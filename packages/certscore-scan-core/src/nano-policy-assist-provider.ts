@@ -7,6 +7,7 @@ import type {
   PrivacyDocumentLinkSelectionInput,
   PrivacyDocumentLinkSelectionResult,
 } from "./scanners/policy-surface-scanner.js";
+import { proxyFetch } from "./proxy-fetch.js";
 
 const OPENAI_API_URL = "https://api.openai.com/v1/chat/completions";
 const DEFAULT_NANO_MODEL = "gpt-5.4-nano";
@@ -102,6 +103,7 @@ export function createOpenAiNanoPolicyAssistProviderFromEnv(
     reviewModel:
       env.CERTSCORE_REVIEW_MODEL?.trim() ||
       DEFAULT_REVIEW_MODEL,
+    fetchImpl: (input, init) => proxyFetch(input, init, env),
   });
 }
 

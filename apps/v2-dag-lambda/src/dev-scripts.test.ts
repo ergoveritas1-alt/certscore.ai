@@ -17,7 +17,7 @@ test("dev image scripts allow the approved Lambda scan regions", async () => {
   const setupScript = await readRepoFile("scripts/local-v2-dag-lambda/setup-dev-aws-image.sh");
 
   assert.match(buildScript, /region="\$\{AWS_REGION:-eu-central-1\}"/);
-  assert.match(buildScript, /eu-central-1\|eu-west-1\|us-west-2/);
+  assert.match(buildScript, /eu-central-1\|eu-west-1\|us-west-1/);
   assert.match(buildScript, /Unsupported local v2 DAG Lambda image region/);
   assert.match(buildScript, /--provenance=false/);
   assert.match(buildScript, /--sbom=false/);
@@ -59,7 +59,7 @@ test("dev image scripts allow the approved Lambda scan regions", async () => {
   assert.match(setupScript, /region="\$\{AWS_REGION:-eu-central-1\}"/);
   assert.match(setupScript, /eu-central-1\) location_env_prefix="EU_DE"/);
   assert.match(setupScript, /eu-west-1\) location_env_prefix="EU_IE"/);
-  assert.match(setupScript, /us-west-2\) location_env_prefix="US_WEST"/);
+  assert.match(setupScript, /us-west-1\) location_env_prefix="US_WEST"/);
   assert.match(setupScript, /CERTSCORE_V2_DAG_LAMBDA_LOCATION_ENV_PREFIX="\$location_env_prefix"/);
   assert.match(setupScript, /CERTSCORE_V2_DAG_LAMBDA_CHROMIUM_ACCEPT_LANGUAGE: "en-IE,en;q=0\.9"/);
   assert.match(setupScript, /CERTSCORE_V2_DAG_LAMBDA_CHROMIUM_LOCALE: "en-IE"/);

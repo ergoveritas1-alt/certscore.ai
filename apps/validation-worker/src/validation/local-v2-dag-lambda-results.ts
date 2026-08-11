@@ -55,7 +55,7 @@ const ORPHAN_TERMINAL_AGE_MS = 930_000;
 
 type LambdaResultStatus = "completed" | "failed";
 type LambdaTargetEnvironment = "local" | "production";
-type LambdaAwsRegion = "eu-central-1" | "eu-west-1" | "us-west-2";
+type LambdaAwsRegion = "eu-central-1" | "eu-west-1" | "us-west-1";
 
 type ScannerRuntimeProvenance = {
   awsRegion: LambdaAwsRegion;
@@ -685,7 +685,7 @@ function stringValue(value: unknown) {
 function parseScannerRuntimeProvenance(value: unknown): ScannerRuntimeProvenance | undefined {
   const record = asRecord(value);
   const awsRegion =
-    record.awsRegion === "eu-central-1" || record.awsRegion === "eu-west-1" || record.awsRegion === "us-west-2"
+    record.awsRegion === "eu-central-1" || record.awsRegion === "eu-west-1" || record.awsRegion === "us-west-1"
       ? record.awsRegion
       : null;
   const dispatchVpcMode = record.dispatchVpcMode === "vpc" || record.dispatchVpcMode === "none"
@@ -958,7 +958,7 @@ function parseS3Uri(uri: string) {
 }
 
 function inferS3ArtifactRegion(bucket: string) {
-  const match = bucket.match(/(?:^|-)(eu-central-1|eu-west-1|us-west-2)(?:-|$)/);
+  const match = bucket.match(/(?:^|-)(eu-central-1|eu-west-1|us-west-1)(?:-|$)/);
   return match?.[1] ?? "eu-central-1";
 }
 
@@ -1914,36 +1914,44 @@ export async function reconcilePersistedCompletedResultFinalizations(input: {
     metadata_json: Record<string, unknown>;
     scan_id: string;
   }>(
-    `select distinct on (result.scan_id)
-            result.scan_id::text,
-            result.metadata_json->>'completedAt' as completed_at,
+    `with latest_result as (
+       select distinct on (result.scan_id)
+              result.scan_id,
+              result.created_at as result_created_at,
+              result.metadata_json->>'completedAt' as completed_at,
+              result.metadata_json
+         from scan_events result
+         join scans scan on scan.id = result.scan_id
+        where result.event_type = $1
+          and result.metadata_json->>'resultStatus' = 'completed'
+          and result.created_at >= now() - interval '7 days'
+          and scan.status = 'completed'
+          and (
+            result.metadata_json->>'targetEnvironment' = 'local'
+            or result.metadata_json #>> '{artifactVerification,verifiedAt}' is not null
+          )
+          and exists (
+            select 1 from scan_events merged
+             where merged.scan_id = result.scan_id
+               and merged.event_type = 'signals.merge_completed'
+          )
+          and exists (
+            select 1 from scan_events findings
+             where findings.scan_id = result.scan_id
+               and findings.event_type = 'findings.unified_derivation_completed'
+          )
+        order by result.scan_id, result.created_at desc
+     )
+     select result.scan_id::text,
+            result.completed_at,
             result.metadata_json
-       from scan_events result
-       join scans scan on scan.id = result.scan_id
-      where result.event_type = $1
-        and result.metadata_json->>'resultStatus' = 'completed'
-        and result.created_at >= now() - interval '7 days'
-        and scan.status = 'completed'
-        and (
-          result.metadata_json->>'targetEnvironment' = 'local'
-          or result.metadata_json #>> '{artifactVerification,verifiedAt}' is not null
-        )
-        and exists (
-          select 1 from scan_events merged
-           where merged.scan_id = result.scan_id
-             and merged.event_type = 'signals.merge_completed'
-        )
-        and exists (
-          select 1 from scan_events findings
-           where findings.scan_id = result.scan_id
-             and findings.event_type = 'findings.unified_derivation_completed'
-        )
-        and not exists (
-          select 1 from scan_score_materialization_requests request
-           where request.scan_id = result.scan_id
-             and request.status in ('completed', 'terminal_failed')
-        )
-      order by result.scan_id, result.created_at desc
+       from latest_result result
+       left join scan_score_materialization_requests request
+         on request.scan_id = result.scan_id
+      where request.status is null or request.status = 'pending'
+      order by coalesce(request.attempt_count, 0) asc,
+               coalesce(request.requested_at, result.result_created_at) asc,
+               result.scan_id asc
       limit 25`,
     [RESULT_RECEIVED_EVENT_TYPE],
   );

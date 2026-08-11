@@ -12,9 +12,9 @@ zip_path="${CERTSCORE_V2_DAG_LAMBDA_ZIP:-${1:-}}"
 case "$region" in
   eu-central-1) location_env_prefix="EU_DE" ;;
   eu-west-1) location_env_prefix="EU_IE" ;;
-  us-west-2) location_env_prefix="US_WEST" ;;
+  us-west-1) location_env_prefix="US_WEST" ;;
   *)
-    echo "Unsupported local v2 DAG Lambda region: ${region}. Use eu-central-1, eu-west-1, or us-west-2." >&2
+    echo "Unsupported local v2 DAG Lambda region: ${region}. Use eu-central-1, eu-west-1, or us-west-1." >&2
     exit 1
     ;;
 esac

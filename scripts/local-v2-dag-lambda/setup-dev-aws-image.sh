@@ -15,9 +15,9 @@ memory_size="${CERTSCORE_V2_DAG_LAMBDA_MEMORY_SIZE:-3008}"
 case "$region" in
   eu-central-1) location_env_prefix="EU_DE" ;;
   eu-west-1) location_env_prefix="EU_IE" ;;
-  us-west-2) location_env_prefix="US_WEST" ;;
+  us-west-1) location_env_prefix="US_WEST" ;;
   *)
-    echo "Unsupported local v2 DAG Lambda region: ${region}. Use eu-central-1, eu-west-1, or us-west-2." >&2
+    echo "Unsupported local v2 DAG Lambda region: ${region}. Use eu-central-1, eu-west-1, or us-west-1." >&2
     exit 1
     ;;
 esac
@@ -95,7 +95,7 @@ failure_queue_arn="$(aws sqs get-queue-attributes \
   --attribute-names QueueArn \
   --query 'Attributes.QueueArn' \
   --output text)"
-supported_regions=("eu-central-1" "eu-west-1" "us-west-2")
+supported_regions=("eu-central-1" "eu-west-1" "us-west-1")
 
 json_array() {
   node -e 'process.stdout.write(JSON.stringify(process.argv.slice(1)))' "$@"

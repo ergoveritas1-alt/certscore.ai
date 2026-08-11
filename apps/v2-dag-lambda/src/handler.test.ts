@@ -21,13 +21,17 @@ import {
   LOCAL_V2_DAG_LAMBDA_EVIDENCE_WORKER_LANES,
   LOCAL_V2_DAG_LAMBDA_EVIDENCE_WORKER_SCANNER_WORK_TIMEOUT_MS,
   LOCAL_V2_DAG_LAMBDA_POLICY_SHUTDOWN_RESERVE_MS,
+  LOCAL_V2_DAG_LAMBDA_SHARDED_HANDLER_SAFETY_TIMEOUT_MS,
   LOCAL_V2_DAG_SCAN_PROCESSOR,
   artifactPointersFromS3Keys,
+  buildLocalV2DagLambdaLaneRun,
   buildLocalV2DagLambdaResultMessage,
   buildVerifiedPolicyEvidencePacket,
   buildLocalV2DagLambdaRuntimeDiagnostics,
   buildScannerRuntimeProvenance,
   buildLocalV2DagLambdaScanTuning,
+  egressIpMatchesExpected,
+  egressRegionMatchesExpected,
   handler,
   invokeLocalV2DagLambdaWorkers,
   mergeLocalV2DagLambdaEvidenceLaneBundles,
@@ -45,6 +49,138 @@ test("sharded orchestration fans out exactly one consent, runtime, and policy ev
     "runtime_evidence",
     "policy_evidence",
   ]);
+});
+
+test("lane instrumentation retains the first top-level response and distinguishes physical invocations", () => {
+  const bundle = canonicalBundleFixture("scan-lanes", {
+    modulesRun: [{
+      moduleName: "preConsentRuntimeScanner",
+      status: "completed",
+      startedAt: "2026-06-15T18:00:00.010Z",
+      completedAt: "2026-06-15T18:00:01.000Z",
+      durationMs: 990,
+      recoveryDiagnostics: {
+        attempted: false,
+        attemptCount: 0,
+        modes: [],
+        durationMs: 0,
+        attempts: [{
+          url: "https://example.com/?token=secret",
+          mode: "initial_navigation",
+          outcome: "success",
+          httpStatus: 200,
+          durationMs: 40,
+        }],
+      },
+      evidenceRefs: [],
+      errors: [],
+    }],
+    networkEvents: [{
+      eventId: "net-1",
+      eventType: "network_request",
+      requestId: "request-1",
+      timestampMs: 20,
+      sourceScanner: "pre_consent_runtime",
+      scenario: "fresh_pre_consent",
+      consentStateAtTime: "pre_consent",
+      pagePhase: "initial_navigation",
+      url: "https://example.com/?token=secret",
+      evidenceRefs: [],
+      confidence: 0.95,
+      directVsInferred: "direct",
+      resourceType: "document",
+      requestUrl: "https://example.com/?token=secret",
+      isMainFrame: true,
+      queryParamNames: ["token"],
+      identifierParamNames: [],
+      advertisingClickIdParamNames: [],
+      tagContainerParamNames: [],
+      hasIdentifierLikeParameters: false,
+      hasAdvertisingClickIdParameters: false,
+      hasTagContainerParameters: false,
+      redirectChainRequestIds: [],
+      cookieHeaderPresent: false,
+      cookieNamesSent: [],
+      authorizationHeaderPresent: false,
+      collectionEndpointObserved: false,
+    }] as CanonicalEvidenceBundle["networkEvents"],
+    networkResponseEvents: [{
+      eventId: "response-1",
+      eventType: "network_response",
+      requestId: "request-1",
+      timestampMs: 35,
+      sourceScanner: "pre_consent_runtime",
+      scenario: "fresh_pre_consent",
+      consentStateAtTime: "pre_consent",
+      pagePhase: "initial_navigation",
+      url: "https://example.com/?token=secret",
+      responseUrl: "https://example.com/?token=secret",
+      status: 200,
+      evidenceRefs: [],
+      confidence: 0.95,
+      directVsInferred: "direct",
+      setCookieHeaders: [],
+      setCookieMetadata: [],
+      cookieNamesSet: [],
+      cacheHeaders: {},
+      accessControlHeaders: {},
+    }] as CanonicalEvidenceBundle["networkResponseEvents"],
+  });
+
+  const consent = buildLocalV2DagLambdaLaneRun({
+    bundle,
+    physicalInvocationId: "aws-request-consent",
+    region: "eu-west-1",
+    workerLane: "consent_proof",
+  });
+  const runtime = buildLocalV2DagLambdaLaneRun({
+    bundle,
+    physicalInvocationId: "aws-request-runtime",
+    region: "eu-west-1",
+    workerLane: "runtime_evidence",
+  });
+
+  assert.equal(consent?.firstHttpStatus, 200);
+  assert.equal(consent?.firstResponseOffsetMs, 35);
+  assert.equal(consent?.navigationCount, 1);
+  assert.equal(consent?.accessOutcome, "representative_page");
+  assert.equal(consent?.firstEffectiveUrl?.includes("secret"), false);
+  assert.notEqual(consent?.physicalInvocationId, runtime?.physicalInvocationId);
+});
+
+test("technical browser success remains a bot-challenge access outcome", () => {
+  const bundle = canonicalBundleFixture("scan-challenge", {
+    modulesRun: [{
+      moduleName: "preConsentRuntimeScanner",
+      status: "completed",
+      startedAt: "2026-06-15T18:00:00.000Z",
+      completedAt: "2026-06-15T18:00:00.500Z",
+      durationMs: 500,
+      evidenceRefs: [],
+      errors: [],
+    }],
+    scanNoGoAssessment: {
+      status: "available",
+      version: "scan-no-go-assessment-v1",
+      decision: "no_go",
+      scanNoGoConfidence: 0.98,
+      reasonCodes: ["captcha_or_challenge", "scan_no_go_corroborated"],
+      corroboratorCodes: ["network_security_challenge_request_observed"],
+      contradictorCodes: [],
+      supportingSignals: { challengeSignalsDetected: true },
+    } as CanonicalEvidenceBundle["scanNoGoAssessment"],
+  });
+
+  const lane = buildLocalV2DagLambdaLaneRun({
+    bundle,
+    physicalInvocationId: "aws-request-challenge",
+    region: "us-west-1",
+    workerLane: "runtime_evidence",
+  });
+
+  assert.equal(lane?.executionOutcome, "success");
+  assert.equal(lane?.challengeDetected, true);
+  assert.equal(lane?.accessOutcome, "bot_challenge");
 });
 
 test("evidence workers start concurrently and retain the parent scan identity", async () => {
@@ -99,15 +235,27 @@ test("the default artifact chain preserves at least the full terminal publicatio
   );
 });
 
+test("sharded coordinator safety deadline stays below the 75-second Lambda cutoff", () => {
+  assert.equal(LOCAL_V2_DAG_LAMBDA_SHARDED_HANDLER_SAFETY_TIMEOUT_MS, 65_000);
+  assert.ok(LOCAL_V2_DAG_LAMBDA_SHARDED_HANDLER_SAFETY_TIMEOUT_MS < 75_000);
+  assert.ok(
+    LOCAL_V2_DAG_LAMBDA_SHARDED_HANDLER_SAFETY_TIMEOUT_MS -
+      LOCAL_V2_DAG_LAMBDA_DEFAULT_RESULT_PUBLISH_TIMEOUT_MS >= 5_000,
+  );
+});
+
 test("dedicated evidence workers preserve the standard profile module budget", async () => {
   let preConsentModuleDeadlineMs: number | undefined;
+  let physicalInvocationId: string | undefined;
   const result = await handler(validPayload({
     orchestrationMode: "worker",
     profile: "standard",
     workerLane: "runtime_evidence",
   }), {
+    awsRequestId: "aws-request-runtime-worker",
     runArtifactChain: async (_payload, options) => {
       preConsentModuleDeadlineMs = options.preConsentModuleDeadlineMs;
+      physicalInvocationId = options.physicalInvocationId;
       return {
         artifactMetadata: {},
         artifactPointers: {},
@@ -123,6 +271,7 @@ test("dedicated evidence workers preserve the standard profile module budget", a
       LOCAL_V2_DAG_LAMBDA_POLICY_SHUTDOWN_RESERVE_MS,
   );
   assert.equal(preConsentModuleDeadlineMs, 35_000);
+  assert.equal(physicalInvocationId, "aws-request-runtime-worker");
 });
 
 test("consent-proof workers reserve a bounded visual recovery window", async () => {
@@ -312,9 +461,9 @@ test("handler accepts the approved regional Lambda dispatch targets", () => {
     resultQueueUrl: "https://sqs.eu-west-1.amazonaws.com/123/certscore-v2-dag-ie-results"
   })).awsRegion, "eu-west-1");
   assert.equal(parseLocalV2DagLambdaDispatchPayload(validPayload({
-    awsRegion: "us-west-2",
-    resultQueueUrl: "https://sqs.us-west-2.amazonaws.com/123/certscore-v2-dag-usw-results"
-  })).awsRegion, "us-west-2");
+    awsRegion: "us-west-1",
+    resultQueueUrl: "https://sqs.us-west-1.amazonaws.com/123/certscore-v2-dag-usw-results"
+  })).awsRegion, "us-west-1");
 });
 
 test("handler exposes bounded Lambda runtime diagnostics for quality A/B runs", () => {
@@ -347,6 +496,21 @@ test("handler exposes bounded Lambda runtime diagnostics for quality A/B runs", 
   assert.equal(Object.hasOwn(diagnostics, "OPENAI_API_KEY"), false);
   assert.equal(JSON.stringify(diagnostics).includes("secret"), false);
   assert.equal(JSON.stringify(diagnostics).includes("proxy.example"), false);
+});
+
+test("regional egress guard fails closed when the proxy public region is wrong", () => {
+  assert.equal(egressRegionMatchesExpected("California", "California"), true);
+  assert.equal(egressRegionMatchesExpected("california", "California"), true);
+  assert.equal(egressRegionMatchesExpected("Oregon", "California"), false);
+  assert.equal(egressRegionMatchesExpected(undefined, "California"), false);
+  assert.equal(egressRegionMatchesExpected(undefined, undefined), true);
+});
+
+test("regional egress guard binds Chrome egress to the configured proxy public IP hash", () => {
+  const proxyIpHash = "sha256:" + createHash("sha256").update("34.218.187.36").digest("hex");
+  assert.equal(egressIpMatchesExpected("34.218.187.36", proxyIpHash), true);
+  assert.equal(egressIpMatchesExpected("35.164.175.41", proxyIpHash), false);
+  assert.equal(egressIpMatchesExpected("34.218.187.36", undefined), true);
 });
 
 test("handler exposes bounded Lambda scan tuning for quality and speed A/B runs", () => {
@@ -493,7 +657,7 @@ test("handler rejects wrong contract, processor, unsupported region, network mod
   );
   assert.throws(
     () => parseLocalV2DagLambdaDispatchPayload(validPayload({ awsRegion: "us-east-1" })),
-    /eu-central-1, eu-west-1, or us-west-2/
+    /eu-central-1, eu-west-1, or us-west-1/
   );
   assert.throws(
     () => parseLocalV2DagLambdaDispatchPayload(validPayload({ vpcMode: "private" })),
@@ -1068,6 +1232,7 @@ test("three-lane merge keeps consent visuals, runtime coverage, and policy evide
     artifactRoot,
     scanId: "scan-local-1",
     consentProof: canonicalBundleFixture("scan-local-1", {
+      scanLaneRuns: [laneRunFixture("consent_proof", "invoke-consent")],
       screenshots: [screenshotArtifact(
         "screenshot_pre_consent_settled",
         "/tmp/worker-consent/screenshot-pre-consent-settled.png",
@@ -1081,6 +1246,7 @@ test("three-lane merge keeps consent visuals, runtime coverage, and policy evide
       },
     }),
     runtimeEvidence: canonicalBundleFixture("scan-local-1", {
+      scanLaneRuns: [laneRunFixture("runtime_evidence", "invoke-runtime")],
       artifactRefs: [{
         artifactId: "runtime_debug",
         artifactType: "json",
@@ -1114,6 +1280,7 @@ test("three-lane merge keeps consent visuals, runtime coverage, and policy evide
       },
     }),
     policyEvidence: canonicalBundleFixture("scan-local-1", {
+      scanLaneRuns: [laneRunFixture("policy_evidence", "invoke-policy")],
       artifactRefs: [{
         artifactId: "policy_surface_text_privacy",
         artifactType: "other",
@@ -1127,6 +1294,14 @@ test("three-lane merge keeps consent visuals, runtime coverage, and policy evide
   });
 
   assert.equal(merged.scanProfile.label, "Three-lane consent, runtime, and policy scan");
+  assert.deepEqual(
+    merged.scanLaneRuns.map((lane) => [lane.laneId, lane.physicalInvocationId]),
+    [
+      ["consent_proof", "invoke-consent"],
+      ["runtime_evidence", "invoke-runtime"],
+      ["policy_evidence", "invoke-policy"],
+    ],
+  );
   assert.equal(merged.screenshots[0]?.path, path.join(artifactRoot, "screenshot-pre-consent-settled.png"));
   assert.equal(merged.derivedRuntimeSignals.consentBannerLikelyPresent, true);
   assert.equal(merged.derivedRuntimeSignals.preConsentTrackingObserved, true);
@@ -1585,6 +1760,7 @@ function canonicalBundleFixture(
     domSnapshots: [],
     iframeEvents: [],
     modulesRun: [],
+    scanLaneRuns: [],
     networkEvents: [],
     networkResponseEvents: [],
     normalizedUrl: "https://example.com/",
@@ -1608,6 +1784,31 @@ function canonicalBundleFixture(
     storageSnapshots: [],
     url: "https://example.com/",
     ...overrides
+  };
+}
+
+function laneRunFixture(
+  laneId: CanonicalEvidenceBundle["scanLaneRuns"][number]["laneId"],
+  physicalInvocationId: string,
+): CanonicalEvidenceBundle["scanLaneRuns"][number] {
+  const policyLane = laneId === "policy_evidence";
+  return {
+    laneId,
+    physicalInvocationId,
+    region: "eu-west-1",
+    phaseName: policyLane ? "policySurfaceScanner" : "preConsentRuntimeScanner",
+    startedAt: "2026-06-15T18:00:00.000Z",
+    firstResponseAt: "2026-06-15T18:00:00.100Z",
+    firstResponseOffsetMs: 100,
+    firstHttpStatus: 200,
+    firstEffectiveUrl: "https://example.com/",
+    navigationCount: 1,
+    challengeDetected: false,
+    challengeType: null,
+    executionOutcome: "success",
+    accessOutcome: "representative_page",
+    completedAt: "2026-06-15T18:00:01.000Z",
+    durationMs: 1_000,
   };
 }
 

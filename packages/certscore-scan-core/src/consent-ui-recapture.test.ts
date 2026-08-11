@@ -6,6 +6,8 @@ import {
   canMarkSettledConsentInventoryCompleted,
   detectConsentUi,
   isDirectCmpSemanticControlClassificationEligible,
+  isSameConsentPacketDocument,
+  mergeConsentUiObservations,
   reconcileConsentUiRecapture,
   reconcilePostSettleConsentUiObservation,
   shouldRunBoundedSameSessionConsentPacketRecovery,
@@ -13,6 +15,41 @@ import {
   shouldCaptureSettledPreConsentScreenshot,
   shouldRecaptureConsentUiAfterTimeout,
 } from "./scanners/pre-consent-runtime-scanner.js";
+
+test("same-session packet binding follows the screenshot checkpoint after a late redirect", () => {
+  assert.equal(isSameConsentPacketDocument({
+    screenshotUrl: "https://example.test/final?step=1",
+    screenshotDocumentIdentity: { source: "cdp_loader_id", token: "loader-final" },
+    inventoryDocumentUrl: "https://example.test/final?step=2",
+    inventoryDocumentIdentity: { source: "cdp_loader_id", token: "loader-final" },
+    geometryPageUrl: "https://example.test/final?step=3",
+    geometryDocumentIdentity: { source: "cdp_loader_id", token: "loader-final" },
+    currentPageUrl: "https://example.test/final?step=4",
+    currentDocumentIdentity: { source: "cdp_loader_id", token: "loader-final" },
+  }), true);
+  assert.equal(isSameConsentPacketDocument({
+    screenshotUrl: "https://example.test/interstitial",
+    screenshotDocumentIdentity: { source: "cdp_loader_id", token: "loader-interstitial" },
+    inventoryDocumentUrl: "https://example.test/final",
+    inventoryDocumentIdentity: { source: "cdp_loader_id", token: "loader-final" },
+    geometryPageUrl: "https://example.test/final",
+    geometryDocumentIdentity: { source: "cdp_loader_id", token: "loader-final" },
+    currentPageUrl: "https://example.test/final",
+    currentDocumentIdentity: { source: "cdp_loader_id", token: "loader-final" },
+  }), false);
+  assert.equal(isSameConsentPacketDocument({
+    screenshotUrl: "https://example.test/final",
+    inventoryDocumentUrl: "https://example.test/final",
+    geometryPageUrl: "https://example.test/final",
+    currentPageUrl: "about:blank",
+  }), false);
+  assert.equal(isSameConsentPacketDocument({
+    screenshotUrl: "https://example.test/final?step=1",
+    inventoryDocumentUrl: "https://example.test/final?step=2",
+    geometryPageUrl: "https://example.test/final?step=3",
+    currentPageUrl: "https://example.test/final?step=4",
+  }), false);
+});
 
 test("direct CMP semantic capture rejects generic profile settings without local consent context", () => {
   const classification = classifyConsentControlLabel({
@@ -328,6 +365,33 @@ test("a newly retained options control strengthens an existing accept and reject
     result.observation.controls.map((control) => control.actionType).sort(),
     ["accept_all", "manage_preferences", "reject_all"],
   );
+});
+
+test("typed controls are never merged across browser document tokens", () => {
+  const earlier = observation({
+    observedAtMs: 1_000,
+    documentUrl: "https://example.test/?step=1",
+    documentIdentity: { source: "cdp_loader_id", token: "loader-1" },
+    likelyPresent: true,
+    layerInspected: "first_layer",
+    acceptControlObserved: true,
+    controls: [{ label: "Accept", actionType: "accept_all", visible: true, classifierReasonCodes: [] }],
+  });
+  const later = observation({
+    observedAtMs: 2_000,
+    documentUrl: "https://example.test/?step=2",
+    documentIdentity: { source: "cdp_loader_id", token: "loader-2" },
+    likelyPresent: true,
+    layerInspected: "first_layer",
+    rejectControlObserved: true,
+    controls: [{ label: "Reject", actionType: "reject_all", visible: true, classifierReasonCodes: [] }],
+  });
+
+  const merged = mergeConsentUiObservations(earlier, later, "recapture:test");
+
+  assert.equal(merged.documentIdentity?.token, "loader-2");
+  assert.deepEqual(merged.controls.map((control) => control.actionType), ["reject_all"]);
+  assert.equal(merged.basis.includes("document_identity_transition_discarded_other_document_evidence"), true);
 });
 
 function rapidInventorySnapshot(withControls: boolean) {

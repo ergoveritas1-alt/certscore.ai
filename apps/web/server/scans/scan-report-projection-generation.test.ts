@@ -3,7 +3,8 @@ import test from "node:test";
 import {
   getCanonicalScanReportPublicationReadiness,
   getScanReportProjectionGeneration,
-  isSameScanReportProjectionGeneration
+  isSameScanReportProjectionGeneration,
+  isScanReportProjectionSourceEvent
 } from "./scan-report-projection-generation";
 
 function event(index: number, createdAt: string) {
@@ -61,6 +62,24 @@ test("generation selects the latest event deterministically even when input is u
   });
 });
 
+test("artifact-only policy handoff events do not invalidate report generation", () => {
+  const canonicalEvents = [event(1, "2026-07-31T16:36:21.000Z")];
+  const withInternalPolicyHandoff = [
+    ...canonicalEvents,
+    {
+      ...event(2, "2026-07-31T16:36:22.000Z"),
+      eventType: "v2_policy_evidence.received"
+    }
+  ];
+
+  assert.equal(isScanReportProjectionSourceEvent("v2_policy_evidence.received"), false);
+  assert.equal(isScanReportProjectionSourceEvent("findings.unified_derivation_completed"), true);
+  assert.deepEqual(
+    getScanReportProjectionGeneration({ events: withInternalPolicyHandoff }),
+    getScanReportProjectionGeneration({ events: canonicalEvents })
+  );
+});
+
 test("projection persistence and materialization cache both bind to the event generation", async () => {
   const { readFile } = await import("node:fs/promises");
   const [projectionSource, materializerSource, publisherSource] = await Promise.all([
@@ -68,9 +87,12 @@ test("projection persistence and materialization cache both bind to the event ge
     readFile("apps/web/server/scans/local-v2-dag-report.ts", "utf8"),
     readFile("apps/web/server/scans/canonical-scan-report-publisher.ts", "utf8")
   ]);
-  assert.match(projectionSource, /count\(\*\).*scan_events source_events/);
+  assert.match(projectionSource, /count\(\*\)[\s\S]*scan_events source_events/);
+  assert.match(projectionSource, /SCAN_REPORT_PROJECTION_NON_SOURCE_EVENT_TYPES/);
+  assert.match(projectionSource, /not \(source_events\.event_type = any\(\$43::text\[\]\)\)/);
   assert.match(projectionSource, /order by source_events\.created_at desc, source_events\.id desc/);
   assert.match(projectionSource, /StaleScanReportProjectionSourceError/);
   assert.match(materializerSource, /getScanReportProjectionGeneration\(scanRecord\)/);
   assert.match(publisherSource, /stale_source_retry/);
+  assert.match(publisherSource, /STALE_SOURCE_MAX_ATTEMPTS\s*=\s*4/);
 });

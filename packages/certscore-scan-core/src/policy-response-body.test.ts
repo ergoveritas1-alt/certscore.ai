@@ -115,6 +115,31 @@ test("policy operations stop when transport work ignores abort before response h
   assert.ok(Date.now() - startedAtMs < 250);
 });
 
+test("policy operations consume late work rejection when already aborted", async () => {
+  const controller = new AbortController();
+  controller.abort(new Error("policy fetch deadline reached"));
+  const unhandled: unknown[] = [];
+  const captureUnhandled = (reason: unknown) => unhandled.push(reason);
+  process.on("unhandledRejection", captureUnhandled);
+
+  try {
+    await assert.rejects(
+      awaitAbortablePolicyOperation(
+        new Promise<Response>((_resolve, reject) =>
+          setTimeout(() => reject(new Error("late DNS ENOTFOUND")), 20),
+        ),
+        controller.signal,
+        "policy fetch deadline reached",
+      ),
+      /policy fetch deadline reached/,
+    );
+    await new Promise((resolve) => setTimeout(resolve, 60));
+    assert.deepEqual(unhandled, []);
+  } finally {
+    process.removeListener("unhandledRejection", captureUnhandled);
+  }
+});
+
 test("policy HTTP transport destroys a socket stalled before response headers", async () => {
   const server = createServer(() => undefined);
   server.listen(0, "127.0.0.1");

@@ -16,6 +16,7 @@ import {
   verifiedPolicyEvidencePacketSchema,
   type CanonicalEvidenceBundle,
   type ConsentFlowScenario,
+  type ScanLaneRun,
   type ScreenshotArtifact,
   type VerifiedPolicyEvidencePacket,
   type V2DagLambdaResultPurpose,
@@ -32,7 +33,7 @@ import {
   type RunScanInput
 } from "@certscore/scan-core";
 
-export const LOCAL_V2_DAG_LAMBDA_AWS_REGIONS = ["eu-central-1", "eu-west-1", "us-west-2"] as const;
+export const LOCAL_V2_DAG_LAMBDA_AWS_REGIONS = ["eu-central-1", "eu-west-1", "us-west-1"] as const;
 export type LocalV2DagLambdaAwsRegion = (typeof LOCAL_V2_DAG_LAMBDA_AWS_REGIONS)[number];
 export const LOCAL_V2_DAG_LAMBDA_AWS_REGION = "eu-central-1" satisfies LocalV2DagLambdaAwsRegion;
 export const LOCAL_V2_DAG_LAMBDA_DISPATCH_CONTRACT_VERSION = "certscore.v2.lambda-dag-dispatch.v1";
@@ -48,6 +49,8 @@ export const LOCAL_V2_DAG_LAMBDA_DEFAULT_HANDLER_SAFETY_TIMEOUT_MS = 30_000;
 export const LOCAL_V2_DAG_LAMBDA_DEFAULT_SCANNER_WORK_TIMEOUT_MS = 23_000;
 export const LOCAL_V2_DAG_LAMBDA_DEFAULT_ARTIFACT_CHAIN_TIMEOUT_MS = 28_000;
 export const LOCAL_V2_DAG_LAMBDA_DEFAULT_RESULT_PUBLISH_TIMEOUT_MS = 2_000;
+export const LOCAL_V2_DAG_LAMBDA_DURATION_WARNING_MS = 60_000;
+export const LOCAL_V2_DAG_LAMBDA_SHARDED_HANDLER_SAFETY_TIMEOUT_MS = 65_000;
 export const LOCAL_V2_DAG_LAMBDA_EVIDENCE_WORKER_HANDLER_SAFETY_TIMEOUT_MS = 45_000;
 export const LOCAL_V2_DAG_LAMBDA_EVIDENCE_WORKER_SCANNER_WORK_TIMEOUT_MS = 37_000;
 export const LOCAL_V2_DAG_LAMBDA_EVIDENCE_WORKER_ARTIFACT_CHAIN_TIMEOUT_MS = 43_000;
@@ -313,6 +316,7 @@ export type LocalV2DagLambdaRuntimeDiagnostics = ReturnType<typeof buildLocalV2D
 
 type HandlerOptions = {
   artifactChainTimeoutMs?: number;
+  awsRequestId?: string;
   handlerSafetyTimeoutMs?: number;
   lambdaClient?: LambdaInvokeClient;
   now?: () => Date;
@@ -322,6 +326,7 @@ type HandlerOptions = {
     artifactRoot: string;
     onScanCoreComplete?: () => void;
     onPolicySurfaceComplete?: NonNullable<RunScanInput["onPolicySurfaceComplete"]>;
+    physicalInvocationId?: string;
     policySurfaceDeadlineAtMs?: number;
     preConsentModuleDeadlineMs?: number;
     preConsentVisualFallbackDeadlineMs?: number;
@@ -516,7 +521,7 @@ function parseAwsRegion(value: unknown): LocalV2DagLambdaAwsRegion {
   if (typeof value === "string" && LOCAL_V2_DAG_LAMBDA_AWS_REGIONS.includes(value as LocalV2DagLambdaAwsRegion)) {
     return value as LocalV2DagLambdaAwsRegion;
   }
-  throw new Error("Local v2 DAG Lambda dispatch must target eu-central-1, eu-west-1, or us-west-2.");
+  throw new Error("Local v2 DAG Lambda dispatch must target eu-central-1, eu-west-1, or us-west-1.");
 }
 
 function parseQueueRegion(queueUrl: string): LocalV2DagLambdaAwsRegion {
@@ -757,6 +762,117 @@ export function buildLocalV2DagLambdaArtifactRoot(input: {
   return path.resolve(input.workspaceRoot, baseDir, input.scanId);
 }
 
+function sanitizedLaneUrl(value: string | undefined): string | null {
+  if (!value) return null;
+  try {
+    const url = new URL(value);
+    if (!/^https?:$/.test(url.protocol)) return null;
+    url.username = "";
+    url.password = "";
+    url.hash = "";
+    url.search = "";
+    return url.toString().slice(0, 500);
+  } catch {
+    return null;
+  }
+}
+
+export function buildLocalV2DagLambdaLaneRun(input: {
+  bundle: CanonicalEvidenceBundle;
+  physicalInvocationId?: string;
+  region: string;
+  workerLane?: LocalV2DagLambdaWorkerLane;
+}): ScanLaneRun | null {
+  const laneId = input.workerLane === "consent_proof" ||
+      input.workerLane === "runtime_evidence" ||
+      input.workerLane === "policy_evidence"
+    ? input.workerLane
+    : null;
+  if (!laneId) return null;
+
+  const phaseName = laneId === "policy_evidence"
+    ? "policySurfaceScanner" as const
+    : "preConsentRuntimeScanner" as const;
+  const moduleRun = input.bundle.modulesRun.find((run) => run.moduleName === phaseName);
+  if (!moduleRun) return null;
+
+  const siteFacingNavigation = moduleRun.siteFacingNavigation;
+  const mainDocumentRequestIds = new Set(input.bundle.networkEvents
+    .filter((event) => event.isMainFrame === true && event.resourceType === "document")
+    .flatMap((event) => event.requestId ? [event.requestId] : []));
+  const firstTopLevelResponse = [...input.bundle.networkResponseEvents]
+    .filter((event) => Boolean(event.requestId && mainDocumentRequestIds.has(event.requestId)))
+    .sort((left, right) => left.timestampMs - right.timestampMs)[0];
+  const bundleStartedAtMs = Date.parse(input.bundle.startedAt);
+  const derivedFirstResponseAt = firstTopLevelResponse && Number.isFinite(bundleStartedAtMs)
+    ? new Date(bundleStartedAtMs + firstTopLevelResponse.timestampMs).toISOString()
+    : null;
+  const firstResponseAt = siteFacingNavigation?.firstResponseAt ?? derivedFirstResponseAt;
+  const firstResponseOffsetMs = siteFacingNavigation?.firstResponseOffsetMs ??
+    (firstTopLevelResponse ? Math.max(0, Math.round(firstTopLevelResponse.timestampMs)) : null);
+  const firstHttpStatus = siteFacingNavigation?.firstHttpStatus ?? firstTopLevelResponse?.status ?? null;
+  const firstEffectiveUrl = sanitizedLaneUrl(
+    siteFacingNavigation?.firstEffectiveUrl ?? firstTopLevelResponse?.responseUrl,
+  );
+  const navigationCount = siteFacingNavigation?.navigationCount ??
+    moduleRun.recoveryDiagnostics?.attempts?.length ??
+    (firstTopLevelResponse ? 1 : 0);
+  const noGoReason = input.bundle.scanNoGoAssessment?.reasonCodes[0] ?? null;
+  const challengeDetected = siteFacingNavigation?.challengeDetected ?? Boolean(
+    input.bundle.scanNoGoAssessment?.supportingSignals.challengeSignalsDetected ||
+    noGoReason === "captcha_or_challenge" ||
+    noGoReason === "potential_security_challenge"
+  );
+  const challengeType = siteFacingNavigation?.challengeType ?? (challengeDetected ? noGoReason : null);
+  const executionOutcome: ScanLaneRun["executionOutcome"] = moduleRun.status === "completed"
+    ? "success"
+    : moduleRun.status === "failed" || moduleRun.status === "not_testable"
+      ? "failed"
+      : "degraded";
+  const accessOutcome: ScanLaneRun["accessOutcome"] = challengeDetected
+    ? "bot_challenge"
+    : noGoReason === "access_denied_or_forbidden_page" ||
+        noGoReason === "rate_limited_429" ||
+        firstHttpStatus === 401 || firstHttpStatus === 403 || firstHttpStatus === 429 || firstHttpStatus === 451
+      ? "access_denied"
+      : noGoReason === "blank_or_unusable_page" || noGoReason === "loading_or_stalled"
+        ? "blank_or_unusable"
+        : executionOutcome === "failed" && firstHttpStatus === null
+          ? "navigation_failed"
+          : firstHttpStatus !== null && firstHttpStatus >= 200 && firstHttpStatus < 400
+            ? "representative_page"
+            : "unknown";
+  const completedAt = moduleRun.completedAt ?? null;
+  const durationMs = moduleRun.durationMs ?? (
+    completedAt && Number.isFinite(Date.parse(completedAt)) && Number.isFinite(Date.parse(moduleRun.startedAt))
+      ? Math.max(0, Date.parse(completedAt) - Date.parse(moduleRun.startedAt))
+      : 0
+  );
+  const fallbackInvocationId = `local_${createHash("sha256")
+    .update(`${input.bundle.scanId}:${laneId}:${moduleRun.startedAt}`)
+    .digest("hex")
+    .slice(0, 32)}`;
+
+  return {
+    laneId,
+    physicalInvocationId: (input.physicalInvocationId?.trim() || fallbackInvocationId).slice(0, 160),
+    region: input.region.slice(0, 80),
+    phaseName,
+    startedAt: moduleRun.startedAt,
+    firstResponseAt,
+    firstResponseOffsetMs,
+    firstHttpStatus,
+    firstEffectiveUrl,
+    navigationCount,
+    challengeDetected,
+    challengeType,
+    executionOutcome,
+    accessOutcome,
+    completedAt,
+    durationMs,
+  };
+}
+
 export async function runLocalV2DagLambdaArtifactChain(
   payload: LocalV2DagLambdaDispatchPayload,
   options: {
@@ -767,6 +883,7 @@ export async function runLocalV2DagLambdaArtifactChain(
     forceAllowedScenarioPlanning?: boolean;
     onScanCoreComplete?: () => void;
     onPolicySurfaceComplete?: NonNullable<RunScanInput["onPolicySurfaceComplete"]>;
+    physicalInvocationId?: string;
     phaseLabelPrefix?: string;
     preConsentScreenshotMode?: "always" | "selective" | "never";
     policySurfaceDeadlineAtMs?: number;
@@ -803,17 +920,21 @@ export async function runLocalV2DagLambdaArtifactChain(
     preConsentVisualFallbackDeadlineAtMs: options.preConsentVisualFallbackDeadlineAtMs,
     onScanCoreComplete: options.onScanCoreComplete,
     onPolicySurfaceComplete: options.onPolicySurfaceComplete,
+    physicalInvocationId: options.physicalInvocationId,
     scanTuning,
     signal: options.signal,
     policySurfaceDeadlineAtMs: options.policySurfaceDeadlineAtMs,
   });
   const [egressAvailable, bundle] = await Promise.all([egressPreflightPromise, scanBundlePromise]);
   if (!egressAvailable) {
-    await timeLambdaPhase(
+    const browserFallbackAvailable = await timeLambdaPhase(
       phaseTimings,
       "egress_preflight_browser_fallback",
       () => writeEgressPreflightArtifact(artifactRoot, { allowBrowserFallback: true, skipLightweightProbe: true }),
     );
+    if (!browserFallbackAvailable && regionalEgressRequired(process.env)) {
+      throw new Error("Required regional scanner egress preflight did not verify the configured proxy and expected public region.");
+    }
   }
 
   return writeAndUploadLocalV2DagLambdaArtifacts({
@@ -833,6 +954,7 @@ async function runLocalV2DagLambdaScanBundle(
     artifactRoot: string;
     onScanCoreComplete?: () => void;
     onPolicySurfaceComplete?: NonNullable<RunScanInput["onPolicySurfaceComplete"]>;
+    physicalInvocationId?: string;
     phaseLabelPrefix?: string;
     phaseTimings: LocalV2DagLambdaPhaseTiming[];
     preConsentScreenshotMode?: "always" | "selective" | "never";
@@ -880,7 +1002,18 @@ async function runLocalV2DagLambdaScanBundle(
         url: payload.targetUrl
       });
       options.onScanCoreComplete?.();
-      return bundle;
+      const laneRun = buildLocalV2DagLambdaLaneRun({
+        bundle,
+        physicalInvocationId: options.physicalInvocationId,
+        region: payload.awsRegion,
+        workerLane: payload.workerLane,
+      });
+      return laneRun
+        ? canonicalEvidenceBundleSchema.parse({
+            ...bundle,
+            scanLaneRuns: [...bundle.scanLaneRuns, laneRun],
+          })
+        : bundle;
     } finally {
       const telemetry = await resourceSampler.stop();
       await writeJson(path.join(options.artifactRoot, "V2RuntimeResourceTelemetry.json"), {
@@ -990,12 +1123,21 @@ async function writeEgressPreflightArtifact(
     "CERTSCORE_CHROMIUM_PROXY_SERVER",
   ]);
   const proxyEnabled = scanProxyEnabledEnv(process.env) && Boolean(proxyServer);
+  const expectedEgressRegion = firstTrimmedRuntimeEnv(process.env, [
+    "CERTSCORE_V2_DAG_LAMBDA_EXPECTED_EGRESS_REGION",
+  ]);
+  const expectedEgressPublicIpHash = firstTrimmedRuntimeEnv(process.env, [
+    "CERTSCORE_V2_DAG_LAMBDA_EGRESS_PUBLIC_IP_HASH",
+  ]);
+  const requireRegionalEgress = regionalEgressRequired(process.env);
   const artifact = {
     artifactVersion: "certscore.v2.lambda-egress-preflight.v1",
     checkedAt: new Date().toISOString(),
     completedAt: null as string | null,
     durationMs: 0,
     egressLabel: egressLabel ? egressLabel.slice(0, 80) : null,
+    expectedEgressRegion: expectedEgressRegion ? expectedEgressRegion.slice(0, 80) : null,
+    expectedEgressPublicIpHash: expectedEgressPublicIpHash ? expectedEgressPublicIpHash.slice(0, 80) : null,
     proxyModeEnabled: proxyEnabled,
     probeStatus: "skipped" as "available" | "failed" | "skipped",
     provider: null as string | null,
@@ -1012,19 +1154,25 @@ async function writeEgressPreflightArtifact(
   };
 
   if (!proxyEnabled) {
+    if (requireRegionalEgress) {
+      artifact.probeStatus = "failed";
+      artifact.error = "Required regional scanner proxy is not configured.";
+    }
     const completedAt = Date.now();
     artifact.completedAt = new Date(completedAt).toISOString();
     artifact.durationMs = completedAt - startedAt;
     await writeJson(path.join(artifactRoot, "EgressPreflight.json"), artifact);
-    return true;
+    return !requireRegionalEgress;
   }
 
   if (!options.skipLightweightProbe && proxyServer) {
     try {
       const response = await fetchEgressProbeThroughProxy(proxyServer);
       const parsed = parseEgressProbeResponse(response.text);
+      const regionMatches = egressRegionMatchesExpected(parsed?.region, expectedEgressRegion);
+      const ipMatches = egressIpMatchesExpected(parsed?.ip, expectedEgressPublicIpHash);
       artifact.provider = "ipinfo.io";
-      artifact.probeStatus = response.status >= 200 && response.status < 300 && parsed ? "available" : "failed";
+      artifact.probeStatus = response.status >= 200 && response.status < 300 && parsed && regionMatches && ipMatches ? "available" : "failed";
       artifact.observed = parsed;
       if (artifact.probeStatus === "available") {
         const completedAt = Date.now();
@@ -1033,7 +1181,11 @@ async function writeEgressPreflightArtifact(
         await writeJson(path.join(artifactRoot, "EgressPreflight.json"), artifact);
         return true;
       }
-      artifact.error = `Unexpected lightweight egress preflight response: HTTP ${response.status}`;
+      artifact.error = !ipMatches && expectedEgressPublicIpHash
+        ? "Observed egress IP did not match the configured regional proxy public-IP hash."
+        : !regionMatches && expectedEgressRegion
+        ? `Observed egress region ${parsed?.region ?? "unknown"} did not match expected region ${expectedEgressRegion}.`
+        : `Unexpected lightweight egress preflight response: HTTP ${response.status}`;
     } catch (error) {
       artifact.error = error instanceof Error ? error.message.slice(0, 240) : "unknown_lightweight_egress_preflight_error";
     }
@@ -1058,13 +1210,19 @@ async function writeEgressPreflightArtifact(
     });
     const text = (await page.locator("body").textContent({ timeout: 2_000 })) ?? "";
     const parsed = parseEgressProbeResponse(text);
+    const regionMatches = egressRegionMatchesExpected(parsed?.region, expectedEgressRegion);
+    const ipMatches = egressIpMatchesExpected(parsed?.ip, expectedEgressPublicIpHash);
     artifact.provider = "ipinfo.io";
-    artifact.probeStatus = response && response.ok() && parsed ? "available" : "failed";
+    artifact.probeStatus = response && response.ok() && parsed && regionMatches && ipMatches ? "available" : "failed";
     artifact.observed = parsed;
     if (artifact.probeStatus === "available") {
       artifact.error = null;
     }
-    if (!parsed) {
+    if (!ipMatches && expectedEgressPublicIpHash) {
+      artifact.error = "Observed egress IP did not match the configured regional proxy public-IP hash.";
+    } else if (!regionMatches && expectedEgressRegion) {
+      artifact.error = `Observed egress region ${parsed?.region ?? "unknown"} did not match expected region ${expectedEgressRegion}.`;
+    } else if (!parsed) {
       artifact.error = `Unexpected egress preflight response: HTTP ${response?.status() ?? 0}`;
     }
     await context.close().catch(() => undefined);
@@ -1079,6 +1237,24 @@ async function writeEgressPreflightArtifact(
     await writeJson(path.join(artifactRoot, "EgressPreflight.json"), artifact);
   }
   return artifact.probeStatus === "available";
+}
+
+export function egressRegionMatchesExpected(observedRegion: string | undefined, expectedRegion: string | undefined) {
+  const expected = expectedRegion?.trim().toLocaleLowerCase();
+  if (!expected) return true;
+  return observedRegion?.trim().toLocaleLowerCase() === expected;
+}
+
+export function egressIpMatchesExpected(observedIp: string | undefined, expectedHash: string | undefined) {
+  const expected = expectedHash?.trim().toLowerCase();
+  if (!expected) return true;
+  if (!observedIp?.trim()) return false;
+  return `sha256:${createHash("sha256").update(observedIp.trim()).digest("hex")}` === expected;
+}
+
+function regionalEgressRequired(env: NodeJS.ProcessEnv = process.env) {
+  const value = env.CERTSCORE_V2_DAG_LAMBDA_REQUIRE_REGIONAL_EGRESS?.trim().toLowerCase();
+  return value === "true" || value === "1" || value === "yes" || value === "on";
 }
 
 function parseEgressProbeResponse(text: string) {
@@ -1813,6 +1989,11 @@ export function mergeLocalV2DagLambdaEvidenceLaneBundles(input: {
       label: "Three-lane consent, runtime, and policy scan",
     },
     modulesRun,
+    scanLaneRuns: [
+      ...consentProof.scanLaneRuns,
+      ...runtimeEvidence.scanLaneRuns,
+      ...policyEvidence.scanLaneRuns,
+    ],
     runtimeTimeline: runtimeEvidence.runtimeTimeline,
     networkEvents: runtimeEvidence.networkEvents,
     networkResponseEvents: runtimeEvidence.networkResponseEvents,
@@ -2028,8 +2209,15 @@ export function buildLocalV2DagLambdaRuntimeDiagnostics(env: NodeJS.ProcessEnv =
     chromiumProxyConfigured: scanProxyEnabled && Boolean(proxyServer),
     chromiumSingleProcessEnabled: lambdaChromiumSingleProcessEnabled(env),
     egressLabel: egressLabel ? egressLabel.slice(0, 80) : null,
+    expectedEgressRegion: firstTrimmedRuntimeEnv(env, [
+      "CERTSCORE_V2_DAG_LAMBDA_EXPECTED_EGRESS_REGION",
+    ])?.slice(0, 80) ?? null,
+    egressPublicIpHashConfigured: Boolean(firstTrimmedRuntimeEnv(env, [
+      "CERTSCORE_V2_DAG_LAMBDA_EGRESS_PUBLIC_IP_HASH",
+    ])),
     memorySizeMb: Number.isFinite(memorySizeMb) ? memorySizeMb : null,
     nodeVersion: process.version,
+    regionalEgressRequired: regionalEgressRequired(env),
     scanProxyEnabled,
     platform: process.platform,
     architecture: process.arch
@@ -2857,6 +3045,7 @@ export async function publishVerifiedPolicyEvidence(input: {
 
 export async function handler(event: unknown, options: HandlerOptions = {}) {
   let payload: LocalV2DagLambdaDispatchPayload | null = null;
+  let handlerOutcome: "completed" | "failed" | "unknown" = "unknown";
   const now = options.now ?? (() => new Date());
   const handlerStartedAt = now();
   const handlerStartedAtMs = Date.now();
@@ -2882,6 +3071,17 @@ export async function handler(event: unknown, options: HandlerOptions = {}) {
 
   try {
     payload = parseLocalV2DagLambdaDispatchPayload(event);
+    console.info(JSON.stringify({
+      event: "v2_lambda_invocation_started",
+      aws_request_id: options.awsRequestId ?? null,
+      function_name: payload.functionName,
+      hostname: payload.hostname,
+      orchestration_mode: payload.orchestrationMode ?? "single",
+      region: payload.awsRegion,
+      scan_id: payload.scanId,
+      target_environment: payload.targetEnvironment,
+      worker_lane: payload.workerLane ?? null,
+    }));
     const workspaceRoot = options.workspaceRoot ?? process.cwd();
     const baseArtifactRoot = buildLocalV2DagLambdaArtifactRoot({
       scanId: payload.scanId,
@@ -2917,7 +3117,7 @@ export async function handler(event: unknown, options: HandlerOptions = {}) {
     const configuredHandlerSafetyTimeoutMs = options.handlerSafetyTimeoutMs ?? (
       Number(process.env.CERTSCORE_V2_DAG_LAMBDA_HANDLER_SAFETY_TIMEOUT_MS) ||
       (evidenceCoordinator
-        ? 75_000
+        ? LOCAL_V2_DAG_LAMBDA_SHARDED_HANDLER_SAFETY_TIMEOUT_MS
         : evidenceWorker
           ? consentProofWorker
             ? LOCAL_V2_DAG_LAMBDA_CONSENT_PROOF_HANDLER_SAFETY_TIMEOUT_MS
@@ -3002,6 +3202,7 @@ export async function handler(event: unknown, options: HandlerOptions = {}) {
             });
           }
         },
+        physicalInvocationId: options.awsRequestId ?? undefined,
         policySurfaceDeadlineAtMs:
           handlerStartedAtMs + scannerWorkTimeoutMs - LOCAL_V2_DAG_LAMBDA_POLICY_SHUTDOWN_RESERVE_MS,
         preConsentModuleDeadlineMs: Math.max(
@@ -3046,6 +3247,7 @@ export async function handler(event: unknown, options: HandlerOptions = {}) {
       // policy handoff. Await it before returning so Lambda freeze cannot drop
       // the S3 packet or its non-terminal SQS notification.
       await policyEvidenceHandoff;
+      handlerOutcome = "completed";
       return {
         artifactMetadata: artifactResult.artifactMetadata,
         artifactPointers: artifactResult.artifactPointers,
@@ -3080,6 +3282,7 @@ export async function handler(event: unknown, options: HandlerOptions = {}) {
       sqsClient: options.sqsClient,
       timeoutMs: remainingResultPublishMs()
     });
+    handlerOutcome = "completed";
     return result;
   } catch (error) {
     const cancellationObservedAt = now();
@@ -3091,6 +3294,7 @@ export async function handler(event: unknown, options: HandlerOptions = {}) {
       throw error;
     }
     if (payload.orchestrationMode === "worker") {
+      handlerOutcome = "failed";
       return {
         error: sanitizeError({
           code: "v2_dag_lambda_worker_failed",
@@ -3101,6 +3305,7 @@ export async function handler(event: unknown, options: HandlerOptions = {}) {
         workerLane: payload.workerLane ?? "coordinator"
       };
     }
+    handlerOutcome = "failed";
     const handlerDeadlineAtMs = handlerStartedAtMs + handlerSafetyTimeoutMs;
     const terminalPublicationReserveMs = Math.max(10, resultPublishTimeoutMs);
     const diagnosticShutdownReserveMs = Math.min(
@@ -3207,6 +3412,24 @@ export async function handler(event: unknown, options: HandlerOptions = {}) {
       throw publicationError;
     }
     return result;
+  } finally {
+    const durationMs = Math.max(0, Date.now() - handlerStartedAtMs);
+    if (payload && durationMs >= LOCAL_V2_DAG_LAMBDA_DURATION_WARNING_MS) {
+      console.warn(JSON.stringify({
+        event: "v2_lambda_duration_warning",
+        aws_request_id: options.awsRequestId ?? null,
+        duration_ms: durationMs,
+        function_name: payload.functionName,
+        handler_outcome: handlerOutcome,
+        hostname: payload.hostname,
+        orchestration_mode: payload.orchestrationMode ?? "single",
+        region: payload.awsRegion,
+        scan_id: payload.scanId,
+        target_environment: payload.targetEnvironment,
+        threshold_ms: LOCAL_V2_DAG_LAMBDA_DURATION_WARNING_MS,
+        worker_lane: payload.workerLane ?? null,
+      }));
+    }
   }
 }
 

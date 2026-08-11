@@ -54,7 +54,7 @@ export const SCAN_FROM_DEFINITIONS = {
     requestedGeo: {
       countryCode: "US",
       provider: "aws-default",
-      regionCode: "us-west-2"
+      regionCode: "us-west-1"
     },
     value: "california"
   },

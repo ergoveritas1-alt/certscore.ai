@@ -43,7 +43,10 @@ import {
   sanitizeJsonbValue,
   SCAN_REPORT_PROJECTION_VERSION
 } from "./scan-report-projection-contract";
-import { getScanReportProjectionGeneration } from "./scan-report-projection-generation";
+import {
+  getScanReportProjectionGeneration,
+  SCAN_REPORT_PROJECTION_NON_SOURCE_EVENT_TYPES
+} from "./scan-report-projection-generation";
 import { getReportableGdprEprivacyCoverageItems } from "../../lib/scans/gdpr-eprivacy-reportable-rows";
 import { deriveRegulatoryCoverageScore } from "../../lib/scans/regulatory-coverage-score";
 import { buildLegacyGdprEprivacyVersionedAssessmentInput } from "./score-assessment-projection";
@@ -630,11 +633,17 @@ export async function persistScanReportProjection(
        from public.scans s
       where s.id = $1::uuid
         and s.domain_id is not null
-        and (select count(*) from public.scan_events source_events where source_events.scan_id = s.id) = $41::bigint
+        and (
+          select count(*)
+            from public.scan_events source_events
+           where source_events.scan_id = s.id
+             and not (source_events.event_type = any($43::text[]))
+        ) = $41::bigint
         and coalesce((
               select source_events.id::text
                 from public.scan_events source_events
                where source_events.scan_id = s.id
+                 and not (source_events.event_type = any($43::text[]))
                order by source_events.created_at desc, source_events.id desc
                limit 1
             ), '') = coalesce($42::text, '')
@@ -723,7 +732,8 @@ export async function persistScanReportProjection(
       persistedProjection.sha256,
       persistedProjection.sizeBytes,
       generation.eventCount,
-      generation.latestEventId
+      generation.latestEventId,
+      [...SCAN_REPORT_PROJECTION_NON_SOURCE_EVENT_TYPES]
     ]
   );
 

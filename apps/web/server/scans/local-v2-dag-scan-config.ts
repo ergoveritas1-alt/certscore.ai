@@ -4,7 +4,7 @@ export const LOCAL_V2_DAG_SCAN_PROCESSOR = "local-certscore-v2-dag-parallel-v1";
 export const LOCAL_V2_DAG_SCAN_PROFILE = "standard";
 export const LOCAL_V2_DAG_SCAN_PROFILES = ["standard", "tiny"] as const;
 export const LOCAL_V2_DAG_LAMBDA_AWS_REGION = "eu-central-1";
-export const LOCAL_V2_DAG_LAMBDA_AWS_REGIONS = ["eu-central-1", "eu-west-1", "us-west-2"] as const;
+export const LOCAL_V2_DAG_LAMBDA_AWS_REGIONS = ["eu-central-1", "eu-west-1", "us-west-1"] as const;
 export const LOCAL_V2_DAG_LAMBDA_DISPATCH_CONTRACT_VERSION = "certscore.v2.lambda-dag-dispatch.v1";
 export const LOCAL_V2_DAG_WC01_PROJECTION_VERSION = "wc01.normalized-concern-policy.v1";
 
@@ -114,7 +114,7 @@ export function getLocalV2DagLambdaAwsRegionForScanFrom(value: unknown): LocalV2
     return "eu-west-1";
   }
   if (scanFrom === "california") {
-    return "us-west-2";
+    return "us-west-1";
   }
   return "eu-central-1";
 }

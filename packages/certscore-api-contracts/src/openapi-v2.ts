@@ -785,7 +785,7 @@ export function buildCertScoreApiV2OpenApiDocument() {
         ScanDiagnostics: {
           type: "object",
           additionalProperties: false,
-          required: ["type", "schemaVersion", "scanId", "generatedAt", "totalWallMs", "phases", "policyDiscovery"],
+          required: ["type", "schemaVersion", "scanId", "generatedAt", "totalWallMs", "phases", "lanes", "policyDiscovery"],
           properties: {
             type: { type: "string", const: "certscore_scan_diagnostics" },
             schemaVersion: { type: "string", const: "scan-diagnostics.v1" },
@@ -806,6 +806,52 @@ export function buildCertScoreApiV2OpenApiDocument() {
                   completedAtMs: { type: ["integer", "null"], minimum: 0 },
                   durationMs: { type: "integer", minimum: 0 },
                   outcome: { type: "string", enum: ["success", "degraded", "failed", "unknown"] }
+                }
+              }
+            },
+            lanes: {
+              type: "array",
+              maxItems: 8,
+              items: {
+                type: "object",
+                additionalProperties: false,
+                required: ["laneId", "physicalInvocationId", "region", "phaseName", "startedAt", "firstResponse", "navigationCount", "challengeDetection", "executionOutcome", "accessOutcome", "completedAt", "durationMs"],
+                properties: {
+                  laneId: { type: "string", enum: ["consent_proof", "runtime_evidence", "policy_evidence"] },
+                  physicalInvocationId: { type: "string", maxLength: 160 },
+                  region: { type: "string", maxLength: 80 },
+                  phaseName: { type: "string", enum: ["preConsentRuntimeScanner", "policySurfaceScanner"] },
+                  startedAt: { type: "string", format: "date-time" },
+                  firstResponse: {
+                    anyOf: [
+                      {
+                        type: "object",
+                        additionalProperties: false,
+                        required: ["at", "offsetMs", "httpStatus", "effectiveUrl"],
+                        properties: {
+                          at: { type: "string", format: "date-time" },
+                          offsetMs: { type: "integer", minimum: 0 },
+                          httpStatus: { type: "integer", minimum: 100, maximum: 599 },
+                          effectiveUrl: { type: ["string", "null"], maxLength: 500 }
+                        }
+                      },
+                      { type: "null" }
+                    ]
+                  },
+                  navigationCount: { type: "integer", minimum: 0 },
+                  challengeDetection: {
+                    type: "object",
+                    additionalProperties: false,
+                    required: ["detected", "type"],
+                    properties: {
+                      detected: { type: "boolean" },
+                      type: { type: ["string", "null"], maxLength: 120 }
+                    }
+                  },
+                  executionOutcome: { type: "string", enum: ["success", "degraded", "failed"] },
+                  accessOutcome: { type: "string", enum: ["representative_page", "bot_challenge", "access_denied", "blank_or_unusable", "navigation_failed", "unknown"] },
+                  completedAt: { type: ["string", "null"], format: "date-time" },
+                  durationMs: { type: "integer", minimum: 0 }
                 }
               }
             },

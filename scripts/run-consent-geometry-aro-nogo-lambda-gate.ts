@@ -22,7 +22,7 @@ type Args = {
   outDir?: string;
   profile: "tiny" | "standard" | "full";
   queueUrl?: string;
-  region: "eu-central-1" | "eu-west-1" | "us-west-2";
+  region: "eu-central-1" | "eu-west-1" | "us-west-1";
   requireNoGoSites: number;
   requireProofForLoaded: boolean;
   review: boolean;
@@ -1026,7 +1026,7 @@ function regionSlug(region: Args["region"]): string {
   if (region === "eu-central-1") {
     return "eu-de";
   }
-  if (region === "us-west-2") {
+  if (region === "us-west-1") {
     return "us-west";
   }
   return "eu-ie";
@@ -1055,7 +1055,7 @@ function siteSlug(site: string): string {
 }
 
 function isRegion(value: string | undefined): value is Args["region"] {
-  return value === "eu-central-1" || value === "eu-west-1" || value === "us-west-2";
+  return value === "eu-central-1" || value === "eu-west-1" || value === "us-west-1";
 }
 
 function isProfile(value: string | undefined): value is Args["profile"] {
@@ -1109,7 +1109,7 @@ function printUsageAndExit(): never {
     "Options:",
     "  --cohort baseline|expanded|adversarial",
     "  --sites-file <path>",
-    "  --region eu-central-1|eu-west-1|us-west-2",
+    "  --region eu-central-1|eu-west-1|us-west-1",
     "  --function-name <name>",
     "  --queue-url <url>",
     "  --out-dir <path>",

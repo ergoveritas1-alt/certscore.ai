@@ -47,6 +47,7 @@ export const consentControlAssessmentEvidenceSchema = z.object({
   actionable: z.boolean().nullable(),
   observedAtMs: z.number().int().nonnegative(),
   documentId: z.string().max(240).nullable(),
+  documentToken: z.string().max(160).nullable().default(null),
   presentationType: z.enum(["dedicated_button", "inline_link", "persistent_link", "unknown"]).default("unknown"),
   placementType: z.enum(["action_cluster", "first_layer_body", "persistent_surface", "unknown"]).default("unknown"),
   channels: z.array(assessmentChannelSchema).max(8),
@@ -81,6 +82,8 @@ export const consentControlAssessmentSchema = z.object({
     identityStatus: z.enum(["matched", "mismatched", "unknown"]),
     canonicalDocumentId: z.string().max(240).nullable(),
     observedDocumentIds: z.array(z.string().max(240)).max(24),
+    canonicalDocumentToken: z.string().max(160).nullable().default(null),
+    observedDocumentTokens: z.array(z.string().max(160)).max(24).default([]),
     reasonCodes: z.array(z.string().max(120)).max(16),
   }),
   surface: z.object({
@@ -130,6 +133,7 @@ export type ConsentControlAssessmentObservation = {
   likelyPresent: boolean;
   layerInspected?: "first_layer" | "unknown";
   documentId?: string | null;
+  documentToken?: string | null;
   captureStatus?: "observed" | "no_evidence" | "incomplete";
   inventoryOutcome?: "complete_with_controls" | "complete_empty" | "partial" | "timed_out" | "frame_inaccessible" | "document_mismatch" | "geometry_unavailable" | "no_go";
   completedChannels?: ConsentControlAssessmentChannel[];
@@ -154,6 +158,7 @@ export type ConsentControlAssessmentCandidate = {
   actionable?: boolean | null;
   observedAtMs?: number;
   documentId?: string | null;
+  documentToken?: string | null;
   presentationType?: "dedicated_button" | "inline_link" | "persistent_link" | "unknown";
   placementType?: "action_cluster" | "first_layer_body" | "persistent_surface" | "unknown";
   channels?: ConsentControlAssessmentChannel[];
@@ -166,6 +171,7 @@ export type ConsentControlAssessmentGeometry = {
   artifactVersion?: string | null;
   assessmentStatus?: "complete" | "incomplete" | "document_mismatch" | null;
   documentId?: string | null;
+  documentToken?: string | null;
   observedAtMs?: number | null;
   completedChannels?: ConsentControlAssessmentChannel[];
   incompleteChannels?: ConsentControlAssessmentChannel[];
@@ -185,6 +191,8 @@ export type ConsentControlAssessmentInput = {
   document?: {
     canonicalDocumentId?: string | null;
     observedDocumentIds?: string[];
+    canonicalDocumentToken?: string | null;
+    observedDocumentTokens?: string[];
     identityStatus?: "matched" | "mismatched" | "unknown";
   };
   observations?: ConsentControlAssessmentObservation[];
@@ -307,6 +315,7 @@ function eligibleCandidate(candidate: ConsentControlAssessmentCandidate, fallbac
     actionable,
     observedAtMs,
     documentId: boundedIdentityText(candidate.documentId ?? fallbackDocumentId, 240),
+    documentToken: boundedIdentityText(candidate.documentToken, 160),
     presentationType,
     placementType: candidate.placementType ?? "unknown",
     channels: unique(candidate.channels ?? (source === "geometry" ? ["geometry"] : ["dom_inventory"])),
@@ -362,8 +371,18 @@ export function deriveConsentControlAssessment(input: ConsentControlAssessmentIn
       ? [boundedIdentityText(input.geometry.documentId, 240) ?? ""]
       : []),
   ]);
+  const canonicalDocumentToken = boundedIdentityText(input.document?.canonicalDocumentToken, 160);
+  const observedDocumentTokens = bounded([
+    ...(input.document?.observedDocumentTokens ?? []),
+    ...observations.map((observation) => observation.documentToken ?? ""),
+    input.geometry?.documentToken ?? "",
+  ].flatMap((value) => boundedIdentityText(value, 160) ?? []));
   const documentStatus = input.document?.identityStatus ??
-    (!canonicalId || bundleObservedIds.length === 0
+    (canonicalDocumentToken && observedDocumentTokens.length > 0
+      ? observedDocumentTokens.some((token) => token !== canonicalDocumentToken)
+        ? "mismatched"
+        : "matched"
+      : !canonicalId || bundleObservedIds.length === 0
       ? "unknown"
       : bundleObservedIds.some((id) => id !== canonicalId)
         ? "mismatched"
@@ -587,6 +606,8 @@ export function deriveConsentControlAssessment(input: ConsentControlAssessmentIn
       identityStatus: documentStatus,
       canonicalDocumentId: canonicalId,
       observedDocumentIds: observedIds,
+      canonicalDocumentToken,
+      observedDocumentTokens,
       reasonCodes: documentStatus === "mismatched" ? ["document_identity_mismatch"] : [],
     },
     surface: {

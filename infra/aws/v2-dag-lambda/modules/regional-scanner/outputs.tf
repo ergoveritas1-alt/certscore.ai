@@ -8,3 +8,14 @@ output "resources" {
     result_queue_url        = aws_sqs_queue.results.url
   }
 }
+
+output "vpc_endpoint_resources" {
+  description = "Private AWS service endpoint resources provisioned for the regional scanner, or null when not configured."
+  value = {
+    endpoint_security_group_id = try(aws_security_group.vpc_endpoints[0].id, null)
+    lambda_endpoint_id         = try(aws_vpc_endpoint.lambda[0].id, null)
+    logs_endpoint_id           = try(aws_vpc_endpoint.logs[0].id, null)
+    s3_gateway_endpoint_id     = try(aws_vpc_endpoint.s3[0].id, null)
+    sqs_endpoint_id            = try(aws_vpc_endpoint.sqs[0].id, null)
+  }
+}

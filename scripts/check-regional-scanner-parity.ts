@@ -2,7 +2,7 @@ import { execFileSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 import path from "node:path";
 
-const REGIONS = ["eu-west-1", "eu-central-1", "us-west-2"] as const;
+const REGIONS = ["eu-west-1", "eu-central-1", "us-west-1"] as const;
 type Region = (typeof REGIONS)[number];
 
 const EXPECTED_CONTEXT: Record<Region, {
@@ -20,7 +20,7 @@ const EXPECTED_CONTEXT: Record<Region, {
     locale: "de-DE",
     timezone: "Europe/Berlin",
   },
-  "us-west-2": {
+  "us-west-1": {
     acceptLanguage: "en-US,en;q=0.9",
     locale: "en-US",
     timezone: "America/Los_Angeles",

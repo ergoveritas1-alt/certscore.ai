@@ -33,7 +33,7 @@ locals {
   v2_dag_lambda_regions = {
     eu_de      = "eu-central-1"
     eu_ie      = "eu-west-1"
-    california = "us-west-2"
+    california = "us-west-1"
   }
   v2_dag_lambda_queue_urls = {
     for key, region in local.v2_dag_lambda_regions :

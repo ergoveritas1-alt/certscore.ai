@@ -194,6 +194,35 @@ export interface ScanDiagnosticPhase {
   outcome: "success" | "degraded" | "failed" | "unknown";
 }
 
+export interface ScanLaneRun {
+  laneId: "consent_proof" | "runtime_evidence" | "policy_evidence";
+  physicalInvocationId: string;
+  region: string;
+  phaseName: "preConsentRuntimeScanner" | "policySurfaceScanner";
+  startedAt: string;
+  firstResponse: {
+    at: string;
+    offsetMs: number;
+    httpStatus: number;
+    effectiveUrl: string | null;
+  } | null;
+  navigationCount: number;
+  challengeDetection: {
+    detected: boolean;
+    type: string | null;
+  };
+  executionOutcome: "success" | "degraded" | "failed";
+  accessOutcome:
+    | "representative_page"
+    | "bot_challenge"
+    | "access_denied"
+    | "blank_or_unusable"
+    | "navigation_failed"
+    | "unknown";
+  completedAt: string | null;
+  durationMs: number;
+}
+
 export interface ScanDiagnostics {
   type: "certscore_scan_diagnostics";
   schemaVersion: "scan-diagnostics.v1";
@@ -201,6 +230,8 @@ export interface ScanDiagnostics {
   generatedAt: string | null;
   totalWallMs: number | null;
   phases: ScanDiagnosticPhase[];
+  /** Present on newly instrumented scans; omitted by older API deployments. */
+  lanes?: ScanLaneRun[];
   policyDiscovery: {
     candidatesDiscovered: number | null;
     candidatesAfterDeduplication: number | null;

@@ -336,6 +336,26 @@ test("buildApiV2ScanDiagnostics projects bounded phase and policy discovery timi
           phase: "policy_enrichment",
           startedAt: "2026-06-30T12:00:06.000Z"
         }
+      ],
+      scanLaneRuns: [
+        {
+          laneId: "runtime_evidence",
+          physicalInvocationId: "aws-request-runtime-1",
+          region: "eu-west-1",
+          phaseName: "preConsentRuntimeScanner",
+          startedAt: "2026-06-30T12:00:02.000Z",
+          firstResponseAt: "2026-06-30T12:00:02.120Z",
+          firstResponseOffsetMs: 120,
+          firstHttpStatus: 403,
+          firstEffectiveUrl: "https://example.com/?token=%5Bredacted%5D",
+          navigationCount: 1,
+          challengeDetected: true,
+          challengeType: "captcha_or_challenge",
+          executionOutcome: "success",
+          accessOutcome: "bot_challenge",
+          completedAt: "2026-06-30T12:00:05.000Z",
+          durationMs: 3000
+        }
       ]
     }
   } as unknown as ScanDetailResponse;
@@ -351,6 +371,11 @@ test("buildApiV2ScanDiagnostics projects bounded phase and policy discovery timi
   assert.equal(diagnostics.policyDiscovery.phaseWallMs, 1500);
   assert.equal(diagnostics.policyDiscovery.maxConcurrency, 4);
   assert.equal(diagnostics.policyDiscovery.shortCircuitReason, "v2_static_short_circuit");
+  assert.equal(diagnostics.lanes.length, 1);
+  assert.equal(diagnostics.lanes[0]?.physicalInvocationId, "aws-request-runtime-1");
+  assert.equal(diagnostics.lanes[0]?.firstResponse?.httpStatus, 403);
+  assert.equal(diagnostics.lanes[0]?.executionOutcome, "success");
+  assert.equal(diagnostics.lanes[0]?.accessOutcome, "bot_challenge");
 });
 
 test("buildApiV2ScanDiagnostics normalizes database Date timestamps", () => {

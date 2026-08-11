@@ -20,14 +20,14 @@ case "$region" in
     expected_accept_language="en-IE,en;q=0.9"
     expected_timezone="Europe/Dublin"
     ;;
-  us-west-2)
+  us-west-1)
     location_slug="us-ca"
     expected_locale="en-US"
     expected_accept_language="en-US,en;q=0.9"
     expected_timezone="America/Los_Angeles"
     ;;
   *)
-    echo "Usage: $0 eu-central-1|eu-west-1|us-west-2 [--apply]" >&2
+    echo "Usage: $0 eu-central-1|eu-west-1|us-west-1 [--apply]" >&2
     exit 1
     ;;
 esac
@@ -82,6 +82,11 @@ vpc_id="$(aws lambda get-function-configuration \
   --function-name "$function_name" \
   --query 'VpcConfig.VpcId' \
   --output text)"
+vpc_cidr="$(aws ec2 describe-vpcs \
+  --region "$region" \
+  --vpc-ids "$vpc_id" \
+  --query 'Vpcs[0].CidrBlock' \
+  --output text)"
 old_network_interface_json="$(aws ec2 describe-network-interfaces \
   --region "$region" \
   --filters "Name=vpc-id,Values=${vpc_id}" "Name=private-ip-address,Values=${old_proxy_private_ip}" \
@@ -106,7 +111,10 @@ ami_id="$(aws ssm get-parameter \
   --query 'Parameter.Value' \
   --output text)"
 visible_hostname="certscore-${location_slug}-proxy"
-sed "s/__CERTSCORE_VISIBLE_HOSTNAME__/${visible_hostname}/g" "$template_path" >"$user_data"
+sed \
+  -e "s|__CERTSCORE_VISIBLE_HOSTNAME__|${visible_hostname}|g" \
+  -e "s|__CERTSCORE_LAMBDA_VPC_CIDR__|${vpc_cidr}|g" \
+  "$template_path" >"$user_data"
 
 echo "Region: ${region}"
 echo "Function: ${function_name}"

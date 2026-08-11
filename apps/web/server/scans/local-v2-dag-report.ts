@@ -1493,7 +1493,7 @@ function localV2ScreenshotStoragePointer(input: {
 }
 
 export function inferS3ArtifactRegion(bucket: string) {
-  const match = bucket.match(/(?:^|-)(eu-central-1|eu-west-1|us-west-2)(?:-|$)/);
+  const match = bucket.match(/(?:^|-)(eu-central-1|eu-west-1|us-west-1)(?:-|$)/);
   const region = match?.[1] ?? null;
   return isLocalV2DagLambdaAwsRegion(region) ? region : LOCAL_V2_DAG_LAMBDA_AWS_REGION;
 }
@@ -5488,6 +5488,7 @@ function buildMaterializedLocalV2Detail(
   const runtimeArtifacts = {
     ...inheritedRuntimeArtifacts,
     ...timingArtifacts,
+    scanLaneRuns: bundle.scanLaneRuns,
     local_v2_dag_scan_core_duration_ms: durationMsFromTimestamps(bundle.startedAt, bundle.completedAt),
     wc01ProductionProjection: {
       approved: true,

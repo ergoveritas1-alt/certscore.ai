@@ -874,6 +874,87 @@ test("explicit observation document URL survives a requested-to-final redirect",
   assert.equal(assessment.controls.options.state, "observed");
 });
 
+test("browser document token binds query-changing consent evidence to the canonical final document", () => {
+  const initialUrl = "https://example.test/consent?step=initial";
+  const finalUrl = "https://example.test/consent?step=final";
+  const documentIdentity = { source: "cdp_loader_id" as const, token: "loader-query-stable" };
+  const source = bundle([
+    { actionType: "accept_all", label: "Accept", visible: true, layer: "first_layer" },
+    { actionType: "reject_all", label: "Reject", visible: true, layer: "first_layer" },
+    { actionType: "manage_preferences", label: "Options", visible: true, layer: "first_layer" },
+  ], { url: finalUrl });
+  source.consentUiObservations[0]!.documentUrl = initialUrl;
+  source.consentUiObservations[0]!.documentIdentity = documentIdentity;
+  source.domSnapshots[0]!.url = finalUrl;
+  source.domSnapshots[0]!.documentIdentity = documentIdentity;
+  source.screenshots = [{
+    artifactId: "screenshot_pre_consent_settled",
+    capturedAtMs: 6_400,
+    captureMethod: "primary_viewport_fallback",
+    path: "artifacts/screenshot.png",
+    url: initialUrl,
+    documentIdentity,
+    pagePhase: "network_idle",
+    consentStateAtTime: "pre_consent",
+  }];
+
+  const assessment = deriveMaterializedConsentControlAssessment({
+    bundle: source,
+    consentControlGeometryEvidence: {
+      artifactVersion: "consent_control_geometry.v1",
+      observedAtMs: 6_600,
+      pageUrl: initialUrl,
+      documentIdentity,
+      candidates: [],
+      summary: {
+        firstLayerAccept: false,
+        firstLayerReject: false,
+        firstLayerOptions: false,
+        cmpDetected: true,
+        confidence: 0.9,
+      },
+    },
+    consentSurfaceInspection: completeInspection("actionable_surface_observed", true),
+    finalUrl,
+    noGo: false,
+    requestedUrl: "https://example.test/",
+  });
+
+  assert.equal(assessment.document.identityStatus, "matched");
+  assert.equal(assessment.document.canonicalDocumentToken, documentIdentity.token);
+  assert.deepEqual(assessment.document.observedDocumentTokens, [documentIdentity.token]);
+  assert.equal(assessment.controls.accept.state, "observed");
+  assert.equal(assessment.controls.reject.state, "observed");
+  assert.equal(assessment.controls.options.state, "observed");
+  assert.ok(assessment.evidence.every((evidence) => evidence.documentId === finalUrl));
+  assert.ok(assessment.evidence.every((evidence) => evidence.documentToken === documentIdentity.token));
+});
+
+test("query-changing consent evidence with a different browser document token stays unknown", () => {
+  const initialUrl = "https://example.test/consent?step=initial";
+  const finalUrl = "https://example.test/consent?step=final";
+  const source = bundle([
+    { actionType: "accept_all", label: "Accept", visible: true, layer: "first_layer" },
+  ], { url: finalUrl });
+  source.consentUiObservations[0]!.documentUrl = initialUrl;
+  source.consentUiObservations[0]!.documentIdentity = { source: "cdp_loader_id", token: "loader-initial" };
+  source.domSnapshots[0]!.url = finalUrl;
+  source.domSnapshots[0]!.documentIdentity = { source: "cdp_loader_id", token: "loader-final" };
+
+  const assessment = deriveMaterializedConsentControlAssessment({
+    bundle: source,
+    consentSurfaceInspection: completeInspection("actionable_surface_observed", true),
+    finalUrl,
+    noGo: false,
+    requestedUrl: "https://example.test/",
+  });
+
+  assert.equal(assessment.document.identityStatus, "mismatched");
+  assert.equal(assessment.controls.accept.state, "unknown");
+  assert.equal(assessment.controls.reject.state, "unknown");
+  assert.equal(assessment.controls.options.state, "unknown");
+});
+
 test("earlier redirect-document controls do not poison a later completed final-document inventory", () => {
   const requestedUrl = "https://redirect-history.example/";
   const finalUrl = "https://redirect-history.example/gb";
@@ -940,6 +1021,53 @@ test("an explicit conflicting observation document fails closed despite a final-
   assert.equal(assessment.controls.accept.state, "unknown");
   assert.equal(assessment.controls.reject.state, "unknown");
   assert.equal(assessment.controls.options.state, "unknown");
+});
+
+test("mismatched auxiliary geometry does not poison canonical typed bundle evidence", () => {
+  const canonicalUrl = "https://canonical.example/final";
+  const source = bundle([
+    { actionType: "accept_all", label: "Accept", visible: true, layer: "first_layer" },
+    { actionType: "reject_all", label: "Reject", visible: true, layer: "first_layer" },
+    { actionType: "manage_preferences", label: "Options", visible: true, layer: "first_layer" },
+  ], { url: canonicalUrl });
+  source.consentUiObservations[0]!.documentUrl = canonicalUrl;
+
+  const assessment = deriveMaterializedConsentControlAssessment({
+    bundle: source,
+    consentControlGeometryEvidence: {
+      artifactVersion: "consent_control_geometry.v1",
+      observedAtMs: 8_700,
+      pageUrl: "https://redirect.example/interstitial",
+      candidates: [{
+        candidateId: "redirect-accept",
+        actionType: "accept_all",
+        label: "Continue",
+        layer: "first_layer",
+        decisionStatus: "confirmed_visible",
+        enabled: true,
+      }],
+      summary: {
+        firstLayerAccept: false,
+        firstLayerReject: false,
+        firstLayerOptions: false,
+        cmpDetected: false,
+        confidence: 0.9,
+      },
+    },
+    consentSurfaceInspection: completeInspection("actionable_surface_observed", true),
+    finalUrl: canonicalUrl,
+    noGo: false,
+    requestedUrl: "https://canonical.example/",
+  });
+
+  assert.equal(assessment.document.identityStatus, "matched");
+  assert.equal(assessment.controls.accept.state, "observed");
+  assert.equal(assessment.controls.reject.state, "observed");
+  assert.equal(assessment.controls.options.state, "observed");
+  assert.ok(assessment.limitations.some((limitation) => limitation.code === "geometry_document_mismatch"));
+  assert.ok(assessment.contradictions.some(
+    (contradiction) => contradiction.reasonCode === "geometry_document_mismatch_does_not_erase_bundle_evidence",
+  ));
 });
 
 test("complete same-document no-surface coverage produces factual not-observed values", () => {

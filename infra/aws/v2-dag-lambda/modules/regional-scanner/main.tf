@@ -1,7 +1,47 @@
 locals {
-  result_dlq_name    = "${var.result_queue_name}-dlq"
-  failure_queue_name = "${var.project_name}-async-failures"
-  artifact_prefix    = trimsuffix(var.artifact_prefix, "/")
+  result_dlq_name       = "${var.result_queue_name}-dlq"
+  failure_queue_name    = "${var.project_name}-async-failures"
+  artifact_prefix       = trimsuffix(var.artifact_prefix, "/")
+  vpc_endpoints_enabled = var.vpc_endpoint_config != null
+  endpoint_security_group_name = (
+    var.region == "us-west-1"
+    ? "certscore-v2-dag-us-ca-vpc-endpoint-sg"
+    : "${var.project_name}-vpc-endpoints-${var.region}"
+  )
+  ecr_lifecycle_rules = jsondecode(var.region == "us-west-1" ? jsonencode([
+    {
+      rulePriority = 1
+      description  = "Expire untagged images after 1 day"
+      selection = {
+        tagStatus   = "untagged"
+        countType   = "sinceImagePushed"
+        countUnit   = "days"
+        countNumber = 1
+      }
+      action = { type = "expire" }
+    },
+    {
+      rulePriority = 2
+      description  = "Keep the 15 most recent tagged images"
+      selection = {
+        tagStatus      = "tagged"
+        tagPatternList = ["*"]
+        countType      = "imageCountMoreThan"
+        countNumber    = 15
+      }
+      action = { type = "expire" }
+    }
+    ]) : jsonencode([{
+      rulePriority = 1
+      description  = "Remove untagged scanner images after 14 days"
+      selection = {
+        tagStatus   = "untagged"
+        countType   = "sinceImagePushed"
+        countUnit   = "days"
+        countNumber = 14
+      }
+      action = { type = "expire" }
+  }]))
   base_environment = {
     CERTSCORE_V2_DAG_LAMBDA_ARTIFACT_BUCKET                        = var.artifact_bucket
     CERTSCORE_V2_DAG_LAMBDA_ARTIFACT_DIR                           = "/tmp/certscore-v2-dag-lambda"
@@ -18,11 +58,192 @@ locals {
     CERTSCORE_V2_DAG_LAMBDA_PRECONSENT_SCREENSHOT_MODE             = "always"
     CERTSCORE_V2_DAG_LAMBDA_PRECONSENT_SCREENSHOT_TIMEOUT_MS       = "15000"
     CERTSCORE_V2_DAG_LAMBDA_PRECONSENT_VISUAL_FALLBACK_DEADLINE_MS = "15000"
+    CERTSCORE_V2_DAG_LAMBDA_REQUIRE_REGIONAL_EGRESS                = "true"
     CERTSCORE_V2_DAG_LAMBDA_SCENARIO_CONCURRENCY                   = "1"
     CERTSCORE_V2_DAG_LAMBDA_SCENARIO_RESOURCE_MODE                 = "cmp_safe"
     CERTSCORE_V2_DAG_LAMBDA_TARGET_ENV                             = "local"
     CERTSCORE_CHROMIUM_EXECUTABLE_PATH                             = "/usr/bin/chromium"
   }
+}
+
+data "aws_vpc" "scanner" {
+  count = local.vpc_endpoints_enabled ? 1 : 0
+  id    = var.vpc_endpoint_config.vpc_id
+}
+
+resource "terraform_data" "vpc_endpoint_dns_guard" {
+  count = local.vpc_endpoints_enabled ? 1 : 0
+
+  input = {
+    vpc_id      = var.vpc_endpoint_config.vpc_id
+    region      = var.region
+    route_table = join(",", var.vpc_endpoint_config.route_table_ids)
+    subnet      = join(",", var.vpc_endpoint_config.subnet_ids)
+  }
+
+  lifecycle {
+    precondition {
+      condition = (
+        length(var.vpc_endpoint_config.route_table_ids) > 0 &&
+        length(var.vpc_endpoint_config.subnet_ids) > 0 &&
+        data.aws_vpc.scanner[0].enable_dns_support &&
+        data.aws_vpc.scanner[0].enable_dns_hostnames
+      )
+      error_message = "NAT-free scanner endpoints require at least one Lambda route table and subnet, plus VPC DNS support and DNS hostnames."
+    }
+  }
+}
+
+resource "aws_security_group" "vpc_endpoints" {
+  count = local.vpc_endpoints_enabled ? 1 : 0
+
+  name        = local.endpoint_security_group_name
+  description = "Private AWS service endpoints for scanner Lambda"
+  vpc_id      = var.vpc_endpoint_config.vpc_id
+
+  ingress {
+    description     = "Lambda-endpoints"
+    protocol        = "tcp"
+    from_port       = 443
+    to_port         = 443
+    security_groups = [var.vpc_endpoint_config.lambda_security_group_id]
+  }
+
+  egress {
+    protocol    = "-1"
+    from_port   = 0
+    to_port     = 0
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+
+  egress {
+    description = "Endpoint-egress"
+    protocol    = "tcp"
+    from_port   = 443
+    to_port     = 443
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+
+  tags = {
+    Name    = local.endpoint_security_group_name
+    Project = "CertScore"
+    Purpose = "private-service-endpoints"
+  }
+}
+
+resource "aws_vpc_endpoint" "s3" {
+  count = local.vpc_endpoints_enabled ? 1 : 0
+
+  vpc_id            = var.vpc_endpoint_config.vpc_id
+  service_name      = "com.amazonaws.${var.region}.s3"
+  vpc_endpoint_type = "Gateway"
+  route_table_ids   = var.vpc_endpoint_config.route_table_ids
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [{
+      Sid       = "AllowRetainedEvidenceObjects"
+      Effect    = "Allow"
+      Principal = "*"
+      Action    = ["s3:GetObject", "s3:PutObject"]
+      Resource  = "arn:aws:s3:::${var.artifact_bucket}/${local.artifact_prefix}/*"
+    }]
+  })
+
+  tags = merge(var.tags, {
+    Name    = "${var.project_name}-s3-endpoint-${var.region}"
+    Purpose = "scanner-retained-evidence"
+  })
+
+  depends_on = [terraform_data.vpc_endpoint_dns_guard]
+}
+
+resource "aws_vpc_endpoint" "sqs" {
+  count = local.vpc_endpoints_enabled ? 1 : 0
+
+  vpc_id              = var.vpc_endpoint_config.vpc_id
+  service_name        = "com.amazonaws.${var.region}.sqs"
+  vpc_endpoint_type   = "Interface"
+  private_dns_enabled = true
+  subnet_ids          = var.vpc_endpoint_config.subnet_ids
+  security_group_ids  = [aws_security_group.vpc_endpoints[0].id]
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [{
+      Sid       = "AllowRegionalScannerResultQueues"
+      Effect    = "Allow"
+      Principal = "*"
+      Action    = ["sqs:SendMessage"]
+      Resource = [
+        "arn:aws:sqs:${var.region}:${var.account_id}:${var.project_name}-results",
+        aws_sqs_queue.results.arn,
+        aws_sqs_queue.result_dlq.arn,
+        aws_sqs_queue.async_failures.arn,
+      ]
+    }]
+  })
+
+  tags = merge(var.tags, {
+    Name    = "${var.project_name}-sqs-endpoint-${var.region}"
+    Purpose = "scanner-result-publication"
+  })
+
+  depends_on = [terraform_data.vpc_endpoint_dns_guard]
+}
+
+resource "aws_vpc_endpoint" "logs" {
+  count = local.vpc_endpoints_enabled ? 1 : 0
+
+  vpc_id              = var.vpc_endpoint_config.vpc_id
+  service_name        = "com.amazonaws.${var.region}.logs"
+  vpc_endpoint_type   = "Interface"
+  private_dns_enabled = true
+  subnet_ids          = var.vpc_endpoint_config.subnet_ids
+  security_group_ids  = [aws_security_group.vpc_endpoints[0].id]
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [{
+      Sid       = "AllowRegionalScannerLogs"
+      Effect    = "Allow"
+      Principal = "*"
+      Action    = ["logs:CreateLogGroup", "logs:CreateLogStream", "logs:PutLogEvents"]
+      Resource  = "arn:aws:logs:${var.region}:${var.account_id}:log-group:/aws/lambda/${var.function_name}:*"
+    }]
+  })
+
+  tags = merge(var.tags, {
+    Name    = "${var.project_name}-logs-endpoint-${var.region}"
+    Purpose = "scanner-logs"
+  })
+
+  depends_on = [terraform_data.vpc_endpoint_dns_guard]
+}
+
+resource "aws_vpc_endpoint" "lambda" {
+  count = local.vpc_endpoints_enabled ? 1 : 0
+
+  vpc_id              = var.vpc_endpoint_config.vpc_id
+  service_name        = "com.amazonaws.${var.region}.lambda"
+  vpc_endpoint_type   = "Interface"
+  private_dns_enabled = true
+  subnet_ids          = var.vpc_endpoint_config.subnet_ids
+  security_group_ids  = [aws_security_group.vpc_endpoints[0].id]
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [{
+      Sid       = "AllowRegionalScannerShardInvocations"
+      Effect    = "Allow"
+      Principal = "*"
+      Action    = ["lambda:InvokeFunction"]
+      Resource  = "arn:aws:lambda:${var.region}:${var.account_id}:function:${var.project_name}-*"
+    }]
+  })
+
+  tags = merge(var.tags, {
+    Name    = "${var.project_name}-lambda-endpoint-${var.region}"
+    Purpose = "scanner-shard-invocation"
+  })
+
+  depends_on = [terraform_data.vpc_endpoint_dns_guard]
 }
 
 resource "aws_ecr_repository" "scanner" {
@@ -42,17 +263,7 @@ resource "aws_ecr_repository" "scanner" {
 resource "aws_ecr_lifecycle_policy" "scanner" {
   repository = aws_ecr_repository.scanner.name
   policy = jsonencode({
-    rules = [{
-      rulePriority = 1
-      description  = "Remove untagged scanner images after 14 days"
-      selection = {
-        tagStatus   = "untagged"
-        countType   = "sinceImagePushed"
-        countUnit   = "days"
-        countNumber = 14
-      }
-      action = { type = "expire" }
-    }]
+    rules = local.ecr_lifecycle_rules
   })
 }
 
@@ -100,6 +311,12 @@ resource "aws_sqs_queue" "result_dlq" {
   message_retention_seconds = 1209600
   sqs_managed_sse_enabled   = true
   tags                      = var.tags
+
+  lifecycle {
+    # AWS supports the live 1 MiB setting, but provider v5 still validates the
+    # historical 256 KiB ceiling. Preserve the live value until provider v6.
+    ignore_changes = [max_message_size]
+  }
 }
 
 resource "aws_sqs_queue" "results" {
@@ -152,13 +369,19 @@ resource "aws_lambda_function" "scanner" {
   package_type                   = "Image"
   image_uri                      = var.image_uri
   memory_size                    = var.memory_size
-  timeout                        = 900
+  timeout                        = 75
   reserved_concurrent_executions = var.reserved_concurrent_executions
 
   ephemeral_storage { size = 512 }
 
   environment {
-    variables = merge(local.base_environment, var.environment_variables)
+    variables = merge(
+      local.base_environment,
+      var.environment_variables,
+      var.expected_egress_region != "" ? {
+        CERTSCORE_V2_DAG_LAMBDA_EXPECTED_EGRESS_REGION = var.expected_egress_region
+      } : {}
+    )
   }
 
   dynamic "vpc_config" {
@@ -199,6 +422,23 @@ resource "aws_cloudwatch_metric_alarm" "lambda_errors" {
   threshold           = 1
   comparison_operator = "GreaterThanOrEqualToThreshold"
   treat_missing_data  = "notBreaching"
+  dimensions          = { FunctionName = aws_lambda_function.scanner.function_name }
+  alarm_actions       = var.alarm_actions
+  tags                = var.tags
+}
+
+resource "aws_cloudwatch_metric_alarm" "lambda_duration_warning" {
+  alarm_name          = "${var.function_name}-${var.region}-duration-60s"
+  alarm_description   = "Scanner Lambda invocation exceeded 60 seconds in ${var.region}. In /aws/lambda/${var.function_name}, filter v2_lambda_duration_warning or v2_lambda_invocation_started to correlate scan_id, aws_request_id, hostname, lane, and outcome."
+  namespace           = "AWS/Lambda"
+  metric_name         = "Duration"
+  statistic           = "Maximum"
+  period              = 60
+  evaluation_periods  = 1
+  threshold           = 60000
+  comparison_operator = "GreaterThanOrEqualToThreshold"
+  treat_missing_data  = "notBreaching"
+  unit                = "Milliseconds"
   dimensions          = { FunctionName = aws_lambda_function.scanner.function_name }
   alarm_actions       = var.alarm_actions
   tags                = var.tags

@@ -24,6 +24,6 @@ test("formats scan-from labels and geo targets", () => {
   assert.deepEqual(getScanFromDefinition("california").requestedGeo, {
     countryCode: "US",
     provider: "aws-default",
-    regionCode: "us-west-2"
+    regionCode: "us-west-1"
   });
 });

@@ -5,6 +5,9 @@ import test from "node:test";
 const webTerraformPath = "infra/aws/web-ecs/main.tf";
 const validationTerraformPath = "infra/aws/validation/main.tf";
 const scannerTerraformPath = "infra/aws/v2-dag-lambda/modules/regional-scanner/main.tf";
+const scannerRootTerraformPath = "infra/aws/v2-dag-lambda/main.tf";
+const scannerRootVariablesPath = "infra/aws/v2-dag-lambda/variables.tf";
+const scannerModuleVariablesPath = "infra/aws/v2-dag-lambda/modules/regional-scanner/variables.tf";
 
 test("MCP uses an isolated single-task ECS service and task role", async () => {
   const source = await readFile(webTerraformPath, "utf8");
@@ -73,7 +76,60 @@ test("scanner Lambda infrastructure is bounded and failure-aware", async () => {
   assert.match(source, /reserved_concurrent_executions\s+=\s+var\.reserved_concurrent_executions/);
   assert.match(source, /resource "aws_cloudwatch_metric_alarm" "old_results"/);
   assert.match(source, /resource "aws_cloudwatch_metric_alarm" "result_dlq"/);
+  assert.match(source, /resource "aws_cloudwatch_metric_alarm" "lambda_duration_warning"/);
+  assert.match(source, /alarm_name\s+=\s+"\$\{var\.function_name\}-\$\{var\.region\}-duration-60s"/);
+  assert.match(source, /metric_name\s+=\s+"Duration"/);
+  assert.match(source, /statistic\s*=\s*"Maximum"/);
+  assert.match(source, /period\s*=\s*60/);
+  assert.match(source, /threshold\s*=\s*60000/);
+  assert.match(source, /v2_lambda_duration_warning/);
+  assert.match(source, /aws_request_id/);
+  assert.match(source, /scan_id/);
+  assert.match(source, /timeout\s+=\s+75/);
   assert.match(source, /resource "aws_s3_bucket_versioning" "artifacts"/);
+  assert.match(source, /CERTSCORE_V2_DAG_LAMBDA_REQUIRE_REGIONAL_EGRESS\s+=\s+"true"/);
+});
+
+test("scanner NAT-free AWS service endpoints are private, scoped, and migration-safe", async () => {
+  const source = await readFile(scannerTerraformPath, "utf8");
+  const root = await readFile(scannerRootTerraformPath, "utf8");
+  const variables = await readFile(scannerRootVariablesPath, "utf8");
+  const moduleVariables = await readFile(scannerModuleVariablesPath, "utf8");
+
+  assert.match(source, /resource "aws_vpc_endpoint" "s3"/);
+  assert.match(source, /vpc_endpoint_type\s+=\s+"Gateway"/);
+  assert.match(source, /route_table_ids\s+=\s+var\.vpc_endpoint_config\.route_table_ids/);
+  assert.match(source, /service_name\s+=\s+"com\.amazonaws\.\$\{var\.region\}\.s3"/);
+  assert.match(source, /resource "aws_vpc_endpoint" "sqs"/);
+  assert.match(source, /service_name\s+=\s+"com\.amazonaws\.\$\{var\.region\}\.sqs"/);
+  assert.match(source, /resource "aws_vpc_endpoint" "logs"/);
+  assert.match(source, /service_name\s+=\s+"com\.amazonaws\.\$\{var\.region\}\.logs"/);
+  assert.match(source, /private_dns_enabled\s+=\s+true/);
+  assert.match(source, /resource "aws_vpc_endpoint" "lambda"/);
+  assert.match(source, /service_name\s+=\s+"com\.amazonaws\.\$\{var\.region\}\.lambda"/);
+  assert.match(source, /resource "aws_security_group" "vpc_endpoints"/);
+  assert.match(source, /security_groups\s+=\s+\[var\.vpc_endpoint_config\.lambda_security_group_id\]/);
+  assert.match(source, /from_port\s+=\s+443/);
+  assert.match(source, /to_port\s+=\s+443/);
+  assert.match(source, /enable_dns_support/);
+  assert.match(source, /enable_dns_hostnames/);
+  assert.match(source, /s3:GetObject/);
+  assert.match(source, /s3:PutObject/);
+  assert.match(source, /sqs:SendMessage/);
+  assert.match(source, /lambda:InvokeFunction/);
+
+  assert.match(root, /vpc_endpoint_config\s+=\s+lookup\(var\.vpc_endpoint_config_by_region/);
+  assert.match(variables, /variable "vpc_endpoint_config_by_region"/);
+  assert.match(variables, /variable "expected_egress_region_by_region"/);
+  assert.match(variables, /"us-west-1"\s+=\s+"California"/);
+  assert.match(variables, /route_table_ids\s+=\s+list\(string\)/);
+  assert.match(moduleVariables, /variable "vpc_endpoint_config"/);
+  assert.match(moduleVariables, /lambda_security_group_id\s+=\s+string/);
+
+  // NAT route removal remains a separately authorized migration action.
+  assert.doesNotMatch(source, /resource "aws_route"/);
+  assert.doesNotMatch(source, /resource "aws_nat_gateway"/);
+  assert.doesNotMatch(source, /resource "aws_eip"/);
 });
 
 test("routine scanner deploys promote immutable digests without recreating infrastructure", async () => {

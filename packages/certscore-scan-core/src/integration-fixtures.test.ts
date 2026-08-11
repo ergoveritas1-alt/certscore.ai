@@ -2664,10 +2664,21 @@ test("pre-consent runtime scanner does not treat off-viewport footer settings as
       path.join(tempRoot, "out", "ConsentControlGeometryEvidence.json"),
       "utf8",
     )) as ConsentControlGeometryArtifact;
+    const settledScreenshot = result.screenshots.find((screenshot) =>
+      screenshot.artifactId === "screenshot_pre_consent_settled"
+    );
+    const retainedDocumentTokens = [
+      observation?.documentIdentity?.token,
+      settledScreenshot?.documentIdentity?.token,
+      geometry.documentIdentity?.token,
+      result.domSnapshots[0]?.documentIdentity?.token,
+    ];
     assert.match(geometry.screenshotArtifactRef ?? "", /screenshot-pre-consent-settled\.png$/);
     assert.equal(geometry.summary.firstLayerAccept, false);
     assert.equal(geometry.summary.firstLayerReject, false);
     assert.equal(geometry.summary.firstLayerOptions, false);
+    assert.equal(retainedDocumentTokens.every((token) => typeof token === "string" && token.length > 0), true);
+    assert.equal(new Set(retainedDocumentTokens).size, 1, "A/R/O inventory, geometry, screenshot, and DOM must share one browser document token");
     assert.equal(consentSurfaceInspection.inspectionCompleted, true);
     assert.equal(consentSurfaceInspection.coverageStatus, "complete");
     assert.equal(consentSurfaceInspection.outcome, "no_surface_observed_complete_coverage");

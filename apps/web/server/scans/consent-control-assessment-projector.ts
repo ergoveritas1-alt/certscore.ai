@@ -34,6 +34,12 @@ function normalizedDocumentId(value: string | null | undefined) {
   }
 }
 
+function retainedDocumentToken(value: unknown): string | null {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
+  const token = (value as { token?: unknown }).token;
+  return typeof token === "string" && token.length > 0 && token.length <= 160 ? token : null;
+}
+
 function unique<T>(values: T[]) {
   return [...new Set(values)];
 }
@@ -79,12 +85,17 @@ function inspectionChannel(value: string | undefined): ConsentControlAssessmentC
 function geometryInput(
   raw: Record<string, unknown> | null | undefined,
   canonicalDocumentId: string | null,
+  canonicalDocumentToken: string | null,
 ): ConsentControlAssessmentGeometry | null {
   if (!raw) return null;
   const summary = raw.summary && typeof raw.summary === "object" && !Array.isArray(raw.summary)
     ? raw.summary as Record<string, unknown>
     : null;
   const pageUrl = normalizedDocumentId(typeof raw.pageUrl === "string" ? raw.pageUrl : null);
+  const documentToken = retainedDocumentToken(raw.documentIdentity);
+  const tokenBoundToCanonicalDocument = Boolean(
+    canonicalDocumentToken && documentToken === canonicalDocumentToken,
+  );
   const candidates = Array.isArray(raw.candidates)
     ? raw.candidates.flatMap((candidate): ConsentControlAssessmentCandidate[] => {
         if (!candidate || typeof candidate !== "object" || Array.isArray(candidate)) return [];
@@ -134,7 +145,8 @@ function geometryInput(
           visible,
           actionable: visible && row.enabled !== false,
           observedAtMs: typeof raw.observedAtMs === "number" ? raw.observedAtMs : 0,
-          documentId: pageUrl,
+          documentId: tokenBoundToCanonicalDocument ? canonicalDocumentId : pageUrl,
+          documentToken,
           channels: ["geometry"],
           artifactRefs: typeof row.screenshotArtifactRef === "string" ? [row.screenshotArtifactRef] : [],
         }];
@@ -152,13 +164,18 @@ function geometryInput(
     Boolean(canonicalDocumentId);
   const assessmentStatus = !complete
     ? "incomplete"
-    : pageUrl !== canonicalDocumentId
+    : canonicalDocumentToken && documentToken
+      ? documentToken !== canonicalDocumentToken
+        ? "document_mismatch"
+        : "complete"
+      : pageUrl !== canonicalDocumentId
       ? "document_mismatch"
       : "complete";
   return {
     artifactVersion: typeof raw.artifactVersion === "string" ? raw.artifactVersion : null,
     assessmentStatus,
-    documentId: pageUrl,
+    documentId: tokenBoundToCanonicalDocument ? canonicalDocumentId : pageUrl,
+    documentToken,
     observedAtMs: typeof raw.observedAtMs === "number" ? raw.observedAtMs : null,
     completedChannels: assessmentStatus === "complete" ? ["geometry"] : [],
     incompleteChannels: assessmentStatus === "incomplete" ? ["geometry"] : [],
@@ -190,8 +207,9 @@ export function deriveMaterializedConsentControlAssessment(input: {
     .map((snapshot) => ({
       capturedAtMs: snapshot.capturedAtMs,
       documentId: normalizedDocumentId(snapshot.url),
+      documentToken: retainedDocumentToken(snapshot.documentIdentity),
     }))
-    .filter((snapshot): snapshot is { capturedAtMs: number; documentId: string } =>
+    .filter((snapshot): snapshot is { capturedAtMs: number; documentId: string; documentToken: string | null } =>
       snapshot.documentId !== null
     )
     .sort((left, right) => left.capturedAtMs - right.capturedAtMs);
@@ -199,11 +217,15 @@ export function deriveMaterializedConsentControlAssessment(input: {
     .map((screenshot) => ({
       capturedAtMs: screenshot.capturedAtMs,
       documentId: normalizedDocumentId(screenshot.url),
+      documentToken: retainedDocumentToken(screenshot.documentIdentity),
     }))
-    .filter((artifact): artifact is { capturedAtMs: number; documentId: string } =>
+    .filter((artifact): artifact is { capturedAtMs: number; documentId: string; documentToken: string | null } =>
       artifact.documentId !== null
     )
     .sort((left, right) => left.capturedAtMs - right.capturedAtMs);
+  const canonicalDocumentToken = retainedDocumentSnapshots
+    .filter((snapshot) => snapshot.documentId === canonicalDocumentId && snapshot.documentToken)
+    .at(-1)?.documentToken ?? null;
   const isCompletedTypedFirstLayerInventory = (
     observation: CanonicalEvidenceBundle["consentUiObservations"][number],
   ) => {
@@ -213,7 +235,18 @@ export function deriveMaterializedConsentControlAssessment(input: {
     const failedChannels = observation.captureDiagnostics?.failedChannels ?? [];
     const terminalVerifiedPacket = isVerifiedTerminalConsentPacket(observation, {
       expectedDocumentUrl: canonicalDocumentId,
-      representativeScreenshotUrls: retainedVisualDocumentArtifacts.map((artifact) => artifact.documentId),
+      expectedDocumentIdentity: canonicalDocumentToken
+        ? { source: "cdp_loader_id", token: canonicalDocumentToken }
+        : undefined,
+      representativeScreenshotUrls: canonicalDocumentToken
+        ? undefined
+        : retainedVisualDocumentArtifacts.map((artifact) => artifact.documentId),
+      representativeScreenshots: retainedVisualDocumentArtifacts.map((artifact) => ({
+        documentIdentity: artifact.documentToken
+          ? { source: "cdp_loader_id" as const, token: artifact.documentToken }
+          : undefined,
+        url: artifact.documentId,
+      })),
     });
     const finalInventoryIncomplete = !terminalVerifiedPacket && (observation.basis ?? []).some((basis) =>
       basis === "recapture:paired_settled_frame_inventory_incomplete" ||
@@ -283,10 +316,18 @@ export function deriveMaterializedConsentControlAssessment(input: {
   const singleRetainedVisualDocumentId = retainedVisualDocumentIds.length === 1
     ? retainedVisualDocumentIds[0] ?? null
     : null;
-  const geometry = geometryInput(input.consentControlGeometryEvidence, canonicalDocumentId);
+  const geometry = geometryInput(
+    input.consentControlGeometryEvidence,
+    canonicalDocumentId,
+    canonicalDocumentToken,
+  );
   const observations: ConsentControlAssessmentInput["observations"] = (input.bundle.consentUiObservations ?? []).map((observation) => {
     const explicitObservationDocumentUrlRetained = typeof observation.documentUrl === "string";
     const explicitObservationDocumentId = normalizedDocumentId(observation.documentUrl);
+    const observationDocumentToken = retainedDocumentToken(observation.documentIdentity);
+    const tokenBoundToCanonicalDocument = Boolean(
+      canonicalDocumentToken && observationDocumentToken === canonicalDocumentToken,
+    );
     const closestPriorDocumentArtifact = [
       ...retainedDocumentSnapshots,
       ...retainedVisualDocumentArtifacts,
@@ -295,7 +336,9 @@ export function deriveMaterializedConsentControlAssessment(input: {
       .sort((left, right) => left.capturedAtMs - right.capturedAtMs)
       .at(-1)?.documentId ?? null;
     const observationDocumentId =
-      explicitObservationDocumentUrlRetained
+      tokenBoundToCanonicalDocument
+        ? canonicalDocumentId
+        : explicitObservationDocumentUrlRetained
         ? explicitObservationDocumentId
         : singleRetainedVisualDocumentId ??
           closestPriorDocumentArtifact ??
@@ -316,6 +359,7 @@ export function deriveMaterializedConsentControlAssessment(input: {
       likelyPresent: observation.likelyPresent,
       layerInspected: retainedLayer,
       documentId: observationDocumentId,
+      documentToken: observationDocumentToken,
       captureStatus: observation.captureStatus,
       inventoryOutcome: observation.inventoryOutcome,
       completedChannels: observation.captureDiagnostics?.completedChannels,
@@ -350,6 +394,7 @@ export function deriveMaterializedConsentControlAssessment(input: {
             (actionType !== "other" || control.semanticRole === "dismiss" || controlVariant !== null),
           observedAtMs: observationTimestamp(observation),
           documentId: observationDocumentId,
+          documentToken: observationDocumentToken,
           channels: observation.captureDiagnostics?.completedChannels,
           artifactRefs: control.artifactRef ? [control.artifactRef] : [],
         };
@@ -432,16 +477,28 @@ export function deriveMaterializedConsentControlAssessment(input: {
     ...retainedVisualDocumentArtifacts
       .map((artifact) => artifact.documentId)
       .filter((documentId) => documentId === canonicalDocumentId),
-    // An incomplete geometry diagnostic can retain the requested page URL
-    // without retaining any control evidence. It must not make a separately
-    // typed first-layer inventory look cross-document.
-    ...(geometry && (geometry.assessmentStatus === "complete" || (geometry.candidates?.length ?? 0) > 0) && geometry.documentId
-      ? [geometry.documentId]
-      : []),
   ]);
+  const primaryObservedDocumentTokens = unique(assessmentObservations
+    .filter((observation) =>
+      (observation.controls?.length ?? 0) > 0 ||
+      (
+        observation.observationId === typedFirstLayerProjectedObservation?.observationId &&
+        observation.observedAtMs === typedFirstLayerProjectedObservation.observedAtMs
+      )
+    )
+    .map((observation) => observation.documentToken)
+    .filter((token): token is string => Boolean(token)));
+  // Geometry is an auxiliary evidence source with its own document binding.
+  // A mismatched geometry packet must remain limited and excluded from the
+  // canonical evidence set, but it must not poison otherwise same-document
+  // typed bundle evidence. deriveConsentControlAssessment retains the
+  // geometry mismatch limitation and contradiction independently.
   const documentIdentityStatus =
-    geometry?.assessmentStatus === "document_mismatch" ||
-    Boolean(canonicalDocumentId && observedDocumentIds.some((documentId) => documentId !== canonicalDocumentId))
+    canonicalDocumentToken && primaryObservedDocumentTokens.length > 0
+      ? primaryObservedDocumentTokens.some((token) => token !== canonicalDocumentToken)
+        ? "mismatched"
+        : "matched"
+      : Boolean(canonicalDocumentId && observedDocumentIds.some((documentId) => documentId !== canonicalDocumentId))
       ? "mismatched"
       : canonicalDocumentId && observedDocumentIds.length > 0
         ? "matched"
@@ -514,6 +571,8 @@ export function deriveMaterializedConsentControlAssessment(input: {
     document: {
       canonicalDocumentId,
       observedDocumentIds,
+      canonicalDocumentToken,
+      observedDocumentTokens: primaryObservedDocumentTokens,
       identityStatus: documentIdentityStatus,
     },
     observations: assessmentObservations,

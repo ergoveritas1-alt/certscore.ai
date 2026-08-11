@@ -4,6 +4,7 @@ import type {
   NanoConsentUiClassificationResult,
 } from "./scanners/consent-flow-runtime-scanner.js";
 import { classifyConsentControlLabel, type ConsentActionType } from "@certscore/contracts";
+import { proxyFetch } from "./proxy-fetch.js";
 
 const OPENAI_API_URL = "https://api.openai.com/v1/chat/completions";
 const DEFAULT_NANO_MODEL = "gpt-5.4-nano";
@@ -39,6 +40,7 @@ export function createOpenAiNanoConsentUiAssistProviderFromEnv(
       env.CERTSCORE_EXTRACTION_MODEL?.trim() ||
       env.VALIDATION_NANO_MODEL?.trim() ||
       DEFAULT_NANO_MODEL,
+    fetchImpl: (input, init) => proxyFetch(input, init, env),
   });
 }
 

@@ -4,7 +4,7 @@ Production scanning runs only through the CertScore v2 DAG Lambda runtime in `WC
 
 ## Production scanner responsibilities
 - `WC01/packages/certscore-scan-core` and the v2 DAG orchestration own production evidence capture
-- the approved production targets are the v2 DAG Lambda functions in `eu-central-1`, `eu-west-1`, and `us-west-2`
+- the approved production targets are the v2 DAG Lambda functions in `eu-central-1`, `eu-west-1`, and `us-west-1` (US West, N. California)
 - production scanner changes and deployments originate in `WC01`
 - scanner ECS/Fargate services are prohibited
 

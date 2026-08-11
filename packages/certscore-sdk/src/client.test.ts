@@ -461,6 +461,25 @@ test("resource clients call API v2 read endpoints", async () => {
         generatedAt: "2026-06-30T12:00:10.000Z",
         totalWallMs: 9000,
         phases: [],
+        lanes: [{
+          laneId: "runtime_evidence",
+          physicalInvocationId: "aws-request-runtime-1",
+          region: "eu-west-1",
+          phaseName: "preConsentRuntimeScanner",
+          startedAt: "2026-06-30T12:00:01.000Z",
+          firstResponse: {
+            at: "2026-06-30T12:00:01.120Z",
+            offsetMs: 120,
+            httpStatus: 200,
+            effectiveUrl: "https://example.com/"
+          },
+          navigationCount: 1,
+          challengeDetection: { detected: false, type: null },
+          executionOutcome: "success",
+          accessOutcome: "representative_page",
+          completedAt: "2026-06-30T12:00:05.000Z",
+          durationMs: 4000
+        }],
         policyDiscovery: {
           candidatesDiscovered: null,
           candidatesAfterDeduplication: null,
@@ -561,6 +580,7 @@ test("resource clients call API v2 read endpoints", async () => {
     assert.equal(scan.type, "certscore_scan");
     assert.equal(diagnostics.type, "certscore_scan_diagnostics");
     assert.equal(diagnostics.totalWallMs, 9000);
+    assert.equal(diagnostics.lanes?.[0]?.physicalInvocationId, "aws-request-runtime-1");
     assert.equal(status.type, "certscore_scan_job");
     assert.equal(inventory.type, "certscore_pre_consent_cookies_trackers");
     assert.equal(findings.type, "certscore_finding_list");

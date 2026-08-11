@@ -113,7 +113,7 @@ notifications.
 
 The regional scanner stack uses `alarm_actions_by_region`. CloudWatch alarms
 and their SNS notification topics are regional, so configure a same-region
-topic separately for `eu-central-1`, `eu-west-1`, and `us-west-2`.
+topic separately for `eu-central-1`, `eu-west-1`, and `us-west-1`.
 
 ## Scale-down order
 

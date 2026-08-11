@@ -462,7 +462,7 @@ function printUsage() {
     "",
     "Options:",
     "  --target-url <url>       Site to scan. Default: https://www.webmd.com/",
-    "  --aws-region <region>    eu-central-1, eu-west-1, or us-west-2. Default: eu-central-1",
+    "  --aws-region <region>    eu-central-1, eu-west-1, or us-west-1. Default: eu-central-1",
     "  --profile <profile>      full, standard, or tiny. Default: full",
     "  --scan-id <id>           Stable scan ID. Default: local-lambda-parity-<uuid>",
     "  --artifact-dir <path>    Artifact base directory. Default: artifacts/local-v2-dag-lambda-parity",
@@ -586,7 +586,7 @@ function lambdaLocationEnvPrefix(region: LocalV2DagLambdaAwsRegion) {
   if (region === "eu-west-1") {
     return "EU_IE";
   }
-  if (region === "us-west-2") {
+  if (region === "us-west-1") {
     return "US_WEST";
   }
   return "EU_DE";
@@ -600,7 +600,7 @@ function regionalChromiumDefaults(region: LocalV2DagLambdaAwsRegion): Record<str
       CERTSCORE_V2_DAG_LAMBDA_CHROMIUM_TIMEZONE_ID: "Europe/Dublin"
     };
   }
-  if (region === "us-west-2") {
+  if (region === "us-west-1") {
     return {
       CERTSCORE_V2_DAG_LAMBDA_CHROMIUM_ACCEPT_LANGUAGE: "en-US,en;q=0.9",
       CERTSCORE_V2_DAG_LAMBDA_CHROMIUM_LOCALE: "en-US",

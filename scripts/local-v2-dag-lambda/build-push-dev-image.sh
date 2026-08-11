@@ -28,9 +28,9 @@ if [[ -n "${DOCKER_CONFIG:-}" ]]; then
 fi
 
 case "$region" in
-  eu-central-1|eu-west-1|us-west-2) ;;
+  eu-central-1|eu-west-1|us-west-1) ;;
   *)
-    echo "Unsupported local v2 DAG Lambda image region: ${region}. Use eu-central-1, eu-west-1, or us-west-2." >&2
+    echo "Unsupported local v2 DAG Lambda image region: ${region}. Use eu-central-1, eu-west-1, or us-west-1." >&2
     exit 1
     ;;
 esac

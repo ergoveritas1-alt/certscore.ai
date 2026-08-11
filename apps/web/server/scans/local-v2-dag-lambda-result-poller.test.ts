@@ -342,7 +342,7 @@ test("SQS poller drains configured regional result queues", async () => {
     env: {
       CERTSCORE_V2_DAG_LAMBDA_EU_DE_RESULT_QUEUE_URL: "https://sqs.eu-central-1.amazonaws.com/123/de-results",
       CERTSCORE_V2_DAG_LAMBDA_EU_IE_RESULT_QUEUE_URL: "https://sqs.eu-west-1.amazonaws.com/123/ie-results",
-      CERTSCORE_V2_DAG_LAMBDA_US_WEST_RESULT_QUEUE_URL: "https://sqs.us-west-2.amazonaws.com/123/usw-results",
+      CERTSCORE_V2_DAG_LAMBDA_US_WEST_RESULT_QUEUE_URL: "https://sqs.us-west-1.amazonaws.com/123/usw-results",
       CERTSCORE_V2_DAG_LAMBDA_TARGET_ENV: "local"
     },
     handleMessage: async (rawMessage, options) => {
@@ -365,10 +365,10 @@ test("SQS poller drains configured regional result queues", async () => {
   assert.deepEqual(receivedQueueUrls, [
     "https://sqs.eu-central-1.amazonaws.com/123/de-results",
     "https://sqs.eu-west-1.amazonaws.com/123/ie-results",
-    "https://sqs.us-west-2.amazonaws.com/123/usw-results"
+    "https://sqs.us-west-1.amazonaws.com/123/usw-results"
   ]);
   assert.deepEqual(deletedQueueUrls, receivedQueueUrls);
-  assert.deepEqual(observedS3Regions, ["eu-central-1", "eu-west-1", "us-west-2"]);
+  assert.deepEqual(observedS3Regions, ["eu-central-1", "eu-west-1", "us-west-1"]);
 });
 
 test("SQS poller targets an explicit EU-IR queue instead of unrelated configured queues", async () => {
@@ -391,7 +391,7 @@ test("SQS poller targets an explicit EU-IR queue instead of unrelated configured
     env: {
       CERTSCORE_V2_DAG_LAMBDA_EU_DE_RESULT_QUEUE_URL: "https://sqs.eu-central-1.amazonaws.com/123/de-results",
       CERTSCORE_V2_DAG_LAMBDA_EU_IE_RESULT_QUEUE_URL: "https://sqs.eu-west-1.amazonaws.com/123/ie-results",
-      CERTSCORE_V2_DAG_LAMBDA_US_WEST_RESULT_QUEUE_URL: "https://sqs.us-west-2.amazonaws.com/123/usw-results",
+      CERTSCORE_V2_DAG_LAMBDA_US_WEST_RESULT_QUEUE_URL: "https://sqs.us-west-1.amazonaws.com/123/usw-results",
       CERTSCORE_V2_DAG_LAMBDA_TARGET_ENV: "local"
     },
     queueUrl: "https://sqs.eu-west-1.amazonaws.com/123/ie-results",
@@ -433,7 +433,7 @@ test("SQS poller drains broad regional queues in parallel", async () => {
     env: {
       CERTSCORE_V2_DAG_LAMBDA_EU_DE_RESULT_QUEUE_URL: "https://sqs.eu-central-1.amazonaws.com/123/de-results",
       CERTSCORE_V2_DAG_LAMBDA_EU_IE_RESULT_QUEUE_URL: "https://sqs.eu-west-1.amazonaws.com/123/ie-results",
-      CERTSCORE_V2_DAG_LAMBDA_US_WEST_RESULT_QUEUE_URL: "https://sqs.us-west-2.amazonaws.com/123/usw-results",
+      CERTSCORE_V2_DAG_LAMBDA_US_WEST_RESULT_QUEUE_URL: "https://sqs.us-west-1.amazonaws.com/123/usw-results",
       CERTSCORE_V2_DAG_LAMBDA_TARGET_ENV: "local"
     },
     sqsClient,
@@ -450,7 +450,7 @@ test("SQS poller drains broad regional queues in parallel", async () => {
   assert.deepEqual(receivedQueueUrls.sort(), [
     "https://sqs.eu-central-1.amazonaws.com/123/de-results",
     "https://sqs.eu-west-1.amazonaws.com/123/ie-results",
-    "https://sqs.us-west-2.amazonaws.com/123/usw-results"
+    "https://sqs.us-west-1.amazonaws.com/123/usw-results"
   ]);
   assert.ok(elapsedMs < 100, `expected parallel polling to avoid serial queue delay; elapsed=${elapsedMs}`);
 });

@@ -1,13 +1,20 @@
 image_uris = {
   eu_central_1 = "123456789012.dkr.ecr.eu-central-1.amazonaws.com/certscore-v2-dag-local-lambda@sha256:REPLACE"
   eu_west_1    = "123456789012.dkr.ecr.eu-west-1.amazonaws.com/certscore-v2-dag-local-lambda@sha256:REPLACE"
-  us_west_2    = "123456789012.dkr.ecr.us-west-2.amazonaws.com/certscore-v2-dag-local-lambda@sha256:REPLACE"
+  us_west_1    = "123456789012.dkr.ecr.us-west-1.amazonaws.com/certscore-v2-dag-local-lambda@sha256:REPLACE"
 }
 
 alarm_actions_by_region = {
   eu-central-1 = ["arn:aws:sns:eu-central-1:123456789012:certscore-operations"]
   eu-west-1    = ["arn:aws:sns:eu-west-1:123456789012:certscore-operations"]
-  us-west-2    = ["arn:aws:sns:us-west-2:123456789012:certscore-operations"]
+  us-west-1    = ["arn:aws:sns:us-west-1:123456789012:certscore-operations"]
+}
+
+# The US-CA scanner must fail closed unless the proxy public IP geolocates to
+# California in the retained EgressPreflight artifact. The current live proxy
+# observed Oregon in the old us-west-2 lane and therefore did not satisfy this guard.
+expected_egress_region_by_region = {
+  us-west-1 = "California"
 }
 
 # Preserve the existing regional proxy variables during import. Never commit
@@ -24,5 +31,30 @@ vpc_config_by_region = {
   eu-central-1 = {
     subnet_ids         = ["subnet-replace"]
     security_group_ids = ["sg-replace"]
+  }
+}
+
+# Existing VPC topology for private S3, SQS, and Lambda service endpoints.
+# Replace placeholders from the read-only regional inventory before planning.
+# This creates endpoint resources only; NAT routes, NAT gateways, proxies,
+# Lambda functions, buckets, queues, and scanner IAM roles remain untouched.
+vpc_endpoint_config_by_region = {
+  eu-central-1 = {
+    vpc_id                   = "vpc-replace"
+    route_table_ids          = ["rtb-replace"]
+    subnet_ids               = ["subnet-replace"]
+    lambda_security_group_id = "sg-replace"
+  }
+  eu-west-1 = {
+    vpc_id                   = "vpc-replace"
+    route_table_ids          = ["rtb-replace"]
+    subnet_ids               = ["subnet-replace"]
+    lambda_security_group_id = "sg-replace"
+  }
+  us-west-1 = {
+    vpc_id                   = "vpc-replace"
+    route_table_ids          = ["rtb-replace"]
+    subnet_ids               = ["subnet-replace"]
+    lambda_security_group_id = "sg-replace"
   }
 }

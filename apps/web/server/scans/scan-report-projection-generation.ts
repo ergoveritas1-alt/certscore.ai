@@ -1,5 +1,23 @@
 import type { ScanDetailResponse } from "./get-scan-by-id";
 
+// These events retain internal review artifacts and diagnostics, but they are
+// not inputs to normalized concerns, concern policy, unified findings, or the
+// persisted customer-facing report. They therefore must not invalidate an
+// otherwise canonical report projection while an independent evidence lane is
+// completing its durable handoff.
+export const SCAN_REPORT_PROJECTION_NON_SOURCE_EVENT_TYPES = [
+  "v2_policy_evidence.received",
+  "v2_policy_evidence.rejected"
+] as const;
+
+const scanReportProjectionNonSourceEventTypes = new Set<string>(
+  SCAN_REPORT_PROJECTION_NON_SOURCE_EVENT_TYPES
+);
+
+export function isScanReportProjectionSourceEvent(eventType: string) {
+  return !scanReportProjectionNonSourceEventTypes.has(eventType);
+}
+
 export type ScanReportProjectionGeneration = {
   eventCount: number;
   latestEventId: string | null;
@@ -8,7 +26,10 @@ export type ScanReportProjectionGeneration = {
 export function getScanReportProjectionGeneration(
   scanRecord: Pick<ScanDetailResponse, "events">
 ): ScanReportProjectionGeneration {
-  const latestEvent = scanRecord.events.reduce<(typeof scanRecord.events)[number] | null>(
+  const sourceEvents = scanRecord.events.filter((event) =>
+    isScanReportProjectionSourceEvent(event.eventType)
+  );
+  const latestEvent = sourceEvents.reduce<(typeof scanRecord.events)[number] | null>(
     (latest, event) => {
       if (!latest) return event;
       if (event.createdAt > latest.createdAt) return event;
@@ -18,7 +39,7 @@ export function getScanReportProjectionGeneration(
     null
   );
   return {
-    eventCount: scanRecord.events.length,
+    eventCount: sourceEvents.length,
     latestEventId: latestEvent?.id ?? null
   };
 }

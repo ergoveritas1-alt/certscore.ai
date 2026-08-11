@@ -127,7 +127,7 @@ function getS3ArtifactRegion(uri: string) {
   if (!bucket || !key?.endsWith("/CanonicalEvidenceBundle.json")) {
     return null;
   }
-  return bucket.match(/(?:^|-)(eu-central-1|eu-west-1|us-west-2)(?:-|$)/)?.[1] ?? null;
+  return bucket.match(/(?:^|-)(eu-central-1|eu-west-1|us-west-1)(?:-|$)/)?.[1] ?? null;
 }
 
 function hasReusableV2LambdaArtifact(scan: {

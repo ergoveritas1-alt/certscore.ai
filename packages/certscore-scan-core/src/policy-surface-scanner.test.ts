@@ -275,6 +275,10 @@ test("policySurfaceScanner warms an observed privacy link before guessed policy 
 
     assert.ok(retained, JSON.stringify({ requestedPaths, observations: result.policySurfaceObservations }, null, 2));
     assert.equal(retained.documentEvaluationState, "usable");
+    assert.equal(result.moduleRun.siteFacingNavigation?.firstHttpStatus, 200);
+    assert.ok(result.moduleRun.siteFacingNavigation?.firstResponseAt);
+    assert.equal(result.moduleRun.siteFacingNavigation?.navigationCount, 1);
+    assert.equal(result.moduleRun.siteFacingNavigation?.challengeDetected, false);
     assert.ok(requestedPaths.indexOf("/about/governance/privacy/") < requestedPaths.indexOf("/privacy-notice"));
   } finally {
     server.close();
@@ -1350,6 +1354,9 @@ test("policySurfaceScanner preserves an exact privacy notice when Nano ranks com
     );
 
     assert.equal(result.moduleRun.status, "completed");
+    assert.equal(result.moduleRun.siteFacingNavigation?.firstHttpStatus, 404);
+    assert.equal(result.moduleRun.siteFacingNavigation?.navigationCount, 1);
+    assert.doesNotMatch(result.moduleRun.siteFacingNavigation?.requestedUrl ?? "", /must-not-be-retained/);
     assert.equal(privacy?.status, "fetched");
     assert.equal(privacy?.documentEvaluationState, "usable");
     assert.equal(requestCounts.get("/gp/product/Ultra-Thin-Protect-Privacy/dp/B0TEST") ?? 0, 0);

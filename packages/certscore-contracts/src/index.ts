@@ -148,6 +148,43 @@ export const scanMetadataSchema = z.object({
   schemaVersion: z.string(),
 });
 
+export const siteFacingNavigationDiagnosticsSchema = z.object({
+  requestedUrl: z.string().max(500),
+  firstResponseAt: z.string().datetime().nullable(),
+  firstResponseOffsetMs: z.number().int().nonnegative().nullable(),
+  firstHttpStatus: z.number().int().min(100).max(599).nullable(),
+  firstEffectiveUrl: z.string().max(500).nullable(),
+  navigationCount: z.number().int().nonnegative(),
+  challengeDetected: z.boolean(),
+  challengeType: z.string().max(120).nullable(),
+}).strict();
+
+export const scanLaneRunSchema = z.object({
+  laneId: z.enum(["consent_proof", "runtime_evidence", "policy_evidence"]),
+  physicalInvocationId: z.string().min(1).max(160),
+  region: z.string().min(1).max(80),
+  phaseName: z.enum(["preConsentRuntimeScanner", "policySurfaceScanner"]),
+  startedAt: z.string().datetime(),
+  firstResponseAt: z.string().datetime().nullable(),
+  firstResponseOffsetMs: z.number().int().nonnegative().nullable(),
+  firstHttpStatus: z.number().int().min(100).max(599).nullable(),
+  firstEffectiveUrl: z.string().max(500).nullable(),
+  navigationCount: z.number().int().nonnegative(),
+  challengeDetected: z.boolean(),
+  challengeType: z.string().max(120).nullable(),
+  executionOutcome: z.enum(["success", "degraded", "failed"]),
+  accessOutcome: z.enum([
+    "representative_page",
+    "bot_challenge",
+    "access_denied",
+    "blank_or_unusable",
+    "navigation_failed",
+    "unknown",
+  ]),
+  completedAt: z.string().datetime().nullable(),
+  durationMs: z.number().int().nonnegative(),
+}).strict();
+
 export const scanModuleRunSchema = z.object({
   moduleName: z.string(),
   status: z.enum(["not_run", "completed", "partial", "failed", "skipped_budget", "not_testable"]),
@@ -173,6 +210,7 @@ export const scanModuleRunSchema = z.object({
       durationMs: z.number().int().nonnegative(),
     })).max(8).optional(),
   }).optional(),
+  siteFacingNavigation: siteFacingNavigationDiagnosticsSchema.optional(),
   evidenceRefs: z.array(evidenceRefSchema).default([]),
   errors: z.array(z.string()).default([]),
 });
@@ -267,6 +305,13 @@ export const setCookieMetadataSchema = z.object({
   httpOnly: z.boolean().default(false),
   firstParty: z.boolean().optional(),
   thirdParty: z.boolean().optional(),
+});
+
+// Opaque browser-native identity for one committed main-frame document.
+// It is meaningful only inside the retained scan/browser session.
+export const browserDocumentIdentitySchema = z.object({
+  source: z.literal("cdp_loader_id"),
+  token: z.string().min(1).max(160),
 });
 
 export const runtimeEvidenceEventSchema = z.object({
@@ -458,6 +503,7 @@ export const consentUiObservationSchema = z.object({
   // should always retain it so ordinary redirects cannot detach typed
   // controls from the document on which they were actually observed.
   documentUrl: z.string().max(500).optional(),
+  documentIdentity: browserDocumentIdentitySchema.optional(),
   // Explicitly distinguishes a completed negative from an incomplete capture.
   // Older bundles may omit these fields and continue using basis/timing data.
   captureStatus: z.enum(["observed", "no_evidence", "incomplete"]).optional(),
@@ -1312,6 +1358,7 @@ export const screenshotArtifactSchema = z.object({
   ]).optional(),
   path: z.string(),
   url: z.string(),
+  documentIdentity: browserDocumentIdentitySchema.optional(),
   pagePhase: pagePhaseSchema,
   consentStateAtTime: consentStateSchema,
 });
@@ -1347,6 +1394,7 @@ export const domSnapshotArtifactSchema = z.object({
   capturedAtMs: z.number().int().nonnegative(),
   path: z.string(),
   url: z.string(),
+  documentIdentity: browserDocumentIdentitySchema.optional(),
   documentLanguage: z.string().max(35).optional(),
   textExcerpt: z.string().optional(),
   pagePhase: pagePhaseSchema,
@@ -2061,8 +2109,9 @@ function consentPacketDocumentIdentity(value: string | null | undefined): string
   if (!value) return null;
   try {
     const url = new URL(value);
-    const pathname = url.pathname.replace(/\/+$/, "") || "/";
-    return `${url.protocol}//${url.host.toLowerCase()}${pathname}`;
+    url.hash = "";
+    if (url.pathname !== "/") url.pathname = url.pathname.replace(/\/+$/, "");
+    return url.toString();
   } catch {
     return null;
   }
@@ -2071,7 +2120,12 @@ function consentPacketDocumentIdentity(value: string | null | undefined): string
 export function isVerifiedTerminalConsentPacket(
   observation: z.infer<typeof consentUiObservationSchema>,
   context?: {
+    expectedDocumentIdentity?: z.infer<typeof browserDocumentIdentitySchema>;
     expectedDocumentUrl?: string | null;
+    representativeScreenshots?: Array<{
+      documentIdentity?: z.infer<typeof browserDocumentIdentitySchema>;
+      url: string;
+    }>;
     representativeScreenshotUrls?: string[];
   },
 ): boolean {
@@ -2111,8 +2165,28 @@ export function isVerifiedTerminalConsentPacket(
 
   const observationDocument = consentPacketDocumentIdentity(observation.documentUrl);
   const expectedDocument = consentPacketDocumentIdentity(context?.expectedDocumentUrl);
-  if (expectedDocument && observationDocument !== expectedDocument) {
+  const observationDocumentToken = observation.documentIdentity?.token;
+  const expectedDocumentToken = context?.expectedDocumentIdentity?.token;
+  const tokenBoundToExpectedDocument = Boolean(
+    observationDocumentToken &&
+    expectedDocumentToken &&
+    observationDocumentToken === expectedDocumentToken,
+  );
+  if (observationDocumentToken && expectedDocumentToken && !tokenBoundToExpectedDocument) {
     return false;
+  }
+  if (!tokenBoundToExpectedDocument && expectedDocument && observationDocument !== expectedDocument) return false;
+  if (context?.representativeScreenshots) {
+    const screenshotBoundToObservation = context.representativeScreenshots.some((screenshot) =>
+      observationDocumentToken || screenshot.documentIdentity?.token
+        ? Boolean(
+            observationDocumentToken &&
+            screenshot.documentIdentity?.token &&
+            screenshot.documentIdentity.token === observationDocumentToken
+          )
+        : Boolean(observationDocument) && consentPacketDocumentIdentity(screenshot.url) === observationDocument
+    );
+    if (!screenshotBoundToObservation) return false;
   }
   if (context?.representativeScreenshotUrls) {
     if (!observationDocument) return false;
@@ -2572,6 +2646,7 @@ export const canonicalEvidenceBundleSchema = z.object({
   region: z.string().optional(),
   scanProfile: scanProfileSchema,
   modulesRun: z.array(scanModuleRunSchema),
+  scanLaneRuns: z.array(scanLaneRunSchema).max(8).default([]),
   runtimeTimeline: z.array(runtimeEvidenceEventSchema),
   networkEvents: z.array(networkEventSchema),
   networkResponseEvents: z.array(networkResponseEventSchema).default([]),
@@ -2753,6 +2828,7 @@ export type EndpointGeographyStatus = z.infer<typeof endpointGeographyStatusSche
 export type EndpointGeographyPrecision = z.infer<typeof endpointGeographyPrecisionSchema>;
 export type EndpointSubtype = z.infer<typeof endpointSubtypeSchema>;
 export type EvidenceRef = z.infer<typeof evidenceRefSchema>;
+export type BrowserDocumentIdentity = z.infer<typeof browserDocumentIdentitySchema>;
 export type ArtifactRef = z.infer<typeof artifactRefSchema>;
 export type EvidenceExcerptKind = z.infer<typeof evidenceExcerptKindSchema>;
 export type DisplaySafeEvidenceExcerpt = z.infer<typeof displaySafeEvidenceExcerptSchema>;
@@ -2808,6 +2884,8 @@ export type PolicySurfaceInspectionOutcome = z.infer<typeof policySurfaceInspect
 export type VerifiedPolicyEvidencePacket = z.infer<typeof verifiedPolicyEvidencePacketSchema>;
 export type ScanNoGoAssessment = z.infer<typeof scanNoGoAssessmentSchema>;
 export type ScanEvidenceLaneAssessment = z.infer<typeof scanEvidenceLaneAssessmentSchema>;
+export type ScanLaneRun = z.infer<typeof scanLaneRunSchema>;
+export type SiteFacingNavigationDiagnostics = z.infer<typeof siteFacingNavigationDiagnosticsSchema>;
 export type VisualAccessReview = z.infer<typeof visualAccessReviewSchema>;
 export type ObservedBehavior = z.infer<typeof observedBehaviorSchema>;
 export type JourneyEventRef = z.infer<typeof journeyEventRefSchema>;

@@ -11,7 +11,7 @@ locals {
   regions = {
     eu_central_1 = "eu-central-1"
     eu_west_1    = "eu-west-1"
-    us_west_2    = "us-west-2"
+    us_west_1    = "us-west-1"
   }
   artifact_buckets = {
     for key, region in local.regions :
@@ -19,6 +19,7 @@ locals {
   }
   queue_arns = flatten([
     for region in values(local.regions) : [
+      "arn:aws:sqs:${region}:${data.aws_caller_identity.current.account_id}:${var.project_name}-results",
       "arn:aws:sqs:${region}:${data.aws_caller_identity.current.account_id}:${local.result_queue_name}",
       "arn:aws:sqs:${region}:${data.aws_caller_identity.current.account_id}:${local.result_queue_name}-dlq",
       "arn:aws:sqs:${region}:${data.aws_caller_identity.current.account_id}:${var.project_name}-async-failures"
@@ -112,6 +113,7 @@ module "eu_central_1" {
   locale                           = "de-DE"
   accept_language                  = "de-DE,de;q=0.9,en;q=0.8"
   timezone_id                      = "Europe/Berlin"
+  expected_egress_region           = lookup(var.expected_egress_region_by_region, "eu-central-1", "")
   log_retention_days               = var.log_retention_days
   memory_size                      = var.memory_size
   project_name                     = var.project_name
@@ -122,6 +124,7 @@ module "eu_central_1" {
   role_arn                         = aws_iam_role.scanner.arn
   tags                             = local.common_tags
   vpc_config                       = lookup(var.vpc_config_by_region, "eu-central-1", null)
+  vpc_endpoint_config              = lookup(var.vpc_endpoint_config_by_region, "eu-central-1", null)
   depends_on                       = [aws_iam_role_policy.scanner]
 }
 
@@ -141,6 +144,7 @@ module "eu_west_1" {
   locale                           = "en-IE"
   accept_language                  = "en-IE,en;q=0.9"
   timezone_id                      = "Europe/Dublin"
+  expected_egress_region           = lookup(var.expected_egress_region_by_region, "eu-west-1", "")
   log_retention_days               = var.log_retention_days
   memory_size                      = var.memory_size
   project_name                     = var.project_name
@@ -151,34 +155,37 @@ module "eu_west_1" {
   role_arn                         = aws_iam_role.scanner.arn
   tags                             = local.common_tags
   vpc_config                       = lookup(var.vpc_config_by_region, "eu-west-1", null)
+  vpc_endpoint_config              = lookup(var.vpc_endpoint_config_by_region, "eu-west-1", null)
   depends_on                       = [aws_iam_role_policy.scanner]
 }
 
-module "us_west_2" {
+module "us_west_1" {
   source = "./modules/regional-scanner"
   providers = {
     aws = aws.us_west
   }
 
   account_id                       = data.aws_caller_identity.current.account_id
-  alarm_actions                    = lookup(var.alarm_actions_by_region, local.regions.us_west_2, [])
-  artifact_bucket                  = local.artifact_buckets.us_west_2
+  alarm_actions                    = lookup(var.alarm_actions_by_region, local.regions.us_west_1, [])
+  artifact_bucket                  = local.artifact_buckets.us_west_1
   artifact_prefix                  = var.artifact_prefix
-  environment_variables            = lookup(var.environment_variables_by_region, "us-west-2", {})
+  environment_variables            = lookup(var.environment_variables_by_region, "us-west-1", {})
   function_name                    = local.function_name
-  image_uri                        = var.image_uris.us_west_2
+  image_uri                        = var.image_uris.us_west_1
   locale                           = "en-US"
   accept_language                  = "en-US,en;q=0.9"
   timezone_id                      = "America/Los_Angeles"
+  expected_egress_region           = lookup(var.expected_egress_region_by_region, "us-west-1", "")
   log_retention_days               = var.log_retention_days
   memory_size                      = var.memory_size
   project_name                     = var.project_name
-  region                           = local.regions.us_west_2
+  region                           = local.regions.us_west_1
   reserved_concurrent_executions   = var.reserved_concurrent_executions
   result_queue_name                = local.result_queue_name
   result_redrive_max_receive_count = var.result_redrive_max_receive_count
   role_arn                         = aws_iam_role.scanner.arn
   tags                             = local.common_tags
-  vpc_config                       = lookup(var.vpc_config_by_region, "us-west-2", null)
+  vpc_config                       = lookup(var.vpc_config_by_region, "us-west-1", null)
+  vpc_endpoint_config              = lookup(var.vpc_endpoint_config_by_region, "us-west-1", null)
   depends_on                       = [aws_iam_role_policy.scanner]
 }

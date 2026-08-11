@@ -369,6 +369,9 @@ test("validation worker frees result poll capacity after retaining the terminal 
   assert.ok(scoreIndex > policyIndex, "score materialization remains canonical downstream work");
   assert.match(source, /reconcilePersistedCompletedResultFinalizations/);
   assert.match(source, /artifactVerification,verifiedAt/);
+  assert.match(source, /coalesce\(request\.attempt_count, 0\) asc/);
+  assert.match(source, /coalesce\(request\.requested_at, result\.result_created_at\) asc/);
+  assert.doesNotMatch(source, /order by result\.scan_id, result\.created_at desc\s+limit 25/);
 });
 
 test("validation worker owns projection finalization across the result-to-findings race", async () => {

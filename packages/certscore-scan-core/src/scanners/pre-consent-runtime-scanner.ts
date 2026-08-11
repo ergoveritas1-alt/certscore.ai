@@ -1,5 +1,6 @@
 import {
   type ArtifactRef,
+  type BrowserDocumentIdentity,
   type CmpRuntimeObservation,
   type CollectionSurfaceObservation,
   type CookieEvent,
@@ -38,6 +39,7 @@ import { isIP } from "node:net";
 import { connect as tlsConnect } from "node:tls";
 import { chromium, type Browser, type BrowserContext, type CDPSession, type Frame, type Page, type Request, type Response, type Route } from "playwright";
 import type { ArtifactWriter } from "../artifact-writer.js";
+import { connectTlsThroughConfiguredProxy, proxyFetch } from "../proxy-fetch.js";
 import {
   captureConsentControlGeometry,
   type ConsentControlGeometryArtifact,
@@ -75,6 +77,20 @@ import {
 
 const SOURCE_SCANNER = "pre_consent_runtime";
 const SCENARIO = "fresh_pre_consent";
+type BrowserDocumentIdentityState = { current?: BrowserDocumentIdentity };
+const browserDocumentIdentityByPage = new WeakMap<Page, BrowserDocumentIdentity>();
+
+function currentBrowserDocumentIdentity(page: Page): BrowserDocumentIdentity | undefined {
+  const identity = browserDocumentIdentityByPage.get(page);
+  return identity ? { ...identity } : undefined;
+}
+
+function stableBrowserDocumentIdentity(
+  before: BrowserDocumentIdentity | undefined,
+  after: BrowserDocumentIdentity | undefined,
+): BrowserDocumentIdentity | undefined {
+  return before?.token && after?.token && before.token === after.token ? { ...after } : undefined;
+}
 const CONSENT_GATE_INITIAL_MS = 10_000;
 const CONSENT_GATE_PROGRESS_REVIEW_MS = 15_000;
 const CONSENT_GATE_STRONG_CMP_FLOOR_MS = 18_000;
@@ -457,6 +473,7 @@ export async function preConsentRuntimeScanner(
   const requestEvents = new WeakMap<Request, NetworkEvent>();
   const cdpInitiatorsByUrl = new Map<string, string[][]>();
   const cdpDestinationsByUrl = new Map<string, NetworkDestination[]>();
+  const browserDocumentIdentityState: BrowserDocumentIdentityState = {};
   let networkMetadataSession: CDPSession | null = null;
   let visualCapture: VisualCaptureSummary = {
     status: "unavailable",
@@ -499,6 +516,7 @@ export async function preConsentRuntimeScanner(
   networkMetadataSession = await installCdpNetworkMetadataCapture(page, {
     destinationsByUrl: cdpDestinationsByUrl,
     initiatorsByUrl: cdpInitiatorsByUrl,
+    documentIdentityState: browserDocumentIdentityState,
   }).catch((error) => {
     runtimeErrors.push(`CDP network metadata capture unavailable: ${errorMessageFromUnknown(error)}`);
     return null;
@@ -1091,6 +1109,7 @@ export async function preConsentRuntimeScanner(
             "Bounded typed geometry capture starts after the initial inventory while the visible pre-consent document is still live.",
             timeoutMs,
             () => captureConsentControlGeometry(page, {
+              documentIdentity: currentBrowserDocumentIdentity(page),
               screenshotArtifactRef: earlyScreenshotPath,
               timeoutMs,
             }),
@@ -1190,6 +1209,7 @@ export async function preConsentRuntimeScanner(
           captureMethod: earlyScreenshotCapture.captureMethod,
           path: earlyScreenshotPath,
           url: page.url(),
+          documentIdentity: currentBrowserDocumentIdentity(page),
           pagePhase: "dom_content_loaded",
           consentStateAtTime: "pre_consent",
         });
@@ -1434,6 +1454,7 @@ export async function preConsentRuntimeScanner(
       );
     if (settledVisualCheckpointNeeded) {
       const settledScreenshotPath = input.artifactWriter.artifactPath("screenshot-pre-consent-settled.png");
+      const settledDocumentIdentityBeforeCapture = currentBrowserDocumentIdentity(page);
       const settledCapture = await recordTiming(
         timingBreakdown,
         "protected settled consent screenshot",
@@ -1449,12 +1470,17 @@ export async function preConsentRuntimeScanner(
         visualCaptureTimingOutcome,
       );
       if (settledCapture.status === "available") {
+        const settledDocumentIdentity = stableBrowserDocumentIdentity(
+          settledDocumentIdentityBeforeCapture,
+          currentBrowserDocumentIdentity(page),
+        );
         const settledScreenshot: ScreenshotArtifact = {
           artifactId: "screenshot_pre_consent_settled",
           capturedAtMs: elapsed(input.scanStartedAtMs),
           captureMethod: settledCapture.captureMethod,
           path: settledScreenshotPath,
           url: page.url(),
+          documentIdentity: settledDocumentIdentity,
           pagePhase: "network_idle",
           consentStateAtTime: "pre_consent",
         };
@@ -1536,6 +1562,7 @@ export async function preConsentRuntimeScanner(
             async () => {
               const geometryCaptureTimeoutMs = Math.max(250, pairedGeometryTimeoutMs - 300);
               const geometry = await captureConsentControlGeometry(page, {
+                documentIdentity: currentBrowserDocumentIdentity(page),
                 screenshotArtifactRef: settledScreenshotPath,
                 timeoutMs: geometryCaptureTimeoutMs,
               });
@@ -1672,6 +1699,7 @@ export async function preConsentRuntimeScanner(
       consentObservation = buildConsentUiObservationFromEvidence({
         scanStartedAtMs: input.scanStartedAtMs,
         documentUrl: page.url(),
+        documentIdentity: currentBrowserDocumentIdentity(page),
         text: domText,
         controls: [],
         fallbackBasis: ["bounded_capture_timeout_or_failure", "dom_text_fallback_after_consent_ui_timeout"],
@@ -1946,6 +1974,7 @@ export async function preConsentRuntimeScanner(
         const screenshotPath = input.artifactWriter.artifactPath(
           "screenshot-pre-consent-cmp-empty.png",
         );
+        const synchronizedDocumentIdentityBeforeCapture = currentBrowserDocumentIdentity(page);
         const screenshotCapture = await recordTiming(
           timingBreakdown,
           "synchronized empty CMP screenshot",
@@ -1960,6 +1989,10 @@ export async function preConsentRuntimeScanner(
         if (screenshotCapture.status !== "available") {
           return null;
         }
+        const synchronizedDocumentIdentity = stableBrowserDocumentIdentity(
+          synchronizedDocumentIdentityBeforeCapture,
+          currentBrowserDocumentIdentity(page),
+        );
 
         const screenshot: ScreenshotArtifact = {
           artifactId: "screenshot_pre_consent_cmp_empty",
@@ -1967,6 +2000,7 @@ export async function preConsentRuntimeScanner(
           captureMethod: screenshotCapture.captureMethod,
           path: screenshotPath,
           url: page.url(),
+          documentIdentity: synchronizedDocumentIdentity,
           pagePhase: "network_idle",
           consentStateAtTime: "pre_consent",
         };
@@ -1999,6 +2033,7 @@ export async function preConsentRuntimeScanner(
           Math.min(1_250, remainingModuleBudgetMs()),
           async () => {
             const geometry = await captureConsentControlGeometry(page, {
+              documentIdentity: currentBrowserDocumentIdentity(page),
               screenshotArtifactRef: screenshotPath,
               timeoutMs: Math.min(950, remainingModuleBudgetMs()),
             });
@@ -2182,6 +2217,7 @@ export async function preConsentRuntimeScanner(
               captureMethod: synchronizedCapture.captureMethod,
               path: synchronizedScreenshotPath,
               url: page.url(),
+              documentIdentity: currentBrowserDocumentIdentity(page),
               pagePhase: "network_idle",
               consentStateAtTime: "pre_consent",
             };
@@ -2296,6 +2332,7 @@ export async function preConsentRuntimeScanner(
         captureMethod: screenshotCapture.captureMethod,
         path: screenshotPath,
         url: page.url(),
+        documentIdentity: currentBrowserDocumentIdentity(page),
         pagePhase: "network_idle",
         consentStateAtTime: "pre_consent",
       });
@@ -2550,6 +2587,7 @@ export async function preConsentRuntimeScanner(
           supplementalBodyText: domText,
         });
         let geometry = await captureConsentControlGeometry(page, {
+          documentIdentity: currentBrowserDocumentIdentity(page),
           screenshotArtifactRef: preferredPreConsentScreenshotRef(screenshots),
           timeoutMs: input.waitMode === "fast" ? 3_000 : 5_000,
         });
@@ -2670,16 +2708,22 @@ export async function preConsentRuntimeScanner(
       );
     }
 
-    const finalDocumentId = canonicalGeometryDocumentIdentity(safePageUrl(page, effectiveNavigationUrl));
+    const finalDocumentUrl = safePageUrl(page, effectiveNavigationUrl);
+    const finalDocumentIdentity = currentBrowserDocumentIdentity(page);
     const representativeScreenshotAvailable = screenshots.some((screenshot) =>
       screenshot.captureMethod !== "primary_placeholder" &&
       screenshot.captureMethod !== "fresh_context_placeholder" &&
-      canonicalGeometryDocumentIdentity(screenshot.url) === finalDocumentId
+      isSameBrowserDocumentOrExactUrl(
+        screenshot.url,
+        screenshot.documentIdentity,
+        finalDocumentUrl,
+        finalDocumentIdentity,
+      )
     );
     const boundedSameSessionPacketRecoveryEligible =
       input.captureScope === "consent_proof" &&
       (input.screenshotMode ?? "always") !== "never" &&
-      finalDocumentId !== null &&
+      strictConsentDocumentIdentity(finalDocumentUrl) !== null &&
       !isTerminalVisualErrorShellText(domText || consentObservation.textExcerpt || "") &&
       remainingModuleBudgetMs() >= 2_000 &&
       shouldRunBoundedSameSessionConsentPacketRecovery({
@@ -2699,6 +2743,7 @@ export async function preConsentRuntimeScanner(
       const recoveryScreenshotPath = input.artifactWriter.artifactPath(
         "screenshot-pre-consent-packet-recovery.png",
       );
+      const recoveryDocumentIdentityBeforeCapture = currentBrowserDocumentIdentity(page);
       const recoveryScreenshotCapture = await recordTiming(
         timingBreakdown,
         "bounded same-session consent packet screenshot",
@@ -2712,12 +2757,18 @@ export async function preConsentRuntimeScanner(
       );
       if (recoveryScreenshotCapture.status === "available") {
         boundedRecoveryOutcome = "inventory_incomplete";
+        const recoveryScreenshotUrl = page.url();
+        const recoveryScreenshotDocumentIdentity = stableBrowserDocumentIdentity(
+          recoveryDocumentIdentityBeforeCapture,
+          currentBrowserDocumentIdentity(page),
+        );
         const recoveryScreenshot: ScreenshotArtifact = {
           artifactId: "screenshot_pre_consent_packet_recovery",
           capturedAtMs: elapsed(input.scanStartedAtMs),
           captureMethod: recoveryScreenshotCapture.captureMethod,
           path: recoveryScreenshotPath,
-          url: page.url(),
+          url: recoveryScreenshotUrl,
+          documentIdentity: recoveryScreenshotDocumentIdentity,
           pagePhase: "network_idle",
           consentStateAtTime: "pre_consent",
         };
@@ -2757,15 +2808,17 @@ export async function preConsentRuntimeScanner(
             "recovery:bounded_same_session_inventory_incomplete",
           ),
         );
-        const recoveryInventoryDocumentId = canonicalGeometryDocumentIdentity(
-          recoveryInventory.documentUrl ?? page.url(),
-        );
         const recoveryTypedInventoryComplete =
           !isIncompleteConsentUiCapture(recoveryInventory) &&
           (recoveryInventory.captureDiagnostics?.completedChannels ?? []).some((channel) =>
             channel === "dom_inventory" || channel === "accessibility_tree"
           ) &&
-          recoveryInventoryDocumentId === finalDocumentId;
+          isSameBrowserDocumentOrExactUrl(
+            recoveryScreenshotUrl,
+            recoveryScreenshotDocumentIdentity,
+            recoveryInventory.documentUrl ?? page.url(),
+            recoveryInventory.documentIdentity,
+          );
         if (recoveryTypedInventoryComplete && remainingModuleBudgetMs() >= 700) {
           boundedRecoveryOutcome = "geometry_incomplete";
           const recoveryGeometryTimeoutMs = Math.min(1_100, remainingModuleBudgetMs());
@@ -2779,6 +2832,7 @@ export async function preConsentRuntimeScanner(
             recoveryGeometryTimeoutMs,
             async () => {
               const geometry = await captureConsentControlGeometry(page, {
+                documentIdentity: currentBrowserDocumentIdentity(page),
                 screenshotArtifactRef: recoveryScreenshotPath,
                 timeoutMs: Math.max(250, recoveryGeometryTimeoutMs - 150),
               });
@@ -2790,16 +2844,22 @@ export async function preConsentRuntimeScanner(
             },
             () => null,
           );
-          const recoveryGeometryDocumentId = canonicalGeometryDocumentIdentity(
-            recoveryGeometry?.geometry.pageUrl,
-          );
           const recoveryGeometryComplete = Boolean(
             recoveryGeometry &&
             recoveryGeometry.access.status === "loaded" &&
             recoveryGeometry.geometry.summary.confidence > 0 &&
             recoveryGeometry.geometry.viewport.width > 0 &&
             recoveryGeometry.geometry.viewport.height > 0 &&
-            recoveryGeometryDocumentId === finalDocumentId,
+            isSameConsentPacketDocument({
+              screenshotUrl: recoveryScreenshotUrl,
+              screenshotDocumentIdentity: recoveryScreenshotDocumentIdentity,
+              inventoryDocumentUrl: recoveryInventory.documentUrl,
+              inventoryDocumentIdentity: recoveryInventory.documentIdentity,
+              geometryPageUrl: recoveryGeometry.geometry.pageUrl,
+              geometryDocumentIdentity: recoveryGeometry.geometry.documentIdentity,
+              currentPageUrl: safePageUrl(page, effectiveNavigationUrl),
+              currentDocumentIdentity: currentBrowserDocumentIdentity(page),
+            }),
           );
           if (recoveryGeometry && recoveryGeometryComplete) {
             const recoveryGeometryArtifactPath = await input.artifactWriter.writeJsonArtifact(
@@ -2817,7 +2877,7 @@ export async function preConsentRuntimeScanner(
               artifactPath: recoveryGeometryArtifactPath,
               current: consentObservation,
               geometry: recoveryGeometry.geometry,
-              pageUrl: safePageUrl(page, effectiveNavigationUrl),
+              pageUrl: recoveryScreenshotUrl,
               recoveryInventory,
               scanStartedAtMs: input.scanStartedAtMs,
             });
@@ -2873,6 +2933,7 @@ export async function preConsentRuntimeScanner(
           captureMethod: synchronizedCapture.captureMethod,
           path: synchronizedScreenshotPath,
           url: page.url(),
+          documentIdentity: currentBrowserDocumentIdentity(page),
           pagePhase: "network_idle",
           consentStateAtTime: "pre_consent",
         };
@@ -2936,6 +2997,7 @@ export async function preConsentRuntimeScanner(
           captureMethod: confirmationCapture.captureMethod,
           path: confirmationPath,
           url: page.url(),
+          documentIdentity: currentBrowserDocumentIdentity(page),
           pagePhase: "network_idle",
           consentStateAtTime: "pre_consent",
         });
@@ -2957,6 +3019,7 @@ export async function preConsentRuntimeScanner(
       capturedAtMs: elapsed(input.scanStartedAtMs),
       path: domPath,
       url: page.url(),
+      documentIdentity: currentBrowserDocumentIdentity(page),
       ...(documentLanguage ? { documentLanguage } : {}),
       textExcerpt: domText.slice(0, 2_000),
       pagePhase: "network_idle",
@@ -5081,6 +5144,7 @@ export async function detectConsentUi(
         accessibilityInventory,
         scanStartedAtMs,
         page.url(),
+        currentBrowserDocumentIdentity(page),
       ),
       ["accessibility_tree_bounded_retry"],
     );
@@ -5139,6 +5203,7 @@ export async function detectConsentUi(
     earlyAccessibilityInventory,
     scanStartedAtMs,
     page.url(),
+    currentBrowserDocumentIdentity(page),
   );
   let earlyChannelObservation = mergeConsentUiObservations(
     earlyAccessibilityObservation,
@@ -5354,6 +5419,7 @@ async function readCheapConsentTextObservation(
   const observation = buildConsentUiObservationFromEvidence({
     scanStartedAtMs,
     documentUrl: page.url(),
+    documentIdentity: currentBrowserDocumentIdentity(page),
     text,
     controls: [],
     fallbackBasis: ["inventory:cheap_text_prefilter"],
@@ -5506,6 +5572,7 @@ async function readDirectCmpSemanticConsentUiObservation(
   return buildConsentUiObservationFromEvidence({
     scanStartedAtMs,
     documentUrl: page.url(),
+    documentIdentity: currentBrowserDocumentIdentity(page),
     text: snapshot.controls.map((control) => `${control.contextText} ${control.label}`).join(" ").slice(0, 12_000),
     controls,
     fallbackBasis: controls.length > 0 ? ["inventory:direct_cmp_semantic_controls"] : [],
@@ -5854,6 +5921,7 @@ async function readRapidFirstLayerConsentUiObservationUnbounded(
   const observation = buildConsentUiObservationFromEvidence({
     scanStartedAtMs,
     documentUrl: page.url(),
+    documentIdentity: currentBrowserDocumentIdentity(page),
     text: snapshot.contextText,
     controls,
     fallbackBasis: controls.length > 0 ? ["inventory:rapid_first_layer_controls"] : [],
@@ -5912,6 +5980,7 @@ async function readRapidFirstLayerConsentUiObservationUnbounded(
   const frameObservation = buildConsentUiObservationFromEvidence({
     scanStartedAtMs,
     documentUrl: page.url(),
+    documentIdentity: currentBrowserDocumentIdentity(page),
     text: frameContextText,
     controls: frameControls,
     fallbackBasis: frameControls.length > 0
@@ -6295,6 +6364,7 @@ async function readConsentUiObservation(
   const observation = buildConsentUiObservationFromEvidence({
     scanStartedAtMs,
     documentUrl: page.url(),
+    documentIdentity: currentBrowserDocumentIdentity(page),
     text: combinedText,
     controls: enrichedControls,
     defaultToggleEvidence,
@@ -6946,6 +7016,7 @@ function consentUiObservationFromAccessibilityInventory(
   inventory: AccessibilityConsentInventory,
   scanStartedAtMs: number,
   documentUrl: string,
+  documentIdentity?: BrowserDocumentIdentity,
 ): ConsentUiObservation {
   const contextText = inventory.textExcerpts.join(" ").slice(0, 12_000);
   const classifiedControls = inventory.controls.flatMap((control) => {
@@ -6992,6 +7063,7 @@ function consentUiObservationFromAccessibilityInventory(
   const observation = buildConsentUiObservationFromEvidence({
     scanStartedAtMs,
     documentUrl,
+    documentIdentity,
     text: contextText,
     controls,
     fallbackBasis: [
@@ -7762,13 +7834,14 @@ function isPaidDeclineVariant(variant: string | null | undefined): boolean {
 function buildConsentUiObservationFromEvidence(input: {
   controls: ConsentUiObservation["controls"];
   defaultToggleEvidence?: ConsentDefaultToggleEvidence;
+  documentIdentity?: BrowserDocumentIdentity;
   documentUrl: string;
   fallbackBasis?: string[];
   inventoryDiagnostics?: ConsentUiObservation["inventoryDiagnostics"];
   scanStartedAtMs: number;
   text: string;
 }): ConsentUiObservation {
-  const { controls, defaultToggleEvidence, documentUrl, fallbackBasis = [], inventoryDiagnostics, scanStartedAtMs, text } = input;
+  const { controls, defaultToggleEvidence, documentIdentity, documentUrl, fallbackBasis = [], inventoryDiagnostics, scanStartedAtMs, text } = input;
   const canonicalSurfaceText = classifyConsentSurfaceText({ text });
   const visibleChoiceLabels = controls.map((control) => control.label);
   const acceptControlObserved = controls.some((control) => control.actionType === "accept_all");
@@ -7790,6 +7863,7 @@ function buildConsentUiObservationFromEvidence(input: {
     observationId: "consent_ui_pre_consent",
     observedAtMs: elapsed(scanStartedAtMs),
     documentUrl,
+    ...(documentIdentity ? { documentIdentity } : {}),
     captureStatus: incomplete ? "incomplete" : likelyPresent ? "observed" : "no_evidence",
     captureDiagnostics: {
       completedChannels: inventoryDiagnostics?.inventorySources?.includes("accessibility_tree")
@@ -8079,6 +8153,24 @@ export function mergeConsentUiObservations(
   candidate: ConsentUiObservation,
   basis: string,
 ): ConsentUiObservation {
+  const currentDocumentToken = current.documentIdentity?.token;
+  const candidateDocumentToken = candidate.documentIdentity?.token;
+  if (
+    currentDocumentToken &&
+    candidateDocumentToken &&
+    currentDocumentToken !== candidateDocumentToken
+  ) {
+    const latestDocumentObservation = candidate.observedAtMs >= current.observedAtMs
+      ? candidate
+      : current;
+    return {
+      ...latestDocumentObservation,
+      basis: unique([
+        ...latestDocumentObservation.basis,
+        "document_identity_transition_discarded_other_document_evidence",
+      ]),
+    };
+  }
   const controls = uniqueConsentObservationControls([
     ...current.controls,
     ...candidate.controls,
@@ -8710,6 +8802,7 @@ export async function probeStrictTls(
   normalizedUrl: string,
   signal?: AbortSignal,
   deadlineAtMs = Date.now() + 5_000,
+  env: Record<string, string | undefined> = process.env,
 ): Promise<TransportSecurityObservation["tlsProbe"]> {
   const inputUrl = originProbeUrl(normalizedUrl, "https");
   if (!inputUrl) {
@@ -8719,6 +8812,7 @@ export async function probeStrictTls(
 
   return new Promise((resolve) => {
     let settled = false;
+    const connectionController = new AbortController();
     let abortListener: (() => void) | undefined;
     const settle = (result: TransportSecurityObservation["tlsProbe"]) => {
       if (settled) {
@@ -8729,15 +8823,9 @@ export async function probeStrictTls(
       if (abortListener) signal?.removeEventListener("abort", abortListener);
       resolve(result);
     };
-    const socket = tlsConnect({
-      host: parsed.hostname,
-      port: parsed.port ? Number(parsed.port) : 443,
-      // Complete the handshake so the presented certificate can be retained even
-      // when Node reports an authorization failure. `socket.authorized` remains
-      // the authoritative strict-verification result below.
-      rejectUnauthorized: false,
-      ...(isIP(parsed.hostname) ? {} : { servername: parsed.hostname }),
-    }, () => {
+    let socket: ReturnType<typeof tlsConnect> | undefined;
+    const onSecureConnect = () => {
+      if (!socket) return;
       const certificate = readPeerCertificate(socket);
       settle({
         attempted: true,
@@ -8753,24 +8841,33 @@ export async function probeStrictTls(
           }),
       });
       socket.end();
-    });
-    abortListener = () => {
-      socket.destroy(abortReason(signal) ?? new Error("strict TLS probe aborted"));
-      settle({ attempted: true, inputUrl: sanitizeTransportUrl(inputUrl), errorCategory: "timeout", errorMessage: "strict TLS probe aborted" });
     };
-    signal?.addEventListener("abort", abortListener, { once: true });
-    const timeout = setTimeout(() => {
-      socket.destroy(new Error("strict TLS probe timed out"));
-      settle({
-        attempted: true,
-        inputUrl: sanitizeTransportUrl(inputUrl),
-        errorCategory: "timeout",
-        errorMessage: "strict TLS probe timed out",
-      });
-    }, Math.max(1, Math.min(5_000, deadlineAtMs - Date.now())));
-    socket.on("error", (error) => {
+    const startConnection = async () => {
+      const servername = isIP(parsed.hostname) ? undefined : parsed.hostname;
+      const proxySocket = await connectTlsThroughConfiguredProxy({
+        hostname: parsed.hostname,
+        port: parsed.port ? Number(parsed.port) : 443,
+        ...(servername ? { servername } : {}),
+      }, connectionController.signal, env);
+      if (proxySocket) {
+        socket = proxySocket;
+        onSecureConnect();
+        return;
+      }
+      socket = tlsConnect({
+        host: parsed.hostname,
+        port: parsed.port ? Number(parsed.port) : 443,
+        // Complete the handshake so the presented certificate can be retained even
+        // when Node reports an authorization failure. `socket.authorized` remains
+        // the authoritative strict-verification result below.
+        rejectUnauthorized: false,
+        ...(servername ? { servername } : {}),
+      }, onSecureConnect);
+      socket.on("error", onSocketError);
+    };
+    const onSocketError = (error: unknown) => {
       const errorCategory = classifyTransportProbeError(error);
-      const certificate = readPeerCertificate(socket);
+      const certificate = socket ? readPeerCertificate(socket) : {};
       settle({
         attempted: true,
         inputUrl: sanitizeTransportUrl(inputUrl),
@@ -8779,7 +8876,24 @@ export async function probeStrictTls(
         errorCategory,
         errorMessage: boundedProbeError(error),
       });
-    });
+    };
+    abortListener = () => {
+      connectionController.abort(abortReason(signal) ?? new Error("strict TLS probe aborted"));
+      socket?.destroy(abortReason(signal) ?? new Error("strict TLS probe aborted"));
+      settle({ attempted: true, inputUrl: sanitizeTransportUrl(inputUrl), errorCategory: "timeout", errorMessage: "strict TLS probe aborted" });
+    };
+    signal?.addEventListener("abort", abortListener, { once: true });
+    const timeout = setTimeout(() => {
+      connectionController.abort(new Error("strict TLS probe timed out"));
+      socket?.destroy(new Error("strict TLS probe timed out"));
+      settle({
+        attempted: true,
+        inputUrl: sanitizeTransportUrl(inputUrl),
+        errorCategory: "timeout",
+        errorMessage: "strict TLS probe timed out",
+      });
+    }, Math.max(1, Math.min(5_000, deadlineAtMs - Date.now())));
+    void startConnection().catch(onSocketError);
   });
 }
 
@@ -8870,7 +8984,7 @@ async function fetchOnceWithTimeout(url: string, timeoutMs: number, method: "GET
   parentSignal?.addEventListener("abort", abortFromParent, { once: true });
   const timeout = setTimeout(() => controller.abort(new Error("HTTP redirect probe timed out")), timeoutMs);
   try {
-    return await fetch(url, {
+    return await proxyFetch(url, {
       method,
       redirect: "manual",
       signal: controller.signal,
@@ -9277,10 +9391,33 @@ async function installCdpNetworkMetadataCapture(
   stores: {
     destinationsByUrl: Map<string, NetworkDestination[]>;
     initiatorsByUrl: Map<string, string[][]>;
+    documentIdentityState: BrowserDocumentIdentityState;
   },
 ): Promise<CDPSession> {
   const session = await page.context().newCDPSession(page);
-  await session.send("Network.enable");
+  await Promise.all([
+    session.send("Network.enable"),
+    session.send("Page.enable"),
+  ]);
+  const retainMainFrameDocumentIdentity = (frame: {
+    id?: string;
+    loaderId?: string;
+    parentId?: string;
+  } | undefined) => {
+    if (!frame || frame.parentId || !frame.loaderId || frame.loaderId.length > 160) return;
+    stores.documentIdentityState.current = {
+      source: "cdp_loader_id",
+      token: frame.loaderId,
+    };
+    browserDocumentIdentityByPage.set(page, stores.documentIdentityState.current);
+  };
+  session.on("Page.frameNavigated", (raw: unknown) => {
+    retainMainFrameDocumentIdentity((raw as { frame?: { id?: string; loaderId?: string; parentId?: string } }).frame);
+  });
+  const initialFrameTree = await session.send("Page.getFrameTree").catch(() => null) as {
+    frameTree?: { frame?: { id?: string; loaderId?: string; parentId?: string } };
+  } | null;
+  retainMainFrameDocumentIdentity(initialFrameTree?.frameTree?.frame);
   session.on("Network.requestWillBeSent", (raw: unknown) => {
     const params = raw as {
       request?: { url?: string };
@@ -9896,6 +10033,7 @@ async function captureSupplementalFullPagePreConsentScreenshot(
       captureMethod: "primary_full_page",
       path: screenshotPath,
       url: page.url(),
+      documentIdentity: currentBrowserDocumentIdentity(page),
       pagePhase: "dom_content_loaded",
       consentStateAtTime: "pre_consent",
     };
@@ -10344,17 +10482,62 @@ function isAroGeometryAction(
     actionType === "manage_preferences";
 }
 
-function canonicalGeometryDocumentIdentity(value: string | undefined): string | null {
-  if (!value) {
-    return null;
+export function isSameConsentPacketDocument(input: {
+  screenshotUrl: string | undefined;
+  screenshotDocumentIdentity?: BrowserDocumentIdentity;
+  inventoryDocumentUrl: string | undefined;
+  inventoryDocumentIdentity?: BrowserDocumentIdentity;
+  geometryPageUrl: string | undefined;
+  geometryDocumentIdentity?: BrowserDocumentIdentity;
+  currentPageUrl: string | undefined;
+  currentDocumentIdentity?: BrowserDocumentIdentity;
+}): boolean {
+  const tokens = [
+    input.screenshotDocumentIdentity?.token,
+    input.inventoryDocumentIdentity?.token,
+    input.geometryDocumentIdentity?.token,
+    input.currentDocumentIdentity?.token,
+  ];
+  const retainedTokenCount = tokens.filter(Boolean).length;
+  if (retainedTokenCount === tokens.length) {
+    return tokens.every((token) => token === tokens[0]);
   }
+  if (retainedTokenCount > 0) return false;
+  const documentIds = [
+    input.screenshotUrl,
+    input.inventoryDocumentUrl,
+    input.geometryPageUrl,
+    input.currentPageUrl,
+  ].map(strictConsentDocumentIdentity);
+  const expectedDocumentId = documentIds[0];
+  return expectedDocumentId !== null && documentIds.every((documentId) => documentId === expectedDocumentId);
+}
+
+function isSameBrowserDocumentOrExactUrl(
+  leftUrl: string | undefined,
+  leftIdentity: BrowserDocumentIdentity | undefined,
+  rightUrl: string | undefined,
+  rightIdentity: BrowserDocumentIdentity | undefined,
+): boolean {
+  if (leftIdentity?.token || rightIdentity?.token) {
+    return Boolean(
+      leftIdentity?.token &&
+      rightIdentity?.token &&
+      leftIdentity.token === rightIdentity.token,
+    );
+  }
+  const leftDocumentId = strictConsentDocumentIdentity(leftUrl);
+  return leftDocumentId !== null && leftDocumentId === strictConsentDocumentIdentity(rightUrl);
+}
+
+function strictConsentDocumentIdentity(value: string | undefined): string | null {
+  if (!value) return null;
   try {
     const url = new URL(value);
-    if (!/^https?:$/.test(url.protocol)) {
-      return null;
-    }
-    const pathname = url.pathname.replace(/\/+$/, "") || "/";
-    return `${url.protocol}//${url.host.toLowerCase()}${pathname}`;
+    if (!/^https?:$/.test(url.protocol)) return null;
+    url.hash = "";
+    if (url.pathname !== "/") url.pathname = url.pathname.replace(/\/+$/, "");
+    return url.toString();
   } catch {
     return null;
   }
@@ -10388,9 +10571,21 @@ export function reconcileConsentUiObservationWithCompletedGeometry(input: {
     }, "geometry:incomplete_not_authoritative");
   }
 
-  const geometryDocument = canonicalGeometryDocumentIdentity(input.geometry.pageUrl);
-  const currentDocument = canonicalGeometryDocumentIdentity(input.pageUrl);
-  if (geometryDocument && currentDocument && geometryDocument !== currentDocument) {
+  const geometryDocumentToken = input.geometry.documentIdentity?.token;
+  const currentDocumentToken = input.current.documentIdentity?.token;
+  const tokenMismatch = Boolean(
+    geometryDocumentToken &&
+    currentDocumentToken &&
+    geometryDocumentToken !== currentDocumentToken,
+  );
+  const tokenMatched = Boolean(
+    geometryDocumentToken &&
+    currentDocumentToken &&
+    geometryDocumentToken === currentDocumentToken,
+  );
+  const geometryDocument = strictConsentDocumentIdentity(input.geometry.pageUrl);
+  const currentDocument = strictConsentDocumentIdentity(input.pageUrl);
+  if (tokenMismatch || (!tokenMatched && geometryDocument && currentDocument && geometryDocument !== currentDocument)) {
     return {
       ...input.current,
       captureStatus: "incomplete",
@@ -10554,8 +10749,6 @@ export function finalizeBoundedSameSessionConsentPacket(input: {
   recoveryInventory: ConsentUiObservation;
   scanStartedAtMs: number;
 }): ConsentUiObservation {
-  const finalDocumentId = canonicalGeometryDocumentIdentity(input.pageUrl);
-  const currentObservationDocumentId = canonicalGeometryDocumentIdentity(input.current.documentUrl);
   const completedRecoveryInventory = annotateConsentInventoryTimingMarkers({
     ...input.recoveryInventory,
     basis: unique([
@@ -10567,7 +10760,13 @@ export function finalizeBoundedSameSessionConsentPacket(input: {
     ]),
   }, ["bounded_same_session_frame_inventory_completed"]);
   const reconciledRecoveryInventory =
-    currentObservationDocumentId === finalDocumentId && input.current.controls.length > 0
+    input.current.controls.length > 0 &&
+      isSameBrowserDocumentOrExactUrl(
+        input.current.documentUrl,
+        input.current.documentIdentity,
+        completedRecoveryInventory.documentUrl,
+        completedRecoveryInventory.documentIdentity,
+      )
       ? mergeConsentUiObservations(
         input.current,
         completedRecoveryInventory,
@@ -10664,6 +10863,7 @@ export function consentUiObservationFromConfirmedGeometryControls(input: {
 
   const observation = buildConsentUiObservationFromEvidence({
     controls,
+    documentIdentity: input.geometry.documentIdentity,
     documentUrl: input.geometry.pageUrl,
     fallbackBasis: ["geometry:confirmed_first_layer_controls"],
     scanStartedAtMs: input.scanStartedAtMs,
@@ -10801,6 +11001,7 @@ async function recaptureConsentGeometryAfterBoundedScroll(
 
   await page.waitForTimeout(350).catch(() => undefined);
   const recaptured = await captureConsentControlGeometry(page, {
+    documentIdentity: currentBrowserDocumentIdentity(page),
     screenshotArtifactRef: options.screenshotArtifactRef,
     timeoutMs: 2_000,
   });
@@ -10811,6 +11012,22 @@ function mergeConsentGeometryCaptures(
   before: ConsentControlGeometryArtifact,
   after: ConsentControlGeometryArtifact,
 ): ConsentControlGeometryArtifact {
+  if (
+    before.documentIdentity?.token &&
+    after.documentIdentity?.token &&
+    before.documentIdentity.token !== after.documentIdentity.token
+  ) {
+    return {
+      ...after,
+      summary: {
+        ...after.summary,
+        limitations: unique([
+          ...after.summary.limitations,
+          "document_identity_transition_discarded_other_document_geometry",
+        ]).slice(0, 12),
+      },
+    };
+  }
   const candidates = [...before.candidates, ...after.candidates]
     .sort((left, right) =>
       (left.decisionStatus === "confirmed_visible" ? 0 : 1) -
@@ -10883,12 +11100,20 @@ async function captureConsentGeometryProofScreenshot(
   },
 ): Promise<ScreenshotArtifact | null> {
   const screenshotPath = input.artifactWriter.artifactPath("screenshot-pre-consent-geometry-proof.png");
+  const cdpDocumentIdentityBeforeCapture = currentBrowserDocumentIdentity(page);
   try {
     await captureViewportScreenshotWithCdp(page, screenshotPath, options.timeoutMs);
-    return consentGeometryProofScreenshotArtifact(input, page, screenshotPath, "primary_viewport_fallback");
+    return consentGeometryProofScreenshotArtifact(
+      input,
+      page,
+      screenshotPath,
+      "primary_viewport_fallback",
+      stableBrowserDocumentIdentity(cdpDocumentIdentityBeforeCapture, currentBrowserDocumentIdentity(page)),
+    );
   } catch (error) {
     options.screenshotErrors.push(`Consent geometry proof fast screenshot failed: ${errorMessageFromUnknown(error)}`);
   }
+  const playwrightDocumentIdentityBeforeCapture = currentBrowserDocumentIdentity(page);
   try {
     await page.screenshot({
       animations: "disabled",
@@ -10896,7 +11121,13 @@ async function captureConsentGeometryProofScreenshot(
       path: screenshotPath,
       timeout: options.timeoutMs,
     });
-    return consentGeometryProofScreenshotArtifact(input, page, screenshotPath, "independent_visual_fallback_viewport");
+    return consentGeometryProofScreenshotArtifact(
+      input,
+      page,
+      screenshotPath,
+      "independent_visual_fallback_viewport",
+      stableBrowserDocumentIdentity(playwrightDocumentIdentityBeforeCapture, currentBrowserDocumentIdentity(page)),
+    );
   } catch (error) {
     options.screenshotErrors.push(`Consent geometry proof Playwright screenshot failed: ${errorMessageFromUnknown(error)}`);
     return null;
@@ -10908,6 +11139,7 @@ function consentGeometryProofScreenshotArtifact(
   page: Page,
   screenshotPath: string,
   captureMethod: ScreenshotArtifact["captureMethod"],
+  documentIdentity?: BrowserDocumentIdentity,
 ): ScreenshotArtifact {
   return {
     artifactId: "screenshot_pre_consent_geometry_proof",
@@ -10915,6 +11147,7 @@ function consentGeometryProofScreenshotArtifact(
     captureMethod,
     path: screenshotPath,
     url: page.url(),
+    documentIdentity,
     pagePhase: "network_idle",
     consentStateAtTime: "pre_consent",
   };

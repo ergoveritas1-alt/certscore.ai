@@ -6,6 +6,7 @@ import {
   isSupportedPrivacyEvidenceLocale,
   PRIVACY_EVIDENCE_LOCALE_REGISTRY,
   type ConsentControlClassifierProfile,
+  type BrowserDocumentIdentity,
   type ConsentControlLabelClassification,
   type ConsentControlLabelClassifierInput,
   type SupportedPrivacyEvidenceLocale,
@@ -174,6 +175,7 @@ export interface ConsentControlGeometryArtifact {
   artifactVersion: "consent_control_geometry.v1";
   sourceScanner: "consent_control_geometry_diagnostic";
   pageUrl: string;
+  documentIdentity?: BrowserDocumentIdentity;
   capturedAt: string;
   viewport: {
     width: number;
@@ -195,6 +197,7 @@ export interface ConsentControlGeometryArtifact {
 }
 
 interface CaptureConsentControlGeometryOptions {
+  documentIdentity?: BrowserDocumentIdentity;
   screenshotArtifactRef?: string;
   candidateLimit?: number;
   containerLimit?: number;
@@ -393,6 +396,7 @@ export async function captureConsentControlGeometry(
     // document. If the main-frame evaluation times out, a successful CMP
     // child frame must not replace the document identity of the scan.
     pageUrl: expectedPageUrl,
+    ...(options.documentIdentity ? { documentIdentity: options.documentIdentity } : {}),
     capturedAt: new Date().toISOString(),
     viewport: mainFrameCapture?.viewport ?? { width: 0, height: 0 },
     screenshotArtifactRef: options.screenshotArtifactRef,

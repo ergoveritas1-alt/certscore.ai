@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
 import { createServer as createHttpServer, type Server as HttpServer } from "node:http";
 import { createServer as createHttpsServer } from "node:https";
+import { connect as connectTcp, type Socket } from "node:net";
 import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { readFileSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -19,6 +20,81 @@ test("strict TLS probe keeps timeouts and network failures unknown instead of in
   assert.equal(result.attempted, true);
   assert.notEqual(result.errorCategory, "tls_or_certificate_failure");
   assert.equal(result.validCertificate, undefined);
+});
+
+test("strict TLS probe completes through the configured HTTP CONNECT proxy", async () => {
+  const tempRoot = await mkdtemp(path.join(tmpdir(), "certscore-proxied-tls-"));
+  const tls = await createSelfSignedCertificate(tempRoot);
+  const httpsServer = await startHttpsFixtureServer({
+    certPath: tls.certPath,
+    keyPath: tls.keyPath,
+    body: "<!doctype html><title>proxied tls fixture</title>",
+  });
+  const proxy = createHttpServer();
+  const proxySockets = new Set<Socket>();
+  let connectCount = 0;
+  proxy.on("connect", (request, clientSocket, head) => {
+    connectCount += 1;
+    proxySockets.add(clientSocket);
+    clientSocket.once("close", () => proxySockets.delete(clientSocket));
+    const [hostname, portText] = (request.url ?? "").split(":");
+    const upstream = connectTcp(Number(portText), hostname, () => {
+      clientSocket.write("HTTP/1.1 200 Connection Established\r\n\r\n");
+      if (head.length > 0) upstream.write(head);
+      clientSocket.pipe(upstream);
+      upstream.pipe(clientSocket);
+    });
+    proxySockets.add(upstream);
+    upstream.once("close", () => proxySockets.delete(upstream));
+    upstream.once("error", (error) => clientSocket.destroy(error));
+  });
+  await listen(proxy);
+  const proxyUrl = serverUrl(proxy, "http");
+
+  try {
+    const result = await probeStrictTls(httpsServer.url, undefined, Date.now() + 2_000, {
+      SCAN_PROXY_ENABLED: "true",
+      SCAN_PROXY_SERVER: proxyUrl,
+    });
+
+    assert.equal(connectCount, 1);
+    assert.equal(result.attempted, true);
+    assert.equal(result.errorCategory, "tls_or_certificate_failure");
+    assert.equal(result.validCertificate, false);
+    assert.equal(typeof result.certificateValidTo, "string");
+    assert.notEqual(result.errorMessage, "strict TLS probe timed out");
+  } finally {
+    for (const socket of proxySockets) socket.destroy();
+    await closeServer(proxy);
+    await closeServer(httpsServer.server);
+    await rm(tempRoot, { recursive: true, force: true });
+  }
+});
+
+test("strict TLS probe bounds a stalled proxy CONNECT as an unknown timeout", async () => {
+  const proxy = createHttpServer();
+  const proxySockets = new Set<Socket>();
+  proxy.on("connect", (_request, socket) => {
+    proxySockets.add(socket);
+    socket.once("close", () => proxySockets.delete(socket));
+  });
+  await listen(proxy);
+  const startedAt = Date.now();
+
+  try {
+    const result = await probeStrictTls("https://example.test/", undefined, Date.now() + 25, {
+      SCAN_PROXY_ENABLED: "true",
+      SCAN_PROXY_SERVER: serverUrl(proxy, "http"),
+    });
+
+    assert.equal(result.attempted, true);
+    assert.equal(result.errorCategory, "timeout");
+    assert.equal(result.validCertificate, undefined);
+    assert.ok(Date.now() - startedAt < 1_000);
+  } finally {
+    for (const socket of proxySockets) socket.destroy();
+    await closeServer(proxy);
+  }
 });
 
 test("pre-consent scanner uses strict TLS probe and records transport-security evidence", async () => {

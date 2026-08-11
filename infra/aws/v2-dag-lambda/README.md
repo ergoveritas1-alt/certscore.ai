@@ -1,7 +1,8 @@
 # CertScore v2 DAG Lambda infrastructure
 
 This stack owns the production scanner runtime in `eu-central-1`, `eu-west-1`,
-and `us-west-2`. WS01 is not a production deployment target.
+and `us-west-1` (US West, N. California). WS01 is not a production deployment
+target.
 
 It manages the shared Lambda role and, in every region:
 
@@ -11,6 +12,9 @@ It manages the shared Lambda role and, in every region:
 - the result queue, result-ingestion DLQ, and async-invocation failure queue;
 - the Lambda configuration, reserved concurrency, log retention, and async
   failure destination;
+- optional per-region S3 gateway, SQS, CloudWatch Logs, and Lambda interface
+  endpoints, with private DNS, endpoint security groups, DNS preconditions,
+  and scoped endpoint policies;
 - alarms for Lambda errors/throttles, stale results, result DLQ messages, and
   async failures.
 
@@ -42,7 +46,18 @@ Do not apply this stack to production before importing the existing resources.
 First inventory each Lambda's environment, VPC attachment, memory, role, queues,
 buckets, and image digest. Populate a private `terraform.tfvars` from
 `terraform.tfvars.example`, preserving all proxy and egress variables exactly.
-Use digest-qualified regional image URIs.
+For a regional NAT-free migration, populate the typed
+`vpc_endpoint_config_by_region` entry from a read-only AWS inventory. It uses
+existing VPC, Lambda subnet, route-table, and Lambda security-group IDs; it
+does not manage the Lambda subnet's NAT route, NAT gateway, proxy, EIP, Lambda
+function, bucket, queue, or scanner role. Use digest-qualified regional image
+URIs.
+
+The California lane is deployed in `us-west-1`, so Lambda, the regional proxy,
+AWS service endpoints, ECR, S3, and SQS remain in one AWS Region. Retained
+`EgressPreflight.json` must still verify the proxy's California geography and
+public-IP hash; the AWS Region alone is not treated as proof of egress IP
+location.
 
 Initialize remote state:
 
@@ -68,7 +83,7 @@ exist.
 |---|---|
 | `eu_central_1` | `eu-central-1` |
 | `eu_west_1` | `eu-west-1` |
-| `us_west_2` | `us-west-2` |
+| `us_west_1` | `us-west-1` |
 
 Example for `eu-central-1` (repeat with the matching module and region):
 
@@ -89,6 +104,12 @@ detachment, no proxy/egress variable removal, and no retained-evidence deletion.
 Apply one region at a time with module targets during the first rollout. After
 each region, run the regional parity check and a retained-evidence canary before
 continuing.
+
+Do not remove the Lambda subnet's NAT default route as part of the endpoint
+apply. Remove it only as a separately authorized, reversible migration step
+after proxy-aware direct HTTP/OpenAI transport and the endpoint canary have
+passed. Do not delete a NAT gateway or release its EIP until the observation
+window and cost gate are complete.
 
 The legacy `scripts/local-v2-dag-lambda/setup-dev-aws-image.sh` is retained only
 for non-production local/dev bootstrapping. Production releases must use

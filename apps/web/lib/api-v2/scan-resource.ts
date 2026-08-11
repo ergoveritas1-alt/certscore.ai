@@ -7,6 +7,7 @@ import {
   apiV2PreConsentCookiesTrackersSchema,
   apiV2ScanJobSchema,
   apiV2ScanDiagnosticsSchema,
+  apiV2ScanLaneRunSchema,
   apiV2ScanPulseSchema,
   apiV2ScanResourceSchema,
   apiV2Disclaimer,
@@ -610,6 +611,40 @@ export function buildApiV2ScanDiagnostics(scanRecord: ScanDetailResponse): ApiV2
   const buildPhaseSummaries = Array.isArray(runtimeArtifacts?.buildPhaseSummaries)
     ? runtimeArtifacts.buildPhaseSummaries.map(plainRecord).filter((value): value is Record<string, unknown> => value !== null)
     : [];
+  const lanes = (Array.isArray(runtimeArtifacts?.scanLaneRuns) ? runtimeArtifacts.scanLaneRuns : [])
+    .flatMap((value) => {
+      const lane = plainRecord(value);
+      if (!lane) return [];
+      const firstResponseAt = boundedStringOrNull(lane.firstResponseAt, 80);
+      const firstResponseOffsetMs = finiteInt(lane.firstResponseOffsetMs);
+      const firstHttpStatus = finiteInt(lane.firstHttpStatus);
+      const parsed = apiV2ScanLaneRunSchema.safeParse({
+        laneId: lane.laneId,
+        physicalInvocationId: lane.physicalInvocationId,
+        region: lane.region,
+        phaseName: lane.phaseName,
+        startedAt: lane.startedAt,
+        firstResponse: firstResponseAt !== null && firstResponseOffsetMs !== null && firstHttpStatus !== null
+          ? {
+              at: firstResponseAt,
+              offsetMs: firstResponseOffsetMs,
+              httpStatus: firstHttpStatus,
+              effectiveUrl: boundedStringOrNull(lane.firstEffectiveUrl, 500),
+            }
+          : null,
+        navigationCount: finiteInt(lane.navigationCount) ?? 0,
+        challengeDetection: {
+          detected: lane.challengeDetected === true,
+          type: boundedStringOrNull(lane.challengeType, 120),
+        },
+        executionOutcome: lane.executionOutcome,
+        accessOutcome: lane.accessOutcome,
+        completedAt: boundedStringOrNull(lane.completedAt, 80),
+        durationMs: finiteInt(lane.durationMs) ?? 0,
+      });
+      return parsed.success ? [parsed.data] : [];
+    })
+    .slice(0, 8);
   const phases = [
     ...executionStages.map((stage) => ({
       name: stage.stage,
@@ -658,6 +693,7 @@ export function buildApiV2ScanDiagnostics(scanRecord: ScanDetailResponse): ApiV2
     generatedAt: completedAt,
     totalWallMs,
     phases,
+    lanes,
     policyDiscovery: {
       candidatesDiscovered: finiteInt(v2PolicyDiagnostics?.candidatesDiscovered) ?? finiteInt(discoveryDebug?.candidateCount),
       candidatesAfterDeduplication: finiteInt(v2PolicyDiagnostics?.candidatesAfterDeduplication) ?? (uniquePrefetchUrls.size > 0 ? uniquePrefetchUrls.size : null),

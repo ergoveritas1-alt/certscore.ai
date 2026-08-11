@@ -48,7 +48,7 @@ type RunJson = {
   url: string;
 };
 
-const SCANNER_REGIONS = ["eu-central-1", "eu-west-1", "us-west-2"] as const;
+const SCANNER_REGIONS = ["eu-central-1", "eu-west-1", "us-west-1"] as const;
 const SCANNER_BUILD_REGION = "eu-central-1" as const;
 const SCANNER_MEMORY_SIZE = 3008;
 const SCANNER_FUNCTION_NAME = "certscore-v2-dag-local-lambda";

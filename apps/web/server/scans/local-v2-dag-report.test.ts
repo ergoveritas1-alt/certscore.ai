@@ -2265,8 +2265,8 @@ test("inferS3ArtifactRegion follows the regional Lambda artifact bucket", async 
     "eu-west-1"
   );
   assert.equal(
-    inferS3ArtifactRegion("certscore-v2-dag-local-artifacts-us-west-2-199536052647"),
-    "us-west-2"
+    inferS3ArtifactRegion("certscore-v2-dag-local-artifacts-us-west-1-199536052647"),
+    "us-west-1"
   );
   assert.equal(inferS3ArtifactRegion("certscore-v2-dag-local-artifacts"), "eu-central-1");
 });
@@ -5657,6 +5657,24 @@ test("materializeLocalV2DagScanDetail reconciles canonical redirects, CMP traffi
         textExcerpt: "CIRA collects personal information to provide services. Service providers may process it outside Canada. You may request access or correction by contacting our Chief Privacy Officer at privacy@example.test."
       }],
       runtimeTimeline: [],
+      scanLaneRuns: [{
+        laneId: "consent_proof",
+        physicalInvocationId: "aws-request-consent-proof",
+        region: "eu-central-1",
+        phaseName: "preConsentRuntimeScanner",
+        startedAt: "2026-07-20T18:10:00.000Z",
+        firstResponseAt: "2026-07-20T18:10:01.000Z",
+        firstResponseOffsetMs: 1000,
+        firstHttpStatus: 200,
+        firstEffectiveUrl: "https://www.cira.ca/en/cybersecurity/",
+        navigationCount: 1,
+        challengeDetected: false,
+        challengeType: null,
+        executionOutcome: "success",
+        accessOutcome: "representative_page",
+        completedAt: "2026-07-20T18:10:20.000Z",
+        durationMs: 20000
+      }],
       scanId: "canonical-redirect-cmp-fixture",
       schemaVersion: "certscore.v2.canonical-evidence-bundle.v1",
       screenshots: [{
@@ -5726,6 +5744,10 @@ test("materializeLocalV2DagScanDetail reconciles canonical redirects, CMP traffi
     assert.deepEqual(choices.rejectLabels, ["Reject Non-Essential"]);
     assert.equal((choices.screenshotRefs as unknown[]).length, 1);
     assert.equal(consentAssessmentScan.scanId, base.scan.id);
+    assert.equal(
+      (detail.runtimeArtifacts?.scanLaneRuns as Array<Record<string, unknown>>)[0]?.physicalInvocationId,
+      "aws-request-consent-proof",
+    );
     assert.deepEqual(detail.policyEnrichment.map((row) => row.pageUrl), ["https://cira.ca/en/privacy-policy"]);
   } finally {
     if (previousAppUrl === undefined) delete process.env.NEXT_PUBLIC_APP_URL;

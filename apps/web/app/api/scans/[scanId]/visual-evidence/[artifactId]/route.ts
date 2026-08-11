@@ -42,7 +42,7 @@ function isLocalV2DagLambdaArtifact(input: { bucket: string | null | undefined; 
 }
 
 function inferS3ArtifactRegion(bucket: string) {
-  const match = bucket.match(/(?:^|-)(eu-central-1|eu-west-1|us-west-2)(?:-|$)/);
+  const match = bucket.match(/(?:^|-)(eu-central-1|eu-west-1|us-west-1)(?:-|$)/);
   return match?.[1] ?? "eu-central-1";
 }
 

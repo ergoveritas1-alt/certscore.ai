@@ -289,6 +289,36 @@ export const apiV2ScanDiagnosticPhaseSchema = z
   })
   .strict();
 
+export const apiV2ScanLaneRunSchema = z.object({
+  laneId: z.enum(["consent_proof", "runtime_evidence", "policy_evidence"]),
+  physicalInvocationId: z.string().max(160),
+  region: z.string().max(80),
+  phaseName: z.enum(["preConsentRuntimeScanner", "policySurfaceScanner"]),
+  startedAt: z.string(),
+  firstResponse: z.object({
+    at: z.string(),
+    offsetMs: z.number().int().min(0),
+    httpStatus: z.number().int().min(100).max(599),
+    effectiveUrl: z.string().max(500).nullable(),
+  }).strict().nullable(),
+  navigationCount: z.number().int().min(0),
+  challengeDetection: z.object({
+    detected: z.boolean(),
+    type: z.string().max(120).nullable(),
+  }).strict(),
+  executionOutcome: z.enum(["success", "degraded", "failed"]),
+  accessOutcome: z.enum([
+    "representative_page",
+    "bot_challenge",
+    "access_denied",
+    "blank_or_unusable",
+    "navigation_failed",
+    "unknown",
+  ]),
+  completedAt: z.string().nullable(),
+  durationMs: z.number().int().min(0),
+}).strict();
+
 export const apiV2PolicyDiscoveryDiagnosticsSchema = z
   .object({
     candidatesDiscovered: z.number().int().min(0).nullable(),
@@ -310,6 +340,7 @@ export const apiV2ScanDiagnosticsSchema = z
     generatedAt: z.string().nullable(),
     totalWallMs: z.number().int().min(0).nullable(),
     phases: z.array(apiV2ScanDiagnosticPhaseSchema).max(20),
+    lanes: z.array(apiV2ScanLaneRunSchema).max(8).default([]),
     policyDiscovery: apiV2PolicyDiscoveryDiagnosticsSchema,
     links: apiV2LinksSchema.optional(),
     disclaimer: z.string().optional()

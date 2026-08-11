@@ -9,7 +9,7 @@ variable "image_uris" {
   type = object({
     eu_central_1 = string
     eu_west_1    = string
-    us_west_2    = string
+    us_west_1    = string
   })
 
   validation {
@@ -68,9 +68,9 @@ variable "alarm_actions_by_region" {
   validation {
     condition = length(setsubtract(
       toset(keys(var.alarm_actions_by_region)),
-      toset(["eu-central-1", "eu-west-1", "us-west-2"])
+      toset(["eu-central-1", "eu-west-1", "us-west-1"])
     )) == 0
-    error_message = "alarm_actions_by_region supports only eu-central-1, eu-west-1, and us-west-2."
+    error_message = "alarm_actions_by_region supports only eu-central-1, eu-west-1, and us-west-1."
   }
 
   validation {
@@ -93,6 +93,22 @@ variable "environment_variables_by_region" {
   default     = {}
 }
 
+variable "expected_egress_region_by_region" {
+  description = "Optional expected public region reported by the regional proxy egress preflight. Set the US-CA lane to California only after its proxy public IP is actually California-based."
+  type        = map(string)
+  default = {
+    "us-west-1" = "California"
+  }
+
+  validation {
+    condition = length(setsubtract(
+      toset(keys(var.expected_egress_region_by_region)),
+      toset(["eu-central-1", "eu-west-1", "us-west-1"])
+    )) == 0
+    error_message = "expected_egress_region_by_region supports only eu-central-1, eu-west-1, and us-west-1."
+  }
+}
+
 variable "vpc_config_by_region" {
   description = "Optional existing VPC attachment for each regional Lambda. Omit a region to preserve AWS-managed public egress."
   type = map(object({
@@ -100,6 +116,25 @@ variable "vpc_config_by_region" {
     subnet_ids         = list(string)
   }))
   default = {}
+}
+
+variable "vpc_endpoint_config_by_region" {
+  description = "Existing per-region VPC topology for NAT-free scanner AWS-service endpoints. The route table is only used for the S3 gateway endpoint; NAT routes remain outside this stack until a separately authorized migration step."
+  type = map(object({
+    vpc_id                   = string
+    route_table_ids          = list(string)
+    subnet_ids               = list(string)
+    lambda_security_group_id = string
+  }))
+  default = {}
+
+  validation {
+    condition = length(setsubtract(
+      toset(keys(var.vpc_endpoint_config_by_region)),
+      toset(["eu-central-1", "eu-west-1", "us-west-1"])
+    )) == 0
+    error_message = "vpc_endpoint_config_by_region supports only eu-central-1, eu-west-1, and us-west-1."
+  }
 }
 
 variable "tags" {

@@ -33,6 +33,7 @@ import {
   chromiumLaunchOptions,
   isAwsLambdaRuntime,
 } from "../playwright-runtime.js";
+import { configuredProxyServer, proxyFetch } from "../proxy-fetch.js";
 import { abortReason, boundedCleanup, throwIfAborted } from "../abort.js";
 import { getRegistrableDomainFromUrl } from "../domain-utils.js";
 import { httpTransportFallbackUrl } from "../transport-fallback.js";
@@ -418,6 +419,10 @@ interface PolicyFetchAttemptDiagnostic {
   navigationMethod?: "direct_navigation" | "observed_link_click";
   requestedUrl: string;
   finalUrl?: string;
+  firstResponseAt?: string;
+  firstResponseStatus?: number;
+  firstEffectiveUrl?: string;
+  redirectCount?: number;
   outcome: PolicyFetchAttemptOutcome;
   httpStatus?: number;
   contentType?: string;
@@ -505,6 +510,9 @@ export async function policySurfaceScanner(
     renderedRecoverySuccesses: 0,
     seenFailureKeys: new Set(),
   };
+  let siteFacingNavigation: ScanModuleRun["siteFacingNavigation"];
+  const withSiteFacingNavigation = (run: ScanModuleRun): ScanModuleRun =>
+    siteFacingNavigation ? { ...run, siteFacingNavigation } : run;
   const policyBrowserRuntime = createPolicyBrowserRuntime(input.browser);
   let policyModuleDeadlineReached = false;
   let externalPolicyDeadlineReached = false;
@@ -541,15 +549,15 @@ export async function policySurfaceScanner(
   const completedPolicyModuleRun = () => {
     if (hasExternalPolicyDeadline && Date.now() >= policyDeadlineAtMs) {
       policyModuleDeadlineReached = true;
-      return moduleRun(
+      return withSiteFacingNavigation(moduleRun(
         observations.length > 0 ? "partial" : "skipped_budget",
         moduleStartedAt,
         moduleStartedAtMs,
         [`Policy-surface lane reached its absolute ${policyModuleDeadlineMs}ms deadline; retained evidence is coverage-limited.`],
         timingBreakdown,
-      );
+      ));
     }
-    return moduleRun("completed", moduleStartedAt, moduleStartedAtMs, [], timingBreakdown);
+    return withSiteFacingNavigation(moduleRun("completed", moduleStartedAt, moduleStartedAtMs, [], timingBreakdown));
   };
   const policyDocumentFetchCaches: PolicyDocumentFetchCaches = {
     browserRuntime: policyBrowserRuntime,
@@ -572,6 +580,28 @@ export async function policySurfaceScanner(
         { allowHttpTransportFallback: true },
       ),
     );
+    const firstHomepageResponse = (homepage.attempts ?? []).find((attempt) =>
+      attempt.firstResponseAt && attempt.firstResponseStatus !== undefined
+    );
+    const firstHomepageResponseMs = firstHomepageResponse?.firstResponseAt
+      ? Date.parse(firstHomepageResponse.firstResponseAt)
+      : Number.NaN;
+    const homepageChallengeDetected = homepage.ok &&
+      assessPolicyTextQuality(homepage.text).reason === "low_quality_access_challenge";
+    siteFacingNavigation = {
+      requestedUrl: sanitizedSiteFacingUrl(input.normalizedUrl),
+      firstResponseAt: firstHomepageResponse?.firstResponseAt ?? null,
+      firstResponseOffsetMs: Number.isFinite(firstHomepageResponseMs)
+        ? Math.max(0, firstHomepageResponseMs - input.scanStartedAtMs)
+        : null,
+      firstHttpStatus: firstHomepageResponse?.firstResponseStatus ?? null,
+      firstEffectiveUrl: firstHomepageResponse?.firstEffectiveUrl
+        ? sanitizedSiteFacingUrl(firstHomepageResponse.firstEffectiveUrl)
+        : null,
+      navigationCount: Math.max(1, homepage.attempts?.length ?? 0),
+      challengeDetected: homepageChallengeDetected,
+      challengeType: homepageChallengeDetected ? "captcha_or_challenge" : null,
+    };
     recordPolicyFetchDiagnostic(policyFetchDiagnostics, {
       stage: "homepage",
       result: homepage,
@@ -715,7 +745,7 @@ export async function policySurfaceScanner(
         policyFetchDiagnostics,
       }));
       return {
-        moduleRun: moduleRun(
+        moduleRun: withSiteFacingNavigation(moduleRun(
           observations.length > 0 ? "partial" : "failed",
           moduleStartedAt,
           moduleStartedAtMs,
@@ -725,7 +755,7 @@ export async function policySurfaceScanner(
               : `Homepage fetch failed with status ${homepage.status ?? "unknown"} and common-path fallback retained no policy surfaces.`,
           ],
           timingBreakdown,
-        ),
+        )),
         policySurfaceObservations: observations,
         artifactRefs,
       };
@@ -1052,23 +1082,23 @@ export async function policySurfaceScanner(
     if (parentCancellation) throw parentCancellation;
     if (externalPolicyDeadlineReached || policyDeadlineController.signal.aborted) {
       return {
-        moduleRun: moduleRun(
+        moduleRun: withSiteFacingNavigation(moduleRun(
           observations.length > 0 ? "partial" : "skipped_budget",
           moduleStartedAt,
           moduleStartedAtMs,
           [`Policy-surface lane reached its absolute ${policyModuleDeadlineMs}ms deadline; retained evidence is coverage-limited.`],
           timingBreakdown,
-        ),
+        )),
         policySurfaceObservations: observations,
         artifactRefs,
       };
     }
     return {
-      moduleRun: moduleRun("failed", moduleStartedAt, moduleStartedAtMs, [
+      moduleRun: withSiteFacingNavigation(moduleRun("failed", moduleStartedAt, moduleStartedAtMs, [
         policyModuleDeadlineReached
           ? `Policy-surface module exceeded its ${policyModuleDeadlineMs}ms hard deadline; retained evidence may be incomplete.`
           : error instanceof Error ? error.message : String(error)
-      ], timingBreakdown),
+      ], timingBreakdown)),
       policySurfaceObservations: observations,
       artifactRefs,
     };
@@ -1365,6 +1395,9 @@ function recordPolicyFetchDiagnostic(
     ...attempt,
     requestedUrl: boundedDiagnosticUrl(attempt.requestedUrl),
     ...(attempt.finalUrl ? { finalUrl: boundedDiagnosticUrl(attempt.finalUrl) } : {}),
+    ...(attempt.firstEffectiveUrl
+      ? { firstEffectiveUrl: sanitizedSiteFacingUrl(attempt.firstEffectiveUrl) }
+      : {}),
     ...(attempt.contentType ? { contentType: attempt.contentType.slice(0, 120) } : {}),
   }));
   const failedAttempt = [...attempts].reverse().find((attempt) => attempt.outcome !== "fetched");
@@ -1412,6 +1445,19 @@ function recordPolicyFetchDiagnostic(
 function boundedDiagnosticUrl(value: string): string {
   try {
     return canonicalPolicyUrlIdentity(value).slice(0, 500);
+  } catch {
+    return value.replace(/[?#].*$/, "").slice(0, 500);
+  }
+}
+
+function sanitizedSiteFacingUrl(value: string): string {
+  try {
+    const url = new URL(value);
+    url.username = "";
+    url.password = "";
+    url.hash = "";
+    url.search = "";
+    return url.toString().slice(0, 500);
   } catch {
     return value.replace(/[?#].*$/, "").slice(0, 500);
   }
@@ -6291,6 +6337,10 @@ async function fetchTextOnce(url: string, timeoutMs: number, parentSignal?: Abor
       mode: "direct" as const,
       requestedUrl: url,
       finalUrl: response.finalUrl,
+      firstResponseAt: response.firstResponseAt,
+      firstResponseStatus: response.firstResponseStatus,
+      firstEffectiveUrl: response.firstEffectiveUrl,
+      redirectCount: response.redirectCount,
       httpStatus: response.status,
       ...(contentType ? { contentType } : {}),
     };
@@ -6397,7 +6447,11 @@ async function fetchTextOnce(url: string, timeoutMs: number, parentSignal?: Abor
 type BoundedPolicyResponse = {
   body: Uint8Array;
   finalUrl: string;
+  firstResponseAt: string;
+  firstResponseStatus: number;
+  firstEffectiveUrl: string;
   headers: Headers;
+  redirectCount: number;
   status: number;
   truncated: boolean;
 };
@@ -6407,6 +6461,9 @@ export type PolicyResponseTransport = "fetch_with_node_fallback" | "node";
 export function policyResponseTransportForEnvironment(
   env: NodeJS.ProcessEnv = process.env,
 ): PolicyResponseTransport {
+  if (configuredProxyServer(env)) {
+    return "fetch_with_node_fallback";
+  }
   // Node's bundled Undici parser can terminate the process when a bounded
   // Web Streams response is paused and its peer closes the socket. Lambda
   // policy lanes use the existing bounded node:http(s) transport so that a
@@ -6433,7 +6490,7 @@ export async function requestBoundedPolicyResponse(
     // runtimes where fetch is unavailable or cannot establish a connection.
     // HTTP responses are returned by the fetch path and are never promoted
     // solely because the fallback transport behaves differently.
-    if (error instanceof TypeError || error instanceof Error) {
+    if ((error instanceof TypeError || error instanceof Error) && !configuredProxyServer()) {
       return requestBoundedPolicyResponseWithNodeTransport(url, signal, redirectsRemaining);
     }
     throw error;
@@ -6444,8 +6501,10 @@ async function requestBoundedPolicyResponseWithFetch(
   url: string,
   signal: AbortSignal,
   redirectsRemaining: number,
+  firstResponse?: { at: string; status: number; url: string },
+  redirectCount = 0,
 ): Promise<BoundedPolicyResponse> {
-  const response = await fetch(url, {
+  const response = await proxyFetch(url, {
     headers: {
       accept: "text/html,application/xhtml+xml,application/xml;q=0.9,application/pdf;q=0.8,*/*;q=0.7",
       "accept-encoding": "identity",
@@ -6455,6 +6514,12 @@ async function requestBoundedPolicyResponseWithFetch(
     redirect: "manual",
     signal,
   });
+  const responseAt = new Date().toISOString();
+  const retainedFirstResponse = firstResponse ?? {
+    at: responseAt,
+    status: response.status,
+    url: response.url || url,
+  };
   const location = response.headers.get("location");
   if (response.status >= 300 && response.status < 400 && location && redirectsRemaining > 0) {
     await response.body?.cancel().catch(() => undefined);
@@ -6462,6 +6527,8 @@ async function requestBoundedPolicyResponseWithFetch(
       new URL(location, url).toString(),
       signal,
       redirectsRemaining - 1,
+      retainedFirstResponse,
+      redirectCount + 1,
     );
   }
   const { body, truncated } = await readBoundedResponseBody(
@@ -6472,7 +6539,11 @@ async function requestBoundedPolicyResponseWithFetch(
   return {
     body,
     finalUrl: response.url || url,
+    firstResponseAt: retainedFirstResponse.at,
+    firstResponseStatus: retainedFirstResponse.status,
+    firstEffectiveUrl: retainedFirstResponse.url,
     headers: response.headers,
+    redirectCount,
     status: response.status,
     truncated,
   };
@@ -6482,6 +6553,8 @@ async function requestBoundedPolicyResponseWithNodeTransport(
   url: string,
   signal: AbortSignal,
   redirectsRemaining: number,
+  firstResponse?: { at: string; status: number; url: string },
+  redirectCount = 0,
 ): Promise<BoundedPolicyResponse> {
   const parsed = new URL(url);
   if (parsed.protocol !== "http:" && parsed.protocol !== "https:") {
@@ -6521,11 +6594,23 @@ async function requestBoundedPolicyResponseWithNodeTransport(
     }, (incoming) => {
       activeResponse = incoming;
       const status = incoming.statusCode ?? 0;
+      const responseAt = new Date().toISOString();
+      const retainedFirstResponse = firstResponse ?? {
+        at: responseAt,
+        status,
+        url: parsed.toString(),
+      };
       const location = incoming.headers.location;
       if (status >= 300 && status < 400 && location && redirectsRemaining > 0) {
         incoming.resume();
         const redirectedUrl = new URL(location, parsed).toString();
-        void requestBoundedPolicyResponseWithNodeTransport(redirectedUrl, signal, redirectsRemaining - 1)
+        void requestBoundedPolicyResponseWithNodeTransport(
+          redirectedUrl,
+          signal,
+          redirectsRemaining - 1,
+          retainedFirstResponse,
+          redirectCount + 1,
+        )
           .then(finishResolve, finishReject);
         return;
       }
@@ -6551,7 +6636,11 @@ async function requestBoundedPolicyResponseWithNodeTransport(
           finishResolve({
             body: Buffer.concat(chunks, sizeBytes),
             finalUrl: parsed.toString(),
+            firstResponseAt: retainedFirstResponse.at,
+            firstResponseStatus: retainedFirstResponse.status,
+            firstEffectiveUrl: retainedFirstResponse.url,
             headers,
+            redirectCount,
             status,
             truncated: true,
           });
@@ -6563,7 +6652,11 @@ async function requestBoundedPolicyResponseWithNodeTransport(
       incoming.once("end", () => finishResolve({
         body: Buffer.concat(chunks, sizeBytes),
         finalUrl: parsed.toString(),
+        firstResponseAt: retainedFirstResponse.at,
+        firstResponseStatus: retainedFirstResponse.status,
+        firstEffectiveUrl: retainedFirstResponse.url,
         headers,
+        redirectCount,
         status,
         truncated,
       }));
@@ -6715,13 +6808,25 @@ export async function awaitAbortablePolicyOperation<T>(
   signal: AbortSignal | undefined,
   abortMessage: string,
 ): Promise<T> {
-  if (!signal) return work;
+  // Convert the work promise into a non-rejecting outcome before checking the
+  // signal. Callers often create work before invoking this helper; if the
+  // signal is already aborted, throwing first would leave a later DNS/socket
+  // rejection unhandled and can terminate the Lambda runtime.
+  const workOutcome = work.then(
+    (value) => ({ kind: "fulfilled" as const, value }),
+    (reason) => ({ kind: "rejected" as const, reason }),
+  );
+  if (!signal) {
+    const outcome = await workOutcome;
+    if (outcome.kind === "rejected") throw outcome.reason;
+    return outcome.value;
+  }
   throwIfAborted(signal);
 
   let abortListener: (() => void) | undefined;
   try {
-    return await Promise.race([
-      work,
+    const outcome = await Promise.race([
+      workOutcome,
       new Promise<never>((_resolve, reject) => {
         abortListener = () => {
           const reason = abortReason(signal);
@@ -6734,6 +6839,8 @@ export async function awaitAbortablePolicyOperation<T>(
         signal.addEventListener("abort", abortListener, { once: true });
       }),
     ]);
+    if (outcome.kind === "rejected") throw outcome.reason;
+    return outcome.value;
   } finally {
     if (abortListener) signal.removeEventListener("abort", abortListener);
   }

@@ -29,6 +29,7 @@ const staticPaths = [
   "/developers/sdk",
   "/developers/mcp",
   "/mcp/light",
+  "/claude",
   "/developers/examples",
   "/faq",
   "/contact",

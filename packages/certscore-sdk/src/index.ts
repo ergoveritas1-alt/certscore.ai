@@ -54,6 +54,7 @@ export type {
   ScanJob,
   ScanDiagnosticPhase,
   ScanDiagnostics,
+  ScanLaneRun,
   ScanOptions,
   ScanPulse,
   ScanResource,

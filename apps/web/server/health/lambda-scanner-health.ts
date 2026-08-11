@@ -5,7 +5,7 @@ import { classifyLambdaScannerFleet } from "./lambda-scanner-health-core";
 
 export { classifyLambdaScannerFleet } from "./lambda-scanner-health-core";
 
-export const PRODUCTION_SCANNER_REGIONS = ["eu-central-1", "eu-west-1", "us-west-2"] as const;
+export const PRODUCTION_SCANNER_REGIONS = ["eu-central-1", "eu-west-1", "us-west-1"] as const;
 
 export type LambdaScannerRegionHealth = {
   checkedAt: string;

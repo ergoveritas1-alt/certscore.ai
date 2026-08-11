@@ -13,7 +13,7 @@ if [[ -z "$source_image_uri" || -z "$target_region" ]]; then
 fi
 
 case "$target_region" in
-  eu-central-1|eu-west-1|us-west-2) ;;
+  eu-central-1|eu-west-1|us-west-1) ;;
   *)
     echo "Unsupported local v2 DAG Lambda image region: ${target_region}." >&2
     exit 1

@@ -7,6 +7,7 @@ import type {
 } from "./consent-control-geometry.js";
 import { classifyConsentControlLabel } from "@certscore/contracts";
 import type { ConsentGeometryAccessDiagnostic } from "./consent-geometry-access.js";
+import { proxyFetch } from "./proxy-fetch.js";
 
 const OPENAI_API_URL = "https://api.openai.com/v1/chat/completions";
 const DEFAULT_NANO_MODEL = "gpt-5.4-nano";
@@ -97,7 +98,7 @@ export async function runConsentGeometryNanoVisualReview(
   const model = input.model?.trim() || DEFAULT_NANO_MODEL;
   const rows: ConsentGeometryNanoVisualReview[] = [];
   const sites = await discoverSiteArtifactInputs(artifactsRoot, input.siteFilter);
-  const fetchImpl = input.fetchImpl ?? fetch;
+  const fetchImpl = input.fetchImpl ?? ((request, init) => proxyFetch(request, init));
 
   for (const site of sites) {
     const reviewPath = path.join(site.siteDir, REVIEW_FILE_NAME);

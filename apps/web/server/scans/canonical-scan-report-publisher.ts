@@ -24,6 +24,14 @@ export type CanonicalScanReportPublicationResult = {
 };
 
 const publicationPromises = new Map<string, Promise<CanonicalScanReportPublicationResult>>();
+const STALE_SOURCE_MAX_ATTEMPTS = 4;
+const STALE_SOURCE_RETRY_BASE_MS = 100;
+
+function waitForStaleSourceRetry(attempt: number) {
+  return new Promise<void>((resolve) => {
+    setTimeout(resolve, STALE_SOURCE_RETRY_BASE_MS * 2 ** attempt);
+  });
+}
 
 async function loadScan(input: { organizationId: string | null; scanId: string }) {
   return input.organizationId
@@ -35,7 +43,7 @@ async function publishCanonicalScanReportProjectionUncached(input: {
   organizationId: string | null;
   scanId: string;
 }): Promise<CanonicalScanReportPublicationResult> {
-  for (let attempt = 0; attempt < 2; attempt += 1) {
+  for (let attempt = 0; attempt < STALE_SOURCE_MAX_ATTEMPTS; attempt += 1) {
     const rawRecord = await loadScan(input);
     if (!rawRecord) {
       return {
@@ -87,12 +95,13 @@ async function publishCanonicalScanReportProjectionUncached(input: {
           status: "finalizing"
         };
       }
-      if (error instanceof StaleScanReportProjectionSourceError && attempt === 0) {
+      if (error instanceof StaleScanReportProjectionSourceError && attempt + 1 < STALE_SOURCE_MAX_ATTEMPTS) {
         console.warn(JSON.stringify({
           attempt: attempt + 1,
           event: "scan.report_projection.stale_source_retry",
           scanId: input.scanId
         }));
+        await waitForStaleSourceRetry(attempt);
         continue;
       }
       throw error;

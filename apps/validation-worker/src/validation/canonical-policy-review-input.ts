@@ -13,13 +13,13 @@ const MAX_CANONICAL_BUNDLE_BYTES = 20 * 1024 * 1024;
 const APPROVED_ARTIFACT_REGIONS = new Set([
   "eu-central-1",
   "eu-west-1",
-  "us-west-2"
+  "us-west-1"
 ]);
 
 export type CanonicalPolicyReviewPointer = {
   expectedSha256: string;
   expectedSizeBytes: number;
-  region: "eu-central-1" | "eu-west-1" | "us-west-2";
+  region: "eu-central-1" | "eu-west-1" | "us-west-1";
   uri: string;
 };
 
@@ -57,7 +57,7 @@ function parseS3Uri(uri: string) {
 }
 
 function inferArtifactRegion(bucket: string): CanonicalPolicyReviewPointer["region"] {
-  const matched = bucket.match(/(?:^|-)(eu-central-1|eu-west-1|us-west-2)(?:-|$)/)?.[1];
+  const matched = bucket.match(/(?:^|-)(eu-central-1|eu-west-1|us-west-1)(?:-|$)/)?.[1];
   if (!matched || !APPROVED_ARTIFACT_REGIONS.has(matched)) {
     throw new Error("Canonical policy-review artifact bucket does not identify an approved scanner region.");
   }
