@@ -153,3 +153,12 @@ test("routine scanner deploys promote immutable digests without recreating infra
   assert.match(verifyFunction, /payload\.MemorySize !== SCANNER_MEMORY_SIZE/);
   assert.doesNotMatch(verifyFunction, /endsWith\(`:\$\{expectedSha\}`\)/);
 });
+
+test("regional scanner parity follows the bounded Lambda and region-specific proxy contracts", async () => {
+  const source = await readFile("scripts/check-regional-scanner-parity.ts", "utf8");
+  assert.match(source, /\["timeout", config\.Timeout, 75\]/);
+  assert.match(source, /"eu-west-1": "ireland-parity-v1"/);
+  assert.match(source, /"eu-central-1": "ireland-parity-v1"/);
+  assert.match(source, /"us-west-1": "us-ca-vpc-v1"/);
+  assert.match(source, /acl vpcsrc src\\s\+\\S\+/);
+});

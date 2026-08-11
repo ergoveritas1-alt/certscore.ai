@@ -27,6 +27,12 @@ const EXPECTED_CONTEXT: Record<Region, {
   },
 };
 
+const EXPECTED_PROXY_CONFIG_TAG: Record<Region, string> = {
+  "eu-west-1": "ireland-parity-v1",
+  "eu-central-1": "ireland-parity-v1",
+  "us-west-1": "us-ca-vpc-v1",
+};
+
 const functionName = process.env.CERTSCORE_V2_DAG_LAMBDA_FUNCTION_NAME?.trim() ||
   "certscore-v2-dag-local-lambda";
 const canonicalTemplate = readFileSync(
@@ -90,6 +96,7 @@ function normalizedProxyUserData(region: Region, instanceId: string): string {
   return Buffer.from(encoded, "base64")
     .toString("utf8")
     .replace(/visible_hostname\s+\S+/, "visible_hostname __CERTSCORE_VISIBLE_HOSTNAME__")
+    .replace(/acl vpcsrc src\s+\S+/, "acl vpcsrc src __CERTSCORE_LAMBDA_VPC_CIDR__")
     .trim();
 }
 
@@ -106,7 +113,7 @@ const observed = REGIONS.map((region) => {
   const context = EXPECTED_CONTEXT[region];
   const required = [
     ["memory", config.MemorySize, 3008],
-    ["timeout", config.Timeout, 900],
+    ["timeout", config.Timeout, 75],
     ["architecture", config.Architectures?.[0], "x86_64"],
     ["ephemeral storage", config.EphemeralStorage?.Size, 512],
     ["locale", env.CERTSCORE_V2_DAG_LAMBDA_CHROMIUM_LOCALE, context.locale],
@@ -151,7 +158,7 @@ const observed = REGIONS.map((region) => {
     [
       "proxy configuration tag",
       instance.Tags?.find((tag) => tag.Key === "CertScoreProxyConfig")?.Value,
-      "ireland-parity-v1",
+      EXPECTED_PROXY_CONFIG_TAG[region],
     ],
   ] as const) {
     if (value !== expected) {
@@ -160,7 +167,7 @@ const observed = REGIONS.map((region) => {
   }
   const normalizedUserData = normalizedProxyUserData(region, address.InstanceId);
   if (normalizedUserData !== canonicalTemplate.trim()) {
-    errors.push(`${region}: proxy user data differs from the canonical Ireland-parity configuration.`);
+    errors.push(`${region}: proxy user data differs from the canonical regional configuration.`);
   }
   return {
     imageDigest: fn.Code?.ResolvedImageUri?.split("@")[1],
