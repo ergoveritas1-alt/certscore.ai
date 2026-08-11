@@ -171,16 +171,30 @@ export function createCertScoreMcpServer(options: CertScoreMcpOptions = {}) {
             ...scanCreationMetadata(created as unknown as Record<string, unknown>)
           }));
         } catch (error) {
-          if (!(error instanceof CertScoreTimeoutError)) {
-            throw error;
-          }
           const scanId = created.scanId ?? created.scan_id;
-          if (scanId) {
-            return toToolResult(withMcpAgentGuidance({
-              ...(await client.scans.status(scanId)),
-              ...scanCreationMetadata(created as unknown as Record<string, unknown>)
-            }));
+          console.warn(JSON.stringify({
+            event: "mcp.scan_site.wait_deferred",
+            errorName: error instanceof Error ? error.name : "UnknownError",
+            jobId: created.jobId ?? null,
+            scanId: scanId ?? null,
+            status: created.status ?? null
+          }));
+          if (error instanceof CertScoreTimeoutError && scanId) {
+            try {
+              return toToolResult(withMcpAgentGuidance({
+                ...(await client.scans.status(scanId)),
+                ...scanCreationMetadata(created as unknown as Record<string, unknown>)
+              }));
+            } catch {
+              // Creation already succeeded. Preserve that stable identity when
+              // the follow-up status read is briefly unavailable.
+            }
           }
+
+          // Waiting is a convenience layered on top of scan creation. Once the
+          // API has accepted a scan, never turn a transient polling or hydration
+          // failure into an identity-less tool error that encourages callers to
+          // submit a second, non-idempotent scan_site request.
           return toToolResult(withMcpAgentGuidance(created as unknown as Record<string, any>));
         }
       } catch (error) {

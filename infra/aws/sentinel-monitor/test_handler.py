@@ -100,6 +100,34 @@ class AuthoritativeFreshnessTests(unittest.TestCase):
         self.assertFalse(result["freshnessIssue"])
 
 
+class McpIdentityTests(unittest.TestCase):
+    def test_stable_scan_id_never_promotes_a_job_id(self):
+        self.assertIsNone(handler.stable_scan_id({"jobId": "job-123"}))
+        self.assertEqual(
+            handler.stable_scan_id({"data": {"scanId": "scan-123", "jobId": "job-123"}}),
+            "scan-123",
+        )
+
+    def test_mcp_tool_payload_prefers_structured_content(self):
+        result, payload = handler.mcp_tool_payload({
+            "result": {
+                "content": [{"type": "text", "text": "summary"}],
+                "structuredContent": {"scanId": "scan-123", "status": "queued"},
+            }
+        })
+
+        self.assertEqual(payload["scanId"], "scan-123")
+        self.assertIn("content", result)
+
+    def test_monitor_has_only_one_non_idempotent_scan_site_submission(self):
+        source = module_path.read_text()
+        mcp_scan_source = source.split("def mcp_scan", 1)[1].split("def signals", 1)[0]
+
+        self.assertEqual(mcp_scan_source.count('"name": "scan_site"'), 1)
+        self.assertIn('session, retry_safe=False)', mcp_scan_source)
+        self.assertIn("not resubmitting", mcp_scan_source)
+
+
 class HourlyJobRotationTests(unittest.TestCase):
     pages = [{"key": f"page-{index}"} for index in range(5)]
 
@@ -142,6 +170,17 @@ class HourlyJobRotationTests(unittest.TestCase):
         }
         self.assertEqual(len(tuples), 45)
         self.assertEqual(set(tuples), expected)
+
+    def test_mcp_target_does_not_repeat_the_previous_hour_api_target(self):
+        for hour in range(15):
+            previous = handler.build_hourly_jobs(self.pages, hour - 1)
+            current = handler.build_hourly_jobs(self.pages, hour)
+            previous_api = next(job for job in previous if job["transport"] == "api")
+            current_mcp = next(job for job in current if job["transport"] == "mcp")
+            self.assertNotEqual(
+                (current_mcp["page"]["key"], current_mcp["location"]),
+                (previous_api["page"]["key"], previous_api["location"]),
+            )
 
 
 if __name__ == "__main__":

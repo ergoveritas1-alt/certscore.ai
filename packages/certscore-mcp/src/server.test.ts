@@ -553,6 +553,49 @@ test("scan_site waits by default and returns the completed scan resource", async
   }
 });
 
+test("scan_site preserves the accepted scan identity when follow-up polling fails", async () => {
+  const mock = installFetch([
+    {
+      status: 202,
+      body: {
+        type: "certscore_scan_job",
+        status: "queued",
+        jobId: "pulse_job_123",
+        scanId: "scan_123",
+        retryAfterSeconds: 0,
+        links: { status: "https://certscore.ai/api/v2/scans/scan_123/status" }
+      }
+    },
+    {
+      status: 503,
+      body: {
+        error: {
+          code: "internal_error",
+          message: "Status is temporarily unavailable."
+        }
+      }
+    }
+  ]);
+  try {
+    await withMcpClient(async (client) => {
+      const result = parseToolJson(await client.callTool({
+        name: "scan_site",
+        arguments: { url: "https://example.com" }
+      }));
+
+      assert.equal(result.type, "certscore_scan_job");
+      assert.equal(result.status, "queued");
+      assert.equal(result.scanId, "scan_123");
+      assert.equal(result.jobId, "pulse_job_123");
+      assert.equal(result.recommendedNextTool, "get_scan_status");
+      assert.equal(result.error, null);
+      assert.equal(mock.calls.length, 2);
+    });
+  } finally {
+    mock.restore();
+  }
+});
+
 test("get_scan_status requires the stable scanId", async () => {
   await withMcpClient(async (client) => {
     await client.listTools();

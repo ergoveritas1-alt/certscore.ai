@@ -43,6 +43,24 @@ def scan_id(x):
         if v: return v
     return None
 
+def stable_scan_id(x):
+    """Return only a durable scan ID, never a job ID."""
+    if not isinstance(x, dict):
+        return None
+    for key in ("scanId", "scan_id"):
+        if isinstance(x.get(key), str) and x[key].strip():
+            return x[key].strip()
+    for key in ("scan", "data"):
+        value = stable_scan_id(x.get(key))
+        if value:
+            return value
+    return None
+
+def mcp_tool_payload(call):
+    result = call.get("result", call) if isinstance(call, dict) else call
+    payload = result.get("structuredContent", result) if isinstance(result, dict) else result
+    return result, payload
+
 def html_escape(value):
     return (str(value).replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;").replace('"', "&quot;").replace("'", "&#39;"))
 
@@ -208,37 +226,31 @@ def mcp_scan(url, loc, secret):
             return json.loads(raw)
         except json.JSONDecodeError as e:
             raise RuntimeError("MCP returned a non-JSON response: " + raw[:180]) from e
-    def mcp_post(payload, session=None):
+    def mcp_post(payload, session=None, retry_safe=True):
         h = {**headers, "accept-language": "en-US,en;q=0.9", "user-agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 Chrome/131.0.0.0 Safari/537.36", **({"mcp-session-id": session} if session else {})}
-        for attempt in range(3):
+        attempts = 3 if retry_safe else 1
+        for attempt in range(attempts):
             req = urllib.request.Request(MCP, data=json.dumps(payload).encode(), method="POST", headers=h)
             try:
                 with urllib.request.urlopen(req, timeout=840) as r:
                     raw = r.read().decode(errors="replace")
                     return decode_mcp_response(raw, r.headers.get("content-type")), r.headers.get("mcp-session-id") or session
             except (urllib.error.URLError, RuntimeError) as e:
-                if attempt == 2:
+                if attempt == attempts - 1:
                     raise
                 time.sleep(2 * (attempt + 1))
     init, session = mcp_post({"jsonrpc": "2.0", "id": 1, "method": "initialize", "params": {"protocolVersion": "2025-03-26", "capabilities": {}, "clientInfo": {"name": "ergoveritas-sentinel-monitor", "version": "1.0"}}})
     # Bind the follow-up messages to the Streamable HTTP session.
     mcp_post({"jsonrpc": "2.0", "method": "notifications/initialized", "params": {}}, session)
-    headers2 = {**headers, **({"mcp-session-id": session} if session else {})}
-    call = None
-    payload = None
-    sid = None
-    for attempt in range(3):
-        call, _ = mcp_post({"jsonrpc": "2.0", "id": 2 + attempt, "method": "tools/call", "params": {"name": "scan_site", "arguments": {"url": url, "freshness": "refresh", "scanFrom": loc, "waitForCompletion": True}}}, session)
-        result = call.get("result", call); payload = result.get("structuredContent", result) if isinstance(result, dict) else result
-        if isinstance(payload, dict) and "content" in payload: payload = payload["content"]
-        sid = scan_id(payload if isinstance(payload, dict) else result)
-        if sid:
-            break
-        if attempt < 2:
-            time.sleep(15 * (attempt + 1))
+    call, _ = mcp_post({"jsonrpc": "2.0", "id": 2, "method": "tools/call", "params": {"name": "scan_site", "arguments": {"url": url, "freshness": "refresh", "scanFrom": loc, "waitForCompletion": True}}}, session, retry_safe=False)
+    result, payload = mcp_tool_payload(call)
+    sid = stable_scan_id(payload if isinstance(payload, dict) else result)
     if not sid:
         diagnostic = json.dumps(call, ensure_ascii=False)[:500] if call is not None else "empty MCP response"
-        raise RuntimeError("MCP submission returned no scan id: " + diagnostic)
+        # scan_site is explicitly non-idempotent. An identity-less response may
+        # still follow a successfully accepted scan, so resubmitting here can hit
+        # the domain throttle and replace the in-flight scan with stale evidence.
+        raise RuntimeError("MCP submission returned no stable scan id; not resubmitting: " + diagnostic)
     evidence, _ = mcp_post({"jsonrpc": "2.0", "id": 3, "method": "tools/call", "params": {"name": "get_scan_bundle", "arguments": {"scanId": sid, "detail": "evidence", "maxBytes": 24000}}}, session)
     return sid, payload, {"scan": payload, "evidence": evidence}, payload
 
@@ -256,7 +268,7 @@ def build_hourly_jobs(pages, hour):
     """
     return [
         {
-            "page": pages[(hour + 2 * transport_index) % len(pages)],
+            "page": pages[(hour + transport_index) % len(pages)],
             "location": LOCATIONS[(hour + transport_index) % len(LOCATIONS)],
             "transport": transport,
         }
