@@ -384,6 +384,7 @@ export async function runScan(input: RunScanInput): Promise<CanonicalEvidenceBun
     ? policySurfaceScanner({
       url: input.url,
       normalizedUrl,
+      region: input.region,
       scanStartedAtMs: startedAtMs,
       internalBudgetMs: scanProfile.internalBudgetMs,
       absoluteDeadlineAtMs: input.policySurfaceDeadlineAtMs,

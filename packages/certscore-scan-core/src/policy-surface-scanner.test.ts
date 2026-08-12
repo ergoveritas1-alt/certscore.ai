@@ -3254,6 +3254,25 @@ test("policySurfaceScanner runs common-path fallback browser recovery while bloc
   const server = createServer((request, response) => {
     const requestUrl = new URL(request.url ?? "/", "http://127.0.0.1");
     const isDirectScannerRequest = /^ConsentCheckBot\//.test(request.headers["user-agent"] ?? "");
+    if (requestUrl.pathname === "/en-emea") {
+      response.writeHead(200, { "content-type": "text/html; charset=utf-8" });
+      response.end(`<!doctype html><html><head><title>English EMEA Privacy Policy</title></head><body><main>
+        <h1>Privacy Policy</h1>
+        <p>Example Media Company is the data controller for this service. Contact privacy@example.test.</p>
+        <p>This policy applies to the websites and services that our group operates in Europe.</p>
+        <p>We process account, device, and usage data to provide services, secure the site, and personalize content. Our legal bases include contract and legitimate interests.</p>
+        <p>Service providers and advertising partners may receive information for these purposes.</p>
+        <p>We retain account records for seven years and delete other information when it is no longer needed.</p>
+        <p>You may access, rectify, erase, restrict, object to processing, and port your personal data.</p>
+        <p>International transfers outside the EEA use standard contractual clauses. You may complain to your supervisory authority.</p>
+      </main></body></html>`);
+      return;
+    }
+    if (requestUrl.pathname === "/fr-emea") {
+      response.writeHead(200, { "content-type": "text/html; charset=utf-8" });
+      response.end("<!doctype html><html lang='fr'><body><h1>Politique de Confidentialité</h1><p>Document régional non sélectionné.</p></body></html>");
+      return;
+    }
     if (isDirectScannerRequest) {
       response.writeHead(403, { "content-type": "text/plain" });
       response.end("blocked direct request");
@@ -3263,13 +3282,10 @@ test("policySurfaceScanner runs common-path fallback browser recovery while bloc
       renderedPrivacyRequestedAt = Date.now();
       response.writeHead(200, { "content-type": "text/html; charset=utf-8" });
       response.end(`<!doctype html><html><head><title>Privacy Policy</title></head><body><main>
-        <h1>Privacy Policy</h1>
-        <p>Example Media Company is the controller for this service. Contact privacy@example.test.</p>
-        <p>We process account, device, and usage data to provide services, secure the site, and personalize content. Our legal bases include contract and legitimate interests.</p>
-        <p>Service providers and advertising partners may receive information for these purposes.</p>
-        <p>We retain account records for seven years and delete other information when it is no longer needed.</p>
-        <p>You may access, rectify, erase, restrict, object to processing, and port your personal data.</p>
-        <p>International transfers outside the EEA use standard contractual clauses. You may complain to your supervisory authority.</p>
+        <h1>Regional Privacy Policies</h1>
+        <p>Select the privacy policy for your language and region.</p>
+        <a href="/en-emea">English (Europe) Privacy Policy</a>
+        <a href="/fr-emea">Français (Europe) Politique de Confidentialité</a>
       </main></body></html>`);
       return;
     }
@@ -3298,17 +3314,31 @@ test("policySurfaceScanner runs common-path fallback browser recovery while bloc
       normalizedUrl: targetUrl,
       scanStartedAtMs: startedAt,
       internalBudgetMs: 8_000,
+      region: "eu-west-1",
       artifactWriter,
       nanoAssistProvider: createDefaultMockNanoPolicyAssistProvider(),
     });
     const elapsedMs = Date.now() - startedAt;
     const diagnostics = await readPolicyCaptureDiagnostics(result);
     const privacy = result.policySurfaceObservations.find((observation) =>
+      observation.status === "fetched" && observation.normalizedUrl === `${targetUrl}en-emea`
+    );
+    const policyIndex = result.policySurfaceObservations.find((observation) =>
       observation.status === "fetched" && observation.normalizedUrl === `${targetUrl}privacy`
     );
 
     assert.equal(result.moduleRun.status, "completed");
-    assert.ok(privacy);
+    assert.ok(privacy, JSON.stringify(result.policySurfaceObservations.map((observation) => ({
+      documentRole: observation.documentRole,
+      linkText: observation.linkText,
+      matchedLocale: observation.matchedLocale,
+      normalizedUrl: observation.normalizedUrl,
+      selectionReasonCodes: observation.selectionReasonCodes,
+      status: observation.status,
+    }))));
+    assert.equal(policyIndex?.documentRole, "policy_index");
+    assert.equal(privacy.documentRole, "policy_document");
+    assert.equal(privacy.selectionReasonCodes?.includes("scan_region_policy_route_match"), true);
     assert.equal(privacy.surfaceType, "privacy_policy");
     assert.equal(privacy.httpStatus, 200);
     assert.ok(renderedPrivacyRequestedAt > 0);

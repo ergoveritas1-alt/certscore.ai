@@ -106,6 +106,7 @@ const DEFAULT_POLICY_EXCERPT_KEYWORDS = [
 export interface PolicySurfaceScannerInput {
   url: string;
   normalizedUrl: string;
+  region?: string;
   scanStartedAtMs: number;
   internalBudgetMs: number;
   absoluteDeadlineAtMs?: number;
@@ -645,15 +646,38 @@ export async function policySurfaceScanner(
         )
         .slice(0, 1);
       const speculativeCommonPathRecoveryPromise = speculativeCommonPathRecoveryCandidates.length > 0
-        ? fetchPolicyCandidateGroup({
-          input,
-          fetchCaches: policyDocumentFetchCaches,
-          timingBreakdown,
-          moduleStartedAtMs,
-          rankedCandidates: speculativeCommonPathRecoveryCandidates,
-          labelPrefix: "homepage-failed speculative common-path recovery",
-          policySurfaceTextArtifactBudget,
-        })
+        ? (async () => {
+          const primaryResults = await fetchPolicyCandidateGroup({
+            input,
+            fetchCaches: policyDocumentFetchCaches,
+            timingBreakdown,
+            moduleStartedAtMs,
+            rankedCandidates: speculativeCommonPathRecoveryCandidates,
+            labelPrefix: "homepage-failed speculative common-path recovery",
+            policySurfaceTextArtifactBudget,
+          });
+          const secondaryCandidates = mergeSupplementalPolicyCandidates(
+            [],
+            dedupeCandidates(primaryResults.secondaryCandidates),
+            1,
+            primaryResults.observations,
+          );
+          if (secondaryCandidates.length === 0) return primaryResults;
+          const secondaryResults = await fetchPolicyCandidateGroup({
+            input,
+            fetchCaches: policyDocumentFetchCaches,
+            timingBreakdown,
+            moduleStartedAtMs,
+            rankedCandidates: secondaryCandidates,
+            labelPrefix: "homepage-failed speculative policy-index child",
+            policySurfaceTextArtifactBudget,
+          });
+          return {
+            observations: [...primaryResults.observations, ...secondaryResults.observations],
+            artifactRefs: [...primaryResults.artifactRefs, ...secondaryResults.artifactRefs],
+            secondaryCandidates: secondaryResults.secondaryCandidates,
+          };
+        })()
         : undefined;
       void speculativeCommonPathRecoveryPromise?.catch(() => undefined);
       let renderedCandidates: PolicySurfaceCandidate[];
@@ -4648,6 +4672,27 @@ async function selectOneHopPolicyIndexChildren(input: {
     };
   }
 
+  const regionalPrivacyDocument = selectRegionalPrivacyDocument(
+    privacyCandidates,
+    input.indexCandidate.deterministicMatchedLocale,
+    input.input.region,
+  );
+  if (regionalPrivacyDocument) {
+    return {
+      fetchCandidates: [{
+        ...regionalPrivacyDocument,
+        selectionReasonCodes: uniqueStrings([
+          ...(regionalPrivacyDocument.selectionReasonCodes ?? []),
+          "scan_region_policy_route_match",
+          "deterministic_one_hop_selection",
+        ]),
+      }],
+      observedChildCandidates: privacyCandidates
+        .filter((candidate) => candidate.candidateId !== regionalPrivacyDocument.candidateId)
+        .map(markUnselectedPrivacyIndexChild),
+    };
+  }
+
   const latestDatedPrivacyDocument = selectLatestDatedPrivacyDocument(
     privacyCandidates,
     input.input.scanStartedAtMs,
@@ -4768,6 +4813,22 @@ async function selectOneHopPolicyIndexChildren(input: {
       observedChildCandidates: privacyCandidates.map(markUnselectedPrivacyIndexChild),
     };
   }
+}
+
+function selectRegionalPrivacyDocument(
+  candidates: PolicySurfaceCandidate[],
+  indexLocale: SupportedPrivacyEvidenceLocale | undefined,
+  region: string | undefined,
+): PolicySurfaceCandidate | undefined {
+  const routePattern = region?.startsWith("eu-")
+    ? /(?:^|[\/_-])(?:emea|eu|europe)(?:[\/_.-]|$)/i
+    : undefined;
+  if (!routePattern || !indexLocale) return undefined;
+  const matches = candidates.filter((candidate) =>
+    candidate.deterministicMatchedLocale === indexLocale &&
+    routePattern.test(new URL(candidate.normalizedUrl).pathname)
+  );
+  return matches.length === 1 ? matches[0] : undefined;
 }
 
 function privacyIndexPrivacyChildCandidate(
@@ -5233,7 +5294,7 @@ export function classifyPolicyDocumentOwnership(input: {
     ).test(ownershipExcerpt)
     : false;
   const corporatePolicyScope =
-    /\b(?:privacy )?(?:policy|notice)\b.{0,160}\bappl(?:y|ies) to\b.{0,180}\b(?:websites?|sites?|applications?|services?)\b.{0,120}\b(?:we|our (?:group|companies|entities|affiliates?))\b.{0,80}\b(?:operate|own|provide|control)|\b(?:websites?|sites?|applications?|services?)\b.{0,120}\b(?:operated|owned|provided|controlled) by\b.{0,100}\b(?:us|our (?:group|companies|entities|affiliates?))\b/i
+    /\b(?:privacy )?(?:policy|notice)\b.{0,160}\bappl(?:y|ies) to\b.{0,180}\b(?:websites?|sites?|applications?|services?)\b.{0,120}\b(?:we|our (?:group|companies|entities|affiliates?))\b.{0,80}\b(?:operate|own|provide|control)|\b(?:websites?|sites?|applications?|services?)\b.{0,120}\b(?:operated|owned|provided|controlled) by\b.{0,100}\b(?:us|our (?:group|companies|entities|affiliates?))\b|\bwhen you (?:use|visit)\b.{0,180}\bour (?:websites?|sites?|apps?|applications?)\b.{0,300}\b(?:our businesses|our services|services)\b/i
       .test(ownershipExcerpt);
   const targetBrandRouteBound = (() => {
     if (!targetBrand) {
