@@ -7,7 +7,12 @@ const SHA_PATTERN = /^[0-9a-f]{40}$/i;
 
 export type WebDeployAncestryAssessment = {
   allowed: boolean;
-  reason: "explicit_override" | "forward_deploy" | "non_descendant" | "same_revision";
+  reason:
+    | "explicit_override"
+    | "explicit_override_unverifiable_live_revision"
+    | "forward_deploy"
+    | "non_descendant"
+    | "same_revision";
 };
 
 export function assessWebDeployAncestry(input: {
@@ -16,8 +21,14 @@ export function assessWebDeployAncestry(input: {
   liveSha: string;
   targetSha: string;
 }): WebDeployAncestryAssessment {
-  if (!SHA_PATTERN.test(input.liveSha) || !SHA_PATTERN.test(input.targetSha)) {
-    throw new Error("Live and target web revisions must be full 40-character Git SHAs.");
+  if (!SHA_PATTERN.test(input.targetSha)) {
+    throw new Error("Target web revision must be a full 40-character Git SHA.");
+  }
+  if (!SHA_PATTERN.test(input.liveSha)) {
+    if (input.allowNonDescendant) {
+      return { allowed: true, reason: "explicit_override_unverifiable_live_revision" };
+    }
+    throw new Error("Live web revision must be a full 40-character Git SHA.");
   }
   if (input.liveSha.toLowerCase() === input.targetSha.toLowerCase()) {
     return { allowed: true, reason: "same_revision" };
@@ -72,14 +83,14 @@ async function gitIsAncestor(ancestor: string, descendant: string) {
   }
 }
 
-async function readLiveSha(baseUrl: string) {
+async function readLiveRevision(baseUrl: string) {
   const response = await fetch(new URL("/api/version", baseUrl), {
     headers: { Accept: "application/json" },
     redirect: "follow"
   });
   const payload = await response.json().catch(() => null) as { gitSha?: unknown } | null;
   const gitSha = typeof payload?.gitSha === "string" ? payload.gitSha.trim() : "";
-  if (!response.ok || !SHA_PATTERN.test(gitSha)) {
+  if (!response.ok || !gitSha) {
     throw new Error(`Could not determine the current production web Git SHA from ${baseUrl}/api/version.`);
   }
   return gitSha;
@@ -94,9 +105,14 @@ async function main() {
     throw new Error("Target web revision must be a full 40-character Git SHA.");
   }
 
-  const liveSha = await readLiveSha(liveBaseUrl);
-  await ensureCommitAvailable(liveSha);
-  const isAncestor = await gitIsAncestor(liveSha, targetSha);
+  const liveSha = await readLiveRevision(liveBaseUrl);
+  const liveRevisionIsSha = SHA_PATTERN.test(liveSha);
+  if (liveRevisionIsSha) {
+    await ensureCommitAvailable(liveSha);
+  }
+  const isAncestor = liveRevisionIsSha
+    ? await gitIsAncestor(liveSha, targetSha)
+    : false;
   const assessment = assessWebDeployAncestry({
     allowNonDescendant,
     isAncestor,
@@ -107,6 +123,11 @@ async function main() {
   console.log(`Current live web SHA: ${liveSha}`);
   console.log(`Target web SHA:       ${targetSha}`);
   console.log(`Ancestry result:      ${assessment.reason}`);
+  if (assessment.reason === "explicit_override_unverifiable_live_revision") {
+    console.warn(
+      "The live build reports a non-Git revision. Proceeding only because the emergency non-descendant override was explicitly supplied."
+    );
+  }
   if (!assessment.allowed) {
     throw new Error(
       "Refusing a non-descendant web deployment because it would remove changes already live in production. Merge the live revision into the target branch first."
