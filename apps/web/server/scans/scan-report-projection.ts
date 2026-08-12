@@ -460,7 +460,17 @@ async function deriveScanReportProjection(
   const reportState = await measureReportProjectionPhase(
     scanRecord.scan.id,
     "unified_finding_state",
-    () => debugBuildScanReportUnifiedFindingStateForScan(projectionScanRecord as unknown as Record<string, unknown>)
+    () => debugBuildScanReportUnifiedFindingStateForScan(
+      projectionScanRecord as unknown as Record<string, unknown>,
+      {
+        onPhase: (phase, durationMs) => console.info(JSON.stringify({
+          durationMs: Math.round(durationMs),
+          event: "scan.report_projection.unified_phase",
+          phase,
+          scanId: scanRecord.scan.id
+        }))
+      }
+    )
   );
   const executiveFindingsProjection = await measureReportProjectionPhase(
     scanRecord.scan.id,

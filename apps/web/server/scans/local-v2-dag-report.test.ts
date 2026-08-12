@@ -312,6 +312,43 @@ test("remote report artifacts start geometry as soon as the manifest resolves", 
   });
 });
 
+test("verified policy text starts when bundle and manifest are ready without waiting for geometry", async () => {
+  const { localV2DagReportPerformanceTestHelpers } = await loadLocalV2DagReport();
+  const events: string[] = [];
+  let resolveBundle: ((value: CanonicalEvidenceBundle) => void) | undefined;
+  let resolveGeometry: ((value: Record<string, unknown>) => void) | undefined;
+
+  const resultPromise = localV2DagReportPerformanceTestHelpers.loadLocalV2DagRemoteArtifacts({
+    readBundle: () => new Promise<CanonicalEvidenceBundle>((resolve) => {
+      resolveBundle = resolve;
+    }),
+    readGeometry: () => new Promise<Record<string, unknown>>((resolve) => {
+      events.push("geometry:start");
+      resolveGeometry = resolve;
+    }),
+    readManifest: async () => ({ auxiliaryArtifacts: [] }),
+    readPolicyTextArtifacts: async () => {
+      events.push("policy:start");
+      return new Map();
+    }
+  });
+
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.deepEqual(events, ["geometry:start"]);
+  const bundle = { schemaVersion: "certscore.v2.canonical-evidence-bundle.v1" } as CanonicalEvidenceBundle;
+  resolveBundle?.(bundle);
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.deepEqual(events, ["geometry:start", "policy:start"]);
+
+  resolveGeometry?.({ retainedControlCount: 1 });
+  assert.deepEqual(await resultPromise, {
+    bundle,
+    consentControlGeometryEvidence: { retainedControlCount: 1 },
+    manifest: { auxiliaryArtifacts: [] },
+    policyTextArtifactsById: new Map()
+  });
+});
+
 test("getLocalV2PrimaryLanguage ranks declared, retained text, and URL evidence", async () => {
   const { getLocalV2PrimaryLanguage } = await loadLocalV2DagReport();
   assert.equal(getLocalV2PrimaryLanguage({

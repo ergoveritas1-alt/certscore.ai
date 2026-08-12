@@ -49,6 +49,7 @@ import { evaluateConsentSurfaceGate } from "./promotion-evidence-contracts";
 import {
   buildReviewFindings,
   buildSectionReviewIssues,
+  createScanReportReviewFindingContext,
   formatReviewIssueDescription,
   type AccessibilityIssueRow,
   type AccessibilityRuleEvidenceRow,
@@ -124,6 +125,7 @@ export type ScanReportUnifiedFindingStateDependencies = {
     trackerVendors: ScanDetailResponse["trackerVendors"];
   }) => PreconsentViolationRow[];
   filterContradictoryPositiveSurfaceFindings: (findings: UnifiedFindingDisplayPacket[]) => UnifiedFindingDisplayPacket[];
+  onPhase?: (phase: string, durationMs: number) => void;
 };
 
 function uniqueStrings(values: Array<string | null | undefined>) {
@@ -2466,6 +2468,12 @@ export function buildScanReportUnifiedFindingState(
   }
 
   const runtimeArtifacts = scanRecord.runtimeArtifacts;
+  let phaseStartedAtMs = globalThis.performance?.now?.() ?? Date.now();
+  const recordPhase = (phase: string) => {
+    const completedAtMs = globalThis.performance?.now?.() ?? Date.now();
+    dependencies.onPhase?.(phase, Math.max(0, completedAtMs - phaseStartedAtMs));
+    phaseStartedAtMs = completedAtMs;
+  };
   const hybridEvidenceCache = (dependencies.createHybridRuntimeEvidenceProjectionCache ?? createHybridRuntimeEvidenceProjectionCache)(
     runtimeArtifacts
   );
@@ -2537,11 +2545,24 @@ export function buildScanReportUnifiedFindingState(
     fields: group.entries.map((entry) => entry.key)
   }));
   const validationFindingLookup = buildValidationFindingLookup(scanRecord.validationFindings);
+  const reviewContext = createScanReportReviewFindingContext({
+    allSignals: scanRecord.signals,
+    macroEnrichment: scanRecord.macroEnrichment,
+    mergedSignals: scanRecord.mergedSignals,
+    policyEnrichment: scanRecord.policyEnrichment,
+    prioritizedAccessibilityRuleRows,
+    runtimeArtifacts: scanRecord.runtimeArtifacts,
+    signalHitRows: scanRecord.signalHits,
+    snapshot
+  });
+  recordPhase("input_indexes_and_derived_context");
   const sectionDrafts = REPORT_PRIMARY_PILLARS.map((pillar) => {
     const sections = getReportSectionsForPillar(pillar.id).map((section) => {
-      const sectionCategoryIds = new Set(getReportEvidenceCategoriesForSection(section.id).map((category) => category.id));
-      const categories = getReportEvidenceCategoriesForSection(section.id).map((category) => {
-        const items = getReportSignalsForEvidenceCategory(category.id)
+      const sectionCategoryDefinitions = getReportEvidenceCategoriesForSection(section.id);
+      const sectionCategoryIds = new Set(sectionCategoryDefinitions.map((category) => category.id));
+      const categories = sectionCategoryDefinitions.map((category) => {
+        const categorySignalDefinitions = getReportSignalsForEvidenceCategory(category.id);
+        const items = categorySignalDefinitions
           .map(({ relation, signal }) => ({
             key: signal.key,
             label: signal.label,
@@ -2570,12 +2591,13 @@ export function buildScanReportUnifiedFindingState(
           sectionId: section.id,
           sectionItems: items,
           trackerVendors: scanRecord.trackerVendors,
-          validationFindingLookup
+          validationFindingLookup,
+          reviewContext
         });
 
         return {
           category,
-          emptySignalCount: getReportSignalsForEvidenceCategory(category.id).length - items.length,
+          emptySignalCount: categorySignalDefinitions.length - items.length,
           items,
           reviewFindings
         };
@@ -2607,7 +2629,8 @@ export function buildScanReportUnifiedFindingState(
         sectionId: section.id,
         sectionItems: [],
         trackerVendors: scanRecord.trackerVendors,
-        validationFindingLookup
+        validationFindingLookup,
+        reviewContext
       });
 
       return {
@@ -2621,6 +2644,7 @@ export function buildScanReportUnifiedFindingState(
 
     return { pillar, sections };
   });
+  recordPhase("taxonomy_section_projection");
 
   const allReviewFindingCandidates = sectionDrafts.flatMap(({ sections }) =>
     sections.flatMap((section) => [
@@ -2643,6 +2667,7 @@ export function buildScanReportUnifiedFindingState(
       !linkedValidationFindingIds.has(String(finding.id ?? "")) &&
       !reviewFindingCandidates.some((candidate) => candidateCoversValidationFinding(candidate, finding as Record<string, unknown>))
   );
+  recordPhase("candidate_merge_and_linking");
   let normalizedConcerns: NormalizedConcern[] = [];
   const globalUnifiedFindings = dependencies.filterContradictoryPositiveSurfaceFindings(buildUnifiedFindingDisplayPackets({
     captureNormalizedConcerns: (concerns) => {
@@ -2663,6 +2688,7 @@ export function buildScanReportUnifiedFindingState(
     validationFindings: unlinkedValidationFindings,
     validationFindingLookup
   }).filter((finding) => finding.presentationDecision.status !== "suppress"));
+  recordPhase("normalized_concerns_and_unified_packets");
 
   return {
     allReviewFindingCandidates: reviewFindingCandidates,
@@ -2819,7 +2845,7 @@ export function filterContradictoryPositiveSurfaceFindings(findings: UnifiedFind
 
 export function debugBuildScanReportUnifiedFindingStateForScan(
   scanRecord: Record<string, unknown>,
-  options: Pick<ScanReportUnifiedFindingStateDependencies, "createHybridRuntimeEvidenceProjectionCache"> = {}
+  options: Pick<ScanReportUnifiedFindingStateDependencies, "createHybridRuntimeEvidenceProjectionCache" | "onPhase"> = {}
 ): ScanReportUnifiedFindingState {
   const snapshot = scanRecord.snapshot;
   if (!snapshot) {
@@ -2844,6 +2870,7 @@ export function debugBuildScanReportUnifiedFindingStateForScan(
   try {
     return buildScanReportUnifiedFindingState(scanRecord as ScanDetailResponse, {
       createHybridRuntimeEvidenceProjectionCache: options.createHybridRuntimeEvidenceProjectionCache,
+      onPhase: options.onPhase,
       deriveAccessibilityIssueRows,
       deriveAccessibilityRuleEvidenceRows,
       deriveConsentAuditFindings: (candidateSnapshot, runtimeArtifacts) =>

@@ -133,14 +133,13 @@ test("failed and canceled scans bypass report readiness", () => {
   }
 });
 
-test("ScanStatusAutoRefresh uses lightweight recursive polling without router refresh or intervals", () => {
+test("ScanStatusAutoRefresh uses lightweight recursive polling and delegates terminal navigation", () => {
   const source = require("node:fs").readFileSync("apps/web/components/scans/scan-status-auto-refresh.tsx", "utf8") as string;
 
-  assert.doesNotMatch(source, /router\.refresh/);
   assert.doesNotMatch(source, /setInterval/);
-  assert.doesNotMatch(source, /HARD_RELOAD_AFTER_MS/);
   assert.match(source, /includeFindings=0/);
   assert.match(source, /sessionStorage\.getItem/);
+  assert.match(source, /onTerminalNavigationRef/);
   assert.match(source, /window\.location\.reload\(\)/);
 });
 

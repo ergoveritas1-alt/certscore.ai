@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useCallback, useEffect, useRef, useState } from "react";
+import { useRouter } from "next/navigation";
 import { readActiveScanSession } from "../../lib/scans/active-scan-session";
 import { type PolledScanProgress, ScanStatusAutoRefresh } from "./scan-status-auto-refresh";
 import { LocalV2DagScanProgressCard } from "./scan-submit-progress";
@@ -16,6 +17,7 @@ const PROGRESS_STAGE_DWELL_MS: Record<PolledScanProgress["stage"], number> = {
 // Once the authoritative report projection is ready, leave just enough time
 // for the bar's 500 ms completion snap to remain visible before navigation.
 export const TERMINAL_NAVIGATION_DELAY_MS = 750;
+export const TERMINAL_REFRESH_FALLBACK_MS = 20_000;
 
 export function shouldRapidlyCompleteProgress(progress: PolledScanProgress) {
   return progress.reportReady;
@@ -59,6 +61,10 @@ export function getProgressHandoffStage(input: {
     : input.serverStage;
 }
 
+export function getProgressHandoffValue(hasSubmissionHandoff: boolean) {
+  return hasSubmissionHandoff ? 0 : null;
+}
+
 export function PendingScanDetailView({
   createdAt,
   domainHostname,
@@ -78,6 +84,7 @@ export function PendingScanDetailView({
   startedAt: string | null;
   status: string;
 }) {
+  const router = useRouter();
   const initialStage: PolledScanProgress["stage"] = pendingPostCompletionWork
     ? "review"
     : status === "queued" ? "prepare" : status === "running" ? "scan" : "review";
@@ -94,10 +101,23 @@ export function PendingScanDetailView({
   const latestProgressRef = useRef(progress);
   const scheduledTargetRef = useRef<PolledScanProgress["stage"] | null>(null);
   const transitionTimersRef = useRef<number[]>([]);
+  const terminalRefreshFallbackRef = useRef<number | null>(null);
   const handoffScanIdRef = useRef<string | null>(null);
   useEffect(() => () => {
     transitionTimersRef.current.forEach((timer) => window.clearTimeout(timer));
+    if (terminalRefreshFallbackRef.current !== null) {
+      window.clearTimeout(terminalRefreshFallbackRef.current);
+    }
   }, []);
+  const handleTerminalNavigation = useCallback(() => {
+    // Preserve the completed progress view while Next.js fetches the report
+    // tree. A hard reload immediately swaps it for the app-wide skeleton and
+    // makes report rendering feel like a second opaque wait.
+    router.refresh();
+    terminalRefreshFallbackRef.current = window.setTimeout(() => {
+      window.location.reload();
+    }, TERMINAL_REFRESH_FALLBACK_MS);
+  }, [router]);
   const handleProgress = useCallback((nextProgress: PolledScanProgress) => {
     latestProgressRef.current = nextProgress;
     if (shouldRapidlyCompleteProgress(nextProgress)) {
@@ -151,11 +171,14 @@ export function PendingScanDetailView({
     handoffScanIdRef.current = scanId;
 
     const activeScanSession = readActiveScanSession();
-    const handoffValue = activeScanSession?.scanId === scanId && typeof activeScanSession.progressValue === "number"
-      ? activeScanSession.progressValue
-      : null;
+    const hasSubmissionHandoff = activeScanSession?.scanId === scanId &&
+      typeof activeScanSession.progressValue === "number";
+    // The destination progress card is a new, full-size timeline. Start it at
+    // the beginning of Prepare instead of carrying over the compact form's
+    // partially-filled bar, which made Prepare look complete on first paint.
+    const handoffValue = getProgressHandoffValue(hasSubmissionHandoff);
     const handoffStage = getProgressHandoffStage({
-      hasSubmissionHandoff: handoffValue !== null,
+      hasSubmissionHandoff,
       serverStage: initialStage
     });
 
@@ -201,6 +224,7 @@ export function PendingScanDetailView({
         startedAt={startedAt}
       />
       <ScanStatusAutoRefresh
+        onTerminalNavigation={handleTerminalNavigation}
         onProgress={handleProgress}
         pendingPostCompletionWork={pendingPostCompletionWork}
         scanId={scanId}

@@ -1753,18 +1753,31 @@ async function pollOnce(input: {
       return { deleted: 0, failed: 1, handled: 0 };
     }
     try {
+      const consumerReceivedAtMs = Date.now();
+      const sentAt = parseSqsEpochMillis(message.Attributes?.SentTimestamp);
       const parsed = parseLambdaResultMessage(rawMessage, input.targetEnvironment);
       const artifactVerification = await verifyProductionArtifactChain(parsed);
       const retention = await recordLocalV2DagLambdaResult(parsed, {
         artifactVerification,
         consumer: {
           approximateReceiveCount: parseSqsInteger(message.Attributes?.ApproximateReceiveCount),
-          consumerReceivedAt: new Date().toISOString(),
+          consumerReceivedAt: new Date(consumerReceivedAtMs).toISOString(),
           queueRegion: input.queueRegion,
-          sentAt: parseSqsEpochMillis(message.Attributes?.SentTimestamp),
+          sentAt,
           sqsMessageId: message.MessageId ?? null
         }
       });
+      const lambdaCompletedAtMs = Date.parse(parsed.completedAt);
+      console.info(JSON.stringify({
+        event: "validation.v2_lambda_result.handoff",
+        lambdaCompletionToConsumerMs: Number.isFinite(lambdaCompletedAtMs)
+          ? Math.max(0, consumerReceivedAtMs - lambdaCompletedAtMs)
+          : null,
+        persistenceMs: Math.max(0, Date.now() - consumerReceivedAtMs),
+        queueRegion: input.queueRegion,
+        scanId: parsed.scanId,
+        sqsQueueLatencyMs: sentAt ? Math.max(0, consumerReceivedAtMs - Date.parse(sentAt)) : null
+      }));
       await input.client.send(new DeleteMessageCommand({
         QueueUrl: input.queueUrl,
         ReceiptHandle: receiptHandle(message)
@@ -2210,21 +2223,28 @@ export function startLocalV2DagLambdaResultPoller(options: LocalV2DagLambdaResul
       clients.set(queueRegion, client);
     }
     while (!stopped) {
+      let received = 0;
       try {
-        await pollOnce({
+        const outcome = await pollOnce({
           client,
           queueRegion,
           queueUrl,
           targetEnvironment: options.targetEnvironment,
           webBaseUrl: options.webBaseUrl
         });
+        received = outcome.received;
       } catch (error) {
         console.error("[validation-worker] v2 DAG Lambda result poll failed", {
           error: error instanceof Error ? error.message : String(error),
           queueRegion
         });
       }
-      await sleep(options.pollMs);
+      // Long polling already waits when the queue is empty. When work was
+      // returned, drain the next batch immediately instead of imposing an
+      // application-side delay between result batches.
+      if (received === 0) {
+        await sleep(options.pollMs);
+      }
     }
   }
 

@@ -7,7 +7,11 @@ import {
   selectOwnerUnifiedFindingsForSection,
   type ScanReportUnifiedFindingState
 } from "./scan-report-unified-findings";
-import { buildReviewFindings, buildSectionReviewIssues } from "./scan-report-review-findings";
+import {
+  buildReviewFindings,
+  buildSectionReviewIssues,
+  createScanReportReviewFindingContext
+} from "./scan-report-review-findings";
 import { buildSupplementalRuntimeUnifiedFindingPackets } from "./supplemental-runtime-unified-findings";
 import { buildUnifiedFindingDisplayPackets } from "./unified-findings";
 import { deriveConcernPolicy } from "./concern-policy";
@@ -64,6 +68,44 @@ test("buildScanReportUnifiedFindings dedupes owner packets across section drafts
     buildScanReportUnifiedFindings(state).map((finding) => finding.unifiedFindingId),
     ["owned"]
   );
+});
+
+test("projection-scoped review indexes preserve finding output", () => {
+  const input = {
+    allSignals: [{ key: "privacy.gpc_signal_not_honored", value: true }],
+    categoryId: "privacy_choices_controls",
+    issues: [],
+    macroEnrichment: { industryPrimary: "media" },
+    mergedSignals: [{ key: "privacy.gpc_signal_not_honored", value: true }],
+    policyEnrichment: [],
+    prioritizedAccessibilityRuleRows: [],
+    runtimeArtifacts: {
+      gpc_verification: { evidenceUrls: ["https://example.test/"] }
+    },
+    signalHitRows: [{
+      matched_text: "Global Privacy Control",
+      signal_key: "privacy.gpc_signal_not_honored"
+    }],
+    snapshot: {},
+    sectionId: "privacy_choices_controls",
+    sectionItems: [{
+      key: "privacy.gpc_signal_not_honored",
+      label: "GPC signal not honored",
+      relation: "primary" as const,
+      source: "snapshot_signal" as const,
+      value: true
+    }],
+    trackerVendors: [],
+    validationFindingLookup: new Map()
+  };
+
+  const withoutSharedContext = buildReviewFindings(input);
+  const withSharedContext = buildReviewFindings({
+    ...input,
+    reviewContext: createScanReportReviewFindingContext(input)
+  });
+
+  assert.deepEqual(withSharedContext, withoutSharedContext);
 });
 
 test("report-level candidates surface runtime-backed session replay provenance", () => {

@@ -2,14 +2,36 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import React from "react";
 import { renderToStaticMarkup } from "react-dom/server";
+import { AppRouterContext } from "next/dist/shared/lib/app-router-context.shared-runtime";
 import {
+  getProgressHandoffValue,
   getProgressHandoffStage,
   getProgressTransitionSchedule,
   getProgressTransitionStages,
   PendingScanDetailView,
   shouldRapidlyCompleteProgress,
-  TERMINAL_NAVIGATION_DELAY_MS
+  TERMINAL_NAVIGATION_DELAY_MS,
+  TERMINAL_REFRESH_FALLBACK_MS
 } from "./pending-scan-detail-view";
+
+const testRouter = {
+  back() {},
+  forward() {},
+  prefetch: async () => {},
+  push() {},
+  refresh() {},
+  replace() {}
+};
+
+function renderPendingScanDetailView(
+  props: React.ComponentProps<typeof PendingScanDetailView> = baseProps
+) {
+  return renderToStaticMarkup(
+    <AppRouterContext.Provider value={testRouter}>
+      <PendingScanDetailView {...props} />
+    </AppRouterContext.Provider>
+  );
+}
 
 const baseProps = {
   createdAt: "2026-07-29T23:00:00.000Z",
@@ -41,18 +63,19 @@ test("fresh submission handoff visibly starts in Prepare before catching up to r
   assert.equal(getProgressHandoffStage({ hasSubmissionHandoff: true, serverStage: "scan" }), "prepare");
   assert.equal(getProgressHandoffStage({ hasSubmissionHandoff: false, serverStage: "scan" }), "scan");
   assert.equal(getProgressHandoffStage({ hasSubmissionHandoff: true, serverStage: "review" }), "review");
+  assert.equal(getProgressHandoffValue(true), 0);
+  assert.equal(getProgressHandoffValue(false), null);
 });
 
 test("authoritative report readiness rapidly completes the bar before navigation", () => {
   assert.equal(TERMINAL_NAVIGATION_DELAY_MS, 750);
+  assert.equal(TERMINAL_REFRESH_FALLBACK_MS, 20_000);
   assert.equal(shouldRapidlyCompleteProgress({ reportReady: true, stage: "complete", status: "completed" }), true);
   assert.equal(shouldRapidlyCompleteProgress({ reportReady: false, stage: "report", status: "completed" }), false);
 });
 
 test("active scans retain the four-step progress view", () => {
-  const html = renderToStaticMarkup(
-    <PendingScanDetailView {...baseProps} />
-  );
+  const html = renderPendingScanDetailView();
 
   assert.match(html, /Scan in progress/);
   assert.match(html, /role="progressbar"/);
@@ -67,13 +90,11 @@ test("active scans retain the four-step progress view", () => {
 });
 
 test("completed scans awaiting report projection remain in the staged progress view", () => {
-  const html = renderToStaticMarkup(
-    <PendingScanDetailView
-      {...baseProps}
-      pendingPostCompletionWork
-      status="processing"
-    />
-  );
+  const html = renderPendingScanDetailView({
+    ...baseProps,
+    pendingPostCompletionWork: true,
+    status: "processing"
+  });
 
   assert.match(html, /Reviewing scan signals/);
   assert.match(html, /Reviewing/);

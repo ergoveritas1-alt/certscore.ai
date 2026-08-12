@@ -9,6 +9,7 @@ export type PolledScanProgress = {
 };
 
 type ScanStatusAutoRefreshProps = {
+  onTerminalNavigation?: () => void;
   onProgress?: (progress: PolledScanProgress) => void;
   pendingBrowserExtensionNormalization?: boolean;
   pendingPostCompletionWork?: boolean;
@@ -277,6 +278,7 @@ function recordTerminalDetection(scanId: string, state: ReturnType<ReturnType<ty
 }
 
 export function ScanStatusAutoRefresh({
+  onTerminalNavigation,
   onProgress,
   pendingBrowserExtensionNormalization = false,
   pendingPostCompletionWork = false,
@@ -286,7 +288,11 @@ export function ScanStatusAutoRefresh({
   status,
   terminalNavigationDelayMs = 0,
 }: ScanStatusAutoRefreshProps) {
+  const onTerminalNavigationRef = useRef(onTerminalNavigation);
   const onProgressRef = useRef(onProgress);
+  useEffect(() => {
+    onTerminalNavigationRef.current = onTerminalNavigation;
+  }, [onTerminalNavigation]);
   useEffect(() => {
     onProgressRef.current = onProgress;
   }, [onProgress]);
@@ -344,10 +350,18 @@ export function ScanStatusAutoRefresh({
         })) return;
         terminalNavigations.add(scanId);
         recordTerminalDetection(scanId, poller.getState());
-        if (terminalNavigationDelayMs > 0) {
-          window.setTimeout(() => window.location.reload(), terminalNavigationDelayMs);
-        } else {
+        const navigate = () => {
+          const terminalNavigation = onTerminalNavigationRef.current;
+          if (terminalNavigation) {
+            terminalNavigation();
+            return;
+          }
           window.location.reload();
+        };
+        if (terminalNavigationDelayMs > 0) {
+          window.setTimeout(navigate, terminalNavigationDelayMs);
+        } else {
+          navigate();
         }
       },
     });

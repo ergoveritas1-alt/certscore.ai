@@ -1663,6 +1663,7 @@ async function loadVerifiedPolicyTextArtifacts(input: {
     const reference = policySurfaceTextArtifactReference(surface);
     return reference ? [[reference.artifactId, reference] as const] : [];
   })).values()].slice(0, 16);
+  const retainedByPointer = new Map<string, Promise<{ text: string; sha256: string; sizeBytes: number }>>();
   const entries = await Promise.all(references.map(async (reference) => {
     const pointer = getLocalV2DagAuxiliaryArtifact(input.manifest, reference.fileName);
     if (!pointer) {
@@ -1674,7 +1675,13 @@ async function loadVerifiedPolicyTextArtifacts(input: {
       } satisfies RetainedPolicyTextArtifactEvidence] as const;
     }
     try {
-      const retained = await readLocalV2DagPolicyTextArtifactFromS3(pointer);
+      const pointerCacheKey = `${pointer.uri}\u0000${pointer.sha256 ?? ""}\u0000${pointer.sizeBytes ?? ""}`;
+      let retainedPromise = retainedByPointer.get(pointerCacheKey);
+      if (!retainedPromise) {
+        retainedPromise = readLocalV2DagPolicyTextArtifactFromS3(pointer);
+        retainedByPointer.set(pointerCacheKey, retainedPromise);
+      }
+      const retained = await retainedPromise;
       return [reference.artifactId, {
         artifactId: reference.artifactId,
         fileName: reference.fileName,
@@ -5903,7 +5910,7 @@ function buildMaterializedLocalV2Detail(
 // fully derived report detail, so retaining an older entry can cause a
 // projection repair to persist stale evidence even after the projector is
 // deployed.
-const LOCAL_V2_DAG_REPORT_MATERIALIZATION_CACHE_VERSION = "local-v2-report-materialization-v8";
+const LOCAL_V2_DAG_REPORT_MATERIALIZATION_CACHE_VERSION = "local-v2-report-materialization-v9";
 const LOCAL_V2_DAG_REPORT_MATERIALIZATION_CACHE_TTL_MS = 60 * 60 * 1_000;
 const LOCAL_V2_DAG_REPORT_MATERIALIZATION_CACHE_MAX_ENTRIES = 6;
 const localV2DagReportMaterializationCache = new BoundedPromiseCache<string, ScanDetailResponse>({
@@ -5923,22 +5930,34 @@ async function loadLocalV2DagRemoteArtifacts(input: {
   readBundle: () => Promise<CanonicalEvidenceBundle | null>;
   readGeometry: (manifest: Record<string, unknown> | null) => Promise<Record<string, unknown> | null>;
   readManifest: () => Promise<Record<string, unknown> | null>;
+  readPolicyTextArtifacts?: (
+    bundle: CanonicalEvidenceBundle,
+    manifest: Record<string, unknown> | null
+  ) => Promise<ReadonlyMap<string, RetainedPolicyTextArtifactEvidence>>;
 }) {
   // Start the largest object immediately. The geometry pointer depends on the
   // small manifest, but geometry itself does not depend on the bundle. Starting
   // it as soon as the manifest resolves removes a full S3 request from the
   // critical path.
   const bundlePromise = input.readBundle();
-  const manifest = await input.readManifest();
-  const geometryPromise = input.readGeometry(manifest);
-  const [bundle, consentControlGeometryEvidence] = await Promise.all([
+  const manifestPromise = input.readManifest();
+  const geometryPromise = manifestPromise.then((manifest) => input.readGeometry(manifest));
+  const policyTextArtifactsPromise = input.readPolicyTextArtifacts
+    ? Promise.all([bundlePromise, manifestPromise]).then(([bundle, manifest]) =>
+        bundle ? input.readPolicyTextArtifacts!(bundle, manifest) : undefined
+      )
+    : Promise.resolve(undefined);
+  const [bundle, consentControlGeometryEvidence, manifest, policyTextArtifactsById] = await Promise.all([
     bundlePromise,
-    geometryPromise
+    geometryPromise,
+    manifestPromise,
+    policyTextArtifactsPromise
   ]);
   return {
     bundle,
     consentControlGeometryEvidence,
-    manifest
+    manifest,
+    ...(policyTextArtifactsById ? { policyTextArtifactsById } : {})
   };
 }
 
@@ -5998,18 +6017,17 @@ async function materializeLocalV2DagScanDetailUncached(
                 uri: input.manifestArtifactUri!
               })
             )
-          : Promise.resolve(null)
+          : Promise.resolve(null),
+        readPolicyTextArtifacts: (verifiedBundle, manifest) => withServerTiming(
+          "app.scan_detail.local_v2_artifact.policy_text",
+          () => loadVerifiedPolicyTextArtifacts({ bundle: verifiedBundle, manifest })
+        )
       })
     );
     bundle = remoteArtifacts.bundle;
     consentControlGeometryEvidence = remoteArtifacts.consentControlGeometryEvidence;
     remoteManifest = remoteArtifacts.manifest;
-    if (bundle) {
-      policyTextArtifactsById = await withServerTiming(
-        "app.scan_detail.local_v2_artifact.policy_text",
-        () => loadVerifiedPolicyTextArtifacts({ bundle: bundle!, manifest: remoteManifest })
-      );
-    }
+    policyTextArtifactsById = remoteArtifacts.policyTextArtifactsById;
   }
   if (
     !bundle &&

@@ -2694,7 +2694,11 @@ export async function preConsentRuntimeScanner(
             !screenshots.some((screenshot) => screenshot.artifactId === "screenshot_pre_consent_geometry_proof")
           ? await captureConsentGeometryProofScreenshot(page, input, {
             screenshotErrors,
-            timeoutMs: input.waitMode === "fast" ? 10_000 : 12_500,
+            // This remains a two-method screenshot attempt. Bound the two
+            // methods by one small shared budget so a slow CDP capture cannot
+            // be followed by another full timeout while the earlier
+            // representative screenshot remains retained.
+            timeoutMs: input.waitMode === "fast" ? 4_000 : 5_000,
           })
           : null;
         if (geometryProofScreenshot) {
@@ -2766,7 +2770,20 @@ export async function preConsentRuntimeScanner(
         finalDocumentIdentity,
       )
     );
+    const stableConsentProofPacket = isStableConsentProofPacket({
+      geometryArtifactWritten: consentGeometryDiagnosticWritten,
+      observation: consentObservation,
+      representativeScreenshotAvailable,
+    });
+    if (stableConsentProofPacket) {
+      recordInstantTiming(
+        timingBreakdown,
+        "consent proof stability gate",
+        "Typed inventory, same-session representative screenshot, and verified geometry are complete; no recovery settle is required.",
+      );
+    }
     const boundedSameSessionPacketRecoveryEligible =
+      !stableConsentProofPacket &&
       input.captureScope === "consent_proof" &&
       screenshotMode !== "never" &&
       strictConsentDocumentIdentity(finalDocumentUrl) !== null &&
@@ -3777,6 +3794,19 @@ export function shouldRunBoundedSameSessionConsentPacketRecovery(input: {
   return isIncompleteConsentUiCapture(input.observation) ||
     !geometryCompleted ||
     !input.representativeScreenshotAvailable;
+}
+
+export function isStableConsentProofPacket(input: {
+  geometryArtifactWritten: boolean;
+  observation: ConsentUiObservation;
+  representativeScreenshotAvailable: boolean;
+}): boolean {
+  return input.geometryArtifactWritten &&
+    input.representativeScreenshotAvailable &&
+    !shouldRunBoundedSameSessionConsentPacketRecovery({
+      observation: input.observation,
+      representativeScreenshotAvailable: input.representativeScreenshotAvailable,
+    });
 }
 
 async function recoverIncompleteConsentUiObservation(input: {
@@ -11210,9 +11240,13 @@ async function captureConsentGeometryProofScreenshot(
   },
 ): Promise<ScreenshotArtifact | null> {
   const screenshotPath = input.artifactWriter.artifactPath("screenshot-pre-consent-geometry-proof.png");
+  const deadlineAtMs = Date.now() + Math.max(2, options.timeoutMs);
+  // Reserve time for both capture mechanisms. This preserves the CDP and
+  // Playwright attempts while preventing their timeouts from stacking.
+  const cdpTimeoutMs = Math.max(1, Math.min(1_750, options.timeoutMs - 750));
   const cdpDocumentIdentityBeforeCapture = currentBrowserDocumentIdentity(page);
   try {
-    await captureViewportScreenshotWithCdp(page, screenshotPath, options.timeoutMs);
+    await captureViewportScreenshotWithCdp(page, screenshotPath, cdpTimeoutMs);
     return consentGeometryProofScreenshotArtifact(
       input,
       page,
@@ -11225,11 +11259,12 @@ async function captureConsentGeometryProofScreenshot(
   }
   const playwrightDocumentIdentityBeforeCapture = currentBrowserDocumentIdentity(page);
   try {
+    const playwrightTimeoutMs = Math.max(1, deadlineAtMs - Date.now());
     await page.screenshot({
       animations: "disabled",
       fullPage: false,
       path: screenshotPath,
-      timeout: options.timeoutMs,
+      timeout: playwrightTimeoutMs,
     });
     return consentGeometryProofScreenshotArtifact(
       input,

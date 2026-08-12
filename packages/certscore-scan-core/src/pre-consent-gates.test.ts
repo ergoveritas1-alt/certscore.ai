@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import {
   hasConsentGateReachedHardCap,
+  isStableConsentProofPacket,
   shouldConfirmSparsePageCandidate,
   shouldExtendConsentGateToHardCap,
 } from "./scanners/pre-consent-runtime-scanner.js";
@@ -11,6 +12,32 @@ test("adaptive consent gates enforce the 25-second navigation-relative hard cap"
   assert.equal(hasConsentGateReachedHardCap(24_999), false);
   assert.equal(hasConsentGateReachedHardCap(25_000), true);
   assert.equal(hasConsentGateReachedHardCap(31_050), true);
+});
+
+test("consent proof stability requires inventory, geometry, and a representative screenshot", () => {
+  const observation = {
+    basis: ["inventory:paired_settled_frame_completed"],
+    captureDiagnostics: {
+      completedChannels: ["dom_inventory", "geometry"],
+      failedChannels: [],
+      timedOutChannels: []
+    },
+    captureStatus: "complete",
+    controls: [],
+    inventoryDiagnostics: { blockingInaccessibleFrameCount: 0 },
+    inventoryOutcome: "complete_empty"
+  } as never;
+
+  assert.equal(isStableConsentProofPacket({
+    geometryArtifactWritten: true,
+    observation,
+    representativeScreenshotAvailable: true
+  }), true);
+  assert.equal(isStableConsentProofPacket({
+    geometryArtifactWritten: true,
+    observation,
+    representativeScreenshotAvailable: false
+  }), false);
 });
 
 test("the 25-second gate opens only for recent consent-surface progress", () => {

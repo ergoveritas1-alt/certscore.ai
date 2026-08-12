@@ -348,6 +348,8 @@ test("validation worker Lambda result poller retains leases and bounds result co
   assert.match(source, /pollIndex < RESULT_QUEUE_POLL_CONCURRENCY/);
   assert.match(source, /startCompletedResultFinalization/);
   assert.match(source, /resultFinalizationBackgroundTasks/);
+  assert.match(source, /if \(received === 0\) \{\s*await sleep\(options\.pollMs\)/);
+  assert.match(source, /validation\.v2_lambda_result\.handoff/);
   assert.doesNotMatch(source, /Promise\.all\(queueUrls\.map/);
 });
 

@@ -1758,15 +1758,14 @@ export async function loadCompletedScanArtifacts(scanId: string) {
 }
 
 export async function loadNanoSignalEnrichmentInputs(scanId: string) {
-  const documentSourcesResult = await query<Record<string, unknown>>(
-    `select * from scan_document_sources where scan_id = $1 order by created_at asc`,
-    [scanId],
-    { readOnly: true }
-  )
-    .then((result) => ({ data: result.rows, error: null as { message?: string; code?: string | null } | null }))
-    .catch((error) => ({ data: [] as Array<Record<string, unknown>>, error: { message: getErrorMessage(error) } }));
-
-  const [scan, snapshot, runtimeArtifacts, policyEnrichments, policyReviewQueue] = await Promise.all([
+  const [documentSourcesResult, scan, snapshot, runtimeArtifacts, policyEnrichments, policyReviewQueue] = await Promise.all([
+    query<Record<string, unknown>>(
+      `select * from scan_document_sources where scan_id = $1 order by created_at asc`,
+      [scanId],
+      { readOnly: true }
+    )
+      .then((result) => ({ data: result.rows, error: null as { message?: string; code?: string | null } | null }))
+      .catch((error) => ({ data: [] as Array<Record<string, unknown>>, error: { message: getErrorMessage(error) } })),
     queryOne<Record<string, unknown>>(`select id, status, scan_type, created_at, started_at, completed_at, error_message, scan_config_json from scans where id = $1`, [scanId], { readOnly: true }),
     queryOne<Record<string, unknown>>(`select * from scan_snapshots where scan_id = $1`, [scanId], { readOnly: true }),
     queryOne<Record<string, unknown>>(`select * from scan_runtime_artifacts where scan_id = $1`, [scanId], { readOnly: true }),

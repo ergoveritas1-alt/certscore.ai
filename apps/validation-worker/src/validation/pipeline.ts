@@ -6553,7 +6553,28 @@ export async function processNanoSignalEnrichmentJob(input: {
 
   const scanId = input.scanId;
   const pollCount = input.pollCount ?? 0;
-  let artifacts = await loadNanoSignalEnrichmentInputs(scanId);
+  const phaseDurationsMs: Record<string, number> = {};
+  const measureNanoPhase = async <T>(phase: string, run: () => Promise<T>): Promise<T> => {
+    const startedAtMs = performance.now();
+    let outcome: "completed" | "failed" = "completed";
+    try {
+      return await run();
+    } catch (error) {
+      outcome = "failed";
+      throw error;
+    } finally {
+      const durationMs = Math.max(0, performance.now() - startedAtMs);
+      phaseDurationsMs[phase] = (phaseDurationsMs[phase] ?? 0) + durationMs;
+      console.info(JSON.stringify({
+        durationMs: Math.round(durationMs),
+        event: "validation.nano_signal.phase",
+        outcome,
+        phase,
+        scanId
+      }));
+    }
+  };
+  let artifacts = await measureNanoPhase("load_inputs", () => loadNanoSignalEnrichmentInputs(scanId));
   const scanStatus = typeof artifacts.scan?.status === "string" ? artifacts.scan.status : null;
   const startedAt =
     typeof artifacts.scan?.started_at === "string"
@@ -6591,10 +6612,12 @@ export async function processNanoSignalEnrichmentJob(input: {
   });
   const reusableExtractions = resolveReusableNanoDocumentExtractions({
     candidates: selectedPendingDocumentSources,
-    priorExtractions: await loadReusableNanoDocumentExtractions({
-      rows: selectedPendingDocumentSources,
-      scanId
-    })
+    priorExtractions: selectedPendingDocumentSources.length > 0
+      ? await measureNanoPhase("load_reusable_extractions", () => loadReusableNanoDocumentExtractions({
+          rows: selectedPendingDocumentSources,
+          scanId
+        }))
+      : []
   });
   const reusableExtractionCandidateCount = selectedPendingDocumentSources.length;
   const reusableExtractionAvoidedCharacterCount = selectedPendingDocumentSources.reduce((sum, row) => {
@@ -6706,14 +6729,16 @@ export async function processNanoSignalEnrichmentJob(input: {
     });
   }
 
+  let lastPersistedNanoSignalRows: Awaited<ReturnType<typeof persistDerivedNanoPolicySignals>> | null = null;
+  let artifactsChangedAfterSignalPersistence = false;
   if (artifacts.policySemanticRows.length > 0) {
-    await persistDerivedNanoPolicySignals({
+    lastPersistedNanoSignalRows = await measureNanoPhase("persist_initial_signals", () => persistDerivedNanoPolicySignals({
       policySemanticRows: artifacts.policySemanticRows,
       policyReviewQueue: artifacts.policyReviewQueue,
       runtimeArtifacts: artifacts.runtimeArtifacts,
       scanId,
       snapshot: artifacts.snapshot
-    });
+    }));
   }
 
   if (selectedPendingDocumentSources.length > 0) {
@@ -6769,15 +6794,17 @@ export async function processNanoSignalEnrichmentJob(input: {
         });
 
         artifacts = await loadNanoSignalEnrichmentInputs(scanId);
+        artifactsChangedAfterSignalPersistence = true;
 
         if (!partialSignalsPersisted && artifacts.policySemanticRows.length > 0) {
-          await persistDerivedNanoPolicySignals({
+          lastPersistedNanoSignalRows = await measureNanoPhase("persist_partial_signals", () => persistDerivedNanoPolicySignals({
             policySemanticRows: artifacts.policySemanticRows,
             policyReviewQueue: artifacts.policyReviewQueue,
             runtimeArtifacts: artifacts.runtimeArtifacts,
             scanId,
             snapshot: artifacts.snapshot
-          });
+          }));
+          artifactsChangedAfterSignalPersistence = false;
           partialSignalsPersisted = true;
         }
       }
@@ -6821,6 +6848,7 @@ export async function processNanoSignalEnrichmentJob(input: {
           }))
         });
         artifacts = await loadNanoSignalEnrichmentInputs(scanId);
+        artifactsChangedAfterSignalPersistence = true;
       }
     }
   }
@@ -6853,17 +6881,19 @@ export async function processNanoSignalEnrichmentJob(input: {
     return;
   }
 
-  const nanoSignalRows = await persistDerivedNanoPolicySignals({
-    policySemanticRows: artifacts.policySemanticRows,
-    policyReviewQueue: artifacts.policyReviewQueue,
-    runtimeArtifacts: artifacts.runtimeArtifacts,
-    scanId,
-    snapshot: artifacts.snapshot
-  });
-  const modelPolicyReviewSummary = await runPolicyModelReview({
+  const nanoSignalRows = lastPersistedNanoSignalRows && !artifactsChangedAfterSignalPersistence
+    ? lastPersistedNanoSignalRows
+    : await measureNanoPhase("persist_final_signals", () => persistDerivedNanoPolicySignals({
+        policySemanticRows: artifacts.policySemanticRows,
+        policyReviewQueue: artifacts.policyReviewQueue,
+        runtimeArtifacts: artifacts.runtimeArtifacts,
+        scanId,
+        snapshot: artifacts.snapshot
+      }));
+  const modelPolicyReviewSummary = await measureNanoPhase("policy_model_review", () => runPolicyModelReview({
     artifacts,
     scanId
-  }).catch((error) => ({
+  })).catch((error) => ({
     cacheHit: false,
     reviewStatus: "failed",
     failureReason: error instanceof Error ? error.message : "Unknown policy model-review failure."
@@ -6891,6 +6921,9 @@ export async function processNanoSignalEnrichmentJob(input: {
       freshExtractionFailedCount,
       freshExtractionPromptTokenCount,
       freshExtractionTotalTokenCount,
+      phaseDurationsMs: Object.fromEntries(
+        Object.entries(phaseDurationsMs).map(([phase, durationMs]) => [phase, Math.round(durationMs)])
+      ),
       ...(modelPolicyReviewSummary ? { modelPolicyReview: modelPolicyReviewSummary } : {}),
       ...(input.recoveryMode ? { recoveryMode: input.recoveryMode } : {}),
       scanStartedAt: startedAt,
