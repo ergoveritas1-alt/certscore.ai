@@ -38,13 +38,15 @@ COPY packages/certscore-api-contracts ./packages/certscore-api-contracts
 COPY packages/certscore-mcp-auth ./packages/certscore-mcp-auth
 COPY packages/certscore-mcp ./packages/certscore-mcp
 COPY packages/certscore-sdk ./packages/certscore-sdk
+COPY packages/shared ./packages/shared
 
 RUN rm -rf \
   ./apps/mcp/dist \
   ./packages/certscore-api-contracts/dist \
   ./packages/certscore-mcp-auth/dist \
   ./packages/certscore-mcp/dist \
-  ./packages/certscore-sdk/dist
+  ./packages/certscore-sdk/dist \
+  ./packages/shared/dist
 
 RUN pnpm --filter @certscore/api-contracts build
 RUN pnpm --filter @certscore/sdk build
