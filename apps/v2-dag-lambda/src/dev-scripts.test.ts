@@ -87,6 +87,23 @@ test("dev image scripts allow the approved Lambda scan regions", async () => {
   assert.doesNotMatch(setupScript, /PLAYWRIGHT_BROWSERS_PATH/);
 });
 
+test("regional proxy replacement can rotate EIPs with a blue-green cutover", async () => {
+  const replacementScript = await readRepoFile("scripts/local-v2-dag-lambda/replace-regional-proxy.sh");
+
+  assert.match(replacementScript, /--rotate-eip/);
+  assert.match(replacementScript, /\["timeout", fn\.Configuration\?\.Timeout, 75\]/);
+  assert.match(replacementScript, /aws ec2 allocate-address/);
+  assert.match(replacementScript, /Purpose,Value=lambda-browser-egress-proxy/);
+  assert.match(replacementScript, /CERTSCORE_V2_DAG_LAMBDA_EGRESS_ID/);
+  assert.match(replacementScript, /CERTSCORE_V2_DAG_LAMBDA_EGRESS_PUBLIC_IP_HASH/);
+  assert.match(replacementScript, /Rollback proxy and Elastic IP retained/);
+  assert.ok(
+    replacementScript.indexOf("aws ec2 associate-address") <
+      replacementScript.indexOf("aws lambda update-function-configuration"),
+    "the fresh EIP must be active before Lambda switches to the replacement proxy",
+  );
+});
+
 test("dev image setup uses local names and refuses non-dev resource names", async () => {
   const setupScript = await readRepoFile("scripts/local-v2-dag-lambda/setup-dev-aws-image.sh");
 

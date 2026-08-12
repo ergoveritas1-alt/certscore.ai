@@ -2,10 +2,22 @@
 set -euo pipefail
 
 region="${1:-}"
-apply="${2:-}"
+apply=""
+rotate_eip="false"
 function_name="${CERTSCORE_V2_DAG_LAMBDA_FUNCTION_NAME:-certscore-v2-dag-local-lambda}"
 script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 template_path="${script_dir}/canonical-regional-proxy-user-data.sh"
+
+for argument in "${@:2}"; do
+  case "$argument" in
+    --apply) apply="--apply" ;;
+    --rotate-eip) rotate_eip="true" ;;
+    *)
+      echo "Unsupported argument: ${argument}" >&2
+      exit 1
+      ;;
+  esac
+done
 
 case "$region" in
   eu-central-1)
@@ -27,7 +39,7 @@ case "$region" in
     expected_timezone="America/Los_Angeles"
     ;;
   *)
-    echo "Usage: $0 eu-central-1|eu-west-1|us-west-1 [--apply]" >&2
+    echo "Usage: $0 eu-central-1|eu-west-1|us-west-1 [--rotate-eip] [--apply]" >&2
     exit 1
     ;;
 esac
@@ -50,7 +62,7 @@ const fn = JSON.parse(readFileSync(path, "utf8"));
 const env = fn.Configuration?.Environment?.Variables ?? {};
 const checks = [
   ["memory", fn.Configuration?.MemorySize, 3008],
-  ["timeout", fn.Configuration?.Timeout, 900],
+  ["timeout", fn.Configuration?.Timeout, 75],
   ["architecture", fn.Configuration?.Architectures?.[0], "x86_64"],
   ["ephemeral storage", fn.Configuration?.EphemeralStorage?.Size, 512],
   ["locale", env.CERTSCORE_V2_DAG_LAMBDA_CHROMIUM_LOCALE, expectedLocale],
@@ -122,7 +134,11 @@ echo "Current proxy: ${old_instance_id} (${old_proxy_private_ip})"
 echo "Replacement AMI: ${ami_id}"
 echo "Proxy subnet: ${proxy_subnet_id}"
 echo "Proxy security group: ${proxy_security_group_id}"
-echo "Retained Elastic IP: ${public_ip} (${allocation_id})"
+if [[ "$rotate_eip" == "true" ]]; then
+  echo "Elastic IP action: allocate a fresh address; retain ${public_ip} (${allocation_id}) on the rollback proxy"
+else
+  echo "Elastic IP action: retain ${public_ip} (${allocation_id})"
+fi
 
 if [[ "$apply" != "--apply" ]]; then
   exit 0
@@ -172,16 +188,52 @@ for attempt in 1 2 3 4 5 6; do
   sleep 10
 done
 
-node - "$lambda_json" "$new_private_ip" >"$environment_json" <<'NODE'
+active_allocation_id="$allocation_id"
+active_public_ip="$public_ip"
+if [[ "$rotate_eip" == "true" ]]; then
+  rotation_timestamp="$(date -u +%Y%m%dT%H%M%SZ)"
+  new_address_json="$(aws ec2 allocate-address \
+    --region "$region" \
+    --domain vpc \
+    --tag-specifications \
+      "ResourceType=elastic-ip,Tags=[{Key=Name,Value=certscore-${location_slug}-proxy-eip-${rotation_timestamp}},{Key=Project,Value=CertScore},{Key=Purpose,Value=lambda-browser-egress-proxy},{Key=Region,Value=${location_slug}},{Key=Rotation,Value=${rotation_timestamp}}]" \
+    --output json)"
+  active_allocation_id="$(node -e 'const x=JSON.parse(process.argv[1]); process.stdout.write(x.AllocationId ?? "")' "$new_address_json")"
+  active_public_ip="$(node -e 'const x=JSON.parse(process.argv[1]); process.stdout.write(x.PublicIp ?? "")' "$new_address_json")"
+  if [[ -z "$active_allocation_id" || -z "$active_public_ip" ]]; then
+    echo "Fresh Elastic IP allocation did not return a complete identity; leaving the replacement proxy for inspection." >&2
+    exit 1
+  fi
+  aws ec2 associate-address \
+    --region "$region" \
+    --instance-id "$new_instance_id" \
+    --allocation-id "$active_allocation_id" \
+    --allow-reassociation >/dev/null
+  echo "Fresh Elastic IP associated with the replacement proxy: ${active_public_ip} (${active_allocation_id})"
+fi
+
+node - "$lambda_json" "$new_private_ip" "$region" "$active_allocation_id" "$active_public_ip" >"$environment_json" <<'NODE'
+const { createHash } = require("node:crypto");
 const { readFileSync } = require("node:fs");
-const [path, privateIp] = process.argv.slice(2);
+const [path, privateIp, region, allocationId, publicIp] = process.argv.slice(2);
 const fn = JSON.parse(readFileSync(path, "utf8"));
 const variables = { ...(fn.Configuration?.Environment?.Variables ?? {}) };
 const proxyServer = `http://${privateIp}:3128`;
 variables.CERTSCORE_V2_DAG_LAMBDA_PROXY_SERVER = proxyServer;
 variables.SCAN_PROXY_SERVER = proxyServer;
+variables.CERTSCORE_V2_DAG_LAMBDA_EGRESS_ID = `aws-ec2-proxy:${region}:${allocationId}`;
+variables.CERTSCORE_V2_DAG_LAMBDA_EGRESS_PROVIDER = "aws-ec2-proxy";
+variables.CERTSCORE_V2_DAG_LAMBDA_EGRESS_PUBLIC_IP_HASH = `sha256:${createHash("sha256").update(publicIp).digest("hex")}`;
 process.stdout.write(JSON.stringify({ Variables: variables }));
 NODE
+
+if [[ "$rotate_eip" != "true" ]]; then
+  aws ec2 associate-address \
+    --region "$region" \
+    --instance-id "$new_instance_id" \
+    --allocation-id "$allocation_id" \
+    --allow-reassociation >/dev/null
+fi
 
 aws lambda update-function-configuration \
   --region "$region" \
@@ -189,13 +241,12 @@ aws lambda update-function-configuration \
   --environment "file://${environment_json}" >/dev/null
 aws lambda wait function-updated --region "$region" --function-name "$function_name"
 
-aws ec2 associate-address \
-  --region "$region" \
-  --instance-id "$new_instance_id" \
-  --allocation-id "$allocation_id" \
-  --allow-reassociation >/dev/null
-
 echo "Regional proxy cutover complete."
 echo "New proxy: ${new_instance_id} (${new_private_ip})"
-echo "Old proxy retained for rollback until the regional smoke scan passes: ${old_instance_id}"
-echo "Elastic IP retained: ${public_ip}"
+if [[ "$rotate_eip" == "true" ]]; then
+  echo "Active Elastic IP: ${active_public_ip} (${active_allocation_id})"
+  echo "Rollback proxy and Elastic IP retained until the regional smoke scan passes: ${old_instance_id}, ${public_ip} (${allocation_id})"
+else
+  echo "Old proxy retained for rollback until the regional smoke scan passes: ${old_instance_id}"
+  echo "Elastic IP retained: ${public_ip}"
+fi
