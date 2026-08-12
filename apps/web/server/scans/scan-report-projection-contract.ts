@@ -177,6 +177,7 @@ export function buildPersistedScanReportProjection(
   }
   return {
     payload: normalizedPayload,
+    serialized,
     sha256: createHash("sha256").update(serialized).digest("hex"),
     sizeBytes
   };

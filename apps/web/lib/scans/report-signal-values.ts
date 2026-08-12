@@ -67,6 +67,7 @@ export function getSnapshotSignalValue(snapshot: Record<string, unknown> | null,
 }
 
 export function getReportSignalValue(input: {
+  getHybridDerivedSignalValue?: (signalKey: string) => unknown;
   mergedSignals?: MergedSignalValueRow[];
   policyEnrichment: Array<Record<string, unknown>>;
   runtimeArtifacts: Record<string, unknown> | null;
@@ -74,7 +75,9 @@ export function getReportSignalValue(input: {
   snapshot: Record<string, unknown> | null;
   signal: ReportSignalDefinition;
 }) {
-  const hybridDerivedValue = getHybridDerivedSignalValue(input.runtimeArtifacts, input.signal.key);
+  const hybridDerivedValue = input.getHybridDerivedSignalValue
+    ? input.getHybridDerivedSignalValue(input.signal.key)
+    : getHybridDerivedSignalValue(input.runtimeArtifacts, input.signal.key);
   if (hybridDerivedValue !== undefined) {
     return hybridDerivedValue;
   }

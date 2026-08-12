@@ -1,6 +1,8 @@
 import {
   appendScanWorkflowEvent,
+  claimNanoSignalScanLeaseById,
   claimNextNanoSignalScanLease,
+  claimNextQueuedNanoSignalScanLease,
   claimNextValidationRunLease,
   getValidationPipelineState,
   releaseNanoSignalScanLease,
@@ -10,13 +12,19 @@ import {
 } from "./repository";
 import { SCAN_EVENT_TYPES } from "@website-signal-risk-scanner/shared";
 import {
+  NANO_SIGNAL_BROAD_RECONCILIATION_SWEEP_MS,
+  NANO_SIGNAL_DURABLE_RECOVERY_SWEEP_MS,
+  NanoSignalWakeupQueue,
+  startNanoSignalWakeupListener
+} from "./nano-signal-wakeup";
+import {
   processNanoSignalEnrichmentJob,
   processValidationCollectJob,
   processValidationRankJob,
   processValidationVerdictJob
 } from "./pipeline";
 
-const IDLE_POLL_MS = 250;
+export const VALIDATION_DISPATCH_IDLE_POLL_MS = 1_000;
 const MAX_NANO_SIGNAL_DISPATCH_ATTEMPTS = 3;
 const NANO_SIGNAL_DISPATCH_RETRY_BASE_MS = 1_000;
 const NANO_SIGNAL_DISPATCH_RETRY_MAX_MS = 30_000;
@@ -127,27 +135,76 @@ async function dispatchNanoSignalScan(lease: NanoSignalScanLease) {
   });
 }
 
+type NanoDispatchCoordinator = {
+  nextBroadReconciliationAt: number;
+  nextDurableRecoveryAt: number;
+  wakeups: NanoSignalWakeupQueue;
+};
+
+async function claimAvailableNanoSignalLease(coordinator: NanoDispatchCoordinator) {
+  for (;;) {
+    const notifiedScanId = coordinator.wakeups.take();
+    if (!notifiedScanId) {
+      break;
+    }
+
+    const notifiedLease = await claimNanoSignalScanLeaseById(notifiedScanId);
+    if (notifiedLease) {
+      return notifiedLease;
+    }
+  }
+
+  const now = Date.now();
+  if (now >= coordinator.nextDurableRecoveryAt) {
+    coordinator.nextDurableRecoveryAt = now + NANO_SIGNAL_DURABLE_RECOVERY_SWEEP_MS;
+    const queuedLease = await claimNextQueuedNanoSignalScanLease();
+    if (queuedLease) {
+      return queuedLease;
+    }
+  }
+
+  if (now >= coordinator.nextBroadReconciliationAt) {
+    coordinator.nextBroadReconciliationAt = now + NANO_SIGNAL_BROAD_RECONCILIATION_SWEEP_MS;
+    return claimNextNanoSignalScanLease();
+  }
+
+  return null;
+}
+
 export async function startValidationDispatcher(options: {
   browserCleanup?: { schedule(reason: string): Promise<unknown> | unknown } | null;
   concurrency: number;
 }) {
   const slots = Math.max(1, options.concurrency);
+  const wakeups = new NanoSignalWakeupQueue();
+  const coordinator: NanoDispatchCoordinator = {
+    nextBroadReconciliationAt: 0,
+    nextDurableRecoveryAt: 0,
+    wakeups
+  };
+  startNanoSignalWakeupListener({
+    onWakeup: (payload) => wakeups.enqueue(payload)
+  });
 
   await Promise.all(
-    Array.from({ length: slots }, (_, index) => runDispatchLoop(index + 1, options.browserCleanup ?? null))
+    Array.from({ length: slots }, (_, index) => runDispatchLoop(index + 1, options.browserCleanup ?? null, coordinator))
   );
 }
 
-async function runDispatchLoop(slot: number, browserCleanup: { schedule(reason: string): Promise<unknown> | unknown } | null) {
+async function runDispatchLoop(
+  slot: number,
+  browserCleanup: { schedule(reason: string): Promise<unknown> | unknown } | null,
+  coordinator: NanoDispatchCoordinator
+) {
   for (;;) {
     try {
       const { state } = await getValidationPipelineState();
       if (state !== "running") {
-        await sleep(IDLE_POLL_MS);
+        await sleep(VALIDATION_DISPATCH_IDLE_POLL_MS);
         continue;
       }
 
-      const scanLease = await claimNextNanoSignalScanLease();
+      const scanLease = await claimAvailableNanoSignalLease(coordinator);
       if (scanLease) {
         try {
           console.info("[validation-worker] nano signal scan claimed", {
@@ -225,13 +282,13 @@ async function runDispatchLoop(slot: number, browserCleanup: { schedule(reason: 
         continue;
       }
 
-      await sleep(IDLE_POLL_MS);
+      await coordinator.wakeups.wait(VALIDATION_DISPATCH_IDLE_POLL_MS);
     } catch (error) {
       console.error("[validation-worker] dispatch loop error", {
         error: error instanceof Error ? error.message : String(error),
         slot
       });
-      await sleep(IDLE_POLL_MS);
+      await coordinator.wakeups.wait(VALIDATION_DISPATCH_IDLE_POLL_MS);
     }
   }
 }

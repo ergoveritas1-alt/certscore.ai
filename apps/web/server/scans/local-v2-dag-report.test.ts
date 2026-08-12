@@ -2268,6 +2268,10 @@ test("inferS3ArtifactRegion follows the regional Lambda artifact bucket", async 
     inferS3ArtifactRegion("certscore-v2-dag-local-artifacts-us-west-1-199536052647"),
     "us-west-1"
   );
+  assert.equal(
+    inferS3ArtifactRegion("certscore-v2-dag-local-artifacts-us-west-2-199536052647"),
+    "us-west-2"
+  );
   assert.equal(inferS3ArtifactRegion("certscore-v2-dag-local-artifacts"), "eu-central-1");
 });
 
@@ -7140,11 +7144,11 @@ test("materializeLocalV2DagScanDetail withholds missing controls and score when 
 
     assert.equal(rejectPathArtifact?.firstLayerCookieConsentBannerObserved, false);
     assert.equal(rejectPathArtifact?.gdprEprivacyConsentSurfaceObserved, "unconfirmed");
-    assert.equal(rejectPath?.status, "Not confirmed");
+    assert.equal(rejectPath?.status, "Not testable");
     assert.equal(rejectPath?.evidenceState, "not_testable");
     assert.match(
       rejectPath?.limitation ?? "",
-      /reject or equivalent refusal control was not established.*assessment is incomplete/i
+      /assessment is incomplete.*reject or equivalent refusal control availability cannot be determined/i
     );
   } finally {
     if (previousAppUrl === undefined) {

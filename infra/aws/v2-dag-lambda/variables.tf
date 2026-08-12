@@ -125,6 +125,7 @@ variable "vpc_endpoint_config_by_region" {
     route_table_ids          = list(string)
     subnet_ids               = list(string)
     lambda_security_group_id = string
+    enable_logs_endpoint     = optional(bool, true)
   }))
   default = {}
 

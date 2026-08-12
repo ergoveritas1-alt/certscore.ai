@@ -307,13 +307,13 @@ variable "web_memory" {
 variable "worker_cpu" {
   description = "CPU units for the validation worker task."
   type        = number
-  default     = 512
+  default     = 256
 }
 
 variable "worker_memory" {
   description = "Memory for the validation worker task."
   type        = number
-  default     = 1024
+  default     = 512
 }
 
 variable "worker_desired_count" {

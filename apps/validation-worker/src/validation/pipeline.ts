@@ -75,11 +75,9 @@ import {
 
 export { buildNanoDocCandidateUrls, selectNanoDocCandidates } from "./nano-document-discovery";
 
-const VALIDATION_SCAN_HANDOFF_POLL_MS = 5_000;
 const NANO_DOC_RETRIEVAL_POLL_MS = 1_000;
 const MAX_NANO_DOC_RETRIEVAL_POLLS = 20;
-const NANO_SIGNAL_POLICY_ROW_RECHECK_MS = 250;
-const NANO_SIGNAL_TERMINAL_STATUS_RECHECK_MS = 1_000;
+export const NANO_SIGNAL_STALE_SAFETY_RECHECK_MS = 5 * 60_000;
 const NANO_SIGNAL_ENRICHMENT_POLL_MS = 2_000;
 const MAX_NANO_SIGNAL_ENRICHMENT_POLLS = 20;
 const NANO_DOCUMENT_EXTRACTION_BATCH_SIZE = 4;
@@ -6831,9 +6829,7 @@ export async function processNanoSignalEnrichmentJob(input: {
     const nextPollCount = pollCount + 1;
     const willContinuePolicyRowPolling = nextPollCount < MAX_NANO_SIGNAL_ENRICHMENT_POLLS;
     await requeueNanoSignalEnrichmentPoll({
-      delayMs: willContinuePolicyRowPolling
-        ? NANO_SIGNAL_POLICY_ROW_RECHECK_MS
-        : VALIDATION_SCAN_HANDOFF_POLL_MS,
+      delayMs: NANO_SIGNAL_STALE_SAFETY_RECHECK_MS,
       pollCount: nextPollCount,
       reason:
         willContinuePolicyRowPolling
@@ -6916,7 +6912,7 @@ export async function processNanoSignalEnrichmentJob(input: {
 
   if (!hasCompletedUnifiedDerivation && !scanIsTerminal) {
     await requeueNanoSignalEnrichmentPoll({
-      delayMs: NANO_SIGNAL_TERMINAL_STATUS_RECHECK_MS,
+      delayMs: NANO_SIGNAL_STALE_SAFETY_RECHECK_MS,
       pollCount,
       reason: "waiting_for_scanner_terminal_status",
       scanId
@@ -6943,6 +6939,13 @@ export async function processNanoSignalEnrichmentJob(input: {
   }
 }
 
+export function buildValidationCollectWaitPatch(status: "collecting" | "waiting_for_scan", now = new Date()) {
+  return {
+    status,
+    updated_at: now.toISOString()
+  } as const;
+}
+
 export async function processValidationCollectJob(validationRunId: string) {
   const { state } = await getValidationPipelineState();
   if (state !== "running") {
@@ -6967,20 +6970,12 @@ export async function processValidationCollectJob(validationRunId: string) {
     const collectAction = determineValidationCollectAction(scanStatus || null);
 
     if (collectAction === "wait_for_scan") {
-      if (run.status !== "waiting_for_scan") {
-        await updateValidationRun(validationRunId, {
-          status: "waiting_for_scan"
-        });
-      }
+      await updateValidationRun(validationRunId, buildValidationCollectWaitPatch("waiting_for_scan"));
       return;
     }
 
     if (collectAction === "wait_for_completion") {
-      if (run.status !== "collecting") {
-        await updateValidationRun(validationRunId, {
-          status: "collecting"
-        });
-      }
+      await updateValidationRun(validationRunId, buildValidationCollectWaitPatch("collecting"));
       return;
     }
 

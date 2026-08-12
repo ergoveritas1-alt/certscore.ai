@@ -16,7 +16,8 @@ import {
 import {
   buildPreconsentEvidenceQualityFallback,
   getHybridRuntimeEvidence,
-  getHybridSignalFallbackEvidence
+  getHybridSignalFallbackEvidence,
+  type HybridRuntimeEvidenceProjectionCache
 } from "./hybrid-runtime-evidence";
 import {
   findMergedSignalValue,
@@ -2180,6 +2181,7 @@ export function buildReviewFindings(input: {
     value: boolean | number | string | string[] | null;
     selectedPopulation?: { value?: boolean | number | string | string[] | null } | null;
   }>;
+  hybridEvidenceCache?: HybridRuntimeEvidenceProjectionCache;
   policyEnrichment?: Array<Record<string, unknown>>;
   prioritizedAccessibilityRuleRows: AccessibilityRuleEvidenceRow[];
   runtimeArtifacts?: Record<string, unknown> | null;
@@ -2397,12 +2399,17 @@ export function buildReviewFindings(input: {
                 }),
         ...getDomainMacroFallbackFields(input.macroEnrichment)
       };
-      const hybridFallbackEvidence = getHybridSignalFallbackEvidence({
-        runtimeArtifacts: input.runtimeArtifacts,
+      const hybridFallbackInput = {
         signalKey: item.key,
         signalLabel: item.label,
         signalValue: item.value
-      });
+      };
+      const hybridFallbackEvidence = input.hybridEvidenceCache
+        ? input.hybridEvidenceCache.getSignalFallbackEvidence(hybridFallbackInput)
+        : getHybridSignalFallbackEvidence({
+            runtimeArtifacts: input.runtimeArtifacts,
+            ...hybridFallbackInput
+          });
       const fallbackEvidence =
         mergeFallbackEvidenceRecords(baseFallbackEvidence, hybridFallbackEvidence);
 

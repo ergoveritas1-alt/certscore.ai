@@ -19,7 +19,7 @@ type ScanStatusAutoRefreshProps = {
   terminalNavigationDelayMs?: number;
 };
 
-export const SCAN_STATUS_POLL_INITIAL_MS = 2_000;
+export const SCAN_STATUS_POLL_INITIAL_MS = 1_000;
 export const SCAN_STATUS_POLL_MAX_MS = 10_000;
 export const SCAN_STATUS_POLL_JITTER_MS = 250;
 export const SCAN_TERMINAL_NAVIGATION_GUARD_MS = 5 * 60_000;

@@ -2727,6 +2727,57 @@ test("pre-consent runtime scanner skips CMP recapture without first-layer surfac
   }
 });
 
+test("runtime-evidence lane excludes consent waits and policy recovery", async () => {
+  const server = await startStaticFixtureServer();
+  const tempRoot = await mkdtemp(path.join(tmpdir(), "certscore-v2-runtime-lane-ownership-"));
+  try {
+    const bundle = await runScan({
+      url: server.urlFor("policy-footer-privacy"),
+      outDir: path.join(tempRoot, "runtime-out"),
+      profile: "standard",
+      evidenceLane: "runtime_evidence",
+      preConsentModuleDeadlineMs: 10_000,
+      // Intentionally request screenshots to prove that lane ownership, not
+      // caller tuning, keeps consent visuals out of runtime evidence.
+      preConsentScreenshotMode: "always",
+      scenarioPlanningMode: "planned_parallel",
+      scenarioResourceMode: "lean",
+    });
+    const preConsentModule = bundle.modulesRun.find((moduleRun) =>
+      moduleRun.moduleName === "preConsentRuntimeScanner"
+    );
+    const timingBreakdown = preConsentModule?.timingBreakdown ?? [];
+    const timingLabels = timingBreakdown.map((entry) => entry.label);
+    const foreignLaneWork = timingBreakdown.filter((entry) =>
+      entry.outcome !== "skipped" &&
+      (
+        /consent/i.test(entry.label) ||
+        /^CMP runtime probe$/i.test(entry.label) ||
+        /rendered policy|rendered-link recovery/i.test(entry.label)
+      )
+    );
+
+    assert.equal(preConsentModule?.status, "completed", preConsentModule?.errors.join("; "));
+    assert.equal(bundle.networkEvents.length > 0, true, "runtime lane must retain observed network evidence");
+    assert.equal(bundle.consentUiObservations.length, 0);
+    assert.equal(bundle.cmpRuntimeObservations.length, 0);
+    assert.equal(bundle.screenshots.length, 0);
+    assert.equal(bundle.policySurfaceObservations.length, 0);
+    assert.equal(
+      bundle.modulesRun.some((moduleRun) => moduleRun.moduleName === "policySurfaceScanner"),
+      false,
+    );
+    assert.deepEqual(
+      foreignLaneWork,
+      [],
+      `runtime lane performed work owned by another lane: ${JSON.stringify(timingLabels)}`,
+    );
+  } finally {
+    await server.close();
+    await rm(tempRoot, { recursive: true, force: true });
+  }
+});
+
 test("consent-proof lane pairs completed empty CMP inventory with geometry and a synchronized viewport", async () => {
   const server = await startStaticFixtureServer();
   const tempRoot = await mkdtemp(path.join(tmpdir(), "certscore-v2-consent-proof-synchronized-empty-"));

@@ -369,8 +369,11 @@ test("validation worker frees result poll capacity after retaining the terminal 
   assert.ok(scoreIndex > policyIndex, "score materialization remains canonical downstream work");
   assert.match(source, /reconcilePersistedCompletedResultFinalizations/);
   assert.match(source, /artifactVerification,verifiedAt/);
-  assert.match(source, /coalesce\(request\.attempt_count, 0\) asc/);
-  assert.match(source, /coalesce\(request\.requested_at, result\.result_created_at\) asc/);
+  assert.match(source, /request\.next_attempt_at <= now\(\)/);
+  assert.match(source, /order by request\.next_attempt_at asc/);
+  assert.match(source, /where request\.scan_id is null/);
+  assert.match(source, /MATERIALIZATION_MISSING_REQUEST_DISCOVERY_INTERVAL_MS\s*=\s*300_000/);
+  assert.match(source, /includeMissingRequests/);
   assert.doesNotMatch(source, /order by result\.scan_id, result\.created_at desc\s+limit 25/);
 });
 
@@ -440,6 +443,8 @@ test("validation worker durably retains results before acknowledgement and mater
   assert.match(source, /existingState === "terminal_failure"/);
   assert.match(source, /claimedState === "terminal_failure"/);
   assert.match(source, /where public\.scan_score_materialization_requests\.status = 'pending'/);
+  assert.match(source, /last_attempt_at = now\(\)/);
+  assert.match(source, /next_attempt_at = now\(\)/);
   assert.doesNotMatch(source, /status <> 'completed'/);
 });
 

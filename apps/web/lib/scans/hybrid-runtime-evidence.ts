@@ -1455,6 +1455,27 @@ function hasSessionReplayObserved(hybrid: Record<string, unknown> | null) {
   return categoryCount > 0 || getSessionReplayVendors(hybrid).length > 0;
 }
 
+const HYBRID_RUNTIME_SIGNAL_KEYS = new Set([
+  "commerce.session_replay_tool_detected",
+  "privacy.autoplay_media_detected",
+  "privacy.consent_control_not_reopenable",
+  "privacy.consent_governance_disclosure_gap",
+  "privacy.cross_domain_identifier_sharing_observed",
+  "privacy.dark_pattern_accept_button_prominence",
+  "privacy.dark_pattern_accept_only_banner",
+  "privacy.dark_pattern_dismiss_without_reject",
+  "privacy.dark_pattern_forced_consent_wall",
+  "privacy.dark_pattern_reject_button_missing",
+  "privacy.fingerprinting_detected",
+  "privacy.overlay_blocking_detected",
+  "privacy.popup_behavior_detected",
+  "privacy.preconsent_tracking_detected",
+  "privacy.session_replay_runtime_detected",
+  "privacy.session_replay_runtime_vendors",
+  "privacy.tracking_before_consent_detected",
+  "privacy.video_content_tracking_exposure_detected"
+]);
+
 export function getHybridDerivedSignalValue(runtimeArtifacts: Record<string, unknown> | null | undefined, signalKey: string) {
   if (signalKey === "privacy.pre_submit_text_capture_detected") {
     const rows = getObjectArray(runtimeArtifacts?.pre_submit_text_capture_evidence ?? runtimeArtifacts?.preSubmitTextCaptureEvidence);
@@ -1472,24 +1493,19 @@ export function getHybridDerivedSignalValue(runtimeArtifacts: Record<string, unk
     return undefined;
   }
 
+  if (!HYBRID_RUNTIME_SIGNAL_KEYS.has(signalKey)) {
+    return undefined;
+  }
+
   const hybrid = getHybridRuntimeEvidence(runtimeArtifacts);
   if (!hybrid) {
     return undefined;
   }
 
-  const consentSummary = getRecord(hybrid.consentSummary);
-  const consentVisual = getRecord(hybrid.consentVisual);
-  const uiSummary = getRecord(hybrid.uiSummary);
-  const networkSummary = getRecord(hybrid.networkSummary);
-  const fingerprintSummary = getFingerprintSummary(hybrid);
-  const mediaSummary = getMediaSummary(hybrid);
-  const verifiedConsentSurface = hasVerifiedConsentSurface(hybrid, runtimeArtifacts);
-  const consentControlLifecycleEvidence = getConsentControlLifecycleEvidence({ hybridRuntimeEvidence: hybrid });
-  const consentGovernanceDisclosureEvidence = getConsentGovernanceDisclosureEvidence({ hybridRuntimeEvidence: hybrid });
-
   switch (signalKey) {
     case "privacy.preconsent_tracking_detected":
     case "privacy.tracking_before_consent_detected": {
+      const networkSummary = getRecord(hybrid.networkSummary);
       const preConsentThirdPartyRequestCount = getNumber(networkSummary?.preConsentThirdPartyRequestCount) ?? 0;
       const preConsentVendorCount =
         getNumber(getRecord(hybrid.vendorSummary)?.preConsentVendorCount) ?? getPreconsentTrackerVendors(hybrid).length;
@@ -1500,7 +1516,10 @@ export function getHybridDerivedSignalValue(runtimeArtifacts: Record<string, unk
 
       return preConsentThirdPartyRequestCount > 0 || preConsentVendorCount > 0 || preConsentEvidenceUrlCount > 0 || preConsentTrackingCookieCount > 0;
     }
-    case "privacy.dark_pattern_reject_button_missing":
+    case "privacy.dark_pattern_reject_button_missing": {
+      const consentSummary = getRecord(hybrid.consentSummary);
+      const consentVisual = getRecord(hybrid.consentVisual);
+      const verifiedConsentSurface = hasVerifiedConsentSurface(hybrid, runtimeArtifacts);
       if (!verifiedConsentSurface) {
         return undefined;
       }
@@ -1510,7 +1529,11 @@ export function getHybridDerivedSignalValue(runtimeArtifacts: Record<string, unk
           consentSummary?.rejectDepthClass === "absent" ||
           consentVisual?.rejectHidden === true)
       );
-    case "privacy.dark_pattern_accept_button_prominence":
+    }
+    case "privacy.dark_pattern_accept_button_prominence": {
+      const consentSummary = getRecord(hybrid.consentSummary);
+      const consentVisual = getRecord(hybrid.consentVisual);
+      const verifiedConsentSurface = hasVerifiedConsentSurface(hybrid, runtimeArtifacts);
       if (!verifiedConsentSurface) {
         return undefined;
       }
@@ -1524,7 +1547,11 @@ export function getHybridDerivedSignalValue(runtimeArtifacts: Record<string, unk
         consentVisual?.rejectProminence === "low" ||
         consentVisual?.contrastAsymmetryDetected === true
       );
-    case "privacy.dark_pattern_forced_consent_wall":
+    }
+    case "privacy.dark_pattern_forced_consent_wall": {
+      const consentSummary = getRecord(hybrid.consentSummary);
+      const uiSummary = getRecord(hybrid.uiSummary);
+      const verifiedConsentSurface = hasVerifiedConsentSurface(hybrid, runtimeArtifacts);
       if (!verifiedConsentSurface) {
         return undefined;
       }
@@ -1536,7 +1563,11 @@ export function getHybridDerivedSignalValue(runtimeArtifacts: Record<string, unk
         consentSummary?.pageInteractionBlocked === true ||
         uiSummary?.forcedActionRequired === true
       );
-    case "privacy.dark_pattern_accept_only_banner":
+    }
+    case "privacy.dark_pattern_accept_only_banner": {
+      const consentSummary = getRecord(hybrid.consentSummary);
+      const consentVisual = getRecord(hybrid.consentVisual);
+      const verifiedConsentSurface = hasVerifiedConsentSurface(hybrid, runtimeArtifacts);
       if (!verifiedConsentSurface) {
         return undefined;
       }
@@ -1547,7 +1578,10 @@ export function getHybridDerivedSignalValue(runtimeArtifacts: Record<string, unk
           consentSummary?.rejectPresent === false &&
           consentSummary?.managePresent === false)
       );
-    case "privacy.dark_pattern_dismiss_without_reject":
+    }
+    case "privacy.dark_pattern_dismiss_without_reject": {
+      const consentSummary = getRecord(hybrid.consentSummary);
+      const verifiedConsentSurface = hasVerifiedConsentSurface(hybrid, runtimeArtifacts);
       if (!verifiedConsentSurface) {
         return undefined;
       }
@@ -1556,24 +1590,35 @@ export function getHybridDerivedSignalValue(runtimeArtifacts: Record<string, unk
         consentSummary?.rejectPresent === false &&
         (consentSummary?.acceptPresent === true || consentSummary?.bannerDisappearedWithoutChoice === true)
       );
-    case "privacy.consent_control_not_reopenable":
+    }
+    case "privacy.consent_control_not_reopenable": {
+      const consentControlLifecycleEvidence = getConsentControlLifecycleEvidence({ hybridRuntimeEvidence: hybrid });
       return consentControlLifecycleEvidence
         ? evaluateConsentControlLifecycleEvidence({ consentControlLifecycleEvidence }).disposition === "eligible"
         : undefined;
-    case "privacy.consent_governance_disclosure_gap":
+    }
+    case "privacy.consent_governance_disclosure_gap": {
+      const consentGovernanceDisclosureEvidence = getConsentGovernanceDisclosureEvidence({ hybridRuntimeEvidence: hybrid });
       return consentGovernanceDisclosureEvidence
         ? evaluateConsentGovernanceDisclosureEvidence({ consentGovernanceDisclosureEvidence }).disposition === "eligible"
         : undefined;
+    }
     case "commerce.session_replay_tool_detected":
     case "privacy.session_replay_runtime_detected":
       return hasSessionReplayObserved(hybrid);
     case "privacy.session_replay_runtime_vendors":
       return getSessionReplayVendors(hybrid);
-    case "privacy.fingerprinting_detected":
+    case "privacy.fingerprinting_detected": {
+      const fingerprintSummary = getFingerprintSummary(hybrid);
       return (getNumber(fingerprintSummary?.tier) ?? 0) >= 2;
-    case "privacy.popup_behavior_detected":
+    }
+    case "privacy.popup_behavior_detected": {
+      const uiSummary = getRecord(hybrid.uiSummary);
       return (getNumber(uiSummary?.popupCount) ?? 0) > 0;
-    case "privacy.overlay_blocking_detected":
+    }
+    case "privacy.overlay_blocking_detected": {
+      const consentSummary = getRecord(hybrid.consentSummary);
+      const uiSummary = getRecord(hybrid.uiSummary);
       return (
         consentSummary?.cookieWallDetected === true ||
         consentSummary?.pageInteractionBlocked === true ||
@@ -1581,8 +1626,11 @@ export function getHybridDerivedSignalValue(runtimeArtifacts: Record<string, unk
         uiSummary?.scrollLocked === true ||
         uiSummary?.forcedActionRequired === true
       );
-    case "privacy.autoplay_media_detected":
+    }
+    case "privacy.autoplay_media_detected": {
+      const mediaSummary = getMediaSummary(hybrid);
       return mediaSummary?.autoplayVideoObserved === true || mediaSummary?.autoplayAudioObserved === true;
+    }
     case "privacy.video_content_tracking_exposure_detected":
       return hasVideoContentTrackingExposure(hybrid);
     case "privacy.cross_domain_identifier_sharing_observed":
@@ -1612,6 +1660,10 @@ export function getHybridSignalFallbackEvidence(input: {
       signalLabel: input.signalLabel,
       signalValue: input.signalValue
     };
+  }
+
+  if (!HYBRID_RUNTIME_SIGNAL_KEYS.has(input.signalKey)) {
+    return null;
   }
 
   const hybrid = getHybridRuntimeEvidence(input.runtimeArtifacts);
@@ -1936,4 +1988,65 @@ export function getHybridSignalFallbackEvidence(input: {
     default:
       return null;
   }
+}
+
+export type HybridRuntimeEvidenceProjectionCache = {
+  getDerivedSignalValue: (signalKey: string) => unknown;
+  getSignalFallbackEvidence: (input: {
+    signalKey: string;
+    signalLabel: string;
+    signalValue: unknown;
+  }) => Record<string, unknown> | null;
+};
+
+/**
+ * Reuses pure hybrid-evidence derivations only for one report projection. The
+ * source artifacts remain authoritative and untouched; this cache stores only
+ * the exact derived return values that the uncached helpers would produce.
+ */
+export function createHybridRuntimeEvidenceProjectionCache(
+  runtimeArtifacts: Record<string, unknown> | null | undefined
+): HybridRuntimeEvidenceProjectionCache {
+  const derivedSignalValues = new Map<string, { value: unknown }>();
+  const fallbackEvidenceBySignal = new Map<
+    string,
+    Map<string, Map<unknown, Record<string, unknown> | null>>
+  >();
+
+  return {
+    getDerivedSignalValue(signalKey) {
+      const cached = derivedSignalValues.get(signalKey);
+      if (cached) {
+        return cached.value;
+      }
+
+      const value = getHybridDerivedSignalValue(runtimeArtifacts, signalKey);
+      derivedSignalValues.set(signalKey, { value });
+      return value;
+    },
+    getSignalFallbackEvidence(input) {
+      let byLabel = fallbackEvidenceBySignal.get(input.signalKey);
+      if (!byLabel) {
+        byLabel = new Map();
+        fallbackEvidenceBySignal.set(input.signalKey, byLabel);
+      }
+
+      let byValue = byLabel.get(input.signalLabel);
+      if (!byValue) {
+        byValue = new Map();
+        byLabel.set(input.signalLabel, byValue);
+      }
+
+      if (byValue.has(input.signalValue)) {
+        return byValue.get(input.signalValue) ?? null;
+      }
+
+      const evidence = getHybridSignalFallbackEvidence({
+        runtimeArtifacts,
+        ...input
+      });
+      byValue.set(input.signalValue, evidence);
+      return evidence;
+    }
+  };
 }

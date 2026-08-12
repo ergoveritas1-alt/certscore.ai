@@ -1493,9 +1493,13 @@ function localV2ScreenshotStoragePointer(input: {
 }
 
 export function inferS3ArtifactRegion(bucket: string) {
-  const match = bucket.match(/(?:^|-)(eu-central-1|eu-west-1|us-west-1)(?:-|$)/);
+  // us-west-2 is retained for reading historical artifacts only. It is not an
+  // active scanner execution region and must not be added to the dispatch list.
+  const match = bucket.match(/(?:^|-)(eu-central-1|eu-west-1|us-west-1|us-west-2)(?:-|$)/);
   const region = match?.[1] ?? null;
-  return isLocalV2DagLambdaAwsRegion(region) ? region : LOCAL_V2_DAG_LAMBDA_AWS_REGION;
+  return region === "us-west-2" || isLocalV2DagLambdaAwsRegion(region)
+    ? region
+    : LOCAL_V2_DAG_LAMBDA_AWS_REGION;
 }
 
 async function streamToBuffer(body: GetObjectCommandOutput["Body"]) {

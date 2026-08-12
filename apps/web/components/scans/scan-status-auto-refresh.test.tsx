@@ -144,9 +144,9 @@ test("ScanStatusAutoRefresh uses lightweight recursive polling without router re
   assert.match(source, /window\.location\.reload\(\)/);
 });
 
-test("poll delay starts at two seconds and applies bounded backoff with jitter", () => {
+test("poll delay starts at one second and applies bounded backoff with jitter", () => {
   assert.equal(scanStatusPollDelayMs(0, 0), SCAN_STATUS_POLL_INITIAL_MS);
-  assert.equal(scanStatusPollDelayMs(1, 0), 4_000);
+  assert.equal(scanStatusPollDelayMs(1, 0), 2_000);
   assert.equal(scanStatusPollDelayMs(10, 1), 10_250);
 });
 

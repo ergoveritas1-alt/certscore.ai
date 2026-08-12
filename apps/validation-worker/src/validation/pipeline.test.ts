@@ -2,6 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import {
   buildNanoDocumentContentHash,
+  buildValidationCollectWaitPatch,
   buildNanoDocCandidateUrls,
   deriveCookieDisclosureGapDiagnostic,
   dedupeNanoDocumentSources,
@@ -4661,6 +4662,19 @@ test("validation collect hands off queued and running scans to WS01 execution", 
   assert.equal(determineValidationCollectAction("completed"), "rank");
   assert.equal(determineValidationCollectAction("failed"), "fail");
   assert.equal(determineValidationCollectAction(null), "unexpected");
+});
+
+test("validation collect refreshes the lease timestamp while waiting", () => {
+  const now = new Date("2026-08-12T02:45:00.000Z");
+
+  assert.deepEqual(buildValidationCollectWaitPatch("waiting_for_scan", now), {
+    status: "waiting_for_scan",
+    updated_at: "2026-08-12T02:45:00.000Z"
+  });
+  assert.deepEqual(buildValidationCollectWaitPatch("collecting", now), {
+    status: "collecting",
+    updated_at: "2026-08-12T02:45:00.000Z"
+  });
 });
 
 test("deriveValidationFindings carries policy review evidence into the validation finding", () => {

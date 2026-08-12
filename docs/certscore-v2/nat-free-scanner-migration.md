@@ -1,8 +1,13 @@
 # Production v2 scanner NAT-free migration
 
 Status: production California migration and authorized Oregon egress retirement
-complete on 2026-08-11 UTC. This report retains the initial inventory and the
-subsequent production changes as an audit record.
+complete on 2026-08-11 UTC. Frankfurt's private AWS-service endpoints,
+pre-cutover canary, authorized NAT-route cutover, and final NAT gateway/EIP
+retirement are complete. Ireland's private AWS-service endpoints, pre-cutover
+canary, authorized NAT-route cutover, and final NAT gateway/EIP retirement are
+also complete. All three active scanner regions are NAT-free while retaining
+their separate EC2 proxy identities. This report retains the initial inventory
+and the subsequent production changes as an audit record.
 
 ## Initial-state architecture
 
@@ -79,11 +84,11 @@ Lambda -> private EC2 proxy -> public website
 Retained evidence
 Lambda -> S3 gateway endpoint -> regional evidence bucket
 
-Result, policy, and logging messages
+Result and policy messages
 Lambda -> SQS interface endpoint -> regional queues
 
-Lambda logs
-Lambda -> CloudWatch Logs interface endpoint -> CloudWatch Logs
+Lambda stdout/stderr logs
+Lambda service -> CloudWatch Logs
 
 Worker fan-out
 Lambda -> Lambda interface endpoint -> regional worker invocations
@@ -351,6 +356,195 @@ observed `18.144.181.165`, `California`, `US`, and
 in-flight, and delayed messages, and the public v2 health endpoint returned
 HTTP `200`.
 
+### Frankfurt additive endpoint verification
+
+On 2026-08-12 UTC, the Frankfurt Lambda subnet received an S3 gateway endpoint
+(`vpce-0374b1e98202480e3`), Lambda interface endpoint
+(`vpce-057a9b017623f3198`), and SQS interface endpoint
+(`vpce-0744eb3b6a22f8d08`). Both interface endpoints have private DNS enabled
+and all three endpoints were `available`. The targeted apply added five
+resources, changed none, and destroyed none. The Lambda subnet route table
+`rtb-08919441eef0a8fee` still contains its active `0.0.0.0/0` route to
+`nat-089fa8994d4253a92`; only the more-specific S3 prefix-list route was added.
+
+Owned synthetic canary `natfree-frankfurt-canary-20260812t0138z` then completed
+through the deployed Frankfurt Lambda in `18.4s`. The coordinator invoked and
+merged the `consent_proof`, `runtime_evidence`, and `policy_evidence` workers.
+Every lane reported successful representative-page access, and the merged
+scan-evidence-lane assessment was `available` / `usable` with no limitation
+keys. The retained bundle contains the consent screenshots, runtime request,
+response, cookie/storage and transport evidence, two retained policy surfaces,
+and the verified policy packet. The dedicated policy lane completed; a
+separate runtime-lane policy-recovery module remained partial without limiting
+the authoritative merged policy lane.
+
+All three retained `EgressPreflight.json` artifacts reported
+`probeStatus: available`, `error: null`, proxy mode enabled, Frankfurt/Hesse
+geography, and a public IP matching the configured SHA-256 identity. This
+confirms that scanned sites still see the EC2 proxy identity rather than the
+NAT EIP. During the canary minute the local result queue recorded two sends,
+two receives, and two deletes (the verified policy notification and terminal
+result), then returned to zero visible, in-flight, and delayed messages. The
+successful canary minute recorded zero Lambda errors. A preceding malformed
+synthetic dispatch was rejected before scanner work and accounts for the one
+Lambda error in the prior minute; it created no retained scan artifacts.
+
+After separate authorization, only the `0.0.0.0/0` route from
+`rtb-08919441eef0a8fee` to `nat-089fa8994d4253a92` was removed. The NAT
+gateway and EIP were retained during the immediate rollback window. Post-route canary
+`natfree-frankfurt-post-route-20260812t014051z` completed with a maximum Lambda
+duration of `17.6s`; the merged evidence window was `16.8s`. All three workers
+completed, every evidence lane remained usable without limitation keys, the
+dedicated policy lane completed, and the canonical bundle retained three
+screenshots plus the same runtime, transport, and two-policy-surface coverage.
+All three post-route preflights again reported the configured Frankfurt proxy
+identity, `probeStatus: available`, and `error: null`.
+
+The post-route minute recorded four Lambda invocations, zero errors, zero
+throttles, and two local-result SQS sends followed by two receives and two
+deletes. The local result queue returned to zero visible, in-flight, and
+delayed messages. The route table still contains only the VPC-local route and
+the S3 gateway-endpoint prefix-list route. The proxy instance is running with
+both system and instance status `ok`, and the Lambda is `Active` with its last
+update successful.
+
+Without the NAT fallback, each worker's lightweight egress probe exhausted its
+bounded direct-path attempt before the browser proxy fallback succeeded. That
+wait overlapped scanner work, and the post-route canary was slightly faster
+than the pre-route canary. The observed browser, policy, transport, identity,
+artifact, fan-out, and result-handoff paths therefore remained usable, but the
+probe timing should remain part of the operating-window comparison.
+
+The intentionally malformed preflight dispatch described above generated one
+Lambda asynchronous-failure message and the corresponding queue alarm. The
+message was verified by exact scan ID and request ID, then that single
+synthetic message was deleted; no queue was purged. The async-failure queue is
+now empty.
+
+After a clean route-cutover observation and separate authorization, a final
+ownership guard found zero route-table references to NAT gateway
+`nat-089fa8994d4253a92`. Its allocation `eipalloc-0e20aa4e408f275b6`
+(`18.194.227.13`) was independently verified as the tagged Lambda NAT egress
+address, not the active scanner proxy allocation
+`eipalloc-03325ebb49b9682ca` (`3.68.180.132`). The NAT gateway was deleted and,
+after AWS reported it fully deleted and the address unassociated, the NAT EIP
+was released. The proxy EIP remained attached to running proxy instance
+`i-0009e177242613e03` at private address `172.31.30.235`.
+
+Final post-retirement canary
+`natfree-frankfurt-post-retirement-20260812t015328z` completed with a `20.1s`
+coordinator duration and `17.9s` merged evidence window. All three worker lanes
+completed; every evidence lane remained usable with no limitation keys; the
+canonical bundle retained three screenshots, runtime request/response,
+cookie/storage, transport, and two policy-surface records. Each lane's egress
+preflight again reported `available`, `error: null`, Frankfurt/Hesse geography,
+and the configured scanner proxy hash. The Lambda had no errors or throttles,
+all Frankfurt scanner alarms were clear, all four result/DLQ/async queues were
+empty, the S3/SQS/Lambda endpoints remained `available`, and the Lambda and
+proxy instance remained healthy. The route table contains only the VPC-local
+and S3 gateway-endpoint routes. Frankfurt no longer has a NAT rollback path;
+recovery would require explicitly recreating the retired gateway and address.
+
+Ireland's independently gated rollout and separately authorized final
+retirement are recorded below.
+
+### Ireland additive endpoints and route cutover
+
+On 2026-08-12 UTC, the Ireland Lambda subnet received an S3 gateway endpoint
+(`vpce-01878fc3fcee28d4b`), Lambda interface endpoint
+(`vpce-0409ae9aaee40ccb8`), and SQS interface endpoint
+(`vpce-0848183cf2df93002`). Both interface endpoints have private DNS enabled,
+all three endpoints are `available`, and the endpoint-only targeted apply added
+five resources with zero changes and zero destroys. The S3 prefix-list route
+was added to `rtb-05702f80fc5665190` while the default NAT route remained
+active for the first canary.
+
+Owned pre-cutover canary `natfree-ireland-canary-20260812t020307z` completed
+with a `17.7s` merged evidence window. All three workers completed, every
+evidence lane was `usable` with no limitation keys, and the canonical bundle
+retained three screenshots plus runtime request/response, cookie/storage,
+transport, and two policy-surface records. All three egress preflights reported
+`available`, `error: null`, Ireland/Leinster geography, and the configured
+proxy identity hash. The canary minute recorded four Lambda invocations, zero
+errors or throttles, and two successful local-result SQS sends and deletes.
+
+After the successful endpoint canary, only the `0.0.0.0/0` route to
+`nat-04c3b66dac1755808` was removed from
+`rtb-05702f80fc5665190`. The NAT gateway and allocation
+`eipalloc-0bb43330e90e8c8a6` (`34.252.43.1`) remain available for rollback.
+Post-route canary `natfree-ireland-post-route-20260812t020544z` then completed
+with a `17.4s` merged evidence window. All three workers and the dedicated
+policy lane completed; every evidence lane remained usable without limitation
+keys; three screenshots and the same runtime, transport, and policy coverage
+were retained. Every post-route preflight again reported the Irish proxy
+identity, `available`, and `error: null`.
+
+The Ireland Lambda is `Active`, its S3/SQS/Lambda endpoints remain available,
+the proxy instance is running with both status checks `ok`, and the production
+result, production DLQ, and async-failure queues are empty with no active
+scanner alarms. The active scanner identity remains allocation
+`eipalloc-001d0305c0d0cc681` (`63.33.9.201`) on proxy instance
+`i-0f615f0254456e91b`; it is distinct from the NAT allocation. The route table
+now contains only the VPC-local and S3 gateway-endpoint routes.
+
+After separate authorization, a final ownership guard found zero route-table
+references to `nat-04c3b66dac1755808`. Its allocation
+`eipalloc-0bb43330e90e8c8a6` (`34.252.43.1`) was verified as the tagged Lambda
+NAT egress address and not the active scanner proxy allocation. The NAT gateway
+was deleted and, after AWS reported it fully deleted and the address
+unassociated, the NAT EIP was released. The Irish scanner proxy EIP remained
+attached to `i-0f615f0254456e91b`.
+
+Final post-retirement canary
+`natfree-ireland-post-retirement-20260812t021059z` completed with a `17.9s`
+maximum Lambda duration and `17.2s` merged evidence window. All three worker
+lanes completed, every evidence lane remained usable with no limitation keys,
+and the canonical bundle retained three screenshots plus runtime
+request/response, cookie/storage, transport, and two policy-surface records.
+Each lane's egress preflight reported `available`, `error: null`,
+Ireland/Leinster geography, and the configured scanner proxy hash. The canary
+recorded four Lambda invocations, zero errors or throttles, and both SQS
+handoffs were sent and deleted. Production result, DLQ, and async-failure
+queues remained empty, there were no active scanner alarms, and the Lambda,
+proxy, and endpoints remained healthy.
+
+Final live inventory found no pending, available, or deleting NAT gateway in
+the active scanner VPCs in `eu-central-1`, `eu-west-1`, or `us-west-1`.
+Ireland and Frankfurt no longer have NAT rollback paths; recovery requires
+explicitly recreating the retired regional gateway and address.
+
+### EU proxy deduplication
+
+After the NAT retirements, a second live cost audit found two superseded
+running `t4g.micro` proxies and two older stopped proxy instances alongside
+the active Frankfurt and Ireland proxies. No Lambda environment, ECS task
+definition, Route 53 record, or autoscaling group referenced the superseded
+private or public addresses. Five-minute network samples after the proxy
+rotation showed only background instance traffic on the old running proxies,
+while scanner bursts used the current private addresses.
+
+The old running instances `i-0f51a9de3f0330a9b` (Frankfurt) and
+`i-0388bb8ef1c083344` (Ireland) were first stopped as a reversible isolation
+test. Owned canaries `proxy-dedupe-frankfurt-20260812t0220z` and
+`proxy-dedupe-ireland-20260812t0220z` then completed successfully: all six lane
+preflights matched the current regional proxy hashes, both merged evidence
+assessments were usable without limitation keys, and both retained three
+screenshots and two policy surfaces.
+
+After that gate, the two superseded instances and stopped instances
+`i-05c32e6f04c2fa3f8` (Frankfurt) and `i-07eb29ce651fb3950` (Ireland) were
+terminated. Their four 8 GiB gp3 root volumes were deleted with them. Dev-test
+proxy allocations `eipalloc-03e0694852ec6a490` (`3.121.221.170`) and
+`eipalloc-04cdbc34f0665287f` (`34.242.205.119`) were released after AWS
+detached them. The shared proxy security groups were preserved because the
+active proxies still use them.
+
+Final inventory contains exactly one running scanner proxy in each active
+region: Frankfurt `3.68.180.132`, Ireland `63.33.9.201`, and California
+`54.193.28.182`. The deduplication removes two running `t4g.micro` charges, two
+public-IPv4 charges, and four obsolete gp3 volumes, worth approximately another
+`$20–25/month` at current list-price pace.
+
 ## Cost comparison
 
 The task baseline estimates approximately `$103/month` for NAT gateway hours,
@@ -373,13 +567,64 @@ unblended NAT cost after credits/discounts. The VPC service showed approximately
 endpoint line was returned in the grouped usage data. These account-wide
 figures are recorded as a baseline, not as an exact per-scanner allocation.
 
-The required endpoint set is now three interface endpoints per region (SQS,
-Lambda, and CloudWatch Logs), plus an S3 gateway endpoint. At the reference
-`$0.01/endpoint-hour`, that is about `$65.70/month` for three endpoints in
-each region. Interface endpoint data processing and any cross-AZ transfer are
-additional; same-subnet/AZ placement should avoid cross-AZ charges. The final
-cost gate must use Cost Explorer after the endpoint canary and account for
-all three interface services.
+The code-owned NAT-free endpoint set is two interface endpoints per region
+(SQS and Lambda), plus an S3 gateway endpoint. Standard Lambda stdout/stderr
+is captured and delivered by the Lambda service; no direct Logs SDK call is
+present in this runtime. All active regional endpoint configurations now set
+`enable_logs_endpoint = false`.
+
+At the reference `$0.01/endpoint-hour`, Frankfurt and Ireland each need about
+`$7.30/month` per interface endpoint, or roughly `$29.20/month` together for
+SQS and Lambda. Interface endpoint data processing and any cross-AZ transfer
+are additional. The final cost gate must use Cost Explorer after each endpoint
+canary. California currently has endpoint ENIs in two Availability Zones, so
+its endpoint-hour count is higher than a single-AZ estimate.
+
+Frankfurt's retired NAT gateway removes approximately `$36/month` of gateway
+hours and one public-IPv4 charge at the observed August pace. After roughly
+`$14.60/month` for its two interface endpoints, the expected Frankfurt net
+reduction is approximately `$20–25/month`, plus avoided NAT data-processing
+charges. Billing data should be rechecked after a complete post-retirement day
+and again after a complete billing month.
+
+Ireland has now retired the equivalent final gateway and public IPv4 address,
+with the same two-interface-endpoint replacement. Its expected net reduction
+is also approximately `$20–25/month`, plus avoided NAT data-processing
+charges. Together, the two EU retirements should reduce the prior monthly pace
+by roughly `$40–50/month` net; the earlier California/Oregon retirement adds
+its own savings. EU proxy deduplication adds an estimated `$20–25/month`, for
+an expected combined EU reduction of roughly `$60–75/month`. Cost Explorer
+should be checked after a full post-retirement day before treating this
+estimate as realized spend.
+
+### California Logs endpoint removal
+
+The California VPC retained a two-subnet CloudWatch Logs interface endpoint
+from its original migration even though the scanner handler does not make a
+direct Logs API call. A targeted Terraform plan removed only
+`vpce-0cc4eb37bbdccd536` and the redundant endpoint-security-group TCP/443
+egress rule already covered by allow-all egress. The S3, SQS, and Lambda
+endpoints, their ingress, the Lambda, proxy, private routes, and fixed scanner
+identity were unchanged.
+
+Owned canary `logs-endpoint-removal-us-ca-20260812t0230z` completed after the
+endpoint was absent. All three lanes reported representative-page success and
+the configured California proxy identity; the merged evidence assessment was
+usable with no limitation keys and retained three screenshots plus two policy
+surfaces. The canary minute recorded four invocations, zero errors or
+throttles, while the expected invocation and worker messages were still
+delivered to `/aws/lambda/certscore-v2-dag-local-lambda`. This verifies the
+AWS-managed Lambda logging path does not depend on the deleted function-side
+Logs endpoint. Removing its two endpoint ENIs saves approximately
+`$14.60/month` in endpoint hours at the current reference price.
+
+Across NAT retirement, EU proxy deduplication, and the California Logs endpoint
+removal, the expected scanner-infrastructure reduction is now approximately
+`$90–105/month` net after the required SQS and Lambda interface endpoints,
+before small endpoint-data and transfer variations. This estimate spans AWS
+service categories: NAT reductions appear in `EC2 - Other`, while endpoint,
+public-IPv4, proxy-compute, and storage changes appear in their respective
+services.
 
 ## Retirement complete
 

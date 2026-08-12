@@ -282,7 +282,7 @@ const ACTIVE_RUN_STATUSES = ["queued", "waiting_for_scan", "collecting", "rankin
 const TRANCO_SOURCE_FALLBACK_URL = "https://tranco-list.eu/latest_list";
 const VALIDATION_WORKER_LOCK_NAMESPACE = 41017;
 const NANO_SIGNAL_SCAN_LOCK_NAMESPACE = 41018;
-const VALIDATION_COLLECT_RECHECK_MS = 15_000;
+const VALIDATION_STALE_COLLECT_RECHECK_MS = 5 * 60_000;
 
 export type ValidationRunLease = {
   client: PoolClient;
@@ -958,32 +958,42 @@ export async function claimNextValidationRunLease(limit = 20): Promise<Validatio
     const result = await client.query<ValidationRunRow>(
       `
         select
-          completed_at,
-          created_at,
-          error_message,
-          hostname,
-          id,
-          normalized_url,
-          rank_band,
-          scan_id,
-          started_at,
-          status,
-          tranco_rank,
-          trigger_mode,
-          updated_at,
-          validation_target_id
-        from validation_runs
+          run.completed_at,
+          run.created_at,
+          run.error_message,
+          run.hostname,
+          run.id,
+          run.normalized_url,
+          run.rank_band,
+          run.scan_id,
+          run.started_at,
+          run.status,
+          run.tranco_rank,
+          run.trigger_mode,
+          run.updated_at,
+          run.validation_target_id
+        from validation_runs run
+        left join scans scan on scan.id = run.scan_id
         where
-          status in ('queued', 'waiting_for_scan', 'collecting', 'ranking', 'validating')
+          run.status in ('queued', 'waiting_for_scan', 'collecting', 'ranking', 'validating')
           and (
-            status in ('queued', 'ranking', 'validating')
+            run.status in ('queued', 'ranking', 'validating')
             or (
-              status in ('waiting_for_scan', 'collecting')
-              and updated_at <= timezone('utc', now()) - ($1::text)::interval
+              run.status = 'waiting_for_scan'
+              and scan.status is distinct from 'queued'
+            )
+            or (
+              run.status = 'collecting'
+              and scan.status is distinct from 'running'
+              and scan.status is distinct from 'processing'
+            )
+            or (
+              run.status in ('waiting_for_scan', 'collecting')
+              and run.updated_at <= timezone('utc', now()) - ($1::text)::interval
             )
           )
         order by
-          case status
+          case run.status
             when 'queued' then 1
             when 'ranking' then 2
             when 'validating' then 3
@@ -991,11 +1001,11 @@ export async function claimNextValidationRunLease(limit = 20): Promise<Validatio
             when 'collecting' then 5
             else 99
           end,
-          updated_at asc,
-          created_at asc
+          run.updated_at asc,
+          run.created_at asc
         limit $2
       `,
-      [`${Math.ceil(VALIDATION_COLLECT_RECHECK_MS / 1000)} seconds`, limit]
+      [`${Math.ceil(VALIDATION_STALE_COLLECT_RECHECK_MS / 1000)} seconds`, limit]
     );
 
     for (const run of result.rows) {
@@ -1028,7 +1038,11 @@ export async function releaseValidationRunLease(lease: ValidationRunLease) {
   }
 }
 
-export async function claimNextNanoSignalScanLease(limit = 20): Promise<NanoSignalScanLease | null> {
+async function claimNanoSignalScanLease(input: {
+  includeImplicitRecoveries: boolean;
+  limit: number;
+  scanId?: string | null;
+}): Promise<NanoSignalScanLease | null> {
   const client = await getWritePool().connect();
 
   try {
@@ -1067,6 +1081,7 @@ export async function claimNextNanoSignalScanLease(limit = 20): Promise<NanoSign
           where scan_events.event_type = $1
             and scan_events.scan_id is not null
             and scan_events.created_at >= now() - interval '24 hours'
+            and ($7::uuid is null or scan_events.scan_id = $7::uuid)
           order by scan_events.scan_id, scan_events.created_at desc
         ),
         recovered as (
@@ -1080,7 +1095,9 @@ export async function claimNextNanoSignalScanLease(limit = 20): Promise<NanoSign
             true as recovered,
             'completed_scan_backfill'::text as recovery_mode
           from scans
-          where scans.status = 'completed'
+          where $6::boolean
+            and scans.status = 'completed'
+            and ($7::uuid is null or scans.id = $7::uuid)
             and coalesce(scans.completed_at, scans.updated_at, scans.created_at) >= now() - interval '24 hours'
             and not exists (
               select 1
@@ -1106,7 +1123,9 @@ export async function claimNextNanoSignalScanLease(limit = 20): Promise<NanoSign
             true as recovered,
             'missing_unified_projection'::text as recovery_mode
           from scans
-          where scans.status = 'completed'
+          where $6::boolean
+            and scans.status = 'completed'
+            and ($7::uuid is null or scans.id = $7::uuid)
             and coalesce(scans.completed_at, scans.updated_at, scans.created_at) >= now() - interval '24 hours'
             and exists (
               select 1
@@ -1148,7 +1167,9 @@ export async function claimNextNanoSignalScanLease(limit = 20): Promise<NanoSign
              order by scan_events.created_at desc
              limit 1
           ) unified_findings on true
-          where scans.status = 'completed'
+          where $6::boolean
+            and scans.status = 'completed'
+            and ($7::uuid is null or scans.id = $7::uuid)
             and coalesce(scans.completed_at, scans.updated_at, scans.created_at) >= now() - interval '24 hours'
             and (
               unified_findings.created_at is null
@@ -1193,8 +1214,10 @@ export async function claimNextNanoSignalScanLease(limit = 20): Promise<NanoSign
         SCAN_EVENT_TYPES.nanoSignalEnrichmentQueued,
         SCAN_EVENT_TYPES.nanoSignalEnrichmentCompleted,
         SCAN_EVENT_TYPES.nanoSignalEnrichmentFailed,
-        limit,
-        SCAN_EVENT_TYPES.unifiedFindingsDerivedCompleted
+        input.limit,
+        SCAN_EVENT_TYPES.unifiedFindingsDerivedCompleted,
+        input.includeImplicitRecoveries,
+        input.scanId ?? null
       ]
     );
 
@@ -1221,6 +1244,71 @@ export async function claimNextNanoSignalScanLease(limit = 20): Promise<NanoSign
     client.release();
     throw error;
   }
+}
+
+export async function claimNanoSignalScanLeaseById(scanId: string) {
+  return claimNanoSignalWorkItemLease({ limit: 1, scanId });
+}
+
+async function claimNanoSignalWorkItemLease(input: { limit: number; scanId?: string | null }) {
+  const client = await getWritePool().connect();
+
+  try {
+    const result = await client.query<{
+      poll_count: number;
+      recovered: boolean;
+      recovery_mode: NanoSignalScanLease["recoveryMode"];
+      scan_id: string;
+    }>(
+      `
+        select
+          scan_id,
+          poll_count,
+          recovered,
+          recovery_mode
+        from nano_signal_work_items
+        where not_before <= now()
+          and ($1::uuid is null or scan_id = $1::uuid)
+        order by not_before asc, requested_at asc
+        limit $2
+      `,
+      [input.scanId ?? null, input.limit]
+    );
+
+    for (const row of result.rows) {
+      const lockResult = await client.query<{ locked: boolean }>(
+        `select pg_try_advisory_lock($1, hashtext($2)) as locked`,
+        [NANO_SIGNAL_SCAN_LOCK_NAMESPACE, row.scan_id]
+      );
+
+      if (lockResult.rows[0]?.locked) {
+        return {
+          client,
+          pollCount: row.poll_count,
+          recovered: row.recovered,
+          recoveryMode: row.recovery_mode,
+          scanId: row.scan_id
+        };
+      }
+    }
+
+    client.release();
+    return null;
+  } catch (error) {
+    client.release();
+    throw error;
+  }
+}
+
+export async function claimNextQueuedNanoSignalScanLease(limit = 20) {
+  return claimNanoSignalWorkItemLease({ limit });
+}
+
+export async function claimNextNanoSignalScanLease(limit = 20) {
+  return claimNanoSignalScanLease({
+    includeImplicitRecoveries: true,
+    limit
+  });
 }
 
 export async function releaseNanoSignalScanLease(lease: NanoSignalScanLease) {

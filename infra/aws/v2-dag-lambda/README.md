@@ -12,9 +12,11 @@ It manages the shared Lambda role and, in every region:
 - the result queue, result-ingestion DLQ, and async-invocation failure queue;
 - the Lambda configuration, reserved concurrency, log retention, and async
   failure destination;
-- optional per-region S3 gateway, SQS, CloudWatch Logs, and Lambda interface
-  endpoints, with private DNS, endpoint security groups, DNS preconditions,
-  and scoped endpoint policies;
+- optional per-region S3 gateway plus SQS and Lambda interface endpoints,
+  with private DNS, endpoint security groups, DNS preconditions, and scoped
+  endpoint policies. A CloudWatch Logs interface endpoint is separately
+  optional for code that calls the Logs API; standard Lambda stdout/stderr
+  delivery does not require it;
 - alarms for Lambda errors/throttles, stale results, result DLQ messages, and
   async failures.
 
