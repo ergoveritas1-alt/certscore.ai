@@ -4,6 +4,7 @@ import pathlib
 import sys
 import types
 import unittest
+from unittest import mock
 
 
 class _FakeDynamoResource:
@@ -99,6 +100,72 @@ class AuthoritativeFreshnessTests(unittest.TestCase):
 
         self.assertFalse(result["freshnessIssue"])
 
+    def test_verification_transport_failure_is_not_reported_as_a_path_mismatch(self):
+        result = handler.assess_freshness_verification_failure(
+            RuntimeError("404 scan still materializing"),
+            {"freshnessDecision": "queued_new_scan"},
+        )
+
+        self.assertTrue(result["freshnessIssue"])
+        self.assertEqual(result["freshness"], "unverified")
+        self.assertEqual(result["freshnessReasonCodes"], ["freshness_verification_unavailable"])
+        self.assertNotIn("path", result["freshnessReason"])
+
+
+class ScannerIncidentTests(unittest.TestCase):
+    def test_one_scan_produces_one_incident_with_multiple_reason_codes(self):
+        incident = handler.scanner_incident_for_row({
+            "scanId": "scan-123",
+            "status": "queued",
+            "freshnessIssue": True,
+            "freshnessReason": "authoritative scan verification was unavailable",
+            "freshnessReasonCodes": ["freshness_verification_unavailable"],
+        })
+
+        self.assertIsNotNone(incident)
+        self.assertEqual(
+            incident["issueCodes"],
+            ["freshness_verification_unavailable", "scan_not_completed"],
+        )
+        self.assertIn(";", incident["issue"])
+
+    def test_completed_fresh_scan_produces_no_incident(self):
+        self.assertIsNone(handler.scanner_incident_for_row({
+            "status": "completed",
+            "freshnessIssue": False,
+        }))
+
+    def test_pre_email_reconciliation_suppresses_an_incident_that_completed(self):
+        requested_url = "https://ergoveritas.com/.well-known/canary.html"
+        incident = {
+            "scanId": "scan-123",
+            "requestedUrl": requested_url,
+            "status": "queued",
+            "freshnessIssue": True,
+            "freshnessReason": "authoritative scan verification was unavailable",
+            "freshnessReasonCodes": ["freshness_verification_unavailable"],
+            "freshnessVerificationError": "404 scan still materializing",
+            "issue": "old issue",
+            "issueCodes": ["freshness_verification_unavailable", "scan_not_completed"],
+        }
+
+        with mock.patch.object(handler, "load_authoritative_scan", return_value={
+            "scanId": "scan-123",
+            "status": "completed",
+            "url": requested_url,
+            "createdAt": "2026-08-12T16:26:59Z",
+        }):
+            unresolved, resolved = handler.reconcile_scanner_incidents(
+                [incident],
+                "test-api-key",
+                "2026-08-12T16:25:30Z",
+            )
+
+        self.assertEqual(unresolved, [])
+        self.assertEqual(len(resolved), 1)
+        self.assertEqual(resolved[0]["status"], "completed")
+        self.assertNotIn("freshnessVerificationError", resolved[0])
+
 
 class McpIdentityTests(unittest.TestCase):
     def test_stable_scan_id_never_promotes_a_job_id(self):
@@ -126,6 +193,54 @@ class McpIdentityTests(unittest.TestCase):
         self.assertEqual(mcp_scan_source.count('"name": "scan_site"'), 1)
         self.assertIn('session, retry_safe=False)', mcp_scan_source)
         self.assertIn("not resubmitting", mcp_scan_source)
+
+    def test_mcp_scan_polls_active_scan_before_requesting_bundle(self):
+        calls = []
+        responses = [
+            ({"result": {}}, {"mcp-session-id": "session-1"}),
+            ({}, {}),
+            ({"result": {"structuredContent": {"scanId": "scan-123", "status": "queued", "retryAfterSeconds": 1}}}, {}),
+            ({"result": {"structuredContent": {"scanId": "scan-123", "status": "running", "retryAfterSeconds": 1}}}, {}),
+            ({"result": {"structuredContent": {"scanId": "scan-123", "status": "completed"}}}, {}),
+            ({"result": {"structuredContent": {"scanId": "scan-123", "status": "completed", "findings": []}}}, {}),
+        ]
+
+        class FakeResponse:
+            def __init__(self, body, headers):
+                self.body = body
+                self.headers = headers
+
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *_args):
+                return False
+
+            def read(self):
+                return __import__("json").dumps(self.body).encode()
+
+        def fake_urlopen(request, timeout):
+            payload = __import__("json").loads(request.data.decode())
+            calls.append(payload.get("params", {}).get("name") or payload.get("method"))
+            body, headers = responses.pop(0)
+            return FakeResponse(body, headers)
+
+        with mock.patch.object(handler.urllib.request, "urlopen", side_effect=fake_urlopen), mock.patch.object(handler.time, "sleep") as sleep:
+            scan_id, scan_status, bundle, created = handler.mcp_scan(
+                "https://example.com/canary",
+                "eu_ie",
+                "test-secret",
+            )
+
+        self.assertEqual(scan_id, "scan-123")
+        self.assertEqual(created["status"], "queued")
+        self.assertEqual(scan_status["status"], "completed")
+        self.assertEqual(scan_status["sentinelPollCount"], 2)
+        self.assertEqual(calls.count("scan_site"), 1)
+        self.assertEqual(calls.count("get_scan_status"), 2)
+        self.assertEqual(calls[-1], "get_scan_bundle")
+        self.assertEqual(bundle["scan"]["status"], "completed")
+        self.assertTrue(all(call.args[0] >= 20 for call in sleep.call_args_list))
 
 
 class HourlyJobRotationTests(unittest.TestCase):

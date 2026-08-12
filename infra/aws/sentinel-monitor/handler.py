@@ -7,6 +7,8 @@ MCP = "https://mcp.certscore.ai/mcp"
 ROOT = "https://ergoveritas.com"
 LOCATIONS = ["eu_ie", "eu_de", "california"]
 TRANSPORTS = ["api", "sdk", "mcp"]
+ACTIVE_SCAN_STATUSES = {"queued", "running", "finalizing"}
+USABLE_SCAN_STATUSES = {"completed", "completed_limited", "complete", "limited"}
 ssm = boto3.client("ssm", region_name=REGION)
 sm = boto3.client("secretsmanager", region_name=REGION)
 # SES identity verification is regional; support@certscore.ai is verified in us-east-1.
@@ -158,14 +160,78 @@ def assess_authoritative_freshness(requested_url, run_started_at, authoritative,
 def load_authoritative_scan(scan_id, api_key):
     headers = {"authorization": "Bearer " + api_key}
     last_error = None
-    for attempt in range(3):
+    for attempt in range(6):
         try:
             return request(API + "/api/v2/scans/" + scan_id, headers=headers, timeout=10)
         except Exception as error:
             last_error = error
-            if attempt < 2:
+            if attempt < 5:
                 time.sleep(2 * (attempt + 1))
     raise RuntimeError("authoritative scan verification failed: " + str(last_error)[:400])
+
+def assess_freshness_verification_failure(error, created=None):
+    """Keep a transport/materialization failure distinct from a path mismatch."""
+    created = created if isinstance(created, dict) else {}
+    return {
+        "authoritativeCreatedAt": None,
+        "authoritativeUrl": None,
+        "creationMetadataFreshnessDecision": created.get("freshnessDecision"),
+        "creationMetadataReportedReuse": scan_creation_metadata_reports_reuse(created),
+        "freshness": "unverified",
+        "freshnessIssue": True,
+        "freshnessReason": "authoritative scan verification was unavailable",
+        "freshnessReasonCodes": ["freshness_verification_unavailable"],
+        "freshnessVerificationError": str(error)[:500],
+    }
+
+def scanner_incident_for_row(row):
+    """Return at most one execution incident per scan, with all reason codes."""
+    reasons = []
+    reason_codes = []
+    if row.get("freshnessIssue"):
+        reasons.append("freshness verification failed: " + str(row.get("freshnessReason") or "unknown reason"))
+        reason_codes.extend(row.get("freshnessReasonCodes") or ["freshness_invariant_failed"])
+    if status(row) not in USABLE_SCAN_STATUSES:
+        reasons.append("scan did not reach a completed usable status")
+        reason_codes.append("scan_not_completed")
+    if not reasons:
+        return None
+    return {
+        **row,
+        "issue": "; ".join(reasons),
+        "issueCodes": list(dict.fromkeys(reason_codes)),
+    }
+
+def reconcile_scanner_incidents(incidents, api_key, run_started_at):
+    """Re-check durable state immediately before alerting and suppress stale incidents."""
+    unresolved = []
+    resolved = []
+    for incident in incidents:
+        sid = incident.get("scanId")
+        requested_url = incident.get("requestedUrl")
+        if not sid or not requested_url:
+            unresolved.append(incident)
+            continue
+        try:
+            authoritative = load_authoritative_scan(sid, api_key)
+            refreshed = {
+                **incident,
+                "status": status(authoritative) or incident.get("status"),
+                **assess_authoritative_freshness(requested_url, run_started_at, authoritative),
+                "reconciledAt": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+            }
+            refreshed.pop("freshnessVerificationError", None)
+            reconciled_incident = scanner_incident_for_row(refreshed)
+            if reconciled_incident:
+                unresolved.append(reconciled_incident)
+            else:
+                resolved.append(refreshed)
+        except Exception as error:
+            unresolved.append({
+                **incident,
+                "reconciliationError": str(error)[:500],
+            })
+    return unresolved, resolved
 
 def rest_scan(url, loc, client, key):
     headers = {"authorization": "Bearer " + key, "x-certscore-client": client, "content-type": "application/json"}
@@ -251,8 +317,39 @@ def mcp_scan(url, loc, secret):
         # still follow a successfully accepted scan, so resubmitting here can hit
         # the domain throttle and replace the in-flight scan with stale evidence.
         raise RuntimeError("MCP submission returned no stable scan id; not resubmitting: " + diagnostic)
-    evidence, _ = mcp_post({"jsonrpc": "2.0", "id": 3, "method": "tools/call", "params": {"name": "get_scan_bundle", "arguments": {"scanId": sid, "detail": "evidence", "maxBytes": 24000}}}, session)
-    return sid, payload, {"scan": payload, "evidence": evidence}, payload
+    created = payload
+    current = payload
+    began_polling = time.time()
+    poll_count = 0
+    first_poll_at = None
+    last_poll_at = None
+    next_call_id = 3
+    while status(current) in ACTIVE_SCAN_STATUSES:
+        if time.time() - began_polling >= 840:
+            raise RuntimeError("MCP scan timed out at " + status(current))
+        retry_after = current.get("retryAfterSeconds") if isinstance(current, dict) else None
+        delay = retry_after if isinstance(retry_after, (int, float)) else 20
+        # scan_site already performed the fast wait. Keep fallback status reads
+        # below the canonical 30-unit/10-minute caller+scan status allowance.
+        time.sleep(max(20, min(30, delay)))
+        polled_at = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
+        status_call, _ = mcp_post({"jsonrpc": "2.0", "id": next_call_id, "method": "tools/call", "params": {"name": "get_scan_status", "arguments": {"scanId": sid}}}, session)
+        next_call_id += 1
+        status_result, status_payload = mcp_tool_payload(status_call)
+        candidate = status_payload if isinstance(status_payload, dict) else status_result
+        if status(candidate):
+            current = candidate
+        elif "not_found" not in json.dumps(candidate, ensure_ascii=False).lower():
+            raise RuntimeError("MCP status polling returned no scan status: " + json.dumps(status_call, ensure_ascii=False)[:500])
+        poll_count += 1
+        first_poll_at = first_poll_at or polled_at
+        last_poll_at = polled_at
+    if isinstance(current, dict):
+        current = {**current, "sentinelPollCount": poll_count, "sentinelFirstPollAt": first_poll_at, "sentinelLastPollAt": last_poll_at}
+    evidence = {}
+    if status(current) in USABLE_SCAN_STATUSES:
+        evidence, _ = mcp_post({"jsonrpc": "2.0", "id": next_call_id, "method": "tools/call", "params": {"name": "get_scan_bundle", "arguments": {"scanId": sid, "detail": "evidence", "maxBytes": 24000}}}, session)
+    return sid, current, {"scan": current, "evidence": evidence}, created
 
 def signals(value):
     text = json.dumps(value, ensure_ascii=False).lower()
@@ -336,14 +433,12 @@ def handler(event, context):
                 authoritative = load_authoritative_scan(sid, key)
                 freshness = assess_authoritative_freshness(requested_url, started, authoritative, created)
             except Exception as error:
-                freshness = assess_authoritative_freshness(requested_url, started, {}, created)
-                freshness["freshnessVerificationError"] = str(error)[:500]
-            freshness_issue = freshness["freshnessIssue"]
-            row = {"page": p["key"], "requestedUrl": requested_url, "location": loc, "transport": transport, "scanId": sid, "status": status(st), "durationMs": int((time.time()-t)*1000), "throttleSeconds": throttle_seconds, "expectedSignals": p.get("expectedSignals", []), "observedSignals": [name for name, present in observed.items() if present], "missing": missing, "comparison": "findings_and_evidence", **freshness}
+                freshness = assess_freshness_verification_failure(error, created)
+            row = {"page": p["key"], "requestedUrl": requested_url, "location": loc, "transport": transport, "scanId": sid, "status": status(st), "durationMs": int((time.time()-t)*1000), "throttleSeconds": throttle_seconds, "expectedSignals": p.get("expectedSignals", []), "observedSignals": [name for name, present in observed.items() if present], "missing": missing, "comparison": "findings_and_evidence", "pollCount": st.get("sentinelPollCount", 0) if isinstance(st, dict) else 0, "firstPollAt": st.get("sentinelFirstPollAt") if isinstance(st, dict) else None, "lastPollAt": st.get("sentinelLastPollAt") if isinstance(st, dict) else None, **freshness}
             if missing: corpus_issues.append({**row, "issue": "required signals missing: " + ", ".join(missing)})
-            if freshness_issue: scanner_failures.append({**row, "issue": "freshness/path invariant failed: " + freshness["freshnessReason"]})
-            if status(st) not in {"completed", "completed_limited", "complete", "limited"}:
-                scanner_failures.append({**row, "issue": "scan did not reach a completed terminal status"})
+            incident = scanner_incident_for_row(row)
+            if incident:
+                scanner_failures.append(incident)
         except Exception as e:
             row = {"page": p["key"], "location": loc, "transport": transport, "durationMs": int((time.time()-t)*1000), "throttleSeconds": throttle_seconds, "error": str(e)}
             scanner_failures.append({**row, "issue": str(e)})
@@ -359,8 +454,9 @@ def handler(event, context):
             absent = [f"{r.get('location')}/{r.get('transport')}" for r in page_rows if signal in r.get("missing", [])]
             if present and absent:
                 variance.append({"page": page.get("key"), "signal": signal, "present": present, "missing": absent})
+    scanner_failures, reconciled_incidents = reconcile_scanner_incidents(scanner_failures, key, started)
     failures = corpus_issues + scanner_failures
-    run = {"runId": run_id, "startedAt": started, "hour": hour, "jobs": len(results), "selectedPages": [p["key"] for p in selected_pages], "failures": len(failures), "scannerFailures": len(scanner_failures), "corpusIssues": len(corpus_issues), "regionalVariance": variance, "results": results}
+    run = {"runId": run_id, "startedAt": started, "hour": hour, "jobs": len(results), "selectedPages": [p["key"] for p in selected_pages], "failures": len(failures), "scannerFailures": len(scanner_failures), "reconciledScannerIncidents": len(reconciled_incidents), "reconciledScannerIncidentIds": [row.get("scanId") for row in reconciled_incidents if row.get("scanId")], "corpusIssues": len(corpus_issues), "regionalVariance": variance, "results": results}
     ddb.put_item(Item={"pk": "run#" + run_id, **run, "expiresAt": int(time.time()) + 90 * 86400})
     if scanner_failures:
         summary = f"{len(scanner_failures)} scanner execution issue(s) detected across {len(results)} sentinel scans. {len(corpus_issues)} expected canary-signal mismatch(es) were recorded for diagnostics but are not alert conditions."
