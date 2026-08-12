@@ -159,13 +159,18 @@ async function requestThroughProxy(
       if (settled) return;
       settled = true;
       cleanup();
+      const status = response.statusCode ?? 502;
       const responseHeaders = new Headers();
       for (const [name, value] of Object.entries(response.headers)) {
         if (Array.isArray(value)) value.forEach((item) => responseHeaders.append(name, item));
         else if (value !== undefined) responseHeaders.set(name, value);
       }
-      resolve(new Response(Readable.toWeb(response) as ReadableStream, {
-        status: response.statusCode ?? 0,
+      const responseBody = method === "HEAD" || status === 204 || status === 205 || status === 304
+        ? null
+        : Readable.toWeb(response) as ReadableStream;
+      if (responseBody === null) response.resume();
+      resolve(new Response(responseBody, {
+        status,
         statusText: response.statusMessage,
         headers: responseHeaders,
       }));
