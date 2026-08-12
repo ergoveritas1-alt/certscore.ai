@@ -34,6 +34,11 @@ on:
         required: false
         default: false
         type: boolean
+      use_x64_fallback:
+        description: "Emergency only: build ARM64 through x64 emulation instead of the native ARM64 runner"
+        required: false
+        default: false
+        type: boolean
 
 concurrency:
   group: public-web-aws-production
@@ -41,7 +46,7 @@ concurrency:
 
 jobs:
   deploy-public-web-aws:
-    runs-on: ubuntu-latest
+    runs-on: ${{ github.event_name == 'workflow_dispatch' && inputs.use_x64_fallback && 'ubuntu-latest' || 'ubuntu-24.04-arm' }}
     timeout-minutes: 90
     permissions:
       contents: read
@@ -121,6 +126,16 @@ jobs:
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
+      - name: Report image build architecture
+        run: |
+          echo "Runner architecture: ${RUNNER_ARCH}"
+          echo "Target image platform: linux/arm64"
+          if [[ "${RUNNER_ARCH}" == "ARM64" ]]; then
+            echo "Using native ARM64 image construction."
+          else
+            echo "::warning::Using the emergency x64 emulation fallback for an ARM64 image."
+          fi
+
       - name: Setup pnpm
         uses: pnpm/action-setup@v6
         with:
@@ -183,6 +198,8 @@ jobs:
           set -euo pipefail
           WEB_IMAGE="${REGISTRY}/${ECR_WEB_REPOSITORY}"
           WEB_CACHE="${WEB_IMAGE}:buildcache"
+          WEB_RUNTIME_BASE_IMAGE="${WEB_IMAGE}:runtime-base"
+          WEB_RUNTIME_BASE_CACHE="${WEB_IMAGE}:runtime-base-cache"
 
           if docker buildx imagetools inspect "${WEB_CACHE}" >/dev/null 2>&1; then
             echo "Registry build cache found: ${WEB_CACHE}"
@@ -190,9 +207,28 @@ jobs:
             echo "Registry build cache is absent or unavailable: ${WEB_CACHE}; expect a cold ARM64 build."
           fi
 
+          if docker buildx imagetools inspect "${WEB_RUNTIME_BASE_IMAGE}" >/dev/null 2>&1; then
+            echo "Reusable web runtime base found: ${WEB_RUNTIME_BASE_IMAGE}"
+          else
+            echo "Reusable web runtime base is absent or unavailable: ${WEB_RUNTIME_BASE_IMAGE}; bootstrapping it now."
+          fi
+
+          docker buildx build \
+            --platform linux/arm64 \
+            --progress=plain \
+            --provenance=false \
+            --sbom=false \
+            --target web-runtime-base \
+            --cache-from "type=registry,ref=${WEB_RUNTIME_BASE_CACHE}" \
+            --cache-to "type=registry,ref=${WEB_RUNTIME_BASE_CACHE},mode=max,image-manifest=true,oci-mediatypes=true,ignore-error=true" \
+            -f apps/web/Dockerfile \
+            -t "${WEB_RUNTIME_BASE_IMAGE}" \
+            --push \
+            .
+
           heartbeat() {
             while sleep 60; do
-              echo "::notice::Public web ARM64 image build is still active at $(date -u +%Y-%m-%dT%H:%M:%SZ). Cold emulated builds may take 45-60 minutes; inspect underlying BuildKit output before cancellation."
+              echo "::notice::Public web ARM64 image build is still active at $(date -u +%Y-%m-%dT%H:%M:%SZ). Inspect underlying BuildKit output before cancellation."
             done
           }
           heartbeat &
@@ -205,7 +241,9 @@ jobs:
             --provenance=false \
             --sbom=false \
             --cache-from "type=registry,ref=${WEB_CACHE}" \
+            --cache-to "type=registry,ref=${WEB_CACHE},mode=max,image-manifest=true,oci-mediatypes=true,ignore-error=true" \
             -f apps/web/Dockerfile \
+            --build-arg WEB_RUNTIME_BASE="${WEB_RUNTIME_BASE_IMAGE}" \
             --build-arg BUILD_GIT_REF="${GITHUB_REF_NAME}" \
             --build-arg BUILD_GIT_SHA="${GITHUB_SHA}" \
             --build-arg BUILD_IMAGE_TAG="${GITHUB_SHA}" \
@@ -214,6 +252,7 @@ jobs:
             -t "${WEB_IMAGE}:latest" \
             --push \
             .
+
           kill "${heartbeat_pid}" 2>/dev/null || true
           wait "${heartbeat_pid}" 2>/dev/null || true
           trap - EXIT

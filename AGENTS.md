@@ -695,6 +695,8 @@ A preflight result applies only to the exact source state that was tested. Rerun
 
 Routine scanner deployments must reuse the existing runtime base, build the scanner image once in the canonical build region, skip registry cache export, replicate the image to all approved regions, and verify digest parity and Lambda health. Use `--push-runtime-base` only when Chromium, Playwright, OS packages, workspace dependencies, or the Lambda runtime-base Docker stage genuinely changed.
 
+Routine public web deployments use three ECR-managed artifacts in addition to the immutable Git-SHA image: `${WEB_IMAGE}:buildcache`, `${WEB_IMAGE}:runtime-base`, and `${WEB_IMAGE}:runtime-base-cache`. The web workflow publishes the BuildKit cache with `mode=max` and builds the runner from the reusable ARM64 runtime base. The first deployment after this contract is introduced may bootstrap the runtime base; subsequent application-only deployments should reuse it. Rebuild the web runtime base when the Node image, OS/runtime packages, runtime dependency versions, or the web runtime-base Docker stage changes. Do not delete or retag the mutable cache/base tags during cleanup, and treat cache export, runtime-base export, and image push as valid build progress when monitoring a deployment.
+
 Deploy-all applies database migrations through the target web image before ECS promotion. It does not run a separate production DB lane. Use the standalone DB deployment only when an independently approved migration must run outside a web release.
 
 After deployment, verify the workflow result, live revision, expected runtime target, and affected production behavior. Keep verification read-only by default. Do not create production scans, records, users, or other persistent state unless the user explicitly authorized that verification.
@@ -705,8 +707,9 @@ Before starting or monitoring an AWS ECS production deployment, read and follow
 `docs/aws-ecs-deployment-runbook.md`. This is required even when the workflow
 was started by another agent or operator.
 
-A GitHub Actions step remaining active is not evidence that it is stuck. Cold
-ARM64 web builds on x64 GitHub-hosted runners may take 45–60 minutes. Do not
+A GitHub Actions step remaining active is not evidence that it is stuck. The
+routine web image path uses a native ARM64 GitHub-hosted runner; the manual x64
+fallback may take 45–60 minutes after a cold invalidation. Do not
 cancel while logs show compilation, static generation, build-trace collection,
 image export, registry-cache export, or image push progress. Before canceling,
 inspect the available logs and require both:

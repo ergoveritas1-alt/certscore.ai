@@ -23,12 +23,13 @@ Do not use Vercel or an ad hoc local container as a production deployment path.
 5. Deploy only the affected services. Scanner deployment is separate from the
    web and MCP workflows.
 
-## Monitoring cold ARM64 builds
+## Monitoring ARM64 builds
 
-The public web workflow currently builds a Linux ARM64 image on an x64
-GitHub-hosted runner. A warm cached image commonly finishes quickly, but a cold
-build after shared-package, lockfile, Dockerfile, or broad web changes may take
-45–60 minutes under emulation.
+The public web workflow builds its Linux ARM64 image on GitHub's native ARM64
+runner. Registry-backed BuildKit layers are restored across runs. A manually
+dispatched deployment may set `use_x64_fallback` only when the native runner is
+unavailable; that path builds through emulation and can take 45–60 minutes
+after a cold invalidation.
 
 A step that remains `in_progress` is not, by itself, stuck. The following are
 positive progress and must not trigger cancellation:
@@ -80,14 +81,14 @@ The ECS workflows should provide:
 The heartbeat process must be stopped when the build exits and must not hide or
 replace the Docker build's exit status.
 
-## Native ARM64 improvement
+## Native ARM64 fallback policy
 
-Moving ARM64 image construction to a provisioned native ARM64 runner or managed
-remote builder is the preferred performance improvement. Do not change
-`runs-on` to an ARM64 label until the runner is provisioned, protected for
-production use, and verified to support AWS OIDC, Docker Buildx, ECR access,
-and the repository's required actions. Preserve the x64 workflow as a fallback
-until native builds have demonstrated digest and runtime parity.
+The normal path uses `ubuntu-24.04-arm`. Preserve the manual x64 fallback until
+native builds have demonstrated repeated digest and runtime parity. Use the
+fallback only for native-runner availability or compatibility incidents, and
+record the reason when dispatching it. Both paths must retain AWS OIDC, Docker
+Buildx, ECR access, immutable Git-SHA tagging, and the exact-image migration
+step.
 
 ## After deployment
 

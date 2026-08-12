@@ -4,6 +4,7 @@
   "private": true,
   "scripts": {
     "build": "pnpm --filter @website-signal-risk-scanner/shared build && pnpm --filter @certscore/mcp-auth build && pnpm check-runtime:build && next build",
+    "build:container": "pnpm check-runtime:build && next build",
     "build:tranco-calibration": "node --enable-source-maps --import tsx ./scripts/build-tranco-calibration-queue.ts",
     "check-env:amplify-runtime": "node --enable-source-maps --import tsx ./scripts/check-amplify-runtime-env.ts",
     "check-env": "node --env-file=.env.local --enable-source-maps --import tsx ./scripts/check-env.ts",
