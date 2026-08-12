@@ -57,12 +57,15 @@ test("API activity resolves authenticated owners and linked scan enrichment", as
   assert.doesNotMatch(source, /getAnonymousScanById/);
 });
 
-test("API activity shows the requested page URL instead of the normalized domain", async () => {
+test("API activity shows the resolved page URL while preserving raw request metadata", async () => {
   const pageSource = await readFile("apps/web/app/app/admin/pulse/page.tsx", "utf8");
+  const listSource = await readFile("apps/web/server/admin/list-pulse-requests.ts", "utf8");
 
   assert.match(pageSource, /\{ label: "Page" \}/);
-  assert.match(pageSource, /title=\{request\.requestedUrl \?\? "Page URL unavailable"\}/);
-  assert.match(pageSource, /\{request\.requestedUrl \?\? "Page URL unavailable"\}/);
+  assert.match(pageSource, /title=\{request\.pageUrl \?\? "Page URL unavailable"\}/);
+  assert.match(pageSource, /\{request\.pageUrl \?\? "Page URL unavailable"\}/);
+  assert.match(listSource, /requestedUrl: typeof row\.requested_url === "string" \? row\.requested_url : null/);
+  assert.match(listSource, /pageUrl: resolvedPageUrl\?\.url \?\? null/);
   assert.doesNotMatch(pageSource, /title=\{request\.normalizedDomain \?\? undefined\}/);
 });
 
@@ -511,13 +514,23 @@ test("localhost web development has enough heap for broad authenticated route QA
 
 test("admin users paginate in SQL instead of loading the complete account history", async () => {
   const pageSource = await readFile("apps/web/app/app/admin/users/page.tsx", "utf8");
+  const listSource = await readFile("apps/web/server/admin/list-admin-users.ts", "utf8");
   const repositorySource = await readFile("apps/web/server/admin/repository.ts", "utf8");
+  const sortSource = await readFile("apps/web/server/admin/admin-users-sort.ts", "utf8");
 
   assert.match(pageSource, /listAdminUsersPage\(pageSize,/);
   assert.doesNotMatch(pageSource, /listAdminUsers\(\)/);
+  assert.match(pageSource, /const \[requestedUserPage, workspaces\] = await Promise\.all\(\[/);
+  assert.match(pageSource, /app\.admin\.users\.workspaces/);
+  assert.match(pageSource, /pendingContent=/);
+  assert.doesNotMatch(pageSource, />Last requested</);
+  assert.doesNotMatch(pageSource, />Last associated</);
+  assert.match(pageSource, /sortKey="lastScan"/);
+  assert.match(listSource, /latestActivityAt\(row\.last_associated_scan_at, row\.last_scan_requested_at\)/);
   assert.match(repositorySource, /selected_users as/);
   assert.match(repositorySource, /limit \$1 offset \$2/);
   assert.match(repositorySource, /where scans\.submitted_by_user_id = selected_users\.id/);
+  assert.match(sortSource, /lastScan: "greatest\(request_activity\.last_scan_requested_at, associated_activity\.last_scan_at\)"/);
 });
 
 test("admin scans poll lightweight status data and refresh only after a status change", async () => {

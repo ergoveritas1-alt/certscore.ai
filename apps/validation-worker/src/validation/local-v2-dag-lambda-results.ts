@@ -48,6 +48,7 @@ const MATERIALIZATION_INPUT_POLL_MS = 250;
 const MATERIALIZATION_RETRY_MS = 500;
 const ORPHAN_RECONCILIATION_INTERVAL_MS = 10_000;
 const MATERIALIZATION_MISSING_REQUEST_DISCOVERY_INTERVAL_MS = 300_000;
+export const REPORT_FINALIZATION_DURABLE_RECOVERY_SWEEP_MS = 2_000;
 // A missing result at the expected envelope is an operational delay, not
 // evidence that the scanner failed. The hard deadline follows the deployed
 // 900s coordinator timeout plus a bounded delivery allowance.
@@ -186,12 +187,19 @@ async function waitForCanonicalReportInputs(scanId: string, deadlineMs: number) 
   throw new Error("Canonical report inputs were not ready before the materialization deadline.");
 }
 
-export async function ensureCompletedScanScoresPersisted(input: {
+type CompletedScanScoresPersistenceResult =
+  | { alreadyPersisted: true }
+  | { alreadyPersisted: false; terminalFailure: true }
+  | { alreadyPersisted: false; terminalFailure: false };
+
+const scoreMaterializationInFlight = new Map<string, Promise<CompletedScanScoresPersistenceResult>>();
+
+async function ensureCompletedScanScoresPersistedUncoalesced(input: {
   fetchImpl?: typeof fetch;
   scanId: string;
   targetEnvironment: LambdaTargetEnvironment;
   webBaseUrl?: string;
-}) {
+}): Promise<CompletedScanScoresPersistenceResult> {
   const existingState = await scoreMaterializationState(input.scanId);
   if (existingState === "completed") return { alreadyPersisted: true };
   if (existingState === "terminal_failure") {
@@ -211,7 +219,12 @@ export async function ensureCompletedScanScoresPersisted(input: {
      on conflict (scan_id) do update
        set token_sha256 = excluded.token_sha256,
            status = 'pending',
-           attempt_count = public.scan_score_materialization_requests.attempt_count + 1,
+           attempt_count = case
+             when public.scan_score_materialization_requests.token_sha256 = repeat('0', 64)
+              and public.scan_score_materialization_requests.last_attempt_at is null
+               then 1
+             else public.scan_score_materialization_requests.attempt_count + 1
+           end,
            requested_at = now(),
            last_attempt_at = now(),
            completed_at = null,
@@ -275,6 +288,25 @@ export async function ensureCompletedScanScoresPersisted(input: {
     }
   }
   return { alreadyPersisted: false, terminalFailure: false as const };
+}
+
+export function ensureCompletedScanScoresPersisted(input: {
+  fetchImpl?: typeof fetch;
+  scanId: string;
+  targetEnvironment: LambdaTargetEnvironment;
+  webBaseUrl?: string;
+}) {
+  const existing = scoreMaterializationInFlight.get(input.scanId);
+  if (existing) return existing;
+
+  const task = ensureCompletedScanScoresPersistedUncoalesced(input)
+    .finally(() => {
+      if (scoreMaterializationInFlight.get(input.scanId) === task) {
+        scoreMaterializationInFlight.delete(input.scanId);
+      }
+    });
+  scoreMaterializationInFlight.set(input.scanId, task);
+  return task;
 }
 
 type LambdaResultConsumerMetadata = {
@@ -2054,6 +2086,50 @@ export async function reconcilePersistedCompletedResultFinalizations(input: {
   return started;
 }
 
+export function startPersistedCompletedResultFinalizationRecovery(input: {
+  webBaseUrl?: string;
+} = {}) {
+  let stopped = false;
+
+  async function loop() {
+    let nextMissingRequestDiscoveryAt = 0;
+    while (!stopped) {
+      try {
+        const includeMissingRequests = Date.now() >= nextMissingRequestDiscoveryAt;
+        const finalizationsStarted = await reconcilePersistedCompletedResultFinalizations({
+          includeMissingRequests,
+          webBaseUrl: input.webBaseUrl,
+        });
+        if (includeMissingRequests) {
+          nextMissingRequestDiscoveryAt = Date.now() + MATERIALIZATION_MISSING_REQUEST_DISCOVERY_INTERVAL_MS;
+        }
+        if (finalizationsStarted > 0) {
+          console.info("[validation-worker] resumed persisted Lambda result finalizations", {
+            finalizationsStarted,
+          });
+        }
+      } catch (error) {
+        console.error("[validation-worker] persisted report finalization recovery failed", {
+          error: error instanceof Error ? error.message : String(error),
+        });
+      }
+      await sleep(REPORT_FINALIZATION_DURABLE_RECOVERY_SWEEP_MS);
+    }
+  }
+
+  console.info("[validation-worker] persisted report finalization recovery started", {
+    durableSweepMs: REPORT_FINALIZATION_DURABLE_RECOVERY_SWEEP_MS,
+    missingRequestDiscoveryMs: MATERIALIZATION_MISSING_REQUEST_DISCOVERY_INTERVAL_MS,
+  });
+  void loop();
+
+  return {
+    stop() {
+      stopped = true;
+    },
+  };
+}
+
 export async function reconcileOrphanedLocalV2DagLambdaScans(input: {
   delayOlderThanMs?: number;
   terminalOlderThanMs?: number;
@@ -2243,25 +2319,11 @@ export function startLocalV2DagLambdaResultPoller(options: LocalV2DagLambdaResul
   }
 
   async function loopReconciliation() {
-    let nextMissingRequestDiscoveryAt = 0;
     while (!stopped) {
       try {
         const orphaned = await reconcileOrphanedLocalV2DagLambdaScans();
         if (orphaned.delayed > 0 || orphaned.failed > 0) {
           console.warn("[validation-worker] reconciled delayed v2 DAG Lambda scans", orphaned);
-        }
-        const includeMissingRequests = Date.now() >= nextMissingRequestDiscoveryAt;
-        const finalizationsStarted = await reconcilePersistedCompletedResultFinalizations({
-          includeMissingRequests,
-          webBaseUrl: options.webBaseUrl,
-        });
-        if (includeMissingRequests) {
-          nextMissingRequestDiscoveryAt = Date.now() + MATERIALIZATION_MISSING_REQUEST_DISCOVERY_INTERVAL_MS;
-        }
-        if (finalizationsStarted > 0) {
-          console.info("[validation-worker] resumed persisted Lambda result finalizations", {
-            finalizationsStarted,
-          });
         }
       } catch (error) {
         console.error("[validation-worker] v2 DAG Lambda orphan reconciliation failed", {

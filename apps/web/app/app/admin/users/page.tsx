@@ -22,6 +22,7 @@ import {
   PLAN_CODES
 } from "../../../../lib/admin/plan-options";
 import { ASSIGNABLE_MEMBERSHIP_ROLES } from "../../../../lib/auth/membership-role-policy";
+import { PendingLink } from "../../../../components/ui/pending-link";
 
 type AdminUsersPageProps = {
   searchParams?: Promise<{
@@ -59,17 +60,28 @@ function SortHeader({
 }) {
   const active = currentSort === sortKey;
   const direction = active ? currentDirection : null;
+  const idleContent = (
+    <>
+      <span>{SORT_LABELS[sortKey]}</span>
+      <span aria-hidden="true" className={active ? "text-sky-600" : "text-slate-400"}>{direction === "asc" ? "↑" : direction === "desc" ? "↓" : "↕"}</span>
+    </>
+  );
   return (
-    <Link
+    <PendingLink
       aria-label={`Sort by ${SORT_LABELS[sortKey]}`}
       aria-sort={direction === "asc" ? "ascending" : direction === "desc" ? "descending" : "none"}
       className="inline-flex items-center gap-1 rounded px-0.5 py-0.5 hover:bg-slate-200/70 hover:text-slate-700"
       href={sortHref(sortKey, currentSort, currentDirection)}
+      idleContent={idleContent}
+      pendingClassName="cursor-wait opacity-60"
+      pendingContent={
+        <>
+          <span>{SORT_LABELS[sortKey]}</span>
+          <span aria-hidden="true" className="animate-pulse text-sky-600">…</span>
+        </>
+      }
       title={direction ? `${SORT_LABELS[sortKey]}: ${direction === "asc" ? "ascending" : "descending"}` : `Sort by ${SORT_LABELS[sortKey]}`}
-    >
-      <span>{SORT_LABELS[sortKey]}</span>
-      <span aria-hidden="true" className={active ? "text-sky-600" : "text-slate-400"}>{direction === "asc" ? "↑" : direction === "desc" ? "↓" : "↕"}</span>
-    </Link>
+    />
   );
 }
 
@@ -79,10 +91,13 @@ export default async function AdminUsersPage({ searchParams }: AdminUsersPagePro
   const requestedPage = normalizePage(resolved.page);
   const sortKey = normalizeAdminUsersSortKey(resolved.sort);
   const direction = normalizeAdminUsersSortDirection(resolved.dir);
-  const requestedUserPage = await withServerTiming(
-    "app.admin.users.list",
-    () => listAdminUsersPage(pageSize, (requestedPage - 1) * pageSize, sortKey, direction)
-  );
+  const [requestedUserPage, workspaces] = await Promise.all([
+    withServerTiming(
+      "app.admin.users.list",
+      () => listAdminUsersPage(pageSize, (requestedPage - 1) * pageSize, sortKey, direction)
+    ),
+    withServerTiming("app.admin.users.workspaces", () => listCompanies())
+  ]);
   const pageCount = Math.max(1, Math.ceil(requestedUserPage.totalCount / pageSize));
   const page = Math.min(requestedPage, pageCount);
   const userPage = page === requestedPage
@@ -92,7 +107,6 @@ export default async function AdminUsersPage({ searchParams }: AdminUsersPagePro
         () => listAdminUsersPage(pageSize, (page - 1) * pageSize, sortKey, direction)
       );
   const users = userPage.items;
-  const workspaces = await listCompanies();
   const passwordResetSent = resolved.message === "password_reset_sent";
   const existingUserWorkspaceCreated = resolved.message === "existing_user_workspace_created";
   const userCreated = resolved.message === "user_created";
@@ -132,8 +146,6 @@ export default async function AdminUsersPage({ searchParams }: AdminUsersPagePro
               <tr className="text-left text-xs font-medium uppercase tracking-wide text-slate-500">
                 <th className="whitespace-nowrap pb-2 pr-4"><SortHeader currentDirection={direction} currentSort={sortKey} sortKey="user" /></th>
                 <th className="whitespace-nowrap pb-2 pr-4"><SortHeader currentDirection={direction} currentSort={sortKey} sortKey="lastLogin" /></th>
-                <th className="whitespace-nowrap pb-2 pr-4" title="Includes user-initiated API and scan requests, including reused scans; does not change scan ownership.">Last requested</th>
-                <th className="whitespace-nowrap pb-2 pr-4" title="Includes scans submitted by the user or claimed from a verified anonymous browser handoff.">Last associated</th>
                 <th className="whitespace-nowrap pb-2 pr-4"><SortHeader currentDirection={direction} currentSort={sortKey} sortKey="lastScan" /></th>
                 <th className="whitespace-nowrap pb-2 pr-4"><SortHeader currentDirection={direction} currentSort={sortKey} sortKey="activity" /></th>
                 <th className="whitespace-nowrap pb-2 pr-4"><SortHeader currentDirection={direction} currentSort={sortKey} sortKey="access" /></th>
@@ -169,14 +181,6 @@ export default async function AdminUsersPage({ searchParams }: AdminUsersPagePro
                   </td>
                   <td className="whitespace-nowrap py-2.5 pr-4 align-top text-sm text-slate-600">
                     {formatAdminCompactDateTime(user.lastLoginAt)}
-                  </td>
-                  <td className="whitespace-nowrap py-2.5 pr-4 align-top text-sm text-slate-600">
-                    <p>{formatAdminCompactDateTime(user.lastScanRequestedAt)}</p>
-                    <p className="text-xs text-slate-400">{user.scanRequestCount} request{user.scanRequestCount === 1 ? "" : "s"}</p>
-                  </td>
-                  <td className="whitespace-nowrap py-2.5 pr-4 align-top text-sm text-slate-600">
-                    <p>{formatAdminCompactDateTime(user.lastAssociatedScanAt)}</p>
-                    <p className="text-xs text-slate-400">{user.associatedScanCount} scan{user.associatedScanCount === 1 ? "" : "s"}</p>
                   </td>
                   <td className="whitespace-nowrap py-2.5 pr-4 align-top text-sm text-slate-600">
                     {formatAdminCompactDateTime(user.lastScanAt)}

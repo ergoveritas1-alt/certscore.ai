@@ -37,7 +37,7 @@ function usePendingNavigation(href: string, onClick?: AnchorHTMLAttributes<HTMLA
 
   useEffect(() => {
     setHasStartedNavigation(false);
-  }, [pathname]);
+  }, [href, pathname]);
 
   useEffect(() => {
     if (!hasStartedNavigation) {

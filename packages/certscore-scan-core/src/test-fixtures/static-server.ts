@@ -1541,6 +1541,8 @@ function consentFlowHomeMarkup(caseName: StaticFixturePage): string {
       <section>
         <p>Fixture page with CMP-rendered text-ish canonical consent controls.</p>
       </section>
+      <script src="https://consent.cookiebot.com/uc.js"></script>
+      <script>window.Cookiebot = { fixture: true };</script>
       <div id="cookiebot-banner" role="dialog" aria-label="Sutikimas" style="position: fixed; left: 24px; right: 24px; bottom: 24px; padding: 20px; border: 1px solid #111; background: #fff;">
         <p>Atsakingas jūsų duomenų naudojimas. Naudojame slapukus, kad galėtume suasmeninti turinį ir analizuoti srautą. Galite pasirinkti, kas ir kokiais tikslais naudoja jūsų duomenis.</p>
         <span id="accept-static" style="display: inline-block; padding: 10px; border: 1px solid #111;">Leisti visus slapukus</span>

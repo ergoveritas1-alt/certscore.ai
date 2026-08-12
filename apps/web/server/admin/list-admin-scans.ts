@@ -46,6 +46,7 @@ import {
   loadCachedAdminScanOverviewCounts
 } from "./admin-query-cache";
 import { query } from "@website-signal-risk-scanner/db";
+import { resolveAdminPageUrl, type AdminPageUrlSource } from "../../lib/admin/admin-page-url";
 
 function scannerEgressFromScanConfig(scanConfig: Record<string, unknown> | null | undefined) {
   if (shouldUseLocalV2DagScanTool()) {
@@ -111,6 +112,8 @@ export type AdminScanListItem = {
   organizationId: string | null;
   organizationName: string | null;
   pagesScanned: number;
+  pageUrl: string | null;
+  pageUrlSource: AdminPageUrlSource | null;
   privacyPolicyPresent: boolean | null;
   primaryLanguage: string | null;
   primaryLanguageConfidence: PrimaryLanguageConfidence | null;
@@ -350,6 +353,13 @@ export async function listAdminScansPage(
         };
     const linkedRequest = requestByLinkedScanId.get(scan.id) ?? null;
     const pulseAttribution = pulseAttributionMap.get(scan.id) ?? null;
+    const domainHostname = scan.domain_id ? domainMap.get(scan.domain_id)?.hostname ?? null : null;
+    const resolvedPageUrl = resolveAdminPageUrl({
+      requestedUrl: linkedRequest?.requested_url,
+      normalizedUrl: linkedRequest?.normalized_url ?? pulseAttribution?.normalized_url,
+      scanConfig: scan.scan_config_json,
+      scanDomain: domainHostname
+    });
     const normalizedAccessPosture = normalizeAccessPostureSummary({
       accessPostureClass: overviewSnapshot?.access_posture_class ?? null,
       highestSuccessfulTier: overviewSnapshot?.highest_successful_tier ?? null,
@@ -420,13 +430,15 @@ export async function listAdminScansPage(
       requestedAt: linkedRequest?.requested_at ?? pulseAttribution?.requested_at ?? scan.created_at,
       requestChannel: linkedRequest?.request_channel ?? pulseAttribution?.request_channel ?? null,
       requestResolutionMode: linkedRequest?.resolution_mode ?? pulseAttribution?.resolution_mode ?? null,
-      requestedUrl: linkedRequest?.requested_url ?? pulseAttribution?.normalized_url ?? getScanPageUrl(scan.scan_config_json),
+      requestedUrl: linkedRequest?.requested_url ?? null,
       reusedCompletedAt: linkedRequest?.reused_completed_at ?? null,
       reuseWindowHours: linkedRequest?.reuse_window_hours ?? null,
       domainId: scan.domain_id,
-      domainHostname: scan.domain_id ? domainMap.get(scan.domain_id)?.hostname ?? null : null,
+      domainHostname,
       organizationName: scan.organization_id ? organizationMap.get(scan.organization_id)?.name ?? null : null,
       organizationId: scan.organization_id,
+      pageUrl: resolvedPageUrl?.url ?? null,
+      pageUrlSource: resolvedPageUrl?.source ?? null,
       requesterIp: requesterIpAttribution.sourceIp,
       requesterIpHash: requesterIpAttribution.ipHash,
       requesterIpSource: requesterIpAttribution.source,
@@ -546,6 +558,12 @@ function mapScanRequestRow(request: ScanRequestRow, linkedScan: AdminScanListIte
         source: linkedScan.primaryLanguageSource
       }
     : inferPrimaryLanguage({ urls: [request.scan_domain_hostname, request.normalized_domain, request.requested_url] });
+  const resolvedPageUrl = resolveAdminPageUrl({
+    requestedUrl: request.requested_url,
+    normalizedUrl: request.normalized_url,
+    scanConfig,
+    scanDomain: request.scan_domain_hostname ?? request.normalized_domain
+  });
 
   return {
     accessPostureClass: linkedScan?.accessPostureClass ?? null,
@@ -584,6 +602,8 @@ function mapScanRequestRow(request: ScanRequestRow, linkedScan: AdminScanListIte
     organizationName,
     organizationId: request.organization_id ?? request.scan_organization_id,
     pagesScanned: linkedScan?.pagesScanned ?? 0,
+    pageUrl: resolvedPageUrl?.url ?? linkedScan?.pageUrl ?? null,
+    pageUrlSource: resolvedPageUrl?.source ?? linkedScan?.pageUrlSource ?? null,
     privacyPolicyPresent: linkedScan?.privacyPolicyPresent ?? null,
     primaryLanguage: primaryLanguage?.locale ?? null,
     primaryLanguageConfidence: primaryLanguage?.confidence ?? null,
@@ -652,16 +672,6 @@ function getFreshRescanRequested(requestContext: unknown) {
 
 function getNestedMetadataObject(value: unknown) {
   return value && typeof value === "object" && !Array.isArray(value) ? (value as Record<string, unknown>) : null;
-}
-
-function getScanPageUrl(scanConfig: Record<string, unknown> | null | undefined) {
-  for (const key of ["targetUrl", "startUrl", "homepageUrl", "normalizedUrl", "url"]) {
-    const value = scanConfig?.[key];
-    if (typeof value === "string" && value.trim()) {
-      return value.trim();
-    }
-  }
-  return null;
 }
 
 function incrementCount(map: Map<string, number>, key: string) {

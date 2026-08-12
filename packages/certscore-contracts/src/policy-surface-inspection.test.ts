@@ -135,6 +135,51 @@ test("an observed policy link does not claim usable document coverage", () => {
   ]);
 });
 
+test("a fetched privacy-policy index does not claim usable governing-document coverage", () => {
+  const outcome = derivePolicySurfaceInspectionOutcome({
+    modulesRun: [moduleRun("completed")],
+    policySurfaceObservations: [{
+      observationId: "privacy-index-only",
+      sourceScanner: "policy_surface",
+      scenario: "policy_surface_review",
+      consentStateAtTime: "not_applicable",
+      url: "https://example.test/privacy",
+      normalizedUrl: "https://example.test/privacy",
+      surfaceType: "privacy_policy",
+      discoveryMethod: "footer_link",
+      status: "fetched",
+      documentRole: "policy_index",
+      documentFetchState: "fetched",
+      documentEvaluationState: "usable",
+      evidenceRefs: [],
+      artifactRefs: [],
+      boundedTextExcerptIds: [],
+      observedTopics: [],
+      article13DisclosureSignals: [],
+      discardedArticle13DisclosureSignals: [],
+      gdprTransparencyTopicCandidates: [],
+      retainedPolicySections: [],
+      policyCookieDisclosures: [],
+      retainedArticle13SectionEvidence: [],
+      mentionedVendors: [],
+      mentionedPurposes: [],
+      mentionedRights: [],
+      mentionedControls: [],
+      assistMetadata: [],
+      confidence: 0.9,
+      directVsInferred: "direct",
+    }],
+  });
+
+  assert.equal(outcome.outcome, "privacy_policy_observed");
+  assert.equal(outcome.coverageStatus, "limited");
+  assert.equal(outcome.documentRetrievalCoverageStatus, "insufficient");
+  assert.deepEqual(outcome.limitationKeys, [
+    "privacy_policy_link_observed_document_not_retained",
+    "privacy_policy_index_retained_governing_document_unresolved",
+  ]);
+});
+
 test("a directly observed privacy link remains observed when document retrieval fails", () => {
   const outcome = derivePolicySurfaceInspectionOutcome({
     modulesRun: [moduleRun("completed")],

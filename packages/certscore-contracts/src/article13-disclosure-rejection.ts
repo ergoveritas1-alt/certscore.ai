@@ -88,7 +88,7 @@ export function hasSubstantiveLegalBasisEvidence(value: string) {
     }
 
     return (
-      /\b(?:rely|relies|based|basis|necessary|needed|required)\b.{0,100}\b(?:consent|contract|legal obligation|legitimate interest|public task|public interest|vital interest)\b/i.test(segment) ||
+      /\b(?:rely|relies|based|basis|necessary|needed|required)\b.{0,100}\b(?:consent|contract|legal obligation|legitimate interests?|public task|public interest|vital interests?)\b/i.test(segment) ||
       /\b(?:performance of (?:a )?contract|contractual necessity|legal obligation|legitimate interests?|public task|public interest|vital interests?)\b.{0,100}\b(?:basis|process|processing|use|collect|hold|necessary|required)\b/i.test(segment) ||
       /\b(?:we|the controller)\s+(?:process|use|collect|hold)\b.{0,160}\b(?:with your consent|to (?:perform|fulfil|fulfill) (?:a|our) contract|to comply with (?:a|our) legal obligation|for our legitimate interests?|in the public interest|to protect vital interests?)\b/i.test(segment) ||
       /\bwith your consent\b.{0,100}\b(?:we|the controller)\s+(?:process|use|collect|hold)\b/i.test(segment)
@@ -187,6 +187,7 @@ export function isGenericArticle13StorageNotRetentionEvidence(value: string) {
     /(?:collect(?:é|e|és|ées)|recogid[ao]s?|raccolt[oi]|verzameld|zbierane)/i.test(text);
   const hasRetentionLifecycle =
     /\b(?:retain|retention|how long|kept for|stored for|delete|deletion|anonymi[sz]e|remove|expires?|as long as necessary|no longer needed|required by law|legal purposes|fraud|abuse)\b/i.test(text) ||
+    /\bkeep (?:your )?(?:personal )?(?:data|information) for as long as (?:we )?(?:need|require)/i.test(text) ||
     /(?:aufbewahrung|speichern|gespeichert|solange|erforderlich|gesetzlich|conservation|conservons|conserv(?:é|e|és|ées)|durée|dispositions légales|finalités|conservación|conservamos|plazo|conservazione|conserviamo|periodo|bewaren|bewaartermijn|noodzakelijk|przechowywania|przechowujemy|okres)/i.test(text);
   return hasStorageMechanics && !hasRetentionLifecycle;
 }
@@ -380,7 +381,7 @@ function hasScanCoreRowSpecificArticle13Terms(
     case "recipients_or_vendor_categories":
       return /\b(?:recipients|service providers|processors|vendors?|partners|affiliates|third parties|third-party|advertising partners?|analytics providers?)\b/i.test(text);
     case "data_retention":
-      return /\b(?:retaining your information|retention period|retention criteria|storage period|retain|retention|kept for|stored for|as long as necessary|deleted or anonymi[sz]ed|expires?|no longer needed|required by law|retain.{0,120}(?:legal purposes|fraud|abuse)|keep.{0,120}(?:legal purposes|fraud|abuse))\b/i.test(text) &&
+      return /\b(?:retaining your information|retention period|retention criteria|storage period|retain|retention|kept for|stored for|as long as necessary|deleted or anonymi[sz]ed|expires?|no longer needed|required by law|retain.{0,120}(?:legal purposes|fraud|abuse)|keep (?:your )?(?:personal )?(?:data|information) for as long as (?:we )?(?:need|require)|keep.{0,120}(?:legal purposes|fraud|abuse))\b/i.test(text) &&
         !isGenericArticle13StorageNotRetentionEvidence(text);
     case "data_subject_rights":
       return hasSubstantiveRightsDisclosure(text);
@@ -413,7 +414,7 @@ function hasRetainedReportRowSpecificArticle13Terms(
     case "recipients_or_vendor_categories":
       return /\b(?:recipients|service providers|processors|vendors?|partners|affiliates|third parties|third-party|advertising partners?|analytics providers?)\b/i.test(text);
     case "data_retention":
-      return /\b(?:retaining your information|retention period|retention criteria|storage period|retain|retention|kept for|stored for|as long as necessary|deleted or anonymi[sz]ed|expires?|no longer needed|required by law|retain.{0,120}(?:legal purposes|fraud|abuse)|keep.{0,120}(?:legal purposes|fraud|abuse))\b/i.test(text) &&
+      return /\b(?:retaining your information|retention period|retention criteria|storage period|retain|retention|kept for|stored for|as long as necessary|deleted or anonymi[sz]ed|expires?|no longer needed|required by law|retain.{0,120}(?:legal purposes|fraud|abuse)|keep (?:your )?(?:personal )?(?:data|information) for as long as (?:we )?(?:need|require)|keep.{0,120}(?:legal purposes|fraud|abuse))\b/i.test(text) &&
         !isGenericArticle13StorageNotRetentionEvidence(text);
     case "data_subject_rights":
       return hasSubstantiveRightsDisclosure(text);

@@ -2021,7 +2021,8 @@ export function derivePolicySurfaceInspectionOutcome(input: {
   const usablePrivacyDocumentRetained = observations.some((observation) =>
     observation.surfaceType === "privacy_policy" &&
     observation.status === "fetched" &&
-    observation.documentEvaluationState !== "insufficient"
+    observation.documentEvaluationState !== "insufficient" &&
+    observation.documentRole !== "policy_index"
   );
   const inspectionCompleted = policyRun?.status === "completed";
   const limitationKeys = [
@@ -2031,6 +2032,13 @@ export function derivePolicySurfaceInspectionOutcome(input: {
       : null,
     privacyPolicyObserved && !usablePrivacyDocumentRetained
       ? "privacy_policy_link_observed_document_not_retained"
+      : null,
+    privacyPolicyObserved && observations.some((observation) =>
+      observation.surfaceType === "privacy_policy" &&
+      observation.status === "fetched" &&
+      observation.documentRole === "policy_index"
+    ) && !usablePrivacyDocumentRetained
+      ? "privacy_policy_index_retained_governing_document_unresolved"
       : null,
   ].filter((value): value is string => value !== null)
     .filter((value, index, values) => values.indexOf(value) === index)

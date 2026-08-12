@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { once } from "node:events";
 import { createServer } from "node:http";
-import { mkdtemp, readFile, rm } from "node:fs/promises";
+import { mkdtemp, readFile, readdir, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import test from "node:test";
@@ -1354,7 +1354,7 @@ test("policySurfaceScanner preserves an exact privacy notice when Nano ranks com
     );
 
     assert.equal(result.moduleRun.status, "completed");
-    assert.equal(result.moduleRun.siteFacingNavigation?.firstHttpStatus, 404);
+    assert.equal(result.moduleRun.siteFacingNavigation?.firstHttpStatus, 200);
     assert.equal(result.moduleRun.siteFacingNavigation?.navigationCount, 1);
     assert.doesNotMatch(result.moduleRun.siteFacingNavigation?.requestedUrl ?? "", /must-not-be-retained/);
     assert.equal(privacy?.status, "fetched");
@@ -3248,7 +3248,7 @@ test("policySurfaceScanner bounds a Ford-like stalled homepage fetch and continu
   }
 });
 
-test("policySurfaceScanner runs common-path fallback browser recovery while blocked rendered discovery is still pending", async () => {
+test("policySurfaceScanner retains the governing child when rendered discovery also finds its policy index", async () => {
   let renderedHomepageRespondedAt = 0;
   let renderedPrivacyRequestedAt = 0;
   const server = createServer((request, response) => {
@@ -3293,8 +3293,8 @@ test("policySurfaceScanner runs common-path fallback browser recovery while bloc
       setTimeout(() => {
         renderedHomepageRespondedAt = Date.now();
         response.writeHead(200, { "content-type": "text/html; charset=utf-8" });
-        response.end("<!doctype html><html><body><main><h1>News</h1><p>No policy links rendered here.</p></main></body></html>");
-      }, 5_000);
+        response.end("<!doctype html><html><body><main><h1>News</h1></main><footer><a href='/privacy'>Privacy Policy</a></footer></body></html>");
+      }, 1_500);
       return;
     }
     response.writeHead(404, { "content-type": "text/plain" });
@@ -3343,17 +3343,12 @@ test("policySurfaceScanner runs common-path fallback browser recovery while bloc
     assert.equal(privacy.httpStatus, 200);
     assert.ok(renderedPrivacyRequestedAt > 0);
     assert.ok(renderedHomepageRespondedAt > 0);
-    assert.ok(
-      renderedPrivacyRequestedAt < renderedHomepageRespondedAt,
-      "common-path browser recovery should start before slow rendered homepage discovery completes",
-    );
     // Browser startup and teardown can briefly exceed the soft 8s module
     // budget when this case runs alongside the full Chromium timing suite.
-    // The ordering assertion above is the deterministic proof that recovery
-    // overlaps the slow homepage navigation; keep a narrow wall-time ceiling
-    // as a regression guard without making CPU contention a release failure.
+    // Keep a narrow wall-time ceiling without making CPU contention a release
+    // failure; the evidence assertions below are the governing regression.
     assert.ok(elapsedMs < 10_000, `expected parallel recovery to stay near the lane budget; elapsed=${elapsedMs}`);
-    assert.equal(diagnostics.renderedCandidateCount, 0);
+    assert.ok(diagnostics.renderedCandidateCount > 0);
     assert.equal(diagnostics.commonPathFallbackUsed, true);
     assert.equal(diagnostics.corePolicySurfaceRetained, true);
     assert.equal(
@@ -3369,6 +3364,19 @@ test("policySurfaceScanner runs common-path fallback browser recovery while bloc
         timing.label.includes("homepage-failed speculative common-path recovery")
       ),
       true,
+    );
+    const policyTextArtifactFiles = (await readdir(tempRoot))
+      .filter((fileName) => fileName.startsWith("policy_surface_text_") && fileName.endsWith(".txt"));
+    const referencedPolicyTextArtifactFiles = new Set(result.policySurfaceObservations.flatMap((observation) =>
+      observation.artifactRefs
+        .filter((artifactRef) => artifactRef.artifactId.startsWith("policy_surface_text_"))
+        .map((artifactRef) => path.basename(artifactRef.path))
+    ));
+    assert.ok(policyTextArtifactFiles.length >= 2);
+    assert.deepEqual(
+      policyTextArtifactFiles.filter((fileName) => !referencedPolicyTextArtifactFiles.has(fileName)),
+      [],
+      "every retained policy-text artifact must be bound to a canonical policy observation",
     );
   } finally {
     server.close();
@@ -4381,6 +4389,44 @@ test("retained policy excerpts directly support controller, purposes, legal basi
   assert.match(excerpt("legal_basis"), /lawful bases are performance of a contract.*legitimate interests/i);
   assert.match(excerpt("data_retention"), /retain account records only as long as necessary.*delete or anonymize/i);
   assert.match(excerpt("dpo_contact"), /Privacy Office at privacy@foundation\.example/i);
+});
+
+test("retained policy sections prefer an explicit purpose-bound retention criterion over an erasure exception", () => {
+  const sourceUrl = "https://publisher.example/privacy";
+  const evidence = retainedArticle13SectionEvidenceFromSections([
+    {
+      sourceUrl,
+      heading: "Policy body section 16",
+      textExcerpt: "Retention. We only keep Information for as long as we need it to fulfil the purpose we are using it for, as permitted by law. Who Do We Disclose Your Information To?",
+      charStart: 1_600,
+      charEnd: 1_770,
+      quality: "strong",
+    },
+    {
+      sourceUrl,
+      heading: "Policy body section 24",
+      textExcerpt: "Right to erasure or deletion. In specific cases, we may keep some Information where we have a legal obligation, or where processing is necessary to continue providing a requested service.",
+      charStart: 2_400,
+      charEnd: 2_580,
+      quality: "strong",
+    },
+    {
+      sourceUrl,
+      heading: "Policy body section 25",
+      textExcerpt: "You may object to the processing of your Information on the basis of our legitimate interests, including direct marketing purposes.",
+      charStart: 2_581,
+      charEnd: 2_720,
+      quality: "strong",
+    },
+  ], sourceUrl);
+  const retention = evidence.find((row) => row.coverageArea === "data_retention");
+  const legalBasis = evidence.find((row) => row.coverageArea === "legal_basis");
+
+  assert.equal(retention?.signalObserved, "observed", JSON.stringify(retention));
+  assert.equal(retention?.selectedPolicySectionHeading, "Policy body section 16");
+  assert.match(retention?.selectedPolicySectionExcerpt ?? "", /keep Information for as long as we need it to fulfil the purpose/i);
+  assert.equal(legalBasis?.signalObserved, "observed", JSON.stringify(legalBasis));
+  assert.match(legalBasis?.selectedPolicySectionExcerpt ?? "", /basis of our legitimate interests/i);
 });
 
 test("transfer excerpts prefer concrete cross-border safeguards over nearby framework complaint prose", () => {

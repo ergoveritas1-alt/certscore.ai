@@ -19,6 +19,7 @@ import { shouldUseLocalV2DagScanTool } from "../scans/local-v2-dag-scan-config";
 import { withServerTiming } from "../performance/log-server-timing";
 import { projectCanonicalSurfaceSummary } from "../../lib/scans/canonical-surface-summary";
 import { parseAdminEvidenceMatrix, type AdminEvidenceMatrix } from "../../lib/scans/admin-evidence-matrix";
+import { resolveAdminPageUrl, type AdminPageUrlSource } from "../../lib/admin/admin-page-url";
 
 export type AdminPulseRequestStatus =
   | "queued"
@@ -53,6 +54,8 @@ export type AdminPulseRequestListItem = {
   freshness: string | null;
   jobId: string;
   normalizedDomain: string | null;
+  pageUrl: string | null;
+  pageUrlSource: AdminPageUrlSource | null;
   industry: string | null;
   publicId: string;
   requestedAt: string;
@@ -358,6 +361,12 @@ function mapPulseRequestRow(row: Record<string, unknown>): AdminPulseRequestList
     snapshot
   });
   const score = canonicalSummary.score;
+  const resolvedPageUrl = resolveAdminPageUrl({
+    requestedUrl: row.requested_url,
+    normalizedUrl: row.normalized_url,
+    scanConfig: asRecord(row.scan_config_json),
+    scanDomain: row.scan_domain_hostname ?? row.normalized_domain
+  });
   return {
     adminSummaryGeneratedAt: timestampString(row.admin_summary_generated_at),
     accessPostureClass: typeof row.access_posture_class === "string" ? row.access_posture_class : null,
@@ -394,6 +403,8 @@ function mapPulseRequestRow(row: Record<string, unknown>): AdminPulseRequestList
         : typeof row.scan_domain_hostname === "string"
           ? row.scan_domain_hostname
           : null,
+    pageUrl: resolvedPageUrl?.url ?? null,
+    pageUrlSource: resolvedPageUrl?.source ?? null,
     publicId: String(row.public_id),
     requestedAt: timestampString(row.requested_at) ?? String(row.requested_at),
     requestedUrl: typeof row.requested_url === "string" ? row.requested_url : null,
@@ -527,6 +538,7 @@ export async function listAdminPulseRequestsPage(input: AdminPulseRequestListInp
             pr.public_id,
             pr.job_id,
             pr.requested_url,
+            pr.normalized_url,
             pr.normalized_domain,
             pr.requested_at,
             pr.request_context,

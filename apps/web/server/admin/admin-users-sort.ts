@@ -6,7 +6,7 @@ const ADMIN_USERS_SORT_EXPRESSIONS: Record<AdminUsersSortKey, string> = {
   activity: "coalesce(user_activity.total_scans, 0)",
   assign: "organizations.name",
   lastLogin: "login_activity.last_login_at",
-  lastScan: "user_activity.last_scan_at",
+  lastScan: "greatest(request_activity.last_scan_requested_at, associated_activity.last_scan_at)",
   plan: "organizations.plan",
   user: "selected_users.email"
 };

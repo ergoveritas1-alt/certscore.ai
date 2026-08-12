@@ -3137,6 +3137,43 @@ export async function appendScanWorkflowEvent(input: {
   );
 }
 
+export async function appendUnifiedFindingsCompletionAndQueueReportMaterialization(input: {
+  eventType: string;
+  message: string;
+  metadataJson?: Record<string, unknown>;
+  scanId: string;
+}) {
+  // Keep the publication wake-up in the same database statement as the
+  // canonical completion event. If the worker exits after this statement,
+  // the durable recovery sweep can still finish the report. The placeholder
+  // hash is never sent to the web app; the materializer rotates it to a fresh
+  // random token immediately before each authorized request.
+  await query(
+    `with completed_event as (
+       insert into scan_events (
+         domain_id, event_type, message, metadata_json, organization_id, scan_id
+       ) values (null, $1, $2, $3, null, $4::uuid)
+       returning scan_id
+     )
+     insert into public.scan_score_materialization_requests (
+       scan_id, token_sha256, status, attempt_count, requested_at, completed_at,
+       last_error, first_failed_at, last_attempt_at, next_attempt_at
+     )
+     select scan_id, repeat('0', 64), 'pending', 1, now(), null,
+            null, null, null, now()
+       from completed_event
+       join public.scans scan on scan.id = completed_event.scan_id
+      where scan.status = 'completed'
+     on conflict (scan_id) do update
+       set next_attempt_at = least(
+             public.scan_score_materialization_requests.next_attempt_at,
+             excluded.next_attempt_at
+           )
+       where public.scan_score_materialization_requests.status = 'pending'`,
+    [input.eventType, input.message, input.metadataJson ?? {}, input.scanId]
+  );
+}
+
 export async function updateScanStatus(input: {
   scanId: string;
   status: "queued" | "running" | "completed" | "failed";

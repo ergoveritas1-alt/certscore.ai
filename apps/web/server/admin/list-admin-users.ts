@@ -15,6 +15,7 @@ import {
   type AdminUserRow as UserRow
 } from "./repository";
 import { requirePlatformAdminContext } from "./platform-admin";
+import { latestActivityAt } from "../../lib/admin/latest-activity-at";
 
 export type AdminUserListItem = {
   accountRole: string;
@@ -58,10 +59,6 @@ function normalizeMembershipRole(role: string | null) {
   }
 
   return role;
-}
-
-function latestActivityAt(...values: Array<string | null | undefined>) {
-  return values.filter((value): value is string => Boolean(value)).sort().at(-1) ?? null;
 }
 
 export async function listAdminUsers(): Promise<AdminUserListItem[]> {
@@ -173,7 +170,7 @@ function mapAdminUserOverviewRow(row: AdminUserOverviewRow): AdminUserListItem {
     domainCount: Number(row.domain_count ?? 0),
     totalScans: Number(row.total_scans ?? 0),
     completedScans: Number(row.completed_scans ?? 0),
-    lastScanAt: latestActivityAt(row.last_scan_at, row.last_scan_requested_at),
+    lastScanAt: latestActivityAt(row.last_associated_scan_at, row.last_scan_requested_at),
     lastCompletedScanAt: row.last_completed_scan_at,
     lastAssociatedScanAt: row.last_associated_scan_at,
     lastScanRequestedAt: row.last_scan_requested_at,

@@ -593,7 +593,7 @@ When the user says **deploy all**, use the fast deploy-all gate before committin
 pnpm preflight:all
 ```
 
-In this repo, **deploy all** means the public web app, validation worker, migrations applied from the target web image before ECS promotion, and the v2 DAG Lambda scanner images in all three approved scanner regions: `eu-central-1`, `eu-west-1`, and `us-west-2`. It does not run a separate production DB deployment lane. Treat those as the canonical Lambda scanner regions unless the user explicitly approves a region change.
+In this repo, **deploy all** means the public web app, validation worker, migrations applied from the target web image before ECS promotion, and the v2 DAG Lambda scanner images in all three approved scanner regions: `eu-central-1`, `eu-west-1`, and `us-west-1`. It does not run a separate production DB deployment lane. Treat those as the canonical Lambda scanner regions unless the user explicitly approves a region change.
 
 Use the full local gate when the change touches shared build infrastructure, broad dependency surfaces, release-critical scan behavior, or when you need maximum local confidence before pushing:
 
@@ -725,7 +725,7 @@ the expensive work.
 
 ## Runtime and deployment topology
 
-Production scanning is Lambda-only and uses the CertScore v2 DAG scanner code in this repository. The approved production scanner targets are the v2 DAG Lambda functions in `eu-central-1`, `eu-west-1`, and `us-west-2`.
+Production scanning is Lambda-only and uses the CertScore v2 DAG scanner code in this repository. The approved production scanner targets are the v2 DAG Lambda functions in `eu-central-1`, `eu-west-1`, and `us-west-1`.
 
 Never create, restore, update, scale, inspect as a deployment target, or push images to a WS01 scanner ECS/Fargate service. In particular, `ws01-scanner-worker` is prohibited and must not be recreated. WS01 is not a production scanner deployment path. Production scanner changes must be made in the WC01 v2 DAG packages and deployed through the three-region Lambda helpers.
 

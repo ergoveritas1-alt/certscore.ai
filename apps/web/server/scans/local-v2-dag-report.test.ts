@@ -3803,6 +3803,38 @@ test("summarizePolicySurfaces never uses a privacy index as sufficient Article 1
   assert.equal(assessments.every((assessment) =>
     (assessment.reasonCodes as string[]).includes("policy_index_is_not_substantive_policy_document")
   ), true);
+  assert.equal(
+    summary.policyTextExtractionHealth.extractionFailureReason,
+    "privacy_policy_index_governing_document_unresolved",
+  );
+  assert.equal(summary.policyTextExtractionHealth.policyTextExtractionStatus, "artifact_unavailable");
+});
+
+test("summarizePolicySurfaces does not infer one language from a multilingual privacy index", async () => {
+  const { dedupePolicySurfaces, summarizePolicySurfaces } = await loadLocalV2DagReport();
+  const multilingualIndex = [
+    "Privacy Policy English United States",
+    "Politique de Confidentialité Français",
+    "Política de Privacidad Español",
+    "นโยบายความเป็นส่วนตัว ตัวเลือกโฆษณา",
+  ].join(" ").repeat(40);
+  const surfaces = dedupePolicySurfaces([{
+    observationId: "multilingual-privacy-index",
+    surfaceType: "privacy_policy",
+    url: "https://example.test/privacy",
+    status: "fetched",
+    documentRole: "policy_index",
+    textExcerpt: multilingualIndex,
+  }] as never, "example.test");
+
+  const summary = summarizePolicySurfaces(surfaces, "example.test", { primaryLanguage: "en" });
+
+  assert.equal(summary.policyTextExtractionHealth.detectedPolicyLanguage, "en");
+  assert.equal(summary.policyTextExtractionHealth.policyTextExtractionStatus, "artifact_unavailable");
+  assert.equal(
+    summary.policyTextExtractionHealth.extractionFailureReason,
+    "privacy_policy_index_governing_document_unresolved",
+  );
 });
 
 test("summarizePolicySurfaces keeps absence coverage insufficient while a material privacy-index child is unresolved", async () => {

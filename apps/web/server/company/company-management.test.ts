@@ -93,7 +93,7 @@ test("admin users expose a protected per-user activity page", async () => {
   const adminRepository = await readFile("apps/web/server/admin/repository.ts", "utf8");
   assert.match(adminRepository, /last_scan_requested_at/);
   assert.match(adminRepository, /requested_by ->> 'userId'/);
-  assert.match(adminUsersList, /latestActivityAt\(row\.last_scan_at, row\.last_scan_requested_at\)/);
+  assert.match(adminUsersList, /latestActivityAt\(row\.last_associated_scan_at, row\.last_scan_requested_at\)/);
 });
 
 test("anonymous homepage scans support one-time verified user claims", async () => {

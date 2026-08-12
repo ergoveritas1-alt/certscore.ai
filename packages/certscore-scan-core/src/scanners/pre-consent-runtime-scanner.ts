@@ -1315,22 +1315,6 @@ export async function preConsentRuntimeScanner(
         }
         retainedCmpRuntimeObservations = earlyCmpRuntimeObservations;
         if (hasHighConfidenceDirectCmpRuntimeEvidence(earlyCmpRuntimeObservations)) {
-          const evidenceFinalizationReserveMs =
-            settleWaitMs + postSettleInventoryMaxMs + postSettleInventoryReserveMs;
-          const cmpGatedWaitMs = Math.min(
-            fastWait ? 10_000 : 12_000,
-            Math.max(0, remainingModuleBudgetMs() - evidenceFinalizationReserveMs),
-          );
-          await recordTiming(
-            timingBreakdown,
-            "early CMP-gated passive render wait",
-            "Passive render window for a directly observed CMP; exits when a complete first-layer choice set is visible or the bounded wait expires.",
-            () => waitForSufficientDirectCmpSemanticControls(
-              page,
-              input.scanStartedAtMs,
-              cmpGatedWaitMs,
-            ),
-          );
           retainedConsentUiObservation = preScreenshotConsentObservation;
         }
       }
@@ -2125,10 +2109,28 @@ export async function preConsentRuntimeScanner(
           text: consentObservation.textExcerpt,
         });
       };
+      const adaptiveGateDocumentUrl = safePageUrl(page, effectiveNavigationUrl);
+      const adaptiveGateDocumentIdentity = currentBrowserDocumentIdentity(page);
+      const representativeScreenshotAvailableBeforeAdaptiveGate = screenshots.some((screenshot) =>
+        screenshot.captureMethod !== "primary_placeholder" &&
+        screenshot.captureMethod !== "fresh_context_placeholder" &&
+        isSameBrowserDocumentOrExactUrl(
+          screenshot.url,
+          screenshot.documentIdentity,
+          adaptiveGateDocumentUrl,
+          adaptiveGateDocumentIdentity,
+        )
+      );
+      const stablePartialProofPacketBeforeAdaptiveGate = isStableConsentProofPacket({
+        geometryArtifactWritten: consentGeometryDiagnosticWritten,
+        observation: consentObservation,
+        representativeScreenshotAvailable: representativeScreenshotAvailableBeforeAdaptiveGate,
+      });
       const runHighConfidenceAdaptiveRecapture = () => detectConsentUiWithAdaptiveCmpGates({
         cmpRuntimeObservations,
         initialObservation: consentObservation,
         navigationStartedAtMs,
+        stablePartialProofPacket: stablePartialProofPacketBeforeAdaptiveGate,
         onTenSecondGate: (
           earlyScreenshotCaptured &&
           (input.screenshotCaptureMode ?? "viewport_first") === "viewport_first"
@@ -2750,7 +2752,7 @@ export async function preConsentRuntimeScanner(
       ).catch((error: unknown) => {
         runtimeErrors.push(`Consent-control geometry diagnostic failed: ${errorMessageFromUnknown(error)}`);
       });
-    } else {
+    } else if (!consentGeometryDiagnosticWritten) {
       recordInstantTiming(
         timingBreakdown,
         "consent control geometry diagnostic skipped",
@@ -4907,10 +4909,21 @@ export function shouldExtendConsentGateToHardCap(progress: ConsentGateProgress |
   return progress !== undefined && progress !== "canonical_cmp_script_appeared";
 }
 
+export function shouldExitConsentGateWithStablePartialPacket(input: {
+  stablePartialProofPacket: boolean;
+  hasMeaningfulProgress: boolean;
+  retainedClassifiedControlCount: number;
+}): boolean {
+  return input.stablePartialProofPacket &&
+    !input.hasMeaningfulProgress &&
+    input.retainedClassifiedControlCount > 0;
+}
+
 async function detectConsentUiWithAdaptiveCmpGates(input: {
   cmpRuntimeObservations: CmpRuntimeObservation[];
   initialObservation: ConsentUiObservation;
   navigationStartedAtMs: number;
+  stablePartialProofPacket: boolean;
   onTenSecondGate?: () => Promise<ConsentUiObservation>;
   page: Page;
   scanStartedAtMs: number;
@@ -4958,7 +4971,15 @@ async function detectConsentUiWithAdaptiveCmpGates(input: {
   let gate10 = await waitToGate(CONSENT_GATE_INITIAL_MS);
   let progressAt10 = meaningfulConsentGateProgress(previous, gate10);
   if (hasSufficientFirstLayerConsentControls(current)) {
-    return recordConsentGateDecision(input.timingBreakdown, current, gate10, "10s", "complete_exit", progressAt10);
+    return recordConsentGateDecision(
+      input.timingBreakdown,
+      current,
+      gate10,
+      "10s",
+      "complete_exit",
+      progressAt10,
+      "marker_only",
+    );
   }
   if (hasConsentGateReachedHardCap(gate10.pageAgeMs)) {
     return recordConsentGateDecision(input.timingBreakdown, current, gate10, "10s", "hard_cap_exit", progressAt10);
@@ -4978,6 +4999,20 @@ async function detectConsentUiWithAdaptiveCmpGates(input: {
   }
   if (hasConsentGateReachedHardCap(gate10.pageAgeMs)) {
     return recordConsentGateDecision(input.timingBreakdown, current, gate10, "10s", "hard_cap_exit", progressAt10);
+  }
+  if (shouldExitConsentGateWithStablePartialPacket({
+    stablePartialProofPacket: input.stablePartialProofPacket,
+    hasMeaningfulProgress: progressAt10 !== undefined,
+    retainedClassifiedControlCount: current.controls.length,
+  })) {
+    return recordConsentGateDecision(
+      input.timingBreakdown,
+      current,
+      gate10,
+      "10s",
+      "stable_partial_packet_exit",
+      progressAt10,
+    );
   }
   const partialAt10 = hasPartialConsentGateEvidence(current);
   current = recordConsentGateDecision(
@@ -5211,21 +5246,24 @@ function recordConsentGateDecision(
   gate: "10s" | "15s" | "18s" | "20s" | "25s",
   decision: string,
   progress: ConsentGateProgress | undefined,
+  telemetry: "record" | "marker_only" = "record",
 ): ConsentUiObservation {
   const marker = `gate_${gate}:${decision}`;
-  timingBreakdown.push({
-    label: `consent gate ${gate}`,
-    detail: [
-      decision,
-      progress ? `progress=${progress}` : "progress=none",
-      `pageAgeMs=${snapshot.pageAgeMs}`,
-      `controls=${snapshot.observation.controls.length}`,
-      `cmpFrames=${snapshot.cmpFrameKeys.length}`,
-      `cmpScripts=${snapshot.cmpScriptKeys.length}`,
-      `mutations=${snapshot.mutationCount}`,
-    ].join("; ").slice(0, 240),
-    durationMs: 0,
-  });
+  if (telemetry === "record") {
+    timingBreakdown.push({
+      label: `consent gate ${gate}`,
+      detail: [
+        decision,
+        progress ? `progress=${progress}` : "progress=none",
+        `pageAgeMs=${snapshot.pageAgeMs}`,
+        `controls=${snapshot.observation.controls.length}`,
+        `cmpFrames=${snapshot.cmpFrameKeys.length}`,
+        `cmpScripts=${snapshot.cmpScriptKeys.length}`,
+        `mutations=${snapshot.mutationCount}`,
+      ].join("; ").slice(0, 240),
+      durationMs: 0,
+    });
+  }
   return annotateConsentInventoryTimingMarkers(observation, [
     marker,
     ...(progress ? [`gate_progress:${progress}`] : []),
@@ -5703,25 +5741,6 @@ async function readDirectCmpSemanticConsentUiObservation(
       ],
     },
   });
-}
-
-async function waitForSufficientDirectCmpSemanticControls(
-  page: Page,
-  scanStartedAtMs: number,
-  timeoutMs: number,
-): Promise<void> {
-  const deadlineAtMs = Date.now() + Math.max(0, timeoutMs);
-  while (Date.now() < deadlineAtMs) {
-    const observation = await readRapidFirstLayerConsentUiObservation(page, scanStartedAtMs);
-    if (hasSufficientFirstLayerConsentControls(observation)) {
-      return;
-    }
-    const remainingMs = deadlineAtMs - Date.now();
-    if (remainingMs <= 0) {
-      return;
-    }
-    await page.waitForTimeout(Math.min(250, remainingMs)).catch(() => undefined);
-  }
 }
 
 export async function readRapidFirstLayerConsentUiObservation(

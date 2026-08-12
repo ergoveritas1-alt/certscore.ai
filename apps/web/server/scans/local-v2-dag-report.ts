@@ -2581,17 +2581,20 @@ export function summarizePolicySurfaces(
     .map((row) => readPolicySurfaceTextArtifact(row.surface, options.policyTextEvidenceContext))
     .filter(Boolean)
     .join("\n");
+  const policyLanguageSurfaces = article13Surfaces.filter((row) =>
+    row.surface.documentRole !== "policy_index"
+  );
   const policyPrimaryLanguage = guessPrimaryLanguage({
-    matchedLocales: article13Surfaces.flatMap((row) => [
+    matchedLocales: policyLanguageSurfaces.flatMap((row) => [
       ...(row.surface.gdprTransparencyTopicCandidates ?? []).map((candidate) => candidate.matchedLocale),
       ...(row.surface.article13DisclosureSignals ?? []).map((signal) => signal.matchedLocale),
     ]),
-    textSamples: article13Surfaces.flatMap((row) => [
+    textSamples: policyLanguageSurfaces.flatMap((row) => [
       row.surface.title,
       row.surface.linkText,
       row.surface.textExcerpt,
     ]),
-    urls: article13Surfaces.flatMap((row) => [
+    urls: policyLanguageSurfaces.flatMap((row) => [
       row.pageUrl,
       row.surface.normalizedUrl,
       row.surface.url,
@@ -3245,6 +3248,9 @@ function buildPolicyTextExtractionHealth(
   const hasPartialDocument = projectedDocuments.some((document) => document.extractionStatus === "partial");
   const hasThinDocument = projectedDocuments.some((document) => document.extractionStatus === "thin");
   const hasMalformedDocument = projectedDocuments.some((document) => document.extractionStatus === "malformed");
+  const policyIndexRetainedWithoutGoverningDocument =
+    projectedDocuments.some((document) => document.documentRole === "policy_index") &&
+    !projectedDocuments.some((document) => document.documentRole === "policy_document");
   const textQuality = assessRetainedPolicyTextQuality(text, { multilingual: true });
   const retainedTextQualityStatus = textQuality.reason === "empty_policy_text"
     ? "empty_policy_text"
@@ -3275,7 +3281,9 @@ function buildPolicyTextExtractionHealth(
           ? "blocked"
         : !hasRetainedDocumentText
           ? "artifact_unavailable"
-          : transparencyLanguageSupported === false
+        : policyIndexRetainedWithoutGoverningDocument
+          ? "artifact_unavailable"
+        : transparencyLanguageSupported === false
             ? "unsupported_language"
           : !textQuality.usable
             ? retainedTextQualityStatus
@@ -3299,6 +3307,8 @@ function buildPolicyTextExtractionHealth(
         ? "privacy_policy_surface_not_observed"
         : policyTextExtractionStatus === "blocked"
           ? "privacy_policy_fetch_blocked"
+        : policyIndexRetainedWithoutGoverningDocument
+          ? "privacy_policy_index_governing_document_unresolved"
         : policyTextExtractionStatus === "errored"
           ? "privacy_policy_text_processing_error"
           : policyTextExtractionStatus === "unsupported_language"

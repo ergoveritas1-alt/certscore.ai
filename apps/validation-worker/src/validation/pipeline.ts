@@ -10,6 +10,7 @@ import {
 } from "../../../../packages/shared/src/known-cmps";
 import {
   appendScanWorkflowEvent,
+  appendUnifiedFindingsCompletionAndQueueReportMaterialization,
   claimNextAutomaticTarget,
   createScanForValidationRun,
   createValidationRun,
@@ -37,6 +38,7 @@ import {
   updateValidationRun,
   upsertValidationVerdict
 } from "./repository";
+import { ensureCompletedScanScoresPersisted } from "./local-v2-dag-lambda-results";
 import {
   validateFindingsBatchWithLlm,
   type BatchedValidationVerdict
@@ -405,6 +407,9 @@ async function deriveAndPersistUnifiedFindingsForScan(input: {
   }).catch(() => undefined);
 
   const findings = await deriveUnifiedFindingsWithWorkflowEvents({
+    appendEvent: (event) => event.eventType === SCAN_EVENT_TYPES.unifiedFindingsDerivedCompleted
+      ? appendUnifiedFindingsCompletionAndQueueReportMaterialization(event)
+      : appendScanWorkflowEvent(event),
     completionMetadata: (findings) => ({
       cookieDisclosureGapDiagnostic: deriveCookieDisclosureGapDiagnostic(
         {
@@ -427,6 +432,7 @@ async function deriveAndPersistUnifiedFindingsForScan(input: {
         persistReportFindingCount: false
       });
     },
+    requireDurableCompletionEvent: true,
     scanId: input.scanId
   });
 
@@ -628,6 +634,7 @@ export async function deriveUnifiedFindingsWithWorkflowEvents<TFinding extends {
   completionMetadata?: (findings: TFinding[]) => Record<string, unknown>;
   deriveFindings: () => TFinding[];
   persistFindings?: (findings: TFinding[]) => Promise<void>;
+  requireDurableCompletionEvent?: boolean;
   scanId: string;
 }) {
   const appendEvent = input.appendEvent ?? appendScanWorkflowEvent;
@@ -637,7 +644,7 @@ export async function deriveUnifiedFindingsWithWorkflowEvents<TFinding extends {
     await input.persistFindings?.(findings);
     const extraMetadata = input.completionMetadata?.(findings) ?? {};
 
-    await appendEvent({
+    const completionEvent = appendEvent({
       eventType: SCAN_EVENT_TYPES.unifiedFindingsDerivedCompleted,
       message: "Unified finding derivation completed.",
       metadataJson: {
@@ -646,7 +653,12 @@ export async function deriveUnifiedFindingsWithWorkflowEvents<TFinding extends {
         stage: "unified_findings"
       },
       scanId: input.scanId
-    }).catch(() => undefined);
+    });
+    if (input.requireDurableCompletionEvent) {
+      await completionEvent;
+    } else {
+      await completionEvent.catch(() => undefined);
+    }
 
     return findings;
   } catch (error) {
@@ -6977,6 +6989,22 @@ export async function processNanoSignalEnrichmentJob(input: {
         scanId,
         status: "completed",
         completedAt: new Date().toISOString()
+      });
+    }
+
+    if (!shouldReprojectAfterBrowserExtensionSignals && (scanStatus === "completed" || scanType === "preview")) {
+      const workerEnv = getWorkerEnv();
+      await ensureCompletedScanScoresPersisted({
+        scanId,
+        targetEnvironment: workerEnv.CERTSCORE_V2_DAG_LAMBDA_TARGET_ENV,
+        webBaseUrl: workerEnv.CERTSCORE_WEB_BASE_URL,
+      }).catch((error) => {
+        // The completion event and pending request were committed atomically.
+        // Leave endpoint or process failures to the indexed recovery sweep.
+        console.error("[validation-worker] immediate report materialization dispatch failed", {
+          error: error instanceof Error ? error.message : String(error),
+          scanId,
+        });
       });
     }
   }

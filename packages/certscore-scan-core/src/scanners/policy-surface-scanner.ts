@@ -512,6 +512,24 @@ export async function policySurfaceScanner(
     renderedRecoverySuccesses: 0,
     seenFailureKeys: new Set(),
   };
+  const appendPolicyResults = (results: {
+    observations: PolicySurfaceObservation[];
+    artifactRefs: ArtifactRef[];
+  }) => {
+    const mergedObservations = mergePolicySurfaceObservations(
+      observations,
+      results.observations,
+    );
+    observations.splice(0, observations.length, ...mergedObservations);
+    for (const artifactRef of results.artifactRefs) {
+      if (!artifactRefs.some((existing) =>
+        existing.artifactId === artifactRef.artifactId &&
+        existing.path === artifactRef.path
+      )) {
+        artifactRefs.push(artifactRef);
+      }
+    }
+  };
   let siteFacingNavigation: ScanModuleRun["siteFacingNavigation"];
   const withSiteFacingNavigation = (run: ScanModuleRun): ScanModuleRun =>
     siteFacingNavigation ? { ...run, siteFacingNavigation } : run;
@@ -697,15 +715,10 @@ export async function policySurfaceScanner(
       renderedCandidateCount = renderedCandidates.length;
       const speculativeCommonPathRecovery = await speculativeCommonPathRecoveryPromise?.catch(() => undefined);
       if (
-        renderedCandidates.length === 0 &&
         speculativeCommonPathRecovery &&
-        hasRetainedCorePolicyOrControlSurface([
-          ...observations,
-          ...speculativeCommonPathRecovery.observations,
-        ])
+        hasRetainedGoverningPolicyIndexChild(speculativeCommonPathRecovery.observations)
       ) {
-        observations.push(...speculativeCommonPathRecovery.observations);
-        artifactRefs.push(...speculativeCommonPathRecovery.artifactRefs);
+        appendPolicyResults(speculativeCommonPathRecovery);
         speculativeCommonPathNanoAbortController.abort();
         await speculativeCommonPathNanoRankingPromise.catch(() => undefined);
         artifactRefs.push(await writePolicyCaptureDiagnostics({
@@ -746,9 +759,8 @@ export async function policySurfaceScanner(
             labelPrefix: "homepage-failed deterministic rendered",
             policySurfaceTextArtifactBudget,
           });
-          observations.push(...deterministicRenderedResults.observations);
-          artifactRefs.push(...deterministicRenderedResults.artifactRefs);
-          if (hasRetainedCorePolicyOrControlSurface(observations)) {
+          appendPolicyResults(deterministicRenderedResults);
+          if (hasRetainedGoverningPolicyOrControlSurface(observations)) {
             speculativeCommonPathNanoAbortController.abort();
             await speculativeCommonPathNanoRankingPromise.catch(() => undefined);
             artifactRefs.push(await writePolicyCaptureDiagnostics({
@@ -785,9 +797,8 @@ export async function policySurfaceScanner(
           await speculativeCommonPathNanoRankingPromise.catch(() => undefined);
           throw error;
         }
-        observations.push(...renderedResults.observations);
-        artifactRefs.push(...renderedResults.artifactRefs);
-        if (hasRetainedCorePolicyOrControlSurface(observations)) {
+        appendPolicyResults(renderedResults);
+        if (hasRetainedGoverningPolicyOrControlSurface(observations)) {
           speculativeCommonPathNanoAbortController.abort();
           await speculativeCommonPathNanoRankingPromise.catch(() => undefined);
           artifactRefs.push(await writePolicyCaptureDiagnostics({
@@ -811,13 +822,12 @@ export async function policySurfaceScanner(
       if (
         renderedCandidates.length > 0 &&
         speculativeCommonPathRecovery &&
-        hasRetainedCorePolicyOrControlSurface([
+        hasRetainedGoverningPolicyOrControlSurface([
           ...observations,
           ...speculativeCommonPathRecovery.observations,
         ])
       ) {
-        observations.push(...speculativeCommonPathRecovery.observations);
-        artifactRefs.push(...speculativeCommonPathRecovery.artifactRefs);
+        appendPolicyResults(speculativeCommonPathRecovery);
         speculativeCommonPathNanoAbortController.abort();
         await speculativeCommonPathNanoRankingPromise.catch(() => undefined);
         artifactRefs.push(await writePolicyCaptureDiagnostics({
@@ -851,9 +861,8 @@ export async function policySurfaceScanner(
         labelPrefix: "homepage-failed common-path",
         policySurfaceTextArtifactBudget,
       });
-      observations.push(...fallbackResults.observations);
-      artifactRefs.push(...fallbackResults.artifactRefs);
-      if (hasRetainedCorePolicyOrControlSurface(observations)) {
+      appendPolicyResults(fallbackResults);
+      if (hasRetainedGoverningPolicyOrControlSurface(observations)) {
         artifactRefs.push(await writePolicyCaptureDiagnostics({
           input,
           moduleStartedAtMs,
@@ -2429,7 +2438,11 @@ async function processPolicyCandidate({
   return {
     observation: observationFromCandidate(effectiveCandidate, {
       status: "fetched",
-      documentRole: policyDocumentRoleForChildSelection(effectiveCandidate, childSelection),
+      documentRole: policyDocumentRoleForChildSelection(effectiveCandidate, childSelection, {
+        substantiveDisclosureSignalCount: merged.article13DisclosureSignals.filter((signal) =>
+          signal.status === "observed"
+        ).length,
+      }),
       httpStatus: fetched.status,
       finalUrl: fetchedFinalUrl,
       redirectChain: policyFetchRedirectChain(fetched),
@@ -4531,6 +4544,37 @@ function hasRetainedCorePolicyOrControlSurface(observations: PolicySurfaceObserv
   );
 }
 
+function hasRetainedGoverningPolicyOrControlSurface(
+  observations: PolicySurfaceObservation[],
+): boolean {
+  const privacyPolicyObservations = observations.filter((observation) =>
+    observation.surfaceType === "privacy_policy" &&
+    !isStateSpecificPrivacyPath(observation.normalizedUrl ?? observation.url)
+  );
+  if (privacyPolicyObservations.length > 0) {
+    return privacyPolicyObservations.some((observation) =>
+      observation.status === "fetched" &&
+      observation.documentEvaluationState === "usable" &&
+      observation.documentRole !== "policy_index"
+    );
+  }
+  return hasRetainedCorePolicyOrControlSurface(observations);
+}
+
+function hasRetainedGoverningPolicyIndexChild(
+  observations: PolicySurfaceObservation[],
+): boolean {
+  return observations.some((observation) =>
+    observation.surfaceType === "privacy_policy" &&
+    observation.status === "fetched" &&
+    observation.documentEvaluationState === "usable" &&
+    observation.documentRole !== "policy_index" &&
+    observation.traversalDepth === 1 &&
+    Boolean(observation.parentObservationId) &&
+    observation.selectionReasonCodes?.includes("linked_from_retained_privacy_policy_index")
+  );
+}
+
 function isCorePolicyOrControlSurface(observation: Pick<PolicySurfaceObservation, "surfaceType">): boolean {
   return [
     "privacy_policy",
@@ -4905,8 +4949,16 @@ function observationsForUnselectedPrivacyIndexChildren(
 function policyDocumentRoleForChildSelection(
   candidate: PolicySurfaceCandidate,
   selection: { fetchCandidates: PolicySurfaceCandidate[]; observedChildCandidates: PolicySurfaceCandidate[] },
+  options: { substantiveDisclosureSignalCount?: number } = {},
 ): "policy_document" | "policy_index" | "unknown" {
   if (candidate.deterministicSurfaceType !== "privacy_policy") return "unknown";
+  // A substantive governing notice can legitimately link to multiple regional
+  // or topic-specific supplements. Only treat the parent as an index when its
+  // own retained text does not already establish multiple row-specific
+  // transparency disclosures.
+  if ((options.substantiveDisclosureSignalCount ?? 0) >= 2) {
+    return "policy_document";
+  }
   const retainedChildren = [...selection.fetchCandidates, ...selection.observedChildCandidates];
   if (retainedChildren.some((child) =>
     child.selectionReasonCodes?.includes("website_privacy_notice_for_scanned_site")
@@ -5672,8 +5724,8 @@ const ARTICLE13_SECTION_PROFILES: Array<{
   {
     disclosureType: "data_retention",
     headingPatterns: [/retaining your information/i, /retention/i],
-    textPatterns: [/retain/i, /retained/i, /retention/i, /deleted?/i, /deletion/i, /anonymi[sz]ed?/i, /remove/i, /expires?/i, /kept for/i, /legal purposes/i, /fraud and abuse prevention/i],
-    observedPattern: /(?:retain|retained).{0,220}(?:as long as necessary|required by law|legal purposes|fraud|abuse|different periods)|deleted? or anonymi[sz]ed|kept until you remove|retention period|retention criteria/i,
+    textPatterns: [/retain/i, /retained/i, /retention/i, /deleted?/i, /deletion/i, /anonymi[sz]ed?/i, /remove/i, /expires?/i, /kept for/i, /keep (?:your )?(?:personal )?(?:data|information) for as long as (?:we )?(?:need|require)/i, /legal purposes/i, /fraud and abuse prevention/i],
+    observedPattern: /(?:retain|retained).{0,220}(?:as long as necessary|required by law|legal purposes|fraud|abuse|different periods)|keep (?:your )?(?:personal )?(?:data|information) for as long as (?:we )?(?:need|require)|deleted? or anonymi[sz]ed|kept until you remove|retention period|retention criteria/i,
   },
   {
     disclosureType: "data_subject_rights",
@@ -7945,6 +7997,12 @@ function bestSectionForProfile(
     ) {
       score += 8;
     }
+    if (
+      profile.disclosureType === "legal_basis" &&
+      isArticle13DisclosureEvidenceUsable(haystack, profile.disclosureType)
+    ) {
+      score += 8;
+    }
     if (profile.partialPattern?.test(section.textExcerpt)) score += 3;
     if (profile.partialPattern) profile.partialPattern.lastIndex = 0;
     if (profile.subjectScope === "controller") {
@@ -8000,7 +8058,10 @@ function bestSectionExcerptForProfile(
       /(?:your details|contact details|application data|application documents|(?:the )?data).{0,180}(?:used|processed|collected|stored).{0,180}(?:to|for(?: the purpose of)?).{0,240}/i,
     ],
     legal_basis: [/(?:our )?(?:legal|lawful) bases? (?:are|include).{0,260}(?:contract|legitimate interests?|legal obligations?|consent|public task|vital interests?)/i],
-    data_retention: [/we retain.{0,260}(?:as long as|period|criteria|delete|anonymi[sz]e)/i],
+    data_retention: [
+      /we retain.{0,260}(?:as long as|period|criteria|delete|anonymi[sz]e)/i,
+      /we (?:only )?keep (?:your )?(?:personal )?(?:data|information).{0,180}(?:for as long as|until|while).{0,180}(?:need|required|purpose|law)/i,
+    ],
     international_transfers: [/(?:we may |we |may )?transfer (?:your )?(?:personal )?(?:data|information).{0,260}(?:located )?outside (?:of )?(?:your |the )?(?:country|jurisdiction|eea|european economic area|uk|united kingdom|eu|european union)/i, /(?:personal data|personal information|information|data).{0,180}(?:transferred|processed|stored|accessed).{0,220}(?:united states|other jurisdictions|other countries|outside)/i, /(?:we|our service providers?|our processors?) (?:transfer|store|process).{0,300}(?:outside|other countries|third countr(?:y|ies)|international).{0,300}(?:standard contractual clauses|adequacy|safeguards?|data privacy framework|protect)/i, /(?:international|cross-border|third-country) transfers?.{0,300}(?:standard contractual clauses|adequacy|safeguards?|data privacy framework|protect)/i],
     recipients_or_vendor_categories: [/(?:we|the company) (?:share|disclose|provide).{0,180}(?:personal data|personal information|information|data).{0,260}(?:service providers?|affiliates?|analytics providers?|advertising networks?|social networks?|platforms?|governmental authorities|third parties)/i],
     dpo_contact: [/(?:privacy office|data protection office|data protection officer|\bdpo\b).{0,180}(?:@|contact|email|write|telephone|phone)/i],

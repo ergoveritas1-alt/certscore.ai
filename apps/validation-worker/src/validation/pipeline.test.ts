@@ -261,6 +261,20 @@ test("deriveUnifiedFindingsWithWorkflowEvents publishes completion only after fi
   assert.deepEqual(order, ["findings_persisted", "completion_event"]);
 });
 
+test("deriveUnifiedFindingsWithWorkflowEvents fails closed when its durable completion handoff fails", async () => {
+  await assert.rejects(
+    () => deriveUnifiedFindingsWithWorkflowEvents({
+      appendEvent: async () => {
+        throw new Error("durable handoff unavailable");
+      },
+      deriveFindings: () => [{ ruleKey: "example.finding" }],
+      requireDurableCompletionEvent: true,
+      scanId: "scan_123"
+    }),
+    /durable handoff unavailable/
+  );
+});
+
 test("deriveUnifiedFindingsWithWorkflowEvents emits failed event metadata on error", async () => {
   const events: Array<Record<string, unknown>> = [];
 
