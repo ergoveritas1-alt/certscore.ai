@@ -83,10 +83,13 @@ async function main() {
   }
 
   if (!args.noPredeploy && ["all", "web", "validation", "scanners", "db"].includes(args.mode)) {
-    await timedLane("preflight", async () => {
+    const preflight = await timedLane("preflight", async () => {
       const predeployArgs = args.mode === "all" ? ["preflight:all"] : ["preflight:fast"];
       await run(["pnpm", ...predeployArgs]);
     });
+    if (preflight.status === "failed") {
+      throw new Error("Deployment aborted because preflight failed.");
+    }
   }
 
   if (!args.noPush && !args.ref) {
