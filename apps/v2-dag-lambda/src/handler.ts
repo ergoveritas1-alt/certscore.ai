@@ -996,6 +996,7 @@ async function runLocalV2DagLambdaScanBundle(
           options.preConsentVisualFallbackDeadlineMs ?? options.scanTuning.preConsentVisualFallbackDeadlineMs,
         preConsentVisualFallbackDeadlineAtMs: options.preConsentVisualFallbackDeadlineAtMs,
         profile: payload.profile,
+        region: payload.awsRegion,
         scenarioPlanningMode: "planned_parallel",
         scenarioResourceMode: effectiveScenarioResourceMode(payload, options.scanTuning),
         signal: options.signal,
