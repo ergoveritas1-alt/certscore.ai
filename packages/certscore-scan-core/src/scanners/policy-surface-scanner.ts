@@ -637,6 +637,25 @@ export async function policySurfaceScanner(
       // not retain a core surface. Observe rejection immediately while Chromium
       // continues so it cannot become an unhandled rejection.
       void speculativeCommonPathNanoRankingPromise.catch(() => undefined);
+      const speculativeCommonPathRecoveryCandidates = deterministicCommonPathFetchFallback(fallbackCandidates)
+        .filter((candidate) =>
+          candidate.fetchable &&
+          !candidate.observationOnly &&
+          candidate.deterministicSurfaceType === "privacy_policy"
+        )
+        .slice(0, 1);
+      const speculativeCommonPathRecoveryPromise = speculativeCommonPathRecoveryCandidates.length > 0
+        ? fetchPolicyCandidateGroup({
+          input,
+          fetchCaches: policyDocumentFetchCaches,
+          timingBreakdown,
+          moduleStartedAtMs,
+          rankedCandidates: speculativeCommonPathRecoveryCandidates,
+          labelPrefix: "homepage-failed speculative common-path recovery",
+          policySurfaceTextArtifactBudget,
+        })
+        : undefined;
+      void speculativeCommonPathRecoveryPromise?.catch(() => undefined);
       let renderedCandidates: PolicySurfaceCandidate[];
       try {
         const renderedDiscovery = await recordPolicyTiming(
@@ -652,6 +671,36 @@ export async function policySurfaceScanner(
         throw error;
       }
       renderedCandidateCount = renderedCandidates.length;
+      const speculativeCommonPathRecovery = await speculativeCommonPathRecoveryPromise?.catch(() => undefined);
+      if (
+        renderedCandidates.length === 0 &&
+        speculativeCommonPathRecovery &&
+        hasRetainedCorePolicyOrControlSurface([
+          ...observations,
+          ...speculativeCommonPathRecovery.observations,
+        ])
+      ) {
+        observations.push(...speculativeCommonPathRecovery.observations);
+        artifactRefs.push(...speculativeCommonPathRecovery.artifactRefs);
+        speculativeCommonPathNanoAbortController.abort();
+        await speculativeCommonPathNanoRankingPromise.catch(() => undefined);
+        artifactRefs.push(await writePolicyCaptureDiagnostics({
+          input,
+          moduleStartedAtMs,
+          staticCandidateCount,
+          renderedCandidateCount,
+          observedCandidateCount,
+          commonPathFallbackUsed: true,
+          observations,
+          candidates: fallbackCandidates,
+          policyFetchDiagnostics,
+        }));
+        return {
+          moduleRun: completedPolicyModuleRun(),
+          policySurfaceObservations: observations,
+          artifactRefs,
+        };
+      }
       if (renderedCandidates.length > 0) {
         observedCandidateCount = renderedCandidates.length;
         const deterministicRenderedCoreCandidates = deterministicFetchFallback(renderedCandidates)
@@ -734,6 +783,35 @@ export async function policySurfaceScanner(
             artifactRefs,
           };
         }
+      }
+      if (
+        renderedCandidates.length > 0 &&
+        speculativeCommonPathRecovery &&
+        hasRetainedCorePolicyOrControlSurface([
+          ...observations,
+          ...speculativeCommonPathRecovery.observations,
+        ])
+      ) {
+        observations.push(...speculativeCommonPathRecovery.observations);
+        artifactRefs.push(...speculativeCommonPathRecovery.artifactRefs);
+        speculativeCommonPathNanoAbortController.abort();
+        await speculativeCommonPathNanoRankingPromise.catch(() => undefined);
+        artifactRefs.push(await writePolicyCaptureDiagnostics({
+          input,
+          moduleStartedAtMs,
+          staticCandidateCount,
+          renderedCandidateCount,
+          observedCandidateCount,
+          commonPathFallbackUsed: true,
+          observations,
+          candidates: dedupeCandidates([...renderedCandidates, ...fallbackCandidates]),
+          policyFetchDiagnostics,
+        }));
+        return {
+          moduleRun: completedPolicyModuleRun(),
+          policySurfaceObservations: observations,
+          artifactRefs,
+        };
       }
       commonPathFallbackUsed = true;
       const nanoRankedFallbackCandidates = await speculativeCommonPathNanoRankingPromise;

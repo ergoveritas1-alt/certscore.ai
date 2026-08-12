@@ -3248,6 +3248,100 @@ test("policySurfaceScanner bounds a Ford-like stalled homepage fetch and continu
   }
 });
 
+test("policySurfaceScanner runs common-path fallback browser recovery while blocked rendered discovery is still pending", async () => {
+  let renderedHomepageRespondedAt = 0;
+  let renderedPrivacyRequestedAt = 0;
+  const server = createServer((request, response) => {
+    const requestUrl = new URL(request.url ?? "/", "http://127.0.0.1");
+    const isDirectScannerRequest = /^ConsentCheckBot\//.test(request.headers["user-agent"] ?? "");
+    if (isDirectScannerRequest) {
+      response.writeHead(403, { "content-type": "text/plain" });
+      response.end("blocked direct request");
+      return;
+    }
+    if (requestUrl.pathname === "/privacy") {
+      renderedPrivacyRequestedAt = Date.now();
+      response.writeHead(200, { "content-type": "text/html; charset=utf-8" });
+      response.end(`<!doctype html><html><head><title>Privacy Policy</title></head><body><main>
+        <h1>Privacy Policy</h1>
+        <p>Example Media Company is the controller for this service. Contact privacy@example.test.</p>
+        <p>We process account, device, and usage data to provide services, secure the site, and personalize content. Our legal bases include contract and legitimate interests.</p>
+        <p>Service providers and advertising partners may receive information for these purposes.</p>
+        <p>We retain account records for seven years and delete other information when it is no longer needed.</p>
+        <p>You may access, rectify, erase, restrict, object to processing, and port your personal data.</p>
+        <p>International transfers outside the EEA use standard contractual clauses. You may complain to your supervisory authority.</p>
+      </main></body></html>`);
+      return;
+    }
+    if (requestUrl.pathname === "/") {
+      setTimeout(() => {
+        renderedHomepageRespondedAt = Date.now();
+        response.writeHead(200, { "content-type": "text/html; charset=utf-8" });
+        response.end("<!doctype html><html><body><main><h1>News</h1><p>No policy links rendered here.</p></main></body></html>");
+      }, 5_000);
+      return;
+    }
+    response.writeHead(404, { "content-type": "text/plain" });
+    response.end("not found");
+  });
+  server.listen(0, "127.0.0.1");
+  await once(server, "listening");
+  const address = server.address();
+  assert.ok(address && typeof address === "object");
+  const targetUrl = `http://127.0.0.1:${address.port}/`;
+  const tempRoot = await mkdtemp(path.join(tmpdir(), "certscore-policy-parallel-recovery-"));
+  try {
+    const artifactWriter = await createArtifactWriter(tempRoot);
+    const startedAt = Date.now();
+    const result = await policySurfaceScanner({
+      url: targetUrl,
+      normalizedUrl: targetUrl,
+      scanStartedAtMs: startedAt,
+      internalBudgetMs: 8_000,
+      artifactWriter,
+      nanoAssistProvider: createDefaultMockNanoPolicyAssistProvider(),
+    });
+    const elapsedMs = Date.now() - startedAt;
+    const diagnostics = await readPolicyCaptureDiagnostics(result);
+    const privacy = result.policySurfaceObservations.find((observation) =>
+      observation.status === "fetched" && observation.normalizedUrl === `${targetUrl}privacy`
+    );
+
+    assert.equal(result.moduleRun.status, "completed");
+    assert.ok(privacy);
+    assert.equal(privacy.surfaceType, "privacy_policy");
+    assert.equal(privacy.httpStatus, 200);
+    assert.ok(renderedPrivacyRequestedAt > 0);
+    assert.ok(renderedHomepageRespondedAt > 0);
+    assert.ok(
+      renderedPrivacyRequestedAt < renderedHomepageRespondedAt,
+      "common-path browser recovery should start before slow rendered homepage discovery completes",
+    );
+    assert.ok(elapsedMs < 7_500, `expected parallel recovery to stay within the lane budget; elapsed=${elapsedMs}`);
+    assert.equal(diagnostics.renderedCandidateCount, 0);
+    assert.equal(diagnostics.commonPathFallbackUsed, true);
+    assert.equal(diagnostics.corePolicySurfaceRetained, true);
+    assert.equal(
+      diagnostics.failedFetches.some((failure) =>
+        failure.stage === "candidate_direct" &&
+        failure.candidateUrl === `${targetUrl}privacy` &&
+        failure.httpStatus === 403
+      ),
+      true,
+    );
+    assert.equal(
+      result.moduleRun.timingBreakdown?.some((timing) =>
+        timing.label.includes("homepage-failed speculative common-path recovery")
+      ),
+      true,
+    );
+  } finally {
+    server.close();
+    await once(server, "close");
+    await rm(tempRoot, { recursive: true, force: true });
+  }
+});
+
 test("policySurfaceScanner keeps core common paths when Nano ranks only secondary controls after homepage failure", async () => {
   const server = await startStaticFixtureServer();
   const tempRoot = await mkdtemp(path.join(tmpdir(), "certscore-policy-scan-"));
