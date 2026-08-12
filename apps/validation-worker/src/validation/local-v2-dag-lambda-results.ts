@@ -230,7 +230,7 @@ export async function ensureCompletedScanScoresPersisted(input: {
   const fetchMaterialization = input.fetchImpl ?? fetch;
   const materializationUrl = new URL("/api/internal/scan-score-materialization", baseUrl);
   let finalizingAttempt = 0;
-  for (const mode of ["publish_report", "finalize"] as const) {
+  for (const mode of ["publish_and_finalize"] as const) {
     while (true) {
       finalizingAttempt += 1;
       const remainingMs = Math.max(1_000, finalizingDeadline - Date.now());
@@ -268,12 +268,6 @@ export async function ensureCompletedScanScoresPersisted(input: {
         throw new Error(`Score materialization endpoint returned HTTP ${response.status}.`);
       }
       const result = await response.json() as { complete?: unknown; reportReady?: unknown };
-      if (mode === "publish_report") {
-        if (result.reportReady !== true) {
-          throw new Error("Report materialization endpoint did not confirm canonical report readiness.");
-        }
-        break;
-      }
       if (result.complete !== true || !(await completedScoreMaterializationExists(input.scanId))) {
         throw new Error("Score materialization endpoint did not confirm canonical materialization completion.");
       }

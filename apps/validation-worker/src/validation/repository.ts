@@ -1972,7 +1972,10 @@ export async function replaceValidationRunFindings(
     pageUrl: string | null;
     rank: number;
     evidence: Record<string, unknown>;
-  }>
+  }>,
+  options: {
+    persistReportFindingCount?: boolean;
+  } = {}
 ) {
   const run = await getValidationRun(runId);
   await query(`delete from validation_run_findings where validation_run_id = $1`, [runId]);
@@ -1982,7 +1985,7 @@ export async function replaceValidationRunFindings(
       finding_count: 0,
       reviewed_finding_count: 0
     });
-    if (run?.scan_id) {
+    if (run?.scan_id && options.persistReportFindingCount !== false) {
       await persistValidationRunReportFindingCount({
         runId,
         scanId: run.scan_id
@@ -2104,7 +2107,7 @@ export async function replaceValidationRunFindings(
     finding_count: findings.length
   });
 
-  if (run?.scan_id) {
+  if (run?.scan_id && options.persistReportFindingCount !== false) {
     await persistValidationRunReportFindingCount({
       runId,
       scanId: run.scan_id ?? ""

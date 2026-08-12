@@ -56,7 +56,7 @@ export async function POST(request: Request) {
     const body = await request.json() as { mode?: unknown; scanId?: unknown; token?: unknown };
     scanId = typeof body.scanId === "string" ? body.scanId : null;
     const token = typeof body.token === "string" ? body.token : null;
-    const mode = body.mode === "publish_report" || body.mode === "finalize"
+    const mode = body.mode === "publish_report" || body.mode === "finalize" || body.mode === "publish_and_finalize"
       ? body.mode
       : "publish_and_finalize";
     if (!scanId || !/^[0-9a-f-]{36}$/i.test(scanId) || !token || !/^[A-Za-z0-9_-]{40,80}$/.test(token)) {

@@ -416,11 +416,19 @@ async function deriveAndPersistUnifiedFindingsForScan(input: {
       ...(input.recoveryMode ? { recoveryMode: input.recoveryMode } : {})
     }),
     deriveFindings: () => deriveValidationFindings(refreshedArtifacts),
+    persistFindings: async (derivedFindings) => {
+      const targetRun = input.validationRunId
+        ? { id: input.validationRunId }
+        : await ensureCompletedValidationRunForScan(input.scanId);
+      // Canonical report publication persists the exact customer-visible
+      // report_finding_count. Rebuilding the report state here would duplicate
+      // that complete projection immediately before publication.
+      await replaceValidationRunFindings(targetRun.id, derivedFindings, {
+        persistReportFindingCount: false
+      });
+    },
     scanId: input.scanId
   });
-
-  const targetRun = input.validationRunId ? { id: input.validationRunId } : await ensureCompletedValidationRunForScan(input.scanId);
-  await replaceValidationRunFindings(targetRun.id, findings);
 
   return findings;
 }
@@ -619,12 +627,14 @@ export async function deriveUnifiedFindingsWithWorkflowEvents<TFinding extends {
   appendEvent?: UnifiedFindingsWorkflowEventAppender;
   completionMetadata?: (findings: TFinding[]) => Record<string, unknown>;
   deriveFindings: () => TFinding[];
+  persistFindings?: (findings: TFinding[]) => Promise<void>;
   scanId: string;
 }) {
   const appendEvent = input.appendEvent ?? appendScanWorkflowEvent;
 
   try {
     const findings = input.deriveFindings();
+    await input.persistFindings?.(findings);
     const extraMetadata = input.completionMetadata?.(findings) ?? {};
 
     await appendEvent({

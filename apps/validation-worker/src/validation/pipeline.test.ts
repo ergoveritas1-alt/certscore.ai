@@ -244,6 +244,23 @@ test("deriveUnifiedFindingsWithWorkflowEvents includes completion metadata on su
   });
 });
 
+test("deriveUnifiedFindingsWithWorkflowEvents publishes completion only after findings are durable", async () => {
+  const order: string[] = [];
+
+  await deriveUnifiedFindingsWithWorkflowEvents({
+    appendEvent: async () => {
+      order.push("completion_event");
+    },
+    deriveFindings: () => [{ ruleKey: "example.finding" }],
+    persistFindings: async () => {
+      order.push("findings_persisted");
+    },
+    scanId: "scan_123"
+  });
+
+  assert.deepEqual(order, ["findings_persisted", "completion_event"]);
+});
+
 test("deriveUnifiedFindingsWithWorkflowEvents emits failed event metadata on error", async () => {
   const events: Array<Record<string, unknown>> = [];
 

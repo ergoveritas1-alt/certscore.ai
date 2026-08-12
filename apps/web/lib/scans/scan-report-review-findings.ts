@@ -2171,6 +2171,49 @@ function getSignalHitMatchedTexts(signalKey: string, signalHitRows: Array<Record
   return uniqueStrings(texts);
 }
 
+function buildRuntimeDerivedReviewIssues(
+  sectionId: string,
+  runtimeArtifacts: Record<string, unknown> | null | undefined
+): CanonicalReviewIssue[] {
+  if (sectionId !== "tracking_third_party_ecosystem") {
+    return [];
+  }
+
+  const endpointJurisdictionRows = getEndpointJurisdictionRows(runtimeArtifacts);
+  const transferReviewEndpointRows = endpointJurisdictionRows
+    .filter(isTransferReviewEndpointRow)
+    .map(compactEndpointJurisdictionRow)
+    .filter((row) => row.host);
+  if (transferReviewEndpointRows.length === 0) {
+    return [];
+  }
+
+  const endpointHosts = uniqueStrings(transferReviewEndpointRows.map((row) => row.host));
+  const endpointRegions = uniqueStrings(transferReviewEndpointRows.map((row) => row.inferredRegion));
+  const endpointCountries = uniqueStrings(transferReviewEndpointRows.map((row) => row.inferredCountryCode));
+  const endpointVendors = uniqueStrings(transferReviewEndpointRows.map((row) => row.matchedVendorName));
+  return [{
+    description:
+      `Observed ${transferReviewEndpointRows.length} third-party endpoint${transferReviewEndpointRows.length === 1 ? "" : "s"} with retained jurisdiction or transfer-region evidence that merits international-transfer review.`,
+    evidence: endpointHosts.slice(0, 6),
+    fallbackEvidence: {
+      endpointJurisdictionEvidence: transferReviewEndpointRows,
+      endpoint_jurisdiction_evidence: transferReviewEndpointRows,
+      runtime_vendor_disclosure_evidence: getRuntimeVendorDisclosureEvidence(runtimeArtifacts),
+      endpointJurisdictionRows: endpointJurisdictionRows.length,
+      endpointTransferReviewHosts: endpointHosts,
+      endpointTransferReviewRegions: endpointRegions,
+      endpointTransferReviewCountries: endpointCountries,
+      endpointTransferReviewVendors: endpointVendors,
+      supportingSignals: ["privacy.cross_border_endpoint_transfer_review_signal"],
+      transferReviewSignalRows: transferReviewEndpointRows.length,
+      unifiedFindingId: "cross_border_endpoint_transfer_review_signal"
+    },
+    severity: "medium",
+    title: "Cross-border endpoint transfer review signal"
+  }];
+}
+
 export type ScanReportReviewFindingContext = {
   availableSignalKeys: ReadonlySet<string>;
   getAccessibilityExamples: (signalKey: string) => ReturnType<typeof getRepresentativeAccessibilityExamplesForSignal>;
@@ -2182,8 +2225,14 @@ export type ScanReportReviewFindingContext = {
     signalLabel: string;
     signalValue: unknown;
   }) => ReturnType<typeof getPolicySignalFallbackEvidence>;
+  getRuntimeDerivedIssues: (sectionId: string) => CanonicalReviewIssue[];
   getSignalHitMatchedTexts: (signalKey: string) => string[];
 };
+
+const CONTRADICTORY_SIGNAL_PAIRS = new Map<string, string>([
+  ["privacy.privacy_contact_channel_missing", "privacy.privacy_contact_path_present"],
+  ["accessibility.accessibility_support_path_missing", "accessibility.accessibility_contact_method_present"]
+]);
 
 /**
  * Builds immutable scan-wide indexes once for the category/section projection.
@@ -2241,6 +2290,7 @@ export function createScanReportReviewFindingContext(input: {
   const accessibilityExamples = new Map<string, ReturnType<typeof getRepresentativeAccessibilityExamplesForSignal>>();
   const keyPageSummaries = new Map<string, ReturnType<typeof getKeyPageDiscoveryPageSummary>>();
   const policyFallbackEvidence = new Map<string, ReturnType<typeof getPolicySignalFallbackEvidence>>();
+  const runtimeDerivedIssues = new Map<string, CanonicalReviewIssue[]>();
   const macroFallbackFields = getDomainMacroFallbackFields(input.macroEnrichment);
   return {
     availableSignalKeys,
@@ -2279,6 +2329,15 @@ export function createScanReportReviewFindingContext(input: {
       }
       return policyFallbackEvidence.get(signal.signalKey)!;
     },
+    getRuntimeDerivedIssues: (sectionId) => {
+      if (!runtimeDerivedIssues.has(sectionId)) {
+        runtimeDerivedIssues.set(
+          sectionId,
+          buildRuntimeDerivedReviewIssues(sectionId, input.runtimeArtifacts)
+        );
+      }
+      return runtimeDerivedIssues.get(sectionId) ?? [];
+    },
     getSignalHitMatchedTexts: (signalKey) => signalHitMatchedTexts.get(signalKey) ?? []
   };
 }
@@ -2305,10 +2364,6 @@ export function buildReviewFindings(input: {
   validationFindingLookup?: Map<string, ScanValidationFinding>;
   reviewContext?: ScanReportReviewFindingContext;
 }) {
-  const contradictorySignalPairs = new Map<string, string>([
-    ["privacy.privacy_contact_channel_missing", "privacy.privacy_contact_path_present"],
-    ["accessibility.accessibility_support_path_missing", "accessibility.accessibility_contact_method_present"]
-  ]);
   const reviewContext = input.reviewContext ?? createScanReportReviewFindingContext(input);
   const sectionSignalKeys = new Set(
     input.sectionItems
@@ -2321,7 +2376,7 @@ export function buildReviewFindings(input: {
         return false;
       }
 
-      const contradictoryPositiveSignalKey = contradictorySignalPairs.get(item.key);
+      const contradictoryPositiveSignalKey = CONTRADICTORY_SIGNAL_PAIRS.get(item.key);
       if (contradictoryPositiveSignalKey) {
         const mergedPositiveValue = reviewContext.getMergedSignalValue(contradictoryPositiveSignalKey);
         if (
@@ -2540,41 +2595,7 @@ export function buildReviewFindings(input: {
       }];
     });
 
-  const runtimeDerivedIssues: CanonicalReviewIssue[] = [];
-  if (input.sectionId === "tracking_third_party_ecosystem") {
-    const endpointJurisdictionRows = getEndpointJurisdictionRows(input.runtimeArtifacts);
-    const transferReviewEndpointRows = endpointJurisdictionRows
-      .filter(isTransferReviewEndpointRow)
-      .map(compactEndpointJurisdictionRow)
-      .filter((row) => row.host);
-
-    if (transferReviewEndpointRows.length > 0) {
-      const endpointHosts = uniqueStrings(transferReviewEndpointRows.map((row) => row.host));
-      const endpointRegions = uniqueStrings(transferReviewEndpointRows.map((row) => row.inferredRegion));
-      const endpointCountries = uniqueStrings(transferReviewEndpointRows.map((row) => row.inferredCountryCode));
-      const endpointVendors = uniqueStrings(transferReviewEndpointRows.map((row) => row.matchedVendorName));
-      runtimeDerivedIssues.push({
-        description:
-          `Observed ${transferReviewEndpointRows.length} third-party endpoint${transferReviewEndpointRows.length === 1 ? "" : "s"} with retained jurisdiction or transfer-region evidence that merits international-transfer review.`,
-        evidence: endpointHosts.slice(0, 6),
-        fallbackEvidence: {
-          endpointJurisdictionEvidence: transferReviewEndpointRows,
-          endpoint_jurisdiction_evidence: transferReviewEndpointRows,
-          runtime_vendor_disclosure_evidence: getRuntimeVendorDisclosureEvidence(input.runtimeArtifacts),
-          endpointJurisdictionRows: endpointJurisdictionRows.length,
-          endpointTransferReviewHosts: endpointHosts,
-          endpointTransferReviewRegions: endpointRegions,
-          endpointTransferReviewCountries: endpointCountries,
-          endpointTransferReviewVendors: endpointVendors,
-          supportingSignals: ["privacy.cross_border_endpoint_transfer_review_signal"],
-          transferReviewSignalRows: transferReviewEndpointRows.length,
-          unifiedFindingId: "cross_border_endpoint_transfer_review_signal"
-        },
-        severity: "medium",
-        title: "Cross-border endpoint transfer review signal"
-      });
-    }
-  }
+  const runtimeDerivedIssues = reviewContext.getRuntimeDerivedIssues(input.sectionId);
 
   const allIssues = [...input.issues, ...runtimeDerivedIssues];
   const issueFindings: CanonicalReviewFinding[] = allIssues.map((issue, index) => ({
