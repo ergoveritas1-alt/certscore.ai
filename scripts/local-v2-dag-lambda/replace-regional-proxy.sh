@@ -22,18 +22,21 @@ done
 case "$region" in
   eu-central-1)
     location_slug="eu-de"
+    proxy_config_tag="ireland-parity-v1"
     expected_locale="de-DE"
     expected_accept_language="de-DE,de;q=0.9,en;q=0.8"
     expected_timezone="Europe/Berlin"
     ;;
   eu-west-1)
     location_slug="eu-ie"
+    proxy_config_tag="ireland-parity-v1"
     expected_locale="en-IE"
     expected_accept_language="en-IE,en;q=0.9"
     expected_timezone="Europe/Dublin"
     ;;
   us-west-1)
     location_slug="us-ca"
+    proxy_config_tag="us-ca-vpc-v1"
     expected_locale="en-US"
     expected_accept_language="en-US,en;q=0.9"
     expected_timezone="America/Los_Angeles"
@@ -155,7 +158,7 @@ new_instance_id="$(aws ec2 run-instances \
   --metadata-options HttpTokens=required,HttpPutResponseHopLimit=2,HttpEndpoint=enabled \
   --user-data "file://${user_data}" \
   --tag-specifications \
-    "ResourceType=instance,Tags=[{Key=Name,Value=${location_slug}-ec2-proxy-t4g-micro},{Key=Project,Value=CertScore},{Key=Purpose,Value=lambda-browser-egress-proxy},{Key=CertScoreProxyConfig,Value=ireland-parity-v1}]" \
+    "ResourceType=instance,Tags=[{Key=Name,Value=${location_slug}-ec2-proxy-t4g-micro},{Key=Project,Value=CertScore},{Key=Purpose,Value=lambda-browser-egress-proxy},{Key=CertScoreProxyConfig,Value=${proxy_config_tag}}]" \
   --query 'Instances[0].InstanceId' \
   --output text)"
 

@@ -94,6 +94,8 @@ test("regional proxy replacement can rotate EIPs with a blue-green cutover", asy
   assert.match(replacementScript, /\["timeout", fn\.Configuration\?\.Timeout, 75\]/);
   assert.match(replacementScript, /aws ec2 allocate-address/);
   assert.match(replacementScript, /Purpose,Value=lambda-browser-egress-proxy/);
+  assert.match(replacementScript, /proxy_config_tag="us-ca-vpc-v1"/);
+  assert.match(replacementScript, /CertScoreProxyConfig,Value=\$\{proxy_config_tag\}/);
   assert.match(replacementScript, /CERTSCORE_V2_DAG_LAMBDA_EGRESS_ID/);
   assert.match(replacementScript, /CERTSCORE_V2_DAG_LAMBDA_EGRESS_PUBLIC_IP_HASH/);
   assert.match(replacementScript, /Rollback proxy and Elastic IP retained/);
