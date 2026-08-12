@@ -132,6 +132,8 @@ export default async function AdminUsersPage({ searchParams }: AdminUsersPagePro
               <tr className="text-left text-xs font-medium uppercase tracking-wide text-slate-500">
                 <th className="whitespace-nowrap pb-2 pr-4"><SortHeader currentDirection={direction} currentSort={sortKey} sortKey="user" /></th>
                 <th className="whitespace-nowrap pb-2 pr-4"><SortHeader currentDirection={direction} currentSort={sortKey} sortKey="lastLogin" /></th>
+                <th className="whitespace-nowrap pb-2 pr-4" title="Includes user-initiated API and scan requests, including reused scans; does not change scan ownership.">Last requested</th>
+                <th className="whitespace-nowrap pb-2 pr-4" title="Includes scans submitted by the user or claimed from a verified anonymous browser handoff.">Last associated</th>
                 <th className="whitespace-nowrap pb-2 pr-4"><SortHeader currentDirection={direction} currentSort={sortKey} sortKey="lastScan" /></th>
                 <th className="whitespace-nowrap pb-2 pr-4"><SortHeader currentDirection={direction} currentSort={sortKey} sortKey="activity" /></th>
                 <th className="whitespace-nowrap pb-2 pr-4"><SortHeader currentDirection={direction} currentSort={sortKey} sortKey="access" /></th>
@@ -148,13 +150,33 @@ export default async function AdminUsersPage({ searchParams }: AdminUsersPagePro
                   <td className="py-2.5 pr-4 align-top">
                     <div className="flex items-center gap-2">
                       <div className="min-w-0">
-                        <p className="max-w-[260px] truncate font-medium text-slate-900" title={user.email}>{user.email}</p>
+                        <div className="flex min-w-0 items-center gap-1.5">
+                          <p className="max-w-[260px] truncate font-medium text-slate-900" title={user.email}>{user.email}</p>
+                          <Link
+                            aria-label={`View activity for ${user.email}`}
+                            className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-md border border-sky-200 bg-sky-50 text-sky-700 shadow-[0_2px_0_0_rgb(186,230,253)] transition hover:-translate-y-0.5 hover:border-sky-400 hover:bg-sky-100 hover:text-sky-800 hover:shadow-[0_3px_0_0_rgb(125,211,252)] active:translate-y-0.5 active:shadow-inner focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-500 focus-visible:ring-offset-2"
+                            href={`/app/admin/users/${user.id}/activity`}
+                            title="View user activity"
+                          >
+                            <svg aria-hidden="true" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="1.8">
+                              <path strokeLinecap="round" strokeLinejoin="round" d="M4 19.5V14m5 5.5V9m5 10.5V4m5 15.5V12" />
+                            </svg>
+                          </Link>
+                        </div>
                         <p className="truncate text-xs text-slate-500">{user.organizationName ?? "Unassigned"}</p>
                       </div>
                     </div>
                   </td>
                   <td className="whitespace-nowrap py-2.5 pr-4 align-top text-sm text-slate-600">
                     {formatAdminCompactDateTime(user.lastLoginAt)}
+                  </td>
+                  <td className="whitespace-nowrap py-2.5 pr-4 align-top text-sm text-slate-600">
+                    <p>{formatAdminCompactDateTime(user.lastScanRequestedAt)}</p>
+                    <p className="text-xs text-slate-400">{user.scanRequestCount} request{user.scanRequestCount === 1 ? "" : "s"}</p>
+                  </td>
+                  <td className="whitespace-nowrap py-2.5 pr-4 align-top text-sm text-slate-600">
+                    <p>{formatAdminCompactDateTime(user.lastAssociatedScanAt)}</p>
+                    <p className="text-xs text-slate-400">{user.associatedScanCount} scan{user.associatedScanCount === 1 ? "" : "s"}</p>
                   </td>
                   <td className="whitespace-nowrap py-2.5 pr-4 align-top text-sm text-slate-600">
                     {formatAdminCompactDateTime(user.lastScanAt)}

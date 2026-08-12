@@ -26,14 +26,18 @@ export type AdminUserListItem = {
   fullName: string | null;
   id: string;
   lastCompletedScanAt: string | null;
+  lastAssociatedScanAt: string | null;
   lastLoginAt: string | null;
   lastScanAt: string | null;
+  lastScanRequestedAt: string | null;
   membershipRole: string | null;
   organizationId: string | null;
   organizationName: string | null;
   organizationSlug: string | null;
   plan: PlanCode | null;
   planStatus: PlanStatus | null;
+  associatedScanCount: number;
+  scanRequestCount: number;
   totalScans: number;
   updatedAt: string;
 };
@@ -54,6 +58,10 @@ function normalizeMembershipRole(role: string | null) {
   }
 
   return role;
+}
+
+function latestActivityAt(...values: Array<string | null | undefined>) {
+  return values.filter((value): value is string => Boolean(value)).sort().at(-1) ?? null;
 }
 
 export async function listAdminUsers(): Promise<AdminUserListItem[]> {
@@ -119,8 +127,12 @@ export async function listAdminUsers(): Promise<AdminUserListItem[]> {
       domainCount: organization ? domainCounts.get(organization.id) ?? 0 : 0,
       totalScans: organization ? totalScans.get(organization.id) ?? 0 : 0,
       completedScans: organization ? completedScans.get(organization.id) ?? 0 : 0,
-      lastScanAt: organization ? latestScan.get(organization.id) ?? null : null,
-      lastCompletedScanAt: organization ? latestCompletedScan.get(organization.id) ?? null : null
+      lastScanAt: latestActivityAt(organization ? latestScan.get(organization.id) : null),
+      lastCompletedScanAt: organization ? latestCompletedScan.get(organization.id) ?? null : null,
+      lastAssociatedScanAt: null,
+      lastScanRequestedAt: null,
+      scanRequestCount: 0,
+      associatedScanCount: organization ? totalScans.get(organization.id) ?? 0 : 0
     } satisfies AdminUserListItem;
   });
 }
@@ -161,8 +173,12 @@ function mapAdminUserOverviewRow(row: AdminUserOverviewRow): AdminUserListItem {
     domainCount: Number(row.domain_count ?? 0),
     totalScans: Number(row.total_scans ?? 0),
     completedScans: Number(row.completed_scans ?? 0),
-    lastScanAt: row.last_scan_at,
-    lastCompletedScanAt: row.last_completed_scan_at
+    lastScanAt: latestActivityAt(row.last_scan_at, row.last_scan_requested_at),
+    lastCompletedScanAt: row.last_completed_scan_at,
+    lastAssociatedScanAt: row.last_associated_scan_at,
+    lastScanRequestedAt: row.last_scan_requested_at,
+    scanRequestCount: Number(row.scan_request_count ?? 0),
+    associatedScanCount: Number(row.associated_scan_count ?? 0)
   };
 }
 

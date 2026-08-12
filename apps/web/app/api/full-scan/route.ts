@@ -27,6 +27,7 @@ import { findScanByClientRequestId } from "../../../server/scans/client-request"
 import { isAnonymousScanQuotaError } from "../../../server/pulse/anonymous-scan-quota";
 import { getScanRequesterIpContext } from "../../../server/scans/requester-ip-context";
 import { normalizeCampaignAttribution } from "../../../lib/attribution/campaign-attribution";
+import { addAnonymousScanClaimCookie } from "../../../server/scans/anonymous-scan-claims";
 
 function isPublicFullScanAvailabilityError(error: unknown) {
   const message = error instanceof Error ? error.message : String(error);
@@ -254,7 +255,7 @@ export async function POST(request: Request) {
         };
       });
 
-      return NextResponse.json(
+      const response = NextResponse.json(
         {
           queuedCount: 1,
           reusedExistingScan: "reusedExistingScan" in anonymousScan ? anonymousScan.reusedExistingScan : false,
@@ -278,6 +279,10 @@ export async function POST(request: Request) {
           status: "reusedExistingScan" in anonymousScan && anonymousScan.reusedExistingScan ? 200 : 202
         }
       );
+      if ("mode" in anonymousScan && anonymousScan.mode !== "preview") {
+        await addAnonymousScanClaimCookie(response, anonymousScan.scan.id);
+      }
+      return response;
     }
 
     const clientRequestId = typeof payload?.requestId === "string" ? payload.requestId : null;

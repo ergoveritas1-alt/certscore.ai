@@ -13,6 +13,7 @@ import { initialCredentialsActionState, type CredentialsActionState } from "./ac
 import { findAppUserByEmail, normalizeEmail } from "./user";
 import { credentialsSchema, getAuthMode } from "./validators";
 import { provisionSelfServeUserSession } from "./provision-self-serve-user";
+import { claimAnonymousScansForUser } from "../scans/anonymous-scan-claims";
 
 function deriveDisplayName(email: string) {
   const localPart = email.split("@")[0]?.trim();
@@ -134,12 +135,13 @@ export async function submitCredentialsAction(
         headers: headerStore
       });
 
-      await provisionSelfServeUserSession({
+      const provisioned = await provisionSelfServeUserSession({
         authProvider: "password",
         email: response.user.email,
         fullName: response.user.name ?? null,
         id: response.user.id
       });
+      await claimAnonymousScansForUser(provisioned.user.id);
       redirect(getRegistrationCompletionRedirect(values.next));
     }
 
@@ -152,12 +154,13 @@ export async function submitCredentialsAction(
       headers: headerStore
     });
 
-    await bootstrapAppUserSession({
+    const bootstrapped = await bootstrapAppUserSession({
       authProvider: "password",
       email: response.user.email,
       fullName: response.user.name ?? null,
       id: response.user.id
     });
+    await claimAnonymousScansForUser(bootstrapped.user.id);
 
     redirect(values.next);
   } catch (error) {
