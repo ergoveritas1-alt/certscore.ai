@@ -36,7 +36,12 @@ import {
   type PolicyBehaviorRuntimeObservationType
 } from "./contradiction-evidence-contract";
 import { REJECT_TRACKING_CONFIRMATION_MIN_MS } from "./reject-tracking-policy";
-import { findMergedSignalValue, getReportSignalValue, isSignalValuePopulated } from "./report-signal-values";
+import {
+  createReportSignalValueIndexes,
+  findMergedSignalValue,
+  getReportSignalValue,
+  isSignalValuePopulated
+} from "./report-signal-values";
 import {
   getPolicyEvidenceSnippets,
   getPolicyPageType,
@@ -242,18 +247,6 @@ function getLinkedValidationFindingIds(candidates: CanonicalReviewFinding[]) {
 function getValidationFindingRuleKey(finding: Record<string, unknown>) {
   const ruleKey = finding.ruleKey ?? finding.rule_key;
   return typeof ruleKey === "string" ? ruleKey : null;
-}
-
-function candidateCoversValidationFinding(candidate: CanonicalReviewFinding, finding: Record<string, unknown>) {
-  const candidateSignalKey = candidate.signalKey ?? candidate.fallbackEvidence?.signalKey;
-  const ruleKey = getValidationFindingRuleKey(finding);
-  return (
-    candidate.linkedValidationFinding?.id === finding.id ||
-    (
-      candidateSignalKey === "privacy.preconsent_tracking_detected" &&
-      ruleKey === "runtime_privacy.preconsent_tracking_observed"
-    )
-  );
 }
 
 function getFiniteNumber(value: unknown) {
@@ -2477,6 +2470,10 @@ export function buildScanReportUnifiedFindingState(
   const hybridEvidenceCache = (dependencies.createHybridRuntimeEvidenceProjectionCache ?? createHybridRuntimeEvidenceProjectionCache)(
     runtimeArtifacts
   );
+  const reportSignalValueIndexes = createReportSignalValueIndexes({
+    mergedSignals: scanRecord.mergedSignals,
+    signals: scanRecord.signals
+  });
   const reportSignalValueCache = new Map<string, { value: unknown }>();
   const getProjectedSignalValue = (signal: Parameters<typeof getReportSignalValue>[0]["signal"]) => {
     const cacheKey = `${signal.source}\u0000${signal.key}`;
@@ -2487,6 +2484,7 @@ export function buildScanReportUnifiedFindingState(
 
     const value = getReportSignalValue({
       getHybridDerivedSignalValue: hybridEvidenceCache.getDerivedSignalValue,
+      indexes: reportSignalValueIndexes,
       mergedSignals: scanRecord.mergedSignals,
       policyEnrichment: scanRecord.policyEnrichment,
       runtimeArtifacts: scanRecord.runtimeArtifacts,
@@ -2662,10 +2660,16 @@ export function buildScanReportUnifiedFindingState(
     runtimeDerivedReviewFindingCandidates
   );
   const linkedValidationFindingIds = getLinkedValidationFindingIds(reviewFindingCandidates);
+  const coversPreconsentTrackingValidation = reviewFindingCandidates.some((candidate) =>
+    (candidate.signalKey ?? candidate.fallbackEvidence?.signalKey) === "privacy.preconsent_tracking_detected"
+  );
   const unlinkedValidationFindings = scanRecord.validationFindings.filter(
     (finding) =>
       !linkedValidationFindingIds.has(String(finding.id ?? "")) &&
-      !reviewFindingCandidates.some((candidate) => candidateCoversValidationFinding(candidate, finding as Record<string, unknown>))
+      !(
+        coversPreconsentTrackingValidation &&
+        getValidationFindingRuleKey(finding as Record<string, unknown>) === "runtime_privacy.preconsent_tracking_observed"
+      )
   );
   recordPhase("candidate_merge_and_linking");
   let normalizedConcerns: NormalizedConcern[] = [];

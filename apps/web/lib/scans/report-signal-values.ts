@@ -12,6 +12,33 @@ export type PersistedSignalValueRow = {
   value: boolean | number | string | string[];
 };
 
+export type ReportSignalValueIndexes = {
+  mergedSignalValues: ReadonlyMap<string, boolean | number | string | string[] | null>;
+  persistedSignalValues: ReadonlyMap<string, boolean | number | string | string[]>;
+};
+
+/** Preserve Array.find's first-row behavior without rescanning for every taxonomy signal. */
+export function createReportSignalValueIndexes(input: {
+  mergedSignals?: MergedSignalValueRow[];
+  signals: PersistedSignalValueRow[];
+}): ReportSignalValueIndexes {
+  const mergedSignalValues = new Map<string, boolean | number | string | string[] | null>();
+  for (const signal of input.mergedSignals ?? []) {
+    if (!mergedSignalValues.has(signal.key)) {
+      mergedSignalValues.set(signal.key, signal.selectedPopulation?.value ?? signal.value ?? null);
+    }
+  }
+
+  const persistedSignalValues = new Map<string, boolean | number | string | string[]>();
+  for (const signal of input.signals) {
+    if (!persistedSignalValues.has(signal.key)) {
+      persistedSignalValues.set(signal.key, signal.value);
+    }
+  }
+
+  return { mergedSignalValues, persistedSignalValues };
+}
+
 export function getSignalNamespaceKey(key: string) {
   const separatorIndex = key.indexOf(".");
   return separatorIndex >= 0 ? key.slice(separatorIndex + 1) : key;
@@ -68,6 +95,7 @@ export function getSnapshotSignalValue(snapshot: Record<string, unknown> | null,
 
 export function getReportSignalValue(input: {
   getHybridDerivedSignalValue?: (signalKey: string) => unknown;
+  indexes?: ReportSignalValueIndexes;
   mergedSignals?: MergedSignalValueRow[];
   policyEnrichment: Array<Record<string, unknown>>;
   runtimeArtifacts: Record<string, unknown> | null;
@@ -81,17 +109,22 @@ export function getReportSignalValue(input: {
   if (hybridDerivedValue !== undefined) {
     return hybridDerivedValue;
   }
-  const mergedSignalValue = findMergedSignalValue(input.mergedSignals, input.signal.key);
+  const mergedSignalValue = input.indexes
+    ? input.indexes.mergedSignalValues.get(input.signal.key) ?? null
+    : findMergedSignalValue(input.mergedSignals, input.signal.key);
+  const persistedSignalValue = input.indexes
+    ? input.indexes.persistedSignalValues.get(input.signal.key) ?? null
+    : findPersistedSignalValue(input.signals, input.signal.key);
 
   if (input.signal.source === "snapshot_signal") {
-    return getSnapshotSignalValue(input.snapshot, input.signal.key) ?? mergedSignalValue ?? findPersistedSignalValue(input.signals, input.signal.key);
+    return getSnapshotSignalValue(input.snapshot, input.signal.key) ?? mergedSignalValue ?? persistedSignalValue;
   }
 
   if (input.signal.source === "runtime_artifact_signal") {
-    return input.runtimeArtifacts?.[input.signal.key] ?? mergedSignalValue ?? findPersistedSignalValue(input.signals, input.signal.key);
+    return input.runtimeArtifacts?.[input.signal.key] ?? mergedSignalValue ?? persistedSignalValue;
   }
 
-  return mergedSignalValue ?? findPersistedSignalValue(input.signals, input.signal.key);
+  return mergedSignalValue ?? persistedSignalValue;
 }
 
 export function isSignalValuePopulated(key: string, value: unknown) {

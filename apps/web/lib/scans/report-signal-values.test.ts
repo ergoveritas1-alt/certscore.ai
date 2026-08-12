@@ -1,10 +1,48 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import {
+  createReportSignalValueIndexes,
   findMergedSignalValue,
+  getReportSignalValue,
   getSnapshotSignalValue,
   isSignalValuePopulated
 } from "./report-signal-values";
+
+test("report signal indexes preserve first-row and selected-population semantics", () => {
+  const indexes = createReportSignalValueIndexes({
+    mergedSignals: [
+      { key: "privacy.example", value: "first", selectedPopulation: { value: "selected" } },
+      { key: "privacy.example", value: "second" }
+    ],
+    signals: [
+      { key: "privacy.persisted", value: "first" },
+      { key: "privacy.persisted", value: "second" }
+    ]
+  });
+
+  assert.equal(indexes.mergedSignalValues.get("privacy.example"), "selected");
+  assert.equal(indexes.persistedSignalValues.get("privacy.persisted"), "first");
+  assert.equal(
+    getReportSignalValue({
+      indexes,
+      mergedSignals: [],
+      policyEnrichment: [],
+      runtimeArtifacts: null,
+      signals: [],
+      snapshot: null,
+      signal: {
+        id: "privacy.persisted",
+        key: "privacy.persisted",
+        label: "Persisted",
+        overlayEvidenceCategoryIds: [],
+        primaryEvidenceCategoryId: "data_handling_disclosures",
+        secondaryEvidenceCategoryIds: [],
+        source: "document_semantic_signal"
+      }
+    }),
+    "first"
+  );
+});
 
 test("findMergedSignalValue prefers selected population values", () => {
   assert.equal(
