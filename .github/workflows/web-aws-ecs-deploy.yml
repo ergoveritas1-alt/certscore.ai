@@ -42,6 +42,7 @@ concurrency:
 jobs:
   deploy-public-web-aws:
     runs-on: ubuntu-latest
+    timeout-minutes: 90
     permissions:
       contents: read
       id-token: write
@@ -175,13 +176,32 @@ jobs:
           node --enable-source-maps --import tsx ./apps/web/scripts/check-amplify-runtime-env.ts
 
       - name: Build and push public web image
+        timeout-minutes: 60
         env:
           REGISTRY: ${{ steps.ecr-login.outputs.registry }}
         run: |
+          set -euo pipefail
           WEB_IMAGE="${REGISTRY}/${ECR_WEB_REPOSITORY}"
           WEB_CACHE="${WEB_IMAGE}:buildcache"
+
+          if docker buildx imagetools inspect "${WEB_CACHE}" >/dev/null 2>&1; then
+            echo "Registry build cache found: ${WEB_CACHE}"
+          else
+            echo "Registry build cache is absent or unavailable: ${WEB_CACHE}; expect a cold ARM64 build."
+          fi
+
+          heartbeat() {
+            while sleep 60; do
+              echo "::notice::Public web ARM64 image build is still active at $(date -u +%Y-%m-%dT%H:%M:%SZ). Cold emulated builds may take 45-60 minutes; inspect underlying BuildKit output before cancellation."
+            done
+          }
+          heartbeat &
+          heartbeat_pid=$!
+          trap 'kill "${heartbeat_pid}" 2>/dev/null || true' EXIT
+
           docker buildx build \
             --platform linux/arm64 \
+            --progress=plain \
             --provenance=false \
             --sbom=false \
             --cache-from "type=registry,ref=${WEB_CACHE}" \
@@ -194,6 +214,9 @@ jobs:
             -t "${WEB_IMAGE}:latest" \
             --push \
             .
+          kill "${heartbeat_pid}" 2>/dev/null || true
+          wait "${heartbeat_pid}" 2>/dev/null || true
+          trap - EXIT
           echo "TARGET_WEB_IMAGE=${WEB_IMAGE}:${GITHUB_SHA}" >> "${GITHUB_ENV}"
 
       - name: Apply database migrations from target web image

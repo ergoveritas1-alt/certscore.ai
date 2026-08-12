@@ -699,6 +699,27 @@ Deploy-all applies database migrations through the target web image before ECS p
 
 After deployment, verify the workflow result, live revision, expected runtime target, and affected production behavior. Keep verification read-only by default. Do not create production scans, records, users, or other persistent state unless the user explicitly authorized that verification.
 
+### Production deploy monitoring
+
+Before starting or monitoring an AWS ECS production deployment, read and follow
+`docs/aws-ecs-deployment-runbook.md`. This is required even when the workflow
+was started by another agent or operator.
+
+A GitHub Actions step remaining active is not evidence that it is stuck. Cold
+ARM64 web builds on x64 GitHub-hosted runners may take 45–60 minutes. Do not
+cancel while logs show compilation, static generation, build-trace collection,
+image export, registry-cache export, or image push progress. Before canceling,
+inspect the available logs and require both:
+
+1. no new log output for the runbook's silence threshold; and
+2. no observable build, export, or push progress.
+
+Prefer workflow-enforced timeouts over manual cancellation. Never cancel after
+successful compilation or static generation solely because the workflow has
+not changed steps. A canceled cold build may discard the nearly completed image
+and prevent its registry cache from being published, making the retry repeat
+the expensive work.
+
 ## Runtime and deployment topology
 
 Production scanning is Lambda-only and uses the CertScore v2 DAG scanner code in this repository. The approved production scanner targets are the v2 DAG Lambda functions in `eu-central-1`, `eu-west-1`, and `us-west-2`.
