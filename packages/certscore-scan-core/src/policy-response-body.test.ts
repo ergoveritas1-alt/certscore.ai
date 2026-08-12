@@ -7,6 +7,7 @@ import {
   gzipSync,
 } from "node:zlib";
 import test from "node:test";
+import { getCrawlerUserAgent } from "@website-signal-risk-scanner/shared";
 import {
   awaitAbortablePolicyOperation,
   canonicalPolicyUrlIdentity,
@@ -98,6 +99,37 @@ test("policy response transport avoids bundled fetch inside AWS Lambda", () => {
     policyResponseTransportForEnvironment({ AWS_LAMBDA_RUNTIME_API: "127.0.0.1:9001" }),
     "node",
   );
+});
+
+test("direct policy requests use the canonical ConsentCheck crawler identity", async () => {
+  let observedUserAgent: string | undefined;
+  const server = createServer((request, response) => {
+    observedUserAgent = request.headers["user-agent"];
+    response.writeHead(200, { "content-type": "text/html; charset=utf-8" });
+    response.end("<!doctype html><html><body>Privacy notice</body></html>");
+  });
+  server.listen(0, "127.0.0.1");
+  await once(server, "listening");
+  const address = server.address();
+  assert.ok(address && typeof address === "object");
+
+  try {
+    const result = await requestBoundedPolicyResponse(
+      `http://127.0.0.1:${address.port}/privacy`,
+      new AbortController().signal,
+      0,
+      "node",
+    );
+
+    assert.equal(result.status, 200);
+    assert.equal(observedUserAgent, getCrawlerUserAgent());
+    assert.equal(observedUserAgent, "ConsentCheckBot/1.0 (+https://consentcheck.site/crawler)");
+  } finally {
+    server.closeAllConnections();
+    await new Promise<void>((resolve, reject) =>
+      server.close((error) => error ? reject(error) : resolve())
+    );
+  }
 });
 
 test("policy operations stop when transport work ignores abort before response headers", async () => {

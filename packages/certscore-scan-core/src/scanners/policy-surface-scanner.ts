@@ -17,6 +17,7 @@ import {
   type ScanModuleRun,
   type SupportedPrivacyEvidenceLocale,
 } from "@certscore/contracts";
+import { getCrawlerUserAgent } from "@website-signal-risk-scanner/shared";
 import { chromium, type Browser, type Locator, type Page } from "playwright";
 import { Resolver } from "node:dns";
 import { isIP } from "node:net";
@@ -653,6 +654,48 @@ export async function policySurfaceScanner(
       renderedCandidateCount = renderedCandidates.length;
       if (renderedCandidates.length > 0) {
         observedCandidateCount = renderedCandidates.length;
+        const deterministicRenderedCoreCandidates = deterministicFetchFallback(renderedCandidates)
+          .filter((candidate) =>
+            candidate.fetchable &&
+            candidate.clickable &&
+            !candidate.observationOnly &&
+            (candidate.deterministicSurfaceType === "privacy_policy" ||
+              candidate.deterministicSurfaceType === "cookie_policy")
+          )
+          .slice(0, 1);
+        if (deterministicRenderedCoreCandidates.length > 0) {
+          const deterministicRenderedResults = await fetchPolicyCandidateGroup({
+            input,
+            fetchCaches: policyDocumentFetchCaches,
+            timingBreakdown,
+            moduleStartedAtMs,
+            rankedCandidates: deterministicRenderedCoreCandidates,
+            labelPrefix: "homepage-failed deterministic rendered",
+            policySurfaceTextArtifactBudget,
+          });
+          observations.push(...deterministicRenderedResults.observations);
+          artifactRefs.push(...deterministicRenderedResults.artifactRefs);
+          if (hasRetainedCorePolicyOrControlSurface(observations)) {
+            speculativeCommonPathNanoAbortController.abort();
+            await speculativeCommonPathNanoRankingPromise.catch(() => undefined);
+            artifactRefs.push(await writePolicyCaptureDiagnostics({
+              input,
+              moduleStartedAtMs,
+              staticCandidateCount,
+              renderedCandidateCount,
+              observedCandidateCount,
+              commonPathFallbackUsed,
+              observations,
+              candidates: renderedCandidates,
+              policyFetchDiagnostics,
+            }));
+            return {
+              moduleRun: completedPolicyModuleRun(),
+              policySurfaceObservations: observations,
+              artifactRefs,
+            };
+          }
+        }
         let renderedResults: Awaited<ReturnType<typeof fetchRankedPolicyCandidates>>;
         try {
           renderedResults = await fetchRankedPolicyCandidates({
@@ -6509,7 +6552,7 @@ async function requestBoundedPolicyResponseWithFetch(
       accept: "text/html,application/xhtml+xml,application/xml;q=0.9,application/pdf;q=0.8,*/*;q=0.7",
       "accept-encoding": "identity",
       "accept-language": "en-US,en;q=0.8,de;q=0.7,fr;q=0.6,es;q=0.5,it;q=0.4,nl;q=0.3,pl;q=0.2",
-      "user-agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126 Safari/537.36",
+      "user-agent": getCrawlerUserAgent(),
     },
     redirect: "manual",
     signal,
@@ -6584,7 +6627,7 @@ async function requestBoundedPolicyResponseWithNodeTransport(
         "accept-encoding": "identity",
         "accept-language": "en-US,en;q=0.8,de;q=0.7,fr;q=0.7,es;q=0.7,it;q=0.7,nl;q=0.7,pl;q=0.7",
         host: parsed.host,
-        "user-agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126 Safari/537.36",
+        "user-agent": getCrawlerUserAgent(),
       },
       hostname: address,
       method: "GET",

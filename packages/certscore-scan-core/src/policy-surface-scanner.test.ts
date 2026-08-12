@@ -3318,9 +3318,15 @@ test("policySurfaceScanner uses rendered footer links before common-path fallbac
     const classificationOrder: string[] = [];
     const nanoAssistProvider: PolicyNanoAssistProvider = {
       async classifyLinks(input) {
-        classificationOrder.push(input.candidates.every((candidate) => candidate.discoveryMethod === "guessed_common_path")
-          ? "common_path"
-          : "rendered");
+        const classificationKind = input.candidates.every((candidate) =>
+          candidate.discoveryMethod === "guessed_common_path"
+        ) ? "common_path" : "rendered";
+        classificationOrder.push(classificationKind);
+        assert.notEqual(
+          classificationKind,
+          "rendered",
+          "a deterministic rendered privacy link should be recovered before another Nano ranking pass",
+        );
         return defaultNanoProvider.classifyLinks!(input);
       },
     };
@@ -3344,7 +3350,7 @@ test("policySurfaceScanner uses rendered footer links before common-path fallbac
     assert.equal(diagnostics.renderedCandidateCount > 0, true);
     assert.equal(diagnostics.commonPathFallbackUsed, false);
     assert.equal(classificationOrder[0], "common_path");
-    assert.equal(classificationOrder.includes("rendered"), true);
+    assert.equal(classificationOrder.includes("rendered"), false);
     assert.equal(
       diagnostics.candidateSummary.some((candidate) =>
         candidate.normalizedUrl === `${server.baseUrl}/browser-visible-policy-homepage/privacy`
@@ -3356,13 +3362,19 @@ test("policySurfaceScanner uses rendered footer links before common-path fallbac
     assert.equal(
       diagnostics.failedFetches.some((failure) =>
         failure.stage === "candidate_direct" &&
-        failure.httpStatus === 503 &&
+        failure.httpStatus === 403 &&
         failure.failureReason === "http_error"
       ),
       true,
     );
     assert.equal(
       result.moduleRun.timingBreakdown?.some((timing) => timing.label.includes("homepage-failed rendered discovery")),
+      true,
+    );
+    assert.equal(
+      result.moduleRun.timingBreakdown?.some((timing) =>
+        timing.label.includes("homepage-failed deterministic rendered fetch group")
+      ),
       true,
     );
     assert.equal(
