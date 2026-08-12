@@ -182,6 +182,18 @@ WC01 does not own scanner runtime observation, crawler identity, or raw evidence
 
 Agents may inspect WS01 for scanner evidence contract, runtime signal, and retained evidence context. Only edit WS01 when the user request explicitly spans both repos or when a WC01 concern/policy change exposes a missing or incorrect upstream WS01 signal.
 
+### Canonical API read-rate policy
+
+`packages/shared/src/api-read-rate-policy.ts` `API_READ_RATE_POLICY` is the sole source of truth for completed-scan retrieval and status-polling windows, scope limits, and unit weights across the Pulse API, API v2, hosted MCP, and any future API or agent-facing read path. Import this policy; do not duplicate its numeric limits in route, SDK, MCP, worker, infrastructure, documentation, `.plist`, JSON, or environment-specific configuration. This file intentionally does not restate the current numbers.
+
+The terminal-read and status-polling profiles are separate. Operation-to-weight mappings must be explicit and must obtain their unit values from the canonical policy. Rolling-window evaluation must use the windows and scoped limits from the canonical policy rather than service-local constants.
+
+Enforcement storage remains service-owned: WC01 API paths use the shared database-backed event ledger for cross-instance bounds, while hosted MCP may reject composite calls at its HTTP boundary before internal fan-out. Rejected protected reads must return `429` with `Retry-After`, canonical bot-facing guidance, and machine-readable policy/profile/scope/window/usage metadata; they must not create API Activity rows or begin report/evidence projection work. Emit one structured denial log without bearer tokens, raw IPs, raw URLs, or target identifiers. Protection failure on direct API reads must fail closed with a retryable response.
+
+The full public numeric policy table may appear only on approved developer and integration surfaces and must render through the shared server component that reads `API_READ_RATE_POLICY`. Approved customer, marketing, dashboard, and scan-report pages may render the compact automated-access notice, which must also derive its values from the canonical policy and link to the full developer reference. Static guides and READMEs must link to that rendered documentation or the machine-readable OpenAPI extension rather than copying numeric limits. Do not add either component to finding, checklist, executive-summary, or regulatory sub-surfaces where it could be mistaken for scan evidence or finding policy.
+
+Documentation tests must verify both rendered policy components against the canonical policy, require exact policy parity in OpenAPI and agent-discovery documents, and enforce separate allowlists for pages permitted to render the full table and compact notice. Any policy change must update the canonical module first and include focused shared-policy, WC01 quota, MCP boundary, 429 contract/logging, and documentation-parity tests. Coordinate the database migration and all consuming service deployments so different services do not enforce different policy versions.
+
 ### Evidence contract discipline
 
 WC01 should not consume loose, ad hoc, or display-only scanner fields. New scanner evidence consumed by WC01 should be structured, typed, bounded, and covered by focused fixtures/tests. Prefer shared runtime contract fixtures when adding or changing WS01 -> WC01 evidence shapes.

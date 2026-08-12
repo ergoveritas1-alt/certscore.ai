@@ -20,6 +20,13 @@ import {
   retryAfterNextUtcDay,
   type AnonymousScanQuotaDecision
 } from "./anonymous-scan-quota";
+import {
+  decidePulseRetrievalQuota,
+  PULSE_RETRIEVAL_DAILY_WINDOW_SECONDS,
+  PULSE_RETRIEVAL_WINDOW_SECONDS,
+  pulseRetrievalPrincipal,
+  type PulseRetrievalProfile
+} from "./retrieval-quota";
 
 type PulseRequestRow = {
   public_id: string;
@@ -143,6 +150,7 @@ function pulseRequestInsertValues(input: CreatePulseRequestInput, publicId: stri
         waitSeconds: input.context.waitSeconds,
         mode: input.context.mode,
         quotaClass: input.context.quotaClass ?? null,
+        retrievalPrincipal: input.context.retrievalPrincipal ?? null,
         source: input.context.source ?? input.context.channel ?? "pulse_api",
         channel: input.context.channel ?? input.context.source ?? "pulse_api"
       },
@@ -163,6 +171,125 @@ export async function createPulseRequest(input: CreatePulseRequestInput) {
   await query(INSERT_PULSE_REQUEST_SQL, pulseRequestInsertValues(input, publicId, jobId));
 
   return { publicId, jobId };
+}
+
+/** Atomically bounds completed scan reads before recording API activity. */
+export async function createPulseRequestWithRetrievalQuota(input: CreatePulseRequestInput & { scanId: string }) {
+  await ensurePulseTables();
+  const principal = pulseRetrievalPrincipal(input.context);
+  const context: PulseRequestContext = {
+    ...input.context,
+    quotaClass: "scan_retrieval",
+    retrievalPrincipal: principal
+  };
+  const decision = await claimPulseReadQuota({
+    detail: context.detail,
+    principal,
+    profile: "terminal",
+    route: context.source ?? context.channel ?? "pulse_api",
+    target: `scan:${input.scanId}`
+  });
+  if (!decision.allowed) return decision;
+  const { publicId, jobId } = await createPulseRequest({ ...input, context });
+  return { ...decision, publicId, jobId };
+}
+
+export async function claimPulseReadQuota(input: {
+  detail: PulseRequestContext["detail"];
+  principal: string;
+  profile: PulseRetrievalProfile;
+  route: string;
+  target: string;
+}) {
+  await ensurePulseTables();
+  return withWriteTransaction(async (client) => {
+    const principal = input.principal;
+    await client.query("select pg_advisory_xact_lock(hashtext($1))", [`pulse-retrieval-principal:${principal}`]);
+    await client.query("select pg_advisory_xact_lock(hashtext($1))", [`pulse-retrieval-target:${input.target}`]);
+    const usageResult = await client.query<{
+      daily_principal_scan_units: number;
+      oldest_daily_principal_scan_at: string | null;
+      oldest_principal_at: string | null;
+      oldest_principal_scan_at: string | null;
+      oldest_scan_at: string | null;
+      principal_scan_units: number;
+      principal_units: number;
+      scan_units: number;
+    }>(
+      `with recent as (
+         select target,
+                requested_at,
+                principal as retrieval_principal,
+                units
+           from pulse_read_events
+          where requested_at > now() - make_interval(secs => $3::int)
+            and profile = $5
+            and (
+              principal = $1
+              or target = $2
+            )
+       )
+       select
+         coalesce(sum(units) filter (
+           where retrieval_principal = $1
+             and requested_at > now() - make_interval(secs => $4::int)
+         ), 0)::int as principal_units,
+         coalesce(sum(units) filter (
+           where target = $2
+             and requested_at > now() - make_interval(secs => $4::int)
+         ), 0)::int as scan_units,
+         min(requested_at) filter (
+           where retrieval_principal = $1
+             and requested_at > now() - make_interval(secs => $4::int)
+         ) as oldest_principal_at,
+         min(requested_at) filter (
+           where target = $2
+             and requested_at > now() - make_interval(secs => $4::int)
+         ) as oldest_scan_at,
+         min(requested_at) filter (where retrieval_principal = $1 and target = $2) as oldest_daily_principal_scan_at,
+         coalesce(sum(units) filter (
+           where retrieval_principal = $1
+             and target = $2
+             and requested_at > now() - make_interval(secs => $4::int)
+         ), 0)::int as principal_scan_units,
+         min(requested_at) filter (
+           where retrieval_principal = $1
+             and target = $2
+             and requested_at > now() - make_interval(secs => $4::int)
+         ) as oldest_principal_scan_at,
+         coalesce(sum(units) filter (where retrieval_principal = $1 and target = $2), 0)::int as daily_principal_scan_units
+       from recent`,
+      [
+        principal,
+        input.target,
+        PULSE_RETRIEVAL_DAILY_WINDOW_SECONDS,
+        PULSE_RETRIEVAL_WINDOW_SECONDS,
+        input.profile
+      ]
+    );
+    const row = usageResult.rows[0];
+    const decision = decidePulseRetrievalQuota({
+      detail: input.detail,
+      profile: input.profile,
+      usage: {
+        dailyPrincipalScanUnits: Number(row?.daily_principal_scan_units ?? 0),
+        oldestDailyPrincipalScanAt: row?.oldest_daily_principal_scan_at ?? null,
+        oldestPrincipalAt: row?.oldest_principal_at ?? null,
+        oldestPrincipalScanAt: row?.oldest_principal_scan_at ?? null,
+        oldestScanAt: row?.oldest_scan_at ?? null,
+        principalScanUnits: Number(row?.principal_scan_units ?? 0),
+        principalUnits: Number(row?.principal_units ?? 0),
+        scanUnits: Number(row?.scan_units ?? 0)
+      }
+    });
+    if (!decision.allowed) return decision;
+    await client.query(
+      `insert into pulse_read_events (principal, target, profile, route, units)
+       values ($1, $2, $3, $4, $5)`,
+      [principal, input.target, input.profile, input.route, decision.weight]
+    );
+    return decision;
+  });
 }
 
 /** Atomically checks the shared regional key quota and reserves one accepted new-scan submission. */

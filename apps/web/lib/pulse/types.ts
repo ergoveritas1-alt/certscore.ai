@@ -26,7 +26,8 @@ export type PulseRequestContext = {
   forceNewScan?: boolean;
   ipHash: string | null;
   mode: "url" | "scanId" | "jobId";
-  quotaClass?: "scan_create" | null;
+  quotaClass?: "scan_create" | "scan_retrieval" | null;
+  retrievalPrincipal?: string | null;
   referer: string | null;
   requestId?: string | null;
   sourceIp: string | null;

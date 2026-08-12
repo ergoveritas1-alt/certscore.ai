@@ -1,5 +1,9 @@
 import Link from "next/link";
-import type { ReactNode } from "react";
+import React, { type ReactNode } from "react";
+import {
+  API_READ_RATE_POLICY,
+  apiReadRateWindow
+} from "@website-signal-risk-scanner/shared";
 import { Badge, Card, CardContent, CardHeader, CardTitle } from "@website-signal-risk-scanner/ui";
 import { SiteFooter } from "../../components/layout/site-footer";
 import { SiteHeader } from "../../components/layout/site-header";
@@ -79,6 +83,84 @@ export const mcpTools = [
   ["get_latest_domain_scan", "Retrieve the latest eligible API v2 public-safe scan for a domain."],
   ["get_latest_domain_pre_consent_cookies_trackers", "Retrieve the public-safe Cookies & Trackers (Pre-consent) table from the latest eligible scan for a domain."]
 ] as const;
+
+const terminalBurstReadPolicy = apiReadRateWindow("terminal", "burst");
+const terminalDailyReadPolicy = apiReadRateWindow("terminal", "daily");
+const statusBurstReadPolicy = apiReadRateWindow("status", "burst");
+
+export function ApiReadRatePolicyDetails() {
+  const heavyReadWeight = API_READ_RATE_POLICY.weights.bundle;
+  const heavyReadsPerBurstWindow = Math.floor(terminalBurstReadPolicy.limits.callerTarget / heavyReadWeight);
+  const heavyReadsPerDailyWindow = Math.floor(terminalDailyReadPolicy.limits.callerTarget / heavyReadWeight);
+  const terminalRows = [
+    ["Caller + scan/resource", terminalBurstReadPolicy.limits.callerTarget, terminalDailyReadPolicy.limits.callerTarget],
+    ["Scan/resource across callers", terminalBurstReadPolicy.limits.target, "—"],
+    ["Caller across scans/resources", terminalBurstReadPolicy.limits.caller, "—"]
+  ] as const;
+  const statusRows = [
+    ["Caller + scan", statusBurstReadPolicy.limits.callerTarget],
+    ["Scan across callers", statusBurstReadPolicy.limits.target],
+    ["Caller across scans", statusBurstReadPolicy.limits.caller]
+  ] as const;
+
+  return (
+    <div
+      className="space-y-5"
+      data-api-read-rate-policy-version={API_READ_RATE_POLICY.version}
+      data-terminal-burst-window-seconds={terminalBurstReadPolicy.windowSeconds}
+      data-terminal-daily-window-seconds={terminalDailyReadPolicy.windowSeconds}
+    >
+      <p className="max-w-3xl text-sm leading-7 text-slate-600">
+        Completed scan and domain resources use weighted, rolling limits. These protections apply in addition to account, API-key,
+        and scan-creation quotas. Policy version <code className="rounded bg-white px-1">{API_READ_RATE_POLICY.version}</code>.
+      </p>
+      <div className="overflow-x-auto rounded-lg border border-slate-200 bg-white">
+        <table className="min-w-full text-left text-sm">
+          <thead className="border-b border-slate-200 bg-slate-50 text-slate-700">
+            <tr>
+              <th className="px-4 py-3 font-semibold">Terminal-read scope</th>
+              <th className="px-4 py-3 font-semibold">Rolling 10 minutes</th>
+              <th className="px-4 py-3 font-semibold">Rolling 24 hours</th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-slate-100 text-slate-600">
+            {terminalRows.map(([scope, burst, daily]) => (
+              <tr key={scope}>
+                <td className="px-4 py-3 font-semibold text-slate-900">{scope}</td>
+                <td className="px-4 py-3">{burst} units</td>
+                <td className="px-4 py-3">{typeof daily === "number" ? `${daily} units` : daily}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+      <div className="grid gap-5 lg:grid-cols-2">
+        <div className="rounded-lg border border-slate-200 bg-white p-4">
+          <h3 className="font-semibold text-slate-950">Read weights</h3>
+          <ul className="mt-3 space-y-2 text-sm leading-6 text-slate-600">
+            <li>Ordinary scan, finding, inventory, or domain read: {API_READ_RATE_POLICY.weights.ordinary} unit.</li>
+            <li>Evidence, full report, diagnostics, export, or composite bundle: {API_READ_RATE_POLICY.weights.bundle} units.</li>
+            <li>
+              That permits {heavyReadsPerBurstWindow} direct heavy reads per caller and resource in 10 minutes, and{" "}
+              {heavyReadsPerDailyWindow} in a rolling 24 hours.
+            </li>
+          </ul>
+        </div>
+        <div className="rounded-lg border border-slate-200 bg-white p-4">
+          <h3 className="font-semibold text-slate-950">Status polling</h3>
+          <ul className="mt-3 space-y-2 text-sm leading-6 text-slate-600">
+            {statusRows.map(([scope, limit]) => <li key={scope}>{scope}: {limit} units per rolling 10 minutes.</li>)}
+          </ul>
+        </div>
+      </div>
+      <p className="max-w-3xl text-sm leading-7 text-slate-600">
+        HTTP 429 and MCP rate-limit errors include <code className="rounded bg-white px-1">Retry-After</code> when a retry time is
+        available, plus machine-readable policy version, profile, scope, window, limit, usage, and requested-unit fields. Wait for
+        that delay. Poll only active status resources and stop polling when a scan becomes terminal.
+      </p>
+    </div>
+  );
+}
 
 export function DeveloperJsonLd({ path, title, description }: { path: string; title: string; description: string }) {
   const schemas = [

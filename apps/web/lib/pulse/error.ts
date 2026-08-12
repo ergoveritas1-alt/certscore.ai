@@ -8,10 +8,24 @@ import {
 } from "./constants";
 import { buildPulseAgentInterpretation } from "./agent-interpretation";
 import type { PulseDetail, PulseFormat } from "./types";
+import type { ApiReadRateProfile, ApiReadRateScope, ApiReadRateWindowId } from "@website-signal-risk-scanner/shared";
+
+type PulseRateLimit = {
+  limitUnits: number;
+  policyVersion: string;
+  profile: ApiReadRateProfile;
+  requestedUnits: number;
+  scope: ApiReadRateScope;
+  usedUnits: number;
+  windowId: ApiReadRateWindowId;
+  windowSeconds: number;
+};
 
 export function buildPulseError(input: {
   code: string;
   message: string;
+  rateLimit?: PulseRateLimit;
+  recommendedNextAction?: string;
   retryAfterSeconds?: number | null;
   resolution?: { label: string; url: string } | null;
   url?: string | null;
@@ -35,7 +49,9 @@ export function buildPulseError(input: {
     error: {
       code: input.code,
       message: input.message,
-      retryAfterSeconds: input.retryAfterSeconds ?? null
+      retryAfterSeconds: input.retryAfterSeconds ?? null,
+      recommendedNextAction: input.recommendedNextAction ?? null,
+      rateLimit: input.rateLimit ?? null
     },
     resolution: input.resolution ?? null,
     feedback: {

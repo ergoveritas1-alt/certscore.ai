@@ -6,6 +6,10 @@ import { createCertScoreMcpServer } from "@certscore/mcp/server";
 import { CERTSCORE_MCP_VERSION } from "@certscore/mcp/version";
 import { getAllowedOrigins, getEnv } from "./env.js";
 import { McpHttpSessionStore } from "./session-store.js";
+import { McpReadThrottle, mcpReadCallsFromJsonRpc } from "./read-throttle.js";
+import sharedPolicy from "@website-signal-risk-scanner/shared";
+
+const { apiReadRateLimitGuidance } = sharedPolicy;
 
 const env = getEnv();
 const allowedOrigins = getAllowedOrigins(env);
@@ -13,6 +17,7 @@ const sessions = new McpHttpSessionStore({
   maxCount: env.SESSION_MAX_COUNT,
   ttlSeconds: env.SESSION_TTL_SECONDS
 });
+const readThrottle = new McpReadThrottle();
 
 function installSseKeepalive(res: ServerResponse) {
   const keepalive = setInterval(() => {
@@ -76,7 +81,7 @@ function corsHeaders(req: IncomingMessage) {
   const headers: Record<string, string> = {
     "Access-Control-Allow-Headers": "Authorization, Content-Type, Mcp-Session-Id, MCP-Protocol-Version",
     "Access-Control-Allow-Methods": "GET, POST, DELETE, OPTIONS",
-    "Access-Control-Expose-Headers": "Mcp-Session-Id, WWW-Authenticate",
+    "Access-Control-Expose-Headers": "Mcp-Session-Id, Retry-After, WWW-Authenticate",
     "Vary": "Origin"
   };
   if (origin && allowedOrigins.has(origin)) {
@@ -229,6 +234,54 @@ async function handleMcp(req: IncomingMessage, res: ServerResponse, anonymous: b
       return json(res, 401, { error: "session_requester_mismatch", error_description: "The MCP session belongs to a different anonymous requester." }, corsHeaders(req));
     }
     return unauthorized(res, req, "session_token_mismatch", "Bearer token does not match this MCP session.");
+  }
+  const readCalls = mcpReadCallsFromJsonRpc(parsedBody);
+  for (const readCall of readCalls) {
+    const decision = readThrottle.claim(tokenHash, readCall);
+    if (!decision.allowed) {
+      const guidance = apiReadRateLimitGuidance(readCall.profile, decision.retryAfterSeconds);
+      console.warn(JSON.stringify({
+        event: "mcp_http.scan_read_rate_limited",
+        level: "warn",
+        limitUnits: decision.limitUnits,
+        policyVersion: decision.policyVersion,
+        profile: readCall.profile,
+        reason: decision.reason,
+        requestedUnits: decision.requestedUnits,
+        retryAfterSeconds: decision.retryAfterSeconds,
+        scope: decision.scope,
+        source: "mcp-http",
+        targetType: readCall.target.startsWith("domain:") ? "domain" : "scan",
+        tool: readCall.tool,
+        usedUnits: decision.usedUnits,
+        windowId: decision.windowId,
+        windowSeconds: decision.windowSeconds
+      }));
+      const rpcRequest = parsedBody && typeof parsedBody === "object" && !Array.isArray(parsedBody)
+        ? parsedBody as Record<string, unknown>
+        : null;
+      return json(res, 429, {
+        jsonrpc: "2.0",
+        id: rpcRequest?.id ?? null,
+        error: {
+          code: -32029,
+          message: guidance.message,
+          data: {
+            code: "rate_limited",
+            limitUnits: decision.limitUnits,
+            policyVersion: decision.policyVersion,
+            profile: readCall.profile,
+            recommendedNextAction: guidance.recommendedNextAction,
+            requestedUnits: decision.requestedUnits,
+            retryAfterSeconds: decision.retryAfterSeconds,
+            scope: decision.scope,
+            usedUnits: decision.usedUnits,
+            windowId: decision.windowId,
+            windowSeconds: decision.windowSeconds
+          }
+        }
+      }, { ...corsHeaders(req), "Retry-After": String(decision.retryAfterSeconds) });
+    }
   }
   res.setHeader("Cache-Control", "no-store");
   for (const [key, value] of Object.entries(corsHeaders(req))) {

@@ -5,6 +5,7 @@ import { PULSE_MIN_REUSABLE_PAGES_REQUESTED } from "../../../../../../../lib/pul
 import { normalizePulseUrl } from "../../../../../../../lib/pulse/request";
 import { findLatestCompletedAnonymousScanForDomain } from "../../../../../../../server/pulse/repository";
 import { getPublicScanRecord } from "../../../../../../../server/scans/get-public-scan-record";
+import { enforceApiV2ScanReadThrottle } from "../../../../../../../server/pulse/api-v2-read-throttle";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -36,6 +37,13 @@ export async function GET(request: Request, context: RouteContext) {
   try {
     const url = new URL(request.url);
     const scanFrom = normalizeScanFrom(url.searchParams.get("scanFrom"));
+    const throttled = await enforceApiV2ScanReadThrottle({
+      request,
+      requestId: id,
+      route: "api-v2-domain-latest-pre-consent-cookies-trackers",
+      target: `domain:${normalized.normalizedDomain}|${scanFrom}`
+    });
+    if (throttled) return throttled;
     const latestScan = await findLatestCompletedAnonymousScanForDomain(normalized.normalizedDomain, {
       minPagesRequested: PULSE_MIN_REUSABLE_PAGES_REQUESTED,
       scanFrom

@@ -174,6 +174,8 @@ Expected public response contracts:
 - /api/v1/pulse/status/pulse_job_nonexistent_test returns HTTP 404 JSON with error.code not_found.
 - HTTP 202 pending responses include Retry-After when a polling delay is recommended.
 - HTTP 429 throttled responses include Retry-After when retry timing is known.
+- Poll only active status resources. Stop polling at a terminal status and do not repeatedly retrieve completed scan resources.
+- Read the current weighted terminal-read and status-polling policy at https://certscore.ai/developers/reference#read-rate-limits or from the x-certscore-read-rate-policy OpenAPI extension.
 - Pulse uses freshness=latest and freshness=refresh. There is no refresh=true parameter.
 - freshness=latest reuses a recent eligible scan before queueing a new scan. freshness=refresh requests a new scan when eligible and bypasses the 24-hour reuse check.
 - Use scanFrom or geo to select the geo execution context for newly queued public scans. Allowed value is eu_ie. Existing scans are returned with their recorded scan context.

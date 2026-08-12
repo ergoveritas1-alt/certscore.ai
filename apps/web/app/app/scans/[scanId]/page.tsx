@@ -2,6 +2,7 @@ import { Suspense } from "react";
 import { notFound } from "next/navigation";
 import { after } from "next/server";
 import { PendingScanStartedEvent } from "../../../../components/analytics/data-layer-events";
+import { ApiReadRatePolicyNotice } from "../../../../components/api-read-rate-policy-notice";
 import { DomainScanForm } from "../../../../components/marketing/domain-scan-form";
 import { SharedScanDetailView } from "../../../../components/scans/shared-scan-detail-view";
 import { buildScanReportUnifiedFindings } from "../../../../components/scans/shared-scan-detail-view";
@@ -310,6 +311,7 @@ async function ScanDetailReportContent({
         showBrowserExtensionRecovery
         viewerAccessRole={membership.role}
       />
+      <ApiReadRatePolicyNotice className="mt-8" />
     </>
   );
 }

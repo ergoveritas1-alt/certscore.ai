@@ -262,7 +262,13 @@ const errorContent = {
         summary: "Rate limited",
         value: {
           type: "certscore_api_error",
-          error: { code: "rate_limited", message: "Rate limit reached. Retry after the recommended delay.", retryable: true, retryAfterSeconds: 60, recommendedNextAction: "Wait 60 seconds, then retry the same request." },
+          error: {
+            code: "rate_limited",
+            message: "Completed scan resource read limit exceeded. Retry after 60 seconds.",
+            retryable: true,
+            retryAfterSeconds: 60,
+            recommendedNextAction: "Wait for Retry-After, then make one bounded retrieval. Do not poll terminal scan resources."
+          },
           disclaimer: apiV2Disclaimer
         }
       },
@@ -276,6 +282,12 @@ const errorContent = {
       }
     }
   }
+} as const;
+
+const readRateLimitedResponse = {
+  description: "Weighted scan-resource read limit reached. Honor Retry-After before retrying and do not poll terminal scan resources.",
+  headers: { ...diagnosticHeaders, ...retryAfterHeader },
+  content: errorContent
 } as const;
 
 export function buildCertScoreApiV2OpenApiDocument() {
@@ -414,6 +426,7 @@ export function buildCertScoreApiV2OpenApiDocument() {
             },
             "400": { description: "Invalid scan ID.", headers: diagnosticHeaders, content: errorContent },
             "404": { description: "Scan not found.", headers: diagnosticHeaders, content: errorContent },
+            "429": readRateLimitedResponse,
             "500": { description: "Temporary service error.", headers: diagnosticHeaders, content: errorContent }
           }
         }
@@ -432,6 +445,7 @@ export function buildCertScoreApiV2OpenApiDocument() {
             },
             "400": { description: "Invalid scan ID.", headers: diagnosticHeaders, content: errorContent },
             "404": { description: "Scan or job not found.", headers: diagnosticHeaders, content: errorContent },
+            "429": readRateLimitedResponse,
             "500": { description: "Temporary service error.", headers: diagnosticHeaders, content: errorContent }
           }
         }
@@ -450,6 +464,7 @@ export function buildCertScoreApiV2OpenApiDocument() {
             },
             "400": { description: "Invalid scan ID.", headers: diagnosticHeaders, content: errorContent },
             "404": { description: "Scan not found.", headers: diagnosticHeaders, content: errorContent },
+            "429": readRateLimitedResponse,
             "500": { description: "Temporary service error.", headers: diagnosticHeaders, content: errorContent }
           }
         }
@@ -468,6 +483,7 @@ export function buildCertScoreApiV2OpenApiDocument() {
             },
             "400": { description: "Invalid scan ID.", headers: diagnosticHeaders, content: errorContent },
             "404": { description: "Scan not found.", headers: diagnosticHeaders, content: errorContent },
+            "429": readRateLimitedResponse,
             "500": { description: "Temporary service error.", headers: diagnosticHeaders, content: errorContent }
           }
         }
@@ -489,6 +505,7 @@ export function buildCertScoreApiV2OpenApiDocument() {
             },
             "400": { description: "Invalid scan or finding ID.", headers: diagnosticHeaders, content: errorContent },
             "404": { description: "Finding not found.", headers: diagnosticHeaders, content: errorContent },
+            "429": readRateLimitedResponse,
             "500": { description: "Temporary service error.", headers: diagnosticHeaders, content: errorContent }
           }
         }
@@ -515,6 +532,7 @@ export function buildCertScoreApiV2OpenApiDocument() {
               content: { "application/json": { schema: { $ref: "#/components/schemas/DomainLatestScan" }, examples: { latest: { value: domainLatestExample } } } }
             },
             "400": { description: "Invalid domain.", headers: diagnosticHeaders, content: errorContent },
+            "429": readRateLimitedResponse,
             "500": { description: "Temporary service error.", headers: diagnosticHeaders, content: errorContent }
           }
         }
@@ -533,6 +551,7 @@ export function buildCertScoreApiV2OpenApiDocument() {
             },
             "400": { description: "Invalid scan ID.", headers: diagnosticHeaders, content: errorContent },
             "404": { description: "Scan not found.", headers: diagnosticHeaders, content: errorContent },
+            "429": readRateLimitedResponse,
             "500": { description: "Temporary service error.", headers: diagnosticHeaders, content: errorContent }
           }
         }
@@ -568,7 +587,7 @@ export function buildCertScoreApiV2OpenApiDocument() {
             },
             "400": { description: "Invalid scan ID.", headers: diagnosticHeaders, content: errorContent },
             "404": { description: "Scan not found.", headers: diagnosticHeaders, content: errorContent },
-            "429": { description: "Rate limited.", headers: { ...diagnosticHeaders, ...retryAfterHeader }, content: errorContent },
+            "429": readRateLimitedResponse,
             "500": { description: "Temporary service error.", headers: diagnosticHeaders, content: errorContent }
           }
         }
@@ -598,7 +617,7 @@ export function buildCertScoreApiV2OpenApiDocument() {
             },
             "400": { description: "Invalid domain.", headers: diagnosticHeaders, content: errorContent },
             "404": { description: "No eligible public scan exists for the domain.", headers: diagnosticHeaders, content: errorContent },
-            "429": { description: "Rate limited.", headers: { ...diagnosticHeaders, ...retryAfterHeader }, content: errorContent },
+            "429": readRateLimitedResponse,
             "500": { description: "Temporary service error.", headers: diagnosticHeaders, content: errorContent }
           }
         }
@@ -1108,7 +1127,23 @@ export function buildCertScoreApiV2OpenApiDocument() {
                 message: { type: "string" },
                 retryable: { type: "boolean" },
                 retryAfterSeconds: { type: ["integer", "null"] },
-                recommendedNextAction: { type: "string" }
+                recommendedNextAction: { type: "string" },
+                rateLimit: {
+                  type: "object",
+                  additionalProperties: false,
+                  description: "Present for weighted scan-read throttles. Values identify the exact canonical policy decision.",
+                  required: ["policyVersion", "profile", "scope", "windowId", "windowSeconds", "limitUnits", "usedUnits", "requestedUnits"],
+                  properties: {
+                    policyVersion: { type: "string" },
+                    profile: { type: "string", enum: ["terminal", "status"] },
+                    scope: { type: "string", enum: ["callerTarget", "target", "caller"] },
+                    windowId: { type: "string", enum: ["burst", "daily"] },
+                    windowSeconds: { type: "integer" },
+                    limitUnits: { type: "integer" },
+                    usedUnits: { type: "integer" },
+                    requestedUnits: { type: "integer" }
+                  }
+                }
               }
             },
             links: { $ref: "#/components/schemas/Links" },

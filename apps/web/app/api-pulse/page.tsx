@@ -13,6 +13,7 @@ import {
   PULSE_STANDARD_DISCLAIMER
 } from "../../lib/pulse/constants";
 import { createPageMetadata } from "../../lib/seo";
+import { ApiReadRatePolicyDetails } from "../developers/developer-pages";
 
 export const metadata: Metadata = createPageMetadata({
   title: "CertScore.ai Pulse API Beta",
@@ -831,6 +832,15 @@ Other statuses: completed_limited, failed, expired, rate_limited
 
 Public-safe phase message:
 "Observing public-page behavior and collecting automated evidence signals."`}</CodeBlock>
+          </CardContent>
+        </Card>
+
+        <Card className="border-slate-200 bg-white shadow-none" id="read-rate-limits">
+          <CardHeader>
+            <CardTitle>Weighted scan-resource limits</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <ApiReadRatePolicyDetails />
           </CardContent>
         </Card>
 

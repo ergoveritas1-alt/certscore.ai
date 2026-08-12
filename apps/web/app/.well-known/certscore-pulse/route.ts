@@ -1,3 +1,5 @@
+import { API_READ_RATE_POLICY_OPENAPI_EXTENSION } from "@website-signal-risk-scanner/shared";
+
 const discoveryDocument = {
   name: "CertScore Pulse beta",
   version: "0.5.3",
@@ -61,6 +63,7 @@ const discoveryDocument = {
   },
   retryBehavior:
     "HTTP 202 pending responses include Retry-After when a polling delay is recommended. HTTP 429 throttled responses include Retry-After when retry timing is known.",
+  readRatePolicy: API_READ_RATE_POLICY_OPENAPI_EXTENSION,
   freshness:
     "Use freshness=latest for eligible completed results within the 24-hour reuse window. Use forceNewScan=true to bypass the 24-hour reuse check. New scan generation remains subject to the 5-minute normalized-domain throttle.",
   agentFetchLimitations:

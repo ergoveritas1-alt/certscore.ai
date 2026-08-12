@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import { createPageMetadata } from "../../../lib/seo";
-import { CodeBlock, DeveloperShell, Section, apiV2Routes } from "../developer-pages";
+import { ApiReadRatePolicyDetails, CodeBlock, DeveloperShell, Section, apiV2Routes } from "../developer-pages";
 
 const description =
   "Reference for the CertScore.ai API v2 resource model, OpenAPI contract, status lifecycle, public-safe evidence summaries, errors, throttling, and legal posture.";
@@ -207,6 +207,10 @@ Current scopes:
             HTTP 202 pending responses and HTTP 429 throttled responses may include <code className="rounded bg-white px-1">Retry-After</code>;
             agents and SDKs should honor that value rather than tight polling.
           </p>
+        </Section>
+
+        <Section id="read-rate-limits" eyebrow="Read protection" title="Weighted scan-resource limits">
+          <ApiReadRatePolicyDetails />
         </Section>
 
         <Section eyebrow="Errors" title="Public-safe error envelope">

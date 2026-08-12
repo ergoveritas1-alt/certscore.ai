@@ -5,6 +5,7 @@ export * from "./constants/usage";
 export * from "./constants/validation";
 export * from "./access-limitations";
 export * from "./access-limitations.fixtures";
+export * from "./api-read-rate-policy";
 export * from "./scan-config";
 export * from "./scan-location";
 export * from "./scan-no-go-reasons";

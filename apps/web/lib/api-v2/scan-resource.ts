@@ -983,6 +983,16 @@ export function buildApiV2Error(input: {
   retryable?: boolean;
   retryAfterSeconds?: number | null;
   recommendedNextAction?: string;
+  rateLimit?: {
+    limitUnits: number;
+    policyVersion: string;
+    profile: "terminal" | "status";
+    requestedUnits: number;
+    scope: "callerTarget" | "target" | "caller";
+    usedUnits: number;
+    windowId: "burst" | "daily";
+    windowSeconds: number;
+  };
 }) {
   const retryable = input.retryable ?? (input.code === "rate_limited" || input.code === "scan_unavailable" || input.code === "internal_error");
   const retryAfterSeconds = input.retryAfterSeconds ?? (retryable ? 30 : null);
@@ -1002,7 +1012,8 @@ export function buildApiV2Error(input: {
       message: input.message,
       retryable,
       retryAfterSeconds,
-      recommendedNextAction
+      recommendedNextAction,
+      ...(input.rateLimit ? { rateLimit: input.rateLimit } : {})
     },
     links: {
       docs: absoluteUrl("/api/v2/openapi.json")

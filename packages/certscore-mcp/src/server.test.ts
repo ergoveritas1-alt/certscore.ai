@@ -973,9 +973,8 @@ test("get_scan_bundle opts into bounded evidence and pre-consent inventory", asy
   };
   const mock = installFetch([
     { status: 200, body: scan },
-    { status: 200, body: { ...pulse, type: "certscore_pulse_summary" } },
-    { status: 200, body: { type: "certscore_finding_list", scanId: "scan_123", findings: [apiFinding("finding_1")] } },
     { status: 200, body: { ...pulse, type: "certscore_pulse_evidence", evidenceSafetyNotes: ["Public-safe evidence only."], projectedFindings: pulse.findings } },
+    { status: 200, body: { type: "certscore_finding_list", scanId: "scan_123", findings: [apiFinding("finding_1")] } },
     { status: 200, body: { type: "certscore_pre_consent_cookies_trackers", scanId: "scan_123", domain: "example.com", summary: { rowCount: 1, trackerCount: 1, cookieCount: 0, requestCount: 1 }, rows: [preConsentRow("row_1")] } }
   ]);
   try {
@@ -983,7 +982,7 @@ test("get_scan_bundle opts into bounded evidence and pre-consent inventory", asy
       const bundle = parseToolJson(await client.callTool({ name: "get_scan_bundle", arguments: { scanId: "scan_123", detail: "evidence" } }));
       assert.ok(bundle.evidenceSummary);
       assert.equal(((bundle.preConsentCookiesTrackers as Record<string, unknown>).rows as unknown[]).length, 1);
-      assert.equal(mock.calls.length, 5);
+      assert.equal(mock.calls.length, 4);
     });
   } finally {
     mock.restore();

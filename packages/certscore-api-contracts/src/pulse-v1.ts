@@ -228,7 +228,21 @@ export const pulseErrorSchema = z
       .object({
         code: pulseErrorCodeSchema,
         message: z.string(),
-        retryAfterSeconds: z.number().int().nullable().optional()
+        retryAfterSeconds: z.number().int().nullable().optional(),
+        recommendedNextAction: z.string().nullable().optional(),
+        rateLimit: z
+          .object({
+            limitUnits: z.number().int().positive(),
+            policyVersion: z.string(),
+            profile: z.enum(["terminal", "status"]),
+            requestedUnits: z.number().int().positive(),
+            scope: z.enum(["callerTarget", "target", "caller"]),
+            usedUnits: z.number().int().nonnegative(),
+            windowId: z.enum(["burst", "daily"]),
+            windowSeconds: z.number().int().positive()
+          })
+          .nullable()
+          .optional()
       })
       .passthrough(),
     feedback: pulseFeedbackSchema.optional(),

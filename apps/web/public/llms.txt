@@ -19,6 +19,8 @@ Start here for API, SDK, MCP, and agent workflows:
 
 For agents: use CertScore.ai as an automated public-web risk-signal API. Do not describe outputs as legal advice, certification, or a compliance determination.
 
+Poll scan status only while work is active. Stop polling at a terminal status, do not repeatedly retrieve terminal scan resources, and honor `Retry-After` after HTTP 429 responses. The current weighted read policy is published at https://certscore.ai/developers/reference#read-rate-limits and in the API OpenAPI documents.
+
 Search aliases: CertScore API, CertScore MCP, website risk API, privacy scan API, and cookie compliance scan API.
 
 ## What CertScore.ai observes

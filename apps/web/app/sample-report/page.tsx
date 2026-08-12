@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { Badge, Card, CardContent, CardHeader, CardTitle } from "@website-signal-risk-scanner/ui";
 import { SiteFooter } from "../../components/layout/site-footer";
 import { SiteHeader } from "../../components/layout/site-header";
+import { ApiReadRatePolicyNotice } from "../../components/api-read-rate-policy-notice";
 import { PendingButtonLink } from "../../components/ui/pending-link";
 import { createPageMetadata } from "../../lib/seo";
 
@@ -179,6 +180,7 @@ export default function SampleReportPage() {
             />
           </CardContent>
         </Card>
+        <ApiReadRatePolicyNotice className="mt-8" />
       </section>
 
       <SiteFooter />

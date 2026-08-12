@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { createPageMetadata } from "../../../lib/seo";
-import { CodeBlock, DeveloperShell, Section, mcpTools } from "../developer-pages";
+import { ApiReadRatePolicyDetails, CodeBlock, DeveloperShell, Section, mcpTools } from "../developer-pages";
 
 const description =
   "Connect agents to the CertScore.ai MCP server for website compliance review workflows using scan, status, finding, explanation, and latest-domain tools.";
@@ -56,6 +56,14 @@ export default function DeveloperMcpPage() {
               </tbody>
             </table>
           </div>
+        </Section>
+
+        <Section id="read-rate-limits" eyebrow="Read protection" title="MCP scan-resource limits">
+          <ApiReadRatePolicyDetails />
+          <p className="mt-5 max-w-3xl text-sm leading-7 text-slate-600">
+            Hosted MCP applies the policy before composite tool fan-out, so an over-limit bundle is rejected before it starts its
+            internal API reads. Local MCP receives the same protection from the underlying CertScore API.
+          </p>
         </Section>
 
         <Section eyebrow="Beginner workflow" title="Light MCP — no authentication">
