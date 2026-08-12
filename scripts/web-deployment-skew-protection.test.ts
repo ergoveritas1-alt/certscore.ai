@@ -12,4 +12,5 @@ test("web deployments use the immutable image SHA for Next.js skew protection", 
   assert.match(nextConfig, /deploymentId:\s*process\.env\.BUILD_GIT_SHA\s*\|\|\s*undefined/);
   assert.match(dockerfile, /ARG BUILD_GIT_SHA=""/);
   assert.match(workflow, /--build-arg BUILD_GIT_SHA="\$\{GITHUB_SHA\}"/);
+  assert.match(workflow, /docker buildx build \\\n\s+--platform linux\/arm64 \\/);
 });

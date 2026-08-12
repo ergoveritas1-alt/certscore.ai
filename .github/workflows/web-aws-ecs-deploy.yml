@@ -181,6 +181,7 @@ jobs:
           WEB_IMAGE="${REGISTRY}/${ECR_WEB_REPOSITORY}"
           WEB_CACHE="${WEB_IMAGE}:buildcache"
           docker buildx build \
+            --platform linux/arm64 \
             --provenance=false \
             --sbom=false \
             --cache-from "type=registry,ref=${WEB_CACHE}" \
