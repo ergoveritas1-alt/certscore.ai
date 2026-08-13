@@ -1,7 +1,11 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";
-import { createSmokeKey } from "./smoke-certscore-mcp-production";
+import {
+  createSmokeKey,
+  parseToolJson,
+  REQUIRED_TOOLS
+} from "./smoke-certscore-mcp-production";
 
 const source = readFileSync("scripts/smoke-certscore-mcp-production.ts", "utf8");
 const consoleLines = source
@@ -15,6 +19,10 @@ test("production MCP smoke keeps the expected safety rails", () => {
   assert.match(source, /certscore_scan_site/);
   assert.match(source, /certscore_get_scan_status/);
   assert.match(source, /certscore_get_scan/);
+  assert.match(source, /certscore_get_scan_bundle/);
+  assert.match(source, /certscore_get_report/);
+  assert.match(source, /certscore_get_evidence/);
+  assert.match(source, /certscore_export_findings/);
   assert.match(source, /certscore_list_findings/);
   assert.match(source, /certscore_explain_finding/);
   assert.match(source, /certscore_get_pre_consent_cookies_trackers/);
@@ -25,6 +33,33 @@ test("production MCP smoke keeps the expected safety rails", () => {
   assert.match(source, /set status = 'revoked', updated_at = timezone\('utc', now\(\)\)/);
   assert.doesNotMatch(source, /revoked_at/);
   assert.equal(consoleLines.some((line) => /key\.token(?!Prefix|Hash)|CERTSCORE_API_KEY/.test(line)), false);
+});
+
+test("production MCP smoke requires the exact 12-tool surface", () => {
+  assert.deepEqual([...REQUIRED_TOOLS].sort(), [
+    "certscore_explain_finding",
+    "certscore_export_findings",
+    "certscore_get_evidence",
+    "certscore_get_latest_domain_pre_consent_cookies_trackers",
+    "certscore_get_latest_domain_scan",
+    "certscore_get_pre_consent_cookies_trackers",
+    "certscore_get_report",
+    "certscore_get_scan",
+    "certscore_get_scan_bundle",
+    "certscore_get_scan_status",
+    "certscore_list_findings",
+    "certscore_scan_site"
+  ]);
+});
+
+test("production MCP smoke reads structured tool output before summary text", () => {
+  assert.deepEqual(parseToolJson({
+    content: [{ type: "text", text: "Human-readable summary." }],
+    structuredContent: { scanId: "scan_123", status: "completed" }
+  } as never), {
+    scanId: "scan_123",
+    status: "completed"
+  });
 });
 
 test("production MCP smoke key helper returns only bounded preview metadata", () => {
