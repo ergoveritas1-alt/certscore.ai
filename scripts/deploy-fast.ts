@@ -511,6 +511,11 @@ async function deployScanners(input: { pushRuntimeBase: boolean; ref: string }):
           "--region", region,
           "--function-name", SCANNER_FUNCTION_NAME
         ], { quiet: true });
+        await applyScannerImageDigestConfiguration({
+          imageDigest,
+          region,
+          temporaryDirectory: dockerConfigRoot
+        });
         return {
           durationMs: Date.now() - regionStart,
           imageUri: digestImageUri,
@@ -537,6 +542,48 @@ async function deployScanners(input: { pushRuntimeBase: boolean; ref: string }):
       await rm(dockerConfigRoot, { force: true, recursive: true });
     }
   });
+}
+
+async function applyScannerImageDigestConfiguration(input: {
+  imageDigest: string;
+  region: (typeof SCANNER_REGIONS)[number];
+  temporaryDirectory: string;
+}) {
+  const current = await run([
+    "aws", "lambda", "get-function-configuration",
+    "--region", input.region,
+    "--function-name", SCANNER_FUNCTION_NAME,
+    "--query", "Environment.Variables",
+    "--output", "json"
+  ], { quiet: true });
+  const variables = JSON.parse(current.stdout) as Record<string, string> | null;
+  if (variables?.SCANNER_IMAGE_DIGEST === input.imageDigest) {
+    return;
+  }
+
+  const configurationPath = path.join(
+    input.temporaryDirectory,
+    `lambda-environment-${input.region}.json`
+  );
+  await writeFile(configurationPath, JSON.stringify({
+    Environment: {
+      Variables: {
+        ...(variables ?? {}),
+        SCANNER_IMAGE_DIGEST: input.imageDigest
+      }
+    },
+    FunctionName: SCANNER_FUNCTION_NAME
+  }), { encoding: "utf8", mode: 0o600 });
+  await run([
+    "aws", "lambda", "update-function-configuration",
+    "--region", input.region,
+    "--cli-input-json", `file://${configurationPath}`
+  ], { quiet: true });
+  await run([
+    "aws", "lambda", "wait", "function-updated-v2",
+    "--region", input.region,
+    "--function-name", SCANNER_FUNCTION_NAME
+  ], { quiet: true });
 }
 
 async function applyScannerMemoryConfiguration() {
@@ -600,10 +647,11 @@ async function verifyScanners(expectedSha: string) {
       "aws", "lambda", "get-function",
       "--region", region,
       "--function-name", SCANNER_FUNCTION_NAME,
-      "--query", "{ImageUri:Code.ImageUri,LastUpdateStatus:Configuration.LastUpdateStatus,State:Configuration.State,Updated:Configuration.LastModified,MemorySize:Configuration.MemorySize}",
+      "--query", "{ImageUri:Code.ImageUri,ImageDigest:Configuration.Environment.Variables.SCANNER_IMAGE_DIGEST,LastUpdateStatus:Configuration.LastUpdateStatus,State:Configuration.State,Updated:Configuration.LastModified,MemorySize:Configuration.MemorySize}",
       "--output", "json"
     ], { quiet: true });
     const payload = JSON.parse(result.stdout) as {
+      ImageDigest?: string;
       ImageUri?: string;
       LastUpdateStatus?: string;
       MemorySize?: number;
@@ -623,6 +671,9 @@ async function verifyScanners(expectedSha: string) {
     }
     if (!payload.ImageUri?.endsWith(`@${expectedDigest}`)) {
       throw new Error(`${region} Lambda image ${payload.ImageUri ?? "unknown"} does not match ${expectedSha}`);
+    }
+    if (payload.ImageDigest !== expectedDigest) {
+      throw new Error(`${region} Lambda provenance digest ${payload.ImageDigest ?? "unknown"} does not match ${expectedDigest}`);
     }
     if (payload.MemorySize !== SCANNER_MEMORY_SIZE) {
       throw new Error(`${region} Lambda memory ${payload.MemorySize ?? "unknown"} does not match ${SCANNER_MEMORY_SIZE} MB`);

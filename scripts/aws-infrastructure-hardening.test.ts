@@ -151,6 +151,7 @@ test("routine scanner deploys promote immutable digests without recreating infra
   assert.match(deployFunction, /imageDetails\[0\]\.imageDigest/);
   assert.match(deployFunction, /await applyScannerMemoryConfiguration\(\)/);
   assert.match(deployFunction, /"lambda", "update-function-code"/);
+  assert.match(deployFunction, /await applyScannerImageDigestConfiguration/);
   assert.ok(
     deployFunction.indexOf("await applyScannerMemoryConfiguration()") <
       deployFunction.indexOf('"lambda", "update-function-code"'),
@@ -162,6 +163,7 @@ test("routine scanner deploys promote immutable digests without recreating infra
   assert.match(source, /const SCANNER_MEMORY_SIZE = 3008/);
   assert.match(verifyFunction, /imageTag=\$\{expectedSha\}/);
   assert.match(verifyFunction, /endsWith\(`@\$\{expectedDigest\}`\)/);
+  assert.match(verifyFunction, /payload\.ImageDigest !== expectedDigest/);
   assert.match(verifyFunction, /payload\.MemorySize !== SCANNER_MEMORY_SIZE/);
   assert.doesNotMatch(verifyFunction, /endsWith\(`:\$\{expectedSha\}`\)/);
 });
