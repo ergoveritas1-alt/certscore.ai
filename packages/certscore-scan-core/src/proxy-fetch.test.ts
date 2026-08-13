@@ -7,6 +7,11 @@ import { proxyFetch } from "./proxy-fetch.js";
 
 test("proxyFetch sends HTTP requests through the configured proxy", async () => {
   const target = createServer((request, response) => {
+    if (request.url === "/no-content") {
+      response.writeHead(204);
+      response.end();
+      return;
+    }
     response.writeHead(200, { "content-type": "text/plain" });
     response.end(`${request.method}:${request.url}`);
   });
@@ -43,6 +48,13 @@ test("proxyFetch sends HTTP requests through the configured proxy", async () => 
     });
     assert.equal(response.status, 200);
     assert.equal(await response.text(), "GET:/health?via=proxy");
+
+    const noContentResponse = await proxyFetch(`http://127.0.0.1:${targetPort}/no-content`, undefined, {
+      SCAN_PROXY_ENABLED: "true",
+      SCAN_PROXY_SERVER: `http://127.0.0.1:${proxyPort}`,
+    });
+    assert.equal(noContentResponse.status, 204);
+    assert.equal(await noContentResponse.text(), "");
   } finally {
     proxy.close();
     target.close();

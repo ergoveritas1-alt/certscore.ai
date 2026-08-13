@@ -141,6 +141,8 @@ export interface RunScanInput {
   policySurfaceSeeds?: PolicySurfaceSeed[];
   preConsentScreenshotMode?: "always" | "selective" | "never";
   preConsentScreenshotTimeoutMs?: number;
+  /** Local diagnostic override; production callers retain the 10s default. */
+  lateConsentGateMs?: number;
   preConsentVisualFallbackDeadlineMs?: number;
   /** Absolute deadline for optional visual recovery, preserving time to finalize retained scan output. */
   preConsentVisualFallbackDeadlineAtMs?: number;
@@ -369,6 +371,7 @@ export async function runScan(input: RunScanInput): Promise<CanonicalEvidenceBun
         screenshotCaptureMode: "viewport_first",
         screenshotMode: effectivePreConsentScreenshotMode,
         screenshotTimeoutMs: input.preConsentScreenshotTimeoutMs,
+        lateConsentGateMs: input.lateConsentGateMs,
         lateConsentGeometryShadowEnabled,
         onLifecycleCheckpoint: (checkpoint) => {
           latestPreConsentLifecycleCheckpoint = checkpoint;
@@ -384,6 +387,7 @@ export async function runScan(input: RunScanInput): Promise<CanonicalEvidenceBun
     ? policySurfaceScanner({
       url: input.url,
       normalizedUrl,
+      region: input.region,
       scanStartedAtMs: startedAtMs,
       internalBudgetMs: scanProfile.internalBudgetMs,
       absoluteDeadlineAtMs: input.policySurfaceDeadlineAtMs,
@@ -779,12 +783,14 @@ export async function runScan(input: RunScanInput): Promise<CanonicalEvidenceBun
   const renderedPolicyEvidenceRef = domSnapshot
     ? { refId: domSnapshot.artifactId, artifactId: domSnapshot.artifactId, path: domSnapshot.path }
     : undefined;
-  const retainedRenderedPolicyObservations = policySurfaceObservationsFromRetainedRenderedLinks({
-    links: preConsentResult.renderedPolicyLinks,
-    evidenceRef: renderedPolicyEvidenceRef,
-  });
+  const retainedRenderedPolicyObservations = policySurfaceEnabled
+    ? policySurfaceObservationsFromRetainedRenderedLinks({
+        links: preConsentResult.renderedPolicyLinks,
+        evidenceRef: renderedPolicyEvidenceRef,
+      })
+    : [];
   let policySurfaceResult = policySurfaceSettled?.value;
-  if (!policySurfaceResult && retainedRenderedPolicyObservations.length > 0) {
+  if (policySurfaceEnabled && !policySurfaceResult && retainedRenderedPolicyObservations.length > 0) {
     policySurfaceResult = buildRetainedRenderedPolicyFallbackResult({
       completedAtMs: Date.now(),
       evidenceRef: renderedPolicyEvidenceRef,
@@ -792,7 +798,7 @@ export async function runScan(input: RunScanInput): Promise<CanonicalEvidenceBun
       startedAtMs,
     });
   }
-  if (policySurfaceResult) {
+  if (policySurfaceEnabled && policySurfaceResult) {
     const recoveredPolicySurfaceCount = countRecoveredPolicySurfaceObservations(
       policySurfaceResult.policySurfaceObservations,
       retainedRenderedPolicyObservations,
@@ -2687,6 +2693,9 @@ export function shouldAttemptIncompleteConsentVisualFallback(
   if (screenshotMode === "never") {
     return false;
   }
+  if (hasCompleteRetainedConsentProofPacket(result)) {
+    return false;
+  }
   const typedInspectionIncomplete = consentInspectionNeedsRecovery({
     moduleStatus: result.moduleRun.status,
     observations: result.consentUiObservations,
@@ -2709,6 +2718,76 @@ export function shouldAttemptIncompleteConsentVisualFallback(
     `${errorText}\n${observationText}`,
   );
   return inspectionIncomplete;
+}
+
+export function hasCompleteRetainedConsentProofPacket(
+  result: Pick<
+    Awaited<ReturnType<typeof preConsentRuntimeScanner>>,
+    "consentUiObservations" | "screenshots"
+  >,
+): boolean {
+  const representativeScreenshots = result.screenshots.filter((screenshot) =>
+    !screenshot.captureMethod?.includes("placeholder")
+  );
+  if (representativeScreenshots.length === 0) {
+    return false;
+  }
+
+  return result.consentUiObservations.some((observation) => {
+    const completedChannels = observation.captureDiagnostics?.completedChannels ?? [];
+    const timedOutChannels = observation.captureDiagnostics?.timedOutChannels ?? [];
+    const failedChannels = observation.captureDiagnostics?.failedChannels ?? [];
+    const coherentInventory = observation.inventoryOutcome === "complete_with_controls"
+      ? observation.captureStatus === "observed" && observation.likelyPresent && observation.controls.length > 0
+      : observation.inventoryOutcome === "complete_empty" &&
+        observation.captureStatus === "no_evidence" &&
+        !observation.likelyPresent &&
+        observation.controls.length === 0;
+    const pairedSameSessionCompletion = observation.basis.some((basis) =>
+      basis === "inventory:paired_settled_frame_completed" ||
+      basis === "recapture:paired_settled_frame_typed_controls"
+    );
+    const completeTypedPacket =
+      coherentInventory &&
+      observation.layerInspected === "first_layer" &&
+      completedChannels.includes("dom_inventory") &&
+      completedChannels.includes("geometry") &&
+      timedOutChannels.length === 0 &&
+      failedChannels.length === 0 &&
+      (observation.inventoryDiagnostics?.blockingInaccessibleFrameCount ?? 0) === 0 &&
+      !observation.basis.some((basis) =>
+        basis === "geometry_capture_unavailable" ||
+        basis === "geometry:incomplete_not_authoritative" ||
+        basis === "geometry:document_mismatch_not_authoritative"
+      );
+    if (!completeTypedPacket) {
+      return false;
+    }
+
+    return isVerifiedTerminalConsentPacket(observation, {
+      representativeScreenshots,
+    }) || (
+      pairedSameSessionCompletion &&
+      representativeScreenshots.some((screenshot) =>
+        retainedScreenshotMatchesConsentObservation(screenshot, observation)
+      )
+    );
+  });
+}
+
+function retainedScreenshotMatchesConsentObservation(
+  screenshot: ScreenshotArtifact,
+  observation: ConsentUiObservation,
+): boolean {
+  const observationToken = observation.documentIdentity?.token;
+  const screenshotToken = screenshot.documentIdentity?.token;
+  if (observationToken || screenshotToken) {
+    return Boolean(observationToken && screenshotToken && observationToken === screenshotToken);
+  }
+  if (!observation.documentUrl) {
+    return false;
+  }
+  return normalizedDocumentIdentity(observation.documentUrl) === normalizedDocumentIdentity(screenshot.url);
 }
 
 export function consentInspectionNeedsRecovery(input: {

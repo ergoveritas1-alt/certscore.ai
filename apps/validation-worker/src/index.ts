@@ -2,7 +2,10 @@ import { hostname as getHostname } from "node:os";
 import { createBrowserCleanupScheduler } from "./browser-cleanup";
 import { getWorkerEnv } from "./env";
 import { startValidationDispatcher } from "./validation/dispatcher";
-import { startLocalV2DagLambdaResultPoller } from "./validation/local-v2-dag-lambda-results";
+import {
+  startLocalV2DagLambdaResultPoller,
+  startPersistedCompletedResultFinalizationRecovery,
+} from "./validation/local-v2-dag-lambda-results";
 import { recordValidationWorkerHeartbeat } from "./validation/repository";
 
 const HEARTBEAT_INTERVAL_MS = 30_000;
@@ -55,6 +58,9 @@ function bootstrapValidationWorker() {
     ],
     webBaseUrl: env.CERTSCORE_WEB_BASE_URL,
     targetEnvironment: env.CERTSCORE_V2_DAG_LAMBDA_TARGET_ENV
+  });
+  startPersistedCompletedResultFinalizationRecovery({
+    webBaseUrl: env.CERTSCORE_WEB_BASE_URL,
   });
   void startValidationDispatcher({
     browserCleanup,

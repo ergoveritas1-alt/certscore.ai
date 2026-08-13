@@ -69,6 +69,10 @@ CertScore results are automated observations from a public-web scan. No-go, not-
 
 The full/authenticated Streamable HTTP endpoint is `https://mcp.certscore.ai/mcp`. Use it after Light when the workflow requires authentication, higher volume, history, or advanced tools. Core identifiers and canonical response fields remain compatible when moving from Light to authenticated access.
 
+## Weighted read limits
+
+MCP scan-resource reads use the same weighted, rolling policy as the direct CertScore API. Hosted MCP rejects an over-limit composite call before internal fan-out; local MCP receives the same protection from the underlying API. Poll only active status resources, stop at a terminal status, do not repeatedly retrieve terminal scan resources, and honor `Retry-After` before retrying. The current limits and weights are published at https://certscore.ai/developers/reference#read-rate-limits and in the `x-certscore-read-rate-policy` extension of the public OpenAPI documents.
+
 ## Tools
 
 - `create_scan` - Deprecated compatibility alias of scan_site. Use scan_site for new integrations. Returns completed-limited no-go disposition and reason-specific guidance when applicable.

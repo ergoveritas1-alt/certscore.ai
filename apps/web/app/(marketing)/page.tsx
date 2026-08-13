@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import Image from "next/image";
 import Link from "next/link";
 import { Badge, Card, CardContent, CardHeader, CardTitle } from "@website-signal-risk-scanner/ui";
+import { ApiReadRatePolicyNotice } from "../../components/api-read-rate-policy-notice";
 import { SiteFooter } from "../../components/layout/site-footer";
 import { SiteHeader } from "../../components/layout/site-header";
 import { DomainScanForm } from "../../components/marketing/domain-scan-form";
@@ -349,6 +350,7 @@ export default async function MarketingHomePage() {
 
       <section className="border-t border-slate-200 bg-white">
         <div className="mx-auto max-w-6xl px-4 py-8 sm:px-6">
+          <ApiReadRatePolicyNotice className="mb-6" />
           <p className="max-w-3xl text-sm leading-6 text-slate-600">
             CertScore.ai provides automated, evidence-based insights into website behavior. It is not legal advice, certification, or a compliance determination.
           </p>

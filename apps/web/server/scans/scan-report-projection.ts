@@ -200,6 +200,34 @@ type ProjectionValue = {
   scoreScoredAt: string | null;
 };
 
+async function measureReportProjectionPhase<T>(
+  scanId: string,
+  phase: string,
+  run: () => T | Promise<T>
+): Promise<T> {
+  const startedAtMs = Date.now();
+  let outcome: "completed" | "failed" = "completed";
+  try {
+    return await run();
+  } catch (error) {
+    outcome = "failed";
+    throw error;
+  } finally {
+    const event = {
+      durationMs: Date.now() - startedAtMs,
+      event: "scan.report_projection.phase",
+      outcome,
+      phase,
+      scanId
+    };
+    if (outcome === "failed") {
+      console.warn(JSON.stringify(event));
+    } else {
+      console.info(JSON.stringify(event));
+    }
+  }
+}
+
 function record(value: unknown): Record<string, unknown> | null {
   return value && typeof value === "object" && !Array.isArray(value)
     ? value as Record<string, unknown>
@@ -429,54 +457,90 @@ async function deriveScanReportProjection(
           consent_control_assessment: assessment,
         },
       };
-  const reportState = debugBuildScanReportUnifiedFindingStateForScan(projectionScanRecord as unknown as Record<string, unknown>);
-  const executiveFindingsProjection = projectExecutiveFindingsFromUnifiedPackets(
-    reportState.globalUnifiedFindings
+  const reportState = await measureReportProjectionPhase(
+    scanRecord.scan.id,
+    "unified_finding_state",
+    () => debugBuildScanReportUnifiedFindingStateForScan(
+      projectionScanRecord as unknown as Record<string, unknown>,
+      {
+        onPhase: (phase, durationMs) => console.info(JSON.stringify({
+          durationMs: Math.round(durationMs),
+          event: "scan.report_projection.unified_phase",
+          phase,
+          scanId: scanRecord.scan.id
+        }))
+      }
+    )
   );
-  const runtimeCookieRows = buildRuntimeCookieInventory({
-    runtimeArtifacts: projectionScanRecord.runtimeArtifacts
-  }).rows;
-  const presentationSummary = deriveCertScoreFindings(projectionScanRecord);
-  const runtimeTrackerPriorityRows = buildTrackerInventoryGroupRows(
-    buildTrackerInventoryRows({
-      domains: scanRecord.trackerVendors.flatMap((vendor) => vendor.scriptHost ? [vendor.scriptHost] : []),
-      firstPartyDomain: scanRecord.scan.domainHostname ?? presentationSummary.requestedHost,
-      preConsentVendors: presentationSummary.preConsentVendorNames,
-      resolvedVendors: presentationSummary.resolvedVendorNames,
-      sessionReplayVendors: presentationSummary.sessionReplayVendorNames,
-      trackerVendors: scanRecord.trackerVendors,
-      topObservedEntities: presentationSummary.topObservedEntities,
-      unresolvedHosts: presentationSummary.unresolvedVendorHosts
-    }).filter(isTimedPreConsentInventoryRow)
-  ).map((row) => ({
-    domains: row.domains,
-    firstSeenMs: row.firstSeenMs,
-    party: row.party,
-    priority: row.priority,
-    purpose: row.purpose,
-    requestCount: row.requestCount ?? null,
-    regulatoryRelevance: row.regulatoryRelevance,
-    vendor: row.vendor
-  }));
-  const checklist = deriveSharedScanDetailGdprEprivacyCoverageChecklist({
-    coverageLimited: false,
-    events: projectionScanRecord.events,
-    normalizedConcerns: reportState.normalizedConcerns,
-    policyEnrichmentCount: projectionScanRecord.policyEnrichment.length,
-    projectedFindings: executiveFindingsProjection.findings,
-    runtimeArtifacts: projectionScanRecord.runtimeArtifacts,
-    runtimeCookieRows,
-    runtimeTrackerPriorityRows,
-    scanCompleted: projectionScanRecord.scan.status === "completed",
-    snapshot: projectionScanRecord.snapshot,
-    unifiedFindings: reportState.globalUnifiedFindings
-  });
-  const canonicalScore = projectionScanRecord.scan.status === "completed"
-    ? deriveCanonicalOverallScoreForReport({
-        checklistRows: checklist,
-        unifiedFindings: reportState.globalUnifiedFindings
-      })
-    : null;
+  const executiveFindingsProjection = await measureReportProjectionPhase(
+    scanRecord.scan.id,
+    "executive_findings_projection",
+    () => projectExecutiveFindingsFromUnifiedPackets(reportState.globalUnifiedFindings)
+  );
+  const runtimeCookieRows = await measureReportProjectionPhase(
+    scanRecord.scan.id,
+    "runtime_cookie_inventory",
+    () => buildRuntimeCookieInventory({
+      runtimeArtifacts: projectionScanRecord.runtimeArtifacts
+    }).rows
+  );
+  const presentationSummary = await measureReportProjectionPhase(
+    scanRecord.scan.id,
+    "presentation_summary",
+    () => deriveCertScoreFindings(projectionScanRecord)
+  );
+  const runtimeTrackerPriorityRows = await measureReportProjectionPhase(
+    scanRecord.scan.id,
+    "runtime_tracker_inventory",
+    () => buildTrackerInventoryGroupRows(
+      buildTrackerInventoryRows({
+        domains: scanRecord.trackerVendors.flatMap((vendor) => vendor.scriptHost ? [vendor.scriptHost] : []),
+        firstPartyDomain: scanRecord.scan.domainHostname ?? presentationSummary.requestedHost,
+        preConsentVendors: presentationSummary.preConsentVendorNames,
+        resolvedVendors: presentationSummary.resolvedVendorNames,
+        sessionReplayVendors: presentationSummary.sessionReplayVendorNames,
+        trackerVendors: scanRecord.trackerVendors,
+        topObservedEntities: presentationSummary.topObservedEntities,
+        unresolvedHosts: presentationSummary.unresolvedVendorHosts
+      }).filter(isTimedPreConsentInventoryRow)
+    ).map((row) => ({
+      domains: row.domains,
+      firstSeenMs: row.firstSeenMs,
+      party: row.party,
+      priority: row.priority,
+      purpose: row.purpose,
+      requestCount: row.requestCount ?? null,
+      regulatoryRelevance: row.regulatoryRelevance,
+      vendor: row.vendor
+    }))
+  );
+  const checklist = await measureReportProjectionPhase(
+    scanRecord.scan.id,
+    "checklist_projection",
+    () => deriveSharedScanDetailGdprEprivacyCoverageChecklist({
+      coverageLimited: false,
+      events: projectionScanRecord.events,
+      normalizedConcerns: reportState.normalizedConcerns,
+      policyEnrichmentCount: projectionScanRecord.policyEnrichment.length,
+      projectedFindings: executiveFindingsProjection.findings,
+      runtimeArtifacts: projectionScanRecord.runtimeArtifacts,
+      runtimeCookieRows,
+      runtimeTrackerPriorityRows,
+      scanCompleted: projectionScanRecord.scan.status === "completed",
+      snapshot: projectionScanRecord.snapshot,
+      unifiedFindings: reportState.globalUnifiedFindings
+    })
+  );
+  const canonicalScore = await measureReportProjectionPhase(
+    scanRecord.scan.id,
+    "canonical_score",
+    () => projectionScanRecord.scan.status === "completed"
+      ? deriveCanonicalOverallScoreForReport({
+          checklistRows: checklist,
+          unifiedFindings: reportState.globalUnifiedFindings
+        })
+      : null
+  );
   const canonicalHighPriorityFindings = selectCanonicalHighPriorityFindings(
     buildChecklistConcernTopFindings(checklist)
   );
@@ -486,10 +550,14 @@ async function deriveScanReportProjection(
   const choices = firstLayerConsentChoices(projectionScanRecord);
   assertCanonicalConsentProjectionInput(scanRecord, assessment);
   const trancoFromConfig = trancoRankFromScanConfig(scanRecord.scan.scanConfigJson);
-  const trancoMetadata = await lookupTrancoRankMetadata({
-    hostname: scanRecord.scan.domainHostname,
-    normalizedUrl: null
-  });
+  const trancoMetadata = await measureReportProjectionPhase(
+    scanRecord.scan.id,
+    "tranco_lookup",
+    () => lookupTrancoRankMetadata({
+      hostname: scanRecord.scan.domainHostname,
+      normalizedUrl: null
+    })
+  );
   const industry = stringValue(scanRecord.domainBenchmark?.industry) ?? stringValue(sourceSnapshot?.admin_industry_label) ?? stringValue(snapshot?.admin_industry_label);
   const score = canonicalScore ?? numberValue(snapshot?.certscore_overall);
   const egressId = shouldUseLocalV2DagScanTool() ? null : stringValue(sourceSnapshot?.egress_id) ?? stringValue(snapshot?.egress_id);
@@ -577,7 +645,11 @@ export async function persistScanReportProjection(
   const projectionWasAlreadyReady = isCurrentScanReportProjectionReady(snapshot);
   const scanNoGoAssessment = record(sourceRuntimeArtifacts?.scan_no_go_assessment) ?? record(sourceRuntimeArtifacts?.scanNoGoAssessment) ?? record(sourceSnapshot?.scan_no_go_assessment);
   const visualAccessReview = record(sourceRuntimeArtifacts?.visual_access_review) ?? record(sourceRuntimeArtifacts?.visualAccessReview) ?? record(sourceSnapshot?.visual_access_review);
-  const hash = sourceHash(scanRecord, value, source);
+  const hash = await measureReportProjectionPhase(
+    scanRecord.scan.id,
+    "source_hash",
+    () => sourceHash(scanRecord, value, source)
+  );
   const projectedSnapshot = {
     ...(scanRecord.snapshot ?? {}),
     certscore_overall: value.score,
@@ -593,13 +665,20 @@ export async function persistScanReportProjection(
     score_version: value.scoreVersion,
     top_finding_count: value.topFindingCount
   };
-  const persistedProjection = buildPersistedScanReportProjection({
-    ...scanRecord,
-    snapshot: projectedSnapshot
-  }, { canonicalReportProjection });
+  const persistedProjection = await measureReportProjectionPhase(
+    scanRecord.scan.id,
+    "payload_normalize_and_serialize",
+    () => buildPersistedScanReportProjection({
+      ...scanRecord,
+      snapshot: projectedSnapshot
+    }, { canonicalReportProjection })
+  );
   const generation = getScanReportProjectionGeneration(scanRecord);
 
-  const persistence = await query(
+  const persistence = await measureReportProjectionPhase(
+    scanRecord.scan.id,
+    "database_persist",
+    () => query(
     `insert into public.scan_snapshots (
        scan_id, organization_id, domain_id, pages_requested, pages_scanned,
        certscore_overall, admin_industry_label, top_finding_count,
@@ -728,13 +807,14 @@ export async function persistScanReportProjection(
       assessment?.provenance.sourceHash ?? null,
       assessment?.coverage.status ?? null,
       assessment?.surface.status ?? null,
-      JSON.stringify(sanitizeJsonbValue(persistedProjection.payload)),
+      persistedProjection.serialized,
       persistedProjection.sha256,
       persistedProjection.sizeBytes,
       generation.eventCount,
       generation.latestEventId,
       [...SCAN_REPORT_PROJECTION_NON_SOURCE_EVENT_TYPES]
     ]
+    )
   );
 
   if (persistence.rowCount !== 1) {

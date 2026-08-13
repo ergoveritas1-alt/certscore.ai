@@ -1100,7 +1100,10 @@ test("pre-consent runtime scanner retains text-ish canonical controls inside CMP
       server.urlFor("consent-cmp-static-canonical-controls"),
       path.join(tempRoot, "consent-cmp-static-canonical-controls"),
       "fast",
-      "selective",
+      "always",
+      "viewport_first",
+      15_000,
+      "consent_proof",
     );
     const observation = bundle.consentUiObservations[0];
 
@@ -1124,6 +1127,28 @@ test("pre-consent runtime scanner retains text-ish canonical controls inside CMP
       true,
       "scanner should retain Lithuanian options text rendered as a CMP control",
     );
+    assert.equal(
+      observation?.inventoryDiagnostics?.timingMarkers.includes("gate_10s:stable_partial_packet_exit"),
+      true,
+      "a stable typed partial packet should exit after the 10-second evidence checkpoint",
+    );
+    assert.equal(
+      observation?.captureDiagnostics?.completedChannels.includes("geometry"),
+      true,
+      "the early exit must retain completed typed geometry",
+    );
+    for (const artifactId of [
+      "screenshot_pre_consent",
+      "screenshot_pre_consent_settled",
+      "screenshot_pre_consent_full_page",
+      "screenshot_pre_consent_cmp_controls",
+    ]) {
+      assert.equal(
+        bundle.screenshots.some((screenshot) => screenshot.artifactId === artifactId),
+        true,
+        `${artifactId} should remain retained across the stable-packet exit`,
+      );
+    }
   } finally {
     await server.close();
     await rm(tempRoot, { recursive: true, force: true });
@@ -1797,13 +1822,13 @@ test("dedicated consent-proof capture retains delayed Portuguese Ketch A/R/O and
     ));
     assert.equal(
       bundle.modulesRun[0]?.timingBreakdown?.some((entry) =>
-        entry.label === "early CMP-gated passive render wait"
+        entry.label === "page evidence: consent UI CMP recapture"
       ),
       true,
-      "the consent-proof lane should independently recognize Ketch and enter its bounded passive render gate",
+      "the consent-proof lane should independently recognize Ketch and retain delayed controls through the adaptive gate",
     );
     assert.equal(
-      observation?.basis.includes("recapture:post_passive_cmp_screenshot"),
+      observation?.basis.some((basis) => basis.startsWith("adaptive_gate_inventory:")),
       true,
       "the delayed Ketch controls should be retained from the same untouched consent-proof session",
     );
@@ -2720,6 +2745,57 @@ test("pre-consent runtime scanner skips CMP recapture without first-layer surfac
       timingLabels.includes("page evidence: consent UI CMP recapture"),
       false,
       "generic CMP runtime evidence without first-layer hints should not spend the full CMP recapture wait",
+    );
+  } finally {
+    await server.close();
+    await rm(tempRoot, { recursive: true, force: true });
+  }
+});
+
+test("runtime-evidence lane excludes consent waits and policy recovery", async () => {
+  const server = await startStaticFixtureServer();
+  const tempRoot = await mkdtemp(path.join(tmpdir(), "certscore-v2-runtime-lane-ownership-"));
+  try {
+    const bundle = await runScan({
+      url: server.urlFor("policy-footer-privacy"),
+      outDir: path.join(tempRoot, "runtime-out"),
+      profile: "standard",
+      evidenceLane: "runtime_evidence",
+      preConsentModuleDeadlineMs: 10_000,
+      // Intentionally request screenshots to prove that lane ownership, not
+      // caller tuning, keeps consent visuals out of runtime evidence.
+      preConsentScreenshotMode: "always",
+      scenarioPlanningMode: "planned_parallel",
+      scenarioResourceMode: "lean",
+    });
+    const preConsentModule = bundle.modulesRun.find((moduleRun) =>
+      moduleRun.moduleName === "preConsentRuntimeScanner"
+    );
+    const timingBreakdown = preConsentModule?.timingBreakdown ?? [];
+    const timingLabels = timingBreakdown.map((entry) => entry.label);
+    const foreignLaneWork = timingBreakdown.filter((entry) =>
+      entry.outcome !== "skipped" &&
+      (
+        /consent/i.test(entry.label) ||
+        /^CMP runtime probe$/i.test(entry.label) ||
+        /rendered policy|rendered-link recovery/i.test(entry.label)
+      )
+    );
+
+    assert.equal(preConsentModule?.status, "completed", preConsentModule?.errors.join("; "));
+    assert.equal(bundle.networkEvents.length > 0, true, "runtime lane must retain observed network evidence");
+    assert.equal(bundle.consentUiObservations.length, 0);
+    assert.equal(bundle.cmpRuntimeObservations.length, 0);
+    assert.equal(bundle.screenshots.length, 0);
+    assert.equal(bundle.policySurfaceObservations.length, 0);
+    assert.equal(
+      bundle.modulesRun.some((moduleRun) => moduleRun.moduleName === "policySurfaceScanner"),
+      false,
+    );
+    assert.deepEqual(
+      foreignLaneWork,
+      [],
+      `runtime lane performed work owned by another lane: ${JSON.stringify(timingLabels)}`,
     );
   } finally {
     await server.close();

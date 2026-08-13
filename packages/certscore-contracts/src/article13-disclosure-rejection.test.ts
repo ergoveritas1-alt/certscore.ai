@@ -88,6 +88,43 @@ test("processing-linked legal obligations qualify as legal-basis evidence", () =
   );
 });
 
+test("processing framed on the basis of legitimate interests qualifies in singular and plural form", () => {
+  for (const legalBasisText of [
+    "You may object to the processing of your information on the basis of our legitimate interest in service security.",
+    "You may object to the processing of your information on the basis of our legitimate interests, including direct marketing.",
+  ]) {
+    assert.equal(hasSubstantiveLegalBasisEvidence(legalBasisText), true, legalBasisText);
+    assert.equal(
+      article13DisclosureRejectReason(legalBasisText, "legal_basis", { mode: "retained_report" }),
+      null,
+      legalBasisText,
+    );
+  }
+
+  assert.equal(
+    hasSubstantiveLegalBasisEvidence("Our legitimate interests include improving our products."),
+    false,
+  );
+});
+
+test("purpose-bound keep-for-as-long-as-needed wording qualifies as retention evidence", () => {
+  const retentionText =
+    "We only keep Information for as long as we need it to fulfil the purpose we are using it for, as permitted by law.";
+
+  for (const mode of ["scan_core", "retained_report"] as const) {
+    assert.equal(article13DisclosureRejectReason(retentionText, "data_retention", { mode }), null);
+  }
+
+  assert.equal(
+    article13DisclosureRejectReason(
+      "We keep information in secure databases and use storage services around the world.",
+      "data_retention",
+      { mode: "retained_report" },
+    ),
+    "generic_storage_not_retention",
+  );
+});
+
 test("mixed broad policy context cannot combine unrelated paragraphs into legal-basis evidence", () => {
   const broadContext = [
     "Communications. We use your personal information to communicate with you by email, telephone, or customer-service channels.",

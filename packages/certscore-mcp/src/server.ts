@@ -313,16 +313,15 @@ export function createCertScoreMcpServer(options: CertScoreMcpOptions = {}) {
           }));
         }
         const includeEvidence = detail === "evidence" || detail === "full";
-        const [report, findings, evidence, preConsentCookiesTrackers] = await Promise.all([
-          retryTransientOriginFailure(() => client.getScan(scanId, { detail: detail === "full" ? "full" : "summary", format: "json" })),
+        const reportDetail = detail === "full" ? "full" : includeEvidence ? "evidence" : "summary";
+        const [report, findings, preConsentCookiesTrackers] = await Promise.all([
+          retryTransientOriginFailure(() => client.getScan(scanId, { detail: reportDetail, format: "json" })),
           retryTransientOriginFailure(() => client.findings.list(scanId)),
-          includeEvidence
-            ? retryTransientOriginFailure(() => client.getScan(scanId, { detail: "evidence", format: "json" }))
-            : Promise.resolve(null),
           includeEvidence
             ? retryTransientOriginFailure(() => client.scans.preConsentCookiesTrackers(scanId))
             : Promise.resolve(null)
         ]);
+        const evidence = includeEvidence ? report : null;
         return toToolResult(buildScanBundle({
           detail,
           evidence,

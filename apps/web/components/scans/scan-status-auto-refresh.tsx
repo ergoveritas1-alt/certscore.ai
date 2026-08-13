@@ -9,6 +9,7 @@ export type PolledScanProgress = {
 };
 
 type ScanStatusAutoRefreshProps = {
+  onTerminalNavigation?: () => void;
   onProgress?: (progress: PolledScanProgress) => void;
   pendingBrowserExtensionNormalization?: boolean;
   pendingPostCompletionWork?: boolean;
@@ -19,7 +20,7 @@ type ScanStatusAutoRefreshProps = {
   terminalNavigationDelayMs?: number;
 };
 
-export const SCAN_STATUS_POLL_INITIAL_MS = 2_000;
+export const SCAN_STATUS_POLL_INITIAL_MS = 1_000;
 export const SCAN_STATUS_POLL_MAX_MS = 10_000;
 export const SCAN_STATUS_POLL_JITTER_MS = 250;
 export const SCAN_TERMINAL_NAVIGATION_GUARD_MS = 5 * 60_000;
@@ -277,6 +278,7 @@ function recordTerminalDetection(scanId: string, state: ReturnType<ReturnType<ty
 }
 
 export function ScanStatusAutoRefresh({
+  onTerminalNavigation,
   onProgress,
   pendingBrowserExtensionNormalization = false,
   pendingPostCompletionWork = false,
@@ -286,7 +288,11 @@ export function ScanStatusAutoRefresh({
   status,
   terminalNavigationDelayMs = 0,
 }: ScanStatusAutoRefreshProps) {
+  const onTerminalNavigationRef = useRef(onTerminalNavigation);
   const onProgressRef = useRef(onProgress);
+  useEffect(() => {
+    onTerminalNavigationRef.current = onTerminalNavigation;
+  }, [onTerminalNavigation]);
   useEffect(() => {
     onProgressRef.current = onProgress;
   }, [onProgress]);
@@ -344,10 +350,18 @@ export function ScanStatusAutoRefresh({
         })) return;
         terminalNavigations.add(scanId);
         recordTerminalDetection(scanId, poller.getState());
-        if (terminalNavigationDelayMs > 0) {
-          window.setTimeout(() => window.location.reload(), terminalNavigationDelayMs);
-        } else {
+        const navigate = () => {
+          const terminalNavigation = onTerminalNavigationRef.current;
+          if (terminalNavigation) {
+            terminalNavigation();
+            return;
+          }
           window.location.reload();
+        };
+        if (terminalNavigationDelayMs > 0) {
+          window.setTimeout(navigate, terminalNavigationDelayMs);
+        } else {
+          navigate();
         }
       },
     });

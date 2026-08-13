@@ -1,4 +1,5 @@
 import { buildPulseV1OpenApiDocument } from "@certscore/api-contracts";
+import { API_READ_RATE_POLICY_OPENAPI_EXTENSION } from "@website-signal-risk-scanner/shared";
 
 function requestId(request: Request) {
   return request.headers.get("x-request-id") ?? crypto.randomUUID();
@@ -6,8 +7,12 @@ function requestId(request: Request) {
 
 export function GET(request: Request) {
   const id = requestId(request);
+  const document = {
+    ...buildPulseV1OpenApiDocument(),
+    "x-certscore-read-rate-policy": API_READ_RATE_POLICY_OPENAPI_EXTENSION
+  };
 
-  return new Response(JSON.stringify(buildPulseV1OpenApiDocument()), {
+  return new Response(JSON.stringify(document), {
     headers: {
       "Cache-Control": "no-store",
       "Content-Type": "application/json; charset=utf-8",

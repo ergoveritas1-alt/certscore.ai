@@ -22,6 +22,7 @@ import {
   PLAN_CODES
 } from "../../../../lib/admin/plan-options";
 import { ASSIGNABLE_MEMBERSHIP_ROLES } from "../../../../lib/auth/membership-role-policy";
+import { PendingLink } from "../../../../components/ui/pending-link";
 
 type AdminUsersPageProps = {
   searchParams?: Promise<{
@@ -59,17 +60,28 @@ function SortHeader({
 }) {
   const active = currentSort === sortKey;
   const direction = active ? currentDirection : null;
+  const idleContent = (
+    <>
+      <span>{SORT_LABELS[sortKey]}</span>
+      <span aria-hidden="true" className={active ? "text-sky-600" : "text-slate-400"}>{direction === "asc" ? "↑" : direction === "desc" ? "↓" : "↕"}</span>
+    </>
+  );
   return (
-    <Link
+    <PendingLink
       aria-label={`Sort by ${SORT_LABELS[sortKey]}`}
       aria-sort={direction === "asc" ? "ascending" : direction === "desc" ? "descending" : "none"}
       className="inline-flex items-center gap-1 rounded px-0.5 py-0.5 hover:bg-slate-200/70 hover:text-slate-700"
       href={sortHref(sortKey, currentSort, currentDirection)}
+      idleContent={idleContent}
+      pendingClassName="cursor-wait opacity-60"
+      pendingContent={
+        <>
+          <span>{SORT_LABELS[sortKey]}</span>
+          <span aria-hidden="true" className="animate-pulse text-sky-600">…</span>
+        </>
+      }
       title={direction ? `${SORT_LABELS[sortKey]}: ${direction === "asc" ? "ascending" : "descending"}` : `Sort by ${SORT_LABELS[sortKey]}`}
-    >
-      <span>{SORT_LABELS[sortKey]}</span>
-      <span aria-hidden="true" className={active ? "text-sky-600" : "text-slate-400"}>{direction === "asc" ? "↑" : direction === "desc" ? "↓" : "↕"}</span>
-    </Link>
+    />
   );
 }
 
@@ -79,10 +91,13 @@ export default async function AdminUsersPage({ searchParams }: AdminUsersPagePro
   const requestedPage = normalizePage(resolved.page);
   const sortKey = normalizeAdminUsersSortKey(resolved.sort);
   const direction = normalizeAdminUsersSortDirection(resolved.dir);
-  const requestedUserPage = await withServerTiming(
-    "app.admin.users.list",
-    () => listAdminUsersPage(pageSize, (requestedPage - 1) * pageSize, sortKey, direction)
-  );
+  const [requestedUserPage, workspaces] = await Promise.all([
+    withServerTiming(
+      "app.admin.users.list",
+      () => listAdminUsersPage(pageSize, (requestedPage - 1) * pageSize, sortKey, direction)
+    ),
+    withServerTiming("app.admin.users.workspaces", () => listCompanies())
+  ]);
   const pageCount = Math.max(1, Math.ceil(requestedUserPage.totalCount / pageSize));
   const page = Math.min(requestedPage, pageCount);
   const userPage = page === requestedPage
@@ -92,7 +107,6 @@ export default async function AdminUsersPage({ searchParams }: AdminUsersPagePro
         () => listAdminUsersPage(pageSize, (page - 1) * pageSize, sortKey, direction)
       );
   const users = userPage.items;
-  const workspaces = await listCompanies();
   const passwordResetSent = resolved.message === "password_reset_sent";
   const existingUserWorkspaceCreated = resolved.message === "existing_user_workspace_created";
   const userCreated = resolved.message === "user_created";
@@ -148,7 +162,19 @@ export default async function AdminUsersPage({ searchParams }: AdminUsersPagePro
                   <td className="py-2.5 pr-4 align-top">
                     <div className="flex items-center gap-2">
                       <div className="min-w-0">
-                        <p className="max-w-[260px] truncate font-medium text-slate-900" title={user.email}>{user.email}</p>
+                        <div className="flex min-w-0 items-center gap-1.5">
+                          <p className="max-w-[260px] truncate font-medium text-slate-900" title={user.email}>{user.email}</p>
+                          <Link
+                            aria-label={`View activity for ${user.email}`}
+                            className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-md border border-sky-200 bg-sky-50 text-sky-700 shadow-[0_2px_0_0_rgb(186,230,253)] transition hover:-translate-y-0.5 hover:border-sky-400 hover:bg-sky-100 hover:text-sky-800 hover:shadow-[0_3px_0_0_rgb(125,211,252)] active:translate-y-0.5 active:shadow-inner focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-500 focus-visible:ring-offset-2"
+                            href={`/app/admin/users/${user.id}/activity`}
+                            title="View user activity"
+                          >
+                            <svg aria-hidden="true" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="1.8">
+                              <path strokeLinecap="round" strokeLinejoin="round" d="M4 19.5V14m5 5.5V9m5 10.5V4m5 15.5V12" />
+                            </svg>
+                          </Link>
+                        </div>
                         <p className="truncate text-xs text-slate-500">{user.organizationName ?? "Unassigned"}</p>
                       </div>
                     </div>

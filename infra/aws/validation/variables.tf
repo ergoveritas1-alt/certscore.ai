@@ -7,7 +7,7 @@ variable "project_name" {
 variable "github_actions_subjects" {
   description = "GitHub OIDC subject patterns allowed to assume the deploy role."
   type        = list(string)
-  default     = ["repo:ergoveritas1-alt/certscore.ai:ref:refs/heads/main"]
+  default     = ["repo:ergoveritas1-alt/certscore.ai:ref:refs/heads/*"]
 }
 
 variable "github_actions_oidc_provider_arn" {
@@ -307,13 +307,13 @@ variable "web_memory" {
 variable "worker_cpu" {
   description = "CPU units for the validation worker task."
   type        = number
-  default     = 512
+  default     = 256
 }
 
 variable "worker_memory" {
   description = "Memory for the validation worker task."
   type        = number
-  default     = 1024
+  default     = 512
 }
 
 variable "worker_desired_count" {

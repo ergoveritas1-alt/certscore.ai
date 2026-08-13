@@ -6,7 +6,8 @@ import {
   getScanSubmitDestination,
   parseScanSubmitPayload,
   restrictLocalExtensionScanFrom,
-  shouldExpectRecentScanReuse
+  shouldExpectRecentScanReuse,
+  shouldUseFullPageScanSubmissionTransition
 } from "./domain-scan-form";
 
 test("getScanSubmitDestination prefers public scanUrl for anonymous full scans", () => {
@@ -50,6 +51,30 @@ test("known recent reuse opens the report without showing fresh-scan progress", 
   assert.equal(shouldExpectRecentScanReuse({ freshRescan: true, hasRecentReusableScan: true, mode: "full" }), false);
   assert.equal(shouldExpectRecentScanReuse({ freshRescan: false, hasRecentReusableScan: false, mode: "full" }), false);
   assert.equal(shouldExpectRecentScanReuse({ freshRescan: false, hasRecentReusableScan: true, mode: "preview" }), false);
+});
+
+test("compact report rescans use the hosted full-page progress transition", () => {
+  assert.equal(shouldUseFullPageScanSubmissionTransition({
+    compact: true,
+    expectsRecentScanReuse: false,
+    hasTransitionHost: true,
+    mode: "full",
+    scanFrom: "eu_ie"
+  }), true);
+  assert.equal(shouldUseFullPageScanSubmissionTransition({
+    compact: true,
+    expectsRecentScanReuse: true,
+    hasTransitionHost: true,
+    mode: "full",
+    scanFrom: "eu_ie"
+  }), false);
+  assert.equal(shouldUseFullPageScanSubmissionTransition({
+    compact: true,
+    expectsRecentScanReuse: false,
+    hasTransitionHost: false,
+    mode: "full",
+    scanFrom: "eu_ie"
+  }), false);
 });
 
 test("parseScanSubmitPayload does not surface raw HTML error documents", () => {

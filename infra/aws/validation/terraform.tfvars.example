@@ -1,6 +1,6 @@
 project_name                    = "certscore-validation"
 aws_region                      = "us-west-1"
-github_actions_subjects         = ["repo:ergoveritas1-alt/certscore.ai:ref:refs/heads/main"]
+github_actions_subjects         = ["repo:ergoveritas1-alt/certscore.ai:ref:refs/heads/*"]
 github_actions_oidc_provider_arn = "arn:aws:iam::123456789012:oidc-provider/token.actions.githubusercontent.com"
 validation_domain_name          = "validation.certscore.ai"
 hosted_zone_id                  = "Z1234567890"
@@ -39,6 +39,8 @@ validation_default_run_mode     = "manual"
 validation_default_sample_interval_minutes = "20"
 validation_openai_model         = "gpt-5.4-nano"
 worker_concurrency              = "1"
+worker_cpu                      = 256
+worker_memory                   = 512
 llm_enrichment_enabled          = "0"
 tags = {
   Environment = "production"

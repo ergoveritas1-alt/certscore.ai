@@ -1,6 +1,7 @@
 import { apiV2PreConsentCookiesTrackersSchema } from "@certscore/api-contracts";
 import { API_V2_SCAN_ID_PATTERN, apiV2JsonResponse, buildApiV2Error, buildApiV2PreConsentCookiesTrackers } from "../../../../../../lib/api-v2/scan-resource";
 import { getPublicScanRecord } from "../../../../../../server/scans/get-public-scan-record";
+import { enforceApiV2ScanReadThrottle } from "../../../../../../server/pulse/api-v2-read-throttle";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -27,6 +28,14 @@ export async function GET(request: Request, context: RouteContext) {
       status: 400
     });
   }
+
+  const throttled = await enforceApiV2ScanReadThrottle({
+    request,
+    requestId: id,
+    route: "api-v2-pre-consent-cookies-trackers",
+    scanId
+  });
+  if (throttled) return throttled;
 
   try {
     const scanRecord = await getPublicScanRecord(scanId, { logPrefix: "[api-v2-pre-consent-cookies-trackers]" });

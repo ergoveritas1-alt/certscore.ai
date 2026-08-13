@@ -9334,6 +9334,13 @@ function derivePolicyTextExtractionOutcome(input: GdprEprivacyCoveragePolicyInpu
 
 function policyTextExtractionLimitationMessage(summary: Record<string, unknown> | null | undefined) {
   const status = policyTextExtractionStatus(summary);
+  const failureReason = getString(getPolicyTextExtractionHealth(summary), [
+    "extractionFailureReason",
+    "extraction_failure_reason",
+  ]);
+  if (failureReason === "privacy_policy_index_governing_document_unresolved") {
+    return "A privacy-policy index was retained, but its governing privacy notice was not attached to the canonical evidence bundle, so row-specific GDPR Transparency extraction could not proceed.";
+  }
   if (status === "unsupported_language") {
     const language = getString(getPolicyTextExtractionHealth(summary), [
       "detectedPolicyLanguage",

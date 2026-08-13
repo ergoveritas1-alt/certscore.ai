@@ -7,7 +7,11 @@ import {
   selectOwnerUnifiedFindingsForSection,
   type ScanReportUnifiedFindingState
 } from "./scan-report-unified-findings";
-import { buildReviewFindings, buildSectionReviewIssues } from "./scan-report-review-findings";
+import {
+  buildReviewFindings,
+  buildSectionReviewIssues,
+  createScanReportReviewFindingContext
+} from "./scan-report-review-findings";
 import { buildSupplementalRuntimeUnifiedFindingPackets } from "./supplemental-runtime-unified-findings";
 import { buildUnifiedFindingDisplayPackets } from "./unified-findings";
 import { deriveConcernPolicy } from "./concern-policy";
@@ -18,6 +22,7 @@ import {
 } from "./consent-audit-findings";
 import { projectExecutiveFindingsFromUnifiedPackets } from "./executive-findings-projection";
 import { deriveGdprEprivacyCoverageChecklist } from "./gdpr-eprivacy-coverage-checklist";
+import { getHybridDerivedSignalValue, getHybridSignalFallbackEvidence } from "./hybrid-runtime-evidence";
 
 function packet(id: string, categoryId: string, relation: "owner" | "mirror" | "overlay") {
   return {
@@ -63,6 +68,44 @@ test("buildScanReportUnifiedFindings dedupes owner packets across section drafts
     buildScanReportUnifiedFindings(state).map((finding) => finding.unifiedFindingId),
     ["owned"]
   );
+});
+
+test("projection-scoped review indexes preserve finding output", () => {
+  const input = {
+    allSignals: [{ key: "privacy.gpc_signal_not_honored", value: true }],
+    categoryId: "privacy_choices_controls",
+    issues: [],
+    macroEnrichment: { industryPrimary: "media" },
+    mergedSignals: [{ key: "privacy.gpc_signal_not_honored", value: true }],
+    policyEnrichment: [],
+    prioritizedAccessibilityRuleRows: [],
+    runtimeArtifacts: {
+      gpc_verification: { evidenceUrls: ["https://example.test/"] }
+    },
+    signalHitRows: [{
+      matched_text: "Global Privacy Control",
+      signal_key: "privacy.gpc_signal_not_honored"
+    }],
+    snapshot: {},
+    sectionId: "privacy_choices_controls",
+    sectionItems: [{
+      key: "privacy.gpc_signal_not_honored",
+      label: "GPC signal not honored",
+      relation: "primary" as const,
+      source: "snapshot_signal" as const,
+      value: true
+    }],
+    trackerVendors: [],
+    validationFindingLookup: new Map()
+  };
+
+  const withoutSharedContext = buildReviewFindings(input);
+  const withSharedContext = buildReviewFindings({
+    ...input,
+    reviewContext: createScanReportReviewFindingContext(input)
+  });
+
+  assert.deepEqual(withSharedContext, withoutSharedContext);
 });
 
 test("report-level candidates surface runtime-backed session replay provenance", () => {
@@ -1612,7 +1655,11 @@ function buildPreconsentRuntimeState(
   runtimeArtifacts: Record<string, unknown>,
   snapshot: Record<string, unknown> = {},
   validationFindings: unknown[] = [],
-  preconsentViolationRows: unknown[] = []
+  preconsentViolationRows: unknown[] = [],
+  createHybridRuntimeEvidenceProjectionCache?: (runtimeArtifacts: Record<string, unknown> | null | undefined) => {
+    getDerivedSignalValue: (signalKey: string) => unknown;
+    getSignalFallbackEvidence: (input: { signalKey: string; signalLabel: string; signalValue: unknown }) => Record<string, unknown> | null;
+  }
 ) {
   return buildScanReportUnifiedFindingState({
     accessibilityRuleCounts: [],
@@ -1635,6 +1682,7 @@ function buildPreconsentRuntimeState(
     trackerVendors: [],
     validationFindings
   } as never, {
+    createHybridRuntimeEvidenceProjectionCache,
     deriveAccessibilityIssueRows: () => [],
     deriveAccessibilityRuleEvidenceRows: () => [],
     deriveConsentAuditFindings: () => [],
@@ -1643,6 +1691,74 @@ function buildPreconsentRuntimeState(
     filterContradictoryPositiveSurfaceFindings: (findings) => findings
   });
 }
+
+test("projection-scoped caching preserves the complete unified finding state", () => {
+  const runtimeArtifacts = {
+    consent_timeline: {
+      firstCmpVisibleMs: 100,
+      firstConsentActionMs: null,
+      firstNonEssentialRequestMs: 250,
+      timelineConfidence: "high"
+    },
+    hybrid_runtime_evidence: {
+      consentSummary: {
+        acceptPresent: true,
+        bannerPresent: true,
+        bannerTextSnippet: "Accept all, reject all, or show purposes",
+        closePresent: false,
+        managePresent: true,
+        rejectPresent: true
+      },
+      consentVisual: {
+        acceptProminence: "high",
+        ctaImbalanceDetected: true,
+        rejectProminence: "low",
+        screenshotArtifactRef: "screenshots/consent-controls.png"
+      },
+      cookieWriteObservations: Array.from({ length: 40 }, (_, index) => ({
+        beforeConsent: true,
+        category: index % 2 === 0 ? "analytics" : "advertising",
+        cookieName: index % 2 === 0 ? `_ga_${index}` : `ad_id_${index}`,
+        domain: index % 2 === 0 ? "example.com" : "ads.example.net",
+        nonEssential: true,
+        setAtMs: 200 + index,
+        setMethod: "set_cookie_header"
+      })),
+      networkSummary: {
+        preConsentThirdPartyRequestCount: 2
+      },
+      requestToVendorObservations: [{
+        category: "analytics",
+        pre_consent: true,
+        requestUrl: "https://analytics.example.net/collect",
+        vendor: "Example Analytics"
+      }],
+      vendorSummary: {
+        preConsentVendorCount: 1
+      }
+    }
+  } satisfies Record<string, unknown>;
+  const cachedState = buildPreconsentRuntimeState(runtimeArtifacts);
+  const uncachedState = buildPreconsentRuntimeState(
+    runtimeArtifacts,
+    {},
+    [],
+    [],
+    (candidateRuntimeArtifacts) => ({
+      getDerivedSignalValue: (signalKey) => getHybridDerivedSignalValue(candidateRuntimeArtifacts, signalKey),
+      getSignalFallbackEvidence: (input) => getHybridSignalFallbackEvidence({
+        runtimeArtifacts: candidateRuntimeArtifacts,
+        ...input
+      })
+    })
+  );
+
+  assert.deepEqual(cachedState, uncachedState);
+  assert.equal(
+    JSON.stringify(cachedState).includes("screenshots/consent-controls.png"),
+    JSON.stringify(uncachedState).includes("screenshots/consent-controls.png")
+  );
+});
 
 test("state-0 preconsent request artifact creates audit-only incomplete preconsent packet", () => {
   const state = buildPreconsentRuntimeState({

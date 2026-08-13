@@ -1,11 +1,14 @@
 import { randomUUID } from "node:crypto";
+import { apiReadRateLimitGuidance, projectExternalScanNoGo } from "@website-signal-risk-scanner/shared";
 import { applyPulseCors, pulseOptionsResponse } from "../../../../../../lib/pulse/cors";
 import { buildPulseError } from "../../../../../../lib/pulse/error";
 import { logPulseGptActionEvent } from "../../../../../../lib/pulse/gpt-action-analytics";
+import { getPulseRequesterContext } from "../../../../../../lib/pulse/request";
 import { buildPulseStatus } from "../../../../../../lib/pulse/status";
 import { getPublicScanRecord } from "../../../../../../server/scans/get-public-scan-record";
-import { getPulseRequestByJobId, updatePulseRequestLifecycle } from "../../../../../../server/pulse/repository";
-import { projectExternalScanNoGo } from "@website-signal-risk-scanner/shared";
+import { claimPulseReadQuota, getPulseRequestByJobId, updatePulseRequestLifecycle } from "../../../../../../server/pulse/repository";
+import { logApiReadRateLimited } from "../../../../../../server/pulse/read-rate-log";
+import { pulseRetrievalPrincipal } from "../../../../../../server/pulse/retrieval-quota";
 import { queueAlternateRegionRecovery } from "../../../../../../server/pulse/queue-alternate-region-recovery";
 
 export const dynamic = "force-dynamic";
@@ -73,6 +76,57 @@ export async function GET(request: Request, context: RouteContext) {
     }
 
     const gptAction = explicitGptAction || pulseRequest.request_channel === "gpt_action";
+    const target = pulseRequest.scan_id ? `scan:${pulseRequest.scan_id}` : `job:${pulseRequest.public_id}`;
+    const requester = getPulseRequesterContext(request);
+    const readDecision = await claimPulseReadQuota({
+      detail: "summary",
+      principal: pulseRetrievalPrincipal({ ipHash: requester.ipHash }),
+      profile: "status",
+      route: "pulse-v1-status",
+      target
+    });
+    if (!readDecision.allowed) {
+      const guidance = apiReadRateLimitGuidance("status", readDecision.retryAfterSeconds);
+      logApiReadRateLimited({
+        limitUnits: readDecision.limitUnits,
+        policyVersion: readDecision.policyVersion,
+        profile: readDecision.profile,
+        reason: readDecision.reason,
+        requestId,
+        requestedUnits: readDecision.requestedUnits,
+        retryAfterSeconds: readDecision.retryAfterSeconds,
+        route: "pulse-v1-status",
+        scope: readDecision.scope,
+        surface: "pulse-v1",
+        targetType: pulseRequest.scan_id ? "scan" : "job",
+        usedUnits: readDecision.usedUnits,
+        windowId: readDecision.windowId,
+        windowSeconds: readDecision.windowSeconds
+      });
+      return pulseJson(
+        buildPulseError({
+          code: "rate_limited",
+          message: guidance.message,
+          rateLimit: {
+            limitUnits: readDecision.limitUnits,
+            policyVersion: readDecision.policyVersion,
+            profile: readDecision.profile,
+            requestedUnits: readDecision.requestedUnits,
+            scope: readDecision.scope,
+            usedUnits: readDecision.usedUnits,
+            windowId: readDecision.windowId,
+            windowSeconds: readDecision.windowSeconds
+          },
+          recommendedNextAction: guidance.recommendedNextAction,
+          retryAfterSeconds: readDecision.retryAfterSeconds
+        }),
+        {
+          headers: { "Cache-Control": "no-store", "Retry-After": String(readDecision.retryAfterSeconds) },
+          status: 429
+        },
+        requestId
+      );
+    }
 
     let status = pulseRequest.status;
     let completedAt = pulseRequest.completed_at;

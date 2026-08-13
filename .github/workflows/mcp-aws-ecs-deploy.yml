@@ -28,6 +28,7 @@ concurrency:
 jobs:
   deploy-mcp-aws:
     runs-on: ubuntu-latest
+    timeout-minutes: 75
     permissions:
       contents: read
       id-token: write
@@ -111,9 +112,11 @@ jobs:
         uses: docker/setup-buildx-action@v3
 
       - name: Build and push immutable MCP image
+        timeout-minutes: 45
         env:
           REGISTRY: ${{ steps.ecr-login.outputs.registry }}
         run: |
+          set -euo pipefail
           MCP_VERSION="$(node -p "require('./packages/certscore-mcp/package.json').version")"
           MCP_IMAGE="${REGISTRY}/${ECR_MCP_REPOSITORY}"
           MCP_CACHE="${MCP_IMAGE}:buildcache"
@@ -121,8 +124,24 @@ jobs:
           if aws ecr describe-images --repository-name "${ECR_MCP_REPOSITORY}" --image-ids "imageTag=${GITHUB_SHA}" >/dev/null 2>&1; then
             echo "Reusing immutable SHA image ${MCP_IMAGE}:${GITHUB_SHA}."
           else
-            build_args=(--provenance=false --sbom=false --cache-from "type=registry,ref=${MCP_CACHE}" --cache-to "type=registry,ref=${MCP_CACHE},mode=max" -f apps/mcp/Dockerfile --build-arg "BUILD_GIT_REF=${GITHUB_REF_NAME}" --build-arg "BUILD_GIT_SHA=${GITHUB_SHA}" --build-arg "BUILD_IMAGE_TAG=${GITHUB_SHA}" --build-arg "BUILD_RUNTIME_TARGET=ecs-fargate" -t "${MCP_IMAGE}:${GITHUB_SHA}" -t "${MCP_IMAGE}:latest")
+            if docker buildx imagetools inspect "${MCP_CACHE}" >/dev/null 2>&1; then
+              echo "Registry build cache found: ${MCP_CACHE}"
+            else
+              echo "Registry build cache is absent or unavailable: ${MCP_CACHE}; expect a cold build."
+            fi
+            heartbeat() {
+              while sleep 60; do
+                echo "::notice::MCP image build is still active at $(date -u +%Y-%m-%dT%H:%M:%SZ). Inspect underlying BuildKit output before cancellation."
+              done
+            }
+            heartbeat &
+            heartbeat_pid=$!
+            trap 'kill "${heartbeat_pid}" 2>/dev/null || true' EXIT
+            build_args=(--progress=plain --provenance=false --sbom=false --cache-from "type=registry,ref=${MCP_CACHE}" --cache-to "type=registry,ref=${MCP_CACHE},mode=max" -f apps/mcp/Dockerfile --build-arg "BUILD_GIT_REF=${GITHUB_REF_NAME}" --build-arg "BUILD_GIT_SHA=${GITHUB_SHA}" --build-arg "BUILD_IMAGE_TAG=${GITHUB_SHA}" --build-arg "BUILD_RUNTIME_TARGET=ecs-fargate" -t "${MCP_IMAGE}:${GITHUB_SHA}" -t "${MCP_IMAGE}:latest")
             docker buildx build "${build_args[@]}" --push .
+            kill "${heartbeat_pid}" 2>/dev/null || true
+            wait "${heartbeat_pid}" 2>/dev/null || true
+            trap - EXIT
           fi
           image_digest="$(aws ecr describe-images --repository-name "${ECR_MCP_REPOSITORY}" --image-ids "imageTag=${GITHUB_SHA}" --query 'imageDetails[0].imageDigest' --output text)"
           test -n "${image_digest}" && test "${image_digest}" != "None"

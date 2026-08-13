@@ -2,6 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import {
   buildNanoDocumentContentHash,
+  buildValidationCollectWaitPatch,
   buildNanoDocCandidateUrls,
   deriveCookieDisclosureGapDiagnostic,
   dedupeNanoDocumentSources,
@@ -241,6 +242,37 @@ test("deriveUnifiedFindingsWithWorkflowEvents includes completion metadata on su
     findingCount: 1,
     stage: "unified_findings"
   });
+});
+
+test("deriveUnifiedFindingsWithWorkflowEvents publishes completion only after findings are durable", async () => {
+  const order: string[] = [];
+
+  await deriveUnifiedFindingsWithWorkflowEvents({
+    appendEvent: async () => {
+      order.push("completion_event");
+    },
+    deriveFindings: () => [{ ruleKey: "example.finding" }],
+    persistFindings: async () => {
+      order.push("findings_persisted");
+    },
+    scanId: "scan_123"
+  });
+
+  assert.deepEqual(order, ["findings_persisted", "completion_event"]);
+});
+
+test("deriveUnifiedFindingsWithWorkflowEvents fails closed when its durable completion handoff fails", async () => {
+  await assert.rejects(
+    () => deriveUnifiedFindingsWithWorkflowEvents({
+      appendEvent: async () => {
+        throw new Error("durable handoff unavailable");
+      },
+      deriveFindings: () => [{ ruleKey: "example.finding" }],
+      requireDurableCompletionEvent: true,
+      scanId: "scan_123"
+    }),
+    /durable handoff unavailable/
+  );
 });
 
 test("deriveUnifiedFindingsWithWorkflowEvents emits failed event metadata on error", async () => {
@@ -4661,6 +4693,19 @@ test("validation collect hands off queued and running scans to WS01 execution", 
   assert.equal(determineValidationCollectAction("completed"), "rank");
   assert.equal(determineValidationCollectAction("failed"), "fail");
   assert.equal(determineValidationCollectAction(null), "unexpected");
+});
+
+test("validation collect refreshes the lease timestamp while waiting", () => {
+  const now = new Date("2026-08-12T02:45:00.000Z");
+
+  assert.deepEqual(buildValidationCollectWaitPatch("waiting_for_scan", now), {
+    status: "waiting_for_scan",
+    updated_at: "2026-08-12T02:45:00.000Z"
+  });
+  assert.deepEqual(buildValidationCollectWaitPatch("collecting", now), {
+    status: "collecting",
+    updated_at: "2026-08-12T02:45:00.000Z"
+  });
 });
 
 test("deriveValidationFindings carries policy review evidence into the validation finding", () => {

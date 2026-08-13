@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { once } from "node:events";
 import { createServer } from "node:http";
-import { mkdtemp, readFile, rm } from "node:fs/promises";
+import { mkdtemp, readFile, readdir, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import test from "node:test";
@@ -1354,7 +1354,7 @@ test("policySurfaceScanner preserves an exact privacy notice when Nano ranks com
     );
 
     assert.equal(result.moduleRun.status, "completed");
-    assert.equal(result.moduleRun.siteFacingNavigation?.firstHttpStatus, 404);
+    assert.equal(result.moduleRun.siteFacingNavigation?.firstHttpStatus, 200);
     assert.equal(result.moduleRun.siteFacingNavigation?.navigationCount, 1);
     assert.doesNotMatch(result.moduleRun.siteFacingNavigation?.requestedUrl ?? "", /must-not-be-retained/);
     assert.equal(privacy?.status, "fetched");
@@ -3248,6 +3248,143 @@ test("policySurfaceScanner bounds a Ford-like stalled homepage fetch and continu
   }
 });
 
+test("policySurfaceScanner retains the governing child when rendered discovery also finds its policy index", async () => {
+  let renderedHomepageRespondedAt = 0;
+  let renderedPrivacyRequestedAt = 0;
+  const server = createServer((request, response) => {
+    const requestUrl = new URL(request.url ?? "/", "http://127.0.0.1");
+    const isDirectScannerRequest = /^ConsentCheckBot\//.test(request.headers["user-agent"] ?? "");
+    if (requestUrl.pathname === "/en-emea") {
+      response.writeHead(200, { "content-type": "text/html; charset=utf-8" });
+      response.end(`<!doctype html><html><head><title>English EMEA Privacy Policy</title></head><body><main>
+        <h1>Privacy Policy</h1>
+        <p>Example Media Company is the data controller for this service. Contact privacy@example.test.</p>
+        <p>This policy applies to the websites and services that our group operates in Europe.</p>
+        <p>We process account, device, and usage data to provide services, secure the site, and personalize content. Our legal bases include contract and legitimate interests.</p>
+        <p>Service providers and advertising partners may receive information for these purposes.</p>
+        <p>We retain account records for seven years and delete other information when it is no longer needed.</p>
+        <p>You may access, rectify, erase, restrict, object to processing, and port your personal data.</p>
+        <p>International transfers outside the EEA use standard contractual clauses. You may complain to your supervisory authority.</p>
+      </main></body></html>`);
+      return;
+    }
+    if (requestUrl.pathname === "/fr-emea") {
+      response.writeHead(200, { "content-type": "text/html; charset=utf-8" });
+      response.end("<!doctype html><html lang='fr'><body><h1>Politique de Confidentialité</h1><p>Document régional non sélectionné.</p></body></html>");
+      return;
+    }
+    if (isDirectScannerRequest) {
+      response.writeHead(403, { "content-type": "text/plain" });
+      response.end("blocked direct request");
+      return;
+    }
+    if (requestUrl.pathname === "/privacy") {
+      renderedPrivacyRequestedAt = Date.now();
+      response.writeHead(200, { "content-type": "text/html; charset=utf-8" });
+      response.end(`<!doctype html><html><head><title>Privacy Policy</title></head><body><main>
+        <h1>Regional Privacy Policies</h1>
+        <p>Select the privacy policy for your language and region.</p>
+        <a href="/en-emea">English (Europe) Privacy Policy</a>
+        <a href="/fr-emea">Français (Europe) Politique de Confidentialité</a>
+      </main></body></html>`);
+      return;
+    }
+    if (requestUrl.pathname === "/") {
+      setTimeout(() => {
+        renderedHomepageRespondedAt = Date.now();
+        response.writeHead(200, { "content-type": "text/html; charset=utf-8" });
+        response.end("<!doctype html><html><body><main><h1>News</h1></main><footer><a href='/privacy'>Privacy Policy</a></footer></body></html>");
+      }, 1_500);
+      return;
+    }
+    response.writeHead(404, { "content-type": "text/plain" });
+    response.end("not found");
+  });
+  server.listen(0, "127.0.0.1");
+  await once(server, "listening");
+  const address = server.address();
+  assert.ok(address && typeof address === "object");
+  const targetUrl = `http://127.0.0.1:${address.port}/`;
+  const tempRoot = await mkdtemp(path.join(tmpdir(), "certscore-policy-parallel-recovery-"));
+  try {
+    const artifactWriter = await createArtifactWriter(tempRoot);
+    const startedAt = Date.now();
+    const result = await policySurfaceScanner({
+      url: targetUrl,
+      normalizedUrl: targetUrl,
+      scanStartedAtMs: startedAt,
+      internalBudgetMs: 8_000,
+      region: "eu-west-1",
+      artifactWriter,
+      nanoAssistProvider: createDefaultMockNanoPolicyAssistProvider(),
+    });
+    const elapsedMs = Date.now() - startedAt;
+    const diagnostics = await readPolicyCaptureDiagnostics(result);
+    const privacy = result.policySurfaceObservations.find((observation) =>
+      observation.status === "fetched" && observation.normalizedUrl === `${targetUrl}en-emea`
+    );
+    const policyIndex = result.policySurfaceObservations.find((observation) =>
+      observation.status === "fetched" && observation.normalizedUrl === `${targetUrl}privacy`
+    );
+
+    assert.equal(result.moduleRun.status, "completed");
+    assert.ok(privacy, JSON.stringify(result.policySurfaceObservations.map((observation) => ({
+      documentRole: observation.documentRole,
+      linkText: observation.linkText,
+      matchedLocale: observation.matchedLocale,
+      normalizedUrl: observation.normalizedUrl,
+      selectionReasonCodes: observation.selectionReasonCodes,
+      status: observation.status,
+    }))));
+    assert.equal(policyIndex?.documentRole, "policy_index");
+    assert.equal(privacy.documentRole, "policy_document");
+    assert.equal(privacy.selectionReasonCodes?.includes("scan_region_policy_route_match"), true);
+    assert.equal(privacy.surfaceType, "privacy_policy");
+    assert.equal(privacy.httpStatus, 200);
+    assert.ok(renderedPrivacyRequestedAt > 0);
+    assert.ok(renderedHomepageRespondedAt > 0);
+    // Browser startup and teardown can briefly exceed the soft 8s module
+    // budget when this case runs alongside the full Chromium timing suite.
+    // Keep a narrow wall-time ceiling without making CPU contention a release
+    // failure; the evidence assertions below are the governing regression.
+    assert.ok(elapsedMs < 10_000, `expected parallel recovery to stay near the lane budget; elapsed=${elapsedMs}`);
+    assert.ok(diagnostics.renderedCandidateCount > 0);
+    assert.equal(diagnostics.commonPathFallbackUsed, true);
+    assert.equal(diagnostics.corePolicySurfaceRetained, true);
+    assert.equal(
+      diagnostics.failedFetches.some((failure) =>
+        failure.stage === "candidate_direct" &&
+        failure.candidateUrl === `${targetUrl}privacy` &&
+        failure.httpStatus === 403
+      ),
+      true,
+    );
+    assert.equal(
+      result.moduleRun.timingBreakdown?.some((timing) =>
+        timing.label.includes("homepage-failed speculative common-path recovery")
+      ),
+      true,
+    );
+    const policyTextArtifactFiles = (await readdir(tempRoot))
+      .filter((fileName) => fileName.startsWith("policy_surface_text_") && fileName.endsWith(".txt"));
+    const referencedPolicyTextArtifactFiles = new Set(result.policySurfaceObservations.flatMap((observation) =>
+      observation.artifactRefs
+        .filter((artifactRef) => artifactRef.artifactId.startsWith("policy_surface_text_"))
+        .map((artifactRef) => path.basename(artifactRef.path))
+    ));
+    assert.ok(policyTextArtifactFiles.length >= 2);
+    assert.deepEqual(
+      policyTextArtifactFiles.filter((fileName) => !referencedPolicyTextArtifactFiles.has(fileName)),
+      [],
+      "every retained policy-text artifact must be bound to a canonical policy observation",
+    );
+  } finally {
+    server.close();
+    await once(server, "close");
+    await rm(tempRoot, { recursive: true, force: true });
+  }
+});
+
 test("policySurfaceScanner keeps core common paths when Nano ranks only secondary controls after homepage failure", async () => {
   const server = await startStaticFixtureServer();
   const tempRoot = await mkdtemp(path.join(tmpdir(), "certscore-policy-scan-"));
@@ -3318,9 +3455,15 @@ test("policySurfaceScanner uses rendered footer links before common-path fallbac
     const classificationOrder: string[] = [];
     const nanoAssistProvider: PolicyNanoAssistProvider = {
       async classifyLinks(input) {
-        classificationOrder.push(input.candidates.every((candidate) => candidate.discoveryMethod === "guessed_common_path")
-          ? "common_path"
-          : "rendered");
+        const classificationKind = input.candidates.every((candidate) =>
+          candidate.discoveryMethod === "guessed_common_path"
+        ) ? "common_path" : "rendered";
+        classificationOrder.push(classificationKind);
+        assert.notEqual(
+          classificationKind,
+          "rendered",
+          "a deterministic rendered privacy link should be recovered before another Nano ranking pass",
+        );
         return defaultNanoProvider.classifyLinks!(input);
       },
     };
@@ -3344,7 +3487,7 @@ test("policySurfaceScanner uses rendered footer links before common-path fallbac
     assert.equal(diagnostics.renderedCandidateCount > 0, true);
     assert.equal(diagnostics.commonPathFallbackUsed, false);
     assert.equal(classificationOrder[0], "common_path");
-    assert.equal(classificationOrder.includes("rendered"), true);
+    assert.equal(classificationOrder.includes("rendered"), false);
     assert.equal(
       diagnostics.candidateSummary.some((candidate) =>
         candidate.normalizedUrl === `${server.baseUrl}/browser-visible-policy-homepage/privacy`
@@ -3356,13 +3499,19 @@ test("policySurfaceScanner uses rendered footer links before common-path fallbac
     assert.equal(
       diagnostics.failedFetches.some((failure) =>
         failure.stage === "candidate_direct" &&
-        failure.httpStatus === 503 &&
+        failure.httpStatus === 403 &&
         failure.failureReason === "http_error"
       ),
       true,
     );
     assert.equal(
       result.moduleRun.timingBreakdown?.some((timing) => timing.label.includes("homepage-failed rendered discovery")),
+      true,
+    );
+    assert.equal(
+      result.moduleRun.timingBreakdown?.some((timing) =>
+        timing.label.includes("homepage-failed deterministic rendered fetch group")
+      ),
       true,
     );
     assert.equal(
@@ -4240,6 +4389,44 @@ test("retained policy excerpts directly support controller, purposes, legal basi
   assert.match(excerpt("legal_basis"), /lawful bases are performance of a contract.*legitimate interests/i);
   assert.match(excerpt("data_retention"), /retain account records only as long as necessary.*delete or anonymize/i);
   assert.match(excerpt("dpo_contact"), /Privacy Office at privacy@foundation\.example/i);
+});
+
+test("retained policy sections prefer an explicit purpose-bound retention criterion over an erasure exception", () => {
+  const sourceUrl = "https://publisher.example/privacy";
+  const evidence = retainedArticle13SectionEvidenceFromSections([
+    {
+      sourceUrl,
+      heading: "Policy body section 16",
+      textExcerpt: "Retention. We only keep Information for as long as we need it to fulfil the purpose we are using it for, as permitted by law. Who Do We Disclose Your Information To?",
+      charStart: 1_600,
+      charEnd: 1_770,
+      quality: "strong",
+    },
+    {
+      sourceUrl,
+      heading: "Policy body section 24",
+      textExcerpt: "Right to erasure or deletion. In specific cases, we may keep some Information where we have a legal obligation, or where processing is necessary to continue providing a requested service.",
+      charStart: 2_400,
+      charEnd: 2_580,
+      quality: "strong",
+    },
+    {
+      sourceUrl,
+      heading: "Policy body section 25",
+      textExcerpt: "You may object to the processing of your Information on the basis of our legitimate interests, including direct marketing purposes.",
+      charStart: 2_581,
+      charEnd: 2_720,
+      quality: "strong",
+    },
+  ], sourceUrl);
+  const retention = evidence.find((row) => row.coverageArea === "data_retention");
+  const legalBasis = evidence.find((row) => row.coverageArea === "legal_basis");
+
+  assert.equal(retention?.signalObserved, "observed", JSON.stringify(retention));
+  assert.equal(retention?.selectedPolicySectionHeading, "Policy body section 16");
+  assert.match(retention?.selectedPolicySectionExcerpt ?? "", /keep Information for as long as we need it to fulfil the purpose/i);
+  assert.equal(legalBasis?.signalObserved, "observed", JSON.stringify(legalBasis));
+  assert.match(legalBasis?.selectedPolicySectionExcerpt ?? "", /basis of our legitimate interests/i);
 });
 
 test("transfer excerpts prefer concrete cross-border safeguards over nearby framework complaint prose", () => {

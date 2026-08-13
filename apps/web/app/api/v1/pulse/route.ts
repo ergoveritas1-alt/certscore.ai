@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { NextResponse } from "next/server";
-import { normalizeScanFrom, type ScanFrom } from "@website-signal-risk-scanner/shared";
+import { apiReadRateLimitGuidance, normalizeScanFrom, type ScanFrom } from "@website-signal-risk-scanner/shared";
 import { restrictScanFromForUser } from "../../../../server/scans/restricted-scan-options";
 import { SITE_URL } from "../../../../lib/seo";
 import { applyPulseCors, pulseOptionsResponse } from "../../../../lib/pulse/cors";
@@ -41,6 +41,7 @@ import {
   claimPulseDomainScanCreation,
   createPulseRequest,
   createPulseRequestWithApiKeyQuota,
+  createPulseRequestWithRetrievalQuota,
   findLatestCompletedAnonymousScanForDomain,
   getPulseGptActionUsage,
   getPulseRequestByJobId,
@@ -50,6 +51,7 @@ import {
   updatePulseRequestQueued,
   updatePulseRequestRateLimited
 } from "../../../../server/pulse/repository";
+import { logApiReadRateLimited } from "../../../../server/pulse/read-rate-log";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -464,13 +466,62 @@ async function handlePulseGET(request: Request, options: PulseRouteOptions = {})
       if (!SCAN_ID_PATTERN.test(scanId)) {
         return pulseJson(buildPulseError({ code: "invalid_url", message: "Invalid scan ID.", detail, format }), { status: 400 }, requestId, routeName);
       }
-      const { publicId } = await createPulseRequest({
+      const reservedRetrieval = await createPulseRequestWithRetrievalQuota({
         context: { ...contextBase, mode: "scanId" },
         requestedUrl: null,
         resolutionMode: "reused_existing_scan",
         scanId,
         status: "completed"
       });
+      if (!reservedRetrieval.allowed) {
+        const guidance = apiReadRateLimitGuidance("terminal", reservedRetrieval.retryAfterSeconds);
+        logApiReadRateLimited({
+          limitUnits: reservedRetrieval.limitUnits,
+          policyVersion: reservedRetrieval.policyVersion,
+          profile: reservedRetrieval.profile,
+          reason: reservedRetrieval.reason,
+          requestId,
+          requestedUnits: reservedRetrieval.requestedUnits,
+          retryAfterSeconds: reservedRetrieval.retryAfterSeconds,
+          route: routeName,
+          scope: reservedRetrieval.scope,
+          surface: "pulse-v1",
+          targetType: "scan",
+          usedUnits: reservedRetrieval.usedUnits,
+          windowId: reservedRetrieval.windowId,
+          windowSeconds: reservedRetrieval.windowSeconds
+        });
+        return pulseJson(
+          buildPulseError({
+            code: "rate_limited",
+            message: guidance.message,
+            detail,
+            format,
+            rateLimit: {
+              limitUnits: reservedRetrieval.limitUnits,
+              policyVersion: reservedRetrieval.policyVersion,
+              profile: reservedRetrieval.profile,
+              requestedUnits: reservedRetrieval.requestedUnits,
+              scope: reservedRetrieval.scope,
+              usedUnits: reservedRetrieval.usedUnits,
+              windowId: reservedRetrieval.windowId,
+              windowSeconds: reservedRetrieval.windowSeconds
+            },
+            recommendedNextAction: guidance.recommendedNextAction,
+            retryAfterSeconds: reservedRetrieval.retryAfterSeconds
+          }),
+          {
+            headers: {
+              "Cache-Control": "no-store",
+              "Retry-After": String(reservedRetrieval.retryAfterSeconds)
+            },
+            status: 429
+          },
+          requestId,
+          routeName
+        );
+      }
+      const { publicId } = reservedRetrieval;
       const scanRecord = await loadPulseScanRecord(scanId);
       if (!scanRecord || scanRecord.scan.status !== "completed") {
         return pulseJson(buildPulseError({ code: "not_found", message: "Scan not found or not eligible for public Pulse.", detail, format }), { status: 404 }, requestId, routeName);

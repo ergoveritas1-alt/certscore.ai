@@ -1,11 +1,8 @@
 # syntax=docker/dockerfile:1.7
 
-FROM node:22-bookworm-slim AS builder
+ARG WEB_RUNTIME_BASE="web-runtime-base"
 
-ARG BUILD_GIT_REF=""
-ARG BUILD_GIT_SHA=""
-ARG BUILD_IMAGE_TAG=""
-ARG BUILD_RUNTIME_TARGET="ecs-fargate"
+FROM node:22-bookworm-slim AS build-dependencies
 
 ENV PNPM_HOME="/pnpm"
 ENV PATH="$PNPM_HOME:$PATH"
@@ -41,7 +38,8 @@ RUN --mount=type=cache,id=wc01-web-pnpm-store,target=/pnpm/store \
     --filter @website-signal-risk-scanner/web... \
     --filter @certscore/vendor-resolver...
 
-COPY apps/web ./apps/web
+FROM build-dependencies AS builder
+
 COPY packages/shared ./packages/shared
 COPY packages/ui ./packages/ui
 COPY packages/db ./packages/db
@@ -50,17 +48,8 @@ COPY packages/certscore-api-contracts ./packages/certscore-api-contracts
 COPY packages/certscore-contracts ./packages/certscore-contracts
 COPY packages/certscore-mcp-auth ./packages/certscore-mcp-auth
 COPY packages/certscore-vendor-resolver ./packages/certscore-vendor-resolver
-COPY scripts/apply-db-migrations.mjs ./scripts/apply-db-migrations.mjs
-COPY scripts/insert-integration-api-key.mjs ./scripts/insert-integration-api-key.mjs
-
-RUN printf 'export const generatedBuildInfo = {"gitRef":"%s","gitSha":"%s","imageTag":"%s","runtimeTarget":"%s"} as const;\n' \
-  "${BUILD_GIT_REF}" \
-  "${BUILD_GIT_SHA}" \
-  "${BUILD_IMAGE_TAG}" \
-  "${BUILD_RUNTIME_TARGET}" > /app/apps/web/server/generated-build-info.ts
 
 RUN rm -rf \
-  ./apps/web/.next \
   ./packages/shared/dist \
   ./packages/ui/dist \
   ./packages/db/dist \
@@ -70,17 +59,56 @@ RUN rm -rf \
   ./packages/certscore-mcp-auth/dist \
   ./packages/certscore-vendor-resolver/dist
 
-RUN pnpm --filter @website-signal-risk-scanner/shared build
-RUN pnpm --filter @website-signal-risk-scanner/ui build
-RUN pnpm --filter @website-signal-risk-scanner/db build
-RUN pnpm --filter @website-signal-risk-scanner/validation-shared build
-RUN pnpm --filter @certscore/api-contracts build
-RUN pnpm --filter @certscore/contracts build
-RUN pnpm --filter @certscore/mcp-auth build
-RUN pnpm --filter @certscore/vendor-resolver build
-RUN pnpm --filter @website-signal-risk-scanner/web build
+RUN pnpm exec turbo run build \
+  --filter @website-signal-risk-scanner/shared \
+  --filter @website-signal-risk-scanner/ui \
+  --filter @website-signal-risk-scanner/db \
+  --filter @website-signal-risk-scanner/validation-shared \
+  --filter @certscore/api-contracts \
+  --filter @certscore/contracts \
+  --filter @certscore/mcp-auth \
+  && pnpm exec tsc -p packages/certscore-vendor-resolver/tsconfig.json
 
-FROM node:22-bookworm-slim AS runner
+ARG BUILD_GIT_REF=""
+ARG BUILD_GIT_SHA=""
+ARG BUILD_IMAGE_TAG=""
+ARG BUILD_RUNTIME_TARGET="ecs-fargate"
+
+COPY apps/web ./apps/web
+COPY scripts/apply-db-migrations.mjs ./scripts/apply-db-migrations.mjs
+COPY scripts/insert-integration-api-key.mjs ./scripts/insert-integration-api-key.mjs
+
+RUN printf 'export const generatedBuildInfo = {"gitRef":"%s","gitSha":"%s","imageTag":"%s","runtimeTarget":"%s"} as const;\n' \
+  "${BUILD_GIT_REF}" \
+  "${BUILD_GIT_SHA}" \
+  "${BUILD_IMAGE_TAG}" \
+  "${BUILD_RUNTIME_TARGET}" > /app/apps/web/server/generated-build-info.ts
+
+RUN rm -rf ./apps/web/.next
+RUN pnpm --filter @website-signal-risk-scanner/web build:container
+
+FROM node:22-bookworm-slim AS web-runtime-base
+
+ENV NODE_ENV="production"
+ENV PORT="3000"
+ENV HOSTNAME="0.0.0.0"
+ENV NODE_PATH="/app/runtime-node_modules/node_modules"
+
+WORKDIR /app
+
+RUN mkdir -p /app/runtime-node_modules \
+  && cd /app/runtime-node_modules \
+  && npm init -y \
+  && PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1 npm install --omit=dev --no-audit --no-fund \
+    pg@8.20.0 \
+    zod@3.24.2 \
+  && mkdir -p /app/node_modules/@certscore \
+  && ln -sfn ../../packages/certscore-api-contracts /app/node_modules/@certscore/api-contracts \
+  && ln -sfn ../../packages/certscore-contracts /app/node_modules/@certscore/contracts \
+  && ln -sfn ../../packages/certscore-mcp-auth /app/node_modules/@certscore/mcp-auth \
+  && ln -sfn ../../packages/certscore-vendor-resolver /app/node_modules/@certscore/vendor-resolver
+
+FROM ${WEB_RUNTIME_BASE} AS runner
 
 ARG BUILD_GIT_REF=""
 ARG BUILD_GIT_SHA=""
@@ -113,19 +141,6 @@ COPY --from=builder /app/packages/certscore-vendor-resolver/dist ./packages/cert
 COPY --from=builder /app/scripts/apply-db-migrations.mjs ./scripts/apply-db-migrations.mjs
 COPY --from=builder /app/scripts/apply-db-migrations.mjs ./apps/web/scripts/apply-db-migrations.mjs
 COPY --from=builder /app/scripts/insert-integration-api-key.mjs ./apps/web/scripts/insert-integration-api-key.mjs
-
-RUN mkdir -p /app/runtime-node_modules \
-  && cd /app/runtime-node_modules \
-  && npm init -y \
-  && PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1 npm install --omit=dev --no-audit --no-fund \
-    pg@8.20.0 \
-    zod@3.24.2
-
-RUN mkdir -p /app/node_modules/@certscore \
-  && ln -sfn ../../packages/certscore-api-contracts /app/node_modules/@certscore/api-contracts \
-  && ln -sfn ../../packages/certscore-contracts /app/node_modules/@certscore/contracts \
-  && ln -sfn ../../packages/certscore-mcp-auth /app/node_modules/@certscore/mcp-auth \
-  && ln -sfn ../../packages/certscore-vendor-resolver /app/node_modules/@certscore/vendor-resolver
 
 EXPOSE 3000
 

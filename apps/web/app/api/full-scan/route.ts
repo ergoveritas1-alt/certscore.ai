@@ -1,4 +1,4 @@
-import { NextResponse } from "next/server";
+import { after, NextResponse } from "next/server";
 import {
   createDomainRequestSchema,
   normalizeScanFrom,
@@ -27,6 +27,7 @@ import { findScanByClientRequestId } from "../../../server/scans/client-request"
 import { isAnonymousScanQuotaError } from "../../../server/pulse/anonymous-scan-quota";
 import { getScanRequesterIpContext } from "../../../server/scans/requester-ip-context";
 import { normalizeCampaignAttribution } from "../../../lib/attribution/campaign-attribution";
+import { addAnonymousScanClaimCookie } from "../../../server/scans/anonymous-scan-claims";
 
 function isPublicFullScanAvailabilityError(error: unknown) {
   const message = error instanceof Error ? error.message : String(error);
@@ -90,6 +91,10 @@ function parseLocalV2DagLambdaDebugOverrides(value: unknown): LocalV2DagLambdaDe
   const consentFlowDeadlineMs = boundedDebugInteger(record.consentFlowDeadlineMs, 10_000, 90_000);
   if (consentFlowDeadlineMs !== null) {
     overrides.consentFlowDeadlineMs = consentFlowDeadlineMs;
+  }
+  const lateConsentGateMs = boundedDebugInteger(record.lateConsentGateMs, 3_000, 10_000);
+  if (lateConsentGateMs !== null) {
+    overrides.lateConsentGateMs = lateConsentGateMs;
   }
   const preActionObservationMs = boundedDebugInteger(record.preActionObservationMs, 0, 12_000);
   if (preActionObservationMs !== null) {
@@ -230,6 +235,7 @@ export async function POST(request: Request) {
         normalizedUrl: firstDomain.normalizedUrl,
         provenance: anonymousProvenance,
         requesterIpContext,
+        scheduleBackgroundTask: (task) => after(task),
         scanFrom: publicScanFrom,
         campaignAttribution
       }).catch(async (error) => {
@@ -254,7 +260,7 @@ export async function POST(request: Request) {
         };
       });
 
-      return NextResponse.json(
+      const response = NextResponse.json(
         {
           queuedCount: 1,
           reusedExistingScan: "reusedExistingScan" in anonymousScan ? anonymousScan.reusedExistingScan : false,
@@ -278,6 +284,10 @@ export async function POST(request: Request) {
           status: "reusedExistingScan" in anonymousScan && anonymousScan.reusedExistingScan ? 200 : 202
         }
       );
+      if ("mode" in anonymousScan && anonymousScan.mode !== "preview") {
+        await addAnonymousScanClaimCookie(response, anonymousScan.scan.id);
+      }
+      return response;
     }
 
     const clientRequestId = typeof payload?.requestId === "string" ? payload.requestId : null;
@@ -305,6 +315,7 @@ export async function POST(request: Request) {
           localV2DagRunViaLambda,
           provenance,
           requesterIpContext,
+          scheduleBackgroundTask: (task) => after(task),
           scanFrom,
           campaignAttribution
         })

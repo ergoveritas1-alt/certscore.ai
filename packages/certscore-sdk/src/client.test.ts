@@ -429,6 +429,41 @@ test("scans.wait resolves to completed API v2 scan resource", async () => {
   }
 });
 
+test("scans.wait falls back to the accepted job while the scan resource materializes", async () => {
+  const scanResource = {
+    type: "certscore_scan",
+    scanId: "scan_123",
+    domain: "example.com",
+    status: "completed"
+  };
+  const mock = installFetch([
+    {
+      status: 404,
+      body: { type: "certscore_api_error", error: { code: "not_found", message: "Scan not found yet." } }
+    },
+    {
+      status: 200,
+      body: { type: "certscore_pulse_status", status: "completed", jobId: "job_1", scanId: "scan_123" }
+    },
+    { status: 200, body: scanResource }
+  ]);
+
+  try {
+    const client = new CertScoreClient();
+    const result = await client.scans.wait(
+      { type: "certscore_scan_job", status: "queued", jobId: "job_1", scanId: "scan_123" },
+      { pollIntervalMs: 0 }
+    );
+
+    assert.deepEqual(result, scanResource);
+    assert.match(mock.calls[0] ?? "", /\/api\/v2\/scans\/scan_123\/status$/);
+    assert.match(mock.calls[1] ?? "", /\/api\/v1\/pulse\/status\/job_1$/);
+    assert.match(mock.calls[2] ?? "", /\/api\/v2\/scans\/scan_123$/);
+  } finally {
+    mock.restore();
+  }
+});
+
 test("scans.wait returns a provided completed scan resource without fetching", async () => {
   const client = new CertScoreClient();
   const scan = {

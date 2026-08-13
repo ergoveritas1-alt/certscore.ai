@@ -66,6 +66,7 @@ export async function createOrQueueDomainScan(input: {
     userAgent?: string | null;
   };
   requesterIpContext?: ScanRequesterIpContext | null;
+  scheduleBackgroundTask?: (task: () => Promise<void>) => void;
   scanFrom?: ScanFrom;
 }) {
   const dashboardContext = await getDashboardContext();
@@ -132,6 +133,7 @@ export async function createOrQueueDomainScan(input: {
       enforceMonthlyUsageLimit: true,
       provenance: input.provenance,
       requesterIpContext: input.requesterIpContext,
+      scheduleBackgroundTask: input.scheduleBackgroundTask,
       bypassRecentScanReuse: input.bypassRecentScanReuse,
       localV2DagScanProfile: input.localV2DagScanProfile,
       localV2DagRunViaLambda,
@@ -207,6 +209,7 @@ export async function createOrQueueDomainScan(input: {
     localV2DagRunViaLambda,
     provenance: input.provenance,
     requesterIpContext: input.requesterIpContext,
+    scheduleBackgroundTask: input.scheduleBackgroundTask,
     scanFrom: defaultScanFrom,
     campaignAttribution: input.campaignAttribution,
     scanThrottleMs: getLocalAwareScanThrottleMs(dashboardContext.user.email),

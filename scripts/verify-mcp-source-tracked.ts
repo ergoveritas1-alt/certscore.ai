@@ -28,7 +28,13 @@ for (const path of tracked) {
 }
 
 const dockerfile = readFileSync("apps/mcp/Dockerfile", "utf8");
-for (const path of ["apps/mcp", "packages/certscore-mcp-auth", "packages/certscore-mcp", "packages/certscore-sdk"]) {
+for (const path of [
+  "apps/mcp",
+  "packages/certscore-mcp-auth",
+  "packages/certscore-mcp",
+  "packages/certscore-sdk",
+  "packages/shared"
+]) {
   assert.match(dockerfile, new RegExp(`COPY ${path.replaceAll("/", "\\/")}`), `MCP Dockerfile must copy ${path}.`);
 }
 

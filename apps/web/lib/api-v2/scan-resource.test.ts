@@ -916,7 +916,7 @@ test("buildApiV2PreConsentCookiesTrackers matches the shared public report table
   assert.equal(metaCookie?.essentiality, "non_essential");
   assert.equal(metaCookie?.essentialityConfidence, 0.98);
   assert.deepEqual(metaCookie?.essentialityReasonCodes, ["canonical_cookie_knowledge_match"]);
-  assert.equal(metaCookie?.essentialitySource, "retained_explicit_classification");
+  assert.equal(metaCookie?.essentialitySource, "canonical_registry");
   assert.deepEqual(metaCookie?.initiatorChain, ["https://connect.facebook.net/fbevents.js"]);
   assert.equal(metaRow?.dataFlows?.[0]?.networkDestination.label, "server location (may be CDN edge)");
   assert.equal(metaRow?.dataFlows?.[0]?.networkDestination.countryCode, "US");

@@ -116,14 +116,6 @@ resource "aws_security_group" "vpc_endpoints" {
     cidr_blocks = ["0.0.0.0/0"]
   }
 
-  egress {
-    description = "Endpoint-egress"
-    protocol    = "tcp"
-    from_port   = 443
-    to_port     = 443
-    cidr_blocks = ["0.0.0.0/0"]
-  }
-
   tags = {
     Name    = local.endpoint_security_group_name
     Project = "CertScore"
@@ -191,7 +183,7 @@ resource "aws_vpc_endpoint" "sqs" {
 }
 
 resource "aws_vpc_endpoint" "logs" {
-  count = local.vpc_endpoints_enabled ? 1 : 0
+  count = local.vpc_endpoints_enabled && var.vpc_endpoint_config.enable_logs_endpoint ? 1 : 0
 
   vpc_id              = var.vpc_endpoint_config.vpc_id
   service_name        = "com.amazonaws.${var.region}.logs"

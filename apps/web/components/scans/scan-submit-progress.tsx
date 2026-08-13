@@ -1,6 +1,11 @@
 "use client";
 
 import React, { useEffect, useMemo, useState } from "react";
+import {
+  getScanProgressRuntime,
+  readLearnedScanDuration,
+  type ScanProgressRuntime
+} from "../../lib/scans/scan-progress-timing";
 
 export type LocalV2ScanProfile = "standard" | "tiny";
 
@@ -35,9 +40,12 @@ const MAIN_PROGRESS_COLORS = [
   [34, 197, 94]
 ] as const;
 
-// Keep the opening state calm enough to read, while reserving meaningful time
-// for review and report preparation near the end of the estimate.
 const SCAN_PROGRESS_PHASE_BREAKPOINTS = [0.34, 0.70, 0.88] as const;
+const SCAN_PROGRESS_PRE_ESTIMATE_CEILING = 96;
+const SCAN_PROGRESS_WAITING_CEILING = 98.5;
+const SCAN_PROGRESS_TICK_MS = 250;
+const SCAN_PROGRESS_TRANSITION_MS = 300;
+const SCAN_PROGRESS_COMPLETION_TRANSITION_MS = 180;
 
 function getMainProgressColor(progressValue: number) {
   const normalizedValue = Math.min(Math.max(progressValue, 0), 100) / 100;
@@ -65,11 +73,13 @@ export function ScanActivityIndicator({ className = "text-white" }: { className?
 export function ScanSubmissionPendingIndicator({
   compact = false,
   onProgressValueChange,
-  profileValue = "standard"
+  profileValue = "standard",
+  targetLabel = ""
 }: {
   compact?: boolean;
   onProgressValueChange?: (value: number) => void;
   profileValue?: string;
+  targetLabel?: string;
 }) {
   const { nowMs, startedAtMs } = useScanProgressClock(true);
 
@@ -81,6 +91,7 @@ export function ScanSubmissionPendingIndicator({
       onProgressValueChange={onProgressValueChange}
       profileValue={profileValue}
       startedAtMs={startedAtMs}
+      targetLabel={targetLabel}
     />
   );
 }
@@ -97,6 +108,7 @@ export function ScanSubmitProgressBar({
   reportReady = false,
   scanStatus,
   startedAtMs,
+  targetLabel = "",
 }: {
   active: boolean;
   compact?: boolean;
@@ -109,19 +121,49 @@ export function ScanSubmitProgressBar({
   reportReady?: boolean;
   scanStatus?: string | null;
   startedAtMs: number | null;
+  targetLabel?: string;
 }) {
-  const derivedEstimate = useMemo(() => (
+  const [runtime, setRuntime] = useState<ScanProgressRuntime>(() => (
+    process.env.NODE_ENV === "development" ? "local" : "hosted"
+  ));
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      setRuntime(getScanProgressRuntime(window.location.hostname));
+    }
+  }, []);
+  const baseEstimate = useMemo(() => (
     estimateScanProgressForOptions({
-      profileValue
+      profileValue,
+      runtime
     })
-  ), [profileValue]);
-  const estimate = progressEstimate ?? derivedEstimate;
-  const elapsedSeconds = startedAtMs !== null ? Math.max(0, Math.floor((nowMs - startedAtMs) / 1_000)) : 0;
+  ), [profileValue, runtime]);
+  const [learnedDurationMs, setLearnedDurationMs] = useState<number | null>(null);
+  useEffect(() => {
+    if (!targetLabel || typeof window === "undefined") {
+      setLearnedDurationMs(null);
+      return;
+    }
+    try {
+      setLearnedDurationMs(readLearnedScanDuration({
+        profileValue,
+        runtime,
+        storage: window.localStorage,
+        target: targetLabel
+      }));
+    } catch {
+      setLearnedDurationMs(null);
+    }
+  }, [profileValue, runtime, targetLabel]);
+  const estimate = progressEstimate ?? (learnedDurationMs === null
+    ? baseEstimate
+    : { estimatedDurationMs: learnedDurationMs, modeLabel: `${profileValue} scan` });
+  const elapsedMs = startedAtMs !== null ? Math.max(0, nowMs - startedAtMs) : 0;
+  const elapsedSeconds = Math.floor(elapsedMs / 1_000);
   const progressPhase = describeScanProgressPhase({
-    elapsedMs: elapsedSeconds * 1_000,
+    elapsedMs,
     estimatedDurationMs: estimate.estimatedDurationMs
   });
-  const delayed = elapsedSeconds * 1_000 > estimate.estimatedDurationMs * 2;
+  const delayed = elapsedMs > estimate.estimatedDurationMs * 1.35;
   const progressDisplay = getScanProgressDisplay({
     delayed,
     phase: progressPhase,
@@ -129,116 +171,25 @@ export function ScanSubmitProgressBar({
     reportReady,
     scanStatus
   });
-  const initialDisplayedProgressValue = initialProgressValue ?? getScanProgressStepStart(progressDisplay.currentStep);
-  const [displayedProgressValue, setDisplayedProgressValue] = useState(initialDisplayedProgressValue);
-  const [progressMotion, setProgressMotion] = useState<"snap" | "steady">("steady");
-  const displayedProgressValueRef = React.useRef(initialDisplayedProgressValue);
-  const displayedStepRef = React.useRef(progressDisplay.currentStep);
-  const handoffAppliedRef = React.useRef(initialProgressValue !== null && initialProgressValue !== undefined);
-  const wasActiveRef = React.useRef(false);
-
-  React.useLayoutEffect(() => {
-    if (handoffAppliedRef.current || initialProgressValue === null || initialProgressValue === undefined) {
-      return;
-    }
-
-    handoffAppliedRef.current = true;
-    const currentStepStart = reportReady ? 100 : getScanProgressStepStart(progressDisplay.currentStep);
-    const handoffValue = clampScanProgressHandoffValue({
-      currentStep: progressDisplay.currentStep,
-      reportReady,
-      value: initialProgressValue
-    });
-    setProgressMotion("snap");
-    displayedStepRef.current = progressDisplay.currentStep;
-    displayedProgressValueRef.current = handoffValue;
-    setDisplayedProgressValue(handoffValue);
-    if (handoffValue < currentStepStart) {
-      const handoffTimer = window.setTimeout(() => {
-        displayedProgressValueRef.current = currentStepStart;
-        setDisplayedProgressValue(currentStepStart);
-      }, 50);
-      return () => window.clearTimeout(handoffTimer);
-    }
-  }, [initialProgressValue, progressDisplay.currentStep, reportReady]);
+  const calculatedProgressValue = getAdaptiveScanProgressValue({
+    elapsedMs,
+    estimatedDurationMs: estimate.estimatedDurationMs,
+    progressStage,
+    reportReady
+  });
+  const progressFloor = initialProgressValue ?? 0;
+  const [displayedProgressValue, setDisplayedProgressValue] = useState(() => (
+    Math.max(progressFloor, calculatedProgressValue)
+  ));
 
   useEffect(() => {
-    if (!active) {
-      wasActiveRef.current = false;
-      return;
-    }
-
-    const isNewScan = !wasActiveRef.current;
-    wasActiveRef.current = true;
-    if (isNewScan) {
-      const currentStepStart = reportReady ? 100 : getScanProgressStepStart(progressDisplay.currentStep);
-      const handoffValue = initialProgressValue === null || initialProgressValue === undefined
-        ? currentStepStart
-        : clampScanProgressHandoffValue({
-          currentStep: progressDisplay.currentStep,
-          reportReady,
-          value: initialProgressValue
-        });
-      displayedStepRef.current = progressDisplay.currentStep;
-      setProgressMotion(handoffValue < currentStepStart ? "snap" : "steady");
-      displayedProgressValueRef.current = handoffValue;
-      setDisplayedProgressValue(handoffValue);
-      if (handoffValue < currentStepStart) {
-        const handoffTimer = window.setTimeout(() => {
-          displayedProgressValueRef.current = currentStepStart;
-          setDisplayedProgressValue(currentStepStart);
-        }, 50);
-        return () => window.clearTimeout(handoffTimer);
-      }
-    }
-
-    if (!isNewScan && progressDisplay.currentStep > displayedStepRef.current) {
-      displayedStepRef.current = progressDisplay.currentStep;
-      const currentStepStart = getScanProgressStepStart(progressDisplay.currentStep);
-      setProgressMotion("snap");
-      displayedProgressValueRef.current = Math.max(displayedProgressValueRef.current, currentStepStart);
-      setDisplayedProgressValue(displayedProgressValueRef.current);
-    }
-
-    if (!reportReady) {
-      return;
-    }
-
-    const frame = window.requestAnimationFrame(() => {
-      setProgressMotion("snap");
-      displayedProgressValueRef.current = 100;
-      setDisplayedProgressValue(100);
-    });
-    return () => window.cancelAnimationFrame(frame);
-  }, [active, initialProgressValue, progressDisplay.currentStep, reportReady]);
+    if (!active) return;
+    setDisplayedProgressValue((currentValue) => Math.max(currentValue, progressFloor, calculatedProgressValue));
+  }, [active, calculatedProgressValue, progressFloor]);
 
   useEffect(() => {
-    if (!active || reportReady) {
-      return;
-    }
-
-    let intervalId: number | undefined;
-    const advanceHalfLife = () => {
-      setProgressMotion("steady");
-      const nextValue = getNextScanProgressValue({
-        currentStep: displayedStepRef.current,
-        currentValue: displayedProgressValueRef.current
-      });
-      displayedProgressValueRef.current = nextValue;
-      setDisplayedProgressValue(nextValue);
-    };
-    const startTimer = window.setTimeout(() => {
-      advanceHalfLife();
-      intervalId = window.setInterval(advanceHalfLife, SCAN_PROGRESS_HALF_LIFE_MS);
-    }, SCAN_PROGRESS_MILESTONE_SNAP_MS);
-
-    return () => {
-      window.clearTimeout(startTimer);
-      if (intervalId !== undefined) {
-        window.clearInterval(intervalId);
-      }
-    };
-  }, [active, progressDisplay.currentStep, reportReady]);
+    onProgressValueChange?.(displayedProgressValue);
+  }, [displayedProgressValue, onProgressValueChange]);
 
   if (!active) {
     return null;
@@ -265,25 +216,23 @@ export function ScanSubmitProgressBar({
       >
         <div
           className="h-full rounded-full transition-[width,background-color]"
-          onTransitionEnd={(event) => {
-            if (event.propertyName === "width") {
-              onProgressValueChange?.(displayedProgressValue);
-            }
-          }}
           style={{
             backgroundColor: getMainProgressColor(displayedProgressValue),
-            transitionDuration: `${progressMotion === "steady" ? SCAN_PROGRESS_HALF_LIFE_MS : SCAN_PROGRESS_MILESTONE_SNAP_MS}ms`,
-            transitionTimingFunction: progressMotion === "steady" ? "linear" : "ease-out",
+            transitionDuration: `${reportReady ? SCAN_PROGRESS_COMPLETION_TRANSITION_MS : SCAN_PROGRESS_TRANSITION_MS}ms`,
+            transitionTimingFunction: "linear",
             width: `${displayedProgressValue}%`
           }}
         />
       </div>
-      <div className={compact ? "mt-2 grid grid-cols-4 gap-1" : "mt-3 grid grid-cols-4 gap-1.5"} aria-hidden="true">
+      <div className={compact ? "mt-2 flex items-center justify-between gap-2" : "mt-3 flex items-center justify-between gap-3"} aria-hidden="true">
         {progressDisplay.steps.map((step) => (
-          <div key={step.label} className="space-y-1">
-            <div className={`h-1 rounded-full transition-colors duration-500 ${step.colorClass}`} />
-            {!compact ? <span className={`block truncate text-[10px] ${step.current ? "font-semibold text-sky-700" : "text-slate-400"}`}>{step.label}</span> : null}
-          </div>
+          <span
+            key={step.label}
+            className={`inline-flex min-w-0 items-center gap-1.5 truncate text-[10px] ${step.current ? "font-semibold text-sky-700" : "text-slate-400"}`}
+          >
+            <span className={`h-1.5 w-1.5 shrink-0 rounded-full transition-colors duration-300 ${step.colorClass}`} />
+            {!compact ? step.label : null}
+          </span>
         ))}
       </div>
     </div>
@@ -297,41 +246,34 @@ const SCAN_PROGRESS_STEPS = [
   { colorClass: "bg-slate-200", label: "Report", value: 92 }
 ] as const;
 
-const SCAN_PROGRESS_STEP_BOUNDARIES = [0, 25, 50, 75, 100] as const;
-export const SCAN_PROGRESS_HALF_LIFE_MS = 6_000;
-const SCAN_PROGRESS_MILESTONE_SNAP_MS = 500;
+const SCAN_PROGRESS_STAGE_FLOORS: Record<ScanProgressStage, number> = {
+  prepare: 0,
+  scan: 4,
+  review: 78,
+  report: 92,
+  complete: 96
+};
 
-function getScanProgressStepStart(stepIndex: number) {
-  return SCAN_PROGRESS_STEP_BOUNDARIES[Math.min(Math.max(stepIndex, 0), SCAN_PROGRESS_STEPS.length)] ?? 0;
-}
-
-function getScanProgressStepEnd(stepIndex: number) {
-  if (stepIndex >= SCAN_PROGRESS_STEPS.length - 1) {
-    return 96;
-  }
-  return getScanProgressStepStart(stepIndex + 1);
-}
-
-export function clampScanProgressHandoffValue(input: {
-  currentStep: number;
+export function getAdaptiveScanProgressValue(input: {
+  elapsedMs: number;
+  estimatedDurationMs: number;
+  progressStage?: ScanProgressStage;
   reportReady: boolean;
-  value: number;
 }) {
-  const stepEnd = input.reportReady ? 100 : getScanProgressStepEnd(input.currentStep);
-  return Math.min(Math.max(input.value, 0), stepEnd);
-}
+  if (input.reportReady) return 100;
 
-export function getNextScanProgressValue(input: {
-  currentStep: number;
-  currentValue: number;
-}) {
-  const stepStart = getScanProgressStepStart(input.currentStep);
-  const stepEnd = getScanProgressStepEnd(input.currentStep);
-  const currentValue = Math.max(stepStart, Math.min(input.currentValue, stepEnd));
-  const nextValue = currentValue + (stepEnd - currentValue) / 2;
+  const elapsedMs = Math.max(0, input.elapsedMs);
+  const estimatedDurationMs = Math.max(2_000, input.estimatedDurationMs);
+  const ratio = elapsedMs / estimatedDurationMs;
+  const timeProgress = ratio <= 1
+    ? SCAN_PROGRESS_PRE_ESTIMATE_CEILING * ratio
+    : SCAN_PROGRESS_PRE_ESTIMATE_CEILING +
+      (SCAN_PROGRESS_WAITING_CEILING - SCAN_PROGRESS_PRE_ESTIMATE_CEILING) * (1 - Math.exp(-(ratio - 1) * 1.5));
+  const stageFloor = input.progressStage ? SCAN_PROGRESS_STAGE_FLOORS[input.progressStage] : 0;
+  const milestoneRamp = Math.min(1, elapsedMs / 750);
+  const value = Math.max(timeProgress, stageFloor * milestoneRamp);
 
-  // Leave a visible remainder for the authoritative milestone transition.
-  return Math.max(currentValue, Math.min(stepEnd - 0.25, nextValue));
+  return Math.round(Math.min(SCAN_PROGRESS_WAITING_CEILING, Math.max(0, value)) * 10) / 10;
 }
 
 function getScanProgressDisplay(input: {
@@ -370,18 +312,17 @@ function getScanProgressDisplay(input: {
         ? 2
         : 3);
   const isComplete = input.reportReady;
-  const value = isComplete ? 100 : estimatedDelay ? 92 : SCAN_PROGRESS_STEPS[phaseIndex].value;
   const label = isComplete
     ? "Completing scan…"
     : estimatedDelay
-      ? "Taking longer than usual"
+      ? "Still working through the scan"
       : hasServerProgress
         ? ["Queued for scan", "Scanning website", "Reviewing scan signals", "Preparing your report"][phaseIndex]
         : ["Getting things ready", "Capturing page evidence", "Checking policies and trackers", "Building your report"][phaseIndex];
   const detail = isComplete
     ? "Opening your report…"
     : estimatedDelay
-      ? "The scan is still working through the site."
+      ? "Progress will continue while the remaining evidence is processed."
       : hasServerProgress
         ? ["Waiting for a scanner to start.", "Capturing page evidence and website signals.", "Processing the retained scan evidence.", "Preparing the report for review."][phaseIndex]
         : `Step ${phaseIndex + 1} of ${SCAN_PROGRESS_STEPS.length}`;
@@ -403,7 +344,6 @@ function getScanProgressDisplay(input: {
       label: step.label
     })),
     currentStep,
-    value
   };
 }
 
@@ -421,7 +361,7 @@ export function useScanProgressClock(active: boolean) {
     setNowMs(Date.now());
     const intervalId = window.setInterval(() => {
       setNowMs(Date.now());
-    }, 1_000);
+    }, SCAN_PROGRESS_TICK_MS);
 
     return () => {
       window.clearInterval(intervalId);
@@ -443,6 +383,8 @@ export function LocalV2DagScanProgressCard({
   revealProgress = true,
   scanStatus,
   startedAt,
+  startedAtMs: explicitStartedAtMs,
+  targetLabel = "",
 }: {
   createdAt?: string | null;
   initialProgressValue?: number | null;
@@ -452,21 +394,26 @@ export function LocalV2DagScanProgressCard({
   revealProgress?: boolean;
   scanStatus?: string | null;
   startedAt?: string | null;
+  startedAtMs?: number | null;
+  targetLabel?: string;
 }) {
   const [nowMs, setNowMs] = useState(() => Date.now());
   const startedAtMs = useMemo(() => {
+    if (explicitStartedAtMs !== null && explicitStartedAtMs !== undefined && Number.isFinite(explicitStartedAtMs)) {
+      return explicitStartedAtMs;
+    }
     const parsedStartedAt = startedAt ? Date.parse(startedAt) : Number.NaN;
     if (Number.isFinite(parsedStartedAt)) {
       return parsedStartedAt;
     }
     const parsedCreatedAt = createdAt ? Date.parse(createdAt) : Number.NaN;
     return Number.isFinite(parsedCreatedAt) ? parsedCreatedAt : nowMs;
-  }, [createdAt, nowMs, startedAt]);
+  }, [createdAt, explicitStartedAtMs, nowMs, startedAt]);
 
   useEffect(() => {
     const intervalId = window.setInterval(() => {
       setNowMs(Date.now());
-    }, 1_000);
+    }, SCAN_PROGRESS_TICK_MS);
 
     return () => {
       window.clearInterval(intervalId);
@@ -503,6 +450,7 @@ export function LocalV2DagScanProgressCard({
         reportReady={reportReady}
         scanStatus={scanStatus}
         startedAtMs={startedAtMs}
+        targetLabel={targetLabel}
       />
     </section>
   );
@@ -532,17 +480,29 @@ export function describeScanProgressPhase(input: {
 export function estimateScanProgressForOptions(input: {
   consentDag?: boolean;
   profileValue: string;
+  runtime?: ScanProgressRuntime;
 }): ScanProgressEstimate {
   const profileValue = input.profileValue;
-  const profileEstimateMs = profileValue === "tiny"
-    ? 16_000
-    : profileValue === "standard"
-      ? 36_000
-      : profileValue === "policy"
-        ? 36_000
-        : profileValue === "consent"
-          ? 42_000
-          : 45_000;
+  const runtime = input.runtime ?? (process.env.NODE_ENV === "development" ? "local" : "hosted");
+  const profileEstimateMs = runtime === "local"
+    ? profileValue === "tiny"
+      ? 8_000
+      : profileValue === "standard"
+        ? 13_500
+        : profileValue === "policy"
+          ? 18_000
+          : profileValue === "consent"
+            ? 20_000
+            : 22_000
+    : profileValue === "tiny"
+      ? 12_000
+      : profileValue === "standard"
+        ? 24_000
+        : profileValue === "policy"
+          ? 30_000
+          : profileValue === "consent"
+            ? 34_000
+            : 36_000;
   const estimatedDurationMs = profileEstimateMs;
   const modeLabel = `${profileValue} scan`;
   return { estimatedDurationMs, modeLabel };

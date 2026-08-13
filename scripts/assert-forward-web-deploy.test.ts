@@ -61,6 +61,30 @@ test("invalid revision identifiers are rejected", () => {
       liveSha: "main",
       targetSha: TARGET_SHA
     }),
-    /40-character Git SHAs/
+    /Live web revision must be a full 40-character Git SHA/
+  );
+});
+
+test("an explicit emergency override permits a legacy non-SHA live revision", () => {
+  assert.deepEqual(
+    assessWebDeployAncestry({
+      allowNonDescendant: true,
+      isAncestor: false,
+      liveSha: "legacy-release-tag",
+      targetSha: TARGET_SHA
+    }),
+    { allowed: true, reason: "explicit_override_unverifiable_live_revision" }
+  );
+});
+
+test("an invalid target revision is rejected even with an emergency override", () => {
+  assert.throws(
+    () => assessWebDeployAncestry({
+      allowNonDescendant: true,
+      isAncestor: false,
+      liveSha: LIVE_SHA,
+      targetSha: "release-tag"
+    }),
+    /Target web revision must be a full 40-character Git SHA/
   );
 });

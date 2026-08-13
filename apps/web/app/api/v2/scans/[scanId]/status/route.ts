@@ -1,5 +1,6 @@
 import { API_V2_SCAN_ID_PATTERN, apiV2JsonResponse, buildApiV2Error, buildApiV2ScanStatus } from "../../../../../../lib/api-v2/scan-resource";
 import { getAnonymousScanById } from "../../../../../../server/scans/get-scan-by-id";
+import { enforceApiV2ScanReadThrottle } from "../../../../../../server/pulse/api-v2-read-throttle";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -26,6 +27,15 @@ export async function GET(request: Request, context: RouteContext) {
       status: 400
     });
   }
+
+  const throttled = await enforceApiV2ScanReadThrottle({
+    profile: "status",
+    request,
+    requestId: id,
+    route: "api-v2-scan-status",
+    scanId
+  });
+  if (throttled) return throttled;
 
   try {
     const scanRecord = await getAnonymousScanById(scanId);

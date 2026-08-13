@@ -1,4 +1,5 @@
 import { buildPulseChatGptOpenApiDocument } from "@certscore/api-contracts";
+import { API_READ_RATE_POLICY_OPENAPI_EXTENSION } from "@website-signal-risk-scanner/shared";
 import { applyPulseCors, pulseOptionsResponse } from "../../../../lib/pulse/cors";
 
 function requestId(request: Request) {
@@ -7,6 +8,10 @@ function requestId(request: Request) {
 
 export function GET(request: Request) {
   const id = requestId(request);
+  const document = {
+    ...buildPulseChatGptOpenApiDocument(),
+    "x-certscore-read-rate-policy": API_READ_RATE_POLICY_OPENAPI_EXTENSION
+  };
   const headers = applyPulseCors(new Headers({
     "Cache-Control": "no-store",
     "Content-Type": "application/json; charset=utf-8",
@@ -19,7 +24,7 @@ export function GET(request: Request) {
     "X-Content-Type-Options": "nosniff"
   }), request);
 
-  return new Response(JSON.stringify(buildPulseChatGptOpenApiDocument()), {
+  return new Response(JSON.stringify(document), {
     headers,
     status: 200
   });

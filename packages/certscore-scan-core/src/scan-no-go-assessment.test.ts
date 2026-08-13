@@ -15,6 +15,7 @@ import type {
 import {
   buildScanEvidenceLaneAssessment,
   buildScanNoGoAssessment,
+  hasCompleteRetainedConsentProofPacket,
   shouldAttemptIncompleteConsentVisualFallback,
   shouldAttemptScreenshotOnlyFallback,
 } from "./index.js";
@@ -130,6 +131,50 @@ test("a runtime-only lane never starts consent visual recovery for an incomplete
 
   assert.equal(shouldAttemptIncompleteConsentVisualFallback(incompleteResult as never, "never"), false);
   assert.equal(shouldAttemptIncompleteConsentVisualFallback(incompleteResult as never, "always"), true);
+});
+
+test("a complete same-document consent proof does not start an independent recovery browser", () => {
+  const completeResult = {
+    consentUiObservations: [{
+      observationId: "consent_ui_pre_consent",
+      observedAtMs: 25_000,
+      captureStatus: "observed",
+      inventoryOutcome: "complete_with_controls",
+      likelyPresent: true,
+      layerInspected: "first_layer",
+      documentUrl: "https://example.test/",
+      documentIdentity: { source: "cdp_loader_id", token: "loader-1" },
+      captureDiagnostics: {
+        completedChannels: ["dom_inventory", "geometry", "accessibility_tree"],
+        timedOutChannels: [],
+        failedChannels: [],
+      },
+      basis: [
+        "inventory:paired_settled_frame_completed",
+        "geometry:captured",
+      ],
+      controls: [{}],
+    }],
+    moduleRun: { status: "partial", errors: ["late consent control screenshot failed"] },
+    screenshots: [{
+      artifactId: "screenshot_pre_consent_settled",
+      capturedAtMs: 8_000,
+      captureMethod: "primary_viewport_fallback",
+      documentIdentity: { source: "cdp_loader_id", token: "loader-1" },
+      path: "/tmp/screenshot.png",
+      url: "https://example.test/",
+      pagePhase: "network_idle",
+      consentStateAtTime: "pre_consent",
+    }],
+    visualCapture: { status: "available", artifactRefs: [], notes: [] },
+  };
+
+  assert.equal(hasCompleteRetainedConsentProofPacket(completeResult as never), true);
+  assert.equal(shouldAttemptIncompleteConsentVisualFallback(completeResult as never, "always"), false);
+
+  completeResult.screenshots[0]!.documentIdentity.token = "loader-2";
+  assert.equal(hasCompleteRetainedConsentProofPacket(completeResult as never), false);
+  assert.equal(shouldAttemptIncompleteConsentVisualFallback(completeResult as never, "always"), true);
 });
 
 test("a 1x1 placeholder cannot corroborate sparse-page or visual no-go evidence", async () => {

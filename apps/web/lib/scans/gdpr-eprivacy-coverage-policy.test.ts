@@ -2412,6 +2412,34 @@ test("deriveGdprEprivacyCoveragePolicyOutcomes reports unsupported policy langua
   assert.doesNotMatch(outcomes.policy_text_extraction?.limitation ?? "", /low-quality or non-policy/i);
 });
 
+test("deriveGdprEprivacyCoveragePolicyOutcomes reports an unresolved policy index instead of a language failure", () => {
+  const outcomes = deriveGdprEprivacyCoveragePolicyOutcomes({
+    ...completedInputBase,
+    runtimeArtifacts: {
+      policyDisclosureSummary: {
+        privacyPolicyPresent: true,
+        privacyPolicyTextCharacterCount: 4362,
+        privacyPolicyUrls: ["https://example.test/privacy"],
+        retainedPrivacyPolicyTextExcerpt: "Select the privacy notice for your language and region.",
+        policyTextExtractionHealth: {
+          detectedPolicyLanguage: "en",
+          extractedTextLength: 4362,
+          extractionFailureReason: "privacy_policy_index_governing_document_unresolved",
+          gdprTransparencyLanguageSupported: true,
+          minimumTextLengthRequired: 500,
+          policyTextExtractionStatus: "artifact_unavailable",
+        },
+      },
+    },
+    snapshot: { privacy_policy_present: true },
+  });
+
+  assert.equal(outcomes.policy_text_extraction?.status, "Not testable");
+  assert.match(outcomes.policy_text_extraction?.limitation ?? "", /privacy-policy index was retained/i);
+  assert.match(outcomes.policy_text_extraction?.limitation ?? "", /governing privacy notice was not attached/i);
+  assert.doesNotMatch(outcomes.policy_text_extraction?.limitation ?? "", /language is not yet supported/i);
+});
+
 test("deriveGdprEprivacyCoveragePolicyOutcomes reports unknown policy language explicitly", () => {
   const outcomes = deriveGdprEprivacyCoveragePolicyOutcomes({
     ...completedInputBase,

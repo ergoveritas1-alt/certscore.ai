@@ -9,6 +9,7 @@ import { ScanStatusAutoRefresh } from "../../../../components/scans/scan-status-
 import { PendingScanDetailView } from "../../../../components/scans/pending-scan-detail-view";
 import { ScanProgressReportVisible } from "../../../../components/scans/scan-progress-report-visible";
 import { ScanReportLoadingCard } from "../../../../components/scans/scan-report-loading-card";
+import { ScanReportRescanTransition } from "../../../../components/scans/scan-report-rescan-transition";
 import { ShareReportActions } from "../../../../components/scans/share-report-actions";
 import {
   hasPendingBrowserExtensionNormalization,
@@ -85,10 +86,6 @@ function ScanDetailLoadingState({ statusProjection }: { statusProjection: ScanSt
       </div>
     </div>
   );
-}
-
-function canViewCapturedImage(input: { isPlatformAdmin: boolean; role: string | null | undefined }) {
-  return input.isPlatformAdmin || input.role === "admin" || input.role === "advanced";
 }
 
 export default async function ScanDetailPage({ params, searchParams }: ScanDetailPageProps) {
@@ -243,13 +240,11 @@ async function ScanDetailReportContent({
     membershipRole: membership.role,
     userEmail: user.email
   });
-  const visualEvidenceArtifacts = canViewCapturedImage({ isPlatformAdmin, role: membership.role })
-    ? getVisualEvidenceArtifacts(displayScanRecord.runtimeArtifacts).sort((left, right) => {
-        const leftPriority = left.captureStep === "initial_load" ? 0 : 1;
-        const rightPriority = right.captureStep === "initial_load" ? 0 : 1;
-        return leftPriority - rightPriority;
-      })
-    : [];
+  const visualEvidenceArtifacts = getVisualEvidenceArtifacts(displayScanRecord.runtimeArtifacts).sort((left, right) => {
+    const leftPriority = left.captureStep === "initial_load" ? 0 : 1;
+    const rightPriority = right.captureStep === "initial_load" ? 0 : 1;
+    return leftPriority - rightPriority;
+  });
   const visualEvidenceArtifact =
     visualEvidenceArtifacts.find((artifact) => artifact.status === "available" && artifact.key) ?? null;
   const visualEvidenceHref = visualEvidenceArtifact
@@ -257,7 +252,7 @@ async function ScanDetailReportContent({
     : null;
 
   return (
-    <>
+    <ScanReportRescanTransition>
       <ScanProgressReportVisible scanId={displayScanRecord.scan.id} />
       <SharedScanDetailView
         analyticsScanSource="dashboard"
@@ -310,6 +305,6 @@ async function ScanDetailReportContent({
         showBrowserExtensionRecovery
         viewerAccessRole={membership.role}
       />
-    </>
+    </ScanReportRescanTransition>
   );
 }

@@ -906,13 +906,17 @@ export type AdminUserOverviewRow = AdminUserRow & {
   completed_scans: number;
   domain_count: number;
   last_completed_scan_at: string | null;
+  last_associated_scan_at: string | null;
   last_scan_at: string | null;
+  last_scan_requested_at: string | null;
   membership_role: string | null;
   organization_id: string | null;
   organization_name: string | null;
   organization_slug: string | null;
   plan: string | null;
   plan_status: string | null;
+  associated_scan_count: number;
+  scan_request_count: number;
   total_scans: number;
 };
 
@@ -1654,6 +1658,7 @@ export async function loadAdminUsersPageData(
   totalCount: number;
   users: AdminUserOverviewRow[];
 }> {
+  await ensureScanRequestLogTable();
   const normalizedLimit = Math.min(Math.max(limit, 1), 100);
   const normalizedOffset = Math.max(offset, 0);
   const [totalCountRow, users] = await Promise.all([
@@ -1704,7 +1709,11 @@ export async function loadAdminUsersPageData(
               coalesce(user_activity.total_scans, 0)::int as total_scans,
               coalesce(user_activity.completed_scans, 0)::int as completed_scans,
               user_activity.last_scan_at,
-              user_activity.last_completed_scan_at
+              user_activity.last_completed_scan_at,
+              coalesce(associated_activity.total_scans, 0)::int as associated_scan_count,
+              associated_activity.last_scan_at as last_associated_scan_at,
+              request_activity.last_scan_requested_at,
+              coalesce(request_activity.scan_request_count, 0)::int as scan_request_count
          from selected_users
          left join login_activity on login_activity.email = selected_users.email
          left join selected_memberships on selected_memberships.user_id = selected_users.id
@@ -1718,6 +1727,26 @@ export async function loadAdminUsersPageData(
              from scans
             where scans.submitted_by_user_id = selected_users.id
          ) user_activity on true
+         left join lateral (
+           select count(*)::int as total_scans,
+                  max(scans.created_at) as last_scan_at
+             from scans
+            where scans.submitted_by_user_id = selected_users.id
+               or scans.claimed_by_user_id = selected_users.id
+         ) associated_activity on true
+         left join lateral (
+           select max(activity.requested_at) as last_scan_requested_at,
+                  count(*)::int as scan_request_count
+             from (
+               select scan_requests.requested_at
+                 from scan_requests
+                where scan_requests.requested_by ->> 'userId' = selected_users.id::text
+               union all
+               select pulse_requests.requested_at
+                 from pulse_requests
+                where pulse_requests.requested_by ->> 'userId' = selected_users.id::text
+             ) activity
+         ) request_activity on true
         order by ${getAdminUsersOrderBy(sortKey, direction)}
         limit $1 offset $2`,
       [normalizedLimit, normalizedOffset],
@@ -1735,6 +1764,7 @@ export async function loadAdminUserOverviewData(limit = 8): Promise<{
   metrics: AdminUserOverviewMetricsRow | null;
   users: AdminUserOverviewRow[];
 }> {
+  await ensureScanRequestLogTable();
   const normalizedLimit = Math.min(Math.max(limit, 1), 25);
   const [metrics, users] = await Promise.all([
     queryOne<AdminUserOverviewMetricsRow>(
@@ -1775,7 +1805,11 @@ export async function loadAdminUserOverviewData(limit = 8): Promise<{
               coalesce(user_activity.total_scans, 0)::int as total_scans,
               coalesce(user_activity.completed_scans, 0)::int as completed_scans,
               user_activity.last_scan_at,
-              user_activity.last_completed_scan_at
+              user_activity.last_completed_scan_at,
+              coalesce(associated_activity.total_scans, 0)::int as associated_scan_count,
+              associated_activity.last_scan_at as last_associated_scan_at,
+              request_activity.last_scan_requested_at,
+              coalesce(request_activity.scan_request_count, 0)::int as scan_request_count
          from users
          left join lateral (
            select max(better_auth_users.role) as account_role,
@@ -1801,6 +1835,26 @@ export async function loadAdminUserOverviewData(limit = 8): Promise<{
              from scans
             where scans.submitted_by_user_id = users.id
          ) user_activity on true
+         left join lateral (
+           select count(*)::int as total_scans,
+                  max(scans.created_at) as last_scan_at
+             from scans
+            where scans.submitted_by_user_id = users.id
+               or scans.claimed_by_user_id = users.id
+         ) associated_activity on true
+         left join lateral (
+           select max(activity.requested_at) as last_scan_requested_at,
+                  count(*)::int as scan_request_count
+             from (
+               select scan_requests.requested_at
+                 from scan_requests
+                where scan_requests.requested_by ->> 'userId' = users.id::text
+               union all
+               select pulse_requests.requested_at
+                 from pulse_requests
+                where pulse_requests.requested_by ->> 'userId' = users.id::text
+             ) activity
+         ) request_activity on true
         order by users.created_at desc
         limit $1`,
       [normalizedLimit],

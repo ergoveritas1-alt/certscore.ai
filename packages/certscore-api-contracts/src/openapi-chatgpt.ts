@@ -7,6 +7,12 @@ const pulseErrorResponses = {
   },
   "429": {
     description: "The request was throttled.",
+    headers: {
+      "Retry-After": {
+        schema: { type: "integer" },
+        description: "Recommended retry delay in seconds. Do not poll terminal scan resources."
+      }
+    },
     content: { "application/json": { schema: { $ref: "#/components/schemas/PulseError" } } }
   },
   "500": {
@@ -261,7 +267,14 @@ export function buildPulseChatGptOpenApiDocument() {
               properties: {
                 code: { type: "string", enum: ["invalid_url", "not_found", "pulse_throttled", "rate_limited", "internal_error", "scan_unavailable"] },
                 message: { type: "string" },
-                retryAfterSeconds: { type: "integer", nullable: true }
+                retryAfterSeconds: { type: "integer", nullable: true },
+                recommendedNextAction: { type: "string", nullable: true },
+                rateLimit: {
+                  type: "object",
+                  nullable: true,
+                  additionalProperties: true,
+                  description: "For scan-read 429 responses: canonical policy version, profile, scope, window, limit, usage, and requested units."
+                }
               }
             },
             feedback: { $ref: "#/components/schemas/PulseFeedback" },

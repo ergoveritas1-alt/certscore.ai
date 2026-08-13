@@ -2,12 +2,102 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import {
   buildPreconsentEvidenceQualityFallback,
+  createHybridRuntimeEvidenceProjectionCache,
   getHybridDerivedTrackerVendors,
   getHybridDerivedSignalValue,
   getHybridNanoSignalPopulations,
   getHybridSignalFallbackEvidence,
   withHybridRuntimeArtifactFallbacks
 } from "./hybrid-runtime-evidence";
+
+test("projection-scoped hybrid cache preserves derived values, fallback evidence, and source artifacts", () => {
+  const runtimeArtifacts = {
+    hybrid_runtime_evidence: {
+      consentSummary: {
+        acceptPresent: true,
+        bannerPresent: true,
+        bannerTextSnippet: "We use cookies. Accept all or reject all.",
+        closePresent: false,
+        managePresent: true,
+        rejectPresent: true
+      },
+      consentVisual: {
+        acceptProminence: "high",
+        ctaImbalanceDetected: true,
+        rejectProminence: "low"
+      },
+      networkSummary: {
+        preConsentThirdPartyRequestCount: 2
+      },
+      requestToVendorObservations: [
+        { category: "session_replay", requestUrl: "https://clarity.example/collect", vendor: "Example Replay" }
+      ],
+      sessionReplayEvidenceSummary: {
+        collectionEndpointObserved: true,
+        libraryOnly: false
+      },
+      vendorSummary: {
+        preConsentVendorCount: 1,
+        vendorCategoryCounts: { session_replay: 1 }
+      }
+    }
+  } satisfies Record<string, unknown>;
+  const originalArtifacts = structuredClone(runtimeArtifacts);
+  const cache = createHybridRuntimeEvidenceProjectionCache(runtimeArtifacts);
+  const signalKeys = [
+    "privacy.preconsent_tracking_detected",
+    "privacy.dark_pattern_reject_button_missing",
+    "privacy.dark_pattern_accept_button_prominence",
+    "privacy.session_replay_runtime_detected",
+    "privacy.session_replay_runtime_vendors",
+    "privacy.non_hybrid_signal"
+  ];
+
+  for (const signalKey of signalKeys) {
+    const uncached = getHybridDerivedSignalValue(runtimeArtifacts, signalKey);
+    assert.deepEqual(cache.getDerivedSignalValue(signalKey), uncached);
+    assert.deepEqual(cache.getDerivedSignalValue(signalKey), uncached);
+  }
+
+  const fallbackInput = {
+    signalKey: "privacy.session_replay_runtime_detected",
+    signalLabel: "Session replay runtime detected",
+    signalValue: true
+  };
+  const uncachedFallback = getHybridSignalFallbackEvidence({ runtimeArtifacts, ...fallbackInput });
+  assert.deepEqual(cache.getSignalFallbackEvidence(fallbackInput), uncachedFallback);
+  assert.deepEqual(cache.getSignalFallbackEvidence(fallbackInput), uncachedFallback);
+  assert.deepEqual(runtimeArtifacts, originalArtifacts);
+
+  const separateCache = createHybridRuntimeEvidenceProjectionCache({
+    hybrid_runtime_evidence: {
+      networkSummary: { preConsentThirdPartyRequestCount: 0 },
+      vendorSummary: { preConsentVendorCount: 0 }
+    }
+  });
+  assert.equal(separateCache.getDerivedSignalValue("privacy.preconsent_tracking_detected"), false);
+  assert.equal(cache.getDerivedSignalValue("privacy.preconsent_tracking_detected"), true);
+});
+
+test("non-hybrid signals bypass hybrid artifact reconstruction", () => {
+  let hybridReadCount = 0;
+  const runtimeArtifacts = Object.defineProperty({}, "hybrid_runtime_evidence", {
+    enumerable: true,
+    get() {
+      hybridReadCount += 1;
+      return { consentSummary: { bannerPresent: true } };
+    }
+  }) as Record<string, unknown>;
+
+  assert.equal(getHybridDerivedSignalValue(runtimeArtifacts, "accessibility.wcag_contrast_failures_count"), undefined);
+  assert.equal(getHybridSignalFallbackEvidence({
+    runtimeArtifacts,
+    signalKey: "accessibility.wcag_contrast_failures_count",
+    signalLabel: "Contrast failures",
+    signalValue: 2
+  }), null);
+  assert.equal(hybridReadCount, 0);
+});
 
 test("derives pre-consent tracking and consent dark-pattern signals from hybrid runtime evidence", () => {
   const runtimeArtifacts = {

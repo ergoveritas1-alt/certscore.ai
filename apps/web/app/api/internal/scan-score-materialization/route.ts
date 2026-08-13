@@ -56,7 +56,7 @@ export async function POST(request: Request) {
     const body = await request.json() as { mode?: unknown; scanId?: unknown; token?: unknown };
     scanId = typeof body.scanId === "string" ? body.scanId : null;
     const token = typeof body.token === "string" ? body.token : null;
-    const mode = body.mode === "publish_report" || body.mode === "finalize"
+    const mode = body.mode === "publish_report" || body.mode === "finalize" || body.mode === "publish_and_finalize"
       ? body.mode
       : "publish_and_finalize";
     if (!scanId || !/^[0-9a-f-]{36}$/i.test(scanId) || !token || !/^[A-Za-z0-9_-]{40,80}$/.test(token)) {
@@ -138,26 +138,35 @@ export async function POST(request: Request) {
     });
   } catch (error) {
     const disposition = classifyScoreMaterializationFailure(error);
+    let retryable = disposition.retryable;
+    let retryAfterSeconds = disposition.retryAfterSeconds;
+    let code: string = disposition.code;
     if (scanId && /^[0-9a-f-]{36}$/i.test(scanId)) {
       if (disposition.retryable) {
-        await recordScoreMaterializationRequestError(scanId, disposition.diagnostic).catch(() => undefined);
+        const schedule = await recordScoreMaterializationRequestError(scanId, disposition.diagnostic)
+          .catch(() => null);
+        if (schedule) {
+          retryable = schedule.retryable;
+          retryAfterSeconds = schedule.retryAfterSeconds;
+          if (!schedule.retryable) code = "retry_exhausted";
+        }
       } else {
         await failScoreMaterializationRequest(scanId, disposition.diagnostic).catch(() => undefined);
       }
     }
     console.error("[score-assessment] completion materialization failed", {
-      code: disposition.code,
+      code,
       diagnostic: disposition.diagnostic,
       errorName: error instanceof Error ? error.name : "UnknownError",
-      retryAfterSeconds: disposition.retryAfterSeconds ?? null,
-      retryable: disposition.retryable,
+      retryAfterSeconds: retryAfterSeconds ?? null,
+      retryable,
       scanId
     });
     return NextResponse.json({
-      code: disposition.code,
+      code,
       error: "Score materialization failed.",
-      retryAfterSeconds: disposition.retryAfterSeconds,
-      retryable: disposition.retryable,
-    }, { status: disposition.retryable ? 503 : 422 });
+      retryAfterSeconds,
+      retryable,
+    }, { status: retryable ? 503 : 422 });
   }
 }

@@ -20,6 +20,7 @@ import {
   normalizeLocalV2ScanProfile,
   type LocalV2ScanProfile
 } from "../scans/scan-submit-progress";
+import { useScanReportRescanTransition } from "../scans/scan-report-rescan-transition";
 
 type DomainScanFormProps = {
   allowLocalExtensionScan?: boolean;
@@ -106,6 +107,17 @@ export function shouldExpectRecentScanReuse(input: {
   mode: ScanMode;
 }) {
   return input.mode === "full" && input.hasRecentReusableScan && !input.freshRescan;
+}
+
+export function shouldUseFullPageScanSubmissionTransition(input: {
+  compact: boolean;
+  expectsRecentScanReuse: boolean;
+  hasTransitionHost: boolean;
+  mode: ScanMode;
+  scanFrom: ScanFrom;
+}) {
+  return input.hasTransitionHost && input.compact && input.mode === "full" &&
+    input.scanFrom !== "local_extension" && !input.expectsRecentScanReuse;
 }
 
 type ScanSubmitFailure = {
@@ -367,6 +379,7 @@ export function DomainScanForm({
 }: DomainScanFormProps) {
   const router = useRouter();
   const pathname = usePathname();
+  const reportRescanTransition = useScanReportRescanTransition();
   const canUseLocalExtensionScan = allowLocalExtensionScan && allowRestrictedScanOptions;
   const allowedDefaultScanFrom = restrictLocalExtensionScanFrom({
     allowLocalExtensionScan,
@@ -393,6 +406,13 @@ export function DomainScanForm({
   const scanButtonArmed = isValidScanTarget(effectiveSubmitDomain);
   const showFreshRescanOption = mode === "full" && scanFrom !== "local_extension" && hasRecentReusableScan;
   const expectsRecentScanReuse = shouldExpectRecentScanReuse({ freshRescan, hasRecentReusableScan, mode });
+  const useFullPageSubmissionProgress = shouldUseFullPageScanSubmissionTransition({
+    compact,
+    expectsRecentScanReuse,
+    hasTransitionHost: reportRescanTransition !== null,
+    mode,
+    scanFrom
+  });
 
   useEffect(() => {
     setRecentScanReusedFromUrl(new URLSearchParams(window.location.search).get("recentScanReused") === "1");
@@ -690,6 +710,14 @@ export function DomainScanForm({
     }
 
     setIsSubmitting(true);
+    const submissionStartedAtMs = Date.now();
+    if (useFullPageSubmissionProgress) {
+      reportRescanTransition?.begin({
+        profile: localV2ScanProfile,
+        startedAtMs: submissionStartedAtMs,
+        targetLabel: submittedDomain
+      });
+    }
 
     try {
       if (mode === "full" && canUseLocalExtensionScan && scanFrom === "local_extension") {
@@ -722,7 +750,7 @@ export function DomainScanForm({
         domain: submittedDomain,
         mode,
         requestId,
-        startedAtMs: Date.now()
+        startedAtMs: submissionStartedAtMs
       });
 
       const response = await fetch(mode === "preview" ? "/api/preview-scan" : "/api/full-scan", {
@@ -759,6 +787,7 @@ export function DomainScanForm({
           status: response.status
         });
         setErrorMessage(getScanSubmitErrorMessage(mode, payload));
+        reportRescanTransition?.cancel();
         isSubmittingRef.current = false;
         setIsSubmitting(false);
         return;
@@ -775,6 +804,7 @@ export function DomainScanForm({
           status: response.status
         });
         setErrorMessage("The scan was accepted, but the result link was missing. Refresh and check scan history.");
+        reportRescanTransition?.cancel();
         isSubmittingRef.current = false;
         setIsSubmitting(false);
         return;
@@ -788,8 +818,12 @@ export function DomainScanForm({
       });
       const nextDestination = appendRecentScanReuseParam(destination, payload.reusedExistingScan);
       clearPendingScanSession(requestId);
+      if (payload.reusedExistingScan) {
+        reportRescanTransition?.cancel();
+      }
 
       if (isCurrentPageDestination(nextDestination)) {
+        reportRescanTransition?.cancel();
         router.refresh();
         isSubmittingRef.current = false;
         setIsSubmitting(false);
@@ -811,7 +845,7 @@ export function DomainScanForm({
           domain: submittedDomain,
           progressValue: submissionProgressValueRef.current,
           scanId: payload.scanId,
-          startedAtMs: Date.now()
+          startedAtMs: submissionStartedAtMs
         });
         router.push(nextDestination);
         return;
@@ -826,6 +860,7 @@ export function DomainScanForm({
         stage: "request_failed"
       });
       setErrorMessage("The request did not complete. Check your connection and try again.");
+      reportRescanTransition?.cancel();
       isSubmittingRef.current = false;
       setIsSubmitting(false);
     }
@@ -939,13 +974,14 @@ export function DomainScanForm({
       {isSubmitting && expectsRecentScanReuse ? (
         <p className="text-sm font-medium text-slate-600" role="status">Opening the recent completed report…</p>
       ) : null}
-      {isSubmitting && scanFrom !== "local_extension" && !expectsRecentScanReuse ? (
+      {isSubmitting && scanFrom !== "local_extension" && !expectsRecentScanReuse && !useFullPageSubmissionProgress ? (
         <ScanSubmissionPendingIndicator
           compact={compact}
           onProgressValueChange={(value) => {
             submissionProgressValueRef.current = value;
           }}
           profileValue={localV2ScanProfile}
+          targetLabel={effectiveSubmitDomain}
         />
       ) : null}
       {sampleDomains.length > 0 ? (

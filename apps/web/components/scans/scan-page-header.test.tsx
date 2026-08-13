@@ -18,6 +18,18 @@ test("ScanPageHeader can override completed status for limited coverage", () => 
   assert.doesNotMatch(html, />Completed</);
 });
 
+test("ScanPageHeader can hide the status badge", () => {
+  const html = renderToStaticMarkup(
+    createElement(ScanPageHeader, {
+      showStatus: false,
+      status: "completed",
+      title: "Scan: example.com"
+    })
+  );
+
+  assert.doesNotMatch(html, /Completed/);
+});
+
 test("ScanPageHeader places scan source badge above the created timestamp row", () => {
   const html = renderToStaticMarkup(
     createElement(ScanPageHeader, {

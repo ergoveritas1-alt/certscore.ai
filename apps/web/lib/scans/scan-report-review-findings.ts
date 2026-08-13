@@ -16,7 +16,8 @@ import {
 import {
   buildPreconsentEvidenceQualityFallback,
   getHybridRuntimeEvidence,
-  getHybridSignalFallbackEvidence
+  getHybridSignalFallbackEvidence,
+  type HybridRuntimeEvidenceProjectionCache
 } from "./hybrid-runtime-evidence";
 import {
   findMergedSignalValue,
@@ -2170,10 +2171,77 @@ function getSignalHitMatchedTexts(signalKey: string, signalHitRows: Array<Record
   return uniqueStrings(texts);
 }
 
-export function buildReviewFindings(input: {
+function buildRuntimeDerivedReviewIssues(
+  sectionId: string,
+  runtimeArtifacts: Record<string, unknown> | null | undefined
+): CanonicalReviewIssue[] {
+  if (sectionId !== "tracking_third_party_ecosystem") {
+    return [];
+  }
+
+  const endpointJurisdictionRows = getEndpointJurisdictionRows(runtimeArtifacts);
+  const transferReviewEndpointRows = endpointJurisdictionRows
+    .filter(isTransferReviewEndpointRow)
+    .map(compactEndpointJurisdictionRow)
+    .filter((row) => row.host);
+  if (transferReviewEndpointRows.length === 0) {
+    return [];
+  }
+
+  const endpointHosts = uniqueStrings(transferReviewEndpointRows.map((row) => row.host));
+  const endpointRegions = uniqueStrings(transferReviewEndpointRows.map((row) => row.inferredRegion));
+  const endpointCountries = uniqueStrings(transferReviewEndpointRows.map((row) => row.inferredCountryCode));
+  const endpointVendors = uniqueStrings(transferReviewEndpointRows.map((row) => row.matchedVendorName));
+  return [{
+    description:
+      `Observed ${transferReviewEndpointRows.length} third-party endpoint${transferReviewEndpointRows.length === 1 ? "" : "s"} with retained jurisdiction or transfer-region evidence that merits international-transfer review.`,
+    evidence: endpointHosts.slice(0, 6),
+    fallbackEvidence: {
+      endpointJurisdictionEvidence: transferReviewEndpointRows,
+      endpoint_jurisdiction_evidence: transferReviewEndpointRows,
+      runtime_vendor_disclosure_evidence: getRuntimeVendorDisclosureEvidence(runtimeArtifacts),
+      endpointJurisdictionRows: endpointJurisdictionRows.length,
+      endpointTransferReviewHosts: endpointHosts,
+      endpointTransferReviewRegions: endpointRegions,
+      endpointTransferReviewCountries: endpointCountries,
+      endpointTransferReviewVendors: endpointVendors,
+      supportingSignals: ["privacy.cross_border_endpoint_transfer_review_signal"],
+      transferReviewSignalRows: transferReviewEndpointRows.length,
+      unifiedFindingId: "cross_border_endpoint_transfer_review_signal"
+    },
+    severity: "medium",
+    title: "Cross-border endpoint transfer review signal"
+  }];
+}
+
+export type ScanReportReviewFindingContext = {
+  availableSignalKeys: ReadonlySet<string>;
+  getAccessibilityExamples: (signalKey: string) => ReturnType<typeof getRepresentativeAccessibilityExamplesForSignal>;
+  getKeyPageSummary: (signalKey: string) => ReturnType<typeof getKeyPageDiscoveryPageSummary>;
+  getMacroFallbackFields: () => ReturnType<typeof getDomainMacroFallbackFields>;
+  getMergedSignalValue: (signalKey: string) => unknown;
+  getPolicySignalFallbackEvidence: (input: {
+    signalKey: string;
+    signalLabel: string;
+    signalValue: unknown;
+  }) => ReturnType<typeof getPolicySignalFallbackEvidence>;
+  getRuntimeDerivedIssues: (sectionId: string) => CanonicalReviewIssue[];
+  getSignalHitMatchedTexts: (signalKey: string) => string[];
+};
+
+const CONTRADICTORY_SIGNAL_PAIRS = new Map<string, string>([
+  ["privacy.privacy_contact_channel_missing", "privacy.privacy_contact_path_present"],
+  ["accessibility.accessibility_support_path_missing", "accessibility.accessibility_contact_method_present"]
+]);
+
+/**
+ * Builds immutable scan-wide indexes once for the category/section projection.
+ * buildReviewFindings is invoked for every taxonomy category and section, so
+ * rebuilding these indexes inside each invocation turns small lookups into
+ * repeated full-payload walks on evidence-rich scans.
+ */
+export function createScanReportReviewFindingContext(input: {
   allSignals?: Array<{ key: string; value: unknown }>;
-  categoryId?: string;
-  issues: CanonicalReviewIssue[];
   macroEnrichment?: Record<string, unknown> | null;
   mergedSignals?: Array<{
     key: string;
@@ -2185,34 +2253,135 @@ export function buildReviewFindings(input: {
   runtimeArtifacts?: Record<string, unknown> | null;
   signalHitRows?: Array<Record<string, unknown>>;
   snapshot?: Record<string, unknown> | null;
+}): ScanReportReviewFindingContext {
+  const availableSignalKeys = new Set(
+    (input.allSignals ?? [])
+      .filter((signal) => isSignalValuePopulated(signal.key, signal.value))
+      .map((signal) => signal.key)
+  );
+  const mergedSignalValues = new Map<string, unknown>();
+  for (const signal of input.mergedSignals ?? []) {
+    if (!mergedSignalValues.has(signal.key)) {
+      mergedSignalValues.set(signal.key, signal.selectedPopulation?.value ?? signal.value ?? null);
+    }
+  }
+  const signalHitMatchedTexts = new Map<string, string[]>();
+  for (const row of input.signalHitRows ?? []) {
+    const keys = uniqueStrings([getRecordString(row, "signal_key"), getRecordString(row, "signalKey")]);
+    if (keys.length === 0) {
+      continue;
+    }
+    const dbMatchedText = getRecordString(row, "matched_text") ?? getRecordString(row, "matchedText");
+    const rowTexts = dbMatchedText
+      ? [dbMatchedText]
+      : row.payload && typeof row.payload === "object" && Array.isArray((row.payload as Record<string, unknown>).matchedTexts)
+        ? ((row.payload as Record<string, unknown>).matchedTexts as unknown[])
+            .filter((text): text is string => typeof text === "string" && text.trim().length > 0)
+            .map((text) => text.trim())
+        : [];
+    for (const key of keys) {
+      signalHitMatchedTexts.set(key, [...(signalHitMatchedTexts.get(key) ?? []), ...rowTexts]);
+    }
+  }
+  for (const [key, texts] of signalHitMatchedTexts) {
+    signalHitMatchedTexts.set(key, uniqueStrings(texts));
+  }
+
+  const accessibilityExamples = new Map<string, ReturnType<typeof getRepresentativeAccessibilityExamplesForSignal>>();
+  const keyPageSummaries = new Map<string, ReturnType<typeof getKeyPageDiscoveryPageSummary>>();
+  const policyFallbackEvidence = new Map<string, ReturnType<typeof getPolicySignalFallbackEvidence>>();
+  const runtimeDerivedIssues = new Map<string, CanonicalReviewIssue[]>();
+  const macroFallbackFields = getDomainMacroFallbackFields(input.macroEnrichment);
+  return {
+    availableSignalKeys,
+    getAccessibilityExamples: (signalKey) => {
+      if (!accessibilityExamples.has(signalKey)) {
+        accessibilityExamples.set(signalKey, getRepresentativeAccessibilityExamplesForSignal({
+          rows: input.prioritizedAccessibilityRuleRows,
+          signalKey
+        }));
+      }
+      return accessibilityExamples.get(signalKey) ?? [];
+    },
+    getKeyPageSummary: (signalKey) => {
+      if (!keyPageSummaries.has(signalKey)) {
+        const keyPageType = getKeyPageTypeForSignal(signalKey);
+        keyPageSummaries.set(
+          signalKey,
+          keyPageType
+            ? getKeyPageDiscoveryPageSummary(input.runtimeArtifacts?.key_page_discovery_summary, keyPageType)
+            : null
+        );
+      }
+      return keyPageSummaries.get(signalKey) ?? null;
+    },
+    getMacroFallbackFields: () => macroFallbackFields,
+    getMergedSignalValue: (signalKey) => mergedSignalValues.get(signalKey) ?? null,
+    getPolicySignalFallbackEvidence: (signal) => {
+      if (!policyFallbackEvidence.has(signal.signalKey)) {
+        policyFallbackEvidence.set(signal.signalKey, getPolicySignalFallbackEvidence({
+          mergedSignals: input.mergedSignals,
+          policyEnrichment: input.policyEnrichment ?? [],
+          runtimeArtifacts: input.runtimeArtifacts,
+          ...signal,
+          snapshot: input.snapshot
+        }));
+      }
+      return policyFallbackEvidence.get(signal.signalKey)!;
+    },
+    getRuntimeDerivedIssues: (sectionId) => {
+      if (!runtimeDerivedIssues.has(sectionId)) {
+        runtimeDerivedIssues.set(
+          sectionId,
+          buildRuntimeDerivedReviewIssues(sectionId, input.runtimeArtifacts)
+        );
+      }
+      return runtimeDerivedIssues.get(sectionId) ?? [];
+    },
+    getSignalHitMatchedTexts: (signalKey) => signalHitMatchedTexts.get(signalKey) ?? []
+  };
+}
+
+export function buildReviewFindings(input: {
+  allSignals?: Array<{ key: string; value: unknown }>;
+  categoryId?: string;
+  issues: CanonicalReviewIssue[];
+  macroEnrichment?: Record<string, unknown> | null;
+  mergedSignals?: Array<{
+    key: string;
+    value: boolean | number | string | string[] | null;
+    selectedPopulation?: { value?: boolean | number | string | string[] | null } | null;
+  }>;
+  hybridEvidenceCache?: HybridRuntimeEvidenceProjectionCache;
+  policyEnrichment?: Array<Record<string, unknown>>;
+  prioritizedAccessibilityRuleRows: AccessibilityRuleEvidenceRow[];
+  runtimeArtifacts?: Record<string, unknown> | null;
+  signalHitRows?: Array<Record<string, unknown>>;
+  snapshot?: Record<string, unknown> | null;
   sectionId: string;
   sectionItems: CanonicalSignalItem[];
   trackerVendors?: TrackerVendorEvidenceRow[];
   validationFindingLookup?: Map<string, ScanValidationFinding>;
+  reviewContext?: ScanReportReviewFindingContext;
 }) {
-  const contradictorySignalPairs = new Map<string, string>([
-    ["privacy.privacy_contact_channel_missing", "privacy.privacy_contact_path_present"],
-    ["accessibility.accessibility_support_path_missing", "accessibility.accessibility_contact_method_present"]
-  ]);
-  const availableSignalKeys = new Set([
-    ...input.sectionItems
+  const reviewContext = input.reviewContext ?? createScanReportReviewFindingContext(input);
+  const sectionSignalKeys = new Set(
+    input.sectionItems
       .filter((item) => isSignalValuePopulated(item.key, item.value))
-      .map((item) => item.key),
-    ...(input.allSignals ?? [])
-      .filter((signal) => isSignalValuePopulated(signal.key, signal.value))
-      .map((signal) => signal.key)
-  ]);
+      .map((item) => item.key)
+  );
   const signalFindings: CanonicalReviewFinding[] = input.sectionItems
     .filter((item) => {
       if (item.relation !== "primary" || !isConcerningSignal(item.key, item.value)) {
         return false;
       }
 
-      const contradictoryPositiveSignalKey = contradictorySignalPairs.get(item.key);
+      const contradictoryPositiveSignalKey = CONTRADICTORY_SIGNAL_PAIRS.get(item.key);
       if (contradictoryPositiveSignalKey) {
-        const mergedPositiveValue = findMergedSignalValue(input.mergedSignals, contradictoryPositiveSignalKey);
+        const mergedPositiveValue = reviewContext.getMergedSignalValue(contradictoryPositiveSignalKey);
         if (
-          availableSignalKeys.has(contradictoryPositiveSignalKey) ||
+          reviewContext.availableSignalKeys.has(contradictoryPositiveSignalKey) ||
+          sectionSignalKeys.has(contradictoryPositiveSignalKey) ||
           isSignalValuePopulated(contradictoryPositiveSignalKey, mergedPositiveValue)
         ) {
           return false;
@@ -2226,14 +2395,8 @@ export function buildReviewFindings(input: {
         ? findValidationFindingForKeys(input.validationFindingLookup, getValidationMatchKeysForSignal(item.key))
         : null;
       const keyPageType = getKeyPageTypeForSignal(item.key);
-      const keyPageSummary =
-        keyPageType
-          ? getKeyPageDiscoveryPageSummary(input.runtimeArtifacts?.key_page_discovery_summary, keyPageType)
-          : null;
-      const accessibilityRuleExamples = getRepresentativeAccessibilityExamplesForSignal({
-        rows: input.prioritizedAccessibilityRuleRows,
-        signalKey: item.key
-      });
+      const keyPageSummary = keyPageType ? reviewContext.getKeyPageSummary(item.key) : null;
+      const accessibilityRuleExamples = reviewContext.getAccessibilityExamples(item.key);
 
       const baseFallbackEvidence = {
         ...(isRightsFrictionSignal(item.key)
@@ -2277,14 +2440,10 @@ export function buildReviewFindings(input: {
             }
           : (item.source === "policy_enrichment_signal" || item.source === "document_semantic_signal") &&
               isPolicyPositiveSignalKey(item.key)
-            ? getPolicySignalFallbackEvidence({
-                mergedSignals: input.mergedSignals,
-                policyEnrichment: input.policyEnrichment ?? [],
-                runtimeArtifacts: input.runtimeArtifacts,
+            ? reviewContext.getPolicySignalFallbackEvidence({
                 signalKey: item.key,
                 signalLabel: item.label,
-                signalValue: item.value,
-                snapshot: input.snapshot
+                signalValue: item.value
               })
           : /privacy\.gpc_signal_not_honored/i.test(item.key)
             ? {
@@ -2315,7 +2474,7 @@ export function buildReviewFindings(input: {
             : /commerce\.(?:high_sensitivity_data_collection_detected|form_collects_(?:ssn|government_id|health_information|financial_information|geolocation))/i.test(item.key)
               ? (
                 buildHighSensitivitySignalFallbackEvidence({
-                  matchedTexts: getSignalHitMatchedTexts(item.key, input.signalHitRows),
+                  matchedTexts: reviewContext.getSignalHitMatchedTexts(item.key),
                   mergedSignals: input.mergedSignals,
                   runtimeArtifacts: input.runtimeArtifacts,
                   signalKey: item.key,
@@ -2390,19 +2549,24 @@ export function buildReviewFindings(input: {
                   ...(/accessibility\.wcag_contrast_failures_count/i.test(item.key) && typeof item.value === "number"
                     ? { count: item.value }
                     : {}),
-                  matchedTexts: getSignalHitMatchedTexts(item.key, input.signalHitRows),
+                  matchedTexts: reviewContext.getSignalHitMatchedTexts(item.key),
                   signalKey: item.key,
                   signalLabel: item.label,
                   signalValue: item.value
                 }),
-        ...getDomainMacroFallbackFields(input.macroEnrichment)
+        ...reviewContext.getMacroFallbackFields()
       };
-      const hybridFallbackEvidence = getHybridSignalFallbackEvidence({
-        runtimeArtifacts: input.runtimeArtifacts,
+      const hybridFallbackInput = {
         signalKey: item.key,
         signalLabel: item.label,
         signalValue: item.value
-      });
+      };
+      const hybridFallbackEvidence = input.hybridEvidenceCache
+        ? input.hybridEvidenceCache.getSignalFallbackEvidence(hybridFallbackInput)
+        : getHybridSignalFallbackEvidence({
+            runtimeArtifacts: input.runtimeArtifacts,
+            ...hybridFallbackInput
+          });
       const fallbackEvidence =
         mergeFallbackEvidenceRecords(baseFallbackEvidence, hybridFallbackEvidence);
 
@@ -2431,41 +2595,7 @@ export function buildReviewFindings(input: {
       }];
     });
 
-  const runtimeDerivedIssues: CanonicalReviewIssue[] = [];
-  if (input.sectionId === "tracking_third_party_ecosystem") {
-    const endpointJurisdictionRows = getEndpointJurisdictionRows(input.runtimeArtifacts);
-    const transferReviewEndpointRows = endpointJurisdictionRows
-      .filter(isTransferReviewEndpointRow)
-      .map(compactEndpointJurisdictionRow)
-      .filter((row) => row.host);
-
-    if (transferReviewEndpointRows.length > 0) {
-      const endpointHosts = uniqueStrings(transferReviewEndpointRows.map((row) => row.host));
-      const endpointRegions = uniqueStrings(transferReviewEndpointRows.map((row) => row.inferredRegion));
-      const endpointCountries = uniqueStrings(transferReviewEndpointRows.map((row) => row.inferredCountryCode));
-      const endpointVendors = uniqueStrings(transferReviewEndpointRows.map((row) => row.matchedVendorName));
-      runtimeDerivedIssues.push({
-        description:
-          `Observed ${transferReviewEndpointRows.length} third-party endpoint${transferReviewEndpointRows.length === 1 ? "" : "s"} with retained jurisdiction or transfer-region evidence that merits international-transfer review.`,
-        evidence: endpointHosts.slice(0, 6),
-        fallbackEvidence: {
-          endpointJurisdictionEvidence: transferReviewEndpointRows,
-          endpoint_jurisdiction_evidence: transferReviewEndpointRows,
-          runtime_vendor_disclosure_evidence: getRuntimeVendorDisclosureEvidence(input.runtimeArtifacts),
-          endpointJurisdictionRows: endpointJurisdictionRows.length,
-          endpointTransferReviewHosts: endpointHosts,
-          endpointTransferReviewRegions: endpointRegions,
-          endpointTransferReviewCountries: endpointCountries,
-          endpointTransferReviewVendors: endpointVendors,
-          supportingSignals: ["privacy.cross_border_endpoint_transfer_review_signal"],
-          transferReviewSignalRows: transferReviewEndpointRows.length,
-          unifiedFindingId: "cross_border_endpoint_transfer_review_signal"
-        },
-        severity: "medium",
-        title: "Cross-border endpoint transfer review signal"
-      });
-    }
-  }
+  const runtimeDerivedIssues = reviewContext.getRuntimeDerivedIssues(input.sectionId);
 
   const allIssues = [...input.issues, ...runtimeDerivedIssues];
   const issueFindings: CanonicalReviewFinding[] = allIssues.map((issue, index) => ({

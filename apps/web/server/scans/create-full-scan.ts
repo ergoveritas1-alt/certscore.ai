@@ -31,8 +31,7 @@ import {
   loadPriorScanAccelerationCandidate,
   loadUsageCounter,
   upsertUsageCounter,
-  updateDomainLatestScan,
-  updateLocalV2DagLambdaDispatchState
+  updateDomainLatestScan
 } from "./repository";
 import { buildQueuedFullScanConfig } from "./full-scan-config";
 import {
@@ -46,16 +45,11 @@ import {
   restrictScanFromForUser
 } from "./restricted-scan-options";
 import {
-  LOCAL_V2_DAG_LAMBDA_DISPATCH_ACCEPTED_EVENT_TYPE,
-  LOCAL_V2_DAG_LAMBDA_DISPATCH_FAILED_EVENT_TYPE,
   LOCAL_V2_DAG_LAMBDA_DISPATCH_REQUESTED_EVENT_TYPE,
-  LOCAL_V2_DAG_LAMBDA_DISPATCH_STARTED_EVENT_TYPE,
-  LocalV2DagLambdaDispatchError,
-  dispatchLocalV2DagLambdaScan,
   isLocalV2DagLambdaIntentSimulated,
   summarizeLocalV2DagLambdaDispatchForEvent
 } from "./local-v2-dag-lambda-dispatch";
-import { dispatchLocalV2DagSimulatedLambdaScan } from "./local-v2-dag-lambda-simulated-dispatch";
+import { runLocalV2DagDispatch, type LocalV2DagDispatchContext } from "./local-v2-dag-dispatch-runner";
 import { resolveRecentScanReuseDecision, RECENT_SCAN_REUSE_WINDOW_HOURS } from "./recent-scan-reuse";
 import { logScanRequestFailure, recordScanRequest, type ScanRequestStatus } from "./scan-request-log";
 import { lookupTrancoRankMetadata } from "./tranco-rank-metadata";
@@ -115,6 +109,7 @@ type QueueFullScanInput = {
     userAgent?: string | null;
   };
   requesterIpContext?: ScanRequesterIpContext | null;
+  scheduleBackgroundTask?: (task: () => Promise<void>) => void;
   scanFrom?: ScanFrom;
   scanThrottleMs?: number;
   source?: string;
@@ -613,88 +608,6 @@ export async function queueFullScanForDomain(input: QueueFullScanInput): Promise
     };
   }
 
-  if (localV2DagLambdaDispatch) {
-    const simulatedLocalLambda = isLocalV2DagLambdaIntentSimulated(scanConfig);
-    await insertQueuedFullScanEvent({
-      domainId: domainRecord.domain.id,
-      eventType: LOCAL_V2_DAG_LAMBDA_DISPATCH_STARTED_EVENT_TYPE,
-      message: "Invoking local v2 DAG Lambda for artifact-only scan execution.",
-      metadataJson: localV2DagLambdaDispatch,
-      organizationId: input.organizationId,
-      scanId: scan.id
-    });
-
-    try {
-      const dispatchResult = await (simulatedLocalLambda
-        ? dispatchLocalV2DagSimulatedLambdaScan
-        : dispatchLocalV2DagLambdaScan)({
-        localCallbackUrl: null,
-        scanConfig,
-        scanId: scan.id
-      });
-      const acceptancePersistenceStartedAtMs = Date.now();
-      await updateLocalV2DagLambdaDispatchState({
-        acceptedAt: new Date().toISOString(),
-        dispatchState: "accepted",
-        invocationRequestId: dispatchResult.invocationRequestId,
-        scanId: scan.id
-      });
-      const acceptancePersistenceMs = Date.now() - acceptancePersistenceStartedAtMs;
-      const eventPersistenceStartedAtMs = Date.now();
-      await insertQueuedFullScanEvent({
-        domainId: domainRecord.domain.id,
-        eventType: LOCAL_V2_DAG_LAMBDA_DISPATCH_ACCEPTED_EVENT_TYPE,
-        message: simulatedLocalLambda
-          ? "Local simulated Lambda completed the v2 DAG artifact-only scan invocation."
-          : "AWS Lambda accepted the local v2 DAG artifact-only scan invocation.",
-        metadataJson: {
-          ...localV2DagLambdaDispatch,
-          invocationRequestId: dispatchResult.invocationRequestId,
-          invocationStatusCode: dispatchResult.invocationStatusCode,
-          invocationType: dispatchResult.invocationType,
-          dispatchTimings: {
-            ...dispatchResult.timings,
-            acceptancePersistenceMs
-          },
-          simulatedLocalLambda,
-          productionFindingIntegration: false
-        },
-        organizationId: input.organizationId,
-        scanId: scan.id
-      });
-      console.info(JSON.stringify({
-        ...dispatchResult.timings,
-        acceptancePersistenceMs,
-        event: "scan.lambda_dispatch_timing",
-        eventPersistenceMs: Date.now() - eventPersistenceStartedAtMs,
-        scanId: scan.id
-      }));
-    } catch (error) {
-      const message = error instanceof Error ? error.message : "Local v2 DAG Lambda dispatch failed.";
-      const dispatchState = error instanceof LocalV2DagLambdaDispatchError ? error.dispatchState : "failed";
-      await updateLocalV2DagLambdaDispatchState({ dispatchState, errorMessage: message, scanId: scan.id });
-      await insertQueuedFullScanEvent({
-        domainId: domainRecord.domain.id,
-        eventType: LOCAL_V2_DAG_LAMBDA_DISPATCH_FAILED_EVENT_TYPE,
-        message: "Local v2 DAG Lambda dispatch failed; no fallback scanner execution was started.",
-        metadataJson: {
-          ...localV2DagLambdaDispatch,
-          errorMessage: message,
-          dispatchState,
-          dispatchTimings: error instanceof LocalV2DagLambdaDispatchError ? error.timings : null,
-          productionFindingIntegration: false
-        },
-        organizationId: input.organizationId,
-        scanId: scan.id
-      });
-
-      return {
-        error: message,
-        scanId: scan.id
-      };
-    }
-  }
-
   try {
     await updateDomainLatestScan({
       domainId: domainRecord.domain.id,
@@ -706,6 +619,47 @@ export async function queueFullScanForDomain(input: QueueFullScanInput): Promise
       error: error instanceof Error ? error.message : "Scan created but latest scan update failed.",
       scanId: scan.id
     };
+  }
+
+  if (localV2DagLambdaDispatch) {
+    const dispatchContext: LocalV2DagDispatchContext = {
+      domainId: domainRecord.domain.id,
+      localV2DagLambdaDispatch,
+      organizationId: input.organizationId,
+      scanConfig,
+      scanId: scan.id,
+      simulatedLocalLambda: isLocalV2DagLambdaIntentSimulated(scanConfig)
+    };
+    if (dispatchContext.simulatedLocalLambda && input.scheduleBackgroundTask) {
+      try {
+        input.scheduleBackgroundTask(async () => {
+          const error = await runLocalV2DagDispatch(dispatchContext);
+          if (error) {
+            console.error("[web] deferred local v2 DAG simulated Lambda dispatch failed", {
+              error,
+              scanId: scan.id
+            });
+          }
+        });
+        return {
+          error: null,
+          scanId: scan.id
+        };
+      } catch (error) {
+        console.warn("[web] local v2 DAG background scheduling failed; awaiting dispatch in request", {
+          error: error instanceof Error ? error.message : String(error),
+          scanId: scan.id
+        });
+      }
+    }
+
+    const dispatchError = await runLocalV2DagDispatch(dispatchContext);
+    if (dispatchError) {
+      return {
+        error: dispatchError,
+        scanId: scan.id
+      };
+    }
   }
 
   if (localV2DagLambdaDispatch) {

@@ -6921,14 +6921,12 @@ function mergeUnifiedFindingDetails(
   }
 }
 
-function finalizeUnifiedFindingPacket(input: {
+function mergeUnifiedFindingCandidateEvidence(input: {
   candidate: ConcernBackedUnifiedFindingCandidate;
   fallbackEvidence: ReturnType<typeof extractEvidenceFromFallback>;
-  fallbackEvidenceRows: Array<Record<string, unknown> | null | undefined>;
   findingId: string;
   linkedValidationFinding?: ScanValidationFinding | null;
   packet: UnifiedFindingPacket;
-  validationFindings: ScanValidationFinding[];
 }) {
   input.packet.evidence = mergeEvidence(
     input.packet.evidence,
@@ -6962,6 +6960,13 @@ function finalizeUnifiedFindingPacket(input: {
       summary: input.candidate.description
     })
   );
+}
+
+function finalizeUnifiedFindingPacketConfidence(input: {
+  fallbackEvidenceRows: Array<Record<string, unknown> | null | undefined>;
+  packet: UnifiedFindingPacket;
+  validationFindings: ScanValidationFinding[];
+}) {
   input.packet.confidenceInputs = deriveConfidenceInputs({
     fallbackEvidenceRows: input.fallbackEvidenceRows,
     packet: input.packet,
@@ -7248,19 +7253,16 @@ export function buildUnifiedFindingPackets(input: {
       );
     }
 
-    fallbackEvidenceByPacket.set(findingId, [
-      ...(fallbackEvidenceByPacket.get(findingId) ?? []),
-      candidate.fallbackEvidence
-    ]);
+    const fallbackEvidenceRows = fallbackEvidenceByPacket.get(findingId) ?? [];
+    fallbackEvidenceRows.push(candidate.fallbackEvidence);
+    fallbackEvidenceByPacket.set(findingId, fallbackEvidenceRows);
     nextPacket.concernContext = mergeConcernContext(existing?.concernContext, candidate);
-    finalizeUnifiedFindingPacket({
+    mergeUnifiedFindingCandidateEvidence({
       candidate,
       fallbackEvidence,
-      fallbackEvidenceRows: fallbackEvidenceByPacket.get(findingId) ?? [],
       findingId,
       linkedValidationFinding,
-      packet: nextPacket,
-      validationFindings: validationByPacket.get(findingId) ?? []
+      packet: nextPacket
     });
     packets.set(findingId, nextPacket);
   };
@@ -7273,6 +7275,14 @@ export function buildUnifiedFindingPackets(input: {
     }
 
     addCandidate(mappedFinding.id, candidate, candidate.linkedValidationFinding ?? null);
+  }
+
+  for (const [findingId, packet] of packets) {
+    finalizeUnifiedFindingPacketConfidence({
+      fallbackEvidenceRows: fallbackEvidenceByPacket.get(findingId) ?? [],
+      packet,
+      validationFindings: validationByPacket.get(findingId) ?? []
+    });
   }
 
   return [...packets.values()].sort(compareUnifiedFindingPackets);
@@ -7330,7 +7340,10 @@ export function buildUnifiedFindingDisplayPackets(input: {
     surfacingEvaluation.debugDecisions.map((decision) => [decision.unifiedFindingId, decision] as const)
   );
 
-  const displayPackets = calibratedPackets.map((packet, _index, rows): UnifiedFindingDisplayPacket => {
+  const canonicalPresentationInputs = calibratedPackets.map((packet) =>
+    buildCanonicalPresentationSiblingInput(packet)
+  );
+  const displayPackets = calibratedPackets.map((packet, index): UnifiedFindingDisplayPacket => {
     const linkedValidationFinding = resolveLinkedValidationFindingForPacket(packet, input.validationFindingLookup);
     const surfacingDecision =
       surfacingDecisionById.get(packet.unifiedFindingId) ??
@@ -7349,10 +7362,9 @@ export function buildUnifiedFindingDisplayPackets(input: {
         usedFindingOverride: false
       } satisfies UnifiedFindingSurfacingDecision);
 
-    const siblingRows = rows.filter((row) => row.unifiedFindingId !== packet.unifiedFindingId);
     const presentation = buildCanonicalReviewFindingPresentation(
       buildCanonicalPresentationInput(packet, linkedValidationFinding),
-      siblingRows.map((row) => buildCanonicalPresentationSiblingInput(row))
+      canonicalPresentationInputs.filter((_row, siblingIndex) => siblingIndex !== index)
     );
     const presentationDecision = buildLegacyPresentationDecisionFromSurfacing({
       coverageSummary: input.coverageSummary,

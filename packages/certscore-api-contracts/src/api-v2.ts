@@ -54,7 +54,19 @@ export const apiV2ErrorSchema = z
         message: z.string(),
         retryable: z.boolean(),
         retryAfterSeconds: z.number().int().nullable(),
-        recommendedNextAction: z.string()
+        recommendedNextAction: z.string(),
+        rateLimit: z
+          .object({
+            limitUnits: z.number().int().positive(),
+            policyVersion: z.string(),
+            profile: z.enum(["terminal", "status"]),
+            requestedUnits: z.number().int().positive(),
+            scope: z.enum(["callerTarget", "target", "caller"]),
+            usedUnits: z.number().int().nonnegative(),
+            windowId: z.enum(["burst", "daily"]),
+            windowSeconds: z.number().int().positive()
+          })
+          .optional()
       })
       .passthrough(),
     links: apiV2LinksSchema.optional(),

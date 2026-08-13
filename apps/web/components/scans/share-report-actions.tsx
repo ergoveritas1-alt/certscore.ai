@@ -18,10 +18,42 @@ const initialSendReportEmailActionState: SendReportEmailActionState = {
 };
 
 export const VISUAL_EVIDENCE_RETRY_DELAYS_MS = [1_000, 2_000, 4_000, 8_000, 15_000] as const;
+export const VISUAL_EVIDENCE_MIN_ZOOM = 0.5;
+export const VISUAL_EVIDENCE_MAX_ZOOM = 10;
+export const VISUAL_EVIDENCE_ZOOM_STEP = 0.25;
 
-export function buildVisualEvidenceRetryHref(href: string, attempt: number) {
+export function buildVisualEvidenceRetryHref(href: string, attempt: number, refreshToken?: number) {
+  const params = new URLSearchParams({ visualEvidenceAttempt: String(attempt) });
+  if (refreshToken !== undefined) {
+    params.set("visualEvidenceRefresh", String(refreshToken));
+  }
   const separator = href.includes("?") ? "&" : "?";
-  return `${href}${separator}visualEvidenceAttempt=${attempt}`;
+  return `${href}${separator}${params.toString()}`;
+}
+
+export function calculateVisualEvidenceFit(input: {
+  containerWidth: number;
+  naturalHeight: number;
+  naturalWidth: number;
+  viewportHeight: number;
+}) {
+  if (
+    input.containerWidth <= 0 ||
+    input.naturalHeight <= 0 ||
+    input.naturalWidth <= 0 ||
+    input.viewportHeight <= 0
+  ) {
+    return null;
+  }
+
+  const availableWidth = Math.max(1, input.containerWidth - 32);
+  const availableHeight = Math.max(1, input.viewportHeight * 0.72);
+  const fitScale = Math.min(1, availableWidth / input.naturalWidth, availableHeight / input.naturalHeight);
+
+  return {
+    height: input.naturalHeight * fitScale,
+    width: input.naturalWidth * fitScale
+  };
 }
 
 function actionClassName(tone: "primary" | "secondary" = "secondary") {
@@ -46,9 +78,11 @@ function iconActionClassName(tone: "primary" | "secondary" = "secondary") {
   return `${base} text-slate-700 hover:text-slate-950`;
 }
 
-function IconTooltip({ label }: { label: string }) {
+function IconTooltip({ align = "center", label }: { align?: "center" | "start"; label: string }) {
+  const positionClass = align === "start" ? "left-0 translate-x-0" : "left-1/2 -translate-x-1/2";
+
   return (
-    <span className="pointer-events-none absolute left-1/2 top-full z-20 mt-2 -translate-x-1/2 whitespace-nowrap rounded-md border border-slate-200 bg-white px-2.5 py-1 text-xs font-semibold text-slate-700 opacity-0 shadow-lg transition-opacity group-hover:opacity-100 group-focus-visible:opacity-100">
+    <span className={`pointer-events-none absolute ${positionClass} top-full z-20 mt-2 whitespace-nowrap rounded-md border border-slate-200 bg-white px-2.5 py-1 text-xs font-semibold text-slate-700 opacity-0 shadow-lg transition-opacity group-hover:opacity-100 group-focus-visible:opacity-100`}>
       {label}
     </span>
   );
@@ -203,7 +237,11 @@ export function ShareReportActions({
   const [isVisualEvidenceImageLoading, setIsVisualEvidenceImageLoading] = useState(false);
   const [visualEvidenceImageFailed, setVisualEvidenceImageFailed] = useState(false);
   const [visualEvidenceLoadAttempt, setVisualEvidenceLoadAttempt] = useState(0);
+  const [visualEvidenceRefreshToken, setVisualEvidenceRefreshToken] = useState(0);
   const [visualEvidenceZoom, setVisualEvidenceZoom] = useState(1);
+  const [visualEvidenceFitSize, setVisualEvidenceFitSize] = useState<{ height: number; width: number } | null>(null);
+  const visualEvidenceImageRef = useRef<HTMLImageElement | null>(null);
+  const visualEvidenceViewerRef = useRef<HTMLDivElement | null>(null);
   const visualEvidenceRetryTimerRef = useRef<number | null>(null);
   const [emailState, emailAction, isEmailPending] = useActionState(
     sendReportEmailAction,
@@ -220,6 +258,34 @@ export function ShareReportActions({
   useEffect(() => {
     setCurrentUrl(window.location.href);
   }, []);
+
+  useEffect(() => {
+    if (!isVisualEvidenceDialogOpen) {
+      return;
+    }
+
+    const updateFitSize = () => {
+      const image = visualEvidenceImageRef.current;
+      const viewer = visualEvidenceViewerRef.current;
+      if (!image || !viewer) {
+        return;
+      }
+
+      const fitSize = calculateVisualEvidenceFit({
+        containerWidth: viewer.clientWidth,
+        naturalHeight: image.naturalHeight,
+        naturalWidth: image.naturalWidth,
+        viewportHeight: window.innerHeight
+      });
+      if (fitSize) {
+        setVisualEvidenceFitSize(fitSize);
+      }
+    };
+
+    updateFitSize();
+    window.addEventListener("resize", updateFitSize);
+    return () => window.removeEventListener("resize", updateFitSize);
+  }, [isVisualEvidenceDialogOpen]);
 
   useEffect(() => {
     if (emailState.success) {
@@ -247,6 +313,7 @@ export function ShareReportActions({
   function retryVisualEvidenceNow() {
     beginVisualEvidenceLoad();
     setVisualEvidenceLoadAttempt(0);
+    setVisualEvidenceRefreshToken((value) => value + 1);
   }
 
   function closeVisualEvidenceDialog() {
@@ -305,7 +372,7 @@ export function ShareReportActions({
               title="Copy link to report"
             >
               <ShareIcon />
-              <IconTooltip label={copyState === "copied" ? "Report URL copied" : "Copy link to report"} />
+              <IconTooltip align="start" label={copyState === "copied" ? "Report URL copied" : "Copy link to report"} />
             </button>
             <button
               type="button"
@@ -345,6 +412,7 @@ export function ShareReportActions({
               setVisualEvidenceLoadAttempt(0);
               beginVisualEvidenceLoad();
               setVisualEvidenceZoom(1);
+              setVisualEvidenceFitSize(null);
               setIsVisualEvidenceDialogOpen(true);
             }}
             title="View screengrab"
@@ -427,10 +495,19 @@ export function ShareReportActions({
                 <div className="flex items-center overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
                   <button
                     type="button"
+                    aria-label="Force refresh captured image"
+                    className="scan-report-button inline-flex h-10 items-center justify-center border-r border-slate-200 px-3 text-xs font-semibold text-slate-600 hover:text-slate-950"
+                    onClick={retryVisualEvidenceNow}
+                    title="Force refresh image"
+                  >
+                    Refresh
+                  </button>
+                  <button
+                    type="button"
                     aria-label="Zoom out captured image"
                     className="scan-report-button inline-flex h-10 w-10 items-center justify-center text-slate-600 hover:text-slate-950 disabled:cursor-not-allowed disabled:text-slate-300"
-                    disabled={visualEvidenceZoom <= 0.5}
-                    onClick={() => setVisualEvidenceZoom((value) => Math.max(0.5, Number((value - 0.25).toFixed(2))))}
+                    disabled={visualEvidenceZoom <= VISUAL_EVIDENCE_MIN_ZOOM}
+                    onClick={() => setVisualEvidenceZoom((value) => Math.max(VISUAL_EVIDENCE_MIN_ZOOM, Number((value - VISUAL_EVIDENCE_ZOOM_STEP).toFixed(2))))}
                     title="Zoom out"
                   >
                     <ZoomOutIcon />
@@ -448,8 +525,8 @@ export function ShareReportActions({
                     type="button"
                     aria-label="Zoom in captured image"
                     className="scan-report-button inline-flex h-10 w-10 items-center justify-center text-slate-600 hover:text-slate-950 disabled:cursor-not-allowed disabled:text-slate-300"
-                    disabled={visualEvidenceZoom >= 3}
-                    onClick={() => setVisualEvidenceZoom((value) => Math.min(3, Number((value + 0.25).toFixed(2))))}
+                    disabled={visualEvidenceZoom >= VISUAL_EVIDENCE_MAX_ZOOM}
+                    onClick={() => setVisualEvidenceZoom((value) => Math.min(VISUAL_EVIDENCE_MAX_ZOOM, Number((value + VISUAL_EVIDENCE_ZOOM_STEP).toFixed(2))))}
                     title="Zoom in"
                   >
                     <ZoomInIcon />
@@ -465,7 +542,7 @@ export function ShareReportActions({
                 </button>
               </div>
             </div>
-            <div className="relative min-h-[18rem] flex-1 overflow-auto bg-slate-950/95 p-4">
+            <div ref={visualEvidenceViewerRef} className="relative min-h-[18rem] flex-1 overflow-auto bg-slate-950/95 p-4">
               {isVisualEvidenceImageLoading ? (
                 <div className="absolute inset-0 flex items-center justify-center">
                   <div className="inline-flex items-center gap-3 rounded-full border border-slate-700 bg-slate-900/90 px-4 py-3 text-sm font-semibold text-slate-100 shadow-xl">
@@ -490,16 +567,31 @@ export function ShareReportActions({
                 <img
                   alt={`Captured scan evidence for ${domainLabel}`}
                   className={`mx-auto block rounded-lg bg-white object-contain shadow-lg transition-opacity duration-150 ${isVisualEvidenceImageLoading ? "opacity-0" : "opacity-100"}`}
+                  ref={visualEvidenceImageRef}
                   onError={handleVisualEvidenceLoadError}
                   onLoad={() => {
                     setIsVisualEvidenceImageLoading(false);
                     setVisualEvidenceImageFailed(false);
+                    const image = visualEvidenceImageRef.current;
+                    const viewer = visualEvidenceViewerRef.current;
+                    if (image && viewer) {
+                      const fitSize = calculateVisualEvidenceFit({
+                        containerWidth: viewer.clientWidth,
+                        naturalHeight: image.naturalHeight,
+                        naturalWidth: image.naturalWidth,
+                        viewportHeight: window.innerHeight
+                      });
+                      if (fitSize) {
+                        setVisualEvidenceFitSize(fitSize);
+                      }
+                    }
                   }}
-                  src={buildVisualEvidenceRetryHref(visualEvidenceHref, visualEvidenceLoadAttempt)}
+                  src={buildVisualEvidenceRetryHref(visualEvidenceHref, visualEvidenceLoadAttempt, visualEvidenceRefreshToken)}
                   style={{
-                    maxHeight: visualEvidenceZoom === 1 ? "72vh" : "none",
-                    maxWidth: visualEvidenceZoom === 1 ? "100%" : "none",
-                    width: `${visualEvidenceZoom * 100}%`
+                    height: visualEvidenceFitSize ? `${visualEvidenceFitSize.height * visualEvidenceZoom}px` : "auto",
+                    maxHeight: visualEvidenceFitSize ? "none" : "72vh",
+                    maxWidth: visualEvidenceFitSize ? "none" : "100%",
+                    width: visualEvidenceFitSize ? `${visualEvidenceFitSize.width * visualEvidenceZoom}px` : "auto"
                   }}
                 />
               )}

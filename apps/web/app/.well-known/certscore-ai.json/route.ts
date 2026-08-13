@@ -1,3 +1,5 @@
+import { API_READ_RATE_POLICY_OPENAPI_EXTENSION } from "@website-signal-risk-scanner/shared";
+
 const discoveryDocument = {
   name: "CertScore AI and API discovery",
   version: "2026-07-15",
@@ -218,6 +220,7 @@ const discoveryDocument = {
   },
   rateLimits: {
     docs: "https://certscore.ai/developers/reference",
+    readPolicy: API_READ_RATE_POLICY_OPENAPI_EXTENSION,
     retryAfter:
       "HTTP 202 pending responses and HTTP 429 throttled responses may include Retry-After. Agents and SDKs should honor Retry-After rather than tight polling."
   },

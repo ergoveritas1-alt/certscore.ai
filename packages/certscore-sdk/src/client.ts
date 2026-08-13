@@ -465,7 +465,14 @@ export class CertScoreClient {
       const delay = Math.min(retryDelayMs(status, undefined, fallbackMs), Math.max(0, options.maxWaitMs - elapsedMs));
       await sleep(delay, options.signal);
 
-      const response = await this.fetch(this.scanResourceStatusUrlFor(status), { signal: options.signal });
+      let response = await this.fetch(this.scanResourceStatusUrlFor(status), { signal: options.signal });
+      // API v2 creation can return a durable scanId before the public scan
+      // resource has materialized. During that bounded window, keep following
+      // the already-accepted job instead of turning a transient 404 into a
+      // failed wait or encouraging a duplicate scan submission.
+      if (response.status === 404 && status.jobId) {
+        response = await this.fetch(this.statusUrlFor(status), { signal: options.signal });
+      }
       if (response.status === 202 || response.status === 200 || response.status === 429) {
         status = (await response.json()) as JobStatus;
         options.onStatusUpdate?.(status);

@@ -56,6 +56,11 @@ function projectionNotReadyReason(error: unknown) {
   return /^[a-z0-9_:-]{1,120}$/i.test(reason) ? reason : "unspecified";
 }
 
+function isStaleProjectionSourceError(error: unknown) {
+  if (!error || typeof error !== "object") return false;
+  return (error as Record<string, unknown>).name === "StaleScanReportProjectionSourceError";
+}
+
 export function classifyScoreMaterializationFailure(error: unknown): MaterializationFailureDisposition {
   const chain = errorChain(error);
   if (chain.some(isProjectionTooLargeError)) {
@@ -70,6 +75,14 @@ export function classifyScoreMaterializationFailure(error: unknown): Materializa
     return {
       code: "materialization_not_ready",
       diagnostic: `materialization_not_ready:${notReadyReason}`,
+      retryAfterSeconds: MATERIALIZATION_NOT_READY_RETRY_SECONDS,
+      retryable: true,
+    };
+  }
+  if (chain.some(isStaleProjectionSourceError)) {
+    return {
+      code: "materialization_not_ready",
+      diagnostic: "materialization_not_ready:stale_projection_source",
       retryAfterSeconds: MATERIALIZATION_NOT_READY_RETRY_SECONDS,
       retryable: true,
     };

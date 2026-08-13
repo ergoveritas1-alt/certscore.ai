@@ -5,10 +5,10 @@ import { bootstrapAppUserSession, type BootstrapSessionUser } from "../bootstrap
 import { createUserWorkspaceIdentity } from "../company/workspace-identity";
 import { ensureOrganizationForUser } from "../users/repository";
 
-export async function provisionSelfServeUserSession(user: BootstrapSessionUser): Promise<void> {
+export async function provisionSelfServeUserSession(user: BootstrapSessionUser) {
   const context = await bootstrapAppUserSession(user);
   if (context.membership) {
-    return;
+    return context;
   }
 
   const workspace = createUserWorkspaceIdentity(context.profile.email);
@@ -17,4 +17,6 @@ export async function provisionSelfServeUserSession(user: BootstrapSessionUser):
     role: DEFAULT_NEW_MEMBERSHIP_ROLE,
     userId: context.user.id
   });
+
+  return context;
 }

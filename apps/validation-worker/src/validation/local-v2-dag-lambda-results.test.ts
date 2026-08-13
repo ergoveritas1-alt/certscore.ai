@@ -348,6 +348,8 @@ test("validation worker Lambda result poller retains leases and bounds result co
   assert.match(source, /pollIndex < RESULT_QUEUE_POLL_CONCURRENCY/);
   assert.match(source, /startCompletedResultFinalization/);
   assert.match(source, /resultFinalizationBackgroundTasks/);
+  assert.match(source, /if \(received === 0\) \{\s*await sleep\(options\.pollMs\)/);
+  assert.match(source, /validation\.v2_lambda_result\.handoff/);
   assert.doesNotMatch(source, /Promise\.all\(queueUrls\.map/);
 });
 
@@ -369,9 +371,42 @@ test("validation worker frees result poll capacity after retaining the terminal 
   assert.ok(scoreIndex > policyIndex, "score materialization remains canonical downstream work");
   assert.match(source, /reconcilePersistedCompletedResultFinalizations/);
   assert.match(source, /artifactVerification,verifiedAt/);
-  assert.match(source, /coalesce\(request\.attempt_count, 0\) asc/);
-  assert.match(source, /coalesce\(request\.requested_at, result\.result_created_at\) asc/);
+  assert.match(source, /request\.next_attempt_at <= now\(\)/);
+  assert.match(source, /order by request\.next_attempt_at asc/);
+  assert.match(source, /where request\.scan_id is null/);
+  assert.match(source, /MATERIALIZATION_MISSING_REQUEST_DISCOVERY_INTERVAL_MS\s*=\s*300_000/);
+  assert.match(source, /includeMissingRequests/);
   assert.doesNotMatch(source, /order by result\.scan_id, result\.created_at desc\s+limit 25/);
+});
+
+test("unified completion durably queues and immediately dispatches canonical report publication", async () => {
+  const [indexSource, pipelineSource, repositorySource, resultSource] = await Promise.all([
+    readFile("apps/validation-worker/src/index.ts", "utf8"),
+    readFile("apps/validation-worker/src/validation/pipeline.ts", "utf8"),
+    readFile("apps/validation-worker/src/validation/repository.ts", "utf8"),
+    readFile("apps/validation-worker/src/validation/local-v2-dag-lambda-results.ts", "utf8"),
+  ]);
+
+  const completionInsert = repositorySource.indexOf("with completed_event as");
+  const durableRequestInsert = repositorySource.indexOf(
+    "insert into public.scan_score_materialization_requests",
+    completionInsert,
+  );
+  assert.ok(completionInsert >= 0, "expected a canonical unified-completion event insert");
+  assert.ok(
+    durableRequestInsert > completionInsert,
+    "the completion event and publication request must share one atomic statement",
+  );
+  assert.match(repositorySource, /repeat\('0', 64\)/);
+  assert.match(repositorySource, /where scan\.status = 'completed'/);
+  assert.match(repositorySource, /where public\.scan_score_materialization_requests\.status = 'pending'/);
+  assert.match(pipelineSource, /appendUnifiedFindingsCompletionAndQueueReportMaterialization/);
+  assert.match(pipelineSource, /requireDurableCompletionEvent:\s*true/);
+  assert.match(pipelineSource, /immediate report materialization dispatch failed/);
+  assert.match(resultSource, /scoreMaterializationInFlight/);
+  assert.match(resultSource, /REPORT_FINALIZATION_DURABLE_RECOVERY_SWEEP_MS\s*=\s*2_000/);
+  assert.match(resultSource, /MATERIALIZATION_MISSING_REQUEST_DISCOVERY_INTERVAL_MS\s*=\s*300_000/);
+  assert.match(indexSource, /startPersistedCompletedResultFinalizationRecovery/);
 });
 
 test("validation worker owns projection finalization across the result-to-findings race", async () => {
@@ -432,14 +467,18 @@ test("validation worker durably retains results before acknowledgement and mater
   assert.match(source, /result\.complete !== true/);
   assert.match(source, /scoreMaterializationState/);
   assert.match(source, /status = 'completed'/);
-  assert.match(source, /for \(const mode of \["publish_report", "finalize"\] as const\)/);
-  assert.match(source, /result\.reportReady !== true/);
+  assert.match(source, /for \(const mode of \["publish_and_finalize"\] as const\)/);
+  assert.doesNotMatch(source, /result\.reportReady !== true/);
   assert.doesNotMatch(source, /async function completedScoreMaterializationExists[\s\S]*?scan_score_assessments/);
   assert.match(source, /response\.status === 422 && failure\?\.retryable === false/);
   assert.match(source, /terminal score materialization failure acknowledged/);
   assert.match(source, /existingState === "terminal_failure"/);
   assert.match(source, /claimedState === "terminal_failure"/);
   assert.match(source, /where public\.scan_score_materialization_requests\.status = 'pending'/);
+  assert.match(source, /token_sha256 = repeat\('0', 64\)/);
+  assert.match(source, /last_attempt_at is null/);
+  assert.match(source, /last_attempt_at = now\(\)/);
+  assert.match(source, /next_attempt_at = now\(\)/);
   assert.doesNotMatch(source, /status <> 'completed'/);
 });
 

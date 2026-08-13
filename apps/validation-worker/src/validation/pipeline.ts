@@ -10,6 +10,7 @@ import {
 } from "../../../../packages/shared/src/known-cmps";
 import {
   appendScanWorkflowEvent,
+  appendUnifiedFindingsCompletionAndQueueReportMaterialization,
   claimNextAutomaticTarget,
   createScanForValidationRun,
   createValidationRun,
@@ -37,6 +38,7 @@ import {
   updateValidationRun,
   upsertValidationVerdict
 } from "./repository";
+import { ensureCompletedScanScoresPersisted } from "./local-v2-dag-lambda-results";
 import {
   validateFindingsBatchWithLlm,
   type BatchedValidationVerdict
@@ -75,11 +77,9 @@ import {
 
 export { buildNanoDocCandidateUrls, selectNanoDocCandidates } from "./nano-document-discovery";
 
-const VALIDATION_SCAN_HANDOFF_POLL_MS = 5_000;
 const NANO_DOC_RETRIEVAL_POLL_MS = 1_000;
 const MAX_NANO_DOC_RETRIEVAL_POLLS = 20;
-const NANO_SIGNAL_POLICY_ROW_RECHECK_MS = 250;
-const NANO_SIGNAL_TERMINAL_STATUS_RECHECK_MS = 1_000;
+export const NANO_SIGNAL_STALE_SAFETY_RECHECK_MS = 5 * 60_000;
 const NANO_SIGNAL_ENRICHMENT_POLL_MS = 2_000;
 const MAX_NANO_SIGNAL_ENRICHMENT_POLLS = 20;
 const NANO_DOCUMENT_EXTRACTION_BATCH_SIZE = 4;
@@ -407,6 +407,9 @@ async function deriveAndPersistUnifiedFindingsForScan(input: {
   }).catch(() => undefined);
 
   const findings = await deriveUnifiedFindingsWithWorkflowEvents({
+    appendEvent: (event) => event.eventType === SCAN_EVENT_TYPES.unifiedFindingsDerivedCompleted
+      ? appendUnifiedFindingsCompletionAndQueueReportMaterialization(event)
+      : appendScanWorkflowEvent(event),
     completionMetadata: (findings) => ({
       cookieDisclosureGapDiagnostic: deriveCookieDisclosureGapDiagnostic(
         {
@@ -418,11 +421,20 @@ async function deriveAndPersistUnifiedFindingsForScan(input: {
       ...(input.recoveryMode ? { recoveryMode: input.recoveryMode } : {})
     }),
     deriveFindings: () => deriveValidationFindings(refreshedArtifacts),
+    persistFindings: async (derivedFindings) => {
+      const targetRun = input.validationRunId
+        ? { id: input.validationRunId }
+        : await ensureCompletedValidationRunForScan(input.scanId);
+      // Canonical report publication persists the exact customer-visible
+      // report_finding_count. Rebuilding the report state here would duplicate
+      // that complete projection immediately before publication.
+      await replaceValidationRunFindings(targetRun.id, derivedFindings, {
+        persistReportFindingCount: false
+      });
+    },
+    requireDurableCompletionEvent: true,
     scanId: input.scanId
   });
-
-  const targetRun = input.validationRunId ? { id: input.validationRunId } : await ensureCompletedValidationRunForScan(input.scanId);
-  await replaceValidationRunFindings(targetRun.id, findings);
 
   return findings;
 }
@@ -621,15 +633,18 @@ export async function deriveUnifiedFindingsWithWorkflowEvents<TFinding extends {
   appendEvent?: UnifiedFindingsWorkflowEventAppender;
   completionMetadata?: (findings: TFinding[]) => Record<string, unknown>;
   deriveFindings: () => TFinding[];
+  persistFindings?: (findings: TFinding[]) => Promise<void>;
+  requireDurableCompletionEvent?: boolean;
   scanId: string;
 }) {
   const appendEvent = input.appendEvent ?? appendScanWorkflowEvent;
 
   try {
     const findings = input.deriveFindings();
+    await input.persistFindings?.(findings);
     const extraMetadata = input.completionMetadata?.(findings) ?? {};
 
-    await appendEvent({
+    const completionEvent = appendEvent({
       eventType: SCAN_EVENT_TYPES.unifiedFindingsDerivedCompleted,
       message: "Unified finding derivation completed.",
       metadataJson: {
@@ -638,7 +653,12 @@ export async function deriveUnifiedFindingsWithWorkflowEvents<TFinding extends {
         stage: "unified_findings"
       },
       scanId: input.scanId
-    }).catch(() => undefined);
+    });
+    if (input.requireDurableCompletionEvent) {
+      await completionEvent;
+    } else {
+      await completionEvent.catch(() => undefined);
+    }
 
     return findings;
   } catch (error) {
@@ -6555,7 +6575,28 @@ export async function processNanoSignalEnrichmentJob(input: {
 
   const scanId = input.scanId;
   const pollCount = input.pollCount ?? 0;
-  let artifacts = await loadNanoSignalEnrichmentInputs(scanId);
+  const phaseDurationsMs: Record<string, number> = {};
+  const measureNanoPhase = async <T>(phase: string, run: () => Promise<T>): Promise<T> => {
+    const startedAtMs = performance.now();
+    let outcome: "completed" | "failed" = "completed";
+    try {
+      return await run();
+    } catch (error) {
+      outcome = "failed";
+      throw error;
+    } finally {
+      const durationMs = Math.max(0, performance.now() - startedAtMs);
+      phaseDurationsMs[phase] = (phaseDurationsMs[phase] ?? 0) + durationMs;
+      console.info(JSON.stringify({
+        durationMs: Math.round(durationMs),
+        event: "validation.nano_signal.phase",
+        outcome,
+        phase,
+        scanId
+      }));
+    }
+  };
+  let artifacts = await measureNanoPhase("load_inputs", () => loadNanoSignalEnrichmentInputs(scanId));
   const scanStatus = typeof artifacts.scan?.status === "string" ? artifacts.scan.status : null;
   const startedAt =
     typeof artifacts.scan?.started_at === "string"
@@ -6593,10 +6634,12 @@ export async function processNanoSignalEnrichmentJob(input: {
   });
   const reusableExtractions = resolveReusableNanoDocumentExtractions({
     candidates: selectedPendingDocumentSources,
-    priorExtractions: await loadReusableNanoDocumentExtractions({
-      rows: selectedPendingDocumentSources,
-      scanId
-    })
+    priorExtractions: selectedPendingDocumentSources.length > 0
+      ? await measureNanoPhase("load_reusable_extractions", () => loadReusableNanoDocumentExtractions({
+          rows: selectedPendingDocumentSources,
+          scanId
+        }))
+      : []
   });
   const reusableExtractionCandidateCount = selectedPendingDocumentSources.length;
   const reusableExtractionAvoidedCharacterCount = selectedPendingDocumentSources.reduce((sum, row) => {
@@ -6708,14 +6751,16 @@ export async function processNanoSignalEnrichmentJob(input: {
     });
   }
 
+  let lastPersistedNanoSignalRows: Awaited<ReturnType<typeof persistDerivedNanoPolicySignals>> | null = null;
+  let artifactsChangedAfterSignalPersistence = false;
   if (artifacts.policySemanticRows.length > 0) {
-    await persistDerivedNanoPolicySignals({
+    lastPersistedNanoSignalRows = await measureNanoPhase("persist_initial_signals", () => persistDerivedNanoPolicySignals({
       policySemanticRows: artifacts.policySemanticRows,
       policyReviewQueue: artifacts.policyReviewQueue,
       runtimeArtifacts: artifacts.runtimeArtifacts,
       scanId,
       snapshot: artifacts.snapshot
-    });
+    }));
   }
 
   if (selectedPendingDocumentSources.length > 0) {
@@ -6771,15 +6816,17 @@ export async function processNanoSignalEnrichmentJob(input: {
         });
 
         artifacts = await loadNanoSignalEnrichmentInputs(scanId);
+        artifactsChangedAfterSignalPersistence = true;
 
         if (!partialSignalsPersisted && artifacts.policySemanticRows.length > 0) {
-          await persistDerivedNanoPolicySignals({
+          lastPersistedNanoSignalRows = await measureNanoPhase("persist_partial_signals", () => persistDerivedNanoPolicySignals({
             policySemanticRows: artifacts.policySemanticRows,
             policyReviewQueue: artifacts.policyReviewQueue,
             runtimeArtifacts: artifacts.runtimeArtifacts,
             scanId,
             snapshot: artifacts.snapshot
-          });
+          }));
+          artifactsChangedAfterSignalPersistence = false;
           partialSignalsPersisted = true;
         }
       }
@@ -6823,6 +6870,7 @@ export async function processNanoSignalEnrichmentJob(input: {
           }))
         });
         artifacts = await loadNanoSignalEnrichmentInputs(scanId);
+        artifactsChangedAfterSignalPersistence = true;
       }
     }
   }
@@ -6831,9 +6879,7 @@ export async function processNanoSignalEnrichmentJob(input: {
     const nextPollCount = pollCount + 1;
     const willContinuePolicyRowPolling = nextPollCount < MAX_NANO_SIGNAL_ENRICHMENT_POLLS;
     await requeueNanoSignalEnrichmentPoll({
-      delayMs: willContinuePolicyRowPolling
-        ? NANO_SIGNAL_POLICY_ROW_RECHECK_MS
-        : VALIDATION_SCAN_HANDOFF_POLL_MS,
+      delayMs: NANO_SIGNAL_STALE_SAFETY_RECHECK_MS,
       pollCount: nextPollCount,
       reason:
         willContinuePolicyRowPolling
@@ -6857,17 +6903,19 @@ export async function processNanoSignalEnrichmentJob(input: {
     return;
   }
 
-  const nanoSignalRows = await persistDerivedNanoPolicySignals({
-    policySemanticRows: artifacts.policySemanticRows,
-    policyReviewQueue: artifacts.policyReviewQueue,
-    runtimeArtifacts: artifacts.runtimeArtifacts,
-    scanId,
-    snapshot: artifacts.snapshot
-  });
-  const modelPolicyReviewSummary = await runPolicyModelReview({
+  const nanoSignalRows = lastPersistedNanoSignalRows && !artifactsChangedAfterSignalPersistence
+    ? lastPersistedNanoSignalRows
+    : await measureNanoPhase("persist_final_signals", () => persistDerivedNanoPolicySignals({
+        policySemanticRows: artifacts.policySemanticRows,
+        policyReviewQueue: artifacts.policyReviewQueue,
+        runtimeArtifacts: artifacts.runtimeArtifacts,
+        scanId,
+        snapshot: artifacts.snapshot
+      }));
+  const modelPolicyReviewSummary = await measureNanoPhase("policy_model_review", () => runPolicyModelReview({
     artifacts,
     scanId
-  }).catch((error) => ({
+  })).catch((error) => ({
     cacheHit: false,
     reviewStatus: "failed",
     failureReason: error instanceof Error ? error.message : "Unknown policy model-review failure."
@@ -6895,6 +6943,9 @@ export async function processNanoSignalEnrichmentJob(input: {
       freshExtractionFailedCount,
       freshExtractionPromptTokenCount,
       freshExtractionTotalTokenCount,
+      phaseDurationsMs: Object.fromEntries(
+        Object.entries(phaseDurationsMs).map(([phase, durationMs]) => [phase, Math.round(durationMs)])
+      ),
       ...(modelPolicyReviewSummary ? { modelPolicyReview: modelPolicyReviewSummary } : {}),
       ...(input.recoveryMode ? { recoveryMode: input.recoveryMode } : {}),
       scanStartedAt: startedAt,
@@ -6916,7 +6967,7 @@ export async function processNanoSignalEnrichmentJob(input: {
 
   if (!hasCompletedUnifiedDerivation && !scanIsTerminal) {
     await requeueNanoSignalEnrichmentPoll({
-      delayMs: NANO_SIGNAL_TERMINAL_STATUS_RECHECK_MS,
+      delayMs: NANO_SIGNAL_STALE_SAFETY_RECHECK_MS,
       pollCount,
       reason: "waiting_for_scanner_terminal_status",
       scanId
@@ -6940,7 +6991,30 @@ export async function processNanoSignalEnrichmentJob(input: {
         completedAt: new Date().toISOString()
       });
     }
+
+    if (!shouldReprojectAfterBrowserExtensionSignals && (scanStatus === "completed" || scanType === "preview")) {
+      const workerEnv = getWorkerEnv();
+      await ensureCompletedScanScoresPersisted({
+        scanId,
+        targetEnvironment: workerEnv.CERTSCORE_V2_DAG_LAMBDA_TARGET_ENV,
+        webBaseUrl: workerEnv.CERTSCORE_WEB_BASE_URL,
+      }).catch((error) => {
+        // The completion event and pending request were committed atomically.
+        // Leave endpoint or process failures to the indexed recovery sweep.
+        console.error("[validation-worker] immediate report materialization dispatch failed", {
+          error: error instanceof Error ? error.message : String(error),
+          scanId,
+        });
+      });
+    }
   }
+}
+
+export function buildValidationCollectWaitPatch(status: "collecting" | "waiting_for_scan", now = new Date()) {
+  return {
+    status,
+    updated_at: now.toISOString()
+  } as const;
 }
 
 export async function processValidationCollectJob(validationRunId: string) {
@@ -6967,20 +7041,12 @@ export async function processValidationCollectJob(validationRunId: string) {
     const collectAction = determineValidationCollectAction(scanStatus || null);
 
     if (collectAction === "wait_for_scan") {
-      if (run.status !== "waiting_for_scan") {
-        await updateValidationRun(validationRunId, {
-          status: "waiting_for_scan"
-        });
-      }
+      await updateValidationRun(validationRunId, buildValidationCollectWaitPatch("waiting_for_scan"));
       return;
     }
 
     if (collectAction === "wait_for_completion") {
-      if (run.status !== "collecting") {
-        await updateValidationRun(validationRunId, {
-          status: "collecting"
-        });
-      }
+      await updateValidationRun(validationRunId, buildValidationCollectWaitPatch("collecting"));
       return;
     }
 

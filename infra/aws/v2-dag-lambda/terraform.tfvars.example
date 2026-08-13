@@ -44,17 +44,24 @@ vpc_endpoint_config_by_region = {
     route_table_ids          = ["rtb-replace"]
     subnet_ids               = ["subnet-replace"]
     lambda_security_group_id = "sg-replace"
+    # Standard Lambda stdout/stderr logging is delivered by the Lambda
+    # service. Enable this only if function code starts calling the Logs API.
+    enable_logs_endpoint     = false
   }
   eu-west-1 = {
     vpc_id                   = "vpc-replace"
     route_table_ids          = ["rtb-replace"]
     subnet_ids               = ["subnet-replace"]
     lambda_security_group_id = "sg-replace"
+    enable_logs_endpoint     = false
   }
   us-west-1 = {
     vpc_id                   = "vpc-replace"
     route_table_ids          = ["rtb-replace"]
     subnet_ids               = ["subnet-replace"]
     lambda_security_group_id = "sg-replace"
+    # Preserve the imported live endpoint until its separately canaried
+    # retirement. New regional migrations should normally set this false.
+    enable_logs_endpoint     = false
   }
 }

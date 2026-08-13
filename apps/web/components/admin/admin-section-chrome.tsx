@@ -10,7 +10,7 @@ type AdminSectionChromeProps = {
 
 const navItems = [
   { href: "/app/admin", label: "Overview" },
-  { href: "/app/admin/users?dir=desc&sort=lastScan", label: "Users" },
+  { href: "/app/admin/users?dir=desc&sort=lastLogin", label: "Users" },
   { href: "/app/admin/scans", label: "Scans" },
   { href: "/app/admin/fintech", label: "Fintech" }
 ] as const;

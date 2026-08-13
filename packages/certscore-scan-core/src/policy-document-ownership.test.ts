@@ -59,6 +59,27 @@ test("attributes a corporate policy when the target is an enumerated subsidiary 
   ]);
 });
 
+test("attributes a parent-company policy when the target brand and operated services are explicitly in scope", () => {
+  const result = classifyPolicyDocumentOwnership({
+    documentTitle: "Warner Bros. Discovery Privacy Policy",
+    documentUrl: "https://www.wbdprivacy.com/policycenter/b2c/en-emea/",
+    targetUrl: "https://cnn.com/",
+    text: [
+      "Warner Bros. Discovery is a global media and entertainment family of companies.",
+      "We offer products and services including HBO Max, CNN, WB Games, and Bleacher Report.",
+      "When you use our websites or apps, or otherwise interact with our businesses, we may collect information about you.",
+    ].join(" "),
+  });
+
+  assert.equal(result.targetRelationship, "first_party_brand");
+  assert.equal(result.ownershipConfidence, 0.86);
+  assert.deepEqual(result.ownershipReasonCodes, [
+    "cross_site_document",
+    "target_brand_named_in_corporate_family",
+    "corporate_policy_scope_applies_to_operated_sites",
+  ]);
+});
+
 test("does not attribute a cross-site policy from a bare target-brand mention", () => {
   const result = classifyPolicyDocumentOwnership({
     documentTitle: "Example Vendor Privacy Policy",

@@ -47,6 +47,8 @@ const MATERIALIZATION_FINALIZING_WAIT_MS = 150_000;
 const MATERIALIZATION_INPUT_POLL_MS = 250;
 const MATERIALIZATION_RETRY_MS = 500;
 const ORPHAN_RECONCILIATION_INTERVAL_MS = 10_000;
+const MATERIALIZATION_MISSING_REQUEST_DISCOVERY_INTERVAL_MS = 300_000;
+export const REPORT_FINALIZATION_DURABLE_RECOVERY_SWEEP_MS = 2_000;
 // A missing result at the expected envelope is an operational delay, not
 // evidence that the scanner failed. The hard deadline follows the deployed
 // 900s coordinator timeout plus a bounded delivery allowance.
@@ -185,12 +187,19 @@ async function waitForCanonicalReportInputs(scanId: string, deadlineMs: number) 
   throw new Error("Canonical report inputs were not ready before the materialization deadline.");
 }
 
-export async function ensureCompletedScanScoresPersisted(input: {
+type CompletedScanScoresPersistenceResult =
+  | { alreadyPersisted: true }
+  | { alreadyPersisted: false; terminalFailure: true }
+  | { alreadyPersisted: false; terminalFailure: false };
+
+const scoreMaterializationInFlight = new Map<string, Promise<CompletedScanScoresPersistenceResult>>();
+
+async function ensureCompletedScanScoresPersistedUncoalesced(input: {
   fetchImpl?: typeof fetch;
   scanId: string;
   targetEnvironment: LambdaTargetEnvironment;
   webBaseUrl?: string;
-}) {
+}): Promise<CompletedScanScoresPersistenceResult> {
   const existingState = await scoreMaterializationState(input.scanId);
   if (existingState === "completed") return { alreadyPersisted: true };
   if (existingState === "terminal_failure") {
@@ -204,15 +213,22 @@ export async function ensureCompletedScanScoresPersisted(input: {
   const tokenSha256 = createHash("sha256").update(token).digest("hex");
   await query(
     `insert into public.scan_score_materialization_requests (
-       scan_id, token_sha256, status, attempt_count, requested_at, completed_at, last_error
-     ) values ($1::uuid, $2, 'pending', 1, now(), null, null)
+       scan_id, token_sha256, status, attempt_count, requested_at, completed_at,
+       last_error, first_failed_at, last_attempt_at, next_attempt_at
+     ) values ($1::uuid, $2, 'pending', 1, now(), null, null, null, now(), now())
      on conflict (scan_id) do update
        set token_sha256 = excluded.token_sha256,
            status = 'pending',
-           attempt_count = public.scan_score_materialization_requests.attempt_count + 1,
+           attempt_count = case
+             when public.scan_score_materialization_requests.token_sha256 = repeat('0', 64)
+              and public.scan_score_materialization_requests.last_attempt_at is null
+               then 1
+             else public.scan_score_materialization_requests.attempt_count + 1
+           end,
            requested_at = now(),
+           last_attempt_at = now(),
            completed_at = null,
-           last_error = null
+           next_attempt_at = now()
        where public.scan_score_materialization_requests.status = 'pending'`,
     [input.scanId, tokenSha256]
   );
@@ -227,7 +243,7 @@ export async function ensureCompletedScanScoresPersisted(input: {
   const fetchMaterialization = input.fetchImpl ?? fetch;
   const materializationUrl = new URL("/api/internal/scan-score-materialization", baseUrl);
   let finalizingAttempt = 0;
-  for (const mode of ["publish_report", "finalize"] as const) {
+  for (const mode of ["publish_and_finalize"] as const) {
     while (true) {
       finalizingAttempt += 1;
       const remainingMs = Math.max(1_000, finalizingDeadline - Date.now());
@@ -265,12 +281,6 @@ export async function ensureCompletedScanScoresPersisted(input: {
         throw new Error(`Score materialization endpoint returned HTTP ${response.status}.`);
       }
       const result = await response.json() as { complete?: unknown; reportReady?: unknown };
-      if (mode === "publish_report") {
-        if (result.reportReady !== true) {
-          throw new Error("Report materialization endpoint did not confirm canonical report readiness.");
-        }
-        break;
-      }
       if (result.complete !== true || !(await completedScoreMaterializationExists(input.scanId))) {
         throw new Error("Score materialization endpoint did not confirm canonical materialization completion.");
       }
@@ -278,6 +288,25 @@ export async function ensureCompletedScanScoresPersisted(input: {
     }
   }
   return { alreadyPersisted: false, terminalFailure: false as const };
+}
+
+export function ensureCompletedScanScoresPersisted(input: {
+  fetchImpl?: typeof fetch;
+  scanId: string;
+  targetEnvironment: LambdaTargetEnvironment;
+  webBaseUrl?: string;
+}) {
+  const existing = scoreMaterializationInFlight.get(input.scanId);
+  if (existing) return existing;
+
+  const task = ensureCompletedScanScoresPersistedUncoalesced(input)
+    .finally(() => {
+      if (scoreMaterializationInFlight.get(input.scanId) === task) {
+        scoreMaterializationInFlight.delete(input.scanId);
+      }
+    });
+  scoreMaterializationInFlight.set(input.scanId, task);
+  return task;
 }
 
 type LambdaResultConsumerMetadata = {
@@ -1750,18 +1779,31 @@ async function pollOnce(input: {
       return { deleted: 0, failed: 1, handled: 0 };
     }
     try {
+      const consumerReceivedAtMs = Date.now();
+      const sentAt = parseSqsEpochMillis(message.Attributes?.SentTimestamp);
       const parsed = parseLambdaResultMessage(rawMessage, input.targetEnvironment);
       const artifactVerification = await verifyProductionArtifactChain(parsed);
       const retention = await recordLocalV2DagLambdaResult(parsed, {
         artifactVerification,
         consumer: {
           approximateReceiveCount: parseSqsInteger(message.Attributes?.ApproximateReceiveCount),
-          consumerReceivedAt: new Date().toISOString(),
+          consumerReceivedAt: new Date(consumerReceivedAtMs).toISOString(),
           queueRegion: input.queueRegion,
-          sentAt: parseSqsEpochMillis(message.Attributes?.SentTimestamp),
+          sentAt,
           sqsMessageId: message.MessageId ?? null
         }
       });
+      const lambdaCompletedAtMs = Date.parse(parsed.completedAt);
+      console.info(JSON.stringify({
+        event: "validation.v2_lambda_result.handoff",
+        lambdaCompletionToConsumerMs: Number.isFinite(lambdaCompletedAtMs)
+          ? Math.max(0, consumerReceivedAtMs - lambdaCompletedAtMs)
+          : null,
+        persistenceMs: Math.max(0, Date.now() - consumerReceivedAtMs),
+        queueRegion: input.queueRegion,
+        scanId: parsed.scanId,
+        sqsQueueLatencyMs: sentAt ? Math.max(0, consumerReceivedAtMs - Date.parse(sentAt)) : null
+      }));
       await input.client.send(new DeleteMessageCommand({
         QueueUrl: input.queueUrl,
         ReceiptHandle: receiptHandle(message)
@@ -1906,22 +1948,64 @@ async function mapWithConcurrency<T, R>(
   return results;
 }
 
-export async function reconcilePersistedCompletedResultFinalizations(input: {
-  webBaseUrl?: string;
-} = {}) {
-  const candidates = await query<{
-    completed_at: string;
-    metadata_json: Record<string, unknown>;
-    scan_id: string;
-  }>(
+type PersistedCompletedResultFinalizationCandidate = {
+  completed_at: string;
+  metadata_json: Record<string, unknown>;
+  scan_id: string;
+};
+
+async function loadDuePersistedCompletedResultFinalizations() {
+  return query<PersistedCompletedResultFinalizationCandidate>(
+    `select request.scan_id::text,
+            result.metadata_json->>'completedAt' as completed_at,
+            result.metadata_json
+       from public.scan_score_materialization_requests request
+       join public.scans scan on scan.id = request.scan_id
+       join lateral (
+         select event.metadata_json
+           from public.scan_events event
+          where event.scan_id = request.scan_id
+            and event.event_type = $1
+            and event.metadata_json->>'resultStatus' = 'completed'
+            and event.created_at >= now() - interval '7 days'
+          order by event.created_at desc
+          limit 1
+       ) result on true
+      where request.status = 'pending'
+        and request.next_attempt_at <= now()
+        and scan.status = 'completed'
+        and (
+          result.metadata_json->>'targetEnvironment' = 'local'
+          or result.metadata_json #>> '{artifactVerification,verifiedAt}' is not null
+        )
+        and exists (
+          select 1 from public.scan_events merged
+           where merged.scan_id = request.scan_id
+             and merged.event_type = 'signals.merge_completed'
+        )
+        and exists (
+          select 1 from public.scan_events findings
+           where findings.scan_id = request.scan_id
+             and findings.event_type = 'findings.unified_derivation_completed'
+        )
+      order by request.next_attempt_at asc,
+               request.requested_at asc,
+               request.scan_id asc
+      limit 25`,
+    [RESULT_RECEIVED_EVENT_TYPE],
+  );
+}
+
+async function discoverMissingCompletedResultFinalizations() {
+  return query<PersistedCompletedResultFinalizationCandidate>(
     `with latest_result as (
        select distinct on (result.scan_id)
               result.scan_id,
               result.created_at as result_created_at,
               result.metadata_json->>'completedAt' as completed_at,
               result.metadata_json
-         from scan_events result
-         join scans scan on scan.id = result.scan_id
+         from public.scan_events result
+         join public.scans scan on scan.id = result.scan_id
         where result.event_type = $1
           and result.metadata_json->>'resultStatus' = 'completed'
           and result.created_at >= now() - interval '7 days'
@@ -1931,12 +2015,12 @@ export async function reconcilePersistedCompletedResultFinalizations(input: {
             or result.metadata_json #>> '{artifactVerification,verifiedAt}' is not null
           )
           and exists (
-            select 1 from scan_events merged
+            select 1 from public.scan_events merged
              where merged.scan_id = result.scan_id
                and merged.event_type = 'signals.merge_completed'
           )
           and exists (
-            select 1 from scan_events findings
+            select 1 from public.scan_events findings
              where findings.scan_id = result.scan_id
                and findings.event_type = 'findings.unified_derivation_completed'
           )
@@ -1946,17 +2030,34 @@ export async function reconcilePersistedCompletedResultFinalizations(input: {
             result.completed_at,
             result.metadata_json
        from latest_result result
-       left join scan_score_materialization_requests request
+       left join public.scan_score_materialization_requests request
          on request.scan_id = result.scan_id
-      where request.status is null or request.status = 'pending'
-      order by coalesce(request.attempt_count, 0) asc,
-               coalesce(request.requested_at, result.result_created_at) asc,
+      where request.scan_id is null
+      order by result.result_created_at asc,
                result.scan_id asc
       limit 25`,
     [RESULT_RECEIVED_EVENT_TYPE],
   );
+}
+
+export async function reconcilePersistedCompletedResultFinalizations(input: {
+  includeMissingRequests?: boolean;
+  webBaseUrl?: string;
+} = {}) {
+  const due = await loadDuePersistedCompletedResultFinalizations();
+  const missing = input.includeMissingRequests
+    ? await discoverMissingCompletedResultFinalizations()
+    : { rows: [] as PersistedCompletedResultFinalizationCandidate[] };
+  const seenScanIds = new Set<string>();
+  const candidates = [...due.rows, ...missing.rows]
+    .filter((candidate) => {
+      if (seenScanIds.has(candidate.scan_id)) return false;
+      seenScanIds.add(candidate.scan_id);
+      return true;
+    })
+    .slice(0, 25);
   let started = 0;
-  for (const candidate of candidates.rows) {
+  for (const candidate of candidates) {
     if (resultFinalizationBackgroundTasks.size >= RESULT_FINALIZATION_BACKGROUND_CONCURRENCY) break;
     const metadata = asRecord(candidate.metadata_json);
     const targetEnvironment = metadata.targetEnvironment === "production" ? "production" : "local";
@@ -1983,6 +2084,50 @@ export async function reconcilePersistedCompletedResultFinalizations(input: {
     if (didStart) started += 1;
   }
   return started;
+}
+
+export function startPersistedCompletedResultFinalizationRecovery(input: {
+  webBaseUrl?: string;
+} = {}) {
+  let stopped = false;
+
+  async function loop() {
+    let nextMissingRequestDiscoveryAt = 0;
+    while (!stopped) {
+      try {
+        const includeMissingRequests = Date.now() >= nextMissingRequestDiscoveryAt;
+        const finalizationsStarted = await reconcilePersistedCompletedResultFinalizations({
+          includeMissingRequests,
+          webBaseUrl: input.webBaseUrl,
+        });
+        if (includeMissingRequests) {
+          nextMissingRequestDiscoveryAt = Date.now() + MATERIALIZATION_MISSING_REQUEST_DISCOVERY_INTERVAL_MS;
+        }
+        if (finalizationsStarted > 0) {
+          console.info("[validation-worker] resumed persisted Lambda result finalizations", {
+            finalizationsStarted,
+          });
+        }
+      } catch (error) {
+        console.error("[validation-worker] persisted report finalization recovery failed", {
+          error: error instanceof Error ? error.message : String(error),
+        });
+      }
+      await sleep(REPORT_FINALIZATION_DURABLE_RECOVERY_SWEEP_MS);
+    }
+  }
+
+  console.info("[validation-worker] persisted report finalization recovery started", {
+    durableSweepMs: REPORT_FINALIZATION_DURABLE_RECOVERY_SWEEP_MS,
+    missingRequestDiscoveryMs: MATERIALIZATION_MISSING_REQUEST_DISCOVERY_INTERVAL_MS,
+  });
+  void loop();
+
+  return {
+    stop() {
+      stopped = true;
+    },
+  };
 }
 
 export async function reconcileOrphanedLocalV2DagLambdaScans(input: {
@@ -2148,21 +2293,28 @@ export function startLocalV2DagLambdaResultPoller(options: LocalV2DagLambdaResul
       clients.set(queueRegion, client);
     }
     while (!stopped) {
+      let received = 0;
       try {
-        await pollOnce({
+        const outcome = await pollOnce({
           client,
           queueRegion,
           queueUrl,
           targetEnvironment: options.targetEnvironment,
           webBaseUrl: options.webBaseUrl
         });
+        received = outcome.received;
       } catch (error) {
         console.error("[validation-worker] v2 DAG Lambda result poll failed", {
           error: error instanceof Error ? error.message : String(error),
           queueRegion
         });
       }
-      await sleep(options.pollMs);
+      // Long polling already waits when the queue is empty. When work was
+      // returned, drain the next batch immediately instead of imposing an
+      // application-side delay between result batches.
+      if (received === 0) {
+        await sleep(options.pollMs);
+      }
     }
   }
 
@@ -2172,14 +2324,6 @@ export function startLocalV2DagLambdaResultPoller(options: LocalV2DagLambdaResul
         const orphaned = await reconcileOrphanedLocalV2DagLambdaScans();
         if (orphaned.delayed > 0 || orphaned.failed > 0) {
           console.warn("[validation-worker] reconciled delayed v2 DAG Lambda scans", orphaned);
-        }
-        const finalizationsStarted = await reconcilePersistedCompletedResultFinalizations({
-          webBaseUrl: options.webBaseUrl,
-        });
-        if (finalizationsStarted > 0) {
-          console.info("[validation-worker] resumed persisted Lambda result finalizations", {
-            finalizationsStarted,
-          });
         }
       } catch (error) {
         console.error("[validation-worker] v2 DAG Lambda orphan reconciliation failed", {

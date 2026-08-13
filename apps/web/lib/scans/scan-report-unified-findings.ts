@@ -20,8 +20,10 @@ import {
 } from "./consent-audit-findings";
 import {
   buildPreconsentEvidenceQualityFallback,
+  createHybridRuntimeEvidenceProjectionCache,
   getHybridDerivedSignalValue,
-  getHybridSignalFallbackEvidence
+  getHybridSignalFallbackEvidence,
+  type HybridRuntimeEvidenceProjectionCache
 } from "./hybrid-runtime-evidence";
 import { deriveHighRiskTrackingContext } from "./high-risk-tracking-context";
 import {
@@ -34,7 +36,12 @@ import {
   type PolicyBehaviorRuntimeObservationType
 } from "./contradiction-evidence-contract";
 import { REJECT_TRACKING_CONFIRMATION_MIN_MS } from "./reject-tracking-policy";
-import { findMergedSignalValue, getReportSignalValue, isSignalValuePopulated } from "./report-signal-values";
+import {
+  createReportSignalValueIndexes,
+  findMergedSignalValue,
+  getReportSignalValue,
+  isSignalValuePopulated
+} from "./report-signal-values";
 import {
   getPolicyEvidenceSnippets,
   getPolicyPageType,
@@ -47,6 +54,7 @@ import { evaluateConsentSurfaceGate } from "./promotion-evidence-contracts";
 import {
   buildReviewFindings,
   buildSectionReviewIssues,
+  createScanReportReviewFindingContext,
   formatReviewIssueDescription,
   type AccessibilityIssueRow,
   type AccessibilityRuleEvidenceRow,
@@ -94,6 +102,9 @@ export type ScanReportUnifiedFindingState = {
 };
 
 export type ScanReportUnifiedFindingStateDependencies = {
+  createHybridRuntimeEvidenceProjectionCache?: (
+    runtimeArtifacts: Record<string, unknown> | null | undefined
+  ) => HybridRuntimeEvidenceProjectionCache;
   deriveAccessibilityIssueRows: (snapshot: Record<string, unknown>) => AccessibilityIssueRow[];
   deriveAccessibilityRuleEvidenceRows: (input: {
     examples: NonNullable<ScanDetailResponse["accessibilityRuleExamples"]>;
@@ -119,6 +130,7 @@ export type ScanReportUnifiedFindingStateDependencies = {
     trackerVendors: ScanDetailResponse["trackerVendors"];
   }) => PreconsentViolationRow[];
   filterContradictoryPositiveSurfaceFindings: (findings: UnifiedFindingDisplayPacket[]) => UnifiedFindingDisplayPacket[];
+  onPhase?: (phase: string, durationMs: number) => void;
 };
 
 function uniqueStrings(values: Array<string | null | undefined>) {
@@ -235,18 +247,6 @@ function getLinkedValidationFindingIds(candidates: CanonicalReviewFinding[]) {
 function getValidationFindingRuleKey(finding: Record<string, unknown>) {
   const ruleKey = finding.ruleKey ?? finding.rule_key;
   return typeof ruleKey === "string" ? ruleKey : null;
-}
-
-function candidateCoversValidationFinding(candidate: CanonicalReviewFinding, finding: Record<string, unknown>) {
-  const candidateSignalKey = candidate.signalKey ?? candidate.fallbackEvidence?.signalKey;
-  const ruleKey = getValidationFindingRuleKey(finding);
-  return (
-    candidate.linkedValidationFinding?.id === finding.id ||
-    (
-      candidateSignalKey === "privacy.preconsent_tracking_detected" &&
-      ruleKey === "runtime_privacy.preconsent_tracking_observed"
-    )
-  );
 }
 
 function getFiniteNumber(value: unknown) {
@@ -1335,6 +1335,7 @@ function hasCredibleRejectInteractionAttribution(
 }
 
 function buildRuntimeDerivedReviewFindingCandidates(input: {
+  hybridEvidenceCache?: HybridRuntimeEvidenceProjectionCache;
   preconsentViolations: PreconsentViolationRow[];
   runtimeArtifacts: Record<string, unknown> | null;
 }): CanonicalReviewFinding[] {
@@ -2316,14 +2317,18 @@ function buildRuntimeDerivedReviewFindingCandidates(input: {
 
   const consentControlSignalKey = "privacy.consent_control_not_reopenable";
   const consentControlSignalLabel = "Consent controls may be hard to revisit";
-  const consentControlSignalValue = getHybridDerivedSignalValue(input.runtimeArtifacts, consentControlSignalKey);
+  const consentControlSignalValue = input.hybridEvidenceCache
+    ? input.hybridEvidenceCache.getDerivedSignalValue(consentControlSignalKey)
+    : getHybridDerivedSignalValue(input.runtimeArtifacts, consentControlSignalKey);
   if (consentControlSignalValue === true) {
-    const fallbackEvidence = getHybridSignalFallbackEvidence({
-      runtimeArtifacts: input.runtimeArtifacts,
+    const fallbackInput = {
       signalKey: consentControlSignalKey,
       signalLabel: consentControlSignalLabel,
       signalValue: consentControlSignalValue
-    });
+    };
+    const fallbackEvidence = input.hybridEvidenceCache
+      ? input.hybridEvidenceCache.getSignalFallbackEvidence(fallbackInput)
+      : getHybridSignalFallbackEvidence({ runtimeArtifacts: input.runtimeArtifacts, ...fallbackInput });
     if (fallbackEvidence) {
       candidates.push({
         categoryId: "choice_symmetry_dark_pattern_indicators",
@@ -2345,14 +2350,18 @@ function buildRuntimeDerivedReviewFindingCandidates(input: {
 
   const consentGovernanceSignalKey = "privacy.consent_governance_disclosure_gap";
   const consentGovernanceSignalLabel = "Consent preferences and withdrawal process not clearly explained";
-  const consentGovernanceSignalValue = getHybridDerivedSignalValue(input.runtimeArtifacts, consentGovernanceSignalKey);
+  const consentGovernanceSignalValue = input.hybridEvidenceCache
+    ? input.hybridEvidenceCache.getDerivedSignalValue(consentGovernanceSignalKey)
+    : getHybridDerivedSignalValue(input.runtimeArtifacts, consentGovernanceSignalKey);
   if (consentGovernanceSignalValue === true) {
-    const fallbackEvidence = getHybridSignalFallbackEvidence({
-      runtimeArtifacts: input.runtimeArtifacts,
+    const fallbackInput = {
       signalKey: consentGovernanceSignalKey,
       signalLabel: consentGovernanceSignalLabel,
       signalValue: consentGovernanceSignalValue
-    });
+    };
+    const fallbackEvidence = input.hybridEvidenceCache
+      ? input.hybridEvidenceCache.getSignalFallbackEvidence(fallbackInput)
+      : getHybridSignalFallbackEvidence({ runtimeArtifacts: input.runtimeArtifacts, ...fallbackInput });
     if (fallbackEvidence) {
       candidates.push({
         categoryId: "data_handling_disclosures",
@@ -2374,18 +2383,22 @@ function buildRuntimeDerivedReviewFindingCandidates(input: {
 
   const signalKey = "privacy.cross_domain_identifier_sharing_observed";
   const signalLabel = "Identifiers shared across domains";
-  const signalValue = getHybridDerivedSignalValue(input.runtimeArtifacts, signalKey);
+  const signalValue = input.hybridEvidenceCache
+    ? input.hybridEvidenceCache.getDerivedSignalValue(signalKey)
+    : getHybridDerivedSignalValue(input.runtimeArtifacts, signalKey);
 
   if (signalValue !== true) {
     return candidates;
   }
 
-  const fallbackEvidence = getHybridSignalFallbackEvidence({
-    runtimeArtifacts: input.runtimeArtifacts,
+  const fallbackInput = {
     signalKey,
     signalLabel,
     signalValue
-  });
+  };
+  const fallbackEvidence = input.hybridEvidenceCache
+    ? input.hybridEvidenceCache.getSignalFallbackEvidence(fallbackInput)
+    : getHybridSignalFallbackEvidence({ runtimeArtifacts: input.runtimeArtifacts, ...fallbackInput });
 
   if (!fallbackEvidence) {
     return candidates;
@@ -2448,6 +2461,40 @@ export function buildScanReportUnifiedFindingState(
   }
 
   const runtimeArtifacts = scanRecord.runtimeArtifacts;
+  let phaseStartedAtMs = globalThis.performance?.now?.() ?? Date.now();
+  const recordPhase = (phase: string) => {
+    const completedAtMs = globalThis.performance?.now?.() ?? Date.now();
+    dependencies.onPhase?.(phase, Math.max(0, completedAtMs - phaseStartedAtMs));
+    phaseStartedAtMs = completedAtMs;
+  };
+  const hybridEvidenceCache = (dependencies.createHybridRuntimeEvidenceProjectionCache ?? createHybridRuntimeEvidenceProjectionCache)(
+    runtimeArtifacts
+  );
+  const reportSignalValueIndexes = createReportSignalValueIndexes({
+    mergedSignals: scanRecord.mergedSignals,
+    signals: scanRecord.signals
+  });
+  const reportSignalValueCache = new Map<string, { value: unknown }>();
+  const getProjectedSignalValue = (signal: Parameters<typeof getReportSignalValue>[0]["signal"]) => {
+    const cacheKey = `${signal.source}\u0000${signal.key}`;
+    const cached = reportSignalValueCache.get(cacheKey);
+    if (cached) {
+      return cached.value;
+    }
+
+    const value = getReportSignalValue({
+      getHybridDerivedSignalValue: hybridEvidenceCache.getDerivedSignalValue,
+      indexes: reportSignalValueIndexes,
+      mergedSignals: scanRecord.mergedSignals,
+      policyEnrichment: scanRecord.policyEnrichment,
+      runtimeArtifacts: scanRecord.runtimeArtifacts,
+      signals: scanRecord.signals,
+      snapshot: scanRecord.snapshot,
+      signal
+    });
+    reportSignalValueCache.set(cacheKey, { value });
+    return value;
+  };
   const policyEnrichmentById = new Map(scanRecord.policyEnrichment.map((row) => [String(row.id ?? ""), row]));
   const scanReportReviewIssues = scanRecord.policyReviewQueue.map((row, index) => {
     const enrichment = policyEnrichmentById.get(String(row.policyEnrichmentId ?? row.policy_enrichment_id ?? "")) ?? null;
@@ -2496,24 +2543,30 @@ export function buildScanReportUnifiedFindingState(
     fields: group.entries.map((entry) => entry.key)
   }));
   const validationFindingLookup = buildValidationFindingLookup(scanRecord.validationFindings);
+  const reviewContext = createScanReportReviewFindingContext({
+    allSignals: scanRecord.signals,
+    macroEnrichment: scanRecord.macroEnrichment,
+    mergedSignals: scanRecord.mergedSignals,
+    policyEnrichment: scanRecord.policyEnrichment,
+    prioritizedAccessibilityRuleRows,
+    runtimeArtifacts: scanRecord.runtimeArtifacts,
+    signalHitRows: scanRecord.signalHits,
+    snapshot
+  });
+  recordPhase("input_indexes_and_derived_context");
   const sectionDrafts = REPORT_PRIMARY_PILLARS.map((pillar) => {
     const sections = getReportSectionsForPillar(pillar.id).map((section) => {
-      const sectionCategoryIds = new Set(getReportEvidenceCategoriesForSection(section.id).map((category) => category.id));
-      const categories = getReportEvidenceCategoriesForSection(section.id).map((category) => {
-        const items = getReportSignalsForEvidenceCategory(category.id)
+      const sectionCategoryDefinitions = getReportEvidenceCategoriesForSection(section.id);
+      const sectionCategoryIds = new Set(sectionCategoryDefinitions.map((category) => category.id));
+      const categories = sectionCategoryDefinitions.map((category) => {
+        const categorySignalDefinitions = getReportSignalsForEvidenceCategory(category.id);
+        const items = categorySignalDefinitions
           .map(({ relation, signal }) => ({
             key: signal.key,
             label: signal.label,
             relation,
             source: signal.source,
-            value: getReportSignalValue({
-              mergedSignals: scanRecord.mergedSignals,
-              policyEnrichment: scanRecord.policyEnrichment,
-              runtimeArtifacts: scanRecord.runtimeArtifacts,
-              signals: scanRecord.signals,
-              snapshot: scanRecord.snapshot,
-              signal
-            })
+            value: getProjectedSignalValue(signal)
           }))
           .filter((item) => isSignalValuePopulated(item.key, item.value))
           .sort((left, right) => {
@@ -2524,6 +2577,7 @@ export function buildScanReportUnifiedFindingState(
         const reviewFindings = buildReviewFindings({
           allSignals: scanRecord.signals,
           categoryId: category.id,
+          hybridEvidenceCache,
           issues: [],
           macroEnrichment: scanRecord.macroEnrichment,
           mergedSignals: scanRecord.mergedSignals,
@@ -2535,12 +2589,13 @@ export function buildScanReportUnifiedFindingState(
           sectionId: section.id,
           sectionItems: items,
           trackerVendors: scanRecord.trackerVendors,
-          validationFindingLookup
+          validationFindingLookup,
+          reviewContext
         });
 
         return {
           category,
-          emptySignalCount: getReportSignalsForEvidenceCategory(category.id).length - items.length,
+          emptySignalCount: categorySignalDefinitions.length - items.length,
           items,
           reviewFindings
         };
@@ -2560,6 +2615,7 @@ export function buildScanReportUnifiedFindingState(
       });
       const issueFindings = buildReviewFindings({
         allSignals: scanRecord.signals,
+        hybridEvidenceCache,
         issues,
         macroEnrichment: scanRecord.macroEnrichment,
         mergedSignals: scanRecord.mergedSignals,
@@ -2571,7 +2627,8 @@ export function buildScanReportUnifiedFindingState(
         sectionId: section.id,
         sectionItems: [],
         trackerVendors: scanRecord.trackerVendors,
-        validationFindingLookup
+        validationFindingLookup,
+        reviewContext
       });
 
       return {
@@ -2585,6 +2642,7 @@ export function buildScanReportUnifiedFindingState(
 
     return { pillar, sections };
   });
+  recordPhase("taxonomy_section_projection");
 
   const allReviewFindingCandidates = sectionDrafts.flatMap(({ sections }) =>
     sections.flatMap((section) => [
@@ -2593,6 +2651,7 @@ export function buildScanReportUnifiedFindingState(
     ])
   );
   const runtimeDerivedReviewFindingCandidates = buildRuntimeDerivedReviewFindingCandidates({
+    hybridEvidenceCache,
     preconsentViolations: preconsentViolationRows,
     runtimeArtifacts
   });
@@ -2601,11 +2660,18 @@ export function buildScanReportUnifiedFindingState(
     runtimeDerivedReviewFindingCandidates
   );
   const linkedValidationFindingIds = getLinkedValidationFindingIds(reviewFindingCandidates);
+  const coversPreconsentTrackingValidation = reviewFindingCandidates.some((candidate) =>
+    (candidate.signalKey ?? candidate.fallbackEvidence?.signalKey) === "privacy.preconsent_tracking_detected"
+  );
   const unlinkedValidationFindings = scanRecord.validationFindings.filter(
     (finding) =>
       !linkedValidationFindingIds.has(String(finding.id ?? "")) &&
-      !reviewFindingCandidates.some((candidate) => candidateCoversValidationFinding(candidate, finding as Record<string, unknown>))
+      !(
+        coversPreconsentTrackingValidation &&
+        getValidationFindingRuleKey(finding as Record<string, unknown>) === "runtime_privacy.preconsent_tracking_observed"
+      )
   );
+  recordPhase("candidate_merge_and_linking");
   let normalizedConcerns: NormalizedConcern[] = [];
   const globalUnifiedFindings = dependencies.filterContradictoryPositiveSurfaceFindings(buildUnifiedFindingDisplayPackets({
     captureNormalizedConcerns: (concerns) => {
@@ -2626,6 +2692,7 @@ export function buildScanReportUnifiedFindingState(
     validationFindings: unlinkedValidationFindings,
     validationFindingLookup
   }).filter((finding) => finding.presentationDecision.status !== "suppress"));
+  recordPhase("normalized_concerns_and_unified_packets");
 
   return {
     allReviewFindingCandidates: reviewFindingCandidates,
@@ -2780,7 +2847,10 @@ export function filterContradictoryPositiveSurfaceFindings(findings: UnifiedFind
   });
 }
 
-export function debugBuildScanReportUnifiedFindingStateForScan(scanRecord: Record<string, unknown>): ScanReportUnifiedFindingState {
+export function debugBuildScanReportUnifiedFindingStateForScan(
+  scanRecord: Record<string, unknown>,
+  options: Pick<ScanReportUnifiedFindingStateDependencies, "createHybridRuntimeEvidenceProjectionCache" | "onPhase"> = {}
+): ScanReportUnifiedFindingState {
   const snapshot = scanRecord.snapshot;
   if (!snapshot) {
     return {
@@ -2803,6 +2873,8 @@ export function debugBuildScanReportUnifiedFindingStateForScan(scanRecord: Recor
 
   try {
     return buildScanReportUnifiedFindingState(scanRecord as ScanDetailResponse, {
+      createHybridRuntimeEvidenceProjectionCache: options.createHybridRuntimeEvidenceProjectionCache,
+      onPhase: options.onPhase,
       deriveAccessibilityIssueRows,
       deriveAccessibilityRuleEvidenceRows,
       deriveConsentAuditFindings: (candidateSnapshot, runtimeArtifacts) =>

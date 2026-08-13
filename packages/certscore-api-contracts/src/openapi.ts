@@ -322,7 +322,13 @@ export function buildPulseV1OpenApiDocument() {
                   enum: ["invalid_url", "not_found", "pulse_throttled", "rate_limited", "internal_error", "scan_unavailable", "unauthorized", "forbidden"]
                 },
                 message: { type: "string" },
-                retryAfterSeconds: { type: ["integer", "null"] }
+                retryAfterSeconds: { type: ["integer", "null"] },
+                recommendedNextAction: { type: ["string", "null"] },
+                rateLimit: {
+                  type: ["object", "null"],
+                  additionalProperties: true,
+                  description: "For scan-read 429 responses: canonical policy version, profile, scope, window, limit, usage, and requested units."
+                }
               }
             },
             feedback: { $ref: "#/components/schemas/PulseFeedback" },

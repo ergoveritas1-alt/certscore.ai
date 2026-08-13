@@ -38,6 +38,8 @@ These resources are intended for OpenAI/ChatGPT, Anthropic/Claude, Perplexity, G
 7. Retrieve findings and pre-consent cookies/trackers.
 8. Treat outputs as automated public-web observations for review, not legal advice, certification, or a compliance determination.
 
+Poll only while a scan is active. Stop polling at a terminal status and do not repeatedly retrieve completed scan resources. HTTP 429 responses include `Retry-After` when retry timing is available. The canonical weighted read policy is published at https://certscore.ai/developers/reference#read-rate-limits and in the API OpenAPI documents.
+
 ## No-account agent scan path
 
 Agents that cannot create an account or configure OAuth can create low-volume scans without an API key:

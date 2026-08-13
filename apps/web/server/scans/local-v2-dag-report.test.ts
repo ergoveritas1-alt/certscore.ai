@@ -312,6 +312,43 @@ test("remote report artifacts start geometry as soon as the manifest resolves", 
   });
 });
 
+test("verified policy text starts when bundle and manifest are ready without waiting for geometry", async () => {
+  const { localV2DagReportPerformanceTestHelpers } = await loadLocalV2DagReport();
+  const events: string[] = [];
+  let resolveBundle: ((value: CanonicalEvidenceBundle) => void) | undefined;
+  let resolveGeometry: ((value: Record<string, unknown>) => void) | undefined;
+
+  const resultPromise = localV2DagReportPerformanceTestHelpers.loadLocalV2DagRemoteArtifacts({
+    readBundle: () => new Promise<CanonicalEvidenceBundle>((resolve) => {
+      resolveBundle = resolve;
+    }),
+    readGeometry: () => new Promise<Record<string, unknown>>((resolve) => {
+      events.push("geometry:start");
+      resolveGeometry = resolve;
+    }),
+    readManifest: async () => ({ auxiliaryArtifacts: [] }),
+    readPolicyTextArtifacts: async () => {
+      events.push("policy:start");
+      return new Map();
+    }
+  });
+
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.deepEqual(events, ["geometry:start"]);
+  const bundle = { schemaVersion: "certscore.v2.canonical-evidence-bundle.v1" } as CanonicalEvidenceBundle;
+  resolveBundle?.(bundle);
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.deepEqual(events, ["geometry:start", "policy:start"]);
+
+  resolveGeometry?.({ retainedControlCount: 1 });
+  assert.deepEqual(await resultPromise, {
+    bundle,
+    consentControlGeometryEvidence: { retainedControlCount: 1 },
+    manifest: { auxiliaryArtifacts: [] },
+    policyTextArtifactsById: new Map()
+  });
+});
+
 test("getLocalV2PrimaryLanguage ranks declared, retained text, and URL evidence", async () => {
   const { getLocalV2PrimaryLanguage } = await loadLocalV2DagReport();
   assert.equal(getLocalV2PrimaryLanguage({
@@ -2268,6 +2305,10 @@ test("inferS3ArtifactRegion follows the regional Lambda artifact bucket", async 
     inferS3ArtifactRegion("certscore-v2-dag-local-artifacts-us-west-1-199536052647"),
     "us-west-1"
   );
+  assert.equal(
+    inferS3ArtifactRegion("certscore-v2-dag-local-artifacts-us-west-2-199536052647"),
+    "us-west-2"
+  );
   assert.equal(inferS3ArtifactRegion("certscore-v2-dag-local-artifacts"), "eu-central-1");
 });
 
@@ -3762,6 +3803,38 @@ test("summarizePolicySurfaces never uses a privacy index as sufficient Article 1
   assert.equal(assessments.every((assessment) =>
     (assessment.reasonCodes as string[]).includes("policy_index_is_not_substantive_policy_document")
   ), true);
+  assert.equal(
+    summary.policyTextExtractionHealth.extractionFailureReason,
+    "privacy_policy_index_governing_document_unresolved",
+  );
+  assert.equal(summary.policyTextExtractionHealth.policyTextExtractionStatus, "artifact_unavailable");
+});
+
+test("summarizePolicySurfaces does not infer one language from a multilingual privacy index", async () => {
+  const { dedupePolicySurfaces, summarizePolicySurfaces } = await loadLocalV2DagReport();
+  const multilingualIndex = [
+    "Privacy Policy English United States",
+    "Politique de Confidentialité Français",
+    "Política de Privacidad Español",
+    "นโยบายความเป็นส่วนตัว ตัวเลือกโฆษณา",
+  ].join(" ").repeat(40);
+  const surfaces = dedupePolicySurfaces([{
+    observationId: "multilingual-privacy-index",
+    surfaceType: "privacy_policy",
+    url: "https://example.test/privacy",
+    status: "fetched",
+    documentRole: "policy_index",
+    textExcerpt: multilingualIndex,
+  }] as never, "example.test");
+
+  const summary = summarizePolicySurfaces(surfaces, "example.test", { primaryLanguage: "en" });
+
+  assert.equal(summary.policyTextExtractionHealth.detectedPolicyLanguage, "en");
+  assert.equal(summary.policyTextExtractionHealth.policyTextExtractionStatus, "artifact_unavailable");
+  assert.equal(
+    summary.policyTextExtractionHealth.extractionFailureReason,
+    "privacy_policy_index_governing_document_unresolved",
+  );
 });
 
 test("summarizePolicySurfaces keeps absence coverage insufficient while a material privacy-index child is unresolved", async () => {
@@ -7140,11 +7213,11 @@ test("materializeLocalV2DagScanDetail withholds missing controls and score when 
 
     assert.equal(rejectPathArtifact?.firstLayerCookieConsentBannerObserved, false);
     assert.equal(rejectPathArtifact?.gdprEprivacyConsentSurfaceObserved, "unconfirmed");
-    assert.equal(rejectPath?.status, "Not confirmed");
+    assert.equal(rejectPath?.status, "Not testable");
     assert.equal(rejectPath?.evidenceState, "not_testable");
     assert.match(
       rejectPath?.limitation ?? "",
-      /reject or equivalent refusal control was not established.*assessment is incomplete/i
+      /assessment is incomplete.*reject or equivalent refusal control availability cannot be determined/i
     );
   } finally {
     if (previousAppUrl === undefined) {

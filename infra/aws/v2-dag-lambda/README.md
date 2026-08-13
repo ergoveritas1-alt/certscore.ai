@@ -12,15 +12,39 @@ It manages the shared Lambda role and, in every region:
 - the result queue, result-ingestion DLQ, and async-invocation failure queue;
 - the Lambda configuration, reserved concurrency, log retention, and async
   failure destination;
-- optional per-region S3 gateway, SQS, CloudWatch Logs, and Lambda interface
-  endpoints, with private DNS, endpoint security groups, DNS preconditions,
-  and scoped endpoint policies;
+- optional per-region S3 gateway plus SQS and Lambda interface endpoints,
+  with private DNS, endpoint security groups, DNS preconditions, and scoped
+  endpoint policies. A CloudWatch Logs interface endpoint is separately
+  optional for code that calls the Logs API; standard Lambda stdout/stderr
+  delivery does not require it;
 - alarms for Lambda errors/throttles, stale results, result DLQ messages, and
   async failures.
 
 Routine `deploy:scanners` releases update Lambda code with a digest-qualified
 regional image. Terraform deliberately ignores only `image_uri`; it remains
 authoritative for runtime configuration and infrastructure.
+
+## Regional proxy and EIP rotation
+
+Rotate a regional scanner address with a blue-green proxy replacement:
+
+```bash
+scripts/local-v2-dag-lambda/replace-regional-proxy.sh eu-west-1 --rotate-eip
+scripts/local-v2-dag-lambda/replace-regional-proxy.sh eu-west-1 --rotate-eip --apply
+```
+
+Run the plan first and repeat for `eu-central-1`, `eu-west-1`, and `us-west-1`.
+Rotation creates a fresh proxy and Elastic IP, associates the address before
+the Lambda cutover, and updates the proxy pointer, egress ID, provider, and
+expected public-IP hash in one Lambda configuration update. The old proxy and
+EIP stay associated for rollback. Do not terminate or release them until all
+three evidence lanes have retained successful production-mode egress
+preflights for that region and the observation/cost gate is complete.
+
+Real values in `environment_variables_by_region` remain secrets-aware runner
+configuration. Update that source after rotation before any Terraform apply so
+Terraform cannot restore the prior proxy pointer or egress identity. Routine
+`deploy:scanners` code promotion preserves the live proxy environment.
 
 Before building or promoting a scanner image, `deploy:scanners` applies the
 Terraform-authoritative 3008 MB memory setting with a scoped Lambda

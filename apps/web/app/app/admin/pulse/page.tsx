@@ -448,8 +448,8 @@ export default async function AdminPulsePage({ searchParams }: AdminPulsePagePro
                     <td className="px-2.5 py-1.5"><span className={`inline-flex max-w-full truncate rounded-full px-1.5 py-0.5 text-[10px] font-semibold ${provenance.className}`} title={request.requesterName ?? provenance.label}>{request.requesterName ?? provenance.label}</span><p className="mt-0.5 truncate font-mono text-[10px] text-slate-500" title={`${sourceIpLabel(request)} · ${request.sourceIpSource.replaceAll("_", " ")}`}>{sourceIpLabel(request)}</p></td>
                     <td className="px-2.5 py-1.5 text-[10px] leading-4 text-slate-600" title={formatAdminDateTime(request.requestedAt)}><p className="truncate">{requestedDateTime.date}</p><p className="truncate text-slate-500">{requestedDateTime.time}</p></td>
                     <td className="px-2.5 py-1.5">
-                      <p className="line-clamp-2 break-all font-semibold leading-4 text-slate-900" title={request.requestedUrl ?? "Page URL unavailable"}>
-                        {request.requestedUrl ?? "Page URL unavailable"}
+                      <p className="line-clamp-2 break-all font-semibold leading-4 text-slate-900" title={request.pageUrl ?? "Page URL unavailable"}>
+                        {request.pageUrl ?? "Page URL unavailable"}
                       </p>
                     </td>
                     <td className="px-2.5 py-1.5 font-medium text-slate-700">{request.trancoRank ? `#${request.trancoRank.toLocaleString()}` : "—"}</td>

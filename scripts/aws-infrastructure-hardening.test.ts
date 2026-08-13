@@ -51,6 +51,15 @@ test("validation deploy assumes its dedicated AWS role", async () => {
   assert.match(terraform, /"logs:FilterLogEvents"/);
 });
 
+test("validation worker uses the measured low-utilization Fargate size", async () => {
+  const workflow = await readFile(".github/workflows/validation-aws-deploy.yml", "utf8");
+  const variables = await readFile("infra/aws/validation/variables.tf", "utf8");
+  assert.match(workflow, /ECS_WORKER_CPU: "256"/);
+  assert.match(workflow, /ECS_WORKER_MEMORY: "512"/);
+  assert.match(variables, /variable "worker_cpu"[\s\S]*?default\s+=\s+256/);
+  assert.match(variables, /variable "worker_memory"[\s\S]*?default\s+=\s+512/);
+});
+
 test("retired validation ops web service stays absent", async () => {
   const source = await readFile(validationTerraformPath, "utf8");
   assert.doesNotMatch(source, /resource "aws_ecs_service" "web"/);
@@ -104,6 +113,7 @@ test("scanner NAT-free AWS service endpoints are private, scoped, and migration-
   assert.match(source, /service_name\s+=\s+"com\.amazonaws\.\$\{var\.region\}\.sqs"/);
   assert.match(source, /resource "aws_vpc_endpoint" "logs"/);
   assert.match(source, /service_name\s+=\s+"com\.amazonaws\.\$\{var\.region\}\.logs"/);
+  assert.match(source, /var\.vpc_endpoint_config\.enable_logs_endpoint/);
   assert.match(source, /private_dns_enabled\s+=\s+true/);
   assert.match(source, /resource "aws_vpc_endpoint" "lambda"/);
   assert.match(source, /service_name\s+=\s+"com\.amazonaws\.\$\{var\.region\}\.lambda"/);
@@ -123,8 +133,10 @@ test("scanner NAT-free AWS service endpoints are private, scoped, and migration-
   assert.match(variables, /variable "expected_egress_region_by_region"/);
   assert.match(variables, /"us-west-1"\s+=\s+"California"/);
   assert.match(variables, /route_table_ids\s+=\s+list\(string\)/);
+  assert.match(variables, /enable_logs_endpoint\s+=\s+optional\(bool, true\)/);
   assert.match(moduleVariables, /variable "vpc_endpoint_config"/);
   assert.match(moduleVariables, /lambda_security_group_id\s+=\s+string/);
+  assert.match(moduleVariables, /enable_logs_endpoint\s+=\s+optional\(bool, true\)/);
 
   // NAT route removal remains a separately authorized migration action.
   assert.doesNotMatch(source, /resource "aws_route"/);

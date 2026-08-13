@@ -182,6 +182,18 @@ WC01 does not own scanner runtime observation, crawler identity, or raw evidence
 
 Agents may inspect WS01 for scanner evidence contract, runtime signal, and retained evidence context. Only edit WS01 when the user request explicitly spans both repos or when a WC01 concern/policy change exposes a missing or incorrect upstream WS01 signal.
 
+### Canonical API read-rate policy
+
+`packages/shared/src/api-read-rate-policy.ts` `API_READ_RATE_POLICY` is the sole source of truth for completed-scan retrieval and status-polling windows, scope limits, and unit weights across the Pulse API, API v2, hosted MCP, and any future API or agent-facing read path. Import this policy; do not duplicate its numeric limits in route, SDK, MCP, worker, infrastructure, documentation, `.plist`, JSON, or environment-specific configuration. This file intentionally does not restate the current numbers.
+
+The terminal-read and status-polling profiles are separate. Operation-to-weight mappings must be explicit and must obtain their unit values from the canonical policy. Rolling-window evaluation must use the windows and scoped limits from the canonical policy rather than service-local constants.
+
+Enforcement storage remains service-owned: WC01 API paths use the shared database-backed event ledger for cross-instance bounds, while hosted MCP may reject composite calls at its HTTP boundary before internal fan-out. Rejected protected reads must return `429` with `Retry-After`, canonical bot-facing guidance, and machine-readable policy/profile/scope/window/usage metadata; they must not create API Activity rows or begin report/evidence projection work. Emit one structured denial log without bearer tokens, raw IPs, raw URLs, or target identifiers. Protection failure on direct API reads must fail closed with a retryable response.
+
+The full public numeric policy table may appear only on approved developer and integration surfaces and must render through the shared server component that reads `API_READ_RATE_POLICY`. Approved customer, marketing, dashboard, and scan-report pages may render the compact automated-access notice, which must also derive its values from the canonical policy and link to the full developer reference. Static guides and READMEs must link to that rendered documentation or the machine-readable OpenAPI extension rather than copying numeric limits. Do not add either component to finding, checklist, executive-summary, or regulatory sub-surfaces where it could be mistaken for scan evidence or finding policy.
+
+Documentation tests must verify both rendered policy components against the canonical policy, require exact policy parity in OpenAPI and agent-discovery documents, and enforce separate allowlists for pages permitted to render the full table and compact notice. Any policy change must update the canonical module first and include focused shared-policy, WC01 quota, MCP boundary, 429 contract/logging, and documentation-parity tests. Coordinate the database migration and all consuming service deployments so different services do not enforce different policy versions.
+
 ### Evidence contract discipline
 
 WC01 should not consume loose, ad hoc, or display-only scanner fields. New scanner evidence consumed by WC01 should be structured, typed, bounded, and covered by focused fixtures/tests. Prefer shared runtime contract fixtures when adding or changing WS01 -> WC01 evidence shapes.
@@ -581,7 +593,7 @@ When the user says **deploy all**, use the fast deploy-all gate before committin
 pnpm preflight:all
 ```
 
-In this repo, **deploy all** means the public web app, validation worker, migrations applied from the target web image before ECS promotion, and the v2 DAG Lambda scanner images in all three approved scanner regions: `eu-central-1`, `eu-west-1`, and `us-west-2`. It does not run a separate production DB deployment lane. Treat those as the canonical Lambda scanner regions unless the user explicitly approves a region change.
+In this repo, **deploy all** means the public web app, validation worker, migrations applied from the target web image before ECS promotion, and the v2 DAG Lambda scanner images in all three approved scanner regions: `eu-central-1`, `eu-west-1`, and `us-west-1`. It does not run a separate production DB deployment lane. Treat those as the canonical Lambda scanner regions unless the user explicitly approves a region change.
 
 Use the full local gate when the change touches shared build infrastructure, broad dependency surfaces, release-critical scan behavior, or when you need maximum local confidence before pushing:
 
@@ -683,13 +695,37 @@ A preflight result applies only to the exact source state that was tested. Rerun
 
 Routine scanner deployments must reuse the existing runtime base, build the scanner image once in the canonical build region, skip registry cache export, replicate the image to all approved regions, and verify digest parity and Lambda health. Use `--push-runtime-base` only when Chromium, Playwright, OS packages, workspace dependencies, or the Lambda runtime-base Docker stage genuinely changed.
 
+Routine public web deployments use three ECR-managed artifacts in addition to the immutable Git-SHA image: `${WEB_IMAGE}:buildcache`, `${WEB_IMAGE}:runtime-base`, and `${WEB_IMAGE}:runtime-base-cache`. The web workflow publishes the BuildKit cache with `mode=max` and builds the runner from the reusable ARM64 runtime base. The first deployment after this contract is introduced may bootstrap the runtime base; subsequent application-only deployments should reuse it. Rebuild the web runtime base when the Node image, OS/runtime packages, runtime dependency versions, or the web runtime-base Docker stage changes. Do not delete or retag the mutable cache/base tags during cleanup, and treat cache export, runtime-base export, and image push as valid build progress when monitoring a deployment.
+
 Deploy-all applies database migrations through the target web image before ECS promotion. It does not run a separate production DB lane. Use the standalone DB deployment only when an independently approved migration must run outside a web release.
 
 After deployment, verify the workflow result, live revision, expected runtime target, and affected production behavior. Keep verification read-only by default. Do not create production scans, records, users, or other persistent state unless the user explicitly authorized that verification.
 
+### Production deploy monitoring
+
+Before starting or monitoring an AWS ECS production deployment, read and follow
+`docs/aws-ecs-deployment-runbook.md`. This is required even when the workflow
+was started by another agent or operator.
+
+A GitHub Actions step remaining active is not evidence that it is stuck. The
+routine web image path uses a native ARM64 GitHub-hosted runner; the manual x64
+fallback may take 45–60 minutes after a cold invalidation. Do not
+cancel while logs show compilation, static generation, build-trace collection,
+image export, registry-cache export, or image push progress. Before canceling,
+inspect the available logs and require both:
+
+1. no new log output for the runbook's silence threshold; and
+2. no observable build, export, or push progress.
+
+Prefer workflow-enforced timeouts over manual cancellation. Never cancel after
+successful compilation or static generation solely because the workflow has
+not changed steps. A canceled cold build may discard the nearly completed image
+and prevent its registry cache from being published, making the retry repeat
+the expensive work.
+
 ## Runtime and deployment topology
 
-Production scanning is Lambda-only and uses the CertScore v2 DAG scanner code in this repository. The approved production scanner targets are the v2 DAG Lambda functions in `eu-central-1`, `eu-west-1`, and `us-west-2`.
+Production scanning is Lambda-only and uses the CertScore v2 DAG scanner code in this repository. The approved production scanner targets are the v2 DAG Lambda functions in `eu-central-1`, `eu-west-1`, and `us-west-1`.
 
 Never create, restore, update, scale, inspect as a deployment target, or push images to a WS01 scanner ECS/Fargate service. In particular, `ws01-scanner-worker` is prohibited and must not be recreated. WS01 is not a production scanner deployment path. Production scanner changes must be made in the WC01 v2 DAG packages and deployed through the three-region Lambda helpers.
 

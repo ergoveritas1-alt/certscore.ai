@@ -26,14 +26,17 @@ function sleep(ms: number) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
-async function submitScan(input: { baseUrl: string; domain: string; profile: string; scanFrom: string }) {
+async function submitScan(input: { baseUrl: string; domain: string; profile: string; scanFrom: string; lateConsentGateMs?: number }) {
   const response = await fetch(`${input.baseUrl.replace(/\/$/, "")}/api/full-scan`, {
     body: JSON.stringify({
       domain: input.domain,
       forceNewScan: true,
       localV2RunViaLambda: true,
       localV2ScanProfile: input.profile,
-      scanFrom: input.scanFrom
+      scanFrom: input.scanFrom,
+      ...(input.lateConsentGateMs === undefined
+        ? {}
+        : { localV2DagLambdaDebugOverrides: { lateConsentGateMs: input.lateConsentGateMs } })
     }),
     headers: {
       "content-type": "application/json",
@@ -105,9 +108,13 @@ async function main() {
   const domain = getArgValue("--domain") ?? "ergoveritas.com";
   const profile = getArgValue("--profile") ?? "tiny";
   const scanFrom = getArgValue("--scan-from") ?? "eu_de";
+  const lateConsentGateMsValue = Number(getArgValue("--late-consent-gate-ms"));
+  const lateConsentGateMs = Number.isInteger(lateConsentGateMsValue) && lateConsentGateMsValue > 0
+    ? lateConsentGateMsValue
+    : undefined;
   const maxAttempts = parsePositiveIntegerArg("--attempts", 18);
   const waitSeconds = parsePositiveIntegerArg("--wait-seconds", 10);
-  const scan = await submitScan({ baseUrl, domain, profile, scanFrom });
+  const scan = await submitScan({ baseUrl, domain, profile, scanFrom, lateConsentGateMs });
   const scanId = scan.scanId as string;
 
   let latestEvents = await loadScanEvents(scanId);

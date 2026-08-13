@@ -105,6 +105,8 @@ test("persisted display projection is bounded, checksum-verified, and scan-bound
   } as unknown as ScanDetailResponse;
   const persisted = buildPersistedScanReportProjection(scanRecord);
   assert.ok(persisted.sizeBytes < MAX_SCAN_REPORT_PROJECTION_BYTES);
+  assert.equal(persisted.serialized, JSON.stringify(persisted.payload));
+  assert.equal(Buffer.byteLength(persisted.serialized), persisted.sizeBytes);
   assert.equal(
     (persisted.payload.snapshot as Record<string, unknown>).report_projection_payload,
     undefined

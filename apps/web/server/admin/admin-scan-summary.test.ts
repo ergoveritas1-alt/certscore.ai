@@ -57,12 +57,15 @@ test("API activity resolves authenticated owners and linked scan enrichment", as
   assert.doesNotMatch(source, /getAnonymousScanById/);
 });
 
-test("API activity shows the requested page URL instead of the normalized domain", async () => {
+test("API activity shows the resolved page URL while preserving raw request metadata", async () => {
   const pageSource = await readFile("apps/web/app/app/admin/pulse/page.tsx", "utf8");
+  const listSource = await readFile("apps/web/server/admin/list-pulse-requests.ts", "utf8");
 
   assert.match(pageSource, /\{ label: "Page" \}/);
-  assert.match(pageSource, /title=\{request\.requestedUrl \?\? "Page URL unavailable"\}/);
-  assert.match(pageSource, /\{request\.requestedUrl \?\? "Page URL unavailable"\}/);
+  assert.match(pageSource, /title=\{request\.pageUrl \?\? "Page URL unavailable"\}/);
+  assert.match(pageSource, /\{request\.pageUrl \?\? "Page URL unavailable"\}/);
+  assert.match(listSource, /requestedUrl: typeof row\.requested_url === "string" \? row\.requested_url : null/);
+  assert.match(listSource, /pageUrl: resolvedPageUrl\?\.url \?\? null/);
   assert.doesNotMatch(pageSource, /title=\{request\.normalizedDomain \?\? undefined\}/);
 });
 
@@ -91,7 +94,10 @@ test("API activity derives terminal state and score from canonical scan records"
 });
 
 test("completion materialization persists the canonical projection before score and acknowledgement", async () => {
-  const source = await readFile("apps/web/app/api/internal/scan-score-materialization/route.ts", "utf8");
+  const [source, requestRepositorySource] = await Promise.all([
+    readFile("apps/web/app/api/internal/scan-score-materialization/route.ts", "utf8"),
+    readFile("apps/web/server/scans/score-materialization-request-repository.ts", "utf8"),
+  ]);
   const routeStart = source.indexOf("export async function POST");
   const projectionIndex = source.indexOf('await timedMaterializationPhase(authorizedScanId, "report_projection"', routeStart);
   const verificationIndex = source.indexOf('"projection_verification"', projectionIndex);
@@ -111,7 +117,13 @@ test("completion materialization persists the canonical projection before score 
   assert.match(source, /persistScanReportProjection/);
   assert.match(source, /loadPersistedScanReportProjection/);
   assert.match(source, /classifyScoreMaterializationFailure/);
-  assert.match(source, /status: disposition\.retryable \? 503 : 422/);
+  assert.match(source, /status: retryable \? 503 : 422/);
+  assert.match(source, /code = "retry_exhausted"/);
+  assert.match(requestRepositorySource, /retry\.attempt_count >= 24/);
+  assert.match(requestRepositorySource, /interval '24 hours'/);
+  assert.match(requestRepositorySource, /least\(\s*1800,/);
+  assert.match(requestRepositorySource, /next_attempt_at/);
+  assert.match(requestRepositorySource, /retry_exhausted:/);
 });
 
 test("completion materialization reuses the verified persisted report for admin and score projection", async () => {
@@ -155,7 +167,7 @@ test("Admin Scans separates requester identity from outbound scanner egress", as
 test("Admin Scans gives access outcomes room for at most two visible lines", async () => {
   const pageSource = await readFile("apps/web/app/app/admin/scans/page.tsx", "utf8");
 
-  assert.match(pageSource, /w-\[2958px\] min-w-\[2958px\] table-fixed/);
+  assert.match(pageSource, /w-\[2957px\] min-w-\[2957px\] table-fixed/);
   assert.match(pageSource, /<ScanSizeCell matrix=\{matrix\} \/>/);
   assert.match(pageSource, /Site load \{website \? `\$\{website\.megabytes\.toFixed\(2\)\} MB` : "—"\}/);
   assert.match(pageSource, /Policy \{policy\?\.compressedKilobytes/);
@@ -502,13 +514,23 @@ test("localhost web development has enough heap for broad authenticated route QA
 
 test("admin users paginate in SQL instead of loading the complete account history", async () => {
   const pageSource = await readFile("apps/web/app/app/admin/users/page.tsx", "utf8");
+  const listSource = await readFile("apps/web/server/admin/list-admin-users.ts", "utf8");
   const repositorySource = await readFile("apps/web/server/admin/repository.ts", "utf8");
+  const sortSource = await readFile("apps/web/server/admin/admin-users-sort.ts", "utf8");
 
   assert.match(pageSource, /listAdminUsersPage\(pageSize,/);
   assert.doesNotMatch(pageSource, /listAdminUsers\(\)/);
+  assert.match(pageSource, /const \[requestedUserPage, workspaces\] = await Promise\.all\(\[/);
+  assert.match(pageSource, /app\.admin\.users\.workspaces/);
+  assert.match(pageSource, /pendingContent=/);
+  assert.doesNotMatch(pageSource, />Last requested</);
+  assert.doesNotMatch(pageSource, />Last associated</);
+  assert.match(pageSource, /sortKey="lastScan"/);
+  assert.match(listSource, /latestActivityAt\(row\.last_associated_scan_at, row\.last_scan_requested_at\)/);
   assert.match(repositorySource, /selected_users as/);
   assert.match(repositorySource, /limit \$1 offset \$2/);
   assert.match(repositorySource, /where scans\.submitted_by_user_id = selected_users\.id/);
+  assert.match(sortSource, /lastScan: "greatest\(request_activity\.last_scan_requested_at, associated_activity\.last_scan_at\)"/);
 });
 
 test("admin scans poll lightweight status data and refresh only after a status change", async () => {

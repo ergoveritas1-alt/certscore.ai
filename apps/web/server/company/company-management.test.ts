@@ -59,6 +59,57 @@ test("workspace management navigation is limited to platform admins", async () =
   assert.match(layout, /const canManageCompany = isPlatformAdmin/);
 });
 
+test("admin users navigation opens the last-login sort", async () => {
+  const adminLayout = await readFile("apps/web/app/app/admin/layout.tsx", "utf8");
+  const adminChrome = await readFile("apps/web/components/admin/admin-section-chrome.tsx", "utf8");
+
+  assert.match(adminLayout, /href: "\/app\/admin\/users\?dir=desc&sort=lastLogin"/);
+  assert.match(adminChrome, /href: "\/app\/admin\/users\?dir=desc&sort=lastLogin"/);
+  assert.doesNotMatch(adminLayout, /href: "\/app\/admin\/users\?dir=desc&sort=lastScan"/);
+  assert.doesNotMatch(adminChrome, /href: "\/app\/admin\/users\?dir=desc&sort=lastScan"/);
+});
+
+test("admin users expose a protected per-user activity page", async () => {
+  const usersPage = await readFile("apps/web/app/app/admin/users/page.tsx", "utf8");
+  const activityPage = await readFile("apps/web/app/app/admin/users/[userId]/activity/page.tsx", "utf8");
+  const activityLoader = await readFile("apps/web/server/admin/list-admin-user-activity.ts", "utf8");
+  const adminUsersList = await readFile("apps/web/server/admin/list-admin-users.ts", "utf8");
+
+  assert.match(usersPage, /View activity for/);
+  assert.match(usersPage, /\/app\/admin\/users\/\$\{user\.id\}\/activity/);
+  assert.match(usersPage, /title="View user activity"/);
+  assert.match(activityPage, />User activity</);
+  assert.match(activityPage, /PaginationControls/);
+  assert.match(activityPage, /pageSize/);
+  assert.match(activityPage, /pageCount/);
+  assert.match(activityPage, /Scan status/);
+  assert.match(activityPage, /API activity routes/);
+  assert.match(activityPage, /loadAdminUserActivity/);
+  assert.match(activityLoader, /requirePlatformAdminContext/);
+  assert.match(activityLoader, /limit \$2 offset \$3/);
+  assert.match(activityLoader, /ADMIN_SCAN_STATUSES/);
+  assert.match(activityLoader, /adminApiRouteSql/);
+  assert.match(activityLoader, /submitted_by_user_id = \$1/);
+  const adminRepository = await readFile("apps/web/server/admin/repository.ts", "utf8");
+  assert.match(adminRepository, /last_scan_requested_at/);
+  assert.match(adminRepository, /requested_by ->> 'userId'/);
+  assert.match(adminUsersList, /latestActivityAt\(row\.last_associated_scan_at, row\.last_scan_requested_at\)/);
+});
+
+test("anonymous homepage scans support one-time verified user claims", async () => {
+  const claims = await readFile("apps/web/server/scans/anonymous-scan-claims.ts", "utf8");
+  const migration = await readFile("packages/db/migrations/0179_anonymous_scan_claims.sql", "utf8");
+  const fullScanRoute = await readFile("apps/web/app/api/full-scan/route.ts", "utf8");
+
+  assert.match(claims, /timingSafeEqual/);
+  assert.match(claims, /organization_id is null/);
+  assert.match(claims, /submitted_by_user_id is null/);
+  assert.match(claims, /claimed_by_user_id is null/);
+  assert.match(fullScanRoute, /addAnonymousScanClaimCookie/);
+  assert.match(migration, /claimed_by_user_id/);
+  assert.match(migration, /scans_claimed_by_user_id_idx/);
+});
+
 test("admin user deletion is protected and removes auth plus app records", async () => {
   const action = await readFile("apps/web/server/admin/delete-user.ts", "utf8");
   const page = await readFile("apps/web/app/app/admin/users/page.tsx", "utf8");

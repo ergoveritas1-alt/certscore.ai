@@ -50,7 +50,7 @@ test("report projection repair uses the canonical publisher and supports an audi
 test("completed dashboard reports stream an honest report shell before detailed evidence", async () => {
   const source = await readFile("apps/web/app/app/scans/[scanId]/page.tsx", "utf8");
   const loadingStateStart = source.indexOf("function ScanDetailLoadingState");
-  const loadingStateEnd = source.indexOf("function canViewCapturedImage", loadingStateStart);
+  const loadingStateEnd = source.indexOf("export default async function", loadingStateStart);
   const loadingState = source.slice(loadingStateStart, loadingStateEnd);
   const loadingCard = await readFile("apps/web/components/scans/scan-report-loading-card.tsx", "utf8");
 
@@ -64,6 +64,18 @@ test("completed dashboard reports stream an honest report shell before detailed 
   assert.doesNotMatch(source, /unstable_cache/);
   assert.doesNotMatch(source, /completedLongEnoughForShortCache/);
   assert.doesNotMatch(source, /hasReportProjectionGraceElapsed/);
+});
+
+test("captured-image availability is not gated by dashboard access level", async () => {
+  const source = await readFile("apps/web/app/app/scans/[scanId]/page.tsx", "utf8");
+  const visualEvidenceStart = source.indexOf("const visualEvidenceArtifacts");
+  const visualEvidenceEnd = source.indexOf("const visualEvidenceHref", visualEvidenceStart);
+  const visualEvidenceBlock = source.slice(visualEvidenceStart, visualEvidenceEnd);
+
+  assert.ok(visualEvidenceStart >= 0);
+  assert.ok(visualEvidenceEnd > visualEvidenceStart);
+  assert.match(visualEvidenceBlock, /getVisualEvidenceArtifacts/);
+  assert.doesNotMatch(visualEvidenceBlock, /canViewCapturedImage|membership\.role|isPlatformAdmin/);
 });
 
 test("completed v2 report routes fail closed to the verified persisted projection", async () => {

@@ -16,6 +16,7 @@ export type LocalV2DagLambdaDebugOverrides = {
   actionFinalSettleMs?: number;
   actionSearchDeadlineMs?: number;
   consentFlowDeadlineMs?: number;
+  lateConsentGateMs?: number;
   preActionObservationMs?: number;
   scenarioConcurrency?: number;
   scenarioResourceMode?: "normal" | "lean" | "cmp_safe";
