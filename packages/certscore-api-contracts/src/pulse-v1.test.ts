@@ -73,47 +73,44 @@ test("MCP contracts expose the current scoped tool surface", () => {
   assert.deepEqual(
     certScoreMcpToolContracts.map((tool) => tool.name).sort(),
     [
-      "create_scan",
-      "explain_finding",
-      "export_findings",
-      "get_evidence",
-      "get_latest_domain_pre_consent_cookies_trackers",
-      "get_latest_domain_scan",
-      "get_pre_consent_cookies_trackers",
-      "get_report",
-      "get_scan",
-      "get_scan_bundle",
-      "get_scan_status",
-      "list_findings",
-      "scan_site"
+      "certscore_explain_finding",
+      "certscore_export_findings",
+      "certscore_get_evidence",
+      "certscore_get_latest_domain_pre_consent_cookies_trackers",
+      "certscore_get_latest_domain_scan",
+      "certscore_get_pre_consent_cookies_trackers",
+      "certscore_get_report",
+      "certscore_get_scan",
+      "certscore_get_scan_bundle",
+      "certscore_get_scan_status",
+      "certscore_list_findings",
+      "certscore_scan_site"
     ]
   );
-  assert.ok(certScoreMcpToolContracts.find((tool) => tool.name === "create_scan")?.inputSchema.url);
-  assert.ok(certScoreMcpToolContracts.find((tool) => tool.name === "get_evidence")?.inputSchema.scanId);
-  assert.ok(certScoreMcpToolContracts.find((tool) => tool.name === "get_scan_bundle")?.inputSchema.scanId);
-  assert.ok(certScoreMcpToolContracts.find((tool) => tool.name === "explain_finding")?.inputSchema.findingId);
-  assert.ok(certScoreMcpToolContracts.find((tool) => tool.name === "get_latest_domain_scan")?.inputSchema.domain);
-  assert.ok(certScoreMcpToolContracts.find((tool) => tool.name === "scan_site")?.inputSchema.waitForCompletion);
-  assert.ok(certScoreMcpToolContracts.find((tool) => tool.name === "scan_site")?.inputSchema.maxWaitSeconds);
-  assert.equal("detail" in (certScoreMcpToolContracts.find((tool) => tool.name === "scan_site")?.inputSchema ?? {}), false);
-  assert.equal("format" in (certScoreMcpToolContracts.find((tool) => tool.name === "scan_site")?.inputSchema ?? {}), false);
-  assert.deepEqual(certScoreMcpToolContracts.find((tool) => tool.name === "scan_site")?.annotations, {
+  assert.ok(certScoreMcpToolContracts.find((tool) => tool.name === "certscore_get_evidence")?.inputSchema.scanId);
+  assert.ok(certScoreMcpToolContracts.find((tool) => tool.name === "certscore_get_scan_bundle")?.inputSchema.scanId);
+  assert.ok(certScoreMcpToolContracts.find((tool) => tool.name === "certscore_explain_finding")?.inputSchema.findingId);
+  assert.ok(certScoreMcpToolContracts.find((tool) => tool.name === "certscore_get_latest_domain_scan")?.inputSchema.domain);
+  assert.ok(certScoreMcpToolContracts.find((tool) => tool.name === "certscore_scan_site")?.inputSchema.waitForCompletion);
+  assert.ok(certScoreMcpToolContracts.find((tool) => tool.name === "certscore_scan_site")?.inputSchema.maxWaitSeconds);
+  assert.equal("detail" in (certScoreMcpToolContracts.find((tool) => tool.name === "certscore_scan_site")?.inputSchema ?? {}), false);
+  assert.equal("format" in (certScoreMcpToolContracts.find((tool) => tool.name === "certscore_scan_site")?.inputSchema ?? {}), false);
+  assert.deepEqual(certScoreMcpToolContracts.find((tool) => tool.name === "certscore_scan_site")?.annotations, {
     readOnlyHint: false,
     destructiveHint: false,
     idempotentHint: false,
     openWorldHint: true
   });
-  assert.deepEqual(certScoreMcpToolContracts.find((tool) => tool.name === "get_scan")?.annotations, {
+  assert.deepEqual(certScoreMcpToolContracts.find((tool) => tool.name === "certscore_get_scan")?.annotations, {
     readOnlyHint: true,
     openWorldHint: true
   });
-  assert.equal(certScoreMcpToolContracts.find((tool) => tool.name === "create_scan")?.description.includes("Deprecated compatibility alias"), true);
-  assert.ok(certScoreMcpToolContracts.find((tool) => tool.name === "list_findings")?.inputSchema.limit);
-  assert.ok(certScoreMcpToolContracts.find((tool) => tool.name === "get_pre_consent_cookies_trackers")?.inputSchema.maxRows);
+  assert.ok(certScoreMcpToolContracts.find((tool) => tool.name === "certscore_list_findings")?.inputSchema.limit);
+  assert.ok(certScoreMcpToolContracts.find((tool) => tool.name === "certscore_get_pre_consent_cookies_trackers")?.inputSchema.maxRows);
 });
 
 test("MCP scan inputs accept every API v2 scanner location", () => {
-  const scanSite = certScoreMcpToolContracts.find((tool) => tool.name === "scan_site");
+  const scanSite = certScoreMcpToolContracts.find((tool) => tool.name === "certscore_scan_site");
   assert.ok(scanSite);
   for (const scanFrom of ["eu_de", "eu_ie", "california"] as const) {
     assert.equal(scanSite.inputSchema.scanFrom.parse(scanFrom), scanFrom);
@@ -121,12 +118,12 @@ test("MCP scan inputs accept every API v2 scanner location", () => {
 });
 
 test("MCP output contracts reuse stable API shapes with bounded MCP metadata", () => {
-  assert.equal(certScoreMcpToolContracts.find((tool) => tool.name === "scan_site")?.outputSchema, mcpScanSiteOutputSchema);
-  assert.equal(certScoreMcpToolContracts.find((tool) => tool.name === "get_scan")?.outputSchema, apiV2ScanResourceSchema);
-  assert.equal(certScoreMcpToolContracts.find((tool) => tool.name === "list_findings")?.outputSchema, mcpFindingListOutputSchema);
-  assert.equal(certScoreMcpToolContracts.find((tool) => tool.name === "explain_finding")?.outputSchema, apiV2FindingDetailSchema);
+  assert.equal(certScoreMcpToolContracts.find((tool) => tool.name === "certscore_scan_site")?.outputSchema, mcpScanSiteOutputSchema);
+  assert.equal(certScoreMcpToolContracts.find((tool) => tool.name === "certscore_get_scan")?.outputSchema, apiV2ScanResourceSchema);
+  assert.equal(certScoreMcpToolContracts.find((tool) => tool.name === "certscore_list_findings")?.outputSchema, mcpFindingListOutputSchema);
+  assert.equal(certScoreMcpToolContracts.find((tool) => tool.name === "certscore_explain_finding")?.outputSchema, apiV2FindingDetailSchema);
   assert.equal(
-    certScoreMcpToolContracts.find((tool) => tool.name === "get_pre_consent_cookies_trackers")?.outputSchema,
+    certScoreMcpToolContracts.find((tool) => tool.name === "certscore_get_pre_consent_cookies_trackers")?.outputSchema,
     mcpPreConsentCookiesTrackersOutputSchema
   );
 
@@ -236,7 +233,7 @@ test("API v2 accepts EU-Germany, EU-Ireland, and California scan creation with t
     anonymousQuotaLimit: 20,
     anonymousQuotaRemaining: 8,
     anonymousQuotaResetAt: "2026-07-16T00:00:00.000Z",
-    recommendedNextTool: "get_scan_bundle"
+    recommendedNextTool: "certscore_get_scan_bundle"
   });
   const evidence = apiV2EvidenceSummarySchema.parse({
     basis: "runtime_observation",
@@ -286,7 +283,7 @@ test("API v2 accepts EU-Germany, EU-Ireland, and California scan creation with t
   assert.equal(scan.score, 88);
   assert.equal(scan.reused, true);
   assert.equal(scan.anonymousQuotaRemaining, 8);
-  assert.equal(scan.recommendedNextTool, "get_scan_bundle");
+  assert.equal(scan.recommendedNextTool, "certscore_get_scan_bundle");
   assert.equal(findingList.findings[0]?.evidence.examples?.[0]?.urlHost, "analytics.example.test");
   assert.equal(findingList.findings[0]?.evidence.examples?.[0]?.resolvedEndpointVendor, "Canonical Analytics");
   assert.deepEqual(findingList.findings[0]?.evidence.projectionWarnings, ["canonical_endpoint_vendor_replaced_raw_vendor"]);

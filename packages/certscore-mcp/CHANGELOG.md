@@ -11,7 +11,7 @@
 - Reserve a compact finding in `findings` mode and a bounded evidence digest/reference in `evidence` mode when the requested byte budget permits.
 - Add selected detail, omitted sections, next recommended byte limit, and report/evidence retrieval URLs to bundle metadata.
 - Return machine-readable `invalid_arguments` details alongside MCP `-32602` validation errors.
-- Keep typed `scan_site` validation envelopes compatible with client-side output-schema validation after `tools/list` discovery.
+- Keep typed `certscore_scan_site` validation envelopes compatible with client-side output-schema validation after `tools/list` discovery.
 - Require complete actionable error objects for failed, expired, rate-limited, and completed-limited no-go results.
 - Add top-level canonical timing fields and contract coverage proving all three Light result tools remain immutable and consistent.
 
@@ -25,15 +25,15 @@
 
 ## 0.2.12
 
-- Add the no-account `https://mcp.certscore.ai/mcp/light` endpoint with the focused `scan_site`, `get_scan_status`, and `get_scan_bundle` workflow.
+- Add the no-account `https://mcp.certscore.ai/mcp/light` endpoint with the focused `certscore_scan_site`, `certscore_get_scan_status`, and `certscore_get_scan_bundle` workflow.
 - Raise the no-account allowance to 20 new scans per requester per UTC day; eligible recent-result reuse remains free.
 - Give quota-limited agents a direct `support@certscore.ai` path for higher-volume access.
 - Advertise the hosted Streamable HTTP endpoint in MCP Registry metadata while retaining the npm stdio package.
 
 ## 0.2.11
 
-- Add `get_scan_bundle` as the compact second call after `scan_site`, retrieving the canonical scan, report summary, projected findings, bounded evidence, and pre-consent inventory in parallel.
-- Report scan reuse, freshness decisions, anonymous quota consumption and remaining allowance, UTC reset time, and the recommended next tool from `scan_site`.
+- Add `certscore_get_scan_bundle` as the compact second call after `certscore_scan_site`, retrieving the canonical scan, report summary, projected findings, bounded evidence, and pre-consent inventory in parallel.
+- Report scan reuse, freshness decisions, anonymous quota consumption and remaining allowance, UTC reset time, and the recommended next tool from `certscore_scan_site`.
 - Normalize terminal status to the canonical `completed` or `completed_limited` scan resource and direct agents to the bundle.
 - Mark `create_scan` as a deprecated compatibility alias in the public tool surface and document the two-call default workflow.
 
@@ -52,7 +52,7 @@
 
 - Rebuild the distributed MCP binary against the SDK client-attribution header so stdio scan requests persist as MCP activity instead of generic Pulse activity.
 - Add `certscore-mcp doctor --check-auth` and a side-effect-free API credential check endpoint.
-- Keep `create_scan` as a compatibility alias while directing new integrations to `scan_site`.
+- Keep `create_scan` as a compatibility alias while directing new integrations to `certscore_scan_site`.
 
 ## 0.2.7
 
@@ -68,7 +68,7 @@
 ## 0.2.5
 
 - Rebuilt the MCP server against `@certscore/sdk@0.2.3`.
-- Documented API v2 scan timing fields returned by `scan_site`, `get_scan`, and `get_scan_status`: `startedAt`, `completedAt`, and `scanTimeSeconds`.
+- Documented API v2 scan timing fields returned by `certscore_scan_site`, `certscore_get_scan`, and `certscore_get_scan_status`: `startedAt`, `completedAt`, and `scanTimeSeconds`.
 - Clarified that `scanTimeSeconds: null` means timing is unavailable and should not be displayed as `0`.
 
 ## 0.1.5
@@ -79,7 +79,7 @@
 ## 0.1.4
 
 - Added a checked-in MCP tool manifest and release guards for server/docs/tool-surface drift.
-- Added `get_evidence` transport bounding metadata for oversized Evidence JSON packets.
+- Added `certscore_get_evidence` transport bounding metadata for oversized Evidence JSON packets.
 - Documented all 12 MCP tools consistently across package and developer docs.
 - Added clean-env npx smoke coverage for install, doctor, tools/list annotations, bounded evidence, and tool-error shape.
 
@@ -103,7 +103,7 @@
 ## 0.1.0
 
 - Added developer-preview stdio MCP server for CertScore Pulse.
-- Added scoped v1 tools: `create_scan`, `get_scan_status`, `get_report`, `export_findings`, and `explain_finding`.
+- Added scoped v1 tools: `create_scan`, `certscore_get_scan_status`, `certscore_get_report`, `certscore_export_findings`, and `certscore_explain_finding`.
 - Added structured finding export and finding explanation helpers.
 - Added MCP protocol and tool-call tests using mocked Pulse API responses.
 - Added live smoke command support through `pnpm mcp:certscore:smoke`.

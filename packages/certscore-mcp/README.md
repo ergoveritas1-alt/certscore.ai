@@ -20,7 +20,7 @@ Light:
 https://mcp.certscore.ai/mcp/light
 
 Authentication: None
-Tools: scan_site, get_scan_status, get_scan_bundle
+Tools: certscore_scan_site, certscore_get_scan_status, certscore_get_scan_bundle
 ```
 
 No signup, API key, bearer token, browser login, or OAuth is required. Light allows 20 new scans per requester IP per UTC day. Reused eligible results do not consume quota.
@@ -33,17 +33,17 @@ codex mcp add certscore --url https://mcp.certscore.ai/mcp/light
 
 First-run Codex prompt:
 
-> Scan https://ergoveritas.com/.well-known/certscore-canary/sentinels/broad-baseline.html. If scan_site returns a queued, running, or finalizing result, retain the returned scanId and poll get_scan_status using scanId only. If scan_site returns a retryable error without a scanId, wait for retryAfterSeconds and retry scan_site; do not call get_scan_status until a scanId exists. Once the scan reaches a terminal status, call get_scan_bundle with detail=findings and maxBytes=8000. Summarize whether the result was new or reused, the score, risk level, findings, evidence links, coverage limitations, and report URL. Explain truncation or omitted sections when present. Treat results as automated public-web observations, not legal conclusions, certifications, or compliance determinations.
+> Scan https://ergoveritas.com/.well-known/certscore-canary/sentinels/broad-baseline.html. If certscore_scan_site returns a queued, running, or finalizing result, retain the returned scanId and poll certscore_get_scan_status using scanId only. If certscore_scan_site returns a retryable error without a scanId, wait for retryAfterSeconds and retry certscore_scan_site; do not call certscore_get_scan_status until a scanId exists. Once the scan reaches a terminal status, call certscore_get_scan_bundle with detail=findings and maxBytes=8000. Summarize whether the result was new or reused, the score, risk level, findings, evidence links, coverage limitations, and report URL. Explain truncation or omitted sections when present. Treat results as automated public-web observations, not legal conclusions, certifications, or compliance determinations.
 
 ErgoVeritas is a stable, owned canary site suited to demonstrating the complete scan, status, and bundle flow. Its pages intentionally contain test signals; users may substitute their own public HTTP or HTTPS URL for production-like testing.
 
 Canonical Light workflow:
 
-1. Call `scan_site` with a public URL.
-2. If a retryable error has no `scanId`, wait `retryAfterSeconds` and retry `scan_site`.
+1. Call `certscore_scan_site` with a public URL.
+2. If a retryable error has no `scanId`, wait `retryAfterSeconds` and retry `certscore_scan_site`.
 3. If the result is queued, running, or finalizing, retain `scanId`.
-4. Poll `get_scan_status` using `scanId` only. Never poll until `scanId` exists.
-5. Stop polling at a terminal status, then call `get_scan_bundle`.
+4. Poll `certscore_get_scan_status` using `scanId` only. Never poll until `scanId` exists.
+5. Stop polling at a terminal status, then call `certscore_get_scan_bundle`.
 6. Use `detail=findings` for a compact finding review.
 7. Use `detail=evidence` for evidence digests and references.
 8. If truncated, follow `recommendedNextAction` or increase `maxBytes`.
@@ -53,9 +53,9 @@ Recommended bundle budgets are `maxBytes=5000` for `summary`, `maxBytes=8000` fo
 
 Verification prompt:
 
-> List the available CertScore tools and confirm that scan_site, get_scan_status, and get_scan_bundle are available. Then scan https://ergoveritas.com/.well-known/certscore-canary/sentinels/broad-baseline.html and report whether the result was new or reused.
+> List the available CertScore tools and confirm that certscore_scan_site, certscore_get_scan_status, and certscore_get_scan_bundle are available. Then scan https://ergoveritas.com/.well-known/certscore-canary/sentinels/broad-baseline.html and report whether the result was new or reused.
 
-Success means the tool list contains exactly the three Light tools, no authorization page appears, and `scan_site` returns a stable `scanId` plus an explicit new-or-reused decision. An eligible reused result reports that quota was not consumed.
+Success means the tool list contains exactly the three Light tools, no authorization page appears, and `certscore_scan_site` returns a stable `scanId` plus an explicit new-or-reused decision. An eligible reused result reports that quota was not consumed.
 
 CertScore results are automated observations from a public-web scan. No-go, not-observed, and limited-coverage results are not proof of compliance, absence of risk, or legal status. Review the retained evidence and applicable context before relying on a finding.
 
@@ -75,19 +75,18 @@ MCP scan-resource reads use the same weighted, rolling policy as the direct Cert
 
 ## Tools
 
-- `create_scan` - Deprecated compatibility alias of scan_site. Use scan_site for new integrations. Returns completed-limited no-go disposition and reason-specific guidance when applicable.
-- `scan_site` - First call. Starts or reuses a public-web scan and waits up to 45 seconds by default. If status is queued, running, or finalizing, retain scanId and poll get_scan_status using only that scanId. Stop polling at completed, completed_limited, failed, expired, or rate_limited. For usable completion, call get_scan_bundle. No-go and limited coverage are observations, never proof of compliance.
-- `get_scan` - Retrieve the API v2 public-safe scan resource, including completed-limited no-go disposition, reason-specific guidance, and timing when available.
-- `get_scan_status` - Poll with only the stable scanId returned by scan_site. Active responses include phase, heartbeat, estimated progress, stalled state, and retry delay. Terminal responses include the canonical score, risk, coverage, timestamps, report URL, and an explicit next action. Stop polling at any terminal status.
-- `get_report` - Retrieve a summary Pulse report, including customer-safe no-go messaging when coverage is completed-limited. Use get_evidence for the larger bounded packet.
-- `get_evidence` - Retrieve the bounded structured Evidence JSON packet for a stable scan ID. Excludes raw cookie values, raw bodies, sensitive payloads, full DOM, and unredacted query values.
-- `get_scan_bundle` - Call after completed or completed_limited status. summary returns the canonical overview without finding bodies; findings reserves space for compact findings; evidence reserves findings plus bounded evidence digests and references; full adds all available bounded sections. Every response declares detail and byte-budget metadata, omittedSections, retrieval URLs, and nextRecommendedMaxBytes when truncated. Never interpret no-go, not-observed, or limited coverage as proof of compliance.
-- `export_findings` - Return structured findings plus completed-limited no-go disposition and guidance for downstream review or ticketing workflows.
-- `list_findings` - List API v2 public-safe findings already projected for a scan.
-- `get_pre_consent_cookies_trackers` - Retrieve the public-safe Cookies & Trackers (Pre-consent) report table as compact JSON for a scan.
-- `explain_finding` - Explain one projected finding with public evidence, caveats, reviewer next steps, and reason-specific no-go context when applicable.
-- `get_latest_domain_scan` - Retrieve the latest eligible API v2 public-safe scan for a domain.
-- `get_latest_domain_pre_consent_cookies_trackers` - Retrieve the public-safe Cookies & Trackers (Pre-consent) table from the latest eligible scan for a domain.
+- `certscore_scan_site` - First call. Starts or reuses a public-web scan and waits up to 45 seconds by default. If status is queued, running, or finalizing, retain scanId and poll certscore_get_scan_status using only that scanId. Stop polling at completed, completed_limited, failed, expired, or rate_limited. For usable completion, call certscore_get_scan_bundle. No-go and limited coverage are observations, never proof of compliance.
+- `certscore_get_scan` - Retrieve the API v2 public-safe scan resource, including completed-limited no-go disposition, reason-specific guidance, and timing when available.
+- `certscore_get_scan_status` - Poll with only the stable scanId returned by certscore_scan_site. Active responses include phase, heartbeat, estimated progress, stalled state, and retry delay. Terminal responses include the canonical score, risk, coverage, timestamps, report URL, and an explicit next action. Stop polling at any terminal status.
+- `certscore_get_report` - Retrieve a summary Pulse report, including customer-safe no-go messaging when coverage is completed-limited. Use certscore_get_evidence for the larger bounded packet.
+- `certscore_get_evidence` - Retrieve the bounded structured Evidence JSON packet for a stable scan ID. Excludes raw cookie values, raw bodies, sensitive payloads, full DOM, and unredacted query values.
+- `certscore_get_scan_bundle` - Call after completed or completed_limited status. summary returns the canonical overview without finding bodies; findings reserves space for compact findings; evidence reserves findings plus bounded evidence digests and references; full adds all available bounded sections. Every response declares detail and byte-budget metadata, omittedSections, retrieval URLs, and nextRecommendedMaxBytes when truncated. Never interpret no-go, not-observed, or limited coverage as proof of compliance.
+- `certscore_export_findings` - Return structured findings plus completed-limited no-go disposition and guidance for downstream review or ticketing workflows.
+- `certscore_list_findings` - List API v2 public-safe findings already projected for a scan.
+- `certscore_get_pre_consent_cookies_trackers` - Retrieve the public-safe Cookies & Trackers (Pre-consent) report table as compact JSON for a scan.
+- `certscore_explain_finding` - Explain one projected finding with public evidence, caveats, reviewer next steps, and reason-specific no-go context when applicable.
+- `certscore_get_latest_domain_scan` - Retrieve the latest eligible API v2 public-safe scan for a domain.
+- `certscore_get_latest_domain_pre_consent_cookies_trackers` - Retrieve the public-safe Cookies & Trackers (Pre-consent) table from the latest eligible scan for a domain.
 
 The initial MCP surface intentionally does not include account scan browsing or scan comparison tools.
 
@@ -99,9 +98,9 @@ MCP tools backed by API v2 scan resources return scan timing when CertScore has 
 - `completedAt`
 - `scanTimeSeconds`
 
-This applies to `scan_site` when it returns an API v2 scan resource or job, `get_scan`, and `get_scan_status` when called with a `scanId`. `scanTimeSeconds: null` means timing is unavailable or incomplete and should not be displayed as `0`.
+This applies to `certscore_scan_site` when it returns an API v2 scan resource or job, `certscore_get_scan`, and `certscore_get_scan_status` when called with a `scanId`. `scanTimeSeconds: null` means timing is unavailable or incomplete and should not be displayed as `0`.
 
-Completed Light results are canonical. `scan_site`, terminal `get_scan_status`, and `get_scan_bundle` return the same score, risk level, coverage, and timing fields. Scores include `scoreStatus`, `scoreVersion`, and `scoreUpdatedAt`; a scan remains `finalizing` until the persisted canonical report projection is ready, so a completed response always carries `scoreStatus: "final"`.
+Completed Light results are canonical. `certscore_scan_site`, terminal `certscore_get_scan_status`, and `certscore_get_scan_bundle` return the same score, risk level, coverage, and timing fields. Scores include `scoreStatus`, `scoreVersion`, and `scoreUpdatedAt`; a scan remains `finalizing` until the persisted canonical report projection is ready, so a completed response always carries `scoreStatus: "final"`.
 
 Every `failed`, `expired`, or `rate_limited` status includes a bounded `error` object with `code`, `message`, `retryable`, `retryAfterSeconds`, and `recommendedNextAction`.
 
@@ -115,10 +114,10 @@ Input-validation errors remain MCP `-32602` errors and also include structured `
 
 The Light workflow is:
 
-1. Call `scan_site` with a public URL.
-2. If a retryable error has no `scanId`, wait `retryAfterSeconds` and retry `scan_site`; do not poll.
-3. If the result is queued, running, or finalizing, retain `scanId` and poll `get_scan_status` with only that ID.
-4. Stop polling at any terminal status. For `completed` or `completed_limited`, call `get_scan_bundle`.
+1. Call `certscore_scan_site` with a public URL.
+2. If a retryable error has no `scanId`, wait `retryAfterSeconds` and retry `certscore_scan_site`; do not poll.
+3. If the result is queued, running, or finalizing, retain `scanId` and poll `certscore_get_scan_status` with only that ID.
+4. Stop polling at any terminal status. For `completed` or `completed_limited`, call `certscore_get_scan_bundle`.
 5. If the bundle is truncated, follow `recommendedNextAction`, increase `maxBytes`, or open a listed content URL.
 6. Summarize the canonical score, risk, findings, coverage, limitations, and report URL without treating no-go, not-observed, or limited coverage as proof of compliance.
 
@@ -303,26 +302,26 @@ Local repo config for contributors:
 
 ## Agent Workflow
 
-1. Call `scan_site` with a public URL. It normally returns the completed scan resource in the same tool call.
-2. Only if it returns a non-terminal job, call `get_scan_status` using the stable `scanId` until completion.
-3. If status is `queued`, `running`, or `finalizing`, retain the returned `scanId` and poll `get_scan_status` using only that ID. Stop polling at `completed`, `completed_limited`, `failed`, `expired`, or `rate_limited`.
-4. For `completed` or `completed_limited`, call `get_scan_bundle` with its default `detail: "summary"`. Use `findings`, `evidence`, or `full` only when progressively deeper bounded context is required.
+1. Call `certscore_scan_site` with a public URL. It normally returns the completed scan resource in the same tool call.
+2. Only if it returns a non-terminal job, call `certscore_get_scan_status` using the stable `scanId` until completion.
+3. If status is `queued`, `running`, or `finalizing`, retain the returned `scanId` and poll `certscore_get_scan_status` using only that ID. Stop polling at `completed`, `completed_limited`, `failed`, `expired`, or `rate_limited`.
+4. For `completed` or `completed_limited`, call `certscore_get_scan_bundle` with its default `detail: "summary"`. Use `findings`, `evidence`, or `full` only when progressively deeper bounded context is required.
 5. Summarize the canonical score, risk, findings, coverage, limitations, report URL, and next action. Never treat no-go, not-observed, or limited coverage as proof of compliance.
 
 Canonical first-run prompt:
 
-> Scan these public URLs. For each one, call scan_site. If status is queued, running, or finalizing, retain scanId and poll get_scan_status using only scanId. Stop polling at completed, completed_limited, failed, expired, or rate_limited. For completed or completed_limited scans, call get_scan_bundle with detail=findings. If truncated, follow recommendedNextAction or increase maxBytes. Report the canonical score, risk level, coverage, findings, limitations, report URL, and next action. Never treat no-go, not-observed, or limited coverage as proof of compliance.
-4. Call `get_report`, `get_evidence`, `list_findings`, or `get_pre_consent_cookies_trackers` only when the task needs a dedicated view.
-5. Call `explain_finding` when a reviewer needs evidence and caveats for a specific finding.
-6. Call `get_latest_domain_scan` or `get_latest_domain_pre_consent_cookies_trackers` when the user asks for latest eligible public data for a domain.
+> Scan these public URLs. For each one, call certscore_scan_site. If status is queued, running, or finalizing, retain scanId and poll certscore_get_scan_status using only scanId. Stop polling at completed, completed_limited, failed, expired, or rate_limited. For completed or completed_limited scans, call certscore_get_scan_bundle with detail=findings. If truncated, follow recommendedNextAction or increase maxBytes. Report the canonical score, risk level, coverage, findings, limitations, report URL, and next action. Never treat no-go, not-observed, or limited coverage as proof of compliance.
+4. Call `certscore_get_report`, `certscore_get_evidence`, `certscore_list_findings`, or `certscore_get_pre_consent_cookies_trackers` only when the task needs a dedicated view.
+5. Call `certscore_explain_finding` when a reviewer needs evidence and caveats for a specific finding.
+6. Call `certscore_get_latest_domain_scan` or `certscore_get_latest_domain_pre_consent_cookies_trackers` when the user asks for latest eligible public data for a domain.
 
-`scan_site` reports whether the result was reused, why the freshness decision was made, whether anonymous quota was consumed, the remaining daily allowance, the UTC reset time, and the recommended next tool.
+`certscore_scan_site` reports whether the result was reused, why the freshness decision was made, whether anonymous quota was consumed, the remaining daily allowance, the UTC reset time, and the recommended next tool.
 
 With `freshness: "latest"`, CertScore reuses an eligible scan completed within the last 24 hours for the same normalized target and scan region. A reusable result must have completed usable page coverage and must not be an early-loss, no-page, or otherwise non-reusable limited result. Reuse does not consume anonymous quota. `freshnessDecision` states whether a recent result was reused or a new scan was queued; `reusedScanAgeSeconds` reports the reused result's age.
 
 ```json
 {
-  "tool": "get_pre_consent_cookies_trackers",
+  "tool": "certscore_get_pre_consent_cookies_trackers",
   "arguments": {
     "scanId": "00000000-0000-4000-8000-000000000123"
   }
@@ -331,7 +330,7 @@ With `freshness: "latest"`, CertScore reuses an eligible scan completed within t
 
 ```json
 {
-  "tool": "get_latest_domain_pre_consent_cookies_trackers",
+  "tool": "certscore_get_latest_domain_pre_consent_cookies_trackers",
   "arguments": {
     "domain": "ergoveritas.com",
     "scanFrom": "eu_ie"
@@ -362,13 +361,13 @@ For the full production operator smoke, run from the WC01 repo:
 pnpm ops:smoke:mcp-production
 ```
 
-This verifies the Homebrew-installed `certscore-mcp` command against live `https://certscore.ai`. It creates a short-lived preview key, stores only the hash in production through the approved ECS/Fargate path, checks required tools, requests a fresh EU-IR scan with `freshness: "refresh"` and `scanFrom: "eu_ie"`, requires non-empty findings and pre-consent cookies/trackers rows, runs `explain_finding`, and revokes the temporary key afterward. It exercises existing public-safe API/MCP projections only.
+This verifies the Homebrew-installed `certscore-mcp` command against live `https://certscore.ai`. It creates a short-lived preview key, stores only the hash in production through the approved ECS/Fargate path, checks required tools, requests a fresh EU-IR scan with `freshness: "refresh"` and `scanFrom: "eu_ie"`, requires non-empty findings and pre-consent cookies/trackers rows, runs `certscore_explain_finding`, and revokes the temporary key afterward. It exercises existing public-safe API/MCP projections only.
 
 ## Troubleshooting
 
 - Unexpected OAuth in Codex: remove the server and add it again with the exact Light URL `https://mcp.certscore.ai/mcp/light`. Do not configure a bearer token.
-- Successful Light connection: Streamable HTTP initialization completes, no authorization page opens, and `tools/list` returns exactly `scan_site`, `get_scan_status`, and `get_scan_bundle`.
-- Missing scan ID: retry `scan_site` only when the error is retryable. Never call `get_scan_status` until `scanId` exists.
+- Successful Light connection: Streamable HTTP initialization completes, no authorization page opens, and `tools/list` returns exactly `certscore_scan_site`, `certscore_get_scan_status`, and `certscore_get_scan_bundle`.
+- Missing scan ID: retry `certscore_scan_site` only when the error is retryable. Never call `certscore_get_scan_status` until `scanId` exists.
 - Rate limited: follow `retryAfterSeconds` and `recommendedNextAction`, wait for the returned UTC reset, or reuse an eligible result.
 - Reused result: report that the eligible prior scan was reused and quota was not consumed.
 - Truncated bundle: follow `nextRecommendedMaxBytes`, raise `maxBytes`, or open a returned report or evidence content URL.

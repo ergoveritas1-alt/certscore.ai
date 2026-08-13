@@ -31,7 +31,7 @@ const scanExample = {
   anonymousQuotaResetAt: "2026-07-16T00:00:00.000Z",
   upgradeSupportEmail: "support@certscore.ai",
   upgradeMessage: "For a higher-volume allowance, contact support@certscore.ai.",
-  recommendedNextTool: "get_scan_bundle",
+  recommendedNextTool: "certscore_get_scan_bundle",
   links: {
     self: "https://certscore.ai/api/v2/scans/00000000-0000-4000-8000-000000000123",
     status: "https://certscore.ai/api/v2/scans/00000000-0000-4000-8000-000000000123/status",
@@ -61,7 +61,7 @@ const scanJobExample = {
   stalled: false,
   retryAfterSeconds: 2,
   reportUrl: "https://certscore.ai/scan/00000000-0000-4000-8000-000000000123",
-  recommendedNextAction: "Poll get_scan_status with scanId 00000000-0000-4000-8000-000000000123 after the recommended delay.",
+  recommendedNextAction: "Poll certscore_get_scan_status with scanId 00000000-0000-4000-8000-000000000123 after the recommended delay.",
   executionMode: "new_scan",
   reused: false,
   reusedScanAgeSeconds: null,
@@ -72,7 +72,7 @@ const scanJobExample = {
   anonymousQuotaResetAt: "2026-07-16T00:00:00.000Z",
   upgradeSupportEmail: "support@certscore.ai",
   upgradeMessage: "For a higher-volume allowance, contact support@certscore.ai.",
-  recommendedNextTool: "get_scan_status",
+  recommendedNextTool: "certscore_get_scan_status",
   links: {
     self: "https://certscore.ai/api/v2/scans/00000000-0000-4000-8000-000000000123/status",
     status: "https://certscore.ai/api/v2/scans/00000000-0000-4000-8000-000000000123/status"
@@ -758,7 +758,7 @@ export function buildCertScoreApiV2OpenApiDocument() {
             anonymousQuotaResetAt: { type: ["string", "null"], format: "date-time" },
             upgradeSupportEmail: { type: ["string", "null"], format: "email" },
             upgradeMessage: { type: ["string", "null"], description: "Higher-volume contact guidance for no-account callers." },
-            recommendedNextTool: { type: "string", enum: ["get_scan_status", "get_scan_bundle"] },
+            recommendedNextTool: { type: "string", enum: ["certscore_get_scan_status", "certscore_get_scan_bundle"] },
             links: { $ref: "#/components/schemas/Links" },
             disclaimer: { type: "string" }
           }
@@ -796,7 +796,7 @@ export function buildCertScoreApiV2OpenApiDocument() {
             anonymousQuotaResetAt: { type: ["string", "null"], format: "date-time" },
             upgradeSupportEmail: { type: ["string", "null"], format: "email" },
             upgradeMessage: { type: ["string", "null"], description: "Higher-volume contact guidance for no-account callers." },
-            recommendedNextTool: { type: "string", enum: ["get_scan_status", "get_scan_bundle"] },
+            recommendedNextTool: { type: "string", enum: ["certscore_get_scan_status", "certscore_get_scan_bundle"] },
             links: { $ref: "#/components/schemas/Links" },
             disclaimer: { type: "string" }
           }

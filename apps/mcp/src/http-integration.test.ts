@@ -130,8 +130,8 @@ test("Streamable HTTP runtime initializes, lists tools, enforces auth, CORS, and
     const client = new Client({ name: "certscore-http-integration", version: "0.1.0" });
     await client.connect(transport);
     const tools = await client.listTools();
-    assert.ok(tools.tools.some((tool) => tool.name === "get_scan"));
-    assert.ok(tools.tools.some((tool) => tool.name === "scan_site"));
+    assert.ok(tools.tools.some((tool) => tool.name === "certscore_get_scan"));
+    assert.ok(tools.tools.some((tool) => tool.name === "certscore_scan_site"));
     await client.close();
 
     const anonymousTransport = new StreamableHTTPClientTransport(new URL(`${origin}/mcp/anonymous`), {
@@ -140,8 +140,8 @@ test("Streamable HTTP runtime initializes, lists tools, enforces auth, CORS, and
     const anonymousClient = new Client({ name: "certscore-anonymous-http-integration", version: "0.1.0" });
     await anonymousClient.connect(anonymousTransport);
     const anonymousTools = await anonymousClient.listTools();
-    assert.ok(anonymousTools.tools.some((tool) => tool.name === "scan_site"));
-    const created = await anonymousClient.callTool({ name: "scan_site", arguments: { url: "https://example.com", waitForCompletion: false } });
+    assert.ok(anonymousTools.tools.some((tool) => tool.name === "certscore_scan_site"));
+    const created = await anonymousClient.callTool({ name: "certscore_scan_site", arguments: { url: "https://example.com", waitForCompletion: false } });
     assert.equal(created.isError, undefined);
     assert.match(JSON.stringify(created), /anonymous-mcp-job/);
     assert.equal(forwardedClientIp, "203.0.113.44");
@@ -154,8 +154,8 @@ test("Streamable HTTP runtime initializes, lists tools, enforces auth, CORS, and
     const lightClient = new Client({ name: "certscore-light-http-integration", version: "0.1.0" });
     await lightClient.connect(lightTransport);
     const lightTools = await lightClient.listTools();
-    assert.deepEqual(lightTools.tools.map((tool) => tool.name).sort(), ["get_scan_bundle", "get_scan_status", "scan_site"]);
-    const invalidLightScan = await lightClient.callTool({ name: "scan_site", arguments: {} });
+    assert.deepEqual(lightTools.tools.map((tool) => tool.name).sort(), ["certscore_get_scan_bundle", "certscore_get_scan_status", "certscore_scan_site"]);
+    const invalidLightScan = await lightClient.callTool({ name: "certscore_scan_site", arguments: {} });
     assert.equal(invalidLightScan.isError, true);
     assert.equal((invalidLightScan.structuredContent as { type?: string } | undefined)?.type, "certscore_tool_error");
     assert.equal(((invalidLightScan.structuredContent as { error?: { field?: string } } | undefined)?.error)?.field, "url");

@@ -104,7 +104,7 @@ export function toInvalidArgumentsToolError(errorMessage: string): CallToolResul
   const recommendedNextAction = field === "url"
     ? "Provide a public URL or domain."
     : field === "scanId"
-      ? "Provide the stable scanId returned by scan_site."
+      ? "Provide the stable scanId returned by certscore_scan_site."
       : "Correct the named fields using the tool input schema, then retry.";
   const error: ActionableError = {
     code: "invalid_arguments",
@@ -115,7 +115,7 @@ export function toInvalidArgumentsToolError(errorMessage: string): CallToolResul
     recommendedNextAction,
     mcpCode: -32602
   };
-  const payload = tool === "scan_site"
+  const payload = tool === "certscore_scan_site"
     ? {
         type: "certscore_tool_error",
         status: "invalid_arguments",
@@ -127,7 +127,7 @@ export function toInvalidArgumentsToolError(errorMessage: string): CallToolResul
     : { error };
   return {
     content: [{ type: "text", text: JSON.stringify(payload) }],
-    ...(tool === "scan_site" ? { structuredContent: payload } : {}),
+    ...(tool === "certscore_scan_site" ? { structuredContent: payload } : {}),
     isError: true
   };
 }
@@ -146,7 +146,7 @@ function terminalErrorForResult(value: Record<string, any>): ActionableError | n
       recommendedNextAction: typeof existing.recommendedNextAction === "string"
         ? existing.recommendedNextAction
         : retryable
-          ? "Wait for the recommended delay, then retry scan_site with freshness=refresh."
+          ? "Wait for the recommended delay, then retry certscore_scan_site with freshness=refresh."
           : "Stop and review the scan limitations before deciding whether to change the URL."
     };
   }
@@ -168,21 +168,21 @@ function terminalErrorForResult(value: Record<string, any>): ActionableError | n
       message: "The scan ended before a canonical result could be produced.",
       retryable: true,
       retryAfterSeconds: 30,
-      recommendedNextAction: "Wait 30 seconds, then retry scan_site with freshness=refresh. Stop if the failure repeats."
+      recommendedNextAction: "Wait 30 seconds, then retry certscore_scan_site with freshness=refresh. Stop if the failure repeats."
     },
     expired: {
       code: "scan_expired",
       message: "The scan expired before a canonical result was available.",
       retryable: true,
       retryAfterSeconds: 30,
-      recommendedNextAction: "Wait 30 seconds, then retry scan_site with freshness=refresh."
+      recommendedNextAction: "Wait 30 seconds, then retry certscore_scan_site with freshness=refresh."
     },
     rate_limited: {
       code: "rate_limited",
       message: "The scan is rate limited.",
       retryable: true,
       retryAfterSeconds: typeof value.retryAfterSeconds === "number" ? value.retryAfterSeconds : 30,
-      recommendedNextAction: "Wait for the recommended delay, then retry the same scan_site request."
+      recommendedNextAction: "Wait for the recommended delay, then retry the same certscore_scan_site request."
     }
   };
   return fallback[String(value.status)] ?? null;
@@ -199,11 +199,11 @@ export function withMcpAgentGuidance<T extends Record<string, any>>(value: T): T
   return {
     ...value,
     error,
-    recommendedNextTool: active ? "get_scan_status" : usable ? "get_scan_bundle" : null,
+    recommendedNextTool: active ? "certscore_get_scan_status" : usable ? "certscore_get_scan_bundle" : null,
     recommendedNextAction: error?.recommendedNextAction ?? value.recommendedNextAction ?? (active
-      ? `Poll get_scan_status with scanId ${value.scanId ?? value.jobId} after the recommended delay.`
+      ? `Poll certscore_get_scan_status with scanId ${value.scanId ?? value.jobId} after the recommended delay.`
       : usable
-        ? `Call get_scan_bundle with scanId ${value.scanId ?? value.jobId} for the canonical findings and limitations.`
+        ? `Call certscore_get_scan_bundle with scanId ${value.scanId ?? value.jobId} for the canonical findings and limitations.`
         : "Review the result and retained limitations."),
     observationOnlyDisclaimer: OBSERVATION_ONLY_DISCLAIMER
   };

@@ -257,7 +257,7 @@ function terminalScanFailure(scanRecord: ScanDetailResponse, status: ReturnType<
       message: "The scan is rate limited.",
       retryable: true,
       retryAfterSeconds: 60,
-      recommendedNextAction: "Wait for the recommended delay, then retry scan_site with the same URL."
+      recommendedNextAction: "Wait for the recommended delay, then retry certscore_scan_site with the same URL."
     };
   }
   if (status === "expired") {
@@ -266,7 +266,7 @@ function terminalScanFailure(scanRecord: ScanDetailResponse, status: ReturnType<
       message: "The scan expired before a canonical result was available.",
       retryable: true,
       retryAfterSeconds: 30,
-      recommendedNextAction: "Retry scan_site with freshness=refresh."
+      recommendedNextAction: "Retry certscore_scan_site with freshness=refresh."
     };
   }
   if (scanRecord.snapshot?.report_projection_status === "failed") {
@@ -275,7 +275,7 @@ function terminalScanFailure(scanRecord: ScanDetailResponse, status: ReturnType<
       message: "The scan completed, but its canonical report result could not be finalized.",
       retryable: true,
       retryAfterSeconds: 30,
-      recommendedNextAction: "Retry scan_site with freshness=refresh. If the failure repeats, stop and contact CertScore support."
+      recommendedNextAction: "Retry certscore_scan_site with freshness=refresh. If the failure repeats, stop and contact CertScore support."
     };
   }
 
@@ -297,7 +297,7 @@ function terminalScanFailure(scanRecord: ScanDetailResponse, status: ReturnType<
     ...classification,
     retryAfterSeconds: classification.retryable ? 30 : null,
     recommendedNextAction: classification.retryable
-      ? "Retry scan_site with freshness=refresh after the recommended delay."
+      ? "Retry certscore_scan_site with freshness=refresh after the recommended delay."
       : "Review the target's access controls or report URL before retrying."
   };
 }
@@ -748,8 +748,8 @@ export function buildApiV2ScanStatus(scanRecord: ScanDetailResponse, options: { 
   const reportUrl = absoluteUrl(`/scan/${scan.id}`);
   const recommendedNextAction = failure?.recommendedNextAction ?? noGoProjection?.noGo.recommendedNextAction ?? (
     terminal
-      ? `Call get_scan_bundle with scanId ${scan.id} for the canonical findings and limitations.`
-      : `Poll get_scan_status with scanId ${scan.id} after the recommended delay.`
+      ? `Call certscore_get_scan_bundle with scanId ${scan.id} for the canonical findings and limitations.`
+      : `Poll certscore_get_scan_status with scanId ${scan.id} after the recommended delay.`
   );
   const resource = {
     type: "certscore_scan_job",
@@ -818,7 +818,7 @@ export function buildApiV2ScanJobFromPulseStatus(
           message: "The scan is rate limited.",
           retryable: true,
           retryAfterSeconds: status.retryAfterSeconds ?? 60,
-          recommendedNextAction: "Wait for the recommended delay, then retry scan_site with the same URL."
+          recommendedNextAction: "Wait for the recommended delay, then retry certscore_scan_site with the same URL."
         }
       : normalizedStatus === "expired"
         ? {
@@ -826,7 +826,7 @@ export function buildApiV2ScanJobFromPulseStatus(
             message: "The scan expired before a canonical result was available.",
             retryable: true,
             retryAfterSeconds: 30,
-            recommendedNextAction: "Retry scan_site with freshness=refresh."
+            recommendedNextAction: "Retry certscore_scan_site with freshness=refresh."
           }
         : normalizedStatus === "failed"
           ? {
@@ -834,7 +834,7 @@ export function buildApiV2ScanJobFromPulseStatus(
               message: "The scan ended before a canonical result could be produced.",
               retryable: true,
               retryAfterSeconds: 30,
-              recommendedNextAction: "Retry scan_site with freshness=refresh after the recommended delay."
+              recommendedNextAction: "Retry certscore_scan_site with freshness=refresh after the recommended delay."
             }
           : undefined
   );
@@ -846,8 +846,8 @@ export function buildApiV2ScanJobFromPulseStatus(
   const reportUrl = status.reportUrl ?? (scanId ? absoluteUrl(`/scan/${scanId}`) : null);
   const recommendedNextAction = terminalError?.recommendedNextAction ?? (
     normalizedStatus === "completed" || normalizedStatus === "completed_limited"
-      ? `Call get_scan_bundle with scanId ${scanId ?? status.jobId} for the canonical findings and limitations.`
-      : `Poll get_scan_status with scanId ${scanId ?? status.jobId} after the recommended delay.`
+      ? `Call certscore_get_scan_bundle with scanId ${scanId ?? status.jobId} for the canonical findings and limitations.`
+      : `Poll certscore_get_scan_status with scanId ${scanId ?? status.jobId} after the recommended delay.`
   );
   const resource = {
     type: "certscore_scan_job",

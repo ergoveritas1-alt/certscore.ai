@@ -30,7 +30,7 @@ type ApiReadRatePolicy = {
  * duplicate these windows, limits, or weights in service-local code.
  */
 export const API_READ_RATE_POLICY = {
-  version: "2026-08-12",
+  version: "2026-08-13",
   weights: {
     ordinary: 1,
     evidence: 4,
@@ -46,7 +46,7 @@ export const API_READ_RATE_POLICY = {
           id: "burst",
           windowSeconds: 10 * 60,
           limits: {
-            callerTarget: 8,
+            callerTarget: 20,
             target: 20,
             caller: 40
           }

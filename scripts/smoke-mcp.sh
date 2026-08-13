@@ -109,13 +109,13 @@ try {
 
   const tools = await request("tools/list");
   assert.equal(tools.tools.length, 12);
-  assert.ok(tools.tools.some((tool) => tool.name === "get_evidence"));
+  assert.ok(tools.tools.some((tool) => tool.name === "certscore_get_evidence"));
   for (const tool of tools.tools) {
     assert.ok(tool.annotations, `${tool.name} missing annotations`);
   }
 
   const failed = await request("tools/call", {
-    name: "get_scan",
+    name: "certscore_get_scan",
     arguments: {
       scanId: "00000000-0000-4000-8000-000000000000"
     }

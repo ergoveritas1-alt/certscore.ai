@@ -121,7 +121,7 @@ const discoveryDocument = {
       dailyNewScanLimit: 20,
       limitKey: "requester_ip_utc_day",
       recentReuseDoesNotConsumeQuota: true,
-      tools: ["scan_site", "get_scan_status", "get_scan_bundle"],
+      tools: ["certscore_scan_site", "certscore_get_scan_status", "certscore_get_scan_bundle"],
       intendedUse: "Frictionless no-account public website scans for new and low-volume agents."
     },
     anonymous: {
@@ -134,19 +134,18 @@ const discoveryDocument = {
       intendedUse: "Low-volume agent discovery, evaluation, and public-web review workflows without account or OAuth setup."
     },
     currentTools: [
-      "scan_site",
-      "create_scan",
-      "get_scan",
-      "get_scan_status",
-      "get_report",
-      "get_evidence",
-      "get_scan_bundle",
-      "export_findings",
-      "list_findings",
-      "get_pre_consent_cookies_trackers",
-      "explain_finding",
-      "get_latest_domain_scan",
-      "get_latest_domain_pre_consent_cookies_trackers"
+      "certscore_scan_site",
+      "certscore_get_scan",
+      "certscore_get_scan_status",
+      "certscore_get_report",
+      "certscore_get_evidence",
+      "certscore_get_scan_bundle",
+      "certscore_export_findings",
+      "certscore_list_findings",
+      "certscore_get_pre_consent_cookies_trackers",
+      "certscore_explain_finding",
+      "certscore_get_latest_domain_scan",
+      "certscore_get_latest_domain_pre_consent_cookies_trackers"
     ]
   },
   recommendedAgentWorkflow: [

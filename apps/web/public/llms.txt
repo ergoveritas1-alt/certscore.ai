@@ -132,10 +132,10 @@ MCP route labels:
 Light MCP — no authentication workflow:
 1. Connect to CertScore Light at https://mcp.certscore.ai/mcp/light. It uses Streamable HTTP and requires no account, API key, bearer token, browser login, or OAuth.
 2. Codex setup: codex mcp add certscore --url https://mcp.certscore.ai/mcp/light
-3. Call scan_site with a public URL.
-4. If a retryable error has no scanId, wait retryAfterSeconds and retry scan_site. Do not call get_scan_status until scanId exists.
-5. If status is queued, running, or finalizing, retain scanId and poll get_scan_status using scanId only.
-6. Stop polling at a terminal status, then call get_scan_bundle.
+3. Call certscore_scan_site with a public URL.
+4. If a retryable error has no scanId, wait retryAfterSeconds and retry certscore_scan_site. Do not call certscore_get_scan_status until scanId exists.
+5. If status is queued, running, or finalizing, retain scanId and poll certscore_get_scan_status using scanId only.
+6. Stop polling at a terminal status, then call certscore_get_scan_bundle.
 7. Use detail=findings with maxBytes=8000 for a compact finding review, or detail=evidence with maxBytes=8000 for evidence digests and references.
 8. Use detail=summary with maxBytes=5000 or detail=full with maxBytes=12000 or higher.
 9. If truncated, inspect actualBytes, truncated, omittedSections, nextRecommendedMaxBytes, and content URLs, then follow recommendedNextAction or increase maxBytes.
@@ -143,12 +143,12 @@ Light MCP — no authentication workflow:
 Light allows 20 new scans per requester IP per UTC day. Reused eligible results do not consume quota.
 
 Codex first-run prompt:
-Scan https://ergoveritas.com/.well-known/certscore-canary/sentinels/broad-baseline.html. If scan_site returns a queued, running, or finalizing result, retain the returned scanId and poll get_scan_status using scanId only. If scan_site returns a retryable error without a scanId, wait for retryAfterSeconds and retry scan_site; do not call get_scan_status until a scanId exists. Once the scan reaches a terminal status, call get_scan_bundle with detail=findings and maxBytes=8000. Summarize whether the result was new or reused, the score, risk level, findings, evidence links, coverage limitations, and report URL. Explain truncation or omitted sections when present. Treat results as automated public-web observations, not legal conclusions, certifications, or compliance determinations.
+Scan https://ergoveritas.com/.well-known/certscore-canary/sentinels/broad-baseline.html. If certscore_scan_site returns a queued, running, or finalizing result, retain the returned scanId and poll certscore_get_scan_status using scanId only. If certscore_scan_site returns a retryable error without a scanId, wait for retryAfterSeconds and retry certscore_scan_site; do not call certscore_get_scan_status until a scanId exists. Once the scan reaches a terminal status, call certscore_get_scan_bundle with detail=findings and maxBytes=8000. Summarize whether the result was new or reused, the score, risk level, findings, evidence links, coverage limitations, and report URL. Explain truncation or omitted sections when present. Treat results as automated public-web observations, not legal conclusions, certifications, or compliance determinations.
 
 The ErgoVeritas canary page is a controlled, stable test site for demonstrating the complete scan, status, and bundle flow. Users may substitute their own public URL.
 
 Codex verification prompt:
-List the available CertScore tools and confirm that scan_site, get_scan_status, and get_scan_bundle are available. Then scan https://ergoveritas.com/.well-known/certscore-canary/sentinels/broad-baseline.html and report whether the result was new or reused.
+List the available CertScore tools and confirm that certscore_scan_site, certscore_get_scan_status, and certscore_get_scan_bundle are available. Then scan https://ergoveritas.com/.well-known/certscore-canary/sentinels/broad-baseline.html and report whether the result was new or reused.
 
 CertScore results are automated observations from a public-web scan. No-go, not-observed, and limited-coverage results are not proof of compliance, absence of risk, or legal status. Review the retained evidence and applicable context before relying on a finding.
 
@@ -166,7 +166,7 @@ No-account agent scan path:
 - POST https://certscore.ai/api/v2/scans without Authorization for low-volume discovery or evaluation.
 - New anonymous scans are limited to 20 per requester IP per UTC day. Contact support@certscore.ai for a higher-volume allowance.
 - Reusing an eligible recent result does not consume the anonymous quota.
-- CertScore Light intentionally exposes only scan_site, get_scan_status, and get_scan_bundle.
+- CertScore Light intentionally exposes only certscore_scan_site, certscore_get_scan_status, and certscore_get_scan_bundle.
 - Poll https://certscore.ai/api/v2/scans/{scanId}/status, then retrieve findings or evidence.
 - Use OAuth or a scoped API key for repeated or higher-volume workflows.
 

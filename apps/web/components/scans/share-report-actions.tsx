@@ -173,7 +173,7 @@ export function buildSdkEvidenceSnippet(scanId: string) {
 
 export function buildMcpEvidenceInvocation(scanId: string) {
   return JSON.stringify({
-    tool: "get_evidence",
+    tool: "certscore_get_evidence",
     arguments: { scanId }
   }, null, 2);
 }

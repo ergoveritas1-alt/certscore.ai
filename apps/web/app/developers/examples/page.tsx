@@ -29,7 +29,7 @@ export default function DeveloperExamplesPage() {
             </div>
             <div className="space-y-3">
               <h3 className="font-semibold text-slate-950">Prompt for MCP agents</h3>
-              <CodeBlock>{`Scan these public URLs with CertScore.ai. For each one, wait for completion when possible. If a scan remains active, poll get_scan_status with the returned scanId. For completed scans, call get_scan_bundle with detail=findings. If truncated, follow recommendedNextAction or increase maxBytes. Report score, risk level, coverage status, findings, limitations, report URL, and whether quota was consumed. Never treat no-go, not-detected, or insufficient-evidence results as proof of compliance.`}</CodeBlock>
+              <CodeBlock>{`Scan these public URLs with CertScore.ai. For each one, wait for completion when possible. If a scan remains active, poll certscore_get_scan_status with the returned scanId. For completed scans, call certscore_get_scan_bundle with detail=findings. If truncated, follow recommendedNextAction or increase maxBytes. Report score, risk level, coverage status, findings, limitations, report URL, and whether quota was consumed. Never treat no-go, not-detected, or insufficient-evidence results as proof of compliance.`}</CodeBlock>
             </div>
           </div>
         </Section>
@@ -120,9 +120,9 @@ console.log(grouped, latestTable.summary.rowCount);`}</CodeBlock>
         </Section>
 
         <Section id="mcp-agent-workflow" eyebrow="MCP" title="Agent tool call for the pre-consent table">
-          <CodeBlock>{`get_pre_consent_cookies_trackers({ scanId: "00000000-0000-4000-8000-000000000123" })
+          <CodeBlock>{`certscore_get_pre_consent_cookies_trackers({ scanId: "00000000-0000-4000-8000-000000000123" })
 
-get_latest_domain_pre_consent_cookies_trackers({
+certscore_get_latest_domain_pre_consent_cookies_trackers({
   domain: "ergoveritas.com",
   scanFrom: "eu_ie"
 })`}</CodeBlock>

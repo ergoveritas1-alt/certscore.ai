@@ -92,7 +92,7 @@ function freshnessMetadata(input: {
     upgradeMessage: input.anonymousQuota
       ? "For a higher-volume allowance, contact support@certscore.ai."
       : null,
-    recommendedNextTool: input.terminal ? "get_scan_bundle" : "get_scan_status"
+    recommendedNextTool: input.terminal ? "certscore_get_scan_bundle" : "certscore_get_scan_status"
   };
 }
 

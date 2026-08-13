@@ -347,7 +347,7 @@ test("terminal status guidance always includes a complete actionable error", () 
       recommendedNextAction: "Publish the intended site, then retry."
     }
   });
-  assert.equal(noGo.recommendedNextTool, "get_scan_bundle");
+  assert.equal(noGo.recommendedNextTool, "certscore_get_scan_bundle");
   assert.equal(noGo.error?.code, "parked_or_placeholder");
   assert.equal(noGo.error?.retryable, false);
   assert.equal(noGo.error?.retryAfterSeconds, null);

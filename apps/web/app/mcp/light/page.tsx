@@ -9,8 +9,8 @@ import { createPageMetadata } from "../../../lib/seo";
 
 const endpoint = "https://mcp.certscore.ai/mcp/light";
 const codexSetupCommand = "codex mcp add certscore --url https://mcp.certscore.ai/mcp/light";
-const firstRunPrompt = "Scan https://ergoveritas.com/.well-known/certscore-canary/sentinels/broad-baseline.html. If scan_site returns a queued, running, or finalizing result, retain the returned scanId and poll get_scan_status using scanId only. If scan_site returns a retryable error without a scanId, wait for retryAfterSeconds and retry scan_site; do not call get_scan_status until a scanId exists. Once the scan reaches a terminal status, call get_scan_bundle with detail=findings and maxBytes=8000. Summarize whether the result was new or reused, the score, risk level, findings, evidence links, coverage limitations, and report URL. Explain truncation or omitted sections when present. Treat results as automated public-web observations, not legal conclusions, certifications, or compliance determinations.";
-const verificationPrompt = "List the available CertScore tools and confirm that scan_site, get_scan_status, and get_scan_bundle are available. Then scan https://ergoveritas.com/.well-known/certscore-canary/sentinels/broad-baseline.html and report whether the result was new or reused.";
+const firstRunPrompt = "Scan https://ergoveritas.com/.well-known/certscore-canary/sentinels/broad-baseline.html. If certscore_scan_site returns a queued, running, or finalizing result, retain the returned scanId and poll certscore_get_scan_status using scanId only. If certscore_scan_site returns a retryable error without a scanId, wait for retryAfterSeconds and retry certscore_scan_site; do not call certscore_get_scan_status until a scanId exists. Once the scan reaches a terminal status, call certscore_get_scan_bundle with detail=findings and maxBytes=8000. Summarize whether the result was new or reused, the score, risk level, findings, evidence links, coverage limitations, and report URL. Explain truncation or omitted sections when present. Treat results as automated public-web observations, not legal conclusions, certifications, or compliance determinations.";
+const verificationPrompt = "List the available CertScore tools and confirm that certscore_scan_site, certscore_get_scan_status, and certscore_get_scan_bundle are available. Then scan https://ergoveritas.com/.well-known/certscore-canary/sentinels/broad-baseline.html and report whether the result was new or reused.";
 const agentDisclaimer = "CertScore results are automated observations from a public-web scan. No-go, not-observed, and limited-coverage results are not proof of compliance, absence of risk, or legal status. Review the retained evidence and applicable context before relying on a finding.";
 
 export const metadata: Metadata = createPageMetadata({
@@ -29,11 +29,11 @@ const clients = [
 ] as const;
 
 const workflow = [
-  "Call scan_site with a public URL.",
-  "If a retryable error has no scanId, wait retryAfterSeconds and retry scan_site.",
+  "Call certscore_scan_site with a public URL.",
+  "If a retryable error has no scanId, wait retryAfterSeconds and retry certscore_scan_site.",
   "If the result is queued, running, or finalizing, retain scanId.",
-  "Poll get_scan_status using scanId only. Never poll until scanId exists.",
-  "Stop polling when the scan reaches a terminal status, then call get_scan_bundle.",
+  "Poll certscore_get_scan_status using scanId only. Never poll until scanId exists.",
+  "Stop polling when the scan reaches a terminal status, then call certscore_get_scan_bundle.",
   "Use detail=findings for a compact finding review.",
   "Use detail=evidence for evidence digests and references.",
   "If truncated, follow recommendedNextAction or increase maxBytes.",
@@ -103,10 +103,10 @@ export default function McpLightPage() {
         <section className="rounded-xl border border-slate-200 bg-white p-6">
           <p className="text-xs font-semibold uppercase tracking-[0.16em] text-sky-700">Canonical workflow</p>
           <h2 className="mt-2 text-2xl font-semibold text-slate-950">Exactly what the agent should do</h2>
-          <CodeBlock>{`scan_site
-→ retry scan_site if a retryable error has no scanId
-→ get_scan_status with scanId if still running
-→ get_scan_bundle after terminal status`}</CodeBlock>
+          <CodeBlock>{`certscore_scan_site
+→ retry certscore_scan_site if a retryable error has no scanId
+→ certscore_get_scan_status with scanId if still running
+→ certscore_get_scan_bundle after terminal status`}</CodeBlock>
           <ol className="mt-5 grid gap-3 md:grid-cols-2">
             {workflow.map((step, index) => (
               <li className="flex gap-3 text-sm leading-6 text-slate-700" key={step}>
@@ -116,7 +116,7 @@ export default function McpLightPage() {
             ))}
           </ol>
           <p className="mt-5 text-sm leading-7 text-slate-600">Terminal statuses are <code>completed</code>, <code>completed_limited</code>, <code>failed</code>, <code>expired</code>, and <code>rate_limited</code>. A <code>completed_limited</code> or no-go result is a usable observation with explicit limitations, not a transport failure.</p>
-          <p className="mt-3 text-sm font-semibold text-slate-800"><code>get_scan_status</code> should only be called after <code>scan_site</code> returns a <code>scanId</code>.</p>
+          <p className="mt-3 text-sm font-semibold text-slate-800"><code>certscore_get_scan_status</code> should only be called after <code>certscore_scan_site</code> returns a <code>scanId</code>.</p>
         </section>
 
         <section>
@@ -125,12 +125,12 @@ export default function McpLightPage() {
             <table className="min-w-full text-left text-sm">
               <thead className="border-b border-slate-200 bg-slate-50 text-slate-700"><tr><th className="px-4 py-3 font-semibold">Outcome</th><th className="px-4 py-3 font-semibold">What the agent should do</th></tr></thead>
               <tbody className="divide-y divide-slate-100 text-slate-600">
-                <tr><td className="px-4 py-3 font-mono">completed</td><td className="px-4 py-3">Call <code>get_scan_bundle</code> and summarize the result.</td></tr>
+                <tr><td className="px-4 py-3 font-mono">completed</td><td className="px-4 py-3">Call <code>certscore_get_scan_bundle</code> and summarize the result.</td></tr>
                 <tr><td className="px-4 py-3 font-mono">reused_scan</td><td className="px-4 py-3">Report that an eligible prior result was reused and quota was not consumed.</td></tr>
-                <tr><td className="px-4 py-3 font-mono">queued / running / finalizing</td><td className="px-4 py-3">Retain <code>scanId</code> and poll <code>get_scan_status</code> using <code>scanId</code> only.</td></tr>
+                <tr><td className="px-4 py-3 font-mono">queued / running / finalizing</td><td className="px-4 py-3">Retain <code>scanId</code> and poll <code>certscore_get_scan_status</code> using <code>scanId</code> only.</td></tr>
                 <tr><td className="px-4 py-3 font-mono">completed_limited / no-go</td><td className="px-4 py-3">Explain the limitation and never treat it as proof of compliance or absence of risk.</td></tr>
-                <tr><td className="px-4 py-3 font-mono">retryable error without scanId</td><td className="px-4 py-3">Wait <code>retryAfterSeconds</code> and retry <code>scan_site</code>; do not poll status.</td></tr>
-                <tr><td className="px-4 py-3 font-mono">invalid URL</td><td className="px-4 py-3">Correct the public HTTP or HTTPS URL, then retry <code>scan_site</code>.</td></tr>
+                <tr><td className="px-4 py-3 font-mono">retryable error without scanId</td><td className="px-4 py-3">Wait <code>retryAfterSeconds</code> and retry <code>certscore_scan_site</code>; do not poll status.</td></tr>
+                <tr><td className="px-4 py-3 font-mono">invalid URL</td><td className="px-4 py-3">Correct the public HTTP or HTTPS URL, then retry <code>certscore_scan_site</code>.</td></tr>
                 <tr><td className="px-4 py-3 font-mono">rate_limited</td><td className="px-4 py-3">Wait for the recommended delay or stop; do not guess a polling action.</td></tr>
                 <tr><td className="px-4 py-3 font-mono">truncated bundle</td><td className="px-4 py-3">Report <code>actualBytes</code>, <code>omittedSections</code>, and <code>nextRecommendedMaxBytes</code>; increase <code>maxBytes</code> or follow a report or evidence URL.</td></tr>
               </tbody>
@@ -176,7 +176,7 @@ export default function McpLightPage() {
           <p className="text-xs font-semibold uppercase tracking-[0.16em] text-sky-700">Verify the connection</p>
           <h2 className="mt-2 text-2xl font-semibold text-slate-950">Confirm the three-tool Light surface</h2>
           <CodeBlock>{verificationPrompt}</CodeBlock>
-          <p className="mt-4 max-w-3xl text-sm leading-7 text-slate-600">Success means Codex lists exactly <code>scan_site</code>, <code>get_scan_status</code>, and <code>get_scan_bundle</code>; no OAuth prompt appears; and <code>scan_site</code> returns a stable <code>scanId</code> plus an explicit new-or-reused decision. A reused eligible result should show that quota was not consumed.</p>
+          <p className="mt-4 max-w-3xl text-sm leading-7 text-slate-600">Success means Codex lists exactly <code>certscore_scan_site</code>, <code>certscore_get_scan_status</code>, and <code>certscore_get_scan_bundle</code>; no OAuth prompt appears; and <code>certscore_scan_site</code> returns a stable <code>scanId</code> plus an explicit new-or-reused decision. A reused eligible result should show that quota was not consumed.</p>
         </section>
 
         <section className="rounded-xl border border-slate-200 bg-white p-6">
@@ -185,11 +185,11 @@ export default function McpLightPage() {
           <ul className="mt-5 list-disc space-y-2 pl-5 text-sm leading-7 text-slate-600">
             <li><strong>Unexpected OAuth:</strong> remove the connection and add it again with the exact URL <code>{endpoint}</code>. Do not configure a bearer token; the Light endpoint has no authentication.</li>
             <li><strong>Connection check:</strong> a successful Streamable HTTP connection completes initialization and lists the three Light tools without opening an authorization page.</li>
-            <li><strong>Missing scanId:</strong> retry <code>scan_site</code> only when the error says <code>retryable: true</code>; never poll <code>get_scan_status</code> without <code>scanId</code>.</li>
+            <li><strong>Missing scanId:</strong> retry <code>certscore_scan_site</code> only when the error says <code>retryable: true</code>; never poll <code>certscore_get_scan_status</code> without <code>scanId</code>.</li>
             <li><strong>Rate limited:</strong> follow <code>retryAfterSeconds</code> and <code>recommendedNextAction</code>, or reuse an eligible result. The daily allowance resets at the returned UTC time.</li>
             <li><strong>Reused result:</strong> report that the eligible prior scan was reused and quota was not consumed.</li>
             <li><strong>Truncated bundle:</strong> follow <code>nextRecommendedMaxBytes</code>, increase <code>maxBytes</code>, or open one of the returned content URLs.</li>
-            <li><strong>Invalid URL:</strong> correct the <code>url</code> field using the structured <code>invalid_arguments</code> response, then retry <code>scan_site</code> with a public HTTP or HTTPS URL.</li>
+            <li><strong>Invalid URL:</strong> correct the <code>url</code> field using the structured <code>invalid_arguments</code> response, then retry <code>certscore_scan_site</code> with a public HTTP or HTTPS URL.</li>
             <li><strong>Limited result:</strong> <code>completed_limited</code>, no-go, not-observed, and limited coverage are observations only, never proof of compliance. Transport failures instead return <code>failed</code>, <code>expired</code>, or a connection error with retry guidance.</li>
           </ul>
         </section>
@@ -201,7 +201,7 @@ export default function McpLightPage() {
             <table className="min-w-full text-left text-sm">
               <thead className="border-b border-slate-200 bg-slate-50 text-slate-700"><tr><th className="px-4 py-3 font-semibold">Route</th><th className="px-4 py-3 font-semibold">Setup method</th><th className="px-4 py-3 font-semibold">Authentication</th><th className="px-4 py-3 font-semibold">Account</th><th className="px-4 py-3 font-semibold">Quota</th><th className="px-4 py-3 font-semibold">Available tools</th><th className="px-4 py-3 font-semibold">Intended user</th><th className="px-4 py-3 font-semibold">Website / access limits</th><th className="px-4 py-3 font-semibold">Upgrade path</th></tr></thead>
               <tbody className="divide-y divide-slate-100 text-slate-600">
-                <tr><td className="min-w-56 px-4 py-3 font-semibold text-slate-900">Light MCP — no authentication</td><td className="px-4 py-3">One Codex command or a remote Streamable HTTP URL</td><td className="px-4 py-3">None</td><td className="px-4 py-3">Not required</td><td className="px-4 py-3">20 new scans per requester IP per UTC day; eligible reuse is free</td><td className="px-4 py-3">scan_site, get_scan_status, get_scan_bundle</td><td className="px-4 py-3">First-time users, testing, and discovery</td><td className="px-4 py-3">Public HTTP or HTTPS websites; core tools only</td><td className="px-4 py-3">Choose authenticated access for volume, history, teams, or advanced tools</td></tr>
+                <tr><td className="min-w-56 px-4 py-3 font-semibold text-slate-900">Light MCP — no authentication</td><td className="px-4 py-3">One Codex command or a remote Streamable HTTP URL</td><td className="px-4 py-3">None</td><td className="px-4 py-3">Not required</td><td className="px-4 py-3">20 new scans per requester IP per UTC day; eligible reuse is free</td><td className="px-4 py-3">certscore_scan_site, certscore_get_scan_status, certscore_get_scan_bundle</td><td className="px-4 py-3">First-time users, testing, and discovery</td><td className="px-4 py-3">Public HTTP or HTTPS websites; core tools only</td><td className="px-4 py-3">Choose authenticated access for volume, history, teams, or advanced tools</td></tr>
                 <tr><td className="min-w-56 px-4 py-3 font-semibold text-slate-900">Hosted MCP — OAuth</td><td className="px-4 py-3">Connect the hosted MCP endpoint from an OAuth-capable client</td><td className="px-4 py-3">OAuth authorization code with PKCE</td><td className="px-4 py-3">Required</td><td className="px-4 py-3">Higher-volume allowance based on access</td><td className="px-4 py-3">Core tools plus approved history and diagnostic tools</td><td className="px-4 py-3">Production, team, and managed remote clients</td><td className="px-4 py-3">Scopes control read and scan creation; scan creation may require support</td><td className="px-4 py-3">Request additional scopes or volume from support</td></tr>
                 <tr><td className="min-w-56 px-4 py-3 font-semibold text-slate-900">Local MCP — scoped API key</td><td className="px-4 py-3">Install and run the local stdio server</td><td className="px-4 py-3">Scoped API key in the client environment</td><td className="px-4 py-3">Required</td><td className="px-4 py-3">Higher-volume allowance based on key access</td><td className="px-4 py-3">Tools permitted by the key scopes</td><td className="px-4 py-3">Backend, local, and controlled automation workflows</td><td className="px-4 py-3">Key scopes control read and scan creation; protect and rotate credentials</td><td className="px-4 py-3">Request scan:create-equivalent scope, advanced access, or more volume</td></tr>
               </tbody>
