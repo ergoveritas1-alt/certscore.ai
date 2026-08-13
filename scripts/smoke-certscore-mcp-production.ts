@@ -11,10 +11,14 @@ const DEFAULT_BASE_URL = "https://certscore.ai";
 const DEFAULT_SMOKE_URL = "https://kbdlab.io";
 const DEFAULT_FALLBACK_DOMAIN = "webmd.com";
 const MCP_COMMAND = process.env.CERTSCORE_MCP_COMMAND?.trim() || "certscore-mcp";
-const REQUIRED_TOOLS = [
+export const REQUIRED_TOOLS = [
   "certscore_scan_site",
   "certscore_get_scan",
   "certscore_get_scan_status",
+  "certscore_get_scan_bundle",
+  "certscore_get_report",
+  "certscore_get_evidence",
+  "certscore_export_findings",
   "certscore_list_findings",
   "certscore_explain_finding",
   "certscore_get_pre_consent_cookies_trackers",
@@ -262,7 +266,10 @@ function assertDoctorWithKey(token: string) {
   console.log("doctor_with_key=ok");
 }
 
-function parseToolJson(result: Awaited<ReturnType<Client["callTool"]>>) {
+export function parseToolJson(result: Awaited<ReturnType<Client["callTool"]>>) {
+  if (result.structuredContent && typeof result.structuredContent === "object") {
+    return result.structuredContent as ToolPayload;
+  }
   const first = result.content?.[0];
   if (!first || first.type !== "text") {
     throw new Error("MCP tool returned no text content.");
@@ -382,6 +389,10 @@ async function runInstalledMcpSmoke(token: string) {
       throw new Error(`Production scan ${scanId} did not complete within 10 minutes.`);
     }
     summarize("certscore_get_scan", await callTool(client, "certscore_get_scan", { scanId }));
+    summarize("certscore_get_report", await callTool(client, "certscore_get_report", { scanId }));
+    summarize("certscore_get_evidence", await callTool(client, "certscore_get_evidence", { scanId }));
+    summarize("certscore_get_scan_bundle", await callTool(client, "certscore_get_scan_bundle", { scanId, detail: "findings" }));
+    summarize("certscore_export_findings", await callTool(client, "certscore_export_findings", { scanId }));
     const findings = await callTool(client, "certscore_list_findings", { scanId });
     summarize("certscore_list_findings", findings);
     const cookies = await callTool(client, "certscore_get_pre_consent_cookies_trackers", { scanId });
