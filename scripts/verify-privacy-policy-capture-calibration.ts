@@ -2,6 +2,11 @@ import { existsSync } from "node:fs";
 import { mkdir, readFile, readdir, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import {
+  assessPolicyDocumentSubstance,
+  assessPolicyDocumentUsefulness,
+  hasExplicitProviderPolicyLinkContext,
+} from "@certscore/scan-core";
 
 type JsonRecord = Record<string, unknown>;
 
@@ -88,6 +93,44 @@ function observationHasSubstantiveDocumentEvidence(observation: JsonRecord): boo
   );
 }
 
+function observationIsUsefulPolicyCapture(observation: JsonRecord): boolean {
+  if (!observationHasSubstantiveDocumentEvidence(observation)) return false;
+  const text = [
+    asString(observation.title),
+    asString(observation.textExcerpt),
+    ...asArray(observation.retainedPolicySections).map((section) =>
+      asString(asRecord(section).textExcerpt)
+    ),
+  ].filter((value): value is string => Boolean(value)).join("\n");
+  const substance = assessPolicyDocumentSubstance({
+    surfaceType: "privacy_policy",
+    title: asString(observation.title) ?? undefined,
+    text,
+  });
+  const usefulness = assessPolicyDocumentUsefulness({
+    surfaceType: "privacy_policy",
+    title: asString(observation.title) ?? undefined,
+    text,
+    targetRelationship: asString(observation.targetRelationship) as
+      | "target_controller"
+      | "first_party_brand"
+      | "service_provider"
+      | "unrelated"
+      | "unknown"
+      | undefined,
+    ownershipConfidence: asNumber(observation.ownershipConfidence) ?? undefined,
+    observedTopicCount: asArray(observation.observedTopics).length,
+    gdprTransparencyTopicCandidateCount: asArray(observation.gdprTransparencyTopicCandidates).length,
+    documentSubstanceMatchesExpectedSurface: substance.matchesExpectedSurface,
+    providerLinkContextObserved: hasExplicitProviderPolicyLinkContext({
+      documentUrl: asString(observation.normalizedUrl) ?? asString(observation.url) ?? undefined,
+      linkText: asString(observation.linkText) ?? undefined,
+      surroundingText: asString(observation.surroundingTextExcerpt) ?? undefined,
+    }),
+  });
+  return substance.matchesExpectedSurface && usefulness.documentEvaluationState === "usable";
+}
+
 function observationIsObservedLink(observation: JsonRecord): boolean {
   if (observation.linkObservationState === "observed") return true;
   const discoveryMethod = asString(observation.discoveryMethod);
@@ -120,7 +163,7 @@ export function summarizePrivacyPolicyCalibrationBundle(
   const fetchedPrivacyObservations = policyObservations.filter((observation) =>
     observationDocumentFetchState(observation) === "fetched"
   );
-  const captured = fetchedPrivacyObservations.some(observationHasSubstantiveDocumentEvidence);
+  const captured = fetchedPrivacyObservations.some(observationIsUsefulPolicyCapture);
   const evidenceIntegrityValid = fetchedPrivacyObservations.length === 0 ||
     fetchedPrivacyObservations.every(observationHasSubstantiveDocumentEvidence);
   const documentFetchFailed = policyObservations.some((observation) =>
@@ -252,7 +295,7 @@ export function evaluatePrivacyPolicyCalibration(input: {
     candidateSites: candidateEligible,
     guardrails: [
       "Only completed, normally reached sites are included in capture and latency denominators.",
-      "A captured policy requires retained substantive evidence; URL guesses alone receive no credit.",
+      "A captured policy requires retained substantive evidence and a privacy semantic signal; URL guesses and strongly contextualized provider-only documents receive no credit, while ambiguous cross-domain parent-brand cases remain reviewable.",
       "Observed links, document retrieval, and usable policy content are measured as separate funnel stages.",
       "False-negative measurement requires an explicit reviewed expectation with supporting evidence.",
       "Latency uses per-domain deltas when enough paired artifacts exist; otherwise baseline and candidate cohorts must be composition-matched.",

@@ -131,6 +131,22 @@ authorization and is deliberately not scheduled. The following rules are mandato
 A blocked result is useful no-go-resilience evidence. It is not permission to increase
 contact frequency. Retained evidence should be inspected before any rescan request.
 
+### One-time policy-miss diagnostic exception — August 13, 2026
+
+The product owner approved one bounded exception for the 35-domain, human-adjudicated
+privacy-policy miss cohort recorded in
+`artifacts/policy-capture-diagnosis-baseline-834-20260813/policy-miss-live-exception-manifest.json`.
+It permits one policy-only browser discovery attempt per exact listed target before the
+ordinary cooldown expires. This is targeted diagnostic measurement, not an acceptance
+sample or a reusable cooldown waiver. The exception expires after the single run or at
+2026-08-14T23:59:59Z, whichever occurs first.
+
+The run must remain sequential, must not interact with consent controls, must not retry
+any target, must honor repository contact holds, and must stop that target on blocking,
+rate limiting, captcha, or other no-go evidence. Every attempted contact must be
+persisted centrally under the idempotent run key
+`policy-miss-35-20260813-owner-exception-v1`. No unlisted target is authorized.
+
 ## Operating loops
 
 ### Every scanner change

@@ -1473,6 +1473,7 @@ export const policySurfaceObservationSchema = z.object({
   linkObservationState: z.enum(["observed", "candidate", "not_observed"]).optional(),
   documentFetchState: z.enum(["not_attempted", "fetched", "failed", "skipped_budget"]).optional(),
   documentEvaluationState: z.enum(["not_attempted", "usable", "insufficient", "blocked"]).optional(),
+  documentEvaluationReasonCodes: z.array(z.string().max(120)).max(12).optional(),
   documentRole: z.enum(["policy_document", "policy_index", "unknown"]).optional(),
   documentFormat: z.enum(["html", "pdf", "text", "unknown"]).optional(),
   contentType: z.string().max(160).optional(),

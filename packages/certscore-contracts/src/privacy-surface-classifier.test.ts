@@ -203,6 +203,42 @@ test("does not classify generic data-protection marketing or customer stories as
   assert.equal(policy.reasonCodes.includes("policy_context_satisfied"), true);
 });
 
+test("classifies retained compact and localized privacy routes without broad generic matching", () => {
+  const fixtures = [
+    {
+      input: {
+        linkText: "Data protection",
+        url: "https://www.eui.eu/About/DataProtection",
+        surroundingText: "Terms and conditions Data protection Health, safety and security Accessibility",
+      },
+      locale: "en",
+    },
+    {
+      input: {
+        linkText: "Gizlilik ve İfşa",
+        url: "https://www.example.com/gizlilik-ve-ifsa/",
+      },
+      locale: "tr",
+    },
+    {
+      input: {
+        linkText: "Privatlivs- og persondatapolitik",
+        url: "https://www.example.dk/privatlivs-og-persondatapolitik",
+      },
+      locale: "da",
+    },
+  ] as const;
+  for (const fixture of fixtures) {
+    const classification = classifyPrivacySurface(fixture.input);
+    assert.equal(classification.surfaceType, "privacy_policy", fixture.input.url);
+    assert.equal(classification.matchedLocale, fixture.locale, fixture.input.url);
+  }
+  assert.equal(classifyPrivacySurface({
+    linkText: "Data protection",
+    url: "https://example.test/about/research-project",
+  }).surfaceType, "unknown");
+});
+
 test("classifies canonical terms surfaces across supported locales", () => {
   const examples = [
     ["Terms", "en"],

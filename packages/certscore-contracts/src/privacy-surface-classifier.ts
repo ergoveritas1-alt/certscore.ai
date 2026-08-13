@@ -306,7 +306,8 @@ export function classifyPrivacySurface(
       score: entry.pattern.test(normalizedUrl) ? 540 : 0,
     }))
     .filter((entry) => entry.score > 0)[0];
-  const localeUrlMatch = canonicalLocaleUrlMatch(normalizedUrl, localeHints);
+  const localeUrlMatch = canonicalLocaleUrlMatch(normalizedUrl, localeHints) ??
+    compactEnglishDataProtectionUrlMatch(input.url, localeHints);
   const urlMatch = localeUrlMatch && (!staticUrlMatch || localeUrlMatch.score >= staticUrlMatch.score)
     ? localeUrlMatch
     : staticUrlMatch;
@@ -352,6 +353,34 @@ export function classifyPrivacySurface(
     surfaceType: urlMatch.surfaceType,
     variant: urlMatch.variant,
   };
+}
+
+function compactEnglishDataProtectionUrlMatch(
+  value: string | null | undefined,
+  localeHints: Set<SupportedPrivacyEvidenceLocale>,
+): {
+  surfaceType: "privacy_policy";
+  score: number;
+  matchedLocale: "en";
+  variant: string;
+} | undefined {
+  if (!value || (localeHints.size > 0 && !localeHints.has("en"))) return undefined;
+  try {
+    const pathSegments = new URL(value).pathname
+      .split("/")
+      .map((segment) => decodeURIComponent(segment).toLocaleLowerCase())
+      .filter(Boolean);
+    return pathSegments.includes("dataprotection")
+      ? {
+          surfaceType: "privacy_policy",
+          score: 539,
+          matchedLocale: "en",
+          variant: "compact_canonical_locale_path",
+        }
+      : undefined;
+  } catch {
+    return undefined;
+  }
 }
 
 function canonicalLocaleUrlMatch(

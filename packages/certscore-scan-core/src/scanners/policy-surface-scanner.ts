@@ -73,6 +73,7 @@ const MAX_NANO_POLICY_ANALYSIS_EXCERPT_CHARS = 40_000;
 const MAX_POLICY_ANALYSIS_OPENING_CHARS = 4_000;
 const MAX_POLICY_ANALYSIS_TOPIC_CHARS = 3_200;
 const MIN_SUBSTANTIVE_POLICY_TEXT_CHARS = 2_500;
+const MIN_GENERAL_PRIVACY_UPGRADE_TEXT_CHARS = 700;
 const MAX_CONSENT_SETTINGS_SHELL_TEXT_CHARS = 120;
 const MAX_CANONICAL_POLICY_LINK_FETCHES = 2;
 const MAX_POLICY_SURFACE_TEXT_ARTIFACT_CHARS = 256_000;
@@ -1472,6 +1473,7 @@ async function writePolicyCaptureDiagnostics(input: {
 }): Promise<ArtifactRef> {
   const fetchedObservations = input.observations.filter((observation) => observation.status === "fetched");
   const coreSurfaces = fetchedObservations.filter((observation) =>
+    observation.documentEvaluationState === "usable" &&
     isCorePolicyOrControlSurface(observation) &&
     !isStateSpecificPrivacyPath(observation.normalizedUrl ?? observation.url)
   );
@@ -1980,6 +1982,10 @@ async function processPolicyCandidate({
   const hasPrefetchedDirectDocument = fetchCaches.direct.has(
     policyDocumentFetchCacheKey(candidate.normalizedUrl),
   );
+  const protectedObservedPolicyCandidate = isProtectedObservedPolicyCandidate({
+    candidate,
+    candidateIndex,
+  });
   const protectedObservedFetch = shouldUseProtectedObservedPolicyFetch({
     candidate,
     candidateIndex,
@@ -2008,6 +2014,7 @@ async function processPolicyCandidate({
   if (protectedObservedFetch) {
     fetchCaches.diagnostics.protectedObservedFetchAttempts += 1;
   }
+  let protectedObservedAttemptRecorded = protectedObservedFetch;
   const boundedAfterSoftBudget = prefetchedAfterSoftBudget || protectedObservedFetch;
 
   // Fast discovery warms deterministic static policy documents while the
@@ -2062,25 +2069,30 @@ async function processPolicyCandidate({
   if (processingProgress) {
     processingProgress.documentFetched = true;
   }
+  const protectedObservedRecovery = protectedObservedFetch || protectedObservedPolicyCandidate;
   if (!fetched.ok && shouldTryRenderedPolicyDocumentFetch({
     candidate,
     candidateIndex,
     input,
     moduleStartedAtMs,
-    protectedObservedFetch,
+    protectedObservedFetch: protectedObservedRecovery,
     status: fetched.status,
   })) {
+    if (protectedObservedRecovery && !protectedObservedAttemptRecorded) {
+      fetchCaches.diagnostics.protectedObservedFetchAttempts += 1;
+      protectedObservedAttemptRecorded = true;
+    }
     fetchCaches.diagnostics.renderedRecoveryAttempts += 1;
     const renderedFetched = await recordPolicyTiming(
       timingBreakdown,
-      `${protectedObservedFetch ? "policy protected rendered fetch fallback" : "policy rendered fetch fallback"} ${candidateIndex + 1}`,
+      `${protectedObservedRecovery ? "policy rendered fetch fallback protected" : "policy rendered fetch fallback"} ${candidateIndex + 1}`,
       `Fetch ${candidate.deterministicSurfaceType} candidate document through bounded browser-rendered navigation after direct fetch failed.`,
       () => fetchRenderedPolicyDocumentSingleFlight(fetchCaches, {
         input,
         linkContext: renderedPolicyLinkContext(input, candidate),
         primeSession: Boolean(input.renderedRecoverySessionPrimerUrl),
         url: candidate.normalizedUrl,
-        timeoutMs: protectedObservedFetch
+        timeoutMs: protectedObservedRecovery
           ? Math.min(
               POLICY_PROTECTED_RENDERED_FETCH_TIMEOUT_MS,
               remainingProtectedPolicyFetchMs(input, moduleStartedAtMs),
@@ -2184,19 +2196,24 @@ async function processPolicyCandidate({
     documentFormat: fetched.documentFormat,
     input,
     moduleStartedAtMs,
-    protectedObservedFetch,
+    protectedObservedFetch: protectedObservedRecovery,
+    lateProtectedObservedFetch: protectedObservedFetch,
     visibleText,
   })) {
+    if (protectedObservedRecovery && !protectedObservedAttemptRecorded) {
+      fetchCaches.diagnostics.protectedObservedFetchAttempts += 1;
+      protectedObservedAttemptRecorded = true;
+    }
     fetchCaches.diagnostics.renderedRecoveryAttempts += 1;
     const renderedFetched = await recordPolicyTiming(
       timingBreakdown,
-      `${protectedObservedFetch ? "policy protected rendered low-quality text fallback" : "policy rendered low-quality text fallback"} ${candidateIndex + 1}`,
+      `${protectedObservedRecovery ? "policy rendered low-quality text fallback protected" : "policy rendered low-quality text fallback"} ${candidateIndex + 1}`,
       `Fetch ${effectiveCandidate.deterministicSurfaceType} candidate document through bounded browser-rendered navigation after direct fetch retained only low-quality text.`,
       () => fetchRenderedPolicyDocumentSingleFlight(fetchCaches, {
         input,
         linkContext: renderedPolicyLinkContext(input, effectiveCandidate),
         url: effectiveCandidate.normalizedUrl,
-        timeoutMs: protectedObservedFetch
+        timeoutMs: protectedObservedRecovery
           ? Math.min(
               POLICY_PROTECTED_RENDERED_FETCH_TIMEOUT_MS,
               remainingProtectedPolicyFetchMs(input, moduleStartedAtMs),
@@ -2241,6 +2258,26 @@ async function processPolicyCandidate({
       }
     }
   }
+  const fetchedSurfaceClassification = classifyFetchedPolicySurface({
+    surfaceType: effectiveCandidate.deterministicSurfaceType,
+    url: effectiveCandidate.normalizedUrl,
+    title,
+    text: visibleText,
+  });
+  if (fetchedSurfaceClassification.surfaceType !== effectiveCandidate.deterministicSurfaceType) {
+    effectiveCandidate = {
+      ...effectiveCandidate,
+      deterministicSurfaceType: fetchedSurfaceClassification.surfaceType,
+      deterministicClassifierReasonCodes: uniqueStrings([
+        ...effectiveCandidate.deterministicClassifierReasonCodes,
+        ...fetchedSurfaceClassification.reasonCodes,
+      ]),
+      selectionReasonCodes: uniqueStrings([
+        ...(effectiveCandidate.selectionReasonCodes ?? []),
+        ...fetchedSurfaceClassification.reasonCodes,
+      ]),
+    };
+  }
   const retainedVisibleText = visibleText;
   const analysisVisibleText = boundedAfterSoftBudget
     ? boundedPrefetchedPolicyAnalysisText(retainedVisibleText)
@@ -2280,6 +2317,7 @@ async function processPolicyCandidate({
             effectiveCandidate.normalizedUrl,
             uniqueStrings(secondaryCandidateHtmlInputs).join("\n"),
             analysisVisibleText,
+            { allowExplicitCrossOriginPrivacyPdf: effectiveCandidate.deterministicSurfaceType === "terms" },
           ),
     });
     return {
@@ -2418,6 +2456,21 @@ async function processPolicyCandidate({
       )
     : undefined;
   const merged = mergePolicyFacts(deterministic, topicAssist);
+  const usefulness = assessPolicyDocumentUsefulness({
+    surfaceType: effectiveCandidate.deterministicSurfaceType,
+    title,
+    text: analysisVisibleText,
+    targetRelationship: ownership.targetRelationship,
+    ownershipConfidence: ownership.ownershipConfidence,
+    observedTopicCount: merged.observedTopics.length,
+    gdprTransparencyTopicCandidateCount: merged.gdprTransparencyTopicCandidates.length,
+    documentSubstanceMatchesExpectedSurface: documentSubstance.matchesExpectedSurface,
+    providerLinkContextObserved: hasExplicitProviderPolicyLinkContext({
+      documentUrl: effectiveCandidate.normalizedUrl,
+      linkText: effectiveCandidate.linkText,
+      surroundingText: effectiveCandidate.surroundingTextExcerpt,
+    }),
+  });
 
   const childSelection = await selectOneHopPolicyIndexChildren({
     input,
@@ -2433,6 +2486,7 @@ async function processPolicyCandidate({
             decodeEmbeddedHtml(html),
           ])).join("\n"),
           analysisVisibleText,
+          { allowExplicitCrossOriginPrivacyPdf: effectiveCandidate.deterministicSurfaceType === "terms" },
         ),
   });
   return {
@@ -2460,6 +2514,7 @@ async function processPolicyCandidate({
       policyCookieDisclosures,
       retainedArticle13SectionEvidence: sectionEvidence,
       ...ownership,
+      ...usefulness,
       contentCoverage,
       documentTextCoverage: policySurfaceTextArtifact.documentTextCoverage,
       mentionedVendors: merged.mentionedVendors,
@@ -2512,12 +2567,56 @@ export type PolicyDocumentSubstanceAssessment = {
   reasonCode:
     | "consent_settings_shell"
     | "multilingual_policy_reviewable"
+    | "obvious_non_policy_document_shell"
     | "obvious_navigation_shell"
     | "substantive_privacy_signals"
     | "substantive_topic_match"
     | "surface_specific_signal"
     | "unrestricted_surface";
 };
+
+export function classifyFetchedPolicySurface(input: {
+  surfaceType: PolicySurfaceObservation["surfaceType"];
+  url: string;
+  title?: string;
+  text: string;
+}): {
+  surfaceType: PolicySurfaceObservation["surfaceType"];
+  reasonCodes: string[];
+} {
+  if (input.surfaceType !== "cookie_policy") {
+    return { surfaceType: input.surfaceType, reasonCodes: [] };
+  }
+  const normalized = normalizeWhitespace(`${input.title ?? ""}\n${input.text}`).toLocaleLowerCase();
+  if (normalized.length < MIN_GENERAL_PRIVACY_UPGRADE_TEXT_CHARS) {
+    return { surfaceType: input.surfaceType, reasonCodes: [] };
+  }
+  const routeClassification = classifyPrivacySurface({ url: input.url });
+  const contentClassification = classifyPrivacySurface({
+    surroundingText: input.text.slice(0, 40_000),
+  });
+  const canonicalPrivacySignals = uniqueStrings(
+    PRIVACY_EVIDENCE_LOCALE_REGISTRY.flatMap((entry) => [
+      ...entry.privacyPolicyLabels,
+      ...entry.contextHints.filter((term) => !/cookie|kolači|колачи|cookies?/iu.test(term)),
+    ])
+      .map((term) => normalizeWhitespace(term).toLocaleLowerCase())
+      .filter((term) => term.length >= 4 && normalized.includes(term)),
+  );
+  if (
+    (
+      (routeClassification.surfaceType === "privacy_policy" && routeClassification.confidence >= 0.72) ||
+      (contentClassification.surfaceType === "privacy_policy" && contentClassification.confidence >= 0.72)
+    ) &&
+    (canonicalPrivacySignals.length >= 2 || gdprTransparencyTopicMatchCount(normalized) > 0)
+  ) {
+    return {
+      surfaceType: "privacy_policy",
+      reasonCodes: ["fetched_content_general_privacy_policy", "cookie_label_overridden_by_document_content"],
+    };
+  }
+  return { surfaceType: input.surfaceType, reasonCodes: [] };
+}
 
 /**
  * Separates an observed privacy-looking link from the substance of the fetched
@@ -2539,6 +2638,9 @@ export function assessPolicyDocumentSubstance(input: {
     /\bview (?:all )?(?:products|models|offers)\b/i,
   ].filter((pattern) => pattern.test(normalized)).length;
   if (input.surfaceType === "privacy_policy") {
+    if (isObviousNonPolicyDocumentShell(normalized)) {
+      return { matchesExpectedSurface: false, reasonCode: "obvious_non_policy_document_shell" };
+    }
     const topicMatches = gdprTransparencyTopicMatchCount(normalized);
     const substantivePrivacySignals = [
       /\b(?:we|the (?:company|controller|organization))\s+(?:collect|process|use|share|disclose|retain|transfer)\b/i,
@@ -2564,12 +2666,10 @@ export function assessPolicyDocumentSubstance(input: {
     ) {
       return { matchesExpectedSurface: false, reasonCode: "consent_settings_shell" };
     }
-    // This is a mismatch guard, not a second policy classifier. Retained
-    // multilingual or unusually-worded policy text should remain reviewable
-    // unless the fetched document is clearly a commercial/navigation shell.
-    return obviousNavigationShellSignals < 2
-      ? { matchesExpectedSurface: true, reasonCode: "multilingual_policy_reviewable" }
-      : { matchesExpectedSurface: false, reasonCode: "obvious_navigation_shell" };
+    if (obviousNavigationShellSignals >= 2) {
+      return { matchesExpectedSurface: false, reasonCode: "obvious_navigation_shell" };
+    }
+    return { matchesExpectedSurface: true, reasonCode: "multilingual_policy_reviewable" };
   }
   if (input.surfaceType === "cookie_policy") {
     const cookieSignal = /\b(?:cookie|browser storage|local storage|tracking technolog)\b/i.test(normalized);
@@ -2584,6 +2684,84 @@ export function assessPolicyDocumentSubstance(input: {
       : { matchesExpectedSurface: false, reasonCode: "obvious_navigation_shell" };
   }
   return { matchesExpectedSurface: true, reasonCode: "unrestricted_surface" };
+}
+
+function isObviousNonPolicyDocumentShell(text: string): boolean {
+  const normalized = normalizeWhitespace(text);
+  const errorOrPlaceholderSignals = [
+    /\b(?:404|page not found|requested page (?:could not|cannot) be found|this page (?:does not exist|is unavailable))\b/i,
+    /\b(?:domain (?:is|may be) for sale|buy this domain|parked (?:free|domain)|courtesy parking page)\b/i,
+    /\b(?:temporarily unavailable|temporary malfunction|service unavailable|technical difficulties|try again later)\b/i,
+    /(?:요청하신|찾을 수 없|존재하지 않).{0,80}(?:페이지|화면)/u,
+    /(?:pagina|servizio).{0,80}(?:temporaneamente non disponibile|momentaneamente non disponibile|malfunzionamento)/iu,
+  ].filter((pattern) => pattern.test(normalized)).length;
+  return errorOrPlaceholderSignals > 0;
+}
+
+export function assessPolicyDocumentUsefulness(input: {
+  surfaceType: PolicySurfaceObservation["surfaceType"];
+  title?: string;
+  text: string;
+  targetRelationship?: PolicySurfaceObservation["targetRelationship"];
+  ownershipConfidence?: number;
+  observedTopicCount: number;
+  gdprTransparencyTopicCandidateCount: number;
+  documentSubstanceMatchesExpectedSurface?: boolean;
+  providerLinkContextObserved?: boolean;
+}): {
+  documentEvaluationState: "usable" | "insufficient";
+  documentEvaluationReasonCodes: string[];
+} {
+  const ownershipVerified =
+    ["target_controller", "first_party_brand"].includes(input.targetRelationship ?? "") &&
+    (input.ownershipConfidence ?? 0) >= 0.75;
+  const ownershipDisproved =
+    ["service_provider", "unrelated"].includes(input.targetRelationship ?? "") &&
+    (input.ownershipConfidence ?? 0) >= 0.75 &&
+    input.providerLinkContextObserved === true;
+  const contentClassification = classifyPrivacySurface({
+    linkText: input.title,
+    title: input.title,
+    surroundingText: input.text.slice(0, 40_000),
+  });
+  const privacySemanticSignal = input.surfaceType !== "privacy_policy" ||
+    input.documentSubstanceMatchesExpectedSurface === true ||
+    input.observedTopicCount > 0 ||
+    input.gdprTransparencyTopicCandidateCount > 0 ||
+    (contentClassification.surfaceType === "privacy_policy" && contentClassification.confidence >= 0.72);
+  const reasonCodes = [
+    ownershipVerified
+      ? "verified_target_or_parent_ownership"
+      : ownershipDisproved ? "provider_or_unrelated_ownership_observed" : "target_ownership_not_disproved",
+    privacySemanticSignal ? "privacy_semantic_signal_observed" : "privacy_semantic_signal_not_observed",
+    "substantive_document_text_retained",
+  ];
+  return {
+    documentEvaluationState: !ownershipDisproved && privacySemanticSignal ? "usable" : "insufficient",
+    documentEvaluationReasonCodes: reasonCodes,
+  };
+}
+
+export function hasExplicitProviderPolicyLinkContext(input: {
+  documentUrl?: string;
+  linkText?: string;
+  surroundingText?: string;
+}): boolean {
+  const context = normalizeWhitespace(`${input.linkText ?? ""} ${input.surroundingText ?? ""}`);
+  if (/learn more about this provider|protected by recaptcha|provider.{0,80}privacy|privacy.{0,80}provider/i.test(context)) {
+    return true;
+  }
+  let documentBrand = "";
+  try {
+    documentBrand = getRegistrableDomainFromUrl(input.documentUrl ?? "")?.split(".")[0] ?? "";
+  } catch {
+    documentBrand = "";
+  }
+  return Boolean(
+    documentBrand.length >= 4 &&
+    /https?:\/\//i.test(input.linkText ?? "") &&
+    new RegExp(`\\b${escapeRegExp(documentBrand)}\\b`, "i").test(input.linkText ?? "")
+  );
 }
 
 function hasCanonicalConsentControlIntent(input: { reasonCodes: readonly string[] }) {
@@ -2623,9 +2801,16 @@ function shouldUseProtectedObservedPolicyFetch(input: {
   moduleStartedAtMs: number;
 }): boolean {
   const elapsedMs = Date.now() - input.moduleStartedAtMs;
-  return input.candidateIndex === 0 &&
+  return isProtectedObservedPolicyCandidate(input) &&
     elapsedMs >= input.input.internalBudgetMs &&
-    elapsedMs < input.input.internalBudgetMs + POLICY_PROTECTED_RESERVE_MS &&
+    elapsedMs < input.input.internalBudgetMs + POLICY_PROTECTED_RESERVE_MS;
+}
+
+function isProtectedObservedPolicyCandidate(input: {
+  candidate: PolicySurfaceCandidate;
+  candidateIndex: number;
+}): boolean {
+  return input.candidateIndex === 0 &&
     input.candidate.deterministicSurfaceType === "privacy_policy" &&
     input.candidate.clickable === true &&
     !input.candidate.observationOnly &&
@@ -2645,6 +2830,7 @@ function shouldTryRenderedPolicyDocumentTextFallback(input: {
   input: PolicySurfaceScannerInput;
   moduleStartedAtMs: number;
   protectedObservedFetch: boolean;
+  lateProtectedObservedFetch: boolean;
   visibleText: string;
 }): boolean {
   const remainingRecoveryMs = input.protectedObservedFetch
@@ -2663,7 +2849,7 @@ function shouldTryRenderedPolicyDocumentTextFallback(input: {
   // A protected late-link attempt is for preserving the strongest observed
   // surface, not for spending the reserve re-rendering an already substantive
   // direct response. Reserve browser recovery here for genuinely thin shells.
-  if (input.protectedObservedFetch && normalized.length >= 100) {
+  if (input.lateProtectedObservedFetch && normalized.length >= 100) {
     return false;
   }
   const looksLikeLocalizedPolicyShell =
@@ -3404,6 +3590,7 @@ function extractCandidates(baseUrl: string, html: string, visibleText: string, a
       url: normalizedUrl,
       surroundingText: surroundingTextExcerpt,
     });
+    const explicitLegalHubLink = isExplicitLegalHubLink(candidateText, normalizedUrl);
     const deterministic = allowGdprNoticeSupplement && isGdprNoticeSupplementLink(candidateText, normalizedUrl, surroundingTextExcerpt ?? "")
       ? {
           ...deterministicBase,
@@ -3413,6 +3600,16 @@ function extractCandidates(baseUrl: string, html: string, visibleText: string, a
           matchedConcept: "GDPR notice",
           classifierReasonCodes: [...deterministicBase.classifierReasonCodes, "gdpr_notice_link", "one_hop_privacy_supplement"],
         }
+      : explicitLegalHubLink && deterministicBase.surfaceType === "unknown"
+        ? {
+            ...deterministicBase,
+            surfaceType: "terms" as const,
+            score: 0.78,
+            keywords: [...deterministicBase.keywords, "explicit_legal_hub_link"],
+            matchedConcept: "legal hub",
+            matchStrength: "direct" as const,
+            classifierReasonCodes: [...deterministicBase.classifierReasonCodes, "explicit_legal_hub_link"],
+          }
       : deterministicBase;
     if (isExternalUrlOnlyPolicyCandidate(baseUrl, normalizedUrl, candidateText, deterministic.surfaceType)) {
       continue;
@@ -3458,6 +3655,16 @@ function extractCandidates(baseUrl: string, html: string, visibleText: string, a
     });
   }
   return candidates;
+}
+
+function isExplicitLegalHubLink(linkText: string, normalizedUrl: string): boolean {
+  const label = normalizeWhitespace(linkText).toLocaleLowerCase();
+  if (!["legal", "legal information", "legal notices", "policies"].includes(label)) return false;
+  try {
+    return /^(?:\/[^/]+)?\/(?:legal|policies)\/?$/i.test(new URL(normalizedUrl).pathname);
+  } catch {
+    return false;
+  }
 }
 
 function extractControlCandidates(baseUrl: string, html: string, visibleText: string): PolicySurfaceCandidate[] {
@@ -4656,13 +4863,17 @@ function highValueSecondaryCandidatesFromPolicyPage(
   baseUrl: string,
   html: string,
   visibleText: string,
+  options: { allowExplicitCrossOriginPrivacyPdf?: boolean } = {},
 ): PolicySurfaceCandidate[] {
   return dedupeCandidates([
     ...extractCandidates(baseUrl, html, visibleText, true),
     ...extractControlCandidates(baseUrl, html, visibleText),
   ]).filter((candidate) =>
     isHighValuePolicySupplement(candidate) &&
-    isSameOriginPolicyPageSupplement(baseUrl, candidate)
+    (
+      isSameOriginPolicyPageSupplement(baseUrl, candidate) ||
+      (options.allowExplicitCrossOriginPrivacyPdf === true && isExplicitCrossOriginPrivacyPdf(candidate))
+    )
   );
 }
 
@@ -4676,8 +4887,21 @@ async function selectOneHopPolicyIndexChildren(input: {
   fetchCandidates: PolicySurfaceCandidate[];
   observedChildCandidates: PolicySurfaceCandidate[];
 }> {
+  const explicitLegalPrivacyHub = isExplicitLegalPrivacyHub({
+    candidate: input.indexCandidate,
+    title: input.indexTitle,
+    text: input.indexText,
+  });
+  const explicitTermsPrivacyDirectory = isExplicitTermsPrivacyDirectory({
+    candidate: input.indexCandidate,
+    candidates: input.candidates,
+  });
   if (
-    input.indexCandidate.deterministicSurfaceType !== "privacy_policy" ||
+    (
+      input.indexCandidate.deterministicSurfaceType !== "privacy_policy" &&
+      !explicitLegalPrivacyHub &&
+      !explicitTermsPrivacyDirectory
+    ) ||
     (input.indexCandidate.traversalDepth ?? 0) >= 1
   ) {
     return { fetchCandidates: [], observedChildCandidates: [] };
@@ -4693,13 +4917,15 @@ async function selectOneHopPolicyIndexChildren(input: {
       ...(candidate.selectionReasonCodes ?? []),
       "linked_from_retained_privacy_policy_index",
       "one_hop_policy_document_candidate",
+      ...(explicitLegalPrivacyHub ? ["linked_from_explicit_legal_privacy_hub"] : []),
+      ...(explicitTermsPrivacyDirectory ? ["linked_from_explicit_terms_policy_directory"] : []),
     ]),
   }));
   const privacyCandidates = childCandidates.flatMap((candidate) => {
     const privacyCandidate = privacyIndexPrivacyChildCandidate(candidate);
     return privacyCandidate &&
       privacyCandidate.fetchable &&
-      privacyCandidate.sameOrigin &&
+      (privacyCandidate.sameOrigin || explicitTermsPrivacyDirectory) &&
       privacyCandidate.deterministicScore >= 0.5
       ? [privacyCandidate]
       : [];
@@ -4713,6 +4939,59 @@ async function selectOneHopPolicyIndexChildren(input: {
     return {
       fetchCandidates: nonPrivacyCandidates,
       observedChildCandidates: [],
+    };
+  }
+
+  if (explicitTermsPrivacyDirectory) {
+    const explicitPrivacyPdfs = privacyCandidates.filter(isExplicitCrossOriginPrivacyPdf);
+    if (explicitPrivacyPdfs.length === 1) {
+      const selected = explicitPrivacyPdfs[0]!;
+      return {
+        fetchCandidates: [{
+          ...selected,
+          selectionReasonCodes: uniqueStrings([
+            ...(selected.selectionReasonCodes ?? []),
+            "single_explicit_privacy_pdf_in_terms_directory",
+            "deterministic_one_hop_selection",
+          ]),
+        }],
+        observedChildCandidates: privacyCandidates
+          .filter((candidate) => candidate.candidateId !== selected.candidateId)
+          .map(markUnselectedPrivacyIndexChild),
+      };
+    }
+  }
+
+  const sameDocumentPrivacyCandidates = privacyCandidates.filter((candidate) => {
+    try {
+      const childUrl = new URL(candidate.normalizedUrl);
+      const indexUrl = new URL(input.indexCandidate.normalizedUrl);
+      const childHash = childUrl.hash;
+      childUrl.hash = "";
+      indexUrl.hash = "";
+      return Boolean(childHash) && canonicalPolicyUrlIdentity(childUrl.toString()) ===
+        canonicalPolicyUrlIdentity(indexUrl.toString());
+    } catch {
+      return false;
+    }
+  });
+  if (sameDocumentPrivacyCandidates.length > 0) {
+    const selected = [...sameDocumentPrivacyCandidates].sort((left, right) =>
+      right.deterministicScore - left.deterministicScore ||
+      left.normalizedUrl.localeCompare(right.normalizedUrl)
+    )[0]!;
+    return {
+      fetchCandidates: [{
+        ...selected,
+        selectionReasonCodes: uniqueStrings([
+          ...(selected.selectionReasonCodes ?? []),
+          "same_document_privacy_section",
+          "deterministic_one_hop_selection",
+        ]),
+      }],
+      observedChildCandidates: privacyCandidates
+        .filter((candidate) => candidate.candidateId !== selected.candidateId)
+        .map(markUnselectedPrivacyIndexChild),
     };
   }
 
@@ -4859,6 +5138,24 @@ async function selectOneHopPolicyIndexChildren(input: {
   }
 }
 
+function isExplicitLegalPrivacyHub(input: {
+  candidate: PolicySurfaceCandidate;
+  title?: string;
+  text: string;
+}): boolean {
+  if (input.candidate.deterministicSurfaceType !== "terms") return false;
+  const legalRouteOrLabel = /(?:^|[\s/_.-])(?:legal|policies)(?:$|[\s/_.-])/i.test(
+    `${input.candidate.linkText} ${input.candidate.normalizedUrl} ${input.title ?? ""}`,
+  );
+  if (!legalRouteOrLabel) return false;
+  return /\b(?:privacy policy|privacy notice|data protection notice|gdpr notice)\b/i.test(input.text) ||
+    PRIVACY_EVIDENCE_LOCALE_REGISTRY.some((entry) =>
+      entry.privacyPolicyLabels.some((label) =>
+        normalizeWhitespace(input.text).toLocaleLowerCase().includes(label.toLocaleLowerCase())
+      )
+    );
+}
+
 function selectRegionalPrivacyDocument(
   candidates: PolicySurfaceCandidate[],
   indexLocale: SupportedPrivacyEvidenceLocale | undefined,
@@ -4946,24 +5243,35 @@ function observationsForUnselectedPrivacyIndexChildren(
   );
 }
 
+function isExplicitTermsPrivacyDirectory(input: {
+  candidate: PolicySurfaceCandidate;
+  candidates: PolicySurfaceCandidate[];
+}): boolean {
+  if (input.candidate.deterministicSurfaceType !== "terms") return false;
+  return input.candidates.filter(isExplicitCrossOriginPrivacyPdf).length === 1;
+}
+
 function policyDocumentRoleForChildSelection(
   candidate: PolicySurfaceCandidate,
   selection: { fetchCandidates: PolicySurfaceCandidate[]; observedChildCandidates: PolicySurfaceCandidate[] },
   options: { substantiveDisclosureSignalCount?: number } = {},
 ): "policy_document" | "policy_index" | "unknown" {
   if (candidate.deterministicSurfaceType !== "privacy_policy") return "unknown";
+  const retainedChildren = [...selection.fetchCandidates, ...selection.observedChildCandidates];
+  if (retainedChildren.some((child) =>
+    child.selectionReasonCodes?.some((reasonCode) => [
+      "latest_dated_privacy_document_link",
+      "website_privacy_notice_for_scanned_site",
+    ].includes(reasonCode))
+  )) {
+    return "policy_index";
+  }
   // A substantive governing notice can legitimately link to multiple regional
   // or topic-specific supplements. Only treat the parent as an index when its
   // own retained text does not already establish multiple row-specific
   // transparency disclosures.
   if ((options.substantiveDisclosureSignalCount ?? 0) >= 2) {
     return "policy_document";
-  }
-  const retainedChildren = [...selection.fetchCandidates, ...selection.observedChildCandidates];
-  if (retainedChildren.some((child) =>
-    child.selectionReasonCodes?.includes("website_privacy_notice_for_scanned_site")
-  )) {
-    return "policy_index";
   }
   const privacyChildCount = retainedChildren
     .filter((child) => child.deterministicSurfaceType === "privacy_policy").length;
@@ -4980,6 +5288,20 @@ export function isGdprNoticeSupplementLink(linkText: string, normalizedUrl: stri
 
 function isSameOriginPolicyPageSupplement(baseUrl: string, candidate: PolicySurfaceCandidate): boolean {
   return candidate.observationOnly || sameOrigin(baseUrl, candidate.normalizedUrl);
+}
+
+function isExplicitCrossOriginPrivacyPdf(candidate: PolicySurfaceCandidate): boolean {
+  let pathname = "";
+  try {
+    pathname = new URL(candidate.normalizedUrl).pathname;
+  } catch {
+    return false;
+  }
+  return candidate.fetchable &&
+    candidate.deterministicSurfaceType === "privacy_policy" &&
+    candidate.deterministicMatchStrength === "direct" &&
+    /\.pdf$/i.test(pathname) &&
+    /\bprivacy\s+(?:policy|notice|statement)\b/i.test(candidate.linkText);
 }
 
 function candidateKey(candidate: PolicySurfaceCandidate) {
@@ -5200,14 +5522,14 @@ function observationFromCandidate(
       : input.status === "skipped_budget"
         ? "skipped_budget" as const
         : "not_attempted" as const;
-  const documentEvaluationState = input.status === "fetched"
+  const documentEvaluationState = input.documentEvaluationState ?? (input.status === "fetched"
     ? "usable" as const
     : input.fetchFailureReason === "low_quality_access_challenge"
       ? "blocked" as const
       : input.fetchFailureReason === "insufficient_policy_text" ||
           input.fetchFailureReason === "consent_settings_shell"
         ? "insufficient" as const
-        : "not_attempted" as const;
+        : "not_attempted" as const);
   const directlyLinkedFromScannedPage =
     (candidate.traversalDepth ?? 0) === 0 &&
     ["footer_link", "header_link", "page_text_link"].includes(candidate.discoveryMethod) &&
@@ -5232,6 +5554,7 @@ function observationFromCandidate(
     linkObservationState,
     documentFetchState,
     documentEvaluationState,
+    documentEvaluationReasonCodes: input.documentEvaluationReasonCodes ?? [],
     documentOwnerEntity: input.documentOwnerEntity,
     targetRelationship: input.targetRelationship,
     ownershipConfidence: input.ownershipConfidence,
@@ -8475,7 +8798,7 @@ type PolicyTextQualityAssessment = {
   usable: boolean;
 };
 
-function assessPolicyTextQuality(value: string): PolicyTextQualityAssessment {
+export function assessPolicyTextQuality(value: string): PolicyTextQualityAssessment {
   const normalized = normalizeWhitespace(value);
   const emptyAssessment = {
     alphabeticWordRatio: 0,
@@ -8527,7 +8850,7 @@ function assessPolicyTextQuality(value: string): PolicyTextQualityAssessment {
   const naturalLanguageSentenceCount =
     (normalized.match(/\b(?:we|you|your|our|users?|individuals?|customers?|visitors?|people)\b[^.!?]{20,}[.!?]/gi) ?? []).length +
     cjkNaturalLanguageSentenceCount;
-  const policyTermCount = uniqueStrings((lower.match(new RegExp([
+  const legacyPolicyTerms = uniqueStrings((lower.match(new RegExp([
     "\\b(?:privacy|collect|use|information|personal data|personal information|data|retain|delete|share|rights|contact|transfer|consent|controller|processor|legal basis|lawful basis)\\b",
     "\\b(?:datenschutz|personenbezogene daten|einwilligung|verarbeitung|aufsichtsbehörde)\\b",
     "\\b(?:confidentialité|données personnelles|traitement|consentement|droits|responsable du traitement)\\b",
@@ -8535,7 +8858,19 @@ function assessPolicyTextQuality(value: string): PolicyTextQualityAssessment {
     "\\b(?:privacy|dati personali|trattamento|consenso|diritti|titolare del trattamento)\\b",
     "\\b(?:privacy|persoonsgegevens|avg|verwerking|toestemming|rechten|verwerkingsverantwoordelijke)\\b",
     "\\b(?:prywatność|dane osobowe|rodo|przetwarzanie|zgoda|prawa|administrator danych)\\b",
-  ].join("|"), "g")) ?? [])).length;
+  ].join("|"), "g")) ?? []));
+  const canonicalPolicyTerms = uniqueStrings(
+    PRIVACY_EVIDENCE_LOCALE_REGISTRY.flatMap((entry) => [
+      ...entry.privacyPolicyLabels,
+      ...entry.contextHints,
+    ])
+      .map((term) => normalizeWhitespace(term).toLocaleLowerCase())
+      .filter((term) => term.length >= 4 && lower.includes(term)),
+  );
+  const policyTermCount = uniqueStrings([
+    ...legacyPolicyTerms,
+    ...canonicalPolicyTerms,
+  ]).length;
   const topicMatchCount = gdprTransparencyTopicMatchCount(normalized);
   const accessChallengeSignals = [
     /\bclient challenge\b/i,

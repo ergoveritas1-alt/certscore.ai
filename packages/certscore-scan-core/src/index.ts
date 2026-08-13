@@ -1529,6 +1529,9 @@ export {
   policySurfaceScannerPlaceholder,
 } from "./scanners/placeholders.js";
 export {
+  assessPolicyDocumentSubstance,
+  assessPolicyDocumentUsefulness,
+  hasExplicitProviderPolicyLinkContext,
   mergePolicySurfaceObservations,
   policySurfaceScanner,
 } from "./scanners/policy-surface-scanner.js";

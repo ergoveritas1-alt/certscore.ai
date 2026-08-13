@@ -95,4 +95,6 @@ test("central ledger scripts use the production ECS psql one-off boundary", asyn
   assert.match(exporter, /runProdDbSqlOneoff/);
   assert.match(persister, /--ecs-oneoff/);
   assert.match(persister, /runProdDbSqlOneoff/);
+  assert.match(persister, /chunk\(contactRows, 8\)/);
+  assert.match(persister, /CALIBRATION_CONTACT_PERSIST_\$\{index \+ 1\}/);
 });

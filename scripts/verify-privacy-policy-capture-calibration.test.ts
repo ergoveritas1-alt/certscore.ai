@@ -37,6 +37,9 @@ test("summarizes only retained substantive privacy-policy evidence as captured",
       status: "fetched",
       url: "https://example.com/privacy",
       textExcerpt: "How we process personal data",
+      targetRelationship: "target_controller",
+      ownershipConfidence: 0.98,
+      observedTopics: ["processing_purposes"],
     }],
   });
 
@@ -45,6 +48,66 @@ test("summarizes only retained substantive privacy-policy evidence as captured",
   assert.equal(captured.evidenceIntegrityValid, true);
   assert.equal(captured.scanDurationMs, 12_000);
   assert.equal(captured.policyModuleStatus, "completed");
+});
+
+test("does not credit substantive provider policy text as target capture", () => {
+  const summarized = summarizePrivacyPolicyCalibrationBundle({
+    normalizedUrl: "https://example.com/",
+    completedAt: "2026-07-17T00:00:12.000Z",
+    policySurfaceObservations: [{
+      surfaceType: "privacy_policy",
+      status: "fetched",
+      url: "https://provider.example/privacy",
+      linkText: "Learn more about this provider — Provider privacy policy",
+      title: "Privacy Policy",
+      textExcerpt: "We process personal data and explain your privacy rights.",
+      targetRelationship: "service_provider",
+      ownershipConfidence: 0.98,
+      observedTopics: ["processing_purposes", "data_subject_rights"],
+    }],
+  });
+
+  assert.equal(summarized.captured, false);
+  assert.equal(summarized.evidenceIntegrityValid, true);
+});
+
+test("keeps cross-domain parent-brand policy reviewable without provider-link context", () => {
+  const summarized = summarizePrivacyPolicyCalibrationBundle({
+    normalizedUrl: "https://product.example/",
+    completedAt: "2026-07-17T00:00:12.000Z",
+    policySurfaceObservations: [{
+      surfaceType: "privacy_policy",
+      status: "fetched",
+      url: "https://parent.example/privacy",
+      linkText: "Privacy Policy",
+      title: "Parent Privacy Policy",
+      textExcerpt: "We process personal data and explain your privacy rights.",
+      targetRelationship: "service_provider",
+      ownershipConfidence: 0.94,
+      observedTopics: ["processing_purposes", "data_subject_rights"],
+    }],
+  });
+
+  assert.equal(summarized.captured, true);
+});
+
+test("does not credit a retained non-policy shell as useful capture", () => {
+  const summarized = summarizePrivacyPolicyCalibrationBundle({
+    normalizedUrl: "https://example.com/",
+    completedAt: "2026-07-17T00:00:12.000Z",
+    policySurfaceObservations: [{
+      surfaceType: "privacy_policy",
+      status: "fetched",
+      url: "https://example.com/privacy",
+      title: "Privacy Policy",
+      textExcerpt: "404 page not found. The requested page could not be found.",
+      targetRelationship: "target_controller",
+      ownershipConfidence: 0.98,
+    }],
+  });
+
+  assert.equal(summarized.captured, false);
+  assert.equal(summarized.evidenceIntegrityValid, true);
 });
 
 test("does not credit a URL-only policy guess and flags its evidence integrity", () => {

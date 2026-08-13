@@ -30,16 +30,16 @@ async function main() {
 
   if (contacts.length === 0) throw new Error("Cohort summary contains no attempted calibration contacts");
 
-  const contactJson = JSON.stringify(contacts.map((contact) => ({
+  const contactRows = contacts.map((contact) => ({
     contact_at: contact.contactAt,
     no_go: contact.noGo,
     no_go_reason_codes: contact.noGoReasonCodes,
     normalized_domain: contact.normalizedDomain,
     scan_status: contact.scanStatus,
-  })));
-  const persistSql = `with input as (
+  }));
+  const persistSql = (contactJson: string, ecsOneoff: boolean) => `with input as (
        select *
-       from jsonb_to_recordset(${args.ecsOneoff ? `${sqlLiteral(contactJson)}::jsonb` : "$2::jsonb"}) as row(
+       from jsonb_to_recordset(${ecsOneoff ? `${sqlLiteral(contactJson)}::jsonb` : "$2::jsonb"}) as row(
          normalized_domain text,
          contact_at timestamptz,
          scan_status text,
@@ -56,7 +56,7 @@ async function main() {
          no_go,
          no_go_reason_codes
        )
-       select ${args.ecsOneoff ? sqlLiteral(args.runKey) : "$1"}, normalized_domain, contact_at, 'scan_quality_calibration', scan_status, no_go, no_go_reason_codes
+       select ${ecsOneoff ? sqlLiteral(args.runKey) : "$1"}, normalized_domain, contact_at, 'scan_quality_calibration', scan_status, no_go, no_go_reason_codes
        from input
        on conflict (calibration_run_key, normalized_domain) where calibration_run_key is not null
        do update set
@@ -70,11 +70,26 @@ async function main() {
      select public.refresh_scan_domain_contact_ledger(normalized_domain)
      from (select distinct normalized_domain from upserted) refreshed`;
   if (args.ecsOneoff) {
-    await runProdDbSqlOneoff({ marker: "CALIBRATION_CONTACT_PERSIST", sql: persistSql });
+    const batches = chunk(contactRows, 8);
+    for (let index = 0; index < batches.length; index += 1) {
+      const batch = batches[index] ?? [];
+      await runProdDbSqlOneoff({
+        marker: `CALIBRATION_CONTACT_PERSIST_${index + 1}`,
+        sql: persistSql(JSON.stringify(batch), true),
+      });
+    }
   } else {
-    await query(persistSql, [args.runKey, contactJson]);
+    await query(persistSql("", false), [args.runKey, JSON.stringify(contactRows)]);
   }
   console.log(`Persisted ${contacts.length} calibration contacts for run ${args.runKey}`);
+}
+
+function chunk<T>(values: T[], size: number): T[][] {
+  const chunks: T[][] = [];
+  for (let index = 0; index < values.length; index += size) {
+    chunks.push(values.slice(index, index + size));
+  }
+  return chunks;
 }
 
 function parseArgs(argv: string[]) {
