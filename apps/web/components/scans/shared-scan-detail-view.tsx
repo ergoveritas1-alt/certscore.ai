@@ -706,7 +706,7 @@ function InventoryPartyAttributionDonut({ rows }: { rows: InventoryGroupRow[] })
           {rawTotal}
         </div>
       </div>
-      <div className="grid min-w-0 flex-1 grid-cols-2 gap-x-3 gap-y-1.5">
+      <div className="grid min-w-0 flex-1 gap-2">
         {segments.map((segment) => (
           <div key={segment.filter} className="flex min-w-0 cursor-pointer items-center gap-1.5 rounded-md px-1 py-0.5 transition-colors hover:bg-slate-100" data-inventory-filter={segment.filter} role="button" tabIndex={0}>
             <span className="h-2 w-2 shrink-0 rounded-full" style={{ backgroundColor: segment.color }} />
@@ -7819,6 +7819,7 @@ export async function SharedScanDetailView({
         }
         scanFromLabel={scanRecord.scan.scanFromLabel}
         scanFromValue={scanRecord.scan.scanFromValue}
+        showStatus={false}
         status={scanRecord.scan.status}
         statusLabel={isIncompleteScanCoverage ? "Completed limited" : undefined}
         statusTone={isIncompleteScanCoverage ? "warning" : undefined}

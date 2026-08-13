@@ -1,4 +1,4 @@
-import { NextResponse } from "next/server";
+import { after, NextResponse } from "next/server";
 import {
   createDomainRequestSchema,
   normalizeScanFrom,
@@ -91,6 +91,10 @@ function parseLocalV2DagLambdaDebugOverrides(value: unknown): LocalV2DagLambdaDe
   const consentFlowDeadlineMs = boundedDebugInteger(record.consentFlowDeadlineMs, 10_000, 90_000);
   if (consentFlowDeadlineMs !== null) {
     overrides.consentFlowDeadlineMs = consentFlowDeadlineMs;
+  }
+  const lateConsentGateMs = boundedDebugInteger(record.lateConsentGateMs, 3_000, 10_000);
+  if (lateConsentGateMs !== null) {
+    overrides.lateConsentGateMs = lateConsentGateMs;
   }
   const preActionObservationMs = boundedDebugInteger(record.preActionObservationMs, 0, 12_000);
   if (preActionObservationMs !== null) {
@@ -231,6 +235,7 @@ export async function POST(request: Request) {
         normalizedUrl: firstDomain.normalizedUrl,
         provenance: anonymousProvenance,
         requesterIpContext,
+        scheduleBackgroundTask: (task) => after(task),
         scanFrom: publicScanFrom,
         campaignAttribution
       }).catch(async (error) => {
@@ -310,6 +315,7 @@ export async function POST(request: Request) {
           localV2DagRunViaLambda,
           provenance,
           requesterIpContext,
+          scheduleBackgroundTask: (task) => after(task),
           scanFrom,
           campaignAttribution
         })

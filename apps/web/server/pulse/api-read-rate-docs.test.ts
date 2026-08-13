@@ -127,8 +127,6 @@ test("only approved pages render the full policy or compact notice", async () =>
   ];
   const approvedNoticePages = [
     "apps/web/app/(marketing)/page.tsx",
-    "apps/web/app/(marketing)/scan/[scanId]/page.tsx",
-    "apps/web/app/app/scans/[scanId]/page.tsx",
     "apps/web/app/sample-report/page.tsx"
   ];
   const fullPolicyReferences: string[] = [];

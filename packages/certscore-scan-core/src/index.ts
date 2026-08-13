@@ -141,6 +141,8 @@ export interface RunScanInput {
   policySurfaceSeeds?: PolicySurfaceSeed[];
   preConsentScreenshotMode?: "always" | "selective" | "never";
   preConsentScreenshotTimeoutMs?: number;
+  /** Local diagnostic override; production callers retain the 10s default. */
+  lateConsentGateMs?: number;
   preConsentVisualFallbackDeadlineMs?: number;
   /** Absolute deadline for optional visual recovery, preserving time to finalize retained scan output. */
   preConsentVisualFallbackDeadlineAtMs?: number;
@@ -369,6 +371,7 @@ export async function runScan(input: RunScanInput): Promise<CanonicalEvidenceBun
         screenshotCaptureMode: "viewport_first",
         screenshotMode: effectivePreConsentScreenshotMode,
         screenshotTimeoutMs: input.preConsentScreenshotTimeoutMs,
+        lateConsentGateMs: input.lateConsentGateMs,
         lateConsentGeometryShadowEnabled,
         onLifecycleCheckpoint: (checkpoint) => {
           latestPreConsentLifecycleCheckpoint = checkpoint;

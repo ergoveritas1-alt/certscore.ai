@@ -145,6 +145,8 @@ export interface PreConsentRuntimeScannerInput {
   screenshotCaptureMode?: "full_page_first" | "viewport_first";
   screenshotMode?: "always" | "selective" | "never";
   screenshotTimeoutMs?: number;
+  /** Bounded local diagnostic override for the no-early-CMP delayed-surface gate. */
+  lateConsentGateMs?: number;
   waitMode?: "full" | "fast";
   /**
    * Retains a bounded auxiliary geometry packet after canonical capture ends.
@@ -2319,8 +2321,12 @@ export async function preConsentRuntimeScanner(
       !hasActionableConsentChoiceControl(consentObservation)
     ) {
       const pageAgeMs = Math.max(0, Date.now() - navigationStartedAtMs);
+      const lateConsentGateMs = Math.min(
+        CONSENT_GATE_INITIAL_MS,
+        Math.max(3_000, input.lateConsentGateMs ?? CONSENT_GATE_INITIAL_MS),
+      );
       const waitToLateSurfaceGateMs = Math.min(
-        Math.max(0, CONSENT_GATE_INITIAL_MS - pageAgeMs),
+        Math.max(0, lateConsentGateMs - pageAgeMs),
         remainingModuleBudgetMs(),
       );
       if (waitToLateSurfaceGateMs >= 500) {
@@ -2328,7 +2334,7 @@ export async function preConsentRuntimeScanner(
         const lateSurfaceObservation = await recordBoundedTiming(
           timingBreakdown,
           "page evidence: late consent surface gate",
-          "Read-only navigation-relative inventory through the 10-second gate for delayed consent surfaces without an early CMP runtime marker.",
+          `Read-only navigation-relative inventory through the ${Math.round(lateConsentGateMs / 1_000)}-second gate for delayed consent surfaces without an early CMP runtime marker.`,
           waitToLateSurfaceGateMs + 250,
           () => detectConsentUi(
             page,
@@ -2345,7 +2351,7 @@ export async function preConsentRuntimeScanner(
         consentObservation = mergeConsentUiObservations(
           consentObservation,
           lateSurfaceObservation,
-          "adaptive_gate_inventory:10s_without_cmp_runtime",
+          `adaptive_gate_inventory:${Math.round(lateConsentGateMs / 1_000)}s_without_cmp_runtime`,
         );
         if (hasActionableConsentChoiceControl(consentObservation)) {
           domText = await page.locator("body").innerText({ timeout: 2_000 }).catch(() => domText);

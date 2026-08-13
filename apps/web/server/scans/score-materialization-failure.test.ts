@@ -73,3 +73,16 @@ test("canonical projection retry diagnostics discard unbounded reasons", () => {
     retryable: true,
   });
 });
+
+test("stale projection sources use the bounded fast retry path", () => {
+  const error = Object.assign(new Error("Refusing to publish stale report projection source."), {
+    name: "StaleScanReportProjectionSourceError",
+  });
+
+  assert.deepEqual(classifyScoreMaterializationFailure(error), {
+    code: "materialization_not_ready",
+    diagnostic: "materialization_not_ready:stale_projection_source",
+    retryAfterSeconds: 1,
+    retryable: true,
+  });
+});

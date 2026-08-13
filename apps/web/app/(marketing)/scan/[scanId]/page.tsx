@@ -3,7 +3,6 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { SiteFooter } from "../../../../components/layout/site-footer";
 import { SiteHeader } from "../../../../components/layout/site-header";
-import { ApiReadRatePolicyNotice } from "../../../../components/api-read-rate-policy-notice";
 import { DomainScanForm } from "../../../../components/marketing/domain-scan-form";
 import {
   SharedScanDetailView,
@@ -250,7 +249,6 @@ export default async function PublicScanDetailPage({ params, searchParams }: Pub
             <AgentSummaryActions domainLabel={publicScanDomainLabel} scanId={displayScanRecord.scan.id} />
           </div>
         ) : null}
-        <ApiReadRatePolicyNotice className="mt-8" />
       </section>
       <SiteFooter />
     </main>

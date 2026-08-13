@@ -3,12 +3,11 @@ import test from "node:test";
 import React from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import {
-  clampScanProgressHandoffValue,
   ScanSubmissionPendingIndicator,
   ScanSubmitProgressBar,
-  SCAN_PROGRESS_HALF_LIFE_MS,
   describeScanProgressPhase,
-  getNextScanProgressValue
+  estimateScanProgressForOptions,
+  getAdaptiveScanProgressValue
 } from "./scan-submit-progress";
 
 test("scan submission remains neutral until the server returns a scan status", () => {
@@ -56,7 +55,8 @@ test("the full progress bar can begin from the compact submission handoff", () =
     <ScanSubmitProgressBar
       active
       initialProgressValue={12.5}
-      nowMs={12_000}
+      nowMs={0}
+      progressEstimate={{ estimatedDurationMs: 100_000, modeLabel: "standard scan" }}
       progressStage="scan"
       scanStatus="running"
       startedAtMs={0}
@@ -67,31 +67,28 @@ test("the full progress bar can begin from the compact submission handoff", () =
   assert.match(html, /width:12.5%/);
 });
 
-test("submission handoff remains inside Prepare instead of snapping to the Scan boundary", () => {
-  assert.equal(clampScanProgressHandoffValue({ currentStep: 0, reportReady: false, value: 12.5 }), 12.5);
-  assert.equal(clampScanProgressHandoffValue({ currentStep: 0, reportReady: false, value: 40 }), 25);
-  assert.equal(clampScanProgressHandoffValue({ currentStep: 1, reportReady: false, value: 12.5 }), 12.5);
+test("adaptive progress starts at zero even when scan work begins immediately", () => {
+  assert.equal(getAdaptiveScanProgressValue({
+    elapsedMs: 0,
+    estimatedDurationMs: 12_000,
+    progressStage: "scan",
+    reportReady: false
+  }), 0);
 });
 
-test("each scan segment halves its remaining distance on every progress beat", () => {
-  assert.equal(SCAN_PROGRESS_HALF_LIFE_MS, 6_000);
-  const firstBeat = getNextScanProgressValue({ currentStep: 0, currentValue: 0 });
-  const secondBeat = getNextScanProgressValue({ currentStep: 0, currentValue: firstBeat });
-  const thirdBeat = getNextScanProgressValue({ currentStep: 0, currentValue: secondBeat });
-
-  assert.equal(firstBeat, 12.5);
-  assert.equal(secondBeat, 18.75);
-  assert.equal(thirdBeat, 21.875);
-  assert.equal(getNextScanProgressValue({ currentStep: 1, currentValue: 25 }), 37.5);
-  assert.equal(getNextScanProgressValue({ currentStep: 2, currentValue: 50 }), 62.5);
-  assert.equal(getNextScanProgressValue({ currentStep: 3, currentValue: 75 }), 85.5);
-  assert.equal(getNextScanProgressValue({ currentStep: 3, currentValue: 95.9 }), 95.9);
+test("adaptive progress is linear through the estimate and then creeps below completion", () => {
+  assert.equal(getAdaptiveScanProgressValue({ elapsedMs: 6_000, estimatedDurationMs: 12_000, reportReady: false }), 48);
+  assert.equal(getAdaptiveScanProgressValue({ elapsedMs: 12_000, estimatedDurationMs: 12_000, reportReady: false }), 96);
+  assert.equal(getAdaptiveScanProgressValue({ elapsedMs: 24_000, estimatedDurationMs: 12_000, reportReady: false }), 97.9);
+  assert.equal(getAdaptiveScanProgressValue({ elapsedMs: 120_000, estimatedDurationMs: 12_000, reportReady: false }), 98.5);
+  assert.equal(getAdaptiveScanProgressValue({ elapsedMs: 2_000, estimatedDurationMs: 12_000, progressStage: "report", reportReady: false }), 92);
+  assert.equal(getAdaptiveScanProgressValue({ elapsedMs: 2_000, estimatedDurationMs: 12_000, progressStage: "complete", reportReady: true }), 100);
 });
 
-test("normal half-life movement uses the full six-second interval at a linear rate", () => {
+test("normal movement uses short linear transitions instead of multi-second pacing", () => {
   const html = renderToStaticMarkup(<ScanSubmissionPendingIndicator />);
 
-  assert.match(html, /transition-duration:6000ms/);
+  assert.match(html, /transition-duration:300ms/);
   assert.match(html, /transition-timing-function:linear/);
 });
 
@@ -105,8 +102,8 @@ test("scan progress communicates a conservative milestone estimate", () => {
     />
   );
 
-  assert.match(html, /aria-valuenow="75"/);
-  assert.match(html, /Taking longer than usual/);
+  assert.match(html, /aria-valuenow="98\.[3-5]"/);
+  assert.match(html, /Still working through the scan/);
   assert.match(html, /Scan/);
   assert.match(html, /role="progressbar"/);
 });
@@ -121,7 +118,7 @@ test("scan progress reports a delayed state after twice the estimate", () => {
     />
   );
 
-  assert.match(html, /taking longer than usual/);
+  assert.match(html, /still working through the scan/i);
   assert.match(html, /120s elapsed/);
 });
 
@@ -159,4 +156,10 @@ test("estimated timing gives scan capture the longest phase", () => {
     describeScanProgressPhase({ elapsedMs: 35_200, estimatedDurationMs }),
     "processing retained evidence"
   );
+});
+
+test("local estimates reflect the faster pipeline while hosted estimates remain conservative", () => {
+  assert.equal(estimateScanProgressForOptions({ profileValue: "standard", runtime: "local" }).estimatedDurationMs, 13_500);
+  assert.equal(estimateScanProgressForOptions({ profileValue: "tiny", runtime: "local" }).estimatedDurationMs, 8_000);
+  assert.equal(estimateScanProgressForOptions({ profileValue: "standard", runtime: "hosted" }).estimatedDurationMs, 24_000);
 });

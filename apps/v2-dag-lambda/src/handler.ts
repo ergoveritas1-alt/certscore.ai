@@ -229,6 +229,7 @@ type LocalV2DagLambdaDebugOverrides = {
   actionFinalSettleMs?: number;
   actionSearchDeadlineMs?: number;
   consentFlowDeadlineMs?: number;
+  lateConsentGateMs?: number;
   expectedConsentScenarios?: ConsentFlowScenario[];
   preActionObservationMs?: number;
   oneTrustHiddenActionMode?: "off" | "diagnostic";
@@ -466,6 +467,10 @@ function parseDebugOverrides(value: unknown): LocalV2DagLambdaDebugOverrides | u
   const consentFlowDeadlineMs = boundedDebugInteger(record.consentFlowDeadlineMs, 10_000, 90_000);
   if (consentFlowDeadlineMs !== undefined) {
     overrides.consentFlowDeadlineMs = consentFlowDeadlineMs;
+  }
+  const lateConsentGateMs = boundedDebugInteger(record.lateConsentGateMs, 3_000, 10_000);
+  if (lateConsentGateMs !== undefined) {
+    overrides.lateConsentGateMs = lateConsentGateMs;
   }
   const preActionObservationMs = boundedDebugInteger(record.preActionObservationMs, 0, 12_000);
   if (preActionObservationMs !== undefined) {
@@ -992,6 +997,9 @@ async function runLocalV2DagLambdaScanBundle(
           ? "never"
           : options.preConsentScreenshotMode,
         preConsentScreenshotTimeoutMs: options.scanTuning.preConsentScreenshotTimeoutMs,
+        lateConsentGateMs: payload.targetEnvironment === "local"
+          ? payload.debugOverrides?.lateConsentGateMs
+          : undefined,
         preConsentVisualFallbackDeadlineMs:
           options.preConsentVisualFallbackDeadlineMs ?? options.scanTuning.preConsentVisualFallbackDeadlineMs,
         preConsentVisualFallbackDeadlineAtMs: options.preConsentVisualFallbackDeadlineAtMs,

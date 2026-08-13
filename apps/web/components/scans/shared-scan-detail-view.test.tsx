@@ -70,6 +70,7 @@ test("site relationship doughnut is derived directly from canonical site relatio
   const source = readFileSync("apps/web/components/scans/shared-scan-detail-view.tsx", "utf8");
   assert.match(source, />Site relationship</);
   assert.match(source, /aria-label="Site relationship distribution"/);
+  assert.match(source, /<div className="grid min-w-0 flex-1 gap-2">/);
   assert.doesNotMatch(source, />Priority mix</);
 });
 
