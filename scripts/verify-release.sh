@@ -140,7 +140,7 @@ try {
   const listed = await client.listTools();
   const toolNames = listed.tools.map((tool) => tool.name);
   assert.deepEqual(sorted(toolNames), sorted(localManifestTools), "tools/list names must match local manifest currentTools");
-  assert.ok(toolNames.includes("get_evidence"), "tools/list must include get_evidence");
+  assert.ok(toolNames.includes("certscore_get_evidence"), "tools/list must include certscore_get_evidence");
   for (const tool of listed.tools) {
     assert.ok(tool.annotations, `${tool.name} must include MCP annotations`);
   }
@@ -148,7 +148,7 @@ try {
   const failed = await client.request({
     method: "tools/call",
     params: {
-      name: "get_scan",
+      name: "certscore_get_scan",
       arguments: {
         scanId: "00000000-0000-4000-8000-000000000000"
       }

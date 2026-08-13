@@ -13,7 +13,7 @@ test("publishes the canonical terminal burst and rolling-day limits", () => {
   assert.deepEqual(apiReadRateWindow("terminal", "burst"), {
     id: "burst",
     windowSeconds: 600,
-    limits: { callerTarget: 8, target: 20, caller: 40 }
+    limits: { callerTarget: 20, target: 20, caller: 40 }
   });
   assert.deepEqual(apiReadRateWindow("terminal", "daily"), {
     id: "daily",
@@ -42,7 +42,7 @@ test("keeps status polling separate and heavy reads at four units", () => {
   for (const costClass of ["evidence", "full", "diagnostics", "export", "bundle"] as const) {
     assert.equal(apiReadRateUnits(costClass), 4);
   }
-  assert.equal(API_READ_RATE_POLICY.version, "2026-08-12");
+  assert.equal(API_READ_RATE_POLICY.version, "2026-08-13");
   assert.equal(API_READ_RATE_POLICY_OPENAPI_EXTENSION.policyVersion, API_READ_RATE_POLICY.version);
   assert.equal(API_READ_RATE_POLICY_OPENAPI_EXTENSION.profiles, API_READ_RATE_POLICY.profiles);
   assert.equal(API_READ_RATE_POLICY_OPENAPI_EXTENSION.throttledResponse.retryHeader, "Retry-After");

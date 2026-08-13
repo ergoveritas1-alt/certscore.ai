@@ -30,7 +30,7 @@ const apiV2ScanCreationMetadataShape = {
   anonymousQuotaResetAt: z.string().nullable().optional(),
   upgradeSupportEmail: z.string().email().nullable().optional(),
   upgradeMessage: z.string().nullable().optional(),
-  recommendedNextTool: z.enum(["get_scan_status", "get_scan_bundle"]).optional()
+  recommendedNextTool: z.enum(["certscore_get_scan_status", "certscore_get_scan_bundle"]).optional()
 } as const;
 
 export const apiV2LinksSchema = z

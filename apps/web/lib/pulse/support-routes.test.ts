@@ -334,11 +334,10 @@ test("Pulse docs page source includes integration-critical guidance", () => {
   assert.match(source, /Recommended workflow/);
   assert.match(source, /without changing evidence, concern, finding, or projection logic/);
   assert.match(source, /authenticated MCP smoke/);
-  assert.match(source, /create_scan/);
-  assert.match(source, /get_scan_status/);
-  assert.match(source, /get_report/);
-  assert.match(source, /export_findings/);
-  assert.match(source, /explain_finding/);
+  assert.match(source, /certscore_get_scan_status/);
+  assert.match(source, /certscore_get_report/);
+  assert.match(source, /certscore_export_findings/);
+  assert.match(source, /certscore_explain_finding/);
   assert.match(source, /Account browsing and drift comparison tools are not part of the initial MCP scope/);
   assert.match(source, /href: "https:\/\/certscore\.ai\/api\/v1\/pulse\?url=https:\/\/kbdlab\.io&detail=tiny"/);
   assert.match(source, /href: "https:\/\/certscore\.ai\/api\/v1\/pulse\?url=https:\/\/kbdlab\.io&format=markdown"/);
@@ -401,7 +400,7 @@ test("Pulse plain text agent guide is retrievable and covers fetch failures", ()
   assert.match(source, /CERTSCORE_API_KEY=<token> pnpm mcp:certscore/);
   assert.match(source, /CERTSCORE_API_KEY=<token> pnpm mcp:certscore:smoke/);
   assert.match(source, /pnpm mcp:certscore:generate-key -- --name "CertScore\.ai MCP preview"/);
-  assert.match(source, /explain_finding for evidence summaries, caveats, and next steps/);
+  assert.match(source, /certscore_explain_finding for evidence summaries, caveats, and next steps/);
   assert.match(source, /https:\/\/certscore\.ai\/api-pulse\/agent/);
   assert.match(source, /https:\/\/certscore\.ai\/api\/v1\/openapi\.chatgpt\.json/);
   assert.match(source, /https:\/\/certscore\.ai\/api\/v1\/pulse-health/);
@@ -516,8 +515,8 @@ test("Light MCP onboarding is no-auth, copyable, and agent-complete", () => {
   const docs = [lightPage, fullMcpPage, readme, llms, llmsFull];
   const setupCommand = "codex mcp add certscore --url https://mcp.certscore.ai/mcp/light";
   const canaryUrl = "https://ergoveritas.com/.well-known/certscore-canary/sentinels/broad-baseline.html";
-  const firstRunPrompt = `Scan ${canaryUrl}. If scan_site returns a queued, running, or finalizing result, retain the returned scanId and poll get_scan_status using scanId only. If scan_site returns a retryable error without a scanId, wait for retryAfterSeconds and retry scan_site; do not call get_scan_status until a scanId exists. Once the scan reaches a terminal status, call get_scan_bundle with detail=findings and maxBytes=8000. Summarize whether the result was new or reused, the score, risk level, findings, evidence links, coverage limitations, and report URL. Explain truncation or omitted sections when present. Treat results as automated public-web observations, not legal conclusions, certifications, or compliance determinations.`;
-  const verificationPrompt = `List the available CertScore tools and confirm that scan_site, get_scan_status, and get_scan_bundle are available. Then scan ${canaryUrl} and report whether the result was new or reused.`;
+  const firstRunPrompt = `Scan ${canaryUrl}. If certscore_scan_site returns a queued, running, or finalizing result, retain the returned scanId and poll certscore_get_scan_status using scanId only. If certscore_scan_site returns a retryable error without a scanId, wait for retryAfterSeconds and retry certscore_scan_site; do not call certscore_get_scan_status until a scanId exists. Once the scan reaches a terminal status, call certscore_get_scan_bundle with detail=findings and maxBytes=8000. Summarize whether the result was new or reused, the score, risk level, findings, evidence links, coverage limitations, and report URL. Explain truncation or omitted sections when present. Treat results as automated public-web observations, not legal conclusions, certifications, or compliance determinations.`;
+  const verificationPrompt = `List the available CertScore tools and confirm that certscore_scan_site, certscore_get_scan_status, and certscore_get_scan_bundle are available. Then scan ${canaryUrl} and report whether the result was new or reused.`;
   const disclaimer = "CertScore results are automated observations from a public-web scan. No-go, not-observed, and limited-coverage results are not proof of compliance, absence of risk, or legal status. Review the retained evidence and applicable context before relying on a finding.";
 
   for (const source of docs) {
@@ -530,13 +529,13 @@ test("Light MCP onboarding is no-auth, copyable, and agent-complete", () => {
     assert.ok(source.includes(firstRunPrompt));
     assert.ok(source.includes(verificationPrompt));
     assert.ok(source.includes(disclaimer));
-    assert.match(source, /scan_site/);
-    assert.match(source, /get_scan_status/);
-    assert.match(source, /get_scan_bundle/);
+    assert.match(source, /certscore_scan_site/);
+    assert.match(source, /certscore_get_scan_status/);
+    assert.match(source, /certscore_get_scan_bundle/);
     assert.match(source, /scanId/);
     assert.match(source, /retryAfterSeconds/);
-    assert.match(source, /retry scan_site/);
-    assert.match(source, /do not call get_scan_status until a scanId exists|Never poll until .*scanId.* exists/);
+    assert.match(source, /retry certscore_scan_site/);
+    assert.match(source, /do not call certscore_get_scan_status until a scanId exists|Never poll until .*scanId.* exists/);
     assert.match(source, /terminal status/);
     assert.match(source, /new or reused/);
     assert.match(source, /truncation or omitted sections|truncated/);
@@ -552,12 +551,12 @@ test("Light MCP onboarding is no-auth, copyable, and agent-complete", () => {
   for (const outcome of ["completed", "reused_scan", "queued / running / finalizing", "completed_limited / no-go", "retryable error without scanId", "invalid URL", "rate_limited", "truncated bundle"]) {
     assert.ok(lightPage.includes(outcome), `Light outcome table should explain ${outcome}`);
   }
-  assert.match(lightPage, /retry scan_site if a retryable error has no scanId/);
-  assert.match(lightPage, /get_scan_status with scanId if still running/);
-  assert.match(lightPage, /get_scan_bundle after terminal status/);
+  assert.match(lightPage, /retry certscore_scan_site if a retryable error has no scanId/);
+  assert.match(lightPage, /certscore_get_scan_status with scanId if still running/);
+  assert.match(lightPage, /certscore_get_scan_bundle after terminal status/);
   assert.match(lightPage, /ErgoVeritas canary page is a controlled, stable test site/);
   assert.match(lightPage, /Substitute your own public URL at any time/);
-  assert.match(lightPage, /retry .*scan_site.* only when the error says .*retryable: true/);
+  assert.match(lightPage, /retry .*certscore_scan_site.* only when the error says .*retryable: true/);
   assert.match(lightPage, /eligible prior scan was reused and quota was not consumed/);
   assert.match(lightPage, /completed_limited.*no-go.*not-observed.*limited coverage are observations only, never proof of compliance/);
   assert.doesNotMatch(fullMcpPage, /Pass jobId only before a stable scanId is available/);
@@ -687,25 +686,24 @@ test("Developer API docs are discoverable by crawlers and agent manifests", asyn
   assert.equal(aiDiscovery.mcp.light.endpoint, "https://mcp.certscore.ai/mcp/light");
   assert.equal(aiDiscovery.mcp.light.authentication, "none");
   assert.equal(aiDiscovery.mcp.light.dailyNewScanLimit, 20);
-  assert.deepEqual(aiDiscovery.mcp.light.tools, ["scan_site", "get_scan_status", "get_scan_bundle"]);
+  assert.deepEqual(aiDiscovery.mcp.light.tools, ["certscore_scan_site", "certscore_get_scan_status", "certscore_get_scan_bundle"]);
   assert.equal(
     aiDiscovery.mcp.install,
     "brew tap ergoveritas1-alt/certscore https://github.com/ergoveritas1-alt/certscore.ai && brew install --cask certscore-mcp"
   );
   assert.deepEqual(aiDiscovery.mcp.currentTools, [
-    "scan_site",
-    "create_scan",
-    "get_scan",
-    "get_scan_status",
-    "get_report",
-    "get_evidence",
-    "get_scan_bundle",
-    "export_findings",
-    "list_findings",
-    "get_pre_consent_cookies_trackers",
-    "explain_finding",
-    "get_latest_domain_scan",
-    "get_latest_domain_pre_consent_cookies_trackers"
+    "certscore_scan_site",
+    "certscore_get_scan",
+    "certscore_get_scan_status",
+    "certscore_get_report",
+    "certscore_get_evidence",
+    "certscore_get_scan_bundle",
+    "certscore_export_findings",
+    "certscore_list_findings",
+    "certscore_get_pre_consent_cookies_trackers",
+    "certscore_explain_finding",
+    "certscore_get_latest_domain_scan",
+    "certscore_get_latest_domain_pre_consent_cookies_trackers"
   ]);
   assert.deepEqual(aiDiscovery.mcp.verify, [
     "certscore-mcp --version",

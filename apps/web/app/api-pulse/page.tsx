@@ -111,19 +111,18 @@ const detailLevels = [
 ] as const;
 
 const mcpTools = [
-  ["create_scan", "Deprecated compatibility alias of scan_site. Use scan_site for new integrations. Returns completed-limited no-go disposition and reason-specific guidance when applicable."],
-  ["scan_site", "First call. Starts or reuses a public-web scan and waits up to 45 seconds by default. If status is queued, running, or finalizing, retain scanId and poll get_scan_status using only that scanId. Stop polling at completed, completed_limited, failed, expired, or rate_limited. For usable completion, call get_scan_bundle. No-go and limited coverage are observations, never proof of compliance."],
-  ["get_scan", "Retrieve the API v2 public-safe scan resource, including completed-limited no-go disposition, reason-specific guidance, and timing when available."],
-  ["get_scan_status", "Poll with only the stable scanId returned by scan_site. Active responses include phase, heartbeat, estimated progress, stalled state, and retry delay. Terminal responses include the canonical score, risk, coverage, timestamps, report URL, and an explicit next action. Stop polling at any terminal status."],
-  ["get_report", "Retrieve a summary Pulse report, including customer-safe no-go messaging when coverage is completed-limited. Use get_evidence for the larger bounded packet."],
-  ["get_evidence", "Retrieve the bounded structured Evidence JSON packet for a stable scan ID. Excludes raw cookie values, raw bodies, sensitive payloads, full DOM, and unredacted query values."],
-  ["get_scan_bundle", "Call after completed or completed_limited status. summary returns the canonical overview without finding bodies; findings reserves space for compact findings; evidence reserves findings plus bounded evidence digests and references; full adds all available bounded sections. Every response declares detail and byte-budget metadata, omittedSections, retrieval URLs, and nextRecommendedMaxBytes when truncated. Never interpret no-go, not-observed, or limited coverage as proof of compliance."],
-  ["export_findings", "Return structured findings plus completed-limited no-go disposition and guidance for downstream review or ticketing workflows."],
-  ["list_findings", "List API v2 public-safe findings already projected for a scan."],
-  ["get_pre_consent_cookies_trackers", "Retrieve the public-safe Cookies & Trackers (Pre-consent) report table as compact JSON for a scan."],
-  ["explain_finding", "Explain one projected finding with public evidence, caveats, reviewer next steps, and reason-specific no-go context when applicable."],
-  ["get_latest_domain_scan", "Retrieve the latest eligible API v2 public-safe scan for a domain."],
-  ["get_latest_domain_pre_consent_cookies_trackers", "Retrieve the public-safe Cookies & Trackers (Pre-consent) table from the latest eligible scan for a domain."]
+  ["certscore_scan_site", "First call. Starts or reuses a public-web scan and waits up to 45 seconds by default. If status is queued, running, or finalizing, retain scanId and poll certscore_get_scan_status using only that scanId. Stop polling at completed, completed_limited, failed, expired, or rate_limited. For usable completion, call certscore_get_scan_bundle. No-go and limited coverage are observations, never proof of compliance."],
+  ["certscore_get_scan", "Retrieve the API v2 public-safe scan resource, including completed-limited no-go disposition, reason-specific guidance, and timing when available."],
+  ["certscore_get_scan_status", "Poll with only the stable scanId returned by certscore_scan_site. Active responses include phase, heartbeat, estimated progress, stalled state, and retry delay. Terminal responses include the canonical score, risk, coverage, timestamps, report URL, and an explicit next action. Stop polling at any terminal status."],
+  ["certscore_get_report", "Retrieve a summary Pulse report, including customer-safe no-go messaging when coverage is completed-limited. Use certscore_get_evidence for the larger bounded packet."],
+  ["certscore_get_evidence", "Retrieve the bounded structured Evidence JSON packet for a stable scan ID. Excludes raw cookie values, raw bodies, sensitive payloads, full DOM, and unredacted query values."],
+  ["certscore_get_scan_bundle", "Call after completed or completed_limited status. summary returns the canonical overview without finding bodies; findings reserves space for compact findings; evidence reserves findings plus bounded evidence digests and references; full adds all available bounded sections. Every response declares detail and byte-budget metadata, omittedSections, retrieval URLs, and nextRecommendedMaxBytes when truncated. Never interpret no-go, not-observed, or limited coverage as proof of compliance."],
+  ["certscore_export_findings", "Return structured findings plus completed-limited no-go disposition and guidance for downstream review or ticketing workflows."],
+  ["certscore_list_findings", "List API v2 public-safe findings already projected for a scan."],
+  ["certscore_get_pre_consent_cookies_trackers", "Retrieve the public-safe Cookies & Trackers (Pre-consent) report table as compact JSON for a scan."],
+  ["certscore_explain_finding", "Explain one projected finding with public evidence, caveats, reviewer next steps, and reason-specific no-go context when applicable."],
+  ["certscore_get_latest_domain_scan", "Retrieve the latest eligible API v2 public-safe scan for a domain."],
+  ["certscore_get_latest_domain_pre_consent_cookies_trackers", "Retrieve the public-safe Cookies & Trackers (Pre-consent) table from the latest eligible scan for a domain."]
 ] as const;
 
 const exampleMeta = {
@@ -690,8 +689,8 @@ pnpm mcp:certscore:generate-key -- --name "CertScore.ai MCP preview"`}</CodeBloc
   }
 }`}</CodeBlock>
             <p>
-              Recommended workflow: call `scan_site` with a public URL. It waits for completion by default. Only poll `get_scan_status`
-              if a non-terminal job is returned, then use `list_findings` or `explain_finding` for review and ticketing. Fetch report,
+              Recommended workflow: call `certscore_scan_site` with a public URL. It waits for completion by default. Only poll `certscore_get_scan_status`
+              if a non-terminal job is returned, then use `certscore_list_findings` or `certscore_explain_finding` for review and ticketing. Fetch report,
               evidence, and cookie inventory resources only when the task needs them.
             </p>
             <p>

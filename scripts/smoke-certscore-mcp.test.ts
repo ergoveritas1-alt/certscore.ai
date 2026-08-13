@@ -5,12 +5,12 @@ import test from "node:test";
 test("MCP smoke uses the one-call scan workflow and only polls when needed", async () => {
   const source = await readFile("scripts/smoke-certscore-mcp.mjs", "utf8");
   const terminalWait = source.indexOf("await waitForTerminalScan(created)");
-  const findingsFetch = source.indexOf('name: "list_findings"');
+  const findingsFetch = source.indexOf('name: "certscore_list_findings"');
   assert.ok(terminalWait >= 0);
   assert.ok(findingsFetch > terminalWait);
-  assert.match(source, /name: "scan_site"/);
+  assert.match(source, /name: "certscore_scan_site"/);
   assert.doesNotMatch(source, /name: "create_scan"/);
-  assert.doesNotMatch(source, /name: "get_report"/);
+  assert.doesNotMatch(source, /name: "certscore_get_report"/);
   assert.match(source, /terminalFailure/);
   assert.match(source, /timeoutMs/);
   assert.match(source, /Math\.random/);

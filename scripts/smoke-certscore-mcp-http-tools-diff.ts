@@ -6,6 +6,11 @@ import { signCertScoreAccessToken } from "../packages/certscore-mcp-auth/src/ind
 
 const DEFAULT_MCP_URL = "https://mcp.certscore.ai/mcp";
 const DEFAULT_ISSUER = "https://certscore.ai";
+const LIGHT_TOOL_NAMES = new Set([
+  "certscore_get_scan_bundle",
+  "certscore_get_scan_status",
+  "certscore_scan_site"
+]);
 
 function getArg(name: string) {
   const prefix = `${name}=`;
@@ -75,13 +80,11 @@ async function listLocalTools() {
   }
 }
 
-async function listHttpTools(mcpUrl: string, bearerToken: string) {
+async function listHttpTools(mcpUrl: string, bearerToken?: string) {
   const transport = new StreamableHTTPClientTransport(new URL(mcpUrl), {
-    requestInit: {
-      headers: {
-        Authorization: `Bearer ${bearerToken}`
-      }
-    }
+    ...(bearerToken
+      ? { requestInit: { headers: { Authorization: `Bearer ${bearerToken}` } } }
+      : {})
   });
   const client = new Client({ name: "certscore-mcp-http-diff", version: "0.1.0" });
   await client.connect(transport);
@@ -102,7 +105,12 @@ async function main() {
     );
   }
 
-  const [localTools, httpTools] = await Promise.all([listLocalTools(), listHttpTools(mcpUrl, bearerToken)]);
+  const lightMcpUrl = `${new URL(mcpUrl).origin}/mcp/light`;
+  const [localTools, httpTools, lightHttpTools] = await Promise.all([
+    listLocalTools(),
+    listHttpTools(mcpUrl, bearerToken),
+    listHttpTools(lightMcpUrl)
+  ]);
   const localPayload = stableToolsPayload(localTools);
   const httpPayload = stableToolsPayload(httpTools);
   const localJson = stableJson(localPayload);
@@ -115,8 +123,23 @@ async function main() {
     assert.equal(httpJson, localJson, "Remote Streamable HTTP tools/list differs from the shared stdio MCP tool list.");
   }
 
+  const localLightTools = {
+    tools: localTools.tools.filter((tool) => LIGHT_TOOL_NAMES.has(tool.name))
+  };
+  const localLightJson = stableJson(stableToolsPayload(localLightTools));
+  const lightHttpJson = stableJson(stableToolsPayload(lightHttpTools));
+  if (lightHttpJson !== localLightJson) {
+    const localNames = localLightTools.tools.map((tool) => tool.name).sort();
+    const httpNames = lightHttpTools.tools.map((tool) => tool.name).sort();
+    console.error(JSON.stringify({ event: "mcp_http_light_tools_diff.failed", localNames, httpNames }, null, 2));
+    assert.equal(lightHttpJson, localLightJson, "Remote Light MCP tools/list differs from the shared stdio MCP Light profile.");
+  }
+
   console.log(JSON.stringify({
     event: "mcp_http_tools_diff.passed",
+    lightMcpUrl,
+    lightToolCount: lightHttpTools.tools.length,
+    lightTools: lightHttpTools.tools.map((tool) => tool.name).sort(),
     mcpUrl,
     toolCount: localTools.tools.length,
     tools: localTools.tools.map((tool) => tool.name).sort()

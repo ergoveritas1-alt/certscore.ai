@@ -423,7 +423,7 @@ test("buildApiV2ScanStatus exposes public scan status links", () => {
   assert.equal(status.progressPercent, 100);
   assert.equal(status.stalled, false);
   assert.equal(status.reportUrl, "https://certscore.ai/scan/00000000-0000-4000-8000-000000000123");
-  assert.match(status.recommendedNextAction ?? "", /get_scan_bundle/);
+  assert.match(status.recommendedNextAction ?? "", /certscore_get_scan_bundle/);
   assert.equal(status.links?.findings, "https://certscore.ai/api/v2/scans/00000000-0000-4000-8000-000000000123/findings");
 });
 
@@ -499,7 +499,7 @@ test("buildApiV2ScanStatus returns bounded terminal failure guidance", () => {
     message: "The public site did not finish navigation within the scan budget.",
     retryable: true,
     retryAfterSeconds: 30,
-    recommendedNextAction: "Retry scan_site with freshness=refresh after the recommended delay."
+    recommendedNextAction: "Retry certscore_scan_site with freshness=refresh after the recommended delay."
   });
   assert.doesNotMatch(JSON.stringify(status), /internal target details/);
 });

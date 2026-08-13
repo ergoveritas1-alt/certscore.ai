@@ -39,36 +39,36 @@ function readCallFromRequest(value: unknown): McpReadCall | null {
   const args = record(params?.arguments);
   const tool = stringValue(params?.name);
   if (!tool) return null;
-  if (tool === "get_scan_status") {
+  if (tool === "certscore_get_scan_status") {
     const scanId = stringValue(args?.scanId);
     return scanId ? { profile: "status", target: `scan:${scanId}`, tool, units: units("ordinary") } : null;
   }
   const scanId = stringValue(args?.scanId);
   if (scanId) {
     const detail = stringValue(args?.detail);
-    const costClass: ApiReadRateCostClass = tool === "get_scan_bundle"
+    const costClass: ApiReadRateCostClass = tool === "certscore_get_scan_bundle"
       ? "bundle"
-      : tool === "get_evidence"
+      : tool === "certscore_get_evidence"
         ? "evidence"
-        : tool === "export_findings"
+        : tool === "certscore_export_findings"
           ? "export"
-          : tool === "get_report" && (detail === "evidence" || detail === "full")
+          : tool === "certscore_get_report" && (detail === "evidence" || detail === "full")
             ? detail
             : "ordinary";
     const readTools = new Set([
-      "get_scan",
-      "get_report",
-      "get_evidence",
-      "get_scan_bundle",
-      "export_findings",
-      "list_findings",
-      "get_pre_consent_cookies_trackers",
-      "explain_finding"
+      "certscore_get_scan",
+      "certscore_get_report",
+      "certscore_get_evidence",
+      "certscore_get_scan_bundle",
+      "certscore_export_findings",
+      "certscore_list_findings",
+      "certscore_get_pre_consent_cookies_trackers",
+      "certscore_explain_finding"
     ]);
     return readTools.has(tool) ? { profile: "terminal", target: `scan:${scanId}`, tool, units: units(costClass) } : null;
   }
   const domain = stringValue(args?.domain)?.toLowerCase();
-  if (domain && (tool === "get_latest_domain_scan" || tool === "get_latest_domain_pre_consent_cookies_trackers")) {
+  if (domain && (tool === "certscore_get_latest_domain_scan" || tool === "certscore_get_latest_domain_pre_consent_cookies_trackers")) {
     return { profile: "terminal", target: `domain:${domain}`, tool, units: units("ordinary") };
   }
   return null;

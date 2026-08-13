@@ -37,7 +37,7 @@ export const mcpScanSiteInputSchema = {
 } as const;
 
 export const mcpGetScanStatusInputSchema = {
-  scanId: z.string().min(1).describe("Stable CertScore scan ID returned by scan_site.")
+  scanId: z.string().min(1).describe("Stable CertScore scan ID returned by certscore_scan_site.")
 } as const;
 
 export const mcpGetScanInputSchema = {
@@ -191,7 +191,7 @@ export const mcpScanSiteOutputSchema = z
     riskLevel: z.string().nullable().optional(),
     coverage: apiV2ScanResourceSchema.shape.coverage.nullable().optional(),
     error: mcpActionableErrorSchema.nullable(),
-    recommendedNextTool: z.enum(["get_scan_status", "get_scan_bundle"]).nullable(),
+    recommendedNextTool: z.enum(["certscore_get_scan_status", "certscore_get_scan_bundle"]).nullable(),
     recommendedNextAction: z.string(),
     observationOnlyDisclaimer: z.string()
   })
@@ -230,7 +230,7 @@ export const mcpScanStatusOutputSchema = z
     error: mcpActionableErrorSchema.nullable(),
     reportUrl: z.string().nullable().optional(),
     links: apiV2ScanResourceSchema.shape.links.optional(),
-    recommendedNextTool: z.enum(["get_scan_status", "get_scan_bundle"]).nullable(),
+    recommendedNextTool: z.enum(["certscore_get_scan_status", "certscore_get_scan_bundle"]).nullable(),
     recommendedNextAction: z.string(),
     observationOnlyDisclaimer: z.string()
   })
@@ -290,7 +290,7 @@ export const mcpScanBundleOutputSchema = z
     preConsentCookiesTrackers: z.record(z.unknown()).optional(),
     links: z.record(z.string()).optional(),
     reportUrl: z.string().nullable(),
-    recommendedNextTool: z.enum(["get_scan_status", "get_scan_bundle"]).nullable(),
+    recommendedNextTool: z.enum(["certscore_get_scan_status", "certscore_get_scan_bundle"]).nullable(),
     recommendedNextAction: z.string(),
     error: mcpActionableErrorSchema.nullable(),
     mcpMetadata: z.object({
@@ -362,24 +362,15 @@ export const mcpPreConsentCookiesTrackersOutputSchema = apiV2PreConsentCookiesTr
 
 export const certScoreMcpToolContracts = [
   {
-    name: "create_scan",
-    title: "Deprecated — Create CertScore Pulse scan",
-    description:
-      "Deprecated compatibility alias of scan_site. Use scan_site for new integrations. Returns completed-limited no-go disposition and reason-specific guidance when applicable.",
-    inputSchema: mcpCreateScanInputSchema,
-    outputSchema: mcpCreateScanOutputSchema,
-    annotations: scanCreationAnnotations
-  },
-  {
-    name: "scan_site",
+    name: "certscore_scan_site",
     title: "Scan site",
-    description: "First call. Starts or reuses a public-web scan and waits up to 45 seconds by default. If status is queued, running, or finalizing, retain scanId and poll get_scan_status using only that scanId. Stop polling at completed, completed_limited, failed, expired, or rate_limited. For usable completion, call get_scan_bundle. No-go and limited coverage are observations, never proof of compliance.",
+    description: "First call. Starts or reuses a public-web scan and waits up to 45 seconds by default. If status is queued, running, or finalizing, retain scanId and poll certscore_get_scan_status using only that scanId. Stop polling at completed, completed_limited, failed, expired, or rate_limited. For usable completion, call certscore_get_scan_bundle. No-go and limited coverage are observations, never proof of compliance.",
     inputSchema: mcpScanSiteInputSchema,
     outputSchema: mcpScanSiteOutputSchema,
     annotations: scanCreationAnnotations
   },
   {
-    name: "get_scan",
+    name: "certscore_get_scan",
     title: "Get CertScore scan",
     description: "Retrieve the API v2 public-safe scan resource, including completed-limited no-go disposition, reason-specific guidance, and timing when available.",
     inputSchema: mcpGetScanInputSchema,
@@ -387,23 +378,23 @@ export const certScoreMcpToolContracts = [
     annotations: readOnlyOpenWorldAnnotations
   },
   {
-    name: "get_scan_status",
+    name: "certscore_get_scan_status",
     title: "Get scan status",
-    description: "Poll with only the stable scanId returned by scan_site. Active responses include phase, heartbeat, estimated progress, stalled state, and retry delay. Terminal responses include the canonical score, risk, coverage, timestamps, report URL, and an explicit next action. Stop polling at any terminal status.",
+    description: "Poll with only the stable scanId returned by certscore_scan_site. Active responses include phase, heartbeat, estimated progress, stalled state, and retry delay. Terminal responses include the canonical score, risk, coverage, timestamps, report URL, and an explicit next action. Stop polling at any terminal status.",
     inputSchema: mcpGetScanStatusInputSchema,
     outputSchema: mcpScanStatusOutputSchema,
     annotations: readOnlyOpenWorldAnnotations
   },
   {
-    name: "get_report",
+    name: "certscore_get_report",
     title: "Get CertScore Pulse report",
-    description: "Retrieve a summary Pulse report, including customer-safe no-go messaging when coverage is completed-limited. Use get_evidence for the larger bounded packet.",
+    description: "Retrieve a summary Pulse report, including customer-safe no-go messaging when coverage is completed-limited. Use certscore_get_evidence for the larger bounded packet.",
     inputSchema: mcpGetReportInputSchema,
     outputSchema: mcpReportOutputSchema,
     annotations: readOnlyOpenWorldAnnotations
   },
   {
-    name: "get_evidence",
+    name: "certscore_get_evidence",
     title: "Get CertScore Pulse evidence",
     description: "Retrieve the bounded structured Evidence JSON packet for a stable scan ID. Excludes raw cookie values, raw bodies, sensitive payloads, full DOM, and unredacted query values.",
     inputSchema: mcpGetEvidenceInputSchema,
@@ -411,7 +402,7 @@ export const certScoreMcpToolContracts = [
     annotations: readOnlyOpenWorldAnnotations
   },
   {
-    name: "get_scan_bundle",
+    name: "certscore_get_scan_bundle",
     title: "Get scan bundle",
     description: "Call after completed or completed_limited status. summary returns the canonical overview without finding bodies; findings reserves space for compact findings; evidence reserves findings plus bounded evidence digests and references; full adds all available bounded sections. Every response declares detail and byte-budget metadata, omittedSections, retrieval URLs, and nextRecommendedMaxBytes when truncated. Never interpret no-go, not-observed, or limited coverage as proof of compliance.",
     inputSchema: mcpGetScanBundleInputSchema,
@@ -419,7 +410,7 @@ export const certScoreMcpToolContracts = [
     annotations: readOnlyOpenWorldAnnotations
   },
   {
-    name: "export_findings",
+    name: "certscore_export_findings",
     title: "Export CertScore findings",
     description: "Return structured findings plus completed-limited no-go disposition and guidance for downstream review or ticketing workflows.",
     inputSchema: mcpExportFindingsInputSchema,
@@ -427,7 +418,7 @@ export const certScoreMcpToolContracts = [
     annotations: readOnlyOpenWorldAnnotations
   },
   {
-    name: "list_findings",
+    name: "certscore_list_findings",
     title: "List CertScore findings",
     description: "List API v2 public-safe findings already projected for a scan.",
     inputSchema: mcpListFindingsInputSchema,
@@ -435,7 +426,7 @@ export const certScoreMcpToolContracts = [
     annotations: readOnlyOpenWorldAnnotations
   },
   {
-    name: "get_pre_consent_cookies_trackers",
+    name: "certscore_get_pre_consent_cookies_trackers",
     title: "Get pre-consent cookies and trackers",
     description: "Retrieve the public-safe Cookies & Trackers (Pre-consent) report table as compact JSON for a scan.",
     inputSchema: mcpGetPreConsentCookiesTrackersInputSchema,
@@ -443,7 +434,7 @@ export const certScoreMcpToolContracts = [
     annotations: readOnlyOpenWorldAnnotations
   },
   {
-    name: "explain_finding",
+    name: "certscore_explain_finding",
     title: "Explain CertScore finding",
     description: "Explain one projected finding with public evidence, caveats, reviewer next steps, and reason-specific no-go context when applicable.",
     inputSchema: mcpExplainFindingInputSchema,
@@ -451,7 +442,7 @@ export const certScoreMcpToolContracts = [
     annotations: readOnlyOpenWorldAnnotations
   },
   {
-    name: "get_latest_domain_scan",
+    name: "certscore_get_latest_domain_scan",
     title: "Get latest domain scan",
     description: "Retrieve the latest eligible API v2 public-safe scan for a domain.",
     inputSchema: mcpGetLatestDomainScanInputSchema,
@@ -459,7 +450,7 @@ export const certScoreMcpToolContracts = [
     annotations: readOnlyOpenWorldAnnotations
   },
   {
-    name: "get_latest_domain_pre_consent_cookies_trackers",
+    name: "certscore_get_latest_domain_pre_consent_cookies_trackers",
     title: "Get latest domain pre-consent cookies and trackers",
     description: "Retrieve the public-safe Cookies & Trackers (Pre-consent) table from the latest eligible scan for a domain.",
     inputSchema: mcpGetLatestDomainPreConsentCookiesTrackersInputSchema,

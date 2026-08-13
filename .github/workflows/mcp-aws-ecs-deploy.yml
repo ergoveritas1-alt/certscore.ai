@@ -11,6 +11,7 @@ on:
       - "packages/certscore-mcp-auth/**"
       - "packages/certscore-mcp/**"
       - "packages/certscore-sdk/**"
+      - "packages/shared/**"
       - "scripts/check-mcp-http-deploy-readiness.ts"
       - "scripts/smoke-certscore-mcp-http-tools-diff.ts"
       - "scripts/verify-mcp-source-tracked.ts"

@@ -190,7 +190,7 @@ class McpIdentityTests(unittest.TestCase):
         source = module_path.read_text()
         mcp_scan_source = source.split("def mcp_scan", 1)[1].split("def signals", 1)[0]
 
-        self.assertEqual(mcp_scan_source.count('"name": "scan_site"'), 1)
+        self.assertEqual(mcp_scan_source.count('"name": "certscore_scan_site"'), 1)
         self.assertIn('session, retry_safe=False)', mcp_scan_source)
         self.assertIn("not resubmitting", mcp_scan_source)
 
@@ -236,9 +236,9 @@ class McpIdentityTests(unittest.TestCase):
         self.assertEqual(created["status"], "queued")
         self.assertEqual(scan_status["status"], "completed")
         self.assertEqual(scan_status["sentinelPollCount"], 2)
-        self.assertEqual(calls.count("scan_site"), 1)
-        self.assertEqual(calls.count("get_scan_status"), 2)
-        self.assertEqual(calls[-1], "get_scan_bundle")
+        self.assertEqual(calls.count("certscore_scan_site"), 1)
+        self.assertEqual(calls.count("certscore_get_scan_status"), 2)
+        self.assertEqual(calls[-1], "certscore_get_scan_bundle")
         self.assertEqual(bundle["scan"]["status"], "completed")
         self.assertTrue(all(call.args[0] >= 20 for call in sleep.call_args_list))
 

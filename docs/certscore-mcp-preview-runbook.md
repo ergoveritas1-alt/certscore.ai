@@ -70,10 +70,10 @@ pnpm mcp:certscore:smoke
 
 Expected behavior:
 
-- MCP client lists the five scoped tools.
-- `create_scan` returns either a completed scan or an async `jobId`/`scanId`.
-- `get_report` runs when a stable `scanId` is available.
-- If the scan is still async, `get_scan_status` returns the public-safe job status.
+- MCP client lists the scoped tools.
+- `certscore_scan_site` returns either a completed scan or an async `jobId`/`scanId`.
+- `certscore_get_report` runs when a stable `scanId` is available.
+- If the scan is still async, `certscore_get_scan_status` returns the public-safe job status.
 
 ## Deploy Verification
 
@@ -96,10 +96,10 @@ The production smoke expects:
 
 - the installed `certscore-mcp` command to report a version and reach `/api/v2/health`
 - required MCP tools to be listed
-- `scan_site`, `get_scan_status`, and `get_scan` to work for the smoke URL
-- `list_findings` to return at least one already-projected finding
-- `get_pre_consent_cookies_trackers` to return at least one public-safe table row
-- `explain_finding` to work for the first returned finding
+- `certscore_scan_site`, `certscore_get_scan_status`, and `certscore_get_scan` to work for the smoke URL
+- `certscore_list_findings` to return at least one already-projected finding
+- `certscore_get_pre_consent_cookies_trackers` to return at least one public-safe table row
+- `certscore_explain_finding` to work for the first returned finding
 - latest-domain scan and latest-domain pre-consent cookies/trackers tools to work
 
 This is an operator confidence check over public API/MCP surfaces. It does not add scanner/report logic, create findings, infer policy conclusions, or inspect raw scanner artifacts.

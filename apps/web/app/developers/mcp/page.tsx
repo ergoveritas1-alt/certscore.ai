@@ -7,8 +7,8 @@ const description =
   "Connect agents to the CertScore.ai MCP server for website compliance review workflows using scan, status, finding, explanation, and latest-domain tools.";
 const lightEndpoint = "https://mcp.certscore.ai/mcp/light";
 const codexSetupCommand = "codex mcp add certscore --url https://mcp.certscore.ai/mcp/light";
-const firstRunPrompt = "Scan https://ergoveritas.com/.well-known/certscore-canary/sentinels/broad-baseline.html. If scan_site returns a queued, running, or finalizing result, retain the returned scanId and poll get_scan_status using scanId only. If scan_site returns a retryable error without a scanId, wait for retryAfterSeconds and retry scan_site; do not call get_scan_status until a scanId exists. Once the scan reaches a terminal status, call get_scan_bundle with detail=findings and maxBytes=8000. Summarize whether the result was new or reused, the score, risk level, findings, evidence links, coverage limitations, and report URL. Explain truncation or omitted sections when present. Treat results as automated public-web observations, not legal conclusions, certifications, or compliance determinations.";
-const verificationPrompt = "List the available CertScore tools and confirm that scan_site, get_scan_status, and get_scan_bundle are available. Then scan https://ergoveritas.com/.well-known/certscore-canary/sentinels/broad-baseline.html and report whether the result was new or reused.";
+const firstRunPrompt = "Scan https://ergoveritas.com/.well-known/certscore-canary/sentinels/broad-baseline.html. If certscore_scan_site returns a queued, running, or finalizing result, retain the returned scanId and poll certscore_get_scan_status using scanId only. If certscore_scan_site returns a retryable error without a scanId, wait for retryAfterSeconds and retry certscore_scan_site; do not call certscore_get_scan_status until a scanId exists. Once the scan reaches a terminal status, call certscore_get_scan_bundle with detail=findings and maxBytes=8000. Summarize whether the result was new or reused, the score, risk level, findings, evidence links, coverage limitations, and report URL. Explain truncation or omitted sections when present. Treat results as automated public-web observations, not legal conclusions, certifications, or compliance determinations.";
+const verificationPrompt = "List the available CertScore tools and confirm that certscore_scan_site, certscore_get_scan_status, and certscore_get_scan_bundle are available. Then scan https://ergoveritas.com/.well-known/certscore-canary/sentinels/broad-baseline.html and report whether the result was new or reused.";
 const agentDisclaimer = "CertScore results are automated observations from a public-web scan. No-go, not-observed, and limited-coverage results are not proof of compliance, absence of risk, or legal status. Review the retained evidence and applicable context before relying on a finding.";
 
 export const metadata: Metadata = createPageMetadata({
@@ -50,7 +50,7 @@ export default function DeveloperMcpPage() {
             <table className="min-w-full text-left text-sm">
               <thead className="border-b border-slate-200 bg-slate-50 text-slate-700"><tr><th className="px-4 py-3 font-semibold">Route</th><th className="px-4 py-3 font-semibold">Setup method</th><th className="px-4 py-3 font-semibold">Authentication</th><th className="px-4 py-3 font-semibold">Account</th><th className="px-4 py-3 font-semibold">Quota</th><th className="px-4 py-3 font-semibold">Available tools</th><th className="px-4 py-3 font-semibold">Intended user</th><th className="px-4 py-3 font-semibold">Website / access limits</th><th className="px-4 py-3 font-semibold">Upgrade path</th></tr></thead>
               <tbody className="divide-y divide-slate-100 text-slate-600">
-                <tr><td className="min-w-56 px-4 py-3 font-semibold text-slate-900">Light MCP — no authentication</td><td className="px-4 py-3">One Codex command or remote Streamable HTTP URL</td><td className="px-4 py-3">None</td><td className="px-4 py-3">Not required</td><td className="px-4 py-3">20 new scans per requester IP per UTC day; eligible reuse is free</td><td className="px-4 py-3">scan_site, get_scan_status, get_scan_bundle</td><td className="px-4 py-3">First-time users, testing, and discovery</td><td className="px-4 py-3">Public HTTP or HTTPS websites; core tools only</td><td className="px-4 py-3">Authenticate for volume, history, teams, or advanced tools</td></tr>
+                <tr><td className="min-w-56 px-4 py-3 font-semibold text-slate-900">Light MCP — no authentication</td><td className="px-4 py-3">One Codex command or remote Streamable HTTP URL</td><td className="px-4 py-3">None</td><td className="px-4 py-3">Not required</td><td className="px-4 py-3">20 new scans per requester IP per UTC day; eligible reuse is free</td><td className="px-4 py-3">certscore_scan_site, certscore_get_scan_status, certscore_get_scan_bundle</td><td className="px-4 py-3">First-time users, testing, and discovery</td><td className="px-4 py-3">Public HTTP or HTTPS websites; core tools only</td><td className="px-4 py-3">Authenticate for volume, history, teams, or advanced tools</td></tr>
                 <tr><td className="min-w-56 px-4 py-3 font-semibold text-slate-900">Hosted MCP — OAuth</td><td className="px-4 py-3">Connect the hosted endpoint from an OAuth-capable client</td><td className="px-4 py-3">OAuth authorization code with PKCE</td><td className="px-4 py-3">Required</td><td className="px-4 py-3">Higher-volume allowance based on access</td><td className="px-4 py-3">Core plus approved history and diagnostic tools</td><td className="px-4 py-3">Production, teams, and managed remote clients</td><td className="px-4 py-3">Scopes control read and scan creation; creation may require support</td><td className="px-4 py-3">Request more scopes or volume from support</td></tr>
                 <tr><td className="min-w-56 px-4 py-3 font-semibold text-slate-900">Local MCP — scoped API key</td><td className="px-4 py-3">Install and run the local stdio server</td><td className="px-4 py-3">Scoped API key in the client environment</td><td className="px-4 py-3">Required</td><td className="px-4 py-3">Higher-volume allowance based on key access</td><td className="px-4 py-3">Tools permitted by the key scopes</td><td className="px-4 py-3">Backend, local, and controlled automation</td><td className="px-4 py-3">Protect and rotate keys; scan creation is support-gated</td><td className="px-4 py-3">Request more scopes, tools, or volume</td></tr>
               </tbody>
@@ -69,16 +69,16 @@ export default function DeveloperMcpPage() {
         <Section eyebrow="Beginner workflow" title="Light MCP — no authentication">
           <p className="max-w-3xl text-sm leading-7 text-slate-600">
             First-time agents should use the Light endpoint. It uses Streamable HTTP and requires no signup, API key, bearer token, browser login, or OAuth,
-            and exposes exactly <code className="mx-1 rounded bg-slate-100 px-1 py-0.5">scan_site</code>,
-            <code className="mx-1 rounded bg-slate-100 px-1 py-0.5">get_scan_status</code>, and
-            <code className="mx-1 rounded bg-slate-100 px-1 py-0.5">get_scan_bundle</code>.
+            and exposes exactly <code className="mx-1 rounded bg-slate-100 px-1 py-0.5">certscore_scan_site</code>,
+            <code className="mx-1 rounded bg-slate-100 px-1 py-0.5">certscore_get_scan_status</code>, and
+            <code className="mx-1 rounded bg-slate-100 px-1 py-0.5">certscore_get_scan_bundle</code>.
           </p>
           <CodeBlock>{`Light:
 ${lightEndpoint}
 
 Transport: Streamable HTTP
 Authentication: None
-Tools: scan_site, get_scan_status, get_scan_bundle`}</CodeBlock>
+Tools: certscore_scan_site, certscore_get_scan_status, certscore_get_scan_bundle`}</CodeBlock>
           <h3 className="mt-6 font-semibold text-slate-950">Codex setup</h3>
           <CodeBlock>{codexSetupCommand}</CodeBlock>
           <p className="mt-3 max-w-3xl text-sm leading-7 text-slate-600">
@@ -97,20 +97,20 @@ Tools: scan_site, get_scan_status, get_scan_bundle`}</CodeBlock>
 
         <Section eyebrow="Light workflow" title="The canonical three-tool sequence">
           <ol className="max-w-3xl list-decimal space-y-2 pl-5 text-sm leading-7 text-slate-600">
-            <li>Call <code>scan_site</code> with a public URL.</li>
-            <li>If a retryable error has no <code>scanId</code>, wait <code>retryAfterSeconds</code> and retry <code>scan_site</code>.</li>
+            <li>Call <code>certscore_scan_site</code> with a public URL.</li>
+            <li>If a retryable error has no <code>scanId</code>, wait <code>retryAfterSeconds</code> and retry <code>certscore_scan_site</code>.</li>
             <li>If the result is queued, running, or finalizing, retain <code>scanId</code>.</li>
-            <li>Poll <code>get_scan_status</code> using <code>scanId</code> only. Never poll until <code>scanId</code> exists.</li>
-            <li>Stop polling at a terminal status, then call <code>get_scan_bundle</code>.</li>
+            <li>Poll <code>certscore_get_scan_status</code> using <code>scanId</code> only. Never poll until <code>scanId</code> exists.</li>
+            <li>Stop polling at a terminal status, then call <code>certscore_get_scan_bundle</code>.</li>
             <li>Use <code>detail=findings</code> for a compact finding review.</li>
             <li>Use <code>detail=evidence</code> for evidence digests and references.</li>
             <li>If truncated, follow <code>recommendedNextAction</code> or increase <code>maxBytes</code>.</li>
             <li>Summarize findings together with coverage limitations and the report URL.</li>
           </ol>
-          <CodeBlock>{`scan_site
-→ retry scan_site if a retryable error has no scanId
-→ get_scan_status with scanId if still running
-→ get_scan_bundle after terminal status`}</CodeBlock>
+          <CodeBlock>{`certscore_scan_site
+→ retry certscore_scan_site if a retryable error has no scanId
+→ certscore_get_scan_status with scanId if still running
+→ certscore_get_scan_bundle after terminal status`}</CodeBlock>
           <CodeBlock>{`Recommended bundle budgets:
 summary   maxBytes=5000
 findings  maxBytes=8000
@@ -122,8 +122,8 @@ full      maxBytes=12000 or higher`}</CodeBlock>
             <code>nextRecommendedMaxBytes</code>, and returned report or evidence content URLs.
           </p>
           <p className="max-w-3xl text-sm font-semibold leading-7 text-slate-800">
-            Call <code>get_scan_status</code> only after <code>scan_site</code> returns a <code>scanId</code>. A retryable response without
-            one must return to <code>scan_site</code>.
+            Call <code>certscore_get_scan_status</code> only after <code>certscore_scan_site</code> returns a <code>scanId</code>. A retryable response without
+            one must return to <code>certscore_scan_site</code>.
           </p>
           <p className="max-w-3xl text-sm leading-7 text-slate-600">{agentDisclaimer}</p>
         </Section>
@@ -132,7 +132,7 @@ full      maxBytes=12000 or higher`}</CodeBlock>
           <CodeBlock>{verificationPrompt}</CodeBlock>
           <p className="max-w-3xl text-sm leading-7 text-slate-600">
             Success means the tool list contains exactly the three Light tools, no authorization page appears, and
-            <code className="mx-1 rounded bg-white px-1">scan_site</code> returns a stable <code>scanId</code> plus an explicit
+            <code className="mx-1 rounded bg-white px-1">certscore_scan_site</code> returns a stable <code>scanId</code> plus an explicit
             new-or-reused decision. An eligible reused result reports that quota was not consumed.
           </p>
         </Section>
@@ -141,7 +141,7 @@ full      maxBytes=12000 or higher`}</CodeBlock>
           <div className="grid gap-3 text-sm md:grid-cols-2">
             {[
               ["OAuth appeared unexpectedly", <>Remove the connection and add the exact Light endpoint <code>{lightEndpoint}</code>. Do not configure a token.</>],
-              ["No scanId was returned", <>Retry <code>scan_site</code> only when the error says <code>retryable: true</code>. Never poll status without <code>scanId</code>.</>],
+              ["No scanId was returned", <>Retry <code>certscore_scan_site</code> only when the error says <code>retryable: true</code>. Never poll status without <code>scanId</code>.</>],
               ["Rate limited", <>Wait for <code>retryAfterSeconds</code> or stop. Eligible recent-result reuse does not consume quota.</>],
               ["Result was reused", <>Report it as reused. The eligible prior result was returned and quota was not consumed.</>],
               ["Bundle was truncated", <>Follow <code>nextRecommendedMaxBytes</code>, increase <code>maxBytes</code>, or open a returned report or evidence URL.</>],
@@ -337,8 +337,8 @@ sha256sum --check SHA256SUMS`}</CodeBlock>
             <code className="rounded bg-white px-1">scanTimeSeconds</code> when CertScore.ai has enough timing evidence. Treat{" "}
             <code className="rounded bg-white px-1">scanTimeSeconds: null</code> as unavailable rather than zero.
           </p>
-          <CodeBlock>{`const scan = await get_scan({ scanId });
-const status = await get_scan_status({ scanId });
+          <CodeBlock>{`const scan = await certscore_get_scan({ scanId });
+const status = await certscore_get_scan_status({ scanId });
 
 // scan.scanTimeSeconds and status.scanTimeSeconds are numbers or null.`}</CodeBlock>
         </Section>
@@ -368,14 +368,14 @@ const status = await get_scan_status({ scanId });
         </Section>
 
         <Section eyebrow="Workflow" title="Recommended agent sequence">
-          <CodeBlock>{`1. scan_site with a public URL; it waits up to 45 seconds by default.
-2. get_scan_status only when scan_site returns a non-terminal result containing scanId; poll with scanId only.
-3. get_scan_bundle for canonical status, findings, bounded evidence, and pre-consent inventory.
-4. get_report, get_evidence, list_findings, or cookie inventory only when a dedicated view is needed.
-5. explain_finding for evidence summaries and caveats.
-6. get_latest_domain_scan or get_latest_domain_pre_consent_cookies_trackers when the user asks for latest-domain data.`}</CodeBlock>
+          <CodeBlock>{`1. certscore_scan_site with a public URL; it waits up to 45 seconds by default.
+2. certscore_get_scan_status only when certscore_scan_site returns a non-terminal result containing scanId; poll with scanId only.
+3. certscore_get_scan_bundle for canonical status, findings, bounded evidence, and pre-consent inventory.
+4. certscore_get_report, certscore_get_evidence, certscore_list_findings, or cookie inventory only when a dedicated view is needed.
+5. certscore_explain_finding for evidence summaries and caveats.
+6. certscore_get_latest_domain_scan or certscore_get_latest_domain_pre_consent_cookies_trackers when the user asks for latest-domain data.`}</CodeBlock>
           <p className="max-w-3xl text-sm leading-7 text-slate-600">
-            <code className="rounded bg-white px-1">scan_site</code> reports whether it reused a result, the freshness decision,
+            <code className="rounded bg-white px-1">certscore_scan_site</code> reports whether it reused a result, the freshness decision,
             whether anonymous quota was consumed, the remaining daily allowance, its UTC reset time, and the recommended next tool.
           </p>
           <CodeBlock>{`{
@@ -389,13 +389,13 @@ const status = await get_scan_status({ scanId });
   "anonymousQuotaResetAt": "2026-07-16T00:00:00.000Z",
   "upgradeSupportEmail": "support@certscore.ai",
   "upgradeMessage": "For a higher-volume allowance, contact support@certscore.ai.",
-  "recommendedNextTool": "get_scan_bundle"
+  "recommendedNextTool": "certscore_get_scan_bundle"
 }`}</CodeBlock>
-          <CodeBlock>{`get_pre_consent_cookies_trackers({
+          <CodeBlock>{`certscore_get_pre_consent_cookies_trackers({
   scanId: "00000000-0000-4000-8000-000000000123"
 })
 
-get_latest_domain_pre_consent_cookies_trackers({
+certscore_get_latest_domain_pre_consent_cookies_trackers({
   domain: "ergoveritas.com",
   scanFrom: "eu_ie"
 })`}</CodeBlock>
@@ -407,13 +407,6 @@ get_latest_domain_pre_consent_cookies_trackers({
           </p>
         </Section>
 
-        <Section eyebrow="Deprecation" title="create_scan removal">
-          <p className="max-w-3xl text-sm leading-7 text-slate-600">
-            <code className="rounded bg-white px-1">create_scan</code> is a deprecated compatibility alias. It will be removed in{" "}
-            a future breaking release after the <code className="rounded bg-white px-1">0.2.x</code> line. Use{" "}
-            <code className="rounded bg-white px-1">scan_site</code> for new scan creation.
-          </p>
-        </Section>
       </div>
     </DeveloperShell>
   );

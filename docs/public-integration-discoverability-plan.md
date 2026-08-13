@@ -159,20 +159,20 @@ Move the SDK toward resource clients:
 
 Move MCP toward a CertScore agent interface:
 
-- `scan_site`
-- `get_scan`
-- `get_scan_status`
-- `list_findings`
-- `explain_finding`
+- `certscore_scan_site`
+- `certscore_get_scan`
+- `certscore_get_scan_status`
+- `certscore_list_findings`
+- `certscore_explain_finding`
 - `get_evidence_summary`
-- `get_latest_domain_scan`
+- `certscore_get_latest_domain_scan`
 
 Current implementation:
 
 - Added SDK resource clients while preserving existing `scan`, `submitScan`, `getScan`, and `getJobStatus` compatibility methods.
-- Added MCP tools `scan_site`, `get_scan`, `list_findings`, and `get_latest_domain_scan`.
-- `get_scan_status` now requires the stable API v2 `scanId` returned by `scan_site`.
-- `explain_finding` now retrieves the API v2 finding detail shape.
+- Added MCP tools `certscore_scan_site`, `certscore_get_scan`, `certscore_list_findings`, and `certscore_get_latest_domain_scan`.
+- `certscore_get_scan_status` now requires the stable API v2 `scanId` returned by `certscore_scan_site`.
+- `certscore_explain_finding` now retrieves the API v2 finding detail shape.
 - Updated SDK and MCP README files to match the current resource client/tool surface.
 - Added README drift tests for SDK resource clients and MCP tools/public docs.
 
@@ -210,7 +210,7 @@ Current v1 behavior:
 - Pulse v1 remains the production scan creation and compatibility entry point.
 - `/api/v1/pulse` supports URL scan/reuse, `scanId` lookup, JSON/markdown formats, detail levels, status polling, GPT Action behavior, throttling, and recent-scan reuse.
 - `@certscore/sdk` keeps `scan`, `submitScan`, `getScan`, and `getJobStatus`.
-- MCP keeps `create_scan`, `get_report`, and `export_findings` compatibility workflows.
+- MCP exposes the namespaced `certscore_` tool surface without legacy aliases.
 
 Target v2 behavior:
 
@@ -222,7 +222,7 @@ Compatibility commitments:
 
 - Do not remove or break Pulse v1 routes during the v2 rollout.
 - Keep existing SDK method names working while adding resource clients.
-- Keep existing MCP tool names available where they are already documented.
+- Keep the namespaced MCP tool surface aligned across registration, contracts, discovery, and documentation.
 - Public API/MCP outputs must not expose raw scanner artifacts or create findings outside the canonical pipeline.
 
 SDK migration:
@@ -233,9 +233,9 @@ SDK migration:
 
 MCP migration:
 
-- Prefer `scan_site`, `get_scan`, `get_scan_status`, `list_findings`, `explain_finding`, and `get_latest_domain_scan`.
-- `create_scan`, `get_report`, and `export_findings` remain for compatibility and Pulse-specific workflows.
-- `get_scan_status` requires the stable API v2 `scanId` returned by `scan_site`.
+- Prefer `certscore_scan_site`, `certscore_get_scan`, `certscore_get_scan_status`, `certscore_list_findings`, `certscore_explain_finding`, and `certscore_get_latest_domain_scan`.
+- `certscore_get_report` and `certscore_export_findings` remain available for Pulse-specific workflows.
+- `certscore_get_scan_status` requires the stable API v2 `scanId` returned by `certscore_scan_site`.
 
 Docs and redirects:
 

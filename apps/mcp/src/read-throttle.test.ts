@@ -8,39 +8,40 @@ function toolCall(name: string, args: Record<string, unknown>) {
 }
 
 test("classifies composite and direct MCP scan reads", () => {
-  assert.deepEqual(mcpReadCallsFromJsonRpc(toolCall("get_scan_bundle", { scanId: "scan_1", detail: "summary" })), [{
+  assert.deepEqual(mcpReadCallsFromJsonRpc(toolCall("certscore_get_scan_bundle", { scanId: "scan_1", detail: "summary" })), [{
     profile: "terminal",
     target: "scan:scan_1",
-    tool: "get_scan_bundle",
+    tool: "certscore_get_scan_bundle",
     units: 4
   }]);
-  assert.deepEqual(mcpReadCallsFromJsonRpc(toolCall("scan_site", { url: "https://example.com" })), []);
-  assert.equal(mcpReadCallsFromJsonRpc(toolCall("get_scan_status", { scanId: "scan_1" }))[0]?.profile, "status");
+  assert.deepEqual(mcpReadCallsFromJsonRpc(toolCall("certscore_scan_site", { url: "https://example.com" })), []);
+  assert.equal(mcpReadCallsFromJsonRpc(toolCall("certscore_get_scan_status", { scanId: "scan_1" }))[0]?.profile, "status");
 });
 
-test("allows two composite reads for one caller and scan, then cools down", () => {
+test("allows five composite reads for one caller and scan, then cools down", () => {
   const throttle = new McpReadThrottle();
-  const call = mcpReadCallsFromJsonRpc(toolCall("get_scan_bundle", { scanId: "scan_1", detail: "evidence" }))[0];
+  const call = mcpReadCallsFromJsonRpc(toolCall("certscore_get_scan_bundle", { scanId: "scan_1", detail: "evidence" }))[0];
   assert.ok(call);
-  assert.equal(throttle.claim("caller_1", call, 1_000).allowed, true);
-  assert.equal(throttle.claim("caller_1", call, 2_000).allowed, true);
-  const third = throttle.claim("caller_1", call, 3_000);
-  assert.equal(third.allowed, false);
-  if (third.allowed) return;
-  assert.equal(third.reason, "mcp_scan_read_caller_target_limit");
-  assert.equal(third.retryAfterSeconds, 598);
-  assert.equal(third.profile, "terminal");
-  assert.equal(third.scope, "callerTarget");
-  assert.equal(third.windowId, "burst");
-  assert.equal(third.windowSeconds, 600);
-  assert.equal(third.limitUnits, 8);
-  assert.equal(third.usedUnits, 8);
-  assert.equal(third.requestedUnits, 4);
+  for (let index = 1; index <= 5; index += 1) {
+    assert.equal(throttle.claim("caller_1", call, index * 1_000).allowed, true);
+  }
+  const sixth = throttle.claim("caller_1", call, 6_000);
+  assert.equal(sixth.allowed, false);
+  if (sixth.allowed) return;
+  assert.equal(sixth.reason, "mcp_scan_read_caller_target_limit");
+  assert.equal(sixth.retryAfterSeconds, 595);
+  assert.equal(sixth.profile, "terminal");
+  assert.equal(sixth.scope, "callerTarget");
+  assert.equal(sixth.windowId, "burst");
+  assert.equal(sixth.windowSeconds, 600);
+  assert.equal(sixth.limitUnits, 20);
+  assert.equal(sixth.usedUnits, 20);
+  assert.equal(sixth.requestedUnits, 4);
 });
 
 test("bounds low-and-slow composite reads to forty units per rolling day", () => {
   const throttle = new McpReadThrottle();
-  const call = mcpReadCallsFromJsonRpc(toolCall("get_scan_bundle", { scanId: "scan_1", detail: "evidence" }))[0];
+  const call = mcpReadCallsFromJsonRpc(toolCall("certscore_get_scan_bundle", { scanId: "scan_1", detail: "evidence" }))[0];
   assert.ok(call);
   const elevenMinutes = 11 * 60 * 1_000;
   for (let index = 0; index < 10; index += 1) {
@@ -55,7 +56,7 @@ test("bounds low-and-slow composite reads to forty units per rolling day", () =>
 
 test("status polling has a separate bounded allowance", () => {
   const throttle = new McpReadThrottle();
-  const call = mcpReadCallsFromJsonRpc(toolCall("get_scan_status", { scanId: "scan_1" }))[0];
+  const call = mcpReadCallsFromJsonRpc(toolCall("certscore_get_scan_status", { scanId: "scan_1" }))[0];
   assert.ok(call);
   for (let index = 0; index < 30; index += 1) {
     assert.equal(throttle.claim("caller_1", call, index).allowed, true);

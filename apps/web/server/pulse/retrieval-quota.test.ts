@@ -38,6 +38,7 @@ test("evidence and full retrievals cost four times a summary retrieval", () => {
 });
 
 test("one principal cannot repeatedly retrieve one terminal scan", () => {
+  assert.equal(PULSE_RETRIEVAL_PRINCIPAL_SCAN_LIMIT, 20);
   assert.equal(decidePulseRetrievalQuota({
     detail: "evidence",
     now,
@@ -66,13 +67,28 @@ test("one principal cannot repeatedly retrieve one terminal scan", () => {
   assert.equal(decision.requestedUnits, 4);
 });
 
+test("a mixed MCP workflow can retrieve evidence after six ordinary terminal-read units", () => {
+  const decision = decidePulseRetrievalQuota({
+    detail: "evidence",
+    now,
+    usage: usage({
+      dailyPrincipalScanUnits: 6,
+      principalScanUnits: 6,
+      principalUnits: 6,
+      scanUnits: 6
+    })
+  });
+  assert.equal(decision.allowed, true);
+  assert.equal(decision.requestedUnits, 4);
+});
+
 test("rate-limit denial logs are structured and omit caller and target identifiers", () => {
   const entries: string[] = [];
   const originalWarn = console.warn;
   console.warn = (entry?: unknown) => entries.push(String(entry));
   try {
     logApiReadRateLimited({
-      limitUnits: 8,
+      limitUnits: PULSE_RETRIEVAL_PRINCIPAL_SCAN_LIMIT,
       policyVersion: "test-policy",
       profile: "terminal",
       reason: "scan_retrieval_principal_scan_limit",
@@ -83,7 +99,7 @@ test("rate-limit denial logs are structured and omit caller and target identifie
       scope: "callerTarget",
       surface: "pulse-v1",
       targetType: "scan",
-      usedUnits: 8,
+      usedUnits: PULSE_RETRIEVAL_PRINCIPAL_SCAN_LIMIT,
       windowId: "burst",
       windowSeconds: 600
     });

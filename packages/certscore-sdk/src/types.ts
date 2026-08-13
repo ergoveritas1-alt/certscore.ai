@@ -106,7 +106,7 @@ export interface ScanCreationMetadata {
   anonymousQuotaResetAt?: string | null;
   upgradeSupportEmail?: string | null;
   upgradeMessage?: string | null;
-  recommendedNextTool?: "get_scan_status" | "get_scan_bundle";
+  recommendedNextTool?: "certscore_get_scan_status" | "certscore_get_scan_bundle";
 }
 
 export interface ScanResource extends ScanCreationMetadata {

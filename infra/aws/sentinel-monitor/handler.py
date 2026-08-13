@@ -308,12 +308,12 @@ def mcp_scan(url, loc, secret):
     init, session = mcp_post({"jsonrpc": "2.0", "id": 1, "method": "initialize", "params": {"protocolVersion": "2025-03-26", "capabilities": {}, "clientInfo": {"name": "ergoveritas-sentinel-monitor", "version": "1.0"}}})
     # Bind the follow-up messages to the Streamable HTTP session.
     mcp_post({"jsonrpc": "2.0", "method": "notifications/initialized", "params": {}}, session)
-    call, _ = mcp_post({"jsonrpc": "2.0", "id": 2, "method": "tools/call", "params": {"name": "scan_site", "arguments": {"url": url, "freshness": "refresh", "scanFrom": loc, "waitForCompletion": True}}}, session, retry_safe=False)
+    call, _ = mcp_post({"jsonrpc": "2.0", "id": 2, "method": "tools/call", "params": {"name": "certscore_scan_site", "arguments": {"url": url, "freshness": "refresh", "scanFrom": loc, "waitForCompletion": True}}}, session, retry_safe=False)
     result, payload = mcp_tool_payload(call)
     sid = stable_scan_id(payload if isinstance(payload, dict) else result)
     if not sid:
         diagnostic = json.dumps(call, ensure_ascii=False)[:500] if call is not None else "empty MCP response"
-        # scan_site is explicitly non-idempotent. An identity-less response may
+        # certscore_scan_site is explicitly non-idempotent. An identity-less response may
         # still follow a successfully accepted scan, so resubmitting here can hit
         # the domain throttle and replace the in-flight scan with stale evidence.
         raise RuntimeError("MCP submission returned no stable scan id; not resubmitting: " + diagnostic)
@@ -329,11 +329,11 @@ def mcp_scan(url, loc, secret):
             raise RuntimeError("MCP scan timed out at " + status(current))
         retry_after = current.get("retryAfterSeconds") if isinstance(current, dict) else None
         delay = retry_after if isinstance(retry_after, (int, float)) else 20
-        # scan_site already performed the fast wait. Keep fallback status reads
+        # certscore_scan_site already performed the fast wait. Keep fallback status reads
         # below the canonical 30-unit/10-minute caller+scan status allowance.
         time.sleep(max(20, min(30, delay)))
         polled_at = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
-        status_call, _ = mcp_post({"jsonrpc": "2.0", "id": next_call_id, "method": "tools/call", "params": {"name": "get_scan_status", "arguments": {"scanId": sid}}}, session)
+        status_call, _ = mcp_post({"jsonrpc": "2.0", "id": next_call_id, "method": "tools/call", "params": {"name": "certscore_get_scan_status", "arguments": {"scanId": sid}}}, session)
         next_call_id += 1
         status_result, status_payload = mcp_tool_payload(status_call)
         candidate = status_payload if isinstance(status_payload, dict) else status_result
@@ -348,7 +348,7 @@ def mcp_scan(url, loc, secret):
         current = {**current, "sentinelPollCount": poll_count, "sentinelFirstPollAt": first_poll_at, "sentinelLastPollAt": last_poll_at}
     evidence = {}
     if status(current) in USABLE_SCAN_STATUSES:
-        evidence, _ = mcp_post({"jsonrpc": "2.0", "id": next_call_id, "method": "tools/call", "params": {"name": "get_scan_bundle", "arguments": {"scanId": sid, "detail": "evidence", "maxBytes": 24000}}}, session)
+        evidence, _ = mcp_post({"jsonrpc": "2.0", "id": next_call_id, "method": "tools/call", "params": {"name": "certscore_get_scan_bundle", "arguments": {"scanId": sid, "detail": "evidence", "maxBytes": 24000}}}, session)
     return sid, current, {"scan": current, "evidence": evidence}, created
 
 def signals(value):

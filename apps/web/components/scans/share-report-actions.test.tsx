@@ -113,7 +113,7 @@ test("agent summary exposes canonical API, SDK, and MCP evidence actions", () =>
 test("agent SDK and MCP snippets use registered canonical evidence clients", () => {
   assert.match(buildSdkEvidenceSnippet("scan-123"), /certscore\.pulse\.evidence\("scan-123"\)/);
   assert.deepEqual(JSON.parse(buildMcpEvidenceInvocation("scan-123")), {
-    tool: "get_evidence",
+    tool: "certscore_get_evidence",
     arguments: { scanId: "scan-123" }
   });
 });

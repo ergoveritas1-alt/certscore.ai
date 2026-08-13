@@ -12,14 +12,14 @@ const DEFAULT_SMOKE_URL = "https://kbdlab.io";
 const DEFAULT_FALLBACK_DOMAIN = "webmd.com";
 const MCP_COMMAND = process.env.CERTSCORE_MCP_COMMAND?.trim() || "certscore-mcp";
 const REQUIRED_TOOLS = [
-  "scan_site",
-  "get_scan",
-  "get_scan_status",
-  "list_findings",
-  "explain_finding",
-  "get_pre_consent_cookies_trackers",
-  "get_latest_domain_scan",
-  "get_latest_domain_pre_consent_cookies_trackers"
+  "certscore_scan_site",
+  "certscore_get_scan",
+  "certscore_get_scan_status",
+  "certscore_list_findings",
+  "certscore_explain_finding",
+  "certscore_get_pre_consent_cookies_trackers",
+  "certscore_get_latest_domain_scan",
+  "certscore_get_latest_domain_pre_consent_cookies_trackers"
 ] as const;
 
 type ToolPayload = Record<string, unknown> & {
@@ -339,7 +339,7 @@ async function runInstalledMcpSmoke(token: string) {
 
     const noGoScanId = process.env.CERTSCORE_MCP_PROD_NO_GO_SCAN_ID?.trim();
     if (noGoScanId) {
-      const noGoScan = await callTool(client, "get_scan", { scanId: noGoScanId });
+      const noGoScan = await callTool(client, "certscore_get_scan", { scanId: noGoScanId });
       const noGo = noGoScan.noGo ?? noGoScan.scan?.noGo;
       assert.equal(noGoScan.status ?? noGoScan.scan?.status, "completed_limited");
       assert.ok(noGo?.reasonCode, "Production no-go scan should retain a stable reason.");
@@ -350,24 +350,24 @@ async function runInstalledMcpSmoke(token: string) {
       console.log(`no_go_contract=passed reason=${noGo.reasonCode} title=${JSON.stringify(noGo.title)}`);
     }
 
-    const created = await callTool(client, "scan_site", {
+    const created = await callTool(client, "certscore_scan_site", {
       url: smokeUrl,
       detail: "standard",
       freshness: smokeFreshness,
       scanFrom: "eu_ie"
     });
-    summarize("scan_site", created);
+    summarize("certscore_scan_site", created);
     const scanId = scanIdFrom(created);
     if (!scanId) {
-      throw new Error("scan_site did not return a usable scanId.");
+      throw new Error("certscore_scan_site did not return a usable scanId.");
     }
 
     let terminalStatus: ToolPayload | null = null;
     for (let attempt = 0; attempt < 120; attempt += 1) {
-      const status = await callTool(client, "get_scan_status", { scanId });
+      const status = await callTool(client, "certscore_get_scan_status", { scanId });
       const statusValue = status.status ?? status.scan?.status ?? null;
       if (attempt === 0 || statusValue === "completed" || statusValue === "completed_limited") {
-        summarize("get_scan_status", status);
+        summarize("certscore_get_scan_status", status);
       }
       if (statusValue === "completed" || statusValue === "completed_limited") {
         terminalStatus = status;
@@ -381,29 +381,29 @@ async function runInstalledMcpSmoke(token: string) {
     if (!terminalStatus) {
       throw new Error(`Production scan ${scanId} did not complete within 10 minutes.`);
     }
-    summarize("get_scan", await callTool(client, "get_scan", { scanId }));
-    const findings = await callTool(client, "list_findings", { scanId });
-    summarize("list_findings", findings);
-    const cookies = await callTool(client, "get_pre_consent_cookies_trackers", { scanId });
-    summarize("get_pre_consent_cookies_trackers", cookies);
-    summarize("get_latest_domain_scan", await callTool(client, "get_latest_domain_scan", { domain: smokeDomain }));
+    summarize("certscore_get_scan", await callTool(client, "certscore_get_scan", { scanId }));
+    const findings = await callTool(client, "certscore_list_findings", { scanId });
+    summarize("certscore_list_findings", findings);
+    const cookies = await callTool(client, "certscore_get_pre_consent_cookies_trackers", { scanId });
+    summarize("certscore_get_pre_consent_cookies_trackers", cookies);
+    summarize("certscore_get_latest_domain_scan", await callTool(client, "certscore_get_latest_domain_scan", { domain: smokeDomain }));
     summarize(
-      "get_latest_domain_pre_consent_cookies_trackers",
-      await callTool(client, "get_latest_domain_pre_consent_cookies_trackers", { domain: smokeDomain })
+      "certscore_get_latest_domain_pre_consent_cookies_trackers",
+      await callTool(client, "certscore_get_latest_domain_pre_consent_cookies_trackers", { domain: smokeDomain })
     );
 
     let findingSource = { scanId, findings, cookies, label: smokeDomain };
     if ((findings.findings?.length ?? 0) === 0 || (cookies.summary?.rowCount ?? cookies.rows?.length ?? 0) === 0) {
       console.log(`primary_sparse=${smokeDomain}; checking fallback latest-domain ${fallbackDomain}`);
-      const fallback = await callTool(client, "get_latest_domain_scan", { domain: fallbackDomain });
+      const fallback = await callTool(client, "certscore_get_latest_domain_scan", { domain: fallbackDomain });
       summarize("fallback_get_latest_domain_scan", fallback);
       const fallbackScanId = scanIdFrom(fallback);
       if (!fallbackScanId) {
         throw new Error(`Fallback latest-domain scan did not return a scanId for ${fallbackDomain}.`);
       }
-      const fallbackFindings = await callTool(client, "list_findings", { scanId: fallbackScanId });
+      const fallbackFindings = await callTool(client, "certscore_list_findings", { scanId: fallbackScanId });
       summarize("fallback_list_findings", fallbackFindings);
-      const fallbackCookies = await callTool(client, "get_pre_consent_cookies_trackers", { scanId: fallbackScanId });
+      const fallbackCookies = await callTool(client, "certscore_get_pre_consent_cookies_trackers", { scanId: fallbackScanId });
       summarize("fallback_get_pre_consent_cookies_trackers", fallbackCookies);
       findingSource = { scanId: fallbackScanId, findings: fallbackFindings, cookies: fallbackCookies, label: fallbackDomain };
     }
@@ -419,9 +419,9 @@ async function runInstalledMcpSmoke(token: string) {
 
     const findingId = findingSource.findings.findings?.[0]?.id;
     if (!findingId) {
-      throw new Error("Production MCP smoke could not resolve a findingId for explain_finding.");
+      throw new Error("Production MCP smoke could not resolve a findingId for certscore_explain_finding.");
     }
-    summarize("explain_finding", await callTool(client, "explain_finding", { scanId: findingSource.scanId, findingId }));
+    summarize("certscore_explain_finding", await callTool(client, "certscore_explain_finding", { scanId: findingSource.scanId, findingId }));
     console.log(`production_mcp_smoke=passed source=${findingSource.label} findings=${findingCount} cookieRows=${rowCount}`);
   } finally {
     await client.close();

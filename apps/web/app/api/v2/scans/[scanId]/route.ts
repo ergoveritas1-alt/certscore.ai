@@ -55,8 +55,8 @@ export async function GET(request: Request, context: RouteContext) {
           retryable: failed ? canonicalStatus.error?.retryable ?? false : true,
           retryAfterSeconds,
           recommendedNextAction: failed
-            ? canonicalStatus.error?.recommendedNextAction ?? `Call get_scan_status with scanId ${scanId} for the terminal failure details.`
-            : `Call get_scan_status with scanId ${scanId}, then retry get_scan_bundle after completion.`
+            ? canonicalStatus.error?.recommendedNextAction ?? `Call certscore_get_scan_status with scanId ${scanId} for the terminal failure details.`
+            : `Call certscore_get_scan_status with scanId ${scanId}, then retry certscore_get_scan_bundle after completion.`
         }),
         headers: retryAfterSeconds === null ? undefined : { "Retry-After": String(retryAfterSeconds) },
         requestId: id,
