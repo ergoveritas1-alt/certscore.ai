@@ -143,6 +143,14 @@ test("lane instrumentation retains the first top-level response and distinguishe
   assert.equal(consent?.firstHttpStatus, 200);
   assert.equal(consent?.firstResponseOffsetMs, 35);
   assert.equal(consent?.navigationCount, 1);
+  assert.deepEqual(consent?.navigationAttempts, [{
+    sequence: 1,
+    mode: "initial_navigation",
+    outcome: "success",
+    httpStatus: 200,
+    durationMs: 40,
+    effectiveUrl: "https://example.com/",
+  }]);
   assert.equal(consent?.accessOutcome, "representative_page");
   assert.equal(consent?.firstEffectiveUrl?.includes("secret"), false);
   assert.notEqual(consent?.physicalInvocationId, runtime?.physicalInvocationId);
@@ -245,6 +253,7 @@ test("sharded coordinator safety deadline stays below the 75-second Lambda cutof
 });
 
 test("dedicated evidence workers preserve the standard profile module budget", async () => {
+  let allowRuntimeEvidenceFinalizationAfterAbort: boolean | undefined;
   let preConsentModuleDeadlineMs: number | undefined;
   let physicalInvocationId: string | undefined;
   const result = await handler(validPayload({
@@ -254,6 +263,7 @@ test("dedicated evidence workers preserve the standard profile module budget", a
   }), {
     awsRequestId: "aws-request-runtime-worker",
     runArtifactChain: async (_payload, options) => {
+      allowRuntimeEvidenceFinalizationAfterAbort = options.allowRuntimeEvidenceFinalizationAfterAbort;
       preConsentModuleDeadlineMs = options.preConsentModuleDeadlineMs;
       physicalInvocationId = options.physicalInvocationId;
       return {
@@ -265,6 +275,7 @@ test("dedicated evidence workers preserve the standard profile module budget", a
   });
 
   assert.equal(result.status, "completed");
+  assert.equal(allowRuntimeEvidenceFinalizationAfterAbort, true);
   assert.equal(
     preConsentModuleDeadlineMs,
     LOCAL_V2_DAG_LAMBDA_EVIDENCE_WORKER_SCANNER_WORK_TIMEOUT_MS -
@@ -275,6 +286,7 @@ test("dedicated evidence workers preserve the standard profile module budget", a
 });
 
 test("consent-proof workers reserve a bounded visual recovery window", async () => {
+  let allowRuntimeEvidenceFinalizationAfterAbort: boolean | undefined;
   let preConsentModuleDeadlineMs: number | undefined;
   let preConsentVisualFallbackDeadlineMs: number | undefined;
   const result = await handler(validPayload({
@@ -283,6 +295,7 @@ test("consent-proof workers reserve a bounded visual recovery window", async () 
     workerLane: "consent_proof",
   }), {
     runArtifactChain: async (_payload, options) => {
+      allowRuntimeEvidenceFinalizationAfterAbort = options.allowRuntimeEvidenceFinalizationAfterAbort;
       preConsentModuleDeadlineMs = options.preConsentModuleDeadlineMs;
       preConsentVisualFallbackDeadlineMs = options.preConsentVisualFallbackDeadlineMs;
       return {
@@ -294,6 +307,7 @@ test("consent-proof workers reserve a bounded visual recovery window", async () 
   });
 
   assert.equal(result.status, "completed");
+  assert.equal(allowRuntimeEvidenceFinalizationAfterAbort, false);
   assert.equal(preConsentModuleDeadlineMs, 35_000);
   assert.equal(
     preConsentModuleDeadlineMs,
@@ -924,6 +938,44 @@ test("handler uploads a bounded artifact-only failure diagnostic on scanner time
   }
 });
 
+test("runtime worker retains a bounded failure diagnostic when no canonical partial bundle can be finalized", async () => {
+  const previousBucket = process.env.CERTSCORE_V2_DAG_LAMBDA_ARTIFACT_BUCKET;
+  process.env.CERTSCORE_V2_DAG_LAMBDA_ARTIFACT_BUCKET = "failure-diagnostic-test";
+  const uploads: Array<{ body: string; key: string }> = [];
+  try {
+    const result = await handler(validPayload({
+      orchestrationMode: "worker",
+      workerLane: "runtime_evidence",
+    }), {
+      artifactChainTimeoutMs: 30,
+      handlerSafetyTimeoutMs: 10_000,
+      resultPublishTimeoutMs: 100,
+      scannerWorkTimeoutMs: 10,
+      runArtifactChain: async () => await new Promise(() => undefined),
+      s3Client: {
+        async send(command: PutObjectCommand) {
+          uploads.push({
+            body: Buffer.from(command.input.Body as Uint8Array).toString("utf8"),
+            key: String(command.input.Key),
+          });
+          return { $metadata: {} };
+        },
+      },
+    });
+
+    assert.equal(result.status, "failed");
+    assert.equal(result.workerLane, "runtime_evidence");
+    assert.equal(result.error?.code, "v2_dag_lambda_safety_timeout");
+    assert.match(result.artifactPointers?.failureDiagnosticUri ?? "", /lanes\/runtime_evidence\/failure\/FailureDiagnostic\.json$/);
+    assert.equal(uploads.length, 1);
+    assert.match(uploads[0]?.body ?? "", /certscore\.v2_lambda_failure_diagnostic\.1/);
+    assert.doesNotMatch(uploads[0]?.body ?? "", /cookieValue|documentText|requestBody|nanoReasoning/i);
+  } finally {
+    if (previousBucket === undefined) delete process.env.CERTSCORE_V2_DAG_LAMBDA_ARTIFACT_BUCKET;
+    else process.env.CERTSCORE_V2_DAG_LAMBDA_ARTIFACT_BUCKET = previousBucket;
+  }
+});
+
 test("failure diagnostic upload errors do not suppress terminal publication", async () => {
   const previousBucket = process.env.CERTSCORE_V2_DAG_LAMBDA_ARTIFACT_BUCKET;
   process.env.CERTSCORE_V2_DAG_LAMBDA_ARTIFACT_BUCKET = "failure-diagnostic-test";
@@ -1386,6 +1438,150 @@ test("three-lane merge marks an empty consent-proof lane not testable", () => {
   );
 });
 
+test("three-lane merge keeps lane-local access failures limited when the independent required lane reached a representative page", () => {
+  const usableRuntimeCoverage = {
+    coverageStatus: "usable" as const,
+    fallbackModesUsed: [],
+    limitationKeys: [],
+    notes: [],
+    observationCounts: {
+      cookieEvents: 0,
+      cookiesBeforeConsent: 0,
+      networkEvents: 4,
+      normalizedVendors: 0,
+      observedJourneys: 0,
+      thirdPartyRequests: 0,
+    },
+    silentEmpty: false,
+  };
+  const unavailableRuntimeCoverage = {
+    ...usableRuntimeCoverage,
+    coverageStatus: "limited_none" as const,
+    limitationKeys: ["navigation_transport_failure"],
+  };
+  const runtimeNoGo = terminalLaneNoGo("navigation_transport_failure");
+  const runtimeVisualNoGo = terminalLaneVisualNoGo("navigation_transport_failure", "capture_failed");
+  const consentScreenshot = screenshotArtifact(
+    "screenshot_pre_consent_settled",
+    "/tmp/worker-consent/screenshot-pre-consent-settled.png",
+  );
+  const runtimeFailed = {
+    ...laneRunFixture("runtime_evidence", "invoke-runtime-failed"),
+    firstHttpStatus: null,
+    executionOutcome: "failed" as const,
+    accessOutcome: "navigation_failed" as const,
+  };
+
+  const runtimeLimited = mergeLocalV2DagLambdaEvidenceLaneBundles({
+    artifactRoot: "/tmp/certscore-three-lane-runtime-disagreement",
+    scanId: "scan-runtime-disagreement",
+    consentProof: canonicalBundleFixture("scan-runtime-disagreement", {
+      scanLaneRuns: [laneRunFixture("consent_proof", "invoke-consent-success")],
+      screenshots: [consentScreenshot],
+      visualCapture: {
+        status: "available",
+        captureMethod: "primary_full_page",
+        artifactRefs: [],
+        notes: [],
+      },
+    }),
+    runtimeEvidence: canonicalBundleFixture("scan-runtime-disagreement", {
+      scanLaneRuns: [runtimeFailed],
+      runtimeCoverage: unavailableRuntimeCoverage,
+      scanNoGoAssessment: runtimeNoGo,
+      scan_no_go_assessment: runtimeNoGo,
+      visualAccessReview: runtimeVisualNoGo,
+      visual_access_review: runtimeVisualNoGo,
+    }),
+    policyEvidence: canonicalBundleFixture("scan-runtime-disagreement"),
+  });
+
+  assert.equal(runtimeLimited.scanNoGoAssessment?.decision, "continue_with_diagnostics");
+  assert.ok(runtimeLimited.scanNoGoAssessment?.contradictorCodes.includes(
+    "independent_consent_proof_representative_page",
+  ));
+  assert.equal(runtimeLimited.visualAccessReview?.go_no_go, "NO_GO");
+  assert.equal(runtimeLimited.scanEvidenceLaneAssessment?.outcome, "partial_with_diagnostics");
+  assert.equal(runtimeLimited.scanEvidenceLaneAssessment?.lanes.homepageRuntime, "unusable");
+  assert.ok(runtimeLimited.scanEvidenceLaneAssessment?.limitationKeys.includes(
+    "evidence_lane_access_disagreement",
+  ));
+
+  const consentNoGo = terminalLaneNoGo("blank_or_unusable_page");
+  const consentVisualNoGo = terminalLaneVisualNoGo("blank_or_unusable_page", "blank_or_unusable");
+  const consentBlocked = {
+    ...laneRunFixture("consent_proof", "invoke-consent-blank"),
+    accessOutcome: "blank_or_unusable" as const,
+  };
+  const consentLimited = mergeLocalV2DagLambdaEvidenceLaneBundles({
+    artifactRoot: "/tmp/certscore-three-lane-consent-disagreement",
+    scanId: "scan-consent-disagreement",
+    consentProof: canonicalBundleFixture("scan-consent-disagreement", {
+      scanLaneRuns: [consentBlocked],
+      screenshots: [consentScreenshot],
+      visualCapture: {
+        status: "available",
+        captureMethod: "primary_full_page",
+        artifactRefs: [],
+        notes: [],
+      },
+      scanNoGoAssessment: consentNoGo,
+      scan_no_go_assessment: consentNoGo,
+      visualAccessReview: consentVisualNoGo,
+      visual_access_review: consentVisualNoGo,
+    }),
+    runtimeEvidence: canonicalBundleFixture("scan-consent-disagreement", {
+      scanLaneRuns: [laneRunFixture("runtime_evidence", "invoke-runtime-success")],
+      runtimeCoverage: usableRuntimeCoverage,
+    }),
+    policyEvidence: canonicalBundleFixture("scan-consent-disagreement"),
+  });
+
+  assert.equal(consentLimited.scanNoGoAssessment?.decision, "continue_with_diagnostics");
+  assert.ok(consentLimited.scanNoGoAssessment?.contradictorCodes.includes(
+    "independent_runtime_evidence_representative_page",
+  ));
+  assert.equal(consentLimited.scanEvidenceLaneAssessment?.outcome, "partial_with_diagnostics");
+  assert.equal(consentLimited.scanEvidenceLaneAssessment?.lanes.homepageRuntime, "usable");
+  assert.equal(consentLimited.scanEvidenceLaneAssessment?.lanes.consent, "limited");
+  assert.deepEqual(
+    consentLimited.consentUiObservations,
+    [],
+    "runtime success must not synthesize consent controls for the limited consent-proof lane",
+  );
+
+  const bothLanesNoGo = mergeLocalV2DagLambdaEvidenceLaneBundles({
+    artifactRoot: "/tmp/certscore-three-lane-both-no-go",
+    scanId: "scan-both-no-go",
+    consentProof: canonicalBundleFixture("scan-both-no-go", {
+      scanLaneRuns: [consentBlocked],
+      screenshots: [consentScreenshot],
+      visualCapture: {
+        status: "available",
+        captureMethod: "primary_full_page",
+        artifactRefs: [],
+        notes: [],
+      },
+      scanNoGoAssessment: consentNoGo,
+      scan_no_go_assessment: consentNoGo,
+      visualAccessReview: consentVisualNoGo,
+      visual_access_review: consentVisualNoGo,
+    }),
+    runtimeEvidence: canonicalBundleFixture("scan-both-no-go", {
+      scanLaneRuns: [laneRunFixture("runtime_evidence", "invoke-runtime-no-go")],
+      runtimeCoverage: usableRuntimeCoverage,
+      scanNoGoAssessment: runtimeNoGo,
+      scan_no_go_assessment: runtimeNoGo,
+      visualAccessReview: runtimeVisualNoGo,
+      visual_access_review: runtimeVisualNoGo,
+    }),
+    policyEvidence: canonicalBundleFixture("scan-both-no-go"),
+  });
+
+  assert.equal(bothLanesNoGo.scanNoGoAssessment?.decision, "no_go");
+  assert.notEqual(bothLanesNoGo.scanEvidenceLaneAssessment?.outcome, "partial_with_diagnostics");
+});
+
 test("sharded bundle merge retains exactly one diagnostic screenshot", () => {
   const merged = mergeLocalV2DagLambdaShardBundles({
     base: canonicalBundleFixture("scan-local-1", {
@@ -1803,12 +1999,48 @@ function laneRunFixture(
     firstHttpStatus: 200,
     firstEffectiveUrl: "https://example.com/",
     navigationCount: 1,
+    navigationAttempts: [],
     challengeDetected: false,
     challengeType: null,
     executionOutcome: "success",
     accessOutcome: "representative_page",
     completedAt: "2026-06-15T18:00:01.000Z",
     durationMs: 1_000,
+  };
+}
+
+function terminalLaneNoGo(
+  reasonCode: string,
+): NonNullable<CanonicalEvidenceBundle["scanNoGoAssessment"]> {
+  return {
+    status: "available",
+    version: "scan-no-go-assessment-v1",
+    decision: "no_go",
+    scanNoGoConfidence: 0.92,
+    reasonCodes: [reasonCode, "scan_no_go_corroborated"],
+    corroboratorCodes: ["lane_local_terminal_evidence"],
+    contradictorCodes: [],
+    supportingSignals: {
+      retainedVisualArtifactAvailable: reasonCode !== "navigation_transport_failure",
+    },
+    evidenceRefs: ["scan_runtime_artifacts.scan_no_go_assessment"],
+  };
+}
+
+function terminalLaneVisualNoGo(
+  reasonCode: string,
+  pageState: NonNullable<CanonicalEvidenceBundle["visualAccessReview"]>["page_state"],
+): NonNullable<CanonicalEvidenceBundle["visualAccessReview"]> {
+  return {
+    artifact_ref: null,
+    confidence: 0.92,
+    go_no_go: "NO_GO",
+    key_visual_evidence: ["Lane-local evidence did not retain a representative public page."],
+    page_state: pageState,
+    reason_code: reasonCode,
+    short_explanation: "Lane-local evidence did not retain a representative public page.",
+    status: "missing_visual_artifact",
+    version: "visual-access-review-v1",
   };
 }
 

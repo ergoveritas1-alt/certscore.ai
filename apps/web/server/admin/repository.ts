@@ -4,6 +4,8 @@ import { query, queryOne } from "@website-signal-risk-scanner/db";
 import { SCAN_FROM_VALUES, SCAN_NO_GO_SNAPSHOT_OUTCOMES, formatScanFromLabel } from "@website-signal-risk-scanner/shared";
 import type { AccessPostureClass, RecoverableFindingClass, ScanExecutionTier } from "@website-signal-risk-scanner/shared";
 import { ensureMonitorSiteRequestsTable } from "../monitor-site/monitor-site-request";
+import { LOCAL_V2_DAG_LAMBDA_RESULT_RECEIVED_EVENT_TYPE } from "../scans/local-v2-dag-lambda-dispatch";
+import { LOCAL_V2_DAG_SCAN_PROCESSOR } from "../scans/local-v2-dag-scan-config";
 import { ensureScanRequestLogTable } from "../scans/scan-request-log";
 import { adminNoGoSql } from "./admin-no-go";
 import { getAdminUsersOrderBy, type AdminUsersSortDirection, type AdminUsersSortKey } from "./admin-users-sort";
@@ -189,6 +191,20 @@ export type AdminScanFilterOptions = {
   outcomes: string[];
 };
 
+function retainedScannerExecutionEvidenceSql(eventAlias: string) {
+  return `(
+    ${eventAlias}.event_type in ('full_scan.started', 'full_scan.completed', 'preview_scan.started', 'preview_scan.completed')
+    or (
+      ${eventAlias}.event_type = '${LOCAL_V2_DAG_LAMBDA_RESULT_RECEIVED_EVENT_TYPE}'
+      and ${eventAlias}.metadata_json ->> 'resultStatus' = 'completed'
+      and ${eventAlias}.metadata_json ->> 'processor' = '${LOCAL_V2_DAG_SCAN_PROCESSOR}'
+      and ${eventAlias}.metadata_json #>> '{artifactPointers,scanArtifactUri}' like 's3://%'
+      and ${eventAlias}.metadata_json #>> '{artifactMetadata,scanArtifactUri,sha256}' ~ '^[a-f0-9]{64}$'
+      and ${eventAlias}.metadata_json #>> '{artifactMetadata,scanArtifactUri,sizeBytes}' ~ '^[1-9][0-9]*$'
+    )
+  )`;
+}
+
 const SCAN_ACTIVITY_NO_GO_SQL = adminNoGoSql({
   accessPosture: "ss.access_posture_class",
   blockedFlag: "ss.blocked_flag",
@@ -210,7 +226,7 @@ const SCAN_ACTIVITY_NO_GO_SQL = adminNoGoSql({
       select 1
       from public.scan_events scanner
       where scanner.scan_id = s.id
-        and scanner.event_type in ('full_scan.started', 'full_scan.completed', 'preview_scan.started', 'preview_scan.completed')
+        and ${retainedScannerExecutionEvidenceSql("scanner")}
     )
   )`,
   outcomesParameter: "$12"
@@ -297,7 +313,7 @@ function adminScanActivityBaseSql() {
           and not exists (
             select 1 from public.scan_events scanner
             where scanner.scan_id = s.id
-              and scanner.event_type in ('full_scan.started', 'full_scan.completed', 'preview_scan.started', 'preview_scan.completed')
+              and ${retainedScannerExecutionEvidenceSql("scanner")}
           ) then 'unknown'
         when s.id is not null then 'clear'
         else 'unknown'
@@ -430,7 +446,7 @@ function adminScanActivityBaseSql() {
           and not exists (
             select 1 from public.scan_events scanner
             where scanner.scan_id = s.id
-              and scanner.event_type in ('full_scan.started', 'full_scan.completed', 'preview_scan.started', 'preview_scan.completed')
+              and ${retainedScannerExecutionEvidenceSql("scanner")}
           ) then 'unknown'
         when s.id is not null then 'clear'
         else 'unknown'
@@ -1215,12 +1231,12 @@ export async function loadAdminScanListPageData(limit: number, offset = 0, reque
       ? query<{ scan_id: string; has_recovery: boolean | null; has_scanner_event: boolean | null }>(
           `select scan_id,
                   bool_or(metadata_json ->> 'recoveryMode' = 'completed_scan_backfill') as has_recovery,
-                  bool_or(event_type in ('full_scan.started', 'full_scan.completed', 'preview_scan.started', 'preview_scan.completed')) as has_scanner_event
+                  bool_or(${retainedScannerExecutionEvidenceSql("scan_events")}) as has_scanner_event
              from scan_events
             where scan_id = any($1::uuid[])
               and (
                 metadata_json ->> 'recoveryMode' = 'completed_scan_backfill'
-                or event_type in ('full_scan.started', 'full_scan.completed', 'preview_scan.started', 'preview_scan.completed')
+                or ${retainedScannerExecutionEvidenceSql("scan_events")}
               )
             group by scan_id`,
           [scanIds],

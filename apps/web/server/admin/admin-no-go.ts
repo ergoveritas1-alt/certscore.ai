@@ -110,8 +110,12 @@ export function projectAdminNoGo(input: AdminNoGoProjectionInput): AdminNoGoProj
   }
 
   const assessments = [record(input.runtimeAssessment), record(input.snapshotRuntimeAssessment)];
-  const assessment = assessments.find((candidate) => stringValue(candidate?.decision ?? candidate?.scan_no_go_decision) === "no_go");
-  if (assessment) {
+  const assessment = assessments.find((candidate) => {
+    const decision = stringValue(candidate?.decision ?? candidate?.scan_no_go_decision);
+    return decision === "no_go" || decision === "continue_with_diagnostics";
+  });
+  const assessmentDecision = stringValue(assessment?.decision ?? assessment?.scan_no_go_decision);
+  if (assessment && assessmentDecision === "no_go") {
     const reasonCodes = assessment?.reasonCodes ?? assessment?.reason_codes;
     const reason = firstString(reasonCodes);
     return {
@@ -120,6 +124,9 @@ export function projectAdminNoGo(input: AdminNoGoProjectionInput): AdminNoGoProj
       reason: reason ?? "Runtime no-go assessment",
       source: "runtime_assessment"
     };
+  }
+  if (assessmentDecision === "continue_with_diagnostics") {
+    return { isNoGo: false, limitationKind: null, reason: null, source: null };
   }
 
   const visualReviews = [record(input.visualAccessReview), record(input.snapshotVisualAccessReview)];
@@ -175,17 +182,26 @@ export function adminNoGoSql(input: {
   const responseDisposition = input.responseSummary
     ? `or ${input.responseSummary} ->> 'resultDisposition' = 'no_go'`
     : "";
+  const effectiveAssessmentDecision = `coalesce(
+      ${input.runtimeArtifacts}.scan_no_go_assessment ->> 'decision',
+      ${input.runtimeArtifacts}.scan_no_go_assessment ->> 'scan_no_go_decision'
+      ${input.snapshotRuntimeAssessment ? `, ${input.snapshotRuntimeAssessment} ->> 'decision', ${input.snapshotRuntimeAssessment} ->> 'scan_no_go_decision'` : ""}
+    )`;
   return `(
     ${input.snapshotOutcome} = any(${input.outcomesParameter ?? "$5"}::text[])
     ${input.snapshotStopReasonCode ? `or ${input.snapshotStopReasonCode} = any(${input.outcomesParameter ?? "$5"}::text[])` : ""}
     ${responseDisposition}
-    or coalesce(${input.runtimeArtifacts}.scan_no_go_assessment ->> 'decision', ${input.runtimeArtifacts}.scan_no_go_assessment ->> 'scan_no_go_decision') = 'no_go'
-    ${input.snapshotRuntimeAssessment ? `or coalesce(${input.snapshotRuntimeAssessment} ->> 'decision', ${input.snapshotRuntimeAssessment} ->> 'scan_no_go_decision') = 'no_go'` : ""}
-    or upper(coalesce(${input.runtimeArtifacts}.visual_access_review ->> 'goNoGo', ${input.runtimeArtifacts}.visual_access_review ->> 'go_no_go', '')) = 'NO_GO'
-    ${input.snapshotVisualAccessReview ? `or upper(coalesce(${input.snapshotVisualAccessReview} ->> 'goNoGo', ${input.snapshotVisualAccessReview} ->> 'go_no_go', '')) = 'NO_GO'` : ""}
-    or ${input.accessPosture} = 'early_loss'
-    or coalesce(${input.blockedFlag}, false)
-    or coalesce(${input.captchaFlag}, false)
-    ${input.scannerEvidenceMissing ? `or ${input.scannerEvidenceMissing}` : ""}
+    or ${effectiveAssessmentDecision} = 'no_go'
+    or (
+      ${effectiveAssessmentDecision} is null
+      and (
+        upper(coalesce(${input.runtimeArtifacts}.visual_access_review ->> 'goNoGo', ${input.runtimeArtifacts}.visual_access_review ->> 'go_no_go', '')) = 'NO_GO'
+        ${input.snapshotVisualAccessReview ? `or upper(coalesce(${input.snapshotVisualAccessReview} ->> 'goNoGo', ${input.snapshotVisualAccessReview} ->> 'go_no_go', '')) = 'NO_GO'` : ""}
+        or ${input.accessPosture} = 'early_loss'
+        or coalesce(${input.blockedFlag}, false)
+        or coalesce(${input.captchaFlag}, false)
+        ${input.scannerEvidenceMissing ? `or ${input.scannerEvidenceMissing}` : ""}
+      )
+    )
   )`;
 }

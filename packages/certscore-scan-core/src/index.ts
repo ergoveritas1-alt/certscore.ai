@@ -166,6 +166,12 @@ export interface RunScanInput {
    */
   evidenceLane?: "combined" | "consent_proof" | "runtime_evidence" | "policy_evidence";
   /**
+   * Allows a dedicated runtime-evidence worker to finish only the deterministic
+   * canonical projection after its parent capture deadline is observed. This
+   * never extends browser capture or permits work owned by another lane.
+   */
+  allowRuntimeEvidenceFinalizationAfterAbort?: boolean;
+  /**
    * Non-blocking policy-lane handoff. Consumers may retain or review this
    * evidence early, but must not project it until it matches the terminal
    * CanonicalEvidenceBundle.
@@ -413,7 +419,11 @@ export async function runScan(input: RunScanInput): Promise<CanonicalEvidenceBun
   try {
     await phaseRecorder.record("pre_consent_runtime", preConsentEnabled ? "started" : "skipped");
     preConsentResult = await preConsentResultPromise;
-    throwIfAborted(input.signal);
+    throwUnlessRuntimeEvidenceFinalizationOnly({
+      allowRuntimeEvidenceFinalizationAfterAbort: input.allowRuntimeEvidenceFinalizationAfterAbort,
+      evidenceLane,
+      signal: input.signal,
+    });
     await phaseRecorder.record("pre_consent_runtime", "completed", {
       durationMs: preConsentResult.moduleRun.durationMs,
       status: preConsentResult.moduleRun.status,
@@ -742,7 +752,23 @@ export async function runScan(input: RunScanInput): Promise<CanonicalEvidenceBun
       await phaseRecorder.record("policy_surface_no_go_cancellation", "completed");
     }
   }
-  throwIfAborted(input.signal);
+  const runtimeEvidenceFinalizationAfterAbort = isRuntimeEvidenceFinalizationOnly({
+    allowRuntimeEvidenceFinalizationAfterAbort: input.allowRuntimeEvidenceFinalizationAfterAbort,
+    evidenceLane,
+    signal: input.signal,
+  });
+  throwUnlessRuntimeEvidenceFinalizationOnly({
+    allowRuntimeEvidenceFinalizationAfterAbort: input.allowRuntimeEvidenceFinalizationAfterAbort,
+    evidenceLane,
+    signal: input.signal,
+  });
+  if (runtimeEvidenceFinalizationAfterAbort) {
+    await phaseRecorder.record("runtime_evidence_deadline_finalization", "started", {
+      captureDurationMs: preConsentResult.moduleRun.durationMs,
+      captureStatus: preConsentResult.moduleRun.status,
+      reason: "parent_capture_deadline_observed_after_typed_runtime_capture",
+    });
+  }
   await phaseRecorder.record("policy_surface_for_output", policyRequiredForOutput ? "started" : "skipped");
   if (policyRequiredForOutput) {
     if (input.policySurfaceDeadlineAtMs === undefined) {
@@ -1171,6 +1197,14 @@ export async function runScan(input: RunScanInput): Promise<CanonicalEvidenceBun
   await phaseRecorder.record("canonical_bundle_write", "started");
   await artifactWriter.writeJsonArtifact("CanonicalEvidenceBundle.json", bundle);
   await phaseRecorder.record("canonical_bundle_write", "completed");
+  if (runtimeEvidenceFinalizationAfterAbort) {
+    await phaseRecorder.record("runtime_evidence_deadline_finalization", "completed", {
+      coverageStatus: bundle.runtimeCoverage?.coverageStatus ?? "limited_none",
+      retainedCookieEvents: bundle.cookieEvents.length,
+      retainedNetworkEvents: bundle.networkEvents.length,
+      retainedNetworkResponseEvents: bundle.networkResponseEvents.length,
+    });
+  }
   await phaseRecorder.record("scan_complete", "completed", {
     durationMs: Date.now() - startedAtMs,
   });
@@ -1185,6 +1219,27 @@ export async function runScan(input: RunScanInput): Promise<CanonicalEvidenceBun
       await phaseRecorder.record("shared_browser_close", "completed");
     }
   }
+}
+
+export function throwUnlessRuntimeEvidenceFinalizationOnly(input: {
+  allowRuntimeEvidenceFinalizationAfterAbort?: boolean;
+  evidenceLane: NonNullable<RunScanInput["evidenceLane"]>;
+  signal?: AbortSignal;
+}): void {
+  if (isRuntimeEvidenceFinalizationOnly(input)) {
+    return;
+  }
+  throwIfAborted(input.signal);
+}
+
+export function isRuntimeEvidenceFinalizationOnly(input: {
+  allowRuntimeEvidenceFinalizationAfterAbort?: boolean;
+  evidenceLane: NonNullable<RunScanInput["evidenceLane"]>;
+  signal?: AbortSignal;
+}): boolean {
+  return input.signal?.aborted === true &&
+    input.allowRuntimeEvidenceFinalizationAfterAbort === true &&
+    input.evidenceLane === "runtime_evidence";
 }
 
 export function compactCanonicalEvidenceBundleForRetention(

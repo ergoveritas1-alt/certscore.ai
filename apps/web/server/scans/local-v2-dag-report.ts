@@ -87,6 +87,16 @@ export function resolveFinalMaterializedScanOutcome(input: { existingOutcome: un
   return existingOutcome ?? "completed_partial";
 }
 
+export function isMaterializedScanNoGo(input: {
+  derivedNoGo: boolean;
+  scanNoGoAssessment: { decision?: string | null } | null | undefined;
+  visualAccessReview: { go_no_go?: string | null } | null | undefined;
+}) {
+  return input.derivedNoGo ||
+    input.scanNoGoAssessment?.decision === "no_go" ||
+    (!input.scanNoGoAssessment && input.visualAccessReview?.go_no_go === "NO_GO");
+}
+
 export function buildFinalMaterializedAccessFields(input: {
   existingOutcome: unknown;
   runtimeCoverageStatus: string | null | undefined;
@@ -5019,9 +5029,11 @@ function buildMaterializedLocalV2Detail(
     consentControlGeometryEvidence: options.consentControlGeometryEvidence,
     consentSurfaceInspection,
     finalUrl: canonicalDocumentUrl,
-    noGo: Boolean(localV2NoGo) ||
-      providedScanNoGoAssessment?.decision === "no_go" ||
-      providedVisualAccessReview?.go_no_go === "NO_GO",
+    noGo: isMaterializedScanNoGo({
+      derivedNoGo: Boolean(localV2NoGo),
+      scanNoGoAssessment: providedScanNoGoAssessment,
+      visualAccessReview: providedVisualAccessReview,
+    }),
     noGoReasonCodes: uniqueStrings([
       ...(localV2NoGo?.scanNoGoAssessment.reasonCodes ?? []),
       ...(providedScanNoGoAssessment?.reasonCodes ?? []),

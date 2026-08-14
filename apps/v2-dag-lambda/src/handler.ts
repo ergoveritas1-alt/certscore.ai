@@ -17,6 +17,7 @@ import {
   type CanonicalEvidenceBundle,
   type ConsentFlowScenario,
   type ScanLaneRun,
+  type ScanNoGoAssessment,
   type ScreenshotArtifact,
   type VerifiedPolicyEvidencePacket,
   type V2DagLambdaResultPurpose,
@@ -324,6 +325,7 @@ type HandlerOptions = {
   resultPublishTimeoutMs?: number;
   runArtifactChain?: (payload: LocalV2DagLambdaDispatchPayload, options: {
     artifactSignal?: AbortSignal;
+    allowRuntimeEvidenceFinalizationAfterAbort?: boolean;
     artifactRoot: string;
     onScanCoreComplete?: () => void;
     onPolicySurfaceComplete?: NonNullable<RunScanInput["onPolicySurfaceComplete"]>;
@@ -822,6 +824,14 @@ export function buildLocalV2DagLambdaLaneRun(input: {
   const navigationCount = siteFacingNavigation?.navigationCount ??
     moduleRun.recoveryDiagnostics?.attempts?.length ??
     (firstTopLevelResponse ? 1 : 0);
+  const navigationAttempts = (moduleRun.recoveryDiagnostics?.attempts ?? []).map((attempt, index) => ({
+    sequence: index + 1,
+    mode: attempt.mode,
+    outcome: attempt.outcome,
+    httpStatus: attempt.httpStatus ?? null,
+    durationMs: attempt.durationMs,
+    effectiveUrl: sanitizedLaneUrl(attempt.url),
+  }));
   const noGoReason = input.bundle.scanNoGoAssessment?.reasonCodes[0] ?? null;
   const challengeDetected = siteFacingNavigation?.challengeDetected ?? Boolean(
     input.bundle.scanNoGoAssessment?.supportingSignals.challengeSignalsDetected ||
@@ -869,6 +879,7 @@ export function buildLocalV2DagLambdaLaneRun(input: {
     firstHttpStatus,
     firstEffectiveUrl,
     navigationCount,
+    navigationAttempts,
     challengeDetected,
     challengeType,
     executionOutcome,
@@ -883,6 +894,7 @@ export async function runLocalV2DagLambdaArtifactChain(
   options: {
     allowedConsentFlowScenarios?: ConsentFlowScenario[];
     artifactSignal?: AbortSignal;
+    allowRuntimeEvidenceFinalizationAfterAbort?: boolean;
     artifactRoot: string;
     externalBaselinePlanning?: "enrich" | "reuse_only";
     forceAllowedScenarioPlanning?: boolean;
@@ -916,6 +928,7 @@ export async function runLocalV2DagLambdaArtifactChain(
     () => writeEgressPreflightArtifact(artifactRoot, { allowBrowserFallback: false }),
   );
   const scanBundlePromise = runLocalV2DagLambdaScanBundle(payload, {
+    allowRuntimeEvidenceFinalizationAfterAbort: options.allowRuntimeEvidenceFinalizationAfterAbort,
     artifactRoot,
     phaseLabelPrefix: options.phaseLabelPrefix,
     phaseTimings,
@@ -956,6 +969,7 @@ export async function runLocalV2DagLambdaArtifactChain(
 async function runLocalV2DagLambdaScanBundle(
   payload: LocalV2DagLambdaDispatchPayload,
   options: {
+    allowRuntimeEvidenceFinalizationAfterAbort?: boolean;
     artifactRoot: string;
     onScanCoreComplete?: () => void;
     onPolicySurfaceComplete?: NonNullable<RunScanInput["onPolicySurfaceComplete"]>;
@@ -983,6 +997,7 @@ async function runLocalV2DagLambdaScanBundle(
             : "combined";
     try {
       const bundle = await runScan({
+        allowRuntimeEvidenceFinalizationAfterAbort: options.allowRuntimeEvidenceFinalizationAfterAbort,
         browserReuseMode: "per_module",
         evidenceLane,
         outDir: options.artifactRoot,
@@ -1947,7 +1962,6 @@ export function mergeLocalV2DagLambdaEvidenceLaneBundles(input: {
   const consentProof = rewriteEvidenceLaneArtifactPaths(input.consentProof, "consent_proof", input.artifactRoot);
   const runtimeEvidence = rewriteEvidenceLaneArtifactPaths(input.runtimeEvidence, "runtime_evidence", input.artifactRoot);
   const policyEvidence = rewriteEvidenceLaneArtifactPaths(input.policyEvidence, "policy_evidence", input.artifactRoot);
-  const scanNoGoAssessment = consentProof.scanNoGoAssessment ?? runtimeEvidence.scanNoGoAssessment;
   const runtimeCoverage = runtimeEvidence.runtimeCoverage;
   if (!runtimeCoverage) {
     throw new Error("Three-lane Lambda evidence merge requires typed runtime coverage from the runtime-evidence lane.");
@@ -1961,12 +1975,23 @@ export function mergeLocalV2DagLambdaEvidenceLaneBundles(input: {
     );
   const consentProofInspectionUsable = consentProof.consentSurfaceInspection?.inspectionCompleted === true &&
     consentProof.consentSurfaceInspection.coverageStatus === "complete";
-  const consentLaneStatus = consentProofVisualUsable && consentProofInspectionUsable
+  const noGoReconciliation = reconcileEvidenceLaneNoGoAssessment({
+    consentProof,
+    consentProofVisualUsable,
+    runtimeEvidence,
+  });
+  const scanNoGoAssessment = noGoReconciliation.scanNoGoAssessment;
+  const visualAccessReview = noGoReconciliation.visualAccessReview;
+  const consentLaneStatus = (consentProof.scanNoGoAssessment ?? consentProof.scan_no_go_assessment)?.decision === "no_go"
+    ? consentProof.screenshots.length > 0 || consentProof.consentUiObservations.length > 0
+      ? "limited" as const
+      : "not_testable" as const
+    : consentProofVisualUsable && consentProofInspectionUsable
     ? "usable" as const
     : consentProof.screenshots.length > 0 || consentProof.consentUiObservations.length > 0
       ? "limited" as const
       : "not_testable" as const;
-  const scanEvidenceLaneAssessment = buildScanEvidenceLaneAssessment({
+  const baseScanEvidenceLaneAssessment = buildScanEvidenceLaneAssessment({
     consentLaneStatus,
     consentLimitationKeys: [
       ...(!consentProofVisualUsable ? ["representative_pre_consent_screenshot_unavailable"] : []),
@@ -1978,6 +2003,22 @@ export function mergeLocalV2DagLambdaEvidenceLaneBundles(input: {
     scanNoGoAssessment: scanNoGoAssessment ?? null,
     transportSecurityObservationCount: transportSecurityObservations.length,
   });
+  const scanEvidenceLaneAssessment = noGoReconciliation.disagreement
+    ? {
+        ...baseScanEvidenceLaneAssessment,
+        outcome: "partial_with_diagnostics" as const,
+        limitationKeys: uniqueStrings([
+          ...baseScanEvidenceLaneAssessment.limitationKeys,
+          "evidence_lane_access_disagreement",
+          `${noGoReconciliation.noGoLane}_lane_no_go`,
+          `${noGoReconciliation.representativeLane}_lane_representative_page`,
+        ]).slice(0, 24),
+        evidenceRefs: uniqueStrings([
+          ...baseScanEvidenceLaneAssessment.evidenceRefs,
+          "scan_runtime_artifacts.scan_lane_runs",
+        ]).slice(0, 24),
+      }
+    : baseScanEvidenceLaneAssessment;
   const artifactRefs = dedupeByField([
     ...consentProof.artifactRefs,
     ...runtimeEvidence.artifactRefs,
@@ -2044,10 +2085,97 @@ export function mergeLocalV2DagLambdaEvidenceLaneBundles(input: {
           scan_no_go_assessment: scanNoGoAssessment,
         }
       : {}),
+    ...(visualAccessReview
+      ? {
+          visualAccessReview,
+          visual_access_review: visualAccessReview,
+        }
+      : {}),
     scanEvidenceLaneAssessment,
     scan_evidence_lane_assessment: scanEvidenceLaneAssessment,
   };
   return canonicalEvidenceBundleSchema.parse(merged);
+}
+
+function reconcileEvidenceLaneNoGoAssessment(input: {
+  consentProof: CanonicalEvidenceBundle;
+  consentProofVisualUsable: boolean;
+  runtimeEvidence: CanonicalEvidenceBundle;
+}): {
+  disagreement: boolean;
+  noGoLane: "consent_proof" | "runtime_evidence" | null;
+  representativeLane: "consent_proof" | "runtime_evidence" | null;
+  scanNoGoAssessment: ScanNoGoAssessment | null;
+  visualAccessReview: CanonicalEvidenceBundle["visualAccessReview"] | null;
+} {
+  const consentAssessment = input.consentProof.scanNoGoAssessment ?? input.consentProof.scan_no_go_assessment;
+  const runtimeAssessment = input.runtimeEvidence.scanNoGoAssessment ?? input.runtimeEvidence.scan_no_go_assessment;
+  const consentVisualReview = input.consentProof.visualAccessReview ?? input.consentProof.visual_access_review;
+  const runtimeVisualReview = input.runtimeEvidence.visualAccessReview ?? input.runtimeEvidence.visual_access_review;
+  const consentNoGo = consentAssessment?.decision === "no_go";
+  const runtimeNoGo = runtimeAssessment?.decision === "no_go";
+  const consentRun = input.consentProof.scanLaneRuns.find((lane) => lane.laneId === "consent_proof");
+  const runtimeRun = input.runtimeEvidence.scanLaneRuns.find((lane) => lane.laneId === "runtime_evidence");
+  const consentRepresentative = input.consentProofVisualUsable &&
+    consentRun?.executionOutcome === "success" &&
+    consentRun.accessOutcome === "representative_page";
+  const runtimeRepresentative = input.runtimeEvidence.runtimeCoverage?.coverageStatus !== "limited_none" &&
+    runtimeRun?.executionOutcome === "success" &&
+    runtimeRun.accessOutcome === "representative_page";
+  const noGoLane = consentNoGo && !runtimeNoGo && runtimeRepresentative
+    ? "consent_proof" as const
+    : runtimeNoGo && !consentNoGo && consentRepresentative
+      ? "runtime_evidence" as const
+      : null;
+  const representativeLane = noGoLane === "consent_proof"
+    ? "runtime_evidence" as const
+    : noGoLane === "runtime_evidence"
+      ? "consent_proof" as const
+      : null;
+  const selectedAssessment = consentNoGo
+    ? consentAssessment
+    : runtimeNoGo
+      ? runtimeAssessment
+      : consentAssessment ?? runtimeAssessment;
+  const selectedVisualReview = consentNoGo
+    ? consentVisualReview
+    : runtimeNoGo
+      ? runtimeVisualReview
+      : consentVisualReview ?? runtimeVisualReview;
+  if (!selectedAssessment || !noGoLane || !representativeLane) {
+    return {
+      disagreement: false,
+      noGoLane: null,
+      representativeLane: null,
+      scanNoGoAssessment: selectedAssessment ?? null,
+      visualAccessReview: selectedVisualReview ?? null,
+    };
+  }
+  return {
+    disagreement: true,
+    noGoLane,
+    representativeLane,
+    scanNoGoAssessment: {
+      ...selectedAssessment,
+      decision: "continue_with_diagnostics",
+      scanNoGoConfidence: Math.min(selectedAssessment.scanNoGoConfidence, 0.72),
+      contradictorCodes: uniqueStrings([
+        ...selectedAssessment.contradictorCodes,
+        `independent_${representativeLane}_representative_page`,
+      ]).slice(0, 16),
+      supportingSignals: {
+        ...selectedAssessment.supportingSignals,
+        evidenceLaneAccessDisagreement: true,
+        noGoLane,
+        representativeLane,
+      },
+      evidenceRefs: uniqueStrings([
+        ...selectedAssessment.evidenceRefs,
+        "scan_runtime_artifacts.scan_lane_runs",
+      ]).slice(0, 16),
+    },
+    visualAccessReview: selectedVisualReview ?? null,
+  };
 }
 
 function rewriteEvidenceLaneArtifactPaths<T>(
@@ -3173,6 +3301,8 @@ export async function handler(event: unknown, options: HandlerOptions = {}) {
     }, scannerWorkTimeoutMs);
     const artifactResult = await withHandlerSafetyTimeout(
       runArtifactChain(payload, {
+        allowRuntimeEvidenceFinalizationAfterAbort:
+          payload.workerLane === "runtime_evidence",
         artifactSignal: artifactAbortController.signal,
         artifactRoot,
         onScanCoreComplete: () => {
@@ -3302,18 +3432,6 @@ export async function handler(event: unknown, options: HandlerOptions = {}) {
     if (!payload) {
       throw error;
     }
-    if (payload.orchestrationMode === "worker") {
-      handlerOutcome = "failed";
-      return {
-        error: sanitizeError({
-          code: "v2_dag_lambda_worker_failed",
-          message: error instanceof Error ? error.message : String(error)
-        }),
-        scanId: payload.scanId,
-        status: "failed" as const,
-        workerLane: payload.workerLane ?? "coordinator"
-      };
-    }
     handlerOutcome = "failed";
     const handlerDeadlineAtMs = handlerStartedAtMs + handlerSafetyTimeoutMs;
     const terminalPublicationReserveMs = Math.max(10, resultPublishTimeoutMs);
@@ -3366,6 +3484,21 @@ export async function handler(event: unknown, options: HandlerOptions = {}) {
           scanId: payload.scanId,
         });
       }
+    }
+    if (payload.orchestrationMode === "worker") {
+      return {
+        artifactMetadata: failureDiagnostic?.artifactMetadata,
+        artifactPointers: failureDiagnostic?.artifactPointers,
+        error: sanitizeError({
+          code: scannerDeadlineAborted
+            ? "v2_dag_lambda_safety_timeout"
+            : "v2_dag_lambda_worker_failed",
+          message: error instanceof Error ? error.message : String(error)
+        }),
+        scanId: payload.scanId,
+        status: "failed" as const,
+        workerLane: payload.workerLane ?? "coordinator"
+      };
     }
     const completedAt = now();
     const result = buildLocalV2DagLambdaResultMessage({

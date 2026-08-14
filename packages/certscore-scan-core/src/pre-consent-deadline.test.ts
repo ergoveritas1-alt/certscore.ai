@@ -1,7 +1,10 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import type { PreConsentRuntimeScannerResult } from "./scanners/pre-consent-runtime-scanner.js";
-import { settlePreConsentRuntimeWithinDeadline } from "./index.js";
+import {
+  settlePreConsentRuntimeWithinDeadline,
+  throwUnlessRuntimeEvidenceFinalizationOnly,
+} from "./index.js";
 
 function retainedPartialResult(startedAtMs: number): PreConsentRuntimeScannerResult {
   const startedAt = new Date(startedAtMs).toISOString();
@@ -101,4 +104,32 @@ test("outer pre-consent deadline retains the latest startup lifecycle checkpoint
   assert.match(result.moduleRun.errors.join("; "), /page_navigation:started/);
   assert.equal(result.moduleRun.timingBreakdown?.[0]?.label, "deadline lifecycle checkpoint");
   assert.equal(result.moduleRun.timingBreakdown?.[0]?.durationMs, 5);
+});
+
+test("dedicated runtime lane may terminalize retained evidence after parent capture cancellation", () => {
+  const controller = new AbortController();
+  const cancellation = new Error("Parent Lambda scanner deadline reached.");
+  controller.abort(cancellation);
+
+  assert.doesNotThrow(() => throwUnlessRuntimeEvidenceFinalizationOnly({
+    allowRuntimeEvidenceFinalizationAfterAbort: true,
+    evidenceLane: "runtime_evidence",
+    signal: controller.signal,
+  }));
+
+  assert.throws(() => throwUnlessRuntimeEvidenceFinalizationOnly({
+    allowRuntimeEvidenceFinalizationAfterAbort: false,
+    evidenceLane: "runtime_evidence",
+    signal: controller.signal,
+  }), (error: unknown) => error === cancellation);
+  assert.throws(() => throwUnlessRuntimeEvidenceFinalizationOnly({
+    allowRuntimeEvidenceFinalizationAfterAbort: true,
+    evidenceLane: "consent_proof",
+    signal: controller.signal,
+  }), (error: unknown) => error === cancellation);
+  assert.throws(() => throwUnlessRuntimeEvidenceFinalizationOnly({
+    allowRuntimeEvidenceFinalizationAfterAbort: true,
+    evidenceLane: "policy_evidence",
+    signal: controller.signal,
+  }), (error: unknown) => error === cancellation);
 });

@@ -1869,6 +1869,61 @@ test("runtime coverage limitation artifacts create audit-only normalized concern
   );
 });
 
+test("lane disagreement remains a limited-runtime concern and does not become a scan no-go concern", () => {
+  const concerns = buildNormalizedConcerns({
+    reviewFindingCandidates: [],
+    runtimeArtifacts: {
+      scanNoGoAssessment: {
+        status: "available",
+        version: "scan-no-go-assessment-v1",
+        decision: "continue_with_diagnostics",
+        scanNoGoConfidence: 0.72,
+        reasonCodes: ["navigation_transport_failure", "scan_no_go_corroborated"],
+        corroboratorCodes: ["pre_consent_navigation_failed"],
+        contradictorCodes: ["independent_consent_proof_representative_page"],
+        supportingSignals: {
+          evidenceLaneAccessDisagreement: true,
+          noGoLane: "runtime_evidence",
+          representativeLane: "consent_proof",
+        },
+        evidenceRefs: ["scan_runtime_artifacts.scan_lane_runs"],
+      },
+      visualAccessReview: {
+        go_no_go: "NO_GO",
+        page_state: "capture_failed",
+        reason_code: "navigation_transport_failure",
+        status: "missing_visual_artifact",
+      },
+      runtimeCoverage: {
+        coverageStatus: "limited_none",
+        fallbackModesUsed: [],
+        limitationKeys: ["navigation_transport_failure"],
+        notes: ["The runtime lane did not retain representative runtime evidence."],
+        observationCounts: {
+          cookieEvents: 0,
+          cookiesBeforeConsent: 0,
+          networkEvents: 2,
+          normalizedVendors: 0,
+          observedJourneys: 0,
+          thirdPartyRequests: 0,
+        },
+        silentEmpty: false,
+      },
+      scanEvidenceLaneAssessment: {
+        outcome: "partial_with_diagnostics",
+        limitationKeys: ["evidence_lane_access_disagreement"],
+      },
+    },
+    validationFindings: [],
+  });
+
+  assert.equal(
+    concerns.some((concern) => concern.originKey === "scan_quality.scan_no_go_assessment.no_go"),
+    false,
+  );
+  assert.ok(concerns.some((concern) => concern.originKey === "scan_quality.runtime_coverage.limited_none"));
+});
+
 function makeGdprTransparencyPolicyDisclosureSummary(
   input: {
     enabled?: boolean;

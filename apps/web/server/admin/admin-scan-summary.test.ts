@@ -251,6 +251,12 @@ test("admin activity consumes the canonical reason-specific no-go outcome regist
   assert.match(repositorySource, /visual_access_review/);
   assert.match(repositorySource, /scanner_evidence_missing/);
   assert.match(repositorySource, /completed_scan_backfill/);
+  assert.match(repositorySource, /retainedScannerExecutionEvidenceSql/);
+  assert.match(repositorySource, /LOCAL_V2_DAG_LAMBDA_RESULT_RECEIVED_EVENT_TYPE/);
+  assert.match(repositorySource, /metadata_json ->> 'resultStatus' = 'completed'/);
+  assert.match(repositorySource, /metadata_json #>> '\{artifactPointers,scanArtifactUri\}' like 's3:\/\/%'/);
+  assert.match(repositorySource, /metadata_json #>> '\{artifactMetadata,scanArtifactUri,sha256\}' ~ '\^\[a-f0-9\]\{64\}\$'/);
+  assert.match(repositorySource, /metadata_json #>> '\{artifactMetadata,scanArtifactUri,sizeBytes\}' ~ '\^\[1-9\]\[0-9\]\*\$'/);
   assert.match(repositorySource, /from scan_snapshots\s+where scan_id = any\(\$1::uuid\[\]\)/);
   assert.match(repositorySource, /from scan_runtime_artifacts\s+where scan_id = any\(\$1::uuid\[\]\)/);
   assert.match(scansPage, /scan\.noGoFlag/);

@@ -44,6 +44,24 @@ test("snapshot-backed assessments remain visible when runtime artifacts are abse
   }).isNoGo, true);
 });
 
+test("an explicit retained continue decision outranks lane-local visual and operational fallbacks", () => {
+  assert.deepEqual(projectAdminNoGo({
+    runtimeAssessment: {
+      decision: "continue_with_diagnostics",
+      reasonCodes: ["navigation_transport_failure"],
+      contradictorCodes: ["independent_consent_proof_representative_page"],
+    },
+    snapshotRuntimeAssessment: { decision: "no_go" },
+    visualAccessReview: { go_no_go: "NO_GO", reason_code: "navigation_transport_failure" },
+    blockedFlag: true,
+  }), {
+    isNoGo: false,
+    limitationKind: null,
+    reason: null,
+    source: null,
+  });
+});
+
 test("operational access flags are a bounded final fallback", () => {
   assert.equal(projectAdminNoGo({ accessPostureClass: "early_loss" }).isNoGo, true);
   assert.equal(projectAdminNoGo({ blockedFlag: true }).isNoGo, true);
