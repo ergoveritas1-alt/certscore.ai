@@ -35,6 +35,36 @@ async function waitForHealth(url: string, child: ChildProcess) {
   throw new Error("Timed out waiting for MCP HTTP test server.");
 }
 
+type McpRequestObservation = Record<string, unknown> & {
+  event: "mcp_http.request_observed";
+};
+
+function mcpRequestObservations(diagnostics: string) {
+  const observations: McpRequestObservation[] = [];
+  for (const line of diagnostics.split(/\r?\n/)) {
+    try {
+      const value = JSON.parse(line) as Record<string, unknown>;
+      if (value.event === "mcp_http.request_observed") {
+        observations.push(value as McpRequestObservation);
+      }
+    } catch {}
+  }
+  return observations;
+}
+
+async function waitForMcpObservation(
+  diagnostics: () => string,
+  predicate: (event: McpRequestObservation) => boolean
+) {
+  const deadline = Date.now() + 5_000;
+  while (Date.now() < deadline) {
+    const event = mcpRequestObservations(diagnostics()).find(predicate);
+    if (event) return event;
+    await new Promise((resolve) => setTimeout(resolve, 25));
+  }
+  throw new Error(`Timed out waiting for MCP request observation.\n${diagnostics()}`);
+}
+
 test("Streamable HTTP runtime initializes, lists tools, enforces auth, CORS, and sessions", async () => {
   const port = await unusedPort();
   const apiPort = await unusedPort();
@@ -256,6 +286,152 @@ test("Streamable HTTP runtime initializes, lists tools, enforces auth, CORS, and
     assert.equal(anonymousSurface, "mcp_anonymous");
     assert.equal(apiAuthorization, undefined);
     await anonymousClient.close();
+    const anonymousInitializeObservation = await waitForMcpObservation(
+      () => diagnostics,
+      (event) => event.surface === "mcp_anonymous" && event.jsonRpcMethod === "initialize"
+    );
+    assert.equal(anonymousInitializeObservation.route, "/mcp/anonymous");
+    assert.equal(anonymousInitializeObservation.finalHttpStatus, 200);
+
+    const observedRequesterIp = "198.51.100.60";
+    const changedRequesterIp = "198.51.100.61";
+    const observedProtocolVersion = "2025-11-25";
+    const observedInitialize = await fetch(`${origin}/mcp/light`, {
+      method: "POST",
+      headers: {
+        accept: "application/json, text/event-stream",
+        "content-type": "application/json",
+        "x-forwarded-for": observedRequesterIp
+      },
+      body: JSON.stringify({
+        jsonrpc: "2.0",
+        id: 7001,
+        method: "initialize",
+        params: {
+          protocolVersion: observedProtocolVersion,
+          capabilities: {},
+          clientInfo: { name: "certscore-observability-test", version: "0.1.0" }
+        }
+      })
+    });
+    assert.equal(observedInitialize.status, 200);
+    assert.match(observedInitialize.headers.get("content-type") ?? "", /^text\/event-stream/);
+    const observedSessionId = observedInitialize.headers.get("mcp-session-id");
+    assert.ok(observedSessionId);
+    await observedInitialize.text();
+
+    const observedInitialized = await fetch(`${origin}/mcp/light`, {
+      method: "POST",
+      headers: {
+        accept: "application/json, text/event-stream",
+        "content-type": "application/json",
+        "mcp-protocol-version": observedProtocolVersion,
+        "mcp-session-id": observedSessionId,
+        "x-forwarded-for": observedRequesterIp
+      },
+      body: JSON.stringify({ jsonrpc: "2.0", method: "notifications/initialized" })
+    });
+    assert.equal(observedInitialized.status, 202);
+    assert.equal(await observedInitialized.text(), "");
+
+    const observedToolsList = await fetch(`${origin}/mcp/light`, {
+      method: "POST",
+      headers: {
+        accept: "application/json, text/event-stream",
+        "content-type": "application/json",
+        "mcp-protocol-version": observedProtocolVersion,
+        "mcp-session-id": observedSessionId,
+        "x-forwarded-for": observedRequesterIp
+      },
+      body: JSON.stringify({ jsonrpc: "2.0", id: 7002, method: "tools/list", params: {} })
+    });
+    assert.equal(observedToolsList.status, 200);
+    assert.match(observedToolsList.headers.get("content-type") ?? "", /^text\/event-stream/);
+    await observedToolsList.text();
+
+    const mismatchedToolsList = await fetch(`${origin}/mcp/light`, {
+      method: "POST",
+      headers: {
+        accept: "application/json, text/event-stream",
+        "content-type": "application/json",
+        "mcp-protocol-version": observedProtocolVersion,
+        "mcp-session-id": observedSessionId,
+        "x-forwarded-for": changedRequesterIp
+      },
+      body: JSON.stringify({ jsonrpc: "2.0", id: 7003, method: "tools/list", params: {} })
+    });
+    assert.equal(mismatchedToolsList.status, 401);
+    assert.deepEqual(await mismatchedToolsList.json(), {
+      error: "session_requester_mismatch",
+      error_description: "The MCP session belongs to a different anonymous requester."
+    });
+
+    const mismatchObservation = await waitForMcpObservation(
+      () => diagnostics,
+      (event) => event.surface === "mcp_light" && event.reasonCode === "session_requester_mismatch"
+    );
+    const lightObservations = mcpRequestObservations(diagnostics).filter((event) => event.surface === "mcp_light");
+    const initializeObservation = lightObservations.find((event) => event.jsonRpcMethod === "initialize");
+    const initializedObservation = lightObservations.find((event) => event.jsonRpcMethod === "notifications/initialized");
+    const toolsListObservation = lightObservations.find((event) => event.jsonRpcMethod === "tools/list" && event.finalHttpStatus === 200);
+    assert.ok(initializeObservation);
+    assert.ok(initializedObservation);
+    assert.ok(toolsListObservation);
+    assert.deepEqual({
+      route: initializeObservation.route,
+      surface: initializeObservation.surface,
+      httpMethod: initializeObservation.httpMethod,
+      finalHttpStatus: initializeObservation.finalHttpStatus,
+      jsonRpcMethod: initializeObservation.jsonRpcMethod,
+      requestedMcpProtocolVersion: initializeObservation.requestedMcpProtocolVersion,
+      negotiatedMcpProtocolVersion: initializeObservation.negotiatedMcpProtocolVersion,
+      sessionHeaderSupplied: initializeObservation.sessionHeaderSupplied,
+      sessionFound: initializeObservation.sessionFound,
+      requesterSessionIdentityMatched: initializeObservation.requesterSessionIdentityMatched,
+      responseContentType: initializeObservation.responseContentType,
+      reasonCode: initializeObservation.reasonCode
+    }, {
+      route: "/mcp/light",
+      surface: "mcp_light",
+      httpMethod: "POST",
+      finalHttpStatus: 200,
+      jsonRpcMethod: "initialize",
+      requestedMcpProtocolVersion: observedProtocolVersion,
+      negotiatedMcpProtocolVersion: observedProtocolVersion,
+      sessionHeaderSupplied: false,
+      sessionFound: false,
+      requesterSessionIdentityMatched: true,
+      responseContentType: "text/event-stream",
+      reasonCode: null
+    });
+    assert.match(String(initializeObservation.timestamp), /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/);
+    assert.equal(initializedObservation.finalHttpStatus, 202);
+    assert.equal(initializedObservation.mcpProtocolVersionHeader, observedProtocolVersion);
+    assert.equal(initializedObservation.sessionHeaderSupplied, true);
+    assert.equal(initializedObservation.sessionFound, true);
+    assert.equal(initializedObservation.requesterSessionIdentityMatched, true);
+    assert.equal(toolsListObservation.finalHttpStatus, 200);
+    assert.equal(toolsListObservation.mcpProtocolVersionHeader, observedProtocolVersion);
+    assert.equal(toolsListObservation.responseContentType, "text/event-stream");
+    assert.equal(mismatchObservation.finalHttpStatus, 401);
+    assert.equal(mismatchObservation.sessionHeaderSupplied, true);
+    assert.equal(mismatchObservation.sessionFound, true);
+    assert.equal(mismatchObservation.requesterSessionIdentityMatched, false);
+    assert.equal(mismatchObservation.reasonCode, "session_requester_mismatch");
+    assert.match(String(initializeObservation.requesterIdentityHash), /^[a-f0-9]{12}$/);
+    assert.equal(initializeObservation.requesterIdentityHash, initializedObservation.requesterIdentityHash);
+    assert.equal(initializeObservation.requesterIdentityHash, toolsListObservation.requesterIdentityHash);
+    assert.equal(initializeObservation.requesterIdentityHash, mismatchObservation.sessionIdentityHash);
+    assert.notEqual(mismatchObservation.requesterIdentityHash, mismatchObservation.sessionIdentityHash);
+    for (const event of lightObservations) {
+      assert.equal("sessionId" in event, false);
+      assert.equal("ip" in event, false);
+      assert.equal("requestBody" in event, false);
+      assert.equal("authorization" in event, false);
+    }
+    assert.equal(diagnostics.includes(observedSessionId), false);
+    assert.equal(diagnostics.includes(observedRequesterIp), false);
+    assert.equal(diagnostics.includes(changedRequesterIp), false);
 
     const lightTransport = new StreamableHTTPClientTransport(new URL(`${origin}/mcp/light`), {
       requestInit: { headers: { "x-forwarded-for": "160.79.104.9" } }

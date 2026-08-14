@@ -108,9 +108,10 @@ test("shared-provider sessions have independent caller limits and a hard provide
 
 test("hosted MCP returns a bot-readable 429 and emits a structured safe denial log", async () => {
   const source = await readFile(new URL("./index.ts", import.meta.url), "utf8");
-  assert.match(source, /return json\(res, 429/);
+  assert.match(source, /\bjson\(res, 429/);
   assert.match(source, /"Retry-After"/);
   assert.match(source, /mcpReadRateLimitGuidance/);
+  assert.match(source, /reasonCode: "rate_limited"/);
   for (const field of ["policyVersion", "profile", "scope", "windowId", "windowSeconds", "limitUnits", "usedUnits", "requestedUnits", "retryAfterSeconds"]) {
     assert.match(source, new RegExp(field));
   }

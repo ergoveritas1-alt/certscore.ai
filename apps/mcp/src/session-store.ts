@@ -61,8 +61,8 @@ export class McpHttpSessionStore {
   delete(sessionId: string) {
     const session = this.sessions.get(sessionId);
     this.sessions.delete(sessionId);
-    session?.server.close().catch((error) => console.error("[mcp-http] server close failed", { sessionId, error }));
-    session?.transport.close().catch((error) => console.error("[mcp-http] transport close failed", { sessionId, error }));
+    session?.server.close().catch((error) => console.error("[mcp-http] server close failed", { error }));
+    session?.transport.close().catch((error) => console.error("[mcp-http] transport close failed", { error }));
   }
 
   prune() {

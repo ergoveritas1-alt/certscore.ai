@@ -1,6 +1,7 @@
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
-import { randomUUID } from "node:crypto";
+import { createHmac, randomUUID } from "node:crypto";
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
+import { LATEST_PROTOCOL_VERSION, SUPPORTED_PROTOCOL_VERSIONS } from "@modelcontextprotocol/sdk/types.js";
 import { verifyCertScoreAccessToken } from "@certscore/mcp-auth";
 import { createCertScoreMcpServer } from "@certscore/mcp/server";
 import { CERTSCORE_MCP_VERSION } from "@certscore/mcp/version";
@@ -139,9 +140,138 @@ function isInitialize(body: unknown) {
   return Boolean(body && typeof body === "object" && !Array.isArray(body) && (body as Record<string, unknown>).method === "initialize");
 }
 
+type AnonymousMcpSurface = "mcp_anonymous" | "mcp_light";
+type McpJsonRpcMethod = "initialize" | "notifications/initialized" | "tools/list" | "tools/call" | "other";
+type McpObservationReason =
+  | "invalid_session_missing"
+  | "invalid_session_unknown"
+  | "session_requester_mismatch"
+  | "origin_rejected"
+  | "host_rejected"
+  | "accept_not_supported"
+  | "malformed_json"
+  | "rate_limited"
+  | "other";
+
+function anonymousMcpSurface(light: boolean): { route: "/mcp/anonymous" | "/mcp/light"; surface: AnonymousMcpSurface } {
+  return light
+    ? { route: "/mcp/light", surface: "mcp_light" }
+    : { route: "/mcp/anonymous", surface: "mcp_anonymous" };
+}
+
+function jsonRpcMethod(body: unknown): McpJsonRpcMethod | null {
+  if (!body || typeof body !== "object" || Array.isArray(body)) {
+    return null;
+  }
+  const method = (body as Record<string, unknown>).method;
+  if (typeof method !== "string") {
+    return null;
+  }
+  if (method === "initialize" || method === "notifications/initialized" || method === "tools/list" || method === "tools/call") {
+    return method;
+  }
+  return "other";
+}
+
+function sanitizedProtocolVersion(value: unknown) {
+  return typeof value === "string" && /^\d{4}-\d{2}-\d{2}$/.test(value) ? value : null;
+}
+
+function initializeProtocolVersion(body: unknown) {
+  if (!body || typeof body !== "object" || Array.isArray(body)) {
+    return null;
+  }
+  const params = (body as Record<string, unknown>).params;
+  if (!params || typeof params !== "object" || Array.isArray(params)) {
+    return null;
+  }
+  return sanitizedProtocolVersion((params as Record<string, unknown>).protocolVersion);
+}
+
+function requestProtocolVersion(req: IncomingMessage) {
+  const value = req.headers["mcp-protocol-version"];
+  return sanitizedProtocolVersion(Array.isArray(value) ? value[0] : value);
+}
+
+function shortIdentityHash(tokenHash: string | null) {
+  if (!tokenHash) {
+    return null;
+  }
+  return createHmac("sha256", env.jwtSecret)
+    .update(`mcp-requester-observation:v1:${tokenHash}`, "utf8")
+    .digest("hex")
+    .slice(0, 12);
+}
+
+function responseContentType(res: ServerResponse) {
+  const value = res.getHeader("Content-Type");
+  const normalized = Array.isArray(value) ? value[0] : value;
+  return typeof normalized === "string" ? normalized.toLowerCase().slice(0, 100) : null;
+}
+
+function logAnonymousMcpObservation(input: {
+  light: boolean;
+  parsedBody?: unknown;
+  reasonCode?: McpObservationReason | null;
+  req: IncomingMessage;
+  requesterTokenHash?: string | null;
+  res: ServerResponse;
+  sessionFound: boolean | null;
+  sessionTokenHash?: string | null;
+}) {
+  const { route, surface } = anonymousMcpSurface(input.light);
+  const requesterIdentityHash = shortIdentityHash(input.requesterTokenHash ?? null);
+  const sessionIdentityHash = shortIdentityHash(input.sessionTokenHash ?? null);
+  const requestedMcpProtocolVersion = initializeProtocolVersion(input.parsedBody);
+  const event = {
+    event: "mcp_http.request_observed",
+    timestamp: new Date().toISOString(),
+    source: "mcp-http",
+    surface,
+    route,
+    httpMethod: input.req.method ?? null,
+    finalHttpStatus: input.res.statusCode,
+    jsonRpcMethod: jsonRpcMethod(input.parsedBody),
+    requestedMcpProtocolVersion,
+    negotiatedMcpProtocolVersion: jsonRpcMethod(input.parsedBody) === "initialize" && input.res.statusCode < 400 && requestedMcpProtocolVersion
+      ? SUPPORTED_PROTOCOL_VERSIONS.includes(requestedMcpProtocolVersion) ? requestedMcpProtocolVersion : LATEST_PROTOCOL_VERSION
+      : null,
+    mcpProtocolVersionHeader: requestProtocolVersion(input.req),
+    sessionHeaderSupplied: Boolean(input.req.headers["mcp-session-id"]),
+    sessionFound: input.sessionFound,
+    requesterSessionIdentityMatched: requesterIdentityHash && sessionIdentityHash
+      ? requesterIdentityHash === sessionIdentityHash
+      : null,
+    requesterIdentityHash,
+    sessionIdentityHash,
+    responseContentType: responseContentType(input.res),
+    reasonCode: input.reasonCode ?? null
+  };
+  const write = input.res.statusCode >= 400 ? console.warn : console.log;
+  write(JSON.stringify(event));
+}
+
+function transportReason(res: ServerResponse): McpObservationReason | null {
+  if (res.statusCode < 400) {
+    return null;
+  }
+  return res.statusCode === 406 ? "accept_not_supported" : "other";
+}
+
 async function handleMcp(req: IncomingMessage, res: ServerResponse, anonymous: boolean, light = false) {
-  if (!hostAllowed(req) || !requestOriginAllowed(req)) {
-    return json(res, 403, { error: "forbidden", error_description: "Host or Origin is not allowed." }, corsHeaders(req));
+  if (!hostAllowed(req)) {
+    json(res, 403, { error: "forbidden", error_description: "Host or Origin is not allowed." }, corsHeaders(req));
+    if (anonymous) {
+      logAnonymousMcpObservation({ light, reasonCode: "host_rejected", req, res, sessionFound: null });
+    }
+    return;
+  }
+  if (!requestOriginAllowed(req)) {
+    json(res, 403, { error: "forbidden", error_description: "Host or Origin is not allowed." }, corsHeaders(req));
+    if (anonymous) {
+      logAnonymousMcpObservation({ light, reasonCode: "origin_rejected", req, res, sessionFound: null });
+    }
+    return;
   }
   const anonymousRequester = anonymous ? anonymousMcpRequester(req) : null;
   const clientIp = anonymousRequester?.ip ?? null;
@@ -167,7 +297,18 @@ async function handleMcp(req: IncomingMessage, res: ServerResponse, anonymous: b
     try {
       parsedBody = await readJsonBody(req);
     } catch {
-      return json(res, 400, { error: "invalid_request", error_description: "MCP request body must be valid JSON." }, corsHeaders(req));
+      json(res, 400, { error: "invalid_request", error_description: "MCP request body must be valid JSON." }, corsHeaders(req));
+      if (anonymous) {
+        logAnonymousMcpObservation({
+          light,
+          reasonCode: "malformed_json",
+          req,
+          requesterTokenHash: tokenHash,
+          res,
+          sessionFound: null
+        });
+      }
+      return;
     }
   }
 
@@ -215,17 +356,52 @@ async function handleMcp(req: IncomingMessage, res: ServerResponse, anonymous: b
       await server.close().catch((error) => console.error("[mcp-http] failed initialize server close failed", { error }));
       await transport.close().catch((error) => console.error("[mcp-http] failed initialize transport close failed", { error }));
     }
-    console.log(JSON.stringify({ event: "mcp_http.initialize", anonymous, source: "mcp-http", sessionId: transport.sessionId ?? null }));
+    if (anonymous) {
+      logAnonymousMcpObservation({
+        light,
+        parsedBody,
+        reasonCode: transportReason(res),
+        req,
+        requesterTokenHash: tokenHash,
+        res,
+        sessionFound: false,
+        sessionTokenHash: transport.sessionId ? tokenHash : null
+      });
+    } else {
+      console.log(JSON.stringify({ event: "mcp_http.initialize", anonymous, source: "mcp-http" }));
+    }
     return;
   }
 
   if (!session) {
-    console.warn(JSON.stringify({ event: "mcp_http.invalid_session", source: "mcp-http", sessionProvided: Boolean(sessionId) }));
-    return json(res, sessionId ? 404 : 400, { error: "invalid_session", error_description: "MCP session is missing or expired." }, corsHeaders(req));
+    json(res, sessionId ? 404 : 400, { error: "invalid_session", error_description: "MCP session is missing or expired." }, corsHeaders(req));
+    if (anonymous) {
+      logAnonymousMcpObservation({
+        light,
+        parsedBody,
+        reasonCode: sessionId ? "invalid_session_unknown" : "invalid_session_missing",
+        req,
+        requesterTokenHash: tokenHash,
+        res,
+        sessionFound: false
+      });
+    }
+    return;
   }
   if (session.tokenHash !== tokenHash) {
     if (anonymous) {
-      return json(res, 401, { error: "session_requester_mismatch", error_description: "The MCP session belongs to a different anonymous requester." }, corsHeaders(req));
+      json(res, 401, { error: "session_requester_mismatch", error_description: "The MCP session belongs to a different anonymous requester." }, corsHeaders(req));
+      logAnonymousMcpObservation({
+        light,
+        parsedBody,
+        reasonCode: "session_requester_mismatch",
+        req,
+        requesterTokenHash: tokenHash,
+        res,
+        sessionFound: true,
+        sessionTokenHash: session.tokenHash
+      });
+      return;
     }
     return unauthorized(res, req, "session_token_mismatch", "Bearer token does not match this MCP session.");
   }
@@ -261,7 +437,7 @@ async function handleMcp(req: IncomingMessage, res: ServerResponse, anonymous: b
       const rpcRequest = parsedBody && typeof parsedBody === "object" && !Array.isArray(parsedBody)
         ? parsedBody as Record<string, unknown>
         : null;
-      return json(res, 429, {
+      json(res, 429, {
         jsonrpc: "2.0",
         id: rpcRequest?.id ?? null,
         error: {
@@ -293,6 +469,19 @@ async function handleMcp(req: IncomingMessage, res: ServerResponse, anonymous: b
           }
         }
       }, { ...corsHeaders(req), "Retry-After": String(decision.retryAfterSeconds) });
+      if (anonymous) {
+        logAnonymousMcpObservation({
+          light,
+          parsedBody,
+          reasonCode: "rate_limited",
+          req,
+          requesterTokenHash: tokenHash,
+          res,
+          sessionFound: true,
+          sessionTokenHash: session.tokenHash
+        });
+      }
+      return;
     }
   }
   res.setHeader("Cache-Control", "no-store");
@@ -304,7 +493,20 @@ async function handleMcp(req: IncomingMessage, res: ServerResponse, anonymous: b
   if (req.method === "DELETE" && sessionId) {
     sessions.delete(sessionId);
   }
-  console.log(JSON.stringify({ anonymous, event: "mcp_http.request", method: req.method, source: "mcp-http", sessionId }));
+  if (anonymous) {
+    logAnonymousMcpObservation({
+      light,
+      parsedBody,
+      reasonCode: transportReason(res),
+      req,
+      requesterTokenHash: tokenHash,
+      res,
+      sessionFound: true,
+      sessionTokenHash: session.tokenHash
+    });
+  } else {
+    console.log(JSON.stringify({ anonymous, event: "mcp_http.request", method: req.method, source: "mcp-http" }));
+  }
 }
 
 const server = createServer(async (req, res) => {
@@ -312,6 +514,9 @@ const server = createServer(async (req, res) => {
   if (req.method === "OPTIONS") {
     res.writeHead(204, corsHeaders(req));
     res.end();
+    if (url.pathname === "/mcp/anonymous" || url.pathname === "/mcp/light") {
+      logAnonymousMcpObservation({ light: url.pathname === "/mcp/light", req, res, sessionFound: null });
+    }
     return;
   }
   if (url.pathname === "/healthz" && req.method === "GET") {
@@ -331,13 +536,26 @@ const server = createServer(async (req, res) => {
   if ((url.pathname === "/mcp" || url.pathname === "/mcp/anonymous" || url.pathname === "/mcp/light") && (req.method === "GET" || req.method === "POST" || req.method === "DELETE")) {
     const anonymous = url.pathname !== "/mcp";
     return handleMcp(req, res, anonymous, url.pathname === "/mcp/light").catch((error) => {
-      console.error("[mcp-http] request failed", { error });
+      console.error(JSON.stringify({
+        event: "mcp_http.request_failed",
+        timestamp: new Date().toISOString(),
+        source: "mcp-http",
+        errorName: error instanceof Error ? error.name : "UnknownError"
+      }));
       if (!res.headersSent) {
         json(res, 500, { error: "internal_error", error_description: "MCP endpoint is temporarily unavailable." }, corsHeaders(req));
       } else {
         res.end();
       }
+      if (anonymous) {
+        logAnonymousMcpObservation({ light: url.pathname === "/mcp/light", reasonCode: "other", req, res, sessionFound: null });
+      }
     });
+  }
+  if ((url.pathname === "/mcp/anonymous" || url.pathname === "/mcp/light")) {
+    json(res, 404, { error: "not_found" }, corsHeaders(req));
+    logAnonymousMcpObservation({ light: url.pathname === "/mcp/light", reasonCode: "other", req, res, sessionFound: null });
+    return;
   }
   return json(res, 404, { error: "not_found" }, corsHeaders(req));
 });
