@@ -2,7 +2,7 @@
   "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
   "name": "ai.certscore/mcp-light",
   "title": "CertScore.ai — Light mode",
-  "description": "No-account public website privacy risk scans with 20 new scans/day and free recent-result reuse.",
+  "description": "No-account public website risk-signal scans with up to 50 new scans/day across Light, burst protection, and free recent-result reuse.",
   "status": "active",
   "repository": {
     "url": "https://github.com/ergoveritas1-alt/certscore.ai",

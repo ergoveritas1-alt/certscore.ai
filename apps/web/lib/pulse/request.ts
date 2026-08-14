@@ -1,5 +1,5 @@
 import { createHash, createHmac, timingSafeEqual } from "node:crypto";
-import { createDomainRequestSchema } from "@website-signal-risk-scanner/shared";
+import { anonymousRequesterNetwork, createDomainRequestSchema } from "@website-signal-risk-scanner/shared";
 import { getTrustedRequestSourceIp, normalizeRequestSourceIp } from "../request-source-ip";
 import type { PulseDetail, PulseFormat, PulseFreshnessMode } from "./types";
 
@@ -55,12 +55,23 @@ export function getFirstHeaderValue(value: string | null) {
 
 const ANONYMOUS_REQUESTER_PROOF_MAX_SKEW_SECONDS = 300;
 
-function verifiedAnonymousMcpRequesterIp(headers: Headers) {
+type AnonymousMcpSurface = "mcp_light" | "mcp_anonymous";
+type InternalMcpOperation = "scan_site_wait" | "scan_status" | "scan_bundle";
+
+function safeProofEqual(expected: string, actual: string) {
+  const expectedBuffer = Buffer.from(expected);
+  const actualBuffer = Buffer.from(actual);
+  return expectedBuffer.length === actualBuffer.length && timingSafeEqual(expectedBuffer, actualBuffer);
+}
+
+function verifiedAnonymousMcpRequester(headers: Headers) {
   const ip = headers.get("x-certscore-anonymous-requester-ip")?.trim() || null;
   const timestamp = headers.get("x-certscore-anonymous-requester-timestamp")?.trim() || null;
   const proof = headers.get("x-certscore-anonymous-requester-proof")?.trim() || null;
+  const surfaceValue = headers.get("x-certscore-anonymous-surface")?.trim() || null;
+  const surface: AnonymousMcpSurface | null = surfaceValue === "mcp_light" || surfaceValue === "mcp_anonymous" ? surfaceValue : null;
   const secret = process.env.CERTSCORE_OAUTH_JWT_SECRET?.trim() || process.env.JWT_SIGNING_KEY?.trim();
-  if (!ip || !timestamp || !proof || !secret || !/^\d{1,12}$/.test(timestamp)) {
+  if (!ip || !timestamp || !proof || !secret || (surfaceValue && !surface) || !/^\d{1,12}$/.test(timestamp)) {
     return null;
   }
   const timestampSeconds = Number(timestamp);
@@ -68,21 +79,44 @@ function verifiedAnonymousMcpRequesterIp(headers: Headers) {
   if (!Number.isSafeInteger(timestampSeconds) || Math.abs(nowSeconds - timestampSeconds) > ANONYMOUS_REQUESTER_PROOF_MAX_SKEW_SECONDS) {
     return null;
   }
-  const expected = createHmac("sha256", secret).update(`${timestamp}.${ip}`).digest("base64url");
-  const expectedBuffer = Buffer.from(expected);
-  const proofBuffer = Buffer.from(proof);
-  if (expectedBuffer.length !== proofBuffer.length || !timingSafeEqual(expectedBuffer, proofBuffer)) {
+  const expected = createHmac("sha256", secret)
+    .update(surface ? `${timestamp}.${ip}.${surface}` : `${timestamp}.${ip}`)
+    .digest("base64url");
+  if (!safeProofEqual(expected, proof)) {
     return null;
   }
-  return normalizeRequestSourceIp(ip);
+  const normalizedIp = normalizeRequestSourceIp(ip);
+  return normalizedIp ? { ip: normalizedIp, surface: surface ?? "mcp_anonymous" } : null;
+}
+
+export function trustedMcpInternalRead(request: Request, expected: {
+  operations: readonly InternalMcpOperation[];
+  scanId?: string;
+}) {
+  const requester = verifiedAnonymousMcpRequester(request.headers);
+  if (!requester || requester.surface !== "mcp_light") return null;
+  const operation = request.headers.get("x-certscore-mcp-internal-operation")?.trim() as InternalMcpOperation | null;
+  const scanId = request.headers.get("x-certscore-mcp-internal-scan-id")?.trim() || null;
+  const proof = request.headers.get("x-certscore-mcp-internal-proof")?.trim() || null;
+  const timestamp = request.headers.get("x-certscore-anonymous-requester-timestamp")?.trim() || null;
+  const secret = process.env.CERTSCORE_OAUTH_JWT_SECRET?.trim() || process.env.JWT_SIGNING_KEY?.trim();
+  if (!operation || !expected.operations.includes(operation) || !scanId || !proof || !timestamp || !secret) return null;
+  if (expected.scanId && scanId !== expected.scanId) return null;
+  const url = new URL(request.url);
+  const target = `${url.pathname}${url.search}`;
+  const message = `${timestamp}.${operation}.${scanId}.${request.method}.${target}`;
+  const expectedProof = createHmac("sha256", secret).update(message).digest("base64url");
+  return safeProofEqual(expectedProof, proof) ? { operation, scanId } : null;
 }
 
 export function getPulseRequesterContext(request: Request) {
   const headers = request.headers;
-  const ip = verifiedAnonymousMcpRequesterIp(headers) ??
-    getTrustedRequestSourceIp(headers);
+  const verifiedMcp = verifiedAnonymousMcpRequester(headers);
+  const ip = verifiedMcp?.ip ?? getTrustedRequestSourceIp(headers);
 
   return {
+    anonymousMcpSurface: verifiedMcp?.surface ?? null,
+    anonymousRequesterNetwork: anonymousRequesterNetwork(ip),
     ipHash: ip ? createHash("sha256").update(ip).digest("hex") : null,
     referer: headers.get("referer")?.slice(0, 500) || null,
     sourceIp: ip?.slice(0, 120) || null,

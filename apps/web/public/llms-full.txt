@@ -321,7 +321,7 @@ Light MCP — no authentication (canonical beginner route):
 
 https://mcp.certscore.ai/mcp/light
 
-CertScore Light uses Streamable HTTP and exposes only certscore_scan_site, certscore_get_scan_status, and certscore_get_scan_bundle. It requires no signup, API key, bearer token, browser login, or OAuth and includes 20 new scans per requester IP per UTC day. Reused eligible results do not consume quota.
+CertScore Light uses Streamable HTTP and exposes only certscore_scan_site, certscore_get_scan_status, and certscore_get_scan_bundle. It requires no signup, API key, bearer token, browser login, or OAuth and includes up to 50 genuinely new scans per UTC day across the public Light surface, with a 5-new-scan rolling 10-minute burst limit. Reused eligible results do not consume quota.
 
 Codex setup:
 

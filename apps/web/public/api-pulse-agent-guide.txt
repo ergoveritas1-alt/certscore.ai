@@ -61,8 +61,7 @@ https://certscore.ai/api-pulse#mcp
 Unauthenticated hosted MCP for low-volume agent discovery:
 https://mcp.certscore.ai/mcp/anonymous
 
-The anonymous hosted MCP endpoint requires no account, API key, or OAuth setup. It supports up to 20 new scans per requester IP per UTC
-day; reusing an eligible recent result does not consume the quota. Use OAuth or a scoped API key for higher-volume MCP workflows.
+The anonymous hosted Light MCP endpoint requires no account, API key, or OAuth setup. It supports up to 50 genuinely new scans per UTC day across the public Light surface and 5 genuinely new scans per rolling 10 minutes. Eligible reuse is free. The general anonymous API retains its separate requester-IP policy. Use OAuth or a scoped API key for higher-volume MCP workflows.
 
 Preferred first-time no-account endpoint:
 

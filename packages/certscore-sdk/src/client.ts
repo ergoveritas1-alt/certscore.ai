@@ -2,6 +2,7 @@ import { createHmac } from "node:crypto";
 import { CertScoreApiError, InvalidUrlError, CertScoreScanFailedError, ThrottledError } from "./errors.js";
 import { adaptivePollIntervalMs, parseRetryAfter, retryDelayMs, sleep, SUCCESS_STATUSES, throwForTerminalStatus, throwTimeout } from "./poll.js";
 import type {
+  ApiV2RequestOptions,
   CertScoreClientOptions,
   CreateScanResourceOptions,
   DomainLatestScan,
@@ -11,6 +12,7 @@ import type {
   FindingResourceClient,
   FreshnessMode,
   GetScanOptions,
+  InternalMcpReadContext,
   JobStatus,
   PendingJob,
   PreConsentCookiesTrackers,
@@ -41,6 +43,7 @@ type RequestOptions = {
   method?: "GET" | "POST";
   signal?: AbortSignal;
   timeout?: number;
+  internalMcpOperation?: InternalMcpReadContext;
 };
 
 function normalizeBaseUrl(baseUrl: string | undefined) {
@@ -114,6 +117,7 @@ export class CertScoreClient {
   private readonly clientName: "mcp" | "sdk";
   private readonly forwardedClientIp?: string;
   private readonly anonymousRequesterSecret?: string;
+  private readonly anonymousSurface?: "mcp_light" | "mcp_anonymous";
   private readonly timeout: number;
   public readonly scans: ScanResourceClient;
   public readonly findings: FindingResourceClient;
@@ -127,6 +131,7 @@ export class CertScoreClient {
     this.clientName = options.clientName ?? "sdk";
     this.forwardedClientIp = options.forwardedClientIp?.trim() || undefined;
     this.anonymousRequesterSecret = options.anonymousRequesterSecret?.trim() || undefined;
+    this.anonymousSurface = options.anonymousSurface ?? undefined;
     this.timeout = options.timeout ?? DEFAULT_TIMEOUT_MS;
     this.scans = {
       create: (url, scanOptions) => this.createScanResource(url, scanOptions),
@@ -207,7 +212,7 @@ export class CertScoreClient {
   getScan(scanId: string, options: GetScanOptions & MarkdownFormatOption): Promise<string>;
   /** Retrieve a durable scan-backed Pulse result by scanId. */
   async getScan(scanId: string, options: GetScanOptions = {}): Promise<PulseResult | string> {
-    return this.fetchScan(scanId, normalizeDetail(options.detail), normalizeFormat(options.format), options.signal);
+    return this.fetchScan(scanId, normalizeDetail(options.detail), normalizeFormat(options.format), options.signal, options.internalMcpOperation);
   }
 
   /** Fetch the public-safe status for an existing Pulse job. */
@@ -235,43 +240,43 @@ export class CertScoreClient {
   }
 
   /** Retrieve the API v2 scan resource for an eligible public scan. */
-  async getScanResource(scanId: string, options: { signal?: AbortSignal } = {}): Promise<ScanResource> {
+  async getScanResource(scanId: string, options: ApiV2RequestOptions = {}): Promise<ScanResource> {
     return this.fetchJson<ScanResource>(`/api/v2/scans/${encodeURIComponent(scanId)}`, options);
   }
 
   /** Retrieve bounded phase and policy-discovery timings for an eligible public scan. */
-  async getScanDiagnostics(scanId: string, options: { signal?: AbortSignal } = {}): Promise<ScanDiagnostics> {
+  async getScanDiagnostics(scanId: string, options: ApiV2RequestOptions = {}): Promise<ScanDiagnostics> {
     return this.fetchJson<ScanDiagnostics>(`/api/v2/scans/${encodeURIComponent(scanId)}/diagnostics`, options);
   }
 
   /** Retrieve API v2 status for an eligible public scan. */
-  async getScanStatus(scanId: string, options: { signal?: AbortSignal } = {}): Promise<ScanJob> {
+  async getScanStatus(scanId: string, options: ApiV2RequestOptions = {}): Promise<ScanJob> {
     return this.fetchJson<ScanJob>(`/api/v2/scans/${encodeURIComponent(scanId)}/status`, options);
   }
 
   /** Retrieve the public-safe Cookies & Trackers (Pre-consent) table for an eligible public scan. */
-  async getPreConsentCookiesTrackers(scanId: string, options: { signal?: AbortSignal } = {}): Promise<PreConsentCookiesTrackers> {
+  async getPreConsentCookiesTrackers(scanId: string, options: ApiV2RequestOptions = {}): Promise<PreConsentCookiesTrackers> {
     return this.fetchJson<PreConsentCookiesTrackers>(`/api/v2/scans/${encodeURIComponent(scanId)}/pre-consent-cookies-trackers`, options);
   }
 
   /** List API v2 public-safe findings for an eligible public scan. */
-  async listFindings(scanId: string, options: { signal?: AbortSignal } = {}): Promise<FindingList> {
+  async listFindings(scanId: string, options: ApiV2RequestOptions = {}): Promise<FindingList> {
     return this.fetchJson<FindingList>(`/api/v2/scans/${encodeURIComponent(scanId)}/findings`, options);
   }
 
   /** Retrieve one API v2 public-safe finding for an eligible public scan. */
-  async getFinding(scanId: string, findingId: string, options: { signal?: AbortSignal } = {}): Promise<FindingDetail> {
+  async getFinding(scanId: string, findingId: string, options: ApiV2RequestOptions = {}): Promise<FindingDetail> {
     return this.fetchJson<FindingDetail>(`/api/v2/scans/${encodeURIComponent(scanId)}/findings/${encodeURIComponent(findingId)}`, options);
   }
 
   /** Retrieve the API v2 Pulse wrapper for an eligible public scan. */
-  async getScanPulse(scanId: string, options: { signal?: AbortSignal } = {}): Promise<ScanPulse> {
+  async getScanPulse(scanId: string, options: ApiV2RequestOptions = {}): Promise<ScanPulse> {
     return this.fetchJson<ScanPulse>(`/api/v2/scans/${encodeURIComponent(scanId)}/pulse`, options);
   }
 
   /** Retrieve the bounded Pulse Evidence JSON artifact for an eligible public scan. */
-  async getScanEvidence(scanId: string, options: { signal?: AbortSignal } = {}): Promise<PulseResult> {
-    return this.fetchScan(scanId, "evidence", "json", options.signal) as Promise<PulseResult>;
+  async getScanEvidence(scanId: string, options: ApiV2RequestOptions = {}): Promise<PulseResult> {
+    return this.fetchScan(scanId, "evidence", "json", options.signal, options.internalMcpOperation) as Promise<PulseResult>;
   }
 
   /** Retrieve the latest eligible public scan for a domain. */
@@ -295,7 +300,7 @@ export class CertScoreClient {
   /** Wait for a Pulse job/status object or retrieve a stable scan by scanId. */
   async waitForScan(scan: string | ScanResource | ScanJob | PendingJob | JobStatus, options: ScanOptions = {}): Promise<ScanResource> {
     if (typeof scan === "string") {
-      return this.getScanResource(scan, { signal: options.signal });
+      return this.getScanResource(scan, { signal: options.signal, internalMcpOperation: options.internalMcpOperation });
     }
     if (scan.type === "certscore_scan") {
       return scan;
@@ -303,7 +308,7 @@ export class CertScoreClient {
     if (scan.type === "certscore_pulse_completed") {
       const completedScanId = statusScanId(scan);
       if (completedScanId) {
-        return this.getScanResource(completedScanId, { signal: options.signal });
+        return this.getScanResource(completedScanId, { signal: options.signal, internalMcpOperation: options.internalMcpOperation });
       }
       throw new CertScoreScanFailedError("Cannot wait for a completed Pulse response without a durable scanId.", {
         responseBody: scan
@@ -312,7 +317,7 @@ export class CertScoreClient {
     if (scan.status === "completed" || scan.status === "completed_limited") {
       const scanId = statusScanId(scan);
       if (scanId) {
-        return this.getScanResource(scanId, { signal: options.signal });
+        return this.getScanResource(scanId, { signal: options.signal, internalMcpOperation: options.internalMcpOperation });
       }
     }
     if (!scan.jobId) {
@@ -327,6 +332,7 @@ export class CertScoreClient {
       maxWaitMs: options.maxWaitMs ?? DEFAULT_MAX_WAIT_MS,
       startedAt: Date.now(),
       signal: options.signal,
+      internalMcpOperation: options.internalMcpOperation,
       onStatusUpdate: options.onStatusUpdate
     });
   }
@@ -389,6 +395,7 @@ export class CertScoreClient {
       initialRetryAfterSeconds?: number;
       signal?: AbortSignal;
       onStatusUpdate?: (status: JobStatus) => void;
+      internalMcpOperation?: InternalMcpReadContext;
     }
   ): Promise<PulseResult | string> {
     let status = initial;
@@ -435,6 +442,7 @@ export class CertScoreClient {
       startedAt: number;
       signal?: AbortSignal;
       onStatusUpdate?: (status: JobStatus) => void;
+      internalMcpOperation?: InternalMcpReadContext;
     }
   ): Promise<ScanResource> {
     let status = initial as JobStatus;
@@ -443,7 +451,7 @@ export class CertScoreClient {
       if (SUCCESS_STATUSES.has(status.status)) {
         const scanId = statusScanId(status);
         if (scanId) {
-          return this.getScanResource(scanId, { signal: options.signal });
+          return this.getScanResource(scanId, { signal: options.signal, internalMcpOperation: options.internalMcpOperation });
         }
         throw new CertScoreScanFailedError("Scan completed without a durable scanId.", {
           jobId: status.jobId,
@@ -465,13 +473,13 @@ export class CertScoreClient {
       const delay = Math.min(retryDelayMs(status, undefined, fallbackMs), Math.max(0, options.maxWaitMs - elapsedMs));
       await sleep(delay, options.signal);
 
-      let response = await this.fetch(this.scanResourceStatusUrlFor(status), { signal: options.signal });
+      let response = await this.fetch(this.scanResourceStatusUrlFor(status), { signal: options.signal, internalMcpOperation: options.internalMcpOperation });
       // API v2 creation can return a durable scanId before the public scan
       // resource has materialized. During that bounded window, keep following
       // the already-accepted job instead of turning a transient 404 into a
       // failed wait or encouraging a duplicate scan submission.
       if (response.status === 404 && status.jobId) {
-        response = await this.fetch(this.statusUrlFor(status), { signal: options.signal });
+        response = await this.fetch(this.statusUrlFor(status), { signal: options.signal, internalMcpOperation: options.internalMcpOperation });
       }
       if (response.status === 202 || response.status === 200 || response.status === 429) {
         status = (await response.json()) as JobStatus;
@@ -502,10 +510,10 @@ export class CertScoreClient {
     });
   }
 
-  private async fetchScan(scanId: string, detail: PulseDetail, format: PulseFormat, signal?: AbortSignal): Promise<PulseResult | string> {
+  private async fetchScan(scanId: string, detail: PulseDetail, format: PulseFormat, signal?: AbortSignal, internalMcpOperation?: InternalMcpReadContext): Promise<PulseResult | string> {
     const endpoint = this.url("/api/v1/pulse");
     withSearchParams(endpoint, { scanId, detail, format });
-    const response = await this.fetch(endpoint, { signal });
+    const response = await this.fetch(endpoint, { signal, internalMcpOperation });
     if (response.status === 200) {
       return this.parseCompletedResponse(response, format);
     }
@@ -554,7 +562,7 @@ export class CertScoreClient {
 
   private async fetchJson<T>(pathOrUrl: string | URL, options: RequestOptions = {}): Promise<T> {
     const endpoint = typeof pathOrUrl === "string" ? this.url(pathOrUrl) : pathOrUrl;
-    const response = await this.fetch(endpoint, { signal: options.signal, timeout: options.timeout });
+    const response = await this.fetch(endpoint, { signal: options.signal, timeout: options.timeout, internalMcpOperation: options.internalMcpOperation });
     if (response.ok) {
       return (await response.json()) as T;
     }
@@ -611,7 +619,7 @@ export class CertScoreClient {
       return await fetch(url, {
         body: options.body === undefined ? undefined : JSON.stringify(options.body),
         method: options.method ?? "GET",
-        headers: this.headers(options.body !== undefined),
+        headers: this.headers(url, options.method ?? "GET", options.body !== undefined, options.internalMcpOperation),
         signal: controller.signal
       });
     } finally {
@@ -620,7 +628,7 @@ export class CertScoreClient {
     }
   }
 
-  private headers(jsonBody = false): HeadersInit {
+  private headers(url: URL, method: "GET" | "POST", jsonBody = false, internalMcpOperation?: InternalMcpReadContext): HeadersInit {
     const headers: Record<string, string> = {
       Accept: "application/json, text/markdown;q=0.9",
       "X-CertScore-Client": this.clientName
@@ -635,11 +643,20 @@ export class CertScoreClient {
       headers["X-Forwarded-For"] = this.forwardedClientIp;
       if (this.anonymousRequesterSecret) {
         const timestamp = String(Math.floor(Date.now() / 1000));
-        const message = `${timestamp}.${this.forwardedClientIp}`;
+        const surface = this.anonymousSurface ?? "mcp_anonymous";
+        const message = `${timestamp}.${this.forwardedClientIp}.${surface}`;
         const proof = createHmac("sha256", this.anonymousRequesterSecret).update(message).digest("base64url");
         headers["X-CertScore-Anonymous-Requester-IP"] = this.forwardedClientIp;
         headers["X-CertScore-Anonymous-Requester-Timestamp"] = timestamp;
         headers["X-CertScore-Anonymous-Requester-Proof"] = proof;
+        headers["X-CertScore-Anonymous-Surface"] = surface;
+        if (internalMcpOperation) {
+          const target = `${url.pathname}${url.search}`;
+          const internalMessage = `${timestamp}.${internalMcpOperation.operation}.${internalMcpOperation.scanId}.${method}.${target}`;
+          headers["X-CertScore-MCP-Internal-Operation"] = internalMcpOperation.operation;
+          headers["X-CertScore-MCP-Internal-Scan-ID"] = internalMcpOperation.scanId;
+          headers["X-CertScore-MCP-Internal-Proof"] = createHmac("sha256", this.anonymousRequesterSecret).update(internalMessage).digest("base64url");
+        }
       }
     }
     return headers;

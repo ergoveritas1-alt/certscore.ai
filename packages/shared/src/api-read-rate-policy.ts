@@ -13,6 +13,8 @@ type ApiReadRateWindowPolicy = {
   id: ApiReadRateWindowId;
   windowSeconds: number;
   limits: Partial<Record<ApiReadRateScope, number>>;
+  /** Hard aggregate for verified shared-provider MCP traffic; not a per-user identity. */
+  mcpProviderLimit?: number;
 };
 
 type ApiReadRatePolicy = {
@@ -30,7 +32,7 @@ type ApiReadRatePolicy = {
  * duplicate these windows, limits, or weights in service-local code.
  */
 export const API_READ_RATE_POLICY = {
-  version: "2026-08-13",
+  version: "2026-08-14",
   weights: {
     ordinary: 1,
     evidence: 4,
@@ -46,17 +48,19 @@ export const API_READ_RATE_POLICY = {
           id: "burst",
           windowSeconds: 10 * 60,
           limits: {
-            callerTarget: 20,
-            target: 20,
-            caller: 40
-          }
+            callerTarget: 120,
+            target: 4_000,
+            caller: 480
+          },
+          mcpProviderLimit: 8_000
         },
         {
           id: "daily",
           windowSeconds: 24 * 60 * 60,
           limits: {
-            callerTarget: 40
-          }
+            callerTarget: 1_200
+          },
+          mcpProviderLimit: 40_000
         }
       ]
     },
@@ -66,10 +70,11 @@ export const API_READ_RATE_POLICY = {
           id: "burst",
           windowSeconds: 10 * 60,
           limits: {
-            callerTarget: 30,
-            target: 100,
-            caller: 120
-          }
+            callerTarget: 120,
+            target: 10_000,
+            caller: 600
+          },
+          mcpProviderLimit: 20_000
         }
       ]
     }

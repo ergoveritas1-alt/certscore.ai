@@ -59,7 +59,7 @@ export const mcpGetScanBundleInputSchema = {
   detail: z.enum(["summary", "findings", "evidence", "full"]).optional().describe("Response detail. Defaults to summary; evidence and full opt into heavier retained context."),
   maxBytes: z.number().int().min(5000).max(200000).optional().describe("Maximum serialized structured response size in bytes. Defaults to 50000."),
   maxFindings: z.number().int().min(1).max(50).optional().describe("Maximum compact findings to return. Defaults to 5 for summary and 20 otherwise."),
-  maxPreConsentRows: z.number().int().min(1).max(50).optional().describe("Maximum pre-consent inventory rows when evidence is requested. Defaults to 20.")
+  maxPreConsentRows: z.number().int().min(1).max(50).optional().describe("Maximum compact pre-consent inventory rows to return. Defaults to 20.")
 } as const;
 
 export const mcpExportFindingsInputSchema = {
@@ -141,6 +141,50 @@ const mcpExecutiveSummarySchema = z.object({
   scanTimeSeconds: z.number().nullable().optional()
 }).passthrough();
 
+export const mcpScanProvenanceSchema = z.object({
+  mode: z.enum(["new_scan_started", "existing_completed_scan_reused", "existing_scan_retrieved", "unknown"]),
+  executionMode: z.enum(["new_scan", "reused_scan"]).nullable(),
+  reused: z.boolean().nullable(),
+  freshnessDecision: z.string().nullable()
+}).strict();
+
+export const mcpInterpretationGuidanceSchema = z.object({
+  scoreLabel: z.literal("CertScore score"),
+  observableSignalsOnly: z.literal(true),
+  doNotInferUnobservedTechnologies: z.literal(true),
+  doNotInferLegalComplianceStatus: z.literal(true),
+  statement: z.string()
+}).strict();
+
+export const mcpScanBundlePreConsentRowSchema = z.object({
+  id: z.string().max(512),
+  kind: apiV2PreConsentCookiesTrackersSchema.shape.rows.element.shape.kind,
+  name: z.string().max(256),
+  cookieNames: z.array(z.string().max(256)).max(24),
+  vendor: z.string().max(160).nullable(),
+  purpose: z.string().max(160).nullable(),
+  category: z.string().max(160).nullable(),
+  confidence: apiV2PreConsentCookiesTrackersSchema.shape.rows.element.shape.confidence.unwrap(),
+  firstObservedAtMs: z.number().int().min(0).nullable(),
+  domains: z.array(z.string().max(253)).max(12),
+  requestCount: z.number().int().min(0).nullable(),
+  evidenceClassification: z.object({
+    basis: apiV2PreConsentCookiesTrackersSchema.shape.rows.element.shape.evidenceBasis,
+    phase: apiV2PreConsentCookiesTrackersSchema.shape.rows.element.shape.phase,
+    observedBeforeConsent: z.boolean(),
+    party: apiV2PreConsentCookiesTrackersSchema.shape.rows.element.shape.party.unwrap(),
+    priority: apiV2PreConsentCookiesTrackersSchema.shape.rows.element.shape.priority.unwrap()
+  }).strict()
+}).strict();
+
+export const mcpScanBundlePreConsentSchema = z.object({
+  summary: apiV2PreConsentCookiesTrackersSummarySchema,
+  rows: z.array(mcpScanBundlePreConsentRowSchema).max(50),
+  total: z.number().int().min(0),
+  returned: z.number().int().min(0),
+  truncated: z.boolean()
+}).strict();
+
 export const mcpCreateScanOutputSchema = z
   .object({
     type: z.literal("certscore_mcp_scan_created"),
@@ -185,12 +229,17 @@ export const mcpScanSiteOutputSchema = z
     completedAt: z.string().nullable().optional(),
     scanTimeSeconds: z.number().nullable().optional(),
     score: z.number().int().min(0).max(100).nullable().optional(),
+    scoreLabel: z.literal("CertScore score"),
     scoreStatus: z.enum(["provisional", "final"]).optional(),
     scoreVersion: z.string().nullable().optional(),
     scoreUpdatedAt: z.string().nullable().optional(),
     riskLevel: z.string().nullable().optional(),
     coverage: apiV2ScanResourceSchema.shape.coverage.nullable().optional(),
     error: mcpActionableErrorSchema.nullable(),
+    provenance: mcpScanProvenanceSchema,
+    interpretationGuidance: mcpInterpretationGuidanceSchema,
+    reportUrl: z.string().nullable().optional(),
+    links: apiV2ScanResourceSchema.shape.links.optional(),
     recommendedNextTool: z.enum(["certscore_get_scan_status", "certscore_get_scan_bundle"]).nullable(),
     recommendedNextAction: z.string(),
     observationOnlyDisclaimer: z.string()
@@ -213,6 +262,7 @@ export const mcpScanStatusOutputSchema = z
     completedAt: z.string().nullable().optional(),
     scanTimeSeconds: z.number().nullable().optional(),
     score: z.number().int().min(0).max(100).nullable().optional(),
+    scoreLabel: z.literal("CertScore score"),
     scoreStatus: z.enum(["provisional", "final"]).optional(),
     scoreVersion: z.string().nullable().optional(),
     scoreUpdatedAt: z.string().nullable().optional(),
@@ -228,6 +278,8 @@ export const mcpScanStatusOutputSchema = z
     stalled: z.boolean().optional(),
     retryAfterSeconds: z.number().int().nullable().optional(),
     error: mcpActionableErrorSchema.nullable(),
+    provenance: mcpScanProvenanceSchema,
+    interpretationGuidance: mcpInterpretationGuidanceSchema,
     reportUrl: z.string().nullable().optional(),
     links: apiV2ScanResourceSchema.shape.links.optional(),
     recommendedNextTool: z.enum(["certscore_get_scan_status", "certscore_get_scan_bundle"]).nullable(),
@@ -256,10 +308,13 @@ export const mcpScanBundleOutputSchema = z
     url: z.string().nullable(),
     status: apiV2ScanStatusSchema,
     score: z.number().int().min(0).max(100).nullable(),
+    scoreLabel: z.literal("CertScore score"),
     scoreStatus: z.enum(["provisional", "final"]),
     scoreVersion: z.string().nullable(),
     scoreUpdatedAt: z.string().nullable(),
     riskLevel: z.string().nullable(),
+    provenance: mcpScanProvenanceSchema,
+    interpretationGuidance: mcpInterpretationGuidanceSchema,
     resultDisposition: scanResultDispositionSchema.nullable().optional(),
     noGo: scanNoGoResultSchema.nullable().optional(),
     coverage: apiV2ScanResourceSchema.shape.coverage.nullable(),
@@ -282,12 +337,13 @@ export const mcpScanBundleOutputSchema = z
     findings: z.array(apiV2FindingDetailSchema),
     findingsMetadata: z.object({
       shown: z.number().int().min(0),
+      returned: z.number().int().min(0),
       total: z.number().int().min(0),
       truncated: z.boolean()
     }).strict(),
     evidenceSummary: z.record(z.unknown()).optional(),
     fullReport: pulseResponseSchema.optional(),
-    preConsentCookiesTrackers: z.record(z.unknown()).optional(),
+    preConsentCookiesTrackers: mcpScanBundlePreConsentSchema.optional(),
     links: z.record(z.string()).optional(),
     reportUrl: z.string().nullable(),
     recommendedNextTool: z.enum(["certscore_get_scan_status", "certscore_get_scan_bundle"]).nullable(),
@@ -380,7 +436,7 @@ export const certScoreMcpToolContracts = [
   {
     name: "certscore_get_scan_status",
     title: "Get scan status",
-    description: "Poll with only the stable scanId returned by certscore_scan_site. Active responses include phase, heartbeat, estimated progress, stalled state, and retry delay. Terminal responses include the canonical score, risk, coverage, timestamps, report URL, and an explicit next action. Stop polling at any terminal status.",
+    description: "Poll with only the stable scanId returned by certscore_scan_site. Active responses include phase, heartbeat, estimated progress, stalled state, and retry delay. Terminal responses include the CertScore score, risk, coverage, timestamps, report URL, and an explicit next action. Stop polling at any terminal status.",
     inputSchema: mcpGetScanStatusInputSchema,
     outputSchema: mcpScanStatusOutputSchema,
     annotations: readOnlyOpenWorldAnnotations
@@ -404,7 +460,7 @@ export const certScoreMcpToolContracts = [
   {
     name: "certscore_get_scan_bundle",
     title: "Get scan bundle",
-    description: "Call after completed or completed_limited status. summary returns the canonical overview without finding bodies; findings reserves space for compact findings; evidence reserves findings plus bounded evidence digests and references; full adds all available bounded sections. Every response declares detail and byte-budget metadata, omittedSections, retrieval URLs, and nextRecommendedMaxBytes when truncated. Never interpret no-go, not-observed, or limited coverage as proof of compliance.",
+    description: "Call after completed or completed_limited status. Every usable completed bundle returns a self-contained concise TextContent digest plus matching structuredContent. The default summary includes the canonical report overview, up to five compact public-safe projected findings across the scan's observed domains, and bounded row-level pre-consent cookie/tracker evidence; detail=findings increases the default finding allowance, evidence adds bounded evidence digests and references, and full adds all available bounded sections. Every response declares finding and evidence total/returned/truncated counts, byte-budget metadata, omittedSections, retrieval URLs, and nextRecommendedMaxBytes when truncated. Enumerate only returned observations and projected findings. The CertScore score covers observable scan signals only; do not infer unobserved technologies or legal compliance status, and never interpret no-go, not-observed, or limited coverage as proof of compliance.",
     inputSchema: mcpGetScanBundleInputSchema,
     outputSchema: mcpScanBundleOutputSchema,
     annotations: readOnlyOpenWorldAnnotations

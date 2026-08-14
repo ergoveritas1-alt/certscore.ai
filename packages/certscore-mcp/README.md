@@ -23,7 +23,7 @@ Authentication: None
 Tools: certscore_scan_site, certscore_get_scan_status, certscore_get_scan_bundle
 ```
 
-No signup, API key, bearer token, browser login, or OAuth is required. Light allows 20 new scans per requester IP per UTC day. Reused eligible results do not consume quota.
+No signup, API key, bearer token, browser login, or OAuth is required. Light allows up to 50 genuinely new scans per UTC day across the public Light surface and up to 5 per rolling 10 minutes, with additional IP/provider safeguards. Reused eligible results do not consume quota.
 
 Codex setup:
 
@@ -63,7 +63,7 @@ CertScore results are automated observations from a public-web scan. No-go, not-
 
 | Route | Access | Best for |
 | --- | --- | --- |
-| Light MCP — no authentication | No account, API key, bearer token, browser login, or OAuth; three tools; 20 new scans per requester IP per UTC day | First-time users, testing, and discovery |
+| Light MCP — no authentication | No account, API key, bearer token, browser login, or OAuth; three tools; up to 50 new scans per UTC day across Light and 5 per rolling 10 minutes; eligible reuse is free | First-time users, testing, and discovery |
 | Hosted MCP — OAuth | Hosted Streamable HTTP with OAuth scopes, higher volume, history, and approved advanced tools | Production, team, and managed remote clients |
 | Local MCP — scoped API key | Local stdio with a scoped key and tools allowed by its scopes | Backend, local, and controlled automation workflows |
 
@@ -77,10 +77,10 @@ MCP scan-resource reads use the same weighted, rolling policy as the direct Cert
 
 - `certscore_scan_site` - First call. Starts or reuses a public-web scan and waits up to 45 seconds by default. If status is queued, running, or finalizing, retain scanId and poll certscore_get_scan_status using only that scanId. Stop polling at completed, completed_limited, failed, expired, or rate_limited. For usable completion, call certscore_get_scan_bundle. No-go and limited coverage are observations, never proof of compliance.
 - `certscore_get_scan` - Retrieve the API v2 public-safe scan resource, including completed-limited no-go disposition, reason-specific guidance, and timing when available.
-- `certscore_get_scan_status` - Poll with only the stable scanId returned by certscore_scan_site. Active responses include phase, heartbeat, estimated progress, stalled state, and retry delay. Terminal responses include the canonical score, risk, coverage, timestamps, report URL, and an explicit next action. Stop polling at any terminal status.
+- `certscore_get_scan_status` - Poll with only the stable scanId returned by certscore_scan_site. Active responses include phase, heartbeat, estimated progress, stalled state, and retry delay. Terminal responses include the CertScore score, risk, coverage, timestamps, report URL, and an explicit next action. Stop polling at any terminal status.
 - `certscore_get_report` - Retrieve a summary Pulse report, including customer-safe no-go messaging when coverage is completed-limited. Use certscore_get_evidence for the larger bounded packet.
 - `certscore_get_evidence` - Retrieve the bounded structured Evidence JSON packet for a stable scan ID. Excludes raw cookie values, raw bodies, sensitive payloads, full DOM, and unredacted query values.
-- `certscore_get_scan_bundle` - Call after completed or completed_limited status. summary returns the canonical overview without finding bodies; findings reserves space for compact findings; evidence reserves findings plus bounded evidence digests and references; full adds all available bounded sections. Every response declares detail and byte-budget metadata, omittedSections, retrieval URLs, and nextRecommendedMaxBytes when truncated. Never interpret no-go, not-observed, or limited coverage as proof of compliance.
+- `certscore_get_scan_bundle` - Call after completed or completed_limited status. Every usable completed bundle includes a self-contained concise `TextContent` digest and matching typed `structuredContent`. The default summary returns the canonical report overview, up to five compact public-safe projected findings across observed scan domains, and bounded row-level pre-consent cookie/tracker evidence. `findings` raises the default finding allowance; `evidence` adds bounded evidence digests and references; `full` adds all available bounded sections. Every response declares finding and evidence `total`/`returned`/`truncated` counts, byte-budget metadata, omitted sections, retrieval URLs, and a recommended larger limit when truncated. The CertScore score covers observable scan signals only; do not infer unobserved technologies or legal compliance status.
 - `certscore_export_findings` - Return structured findings plus completed-limited no-go disposition and guidance for downstream review or ticketing workflows.
 - `certscore_list_findings` - List API v2 public-safe findings already projected for a scan.
 - `certscore_get_pre_consent_cookies_trackers` - Retrieve the public-safe Cookies & Trackers (Pre-consent) report table as compact JSON for a scan.
@@ -102,15 +102,19 @@ This applies to `certscore_scan_site` when it returns an API v2 scan resource or
 
 Completed Light results are canonical. `certscore_scan_site`, terminal `certscore_get_scan_status`, and `certscore_get_scan_bundle` return the same score, risk level, coverage, and timing fields. Scores include `scoreStatus`, `scoreVersion`, and `scoreUpdatedAt`; a scan remains `finalizing` until the persisted canonical report projection is ready, so a completed response always carries `scoreStatus: "final"`.
 
+The value is labeled `CertScore score`, never a compliance score. It covers observable public-web scan signals only. Clients must not infer technologies absent from the returned evidence, compare the value with a hypothetical compliant baseline, or infer legal compliance status.
+
 Every `failed`, `expired`, or `rate_limited` status includes a bounded `error` object with `code`, `message`, `retryable`, `retryAfterSeconds`, and `recommendedNextAction`.
 
 ## Light Bundle Detail and Byte Budgets
 
-Every bundle declares its selected `detail` mode. `summary` returns the overview, canonical result, coverage, limitations, counts, and report URL without finding bodies. `findings` reserves space for compact finding objects. `evidence` reserves findings plus bounded evidence digests and references. `full` adds every available section subject to the caller's byte budget.
+Every bundle declares its selected `detail` mode. `summary` returns the overview, canonical result, up to five compact projected finding objects, compact row-level pre-consent cookie/tracker evidence, coverage, limitations, counts, and report URL. This lets conversational MCP clients enumerate projected consent-control, CMP-context, transport, GDPR/ePrivacy transparency, social/media embed, accessibility, disclosure, and other returned review signals without needing a second tool; only categories actually present in canonical projections are returned. Findings and inventory sections each declare `total`, `returned`, and `truncated`. Each inventory row includes cookie/tracker identity, cookie names where present, vendor, purpose, category, first-observed time, domains, evidence classification, and confidence. `findings` raises the default finding allowance to 20. `evidence` adds bounded evidence digests and references. `full` adds every available section subject to the caller's byte budget.
+
+`TextContent` is capped at 8,000 characters and uses short plain-text lines instead of large tables or nested JSON. It presents canonical overview facts and projected findings before the row inventory so one evidence family cannot crowd out the rest. The structured bundle defaults to 50,000 bytes and accepts a caller-selected 5,000-200,000-byte bound. If either representation must omit returned items, it states that explicitly and preserves totals and truncation metadata.
 
 `mcpMetadata` always includes `requestedMaxBytes`, `actualBytes`, `truncated`, `truncationReason`, `omittedSections`, `nextRecommendedMaxBytes`, `omittedContentAvailableViaUrl`, and `contentUrls`. When the budget cannot retain a requested section, `recommendedNextAction` names the next useful byte limit or directs the agent to an available report/evidence URL.
 
-Input-validation errors remain MCP `-32602` errors and also include structured `invalid_arguments` details with the affected field and a safe next action. Error results use concise text plus the same machine-readable `structuredContent`; successful results never duplicate the full structured payload in text.
+Input-validation errors remain MCP `-32602` errors and also include structured `invalid_arguments` details with the affected field and a safe next action. Error results use concise text plus machine-readable details. Successful results put the typed result in `structuredContent`; scan bundles also render a bounded row-level evidence summary in `TextContent` for client compatibility.
 
 The Light workflow is:
 
@@ -119,7 +123,7 @@ The Light workflow is:
 3. If the result is queued, running, or finalizing, retain `scanId` and poll `certscore_get_scan_status` with only that ID.
 4. Stop polling at any terminal status. For `completed` or `completed_limited`, call `certscore_get_scan_bundle`.
 5. If the bundle is truncated, follow `recommendedNextAction`, increase `maxBytes`, or open a listed content URL.
-6. Summarize the canonical score, risk, findings, coverage, limitations, and report URL without treating no-go, not-observed, or limited coverage as proof of compliance.
+6. Summarize the CertScore score, risk, pre-consent rows, findings, coverage, limitations, and report URL without treating no-go, not-observed, or limited coverage as proof of compliance.
 
 ## Completed-Limited No-Go Results
 

@@ -65,6 +65,18 @@ test("Pulse validates DNS before creating a queued request or claiming the domai
   assert.match(routeSource, /dnsStatus\.retryable \? 503 : 400/);
 });
 
+test("Pulse domain cooldown is claimed atomically under concurrent requests", async () => {
+  const repositorySource = await readFile("apps/web/server/pulse/repository.ts", "utf8");
+  const functionAt = repositorySource.indexOf("export async function claimPulseDomainScanCreation");
+  const nextFunctionAt = repositorySource.indexOf("export async function", functionAt + 1);
+  const source = repositorySource.slice(functionAt, nextFunctionAt);
+  assert.match(source, /insert into pulse_domain_throttles/);
+  assert.match(source, /on conflict \(normalized_domain\)/);
+  assert.match(source, /where pulse_domain_throttles\.expires_at <= now\(\)/);
+  assert.match(source, /returning expires_at/);
+  assert.ok(source.indexOf("insert into pulse_domain_throttles") < source.indexOf("select expires_at from pulse_domain_throttles"));
+});
+
 test("Pulse integration quota counts scan creation but not polling or recent-result reuse", async () => {
   const routeSource = await readFile("apps/web/app/api/v1/pulse/route.ts", "utf8");
   const repositorySource = await readFile("apps/web/server/pulse/repository.ts", "utf8");

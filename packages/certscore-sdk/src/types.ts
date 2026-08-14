@@ -40,6 +40,8 @@ export interface CertScoreClientOptions {
   forwardedClientIp?: string | null;
   /** Internal gateway secret used to authenticate the forwarded anonymous requester identity. */
   anonymousRequesterSecret?: string | null;
+  /** Authenticated internal gateway surface, bound into anonymous requester proofs. */
+  anonymousSurface?: "mcp_light" | "mcp_anonymous" | null;
   timeout?: number;
 }
 
@@ -53,6 +55,7 @@ export interface ScanOptions {
   pollIntervalMs?: number;
   signal?: AbortSignal;
   onStatusUpdate?: (status: JobStatus) => void;
+  internalMcpOperation?: InternalMcpReadContext;
 }
 
 export interface SubmitScanOptions {
@@ -67,10 +70,17 @@ export interface GetScanOptions {
   detail?: PulseDetail;
   format?: PulseFormat;
   signal?: AbortSignal;
+  internalMcpOperation?: InternalMcpReadContext;
 }
 
 export interface ApiV2RequestOptions {
   signal?: AbortSignal;
+  internalMcpOperation?: InternalMcpReadContext;
+}
+
+export interface InternalMcpReadContext {
+  operation: "scan_site_wait" | "scan_status" | "scan_bundle";
+  scanId: string;
 }
 
 export interface DomainLatestScanOptions extends ApiV2RequestOptions {

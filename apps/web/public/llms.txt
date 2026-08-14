@@ -125,7 +125,7 @@ CERTSCORE_API_KEY=<token> certscore-mcp doctor
 ```
 
 MCP route labels:
-- Light MCP — no authentication: first-time users, testing, and discovery; no account or credentials; three core tools; 20 new scans per requester IP per UTC day.
+- Light MCP — no authentication: first-time users, testing, and discovery; no account or credentials; three core tools; up to 50 genuinely new scans per UTC day across Light and 5 per rolling 10 minutes; eligible reuse is free.
 - Hosted MCP — OAuth: production and team remote clients; account and OAuth scopes required; higher-volume and approved advanced access.
 - Local MCP — scoped API key: backend, local, and stdio clients; account and scoped key required; access follows key scopes.
 
@@ -140,7 +140,7 @@ Light MCP — no authentication workflow:
 8. Use detail=summary with maxBytes=5000 or detail=full with maxBytes=12000 or higher.
 9. If truncated, inspect actualBytes, truncated, omittedSections, nextRecommendedMaxBytes, and content URLs, then follow recommendedNextAction or increase maxBytes.
 
-Light allows 20 new scans per requester IP per UTC day. Reused eligible results do not consume quota.
+Light allows up to 50 genuinely new scans per UTC day across the public Light surface and 5 per rolling 10 minutes. Reused eligible results do not consume quota.
 
 Codex first-run prompt:
 Scan https://ergoveritas.com/.well-known/certscore-canary/sentinels/broad-baseline.html. If certscore_scan_site returns a queued, running, or finalizing result, retain the returned scanId and poll certscore_get_scan_status using scanId only. If certscore_scan_site returns a retryable error without a scanId, wait for retryAfterSeconds and retry certscore_scan_site; do not call certscore_get_scan_status until a scanId exists. Once the scan reaches a terminal status, call certscore_get_scan_bundle with detail=findings and maxBytes=8000. Summarize whether the result was new or reused, the score, risk level, findings, evidence links, coverage limitations, and report URL. Explain truncation or omitted sections when present. Treat results as automated public-web observations, not legal conclusions, certifications, or compliance determinations.

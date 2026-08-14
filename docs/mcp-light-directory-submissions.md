@@ -12,7 +12,7 @@ Scan public websites for privacy, cookie, tracker, consent, policy, and disclosu
 
 ## Full description
 
-CertScore.ai scans public websites for evidence-backed digital privacy risk signals. Start instantly with zero-auth Light mode: connect an MCP agent, paste a public URL, and scan without signup, an API key, or OAuth. Light includes 20 new scans per requester IP per UTC day, free reuse of eligible recent results, and a compact three-tool workflow. Sign in or contact support@certscore.ai for higher volume, scan history, and the complete diagnostic toolset. Outputs are automated public-web observations for review, not legal advice, certification, or a compliance determination.
+CertScore.ai scans public websites for evidence-backed digital risk signals. Start instantly with zero-auth Light mode: connect an MCP agent, paste a public URL, and scan without signup, an API key, or OAuth. Light includes up to 50 genuinely new scans per UTC day across the public Light surface, a 5-new-scan rolling 10-minute burst limit, free reuse of eligible recent results, and a compact three-tool workflow. Sign in or contact support@certscore.ai for higher volume, scan history, and the complete diagnostic toolset. Outputs are automated public-web observations for review, not legal advice, certification, or a compliance determination.
 
 ## Links
 

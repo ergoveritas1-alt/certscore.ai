@@ -6,10 +6,8 @@ import { createCertScoreMcpServer } from "@certscore/mcp/server";
 import { CERTSCORE_MCP_VERSION } from "@certscore/mcp/version";
 import { getAllowedOrigins, getEnv } from "./env.js";
 import { McpHttpSessionStore } from "./session-store.js";
-import { McpReadThrottle, mcpReadCallsFromJsonRpc } from "./read-throttle.js";
-import sharedPolicy from "@website-signal-risk-scanner/shared";
-
-const { apiReadRateLimitGuidance } = sharedPolicy;
+import { McpReadThrottle, mcpReadCallsFromJsonRpc, mcpReadRateLimitGuidance } from "./read-throttle.js";
+import { anonymousMcpRequester, anonymousSessionBinding } from "./requester-identity.js";
 
 const env = getEnv();
 const allowedOrigins = getAllowedOrigins(env);
@@ -120,16 +118,6 @@ function bearerToken(req: IncomingMessage) {
   return match?.[1]?.trim() || null;
 }
 
-function firstHeaderValue(value: string | string[] | undefined) {
-  return value?.toString().split(",")[0]?.trim() || null;
-}
-
-function requesterIp(req: IncomingMessage) {
-  return firstHeaderValue(req.headers["cf-connecting-ip"])
-    ?? firstHeaderValue(req.headers["x-forwarded-for"])
-    ?? firstHeaderValue(req.headers["x-real-ip"]);
-}
-
 function authenticate(req: IncomingMessage) {
   const token = bearerToken(req);
   if (!token) {
@@ -155,11 +143,14 @@ async function handleMcp(req: IncomingMessage, res: ServerResponse, anonymous: b
   if (!hostAllowed(req) || !requestOriginAllowed(req)) {
     return json(res, 403, { error: "forbidden", error_description: "Host or Origin is not allowed." }, corsHeaders(req));
   }
-  const clientIp = anonymous ? requesterIp(req) : null;
+  const anonymousRequester = anonymous ? anonymousMcpRequester(req) : null;
+  const clientIp = anonymousRequester?.ip ?? null;
   let token: string | undefined;
   let tokenHash: string;
   if (anonymous) {
-    tokenHash = sessions.hashToken(`anonymous:${clientIp ?? "unknown-requester"}`);
+    tokenHash = sessions.hashToken(light
+      ? anonymousSessionBinding(anonymousRequester!)
+      : `anonymous:${clientIp ?? "unknown-requester"}`);
   } else {
     const auth = authenticate(req);
     if (!auth.ok) {
@@ -188,6 +179,7 @@ async function handleMcp(req: IncomingMessage, res: ServerResponse, anonymous: b
       anonymousRequesterSecret: anonymous ? env.jwtSecret : undefined,
       baseUrl: env.CERTSCORE_BASE_URL,
       forwardedClientIp: clientIp,
+      anonymousSurface: light ? "mcp_light" : "mcp_anonymous",
       timeout: env.CERTSCORE_REQUEST_TIMEOUT_MS,
       toolProfile: light ? "light" : "full"
     });
@@ -237,9 +229,13 @@ async function handleMcp(req: IncomingMessage, res: ServerResponse, anonymous: b
   }
   const readCalls = mcpReadCallsFromJsonRpc(parsedBody);
   for (const readCall of readCalls) {
-    const decision = readThrottle.claim(tokenHash, readCall);
+    const caller = light && anonymousRequester?.network === "anthropic" && sessionId
+      ? sessions.hashToken(`anonymous-session:${sessionId}`)
+      : tokenHash;
+    const provider = light && anonymousRequester?.network === "anthropic" ? "anthropic" : undefined;
+    const decision = readThrottle.claim(caller, readCall, Date.now(), provider);
     if (!decision.allowed) {
-      const guidance = apiReadRateLimitGuidance(readCall.profile, decision.retryAfterSeconds);
+      const guidance = mcpReadRateLimitGuidance(readCall, decision, { anonymousLight: light && anonymous });
       console.warn(JSON.stringify({
         event: "mcp_http.scan_read_rate_limited",
         level: "warn",
@@ -268,16 +264,27 @@ async function handleMcp(req: IncomingMessage, res: ServerResponse, anonymous: b
           message: guidance.message,
           data: {
             code: "rate_limited",
+            accountUrl: guidance.accountUrl,
+            anonymousLightLimitChangedByAccount: guidance.anonymousLightLimitChangedByAccount,
+            equivalentRequestLimit: guidance.equivalentRequestLimit,
+            limitDescription: guidance.limitDescription,
             limitUnits: decision.limitUnits,
+            operationCostUnits: guidance.operationCostUnits,
             policyVersion: decision.policyVersion,
             profile: readCall.profile,
             recommendedNextAction: guidance.recommendedNextAction,
             requestedUnits: decision.requestedUnits,
             retryAfterSeconds: decision.retryAfterSeconds,
             scope: decision.scope,
+            scopeDescription: guidance.scopeDescription,
+            supportEmail: guidance.supportEmail,
+            tool: readCall.tool,
+            upgradeAvailable: guidance.upgradeAvailable,
+            upgradeMessage: guidance.upgradeMessage,
             usedUnits: decision.usedUnits,
             windowId: decision.windowId,
-            windowSeconds: decision.windowSeconds
+            windowSeconds: decision.windowSeconds,
+            windowDescription: guidance.windowDescription
           }
         }
       }, { ...corsHeaders(req), "Retry-After": String(decision.retryAfterSeconds) });

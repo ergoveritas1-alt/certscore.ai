@@ -43,10 +43,17 @@ test("Streamable HTTP runtime initializes, lists tools, enforces auth, CORS, and
   const secret = "mcp-http-integration-secret-long-enough";
   let forwardedClientIp: string | undefined;
   let apiAuthorization: string | undefined;
+  let anonymousSurface: string | undefined;
+  let anonymousRequesterIp: string | undefined;
+  let anonymousRequesterProof: string | undefined;
   const apiServer = createHttpServer((request, response) => {
+    const requestUrl = new URL(request.url ?? "/", apiOrigin);
     if (request.method === "POST" && request.url === "/api/v2/scans") {
       forwardedClientIp = request.headers["x-forwarded-for"]?.toString();
       apiAuthorization = request.headers.authorization;
+      anonymousSurface = request.headers["x-certscore-anonymous-surface"]?.toString();
+      anonymousRequesterIp = request.headers["x-certscore-anonymous-requester-ip"]?.toString();
+      anonymousRequesterProof = request.headers["x-certscore-anonymous-requester-proof"]?.toString();
       response.writeHead(202, { "content-type": "application/json" });
       response.end(JSON.stringify({
         type: "certscore_scan_job",
@@ -54,6 +61,80 @@ test("Streamable HTTP runtime initializes, lists tools, enforces auth, CORS, and
         scanId: "00000000-0000-4000-8000-000000000123",
         domain: "example.com",
         status: "queued"
+      }));
+      return;
+    }
+    if (request.method === "GET" && requestUrl.pathname === "/api/v2/scans/00000000-0000-4000-8000-000000000123") {
+      response.writeHead(200, { "content-type": "application/json" });
+      response.end(JSON.stringify({
+        type: "certscore_scan",
+        scanId: "00000000-0000-4000-8000-000000000123",
+        domain: "caltech.edu",
+        url: "https://caltech.edu/",
+        status: "completed",
+        score: 46,
+        coverage: { status: "partial" }
+      }));
+      return;
+    }
+    if (request.method === "GET" && requestUrl.pathname === "/api/v1/pulse" && requestUrl.searchParams.get("scanId")) {
+      response.writeHead(200, { "content-type": "application/json" });
+      response.end(JSON.stringify({
+        type: "certscore_pulse_summary",
+        scanId: "00000000-0000-4000-8000-000000000123",
+        domain: "caltech.edu",
+        summary: { score: 46 },
+        findings: [],
+        topFindings: [],
+        coverage: { limitations: ["Automated public-web scan only."] },
+        disclaimer: "Automated public-web observations for review."
+      }));
+      return;
+    }
+    if (request.method === "GET" && requestUrl.pathname.endsWith("/findings")) {
+      response.writeHead(200, { "content-type": "application/json" });
+      response.end(JSON.stringify({
+        type: "certscore_finding_list",
+        scanId: "00000000-0000-4000-8000-000000000123",
+        findings: [{
+          type: "certscore_finding",
+          id: "consent_reject_not_observed",
+          scanId: "00000000-0000-4000-8000-000000000123",
+          label: "First-layer reject control not observed",
+          criticality: "high",
+          confidence: "good",
+          plainEnglish: "The canonical consent assessment did not establish a same-layer reject control.",
+          evidence: { basis: "public_report_projection", summary: "Retained first-layer controls were assessed.", exampleCount: 1, examplesShown: 1, hasTimingAnchor: false, hasVendorAnchor: true },
+          reviewLenses: ["GDPR / ePrivacy"],
+          disclaimer: "Automated public-web observations for review."
+        }]
+      }));
+      return;
+    }
+    if (request.method === "GET" && requestUrl.pathname.endsWith("/pre-consent-cookies-trackers")) {
+      response.writeHead(200, { "content-type": "application/json" });
+      response.end(JSON.stringify({
+        type: "certscore_pre_consent_cookies_trackers",
+        scanId: "00000000-0000-4000-8000-000000000123",
+        domain: "caltech.edu",
+        summary: { rowCount: 1, trackerCount: 1, cookieCount: 1, requestCount: 1 },
+        rows: [{
+          id: "tracker:google-analytics",
+          kind: "tracker",
+          name: "Google Analytics",
+          vendor: "Google",
+          purpose: "Audience measurement",
+          category: "Analytics",
+          confidence: "high",
+          party: "third_party",
+          priority: "high",
+          domains: ["google-analytics.com"],
+          cookieDetails: [{ name: "_ga", domain: ".caltech.edu" }],
+          firstObservedAtMs: 928,
+          phase: "pre_consent",
+          observedBeforeConsent: true,
+          evidenceBasis: "public_report_projection"
+        }]
       }));
       return;
     }
@@ -135,7 +216,11 @@ test("Streamable HTTP runtime initializes, lists tools, enforces auth, CORS, and
     await client.close();
 
     const anonymousTransport = new StreamableHTTPClientTransport(new URL(`${origin}/mcp/anonymous`), {
-      requestInit: { headers: { "x-forwarded-for": "203.0.113.44" } }
+      requestInit: { headers: {
+        "cf-connecting-ip": "192.0.2.90",
+        "x-forwarded-for": "192.0.2.91, 203.0.113.44",
+        "x-real-ip": "192.0.2.92"
+      } }
     });
     const anonymousClient = new Client({ name: "certscore-anonymous-http-integration", version: "0.1.0" });
     await anonymousClient.connect(anonymousTransport);
@@ -145,11 +230,14 @@ test("Streamable HTTP runtime initializes, lists tools, enforces auth, CORS, and
     assert.equal(created.isError, undefined);
     assert.match(JSON.stringify(created), /anonymous-mcp-job/);
     assert.equal(forwardedClientIp, "203.0.113.44");
+    assert.equal(anonymousRequesterIp, "203.0.113.44");
+    assert.match(anonymousRequesterProof ?? "", /^[A-Za-z0-9_-]+$/);
+    assert.equal(anonymousSurface, "mcp_anonymous");
     assert.equal(apiAuthorization, undefined);
     await anonymousClient.close();
 
     const lightTransport = new StreamableHTTPClientTransport(new URL(`${origin}/mcp/light`), {
-      requestInit: { headers: { "x-forwarded-for": "203.0.113.45" } }
+      requestInit: { headers: { "x-forwarded-for": "160.79.104.9" } }
     });
     const lightClient = new Client({ name: "certscore-light-http-integration", version: "0.1.0" });
     await lightClient.connect(lightTransport);
@@ -159,7 +247,81 @@ test("Streamable HTTP runtime initializes, lists tools, enforces auth, CORS, and
     assert.equal(invalidLightScan.isError, true);
     assert.equal((invalidLightScan.structuredContent as { type?: string } | undefined)?.type, "certscore_tool_error");
     assert.equal(((invalidLightScan.structuredContent as { error?: { field?: string } } | undefined)?.error)?.field, "url");
+    const lightCreated = await lightClient.callTool({ name: "certscore_scan_site", arguments: { url: "https://example.com", waitForCompletion: false } });
+    assert.equal(lightCreated.isError, undefined);
+    assert.equal(anonymousSurface, "mcp_light");
+    assert.equal(anonymousRequesterIp, "160.79.104.9");
+
+    const completedBundle = await lightClient.callTool({
+      name: "certscore_get_scan_bundle",
+      arguments: { scanId: "00000000-0000-4000-8000-000000000123" }
+    });
+    assert.equal(completedBundle.isError, undefined, JSON.stringify(completedBundle));
+    assert.equal((completedBundle.structuredContent as { scoreLabel?: string })?.scoreLabel, "CertScore score");
+    const bundleContent = (completedBundle as { content?: Array<{ type: string; text?: string }> }).content ?? [];
+    const bundleText = bundleContent[0]?.type === "text" ? bundleContent[0].text ?? "" : "";
+    assert.match(bundleText, /Full report: https:\/\/certscore\.ai\/scan\/00000000-0000-4000-8000-000000000123/);
+    assert.match(bundleText, /First-layer reject control not observed/);
+    assert.match(bundleText, /Google Analytics/);
+    assert.match(bundleText, /cookies=_ga/);
+    assert.match(bundleText, /not legal advice, certification, or a compliance determination/i);
+
+    for (let index = 0; index < 29; index += 1) {
+      const result = await lightClient.callTool({
+        name: "certscore_get_scan_bundle",
+        arguments: { scanId: "00000000-0000-4000-8000-000000000123" }
+      });
+      assert.equal(result.isError, undefined);
+    }
+    assert.ok(lightTransport.sessionId);
+    const throttled = await fetch(`${origin}/mcp/light`, {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        "mcp-session-id": lightTransport.sessionId,
+        "x-forwarded-for": "160.79.104.9"
+      },
+      body: JSON.stringify({
+        jsonrpc: "2.0",
+        id: 9001,
+        method: "tools/call",
+        params: { name: "certscore_get_scan_bundle", arguments: { scanId: "00000000-0000-4000-8000-000000000123" } }
+      })
+    });
+    assert.equal(throttled.status, 429);
+    const retryAfter = Number(throttled.headers.get("retry-after"));
+    assert.ok(retryAfter > 0 && retryAfter <= 600);
+    const throttledBody = await throttled.json() as any;
+    assert.equal(throttledBody.error.code, -32029);
+    assert.equal(throttledBody.error.data.retryAfterSeconds, retryAfter);
+    assert.equal(throttledBody.error.data.scope, "callerTarget");
+    assert.match(throttledBody.error.message, new RegExp(`Retry after ${retryAfter} seconds`));
+    assert.match(throttledBody.error.message, /120 terminal-read units per 10-minute rolling window/i);
+    assert.match(throttledBody.error.message, /up to 30 bundle reads/i);
+    assert.match(throttledBody.error.message, /login\?mode=create_account/);
+    assert.match(throttledBody.error.message, /does not automatically change the anonymous Light MCP limit/i);
+    assert.match(throttledBody.error.data.recommendedNextAction, /one bounded retrieval/);
+    assert.equal(throttledBody.error.data.limitDescription, "120 terminal-read units per 10-minute rolling window");
+    assert.equal(throttledBody.error.data.scopeDescription, "this MCP session and scan");
+    assert.equal(throttledBody.error.data.operationCostUnits, 4);
+    assert.equal(throttledBody.error.data.equivalentRequestLimit, 30);
+    assert.equal(throttledBody.error.data.accountUrl, "https://certscore.ai/login?mode=create_account");
+    assert.equal(throttledBody.error.data.supportEmail, "support@certscore.ai");
+    assert.equal(throttledBody.error.data.upgradeAvailable, true);
+    assert.equal(throttledBody.error.data.anonymousLightLimitChangedByAccount, false);
     await lightClient.close();
+
+    const secondProviderTransport = new StreamableHTTPClientTransport(new URL(`${origin}/mcp/light`), {
+      requestInit: { headers: { "x-forwarded-for": "160.79.104.9" } }
+    });
+    const secondProviderClient = new Client({ name: "independent-claude-session", version: "0.1.0" });
+    await secondProviderClient.connect(secondProviderTransport);
+    const secondProviderBundle = await secondProviderClient.callTool({
+      name: "certscore_get_scan_bundle",
+      arguments: { scanId: "00000000-0000-4000-8000-000000000123" }
+    });
+    assert.equal(secondProviderBundle.isError, undefined);
+    await secondProviderClient.close();
 
     const invalidSession = await fetch(`${origin}/mcp`, {
       method: "POST",

@@ -1,7 +1,7 @@
 import { createHash } from "node:crypto";
 import { apiReadRateLimitGuidance } from "@website-signal-risk-scanner/shared";
 import { apiV2JsonResponse, buildApiV2Error } from "../../lib/api-v2/scan-resource";
-import { getPulseRequesterContext } from "../../lib/pulse/request";
+import { getPulseRequesterContext, trustedMcpInternalRead } from "../../lib/pulse/request";
 import type { PulseDetail } from "../../lib/pulse/types";
 import { claimPulseReadQuota } from "./repository";
 import type { PulseRetrievalProfile } from "./retrieval-quota";
@@ -33,6 +33,14 @@ export async function enforceApiV2ScanReadThrottle(input: {
 }) {
   const target = input.target ?? (input.scanId ? `scan:${input.scanId}` : null);
   if (!target) throw new Error("API v2 read throttling requires a scanId or target");
+  if (input.scanId) {
+    const allowedOperations = (input.profile ?? "terminal") === "status"
+      ? (["scan_site_wait", "scan_status"] as const)
+      : (["scan_site_wait", "scan_status", "scan_bundle"] as const);
+    if (trustedMcpInternalRead(input.request, { operations: allowedOperations, scanId: input.scanId })) {
+      return null;
+    }
+  }
   let decision: Awaited<ReturnType<typeof claimPulseReadQuota>>;
   try {
     decision = await claimPulseReadQuota({

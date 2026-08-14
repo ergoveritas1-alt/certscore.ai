@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { CertScoreError, type PulseResult } from "@certscore/sdk";
 import { mcpScanBundleOutputSchema } from "@certscore/api-contracts";
-import { boundEvidencePacket, buildScanBundle, explainFinding, exportFindings, limitPreConsentRows, paginateFindingList, toToolError, toToolResult, withMcpAgentGuidance } from "./tools.js";
+import { boundEvidencePacket, buildScanBundle, explainFinding, exportFindings, limitPreConsentRows, paginateFindingList, scanBundleText, toToolError, toToolResult, withMcpAgentGuidance } from "./tools.js";
 
 const report = {
   type: "certscore_pulse",
@@ -150,6 +150,17 @@ test("toToolResult returns concise text and structured content without duplicati
   assert.equal(result.content[0]?.text, "CertScore fixture. Full result is in structuredContent.");
 });
 
+test("guided scan and status TextContent exposes the canonical report URL from scanId", () => {
+  const result = toToolResult(withMcpAgentGuidance({
+    type: "certscore_scan_job",
+    scanId: "scan_123",
+    status: "running"
+  }));
+
+  assert.equal((result.structuredContent as Record<string, unknown>).reportUrl, "https://certscore.ai/scan/scan_123");
+  assert.match(result.content[0]?.type === "text" ? result.content[0].text : "", /full report=https:\/\/certscore\.ai\/scan\/scan_123/);
+});
+
 test("buildScanBundle honors the caller's byte budget", () => {
   const bundle = buildScanBundle({
     detail: "full",
@@ -179,6 +190,9 @@ test("buildScanBundle honors the caller's byte budget", () => {
   assert.equal((bundle.mcpMetadata as Record<string, unknown>).truncated, true);
   assert.equal((bundle.mcpMetadata as Record<string, unknown>).actualBytes, new TextEncoder().encode(JSON.stringify(bundle)).byteLength);
   assert.equal(typeof (bundle.mcpMetadata as Record<string, unknown>).truncationReason, "string");
+  assert.equal(bundle.preConsentCookiesTrackers.total, 20);
+  assert.equal(bundle.preConsentCookiesTrackers.returned, bundle.preConsentCookiesTrackers.rows.length);
+  assert.equal(bundle.preConsentCookiesTrackers.truncated, true);
 });
 
 test("buildScanBundle implements materially distinct detail modes", () => {
@@ -214,8 +228,11 @@ test("buildScanBundle implements materially distinct detail modes", () => {
   const full = buildScanBundle({ ...common, detail: "full" });
 
   assert.equal(summary.detail, "summary");
-  assert.equal(summary.findings.length, 0);
-  assert.ok(summary.mcpMetadata.omittedSections.includes("findings"));
+  assert.equal(summary.findings.length, 5);
+  assert.equal(summary.findingsMetadata.returned, 5);
+  assert.equal(summary.findingsMetadata.total, 8);
+  assert.equal(summary.findingsMetadata.truncated, true);
+  assert.ok(summary.mcpMetadata.omittedSections.includes("additionalFindings"));
   assert.equal(findings.detail, "findings");
   assert.equal(findings.findings.length, 8);
   assert.equal(findings.findings[0]?.detail, undefined);
@@ -226,6 +243,41 @@ test("buildScanBundle implements materially distinct detail modes", () => {
   assert.equal(full.detail, "full");
   assert.equal(full.evidenceSummary !== undefined, true);
   assert.equal(full.fullReport !== undefined, true);
+  assert.equal(summary.preConsentCookiesTrackers.returned, 1);
+  assert.equal(summary.preConsentCookiesTrackers.rows[0]?.evidenceClassification.basis, "public_report_projection");
+});
+
+test("summary groups exact duplicate finding labels while findings mode preserves canonical rows", () => {
+  const common = {
+    findings: {
+      type: "certscore_finding_list",
+      scanId: "scan_123",
+      findings: [
+        { ...publicFinding("decline_control", "First projected row."), label: "Decline consent control" },
+        { ...publicFinding("regulatory_decline_control", "Second projected row."), label: "Decline consent control" },
+        { ...publicFinding("tls", "TLS projected row."), label: "Valid SSL/TLS certificate" }
+      ]
+    },
+    preConsentCookiesTrackers: null,
+    report,
+    scan: {
+      type: "certscore_scan",
+      scanId: "scan_123",
+      domain: "example.com",
+      status: "completed",
+      score: 60
+    }
+  } as any;
+
+  const summary = buildScanBundle({ ...common, detail: "summary" });
+  const findings = buildScanBundle({ ...common, detail: "findings" });
+
+  assert.deepEqual(summary.findings.map((finding: Record<string, unknown>) => finding.label), [
+    "Decline consent control",
+    "Valid SSL/TLS certificate"
+  ]);
+  assert.deepEqual(summary.findingsMetadata, { shown: 2, returned: 2, total: 3, truncated: true });
+  assert.equal(findings.findings.length, 3);
 });
 
 test("findings and evidence modes preserve useful content at the 5000-byte minimum", () => {
@@ -352,6 +404,165 @@ test("terminal status guidance always includes a complete actionable error", () 
   assert.equal(noGo.error?.retryable, false);
   assert.equal(noGo.error?.retryAfterSeconds, null);
   assert.match(noGo.observationOnlyDisclaimer, /not proof of compliance/i);
+});
+
+test("scan bundle text exposes compact row evidence, neutral score terminology, provenance, and legal framing", () => {
+  const bundle = buildScanBundle({
+    detail: "summary",
+    findings: { type: "certscore_finding_list", scanId: "scan_123", findings: [] },
+    preConsentCookiesTrackers: {
+      type: "certscore_pre_consent_cookies_trackers",
+      scanId: "scan_123",
+      domain: "cnn.com",
+      summary: { rowCount: 1, trackerCount: 1, cookieCount: 1, requestCount: 1 },
+      rows: [{
+        id: "tracker:bombora",
+        kind: "tracker",
+        name: "Bombora",
+        vendor: "Bombora",
+        purpose: "Advertising",
+        category: "Advertising",
+        confidence: "high",
+        party: "third_party",
+        priority: "high",
+        domains: ["cdn.ml314.com"],
+        cookieDetails: [{ name: "visitor_id", domain: "ml314.com" }],
+        firstObservedAtMs: 1698,
+        phase: "pre_consent",
+        observedBeforeConsent: true,
+        evidenceBasis: "public_report_projection"
+      }]
+    },
+    report,
+    scan: {
+      type: "certscore_scan",
+      scanId: "scan_123",
+      domain: "cnn.com",
+      status: "completed",
+      score: 56
+    }
+  } as any);
+  const text = scanBundleText(bundle);
+
+  assert.match(text, /CertScore score=56/);
+  assert.doesNotMatch(text, /compliance score/i);
+  assert.match(text, /provenance: existing_scan_retrieved/i);
+  assert.match(text, /Full report: https:\/\/certscore\.ai\/scan\/scan_123/);
+  assert.match(text, /tracker: Bombora/);
+  assert.match(text, /cookies=visitor_id/);
+  assert.match(text, /first observed=1\.698s/);
+  assert.match(text, /public_report_projection\/pre_consent\/third_party/);
+  assert.match(text, /automated public-web observations for human review/i);
+  assert.match(text, /not legal advice, certification, or a compliance determination/i);
+  assert.match(text, /observable public-web scan signals only/i);
+  assert.match(text, /Do not infer technologies that are not listed/i);
+  assert.doesNotMatch(text, /compliance score|compliant baseline/i);
+  assert.ok(text.length <= 8_000);
+});
+
+test("default scan bundle exposes cross-domain projected findings and canonical overview facts in TextContent", () => {
+  const finding = (id: string, label: string, plainEnglish: string) => ({
+    ...publicFinding(id, plainEnglish),
+    label
+  });
+  const bundle = buildScanBundle({
+    detail: "summary",
+    findings: {
+      type: "certscore_finding_list",
+      scanId: "scan_123",
+      findings: [
+        finding("consent_reject_not_observed", "First-layer reject control not observed", "The retained canonical consent assessment did not establish a same-layer reject control."),
+        finding("transport_security_tls_certificate", "Valid SSL/TLS certificate", "The strict TLS probe did not verify a valid certificate chain."),
+        finding("gdpr_transparency_legal_basis", "Processing legal-basis language", "The retained policy projection surfaced a legal-basis disclosure review signal."),
+        finding("social_media_embed_pre_consent", "Social/media embeds loaded before consent", "An Instagram asset was observed before any recorded consent action.")
+      ]
+    },
+    preConsentCookiesTrackers: null,
+    report: {
+      ...report,
+      executiveSummary: {
+        consentPlatform: "TrustArc",
+        cookiesPreConsent: 2,
+        nonEssentialPreConsentStorage: 2,
+        thirdPartyRequests: 19,
+        trackerFootprint: { domains: 8, vendors: 8 },
+        policySurfaces: [{ type: "privacy_policy", title: "Privacy Notice", url: "https://example.com/privacy" }],
+        score: 46
+      }
+    },
+    scan: {
+      type: "certscore_scan",
+      scanId: "scan_123",
+      domain: "caltech.edu",
+      status: "completed",
+      score: 46,
+      coverage: { status: "partial", summary: "Automated public-web scan completed with coverage limitations." }
+    }
+  } as any);
+  const text = scanBundleText(bundle);
+
+  assert.equal(bundle.findingsMetadata.returned, 4);
+  assert.equal(bundle.findingsMetadata.total, 4);
+  assert.equal(bundle.findingsMetadata.truncated, false);
+  assert.equal(bundle.summary.executiveSummary.consentPlatform, "TrustArc");
+  assert.equal(bundle.summary.executiveSummary.preConsentStorageAssessment, undefined);
+  assert.equal(bundle.reportUrl, "https://certscore.ai/scan/scan_123");
+  assert.match(text, /Full report: https:\/\/certscore\.ai\/scan\/scan_123/);
+  assert.match(text, /CMP\/consent platform=TrustArc/);
+  assert.match(text, /First-layer reject control not observed/);
+  assert.match(text, /Valid SSL\/TLS certificate/);
+  assert.match(text, /Processing legal-basis language/);
+  assert.match(text, /Social\/media embeds loaded before consent/);
+  assert.match(text, /already-projected review signals, not inferred technologies or legal conclusions/i);
+  assert.doesNotMatch(text, /compliance score|compliant baseline/i);
+  assert.ok(text.length <= 8_000);
+  assert.doesNotThrow(() => mcpScanBundleOutputSchema.parse(bundle));
+});
+
+test("scan bundle text remains bounded while preserving interpretation guidance", () => {
+  const bundle = buildScanBundle({
+    detail: "summary",
+    findings: { type: "certscore_finding_list", scanId: "scan_123", findings: [] },
+    maxBytes: 50_000,
+    maxPreConsentRows: 50,
+    preConsentCookiesTrackers: {
+      type: "certscore_pre_consent_cookies_trackers",
+      scanId: "scan_123",
+      domain: "example.com",
+      summary: { rowCount: 50, trackerCount: 50, cookieCount: 50, requestCount: 50 },
+      rows: Array.from({ length: 50 }, (_, index) => ({
+        id: `tracker_${index}`,
+        kind: "tracker",
+        name: `Observed Tracker ${index}`,
+        vendor: `Observed Vendor ${index}`,
+        purpose: "Audience measurement",
+        category: "Analytics",
+        confidence: "high",
+        party: "third_party",
+        priority: "high",
+        domains: [`tracker-${index}.example.test`, `collect-${index}.example.test`],
+        cookieDetails: [{ name: `cookie_${index}`, domain: "example.test" }],
+        firstObservedAtMs: 1_000 + index,
+        phase: "pre_consent",
+        observedBeforeConsent: true,
+        evidenceBasis: "public_report_projection"
+      }))
+    },
+    report,
+    scan: {
+      type: "certscore_scan",
+      scanId: "scan_123",
+      domain: "example.com",
+      status: "completed",
+      score: 60
+    }
+  } as any);
+  const text = scanBundleText(bundle);
+
+  assert.ok(text.length <= 8_000);
+  assert.match(text, /additional returned pre-consent rows? .*omitted from TextContent/i);
+  assert.match(text, /automated public-web observations for human review/i);
+  assert.match(text, /Do not infer technologies that are not listed/i);
 });
 
 test("toToolError marks CertScoreError results as MCP errors and truncates response bodies", () => {

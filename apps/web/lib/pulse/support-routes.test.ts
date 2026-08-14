@@ -523,7 +523,8 @@ test("Light MCP onboarding is no-auth, copyable, and agent-complete", () => {
     assert.match(source, /https:\/\/mcp\.certscore\.ai\/mcp\/light/);
     assert.match(source, /Streamable HTTP/);
     assert.match(source, /browser login/);
-    assert.match(source, /20 new scans per requester IP per UTC day/);
+    assert.match(source, /50 (?:genuinely )?new scans per UTC day across (?:the public )?Light/i);
+    assert.match(source, /5[^\n]{0,80}rolling 10(?:-minute| minutes)/i);
     assert.match(source, /reused eligible results do not consume quota|Reused eligible results do not consume quota/i);
     assert.ok(source.includes(setupCommand));
     assert.ok(source.includes(firstRunPrompt));

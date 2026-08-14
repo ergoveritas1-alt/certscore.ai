@@ -28,8 +28,8 @@ import { runLocalV2DagDispatch, type LocalV2DagDispatchContext } from "./local-v
 import { resolveRecentScanReuseDecision, RECENT_SCAN_REUSE_WINDOW_HOURS } from "./recent-scan-reuse";
 import { logScanRequestFailure, recordScanRequest } from "./scan-request-log";
 import { lookupTrancoRankMetadata } from "./tranco-rank-metadata";
-import { AnonymousScanQuotaError } from "../pulse/anonymous-scan-quota";
-import { claimAnonymousScanDailyQuota } from "../pulse/repository";
+import { AnonymousScanQuotaError, lightMcpScanRequesterKey } from "../pulse/anonymous-scan-quota";
+import { claimAnonymousScanDailyQuota, claimLightMcpNewScanQuota } from "../pulse/repository";
 import {
   normalizeScanRequesterIpContext,
   type ScanRequesterIpContext
@@ -178,9 +178,16 @@ export async function createAnonymousFullScan(input: {
   }
 
   if (input.countAnonymousQuota !== false) {
-    const quota = await claimAnonymousScanDailyQuota({
-      ipHash: requesterIpContext.ipHash ?? input.provenance?.originIp
+    const isLightMcp = requesterIpContext.anonymousMcpSurface === "mcp_light";
+    const lightRequesterKey = lightMcpScanRequesterKey({
+      ipHash: requesterIpContext.ipHash ?? input.provenance?.originIp,
+      network: requesterIpContext.anonymousRequesterNetwork
     });
+    const quota = isLightMcp
+      ? await claimLightMcpNewScanQuota({ requesterKey: lightRequesterKey })
+      : await claimAnonymousScanDailyQuota({
+          ipHash: requesterIpContext.ipHash ?? input.provenance?.originIp
+        });
     if (!quota.allowed) {
       await recordScanRequest({
         normalizedDomain: input.hostname,
@@ -202,7 +209,14 @@ export async function createAnonymousFullScan(input: {
         status: "rejected"
       }).catch((error) => logScanRequestFailure("anonymous_daily_quota", error));
 
-      throw new AnonymousScanQuotaError(quota.retryAfterSeconds);
+      throw new AnonymousScanQuotaError(quota.retryAfterSeconds, {
+        lightMcp: isLightMcp,
+        ...("limit" in quota ? {
+          limit: quota.limit,
+          scope: quota.scope,
+          window: quota.window
+        } : {})
+      });
     }
   }
 

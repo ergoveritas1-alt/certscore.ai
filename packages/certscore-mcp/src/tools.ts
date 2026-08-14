@@ -6,7 +6,22 @@ export const MAX_EVIDENCE_PACKET_CHARS = 250_000;
 const EVIDENCE_STRING_CHARS = 4_000;
 const EVIDENCE_ARRAY_ITEMS = 40;
 const EVIDENCE_OBJECT_KEYS = 80;
-const OBSERVATION_ONLY_DISCLAIMER = "Observation only: no-go, not-observed, and limited-coverage results are not proof of compliance.";
+const MAX_TOOL_TEXT_CHARS = 8_000;
+const LEGAL_REVIEW_DISCLAIMER = "CertScore results are automated public-web observations for human review, not legal advice, certification, or a compliance determination.";
+const INTERPRETATION_STATEMENT = "The CertScore score covers observable public-web scan signals only. Do not infer technologies that are not listed in the returned evidence or any legal compliance status.";
+const OBSERVATION_ONLY_DISCLAIMER = `${LEGAL_REVIEW_DISCLAIMER} No-go, not-observed, and limited-coverage results are not proof of compliance.`;
+
+type ScanProvenanceMode = "new_scan_started" | "existing_completed_scan_reused" | "existing_scan_retrieved" | "unknown";
+
+function interpretationGuidance() {
+  return {
+    scoreLabel: "CertScore score" as const,
+    observableSignalsOnly: true as const,
+    doNotInferUnobservedTechnologies: true as const,
+    doNotInferLegalComplianceStatus: true as const,
+    statement: INTERPRETATION_STATEMENT
+  };
+}
 
 type ActionableError = {
   code: string;
@@ -26,11 +41,31 @@ function toolResultSummary(payload: unknown) {
   const type = typeof record.type === "string" ? record.type : "result";
   const status = typeof record.status === "string" ? `; status=${record.status}` : "";
   const scanId = typeof record.scanId === "string" ? `; scanId=${record.scanId}` : "";
-  const score = typeof record.score === "number" ? `; score=${record.score}` : "";
-  return `CertScore ${type}${status}${scanId}${score}. Full result is in structuredContent.`;
+  const score = typeof record.score === "number" ? `; CertScore score=${record.score}` : "";
+  const recordLinks = record.links && typeof record.links === "object" && !Array.isArray(record.links)
+    ? record.links as Record<string, unknown>
+    : null;
+  const stableScanId = typeof record.scanId === "string" && record.scanId.trim()
+    ? record.scanId.trim()
+    : typeof record.scan_id === "string" && record.scan_id.trim()
+      ? record.scan_id.trim()
+      : null;
+  const reportUrl = typeof record.reportUrl === "string" && record.reportUrl.trim()
+    ? record.reportUrl.trim()
+    : typeof recordLinks?.report === "string" && recordLinks.report.trim()
+      ? recordLinks.report.trim()
+      : stableScanId
+        ? `https://certscore.ai/scan/${encodeURIComponent(stableScanId)}`
+        : null;
+  const report = reportUrl ? `; full report=${reportUrl}` : "";
+  const provenanceRecord = record.provenance && typeof record.provenance === "object" && !Array.isArray(record.provenance)
+    ? record.provenance as Record<string, unknown>
+    : null;
+  const provenance = typeof provenanceRecord?.mode === "string" ? `; provenance=${provenanceRecord.mode}` : "";
+  return `CertScore ${type}${status}${scanId}${score}${provenance}${report}. Full result is in structuredContent.`;
 }
 
-export function toToolResult(payload: unknown): CallToolResult {
+export function toToolResult(payload: unknown, text?: string): CallToolResult {
   const structuredContent = payload !== null && typeof payload === "object" && !Array.isArray(payload)
     ? payload as Record<string, unknown>
     : { value: payload };
@@ -39,7 +74,7 @@ export function toToolResult(payload: unknown): CallToolResult {
     content: [
       {
         type: "text",
-        text: toolResultSummary(payload)
+        text: text ?? toolResultSummary(payload)
       }
     ]
   };
@@ -120,6 +155,9 @@ export function toInvalidArgumentsToolError(errorMessage: string): CallToolResul
         type: "certscore_tool_error",
         status: "invalid_arguments",
         error,
+        scoreLabel: "CertScore score",
+        provenance: scanProvenance({}, "unknown"),
+        interpretationGuidance: interpretationGuidance(),
         recommendedNextTool: null,
         recommendedNextAction,
         observationOnlyDisclaimer: OBSERVATION_ONLY_DISCLAIMER
@@ -188,7 +226,30 @@ function terminalErrorForResult(value: Record<string, any>): ActionableError | n
   return fallback[String(value.status)] ?? null;
 }
 
-export function withMcpAgentGuidance<T extends Record<string, any>>(value: T): T & {
+function scanProvenance(value: Record<string, any>, fallbackMode: ScanProvenanceMode): {
+  mode: ScanProvenanceMode;
+  executionMode: "new_scan" | "reused_scan" | null;
+  reused: boolean | null;
+  freshnessDecision: string | null;
+} {
+  const executionMode = value.executionMode === "new_scan" || value.executionMode === "reused_scan"
+    ? value.executionMode
+    : null;
+  const reused = typeof value.reused === "boolean" ? value.reused : executionMode === "reused_scan" ? true : executionMode === "new_scan" ? false : null;
+  const mode = executionMode === "new_scan"
+    ? "new_scan_started"
+    : executionMode === "reused_scan" || reused === true
+      ? "existing_completed_scan_reused"
+      : fallbackMode;
+  return {
+    mode,
+    executionMode,
+    reused,
+    freshnessDecision: typeof value.freshnessDecision === "string" ? value.freshnessDecision : null
+  };
+}
+
+export function withMcpAgentGuidance<T extends Record<string, any>>(value: T, fallbackProvenanceMode: ScanProvenanceMode = "unknown"): T & {
   error: ActionableError | null;
   observationOnlyDisclaimer: string;
 } {
@@ -196,9 +257,25 @@ export function withMcpAgentGuidance<T extends Record<string, any>>(value: T): T
   const active = status === "queued" || status === "running" || status === "finalizing";
   const usable = status === "completed" || status === "completed_limited";
   const error = terminalErrorForResult(value);
+  const stableScanId = typeof value.scanId === "string" && value.scanId.trim()
+    ? value.scanId.trim()
+    : typeof value.scan_id === "string" && value.scan_id.trim()
+      ? value.scan_id.trim()
+      : null;
+  const reportUrl = typeof value.reportUrl === "string" && value.reportUrl.trim()
+    ? value.reportUrl.trim()
+    : typeof value.links?.report === "string" && value.links.report.trim()
+      ? value.links.report.trim()
+      : stableScanId
+        ? `https://certscore.ai/scan/${encodeURIComponent(stableScanId)}`
+        : null;
   return {
     ...value,
     error,
+    reportUrl,
+    scoreLabel: "CertScore score",
+    provenance: scanProvenance(value, fallbackProvenanceMode),
+    interpretationGuidance: interpretationGuidance(),
     recommendedNextTool: active ? "certscore_get_scan_status" : usable ? "certscore_get_scan_bundle" : null,
     recommendedNextAction: error?.recommendedNextAction ?? value.recommendedNextAction ?? (active
       ? `Poll certscore_get_scan_status with scanId ${value.scanId ?? value.jobId} after the recommended delay.`
@@ -308,6 +385,20 @@ function compactBundleFinding(finding: Record<string, any>) {
     },
     ...(finding.nextStep !== undefined ? { nextStep: boundedText(finding.nextStep, 180) } : {})
   };
+}
+
+function distinctSummaryFindings(findings: Record<string, any>[]) {
+  const labels = new Set<string>();
+  return findings.filter((finding) => {
+    const key = typeof finding.label === "string" && finding.label.trim().length > 0
+      ? finding.label.trim().toLocaleLowerCase()
+      : typeof finding.id === "string"
+        ? finding.id
+        : JSON.stringify(finding);
+    if (labels.has(key)) return false;
+    labels.add(key);
+    return true;
+  });
 }
 
 function compactPriorityEvidenceSummary(summary: Record<string, any>) {
@@ -616,6 +707,222 @@ export function limitPreConsentRows<T extends Record<string, unknown>>(
   } as T;
 }
 
+function uniqueBoundedStrings(values: unknown[], maxItems: number, maxChars: number) {
+  return [...new Set(values.filter((value): value is string => typeof value === "string" && value.length > 0).map((value) => value.slice(0, maxChars)))].slice(0, maxItems);
+}
+
+function compactPreConsentRow(row: Record<string, any>) {
+  const cookieDetails = Array.isArray(row.cookieDetails) ? row.cookieDetails : [];
+  const domains = uniqueBoundedStrings([
+    ...(Array.isArray(row.domains) ? row.domains : []),
+    row.host,
+    row.registrableDomain
+  ], 12, 253);
+  const purposes = Array.isArray(row.purposes) ? row.purposes : [];
+  return {
+    id: String(row.id ?? `${row.kind ?? "unknown"}:${row.name ?? row.vendor ?? row.host ?? "observed-item"}`).slice(0, 512),
+    kind: ["cookie", "tracker", "request", "storage"].includes(row.kind) ? row.kind : "unknown",
+    name: String(row.name ?? row.vendor ?? row.host ?? "Observed item").slice(0, 256),
+    cookieNames: uniqueBoundedStrings(cookieDetails.map((cookie) => cookie && typeof cookie === "object" ? cookie.name : null), 24, 256),
+    vendor: typeof row.vendor === "string" ? row.vendor.slice(0, 160) : null,
+    purpose: typeof row.purpose === "string" ? row.purpose.slice(0, 160) : typeof purposes[0] === "string" ? purposes[0].slice(0, 160) : null,
+    category: typeof row.category === "string" ? row.category.slice(0, 160) : null,
+    confidence: ["high", "medium", "low"].includes(row.confidence) ? row.confidence : "unknown",
+    firstObservedAtMs: Number.isInteger(row.firstObservedAtMs) && row.firstObservedAtMs >= 0 ? row.firstObservedAtMs : null,
+    domains,
+    requestCount: Number.isInteger(row.requestCount) && row.requestCount >= 0 ? row.requestCount : null,
+    evidenceClassification: {
+      basis: "public_report_projection",
+      phase: "pre_consent",
+      observedBeforeConsent: row.observedBeforeConsent !== false,
+      party: ["first_party", "third_party", "mixed"].includes(row.party) ? row.party : "unknown",
+      priority: ["high", "medium", "review_needed", "contextual"].includes(row.priority) ? row.priority : "unknown"
+    }
+  };
+}
+
+function preConsentBundleSection(payload: PreConsentCookiesTrackers, maxRows: number) {
+  const sourceRows = Array.isArray(payload.rows) ? payload.rows : [];
+  const total = Math.max(sourceRows.length, Number.isInteger(payload.summary?.rowCount) ? payload.summary.rowCount : 0);
+  const rows = sourceRows.slice(0, maxRows).map((row) => compactPreConsentRow(row as Record<string, any>));
+  return {
+    summary: {
+      rowCount: total,
+      trackerCount: Number.isInteger(payload.summary?.trackerCount) ? payload.summary.trackerCount : 0,
+      cookieCount: Number.isInteger(payload.summary?.cookieCount) ? payload.summary.cookieCount : 0,
+      requestCount: Number.isInteger(payload.summary?.requestCount) ? payload.summary.requestCount : 0,
+      vendorCount: Number.isInteger(payload.summary?.vendorCount) ? payload.summary.vendorCount : 0,
+      domainCount: Number.isInteger(payload.summary?.domainCount) ? payload.summary.domainCount : 0
+    },
+    rows,
+    total,
+    returned: rows.length,
+    truncated: total > rows.length
+  };
+}
+
+function neutralExecutiveSummary(value: unknown) {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    return null;
+  }
+  const summary = value as Record<string, any>;
+  const score = typeof summary.score === "number" ? summary.score : null;
+  const scoreMetadata = summary.scoreMetadata && typeof summary.scoreMetadata === "object" && !Array.isArray(summary.scoreMetadata)
+    ? { ...summary.scoreMetadata, metricLabel: "CertScore score" }
+    : summary.scoreMetadata;
+  const trackerFootprint = summary.trackerFootprint && typeof summary.trackerFootprint === "object" && !Array.isArray(summary.trackerFootprint)
+    ? Object.fromEntries(Object.entries(summary.trackerFootprint).filter(([, entry]) => typeof entry === "number" || entry === null))
+    : undefined;
+  const policySurfaces = Array.isArray(summary.policySurfaces)
+    ? summary.policySurfaces.slice(0, 5).flatMap((surface: unknown) => {
+        if (!surface || typeof surface !== "object" || Array.isArray(surface)) return [];
+        const row = surface as Record<string, unknown>;
+        return [{
+          type: boundedText(row.type, 80),
+          title: boundedText(row.title, 160),
+          url: boundedText(row.url, 2_048)
+        }];
+      })
+    : undefined;
+  return {
+    completionSummary: boundedText(summary.completionSummary, 280),
+    domain: boundedText(summary.domain, 253),
+    score,
+    scoreLabel: score === null ? "CertScore score" : `CertScore score: ${score}/100`,
+    ...(scoreMetadata ? { scoreMetadata } : {}),
+    riskLevel: summary.riskLevel,
+    actionLabel: summary.actionLabel,
+    issuesToReview: summary.issuesToReview,
+    thirdPartyRequests: summary.thirdPartyRequests,
+    trackingClassifiedThirdPartyRequests: summary.trackingClassifiedThirdPartyRequests,
+    cookiesPreConsent: summary.cookiesPreConsent,
+    nonEssentialPreConsentStorage: summary.nonEssentialPreConsentStorage,
+    unclassifiedPreConsentStorageCount: summary.unclassifiedPreConsentStorageCount,
+    storageMetricLabel: boundedText(summary.storageMetricLabel, 120),
+    storageMetricScope: boundedText(summary.storageMetricScope, 120),
+    storageMetricStatus: boundedText(summary.storageMetricStatus, 120),
+    storageMetricExplanation: boundedText(summary.storageMetricExplanation, 280),
+    consentPlatform: boundedText(summary.consentPlatform, 160),
+    ...(trackerFootprint ? { trackerFootprint } : {}),
+    ...(policySurfaces ? { policySurfaces } : {}),
+    scanTimeSeconds: summary.scanTimeSeconds
+  };
+}
+
+function findingText(finding: Record<string, any>) {
+  const evidence = finding.evidence && typeof finding.evidence === "object" && !Array.isArray(finding.evidence)
+    ? finding.evidence as Record<string, unknown>
+    : {};
+  const lenses = Array.isArray(finding.reviewLenses) && finding.reviewLenses.length > 0
+    ? finding.reviewLenses.slice(0, 2).join(", ")
+    : "not classified";
+  return `- ${finding.label ?? finding.id ?? "Projected finding"}; criticality=${finding.criticality ?? "unknown"}; confidence=${finding.confidence ?? "unknown"}; observation=${finding.plainEnglish ?? evidence.summary ?? "No compact description available"}; evidence=${evidence.basis ?? "unknown"}/${evidence.phase ?? "phase unknown"}: ${evidence.summary ?? "No compact evidence summary available"}; review lenses=${lenses}.`;
+}
+
+function executiveOverviewText(summary: Record<string, any> | null | undefined) {
+  if (!summary) return null;
+  const tracker = summary.trackerFootprint && typeof summary.trackerFootprint === "object" && !Array.isArray(summary.trackerFootprint)
+    ? summary.trackerFootprint as Record<string, unknown>
+    : {};
+  const policies = Array.isArray(summary.policySurfaces)
+    ? summary.policySurfaces.flatMap((surface: unknown) => {
+        if (!surface || typeof surface !== "object" || Array.isArray(surface)) return [];
+        const row = surface as Record<string, unknown>;
+        return typeof row.title === "string" ? [row.title] : typeof row.type === "string" ? [row.type] : [];
+      }).slice(0, 5)
+    : [];
+  const values = [
+    `CMP/consent platform=${summary.consentPlatform ?? "not returned"}`,
+    `third-party requests=${summary.thirdPartyRequests ?? "unknown"}`,
+    `non-essential pre-consent storage=${summary.nonEssentialPreConsentStorage ?? summary.cookiesPreConsent ?? "unknown"}`,
+    `tracker vendors=${tracker.vendors ?? "unknown"}`,
+    `tracker domains=${tracker.domains ?? "unknown"}`,
+    `policy surfaces=${policies.length > 0 ? policies.join(", ") : "none returned"}`
+  ];
+  return `Canonical report overview: ${values.join("; ")}.`;
+}
+
+function preConsentRowText(row: Record<string, any>) {
+  const cookieNames = Array.isArray(row.cookieNames) && row.cookieNames.length > 0
+    ? `; cookies=${row.cookieNames.slice(0, 8).join(", ")}${row.cookieNames.length > 8 ? ", …" : ""}`
+    : "";
+  const domains = Array.isArray(row.domains) && row.domains.length > 0
+    ? `; domains=${row.domains.slice(0, 4).join(", ")}${row.domains.length > 4 ? ", …" : ""}`
+    : "";
+  const timing = typeof row.firstObservedAtMs === "number" ? `${(row.firstObservedAtMs / 1_000).toFixed(3)}s` : "unknown";
+  const classification = row.evidenceClassification && typeof row.evidenceClassification === "object"
+    ? row.evidenceClassification as Record<string, unknown>
+    : {};
+  return `- ${row.kind}: ${row.name}${cookieNames}; vendor=${row.vendor ?? "unknown"}; purpose=${row.purpose ?? "unknown"}; category=${row.category ?? "unknown"}; first observed=${timing}${domains}; evidence=${classification.basis ?? "unknown"}/${classification.phase ?? "unknown"}/${classification.party ?? "unknown"}; observedBeforeConsent=${classification.observedBeforeConsent ?? "unknown"}; priority=${classification.priority ?? "unknown"}; confidence=${row.confidence ?? "unknown"}.`;
+}
+
+export function scanBundleText(bundle: Record<string, any>) {
+  const score = typeof bundle.score === "number" ? `; CertScore score=${bundle.score}` : "";
+  const footer = [OBSERVATION_ONLY_DISCLAIMER, INTERPRETATION_STATEMENT];
+  const lines = [
+    `CertScore scan bundle for ${bundle.domain ?? "unknown domain"}; status=${bundle.status ?? "unknown"}${score}; scanId=${bundle.scanId ?? "unknown"}.`,
+    `Provenance: ${bundle.provenance?.mode ?? "unknown"}.`,
+    `Full report: ${bundle.reportUrl ?? (bundle.scanId ? `https://certscore.ai/scan/${encodeURIComponent(String(bundle.scanId))}` : "not available")}.`
+  ];
+  const canAppend = (line: string) => [...lines, line, ...footer].join("\n").length <= MAX_TOOL_TEXT_CHARS;
+  const append = (line: string) => {
+    if (!canAppend(line)) return false;
+    lines.push(line);
+    return true;
+  };
+  const coverage = bundle.coverage && typeof bundle.coverage === "object" && !Array.isArray(bundle.coverage)
+    ? bundle.coverage as Record<string, unknown>
+    : null;
+  if (coverage) {
+    append(`Coverage: status=${coverage.status ?? "unknown"}; ${coverage.summary ?? "Review limitations before interpreting absence."}`);
+  }
+  const overview = executiveOverviewText(bundle.summary?.executiveSummary);
+  if (overview) append(overview);
+
+  const findings = Array.isArray(bundle.findings) ? bundle.findings : [];
+  const findingTotal = bundle.findingsMetadata?.total ?? findings.length;
+  const findingReturned = bundle.findingsMetadata?.returned ?? bundle.findingsMetadata?.shown ?? findings.length;
+  append(`Canonical projected findings: ${findingReturned} of ${findingTotal} returned${bundle.findingsMetadata?.truncated ? " (truncated)" : ""}. These are already-projected review signals, not inferred technologies or legal conclusions.`);
+  let findingsRendered = 0;
+  for (const [index, finding] of findings.entries()) {
+    const next = findingText(finding);
+    const remaining = findings.length - index - 1;
+    const reserve = remaining > 0
+      ? `${remaining} additional returned finding${remaining === 1 ? " was" : "s were"} omitted from TextContent to preserve the size limit; see structuredContent or the report URL.`
+      : null;
+    if ([...lines, next, ...(reserve ? [reserve] : []), ...footer].join("\n").length > MAX_TOOL_TEXT_CHARS) break;
+    lines.push(next);
+    findingsRendered += 1;
+  }
+  if (findingsRendered < findings.length) {
+    append(`${findings.length - findingsRendered} additional returned finding${findings.length - findingsRendered === 1 ? " was" : "s were"} omitted from TextContent to preserve the size limit; see structuredContent or the report URL.`);
+  }
+
+  const inventory = bundle.preConsentCookiesTrackers;
+  if (inventory && typeof inventory === "object") {
+    append(`Pre-consent cookie/tracker evidence: ${inventory.returned ?? 0} of ${inventory.total ?? 0} rows returned${inventory.truncated ? " (truncated)" : ""}.`);
+    const rows = Array.isArray(inventory.rows) ? inventory.rows : [];
+    let rowsRendered = 0;
+    for (const [index, row] of rows.entries()) {
+      const next = preConsentRowText(row);
+      const remaining = rows.length - index - 1;
+      const reserve = remaining > 0
+        ? `${remaining} additional returned pre-consent row${remaining === 1 ? " was" : "s were"} omitted from TextContent to preserve the size limit; see structuredContent or the report URL.`
+        : null;
+      if ([...lines, next, ...(reserve ? [reserve] : []), ...footer].join("\n").length > MAX_TOOL_TEXT_CHARS) break;
+      lines.push(next);
+      rowsRendered += 1;
+    }
+    if (rowsRendered < rows.length) {
+      append(`${rows.length - rowsRendered} additional returned pre-consent row${rows.length - rowsRendered === 1 ? " was" : "s were"} omitted from TextContent to preserve the size limit; see structuredContent or the report URL.`);
+    }
+  } else {
+    append("No row-level pre-consent inventory was available for this result; review coverage and limitations before interpreting absence.");
+  }
+  lines.push(...footer);
+  return lines.join("\n");
+}
+
 export function buildScanBundle(input: {
   detail?: "summary" | "findings" | "evidence" | "full";
   evidence?: PulseResult | null;
@@ -633,12 +940,13 @@ export function buildScanBundle(input: {
   const evidence = (input.evidence ?? {}) as Record<string, unknown>;
   const report = (input.report ?? {}) as Record<string, unknown>;
   const allFindings = Array.isArray(input.findings.findings) ? input.findings.findings : [];
-  const findings = detail === "summary"
-    ? []
-    : allFindings.slice(0, maxFindings).map((finding) => detail === "full" ? finding : compactBundleFinding(finding));
-  const preConsentRows = Array.isArray(input.preConsentCookiesTrackers?.rows)
-    ? input.preConsentCookiesTrackers.rows.slice(0, maxPreConsentRows)
-    : [];
+  const selectedFindings = detail === "summary" ? distinctSummaryFindings(allFindings) : allFindings;
+  const findings = selectedFindings
+    .slice(0, maxFindings)
+    .map((finding) => detail === "full" ? finding : compactBundleFinding(finding));
+  const preConsentCookiesTrackers = input.preConsentCookiesTrackers
+    ? preConsentBundleSection(input.preConsentCookiesTrackers, maxPreConsentRows)
+    : null;
   const links: Record<string, unknown> = {
     ...(input.scan.links ?? {}),
     ...(report.links && typeof report.links === "object" && !Array.isArray(report.links) ? report.links : {})
@@ -651,7 +959,7 @@ export function buildScanBundle(input: {
     preConsentCookiesTrackers: links.preConsentCookiesTrackers
   }).filter(([, value]) => typeof value === "string"));
   const intentionallyOmitted = new Set<string>();
-  if (detail === "summary" && allFindings.length > 0) intentionallyOmitted.add("findings");
+  if (allFindings.length > findings.length) intentionallyOmitted.add("additionalFindings");
   if ((detail === "summary" || detail === "findings") && (Object.keys(evidence).length > 0 || allFindings.length > 0)) intentionallyOmitted.add("evidence");
   if (detail !== "full" && Object.keys(report).length > 0) intentionallyOmitted.add("fullReport");
   const guidedScan = withMcpAgentGuidance(input.scan as unknown as Record<string, any>);
@@ -663,10 +971,13 @@ export function buildScanBundle(input: {
     url: input.scan.url ?? null,
     status: input.scan.status,
     score: input.scan.score ?? null,
+    scoreLabel: "CertScore score",
     scoreStatus: input.scan.scoreStatus ?? "final",
     scoreVersion: input.scan.scoreVersion ?? null,
     scoreUpdatedAt: input.scan.scoreUpdatedAt ?? null,
     riskLevel: input.scan.riskLevel ?? null,
+    provenance: scanProvenance(input.scan as unknown as Record<string, any>, "existing_scan_retrieved"),
+    interpretationGuidance: interpretationGuidance(),
     resultDisposition: input.scan.resultDisposition ?? null,
     noGo: input.scan.noGo ?? null,
     coverage: input.scan.coverage ?? null,
@@ -684,13 +995,14 @@ export function buildScanBundle(input: {
       headline: report.summary && typeof report.summary === "object" && !Array.isArray(report.summary)
         ? (report.summary as Record<string, unknown>).headline ?? null
         : null,
-      executiveSummary: report.executiveSummary ?? null,
+      executiveSummary: neutralExecutiveSummary(report.executiveSummary),
       counts: report.counts ?? null,
       agentInterpretation: report.agentInterpretation ?? null
     },
     findings,
     findingsMetadata: {
       shown: findings.length,
+      returned: findings.length,
       total: allFindings.length,
       truncated: allFindings.length > findings.length
     },
@@ -705,18 +1017,12 @@ export function buildScanBundle(input: {
         stringChars: 4_000
       })
     } : {}),
-    ...(input.preConsentCookiesTrackers ? { preConsentCookiesTrackers: {
-      summary: input.preConsentCookiesTrackers.summary,
-      rows: preConsentRows,
-      shown: preConsentRows.length,
-      total: Array.isArray(input.preConsentCookiesTrackers.rows) ? input.preConsentCookiesTrackers.rows.length : 0,
-      truncated: Array.isArray(input.preConsentCookiesTrackers.rows) && input.preConsentCookiesTrackers.rows.length > preConsentRows.length
-    } } : {}),
+    ...(preConsentCookiesTrackers ? { preConsentCookiesTrackers } : {}),
     links,
-    reportUrl: input.scan.links?.report ?? (typeof links.report === "string" ? links.report : null),
+    reportUrl: input.scan.links?.report ?? (typeof links.report === "string" ? links.report : `https://certscore.ai/scan/${encodeURIComponent(input.scan.scanId)}`),
     recommendedNextTool: null,
-    recommendedNextAction: guidedScan.error?.recommendedNextAction ?? (detail === "summary" && allFindings.length > 0
-      ? "Review this overview, then request detail=findings for bounded finding objects or open the report URL."
+    recommendedNextAction: guidedScan.error?.recommendedNextAction ?? (detail === "summary" && allFindings.length > findings.length
+      ? "Review the returned overview and findings, then request detail=findings or a larger maxFindings value for more projected findings."
       : findings.length > 0
         ? "Review the returned findings and follow their evidence references. Use detail=evidence only when deeper retained context is needed."
         : "Review coverage and limitations before interpreting the absence of findings."),
@@ -735,7 +1041,7 @@ export function buildScanBundle(input: {
       contentUrls
     },
     observationOnlyDisclaimer: OBSERVATION_ONLY_DISCLAIMER,
-    disclaimer: input.scan.disclaimer ?? input.report?.disclaimer ?? OBSERVATION_ONLY_DISCLAIMER
+    disclaimer: LEGAL_REVIEW_DISCLAIMER
   };
 
   const recommendationCandidates: number[] = [];
@@ -764,21 +1070,17 @@ export function buildScanBundle(input: {
   }
   const inventoryRows = bundle.preConsentCookiesTrackers?.rows;
   while (bundle.mcpMetadata.actualBytes > maxBytes && Array.isArray(inventoryRows) && inventoryRows.length > 0) {
-    markBudgetOmitted("preConsentCookiesTrackers", "evidence_inventory_reduced_to_byte_limit");
+    markBudgetOmitted("additionalPreConsentRows", "evidence_inventory_reduced_to_byte_limit");
     inventoryRows.pop();
-    bundle.preConsentCookiesTrackers.shown = inventoryRows.length;
+    bundle.preConsentCookiesTrackers.returned = inventoryRows.length;
     bundle.preConsentCookiesTrackers.truncated = true;
-    refresh();
-  }
-  if (bundle.mcpMetadata.actualBytes > maxBytes && bundle.preConsentCookiesTrackers) {
-    markBudgetOmitted("preConsentCookiesTrackers", "evidence_inventory_omitted_to_byte_limit");
-    delete bundle.preConsentCookiesTrackers;
     refresh();
   }
   while (bundle.mcpMetadata.actualBytes > maxBytes && bundle.findings.length > 1) {
     markBudgetOmitted("additionalFindings", "findings_reduced_to_byte_limit");
     bundle.findings.pop();
     bundle.findingsMetadata.shown = bundle.findings.length;
+    bundle.findingsMetadata.returned = bundle.findings.length;
     bundle.findingsMetadata.truncated = true;
     bundle.mcpMetadata.findingsTruncated = true;
     refresh();
@@ -813,15 +1115,11 @@ export function buildScanBundle(input: {
     bundle.evidenceSummary = compactPriorityEvidenceSummary(bundle.evidenceSummary);
     refresh();
   }
-  if (bundle.mcpMetadata.actualBytes > maxBytes && bundle.disclaimer === OBSERVATION_ONLY_DISCLAIMER) {
-    markBudgetOmitted("duplicateDisclaimer", "duplicate_disclaimer_omitted_to_byte_limit");
-    bundle.disclaimer = null;
-    refresh();
-  }
   if (bundle.mcpMetadata.actualBytes > maxBytes && bundle.findings.length > 0) {
     markBudgetOmitted("findings", "finding_omitted_to_byte_limit");
     bundle.findings = [];
     bundle.findingsMetadata.shown = 0;
+    bundle.findingsMetadata.returned = 0;
     bundle.findingsMetadata.truncated = bundle.findingsMetadata.total > 0;
     bundle.mcpMetadata.findingsTruncated = bundle.findingsMetadata.total > 0;
     refresh();
@@ -847,10 +1145,13 @@ export function buildScanBundle(input: {
       url: bundle.url,
       status: bundle.status,
       score: bundle.score,
+      scoreLabel: bundle.scoreLabel,
       scoreStatus: bundle.scoreStatus,
       scoreVersion: bundle.scoreVersion,
       scoreUpdatedAt: bundle.scoreUpdatedAt,
       riskLevel: bundle.riskLevel,
+      provenance: bundle.provenance,
+      interpretationGuidance: bundle.interpretationGuidance,
       resultDisposition: bundle.resultDisposition,
       noGo: bundle.noGo,
       coverage: null,
@@ -868,9 +1169,19 @@ export function buildScanBundle(input: {
       findings: [],
       findingsMetadata: {
         shown: 0,
+        returned: 0,
         total: bundle.findingsMetadata.total,
         truncated: bundle.findingsMetadata.total > 0
       },
+      ...(bundle.preConsentCookiesTrackers ? {
+        preConsentCookiesTrackers: {
+          summary: bundle.preConsentCookiesTrackers.summary,
+          rows: [],
+          total: bundle.preConsentCookiesTrackers.total,
+          returned: 0,
+          truncated: bundle.preConsentCookiesTrackers.total > 0
+        }
+      } : {}),
       links: Object.fromEntries(Object.entries(bundle.links ?? {}).filter(([key]) => ["docs", "report", "self"].includes(key))),
       reportUrl: bundle.reportUrl,
       recommendedNextTool: null,
@@ -884,7 +1195,7 @@ export function buildScanBundle(input: {
         actualBytes: 0,
         truncated: true,
         truncationReason: "minimal_canonical_result_returned_to_byte_limit",
-        omittedSections: [...new Set([...bundle.mcpMetadata.omittedSections, "summaryDetail", "findings", "evidence"])],
+        omittedSections: [...new Set([...bundle.mcpMetadata.omittedSections, "summaryDetail", "findings", "evidence", ...(bundle.preConsentCookiesTrackers?.total > 0 ? ["additionalPreConsentRows"] : [])])],
         nextRecommendedMaxBytes: bundle.mcpMetadata.nextRecommendedMaxBytes ?? Math.min(200_000, maxBytes + 1_000),
         omittedContentAvailableViaUrl: Object.keys(contentUrls).length > 0,
         contentUrls

@@ -139,9 +139,31 @@ function preConsentRow(id: string) {
     vendor: "Example Analytics",
     host: "analytics.example.test",
     registrableDomain: "example.test",
+    category: "Analytics",
+    purpose: "Audience measurement",
     priority: "high",
     confidence: "high",
     party: "third_party",
+    domains: ["analytics.example.test", "collect.example.test"],
+    cookieDetails: [{
+      name: "analytics_id",
+      domain: "example.test",
+      category: "analytics",
+      essentiality: "non_essential",
+      essentialityConfidence: 0.98,
+      essentialityReasonCodes: ["canonical_registry"],
+      essentialitySource: "canonical_registry",
+      description: "Analytics identifier.",
+      dataTypes: ["identifier"],
+      expiresAt: null,
+      lifespanSeconds: null,
+      lifespanSource: null,
+      longLived: false,
+      setByThirdPartyScript: true,
+      set_by_third_party_script: true,
+      setterScriptUrl: "https://analytics.example.test/app.js",
+      initiatorChain: ["https://example.com/app.js"]
+    }],
     requestDetails: [{
       cookieNamesSent: ["analytics_id"],
       essentiality: "unknown",
@@ -208,6 +230,17 @@ test("CertScore Light exposes only the focused no-account workflow", async () =>
     assert.equal((bundleTool?.inputSchema.properties?.maxBytes as { minimum?: number })?.minimum, 5_000);
     assert.ok(bundleTool?.outputSchema?.required?.includes("detail"));
     assert.ok(bundleTool?.outputSchema?.required?.includes("error"));
+    assert.ok(bundleTool?.outputSchema?.required?.includes("provenance"));
+    assert.ok(bundleTool?.outputSchema?.required?.includes("scoreLabel"));
+    assert.ok(bundleTool?.outputSchema?.required?.includes("interpretationGuidance"));
+    const inventorySchema = bundleTool?.outputSchema?.properties?.preConsentCookiesTrackers as {
+      properties?: { rows?: { items?: { properties?: Record<string, unknown> } }; returned?: unknown; total?: unknown; truncated?: unknown };
+    } | undefined;
+    assert.ok(inventorySchema?.properties?.rows?.items?.properties?.cookieNames);
+    assert.ok(inventorySchema?.properties?.rows?.items?.properties?.evidenceClassification);
+    assert.ok(inventorySchema?.properties?.total);
+    assert.ok(inventorySchema?.properties?.returned);
+    assert.ok(inventorySchema?.properties?.truncated);
     const metadataSchema = bundleTool?.outputSchema?.properties?.mcpMetadata as { required?: string[] } | undefined;
     for (const field of ["requestedMaxBytes", "actualBytes", "truncated", "truncationReason", "omittedSections", "nextRecommendedMaxBytes", "omittedContentAvailableViaUrl", "contentUrls"]) {
       assert.ok(metadataSchema?.required?.includes(field), `mcpMetadata.${field} must be required`);
@@ -386,22 +419,59 @@ test("certscore_scan_site can return immediately for an explicitly asynchronous 
         type: "certscore_scan_job",
         status: "queued",
         jobId: "pulse_job_123",
-        scanId: "scan_123"
+        scanId: "scan_123",
+        executionMode: "new_scan",
+        reused: false,
+        freshnessDecision: "refresh_requested_new_scan"
       }
     }
   ]);
   try {
     await withMcpClient(async (client) => {
-      const result = parseToolJson(
-        await client.callTool({
+      const raw = await client.callTool({
           name: "certscore_scan_site",
           arguments: { url: "https://example.com", freshness: "refresh", scanFrom: "eu_ie", waitForCompletion: false }
-        })
-      );
+        });
+      const result = parseToolJson(raw);
       assert.equal(result.type, "certscore_scan_job");
       assert.equal(result.status, "queued");
+      assert.equal(result.reportUrl, "https://certscore.ai/scan/scan_123");
+      assert.equal((result.provenance as Record<string, unknown>).mode, "new_scan_started");
+      assert.match(raw.content[0]?.type === "text" ? raw.content[0].text : "", /provenance=new_scan_started/);
+      assert.match(raw.content[0]?.type === "text" ? raw.content[0].text : "", /full report=https:\/\/certscore\.ai\/scan\/scan_123/);
       assert.match(mock.calls[0] ?? "", /\/api\/v2\/scans$/);
     });
+  } finally {
+    mock.restore();
+  }
+});
+
+test("certscore_scan_site identifies an existing completed scan reuse", async () => {
+  const mock = installFetch([{
+    status: 200,
+    body: {
+      type: "certscore_scan",
+      scanId: "scan_reused",
+      domain: "example.com",
+      status: "completed",
+      score: 74,
+      executionMode: "reused_scan",
+      reused: true,
+      reusedScanAgeSeconds: 90,
+      freshnessDecision: "reused_existing_scan"
+    }
+  }]);
+  try {
+    await withMcpClient(async (client) => {
+      const result = parseToolJson(await client.callTool({
+        name: "certscore_scan_site",
+        arguments: { url: "https://example.com" }
+      }));
+      assert.equal((result.provenance as Record<string, unknown>).mode, "existing_completed_scan_reused");
+      assert.equal((result.provenance as Record<string, unknown>).reused, true);
+      assert.equal((result.provenance as Record<string, unknown>).freshnessDecision, "reused_existing_scan");
+      assert.equal(mock.calls.length, 1);
+    }, { toolProfile: "light" });
   } finally {
     mock.restore();
   }
@@ -469,6 +539,16 @@ test("certscore_scan_site waits by default and returns the completed scan resour
       assert.equal(mock.calls.length, 3);
       assert.match(mock.calls[1] ?? "", /\/api\/v2\/scans\/scan_123\/status$/);
       assert.match(mock.calls[2] ?? "", /\/api\/v2\/scans\/scan_123$/);
+      assert.equal(mock.requestHeaders[0]?.get("x-certscore-mcp-internal-operation"), null);
+      assert.equal(mock.requestHeaders[1]?.get("x-certscore-mcp-internal-operation"), "scan_site_wait");
+      assert.equal(mock.requestHeaders[2]?.get("x-certscore-mcp-internal-operation"), "scan_site_wait");
+      assert.equal(mock.requestHeaders[1]?.get("x-certscore-mcp-internal-scan-id"), "scan_123");
+      assert.match(mock.requestHeaders[1]?.get("x-certscore-mcp-internal-proof") ?? "", /^[A-Za-z0-9_-]+$/);
+    }, {
+      anonymousRequesterSecret: "mcp-internal-read-test-secret",
+      anonymousSurface: "mcp_light",
+      forwardedClientIp: "203.0.113.44",
+      toolProfile: "light"
     });
   } finally {
     mock.restore();
@@ -602,6 +682,7 @@ test("certscore_get_scan_status supports API v2 scanId status with timing fields
       assert.equal(result.scanTimeSeconds, 34);
       assert.equal(result.score, 78);
       assert.equal(result.riskLevel, "monitor");
+      assert.equal((result.provenance as Record<string, unknown>).mode, "existing_scan_retrieved");
       assert.equal(mock.calls.length, 2);
       assert.match(mock.calls[0] ?? "", /\/api\/v2\/scans\/00000000-0000-4000-8000-000000000123\/status/);
       assert.match(mock.calls[1] ?? "", /\/api\/v2\/scans\/00000000-0000-4000-8000-000000000123$/);
@@ -750,7 +831,8 @@ test("certscore_get_scan_bundle returns a compact canonical summary by default",
   const mock = installFetch([
     { status: 200, body: scan },
     { status: 200, body: { ...pulse, summary: { ...pulse.summary, score: 88 }, type: "certscore_pulse_summary", executiveSummary: { issuesToReview: 1 }, counts: { totalAutomatedFindingCount: 1 } } },
-    { status: 200, body: { type: "certscore_finding_list", scanId: "scan_123", findings: [apiFinding("finding_1")] } }
+    { status: 200, body: { type: "certscore_finding_list", scanId: "scan_123", findings: [apiFinding("finding_1")] } },
+    { status: 200, body: { type: "certscore_pre_consent_cookies_trackers", scanId: "scan_123", domain: "example.com", summary: { rowCount: 1, trackerCount: 1, cookieCount: 1, requestCount: 1, vendorCount: 1, domainCount: 2 }, rows: [preConsentRow("row_1")] } }
   ]);
   try {
     await withMcpClient(async (client) => {
@@ -760,15 +842,55 @@ test("certscore_get_scan_bundle returns a compact canonical summary by default",
       assert.equal(bundle.scanId, "scan_123");
       assert.equal(bundle.status, "completed");
       assert.equal(bundle.score, 72);
-      assert.equal((bundle.findings as unknown[]).length, 0);
+      assert.equal(bundle.scoreLabel, "CertScore score");
+      assert.equal(((bundle.summary as Record<string, any>).executiveSummary as Record<string, unknown>).scoreLabel, "CertScore score");
+      assert.equal((bundle.findings as unknown[]).length, 1);
+      assert.equal((bundle.findings as Array<Record<string, unknown>>)[0]?.id, "finding_1");
+      assert.equal((bundle.findingsMetadata as Record<string, unknown>).returned, 1);
+      assert.equal((bundle.findingsMetadata as Record<string, unknown>).total, 1);
+      assert.equal((bundle.findingsMetadata as Record<string, unknown>).truncated, false);
       assert.equal(bundle.detail, "summary");
-      assert.ok(((bundle.mcpMetadata as Record<string, unknown>).omittedSections as string[]).includes("findings"));
+      assert.ok(!((bundle.mcpMetadata as Record<string, unknown>).omittedSections as string[]).includes("findings"));
       assert.equal(bundle.evidenceSummary, undefined);
-      assert.equal(bundle.preConsentCookiesTrackers, undefined);
+      const inventory = bundle.preConsentCookiesTrackers as Record<string, unknown>;
+      const rows = inventory.rows as Array<Record<string, unknown>>;
+      assert.equal(inventory.total, 1);
+      assert.equal(inventory.returned, 1);
+      assert.equal(inventory.truncated, false);
+      assert.deepEqual(rows[0]?.cookieNames, ["analytics_id"]);
+      assert.equal(rows[0]?.vendor, "Example Analytics");
+      assert.equal(rows[0]?.purpose, "Audience measurement");
+      assert.equal(rows[0]?.category, "Analytics");
+      assert.equal(rows[0]?.firstObservedAtMs, 1200);
+      assert.deepEqual(rows[0]?.domains, ["analytics.example.test", "collect.example.test", "example.test"]);
+      assert.equal((rows[0]?.evidenceClassification as Record<string, unknown>).basis, "public_report_projection");
+      assert.equal(rows[0]?.confidence, "high");
+      assert.equal((bundle.provenance as Record<string, unknown>).mode, "existing_scan_retrieved");
       assert.equal(bundle.recommendedNextTool, null);
       assert.doesNotMatch(JSON.stringify(bundle), /certscore_explain_finding/);
-      assert.equal(mock.calls.length, 3);
-      assert.ok(raw.content[0]?.type === "text" && raw.content[0].text.length < 180);
+      assert.equal(mock.calls.length, 4);
+      for (const headers of mock.requestHeaders) {
+        assert.equal(headers.get("x-certscore-mcp-internal-operation"), "scan_bundle");
+        assert.equal(headers.get("x-certscore-mcp-internal-scan-id"), "scan_123");
+        assert.match(headers.get("x-certscore-mcp-internal-proof") ?? "", /^[A-Za-z0-9_-]+$/);
+      }
+      const text = raw.content[0]?.type === "text" ? raw.content[0].text : "";
+      assert.match(text, /Canonical projected findings: 1 of 1 returned/);
+      assert.match(text, /Tracking started before consent/);
+      assert.match(text, /tracker: Example Analytics/);
+      assert.match(text, /cookies=analytics_id/);
+      assert.match(text, /CertScore score=72/);
+      assert.match(text, /automated public-web observations for human review/i);
+      assert.match(text, /not legal advice, certification, or a compliance determination/i);
+      assert.match(text, /observable public-web scan signals only/i);
+      assert.match(text, /Do not infer technologies that are not listed/i);
+      assert.match(text, /or any legal compliance status/i);
+      assert.doesNotMatch(text, /compliance score|compliant baseline/i);
+    }, {
+      anonymousRequesterSecret: "mcp-internal-read-test-secret",
+      anonymousSurface: "mcp_light",
+      forwardedClientIp: "203.0.113.44",
+      toolProfile: "light"
     });
   } finally {
     mock.restore();
@@ -817,12 +939,15 @@ test("certscore_get_scan_bundle returns the canonical no-go result when the Puls
       assert.equal(bundle.status, "completed_limited");
       assert.equal(bundle.score, null);
       assert.equal(bundle.scoreStatus, "final");
+      assert.equal((bundle.provenance as Record<string, unknown>).mode, "existing_scan_retrieved");
       assert.equal(bundle.resultDisposition, "no_go");
       assert.equal(bundle.recommendedNextAction, recommendedNextAction);
       assert.deepEqual(bundle.findings, []);
       assert.deepEqual((bundle.evidenceSummary as Record<string, unknown>).digests, []);
       assert.equal(bundle.error && (bundle.error as Record<string, unknown>).code, "parked_or_placeholder");
       assert.match(String(bundle.observationOnlyDisclaimer), /not proof of compliance/i);
+      assert.match(String(bundle.disclaimer), /automated public-web observations for human review/i);
+      assert.match(String(bundle.disclaimer), /not legal advice, certification, or a compliance determination/i);
       assert.equal(mock.calls.length, 1);
     });
   } finally {
@@ -855,7 +980,8 @@ test("completed Light tools preserve one final canonical score and metadata", as
     { status: 200, body: canonicalScan },
     { status: 200, body: canonicalScan },
     { status: 200, body: { ...pulse, summary: { ...pulse.summary, score: 73 }, type: "certscore_pulse_summary" } },
-    { status: 200, body: { type: "certscore_finding_list", scanId: "scan_123", findings: [apiFinding("finding_1")] } }
+    { status: 200, body: { type: "certscore_finding_list", scanId: "scan_123", findings: [apiFinding("finding_1")] } },
+    { status: 200, body: { type: "certscore_pre_consent_cookies_trackers", scanId: "scan_123", domain: "example.com", summary: { rowCount: 1, trackerCount: 1, cookieCount: 1, requestCount: 1 }, rows: [preConsentRow("row_1")] } }
   ]);
   try {
     await withMcpClient(async (client) => {
@@ -875,9 +1001,10 @@ test("completed Light tools preserve one final canonical score and metadata", as
       assert.equal(created.url, "https://example.com");
       assert.equal(status.url, "https://example.com");
       assert.equal(bundle.url, "https://example.com");
+      assert.equal(created.reportUrl, "https://certscore.ai/scan/scan_123");
       assert.equal(status.reportUrl, "https://certscore.ai/scan/scan_123");
       assert.equal(bundle.reportUrl, "https://certscore.ai/scan/scan_123");
-      assert.equal(mock.calls.length, 6);
+      assert.equal(mock.calls.length, 7);
     });
   } finally {
     mock.restore();
@@ -903,7 +1030,11 @@ test("certscore_get_scan_bundle opts into bounded evidence and pre-consent inven
     await withMcpClient(async (client) => {
       const bundle = parseToolJson(await client.callTool({ name: "certscore_get_scan_bundle", arguments: { scanId: "scan_123", detail: "evidence" } }));
       assert.ok(bundle.evidenceSummary);
-      assert.equal(((bundle.preConsentCookiesTrackers as Record<string, unknown>).rows as unknown[]).length, 1);
+      const inventory = bundle.preConsentCookiesTrackers as Record<string, unknown>;
+      assert.equal((inventory.rows as unknown[]).length, 1);
+      assert.equal(inventory.total, 1);
+      assert.equal(inventory.returned, 1);
+      assert.equal(inventory.truncated, false);
       assert.equal(mock.calls.length, 4);
     });
   } finally {

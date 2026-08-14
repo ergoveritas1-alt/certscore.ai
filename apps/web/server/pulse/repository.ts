@@ -15,8 +15,10 @@ import {
 import { ensurePulseTables } from "./schema";
 import {
   ANONYMOUS_SCAN_DAILY_LIMIT,
+  LIGHT_MCP_NEW_SCAN_POLICY,
   anonymousScanQuotaKey,
   decideAnonymousScanQuota,
+  decideLightMcpNewScanQuota,
   retryAfterNextUtcDay,
   type AnonymousScanQuotaDecision
 } from "./anonymous-scan-quota";
@@ -641,32 +643,28 @@ export function pulseScanThrottleIdentity(input: { normalizedDomain: string; nor
 export async function claimPulseDomainScanCreation(input: { normalizedDomain: string; normalizedUrl: string; pulseRequestId: string; scanFrom?: ScanFrom }) {
   await ensurePulseTables();
   const throttleIdentity = pulseScanThrottleIdentity(input);
-  const existing = await queryOne<{ expires_at: string }>(
-    `select expires_at
-       from pulse_domain_throttles
-      where normalized_domain = $1
-        and expires_at > now()`,
-    [throttleIdentity],
-    { readOnly: true }
-  );
-
-  if (existing) {
-    const retryAfterSeconds = Math.max(1, Math.ceil((new Date(existing.expires_at).getTime() - Date.now()) / 1000));
-    return { allowed: false as const, retryAfterSeconds };
-  }
-
-  await query(
+  const claimed = await queryOne<{ expires_at: string }>(
     `insert into pulse_domain_throttles (normalized_domain, expires_at, last_pulse_request_id)
      values ($1, now() + interval '1 minute', $2)
      on conflict (normalized_domain)
      do update set
        last_scan_created_at = now(),
        expires_at = now() + interval '1 minute',
-       last_pulse_request_id = excluded.last_pulse_request_id`,
+       last_pulse_request_id = excluded.last_pulse_request_id,
+       updated_at = now()
+     where pulse_domain_throttles.expires_at <= now()
+     returning expires_at`,
     [throttleIdentity, input.pulseRequestId]
   );
 
-  return { allowed: true as const, retryAfterSeconds: 0 };
+  if (claimed) return { allowed: true as const, retryAfterSeconds: 0 };
+  const existing = await queryOne<{ expires_at: string }>(
+    `select expires_at from pulse_domain_throttles where normalized_domain = $1`,
+    [throttleIdentity],
+    { readOnly: true }
+  );
+  const retryAfterSeconds = Math.max(1, Math.ceil((new Date(existing?.expires_at ?? Date.now() + 60_000).getTime() - Date.now()) / 1_000));
+  return { allowed: false as const, retryAfterSeconds };
 }
 
 export async function claimAnonymousScanDailyQuota(input: {
@@ -695,6 +693,77 @@ export async function claimAnonymousScanDailyQuota(input: {
     allowed: false,
     remaining: 0,
     retryAfterSeconds: retryAfterNextUtcDay()
+  };
+}
+
+type LightMcpNewScanUsageRow = {
+  oldest_requester_burst_at: string | null;
+  oldest_surface_burst_at: string | null;
+  requester_burst_count: number | string;
+  requester_daily_count: number | string;
+  surface_burst_count: number | string;
+  surface_daily_count: number | string;
+};
+
+function lightMcpUsage(row: LightMcpNewScanUsageRow | undefined) {
+  return {
+    requester: {
+      burstCount: Number(row?.requester_burst_count ?? 0),
+      dailyCount: Number(row?.requester_daily_count ?? 0),
+      oldestBurstAt: row?.oldest_requester_burst_at ?? null
+    },
+    surface: {
+      burstCount: Number(row?.surface_burst_count ?? 0),
+      dailyCount: Number(row?.surface_daily_count ?? 0),
+      oldestBurstAt: row?.oldest_surface_burst_at ?? null
+    }
+  };
+}
+
+const LIGHT_MCP_NEW_SCAN_USAGE_SQL = `select
+  count(*) filter (where requested_at > now() - make_interval(secs => $2::int))::int as surface_burst_count,
+  count(*) filter (where requester_key = $1 and requested_at > now() - make_interval(secs => $2::int))::int as requester_burst_count,
+  count(*) filter (where requested_at >= date_trunc('day', now() at time zone 'utc') at time zone 'utc')::int as surface_daily_count,
+  count(*) filter (where requester_key = $1 and requested_at >= date_trunc('day', now() at time zone 'utc') at time zone 'utc')::int as requester_daily_count,
+  min(requested_at) filter (where requested_at > now() - make_interval(secs => $2::int)) as oldest_surface_burst_at,
+  min(requested_at) filter (where requester_key = $1 and requested_at > now() - make_interval(secs => $2::int)) as oldest_requester_burst_at
+from light_mcp_new_scan_events
+where requested_at > now() - interval '1 day'
+   or requested_at >= date_trunc('day', now() at time zone 'utc') at time zone 'utc'`;
+
+/** Atomically reserves one genuinely new scan against both requester and whole-Light safety rails. */
+export async function claimLightMcpNewScanQuota(input: { requesterKey: string }) {
+  await ensurePulseTables();
+  return withWriteTransaction(async (client) => {
+    await client.query("select pg_advisory_xact_lock(hashtext($1))", ["light-mcp-new-scan-surface"]);
+    const usageResult = await client.query<LightMcpNewScanUsageRow>(LIGHT_MCP_NEW_SCAN_USAGE_SQL, [
+      input.requesterKey,
+      LIGHT_MCP_NEW_SCAN_POLICY.burstWindowSeconds
+    ]);
+    const decision = decideLightMcpNewScanQuota({ usage: lightMcpUsage(usageResult.rows[0]) });
+    if (!decision.allowed) return decision;
+    await client.query(
+      "insert into light_mcp_new_scan_events (requester_key) values ($1)",
+      [input.requesterKey]
+    );
+    return decision;
+  });
+}
+
+export async function getLightMcpNewScanQuotaState(input: { requesterKey: string; now?: Date }) {
+  await ensurePulseTables();
+  const row = await queryOne<LightMcpNewScanUsageRow>(LIGHT_MCP_NEW_SCAN_USAGE_SQL, [
+    input.requesterKey,
+    LIGHT_MCP_NEW_SCAN_POLICY.burstWindowSeconds
+  ], { readOnly: true });
+  const usage = lightMcpUsage(row ?? undefined);
+  const used = Math.max(usage.surface.dailyCount, usage.requester.dailyCount);
+  const now = input.now ?? new Date();
+  return {
+    limit: LIGHT_MCP_NEW_SCAN_POLICY.dailyLimit,
+    remaining: Math.max(0, LIGHT_MCP_NEW_SCAN_POLICY.dailyLimit - used),
+    resetAt: new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() + 1)).toISOString(),
+    used
   };
 }
 

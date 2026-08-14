@@ -96,13 +96,14 @@ test("SDK identifies requests with the configured client name", async () => {
 test("anonymous gateway context forwards the requester IP without adding authorization", async () => {
   const mock = installFetch([{ status: 202, body: { type: "certscore_scan_job", status: "queued", jobId: "job_1" } }]);
   try {
-    const client = new CertScoreClient({ clientName: "mcp", forwardedClientIp: "203.0.113.44", anonymousRequesterSecret: "anonymous-mcp-requester-test-secret" });
+    const client = new CertScoreClient({ clientName: "mcp", forwardedClientIp: "203.0.113.44", anonymousRequesterSecret: "anonymous-mcp-requester-test-secret", anonymousSurface: "mcp_light" });
     await client.scans.create("https://example.com");
     const headers = new Headers(mock.callDetails[0]?.headers);
     assert.equal(headers.get("X-Forwarded-For"), "203.0.113.44");
     assert.match(headers.get("X-CertScore-Anonymous-Requester-IP") ?? "", /203\.0\.113\.44/);
     assert.match(headers.get("X-CertScore-Anonymous-Requester-Timestamp") ?? "", /^\d+$/);
     assert.match(headers.get("X-CertScore-Anonymous-Requester-Proof") ?? "", /^[A-Za-z0-9_-]+$/);
+    assert.equal(headers.get("X-CertScore-Anonymous-Surface"), "mcp_light");
     assert.equal(headers.get("Authorization"), null);
   } finally {
     mock.restore();

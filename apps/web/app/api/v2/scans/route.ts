@@ -10,10 +10,13 @@ import {
 } from "../../../../lib/api-v2/scan-resource";
 import { getPublicScanRecord } from "../../../../server/scans/get-public-scan-record";
 import { getPulseRequesterContext } from "../../../../lib/pulse/request";
-import { getAnonymousScanDailyQuotaState } from "../../../../server/pulse/repository";
+import { getAnonymousScanDailyQuotaState, getLightMcpNewScanQuotaState } from "../../../../server/pulse/repository";
+import { lightMcpScanRequesterKey } from "../../../../server/pulse/anonymous-scan-quota";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
+
+const HIGHER_VOLUME_MESSAGE = "If you need higher-volume scanning, create an account at https://certscore.ai/login?mode=create_account and contact support@certscore.ai to request a custom automated-access allowance. Creating an account does not automatically change this anonymous endpoint's limit.";
 
 function requestId(request: Request) {
   return request.headers.get("x-request-id") ?? crypto.randomUUID();
@@ -90,7 +93,7 @@ function freshnessMetadata(input: {
     anonymousQuotaResetAt: input.anonymousQuota?.resetAt ?? null,
     upgradeSupportEmail: input.anonymousQuota ? "support@certscore.ai" : null,
     upgradeMessage: input.anonymousQuota
-      ? "For a higher-volume allowance, contact support@certscore.ai."
+      ? HIGHER_VOLUME_MESSAGE
       : null,
     recommendedNextTool: input.terminal ? "certscore_get_scan_bundle" : "certscore_get_scan_status"
   };
@@ -115,7 +118,12 @@ export async function POST(request: Request) {
     const retryAfter = pulseResponse.headers.get("Retry-After") ?? undefined;
     const pulseBody = await pulseResponse.json().catch(() => null);
     const anonymousQuota = anonymousRequester
-      ? await getAnonymousScanDailyQuotaState({ ipHash: anonymousRequester.ipHash })
+      ? anonymousRequester.anonymousMcpSurface === "mcp_light"
+        ? await getLightMcpNewScanQuotaState({ requesterKey: lightMcpScanRequesterKey({
+            ipHash: anonymousRequester.ipHash,
+            network: anonymousRequester.anonymousRequesterNetwork
+          }) })
+        : await getAnonymousScanDailyQuotaState({ ipHash: anonymousRequester.ipHash })
       : null;
 
     if (pulseResponse.status === 200) {
@@ -229,7 +237,7 @@ export async function POST(request: Request) {
         anonymousQuotaRemaining: anonymousQuota?.remaining ?? null,
         anonymousQuotaResetAt: anonymousQuota?.resetAt ?? null,
         upgradeSupportEmail: anonymousQuota ? "support@certscore.ai" : null,
-        upgradeMessage: anonymousQuota ? "For a higher-volume allowance, contact support@certscore.ai." : null
+        upgradeMessage: anonymousQuota ? HIGHER_VOLUME_MESSAGE : null
       },
       headers: retryAfter ? { "Retry-After": retryAfter } : undefined,
       requestId: id,

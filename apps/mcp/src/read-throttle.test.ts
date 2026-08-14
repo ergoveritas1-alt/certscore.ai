@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import test from "node:test";
-import { McpReadThrottle, mcpReadCallsFromJsonRpc } from "./read-throttle.js";
+import { McpReadThrottle, mcpReadCallsFromJsonRpc, mcpReadRateLimitGuidance } from "./read-throttle.js";
 
 function toolCall(name: string, args: Record<string, unknown>) {
   return { jsonrpc: "2.0", id: 1, method: "tools/call", params: { name, arguments: args } };
@@ -18,57 +18,98 @@ test("classifies composite and direct MCP scan reads", () => {
   assert.equal(mcpReadCallsFromJsonRpc(toolCall("certscore_get_scan_status", { scanId: "scan_1" }))[0]?.profile, "status");
 });
 
-test("allows five composite reads for one caller and scan, then cools down", () => {
+test("allows thirty composite reads for one caller and scan, then cools down", () => {
   const throttle = new McpReadThrottle();
   const call = mcpReadCallsFromJsonRpc(toolCall("certscore_get_scan_bundle", { scanId: "scan_1", detail: "evidence" }))[0];
   assert.ok(call);
-  for (let index = 1; index <= 5; index += 1) {
+  for (let index = 1; index <= 30; index += 1) {
     assert.equal(throttle.claim("caller_1", call, index * 1_000).allowed, true);
   }
-  const sixth = throttle.claim("caller_1", call, 6_000);
-  assert.equal(sixth.allowed, false);
-  if (sixth.allowed) return;
-  assert.equal(sixth.reason, "mcp_scan_read_caller_target_limit");
-  assert.equal(sixth.retryAfterSeconds, 595);
-  assert.equal(sixth.profile, "terminal");
-  assert.equal(sixth.scope, "callerTarget");
-  assert.equal(sixth.windowId, "burst");
-  assert.equal(sixth.windowSeconds, 600);
-  assert.equal(sixth.limitUnits, 20);
-  assert.equal(sixth.usedUnits, 20);
-  assert.equal(sixth.requestedUnits, 4);
+  const thirtyFirst = throttle.claim("caller_1", call, 31_000);
+  assert.equal(thirtyFirst.allowed, false);
+  if (thirtyFirst.allowed) return;
+  assert.equal(thirtyFirst.reason, "mcp_scan_read_caller_target_limit");
+  assert.equal(thirtyFirst.retryAfterSeconds, 570);
+  assert.equal(thirtyFirst.profile, "terminal");
+  assert.equal(thirtyFirst.scope, "callerTarget");
+  assert.equal(thirtyFirst.windowId, "burst");
+  assert.equal(thirtyFirst.windowSeconds, 600);
+  assert.equal(thirtyFirst.limitUnits, 120);
+  assert.equal(thirtyFirst.usedUnits, 120);
+  assert.equal(thirtyFirst.requestedUnits, 4);
+  const guidance = mcpReadRateLimitGuidance(call, thirtyFirst, { anonymousLight: true });
+  assert.match(guidance.message, /this MCP session and scan/i);
+  assert.match(guidance.message, /120 terminal-read units per 10-minute rolling window/i);
+  assert.match(guidance.message, /up to 30 bundle reads/i);
+  assert.match(guidance.message, /login\?mode=create_account/);
+  assert.match(guidance.message, /does not automatically change the anonymous Light MCP limit/i);
+  assert.equal(guidance.upgradeAvailable, true);
+  assert.equal(guidance.accountUrl, "https://certscore.ai/login?mode=create_account");
+
+  const authenticatedGuidance = mcpReadRateLimitGuidance(call, thirtyFirst);
+  assert.match(authenticatedGuidance.message, /authenticated MCP account/i);
+  assert.doesNotMatch(authenticatedGuidance.message, /create an account/i);
+  assert.equal(authenticatedGuidance.accountUrl, null);
 });
 
-test("bounds low-and-slow composite reads to forty units per rolling day", () => {
+test("bounds low-and-slow composite reads to twelve hundred units per rolling day", () => {
   const throttle = new McpReadThrottle();
   const call = mcpReadCallsFromJsonRpc(toolCall("certscore_get_scan_bundle", { scanId: "scan_1", detail: "evidence" }))[0];
   assert.ok(call);
-  const elevenMinutes = 11 * 60 * 1_000;
-  for (let index = 0; index < 10; index += 1) {
-    assert.equal(throttle.claim("caller_1", call, index * elevenMinutes).allowed, true);
+  const twoMinutes = 2 * 60 * 1_000;
+  for (let index = 0; index < 300; index += 1) {
+    assert.equal(throttle.claim("caller_1", call, index * twoMinutes).allowed, true);
   }
-  const eleventh = throttle.claim("caller_1", call, 10 * elevenMinutes);
-  assert.equal(eleventh.allowed, false);
-  if (eleventh.allowed) return;
-  assert.equal(eleventh.reason, "mcp_scan_read_daily_caller_target_limit");
-  assert.equal(eleventh.retryAfterSeconds, 79_800);
+  const next = throttle.claim("caller_1", call, 300 * twoMinutes);
+  assert.equal(next.allowed, false);
+  if (next.allowed) return;
+  assert.equal(next.reason, "mcp_scan_read_daily_caller_target_limit");
+  assert.equal(next.retryAfterSeconds, 50_400);
 });
 
 test("status polling has a separate bounded allowance", () => {
   const throttle = new McpReadThrottle();
   const call = mcpReadCallsFromJsonRpc(toolCall("certscore_get_scan_status", { scanId: "scan_1" }))[0];
   assert.ok(call);
-  for (let index = 0; index < 30; index += 1) {
+  for (let index = 0; index < 120; index += 1) {
     assert.equal(throttle.claim("caller_1", call, index).allowed, true);
   }
-  assert.equal(throttle.claim("caller_1", call, 31).allowed, false);
+  assert.equal(throttle.claim("caller_1", call, 121).allowed, false);
+});
+
+test("many independent callers can read one popular completed scan", () => {
+  const throttle = new McpReadThrottle();
+  const call = mcpReadCallsFromJsonRpc(toolCall("certscore_get_scan_bundle", { scanId: "cnn", detail: "summary" }))[0];
+  assert.ok(call);
+  for (let index = 0; index < 250; index += 1) {
+    assert.equal(throttle.claim(`caller_${index}`, call, index).allowed, true);
+  }
+});
+
+test("shared-provider sessions have independent caller limits and a hard provider aggregate", () => {
+  const throttle = new McpReadThrottle();
+  const call = mcpReadCallsFromJsonRpc(toolCall("certscore_get_scan_bundle", { scanId: "scan_1" }))[0];
+  assert.ok(call);
+  for (let index = 0; index < 2_000; index += 1) {
+    assert.equal(throttle.claim(`session_${index}`, { ...call, target: `scan:${index}` }, index, "anthropic").allowed, true);
+  }
+  const denied = throttle.claim("fresh_session", { ...call, target: "scan:fresh" }, 2_001, "anthropic");
+  assert.equal(denied.allowed, false);
+  if (denied.allowed) return;
+  assert.equal(denied.scope, "provider");
+  assert.equal(denied.limitUnits, 8_000);
+  const guidance = mcpReadRateLimitGuidance(call, denied, { anonymousLight: true });
+  assert.match(guidance.message, /shared Anthropic provider service/i);
+  assert.match(guidance.message, /registering an account will not bypass/i);
+  assert.equal(guidance.upgradeAvailable, false);
+  assert.equal(guidance.accountUrl, null);
 });
 
 test("hosted MCP returns a bot-readable 429 and emits a structured safe denial log", async () => {
   const source = await readFile(new URL("./index.ts", import.meta.url), "utf8");
   assert.match(source, /return json\(res, 429/);
   assert.match(source, /"Retry-After"/);
-  assert.match(source, /apiReadRateLimitGuidance/);
+  assert.match(source, /mcpReadRateLimitGuidance/);
   for (const field of ["policyVersion", "profile", "scope", "windowId", "windowSeconds", "limitUnits", "usedUnits", "requestedUnits", "retryAfterSeconds"]) {
     assert.match(source, new RegExp(field));
   }

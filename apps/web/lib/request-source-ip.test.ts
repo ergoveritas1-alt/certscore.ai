@@ -27,7 +27,17 @@ test("does not trust a standalone spoofed CF-Connecting-IP header", () => {
   assert.equal(getTrustedRequestSourceIp(new Headers({
     "cf-connecting-ip": "198.51.100.200",
     "x-real-ip": "203.0.113.42"
-  })), "203.0.113.42");
+  })), null);
+});
+
+test("does not trust a standalone spoofed X-Real-IP header", () => {
+  assert.equal(getTrustedRequestSourceIp(new Headers({ "x-real-ip": "198.51.100.90" })), null);
+});
+
+test("fails closed when the rightmost ALB source slot is malformed", () => {
+  assert.equal(getTrustedRequestSourceIp(new Headers({
+    "x-forwarded-for": "198.51.100.90, not-an-ip"
+  })), null);
 });
 
 test("normalizes valid address and optional proxy port forms", () => {

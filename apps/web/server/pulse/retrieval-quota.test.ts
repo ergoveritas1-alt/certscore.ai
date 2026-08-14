@@ -37,8 +37,8 @@ test("evidence and full retrievals cost four times a summary retrieval", () => {
   assert.equal(pulseRetrievalWeight("full"), 4);
 });
 
-test("one principal cannot repeatedly retrieve one terminal scan", () => {
-  assert.equal(PULSE_RETRIEVAL_PRINCIPAL_SCAN_LIMIT, 20);
+test("one principal can reasonably repeat a terminal scan before throttling", () => {
+  assert.equal(PULSE_RETRIEVAL_PRINCIPAL_SCAN_LIMIT, 120);
   assert.equal(decidePulseRetrievalQuota({
     detail: "evidence",
     now,
@@ -54,6 +54,8 @@ test("one principal cannot repeatedly retrieve one terminal scan", () => {
     now,
     usage: usage({ principalScanUnits: PULSE_RETRIEVAL_PRINCIPAL_SCAN_LIMIT })
   });
+  const usedUnits = decision.allowed ? null : decision.usedUnits;
+  const requestedUnits = decision.requestedUnits;
   assert.equal(decision.allowed, false);
   if (decision.allowed) return;
   assert.equal(decision.reason, "scan_retrieval_principal_scan_limit");
@@ -63,8 +65,8 @@ test("one principal cannot repeatedly retrieve one terminal scan", () => {
   assert.equal(decision.windowId, "burst");
   assert.equal(decision.windowSeconds, 600);
   assert.equal(decision.limitUnits, PULSE_RETRIEVAL_PRINCIPAL_SCAN_LIMIT);
-  assert.equal(decision.usedUnits, PULSE_RETRIEVAL_PRINCIPAL_SCAN_LIMIT);
-  assert.equal(decision.requestedUnits, 4);
+  assert.equal(usedUnits, PULSE_RETRIEVAL_PRINCIPAL_SCAN_LIMIT);
+  assert.equal(requestedUnits, 4);
 });
 
 test("a mixed MCP workflow can retrieve evidence after six ordinary terminal-read units", () => {
@@ -116,7 +118,7 @@ test("rate-limit denial logs are structured and omit caller and target identifie
   assert.equal("token" in event, false);
 });
 
-test("one principal cannot slowly retrieve one terminal scan more than forty units per rolling day", () => {
+test("one principal retains a high but bounded rolling-day allowance per terminal scan", () => {
   const decision = decidePulseRetrievalQuota({
     detail: "evidence",
     now,

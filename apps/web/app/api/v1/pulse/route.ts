@@ -19,7 +19,8 @@ import {
   parsePulseDetail,
   parsePulseFormat,
   parsePulseFreshness,
-  parsePulseWaitSeconds
+  parsePulseWaitSeconds,
+  trustedMcpInternalRead
 } from "../../../../lib/pulse/request";
 import { buildPulseStatus } from "../../../../lib/pulse/status";
 import { PULSE_MIN_REUSABLE_PAGES_REQUESTED, PULSE_SCAN_COVERAGE_PLAN_CODE } from "../../../../lib/pulse/scan-coverage";
@@ -466,13 +467,17 @@ async function handlePulseGET(request: Request, options: PulseRouteOptions = {})
       if (!SCAN_ID_PATTERN.test(scanId)) {
         return pulseJson(buildPulseError({ code: "invalid_url", message: "Invalid scan ID.", detail, format }), { status: 400 }, requestId, routeName);
       }
-      const reservedRetrieval = await createPulseRequestWithRetrievalQuota({
+      const retrievalInput = {
         context: { ...contextBase, mode: "scanId" },
         requestedUrl: null,
         resolutionMode: "reused_existing_scan",
         scanId,
         status: "completed"
-      });
+      } as const;
+      const internalBundleRead = trustedMcpInternalRead(request, { operations: ["scan_bundle"], scanId });
+      const reservedRetrieval = internalBundleRead
+        ? { allowed: true as const, ...(await createPulseRequest(retrievalInput)) }
+        : await createPulseRequestWithRetrievalQuota(retrievalInput);
       if (!reservedRetrieval.allowed) {
         const guidance = apiReadRateLimitGuidance("terminal", reservedRetrieval.retryAfterSeconds);
         logApiReadRateLimited({
@@ -922,6 +927,8 @@ async function handlePulseGET(request: Request, options: PulseRouteOptions = {})
         originIp: requester.ipHash
       },
       requesterIpContext: {
+        anonymousMcpSurface: requester.anonymousMcpSurface,
+        anonymousRequesterNetwork: requester.anonymousRequesterNetwork,
         ipHash: requester.ipHash,
         sourceIp: requester.sourceIp
       },

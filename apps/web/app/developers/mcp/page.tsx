@@ -50,7 +50,7 @@ export default function DeveloperMcpPage() {
             <table className="min-w-full text-left text-sm">
               <thead className="border-b border-slate-200 bg-slate-50 text-slate-700"><tr><th className="px-4 py-3 font-semibold">Route</th><th className="px-4 py-3 font-semibold">Setup method</th><th className="px-4 py-3 font-semibold">Authentication</th><th className="px-4 py-3 font-semibold">Account</th><th className="px-4 py-3 font-semibold">Quota</th><th className="px-4 py-3 font-semibold">Available tools</th><th className="px-4 py-3 font-semibold">Intended user</th><th className="px-4 py-3 font-semibold">Website / access limits</th><th className="px-4 py-3 font-semibold">Upgrade path</th></tr></thead>
               <tbody className="divide-y divide-slate-100 text-slate-600">
-                <tr><td className="min-w-56 px-4 py-3 font-semibold text-slate-900">Light MCP — no authentication</td><td className="px-4 py-3">One Codex command or remote Streamable HTTP URL</td><td className="px-4 py-3">None</td><td className="px-4 py-3">Not required</td><td className="px-4 py-3">20 new scans per requester IP per UTC day; eligible reuse is free</td><td className="px-4 py-3">certscore_scan_site, certscore_get_scan_status, certscore_get_scan_bundle</td><td className="px-4 py-3">First-time users, testing, and discovery</td><td className="px-4 py-3">Public HTTP or HTTPS websites; core tools only</td><td className="px-4 py-3">Authenticate for volume, history, teams, or advanced tools</td></tr>
+                <tr><td className="min-w-56 px-4 py-3 font-semibold text-slate-900">Light MCP — no authentication</td><td className="px-4 py-3">One Codex command or remote Streamable HTTP URL</td><td className="px-4 py-3">None</td><td className="px-4 py-3">Not required</td><td className="px-4 py-3">Up to 50 new scans per UTC day across Light and 5 per rolling 10 minutes; eligible reuse is free</td><td className="px-4 py-3">certscore_scan_site, certscore_get_scan_status, certscore_get_scan_bundle</td><td className="px-4 py-3">First-time users, testing, and discovery</td><td className="px-4 py-3">Public HTTP or HTTPS websites; core tools only</td><td className="px-4 py-3">Authenticate for volume, history, teams, or advanced tools</td></tr>
                 <tr><td className="min-w-56 px-4 py-3 font-semibold text-slate-900">Hosted MCP — OAuth</td><td className="px-4 py-3">Connect the hosted endpoint from an OAuth-capable client</td><td className="px-4 py-3">OAuth authorization code with PKCE</td><td className="px-4 py-3">Required</td><td className="px-4 py-3">Higher-volume allowance based on access</td><td className="px-4 py-3">Core plus approved history and diagnostic tools</td><td className="px-4 py-3">Production, teams, and managed remote clients</td><td className="px-4 py-3">Scopes control read and scan creation; creation may require support</td><td className="px-4 py-3">Request more scopes or volume from support</td></tr>
                 <tr><td className="min-w-56 px-4 py-3 font-semibold text-slate-900">Local MCP — scoped API key</td><td className="px-4 py-3">Install and run the local stdio server</td><td className="px-4 py-3">Scoped API key in the client environment</td><td className="px-4 py-3">Required</td><td className="px-4 py-3">Higher-volume allowance based on key access</td><td className="px-4 py-3">Tools permitted by the key scopes</td><td className="px-4 py-3">Backend, local, and controlled automation</td><td className="px-4 py-3">Protect and rotate keys; scan creation is support-gated</td><td className="px-4 py-3">Request more scopes, tools, or volume</td></tr>
               </tbody>
@@ -82,7 +82,7 @@ Tools: certscore_scan_site, certscore_get_scan_status, certscore_get_scan_bundle
           <h3 className="mt-6 font-semibold text-slate-950">Codex setup</h3>
           <CodeBlock>{codexSetupCommand}</CodeBlock>
           <p className="mt-3 max-w-3xl text-sm leading-7 text-slate-600">
-            Light allows 20 new scans per requester IP per UTC day. Reused eligible results do not consume quota.
+            Light allows up to 50 genuinely new scans per UTC day across the public Light surface and 5 per rolling 10 minutes. Reused eligible results do not consume quota.
           </p>
         </Section>
 
@@ -157,7 +157,7 @@ full      maxBytes=12000 or higher`}</CodeBlock>
 
         <Section eyebrow="Light-to-Authenticated migration" title="Upgrade when Light becomes a constraint">
           <p className="max-w-3xl text-sm leading-7 text-slate-600">
-            Upgrade when you need more than 20 new scans per requester IP per UTC day, production or team access, backend automation,
+            Upgrade when you need a dedicated higher-volume allowance, production or team access, backend automation,
             scan history, advanced diagnostic tools, or support-managed scopes.
           </p>
           <div className="grid gap-4 md:grid-cols-2">

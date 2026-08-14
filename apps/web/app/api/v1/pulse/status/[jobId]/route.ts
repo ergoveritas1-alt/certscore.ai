@@ -3,7 +3,7 @@ import { apiReadRateLimitGuidance, projectExternalScanNoGo } from "@website-sign
 import { applyPulseCors, pulseOptionsResponse } from "../../../../../../lib/pulse/cors";
 import { buildPulseError } from "../../../../../../lib/pulse/error";
 import { logPulseGptActionEvent } from "../../../../../../lib/pulse/gpt-action-analytics";
-import { getPulseRequesterContext } from "../../../../../../lib/pulse/request";
+import { getPulseRequesterContext, trustedMcpInternalRead } from "../../../../../../lib/pulse/request";
 import { buildPulseStatus } from "../../../../../../lib/pulse/status";
 import { getPublicScanRecord } from "../../../../../../server/scans/get-public-scan-record";
 import { claimPulseReadQuota, getPulseRequestByJobId, updatePulseRequestLifecycle } from "../../../../../../server/pulse/repository";
@@ -78,13 +78,19 @@ export async function GET(request: Request, context: RouteContext) {
     const gptAction = explicitGptAction || pulseRequest.request_channel === "gpt_action";
     const target = pulseRequest.scan_id ? `scan:${pulseRequest.scan_id}` : `job:${pulseRequest.public_id}`;
     const requester = getPulseRequesterContext(request);
-    const readDecision = await claimPulseReadQuota({
-      detail: "summary",
-      principal: pulseRetrievalPrincipal({ ipHash: requester.ipHash }),
-      profile: "status",
-      route: "pulse-v1-status",
-      target
+    const internalStatusRead = trustedMcpInternalRead(request, {
+      operations: ["scan_site_wait"],
+      scanId: pulseRequest.scan_id ?? jobId
     });
+    const readDecision = internalStatusRead
+      ? { allowed: true as const }
+      : await claimPulseReadQuota({
+          detail: "summary",
+          principal: pulseRetrievalPrincipal({ ipHash: requester.ipHash }),
+          profile: "status",
+          route: "pulse-v1-status",
+          target
+        });
     if (!readDecision.allowed) {
       const guidance = apiReadRateLimitGuidance("status", readDecision.retryAfterSeconds);
       logApiReadRateLimited({

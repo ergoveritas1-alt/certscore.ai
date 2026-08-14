@@ -8,8 +8,12 @@ import type {
 const {
   API_READ_RATE_MAX_WINDOW_SECONDS,
   API_READ_RATE_POLICY,
+  apiReadRateLimitGuidance,
   apiReadRateUnits
 } = sharedPolicy;
+
+const CERTSCORE_ACCOUNT_URL = "https://certscore.ai/login?mode=create_account";
+const CERTSCORE_SUPPORT_EMAIL = "support@certscore.ai";
 
 export type McpReadCall = {
   profile: ApiReadRateProfile;
@@ -82,15 +86,75 @@ export function mcpReadCallsFromJsonRpc(value: unknown) {
   return call ? [call] : [];
 }
 
+function rateLimitWindowDescription(windowSeconds: number) {
+  if (windowSeconds === 600) return "10-minute rolling window";
+  if (windowSeconds === 86_400) return "24-hour rolling window";
+  return `${windowSeconds}-second rolling window`;
+}
+
+function rateLimitScopeDescription(scope: ApiReadRateScope | "provider") {
+  if (scope === "callerTarget") return "this MCP session and scan";
+  if (scope === "caller") return "this MCP session across scans";
+  if (scope === "target") return "this scan across all callers";
+  return "the shared Anthropic provider service";
+}
+
+export function mcpReadRateLimitGuidance(call: McpReadCall, decision: {
+  limitUnits: number;
+  profile: ApiReadRateProfile;
+  requestedUnits: number;
+  retryAfterSeconds: number;
+  scope: ApiReadRateScope | "provider";
+  usedUnits: number;
+  windowSeconds: number;
+}, options: { anonymousLight?: boolean } = {}) {
+  const canonical = apiReadRateLimitGuidance(decision.profile, decision.retryAfterSeconds);
+  const scopeDescription = rateLimitScopeDescription(decision.scope);
+  const windowDescription = rateLimitWindowDescription(decision.windowSeconds);
+  const unitDescription = decision.profile === "status" ? "status-poll units" : "terminal-read units";
+  const requestDescription = call.tool === "certscore_get_scan_bundle"
+    ? "bundle reads"
+    : call.tool === "certscore_get_scan_status"
+      ? "status polls"
+      : "equivalent requests";
+  const equivalentRequestLimit = Math.floor(decision.limitUnits / decision.requestedUnits);
+  const callerScoped = decision.scope === "callerTarget" || decision.scope === "caller";
+  const anonymousLightUpgrade = callerScoped && options.anonymousLight === true;
+  const upgradeMessage = anonymousLightUpgrade
+    ? `If you need higher-volume scanning, create an account at ${CERTSCORE_ACCOUNT_URL} and contact ${CERTSCORE_SUPPORT_EMAIL} to request a custom automated-access allowance. Creating an account does not automatically change the anonymous Light MCP limit.`
+    : callerScoped
+      ? `If you need higher-volume scanning, contact ${CERTSCORE_SUPPORT_EMAIL} to request a custom automated-access allowance for your authenticated MCP account.`
+    : `This is a shared service or scan-resource limit; registering an account will not bypass the active window. Contact ${CERTSCORE_SUPPORT_EMAIL} if this repeatedly affects legitimate use.`;
+  const limitDescription = `${decision.limitUnits} ${unitDescription} per ${windowDescription}`;
+  const operationDescription = `${call.tool} costs ${decision.requestedUnits} ${decision.requestedUnits === 1 ? "unit" : "units"}, equivalent to up to ${equivalentRequestLimit} ${requestDescription} when no other reads use the window`;
+  const recommendedNextAction = `${canonical.recommendedNextAction} ${upgradeMessage}`;
+
+  return {
+    accountUrl: anonymousLightUpgrade ? CERTSCORE_ACCOUNT_URL : null,
+    anonymousLightLimitChangedByAccount: false,
+    equivalentRequestLimit,
+    limitDescription,
+    message: `${canonical.message} The active limit for ${scopeDescription} is ${limitDescription}; ${operationDescription}, and ${decision.usedUnits} units are currently used. ${recommendedNextAction}`,
+    operationCostUnits: decision.requestedUnits,
+    recommendedNextAction,
+    scopeDescription,
+    supportEmail: CERTSCORE_SUPPORT_EMAIL,
+    upgradeAvailable: callerScoped,
+    upgradeMessage,
+    windowDescription
+  };
+}
+
 export class McpReadThrottle {
   private readonly events = new Map<string, Event[]>();
   private claims = 0;
 
-  claim(caller: string, call: McpReadCall, now = Date.now()) {
-    const keys: Array<{ key: string; reason: string; scope: ApiReadRateScope }> = [
+  claim(caller: string, call: McpReadCall, now = Date.now(), provider?: string) {
+    const keys: Array<{ key: string; reason: string; scope: ApiReadRateScope | "provider" }> = [
       { key: `${call.profile}:caller-target:${caller}:${call.target}`, reason: "caller_target", scope: "callerTarget" },
       { key: `${call.profile}:target:${call.target}`, reason: "target", scope: "target" },
-      { key: `${call.profile}:caller:${caller}`, reason: "caller", scope: "caller" }
+      { key: `${call.profile}:caller:${caller}`, reason: "caller", scope: "caller" },
+      ...(provider ? [{ key: `${call.profile}:provider:${provider}`, reason: "provider", scope: "provider" as const }] : [])
     ];
     const retentionCutoff = now - API_READ_RATE_MAX_WINDOW_SECONDS * 1000;
     const scoped = keys.map((scope) => {
@@ -103,13 +167,16 @@ export class McpReadThrottle {
       events: Event[];
       limitUnits: number;
       reason: string;
-      scope: ApiReadRateScope;
+      scope: ApiReadRateScope | "provider";
       usedUnits: number;
       windowId: "burst" | "daily";
       windowSeconds: number;
     } | null = null;
     for (const window of API_READ_RATE_POLICY.profiles[call.profile].windows) {
-      const limits: Partial<Record<ApiReadRateScope, number>> = window.limits;
+      const limits: Partial<Record<ApiReadRateScope | "provider", number>> = {
+        ...window.limits,
+        ...(window.mcpProviderLimit === undefined ? {} : { provider: window.mcpProviderLimit })
+      };
       const cutoff = now - window.windowSeconds * 1000;
       for (const scope of scoped) {
         const limit = limits[scope.scope];
