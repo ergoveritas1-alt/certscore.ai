@@ -20,6 +20,28 @@ import {
   pulseStatusSchema
 } from "./index.js";
 
+const retrievedMcpGuidance = {
+  scoreLabel: "CertScore score" as const,
+  provenance: {
+    mode: "existing_scan_retrieved" as const,
+    executionMode: null,
+    reused: null,
+    freshnessDecision: null
+  },
+  interpretationGuidance: {
+    scoreLabel: "CertScore score" as const,
+    observableSignalsOnly: true as const,
+    doNotInferUnobservedTechnologies: true as const,
+    doNotInferLegalComplianceStatus: true as const,
+    statement: "Observable scan signals only; do not infer unobserved technologies or legal compliance status."
+  },
+  reportUrl: "https://certscore.ai/scan/scan_123",
+  recommendedNextTool: null,
+  recommendedNextAction: "Review the result and retained limitations.",
+  error: null,
+  observationOnlyDisclaimer: "Automated public-web observations for human review, not legal advice, certification, or a compliance determination."
+};
+
 test("Pulse v1 schemas accept public-safe response shapes", () => {
   const parsed = pulseResponseSchema.parse({
     type: "certscore_pulse",
@@ -132,6 +154,7 @@ test("MCP output contracts reuse stable API shapes with bounded MCP metadata", (
       type: "certscore_finding_list",
       scanId: "scan_123",
       findings: [],
+      ...retrievedMcpGuidance,
       pagination: {
         limit: 50,
         offset: 0,
@@ -154,6 +177,8 @@ test("MCP output contracts reuse stable API shapes with bounded MCP metadata", (
         totalRowCount: 12,
         truncated: true
       },
+      evidenceMetadata: { total: 12, returned: 0, truncated: true },
+      ...retrievedMcpGuidance,
       rows: []
     })
   );

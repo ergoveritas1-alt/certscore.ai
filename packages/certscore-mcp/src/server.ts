@@ -2,7 +2,7 @@ import { CertScoreClient, CertScoreTimeoutError } from "@certscore/sdk";
 import { certScoreMcpToolContracts } from "@certscore/api-contracts";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { CERTSCORE_MCP_VERSION } from "./version.js";
-import { boundEvidencePacket, buildScanBundle, exportFindings, limitPreConsentRows, normalizeDetail, normalizeFormat, paginateFindingList, scanBundleText, toInvalidArgumentsToolError, toToolError, toToolResult, withMcpAgentGuidance } from "./tools.js";
+import { boundEvidencePacket, buildScanBundle, exportFindings, findingListText, limitPreConsentRows, markdownReportText, MAX_EVIDENCE_PACKET_CHARS, normalizeDetail, normalizeFormat, paginateFindingList, preConsentInventoryText, pulseReportText, scanBundleText, toInvalidArgumentsToolError, toToolError, toToolResult, withMcpAgentGuidance } from "./tools.js";
 
 export interface CertScoreMcpOptions {
   apiKey?: string;
@@ -240,7 +240,16 @@ export function createCertScoreMcpServer(options: CertScoreMcpOptions = {}) {
                 detail: normalizeDetail(detail),
                 format: "json"
               });
-        return toToolResult(result);
+        if (typeof result === "string") {
+          const guided = withMcpAgentGuidance({
+            type: "certscore_pulse_markdown",
+            scanId,
+            value: result
+          }, "existing_scan_retrieved");
+          return toToolResult(guided, markdownReportText(guided));
+        }
+        const guided = withMcpAgentGuidance(result as unknown as Record<string, any>, "existing_scan_retrieved");
+        return toToolResult(guided, pulseReportText(guided));
       } catch (error) {
         return toToolError(error);
       }
@@ -252,7 +261,12 @@ export function createCertScoreMcpServer(options: CertScoreMcpOptions = {}) {
     toolContract("certscore_get_evidence"),
     async ({ scanId }: GetEvidenceInput) => {
       try {
-        return toToolResult(boundEvidencePacket(await client.getScan(scanId, { detail: "evidence", format: "json" })));
+        const bounded = boundEvidencePacket(
+          await client.getScan(scanId, { detail: "evidence", format: "json" }),
+          MAX_EVIDENCE_PACKET_CHARS - 2_500
+        ) as Record<string, any>;
+        const guided = withMcpAgentGuidance(bounded, "existing_scan_retrieved");
+        return toToolResult(guided, pulseReportText(guided, "CertScore evidence result"));
       } catch (error) {
         return toToolError(error);
       }
@@ -314,7 +328,8 @@ export function createCertScoreMcpServer(options: CertScoreMcpOptions = {}) {
     async ({ scanId }: ExportFindingsInput) => {
       try {
         const report = await client.getScan(scanId, { detail: "full", format: "json" });
-        return toToolResult(exportFindings(report));
+        const guided = withMcpAgentGuidance(exportFindings(report), "existing_scan_retrieved");
+        return toToolResult(guided, findingListText(guided, "Exported canonical projected findings"));
       } catch (error) {
         return toToolError(error);
       }
@@ -326,7 +341,11 @@ export function createCertScoreMcpServer(options: CertScoreMcpOptions = {}) {
     toolContract("certscore_list_findings"),
     async ({ limit, offset, scanId }: ListFindingsInput) => {
       try {
-        return toToolResult(paginateFindingList(await client.findings.list(scanId), { limit, offset }));
+        const guided = withMcpAgentGuidance(
+          paginateFindingList(await client.findings.list(scanId), { limit, offset }),
+          "existing_scan_retrieved"
+        );
+        return toToolResult(guided, findingListText(guided));
       } catch (error) {
         return toToolError(error);
       }
@@ -338,7 +357,11 @@ export function createCertScoreMcpServer(options: CertScoreMcpOptions = {}) {
     toolContract("certscore_get_pre_consent_cookies_trackers"),
     async ({ maxRows, scanId }: GetPreConsentCookiesTrackersInput) => {
       try {
-        return toToolResult(limitPreConsentRows(await client.scans.preConsentCookiesTrackers(scanId), { maxRows }));
+        const guided = withMcpAgentGuidance(
+          limitPreConsentRows(await client.scans.preConsentCookiesTrackers(scanId), { maxRows }),
+          "existing_scan_retrieved"
+        );
+        return toToolResult(guided, preConsentInventoryText(guided));
       } catch (error) {
         return toToolError(error);
       }
@@ -374,7 +397,11 @@ export function createCertScoreMcpServer(options: CertScoreMcpOptions = {}) {
     toolContract("certscore_get_latest_domain_pre_consent_cookies_trackers"),
     async ({ domain, maxRows, scanFrom }: GetLatestDomainPreConsentCookiesTrackersInput) => {
       try {
-        return toToolResult(limitPreConsentRows(await client.domains.latestPreConsentCookiesTrackers(domain, { scanFrom }), { maxRows }));
+        const guided = withMcpAgentGuidance(
+          limitPreConsentRows(await client.domains.latestPreConsentCookiesTrackers(domain, { scanFrom }), { maxRows }),
+          "existing_scan_retrieved"
+        );
+        return toToolResult(guided, preConsentInventoryText(guided));
       } catch (error) {
         return toToolError(error);
       }

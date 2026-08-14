@@ -64,6 +64,13 @@ function safeProofEqual(expected: string, actual: string) {
   return expectedBuffer.length === actualBuffer.length && timingSafeEqual(expectedBuffer, actualBuffer);
 }
 
+function freshProofTimestamp(timestamp: string | null) {
+  if (!timestamp || !/^\d{1,12}$/.test(timestamp)) return false;
+  const timestampSeconds = Number(timestamp);
+  const nowSeconds = Math.floor(Date.now() / 1000);
+  return Number.isSafeInteger(timestampSeconds) && Math.abs(nowSeconds - timestampSeconds) <= ANONYMOUS_REQUESTER_PROOF_MAX_SKEW_SECONDS;
+}
+
 function verifiedAnonymousMcpRequester(headers: Headers) {
   const ip = headers.get("x-certscore-anonymous-requester-ip")?.trim() || null;
   const timestamp = headers.get("x-certscore-anonymous-requester-timestamp")?.trim() || null;
@@ -71,12 +78,7 @@ function verifiedAnonymousMcpRequester(headers: Headers) {
   const surfaceValue = headers.get("x-certscore-anonymous-surface")?.trim() || null;
   const surface: AnonymousMcpSurface | null = surfaceValue === "mcp_light" || surfaceValue === "mcp_anonymous" ? surfaceValue : null;
   const secret = process.env.CERTSCORE_OAUTH_JWT_SECRET?.trim() || process.env.JWT_SIGNING_KEY?.trim();
-  if (!ip || !timestamp || !proof || !secret || (surfaceValue && !surface) || !/^\d{1,12}$/.test(timestamp)) {
-    return null;
-  }
-  const timestampSeconds = Number(timestamp);
-  const nowSeconds = Math.floor(Date.now() / 1000);
-  if (!Number.isSafeInteger(timestampSeconds) || Math.abs(nowSeconds - timestampSeconds) > ANONYMOUS_REQUESTER_PROOF_MAX_SKEW_SECONDS) {
+  if (!ip || !timestamp || !proof || !secret || (surfaceValue && !surface) || !freshProofTimestamp(timestamp)) {
     return null;
   }
   const expected = createHmac("sha256", secret)
@@ -94,13 +96,16 @@ export function trustedMcpInternalRead(request: Request, expected: {
   scanId?: string;
 }) {
   const requester = verifiedAnonymousMcpRequester(request.headers);
-  if (!requester || requester.surface !== "mcp_light") return null;
+  const authenticatedBearer = /^Bearer\s+\S+$/i.test(request.headers.get("authorization")?.trim() ?? "");
+  if (requester?.surface !== "mcp_light" && !authenticatedBearer) return null;
   const operation = request.headers.get("x-certscore-mcp-internal-operation")?.trim() as InternalMcpOperation | null;
   const scanId = request.headers.get("x-certscore-mcp-internal-scan-id")?.trim() || null;
   const proof = request.headers.get("x-certscore-mcp-internal-proof")?.trim() || null;
-  const timestamp = request.headers.get("x-certscore-anonymous-requester-timestamp")?.trim() || null;
+  const timestamp = request.headers.get("x-certscore-mcp-internal-timestamp")?.trim()
+    || request.headers.get("x-certscore-anonymous-requester-timestamp")?.trim()
+    || null;
   const secret = process.env.CERTSCORE_OAUTH_JWT_SECRET?.trim() || process.env.JWT_SIGNING_KEY?.trim();
-  if (!operation || !expected.operations.includes(operation) || !scanId || !proof || !timestamp || !secret) return null;
+  if (!operation || !expected.operations.includes(operation) || !scanId || !proof || !freshProofTimestamp(timestamp) || !secret) return null;
   if (expected.scanId && scanId !== expected.scanId) return null;
   const url = new URL(request.url);
   const target = `${url.pathname}${url.search}`;

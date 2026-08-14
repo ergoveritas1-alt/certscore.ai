@@ -110,6 +110,33 @@ test("anonymous gateway context forwards the requester IP without adding authori
   }
 });
 
+test("authenticated hosted MCP component reads carry a signed internal-operation proof", async () => {
+  const mock = installFetch([{ status: 200, body: {
+    type: "certscore_scan",
+    scanId: "scan_123",
+    domain: "example.com",
+    status: "completed",
+    coverage: { status: "complete" }
+  } }]);
+  try {
+    const client = new CertScoreClient({
+      apiKey: "oauth-access-token",
+      anonymousRequesterSecret: "hosted-mcp-internal-test-secret",
+      clientName: "mcp"
+    });
+    await client.scans.get("scan_123", { internalMcpOperation: { operation: "scan_bundle", scanId: "scan_123" } });
+    const headers = new Headers(mock.callDetails[0]?.headers);
+    assert.equal(headers.get("Authorization"), "Bearer oauth-access-token");
+    assert.equal(headers.get("X-CertScore-MCP-Internal-Operation"), "scan_bundle");
+    assert.equal(headers.get("X-CertScore-MCP-Internal-Scan-ID"), "scan_123");
+    assert.match(headers.get("X-CertScore-MCP-Internal-Timestamp") ?? "", /^\d+$/);
+    assert.match(headers.get("X-CertScore-MCP-Internal-Proof") ?? "", /^[A-Za-z0-9_-]+$/);
+    assert.equal(headers.get("X-CertScore-Anonymous-Requester-IP"), null);
+  } finally {
+    mock.restore();
+  }
+});
+
 test("README documents current SDK resource clients", () => {
   const readme = readFileSync(new URL("../README.md", import.meta.url), "utf8");
 

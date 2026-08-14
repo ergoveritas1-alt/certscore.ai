@@ -92,9 +92,9 @@ function rateLimitWindowDescription(windowSeconds: number) {
   return `${windowSeconds}-second rolling window`;
 }
 
-function rateLimitScopeDescription(scope: ApiReadRateScope | "provider") {
-  if (scope === "callerTarget") return "this MCP session and scan";
-  if (scope === "caller") return "this MCP session across scans";
+function rateLimitScopeDescription(scope: ApiReadRateScope | "provider", authenticated = false) {
+  if (scope === "callerTarget") return authenticated ? "this authenticated OAuth identity and scan" : "this MCP session and scan";
+  if (scope === "caller") return authenticated ? "this authenticated OAuth identity across scans" : "this MCP session across scans";
   if (scope === "target") return "this scan across all callers";
   return "the shared Anthropic provider service";
 }
@@ -107,9 +107,9 @@ export function mcpReadRateLimitGuidance(call: McpReadCall, decision: {
   scope: ApiReadRateScope | "provider";
   usedUnits: number;
   windowSeconds: number;
-}, options: { anonymousLight?: boolean } = {}) {
+}, options: { anonymousLight?: boolean; authenticated?: boolean } = {}) {
   const canonical = apiReadRateLimitGuidance(decision.profile, decision.retryAfterSeconds);
-  const scopeDescription = rateLimitScopeDescription(decision.scope);
+  const scopeDescription = rateLimitScopeDescription(decision.scope, options.authenticated === true);
   const windowDescription = rateLimitWindowDescription(decision.windowSeconds);
   const unitDescription = decision.profile === "status" ? "status-poll units" : "terminal-read units";
   const requestDescription = call.tool === "certscore_get_scan_bundle"

@@ -7,7 +7,7 @@ import { CERTSCORE_MCP_VERSION } from "@certscore/mcp/version";
 import { getAllowedOrigins, getEnv } from "./env.js";
 import { McpHttpSessionStore } from "./session-store.js";
 import { McpReadThrottle, mcpReadCallsFromJsonRpc, mcpReadRateLimitGuidance } from "./read-throttle.js";
-import { anonymousMcpRequester, anonymousSessionBinding } from "./requester-identity.js";
+import { anonymousMcpRequester, anonymousSessionBinding, authenticatedMcpCallerBinding } from "./requester-identity.js";
 
 const env = getEnv();
 const allowedOrigins = getAllowedOrigins(env);
@@ -147,6 +147,7 @@ async function handleMcp(req: IncomingMessage, res: ServerResponse, anonymous: b
   const clientIp = anonymousRequester?.ip ?? null;
   let token: string | undefined;
   let tokenHash: string;
+  let authenticatedCallerHash: string | null = null;
   if (anonymous) {
     tokenHash = sessions.hashToken(light
       ? anonymousSessionBinding(anonymousRequester!)
@@ -158,6 +159,7 @@ async function handleMcp(req: IncomingMessage, res: ServerResponse, anonymous: b
     }
     token = auth.token;
     tokenHash = auth.tokenHash;
+    authenticatedCallerHash = sessions.hashToken(authenticatedMcpCallerBinding(auth.claims));
   }
   const sessionId = req.headers["mcp-session-id"]?.toString();
   let parsedBody: unknown;
@@ -176,10 +178,10 @@ async function handleMcp(req: IncomingMessage, res: ServerResponse, anonymous: b
     });
     const server = createCertScoreMcpServer({
       apiKey: token,
-      anonymousRequesterSecret: anonymous ? env.jwtSecret : undefined,
+      anonymousRequesterSecret: env.jwtSecret,
       baseUrl: env.CERTSCORE_BASE_URL,
       forwardedClientIp: clientIp,
-      anonymousSurface: light ? "mcp_light" : "mcp_anonymous",
+      anonymousSurface: anonymous ? (light ? "mcp_light" : "mcp_anonymous") : null,
       timeout: env.CERTSCORE_REQUEST_TIMEOUT_MS,
       toolProfile: light ? "light" : "full"
     });
@@ -231,11 +233,14 @@ async function handleMcp(req: IncomingMessage, res: ServerResponse, anonymous: b
   for (const readCall of readCalls) {
     const caller = light && anonymousRequester?.network === "anthropic" && sessionId
       ? sessions.hashToken(`anonymous-session:${sessionId}`)
-      : tokenHash;
+      : authenticatedCallerHash ?? tokenHash;
     const provider = light && anonymousRequester?.network === "anthropic" ? "anthropic" : undefined;
     const decision = readThrottle.claim(caller, readCall, Date.now(), provider);
     if (!decision.allowed) {
-      const guidance = mcpReadRateLimitGuidance(readCall, decision, { anonymousLight: light && anonymous });
+      const guidance = mcpReadRateLimitGuidance(readCall, decision, {
+        anonymousLight: light && anonymous,
+        authenticated: !anonymous
+      });
       console.warn(JSON.stringify({
         event: "mcp_http.scan_read_rate_limited",
         level: "warn",

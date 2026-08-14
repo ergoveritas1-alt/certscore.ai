@@ -650,14 +650,16 @@ export class CertScoreClient {
         headers["X-CertScore-Anonymous-Requester-Timestamp"] = timestamp;
         headers["X-CertScore-Anonymous-Requester-Proof"] = proof;
         headers["X-CertScore-Anonymous-Surface"] = surface;
-        if (internalMcpOperation) {
-          const target = `${url.pathname}${url.search}`;
-          const internalMessage = `${timestamp}.${internalMcpOperation.operation}.${internalMcpOperation.scanId}.${method}.${target}`;
-          headers["X-CertScore-MCP-Internal-Operation"] = internalMcpOperation.operation;
-          headers["X-CertScore-MCP-Internal-Scan-ID"] = internalMcpOperation.scanId;
-          headers["X-CertScore-MCP-Internal-Proof"] = createHmac("sha256", this.anonymousRequesterSecret).update(internalMessage).digest("base64url");
-        }
       }
+    }
+    if (internalMcpOperation && this.anonymousRequesterSecret) {
+      const timestamp = String(Math.floor(Date.now() / 1000));
+      const target = `${url.pathname}${url.search}`;
+      const internalMessage = `${timestamp}.${internalMcpOperation.operation}.${internalMcpOperation.scanId}.${method}.${target}`;
+      headers["X-CertScore-MCP-Internal-Timestamp"] = timestamp;
+      headers["X-CertScore-MCP-Internal-Operation"] = internalMcpOperation.operation;
+      headers["X-CertScore-MCP-Internal-Scan-ID"] = internalMcpOperation.scanId;
+      headers["X-CertScore-MCP-Internal-Proof"] = createHmac("sha256", this.anonymousRequesterSecret).update(internalMessage).digest("base64url");
     }
     return headers;
   }

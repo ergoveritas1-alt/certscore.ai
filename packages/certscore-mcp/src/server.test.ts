@@ -82,6 +82,12 @@ function parseToolJson(result: Awaited<ReturnType<Client["callTool"]>>) {
   return JSON.parse(first.text) as Record<string, unknown>;
 }
 
+function assertToolOutputSchema(name: (typeof certScoreMcpToolContracts)[number]["name"], payload: Record<string, unknown>) {
+  const contract = certScoreMcpToolContracts.find((candidate) => candidate.name === name);
+  assert.ok(contract);
+  assert.doesNotThrow(() => (contract.outputSchema as any).parse(payload));
+}
+
 const pulse = {
   type: "certscore_pulse",
   scanId: "scan_123",
@@ -787,13 +793,23 @@ test("certscore_get_report supports markdown and JSON report retrieval", async (
   const mock = installFetch([{ status: 200, text: "# CertScore Pulse" }, { status: 200, body: pulse }]);
   try {
     await withMcpClient(async (client) => {
-      const markdown = parseToolJson(
-        await client.callTool({ name: "certscore_get_report", arguments: { scanId: "scan_123", format: "markdown" } })
-      );
+      const markdownRaw = await client.callTool({ name: "certscore_get_report", arguments: { scanId: "scan_123", format: "markdown" } });
+      const markdown = parseToolJson(markdownRaw);
+      assertToolOutputSchema("certscore_get_report", markdown);
       assert.equal(markdown.value, "# CertScore Pulse");
+      const markdownText = markdownRaw.content[0]?.type === "text" ? markdownRaw.content[0].text : "";
+      assert.match(markdownText, /# CertScore Pulse/);
+      assert.match(markdownText, /Provenance: existing_scan_retrieved/);
+      assert.match(markdownText, /not legal advice, certification, or a compliance determination/i);
 
-      const json = parseToolJson(await client.callTool({ name: "certscore_get_report", arguments: { scanId: "scan_123", detail: "full" } }));
+      const jsonRaw = await client.callTool({ name: "certscore_get_report", arguments: { scanId: "scan_123", detail: "full" } });
+      const json = parseToolJson(jsonRaw);
+      assertToolOutputSchema("certscore_get_report", json);
       assert.equal(json.scanId, "scan_123");
+      const jsonText = jsonRaw.content[0]?.type === "text" ? jsonRaw.content[0].text : "";
+      assert.match(jsonText, /Tracking started before consent/);
+      assert.match(jsonText, /CertScore score=72/);
+      assert.doesNotMatch(jsonText, /compliance score|compliant baseline/i);
       assert.match(mock.calls[0] ?? "", /format=markdown/);
       assert.match(mock.calls[1] ?? "", /detail=full/);
     });
@@ -806,8 +822,13 @@ test("certscore_get_evidence retrieves the bounded Evidence JSON artifact", asyn
   const mock = installFetch([{ status: 200, body: { ...pulse, type: "certscore_pulse_evidence" } }]);
   try {
     await withMcpClient(async (client) => {
-      const evidence = parseToolJson(await client.callTool({ name: "certscore_get_evidence", arguments: { scanId: "scan_123" } }));
+      const raw = await client.callTool({ name: "certscore_get_evidence", arguments: { scanId: "scan_123" } });
+      const evidence = parseToolJson(raw);
+      assertToolOutputSchema("certscore_get_evidence", evidence);
       assert.equal(evidence.type, "certscore_pulse_evidence");
+      const text = raw.content[0]?.type === "text" ? raw.content[0].text : "";
+      assert.match(text, /Tracking started before consent/);
+      assert.match(text, /Do not infer technologies that are not listed/i);
       assert.match(mock.calls[0] ?? "", /scanId=scan_123/);
       assert.match(mock.calls[0] ?? "", /detail=evidence/);
     });
@@ -1067,7 +1088,8 @@ test("certscore_get_evidence bounds oversized Evidence JSON artifacts", async ()
       assert.equal(evidence.type, "certscore_pulse_evidence");
       assert.equal(evidence.scanId, "scan_123");
       assert.equal(metadata.truncated, true);
-      assert.ok(text.length <= 250_000);
+      assert.ok(JSON.stringify(evidence).length <= 250_000);
+      assert.ok(text.length <= 8_000);
     });
   } finally {
     mock.restore();
@@ -1174,14 +1196,18 @@ test("API v2 MCP tools return scan timing, findings, and latest domain resources
   try {
     await withMcpClient(async (client) => {
       const scan = parseToolJson(await client.callTool({ name: "certscore_get_scan", arguments: { scanId: "scan_123" } }));
-      const findings = parseToolJson(await client.callTool({ name: "certscore_list_findings", arguments: { scanId: "scan_123", limit: 1, offset: 1 } }));
-      const inventory = parseToolJson(await client.callTool({ name: "certscore_get_pre_consent_cookies_trackers", arguments: { scanId: "scan_123", maxRows: 2 } }));
+      const findingsRaw = await client.callTool({ name: "certscore_list_findings", arguments: { scanId: "scan_123", limit: 1, offset: 1 } });
+      const findings = parseToolJson(findingsRaw);
+      assertToolOutputSchema("certscore_list_findings", findings);
+      const inventoryRaw = await client.callTool({ name: "certscore_get_pre_consent_cookies_trackers", arguments: { scanId: "scan_123", maxRows: 2 } });
+      const inventory = parseToolJson(inventoryRaw);
+      assertToolOutputSchema("certscore_get_pre_consent_cookies_trackers", inventory);
       const latest = parseToolJson(
         await client.callTool({ name: "certscore_get_latest_domain_scan", arguments: { domain: "example.com", scanFrom: "eu_ie" } })
       );
-      const latestInventory = parseToolJson(
-        await client.callTool({ name: "certscore_get_latest_domain_pre_consent_cookies_trackers", arguments: { domain: "example.com", scanFrom: "eu_ie", maxRows: 1 } })
-      );
+      const latestInventoryRaw = await client.callTool({ name: "certscore_get_latest_domain_pre_consent_cookies_trackers", arguments: { domain: "example.com", scanFrom: "eu_ie", maxRows: 1 } });
+      const latestInventory = parseToolJson(latestInventoryRaw);
+      assertToolOutputSchema("certscore_get_latest_domain_pre_consent_cookies_trackers", latestInventory);
 
       assert.equal(scan.type, "certscore_scan");
       assert.equal(scan.startedAt, "2026-07-08T12:00:00.000Z");
@@ -1196,6 +1222,10 @@ test("API v2 MCP tools return scan timing, findings, and latest domain resources
         total: 3,
         truncated: true
       });
+      const findingsText = findingsRaw.content[0]?.type === "text" ? findingsRaw.content[0].text : "";
+      assert.ok(findingsText.length <= 8_000);
+      assert.match(findingsText, /Tracking started before consent/i);
+      assert.match(findingsText, /1 of 3 returned \(truncated\)/);
       assert.equal(inventory.type, "certscore_pre_consent_cookies_trackers");
       assert.equal((inventory.rows as unknown[]).length, 2);
       assert.equal(
@@ -1204,10 +1234,23 @@ test("API v2 MCP tools return scan timing, findings, and latest domain resources
       );
       assert.equal((inventory.summary as Record<string, unknown>).truncated, true);
       assert.equal((inventory.summary as Record<string, unknown>).totalRowCount, 3);
+      assert.deepEqual(inventory.evidenceMetadata, { total: 3, returned: 2, truncated: true });
+      const inventoryText = inventoryRaw.content[0]?.type === "text" ? inventoryRaw.content[0].text : "";
+      assert.ok(inventoryText.length <= 8_000);
+      assert.match(inventoryText, /2 of 3 rows returned \(truncated\)/);
+      assert.match(inventoryText, /vendor=Example Analytics/);
+      assert.match(inventoryText, /first observed=1\.200s/);
+      assert.match(inventoryText, /priority=high; confidence=high/);
+      assert.match(inventoryText, /domains=analytics\.example\.test/);
       assert.equal(latest.type, "certscore_domain_latest_scan");
       assert.equal(latestInventory.type, "certscore_pre_consent_cookies_trackers");
       assert.equal((latestInventory.rows as unknown[]).length, 1);
       assert.equal((latestInventory.summary as Record<string, unknown>).truncated, true);
+      const latestInventoryText = latestInventoryRaw.content[0]?.type === "text" ? latestInventoryRaw.content[0].text : "";
+      assert.ok(latestInventoryText.length <= 8_000);
+      assert.match(latestInventoryText, /Example Analytics/);
+      assert.match(latestInventoryText, /1 of 3 rows returned \(truncated\)/);
+      assert.match(latestInventoryText, /Do not infer technologies that are not listed/i);
       assert.match(mock.calls[0] ?? "", /\/api\/v2\/scans\/scan_123$/);
       assert.match(mock.calls[1] ?? "", /\/api\/v2\/scans\/scan_123\/findings$/);
       assert.match(mock.calls[2] ?? "", /\/api\/v2\/scans\/scan_123\/pre-consent-cookies-trackers$/);

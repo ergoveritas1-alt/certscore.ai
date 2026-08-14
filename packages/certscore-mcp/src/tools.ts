@@ -694,11 +694,21 @@ export function limitPreConsentRows<T extends Record<string, unknown>>(
     return payload;
   }
   const maxRows = Math.min(200, Math.max(1, options.maxRows ?? 200));
-  const total = rows.length;
-  const truncated = total > maxRows;
+  const reportedTotal = payload.summary && typeof payload.summary === "object" && !Array.isArray(payload.summary)
+    && Number.isInteger((payload.summary as Record<string, unknown>).rowCount)
+    ? Number((payload.summary as Record<string, unknown>).rowCount)
+    : 0;
+  const total = Math.max(rows.length, reportedTotal);
+  const returnedRows = rows.slice(0, maxRows);
+  const truncated = total > returnedRows.length;
   return {
     ...payload,
-    rows: rows.slice(0, maxRows),
+    rows: returnedRows,
+    evidenceMetadata: {
+      total,
+      returned: returnedRows.length,
+      truncated
+    },
     summary: {
       ...(payload.summary && typeof payload.summary === "object" && !Array.isArray(payload.summary) ? payload.summary : {}),
       totalRowCount: total,
@@ -854,6 +864,111 @@ function preConsentRowText(row: Record<string, any>) {
     ? row.evidenceClassification as Record<string, unknown>
     : {};
   return `- ${row.kind}: ${row.name}${cookieNames}; vendor=${row.vendor ?? "unknown"}; purpose=${row.purpose ?? "unknown"}; category=${row.category ?? "unknown"}; first observed=${timing}${domains}; evidence=${classification.basis ?? "unknown"}/${classification.phase ?? "unknown"}/${classification.party ?? "unknown"}; observedBeforeConsent=${classification.observedBeforeConsent ?? "unknown"}; priority=${classification.priority ?? "unknown"}; confidence=${row.confidence ?? "unknown"}.`;
+}
+
+function reportUrlFor(value: Record<string, any>) {
+  const scanId = extractScanId(value);
+  return typeof value.reportUrl === "string" && value.reportUrl.trim()
+    ? value.reportUrl.trim()
+    : typeof value.links?.report === "string" && value.links.report.trim()
+      ? value.links.report.trim()
+      : scanId
+        ? `https://certscore.ai/scan/${encodeURIComponent(scanId)}`
+        : null;
+}
+
+function boundedResultText(header: string, bodyLines: string[], value: Record<string, any>) {
+  const footer = [OBSERVATION_ONLY_DISCLAIMER, INTERPRETATION_STATEMENT];
+  const reportUrl = reportUrlFor(value);
+  const lines = [
+    header,
+    `Provenance: ${value.provenance?.mode ?? "existing_scan_retrieved"}.`,
+    `Full report: ${reportUrl ?? "not available"}.`
+  ];
+  let rendered = 0;
+  for (const line of bodyLines) {
+    if ([...lines, line, ...footer].join("\n").length > MAX_TOOL_TEXT_CHARS) break;
+    lines.push(line);
+    rendered += 1;
+  }
+  if (rendered < bodyLines.length) {
+    const omitted = `${bodyLines.length - rendered} additional returned row${bodyLines.length - rendered === 1 ? " was" : "s were"} omitted from TextContent to preserve the size limit; use structuredContent or the report URL.`;
+    if ([...lines, omitted, ...footer].join("\n").length <= MAX_TOOL_TEXT_CHARS) lines.push(omitted);
+  }
+  lines.push(...footer);
+  return lines.join("\n");
+}
+
+export function findingListText(value: Record<string, any>, label = "Canonical projected findings") {
+  const findings = Array.isArray(value.findings) ? value.findings : [];
+  const pagination = value.pagination && typeof value.pagination === "object" && !Array.isArray(value.pagination)
+    ? value.pagination as Record<string, unknown>
+    : {};
+  const total = typeof pagination.total === "number" ? pagination.total : findings.length;
+  const returned = typeof pagination.returned === "number" ? pagination.returned : findings.length;
+  const truncated = pagination.truncated === true;
+  const scanId = extractScanId(value) ?? "unknown";
+  return boundedResultText(
+    `${label} for scanId=${scanId}: ${returned} of ${total} returned${truncated ? " (truncated)" : ""}. These are canonical projected review signals, not MCP-derived findings.`,
+    findings.map((finding) => findingText(finding as Record<string, any>)),
+    value
+  );
+}
+
+export function preConsentInventoryText(value: Record<string, any>) {
+  const rows = Array.isArray(value.rows) ? value.rows : [];
+  const metadata = value.evidenceMetadata && typeof value.evidenceMetadata === "object" && !Array.isArray(value.evidenceMetadata)
+    ? value.evidenceMetadata as Record<string, unknown>
+    : {};
+  const total = typeof metadata.total === "number"
+    ? metadata.total
+    : typeof value.summary?.totalRowCount === "number"
+      ? value.summary.totalRowCount
+      : typeof value.summary?.rowCount === "number"
+        ? value.summary.rowCount
+        : rows.length;
+  const returned = typeof metadata.returned === "number" ? metadata.returned : rows.length;
+  const truncated = metadata.truncated === true || value.summary?.truncated === true;
+  const scanId = extractScanId(value) ?? "unknown";
+  const domain = typeof value.domain === "string" ? value.domain : "unknown domain";
+  return boundedResultText(
+    `Pre-consent cookie/tracker evidence for ${domain}; scanId=${scanId}; ${returned} of ${total} rows returned${truncated ? " (truncated)" : ""}. Enumerate only these observed rows.`,
+    rows.map((row) => preConsentRowText(compactPreConsentRow(row as Record<string, any>))),
+    value
+  );
+}
+
+export function pulseReportText(value: Record<string, any>, label = "CertScore report") {
+  const scanId = extractScanId(value) ?? "unknown";
+  const domain = typeof value.domain === "string" ? value.domain : "unknown domain";
+  const score = typeof value.summary?.score === "number"
+    ? value.summary.score
+    : typeof value.score === "number"
+      ? value.score
+      : null;
+  const findings = findingsFromReport(value as PulseResult);
+  const overview = executiveOverviewText(value.executiveSummary ?? value.summary?.executiveSummary);
+  const body = [
+    ...(overview ? [overview] : []),
+    `Canonical projected findings returned in this ${label.toLocaleLowerCase()}: ${findings.length}.`,
+    ...findings.map((finding) => findingText(finding as Record<string, any>))
+  ];
+  return boundedResultText(
+    `${label} for ${domain}; scanId=${scanId}${score === null ? "" : `; CertScore score=${score}`}.`,
+    body,
+    value
+  );
+}
+
+export function markdownReportText(value: Record<string, any>) {
+  const markdown = typeof value.value === "string" ? value.value : "";
+  const excerptLimit = Math.max(0, MAX_TOOL_TEXT_CHARS - 1_500);
+  const excerpt = markdown.length > excerptLimit ? `${markdown.slice(0, excerptLimit)}\n…[markdown truncated for MCP TextContent]` : markdown;
+  return boundedResultText(
+    `CertScore report for scanId=${extractScanId(value) ?? "unknown"}. The following is a bounded canonical report excerpt.`,
+    excerpt ? [excerpt] : ["No Markdown report body was returned."],
+    value
+  );
 }
 
 export function scanBundleText(bundle: Record<string, any>) {

@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import type { IncomingMessage } from "node:http";
 import test from "node:test";
-import { anonymousMcpRequester, anonymousSessionBinding } from "./requester-identity.js";
+import { anonymousMcpRequester, anonymousSessionBinding, authenticatedMcpCallerBinding } from "./requester-identity.js";
 
 function request(headers: IncomingMessage["headers"]) {
   return { headers } as IncomingMessage;
@@ -28,4 +28,15 @@ test("verified Anthropic egress is provider-classified without treating clientIn
 
 test("missing ALB forwarding does not fall back to caller-controlled X-Real-IP", () => {
   assert.deepEqual(anonymousMcpRequester(request({ "x-real-ip": "203.0.113.90" })), { ip: null, network: "unknown" });
+});
+
+test("authenticated read identity is stable across OAuth access-token refreshes", () => {
+  const first = authenticatedMcpCallerBinding({ iss: "https://certscore.ai", sub: "user_123" });
+  const refreshed = authenticatedMcpCallerBinding({ iss: "https://certscore.ai", sub: "user_123" });
+  const otherUser = authenticatedMcpCallerBinding({ iss: "https://certscore.ai", sub: "user_456" });
+  const otherIssuer = authenticatedMcpCallerBinding({ iss: "https://issuer.example", sub: "user_123" });
+  assert.equal(first, refreshed);
+  assert.notEqual(first, otherUser);
+  assert.notEqual(first, otherIssuer);
+  assert.doesNotMatch(first, /clientInfo|anthropic/i);
 });

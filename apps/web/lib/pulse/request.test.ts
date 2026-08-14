@@ -95,3 +95,36 @@ test("internal Light read proofs are bound to operation, scan, method, and exact
     else process.env.CERTSCORE_OAUTH_JWT_SECRET = previousSecret;
   }
 });
+
+test("authenticated hosted MCP internal reads use the same bounded proof without anonymous identity", () => {
+  const previousSecret = process.env.CERTSCORE_OAUTH_JWT_SECRET;
+  const secret = "authenticated-mcp-internal-test-secret";
+  process.env.CERTSCORE_OAUTH_JWT_SECRET = secret;
+  try {
+    const timestamp = String(Math.floor(Date.now() / 1000));
+    const operation = "scan_bundle";
+    const scanId = "scan_123";
+    const url = "https://certscore.ai/api/v2/scans/scan_123/findings";
+    const target = "/api/v2/scans/scan_123/findings";
+    const headers = {
+      authorization: "Bearer verified-upstream-oauth-token",
+      "x-certscore-mcp-internal-timestamp": timestamp,
+      "x-certscore-mcp-internal-operation": operation,
+      "x-certscore-mcp-internal-scan-id": scanId,
+      "x-certscore-mcp-internal-proof": createHmac("sha256", secret).update(`${timestamp}.${operation}.${scanId}.GET.${target}`).digest("base64url")
+    };
+    const request = new Request(url, { headers });
+    assert.deepEqual(trustedMcpInternalRead(request, { operations: ["scan_bundle"], scanId }), { operation, scanId });
+    assert.equal(trustedMcpInternalRead(new Request(url, { headers: { ...headers, authorization: "" } }), { operations: ["scan_bundle"], scanId }), null);
+    assert.equal(trustedMcpInternalRead(new Request(url, { headers: { ...headers, "x-certscore-mcp-internal-proof": "invalid" } }), { operations: ["scan_bundle"], scanId }), null);
+    const staleTimestamp = String(Math.floor(Date.now() / 1000) - 301);
+    assert.equal(trustedMcpInternalRead(new Request(url, { headers: {
+      ...headers,
+      "x-certscore-mcp-internal-timestamp": staleTimestamp,
+      "x-certscore-mcp-internal-proof": createHmac("sha256", secret).update(`${staleTimestamp}.${operation}.${scanId}.GET.${target}`).digest("base64url")
+    } }), { operations: ["scan_bundle"], scanId }), null);
+  } finally {
+    if (previousSecret === undefined) delete process.env.CERTSCORE_OAUTH_JWT_SECRET;
+    else process.env.CERTSCORE_OAUTH_JWT_SECRET = previousSecret;
+  }
+});

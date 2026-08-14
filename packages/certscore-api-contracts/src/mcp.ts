@@ -214,6 +214,17 @@ export const mcpActionableErrorSchema = z.object({
   responseBody: z.unknown().optional()
 }).strict();
 
+const mcpRetrievedGuidanceShape = {
+  scoreLabel: z.literal("CertScore score"),
+  provenance: mcpScanProvenanceSchema,
+  interpretationGuidance: mcpInterpretationGuidanceSchema,
+  reportUrl: z.string().nullable().optional(),
+  recommendedNextTool: z.enum(["certscore_get_scan_status", "certscore_get_scan_bundle"]).nullable(),
+  recommendedNextAction: z.string(),
+  error: mcpActionableErrorSchema.nullable(),
+  observationOnlyDisclaimer: z.string()
+} as const;
+
 export const mcpScanSiteOutputSchema = z
   .object({
     type: z.enum(["certscore_scan", "certscore_scan_job", "certscore_tool_error"]),
@@ -290,12 +301,28 @@ export const mcpScanStatusOutputSchema = z
 
 export const mcpReportOutputSchema = z
   .object({
-    type: z.enum(["certscore_pulse", "certscore_pulse_summary", "certscore_pulse_evidence"]).optional(),
+    type: z.enum(["certscore_pulse", "certscore_pulse_summary", "certscore_pulse_evidence", "certscore_pulse_markdown"]).optional(),
     scanId: z.string().optional(),
     scan_id: z.string().optional(),
     resultDisposition: scanResultDispositionSchema.optional(),
     noGo: scanNoGoResultSchema.optional(),
-    value: z.string().optional()
+    value: z.string().optional(),
+    ...mcpRetrievedGuidanceShape
+  })
+  .passthrough();
+
+export const mcpEvidenceOutputSchema = z
+  .object({
+    type: z.string(),
+    scanId: z.string().nullable().optional(),
+    scan_id: z.string().nullable().optional(),
+    mcpMetadata: z.object({
+      maxSerializedChars: z.number().int().min(1),
+      originalSerializedChars: z.number().int().min(0),
+      strategy: z.enum(["compact_nested_values", "minimal_safe_summary", "metadata_only"]),
+      truncated: z.literal(true)
+    }).strict().optional(),
+    ...mcpRetrievedGuidanceShape
   })
   .passthrough();
 
@@ -391,7 +418,8 @@ export const mcpFindingsExportOutputSchema = z
         })
         .passthrough()
     ),
-    disclaimer: z.string().nullable()
+    disclaimer: z.string().nullable(),
+    ...mcpRetrievedGuidanceShape
   })
   .passthrough();
 
@@ -406,14 +434,21 @@ export const mcpFindingListPaginationSchema = z
   .strict();
 
 export const mcpFindingListOutputSchema = apiV2FindingListSchema.extend({
-  pagination: mcpFindingListPaginationSchema.optional()
+  pagination: mcpFindingListPaginationSchema.optional(),
+  ...mcpRetrievedGuidanceShape
 });
 
 export const mcpPreConsentCookiesTrackersOutputSchema = apiV2PreConsentCookiesTrackersSchema.extend({
   summary: apiV2PreConsentCookiesTrackersSummarySchema.extend({
     totalRowCount: z.number().int().min(0).optional(),
     truncated: z.boolean().optional()
-  })
+  }),
+  evidenceMetadata: z.object({
+    total: z.number().int().min(0),
+    returned: z.number().int().min(0),
+    truncated: z.boolean()
+  }).strict(),
+  ...mcpRetrievedGuidanceShape
 });
 
 export const certScoreMcpToolContracts = [
@@ -444,7 +479,7 @@ export const certScoreMcpToolContracts = [
   {
     name: "certscore_get_report",
     title: "Get CertScore Pulse report",
-    description: "Retrieve a summary Pulse report, including customer-safe no-go messaging when coverage is completed-limited. Use certscore_get_evidence for the larger bounded packet.",
+    description: "Focused follow-up: retrieve a bounded Pulse report with high-signal TextContent and typed structuredContent, including customer-safe no-go messaging. For broad privacy questions, use certscore_get_scan_bundle first because it combines canonical findings, limitations, and pre-consent rows without redundant calls.",
     inputSchema: mcpGetReportInputSchema,
     outputSchema: mcpReportOutputSchema,
     annotations: readOnlyOpenWorldAnnotations
@@ -452,9 +487,9 @@ export const certScoreMcpToolContracts = [
   {
     name: "certscore_get_evidence",
     title: "Get CertScore Pulse evidence",
-    description: "Retrieve the bounded structured Evidence JSON packet for a stable scan ID. Excludes raw cookie values, raw bodies, sensitive payloads, full DOM, and unredacted query values.",
+    description: "Focused follow-up: retrieve a bounded public-safe evidence packet with a concise TextContent digest and typed structuredContent. For broad privacy questions, use certscore_get_scan_bundle first. Excludes raw cookie values, raw bodies, sensitive payloads, full DOM, and unredacted query values.",
     inputSchema: mcpGetEvidenceInputSchema,
-    outputSchema: pulseResponseSchema,
+    outputSchema: mcpEvidenceOutputSchema,
     annotations: readOnlyOpenWorldAnnotations
   },
   {
@@ -476,7 +511,7 @@ export const certScoreMcpToolContracts = [
   {
     name: "certscore_list_findings",
     title: "List CertScore findings",
-    description: "List API v2 public-safe findings already projected for a scan.",
+    description: "Focused follow-up: list bounded API v2 public-safe findings already projected by the canonical pipeline, with matching high-signal TextContent and typed structuredContent. For broad privacy questions, use certscore_get_scan_bundle first.",
     inputSchema: mcpListFindingsInputSchema,
     outputSchema: mcpFindingListOutputSchema,
     annotations: readOnlyOpenWorldAnnotations
@@ -484,7 +519,7 @@ export const certScoreMcpToolContracts = [
   {
     name: "certscore_get_pre_consent_cookies_trackers",
     title: "Get pre-consent cookies and trackers",
-    description: "Retrieve the public-safe Cookies & Trackers (Pre-consent) report table as compact JSON for a scan.",
+    description: "Focused follow-up: retrieve bounded row-level public-safe pre-consent cookie/tracker evidence with matching TextContent and typed structuredContent. For a new broad request such as checking a site for pre-consent tracking, use certscore_scan_site then certscore_get_scan_bundle first.",
     inputSchema: mcpGetPreConsentCookiesTrackersInputSchema,
     outputSchema: mcpPreConsentCookiesTrackersOutputSchema,
     annotations: readOnlyOpenWorldAnnotations
@@ -508,7 +543,7 @@ export const certScoreMcpToolContracts = [
   {
     name: "certscore_get_latest_domain_pre_consent_cookies_trackers",
     title: "Get latest domain pre-consent cookies and trackers",
-    description: "Retrieve the public-safe Cookies & Trackers (Pre-consent) table from the latest eligible scan for a domain.",
+    description: "Focused follow-up: retrieve bounded row-level public-safe pre-consent cookie/tracker evidence from the latest eligible scan for a domain, with matching TextContent and typed structuredContent. For a broad current-site review, use certscore_scan_site then certscore_get_scan_bundle first.",
     inputSchema: mcpGetLatestDomainPreConsentCookiesTrackersInputSchema,
     outputSchema: mcpPreConsentCookiesTrackersOutputSchema,
     annotations: readOnlyOpenWorldAnnotations

@@ -46,7 +46,8 @@ test("allows thirty composite reads for one caller and scan, then cools down", (
   assert.equal(guidance.upgradeAvailable, true);
   assert.equal(guidance.accountUrl, "https://certscore.ai/login?mode=create_account");
 
-  const authenticatedGuidance = mcpReadRateLimitGuidance(call, thirtyFirst);
+  const authenticatedGuidance = mcpReadRateLimitGuidance(call, thirtyFirst, { authenticated: true });
+  assert.match(authenticatedGuidance.message, /this authenticated OAuth identity and scan/i);
   assert.match(authenticatedGuidance.message, /authenticated MCP account/i);
   assert.doesNotMatch(authenticatedGuidance.message, /create an account/i);
   assert.equal(authenticatedGuidance.accountUrl, null);

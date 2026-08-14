@@ -46,6 +46,9 @@ test("Streamable HTTP runtime initializes, lists tools, enforces auth, CORS, and
   let anonymousSurface: string | undefined;
   let anonymousRequesterIp: string | undefined;
   let anonymousRequesterProof: string | undefined;
+  let authenticatedInternalOperation: string | undefined;
+  let authenticatedInternalProof: string | undefined;
+  let authenticatedInternalTimestamp: string | undefined;
   const apiServer = createHttpServer((request, response) => {
     const requestUrl = new URL(request.url ?? "/", apiOrigin);
     if (request.method === "POST" && request.url === "/api/v2/scans") {
@@ -65,6 +68,11 @@ test("Streamable HTTP runtime initializes, lists tools, enforces auth, CORS, and
       return;
     }
     if (request.method === "GET" && requestUrl.pathname === "/api/v2/scans/00000000-0000-4000-8000-000000000123") {
+      if (request.headers.authorization) {
+        authenticatedInternalOperation = request.headers["x-certscore-mcp-internal-operation"]?.toString();
+        authenticatedInternalProof = request.headers["x-certscore-mcp-internal-proof"]?.toString();
+        authenticatedInternalTimestamp = request.headers["x-certscore-mcp-internal-timestamp"]?.toString();
+      }
       response.writeHead(200, { "content-type": "application/json" });
       response.end(JSON.stringify({
         type: "certscore_scan",
@@ -213,6 +221,19 @@ test("Streamable HTTP runtime initializes, lists tools, enforces auth, CORS, and
     const tools = await client.listTools();
     assert.ok(tools.tools.some((tool) => tool.name === "certscore_get_scan"));
     assert.ok(tools.tools.some((tool) => tool.name === "certscore_scan_site"));
+    const authenticatedBundle = await client.callTool({
+      name: "certscore_get_scan_bundle",
+      arguments: { scanId: "00000000-0000-4000-8000-000000000123" }
+    });
+    assert.equal(authenticatedBundle.isError, undefined, JSON.stringify(authenticatedBundle));
+    const authenticatedContent = (authenticatedBundle as { content?: Array<{ type: string; text?: string }> }).content ?? [];
+    const authenticatedText = authenticatedContent[0]?.type === "text" ? authenticatedContent[0].text ?? "" : "";
+    assert.match(authenticatedText, /First-layer reject control not observed/);
+    assert.match(authenticatedText, /Google Analytics/);
+    assert.match(authenticatedText, /cookies=_ga/);
+    assert.equal(authenticatedInternalOperation, "scan_bundle");
+    assert.match(authenticatedInternalTimestamp ?? "", /^\d+$/);
+    assert.match(authenticatedInternalProof ?? "", /^[A-Za-z0-9_-]+$/);
     await client.close();
 
     const anonymousTransport = new StreamableHTTPClientTransport(new URL(`${origin}/mcp/anonymous`), {
