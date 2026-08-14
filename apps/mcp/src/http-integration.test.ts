@@ -707,10 +707,13 @@ test("Streamable HTTP runtime initializes, lists tools, enforces auth, CORS, and
     const lightTools = await lightClient.listTools();
     assert.deepEqual(lightTools.tools.map((tool) => tool.name).sort(), ["certscore_get_scan_bundle", "certscore_get_scan_status", "certscore_scan_site"]);
     const lightScanTool = lightTools.tools.find((tool) => tool.name === "certscore_scan_site");
-    assert.match(lightScanTool?.description ?? "", /scan or check a public website for observable privacy and consent signals/);
-    assert.match(lightScanTool?.description ?? "", /cookies or browser storage, third-party or pre-consent tracking/);
-    assert.match(lightScanTool?.description ?? "", /GDPR\/ePrivacy or applicable CCPA\/CPRA review signals/);
-    assert.match(lightScanTool?.description ?? "", /accessibility or transport-security signals where available/);
+    assert.match(lightScanTool?.description ?? "", /scan a public website for observable privacy and consent signals/);
+    assert.match(lightScanTool?.description ?? "", /pre-consent cookies and browser storage, third-party trackers/);
+    assert.match(lightScanTool?.description ?? "", /consent-banner and CMP behavior/);
+    assert.match(lightScanTool?.description ?? "", /TLS\/transport security/);
+    assert.match(lightScanTool?.description ?? "", /privacy-policy disclosures/);
+    assert.match(lightScanTool?.description ?? "", /GDPR\/ePrivacy transparency findings/);
+    assert.match(lightScanTool?.description ?? "", /applicable CCPA\/CPRA review signals/);
     assert.match(lightScanTool?.description ?? "", /Starts or reuses a public-web scan and waits up to 45 seconds by default/);
     assert.deepEqual(lightScanTool?.annotations, {
       readOnlyHint: false,
