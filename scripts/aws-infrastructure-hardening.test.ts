@@ -51,6 +51,15 @@ test("validation deploy assumes its dedicated AWS role", async () => {
   assert.match(terraform, /"logs:FilterLogEvents"/);
 });
 
+test("production ops monitor assumes the validation role for ECS probes", async () => {
+  const source = await readFile(".github/workflows/prod-ops-monitor.yml", "utf8");
+
+  assert.match(
+    source,
+    /AWS_ROLE_TO_ASSUME: \$\{\{ vars\.AWS_VALIDATION_ROLE_TO_ASSUME \|\| secrets\.AWS_ROLE_TO_ASSUME \}\}/
+  );
+});
+
 test("validation worker uses the measured low-utilization Fargate size", async () => {
   const workflow = await readFile(".github/workflows/validation-aws-deploy.yml", "utf8");
   const variables = await readFile("infra/aws/validation/variables.tf", "utf8");

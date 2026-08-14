@@ -50,10 +50,16 @@ OPS_REQUIRE_VALIDATION_HEARTBEAT=false
 OPS_REQUIRE_DIRECT_DATABASE=false
 OPS_SCAN_QUEUE_STALE_MINUTES=10
 AWS_REGION=us-west-1
+AWS_VALIDATION_ROLE_TO_ASSUME=arn:aws:iam::<account-id>:role/certscore-validation-github-actions-deploy
 OPS_AWS_DB_PROBE_ENABLED=true
 OPS_AWS_MONITOR_ECS_CLUSTER=certscore-validation-cluster
 OPS_AWS_MONITOR_ECS_SERVICE=certscore-validation-worker
 ```
+
+Configure `AWS_VALIDATION_ROLE_TO_ASSUME` as a GitHub Actions repository variable.
+The scheduled monitor uses this dedicated role because its Fargate probe must
+pass the validation worker execution and task roles. The legacy
+`AWS_ROLE_TO_ASSUME` secret remains a fallback only.
 
 `OPS_REQUIRE_DIRECT_DATABASE=false` is the default for the GitHub-hosted monitor because the production Postgres instance is private to AWS networking. In that mode, `pnpm ops:monitor:prod` still checks the public web process, public database health endpoint, and configured ECS services. With `OPS_AWS_DB_PROBE_ENABLED=true`, the workflow then runs `pnpm ops:monitor:prod:aws`, which launches `apps/validation-worker/scripts/prod-ops-db-probe.ts` in Fargate using the validation worker task definition, subnets, security groups, and production secrets. Set `OPS_REQUIRE_DIRECT_DATABASE=true` only from an environment that can reach the production database directly, such as the ECS-hosted probe or a trusted operator shell inside the VPC.
 
