@@ -9,7 +9,7 @@ on:
       - ".github/workflows/validation-aws-deploy.yml"
       - "apps/validation-worker/**"
       - "apps/web/lib/scans/**"
-      - "apps/web/server/scans/**"
+      - "apps/web/server/**"
       - "apps/web/package.json"
       - "infra/aws/validation/**"
       - "packages/db/**"
@@ -119,7 +119,7 @@ jobs:
             /^apps\/validation-worker\// { worker=1 }
             /^apps\/validation-worker\/scripts\// { worker_scripts=1 }
             /^apps\/validation-worker\/.*\.(test|spec)\.ts$/ { worker_tests=1 }
-            /^apps\/web\/lib\/scans\// || /^apps\/web\/server\/scans\// { surfacing=1 }
+            /^apps\/web\/lib\/scans\// || /^apps\/web\/server\// { surfacing=1 }
             /^apps\/web\/.*\.(test|spec)\.(ts|tsx)$/ { web_tests=1 }
             /^packages\/(shared|db|validation-shared|web-bot-auth)\// { pkg=1 }
             /^infra\/aws\/validation\// { infra=1 }
@@ -129,7 +129,7 @@ jobs:
               if (worker) print "  - validation worker source"
               if (worker_scripts) print "  - validation worker script-only change"
               if (worker_tests) print "  - validation worker test-only change"
-              if (surfacing) print "  - web scan/finding surfacing dependency"
+              if (surfacing) print "  - web server/scan dependency compiled into validation runtime"
               if (web_tests) print "  - web scan/finding test-only change"
               if (pkg) print "  - validation runtime package"
               if (infra) print "  - validation infrastructure"

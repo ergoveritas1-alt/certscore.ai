@@ -17,7 +17,6 @@ import { revalidatePath } from "next/cache";
 import { enqueueFullScanJob } from "../queue/full-scan-queue";
 import { enqueueValidationCollectJob, getValidationQueueAvailability, getValidationQueueHealth } from "../queue/validation-queue";
 import { getWebServerEnv } from "../../lib/env";
-import { requireValidationAdminContext } from "./auth";
 import { shouldSurfaceSupplementalPolicyReviewFinding } from "../../lib/scans/supplemental-policy-review-gates";
 import {
   getHybridConsentAuditCompleted,
@@ -1496,6 +1495,7 @@ function getPipelineState(settings: ValidationSettingsRow): ValidationPipelineSt
 }
 
 async function requireAdmin() {
+  const { requireValidationAdminContext } = await import("./auth");
   return requireValidationAdminContext();
 }
 

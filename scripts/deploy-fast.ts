@@ -312,7 +312,7 @@ function isValidationDeployInput(file: string) {
     file === ".github/workflows/validation-aws-deploy.yml" ||
     file.startsWith("apps/validation-worker/") ||
     file.startsWith("apps/web/lib/scans/") ||
-    file.startsWith("apps/web/server/scans/") ||
+    file.startsWith("apps/web/server/") ||
     file.startsWith("infra/aws/validation/") ||
     file.startsWith("packages/db/") ||
     file.startsWith("packages/shared/") ||

@@ -44,11 +44,20 @@ test("GitHub deploy roles restrict PassRole to ECS task roles", async () => {
 test("validation deploy assumes its dedicated AWS role", async () => {
   const source = await readFile(".github/workflows/validation-aws-deploy.yml", "utf8");
   assert.match(source, /vars\.AWS_VALIDATION_ROLE_TO_ASSUME/);
+  assert.match(source, /"apps\/web\/server\/\*\*"/);
   assert.match(source, /\.name != "S3_ACCESS_KEY_ID"/);
   assert.match(source, /\.name != "S3_SECRET_ACCESS_KEY"/);
 
   const terraform = await readFile(validationTerraformPath, "utf8");
   assert.match(terraform, /"logs:FilterLogEvents"/);
+});
+
+test("validation deployment classifiers include web server dependencies compiled into the worker", async () => {
+  const deploySource = await readFile("scripts/deploy-fast.ts", "utf8");
+  const predeploySource = await readFile("scripts/predeploy.ts", "utf8");
+
+  assert.match(deploySource, /file\.startsWith\("apps\/web\/server\/"\)/);
+  assert.match(predeploySource, /file\.startsWith\("apps\/web\/server\/"\)/);
 });
 
 test("production ops monitor assumes the validation role for ECS probes", async () => {

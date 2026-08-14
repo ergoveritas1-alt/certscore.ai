@@ -66,3 +66,13 @@ test("full scan responses keep post-queue failures attached to the created scan"
   assert.match(queueSource, /Scan created but event logging failed\.",\s+scanId: scan\.id/);
   assert.match(queueSource, /Scan created but latest scan update failed\.",\s+scanId: scan\.id/);
 });
+
+test("validation repository keeps React-backed admin auth outside worker import paths", () => {
+  const repositorySource = readFileSync("apps/web/server/validation/repository.ts", "utf8");
+
+  assert.doesNotMatch(repositorySource, /^import .*from "\.\/auth";/m);
+  assert.match(
+    repositorySource,
+    /async function requireAdmin\(\) \{\s+const \{ requireValidationAdminContext \} = await import\("\.\/auth"\);/
+  );
+});
