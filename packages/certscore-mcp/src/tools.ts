@@ -1069,7 +1069,7 @@ export function buildScanBundle(input: {
     refresh();
   }
   const inventoryRows = bundle.preConsentCookiesTrackers?.rows;
-  while (bundle.mcpMetadata.actualBytes > maxBytes && Array.isArray(inventoryRows) && inventoryRows.length > 0) {
+  while (bundle.mcpMetadata.actualBytes > maxBytes && Array.isArray(inventoryRows) && inventoryRows.length > 1) {
     markBudgetOmitted("additionalPreConsentRows", "evidence_inventory_reduced_to_byte_limit");
     inventoryRows.pop();
     bundle.preConsentCookiesTrackers.returned = inventoryRows.length;

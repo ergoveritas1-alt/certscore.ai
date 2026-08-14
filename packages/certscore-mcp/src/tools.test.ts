@@ -195,6 +195,68 @@ test("buildScanBundle honors the caller's byte budget", () => {
   assert.equal(bundle.preConsentCookiesTrackers.truncated, true);
 });
 
+test("documented 8 KB findings budget preserves compact row-level pre-consent evidence", () => {
+  const bundle = buildScanBundle({
+    detail: "findings",
+    evidence: null,
+    findings: {
+      type: "certscore_finding_list",
+      scanId: "scan_123",
+      findings: Array.from({ length: 5 }, (_, index) => publicFinding(`finding_${index}`))
+    },
+    maxBytes: 8_000,
+    preConsentCookiesTrackers: {
+      type: "certscore_pre_consent_cookies_trackers",
+      rows: Array.from({ length: 24 }, (_, index) => ({
+        id: `tracker_${index}`,
+        kind: "tracker",
+        name: `Tracker ${index}`,
+        cookieNames: [],
+        vendor: `Vendor ${index}`,
+        purpose: "Audience measurement",
+        category: "Analytics",
+        confidence: "high",
+        firstObservedAtMs: 4_000 + index,
+        domains: [`tracker-${index}.example`],
+        requestCount: null,
+        evidenceClassification: {
+          basis: "public_report_projection",
+          phase: "pre_consent",
+          observedBeforeConsent: true,
+          party: "third_party",
+          priority: "high"
+        }
+      })),
+      summary: { rowCount: 24 }
+    },
+    report,
+    scan: {
+      type: "certscore_scan",
+      scanId: "scan_123",
+      domain: "example.com",
+      url: "https://example.com",
+      status: "completed",
+      score: 72,
+      scoreStatus: "final",
+      links: {
+        self: "https://certscore.ai/api/v2/scans/scan_123",
+        report: "https://certscore.ai/scan/scan_123",
+        findings: "https://certscore.ai/api/v2/scans/scan_123/findings",
+        pulse: "https://certscore.ai/api/v2/scans/scan_123/pulse",
+        preConsentCookiesTrackers: "https://certscore.ai/api/v2/scans/scan_123/pre-consent-cookies-trackers"
+      }
+    }
+  } as any);
+
+  const text = scanBundleText(bundle);
+  assert.ok(bundle.mcpMetadata.actualBytes <= 8_000);
+  assert.ok(bundle.preConsentCookiesTrackers.returned >= 1);
+  assert.ok(bundle.preConsentCookiesTrackers.rows.length >= 1);
+  assert.match(text, /- tracker: Tracker 0;/);
+  assert.match(text, /vendor=Vendor 0; purpose=Audience measurement; category=Analytics;/);
+  assert.doesNotThrow(() => mcpScanBundleOutputSchema.parse(bundle));
+});
+
 test("buildScanBundle implements materially distinct detail modes", () => {
   const common = {
     evidence: { ...report, evidenceSafetyNotes: ["Retained evidence is bounded."] },
