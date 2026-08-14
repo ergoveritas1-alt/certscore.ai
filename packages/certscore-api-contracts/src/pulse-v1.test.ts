@@ -143,6 +143,38 @@ test("MCP contracts expose the current scoped tool surface", () => {
   assert.ok(certScoreMcpToolContracts.find((tool) => tool.name === "certscore_get_pre_consent_cookies_trackers")?.inputSchema.maxRows);
 });
 
+test("certscore_scan_site advertises public-site privacy inspection before the unchanged Light workflow", () => {
+  const scanSite = certScoreMcpToolContracts.find((tool) => tool.name === "certscore_scan_site");
+  const status = certScoreMcpToolContracts.find((tool) => tool.name === "certscore_get_scan_status");
+  const bundle = certScoreMcpToolContracts.find((tool) => tool.name === "certscore_get_scan_bundle");
+  assert.ok(scanSite);
+  assert.equal(
+    scanSite.description,
+    "Use CertScore to scan or check a public website for observable privacy and consent signals, including cookies or browser storage, third-party or pre-consent tracking, consent-banner and CMP behavior, privacy-policy disclosures, related GDPR/ePrivacy or applicable CCPA/CPRA review signals, and accessibility or transport-security signals where available. Starts or reuses a public-web scan and waits up to 45 seconds by default. If status is queued, running, or finalizing, retain scanId and poll certscore_get_scan_status using only that scanId. Stop polling at completed, completed_limited, failed, expired, or rate_limited. For usable completion, call certscore_get_scan_bundle. No-go and limited coverage are observations, never proof of compliance."
+  );
+  for (const concept of [
+    /scan or check a public website/,
+    /observable privacy and consent signals/,
+    /cookies or browser storage/,
+    /third-party or pre-consent tracking/,
+    /consent-banner and CMP behavior/,
+    /privacy-policy disclosures/,
+    /GDPR\/ePrivacy/,
+    /CCPA\/CPRA/,
+    /accessibility or transport-security signals where available/
+  ]) {
+    assert.match(scanSite.description, concept);
+  }
+  assert.equal(
+    status?.description,
+    "Poll with only the stable scanId returned by certscore_scan_site. Active responses include phase, heartbeat, estimated progress, stalled state, and retry delay. Terminal responses include the CertScore score, risk, coverage, timestamps, report URL, and an explicit next action. Stop polling at any terminal status."
+  );
+  assert.equal(
+    bundle?.description,
+    "Call after completed or completed_limited status. Every usable completed bundle returns a self-contained concise TextContent digest plus matching structuredContent. The default summary includes the canonical report overview, up to five compact public-safe projected findings across the scan's observed domains, and bounded row-level pre-consent cookie/tracker evidence; detail=findings increases the default finding allowance, evidence adds bounded evidence digests and references, and full adds all available bounded sections. Every response declares finding and evidence total/returned/truncated counts, byte-budget metadata, omittedSections, retrieval URLs, and nextRecommendedMaxBytes when truncated. Enumerate only returned observations and projected findings. The CertScore score covers observable scan signals only; do not infer unobserved technologies or legal compliance status, and never interpret no-go, not-observed, or limited coverage as proof of compliance."
+  );
+});
+
 test("MCP scan inputs accept every API v2 scanner location", () => {
   const scanSite = certScoreMcpToolContracts.find((tool) => tool.name === "certscore_scan_site");
   assert.ok(scanSite);

@@ -469,7 +469,7 @@ export const certScoreMcpToolContracts = [
   {
     name: "certscore_scan_site",
     title: "Scan site",
-    description: "First call. Starts or reuses a public-web scan and waits up to 45 seconds by default. If status is queued, running, or finalizing, retain scanId and poll certscore_get_scan_status using only that scanId. Stop polling at completed, completed_limited, failed, expired, or rate_limited. For usable completion, call certscore_get_scan_bundle. No-go and limited coverage are observations, never proof of compliance.",
+    description: "Use CertScore to scan or check a public website for observable privacy and consent signals, including cookies or browser storage, third-party or pre-consent tracking, consent-banner and CMP behavior, privacy-policy disclosures, related GDPR/ePrivacy or applicable CCPA/CPRA review signals, and accessibility or transport-security signals where available. Starts or reuses a public-web scan and waits up to 45 seconds by default. If status is queued, running, or finalizing, retain scanId and poll certscore_get_scan_status using only that scanId. Stop polling at completed, completed_limited, failed, expired, or rate_limited. For usable completion, call certscore_get_scan_bundle. No-go and limited coverage are observations, never proof of compliance.",
     inputSchema: mcpScanSiteInputSchema,
     outputSchema: mcpScanSiteOutputSchema,
     annotations: scanCreationAnnotations

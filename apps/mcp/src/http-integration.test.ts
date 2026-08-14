@@ -706,7 +706,13 @@ test("Streamable HTTP runtime initializes, lists tools, enforces auth, CORS, and
     await lightClient.connect(lightTransport);
     const lightTools = await lightClient.listTools();
     assert.deepEqual(lightTools.tools.map((tool) => tool.name).sort(), ["certscore_get_scan_bundle", "certscore_get_scan_status", "certscore_scan_site"]);
-    assert.deepEqual(lightTools.tools.find((tool) => tool.name === "certscore_scan_site")?.annotations, {
+    const lightScanTool = lightTools.tools.find((tool) => tool.name === "certscore_scan_site");
+    assert.match(lightScanTool?.description ?? "", /scan or check a public website for observable privacy and consent signals/);
+    assert.match(lightScanTool?.description ?? "", /cookies or browser storage, third-party or pre-consent tracking/);
+    assert.match(lightScanTool?.description ?? "", /GDPR\/ePrivacy or applicable CCPA\/CPRA review signals/);
+    assert.match(lightScanTool?.description ?? "", /accessibility or transport-security signals where available/);
+    assert.match(lightScanTool?.description ?? "", /Starts or reuses a public-web scan and waits up to 45 seconds by default/);
+    assert.deepEqual(lightScanTool?.annotations, {
       readOnlyHint: false,
       destructiveHint: false,
       idempotentHint: false,
