@@ -295,6 +295,7 @@ test("Streamable HTTP runtime initializes, lists tools, enforces auth, CORS, and
 
     const observedRequesterIp = "198.51.100.60";
     const changedRequesterIp = "198.51.100.61";
+    const secondChangedRequesterIp = "198.51.100.62";
     const observedProtocolVersion = "2025-11-25";
     const observedInitialize = await fetch(`${origin}/mcp/light`, {
       method: "POST",
@@ -327,7 +328,7 @@ test("Streamable HTTP runtime initializes, lists tools, enforces auth, CORS, and
         "content-type": "application/json",
         "mcp-protocol-version": observedProtocolVersion,
         "mcp-session-id": observedSessionId,
-        "x-forwarded-for": observedRequesterIp
+        "x-forwarded-for": changedRequesterIp
       },
       body: JSON.stringify({ jsonrpc: "2.0", method: "notifications/initialized" })
     });
@@ -341,7 +342,7 @@ test("Streamable HTTP runtime initializes, lists tools, enforces auth, CORS, and
         "content-type": "application/json",
         "mcp-protocol-version": observedProtocolVersion,
         "mcp-session-id": observedSessionId,
-        "x-forwarded-for": observedRequesterIp
+        "x-forwarded-for": secondChangedRequesterIp
       },
       body: JSON.stringify({ jsonrpc: "2.0", id: 7002, method: "tools/list", params: {} })
     });
@@ -349,26 +350,49 @@ test("Streamable HTTP runtime initializes, lists tools, enforces auth, CORS, and
     assert.match(observedToolsList.headers.get("content-type") ?? "", /^text\/event-stream/);
     await observedToolsList.text();
 
-    const mismatchedToolsList = await fetch(`${origin}/mcp/light`, {
+    const anonymousMismatchInitialize = await fetch(`${origin}/mcp/anonymous`, {
+      method: "POST",
+      headers: {
+        accept: "application/json, text/event-stream",
+        "content-type": "application/json",
+        "x-forwarded-for": observedRequesterIp
+      },
+      body: JSON.stringify({
+        jsonrpc: "2.0",
+        id: 7003,
+        method: "initialize",
+        params: {
+          protocolVersion: observedProtocolVersion,
+          capabilities: {},
+          clientInfo: { name: "certscore-mismatch-test", version: "0.1.0" }
+        }
+      })
+    });
+    assert.equal(anonymousMismatchInitialize.status, 200);
+    const anonymousMismatchSessionId = anonymousMismatchInitialize.headers.get("mcp-session-id");
+    assert.ok(anonymousMismatchSessionId);
+    await anonymousMismatchInitialize.text();
+
+    const anonymousMismatchedToolsList = await fetch(`${origin}/mcp/anonymous`, {
       method: "POST",
       headers: {
         accept: "application/json, text/event-stream",
         "content-type": "application/json",
         "mcp-protocol-version": observedProtocolVersion,
-        "mcp-session-id": observedSessionId,
+        "mcp-session-id": anonymousMismatchSessionId,
         "x-forwarded-for": changedRequesterIp
       },
-      body: JSON.stringify({ jsonrpc: "2.0", id: 7003, method: "tools/list", params: {} })
+      body: JSON.stringify({ jsonrpc: "2.0", id: 7004, method: "tools/list", params: {} })
     });
-    assert.equal(mismatchedToolsList.status, 401);
-    assert.deepEqual(await mismatchedToolsList.json(), {
+    assert.equal(anonymousMismatchedToolsList.status, 401);
+    assert.deepEqual(await anonymousMismatchedToolsList.json(), {
       error: "session_requester_mismatch",
       error_description: "The MCP session belongs to a different anonymous requester."
     });
 
     const mismatchObservation = await waitForMcpObservation(
       () => diagnostics,
-      (event) => event.surface === "mcp_light" && event.reasonCode === "session_requester_mismatch"
+      (event) => event.surface === "mcp_anonymous" && event.reasonCode === "session_requester_mismatch"
     );
     const lightObservations = mcpRequestObservations(diagnostics).filter((event) => event.surface === "mcp_light");
     const initializeObservation = lightObservations.find((event) => event.jsonRpcMethod === "initialize");
@@ -409,9 +433,11 @@ test("Streamable HTTP runtime initializes, lists tools, enforces auth, CORS, and
     assert.equal(initializedObservation.mcpProtocolVersionHeader, observedProtocolVersion);
     assert.equal(initializedObservation.sessionHeaderSupplied, true);
     assert.equal(initializedObservation.sessionFound, true);
-    assert.equal(initializedObservation.requesterSessionIdentityMatched, true);
+    assert.equal(initializedObservation.requesterSessionIdentityMatched, false);
+    assert.equal(initializedObservation.reasonCode, null);
     assert.equal(toolsListObservation.finalHttpStatus, 200);
     assert.equal(toolsListObservation.mcpProtocolVersionHeader, observedProtocolVersion);
+    assert.equal(toolsListObservation.requesterSessionIdentityMatched, false);
     assert.equal(toolsListObservation.responseContentType, "text/event-stream");
     assert.equal(mismatchObservation.finalHttpStatus, 401);
     assert.equal(mismatchObservation.sessionHeaderSupplied, true);
@@ -419,8 +445,10 @@ test("Streamable HTTP runtime initializes, lists tools, enforces auth, CORS, and
     assert.equal(mismatchObservation.requesterSessionIdentityMatched, false);
     assert.equal(mismatchObservation.reasonCode, "session_requester_mismatch");
     assert.match(String(initializeObservation.requesterIdentityHash), /^[a-f0-9]{12}$/);
-    assert.equal(initializeObservation.requesterIdentityHash, initializedObservation.requesterIdentityHash);
-    assert.equal(initializeObservation.requesterIdentityHash, toolsListObservation.requesterIdentityHash);
+    assert.equal(initializeObservation.requesterIdentityHash, initializedObservation.sessionIdentityHash);
+    assert.equal(initializeObservation.requesterIdentityHash, toolsListObservation.sessionIdentityHash);
+    assert.notEqual(initializeObservation.requesterIdentityHash, initializedObservation.requesterIdentityHash);
+    assert.notEqual(initializeObservation.requesterIdentityHash, toolsListObservation.requesterIdentityHash);
     assert.equal(initializeObservation.requesterIdentityHash, mismatchObservation.sessionIdentityHash);
     assert.notEqual(mismatchObservation.requesterIdentityHash, mismatchObservation.sessionIdentityHash);
     for (const event of lightObservations) {
@@ -432,6 +460,7 @@ test("Streamable HTTP runtime initializes, lists tools, enforces auth, CORS, and
     assert.equal(diagnostics.includes(observedSessionId), false);
     assert.equal(diagnostics.includes(observedRequesterIp), false);
     assert.equal(diagnostics.includes(changedRequesterIp), false);
+    assert.equal(diagnostics.includes(secondChangedRequesterIp), false);
 
     const lightTransport = new StreamableHTTPClientTransport(new URL(`${origin}/mcp/light`), {
       requestInit: { headers: { "x-forwarded-for": "160.79.104.9" } }

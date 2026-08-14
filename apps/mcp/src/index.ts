@@ -388,7 +388,9 @@ async function handleMcp(req: IncomingMessage, res: ServerResponse, anonymous: b
     }
     return;
   }
-  if (session.tokenHash !== tokenHash) {
+  // Hosted MCP clients may distribute one anonymous Light session across egress addresses.
+  // The opaque session ID remains authoritative; other surfaces retain requester binding.
+  if (session.tokenHash !== tokenHash && !light) {
     if (anonymous) {
       json(res, 401, { error: "session_requester_mismatch", error_description: "The MCP session belongs to a different anonymous requester." }, corsHeaders(req));
       logAnonymousMcpObservation({
@@ -409,7 +411,10 @@ async function handleMcp(req: IncomingMessage, res: ServerResponse, anonymous: b
   for (const readCall of readCalls) {
     const caller = light && anonymousRequester?.network === "anthropic" && sessionId
       ? sessions.hashToken(`anonymous-session:${sessionId}`)
-      : authenticatedCallerHash ?? tokenHash;
+      : light && anonymous
+        // Preserve initialize-time caller accounting when a Light session changes egress.
+        ? session.tokenHash
+        : authenticatedCallerHash ?? tokenHash;
     const provider = light && anonymousRequester?.network === "anthropic" ? "anthropic" : undefined;
     const decision = readThrottle.claim(caller, readCall, Date.now(), provider);
     if (!decision.allowed) {
