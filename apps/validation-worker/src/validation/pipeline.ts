@@ -29,6 +29,7 @@ import {
   loadNanoSignalEnrichmentInputs,
   loadValidationRunFindings,
   markValidationSchedule,
+  parkNanoSignalEnrichmentUntilScanTerminal,
   persistDerivedNanoPolicySignals,
   replaceScanDocumentSources,
   replaceValidationRunFindings,
@@ -85,6 +86,17 @@ const MAX_NANO_SIGNAL_ENRICHMENT_POLLS = 20;
 const NANO_DOCUMENT_EXTRACTION_BATCH_SIZE = 4;
 const VALIDATION_VERDICT_BATCH_SIZE = 12;
 const SENTINEL_POLICY_REVIEW_PATH_PREFIX = "/.well-known/certscore-canary/sentinels/";
+
+export function getNanoSignalPolicyWaitDecision(pollCount: number) {
+  const nextPollCount = Math.min(
+    MAX_NANO_SIGNAL_ENRICHMENT_POLLS,
+    Math.max(0, Math.floor(pollCount)) + 1
+  );
+  return {
+    action: nextPollCount >= MAX_NANO_SIGNAL_ENRICHMENT_POLLS ? "park" : "requeue",
+    nextPollCount
+  } as const;
+}
 
 const FINANCIAL_COMMERCIAL_SIGNAL_KEYS = new Set([
   "financial.performance_claim_text_present",
@@ -6876,17 +6888,23 @@ export async function processNanoSignalEnrichmentJob(input: {
   }
 
   if (artifacts.policySemanticRows.length === 0 && scanStatus !== "completed" && scanStatus !== "failed") {
-    const nextPollCount = pollCount + 1;
-    const willContinuePolicyRowPolling = nextPollCount < MAX_NANO_SIGNAL_ENRICHMENT_POLLS;
-    await requeueNanoSignalEnrichmentPoll({
-      delayMs: NANO_SIGNAL_STALE_SAFETY_RECHECK_MS,
-      pollCount: nextPollCount,
-      reason:
-        willContinuePolicyRowPolling
-          ? "waiting_for_scanner_policy_rows"
-          : "waiting_for_scanner_terminal_status",
-      scanId
-    });
+    const waitDecision = getNanoSignalPolicyWaitDecision(pollCount);
+    if (waitDecision.action === "park") {
+      await parkNanoSignalEnrichmentUntilScanTerminal({
+        pollCount: waitDecision.nextPollCount,
+        reason: "scanner_policy_rows_unavailable_within_poll_window",
+        recoveryMode: input.recoveryMode,
+        scanId,
+        wakeOnPolicyEvidence: true
+      });
+    } else {
+      await requeueNanoSignalEnrichmentPoll({
+        delayMs: NANO_SIGNAL_STALE_SAFETY_RECHECK_MS,
+        pollCount: waitDecision.nextPollCount,
+        reason: "waiting_for_scanner_policy_rows",
+        scanId
+      });
+    }
     return;
   }
 
@@ -6966,11 +6984,12 @@ export async function processNanoSignalEnrichmentJob(input: {
   const scanIsTerminal = scanStatus === "completed" || scanStatus === "failed";
 
   if (!hasCompletedUnifiedDerivation && !scanIsTerminal) {
-    await requeueNanoSignalEnrichmentPoll({
-      delayMs: NANO_SIGNAL_STALE_SAFETY_RECHECK_MS,
+    await parkNanoSignalEnrichmentUntilScanTerminal({
       pollCount,
       reason: "waiting_for_scanner_terminal_status",
-      scanId
+      recoveryMode: input.recoveryMode,
+      scanId,
+      wakeOnPolicyEvidence: false
     });
     return;
   }

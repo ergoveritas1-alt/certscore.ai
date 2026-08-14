@@ -55,6 +55,16 @@ test("Nano wakeup migration makes event inserts and terminal scan updates transa
   assert.match(projectionSource, /signals\.nano_doc_enrichment_failed/);
 });
 
+test("Nano waits park durably without fabricating a terminal enrichment result", () => {
+  const repositorySource = readFileSync("apps/validation-worker/src/validation/repository.ts", "utf8");
+  assert.match(repositorySource, /nanoSignalEnrichmentWaiting/);
+  assert.match(repositorySource, /'infinity'::timestamptz/);
+  assert.match(repositorySource, /insert into nano_signal_work_items/);
+  assert.match(repositorySource, /scans\.status in \('completed', 'failed'\)/);
+  assert.match(repositorySource, /policy_enrichment\.scan_id = parked_event\.scan_id/);
+  assert.doesNotMatch(repositorySource, /nanoSignalEnrichmentWaiting[\s\S]{0,300}nanoSignalEnrichmentCompleted/);
+});
+
 test("buildNanoSignalDispatchFailureEvent schedules bounded retries with persisted backoff", () => {
   const first = buildNanoSignalDispatchFailureEvent({
     error: new Error("missing retained inputs"),

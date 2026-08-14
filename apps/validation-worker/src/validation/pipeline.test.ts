@@ -9,6 +9,7 @@ import {
   deriveUnifiedFindingsWithWorkflowEvents,
   deriveValidationFindings,
   determineValidationCollectAction,
+  getNanoSignalPolicyWaitDecision,
   getNanoDocumentSourceDedupKeys,
   isolateLikelyLegalDocumentText,
   isSentinelPolicyReviewTarget,
@@ -23,6 +24,21 @@ import {
   shouldRetryRejectedNanoDocumentSource,
   shouldQueueNanoDocumentSourceForExtraction
 } from "./pipeline";
+
+test("Nano signal policy waits become parked after the bounded poll window", () => {
+  assert.deepEqual(getNanoSignalPolicyWaitDecision(18), {
+    action: "requeue",
+    nextPollCount: 19
+  });
+  assert.deepEqual(getNanoSignalPolicyWaitDecision(19), {
+    action: "park",
+    nextPollCount: 20
+  });
+  assert.deepEqual(getNanoSignalPolicyWaitDecision(210_945), {
+    action: "park",
+    nextPollCount: 20
+  });
+});
 
 test("retained-extraction shadow cohort is limited to owned sentinel pages", () => {
   assert.equal(

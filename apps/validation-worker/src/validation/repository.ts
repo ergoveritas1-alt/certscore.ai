@@ -3137,6 +3137,73 @@ export async function appendScanWorkflowEvent(input: {
   );
 }
 
+export async function parkNanoSignalEnrichmentUntilScanTerminal(input: {
+  pollCount: number;
+  reason: string;
+  recoveryMode?: NanoSignalScanLease["recoveryMode"];
+  scanId: string;
+  wakeOnPolicyEvidence: boolean;
+}) {
+  await query(
+    `with parked_event as (
+       insert into scan_events (
+         domain_id, event_type, message, metadata_json, organization_id, scan_id
+       ) values (
+         null, $1, $2, $3, null, $4
+       )
+       returning scan_id, created_at
+     )
+     insert into nano_signal_work_items (
+       scan_id, requested_at, not_before, poll_count, recovered, recovery_mode, updated_at
+     )
+     select
+       scan_id,
+       created_at,
+       case
+         when exists (
+           select 1
+             from scans
+            where scans.id = parked_event.scan_id
+              and scans.status in ('completed', 'failed')
+         ) or (
+           $8::boolean
+           and exists (
+             select 1
+               from policy_enrichment
+              where policy_enrichment.scan_id = parked_event.scan_id
+           )
+         ) then now()
+         else 'infinity'::timestamptz
+       end,
+       $5,
+       $6,
+       $7,
+       now()
+     from parked_event
+     on conflict (scan_id) do update
+       set requested_at = excluded.requested_at,
+           not_before = excluded.not_before,
+           poll_count = excluded.poll_count,
+           recovered = excluded.recovered,
+           recovery_mode = excluded.recovery_mode,
+           updated_at = now()`,
+    [
+      SCAN_EVENT_TYPES.nanoSignalEnrichmentWaiting,
+      "Nano document signal enrichment is parked until scanner evidence or terminal status arrives.",
+      {
+        pollCount: Math.max(0, Math.floor(input.pollCount)),
+        reason: input.reason,
+        stage: "nano_doc_signals"
+      },
+      input.scanId,
+      Math.max(0, Math.floor(input.pollCount)),
+      Boolean(input.recoveryMode),
+      input.recoveryMode ?? null,
+      input.wakeOnPolicyEvidence
+    ]
+  );
+}
+
 export async function appendUnifiedFindingsCompletionAndQueueReportMaterialization(input: {
   eventType: string;
   message: string;
