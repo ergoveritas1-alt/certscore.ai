@@ -715,6 +715,18 @@ test("Streamable HTTP runtime initializes, lists tools, enforces auth, CORS, and
     assert.match(lightScanTool?.description ?? "", /GDPR\/ePrivacy transparency findings/);
     assert.match(lightScanTool?.description ?? "", /applicable CCPA\/CPRA review signals/);
     assert.match(lightScanTool?.description ?? "", /Starts or reuses a public-web scan and waits up to 45 seconds by default/);
+    const freshnessSchema = lightScanTool?.inputSchema.properties?.freshness as { description?: string; enum?: string[] } | undefined;
+    assert.deepEqual(freshnessSchema?.enum, ["latest", "refresh"]);
+    assert.equal(
+      freshnessSchema?.description,
+      "Prefer latest for ordinary website checks so an eligible recent completed scan can be reused and new-scan allowance is not consumed unnecessarily; CertScore may still start a scan when no suitable result exists. Use refresh only when the user explicitly requests a fresh, new, or repeated scan; ordinary check, scan, audit, inspect, review, or assess wording alone does not request refresh."
+    );
+    const scanFromSchema = lightScanTool?.inputSchema.properties?.scanFrom as { description?: string; enum?: string[] } | undefined;
+    assert.deepEqual(scanFromSchema?.enum, ["eu_de", "eu_ie", "california"]);
+    assert.equal(
+      scanFromSchema?.description,
+      "Optional execution region for a newly queued scan. Omit when the user did not request a jurisdiction or regional perspective; use eu_de or eu_ie for explicit EU/GDPR/ePrivacy requests and california for explicit California/CCPA/CPRA requests. Do not use multiple regions unless comparison is requested, and do not infer EU from consent or California from a U.S. user location."
+    );
     assert.deepEqual(lightScanTool?.annotations, {
       readOnlyHint: false,
       destructiveHint: false,

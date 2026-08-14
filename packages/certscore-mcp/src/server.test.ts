@@ -231,6 +231,18 @@ test("CertScore Light exposes only the focused no-account workflow", async () =>
     });
     assert.ok(scanSiteTool?.outputSchema?.required?.includes("error"));
     assert.ok(scanSiteTool?.outputSchema?.required?.includes("recommendedNextAction"));
+    const freshnessSchema = scanSiteTool?.inputSchema.properties?.freshness as { description?: string; enum?: string[] } | undefined;
+    assert.deepEqual(freshnessSchema?.enum, ["latest", "refresh"]);
+    assert.equal(
+      freshnessSchema?.description,
+      "Prefer latest for ordinary website checks so an eligible recent completed scan can be reused and new-scan allowance is not consumed unnecessarily; CertScore may still start a scan when no suitable result exists. Use refresh only when the user explicitly requests a fresh, new, or repeated scan; ordinary check, scan, audit, inspect, review, or assess wording alone does not request refresh."
+    );
+    const scanFromSchema = scanSiteTool?.inputSchema.properties?.scanFrom as { description?: string; enum?: string[] } | undefined;
+    assert.deepEqual(scanFromSchema?.enum, ["eu_de", "eu_ie", "california"]);
+    assert.equal(
+      scanFromSchema?.description,
+      "Optional execution region for a newly queued scan. Omit when the user did not request a jurisdiction or regional perspective; use eu_de or eu_ie for explicit EU/GDPR/ePrivacy requests and california for explicit California/CCPA/CPRA requests. Do not use multiple regions unless comparison is requested, and do not infer EU from consent or California from a U.S. user location."
+    );
     const statusTool = tools.tools.find((tool) => tool.name === "certscore_get_scan_status");
     assert.deepEqual(statusTool?.annotations, {
       readOnlyHint: true,

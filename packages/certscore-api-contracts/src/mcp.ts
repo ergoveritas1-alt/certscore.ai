@@ -24,8 +24,8 @@ export const mcpCreateScanInputSchema = {
   url: z.string().min(1).describe("Public URL or domain to scan."),
   detail: mcpPulseDetailSchema.optional().describe("Pulse detail level. Defaults to summary."),
   format: mcpPulseFormatSchema.optional().describe("Response format for completed immediate responses. Defaults to json."),
-  freshness: mcpPulseFreshnessSchema.optional().describe("Use latest to reuse recent scans or refresh to request a new scan when eligible."),
-  scanFrom: mcpScanFromSchema.optional().describe("Optional scan execution context for newly queued scans.")
+  freshness: mcpPulseFreshnessSchema.optional().describe("Prefer latest for ordinary website checks so an eligible recent completed scan can be reused and new-scan allowance is not consumed unnecessarily; CertScore may still start a scan when no suitable result exists. Use refresh only when the user explicitly requests a fresh, new, or repeated scan; ordinary check, scan, audit, inspect, review, or assess wording alone does not request refresh."),
+  scanFrom: mcpScanFromSchema.optional().describe("Optional execution region for a newly queued scan. Omit when the user did not request a jurisdiction or regional perspective; use eu_de or eu_ie for explicit EU/GDPR/ePrivacy requests and california for explicit California/CCPA/CPRA requests. Do not use multiple regions unless comparison is requested, and do not infer EU from consent or California from a U.S. user location.")
 } as const;
 
 export const mcpScanSiteInputSchema = {

@@ -13,6 +13,8 @@ import {
   certScoreMcpToolContracts,
   mcpFindingListOutputSchema,
   mcpPreConsentCookiesTrackersOutputSchema,
+  mcpPulseFreshnessSchema,
+  mcpScanFromSchema,
   mcpScanSiteOutputSchema,
   PULSE_SCHEMA_VERSION,
   pulseErrorSchema,
@@ -173,6 +175,23 @@ test("certscore_scan_site advertises public-site privacy inspection before the u
     bundle?.description,
     "Call after completed or completed_limited status. Every usable completed bundle returns a self-contained concise TextContent digest plus matching structuredContent. The default summary includes the canonical report overview, up to five compact public-safe projected findings across the scan's observed domains, and bounded row-level pre-consent cookie/tracker evidence; detail=findings increases the default finding allowance, evidence adds bounded evidence digests and references, and full adds all available bounded sections. Every response declares finding and evidence total/returned/truncated counts, byte-budget metadata, omittedSections, retrieval URLs, and nextRecommendedMaxBytes when truncated. Enumerate only returned observations and projected findings. The CertScore score covers observable scan signals only; do not infer unobserved technologies or legal compliance status, and never interpret no-go, not-observed, or limited coverage as proof of compliance."
   );
+});
+
+test("certscore_scan_site parameter guidance preserves economical intent-aligned selection", () => {
+  const scanSite = certScoreMcpToolContracts.find((tool) => tool.name === "certscore_scan_site");
+  assert.ok(scanSite);
+  assert.equal(
+    scanSite.inputSchema.freshness.description,
+    "Prefer latest for ordinary website checks so an eligible recent completed scan can be reused and new-scan allowance is not consumed unnecessarily; CertScore may still start a scan when no suitable result exists. Use refresh only when the user explicitly requests a fresh, new, or repeated scan; ordinary check, scan, audit, inspect, review, or assess wording alone does not request refresh."
+  );
+  assert.equal(
+    scanSite.inputSchema.scanFrom.description,
+    "Optional execution region for a newly queued scan. Omit when the user did not request a jurisdiction or regional perspective; use eu_de or eu_ie for explicit EU/GDPR/ePrivacy requests and california for explicit California/CCPA/CPRA requests. Do not use multiple regions unless comparison is requested, and do not infer EU from consent or California from a U.S. user location."
+  );
+  assert.deepEqual(mcpPulseFreshnessSchema.options, ["latest", "refresh"]);
+  assert.deepEqual(mcpScanFromSchema.options, ["eu_de", "eu_ie", "california"]);
+  assert.equal(scanSite.inputSchema.freshness.parse(undefined), undefined);
+  assert.equal(scanSite.inputSchema.scanFrom.parse(undefined), undefined);
 });
 
 test("MCP scan inputs accept every API v2 scanner location", () => {
