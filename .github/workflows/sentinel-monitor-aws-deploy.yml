@@ -1,0 +1,80 @@
+name: Sentinel Monitor AWS Deploy
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/sentinel-monitor-aws-deploy.yml"
+      - "infra/aws/sentinel-monitor/handler.py"
+      - "infra/aws/sentinel-monitor/test_handler.py"
+      - "infra/aws/sentinel-monitor/github-actions-policy.json"
+      - "infra/aws/sentinel-monitor/github-actions-trust-policy.json"
+  workflow_dispatch:
+
+concurrency:
+  group: sentinel-monitor-aws-production
+  cancel-in-progress: false
+
+jobs:
+  deploy-sentinel-monitor:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      id-token: write
+    env:
+      AWS_REGION: us-west-2
+      AWS_ROLE_TO_ASSUME: ${{ vars.AWS_SENTINEL_ROLE_TO_ASSUME }}
+      FUNCTION_NAME: certscore-sentinel-monitor
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+
+      - name: Test sentinel monitor
+        run: python -m unittest infra/aws/sentinel-monitor/test_handler.py
+
+      - name: Validate deploy configuration
+        run: |
+          test -n "${AWS_ROLE_TO_ASSUME}" || (echo "Missing variable AWS_SENTINEL_ROLE_TO_ASSUME" && exit 1)
+          test "${AWS_REGION}" = "us-west-2" || (echo "Sentinel monitor must deploy in us-west-2" && exit 1)
+          test "${FUNCTION_NAME}" = "certscore-sentinel-monitor" || (echo "Unexpected Lambda function: ${FUNCTION_NAME}" && exit 1)
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v6
+        with:
+          aws-region: ${{ env.AWS_REGION }}
+          role-to-assume: ${{ env.AWS_ROLE_TO_ASSUME }}
+
+      - name: Package sentinel monitor
+        run: |
+          mkdir -p /tmp/certscore-sentinel-package
+          cp infra/aws/sentinel-monitor/handler.py /tmp/certscore-sentinel-package/handler.py
+          (cd /tmp/certscore-sentinel-package && zip -X -q function.zip handler.py)
+          package_sha="$(openssl dgst -sha256 -binary /tmp/certscore-sentinel-package/function.zip | openssl base64 -A)"
+          echo "SENTINEL_PACKAGE_SHA=${package_sha}" >> "${GITHUB_ENV}"
+
+      - name: Deploy tested handler
+        run: |
+          revision_id="$(aws lambda get-function-configuration --function-name "${FUNCTION_NAME}" --query RevisionId --output text)"
+          aws lambda update-function-code \
+            --function-name "${FUNCTION_NAME}" \
+            --revision-id "${revision_id}" \
+            --zip-file fileb:///tmp/certscore-sentinel-package/function.zip \
+            >/tmp/certscore-sentinel-update.json
+          aws lambda wait function-updated-v2 --function-name "${FUNCTION_NAME}"
+
+      - name: Verify deployed package
+        run: |
+          deployed_sha="$(aws lambda get-function-configuration --function-name "${FUNCTION_NAME}" --query CodeSha256 --output text)"
+          test "${deployed_sha}" = "${SENTINEL_PACKAGE_SHA}" || (echo "Deployed package hash does not match the tested package" && exit 1)
+          code_url="$(aws lambda get-function --function-name "${FUNCTION_NAME}" --query Code.Location --output text)"
+          curl -fsSL "${code_url}" -o /tmp/certscore-sentinel-deployed.zip
+          mkdir -p /tmp/certscore-sentinel-deployed
+          unzip -q /tmp/certscore-sentinel-deployed.zip -d /tmp/certscore-sentinel-deployed
+          cmp infra/aws/sentinel-monitor/handler.py /tmp/certscore-sentinel-deployed/handler.py
