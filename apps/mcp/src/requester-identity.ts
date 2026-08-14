@@ -5,16 +5,18 @@ import type { IncomingMessage } from "node:http";
 
 const { anonymousRequesterNetwork, getTrustedRequestSourceIp } = shared;
 
-function requestHeaders(req: IncomingMessage) {
-  const headers = new Headers();
-  for (const [name, value] of Object.entries(req.headers)) {
+type McpRequestHeaders = Record<string, string | string[] | undefined>;
+
+function requestHeaders(sourceHeaders: McpRequestHeaders) {
+  const normalizedHeaders = new Headers();
+  for (const [name, value] of Object.entries(sourceHeaders)) {
     if (Array.isArray(value)) {
-      for (const item of value) headers.append(name, item);
+      for (const item of value) normalizedHeaders.append(name, item);
     } else if (value !== undefined) {
-      headers.set(name, value);
+      normalizedHeaders.set(name, value);
     }
   }
-  return headers;
+  return normalizedHeaders;
 }
 
 export type AnonymousMcpRequester = {
@@ -22,9 +24,13 @@ export type AnonymousMcpRequester = {
   network: AnonymousRequesterNetwork;
 };
 
-export function anonymousMcpRequester(req: IncomingMessage): AnonymousMcpRequester {
-  const ip = getTrustedRequestSourceIp(requestHeaders(req));
+export function anonymousMcpRequesterFromHeaders(headers: McpRequestHeaders): AnonymousMcpRequester {
+  const ip = getTrustedRequestSourceIp(requestHeaders(headers));
   return { ip, network: anonymousRequesterNetwork(ip) };
+}
+
+export function anonymousMcpRequester(req: IncomingMessage): AnonymousMcpRequester {
+  return anonymousMcpRequesterFromHeaders(req.headers);
 }
 
 export function anonymousSessionBinding(requester: AnonymousMcpRequester) {

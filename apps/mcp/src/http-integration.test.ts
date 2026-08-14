@@ -65,6 +65,88 @@ async function waitForMcpObservation(
   throw new Error(`Timed out waiting for MCP request observation.\n${diagnostics()}`);
 }
 
+test("expired Light sessions retain the existing invalid-session behavior", async () => {
+  const port = await unusedPort();
+  const origin = `http://127.0.0.1:${port}`;
+  const requesterIp = "198.51.100.70";
+  const child = spawn(process.execPath, ["--import", "tsx", "src/index.ts"], {
+    cwd: new URL("..", import.meta.url),
+    env: {
+      ...process.env,
+      PORT: String(port),
+      CERTSCORE_BASE_URL: "https://certscore.ai",
+      CERTSCORE_OAUTH_JWT_SECRET: "mcp-expired-session-test-secret",
+      MCP_PUBLIC_URL: origin,
+      OAUTH_ISSUER: "https://certscore.ai",
+      SESSION_TTL_SECONDS: "1"
+    },
+    stdio: ["ignore", "pipe", "pipe"]
+  });
+  let diagnostics = "";
+  child.stdout?.on("data", (chunk) => { diagnostics += String(chunk); });
+  child.stderr?.on("data", (chunk) => { diagnostics += String(chunk); });
+
+  try {
+    await waitForHealth(origin, child);
+    const initialized = await fetch(`${origin}/mcp/light`, {
+      method: "POST",
+      headers: {
+        accept: "application/json, text/event-stream",
+        "content-type": "application/json",
+        "x-forwarded-for": requesterIp
+      },
+      body: JSON.stringify({
+        jsonrpc: "2.0",
+        id: 1,
+        method: "initialize",
+        params: {
+          protocolVersion: "2025-11-25",
+          capabilities: {},
+          clientInfo: { name: "certscore-expired-session-test", version: "0.1.0" }
+        }
+      })
+    });
+    assert.equal(initialized.status, 200);
+    const sessionId = initialized.headers.get("mcp-session-id");
+    assert.ok(sessionId);
+    await initialized.text();
+    await new Promise((resolve) => setTimeout(resolve, 1_100));
+
+    const expired = await fetch(`${origin}/mcp/light`, {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        "mcp-protocol-version": "2025-11-25",
+        "mcp-session-id": sessionId,
+        "x-forwarded-for": "198.51.100.71"
+      },
+      body: JSON.stringify({ jsonrpc: "2.0", id: 2, method: "tools/list", params: {} })
+    });
+    assert.equal(expired.status, 404);
+    assert.deepEqual(await expired.json(), {
+      error: "invalid_session",
+      error_description: "MCP session is missing or expired."
+    });
+    const observation = await waitForMcpObservation(
+      () => diagnostics,
+      (event) => event.surface === "mcp_light" && event.reasonCode === "invalid_session_unknown"
+    );
+    assert.equal(observation.sessionFound, false);
+    assert.equal(diagnostics.includes(sessionId), false);
+    assert.equal(diagnostics.includes(requesterIp), false);
+  } finally {
+    child.kill("SIGTERM");
+    await new Promise<void>((resolve) => {
+      if (child.exitCode !== null) return resolve();
+      child.once("exit", () => resolve());
+      setTimeout(() => {
+        child.kill("SIGKILL");
+        resolve();
+      }, 3_000).unref();
+    });
+  }
+});
+
 test("Streamable HTTP runtime initializes, lists tools, enforces auth, CORS, and sessions", async () => {
   const port = await unusedPort();
   const apiPort = await unusedPort();
@@ -296,6 +378,10 @@ test("Streamable HTTP runtime initializes, lists tools, enforces auth, CORS, and
     const observedRequesterIp = "198.51.100.60";
     const changedRequesterIp = "198.51.100.61";
     const secondChangedRequesterIp = "198.51.100.62";
+    const getRequesterIp = "198.51.100.63";
+    const toolRequesterIp = "198.51.100.64";
+    const readRequesterIp = "198.51.100.65";
+    const independentReadRequesterIp = "198.51.100.66";
     const observedProtocolVersion = "2025-11-25";
     const observedInitialize = await fetch(`${origin}/mcp/light`, {
       method: "POST",
@@ -350,6 +436,140 @@ test("Streamable HTTP runtime initializes, lists tools, enforces auth, CORS, and
     assert.match(observedToolsList.headers.get("content-type") ?? "", /^text\/event-stream/);
     await observedToolsList.text();
 
+    const observedGet = await fetch(`${origin}/mcp/light`, {
+      method: "GET",
+      headers: {
+        accept: "text/event-stream",
+        "mcp-protocol-version": observedProtocolVersion,
+        "mcp-session-id": observedSessionId,
+        "x-forwarded-for": getRequesterIp
+      }
+    });
+    assert.equal(observedGet.status, 200);
+    assert.match(observedGet.headers.get("content-type") ?? "", /^text\/event-stream/);
+    await observedGet.body?.cancel();
+
+    const currentRequesterScan = await fetch(`${origin}/mcp/light`, {
+      method: "POST",
+      headers: {
+        accept: "application/json, text/event-stream",
+        "content-type": "application/json",
+        "mcp-protocol-version": observedProtocolVersion,
+        "mcp-session-id": observedSessionId,
+        "x-forwarded-for": toolRequesterIp
+      },
+      body: JSON.stringify({
+        jsonrpc: "2.0",
+        id: 7003,
+        method: "tools/call",
+        params: {
+          name: "certscore_scan_site",
+          arguments: { url: "https://example.com", waitForCompletion: false }
+        }
+      })
+    });
+    assert.equal(currentRequesterScan.status, 200);
+    await currentRequesterScan.text();
+    assert.equal(forwardedClientIp, toolRequesterIp);
+    assert.equal(anonymousRequesterIp, toolRequesterIp);
+    assert.equal(anonymousSurface, "mcp_light");
+
+    for (let index = 0; index < 30; index += 1) {
+      const currentRequesterRead: Response = await fetch(`${origin}/mcp/light`, {
+        method: "POST",
+        headers: {
+          accept: "application/json, text/event-stream",
+          "content-type": "application/json",
+          "mcp-protocol-version": observedProtocolVersion,
+          "mcp-session-id": observedSessionId,
+          "x-forwarded-for": readRequesterIp
+        },
+        body: JSON.stringify({
+          jsonrpc: "2.0",
+          id: 7100 + index,
+          method: "tools/call",
+          params: {
+            name: "certscore_get_scan_bundle",
+            arguments: { scanId: "00000000-0000-4000-8000-000000000123" }
+          }
+        })
+      });
+      assert.equal(currentRequesterRead.status, 200);
+      await currentRequesterRead.text();
+    }
+    const exhaustedCurrentRequesterRead = await fetch(`${origin}/mcp/light`, {
+      method: "POST",
+      headers: {
+        accept: "application/json, text/event-stream",
+        "content-type": "application/json",
+        "mcp-protocol-version": observedProtocolVersion,
+        "mcp-session-id": observedSessionId,
+        "x-forwarded-for": readRequesterIp
+      },
+      body: JSON.stringify({
+        jsonrpc: "2.0",
+        id: 7130,
+        method: "tools/call",
+        params: {
+          name: "certscore_get_scan_bundle",
+          arguments: { scanId: "00000000-0000-4000-8000-000000000123" }
+        }
+      })
+    });
+    assert.equal(exhaustedCurrentRequesterRead.status, 429);
+    await exhaustedCurrentRequesterRead.text();
+
+    const independentCurrentRequesterRead = await fetch(`${origin}/mcp/light`, {
+      method: "POST",
+      headers: {
+        accept: "application/json, text/event-stream",
+        "content-type": "application/json",
+        "mcp-protocol-version": observedProtocolVersion,
+        "mcp-session-id": observedSessionId,
+        "x-forwarded-for": independentReadRequesterIp
+      },
+      body: JSON.stringify({
+        jsonrpc: "2.0",
+        id: 7131,
+        method: "tools/call",
+        params: {
+          name: "certscore_get_scan_bundle",
+          arguments: { scanId: "00000000-0000-4000-8000-000000000123" }
+        }
+      })
+    });
+    assert.equal(independentCurrentRequesterRead.status, 200);
+    await independentCurrentRequesterRead.text();
+
+    const unknownLightSession = await fetch(`${origin}/mcp/light`, {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        "mcp-session-id": "unknown-light-session",
+        "x-forwarded-for": changedRequesterIp
+      },
+      body: JSON.stringify({ jsonrpc: "2.0", id: 7132, method: "tools/list", params: {} })
+    });
+    assert.equal(unknownLightSession.status, 404);
+    assert.deepEqual(await unknownLightSession.json(), {
+      error: "invalid_session",
+      error_description: "MCP session is missing or expired."
+    });
+
+    const missingLightSession = await fetch(`${origin}/mcp/light`, {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        "x-forwarded-for": changedRequesterIp
+      },
+      body: JSON.stringify({ jsonrpc: "2.0", id: 7133, method: "tools/list", params: {} })
+    });
+    assert.equal(missingLightSession.status, 400);
+    assert.deepEqual(await missingLightSession.json(), {
+      error: "invalid_session",
+      error_description: "MCP session is missing or expired."
+    });
+
     const anonymousMismatchInitialize = await fetch(`${origin}/mcp/anonymous`, {
       method: "POST",
       headers: {
@@ -359,7 +579,7 @@ test("Streamable HTTP runtime initializes, lists tools, enforces auth, CORS, and
       },
       body: JSON.stringify({
         jsonrpc: "2.0",
-        id: 7003,
+        id: 7200,
         method: "initialize",
         params: {
           protocolVersion: observedProtocolVersion,
@@ -382,7 +602,7 @@ test("Streamable HTTP runtime initializes, lists tools, enforces auth, CORS, and
         "mcp-session-id": anonymousMismatchSessionId,
         "x-forwarded-for": changedRequesterIp
       },
-      body: JSON.stringify({ jsonrpc: "2.0", id: 7004, method: "tools/list", params: {} })
+      body: JSON.stringify({ jsonrpc: "2.0", id: 7201, method: "tools/list", params: {} })
     });
     assert.equal(anonymousMismatchedToolsList.status, 401);
     assert.deepEqual(await anonymousMismatchedToolsList.json(), {
@@ -398,9 +618,15 @@ test("Streamable HTTP runtime initializes, lists tools, enforces auth, CORS, and
     const initializeObservation = lightObservations.find((event) => event.jsonRpcMethod === "initialize");
     const initializedObservation = lightObservations.find((event) => event.jsonRpcMethod === "notifications/initialized");
     const toolsListObservation = lightObservations.find((event) => event.jsonRpcMethod === "tools/list" && event.finalHttpStatus === 200);
+    const getObservation = lightObservations.find((event) => event.httpMethod === "GET" && event.finalHttpStatus === 200);
+    const unknownSessionObservation = lightObservations.find((event) => event.reasonCode === "invalid_session_unknown");
+    const missingSessionObservation = lightObservations.find((event) => event.reasonCode === "invalid_session_missing");
     assert.ok(initializeObservation);
     assert.ok(initializedObservation);
     assert.ok(toolsListObservation);
+    assert.ok(getObservation);
+    assert.ok(unknownSessionObservation);
+    assert.ok(missingSessionObservation);
     assert.deepEqual({
       route: initializeObservation.route,
       surface: initializeObservation.surface,
@@ -434,11 +660,16 @@ test("Streamable HTTP runtime initializes, lists tools, enforces auth, CORS, and
     assert.equal(initializedObservation.sessionHeaderSupplied, true);
     assert.equal(initializedObservation.sessionFound, true);
     assert.equal(initializedObservation.requesterSessionIdentityMatched, false);
-    assert.equal(initializedObservation.reasonCode, null);
+    assert.equal(initializedObservation.reasonCode, "session_requester_changed_allowed");
     assert.equal(toolsListObservation.finalHttpStatus, 200);
     assert.equal(toolsListObservation.mcpProtocolVersionHeader, observedProtocolVersion);
     assert.equal(toolsListObservation.requesterSessionIdentityMatched, false);
     assert.equal(toolsListObservation.responseContentType, "text/event-stream");
+    assert.equal(toolsListObservation.reasonCode, "session_requester_changed_allowed");
+    assert.equal(getObservation.requesterSessionIdentityMatched, false);
+    assert.equal(getObservation.reasonCode, "session_requester_changed_allowed");
+    assert.equal(unknownSessionObservation.finalHttpStatus, 404);
+    assert.equal(missingSessionObservation.finalHttpStatus, 400);
     assert.equal(mismatchObservation.finalHttpStatus, 401);
     assert.equal(mismatchObservation.sessionHeaderSupplied, true);
     assert.equal(mismatchObservation.sessionFound, true);
@@ -447,8 +678,10 @@ test("Streamable HTTP runtime initializes, lists tools, enforces auth, CORS, and
     assert.match(String(initializeObservation.requesterIdentityHash), /^[a-f0-9]{12}$/);
     assert.equal(initializeObservation.requesterIdentityHash, initializedObservation.sessionIdentityHash);
     assert.equal(initializeObservation.requesterIdentityHash, toolsListObservation.sessionIdentityHash);
+    assert.equal(initializeObservation.requesterIdentityHash, getObservation.sessionIdentityHash);
     assert.notEqual(initializeObservation.requesterIdentityHash, initializedObservation.requesterIdentityHash);
     assert.notEqual(initializeObservation.requesterIdentityHash, toolsListObservation.requesterIdentityHash);
+    assert.notEqual(initializeObservation.requesterIdentityHash, getObservation.requesterIdentityHash);
     assert.equal(initializeObservation.requesterIdentityHash, mismatchObservation.sessionIdentityHash);
     assert.notEqual(mismatchObservation.requesterIdentityHash, mismatchObservation.sessionIdentityHash);
     for (const event of lightObservations) {
@@ -461,6 +694,10 @@ test("Streamable HTTP runtime initializes, lists tools, enforces auth, CORS, and
     assert.equal(diagnostics.includes(observedRequesterIp), false);
     assert.equal(diagnostics.includes(changedRequesterIp), false);
     assert.equal(diagnostics.includes(secondChangedRequesterIp), false);
+    assert.equal(diagnostics.includes(getRequesterIp), false);
+    assert.equal(diagnostics.includes(toolRequesterIp), false);
+    assert.equal(diagnostics.includes(readRequesterIp), false);
+    assert.equal(diagnostics.includes(independentReadRequesterIp), false);
 
     const lightTransport = new StreamableHTTPClientTransport(new URL(`${origin}/mcp/light`), {
       requestInit: { headers: { "x-forwarded-for": "160.79.104.9" } }

@@ -1,6 +1,7 @@
 import { CertScoreClient, CertScoreTimeoutError } from "@certscore/sdk";
 import { certScoreMcpToolContracts } from "@certscore/api-contracts";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
+import type { RequestInfo } from "@modelcontextprotocol/sdk/types.js";
 import { CERTSCORE_MCP_VERSION } from "./version.js";
 import { boundEvidencePacket, buildScanBundle, exportFindings, findingListText, limitPreConsentRows, markdownReportText, MAX_EVIDENCE_PACKET_CHARS, normalizeDetail, normalizeFormat, paginateFindingList, preConsentInventoryText, pulseReportText, scanBundleText, toInvalidArgumentsToolError, toToolError, toToolResult, withMcpAgentGuidance } from "./tools.js";
 
@@ -8,6 +9,7 @@ export interface CertScoreMcpOptions {
   apiKey?: string;
   baseUrl?: string;
   forwardedClientIp?: string | null;
+  resolveForwardedClientIp?: (headers: RequestInfo["headers"]) => string | null;
   anonymousRequesterSecret?: string | null;
   anonymousSurface?: "mcp_light" | "mcp_anonymous" | null;
   timeout?: number;
@@ -15,6 +17,7 @@ export interface CertScoreMcpOptions {
 }
 
 type CertScoreMcpToolName = (typeof certScoreMcpToolContracts)[number]["name"];
+type McpRequestExtra = { requestInfo?: RequestInfo };
 type CreateScanInput = {
   url: string;
   detail?: "tiny" | "quick" | "standard" | "full" | "summary" | "evidence";
@@ -86,15 +89,19 @@ function toolContract(name: CertScoreMcpToolName): any {
 }
 
 export function createCertScoreMcpServer(options: CertScoreMcpOptions = {}) {
-  const client = new CertScoreClient({
+  const createClient = (forwardedClientIp: string | null | undefined) => new CertScoreClient({
     apiKey: options.apiKey,
     baseUrl: options.baseUrl,
     clientName: "mcp",
-    forwardedClientIp: options.forwardedClientIp,
+    forwardedClientIp,
     anonymousRequesterSecret: options.anonymousRequesterSecret,
     anonymousSurface: options.anonymousSurface,
     timeout: options.timeout
   });
+  const client = createClient(options.forwardedClientIp);
+  const clientForRequest = (extra: { requestInfo?: RequestInfo }) => options.resolveForwardedClientIp
+    ? createClient(options.resolveForwardedClientIp(extra.requestInfo?.headers ?? {}))
+    : client;
 
   const server = new McpServer({
     name: "certscore",
@@ -116,7 +123,8 @@ export function createCertScoreMcpServer(options: CertScoreMcpOptions = {}) {
   registerTool(
     "certscore_scan_site",
     toolContract("certscore_scan_site"),
-    async (input: CreateScanInput) => {
+    async (input: CreateScanInput, extra: McpRequestExtra) => {
+      const client = clientForRequest(extra);
       try {
         const created = await client.scans.create(input.url, {
           freshness: input.freshness ?? "latest",
@@ -183,7 +191,8 @@ export function createCertScoreMcpServer(options: CertScoreMcpOptions = {}) {
   registerTool(
     "certscore_get_scan_status",
     toolContract("certscore_get_scan_status"),
-    async ({ scanId }: GetScanStatusInput) => {
+    async ({ scanId }: GetScanStatusInput, extra: McpRequestExtra) => {
+      const client = clientForRequest(extra);
       try {
         const internalMcpOperation = { operation: "scan_status" as const, scanId };
         const status = await client.scans.status(scanId, { internalMcpOperation });
@@ -276,7 +285,8 @@ export function createCertScoreMcpServer(options: CertScoreMcpOptions = {}) {
   registerTool(
     "certscore_get_scan_bundle",
     toolContract("certscore_get_scan_bundle"),
-    async ({ scanId, detail = "summary", maxBytes, maxFindings, maxPreConsentRows }: GetScanBundleInput) => {
+    async ({ scanId, detail = "summary", maxBytes, maxFindings, maxPreConsentRows }: GetScanBundleInput, extra: McpRequestExtra) => {
+      const client = clientForRequest(extra);
       try {
         const internalMcpOperation = { operation: "scan_bundle" as const, scanId };
         const scan = await retryTransientOriginFailure(() => client.scans.get(scanId, { internalMcpOperation }));

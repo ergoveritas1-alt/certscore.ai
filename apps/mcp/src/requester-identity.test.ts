@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import type { IncomingMessage } from "node:http";
 import test from "node:test";
-import { anonymousMcpRequester, anonymousSessionBinding, authenticatedMcpCallerBinding } from "./requester-identity.js";
+import { anonymousMcpRequester, anonymousMcpRequesterFromHeaders, anonymousSessionBinding, authenticatedMcpCallerBinding } from "./requester-identity.js";
 
 function request(headers: IncomingMessage["headers"]) {
   return { headers } as IncomingMessage;
@@ -15,6 +15,14 @@ test("MCP identity uses the ALB-appended source and ignores spoofable headers", 
   }));
   assert.deepEqual(requester, { ip: "203.0.113.44", network: "direct" });
   assert.equal(anonymousSessionBinding(requester), "anonymous:203.0.113.44");
+});
+
+test("MCP request metadata resolves the current trusted requester identity", () => {
+  assert.deepEqual(anonymousMcpRequesterFromHeaders({
+    "cf-connecting-ip": "198.51.100.8",
+    "x-forwarded-for": "192.0.2.200, 203.0.113.45",
+    "x-real-ip": "192.0.2.201"
+  }), { ip: "203.0.113.45", network: "direct" });
 });
 
 test("verified Anthropic egress is provider-classified without treating clientInfo as identity", () => {

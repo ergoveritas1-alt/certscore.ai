@@ -8,7 +8,7 @@ import { CERTSCORE_MCP_VERSION } from "@certscore/mcp/version";
 import { getAllowedOrigins, getEnv } from "./env.js";
 import { McpHttpSessionStore } from "./session-store.js";
 import { McpReadThrottle, mcpReadCallsFromJsonRpc, mcpReadRateLimitGuidance } from "./read-throttle.js";
-import { anonymousMcpRequester, anonymousSessionBinding, authenticatedMcpCallerBinding } from "./requester-identity.js";
+import { anonymousMcpRequester, anonymousMcpRequesterFromHeaders, anonymousSessionBinding, authenticatedMcpCallerBinding } from "./requester-identity.js";
 
 const env = getEnv();
 const allowedOrigins = getAllowedOrigins(env);
@@ -151,6 +151,7 @@ type McpObservationReason =
   | "accept_not_supported"
   | "malformed_json"
   | "rate_limited"
+  | "session_requester_changed_allowed"
   | "other";
 
 function anonymousMcpSurface(light: boolean): { route: "/mcp/anonymous" | "/mcp/light"; surface: AnonymousMcpSurface } {
@@ -322,6 +323,9 @@ async function handleMcp(req: IncomingMessage, res: ServerResponse, anonymous: b
       anonymousRequesterSecret: env.jwtSecret,
       baseUrl: env.CERTSCORE_BASE_URL,
       forwardedClientIp: clientIp,
+      resolveForwardedClientIp: anonymous && light
+        ? (headers) => anonymousMcpRequesterFromHeaders(headers).ip
+        : undefined,
       anonymousSurface: anonymous ? (light ? "mcp_light" : "mcp_anonymous") : null,
       timeout: env.CERTSCORE_REQUEST_TIMEOUT_MS,
       toolProfile: light ? "light" : "full"
@@ -411,10 +415,7 @@ async function handleMcp(req: IncomingMessage, res: ServerResponse, anonymous: b
   for (const readCall of readCalls) {
     const caller = light && anonymousRequester?.network === "anthropic" && sessionId
       ? sessions.hashToken(`anonymous-session:${sessionId}`)
-      : light && anonymous
-        // Preserve initialize-time caller accounting when a Light session changes egress.
-        ? session.tokenHash
-        : authenticatedCallerHash ?? tokenHash;
+      : authenticatedCallerHash ?? tokenHash;
     const provider = light && anonymousRequester?.network === "anthropic" ? "anthropic" : undefined;
     const decision = readThrottle.claim(caller, readCall, Date.now(), provider);
     if (!decision.allowed) {
@@ -499,10 +500,13 @@ async function handleMcp(req: IncomingMessage, res: ServerResponse, anonymous: b
     sessions.delete(sessionId);
   }
   if (anonymous) {
+    const transportFailure = transportReason(res);
     logAnonymousMcpObservation({
       light,
       parsedBody,
-      reasonCode: transportReason(res),
+      reasonCode: transportFailure ?? (light && session.tokenHash !== tokenHash
+        ? "session_requester_changed_allowed"
+        : null),
       req,
       requesterTokenHash: tokenHash,
       res,
