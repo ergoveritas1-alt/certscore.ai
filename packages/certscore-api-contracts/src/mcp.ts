@@ -100,6 +100,20 @@ const scanCreationAnnotations = {
   openWorldHint: true
 } as const;
 
+const readOnlyInternalAnnotations = {
+  readOnlyHint: true,
+  destructiveHint: false,
+  idempotentHint: true,
+  openWorldHint: false
+} as const;
+
+const accountedInternalReadAnnotations = {
+  readOnlyHint: false,
+  destructiveHint: false,
+  idempotentHint: false,
+  openWorldHint: false
+} as const;
+
 const readOnlyOpenWorldAnnotations = {
   readOnlyHint: true,
   openWorldHint: true
@@ -474,7 +488,7 @@ export const certScoreMcpToolContracts = [
     description: "Poll with only the stable scanId returned by certscore_scan_site. Active responses include phase, heartbeat, estimated progress, stalled state, and retry delay. Terminal responses include the CertScore score, risk, coverage, timestamps, report URL, and an explicit next action. Stop polling at any terminal status.",
     inputSchema: mcpGetScanStatusInputSchema,
     outputSchema: mcpScanStatusOutputSchema,
-    annotations: readOnlyOpenWorldAnnotations
+    annotations: readOnlyInternalAnnotations
   },
   {
     name: "certscore_get_report",
@@ -498,7 +512,7 @@ export const certScoreMcpToolContracts = [
     description: "Call after completed or completed_limited status. Every usable completed bundle returns a self-contained concise TextContent digest plus matching structuredContent. The default summary includes the canonical report overview, up to five compact public-safe projected findings across the scan's observed domains, and bounded row-level pre-consent cookie/tracker evidence; detail=findings increases the default finding allowance, evidence adds bounded evidence digests and references, and full adds all available bounded sections. Every response declares finding and evidence total/returned/truncated counts, byte-budget metadata, omittedSections, retrieval URLs, and nextRecommendedMaxBytes when truncated. Enumerate only returned observations and projected findings. The CertScore score covers observable scan signals only; do not infer unobserved technologies or legal compliance status, and never interpret no-go, not-observed, or limited coverage as proof of compliance.",
     inputSchema: mcpGetScanBundleInputSchema,
     outputSchema: mcpScanBundleOutputSchema,
-    annotations: readOnlyOpenWorldAnnotations
+    annotations: accountedInternalReadAnnotations
   },
   {
     name: "certscore_export_findings",

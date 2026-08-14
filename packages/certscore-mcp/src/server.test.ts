@@ -223,14 +223,32 @@ test("CertScore Light exposes only the focused no-account workflow", async () =>
       ["certscore_get_scan_bundle", "certscore_get_scan_status", "certscore_scan_site"]
     );
     const scanSiteTool = tools.tools.find((tool) => tool.name === "certscore_scan_site");
+    assert.deepEqual(scanSiteTool?.annotations, {
+      readOnlyHint: false,
+      destructiveHint: false,
+      idempotentHint: false,
+      openWorldHint: true
+    });
     assert.ok(scanSiteTool?.outputSchema?.required?.includes("error"));
     assert.ok(scanSiteTool?.outputSchema?.required?.includes("recommendedNextAction"));
     const statusTool = tools.tools.find((tool) => tool.name === "certscore_get_scan_status");
+    assert.deepEqual(statusTool?.annotations, {
+      readOnlyHint: true,
+      destructiveHint: false,
+      idempotentHint: true,
+      openWorldHint: false
+    });
     assert.deepEqual(statusTool?.inputSchema.required, ["scanId"]);
     assert.equal(statusTool?.inputSchema.additionalProperties, false);
     assert.ok(statusTool?.outputSchema?.required?.includes("error"));
     assert.ok(statusTool?.outputSchema?.required?.includes("recommendedNextAction"));
     const bundleTool = tools.tools.find((tool) => tool.name === "certscore_get_scan_bundle");
+    assert.deepEqual(bundleTool?.annotations, {
+      readOnlyHint: false,
+      destructiveHint: false,
+      idempotentHint: false,
+      openWorldHint: false
+    });
     assert.equal(bundleTool?.inputSchema.additionalProperties, false);
     assert.deepEqual((bundleTool?.inputSchema.properties?.detail as { enum?: string[] })?.enum, ["summary", "findings", "evidence", "full"]);
     assert.equal((bundleTool?.inputSchema.properties?.maxBytes as { minimum?: number })?.minimum, 5_000);

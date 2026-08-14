@@ -264,6 +264,24 @@ test("Streamable HTTP runtime initializes, lists tools, enforces auth, CORS, and
     await lightClient.connect(lightTransport);
     const lightTools = await lightClient.listTools();
     assert.deepEqual(lightTools.tools.map((tool) => tool.name).sort(), ["certscore_get_scan_bundle", "certscore_get_scan_status", "certscore_scan_site"]);
+    assert.deepEqual(lightTools.tools.find((tool) => tool.name === "certscore_scan_site")?.annotations, {
+      readOnlyHint: false,
+      destructiveHint: false,
+      idempotentHint: false,
+      openWorldHint: true
+    });
+    assert.deepEqual(lightTools.tools.find((tool) => tool.name === "certscore_get_scan_status")?.annotations, {
+      readOnlyHint: true,
+      destructiveHint: false,
+      idempotentHint: true,
+      openWorldHint: false
+    });
+    assert.deepEqual(lightTools.tools.find((tool) => tool.name === "certscore_get_scan_bundle")?.annotations, {
+      readOnlyHint: false,
+      destructiveHint: false,
+      idempotentHint: false,
+      openWorldHint: false
+    });
     const invalidLightScan = await lightClient.callTool({ name: "certscore_scan_site", arguments: {} });
     assert.equal(invalidLightScan.isError, true);
     assert.equal((invalidLightScan.structuredContent as { type?: string } | undefined)?.type, "certscore_tool_error");

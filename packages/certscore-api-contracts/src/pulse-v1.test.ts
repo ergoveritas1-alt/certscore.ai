@@ -123,6 +123,18 @@ test("MCP contracts expose the current scoped tool surface", () => {
     idempotentHint: false,
     openWorldHint: true
   });
+  assert.deepEqual(certScoreMcpToolContracts.find((tool) => tool.name === "certscore_get_scan_status")?.annotations, {
+    readOnlyHint: true,
+    destructiveHint: false,
+    idempotentHint: true,
+    openWorldHint: false
+  });
+  assert.deepEqual(certScoreMcpToolContracts.find((tool) => tool.name === "certscore_get_scan_bundle")?.annotations, {
+    readOnlyHint: false,
+    destructiveHint: false,
+    idempotentHint: false,
+    openWorldHint: false
+  });
   assert.deepEqual(certScoreMcpToolContracts.find((tool) => tool.name === "certscore_get_scan")?.annotations, {
     readOnlyHint: true,
     openWorldHint: true
