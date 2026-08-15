@@ -256,7 +256,7 @@ test("CertScore Light exposes only the focused no-account workflow", async () =>
     assert.ok(statusTool?.outputSchema?.required?.includes("recommendedNextAction"));
     const bundleTool = tools.tools.find((tool) => tool.name === "certscore_get_scan_bundle");
     assert.deepEqual(bundleTool?.annotations, {
-      readOnlyHint: false,
+      readOnlyHint: true,
       destructiveHint: false,
       idempotentHint: false,
       openWorldHint: false

@@ -763,7 +763,7 @@ test("Streamable HTTP runtime initializes, lists tools, enforces auth, CORS, and
       openWorldHint: false
     });
     assert.deepEqual(lightTools.tools.find((tool) => tool.name === "certscore_get_scan_bundle")?.annotations, {
-      readOnlyHint: false,
+      readOnlyHint: true,
       destructiveHint: false,
       idempotentHint: false,
       openWorldHint: false
