@@ -2,7 +2,7 @@ import { z } from "zod";
 import { scanNoGoResultSchema, scanResultDispositionSchema } from "./scan-no-go.js";
 
 export const PULSE_API_VERSION = "v1";
-export const PULSE_SCHEMA_VERSION = "0.5.3";
+export const PULSE_SCHEMA_VERSION = "0.5.4";
 export const PULSE_SOURCE = "certscore.ai";
 
 export const PULSE_PURPOSE_STATEMENT =
@@ -155,6 +155,46 @@ export const pulseFindingSchema = z
   })
   .passthrough();
 
+export const pulseTransportSecuritySchema = z
+  .object({
+    status: z.enum(["available", "limited", "unavailable"]),
+    evidenceRetained: z.boolean(),
+    observationCounts: z.object({
+      total: z.number().int().min(0),
+      observedPositive: z.number().int().min(0),
+      concernOrReview: z.number().int().min(0),
+      notObserved: z.number().int().min(0),
+      unavailable: z.number().int().min(0)
+    }).strict(),
+    observations: z.array(z.object({
+      id: z.string(),
+      label: z.string(),
+      status: z.enum([
+        "Gap observed",
+        "Observed",
+        "Not confirmed",
+        "Not observed",
+        "Not testable",
+        "Review signal",
+        "Insufficient evidence",
+        "Out of scope"
+      ]),
+      assessmentStatus: z.enum([
+        "gap_observed",
+        "review_signal",
+        "checked",
+        "coverage_limitation",
+        "not_applicable"
+      ]),
+      evidenceState: z.enum(["observed", "not_observed", "not_testable", "not_applicable"]),
+      summary: z.string(),
+      evidenceRefs: z.array(z.string())
+    }).strict()),
+    limitations: z.array(z.string()),
+    retainedSummary: z.record(z.unknown()).optional()
+  })
+  .strict();
+
 export const pulseResponseSchema = z
   .object({
     type: z.enum(["certscore_pulse", "certscore_pulse_summary", "certscore_pulse_evidence"]),
@@ -168,6 +208,7 @@ export const pulseResponseSchema = z
     noGo: scanNoGoResultSchema.optional(),
     summary: pulseSummarySchema.optional(),
     topFindings: z.array(pulseFindingSchema).optional(),
+    transportSecurity: pulseTransportSecuritySchema.optional(),
     coverage: pulseCoverageSchema.optional(),
     links: pulseLinksSchema.optional(),
     feedback: pulseFeedbackSchema.optional(),

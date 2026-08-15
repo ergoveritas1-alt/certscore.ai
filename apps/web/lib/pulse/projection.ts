@@ -471,6 +471,95 @@ function buildPulseReportSurface(input: {
   };
 }
 
+const TRANSPORT_SECURITY_ROW_IDS = new Set([
+  "transport_security_https_delivery",
+  "transport_security_tls_certificate",
+  "transport_security_http_redirect",
+  "transport_security_mixed_content",
+  "transport_security_form_transport"
+]);
+
+function buildTransportSecurityProjection(input: {
+  detail: PulseDetail;
+  reportSurface: ReturnType<typeof buildPulseReportSurface>;
+  runtimeArtifacts: ScanDetailResponse["runtimeArtifacts"];
+}) {
+  const runtimeArtifacts = asRecord(input.runtimeArtifacts);
+  const hybrid = getHybridRuntimeEvidence(input.runtimeArtifacts);
+  const summary =
+    asRecord(recordValue(runtimeArtifacts, "transportSecuritySummary")) ??
+    asRecord(recordValue(runtimeArtifacts, "transport_security_summary")) ??
+    asRecord(recordValue(hybrid, "transportSecuritySummary")) ??
+    asRecord(recordValue(hybrid, "transport_security_summary"));
+  const rows = input.reportSurface.reportableGdprRows.filter((row) =>
+    TRANSPORT_SECURITY_ROW_IDS.has(row.id)
+  );
+  const evidenceRetained = recordValue(summary, "evidenceRetained") === true ||
+    recordValue(summary, "evidence_retained") === true;
+  const unavailableCount = rows.filter((row) =>
+    row.status === "Not testable" || row.status === "Insufficient evidence" || row.status === "Out of scope"
+  ).length;
+  const concernCount = rows.filter((row) =>
+    row.status === "Gap observed" || row.status === "Review signal" || row.status === "Not confirmed"
+  ).length;
+  const status = !evidenceRetained || rows.length === 0
+    ? "unavailable"
+    : unavailableCount > 0
+      ? "limited"
+      : "available";
+  const limitations = uniqueStrings([
+    ...rows
+      .filter((row) => row.status === "Not testable" || row.status === "Insufficient evidence" || row.status === "Out of scope")
+      .map((row) => row.note),
+    "Only the listed canonical observations are represented. Do not infer HSTS, supported TLS versions, cipher suites, or certificate properties that are not explicitly returned."
+  ]).slice(0, 8);
+  const observations = input.detail === "summary" || input.detail === "tiny"
+    ? []
+    : rows.map((row) => ({
+        id: row.id,
+        label: row.label,
+        status: row.status,
+        assessmentStatus: row.assessmentStatus,
+        evidenceState: row.evidenceState,
+        summary: row.note,
+        evidenceRefs: row.evidenceRefs.slice(0, 6)
+      }));
+
+  return {
+    status,
+    evidenceRetained,
+    observationCounts: {
+      total: rows.length,
+      observedPositive: rows.filter((row) => row.status === "Observed").length,
+      concernOrReview: concernCount,
+      notObserved: rows.filter((row) => row.status === "Not observed").length,
+      unavailable: unavailableCount
+    },
+    observations,
+    limitations,
+    ...(input.detail === "full" && summary
+      ? {
+          retainedSummary: safeRecordSubset(summary, [
+            "evidenceRetained",
+            "evidenceRefs",
+            "pageHttpsObserved",
+            "httpProbeAttempted",
+            "httpRedirectsToHttps",
+            "tlsProbeAttempted",
+            "validTlsCertificate",
+            "tlsProbeErrorCategory",
+            "tlsProbeErrorMessage",
+            "mixedContentObserved",
+            "mixedContentObservedCount",
+            "insecureFormTransportObserved",
+            "formTransportCount",
+            "sampledPageUrls"
+          ])
+        }
+      : {})
+  };
+}
+
 export function selectPublicPulseFindingsFromUnifiedProjection(input: {
   checklistFindings?: CertScoreFinding[];
   findings: CertScoreFinding[];
@@ -1571,6 +1660,7 @@ function buildSummaryArtifact(input: {
     surfacedResults: input.base.surfacedResults,
     counts: input.base.counts,
     topFindings: input.base.topFindings,
+    transportSecurity: input.base.transportSecurity,
     coverage: input.standard.coverage ?? input.base.coverage,
     links: {
       summaryJsonUrl: baseLinks.summaryJsonUrl,
@@ -1767,6 +1857,7 @@ function buildEvidenceArtifact(input: {
     summary: input.base.summary,
     executiveSummary: input.base.executiveSummary,
     surfacedResults: input.base.surfacedResults,
+    transportSecurity: input.base.transportSecurity,
     evidenceSafetyNotes: [
       "This packet contains bounded structured evidence for review, not raw browser capture.",
       "Raw cookie values, raw request/response bodies, sensitive payloads, full DOM, raw Nano reasoning, and unredacted query values are not included.",
@@ -2148,6 +2239,11 @@ export function buildPulseProjection(input: PulseProjectionInput) {
   const trackerFootprintBreakdown = buildTrackerFootprintBreakdown(reportSurface);
   const selectedScoreStatus = reportSurface.customerScoreAssessment.scoreStatus;
   const selectedWithholdingReason = reportSurface.customerScoreAssessment.withholdingReason;
+  const transportSecurity = buildTransportSecurityProjection({
+    detail: input.detail,
+    reportSurface,
+    runtimeArtifacts: hydratedScanRecord.runtimeArtifacts
+  });
   const executiveSummary = {
     completionSummary: summary.completionSummary,
     domain,
@@ -2285,6 +2381,7 @@ export function buildPulseProjection(input: PulseProjectionInput) {
     surfacedResults,
     counts,
     topFindings,
+    transportSecurity,
     capabilities: PULSE_CAPABILITIES,
     coverage: {
       status: coverage.status,

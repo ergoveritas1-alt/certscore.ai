@@ -56,11 +56,33 @@ test("Pulse v1 schemas accept public-safe response shapes", () => {
         evidenceDigest: { basis: "runtime_observation", hasTimingAnchor: true }
       }
     ],
+    transportSecurity: {
+      status: "available",
+      evidenceRetained: true,
+      observationCounts: {
+        total: 1,
+        observedPositive: 1,
+        concernOrReview: 0,
+        notObserved: 0,
+        unavailable: 0
+      },
+      observations: [{
+        id: "transport_security_tls_certificate",
+        label: "Valid SSL/TLS certificate",
+        status: "Observed",
+        assessmentStatus: "checked",
+        evidenceState: "observed",
+        summary: "The strict TLS probe verified the HTTPS origin certificate.",
+        evidenceRefs: ["ref_transport_security"]
+      }],
+      limitations: ["Do not infer unreturned transport properties."]
+    },
     links: { fullReportUrl: "https://certscore.ai/scan/scan_123" }
   });
 
   assert.equal(parsed.type, "certscore_pulse");
   assert.equal(parsed.topFindings?.[0]?.id, "pre_consent_tracking_detected");
+  assert.equal(parsed.transportSecurity?.observations[0]?.status, "Observed");
 });
 
 test("Pulse ChatGPT OpenAPI stays compact and action-compatible", () => {

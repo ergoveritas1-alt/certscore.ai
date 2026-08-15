@@ -60,5 +60,6 @@ export type {
   ScanResource,
   ScanResourceClient,
   SubmitScanOptions,
-  TopFinding
+  TopFinding,
+  TransportSecurityProjection
 } from "./types.js";

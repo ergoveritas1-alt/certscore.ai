@@ -171,6 +171,106 @@ test("Pulse evidence preserves canonical cookie, request, and policy provenance 
   assert.equal(provenance?.translationApplied, false);
 });
 
+test("Pulse projects canonical transport-security rows with bounded detail semantics", () => {
+  const scanRecord = pulseScanRecord({
+    runtimeArtifacts: {
+      transportSecuritySummary: {
+        evidenceRetained: true,
+        evidenceRefs: ["ref_transport_security"],
+        pageHttpsObserved: true,
+        httpProbeAttempted: true,
+        httpRedirectsToHttps: true,
+        tlsProbeAttempted: true,
+        validTlsCertificate: true,
+        mixedContentObserved: false,
+        mixedContentObservedCount: 0,
+        insecureFormTransportObserved: false,
+        formTransportCount: 1,
+        sampledPageUrls: ["https://example.com/"]
+      }
+    },
+    scan: {
+      completedAt: "2026-08-01T20:00:20.000Z",
+      createdAt: "2026-08-01T20:00:00.000Z",
+      domainHostname: "example.com",
+      id: "00000000-0000-4000-8000-000000000123",
+      pagesRequested: 1,
+      pagesScanned: 1,
+      startedAt: "2026-08-01T20:00:01.000Z",
+      status: "completed"
+    },
+    snapshot: {
+      certscore_overall: 90,
+      score_source: "canonical.gdpr_eprivacy"
+    }
+  });
+  const project = (detail: "summary" | "evidence" | "full") => buildPulseProjection({
+    detail,
+    format: "json",
+    freshnessMode: "latest",
+    pulseRequestId: `transport-${detail}`,
+    requestedUrl: "https://example.com/",
+    resolutionMode: "test",
+    scanRecord,
+    waitSeconds: 0
+  }) as Record<string, any>;
+
+  const summary = project("summary");
+  const evidence = project("evidence");
+  const full = project("full");
+  pulseResponseSchema.parse(summary);
+  pulseResponseSchema.parse(evidence);
+  pulseResponseSchema.parse(full);
+
+  assert.equal(summary.transportSecurity.status, "available");
+  assert.equal(summary.transportSecurity.evidenceRetained, true);
+  assert.equal(summary.transportSecurity.observationCounts.total, 5);
+  assert.deepEqual(summary.transportSecurity.observations, []);
+  assert.equal(evidence.transportSecurity.observations.length, 5);
+  assert.deepEqual(
+    evidence.transportSecurity.observations.map((row: Record<string, unknown>) => row.status),
+    ["Observed", "Observed", "Observed", "Observed", "Observed"]
+  );
+  assert.equal(full.transportSecurity.retainedSummary.validTlsCertificate, true);
+  assert.equal(full.transportSecurity.retainedSummary.httpRedirectsToHttps, true);
+  assert.equal("hstsEnabled" in full.transportSecurity.retainedSummary, false);
+  assert.equal("tlsVersionMinSupported" in full.transportSecurity.retainedSummary, false);
+  assert.equal("cipherSuites" in full.transportSecurity.retainedSummary, false);
+});
+
+test("Pulse represents missing canonical transport-security evidence as unavailable", () => {
+  const pulse = buildPulseProjection({
+    detail: "evidence",
+    format: "json",
+    freshnessMode: "latest",
+    pulseRequestId: "transport-unavailable",
+    requestedUrl: "https://example.com/",
+    resolutionMode: "test",
+    scanRecord: pulseScanRecord({
+      runtimeArtifacts: {},
+      scan: {
+        completedAt: "2026-08-01T20:00:20.000Z",
+        createdAt: "2026-08-01T20:00:00.000Z",
+        domainHostname: "example.com",
+        id: "00000000-0000-4000-8000-000000000123",
+        pagesRequested: 1,
+        pagesScanned: 1,
+        startedAt: "2026-08-01T20:00:01.000Z",
+        status: "completed"
+      }
+    }),
+    waitSeconds: 0
+  }) as Record<string, any>;
+
+  assert.equal(pulse.transportSecurity.status, "unavailable");
+  assert.equal(pulse.transportSecurity.evidenceRetained, false);
+  assert.equal(pulse.transportSecurity.observationCounts.unavailable, 5);
+  assert.equal(
+    pulse.transportSecurity.observations.every((row: Record<string, unknown>) => row.status === "Not testable"),
+    true
+  );
+});
+
 test("Pulse executive action label follows the same posture as the rendered report", () => {
   assert.equal(getPulseExecutiveActionLabel("Action Needed"), "Action Needed");
   assert.equal(getPulseExecutiveActionLabel("Watch"), "Monitor");

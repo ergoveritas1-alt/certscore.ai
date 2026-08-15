@@ -206,6 +206,27 @@ test("Streamable HTTP runtime initializes, lists tools, enforces auth, CORS, and
         summary: { score: 46 },
         findings: [],
         topFindings: [],
+        transportSecurity: {
+          status: "available",
+          evidenceRetained: true,
+          observationCounts: {
+            total: 1,
+            observedPositive: 1,
+            concernOrReview: 0,
+            notObserved: 0,
+            unavailable: 0
+          },
+          observations: [{
+            id: "transport_security_tls_certificate",
+            label: "Valid SSL/TLS certificate",
+            status: "Observed",
+            assessmentStatus: "checked",
+            evidenceState: "observed",
+            summary: "The strict TLS probe verified the HTTPS origin certificate.",
+            evidenceRefs: ["ref_transport_security"]
+          }],
+          limitations: ["Do not infer transport properties that are not explicitly returned."]
+        },
         coverage: { limitations: ["Automated public-web scan only."] },
         disclaimer: "Automated public-web observations for review."
       }));
@@ -335,7 +356,7 @@ test("Streamable HTTP runtime initializes, lists tools, enforces auth, CORS, and
     assert.ok(tools.tools.some((tool) => tool.name === "certscore_scan_site"));
     const authenticatedBundle = await client.callTool({
       name: "certscore_get_scan_bundle",
-      arguments: { scanId: "00000000-0000-4000-8000-000000000123" }
+      arguments: { scanId: "00000000-0000-4000-8000-000000000123", detail: "evidence" }
     });
     assert.equal(authenticatedBundle.isError, undefined, JSON.stringify(authenticatedBundle));
     const authenticatedContent = (authenticatedBundle as { content?: Array<{ type: string; text?: string }> }).content ?? [];
@@ -343,6 +364,8 @@ test("Streamable HTTP runtime initializes, lists tools, enforces auth, CORS, and
     assert.match(authenticatedText, /First-layer reject control not observed/);
     assert.match(authenticatedText, /Google Analytics/);
     assert.match(authenticatedText, /cookies=_ga/);
+    assert.match(authenticatedText, /Transport security: status=available/);
+    assert.match(authenticatedText, /Valid SSL\/TLS certificate; status=Observed/);
     assert.equal(authenticatedInternalOperation, "scan_bundle");
     assert.match(authenticatedInternalTimestamp ?? "", /^\d+$/);
     assert.match(authenticatedInternalProof ?? "", /^[A-Za-z0-9_-]+$/);

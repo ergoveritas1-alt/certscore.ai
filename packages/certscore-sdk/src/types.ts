@@ -624,6 +624,29 @@ export interface AgentInterpretation {
   [key: string]: unknown;
 }
 
+export interface TransportSecurityProjection {
+  status: "available" | "limited" | "unavailable";
+  evidenceRetained: boolean;
+  observationCounts: {
+    total: number;
+    observedPositive: number;
+    concernOrReview: number;
+    notObserved: number;
+    unavailable: number;
+  };
+  observations: Array<{
+    id: string;
+    label: string;
+    status: "Gap observed" | "Observed" | "Not confirmed" | "Not observed" | "Not testable" | "Review signal" | "Insufficient evidence" | "Out of scope";
+    assessmentStatus: "gap_observed" | "review_signal" | "checked" | "coverage_limitation" | "not_applicable";
+    evidenceState: "observed" | "not_observed" | "not_testable" | "not_applicable";
+    summary: string;
+    evidenceRefs: string[];
+  }>;
+  limitations: string[];
+  retainedSummary?: Record<string, unknown>;
+}
+
 export interface PulseResultBase {
   type: "certscore_pulse" | "certscore_pulse_summary" | "certscore_pulse_evidence";
   meta?: PulseMeta;
@@ -636,6 +659,7 @@ export interface PulseResultBase {
   noGo?: ScanNoGoResult;
   summary?: PulseSummary;
   topFindings?: TopFinding[];
+  transportSecurity?: TransportSecurityProjection;
   coverage?: CoverageInfo;
   links?: Links;
   feedback?: FeedbackInfo;

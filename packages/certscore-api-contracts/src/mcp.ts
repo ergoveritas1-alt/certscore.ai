@@ -9,7 +9,7 @@ import {
   apiV2ScanResourceSchema,
   apiV2ScanStatusSchema
 } from "./api-v2.js";
-import { pulseAgentInterpretationSchema, pulseResponseSchema, pulseStatusSchema } from "./pulse-v1.js";
+import { pulseAgentInterpretationSchema, pulseResponseSchema, pulseStatusSchema, pulseTransportSecuritySchema } from "./pulse-v1.js";
 import { scanNoGoResultSchema, scanResultDispositionSchema } from "./scan-no-go.js";
 
 export const mcpPulseDetailSchema = z.enum(["tiny", "quick", "standard", "full", "summary", "evidence"]);
@@ -385,6 +385,7 @@ export const mcpScanBundleOutputSchema = z
     evidenceSummary: z.record(z.unknown()).optional(),
     fullReport: pulseResponseSchema.optional(),
     preConsentCookiesTrackers: mcpScanBundlePreConsentSchema.optional(),
+    transportSecurity: pulseTransportSecuritySchema,
     links: z.record(z.string()).optional(),
     reportUrl: z.string().nullable(),
     recommendedNextTool: z.enum(["certscore_get_scan_status", "certscore_get_scan_bundle"]).nullable(),

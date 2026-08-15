@@ -994,6 +994,22 @@ export function scanBundleText(bundle: Record<string, any>) {
   const overview = executiveOverviewText(bundle.summary?.executiveSummary);
   if (overview) append(overview);
 
+  const transportSecurity = bundle.transportSecurity && typeof bundle.transportSecurity === "object" && !Array.isArray(bundle.transportSecurity)
+    ? bundle.transportSecurity as Record<string, any>
+    : null;
+  if (transportSecurity) {
+    const counts = transportSecurity.observationCounts && typeof transportSecurity.observationCounts === "object"
+      ? transportSecurity.observationCounts as Record<string, unknown>
+      : {};
+    append(`Transport security: status=${transportSecurity.status ?? "unavailable"}; retained evidence=${transportSecurity.evidenceRetained === true ? "yes" : "no"}; canonical observations=${counts.total ?? 0}; concerns/review=${counts.concernOrReview ?? 0}; unavailable=${counts.unavailable ?? 0}.`);
+    for (const observation of Array.isArray(transportSecurity.observations) ? transportSecurity.observations : []) {
+      append(`Transport observation: ${observation.label ?? observation.id ?? "unknown"}; status=${observation.status ?? "unknown"}; ${observation.summary ?? "Review the structured transport evidence."}`);
+    }
+    for (const limitation of Array.isArray(transportSecurity.limitations) ? transportSecurity.limitations.slice(0, 3) : []) {
+      append(`Transport limitation: ${limitation}`);
+    }
+  }
+
   const findings = Array.isArray(bundle.findings) ? bundle.findings : [];
   const findingTotal = bundle.findingsMetadata?.total ?? findings.length;
   const findingReturned = bundle.findingsMetadata?.returned ?? bundle.findingsMetadata?.shown ?? findings.length;
@@ -1038,6 +1054,65 @@ export function scanBundleText(bundle: Record<string, any>) {
   return lines.join("\n");
 }
 
+function scanBundleTransportSecurity(report: Record<string, unknown>, detail: "summary" | "findings" | "evidence" | "full") {
+  const source = report.transportSecurity && typeof report.transportSecurity === "object" && !Array.isArray(report.transportSecurity)
+    ? report.transportSecurity as Record<string, unknown>
+    : null;
+  if (!source) {
+    return {
+      status: "unavailable" as const,
+      evidenceRetained: false,
+      observationCounts: {
+        total: 0,
+        observedPositive: 0,
+        concernOrReview: 0,
+        notObserved: 0,
+        unavailable: 0
+      },
+      observations: [],
+      limitations: [
+        "No canonical transport-security projection was available in this scan response. Do not infer a positive transport result."
+      ]
+    };
+  }
+
+  const observations = Array.isArray(source.observations) ? source.observations : [];
+  return {
+    status: source.status === "available" || source.status === "limited" ? source.status : "unavailable",
+    evidenceRetained: source.evidenceRetained === true,
+    observationCounts: source.observationCounts && typeof source.observationCounts === "object" && !Array.isArray(source.observationCounts)
+      ? source.observationCounts
+      : {
+          total: observations.length,
+          observedPositive: 0,
+          concernOrReview: 0,
+          notObserved: 0,
+          unavailable: observations.length
+        },
+    observations: detail === "summary" || detail === "findings"
+      ? []
+      : observations.map((observation) => compactEvidenceValue(observation, {
+          arrayItems: 6,
+          depth: 4,
+          objectKeys: 12,
+          stringChars: 1_200
+        })),
+    limitations: Array.isArray(source.limitations)
+      ? source.limitations.filter((value): value is string => typeof value === "string").slice(0, 8)
+      : [],
+    ...(detail === "full" && source.retainedSummary && typeof source.retainedSummary === "object" && !Array.isArray(source.retainedSummary)
+      ? {
+          retainedSummary: compactEvidenceValue(source.retainedSummary, {
+            arrayItems: 20,
+            depth: 4,
+            objectKeys: 24,
+            stringChars: 1_200
+          })
+        }
+      : {})
+  };
+}
+
 export function buildScanBundle(input: {
   detail?: "summary" | "findings" | "evidence" | "full";
   evidence?: PulseResult | null;
@@ -1054,6 +1129,7 @@ export function buildScanBundle(input: {
   const maxPreConsentRows = Math.min(50, Math.max(1, input.maxPreConsentRows ?? 20));
   const evidence = (input.evidence ?? {}) as Record<string, unknown>;
   const report = (input.report ?? {}) as Record<string, unknown>;
+  const transportSecurity = scanBundleTransportSecurity(report, detail);
   const allFindings = Array.isArray(input.findings.findings) ? input.findings.findings : [];
   const selectedFindings = detail === "summary" ? distinctSummaryFindings(allFindings) : allFindings;
   const findings = selectedFindings
@@ -1121,6 +1197,7 @@ export function buildScanBundle(input: {
       total: allFindings.length,
       truncated: allFindings.length > findings.length
     },
+    transportSecurity,
     ...(detail === "evidence" || detail === "full"
       ? { evidenceSummary: bundleEvidenceSummary(evidence, allFindings, links, detail === "full") }
       : {}),
@@ -1189,6 +1266,20 @@ export function buildScanBundle(input: {
     inventoryRows.pop();
     bundle.preConsentCookiesTrackers.returned = inventoryRows.length;
     bundle.preConsentCookiesTrackers.truncated = true;
+    refresh();
+  }
+  if (
+    bundle.mcpMetadata.actualBytes > maxBytes &&
+    (bundle.transportSecurity?.observations?.length > 0 || bundle.transportSecurity?.retainedSummary)
+  ) {
+    markBudgetOmitted("transportSecurityDetail", "transport_security_detail_omitted_to_byte_limit");
+    bundle.transportSecurity = {
+      status: bundle.transportSecurity.status,
+      evidenceRetained: bundle.transportSecurity.evidenceRetained,
+      observationCounts: bundle.transportSecurity.observationCounts,
+      observations: [],
+      limitations: bundle.transportSecurity.limitations
+    };
     refresh();
   }
   while (bundle.mcpMetadata.actualBytes > maxBytes && bundle.findings.length > 1) {
@@ -1287,6 +1378,13 @@ export function buildScanBundle(input: {
         returned: 0,
         total: bundle.findingsMetadata.total,
         truncated: bundle.findingsMetadata.total > 0
+      },
+      transportSecurity: {
+        status: bundle.transportSecurity.status,
+        evidenceRetained: bundle.transportSecurity.evidenceRetained,
+        observationCounts: bundle.transportSecurity.observationCounts,
+        observations: [],
+        limitations: bundle.transportSecurity.limitations.slice(0, 2)
       },
       ...(bundle.preConsentCookiesTrackers ? {
         preConsentCookiesTrackers: {

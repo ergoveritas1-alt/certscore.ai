@@ -309,6 +309,123 @@ test("buildScanBundle implements materially distinct detail modes", () => {
   assert.equal(summary.preConsentCookiesTrackers.rows[0]?.evidenceClassification.basis, "public_report_projection");
 });
 
+test("scan bundle exposes bounded canonical transport security across detail modes", () => {
+  const transportSecurity = {
+    status: "available",
+    evidenceRetained: true,
+    observationCounts: {
+      total: 5,
+      observedPositive: 5,
+      concernOrReview: 0,
+      notObserved: 0,
+      unavailable: 0
+    },
+    observations: [
+      ["transport_security_https_delivery", "HTTPS delivery for scanned pages", "The scanned page was served over HTTPS in the retained transport observation."],
+      ["transport_security_tls_certificate", "Valid SSL/TLS certificate", "The strict TLS probe verified the HTTPS origin certificate."],
+      ["transport_security_http_redirect", "HTTP redirects to HTTPS", "The explicit HTTP-origin probe redirected to HTTPS."],
+      ["transport_security_mixed_content", "Mixed content", "No mixed-content HTTP subresources were retained for the scanned HTTPS page."],
+      ["transport_security_form_transport", "Observed form transport", "No insecure observed form transport was retained for the scanned page."]
+    ].map(([id, label, summary]) => ({
+      id,
+      label,
+      status: "Observed",
+      assessmentStatus: "checked",
+      evidenceState: "observed",
+      summary,
+      evidenceRefs: ["ref_transport_security"]
+    })),
+    limitations: [
+      "Only the listed canonical observations are represented. Do not infer HSTS, supported TLS versions, cipher suites, or certificate properties that are not explicitly returned."
+    ],
+    retainedSummary: {
+      evidenceRetained: true,
+      pageHttpsObserved: true,
+      httpRedirectsToHttps: true,
+      validTlsCertificate: true,
+      mixedContentObserved: false,
+      insecureFormTransportObserved: false
+    }
+  };
+  const reportWithTransport = {
+    ...report,
+    transportSecurity,
+    executiveSummary: {
+      consentPlatform: "OneTrust",
+      trackerFootprint: { vendors: 2, domains: 3, cookies: 1 },
+      policySurfaces: [{
+        type: "privacy_policy",
+        title: "Privacy Policy",
+        url: "https://example.com/privacy"
+      }]
+    }
+  };
+  const common = {
+    evidence: { ...reportWithTransport, evidenceSafetyNotes: ["Bounded public evidence."] },
+    findings: { type: "certscore_finding_list", findings: [publicFinding("tls")] },
+    preConsentCookiesTrackers: {
+      type: "certscore_pre_consent_cookies_trackers",
+      rows: [{ id: "row_1", kind: "cookie", name: "cmp" }],
+      summary: { rowCount: 1 }
+    },
+    report: reportWithTransport,
+    scan: {
+      type: "certscore_scan",
+      scanId: "scan_123",
+      domain: "example.com",
+      status: "completed",
+      score: 72,
+      freshness: { status: "fresh" },
+      scanFrom: "us_east"
+    }
+  } as any;
+
+  const summary = buildScanBundle({ ...common, detail: "summary" });
+  const evidence = buildScanBundle({ ...common, detail: "evidence" });
+  const full = buildScanBundle({ ...common, detail: "full" });
+
+  mcpScanBundleOutputSchema.parse(summary);
+  mcpScanBundleOutputSchema.parse(evidence);
+  mcpScanBundleOutputSchema.parse(full);
+  assert.equal(summary.transportSecurity.status, "available");
+  assert.deepEqual(summary.transportSecurity.observations, []);
+  assert.equal(evidence.transportSecurity.observations.length, 5);
+  assert.equal(evidence.transportSecurity.retainedSummary, undefined);
+  assert.equal(full.transportSecurity.observations.length, 5);
+  assert.equal(full.transportSecurity.retainedSummary.validTlsCertificate, true);
+  assert.equal(full.preConsentCookiesTrackers.rows[0]?.name, "cmp");
+  assert.equal(full.findings[0]?.id, "tls");
+  assert.equal(full.summary.executiveSummary.consentPlatform, "OneTrust");
+  assert.deepEqual(full.summary.executiveSummary.trackerFootprint, { vendors: 2, domains: 3, cookies: 1 });
+  assert.equal(full.summary.executiveSummary.policySurfaces[0]?.url, "https://example.com/privacy");
+  assert.match(scanBundleText(evidence), /Transport security: status=available/);
+  assert.match(scanBundleText(evidence), /Valid SSL\/TLS certificate; status=Observed/);
+  assert.doesNotMatch(JSON.stringify(full.transportSecurity), /hstsEnabled|tlsVersionMinSupported|cipherSuites/);
+});
+
+test("scan bundle explicitly reports unavailable transport evidence without a positive conclusion", () => {
+  const bundle = buildScanBundle({
+    detail: "full",
+    evidence: report,
+    findings: { type: "certscore_finding_list", findings: [] },
+    preConsentCookiesTrackers: null,
+    report,
+    scan: {
+      type: "certscore_scan",
+      scanId: "scan_123",
+      domain: "example.com",
+      status: "completed",
+      score: 72
+    }
+  } as any);
+
+  assert.equal(bundle.transportSecurity.status, "unavailable");
+  assert.equal(bundle.transportSecurity.evidenceRetained, false);
+  assert.deepEqual(bundle.transportSecurity.observations, []);
+  assert.match(bundle.transportSecurity.limitations[0], /Do not infer a positive transport result/);
+  assert.match(scanBundleText(bundle), /Transport security: status=unavailable/);
+});
+
 test("summary groups exact duplicate finding labels while findings mode preserves canonical rows", () => {
   const common = {
     findings: {

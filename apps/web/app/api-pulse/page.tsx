@@ -127,9 +127,9 @@ const mcpTools = [
 
 const exampleMeta = {
   apiVersion: "v1",
-  schemaVersion: "0.5.3",
+  schemaVersion: "0.5.4",
   pulseVersion: "2026-05-18",
-  projectionVersion: "pulse-public-v1",
+  projectionVersion: "pulse-public-v3",
   generatedAt: "2026-05-18T23:15:32Z",
   source: "certscore.ai"
 };
