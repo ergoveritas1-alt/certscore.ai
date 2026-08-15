@@ -254,6 +254,9 @@ test("CertScore Light exposes only the focused no-account workflow", async () =>
     assert.equal(statusTool?.inputSchema.additionalProperties, false);
     assert.ok(statusTool?.outputSchema?.required?.includes("error"));
     assert.ok(statusTool?.outputSchema?.required?.includes("recommendedNextAction"));
+    assert.match(statusTool?.description ?? "", /execution region \(scanFrom\), timestamps/);
+    assert.match(statusTool?.description ?? "", /never infer its original region from the current request, the user's location, or a default/i);
+    assert.match(statusTool?.description ?? "", /Report unavailable provenance as unavailable/);
     const bundleTool = tools.tools.find((tool) => tool.name === "certscore_get_scan_bundle");
     assert.deepEqual(bundleTool?.annotations, {
       readOnlyHint: true,
@@ -269,6 +272,9 @@ test("CertScore Light exposes only the focused no-account workflow", async () =>
     assert.ok(bundleTool?.outputSchema?.required?.includes("provenance"));
     assert.ok(bundleTool?.outputSchema?.required?.includes("scoreLabel"));
     assert.ok(bundleTool?.outputSchema?.required?.includes("interpretationGuidance"));
+    assert.ok(bundleTool?.outputSchema?.required?.includes("scanFrom"));
+    assert.match(bundleTool?.description ?? "", /canonical execution region \(scanFrom\) and timestamps when available/i);
+    assert.match(bundleTool?.description ?? "", /never infer its original region from the current request, the user's location, or a default/i);
     assert.match(bundleTool?.description ?? "", /criticality, priority, and confidence as CertScore metadata/i);
     assert.match(bundleTool?.description ?? "", /regulatory review lenses are non-determinative CertScore review context, not legal severity, legal exposure, or a compliance determination/i);
     assert.match(bundleTool?.description ?? "", /Missing consent-action evidence does not establish Accept, Reject, or Decline behavior/i);
@@ -701,6 +707,8 @@ test("certscore_get_scan_status supports API v2 scanId status with timing fields
         status: "completed",
         score: 78,
         riskLevel: "monitor",
+        scanFrom: "eu_ie",
+        createdAt: "2026-07-08T11:59:59.000Z",
         startedAt: "2026-07-08T12:00:00.000Z",
         completedAt: "2026-07-08T12:00:34.000Z",
         scanTimeSeconds: 34
@@ -709,20 +717,27 @@ test("certscore_get_scan_status supports API v2 scanId status with timing fields
   ]);
   try {
     await withMcpClient(async (client) => {
-      const result = parseToolJson(
-        await client.callTool({
+      const raw = await client.callTool({
           name: "certscore_get_scan_status",
           arguments: { scanId: "00000000-0000-4000-8000-000000000123" }
-        })
-      );
+        });
+      const result = parseToolJson(raw);
       assert.equal(result.type, "certscore_scan_job");
       assert.equal(result.scanId, "00000000-0000-4000-8000-000000000123");
+      assert.equal(result.scanFrom, "eu_ie");
+      assert.equal(result.createdAt, "2026-07-08T11:59:59.000Z");
       assert.equal(result.startedAt, "2026-07-08T12:00:00.000Z");
       assert.equal(result.completedAt, "2026-07-08T12:00:34.000Z");
       assert.equal(result.scanTimeSeconds, 34);
       assert.equal(result.score, 78);
       assert.equal(result.riskLevel, "monitor");
       assert.equal((result.provenance as Record<string, unknown>).mode, "existing_scan_retrieved");
+      const text = raw.content[0]?.type === "text" ? raw.content[0].text : "";
+      assert.match(text, /scanFrom\/execution region=eu_ie/);
+      assert.match(text, /completedAt=2026-07-08T12:00:34\.000Z/);
+      assert.match(text, /provenance\/reuse state=existing_scan_retrieved/);
+      assert.match(text, /Never infer its original scan region from the current request, the user's location, or a default execution region/);
+      assertToolOutputSchema("certscore_get_scan_status", result);
       assert.equal(mock.calls.length, 2);
       assert.match(mock.calls[0] ?? "", /\/api\/v2\/scans\/00000000-0000-4000-8000-000000000123\/status/);
       assert.match(mock.calls[1] ?? "", /\/api\/v2\/scans\/00000000-0000-4000-8000-000000000123$/);
@@ -879,6 +894,10 @@ test("certscore_get_scan_bundle returns a compact canonical summary by default",
     url: "https://example.com",
     status: "completed",
     score: 72,
+    scanFrom: "eu_ie",
+    createdAt: "2026-08-15T03:39:14.064Z",
+    startedAt: "2026-08-15T03:39:14.064Z",
+    completedAt: "2026-08-15T03:39:36.015Z",
     coverage: { status: "partial" },
     links: { self: "https://certscore.ai/api/v2/scans/scan_123" },
     disclaimer: "Automated public-web observations for review."
@@ -895,6 +914,10 @@ test("certscore_get_scan_bundle returns a compact canonical summary by default",
       const bundle = parseToolJson(raw);
       assert.equal(bundle.type, "certscore_scan_bundle");
       assert.equal(bundle.scanId, "scan_123");
+      assert.equal(bundle.scanFrom, "eu_ie");
+      assert.equal(bundle.createdAt, "2026-08-15T03:39:14.064Z");
+      assert.equal(bundle.startedAt, "2026-08-15T03:39:14.064Z");
+      assert.equal(bundle.completedAt, "2026-08-15T03:39:36.015Z");
       assert.equal(bundle.status, "completed");
       assert.equal(bundle.score, 72);
       assert.equal(bundle.scoreLabel, "CertScore score");
@@ -932,6 +955,9 @@ test("certscore_get_scan_bundle returns a compact canonical summary by default",
       const text = raw.content[0]?.type === "text" ? raw.content[0].text : "";
       const responseContract = text.split("\n")[0] ?? "";
       assert.match(responseContract, /^Response contract:/);
+      assert.match(text, /scanFrom\/execution region=eu_ie/);
+      assert.match(text, /completedAt=2026-08-15T03:39:36\.015Z/);
+      assert.match(text, /provenance\/reuse state=existing_scan_retrieved/);
       assert.ok(text.indexOf(responseContract) < text.indexOf("CertScore score=72"));
       assert.ok(text.indexOf(responseContract) < text.indexOf("Canonical projected findings:"));
       assert.match(responseContract, /criticality, priority, and confidence are CertScore metadata/i);

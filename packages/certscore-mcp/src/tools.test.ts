@@ -1,8 +1,8 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { CertScoreError, type PulseResult } from "@certscore/sdk";
-import { mcpScanBundleOutputSchema } from "@certscore/api-contracts";
-import { boundEvidencePacket, buildScanBundle, explainFinding, exportFindings, limitPreConsentRows, paginateFindingList, scanBundleText, toToolError, toToolResult, withMcpAgentGuidance } from "./tools.js";
+import { mcpScanBundleOutputSchema, mcpScanStatusOutputSchema } from "@certscore/api-contracts";
+import { boundEvidencePacket, buildScanBundle, explainFinding, exportFindings, limitPreConsentRows, paginateFindingList, scanBundleText, scanStatusText, toToolError, toToolResult, withMcpAgentGuidance, withMcpScanProvenanceGuidance } from "./tools.js";
 
 const report = {
   type: "certscore_pulse",
@@ -376,7 +376,7 @@ test("scan bundle exposes bounded canonical transport security across detail mod
       status: "completed",
       score: 72,
       freshness: { status: "fresh" },
-      scanFrom: "us_east"
+      scanFrom: "eu_ie"
     }
   } as any;
 
@@ -633,7 +633,7 @@ test("scan bundle text exposes compact row evidence, neutral score terminology, 
   assert.match(responseContract, /Do not extrapolate an observed embed, vendor, or request into unobserved cookies, fingerprinting, tracking, or processing/i);
   assert.match(text, /CertScore score=56/);
   assert.doesNotMatch(text, /compliance score/i);
-  assert.match(text, /provenance: existing_scan_retrieved/i);
+  assert.match(text, /provenance\/reuse state=existing_scan_retrieved/i);
   assert.match(text, /Full report: https:\/\/certscore\.ai\/scan\/scan_123/);
   assert.match(text, /tracker: Bombora/);
   assert.match(text, /cookies=visitor_id/);
@@ -655,6 +655,105 @@ test("scan bundle text exposes compact row evidence, neutral score terminology, 
     "Report only observed CertScore evidence and persisted CertScore classifications. Without corresponding captured post-action evidence, do not infer what Accept, Reject, Decline, or another consent action would do; say the scan does not establish what happens after that action. Do not speculate that an observed embed, vendor, or request may cause additional cookies, fingerprinting, tracking, or processing unless CertScore observed that behavior. Treat returned priority or severity as a CertScore classification, not regulatory criticality or legal exposure; prefer ‘observed privacy risk signal’ or ‘CertScore finding’. Do not infer unobserved technologies, legal compliance, or a legal violation from scores or findings."
   );
   assert.ok(text.length <= 8_000);
+});
+
+test("Light read projections expose canonical provenance for reused and newly created scans", () => {
+  for (const fixture of [
+    { executionMode: "reused_scan", reused: true, expectedMode: "existing_completed_scan_reused" },
+    { executionMode: "new_scan", reused: false, expectedMode: "new_scan_started" }
+  ] as const) {
+    const status = withMcpScanProvenanceGuidance({
+      type: "certscore_scan_job",
+      jobId: "scan_provenance",
+      scanId: "scan_provenance",
+      status: "completed",
+      scanFrom: "eu_ie",
+      createdAt: "2026-08-15T03:39:14.064Z",
+      startedAt: "2026-08-15T03:39:14.064Z",
+      completedAt: "2026-08-15T03:39:36.015Z",
+      ...fixture
+    }, "unknown");
+    const text = scanStatusText(status);
+
+    assert.equal(status.scanFrom, "eu_ie");
+    assert.equal(status.completedAt, "2026-08-15T03:39:36.015Z");
+    assert.equal(status.provenance.mode, fixture.expectedMode);
+    assert.match(text, /scanId=scan_provenance/);
+    assert.match(text, /scanFrom\/execution region=eu_ie/);
+    assert.match(text, /completedAt=2026-08-15T03:39:36\.015Z/);
+    assert.match(text, /startedAt=2026-08-15T03:39:14\.064Z/);
+    assert.match(text, new RegExp(`provenance/reuse state=${fixture.expectedMode}`));
+    assert.match(text, /Never infer its original scan region from the current request, the user's location, or a default execution region/);
+    assert.match(status.interpretationGuidance.statement, /use only persisted scanFrom and timestamps/);
+    assert.doesNotThrow(() => mcpScanStatusOutputSchema.parse(status));
+
+    const bundle = buildScanBundle({
+      detail: "summary",
+      evidence: null,
+      findings: { type: "certscore_finding_list", scanId: "scan_provenance", findings: [] },
+      preConsentCookiesTrackers: null,
+      report: null,
+      scan: {
+        type: "certscore_scan",
+        scanId: "scan_provenance",
+        domain: "example.com",
+        status: "completed",
+        scanFrom: "eu_ie",
+        createdAt: "2026-08-15T03:39:14.064Z",
+        startedAt: "2026-08-15T03:39:14.064Z",
+        completedAt: "2026-08-15T03:39:36.015Z",
+        executionMode: fixture.executionMode,
+        reused: fixture.reused
+      }
+    } as any);
+    const bundleText = scanBundleText(bundle);
+    assert.equal(bundle.scanFrom, "eu_ie");
+    assert.equal(bundle.completedAt, "2026-08-15T03:39:36.015Z");
+    assert.equal(bundle.provenance.mode, fixture.expectedMode);
+    assert.match(bundleText, /scanFrom\/execution region=eu_ie/);
+    assert.match(bundleText, new RegExp(`provenance/reuse state=${fixture.expectedMode}`));
+    assert.doesNotThrow(() => mcpScanBundleOutputSchema.parse(bundle));
+  }
+});
+
+test("Light read projections report legacy missing provenance as unavailable without assigning a default region", () => {
+  const status = withMcpScanProvenanceGuidance({
+    type: "certscore_scan_job",
+    jobId: "scan_legacy",
+    scanId: "scan_legacy",
+    status: "completed",
+    scanFrom: null,
+    createdAt: null,
+    startedAt: null,
+    completedAt: null
+  }, "existing_scan_retrieved");
+  const statusText = scanStatusText(status);
+  const bundle = buildScanBundle({
+    detail: "summary",
+    evidence: null,
+    findings: { type: "certscore_finding_list", scanId: "scan_legacy", findings: [] },
+    preConsentCookiesTrackers: null,
+    report: null,
+    scan: {
+      type: "certscore_scan",
+      scanId: "scan_legacy",
+      domain: "legacy.example",
+      status: "completed"
+    }
+  } as any);
+  const bundleText = scanBundleText(bundle);
+
+  assert.equal(status.scanFrom, null);
+  assert.equal(bundle.scanFrom, null);
+  for (const text of [statusText, bundleText]) {
+    assert.match(text, /scanFrom\/execution region=unavailable/);
+    assert.match(text, /completedAt=unavailable; startedAt=unavailable; createdAt=unavailable/);
+    assert.match(text, /Never infer its original scan region from the current request, the user's location, or a default execution region/);
+    assert.doesNotMatch(text, /scanFrom\/execution region=(eu_de|eu_ie|california)/);
+  }
+  assert.doesNotThrow(() => mcpScanStatusOutputSchema.parse(status));
+  assert.doesNotThrow(() => mcpScanBundleOutputSchema.parse(bundle));
+  assert.ok(bundleText.length <= 8_000);
 });
 
 test("default scan bundle exposes cross-domain projected findings and canonical overview facts in TextContent", () => {

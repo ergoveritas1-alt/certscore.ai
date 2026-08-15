@@ -3,7 +3,7 @@ import { certScoreMcpToolContracts } from "@certscore/api-contracts";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import type { RequestInfo } from "@modelcontextprotocol/sdk/types.js";
 import { CERTSCORE_MCP_VERSION } from "./version.js";
-import { boundEvidencePacket, buildScanBundle, exportFindings, findingListText, limitPreConsentRows, markdownReportText, MAX_EVIDENCE_PACKET_CHARS, normalizeDetail, normalizeFormat, paginateFindingList, preConsentInventoryText, pulseReportText, scanBundleText, toInvalidArgumentsToolError, toToolError, toToolResult, withMcpAgentGuidance } from "./tools.js";
+import { boundEvidencePacket, buildScanBundle, exportFindings, findingListText, limitPreConsentRows, markdownReportText, MAX_EVIDENCE_PACKET_CHARS, normalizeDetail, normalizeFormat, paginateFindingList, preConsentInventoryText, pulseReportText, scanBundleText, scanStatusText, toInvalidArgumentsToolError, toToolError, toToolResult, withMcpAgentGuidance, withMcpScanProvenanceGuidance } from "./tools.js";
 
 export interface CertScoreMcpOptions {
   apiKey?: string;
@@ -200,12 +200,13 @@ export function createCertScoreMcpServer(options: CertScoreMcpOptions = {}) {
         if (needsTerminalHydration) {
           try {
             const scan = await client.scans.get(scanId, { internalMcpOperation });
-            return toToolResult(withMcpAgentGuidance({
+            const guided = withMcpScanProvenanceGuidance({
               ...status,
               type: "certscore_scan_job",
               status: scan.status,
               domain: scan.domain,
               url: scan.url ?? null,
+              scanFrom: scan.scanFrom ?? null,
               resultDisposition: scan.resultDisposition,
               noGo: scan.noGo,
               createdAt: scan.createdAt ?? null,
@@ -220,13 +221,18 @@ export function createCertScoreMcpServer(options: CertScoreMcpOptions = {}) {
               coverage: scan.coverage ?? null,
               reportUrl: scan.links?.report ?? status.reportUrl ?? null,
               links: { ...status.links, ...scan.links }
-            }, "existing_scan_retrieved"));
+            }, "existing_scan_retrieved");
+            return toToolResult(guided, scanStatusText(guided));
           } catch {
             // Preserve the API status response if the terminal scan resource is
             // briefly unavailable during eventual-consistency windows.
           }
         }
-        return toToolResult(withMcpAgentGuidance(status as unknown as Record<string, any>, "existing_scan_retrieved"));
+        const guided = withMcpScanProvenanceGuidance({
+          ...status,
+          scanFrom: status.scanFrom ?? null
+        } as unknown as Record<string, any>, "existing_scan_retrieved");
+        return toToolResult(guided, scanStatusText(guided));
       } catch (error) {
         return toToolError(error);
       }

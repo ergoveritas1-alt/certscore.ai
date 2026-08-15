@@ -155,6 +155,7 @@ export interface ScanJob extends ScanCreationMetadata {
   scan_id?: string | null;
   domain?: string | null;
   url?: string | null;
+  scanFrom?: ScanFrom;
   status: PulseJobStatus;
   resultDisposition?: ScanResultDisposition;
   noGo?: ScanNoGoResult;

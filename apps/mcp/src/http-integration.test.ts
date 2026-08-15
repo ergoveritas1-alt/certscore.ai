@@ -193,6 +193,10 @@ test("Streamable HTTP runtime initializes, lists tools, enforces auth, CORS, and
         url: "https://caltech.edu/",
         status: "completed",
         score: 46,
+        scanFrom: "eu_ie",
+        createdAt: "2026-08-15T03:39:14.064Z",
+        startedAt: "2026-08-15T03:39:14.064Z",
+        completedAt: "2026-08-15T03:39:36.015Z",
         coverage: { status: "partial" }
       }));
       return;
@@ -788,9 +792,12 @@ test("Streamable HTTP runtime initializes, lists tools, enforces auth, CORS, and
     });
     assert.equal(completedBundle.isError, undefined, JSON.stringify(completedBundle));
     assert.equal((completedBundle.structuredContent as { scoreLabel?: string })?.scoreLabel, "CertScore score");
+    assert.equal((completedBundle.structuredContent as { scanFrom?: string })?.scanFrom, "eu_ie");
     const bundleContent = (completedBundle as { content?: Array<{ type: string; text?: string }> }).content ?? [];
     const bundleText = bundleContent[0]?.type === "text" ? bundleContent[0].text ?? "" : "";
     assert.match(bundleText, /Full report: https:\/\/certscore\.ai\/scan\/00000000-0000-4000-8000-000000000123/);
+    assert.match(bundleText, /scanFrom\/execution region=eu_ie/);
+    assert.match(bundleText, /completedAt=2026-08-15T03:39:36\.015Z/);
     assert.match(bundleText, /First-layer reject control not observed/);
     assert.match(bundleText, /Google Analytics/);
     assert.match(bundleText, /cookies=_ga/);

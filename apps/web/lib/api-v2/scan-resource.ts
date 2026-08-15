@@ -757,6 +757,7 @@ export function buildApiV2ScanStatus(scanRecord: ScanDetailResponse, options: { 
     scanId: scan.id,
     domain: scan.domainHostname ?? null,
     url: canonicalScan.url ?? null,
+    scanFrom: canonicalScan.scanFrom,
     status,
     ...(noGoProjection ?? {}),
     phase: status === "completed" || status === "completed_limited"

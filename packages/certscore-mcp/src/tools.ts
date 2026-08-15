@@ -8,8 +8,9 @@ const EVIDENCE_ARRAY_ITEMS = 40;
 const EVIDENCE_OBJECT_KEYS = 80;
 const MAX_TOOL_TEXT_CHARS = 8_000;
 const LEGAL_REVIEW_DISCLAIMER = "CertScore results are automated public-web observations for human review, not legal advice, certification, or a compliance determination.";
+const SCAN_PROVENANCE_GROUNDING = "For a reused or retrieved existing scan, use only persisted scanFrom and timestamps. Never infer its original scan region from the current request, the user's location, or a default execution region. If persisted region or timestamps are unavailable, report them as unavailable.";
 const INTERPRETATION_STATEMENT = "The CertScore score covers observable public-web scan signals only. Do not infer technologies that are not listed in the returned evidence or any legal compliance status.";
-const SCAN_BUNDLE_RESPONSE_CONTRACT = "Response contract: Report only observed CertScore evidence and CertScore classifications. criticality, priority, and confidence are CertScore metadata; regulatory review lenses are non-determinative CertScore review context—not legal severity, legal exposure, or a compliance determination. Absence of captured consent-action evidence does not establish what happens after Accept, Reject, or Decline. Do not extrapolate an observed embed, vendor, or request into unobserved cookies, fingerprinting, tracking, or processing, and do not infer violations or compliance beyond what CertScore observed.";
+const SCAN_BUNDLE_RESPONSE_CONTRACT = `Response contract: Report only observed CertScore evidence and CertScore classifications. criticality, priority, and confidence are CertScore metadata; regulatory review lenses are non-determinative CertScore review context—not legal severity, legal exposure, or a compliance determination. Absence of captured consent-action evidence does not establish what happens after Accept, Reject, or Decline. Do not extrapolate an observed embed, vendor, or request into unobserved cookies, fingerprinting, tracking, or processing, and do not infer violations or compliance beyond what CertScore observed. ${SCAN_PROVENANCE_GROUNDING}`;
 const SCAN_BUNDLE_INTERPRETATION_STATEMENT = "Report only observed CertScore evidence and persisted CertScore classifications. Without corresponding captured post-action evidence, do not infer what Accept, Reject, Decline, or another consent action would do; say the scan does not establish what happens after that action. Do not speculate that an observed embed, vendor, or request may cause additional cookies, fingerprinting, tracking, or processing unless CertScore observed that behavior. Treat returned priority or severity as a CertScore classification, not regulatory criticality or legal exposure; prefer ‘observed privacy risk signal’ or ‘CertScore finding’. Do not infer unobserved technologies, legal compliance, or a legal violation from scores or findings.";
 const OBSERVATION_ONLY_DISCLAIMER = `${LEGAL_REVIEW_DISCLAIMER} No-go, not-observed, and limited-coverage results are not proof of compliance.`;
 
@@ -285,6 +286,14 @@ export function withMcpAgentGuidance<T extends Record<string, any>>(value: T, fa
         ? `Call certscore_get_scan_bundle with scanId ${value.scanId ?? value.jobId} for the canonical findings and limitations.`
         : "Review the result and retained limitations."),
     observationOnlyDisclaimer: OBSERVATION_ONLY_DISCLAIMER
+  };
+}
+
+export function withMcpScanProvenanceGuidance(value: Record<string, any>, fallbackProvenanceMode: ScanProvenanceMode) {
+  const guided = withMcpAgentGuidance(value, fallbackProvenanceMode);
+  return {
+    ...guided,
+    interpretationGuidance: interpretationGuidance(`${INTERPRETATION_STATEMENT} ${SCAN_PROVENANCE_GROUNDING}`)
   };
 }
 
@@ -879,6 +888,23 @@ function reportUrlFor(value: Record<string, any>) {
         : null;
 }
 
+function canonicalScanProvenanceText(value: Record<string, any>) {
+  const present = (field: unknown) => typeof field === "string" && field.trim() ? field.trim() : "unavailable";
+  return `Canonical scan provenance: scanId=${present(extractScanId(value))}; scanFrom/execution region=${present(value.scanFrom)}; completedAt=${present(value.completedAt)}; startedAt=${present(value.startedAt)}; createdAt=${present(value.createdAt)}; provenance/reuse state=${present(value.provenance?.mode)}.`;
+}
+
+export function scanStatusText(value: Record<string, any>) {
+  const reportUrl = reportUrlFor(value);
+  return [
+    `CertScore scan status: status=${value.status ?? "unknown"}.`,
+    canonicalScanProvenanceText(value),
+    `Full report: ${reportUrl ?? "not available"}.`,
+    OBSERVATION_ONLY_DISCLAIMER,
+    INTERPRETATION_STATEMENT,
+    SCAN_PROVENANCE_GROUNDING
+  ].join("\n");
+}
+
 function boundedResultText(header: string, bodyLines: string[], value: Record<string, any>) {
   const footer = [OBSERVATION_ONLY_DISCLAIMER, INTERPRETATION_STATEMENT];
   const reportUrl = reportUrlFor(value);
@@ -979,7 +1005,7 @@ export function scanBundleText(bundle: Record<string, any>) {
   const lines = [
     SCAN_BUNDLE_RESPONSE_CONTRACT,
     `CertScore scan bundle for ${bundle.domain ?? "unknown domain"}; status=${bundle.status ?? "unknown"}${score}; scanId=${bundle.scanId ?? "unknown"}.`,
-    `Provenance: ${bundle.provenance?.mode ?? "unknown"}.`,
+    canonicalScanProvenanceText(bundle),
     `Full report: ${bundle.reportUrl ?? (bundle.scanId ? `https://certscore.ai/scan/${encodeURIComponent(String(bundle.scanId))}` : "not available")}.`
   ];
   const canAppend = (line: string) => [...lines, line, ...footer].join("\n").length <= MAX_TOOL_TEXT_CHARS;
@@ -1163,6 +1189,7 @@ export function buildScanBundle(input: {
     scanId: input.scan.scanId,
     domain: input.scan.domain,
     url: input.scan.url ?? null,
+    scanFrom: input.scan.scanFrom ?? null,
     status: input.scan.status,
     score: input.scan.score ?? null,
     scoreLabel: "CertScore score",

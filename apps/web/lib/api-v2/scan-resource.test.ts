@@ -412,6 +412,7 @@ test("buildApiV2ScanStatus exposes public scan status links", () => {
   assert.equal(status.completedAt, "2026-06-30T12:00:10.000Z");
   assert.equal(status.scanTimeSeconds, 9);
   assert.equal(status.url, "https://example.com");
+  assert.equal(status.scanFrom, "eu_ie");
   assert.equal(status.score, 32);
   assert.equal(status.scoreStatus, "final");
   assert.equal(status.scoreVersion, "overall-score.v1");

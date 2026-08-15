@@ -92,6 +92,7 @@ export const apiV2ScanJobSchema = z
     scanId: z.string().nullable().optional(),
     domain: z.string().nullable().optional(),
     url: z.string().nullable().optional(),
+    scanFrom: apiV2ScanFromSchema.optional(),
     status: apiV2ScanStatusSchema,
     resultDisposition: scanResultDispositionSchema.optional(),
     noGo: scanNoGoResultSchema.optional(),
