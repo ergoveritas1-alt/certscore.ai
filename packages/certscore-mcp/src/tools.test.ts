@@ -622,7 +622,15 @@ test("scan bundle text exposes compact row evidence, neutral score terminology, 
     }
   } as any);
   const text = scanBundleText(bundle);
+  const responseContract = text.split("\n")[0] ?? "";
 
+  assert.match(responseContract, /^Response contract: Report only observed CertScore evidence and CertScore classifications\./);
+  assert.ok(text.indexOf(responseContract) < text.indexOf("CertScore score=56"));
+  assert.ok(text.indexOf(responseContract) < text.indexOf("Canonical projected findings:"));
+  assert.match(responseContract, /criticality, priority, and confidence are CertScore metadata/i);
+  assert.match(responseContract, /regulatory review lenses are non-determinative CertScore review context—not legal severity, legal exposure, or a compliance determination/i);
+  assert.match(responseContract, /Absence of captured consent-action evidence does not establish what happens after Accept, Reject, or Decline/i);
+  assert.match(responseContract, /Do not extrapolate an observed embed, vendor, or request into unobserved cookies, fingerprinting, tracking, or processing/i);
   assert.match(text, /CertScore score=56/);
   assert.doesNotMatch(text, /compliance score/i);
   assert.match(text, /provenance: existing_scan_retrieved/i);
@@ -750,6 +758,7 @@ test("scan bundle text remains bounded while preserving interpretation guidance"
   const text = scanBundleText(bundle);
 
   assert.ok(text.length <= 8_000);
+  assert.match(text.split("\n")[0] ?? "", /^Response contract:/);
   assert.match(text, /additional returned pre-consent rows? .*omitted from TextContent/i);
   assert.match(text, /automated public-web observations for human review/i);
   assert.match(text, /the scan does not establish what happens after that action/i);

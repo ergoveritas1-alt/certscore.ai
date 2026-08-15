@@ -269,6 +269,10 @@ test("CertScore Light exposes only the focused no-account workflow", async () =>
     assert.ok(bundleTool?.outputSchema?.required?.includes("provenance"));
     assert.ok(bundleTool?.outputSchema?.required?.includes("scoreLabel"));
     assert.ok(bundleTool?.outputSchema?.required?.includes("interpretationGuidance"));
+    assert.match(bundleTool?.description ?? "", /criticality, priority, and confidence as CertScore metadata/i);
+    assert.match(bundleTool?.description ?? "", /regulatory review lenses are non-determinative CertScore review context, not legal severity, legal exposure, or a compliance determination/i);
+    assert.match(bundleTool?.description ?? "", /Missing consent-action evidence does not establish Accept, Reject, or Decline behavior/i);
+    assert.match(bundleTool?.description ?? "", /Do not extrapolate observed embeds, vendors, or requests into unobserved cookies, fingerprinting, tracking, or processing/i);
     const inventorySchema = bundleTool?.outputSchema?.properties?.preConsentCookiesTrackers as {
       properties?: { rows?: { items?: { properties?: Record<string, unknown> } }; returned?: unknown; total?: unknown; truncated?: unknown };
     } | undefined;
@@ -926,6 +930,14 @@ test("certscore_get_scan_bundle returns a compact canonical summary by default",
         assert.match(headers.get("x-certscore-mcp-internal-proof") ?? "", /^[A-Za-z0-9_-]+$/);
       }
       const text = raw.content[0]?.type === "text" ? raw.content[0].text : "";
+      const responseContract = text.split("\n")[0] ?? "";
+      assert.match(responseContract, /^Response contract:/);
+      assert.ok(text.indexOf(responseContract) < text.indexOf("CertScore score=72"));
+      assert.ok(text.indexOf(responseContract) < text.indexOf("Canonical projected findings:"));
+      assert.match(responseContract, /criticality, priority, and confidence are CertScore metadata/i);
+      assert.match(responseContract, /regulatory review lenses are non-determinative CertScore review context—not legal severity, legal exposure, or a compliance determination/i);
+      assert.match(responseContract, /Absence of captured consent-action evidence does not establish what happens after Accept, Reject, or Decline/i);
+      assert.match(responseContract, /Do not extrapolate an observed embed, vendor, or request into unobserved cookies, fingerprinting, tracking, or processing/i);
       assert.match(text, /Canonical projected findings: 1 of 1 returned/);
       assert.match(text, /Tracking started before consent/);
       assert.match(text, /tracker: Example Analytics/);
@@ -940,6 +952,7 @@ test("certscore_get_scan_bundle returns a compact canonical summary by default",
       assert.match(text, /observed privacy risk signal.*CertScore finding/i);
       assert.match(text, /legal violation from scores or findings/i);
       assert.doesNotMatch(text, /compliance score|compliant baseline|criticality=/i);
+      assert.ok(text.length <= 8_000);
       assert.match(String((bundle.interpretationGuidance as Record<string, unknown>).statement), /Without corresponding captured post-action evidence/i);
     }, {
       anonymousRequesterSecret: "mcp-internal-read-test-secret",

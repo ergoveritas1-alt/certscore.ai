@@ -768,6 +768,11 @@ test("Streamable HTTP runtime initializes, lists tools, enforces auth, CORS, and
       idempotentHint: false,
       openWorldHint: false
     });
+    const lightBundleTool = lightTools.tools.find((tool) => tool.name === "certscore_get_scan_bundle");
+    assert.match(lightBundleTool?.description ?? "", /criticality, priority, and confidence as CertScore metadata/i);
+    assert.match(lightBundleTool?.description ?? "", /regulatory review lenses are non-determinative CertScore review context, not legal severity, legal exposure, or a compliance determination/i);
+    assert.match(lightBundleTool?.description ?? "", /Missing consent-action evidence does not establish Accept, Reject, or Decline behavior/i);
+    assert.match(lightBundleTool?.description ?? "", /Do not extrapolate observed embeds, vendors, or requests into unobserved cookies, fingerprinting, tracking, or processing/i);
     const invalidLightScan = await lightClient.callTool({ name: "certscore_scan_site", arguments: {} });
     assert.equal(invalidLightScan.isError, true);
     assert.equal((invalidLightScan.structuredContent as { type?: string } | undefined)?.type, "certscore_tool_error");
