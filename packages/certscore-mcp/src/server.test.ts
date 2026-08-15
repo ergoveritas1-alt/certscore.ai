@@ -933,10 +933,14 @@ test("certscore_get_scan_bundle returns a compact canonical summary by default",
       assert.match(text, /CertScore score=72/);
       assert.match(text, /automated public-web observations for human review/i);
       assert.match(text, /not legal advice, certification, or a compliance determination/i);
-      assert.match(text, /observable public-web scan signals only/i);
-      assert.match(text, /Do not infer technologies that are not listed/i);
-      assert.match(text, /or any legal compliance status/i);
-      assert.doesNotMatch(text, /compliance score|compliant baseline/i);
+      assert.match(text, /Report only observed CertScore evidence and persisted CertScore classifications/i);
+      assert.match(text, /the scan does not establish what happens after that action/i);
+      assert.match(text, /observed embed, vendor, or request may cause additional cookies, fingerprinting, tracking, or processing unless CertScore observed that behavior/i);
+      assert.match(text, /not regulatory criticality or legal exposure/i);
+      assert.match(text, /observed privacy risk signal.*CertScore finding/i);
+      assert.match(text, /legal violation from scores or findings/i);
+      assert.doesNotMatch(text, /compliance score|compliant baseline|criticality=/i);
+      assert.match(String((bundle.interpretationGuidance as Record<string, unknown>).statement), /Without corresponding captured post-action evidence/i);
     }, {
       anonymousRequesterSecret: "mcp-internal-read-test-secret",
       anonymousSurface: "mcp_light",

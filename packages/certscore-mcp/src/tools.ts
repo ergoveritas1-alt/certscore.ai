@@ -9,17 +9,18 @@ const EVIDENCE_OBJECT_KEYS = 80;
 const MAX_TOOL_TEXT_CHARS = 8_000;
 const LEGAL_REVIEW_DISCLAIMER = "CertScore results are automated public-web observations for human review, not legal advice, certification, or a compliance determination.";
 const INTERPRETATION_STATEMENT = "The CertScore score covers observable public-web scan signals only. Do not infer technologies that are not listed in the returned evidence or any legal compliance status.";
+const SCAN_BUNDLE_INTERPRETATION_STATEMENT = "Report only observed CertScore evidence and persisted CertScore classifications. Without corresponding captured post-action evidence, do not infer what Accept, Reject, Decline, or another consent action would do; say the scan does not establish what happens after that action. Do not speculate that an observed embed, vendor, or request may cause additional cookies, fingerprinting, tracking, or processing unless CertScore observed that behavior. Treat returned priority or severity as a CertScore classification, not regulatory criticality or legal exposure; prefer ‘observed privacy risk signal’ or ‘CertScore finding’. Do not infer unobserved technologies, legal compliance, or a legal violation from scores or findings.";
 const OBSERVATION_ONLY_DISCLAIMER = `${LEGAL_REVIEW_DISCLAIMER} No-go, not-observed, and limited-coverage results are not proof of compliance.`;
 
 type ScanProvenanceMode = "new_scan_started" | "existing_completed_scan_reused" | "existing_scan_retrieved" | "unknown";
 
-function interpretationGuidance() {
+function interpretationGuidance(statement = INTERPRETATION_STATEMENT) {
   return {
     scoreLabel: "CertScore score" as const,
     observableSignalsOnly: true as const,
     doNotInferUnobservedTechnologies: true as const,
     doNotInferLegalComplianceStatus: true as const,
-    statement: INTERPRETATION_STATEMENT
+    statement
   };
 }
 
@@ -819,14 +820,14 @@ function neutralExecutiveSummary(value: unknown) {
   };
 }
 
-function findingText(finding: Record<string, any>) {
+function findingText(finding: Record<string, any>, priorityLabel = "criticality") {
   const evidence = finding.evidence && typeof finding.evidence === "object" && !Array.isArray(finding.evidence)
     ? finding.evidence as Record<string, unknown>
     : {};
   const lenses = Array.isArray(finding.reviewLenses) && finding.reviewLenses.length > 0
     ? finding.reviewLenses.slice(0, 2).join(", ")
     : "not classified";
-  return `- ${finding.label ?? finding.id ?? "Projected finding"}; criticality=${finding.criticality ?? "unknown"}; confidence=${finding.confidence ?? "unknown"}; observation=${finding.plainEnglish ?? evidence.summary ?? "No compact description available"}; evidence=${evidence.basis ?? "unknown"}/${evidence.phase ?? "phase unknown"}: ${evidence.summary ?? "No compact evidence summary available"}; review lenses=${lenses}.`;
+  return `- ${finding.label ?? finding.id ?? "Projected finding"}; ${priorityLabel}=${finding.criticality ?? "unknown"}; confidence=${finding.confidence ?? "unknown"}; observation=${finding.plainEnglish ?? evidence.summary ?? "No compact description available"}; evidence=${evidence.basis ?? "unknown"}/${evidence.phase ?? "phase unknown"}: ${evidence.summary ?? "No compact evidence summary available"}; review lenses=${lenses}.`;
 }
 
 function executiveOverviewText(summary: Record<string, any> | null | undefined) {
@@ -852,7 +853,7 @@ function executiveOverviewText(summary: Record<string, any> | null | undefined) 
   return `Canonical report overview: ${values.join("; ")}.`;
 }
 
-function preConsentRowText(row: Record<string, any>) {
+function preConsentRowText(row: Record<string, any>, priorityLabel = "priority") {
   const cookieNames = Array.isArray(row.cookieNames) && row.cookieNames.length > 0
     ? `; cookies=${row.cookieNames.slice(0, 8).join(", ")}${row.cookieNames.length > 8 ? ", …" : ""}`
     : "";
@@ -863,7 +864,7 @@ function preConsentRowText(row: Record<string, any>) {
   const classification = row.evidenceClassification && typeof row.evidenceClassification === "object"
     ? row.evidenceClassification as Record<string, unknown>
     : {};
-  return `- ${row.kind}: ${row.name}${cookieNames}; vendor=${row.vendor ?? "unknown"}; purpose=${row.purpose ?? "unknown"}; category=${row.category ?? "unknown"}; first observed=${timing}${domains}; evidence=${classification.basis ?? "unknown"}/${classification.phase ?? "unknown"}/${classification.party ?? "unknown"}; observedBeforeConsent=${classification.observedBeforeConsent ?? "unknown"}; priority=${classification.priority ?? "unknown"}; confidence=${row.confidence ?? "unknown"}.`;
+  return `- ${row.kind}: ${row.name}${cookieNames}; vendor=${row.vendor ?? "unknown"}; purpose=${row.purpose ?? "unknown"}; category=${row.category ?? "unknown"}; first observed=${timing}${domains}; evidence=${classification.basis ?? "unknown"}/${classification.phase ?? "unknown"}/${classification.party ?? "unknown"}; observedBeforeConsent=${classification.observedBeforeConsent ?? "unknown"}; ${priorityLabel}=${classification.priority ?? "unknown"}; confidence=${row.confidence ?? "unknown"}.`;
 }
 
 function reportUrlFor(value: Record<string, any>) {
@@ -973,7 +974,7 @@ export function markdownReportText(value: Record<string, any>) {
 
 export function scanBundleText(bundle: Record<string, any>) {
   const score = typeof bundle.score === "number" ? `; CertScore score=${bundle.score}` : "";
-  const footer = [OBSERVATION_ONLY_DISCLAIMER, INTERPRETATION_STATEMENT];
+  const footer = [OBSERVATION_ONLY_DISCLAIMER, SCAN_BUNDLE_INTERPRETATION_STATEMENT];
   const lines = [
     `CertScore scan bundle for ${bundle.domain ?? "unknown domain"}; status=${bundle.status ?? "unknown"}${score}; scanId=${bundle.scanId ?? "unknown"}.`,
     `Provenance: ${bundle.provenance?.mode ?? "unknown"}.`,
@@ -1016,7 +1017,7 @@ export function scanBundleText(bundle: Record<string, any>) {
   append(`Canonical projected findings: ${findingReturned} of ${findingTotal} returned${bundle.findingsMetadata?.truncated ? " (truncated)" : ""}. These are already-projected review signals, not inferred technologies or legal conclusions.`);
   let findingsRendered = 0;
   for (const [index, finding] of findings.entries()) {
-    const next = findingText(finding);
+    const next = findingText(finding, "CertScore priority/classification");
     const remaining = findings.length - index - 1;
     const reserve = remaining > 0
       ? `${remaining} additional returned finding${remaining === 1 ? " was" : "s were"} omitted from TextContent to preserve the size limit; see structuredContent or the report URL.`
@@ -1035,7 +1036,7 @@ export function scanBundleText(bundle: Record<string, any>) {
     const rows = Array.isArray(inventory.rows) ? inventory.rows : [];
     let rowsRendered = 0;
     for (const [index, row] of rows.entries()) {
-      const next = preConsentRowText(row);
+      const next = preConsentRowText(row, "CertScore priority");
       const remaining = rows.length - index - 1;
       const reserve = remaining > 0
         ? `${remaining} additional returned pre-consent row${remaining === 1 ? " was" : "s were"} omitted from TextContent to preserve the size limit; see structuredContent or the report URL.`
@@ -1168,7 +1169,7 @@ export function buildScanBundle(input: {
     scoreUpdatedAt: input.scan.scoreUpdatedAt ?? null,
     riskLevel: input.scan.riskLevel ?? null,
     provenance: scanProvenance(input.scan as unknown as Record<string, any>, "existing_scan_retrieved"),
-    interpretationGuidance: interpretationGuidance(),
+    interpretationGuidance: interpretationGuidance(SCAN_BUNDLE_INTERPRETATION_STATEMENT),
     resultDisposition: input.scan.resultDisposition ?? null,
     noGo: input.scan.noGo ?? null,
     coverage: input.scan.coverage ?? null,

@@ -633,9 +633,19 @@ test("scan bundle text exposes compact row evidence, neutral score terminology, 
   assert.match(text, /public_report_projection\/pre_consent\/third_party/);
   assert.match(text, /automated public-web observations for human review/i);
   assert.match(text, /not legal advice, certification, or a compliance determination/i);
-  assert.match(text, /observable public-web scan signals only/i);
-  assert.match(text, /Do not infer technologies that are not listed/i);
-  assert.doesNotMatch(text, /compliance score|compliant baseline/i);
+  assert.match(text, /Report only observed CertScore evidence and persisted CertScore classifications/i);
+  assert.match(text, /Without corresponding captured post-action evidence, do not infer what Accept, Reject, Decline, or another consent action would do/i);
+  assert.match(text, /the scan does not establish what happens after that action/i);
+  assert.match(text, /Do not speculate that an observed embed, vendor, or request may cause additional cookies, fingerprinting, tracking, or processing unless CertScore observed that behavior/i);
+  assert.match(text, /Treat returned priority or severity as a CertScore classification, not regulatory criticality or legal exposure/i);
+  assert.match(text, /prefer ‘observed privacy risk signal’ or ‘CertScore finding’/i);
+  assert.match(text, /Do not infer unobserved technologies, legal compliance, or a legal violation from scores or findings/i);
+  assert.match(text, /CertScore priority=high/i);
+  assert.doesNotMatch(text, /compliance score|compliant baseline|criticality=/i);
+  assert.equal(
+    bundle.interpretationGuidance.statement,
+    "Report only observed CertScore evidence and persisted CertScore classifications. Without corresponding captured post-action evidence, do not infer what Accept, Reject, Decline, or another consent action would do; say the scan does not establish what happens after that action. Do not speculate that an observed embed, vendor, or request may cause additional cookies, fingerprinting, tracking, or processing unless CertScore observed that behavior. Treat returned priority or severity as a CertScore classification, not regulatory criticality or legal exposure; prefer ‘observed privacy risk signal’ or ‘CertScore finding’. Do not infer unobserved technologies, legal compliance, or a legal violation from scores or findings."
+  );
   assert.ok(text.length <= 8_000);
 });
 
@@ -693,7 +703,8 @@ test("default scan bundle exposes cross-domain projected findings and canonical 
   assert.match(text, /Processing legal-basis language/);
   assert.match(text, /Social\/media embeds loaded before consent/);
   assert.match(text, /already-projected review signals, not inferred technologies or legal conclusions/i);
-  assert.doesNotMatch(text, /compliance score|compliant baseline/i);
+  assert.match(text, /CertScore priority\/classification=/i);
+  assert.doesNotMatch(text, /compliance score|compliant baseline|criticality=/i);
   assert.ok(text.length <= 8_000);
   assert.doesNotThrow(() => mcpScanBundleOutputSchema.parse(bundle));
 });
@@ -741,7 +752,8 @@ test("scan bundle text remains bounded while preserving interpretation guidance"
   assert.ok(text.length <= 8_000);
   assert.match(text, /additional returned pre-consent rows? .*omitted from TextContent/i);
   assert.match(text, /automated public-web observations for human review/i);
-  assert.match(text, /Do not infer technologies that are not listed/i);
+  assert.match(text, /the scan does not establish what happens after that action/i);
+  assert.match(text, /not regulatory criticality or legal exposure/i);
 });
 
 test("toToolError marks CertScoreError results as MCP errors and truncates response bodies", () => {
