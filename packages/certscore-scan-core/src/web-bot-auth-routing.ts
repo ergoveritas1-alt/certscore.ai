@@ -22,6 +22,13 @@ export type WebBotAuthRouteInstallation = {
   expiresSeconds: number | null;
   keyId: string | null;
   signatureAgentUrl: string | null;
+  snapshot: () => WebBotAuthRouteTelemetry;
+};
+
+export type WebBotAuthRouteTelemetry = {
+  enabled: boolean;
+  signedHttpsRequestCount: number;
+  signedNavigationRequestCount: number;
 };
 
 function enabledFlag(value: string | undefined) {
@@ -93,19 +100,35 @@ export async function installWebBotAuthRoute(
 ): Promise<WebBotAuthRouteInstallation> {
   const config = resolveWebBotAuthRoutingConfig(env);
   if (!config) {
+    const telemetry: WebBotAuthRouteTelemetry = {
+      enabled: false,
+      signedHttpsRequestCount: 0,
+      signedNavigationRequestCount: 0,
+    };
     return {
       enabled: false,
       expiresSeconds: null,
       keyId: null,
       signatureAgentUrl: null,
+      snapshot: () => ({ ...telemetry }),
     };
   }
+
+  const telemetry: WebBotAuthRouteTelemetry = {
+    enabled: true,
+    signedHttpsRequestCount: 0,
+    signedNavigationRequestCount: 0,
+  };
 
   await context.route("**/*", async (route) => {
     const signed = signedHeadersForUrl(config, route.request().url());
     if (!signed) {
       await route.fallback();
       return;
+    }
+    telemetry.signedHttpsRequestCount += 1;
+    if (route.request().isNavigationRequest()) {
+      telemetry.signedNavigationRequestCount += 1;
     }
     await route.fallback({
       headers: {
@@ -120,5 +143,6 @@ export async function installWebBotAuthRoute(
     expiresSeconds: config.expiresSeconds,
     keyId: config.keyMaterial.thumbprint,
     signatureAgentUrl: config.signatureAgentUrl,
+    snapshot: () => ({ ...telemetry }),
   };
 }

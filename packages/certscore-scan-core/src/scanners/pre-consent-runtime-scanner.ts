@@ -1,5 +1,6 @@
 import {
   type ArtifactRef,
+  type AutomatedAccessObservation,
   type BrowserDocumentIdentity,
   type CmpRuntimeObservation,
   type CollectionSurfaceObservation,
@@ -33,7 +34,10 @@ import {
   resolveVendorObservations,
   type VendorResolverInput,
 } from "@certscore/vendor-resolver";
-import { KNOWN_CMP_REGISTRY } from "@website-signal-risk-scanner/shared";
+import {
+  classifyBlockedResponse,
+  KNOWN_CMP_REGISTRY,
+} from "@website-signal-risk-scanner/shared";
 import { writeFile } from "node:fs/promises";
 import { isIP } from "node:net";
 import { connect as tlsConnect } from "node:tls";
@@ -398,6 +402,7 @@ export interface PreConsentRuntimeScannerResult {
   runtimeTimeline: RuntimeEvidenceEvent[];
   networkEvents: NetworkEvent[];
   networkResponseEvents: NetworkResponseEvent[];
+  automatedAccessObservation: AutomatedAccessObservation;
   cookieEvents: CookieEvent[];
   cookieSnapshots: CookieSnapshot[];
   storageSnapshots: StorageSnapshot[];
@@ -467,6 +472,8 @@ export async function preConsentRuntimeScanner(
   let firstPartyDomain = getRegistrableDomainFromUrl(input.normalizedUrl) ?? undefined;
   const networkEvents: NetworkEvent[] = [];
   const networkResponseEvents: NetworkResponseEvent[] = [];
+  const targetInfrastructureProviders = new Set<AutomatedAccessObservation["targetInfrastructure"]["providerCandidates"][number]>();
+  const targetInfrastructureSignalCodes = new Set<string>();
   const cookieEvents: CookieEvent[] = [];
   const scriptEvents: ScriptEvent[] = [];
   const iframeEvents: IframeEvent[] = [];
@@ -584,7 +591,7 @@ export async function preConsentRuntimeScanner(
       await route.continue();
     });
   }
-  await installWebBotAuthRoute(browserContext);
+  const webBotAuthRoute = await installWebBotAuthRoute(browserContext);
 
   page.on("request", (request) => {
     const requestUrl = request.url();
@@ -838,6 +845,11 @@ export async function preConsentRuntimeScanner(
       runtimeTimeline: [...networkEvents, ...networkResponseEvents, ...cookieEvents, ...scriptEvents, ...iframeEvents, ...browserApiAccessEvents],
       networkEvents: [...networkEvents],
       networkResponseEvents: [...networkResponseEvents],
+      automatedAccessObservation: buildAutomatedAccessObservation({
+        providers: targetInfrastructureProviders,
+        signalCodes: targetInfrastructureSignalCodes,
+        webBotAuth: webBotAuthRoute.snapshot(),
+      }),
       cookieEvents: [...cookieEvents],
       cookieSnapshots: retainedCookieSnapshot ? [retainedCookieSnapshot] : [],
       storageSnapshots: retainedStorageSnapshot ? [retainedStorageSnapshot] : [],
@@ -3213,6 +3225,11 @@ export async function preConsentRuntimeScanner(
       runtimeTimeline: [...networkEvents, ...networkResponseEvents, ...cookieEvents, ...scriptEvents, ...iframeEvents, ...browserApiAccessEvents],
       networkEvents,
       networkResponseEvents,
+      automatedAccessObservation: buildAutomatedAccessObservation({
+        providers: targetInfrastructureProviders,
+        signalCodes: targetInfrastructureSignalCodes,
+        webBotAuth: webBotAuthRoute.snapshot(),
+      }),
       cookieEvents,
       cookieSnapshots: [cookieSnapshot],
       storageSnapshots: [storageSnapshot],
@@ -3330,6 +3347,11 @@ export async function preConsentRuntimeScanner(
       runtimeTimeline: [],
       networkEvents,
       networkResponseEvents,
+      automatedAccessObservation: buildAutomatedAccessObservation({
+        providers: targetInfrastructureProviders,
+        signalCodes: targetInfrastructureSignalCodes,
+        webBotAuth: webBotAuthRoute.snapshot(),
+      }),
       cookieEvents,
       cookieSnapshots: retainedCookieSnapshot ? [retainedCookieSnapshot] : [],
       storageSnapshots: retainedStorageSnapshot ? [retainedStorageSnapshot] : [],
@@ -3378,6 +3400,16 @@ export async function preConsentRuntimeScanner(
     const hostname = getHostname(responseUrl) ?? undefined;
     const registrableDomain = getRegistrableDomain(hostname) ?? undefined;
     const party = classifyHostnameParty(hostname, firstPartyHostname);
+    // Retain the bounded main-frame navigation chain, including cross-registrable-domain
+    // canonical redirects such as allegro.com -> allegro.pl. Subresources and child
+    // frames remain excluded from target infrastructure attribution.
+    if (shouldRetainTargetInfrastructureSignals({ isMainFrame: requestEvent?.isMainFrame === true })) {
+      retainTargetInfrastructureSignals({
+        headers,
+        providers: targetInfrastructureProviders,
+        signalCodes: targetInfrastructureSignalCodes,
+      });
+    }
     const setCookieHeaders = await response.headerValues("set-cookie").catch(() => {
       const setCookieHeader = headers["set-cookie"];
       return setCookieHeader ? [setCookieHeader] : [];
@@ -9405,6 +9437,71 @@ function safeRequestHeaders(headers: Record<string, string>): NonNullable<Networ
     cookieHeaderPresent: cookieNames.length > 0,
     cookieNames,
     authorizationHeaderPresent: Boolean(headers.authorization),
+  };
+}
+
+export function retainTargetInfrastructureSignals(input: {
+  headers: Record<string, string>;
+  providers: Set<AutomatedAccessObservation["targetInfrastructure"]["providerCandidates"][number]>;
+  signalCodes: Set<string>;
+}) {
+  const classification = classifyBlockedResponse({
+    headers: input.headers,
+    serverHeader: input.headers.server,
+  });
+  if (classification.vendorGuess === "unknown") return;
+  input.providers.add(classification.vendorGuess);
+  input.signalCodes.add(`main_document_provider:${classification.vendorGuess}`);
+
+  const serverHeader = input.headers.server?.toLowerCase() ?? "";
+  if (classification.vendorGuess === "cloudflare") {
+    if (input.headers["cf-ray"]) input.signalCodes.add("cloudflare_cf_ray_header");
+    if (input.headers["cf-cache-status"]) input.signalCodes.add("cloudflare_cf_cache_status_header");
+    if (serverHeader.includes("cloudflare")) input.signalCodes.add("cloudflare_server_header");
+  } else if (classification.vendorGuess === "akamai") {
+    if (serverHeader.includes("akamai")) input.signalCodes.add("akamai_server_header");
+    if (Object.keys(input.headers).some((name) => name.toLowerCase().startsWith("akamai"))) {
+      input.signalCodes.add("akamai_header_marker");
+    }
+  } else if (serverHeader.includes(classification.vendorGuess)) {
+    input.signalCodes.add(`${classification.vendorGuess}_server_header`);
+  }
+}
+
+export function shouldRetainTargetInfrastructureSignals(input: { isMainFrame: boolean }) {
+  return input.isMainFrame;
+}
+
+export function buildAutomatedAccessObservation(input: {
+  providers: Set<AutomatedAccessObservation["targetInfrastructure"]["providerCandidates"][number]>;
+  signalCodes: Set<string>;
+  webBotAuth: {
+    enabled: boolean;
+    signedHttpsRequestCount: number;
+    signedNavigationRequestCount: number;
+  };
+}): AutomatedAccessObservation {
+  const signedHttpsRequestCount = Math.min(100_000, input.webBotAuth.signedHttpsRequestCount);
+  const signedNavigationRequestCount = Math.min(10_000, input.webBotAuth.signedNavigationRequestCount);
+  return {
+    status: "available",
+    version: "automated-access-observation-v1",
+    productionProjectable: false,
+    webBotAuth: {
+      enabled: input.webBotAuth.enabled,
+      signingOutcome: !input.webBotAuth.enabled
+        ? "disabled"
+        : signedHttpsRequestCount > 0
+          ? "applied"
+          : "configured_no_https_request",
+      signedHttpsRequestCount,
+      signedNavigationRequestCount,
+    },
+    targetInfrastructure: {
+      cloudflareObserved: input.providers.has("cloudflare"),
+      providerCandidates: [...input.providers].sort(),
+      signalCodes: [...input.signalCodes].sort().slice(0, 16),
+    },
   };
 }
 

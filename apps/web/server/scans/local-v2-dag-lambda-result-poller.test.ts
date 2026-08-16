@@ -663,6 +663,9 @@ test("local web poller records Lambda result before marking scan completed", asy
   assert.match(source, /on conflict \(scan_id\) do update/);
   assert.match(source, /scan_no_go_assessment/);
   assert.match(source, /visual_access_review/);
+  assert.match(source, /automated_access_observation/);
+  assert.match(source, /bundle\.automatedAccessObservation/);
+  assert.match(source, /automatedAccessObservationSchema\.safeParse/);
   assert.match(source, /scannerRuntimeProvenance/);
   assert.match(source, /public_ip_hash = coalesce\(\$4, public_ip_hash\)/);
   assert.match(source, /scan_outcome = excluded\.scan_outcome/);

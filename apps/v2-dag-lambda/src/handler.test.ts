@@ -1284,6 +1284,22 @@ test("three-lane merge keeps consent visuals, runtime coverage, and policy evide
     artifactRoot,
     scanId: "scan-local-1",
     consentProof: canonicalBundleFixture("scan-local-1", {
+      automatedAccessObservation: {
+        status: "available",
+        version: "automated-access-observation-v1",
+        productionProjectable: false,
+        webBotAuth: {
+          enabled: true,
+          signingOutcome: "applied",
+          signedHttpsRequestCount: 3,
+          signedNavigationRequestCount: 1,
+        },
+        targetInfrastructure: {
+          cloudflareObserved: false,
+          providerCandidates: ["akamai"],
+          signalCodes: ["main_document_provider:akamai"],
+        },
+      },
       scanLaneRuns: [laneRunFixture("consent_proof", "invoke-consent")],
       screenshots: [screenshotArtifact(
         "screenshot_pre_consent_settled",
@@ -1298,6 +1314,22 @@ test("three-lane merge keeps consent visuals, runtime coverage, and policy evide
       },
     }),
     runtimeEvidence: canonicalBundleFixture("scan-local-1", {
+      automatedAccessObservation: {
+        status: "available",
+        version: "automated-access-observation-v1",
+        productionProjectable: false,
+        webBotAuth: {
+          enabled: true,
+          signingOutcome: "applied",
+          signedHttpsRequestCount: 24,
+          signedNavigationRequestCount: 2,
+        },
+        targetInfrastructure: {
+          cloudflareObserved: true,
+          providerCandidates: ["cloudflare"],
+          signalCodes: ["cloudflare_cf_ray_header", "main_document_provider:cloudflare"],
+        },
+      },
       scanLaneRuns: [laneRunFixture("runtime_evidence", "invoke-runtime")],
       artifactRefs: [{
         artifactId: "runtime_debug",
@@ -1358,6 +1390,22 @@ test("three-lane merge keeps consent visuals, runtime coverage, and policy evide
   assert.equal(merged.derivedRuntimeSignals.consentBannerLikelyPresent, true);
   assert.equal(merged.derivedRuntimeSignals.preConsentTrackingObserved, true);
   assert.equal(merged.runtimeCoverage?.coverageStatus, "usable");
+  assert.deepEqual(merged.automatedAccessObservation, {
+    status: "available",
+    version: "automated-access-observation-v1",
+    productionProjectable: false,
+    webBotAuth: {
+      enabled: true,
+      signingOutcome: "applied",
+      signedHttpsRequestCount: 24,
+      signedNavigationRequestCount: 2,
+    },
+    targetInfrastructure: {
+      cloudflareObserved: true,
+      providerCandidates: ["cloudflare"],
+      signalCodes: ["cloudflare_cf_ray_header", "main_document_provider:cloudflare"],
+    },
+  });
   assert.equal(merged.networkEvents[0]?.path, "/scripttemplates/otSDKStub.js");
   assert.equal(merged.policySurfaceObservations[0]?.observationId, "policy_surface_privacy");
   assert.equal(merged.scanEvidenceLaneAssessment?.lanes.homepageRuntime, "usable");

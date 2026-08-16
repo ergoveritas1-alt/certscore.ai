@@ -185,6 +185,7 @@ export type OrganizationDomainCompletedScanRow = {
 
 export type OrganizationScanSnapshotRow = {
   access_posture_class: AccessPostureClass | null;
+  automated_access_observation?: Record<string, unknown> | null;
   accessibility_score: number | null;
   admin_industry_label?: string | null;
   auth_wall_detected: boolean | null;

@@ -1910,6 +1910,54 @@ function isSupportedAuxiliaryFileName(fileName: string) {
   );
 }
 
+function mergeAutomatedAccessObservations(
+  bundles: CanonicalEvidenceBundle[],
+): CanonicalEvidenceBundle["automatedAccessObservation"] {
+  const observations = bundles
+    .map((bundle) => bundle.automatedAccessObservation)
+    .filter((observation): observation is NonNullable<CanonicalEvidenceBundle["automatedAccessObservation"]> =>
+      Boolean(observation)
+    );
+  if (observations.length === 0) return undefined;
+
+  const enabled = observations.some((observation) => observation.webBotAuth.enabled);
+  const signedHttpsRequestCount = Math.max(
+    0,
+    ...observations.map((observation) => observation.webBotAuth.signedHttpsRequestCount),
+  );
+  const signedNavigationRequestCount = Math.max(
+    0,
+    ...observations.map((observation) => observation.webBotAuth.signedNavigationRequestCount),
+  );
+  const providerCandidates = uniqueStrings(
+    observations.flatMap((observation) => observation.targetInfrastructure.providerCandidates),
+  ).filter((provider): provider is NonNullable<CanonicalEvidenceBundle["automatedAccessObservation"]>["targetInfrastructure"]["providerCandidates"][number] =>
+    ["akamai", "cloudflare", "fastly", "imperva", "kasada"].includes(provider)
+  ).slice(0, 5);
+  return {
+    status: "available",
+    version: "automated-access-observation-v1",
+    productionProjectable: false,
+    webBotAuth: {
+      enabled,
+      signingOutcome: !enabled
+        ? "disabled"
+        : signedHttpsRequestCount > 0
+          ? "applied"
+          : "configured_no_https_request",
+      signedHttpsRequestCount,
+      signedNavigationRequestCount,
+    },
+    targetInfrastructure: {
+      cloudflareObserved: providerCandidates.includes("cloudflare"),
+      providerCandidates,
+      signalCodes: uniqueStrings(
+        observations.flatMap((observation) => observation.targetInfrastructure.signalCodes),
+      ).slice(0, 16),
+    },
+  };
+}
+
 export function mergeLocalV2DagLambdaShardBundles(input: {
   base: CanonicalEvidenceBundle;
   scanId: string;
@@ -1924,6 +1972,7 @@ export function mergeLocalV2DagLambdaShardBundles(input: {
     runtimeTimeline: dedupeByEventId(bundles.flatMap((bundle) => bundle.runtimeTimeline)),
     networkEvents: dedupeByEventId(bundles.flatMap((bundle) => bundle.networkEvents)),
     networkResponseEvents: dedupeByEventId(bundles.flatMap((bundle) => bundle.networkResponseEvents)),
+    automatedAccessObservation: mergeAutomatedAccessObservations(bundles),
     cookieEvents: dedupeByEventId(bundles.flatMap((bundle) => bundle.cookieEvents)),
     cookieSnapshots: dedupeByArtifactId(bundles.flatMap((bundle) => bundle.cookieSnapshots)),
     storageSnapshots: dedupeByArtifactId(bundles.flatMap((bundle) => bundle.storageSnapshots)),
@@ -2047,6 +2096,7 @@ export function mergeLocalV2DagLambdaEvidenceLaneBundles(input: {
     runtimeTimeline: runtimeEvidence.runtimeTimeline,
     networkEvents: runtimeEvidence.networkEvents,
     networkResponseEvents: runtimeEvidence.networkResponseEvents,
+    automatedAccessObservation: runtimeEvidence.automatedAccessObservation,
     cookieEvents: runtimeEvidence.cookieEvents,
     cookieSnapshots: runtimeEvidence.cookieSnapshots,
     storageSnapshots: runtimeEvidence.storageSnapshots,

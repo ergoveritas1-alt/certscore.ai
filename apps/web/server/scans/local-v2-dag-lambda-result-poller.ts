@@ -8,7 +8,11 @@ import {
   type Message,
   type ReceiveMessageCommandOutput
 } from "@aws-sdk/client-sqs";
-import { classifyV2DagLambdaResultDisposition } from "@certscore/contracts";
+import {
+  automatedAccessObservationSchema,
+  classifyV2DagLambdaResultDisposition,
+  type AutomatedAccessObservation
+} from "@certscore/contracts";
 import { createHash } from "node:crypto";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
@@ -46,6 +50,7 @@ type MirroredLambdaArtifact = {
 };
 
 type RetainedScanCompletionDiagnostics = {
+  automatedAccessObservation: AutomatedAccessObservation | null;
   noGo: boolean;
   pageState: string | null;
   reasonCode: string | null;
@@ -110,6 +115,9 @@ async function readRetainedScanCompletionDiagnostics(
   );
   if (!scanArtifact) return null;
   const bundle = asRecord(JSON.parse(await readFile(scanArtifact.localPath, "utf8")));
+  const automatedAccessObservationResult = automatedAccessObservationSchema.safeParse(
+    bundle.automatedAccessObservation,
+  );
   const assessment = asRecord(bundle.scanNoGoAssessment ?? bundle.scan_no_go_assessment);
   const visualReview = asRecord(bundle.visualAccessReview ?? bundle.visual_access_review);
   const reasonCodes = Array.isArray(assessment.reasonCodes ?? assessment.reason_codes)
@@ -120,6 +128,9 @@ async function readRetainedScanCompletionDiagnostics(
   );
   const pageState = visualReview.pageState ?? visualReview.page_state;
   return {
+    automatedAccessObservation: automatedAccessObservationResult.success
+      ? automatedAccessObservationResult.data
+      : null,
     noGo:
       (assessment.decision ?? assessment.scan_no_go_decision) === "no_go" &&
       (visualReview.goNoGo ?? visualReview.go_no_go) === "NO_GO",
@@ -656,12 +667,12 @@ export async function recordLocalV2DagLambdaResultEvent(
            access_posture_class, blocked_flag, captcha_flag, coverage_level,
            homepage_fetch_status, scan_outcome, stop_reason_code,
            stop_reason_detail, stop_reason_label, scan_no_go_assessment,
-           visual_access_review
+           visual_access_review, automated_access_observation
          )
          select s.id, s.organization_id, s.domain_id,
                 greatest(coalesce(s.pages_requested, s.pages_scanned, 1), 1),
                 0, 'early_loss', $5, $6, 'limited_none', 'failed', $2, $2,
-                $3, $4, $7::jsonb, $8::jsonb
+                $3, $4, $7::jsonb, $8::jsonb, $9::jsonb
            from scans s
           where s.id = $1
             and s.organization_id is not null
@@ -678,7 +689,8 @@ export async function recordLocalV2DagLambdaResultEvent(
                stop_reason_detail = excluded.stop_reason_detail,
                stop_reason_label = excluded.stop_reason_label,
                scan_no_go_assessment = coalesce(excluded.scan_no_go_assessment, scan_snapshots.scan_no_go_assessment),
-               visual_access_review = coalesce(excluded.visual_access_review, scan_snapshots.visual_access_review)`,
+               visual_access_review = coalesce(excluded.visual_access_review, scan_snapshots.visual_access_review),
+               automated_access_observation = coalesce(excluded.automated_access_observation, scan_snapshots.automated_access_observation)`,
         [
           parsedMessage.scanId,
           retainedDiagnostics.reasonCode ?? "unknown_access_limitation",
@@ -688,6 +700,9 @@ export async function recordLocalV2DagLambdaResultEvent(
           presentation.code === "captcha_or_challenge",
           retainedDiagnostics.scanNoGoAssessment ? JSON.stringify(retainedDiagnostics.scanNoGoAssessment) : null,
           retainedDiagnostics.visualAccessReview ? JSON.stringify(retainedDiagnostics.visualAccessReview) : null,
+          retainedDiagnostics.automatedAccessObservation
+            ? JSON.stringify(retainedDiagnostics.automatedAccessObservation)
+            : null,
         ]
       );
     }
@@ -695,9 +710,15 @@ export async function recordLocalV2DagLambdaResultEvent(
   if (parsedMessage.status === "completed" && !retainedDiagnostics?.noGo) {
     await query(
       `update scan_snapshots
-          set scan_outcome = coalesce(scan_outcome, 'completed_partial')
+          set scan_outcome = coalesce(scan_outcome, 'completed_partial'),
+              automated_access_observation = coalesce($2::jsonb, automated_access_observation)
         where scan_id = $1`,
-      [parsedMessage.scanId]
+      [
+        parsedMessage.scanId,
+        retainedDiagnostics?.automatedAccessObservation
+          ? JSON.stringify(retainedDiagnostics.automatedAccessObservation)
+          : null,
+      ]
     );
   }
   if (artifactMirror && options.mirrorAuxiliaryArtifacts !== false) {

@@ -256,6 +256,29 @@ export const safeResponseHeadersSchema = z.object({
   accessControlExposeHeaders: z.string().optional(),
 });
 
+export const automatedAccessObservationSchema = z.object({
+  status: z.literal("available"),
+  version: z.literal("automated-access-observation-v1"),
+  productionProjectable: z.literal(false),
+  webBotAuth: z.object({
+    enabled: z.boolean(),
+    signingOutcome: z.enum(["disabled", "configured_no_https_request", "applied"]),
+    signedHttpsRequestCount: z.number().int().nonnegative().max(100_000),
+    signedNavigationRequestCount: z.number().int().nonnegative().max(10_000),
+  }),
+  targetInfrastructure: z.object({
+    cloudflareObserved: z.boolean(),
+    providerCandidates: z.array(z.enum([
+      "akamai",
+      "cloudflare",
+      "fastly",
+      "imperva",
+      "kasada",
+    ])).max(5).default([]),
+    signalCodes: z.array(z.string().max(120)).max(16).default([]),
+  }),
+});
+
 export const requestPayloadSignalsSchema = z.object({
   bodyPresent: z.boolean().default(false),
   bodySizeBytes: z.number().int().nonnegative().optional(),
@@ -2666,6 +2689,7 @@ export const canonicalEvidenceBundleSchema = z.object({
   runtimeTimeline: z.array(runtimeEvidenceEventSchema),
   networkEvents: z.array(networkEventSchema),
   networkResponseEvents: z.array(networkResponseEventSchema).default([]),
+  automatedAccessObservation: automatedAccessObservationSchema.optional(),
   siteResourceSizeSummary: siteResourceSizeSummarySchema.optional(),
   cookieEvents: z.array(cookieEventSchema),
   cookieSnapshots: z.array(cookieSnapshotSchema),
@@ -2856,6 +2880,7 @@ export type RuntimeEvidenceEvent = z.infer<typeof runtimeEvidenceEventSchema>;
 export type NetworkEvent = z.infer<typeof networkEventSchema>;
 export type NetworkResponseEvent = z.infer<typeof networkResponseEventSchema>;
 export type NetworkDestination = z.infer<typeof networkDestinationSchema>;
+export type AutomatedAccessObservation = z.infer<typeof automatedAccessObservationSchema>;
 export type CookieEvent = z.infer<typeof cookieEventSchema>;
 export type SetCookieMetadata = z.infer<typeof setCookieMetadataSchema>;
 export type CookieSnapshot = z.infer<typeof cookieSnapshotSchema>;

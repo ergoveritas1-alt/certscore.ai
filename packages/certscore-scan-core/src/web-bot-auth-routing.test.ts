@@ -51,7 +51,7 @@ test("builds short-lived authority-bound HTTPS browser headers", () => {
 test("installs the signer as a route-chain fallback and preserves request headers", async () => {
   let handler: ((route: {
     fallback(options?: { headers?: Record<string, string> }): Promise<void>;
-    request(): { headers(): Record<string, string>; url(): string };
+    request(): { headers(): Record<string, string>; isNavigationRequest(): boolean; url(): string };
   }) => Promise<void>) | undefined;
   const context = {
     async route(_pattern: string, candidate: typeof handler) {
@@ -74,6 +74,7 @@ test("installs the signer as a route-chain fallback and preserves request header
     request() {
       return {
         headers: () => ({ accept: "text/html", "x-existing": "kept" }),
+        isNavigationRequest: () => true,
         url: () => "https://example.com/",
       };
     },
@@ -81,4 +82,24 @@ test("installs the signer as a route-chain fallback and preserves request header
   assert.equal(forwardedHeaders?.["x-existing"], "kept");
   assert.match(forwardedHeaders?.Signature ?? "", /^sig1=:.+:$/);
   assert.match(forwardedHeaders?.["Signature-Input"] ?? "", /tag="web-bot-auth"/);
+  assert.deepEqual(installation.snapshot(), {
+    enabled: true,
+    signedHttpsRequestCount: 1,
+    signedNavigationRequestCount: 1,
+  });
+});
+
+test("reports disabled request-signing telemetry without installing a route", async () => {
+  let routeInstalled = false;
+  const installation = await installWebBotAuthRoute({
+    async route() {
+      routeInstalled = true;
+    },
+  } as never, {});
+  assert.equal(routeInstalled, false);
+  assert.deepEqual(installation.snapshot(), {
+    enabled: false,
+    signedHttpsRequestCount: 0,
+    signedNavigationRequestCount: 0,
+  });
 });
