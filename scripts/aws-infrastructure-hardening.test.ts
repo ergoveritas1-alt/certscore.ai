@@ -164,15 +164,15 @@ test("scanner NAT-free AWS service endpoints are private, scoped, and migration-
 
 test("routine scanner deploys promote immutable digests without recreating infrastructure", async () => {
   const source = await readFile("scripts/deploy-fast.ts", "utf8");
-  const deployFunction = source.match(/async function deployScanners[\s\S]*?\n}\n\nasync function applyScannerMemoryConfiguration/)?.[0] ?? "";
+  const deployFunction = source.match(/async function deployScanners[\s\S]*?\n}\n\nasync function readScannerWebBotAuthPrivateKey/)?.[0] ?? "";
   const verifyFunction = source.match(/async function verifyScanners[\s\S]*?\n}\n\nasync function ensureWorkflowRun/)?.[0] ?? "";
   assert.match(deployFunction, /imageDetails\[0\]\.imageDigest/);
-  assert.match(deployFunction, /await applyScannerMemoryConfiguration\(\)/);
+  assert.match(deployFunction, /await applyScannerRuntimeConfiguration\(\)/);
   assert.match(deployFunction, /"lambda", "update-function-code"/);
   assert.ok(
-    deployFunction.indexOf("await applyScannerMemoryConfiguration()") <
+    deployFunction.indexOf("await applyScannerRuntimeConfiguration()") <
       deployFunction.indexOf('"lambda", "update-function-code"'),
-    "scanner memory configuration must converge before image promotion"
+    "scanner runtime configuration must converge before image promotion"
   );
   assert.doesNotMatch(deployFunction, /setup-dev-aws-image\.sh/);
   assert.match(source, /"lambda", "update-function-configuration"/);

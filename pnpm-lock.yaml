@@ -287,6 +287,9 @@ importers:
       '@website-signal-risk-scanner/shared':
         specifier: workspace:*
         version: link:../shared
+      '@website-signal-risk-scanner/web-bot-auth':
+        specifier: workspace:*
+        version: link:../web-bot-auth
       maxmind:
         specifier: ^5.0.6
         version: 5.0.6

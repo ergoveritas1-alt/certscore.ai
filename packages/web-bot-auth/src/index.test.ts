@@ -63,10 +63,10 @@ test("builds outbound request signing headers with signature-agent and authority
     url: "https://example.com/some-path?x=1"
   });
 
-  assert.equal(result.headers["Signature-Agent"]!, signatureAgentUrl);
+  assert.equal(result.headers["Signature-Agent"]!, `"${signatureAgentUrl}"`);
   assert.match(result.headers["Signature-Input"]!, /tag="web-bot-auth"/);
   assert.match(result.headers["Signature-Input"]!, /"signature-agent"/);
   assert.match(result.headers["Signature-Input"]!, /"@authority"/);
   assert.match(result.signatureBase, /"@authority": example\.com/);
-  assert.match(result.signatureBase, new RegExp(`"signature-agent": ${signatureAgentUrl.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}`));
+  assert.match(result.signatureBase, new RegExp(`"signature-agent": "${signatureAgentUrl.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}"`));
 });

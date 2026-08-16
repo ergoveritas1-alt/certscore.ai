@@ -6,7 +6,8 @@
       "@certscore/contracts": ["packages/certscore-contracts/src"],
       "@certscore/vendor-resolver": ["packages/certscore-vendor-resolver/src"],
       "@certscore/review-engine": ["packages/certscore-review-engine/src"],
-      "@website-signal-risk-scanner/shared": ["packages/shared/src"]
+      "@website-signal-risk-scanner/shared": ["packages/shared/src"],
+      "@website-signal-risk-scanner/web-bot-auth": ["packages/web-bot-auth/src"]
     }
   }
 }

@@ -61,6 +61,7 @@ import { chromiumContextOptions, chromiumLaunchOptions } from "../playwright-run
 import { enrichNetworkDestination } from "../network-destination.js";
 import { normalizePublicIpAddress } from "../public-ip-address.js";
 import { maybeFulfillHeavyResource } from "../resource-stubbing.js";
+import { installWebBotAuthRoute } from "../web-bot-auth-routing.js";
 import { abortReason, boundedCleanup, throwIfAborted } from "../abort.js";
 import {
   boundedInitiatorChain,
@@ -583,6 +584,7 @@ export async function preConsentRuntimeScanner(
       await route.continue();
     });
   }
+  await installWebBotAuthRoute(browserContext);
 
   page.on("request", (request) => {
     const requestUrl = request.url();
@@ -11404,6 +11406,7 @@ async function retryPreConsentScreenshotInFreshContext(input: {
             await route.continue();
           });
         }
+        await installWebBotAuthRoute(retryContext);
         const retryPage = await retryContext.newPage();
         await retryPage.goto(input.navigationUrl, {
           waitUntil: "commit",

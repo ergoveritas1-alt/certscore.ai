@@ -24,6 +24,14 @@ Routine `deploy:scanners` releases update Lambda code with a digest-qualified
 regional image. Terraform deliberately ignores only `image_uri`; it remains
 authoritative for runtime configuration and infrastructure.
 
+The stack also resolves the ConsentCheck Ed25519 key from the us-west-1
+`consentcheck/web-bot-auth-private-key-pem` secret into each Lambda's encrypted
+environment. Every production browser context uses the exact Cloudflare-
+registered ConsentCheck user agent and short-lived authority-bound Web Bot Auth
+request signatures. Routine scanner deploys converge that identity before image
+promotion without printing the private key. Coordinate key rotation with the
+signed public directory response at `consentcheck.site`.
+
 ## Regional proxy and EIP rotation
 
 Rotate a regional scanner address with a blue-green proxy replacement:

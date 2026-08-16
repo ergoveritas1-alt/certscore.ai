@@ -26,6 +26,11 @@ environment_variables_by_region = {
   }
 }
 
+# The production default resolves this us-west-1 secret into Lambda's encrypted
+# regional environments and encrypted Terraform state. Override only for a
+# coordinated ConsentCheck Web Bot Auth key rotation.
+web_bot_auth_private_key_secret_id = "consentcheck/web-bot-auth-private-key-pem"
+
 # Populate only for regions whose existing Lambda is VPC-attached.
 vpc_config_by_region = {
   eu-central-1 = {

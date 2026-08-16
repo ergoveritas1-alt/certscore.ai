@@ -52,6 +52,18 @@ const SCANNER_REGIONS = ["eu-central-1", "eu-west-1", "us-west-1"] as const;
 const SCANNER_BUILD_REGION = "eu-central-1" as const;
 const SCANNER_MEMORY_SIZE = 3008;
 const SCANNER_FUNCTION_NAME = "certscore-v2-dag-local-lambda";
+const SCANNER_WEB_BOT_AUTH_SECRET_ID = "consentcheck/web-bot-auth-private-key-pem";
+const SCANNER_IDENTITY_ENVIRONMENT = {
+  CERTSCORE_V2_DAG_LAMBDA_CHROMIUM_USER_AGENT:
+    "Mozilla/5.0 (compatible; ConsentCheckBot/1.0; +https://consentcheck.site/bot)",
+  SCANNER_CRAWLER_NAME: "ConsentCheckBot",
+  SCANNER_CRAWLER_PUBLIC_URL: "https://consentcheck.site/bot",
+  WEB_BOT_AUTH_ENABLED: "1",
+  WEB_BOT_AUTH_EXPIRES_SECONDS: "60",
+  WEB_BOT_AUTH_INCLUDE_NONCE: "1",
+  WEB_BOT_AUTH_SIGNATURE_AGENT_URL:
+    "https://consentcheck.site/.well-known/http-message-signatures-directory",
+} as const;
 const WEB_WORKFLOW = "web-aws-ecs-deploy.yml";
 const VALIDATION_WORKFLOW = "validation-aws-deploy.yml";
 const DB_WORKFLOW = "prod-db-migrate.yml";
@@ -404,7 +416,7 @@ async function deployDb(input: { ref: string; skip: boolean; workflowRef: string
 
 async function deployScanners(input: { pushRuntimeBase: boolean; ref: string }): Promise<LaneResult> {
   return timedLane("Lambda scanner deploys", async () => {
-    await applyScannerMemoryConfiguration();
+    await applyScannerRuntimeConfiguration();
 
     const runtimeBaseAvailability = await Promise.all(SCANNER_REGIONS.map(async (region) => {
       const result = await run([
@@ -532,6 +544,13 @@ async function deployScanners(input: { pushRuntimeBase: boolean; ref: string }):
         "scripts/check-regional-scanner-parity.ts",
       ]);
       details.regionParity = "passed";
+      await run([
+        "node",
+        "--import",
+        "tsx",
+        "scripts/check-regional-web-bot-auth.ts",
+      ]);
+      details.webBotAuth = "verified in all scanner regions";
       return details;
     } finally {
       await rm(dockerConfigRoot, { force: true, recursive: true });
@@ -539,24 +558,68 @@ async function deployScanners(input: { pushRuntimeBase: boolean; ref: string }):
   });
 }
 
-async function applyScannerMemoryConfiguration() {
-  console.log(`Applying ${SCANNER_MEMORY_SIZE} MB scanner memory configuration before image promotion.`);
+async function readScannerWebBotAuthPrivateKey() {
+  const result = await run([
+    "aws", "secretsmanager", "get-secret-value",
+    "--region", "us-west-1",
+    "--secret-id", SCANNER_WEB_BOT_AUTH_SECRET_ID,
+    "--query", "SecretString",
+    "--output", "text",
+  ], { quiet: true });
+  const privateKeyPem = result.stdout.trim();
+  if (!privateKeyPem.includes("BEGIN PRIVATE KEY") || !privateKeyPem.includes("END PRIVATE KEY")) {
+    throw new Error("ConsentCheck Web Bot Auth secret is not a PKCS#8 private key.");
+  }
+  return privateKeyPem;
+}
+
+async function applyScannerRuntimeConfiguration() {
+  console.log(`Applying ${SCANNER_MEMORY_SIZE} MB memory and verified ConsentCheck identity before image promotion.`);
+  const privateKeyPem = await readScannerWebBotAuthPrivateKey();
   const results = await Promise.all(SCANNER_REGIONS.map(async (region) => {
     const current = await run([
       "aws", "lambda", "get-function-configuration",
       "--region", region,
       "--function-name", SCANNER_FUNCTION_NAME,
-      "--query", "MemorySize",
-      "--output", "text"
+      "--query", "{MemorySize:MemorySize,Variables:Environment.Variables}",
+      "--output", "json"
     ], { quiet: true });
-    const currentMemorySize = Number.parseInt(current.stdout.trim(), 10);
-    if (currentMemorySize !== SCANNER_MEMORY_SIZE) {
-      await run([
-        "aws", "lambda", "update-function-configuration",
-        "--region", region,
-        "--function-name", SCANNER_FUNCTION_NAME,
-        "--memory-size", String(SCANNER_MEMORY_SIZE)
-      ], { quiet: true });
+    const currentPayload = JSON.parse(current.stdout) as {
+      MemorySize?: number;
+      Variables?: Record<string, string>;
+    };
+    const currentVariables = currentPayload.Variables ?? {};
+    const nextVariables = {
+      ...currentVariables,
+      ...SCANNER_IDENTITY_ENVIRONMENT,
+      WEB_BOT_AUTH_PRIVATE_KEY_PEM: privateKeyPem,
+    };
+    const identityChanged = Object.entries({
+      ...SCANNER_IDENTITY_ENVIRONMENT,
+      WEB_BOT_AUTH_PRIVATE_KEY_PEM: privateKeyPem,
+    }).some(([key, value]) => currentVariables[key] !== value);
+    const memoryChanged = currentPayload.MemorySize !== SCANNER_MEMORY_SIZE;
+    const environmentDocument = JSON.stringify({ Variables: nextVariables });
+    if (Buffer.byteLength(environmentDocument, "utf8") > 4_096) {
+      throw new Error(`${region} scanner environment would exceed Lambda's 4 KiB limit.`);
+    }
+    if (identityChanged || memoryChanged) {
+      const environmentPath = path.join(
+        tmpdir(),
+        `certscore-scanner-identity-${process.pid}-${region}.json`,
+      );
+      await writeFile(environmentPath, `${environmentDocument}\n`, { encoding: "utf8", mode: 0o600 });
+      try {
+        await run([
+          "aws", "lambda", "update-function-configuration",
+          "--region", region,
+          "--function-name", SCANNER_FUNCTION_NAME,
+          "--memory-size", String(SCANNER_MEMORY_SIZE),
+          "--environment", `file://${environmentPath}`,
+        ], { quiet: true });
+      } finally {
+        await rm(environmentPath, { force: true });
+      }
       await run([
         "aws", "lambda", "wait", "function-updated-v2",
         "--region", region,
@@ -567,25 +630,31 @@ async function applyScannerMemoryConfiguration() {
       "aws", "lambda", "get-function-configuration",
       "--region", region,
       "--function-name", SCANNER_FUNCTION_NAME,
-      "--query", "{MemorySize:MemorySize,LastUpdateStatus:LastUpdateStatus,State:State}",
+      "--query", "{MemorySize:MemorySize,LastUpdateStatus:LastUpdateStatus,State:State,Variables:Environment.Variables}",
       "--output", "json"
     ], { quiet: true });
     const payload = JSON.parse(verified.stdout) as {
       LastUpdateStatus?: string;
       MemorySize?: number;
       State?: string;
+      Variables?: Record<string, string>;
     };
+    const verifiedVariables = payload.Variables ?? {};
+    const identityConverged = Object.entries(SCANNER_IDENTITY_ENVIRONMENT)
+      .every(([key, value]) => verifiedVariables[key] === value) &&
+      verifiedVariables.WEB_BOT_AUTH_PRIVATE_KEY_PEM === privateKeyPem;
     if (
       payload.MemorySize !== SCANNER_MEMORY_SIZE ||
       payload.LastUpdateStatus !== "Successful" ||
-      payload.State !== "Active"
+      payload.State !== "Active" ||
+      !identityConverged
     ) {
-      throw new Error(`${region} scanner memory configuration did not converge: ${verified.stdout.trim()}`);
+      throw new Error(`${region} scanner runtime configuration did not converge.`);
     }
-    return { changed: currentMemorySize !== SCANNER_MEMORY_SIZE, region };
+    return { changed: identityChanged || memoryChanged, region };
   }));
   for (const result of results) {
-    console.log(`${result.region}: ${SCANNER_MEMORY_SIZE} MB (${result.changed ? "updated" : "already configured"})`);
+    console.log(`${result.region}: ${SCANNER_MEMORY_SIZE} MB and verified identity (${result.changed ? "updated" : "already configured"})`);
   }
 }
 

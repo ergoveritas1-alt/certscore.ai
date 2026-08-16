@@ -50,7 +50,7 @@ locals {
     CERTSCORE_V2_DAG_LAMBDA_CHROMIUM_LOCALE                        = var.locale
     CERTSCORE_V2_DAG_LAMBDA_CHROMIUM_SINGLE_PROCESS                = "false"
     CERTSCORE_V2_DAG_LAMBDA_CHROMIUM_TIMEZONE_ID                   = var.timezone_id
-    CERTSCORE_V2_DAG_LAMBDA_CHROMIUM_USER_AGENT                    = "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/150.0.0.0 Safari/537.36"
+    CERTSCORE_V2_DAG_LAMBDA_CHROMIUM_USER_AGENT                    = "Mozilla/5.0 (compatible; ConsentCheckBot/1.0; +https://consentcheck.site/bot)"
     CERTSCORE_V2_DAG_LAMBDA_CONSENT_FLOW_SCREENSHOT_MODE           = "none"
     CERTSCORE_CONSENT_LATE_GEOMETRY_SHADOW_ENABLED                 = "1"
     CERTSCORE_V2_DAG_LAMBDA_EVIDENCE_DIAGNOSTIC_MODE               = "webmd"
@@ -63,6 +63,12 @@ locals {
     CERTSCORE_V2_DAG_LAMBDA_SCENARIO_RESOURCE_MODE                 = "cmp_safe"
     CERTSCORE_V2_DAG_LAMBDA_TARGET_ENV                             = "local"
     CERTSCORE_CHROMIUM_EXECUTABLE_PATH                             = "/usr/bin/chromium"
+    SCANNER_CRAWLER_NAME                                           = "ConsentCheckBot"
+    SCANNER_CRAWLER_PUBLIC_URL                                     = "https://consentcheck.site/bot"
+    WEB_BOT_AUTH_ENABLED                                           = "1"
+    WEB_BOT_AUTH_EXPIRES_SECONDS                                   = "60"
+    WEB_BOT_AUTH_INCLUDE_NONCE                                     = "1"
+    WEB_BOT_AUTH_SIGNATURE_AGENT_URL                               = "https://consentcheck.site/.well-known/http-message-signatures-directory"
   }
 }
 

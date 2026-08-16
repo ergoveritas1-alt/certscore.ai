@@ -1,6 +1,7 @@
 import { execFileSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 import path from "node:path";
+import { createWebBotAuthKeyMaterial } from "../packages/web-bot-auth/src/index.js";
 
 const REGIONS = ["eu-west-1", "eu-central-1", "us-west-1"] as const;
 type Region = (typeof REGIONS)[number];
@@ -32,6 +33,20 @@ const EXPECTED_PROXY_CONFIG_TAG: Record<Region, string> = {
   "eu-central-1": "ireland-parity-v1",
   "us-west-1": "us-ca-vpc-v1",
 };
+const EXPECTED_CRAWLER_USER_AGENT =
+  "Mozilla/5.0 (compatible; ConsentCheckBot/1.0; +https://consentcheck.site/bot)";
+const EXPECTED_SIGNATURE_AGENT_URL =
+  "https://consentcheck.site/.well-known/http-message-signatures-directory";
+const liveSignatureDirectory = JSON.parse(execFileSync("curl", [
+  "--fail",
+  "--silent",
+  "--show-error",
+  EXPECTED_SIGNATURE_AGENT_URL,
+], { encoding: "utf8" })) as { keys?: Array<{ kid?: string }> };
+const expectedWebBotAuthKeyId = liveSignatureDirectory.keys?.[0]?.kid;
+if (!expectedWebBotAuthKeyId) {
+  throw new Error("ConsentCheck public Web Bot Auth directory is missing its key ID.");
+}
 
 const functionName = process.env.CERTSCORE_V2_DAG_LAMBDA_FUNCTION_NAME?.trim() ||
   "certscore-v2-dag-local-lambda";
@@ -119,11 +134,31 @@ const observed = REGIONS.map((region) => {
     ["locale", env.CERTSCORE_V2_DAG_LAMBDA_CHROMIUM_LOCALE, context.locale],
     ["accept language", env.CERTSCORE_V2_DAG_LAMBDA_CHROMIUM_ACCEPT_LANGUAGE, context.acceptLanguage],
     ["timezone", env.CERTSCORE_V2_DAG_LAMBDA_CHROMIUM_TIMEZONE_ID, context.timezone],
+    ["crawler user agent", env.CERTSCORE_V2_DAG_LAMBDA_CHROMIUM_USER_AGENT, EXPECTED_CRAWLER_USER_AGENT],
+    ["crawler name", env.SCANNER_CRAWLER_NAME, "ConsentCheckBot"],
+    ["crawler public URL", env.SCANNER_CRAWLER_PUBLIC_URL, "https://consentcheck.site/bot"],
+    ["Web Bot Auth enabled", env.WEB_BOT_AUTH_ENABLED, "1"],
+    ["Web Bot Auth expiry", env.WEB_BOT_AUTH_EXPIRES_SECONDS, "60"],
+    ["Web Bot Auth nonce", env.WEB_BOT_AUTH_INCLUDE_NONCE, "1"],
+    ["Web Bot Auth signature agent", env.WEB_BOT_AUTH_SIGNATURE_AGENT_URL, EXPECTED_SIGNATURE_AGENT_URL],
     ["proxy enabled", env.SCAN_PROXY_ENABLED, "true"],
   ] as const;
   for (const [label, value, expected] of required) {
     if (value !== expected) {
       errors.push(`${region}: ${label} expected ${expected}, received ${value ?? "missing"}.`);
+    }
+  }
+  const privateKeyPem = env.WEB_BOT_AUTH_PRIVATE_KEY_PEM;
+  if (!privateKeyPem) {
+    errors.push(`${region}: Web Bot Auth private key is missing.`);
+  } else {
+    try {
+      const keyId = createWebBotAuthKeyMaterial(privateKeyPem).thumbprint;
+      if (keyId !== expectedWebBotAuthKeyId) {
+        errors.push(`${region}: Web Bot Auth key does not match the public ConsentCheck directory.`);
+      }
+    } catch {
+      errors.push(`${region}: Web Bot Auth private key is malformed.`);
     }
   }
 

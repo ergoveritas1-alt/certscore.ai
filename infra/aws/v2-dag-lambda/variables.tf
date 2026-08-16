@@ -93,6 +93,12 @@ variable "environment_variables_by_region" {
   default     = {}
 }
 
+variable "web_bot_auth_private_key_secret_id" {
+  description = "Secrets Manager ID in us-west-1 containing the ConsentCheck Ed25519 Web Bot Auth private key. Terraform stores the resolved value only in encrypted remote state and Lambda's encrypted environment."
+  type        = string
+  default     = "consentcheck/web-bot-auth-private-key-pem"
+}
+
 variable "expected_egress_region_by_region" {
   description = "Optional expected public region reported by the regional proxy egress preflight. Set the US-CA lane to California only after its proxy public IP is actually California-based."
   type        = map(string)

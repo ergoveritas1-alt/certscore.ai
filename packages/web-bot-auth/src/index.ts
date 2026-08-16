@@ -291,6 +291,7 @@ export function buildWebBotAuthRequestHeaders(input: {
   const url = typeof input.url === "string" ? new URL(input.url) : input.url;
   const signatureAgentUrl = input.signatureAgentUrl.trim();
   assertAscii(signatureAgentUrl, "Signature-Agent");
+  const signatureAgentHeader = serializeStructuredFieldString(signatureAgentUrl);
 
   const created = Math.floor(Date.now() / 1000);
   const expires = created + normalizeExpiresInSeconds(input.expiresInSeconds);
@@ -302,7 +303,7 @@ export function buildWebBotAuthRequestHeaders(input: {
       },
       {
         id: "signature-agent",
-        value: signatureAgentUrl
+        value: signatureAgentHeader
       }
     ],
     created,
@@ -319,7 +320,7 @@ export function buildWebBotAuthRequestHeaders(input: {
     expires,
     headers: {
       ...headers,
-      "Signature-Agent": signatureAgentUrl
+      "Signature-Agent": signatureAgentHeader
     },
     keyId: input.keyMaterial.thumbprint,
     nonce: input.nonce ?? null,

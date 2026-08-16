@@ -6,7 +6,7 @@
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
   "scripts": {
-    "build": "pnpm --filter @certscore/contracts build && pnpm --filter @certscore/vendor-resolver build && pnpm --filter @website-signal-risk-scanner/shared build && tsc -p tsconfig.json",
+    "build": "pnpm --filter @certscore/contracts build && pnpm --filter @certscore/vendor-resolver build && pnpm --filter @website-signal-risk-scanner/shared build && pnpm --filter @website-signal-risk-scanner/web-bot-auth build && tsc -p tsconfig.json",
     "typecheck": "tsc --noEmit -p tsconfig.typecheck.json",
     "scan": "node --import tsx ./src/cli/scan.ts",
     "demo": "node --import tsx ./src/cli/demo.ts",
@@ -29,6 +29,7 @@
     "@certscore/contracts": "workspace:*",
     "@certscore/vendor-resolver": "workspace:*",
     "@website-signal-risk-scanner/shared": "workspace:*",
+    "@website-signal-risk-scanner/web-bot-auth": "workspace:*",
     "maxmind": "^5.0.6",
     "pdf-parse": "^2.4.5",
     "playwright": "^1.51.1",

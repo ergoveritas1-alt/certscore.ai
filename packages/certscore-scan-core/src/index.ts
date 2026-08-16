@@ -67,6 +67,7 @@ import {
   collectConsentGeometryPageAccess,
 } from "./consent-geometry-access.js";
 import { maybeFulfillHeavyResource } from "./resource-stubbing.js";
+import { installWebBotAuthRoute } from "./web-bot-auth-routing.js";
 import { throwIfAborted } from "./abort.js";
 import {
   classifyNavigationFailure,
@@ -2919,6 +2920,7 @@ export async function capturePreConsentScreenshotOnlyFallback(input: {
           await route.continue();
         });
       }
+      await installWebBotAuthRoute(context);
       const page = await context.newPage();
       const navigationUrls = input.navigationUrls?.length
         ? input.navigationUrls
