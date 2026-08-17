@@ -217,7 +217,7 @@ function writeSummary(scanId, status, counts, reportUrl, blockedFindings) {
     `- Low: ${counts.low}`,
     reportUrl ? `- Report: ${reportUrl}` : null,
     "",
-    "CertScore outputs are automated public-web observations for review. They are not legal advice, certification, or a compliance determination."
+    "CertScore outputs are automated public-web observations for human and agentic review. They are not legal advice, certification, or a compliance determination."
   ].filter(Boolean);
 
   if (blockedFindings.length > 0) {

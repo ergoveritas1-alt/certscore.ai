@@ -401,7 +401,7 @@ certscore_get_latest_domain_pre_consent_cookies_trackers({
 })`}</CodeBlock>
           <p className="max-w-3xl text-sm leading-7 text-slate-600">
             MCP tools return compact public-safe JSON. They must not infer raw-signal findings or convert automated review signals into
-            legal conclusions. CertScore.ai outputs are automated public-web observations for review. They are not legal advice,
+            legal conclusions. CertScore.ai outputs are automated public-web observations for human and agentic review. They are not legal advice,
             certification, or a compliance determination. Group Cookies & Trackers rows by vendor, purpose, and host when the user wants
             a short review handoff.
           </p>

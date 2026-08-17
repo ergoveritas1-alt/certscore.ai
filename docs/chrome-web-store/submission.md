@@ -30,7 +30,7 @@ The extension does not capture cookie values, passwords, form entries, payment i
 
 Every scan uses a fresh visit. The extension clears cookies and site storage only for the chosen website before reloading it.
 
-The extension reports observable risk signals for review. It does not provide legal certification or a compliance determination.
+The extension reports observable risk signals for human and agentic review. It does not provide legal certification or a compliance determination.
 
 ## Single purpose
 

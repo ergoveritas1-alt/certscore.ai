@@ -109,7 +109,7 @@ export default async function AuthorizePage({ searchParams }: AuthorizePageProps
           <CardContent className="space-y-6">
             <p className="text-sm leading-7 text-slate-600">
               This app is requesting access to CertScore.ai MCP tools for {organization.name}. CertScore.ai MCP returns public-web
-              risk signals for review and does not provide legal advice or compliance certification.
+              risk signals for human and agentic review and does not provide legal advice or compliance certification.
             </p>
             <div className="rounded border border-slate-200 bg-slate-50 p-4 text-sm text-slate-700">
               <p className="font-semibold text-slate-900">Requested scopes</p>

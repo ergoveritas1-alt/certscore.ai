@@ -339,7 +339,7 @@ test("finding atlas index groups all reviewed findings with registry context", (
 
   assert.doesNotMatch(pageSource, /CertScore's findings registry explains the automated observations/);
   assert.match(pageSource, /How to read a finding/);
-  assert.match(pageSource, /Findings are automated public-web observations for review/);
+  assert.match(pageSource, /Findings are automated public-web observations for human and agentic review/);
   assert.match(pageSource, /finding references are reviewed periodically/);
   assert.match(source, /Consent and choice architecture/);
   assert.match(source, /Third-party tracking and adtech/);

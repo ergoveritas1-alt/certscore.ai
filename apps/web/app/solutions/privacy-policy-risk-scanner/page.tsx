@@ -45,7 +45,7 @@ const config: SolutionPageConfig = {
     {
       question: "What is a privacy policy risk scanner?",
       answer:
-        "It is a tool that reviews public policy content and observable website behavior to surface potential disclosure gaps or policy/runtime mismatches for human review."
+        "It is a tool that reviews public policy content and observable website behavior to surface potential disclosure gaps or policy/runtime mismatches for human and agentic review."
     },
     {
       question: "Does CertScore.ai write privacy policies?",

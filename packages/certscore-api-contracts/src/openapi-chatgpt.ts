@@ -103,7 +103,7 @@ export function buildPulseChatGptOpenApiDocument() {
           tags: ["Pulse"],
           summary: "Retrieve a GPT-safe CertScore Pulse summary by durable scanId.",
           description:
-            "Retrieve a completed CertScore Pulse result by durable scanId. Use this when a prior scan returned a scanId or report link. Automated observations for review, not legal advice or a compliance determination.",
+            "Retrieve a completed CertScore Pulse result by durable scanId. Use this when a prior scan returned a scanId or report link. Automated observations for human and agentic review, not legal advice or a compliance determination.",
           parameters: [
             {
               name: "scanId",

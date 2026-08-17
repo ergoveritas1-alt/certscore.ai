@@ -23,7 +23,7 @@ const config: GrowthContentPageConfig = {
       title: "Direct answer",
       paragraphs: [
         "A runtime scan can help detect whether tracker-like requests or third-party cookie activity appears before a cookie consent decision is observed.",
-        "This is evidence for review, not a legal conclusion. The affected requests, vendors, and timing should be checked before relying on findings."
+        "This is evidence for human and agentic review, not a legal conclusion. The affected requests, vendors, and timing should be checked before relying on findings."
       ]
     },
     {

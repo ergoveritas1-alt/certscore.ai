@@ -78,7 +78,7 @@ export function InsightTemplate({
           <CardContent className="space-y-4 text-sm text-slate-600">
             <p>
               These pages provide compact reference material around the kinds of public website
-              signals CertScore.ai can surface for review.
+              signals CertScore.ai can surface for human and agentic review.
             </p>
             <div className="flex flex-wrap gap-3">
               <PendingButtonLink

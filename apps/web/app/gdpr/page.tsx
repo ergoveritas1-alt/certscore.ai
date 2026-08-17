@@ -9,10 +9,10 @@ import { getFindingReferenceItems } from "../../lib/marketing/finding-atlas";
 
 const pageTitle = "GDPR Website Privacy Scanner | Consent, Cookies & Tracking Review Signals | CertScore.ai";
 const pageDescription =
-  "Evidence-based GDPR review signals for public websites. Detect pre-consent tracking, third-party cookies before consent, consent UX issues, session replay signals, fingerprinting-related activity, and policy/runtime gaps. Automated observations for review, not legal advice.";
+  "Evidence-based GDPR review signals for public websites. Detect pre-consent tracking, third-party cookies before consent, consent UX issues, session replay signals, fingerprinting-related activity, and policy/runtime gaps. Automated observations for human and agentic review, not legal advice.";
 const pagePath = "/gdpr";
 const disclaimer =
-  "CertScore.ai findings are automated public-web observations for review, not legal advice, certification, or a compliance determination.";
+  "CertScore.ai findings are automated public-web observations for human and agentic review, not legal advice, certification, or a compliance determination.";
 
 export const metadata: Metadata = {
   ...createPageMetadata({
@@ -219,7 +219,7 @@ const faqs = [
   {
     question: "What is a GDPR website privacy scanner?",
     answer:
-      "A GDPR website privacy scanner reviews public website behavior that may be relevant to privacy and data-protection review. CertScore.ai focuses on automated public-web observations for review, including consent timing, cookies, tracking, replay, fingerprinting-related activity, and disclosures."
+      "A GDPR website privacy scanner reviews public website behavior that may be relevant to privacy and data-protection review. CertScore.ai focuses on automated public-web observations for human and agentic review, including consent timing, cookies, tracking, replay, fingerprinting-related activity, and disclosures."
   },
   {
     question: "What is pre-consent tracking?",
@@ -229,12 +229,12 @@ const faqs = [
   {
     question: "Does GDPR require cookie consent?",
     answer:
-      "Cookie and device-access review often involves both GDPR and ePrivacy context. Some storage or access may require consent unless an exception applies. CertScore.ai surfaces runtime evidence for review and does not decide which legal basis or exception applies."
+      "Cookie and device-access review often involves both GDPR and ePrivacy context. Some storage or access may require consent unless an exception applies. CertScore.ai surfaces runtime evidence for human and agentic review and does not decide which legal basis or exception applies."
   },
   {
     question: "Can CertScore.ai tell me if my website is GDPR compliant?",
     answer:
-      "No. CertScore.ai provides automated public-web observations for review. It does not provide legal advice, certification, proof of non-compliance, or a GDPR compliance determination."
+      "No. CertScore.ai provides automated public-web observations for human and agentic review. It does not provide legal advice, certification, proof of non-compliance, or a GDPR compliance determination."
   },
   {
     question: "How does CertScore.ai detect tracking before consent?",
@@ -426,7 +426,7 @@ export default function GdprPage() {
               GDPR/ePrivacy signals observed in recent production scans
             </h2>
             <p className="text-base leading-7 text-slate-600">
-              Across recent CertScore.ai production scan batches covering public websites, the most common GDPR/ePrivacy-relevant review signal was tracking before a recorded consent choice. These are automated public-web observations for review, not legal conclusions, certification, or compliance determinations.
+              Across recent CertScore.ai production scan batches covering public websites, the most common GDPR/ePrivacy-relevant review signal was tracking before a recorded consent choice. These are automated public-web observations for human and agentic review, not legal conclusions, certification, or compliance determinations.
             </p>
           </div>
           <div className="mt-8 grid gap-6 lg:grid-cols-[0.95fr_1.05fr]">
@@ -502,7 +502,7 @@ export default function GdprPage() {
                           {finding?.observed ?? "Runtime evidence that may be relevant to privacy review."}
                         </p>
                         <p>
-                          <span className="font-semibold text-slate-800">Why it may matter for review: </span>
+                          <span className="font-semibold text-slate-800">Why it may matter for human and agentic review: </span>
                           {finding?.regulatoryContext?.primaryConcern.displayCopy ?? "The retained evidence can help reviewers prioritize consent, cookie, tracking, disclosure, or data-protection questions."}
                         </p>
                         <Link href={finding ? `/findings/${finding.id}` : "/findings"} className="inline-flex text-sm font-medium text-sky-700 hover:text-sky-800">
@@ -601,7 +601,7 @@ export default function GdprPage() {
         <div className="border border-slate-200 bg-white p-6">
           <DomainScanForm
             buttonLabel="Start a trial scan"
-            helperText="Public website scans surface automated observations for review."
+            helperText="Public website scans surface automated observations for human and agentic review."
             inputLabel="Website domain"
             mode="preview"
             scanSource="unknown"

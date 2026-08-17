@@ -87,7 +87,7 @@ export default function SessionReplayRiskBenchmarkPage() {
             title: "What CertScore.ai observes",
             paragraphs: [
               "CertScore.ai observes public page context, recording-related vendors or scripts, timing, and whether behavior appears near sensitive input surfaces where evidence is available.",
-              "CertScore.ai findings remain automated signals for review, not legal advice, certification, or compliance determinations."
+              "CertScore.ai findings remain automated signals for human and agentic review, not legal advice, certification, or compliance determinations."
             ]
           },
           {

@@ -1,7 +1,7 @@
 import { applyPulseCors, pulseOptionsResponse } from "../../../../lib/pulse/cors";
 
 const standardDisclaimer =
-  "CertScore.ai provides automated public-web observations for review. Results may be incomplete or contain errors. CertScore.ai does not provide legal advice nor certify compliance. Always review the underlying evidence and consult qualified experts where appropriate.";
+  "CertScore.ai provides automated public-web observations for human and agentic review. Results may be incomplete or contain errors. CertScore.ai does not provide legal advice nor certify compliance. Always review the underlying evidence and consult qualified experts where appropriate.";
 
 const capabilities = {
   method: "automated_runtime_analysis",

@@ -22,7 +22,7 @@ const faqs = [
   {
     question: "How accurate are the results?",
     answer:
-      "Findings reflect automated analysis of public website signals under the tested scan context. They are designed for review and monitoring, not as a legal or formal accessibility determination."
+      "Findings reflect automated analysis of public website signals under the tested scan context. They are designed for human and agentic review and monitoring, not as a legal or formal accessibility determination."
   },
   {
     question: "Does CertScore.ai scan private or logged-in pages?",

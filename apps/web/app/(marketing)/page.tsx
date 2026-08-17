@@ -250,7 +250,7 @@ export default async function MarketingHomePage() {
                 Focused pages for the review workflow you need.
               </h2>
               <p className="text-sm leading-6 text-slate-600">
-                Start with the scanner category closest to the question: GDPR, cookie consent, or privacy policy risk. Each page explains observable public-web signals for review, not legal conclusions.
+                Start with the scanner category closest to the question: GDPR, cookie consent, or privacy policy risk. Each page explains observable public-web signals for human and agentic review, not legal conclusions.
               </p>
             </div>
             <Link href="/solutions" className="text-sm font-semibold text-slate-900 transition hover:text-sky-700">

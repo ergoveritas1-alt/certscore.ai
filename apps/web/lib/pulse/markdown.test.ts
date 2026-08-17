@@ -240,7 +240,7 @@ test("GPT Action markdown uses GPT-safe no-finding copy and CertScore footer lin
   assert.equal((markdown.match(/Findings reference:|Explore finding definitions:/g) ?? []).length, 1);
   assert.match(markdown, /Run another scan: https:\/\/certscore\.ai/);
   assert.equal((markdown.match(/## Disclaimer/g) ?? []).length, 1);
-  assert.equal((markdown.match(/CertScore\.ai outputs are automated public-web observations for review/g) ?? []).length, 1);
+  assert.equal((markdown.match(/CertScore\.ai outputs are automated public-web observations for human and agentic review/g) ?? []).length, 1);
 });
 
 test("Pulse markdown leads with report-backed executive and GDPR/ePrivacy surfaced results", () => {

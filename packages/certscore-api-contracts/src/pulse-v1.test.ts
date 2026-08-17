@@ -41,7 +41,7 @@ const retrievedMcpGuidance = {
   recommendedNextTool: null,
   recommendedNextAction: "Review the result and retained limitations.",
   error: null,
-  observationOnlyDisclaimer: "Automated public-web observations for human review, not legal advice, certification, or a compliance determination."
+  observationOnlyDisclaimer: "Automated public-web observations for human and agentic review, not legal advice, certification, or a compliance determination."
 };
 
 test("Pulse v1 schemas accept public-safe response shapes", () => {
@@ -479,7 +479,7 @@ test("API v2 draft OpenAPI locks resource path and operation names", () => {
     "listScanFindings",
     "requestReadOnlyApiKey"
   ]);
-  assert.match(document.info.description, /automated public-web observations for review/i);
+  assert.match(document.info.description, /automated public-web observations for human and agentic review/i);
   assert.match(document.info.description, /not legal advice, certification, or a compliance determination/i);
   assert.equal(document.paths["/api/v2/scans"].post.responses["202"].headers["Retry-After"].description, "Recommended retry or polling delay in seconds.");
   assert.ok(document.paths["/api/v2/scans"].post.responses["200"].content["application/json"].examples.completed);

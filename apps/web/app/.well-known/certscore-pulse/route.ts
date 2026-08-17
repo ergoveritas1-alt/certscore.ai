@@ -72,7 +72,7 @@ const discoveryDocument = {
   support: "https://certscore.ai/contact",
   terms: "https://certscore.ai/terms",
   privacy: "https://certscore.ai/privacy",
-  disclaimer: "Automated public-web observations for review. Not legal advice, certification, or a compliance determination."
+  disclaimer: "Automated public-web observations for human and agentic review. Not legal advice, certification, or a compliance determination."
 } as const;
 
 function requestId(request: Request) {

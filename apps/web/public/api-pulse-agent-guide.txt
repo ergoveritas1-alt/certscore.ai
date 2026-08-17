@@ -2,7 +2,7 @@
 
 Last updated: 2026-05-19
 
-CertScore.ai Pulse provides automated public-web observations for review. Outputs are not legal advice, certification, or a compliance determination.
+CertScore.ai Pulse provides automated public-web observations for human and agentic review. Outputs are not legal advice, certification, or a compliance determination.
 
 This is beta software. The current Pulse API beta version is 0.5.4.
 
@@ -189,7 +189,7 @@ Use guidance:
 - Use detail=evidence when structured finding, evidence, review lens, coverage, and benchmark context are needed.
 - Use format=markdown when a tool handles readable text better than JSON.
 - For a Custom GPT Action beta, import https://certscore.ai/api/v1/openapi.chatgpt.json and use getPulseForUrl with format=markdown, detail=standard, wait=35.
-- Treat the response as automated public-web observations for review.
+- Treat the response as automated public-web observations for human and agentic review.
 - Do not treat absence of findings as proof of compliance.
 - Review the linked evidence and consult qualified experts where appropriate.
 

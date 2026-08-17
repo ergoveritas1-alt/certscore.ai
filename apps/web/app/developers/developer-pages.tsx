@@ -239,7 +239,7 @@ export function DeveloperShell({
             <h1 className="text-4xl font-semibold tracking-tight text-slate-950">{title}</h1>
             <p className="text-lg leading-8 text-slate-600">{description}</p>
             <p className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm leading-6 text-amber-950">
-              CertScore.ai outputs are automated public-web observations for review. They are not legal advice, certification, or a
+              CertScore.ai outputs are automated public-web observations for human and agentic review. They are not legal advice, certification, or a
               compliance determination.
             </p>
           </div>
@@ -298,7 +298,7 @@ export function AgentQuickPath() {
           <li>Create or reuse a scan with POST /api/v2/scans; authentication is optional for up to 20 new scans per requester IP per UTC day. Contact support@certscore.ai for higher volume.</li>
           <li>Poll status and honor Retry-After.</li>
           <li>Retrieve findings and pre-consent cookies/trackers.</li>
-          <li>Treat outputs as automated public-web observations for review, not legal advice, certification, or a compliance determination.</li>
+          <li>Treat outputs as automated public-web observations for human and agentic review, not legal advice, certification, or a compliance determination.</li>
         </ol>
       </div>
     </section>

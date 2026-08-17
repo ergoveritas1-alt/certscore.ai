@@ -112,7 +112,7 @@ const pulse = {
   ],
   topFindings: [],
   coverage: { limitations: ["Automated public-web scan only."] },
-  disclaimer: "Automated public-web observations for review."
+  disclaimer: "Automated public-web observations for human and agentic review."
 } as const;
 
 function apiFinding(id: string) {
@@ -133,7 +133,7 @@ function apiFinding(id: string) {
       hasVendorAnchor: true
     },
     reviewLenses: ["GDPR / ePrivacy"],
-    disclaimer: "Automated public-web observations for review."
+    disclaimer: "Automated public-web observations for human and agentic review."
   };
 }
 
@@ -345,7 +345,7 @@ test("README documents current MCP tool surface and public docs", () => {
   assert.match(readme, /"command": "certscore-mcp"/);
   assert.doesNotMatch(readme, /npx -y certscore-mcp/);
   assert.doesNotMatch(readme, /"command": "npx"/);
-  assert.match(readme, /automated public-web observations for review/i);
+  assert.match(readme, /automated public-web observations for human and agentic review/i);
   assert.doesNotMatch(readme, /legal violation|non-compliant|certifies compliance/i);
 
   assert.equal(packageJson.name, "@certscore/mcp");
@@ -938,7 +938,7 @@ test("certscore_get_scan_bundle returns a compact canonical summary by default",
     completedAt: "2026-08-15T03:39:36.015Z",
     coverage: { status: "partial" },
     links: { self: "https://certscore.ai/api/v2/scans/scan_123" },
-    disclaimer: "Automated public-web observations for review."
+    disclaimer: "Automated public-web observations for human and agentic review."
   };
   const mock = installFetch([
     { status: 200, body: scan },
@@ -1007,7 +1007,7 @@ test("certscore_get_scan_bundle returns a compact canonical summary by default",
       assert.match(text, /tracker: Example Analytics/);
       assert.match(text, /cookies=analytics_id/);
       assert.match(text, /CertScore score=72/);
-      assert.match(text, /automated public-web observations for human review/i);
+      assert.match(text, /automated public-web observations for human and agentic review/i);
       assert.match(text, /not legal advice, certification, or a compliance determination/i);
       assert.match(text, /Report only observed CertScore evidence and persisted CertScore classifications/i);
       assert.match(text, /the scan does not establish what happens after that action/i);
@@ -1078,7 +1078,7 @@ test("certscore_get_scan_bundle returns the canonical no-go result when the Puls
       assert.deepEqual((bundle.evidenceSummary as Record<string, unknown>).digests, []);
       assert.equal(bundle.error && (bundle.error as Record<string, unknown>).code, "parked_or_placeholder");
       assert.match(String(bundle.observationOnlyDisclaimer), /not proof of compliance/i);
-      assert.match(String(bundle.disclaimer), /automated public-web observations for human review/i);
+      assert.match(String(bundle.disclaimer), /automated public-web observations for human and agentic review/i);
       assert.match(String(bundle.disclaimer), /not legal advice, certification, or a compliance determination/i);
       assert.equal(mock.calls.length, 1);
     });
@@ -1227,7 +1227,7 @@ test("certscore_export_findings uses full Pulse detail and certscore_explain_fin
           examplesShown: 1
         },
         detail: { caveats: ["Automated public-web scan only."] },
-        disclaimer: "Automated public-web observations for review."
+        disclaimer: "Automated public-web observations for human and agentic review."
       }
     }
   ]);

@@ -48,7 +48,7 @@ export default function WebsiteConsentAuditToolsPage() {
       <SiteHeader />
       <AiVisibilityContent
         badge="Comparison"
-        intro="Website consent audit tools should be compared by whether they review observable behavior, not only banner presence or cookie inventory. CertScore.ai focuses on automated evidence-backed risk signals for review."
+        intro="Website consent audit tools should be compared by whether they review observable behavior, not only banner presence or cookie inventory. CertScore.ai focuses on automated evidence-backed risk signals for human and agentic review."
         relatedLinks={[
           { href: "/guides/website-consent-audit-checklist", label: "website consent audit checklist" },
           { href: "/guides/reject-consent-tracking-test", label: "reject consent tracking test" },
@@ -61,7 +61,7 @@ export default function WebsiteConsentAuditToolsPage() {
             title: "Direct answer",
             paragraphs: [
               "A useful website consent audit tool should review banner controls, tracking requests, cookie timing, reject behavior, and retained evidence.",
-              "CertScore.ai is designed to surface public website risk signals for review rather than provide legal advice, certification, or compliance determinations."
+              "CertScore.ai is designed to surface public website risk signals for human and agentic review rather than provide legal advice, certification, or compliance determinations."
             ]
           },
           {

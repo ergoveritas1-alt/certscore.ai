@@ -343,7 +343,7 @@ With `freshness: "latest"`, CertScore reuses an eligible scan completed within t
 ```
 
 When summarizing table data, group rows by `vendor`, `purpose`, and `host` unless the user asks for row-level JSON.
-Treat MCP outputs as automated public-web observations for review. They are not legal advice, certification, or a compliance determination. MCP tools must not infer findings from raw labels, raw network events, missing data, or display-only context.
+Treat MCP outputs as automated public-web observations for human and agentic review. They are not legal advice, certification, or a compliance determination. MCP tools must not infer findings from raw labels, raw network events, missing data, or display-only context.
 
 ## Live Smoke
 

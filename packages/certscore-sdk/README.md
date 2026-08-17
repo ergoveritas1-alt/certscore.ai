@@ -2,7 +2,7 @@
 
 Official TypeScript/JavaScript SDK for the CertScore public API, Pulse API, and website risk-signal workflows.
 
-CertScore outputs are automated public-web observations for review. They are not legal advice, certification, or a compliance determination. Always review the underlying evidence and consult qualified experts where appropriate.
+CertScore outputs are automated public-web observations for human and agentic review. They are not legal advice, certification, or a compliance determination. Always review the underlying evidence and consult qualified experts where appropriate.
 
 ## Status
 
@@ -268,7 +268,7 @@ if (criticalFindings.length > 0) {
 console.log("No critical automated review signals were surfaced in this Pulse.");
 ```
 
-This CI example fails only on critical automated review signals surfaced by CertScore. It does not make a legal or compliance conclusion. CertScore provides automated public-web observations for review, not legal advice, certification, or a compliance determination.
+This CI example fails only on critical automated review signals surfaced by CertScore. It does not make a legal or compliance conclusion. CertScore provides automated public-web observations for human and agentic review, not legal advice, certification, or a compliance determination.
 
 ## API Notes
 

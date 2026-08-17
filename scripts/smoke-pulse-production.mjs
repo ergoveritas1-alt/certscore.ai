@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 
 const baseUrl = (process.env.BASE_URL ?? "https://certscore.ai").replace(/\/+$/, "");
-const disclaimerPattern = /automated public-web observations for review/i;
+const disclaimerPattern = /automated public-web observations for human and agentic review/i;
 
 function absolute(path) {
   return `${baseUrl}${path}`;

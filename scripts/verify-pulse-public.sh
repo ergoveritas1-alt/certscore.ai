@@ -118,7 +118,7 @@ node_check "self-test body" '
   if (body.ok !== true || body.type !== "certscore_pulse_self_test") process.exit(1);
   if (body.capabilities?.method !== "automated_runtime_analysis") process.exit(1);
   if (!body.capabilities?.observes?.includes("pre_consent_tracking")) process.exit(1);
-  if (!body.disclaimer?.includes("automated public-web observations for review")) process.exit(1);
+  if (!body.disclaimer?.includes("automated public-web observations for human and agentic review")) process.exit(1);
 '
 
 request "/api/v1/pulse?url=https://kbdlab.io&detail=tiny"
@@ -183,7 +183,7 @@ elif [[ "$LAST_CONTENT_TYPE" != text/markdown* ]]; then
   fail "markdown pulse" "Expected markdown content type."
 elif ! require_diag_headers "markdown pulse"; then
   true
-elif ! grep -q "CertScore provides automated public-web observations for review" "$LAST_BODY"; then
+elif ! grep -q "CertScore provides automated public-web observations for human and agentic review" "$LAST_BODY"; then
   fail "markdown pulse" "Missing canonical disclaimer."
 elif ! grep -Eq "automated runtime analysis|automated public-web" "$LAST_BODY"; then
   fail "markdown pulse" "Missing capabilities or purpose language."

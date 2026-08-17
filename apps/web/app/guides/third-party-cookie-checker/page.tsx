@@ -23,7 +23,7 @@ const config: GrowthContentPageConfig = {
       title: "Direct answer",
       paragraphs: [
         "A third-party cookie checker reviews cookies set by domains other than the site being scanned and helps identify timing, domain, and consent-state context.",
-        "Third-party cookies can be useful evidence for review, especially when they appear before a consent choice or persist after a reject interaction."
+        "Third-party cookies can be useful evidence for human and agentic review, especially when they appear before a consent choice or persist after a reject interaction."
       ]
     },
     {

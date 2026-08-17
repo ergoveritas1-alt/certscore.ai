@@ -17,9 +17,9 @@ const discoveryDocument = {
   },
   posture: {
     summary:
-      "CertScore outputs are automated public-web observations for review. They are not legal advice, certification, or a compliance determination.",
+      "CertScore outputs are automated public-web observations for human and agentic review. They are not legal advice, certification, or a compliance determination.",
     allowedUse:
-      "Use public API and documentation outputs as evidence-backed review signals with human review. Do not represent CertScore output as a legal conclusion.",
+      "Use public API and documentation outputs as evidence-backed review signals with human and agentic review. Do not represent CertScore output as a legal conclusion.",
     canonicalFlow:
       "WS01 observed evidence -> WC01 normalized concern -> WC01 concern policy -> WC01 unified finding/checklist projection -> executive/regulatory display."
   },
@@ -37,7 +37,7 @@ const discoveryDocument = {
     cookieConsentScanner: "https://certscore.ai/solutions/cookie-consent-scanner",
     privacyPolicyRiskScanner: "https://certscore.ai/solutions/privacy-policy-risk-scanner",
     posture:
-      "Scanner solution pages describe public website review workflows and automated risk signals. CertScore outputs are automated public-web observations for review. They are not legal advice, certification, or a compliance determination."
+      "Scanner solution pages describe public website review workflows and automated risk signals. CertScore outputs are automated public-web observations for human and agentic review. They are not legal advice, certification, or a compliance determination."
   },
   developerDocs: {
     hub: "https://certscore.ai/developers",

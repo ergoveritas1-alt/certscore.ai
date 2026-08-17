@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 
 const baseUrl = (process.env.BASE_URL ?? process.env.PULSE_SMOKE_BASE_URL ?? "https://certscore.ai").replace(/\/+$/, "");
-const standardDisclaimerPattern = /automated public-web observations for review/i;
+const standardDisclaimerPattern = /automated public-web observations for human and agentic review/i;
 const shortDisclaimerPattern = /not legal advice, certification, or a compliance determination/i;
 
 type FetchResult = {

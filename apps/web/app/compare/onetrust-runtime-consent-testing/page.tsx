@@ -23,7 +23,7 @@ const config: GrowthContentPageConfig = {
       title: "Direct answer",
       paragraphs: [
         "CertScore.ai complements OneTrust-style CMP workflows by observing runtime tracking, cookie, and third-party request behavior from public webpages.",
-        "It helps teams find evidence for review when consent settings and live tag behavior may have drifted."
+        "It helps teams find evidence for human and agentic review when consent settings and live tag behavior may have drifted."
       ]
     },
     {

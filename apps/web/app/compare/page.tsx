@@ -53,7 +53,7 @@ const approachCards = [
   },
   {
     title: "Runtime behavior observations",
-    body: "Useful for reviewing what appears to happen in the browser before and after consent choices using retained evidence for review."
+    body: "Useful for reviewing what appears to happen in the browser before and after consent choices using retained evidence for human and agentic review."
   }
 ];
 

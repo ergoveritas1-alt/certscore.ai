@@ -88,7 +88,7 @@ export default function PreConsentTrackingBenchmarkPage() {
             title: "What CertScore.ai observes",
             paragraphs: [
               "CertScore.ai observes request timing, cookie timing, consent-surface signals, vendor-like hosts, and retained evidence from public website scans.",
-              "Findings are automated risk signals for review and are not legal advice, certification, or compliance determinations."
+              "Findings are automated risk signals for human and agentic review and are not legal advice, certification, or compliance determinations."
             ]
           },
           {

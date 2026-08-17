@@ -109,7 +109,7 @@ test("ChatGPT Action OpenAPI route returns compact action-safe JSON", async () =
   assert.ok(body.components.schemas.PulseCoverageInterruption);
   assert.ok(body.components.schemas.PulseSelfTest);
   assert.equal(body.paths["/api/v1/pulse-self-test"].get.responses["200"].content["application/json"].schema.$ref, "#/components/schemas/PulseSelfTest");
-  assert.match(JSON.stringify(body), /checkPulseConnectivity|getPulseForUrl|automated public-web observations for review|automated_runtime_analysis/);
+  assert.match(JSON.stringify(body), /checkPulseConnectivity|getPulseForUrl|automated public-web observations for human and agentic review|automated_runtime_analysis/);
   assert.doesNotMatch(JSON.stringify(body), /text\/markdown|format=markdown|transport error/);
   assert.doesNotMatch(JSON.stringify(body.paths["/api/v1/pulse/gpt"].get.parameters), /refresh/);
   assert.doesNotMatch(JSON.stringify(body.paths), /pulse-health/);
@@ -243,7 +243,7 @@ test("Pulse discovery route returns compact machine-readable metadata", async ()
   assert.equal(body.recommendedCalls.connectivityCheck, "GET /api/v1/pulse-self-test");
   assert.match(body.freshness, /24-hour reuse window/);
   assert.match(body.freshness, /forceNewScan=true/);
-  assert.equal(body.disclaimer, "Automated public-web observations for review. Not legal advice, certification, or a compliance determination.");
+  assert.equal(body.disclaimer, "Automated public-web observations for human and agentic review. Not legal advice, certification, or a compliance determination.");
 });
 
 test("Pulse health canary route is dependency-free JSON", async () => {
@@ -287,7 +287,7 @@ test("Pulse self-test route is dependency-free JSON with capabilities", async ()
   assert.equal(body.routes.chatgptOpenapi, "/api/v1/openapi.chatgpt.json");
   assert.equal(body.capabilities.method, "automated_runtime_analysis");
   assert.ok(body.capabilities.observes.includes("pre_consent_tracking"));
-  assert.match(body.disclaimer, /automated public-web observations for review/i);
+  assert.match(body.disclaimer, /automated public-web observations for human and agentic review/i);
 
   const source = readFileSync("apps/web/app/api/v1/pulse-self-test/route.ts", "utf8");
   assert.doesNotMatch(source, /from\s+["'][^"']*(db|server|auth|queue|redis|pulse\/repository|internal)["']/i);
@@ -412,7 +412,7 @@ test("Pulse plain text agent guide is retrievable and covers fetch failures", ()
   assert.match(source, /client\/network fetch limitation/);
   assert.match(source, /Recommended calls/);
   assert.match(source, /Markdown is best for conversational summaries/);
-  assert.match(source, /automated public-web observations for review/);
+  assert.match(source, /automated public-web observations for human and agentic review/);
   assert.match(source, /automated runtime analysis of public websites/);
 });
 
@@ -469,7 +469,7 @@ test("Pulse public text surfaces keep cautious language outside explicit avoid g
   assert.doesNotMatch(text, /\bbreach of law\b/i);
   assert.doesNotMatch(text, /\bcertifies compliance\b/i);
   assert.doesNotMatch(text, /\bdetermines compliance\b/i);
-  assert.match(text, /automated public-web observations for review|automated runtime analysis/i);
+  assert.match(text, /automated public-web observations for human and agentic review|automated runtime analysis/i);
   assert.match(text, /review signals?|evidence for review|coverage limitation/i);
   assert.match(text, /not legal advice/i);
 });
@@ -845,7 +845,7 @@ test("Pulse invalid-input errors use the documented public-safe shape", () => {
   assert.equal(body.feedback.email, "support@certscore.ai");
   assert.equal(body.agentInterpretation.responseClass, "api_error");
   assert.equal(body.agentInterpretation.requiresHumanReview, true);
-  assert.match(body.disclaimer, /automated public-web observations for review/i);
+  assert.match(body.disclaimer, /automated public-web observations for human and agentic review/i);
   assert.doesNotMatch(JSON.stringify(body), /stack|DATABASE_URL|token|secret/i);
 });
 

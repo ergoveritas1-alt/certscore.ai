@@ -89,7 +89,7 @@ const detailLevels = [
   {
     name: "detail=evidence",
     summary:
-      "Bounded structured evidence packet for review. Includes projected findings, GDPR/ePrivacy checklist rows, tracker/cookie inventories, timing summaries, and safety notes without raw payloads."
+      "Bounded structured evidence packet for human and agentic review. Includes projected findings, GDPR/ePrivacy checklist rows, tracker/cookie inventories, timing summaries, and safety notes without raw payloads."
   },
   {
     name: "detail=tiny",
@@ -321,7 +321,7 @@ const responseExamples = [
       scanStatus: "completed",
       findings: [exampleFinding],
       reviewContext: {
-        disclaimer: "Findings are organized by privacy, consumer protection, accessibility, and other review contexts. These are automated signals for review, not legal determinations.",
+        disclaimer: "Findings are organized by privacy, consumer protection, accessibility, and other review contexts. These are automated signals for human and agentic review, not legal determinations.",
         lenses: [
           {
             name: "GDPR / ePrivacy",
@@ -497,7 +497,7 @@ export default function ApiPulsePage() {
             <div className="rounded-lg border border-sky-200 bg-white p-4">
               <h2 className="text-base font-semibold text-slate-950">Try CertScore.ai GPT beta</h2>
               <p className="mt-1 text-sm leading-6 text-slate-600">
-                Paste a public website URL and get a CertScore.ai Pulse summary inside ChatGPT. Automated observations for review, not legal advice or a compliance determination.
+                Paste a public website URL and get a CertScore.ai Pulse summary inside ChatGPT. Automated observations for human and agentic review, not legal advice or a compliance determination.
               </p>
               <a
                 className="mt-3 inline-flex w-fit rounded-full border border-sky-300 bg-sky-600 px-3 py-2 text-sm font-semibold text-white hover:bg-sky-700"

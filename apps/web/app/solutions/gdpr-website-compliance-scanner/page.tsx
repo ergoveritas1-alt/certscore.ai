@@ -8,7 +8,7 @@ import {
 const config: SolutionPageConfig = {
   badge: "GDPR website scanner",
   description:
-    "Scan public websites for GDPR-relevant consent, cookie, tracking, policy, and disclosure review signals. CertScore.ai provides evidence-backed observations for review, not legal advice.",
+    "Scan public websites for GDPR-relevant consent, cookie, tracking, policy, and disclosure review signals. CertScore.ai provides evidence-backed observations for human and agentic review, not legal advice.",
   intro:
     "CertScore.ai helps teams review GDPR-relevant website behavior by observing public pages in a real browser and surfacing consent, cookie, tracking, policy, and disclosure signals that deserve follow-up.",
   path: "/solutions/gdpr-website-compliance-scanner",
@@ -45,7 +45,7 @@ const config: SolutionPageConfig = {
     {
       question: "Can CertScore.ai tell me if a website is GDPR compliant?",
       answer:
-        "No. CertScore.ai provides automated public-web observations for review. It does not provide legal advice, certification, proof of non-compliance, or a GDPR compliance determination."
+        "No. CertScore.ai provides automated public-web observations for human and agentic review. It does not provide legal advice, certification, proof of non-compliance, or a GDPR compliance determination."
     },
     {
       question: "What does a GDPR website scanner look for?",

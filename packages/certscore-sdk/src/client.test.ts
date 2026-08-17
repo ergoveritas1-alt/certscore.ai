@@ -58,7 +58,7 @@ const pulse = {
   summary: { score: 88 },
   topFindings: [],
   links: { fullReportUrl: "https://certscore.ai/scan/scan_123" },
-  disclaimer: "CertScore provides automated public-web observations for review."
+  disclaimer: "CertScore provides automated public-web observations for human and agentic review."
 } as const;
 
 const supportedNoGoReasons: ScanNoGoReasonCode[] = [
@@ -159,7 +159,7 @@ test("README documents current SDK resource clients", () => {
   }
 
   assert.match(readme, /resource-oriented API v2 clients/i);
-  assert.match(readme, /automated public-web observations for review/i);
+  assert.match(readme, /automated public-web observations for human and agentic review/i);
   assert.doesNotMatch(readme, /legal violation|non-compliant|certifies compliance/i);
 });
 

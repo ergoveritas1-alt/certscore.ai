@@ -45,7 +45,7 @@ function getPagePath(activeFinding?: FindingReferenceItem) {
 export function getReferenceNotes(activeFinding?: FindingReferenceItem) {
   const commonNotes = [
     "CertScore.ai uses findings, evidence, signals, and observations consistently: signals are raw runtime or page-surface events, evidence is retained support, observations are interpreted evidence context, and findings are promoted review items.",
-    "Findings are runtime evidence and public-surface observations for review. Observed signals may surface possible concerns, but review is recommended before operational or legal reliance.",
+    "Findings are runtime evidence and public-surface observations for human and agentic review. Observed signals may surface possible concerns, but review is recommended before operational or legal reliance.",
     "Finding reference content is reviewed periodically and updated when material guidance changes. CertScore.ai monitors guidance families such as EDPB consent and ePrivacy materials, ICO cookie guidance, CNIL tracker recommendations, FTC privacy and dark-pattern materials, and relevant accessibility guidance where applicable."
   ];
 
@@ -202,7 +202,7 @@ function getCategoryIntro(category: FindingReferenceCategory) {
     case "Disclosure gaps":
       return "Public disclosure, privacy-choice, and policy-surface gaps that need manual business and legal review.";
     case "Consumer protection":
-      return "Choice architecture and policy/runtime alignment findings for review of public claims and observed behavior.";
+      return "Choice architecture and policy/runtime alignment findings for human and agentic review of public claims and observed behavior.";
   }
 }
 
@@ -335,7 +335,7 @@ export function FindingsReferencePage({ activeFinding }: FindingsReferencePagePr
         ) : (
           <div className="space-y-4 text-base leading-7 text-slate-600">
             <p>
-              Findings are automated public-web observations for review. They are not legal conclusions, certifications, compliance determinations, or proof of non-compliance.
+              Findings are automated public-web observations for human and agentic review. They are not legal conclusions, certifications, compliance determinations, or proof of non-compliance.
             </p>
             <div className="border border-slate-200 bg-slate-50 p-4 text-sm leading-6 text-slate-700">
               <h2 className="text-sm font-semibold text-slate-950">How to read a finding</h2>
@@ -348,7 +348,7 @@ export function FindingsReferencePage({ activeFinding }: FindingsReferencePagePr
               <p className="mt-2">
                 CertScore.ai ranks findings using evidence strength, directness, corroboration, affected surface, and review relevance.
                 Benchmark frequency is market context only. A rare finding is not automatically critical, and a common finding is not automatically low risk.
-                Findings remain automated public-web observations for review, not legal conclusions.
+                Findings remain automated public-web observations for human and agentic review, not legal conclusions.
               </p>
             </div>
           </div>
@@ -384,7 +384,7 @@ export function FindingsReferencePage({ activeFinding }: FindingsReferencePagePr
           <div className="border border-sky-200 bg-sky-50 p-4 text-sm leading-6 text-slate-700">
             <p>Want to test these findings on a public website? Use the CertScore.ai GPT to scan a public website from ChatGPT.</p>
             <p className="mt-1 text-slate-600">
-              Results are automated public-web observations for review, not legal advice or a compliance determination.
+              Results are automated public-web observations for human and agentic review, not legal advice or a compliance determination.
             </p>
             <a
               className="mt-3 inline-flex rounded-full border border-sky-300 bg-white px-3 py-2 font-semibold text-sky-700 hover:bg-sky-50"

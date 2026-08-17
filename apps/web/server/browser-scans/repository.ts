@@ -664,7 +664,7 @@ export async function completeBrowserScanSession(input: {
     ...input.summary,
     canonicalScanId,
     evidenceNotice:
-      "Browser-observed evidence captured from the reviewer's Chrome browser. Results may reflect the user's browser profile, location, cache, extensions, prior consent state, login state, and network path. Automated public-web observations for review, not legal advice, certification, or a compliance determination.",
+      "Browser-observed evidence captured from the reviewer's Chrome browser. Results may reflect the user's browser profile, location, cache, extensions, prior consent state, login state, and network path. Automated public-web observations for human and agentic review, not legal advice, certification, or a compliance determination.",
     sourceId: BROWSER_SCAN_SOURCE_ID,
     sourceType: BROWSER_SCAN_SOURCE_TYPE
   };

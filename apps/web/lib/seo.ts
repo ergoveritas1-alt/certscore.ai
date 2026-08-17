@@ -252,6 +252,6 @@ export function createBenchmarkDatasetSchema({
       url: SITE_URL
     },
     measurementTechnique:
-      "Automated homepage-oriented observation of public website behavior. Results are risk signals for review, not legal advice or legal determinations."
+      "Automated homepage-oriented observation of public website behavior. Results are risk signals for human and agentic review, not legal advice or legal determinations."
   };
 }

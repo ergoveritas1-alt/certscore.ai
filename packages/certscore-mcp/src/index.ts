@@ -151,7 +151,7 @@ export async function getCertScoreMcpDoctorReport(options: CertScoreMcpDoctorOpt
     }
   }
 
-  lines.push("CertScore outputs are automated public-web observations for review, not legal advice, certification, or a compliance determination.");
+  lines.push("CertScore outputs are automated public-web observations for human and agentic review, not legal advice, certification, or a compliance determination.");
 
   return { exitCode, lines };
 }

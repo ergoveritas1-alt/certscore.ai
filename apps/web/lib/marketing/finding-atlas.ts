@@ -1807,7 +1807,7 @@ const USER_IMPACT: Record<string, string> = {
 const DEFAULT_LIMITATIONS = [
   "Automated findings may contain errors and should be reviewed with the retained evidence.",
   "Not detected means not observed in the scan scope; it is not proof of absence.",
-  "Findings are runtime evidence and public-surface observations for review, not legal conclusions."
+  "Findings are runtime evidence and public-surface observations for human and agentic review, not legal conclusions."
 ];
 
 function makeBenchmarkBadge(benchmark: FindingDensityBenchmark) {

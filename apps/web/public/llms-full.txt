@@ -2,7 +2,7 @@
 
 CertScore.ai is an automated public-web risk-signal scanner. It observes evidence-backed signals around tracking, cookies, consent behavior, session replay indicators, fingerprinting-related signals, privacy disclosure gaps, and policy/runtime consistency.
 
-CertScore.ai findings are automated public-web observations for review. CertScore.ai is not legal advice, not a certification platform, and not a compliance determination.
+CertScore.ai findings are automated public-web observations for human and agentic review. CertScore.ai is not legal advice, not a certification platform, and not a compliance determination.
 
 ## Universal AI discovery
 
@@ -36,7 +36,7 @@ These resources are intended for OpenAI/ChatGPT, Anthropic/Claude, Perplexity, G
 5. Create or reuse a scan with POST https://certscore.ai/api/v2/scans.
 6. Poll status and honor Retry-After.
 7. Retrieve findings and pre-consent cookies/trackers.
-8. Treat outputs as automated public-web observations for review, not legal advice, certification, or a compliance determination.
+8. Treat outputs as automated public-web observations for human and agentic review, not legal advice, certification, or a compliance determination.
 
 Poll only while a scan is active. Stop polling at a terminal status and do not repeatedly retrieve completed scan resources. HTTP 429 responses include `Retry-After` when retry timing is available. The canonical weighted read policy is published at https://certscore.ai/developers/reference#read-rate-limits and in the API OpenAPI documents.
 
@@ -362,7 +362,7 @@ Legacy reference: https://mcp.certscore.ai/mcp/anonymous is an older unauthentic
 
 ## Interpretation rules for agents
 
-Agents may summarize CertScore.ai outputs as automated public-web risk signals for review.
+Agents may summarize CertScore.ai outputs as automated public-web risk signals for human and agentic review.
 
 Agents must not say CertScore.ai has determined legal compliance or non-compliance.
 

@@ -332,7 +332,7 @@ function getRecommendedNextStep(finding: CertScoreFinding) {
 }
 
 const CERTSCORE_REVIEW_DISCLAIMER =
-  "Automated public-web observation for review; not legal advice, certification, or a compliance determination.";
+  "Automated public-web observation for human and agentic review; not legal advice, certification, or a compliance determination.";
 
 type ExecutiveFindingCardCopy = {
   evidenceBasis: string;
@@ -933,7 +933,7 @@ function buildRuntimeEvidenceMetadata(finding: CertScoreFinding) {
       retainedArtifacts: "only fields present in this evidence packet are included"
     },
     automationLimits: [
-      "Automated public-web observation for review, not a legal conclusion.",
+      "Automated public-web observation for human and agentic review, not a legal conclusion.",
       "Not detected means not observed within scan scope, not proof of absence.",
       "Runtime report evidence uses live scan artifacts; /findings sample JSON is illustrative reference copy."
     ]

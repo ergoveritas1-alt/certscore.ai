@@ -232,7 +232,7 @@ test("Streamable HTTP runtime initializes, lists tools, enforces auth, CORS, and
           limitations: ["Do not infer transport properties that are not explicitly returned."]
         },
         coverage: { limitations: ["Automated public-web scan only."] },
-        disclaimer: "Automated public-web observations for review."
+        disclaimer: "Automated public-web observations for human and agentic review."
       }));
       return;
     }
@@ -251,7 +251,7 @@ test("Streamable HTTP runtime initializes, lists tools, enforces auth, CORS, and
           plainEnglish: "The canonical consent assessment did not establish a same-layer reject control.",
           evidence: { basis: "public_report_projection", summary: "Retained first-layer controls were assessed.", exampleCount: 1, examplesShown: 1, hasTimingAnchor: false, hasVendorAnchor: true },
           reviewLenses: ["GDPR / ePrivacy"],
-          disclaimer: "Automated public-web observations for review."
+          disclaimer: "Automated public-web observations for human and agentic review."
         }]
       }));
       return;

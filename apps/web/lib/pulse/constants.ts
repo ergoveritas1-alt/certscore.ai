@@ -7,13 +7,13 @@ export const PULSE_FEEDBACK_EMAIL = "support@certscore.ai";
 export const PULSE_MAX_RECOMMENDED_AGE_HOURS = 168;
 
 export const PULSE_STANDARD_DISCLAIMER =
-  "CertScore.ai outputs are automated public-web observations for review. They are not legal advice, certification, or a compliance determination. Always review the underlying evidence and consult qualified experts where appropriate.";
+  "CertScore.ai outputs are automated public-web observations for human and agentic review. They are not legal advice, certification, or a compliance determination. Always review the underlying evidence and consult qualified experts where appropriate.";
 
 export const PULSE_SHORT_DISCLAIMER =
-  "Automated public-web observations for review. Not legal advice, certification, or a compliance determination.";
+  "Automated public-web observations for human and agentic review. Not legal advice, certification, or a compliance determination.";
 
 export const PULSE_REVIEW_CONTEXT_DISCLAIMER =
-  "Findings are organized by privacy, consumer protection, accessibility, and other review contexts. These are automated signals for review, not legal determinations.";
+  "Findings are organized by privacy, consumer protection, accessibility, and other review contexts. These are automated signals for human and agentic review, not legal determinations.";
 
 export const PULSE_COVERAGE_LIMITATION_COPY =
   "Coverage may be affected by bot defenses, geography, consent flow branching, lazy loading, protected routes, authenticated-only areas, or other runtime conditions. Absence of findings should not be interpreted as absence of risk.";

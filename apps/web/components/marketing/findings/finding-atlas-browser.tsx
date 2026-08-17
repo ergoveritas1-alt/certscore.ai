@@ -167,7 +167,7 @@ function getFindingBadges(finding: FindingReferenceItem) {
           ? "Absence observation"
           : directVsInferred === "clustered_inference"
             ? "Clustered inference"
-            : "Observation for review";
+            : "Observation for human and agentic review";
   const contextLabel = finding.id === "pre_consent_tracking_detected" ? "Consent timing" : finding.category;
 
   return [

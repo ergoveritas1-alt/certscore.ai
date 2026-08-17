@@ -79,7 +79,7 @@ curl -H "Authorization: Bearer $CERTSCORE_API_KEY" \\
             <CodeBlock>{`curl -H "Authorization: Bearer $CERTSCORE_API_KEY" \\
   "https://certscore.ai/api/v2/domains/ergoveritas.com/latest/pre-consent-cookies-trackers"`}</CodeBlock>
             <p className="max-w-3xl text-sm leading-7 text-slate-600">
-              CertScore.ai outputs are automated public-web observations for review. They are not legal advice, certification, or a compliance determination.
+              CertScore.ai outputs are automated public-web observations for human and agentic review. They are not legal advice, certification, or a compliance determination.
             </p>
           </div>
         </Section>

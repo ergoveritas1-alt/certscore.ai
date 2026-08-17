@@ -1859,9 +1859,9 @@ function buildEvidenceArtifact(input: {
     surfacedResults: input.base.surfacedResults,
     transportSecurity: input.base.transportSecurity,
     evidenceSafetyNotes: [
-      "This packet contains bounded structured evidence for review, not raw browser capture.",
+      "This packet contains bounded structured evidence for human and agentic review, not raw browser capture.",
       "Raw cookie values, raw request/response bodies, sensitive payloads, full DOM, raw Nano reasoning, and unredacted query values are not included.",
-      "CertScore.ai outputs are automated public-web observations for review and are not legal advice or a compliance determination."
+      "CertScore.ai outputs are automated public-web observations for human and agentic review and are not legal advice or a compliance determination."
     ],
     projectionDiagnostics: {
       projectionWarnings: capArray(

@@ -4,7 +4,7 @@ CertScore MCP is distributed to external macOS MCP clients through Homebrew. The
 
 The hosted Streamable HTTP runtime is a separate deployment of the same tool contracts at `https://mcp.certscore.ai/mcp`. Releasing Homebrew does not update that service; the isolated MCP ECS workflow must also deploy and verify the matching version.
 
-CertScore outputs are automated public-web observations for review. They are not legal advice, certification, or a compliance determination.
+CertScore outputs are automated public-web observations for human and agentic review. They are not legal advice, certification, or a compliance determination.
 
 ## Build
 

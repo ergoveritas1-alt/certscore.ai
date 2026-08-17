@@ -35,7 +35,7 @@ const report = {
   coverage: {
     limitations: ["Automated public-web scan only."]
   },
-  disclaimer: "Automated public-web observations for review."
+  disclaimer: "Automated public-web observations for human and agentic review."
 } satisfies PulseResult;
 
 function publicFinding(id: string, text = "Observed evidence.") {
@@ -639,7 +639,7 @@ test("scan bundle text exposes compact row evidence, neutral score terminology, 
   assert.match(text, /cookies=visitor_id/);
   assert.match(text, /first observed=1\.698s/);
   assert.match(text, /public_report_projection\/pre_consent\/third_party/);
-  assert.match(text, /automated public-web observations for human review/i);
+  assert.match(text, /automated public-web observations for human and agentic review/i);
   assert.match(text, /not legal advice, certification, or a compliance determination/i);
   assert.match(text, /Report only observed CertScore evidence and persisted CertScore classifications/i);
   assert.match(text, /Without corresponding captured post-action evidence, do not infer what Accept, Reject, Decline, or another consent action would do/i);
@@ -859,7 +859,7 @@ test("scan bundle text remains bounded while preserving interpretation guidance"
   assert.ok(text.length <= 8_000);
   assert.match(text.split("\n")[0] ?? "", /^Response contract:/);
   assert.match(text, /additional returned pre-consent rows? .*omitted from TextContent/i);
-  assert.match(text, /automated public-web observations for human review/i);
+  assert.match(text, /automated public-web observations for human and agentic review/i);
   assert.match(text, /the scan does not establish what happens after that action/i);
   assert.match(text, /not regulatory criticality or legal exposure/i);
 });
@@ -949,7 +949,7 @@ test("boundEvidencePacket truncates oversized evidence packets with MCP metadata
         exampleEvents: Array.from({ length: 20 }, () => ({ value: "y".repeat(1_000) }))
       }
     })),
-    disclaimer: "Automated public-web observations for review."
+    disclaimer: "Automated public-web observations for human and agentic review."
   };
 
   const result = boundEvidencePacket(payload, 20_000) as Record<string, unknown>;

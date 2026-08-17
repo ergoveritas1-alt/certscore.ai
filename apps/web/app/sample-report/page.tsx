@@ -39,7 +39,7 @@ const evidenceRows = [
   {
     signal: "Disclosure consistency",
     observation: "The privacy text described analytics and advertising tooling, but observed runtime behavior should be reviewed against current configuration.",
-    evidence: "Policy snippets are retained with source URLs for human review."
+    evidence: "Policy snippets are retained with source URLs for human and agentic review."
   },
   {
     signal: "Accessibility signals",
@@ -89,7 +89,7 @@ export default function SampleReportPage() {
               />
             </div>
             <p className="text-sm leading-6 text-slate-500">
-              Sample content is illustrative. CertScore.ai surfaces observations for review and does not provide legal advice, certification, or compliance determinations.
+              Sample content is illustrative. CertScore.ai surfaces observations for human and agentic review and does not provide legal advice, certification, or compliance determinations.
             </p>
           </div>
 

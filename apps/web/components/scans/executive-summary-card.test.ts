@@ -2695,7 +2695,7 @@ test("ExecutiveSummaryCard renders structured pre-consent JSON evidence", () => 
   assert.match(html, /Confirm whether these services are intentionally allowed before consent or should be gated by consent controls\./);
   assert.match(html, /Learn more/);
   assert.doesNotMatch(html, /Evidence basis/);
-  assert.doesNotMatch(html, /No accept, reject, manage, or close interaction was recorded before the retained request evidence\. Representative vendors: Google Tag Manager and HubSpot\. Automated public-web observation for review; not legal advice, certification, or a compliance determination\./);
+  assert.doesNotMatch(html, /No accept, reject, manage, or close interaction was recorded before the retained request evidence\. Representative vendors: Google Tag Manager and HubSpot\. Automated public-web observation for human and agentic review; not legal advice, certification, or a compliance determination\./);
   assert.doesNotMatch(html, /Why this matters/);
   assert.doesNotMatch(html, /Review and remediation starting points/);
   assert.doesNotMatch(html, /Observed runtime behavior:/);

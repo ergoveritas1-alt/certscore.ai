@@ -3,7 +3,7 @@ import test from "node:test";
 
 const baseUrl = process.env.PULSE_SMOKE_BASE_URL?.replace(/\/+$/, "");
 const allowedPulseStatuses = new Set([200, 202, 400, 404, 429]);
-const standardDisclaimerPattern = /automated public-web observations for review/i;
+const standardDisclaimerPattern = /automated public-web observations for human and agentic review/i;
 
 type SmokeTarget = {
   path: string;

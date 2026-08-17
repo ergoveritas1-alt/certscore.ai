@@ -239,7 +239,7 @@ export function GuideTemplate({
           </CardHeader>
           <CardContent className="space-y-3 text-sm leading-6 text-slate-600">
             <p>
-              This CertScore.ai guide explains {title.toLowerCase()} as an observable public website signal for review.
+              This CertScore.ai guide explains {title.toLowerCase()} as an observable public website signal for human and agentic review.
               CertScore.ai scans public website behavior around tracking, cookies, consent, session recording indicators, fingerprinting-related signals, accessibility, and disclosures.
             </p>
             <p>

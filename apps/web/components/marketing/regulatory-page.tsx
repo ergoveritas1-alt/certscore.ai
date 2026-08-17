@@ -169,7 +169,7 @@ export function RegulatoryPage({ config }: { config: RegulatoryPageConfig }) {
       <section className="mx-auto max-w-6xl px-6 py-14">
         <div className="max-w-3xl space-y-3">
           <Badge tone="neutral">Review signals</Badge>
-          <h2 className="text-3xl font-semibold tracking-tight text-slate-950">What CertScore.ai can surface for review</h2>
+          <h2 className="text-3xl font-semibold tracking-tight text-slate-950">What CertScore.ai can surface for human and agentic review</h2>
         </div>
         <div className="mt-8 grid gap-5 md:grid-cols-3">
           {config.signalCards.map((card) => (
@@ -187,7 +187,7 @@ export function RegulatoryPage({ config }: { config: RegulatoryPageConfig }) {
         <div className="mx-auto max-w-6xl px-6 py-14">
           <div className="max-w-3xl space-y-3">
             <Badge tone="neutral">Regulatory context</Badge>
-            <h2 className="text-3xl font-semibold tracking-tight text-slate-950">Context for human review</h2>
+            <h2 className="text-3xl font-semibold tracking-tight text-slate-950">Context for human and agentic review</h2>
           </div>
           <div className="mt-8 grid gap-5 md:grid-cols-2">
             {config.reviewContexts.map((context) => (
@@ -249,7 +249,7 @@ export function RegulatoryPage({ config }: { config: RegulatoryPageConfig }) {
         <div className="border border-slate-200 bg-white p-6">
           <DomainScanForm
             buttonLabel="Start a trial scan"
-            helperText="Public website scans surface automated observations for review."
+            helperText="Public website scans surface automated observations for human and agentic review."
             inputLabel="Website domain"
             mode="preview"
             scanSource="unknown"

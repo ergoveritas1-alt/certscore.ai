@@ -8,7 +8,7 @@ import {
 const config: SolutionPageConfig = {
   badge: "Cookie consent scanner",
   description:
-    "Review public websites for cookie consent timing, third-party cookies before consent, CMP behavior, and reject-path tracking signals. Evidence-backed observations for review.",
+    "Review public websites for cookie consent timing, third-party cookies before consent, CMP behavior, and reject-path tracking signals. Evidence-backed observations for human and agentic review.",
   intro:
     "CertScore.ai scans how public websites behave around cookie consent, including what loads before consent, what writes cookies or storage, and whether reject-style choices appear to reduce non-essential activity.",
   path: "/solutions/cookie-consent-scanner",
@@ -23,7 +23,7 @@ const config: SolutionPageConfig = {
     {
       title: "Direct answer",
       body:
-        "A cookie consent scanner observes whether cookies, storage, and related tracking activity appear before or after a recorded consent state. CertScore.ai surfaces evidence for review rather than declaring legal outcomes."
+        "A cookie consent scanner observes whether cookies, storage, and related tracking activity appear before or after a recorded consent state. CertScore.ai surfaces evidence for human and agentic review rather than declaring legal outcomes."
     },
     {
       title: "What CertScore.ai checks",

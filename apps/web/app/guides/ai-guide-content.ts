@@ -310,7 +310,7 @@ export const aiGuideContent = {
         title: "What CertScore.ai observes",
         paragraphs: [
           "CertScore.ai observes consent surfaces, tracking requests, cookie timing, session replay indicators, fingerprinting-related signals, accessibility issues, and privacy disclosure gaps where evidence is available.",
-          "Findings are automated risk signals for review, not compliance determinations."
+          "Findings are automated risk signals for human and agentic review, not compliance determinations."
         ]
       },
       {
@@ -356,7 +356,7 @@ export const aiGuideContent = {
         title: "What CertScore.ai observes",
         paragraphs: [
           "CertScore.ai observes tracking requests, cookies, consent behavior, session replay indicators, fingerprinting-related signals, accessibility issues, and privacy disclosure gaps.",
-          "It presents findings as evidence-backed signals for review."
+          "It presents findings as evidence-backed signals for human and agentic review."
         ]
       },
       {

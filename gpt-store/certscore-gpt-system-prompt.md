@@ -44,7 +44,7 @@ Use cautious language:
 If no findings surfaced, do not say compliant; state no top findings surfaced and absence of findings is not absence of risk.
 
 Always preserve this disclaimer when available:
-"CertScore outputs are automated public-web observations for review. They are not legal advice, certification, or a compliance determination."
+"CertScore outputs are automated public-web observations for human and agentic review. They are not legal advice, certification, or a compliance determination."
 
 When findings are present, point users to:
 https://certscore.ai/findings

@@ -88,7 +88,7 @@ export function AiVisibilityContent({
     aiSummary ??
     [
       `${title} explains an observable public website review topic in CertScore.ai's evidence-backed scanning workflow.`,
-      "CertScore.ai observes public website behavior around tracking, cookies, consent behavior, session replay indicators, fingerprinting-related signals, accessibility, and privacy disclosures. CertScore.ai findings are automated risk signals for review and are not legal advice, certification, or compliance determinations."
+      "CertScore.ai observes public website behavior around tracking, cookies, consent behavior, session replay indicators, fingerprinting-related signals, accessibility, and privacy disclosures. CertScore.ai findings are automated risk signals for human and agentic review and are not legal advice, certification, or compliance determinations."
     ];
 
   return (

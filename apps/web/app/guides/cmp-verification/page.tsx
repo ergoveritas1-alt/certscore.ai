@@ -30,7 +30,7 @@ const config: GrowthContentPageConfig = {
       title: "Signals to compare",
       paragraphs: [
         "Compare banner presence, available choices, request timing, cookie timing, vendor domains, and whether reject appears to reduce non-essential tracking.",
-        "A scan can surface evidence for review, but it should not be treated as proof of a legal outcome."
+        "A scan can surface evidence for human and agentic review, but it should not be treated as proof of a legal outcome."
       ]
     },
     {

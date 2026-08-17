@@ -33,7 +33,7 @@ export default function WebsiteScanningBasicsPage() {
         "Policy and disclosure checks can identify missing or thin public explanations that need human review."
       ]}
       automatedScanningHelp={[
-        "Automated scanning is strongest when it records evidence consistently and exposes the underlying JSON for review.",
+        "Automated scanning is strongest when it records evidence consistently and exposes the underlying JSON for human and agentic review.",
         "It should identify uncertainty, coverage limits, and retained snippets rather than hiding them behind a simple score.",
         "Teams can compare repeated scans to see whether changes improved the observed public behavior."
       ]}
