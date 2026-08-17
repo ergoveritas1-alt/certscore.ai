@@ -328,7 +328,10 @@ async function handleMcp(req: IncomingMessage, res: ServerResponse, anonymous: b
         : undefined,
       anonymousSurface: anonymous ? (light ? "mcp_light" : "mcp_anonymous") : null,
       timeout: env.CERTSCORE_REQUEST_TIMEOUT_MS,
-      toolProfile: light ? "light" : "full"
+      toolProfile: light ? "light" : "full",
+      exampleDomainDemoUrl: anonymous
+        ? "https://ergoveritas.com/.well-known/certscore-canary/sentinels/broad-baseline.html"
+        : null
     });
     transport.onclose = () => {
       if (transport.sessionId) {

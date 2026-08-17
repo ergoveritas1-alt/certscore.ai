@@ -267,7 +267,13 @@ export const mcpScanSiteOutputSchema = z
     links: apiV2ScanResourceSchema.shape.links.optional(),
     recommendedNextTool: z.enum(["certscore_get_scan_status", "certscore_get_scan_bundle"]).nullable(),
     recommendedNextAction: z.string(),
-    observationOnlyDisclaimer: z.string()
+    observationOnlyDisclaimer: z.string(),
+    demoSubstitution: z.object({
+      requestedUrl: z.string(),
+      effectiveUrl: z.string().url(),
+      reason: z.literal("iana_example_domain"),
+      message: z.string()
+    }).strict().optional()
   })
   .passthrough();
 

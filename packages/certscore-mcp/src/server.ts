@@ -14,6 +14,7 @@ export interface CertScoreMcpOptions {
   anonymousSurface?: "mcp_light" | "mcp_anonymous" | null;
   timeout?: number;
   toolProfile?: "full" | "light";
+  exampleDomainDemoUrl?: string | null;
 }
 
 type CertScoreMcpToolName = (typeof certScoreMcpToolContracts)[number]["name"];
@@ -46,6 +47,44 @@ type GetLatestDomainScanInput = { domain: string; scanFrom?: "eu_de" | "eu_ie" |
 type GetLatestDomainPreConsentCookiesTrackersInput = { domain: string; maxRows?: number; scanFrom?: "eu_de" | "eu_ie" | "california" };
 
 const DEFAULT_MCP_SCAN_WAIT_MS = 45_000;
+
+type ExampleDomainDemoSubstitution = {
+  requestedUrl: string;
+  effectiveUrl: string;
+  reason: "iana_example_domain";
+  message: string;
+};
+
+function exampleDomainDemoSubstitution(requestedUrl: string, demoUrl: string | null | undefined): ExampleDomainDemoSubstitution | null {
+  if (!demoUrl) return null;
+  try {
+    const parsed = new URL(requestedUrl.includes("://") ? requestedUrl : `https://${requestedUrl}`);
+    const hostname = parsed.hostname.toLowerCase().replace(/\.$/, "");
+    const reserved = ["example.com", "example.net", "example.org"].some(
+      (domain) => hostname === domain || hostname.endsWith(`.${domain}`)
+    );
+    if (!reserved) return null;
+    return {
+      requestedUrl,
+      effectiveUrl: demoUrl,
+      reason: "iana_example_domain",
+      message: "The requested IANA example domain is a documentation placeholder, so CertScore scanned its controlled demonstration site instead. Findings describe the effective URL, not the requested placeholder."
+    };
+  } catch {
+    return null;
+  }
+}
+
+function withExampleDomainDemo<T extends Record<string, any>>(value: T, substitution: ExampleDomainDemoSubstitution | null) {
+  return substitution ? { ...value, demoSubstitution: substitution } : value;
+}
+
+function exampleDomainDemoText(value: Record<string, any>, substitution: ExampleDomainDemoSubstitution | null) {
+  if (!substitution) return undefined;
+  const status = typeof value.status === "string" ? ` Status=${value.status}.` : "";
+  const scanId = typeof value.scanId === "string" ? ` ScanId=${value.scanId}.` : "";
+  return `${substitution.message}${status}${scanId} Full result and substitution provenance are in structuredContent.`;
+}
 
 async function retryTransientOriginFailure<T>(operation: () => Promise<T>): Promise<T> {
   try {
@@ -125,13 +164,16 @@ export function createCertScoreMcpServer(options: CertScoreMcpOptions = {}) {
     toolContract("certscore_scan_site"),
     async (input: CreateScanInput, extra: McpRequestExtra) => {
       const client = clientForRequest(extra);
+      const demoSubstitution = exampleDomainDemoSubstitution(input.url, options.exampleDomainDemoUrl);
+      const effectiveUrl = demoSubstitution?.effectiveUrl ?? input.url;
       try {
-        const created = await client.scans.create(input.url, {
+        const created = await client.scans.create(effectiveUrl, {
           freshness: input.freshness ?? "latest",
           scanFrom: input.scanFrom
         });
         if (input.waitForCompletion === false || created.type === "certscore_scan") {
-          return toToolResult(withMcpAgentGuidance(created as unknown as Record<string, any>));
+          const guided = withExampleDomainDemo(withMcpAgentGuidance(created as unknown as Record<string, any>), demoSubstitution);
+          return toToolResult(guided, exampleDomainDemoText(guided, demoSubstitution));
         }
         try {
           const internalMcpOperation = { operation: "scan_site_wait" as const, scanId: created.scanId ?? created.scan_id ?? created.jobId };
@@ -139,10 +181,11 @@ export function createCertScoreMcpServer(options: CertScoreMcpOptions = {}) {
             maxWaitMs: Math.min(input.maxWaitSeconds ? input.maxWaitSeconds * 1_000 : DEFAULT_MCP_SCAN_WAIT_MS, DEFAULT_MCP_SCAN_WAIT_MS),
             internalMcpOperation
           });
-          return toToolResult(withMcpAgentGuidance({
+          const guided = withExampleDomainDemo(withMcpAgentGuidance({
             ...completed,
             ...scanCreationMetadata(created as unknown as Record<string, unknown>)
-          }));
+          }), demoSubstitution);
+          return toToolResult(guided, exampleDomainDemoText(guided, demoSubstitution));
         } catch (error) {
           const scanId = created.scanId ?? created.scan_id;
           console.warn(JSON.stringify({
@@ -154,10 +197,11 @@ export function createCertScoreMcpServer(options: CertScoreMcpOptions = {}) {
           }));
           if (error instanceof CertScoreTimeoutError && scanId) {
             try {
-              return toToolResult(withMcpAgentGuidance({
+              const guided = withExampleDomainDemo(withMcpAgentGuidance({
                 ...(await client.scans.status(scanId, { internalMcpOperation: { operation: "scan_site_wait", scanId } })),
                 ...scanCreationMetadata(created as unknown as Record<string, unknown>)
-              }));
+              }), demoSubstitution);
+              return toToolResult(guided, exampleDomainDemoText(guided, demoSubstitution));
             } catch {
               // Creation already succeeded. Preserve that stable identity when
               // the follow-up status read is briefly unavailable.
@@ -168,7 +212,8 @@ export function createCertScoreMcpServer(options: CertScoreMcpOptions = {}) {
           // API has accepted a scan, never turn a transient polling or hydration
           // failure into an identity-less tool error that encourages callers to
           // submit a second, non-idempotent certscore_scan_site request.
-          return toToolResult(withMcpAgentGuidance(created as unknown as Record<string, any>));
+          const guided = withExampleDomainDemo(withMcpAgentGuidance(created as unknown as Record<string, any>), demoSubstitution);
+          return toToolResult(guided, exampleDomainDemoText(guided, demoSubstitution));
         }
       } catch (error) {
         return toToolError(error);

@@ -523,6 +523,44 @@ test("certscore_scan_site identifies an existing completed scan reuse", async ()
   }
 });
 
+test("certscore_scan_site transparently substitutes a controlled demo for IANA example domains when enabled", async () => {
+  const demoUrl = "https://ergoveritas.com/.well-known/certscore-canary/sentinels/broad-baseline.html";
+  const mock = installFetch([{
+    status: 200,
+    body: {
+      type: "certscore_scan",
+      scanId: "scan_demo",
+      domain: "ergoveritas.com",
+      status: "completed",
+      score: 81,
+      executionMode: "reused_scan",
+      reused: true,
+      freshnessDecision: "reused_existing_scan"
+    }
+  }]);
+  try {
+    await withMcpClient(async (client) => {
+      const raw = await client.callTool({
+        name: "certscore_scan_site",
+        arguments: { url: "https://www.example.com/test" }
+      });
+      const result = parseToolJson(raw);
+      assert.equal(result.domain, "ergoveritas.com");
+      assert.deepEqual(result.demoSubstitution, {
+        requestedUrl: "https://www.example.com/test",
+        effectiveUrl: demoUrl,
+        reason: "iana_example_domain",
+        message: "The requested IANA example domain is a documentation placeholder, so CertScore scanned its controlled demonstration site instead. Findings describe the effective URL, not the requested placeholder."
+      });
+      assert.equal(JSON.parse(mock.requestBodies[0] ?? "{}").url, demoUrl);
+      assert.match(raw.content[0]?.type === "text" ? raw.content[0].text : "", /Findings describe the effective URL/);
+      assertToolOutputSchema("certscore_scan_site", result);
+    }, { exampleDomainDemoUrl: demoUrl, toolProfile: "light" });
+  } finally {
+    mock.restore();
+  }
+});
+
 test("certscore_scan_site forwards EU-Germany, EU-Ireland, and California contexts", async () => {
   for (const scanFrom of ["eu_de", "eu_ie", "california"] as const) {
     const mock = installFetch([{ status: 202, body: { type: "certscore_scan_job", status: "queued", jobId: `job_${scanFrom}`, scanId: `scan_${scanFrom}` } }]);
