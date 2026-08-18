@@ -18,6 +18,16 @@ output "ecs_certscore_service_name" {
   value       = aws_ecs_service.certscore.name
 }
 
+output "ecs_materializer_service_name" {
+  description = "Dedicated ECS service for canonical report materialization."
+  value       = aws_ecs_service.materializer.name
+}
+
+output "alb_access_logs_bucket_name" {
+  description = "S3 bucket receiving retained public ALB access logs."
+  value       = local.alb_access_logs_bucket_name
+}
+
 output "github_actions_deploy_role_arn" {
   description = "IAM role ARN for the GitHub Actions public web deploy workflow."
   value       = aws_iam_role.github_actions_deploy.arn

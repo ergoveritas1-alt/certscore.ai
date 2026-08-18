@@ -54,6 +54,12 @@ type RecentScanAvailabilityPayload = {
   hasRecentReusableScan?: boolean | null;
 };
 
+type ScanSubmitAttempt = {
+  ok: boolean;
+  payload: ScanSubmitPayload;
+  status: number;
+};
+
 function looksLikeHtmlDocument(raw: string) {
   const prefix = raw.trimStart().slice(0, 120).toLowerCase();
   return prefix.startsWith("<!doctype html") || prefix.startsWith("<html") || prefix.includes("<html");
@@ -99,6 +105,23 @@ export function buildRecentScanAvailabilityUrl(input: { domain: string; scanFrom
   });
 
   return `/api/full-scan/reuse-availability?${params.toString()}`;
+}
+
+export function buildScanSubmissionStatusUrl(requestId: string) {
+  return `/api/full-scan/submission-status?requestId=${encodeURIComponent(requestId)}`;
+}
+
+export function shouldRecoverScanSubmission(attempt: ScanSubmitAttempt) {
+  return attempt.payload.code === "non_json_response" || attempt.status === 502 ||
+    attempt.status === 503 || attempt.status === 504;
+}
+
+async function readScanSubmitAttempt(response: Response): Promise<ScanSubmitAttempt> {
+  return {
+    ok: response.ok,
+    payload: parseScanSubmitPayload(await response.text()),
+    status: response.status
+  };
 }
 
 export function shouldExpectRecentScanReuse(input: {
@@ -753,8 +776,8 @@ export function DomainScanForm({
         startedAtMs: submissionStartedAtMs
       });
 
-      const response = await fetch(mode === "preview" ? "/api/preview-scan" : "/api/full-scan", {
-        body: JSON.stringify({
+      const submitUrl = mode === "preview" ? "/api/preview-scan" : "/api/full-scan";
+      const submitBody = JSON.stringify({
           domain: submittedDomain,
           campaignAttribution,
           forceNewScan: showFreshRescanOption ? freshRescan : false,
@@ -765,18 +788,40 @@ export function DomainScanForm({
               : true,
           scanFrom: scanFrom as ServerScanFrom,
           requestId
-        }),
-        headers: {
+        });
+      const submitHeaders = {
           "Content-Type": "application/json",
           ...(requestSource ? { "x-certscore-scan-source": requestSource } : {})
-        },
+        };
+      const postSubmission = () => fetch(submitUrl, {
+        body: submitBody,
+        headers: submitHeaders,
         method: "POST"
-      });
+      }).then(readScanSubmitAttempt);
 
-      const payload = parseScanSubmitPayload(await response.text());
+      let attempt = await postSubmission();
+      if (mode === "full" && shouldRecoverScanSubmission(attempt)) {
+        setMessageTone("info");
+        setErrorMessage("We couldn't confirm the scan submission. Checking its status…");
+        await new Promise((resolve) => window.setTimeout(resolve, 250));
+        attempt = await postSubmission();
+
+        if (shouldRecoverScanSubmission(attempt)) {
+          const statusResponse = await fetch(buildScanSubmissionStatusUrl(requestId), {
+            cache: "no-store",
+            headers: requestSource ? { "x-certscore-scan-source": requestSource } : undefined
+          });
+          if (statusResponse.ok) {
+            attempt = await readScanSubmitAttempt(statusResponse);
+          }
+        }
+      }
+
+      const { payload } = attempt;
       const destination = getScanSubmitDestination(mode, payload);
 
-      if (!response.ok) {
+      if (!attempt.ok) {
+        setMessageTone("error");
         clearPendingScanSession(requestId);
         recordScanSubmitFailure({
           code: payload.code,
@@ -784,7 +829,7 @@ export function DomainScanForm({
           error: payload.error,
           mode,
           stage: "api_rejected",
-          status: response.status
+          status: attempt.status
         });
         setErrorMessage(getScanSubmitErrorMessage(mode, payload));
         reportRescanTransition?.cancel();
@@ -801,7 +846,7 @@ export function DomainScanForm({
           error: payload.error,
           mode,
           stage: "missing_destination",
-          status: response.status
+          status: attempt.status
         });
         setErrorMessage("The scan was accepted, but the result link was missing. Refresh and check scan history.");
         reportRescanTransition?.cancel();

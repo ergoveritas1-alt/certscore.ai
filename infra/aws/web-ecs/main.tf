@@ -1,5 +1,9 @@
 data "aws_caller_identity" "current" {}
 
+data "aws_ecs_task_definition" "certscore_live" {
+  task_definition = "${var.project_name}-certscore"
+}
+
 data "aws_secretsmanager_secret" "oauth_jwt" {
   name = "certscore/oauth-jwt-secret"
 }
@@ -20,15 +24,20 @@ check "s3_static_credentials_are_paired" {
 }
 
 locals {
-  prefix                      = var.project_name
-  vpc_id                      = var.existing_vpc_id
-  public_subnets              = var.public_subnet_ids
-  private_subnets             = var.private_subnet_ids
-  certificate_arn             = trimspace(var.existing_certificate_arn) != "" ? var.existing_certificate_arn : null
-  mcp_certificate_arn         = trimspace(var.mcp_certificate_arn) != "" ? var.mcp_certificate_arn : null
-  create_cluster              = trimspace(var.existing_ecs_cluster_name) == ""
-  ecs_cluster_name            = local.create_cluster ? aws_ecs_cluster.web[0].name : var.existing_ecs_cluster_name
-  common_tags                 = merge(var.tags, { Project = local.prefix, ManagedBy = "terraform", Stack = "web-ecs" })
+  prefix              = var.project_name
+  vpc_id              = var.existing_vpc_id
+  public_subnets      = var.public_subnet_ids
+  private_subnets     = var.private_subnet_ids
+  certificate_arn     = trimspace(var.existing_certificate_arn) != "" ? var.existing_certificate_arn : null
+  mcp_certificate_arn = trimspace(var.mcp_certificate_arn) != "" ? var.mcp_certificate_arn : null
+  create_cluster      = trimspace(var.existing_ecs_cluster_name) == ""
+  ecs_cluster_name    = local.create_cluster ? aws_ecs_cluster.web[0].name : var.existing_ecs_cluster_name
+  common_tags         = merge(var.tags, { Project = local.prefix, ManagedBy = "terraform", Stack = "web-ecs" })
+  alb_access_logs_bucket_name = var.enable_alb_access_logs ? (
+    trimspace(var.alb_access_logs_bucket) != ""
+    ? var.alb_access_logs_bucket
+    : aws_s3_bucket.alb_access_logs[0].bucket
+  ) : ""
   v2_dag_lambda_function_name = "certscore-v2-dag-local-lambda"
   v2_dag_lambda_regions = {
     eu_de      = "eu-central-1"
@@ -205,15 +214,91 @@ resource "aws_lb" "web" {
   xff_header_processing_mode = "append"
 
   dynamic "access_logs" {
-    for_each = trimspace(var.alb_access_logs_bucket) != "" ? [1] : []
+    for_each = local.alb_access_logs_bucket_name != "" ? [1] : []
     content {
-      bucket  = var.alb_access_logs_bucket
+      bucket  = local.alb_access_logs_bucket_name
       enabled = true
       prefix  = var.alb_access_logs_prefix
     }
   }
 
+  depends_on = [aws_s3_bucket_policy.alb_access_logs]
+
   tags = merge(local.common_tags, { Name = "${local.prefix}-alb" })
+}
+
+resource "aws_s3_bucket" "alb_access_logs" {
+  count = var.enable_alb_access_logs && trimspace(var.alb_access_logs_bucket) == "" ? 1 : 0
+
+  bucket = "${local.prefix}-alb-access-logs-${data.aws_caller_identity.current.account_id}-${var.aws_region}"
+  tags   = merge(local.common_tags, { Name = "${local.prefix}-alb-access-logs" })
+}
+
+resource "aws_s3_bucket_public_access_block" "alb_access_logs" {
+  count = length(aws_s3_bucket.alb_access_logs)
+
+  bucket                  = aws_s3_bucket.alb_access_logs[0].id
+  block_public_acls       = true
+  block_public_policy     = true
+  ignore_public_acls      = true
+  restrict_public_buckets = true
+}
+
+resource "aws_s3_bucket_server_side_encryption_configuration" "alb_access_logs" {
+  count = length(aws_s3_bucket.alb_access_logs)
+
+  bucket = aws_s3_bucket.alb_access_logs[0].id
+  rule {
+    apply_server_side_encryption_by_default {
+      sse_algorithm = "AES256"
+    }
+  }
+}
+
+resource "aws_s3_bucket_lifecycle_configuration" "alb_access_logs" {
+  count = length(aws_s3_bucket.alb_access_logs)
+
+  bucket = aws_s3_bucket.alb_access_logs[0].id
+  rule {
+    id     = "expire-alb-access-logs"
+    status = "Enabled"
+    filter {}
+    expiration { days = 30 }
+  }
+}
+
+resource "aws_s3_bucket_policy" "alb_access_logs" {
+  count = length(aws_s3_bucket.alb_access_logs)
+
+  bucket = aws_s3_bucket.alb_access_logs[0].id
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Sid       = "AllowELBLogDeliveryAclCheck"
+        Effect    = "Allow"
+        Principal = { Service = "logdelivery.elasticloadbalancing.amazonaws.com" }
+        Action    = "s3:GetBucketAcl"
+        Resource  = aws_s3_bucket.alb_access_logs[0].arn
+        Condition = { StringEquals = { "aws:SourceAccount" = data.aws_caller_identity.current.account_id } }
+      },
+      {
+        Sid       = "AllowELBLogDeliveryWrite"
+        Effect    = "Allow"
+        Principal = { Service = "logdelivery.elasticloadbalancing.amazonaws.com" }
+        Action    = "s3:PutObject"
+        Resource  = "${aws_s3_bucket.alb_access_logs[0].arn}/${trim(var.alb_access_logs_prefix, "/")}/AWSLogs/${data.aws_caller_identity.current.account_id}/*"
+        Condition = {
+          StringEquals = {
+            "aws:SourceAccount" = data.aws_caller_identity.current.account_id
+            "s3:x-amz-acl"      = "bucket-owner-full-control"
+          }
+        }
+      }
+    ]
+  })
+
+  depends_on = [aws_s3_bucket_public_access_block.alb_access_logs]
 }
 
 resource "aws_wafv2_web_acl" "public" {
@@ -311,6 +396,28 @@ resource "aws_lb_target_group" "certscore" {
   }
 
   tags = merge(local.common_tags, { Name = "${local.prefix}-certscore-tg" })
+}
+
+resource "aws_lb_target_group" "materializer" {
+  name        = substr(replace("${local.prefix}-materializer", "/[^a-zA-Z0-9-]/", "-"), 0, 32)
+  port        = 3000
+  protocol    = "HTTP"
+  target_type = "ip"
+  vpc_id      = local.vpc_id
+
+  health_check {
+    enabled             = true
+    healthy_threshold   = 2
+    interval            = 30
+    matcher             = "200-399"
+    path                = "/"
+    port                = "traffic-port"
+    protocol            = "HTTP"
+    timeout             = 5
+    unhealthy_threshold = 3
+  }
+
+  tags = merge(local.common_tags, { Name = "${local.prefix}-materializer-tg" })
 }
 
 resource "aws_lb_target_group" "mcp_legacy" {
@@ -413,6 +520,53 @@ resource "aws_lb_listener_certificate" "mcp" {
 
   listener_arn    = aws_lb_listener.https[0].arn
   certificate_arn = local.mcp_certificate_arn
+}
+
+resource "aws_lb_listener_rule" "materializer" {
+  count = local.certificate_arn != null ? 1 : 0
+
+  listener_arn = aws_lb_listener.https[0].arn
+  priority     = 80
+
+  action {
+    type             = "forward"
+    target_group_arn = aws_lb_target_group.materializer.arn
+  }
+
+  condition {
+    host_header {
+      values = [var.certscore_domain_name, "www.${var.certscore_domain_name}"]
+    }
+  }
+
+  condition {
+    path_pattern {
+      values = ["/api/internal/scan-score-materialization"]
+    }
+  }
+
+  depends_on = [aws_ecs_service.materializer]
+}
+
+# Associate the target group before ECS service creation without routing real
+# materialization traffic to an empty target group. The live rule is created
+# only after ECS reports the dedicated service steady.
+resource "aws_lb_listener_rule" "materializer_staging_association" {
+  count = local.certificate_arn != null ? 1 : 0
+
+  listener_arn = aws_lb_listener.https[0].arn
+  priority     = 81
+
+  action {
+    type             = "forward"
+    target_group_arn = aws_lb_target_group.materializer.arn
+  }
+
+  condition {
+    host_header {
+      values = ["materializer-staging.invalid"]
+    }
+  }
 }
 
 resource "aws_lb_listener_rule" "mcp_host" {
@@ -1048,6 +1202,39 @@ resource "aws_ecs_service" "certscore" {
   tags = local.common_tags
 }
 
+resource "aws_ecs_service" "materializer" {
+  name                               = "${local.prefix}-materializer"
+  cluster                            = local.ecs_cluster_name
+  task_definition                    = data.aws_ecs_task_definition.certscore_live.arn
+  desired_count                      = var.materializer_desired_count
+  launch_type                        = "FARGATE"
+  enable_execute_command             = true
+  deployment_maximum_percent         = 200
+  deployment_minimum_healthy_percent = 100
+
+  network_configuration {
+    assign_public_ip = var.assign_public_ip
+    security_groups  = [aws_security_group.ecs_tasks.id]
+    subnets          = local.private_subnets
+  }
+
+  load_balancer {
+    target_group_arn = aws_lb_target_group.materializer.arn
+    container_name   = "certscore-web"
+    container_port   = 3000
+  }
+
+  deployment_circuit_breaker {
+    enable   = true
+    rollback = true
+  }
+
+  health_check_grace_period_seconds = 90
+  wait_for_steady_state             = true
+  depends_on                        = [aws_lb_listener_rule.materializer_staging_association]
+  tags                              = local.common_tags
+}
+
 resource "aws_ecs_service" "mcp" {
   name                               = "${local.prefix}-mcp"
   cluster                            = local.ecs_cluster_name
@@ -1132,6 +1319,41 @@ resource "aws_cloudwatch_metric_alarm" "certscore_web_cpu_sustained" {
   }
 
   tags = local.common_tags
+}
+
+resource "aws_cloudwatch_metric_alarm" "public_alb_gateway_5xx" {
+  alarm_name          = "${local.prefix}-public-alb-gateway-5xx"
+  alarm_description   = "The public ALB generated gateway 5xx responses in at least two of three minutes."
+  comparison_operator = "GreaterThanOrEqualToThreshold"
+  evaluation_periods  = 3
+  datapoints_to_alarm = 2
+  metric_name         = "HTTPCode_ELB_5XX_Count"
+  namespace           = "AWS/ApplicationELB"
+  period              = 60
+  statistic           = "Sum"
+  threshold           = 1
+  treat_missing_data  = "notBreaching"
+  alarm_actions       = var.alarm_actions
+  ok_actions          = var.alarm_actions
+  dimensions          = { LoadBalancer = aws_lb.web.arn_suffix }
+  tags                = local.common_tags
+}
+
+resource "aws_cloudwatch_metric_alarm" "public_alb_target_connection_errors" {
+  alarm_name          = "${local.prefix}-public-alb-target-connection-errors"
+  alarm_description   = "The public ALB could not establish or retain target connections."
+  comparison_operator = "GreaterThanOrEqualToThreshold"
+  evaluation_periods  = 1
+  metric_name         = "TargetConnectionErrorCount"
+  namespace           = "AWS/ApplicationELB"
+  period              = 60
+  statistic           = "Sum"
+  threshold           = 1
+  treat_missing_data  = "notBreaching"
+  alarm_actions       = var.alarm_actions
+  ok_actions          = var.alarm_actions
+  dimensions          = { LoadBalancer = aws_lb.web.arn_suffix }
+  tags                = local.common_tags
 }
 
 resource "aws_cloudwatch_log_metric_filter" "scan_progress_status_requests" {

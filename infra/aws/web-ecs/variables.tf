@@ -53,9 +53,15 @@ variable "assign_public_ip" {
 }
 
 variable "alb_access_logs_bucket" {
-  description = "Optional S3 bucket configured to accept ALB access logs. Leave empty to disable until the bucket policy is ready."
+  description = "Optional existing S3 bucket configured to accept ALB access logs. When empty and logging is enabled, this stack creates a dedicated bucket."
   type        = string
   default     = ""
+}
+
+variable "enable_alb_access_logs" {
+  description = "Retain public ALB access logs in S3 for gateway-error diagnosis."
+  type        = bool
+  default     = true
 }
 
 variable "alb_access_logs_prefix" {
@@ -344,6 +350,12 @@ variable "web_desired_count" {
   description = "Desired task count per public host."
   type        = number
   default     = 2
+}
+
+variable "materializer_desired_count" {
+  description = "Dedicated web-image task count for canonical report materialization."
+  type        = number
+  default     = 1
 }
 
 variable "web_autoscaling_min_capacity" {

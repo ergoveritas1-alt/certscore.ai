@@ -3,9 +3,11 @@ import test from "node:test";
 
 import {
   buildRecentScanAvailabilityUrl,
+  buildScanSubmissionStatusUrl,
   getScanSubmitDestination,
   parseScanSubmitPayload,
   restrictLocalExtensionScanFrom,
+  shouldRecoverScanSubmission,
   shouldExpectRecentScanReuse,
   shouldUseFullPageScanSubmissionTransition
 } from "./domain-scan-form";
@@ -44,6 +46,16 @@ test("buildRecentScanAvailabilityUrl targets the full scan reuse availability ch
     buildRecentScanAvailabilityUrl({ domain: "https://example.com/path?a=1", scanFrom: "eu_ie" }),
     "/api/full-scan/reuse-availability?domain=https%3A%2F%2Fexample.com%2Fpath%3Fa%3D1&scanFrom=eu_ie"
   );
+});
+
+test("submission recovery uses the opaque request id and only retries ambiguous gateway responses", () => {
+  assert.equal(
+    buildScanSubmissionStatusUrl("request/id"),
+    "/api/full-scan/submission-status?requestId=request%2Fid"
+  );
+  assert.equal(shouldRecoverScanSubmission({ ok: false, payload: {}, status: 502 }), true);
+  assert.equal(shouldRecoverScanSubmission({ ok: false, payload: { code: "non_json_response" }, status: 500 }), true);
+  assert.equal(shouldRecoverScanSubmission({ ok: false, payload: { code: "invalid_domain" }, status: 400 }), false);
 });
 
 test("known recent reuse opens the report without showing fresh-scan progress", () => {

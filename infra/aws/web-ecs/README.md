@@ -58,8 +58,15 @@ The stack expects you to supply an existing VPC and existing public and private 
 The example enables WAF with the AWS common managed rules in count mode and the
 source-IP rate rule in blocking mode. Review sampled managed-rule matches before
 changing the common rule group to blocking, especially for MCP JSON requests.
-ALB access logging remains disabled until `alb_access_logs_bucket` names a bucket
-whose policy permits regional Elastic Load Balancing log delivery.
+ALB access logging is enabled by default. When `alb_access_logs_bucket` is empty,
+the stack creates a private, encrypted bucket with a 30-day retention policy and
+the regional Elastic Load Balancing delivery policy. Supplying a bucket keeps
+bucket ownership and delivery policy management external to this stack.
+
+Canonical report materialization is routed by exact internal API path to the
+dedicated `${project_name}-materializer` ECS service. It runs the same immutable
+web image and database-backed canonical projection code, but its CPU work cannot
+starve public scan-submission requests on the main web targets.
 
 ## Existing AWS pattern this stack copies
 

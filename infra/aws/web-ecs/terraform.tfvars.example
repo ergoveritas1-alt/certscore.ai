@@ -15,6 +15,7 @@ private_subnet_ids        = ["subnet-053d0eaa45152d300", "subnet-000adac289b27c3
 assign_public_ip          = true
 enable_waf               = true
 waf_rate_limit           = 2000
+enable_alb_access_logs   = true
 alb_access_logs_bucket   = ""
 alb_access_logs_prefix   = "certscore/public-alb"
 web_autoscaling_min_capacity = 2
