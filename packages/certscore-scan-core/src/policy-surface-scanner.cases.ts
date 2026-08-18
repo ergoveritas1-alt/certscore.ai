@@ -99,6 +99,25 @@ test("builds a bounded canonical www retry for policy notices", () => {
   assert.equal(canonicalWwwPolicyUrlVariant("http://publisher.example/legal/privacy-policy"), null);
 });
 
+test("template expressions are never fetchable policy candidates", () => {
+  for (const href of [
+    "{{link}}",
+    "{{profileLink}}",
+    "%7B%7Blink%7D%7D",
+    "${policyUrl}",
+    "[[privacyLink]]",
+  ]) {
+    assert.equal(isFetchablePolicyCandidateForPolicySurface({
+      baseUrl: "https://example.test/privacy/",
+      href,
+      normalizedUrl: new URL(href, "https://example.test/privacy/").toString(),
+      surfaceType: "privacy_policy",
+      matchStrength: "direct",
+      linkText: "Privacy Notice",
+    }), false, href);
+  }
+});
+
 test("does not repeat a canonical host retry already attempted by the bounded fetch", () => {
   const candidateUrl = "https://publisher.example/legal/privacy-policy";
   assert.equal(shouldRetryCanonicalPolicyHost(candidateUrl, [{ requestedUrl: candidateUrl }]), true);
@@ -2424,6 +2443,36 @@ test("policySurfaceScanner uses rendered document text when direct fetch retains
     );
     assert.equal(
       privacy.gdprTransparencyTopicCandidates.every((candidate) => candidate.productionCredit === false),
+      true,
+    );
+  });
+});
+
+test("policySurfaceScanner renders a long loading shell and ignores template child links", async () => {
+  await withPolicyScan("policy-loading-notice-template-shell", async ({ result, baseUrl }) => {
+    const privacy = result.policySurfaceObservations.find((observation) =>
+      observation.status === "fetched" &&
+      observation.surfaceType === "privacy_policy" &&
+      observation.normalizedUrl === `${baseUrl}/loading-notice-template-shell/privacy`
+    );
+
+    assert.ok(privacy, "rendered governing privacy notice should be retained");
+    assert.equal(privacy.documentRole, "policy_document");
+    assert.match(privacy.textExcerpt ?? "", /data controller is Example Test/i);
+    assert.doesNotMatch(privacy.textExcerpt ?? "", /Loading Privacy Notice/i);
+    assert.equal(
+      result.policySurfaceObservations.some((observation) =>
+        /%7B%7B|\{\{|%24%7B|\$\{|%5B%5B|\[\[/i.test(observation.normalizedUrl ?? observation.url)
+      ),
+      false,
+      "unresolved template expressions must not become retained child observations",
+    );
+    assert.equal(
+      result.moduleRun.timingBreakdown?.some((timing) => timing.label.includes("policy rendered low-quality text fallback")),
+      true,
+    );
+    assert.equal(
+      privacy.gdprTransparencyTopicCandidates.some((candidate) => candidate.topic === "controller_contact"),
       true,
     );
   });

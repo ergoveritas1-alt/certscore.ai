@@ -85,6 +85,7 @@ export type StaticFixturePage =
   | "policy-ambiguous-choices"
   | "policy-broken-link"
   | "policy-browser-hydrated-document"
+  | "policy-loading-notice-template-shell"
   | "policy-canonical-near-privacy-center"
   | "policy-redirected-privacy-center"
   | "policy-localized-canonical-shell"
@@ -276,6 +277,7 @@ const fixtureSlugs: Record<StaticFixturePage, string> = {
   "policy-ambiguous-choices": "policy-ambiguous-choices",
   "policy-broken-link": "policy-broken-link",
   "policy-browser-hydrated-document": "policy-browser-hydrated-document",
+  "policy-loading-notice-template-shell": "policy-loading-notice-template-shell",
   "policy-canonical-near-privacy-center": "policy-canonical-near-privacy-center",
   "policy-redirected-privacy-center": "policy-redirected-privacy-center",
   "policy-localized-canonical-shell": "policy-localized-canonical-shell",
@@ -602,6 +604,49 @@ function handleRequest(request: IncomingMessage, response: ServerResponse): void
             <p>Die Rechtsgrundlage für die Verarbeitung personenbezogener Daten umfasst Einwilligung, Vertragserfüllung und berechtigte Interessen.</p>
             <p>Empfänger personenbezogener Daten sind Dienstleister, die personenbezogene Daten verarbeiten.</p>
             <p>Sie haben Rechte auf Auskunft, Löschung und Widerspruch.</p>
+          </main>
+        </body>
+      </html>`);
+    return;
+  }
+
+  if (url.pathname === "/loading-notice-template-shell/privacy") {
+    if (request.headers["sec-fetch-mode"] !== "navigate") {
+      response.writeHead(200, { "Content-Type": "text/html; charset=utf-8" });
+      response.end(`<!doctype html>
+        <html lang="en">
+          <head><title>Privacy Notice</title></head>
+          <body>
+            <header>${"Products Insights About Support ".repeat(80)}</header>
+            <main>
+              <h1>Privacy Notice</h1>
+              <p>Loading Privacy Notice...</p>
+              <template>
+                <a href="{{link}}">{{title}} {{summary}}</a>
+                <a href="{{profileLink}}">{{displayName}} {{companyName}}</a>
+              </template>
+            </main>
+            <footer>${"Contact Careers Locations Terms Privacy ".repeat(80)}</footer>
+          </body>
+        </html>`);
+      return;
+    }
+    response.writeHead(200, { "Content-Type": "text/html; charset=utf-8" });
+    response.end(`<!doctype html>
+      <html lang="en">
+        <head><title>Privacy Notice</title></head>
+        <body>
+          <main>
+            <h1>Privacy Notice</h1>
+            <p>The data controller is Example Test. You can contact the controller at privacy@example.test for privacy questions.</p>
+            <p>We process personal data to provide the service, secure accounts, communicate with customers, and improve our products.</p>
+            <p>Our legal bases include contract, consent, legal obligations, and legitimate interests.</p>
+            <p>Recipients include hosting providers, analytics providers, payment processors, professional advisers, and public authorities where required.</p>
+            <p>We retain personal data only as long as necessary for the purposes described and applicable legal requirements.</p>
+            <p>You may request access, correction, deletion, restriction, portability, or object to processing.</p>
+            <p>International transfers may use adequacy decisions or standard contractual clauses.</p>
+            <p>Our data protection officer can be contacted at dpo@example.test, and you may lodge a complaint with a supervisory authority.</p>
+            <p>${"Additional policy context explains the categories of personal data, sources, purposes, recipients, retention criteria, safeguards, individual rights, complaint routes, and policy updates. ".repeat(18)}</p>
           </main>
         </body>
       </html>`);
@@ -2076,6 +2121,7 @@ function policyHomeMarkup(caseName: StaticFixturePage): string {
     "policy-ambiguous-choices": `<a href="/privacy-choices">Your Choices</a>`,
     "policy-broken-link": `<a href="/policies/missing-privacy">Privacy Policy</a>`,
     "policy-browser-hydrated-document": `<a href="/browser-hydrated-policy/privacy">Datenschutzhinweis</a>`,
+    "policy-loading-notice-template-shell": `<a href="/loading-notice-template-shell/privacy">Privacy Notice</a>`,
     "policy-canonical-near-privacy-center": `<a href="/privacy-center-shell">Privacy Policy</a>`,
     "policy-redirected-privacy-center": `<a href="/redirected-privacy">Privacy Policy</a>`,
     "policy-localized-canonical-shell": `<a href="/datenschutz-shell">Datenschutzhinweis</a>`,

@@ -8622,6 +8622,10 @@ function article13DisclosureRejectReason(
 
 function looksLikePrivacyCenterShell(text: string): boolean {
   const normalized = normalizeWhitespace(text);
+  const explicitLoadingShell = /\bloading\s+(?:the\s+)?(?:privacy|data protection)\s+(?:policy|notice|statement)\b|\b(?:privacy|data protection)\s+(?:policy|notice|statement)\s+is\s+loading\b/i.test(normalized);
+  if (explicitLoadingShell) {
+    return true;
+  }
   if (normalized.length < MIN_SUBSTANTIVE_POLICY_TEXT_CHARS) {
     return /privacy\s+(center|settings|choices)|cookie preferences|manage privacy|processing error|datenschutzhinweis|datenschutzerkl[aä]rung|polityka prywatno[śs]ci/i.test(normalized);
   }
@@ -8895,7 +8899,18 @@ function normalizeUrl(href: string, baseUrl: string): string | undefined {
 
 function isPlaceholderHref(href: string): boolean {
   const trimmed = href.trim();
-  return trimmed === "#" || /^javascript:/i.test(trimmed);
+  const decoded = decodeURIComponentSafely(trimmed);
+  return trimmed === "#" ||
+    /^javascript:/i.test(trimmed) ||
+    /(?:\{\{|\}\}|<%|%>|\$\{|\[\[|\]\])/.test(decoded);
+}
+
+function decodeURIComponentSafely(value: string): string {
+  try {
+    return decodeURIComponent(value);
+  } catch {
+    return value;
+  }
 }
 
 function isExternalPoweredByAttributionLink(baseUrl: string, url: string, label: string): boolean {
@@ -8961,6 +8976,9 @@ export function isFetchablePolicyCandidateForPolicySurface(input: {
   matchStrength?: PrivacySurfaceMatchStrength;
   linkText: string;
 }): boolean {
+  if (isPlaceholderHref(input.href) || isPlaceholderHref(input.normalizedUrl)) {
+    return false;
+  }
   if (isFetchablePolicyHrefForPolicySurface(
     input.baseUrl,
     input.href,
