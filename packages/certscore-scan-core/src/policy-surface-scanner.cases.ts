@@ -3042,6 +3042,8 @@ test("policySurfaceScanner retains footer terms as a secondary policy surface al
 
     assert.ok(privacy);
     assert.ok(terms);
+    assert.deepEqual(terms.article13DisclosureSignals, []);
+    assert.deepEqual(terms.gdprTransparencyTopicCandidates, []);
     assert.equal(diagnostics.candidateSummary.some((candidate) =>
       candidate.surfaceType === "terms" &&
       candidate.normalizedUrl === `${baseUrl}/terms`

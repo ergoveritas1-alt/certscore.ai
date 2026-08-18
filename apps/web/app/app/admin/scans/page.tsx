@@ -158,9 +158,12 @@ function evidenceMark(result: AdminEvidenceResult | null) {
   return result ? EVIDENCE_MARKS[result.status].mark : "·";
 }
 
-function EvidenceCode({ code, label, result }: { code: string; label: string; result: AdminEvidenceResult | null }) {
+function EvidenceCode({ code, disposition, label, result }: { code: string; disposition?: string | null; label: string; result: AdminEvidenceResult | null }) {
   const presentation = result ? EVIDENCE_MARKS[result.status] : { mark: "·", className: "text-slate-300" };
-  return <span className={`whitespace-nowrap font-semibold ${presentation.className}`} title={evidenceTitle(label, result)}>{code}{presentation.mark}</span>;
+  const title = [evidenceTitle(label, result), disposition ? `Pipeline disposition: ${disposition.replaceAll("_", " ")}` : null]
+    .filter((value): value is string => Boolean(value))
+    .join(" · ");
+  return <span className={`whitespace-nowrap font-semibold ${presentation.className}`} title={title}>{code}{presentation.mark}</span>;
 }
 
 function aggregateLabel(aggregate: AdminEvidenceAggregate) {
@@ -184,7 +187,7 @@ function EvidenceGroupCell({
       {policyEvidence ? `${adminPolicyEvidenceStageLabel(policyEvidence.stage)} · ` : ""}{aggregate ? aggregateLabel(aggregate) : "Not projected"}
     </p>
     <p className="flex items-center gap-1.5 overflow-hidden text-[10px] leading-4">
-      {Object.entries(labels).map(([code, label]) => <EvidenceCode code={code} key={code} label={label} result={results?.[code] ?? null} />)}
+      {Object.entries(labels).map(([code, label]) => <EvidenceCode code={code} disposition={policyEvidence?.topicDispositions?.[code]?.disposition} key={code} label={label} result={results?.[code] ?? null} />)}
     </p>
   </>;
 }

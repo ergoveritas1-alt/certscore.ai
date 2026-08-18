@@ -6,7 +6,9 @@ export const LOCAL_V2_DAG_SCAN_PROFILES = ["standard", "tiny"] as const;
 export const LOCAL_V2_DAG_LAMBDA_AWS_REGION = "eu-central-1";
 export const LOCAL_V2_DAG_LAMBDA_AWS_REGIONS = ["eu-central-1", "eu-west-1", "us-west-1"] as const;
 export const LOCAL_V2_DAG_LAMBDA_DISPATCH_CONTRACT_VERSION = "certscore.v2.lambda-dag-dispatch.v1";
-export const LOCAL_V2_DAG_WC01_PROJECTION_VERSION = "wc01.normalized-concern-policy.v1";
+export const LOCAL_V2_DAG_SCANNER_EXECUTION_MODE = "artifact_capture_only" as const;
+export const LOCAL_V2_DAG_WC01_PROJECTION_MODE = "gdpr_transparency_observed_only" as const;
+export const LOCAL_V2_DAG_WC01_PROJECTION_VERSION = "wc01.normalized-concern-policy.v2";
 
 export type LocalV2DagScanProfile = (typeof LOCAL_V2_DAG_SCAN_PROFILES)[number];
 export type LocalV2DagLambdaAwsRegion = (typeof LOCAL_V2_DAG_LAMBDA_AWS_REGIONS)[number];
@@ -269,6 +271,7 @@ export function applyLocalV2DagScanConfig(
       ...(config.execution ?? {}),
       v2DagParallel: {
         artifactOnly: true,
+        executionMode: LOCAL_V2_DAG_SCANNER_EXECUTION_MODE,
         localOnly: true,
         plannedParallel: true,
         postConsentFlowsEnabled: false,
@@ -277,7 +280,10 @@ export function applyLocalV2DagScanConfig(
         productionFindingIntegration: false,
         wc01ProductionProjection: {
           approved: true,
+          mode: LOCAL_V2_DAG_WC01_PROJECTION_MODE,
           pipeline: "normalized_concern_policy_unified_finding",
+          source: "verified_canonical_evidence_bundle",
+          scope: ["gdpr_transparency_observed_topics"],
           version: LOCAL_V2_DAG_WC01_PROJECTION_VERSION
         },
         profile,
@@ -300,6 +306,7 @@ export function applyLocalV2DagScanConfig(
               orchestrationMode: lambdaConfig.orchestrationMode,
               processor: LOCAL_V2_DAG_SCAN_PROCESSOR,
               productionFindingIntegration: false,
+              scannerExecutionMode: LOCAL_V2_DAG_SCANNER_EXECUTION_MODE,
               resultHandoff: "sqs",
               resultQueueUrl: lambdaConfig.resultQueueUrl,
               scannerRuntime: "certscore-v2-dag-parallel-path",

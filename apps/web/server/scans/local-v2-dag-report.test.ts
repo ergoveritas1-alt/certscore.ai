@@ -4949,6 +4949,16 @@ test("materializeLocalV2DagScanDetail records stable GDPR Transparency profile m
     assert.equal(defaultSummary?.gdprTransparencyProductionEvidenceEnabled, true);
     assert.equal(defaultDetail.runtimeArtifacts?.gdprTransparencyEvidenceProfile, "gdpr_transparency_multilingual_article13_v1");
     assert.equal(defaultDetail.runtimeArtifacts?.gdprTransparencyProductionEvidenceEnabled, true);
+    assert.deepEqual(defaultDetail.runtimeArtifacts?.wc01ProductionProjection, {
+      approved: true,
+      artifactBoundaryPreserved: true,
+      mode: "gdpr_transparency_observed_only",
+      pipeline: "normalized_concern_policy_unified_finding",
+      scannerExecutionMode: "artifact_capture_only",
+      scope: ["gdpr_transparency_observed_topics"],
+      source: "verified_canonical_evidence_bundle",
+      version: "wc01.normalized-concern-policy.v2",
+    });
     assert.equal(defaultSignals?.length, 0);
 
     const legacyDetail = await materializeLocalV2DagScanDetail(makeScanRecord({

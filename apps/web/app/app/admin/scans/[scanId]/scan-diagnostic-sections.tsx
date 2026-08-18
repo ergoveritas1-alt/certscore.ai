@@ -184,6 +184,8 @@ async function RuntimeDiagnosticsSection({
             record.localV2DagLambdaEvents.map((event, index) => {
               const artifactOnly = readBooleanField(event.metadataJson, "artifactOnly");
               const productionFindingIntegration = readBooleanField(event.metadataJson, "productionFindingIntegration");
+              const scannerBuildProvenance = readRecord(event.metadataJson?.scannerBuildProvenance);
+              const wc01Projection = readRecord(event.metadataJson?.wc01Projection);
               const error = formatLocalV2DagLambdaError(event.metadataJson);
               const artifactPointers = formatLocalV2DagLambdaArtifacts(event.metadataJson);
 
@@ -204,8 +206,13 @@ async function RuntimeDiagnosticsSection({
                   <div className="mt-3 grid gap-2 md:grid-cols-2 xl:grid-cols-4">
                     <p>Created: {formatAdminDateTime(event.createdAt)}</p>
                     <p>Target env: {formatValue(readStringField(event.metadataJson, "targetEnvironment"))}</p>
-                    <p>Artifact only: {formatValue(artifactOnly)}</p>
-                    <p>Prod finding integration: {formatValue(productionFindingIntegration)}</p>
+                    <p>Scanner execution: {formatValue(readStringField(event.metadataJson, "scannerExecutionMode"))}</p>
+                    <p>Artifact boundary: {formatValue(artifactOnly)}</p>
+                    <p>Scanner-direct finding integration: {formatValue(productionFindingIntegration)}</p>
+                    <p>WC01 projection mode: {formatValue(readStringField(wc01Projection, "mode"))}</p>
+                    <p>WC01 projection version: {formatValue(readStringField(wc01Projection, "version"))}</p>
+                    <p>Scanner Git SHA: {formatValue(readStringField(scannerBuildProvenance, "gitSha"))}</p>
+                    <p>Build provenance: {formatValue(readStringField(event.metadataJson, "scannerBuildProvenanceStatus"))}</p>
                   </div>
                   {error ? <p className="mt-3 text-sm text-amber-700">Result detail: {error}</p> : null}
                   {artifactPointers ? <p className="mt-3 break-all font-mono text-xs text-slate-500">{artifactPointers}</p> : null}

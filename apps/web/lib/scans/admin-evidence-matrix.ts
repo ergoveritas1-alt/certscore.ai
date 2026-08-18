@@ -3,11 +3,13 @@ import type {
   GdprEprivacyCoverageChecklistStatus
 } from "./gdpr-eprivacy-coverage-checklist";
 
-export const ADMIN_EVIDENCE_MATRIX_VERSION = "admin_evidence_matrix.v2" as const;
+export const ADMIN_EVIDENCE_MATRIX_VERSION = "admin_evidence_matrix.v3" as const;
 const LEGACY_ADMIN_EVIDENCE_MATRIX_VERSION = "admin_evidence_matrix.v1" as const;
+const PREVIOUS_ADMIN_EVIDENCE_MATRIX_VERSION = "admin_evidence_matrix.v2" as const;
 const VALID_ADMIN_EVIDENCE_MATRIX_VERSIONS = new Set<string>([
   ADMIN_EVIDENCE_MATRIX_VERSION,
-  LEGACY_ADMIN_EVIDENCE_MATRIX_VERSION
+  LEGACY_ADMIN_EVIDENCE_MATRIX_VERSION,
+  PREVIOUS_ADMIN_EVIDENCE_MATRIX_VERSION,
 ]);
 
 export type AdminEvidenceStatus =
@@ -60,6 +62,28 @@ export type AdminPolicyEvidenceDiagnostic = {
     notEvaluated: number;
     notLocatedAutomatically: number;
   };
+  topicDispositions: Record<string, {
+    descriptor: string;
+    disposition:
+      | "projected_observed"
+      | "document_not_retained"
+      | "ownership_unverified"
+      | "coverage_insufficient"
+      | "language_unsupported"
+      | "topic_not_matched"
+      | "confidence_below_threshold"
+      | "projection_disabled"
+      | "review_required";
+    rowId: string;
+  }>;
+};
+
+export type AdminProjectionContext = {
+  scannerBuildProvenanceStatus: "complete" | "partial" | "unavailable";
+  scannerExecutionMode: string | null;
+  scannerGitSha: string | null;
+  wc01ProjectionMode: string | null;
+  wc01ProjectionVersion: string | null;
 };
 
 export type AdminScanSizeMetrics = {
@@ -159,13 +183,17 @@ type ResultMap<T extends Record<string, string>> = { [K in keyof T]: AdminEviden
 export type AdminEvidenceMatrix = {
   generatedAt: string;
   policyEvidence?: AdminPolicyEvidenceDiagnostic | null;
+  projectionContext?: AdminProjectionContext | null;
   privacyConsent: ResultMap<typeof PRIVACY_CONSENT_ROWS> & { cmpVendorName: string | null };
   runtime: { aggregate: AdminEvidenceAggregate; results: ResultMap<typeof RUNTIME_ROWS> };
   sizeMetrics?: AdminScanSizeMetrics | null;
   sourceProjectionVersion: string | null;
   transparency: { aggregate: AdminEvidenceAggregate; results: ResultMap<typeof TRANSPARENCY_ROWS> };
   transport: { aggregate: AdminEvidenceAggregate; results: ResultMap<typeof TRANSPORT_ROWS> };
-  version: typeof ADMIN_EVIDENCE_MATRIX_VERSION | typeof LEGACY_ADMIN_EVIDENCE_MATRIX_VERSION;
+  version:
+    | typeof ADMIN_EVIDENCE_MATRIX_VERSION
+    | typeof PREVIOUS_ADMIN_EVIDENCE_MATRIX_VERSION
+    | typeof LEGACY_ADMIN_EVIDENCE_MATRIX_VERSION;
 };
 
 const STATUS_MAP: Record<GdprEprivacyCoverageChecklistStatus, AdminEvidenceStatus> = {
@@ -191,6 +219,17 @@ const VALID_POLICY_EVIDENCE_STAGES = new Set<AdminPolicyEvidenceStage>([
   "content_limited",
   "processing_error",
   "unknown"
+]);
+const VALID_TOPIC_DISPOSITIONS = new Set<AdminPolicyEvidenceDiagnostic["topicDispositions"][string]["disposition"]>([
+  "projected_observed",
+  "document_not_retained",
+  "ownership_unverified",
+  "coverage_insufficient",
+  "language_unsupported",
+  "topic_not_matched",
+  "confidence_below_threshold",
+  "projection_disabled",
+  "review_required",
 ]);
 
 function record(value: unknown) {
@@ -239,6 +278,42 @@ function policyEvidenceStage(input: {
   return "unknown";
 }
 
+function topicDisposition(input: {
+  extractionFailureReason: string | null;
+  row: GdprEprivacyCoverageChecklistItem | undefined;
+  result: string | null;
+  stage: AdminPolicyEvidenceStage;
+}): AdminPolicyEvidenceDiagnostic["topicDispositions"][string]["disposition"] {
+  if (input.row?.status === "Observed" || input.result === "disclosure_observed") return "projected_observed";
+  if (
+    input.extractionFailureReason === "privacy_policy_index_governing_document_unresolved" ||
+    input.stage === "text_not_retained" ||
+    input.stage === "retrieval_limited"
+  ) {
+    return "document_not_retained";
+  }
+  if (input.stage === "projection_unavailable") return "projection_disabled";
+  if (input.stage === "unsupported_language" || input.stage === "language_unknown") return "language_unsupported";
+  const diagnosticText = [
+    input.row?.note,
+    input.row?.explanation,
+    input.row?.criticalEvidence?.statusBasis,
+    ...(input.row?.criticalEvidence?.missingOrIncompleteSourceSignals ?? []).flatMap((gap) => [
+      gap.field,
+      typeof gap.expected === "string" ? gap.expected : undefined,
+      typeof gap.actual === "string" ? gap.actual : undefined,
+      gap.whyNeeded,
+    ]),
+  ].filter((value): value is string => typeof value === "string").join(" ").toLowerCase();
+  if (/owner|ownership|target-owned|target owned|attributable/.test(diagnosticText)) return "ownership_unverified";
+  if (input.result === "ambiguous" || input.row?.status === "Review signal") return "confidence_below_threshold";
+  if (input.result === "not_located_automatically") return "topic_not_matched";
+  if (input.result === "extraction_incomplete" || input.stage === "content_limited") return "coverage_insufficient";
+  if (input.stage === "processing_error") return "review_required";
+  if (input.row?.status === "Not confirmed" && input.stage === "topic_evidence_limited") return "topic_not_matched";
+  return "review_required";
+}
+
 function projectPolicyEvidenceDiagnostic(
   checklistRows: GdprEprivacyCoverageChecklistItem[],
   byId: Map<string, GdprEprivacyCoverageChecklistItem>,
@@ -249,6 +324,7 @@ function projectPolicyEvidenceDiagnostic(
   const health = policyEvidenceHealth(extractionRow ?? fallbackRow, policyDisclosureSummary);
   const extractionStatus = stringValue(health?.policyTextExtractionStatus ?? health?.policy_text_extraction_status);
   const projectionStatus = stringValue(health?.policyTextEvidenceProjectionStatus ?? health?.policy_text_evidence_projection_status);
+  const extractionFailureReason = stringValue(health?.extractionFailureReason ?? health?.extraction_failure_reason);
   const topicResults = {
     ambiguous: 0,
     disclosureObserved: 0,
@@ -279,17 +355,33 @@ function projectPolicyEvidenceDiagnostic(
   if (!health && checklistRows.length === 0 && Object.values(topicResults).every((count) => count === 0)) {
     return null;
   }
+  const stage = policyEvidenceStage({ extractionStatus, projectionStatus, topicResults });
+  const topicDispositions = Object.fromEntries(
+    Object.entries(TRANSPARENCY_ROWS).flatMap(([code, rowId]) => {
+      const row = byId.get(rowId);
+      if (!row) return [];
+      const retained = record(row.criticalEvidence?.retainedEvidence);
+      const assessment = record(retained?.policyEvidenceAssessment) ?? record(retained?.policy_evidence_assessment);
+      const result = stringValue(assessment?.result);
+      return [[code, {
+        descriptor: boundedDescriptor(row.note || row.explanation || row.label),
+        disposition: topicDisposition({ extractionFailureReason, row, result, stage }),
+        rowId,
+      }]];
+    })
+  );
   return {
     detectedLanguage: stringValue(health?.detectedPolicyLanguage ?? health?.detected_policy_language),
-    extractionFailureReason: stringValue(health?.extractionFailureReason ?? health?.extraction_failure_reason),
+    extractionFailureReason,
     extractionStatus,
     gdprTransparencyLanguageSupported:
       typeof (health?.gdprTransparencyLanguageSupported ?? health?.gdpr_transparency_language_supported) === "boolean"
         ? (health?.gdprTransparencyLanguageSupported ?? health?.gdpr_transparency_language_supported) as boolean
         : null,
     projectionStatus,
-    stage: policyEvidenceStage({ extractionStatus, projectionStatus, topicResults }),
-    topicResults
+    stage,
+    topicDispositions,
+    topicResults,
   };
 }
 
@@ -332,6 +424,7 @@ export function projectAdminEvidenceMatrix(input: {
   cmpVendorName: string | null;
   generatedAt?: string;
   policyDisclosureSummary?: Record<string, unknown> | null;
+  projectionContext?: AdminProjectionContext | null;
   sourceProjectionVersion: string | null;
   sizeMetrics?: AdminScanSizeMetrics | null;
 }): AdminEvidenceMatrix {
@@ -362,6 +455,7 @@ export function projectAdminEvidenceMatrix(input: {
     version: ADMIN_EVIDENCE_MATRIX_VERSION,
     generatedAt: input.generatedAt ?? new Date().toISOString(),
     policyEvidence: projectPolicyEvidenceDiagnostic(input.checklistRows, byId, input.policyDisclosureSummary),
+    projectionContext: input.projectionContext ?? null,
     sourceProjectionVersion: input.sourceProjectionVersion,
     sizeMetrics: input.sizeMetrics ?? null,
     privacyConsent: {
@@ -404,6 +498,21 @@ function isPolicyEvidenceDiagnostic(value: unknown): value is AdminPolicyEvidenc
   if (value === null || value === undefined) return true;
   const diagnostic = record(value);
   const topicResults = record(diagnostic?.topicResults);
+  const topicDispositions = record(diagnostic?.topicDispositions);
+  const topicDispositionsValid = diagnostic?.topicDispositions === undefined || Boolean(
+    topicDispositions &&
+    Object.keys(topicDispositions).length <= 10 &&
+    Object.values(topicDispositions).every((entry) => {
+      const disposition = record(entry);
+      return Boolean(
+        disposition &&
+        typeof disposition.rowId === "string" && disposition.rowId.length <= 120 &&
+        typeof disposition.descriptor === "string" && disposition.descriptor.length <= 220 &&
+        typeof disposition.disposition === "string" &&
+        VALID_TOPIC_DISPOSITIONS.has(disposition.disposition as AdminPolicyEvidenceDiagnostic["topicDispositions"][string]["disposition"])
+      );
+    })
+  );
   return Boolean(
     diagnostic &&
     typeof diagnostic.stage === "string" &&
@@ -413,10 +522,22 @@ function isPolicyEvidenceDiagnostic(value: unknown): value is AdminPolicyEvidenc
     isBoundedNullableString(diagnostic.extractionStatus) &&
     isBoundedNullableString(diagnostic.projectionStatus) &&
     (diagnostic.gdprTransparencyLanguageSupported === null || typeof diagnostic.gdprTransparencyLanguageSupported === "boolean") &&
+    topicDispositionsValid &&
     topicResults &&
     ["ambiguous", "disclosureObserved", "extractionIncomplete", "notEvaluated", "notLocatedAutomatically"].every((key) =>
       typeof topicResults[key] === "number" && Number.isInteger(topicResults[key]) && (topicResults[key] as number) >= 0 && (topicResults[key] as number) <= 10
     )
+  );
+}
+
+function isProjectionContext(value: unknown): value is AdminProjectionContext | null | undefined {
+  if (value === null || value === undefined) return true;
+  const context = record(value);
+  return Boolean(
+    context &&
+    ["complete", "partial", "unavailable"].includes(String(context.scannerBuildProvenanceStatus)) &&
+    [context.scannerExecutionMode, context.scannerGitSha, context.wc01ProjectionMode, context.wc01ProjectionVersion]
+      .every(isBoundedNullableString)
   );
 }
 
@@ -457,6 +578,14 @@ export function parseAdminEvidenceMatrix(value: unknown): AdminEvidenceMatrix | 
   if (typeof matrix.version !== "string" || !VALID_ADMIN_EVIDENCE_MATRIX_VERSIONS.has(matrix.version) || typeof matrix.generatedAt !== "string" || matrix.generatedAt.length > 64) return null;
   if (matrix.sourceProjectionVersion !== null && typeof matrix.sourceProjectionVersion !== "string") return null;
   if (!isPolicyEvidenceDiagnostic(matrix.policyEvidence)) return null;
+  if (!isProjectionContext(matrix.projectionContext)) return null;
+  if (
+    matrix.version === ADMIN_EVIDENCE_MATRIX_VERSION &&
+    (
+      (record(matrix.policyEvidence) !== null && !record(matrix.policyEvidence)?.topicDispositions) ||
+      matrix.projectionContext === undefined
+    )
+  ) return null;
   if (!isScanSizeMetrics(matrix.sizeMetrics)) return null;
   const privacyConsent = matrix.privacyConsent as Record<string, unknown> | null;
   const transparency = matrix.transparency as Record<string, unknown> | null;

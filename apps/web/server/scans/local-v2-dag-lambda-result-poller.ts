@@ -25,12 +25,28 @@ import {
   type LocalV2DagLambdaResultMessage
 } from "./local-v2-dag-lambda-dispatch";
 import {
+  LOCAL_V2_DAG_SCANNER_EXECUTION_MODE,
   LOCAL_V2_DAG_SCAN_PROCESSOR,
+  LOCAL_V2_DAG_WC01_PROJECTION_MODE,
+  LOCAL_V2_DAG_WC01_PROJECTION_VERSION,
   getSqsQueueRegion,
   getLocalV2DagLambdaTargetEnvironment,
   shouldUseLocalV2DagScanTool,
   type LocalV2DagLambdaTargetEnvironment
 } from "./local-v2-dag-scan-config";
+
+function scannerBuildProvenance(message: LocalV2DagLambdaResultMessage) {
+  const value = {
+    gitSha: message.scannerGitSha ?? null,
+    imageTag: message.scannerImageTag ?? null,
+    runtimeVersion: message.scannerRuntimeVersion ?? null,
+  };
+  const retainedCount = Object.values(value).filter((entry) => entry !== null).length;
+  return {
+    status: retainedCount === 3 ? "complete" as const : retainedCount > 0 ? "partial" as const : "unavailable" as const,
+    value,
+  };
+}
 
 type SqsPollClient = {
   send(command: DeleteMessageCommand | ReceiveMessageCommand): Promise<DeleteMessageCommandOutput | ReceiveMessageCommandOutput>;
@@ -469,6 +485,7 @@ export async function recordLocalV2DagLambdaResultEvent(
   const lambdaToWc01ResultRecordedMs = Number.isFinite(lambdaCompletedAtMs)
     ? Math.max(0, wc01ResultRecordedAt.getTime() - lambdaCompletedAtMs)
     : null;
+  const retainedScannerBuildProvenance = scannerBuildProvenance(parsedMessage);
   if (artifactMirror) {
     await query(
       `update scans
@@ -561,6 +578,9 @@ export async function recordLocalV2DagLambdaResultEvent(
           ...(parsedMessage.handlerTiming ? { lambdaHandlerTiming: parsedMessage.handlerTiming } : {}),
           processor: LOCAL_V2_DAG_SCAN_PROCESSOR,
           productionFindingIntegration: false,
+          scannerBuildProvenance: retainedScannerBuildProvenance.value,
+          scannerBuildProvenanceStatus: retainedScannerBuildProvenance.status,
+          scannerExecutionMode: LOCAL_V2_DAG_SCANNER_EXECUTION_MODE,
           resultStatus: parsedMessage.status,
           ...(parsedMessage.scannerGitSha ? { scannerGitSha: parsedMessage.scannerGitSha } : {}),
           ...(parsedMessage.scannerImageTag ? { scannerImageTag: parsedMessage.scannerImageTag } : {}),
@@ -570,6 +590,11 @@ export async function recordLocalV2DagLambdaResultEvent(
             : {}),
           targetEnvironment: parsedMessage.targetEnvironment,
           v2ArtifactsRemainInternal: true,
+          wc01Projection: {
+            mode: LOCAL_V2_DAG_WC01_PROJECTION_MODE,
+            source: "verified_canonical_evidence_bundle",
+            version: LOCAL_V2_DAG_WC01_PROJECTION_VERSION,
+          },
           ...(parsedMessage.error ? { error: parsedMessage.error } : {})
         }
       ]
@@ -612,7 +637,11 @@ export async function recordLocalV2DagLambdaResultEvent(
               coalesce(scan_config_json #> '{execution,v2DagLambda}', '{}'::jsonb) || jsonb_build_object(
                 'completedAt', $2::timestamptz,
                 'dispatchState', case when $3 = 'failed' then 'failed' else 'completed' end,
-                'runtimeProvenance', $7::jsonb
+                'runtimeProvenance', $7::jsonb,
+                'scannerBuildProvenance', $8::jsonb,
+                'scannerBuildProvenanceStatus', $9::text,
+                'scannerExecutionMode', $10::text,
+                'wc01Projection', $11::jsonb
               ),
               true
             ),
@@ -629,6 +658,14 @@ export async function recordLocalV2DagLambdaResultEvent(
       parsedMessage.scannerRuntimeProvenance
         ? JSON.stringify(parsedMessage.scannerRuntimeProvenance)
         : null,
+      JSON.stringify(retainedScannerBuildProvenance.value),
+      retainedScannerBuildProvenance.status,
+      LOCAL_V2_DAG_SCANNER_EXECUTION_MODE,
+      JSON.stringify({
+        mode: LOCAL_V2_DAG_WC01_PROJECTION_MODE,
+        source: "verified_canonical_evidence_bundle",
+        version: LOCAL_V2_DAG_WC01_PROJECTION_VERSION,
+      }),
     ]
   );
   if (parsedMessage.scannerRuntimeProvenance) {

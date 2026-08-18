@@ -51,7 +51,7 @@ test("projects bounded Admin evidence only from canonical checklist rows", () =>
     sourceProjectionVersion: "scan_report_display_projection.v1"
   });
 
-  assert.equal(matrix.version, "admin_evidence_matrix.v2");
+  assert.equal(matrix.version, "admin_evidence_matrix.v3");
   assert.equal(matrix.privacyConsent.reject?.status, "review_signal");
   assert.equal(matrix.privacyConsent.mechanism?.status, "not_observed");
   assert.equal(matrix.privacyConsent.accept, null);
@@ -128,8 +128,13 @@ test("bounds descriptors and rejects malformed persisted projections", () => {
     sourceProjectionVersion: null
   });
   assert.ok((matrix.transparency.results.CC?.descriptor.length ?? 0) <= 220);
-  assert.ok(parseAdminEvidenceMatrix({ ...matrix, version: "admin_evidence_matrix.v1" }));
-  assert.equal(parseAdminEvidenceMatrix({ ...matrix, version: "admin_evidence_matrix.v3" }), null);
+  const legacyMatrix = structuredClone(matrix) as Record<string, unknown>;
+  legacyMatrix.version = "admin_evidence_matrix.v2";
+  delete legacyMatrix.projectionContext;
+  const legacyPolicyEvidence = legacyMatrix.policyEvidence as Record<string, unknown> | null;
+  if (legacyPolicyEvidence) delete legacyPolicyEvidence.topicDispositions;
+  assert.ok(parseAdminEvidenceMatrix(legacyMatrix));
+  assert.equal(parseAdminEvidenceMatrix({ ...matrix, version: "admin_evidence_matrix.v4" }), null);
   assert.equal(parseAdminEvidenceMatrix({ ...matrix, transparency: { ...matrix.transparency, aggregate: null } }), null);
 });
 
@@ -205,6 +210,18 @@ test("projects the canonical policy evidence failure stage and every transparenc
     gdprTransparencyLanguageSupported: true,
     projectionStatus: "verified_complete",
     stage: "topic_evidence_limited",
+    topicDispositions: {
+      AD: { descriptor: "automated_decision_making_profiling_disclosure", disposition: "topic_not_matched", rowId: "automated_decision_making_profiling_disclosure" },
+      CC: { descriptor: "controller_contact_disclosure", disposition: "projected_observed", rowId: "controller_contact_disclosure" },
+      DR: { descriptor: "retention_disclosure_observed", disposition: "topic_not_matched", rowId: "retention_disclosure_observed" },
+      DS: { descriptor: "data_subject_rights_disclosure", disposition: "projected_observed", rowId: "data_subject_rights_disclosure" },
+      IT: { descriptor: "international_transfers_disclosure", disposition: "confidence_below_threshold", rowId: "international_transfers_disclosure" },
+      LB: { descriptor: "legal_basis_disclosure_observed", disposition: "confidence_below_threshold", rowId: "legal_basis_disclosure_observed" },
+      PC: { descriptor: "dpo_contact_point_disclosure", disposition: "topic_not_matched", rowId: "dpo_contact_point_disclosure" },
+      PP: { descriptor: "processing_purposes_disclosure", disposition: "projected_observed", rowId: "processing_purposes_disclosure" },
+      RC: { descriptor: "recipients_vendor_categories_disclosure", disposition: "topic_not_matched", rowId: "recipients_vendor_categories_disclosure" },
+      SA: { descriptor: "supervisory_authority_complaint_disclosure", disposition: "topic_not_matched", rowId: "supervisory_authority_complaint_disclosure" },
+    },
     topicResults: {
       ambiguous: 2,
       disclosureObserved: 3,
@@ -218,4 +235,34 @@ test("projects the canonical policy evidence failure stage and every transparenc
     ...matrix,
     policyEvidence: { ...matrix.policyEvidence, stage: "invented" }
   }), null);
+});
+
+test("persists explicit projection context and per-topic first-broken-stage dispositions", () => {
+  const extractionHealth = {
+    extractionFailureReason: "privacy_policy_index_governing_document_unresolved",
+    policyTextEvidenceProjectionStatus: "unavailable",
+    policyTextExtractionStatus: "projection_unavailable",
+  };
+  const matrix = projectAdminEvidenceMatrix({
+    checklistRows: [
+      policyRow("policy_text_extraction", "extraction_incomplete", { policyTextExtractionHealth: extractionHealth }),
+      policyRow("controller_contact_disclosure", "extraction_incomplete", { policyTextExtractionHealth: extractionHealth }),
+    ],
+    cmpVendorName: null,
+    projectionContext: {
+      scannerBuildProvenanceStatus: "complete",
+      scannerExecutionMode: "artifact_capture_only",
+      scannerGitSha: "3099a7dacc4e64ae0d69affec89323eb5966b63a",
+      wc01ProjectionMode: "gdpr_transparency_observed_only",
+      wc01ProjectionVersion: "wc01.normalized-concern-policy.v2",
+    },
+    sourceProjectionVersion: "scan-report-projection-v18",
+  });
+
+  assert.equal(matrix.version, "admin_evidence_matrix.v3");
+  assert.equal(matrix.policyEvidence?.topicDispositions.CC?.disposition, "document_not_retained");
+  assert.equal(matrix.projectionContext?.scannerExecutionMode, "artifact_capture_only");
+  assert.equal(matrix.projectionContext?.wc01ProjectionMode, "gdpr_transparency_observed_only");
+  assert.ok(parseAdminEvidenceMatrix(matrix));
+  assert.equal(parseAdminEvidenceMatrix({ ...matrix, projectionContext: undefined }), null);
 });

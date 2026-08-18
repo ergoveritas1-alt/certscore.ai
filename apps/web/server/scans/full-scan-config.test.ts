@@ -207,6 +207,7 @@ test("localhost scan configs use the local v2 planned-parallel DAG processor onl
   assert.equal(config.profile, "standard");
   assert.deepEqual(config.execution?.v2DagParallel as Record<string, unknown> | undefined, {
     artifactOnly: true,
+    executionMode: "artifact_capture_only",
     localOnly: true,
     plannedParallel: true,
     postConsentFlowsEnabled: false,
@@ -215,8 +216,11 @@ test("localhost scan configs use the local v2 planned-parallel DAG processor onl
     productionFindingIntegration: false,
     wc01ProductionProjection: {
       approved: true,
+      mode: "gdpr_transparency_observed_only",
       pipeline: "normalized_concern_policy_unified_finding",
-      version: "wc01.normalized-concern-policy.v1"
+      scope: ["gdpr_transparency_observed_topics"],
+      source: "verified_canonical_evidence_bundle",
+      version: "wc01.normalized-concern-policy.v2"
     },
     profile: "standard",
     scenarioConcurrency: 2,
@@ -368,6 +372,7 @@ test("queued full-scan config marks local v2 DAG Lambda dispatch when configured
     productionFindingIntegration: false,
     resultHandoff: "sqs",
     resultQueueUrl: "https://sqs.eu-west-1.amazonaws.com/123/certscore-v2-dag-local-results",
+    scannerExecutionMode: "artifact_capture_only",
     scannerRuntime: "certscore-v2-dag-parallel-path",
     simulatedLocalLambda: false,
     targetEnvironment: "local",

@@ -7386,6 +7386,17 @@ export async function SharedScanDetailView({
       })
     : null;
   const runtimeArtifacts = scanRecord.runtimeArtifacts;
+  const wc01ProductionProjection = getRecord(runtimeArtifacts?.wc01ProductionProjection);
+  const wc01ProjectionMode = getRecordString(wc01ProductionProjection, "mode");
+  const wc01ProjectionVersion = getRecordString(wc01ProductionProjection, "version");
+  const scannerExecutionMode = getRecordString(wc01ProductionProjection, "scannerExecutionMode");
+  const gdprProjectionContext = wc01ProjectionMode && wc01ProjectionVersion && scannerExecutionMode
+    ? {
+        mode: wc01ProjectionMode,
+        scannerExecutionMode,
+        version: wc01ProjectionVersion,
+      }
+    : null;
   const visualAccessLimitationNotice = deriveVisualAccessLimitationNotice(runtimeArtifacts);
   const requestedExecutiveAccessLimitationNotice =
     visualAccessLimitationNotice ??
@@ -7958,6 +7969,7 @@ export async function SharedScanDetailView({
                       defaultOpen
                       gdprEprivacyLens={gdprEprivacyExecutiveLens}
                       items={reportableGdprEprivacyCoverageChecklist}
+                      projectionContext={gdprProjectionContext}
                       showSummaryStrip={false}
                     />
                   ),

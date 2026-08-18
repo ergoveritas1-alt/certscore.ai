@@ -2419,6 +2419,17 @@ async function processPolicyCandidate({
       )
     : undefined;
   const merged = mergePolicyFacts(deterministic, topicAssist);
+  if (effectiveCandidate.deterministicSurfaceType !== "privacy_policy") {
+    // GDPR Transparency evidence belongs to the verified governing privacy
+    // notice. Terms, cookie, and general legal surfaces may contain similar
+    // vocabulary, but retaining Article 13 signals on those observations
+    // creates noisy evidence that must later be discarded. Keep their general
+    // policy topics while preventing non-governing surfaces from entering the
+    // GDPR evidence contract.
+    merged.article13DisclosureSignals = [];
+    merged.gdprTransparencyTopicCandidates = [];
+    merged.discardedArticle13DisclosureSignals = [];
+  }
 
   const childSelection = await selectOneHopPolicyIndexChildren({
     input,

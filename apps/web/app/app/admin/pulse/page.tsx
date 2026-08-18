@@ -115,14 +115,17 @@ function evidenceTitle(label: string, result: AdminEvidenceResult | null) {
   return result ? `${label}: ${STATUS_LABELS[result.status]} — ${result.descriptor}` : `${label}: not projected for this request`;
 }
 
-function EvidenceCode({ code, label, result }: { code: string; label: string; result: AdminEvidenceResult | null }) {
+function EvidenceCode({ code, disposition, label, result }: { code: string; disposition?: string | null; label: string; result: AdminEvidenceResult | null }) {
   const presentation = result ? EVIDENCE_MARKS[result.status] : { mark: "·", className: "text-slate-300" };
-  return <span className={`whitespace-nowrap font-semibold ${presentation.className}`} title={evidenceTitle(label, result)}>{code}{presentation.mark}</span>;
+  const title = [evidenceTitle(label, result), disposition ? `Pipeline disposition: ${disposition.replaceAll("_", " ")}` : null]
+    .filter((value): value is string => Boolean(value))
+    .join(" · ");
+  return <span className={`whitespace-nowrap font-semibold ${presentation.className}`} title={title}>{code}{presentation.mark}</span>;
 }
 
 function EvidenceGroupCell({ aggregate, labels, policyEvidence, results }: { aggregate: AdminEvidenceAggregate | null; labels: Record<string, string>; policyEvidence?: AdminPolicyEvidenceDiagnostic | null; results: Record<string, AdminEvidenceResult | null> | null }) {
   const summary = aggregate && aggregate.projected > 0 ? `${aggregate.observed}/${aggregate.total} ✓ · ${aggregate.review}△ · ${aggregate.concern}!` : "Not projected";
-  return <><p className="truncate text-[10px] font-medium text-slate-600" title={policyEvidence ? adminPolicyEvidenceDiagnosticTitle(policyEvidence) : undefined}>{policyEvidence ? `${adminPolicyEvidenceStageLabel(policyEvidence.stage)} · ` : ""}{summary}</p><p className="flex items-center gap-1.5 overflow-hidden text-[10px] leading-4">{Object.entries(labels).map(([code, label]) => <EvidenceCode code={code} key={code} label={label} result={results?.[code] ?? null} />)}</p></>;
+  return <><p className="truncate text-[10px] font-medium text-slate-600" title={policyEvidence ? adminPolicyEvidenceDiagnosticTitle(policyEvidence) : undefined}>{policyEvidence ? `${adminPolicyEvidenceStageLabel(policyEvidence.stage)} · ` : ""}{summary}</p><p className="flex items-center gap-1.5 overflow-hidden text-[10px] leading-4">{Object.entries(labels).map(([code, label]) => <EvidenceCode code={code} disposition={policyEvidence?.topicDispositions?.[code]?.disposition} key={code} label={label} result={results?.[code] ?? null} />)}</p></>;
 }
 
 const TRANSPARENCY_LABELS = { CC: "Controller/contact", LB: "Legal basis", DR: "Data retention", PP: "Processing purposes", RC: "Recipients/categories", DS: "Data-subject rights", IT: "International transfers", PC: "Privacy contact", SA: "Supervisory authority", AD: "Automated decisions/profiling" };

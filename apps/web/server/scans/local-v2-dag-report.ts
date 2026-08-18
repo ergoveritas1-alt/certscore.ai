@@ -59,6 +59,8 @@ import {
   LOCAL_V2_DAG_LAMBDA_AWS_REGION,
   isLocalV2DagLambdaAwsRegion,
   LOCAL_V2_DAG_SCAN_PROCESSOR,
+  LOCAL_V2_DAG_SCANNER_EXECUTION_MODE,
+  LOCAL_V2_DAG_WC01_PROJECTION_MODE,
   LOCAL_V2_DAG_WC01_PROJECTION_VERSION,
   shouldUseLocalV2DagScanTool,
   type LocalV2DagScanProfile
@@ -5646,7 +5648,11 @@ function buildMaterializedLocalV2Detail(
     wc01ProductionProjection: {
       approved: true,
       artifactBoundaryPreserved: true,
+      mode: LOCAL_V2_DAG_WC01_PROJECTION_MODE,
       pipeline: "normalized_concern_policy_unified_finding",
+      scannerExecutionMode: LOCAL_V2_DAG_SCANNER_EXECUTION_MODE,
+      scope: ["gdpr_transparency_observed_topics"],
+      source: "verified_canonical_evidence_bundle",
       version: LOCAL_V2_DAG_WC01_PROJECTION_VERSION
     },
     ...(providedScanNoGoAssessment ? {
@@ -6062,7 +6068,7 @@ function buildMaterializedLocalV2Detail(
 // fully derived report detail, so retaining an older entry can cause a
 // projection repair to persist stale evidence even after the projector is
 // deployed.
-const LOCAL_V2_DAG_REPORT_MATERIALIZATION_CACHE_VERSION = "local-v2-report-materialization-v10";
+const LOCAL_V2_DAG_REPORT_MATERIALIZATION_CACHE_VERSION = "local-v2-report-materialization-v11";
 const LOCAL_V2_DAG_REPORT_MATERIALIZATION_CACHE_TTL_MS = 60 * 60 * 1_000;
 const LOCAL_V2_DAG_REPORT_MATERIALIZATION_CACHE_MAX_ENTRIES = 6;
 const localV2DagReportMaterializationCache = new BoundedPromiseCache<string, ScanDetailResponse>({

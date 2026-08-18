@@ -5,6 +5,7 @@ import { buildPulseProjection } from "../../lib/pulse/projection";
 import {
   projectAdminEvidenceMatrix,
   type AdminEvidenceMatrix,
+  type AdminProjectionContext,
   type AdminScanSizeMetrics
 } from "../../lib/scans/admin-evidence-matrix";
 import type { GdprEprivacyCoverageChecklistItem } from "../../lib/scans/gdpr-eprivacy-coverage-checklist";
@@ -86,6 +87,28 @@ function recordObject(record: Record<string, unknown> | null, key: string) {
   return value && typeof value === "object" && !Array.isArray(value)
     ? value as Record<string, unknown>
     : null;
+}
+
+function projectAdminProjectionContext(scanRecord: PublicScanRecord): AdminProjectionContext {
+  const scanConfig = scanRecord.scan.scanConfigJson;
+  const execution = recordObject(scanConfig, "execution");
+  const parallel = recordObject(execution, "v2DagParallel");
+  const lambda = recordObject(execution, "v2DagLambda");
+  const configuredProjection = recordObject(parallel, "wc01ProductionProjection");
+  const materializedProjection = recordObject(scanRecord.runtimeArtifacts, "wc01ProductionProjection");
+  const projection = materializedProjection ?? configuredProjection;
+  const build = recordObject(lambda, "scannerBuildProvenance");
+  const status = recordString(lambda, "scannerBuildProvenanceStatus");
+  return {
+    scannerBuildProvenanceStatus:
+      status === "complete" || status === "partial" ? status : "unavailable",
+    scannerExecutionMode:
+      recordString(lambda, "scannerExecutionMode") ??
+      recordString(parallel, "executionMode"),
+    scannerGitSha: recordString(build, "gitSha"),
+    wc01ProjectionMode: recordString(projection, "mode"),
+    wc01ProjectionVersion: recordString(projection, "version"),
+  };
 }
 
 function nonnegativeInteger(record: Record<string, unknown> | null, key: string) {
@@ -200,6 +223,7 @@ export async function persistAdminScanSummaryForPublishedRecord(
     checklistRows,
     cmpVendorName,
     policyDisclosureSummary,
+    projectionContext: projectAdminProjectionContext(canonicalScanRecord),
     sizeMetrics: projectAdminScanSizeMetrics({ networkSummary, policyDisclosureSummary }),
     sourceProjectionVersion: recordString(snapshot, "report_projection_version")
   });

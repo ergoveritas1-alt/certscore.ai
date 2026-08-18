@@ -32,6 +32,11 @@ type GdprEprivacyCoverageChecklistCardProps = {
     summary?: string;
   } | null;
   items: GdprEprivacyCoverageChecklistItem[];
+  projectionContext?: {
+    mode: string;
+    scannerExecutionMode: string;
+    version: string;
+  } | null;
   showDebugConfidenceImprovements?: boolean;
   showSummaryStrip?: boolean;
 };
@@ -2920,6 +2925,7 @@ export function GdprEprivacyCoverageChecklistCard({
   defaultOpen = true,
   gdprEprivacyLens,
   items,
+  projectionContext = null,
   showDebugConfidenceImprovements = true,
   showSummaryStrip = true
 }: GdprEprivacyCoverageChecklistCardProps) {
@@ -2956,6 +2962,11 @@ export function GdprEprivacyCoverageChecklistCard({
       contentClassName="space-y-3 px-4 pb-4"
       summaryClassName="px-4 py-4"
     >
+      {projectionContext ? (
+        <p className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-xs leading-5 text-slate-600">
+          Scanner mode: {projectionContext.scannerExecutionMode.replaceAll("_", " ")}. WC01 projection: {projectionContext.mode.replaceAll("_", " ")} ({projectionContext.version}). Missing evidence remains unknown or review; this surface does not create findings.
+        </p>
+      ) : null}
       {showSummaryStrip ? <ChecklistRowSummaryStrip items={reportItems} /> : null}
       {groupedSections.map((group) => (
         <div key={group.title} className="overflow-hidden rounded-lg border border-slate-200">
