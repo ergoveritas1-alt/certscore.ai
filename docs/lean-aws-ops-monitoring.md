@@ -48,6 +48,7 @@ Recommended lean-mode environment:
 OPS_REQUIRE_SCANNER_HEARTBEAT=false
 OPS_REQUIRE_VALIDATION_HEARTBEAT=false
 OPS_REQUIRE_DIRECT_DATABASE=false
+OPS_REPAIR_ORPHANED_QUEUED_SCANS=true
 OPS_SCAN_QUEUE_STALE_MINUTES=10
 AWS_REGION=us-west-1
 AWS_VALIDATION_ROLE_TO_ASSUME=arn:aws:iam::<account-id>:role/certscore-validation-github-actions-deploy
@@ -81,6 +82,7 @@ The monitor checks:
 - validation worker heartbeat when direct database checks are enabled and validation heartbeat checks are not disabled
 - scanner heartbeat when direct database checks are enabled and scanner heartbeat checks are not disabled
 - queued full scans older than `OPS_SCAN_QUEUE_STALE_MINUTES` when direct database checks are enabled
+- fail-closed reconciliation for stale queued scans that have no executable Lambda dispatch configuration
 - relies on the production v2 DAG Lambda scanner for queued scans; no scanner ECS wake path exists
 
 The JSON output is intentionally sectioned so the first screen answers the operational questions directly:

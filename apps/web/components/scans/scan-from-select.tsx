@@ -120,7 +120,8 @@ export function ScanFromSelect({
   const localV2RunViaLambda = allowRestrictedScanOptions
     ? (localV2RunViaLambdaValue ?? uncontrolledLocalV2RunViaLambda)
     : true;
-  const showLocalV2RunViaLambdaOption = includeLocalV2ScanProfileOption && allowRestrictedScanOptions;
+  const showLocalV2RunViaLambdaOption =
+    process.env.NODE_ENV !== "production" && includeLocalV2ScanProfileOption && allowRestrictedScanOptions;
   const hasVisibleMenuContent = includeScanFromOptions || includeFreshRescanOption || showLocalV2RunViaLambdaOption;
 
   useEffect(() => {

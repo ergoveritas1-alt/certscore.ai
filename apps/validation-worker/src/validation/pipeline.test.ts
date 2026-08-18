@@ -24,6 +24,66 @@ import {
   shouldRetryRejectedNanoDocumentSource,
   shouldQueueNanoDocumentSourceForExtraction
 } from "./pipeline";
+import {
+  hasExecutableLambdaDispatch,
+  shouldFailQueuedScanWithoutExecutableDispatch
+} from "./orphaned-queued-scan";
+
+test("orphaned queued scans fail only after the dispatch deadline", () => {
+  const createdAt = "2026-08-17T23:00:00.000Z";
+  assert.equal(
+    shouldFailQueuedScanWithoutExecutableDispatch({
+      createdAt,
+      deadlineMs: 10 * 60_000,
+      nowMs: Date.parse("2026-08-17T23:09:59.999Z"),
+      scanConfigJson: { processor: "queued-full-scan-v1" },
+      status: "queued"
+    }),
+    false
+  );
+  assert.equal(
+    shouldFailQueuedScanWithoutExecutableDispatch({
+      createdAt,
+      deadlineMs: 10 * 60_000,
+      nowMs: Date.parse("2026-08-17T23:10:00.000Z"),
+      scanConfigJson: { processor: "queued-full-scan-v1" },
+      status: "queued"
+    }),
+    true
+  );
+  assert.equal(
+    shouldFailQueuedScanWithoutExecutableDispatch({
+      createdAt,
+      deadlineMs: 10 * 60_000,
+      nowMs: Date.parse("2026-08-18T00:00:00.000Z"),
+      scanConfigJson: { processor: "queued-full-scan-v1" },
+      status: "running"
+    }),
+    false
+  );
+});
+
+test("queued scans with a complete Lambda dispatch contract are never treated as orphans", () => {
+  const scanConfigJson = {
+    execution: {
+      v2DagLambda: {
+        dispatchState: "pending_dispatch",
+        functionName: "certscore-v2-dag-scanner",
+        resultQueueUrl: "https://sqs.eu-west-1.amazonaws.com/123/results"
+      }
+    }
+  };
+  assert.equal(hasExecutableLambdaDispatch(scanConfigJson), true);
+  assert.equal(
+    shouldFailQueuedScanWithoutExecutableDispatch({
+      createdAt: "2026-08-17T22:00:00.000Z",
+      nowMs: Date.parse("2026-08-18T00:00:00.000Z"),
+      scanConfigJson,
+      status: "queued"
+    }),
+    false
+  );
+});
 
 test("Nano signal policy waits become parked after the bounded poll window", () => {
   assert.deepEqual(getNanoSignalPolicyWaitDecision(18), {

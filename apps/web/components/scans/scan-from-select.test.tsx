@@ -124,3 +124,28 @@ test("ScanFromSelect exposes restricted scan controls to admin users", () => {
   assert.match(html, /<input[^>]*name="localV2RunViaLambda"[^>]*value="false"/);
   assert.match(html, /Chrome browser/);
 });
+
+test("ScanFromSelect hides the Lambda-off control in production while submitting Lambda on", () => {
+  const mutableEnv = process.env as Record<string, string | undefined>;
+  const priorNodeEnv = mutableEnv.NODE_ENV;
+  mutableEnv.NODE_ENV = "production";
+  try {
+    const html = renderToStaticMarkup(
+      createElement(ScanFromSelect, {
+        allowRestrictedScanOptions: true,
+        includeLocalV2ScanProfileOption: true,
+        localV2RunViaLambdaValue: true,
+        variant: "field"
+      })
+    );
+
+    assert.match(html, /<input[^>]*name="localV2RunViaLambda"[^>]*value="true"/);
+    assert.doesNotMatch(html, /Run via Lambda/);
+  } finally {
+    if (priorNodeEnv === undefined) {
+      delete mutableEnv.NODE_ENV;
+    } else {
+      mutableEnv.NODE_ENV = priorNodeEnv;
+    }
+  }
+});

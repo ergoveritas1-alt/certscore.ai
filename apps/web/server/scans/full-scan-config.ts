@@ -82,6 +82,7 @@ function buildCanonicalLegalSurfaceHints(input: { normalizedUrl: string }): Shar
 }
 
 export function buildQueuedFullScanConfig(input: BuildQueuedFullScanConfigInput): SharedScanConfig {
+  const env = input.env ?? process.env;
   const scanFrom = normalizeScanFrom(input.scanFrom);
   const scanFromDefinition = getScanFromDefinition(scanFrom);
   const crawlSeedHints = [
@@ -119,10 +120,10 @@ export function buildQueuedFullScanConfig(input: BuildQueuedFullScanConfigInput)
         }
       : {}),
     source: input.source
-  }), input.env, {
+  }), env, {
     lambdaDebugOverrides: input.localV2DagLambdaDebugOverrides,
     profile: input.localV2DagScanProfile,
-    runViaLambda: input.localV2DagRunViaLambda,
+    runViaLambda: env.NODE_ENV === "production" ? true : input.localV2DagRunViaLambda,
     scanFrom
   });
 }

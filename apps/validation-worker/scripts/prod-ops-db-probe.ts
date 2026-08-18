@@ -1,6 +1,8 @@
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import { query, queryOne } from "@website-signal-risk-scanner/db";
+import { reconcileOrphanedQueuedScans } from "../src/validation/repository";
+import { ORPHANED_QUEUED_SCAN_DISPATCH_DEADLINE_MS } from "../src/validation/orphaned-queued-scan";
 
 const DEFAULT_BASE_URL = "https://certscore.ai";
 const DEFAULT_HEARTBEAT_STALE_MINUTES = 10;
@@ -349,6 +351,7 @@ async function main() {
   const syntheticScanTimeoutMinutes = getNumberEnv("OPS_SYNTHETIC_SCAN_TIMEOUT_MINUTES", DEFAULT_SYNTHETIC_SCAN_TIMEOUT_MINUTES);
   const requireScannerHeartbeat = getBooleanEnv("OPS_REQUIRE_SCANNER_HEARTBEAT", false);
   const requireValidationHeartbeat = getBooleanEnv("OPS_REQUIRE_VALIDATION_HEARTBEAT", true);
+  const repairOrphanedQueuedScans = getBooleanEnv("OPS_REPAIR_ORPHANED_QUEUED_SCANS", true);
   const findings: string[] = [];
   let scannerHeartbeatHealthy = false;
   const sections = {
@@ -356,6 +359,23 @@ async function main() {
     workerHeartbeats: { details: [], status: "skipped" as SectionState },
     scannerQueueCanary: { details: [], status: "ok" as SectionState }
   };
+
+  const repairedOrphanedScanIds = repairOrphanedQueuedScans
+    ? await reconcileOrphanedQueuedScans({
+        limit: 20,
+        minAgeMs: Math.max(
+          ORPHANED_QUEUED_SCAN_DISPATCH_DEADLINE_MS,
+          scanQueueStaleMinutes * 60_000
+        ),
+        source: "prod-ops-db-probe"
+      })
+    : [];
+  if (repairedOrphanedScanIds.length > 0) {
+    note(
+      sections.scannerQueueCanary,
+      `Marked ${repairedOrphanedScanIds.length} orphaned queued scan(s) failed after the Lambda dispatch deadline.`
+    );
+  }
 
   const validationSettings = await queryOne<ValidationSettingsRow>(
     `select last_worker_heartbeat_at, last_worker_host, pipeline_enabled
@@ -482,6 +502,7 @@ async function main() {
         },
         sections,
         queuedFullScans: backlog?.queued_count ?? null,
+        repairedOrphanedQueuedScans: repairedOrphanedScanIds.length,
         syntheticScanEnabled,
         validationHeartbeatAt: validationSettings?.last_worker_heartbeat_at ?? null
       },

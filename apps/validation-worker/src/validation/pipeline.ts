@@ -10,6 +10,7 @@ import {
 } from "../../../../packages/shared/src/known-cmps";
 import {
   appendScanWorkflowEvent,
+  failOrphanedQueuedScan,
   appendUnifiedFindingsCompletionAndQueueReportMaterialization,
   claimNextAutomaticTarget,
   createScanForValidationRun,
@@ -39,6 +40,10 @@ import {
   updateValidationRun,
   upsertValidationVerdict
 } from "./repository";
+import {
+  ORPHANED_QUEUED_SCAN_DISPATCH_DEADLINE_MS,
+  shouldFailQueuedScanWithoutExecutableDispatch
+} from "./orphaned-queued-scan";
 import { ensureCompletedScanScoresPersisted } from "./local-v2-dag-lambda-results";
 import {
   validateFindingsBatchWithLlm,
@@ -6616,6 +6621,26 @@ export async function processNanoSignalEnrichmentJob(input: {
       : typeof artifacts.scan?.created_at === "string"
         ? artifacts.scan.created_at
         : null;
+  const lambdaOnlyProduction =
+    getWorkerEnv().CERTSCORE_V2_DAG_LAMBDA_TARGET_ENV === "production";
+
+  if (
+    lambdaOnlyProduction &&
+    shouldFailQueuedScanWithoutExecutableDispatch({
+      createdAt: typeof artifacts.scan?.created_at === "string" ? artifacts.scan.created_at : null,
+      scanConfigJson: artifacts.scan?.scan_config_json,
+      status: scanStatus
+    })
+  ) {
+    const failed = await failOrphanedQueuedScan({
+      minAgeMs: ORPHANED_QUEUED_SCAN_DISPATCH_DEADLINE_MS,
+      scanId,
+      source: "validation-nano-dispatch-deadline"
+    });
+    if (failed) {
+      return;
+    }
+  }
 
   if (pollCount === 0) {
     await appendScanWorkflowEvent({

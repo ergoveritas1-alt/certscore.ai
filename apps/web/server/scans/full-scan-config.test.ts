@@ -586,6 +586,30 @@ test("queued full-scan config can dispatch v2 DAG Lambda outside localhost when 
   });
 });
 
+test("production full-scan config ignores Lambda-off requests", () => {
+  const config = buildQueuedFullScanConfig({
+    env: {
+      CERTSCORE_V2_DAG_LAMBDA_ENABLED: "true",
+      CERTSCORE_V2_DAG_LAMBDA_FUNCTION_NAME: "certscore-v2-dag-prod",
+      CERTSCORE_V2_DAG_LAMBDA_RESULT_QUEUE_URL: "https://sqs.eu-west-1.amazonaws.com/123/certscore-v2-dag-prod-results",
+      CERTSCORE_V2_DAG_LAMBDA_TARGET_ENV: "production",
+      NEXT_PUBLIC_APP_URL: "https://certscore.ai",
+      NODE_ENV: "production"
+    },
+    hostname: "example.com",
+    localV2DagRunViaLambda: false,
+    maxPages: 3,
+    normalizedUrl: "https://example.com/",
+    profile: "homepage",
+    scanFrom: "eu_ie",
+    source: "manual-dashboard"
+  });
+
+  const v2DagLambda = config.execution?.v2DagLambda as Record<string, unknown> | undefined;
+  assert.equal(v2DagLambda?.functionName, "certscore-v2-dag-prod");
+  assert.equal(v2DagLambda?.targetEnvironment, "production");
+});
+
 test("queued full-scan Lambda option fails closed when AWS handoff env is missing", () => {
   assert.throws(
     () =>

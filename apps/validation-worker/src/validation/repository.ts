@@ -3137,6 +3137,121 @@ export async function appendScanWorkflowEvent(input: {
   );
 }
 
+export async function failOrphanedQueuedScan(input: {
+  minAgeMs: number;
+  scanId: string;
+  source: string;
+}) {
+  const client = await getWritePool().connect();
+  const failedAt = new Date().toISOString();
+  const errorMessage =
+    "The scan was not assigned to an executable scanner within the dispatch deadline. No result was inferred; start a new scan.";
+
+  try {
+    await client.query("begin");
+    const failed = await client.query<{
+      domain_id: string | null;
+      organization_id: string | null;
+    }>(
+      `update scans
+          set status = 'failed',
+              completed_at = $2,
+              error_message = $3,
+              updated_at = now()
+        where id = $1
+          and status = 'queued'
+          and created_at <= now() - ($4::double precision * interval '1 millisecond')
+          and (
+            jsonb_typeof(scan_config_json #> '{execution,v2DagLambda}') = 'object'
+            and scan_config_json #>> '{execution,v2DagLambda,dispatchState}' = 'pending_dispatch'
+            and nullif(btrim(scan_config_json #>> '{execution,v2DagLambda,functionName}'), '') is not null
+            and nullif(btrim(scan_config_json #>> '{execution,v2DagLambda,resultQueueUrl}'), '') is not null
+          ) is not true
+      returning domain_id::text, organization_id::text`,
+      [input.scanId, failedAt, errorMessage, Math.max(1, input.minAgeMs)]
+    );
+
+    const row = failed.rows[0];
+    if (!row) {
+      await client.query("rollback");
+      return false;
+    }
+
+    await client.query(
+      `insert into scan_events (scan_id, domain_id, organization_id, event_type, message, metadata_json)
+       values
+         ($1, $2, $3, 'ops.scan_marked_failed', $4, $5::jsonb),
+         ($1, $2, $3, $6, $7, $8::jsonb)`,
+      [
+        input.scanId,
+        row.domain_id,
+        row.organization_id,
+        "Ops reconciler marked an orphaned queued scan as failed after no executable Lambda dispatch was configured.",
+        JSON.stringify({
+          dispatchDeadlineMs: Math.max(1, input.minAgeMs),
+          failedAt,
+          reason: "scanner_dispatch_not_configured",
+          source: input.source
+        }),
+        SCAN_EVENT_TYPES.nanoSignalEnrichmentFailed,
+        "Nano document signal enrichment stopped because scanner dispatch was not configured.",
+        JSON.stringify({
+          dispatchDeadlineMs: Math.max(1, input.minAgeMs),
+          reason: "scanner_dispatch_not_configured",
+          stage: "nano_doc_signals"
+        })
+      ]
+    );
+    await client.query(`delete from nano_signal_work_items where scan_id = $1`, [input.scanId]);
+    await client.query("commit");
+    return true;
+  } catch (error) {
+    await client.query("rollback").catch(() => undefined);
+    throw error;
+  } finally {
+    client.release();
+  }
+}
+
+export async function reconcileOrphanedQueuedScans(input: {
+  limit?: number;
+  minAgeMs: number;
+  source: string;
+}) {
+  const candidates = await query<{ id: string }>(
+    `select id::text as id
+       from scans
+      where scan_type = 'full'
+        and status = 'queued'
+        and created_at <= now() - ($1::double precision * interval '1 millisecond')
+        and (
+          jsonb_typeof(scan_config_json #> '{execution,v2DagLambda}') = 'object'
+          and scan_config_json #>> '{execution,v2DagLambda,dispatchState}' = 'pending_dispatch'
+          and nullif(btrim(scan_config_json #>> '{execution,v2DagLambda,functionName}'), '') is not null
+          and nullif(btrim(scan_config_json #>> '{execution,v2DagLambda,resultQueueUrl}'), '') is not null
+        ) is not true
+      order by created_at asc
+      limit $2`,
+    [Math.max(1, input.minAgeMs), Math.max(1, Math.min(100, input.limit ?? 20))],
+    { readOnly: true }
+  );
+  const failedScanIds: string[] = [];
+
+  for (const candidate of candidates.rows) {
+    if (
+      await failOrphanedQueuedScan({
+        minAgeMs: input.minAgeMs,
+        scanId: candidate.id,
+        source: input.source
+      })
+    ) {
+      failedScanIds.push(candidate.id);
+    }
+  }
+
+  return failedScanIds;
+}
+
 export async function parkNanoSignalEnrichmentUntilScanTerminal(input: {
   pollCount: number;
   reason: string;

@@ -29,6 +29,10 @@ export function restrictLocalV2RunViaLambdaForUser(input: {
   env?: LocalV2DagScanEnv;
   localV2DagRunViaLambda: boolean | null | undefined;
 }) {
+  if (input.env?.NODE_ENV === "production" || (!input.env && process.env.NODE_ENV === "production")) {
+    return true;
+  }
+
   if (input.canUseRestrictedScanOptions) {
     return input.localV2DagRunViaLambda;
   }

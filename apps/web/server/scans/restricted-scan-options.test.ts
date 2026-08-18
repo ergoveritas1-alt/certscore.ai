@@ -87,6 +87,20 @@ test("restricted scan users keep explicit Lambda preference", () => {
   );
 });
 
+test("production forces Lambda even for restricted scan users", () => {
+  assert.equal(
+    restrictLocalV2RunViaLambdaForUser({
+      canUseRestrictedScanOptions: true,
+      env: {
+        NEXT_PUBLIC_APP_URL: "https://certscore.ai",
+        NODE_ENV: "production"
+      },
+      localV2DagRunViaLambda: false
+    }),
+    true
+  );
+});
+
 test("all users can select every public scan region", () => {
   assert.equal(restrictScanFromForUser({ canUseRestrictedScanOptions: false, scanFrom: "eu_de" }), "eu_de");
   assert.equal(restrictScanFromForUser({ canUseRestrictedScanOptions: true, scanFrom: "eu_de" }), "eu_de");
