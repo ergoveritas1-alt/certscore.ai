@@ -56,9 +56,9 @@ const ROOT_FULL_CHECKS: Check[] = [
     command: ["pnpm", "--filter", "@certscore/scan-core", "test:integration-fixtures:consent"]
   },
   {
-    key: "scan-core-policy-timing-quality",
-    label: "v2 policy timing quality fixtures",
-    command: ["pnpm", "--filter", "@certscore/scan-core", "test:policy-timing-quality"]
+    key: "scan-core-policy-full",
+    label: "v2 policy scanner full suite",
+    command: ["pnpm", "--filter", "@certscore/scan-core", "test:policy:full"]
   },
   {
     key: "lambda-tests",
@@ -156,9 +156,9 @@ const TARGETS: Target[] = [
         command: ["pnpm", "--filter", "@certscore/scan-core", "test:integration-fixtures:consent"]
       },
       {
-        key: "scan-core-policy-timing-quality",
-        label: "v2 policy timing quality fixtures",
-        command: ["pnpm", "--filter", "@certscore/scan-core", "test:policy-timing-quality"]
+        key: "scan-core-policy-full",
+        label: "v2 policy scanner full suite",
+        command: ["pnpm", "--filter", "@certscore/scan-core", "test:policy:full"]
       },
       {
         key: "lambda-typecheck",

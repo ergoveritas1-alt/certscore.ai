@@ -266,6 +266,47 @@ function makeCoverageOutcome(
   };
 }
 
+test("checklist preserves a verified international-transfer absence gap over its generic review finding", () => {
+  const items = deriveGdprEprivacyCoverageChecklist({
+    coverageLimited: false,
+    coverageOutcomes: {
+      international_transfers_disclosure: makeCoverageOutcome({
+        evidenceRefs: ["Evidence: International transfer disclosure"],
+        limitation:
+          "International transfer disclosure was not observed in a verified, complete, target-owned policy retained with sufficient row-specific absence coverage.",
+        retainedEvidence: {
+          article13CoverageAssessment: {
+            assessmentContractVersion: "gdpr_transparency_article13_coverage_assessment.v1",
+            coverageStatus: "sufficient",
+            policyDocumentIds: ["policy-1"],
+            policyDocumentRoles: ["policy_document"],
+            policyDocumentSha256: ["a".repeat(64)],
+            sourceUrls: ["https://example.test/privacy"],
+            status: "not_observed_with_sufficient_coverage",
+            topic: "international_transfers"
+          }
+        },
+        rowId: "international_transfers_disclosure",
+        status: "Gap observed"
+      })
+    },
+    projectedFindings: [{
+      id: "missing_transfer_disclosure",
+      label: "Missing transfer disclosure"
+    }],
+    scanCompleted: true,
+    unifiedFindings: [
+      makeFinding("missing_transfer_disclosure", "Missing transfer disclosure")
+    ]
+  });
+
+  const transfer = byId(items, "international_transfers_disclosure");
+  assert.equal(transfer.status, "Gap observed");
+  assert.equal(transfer.assessmentStatus, "gap_observed");
+  assert.equal(transfer.criticalEvidence.pipeline.projectionStage, "coverage_policy");
+  assert.deepEqual(transfer.criticalEvidence.projectedFindings, []);
+});
+
 test("checklist keeps automated policy retrieval limitations neutral", () => {
   const items = deriveGdprEprivacyCoverageChecklist({
     coverageLimited: false,

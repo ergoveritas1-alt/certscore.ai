@@ -269,6 +269,36 @@ export function isLocalV2DagReport(scanRecord: ScanDetailResponse) {
   return Boolean(getLocalV2DagReportInput(scanRecord));
 }
 
+type LocalV2DagReportArtifactSelectionInput = {
+  manifestArtifactSha256: string | null;
+  manifestArtifactSizeBytes: number | null;
+  manifestArtifactUri: string | null;
+  outDir: string | null;
+  scanArtifactSha256: string | null;
+  scanArtifactSizeBytes: number | null;
+  scanArtifactUri: string | null;
+};
+
+function hasVerifiedRemoteReportArtifactChain(
+  input: LocalV2DagReportArtifactSelectionInput,
+) {
+  return Boolean(
+    input.scanArtifactUri &&
+    input.scanArtifactSha256 &&
+    input.scanArtifactSizeBytes !== null &&
+    input.manifestArtifactUri &&
+    input.manifestArtifactSha256 &&
+    input.manifestArtifactSizeBytes !== null
+  );
+}
+
+function shouldReadLocalV2DagReportOutDir(
+  input: LocalV2DagReportArtifactSelectionInput,
+  localToolEnabled = shouldUseLocalV2DagScanTool(),
+) {
+  return Boolean(input.outDir && localToolEnabled);
+}
+
 export function shouldAttemptLocalV2DagLambdaResultRefresh(scanRecord: ScanDetailResponse, nowMs = Date.now()) {
   // Lambda result ingestion is owned by the validation worker. Report pages must
   // not consume SQS messages, or they can hide results until visibility timeout.
@@ -1411,10 +1441,35 @@ function extractSupervisoryAuthoritySupportingContactContext(value: string) {
   return contactMatch?.[0] ? contactMatch[0].trim() : null;
 }
 
-async function readLocalV2DagBundle(outDir: string): Promise<CanonicalEvidenceBundle | null> {
+type LocalV2DagLocalArtifactVerification = {
+  expectedSha256?: string | null;
+  expectedSizeBytes?: number | null;
+};
+
+async function readLocalV2DagJsonArtifact(
+  outDir: string,
+  fileName: string,
+  verification: LocalV2DagLocalArtifactVerification = {},
+) {
+  const body = await readFile(path.join(resolveLocalV2OutDir(outDir), fileName));
+  verifyLocalV2DagLambdaArtifactBody({
+    body,
+    expectedSha256: verification.expectedSha256,
+    expectedSizeBytes: verification.expectedSizeBytes,
+  });
+  return JSON.parse(body.toString("utf8")) as unknown;
+}
+
+async function readLocalV2DagBundle(
+  outDir: string,
+  verification: LocalV2DagLocalArtifactVerification = {},
+): Promise<CanonicalEvidenceBundle | null> {
   try {
-    const raw = await readFile(path.join(resolveLocalV2OutDir(outDir), "CanonicalEvidenceBundle.json"), "utf8");
-    const parsed: unknown = JSON.parse(raw);
+    const parsed = await readLocalV2DagJsonArtifact(
+      outDir,
+      "CanonicalEvidenceBundle.json",
+      verification,
+    );
     if (
       !isRecord(parsed) ||
       (parsed.schemaVersion !== "certscore.v2.canonical-evidence-bundle.v1" &&
@@ -1428,10 +1483,16 @@ async function readLocalV2DagBundle(outDir: string): Promise<CanonicalEvidenceBu
   }
 }
 
-async function readLocalV2DagManifest(outDir: string): Promise<Record<string, unknown> | null> {
+async function readLocalV2DagManifest(
+  outDir: string,
+  verification: LocalV2DagLocalArtifactVerification = {},
+): Promise<Record<string, unknown> | null> {
   try {
-    const raw = await readFile(path.join(resolveLocalV2OutDir(outDir), "LocalV2DagLambdaManifest.json"), "utf8");
-    const parsed: unknown = JSON.parse(raw);
+    const parsed = await readLocalV2DagJsonArtifact(
+      outDir,
+      "LocalV2DagLambdaManifest.json",
+      verification,
+    );
     return isRecord(parsed) ? parsed : null;
   } catch {
     return null;
@@ -1716,6 +1777,65 @@ async function loadVerifiedPolicyTextArtifacts(input: {
   return new Map<string, RetainedPolicyTextArtifactEvidence>(entries);
 }
 
+async function loadVerifiedLocalPolicyTextArtifacts(input: {
+  bundle: CanonicalEvidenceBundle;
+  localOutDir: string;
+  manifest: Record<string, unknown> | null;
+}) {
+  const references = [...new Map(input.bundle.policySurfaceObservations.flatMap((surface) => {
+    const reference = policySurfaceTextArtifactReference(surface);
+    return reference ? [[reference.artifactId, reference] as const] : [];
+  })).values()].slice(0, 16);
+  const entries = await Promise.all(references.map(async (reference) => {
+    const pointer = getLocalV2DagAuxiliaryArtifact(input.manifest, reference.fileName);
+    if (!pointer) {
+      return [reference.artifactId, {
+        artifactId: reference.artifactId,
+        fileName: reference.fileName,
+        verificationStatus: "missing_manifest_entry",
+        failureReason: "policy_text_artifact_missing_from_verified_manifest",
+      } satisfies RetainedPolicyTextArtifactEvidence] as const;
+    }
+    try {
+      if (pointer.sizeBytes === null || pointer.sizeBytes <= 0 || pointer.sizeBytes > 1_000_000 || !pointer.sha256) {
+        throw new Error("Policy text artifact metadata is missing or outside the retained size bound.");
+      }
+      const resolved = resolvePolicyTextArtifactPath(reference.artifactPath, input.localOutDir);
+      if (!resolved) {
+        throw new Error("Verified local policy text artifact is unavailable.");
+      }
+      const body = verifyLocalV2DagLambdaArtifactBody({
+        body: await readFile(resolved),
+        expectedSha256: pointer.sha256,
+        expectedSizeBytes: pointer.sizeBytes,
+      });
+      if (body.includes(0)) {
+        throw new Error("Policy text artifact is not valid bounded UTF-8 text.");
+      }
+      return [reference.artifactId, {
+        artifactId: reference.artifactId,
+        fileName: reference.fileName,
+        text: body.toString("utf8").replace(/\s+/g, " ").trim(),
+        sha256: pointer.sha256,
+        sizeBytes: body.byteLength,
+        uri: pointer.uri,
+        verificationStatus: "verified",
+      } satisfies RetainedPolicyTextArtifactEvidence] as const;
+    } catch {
+      return [reference.artifactId, {
+        artifactId: reference.artifactId,
+        fileName: reference.fileName,
+        sha256: pointer.sha256 ?? undefined,
+        sizeBytes: pointer.sizeBytes ?? undefined,
+        uri: pointer.uri,
+        verificationStatus: "verification_failed",
+        failureReason: "policy_text_local_mirror_verification_failed",
+      } satisfies RetainedPolicyTextArtifactEvidence] as const;
+    }
+  }));
+  return new Map<string, RetainedPolicyTextArtifactEvidence>(entries);
+}
+
 const LOCAL_V2_VISUAL_EVIDENCE_FILE_NAMES = {
   "local_v2:screenshot_pre_consent": "screenshot-pre-consent.png",
   "local_v2:screenshot_pre_consent_settled": "screenshot-pre-consent-settled.png",
@@ -1766,7 +1886,7 @@ export async function resolveLocalV2DagVisualEvidencePointer(
 
   const id = artifactId as keyof typeof LOCAL_V2_VISUAL_EVIDENCE_FILE_NAMES;
   const fileNames = localV2VisualEvidenceFileNames(id);
-  const shouldReadLocalOutDir = Boolean(input.outDir && shouldUseLocalV2DagScanTool());
+  const shouldReadLocalOutDir = shouldReadLocalV2DagReportOutDir(input);
   if (shouldReadLocalOutDir && input.outDir) {
     for (const fileName of fileNames) {
       try {
@@ -5932,7 +6052,7 @@ function buildMaterializedLocalV2Detail(
 // fully derived report detail, so retaining an older entry can cause a
 // projection repair to persist stale evidence even after the projector is
 // deployed.
-const LOCAL_V2_DAG_REPORT_MATERIALIZATION_CACHE_VERSION = "local-v2-report-materialization-v9";
+const LOCAL_V2_DAG_REPORT_MATERIALIZATION_CACHE_VERSION = "local-v2-report-materialization-v10";
 const LOCAL_V2_DAG_REPORT_MATERIALIZATION_CACHE_TTL_MS = 60 * 60 * 1_000;
 const LOCAL_V2_DAG_REPORT_MATERIALIZATION_CACHE_MAX_ENTRIES = 6;
 const localV2DagReportMaterializationCache = new BoundedPromiseCache<string, ScanDetailResponse>({
@@ -5991,22 +6111,42 @@ async function materializeLocalV2DagScanDetailUncached(
   if (!input || scanRecord.scan.status !== "completed") {
     return scanRecord;
   }
-  const shouldReadLocalOutDir = Boolean(input.outDir && shouldUseLocalV2DagScanTool());
+  const shouldReadLocalOutDir = shouldReadLocalV2DagReportOutDir(input);
   let bundle: CanonicalEvidenceBundle | null;
   let consentControlGeometryEvidence: Record<string, unknown> | null;
   let remoteManifest: Record<string, unknown> | null = null;
   let policyTextArtifactsById: ReadonlyMap<string, RetainedPolicyTextArtifactEvidence> | undefined;
+  const verifiedArtifactChainAvailable = hasVerifiedRemoteReportArtifactChain(input);
   if (shouldReadLocalOutDir && input.outDir) {
-    [bundle, consentControlGeometryEvidence] = await withServerTiming(
+    [bundle, consentControlGeometryEvidence, remoteManifest] = await withServerTiming(
       "app.scan_detail.local_v2_artifacts.local",
       async () => {
-        const [localBundle, localGeometryEvidence] = await Promise.all([
-          readLocalV2DagBundle(input.outDir!),
-          readLocalV2ConsentControlGeometry(input.outDir!)
+        const [localBundle, localGeometryEvidence, localManifest] = await Promise.all([
+          readLocalV2DagBundle(input.outDir!, verifiedArtifactChainAvailable ? {
+            expectedSha256: input.scanArtifactSha256,
+            expectedSizeBytes: input.scanArtifactSizeBytes,
+          } : {}),
+          readLocalV2ConsentControlGeometry(input.outDir!),
+          readLocalV2DagManifest(input.outDir!, verifiedArtifactChainAvailable ? {
+            expectedSha256: input.manifestArtifactSha256,
+            expectedSizeBytes: input.manifestArtifactSizeBytes,
+          } : {}),
         ]);
-        return [localBundle, localGeometryEvidence] as const;
+        return [localBundle, localGeometryEvidence, localManifest] as const;
       }
     );
+    if (bundle && remoteManifest && verifiedArtifactChainAvailable) {
+      const verifiedLocalBundle = bundle;
+      const verifiedLocalManifest = remoteManifest;
+      policyTextArtifactsById = await withServerTiming(
+        "app.scan_detail.local_v2_artifact.policy_text_mirror",
+        () => loadVerifiedLocalPolicyTextArtifacts({
+          bundle: verifiedLocalBundle,
+          localOutDir: input.outDir!,
+          manifest: verifiedLocalManifest,
+        }),
+      );
+    }
   } else {
     const remoteArtifacts = await withServerTiming(
       "app.scan_detail.local_v2_artifacts.remote",
@@ -6071,7 +6211,15 @@ async function materializeLocalV2DagScanDetailUncached(
             generatedAt: bundle.completedAt,
             localOutDir: shouldReadLocalOutDir ? input.outDir : null,
             scanId: bundle.scanId,
-            sourceBundle: shouldReadLocalOutDir
+            sourceBundle: shouldReadLocalOutDir && verifiedArtifactChainAvailable
+              ? {
+                  schemaVersion: bundle.schemaVersion,
+                  sha256: input.scanArtifactSha256!,
+                  sizeBytes: input.scanArtifactSizeBytes!,
+                  uri: input.scanArtifactUri!,
+                  verificationStatus: "verified",
+                }
+              : shouldReadLocalOutDir
               ? {
                   schemaVersion: bundle.schemaVersion,
                   verificationStatus: "local_unverified",
@@ -6111,8 +6259,10 @@ export async function materializeLocalV2DagScanDetail(
   // evidence-rich scans can exceed that cache's 2 MB item limit. Local/test
   // records without a verified artifact identity stay uncached so fixtures and
   // local out-dir development remain fully deterministic.
-  const localOutDirActive = Boolean(input.outDir && shouldUseLocalV2DagScanTool());
-  if (localOutDirActive || !input.scanArtifactUri || !input.scanArtifactSha256) {
+  const unverifiedLocalOutDirActive =
+    shouldReadLocalV2DagReportOutDir(input) &&
+    !hasVerifiedRemoteReportArtifactChain(input);
+  if (unverifiedLocalOutDirActive || !input.scanArtifactUri || !input.scanArtifactSha256) {
     return materializeLocalV2DagScanDetailUncached(scanRecord, options);
   }
 
@@ -6134,5 +6284,6 @@ export async function materializeLocalV2DagScanDetail(
 }
 
 export const localV2DagReportPerformanceTestHelpers = {
-  loadLocalV2DagRemoteArtifacts
+  loadLocalV2DagRemoteArtifacts,
+  shouldReadLocalV2DagReportOutDir
 };

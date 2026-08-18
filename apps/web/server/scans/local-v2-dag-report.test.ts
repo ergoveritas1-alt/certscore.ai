@@ -349,6 +349,39 @@ test("verified policy text starts when bundle and manifest are ready without wai
   });
 });
 
+test("a local mirror remains active when immutable remote checksums are available", async () => {
+  const { localV2DagReportPerformanceTestHelpers } = await loadLocalV2DagReport();
+  const verifiedRemoteInput = {
+    manifestArtifactSha256: "b".repeat(64),
+    manifestArtifactSizeBytes: 456,
+    manifestArtifactUri: "s3://certscore-artifacts/scan/LocalV2DagLambdaManifest.json",
+    outDir: "/workspace/artifacts/local-v2-dag-scans/scan-1",
+    scanArtifactSha256: "a".repeat(64),
+    scanArtifactSizeBytes: 123,
+    scanArtifactUri: "s3://certscore-artifacts/scan/CanonicalEvidenceBundle.json",
+  };
+
+  assert.equal(
+    localV2DagReportPerformanceTestHelpers.shouldReadLocalV2DagReportOutDir(
+      verifiedRemoteInput,
+      true,
+    ),
+    true,
+  );
+  assert.equal(
+    localV2DagReportPerformanceTestHelpers.shouldReadLocalV2DagReportOutDir({
+      ...verifiedRemoteInput,
+      manifestArtifactSha256: null,
+      manifestArtifactSizeBytes: null,
+      manifestArtifactUri: null,
+      scanArtifactSha256: null,
+      scanArtifactSizeBytes: null,
+      scanArtifactUri: null,
+    }, true),
+    true,
+  );
+});
+
 test("getLocalV2PrimaryLanguage ranks declared, retained text, and URL evidence", async () => {
   const { getLocalV2PrimaryLanguage } = await loadLocalV2DagReport();
   assert.equal(getLocalV2PrimaryLanguage({
@@ -3931,6 +3964,31 @@ test("summarizePolicySurfaces permits absence coverage for a verified substantiv
   assert.deepEqual(retention?.policyDocumentRoles, ["policy_document"]);
 });
 
+test("a complete 2,104-character governing policy supports deterministic absence coverage", async () => {
+  const { dedupePolicySurfaces, summarizePolicySurfaces } = await loadLocalV2DagReport();
+  const policyText = [
+    "Privacy Notice. Example Test is the controller for personal information.",
+    "We collect and use personal information to provide, secure, and improve the service.",
+    "Our hosting providers may process request information to deliver and protect the site."
+  ].join(" ").repeat(20).slice(0, 2_104);
+  const surfaces = dedupePolicySurfaces([{
+    observationId: "compact-complete-privacy-policy",
+    surfaceType: "privacy_policy",
+    url: "https://example.test/privacy",
+    status: "fetched",
+    documentRole: "policy_document",
+    textExcerpt: policyText,
+  }] as never, "example.test");
+
+  const summary = summarizePolicySurfaces(surfaces, "example.test", { primaryLanguage: "en" });
+  const retention = (summary.article13CoverageAssessments as Array<Record<string, unknown>>)
+    .find((assessment) => assessment.topic === "data_retention");
+
+  assert.equal(policyText.length, 2_104);
+  assert.equal(retention?.coverageStatus, "sufficient");
+  assert.equal(retention?.status, "not_observed_with_sufficient_coverage");
+});
+
 test("500-character policies support positive evaluation without supporting absence gaps", async () => {
   const { dedupePolicySurfaces, summarizePolicySurfaces } = await loadLocalV2DagReport();
   const legalBasisEvidence =
@@ -4938,6 +4996,168 @@ test("materializeLocalV2DagScanDetail records stable GDPR Transparency profile m
     assert.equal(optInDetail.runtimeArtifacts?.gdprTransparencyEvidenceProfile, "gdpr_transparency_multilingual_article13_v1");
     assert.equal(optInDetail.runtimeArtifacts?.gdprTransparencyProductionEvidenceEnabled, true);
     assert.equal(optInSignals?.length, 0);
+  } finally {
+    if (previousAppUrl === undefined) {
+      delete process.env.NEXT_PUBLIC_APP_URL;
+    } else {
+      process.env.NEXT_PUBLIC_APP_URL = previousAppUrl;
+    }
+    await rm(outDir, { recursive: true, force: true });
+  }
+});
+
+test("materializeLocalV2DagScanDetail verifies a checksum-matching local policy mirror", async () => {
+  const { materializeLocalV2DagScanDetail } = await loadLocalV2DagReport();
+  const previousAppUrl = process.env.NEXT_PUBLIC_APP_URL;
+  const scanId = "94d8855d-0347-4d5d-9bb1-b60f1cccc8fd";
+  const outDir = await mkdtemp(path.join(process.cwd(), "artifacts/local-v2-dag-scans/verified-policy-mirror-"));
+  const policyFileName = "policy_surface_text_verified.txt";
+  const policyArtifactId = "policy_surface_text_verified";
+  const policyArtifactPath = path.join(outDir, policyFileName);
+  const policyText = [
+    "Privacy Notice. Example Test is the controller for personal information.",
+    "We collect and use personal information to provide, secure, and improve the service.",
+    "Our hosting and content-delivery providers may process request information to deliver and protect the site."
+  ].join(" ").repeat(20).slice(0, 2_104);
+  try {
+    process.env.NEXT_PUBLIC_APP_URL = "http://localhost:3000";
+    await writeFile(policyArtifactPath, policyText, "utf8");
+    const policyArtifactBody = Buffer.from(policyText, "utf8");
+    const bundleBody = Buffer.from(`${JSON.stringify({
+      completedAt: "2026-06-25T02:16:00.000Z",
+      consentUiObservations: [],
+      cookieEvents: [],
+      modulesRun: [],
+      networkEvents: [],
+      normalizedUrl: "https://example.test/",
+      normalizedVendorObservations: [],
+      policySurfaceObservations: [{
+        artifactRefs: [{
+          artifactId: policyArtifactId,
+          artifactType: "other",
+          label: "privacy_policy normalized policy_surface_text",
+          path: policyArtifactPath,
+          redactionStatus: "redacted",
+          relatedEventIds: [],
+          sensitivity: "redacted"
+        }],
+        confidence: 0.98,
+        contentCoverage: {
+          extractedSectionCount: 1,
+          limitationKeys: [],
+          retainedSectionCount: 1,
+          retainedTableRowCount: 0,
+          sourceTextChars: policyText.length,
+          status: "complete"
+        },
+        documentEvaluationState: "usable",
+        documentFetchState: "fetched",
+        documentFormat: "text",
+        documentRole: "policy_document",
+        documentTextCoverage: {
+          limitationKeys: [],
+          retainedTextChars: policyText.length,
+          sourceTextChars: policyText.length,
+          status: "complete"
+        },
+        normalizedUrl: "https://example.test/privacy",
+        observationId: "verified-policy",
+        ownershipConfidence: 0.99,
+        status: "fetched",
+        surfaceType: "privacy_policy",
+        targetRelationship: "target_controller",
+        textExcerpt: policyText.slice(0, 1_000),
+        url: "https://example.test/privacy"
+      }],
+      runtimeCoverage: {
+        coverageStatus: "usable",
+        fallbackModesUsed: [],
+        limitationKeys: [],
+        notes: [],
+        observationCounts: {
+          cookieEvents: 0,
+          cookiesBeforeConsent: 0,
+          networkEvents: 0,
+          normalizedVendors: 0,
+          observedJourneys: 0,
+          thirdPartyRequests: 0
+        },
+        silentEmpty: false
+      },
+      runtimeTimeline: [],
+      scanId,
+      schemaVersion: "certscore.v2.canonical-evidence-bundle.v1",
+      screenshots: [],
+      startedAt: "2026-06-25T02:15:50.000Z",
+      url: "https://example.test/"
+    }, null, 2)}\n`, "utf8");
+    const manifestBody = Buffer.from(`${JSON.stringify({
+      auxiliaryArtifacts: [{
+        fileName: policyFileName,
+        sha256: createHash("sha256").update(policyArtifactBody).digest("hex"),
+        sizeBytes: policyArtifactBody.byteLength,
+        uri: `s3://test-policy-artifacts/${policyFileName}`
+      }]
+    }, null, 2)}\n`, "utf8");
+    await writeFile(path.join(outDir, "CanonicalEvidenceBundle.json"), bundleBody);
+    await writeFile(path.join(outDir, "LocalV2DagLambdaManifest.json"), manifestBody);
+
+    const detail = await materializeLocalV2DagScanDetail(makeScanRecord({
+      events: [{
+        createdAt: "2026-06-25T02:16:01.000Z",
+        eventType: "v2_lambda_result.received",
+        id: "verified-result",
+        message: "Verified Lambda artifacts retained.",
+        metadataJson: {
+          artifactAccess: { productionReadMode: "verified_s3" },
+          artifactOnly: true,
+          artifactMetadata: {
+            manifestUri: {
+              sha256: createHash("sha256").update(manifestBody).digest("hex"),
+              sizeBytes: manifestBody.byteLength
+            },
+            scanArtifactUri: {
+              sha256: createHash("sha256").update(bundleBody).digest("hex"),
+              sizeBytes: bundleBody.byteLength
+            }
+          },
+          artifactPointers: {
+            manifestUri: "s3://test-policy-artifacts/LocalV2DagLambdaManifest.json",
+            scanArtifactUri: "s3://test-policy-artifacts/CanonicalEvidenceBundle.json"
+          },
+          processor: LOCAL_V2_DAG_SCAN_PROCESSOR,
+          productionFindingIntegration: false
+        }
+      }],
+      scan: {
+        ...makeScanRecord().scan,
+        domainHostname: "example.test",
+        scanConfigJson: {
+          hostname: "example.test",
+          normalizedUrl: "https://example.test/",
+          processor: LOCAL_V2_DAG_SCAN_PROCESSOR,
+          execution: {
+            localV2Dag: { outDir },
+            v2DagParallel: {
+              artifactOnly: true,
+              localOnly: true,
+              profile: "standard",
+              productionFindingIntegration: false
+            }
+          }
+        }
+      }
+    }), { requireBundle: true });
+    const summary = detail.runtimeArtifacts?.policyDisclosureSummary as Record<string, unknown>;
+    const projection = summary.policyTextEvidenceProjection as Record<string, unknown>;
+    const documents = projection.documents as Array<Record<string, unknown>>;
+    const assessments = summary.article13CoverageAssessments as Array<Record<string, unknown>>;
+    const retention = assessments.find((assessment) => assessment.topic === "data_retention");
+
+    assert.equal(projection.projectionStatus, "verified_complete");
+    assert.equal(documents[0]?.artifactVerificationStatus, "verified");
+    assert.equal(retention?.coverageStatus, "sufficient");
+    assert.equal(retention?.status, "not_observed_with_sufficient_coverage");
   } finally {
     if (previousAppUrl === undefined) {
       delete process.env.NEXT_PUBLIC_APP_URL;

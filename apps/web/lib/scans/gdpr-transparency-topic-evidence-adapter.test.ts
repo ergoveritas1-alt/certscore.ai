@@ -103,6 +103,40 @@ test("legacy_only accepts no production signals from GDPR Transparency topic can
   assert.equal(diagnosticCandidate.productionCredit, false);
 });
 
+test("compact purpose and service-provider candidates pass the production evidence adapter", () => {
+  const candidates = [
+    candidate({
+      confidence: 0.82,
+      evidenceText:
+        "We use this information to understand site usage, verify changes, and diagnose usability issues.",
+      matchStrength: "equivalent",
+      matchedLocale: "en",
+      matchedTerm: "we use this information to",
+      topic: "processing_purposes"
+    }),
+    candidate({
+      confidence: 0.82,
+      evidenceText:
+        "Our hosting and content-delivery service providers may process ordinary request information to deliver and protect the site.",
+      matchStrength: "equivalent",
+      matchedLocale: "en",
+      matchedTerm: "service providers may process",
+      topic: "recipients_or_vendor_categories"
+    })
+  ];
+  const result = adaptGdprTransparencyTopicCandidatesForProduction({
+    policyTextQuality: { usable: true },
+    profile: GDPR_TRANSPARENCY_MULTILINGUAL_ARTICLE13_PROFILE,
+    surface: surface(candidates)
+  });
+
+  assert.deepEqual(
+    result.acceptedProductionSignals.map((signal) => signal.disclosureType).sort(),
+    ["processing_purposes", "recipients_or_vendor_categories"]
+  );
+  assert.deepEqual(result.discardedArticle13DisclosureSignals, []);
+});
+
 test("explicit GDPR Transparency profile accepts strong direct multilingual candidates from usable privacy-policy surfaces", () => {
   const examples: Array<{ locale: Locale; matchedTerm: string; text: string }> = [
     {

@@ -227,7 +227,12 @@ const POLICY_EXTRACTION_IDS = [
 ] as const satisfies ReportUnifiedFindingId[];
 
 const RIGHTS_GAP_IDS = [
+  "controller_identity_or_contact_disclosure_missing",
   "data_categories_disclosure_missing",
+  "data_subject_rights_disclosure_missing",
+  "legal_basis_disclosure_missing",
+  "retention_disclosure_missing",
+  "supervisory_authority_disclosure_missing",
   "third_party_recipient_disclosure_missing",
   "purpose_of_use_disclosure_missing",
   "missing_dsar_mechanism",

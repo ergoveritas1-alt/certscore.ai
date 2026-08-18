@@ -6897,10 +6897,15 @@ function getGdprTransparencyArticle13ChecklistConcern(
       const approvedDeterministicAbsenceEvidence =
         productionCreditProfile === "gdpr_transparency_deterministic_absence_v1" &&
         classifierProvenance === "gdpr_transparency_absence_coverage.v1";
+      const approvedConcernPosture = approvedDeterministicAbsenceEvidence
+        ? concern.promotionEligibility === "eligible" &&
+          concern.externalSurfacingEligibility === "eligible" &&
+          concern.regulatoryChecklistEligibility === "gap_observed"
+        : concern.promotionEligibility === "internal_only" &&
+          concern.externalSurfacingEligibility === "audit_only";
       return concern.originKey === `gdpr_transparency.article13.${topic}` &&
         concern.originType === "runtime_artifact" &&
-        concern.promotionEligibility === "internal_only" &&
-        concern.externalSurfacingEligibility === "audit_only" &&
+        approvedConcernPosture &&
         rawEvidence?.gdprTransparencyArticle13Evidence === true &&
         rawEvidence.productionCredit === true &&
         (approvedDeterministicEvidence || approvedModelReviewEvidence || approvedDeterministicAbsenceEvidence) &&

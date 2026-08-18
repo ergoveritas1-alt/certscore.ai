@@ -472,17 +472,23 @@ test("verified complete-policy absence projects row-specific GDPR Transparency g
       ]
     }
   };
+  const normalizedConcerns = buildNormalizedConcerns({
+    reviewFindingCandidates: [],
+    runtimeArtifacts,
+    validationFindings: []
+  });
   const outcomes = deriveGdprEprivacyCoveragePolicyOutcomes({
     ...completedInputBase,
-    normalizedConcerns: buildNormalizedConcerns({
-      reviewFindingCandidates: [],
-      runtimeArtifacts,
-      validationFindings: []
-    }),
+    normalizedConcerns,
     runtimeArtifacts,
     snapshot: {}
   });
+  const retentionConcern = normalizedConcerns.find((concern) =>
+    concern.originKey === "gdpr_transparency.article13.data_retention"
+  );
 
+  assert.equal(retentionConcern?.promotionEligibility, "eligible");
+  assert.equal(retentionConcern?.externalSurfacingEligibility, "eligible");
   assert.equal(outcomes.retention_disclosure_observed?.status, "Gap observed");
   assert.equal(outcomes.international_transfers_disclosure?.status, "Gap observed");
   assert.ok(retainedArticle13Signal(outcomes.retention_disclosure_observed!));

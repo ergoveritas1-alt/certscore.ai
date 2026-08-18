@@ -36,7 +36,7 @@ function makeConcern(
   >;
 }
 
-test("deriveConcernPolicy keeps GDPR Transparency Article 13 concerns internal while assigning checklist eligibility", () => {
+test("deriveConcernPolicy keeps observed Article 13 evidence internal and surfaces only verified deterministic gaps", () => {
   const concern = makeConcern({
     originKey: "gdpr_transparency.article13.legal_basis",
     originType: "runtime_artifact",
@@ -86,12 +86,32 @@ test("deriveConcernPolicy keeps GDPR Transparency Article 13 concerns internal w
       productionCreditProfile: "gdpr_transparency_multilingual_article13_v1"
     }
   });
+  const missing = deriveConcernPolicy({
+    concern: makeConcern({
+      ...concern,
+      suggestedUnifiedFindingId: "legal_basis_disclosure_missing",
+      title: "GDPR Transparency Article 13 topic not observed: legal_basis"
+    }),
+    evidenceStrengthFlags: ["policy_text", "page_attributed"],
+    rawEvidence: {
+      classifierProvenance: "gdpr_transparency_absence_coverage.v1",
+      gdprTransparencyArticle13ConcernState: "missing",
+      gdprTransparencyArticle13Evidence: true,
+      gdprTransparencyArticle13Topic: "legal_basis",
+      gdprTransparencyEvidenceProfile: "gdpr_transparency_deterministic_absence_v1",
+      productionCredit: true,
+      productionCreditProfile: "gdpr_transparency_deterministic_absence_v1"
+    }
+  });
 
   assert.equal(observed.promotionEligibility, "internal_only");
   assert.equal(observed.externalSurfacingEligibility, "audit_only");
   assert.equal(observed.regulatoryChecklistEligibility, "observed");
   assert.equal(automated.regulatoryChecklistEligibility, "review_signal");
   assert.equal(ambiguous.regulatoryChecklistEligibility, "none");
+  assert.equal(missing.regulatoryChecklistEligibility, "gap_observed");
+  assert.equal(missing.promotionEligibility, "eligible");
+  assert.equal(missing.externalSurfacingEligibility, "eligible");
 });
 
 test("deriveConcernPolicy projects paid decline evidence as a checklist-only review signal", () => {

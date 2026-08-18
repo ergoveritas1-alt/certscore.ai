@@ -21,6 +21,29 @@
       ],
       "outputs": []
     },
+    "test:policy:fast": {
+      "inputs": [
+        "$TURBO_DEFAULT$",
+        "$TURBO_ROOT$/packages/certscore-contracts/src/**",
+        "$TURBO_ROOT$/packages/certscore-vendor-resolver/src/**",
+        "$TURBO_ROOT$/packages/shared/src/**",
+        "$TURBO_ROOT$/packages/web-bot-auth/src/**"
+      ],
+      "outputs": []
+    },
+    "test:policy:full": {
+      "inputs": [
+        "$TURBO_DEFAULT$",
+        "$TURBO_ROOT$/packages/certscore-contracts/src/**",
+        "$TURBO_ROOT$/packages/certscore-vendor-resolver/src/**",
+        "$TURBO_ROOT$/packages/shared/src/**",
+        "$TURBO_ROOT$/packages/web-bot-auth/src/**"
+      ],
+      "outputs": []
+    },
+    "test:policy:timing-canary": {
+      "cache": false
+    },
     "clean": {
       "cache": false
     }

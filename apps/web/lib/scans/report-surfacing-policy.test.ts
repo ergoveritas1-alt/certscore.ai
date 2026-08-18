@@ -1126,23 +1126,33 @@ test("generic policy text is not enough to main-lane behavioral analytics disclo
 });
 
 test("structured policy disclosure gaps stay review-level without runtime corroboration", () => {
+  const findingIds = [
+    "controller_identity_or_contact_disclosure_missing",
+    "data_categories_disclosure_missing",
+    "data_subject_rights_disclosure_missing",
+    "legal_basis_disclosure_missing",
+    "retention_disclosure_missing",
+    "supervisory_authority_disclosure_missing"
+  ] as const satisfies readonly ReportUnifiedFindingId[];
   const evaluation = evaluateUnifiedFindingSurfacing({
-    packets: [
-      makePacket("data_categories_disclosure_missing", {
+    packets: findingIds.map((findingId) =>
+      makePacket(findingId, {
         confidenceInputs: {
-          ...makePacket("data_categories_disclosure_missing").confidenceInputs,
+          ...makePacket(findingId).confidenceInputs,
           hasPolicyTextEvidence: true,
           hasReadableSurfaceSnippetEvidence: true,
           hasStructuredValidationEvidence: true
         }
       })
-    ]
+    )
   });
 
-  const decision = evaluation.debugDecisions[0];
-  assert.equal(decision?.decisionState, "review");
-  assert.equal(decision?.reportLane, "main");
-  assert.ok(decision?.appliedRules.includes("evidence.rights_gap.review_structured_policy_gap"));
+  assert.equal(evaluation.debugDecisions.length, findingIds.length);
+  for (const decision of evaluation.debugDecisions) {
+    assert.equal(decision.decisionState, "review");
+    assert.equal(decision.reportLane, "main");
+    assert.ok(decision.appliedRules.includes("evidence.rights_gap.review_structured_policy_gap"));
+  }
 });
 
 test("deferred CCPA/CPRA rights gaps stay in confidence coverage even with structured validation", () => {

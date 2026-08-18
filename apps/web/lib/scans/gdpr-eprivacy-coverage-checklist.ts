@@ -2471,6 +2471,32 @@ function shouldPreferCoverageOutcomeForContextualInfrastructure(
   return readRetainedBoolean(retained, ["contextualInfrastructureOnly", "contextual_infrastructure_only"]) === true;
 }
 
+function shouldPreferVerifiedGdprTransparencyAbsenceOutcome(
+  coverageOutcome: GdprEprivacyCoverageOutcome | undefined
+) {
+  if (coverageOutcome?.status !== "Gap observed") {
+    return false;
+  }
+
+  const retained = getRecordValue(coverageOutcome.criticalEvidence.retainedEvidence) ?? {};
+  const assessment = getNestedRecord(retained, [
+    "article13CoverageAssessment",
+    "article13_coverage_assessment"
+  ]);
+  if (!assessment) {
+    return false;
+  }
+
+  return (
+    readRetainedString(assessment, [
+      "assessmentContractVersion",
+      "assessment_contract_version"
+    ]) === "gdpr_transparency_article13_coverage_assessment.v1" &&
+    readRetainedString(assessment, ["coverageStatus", "coverage_status"]) === "sufficient" &&
+    readRetainedString(assessment, ["status"]) === "not_observed_with_sufficient_coverage"
+  );
+}
+
 function isFindingEligibleForCoverageRow(rowId: string, finding: UnifiedFindingDisplayPacket) {
   if (rowId === "post_reject_tracking_reduction") {
     return hasConfirmedPostRejectEvidence(finding);
@@ -3399,7 +3425,8 @@ export function deriveGdprEprivacyCoverageChecklist(
       (
         shouldPreferCoverageOutcomeForMissingReject(definition.id, coverageOutcome) ||
         shouldPreferCoverageOutcomeForConsentChoiceQuality(definition.id, coverageOutcome) ||
-        shouldPreferCoverageOutcomeForContextualInfrastructure(definition.id, coverageOutcome)
+        shouldPreferCoverageOutcomeForContextualInfrastructure(definition.id, coverageOutcome) ||
+        shouldPreferVerifiedGdprTransparencyAbsenceOutcome(coverageOutcome)
       )
     ) {
       const specialized = specializeChecklistRow({

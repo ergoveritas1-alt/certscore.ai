@@ -994,7 +994,11 @@ const POLICY_EXTRACTION_FINDING_IDS = new Set([
 ]);
 
 const RIGHTS_GAP_FINDING_IDS = new Set([
+  "controller_identity_or_contact_disclosure_missing",
+  "data_subject_rights_disclosure_missing",
+  "legal_basis_disclosure_missing",
   "privacy_contact_channel_missing",
+  "retention_disclosure_missing",
   "sale_sharing_controls_missing",
   "missing_dsar_mechanism",
   "missing_dsar_high_exposure",
@@ -1004,7 +1008,8 @@ const RIGHTS_GAP_FINDING_IDS = new Set([
   "missing_transfer_disclosure",
   "data_categories_disclosure_missing",
   "third_party_recipient_disclosure_missing",
-  "purpose_of_use_disclosure_missing"
+  "purpose_of_use_disclosure_missing",
+  "supervisory_authority_disclosure_missing"
 ]);
 
 const CONTRADICTION_FINDING_IDS = new Set([
@@ -5781,6 +5786,26 @@ const UNIFIED_FINDING_PRESENTATION_COPY_OVERRIDES: Record<
   purpose_of_use_disclosure_missing: {
     suggestedFix: "Clarify the main purposes for which the site uses collected data so the notice explains more than just collection itself.",
     whyThisMatters: "A notice that describes collection without explaining use leaves users with an incomplete understanding of the site's data practices."
+  },
+  controller_identity_or_contact_disclosure_missing: {
+    suggestedFix: "Identify the relevant controller or equivalent responsible organization and provide a clear contact route in the primary privacy notice.",
+    whyThisMatters: "Without controller identity or contact information, people may have difficulty understanding who is responsible for the described processing."
+  },
+  legal_basis_disclosure_missing: {
+    suggestedFix: "Add clear legal-basis language for the main processing purposes, such as contract, consent, legal obligation, or legitimate interests where applicable.",
+    whyThisMatters: "Legal-basis language helps people understand the stated basis on which the organization processes personal data."
+  },
+  retention_disclosure_missing: {
+    suggestedFix: "Describe applicable retention periods or the substantive criteria used to determine how long personal data is kept.",
+    whyThisMatters: "Retention information helps people understand how long their data may remain in use or storage."
+  },
+  data_subject_rights_disclosure_missing: {
+    suggestedFix: "Describe the substantive privacy rights available to people and provide a practical route for exercising them.",
+    whyThisMatters: "Rights disclosures help people understand the access, correction, deletion, objection, portability, or related choices that may be available."
+  },
+  supervisory_authority_disclosure_missing: {
+    suggestedFix: "Explain the right to raise a concern with an applicable supervisory authority and provide enough context to locate the relevant authority.",
+    whyThisMatters: "Complaint information helps people understand where they can seek independent review of a privacy concern."
   },
   keyboard_only_task_completion_blocked: {
     suggestedFix:

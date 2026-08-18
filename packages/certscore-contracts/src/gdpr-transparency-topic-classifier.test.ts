@@ -65,6 +65,20 @@ test("classifies common practical English policy headings and clauses", () => {
   assert.equal(topics.has("international_transfers"), true);
 });
 
+test("classifies practical purpose and service-provider clauses from a compact privacy notice", () => {
+  const classification = classifyGdprTransparencyTopics({
+    localeHints: ["en"],
+    text: [
+      "Our hosting and content-delivery providers may process ordinary request information to deliver and protect the site.",
+      "We use this information to understand site usage, verify changes, and diagnose usability issues."
+    ].join(" ")
+  });
+  const topics = new Set(classification.matches.map((match) => match.topic));
+
+  assert.equal(topics.has("processing_purposes"), true);
+  assert.equal(topics.has("recipients_or_vendor_categories"), true);
+});
+
 test("retention criteria do not become processing-purpose evidence", () => {
   const classification = classifyGdprTransparencyTopics({
     localeHints: ["en"],

@@ -3096,7 +3096,10 @@ export function deriveConcernPolicy(input: {
     }
   }
 
-  if (isStructuredPolicyDisclosureGapConcern(input.concern)) {
+  if (
+    isStructuredPolicyDisclosureGapConcern(input.concern) &&
+    !isGdprTransparencyArticle13EvidenceConcern(input.rawEvidence)
+  ) {
     const extractionStatus = getPolicyExtractionStatus(input.rawEvidence);
 
     if (extractionStatus !== "fetched") {
@@ -3546,6 +3549,10 @@ export function deriveConcernPolicy(input: {
 
   if (isGdprTransparencyArticle13EvidenceConcern(input.rawEvidence)) {
     const regulatoryChecklistEligibility = getGdprTransparencyArticle13ChecklistEligibility(input.rawEvidence);
+    const article13ConcernState = getFirstString(input.rawEvidence, [
+      "gdprTransparencyArticle13ConcernState",
+      "gdpr_transparency_article13_concern_state"
+    ]);
     if (
       getBooleanEvidence(input.rawEvidence, [
         "staleLegalFrameworkReferenceObserved",
@@ -3556,15 +3563,12 @@ export function deriveConcernPolicy(input: {
     }
     return {
       allowedNarrativeTier:
-        getFirstString(input.rawEvidence, [
-          "gdprTransparencyArticle13ConcernState",
-          "gdpr_transparency_article13_concern_state"
-        ]) === "sufficient"
+        article13ConcernState === "sufficient" || article13ConcernState === "missing"
           ? "moderate"
           : "weak",
-      externalSurfacingEligibility: "audit_only",
+      externalSurfacingEligibility: article13ConcernState === "missing" ? "eligible" : "audit_only",
       negativeEvidenceFlags: [...negativeEvidenceFlags],
-      promotionEligibility: "internal_only",
+      promotionEligibility: article13ConcernState === "missing" ? "eligible" : "internal_only",
       regulatoryChecklistEligibility
     };
   }

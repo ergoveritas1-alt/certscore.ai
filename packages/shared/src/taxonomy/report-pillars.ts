@@ -2371,6 +2371,36 @@ export const REPORT_UNIFIED_FINDINGS = [
     overlays: ["transparency_notice_data_subject_rights", "consumer_rights_request_handling", "notice_rights_baseline"]
   }),
   defineReportUnifiedFinding({
+    id: "controller_identity_or_contact_disclosure_missing",
+    label: "Controller identity/contact disclosure not observed",
+    owner: "privacy_contacts_accountability",
+    overlays: ["privacy_governance_contactability", "transparency_notice_data_subject_rights", "notice_rights_baseline"]
+  }),
+  defineReportUnifiedFinding({
+    id: "legal_basis_disclosure_missing",
+    label: "Processing legal-basis language not observed",
+    owner: "data_handling_disclosures",
+    overlays: ["transparency_notice_data_subject_rights", "notice_rights_baseline", "consent_lawful_basis_user_choice"]
+  }),
+  defineReportUnifiedFinding({
+    id: "retention_disclosure_missing",
+    label: "Retention period or criteria not observed",
+    owner: "data_handling_disclosures",
+    overlays: ["transparency_notice_data_subject_rights", "notice_rights_baseline", "governance_accountability_transfers"]
+  }),
+  defineReportUnifiedFinding({
+    id: "data_subject_rights_disclosure_missing",
+    label: "Substantive privacy-rights signals not observed",
+    owner: "rights_request_mechanisms",
+    overlays: ["consumer_rights_request_handling", "transparency_notice_data_subject_rights", "notice_rights_baseline"]
+  }),
+  defineReportUnifiedFinding({
+    id: "supervisory_authority_disclosure_missing",
+    label: "Supervisory-authority complaint disclosure not observed",
+    owner: "rights_request_mechanisms",
+    overlays: ["consumer_rights_request_handling", "transparency_notice_data_subject_rights", "notice_rights_baseline", "governance_accountability_transfers"]
+  }),
+  defineReportUnifiedFinding({
     id: "cookie_policy_present",
     label: "Cookie settings or policy surface present",
     owner: "data_handling_disclosures",

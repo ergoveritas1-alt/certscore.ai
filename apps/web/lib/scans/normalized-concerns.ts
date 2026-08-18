@@ -5,6 +5,7 @@ import {
   hasStaleLegalFrameworkReference,
   hasSubstantiveProcessingPurposesEvidence,
   policyModelReviewArtifactSchema,
+  type GdprTransparencyTopic,
 } from "@certscore/contracts";
 import {
   getReportUnifiedFinding,
@@ -14,6 +15,7 @@ import {
   getKnownCmpVendorName,
   getScanNoGoLimitationKindLabel,
   resolveScanNoGoPresentation,
+  type ReportUnifiedFindingId,
   type ReportSignalSource
 } from "@website-signal-risk-scanner/shared";
 import {
@@ -2682,6 +2684,20 @@ function buildGdprTransparencyArticle13Concerns(
 const GDPR_TRANSPARENCY_DETERMINISTIC_ABSENCE_PROFILE =
   "gdpr_transparency_deterministic_absence_v1";
 
+const GDPR_TRANSPARENCY_ARTICLE13_ABSENCE_FINDING_IDS: Partial<Record<
+  GdprTransparencyTopic,
+  ReportUnifiedFindingId
+>> = {
+  controller_contact: "controller_identity_or_contact_disclosure_missing",
+  data_retention: "retention_disclosure_missing",
+  data_subject_rights: "data_subject_rights_disclosure_missing",
+  international_transfers: "missing_transfer_disclosure",
+  legal_basis: "legal_basis_disclosure_missing",
+  processing_purposes: "purpose_of_use_disclosure_missing",
+  recipients_or_vendor_categories: "third_party_recipient_disclosure_missing",
+  supervisory_authority: "supervisory_authority_disclosure_missing"
+};
+
 function buildGdprTransparencyArticle13AbsenceConcerns(
   runtimeArtifacts: Record<string, unknown> | null | undefined,
   domainContext?: ScanDomainContext
@@ -2726,6 +2742,10 @@ function buildGdprTransparencyArticle13AbsenceConcerns(
       return [];
     }
 
+    const unifiedFindingId = GDPR_TRANSPARENCY_ARTICLE13_ABSENCE_FINDING_IDS[
+      topic as GdprTransparencyTopic
+    ];
+
     return [buildConcernFromSharedInput({
       categoryId: "privacy",
       description:
@@ -2752,7 +2772,8 @@ function buildGdprTransparencyArticle13AbsenceConcerns(
         selectedEvidenceStrength: "strong",
         signalKey: `privacy.gdpr_transparency.article13.${topic}`,
         sourceUrl: sourceUrls[0],
-        sourceUrls
+        sourceUrls,
+        ...(unifiedFindingId ? { unifiedFindingId } : {})
       },
       severity: "medium",
       signalKey: `privacy.gdpr_transparency.article13.${topic}`,

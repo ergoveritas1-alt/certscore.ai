@@ -4955,6 +4955,12 @@ function policyDocumentRoleForChildSelection(
   options: { substantiveDisclosureSignalCount?: number } = {},
 ): "policy_document" | "policy_index" | "unknown" {
   if (candidate.deterministicSurfaceType !== "privacy_policy") return "unknown";
+  const retainedChildren = [...selection.fetchCandidates, ...selection.observedChildCandidates];
+  if (retainedChildren.some((child) =>
+    child.selectionReasonCodes?.includes("latest_dated_privacy_document_link")
+  )) {
+    return "policy_index";
+  }
   // A substantive governing notice can legitimately link to multiple regional
   // or topic-specific supplements. Only treat the parent as an index when its
   // own retained text does not already establish multiple row-specific
@@ -4962,7 +4968,6 @@ function policyDocumentRoleForChildSelection(
   if ((options.substantiveDisclosureSignalCount ?? 0) >= 2) {
     return "policy_document";
   }
-  const retainedChildren = [...selection.fetchCandidates, ...selection.observedChildCandidates];
   if (retainedChildren.some((child) =>
     child.selectionReasonCodes?.includes("website_privacy_notice_for_scanned_site")
   )) {
@@ -7972,7 +7977,11 @@ function bestSectionForProfile(
   sections: RetainedPolicySection[],
   profile: (typeof ARTICLE13_SECTION_PROFILES)[number],
 ): RetainedPolicySection | undefined {
-  let best: { section: RetainedPolicySection; score: number } | undefined;
+  let best: {
+    section: RetainedPolicySection;
+    score: number;
+    substantiveHeadingMatch: boolean;
+  } | undefined;
   const controllerSpecificSections = profile.disclosureType === "controller_contact"
     ? sections.filter((section) => !/(?:third parties?|service providers?).{0,100}(?:independent )?(?:data )?controllers?/i.test(section.textExcerpt))
     : sections;
@@ -7980,12 +7989,16 @@ function bestSectionForProfile(
   for (const section of candidateSections) {
     const haystack = `${section.heading}\n${section.textExcerpt}`;
     const canonicalTopicMatch = canonicalSectionTopicMatch(section, profile.disclosureType);
+    let headingMatched = false;
     let score = 0;
     if (canonicalTopicMatch) {
       score += canonicalTopicMatch.matchStrength === "direct" ? 8 : canonicalTopicMatch.matchStrength === "equivalent" ? 7 : 3;
     }
     for (const pattern of profile.headingPatterns) {
-      if (pattern.test(section.heading)) score += 6;
+      if (pattern.test(section.heading)) {
+        headingMatched = true;
+        score += 6;
+      }
       pattern.lastIndex = 0;
     }
     for (const pattern of profile.textPatterns) {
@@ -8012,8 +8025,15 @@ function bestSectionForProfile(
       score += controllerSubjectSectionScore(section);
     }
     if (section.quality === "strong") score += 1;
-    if (score > (best?.score ?? 0)) {
-      best = { section, score };
+    const selectedExcerpt = bestSectionExcerptForProfile(section, profile);
+    const substantiveHeadingMatch = headingMatched &&
+      sectionEvidenceStatus(profile, selectedExcerpt) !== "not_confirmed";
+    if (
+      !best ||
+      (substantiveHeadingMatch && !best.substantiveHeadingMatch) ||
+      (substantiveHeadingMatch === best.substantiveHeadingMatch && score > best.score)
+    ) {
+      best = { section, score, substantiveHeadingMatch };
     }
   }
   return best && best.score >= 3 ? best.section : undefined;
