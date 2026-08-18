@@ -5,6 +5,7 @@ import {
   AgentQuickPath,
   CodeBlock,
   DeveloperShell,
+  LightMcpCallout,
   LinkCard,
   Section,
   apiV2Routes,
@@ -37,9 +38,10 @@ export default function DevelopersPage() {
   return (
     <DeveloperShell activePath="/developers" title="CertScore.ai API" description={description}>
       <div className="space-y-12">
+        <LightMcpCallout />
         <AgentQuickPath />
 
-        <Section eyebrow="Start here" title="One public integration surface for humans and agents.">
+        <Section eyebrow="Explore the platform" title="Choose the next step that fits your workflow.">
           <div className="grid gap-5 md:grid-cols-2">
             {developerPages.map((page) => (
               <LinkCard key={page.href} href={page.href} title={page.label} description={page.description} />
@@ -75,8 +77,13 @@ export default function DevelopersPage() {
         </Section>
 
         <Section eyebrow="API v2" title="Resource-oriented routes">
-          <div className="overflow-hidden rounded-lg border border-slate-200 bg-white">
-            <table className="w-full text-left text-sm">
+          <div className="overflow-x-auto rounded-lg border border-slate-200 bg-white">
+            <table className="min-w-[760px] table-fixed w-full text-left text-sm">
+              <colgroup>
+                <col className="w-[12%]" />
+                <col className="w-[31%]" />
+                <col className="w-[57%]" />
+              </colgroup>
               <thead className="bg-slate-100 text-xs uppercase tracking-[0.14em] text-slate-600">
                 <tr>
                   <th className="px-4 py-3">Method</th>

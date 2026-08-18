@@ -8,6 +8,7 @@ import { CodeBlock } from "../../developers/developer-pages";
 import { createPageMetadata } from "../../../lib/seo";
 
 const endpoint = "https://mcp.certscore.ai/mcp/light";
+const openAiMcpDemoPath = "/videos/openai-mcp-certscore-demo.mp4";
 const codexSetupCommand = "codex mcp add certscore --url https://mcp.certscore.ai/mcp/light";
 const firstRunPrompt = "Scan https://ergoveritas.com/.well-known/certscore-canary/sentinels/broad-baseline.html. If certscore_scan_site returns a queued, running, or finalizing result, retain the returned scanId and poll certscore_get_scan_status using scanId only. If certscore_scan_site returns a retryable error without a scanId, wait for retryAfterSeconds and retry certscore_scan_site; do not call certscore_get_scan_status until a scanId exists. Once the scan reaches a terminal status, call certscore_get_scan_bundle with detail=findings and maxBytes=8000. Summarize whether the result was new or reused, the score, risk level, findings, evidence links, coverage limitations, and report URL. Explain truncation or omitted sections when present. Treat results as automated public-web observations, not legal conclusions, certifications, or compliance determinations.";
 const verificationPrompt = "List the available CertScore tools and confirm that certscore_scan_site, certscore_get_scan_status, and certscore_get_scan_bundle are available. Then scan https://ergoveritas.com/.well-known/certscore-canary/sentinels/broad-baseline.html and report whether the result was new or reused.";
@@ -75,6 +76,7 @@ export default function McpLightPage() {
               <CopyMcpValue label="Codex command" value={codexSetupCommand} />
               <CopyMcpValue label="first-run prompt" value={firstRunPrompt} />
               <Link className="rounded-md bg-slate-950 px-4 py-2 text-sm font-semibold text-white hover:bg-slate-800" href="#try">Try it now</Link>
+              <Link className="rounded-md border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-800 hover:border-sky-400 hover:text-sky-800" href="#openai-mcp-demo">Watch the demo</Link>
             </div>
             <p className="text-sm text-slate-500">Streamable HTTP with no API key and no OAuth. Light allows up to 50 genuinely new scans per UTC day across the public Light surface and 5 per rolling 10 minutes; reused eligible results do not consume quota. Contact <a className="font-semibold text-sky-700" href="mailto:support@certscore.ai">support@certscore.ai</a> for higher volume.</p>
           </div>
@@ -84,6 +86,29 @@ export default function McpLightPage() {
             <div className="mt-6 grid gap-3 text-sm">
               {[["1", "Run the Codex setup command"], ["2", "Paste the first-run prompt"], ["3", "Review the canonical result"]].map(([step, text]) => <div className="flex gap-3" key={step}><span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-sky-500 font-semibold text-slate-950">{step}</span><span>{text}</span></div>)}
             </div>
+          </div>
+        </div>
+      </section>
+
+      <section aria-labelledby="openai-mcp-demo-title" className="border-b border-slate-200 bg-slate-950" id="openai-mcp-demo">
+        <div className="mx-auto grid max-w-6xl gap-8 px-6 py-12 sm:py-16 lg:grid-cols-[1.25fr_0.75fr] lg:items-center">
+          <div className="order-2 lg:order-1">
+            <video
+              aria-label="OpenAI ChatGPT CertScore MCP integration demonstration"
+              className="w-full rounded-xl bg-black shadow-2xl ring-1 ring-white/10"
+              controls
+              playsInline
+              preload="metadata"
+            >
+              <source src={openAiMcpDemoPath} type="video/mp4" />
+              Your browser does not support embedded video. <a className="underline" href={openAiMcpDemoPath}>Open the MP4 directly.</a>
+            </video>
+          </div>
+          <div className="order-1 text-white lg:order-2">
+            <p className="text-xs font-semibold uppercase tracking-[0.16em] text-sky-300">OpenAI MCP integration demo</p>
+            <h2 className="mt-3 text-3xl font-semibold tracking-tight" id="openai-mcp-demo-title">See Light MCP in action</h2>
+            <p className="mt-4 text-sm leading-7 text-slate-300">Watch the OpenAI/ChatGPT flow from prompt to CertScore tool calls, public-safe scan observations, and the full report. It is the quickest way to understand what the Light route feels like in practice.</p>
+            <a className="mt-6 inline-flex rounded-md bg-white px-4 py-2 text-sm font-semibold text-slate-950 hover:bg-sky-50" href={openAiMcpDemoPath} rel="noreferrer" target="_blank">Open the standalone MP4</a>
           </div>
         </div>
       </section>
@@ -122,7 +147,11 @@ export default function McpLightPage() {
         <section>
           <h2 className="text-2xl font-semibold text-slate-950">What can happen?</h2>
           <div className="mt-5 overflow-x-auto rounded-lg border border-slate-200 bg-white">
-            <table className="min-w-full text-left text-sm">
+            <table className="min-w-[680px] table-fixed w-full text-left text-sm">
+              <colgroup>
+                <col className="w-[25%]" />
+                <col className="w-[75%]" />
+              </colgroup>
               <thead className="border-b border-slate-200 bg-slate-50 text-slate-700"><tr><th className="px-4 py-3 font-semibold">Outcome</th><th className="px-4 py-3 font-semibold">What the agent should do</th></tr></thead>
               <tbody className="divide-y divide-slate-100 text-slate-600">
                 <tr><td className="px-4 py-3 font-mono">completed</td><td className="px-4 py-3">Call <code>certscore_get_scan_bundle</code> and summarize the result.</td></tr>
@@ -158,7 +187,12 @@ export default function McpLightPage() {
             Use <code>maxBytes</code> to set a 5,000–200,000 byte budget; the response reports requested bytes, actual bytes, and any truncation reason.
           </p>
           <div className="mt-5 overflow-x-auto rounded-lg border border-slate-200 bg-white">
-            <table className="min-w-full text-left text-sm">
+            <table className="min-w-[680px] table-fixed w-full text-left text-sm">
+              <colgroup>
+                <col className="w-[18%]" />
+                <col className="w-[24%]" />
+                <col className="w-[58%]" />
+              </colgroup>
               <thead className="border-b border-slate-200 bg-slate-50 text-slate-700"><tr><th className="px-4 py-3 font-semibold">detail</th><th className="px-4 py-3 font-semibold">Recommended maxBytes</th><th className="px-4 py-3 font-semibold">Use</th></tr></thead>
               <tbody className="divide-y divide-slate-100 text-slate-600">
                 {[["summary", "5000", "Canonical overview"], ["findings", "8000", "Compact finding review"], ["evidence", "8000", "Finding plus evidence digests and references"], ["full", "12000 or higher", "All available bounded sections"]].map(([detail, maxBytes, use]) => <tr key={detail}><td className="px-4 py-3 font-mono">{detail}</td><td className="px-4 py-3 font-mono">{maxBytes}</td><td className="px-4 py-3">{use}</td></tr>)}

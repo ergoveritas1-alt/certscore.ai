@@ -26,6 +26,11 @@ export const developerPages = [
     description: "Create a scan, poll status, retrieve findings, and review public-safe scan resources."
   },
   {
+    href: "/mcp/light",
+    label: "Light MCP",
+    description: "Start no-account website scans from any remote MCP client."
+  },
+  {
     href: "/developers/reference",
     label: "API reference",
     description: "Resource routes, status behavior, error shape, rate limits, and public-safe evidence rules."
@@ -39,11 +44,6 @@ export const developerPages = [
     href: "/developers/mcp",
     label: "MCP server",
     description: "Connect agents to CertScore.ai tools for public website risk-signal review."
-  },
-  {
-    href: "/mcp/light",
-    label: "Light MCP",
-    description: "Start no-account website scans from any remote MCP client."
   },
   {
     href: "/developers/examples",
@@ -251,7 +251,11 @@ export function DeveloperShell({
               Overview
             </Link>
             {developerPages.map((page) => (
-              <Link key={page.href} className={navClass(activePath === page.href)} href={page.href}>
+              <Link
+                key={page.href}
+                className={navClass(activePath === page.href, page.href === "/mcp/light")}
+                href={page.href}
+              >
                 {page.label}
               </Link>
             ))}
@@ -269,10 +273,14 @@ export function DeveloperShell({
   );
 }
 
-function navClass(active: boolean) {
+function navClass(active: boolean, featured = false) {
   return [
     "inline-flex rounded-full border px-3 py-2 text-sm font-semibold transition",
-    active ? "border-slate-950 bg-slate-950 text-white" : "border-slate-200 bg-white text-slate-700 hover:border-slate-300"
+    active
+      ? "border-slate-950 bg-slate-950 text-white"
+      : featured
+        ? "border-sky-300 bg-sky-50 text-sky-800 hover:border-sky-500 hover:bg-sky-100"
+        : "border-slate-200 bg-white text-slate-700 hover:border-slate-300"
   ].join(" ");
 }
 
@@ -300,6 +308,39 @@ export function AgentQuickPath() {
           <li>Retrieve findings and pre-consent cookies/trackers.</li>
           <li>Treat outputs as automated public-web observations for human and agentic review, not legal advice, certification, or a compliance determination.</li>
         </ol>
+      </div>
+    </section>
+  );
+}
+
+export function LightMcpCallout() {
+  return (
+    <section id="light-mcp" className="overflow-hidden rounded-2xl border-2 border-sky-300 bg-gradient-to-br from-sky-50 via-white to-white shadow-sm">
+      <div className="grid gap-8 p-6 sm:p-8 lg:grid-cols-[1.1fr_0.9fr] lg:items-center">
+        <div>
+          <p className="text-xs font-semibold uppercase tracking-[0.16em] text-sky-700">Recommended starting point</p>
+          <h2 className="mt-2 text-2xl font-semibold tracking-tight text-slate-950">Start with Light MCP</h2>
+          <p className="mt-3 max-w-2xl text-sm leading-7 text-slate-600">
+            Connect an MCP-capable agent to CertScore in about a minute. No account, API key, browser login, or OAuth—just one remote URL and three focused tools.
+          </p>
+          <div className="mt-5 flex flex-wrap gap-3">
+            <Link className="rounded-md bg-sky-700 px-4 py-2 text-sm font-semibold text-white hover:bg-sky-800" href="/mcp/light">
+              Open Light MCP
+            </Link>
+            <Link className="rounded-md border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-800 hover:border-sky-400 hover:text-sky-800" href="/mcp/light#quickstart">
+              See the 1-minute setup
+            </Link>
+          </div>
+        </div>
+        <div className="rounded-xl border border-slate-800 bg-slate-950 p-5 text-slate-100">
+          <p className="text-xs font-semibold uppercase tracking-[0.16em] text-sky-300">Remote endpoint</p>
+          <code className="mt-2 block break-all text-sm">https://mcp.certscore.ai/mcp/light</code>
+          <ol className="mt-5 grid gap-3 text-sm text-slate-300">
+            <li><span className="mr-2 inline-flex h-6 w-6 items-center justify-center rounded-full bg-sky-400 font-semibold text-slate-950">1</span>Connect the endpoint</li>
+            <li><span className="mr-2 inline-flex h-6 w-6 items-center justify-center rounded-full bg-sky-400 font-semibold text-slate-950">2</span>Paste the first-run prompt</li>
+            <li><span className="mr-2 inline-flex h-6 w-6 items-center justify-center rounded-full bg-sky-400 font-semibold text-slate-950">3</span>Review the public-safe result</li>
+          </ol>
+        </div>
       </div>
     </section>
   );

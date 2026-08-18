@@ -20,8 +20,13 @@ export default function DeveloperReferencePage() {
     <DeveloperShell activePath="/developers/reference" title="API reference" description={description}>
       <div className="space-y-12">
         <Section eyebrow="Routes" title="API v2 resources">
-          <div className="overflow-hidden rounded-lg border border-slate-200 bg-white">
-            <table className="w-full text-left text-sm">
+          <div className="overflow-x-auto rounded-lg border border-slate-200 bg-white">
+            <table className="min-w-[760px] table-fixed w-full text-left text-sm">
+              <colgroup>
+                <col className="w-[12%]" />
+                <col className="w-[34%]" />
+                <col className="w-[54%]" />
+              </colgroup>
               <thead className="bg-slate-100 text-xs uppercase tracking-[0.14em] text-slate-600">
                 <tr>
                   <th className="px-4 py-3">Method</th>

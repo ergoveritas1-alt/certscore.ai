@@ -6,6 +6,7 @@ import { ApiReadRatePolicyDetails, CodeBlock, DeveloperShell, Section, mcpTools 
 const description =
   "Connect agents to the CertScore.ai MCP server for website compliance review workflows using scan, status, finding, explanation, and latest-domain tools.";
 const lightEndpoint = "https://mcp.certscore.ai/mcp/light";
+const openAiMcpDemoPath = "/videos/openai-mcp-certscore-demo.mp4";
 const codexSetupCommand = "codex mcp add certscore --url https://mcp.certscore.ai/mcp/light";
 const firstRunPrompt = "Scan https://ergoveritas.com/.well-known/certscore-canary/sentinels/broad-baseline.html. If certscore_scan_site returns a queued, running, or finalizing result, retain the returned scanId and poll certscore_get_scan_status using scanId only. If certscore_scan_site returns a retryable error without a scanId, wait for retryAfterSeconds and retry certscore_scan_site; do not call certscore_get_scan_status until a scanId exists. Once the scan reaches a terminal status, call certscore_get_scan_bundle with detail=findings and maxBytes=8000. Summarize whether the result was new or reused, the score, risk level, findings, evidence links, coverage limitations, and report URL. Explain truncation or omitted sections when present. Treat results as automated public-web observations, not legal conclusions, certifications, or compliance determinations.";
 const verificationPrompt = "List the available CertScore tools and confirm that certscore_scan_site, certscore_get_scan_status, and certscore_get_scan_bundle are available. Then scan https://ergoveritas.com/.well-known/certscore-canary/sentinels/broad-baseline.html and report whether the result was new or reused.";
@@ -43,11 +44,58 @@ export default function DeveloperMcpPage() {
               <a className="mt-5 inline-flex rounded-md border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-800 hover:border-sky-400 hover:text-sky-800" href="#authenticated-mcp">Set up Authenticated MCP</a>
             </article>
           </div>
+          <a
+            className="mt-6 inline-flex items-center rounded-md border border-sky-300 bg-white px-4 py-2 text-sm font-semibold text-sky-800 hover:border-sky-500 hover:text-sky-950"
+            href="#openai-mcp-demo"
+          >
+            Watch the OpenAI MCP integration demo
+          </a>
+        </section>
+
+        <section
+          aria-labelledby="openai-mcp-demo-title"
+          className="overflow-hidden rounded-xl border border-slate-200 bg-white"
+          id="openai-mcp-demo"
+        >
+          <div className="grid gap-6 p-6 sm:p-8 lg:grid-cols-[minmax(0,1fr)_minmax(16rem,0.55fr)] lg:items-center">
+            <div>
+              <p className="text-xs font-semibold uppercase tracking-[0.16em] text-sky-700">OpenAI integration path</p>
+              <h2 className="mt-2 text-2xl font-semibold text-slate-950" id="openai-mcp-demo-title">
+                See CertScore MCP tools run in ChatGPT
+              </h2>
+              <p className="mt-3 text-sm leading-7 text-slate-600">
+                This silent 2:47 recording demonstrates the OpenAI MCP integration path: a user asks ChatGPT for a public-site scan,
+                ChatGPT invokes CertScore tools, presents the evidence-backed observations and tool-call details, and opens the full
+                CertScore report.
+              </p>
+              <a
+                className="mt-5 inline-flex rounded-md bg-slate-950 px-4 py-2 text-sm font-semibold text-white hover:bg-slate-800"
+                href={openAiMcpDemoPath}
+                rel="noreferrer"
+                target="_blank"
+              >
+                Open the standalone MP4
+              </a>
+            </div>
+            <video
+              aria-label="CertScore OpenAI MCP integration demonstration"
+              className="w-full rounded-lg bg-slate-950 shadow-sm"
+              controls
+              playsInline
+              preload="metadata"
+            >
+              <source src={openAiMcpDemoPath} type="video/mp4" />
+              Your browser does not support embedded video. Open the standalone MP4 using the link beside the player.
+            </video>
+          </div>
         </section>
 
         <Section eyebrow="Compare routes" title="Authentication is visible before setup">
           <div className="overflow-x-auto rounded-lg border border-slate-200 bg-white">
-            <table className="min-w-full text-left text-sm">
+            <table className="min-w-[1240px] table-fixed w-full text-left text-sm">
+              <colgroup>
+                <col className="w-[15%]" /><col className="w-[14%]" /><col className="w-[11%]" /><col className="w-[8%]" /><col className="w-[14%]" /><col className="w-[14%]" /><col className="w-[11%]" /><col className="w-[14%]" /><col className="w-[14%]" />
+              </colgroup>
               <thead className="border-b border-slate-200 bg-slate-50 text-slate-700"><tr><th className="px-4 py-3 font-semibold">Route</th><th className="px-4 py-3 font-semibold">Setup method</th><th className="px-4 py-3 font-semibold">Authentication</th><th className="px-4 py-3 font-semibold">Account</th><th className="px-4 py-3 font-semibold">Quota</th><th className="px-4 py-3 font-semibold">Available tools</th><th className="px-4 py-3 font-semibold">Intended user</th><th className="px-4 py-3 font-semibold">Website / access limits</th><th className="px-4 py-3 font-semibold">Upgrade path</th></tr></thead>
               <tbody className="divide-y divide-slate-100 text-slate-600">
                 <tr><td className="min-w-56 px-4 py-3 font-semibold text-slate-900">Light MCP — no authentication</td><td className="px-4 py-3">One Codex command or remote Streamable HTTP URL</td><td className="px-4 py-3">None</td><td className="px-4 py-3">Not required</td><td className="px-4 py-3">Up to 50 new scans per UTC day across Light and 5 per rolling 10 minutes; eligible reuse is free</td><td className="px-4 py-3">certscore_scan_site, certscore_get_scan_status, certscore_get_scan_bundle</td><td className="px-4 py-3">First-time users, testing, and discovery</td><td className="px-4 py-3">Public HTTP or HTTPS websites; core tools only</td><td className="px-4 py-3">Authenticate for volume, history, teams, or advanced tools</td></tr>
@@ -355,7 +403,10 @@ const status = await certscore_get_scan_status({ scanId });
         <Section eyebrow="Developer reference" title="Non-MCP integration options">
           <p className="max-w-3xl text-sm leading-7 text-slate-600">The beginner MCP path ends above. Use these separate developer sections only when you are building a direct HTTP or TypeScript integration.</p>
           <div className="overflow-x-auto rounded-lg border border-slate-200 bg-white">
-            <table className="min-w-full text-left text-sm">
+            <table className="min-w-[760px] table-fixed w-full text-left text-sm">
+              <colgroup>
+                <col className="w-[20%]" /><col className="w-[30%]" /><col className="w-[50%]" />
+              </colgroup>
               <thead className="border-b border-slate-200 bg-slate-50 text-slate-700">
                 <tr><th className="px-4 py-3 font-semibold">Integration</th><th className="px-4 py-3 font-semibold">Access</th><th className="px-4 py-3 font-semibold">Best for</th></tr>
               </thead>

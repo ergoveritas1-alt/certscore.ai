@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
+import { readFileSync, statSync } from "node:fs";
 import test from "node:test";
 import { hasDatabaseEnv } from "@website-signal-risk-scanner/db";
 import { GET as aiDiscoveryGET } from "../../app/.well-known/certscore-ai.json/route";
@@ -507,6 +507,9 @@ test("Robots allows public developer docs and API v2 discovery while keeping gen
 test("Light MCP onboarding is no-auth, copyable, and agent-complete", () => {
   const lightPage = readFileSync("apps/web/app/mcp/light/page.tsx", "utf8");
   const fullMcpPage = readFileSync("apps/web/app/developers/mcp/page.tsx", "utf8");
+  const developerPagesSource = readFileSync("apps/web/app/developers/developer-pages.tsx", "utf8");
+  const developerOverview = readFileSync("apps/web/app/developers/page.tsx", "utf8");
+  const developerQuickstart = readFileSync("apps/web/app/developers/quickstart/page.tsx", "utf8");
   const readme = readFileSync("packages/certscore-mcp/README.md", "utf8");
   const llms = readFileSync("apps/web/public/llms.txt", "utf8");
   const llmsFull = readFileSync("apps/web/public/llms-full.txt", "utf8");
@@ -580,6 +583,18 @@ test("Light MCP onboarding is no-auth, copyable, and agent-complete", () => {
     assert.match(source, /Core identifiers and canonical response fields/);
     assert.match(source, /Need more scans or advanced tools\? Upgrade to Authenticated MCP\./);
   }
+  assert.ok(
+    developerPagesSource.indexOf('href: "/developers/quickstart"') < developerPagesSource.indexOf('href: "/mcp/light"') &&
+      developerPagesSource.indexOf('href: "/mcp/light"') < developerPagesSource.indexOf('href: "/developers/reference"'),
+    "Developer navigation should place Light MCP immediately after Quickstart"
+  );
+  for (const source of [developerOverview, developerQuickstart]) {
+    assert.match(source, /LightMcpCallout/);
+  }
+  assert.match(developerQuickstart, /\/mcp\/light/);
+  assert.match(lightPage, /openai-mcp-demo/);
+  assert.match(lightPage, /\/videos\/openai-mcp-certscore-demo\.mp4/);
+  assert.match(lightPage, /Watch the demo/);
   for (const issue of ["OAuth appeared unexpectedly", "No scanId was returned", "Rate limited", "Result was reused", "Bundle was truncated", "Coverage was limited"]) {
     assert.ok(fullMcpPage.includes(issue), `MCP troubleshooting should explain ${issue}`);
   }
@@ -600,6 +615,18 @@ test("Light MCP onboarding is no-auth, copyable, and agent-complete", () => {
     assert.ok(fullMcpPage.includes(integration));
     assert.ok(!lightPage.includes(integration), `${integration} should stay out of the beginner Light page`);
   }
+});
+
+test("MCP docs identify and serve the OpenAI integration demo", () => {
+  const fullMcpPage = readFileSync("apps/web/app/developers/mcp/page.tsx", "utf8");
+  const demoPath = "apps/web/public/videos/openai-mcp-certscore-demo.mp4";
+
+  assert.match(fullMcpPage, /OpenAI MCP integration demo/);
+  assert.match(fullMcpPage, /OpenAI MCP integration path/);
+  assert.match(fullMcpPage, /See CertScore MCP tools run in ChatGPT/);
+  assert.match(fullMcpPage, /\/videos\/openai-mcp-certscore-demo\.mp4/);
+  assert.match(fullMcpPage, /<video/);
+  assert.ok(statSync(demoPath).size < 50 * 1024 * 1024, "web demo should remain below 50 MiB");
 });
 
 test("Developer API docs are discoverable by crawlers and agent manifests", async () => {

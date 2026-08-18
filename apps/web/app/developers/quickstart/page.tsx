@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
+import Link from "next/link";
 import { createPageMetadata } from "../../../lib/seo";
-import { AgentQuickPath, CodeBlock, DeveloperShell, Section } from "../developer-pages";
+import { AgentQuickPath, CodeBlock, DeveloperShell, LightMcpCallout, Section } from "../developer-pages";
 
 const description =
   "Start using the CertScore.ai API v2 with curl: create a public website scan, poll status, list public-safe findings, and retrieve latest-domain scan resources.";
@@ -19,7 +20,17 @@ export default function DeveloperQuickstartPage() {
   return (
     <DeveloperShell activePath="/developers/quickstart" title="API quickstart" description={description}>
       <div className="space-y-12">
+        <LightMcpCallout />
         <AgentQuickPath />
+
+        <section className="rounded-xl border border-slate-200 bg-white p-6 sm:p-8">
+          <p className="text-xs font-semibold uppercase tracking-[0.16em] text-sky-700">Already know you want an MCP connection?</p>
+          <h2 className="mt-2 text-2xl font-semibold tracking-tight text-slate-950">Skip the API key setup</h2>
+          <p className="mt-3 max-w-3xl text-sm leading-7 text-slate-600">Light MCP is the fastest route for a first scan. It uses the same public-safe scan pipeline without account creation, OAuth, or credentials.</p>
+          <Link className="mt-5 inline-flex rounded-md bg-sky-700 px-4 py-2 text-sm font-semibold text-white hover:bg-sky-800" href="/mcp/light#quickstart">
+            Go to Light MCP setup
+          </Link>
+        </section>
 
         <Section id="api-key-access" eyebrow="Access" title="Get a scoped API key">
           <p className="max-w-3xl text-sm leading-7 text-slate-600">
