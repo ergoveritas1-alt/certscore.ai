@@ -10,6 +10,8 @@ import { McpHttpSessionStore } from "./session-store.js";
 import { McpReadThrottle, mcpReadCallsFromJsonRpc, mcpReadRateLimitGuidance } from "./read-throttle.js";
 import { anonymousMcpRequester, anonymousMcpRequesterFromHeaders, anonymousSessionBinding, authenticatedMcpCallerBinding } from "./requester-identity.js";
 
+const OPENAI_APPS_CHALLENGE_TOKEN = "RVujVoFeQNvwzz4Upt8IPh_f2Xm3qf2Uqa_-tr3VTeQ";
+
 const env = getEnv();
 const allowedOrigins = getAllowedOrigins(env);
 const sessions = new McpHttpSessionStore({
@@ -523,6 +525,16 @@ async function handleMcp(req: IncomingMessage, res: ServerResponse, anonymous: b
 
 const server = createServer(async (req, res) => {
   const url = requestUrl(req);
+  if (url.pathname === "/.well-known/openai-apps-challenge" && req.method === "GET") {
+    const body = OPENAI_APPS_CHALLENGE_TOKEN;
+    res.writeHead(200, {
+      "Cache-Control": "public, max-age=300",
+      "Content-Length": Buffer.byteLength(body),
+      "Content-Type": "text/plain; charset=utf-8"
+    });
+    res.end(body);
+    return;
+  }
   if (req.method === "OPTIONS") {
     res.writeHead(204, corsHeaders(req));
     res.end();

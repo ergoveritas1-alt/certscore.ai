@@ -309,6 +309,13 @@ test("Streamable HTTP runtime initializes, lists tools, enforces auth, CORS, and
 
   try {
     await waitForHealth(origin, child);
+    const challenge = await fetch(`${origin}/.well-known/openai-apps-challenge`);
+    assert.equal(challenge.status, 200);
+    assert.match(challenge.headers.get("content-type") ?? "", /^text\/plain(?:;|$)/i);
+    assert.equal(await challenge.text(), "RVujVoFeQNvwzz4Upt8IPh_f2Xm3qf2Uqa_-tr3VTeQ");
+    assert.equal(challenge.headers.get("mcp-session-id"), null);
+    assert.equal(challenge.headers.get("www-authenticate"), null);
+
     const health = await fetch(`${origin}/healthz`).then((response) => response.json());
     assert.equal(health.anonymousEndpoint, `${origin}/mcp/anonymous`);
     assert.equal(health.lightEndpoint, `${origin}/mcp/light`);
