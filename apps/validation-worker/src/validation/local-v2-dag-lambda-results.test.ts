@@ -467,8 +467,8 @@ test("validation worker durably retains results before acknowledgement and mater
   assert.match(source, /result\.complete !== true/);
   assert.match(source, /scoreMaterializationState/);
   assert.match(source, /status = 'completed'/);
-  assert.match(source, /for \(const mode of \["publish_and_finalize"\] as const\)/);
-  assert.doesNotMatch(source, /result\.reportReady !== true/);
+  assert.match(source, /for \(const mode of \["publish_report", "finalize"\] as const\)/);
+  assert.match(source, /result\.reportReady !== true/);
   assert.doesNotMatch(source, /async function completedScoreMaterializationExists[\s\S]*?scan_score_assessments/);
   assert.match(source, /response\.status === 422 && failure\?\.retryable === false/);
   assert.match(source, /terminal score materialization failure acknowledged/);

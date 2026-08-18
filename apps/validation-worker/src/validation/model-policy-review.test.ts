@@ -46,7 +46,10 @@ function completeRows(overrides?: Partial<Record<string, Record<string, unknown>
   ]));
 }
 
-function buildFixturePacket(text: string) {
+function buildFixturePacket(text: string, overrides: {
+  documentFetchState?: string;
+  ownershipReasonCodes?: string[];
+} = {}) {
   const packet = buildPolicyReviewPacket({
     documentSources: [{
       id: "11111111-1111-4111-8111-111111111111",
@@ -62,10 +65,10 @@ function buildFixturePacket(text: string) {
         limitationKeys: []
       },
       document_evaluation_state: "usable",
-      document_fetch_state: "fetched",
+      document_fetch_state: overrides.documentFetchState ?? "fetched",
       document_owner_entity: "Oxfam",
       ownership_confidence: 0.98,
-      ownership_reason_codes: ["same_registrable_domain_as_scan_target"],
+      ownership_reason_codes: overrides.ownershipReasonCodes ?? ["same_registrable_domain_as_scan_target"],
       target_relationship: "target_controller",
       extraction_status: "ready",
       source_status: "ready",
@@ -1541,4 +1544,19 @@ test("policy cache key changes with model or content", () => {
   });
   assert.notEqual(first, second);
   assert.notEqual(first, third);
+});
+
+test("policy content identity includes retained ownership and fetch provenance", () => {
+  const baseline = buildFixturePacket("We describe processing purposes and privacy rights.");
+  const ownershipChanged = buildFixturePacket(
+    "We describe processing purposes and privacy rights.",
+    { ownershipReasonCodes: ["confirmed_first_party_brand"] },
+  );
+  const fetchStateChanged = buildFixturePacket(
+    "We describe processing purposes and privacy rights.",
+    { documentFetchState: "skipped_budget" },
+  );
+
+  assert.notEqual(baseline.contentHash, ownershipChanged.contentHash);
+  assert.notEqual(baseline.contentHash, fetchStateChanged.contentHash);
 });

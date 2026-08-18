@@ -2854,26 +2854,48 @@ export async function preConsentRuntimeScanner(
       const recoveryScreenshotPath = input.artifactWriter.artifactPath(
         "screenshot-pre-consent-packet-recovery.png",
       );
-      const recoveryDocumentIdentityBeforeCapture = currentBrowserDocumentIdentity(page);
-      const recoveryScreenshotCapture = await recordTiming(
-        timingBreakdown,
-        "bounded same-session consent packet screenshot",
-        "Representative viewport retained immediately before the final typed inventory and geometry retry on the untouched document.",
-        () => capturePreConsentScreenshot(page, recoveryScreenshotPath, {
-          captureMode: "viewport_first",
-          screenshotErrors,
-          timeoutMs: Math.min(700, remainingModuleBudgetMs()),
-        }),
-        visualCaptureTimingOutcome,
+      const reusableRecoveryScreenshot = screenshots.find((screenshot) =>
+        screenshot.captureMethod !== "primary_placeholder" &&
+        screenshot.captureMethod !== "fresh_context_placeholder" &&
+        isSameBrowserDocumentOrExactUrl(
+          screenshot.url,
+          screenshot.documentIdentity,
+          finalDocumentUrl,
+          finalDocumentIdentity,
+        )
       );
+      const recoveryDocumentIdentityBeforeCapture = reusableRecoveryScreenshot?.documentIdentity ??
+        currentBrowserDocumentIdentity(page);
+      const recoveryScreenshotCapture: VisualCaptureSummary = reusableRecoveryScreenshot
+        ? {
+            status: "available",
+            captureMethod: reusableRecoveryScreenshot.captureMethod,
+            artifactRefs: [],
+            notes: [
+              "The retained same-session, same-document representative screenshot was reused for bounded inventory/geometry recovery.",
+            ],
+          }
+        : await recordTiming(
+            timingBreakdown,
+            "bounded same-session consent packet screenshot",
+            "Representative viewport retained immediately before the final typed inventory and geometry retry on the untouched document.",
+            () => capturePreConsentScreenshot(page, recoveryScreenshotPath, {
+              captureMode: "viewport_first",
+              fallbackMode: "bounded_viewport",
+              screenshotErrors,
+              timeoutMs: Math.min(700, remainingModuleBudgetMs()),
+            }),
+            visualCaptureTimingOutcome,
+          );
       if (recoveryScreenshotCapture.status === "available") {
         boundedRecoveryOutcome = "inventory_incomplete";
-        const recoveryScreenshotUrl = page.url();
-        const recoveryScreenshotDocumentIdentity = stableBrowserDocumentIdentity(
-          recoveryDocumentIdentityBeforeCapture,
-          currentBrowserDocumentIdentity(page),
-        );
-        const recoveryScreenshot: ScreenshotArtifact = {
+        const recoveryScreenshotUrl = reusableRecoveryScreenshot?.url ?? page.url();
+        const recoveryScreenshotDocumentIdentity = reusableRecoveryScreenshot?.documentIdentity ??
+          stableBrowserDocumentIdentity(
+            recoveryDocumentIdentityBeforeCapture,
+            currentBrowserDocumentIdentity(page),
+          );
+        const recoveryScreenshot: ScreenshotArtifact = reusableRecoveryScreenshot ?? {
           artifactId: "screenshot_pre_consent_packet_recovery",
           capturedAtMs: elapsed(input.scanStartedAtMs),
           captureMethod: recoveryScreenshotCapture.captureMethod,
@@ -2883,11 +2905,19 @@ export async function preConsentRuntimeScanner(
           pagePhase: "network_idle",
           consentStateAtTime: "pre_consent",
         };
-        screenshots.unshift(recoveryScreenshot);
-        notifyScreenshotCaptured(input, recoveryScreenshot);
+        if (!reusableRecoveryScreenshot) {
+          screenshots.unshift(recoveryScreenshot);
+          notifyScreenshotCaptured(input, recoveryScreenshot);
+        } else {
+          recordInstantTiming(
+            timingBreakdown,
+            "bounded same-session consent packet screenshot reused",
+            "A retained representative screenshot already matched the current browser document; no duplicate capture was attempted.",
+          );
+        }
         const recoveryVisualCapture = visualCaptureFromScreenshotSummary(
           recoveryScreenshotCapture,
-          recoveryScreenshotPath,
+          recoveryScreenshot.path,
           recoveryScreenshot.artifactId,
         );
         visualCapture = {
@@ -2903,8 +2933,20 @@ export async function preConsentRuntimeScanner(
           ]),
         };
 
+        const reusableTypedInventory = !isIncompleteConsentUiCapture(consentObservation) &&
+          (consentObservation.captureDiagnostics?.completedChannels ?? []).some((channel) =>
+            channel === "dom_inventory" || channel === "accessibility_tree"
+          ) &&
+          isSameBrowserDocumentOrExactUrl(
+            recoveryScreenshotUrl,
+            recoveryScreenshotDocumentIdentity,
+            consentObservation.documentUrl ?? page.url(),
+            consentObservation.documentIdentity,
+          )
+          ? consentObservation
+          : null;
         const recoveryInventoryTimeoutMs = Math.min(900, remainingModuleBudgetMs());
-        const recoveryInventory = await recordBoundedTiming(
+        const recoveryInventory = reusableTypedInventory ?? await recordBoundedTiming(
           timingBreakdown,
           "bounded same-session consent packet inventory",
           "Final canonical DOM inventory paired to the recovery screenshot; incomplete reads remain fail-closed.",
@@ -2920,6 +2962,13 @@ export async function preConsentRuntimeScanner(
             "recovery:bounded_same_session_inventory_incomplete",
           ),
         );
+        if (reusableTypedInventory) {
+          recordInstantTiming(
+            timingBreakdown,
+            "bounded same-session consent packet inventory reused",
+            "The completed typed inventory remained bound to the retained same-document screenshot; recovery proceeded directly to geometry.",
+          );
+        }
         const recoveryTypedInventoryComplete =
           !isIncompleteConsentUiCapture(recoveryInventory) &&
           (recoveryInventory.captureDiagnostics?.completedChannels ?? []).some((channel) =>
@@ -10416,71 +10465,80 @@ async function capturePreConsentScreenshot(
   },
 ): Promise<VisualCaptureSummary> {
   const captureStartedAtMs = Date.now();
+  const captureDeadlineAtMs = captureStartedAtMs + Math.max(1, options.timeoutMs);
+  const remainingCaptureMs = () => Math.max(0, captureDeadlineAtMs - Date.now());
+  const nextCaptureTimeoutMs = (maximumMs: number) => {
+    const remainingMs = remainingCaptureMs();
+    return remainingMs > 0 ? Math.max(1, Math.min(maximumMs, remainingMs)) : null;
+  };
   const boundedViewportOnly = options.fallbackMode === "bounded_viewport";
-  const viewportTimeoutMs = boundedViewportOnly
-    ? Math.max(250, Math.min(900, Math.floor(options.timeoutMs * 0.55)))
-    : Math.max(1_500, Math.min(options.timeoutMs, 4_000));
+  const viewportAttemptMaximumMs = boundedViewportOnly
+    ? Math.max(1, Math.min(900, Math.floor(options.timeoutMs * 0.55)))
+    : Math.max(1, Math.min(options.timeoutMs, 4_000));
   const deferredViewportAttemptErrors: string[] = [];
   if (options.captureMode === "viewport_first") {
     let cdpViewportFailure: string | undefined;
-    try {
-      await captureViewportScreenshotWithCdp(page, screenshotPath, viewportTimeoutMs);
-      return {
-        status: "available",
-        captureMethod: captureMethods.viewportPrimary,
-        artifactRefs: [],
-        notes: ["Viewport pre-consent screenshot retained through the low-latency browser capture path."],
-      };
-    } catch (error) {
-      const errorMessage = errorMessageFromUnknown(error);
-      cdpViewportFailure = `CDP viewport screenshot failed: ${errorMessage}`;
-      if (isTerminalScreenshotTargetFailure(errorMessage)) {
-        options.screenshotErrors.push(cdpViewportFailure);
-        return retainScreenshotPlaceholder({
-          failureReason: classifyVisualCaptureFailureReason(errorMessage),
-          notes: ["A 1x1 screenshot placeholder was retained after the Chromium target became unavailable during CDP capture."],
-          options,
-          screenshotPath,
-          captureMethod: captureMethods.placeholder,
-        });
+    const cdpTimeoutMs = nextCaptureTimeoutMs(viewportAttemptMaximumMs);
+    if (cdpTimeoutMs !== null) {
+      try {
+        await captureViewportScreenshotWithCdp(page, screenshotPath, cdpTimeoutMs);
+        return {
+          status: "available",
+          captureMethod: captureMethods.viewportPrimary,
+          artifactRefs: [],
+          notes: ["Viewport pre-consent screenshot retained through the low-latency browser capture path."],
+        };
+      } catch (error) {
+        const errorMessage = errorMessageFromUnknown(error);
+        cdpViewportFailure = `CDP viewport screenshot failed: ${errorMessage}`;
+        if (isTerminalScreenshotTargetFailure(errorMessage)) {
+          options.screenshotErrors.push(cdpViewportFailure);
+          return retainScreenshotPlaceholder({
+            failureReason: classifyVisualCaptureFailureReason(errorMessage),
+            notes: ["A 1x1 screenshot placeholder was retained after the Chromium target became unavailable during CDP capture."],
+            options,
+            screenshotPath,
+            captureMethod: captureMethods.placeholder,
+          });
+        }
+        // Playwright's bounded viewport capture remains the compatibility fallback.
       }
-      // Playwright's bounded viewport capture remains the compatibility fallback.
     }
-    try {
-      const compatibleViewportTimeoutMs = boundedViewportOnly
-        ? Math.max(1, options.timeoutMs - (Date.now() - captureStartedAtMs))
-        : viewportTimeoutMs;
-      await page.screenshot({
-        path: screenshotPath,
-        fullPage: false,
-        timeout: compatibleViewportTimeoutMs,
-      });
-      return {
-        status: "available",
-        captureMethod: captureMethods.viewportPrimary,
-        artifactRefs: [],
-        notes: [
-          "Viewport pre-consent screenshot retained for fast planned-DAG evidence capture.",
-          ...(cdpViewportFailure
-            ? ["The compatible viewport capture recovered an earlier low-latency capture timeout."]
-            : []),
-        ],
-      };
-    } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : String(error);
-      if (cdpViewportFailure) {
-        deferredViewportAttemptErrors.push(cdpViewportFailure);
-      }
-      deferredViewportAttemptErrors.push(`Viewport screenshot failed: ${errorMessage}`);
-      if (isTerminalScreenshotTargetFailure(errorMessage)) {
-        options.screenshotErrors.push(...deferredViewportAttemptErrors);
-        return retainScreenshotPlaceholder({
-          failureReason: classifyVisualCaptureFailureReason(errorMessage),
-          notes: ["A 1x1 screenshot placeholder was retained after the Chromium target became unavailable during viewport capture."],
-          options,
-          screenshotPath,
-          captureMethod: captureMethods.placeholder,
+    const compatibleViewportTimeoutMs = nextCaptureTimeoutMs(viewportAttemptMaximumMs);
+    if (compatibleViewportTimeoutMs !== null) {
+      try {
+        await page.screenshot({
+          path: screenshotPath,
+          fullPage: false,
+          timeout: compatibleViewportTimeoutMs,
         });
+        return {
+          status: "available",
+          captureMethod: captureMethods.viewportPrimary,
+          artifactRefs: [],
+          notes: [
+            "Viewport pre-consent screenshot retained for fast planned-DAG evidence capture.",
+            ...(cdpViewportFailure
+              ? ["The compatible viewport capture recovered an earlier low-latency capture timeout."]
+              : []),
+          ],
+        };
+      } catch (error) {
+        const errorMessage = error instanceof Error ? error.message : String(error);
+        if (cdpViewportFailure) {
+          deferredViewportAttemptErrors.push(cdpViewportFailure);
+        }
+        deferredViewportAttemptErrors.push(`Viewport screenshot failed: ${errorMessage}`);
+        if (isTerminalScreenshotTargetFailure(errorMessage)) {
+          options.screenshotErrors.push(...deferredViewportAttemptErrors);
+          return retainScreenshotPlaceholder({
+            failureReason: classifyVisualCaptureFailureReason(errorMessage),
+            notes: ["A 1x1 screenshot placeholder was retained after the Chromium target became unavailable during viewport capture."],
+            options,
+            screenshotPath,
+            captureMethod: captureMethods.placeholder,
+          });
+        }
       }
     }
     if (boundedViewportOnly) {
@@ -10498,57 +10556,65 @@ async function capturePreConsentScreenshot(
       });
     }
   }
-  try {
-    await page.screenshot({ path: screenshotPath, fullPage: true, timeout: options.timeoutMs });
-    return {
-      status: "available",
-      captureMethod: captureMethods.fullPage,
-      artifactRefs: [],
-      notes: ["Full-page pre-consent screenshot retained."],
-    };
-  } catch (error) {
-    const errorMessage = error instanceof Error ? error.message : String(error);
-    const fullPageFailure = `Full-page screenshot failed: ${errorMessage}`;
-    if (options.captureMode === "viewport_first") {
-      deferredViewportAttemptErrors.push(fullPageFailure);
-    } else {
-      options.screenshotErrors.push(fullPageFailure);
+  const fullPageTimeoutMs = nextCaptureTimeoutMs(options.timeoutMs);
+  if (fullPageTimeoutMs !== null) {
+    try {
+      await page.screenshot({ path: screenshotPath, fullPage: true, timeout: fullPageTimeoutMs });
+      return {
+        status: "available",
+        captureMethod: captureMethods.fullPage,
+        artifactRefs: [],
+        notes: ["Full-page pre-consent screenshot retained."],
+      };
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      const fullPageFailure = `Full-page screenshot failed: ${errorMessage}`;
+      if (options.captureMode === "viewport_first") {
+        deferredViewportAttemptErrors.push(fullPageFailure);
+      } else {
+        options.screenshotErrors.push(fullPageFailure);
+      }
+      if (isTerminalScreenshotTargetFailure(errorMessage)) {
+        if (options.captureMode === "viewport_first") {
+          options.screenshotErrors.push(...deferredViewportAttemptErrors);
+        }
+        return retainScreenshotPlaceholder({
+          failureReason: classifyVisualCaptureFailureReason(errorMessage),
+          notes: ["A 1x1 screenshot placeholder was retained after the Chromium target became unavailable during full-page capture."],
+          options,
+          screenshotPath,
+          captureMethod: captureMethods.placeholder,
+        });
+      }
     }
-    if (isTerminalScreenshotTargetFailure(errorMessage)) {
+  }
+  const finalViewportTimeoutMs = nextCaptureTimeoutMs(viewportAttemptMaximumMs);
+  if (finalViewportTimeoutMs !== null) {
+    try {
+      await page.screenshot({ path: screenshotPath, fullPage: false, timeout: finalViewportTimeoutMs });
+      if (options.captureMode === "full_page_first") {
+        options.screenshotErrors.push("Viewport screenshot fallback used after full-page screenshot failure.");
+      }
+      return {
+        status: "available",
+        captureMethod: captureMethods.viewportFallback,
+        artifactRefs: [],
+        notes: [
+          "Viewport pre-consent screenshot retained after full-page screenshot failure.",
+          ...(options.captureMode === "viewport_first" && deferredViewportAttemptErrors.length > 0
+            ? ["The requested viewport artifact was retained after bounded capture-method retries."]
+            : []),
+        ],
+      };
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : String(error);
       if (options.captureMode === "viewport_first") {
         options.screenshotErrors.push(...deferredViewportAttemptErrors);
       }
-      return retainScreenshotPlaceholder({
-        failureReason: classifyVisualCaptureFailureReason(errorMessage),
-        notes: ["A 1x1 screenshot placeholder was retained after the Chromium target became unavailable during full-page capture."],
-        options,
-        screenshotPath,
-        captureMethod: captureMethods.placeholder,
-      });
+      options.screenshotErrors.push(`Viewport screenshot fallback failed: ${errorMessage}`);
     }
-  }
-  try {
-    await page.screenshot({ path: screenshotPath, fullPage: false, timeout: viewportTimeoutMs });
-    if (options.captureMode === "full_page_first") {
-      options.screenshotErrors.push("Viewport screenshot fallback used after full-page screenshot failure.");
-    }
-    return {
-      status: "available",
-      captureMethod: captureMethods.viewportFallback,
-      artifactRefs: [],
-      notes: [
-        "Viewport pre-consent screenshot retained after full-page screenshot failure.",
-        ...(options.captureMode === "viewport_first" && deferredViewportAttemptErrors.length > 0
-          ? ["The requested viewport artifact was retained after bounded capture-method retries."]
-          : []),
-      ],
-    };
-  } catch (error) {
-    const errorMessage = error instanceof Error ? error.message : String(error);
-    if (options.captureMode === "viewport_first") {
-      options.screenshotErrors.push(...deferredViewportAttemptErrors);
-    }
-    options.screenshotErrors.push(`Viewport screenshot fallback failed: ${errorMessage}`);
+  } else {
+    options.screenshotErrors.push(`Screenshot transaction deadline exhausted after ${Date.now() - captureStartedAtMs}ms.`);
   }
   return retainScreenshotPlaceholder({
     failureReason: "placeholder_used",
@@ -10591,9 +10657,11 @@ async function captureViewportScreenshotWithCdp(
   screenshotPath: string,
   timeoutMs: number,
 ): Promise<void> {
+  const deadlineAtMs = Date.now() + Math.max(1, timeoutMs);
   const client = await page.context().newCDPSession(page);
   let timer: ReturnType<typeof setTimeout> | undefined;
   try {
+    const remainingMs = Math.max(1, deadlineAtMs - Date.now());
     const screenshot = await Promise.race([
       client.send("Page.captureScreenshot", {
         captureBeyondViewport: false,
@@ -10601,7 +10669,7 @@ async function captureViewportScreenshotWithCdp(
         fromSurface: true,
       }),
       new Promise<never>((_resolve, reject) => {
-        timer = setTimeout(() => reject(new Error("Viewport screenshot timed out")), timeoutMs);
+        timer = setTimeout(() => reject(new Error("Viewport screenshot timed out")), remainingMs);
       }),
     ]);
     await writeFile(screenshotPath, Buffer.from(screenshot.data, "base64"));
@@ -10609,7 +10677,12 @@ async function captureViewportScreenshotWithCdp(
     if (timer) {
       clearTimeout(timer);
     }
-    await boundedCleanup(client.detach(), 250);
+    const cleanupRemainingMs = deadlineAtMs - Date.now();
+    if (cleanupRemainingMs > 0) {
+      await boundedCleanup(client.detach(), Math.min(250, cleanupRemainingMs));
+    } else {
+      void client.detach().catch(() => undefined);
+    }
   }
 }
 

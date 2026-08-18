@@ -119,6 +119,9 @@ test("typed consent recovery covers partial modules and missing geometry channel
     moduleStatus: "partial",
     observations: [{
       ...observedControls,
+      inventoryOutcome: "complete_with_controls",
+      layerInspected: "first_layer",
+      controls: [{}],
       captureDiagnostics: {
         completedChannels: ["dom_inventory", "geometry"],
         timedOutChannels: [],

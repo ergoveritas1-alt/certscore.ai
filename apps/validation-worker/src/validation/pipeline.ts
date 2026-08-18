@@ -6946,6 +6946,18 @@ export async function processNanoSignalEnrichmentJob(input: {
     return;
   }
 
+  // The verified retained bundle is the model review's sole production input,
+  // while deterministic signal persistence consumes the already-loaded typed
+  // runtime/policy rows. They join before normalized concern derivation, so run
+  // them concurrently without allowing either path to infer from the other.
+  const modelPolicyReviewPromise = measureNanoPhase("policy_model_review", () => runPolicyModelReview({
+    artifacts,
+    scanId
+  })).catch((error) => ({
+    cacheHit: false,
+    reviewStatus: "failed",
+    failureReason: error instanceof Error ? error.message : "Unknown policy model-review failure."
+  }));
   const nanoSignalRows = lastPersistedNanoSignalRows && !artifactsChangedAfterSignalPersistence
     ? lastPersistedNanoSignalRows
     : await measureNanoPhase("persist_final_signals", () => persistDerivedNanoPolicySignals({
@@ -6955,14 +6967,7 @@ export async function processNanoSignalEnrichmentJob(input: {
         scanId,
         snapshot: artifacts.snapshot
       }));
-  const modelPolicyReviewSummary = await measureNanoPhase("policy_model_review", () => runPolicyModelReview({
-    artifacts,
-    scanId
-  })).catch((error) => ({
-    cacheHit: false,
-    reviewStatus: "failed",
-    failureReason: error instanceof Error ? error.message : "Unknown policy model-review failure."
-  }));
+  const modelPolicyReviewSummary = await modelPolicyReviewPromise;
 
   await appendScanWorkflowEvent({
     eventType: SCAN_EVENT_TYPES.nanoSignalEnrichmentCompleted,

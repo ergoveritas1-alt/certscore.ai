@@ -618,10 +618,12 @@ export function buildPolicyReviewPacket(input: {
       canonicalUrl: document.canonicalUrl,
       contentCoverage: document.contentCoverage,
       documentEvaluationState: document.documentEvaluationState,
+      documentFetchState: document.documentFetchState,
       documentType: document.documentType,
       documentOwnerEntity: document.documentOwnerEntity,
       extractedCandidates: document.extractedCandidates,
       ownershipConfidence: document.ownershipConfidence,
+      ownershipReasonCodes: document.ownershipReasonCodes,
       targetRelationship: document.targetRelationship,
       text: document.text
     })),

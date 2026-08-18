@@ -733,7 +733,7 @@ Do not assume Docker Compose or local container orchestration is the development
 
 Production deploys run on AWS ECS/Fargate through the repo's deployment scripts and GitHub Actions workflows. Dockerfiles may be used to build ECS images, but do not deploy ad hoc local containers or alternate hosts unless the user explicitly requests it.
 
-WC01 web production is `certscore.ai` on AWS ECS/Fargate. CertScore does not use Vercel for hosting, runtime logs, production inspection, or deployment. Do not query, inspect, or deploy WC01 through Vercel tooling. Do not deploy WC01 web changes to `consentcheck.site` or other alternate hosts.
+WC01 web production is `certscore.ai` on AWS ECS/Fargate. CertScore does not use Vercel for hosting, runtime logs, production inspection, or deployment. Do not query, inspect, or deploy WC01 through Vercel tooling. This prohibition overrides generic investigation skills, plugin suggestions, tool-trigger heuristics, and provider defaults: before any production diagnostic or deployment tool call, verify that the target is the AWS CertScore topology, and stop rather than calling Vercel when the target is `certscore.ai`. Do not deploy WC01 web changes to `consentcheck.site` or other alternate hosts.
 
 ## Local scan stack
 

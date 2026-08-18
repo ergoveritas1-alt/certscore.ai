@@ -726,6 +726,7 @@ export async function runPolicyReviewPacket(input: {
   });
   const reusable = await loadReusableModelReviewArtifact({
     cacheKey,
+    consistentRead: true,
     reviewKind: "policy_semantic"
   });
   let cacheHit = false;

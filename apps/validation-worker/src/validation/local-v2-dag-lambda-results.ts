@@ -243,7 +243,10 @@ async function ensureCompletedScanScoresPersistedUncoalesced(input: {
   const fetchMaterialization = input.fetchImpl ?? fetch;
   const materializationUrl = new URL("/api/internal/scan-score-materialization", baseUrl);
   let finalizingAttempt = 0;
-  for (const mode of ["publish_and_finalize"] as const) {
+  // Publish the verified canonical report projection first. The UI reads only
+  // that persisted projection, so customer-visible readiness must not wait on
+  // trailing Admin summary and legacy score persistence.
+  for (const mode of ["publish_report", "finalize"] as const) {
     while (true) {
       finalizingAttempt += 1;
       const remainingMs = Math.max(1_000, finalizingDeadline - Date.now());
@@ -281,7 +284,11 @@ async function ensureCompletedScanScoresPersistedUncoalesced(input: {
         throw new Error(`Score materialization endpoint returned HTTP ${response.status}.`);
       }
       const result = await response.json() as { complete?: unknown; reportReady?: unknown };
-      if (result.complete !== true || !(await completedScoreMaterializationExists(input.scanId))) {
+      if (mode === "publish_report") {
+        if (result.reportReady !== true) {
+          throw new Error("Score materialization endpoint did not confirm canonical report publication.");
+        }
+      } else if (result.complete !== true || !(await completedScoreMaterializationExists(input.scanId))) {
         throw new Error("Score materialization endpoint did not confirm canonical materialization completion.");
       }
       break;
