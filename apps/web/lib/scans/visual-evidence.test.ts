@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import {
+  getHomepageScreenshotState,
   getVisualEvidenceArtifacts,
   normalizeVisualEvidenceArtifact
 } from "./visual-evidence";
@@ -63,3 +64,21 @@ test("getVisualEvidenceArtifacts supports camelCase fallback", () => {
   assert.equal(artifacts[0]?.status, "upload_failed");
 });
 
+test("homepage screenshot state distinguishes withheld images and preserves historical scans", () => {
+  assert.deepEqual(getHomepageScreenshotState({
+    homepage_screenshot: {
+      status: "withheld",
+      reason: "sensitive_visual_content"
+    }
+  }), {
+    status: "withheld",
+    reason: "sensitive_visual_content"
+  });
+  assert.equal(getHomepageScreenshotState({
+    visual_evidence_artifacts: [{
+      id: "historical-image",
+      key: "scans/old/image.webp",
+      status: "available"
+    }]
+  }), null, "historical scans require no migration and keep their existing image behavior");
+});

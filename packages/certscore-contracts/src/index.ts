@@ -1392,7 +1392,34 @@ export const screenshotArtifactSchema = z.object({
   documentIdentity: browserDocumentIdentitySchema.optional(),
   pagePhase: pagePhaseSchema,
   consentStateAtTime: consentStateSchema,
+  retentionStatus: z.enum(["available", "withheld"]).optional(),
+  withheldReason: z.enum(["sensitive_visual_content", "safety_check_unavailable"]).optional(),
+}).superRefine((artifact, context) => {
+  if (artifact.retentionStatus === "withheld" && !artifact.withheldReason) {
+    context.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: "A withheld screenshot must include a withheld reason.",
+      path: ["withheldReason"],
+    });
+  }
+  if (artifact.retentionStatus !== "withheld" && artifact.withheldReason) {
+    context.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: "A screenshot withheld reason requires withheld retention status.",
+      path: ["withheldReason"],
+    });
+  }
 });
+
+export const homepageScreenshotStateSchema = z.discriminatedUnion("status", [
+  z.object({
+    status: z.literal("available"),
+  }),
+  z.object({
+    status: z.literal("withheld"),
+    reason: z.enum(["sensitive_visual_content", "safety_check_unavailable"]),
+  }),
+]);
 
 export const visualCaptureStatusSchema = z.enum(["available", "unavailable", "failed", "placeholder"]);
 export const visualCaptureFailureReasonSchema = z.enum([
@@ -2707,6 +2734,7 @@ export const canonicalEvidenceBundleSchema = z.object({
   transportSecurityObservations: z.array(transportSecurityObservationSchema).default([]),
   cmpRuntimeObservations: z.array(cmpRuntimeObservationSchema).default([]),
   screenshots: z.array(screenshotArtifactSchema),
+  homepageScreenshot: homepageScreenshotStateSchema.optional(),
   domSnapshots: z.array(domSnapshotArtifactSchema),
   normalizedVendorObservations: z.array(normalizedVendorObservationSchema),
   observedJourneys: z.array(observedJourneySchema).default([]),
@@ -2907,6 +2935,7 @@ export type ConsentScenarioShadowCompareArtifact = z.infer<typeof consentScenari
 export type ConsentActionRecipeResearchArtifact = z.infer<typeof consentActionRecipeResearchArtifactSchema>;
 export type JourneyPhaseDelta = z.infer<typeof journeyPhaseDeltaSchema>;
 export type ScreenshotArtifact = z.infer<typeof screenshotArtifactSchema>;
+export type HomepageScreenshotState = z.infer<typeof homepageScreenshotStateSchema>;
 export type VisualCaptureSummary = z.infer<typeof visualCaptureSummarySchema>;
 export type DomSnapshotArtifact = z.infer<typeof domSnapshotArtifactSchema>;
 export type PolicySurfaceObservation = z.infer<typeof policySurfaceObservationSchema>;

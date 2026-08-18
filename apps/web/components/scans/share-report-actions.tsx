@@ -10,6 +10,7 @@ type ShareReportActionsProps = {
   showMonitorSite?: boolean;
   visualEvidenceHref?: string | null;
   visualEvidenceOnly?: boolean;
+  visualEvidenceWithheldReason?: "sensitive_visual_content" | "safety_check_unavailable" | null;
 };
 
 const initialSendReportEmailActionState: SendReportEmailActionState = {
@@ -21,6 +22,14 @@ export const VISUAL_EVIDENCE_RETRY_DELAYS_MS = [1_000, 2_000, 4_000, 8_000, 15_0
 export const VISUAL_EVIDENCE_MIN_ZOOM = 0.5;
 export const VISUAL_EVIDENCE_MAX_ZOOM = 10;
 export const VISUAL_EVIDENCE_ZOOM_STEP = 0.25;
+
+export function visualEvidenceWithheldDescription(
+  reason: "sensitive_visual_content" | "safety_check_unavailable",
+) {
+  return reason === "sensitive_visual_content"
+    ? "Page imagery was not retained because potentially sensitive or explicit visual content was detected."
+    : "Page imagery was not retained because the visual safety check could not be completed.";
+}
 
 export function buildVisualEvidenceRetryHref(href: string, attempt: number, refreshToken?: number) {
   const params = new URLSearchParams({ visualEvidenceAttempt: String(attempt) });
@@ -228,7 +237,8 @@ export function ShareReportActions({
   scanId,
   showMonitorSite = false,
   visualEvidenceHref = null,
-  visualEvidenceOnly = false
+  visualEvidenceOnly = false,
+  visualEvidenceWithheldReason = null
 }: ShareReportActionsProps) {
   const [copyState, setCopyState] = useState<"idle" | "copied" | "failed">("idle");
   const [currentUrl, setCurrentUrl] = useState("");
@@ -420,6 +430,20 @@ export function ShareReportActions({
             <VisualEvidenceIcon />
             <IconTooltip label="View captured image" />
           </button>
+        ) : visualEvidenceWithheldReason ? (
+          <div
+            className="flex max-w-md items-start gap-2 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-left"
+            data-testid="visual-evidence-withheld"
+            role="status"
+          >
+            <span className="mt-0.5 shrink-0 text-slate-500"><VisualEvidenceIcon /></span>
+            <span>
+              <span className="block text-xs font-semibold text-slate-800">Screenshot withheld</span>
+              <span className="mt-0.5 block text-xs leading-5 text-slate-600">
+                {visualEvidenceWithheldDescription(visualEvidenceWithheldReason)}
+              </span>
+            </span>
+          </div>
         ) : null}
       </div>
       {copyState === "failed" ? (

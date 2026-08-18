@@ -33,6 +33,7 @@ import {
   runScan,
   type RunScanInput
 } from "@certscore/scan-core";
+import { applyHomepageScreenshotSafetyGate } from "./screenshot-safety.js";
 
 export const LOCAL_V2_DAG_LAMBDA_AWS_REGIONS = ["eu-central-1", "eu-west-1", "us-west-1"] as const;
 export type LocalV2DagLambdaAwsRegion = (typeof LOCAL_V2_DAG_LAMBDA_AWS_REGIONS)[number];
@@ -1067,7 +1068,16 @@ async function writeAndUploadLocalV2DagLambdaArtifacts(input: {
   artifactPointers: LocalV2DagLambdaArtifactPointers;
   phaseTimings: LocalV2DagLambdaPhaseTiming[];
 }> {
-  const { artifactRoot, bundle, payload, phaseTimings, scanTuning } = input;
+  const { artifactRoot, payload, phaseTimings, scanTuning } = input;
+  const bundle = await timeLambdaPhase(
+    phaseTimings,
+    "screenshot_safety_gate",
+    () => applyHomepageScreenshotSafetyGate({
+      artifactRoot,
+      bundle: input.bundle,
+      signal: input.signal,
+    }),
+  );
   const scanArtifactPath = path.join(artifactRoot, "CanonicalEvidenceBundle.json");
   await timeLambdaPhase(phaseTimings, "scan_artifact_write", () => writeJson(scanArtifactPath, bundle));
 
@@ -1964,6 +1974,14 @@ export function mergeLocalV2DagLambdaShardBundles(input: {
   workerBundles: CanonicalEvidenceBundle[];
 }): CanonicalEvidenceBundle {
   const bundles = [input.base, ...input.workerBundles];
+  const homepageScreenshot = bundles.find(
+    (bundle) => bundle.homepageScreenshot?.status === "withheld" &&
+      bundle.homepageScreenshot.reason === "sensitive_visual_content",
+  )?.homepageScreenshot ?? bundles.find(
+    (bundle) => bundle.homepageScreenshot?.status === "withheld",
+  )?.homepageScreenshot ?? bundles.find(
+    (bundle) => bundle.homepageScreenshot?.status === "available",
+  )?.homepageScreenshot;
   const merged = {
     ...input.base,
     scanId: input.scanId,
@@ -1990,6 +2008,7 @@ export function mergeLocalV2DagLambdaShardBundles(input: {
     ),
     cmpRuntimeObservations: dedupeByField(bundles.flatMap((bundle) => bundle.cmpRuntimeObservations), "observationId"),
     screenshots: selectDiagnosticScreenshot(bundles.flatMap((bundle) => bundle.screenshots)),
+    ...(homepageScreenshot ? { homepageScreenshot } : {}),
     domSnapshots: dedupeByArtifactId(bundles.flatMap((bundle) => bundle.domSnapshots)),
     normalizedVendorObservations: dedupeByField(bundles.flatMap((bundle) => bundle.normalizedVendorObservations), "vendorObservationId"),
     observedJourneys: dedupeByField(bundles.flatMap((bundle) => bundle.observedJourneys), "journeyId"),

@@ -17,7 +17,7 @@ import {
   hasPendingBrowserExtensionNormalization,
   hasPendingPostCompletionFindingWork
 } from "../../../../lib/scans/scan-auto-refresh";
-import { getVisualEvidenceArtifacts } from "../../../../lib/scans/visual-evidence";
+import { getHomepageScreenshotState, getVisualEvidenceArtifacts } from "../../../../lib/scans/visual-evidence";
 import { absoluteUrl } from "../../../../lib/seo";
 import { getPublicScanById } from "../../../../server/scans/get-scan-by-id";
 import { loadPersistedScanReportProjection } from "../../../../server/scans/scan-report-projection";
@@ -189,6 +189,7 @@ export default async function PublicScanDetailPage({ params, searchParams }: Pub
   const visualEvidenceHref = visualEvidenceArtifact
     ? `/api/scans/${displayScanRecord.scan.id}/visual-evidence/${encodeURIComponent(visualEvidenceArtifact.id)}`
     : null;
+  const homepageScreenshotState = getHomepageScreenshotState(displayScanRecord.runtimeArtifacts);
   const isNoGoReport = Boolean(deriveVisualAccessLimitationNotice(displayScanRecord.runtimeArtifacts));
 
   return (
@@ -215,6 +216,7 @@ export default async function PublicScanDetailPage({ params, searchParams }: Pub
                   domainLabel={publicScanDomainLabel}
                   scanId={displayScanRecord.scan.id}
                   visualEvidenceHref={visualEvidenceHref}
+                  visualEvidenceWithheldReason={homepageScreenshotState?.status === "withheld" ? homepageScreenshotState.reason : null}
                 />
                 <div className="w-full lg:ml-auto lg:max-w-[calc(16rem+20ch)]">
                   <DomainScanForm

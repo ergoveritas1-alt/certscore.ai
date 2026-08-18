@@ -1,4 +1,9 @@
-export type VisualEvidenceArtifactStatus = "available" | "capture_failed" | "upload_failed" | "disabled";
+export type HomepageScreenshotWithheldReason = "sensitive_visual_content" | "safety_check_unavailable";
+export type HomepageScreenshotState =
+  | { status: "available" }
+  | { status: "withheld"; reason: HomepageScreenshotWithheldReason };
+
+export type VisualEvidenceArtifactStatus = "available" | "capture_failed" | "upload_failed" | "disabled" | "withheld";
 
 export type VisualEvidenceArtifact = {
   bucket: string | null;
@@ -16,6 +21,7 @@ export type VisualEvidenceArtifact = {
   pageUrl: string | null;
   sha256: string | null;
   status: VisualEvidenceArtifactStatus;
+  statusReason: string | null;
   viewport: {
     height: number | null;
     width: number | null;
@@ -36,7 +42,7 @@ function getNumber(value: unknown) {
 }
 
 function getStatus(value: unknown): VisualEvidenceArtifactStatus {
-  return value === "available" || value === "capture_failed" || value === "upload_failed" || value === "disabled"
+  return value === "available" || value === "capture_failed" || value === "upload_failed" || value === "disabled" || value === "withheld"
     ? value
     : "disabled";
 }
@@ -74,12 +80,41 @@ export function normalizeVisualEvidenceArtifact(value: unknown): VisualEvidenceA
     pageUrl: getString(record.pageUrl ?? record.page_url),
     sha256: getString(record.sha256),
     status,
+    statusReason: getString(record.statusReason ?? record.status_reason),
     viewport: {
       height,
       width
     },
     width
   };
+}
+
+export function getHomepageScreenshotState(
+  runtimeArtifacts: Record<string, unknown> | null | undefined,
+): HomepageScreenshotState | null {
+  const value = getRecord(
+    runtimeArtifacts?.homepageScreenshot ?? runtimeArtifacts?.homepage_screenshot,
+  );
+  if (value?.status === "available") {
+    return { status: "available" };
+  }
+  if (
+    value?.status === "withheld" &&
+    (value.reason === "sensitive_visual_content" || value.reason === "safety_check_unavailable")
+  ) {
+    return { status: "withheld", reason: value.reason };
+  }
+
+  const withheldArtifact = getVisualEvidenceArtifacts(runtimeArtifacts).find(
+    (artifact) => artifact.status === "withheld",
+  );
+  if (
+    withheldArtifact?.statusReason === "sensitive_visual_content" ||
+    withheldArtifact?.statusReason === "safety_check_unavailable"
+  ) {
+    return { status: "withheld", reason: withheldArtifact.statusReason };
+  }
+  return null;
 }
 
 export function getVisualEvidenceArtifacts(runtimeArtifacts: Record<string, unknown> | null | undefined) {
@@ -93,4 +128,3 @@ export function getVisualEvidenceArtifacts(runtimeArtifacts: Record<string, unkn
     .map(normalizeVisualEvidenceArtifact)
     .filter((artifact): artifact is VisualEvidenceArtifact => artifact !== null);
 }
-

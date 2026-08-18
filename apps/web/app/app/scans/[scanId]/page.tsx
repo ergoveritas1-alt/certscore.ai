@@ -16,7 +16,7 @@ import {
   hasPendingPostCompletionFindingWork,
   shouldBackfillReportFindingCount
 } from "../../../../lib/scans/scan-auto-refresh";
-import { getVisualEvidenceArtifacts } from "../../../../lib/scans/visual-evidence";
+import { getHomepageScreenshotState, getVisualEvidenceArtifacts } from "../../../../lib/scans/visual-evidence";
 import { isPlatformAdminEmail } from "../../../../server/admin/platform-admin";
 import { getDashboardContext } from "../../../../server/auth";
 import { BoundedPromiseCache } from "../../../../server/performance/bounded-promise-cache";
@@ -250,6 +250,7 @@ async function ScanDetailReportContent({
   const visualEvidenceHref = visualEvidenceArtifact
     ? `/api/scans/${scanRecord.scan.id}/visual-evidence/${encodeURIComponent(visualEvidenceArtifact.id)}`
     : null;
+  const homepageScreenshotState = getHomepageScreenshotState(displayScanRecord.runtimeArtifacts);
 
   return (
     <ScanReportRescanTransition>
@@ -275,6 +276,7 @@ async function ScanDetailReportContent({
                 scanId={displayScanRecord.scan.id}
                 showMonitorSite={canUseAdvancedReportActions}
                 visualEvidenceHref={visualEvidenceHref}
+                visualEvidenceWithheldReason={homepageScreenshotState?.status === "withheld" ? homepageScreenshotState.reason : null}
               />
               <div className="w-full lg:ml-auto lg:max-w-[calc(16rem+20ch)]">
                 <DomainScanForm

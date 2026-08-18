@@ -95,6 +95,19 @@ test("visual evidence modal hides broken image output and provides manual recove
   assert.match(source, /setVisualEvidenceRefreshToken\(\(value\) => value \+ 1\)/);
 });
 
+test("withheld visual evidence renders a text-only state without attempting an image", () => {
+  const markup = renderToStaticMarkup(createElement(ShareReportActions, {
+    domainLabel: "example.com",
+    scanId: "scan-1",
+    visualEvidenceWithheldReason: "sensitive_visual_content"
+  }));
+
+  assert.match(markup, /Screenshot withheld/);
+  assert.match(markup, /potentially sensitive or explicit visual content was detected/);
+  assert.doesNotMatch(markup, /<img/);
+  assert.doesNotMatch(markup, /View captured image/);
+});
+
 test("agent summary exposes canonical API, SDK, and MCP evidence actions", () => {
   const markup = renderToStaticMarkup(createElement(AgentSummaryActions, {
     domainLabel: "cnn.com",

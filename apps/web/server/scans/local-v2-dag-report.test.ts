@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import { readFileSync, statSync } from "node:fs";
-import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { createRequire } from "node:module";
 import path from "node:path";
 import test from "node:test";
@@ -6255,7 +6255,7 @@ test("materializeLocalV2DagScanDetail derives visual evidence key from Lambda ar
       url: "https://example.test/"
     }, null, 2)}\n`, "utf8");
 
-    const detail = await materializeLocalV2DagScanDetail(makeScanRecord({
+    const scanRecord = makeScanRecord({
       events: [
         {
           createdAt: "2026-06-17T13:14:02.000Z",
@@ -6290,7 +6290,8 @@ test("materializeLocalV2DagScanDetail derives visual evidence key from Lambda ar
           }
         }
       }
-    }));
+    });
+    const detail = await materializeLocalV2DagScanDetail(scanRecord);
 
     const visualArtifacts = detail.runtimeArtifacts?.visual_evidence_artifacts as Array<Record<string, unknown>> | undefined;
     assert.equal(visualArtifacts?.[0]?.bucket, "ws01-scan-artifacts-199536052647-us-west-1");
@@ -6308,6 +6309,28 @@ test("materializeLocalV2DagScanDetail derives visual evidence key from Lambda ar
       visualArtifacts?.[2]?.key,
       "v2-dag-lambda/local/visual-evidence-fixture/auxiliary/screenshot-pre-consent.png"
     );
+
+    const bundlePath = path.join(outDir, "CanonicalEvidenceBundle.json");
+    const withheldBundle = JSON.parse(await readFile(bundlePath, "utf8")) as Record<string, unknown>;
+    withheldBundle.homepageScreenshot = {
+      status: "withheld",
+      reason: "sensitive_visual_content"
+    };
+    withheldBundle.screenshots = (withheldBundle.screenshots as Array<Record<string, unknown>>).map((screenshot) => ({
+      ...screenshot,
+      retentionStatus: "withheld",
+      withheldReason: "sensitive_visual_content"
+    }));
+    await writeFile(bundlePath, `${JSON.stringify(withheldBundle, null, 2)}\n`, "utf8");
+    const withheldDetail = await materializeLocalV2DagScanDetail(scanRecord);
+    const withheldArtifacts = withheldDetail.runtimeArtifacts?.visual_evidence_artifacts as Array<Record<string, unknown>> | undefined;
+    assert.deepEqual(withheldDetail.runtimeArtifacts?.homepage_screenshot, {
+      status: "withheld",
+      reason: "sensitive_visual_content"
+    });
+    assert.equal(withheldArtifacts?.[0]?.status, "withheld");
+    assert.equal(withheldArtifacts?.[0]?.status_reason, "sensitive_visual_content");
+    assert.equal(withheldArtifacts?.[0]?.key, null);
   } finally {
     if (previousAppUrl === undefined) {
       delete process.env.NEXT_PUBLIC_APP_URL;

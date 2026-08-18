@@ -5825,6 +5825,12 @@ function buildMaterializedLocalV2Detail(
     visual_capture_notes: visualCapture.notes,
     visual_capture_status: visualCapture.status,
     visual_capture_technical_limit: visualCaptureUnavailable,
+    ...(bundle.homepageScreenshot
+      ? {
+          homepageScreenshot: bundle.homepageScreenshot,
+          homepage_screenshot: bundle.homepageScreenshot,
+        }
+      : {}),
     thirdPartyRequestCount: thirdPartyRequestCount,
     thirdPartyRequestDomains: thirdPartyDomains,
     third_party_request_count: thirdPartyRequestCount,
@@ -5837,6 +5843,7 @@ function buildMaterializedLocalV2Detail(
         return [];
       }
       const capturedErrorShell = isPreConsentErrorShellScreenshot(bundle, screenshot);
+      const screenshotWithheld = screenshot.retentionStatus === "withheld";
       const storagePointer = localV2ScreenshotStoragePointer({
         scanArtifactUri: options.scanArtifactUri,
         scanId: scanRecord.scan.id,
@@ -5850,11 +5857,13 @@ function buildMaterializedLocalV2Detail(
         final_url: safeLocalV2DocumentUrl(screenshot.url, canonicalDocumentUrl),
         id: localV2VisualEvidenceArtifactId(screenshot),
         interaction_state: "none",
-        key: capturedErrorShell ? null : storagePointer.key,
+        key: capturedErrorShell || screenshotWithheld ? null : storagePointer.key,
         mime_type: "image/png",
         page_url: safeLocalV2DocumentUrl(screenshot.url, canonicalDocumentUrl),
-        status: capturedErrorShell ? "capture_failed" : "available",
-        status_reason: capturedErrorShell ? "pre_consent_error_shell_captured" : null
+        status: screenshotWithheld ? "withheld" : capturedErrorShell ? "capture_failed" : "available",
+        status_reason: screenshotWithheld
+          ? screenshot.withheldReason ?? "safety_check_unavailable"
+          : capturedErrorShell ? "pre_consent_error_shell_captured" : null
       }];
     })
   };
