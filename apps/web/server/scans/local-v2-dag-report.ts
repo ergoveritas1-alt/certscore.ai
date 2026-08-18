@@ -1728,6 +1728,31 @@ async function readLocalV2DagPolicyTextArtifactFromS3(
   };
 }
 
+export function classifyPolicyTextArtifactVerificationFailure(
+  error: unknown,
+  source: "s3" | "local_mirror",
+) {
+  const message = error instanceof Error ? error.message : "";
+  if (/metadata is missing|outside the retained size bound/i.test(message)) {
+    return "policy_text_artifact_pointer_metadata_invalid";
+  }
+  if (/size mismatch/i.test(message)) {
+    return "policy_text_artifact_size_mismatch";
+  }
+  if (/checksum mismatch/i.test(message)) {
+    return "policy_text_artifact_checksum_mismatch";
+  }
+  if (/not valid bounded UTF-8 text/i.test(message)) {
+    return "policy_text_artifact_invalid_bounded_text";
+  }
+  if (source === "local_mirror" && /unavailable/i.test(message)) {
+    return "policy_text_local_mirror_unavailable";
+  }
+  return source === "local_mirror"
+    ? "policy_text_local_mirror_read_failed"
+    : "policy_text_artifact_fetch_failed";
+}
+
 async function loadVerifiedPolicyTextArtifacts(input: {
   bundle: CanonicalEvidenceBundle;
   manifest: Record<string, unknown> | null;
@@ -1764,7 +1789,7 @@ async function loadVerifiedPolicyTextArtifacts(input: {
         uri: pointer.uri,
         verificationStatus: "verified",
       } satisfies RetainedPolicyTextArtifactEvidence] as const;
-    } catch {
+    } catch (error) {
       return [reference.artifactId, {
         artifactId: reference.artifactId,
         fileName: reference.fileName,
@@ -1772,7 +1797,7 @@ async function loadVerifiedPolicyTextArtifacts(input: {
         sizeBytes: pointer.sizeBytes ?? undefined,
         uri: pointer.uri,
         verificationStatus: "verification_failed",
-        failureReason: "policy_text_artifact_verification_failed",
+        failureReason: classifyPolicyTextArtifactVerificationFailure(error, "s3"),
       } satisfies RetainedPolicyTextArtifactEvidence] as const;
     }
   }));
@@ -1823,7 +1848,7 @@ async function loadVerifiedLocalPolicyTextArtifacts(input: {
         uri: pointer.uri,
         verificationStatus: "verified",
       } satisfies RetainedPolicyTextArtifactEvidence] as const;
-    } catch {
+    } catch (error) {
       return [reference.artifactId, {
         artifactId: reference.artifactId,
         fileName: reference.fileName,
@@ -1831,7 +1856,7 @@ async function loadVerifiedLocalPolicyTextArtifacts(input: {
         sizeBytes: pointer.sizeBytes ?? undefined,
         uri: pointer.uri,
         verificationStatus: "verification_failed",
-        failureReason: "policy_text_local_mirror_verification_failed",
+        failureReason: classifyPolicyTextArtifactVerificationFailure(error, "local_mirror"),
       } satisfies RetainedPolicyTextArtifactEvidence] as const;
     }
   }));
@@ -3338,10 +3363,14 @@ function buildPolicyTextEvidenceProjection(
     };
   });
   const verifiedDocuments = documents.filter((document) => document.artifactVerificationStatus === "verified");
-  const completeDocuments = documents.filter((document) => document.extractionStatus === "complete");
+  const completeOwnedPolicyDocuments = documents.filter((document) =>
+    document.extractionStatus === "complete" &&
+    document.documentRole === "policy_document" &&
+    ["target_controller", "first_party_brand"].includes(document.targetRelationship)
+  );
   const projectionStatus: PolicyTextEvidenceProjection["projectionStatus"] =
     sourceBundle.verificationStatus === "verified"
-      ? completeDocuments.length > 0 && verifiedDocuments.length === documents.length
+      ? completeOwnedPolicyDocuments.length > 0 && verifiedDocuments.length === documents.length
         ? "verified_complete"
         : "verified_partial"
       : sourceBundle.verificationStatus === "local_unverified"
@@ -3354,7 +3383,12 @@ function buildPolicyTextEvidenceProjection(
     sourceBundle,
     projectionStatus,
     documents,
-    limitationKeys: uniqueStrings(documents.flatMap((document) => document.limitationKeys)),
+    limitationKeys: uniqueStrings([
+      ...documents.flatMap((document) => document.limitationKeys),
+      sourceBundle.verificationStatus === "verified" && completeOwnedPolicyDocuments.length === 0
+        ? "verified_owned_complete_policy_document_unavailable"
+        : null,
+    ]),
   });
 }
 

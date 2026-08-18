@@ -2278,7 +2278,10 @@ test("resolveLocalV2DagVisualEvidencePointer resolves the local full-page JPEG a
 });
 
 test("verified S3 fallback enforces Lambda artifact checksum and size", async () => {
-  const { verifyLocalV2DagLambdaArtifactBody } = await loadLocalV2DagReport();
+  const {
+    classifyPolicyTextArtifactVerificationFailure,
+    verifyLocalV2DagLambdaArtifactBody,
+  } = await loadLocalV2DagReport();
   const body = Buffer.from('{"schemaVersion":"certscore.v2.canonical-evidence-bundle.v1"}');
   const sha256 = createHash("sha256").update(body).digest("hex");
 
@@ -2297,6 +2300,31 @@ test("verified S3 fallback enforces Lambda artifact checksum and size", async ()
     expectedSha256: sha256,
     expectedSizeBytes: body.byteLength + 1
   }), /size mismatch/);
+  assert.equal(
+    classifyPolicyTextArtifactVerificationFailure(
+      new Error("Local v2 DAG Lambda S3 artifact checksum mismatch."),
+      "s3",
+    ),
+    "policy_text_artifact_checksum_mismatch",
+  );
+  assert.equal(
+    classifyPolicyTextArtifactVerificationFailure(
+      new Error("Local v2 DAG Lambda S3 artifact size mismatch."),
+      "s3",
+    ),
+    "policy_text_artifact_size_mismatch",
+  );
+  assert.equal(
+    classifyPolicyTextArtifactVerificationFailure(
+      new Error("Policy text artifact metadata is missing or outside the retained size bound."),
+      "s3",
+    ),
+    "policy_text_artifact_pointer_metadata_invalid",
+  );
+  assert.equal(
+    classifyPolicyTextArtifactVerificationFailure(new Error("S3 request failed."), "s3"),
+    "policy_text_artifact_fetch_failed",
+  );
 });
 
 test("getLocalV2DagReportInput ignores Lambda events that would enable production finding integration", async () => {
@@ -3843,6 +3871,74 @@ test("summarizePolicySurfaces never uses a privacy index as sufficient Article 1
   assert.equal(summary.policyTextExtractionHealth.policyTextExtractionStatus, "artifact_unavailable");
 });
 
+test("persisted policy projection cannot be verified_complete for an index-only artifact", async () => {
+  const { dedupePolicySurfaces, summarizePolicySurfaces } = await loadLocalV2DagReport();
+  const retainedText = "Privacy notices. Select the governing notice for your relationship with Example. ".repeat(40);
+  const artifactId = "policy_surface_text_index_only";
+  const artifactFileName = "policy-surface-index-only.txt";
+  const surfaces = dedupePolicySurfaces([{
+    observationId: "verified-index-only",
+    surfaceType: "privacy_policy",
+    url: "https://example.test/privacy",
+    normalizedUrl: "https://example.test/privacy",
+    confidence: 0.95,
+    status: "fetched",
+    documentRole: "policy_index",
+    documentFetchState: "fetched",
+    documentEvaluationState: "usable",
+    targetRelationship: "target_controller",
+    textExcerpt: retainedText.slice(0, 800),
+    contentCoverage: {
+      status: "complete",
+      sourceTextChars: retainedText.length,
+      extractedSectionCount: 1,
+      retainedSectionCount: 1,
+      retainedTableRowCount: 0,
+      limitationKeys: [],
+    },
+    documentTextCoverage: {
+      status: "complete",
+      sourceTextChars: retainedText.length,
+      retainedTextChars: retainedText.length,
+      limitationKeys: [],
+    },
+    artifactRefs: [{
+      artifactId,
+      path: `/tmp/${artifactFileName}`,
+      label: "privacy_policy normalized policy_surface_text",
+    }],
+  }] as never, "example.test");
+
+  const summary = summarizePolicySurfaces(surfaces, "example.test", {
+    primaryLanguage: "en",
+    policyTextEvidenceContext: {
+      artifactsById: new Map([[artifactId, {
+        artifactId,
+        fileName: artifactFileName,
+        text: retainedText,
+        sha256: createHash("sha256").update(retainedText).digest("hex"),
+        sizeBytes: Buffer.byteLength(retainedText),
+        verificationStatus: "verified" as const,
+      }]]),
+      generatedAt: "2026-08-18T20:00:00.000Z",
+      scanId: "verified-index-only-scan",
+      sourceBundle: {
+        schemaVersion: "certscore.v2.canonical-evidence-bundle.v1",
+        verificationStatus: "verified",
+      },
+    },
+  });
+
+  assert.equal(summary.policyTextEvidenceProjection.projectionStatus, "verified_partial");
+  assert.equal(summary.policyTextExtractionHealth.policyTextExtractionStatus, "artifact_unavailable");
+  assert.equal(
+    summary.policyTextEvidenceProjection.limitationKeys.includes(
+      "verified_owned_complete_policy_document_unavailable",
+    ),
+    true,
+  );
+});
+
 test("summarizePolicySurfaces does not infer one language from a multilingual privacy index", async () => {
   const { dedupePolicySurfaces, summarizePolicySurfaces } = await loadLocalV2DagReport();
   const multilingualIndex = [
@@ -4957,7 +5053,7 @@ test("materializeLocalV2DagScanDetail records stable GDPR Transparency profile m
       scannerExecutionMode: "artifact_capture_only",
       scope: ["gdpr_transparency_observed_topics"],
       source: "verified_canonical_evidence_bundle",
-      version: "wc01.normalized-concern-policy.v2",
+      version: "wc01.normalized-concern-policy.v3",
     });
     assert.equal(defaultSignals?.length, 0);
 

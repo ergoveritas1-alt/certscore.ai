@@ -220,7 +220,7 @@ test("localhost scan configs use the local v2 planned-parallel DAG processor onl
       pipeline: "normalized_concern_policy_unified_finding",
       scope: ["gdpr_transparency_observed_topics"],
       source: "verified_canonical_evidence_bundle",
-      version: "wc01.normalized-concern-policy.v2"
+      version: "wc01.normalized-concern-policy.v3"
     },
     profile: "standard",
     scenarioConcurrency: 2,

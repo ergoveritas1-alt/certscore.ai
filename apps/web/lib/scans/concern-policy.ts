@@ -118,6 +118,7 @@ const BLOCKED_OR_INTERSTITIAL_TEXT_PATTERN =
   /unable to authorize your request|access denied|verify you are human|captcha|bot challenge|request blocked|security check|temporarily unavailable|forbidden|we(?:'|’)re sorry, but we were unable to authorize your request/i;
 
 const GDPR_TRANSPARENCY_ARTICLE13_CHECKLIST_OBSERVED_TOPICS = new Set([
+  "automated_decision_making_or_profiling",
   "controller_contact",
   "processing_purposes",
   "legal_basis",
@@ -128,9 +129,6 @@ const GDPR_TRANSPARENCY_ARTICLE13_CHECKLIST_OBSERVED_TOPICS = new Set([
   "dpo_contact",
   "supervisory_authority"
 ]);
-
-const GDPR_TRANSPARENCY_ARTICLE22_DISCLOSURE_PATTERN =
-  /solely (?:on )?automated (?:processing|decision)|automated decision(?:-making| making)?.{0,160}(?:legal or similarly significant effects|similarly significant effects|meaningful information about the logic involved)|(?:legal or similarly significant effects|similarly significant effects).{0,160}(?:automated decision|solely (?:on )?automated|profiling)/i;
 
 function hasTruthyArrayValue(value: unknown) {
   return Array.isArray(value) && value.some((entry) => typeof entry === "string" && entry.trim().length > 0);
@@ -2288,13 +2286,6 @@ function getGdprTransparencyArticle13ChecklistEligibility(
     "gdprTransparencyArticle13Topic",
     "gdpr_transparency_article13_topic"
   ]);
-  if (topic === "automated_decision_making_or_profiling") {
-    return getEvidenceTextCandidates(rawEvidence).some((value) =>
-      GDPR_TRANSPARENCY_ARTICLE22_DISCLOSURE_PATTERN.test(value)
-    )
-      ? "observed"
-      : "review_signal";
-  }
   return topic && GDPR_TRANSPARENCY_ARTICLE13_CHECKLIST_OBSERVED_TOPICS.has(topic)
     ? "observed"
     : "review_signal";

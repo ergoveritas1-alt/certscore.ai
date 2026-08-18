@@ -7055,6 +7055,8 @@ function buildGdprTransparencyArticle13ConcernOutcome(
       "staleLegalFrameworkReferenceObserved",
       "stale_legal_framework_reference_observed"
     ]) === true;
+  const automatedDecisionTopicObserved =
+    topic === "automated_decision_making_or_profiling";
   const retainedEvidence = {
     article13Signal: {
       classifierProvenance: rawEvidence.classifierProvenance,
@@ -7093,6 +7095,15 @@ function buildGdprTransparencyArticle13ConcernOutcome(
         }
       : {}),
     legalFrameworkValidityMatches,
+    ...(automatedDecisionTopicObserved
+      ? {
+          article22DetailAssessment: {
+            assessment: "not_evaluated",
+            contractVersion: "certscore.article22-detail-assessment.v1",
+            reviewRecommended: true
+          }
+        }
+      : {}),
     signalObserved: concern.regulatoryChecklistEligibility === "observed"
       ? true
       : state === "no_match_found"
@@ -7127,8 +7138,12 @@ function buildGdprTransparencyArticle13ConcernOutcome(
     return makeOutcome(
       config.rowId,
       "Observed",
-      `${config.label} evidence was retained through adapter-approved multilingual GDPR Transparency Article 13 evidence.`,
-      evidenceRefs,
+      automatedDecisionTopicObserved
+        ? `${config.label} topic evidence was retained through adapter-approved multilingual GDPR Transparency evidence. This row records disclosure presence; Article 22 detail and completeness were not evaluated.`
+        : `${config.label} evidence was retained through adapter-approved multilingual GDPR Transparency Article 13 evidence.`,
+      automatedDecisionTopicObserved
+        ? [...evidenceRefs, "Article 22 detail/completeness: not evaluated; review recommended"]
+        : evidenceRefs,
       {
         retainedEvidence
       }

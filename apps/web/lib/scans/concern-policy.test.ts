@@ -125,7 +125,7 @@ test("deriveConcernPolicy keeps Article 13 evidence and deterministic no-match r
   assert.equal(observed.promotionEligibility, "internal_only");
   assert.equal(observed.externalSurfacingEligibility, "audit_only");
   assert.equal(observed.regulatoryChecklistEligibility, "observed");
-  assert.equal(automated.regulatoryChecklistEligibility, "review_signal");
+  assert.equal(automated.regulatoryChecklistEligibility, "observed");
   assert.equal(automatedArticle22.regulatoryChecklistEligibility, "observed");
   assert.equal(ambiguous.regulatoryChecklistEligibility, "none");
   assert.equal(noMatch.regulatoryChecklistEligibility, "review_signal");

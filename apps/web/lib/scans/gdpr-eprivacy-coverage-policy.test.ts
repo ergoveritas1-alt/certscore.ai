@@ -625,7 +625,12 @@ test("twenty-two expansion locales capture all topics through classifier, adapte
     for (const rowId of Object.values(GDPR_TRANSPARENCY_TOPIC_TO_ROW_ID)) {
       assert.equal(outcomes[rowId]?.status, "Observed", `${locale} ${rowId}`);
     }
-    assert.equal(outcomes.automated_decision_making_profiling_disclosure?.status, "Not confirmed", `${locale} automated no match`);
+    assert.equal(outcomes.automated_decision_making_profiling_disclosure?.status, "Observed", `${locale} automated topic`);
+    assert.equal(
+      ((outcomes.automated_decision_making_profiling_disclosure?.criticalEvidence.retainedEvidence.article22DetailAssessment ?? {}) as Record<string, unknown>).assessment,
+      "not_evaluated",
+      `${locale} Article 22 detail posture`,
+    );
   }
 });
 
@@ -690,7 +695,7 @@ test("deriveGdprEprivacyCoveragePolicyOutcomes credits French retention and reci
   assert.equal(concernOutcomes.recipients_vendor_categories_disclosure?.status, "Observed");
 });
 
-test("deriveGdprEprivacyCoveragePolicyOutcomes treats non-specific automated profiling evidence as no match", () => {
+test("deriveGdprEprivacyCoveragePolicyOutcomes keeps accepted automated-decision topic presence separate from Article 22 completeness", () => {
   const outcomes = deriveGdprEprivacyCoveragePolicyOutcomes({
     ...completedInputBase,
     normalizedConcerns: makeGdprTransparencyConcerns([
@@ -700,11 +705,14 @@ test("deriveGdprEprivacyCoveragePolicyOutcomes treats non-specific automated pro
     snapshot: {}
   });
 
-  assert.notEqual(outcomes.automated_decision_making_profiling_disclosure?.status, "Observed");
-  assert.equal(outcomes.automated_decision_making_profiling_disclosure?.status, "Not confirmed");
+  assert.equal(outcomes.automated_decision_making_profiling_disclosure?.status, "Observed");
   assert.equal(
-    (outcomes.automated_decision_making_profiling_disclosure?.criticalEvidence.retainedEvidence.policyEvidenceAssessment as Record<string, unknown>)?.result,
-    "not_located_automatically"
+    ((outcomes.automated_decision_making_profiling_disclosure?.criticalEvidence.retainedEvidence.article22DetailAssessment ?? {}) as Record<string, unknown>).assessment,
+    "not_evaluated"
+  );
+  assert.equal(
+    ((outcomes.automated_decision_making_profiling_disclosure?.criticalEvidence.retainedEvidence.article22DetailAssessment ?? {}) as Record<string, unknown>).reviewRecommended,
+    true
   );
 });
 
