@@ -11,4 +11,5 @@ test("visual evidence route does not re-materialize the full local v2 report", a
 
   assert.doesNotMatch(source, /materializeLocalV2DagScanDetail/);
   assert.match(source, /resolveLocalV2DagVisualEvidencePointer/);
+  assert.match(source, /artifact\.status !== "available" \|\| !artifact\.key/);
 });

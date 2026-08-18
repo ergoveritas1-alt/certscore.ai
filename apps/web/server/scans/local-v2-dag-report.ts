@@ -5843,7 +5843,8 @@ function buildMaterializedLocalV2Detail(
         return [];
       }
       const capturedErrorShell = isPreConsentErrorShellScreenshot(bundle, screenshot);
-      const screenshotWithheld = screenshot.retentionStatus === "withheld";
+      const screenshotWithheld = screenshot.displayStatus === "withheld" ||
+        (screenshot.displayStatus === undefined && screenshot.retentionStatus === "withheld");
       const storagePointer = localV2ScreenshotStoragePointer({
         scanArtifactUri: options.scanArtifactUri,
         scanId: scanRecord.scan.id,
@@ -5862,7 +5863,7 @@ function buildMaterializedLocalV2Detail(
         page_url: safeLocalV2DocumentUrl(screenshot.url, canonicalDocumentUrl),
         status: screenshotWithheld ? "withheld" : capturedErrorShell ? "capture_failed" : "available",
         status_reason: screenshotWithheld
-          ? screenshot.withheldReason ?? "safety_check_unavailable"
+          ? screenshot.displayWithheldReason ?? screenshot.withheldReason ?? "safety_check_unavailable"
           : capturedErrorShell ? "pre_consent_error_shell_captured" : null
       }];
     })

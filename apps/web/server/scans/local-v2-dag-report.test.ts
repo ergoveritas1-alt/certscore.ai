@@ -6331,6 +6331,45 @@ test("materializeLocalV2DagScanDetail derives visual evidence key from Lambda ar
     assert.equal(withheldArtifacts?.[0]?.status, "withheld");
     assert.equal(withheldArtifacts?.[0]?.status_reason, "sensitive_visual_content");
     assert.equal(withheldArtifacts?.[0]?.key, null);
+
+    const partiallyRetainedBundle = JSON.parse(await readFile(bundlePath, "utf8")) as Record<string, unknown>;
+    partiallyRetainedBundle.homepageScreenshot = { status: "available" };
+    partiallyRetainedBundle.screenshots = (
+      partiallyRetainedBundle.screenshots as Array<Record<string, unknown>>
+    ).map((screenshot, index) => {
+      if (index === 0) {
+        return {
+          ...screenshot,
+          displayStatus: "withheld",
+          displayWithheldReason: "safety_check_unavailable",
+          retentionStatus: "withheld",
+          safetyFailureCode: "finalization_deadline_exceeded",
+          withheldReason: "safety_check_unavailable"
+        };
+      }
+      const {
+        displayWithheldReason: _displayWithheldReason,
+        safetyFailureCode: _safetyFailureCode,
+        withheldReason: _withheldReason,
+        ...retained
+      } = screenshot;
+      return {
+        ...retained,
+        displayStatus: "available",
+        retentionStatus: "available"
+      };
+    });
+    await writeFile(bundlePath, `${JSON.stringify(partiallyRetainedBundle, null, 2)}\n`, "utf8");
+    const partiallyRetainedDetail = await materializeLocalV2DagScanDetail(scanRecord);
+    const partiallyRetainedArtifacts = partiallyRetainedDetail.runtimeArtifacts
+      ?.visual_evidence_artifacts as Array<Record<string, unknown>> | undefined;
+    assert.deepEqual(partiallyRetainedDetail.runtimeArtifacts?.homepage_screenshot, {
+      status: "available"
+    });
+    assert.equal(partiallyRetainedArtifacts?.[0]?.status, "withheld");
+    assert.equal(partiallyRetainedArtifacts?.[0]?.key, null);
+    assert.equal(partiallyRetainedArtifacts?.[1]?.status, "available");
+    assert.equal(typeof partiallyRetainedArtifacts?.[1]?.key, "string");
   } finally {
     if (previousAppUrl === undefined) {
       delete process.env.NEXT_PUBLIC_APP_URL;

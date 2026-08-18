@@ -3194,12 +3194,16 @@ test("pre-consent runtime scanner retains the initial screenshot before delayed 
   try {
     const url = server.urlFor("consent-late-cmp-choice-controls");
     const artifactWriter = await createArtifactWriter(path.join(tempRoot, "out"));
+    const capturedScreenshotIds: string[] = [];
     const result = await preConsentRuntimeScanner({
       url,
       normalizedUrl: url,
       scanStartedAtMs: Date.now(),
       internalBudgetMs: getScanProfile("quick").internalBudgetMs,
       artifactWriter,
+      onScreenshotCaptured: (screenshot) => {
+        capturedScreenshotIds.push(screenshot.artifactId);
+      },
       screenshotMode: "always",
       screenshotCaptureMode: "viewport_first",
       waitMode: "full"
@@ -3209,6 +3213,7 @@ test("pre-consent runtime scanner retains the initial screenshot before delayed 
     const screenshotTiming = timing.find((entry) => entry.label === "early screenshot capture");
     const consentTiming = timing.find((entry) => entry.label === "page evidence: consent UI");
     assert.ok(result.screenshots.some((screenshot) => screenshot.artifactId === "screenshot_pre_consent"));
+    assert.ok(capturedScreenshotIds.includes("screenshot_pre_consent"));
     assert.equal(result.visualCapture.status, "available");
     assert.ok(screenshotTiming);
     assert.ok(consentTiming);

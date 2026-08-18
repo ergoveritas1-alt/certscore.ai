@@ -92,6 +92,8 @@ export {
   lambdaChromiumSingleProcessEnabled,
 } from "./playwright-runtime.js";
 
+export { proxyFetch } from "./proxy-fetch.js";
+
 export {
   assertPublicTestContactAllowed,
   PUBLIC_TEST_CONTACT_HOLDS,
@@ -142,6 +144,12 @@ export interface RunScanInput {
   policySurfaceSeeds?: PolicySurfaceSeed[];
   preConsentScreenshotMode?: "always" | "selective" | "never";
   preConsentScreenshotTimeoutMs?: number;
+  /**
+   * Non-blocking handoff fired immediately after a representative pre-consent
+   * screenshot is written. Consumers may begin retention review in parallel,
+   * but must not infer findings from screenshot pixels.
+   */
+  onPreConsentScreenshotCaptured?: (screenshot: ScreenshotArtifact) => void;
   /** Local diagnostic override; production callers retain the 10s default. */
   lateConsentGateMs?: number;
   preConsentVisualFallbackDeadlineMs?: number;
@@ -378,6 +386,7 @@ export async function runScan(input: RunScanInput): Promise<CanonicalEvidenceBun
         screenshotCaptureMode: "viewport_first",
         screenshotMode: effectivePreConsentScreenshotMode,
         screenshotTimeoutMs: input.preConsentScreenshotTimeoutMs,
+        onScreenshotCaptured: input.onPreConsentScreenshotCaptured,
         lateConsentGateMs: input.lateConsentGateMs,
         lateConsentGeometryShadowEnabled,
         onLifecycleCheckpoint: (checkpoint) => {
@@ -468,6 +477,7 @@ export async function runScan(input: RunScanInput): Promise<CanonicalEvidenceBun
         screenshotCaptureMode: "viewport_first",
         screenshotMode: effectivePreConsentScreenshotMode,
         screenshotTimeoutMs: input.preConsentScreenshotTimeoutMs,
+        onScreenshotCaptured: input.onPreConsentScreenshotCaptured,
         waitMode: leanPreConsent ? "fast" : "full",
         retainRenderedPolicyRecoverySession: evidenceLane === "combined",
       });
@@ -524,6 +534,14 @@ export async function runScan(input: RunScanInput): Promise<CanonicalEvidenceBun
       };
     });
     if (!("error" in screenshotFallback)) {
+      if (screenshotFallback.screenshot) {
+        try {
+          input.onPreConsentScreenshotCaptured?.(screenshotFallback.screenshot);
+        } catch {
+          // The optional retention-review handoff must not alter canonical
+          // evidence capture or projection when a consumer fails locally.
+        }
+      }
       const fallbackConsentUiObservations = screenshotFallback.consentUiObservation
         ? [screenshotFallback.consentUiObservation]
         : [];

@@ -95,17 +95,25 @@ test("visual evidence modal hides broken image output and provides manual recove
   assert.match(source, /setVisualEvidenceRefreshToken\(\(value\) => value \+ 1\)/);
 });
 
-test("withheld visual evidence renders a text-only state without attempting an image", () => {
+test("withheld visual evidence renders a compact blocked-capture control", async () => {
   const markup = renderToStaticMarkup(createElement(ShareReportActions, {
     domainLabel: "example.com",
     scanId: "scan-1",
     visualEvidenceWithheldReason: "sensitive_visual_content"
   }));
 
-  assert.match(markup, /Screenshot withheld/);
-  assert.match(markup, /potentially sensitive or explicit visual content was detected/);
+  assert.match(markup, /aria-label="Captured image unavailable"/);
+  assert.match(markup, /aria-expanded="false"/);
+  assert.doesNotMatch(markup, /Screenshot withheld/);
+  assert.doesNotMatch(markup, /visual safety check|sensitive or explicit/);
   assert.doesNotMatch(markup, /<img/);
   assert.doesNotMatch(markup, /View captured image/);
+
+  const source = await import("node:fs/promises").then(({ readFile }) =>
+    readFile("apps/web/components/scans/share-report-actions.tsx", "utf8")
+  );
+  assert.match(source, /onClick=\{\(\) => setIsWithheldNoticeOpen\(true\)\}/);
+  assert.match(source, /Image was not retained\./);
 });
 
 test("agent summary exposes canonical API, SDK, and MCP evidence actions", () => {

@@ -1486,6 +1486,68 @@ test("three-lane merge marks an empty consent-proof lane not testable", () => {
   );
 });
 
+test("three-lane merge treats unretained moderated imagery as unavailable consent proof", () => {
+  const withheldScreenshot: ScreenshotArtifact = {
+    ...screenshotArtifact(
+      "screenshot_pre_consent_settled",
+      "/tmp/worker-consent/screenshot-pre-consent-settled.png",
+    ),
+    displayStatus: "withheld",
+    displayWithheldReason: "safety_check_unavailable",
+    retentionStatus: "withheld",
+    safetyFailureCode: "finalization_deadline_exceeded",
+    withheldReason: "safety_check_unavailable",
+  };
+  const merged = mergeLocalV2DagLambdaEvidenceLaneBundles({
+    artifactRoot: "/tmp/certscore-three-lane-withheld-consent",
+    scanId: "scan-withheld-consent",
+    consentProof: canonicalBundleFixture("scan-withheld-consent", {
+      homepageScreenshot: {
+        status: "withheld",
+        reason: "safety_check_unavailable",
+        failureCode: "finalization_deadline_exceeded",
+      },
+      scanLaneRuns: [laneRunFixture("consent_proof", "invoke-consent-withheld")],
+      screenshots: [withheldScreenshot],
+      visualCapture: {
+        status: "available",
+        captureMethod: "primary_full_page",
+        artifactRefs: [],
+        notes: [],
+      },
+    }),
+    runtimeEvidence: canonicalBundleFixture("scan-withheld-consent", {
+      scanLaneRuns: [laneRunFixture("runtime_evidence", "invoke-runtime-success")],
+      runtimeCoverage: {
+        coverageStatus: "usable",
+        fallbackModesUsed: [],
+        limitationKeys: [],
+        notes: [],
+        observationCounts: {
+          cookieEvents: 0,
+          cookiesBeforeConsent: 0,
+          networkEvents: 1,
+          normalizedVendors: 0,
+          observedJourneys: 0,
+          thirdPartyRequests: 0,
+        },
+        silentEmpty: false,
+      },
+    }),
+    policyEvidence: canonicalBundleFixture("scan-withheld-consent"),
+  });
+
+  assert.equal(merged.scanEvidenceLaneAssessment?.lanes.consent, "limited");
+  assert.equal(merged.scanEvidenceLaneAssessment?.limitationKeys.includes(
+    "representative_pre_consent_screenshot_unavailable",
+  ), true);
+  assert.deepEqual(merged.homepageScreenshot, {
+    status: "withheld",
+    reason: "safety_check_unavailable",
+    failureCode: "finalization_deadline_exceeded",
+  });
+});
+
 test("three-lane merge keeps lane-local access failures limited when the independent required lane reached a representative page", () => {
   const usableRuntimeCoverage = {
     coverageStatus: "usable" as const,
@@ -2116,6 +2178,7 @@ function screenshotArtifact(artifactId: string, filePath: string): ScreenshotArt
     consentStateAtTime: "pre_consent",
     pagePhase: "initial_navigation",
     path: filePath,
+    retentionStatus: "available",
     url: "https://example.com/"
   };
 }

@@ -150,6 +150,8 @@ export interface PreConsentRuntimeScannerInput {
   screenshotCaptureMode?: "full_page_first" | "viewport_first";
   screenshotMode?: "always" | "selective" | "never";
   screenshotTimeoutMs?: number;
+  /** Non-blocking retention-review handoff; screenshot pixels never create findings. */
+  onScreenshotCaptured?: (screenshot: ScreenshotArtifact) => void;
   /** Bounded local diagnostic override for the no-early-CMP delayed-surface gate. */
   lateConsentGateMs?: number;
   waitMode?: "full" | "fast";
@@ -181,6 +183,18 @@ export interface FixtureRouteFulfiller {
   body?: string;
   headers?: Record<string, string>;
   setCookieHeaders?: string[];
+}
+
+function notifyScreenshotCaptured(
+  input: PreConsentRuntimeScannerInput,
+  screenshot: ScreenshotArtifact,
+) {
+  try {
+    input.onScreenshotCaptured?.(screenshot);
+  } catch {
+    // Retention-review handoff is advisory and must never discard canonical
+    // runtime, consent, or policy evidence already captured by this lane.
+  }
 }
 
 export function shouldCaptureLateConsentGeometryShadow(input: {
@@ -1243,7 +1257,7 @@ export async function preConsentRuntimeScanner(
         ? await earlyScreenshotCapturePromise
         : null;
       if (earlyScreenshotCapture) {
-        screenshots.push({
+        const screenshot: ScreenshotArtifact = {
           artifactId: "screenshot_pre_consent",
           capturedAtMs: elapsed(input.scanStartedAtMs),
           captureMethod: earlyScreenshotCapture.captureMethod,
@@ -1252,7 +1266,9 @@ export async function preConsentRuntimeScanner(
           documentIdentity: currentBrowserDocumentIdentity(page),
           pagePhase: "dom_content_loaded",
           consentStateAtTime: "pre_consent",
-        });
+        };
+        screenshots.push(screenshot);
+        notifyScreenshotCaptured(input, screenshot);
         earlyScreenshotCaptured = true;
         visualCapture = visualCaptureFromScreenshotSummary(earlyScreenshotCapture, earlyScreenshotPath);
       }
@@ -1518,6 +1534,7 @@ export async function preConsentRuntimeScanner(
           consentStateAtTime: "pre_consent",
         };
         screenshots.unshift(settledScreenshot);
+        notifyScreenshotCaptured(input, settledScreenshot);
         const settledVisualCapture = visualCaptureFromScreenshotSummary(
           settledCapture,
           settledScreenshotPath,
@@ -2048,6 +2065,7 @@ export async function preConsentRuntimeScanner(
           consentStateAtTime: "pre_consent",
         };
         screenshots.unshift(screenshot);
+        notifyScreenshotCaptured(input, screenshot);
         const synchronizedVisualCapture = visualCaptureFromScreenshotSummary(
           screenshotCapture,
           screenshotPath,
@@ -2172,6 +2190,7 @@ export async function preConsentRuntimeScanner(
             );
             if (supplementalCapture?.screenshot) {
               screenshots.unshift(supplementalCapture.screenshot);
+              notifyScreenshotCaptured(input, supplementalCapture.screenshot);
               visualCapture = mergeVisualCaptureWithFullPageArtifact(
                 visualCapture,
                 supplementalCapture.visualCapture,
@@ -2283,6 +2302,7 @@ export async function preConsentRuntimeScanner(
               consentStateAtTime: "pre_consent",
             };
             screenshots.unshift(synchronizedScreenshot);
+            notifyScreenshotCaptured(input, synchronizedScreenshot);
             const synchronizedVisualCapture = visualCaptureFromScreenshotSummary(
               synchronizedCapture,
               synchronizedScreenshotPath,
@@ -2392,7 +2412,7 @@ export async function preConsentRuntimeScanner(
         }),
         visualCaptureTimingOutcome,
       );
-      screenshots.push({
+      const screenshot: ScreenshotArtifact = {
         artifactId: "screenshot_pre_consent",
         capturedAtMs: elapsed(input.scanStartedAtMs),
         captureMethod: screenshotCapture.captureMethod,
@@ -2401,7 +2421,9 @@ export async function preConsentRuntimeScanner(
         documentIdentity: currentBrowserDocumentIdentity(page),
         pagePhase: "network_idle",
         consentStateAtTime: "pre_consent",
-      });
+      };
+      screenshots.push(screenshot);
+      notifyScreenshotCaptured(input, screenshot);
       visualCapture = visualCaptureFromScreenshotSummary(screenshotCapture, screenshotPath);
     }
     if (shouldCaptureScreenshot) {
@@ -2515,6 +2537,7 @@ export async function preConsentRuntimeScanner(
       );
       if (supplementalCapture?.screenshot) {
         screenshots.unshift(supplementalCapture.screenshot);
+        notifyScreenshotCaptured(input, supplementalCapture.screenshot);
         visualCapture = mergeVisualCaptureWithFullPageArtifact(visualCapture, supplementalCapture.visualCapture);
       }
       if (supplementalCapture?.errorMessage) {
@@ -2627,6 +2650,7 @@ export async function preConsentRuntimeScanner(
           );
           if (representativeScreenshot) {
             screenshots.unshift(representativeScreenshot);
+            notifyScreenshotCaptured(input, representativeScreenshot);
             const representativeVisualCapture = visualCaptureFromScreenshotSummary(
               {
                 status: "available",
@@ -2686,6 +2710,7 @@ export async function preConsentRuntimeScanner(
           );
           if (belowFoldCapture?.screenshot) {
             screenshots.unshift(belowFoldCapture.screenshot);
+            notifyScreenshotCaptured(input, belowFoldCapture.screenshot);
             visualCapture = mergeVisualCaptureWithFullPageArtifact(
               visualCapture,
               belowFoldCapture.visualCapture,
@@ -2725,6 +2750,7 @@ export async function preConsentRuntimeScanner(
           : null;
         if (geometryProofScreenshot) {
           screenshots.unshift(geometryProofScreenshot);
+          notifyScreenshotCaptured(input, geometryProofScreenshot);
           rewriteConsentGeometryScreenshotRefs(geometry, geometryProofScreenshot.path);
         }
         const geometryArtifactPath = await input.artifactWriter.writeJsonArtifact("ConsentControlGeometryEvidence.json", {
@@ -2858,6 +2884,7 @@ export async function preConsentRuntimeScanner(
           consentStateAtTime: "pre_consent",
         };
         screenshots.unshift(recoveryScreenshot);
+        notifyScreenshotCaptured(input, recoveryScreenshot);
         const recoveryVisualCapture = visualCaptureFromScreenshotSummary(
           recoveryScreenshotCapture,
           recoveryScreenshotPath,
@@ -3025,6 +3052,7 @@ export async function preConsentRuntimeScanner(
           consentStateAtTime: "pre_consent",
         };
         screenshots.unshift(synchronizedScreenshot);
+        notifyScreenshotCaptured(input, synchronizedScreenshot);
         const synchronizedVisualCapture = visualCaptureFromScreenshotSummary(
           synchronizedCapture,
           synchronizedScreenshotPath,
@@ -3079,7 +3107,7 @@ export async function preConsentRuntimeScanner(
           }),
           visualCaptureTimingOutcome,
         ));
-        screenshots.push({
+        const screenshot: ScreenshotArtifact = {
           artifactId: "screenshot_pre_consent_no_go_confirmation",
           capturedAtMs: elapsed(input.scanStartedAtMs),
           captureMethod: confirmationCapture.captureMethod,
@@ -3088,7 +3116,9 @@ export async function preConsentRuntimeScanner(
           documentIdentity: currentBrowserDocumentIdentity(page),
           pagePhase: "network_idle",
           consentStateAtTime: "pre_consent",
-        });
+        };
+        screenshots.push(screenshot);
+        notifyScreenshotCaptured(input, screenshot);
       }
     }
 
@@ -3297,6 +3327,7 @@ export async function preConsentRuntimeScanner(
       });
       if (retryCapture) {
         screenshots.push(retryCapture.screenshot);
+        notifyScreenshotCaptured(input, retryCapture.screenshot);
         visualCapture = retryCapture.visualCapture;
         if (retryCapture.consentUiObservation) {
           fallbackConsentUiObservations.push(retryCapture.consentUiObservation);

@@ -33,7 +33,11 @@ import {
   runScan,
   type RunScanInput
 } from "@certscore/scan-core";
-import { applyHomepageScreenshotSafetyGate } from "./screenshot-safety.js";
+import {
+  applyHomepageScreenshotSafetyGate,
+  createHomepageScreenshotSafetyReviewCoordinator,
+  type HomepageScreenshotSafetyReviewCoordinator,
+} from "./screenshot-safety.js";
 
 export const LOCAL_V2_DAG_LAMBDA_AWS_REGIONS = ["eu-central-1", "eu-west-1", "us-west-1"] as const;
 export type LocalV2DagLambdaAwsRegion = (typeof LOCAL_V2_DAG_LAMBDA_AWS_REGIONS)[number];
@@ -923,6 +927,10 @@ export async function runLocalV2DagLambdaArtifactChain(
   const phaseTimings: LocalV2DagLambdaPhaseTiming[] = [];
   const scanTuning = buildLocalV2DagLambdaScanTuning();
   await mkdir(artifactRoot, { recursive: true });
+  const screenshotSafetyReviewCoordinator = createHomepageScreenshotSafetyReviewCoordinator({
+    artifactRoot,
+    signal: options.artifactSignal ?? options.signal,
+  });
   const egressPreflightPromise = timeLambdaPhase(
     phaseTimings,
     "egress_preflight",
@@ -941,6 +949,7 @@ export async function runLocalV2DagLambdaArtifactChain(
     onPolicySurfaceComplete: options.onPolicySurfaceComplete,
     physicalInvocationId: options.physicalInvocationId,
     scanTuning,
+    screenshotSafetyReviewCoordinator,
     signal: options.signal,
     policySurfaceDeadlineAtMs: options.policySurfaceDeadlineAtMs,
   });
@@ -963,6 +972,7 @@ export async function runLocalV2DagLambdaArtifactChain(
     phaseTimings,
     s3Client: options.s3Client,
     scanTuning,
+    screenshotSafetyReviewCoordinator,
     signal: options.artifactSignal ?? options.signal
   });
 }
@@ -983,6 +993,7 @@ async function runLocalV2DagLambdaScanBundle(
     preConsentVisualFallbackDeadlineMs?: number;
     preConsentVisualFallbackDeadlineAtMs?: number;
     scanTuning: ReturnType<typeof buildLocalV2DagLambdaScanTuning>;
+    screenshotSafetyReviewCoordinator: HomepageScreenshotSafetyReviewCoordinator;
     signal?: AbortSignal;
   }
 ) {
@@ -1002,6 +1013,7 @@ async function runLocalV2DagLambdaScanBundle(
         browserReuseMode: "per_module",
         evidenceLane,
         outDir: options.artifactRoot,
+        onPreConsentScreenshotCaptured: options.screenshotSafetyReviewCoordinator.schedule,
         onPolicySurfaceComplete: options.onPolicySurfaceComplete,
         policyOutputGraceMs: 1_000,
         policyPlanningDeadlineMs: 1_500,
@@ -1062,6 +1074,7 @@ async function writeAndUploadLocalV2DagLambdaArtifacts(input: {
   phaseTimings: LocalV2DagLambdaPhaseTiming[];
   s3Client?: S3PutClient;
   scanTuning: ReturnType<typeof buildLocalV2DagLambdaScanTuning>;
+  screenshotSafetyReviewCoordinator?: HomepageScreenshotSafetyReviewCoordinator;
   signal?: AbortSignal;
 }): Promise<{
   artifactMetadata: LocalV2DagLambdaArtifactMetadata;
@@ -1075,6 +1088,7 @@ async function writeAndUploadLocalV2DagLambdaArtifacts(input: {
     () => applyHomepageScreenshotSafetyGate({
       artifactRoot,
       bundle: input.bundle,
+      reviewCoordinator: input.screenshotSafetyReviewCoordinator,
       signal: input.signal,
     }),
   );
@@ -2039,7 +2053,8 @@ export function mergeLocalV2DagLambdaEvidenceLaneBundles(input: {
   const consentProofVisualUsable = consentProof.visualCapture?.status === "available" &&
     consentProof.screenshots.some((screenshot) =>
       screenshot.captureMethod !== "primary_placeholder" &&
-      screenshot.captureMethod !== "fresh_context_placeholder"
+      screenshot.captureMethod !== "fresh_context_placeholder" &&
+      screenshot.retentionStatus === "available"
     );
   const consentProofInspectionUsable = consentProof.consentSurfaceInspection?.inspectionCompleted === true &&
     consentProof.consentSurfaceInspection.coverageStatus === "complete";

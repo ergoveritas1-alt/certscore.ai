@@ -23,14 +23,6 @@ export const VISUAL_EVIDENCE_MIN_ZOOM = 0.5;
 export const VISUAL_EVIDENCE_MAX_ZOOM = 10;
 export const VISUAL_EVIDENCE_ZOOM_STEP = 0.25;
 
-export function visualEvidenceWithheldDescription(
-  reason: "sensitive_visual_content" | "safety_check_unavailable",
-) {
-  return reason === "sensitive_visual_content"
-    ? "Page imagery was not retained because potentially sensitive or explicit visual content was detected."
-    : "Page imagery was not retained because the visual safety check could not be completed.";
-}
-
 export function buildVisualEvidenceRetryHref(href: string, attempt: number, refreshToken?: number) {
   const params = new URLSearchParams({ visualEvidenceAttempt: String(attempt) });
   if (refreshToken !== undefined) {
@@ -196,6 +188,19 @@ function VisualEvidenceIcon() {
   );
 }
 
+function WithheldVisualEvidenceIcon() {
+  return (
+    <span aria-hidden="true" className="relative inline-flex">
+      <VisualEvidenceIcon />
+      <span className="absolute -bottom-1 -right-1 flex h-2.5 w-2.5 items-center justify-center rounded-full bg-white text-slate-500 ring-1 ring-slate-300">
+        <svg className="h-2 w-2" fill="none" viewBox="0 0 10 10">
+          <path d="m2.2 7.8 5.6-5.6" stroke="currentColor" strokeLinecap="round" strokeWidth="1.5" />
+        </svg>
+      </span>
+    </span>
+  );
+}
+
 function CloseIcon() {
   return (
     <svg aria-hidden="true" className="h-5 w-5" fill="none" viewBox="0 0 24 24">
@@ -244,6 +249,7 @@ export function ShareReportActions({
   const [currentUrl, setCurrentUrl] = useState("");
   const [isEmailDialogOpen, setIsEmailDialogOpen] = useState(false);
   const [isVisualEvidenceDialogOpen, setIsVisualEvidenceDialogOpen] = useState(false);
+  const [isWithheldNoticeOpen, setIsWithheldNoticeOpen] = useState(false);
   const [isVisualEvidenceImageLoading, setIsVisualEvidenceImageLoading] = useState(false);
   const [visualEvidenceImageFailed, setVisualEvidenceImageFailed] = useState(false);
   const [visualEvidenceLoadAttempt, setVisualEvidenceLoadAttempt] = useState(0);
@@ -302,6 +308,14 @@ export function ShareReportActions({
       setIsEmailDialogOpen(false);
     }
   }, [emailState.success]);
+
+  useEffect(() => {
+    if (!isWithheldNoticeOpen) {
+      return;
+    }
+    const timeout = window.setTimeout(() => setIsWithheldNoticeOpen(false), 2_400);
+    return () => window.clearTimeout(timeout);
+  }, [isWithheldNoticeOpen]);
 
   useEffect(() => {
     return () => {
@@ -431,18 +445,26 @@ export function ShareReportActions({
             <IconTooltip label="View captured image" />
           </button>
         ) : visualEvidenceWithheldReason ? (
-          <div
-            className="flex max-w-md items-start gap-2 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-left"
-            data-testid="visual-evidence-withheld"
-            role="status"
-          >
-            <span className="mt-0.5 shrink-0 text-slate-500"><VisualEvidenceIcon /></span>
-            <span>
-              <span className="block text-xs font-semibold text-slate-800">Screenshot withheld</span>
-              <span className="mt-0.5 block text-xs leading-5 text-slate-600">
-                {visualEvidenceWithheldDescription(visualEvidenceWithheldReason)}
-              </span>
-            </span>
+          <div className="relative" data-testid="visual-evidence-withheld">
+            <button
+              aria-expanded={isWithheldNoticeOpen}
+              aria-label="Captured image unavailable"
+              className={visualEvidenceOnly ? "app-raised-button group relative inline-flex h-8 w-8 items-center justify-center rounded-full text-slate-500 hover:text-slate-700" : iconActionClassName()}
+              onClick={() => setIsWithheldNoticeOpen(true)}
+              title="Captured image unavailable"
+              type="button"
+            >
+              <WithheldVisualEvidenceIcon />
+              {!isWithheldNoticeOpen ? <IconTooltip label="Captured image unavailable" /> : null}
+            </button>
+            {isWithheldNoticeOpen ? (
+              <div
+                className="absolute left-0 top-full z-30 mt-2 whitespace-nowrap rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-medium text-slate-600 shadow-lg"
+                role="status"
+              >
+                Image was not retained.
+              </div>
+            ) : null}
           </div>
         ) : null}
       </div>
