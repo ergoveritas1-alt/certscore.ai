@@ -61,6 +61,51 @@ test("getEvidenceLabel presents a neutral canonical policy no-match result disti
     getGdprEprivacyCoverageChecklistRowRationaleForAudit(item),
     "CertScore retained a usable privacy policy but found no sufficiently direct legal-basis passage during automated analysis. This does not establish that the disclosure is absent."
   );
+
+  const html = renderToStaticMarkup(createElement(GdprEprivacyCoverageChecklistCard, {
+    defaultOpen: true,
+    items: [item],
+    showSummaryStrip: false
+  }));
+
+  assert.match(html, />No match found</);
+  assert.doesNotMatch(html, /Potential gap/);
+  assert.doesNotMatch(html, /Potential issue based on scan evidence/i);
+});
+
+test("profiling-adjacent policy evidence renders as no match instead of partial concern", () => {
+  const item = makeChecklistItem({
+    assessmentStatus: "coverage_limitation",
+    criticalEvidence: {
+      retainedEvidence: {
+        article13Signal: {
+          disclosureType: "automated_decision_making_or_profiling",
+          evidenceText: "Advertising tailored to your interests.",
+          status: "partial"
+        },
+        policyEvidenceAssessment: {
+          contractVersion: "certscore.policy-topic-evidence-assessment.v1",
+          result: "not_located_automatically",
+          scoreEffect: "none"
+        },
+        signalObserved: "profiling_adjacent_evidence_without_direct_disclosure"
+      }
+    },
+    evidenceState: "not_testable",
+    id: "automated_decision_making_profiling_disclosure",
+    label: "Automated decision-making / profiling disclosure",
+    status: "Not confirmed"
+  });
+  const html = renderToStaticMarkup(createElement(GdprEprivacyCoverageChecklistCard, {
+    defaultOpen: true,
+    items: [item],
+    showSummaryStrip: false
+  }));
+
+  assert.equal(getEvidenceLabel(item), "No match found");
+  assert.match(html, />No match found</);
+  assert.doesNotMatch(html, /Partial concern/);
+  assert.doesNotMatch(html, /Potential gap/);
 });
 
 test("retained but thin policy extraction is not confirmed without becoming not testable", () => {
@@ -1427,37 +1472,48 @@ test("GdprEprivacyCoverageChecklistCard explains supervisory-authority partial s
   assert.match(html, /complete supervisory-authority complaint-right disclosure was not confirmed/);
 });
 
-test("GdprEprivacyCoverageChecklistCard makes policy gap decisions inferable from descriptor and packet", () => {
+test("GdprEprivacyCoverageChecklistCard makes policy no-match decisions inferable from the canonical packet", () => {
   const html = renderToStaticMarkup(
     createElement(GdprEprivacyCoverageChecklistCard, {
       defaultOpen: true,
       items: [
         makeChecklistItem({
-          assessmentStatus: "gap_observed",
+          assessmentStatus: "coverage_limitation",
           criticalEvidence: {
             retainedEvidence: {
+              article13CoverageAssessment: {
+                assessmentContractVersion: "gdpr_transparency_article13_coverage_assessment.v1",
+                coverageStatus: "sufficient",
+                status: "not_observed_with_sufficient_coverage",
+                topic: "international_transfers"
+              },
+              policyEvidenceAssessment: {
+                contractVersion: "certscore.policy-topic-evidence-assessment.v1",
+                result: "not_located_automatically",
+                scoreEffect: "none"
+              },
               policySurfaceSummary: {
                 privacyPolicyTextCharacterCount: 6240,
                 privacyPolicyUrls: ["https://example.test/privacy"]
               },
-              signalObserved: false
+              signalObserved: "not_observed_with_sufficient_coverage"
             },
             statusBasis:
-              "International transfer disclosure was expected for Article 13 transparency review but was not observed in retained privacy-policy evidence."
+              "CertScore retained a usable policy but found no sufficiently direct matching passage for international transfer disclosure during automated analysis. This does not establish that the disclosure is absent."
           },
-          evidenceState: "observed",
+          evidenceState: "not_testable",
           id: "international_transfers_disclosure",
           label: "International transfer disclosure",
-          status: "Gap observed"
+          status: "Not confirmed"
         })
       ],
       showSummaryStrip: false
     })
   );
 
-  assert.match(html, /Potential gap from retained policy-surface evidence/);
-  assert.match(html, /International transfer disclosure was expected/);
-  assert.match(html, /structured signalObserved=false retained/);
+  assert.match(html, />No match found</);
+  assert.match(html, /found no sufficiently direct passage/);
+  assert.doesNotMatch(html, /Potential gap/);
 });
 
 test("GdprEprivacyCoverageChecklistCard makes not-testable decisions inferable from missing source signals", () => {

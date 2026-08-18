@@ -2471,10 +2471,10 @@ function shouldPreferCoverageOutcomeForContextualInfrastructure(
   return readRetainedBoolean(retained, ["contextualInfrastructureOnly", "contextual_infrastructure_only"]) === true;
 }
 
-function shouldPreferVerifiedGdprTransparencyAbsenceOutcome(
+function shouldPreferGdprTransparencyNoMatchOutcome(
   coverageOutcome: GdprEprivacyCoverageOutcome | undefined
 ) {
-  if (coverageOutcome?.status !== "Gap observed") {
+  if (coverageOutcome?.status !== "Not confirmed") {
     return false;
   }
 
@@ -3426,7 +3426,7 @@ export function deriveGdprEprivacyCoverageChecklist(
         shouldPreferCoverageOutcomeForMissingReject(definition.id, coverageOutcome) ||
         shouldPreferCoverageOutcomeForConsentChoiceQuality(definition.id, coverageOutcome) ||
         shouldPreferCoverageOutcomeForContextualInfrastructure(definition.id, coverageOutcome) ||
-        shouldPreferVerifiedGdprTransparencyAbsenceOutcome(coverageOutcome)
+        shouldPreferGdprTransparencyNoMatchOutcome(coverageOutcome)
       )
     ) {
       const specialized = specializeChecklistRow({

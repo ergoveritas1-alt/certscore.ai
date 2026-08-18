@@ -1,7 +1,10 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import type { PolicySurfaceObservation } from "@certscore/contracts";
+import {
+  classifyGdprTransparencyTopics,
+  type PolicySurfaceObservation,
+} from "@certscore/contracts";
 
 import {
   GDPR_TRANSPARENCY_MULTILINGUAL_ARTICLE13_PROFILE,
@@ -133,6 +136,42 @@ test("compact purpose and service-provider candidates pass the production eviden
   assert.deepEqual(
     result.acceptedProductionSignals.map((signal) => signal.disclosureType).sort(),
     ["processing_purposes", "recipients_or_vendor_categories"]
+  );
+  assert.deepEqual(result.discardedArticle13DisclosureSignals, []);
+});
+
+test("privacy-context contact channel candidates pass the production evidence adapter", () => {
+  const text = [
+    "Privacy Policy.",
+    "Contact. If you email us, we receive the information you choose to include and use it to respond to your message.",
+    "You can contact us at ergoveritas1@gmail.com."
+  ].join(" ");
+  const candidates = classifyGdprTransparencyTopics({ localeHints: ["en"], text }).matches.map((match) =>
+    candidate({
+      classifierReasonCodes: match.reasonCodes,
+      confidence: match.confidence,
+      evidenceText: match.evidenceExcerpt,
+      matchStrength: match.matchStrength,
+      matchedLocale: match.matchedLocale,
+      matchedTerm: match.matchedTerm,
+      topic: match.topic
+    })
+  );
+  const result = adaptGdprTransparencyTopicCandidatesForProduction({
+    policyTextQuality: { usable: true },
+    profile: GDPR_TRANSPARENCY_MULTILINGUAL_ARTICLE13_PROFILE,
+    surface: surface(candidates, { textExcerpt: text })
+  });
+
+  assert.deepEqual(
+    result.acceptedProductionSignals.map((signal) => signal.disclosureType).sort(),
+    ["controller_contact", "dpo_contact"]
+  );
+  assert.equal(
+    result.acceptedProductionSignals.every((signal) =>
+      signal.matchStrength === "equivalent" && signal.evidenceText.includes("ergoveritas1@gmail.com")
+    ),
+    true
   );
   assert.deepEqual(result.discardedArticle13DisclosureSignals, []);
 });

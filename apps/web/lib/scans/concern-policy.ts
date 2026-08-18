@@ -129,6 +129,9 @@ const GDPR_TRANSPARENCY_ARTICLE13_CHECKLIST_OBSERVED_TOPICS = new Set([
   "supervisory_authority"
 ]);
 
+const GDPR_TRANSPARENCY_ARTICLE22_DISCLOSURE_PATTERN =
+  /solely (?:on )?automated (?:processing|decision)|automated decision(?:-making| making)?.{0,160}(?:legal or similarly significant effects|similarly significant effects|meaningful information about the logic involved)|(?:legal or similarly significant effects|similarly significant effects).{0,160}(?:automated decision|solely (?:on )?automated|profiling)/i;
+
 function hasTruthyArrayValue(value: unknown) {
   return Array.isArray(value) && value.some((entry) => typeof entry === "string" && entry.trim().length > 0);
 }
@@ -2274,8 +2277,8 @@ function getGdprTransparencyArticle13ChecklistEligibility(
   if (state === "partial") {
     return "review_signal";
   }
-  if (state === "missing") {
-    return "gap_observed";
+  if (state === "no_match_found") {
+    return "review_signal";
   }
   if (state !== "sufficient") {
     return "none";
@@ -2285,6 +2288,13 @@ function getGdprTransparencyArticle13ChecklistEligibility(
     "gdprTransparencyArticle13Topic",
     "gdpr_transparency_article13_topic"
   ]);
+  if (topic === "automated_decision_making_or_profiling") {
+    return getEvidenceTextCandidates(rawEvidence).some((value) =>
+      GDPR_TRANSPARENCY_ARTICLE22_DISCLOSURE_PATTERN.test(value)
+    )
+      ? "observed"
+      : "review_signal";
+  }
   return topic && GDPR_TRANSPARENCY_ARTICLE13_CHECKLIST_OBSERVED_TOPICS.has(topic)
     ? "observed"
     : "review_signal";
@@ -3563,12 +3573,12 @@ export function deriveConcernPolicy(input: {
     }
     return {
       allowedNarrativeTier:
-        article13ConcernState === "sufficient" || article13ConcernState === "missing"
+        article13ConcernState === "sufficient"
           ? "moderate"
           : "weak",
-      externalSurfacingEligibility: article13ConcernState === "missing" ? "eligible" : "audit_only",
+      externalSurfacingEligibility: "audit_only",
       negativeEvidenceFlags: [...negativeEvidenceFlags],
-      promotionEligibility: article13ConcernState === "missing" ? "eligible" : "internal_only",
+      promotionEligibility: "internal_only",
       regulatoryChecklistEligibility
     };
   }

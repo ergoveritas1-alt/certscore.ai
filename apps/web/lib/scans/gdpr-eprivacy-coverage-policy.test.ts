@@ -452,7 +452,7 @@ test("deriveGdprEprivacyCoveragePolicyOutcomes gives checklist Observed credit t
   }
 });
 
-test("verified complete-policy absence projects row-specific GDPR Transparency gaps", () => {
+test("verified complete-policy absence projects neutral GDPR Transparency no-match results", () => {
   const assessment = (topic: string) => ({
     assessmentContractVersion: "gdpr_transparency_article13_coverage_assessment.v1",
     coverageStatus: "sufficient",
@@ -487,10 +487,11 @@ test("verified complete-policy absence projects row-specific GDPR Transparency g
     concern.originKey === "gdpr_transparency.article13.data_retention"
   );
 
-  assert.equal(retentionConcern?.promotionEligibility, "eligible");
-  assert.equal(retentionConcern?.externalSurfacingEligibility, "eligible");
-  assert.equal(outcomes.retention_disclosure_observed?.status, "Gap observed");
-  assert.equal(outcomes.international_transfers_disclosure?.status, "Gap observed");
+  assert.equal(retentionConcern?.promotionEligibility, "internal_only");
+  assert.equal(retentionConcern?.externalSurfacingEligibility, "audit_only");
+  assert.equal(retentionConcern?.regulatoryChecklistEligibility, "review_signal");
+  assert.equal(outcomes.retention_disclosure_observed?.status, "Not confirmed");
+  assert.equal(outcomes.international_transfers_disclosure?.status, "Not confirmed");
   assert.ok(retainedArticle13Signal(outcomes.retention_disclosure_observed!));
   assert.deepEqual(
     outcomes.retention_disclosure_observed?.criticalEvidence.retainedEvidence.article13CoverageAssessment,
@@ -498,6 +499,15 @@ test("verified complete-policy absence projects row-specific GDPR Transparency g
   );
   assert.equal(retainedArticle13Signal(outcomes.retention_disclosure_observed!)?.evidenceText, null);
   assert.equal(retainedArticle13Signal(outcomes.international_transfers_disclosure!)?.evidenceText, null);
+  assert.deepEqual(
+    outcomes.retention_disclosure_observed?.criticalEvidence.retainedEvidence.policyEvidenceAssessment,
+    {
+      contractVersion: "certscore.policy-topic-evidence-assessment.v1",
+      result: "not_located_automatically",
+      scoreEffect: "none",
+      topicRelevance: "unknown"
+    }
+  );
 });
 
 test("invariant-verified Mini evidence wins a checklist tie against deterministic placeholder evidence", () => {
@@ -615,7 +625,7 @@ test("twenty-two expansion locales capture all topics through classifier, adapte
     for (const rowId of Object.values(GDPR_TRANSPARENCY_TOPIC_TO_ROW_ID)) {
       assert.equal(outcomes[rowId]?.status, "Observed", `${locale} ${rowId}`);
     }
-    assert.equal(outcomes.automated_decision_making_profiling_disclosure?.status, "Review signal", `${locale} automated review`);
+    assert.equal(outcomes.automated_decision_making_profiling_disclosure?.status, "Not confirmed", `${locale} automated no match`);
   }
 });
 
@@ -680,7 +690,7 @@ test("deriveGdprEprivacyCoveragePolicyOutcomes credits French retention and reci
   assert.equal(concernOutcomes.recipients_vendor_categories_disclosure?.status, "Observed");
 });
 
-test("deriveGdprEprivacyCoveragePolicyOutcomes keeps automated profiling Article 13 evidence in review", () => {
+test("deriveGdprEprivacyCoveragePolicyOutcomes treats non-specific automated profiling evidence as no match", () => {
   const outcomes = deriveGdprEprivacyCoveragePolicyOutcomes({
     ...completedInputBase,
     normalizedConcerns: makeGdprTransparencyConcerns([
@@ -691,7 +701,33 @@ test("deriveGdprEprivacyCoveragePolicyOutcomes keeps automated profiling Article
   });
 
   assert.notEqual(outcomes.automated_decision_making_profiling_disclosure?.status, "Observed");
-  assert.equal(outcomes.automated_decision_making_profiling_disclosure?.status, "Review signal");
+  assert.equal(outcomes.automated_decision_making_profiling_disclosure?.status, "Not confirmed");
+  assert.equal(
+    (outcomes.automated_decision_making_profiling_disclosure?.criticalEvidence.retainedEvidence.policyEvidenceAssessment as Record<string, unknown>)?.result,
+    "not_located_automatically"
+  );
+});
+
+test("deriveGdprEprivacyCoveragePolicyOutcomes observes direct Article 22-style disclosure evidence", () => {
+  const evidenceText =
+    "We do not make decisions based solely on automated processing, including profiling, that produce legal or similarly significant effects. We provide meaningful information about the logic involved.";
+  const outcomes = deriveGdprEprivacyCoveragePolicyOutcomes({
+    ...completedInputBase,
+    normalizedConcerns: makeGdprTransparencyConcerns([
+      makeGdprTransparencyArticle13Signal({
+        disclosureType: "automated_decision_making_or_profiling",
+        evidenceText
+      })
+    ]),
+    runtimeArtifacts: {},
+    snapshot: {}
+  });
+
+  assert.equal(outcomes.automated_decision_making_profiling_disclosure?.status, "Observed");
+  assert.match(
+    retainedArticle13Signal(outcomes.automated_decision_making_profiling_disclosure!)?.evidenceText ?? "",
+    /solely on automated processing/i
+  );
 });
 
 test("deriveGdprEprivacyCoveragePolicyOutcomes maps partial and ambiguous multilingual Article 13 evidence safely", () => {
@@ -1711,7 +1747,7 @@ test("US privacy policy calibration separates contact, DPO, rights scope, transf
   assert.equal(outcomes.formal_dpo_designation_disclosure, undefined);
 });
 
-test("deriveGdprEprivacyCoveragePolicyOutcomes keeps financial-incentive text out of automated decision observed", () => {
+test("deriveGdprEprivacyCoveragePolicyOutcomes presents financial-incentive text as automated-decision no match", () => {
   const outcomes = deriveGdprEprivacyCoveragePolicyOutcomes({
     ...completedInputBase,
     runtimeArtifacts: {
@@ -1737,14 +1773,14 @@ test("deriveGdprEprivacyCoveragePolicyOutcomes keeps financial-incentive text ou
     }
   });
 
-  assert.equal(outcomes.automated_decision_making_profiling_disclosure?.status, "Review signal");
+  assert.equal(outcomes.automated_decision_making_profiling_disclosure?.status, "Not confirmed");
   assert.equal(
     outcomes.automated_decision_making_profiling_disclosure?.criticalEvidence.retainedEvidence.signalObserved,
     "partial_automated_processing_without_article22_disclosure"
   );
 });
 
-test("explicit automated-decision text remains review-only without an approved row witness", () => {
+test("explicit automated-decision text remains no match without an approved row witness", () => {
   const outcomes = deriveGdprEprivacyCoveragePolicyOutcomes({
     ...completedInputBase,
     runtimeArtifacts: {
@@ -1761,7 +1797,7 @@ test("explicit automated-decision text remains review-only without an approved r
     }
   });
 
-  assert.equal(outcomes.automated_decision_making_profiling_disclosure?.status, "Review signal");
+  assert.equal(outcomes.automated_decision_making_profiling_disclosure?.status, "Not confirmed");
   assert.match(
     retainedArticle13Signal(outcomes.automated_decision_making_profiling_disclosure!)?.evidenceText ?? "",
     /solely on automated processing/i
@@ -2874,7 +2910,7 @@ test("mature policy text still requires row-specific evidence witnesses", () => 
   assert.equal(outcomes.international_transfers_disclosure?.status, "Not confirmed");
   assert.equal(outcomes.dpo_contact_point_disclosure?.status, "Not confirmed");
   assert.equal(outcomes.supervisory_authority_complaint_disclosure?.status, "Not confirmed");
-  assert.equal(outcomes.automated_decision_making_profiling_disclosure?.status, "Review signal");
+  assert.equal(outcomes.automated_decision_making_profiling_disclosure?.status, "Not confirmed");
 
   const controllerText = String(outcomes.controller_contact_disclosure?.criticalEvidence.retainedEvidence.candidatePolicyExcerpt ?? "");
   const retentionText = String(outcomes.retention_disclosure_observed?.criticalEvidence.retainedEvidence.candidatePolicyExcerpt ?? "");

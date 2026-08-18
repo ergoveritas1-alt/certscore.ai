@@ -36,7 +36,7 @@ function makeConcern(
   >;
 }
 
-test("deriveConcernPolicy keeps observed Article 13 evidence internal and surfaces only verified deterministic gaps", () => {
+test("deriveConcernPolicy keeps Article 13 evidence and deterministic no-match results checklist-only", () => {
   const concern = makeConcern({
     originKey: "gdpr_transparency.article13.legal_basis",
     originType: "runtime_artifact",
@@ -73,6 +73,25 @@ test("deriveConcernPolicy keeps observed Article 13 evidence internal and surfac
       productionCreditProfile: "gdpr_transparency_multilingual_article13_v1"
     }
   });
+  const automatedArticle22 = deriveConcernPolicy({
+    concern: makeConcern({
+      ...concern,
+      originKey: "gdpr_transparency.article13.automated_decision_making_or_profiling"
+    }),
+    evidenceStrengthFlags: ["policy_text", "page_attributed"],
+    rawEvidence: {
+      classifierProvenance: "gdpr_transparency_topic_classifier.v1",
+      gdprTransparencyArticle13ConcernState: "sufficient",
+      gdprTransparencyArticle13Evidence: true,
+      gdprTransparencyArticle13Topic: "automated_decision_making_or_profiling",
+      gdprTransparencyEvidenceProfile: "gdpr_transparency_multilingual_article13_v1",
+      policySnippets: [
+        "We do not make decisions based solely on automated processing, including profiling, that produce legal or similarly significant effects."
+      ],
+      productionCredit: true,
+      productionCreditProfile: "gdpr_transparency_multilingual_article13_v1"
+    }
+  });
   const ambiguous = deriveConcernPolicy({
     concern,
     evidenceStrengthFlags: ["policy_text", "page_attributed"],
@@ -86,16 +105,15 @@ test("deriveConcernPolicy keeps observed Article 13 evidence internal and surfac
       productionCreditProfile: "gdpr_transparency_multilingual_article13_v1"
     }
   });
-  const missing = deriveConcernPolicy({
+  const noMatch = deriveConcernPolicy({
     concern: makeConcern({
       ...concern,
-      suggestedUnifiedFindingId: "legal_basis_disclosure_missing",
       title: "GDPR Transparency Article 13 topic not observed: legal_basis"
     }),
     evidenceStrengthFlags: ["policy_text", "page_attributed"],
     rawEvidence: {
       classifierProvenance: "gdpr_transparency_absence_coverage.v1",
-      gdprTransparencyArticle13ConcernState: "missing",
+      gdprTransparencyArticle13ConcernState: "no_match_found",
       gdprTransparencyArticle13Evidence: true,
       gdprTransparencyArticle13Topic: "legal_basis",
       gdprTransparencyEvidenceProfile: "gdpr_transparency_deterministic_absence_v1",
@@ -108,10 +126,11 @@ test("deriveConcernPolicy keeps observed Article 13 evidence internal and surfac
   assert.equal(observed.externalSurfacingEligibility, "audit_only");
   assert.equal(observed.regulatoryChecklistEligibility, "observed");
   assert.equal(automated.regulatoryChecklistEligibility, "review_signal");
+  assert.equal(automatedArticle22.regulatoryChecklistEligibility, "observed");
   assert.equal(ambiguous.regulatoryChecklistEligibility, "none");
-  assert.equal(missing.regulatoryChecklistEligibility, "gap_observed");
-  assert.equal(missing.promotionEligibility, "eligible");
-  assert.equal(missing.externalSurfacingEligibility, "eligible");
+  assert.equal(noMatch.regulatoryChecklistEligibility, "review_signal");
+  assert.equal(noMatch.promotionEligibility, "internal_only");
+  assert.equal(noMatch.externalSurfacingEligibility, "audit_only");
 });
 
 test("deriveConcernPolicy projects paid decline evidence as a checklist-only review signal", () => {

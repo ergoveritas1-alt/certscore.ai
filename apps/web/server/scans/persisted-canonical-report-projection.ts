@@ -5,7 +5,7 @@ import type { ScanDetailResponse } from "./get-scan-by-id";
 import type { VersionedScoreAssessmentInput } from "./score-assessment-repository";
 
 export const PERSISTED_CANONICAL_REPORT_PROJECTION_VERSION =
-  "persisted-canonical-report-projection-v1";
+  "persisted-canonical-report-projection-v2";
 
 export type PersistedCanonicalReportProjection = {
   artifactVersion: typeof PERSISTED_CANONICAL_REPORT_PROJECTION_VERSION;

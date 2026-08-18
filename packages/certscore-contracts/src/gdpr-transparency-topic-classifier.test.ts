@@ -186,6 +186,36 @@ test("classifies direct US-policy transfer, recipient, and privacy-contact wordi
   assert.equal(byTopic.has("dpo_contact"), false);
 });
 
+test("classifies a retained privacy-policy contact channel without claiming generic business contact", () => {
+  const retainedPolicy = classifyGdprTransparencyTopics({
+    localeHints: ["en"],
+    text: [
+      "Privacy Policy.",
+      "Contact. If you email us, we receive the information you choose to include and use it to respond to your message.",
+      "You can contact us at ergoveritas1@gmail.com."
+    ].join(" ")
+  });
+  const policyTopics = new Map(retainedPolicy.matches.map((match) => [match.topic, match]));
+
+  assert.equal(policyTopics.get("controller_contact")?.matchedTerm, "you can contact us at");
+  assert.equal(policyTopics.get("dpo_contact")?.matchedTerm, "you can contact us at");
+  assert.equal(policyTopics.get("controller_contact")?.matchStrength, "equivalent");
+  assert.equal(policyTopics.get("dpo_contact")?.matchStrength, "equivalent");
+  assert.match(policyTopics.get("controller_contact")?.evidenceExcerpt ?? "", /ergoveritas1@gmail\.com/i);
+  assert.match(policyTopics.get("dpo_contact")?.evidenceExcerpt ?? "", /ergoveritas1@gmail\.com/i);
+
+  const genericBusinessContact = classifyGdprTransparencyTopics({
+    localeHints: ["en"],
+    text: "For product pricing and account support, you can contact us at support@example.test."
+  });
+  assert.equal(
+    genericBusinessContact.matches.some((match) =>
+      match.topic === "controller_contact" || match.topic === "dpo_contact"
+    ),
+    false
+  );
+});
+
 test("classifies representative GDPR Transparency snippets across supported locales", () => {
   const examples = [
     {

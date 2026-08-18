@@ -1975,7 +1975,7 @@ function makeApprovedGdprTransparencyArticle13Signal(
   };
 }
 
-test("verified row-specific policy absence creates GDPR Transparency gap concerns", () => {
+test("verified row-specific policy absence creates neutral GDPR Transparency no-match concerns", () => {
   const assessment = (topic: string) => ({
     assessmentContractVersion: "gdpr_transparency_article13_coverage_assessment.v1",
     coverageStatus: "sufficient",
@@ -1999,21 +1999,18 @@ test("verified row-specific policy absence creates GDPR Transparency gap concern
     },
     validationFindings: []
   });
-  const gaps = concerns.filter((concern) =>
+  const noMatches = concerns.filter((concern) =>
     concern.originKey === "gdpr_transparency.article13.data_retention" ||
     concern.originKey === "gdpr_transparency.article13.international_transfers"
   );
 
-  assert.equal(gaps.length, 2);
-  assert.equal(gaps.every((concern) => concern.observedValue === "missing"), true);
-  assert.equal(gaps.every((concern) => concern.regulatoryChecklistEligibility === "gap_observed"), true);
-  assert.deepEqual(
-    gaps.map((concern) => concern.suggestedUnifiedFindingId).sort(),
-    ["missing_transfer_disclosure", "retention_disclosure_missing"]
-  );
-  assert.equal(gaps.every((concern) => concern.promotionEligibility === "eligible"), true);
-  assert.equal(gaps.every((concern) => concern.externalSurfacingEligibility === "eligible"), true);
-  assert.equal(gaps.every((concern) =>
+  assert.equal(noMatches.length, 2);
+  assert.equal(noMatches.every((concern) => concern.observedValue === "no_match_found"), true);
+  assert.equal(noMatches.every((concern) => concern.regulatoryChecklistEligibility === "review_signal"), true);
+  assert.equal(noMatches.every((concern) => concern.suggestedUnifiedFindingId === undefined), true);
+  assert.equal(noMatches.every((concern) => concern.promotionEligibility === "internal_only"), true);
+  assert.equal(noMatches.every((concern) => concern.externalSurfacingEligibility === "audit_only"), true);
+  assert.equal(noMatches.every((concern) =>
     concern.evidenceBundle.rawEvidence?.classifierProvenance === "gdpr_transparency_absence_coverage.v1"
   ), true);
 });
@@ -2422,7 +2419,7 @@ test("observed GDPR Transparency concerns remain checklist-only", () => {
   assert.equal(packets.some((packet) => /gdpr|article13|transparency/i.test(packet.unifiedFindingId)), false);
 });
 
-test("verified GDPR Transparency absence assessments create unified finding packets", () => {
+test("verified GDPR Transparency absence assessments do not create unified finding packets", () => {
   const assessment = (topic: string) => ({
     assessmentContractVersion: "gdpr_transparency_article13_coverage_assessment.v1",
     coverageStatus: "sufficient",
@@ -2460,36 +2457,8 @@ test("verified GDPR Transparency absence assessments create unified finding pack
     validationFindingLookup: new Map()
   });
 
-  assert.deepEqual(
-    packets.map((packet) => packet.unifiedFindingId).sort(),
-    [
-      "controller_identity_or_contact_disclosure_missing",
-      "data_subject_rights_disclosure_missing",
-      "legal_basis_disclosure_missing",
-      "missing_transfer_disclosure",
-      "purpose_of_use_disclosure_missing",
-      "retention_disclosure_missing",
-      "supervisory_authority_disclosure_missing",
-      "third_party_recipient_disclosure_missing"
-    ]
-  );
-  assert.deepEqual(
-    displayPackets.map((packet) => packet.unifiedFindingId).sort(),
-    [
-      "controller_identity_or_contact_disclosure_missing",
-      "data_subject_rights_disclosure_missing",
-      "legal_basis_disclosure_missing",
-      "missing_transfer_disclosure",
-      "purpose_of_use_disclosure_missing",
-      "retention_disclosure_missing",
-      "supervisory_authority_disclosure_missing",
-      "third_party_recipient_disclosure_missing"
-    ]
-  );
-  assert.equal(
-    displayPackets.every((packet) => packet.presentationDecision.status === "surface"),
-    true
-  );
+  assert.deepEqual(packets, []);
+  assert.deepEqual(displayPackets, []);
 });
 
 test("English legacy normalized concern behavior is preserved with legacy Article 13 summaries present", () => {

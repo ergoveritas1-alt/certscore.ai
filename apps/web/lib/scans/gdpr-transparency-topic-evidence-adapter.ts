@@ -221,9 +221,27 @@ function rejectReasonForCandidate(
   if (!candidate.classifierReasonCodes.includes(`matched_${candidate.topic}`)) {
     return "candidate_missing_topic_reason_code";
   }
-  return article13DisclosureRejectReason(candidate.evidenceText, candidate.topic, {
+  const article13RejectReason = article13DisclosureRejectReason(candidate.evidenceText, candidate.topic, {
     mode: "multilingual_classifier",
   });
+  if (
+    article13RejectReason === "insufficient_row_specific_terms" &&
+    isPrivacyContextContactChannelCandidate(candidate)
+  ) {
+    return null;
+  }
+  return article13RejectReason;
+}
+
+function isPrivacyContextContactChannelCandidate(candidate: GdprTransparencyTopicCandidate) {
+  return (
+    (candidate.topic === "controller_contact" || candidate.topic === "dpo_contact") &&
+    candidate.matchStrength === "equivalent" &&
+    candidate.matchedLocale === "en" &&
+    candidate.matchedTerm === "you can contact us at" &&
+    candidate.classifierReasonCodes.includes("variant_requires_privacy_context") &&
+    /\byou can contact us at\b.{0,160}\b[\w.+-]+@[\w.-]+\.[a-z]{2,}\b/i.test(candidate.evidenceText)
+  );
 }
 
 function rejectReasonToDiscardedArticle13Reason(

@@ -2026,6 +2026,24 @@ test("compact English policy sections retain purpose and service-provider GDPR T
   assert.equal(candidates.every((candidate) => candidate.productionCredit === false), true);
 });
 
+test("compact English privacy contact sections retain controller and privacy-contact candidates", () => {
+  const candidates = gdprTransparencyTopicCandidatesFromRetainedPolicySections([
+    {
+      heading: "Privacy Policy",
+      textExcerpt:
+        "Contact. If you email us, we receive the information you choose to include and use it to respond to your message. You can contact us at ergoveritas1@gmail.com."
+    }
+  ]);
+  const byTopic = new Map(candidates.map((candidate) => [candidate.topic, candidate]));
+
+  assert.equal(byTopic.get("controller_contact")?.matchedTerm, "you can contact us at");
+  assert.equal(byTopic.get("dpo_contact")?.matchedTerm, "you can contact us at");
+  assert.equal(byTopic.get("controller_contact")?.matchStrength, "equivalent");
+  assert.equal(byTopic.get("dpo_contact")?.matchStrength, "equivalent");
+  assert.match(byTopic.get("controller_contact")?.evidenceText ?? "", /ergoveritas1@gmail\.com/i);
+  assert.match(byTopic.get("dpo_contact")?.evidenceText ?? "", /ergoveritas1@gmail\.com/i);
+});
+
 test("policy section extraction preserves structured table rows for canonical multilingual Article 13 evidence", () => {
   const sourceUrl = "https://example.test/informativa-privacy-generale";
   const html = `

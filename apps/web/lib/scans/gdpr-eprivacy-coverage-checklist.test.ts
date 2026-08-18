@@ -214,7 +214,35 @@ test("checklist consumes approved multilingual GDPR Transparency Article 13 cove
   );
 });
 
-test("checklist keeps automated multilingual GDPR Transparency Article 13 evidence as review-only", () => {
+test("checklist projects retained privacy contact evidence through normalized concerns without findings", () => {
+  const normalizedConcerns = [
+    ...makeChecklistGdprTransparencyConcerns("controller_contact"),
+    ...makeChecklistGdprTransparencyConcerns("dpo_contact")
+  ];
+  const coverageOutcomes = deriveGdprEprivacyCoveragePolicyOutcomes({
+    coverageLimited: false,
+    normalizedConcerns,
+    runtimeArtifacts: {},
+    scanCompleted: true,
+    snapshot: {}
+  });
+  const items = deriveGdprEprivacyCoverageChecklist({
+    coverageLimited: false,
+    coverageOutcomes,
+    projectedFindings: [],
+    scanCompleted: true,
+    unifiedFindings: []
+  });
+  const controllerContact = byId(items, "controller_contact_disclosure");
+  const privacyContact = byId(items, "dpo_contact_point_disclosure");
+
+  assert.equal(controllerContact.status, "Observed");
+  assert.equal(privacyContact.status, "Observed");
+  assert.equal(controllerContact.criticalEvidence.projectedFindings.length, 0);
+  assert.equal(privacyContact.criticalEvidence.projectedFindings.length, 0);
+});
+
+test("checklist presents profiling-adjacent GDPR Transparency evidence as a neutral no-match result", () => {
   const coverageOutcomes = deriveGdprEprivacyCoveragePolicyOutcomes({
     coverageLimited: false,
     normalizedConcerns: makeChecklistGdprTransparencyConcerns("automated_decision_making_or_profiling"),
@@ -231,8 +259,10 @@ test("checklist keeps automated multilingual GDPR Transparency Article 13 eviden
   });
   const automated = byId(items, "automated_decision_making_profiling_disclosure");
 
-  assert.equal(automated.status, "Review signal");
-  assert.equal(automated.assessmentStatus, "review_signal");
+  assert.equal(automated.status, "Not confirmed");
+  assert.equal(automated.assessmentStatus, "coverage_limitation");
+  assert.equal(getEvidenceLabel(automated), "No match found");
+  assert.equal(getAssessmentDirection(automated), "technical_limitation");
   assert.equal(automated.criticalEvidence.projectedFindings.length, 0);
   assert.equal(
     automated.criticalEvidence.retainedEvidence.gdprTransparencyArticle13Concern !== undefined,
@@ -266,7 +296,7 @@ function makeCoverageOutcome(
   };
 }
 
-test("checklist preserves a verified international-transfer absence gap over its generic review finding", () => {
+test("checklist preserves a neutral international-transfer no-match result over stale absence findings", () => {
   const items = deriveGdprEprivacyCoverageChecklist({
     coverageLimited: false,
     coverageOutcomes: {
@@ -284,10 +314,15 @@ test("checklist preserves a verified international-transfer absence gap over its
             sourceUrls: ["https://example.test/privacy"],
             status: "not_observed_with_sufficient_coverage",
             topic: "international_transfers"
+          },
+          policyEvidenceAssessment: {
+            contractVersion: "certscore.policy-topic-evidence-assessment.v1",
+            result: "not_located_automatically",
+            scoreEffect: "none"
           }
         },
         rowId: "international_transfers_disclosure",
-        status: "Gap observed"
+        status: "Not confirmed"
       })
     },
     projectedFindings: [{
@@ -301,8 +336,10 @@ test("checklist preserves a verified international-transfer absence gap over its
   });
 
   const transfer = byId(items, "international_transfers_disclosure");
-  assert.equal(transfer.status, "Gap observed");
-  assert.equal(transfer.assessmentStatus, "gap_observed");
+  assert.equal(transfer.status, "Not confirmed");
+  assert.equal(transfer.assessmentStatus, "coverage_limitation");
+  assert.equal(getEvidenceLabel(transfer), "No match found");
+  assert.equal(getAssessmentDirection(transfer), "technical_limitation");
   assert.equal(transfer.criticalEvidence.pipeline.projectionStage, "coverage_policy");
   assert.deepEqual(transfer.criticalEvidence.projectedFindings, []);
 });

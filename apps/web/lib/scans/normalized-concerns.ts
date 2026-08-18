@@ -5,7 +5,6 @@ import {
   hasStaleLegalFrameworkReference,
   hasSubstantiveProcessingPurposesEvidence,
   policyModelReviewArtifactSchema,
-  type GdprTransparencyTopic,
 } from "@certscore/contracts";
 import {
   getReportUnifiedFinding,
@@ -15,7 +14,6 @@ import {
   getKnownCmpVendorName,
   getScanNoGoLimitationKindLabel,
   resolveScanNoGoPresentation,
-  type ReportUnifiedFindingId,
   type ReportSignalSource
 } from "@website-signal-risk-scanner/shared";
 import {
@@ -2684,20 +2682,6 @@ function buildGdprTransparencyArticle13Concerns(
 const GDPR_TRANSPARENCY_DETERMINISTIC_ABSENCE_PROFILE =
   "gdpr_transparency_deterministic_absence_v1";
 
-const GDPR_TRANSPARENCY_ARTICLE13_ABSENCE_FINDING_IDS: Partial<Record<
-  GdprTransparencyTopic,
-  ReportUnifiedFindingId
->> = {
-  controller_contact: "controller_identity_or_contact_disclosure_missing",
-  data_retention: "retention_disclosure_missing",
-  data_subject_rights: "data_subject_rights_disclosure_missing",
-  international_transfers: "missing_transfer_disclosure",
-  legal_basis: "legal_basis_disclosure_missing",
-  processing_purposes: "purpose_of_use_disclosure_missing",
-  recipients_or_vendor_categories: "third_party_recipient_disclosure_missing",
-  supervisory_authority: "supervisory_authority_disclosure_missing"
-};
-
 function buildGdprTransparencyArticle13AbsenceConcerns(
   runtimeArtifacts: Record<string, unknown> | null | undefined,
   domainContext?: ScanDomainContext
@@ -2742,23 +2726,19 @@ function buildGdprTransparencyArticle13AbsenceConcerns(
       return [];
     }
 
-    const unifiedFindingId = GDPR_TRANSPARENCY_ARTICLE13_ABSENCE_FINDING_IDS[
-      topic as GdprTransparencyTopic
-    ];
-
     return [buildConcernFromSharedInput({
       categoryId: "privacy",
       description:
-        "A verified, complete, target-owned policy was reviewed for this GDPR Transparency topic and row-specific evidence was not observed.",
+        "A verified, complete, target-owned policy was reviewed for this GDPR Transparency topic and no sufficiently direct matching passage was found. This is a neutral no-match result, not an observed gap.",
       domainContext,
       evidence: sourceUrls,
-      observedValue: "missing",
+      observedValue: "no_match_found",
       originKey: `gdpr_transparency.article13.${topic}`,
       originType: "runtime_artifact",
       rawEvidence: {
         article13CoverageAssessment: assessment,
         classifierProvenance: "gdpr_transparency_absence_coverage.v1",
-        gdprTransparencyArticle13ConcernState: "missing",
+        gdprTransparencyArticle13ConcernState: "no_match_found",
         gdprTransparencyArticle13Evidence: true,
         gdprTransparencyArticle13Topic: topic,
         gdprTransparencyEvidenceProfile: GDPR_TRANSPARENCY_DETERMINISTIC_ABSENCE_PROFILE,
@@ -2772,10 +2752,9 @@ function buildGdprTransparencyArticle13AbsenceConcerns(
         selectedEvidenceStrength: "strong",
         signalKey: `privacy.gdpr_transparency.article13.${topic}`,
         sourceUrl: sourceUrls[0],
-        sourceUrls,
-        ...(unifiedFindingId ? { unifiedFindingId } : {})
+        sourceUrls
       },
-      severity: "medium",
+      severity: "low",
       signalKey: `privacy.gdpr_transparency.article13.${topic}`,
       signalLabel: `GDPR Transparency Article 13 topic not observed: ${topic}`,
       signalSource: "runtime_artifact_signal",

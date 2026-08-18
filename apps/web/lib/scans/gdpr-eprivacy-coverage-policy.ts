@@ -6898,9 +6898,9 @@ function getGdprTransparencyArticle13ChecklistConcern(
         productionCreditProfile === "gdpr_transparency_deterministic_absence_v1" &&
         classifierProvenance === "gdpr_transparency_absence_coverage.v1";
       const approvedConcernPosture = approvedDeterministicAbsenceEvidence
-        ? concern.promotionEligibility === "eligible" &&
-          concern.externalSurfacingEligibility === "eligible" &&
-          concern.regulatoryChecklistEligibility === "gap_observed"
+        ? concern.promotionEligibility === "internal_only" &&
+          concern.externalSurfacingEligibility === "audit_only" &&
+          concern.regulatoryChecklistEligibility === "review_signal"
         : concern.promotionEligibility === "internal_only" &&
           concern.externalSurfacingEligibility === "audit_only";
       return concern.originKey === `gdpr_transparency.article13.${topic}` &&
@@ -7037,7 +7037,7 @@ function buildGdprTransparencyArticle13ConcernOutcome(
   // An absence assessment is supported by the typed coverage record, not by a
   // matching excerpt. Keeping a generic policy-document hash or provenance
   // string here would misrepresent it as affirmative topic evidence.
-  const evidenceText = concern.regulatoryChecklistEligibility === "gap_observed"
+  const evidenceText = state === "no_match_found"
     ? null
     : observedEvidenceText;
   const evidenceRefs = [
@@ -7071,7 +7071,7 @@ function buildGdprTransparencyArticle13ConcernOutcome(
       source: "normalized_concern",
       status: concern.regulatoryChecklistEligibility === "observed"
         ? "observed"
-        : concern.regulatoryChecklistEligibility === "gap_observed"
+        : state === "no_match_found"
           ? "not_observed_with_sufficient_coverage"
           : "partial"
     },
@@ -7083,10 +7083,19 @@ function buildGdprTransparencyArticle13ConcernOutcome(
       topic
     },
     ...(article13CoverageAssessment ? { article13CoverageAssessment } : {}),
+    ...(state === "no_match_found"
+      ? {
+          policyEvidenceAssessment: {
+            contractVersion: "certscore.policy-topic-evidence-assessment.v1",
+            result: "not_located_automatically",
+            scoreEffect: "none"
+          }
+        }
+      : {}),
     legalFrameworkValidityMatches,
     signalObserved: concern.regulatoryChecklistEligibility === "observed"
       ? true
-      : concern.regulatoryChecklistEligibility === "gap_observed"
+      : state === "no_match_found"
         ? "not_observed_with_sufficient_coverage"
         : "partial"
   };
@@ -7126,14 +7135,29 @@ function buildGdprTransparencyArticle13ConcernOutcome(
     );
   }
 
-  if (concern.regulatoryChecklistEligibility === "gap_observed") {
+  if (state === "no_match_found") {
     return makeOutcome(
       config.rowId,
-      "Gap observed",
-      `${config.label} was not observed in a verified, complete, target-owned policy retained with sufficient row-specific absence coverage.`,
+      "Not confirmed",
+      `CertScore retained a usable policy but found no sufficiently direct matching passage for ${config.label.toLowerCase()} during automated analysis. This does not establish that the disclosure is absent.`,
       evidenceRefs,
       {
         retainedEvidence
+      }
+    );
+  }
+
+  if (config.rowId === "automated_decision_making_profiling_disclosure") {
+    return makeOutcome(
+      config.rowId,
+      "Not confirmed",
+      "CertScore retained policy evidence related to automated processing, personalization, or profiling, but did not confirm a sufficiently direct automated decision-making/profiling disclosure. This does not establish that the disclosure is absent.",
+      evidenceRefs,
+      {
+        retainedEvidence: {
+          ...retainedEvidence,
+          signalObserved: "profiling_adjacent_evidence_without_direct_disclosure"
+        }
       }
     );
   }
@@ -8604,8 +8628,8 @@ function derivePolicyDisclosureOutcome(input: GdprEprivacyCoveragePolicyInput, c
   if (config.rowId === "automated_decision_making_profiling_disclosure" && automatedGeneralTextMatchEvidence) {
     return makeOutcome(
       config.rowId,
-      "Review signal",
-      "Automated processing or personalization language was observed, but an Article 22-style solely automated decision-making disclosure was not confirmed.",
+      "Not confirmed",
+      "CertScore retained automated-processing, personalization, or profiling-adjacent language, but did not confirm a sufficiently direct automated decision-making/profiling disclosure. This does not establish that the disclosure is absent.",
       [
         "Evidence: automated processing or personalization language",
         `Excerpt: ${automatedGeneralTextMatchEvidence}`,
@@ -8627,6 +8651,27 @@ function derivePolicyDisclosureOutcome(input: GdprEprivacyCoveragePolicyInput, c
   }
 
   if (article13SignalPartial) {
+    if (config.rowId === "automated_decision_making_profiling_disclosure") {
+      return makeOutcome(
+        config.rowId,
+        "Not confirmed",
+        "CertScore retained partial automated-processing or profiling evidence, but did not confirm a sufficiently direct automated decision-making/profiling disclosure. This does not establish that the disclosure is absent.",
+        [
+          `Evidence: partial ${config.label}`,
+          getString(article13Signal, ["evidenceText", "evidence_text"])
+            ? `Excerpt: ${getString(article13Signal, ["evidenceText", "evidence_text"])}`
+            : null,
+          ...getStringArray(summary, ["privacyPolicyUrls", "privacy_policy_urls"]).map((url) => `Policy URL: ${url}`).slice(0, 2)
+        ].filter((value): value is string => Boolean(value)),
+        {
+          retainedEvidence: {
+            article13Signal,
+            policySurfaceSummary: summary,
+            signalObserved: "profiling_adjacent_evidence_without_direct_disclosure"
+          }
+        }
+      );
+    }
     return makeOutcome(
       config.rowId,
       "Review signal",
@@ -8955,9 +9000,9 @@ function derivePolicyDisclosureOutcome(input: GdprEprivacyCoveragePolicyInput, c
 
   return makeOutcome(
     config.rowId,
-    config.rowId === "automated_decision_making_profiling_disclosure" ? "Not observed" : "Gap observed",
+    config.rowId === "automated_decision_making_profiling_disclosure" ? "Not confirmed" : "Gap observed",
     config.rowId === "automated_decision_making_profiling_disclosure"
-      ? `${config.label} was not observed in retained privacy-policy evidence.`
+      ? `CertScore found no sufficiently direct matching passage for ${config.label.toLowerCase()} during automated analysis. This does not establish that the disclosure is absent.`
       : `${config.label} was expected for Article 13 transparency review but was not observed in retained privacy-policy evidence.`,
     ["Evidence: retained privacy policy text reviewed"],
     {

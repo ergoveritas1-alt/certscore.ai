@@ -198,6 +198,13 @@ test("persisted projection carries one scan-bound canonical output packet", () =
   assert.deepEqual(getPersistedCanonicalReportProjection(transported), canonicalReportProjection);
   assert.equal(getPersistedCanonicalReportProjection({
     ...transported,
+    canonicalReportProjection: {
+      ...canonicalReportProjection,
+      artifactVersion: "persisted-canonical-report-projection-v1"
+    }
+  } as unknown as ScanDetailResponse), null);
+  assert.equal(getPersistedCanonicalReportProjection({
+    ...transported,
     scan: { ...transported.scan, id: "00000000-0000-0000-0000-000000000000" }
   }), null);
 });
