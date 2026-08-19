@@ -3210,6 +3210,8 @@ test("policySurfaceScanner freshly validates a bounded prior policy seed when ho
       confidence: 0.9,
       hintType: "privacy_policy",
       source: "prior_scan_hint",
+      sourceCompletedAt: new Date().toISOString(),
+      sourceScanId: "policy-no-links-prior",
       url: "/policies/privacy",
     }],
   });
@@ -3362,8 +3364,7 @@ test("policySurfaceScanner bounds a Ford-like stalled homepage fetch and continu
   }
 });
 
-test("policySurfaceScanner retains the governing child when rendered discovery also finds its policy index", async () => {
-  let renderedHomepageRespondedAt = 0;
+test("policySurfaceScanner stops redundant rendered discovery after a fresh prior index retains the governing child", async () => {
   let renderedPrivacyRequestedAt = 0;
   const server = createServer((request, response) => {
     const requestUrl = new URL(request.url ?? "/", "http://127.0.0.1");
@@ -3379,6 +3380,11 @@ test("policySurfaceScanner retains the governing child when rendered discovery a
         <p>We retain account records for seven years and delete other information when it is no longer needed.</p>
         <p>You may access, rectify, erase, restrict, object to processing, and port your personal data.</p>
         <p>International transfers outside the EEA use standard contractual clauses. You may complain to your supervisory authority.</p>
+        <p>We collect account details, subscription records, device identifiers, approximate location, service interactions, viewing preferences, and support correspondence when you use the service. We use this information to deliver requested features, authenticate accounts, prevent fraud, maintain security, provide customer support, measure service performance, and improve the reliability of our products.</p>
+        <p>Depending on the activity, processing is based on performance of a contract, compliance with legal obligations, consent where requested, and our legitimate interests in operating, securing, and improving the service. Recipients can include hosting providers, payment processors, analytics suppliers, customer-support providers, professional advisers, advertising partners where permitted, and affiliated companies that support the purposes described in this notice.</p>
+        <p>Retention periods depend on the type of record and the reason it was collected. Account and transaction records may be retained for seven years where tax or accounting rules require it, security logs are retained for a shorter defined period, and support correspondence is deleted when it is no longer needed. We periodically review retained information and erase or anonymize it when the applicable purpose and legal requirements expire.</p>
+        <p>People in the European Economic Area may request access, correction, deletion, restriction, portability, or objection, and may withdraw consent without affecting earlier processing. Requests can be submitted to the privacy office identified above. Cross-border transfers use adequacy decisions or the European Commission standard contractual clauses, together with supplementary safeguards where appropriate.</p>
+        ${`<p>This notice also explains how privacy requests are verified, how authorized representatives may act, how appeals are reviewed, how material policy updates are communicated, and how users can contact the controller or data protection officer. We maintain organizational and technical safeguards appropriate to the nature of the information and periodically review service-provider access, retention schedules, transfer safeguards, and incident-response controls.</p>`.repeat(3)}
       </main></body></html>`);
       return;
     }
@@ -3405,10 +3411,9 @@ test("policySurfaceScanner retains the governing child when rendered discovery a
     }
     if (requestUrl.pathname === "/") {
       setTimeout(() => {
-        renderedHomepageRespondedAt = Date.now();
         response.writeHead(200, { "content-type": "text/html; charset=utf-8" });
         response.end("<!doctype html><html><body><main><h1>News</h1></main><footer><a href='/privacy'>Privacy Policy</a></footer></body></html>");
-      }, 1_500);
+      }, 12_000);
       return;
     }
     response.writeHead(404, { "content-type": "text/plain" });
@@ -3427,10 +3432,18 @@ test("policySurfaceScanner retains the governing child when rendered discovery a
       url: targetUrl,
       normalizedUrl: targetUrl,
       scanStartedAtMs: startedAt,
-      internalBudgetMs: 8_000,
+      internalBudgetMs: 15_000,
       region: "eu-west-1",
       artifactWriter,
       nanoAssistProvider: createDefaultMockNanoPolicyAssistProvider(),
+      policySurfaceSeeds: [{
+        confidence: 0.95,
+        hintType: "privacy_policy",
+        source: "prior_scan_hint",
+        sourceCompletedAt: new Date(startedAt - 24 * 60 * 60 * 1_000).toISOString(),
+        sourceScanId: "prior-policy-index",
+        url: `${targetUrl}privacy`,
+      }],
     });
     const elapsedMs = Date.now() - startedAt;
     const diagnostics = await readPolicyCaptureDiagnostics(result);
@@ -3456,13 +3469,8 @@ test("policySurfaceScanner retains the governing child when rendered discovery a
     assert.equal(privacy.surfaceType, "privacy_policy");
     assert.equal(privacy.httpStatus, 200);
     assert.ok(renderedPrivacyRequestedAt > 0);
-    assert.ok(renderedHomepageRespondedAt > 0);
-    // Browser startup and teardown can briefly exceed the soft 8s module
-    // budget when this case runs alongside the full Chromium timing suite.
-    // Keep a narrow wall-time ceiling without making CPU contention a release
-    // failure; the evidence assertions below are the governing regression.
-    assert.ok(elapsedMs < 10_000, `expected parallel recovery to stay near the lane budget; elapsed=${elapsedMs}`);
-    assert.ok(diagnostics.renderedCandidateCount > 0);
+    assert.ok(elapsedMs < 10_000, `expected prior-seed recovery to avoid the redundant rendered-homepage wait; elapsed=${elapsedMs}`);
+    assert.equal(diagnostics.renderedCandidateCount, 0);
     assert.equal(diagnostics.commonPathFallbackUsed, true);
     assert.equal(diagnostics.corePolicySurfaceRetained, true);
     assert.equal(
@@ -3470,6 +3478,12 @@ test("policySurfaceScanner retains the governing child when rendered discovery a
         failure.stage === "candidate_direct" &&
         failure.candidateUrl === `${targetUrl}privacy` &&
         failure.httpStatus === 403
+      ),
+      true,
+    );
+    assert.equal(
+      result.moduleRun.timingBreakdown?.some((timing) =>
+        timing.label === "homepage-failed rendered discovery superseded"
       ),
       true,
     );

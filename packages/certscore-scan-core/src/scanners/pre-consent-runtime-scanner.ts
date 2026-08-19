@@ -2236,6 +2236,7 @@ export async function preConsentRuntimeScanner(
             if (supplementalCapture?.errorMessage) {
               screenshotErrors.push(supplementalCapture.errorMessage);
             }
+            recordSupplementalViewportDiagnostic(timingBreakdown, supplementalCapture);
             const postCaptureObservation = await recordBoundedTiming(
               timingBreakdown,
               "consent UI supplemental screenshot recapture",
@@ -2548,10 +2549,31 @@ export async function preConsentRuntimeScanner(
       );
     }
 
+    const structuredFirstLayerControlsConfirmed = consentObservation.layerInspected === "first_layer" &&
+      consentObservation.controls.some((control) =>
+        ["accept_all", "reject_all", "essential_only", "manage_preferences"].includes(control.actionType)
+      );
+    const supplementalCheckpointUrl = safePageUrl(page, effectiveNavigationUrl);
+    const supplementalCheckpointDocumentIdentity = currentBrowserDocumentIdentity(page);
+    const protectedSettledConsentProofAvailable = screenshots.some((screenshot) =>
+      screenshot.artifactId === "screenshot_pre_consent_settled" &&
+      screenshot.captureMethod !== "primary_placeholder" &&
+      screenshot.captureMethod !== "fresh_context_placeholder" &&
+      isSameBrowserDocumentOrExactUrl(
+        screenshot.url,
+        screenshot.documentIdentity,
+        supplementalCheckpointUrl,
+        supplementalCheckpointDocumentIdentity,
+      )
+    );
+    const supplementalFullPageProofAlreadyComplete =
+      structuredFirstLayerControlsConfirmed && protectedSettledConsentProofAvailable;
+
     if (
       captureConsentEvidence &&
       earlyScreenshotCaptured &&
       !supplementalScreenshotAttempted &&
+      !supplementalFullPageProofAlreadyComplete &&
       (input.screenshotCaptureMode ?? "viewport_first") === "viewport_first" &&
       screenshots.some((screenshot) => screenshot.captureMethod === "primary_viewport_fallback") &&
       shouldCaptureSupplementalFullPageScreenshot({
@@ -2580,6 +2602,7 @@ export async function preConsentRuntimeScanner(
       if (supplementalCapture?.errorMessage) {
         screenshotErrors.push(supplementalCapture.errorMessage);
       }
+      recordSupplementalViewportDiagnostic(timingBreakdown, supplementalCapture);
       if (
         supplementalCapture?.screenshot &&
         shouldRecaptureConsentUiAfterSupplementalScreenshot(consentObservation, cmpRuntimeObservations)
@@ -2621,11 +2644,13 @@ export async function preConsentRuntimeScanner(
         }
       }
     }
-
-    const structuredFirstLayerControlsConfirmed = consentObservation.layerInspected === "first_layer" &&
-      consentObservation.controls.some((control) =>
-        ["accept_all", "reject_all", "essential_only", "manage_preferences"].includes(control.actionType)
+    if (supplementalFullPageProofAlreadyComplete) {
+      recordInstantTiming(
+        timingBreakdown,
+        "supplemental full-page screenshot skipped",
+        "Protected settled same-document viewport evidence is already paired with a completed typed first-layer control inventory; below-fold geometry can still request a bounded full-page capture later.",
       );
+    }
     const completedGeometryNegativeWithOnlyRejectedNonSurfaceCandidates =
       consentObservation.controls.length === 0 &&
       consentObservation.inventoryOutcome === "complete_empty" &&
@@ -2711,15 +2736,25 @@ export async function preConsentRuntimeScanner(
             };
           }
         }
-        const access = await collectConsentGeometryPageAccess(page, initialNavigationHttpStatus, {
-          frameTextTimeoutMs: input.waitMode === "fast" ? 250 : 500,
-          supplementalBodyText: domText,
-        });
-        let geometry = await captureConsentControlGeometry(page, {
-          documentIdentity: currentBrowserDocumentIdentity(page),
-          screenshotArtifactRef: preferredPreConsentScreenshotRef(screenshots),
-          timeoutMs: input.waitMode === "fast" ? 3_000 : 5_000,
-        });
+        const access = await recordTiming(
+          timingBreakdown,
+          "consent geometry page access",
+          "Collect bounded frame and document access diagnostics before typed geometry capture.",
+          () => collectConsentGeometryPageAccess(page, initialNavigationHttpStatus, {
+            frameTextTimeoutMs: input.waitMode === "fast" ? 250 : 500,
+            supplementalBodyText: domText,
+          }),
+        );
+        let geometry = await recordTiming(
+          timingBreakdown,
+          "consent geometry DOM capture",
+          "Capture typed first-layer control geometry from the untouched browser document.",
+          () => captureConsentControlGeometry(page, {
+            documentIdentity: currentBrowserDocumentIdentity(page),
+            screenshotArtifactRef: preferredPreConsentScreenshotRef(screenshots),
+            timeoutMs: input.waitMode === "fast" ? 3_000 : 5_000,
+          }),
+        );
         const geometryCaptureUnavailable = geometry.summary.confidence === 0 ||
           geometry.viewport.width <= 0 ||
           geometry.viewport.height <= 0 ||
@@ -2756,6 +2791,7 @@ export async function preConsentRuntimeScanner(
           if (belowFoldCapture?.errorMessage) {
             screenshotErrors.push(belowFoldCapture.errorMessage);
           }
+          recordSupplementalViewportDiagnostic(timingBreakdown, belowFoldCapture);
         }
         if (
           hasBelowFoldFirstLayerGeometryControls(geometry) ||
@@ -2776,14 +2812,19 @@ export async function preConsentRuntimeScanner(
         }
         const geometryProofScreenshot = hasConfirmedFirstLayerGeometryControls(geometry) &&
             !screenshots.some((screenshot) => screenshot.artifactId === "screenshot_pre_consent_geometry_proof")
-          ? await captureConsentGeometryProofScreenshot(page, input, {
-            screenshotErrors,
-            // This remains a two-method screenshot attempt. Bound the two
-            // methods by one small shared budget so a slow CDP capture cannot
-            // be followed by another full timeout while the earlier
-            // representative screenshot remains retained.
-            timeoutMs: input.waitMode === "fast" ? 4_000 : 5_000,
-          })
+          ? await recordTiming(
+            timingBreakdown,
+            "consent geometry proof screenshot",
+            "Retain the representative same-session viewport bound to confirmed typed first-layer geometry.",
+            () => captureConsentGeometryProofScreenshot(page, input, {
+              screenshotErrors,
+              // This remains a two-method screenshot attempt. Bound the two
+              // methods by one small shared budget so a slow CDP capture cannot
+              // be followed by another full timeout while the earlier
+              // representative screenshot remains retained.
+              timeoutMs: input.waitMode === "fast" ? 4_000 : 5_000,
+            }),
+          )
           : null;
         if (geometryProofScreenshot) {
           screenshots.unshift(geometryProofScreenshot);
@@ -3111,12 +3152,14 @@ export async function preConsentRuntimeScanner(
     }
 
     // A fast initial screenshot can legitimately precede a late-rendering CMP.
-    // Once structured first-layer controls are retained, preserve a second
-    // screenshot from that same DOM state even when no direct CMP runtime
-    // marker was available to trigger the older synchronized-CMP path.
+    // Capture a synchronized frame only while the canonical proof packet is
+    // incomplete. A stable packet already binds a representative same-session
+    // screenshot to typed inventory and verified geometry, so another capture
+    // would add latency without adding evidence.
     if (
       captureConsentEvidence &&
       screenshotMode !== "never" &&
+      !stableConsentProofPacket &&
       consentObservation.layerInspected === "first_layer" &&
       consentObservation.controls.length > 0 &&
       !screenshots.some((screenshot) => screenshot.artifactId === "screenshot_pre_consent_cmp_controls") &&
@@ -3168,6 +3211,16 @@ export async function preConsentRuntimeScanner(
           ]),
         };
       }
+    } else if (
+      stableConsentProofPacket &&
+      consentObservation.layerInspected === "first_layer" &&
+      consentObservation.controls.length > 0
+    ) {
+      recordInstantTiming(
+        timingBreakdown,
+        "late consent control screenshot skipped",
+        "Stable consent proof already retains a same-session representative screenshot, completed typed inventory, and verified geometry.",
+      );
     }
 
     const initialNoGoCandidateText = domText.replace(/\s+/g, " ").trim();
@@ -10661,7 +10714,23 @@ function shouldCaptureSupplementalFullPageScreenshot(input: {
 type SupplementalFullPageScreenshotResult = {
   errorMessage?: string;
   screenshot?: ScreenshotArtifact;
+  viewportDiagnostic?: SupplementalScreenshotViewportDiagnostic;
   visualCapture?: VisualCaptureSummary;
+};
+
+type SupplementalScreenshotViewportSnapshot = {
+  configuredHeight: number | null;
+  configuredWidth: number | null;
+  innerHeight: number | null;
+  innerWidth: number | null;
+};
+
+type SupplementalScreenshotViewportDiagnostic = {
+  after: SupplementalScreenshotViewportSnapshot | null;
+  before: SupplementalScreenshotViewportSnapshot | null;
+  final: SupplementalScreenshotViewportSnapshot | null;
+  restoreAttempted: boolean;
+  restored: boolean;
 };
 
 async function captureSupplementalFullPagePreConsentScreenshot(
@@ -10670,8 +10739,16 @@ async function captureSupplementalFullPagePreConsentScreenshot(
   options: { timeoutMs: number },
 ): Promise<SupplementalFullPageScreenshotResult | null> {
   const screenshotPath = input.artifactWriter.artifactPath("screenshot-pre-consent-full-page.jpg");
+  let viewportDiagnostic: SupplementalScreenshotViewportDiagnostic | undefined;
   try {
-    await captureScaledFullPageScreenshotWithCdp(page, screenshotPath, options.timeoutMs);
+    await captureScaledFullPageScreenshotWithCdp(
+      page,
+      screenshotPath,
+      options.timeoutMs,
+      (diagnostic) => {
+        viewportDiagnostic = diagnostic;
+      },
+    );
     const screenshot: ScreenshotArtifact = {
       artifactId: "screenshot_pre_consent_full_page",
       capturedAtMs: elapsed(input.scanStartedAtMs),
@@ -10684,6 +10761,7 @@ async function captureSupplementalFullPagePreConsentScreenshot(
     };
     return {
       screenshot,
+      viewportDiagnostic,
       visualCapture: visualCaptureFromScreenshotSummary(
         {
           status: "available",
@@ -10698,10 +10776,11 @@ async function captureSupplementalFullPagePreConsentScreenshot(
   } catch (error) {
     const message = errorMessageFromUnknown(error);
     if (classifyVisualCaptureFailureReason(message) === "screenshot_timeout") {
-      return null;
+      return viewportDiagnostic ? { viewportDiagnostic } : null;
     }
     return {
       errorMessage: `Supplemental full-page screenshot failed: ${message}`,
+      viewportDiagnostic,
     };
   }
 }
@@ -10710,8 +10789,10 @@ async function captureScaledFullPageScreenshotWithCdp(
   page: Page,
   screenshotPath: string,
   timeoutMs: number,
+  onViewportDiagnostic?: (diagnostic: SupplementalScreenshotViewportDiagnostic) => void,
 ): Promise<void> {
   const deadlineAtMs = Date.now() + Math.max(1, timeoutMs);
+  const before = await readSupplementalScreenshotViewportSnapshot(page);
   const client = await acquireCdpSessionBeforeDeadline(
     page,
     deadlineAtMs,
@@ -10752,7 +10833,102 @@ async function captureScaledFullPageScreenshotWithCdp(
       clearTimeout(timer);
     }
     await boundedCleanup(client.detach(), Math.min(250, Math.max(1, deadlineAtMs - Date.now())));
+    const after = await readSupplementalScreenshotViewportSnapshot(page);
+    const shouldRestore = supplementalScreenshotChangedViewport(before, after);
+    let restoreAttempted = false;
+    if (shouldRestore) {
+      const configured = page.viewportSize();
+      if (configured) {
+        restoreAttempted = true;
+        await boundedCleanup(page.setViewportSize(configured), 250);
+      }
+    }
+    const final = await readSupplementalScreenshotViewportSnapshot(page);
+    onViewportDiagnostic?.({
+      after,
+      before,
+      final,
+      restoreAttempted,
+      restored: restoreAttempted && supplementalScreenshotViewportMatchesConfigured(final),
+    });
   }
+}
+
+async function readSupplementalScreenshotViewportSnapshot(
+  page: Page,
+): Promise<SupplementalScreenshotViewportSnapshot | null> {
+  const configured = page.viewportSize();
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  try {
+    const viewport = await Promise.race([
+      page.evaluate(() => ({
+        innerHeight: window.innerHeight,
+        innerWidth: window.innerWidth,
+      })),
+      new Promise<never>((_resolve, reject) => {
+        timer = setTimeout(() => reject(new Error("Viewport diagnostic timed out")), 150);
+      }),
+    ]);
+    return {
+      configuredHeight: configured?.height ?? null,
+      configuredWidth: configured?.width ?? null,
+      innerHeight: viewport.innerHeight,
+      innerWidth: viewport.innerWidth,
+    };
+  } catch {
+    return configured
+      ? {
+          configuredHeight: configured.height,
+          configuredWidth: configured.width,
+          innerHeight: null,
+          innerWidth: null,
+        }
+      : null;
+  } finally {
+    if (timer) clearTimeout(timer);
+  }
+}
+
+function supplementalScreenshotChangedViewport(
+  before: SupplementalScreenshotViewportSnapshot | null,
+  after: SupplementalScreenshotViewportSnapshot | null,
+): boolean {
+  if (!after || after.innerHeight === null || after.innerWidth === null) return false;
+  const configuredHeight = after.configuredHeight ?? before?.configuredHeight;
+  const configuredWidth = after.configuredWidth ?? before?.configuredWidth;
+  const changedFromBefore = before?.innerHeight !== null && before?.innerHeight !== undefined &&
+    before.innerWidth !== null && before.innerWidth !== undefined &&
+    (Math.abs(after.innerHeight - before.innerHeight) > 2 || Math.abs(after.innerWidth - before.innerWidth) > 25);
+  const implausibleForConfiguredViewport = configuredHeight !== null && configuredHeight !== undefined &&
+    configuredWidth !== null && configuredWidth !== undefined &&
+    (after.innerHeight > configuredHeight * 1.5 || after.innerWidth > configuredWidth * 1.5);
+  return changedFromBefore || implausibleForConfiguredViewport;
+}
+
+function supplementalScreenshotViewportMatchesConfigured(
+  snapshot: SupplementalScreenshotViewportSnapshot | null,
+): boolean {
+  return snapshot?.innerHeight !== null && snapshot?.innerHeight !== undefined &&
+    snapshot.innerWidth !== null && snapshot.innerWidth !== undefined &&
+    snapshot.configuredHeight !== null && snapshot.configuredWidth !== null &&
+    Math.abs(snapshot.innerHeight - snapshot.configuredHeight) <= 2 &&
+    Math.abs(snapshot.innerWidth - snapshot.configuredWidth) <= 25;
+}
+
+function recordSupplementalViewportDiagnostic(
+  timingBreakdown: NonNullable<ScanModuleRun["timingBreakdown"]>,
+  result: SupplementalFullPageScreenshotResult | null | undefined,
+): void {
+  const diagnostic = result?.viewportDiagnostic;
+  if (!diagnostic) return;
+  const format = (snapshot: SupplementalScreenshotViewportSnapshot | null) => snapshot
+    ? `${snapshot.innerWidth ?? "unknown"}x${snapshot.innerHeight ?? "unknown"} (configured ${snapshot.configuredWidth ?? "unknown"}x${snapshot.configuredHeight ?? "unknown"})`
+    : "unavailable";
+  recordInstantTiming(
+    timingBreakdown,
+    "supplemental full-page viewport diagnostic",
+    `before=${format(diagnostic.before)}; after=${format(diagnostic.after)}; restoreAttempted=${diagnostic.restoreAttempted}; restored=${diagnostic.restored}; final=${format(diagnostic.final)}`,
+  );
 }
 
 function mergeVisualCaptureWithFullPageArtifact(

@@ -8,6 +8,14 @@ export type McpHttpSession = {
   server: McpServer;
   tokenHash: string;
   transport: StreamableHTTPServerTransport;
+  telemetry?: {
+    observeTransportRateLimit(input: {
+      body: unknown;
+      durationMs: number;
+      scanId?: string | null;
+      toolName: string;
+    }): void;
+  };
 };
 
 export class McpHttpSessionStore {

@@ -17,7 +17,10 @@ import {
   type ScanModuleRun,
   type SupportedPrivacyEvidenceLocale,
 } from "@certscore/contracts";
-import { getCrawlerUserAgent } from "@website-signal-risk-scanner/shared";
+import {
+  getCrawlerUserAgent,
+  isFreshPriorScanAccelerationSource,
+} from "@website-signal-risk-scanner/shared";
 import { chromium, type Browser, type Locator, type Page } from "playwright";
 import { Resolver } from "node:dns";
 import { isIP } from "node:net";
@@ -119,6 +122,8 @@ export interface PolicySurfaceScannerInput {
     confidence?: number;
     hintType: string;
     source: "prior_scan_hint" | "canonical_legal_surface_hint";
+    sourceCompletedAt?: string;
+    sourceScanId?: string;
     url: string;
   }>;
   discoveryMode?: "full" | "fast";
@@ -699,15 +704,58 @@ export async function policySurfaceScanner(
         })()
         : undefined;
       void speculativeCommonPathRecoveryPromise?.catch(() => undefined);
+      const renderedDiscoveryPromise = recordPolicyTiming(
+        timingBreakdown,
+        "homepage-failed rendered discovery",
+        "Bounded browser-rendered policy link discovery after static homepage fetch failed.",
+        () => extractRenderedCandidatesBeforeSoftDeadline(input, moduleStartedAtMs, policyBrowserRuntime),
+      );
+      void renderedDiscoveryPromise.catch(() => undefined);
+      const governingPriorRecoveryPromise = speculativeCommonPathRecoveryPromise
+        ? speculativeCommonPathRecoveryPromise
+          .then((recovery) => hasRetainedGoverningPolicyIndexChild(recovery.observations)
+            ? { kind: "governing_prior_recovery" as const, recovery }
+            : new Promise<never>(() => undefined))
+          .catch(() => new Promise<never>(() => undefined))
+        : new Promise<never>(() => undefined);
       let renderedCandidates: PolicySurfaceCandidate[];
       try {
-        const renderedDiscovery = await recordPolicyTiming(
-          timingBreakdown,
-          "homepage-failed rendered discovery",
-          "Bounded browser-rendered policy link discovery after static homepage fetch failed.",
-          () => extractRenderedCandidatesBeforeSoftDeadline(input, moduleStartedAtMs, policyBrowserRuntime),
-        );
-        renderedCandidates = renderedDiscovery.candidates;
+        const firstUsefulRecovery = await Promise.race([
+          renderedDiscoveryPromise.then((renderedDiscovery) => ({
+            kind: "rendered_discovery" as const,
+            renderedDiscovery,
+          })),
+          governingPriorRecoveryPromise,
+        ]);
+        if (firstUsefulRecovery.kind === "governing_prior_recovery") {
+          appendPolicyResults(firstUsefulRecovery.recovery);
+          speculativeCommonPathNanoAbortController.abort();
+          await speculativeCommonPathNanoRankingPromise.catch(() => undefined);
+          recordInstantPolicyTiming(
+            timingBreakdown,
+            "homepage-failed rendered discovery superseded",
+            "A freshly validated prior policy seed retained a governing policy child before rendered homepage discovery completed.",
+          );
+          await boundedCleanup(policyBrowserRuntime.close(), 500);
+          await boundedCleanup(renderedDiscoveryPromise.catch(() => undefined), 500);
+          artifactRefs.push(await writePolicyCaptureDiagnostics({
+            input,
+            moduleStartedAtMs,
+            staticCandidateCount,
+            renderedCandidateCount,
+            observedCandidateCount,
+            commonPathFallbackUsed: true,
+            observations,
+            candidates: fallbackCandidates,
+            policyFetchDiagnostics,
+          }));
+          return {
+            moduleRun: completedPolicyModuleRun(),
+            policySurfaceObservations: observations,
+            artifactRefs,
+          };
+        }
+        renderedCandidates = firstUsefulRecovery.renderedDiscovery.candidates;
       } catch (error) {
         speculativeCommonPathNanoAbortController.abort();
         await speculativeCommonPathNanoRankingPromise.catch(() => undefined);
@@ -3307,6 +3355,19 @@ async function recordPolicyTiming<T>(
   }
 }
 
+function recordInstantPolicyTiming(
+  timingBreakdown: NonNullable<ScanModuleRun["timingBreakdown"]>,
+  label: string,
+  detail: string,
+): void {
+  timingBreakdown.push({
+    label,
+    detail,
+    durationMs: 0,
+    outcome: /superseded|skipp?ed/i.test(label) ? "skipped" : "completed",
+  });
+}
+
 async function mapWithConcurrency<TInput, TOutput>(
   inputs: TInput[],
   concurrency: number,
@@ -3981,6 +4042,12 @@ function policySurfaceSeedCandidatesFor(input: PolicySurfaceScannerInput): Polic
   const candidates: PolicySurfaceCandidate[] = [];
   const seen = new Set<string>();
   for (const [index, seed] of (input.policySurfaceSeeds ?? []).slice(0, 12).entries()) {
+    if (
+      seed.source === "prior_scan_hint" &&
+      (!seed.sourceCompletedAt || !isFreshPriorScanAccelerationSource(seed.sourceCompletedAt, input.scanStartedAtMs))
+    ) {
+      continue;
+    }
     const normalizedUrl = normalizeUrl(seed.url, input.normalizedUrl);
     if (!normalizedUrl || seen.has(normalizedUrl)) continue;
     seen.add(normalizedUrl);
@@ -4281,6 +4348,9 @@ function commonPathCandidateKey(value: string): string {
 
 function commonPathPriority(candidate: PolicySurfaceCandidate): number {
   const path = safeUrlPath(candidate.normalizedUrl);
+  if (candidate.seedSource === "prior_scan_hint") {
+    return -2;
+  }
   if (candidate.deterministicClassifierReasonCodes.includes("common_path_primary_locale_privacy_canonical_www")) {
     return -1;
   }

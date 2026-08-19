@@ -5,6 +5,15 @@
 > **Package manager:** pnpm 10.6.3 (workspace monorepo with Turbo)
 > **Node engines:** `>=20.0.0 <25.0.0` (Node 25 is unsupported and can fail DNS resolution on localhost)
 
+## Cost-change approval
+
+Any change that can increase recurring infrastructure cost, per-request or
+per-scan spend, paid-service usage, model/API usage, storage/retention cost, or
+reserved/provisioned capacity requires explicit product-owner approval before
+implementation or deployment. Present the expected cost, benefit, and lower-cost
+alternatives first. Do not infer approval from a latency, reliability, or scaling
+request. Cost-neutral diagnostics and optimizations may proceed normally.
+
 ---
 
 ## Project overview

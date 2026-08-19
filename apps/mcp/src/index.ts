@@ -9,6 +9,8 @@ import { getAllowedOrigins, getEnv } from "./env.js";
 import { McpHttpSessionStore } from "./session-store.js";
 import { McpReadThrottle, mcpReadCallsFromJsonRpc, mcpReadRateLimitGuidance } from "./read-throttle.js";
 import { anonymousMcpRequester, anonymousMcpRequesterFromHeaders, anonymousSessionBinding, authenticatedMcpCallerBinding } from "./requester-identity.js";
+import { createHostedMcpTelemetry } from "./telemetry.js";
+import type { McpTelemetrySurface } from "@website-signal-risk-scanner/shared";
 
 const OPENAI_APPS_CHALLENGE_TOKEN = "RVujVoFeQNvwzz4Upt8IPh_f2Xm3qf2Uqa_-tr3VTeQ";
 
@@ -262,6 +264,7 @@ function transportReason(res: ServerResponse): McpObservationReason | null {
 }
 
 async function handleMcp(req: IncomingMessage, res: ServerResponse, anonymous: boolean, light = false) {
+  const requestStartedAt = Date.now();
   if (!hostAllowed(req)) {
     json(res, 403, { error: "forbidden", error_description: "Host or Origin is not allowed." }, corsHeaders(req));
     if (anonymous) {
@@ -320,6 +323,22 @@ async function handleMcp(req: IncomingMessage, res: ServerResponse, anonymous: b
     const transport = new StreamableHTTPServerTransport({
       sessionIdGenerator: () => randomUUID()
     });
+    const surface: McpTelemetrySurface = light
+      ? "mcp_light"
+      : anonymous
+        ? "mcp_anonymous"
+        : "mcp_authenticated";
+    const telemetry = createHostedMcpTelemetry({
+      authenticatedActorBinding: authenticatedCallerHash,
+      baseUrl: env.CERTSCORE_BASE_URL,
+      clientInfoBody: parsedBody,
+      headers: req.headers,
+      requesterBinding: tokenHash,
+      requesterNetwork: anonymousRequester?.network,
+      secret: env.jwtSecret,
+      sessionId: () => transport.sessionId ?? null,
+      surface
+    });
     const server = createCertScoreMcpServer({
       apiKey: token,
       anonymousRequesterSecret: env.jwtSecret,
@@ -333,7 +352,8 @@ async function handleMcp(req: IncomingMessage, res: ServerResponse, anonymous: b
       toolProfile: light ? "light" : "full",
       exampleDomainDemoUrl: anonymous
         ? "https://ergoveritas.com/.well-known/certscore-canary/sentinels/broad-baseline.html"
-        : null
+        : null,
+      onToolInvocation: telemetry.observeToolInvocation
     });
     transport.onclose = () => {
       if (transport.sessionId) {
@@ -350,6 +370,7 @@ async function handleMcp(req: IncomingMessage, res: ServerResponse, anonymous: b
     if (transport.sessionId) {
       const sessionResult = sessions.set(transport.sessionId, {
         server,
+        telemetry,
         tokenHash,
         transport
       });
@@ -480,6 +501,12 @@ async function handleMcp(req: IncomingMessage, res: ServerResponse, anonymous: b
           }
         }
       }, { ...corsHeaders(req), "Retry-After": String(decision.retryAfterSeconds) });
+      session.telemetry?.observeTransportRateLimit({
+        body: parsedBody,
+        durationMs: Date.now() - requestStartedAt,
+        scanId: readCall.target.startsWith("scan:") ? readCall.target.slice("scan:".length) : null,
+        toolName: readCall.tool
+      });
       if (anonymous) {
         logAnonymousMcpObservation({
           light,

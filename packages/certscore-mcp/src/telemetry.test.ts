@@ -1,0 +1,123 @@
+import assert from "node:assert/strict";
+import test from "node:test";
+import { Client } from "@modelcontextprotocol/sdk/client/index.js";
+import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
+import { createCertScoreMcpServer, projectMcpToolInvocationObservation } from "./server.js";
+
+test("scan-site telemetry classifies new and reused scans without retaining a URL path", () => {
+  const created = projectMcpToolInvocationObservation({
+    args: { freshness: "refresh", scanFrom: "eu_de", url: "https://WWW.Example.com/private/path?token=secret" },
+    durationMs: 151.8,
+    result: { structuredContent: { executionMode: "new_scan", reused: false, scanId: "scan_new", scanFrom: "eu_de", status: "queued" } },
+    toolName: "certscore_scan_site",
+  });
+  const reused = projectMcpToolInvocationObservation({
+    args: { url: "example.com" },
+    durationMs: 8,
+    result: { structuredContent: { executionMode: "reused_scan", reused: true, scanId: "scan_reused", status: "completed" } },
+    toolName: "certscore_scan_site",
+  });
+
+  assert.deepEqual(created, {
+    durationMs: 152,
+    errorCode: null,
+    freshness: "refresh",
+    outcome: "success",
+    quotaOutcome: "allowed",
+    scanDecision: "new",
+    scanFrom: "eu_de",
+    scanId: "scan_new",
+    scanStatus: "queued",
+    targetHostname: "www.example.com",
+    toolName: "certscore_scan_site",
+    transportOutcome: "mcp_result",
+  });
+  assert.equal(reused.scanDecision, "reused");
+  assert.equal(JSON.stringify(created).includes("private/path"), false);
+  assert.equal(JSON.stringify(created).includes("secret"), false);
+});
+
+test("status and bundle telemetry retain only stable scan metadata", () => {
+  for (const toolName of ["certscore_get_scan_status", "certscore_get_scan_bundle"]) {
+    const observation = projectMcpToolInvocationObservation({
+      args: { detail: "full", scanId: "scan_123" },
+      durationMs: 92,
+      result: { structuredContent: { scanId: "scan_123", status: "completed" } },
+      toolName,
+    });
+    assert.equal(observation.toolName, toolName);
+    assert.equal(observation.scanId, "scan_123");
+    assert.equal(observation.scanDecision, "not_applicable");
+    assert.equal(observation.targetHostname, null);
+  }
+});
+
+test("full-profile domain tools contribute a normalized requested hostname", () => {
+  for (const toolName of [
+    "certscore_get_latest_domain_scan",
+    "certscore_get_latest_domain_pre_consent_cookies_trackers",
+  ]) {
+    const observation = projectMcpToolInvocationObservation({
+      args: { domain: "HTTPS://News.Example.com/private/path?secret=value" },
+      durationMs: 12,
+      result: { structuredContent: { status: "completed" } },
+      toolName,
+    });
+    assert.equal(observation.targetHostname, "news.example.com");
+    assert.equal(JSON.stringify(observation).includes("private/path"), false);
+    assert.equal(JSON.stringify(observation).includes("secret=value"), false);
+  }
+});
+
+test("failed and rate-limited tool results produce bounded outcomes", () => {
+  const failed = projectMcpToolInvocationObservation({
+    args: { scanId: "scan_123" },
+    durationMs: 14,
+    result: { content: [{ type: "text", text: JSON.stringify({ error: { code: "not_found", message: "sensitive detail" } }) }], isError: true },
+    toolName: "certscore_get_scan_status",
+  });
+  const limited = projectMcpToolInvocationObservation({
+    args: { url: "https://example.com" },
+    durationMs: 9,
+    result: { content: [{ type: "text", text: JSON.stringify({ error: { code: "rate_limited" } }) }], isError: true },
+    toolName: "certscore_scan_site",
+  });
+  assert.equal(failed.outcome, "error");
+  assert.equal(failed.errorCode, "not_found");
+  assert.equal(JSON.stringify(failed).includes("sensitive detail"), false);
+  assert.equal(limited.outcome, "rate_limited");
+  assert.equal(limited.quotaOutcome, "rate_limited");
+  assert.equal(limited.scanDecision, "unavailable");
+});
+
+test("telemetry observer failure never changes an MCP tool result", async () => {
+  const previousFetch = globalThis.fetch;
+  globalThis.fetch = (async () => new Response(JSON.stringify({
+    type: "certscore_scan_job",
+    status: "queued",
+    jobId: "job_123",
+    scanId: "scan_123",
+    executionMode: "new_scan",
+    reused: false,
+  }), { status: 202, headers: { "content-type": "application/json" } })) as typeof fetch;
+  const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
+  const server = createCertScoreMcpServer({
+    onToolInvocation: () => { throw new Error("storage unavailable"); },
+    toolProfile: "light",
+  });
+  const client = new Client({ name: "telemetry-failure-test", version: "1.0.0" });
+  await Promise.all([server.connect(serverTransport), client.connect(clientTransport)]);
+  try {
+    const result = await client.callTool({
+      name: "certscore_scan_site",
+      arguments: { url: "https://example.com", waitForCompletion: false },
+    });
+    assert.equal(result.isError, undefined);
+    assert.equal((result.structuredContent as Record<string, unknown>).scanId, "scan_123");
+    await new Promise((resolve) => setImmediate(resolve));
+  } finally {
+    globalThis.fetch = previousFetch;
+    await client.close();
+    await server.close();
+  }
+});

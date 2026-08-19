@@ -497,9 +497,12 @@ test("pre-consent runtime scanner retains first-layer accept and reject controls
       server.urlFor("consent-simple-accept-reject"),
       path.join(tempRoot, "consent-simple-accept-reject"),
       "fast",
-      "selective",
+      "always",
+      "viewport_first",
+      12_000,
     );
     const observation = bundle.consentUiObservations[0];
+    const timingLabels = bundle.modulesRun[0]?.timingBreakdown?.map((entry) => entry.label) ?? [];
 
     assert.equal(observation?.likelyPresent, true);
     assert.equal(observation?.layerInspected, "first_layer");
@@ -524,6 +527,13 @@ test("pre-consent runtime scanner retains first-layer accept and reject controls
       observation?.controls.some((control) => control.actionType === "reject_all"),
       true,
       "scanner should classify the first-layer reject control",
+    );
+    assert.equal(timingLabels.includes("consent geometry page access"), true);
+    assert.equal(timingLabels.includes("consent geometry DOM capture"), true);
+    assert.equal(
+      timingLabels.includes("late consent control screenshot skipped"),
+      true,
+      "a stable screenshot/inventory/geometry packet should suppress the late duplicate screenshot",
     );
   } finally {
     await server.close();
@@ -1586,14 +1596,21 @@ test("pre-consent runtime scanner recaptures late first-layer controls without i
       "scanner should use a bounded typed recapture path",
     );
     assert.equal(
-      bundle.screenshots.some((screenshot) => screenshot.artifactId === "screenshot_pre_consent_cmp_controls"),
+      bundle.screenshots.some((screenshot) =>
+        screenshot.artifactId === "screenshot_pre_consent_cmp_controls" ||
+        screenshot.artifactId === "screenshot_pre_consent_geometry_proof"
+      ),
       true,
-      "scanner should retain a screenshot synchronized to late first-layer controls",
+      "scanner should retain representative same-session visual proof for late first-layer controls",
     );
     assert.equal(
-      timingLabels.includes("late consent control screenshot"),
+      timingLabels.includes("late consent control screenshot") ||
+        (
+          timingLabels.includes("consent proof stability gate") &&
+          timingLabels.includes("late consent control screenshot skipped")
+        ),
       true,
-      "scanner should record the synchronized late-control screenshot",
+      "scanner should record either a synchronized late capture or verified stable-proof reuse",
     );
   } finally {
     await server.close();
@@ -1749,6 +1766,11 @@ test("pre-consent runtime scanner protects a settled screenshot paired with dela
     );
     assert.equal(timingLabels.includes("protected settled consent screenshot"), true);
     assert.equal(timingLabels.includes("paired settled-frame consent inventory"), true);
+    assert.equal(
+      timingLabels.includes("supplemental full-page screenshot skipped"),
+      true,
+      "a completed settled frame plus typed first-layer inventory should suppress the redundant full-page capture",
+    );
     assert.ok(
       timingLabels.indexOf("protected settled consent screenshot") < timingLabels.indexOf("page evidence capture"),
       "the representative screenshot must run before consolidated page extraction",
@@ -2236,6 +2258,11 @@ test("pre-consent runtime scanner performs a structured read after supplemental 
       timingLabels.includes("supplemental full-page screenshot"),
       true,
       "fixture should exercise the same supplemental full-page capture path used by local scans",
+    );
+    assert.equal(
+      timingLabels.includes("supplemental full-page viewport diagnostic"),
+      true,
+      "supplemental capture should retain before/after viewport diagnostics and restoration status",
     );
     assert.equal(
       timingLabels.includes("consent UI supplemental screenshot recapture"),

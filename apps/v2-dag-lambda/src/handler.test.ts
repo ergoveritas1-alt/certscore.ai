@@ -1,7 +1,9 @@
 import assert from "node:assert/strict";
 import { createRequire } from "node:module";
 import { createHash } from "node:crypto";
-import { mkdtemp, readFile, writeFile } from "node:fs/promises";
+import { once } from "node:events";
+import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { createServer as createHttpServer } from "node:http";
 import os from "node:os";
 import path from "node:path";
 import test from "node:test";
@@ -32,6 +34,7 @@ import {
   buildLocalV2DagLambdaScanTuning,
   egressIpMatchesExpected,
   egressRegionMatchesExpected,
+  fetchEgressProbeThroughProxy,
   handler,
   invokeLocalV2DagLambdaWorkers,
   mergeLocalV2DagLambdaEvidenceLaneBundles,
@@ -41,7 +44,8 @@ import {
   sendLocalV2DagLambdaResultMessage,
   serializeCanonicalEvidenceBundle,
   uploadAuxiliaryArtifactFiles,
-  uploadArtifactFiles
+  uploadArtifactFiles,
+  writeEgressPreflightArtifact,
 } from "./handler";
 
 test("canonical evidence bundle transport is compact without changing evidence", () => {
@@ -463,12 +467,16 @@ test("handler preserves the typed persisted-scan result purpose for UUID-backed 
 });
 
 test("handler bounds and validates policy surface seeds", () => {
+  const source = {
+    sourceCompletedAt: "2026-08-18T00:00:00.000Z",
+    sourceScanId: "prior-scan-1",
+  };
   const parsed = parseLocalV2DagLambdaDispatchPayload(validPayload({
     policySurfaceSeeds: [
-      { confidence: 4, hintType: "privacy_policy", source: "prior_scan_hint", url: "https://example.com/legal/privacy#section" },
-      { hintType: "unrelated", source: "prior_scan_hint", url: "https://example.com/about" },
-      { hintType: "cookie_policy", source: "unknown", url: "https://example.com/cookies" },
-      { hintType: "privacy_policy", source: "prior_scan_hint", url: "javascript:alert(1)" }
+      { confidence: 4, hintType: "privacy_policy", source: "prior_scan_hint", ...source, url: "https://example.com/legal/privacy#section" },
+      { hintType: "unrelated", source: "prior_scan_hint", ...source, url: "https://example.com/about" },
+      { hintType: "cookie_policy", source: "unknown", ...source, url: "https://example.com/cookies" },
+      { hintType: "privacy_policy", source: "prior_scan_hint", ...source, url: "javascript:alert(1)" }
     ]
   }));
 
@@ -476,8 +484,60 @@ test("handler bounds and validates policy surface seeds", () => {
     confidence: 1,
     hintType: "privacy_policy",
     source: "prior_scan_hint",
+    sourceCompletedAt: source.sourceCompletedAt,
+    sourceScanId: source.sourceScanId,
     url: "https://example.com/legal/privacy"
   }]);
+});
+
+test("lightweight egress probe enforces one hard total deadline", async () => {
+  const proxy = createHttpServer();
+  let tunnelSocket: { destroy(): void } | undefined;
+  proxy.on("connect", (_request, socket) => {
+    tunnelSocket = socket;
+    socket.write("HTTP/1.1 200 Connection Established\r\n\r\n");
+  });
+  proxy.listen(0, "127.0.0.1");
+  await once(proxy, "listening");
+  const address = proxy.address();
+  assert.ok(address && typeof address === "object");
+  const startedAt = Date.now();
+  try {
+    await assert.rejects(
+      fetchEgressProbeThroughProxy(`http://127.0.0.1:${address.port}`, 100),
+      /exceeded 100ms total deadline/,
+    );
+    assert.ok(Date.now() - startedAt < 1_000);
+  } finally {
+    tunnelSocket?.destroy();
+    await new Promise<void>((resolve, reject) => proxy.close((error) => error ? reject(error) : resolve()));
+  }
+});
+
+test("browser-fallback handoff preserves the failed lightweight egress attempt", async () => {
+  const artifactRoot = await mkdtemp(path.join(os.tmpdir(), "certscore-egress-attempts-"));
+  const priorProxy = process.env.CERTSCORE_V2_DAG_LAMBDA_PROXY_SERVER;
+  process.env.CERTSCORE_V2_DAG_LAMBDA_PROXY_SERVER = "ftp://127.0.0.1:9";
+  try {
+    assert.equal(await writeEgressPreflightArtifact(artifactRoot, { allowBrowserFallback: false }), false);
+    assert.equal(await writeEgressPreflightArtifact(artifactRoot, {
+      allowBrowserFallback: false,
+      skipLightweightProbe: true,
+    }), false);
+    const artifact = JSON.parse(await readFile(path.join(artifactRoot, "EgressPreflight.json"), "utf8")) as {
+      attempts?: Array<{ error?: string; mode?: string; probeStatus?: string }>;
+    };
+    assert.deepEqual(artifact.attempts?.map((attempt) => attempt.mode), ["lightweight_proxy"]);
+    assert.equal(artifact.attempts?.[0]?.probeStatus, "failed");
+    assert.match(artifact.attempts?.[0]?.error ?? "", /Unsupported lightweight egress proxy protocol/);
+  } finally {
+    if (priorProxy === undefined) {
+      delete process.env.CERTSCORE_V2_DAG_LAMBDA_PROXY_SERVER;
+    } else {
+      process.env.CERTSCORE_V2_DAG_LAMBDA_PROXY_SERVER = priorProxy;
+    }
+    await rm(artifactRoot, { force: true, recursive: true });
+  }
 });
 
 test("handler accepts the approved regional Lambda dispatch targets", () => {

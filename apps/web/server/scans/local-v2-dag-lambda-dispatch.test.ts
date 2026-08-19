@@ -37,6 +37,10 @@ function buildLambdaScanConfig(options: {
 }
 
 test("builds a local-only v2 DAG Lambda dispatch payload for EU-IR SQS handoff", () => {
+  const canonicalSource = {
+    sourceCompletedAt: "1970-01-01T00:00:00.000Z",
+    sourceScanId: "canonical-legal-surface-hints-v1",
+  };
   const payload = buildLocalV2DagLambdaDispatchPayload({
     localCallbackUrl: null,
     scanConfig: buildLambdaScanConfig(),
@@ -57,14 +61,14 @@ test("builds a local-only v2 DAG Lambda dispatch payload for EU-IR SQS handoff",
     localCallbackUrl: null,
     orchestrationMode: "single",
     policySurfaceSeeds: [
-      { confidence: 0.62, hintType: "privacy_policy", source: "canonical_legal_surface_hint", url: "https://example.com/privacy" },
-      { confidence: 0.68, hintType: "privacy_policy", source: "canonical_legal_surface_hint", url: "https://example.com/privacy-policy" },
-      { confidence: 0.66, hintType: "privacy_policy", source: "canonical_legal_surface_hint", url: "https://example.com/privacy-notice" },
-      { confidence: 0.58, hintType: "privacy_policy", source: "canonical_legal_surface_hint", url: "https://example.com/legal/privacy" },
-      { confidence: 0.62, hintType: "cookie_policy", source: "canonical_legal_surface_hint", url: "https://example.com/cookies" },
-      { confidence: 0.66, hintType: "cookie_policy", source: "canonical_legal_surface_hint", url: "https://example.com/cookie-policy" },
-      { confidence: 0.54, hintType: "privacy_choice", source: "canonical_legal_surface_hint", url: "https://example.com/privacy/choices" },
-      { confidence: 0.54, hintType: "privacy_choice", source: "canonical_legal_surface_hint", url: "https://example.com/privacy-rights" }
+      { confidence: 0.62, hintType: "privacy_policy", source: "canonical_legal_surface_hint", ...canonicalSource, url: "https://example.com/privacy" },
+      { confidence: 0.68, hintType: "privacy_policy", source: "canonical_legal_surface_hint", ...canonicalSource, url: "https://example.com/privacy-policy" },
+      { confidence: 0.66, hintType: "privacy_policy", source: "canonical_legal_surface_hint", ...canonicalSource, url: "https://example.com/privacy-notice" },
+      { confidence: 0.58, hintType: "privacy_policy", source: "canonical_legal_surface_hint", ...canonicalSource, url: "https://example.com/legal/privacy" },
+      { confidence: 0.62, hintType: "cookie_policy", source: "canonical_legal_surface_hint", ...canonicalSource, url: "https://example.com/cookies" },
+      { confidence: 0.66, hintType: "cookie_policy", source: "canonical_legal_surface_hint", ...canonicalSource, url: "https://example.com/cookie-policy" },
+      { confidence: 0.54, hintType: "privacy_choice", source: "canonical_legal_surface_hint", ...canonicalSource, url: "https://example.com/privacy/choices" },
+      { confidence: 0.54, hintType: "privacy_choice", source: "canonical_legal_surface_hint", ...canonicalSource, url: "https://example.com/privacy-rights" }
     ],
     processor: LOCAL_V2_DAG_SCAN_PROCESSOR,
     productionFindingIntegration: false,
@@ -81,6 +85,7 @@ test("builds a local-only v2 DAG Lambda dispatch payload for EU-IR SQS handoff",
 });
 
 test("carries bounded prior policy URLs into Lambda as acceleration hints", () => {
+  const sourceCompletedAt = new Date(Date.now() - 24 * 60 * 60 * 1_000).toISOString();
   const config = buildLambdaScanConfig();
   config.execution = {
     ...config.execution,
@@ -89,14 +94,14 @@ test("carries bounded prior policy URLs into Lambda as acceleration hints", () =
         confidence: 0.91,
         hintType: "privacy_policy",
         source: "prior_scan_hint",
-        sourceCompletedAt: "2026-07-16T00:00:00.000Z",
+        sourceCompletedAt,
         sourceScanId: "prior-1",
         url: "https://legal.example.net/company/privacy"
       },
       {
         hintType: "unrelated_page",
         source: "prior_scan_hint",
-        sourceCompletedAt: "2026-07-16T00:00:00.000Z",
+        sourceCompletedAt,
         sourceScanId: "prior-1",
         url: "https://example.com/about"
       }
@@ -113,8 +118,33 @@ test("carries bounded prior policy URLs into Lambda as acceleration hints", () =
     confidence: 0.91,
     hintType: "privacy_policy",
     source: "prior_scan_hint",
+    sourceCompletedAt,
+    sourceScanId: "prior-1",
     url: "https://legal.example.net/company/privacy"
   }]);
+});
+
+test("drops stale prior policy URLs before Lambda dispatch", () => {
+  const config = buildLambdaScanConfig();
+  config.execution = {
+    ...config.execution,
+    crawlSeedHints: [{
+      confidence: 0.95,
+      hintType: "privacy_policy",
+      source: "prior_scan_hint",
+      sourceCompletedAt: new Date(Date.now() - 31 * 24 * 60 * 60 * 1_000).toISOString(),
+      sourceScanId: "stale-prior",
+      url: "https://legal.example.net/stale/privacy",
+    }],
+  };
+
+  const payload = buildLocalV2DagLambdaDispatchPayload({
+    localCallbackUrl: null,
+    scanConfig: config,
+    scanId: "scan-stale-policy-seed",
+  });
+
+  assert.equal(payload.policySurfaceSeeds, undefined);
 });
 
 test("builds local Lambda dispatch payload with bounded debug overrides", () => {

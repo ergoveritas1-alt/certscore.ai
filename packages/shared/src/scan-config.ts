@@ -1,5 +1,18 @@
 import type { RequestedGeoTarget, ScanFrom } from "./scan-location";
 
+export const PRIOR_SCAN_ACCELERATION_MAX_AGE_DAYS = 30;
+export const PRIOR_SCAN_ACCELERATION_MAX_AGE_MS = PRIOR_SCAN_ACCELERATION_MAX_AGE_DAYS * 24 * 60 * 60 * 1_000;
+
+export function isFreshPriorScanAccelerationSource(
+  sourceCompletedAt: string,
+  scanStartedAtMs: number,
+): boolean {
+  const completedAtMs = Date.parse(sourceCompletedAt);
+  if (!Number.isFinite(completedAtMs) || !Number.isFinite(scanStartedAtMs)) return false;
+  const ageMs = scanStartedAtMs - completedAtMs;
+  return ageMs >= 0 && ageMs <= PRIOR_SCAN_ACCELERATION_MAX_AGE_MS;
+}
+
 export type SharedCrawlerIdentityConfig = {
   productToken?: string;
   publicUrl?: string;

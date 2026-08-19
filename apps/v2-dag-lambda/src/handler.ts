@@ -2,11 +2,12 @@ import { InvokeCommand, LambdaClient, type InvokeCommandOutput } from "@aws-sdk/
 import { GetObjectCommand, PutObjectCommand, S3Client, type GetObjectCommandOutput, type PutObjectCommandOutput } from "@aws-sdk/client-s3";
 import { SQSClient, SendMessageCommand, type SendMessageCommandOutput } from "@aws-sdk/client-sqs";
 import { createHash } from "node:crypto";
-import { request as httpRequest } from "node:http";
+import { request as httpRequest, type ClientRequest } from "node:http";
 import { request as httpsRequest } from "node:https";
+import type { Duplex } from "node:stream";
 import path from "node:path";
 import { mkdir, readdir, readFile, writeFile } from "node:fs/promises";
-import { connect as tlsConnect } from "node:tls";
+import { connect as tlsConnect, type TLSSocket } from "node:tls";
 import { chromium } from "playwright";
 import {
   VERIFIED_POLICY_EVIDENCE_PACKET_VERSION,
@@ -69,6 +70,7 @@ const LOCAL_V2_DAG_LAMBDA_POST_FALLBACK_RESERVE_MS = 4_000;
 const LOCAL_V2_DAG_LAMBDA_CONSENT_PROOF_FALLBACK_BUDGET_MS = 6_000;
 const LOCAL_V2_DAG_LAMBDA_AWS_SEND_ATTEMPT_TIMEOUT_MS = 4_000;
 const LOCAL_V2_DAG_LAMBDA_AWS_SEND_MAX_ATTEMPTS = 3;
+const LOCAL_V2_DAG_LAMBDA_EGRESS_LIGHTWEIGHT_TOTAL_TIMEOUT_MS = 5_000;
 
 export type LocalV2DagLambdaDispatchPayload = {
   artifactOnly: true;
@@ -86,6 +88,8 @@ export type LocalV2DagLambdaDispatchPayload = {
     confidence?: number;
     hintType: string;
     source: "prior_scan_hint" | "canonical_legal_surface_hint";
+    sourceCompletedAt: string;
+    sourceScanId: string;
     url: string;
   }>;
   coordinatorPlanSummary?: LocalV2DagLambdaCoordinatorPlanSummary;
@@ -620,11 +624,16 @@ function parsePolicySurfaceSeeds(value: unknown): NonNullable<LocalV2DagLambdaDi
     const record = asRecord(item);
     const hintType = compactString(record.hintType);
     const source = record.source;
+    const sourceCompletedAt = compactString(record.sourceCompletedAt);
+    const sourceScanId = compactString(record.sourceScanId);
     const rawUrl = compactString(record.url);
     if (
       !hintType ||
       !["privacy_policy", "cookie_policy", "privacy_choice", "consent_preferences"].includes(hintType) ||
       (source !== "prior_scan_hint" && source !== "canonical_legal_surface_hint") ||
+      !sourceCompletedAt ||
+      !Number.isFinite(Date.parse(sourceCompletedAt)) ||
+      !sourceScanId ||
       !rawUrl
     ) continue;
     try {
@@ -639,6 +648,8 @@ function parsePolicySurfaceSeeds(value: unknown): NonNullable<LocalV2DagLambdaDi
             : {}),
           hintType,
           source,
+          sourceCompletedAt: new Date(sourceCompletedAt).toISOString(),
+          sourceScanId: sourceScanId.slice(0, 160),
           url,
         });
       }
@@ -1166,12 +1177,31 @@ export function serializeCanonicalEvidenceBundle(value: unknown) {
   return JSON.stringify(value);
 }
 
-async function writeEgressPreflightArtifact(
+type EgressProbeObservation = {
+  asn?: string;
+  country?: string;
+  ip?: string;
+  org?: string;
+  region?: string;
+  timezone?: string;
+};
+
+type EgressProbeAttempt = {
+  completedAt: string;
+  durationMs: number;
+  error: string | null;
+  mode: "lightweight_proxy" | "browser_fallback";
+  observed: EgressProbeObservation | null;
+  probeStatus: "available" | "failed" | "skipped";
+  provider: string | null;
+  startedAt: string;
+};
+
+export async function writeEgressPreflightArtifact(
   artifactRoot: string,
   options: { allowBrowserFallback: boolean; skipLightweightProbe?: boolean },
 ): Promise<boolean> {
   const startedAt = Date.now();
-  const startedAtIso = new Date(startedAt).toISOString();
   const egressLabel = firstTrimmedRuntimeEnv(process.env, [
     "SCAN_EGRESS_LABEL",
     "CERTSCORE_V2_DAG_LAMBDA_EGRESS_LABEL",
@@ -1200,16 +1230,12 @@ async function writeEgressPreflightArtifact(
     proxyModeEnabled: proxyEnabled,
     probeStatus: "skipped" as "available" | "failed" | "skipped",
     provider: null as string | null,
-    observed: null as null | {
-      asn?: string;
-      country?: string;
-      ip?: string;
-      org?: string;
-      region?: string;
-      timezone?: string;
-    },
-    startedAt: startedAtIso,
-    error: null as null | string
+    observed: null as EgressProbeObservation | null,
+    startedAt: new Date(startedAt).toISOString(),
+    error: null as null | string,
+    attempts: options.skipLightweightProbe
+      ? await readPriorEgressProbeAttempts(artifactRoot)
+      : [] as EgressProbeAttempt[],
   };
 
   if (!proxyEnabled) {
@@ -1225,28 +1251,36 @@ async function writeEgressPreflightArtifact(
   }
 
   if (!options.skipLightweightProbe && proxyServer) {
+    const attemptStartedAt = Date.now();
     try {
-      const response = await fetchEgressProbeThroughProxy(proxyServer);
+      const response = await fetchEgressProbeThroughProxy(
+        proxyServer,
+        LOCAL_V2_DAG_LAMBDA_EGRESS_LIGHTWEIGHT_TOTAL_TIMEOUT_MS,
+      );
       const parsed = parseEgressProbeResponse(response.text);
       const regionMatches = egressRegionMatchesExpected(parsed?.region, expectedEgressRegion);
       const ipMatches = egressIpMatchesExpected(parsed?.ip, expectedEgressPublicIpHash);
       artifact.provider = "ipinfo.io";
       artifact.probeStatus = response.status >= 200 && response.status < 300 && parsed && regionMatches && ipMatches ? "available" : "failed";
       artifact.observed = parsed;
-      if (artifact.probeStatus === "available") {
-        const completedAt = Date.now();
-        artifact.completedAt = new Date(completedAt).toISOString();
-        artifact.durationMs = completedAt - startedAt;
-        await writeJson(path.join(artifactRoot, "EgressPreflight.json"), artifact);
-        return true;
-      }
-      artifact.error = !ipMatches && expectedEgressPublicIpHash
-        ? "Observed egress IP did not match the configured regional proxy public-IP hash."
-        : !regionMatches && expectedEgressRegion
-        ? `Observed egress region ${parsed?.region ?? "unknown"} did not match expected region ${expectedEgressRegion}.`
-        : `Unexpected lightweight egress preflight response: HTTP ${response.status}`;
+      artifact.error = artifact.probeStatus === "available"
+        ? null
+        : !ipMatches && expectedEgressPublicIpHash
+          ? "Observed egress IP did not match the configured regional proxy public-IP hash."
+          : !regionMatches && expectedEgressRegion
+            ? `Observed egress region ${parsed?.region ?? "unknown"} did not match expected region ${expectedEgressRegion}.`
+            : `Unexpected lightweight egress preflight response: HTTP ${response.status}`;
     } catch (error) {
+      artifact.probeStatus = "failed";
       artifact.error = error instanceof Error ? error.message.slice(0, 240) : "unknown_lightweight_egress_preflight_error";
+    }
+    artifact.attempts.push(egressProbeAttempt(artifact, "lightweight_proxy", attemptStartedAt, Date.now()));
+    if (artifact.probeStatus === "available") {
+      const completedAt = Date.now();
+      artifact.completedAt = new Date(completedAt).toISOString();
+      artifact.durationMs = completedAt - startedAt;
+      await writeJson(path.join(artifactRoot, "EgressPreflight.json"), artifact);
+      return true;
     }
   }
 
@@ -1259,6 +1293,7 @@ async function writeEgressPreflightArtifact(
   }
 
   let browser;
+  const browserAttemptStartedAt = Date.now();
   try {
     browser = await chromium.launch(chromiumLaunchOptions({ headless: true }));
     const context = await browser.newContext(chromiumContextOptions());
@@ -1274,16 +1309,13 @@ async function writeEgressPreflightArtifact(
     artifact.provider = "ipinfo.io";
     artifact.probeStatus = response && response.ok() && parsed && regionMatches && ipMatches ? "available" : "failed";
     artifact.observed = parsed;
-    if (artifact.probeStatus === "available") {
-      artifact.error = null;
-    }
-    if (!ipMatches && expectedEgressPublicIpHash) {
-      artifact.error = "Observed egress IP did not match the configured regional proxy public-IP hash.";
-    } else if (!regionMatches && expectedEgressRegion) {
-      artifact.error = `Observed egress region ${parsed?.region ?? "unknown"} did not match expected region ${expectedEgressRegion}.`;
-    } else if (!parsed) {
-      artifact.error = `Unexpected egress preflight response: HTTP ${response?.status() ?? 0}`;
-    }
+    artifact.error = artifact.probeStatus === "available"
+      ? null
+      : !ipMatches && expectedEgressPublicIpHash
+        ? "Observed egress IP did not match the configured regional proxy public-IP hash."
+        : !regionMatches && expectedEgressRegion
+          ? `Observed egress region ${parsed?.region ?? "unknown"} did not match expected region ${expectedEgressRegion}.`
+          : `Unexpected egress preflight response: HTTP ${response?.status() ?? 0}`;
     await context.close().catch(() => undefined);
   } catch (error) {
     artifact.probeStatus = "failed";
@@ -1291,11 +1323,46 @@ async function writeEgressPreflightArtifact(
   } finally {
     await browser?.close().catch(() => undefined);
     const completedAt = Date.now();
+    artifact.attempts.push(egressProbeAttempt(artifact, "browser_fallback", browserAttemptStartedAt, completedAt));
     artifact.completedAt = new Date(completedAt).toISOString();
     artifact.durationMs = completedAt - startedAt;
     await writeJson(path.join(artifactRoot, "EgressPreflight.json"), artifact);
   }
   return artifact.probeStatus === "available";
+}
+
+function egressProbeAttempt(
+  artifact: {
+    error: string | null;
+    observed: EgressProbeObservation | null;
+    probeStatus: "available" | "failed" | "skipped";
+    provider: string | null;
+  },
+  mode: EgressProbeAttempt["mode"],
+  startedAt: number,
+  completedAt: number,
+): EgressProbeAttempt {
+  return {
+    completedAt: new Date(completedAt).toISOString(),
+    durationMs: Math.max(0, completedAt - startedAt),
+    error: artifact.error,
+    mode,
+    observed: artifact.observed,
+    probeStatus: artifact.probeStatus,
+    provider: artifact.provider,
+    startedAt: new Date(startedAt).toISOString(),
+  };
+}
+
+async function readPriorEgressProbeAttempts(artifactRoot: string): Promise<EgressProbeAttempt[]> {
+  try {
+    const parsed = JSON.parse(await readFile(path.join(artifactRoot, "EgressPreflight.json"), "utf8")) as {
+      attempts?: EgressProbeAttempt[];
+    };
+    return Array.isArray(parsed.attempts) ? parsed.attempts.slice(0, 4) : [];
+  } catch {
+    return [];
+  }
 }
 
 export function egressRegionMatchesExpected(observedRegion: string | undefined, expectedRegion: string | undefined) {
@@ -1339,8 +1406,9 @@ function parseEgressProbeResponse(text: string) {
   }
 }
 
-async function fetchEgressProbeThroughProxy(
+export async function fetchEgressProbeThroughProxy(
   proxyServer: string,
+  totalTimeoutMs = LOCAL_V2_DAG_LAMBDA_EGRESS_LIGHTWEIGHT_TOTAL_TIMEOUT_MS,
 ): Promise<{ status: number; text: string }> {
   const proxyUrl = new URL(proxyServer.includes("://") ? proxyServer : `http://${proxyServer}`);
   if (proxyUrl.protocol !== "http:" && proxyUrl.protocol !== "https:") {
@@ -1360,7 +1428,34 @@ async function fetchEgressProbeThroughProxy(
   const connectRequest = proxyUrl.protocol === "https:" ? httpsRequest : httpRequest;
 
   return new Promise((resolve, reject) => {
-    const request = connectRequest({
+    let connectRequestHandle: ClientRequest | undefined;
+    let probeRequest: ClientRequest | undefined;
+    let secureSocket: TLSSocket | undefined;
+    let tunnelSocket: Duplex | undefined;
+    let settled = false;
+    let totalTimer: ReturnType<typeof setTimeout> | undefined;
+    const finish = (result: { status: number; text: string }) => {
+      if (settled) return;
+      settled = true;
+      if (totalTimer) clearTimeout(totalTimer);
+      resolve(result);
+    };
+    const fail = (error: unknown) => {
+      if (settled) return;
+      settled = true;
+      if (totalTimer) clearTimeout(totalTimer);
+      probeRequest?.destroy();
+      secureSocket?.destroy();
+      tunnelSocket?.destroy();
+      connectRequestHandle?.destroy();
+      reject(error instanceof Error ? error : new Error(String(error)));
+    };
+    totalTimer = setTimeout(
+      () => fail(new Error(`Lightweight egress proxy probe exceeded ${totalTimeoutMs}ms total deadline`)),
+      totalTimeoutMs,
+    );
+
+    connectRequestHandle = connectRequest({
       hostname: proxyUrl.hostname,
       method: "CONNECT",
       path: "ipinfo.io:443",
@@ -1370,60 +1465,60 @@ async function fetchEgressProbeThroughProxy(
         ...(proxyAuthorization ? { "Proxy-Authorization": proxyAuthorization } : {}),
       },
     });
-    const fail = (error: unknown) => {
-      request.destroy();
-      reject(error instanceof Error ? error : new Error(String(error)));
-    };
-    request.setTimeout(5_000, () => fail(new Error("Lightweight egress proxy CONNECT timed out")));
-    request.once("error", fail);
-    request.once("connect", (response, socket, head) => {
-      request.removeListener("error", fail);
+    connectRequestHandle.setTimeout(totalTimeoutMs, () => fail(new Error("Lightweight egress proxy CONNECT timed out")));
+    connectRequestHandle.once("error", fail);
+    connectRequestHandle.once("connect", (response, socket, head) => {
+      tunnelSocket = socket;
       if (response.statusCode !== 200) {
-        socket.destroy();
-        reject(new Error(`Lightweight egress proxy CONNECT failed: HTTP ${response.statusCode ?? 0}`));
+        fail(new Error(`Lightweight egress proxy CONNECT failed: HTTP ${response.statusCode ?? 0}`));
         return;
       }
       if (head.length > 0) {
         socket.unshift(head);
       }
-      const secureSocket = tlsConnect({
+      secureSocket = tlsConnect({
         rejectUnauthorized: true,
         servername: "ipinfo.io",
         socket,
       });
-      const probeRequest = httpsRequest({
-        agent: false,
-        createConnection: () => secureSocket,
-        headers: {
-          Accept: "application/json",
-          "User-Agent": "CertScore-Egress-Preflight/1.0",
-        },
-        hostname: "ipinfo.io",
-        method: "GET",
-        path: "/json",
-        port: 443,
-      }, (probeResponse) => {
-        const chunks: Buffer[] = [];
-        let sizeBytes = 0;
-        probeResponse.on("data", (chunk: Buffer | string) => {
-          const buffer = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk);
-          sizeBytes += buffer.length;
-          if (sizeBytes <= 64 * 1024) {
-            chunks.push(buffer);
-          } else {
-            probeRequest.destroy(new Error("Lightweight egress response exceeded 64 KiB"));
-          }
+      secureSocket.once("error", fail);
+      secureSocket.once("secureConnect", () => {
+        if (settled || !secureSocket) return;
+        probeRequest = httpsRequest({
+          agent: false,
+          createConnection: () => secureSocket!,
+          headers: {
+            Accept: "application/json",
+            "User-Agent": "CertScore-Egress-Preflight/1.0",
+          },
+          hostname: "ipinfo.io",
+          method: "GET",
+          path: "/json",
+          port: 443,
+        }, (probeResponse) => {
+          const chunks: Buffer[] = [];
+          let sizeBytes = 0;
+          probeResponse.once("error", fail);
+          probeResponse.on("data", (chunk: Buffer | string) => {
+            const buffer = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk);
+            sizeBytes += buffer.length;
+            if (sizeBytes <= 64 * 1024) {
+              chunks.push(buffer);
+            } else {
+              fail(new Error("Lightweight egress response exceeded 64 KiB"));
+            }
+          });
+          probeResponse.once("end", () => finish({
+            status: probeResponse.statusCode ?? 0,
+            text: Buffer.concat(chunks).toString("utf8"),
+          }));
         });
-        probeResponse.once("end", () => resolve({
-          status: probeResponse.statusCode ?? 0,
-          text: Buffer.concat(chunks).toString("utf8"),
-        }));
+        probeRequest.setTimeout(totalTimeoutMs, () => fail(new Error("Lightweight egress HTTPS probe timed out")));
+        probeRequest.once("error", fail);
+        probeRequest.end();
       });
-      probeRequest.setTimeout(5_000, () => probeRequest.destroy(new Error("Lightweight egress HTTPS probe timed out")));
-      probeRequest.once("error", reject);
-      probeRequest.end();
     });
-    request.end();
+    connectRequestHandle.end();
   });
 }
 

@@ -1,4 +1,8 @@
-import type { SharedCrawlSeedHint, SharedScanConfig } from "@website-signal-risk-scanner/shared";
+import {
+  isFreshPriorScanAccelerationSource,
+  type SharedCrawlSeedHint,
+  type SharedScanConfig,
+} from "@website-signal-risk-scanner/shared";
 import {
   LOCAL_V2_DAG_LAMBDA_DISPATCH_CONTRACT_VERSION,
   LOCAL_V2_DAG_SCAN_PROCESSOR,
@@ -40,7 +44,10 @@ export type LocalV2DagLambdaDispatchPayload = {
   targetUrl: string;
   vpcMode: LocalV2DagLambdaVpcMode;
   processor: typeof LOCAL_V2_DAG_SCAN_PROCESSOR;
-  policySurfaceSeeds?: Array<Pick<SharedCrawlSeedHint, "confidence" | "hintType" | "source" | "url">>;
+  policySurfaceSeeds?: Array<Pick<
+    SharedCrawlSeedHint,
+    "confidence" | "hintType" | "source" | "sourceCompletedAt" | "sourceScanId" | "url"
+  >>;
 };
 
 const MAX_POLICY_SURFACE_SEEDS = 12;
@@ -59,11 +66,16 @@ function policySurfaceSeedsFromConfig(config: SharedScanConfig | Record<string, 
     const hint = asRecord(rawHint);
     const hintType = stringValue(hint.hintType);
     const source = hint.source;
+    const sourceCompletedAt = stringValue(hint.sourceCompletedAt);
+    const sourceScanId = stringValue(hint.sourceScanId);
     const url = stringValue(hint.url);
     if (
       !hintType ||
       !POLICY_SURFACE_HINT_TYPES.has(hintType) ||
       (source !== "prior_scan_hint" && source !== "canonical_legal_surface_hint") ||
+      !sourceCompletedAt ||
+      !sourceScanId ||
+      (source === "prior_scan_hint" && !isFreshPriorScanAccelerationSource(sourceCompletedAt, Date.now())) ||
       !url
     ) {
       continue;
@@ -80,6 +92,8 @@ function policySurfaceSeedsFromConfig(config: SharedScanConfig | Record<string, 
             : {}),
           hintType,
           source,
+          sourceCompletedAt,
+          sourceScanId: sourceScanId.slice(0, 160),
           url: normalizedUrl,
         });
       }

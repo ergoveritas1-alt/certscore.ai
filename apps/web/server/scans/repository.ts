@@ -1,6 +1,7 @@
 "use server";
 
 import { query, queryOne } from "@website-signal-risk-scanner/db";
+import { PRIOR_SCAN_ACCELERATION_MAX_AGE_DAYS } from "@website-signal-risk-scanner/shared";
 import type {
   AccessPostureClass,
   RecoverableFindingClass,
@@ -386,7 +387,6 @@ type QueryErrorLike = {
 } | null;
 
 const CHANGE_EVENT_BATCH_SIZE = 50;
-const PRIOR_SCAN_ACCELERATION_MAX_AGE_DAYS = 30;
 const PRIOR_SCAN_ACCELERATION_MAX_CRAWL_SEEDS = 20;
 const PRIOR_SCAN_ACCELERATION_MAX_CANDIDATES = 10;
 const PRIOR_SCAN_ACCELERATION_MAX_DOCUMENT_TEXT_CHARS = 25_000;

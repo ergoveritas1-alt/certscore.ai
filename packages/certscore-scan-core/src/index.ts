@@ -194,6 +194,8 @@ export interface PolicySurfaceSeed {
   confidence?: number;
   hintType: string;
   source: "prior_scan_hint" | "canonical_legal_surface_hint";
+  sourceCompletedAt?: string;
+  sourceScanId?: string;
   url: string;
 }
 

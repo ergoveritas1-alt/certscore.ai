@@ -13,6 +13,7 @@ const navItems = [
   { href: "/app/admin/companies", label: "Workspaces" },
   { href: "/app/admin/scans", label: "Scans" },
   { href: "/app/admin/pulse", label: "API activity" },
+  { href: "/app/admin/mcp", label: "MCP telemetry" },
   { href: "/app/admin/monitor-requests", label: "Monitor Requests" }
 ] as const;
 
