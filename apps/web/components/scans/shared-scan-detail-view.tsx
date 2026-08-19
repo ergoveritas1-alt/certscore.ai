@@ -44,8 +44,8 @@ import {
 } from "../../lib/scans/gdpr-eprivacy-assessment-direction";
 import {
   hydrateChecklistPolicyEvidence,
-  indexChecklistPolicyEvidence,
 } from "../../lib/scans/checklist-evidence-index";
+import { buildGdprEprivacyChecklistPresentation } from "../../lib/scans/gdpr-eprivacy-checklist-presentation";
 import { InfoTip } from "./info-tip";
 import { RedirectFlowPanel } from "./redirect-flow-panel";
 import { RegulatoryChecklistSection } from "./regulatory-checklist-section";
@@ -7144,6 +7144,7 @@ type SharedScanDetailViewProps = {
   previewNotice?: ReactNode;
   previewPayload?: PreviewScanPayload | null;
   previewMode?: "full" | "homepage";
+  reportGeneration?: string | null;
   scanRecord: ScanDetailResponse;
   canViewReviewLenses?: boolean;
   signalSnapshotVisibility?: {
@@ -7354,6 +7355,7 @@ export async function SharedScanDetailView({
   previewNotice = null,
   previewPayload: previewPayloadOverride = null,
   previewMode = "full",
+  reportGeneration = null,
   scanRecord,
   canViewReviewLenses,
   signalSnapshotVisibility,
@@ -7663,8 +7665,11 @@ export async function SharedScanDetailView({
     unifiedFindings: findingEvidenceDiagnostics
   });
   const reportableGdprEprivacyCoverageChecklist = getReportableGdprEprivacyCoverageItems(gdprEprivacyCoverageChecklist);
-  const checklistEvidenceTransport = indexChecklistPolicyEvidence(
-    reportableGdprEprivacyCoverageChecklist,
+  const checklistPresentation =
+    persistedCanonicalProjection?.checklistPresentation ??
+    buildGdprEprivacyChecklistPresentation(reportableGdprEprivacyCoverageChecklist);
+  const lazyChecklistDetailsAvailable = Boolean(
+    reportGeneration && persistedCanonicalProjection,
   );
   const gdprEprivacyAssessmentSummaryCounts = summarizeGdprEprivacyAssessmentDirections(
     reportableGdprEprivacyCoverageChecklist
@@ -7979,10 +7984,16 @@ export async function SharedScanDetailView({
                   content: (
                     <GdprEprivacyCoverageChecklistCard
                       defaultOpen
-                      evidenceIndex={checklistEvidenceTransport.evidenceIndex}
                       gdprEprivacyLens={gdprEprivacyExecutiveLens}
-                      items={checklistEvidenceTransport.rows}
+                      initialDetailItems={
+                        lazyChecklistDetailsAvailable
+                          ? undefined
+                          : reportableGdprEprivacyCoverageChecklist
+                      }
+                      presentation={checklistPresentation}
                       projectionContext={gdprProjectionContext}
+                      reportGeneration={reportGeneration}
+                      scanId={scanRecord.scan.id}
                       showSummaryStrip={false}
                     />
                   ),

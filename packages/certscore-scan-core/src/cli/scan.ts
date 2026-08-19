@@ -22,7 +22,7 @@ async function main(): Promise<void> {
   const args = parseArgs(process.argv.slice(2));
 
   if (!args.url) {
-    console.error("Usage: pnpm v2:scan --url <url> [--profile tiny] [--out ./artifacts/example] [--capture-replay] [--capture-replay-trace] [--capture-replay-aux-probes all|none|form|accessibility] [--privacy-control-url <url>...] [--scenario-planning-mode legacy_sequential|planned_parallel] [--policy-output-grace-ms 1000] [--pre-consent-screenshot-timeout-ms 15000] [--scenario-resource-mode normal|lean] [--consent-flow-screenshot-mode auto|none]");
+    console.error("Usage: pnpm v2:scan --url <url> [--profile tiny] [--out ./artifacts/example] [--capture-replay] [--capture-replay-trace] [--capture-replay-aux-probes all|none|form|accessibility] [--privacy-control-url <url>...] [--scenario-planning-mode legacy_sequential|planned_parallel] [--policy-output-grace-ms 1000] [--pre-consent-screenshot-timeout-ms 15000] [--scenario-resource-mode normal|lean] [--consent-flow-screenshot-mode auto|none] [--consent-gate-audit-holdout]");
     process.exit(1);
   }
 
@@ -44,6 +44,7 @@ async function main(): Promise<void> {
     consentFlowDeadlineMs: args.consentFlowDeadlineMs,
     scenarioResourceMode: args.scenarioResourceMode,
     consentFlowScreenshotMode: args.consentFlowScreenshotMode,
+    consentGateAuditHoldout: args.consentGateAuditHoldout,
   });
 
   console.log(`Wrote ${path.join(outDir, "CanonicalEvidenceBundle.json")}`);
@@ -72,6 +73,7 @@ function parseArgs(argv: string[]): {
   consentFlowDeadlineMs?: number;
   scenarioResourceMode?: "normal" | "lean";
   consentFlowScreenshotMode?: "auto" | "none";
+  consentGateAuditHoldout?: boolean;
 } {
   const parsed: {
     url?: string;
@@ -89,6 +91,7 @@ function parseArgs(argv: string[]): {
     consentFlowDeadlineMs?: number;
     scenarioResourceMode?: "normal" | "lean";
     consentFlowScreenshotMode?: "auto" | "none";
+    consentGateAuditHoldout?: boolean;
   } = { privacyControlUrls: [] };
 
   for (let index = 0; index < argv.length; index += 1) {
@@ -138,6 +141,8 @@ function parseArgs(argv: string[]): {
     } else if (key === "--consent-flow-screenshot-mode" && isConsentFlowScreenshotMode(value)) {
       parsed.consentFlowScreenshotMode = value;
       index += 1;
+    } else if (key === "--consent-gate-audit-holdout") {
+      parsed.consentGateAuditHoldout = true;
     }
   }
 

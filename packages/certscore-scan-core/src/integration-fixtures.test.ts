@@ -1630,9 +1630,9 @@ test("pre-consent runtime scanner waits briefly for late choice controls when CM
       "scanner should use the bounded post-CMP recapture path",
     );
     assert.equal(
-      observation?.inventoryDiagnostics?.timingMarkers.includes("gate_10s:complete_exit"),
+      observation?.inventoryDiagnostics?.timingMarkers.includes("gate_4s:complete_exit"),
       true,
-      "complete accept/reject evidence should exit through the first adaptive gate without spending the later tail",
+      "complete accept/reject evidence should exit through the new first adaptive gate without spending the later tail",
     );
     assert.equal(
       bundle.cmpRuntimeObservations.some((cmp) => cmp.vendor === "OneTrust"),
@@ -1705,9 +1705,9 @@ test("pre-consent runtime scanner recaptures late CMP choice controls when no in
       "scanner should retain late CMP choice controls even when no initial controls were visible",
     );
     assert.equal(
-      observation?.inventoryDiagnostics?.timingMarkers.includes("gate_10s:complete_exit"),
+      observation?.inventoryDiagnostics?.timingMarkers.includes("gate_4s:complete_exit"),
       true,
-      "complete late CMP controls should exit before the 10-second checkpoint when they become available",
+      "complete late CMP controls should exit at the 4-second checkpoint when they become available",
     );
   } finally {
     await server.close();
@@ -1966,13 +1966,16 @@ test("pre-consent runtime scanner recaptures late settings controls from high-co
       server.urlFor("consent-cmp-script-late-settings"),
       path.join(tempRoot, "consent-cmp-script-late-settings"),
       "fast",
-      "selective",
+      "always",
       undefined,
       25_000,
     );
     const observation = bundle.consentUiObservations[0];
     const cmpRecaptureTiming = bundle.modulesRun[0]?.timingBreakdown?.find((entry) =>
       entry.label === "page evidence: consent UI CMP recapture"
+    );
+    const gateCheckpoints = bundle.modulesRun[0]?.timingBreakdown?.find((entry) =>
+      entry.label === "consent gate checkpoints"
     );
 
     assert.equal(
@@ -2012,14 +2015,24 @@ test("pre-consent runtime scanner recaptures late settings controls from high-co
       "high-confidence CMP recapture should use the navigation-relative adaptive gate path",
     );
     assert.equal(
-      observation?.inventoryDiagnostics?.timingMarkers.includes("gate_18s:stagnant_partial_exit"),
+      observation?.inventoryDiagnostics?.timingMarkers.includes("gate_10s:calibrated_stable_partial_exit"),
       true,
-      "accept/settings-only evidence with no progress after 10 seconds should exit at the 18-second safety floor",
+      `accept/settings-only evidence should use the calibrated partial exit: ${JSON.stringify({
+        markers: observation?.inventoryDiagnostics?.timingMarkers,
+        timing: bundle.modulesRun[0]?.timingBreakdown?.filter((entry) => entry.label.startsWith("consent gate")),
+        outcome: observation?.inventoryOutcome,
+        diagnostics: observation?.captureDiagnostics,
+      })}`,
     );
     assert.equal(
       typeof cmpRecaptureTiming?.durationMs === "number" && cmpRecaptureTiming.durationMs < 20_000,
       true,
       "adaptive CMP recapture should stop before the hard cap when partial controls stop improving",
+    );
+    assert.match(
+      gateCheckpoints?.detail ?? "",
+      /8s:progress:n\d+:@\d+.*10s:stable_exit:n\d+:@\d+/,
+      "checkpoint telemetry should retain the progress and stable states used by the probability-informed exit",
     );
   } finally {
     await server.close();
@@ -2090,6 +2103,9 @@ test("pre-consent runtime scanner keeps high-confidence CMP recapture open long 
     const cmpRecaptureTiming = bundle.modulesRun[0]?.timingBreakdown?.find((entry) =>
       entry.label === "page evidence: consent UI CMP recapture"
     );
+    const gateCheckpoints = bundle.modulesRun[0]?.timingBreakdown?.find((entry) =>
+      entry.label === "consent gate checkpoints"
+    );
 
     assert.equal(observation?.likelyPresent, true);
     assert.equal(observation?.acceptControlObserved, true);
@@ -2109,13 +2125,80 @@ test("pre-consent runtime scanner keeps high-confidence CMP recapture open long 
       "scanner should mark the very late controls as retained by the adaptive CMP recapture",
     );
     assert.equal(
-      observation?.inventoryDiagnostics?.timingMarkers.includes("gate_18s:partial_or_progressing_continue_20s"),
+      observation?.inventoryDiagnostics?.timingMarkers.includes("gate_18s:partial_proof_incomplete_safety_exit"),
       true,
-      "very late partial controls should be retained at the 18-second safety floor and continue to the 20-second review gate",
+      `very late partial controls should be retained by the adaptive safety floor: ${JSON.stringify({
+        markers: observation?.inventoryDiagnostics?.timingMarkers,
+        timing: bundle.modulesRun[0]?.timingBreakdown?.filter((entry) => entry.label.startsWith("consent gate")),
+      })}`,
     );
     assert.ok(
       typeof cmpRecaptureTiming?.durationMs === "number" && cmpRecaptureTiming.durationMs < 20_000,
-      `adaptive CMP recapture should retain the very late controls without spending the 25s hard cap; durationMs=${cmpRecaptureTiming?.durationMs ?? "missing"}`,
+      `adaptive CMP recapture should retain the very late controls without spending the 24s hard cap; durationMs=${cmpRecaptureTiming?.durationMs ?? "missing"}`,
+    );
+    assert.match(
+      gateCheckpoints?.detail ?? "",
+      /16s:progress:n\d+:@\d+.*18s:limited_exit:n\d+:@\d+/,
+      "checkpoint telemetry must expose the late typed-control transition before the bounded limited exit",
+    );
+  } finally {
+    await server.close();
+    await rm(tempRoot, { recursive: true, force: true });
+  }
+});
+
+test("pre-consent runtime scanner retains first-layer controls that render in separate waves", async () => {
+  const server = await startStaticFixtureServer();
+  const tempRoot = await mkdtemp(path.join(tmpdir(), "certscore-v2-preconsent-cmp-script-staggered-controls-"));
+  try {
+    const bundle = await scanFixturePage(
+      server.urlFor("consent-cmp-script-staggered-controls"),
+      path.join(tempRoot, "consent-cmp-script-staggered-controls"),
+      "fast",
+      "selective",
+      undefined,
+      25_000,
+      undefined,
+      true,
+    );
+    const observation = bundle.consentUiObservations[0];
+    const timingMarkers = observation?.inventoryDiagnostics?.timingMarkers ?? [];
+    const cmpRecaptureTiming = bundle.modulesRun[0]?.timingBreakdown?.find((entry) =>
+      entry.label === "page evidence: consent UI CMP recapture"
+    );
+    const gateCheckpoints = bundle.modulesRun[0]?.timingBreakdown?.find((entry) =>
+      entry.label === "consent gate checkpoints"
+    );
+
+    assert.equal(observation?.managePreferencesControlObserved, true);
+    assert.equal(observation?.acceptControlObserved, true);
+    assert.equal(observation?.rejectControlObserved, true);
+    assert.equal(
+      timingMarkers.includes("gate_progress:accept_control_retained"),
+      true,
+      "the adaptive inventory should retain Accept when it appears after the earlier Settings control",
+    );
+    assert.equal(
+      timingMarkers.includes("gate_progress:reject_control_retained"),
+      true,
+      "the adaptive checkpoints should retain Reject when it appears after the partial control packet",
+    );
+    assert.equal(
+      timingMarkers.includes("gate_16s:complete_exit"),
+      true,
+      `the staggered audit packet should exit as soon as the sufficient first-layer set is retained: ${JSON.stringify({
+        markers: timingMarkers,
+        timing: bundle.modulesRun[0]?.timingBreakdown?.filter((entry) => entry.label.startsWith("consent gate")),
+      })}`,
+    );
+    assert.ok(
+      typeof cmpRecaptureTiming?.durationMs === "number" && cmpRecaptureTiming.durationMs < 20_000,
+      `staggered controls should be retained without overshooting the navigation-relative safety floor; durationMs=${cmpRecaptureTiming?.durationMs ?? "missing"}`,
+    );
+    const gate16PageAgeMs = Number(gateCheckpoints?.detail?.match(/16s:complete:n\d+:@(\d+)/)?.[1]);
+    assert.ok(
+      Number.isFinite(gate16PageAgeMs) && gate16PageAgeMs < 17_000,
+      `the 16-second checkpoint should remain navigation-relative after staggered probe work; pageAgeMs=${gate16PageAgeMs}`,
     );
   } finally {
     await server.close();
@@ -2161,7 +2244,19 @@ test("pre-consent runtime scanner performs a structured read after supplemental 
     );
     assert.equal(observation?.likelyPresent, true);
     assert.equal(observation?.acceptControlObserved, true);
-    assert.equal(observation?.managePreferencesControlObserved, true);
+    assert.equal(
+      observation?.managePreferencesControlObserved,
+      true,
+      `deadline-edge structured read should retain Settings: ${JSON.stringify({
+        basis: observation?.basis,
+        controls: observation?.controls.map((control) => ({
+          actionType: control.actionType,
+          label: control.label,
+        })),
+        markers: observation?.inventoryDiagnostics?.timingMarkers,
+        timing: result.moduleRun.timingBreakdown,
+      })}`,
+    );
     assert.equal(
       observation?.controls.some((control) =>
         control.actionType === "manage_preferences" &&
@@ -3530,6 +3625,7 @@ async function scanFixturePage(
   screenshotCaptureMode?: "full_page_first" | "viewport_first",
   internalBudgetMs?: number,
   captureScope?: "combined" | "consent_proof" | "runtime_evidence",
+  consentGateAuditHoldout = false,
 ): Promise<CanonicalEvidenceBundle> {
   const startedAtMs = Date.now();
   const scanProfile = getScanProfile("quick");
@@ -3541,6 +3637,7 @@ async function scanFixturePage(
     internalBudgetMs: internalBudgetMs ?? (waitMode === "fast" ? 6_000 : scanProfile.internalBudgetMs),
     artifactWriter,
     captureScope,
+    consentGateAuditHoldout,
     routeFulfillers,
     screenshotCaptureMode,
     waitMode,

@@ -15,9 +15,6 @@ import {
   type ChecklistEvidenceIndex,
 } from "../../lib/scans/checklist-evidence-index";
 import {
-  deriveGdprEprivacyReviewSummary,
-} from "../../lib/scans/gdpr-eprivacy-review-summary";
-import {
   getAssessmentDirection,
   getEvidenceLabel,
   type AssessmentDirection,
@@ -25,8 +22,11 @@ import {
   type GdprEprivacyAssessmentSummaryCounts
 } from "../../lib/scans/gdpr-eprivacy-assessment-direction";
 import { deriveGdprEprivacyCoverageChecklistRowRationale } from "../../lib/scans/gdpr-eprivacy-checklist-rationale";
-import { getReportableGdprEprivacyCoverageItems } from "../../lib/scans/gdpr-eprivacy-reportable-rows";
-import { deriveRegulatoryCoverageScore } from "../../lib/scans/regulatory-coverage-score";
+import {
+  buildGdprEprivacyChecklistPresentation,
+  type GdprEprivacyChecklistPresentation,
+  type GdprEprivacyChecklistPresentationRow,
+} from "../../lib/scans/gdpr-eprivacy-checklist-presentation";
 
 type GdprEprivacyCoverageChecklistCardProps = {
   defaultOpen?: boolean;
@@ -35,18 +35,23 @@ type GdprEprivacyCoverageChecklistCardProps = {
     score: number | null;
     summary?: string;
   } | null;
-  items: GdprEprivacyCoverageChecklistItem[];
+  initialDetailItems?: GdprEprivacyCoverageChecklistItem[];
+  items?: GdprEprivacyCoverageChecklistItem[];
   evidenceIndex?: ChecklistEvidenceIndex;
+  presentation?: GdprEprivacyChecklistPresentation;
   projectionContext?: {
     mode: string;
     scannerExecutionMode: string;
     version: string;
   } | null;
+  reportGeneration?: string | null;
+  scanId?: string | null;
   showDebugConfidenceImprovements?: boolean;
   showSummaryStrip?: boolean;
 };
 
 type RowToolState = Partial<Record<"correction" | "evidence", boolean>>;
+type DetailLoadState = "error" | "loading";
 type CoverageIcon = "alert" | "check" | "circle-alert" | "equal" | "flag" | "info" | "slash";
 type PolicyHighlightSnippet = {
   label: string;
@@ -791,18 +796,18 @@ function retainedText(item: GdprEprivacyCoverageChecklistItem) {
 }
 
 function DebugConfidenceSummary({
-  item,
+  row,
   showImprovements,
 }: {
-  item: GdprEprivacyCoverageChecklistItem;
+  row: GdprEprivacyChecklistPresentationRow;
   showImprovements: boolean;
 }) {
-  if (!item.debugConfidence) {
+  if (!row.debugConfidence) {
     return null;
   }
-  const improvements = item.debugConfidence.improveConfidence.slice(0, 3);
-  const coverageMissing = hasScannerCoverageGap(item);
-  const pillLabel = coverageMissing ? "Coverage missing" : `Confidence: ${item.debugConfidence.score}`;
+  const improvements = row.debugConfidence.improveConfidence.slice(0, 3);
+  const coverageMissing = row.scannerCoverageGap;
+  const pillLabel = coverageMissing ? "Coverage missing" : `Confidence: ${row.debugConfidence.score}`;
   const actionLabel = coverageMissing ? "Next coverage step" : "Improve confidence";
   return (
     <div className="flex flex-wrap items-center gap-1.5 text-xs leading-5 text-slate-500">
@@ -825,55 +830,34 @@ function DebugConfidenceSummary({
   );
 }
 
-function hasScannerCoverageGap(item: GdprEprivacyCoverageChecklistItem) {
-  if (item.evidenceState !== "not_testable" && item.assessmentStatus !== "coverage_limitation") {
-    return false;
-  }
-  return item.criticalEvidence.missingOrIncompleteSourceSignals.some((gap) =>
-    /policysurfacescanner|consentflowruntimescanner|preconsentruntimescanner|scanner did not run|required_source_module_not_run/i.test(String(gap.whyNeeded))
-  );
-}
-
-function getChecklistRowSummary(items: GdprEprivacyCoverageChecklistItem[]) {
-  const coverageMissing = items.filter(hasScannerCoverageGap).length;
-  return {
-    coverageMissing,
-    evaluated: items.filter((item) =>
-      item.evidenceState !== "not_testable" &&
-      item.evidenceState !== "not_applicable" &&
-      !hasScannerCoverageGap(item)
-    ).length,
-    gaps: items.filter((item) => item.assessmentStatus === "gap_observed").length,
-    reviewSignals: items.filter((item) => item.assessmentStatus === "review_signal").length,
+function ChecklistRowSummaryStrip({ rows }: { rows: GdprEprivacyChecklistPresentationRow[] }) {
+  const summary = {
+    coverageMissing: rows.filter((row) => row.scannerCoverageGap).length,
   };
-}
-
-function ChecklistRowSummaryStrip({ items }: { items: GdprEprivacyCoverageChecklistItem[] }) {
-  const summary = getChecklistRowSummary(items);
   const entries = [
     {
       className: "border-slate-200 bg-white text-slate-700",
-      count: items.filter((item) => getEvidenceLabel(item) === "Observed").length,
+      count: rows.filter((row) => row.evidenceLabel === "Observed").length,
       label: "Observed",
     },
     {
       className: "border-slate-200 bg-white text-slate-700",
-      count: items.filter((item) => getEvidenceLabel(item) === "Not observed").length,
+      count: rows.filter((row) => row.evidenceLabel === "Not observed").length,
       label: "Not observed",
     },
     {
       className: "border-slate-200 bg-white text-slate-700",
-      count: items.filter((item) => getEvidenceLabel(item) === "Partial concern").length,
+      count: rows.filter((row) => row.evidenceLabel === "Partial concern").length,
       label: "Partial concern",
     },
     {
       className: "border-slate-200 bg-white text-slate-700",
-      count: items.filter((item) => getEvidenceLabel(item) === "Not confirmed").length,
+      count: rows.filter((row) => row.evidenceLabel === "Not confirmed").length,
       label: "Not confirmed",
     },
     {
       className: "border-slate-200 bg-white text-slate-700",
-      count: items.filter((item) => getEvidenceLabel(item) === "Potential gap").length + summary.coverageMissing,
+      count: rows.filter((row) => row.evidenceLabel === "Potential gap").length + summary.coverageMissing,
       label: "Gaps / limits",
     },
   ];
@@ -1180,7 +1164,6 @@ export function GdprEprivacyCoverageSummaryPills({
 }
 
 function getGdprSummaryTitle(input: {
-  items: GdprEprivacyCoverageChecklistItem[];
   summary: string;
 }) {
   return (
@@ -2560,9 +2543,12 @@ function hasQuantitativePostRejectReductionEvidence(item: GdprEprivacyCoverageCh
 
 function getGdprSectionSummary(input: {
   fallbackSummary: string;
-  items: GdprEprivacyCoverageChecklistItem[];
+  items: Array<{ id: string }>;
   lensSummary?: string;
-  reviewSummary: ReturnType<typeof deriveGdprEprivacyReviewSummary>;
+  reviewSummary: {
+    coverageText: string;
+    priorityReviewText: string;
+  };
   scoreSummary?: string;
 }) {
   const primary = input.lensSummary ?? input.fallbackSummary;
@@ -2570,7 +2556,7 @@ function getGdprSectionSummary(input: {
   return `${scorePrefix}${primary} ${input.reviewSummary.coverageText} ${input.reviewSummary.priorityReviewText} Review retained evidence for ${getGdprReviewedAreas(input.items)}.`;
 }
 
-function getGdprReviewedAreas(items: GdprEprivacyCoverageChecklistItem[]) {
+function getGdprReviewedAreas(items: Array<{ id: string }>) {
   const rowIds = new Set(items.map((item) => item.id));
   const areas = [
     rowIds.has("pre_consent_cookies_storage") || rowIds.has("pre_consent_third_party_tracking")
@@ -2776,14 +2762,20 @@ function PolicyExcerptModal({
 function ChecklistRows({
   allowPolicyReview,
   expandAllAdvancedEvidence,
-  items,
+  rows,
+  getDetail,
+  getDetailLoadState,
+  requestDetail,
   onOpenPolicyReview,
   showDebugConfidenceImprovements
 }: {
   allowPolicyReview?: boolean;
   expandAllAdvancedEvidence: boolean;
-  items: GdprEprivacyCoverageChecklistItem[];
+  getDetail: (rowId: string) => GdprEprivacyCoverageChecklistItem | null;
+  getDetailLoadState: (rowId: string) => DetailLoadState | null;
   onOpenPolicyReview: (payload: PolicyReviewPayload) => void;
+  requestDetail: (rowId: string) => Promise<GdprEprivacyCoverageChecklistItem | null>;
+  rows: GdprEprivacyChecklistPresentationRow[];
   showDebugConfidenceImprovements: boolean;
 }) {
   const [openToolsByRow, setOpenToolsByRow] = React.useState<Record<string, RowToolState>>({});
@@ -2802,44 +2794,39 @@ function ChecklistRows({
 
   return (
     <div className="divide-y divide-slate-200">
-      {items.map((item) => {
-        const evidenceLabel = getEvidenceLabel(item);
-        const assessmentDirection = getAssessmentDirection(item);
-        const rowRationale = getChecklistRowRationale(item);
-        const rowToolState = openToolsByRow[item.id] ?? {};
+      {rows.map((row) => {
+        const detail = getDetail(row.id);
+        const detailLoadState = getDetailLoadState(row.id);
+        const rowToolState = openToolsByRow[row.id] ?? {};
         const evidenceOpen = expandAllAdvancedEvidence || Boolean(rowToolState.evidence);
         const correctionOpen = expandAllAdvancedEvidence || Boolean(rowToolState.correction);
-        const policyReviewPayload = getGdprTransparencyPolicyReviewPayload(item);
-        const showPolicyReview =
-          allowPolicyReview === true &&
-          (evidenceLabel === "Observed" || evidenceLabel === "Not confirmed") &&
-          policyReviewPayload !== null;
+        const showPolicyReview = allowPolicyReview === true && row.policyReviewCandidate;
         return (
           <div
-            key={item.id}
+            key={row.id}
             className="grid grid-cols-1 gap-3 px-4 py-3 text-sm md:grid-cols-[minmax(13rem,0.8fr)_minmax(0,1.5fr)]"
           >
             <div className="min-w-0 space-y-2">
               <div className="flex items-start gap-3">
-                <CoverageStatusGlyph direction={assessmentDirection} evidenceLabel={evidenceLabel} />
+                <CoverageStatusGlyph direction={row.assessmentDirection} evidenceLabel={row.evidenceLabel} />
                 <div className="min-w-0 space-y-1.5">
                   <div className="flex min-w-0 flex-wrap items-center gap-1.5">
-                    <p className="min-w-0 font-medium text-slate-950">{item.label}</p>
+                    <p className="min-w-0 font-medium text-slate-950">{row.label}</p>
                     <InfoTip
                       align="start"
                       placement="bottom"
-                      text={`This finding explains how the scan evaluates ${item.label.toLowerCase()}. Use the status and evidence details to interpret what was found; it is review context, not a legal conclusion.`}
+                      text={`This finding explains how the scan evaluates ${row.label.toLowerCase()}. Use the status and evidence details to interpret what was found; it is review context, not a legal conclusion.`}
                     />
                     <span
                       className={cn(
                         "inline-flex whitespace-nowrap rounded-full border px-2 py-0.5 text-[10px] font-medium uppercase tracking-[0.1em]",
-                        getEvidenceLabelBadgeClasses(evidenceLabel)
+                        getEvidenceLabelBadgeClasses(row.evidenceLabel)
                       )}
                     >
-                      {evidenceLabel}
+                      {row.evidenceLabel}
                     </span>
                   </div>
-                  <DebugConfidenceSummary item={item} showImprovements={showDebugConfidenceImprovements} />
+                  <DebugConfidenceSummary row={row} showImprovements={showDebugConfidenceImprovements} />
                 </div>
               </div>
             </div>
@@ -2850,28 +2837,37 @@ function ChecklistRows({
                     <RowToolButton
                       active={false}
                       icon="review"
-                      label={`Open captured privacy policy for ${item.label}`}
+                      label={`Open captured privacy policy for ${row.label}`}
                       onClick={() => {
-                        if (policyReviewPayload) {
-                          onOpenPolicyReview(policyReviewPayload);
-                        }
+                        void requestDetail(row.id).then((loadedDetail) => {
+                          const payload = loadedDetail
+                            ? getGdprTransparencyPolicyReviewPayload(loadedDetail)
+                            : null;
+                          if (payload) onOpenPolicyReview(payload);
+                        });
                       }}
                     />
                   ) : null}
                   <RowToolButton
                     active={evidenceOpen}
                     icon="evidence"
-                    label={`Toggle evidence details for ${item.label}`}
-                    onClick={() => toggleRowTool(item.id, "evidence")}
+                    label={`Toggle evidence details for ${row.label}`}
+                    onClick={() => {
+                      toggleRowTool(row.id, "evidence");
+                      if (!evidenceOpen) void requestDetail(row.id);
+                    }}
                   />
                   <RowToolButton
                     active={correctionOpen}
                     icon="correction"
-                    label={`Toggle correction steps for ${item.label}`}
-                    onClick={() => toggleRowTool(item.id, "correction")}
+                    label={`Toggle correction steps for ${row.label}`}
+                    onClick={() => {
+                      toggleRowTool(row.id, "correction");
+                      if (!correctionOpen) void requestDetail(row.id);
+                    }}
                   />
                 </div>
-                <p className="line-clamp-2 min-w-0 text-sm leading-6 text-slate-600">{renderRationaleText(rowRationale)}</p>
+                <p className="line-clamp-2 min-w-0 text-sm leading-6 text-slate-600">{renderRationaleText(row.rationale)}</p>
               </div>
               <div className="flex items-start gap-2 md:hidden">
                 <div className="flex w-[6.75rem] shrink-0 items-center gap-1 pt-0.5">
@@ -2879,28 +2875,37 @@ function ChecklistRows({
                     <RowToolButton
                       active={false}
                       icon="review"
-                      label={`Open captured privacy policy for ${item.label}`}
+                      label={`Open captured privacy policy for ${row.label}`}
                       onClick={() => {
-                        if (policyReviewPayload) {
-                          onOpenPolicyReview(policyReviewPayload);
-                        }
+                        void requestDetail(row.id).then((loadedDetail) => {
+                          const payload = loadedDetail
+                            ? getGdprTransparencyPolicyReviewPayload(loadedDetail)
+                            : null;
+                          if (payload) onOpenPolicyReview(payload);
+                        });
                       }}
                     />
                   ) : null}
                   <RowToolButton
                     active={evidenceOpen}
                     icon="evidence"
-                    label={`Toggle evidence details for ${item.label}`}
-                    onClick={() => toggleRowTool(item.id, "evidence")}
+                    label={`Toggle evidence details for ${row.label}`}
+                    onClick={() => {
+                      toggleRowTool(row.id, "evidence");
+                      if (!evidenceOpen) void requestDetail(row.id);
+                    }}
                   />
                   <RowToolButton
                     active={correctionOpen}
                     icon="correction"
-                    label={`Toggle correction steps for ${item.label}`}
-                    onClick={() => toggleRowTool(item.id, "correction")}
+                    label={`Toggle correction steps for ${row.label}`}
+                    onClick={() => {
+                      toggleRowTool(row.id, "correction");
+                      if (!correctionOpen) void requestDetail(row.id);
+                    }}
                   />
                 </div>
-                <p className="line-clamp-2 min-w-0 text-xs leading-5 text-slate-500">{renderRationaleText(rowRationale)}</p>
+                <p className="line-clamp-2 min-w-0 text-xs leading-5 text-slate-500">{renderRationaleText(row.rationale)}</p>
               </div>
               {evidenceOpen ? (
                 <details className="mt-2 rounded-md border border-slate-200 bg-white" open>
@@ -2908,15 +2913,27 @@ function ChecklistRows({
                     Evidence details
                   </summary>
                   <div className="max-h-[50vh] overflow-y-auto">
-                    <RegulatoryChecklistEvidenceDetails evidenceRefs={getDisplayEvidenceRefs(item)} jsonPayload={stringifyEvidenceJson(item)} />
+                    {detail ? (
+                      <RegulatoryChecklistEvidenceDetails evidenceRefs={getDisplayEvidenceRefs(detail)} jsonPayload={stringifyEvidenceJson(detail)} />
+                    ) : detailLoadState === "error" ? (
+                      <p className="px-3 py-2 text-xs text-amber-700">Retained evidence details are unavailable. Close and reopen this section to retry.</p>
+                    ) : (
+                      <p className="px-3 py-2 text-xs text-slate-500">Loading retained evidence…</p>
+                    )}
                   </div>
                 </details>
               ) : null}
               {correctionOpen ? (
-                <RegulatoryChecklistCorrectionSteps
-                  defaultOpen
-                  jsonPayload={stringifyEvidenceJson(item)}
-                />
+                detail ? (
+                  <RegulatoryChecklistCorrectionSteps
+                    defaultOpen
+                    jsonPayload={stringifyEvidenceJson(detail)}
+                  />
+                ) : detailLoadState === "error" ? (
+                  <p className="mt-2 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-700">Retained evidence details are unavailable. Close and reopen this section to retry.</p>
+                ) : (
+                  <p className="mt-2 rounded-md border border-slate-200 bg-white px-3 py-2 text-xs text-slate-500">Loading retained evidence…</p>
+                )
               ) : null}
             </div>
           </div>
@@ -2930,31 +2947,109 @@ export function GdprEprivacyCoverageChecklistCard({
   defaultOpen = true,
   evidenceIndex,
   gdprEprivacyLens,
+  initialDetailItems,
   items,
+  presentation,
   projectionContext = null,
+  reportGeneration = null,
+  scanId = null,
   showDebugConfidenceImprovements = true,
   showSummaryStrip = true
 }: GdprEprivacyCoverageChecklistCardProps) {
   const { expandAllAdvancedEvidence } = useRegulatoryChecklistAdvancedEvidence();
   const [policyReviewPayload, setPolicyReviewPayload] = React.useState<PolicyReviewPayload | null>(null);
-  const hydratedItems = hydrateChecklistPolicyEvidence(items, evidenceIndex);
-  const reportItems = getReportableGdprEprivacyCoverageItems(hydratedItems);
-  const itemsById = new Map(reportItems.map((item) => [item.id, item]));
+  const hydratedInitialItems = React.useMemo(
+    () => hydrateChecklistPolicyEvidence(items ?? initialDetailItems ?? [], evidenceIndex),
+    [evidenceIndex, initialDetailItems, items],
+  );
+  const resolvedPresentation = React.useMemo(
+    () => presentation ?? buildGdprEprivacyChecklistPresentation(hydratedInitialItems),
+    [hydratedInitialItems, presentation],
+  );
+  const [detailsById, setDetailsById] = React.useState<Record<string, GdprEprivacyCoverageChecklistItem>>(
+    () => Object.fromEntries(hydratedInitialItems.map((item) => [item.id, item])),
+  );
+  const [detailLoadStateById, setDetailLoadStateById] = React.useState<Record<string, DetailLoadState>>({});
+  const rowsById = new Map(resolvedPresentation.rows.map((row) => [row.id, row]));
   const groupedRowIds = new Set<string>(REPORT_ROW_GROUPS.flatMap((group) => [...group.rowIds]));
   const groupedSections = REPORT_ROW_GROUPS.map((group) => ({
     ...group,
-    items: group.rowIds.flatMap((rowId) => itemsById.get(rowId) ?? [])
-  })).filter((group) => group.items.length > 0);
-  const additionalItems = reportItems.filter((item) => !groupedRowIds.has(item.id));
-  const checklistScore = deriveRegulatoryCoverageScore({ framework: "gdpr_eprivacy", rows: reportItems });
-  const reviewSummary = deriveGdprEprivacyReviewSummary(reportItems);
+    rows: group.rowIds.flatMap((rowId) => rowsById.get(rowId) ?? [])
+  })).filter((group) => group.rows.length > 0);
+  const additionalRows = resolvedPresentation.rows.filter((row) => !groupedRowIds.has(row.id));
+  const requestDetails = React.useCallback(async (rowIds: string[]) => {
+    const missingRowIds = rowIds.filter((rowId) => !detailsById[rowId]);
+    if (missingRowIds.length === 0) {
+      return detailsById;
+    }
+    if (!scanId || !reportGeneration) {
+      return detailsById;
+    }
+    setDetailLoadStateById((current) => ({
+      ...current,
+      ...Object.fromEntries(missingRowIds.map((rowId) => [rowId, "loading" as const])),
+    }));
+    const query = new URLSearchParams({
+      generation: reportGeneration,
+      rowIds: missingRowIds.join(","),
+    });
+    try {
+      const response = await fetch(
+        `/api/scans/${encodeURIComponent(scanId)}/report-details/gdpr-eprivacy?${query.toString()}`,
+      );
+      if (!response.ok) {
+        setDetailLoadStateById((current) => ({
+          ...current,
+          ...Object.fromEntries(missingRowIds.map((rowId) => [rowId, "error" as const])),
+        }));
+        return detailsById;
+      }
+      const payload = await response.json() as { rows?: GdprEprivacyCoverageChecklistItem[] };
+      if (!Array.isArray(payload.rows)) {
+        setDetailLoadStateById((current) => ({
+          ...current,
+          ...Object.fromEntries(missingRowIds.map((rowId) => [rowId, "error" as const])),
+        }));
+        return detailsById;
+      }
+      const loaded = Object.fromEntries(payload.rows.map((item) => [item.id, item]));
+      setDetailsById((current) => ({ ...current, ...loaded }));
+      setDetailLoadStateById((current) => {
+        const next = { ...current };
+        for (const rowId of missingRowIds) {
+          if (loaded[rowId]) {
+            delete next[rowId];
+          } else {
+            next[rowId] = "error";
+          }
+        }
+        return next;
+      });
+      return { ...detailsById, ...loaded };
+    } catch {
+      setDetailLoadStateById((current) => ({
+        ...current,
+        ...Object.fromEntries(missingRowIds.map((rowId) => [rowId, "error" as const])),
+      }));
+      return detailsById;
+    }
+  }, [detailsById, reportGeneration, scanId]);
+  const requestDetail = React.useCallback(async (rowId: string) => {
+    const details = await requestDetails([rowId]);
+    return details[rowId] ?? null;
+  }, [requestDetails]);
+  React.useEffect(() => {
+    if (expandAllAdvancedEvidence) {
+      void requestDetails(resolvedPresentation.rows.map((row) => row.id));
+    }
+  }, [expandAllAdvancedEvidence, requestDetails, resolvedPresentation.rows]);
   const gdprSectionSummary =
     getGdprSectionSummary({
-      fallbackSummary: `${reviewSummary.coverageText} ${reviewSummary.priorityReviewText}`,
-      items: reportItems,
+      fallbackSummary: `${resolvedPresentation.reviewSummary.coverageText} ${resolvedPresentation.reviewSummary.priorityReviewText}`,
+      items: resolvedPresentation.rows,
       lensSummary: gdprEprivacyLens?.summary,
-      reviewSummary,
-      scoreSummary: checklistScore.summary
+      reviewSummary: resolvedPresentation.reviewSummary,
+      scoreSummary: resolvedPresentation.checklistScore.summary
     });
 
   return (
@@ -2963,7 +3058,6 @@ export function GdprEprivacyCoverageChecklistCard({
       defaultOpen={defaultOpen}
       showChevron={false}
       title={getGdprSummaryTitle({
-        items: reportItems,
         summary: gdprSectionSummary
       })}
       contentClassName="space-y-3 px-4 pb-4"
@@ -2974,7 +3068,7 @@ export function GdprEprivacyCoverageChecklistCard({
           Scanner mode: {projectionContext.scannerExecutionMode.replaceAll("_", " ")}. WC01 projection: {projectionContext.mode.replaceAll("_", " ")} ({projectionContext.version}). Missing evidence remains unknown or review; this surface does not create findings.
         </p>
       ) : null}
-      {showSummaryStrip ? <ChecklistRowSummaryStrip items={reportItems} /> : null}
+      {showSummaryStrip ? <ChecklistRowSummaryStrip rows={resolvedPresentation.rows} /> : null}
       {groupedSections.map((group) => (
         <div key={group.title} className="overflow-hidden rounded-lg border border-slate-200">
           <div className="grid grid-cols-1 gap-3 border-b border-slate-200 bg-slate-50 px-4 py-2 text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-500 md:grid-cols-[minmax(13rem,0.8fr)_minmax(0,1.5fr)]">
@@ -2984,18 +3078,24 @@ export function GdprEprivacyCoverageChecklistCard({
           <ChecklistRows
             allowPolicyReview={group.title === "GDPR Transparency"}
             expandAllAdvancedEvidence={expandAllAdvancedEvidence}
-            items={group.items}
+            getDetail={(rowId) => detailsById[rowId] ?? null}
+            getDetailLoadState={(rowId) => detailLoadStateById[rowId] ?? null}
             onOpenPolicyReview={setPolicyReviewPayload}
+            requestDetail={requestDetail}
+            rows={group.rows}
             showDebugConfidenceImprovements={showDebugConfidenceImprovements}
           />
         </div>
       ))}
-      {additionalItems.length > 0 ? (
+      {additionalRows.length > 0 ? (
         <div className="overflow-hidden rounded-lg border border-slate-200">
           <ChecklistRows
             expandAllAdvancedEvidence={expandAllAdvancedEvidence}
-            items={additionalItems}
+            getDetail={(rowId) => detailsById[rowId] ?? null}
+            getDetailLoadState={(rowId) => detailLoadStateById[rowId] ?? null}
             onOpenPolicyReview={setPolicyReviewPayload}
+            requestDetail={requestDetail}
+            rows={additionalRows}
             showDebugConfidenceImprovements={showDebugConfidenceImprovements}
           />
         </div>

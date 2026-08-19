@@ -96,11 +96,25 @@ function stableBrowserDocumentIdentity(
 ): BrowserDocumentIdentity | undefined {
   return before?.token && after?.token && before.token === after.token ? { ...after } : undefined;
 }
-const CONSENT_GATE_INITIAL_MS = 10_000;
-const CONSENT_GATE_PROGRESS_REVIEW_MS = 15_000;
+const CONSENT_GATE_CHECKPOINTS_MS = [
+  4_000,
+  6_000,
+  8_000,
+  10_000,
+  12_000,
+  14_000,
+  16_000,
+  18_000,
+  20_000,
+  22_000,
+  24_000,
+] as const;
+const CONSENT_GATE_STABILITY_MS = 2_000;
+const CONSENT_GATE_LIVE_PARTIAL_EXIT_FLOOR_MS = 8_000;
 const CONSENT_GATE_STRONG_CMP_FLOOR_MS = 18_000;
-const CONSENT_GATE_PARTIAL_EVIDENCE_MS = 20_000;
-const CONSENT_GATE_HARD_CAP_MS = 25_000;
+const CONSENT_GATE_HARD_CAP_MS = 24_000;
+const CONSENT_GATE_AUDIT_BUCKETS = 20;
+const NO_EARLY_CMP_LATE_GATE_DEFAULT_MS = 10_000;
 export const LATE_CONSENT_GEOMETRY_SHADOW_BUDGET_MS = 1_500;
 const LATE_CONSENT_GEOMETRY_SHADOW_CAPTURE_MS = 1_250;
 const CANONICAL_CONSENT_INVENTORY_LABELS = unique(
@@ -154,6 +168,8 @@ export interface PreConsentRuntimeScannerInput {
   onScreenshotCaptured?: (screenshot: ScreenshotArtifact) => void;
   /** Bounded local diagnostic override for the no-early-CMP delayed-surface gate. */
   lateConsentGateMs?: number;
+  /** Deterministic calibration/test override for the 5% probability-gate audit holdout. */
+  consentGateAuditHoldout?: boolean;
   waitMode?: "full" | "fast";
   /**
    * Retains a bounded auxiliary geometry packet after canonical capture ends.
@@ -2160,10 +2176,31 @@ export async function preConsentRuntimeScanner(
         observation: consentObservation,
         representativeScreenshotAvailable: representativeScreenshotAvailableBeforeAdaptiveGate,
       });
+      const resolveStablePartialProofPacket = (observation: ConsentUiObservation) => {
+        const documentUrl = safePageUrl(page, effectiveNavigationUrl);
+        const documentIdentity = currentBrowserDocumentIdentity(page);
+        const representativeScreenshotAvailable = screenshots.some((screenshot) =>
+          screenshot.captureMethod !== "primary_placeholder" &&
+          screenshot.captureMethod !== "fresh_context_placeholder" &&
+          isSameBrowserDocumentOrExactUrl(
+            screenshot.url,
+            screenshot.documentIdentity,
+            documentUrl,
+            documentIdentity,
+          )
+        );
+        return isStableConsentProofPacket({
+          geometryArtifactWritten: consentGeometryDiagnosticWritten,
+          observation,
+          representativeScreenshotAvailable,
+        });
+      };
       const runHighConfidenceAdaptiveRecapture = () => detectConsentUiWithAdaptiveCmpGates({
+        auditHoldout: input.consentGateAuditHoldout,
         cmpRuntimeObservations,
         initialObservation: consentObservation,
         navigationStartedAtMs,
+        resolveStablePartialProofPacket,
         stablePartialProofPacket: stablePartialProofPacketBeforeAdaptiveGate,
         onTenSecondGate: (
           earlyScreenshotCaptured &&
@@ -2230,7 +2267,7 @@ export async function preConsentRuntimeScanner(
         ? await recordParentTiming(
           timingBreakdown,
           "page evidence: consent UI CMP recapture",
-          "Navigation-relative adaptive CMP inventory with 10s, 15s, 18s, 20s, and 25s evidence gates.",
+          "Navigation-relative adaptive CMP inventory from 4s through 24s at two-second checkpoints; 4s/6s partial states are shadow-only, with live partial exits beginning at 8s and a deterministic 18s audit holdout.",
           () => runHighConfidenceAdaptiveRecapture().catch(() => consentObservation),
         )
         : recaptureTimeoutMs >= 1_000
@@ -2356,8 +2393,8 @@ export async function preConsentRuntimeScanner(
     ) {
       const pageAgeMs = Math.max(0, Date.now() - navigationStartedAtMs);
       const lateConsentGateMs = Math.min(
-        CONSENT_GATE_INITIAL_MS,
-        Math.max(3_000, input.lateConsentGateMs ?? CONSENT_GATE_INITIAL_MS),
+        NO_EARLY_CMP_LATE_GATE_DEFAULT_MS,
+        Math.max(3_000, input.lateConsentGateMs ?? NO_EARLY_CMP_LATE_GATE_DEFAULT_MS),
       );
       const waitToLateSurfaceGateMs = Math.min(
         Math.max(0, lateConsentGateMs - pageAgeMs),
@@ -2842,6 +2879,7 @@ export async function preConsentRuntimeScanner(
         representativeScreenshotAvailable,
       });
     if (boundedSameSessionPacketRecoveryEligible) {
+      const boundedRecoveryStartedAtMs = Date.now();
       let boundedRecoveryOutcome: NonNullable<ConsentUiObservation["boundedSameSessionRecoveryOutcome"]> =
         "screenshot_failed";
       await recordTiming(
@@ -3060,6 +3098,16 @@ export async function preConsentRuntimeScanner(
         };
         retainedConsentUiObservation = consentObservation;
       }
+      timingBreakdown.push({
+        label: "bounded same-session consent packet recovery total",
+        detail: [
+          `outcome=${boundedRecoveryOutcome}`,
+          `representativeScreenshotReused=${Boolean(reusableRecoveryScreenshot)}`,
+          `remainingModuleBudgetMs=${remainingModuleBudgetMs()}`,
+        ].join("; "),
+        durationMs: Date.now() - boundedRecoveryStartedAtMs,
+        outcome: boundedRecoveryOutcome === "completed" ? "completed" : "failed",
+      });
     }
 
     // A fast initial screenshot can legitimately precede a late-rendering CMP.
@@ -3296,7 +3344,7 @@ export async function preConsentRuntimeScanner(
         startedAt: moduleStartedAt,
         completedAt: new Date().toISOString(),
         durationMs: Date.now() - moduleStartedAtMs,
-        timingBreakdown,
+        timingBreakdown: boundedPreConsentTimingBreakdown(timingBreakdown),
         recoveryDiagnostics: recoveryDiagnostics(),
         evidenceRefs: [],
         errors: [...runtimeErrors, ...screenshotErrors],
@@ -3419,7 +3467,7 @@ export async function preConsentRuntimeScanner(
         startedAt: moduleStartedAt,
         completedAt: new Date().toISOString(),
         durationMs: Date.now() - moduleStartedAtMs,
-        timingBreakdown,
+        timingBreakdown: boundedPreConsentTimingBreakdown(timingBreakdown),
         recoveryDiagnostics: recoveryDiagnostics(),
         evidenceRefs: [],
         errors: [...runtimeErrors, errorMessage, ...screenshotErrors],
@@ -3632,6 +3680,35 @@ async function hasStrongUnresolvedSecurityChallenge(page: import("playwright").P
   const normalized = text.replace(/\s+/g, " ").trim().slice(0, 4_000);
   if (normalized.length > 1_200 && normalized.split(/\s+/).length > 170) return false;
   return /checking (?:your )?browser|verify (?:you are|that you(?:'|’)re) human|performing security verification|cloudflare ray id|press and hold.{0,100}verif|security (?:check|challenge)|just a moment/i.test(normalized);
+}
+
+function boundedPreConsentTimingBreakdown(
+  entries: NonNullable<ScanModuleRun["timingBreakdown"]>,
+): NonNullable<ScanModuleRun["timingBreakdown"]> {
+  if (entries.length <= 40) return entries;
+  const redundantConsolidatedChildLabels = new Set([
+    "page evidence: storage snapshot",
+    "page evidence: script inventory",
+    "page evidence: iframe inventory",
+    "page evidence: browser API access",
+    "page evidence: collection surfaces",
+    "page evidence: body text",
+  ]);
+  const compacted = entries.filter((entry) => !redundantConsolidatedChildLabels.has(entry.label));
+  if (compacted.length <= 40) return compacted;
+
+  const requiredIndexes = new Set<number>();
+  compacted.forEach((entry, index) => {
+    if (
+      /^(?:browser launch|browser context|page navigation|network idle wait|page evidence: consent UI|early screenshot capture|early consent control geometry|page evidence: consent UI CMP recapture|consent gate|bounded same-session consent packet recovery total|late consent control screenshot|DOM artifact write)/.test(entry.label)
+    ) {
+      requiredIndexes.add(index);
+    }
+  });
+  for (let index = compacted.length - 1; index >= 0 && requiredIndexes.size < 40; index -= 1) {
+    requiredIndexes.add(index);
+  }
+  return compacted.filter((_entry, index) => requiredIndexes.has(index)).slice(0, 40);
 }
 
 async function recordTiming<T>(
@@ -5021,6 +5098,16 @@ type ConsentGateProgress =
   | "canonical_cmp_frame_appeared"
   | "canonical_cmp_script_appeared";
 
+type ConsentGateLabel = "4s" | "6s" | "8s" | "10s" | "12s" | "14s" | "16s" | "18s" | "20s" | "22s" | "24s";
+
+type ConsentGateShadowExitCandidate = {
+  gate: ConsentGateLabel;
+  gateMs: number;
+  mode: "early_shadow" | "audit_holdout";
+  proofStableAfterGateWork: boolean;
+  snapshot: ConsentGateSnapshot;
+};
+
 export function hasConsentGateReachedHardCap(pageAgeMs: number) {
   return Math.max(0, pageAgeMs) >= CONSENT_GATE_HARD_CAP_MS;
 }
@@ -5029,21 +5116,94 @@ export function shouldExtendConsentGateToHardCap(progress: ConsentGateProgress |
   return progress !== undefined && progress !== "canonical_cmp_script_appeared";
 }
 
-export function shouldExitConsentGateWithStablePartialPacket(input: {
-  stablePartialProofPacket: boolean;
-  hasMeaningfulProgress: boolean;
-  retainedClassifiedControlCount: number;
-}): boolean {
-  return input.stablePartialProofPacket &&
-    !input.hasMeaningfulProgress &&
-    input.retainedClassifiedControlCount > 0;
+export function shouldExitStablePartialConsentGate(input: {
+  controlCount: number;
+  progressObserved: boolean;
+  proofStable: boolean;
+  stableForMs: number;
+}) {
+  return input.proofStable &&
+    input.controlCount > 0 &&
+    input.stableForMs >= CONSENT_GATE_STABILITY_MS &&
+    !input.progressObserved;
+}
+
+export function consentGateStablePartialDisposition(
+  checkpointMs: number,
+  auditHoldout: boolean,
+): "early_shadow" | "audit_holdout" | "exit" {
+  if (checkpointMs < CONSENT_GATE_LIVE_PARTIAL_EXIT_FLOOR_MS) {
+    return "early_shadow";
+  }
+  if (auditHoldout && checkpointMs < CONSENT_GATE_STRONG_CMP_FLOOR_MS) {
+    return "audit_holdout";
+  }
+  return "exit";
+}
+
+export function consentGateAuditBucket(value: string) {
+  let hash = 2_166_136_261;
+  for (let index = 0; index < value.length; index += 1) {
+    hash ^= value.charCodeAt(index);
+    hash = Math.imul(hash, 16_777_619);
+  }
+  return (hash >>> 0) % CONSENT_GATE_AUDIT_BUCKETS;
+}
+
+export function consentGateCheckpointSchedule(entryPageAgeMs: number) {
+  const normalizedEntryAgeMs = Math.max(0, entryPageAgeMs);
+  const lastExpiredCheckpoint = [...CONSENT_GATE_CHECKPOINTS_MS]
+    .reverse()
+    .find((checkpointMs) => checkpointMs <= normalizedEntryAgeMs);
+  return [
+    ...(lastExpiredCheckpoint === undefined ? [] : [lastExpiredCheckpoint]),
+    ...CONSENT_GATE_CHECKPOINTS_MS.filter((checkpointMs) => checkpointMs > normalizedEntryAgeMs),
+  ];
+}
+
+export function consentGateProbeBudget(remainingToGateMs: number) {
+  const totalBudgetMs = Math.max(0, Math.floor(remainingToGateMs));
+  if (totalBudgetMs <= 0) {
+    return {
+      accessibilityTimeoutMs: 100,
+      rapidInventoryTimeoutMs: 100,
+      returnAfterRapidSnapshot: true,
+      waitForControlTimeoutMs: 0,
+    } as const;
+  }
+
+  const rapidInventoryTimeoutMs = Math.min(300, Math.max(100, Math.floor(totalBudgetMs * 0.15)));
+  const accessibilityTimeoutMs = Math.min(750, Math.max(100, Math.floor(totalBudgetMs * 0.25)));
+  const finishingReserveMs = Math.min(250, Math.max(50, Math.floor(totalBudgetMs * 0.1)));
+  return {
+    accessibilityTimeoutMs,
+    rapidInventoryTimeoutMs,
+    returnAfterRapidSnapshot: false,
+    waitForControlTimeoutMs: Math.max(
+      0,
+      totalBudgetMs - rapidInventoryTimeoutMs - accessibilityTimeoutMs - finishingReserveMs,
+    ),
+  } as const;
+}
+
+function consentGateLabel(gateMs: number): ConsentGateLabel {
+  return `${Math.round(gateMs / 1_000)}s` as ConsentGateLabel;
+}
+
+function isTypedConsentControlProgress(progress: ConsentGateProgress | undefined) {
+  return progress === "reject_control_retained" ||
+    progress === "accept_control_retained" ||
+    progress === "preferences_control_retained" ||
+    progress === "classified_control_inventory_increased";
 }
 
 async function detectConsentUiWithAdaptiveCmpGates(input: {
+  auditHoldout?: boolean;
   cmpRuntimeObservations: CmpRuntimeObservation[];
   initialObservation: ConsentUiObservation;
   navigationStartedAtMs: number;
   stablePartialProofPacket: boolean;
+  resolveStablePartialProofPacket?: (observation: ConsentUiObservation) => boolean;
   onTenSecondGate?: () => Promise<ConsentUiObservation>;
   page: Page;
   scanStartedAtMs: number;
@@ -5053,191 +5213,266 @@ async function detectConsentUiWithAdaptiveCmpGates(input: {
   await installConsentGateMutationProbe(input.page);
   let current = input.initialObservation;
   let previous = await captureConsentGateSnapshot(input, current);
-
-  if (previous.pageAgeMs >= CONSENT_GATE_HARD_CAP_MS) {
-    return recordConsentGateDecision(
+  let shadowExitCandidate: ConsentGateShadowExitCandidate | undefined;
+  const navigationOffsetFromScanMs = Math.max(0, input.navigationStartedAtMs - input.scanStartedAtMs);
+  let lastTypedControlProgressAtMs = current.controls.length > 0
+    ? Math.max(0, current.observedAtMs - navigationOffsetFromScanMs)
+    : undefined;
+  const auditHoldout = input.auditHoldout ?? consentGateAuditBucket(
+    `${safePageUrl(input.page, "about:blank")}|${input.scanStartedAtMs}`,
+  ) === 0;
+  const finish = (
+    snapshot: ConsentGateSnapshot,
+    gate: ConsentGateLabel,
+    decision: string,
+    progress: ConsentGateProgress | undefined,
+    telemetry: "record" | "marker_only" = "record",
+  ) => {
+    const result = recordConsentGateDecision(
       input.timingBreakdown,
       current,
+      snapshot,
+      gate,
+      decision,
+      progress,
+      telemetry,
+    );
+    if (shadowExitCandidate) {
+      recordConsentGateShadowOutcome(
+        input.timingBreakdown,
+        shadowExitCandidate,
+        snapshot,
+        gate,
+      );
+    }
+    return result;
+  };
+
+  if (previous.pageAgeMs >= CONSENT_GATE_HARD_CAP_MS) {
+    return finish(
       previous,
-      "25s",
+      "24s",
       hasSufficientFirstLayerConsentControls(current) ? "complete_exit" : "late_entry_hard_cap_exit",
       undefined,
     );
   }
 
-  const waitToGate = async (gateMs: number) => {
-    const remainingBudgetMs = Math.max(0, input.deadlineAtMs - Date.now());
-    const remainingMs = Math.min(
-      remainingBudgetMs,
-      Math.max(0, gateMs - (Date.now() - input.navigationStartedAtMs)),
+  const checkpointSchedule = consentGateCheckpointSchedule(previous.pageAgeMs);
+  for (const checkpointMs of checkpointSchedule) {
+    const gate = consentGateLabel(checkpointMs);
+    const remainingToCheckpointMs = Math.max(
+      0,
+      checkpointMs - (Date.now() - input.navigationStartedAtMs),
     );
-    const candidate = await detectConsentUi(
+    const remainingModuleBudgetMs = Math.max(0, input.deadlineAtMs - Date.now());
+    const waitMs = Math.min(remainingToCheckpointMs, remainingModuleBudgetMs);
+    if (waitMs > 0) {
+      await input.page.waitForTimeout(waitMs).catch(() => undefined);
+    }
+
+    if (Date.now() >= input.deadlineAtMs) {
+      const deadlineObservation = await readRapidFirstLayerConsentUiObservation(
+        input.page,
+        input.scanStartedAtMs,
+        250,
+        "retry",
+      );
+      current = mergeConsentUiObservations(
+        current,
+        deadlineObservation,
+        "adaptive_gate_inventory:module_deadline_final_read",
+      );
+      const deadlineSemanticObservation = await recordBoundedTiming(
+        input.timingBreakdown,
+        "consent gate deadline typed inventory",
+        "Final bounded typed semantic inventory when a control-render wave lands between the last checkpoint and the soft module deadline.",
+        500,
+        () => detectConsentUi(
+          input.page,
+          input.scanStartedAtMs,
+          0,
+          {
+            accessibilityTimeoutMs: 350,
+            rapidInventoryTimeoutMs: 150,
+            returnAfterRapidSnapshot: false,
+          },
+        ),
+        () => deadlineObservation,
+      );
+      current = mergeConsentUiObservations(
+        current,
+        deadlineSemanticObservation,
+        "adaptive_gate_semantic_inventory:module_deadline_final_read",
+      );
+      const deadlineSnapshot = await captureConsentGateSnapshot(input, current);
+      return finish(
+        deadlineSnapshot,
+        gate,
+        hasSufficientFirstLayerConsentControls(current) ? "complete_exit" : "module_deadline_exit",
+        meaningfulConsentGateProgress(previous, deadlineSnapshot),
+      );
+    }
+
+    const rapidObservation = await readRapidFirstLayerConsentUiObservation(
       input.page,
       input.scanStartedAtMs,
-      remainingMs,
-      {
-        waitForCompleteChoiceControls: true,
-        waitForControlsOnTextOnlySurface: true,
-      },
+      Math.min(250, Math.max(100, input.deadlineAtMs - Date.now())),
+      "retry",
     );
     current = mergeConsentUiObservations(
       current,
-      candidate,
-      `adaptive_gate_inventory:${Math.round(gateMs / 1_000)}s`,
+      rapidObservation,
+      `adaptive_gate_inventory:${gate}`,
     );
-    return captureConsentGateSnapshot(input, current);
-  };
+    let snapshot = await captureConsentGateSnapshot(input, current);
+    let progress = meaningfulConsentGateProgress(previous, snapshot);
 
-  let gate10 = await waitToGate(CONSENT_GATE_INITIAL_MS);
-  let progressAt10 = meaningfulConsentGateProgress(previous, gate10);
-  if (hasSufficientFirstLayerConsentControls(current)) {
-    return recordConsentGateDecision(
+    if (checkpointMs === 10_000 && !hasSufficientFirstLayerConsentControls(current) && input.onTenSecondGate) {
+      const postCaptureObservation = await input.onTenSecondGate();
+      current = mergeConsentUiObservations(
+        current,
+        postCaptureObservation,
+        "adaptive_gate_inventory:10s_supplemental_capture",
+      );
+      snapshot = await captureConsentGateSnapshot(input, current);
+      progress = meaningfulConsentGateProgress(previous, snapshot);
+    }
+
+    const topologyProgress = progress === "canonical_cmp_frame_appeared" ||
+      progress === "canonical_cmp_script_appeared";
+    const shouldRunSemanticCheckpoint = (
+      checkpointMs === 18_000 ||
+      (checkpointMs === 12_000 && current.controls.length === 0) ||
+      isTypedConsentControlProgress(progress) ||
+      topologyProgress
+    ) && input.deadlineAtMs - Date.now() >= 250;
+    if (shouldRunSemanticCheckpoint) {
+      const semanticBudgetMs = Math.min(750, Math.max(250, input.deadlineAtMs - Date.now()));
+      const semanticObservation = await detectConsentUi(
+        input.page,
+        input.scanStartedAtMs,
+        0,
+        {
+          accessibilityTimeoutMs: semanticBudgetMs,
+          rapidInventoryTimeoutMs: Math.min(200, semanticBudgetMs),
+          returnAfterRapidSnapshot: false,
+        },
+      );
+      current = mergeConsentUiObservations(
+        current,
+        semanticObservation,
+        `adaptive_gate_semantic_inventory:${gate}`,
+      );
+      snapshot = await captureConsentGateSnapshot(input, current);
+      progress = meaningfulConsentGateProgress(previous, snapshot);
+    }
+
+    if (isTypedConsentControlProgress(progress)) {
+      lastTypedControlProgressAtMs = snapshot.pageAgeMs;
+    } else if (lastTypedControlProgressAtMs === undefined && current.controls.length > 0) {
+      lastTypedControlProgressAtMs = Math.max(
+        0,
+        current.observedAtMs - navigationOffsetFromScanMs,
+      );
+    }
+
+    if (hasSufficientFirstLayerConsentControls(current)) {
+      return finish(snapshot, gate, "complete_exit", progress);
+    }
+    if (hasConsentGateReachedHardCap(snapshot.pageAgeMs) || checkpointMs === CONSENT_GATE_HARD_CAP_MS) {
+      return finish(snapshot, gate, "hard_cap_exit", progress);
+    }
+
+    const proofStable = input.resolveStablePartialProofPacket?.(current) ??
+      input.stablePartialProofPacket;
+    const stableForMs = lastTypedControlProgressAtMs === undefined
+      ? 0
+      : Math.max(0, snapshot.pageAgeMs - lastTypedControlProgressAtMs);
+    const stablePartialExitEligible = shouldExitStablePartialConsentGate({
+      controlCount: current.controls.length,
+      progressObserved: isTypedConsentControlProgress(progress),
+      proofStable,
+      stableForMs,
+    });
+    const stablePartialDisposition = stablePartialExitEligible
+      ? consentGateStablePartialDisposition(checkpointMs, auditHoldout)
+      : undefined;
+    if (stablePartialExitEligible) {
+      if (
+        stablePartialDisposition === "early_shadow" &&
+        !shadowExitCandidate
+      ) {
+        shadowExitCandidate = {
+          gate,
+          gateMs: checkpointMs,
+          mode: "early_shadow",
+          proofStableAfterGateWork: proofStable,
+          snapshot,
+        };
+        recordConsentGateShadowCandidate(input.timingBreakdown, shadowExitCandidate);
+      }
+      if (stablePartialDisposition === "exit") {
+        return finish(
+          snapshot,
+          gate,
+          auditHoldout ? "calibrated_audit_complete_exit" : "calibrated_stable_partial_exit",
+          progress,
+        );
+      }
+      if (
+        stablePartialDisposition === "audit_holdout" &&
+        !shadowExitCandidate
+      ) {
+        shadowExitCandidate = {
+          gate,
+          gateMs: checkpointMs,
+          mode: "audit_holdout",
+          proofStableAfterGateWork: proofStable,
+          snapshot,
+        };
+        recordConsentGateShadowCandidate(input.timingBreakdown, shadowExitCandidate);
+      }
+    }
+
+    if (
+      checkpointMs >= CONSENT_GATE_STRONG_CMP_FLOOR_MS &&
+      current.controls.length === 0
+    ) {
+      return finish(snapshot, gate, "strong_cmp_no_control_progress_exit", progress);
+    }
+    if (
+      checkpointMs >= CONSENT_GATE_STRONG_CMP_FLOOR_MS &&
+      current.controls.length > 0 &&
+      !proofStable &&
+      !isTypedConsentControlProgress(progress)
+    ) {
+      return finish(snapshot, gate, "partial_proof_incomplete_safety_exit", progress);
+    }
+
+    const decision = stablePartialDisposition === "early_shadow"
+      ? "early_partial_shadow_continue_8s"
+      : stablePartialDisposition === "audit_holdout"
+        ? "probability_audit_holdout_continue_18s"
+        : isTypedConsentControlProgress(progress)
+          ? "typed_progress_reset_2s_stability"
+          : current.controls.length > 0
+            ? proofStable
+              ? "partial_wait_for_2s_stability"
+              : "partial_proof_incomplete_continue"
+            : "strong_cmp_no_control_progress_continue_18s";
+    current = recordConsentGateDecision(
       input.timingBreakdown,
       current,
-      gate10,
-      "10s",
-      "complete_exit",
-      progressAt10,
-      "marker_only",
+      snapshot,
+      gate,
+      decision,
+      progress,
     );
+    previous = snapshot;
   }
-  if (hasConsentGateReachedHardCap(gate10.pageAgeMs)) {
-    return recordConsentGateDecision(input.timingBreakdown, current, gate10, "10s", "hard_cap_exit", progressAt10);
-  }
-  if (!hasSufficientFirstLayerConsentControls(current) && input.onTenSecondGate) {
-    const postCaptureObservation = await input.onTenSecondGate();
-    current = mergeConsentUiObservations(
-      current,
-      postCaptureObservation,
-      "adaptive_gate_inventory:10s_supplemental_capture",
-    );
-    gate10 = await captureConsentGateSnapshot(input, current);
-    progressAt10 = meaningfulConsentGateProgress(previous, gate10);
-  }
-  if (hasSufficientFirstLayerConsentControls(current)) {
-    return recordConsentGateDecision(input.timingBreakdown, current, gate10, "10s", "complete_exit", progressAt10);
-  }
-  if (hasConsentGateReachedHardCap(gate10.pageAgeMs)) {
-    return recordConsentGateDecision(input.timingBreakdown, current, gate10, "10s", "hard_cap_exit", progressAt10);
-  }
-  if (shouldExitConsentGateWithStablePartialPacket({
-    stablePartialProofPacket: input.stablePartialProofPacket,
-    hasMeaningfulProgress: progressAt10 !== undefined,
-    retainedClassifiedControlCount: current.controls.length,
-  })) {
-    return recordConsentGateDecision(
-      input.timingBreakdown,
-      current,
-      gate10,
-      "10s",
-      "stable_partial_packet_exit",
-      progressAt10,
-    );
-  }
-  const partialAt10 = hasPartialConsentGateEvidence(current);
-  current = recordConsentGateDecision(
-    input.timingBreakdown,
-    current,
-    gate10,
-    "10s",
-    partialAt10 || progressAt10 ? "partial_or_progressing_arm_20s" : "strong_cmp_no_progress_continue_18s",
-    progressAt10,
-  );
-  previous = gate10;
 
-  const gate15 = await waitToGate(CONSENT_GATE_PROGRESS_REVIEW_MS);
-  const progressAt15 = meaningfulConsentGateProgress(previous, gate15);
-  if (hasSufficientFirstLayerConsentControls(current)) {
-    return recordConsentGateDecision(input.timingBreakdown, current, gate15, "15s", "complete_exit", progressAt15);
-  }
-  if (hasConsentGateReachedHardCap(gate15.pageAgeMs)) {
-    return recordConsentGateDecision(input.timingBreakdown, current, gate15, "15s", "hard_cap_exit", progressAt15);
-  }
-  const partialAt15 = hasPartialConsentGateEvidence(current);
-  current = recordConsentGateDecision(
-    input.timingBreakdown,
-    current,
-    gate15,
-    "15s",
-    progressAt15
-      ? "progress_since_10s_continue_18s"
-      : partialAt15
-        ? "stagnant_partial_continue_18s_safety_floor"
-        : "strong_cmp_no_progress_continue_18s",
-    progressAt15,
-  );
-  previous = gate15;
-
-  const gate18 = await waitToGate(CONSENT_GATE_STRONG_CMP_FLOOR_MS);
-  const progressAt18 = meaningfulConsentGateProgress(previous, gate18);
-  if (hasSufficientFirstLayerConsentControls(current)) {
-    return recordConsentGateDecision(input.timingBreakdown, current, gate18, "18s", "complete_exit", progressAt18);
-  }
-  if (hasConsentGateReachedHardCap(gate18.pageAgeMs)) {
-    return recordConsentGateDecision(input.timingBreakdown, current, gate18, "18s", "hard_cap_exit", progressAt18);
-  }
-  const partialAt18 = hasPartialConsentGateEvidence(current);
-  const progressSinceTenSecondSnapshot = Boolean(progressAt15 || progressAt18);
-  if (!partialAt18 && !progressSinceTenSecondSnapshot) {
-    return recordConsentGateDecision(input.timingBreakdown, current, gate18, "18s", "no_progress_exit", progressAt18);
-  }
-  if (!progressSinceTenSecondSnapshot) {
-    return recordConsentGateDecision(
-      input.timingBreakdown,
-      current,
-      gate18,
-      "18s",
-      "stagnant_partial_exit",
-      progressAt18,
-    );
-  }
-  current = recordConsentGateDecision(
-    input.timingBreakdown,
-    current,
-    gate18,
-    "18s",
-    "partial_or_progressing_continue_20s",
-    progressAt18,
-  );
-  previous = gate18;
-
-  const gate20 = await waitToGate(CONSENT_GATE_PARTIAL_EVIDENCE_MS);
-  const progressAt20 = meaningfulConsentGateProgress(previous, gate20);
-  if (hasSufficientFirstLayerConsentControls(current)) {
-    return recordConsentGateDecision(input.timingBreakdown, current, gate20, "20s", "complete_exit", progressAt20);
-  }
-  if (hasConsentGateReachedHardCap(gate20.pageAgeMs)) {
-    return recordConsentGateDecision(input.timingBreakdown, current, gate20, "20s", "hard_cap_exit", progressAt20);
-  }
-  if (!shouldExtendConsentGateToHardCap(progressAt20)) {
-    return recordConsentGateDecision(
-      input.timingBreakdown,
-      current,
-      gate20,
-      "20s",
-      progressAt20 ? "low_value_progress_exit" : "no_recent_progress_exit",
-      progressAt20,
-    );
-  }
-  current = recordConsentGateDecision(
-    input.timingBreakdown,
-    current,
-    gate20,
-    "20s",
-    "recent_stronger_transition_continue_25s",
-    progressAt20,
-  );
-
-  const gate25 = await waitToGate(CONSENT_GATE_HARD_CAP_MS);
-  const progressAt25 = meaningfulConsentGateProgress(gate20, gate25);
-  return recordConsentGateDecision(
-    input.timingBreakdown,
-    current,
-    gate25,
-    "25s",
-    hasSufficientFirstLayerConsentControls(current) ? "complete_exit" : "hard_cap_exit",
-    progressAt25,
-  );
+  const finalSnapshot = await captureConsentGateSnapshot(input, current);
+  return finish(finalSnapshot, "24s", "hard_cap_exit", undefined);
 }
 
 async function installConsentGateMutationProbe(page: Page): Promise<void> {
@@ -5352,6 +5587,68 @@ function meaningfulConsentGateProgress(
   return undefined;
 }
 
+function consentGateTypedState(snapshot: ConsentGateSnapshot) {
+  const intents = unique(snapshot.observation.controls.map((control) => control.actionType)).sort();
+  const aro = [
+    snapshot.observation.acceptControlObserved ? "A" : "-",
+    snapshot.observation.rejectControlObserved ? "R" : "-",
+    snapshot.observation.managePreferencesControlObserved ? "O" : "-",
+  ].join("");
+  return [
+    aro,
+    intents.join("+") || "none",
+    `n${snapshot.observation.controls.length}`,
+    snapshot.observation.likelyPresent ? "surface" : "no_surface",
+  ].join("|");
+}
+
+function recordConsentGateShadowCandidate(
+  timingBreakdown: NonNullable<ScanModuleRun["timingBreakdown"]>,
+  candidate: ConsentGateShadowExitCandidate,
+) {
+  timingBreakdown.push({
+    label: "consent gate shadow exit candidate",
+    detail: [
+      candidate.mode,
+      `candidate=${candidate.gate}@${candidate.snapshot.pageAgeMs}`,
+      `proof=${candidate.proofStableAfterGateWork}`,
+      `from=${consentGateTypedState(candidate.snapshot)}`,
+    ].join("; ").slice(0, 240),
+    durationMs: 0,
+  });
+}
+
+function recordConsentGateShadowOutcome(
+  timingBreakdown: NonNullable<ScanModuleRun["timingBreakdown"]>,
+  candidate: ConsentGateShadowExitCandidate,
+  finalSnapshot: ConsentGateSnapshot,
+  finalGate: ConsentGateLabel,
+) {
+  const lateProgress = meaningfulConsentGateProgress(candidate.snapshot, finalSnapshot);
+  const candidateEntry = [...timingBreakdown].reverse().find((entry) =>
+    entry.label === "consent gate shadow exit candidate"
+  );
+  const outcome = {
+    label: "consent gate shadow exit outcome",
+    detail: [
+      candidate.mode,
+      `candidate=${candidate.gate}@${candidate.snapshot.pageAgeMs}`,
+      `proof=${candidate.proofStableAfterGateWork}`,
+      `from=${consentGateTypedState(candidate.snapshot)}`,
+      `final=${finalGate}@${finalSnapshot.pageAgeMs}`,
+      `saveMs=${Math.max(0, finalSnapshot.pageAgeMs - candidate.snapshot.pageAgeMs)}`,
+      `late=${lateProgress ?? "none"}`,
+      `to=${consentGateTypedState(finalSnapshot)}`,
+    ].join("; ").slice(0, 240),
+    durationMs: 0,
+  };
+  if (candidateEntry) {
+    Object.assign(candidateEntry, outcome);
+    return;
+  }
+  timingBreakdown.push(outcome);
+}
+
 function hasPartialConsentGateEvidence(observation: ConsentUiObservation): boolean {
   return observation.likelyPresent ||
     observation.controls.length > 0 ||
@@ -5363,31 +5660,61 @@ function recordConsentGateDecision(
   timingBreakdown: NonNullable<ScanModuleRun["timingBreakdown"]>,
   observation: ConsentUiObservation,
   snapshot: ConsentGateSnapshot,
-  gate: "10s" | "15s" | "18s" | "20s" | "25s",
+  gate: ConsentGateLabel,
   decision: string,
   progress: ConsentGateProgress | undefined,
   telemetry: "record" | "marker_only" = "record",
 ): ConsentUiObservation {
   const marker = `gate_${gate}:${decision}`;
   if (telemetry === "record") {
-    timingBreakdown.push({
-      label: `consent gate ${gate}`,
-      detail: [
-        decision,
-        progress ? `progress=${progress}` : "progress=none",
-        `pageAgeMs=${snapshot.pageAgeMs}`,
-        `controls=${snapshot.observation.controls.length}`,
-        `cmpFrames=${snapshot.cmpFrameKeys.length}`,
-        `cmpScripts=${snapshot.cmpScriptKeys.length}`,
-        `mutations=${snapshot.mutationCount}`,
-      ].join("; ").slice(0, 240),
-      durationMs: 0,
-    });
+    const decisionCode = consentGateDecisionCode(decision);
+    const token = [
+      `${gate}:${decisionCode}`,
+      `n${snapshot.observation.controls.length}`,
+      `@${snapshot.pageAgeMs}`,
+      progress && progress !== "canonical_cmp_script_appeared"
+        ? `p=${progress.replaceAll("_control_retained", "").replaceAll("classified_control_inventory_increased", "inventory")}`
+        : null,
+    ].filter(Boolean).join(":");
+    const existing = timingBreakdown.find((entry) => entry.label === "consent gate checkpoints");
+    const tokens = [...(existing?.detail?.split(" | ").filter(Boolean) ?? []), token];
+    while (tokens.join(" | ").length > 240 && tokens.length > 1) {
+      tokens.shift();
+    }
+    if (existing) {
+      existing.detail = tokens.join(" | ");
+    } else {
+      timingBreakdown.push({
+        label: "consent gate checkpoints",
+        detail: tokens.join(" | "),
+        durationMs: 0,
+      });
+    }
   }
   return annotateConsentInventoryTimingMarkers(observation, [
     marker,
     ...(progress ? [`gate_progress:${progress}`] : []),
   ]);
+}
+
+function consentGateDecisionCode(decision: string) {
+  switch (decision) {
+    case "complete_exit": return "complete";
+    case "hard_cap_exit": return "hard_cap";
+    case "late_entry_hard_cap_exit": return "late_hard_cap";
+    case "module_deadline_exit": return "deadline";
+    case "calibrated_stable_partial_exit": return "stable_exit";
+    case "calibrated_audit_complete_exit": return "audit_exit";
+    case "early_partial_shadow_continue_8s": return "early_shadow";
+    case "probability_audit_holdout_continue_18s": return "audit_hold";
+    case "typed_progress_reset_2s_stability": return "progress";
+    case "partial_wait_for_2s_stability": return "stabilize";
+    case "partial_proof_incomplete_continue": return "proof_wait";
+    case "partial_proof_incomplete_safety_exit": return "limited_exit";
+    case "strong_cmp_no_control_progress_continue_18s": return "no_control";
+    case "strong_cmp_no_control_progress_exit": return "no_control_exit";
+    default: return decision.slice(0, 32);
+  }
 }
 
 export async function detectConsentUi(
@@ -10384,9 +10711,15 @@ async function captureScaledFullPageScreenshotWithCdp(
   screenshotPath: string,
   timeoutMs: number,
 ): Promise<void> {
-  const client = await page.context().newCDPSession(page);
+  const deadlineAtMs = Date.now() + Math.max(1, timeoutMs);
+  const client = await acquireCdpSessionBeforeDeadline(
+    page,
+    deadlineAtMs,
+    "Supplemental full-page CDP session acquisition timed out",
+  );
   let timer: ReturnType<typeof setTimeout> | undefined;
   try {
+    const remainingMs = Math.max(1, deadlineAtMs - Date.now());
     const screenshot = await Promise.race([
       (async () => {
         const metrics = await client.send("Page.getLayoutMetrics");
@@ -10410,7 +10743,7 @@ async function captureScaledFullPageScreenshotWithCdp(
         });
       })(),
       new Promise<never>((_resolve, reject) => {
-        timer = setTimeout(() => reject(new Error("Supplemental full-page screenshot timed out")), timeoutMs);
+        timer = setTimeout(() => reject(new Error("Supplemental full-page screenshot timed out")), remainingMs);
       }),
     ]);
     await writeFile(screenshotPath, Buffer.from(screenshot.data, "base64"));
@@ -10418,7 +10751,7 @@ async function captureScaledFullPageScreenshotWithCdp(
     if (timer) {
       clearTimeout(timer);
     }
-    await boundedCleanup(client.detach(), 250);
+    await boundedCleanup(client.detach(), Math.min(250, Math.max(1, deadlineAtMs - Date.now())));
   }
 }
 
@@ -10658,7 +10991,11 @@ async function captureViewportScreenshotWithCdp(
   timeoutMs: number,
 ): Promise<void> {
   const deadlineAtMs = Date.now() + Math.max(1, timeoutMs);
-  const client = await page.context().newCDPSession(page);
+  const client = await acquireCdpSessionBeforeDeadline(
+    page,
+    deadlineAtMs,
+    "Viewport CDP session acquisition timed out",
+  );
   let timer: ReturnType<typeof setTimeout> | undefined;
   try {
     const remainingMs = Math.max(1, deadlineAtMs - Date.now());
@@ -10682,6 +11019,39 @@ async function captureViewportScreenshotWithCdp(
       await boundedCleanup(client.detach(), Math.min(250, cleanupRemainingMs));
     } else {
       void client.detach().catch(() => undefined);
+    }
+  }
+}
+
+export async function acquireCdpSessionBeforeDeadline(
+  page: Page,
+  deadlineAtMs: number,
+  timeoutMessage = "CDP session acquisition timed out",
+): Promise<CDPSession> {
+  const sessionPromise = page.context().newCDPSession(page);
+  const remainingMs = Math.max(1, deadlineAtMs - Date.now());
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  let timedOut = false;
+  try {
+    return await Promise.race([
+      sessionPromise,
+      new Promise<never>((_resolve, reject) => {
+        timer = setTimeout(() => {
+          timedOut = true;
+          reject(new Error(timeoutMessage));
+        }, remainingMs);
+      }),
+    ]);
+  } catch (error) {
+    if (timedOut) {
+      void sessionPromise
+        .then((session) => boundedCleanup(session.detach(), 250))
+        .catch(() => undefined);
+    }
+    throw error;
+  } finally {
+    if (timer) {
+      clearTimeout(timer);
     }
   }
 }

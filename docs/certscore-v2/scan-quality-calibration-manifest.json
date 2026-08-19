@@ -79,6 +79,7 @@
     {"url": "https://forbes.com", "role": "publisher", "lanes": ["consent_controls", "gdpr_transparency", "transport_evidence", "third_party_attribution", "no_go_resilience", "language_inference"]},
     {"url": "https://theguardian.com", "role": "publisher", "lanes": ["consent_controls", "gdpr_transparency", "transport_evidence", "third_party_attribution", "no_go_resilience", "language_inference"]},
     {"url": "https://cnn.com", "role": "publisher", "lanes": ["consent_controls", "gdpr_transparency", "transport_evidence", "third_party_attribution", "no_go_resilience", "language_inference"]},
+    {"url": "https://msnbc.com", "role": "publisher", "lanes": ["consent_controls", "gdpr_transparency", "transport_evidence", "third_party_attribution", "no_go_resilience", "language_inference"]},
     {"url": "https://weather.com", "role": "publisher", "lanes": ["consent_controls", "gdpr_transparency", "transport_evidence", "third_party_attribution", "no_go_resilience", "language_inference"]},
     {"url": "https://walmart.com", "role": "ecommerce", "lanes": ["consent_controls", "gdpr_transparency", "transport_evidence", "third_party_attribution", "no_go_resilience", "language_inference"]},
     {"url": "https://macys.com", "role": "ecommerce", "lanes": ["consent_controls", "gdpr_transparency", "transport_evidence", "third_party_attribution", "no_go_resilience", "language_inference"]},

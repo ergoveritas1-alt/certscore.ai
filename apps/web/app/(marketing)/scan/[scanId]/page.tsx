@@ -130,7 +130,10 @@ export default async function PublicScanDetailPage({ params, searchParams }: Pub
     );
   }
   const localPersistedReportProjection = statusProjection.reportReady
-    ? await loadPersistedScanReportProjection({ scanId })
+    ? await loadPersistedScanReportProjection({
+        generation: statusProjection.reportGeneration,
+        scanId,
+      })
     : null;
   if (
     isCompletedScanStatus(statusProjection.status) &&
@@ -233,6 +236,7 @@ export default async function PublicScanDetailPage({ params, searchParams }: Pub
           }
           headerActionsPlacement="belowTitle"
           localV2DagInFlightProgress={null}
+          reportGeneration={statusProjection.reportGeneration}
           scanRecord={displayScanRecord}
           showBrowserExtensionRecovery
           viewerAccessRole="user"

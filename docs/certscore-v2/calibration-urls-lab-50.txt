@@ -1,4 +1,4 @@
-# CertScore v2 Scan Lab 50-site rotating target inventory.
+# CertScore v2 Scan Lab rotating target inventory (51 sites).
 # Select only a cooldown-eligible 8-12-site sample for routine live calibration.
 # Internal diagnostic only. This list does not define production behavior,
 # customer-facing report output, or finding eligibility.
@@ -15,6 +15,7 @@ https://washingtonpost.com
 https://forbes.com
 https://theguardian.com
 https://cnn.com
+https://msnbc.com
 https://weather.com
 
 # Ecommerce and automotive with dense third-party surfaces

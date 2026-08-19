@@ -25,6 +25,7 @@ import {
   PERSISTED_CANONICAL_REPORT_PROJECTION_VERSION,
   type PersistedCanonicalReportProjection
 } from "./persisted-canonical-report-projection";
+import { buildGdprEprivacyChecklistPresentation } from "../../lib/scans/gdpr-eprivacy-checklist-presentation";
 
 const projectionPath = "apps/web/server/scans/scan-report-projection.ts";
 const projectionContractPath = "apps/web/server/scans/scan-report-projection-contract.ts";
@@ -163,6 +164,7 @@ test("persisted projection carries one scan-bound canonical output packet", () =
   } as unknown as ScanDetailResponse;
   const canonicalReportProjection = {
     artifactVersion: PERSISTED_CANONICAL_REPORT_PROJECTION_VERSION,
+    checklistPresentation: buildGdprEprivacyChecklistPresentation([]),
     checklistRows: [],
     derivedContext: {
       accessibilityIssueRows: [],

@@ -152,6 +152,8 @@ export interface RunScanInput {
   onPreConsentScreenshotCaptured?: (screenshot: ScreenshotArtifact) => void;
   /** Local diagnostic override; production callers retain the 10s default. */
   lateConsentGateMs?: number;
+  /** Diagnostic-only override that holds otherwise eligible partial consent packets through the 18s audit gate. */
+  consentGateAuditHoldout?: boolean;
   preConsentVisualFallbackDeadlineMs?: number;
   /** Absolute deadline for optional visual recovery, preserving time to finalize retained scan output. */
   preConsentVisualFallbackDeadlineAtMs?: number;
@@ -388,6 +390,7 @@ export async function runScan(input: RunScanInput): Promise<CanonicalEvidenceBun
         screenshotTimeoutMs: input.preConsentScreenshotTimeoutMs,
         onScreenshotCaptured: input.onPreConsentScreenshotCaptured,
         lateConsentGateMs: input.lateConsentGateMs,
+        consentGateAuditHoldout: input.consentGateAuditHoldout,
         lateConsentGeometryShadowEnabled,
         onLifecycleCheckpoint: (checkpoint) => {
           latestPreConsentLifecycleCheckpoint = checkpoint;
@@ -478,6 +481,7 @@ export async function runScan(input: RunScanInput): Promise<CanonicalEvidenceBun
         screenshotMode: effectivePreConsentScreenshotMode,
         screenshotTimeoutMs: input.preConsentScreenshotTimeoutMs,
         onScreenshotCaptured: input.onPreConsentScreenshotCaptured,
+        consentGateAuditHoldout: input.consentGateAuditHoldout,
         waitMode: leanPreConsent ? "fast" : "full",
         retainRenderedPolicyRecoverySession: evidenceLane === "combined",
       });

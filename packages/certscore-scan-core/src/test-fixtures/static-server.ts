@@ -21,6 +21,7 @@ export type StaticFixturePage =
   | "consent-cmp-script-late-settings"
   | "consent-cmp-script-offscreen-onetrust-controls"
   | "consent-cmp-script-shadow-context-controls"
+  | "consent-cmp-script-staggered-controls"
   | "consent-cmp-script-supplemental-settings"
   | "consent-cmp-static-canonical-controls"
   | "consent-cmp-script-very-late-settings"
@@ -213,6 +214,7 @@ const fixtureSlugs: Record<StaticFixturePage, string> = {
   "consent-cmp-script-late-settings": "consent-cmp-script-late-settings",
   "consent-cmp-script-offscreen-onetrust-controls": "consent-cmp-script-offscreen-onetrust-controls",
   "consent-cmp-script-shadow-context-controls": "consent-cmp-script-shadow-context-controls",
+  "consent-cmp-script-staggered-controls": "consent-cmp-script-staggered-controls",
   "consent-cmp-script-supplemental-settings": "consent-cmp-script-supplemental-settings",
   "consent-cmp-static-canonical-controls": "consent-cmp-static-canonical-controls",
   "consent-cmp-script-very-late-settings": "consent-cmp-script-very-late-settings",
@@ -1404,6 +1406,7 @@ function consentFlowHomeMarkup(caseName: StaticFixturePage): string {
     cmpScriptOffscreenFooterSettings: caseName === "consent-cmp-script-offscreen-footer-settings",
     cmpScriptOffscreenOneTrustControls: caseName === "consent-cmp-script-offscreen-onetrust-controls",
     cmpScriptShadowContextControls: caseName === "consent-cmp-script-shadow-context-controls",
+    cmpScriptStaggeredControls: caseName === "consent-cmp-script-staggered-controls",
     cmpScriptSupplementalSettings: caseName === "consent-cmp-script-supplemental-settings",
     cmpStaticCanonicalControls: caseName === "consent-cmp-static-canonical-controls",
     cmpScriptVeryLateSettings: caseName === "consent-cmp-script-very-late-settings",
@@ -1815,6 +1818,31 @@ function consentFlowHomeMarkup(caseName: StaticFixturePage): string {
             <div id="shadow-settings" role="button" tabindex="0">Cookie settings</div>
           </section>
         \`;
+      </script>
+    `;
+  }
+  if (options.cmpScriptStaggeredControls) {
+    return `
+      <section>
+        <h1>Staggered CMP landing page</h1>
+        <p>The first-layer consent actions are attached in separate render waves.</p>
+      </section>
+      <script src="https://cdn.consentmanager.net/delivery/js/semiautomatic.min.js"></script>
+      <div id="cmp-root"></div>
+      <script>
+        window.OneTrust = { fixture: true };
+        setTimeout(() => {
+          const target = document.getElementById("cmp-root");
+          if (!target) return;
+          target.innerHTML = '<div id="privacy-settings-modal" role="dialog" aria-label="Privacy Settings"><h2>Privacy Settings</h2><p>Choose how cookies and similar technologies may be used.</p><span id="staggered-actions"></span></div>';
+          document.getElementById("staggered-actions").insertAdjacentHTML("beforeend", '<button id="settings" type="button">Settings</button>');
+        }, 6500);
+        setTimeout(() => {
+          document.getElementById("staggered-actions")?.insertAdjacentHTML("beforeend", '<button id="accept" type="button">Accept</button>');
+        }, 12500);
+        setTimeout(() => {
+          document.getElementById("staggered-actions")?.insertAdjacentHTML("beforeend", '<button id="reject" type="button">Reject</button>');
+        }, 15200);
       </script>
     `;
   }

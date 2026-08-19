@@ -4,16 +4,24 @@ import type { GdprEprivacyCoverageChecklistItem } from "../../lib/scans/gdpr-epr
 import type { ScanDetailResponse } from "./get-scan-by-id";
 import type { VersionedScoreAssessmentInput } from "./score-assessment-repository";
 import type { ChecklistEvidenceIndex } from "../../lib/scans/checklist-evidence-index";
+import {
+  isGdprEprivacyChecklistPresentation,
+  type GdprEprivacyChecklistPresentation,
+} from "../../lib/scans/gdpr-eprivacy-checklist-presentation";
 
 export const PERSISTED_CANONICAL_REPORT_PROJECTION_VERSION =
+  "persisted-canonical-report-projection-v4";
+const LEGACY_PERSISTED_CANONICAL_REPORT_PROJECTION_VERSION_V3 =
   "persisted-canonical-report-projection-v3";
-const LEGACY_PERSISTED_CANONICAL_REPORT_PROJECTION_VERSION =
+const LEGACY_PERSISTED_CANONICAL_REPORT_PROJECTION_VERSION_V2 =
   "persisted-canonical-report-projection-v2";
 
 export type PersistedCanonicalReportProjection = {
   artifactVersion:
     | typeof PERSISTED_CANONICAL_REPORT_PROJECTION_VERSION
-    | typeof LEGACY_PERSISTED_CANONICAL_REPORT_PROJECTION_VERSION;
+    | typeof LEGACY_PERSISTED_CANONICAL_REPORT_PROJECTION_VERSION_V3
+    | typeof LEGACY_PERSISTED_CANONICAL_REPORT_PROJECTION_VERSION_V2;
+  checklistPresentation?: GdprEprivacyChecklistPresentation;
   checklistRows: GdprEprivacyCoverageChecklistItem[];
   derivedContext: ScanReportUnifiedFindingState["derivedContext"];
   evidenceIndex?: ChecklistEvidenceIndex;
@@ -43,7 +51,8 @@ export function getPersistedCanonicalReportProjection(
     !isRecord(candidate) ||
     (
       candidate.artifactVersion !== PERSISTED_CANONICAL_REPORT_PROJECTION_VERSION &&
-      candidate.artifactVersion !== LEGACY_PERSISTED_CANONICAL_REPORT_PROJECTION_VERSION
+      candidate.artifactVersion !== LEGACY_PERSISTED_CANONICAL_REPORT_PROJECTION_VERSION_V3 &&
+      candidate.artifactVersion !== LEGACY_PERSISTED_CANONICAL_REPORT_PROJECTION_VERSION_V2
     ) ||
     !Array.isArray(candidate.checklistRows) ||
     !isRecord(candidate.derivedContext) ||
@@ -58,8 +67,11 @@ export function getPersistedCanonicalReportProjection(
     return null;
   }
 
+  const usesIndexedEvidence =
+    candidate.artifactVersion === PERSISTED_CANONICAL_REPORT_PROJECTION_VERSION ||
+    candidate.artifactVersion === LEGACY_PERSISTED_CANONICAL_REPORT_PROJECTION_VERSION_V3;
   if (
-    candidate.artifactVersion === PERSISTED_CANONICAL_REPORT_PROJECTION_VERSION &&
+    usesIndexedEvidence &&
     (
       !isRecord(candidate.evidenceIndex) ||
       !Array.isArray(candidate.ownerUnifiedFindingIds) ||
@@ -68,8 +80,14 @@ export function getPersistedCanonicalReportProjection(
   ) {
     return null;
   }
+  if (
+    candidate.artifactVersion === PERSISTED_CANONICAL_REPORT_PROJECTION_VERSION &&
+    !isGdprEprivacyChecklistPresentation(candidate.checklistPresentation)
+  ) {
+    return null;
+  }
 
-  if (candidate.artifactVersion === PERSISTED_CANONICAL_REPORT_PROJECTION_VERSION) {
+  if (usesIndexedEvidence) {
     const globalById = new Map(
       (candidate.globalUnifiedFindings as UnifiedFindingDisplayPacket[]).map((finding) => [
         finding.unifiedFindingId,

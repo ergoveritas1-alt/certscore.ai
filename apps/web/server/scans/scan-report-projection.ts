@@ -44,6 +44,7 @@ import {
   SCAN_REPORT_PROJECTION_VERSION
 } from "./scan-report-projection-contract";
 import { indexChecklistPolicyEvidence } from "../../lib/scans/checklist-evidence-index";
+import { buildGdprEprivacyChecklistPresentation } from "../../lib/scans/gdpr-eprivacy-checklist-presentation";
 import {
   getScanReportProjectionGeneration,
   SCAN_REPORT_PROJECTION_NON_SOURCE_EVENT_TYPES
@@ -80,11 +81,74 @@ type PersistedScanReportProjectionRow = {
   report_projection_payload: Record<string, unknown> | null;
   report_projection_payload_sha256: string | null;
   report_projection_payload_size_bytes: number | null;
+  report_projection_source_hash: string | null;
   report_projection_status: string | null;
   report_projection_version: string | null;
   scan_id: string;
   scan_status: string;
 };
+
+const COMPLETED_REPORT_CACHE_MAX_ENTRIES = 8;
+const COMPLETED_REPORT_CACHE_TTL_MS = 10 * 60 * 1000;
+const completedReportProjectionCache = new Map<
+  string,
+  { expiresAt: number; value: ScanDetailResponse }
+>();
+
+function completedReportCacheKey(input: {
+  generation: string;
+  scanId: string;
+}) {
+  return `${input.scanId}:${input.generation}`;
+}
+
+function getCachedCompletedReportProjection(input: {
+  generation?: string | null;
+  organizationId?: string | null;
+  scanId: string;
+}) {
+  if (!input.generation || !/^[a-f0-9]{64}$/i.test(input.generation)) {
+    return null;
+  }
+  const key = completedReportCacheKey({
+    generation: input.generation,
+    scanId: input.scanId,
+  });
+  const cached = completedReportProjectionCache.get(key);
+  if (!cached) {
+    return null;
+  }
+  if (cached.expiresAt <= Date.now()) {
+    completedReportProjectionCache.delete(key);
+    return null;
+  }
+  completedReportProjectionCache.delete(key);
+  completedReportProjectionCache.set(key, cached);
+  return cached.value;
+}
+
+function primeCompletedReportProjectionCache(input: {
+  generation: string;
+  scanId: string;
+  value: ScanDetailResponse;
+}) {
+  if (!/^[a-f0-9]{64}$/i.test(input.generation)) {
+    return;
+  }
+  const key = completedReportCacheKey(input);
+  completedReportProjectionCache.delete(key);
+  completedReportProjectionCache.set(key, {
+    expiresAt: Date.now() + COMPLETED_REPORT_CACHE_TTL_MS,
+    value: input.value,
+  });
+  while (completedReportProjectionCache.size > COMPLETED_REPORT_CACHE_MAX_ENTRIES) {
+    const oldestKey = completedReportProjectionCache.keys().next().value;
+    if (typeof oldestKey !== "string") {
+      break;
+    }
+    completedReportProjectionCache.delete(oldestKey);
+  }
+}
 
 /**
  * Reads the local display projection without first loading and normalizing all
@@ -92,9 +156,14 @@ type PersistedScanReportProjectionRow = {
  * unrestricted platform-admin/public scope.
  */
 export async function loadPersistedScanReportProjection(input: {
+  generation?: string | null;
   organizationId?: string | null;
   scanId: string;
 }) {
+  const cached = getCachedCompletedReportProjection(input);
+  if (cached) {
+    return cached;
+  }
   const row = await queryOne<PersistedScanReportProjectionRow>(
     `select s.id as scan_id,
             s.status as scan_status,
@@ -102,26 +171,36 @@ export async function loadPersistedScanReportProjection(input: {
             projection.report_projection_payload,
             projection.report_projection_payload_sha256,
             projection.report_projection_payload_size_bytes,
+            projection.report_projection_source_hash,
             projection.report_projection_status,
             projection.report_projection_version
        from public.scans s
        join public.scan_snapshots projection on projection.scan_id = s.id
       where s.id = $1::uuid
         and ($2::uuid is null or s.organization_id = $2::uuid)
+        and ($3::text is null or projection.report_projection_source_hash = $3::text)
       limit 1`,
-    [input.scanId, input.organizationId ?? null],
+    [input.scanId, input.organizationId ?? null, input.generation ?? null],
     { readOnly: true }
   );
   if (!row) {
     return null;
   }
-  return readPersistedScanReportProjection({
+  const projection = readPersistedScanReportProjection({
     scan: {
       id: row.scan_id,
       status: row.scan_status
     } as ScanDetailResponse["scan"],
     snapshot: row
   });
+  if (projection && row.report_projection_source_hash) {
+    primeCompletedReportProjectionCache({
+      generation: row.report_projection_source_hash,
+      scanId: input.scanId,
+      value: projection,
+    });
+  }
+  return projection;
 }
 
 export type ScanReportProjectionRow = {
@@ -613,6 +692,7 @@ async function deriveScanReportProjection(
   const ownerUnifiedFindings = buildScanReportUnifiedFindingsFromState(reportState);
   const canonicalReportProjection: PersistedCanonicalReportProjection = {
     artifactVersion: PERSISTED_CANONICAL_REPORT_PROJECTION_VERSION,
+    checklistPresentation: buildGdprEprivacyChecklistPresentation(checklist),
     checklistRows: indexedChecklistEvidence.rows,
     derivedContext: reportState.derivedContext,
     evidenceIndex: indexedChecklistEvidence.evidenceIndex,
@@ -827,6 +907,15 @@ export async function persistScanReportProjection(
   if (persistence.rowCount !== 1) {
     throw new StaleScanReportProjectionSourceError(scanRecord.scan.id);
   }
+
+  // The projection payload is already normalized in memory. Priming this
+  // bounded generation-keyed cache adds no database read or serialization to
+  // finalization and cannot serve stale content after a source-hash change.
+  primeCompletedReportProjectionCache({
+    generation: hash,
+    scanId: scanRecord.scan.id,
+    value: persistedProjection.payload,
+  });
 
   if (!projectionWasAlreadyReady) {
     const completionToProjectionMs = completionToReportProjectionMs(scanRecord.scan.completedAt);

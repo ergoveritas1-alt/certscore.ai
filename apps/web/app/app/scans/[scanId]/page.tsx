@@ -165,6 +165,7 @@ async function ScanDetailReportContent({
     statusProjection.reportReady
       ? withServerTiming("app.scan_detail.persisted_projection", () =>
           loadPersistedScanReportProjection({
+            generation: statusProjection.reportGeneration,
             organizationId: isPlatformAdmin ? null : organization.id,
             scanId
           })
@@ -297,6 +298,7 @@ async function ScanDetailReportContent({
         }
         headerActionsPlacement="belowTitle"
         localV2DagInFlightProgress={null}
+        reportGeneration={statusProjection.reportGeneration}
         scanRecord={displayScanRecord}
         canViewReviewLenses={isPlatformAdmin || membership.role === "admin"}
         signalSnapshotVisibility={{
