@@ -51,6 +51,24 @@ test("hosted MCP client classification keeps verified and self-declared attribut
   assert.equal(JSON.stringify(claimed).includes("opaque-user-value"), false);
 });
 
+test("hosted MCP client classification keeps Codex distinct from generic OpenAI client names", () => {
+  const codex = classifyHostedMcpClient({
+    clientInfoBody: { params: { clientInfo: { name: "OpenAI Codex CLI", version: "1" } } },
+    headers: {}, requesterNetwork: "direct", secret, surface: "mcp_light",
+  });
+  const unknown = classifyHostedMcpClient({
+    clientInfoBody: { params: { clientInfo: { name: "generic-mcp-bridge", version: "1" } } },
+    headers: {}, requesterNetwork: "direct", secret, surface: "mcp_light",
+  });
+
+  assert.equal(codex.clientFamily, "openai_codex");
+  assert.equal(codex.source, "openai");
+  assert.equal(codex.sourceAttribution, "self_declared_client");
+  assert.equal(unknown.clientFamily, "other");
+  assert.equal(unknown.source, "unknown");
+  assert.equal(unknown.sourceAttribution, "unknown");
+});
+
 test("telemetry differentiates all hosted MCP entrypoints and signs minimized events", async () => {
   const requests: Array<{ body: string; headers: Headers }> = [];
   const fetchMock = (async (_input: RequestInfo | URL, init?: RequestInit) => {

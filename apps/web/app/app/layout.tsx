@@ -1,7 +1,11 @@
+import { after } from "next/server";
+import { headers } from "next/headers";
 import type { ReactNode } from "react";
 import { AppShell } from "../../components/dashboard/app-shell";
 import { getDashboardContext } from "../../server/auth";
 import { getPlatformAdminFlag } from "../../server/admin/platform-admin";
+import { normalizeAnalyticsRoute } from "../../lib/product-analytics/contract";
+import { persistProductAnalyticsEvent } from "../../server/product-analytics/repository";
 
 export const dynamic = "force-dynamic";
 
@@ -10,10 +14,46 @@ type AppLayoutProps = {
 };
 
 export default async function AppLayout({ children }: AppLayoutProps) {
-  const [{ membership, organization, user }, isPlatformAdmin] = await Promise.all([
+  const [{ membership, organization, user }, isPlatformAdmin, requestHeaders] = await Promise.all([
     getDashboardContext(),
-    getPlatformAdminFlag()
+    getPlatformAdminFlag(),
+    headers()
   ]);
+
+  const eventId = requestHeaders.get("x-certscore-operational-event-id");
+  const method = requestHeaders.get("x-certscore-operational-method") ?? "GET";
+  const route = requestHeaders.get("x-certscore-operational-route");
+  if (eventId && route && (method === "GET" || method === "POST")) {
+    const operationalEvent = method === "POST"
+      ? { category: "form" as const, eventName: "form_submitted" as const, feature: "server_action", outcome: "submitted" as const }
+      : { category: "navigation" as const, eventName: "page_viewed" as const, feature: "server_route", outcome: "observed" as const };
+    after(async () => {
+      try {
+        await persistProductAnalyticsEvent({
+          ...operationalEvent,
+          route: normalizeAnalyticsRoute(route)
+        }, {
+          browserFamily: "server",
+          consentState: "operational",
+          countryCode: null,
+          deviceClass: "unknown",
+          isBot: false,
+          isStaff: isPlatformAdmin,
+          osFamily: "server",
+          organizationId: organization?.id ?? null,
+          referringDomain: null,
+          userId: user.id
+        }, eventId);
+      } catch (error) {
+        console.error(JSON.stringify({
+          event: "operational_event.write_failed",
+          errorClass: error instanceof Error ? error.name : "UnknownError",
+          eventName: operationalEvent.eventName,
+          route: normalizeAnalyticsRoute(route)
+        }));
+      }
+    });
+  }
 
   const canManageCompany = isPlatformAdmin;
   const hasWorkspace = Boolean(organization && membership);

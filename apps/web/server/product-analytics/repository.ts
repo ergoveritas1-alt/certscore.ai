@@ -6,9 +6,9 @@ import type { ProductAnalyticsPayload } from "../../lib/product-analytics/contra
 const RAW_RETENTION_DAYS = 90;
 let lastPrunedAt = 0;
 
-type ProductAnalyticsContext = {
+export type ProductAnalyticsContext = {
   browserFamily: string;
-  consentState: "measurement" | "granted" | "opted_out";
+  consentState: "operational" | "measurement" | "granted" | "opted_out";
   countryCode: string | null;
   deviceClass: "desktop" | "mobile" | "tablet" | "unknown";
   isBot: boolean;
@@ -19,23 +19,24 @@ type ProductAnalyticsContext = {
   userId: string | null;
 };
 
-export async function persistProductAnalyticsEvent(payload: ProductAnalyticsPayload, context: ProductAnalyticsContext) {
+export async function persistProductAnalyticsEvent(payload: ProductAnalyticsPayload, context: ProductAnalyticsContext, eventId?: string | null) {
   const optedOut = context.consentState === "opted_out";
   await query(
     `insert into public.product_analytics_events (
-       event_name, category, feature, outcome, normalized_route, previous_route, entry_route,
+       event_id, event_name, category, feature, outcome, normalized_route, previous_route, entry_route,
        element_id, form_id, session_id, actor_id, user_id, organization_id, scan_id,
        consent_state, referring_domain, campaign_source, campaign_medium, campaign_name,
        browser_family, os_family, device_class, viewport_band, language, country_code,
        is_authenticated, is_staff, is_bot, duration_ms, numeric_value
      ) values (
-       $1, $2, $3, $4, $5, $6, $7,
-       $8, $9, $10::uuid, $11::uuid, $12::uuid, $13::uuid, $14::uuid,
-       $15, $16, $17, $18, $19,
-       $20, $21, $22, $23, $24, $25,
-       $26, $27, $28, $29, $30
-     )`,
+       coalesce($1::uuid, gen_random_uuid()), $2, $3, $4, $5, $6, $7, $8,
+       $9, $10, $11::uuid, $12::uuid, $13::uuid, $14::uuid, $15::uuid,
+       $16, $17, $18, $19, $20,
+       $21, $22, $23, $24, $25, $26,
+       $27, $28, $29, $30, $31
+     ) on conflict (event_id) do nothing`,
     [
+      eventId ?? null,
       payload.eventName,
       payload.category,
       payload.feature,

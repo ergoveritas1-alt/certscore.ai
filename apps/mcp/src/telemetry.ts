@@ -56,8 +56,8 @@ function declaredClientName(body: unknown) {
 
 function clientFamily(name: string | null): McpTelemetryEvent["clientFamily"] {
   if (!name) return "unknown";
-  if (/chatgpt|openai/i.test(name)) return "openai_chatgpt";
   if (/codex/i.test(name)) return "openai_codex";
+  if (/chatgpt|openai/i.test(name)) return "openai_chatgpt";
   if (/claude|anthropic/i.test(name)) return "anthropic_claude";
   return "other";
 }

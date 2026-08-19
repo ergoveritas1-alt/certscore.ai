@@ -100,6 +100,19 @@ function sourceClass(source: AdminMcpTelemetryEvent["source"], attribution: stri
   return "bg-slate-100 text-slate-600 ring-slate-200";
 }
 
+function clientSignalReason(attribution: string, clientFamily: string) {
+  if (attribution === "verified_network") return "Verified network";
+  if (attribution === "self_declared_header") return "Provider header claim";
+  if (attribution === "self_declared_client") return "Recognized client info";
+  return clientFamily === "other" ? "Unrecognized client info" : "No client signal";
+}
+
+function provenanceLabel(value: "request" | "canonical_scan" | null) {
+  if (value === "request") return "Direct request";
+  if (value === "canonical_scan") return "From scan";
+  return null;
+}
+
 function decisionClass(decision: AdminMcpTelemetryEvent["scan_decision"]) {
   if (decision === "reused") return "bg-sky-50 text-sky-700 ring-sky-100";
   if (decision === "new") return "bg-emerald-50 text-emerald-700 ring-emerald-100";
@@ -281,7 +294,7 @@ export default async function AdminMcpTelemetryPage({ searchParams }: AdminMcpPa
               </colgroup>
               <thead className="sticky top-0 z-20 bg-slate-50 text-[10px] uppercase tracking-[0.08em] text-slate-500">
                 <tr>{[
-                  { label: "Status", className: "sticky left-0 z-30 bg-slate-50" }, { label: "Entrypoint" }, { label: "Provider / client" },
+                  { label: "Status", className: "sticky left-0 z-30 bg-slate-50" }, { label: "Entrypoint" }, { label: "Provider signal / client" },
                   { label: "Requested" }, { label: "Target" }, { label: "Tool" }, { label: "Decision" }, { label: "Perspective" },
                   { label: "Latency" }, { label: "Scan ID" }, { label: "Request / event" }, { label: "Opaque IDs" },
                   { label: "Open", className: "sticky right-0 z-30 bg-slate-50" },
@@ -296,12 +309,12 @@ export default async function AdminMcpTelemetryPage({ searchParams }: AdminMcpPa
                     <tr className="group h-[54px] hover:bg-slate-50/70" key={event.event_id}>
                       <td className="sticky left-0 z-10 bg-white px-2.5 py-1.5 group-hover:bg-slate-50"><span className={`inline-flex items-center gap-1.5 font-semibold ${outcome.text}`}><span aria-hidden="true" className={`inline-block h-2.5 w-2.5 rounded-full ${outcome.dot}`} />{outcome.label}</span>{event.error_code ? <p className="mt-0.5 truncate text-[10px] text-rose-600" title={event.error_code}>{event.error_code}</p> : null}</td>
                       <td className="px-2.5 py-1.5"><span className={`inline-flex rounded-full px-1.5 py-0.5 text-[10px] font-semibold ring-1 ${surfaceClass(event.surface)}`}>{surfaceLabels[event.surface]}</span><p className="mt-1 text-[10px] text-slate-500">{event.auth_class}</p></td>
-                      <td className="px-2.5 py-1.5"><span className={`inline-flex max-w-full truncate rounded-full px-1.5 py-0.5 text-[10px] font-semibold ring-1 ${sourceClass(event.source, event.source_attribution)}`}>{sourceLabel(event.source, event.source_attribution)}</span><p className="mt-1 truncate text-[10px] text-slate-500" title={event.client_family}>{formatLabel(event.client_family)}</p></td>
+                      <td className="px-2.5 py-1.5"><span className={`inline-flex max-w-full truncate rounded-full px-1.5 py-0.5 text-[10px] font-semibold ring-1 ${sourceClass(event.source, event.source_attribution)}`}>{sourceLabel(event.source, event.source_attribution)}</span><p className="mt-1 truncate text-[10px] text-slate-500" title={`${formatLabel(event.client_family)} · ${clientSignalReason(event.source_attribution, event.client_family)}`}>{formatLabel(event.client_family)} · {clientSignalReason(event.source_attribution, event.client_family)}</p></td>
                       <td className="px-2.5 py-1.5 text-[10px] leading-4" title={formatAdminDateTime(event.occurred_at)}><p>{requested.date}</p><p className="text-slate-500">{requested.time}</p></td>
-                      <td className="px-2.5 py-1.5"><p className="truncate font-mono text-[11px] font-semibold text-slate-900" title={event.target_hostname ?? "No target hostname"}>{event.target_hostname ?? "—"}</p><p className="mt-1 truncate text-[10px] text-slate-500">{event.freshness ? formatLabel(event.freshness) : "No freshness"}</p></td>
+                      <td className="px-2.5 py-1.5"><p className="truncate font-mono text-[11px] font-semibold text-slate-900" title={event.target_hostname ?? "No target hostname"}>{event.target_hostname ?? "—"}</p><p className="mt-1 truncate text-[10px] text-slate-500">{[event.freshness ? formatLabel(event.freshness) : null, provenanceLabel(event.target_provenance)].filter(Boolean).join(" · ") || "No target context"}</p></td>
                       <td className="px-2.5 py-1.5"><p className="truncate font-mono text-[10px] font-semibold text-slate-900" title={event.tool_name}>{event.tool_name}</p><p className="mt-1 truncate text-[10px] text-slate-500">{formatLabel(event.transport_outcome)}</p></td>
                       <td className="px-2.5 py-1.5"><span className={`inline-flex rounded-full px-1.5 py-0.5 text-[10px] font-semibold ring-1 ${decisionClass(event.scan_decision)}`}>{formatLabel(event.scan_decision)}</span>{event.scan_status ? <p className="mt-1 truncate text-[10px] text-slate-500">{formatLabel(event.scan_status)}</p> : null}</td>
-                      <td className="px-2.5 py-1.5 font-medium text-slate-700">{event.scan_from ? formatLabel(event.scan_from) : "—"}</td>
+                      <td className="px-2.5 py-1.5"><p className="font-medium text-slate-700">{event.scan_from ? formatLabel(event.scan_from) : "—"}</p>{provenanceLabel(event.perspective_provenance) ? <p className="mt-1 truncate text-[10px] text-slate-500">{provenanceLabel(event.perspective_provenance)}</p> : null}</td>
                       <td className="px-2.5 py-1.5 font-semibold text-slate-900">{duration(event.duration_ms)}</td>
                       <td className="px-2.5 py-1.5"><p className="truncate font-mono text-[10px]" title={event.scan_id ?? undefined}>{event.scan_id ?? "—"}</p></td>
                       <td className="px-2.5 py-1.5 font-mono text-[10px] text-slate-500"><p className="truncate" title={event.request_id}>req {event.request_id}</p><p className="mt-1 truncate" title={event.event_id}>evt {event.event_id}</p></td>
@@ -383,7 +396,7 @@ export default async function AdminMcpTelemetryPage({ searchParams }: AdminMcpPa
                       <p className="font-semibold text-slate-900">{sourceLabel(source.source, source.sourceAttribution)}</p>
                       <span className="rounded-full bg-slate-100 px-2 py-1 text-xs text-slate-600">{surfaceLabels[source.surface]}</span>
                     </div>
-                    <p className="mt-1 text-sm text-slate-600">{source.clientFamily.replaceAll("_", " ")} · {source.authClass} · {number(source.calls)} calls · {number(source.sessions)} sessions · {number(source.actors)} actors</p>
+                    <p className="mt-1 text-sm text-slate-600">{source.clientFamily.replaceAll("_", " ")} · {clientSignalReason(source.sourceAttribution, source.clientFamily)} · {source.authClass} · {number(source.calls)} calls · {number(source.sessions)} sessions · {number(source.actors)} actors</p>
                   </div>
                 ))}
                 {dashboard.sources.length === 0 ? <p className="text-sm text-slate-500">No source signals retained during {dashboard.sourceAnalytics.label.toLowerCase()}.</p> : null}

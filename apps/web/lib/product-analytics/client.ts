@@ -60,31 +60,50 @@ function campaignValue(name: string) {
 export function trackProductEvent(input: Omit<ProductAnalyticsPayload, "actorId" | "entryRoute" | "language" | "route" | "scanId" | "sessionId" | "viewportBand"> & { route?: string; anonymousAggregate?: boolean }) {
   if (typeof window === "undefined") return;
   const choice = getStoredAnalyticsConsent();
-  if (choice === "denied" && !input.anonymousAggregate) return;
+  const privacyBounded = input.anonymousAggregate || choice === "denied";
   const actualRoute = input.route ?? window.location.pathname;
-  const entryRoute = input.anonymousAggregate ? actualRoute : safeStorage(window.sessionStorage, ENTRY_ROUTE_KEY) ?? actualRoute;
-  if (!input.anonymousAggregate) setSafeStorage(window.sessionStorage, ENTRY_ROUTE_KEY, entryRoute);
+  const entryRoute = privacyBounded ? actualRoute : safeStorage(window.sessionStorage, ENTRY_ROUTE_KEY) ?? actualRoute;
+  if (!privacyBounded) setSafeStorage(window.sessionStorage, ENTRY_ROUTE_KEY, entryRoute);
   const payload: ProductAnalyticsPayload = {
     ...input,
     route: actualRoute,
-    scanId: input.anonymousAggregate ? undefined : extractScanIdFromPath(actualRoute),
+    scanId: privacyBounded ? undefined : extractScanIdFromPath(actualRoute),
     entryRoute,
     language: navigator.language,
     viewportBand: viewportBand(),
-    campaignSource: input.anonymousAggregate ? undefined : campaignValue("utm_source"),
-    campaignMedium: input.anonymousAggregate ? undefined : campaignValue("utm_medium"),
-    campaignName: input.anonymousAggregate ? undefined : campaignValue("utm_campaign"),
-    ...(input.anonymousAggregate ? {} : { actorId: getActorId(), sessionId: getSessionId() })
+    campaignSource: privacyBounded ? undefined : campaignValue("utm_source"),
+    campaignMedium: privacyBounded ? undefined : campaignValue("utm_medium"),
+    campaignName: privacyBounded ? undefined : campaignValue("utm_campaign"),
+    ...(privacyBounded ? {} : { actorId: getActorId(), sessionId: getSessionId() })
   };
   delete (payload as ProductAnalyticsPayload & { anonymousAggregate?: boolean }).anonymousAggregate;
-  void fetch("/api/analytics/events", {
-    method: "POST",
-    headers: {
-      "content-type": "application/json",
-      "x-certscore-analytics-consent": choice === "granted" ? "granted" : "measurement"
-    },
-    body: JSON.stringify(payload),
-    keepalive: true,
-    credentials: "same-origin"
-  }).catch(() => undefined);
+  const body = JSON.stringify(payload);
+
+  async function deliver(attempt = 0): Promise<void> {
+    try {
+      const response = await fetch("/api/analytics/events", {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          "x-certscore-analytics-consent": choice === "denied" ? "denied" : choice === "granted" ? "granted" : "measurement"
+        },
+        body,
+        keepalive: true,
+        credentials: "same-origin"
+      });
+      if (!response.ok) throw new Error(`Operational event ingestion returned HTTP ${response.status}.`);
+    } catch (error) {
+      if (attempt < 2) {
+        await new Promise((resolve) => window.setTimeout(resolve, 250 * (attempt + 1)));
+        return deliver(attempt + 1);
+      }
+      console.error("[certscore] operational event ingestion failed", {
+        errorName: error instanceof Error ? error.name : "UnknownError",
+        eventName: payload.eventName,
+        route: payload.route
+      });
+    }
+  }
+
+  void deliver();
 }

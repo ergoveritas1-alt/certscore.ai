@@ -428,6 +428,18 @@ test("buildApiV2ScanStatus exposes public scan status links", () => {
   assert.equal(status.links?.findings, "https://certscore.ai/api/v2/scans/00000000-0000-4000-8000-000000000123/findings");
 });
 
+test("buildApiV2ScanStatus preserves every supported canonical execution region", () => {
+  for (const scanFrom of ["eu_de", "eu_ie", "california"] as const) {
+    const status = buildApiV2ScanStatus(fixture({ scanFromValue: scanFrom }));
+    assert.equal(status.scanFrom, scanFrom);
+  }
+});
+
+test("buildApiV2ScanStatus does not invent unavailable execution provenance", () => {
+  const status = buildApiV2ScanStatus(fixture({ scanFromValue: "default" }));
+  assert.equal(status.scanFrom, undefined);
+});
+
 test("buildApiV2ScanStatus keeps completed scanner work finalizing until the canonical score is ready", () => {
   const scanRecord = {
     ...fixture(),

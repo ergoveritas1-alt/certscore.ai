@@ -14,7 +14,7 @@ const navItems = [
   { href: "/app/admin/scans", label: "Scans" },
   { href: "/app/admin/pulse", label: "API activity" },
   { href: "/app/admin/mcp", label: "MCP operations" },
-  { href: "/app/admin/analytics", label: "Product analytics" },
+  { href: "/app/admin/analytics", label: "Events" },
   { href: "/app/admin/monitor-requests", label: "Monitor Requests" }
 ] as const;
 
@@ -25,7 +25,7 @@ export default async function AdminLayout({ children }: AdminLayoutProps) {
     <div className="min-w-0 space-y-6">
       <div className="space-y-2">
         <h1 className="text-3xl font-semibold tracking-tight">Admin</h1>
-        <p className="max-w-3xl text-sm text-slate-600">Workspace operations, scan inspection, and API activity.</p>
+        <p className="max-w-3xl text-sm text-slate-600">Workspace operations, scan inspection, and cross-route event activity.</p>
       </div>
 
       <nav className="flex min-w-0 flex-wrap gap-2">

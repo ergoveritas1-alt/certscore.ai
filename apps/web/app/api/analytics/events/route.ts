@@ -1,4 +1,4 @@
-import { after, NextResponse } from "next/server";
+import { NextResponse } from "next/server";
 import { isPlatformAdminEmail } from "../../../../server/admin/platform-admin";
 import { getBetterAuthSessionUser } from "../../../../server/better-auth/session";
 import { parseProductAnalyticsPayload } from "../../../../lib/product-analytics/contract";
@@ -34,7 +34,7 @@ export async function POST(request: Request) {
   const payload = parseProductAnalyticsPayload(await request.json().catch(() => null));
   if (!payload) return NextResponse.json({ error: "invalid_event" }, { status: 400 });
 
-  const consentState = payload.eventName === "analytics_opted_out"
+  const consentState = payload.eventName === "analytics_opted_out" || request.headers.get("x-certscore-analytics-consent") === "denied"
     ? "opted_out" as const
     : request.headers.get("x-certscore-analytics-consent") === "granted"
       ? "granted" as const
@@ -44,23 +44,21 @@ export async function POST(request: Request) {
   const countryHeader = request.headers.get("cloudfront-viewer-country") ?? request.headers.get("cf-ipcountry");
   const countryCode = countryHeader && /^[A-Z]{2}$/.test(countryHeader) ? countryHeader : null;
 
-  after(async () => {
-    try {
-      const user = consentState === "opted_out" ? null : await getBetterAuthSessionUser();
-      const organizationId = user ? await findOrganizationIdForUser(user.id).catch(() => null) : null;
-      await persistProductAnalyticsEvent(payload, {
-        ...technical,
-        consentState,
-        countryCode,
-        isStaff: isPlatformAdminEmail(user?.email),
-        organizationId,
-        referringDomain: referringDomain(request),
-        userId: user?.id ?? null
-      });
-    } catch (error) {
-      console.warn(JSON.stringify({ event: "product_analytics.write_failed", errorClass: error instanceof Error ? error.name : "UnknownError" }));
-    }
-  });
-
-  return new NextResponse(null, { status: 202 });
+  try {
+    const user = consentState === "opted_out" ? null : await getBetterAuthSessionUser();
+    const organizationId = user ? await findOrganizationIdForUser(user.id).catch(() => null) : null;
+    await persistProductAnalyticsEvent(payload, {
+      ...technical,
+      consentState,
+      countryCode,
+      isStaff: isPlatformAdminEmail(user?.email),
+      organizationId,
+      referringDomain: referringDomain(request),
+      userId: user?.id ?? null
+    });
+    return new NextResponse(null, { status: 201 });
+  } catch (error) {
+    console.error(JSON.stringify({ event: "product_analytics.write_failed", errorClass: error instanceof Error ? error.name : "UnknownError" }));
+    return NextResponse.json({ error: "event_persistence_failed" }, { status: 503 });
+  }
 }

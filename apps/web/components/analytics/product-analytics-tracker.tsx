@@ -35,7 +35,10 @@ export function ProductAnalyticsTracker() {
 
   useEffect(() => {
     const eventName = pathname.includes("/scans/") ? "scan_viewed" : pathname.includes("/reports/") ? "report_viewed" : "page_viewed";
-    trackProductEvent({ eventName, category: eventName === "scan_viewed" ? "scan" : eventName === "report_viewed" ? "report" : "navigation", feature: "route", outcome: "observed", previousRoute: previousRoute.current, route: pathname });
+    const isInitialAuthenticatedAppView = pathname.startsWith("/app") && previousRoute.current === undefined;
+    if (!isInitialAuthenticatedAppView) {
+      trackProductEvent({ eventName, category: eventName === "scan_viewed" ? "scan" : eventName === "report_viewed" ? "report" : "navigation", feature: "route", outcome: "observed", previousRoute: previousRoute.current, route: pathname });
+    }
     previousRoute.current = pathname;
   }, [pathname]);
 

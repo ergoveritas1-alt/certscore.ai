@@ -126,8 +126,10 @@ export type AdminMcpTelemetryEvent = {
   source_attribution: string;
   surface: McpTelemetrySurface;
   target_hostname: string | null;
+  target_provenance: "request" | "canonical_scan" | null;
   tool_name: string;
   transport_outcome: "mcp_result" | "mcp_error" | "http_429";
+  perspective_provenance: "request" | "canonical_scan" | null;
 };
 
 export type AdminMcpTelemetryEventFilters = {
@@ -445,13 +447,42 @@ export async function listAdminMcpTelemetryEventsPage(
       { readOnly: true },
     ),
     query<AdminMcpTelemetryEvent>(
-      `select event_id, occurred_at, surface, source, source_attribution, auth_class, client_family,
-              tool_name, request_id, target_hostname, freshness, scan_from, scan_id, scan_decision,
-              scan_status, outcome, transport_outcome, duration_ms, quota_outcome, error_code,
-              session_id, actor_id
-         from public.mcp_tool_invocation_events
+      `select events.event_id, events.occurred_at, events.surface, events.source,
+              events.source_attribution, events.auth_class, events.client_family,
+              events.tool_name, events.request_id,
+              coalesce(events.target_hostname, canonical_domain.hostname) as target_hostname,
+              case
+                when events.target_hostname is not null then 'request'
+                when canonical_domain.hostname is not null then 'canonical_scan'
+                else null
+              end as target_provenance,
+              events.freshness,
+              coalesce(
+                events.scan_from,
+                case
+                  when canonical_scan.scan_config_json ->> 'scanFrom' in ('eu_de', 'eu_ie', 'california')
+                    then canonical_scan.scan_config_json ->> 'scanFrom'
+                  else null
+                end
+              ) as scan_from,
+              case
+                when events.scan_from is not null then 'request'
+                when canonical_scan.scan_config_json ->> 'scanFrom' in ('eu_de', 'eu_ie', 'california') then 'canonical_scan'
+                else null
+              end as perspective_provenance,
+              events.scan_id, events.scan_decision, events.scan_status, events.outcome,
+              events.transport_outcome, events.duration_ms, events.quota_outcome, events.error_code,
+              events.session_id, events.actor_id
+         from public.mcp_tool_invocation_events events
+         left join public.scans canonical_scan
+           on canonical_scan.id = case
+             when events.scan_id ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$'
+               then events.scan_id::uuid
+             else null
+           end
+         left join public.domains canonical_domain on canonical_domain.id = canonical_scan.domain_id
          ${whereSql}
-        order by occurred_at desc
+        order by events.occurred_at desc
         limit ${limitParameter}
        offset ${offsetParameter}`,
       [...values, limit, offset],

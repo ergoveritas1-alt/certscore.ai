@@ -19,8 +19,12 @@ function hasSessionCookie(request: NextRequest) {
 
 export async function middleware(request: NextRequest) {
   if (hasSessionCookie(request)) {
+    const requestHeaders = new Headers(request.headers);
+    requestHeaders.set("x-certscore-operational-event-id", crypto.randomUUID());
+    requestHeaders.set("x-certscore-operational-method", request.method);
+    requestHeaders.set("x-certscore-operational-route", request.nextUrl.pathname);
     return NextResponse.next({
-      request
+      request: { headers: requestHeaders }
     });
   }
 

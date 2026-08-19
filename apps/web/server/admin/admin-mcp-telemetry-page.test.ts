@@ -46,6 +46,11 @@ test("MCP operations page makes the request ledger the primary navigable workspa
   assert.doesNotMatch(page, /Invocation telemetry/);
   assert.match(page, /Unknown source/);
   assert.match(page, /allowedAttribution/);
+  assert.match(page, /Provider signal \/ client/);
+  assert.match(page, /Recognized client info/);
+  assert.match(page, /Unrecognized client info/);
+  assert.match(page, /No client signal/);
+  assert.match(page, /From scan/);
 });
 
 test("MCP telemetry dashboard queries bounded periods and never reads request payloads", () => {
@@ -67,6 +72,11 @@ test("MCP telemetry dashboard queries bounded periods and never reads request pa
   assert.match(repository, /expired_event_count/);
   assert.match(repository, /listAdminMcpTelemetryEventsPage/);
   assert.match(repository, /target_hostname ilike/);
+  assert.match(repository, /left join public\.scans canonical_scan/);
+  assert.match(repository, /left join public\.domains canonical_domain/);
+  assert.match(repository, /target_provenance/);
+  assert.match(repository, /perspective_provenance/);
+  assert.match(repository, /canonical_scan\.scan_config_json ->> 'scanFrom' in \('eu_de', 'eu_ie', 'california'\)/);
   assert.match(repository, /limit \$\{limitParameter\}/);
   assert.doesNotMatch(repository, /prompt|authorization|request_body|response_body|raw_header/i);
 });
