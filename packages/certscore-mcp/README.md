@@ -362,10 +362,10 @@ Without `CERTSCORE_API_KEY`, the smoke script exits successfully with a skip mes
 For the full production operator smoke, run from the WC01 repo:
 
 ```bash
-pnpm ops:smoke:mcp-production
+CERTSCORE_ALLOW_PAID_ECS_SMOKE=1 pnpm ops:smoke:mcp-cli-production
 ```
 
-This verifies the Homebrew-installed `certscore-mcp` command against live `https://certscore.ai`. It creates a short-lived preview key, stores only the hash in production through the approved ECS/Fargate path, checks required tools, requests a fresh EU-IR scan with `freshness: "refresh"` and `scanFrom: "eu_ie"`, requires non-empty findings and pre-consent cookies/trackers rows, runs `certscore_explain_finding`, and revokes the temporary key afterward. It exercises existing public-safe API/MCP projections only.
+This verifies the Homebrew-installed `certscore-mcp` command against live `https://certscore.ai`. It first requires the installed CLI version to match the workspace version, then creates a short-lived preview key, stores only the hash in production through the approved ECS/Fargate path, checks required tools, requires non-empty findings and pre-consent cookies/trackers rows, and revokes the temporary key afterward. The explicit cost opt-in is required because this separate CLI check starts one-off Fargate tasks. Use `pnpm ops:smoke:mcp-production` for the hosted, retained-scan, read-only canary.
 
 ## Troubleshooting
 

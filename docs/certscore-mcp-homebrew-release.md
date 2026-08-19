@@ -96,10 +96,10 @@ artifacts/certscore-mcp-homebrew/certscore-mcp-v$(node -e 'console.log(JSON.pars
 For an end-to-end production operator smoke after release:
 
 ```bash
-pnpm ops:smoke:mcp-production
+CERTSCORE_ALLOW_PAID_ECS_SMOKE=1 pnpm ops:smoke:mcp-cli-production
 ```
 
-The production smoke uses the installed Homebrew command, creates a short-lived preview key, stores only the key hash in production through the approved ECS/Fargate one-off task pattern, verifies non-empty findings and pre-consent cookies/trackers rows through MCP, and revokes the temporary key afterward. It is a public integration smoke, not a scanner/report pipeline change.
+The CLI production smoke requires the installed Homebrew version to match the workspace version. It creates a short-lived preview key, stores only the key hash in production through the approved ECS/Fargate one-off task pattern, verifies non-empty findings and pre-consent cookies/trackers rows through MCP, and revokes the temporary key afterward. Because it starts one-off Fargate tasks, set the explicit cost opt-in only after owner approval. It is separate from the hosted MCP canary.
 
 ## Troubleshooting
 

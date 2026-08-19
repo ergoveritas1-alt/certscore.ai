@@ -48,6 +48,13 @@ export default async function AdminMcpTelemetryPage() {
         This dashboard measures requests that reach CertScore.ai infrastructure. It does not measure ChatGPT directory impressions, searches, plugin suggestions, install impressions, or cases where ChatGPT considered CertScore.ai but did not invoke it.
       </div>
 
+      <div className={`rounded-2xl border px-4 py-3 text-sm leading-6 ${dashboard.retention.expiredEvents > 0 ? "border-amber-200 bg-amber-50 text-amber-950" : "border-slate-200 bg-white text-slate-700"}`}>
+        <span className="font-semibold text-slate-950">Retention health:</span>{" "}
+        {dashboard.retention.totalEvents === 0
+          ? `No events retained yet. The retention target is ${dashboard.retention.days} days.`
+          : <>target {dashboard.retention.days} days · oldest {dashboard.retention.oldestEventAt ? formatAdminDateTime(dashboard.retention.oldestEventAt) : "unavailable"} · newest {dashboard.retention.newestEventAt ? formatAdminDateTime(dashboard.retention.newestEventAt) : "unavailable"} · {number(dashboard.retention.totalEvents)} total · {number(dashboard.retention.expiredEvents)} awaiting write-triggered pruning</>}
+      </div>
+
       <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-6">
         {[
           ["Today", number(dashboard.metrics.invocationsToday), "All tool invocations"],

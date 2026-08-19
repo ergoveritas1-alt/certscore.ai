@@ -48,10 +48,10 @@ jobs:
           {
             node <<'NODE'
           const { createHash, randomBytes } = require("node:crypto");
-          const token = `cs_preview_${randomBytes(32).toString("base64url")}`;
+          const secret = randomBytes(32).toString("base64url");
+          const token = `cs_preview_${secret}`;
           const tokenHash = createHash("sha256").update(token, "utf8").digest("hex");
-          const [, kind, secret] = token.split("_");
-          const tokenPrefix = `cs_${kind}_${secret.slice(0, 8)}`;
+          const tokenPrefix = `cs_preview_${secret.slice(0, 8)}`;
           const publicId = `api_key_${randomBytes(12).toString("base64url")}`;
           const requestedExpiresAt = process.env.REQUESTED_EXPIRES_AT?.trim();
           const expiresAt = requestedExpiresAt || new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString();

@@ -33,6 +33,8 @@ test("production MCP smoke keeps the expected safety rails", () => {
   assert.match(source, /set status = 'revoked', updated_at = timezone\('utc', now\(\)\)/);
   assert.doesNotMatch(source, /revoked_at/);
   assert.equal(consoleLines.some((line) => /key\.token(?!Prefix|Hash)|CERTSCORE_API_KEY/.test(line)), false);
+  assert.match(source, /CERTSCORE_ALLOW_PAID_ECS_SMOKE/);
+  assert.match(source, /Installed legacy CLI version/);
 });
 
 test("production MCP smoke requires the exact 12-tool surface", () => {

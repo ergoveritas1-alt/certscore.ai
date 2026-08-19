@@ -1,7 +1,7 @@
 import "server-only";
 
 import { query, queryOne } from "@website-signal-risk-scanner/db";
-import type { McpTelemetrySurface } from "@website-signal-risk-scanner/shared";
+import { MCP_TELEMETRY_RETENTION_DAYS, type McpTelemetrySurface } from "@website-signal-risk-scanner/shared";
 import { calculateMcpTelemetryRates } from "../../lib/admin/mcp-telemetry-rates";
 import { requirePlatformAdminContext } from "./platform-admin";
 
@@ -86,6 +86,13 @@ type RecentRow = {
   tool_name: string;
 };
 
+type RetentionRow = {
+  expired_event_count: CountValue;
+  newest_event_at: string | null;
+  oldest_event_at: string | null;
+  total_event_count: CountValue;
+};
+
 function count(value: CountValue) {
   const parsed = Number(value ?? 0);
   return Number.isFinite(parsed) ? parsed : 0;
@@ -99,7 +106,7 @@ function nullableNumber(value: CountValue) {
 
 export async function loadAdminMcpTelemetryDashboard() {
   await requirePlatformAdminContext();
-  const [summaryResult, dailyResult, toolResult, surfaceResult, sourceResult, hostnameResult, recentResult] = await Promise.all([
+  const [summaryResult, dailyResult, toolResult, surfaceResult, sourceResult, hostnameResult, recentResult, retentionResult] = await Promise.all([
     queryOne<SummaryRow>(
       `select count(*) filter (where occurred_at >= (date_trunc('day', now() at time zone 'UTC') at time zone 'UTC')) as invocation_count_today,
               count(*) filter (where occurred_at >= now() - interval '7 days') as invocation_count_7d,
@@ -206,6 +213,17 @@ export async function loadAdminMcpTelemetryDashboard() {
       [],
       { readOnly: true },
     ),
+    queryOne<RetentionRow>(
+      `select min(occurred_at) as oldest_event_at,
+              max(occurred_at) as newest_event_at,
+              count(*) as total_event_count,
+              count(*) filter (
+                where occurred_at < now() - ($1::int * interval '1 day')
+              ) as expired_event_count
+         from public.mcp_tool_invocation_events`,
+      [MCP_TELEMETRY_RETENTION_DAYS],
+      { readOnly: true },
+    ),
   ]);
 
   const summary = summaryResult ?? {
@@ -251,6 +269,13 @@ export async function loadAdminMcpTelemetryDashboard() {
       scans: metrics.scans30d,
       statusPolls: metrics.statusPolls30d,
     }),
+    retention: {
+      days: MCP_TELEMETRY_RETENTION_DAYS,
+      expiredEvents: count(retentionResult?.expired_event_count ?? 0),
+      newestEventAt: retentionResult?.newest_event_at ?? null,
+      oldestEventAt: retentionResult?.oldest_event_at ?? null,
+      totalEvents: count(retentionResult?.total_event_count ?? 0),
+    },
     recent: recentResult.rows,
     sources: sourceResult.rows.map((row) => ({
       actors: count(row.actor_count),

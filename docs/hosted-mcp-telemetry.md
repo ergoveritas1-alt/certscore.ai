@@ -100,3 +100,27 @@ This telemetry cannot measure:
 - provider-side retries or decisions that never reach CertScore infrastructure
 
 The dashboard repeats this limitation so infrastructure request counts are not presented as discovery or marketplace analytics.
+
+## Production canary and operational checks
+
+The hosted production canary exercises all three entrypoints without creating a scan. It requires an existing retained scan ID and a short-lived authenticated MCP token supplied only through the environment:
+
+```bash
+CERTSCORE_MCP_CANARY_SCAN_ID=<retained-scan-id> \
+CERTSCORE_MCP_ACCESS_TOKEN=<short-lived-scan-read-mcp-token> \
+pnpm ops:smoke:mcp-production
+```
+
+The canary verifies the exact three-tool Light contract, the exact twelve-tool anonymous and authenticated contracts, one status read on each entrypoint, and one summary bundle read on Light. It never calls `certscore_scan_site`, requests `freshness=refresh`, creates an API key, or starts a one-off compute task. Set `CERTSCORE_MCP_CANARY_VERIFY_TELEMETRY=1` only from an approved environment that already has `DATABASE_URL`; this additionally verifies that all four expected privacy-minimized event rows were persisted.
+
+The separately packaged stdio/Homebrew CLI has its own explicit check:
+
+```bash
+CERTSCORE_ALLOW_PAID_ECS_SMOKE=1 pnpm ops:smoke:mcp-cli-production
+```
+
+That legacy check first requires the installed CLI version to match the workspace package. It creates one-off Fargate tasks, so the cost opt-in must be set only after explicit owner approval.
+
+Telemetry write and persistence failures remain visible through the structured `mcp.telemetry_write_failed`, `mcp.telemetry_event_rejected`, and `mcp.telemetry_persistence_failed` log events. The web ECS stack combines those events from the MCP and web log groups into the sparse `CertScore/MCP` `TelemetryPipelineFailures` metric and alarms on the first failure. Missing metric data is treated as healthy, so the custom metric emits only when a matching failure is logged. The dedicated regional SNS topic sends alarm and recovery notifications to the configured operations email endpoint.
+
+The telemetry alarm was cost-approved by the product owner on August 19, 2026. Scheduled canaries, provisioned concurrency, or another paid monitoring service still require separate cost approval. The admin dashboard shows the canonical retention target, oldest and newest retained events, total retained rows, and rows awaiting write-triggered pruning so retention can be audited without a scheduler.

@@ -64,6 +64,7 @@ stripe_billing_portal_return_path    = "/app/modify-plan"
 web_cpu           = 512
 web_memory        = 1024
 web_desired_count = 2
+mcp_telemetry_alert_email = "ops@example.com"
 
 tags = {
   Environment = "production"

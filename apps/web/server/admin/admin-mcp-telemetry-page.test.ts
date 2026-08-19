@@ -16,11 +16,16 @@ test("MCP telemetry page distinguishes every hosted entrypoint and states discov
   assert.match(page, /Authenticated · \/mcp/);
   assert.match(page, /does not measure ChatGPT directory impressions/);
   assert.match(page, /Self-declared headers and client names/);
+  assert.match(page, /Retention health:/);
+  assert.match(page, /awaiting write-triggered pruning/);
 });
 
 test("MCP telemetry dashboard queries bounded periods and never reads request payloads", () => {
   assert.match(repository, /occurred_at >= now\(\) - interval '30 days'/);
   assert.match(repository, /limit 20/);
   assert.match(repository, /limit 40/);
+  assert.match(repository, /MCP_TELEMETRY_RETENTION_DAYS/);
+  assert.match(repository, /min\(occurred_at\) as oldest_event_at/);
+  assert.match(repository, /expired_event_count/);
   assert.doesNotMatch(repository, /prompt|authorization|request_body|response_body|raw_header/i);
 });

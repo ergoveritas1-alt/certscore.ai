@@ -84,25 +84,23 @@ BASE_URL=https://certscore.ai pnpm exec tsx ./scripts/smoke-pulse-endpoints.ts
 CERTSCORE_API_KEY=<target-env-token> CERTSCORE_BASE_URL=https://certscore.ai pnpm mcp:certscore:smoke
 ```
 
-For the full operator production smoke, prefer:
+For the hosted production canary, use a retained scan and a short-lived `scan:read mcp` token:
 
 ```bash
+CERTSCORE_MCP_CANARY_SCAN_ID=<retained-scan-id> \
+CERTSCORE_MCP_ACCESS_TOKEN=<short-lived-token> \
 pnpm ops:smoke:mcp-production
 ```
 
-This command verifies the Homebrew-installed `certscore-mcp` command against live `https://certscore.ai`. It creates a short-lived preview token locally, inserts only the token hash into the production `integration_api_keys` table through the approved ECS/Fargate one-off task pattern, runs authenticated MCP protocol calls, and revokes the temporary key afterward.
+This command verifies `/mcp/light`, `/mcp/anonymous`, and `/mcp` directly at `https://mcp.certscore.ai`. It checks exact tool surfaces and bounded reads only; it does not create a scan, issue an API key, or start a one-off task.
 
-The production smoke expects:
+The separately packaged CLI smoke is intentionally distinct and cost-gated:
 
-- the installed `certscore-mcp` command to report a version and reach `/api/v2/health`
-- required MCP tools to be listed
-- `certscore_scan_site`, `certscore_get_scan_status`, and `certscore_get_scan` to work for the smoke URL
-- `certscore_list_findings` to return at least one already-projected finding
-- `certscore_get_pre_consent_cookies_trackers` to return at least one public-safe table row
-- `certscore_explain_finding` to work for the first returned finding
-- latest-domain scan and latest-domain pre-consent cookies/trackers tools to work
+```bash
+CERTSCORE_ALLOW_PAID_ECS_SMOKE=1 pnpm ops:smoke:mcp-cli-production
+```
 
-This is an operator confidence check over public API/MCP surfaces. It does not add scanner/report logic, create findings, infer policy conclusions, or inspect raw scanner artifacts.
+Run that command only after cost approval because its temporary-key lifecycle uses one-off Fargate tasks. It also fails before creating resources when the installed CLI version differs from the workspace version.
 
 Also inspect:
 
@@ -131,5 +129,6 @@ URL scan requests require `pulse:scan` and `mcp`. Existing scan/job reads requir
 - Apply migration in target environment.
 - Generate a scoped preview key in target environment.
 - Run authenticated MCP smoke against target host.
-- Run `pnpm ops:smoke:mcp-production` when AWS operator credentials are available.
+- Run the bounded hosted canary with an existing scan ID and short-lived MCP token.
+- Run the separate CLI/Fargate smoke only when its additional cost has been approved.
 - Verify public docs after deploy.

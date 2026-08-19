@@ -388,6 +388,17 @@ variable "alarm_actions" {
   default     = []
 }
 
+variable "mcp_telemetry_alert_email" {
+  description = "Optional email endpoint subscribed to the dedicated MCP telemetry failure alarm topic."
+  type        = string
+  default     = ""
+
+  validation {
+    condition     = var.mcp_telemetry_alert_email == "" || can(regex("^[^@[:space:]]+@[^@[:space:]]+\\.[^@[:space:]]+$", var.mcp_telemetry_alert_email))
+    error_message = "mcp_telemetry_alert_email must be empty or a valid email address."
+  }
+}
+
 variable "tags" {
   description = "Tags applied to future public web infrastructure."
   type        = map(string)

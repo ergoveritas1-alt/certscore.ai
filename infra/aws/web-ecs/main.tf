@@ -1608,3 +1608,63 @@ resource "aws_cloudwatch_metric_alarm" "mcp_session_capacity_evictions" {
 
   tags = local.common_tags
 }
+
+resource "aws_sns_topic" "mcp_telemetry_alerts" {
+  name = "${local.prefix}-mcp-telemetry-alerts"
+
+  tags = local.common_tags
+}
+
+resource "aws_sns_topic_subscription" "mcp_telemetry_alert_email" {
+  count = var.mcp_telemetry_alert_email == "" ? 0 : 1
+
+  topic_arn = aws_sns_topic.mcp_telemetry_alerts.arn
+  protocol  = "email"
+  endpoint  = var.mcp_telemetry_alert_email
+}
+
+resource "aws_cloudwatch_log_metric_filter" "mcp_telemetry_delivery_failures" {
+  name           = "${local.prefix}-mcp-telemetry-delivery-failures"
+  pattern        = "{ ($.event = \"mcp.telemetry_write_failed\") || ($.event = \"mcp.telemetry_event_rejected\") }"
+  log_group_name = aws_cloudwatch_log_group.mcp.name
+
+  metric_transformation {
+    name      = "TelemetryPipelineFailures"
+    namespace = "CertScore/MCP"
+    value     = "1"
+  }
+}
+
+resource "aws_cloudwatch_log_metric_filter" "mcp_telemetry_persistence_failures" {
+  name           = "${local.prefix}-mcp-telemetry-persistence-failures"
+  pattern        = "{ $.event = \"mcp.telemetry_persistence_failed\" }"
+  log_group_name = aws_cloudwatch_log_group.certscore.name
+
+  metric_transformation {
+    name      = "TelemetryPipelineFailures"
+    namespace = "CertScore/MCP"
+    value     = "1"
+  }
+}
+
+resource "aws_cloudwatch_metric_alarm" "mcp_telemetry_pipeline_failures" {
+  alarm_name          = "${local.prefix}-mcp-telemetry-pipeline-failures"
+  alarm_description   = "CertScore hosted MCP telemetry delivery, validation, or persistence failed. MCP tool results remain failure-tolerant, so investigate telemetry integrity."
+  comparison_operator = "GreaterThanOrEqualToThreshold"
+  evaluation_periods  = 1
+  metric_name         = "TelemetryPipelineFailures"
+  namespace           = "CertScore/MCP"
+  period              = 60
+  statistic           = "Sum"
+  threshold           = 1
+  treat_missing_data  = "notBreaching"
+  alarm_actions       = [aws_sns_topic.mcp_telemetry_alerts.arn]
+  ok_actions          = [aws_sns_topic.mcp_telemetry_alerts.arn]
+
+  depends_on = [
+    aws_cloudwatch_log_metric_filter.mcp_telemetry_delivery_failures,
+    aws_cloudwatch_log_metric_filter.mcp_telemetry_persistence_failures,
+  ]
+
+  tags = local.common_tags
+}

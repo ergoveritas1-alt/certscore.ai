@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { createHash, randomBytes } from "node:crypto";
 import { spawnSync } from "node:child_process";
+import { readFileSync } from "node:fs";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
 
@@ -111,10 +112,10 @@ function withoutApiKeyEnv() {
 }
 
 export function createSmokeKey(createdBy: string, ttlHours = 24): SmokeKey {
-  const token = `cs_preview_${randomBytes(32).toString("base64url")}`;
+  const secret = randomBytes(32).toString("base64url");
+  const token = `cs_preview_${secret}`;
   const tokenHash = createHash("sha256").update(token, "utf8").digest("hex");
-  const [, kind, secret] = token.split("_");
-  const tokenPrefix = `cs_${kind}_${secret?.slice(0, 8)}`;
+  const tokenPrefix = `cs_preview_${secret.slice(0, 8)}`;
   return {
     token,
     tokenHash,
@@ -441,7 +442,19 @@ async function runInstalledMcpSmoke(token: string) {
 
 async function main() {
   const version = run(MCP_COMMAND, ["--version"]).stdout.trim();
-  console.log(`certscore_mcp_version=${version}`);
+  const workspaceVersion = JSON.parse(readFileSync("packages/certscore-mcp/package.json", "utf8")) as { version?: string };
+  if (version !== workspaceVersion.version) {
+    throw new Error(
+      `Installed legacy CLI version ${version} does not match workspace version ${workspaceVersion.version ?? "unknown"}. `
+      + "Publish/install the current CLI before running the separate CLI production smoke.",
+    );
+  }
+  if (process.env.CERTSCORE_ALLOW_PAID_ECS_SMOKE?.trim() !== "1") {
+    throw new Error(
+      "The separate CLI production smoke starts one-off Fargate tasks. Set CERTSCORE_ALLOW_PAID_ECS_SMOKE=1 only after explicit cost approval.",
+    );
+  }
+  console.log(`certscore_mcp_cli_version=${version}`);
   assertDoctorWithoutKey();
 
   const context = getEcsContext();
