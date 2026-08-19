@@ -174,6 +174,7 @@ type AdminScanActivityPageResultRow = {
 };
 
 export type AdminScanActivityFilters = {
+  includeCanary?: boolean;
   query?: string | null;
   status?: "any" | "no_go" | "failed" | "running" | "queued" | "limited" | "completed";
   freshness?: "any" | "fresh" | "forced_fresh" | "reused";
@@ -319,6 +320,7 @@ function adminScanActivityBaseSql() {
         else 'unknown'
       end as access_filter
       ,coalesce(nullif(trim(ss.stop_reason_code), ''), ss.scan_outcome) as outcome_filter
+      ,exists (select 1 from public.scan_pages csp where csp.scan_id = s.id and csp.page_url ~* '^https?://[^/?#]+/\\.well-known/certscore-canary/') as canary_filter
     from public.scans s
     left join public.domains d on d.id = s.domain_id
     left join public.industries ind on ind.id = d.industry_primary_id
@@ -452,6 +454,7 @@ function adminScanActivityBaseSql() {
         else 'unknown'
       end as access_filter
       ,coalesce(nullif(trim(ss.stop_reason_code), ''), ss.scan_outcome) as outcome_filter
+      ,coalesce(sr.requested_url, '') ~* '^https?://[^/?#]+/\\.well-known/certscore-canary/' as canary_filter
     from public.scan_requests sr
     left join public.scans s on s.id = coalesce(sr.fulfilled_by_scan_id, sr.scan_id)
     left join public.domains d on d.id = s.domain_id
@@ -545,6 +548,7 @@ function adminScanActivityBaseSql() {
        and ($11::text is null or outcome_filter = $11)
        and ($14::text is null or lower(source_filter) = lower($14))
        and ($19::text[] is null or not (coalesce(source_filter, '') ilike any($19::text[])))
+       and ($20::boolean = true or not canary_filter)
   )`;
 }
 
@@ -573,7 +577,7 @@ export async function loadAdminScanActivityPageRefs(
     SCAN_NO_GO_SNAPSHOT_OUTCOMES, exclusionArray(parsedSearch.exclusions.requester), source,
     exclusionArray(parsedSearch.exclusions.domain), exclusionArray(parsedSearch.exclusions.scanId),
     exclusionArray(parsedSearch.exclusions.email), exclusionArray(parsedSearch.exclusions.ip),
-    exclusionArray(parsedSearch.exclusions.source)
+    exclusionArray(parsedSearch.exclusions.source), filters.includeCanary === true
   ];
 
   const canUseBoundedActivityPath = Boolean(
@@ -591,7 +595,8 @@ export async function loadAdminScanActivityPageRefs(
     parsedSearch.exclusions.scanId.length === 0 &&
     parsedSearch.exclusions.email.length === 0 &&
     parsedSearch.exclusions.ip.length === 0 &&
-    parsedSearch.exclusions.source.length === 0
+    parsedSearch.exclusions.source.length === 0 &&
+    filters.includeCanary === true
   );
 
   const exactHostname = normalizeAdminExactHostname(queryText);
@@ -611,7 +616,8 @@ export async function loadAdminScanActivityPageRefs(
     parsedSearch.exclusions.scanId.length === 0 &&
     parsedSearch.exclusions.email.length === 0 &&
     parsedSearch.exclusions.ip.length === 0 &&
-    parsedSearch.exclusions.source.length === 0
+    parsedSearch.exclusions.source.length === 0 &&
+    filters.includeCanary === true
   );
 
   if (canUseBoundedActivityPath) {
@@ -2226,15 +2232,16 @@ export async function updateAdminOrganizationPlan(input: {
   );
 }
 
-export async function loadAdminScanOverviewCounts(): Promise<AdminScanOverviewCounts> {
+export async function loadAdminScanOverviewCounts(includeCanary = false): Promise<AdminScanOverviewCounts> {
   await ensureScanRequestLogTable();
   const [scanFromResult, scanRequestCounts, snapshotCounts] = await Promise.all([
     query<{ count: string; scan_from: string }>(
       `select coalesce(scan_config_json->>'scanFrom', 'default') as scan_from,
               count(*)::text as count
-         from scans
+         from scans s
+        where ($1::boolean = true or not exists (select 1 from scan_pages sp where sp.scan_id = s.id and sp.page_url ~* '^https?://[^/?#]+/\\.well-known/certscore-canary/'))
         group by coalesce(scan_config_json->>'scanFrom', 'default')`,
-      [],
+      [includeCanary],
       { readOnly: true }
     ),
     queryOne<{ total_count: number; unlinked_count: number }>(
@@ -2243,8 +2250,9 @@ export async function loadAdminScanOverviewCounts(): Promise<AdminScanOverviewCo
                 where coalesce(fulfilled_by_scan_id, scan_id) is null
                    or resolution_mode = 'reused_existing_scan'
               )::int as unlinked_count
-         from scan_requests`,
-      [],
+         from scan_requests
+        where ($1::boolean = true or coalesce(requested_url, '') !~* '^https?://[^/?#]+/\\.well-known/certscore-canary/')`,
+      [includeCanary],
       { readOnly: true }
     ),
     queryOne<{ blocked_or_captcha_count: number; http_403_count: number; http_429_count: number }>(
@@ -2261,8 +2269,9 @@ export async function loadAdminScanOverviewCounts(): Promise<AdminScanOverviewCo
                    or captcha_flag = true
                    or scan_outcome = 'content_capture_degraded'
               )::int as blocked_or_captcha_count
-         from scan_snapshots`,
-      [],
+         from scan_snapshots ss
+        where ($1::boolean = true or not exists (select 1 from scan_pages sp where sp.scan_id = ss.scan_id and sp.page_url ~* '^https?://[^/?#]+/\\.well-known/certscore-canary/'))`,
+      [includeCanary],
       { readOnly: true }
     )
   ]);

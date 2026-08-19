@@ -121,6 +121,16 @@ function parsedToolArguments(body: unknown) {
   return args && typeof args === "object" && !Array.isArray(args) ? args as Record<string, unknown> : {};
 }
 
+function isCertScoreCanaryUrl(value: unknown) {
+  if (typeof value !== "string") return false;
+  try {
+    const parsed = new URL(/^https?:\/\//i.test(value) ? value : `https://${value}`);
+    return parsed.pathname.startsWith("/.well-known/certscore-canary/");
+  } catch {
+    return false;
+  }
+}
+
 export function createHostedMcpTelemetry(input: CreateHostedMcpTelemetryInput) {
   const fetchImpl = input.fetch ?? globalThis.fetch;
   const logger = input.logger ?? console;
@@ -142,6 +152,7 @@ export function createHostedMcpTelemetry(input: CreateHostedMcpTelemetryInput) {
       eventId: randomUUID(),
       freshness: observation.freshness,
       integration: MCP_TELEMETRY_INTEGRATION,
+      isCanary: observation.isCanary,
       occurredAt: new Date().toISOString(),
       outcome: observation.outcome,
       quotaOutcome: observation.quotaOutcome,
@@ -201,6 +212,7 @@ export function createHostedMcpTelemetry(input: CreateHostedMcpTelemetryInput) {
         durationMs: input.durationMs,
         errorCode: "rate_limited",
         freshness: args.freshness === "refresh" ? "refresh" : input.toolName === "certscore_scan_site" ? "latest" : null,
+        isCanary: isCertScoreCanaryUrl(args.url),
         outcome: "rate_limited",
         quotaOutcome: "rate_limited",
         scanDecision: input.toolName === "certscore_scan_site" ? "unavailable" : "not_applicable",

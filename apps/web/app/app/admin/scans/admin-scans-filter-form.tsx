@@ -9,9 +9,10 @@ type AdminScansFilterFormProps = {
   children: ReactNode;
   clearHref?: string;
   hasFilters: boolean;
+  submitFirst?: boolean;
 };
 
-export function AdminScansFilterForm({ basePath = "/app/admin/scans", children, clearHref, hasFilters }: AdminScansFilterFormProps) {
+export function AdminScansFilterForm({ basePath = "/app/admin/scans", children, clearHref, hasFilters, submitFirst = false }: AdminScansFilterFormProps) {
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
 
@@ -31,6 +32,23 @@ export function AdminScansFilterForm({ basePath = "/app/admin/scans", children, 
     });
   }
 
+  const submitButton = (
+    <button
+      aria-label={isPending ? "Applying scan filters" : "Apply scan filters"}
+      className="app-raised-button app-raised-button-dark inline-flex h-10 shrink-0 items-center justify-center gap-2 rounded-lg px-4 text-sm font-semibold text-white disabled:cursor-wait disabled:opacity-70"
+      disabled={isPending}
+      translate="no"
+      type="submit"
+    >
+      <span
+        aria-hidden="true"
+        className={`inline-block h-3.5 w-3.5 rounded-full border-2 border-white/40 border-t-white ${isPending ? "animate-spin" : "hidden"}`}
+      />
+      <span className={isPending ? "hidden" : undefined}>Filter</span>
+      <span className={isPending ? undefined : "hidden"}>Filtering…</span>
+    </button>
+  );
+
   return (
     <form
       aria-busy={isPending}
@@ -38,21 +56,9 @@ export function AdminScansFilterForm({ basePath = "/app/admin/scans", children, 
       method="get"
       onSubmit={handleSubmit}
     >
+      {submitFirst ? submitButton : null}
       {children}
-      <button
-        aria-label={isPending ? "Applying scan filters" : "Apply scan filters"}
-        className="app-raised-button app-raised-button-dark inline-flex h-10 shrink-0 items-center justify-center gap-2 rounded-lg px-4 text-sm font-semibold text-white disabled:cursor-wait disabled:opacity-70"
-        disabled={isPending}
-        translate="no"
-        type="submit"
-      >
-        <span
-          aria-hidden="true"
-          className={`inline-block h-3.5 w-3.5 rounded-full border-2 border-white/40 border-t-white ${isPending ? "animate-spin" : "hidden"}`}
-        />
-        <span className={isPending ? "hidden" : undefined}>Filter</span>
-        <span className={isPending ? undefined : "hidden"}>Filtering…</span>
-      </button>
+      {submitFirst ? null : submitButton}
       {hasFilters ? <Link className="app-raised-button inline-flex h-10 shrink-0 items-center rounded-lg px-4 text-sm font-semibold text-slate-700" href={clearHref ?? basePath} prefetch={false}>Clear</Link> : null}
     </form>
   );

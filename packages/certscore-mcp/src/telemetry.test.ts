@@ -22,6 +22,7 @@ test("scan-site telemetry classifies new and reused scans without retaining a UR
     durationMs: 152,
     errorCode: null,
     freshness: "refresh",
+    isCanary: false,
     outcome: "success",
     quotaOutcome: "allowed",
     scanDecision: "new",
@@ -35,6 +36,31 @@ test("scan-site telemetry classifies new and reused scans without retaining a UR
   assert.equal(reused.scanDecision, "reused");
   assert.equal(JSON.stringify(created).includes("private/path"), false);
   assert.equal(JSON.stringify(created).includes("secret"), false);
+});
+
+test("scan-site telemetry classifies the bounded CertScore canary path without retaining it", () => {
+  const observation = projectMcpToolInvocationObservation({
+    args: { url: "https://ergoveritas.com/.well-known/certscore-canary/sentinels/consent-stress.html?secret=value" },
+    durationMs: 5,
+    result: { structuredContent: { scanId: "scan_canary", status: "queued" } },
+    toolName: "certscore_scan_site",
+  });
+  assert.equal(observation.isCanary, true);
+  assert.equal(JSON.stringify(observation).includes("consent-stress"), false);
+  assert.equal(JSON.stringify(observation).includes("secret=value"), false);
+
+  for (const url of [
+    "https://ergoveritas.com/",
+    "https://ergoveritas.com/services/privacy",
+    "https://ergoveritas.com/?example=/.well-known/certscore-canary/sentinels/demo.html",
+  ]) {
+    const regular = projectMcpToolInvocationObservation({
+      args: { url }, durationMs: 5,
+      result: { structuredContent: { scanId: "scan_regular", status: "queued" } },
+      toolName: "certscore_scan_site",
+    });
+    assert.equal(regular.isCanary, false, `${url} must remain regular traffic`);
+  }
 });
 
 test("status and bundle telemetry retain only stable scan metadata", () => {

@@ -599,6 +599,6 @@ test("admin section navigation avoids speculative heavy-page loads and has a loa
   assert.match(loadingSource, /aria-label="Loading admin page"/);
   assert.match(loadingSource, /aria-busy="true"/);
   assert.equal((actionsSource.match(/prefetch=\{false\}/g) ?? []).length, 2);
-  assert.equal((overviewSource.match(/prefetch=\{false\}/g) ?? []).length, 6);
+  assert.equal((overviewSource.match(/prefetch=\{false\}/g) ?? []).length, 7);
   assert.equal((appShellSource.match(/prefetch=\{false\}/g) ?? []).length, 2);
 });

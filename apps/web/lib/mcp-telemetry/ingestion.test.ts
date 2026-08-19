@@ -18,6 +18,7 @@ function event() {
     eventId: "00000000-0000-4000-8000-000000000001",
     freshness: "latest",
     integration: "certscore-mcp",
+    isCanary: false,
     occurredAt: "2026-08-19T12:00:00.000Z",
     outcome: "success",
     quotaOutcome: "allowed",

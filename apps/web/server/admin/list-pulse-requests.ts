@@ -162,6 +162,7 @@ const loadCachedAdminPulseOverviewCounts = unstable_cache(
            from pulse_requests pr
            left join scans s on s.id = pr.scan_id
           where ${LOGICAL_PULSE_ACTIVITY_PREDICATE}
+            and coalesce(pr.requested_url, '') !~* '^https?://[^/?#]+/\\.well-known/certscore-canary/'
        )
        select
          count(*)::int as total,
@@ -271,7 +272,8 @@ const PULSE_ACTIVITY_FILTER_SQL = `
         pr.request_context -> 'provenance' ->> 'sourceIp', pr.request_context -> 'provenance' ->> 'originIp',
         pr.request_context -> 'provenance' ->> 'ipHash', pr.requested_by ->> 'sourceIp', pr.requested_by ->> 'ipHash'
       ) ilike any($18::text[])
-    ))`;
+    ))
+    and ($19::boolean = true or coalesce(pr.requested_url, '') !~* '^https?://[^/?#]+/\\.well-known/certscore-canary/')`;
 
 function asRecord(value: unknown): Record<string, unknown> {
   return value && typeof value === "object" && !Array.isArray(value) ? (value as Record<string, unknown>) : {};
@@ -493,12 +495,27 @@ function buildDisplayResponseSummary(input: {
   };
 }
 
-export async function getAdminPulseOverviewCounts(): Promise<AdminPulseOverviewCounts> {
+export async function getAdminPulseOverviewCounts(includeCanary = false): Promise<AdminPulseOverviewCounts> {
   await requirePlatformAdminContext();
+  if (includeCanary) {
+    const result = await queryOne<{ completed: number; queued_or_running: number; rate_limited: number; total: number }>(
+      `with logical_pulse_requests as (
+         select pr.*, ${PULSE_EFFECTIVE_STATUS_SQL} as effective_status
+           from pulse_requests pr left join scans s on s.id = pr.scan_id
+          where ${LOGICAL_PULSE_ACTIVITY_PREDICATE}
+       )
+       select count(*)::int as total,
+              count(*) filter (where effective_status in ('completed', 'completed_limited'))::int as completed,
+              count(*) filter (where effective_status in ('queued', 'running', 'finalizing'))::int as queued_or_running,
+              count(*) filter (where effective_status = 'rate_limited')::int as rate_limited
+         from logical_pulse_requests`, [], { readOnly: true });
+    return { completed: result?.completed ?? 0, evidenceJsonDownloads: 0, feedback: 0, queuedOrRunning: result?.queued_or_running ?? 0, rateLimited: result?.rate_limited ?? 0, summaryJsonDownloads: 0, total: result?.total ?? 0 };
+  }
   return await loadCachedAdminPulseOverviewCounts();
 }
 
 export type AdminPulseRequestListInput = {
+  includeCanary?: boolean;
   limit?: number;
   offset?: number;
   query?: string | null;
@@ -626,7 +643,8 @@ export async function listAdminPulseRequestsPage(input: AdminPulseRequestListInp
       input.status ?? null, search, freshness, language, industry, scanFrom, since, access, outcome,
       limit, offset, SCAN_NO_GO_SNAPSHOT_OUTCOMES, exclusionArray(parsedSearch.exclusions.requester), route,
       exclusionArray(parsedSearch.exclusions.domain), exclusionArray(parsedSearch.exclusions.scanId),
-      exclusionArray(parsedSearch.exclusions.email), exclusionArray(parsedSearch.exclusions.ip)
+      exclusionArray(parsedSearch.exclusions.email), exclusionArray(parsedSearch.exclusions.ip),
+      input.includeCanary === true
     ],
     { readOnly: true }
   );

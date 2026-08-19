@@ -10,6 +10,7 @@ function observation(toolName = "certscore_get_scan_status") {
     durationMs: 42,
     errorCode: null,
     freshness: null,
+    isCanary: false,
     outcome: "success" as const,
     quotaOutcome: "allowed" as const,
     scanDecision: "not_applicable" as const,

@@ -97,7 +97,7 @@ export default async function AdminOverviewPage() {
             <p>Completed: {pulseCounts.completed}</p>
             <p>Feedback: {pulseCounts.feedback}</p>
             <div className="pt-3">
-              <PendingButtonLink href="/app/admin/mcp" idleContent="Open MCP telemetry" pendingContent="Opening..." prefetch={false} size="sm" variant="secondary" />
+              <PendingButtonLink href="/app/admin/mcp" idleContent="Open MCP operations" pendingContent="Opening..." prefetch={false} size="sm" variant="secondary" />
             </div>
           </CardContent>
         </Card>

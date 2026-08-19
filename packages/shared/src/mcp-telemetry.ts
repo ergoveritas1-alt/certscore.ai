@@ -25,6 +25,7 @@ export const mcpTelemetryEventSchema = z.object({
   eventId: z.string().uuid(),
   freshness: z.enum(["latest", "refresh"]).nullable(),
   integration: z.literal(MCP_TELEMETRY_INTEGRATION),
+  isCanary: z.boolean(),
   occurredAt: z.string().datetime(),
   outcome: z.enum(["success", "error", "rate_limited"]),
   quotaOutcome: z.enum(["allowed", "rate_limited", "not_applicable"]),

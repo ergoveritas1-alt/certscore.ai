@@ -51,6 +51,7 @@ export type McpToolInvocationObservation = {
   durationMs: number;
   errorCode: string | null;
   freshness: "latest" | "refresh" | null;
+  isCanary: boolean;
   outcome: "success" | "error" | "rate_limited";
   quotaOutcome: "allowed" | "rate_limited";
   scanDecision: "reused" | "new" | "unavailable" | "not_applicable";
@@ -177,6 +178,16 @@ function telemetryHostname(value: unknown) {
   }
 }
 
+function isCertScoreCanaryUrl(value: unknown) {
+  if (typeof value !== "string") return false;
+  try {
+    const parsed = new URL(/^https?:\/\//i.test(value) ? value : `https://${value}`);
+    return parsed.pathname.startsWith("/.well-known/certscore-canary/");
+  } catch {
+    return false;
+  }
+}
+
 export function projectMcpToolInvocationObservation(input: {
   args: unknown;
   durationMs: number;
@@ -202,6 +213,7 @@ export function projectMcpToolInvocationObservation(input: {
       || input.toolName === "certscore_get_latest_domain_pre_consent_cookies_trackers"
       ? telemetryHostname(args.domain)
       : null;
+  const isCanary = isCertScoreCanaryUrl(args.url);
   const executionMode = result.executionMode;
   const scanDecision = input.toolName !== "certscore_scan_site"
     ? "not_applicable"
@@ -217,6 +229,7 @@ export function projectMcpToolInvocationObservation(input: {
     durationMs: Math.max(0, Math.min(Math.round(input.durationMs), 3_600_000)),
     errorCode: rateLimited ? "rate_limited" : errorCode,
     freshness: args.freshness === "refresh" ? "refresh" : input.toolName === "certscore_scan_site" ? "latest" : null,
+    isCanary,
     outcome,
     quotaOutcome: rateLimited ? "rate_limited" : "allowed",
     scanDecision,

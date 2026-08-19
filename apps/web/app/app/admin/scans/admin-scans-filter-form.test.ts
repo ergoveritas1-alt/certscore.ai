@@ -14,3 +14,15 @@ test("admin scan filter pending state keeps a stable translated DOM subtree", as
   assert.doesNotMatch(source, /isPending \? <span[^\n]+: null/);
   assert.doesNotMatch(source, /isPending \? "Filtering…" : "Filter"/);
 });
+
+test("primary admin activity pages place the filter action before the filter fields", async () => {
+  const [scansPage, apiActivityPage, mcpPage] = await Promise.all([
+    readFile("apps/web/app/app/admin/scans/page.tsx", "utf8"),
+    readFile("apps/web/app/app/admin/pulse/page.tsx", "utf8"),
+    readFile("apps/web/app/app/admin/mcp/page.tsx", "utf8"),
+  ]);
+
+  assert.match(scansPage, /<AdminScansFilterForm[^>]+submitFirst>/);
+  assert.match(apiActivityPage, /<AdminScansFilterForm[^>]+submitFirst>/);
+  assert.match(mcpPage, /<AdminScansFilterForm[^>]+submitFirst>/);
+});
