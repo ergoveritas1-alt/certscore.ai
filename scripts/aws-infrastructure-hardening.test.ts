@@ -52,6 +52,17 @@ test("validation deploy assumes its dedicated AWS role", async () => {
   assert.match(terraform, /"logs:FilterLogEvents"/);
 });
 
+test("validation runtime-base rebuilds follow dependency inputs, not root script-only edits", async () => {
+  const source = await readFile(".github/workflows/validation-aws-deploy.yml", "utf8");
+  const classifier = source.match(
+    /if git diff --name-only "\$\{base_ref\}" "\$\{GITHUB_SHA\}" \| grep -Eq '([^']+)'/,
+  )?.[1] ?? "";
+
+  assert.match(classifier, /apps\/validation-worker\/package\\\.json/);
+  assert.match(classifier, /pnpm-lock\\\.yaml/);
+  assert.doesNotMatch(classifier, /\|package\\\.json\|/);
+});
+
 test("validation deployment classifiers include web server dependencies compiled into the worker", async () => {
   const deploySource = await readFile("scripts/deploy-fast.ts", "utf8");
   const predeploySource = await readFile("scripts/predeploy.ts", "utf8");

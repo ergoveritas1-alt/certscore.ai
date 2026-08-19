@@ -140,7 +140,9 @@ jobs:
 
           {
             echo "VALIDATION_DEPLOY_BASE_REF=${base_ref}"
-            if git diff --name-only "${base_ref}" "${GITHUB_SHA}" | grep -Eq '^(apps/validation-worker/Dockerfile|apps/validation-worker/package\.json|pnpm-lock\.yaml|package\.json|pnpm-workspace\.yaml|\.npmrc)$'; then
+            # Root package.json script-only edits do not change the Chromium/runtime
+            # base. Dependency changes remain covered by the canonical lockfile.
+            if git diff --name-only "${base_ref}" "${GITHUB_SHA}" | grep -Eq '^(apps/validation-worker/Dockerfile|apps/validation-worker/package\.json|pnpm-lock\.yaml|pnpm-workspace\.yaml|\.npmrc)$'; then
               echo "VALIDATION_RUNTIME_INPUTS_CHANGED=1"
             else
               echo "VALIDATION_RUNTIME_INPUTS_CHANGED=0"
