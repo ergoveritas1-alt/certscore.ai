@@ -56,6 +56,10 @@ const workerEnvSchema = z.object({
     emptyStringToUndefined,
     z.enum(["0", "1"]).optional()
   ).transform((value) => value === "1"),
+  CERTSCORE_NANO_PRIMARY_POLICY_REVIEW_ENABLED: z.preprocess(
+    emptyStringToUndefined,
+    z.enum(["0", "1"]).optional()
+  ).transform((value) => value === "1"),
   CERTSCORE_RUNTIME_SEMANTIC_CACHE_ENABLED: z.preprocess(
     emptyStringToUndefined,
     z.enum(["0", "1"]).optional()

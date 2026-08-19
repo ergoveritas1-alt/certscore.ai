@@ -1093,7 +1093,10 @@ async function writeAndUploadLocalV2DagLambdaArtifacts(input: {
     }),
   );
   const scanArtifactPath = path.join(artifactRoot, "CanonicalEvidenceBundle.json");
-  await timeLambdaPhase(phaseTimings, "scan_artifact_write", () => writeJson(scanArtifactPath, bundle));
+  // The retained bundle remains byte-for-byte complete JSON, but compact
+  // encoding avoids transferring hundreds of kilobytes of indentation to each
+  // downstream verifier and projector.
+  await timeLambdaPhase(phaseTimings, "scan_artifact_write", () => writeCompactJson(scanArtifactPath, bundle));
 
   const manifestPath = path.join(artifactRoot, "LocalV2DagLambdaManifest.json");
   const pointers = artifactPointersFromS3Keys({
@@ -1153,6 +1156,14 @@ function phaseLabel(prefix: string | undefined, label: string) {
 
 function writeJson(filePath: string, value: unknown) {
   return writeFile(filePath, `${JSON.stringify(value, null, 2)}\n`, "utf8");
+}
+
+function writeCompactJson(filePath: string, value: unknown) {
+  return writeFile(filePath, serializeCanonicalEvidenceBundle(value), "utf8");
+}
+
+export function serializeCanonicalEvidenceBundle(value: unknown) {
+  return JSON.stringify(value);
 }
 
 async function writeEgressPreflightArtifact(

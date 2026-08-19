@@ -502,7 +502,9 @@ async function processPolicyEvidenceReadyMessageUncoalesced(input: {
     if (reviewPacket) {
       const review = await runStaticPolicyReviewPacket({
         apiKey: env.OPENAI_API_KEY,
-        model: env.CERTSCORE_REVIEW_MODEL,
+        model: env.CERTSCORE_NANO_PRIMARY_POLICY_REVIEW_ENABLED
+          ? env.CERTSCORE_ROUTINE_REVIEW_MODEL
+          : env.CERTSCORE_REVIEW_MODEL,
         packet: reviewPacket,
       });
       reviewSummary = {

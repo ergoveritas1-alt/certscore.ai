@@ -5,6 +5,7 @@ import path from "node:path";
 import test from "node:test";
 import {
   extractCanonicalPolicyReviewPointer,
+  extractLocalCanonicalPolicyReviewMirrorPath,
   loadCanonicalBundleForPolicyReview
 } from "./canonical-policy-review-input";
 
@@ -89,4 +90,56 @@ test("rejects canonical policy bundle bytes that do not match retained metadata"
     }),
     /checksum/
   );
+});
+
+test("selects only the checksum-bound canonical bundle from a local scan mirror", () => {
+  const scanId = "00000000-0000-4000-8000-000000000001";
+  const workspaceRoot = "/workspace";
+  const pointer = {
+    expectedSha256: "a".repeat(64),
+    expectedSizeBytes: 123,
+    region: "eu-central-1" as const,
+    uri: `s3://scan-artifacts-eu-central-1/v2/${scanId}/CanonicalEvidenceBundle.json`,
+  };
+  const localPath = `${workspaceRoot}/artifacts/local-v2-dag-scans/${scanId}/CanonicalEvidenceBundle.json`;
+  assert.equal(extractLocalCanonicalPolicyReviewMirrorPath({
+    metadata: {
+      targetEnvironment: "local",
+      artifactMirror: {
+        outDir: `${workspaceRoot}/artifacts/local-v2-dag-scans/${scanId}`,
+        mirroredArtifacts: [{
+          field: "scanArtifactUri",
+          localPath,
+          sourceUri: pointer.uri,
+        }],
+      },
+    },
+    pointer,
+    scanId,
+  }), localPath);
+});
+
+test("rejects a local canonical bundle mirror outside the scan artifact directory", () => {
+  const scanId = "00000000-0000-4000-8000-000000000001";
+  const pointer = {
+    expectedSha256: "a".repeat(64),
+    expectedSizeBytes: 123,
+    region: "eu-central-1" as const,
+    uri: `s3://scan-artifacts-eu-central-1/v2/${scanId}/CanonicalEvidenceBundle.json`,
+  };
+  assert.throws(() => extractLocalCanonicalPolicyReviewMirrorPath({
+    metadata: {
+      targetEnvironment: "local",
+      artifactMirror: {
+        mirroredArtifacts: [{
+          field: "scanArtifactUri",
+          localPath: "/tmp/CanonicalEvidenceBundle.json",
+          sourceUri: pointer.uri,
+        }],
+      },
+    },
+    pointer,
+    scanId,
+    workspaceRoot: "/workspace",
+  }), /outside the scan artifact directory/);
 });

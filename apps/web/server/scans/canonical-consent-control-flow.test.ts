@@ -1155,7 +1155,7 @@ test("all customer and administrative surfaces consume persisted canonical proje
   assert.match(pulseProjection, /gdprEprivacyChecklist/);
   assert.match(pulseProjection, /gdprEprivacyScore/);
 
-  assert.match(reportViewProjection, /persistedCanonicalProjection\?\.checklistRows/);
+  assert.match(reportViewProjection, /hydrateChecklistPolicyEvidence\([\s\S]*persistedCanonicalProjection\.checklistRows/);
   assert.match(reportViewProjection, /persisted\.ownerUnifiedFindings/);
   assert.match(scoreLifecycleProjection, /persistedCanonicalProjection\.legacyScoreAssessmentInput/);
 

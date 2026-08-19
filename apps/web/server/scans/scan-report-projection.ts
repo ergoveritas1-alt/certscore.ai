@@ -43,6 +43,7 @@ import {
   sanitizeJsonbValue,
   SCAN_REPORT_PROJECTION_VERSION
 } from "./scan-report-projection-contract";
+import { indexChecklistPolicyEvidence } from "../../lib/scans/checklist-evidence-index";
 import {
   getScanReportProjectionGeneration,
   SCAN_REPORT_PROJECTION_NON_SOURCE_EVENT_TYPES
@@ -608,10 +609,13 @@ async function deriveScanReportProjection(
     framework: "gdpr_eprivacy",
     rows: getReportableGdprEprivacyCoverageItems(checklist)
   });
+  const indexedChecklistEvidence = indexChecklistPolicyEvidence(checklist);
+  const ownerUnifiedFindings = buildScanReportUnifiedFindingsFromState(reportState);
   const canonicalReportProjection: PersistedCanonicalReportProjection = {
     artifactVersion: PERSISTED_CANONICAL_REPORT_PROJECTION_VERSION,
-    checklistRows: checklist,
+    checklistRows: indexedChecklistEvidence.rows,
     derivedContext: reportState.derivedContext,
+    evidenceIndex: indexedChecklistEvidence.evidenceIndex,
     globalUnifiedFindings: reportState.globalUnifiedFindings,
     legacyScoreAssessmentInput: buildLegacyGdprEprivacyVersionedAssessmentInput({
       assessment: legacyScoreAssessment,
@@ -621,7 +625,10 @@ async function deriveScanReportProjection(
       unifiedFindings: reportState.globalUnifiedFindings
     }),
     normalizedConcerns: reportState.normalizedConcerns ?? [],
-    ownerUnifiedFindings: buildScanReportUnifiedFindingsFromState(reportState),
+    ownerUnifiedFindingIds: ownerUnifiedFindings.map((finding) => finding.unifiedFindingId),
+    // V3 persists each display packet once. The accessor restores the
+    // owner-specific ordering from ownerUnifiedFindingIds for existing callers.
+    ownerUnifiedFindings: [],
     topFindingIds: visibleCanonicalHighPriorityFindings.map((finding) => finding.id)
   };
 

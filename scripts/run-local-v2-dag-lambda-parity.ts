@@ -196,7 +196,9 @@ async function main() {
     applyRegionalLambdaParityEnv(args.awsRegion);
     process.env.AWS_LAMBDA_FUNCTION_MEMORY_SIZE = "3008";
     process.env.AWS_LAMBDA_FUNCTION_NAME = args.functionName;
-    process.env.CERTSCORE_V2_DAG_LAMBDA_ARTIFACT_BUCKET = process.env.S3_BUCKET ?? "scan-artifacts";
+    const localArtifactBucketBase = process.env.S3_BUCKET?.trim() || "scan-artifacts";
+    process.env.CERTSCORE_V2_DAG_LAMBDA_ARTIFACT_BUCKET =
+      `${localArtifactBucketBase}-${args.awsRegion}`;
     process.env.CERTSCORE_V2_DAG_LAMBDA_ARTIFACT_DIR = artifactBaseDir;
     process.env.CERTSCORE_V2_DAG_LAMBDA_ARTIFACT_PREFIX = "v2-dag-lambda/local-parity";
     // Lambda's single-process Chromium mode is required for the Linux runtime,

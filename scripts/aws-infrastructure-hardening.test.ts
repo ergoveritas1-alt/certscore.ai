@@ -78,6 +78,20 @@ test("validation worker uses the measured low-utilization Fargate size", async (
   assert.match(variables, /variable "worker_memory"[\s\S]*?default\s+=\s+512/);
 });
 
+test("report materialization uses an isolated full-vCPU task definition", async () => {
+  const workflow = await readFile(".github/workflows/web-aws-ecs-deploy.yml", "utf8");
+  const terraform = await readFile(webTerraformPath, "utf8");
+  const materializerService = terraform.match(
+    /resource "aws_ecs_service" "materializer" \{[\s\S]*?\n\}/,
+  )?.[0] ?? "";
+
+  assert.match(workflow, /MATERIALIZER_TASK_CPU: \$\{\{ vars\.AWS_WEB_MATERIALIZER_TASK_CPU \|\| '1024' \}\}/);
+  assert.match(workflow, /MATERIALIZER_TASK_MEMORY: \$\{\{ vars\.AWS_WEB_MATERIALIZER_TASK_MEMORY \|\| '2048' \}\}/);
+  assert.match(workflow, /\.family = \(\.family \+ "-materializer"\)/);
+  assert.match(workflow, /--task-definition "\$\{TARGET_MATERIALIZER_TASK_DEFINITION\}"/);
+  assert.match(materializerService, /ignore_changes\s+=\s+\[task_definition\]/);
+});
+
 test("retired validation ops web service stays absent", async () => {
   const source = await readFile(validationTerraformPath, "utf8");
   assert.doesNotMatch(source, /resource "aws_ecs_service" "web"/);

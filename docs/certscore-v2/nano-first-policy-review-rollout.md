@@ -147,6 +147,52 @@ This route is controlled by `CERTSCORE_MINI_EXCEPTION_ROUTING_ENABLED`. Turning 
 
 The bounded Nano/Mini hybrid is not productionized: the adjudicated corpus showed that its compact transport missed observed evidence recovered by full Mini. Mini remains authoritative wherever semantic escalation occurs.
 
+### Non-blocking production projection
+
+With `CERTSCORE_PARALLEL_POLICY_PROJECTION_ENABLED=1`, the verified policy-evidence
+lane owns static Mini execution and content-hash cache population. After
+`v2_lambda_result.received`, WC01 performs a zero-wait lookup for a verified
+completed full or static artifact. It may combine a completed static Mini
+artifact with deterministic cookie inventory and deterministic no-comparison
+handling, but it must not initiate a fresh model request, poll for model work,
+or wait for a terminal model fallback.
+
+When no verified completed semantic artifact is ready, the semantic review is
+persisted as deferred/failed and is not production-projectable. A directly
+comparable policy/runtime claim without a completed semantic result remains
+`insufficient_retained_evidence`; it never becomes alignment, contradiction,
+or absence. Retained evidence and deterministic findings remain available
+through the canonical pipeline. This mode intentionally favors bounded report
+latency while failing closed on semantic coverage.
+
+### Nano-primary precision mode
+
+The August 18, 2026 operating goal is fewer than 3% of unique Nano-reviewed
+policy hashes invoking Mini. `CERTSCORE_NANO_PRIMARY_POLICY_REVIEW_ENABLED`
+selects the candidate mode; its production infrastructure default remains off
+until calibration passes.
+
+The candidate mode uses one full retained-evidence Nano review, one bounded
+topic-specific Nano recovery for routine uncertainty, deterministic cookie
+inventory, and deterministic no-comparison handling. Low confidence,
+ambiguity, insufficient evidence, and unproven absence do not invoke Mini.
+After recovery they remain `insufficient_retained_evidence` and cannot create
+absence findings. Mini is eligible only when a Nano row retains both supporting
+and materially conflicting excerpts, verified policy source references, and
+the canonical evidence invariants.
+
+Measure Mini usage by unique canonical policy hash, not topic rows or cache
+hits. The artifact records the 3% target, actual Mini invocation, recovery
+topics, unresolved topics, and a deterministic 1% audit-sample selection. Audit
+selection is telemetry only until a durable asynchronous review queue is
+approved; it must not add report-readiness latency.
+
+This mode trades semantic coverage for latency and cost until bounded Nano
+recovery is independently calibrated. It must remain disabled in production
+until a human-adjudicated corpus and a fresh cooldown-selected cohort establish
+zero unsafe observed projections, acceptable observed coverage, and the
+scan-level Mini invocation target.
+
 ## Stage 3: approval and bounded cutover
 
 Before production routing, add a typed hybrid artifact contract with row-level model provenance and obtain explicit approval for the exact Nano-safe projection scope. The cutover must preserve these rules:

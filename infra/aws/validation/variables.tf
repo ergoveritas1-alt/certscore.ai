@@ -250,6 +250,18 @@ variable "certscore_mini_review_enabled" {
   default     = "1"
 }
 
+variable "certscore_mini_exception_routing_enabled" {
+  description = "Uses deterministic cookie inventory and invokes Mini only when a retained policy promise is directly comparable with runtime evidence."
+  type        = string
+  default     = "1"
+}
+
+variable "certscore_nano_primary_policy_review_enabled" {
+  description = "Enables Nano-primary precision review with bounded Nano recovery and Mini reserved for verified retained contradictions. Keep disabled until the calibrated Mini invocation rate and evidence-quality gates pass."
+  type        = string
+  default     = "0"
+}
+
 variable "certscore_escalation_enabled" {
   description = "Whether selective strong-model escalation is enabled. Disabled by default."
   type        = string
@@ -269,7 +281,7 @@ variable "certscore_parallel_policy_review_enabled" {
 }
 
 variable "certscore_parallel_policy_projection_enabled" {
-  description = "Allows a verified parallel policy join to replace the canonical full review after parity gates pass."
+  description = "Consumes only verified completed early/cached policy review at terminal projection and forbids fresh post-result model calls; unavailable semantic review fails closed."
   type        = string
   default     = "1"
 }

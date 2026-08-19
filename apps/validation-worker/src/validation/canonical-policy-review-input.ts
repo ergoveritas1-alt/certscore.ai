@@ -7,6 +7,8 @@ import {
   type CanonicalEvidenceBundle
 } from "@certscore/contracts";
 import { createHash } from "node:crypto";
+import { readFile } from "node:fs/promises";
+import path from "node:path";
 import { Readable } from "node:stream";
 
 const MAX_CANONICAL_BUNDLE_BYTES = 20 * 1024 * 1024;
@@ -22,6 +24,59 @@ export type CanonicalPolicyReviewPointer = {
   region: "eu-central-1" | "eu-west-1" | "us-west-1";
   uri: string;
 };
+
+export function extractLocalCanonicalPolicyReviewMirrorPath(input: {
+  metadata: Record<string, unknown> | null;
+  pointer: CanonicalPolicyReviewPointer;
+  scanId: string;
+  workspaceRoot?: string;
+}) {
+  if (input.metadata?.targetEnvironment !== "local") return null;
+  const artifactMirror = asRecord(input.metadata.artifactMirror);
+  const mirroredArtifacts = Array.isArray(artifactMirror?.mirroredArtifacts)
+    ? artifactMirror.mirroredArtifacts
+    : [];
+  const match = mirroredArtifacts
+    .map(asRecord)
+    .find((artifact) => (
+      artifact?.field === "scanArtifactUri" &&
+      artifact.sourceUri === input.pointer.uri
+    ));
+  const localPath = stringValue(match?.localPath);
+  if (!localPath) return null;
+
+  const mirrorOutDir = stringValue(artifactMirror?.outDir);
+  const expectedRoot = input.workspaceRoot
+    ? path.resolve(
+        input.workspaceRoot,
+        "artifacts",
+        "local-v2-dag-scans",
+        input.scanId,
+      )
+    : mirrorOutDir
+      ? path.resolve(mirrorOutDir)
+      : path.resolve(
+          process.cwd(),
+          "artifacts",
+          "local-v2-dag-scans",
+          input.scanId,
+        );
+  if (
+    path.basename(expectedRoot) !== input.scanId ||
+    path.basename(path.dirname(expectedRoot)) !== "local-v2-dag-scans" ||
+    path.basename(path.dirname(path.dirname(expectedRoot))) !== "artifacts"
+  ) {
+    throw new Error("Canonical policy-review local mirror root is not a scan artifact directory.");
+  }
+  const resolvedLocalPath = path.resolve(localPath);
+  if (
+    !resolvedLocalPath.startsWith(`${expectedRoot}${path.sep}`) ||
+    path.basename(resolvedLocalPath) !== "CanonicalEvidenceBundle.json"
+  ) {
+    throw new Error("Canonical policy-review local mirror path is outside the scan artifact directory.");
+  }
+  return resolvedLocalPath;
+}
 
 type S3GetClient = {
   send(command: GetObjectCommand): Promise<{ Body?: unknown }>;
@@ -140,4 +195,18 @@ export async function loadCanonicalBundleForPolicyReview(input: {
     throw new Error("Canonical policy-review artifact checksum does not match retained metadata.");
   }
   return canonicalEvidenceBundleSchema.parse(JSON.parse(body.toString("utf8")));
+}
+
+export async function loadCanonicalBundleForPolicyReviewFromLocalMirror(input: {
+  localPath: string;
+  pointer: CanonicalPolicyReviewPointer;
+}) {
+  return loadCanonicalBundleForPolicyReview({
+    client: {
+      async send() {
+        return { Body: await readFile(input.localPath) };
+      }
+    },
+    pointer: input.pointer
+  });
 }

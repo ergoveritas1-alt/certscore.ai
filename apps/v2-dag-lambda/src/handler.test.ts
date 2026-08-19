@@ -39,9 +39,21 @@ import {
   mirrorWorkerArtifactsIntoFinalArtifactRoot,
   parseLocalV2DagLambdaDispatchPayload,
   sendLocalV2DagLambdaResultMessage,
+  serializeCanonicalEvidenceBundle,
   uploadAuxiliaryArtifactFiles,
   uploadArtifactFiles
 } from "./handler";
+
+test("canonical evidence bundle transport is compact without changing evidence", () => {
+  const bundle = {
+    cookieEvents: [{ cookieName: "session", evidenceRefs: ["cookie-1"] }],
+    policySurfaceObservations: [{ status: "fetched", textExcerpt: "Retained evidence." }],
+  };
+  const serialized = serializeCanonicalEvidenceBundle(bundle);
+  assert.equal(serialized, JSON.stringify(bundle));
+  assert.deepEqual(JSON.parse(serialized), bundle);
+  assert.equal(serialized.includes("\n"), false);
+});
 
 test("sharded orchestration fans out exactly one consent, runtime, and policy evidence lane", () => {
   assert.deepEqual(LOCAL_V2_DAG_LAMBDA_EVIDENCE_WORKER_LANES, [

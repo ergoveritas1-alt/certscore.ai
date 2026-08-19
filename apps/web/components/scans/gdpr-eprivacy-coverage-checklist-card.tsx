@@ -11,6 +11,10 @@ import type {
   GdprEprivacyCoverageChecklistItem
 } from "../../lib/scans/gdpr-eprivacy-coverage-checklist";
 import {
+  hydrateChecklistPolicyEvidence,
+  type ChecklistEvidenceIndex,
+} from "../../lib/scans/checklist-evidence-index";
+import {
   deriveGdprEprivacyReviewSummary,
 } from "../../lib/scans/gdpr-eprivacy-review-summary";
 import {
@@ -32,6 +36,7 @@ type GdprEprivacyCoverageChecklistCardProps = {
     summary?: string;
   } | null;
   items: GdprEprivacyCoverageChecklistItem[];
+  evidenceIndex?: ChecklistEvidenceIndex;
   projectionContext?: {
     mode: string;
     scannerExecutionMode: string;
@@ -2923,6 +2928,7 @@ function ChecklistRows({
 
 export function GdprEprivacyCoverageChecklistCard({
   defaultOpen = true,
+  evidenceIndex,
   gdprEprivacyLens,
   items,
   projectionContext = null,
@@ -2931,7 +2937,8 @@ export function GdprEprivacyCoverageChecklistCard({
 }: GdprEprivacyCoverageChecklistCardProps) {
   const { expandAllAdvancedEvidence } = useRegulatoryChecklistAdvancedEvidence();
   const [policyReviewPayload, setPolicyReviewPayload] = React.useState<PolicyReviewPayload | null>(null);
-  const reportItems = getReportableGdprEprivacyCoverageItems(items);
+  const hydratedItems = hydrateChecklistPolicyEvidence(items, evidenceIndex);
+  const reportItems = getReportableGdprEprivacyCoverageItems(hydratedItems);
   const itemsById = new Map(reportItems.map((item) => [item.id, item]));
   const groupedRowIds = new Set<string>(REPORT_ROW_GROUPS.flatMap((group) => [...group.rowIds]));
   const groupedSections = REPORT_ROW_GROUPS.map((group) => ({

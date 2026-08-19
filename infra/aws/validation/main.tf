@@ -77,6 +77,8 @@ locals {
       { name = "CERTSCORE_EXTRACTION_MODEL", value = var.certscore_extraction_model },
       { name = "CERTSCORE_REVIEW_MODEL", value = var.certscore_review_model },
       { name = "CERTSCORE_MINI_REVIEW_ENABLED", value = var.certscore_mini_review_enabled },
+      { name = "CERTSCORE_MINI_EXCEPTION_ROUTING_ENABLED", value = var.certscore_mini_exception_routing_enabled },
+      { name = "CERTSCORE_NANO_PRIMARY_POLICY_REVIEW_ENABLED", value = var.certscore_nano_primary_policy_review_enabled },
       { name = "CERTSCORE_ESCALATION_ENABLED", value = var.certscore_escalation_enabled },
       { name = "CERTSCORE_MODEL_REVIEW_MODE", value = var.certscore_model_review_mode },
       { name = "CERTSCORE_PARALLEL_POLICY_REVIEW_ENABLED", value = var.certscore_parallel_policy_review_enabled },

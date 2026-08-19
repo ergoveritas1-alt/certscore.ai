@@ -9,6 +9,7 @@ import {
   type AdminScanSizeMetrics
 } from "../../lib/scans/admin-evidence-matrix";
 import type { GdprEprivacyCoverageChecklistItem } from "../../lib/scans/gdpr-eprivacy-coverage-checklist";
+import { hydrateChecklistPolicyEvidence } from "../../lib/scans/checklist-evidence-index";
 import { getAnonymousScanById, getScanById } from "../scans/get-scan-by-id";
 import type { PublicScanRecord } from "../scans/get-public-scan-record";
 import { trancoRankFromScanConfig } from "../scans/tranco-rank-metadata";
@@ -168,7 +169,12 @@ export async function persistAdminScanSummaryForPublishedRecord(
   const persistedCanonicalProjection = getPersistedCanonicalReportProjection(canonicalScanRecord);
   let reportSummary: Record<string, unknown> | null = null;
   let resultDisposition: string | null = null;
-  let checklistRows: GdprEprivacyCoverageChecklistItem[] = persistedCanonicalProjection?.checklistRows ?? [];
+  let checklistRows: GdprEprivacyCoverageChecklistItem[] = persistedCanonicalProjection
+    ? hydrateChecklistPolicyEvidence(
+        persistedCanonicalProjection.checklistRows,
+        persistedCanonicalProjection.evidenceIndex,
+      )
+    : [];
   let topFindingIds = persistedCanonicalProjection?.topFindingIds ?? [];
   if (!persistedCanonicalProjection) {
     const reportProjection = buildPulseProjection({

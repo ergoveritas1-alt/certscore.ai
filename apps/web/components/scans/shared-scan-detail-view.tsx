@@ -42,6 +42,10 @@ import {
 import {
   summarizeGdprEprivacyAssessmentDirections
 } from "../../lib/scans/gdpr-eprivacy-assessment-direction";
+import {
+  hydrateChecklistPolicyEvidence,
+  indexChecklistPolicyEvidence,
+} from "../../lib/scans/checklist-evidence-index";
 import { InfoTip } from "./info-tip";
 import { RedirectFlowPanel } from "./redirect-flow-panel";
 import { RegulatoryChecklistSection } from "./regulatory-checklist-section";
@@ -7640,7 +7644,12 @@ export async function SharedScanDetailView({
     }))
   };
   const persistedCanonicalProjection = getPersistedCanonicalReportProjection(scanRecord);
-  const gdprEprivacyCoverageChecklist = persistedCanonicalProjection?.checklistRows ?? deriveSharedScanDetailGdprEprivacyCoverageChecklist({
+  const gdprEprivacyCoverageChecklist = persistedCanonicalProjection
+    ? hydrateChecklistPolicyEvidence(
+        persistedCanonicalProjection.checklistRows,
+        persistedCanonicalProjection.evidenceIndex,
+      )
+    : deriveSharedScanDetailGdprEprivacyCoverageChecklist({
     coverageLimited: Boolean(executiveAccessLimitationNotice) || isIncompleteScanCoverage,
     events: scanRecord.events,
     normalizedConcerns: scanReportRenderProjection.normalizedConcerns,
@@ -7654,6 +7663,9 @@ export async function SharedScanDetailView({
     unifiedFindings: findingEvidenceDiagnostics
   });
   const reportableGdprEprivacyCoverageChecklist = getReportableGdprEprivacyCoverageItems(gdprEprivacyCoverageChecklist);
+  const checklistEvidenceTransport = indexChecklistPolicyEvidence(
+    reportableGdprEprivacyCoverageChecklist,
+  );
   const gdprEprivacyAssessmentSummaryCounts = summarizeGdprEprivacyAssessmentDirections(
     reportableGdprEprivacyCoverageChecklist
   );
@@ -7967,8 +7979,9 @@ export async function SharedScanDetailView({
                   content: (
                     <GdprEprivacyCoverageChecklistCard
                       defaultOpen
+                      evidenceIndex={checklistEvidenceTransport.evidenceIndex}
                       gdprEprivacyLens={gdprEprivacyExecutiveLens}
-                      items={reportableGdprEprivacyCoverageChecklist}
+                      items={checklistEvidenceTransport.rows}
                       projectionContext={gdprProjectionContext}
                       showSummaryStrip={false}
                     />

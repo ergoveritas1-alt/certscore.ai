@@ -72,13 +72,16 @@ import {
 import {
   runDualNanoConsensusPolicyReviewShadow,
   runExtractionReusePolicyReviewShadow,
+  runNanoPrimaryPolicyReviewPacket,
   runParallelPolicyReviewShadow,
   runNanoPolicyReviewShadow,
   runPolicyReviewPacket,
 } from "./model-policy-review-runner";
 import {
   extractCanonicalPolicyReviewPointer,
-  loadCanonicalBundleForPolicyReview
+  extractLocalCanonicalPolicyReviewMirrorPath,
+  loadCanonicalBundleForPolicyReview,
+  loadCanonicalBundleForPolicyReviewFromLocalMirror
 } from "./canonical-policy-review-input";
 
 export { buildNanoDocCandidateUrls, selectNanoDocCandidates } from "./nano-document-discovery";
@@ -189,9 +192,19 @@ async function runPolicyModelReview(input: {
   const canonicalPointer = extractCanonicalPolicyReviewPointer(lambdaResultMetadata);
   let canonicalPacket = null;
   if (canonicalPointer) {
-    const canonicalBundle = await loadCanonicalBundleForPolicyReview({
-      pointer: canonicalPointer
+    const localMirrorPath = extractLocalCanonicalPolicyReviewMirrorPath({
+      metadata: lambdaResultMetadata,
+      pointer: canonicalPointer,
+      scanId: input.scanId,
     });
+    const canonicalBundle = localMirrorPath
+      ? await loadCanonicalBundleForPolicyReviewFromLocalMirror({
+          localPath: localMirrorPath,
+          pointer: canonicalPointer,
+        })
+      : await loadCanonicalBundleForPolicyReview({
+          pointer: canonicalPointer
+        });
     canonicalPacket = buildPolicyReviewPacketFromCanonicalBundle(canonicalBundle, {
       scanId: input.scanId,
       verifiedRetainedBundle: true,
@@ -209,18 +222,36 @@ async function runPolicyModelReview(input: {
     };
   }
 
-  const canonicalReview = runPolicyReviewPacket({
-    apiKey: env.OPENAI_API_KEY,
-    mode: env.CERTSCORE_MODEL_REVIEW_MODE,
-    model: env.CERTSCORE_REVIEW_MODEL,
-    packet,
-    reuseEarlyStatic:
-      env.CERTSCORE_PARALLEL_POLICY_REVIEW_ENABLED &&
-      env.CERTSCORE_PARALLEL_POLICY_PROJECTION_ENABLED,
-    useMiniExceptionRuntime: env.CERTSCORE_MINI_EXCEPTION_ROUTING_ENABLED,
-    useRuntimeSemanticCache: env.CERTSCORE_RUNTIME_SEMANTIC_CACHE_ENABLED,
-  });
+  const allowPostResultModelCalls = !env.CERTSCORE_PARALLEL_POLICY_PROJECTION_ENABLED;
+
+  const canonicalReview = env.CERTSCORE_NANO_PRIMARY_POLICY_REVIEW_ENABLED && allowPostResultModelCalls
+    ? runNanoPrimaryPolicyReviewPacket({
+        apiKey: env.OPENAI_API_KEY,
+        earlyStaticExpected: Boolean(lambdaResultMetadata?.policyEvidence),
+        miniModel: env.CERTSCORE_REVIEW_MODEL,
+        mode: env.CERTSCORE_MODEL_REVIEW_MODE,
+        nanoModel: env.CERTSCORE_ROUTINE_REVIEW_MODEL,
+        packet,
+        reuseEarlyStatic:
+          env.CERTSCORE_PARALLEL_POLICY_REVIEW_ENABLED &&
+          env.CERTSCORE_PARALLEL_POLICY_PROJECTION_ENABLED,
+      })
+    : runPolicyReviewPacket({
+        allowPostResultModelCalls,
+        apiKey: env.OPENAI_API_KEY,
+        earlyStaticExpected: Boolean(lambdaResultMetadata?.policyEvidence),
+        mode: env.CERTSCORE_MODEL_REVIEW_MODE,
+        model: env.CERTSCORE_REVIEW_MODEL,
+        packet,
+        reuseEarlyStatic:
+          env.CERTSCORE_PARALLEL_POLICY_REVIEW_ENABLED &&
+          env.CERTSCORE_PARALLEL_POLICY_PROJECTION_ENABLED,
+        useMiniExceptionRuntime: env.CERTSCORE_MINI_EXCEPTION_ROUTING_ENABLED,
+        useRuntimeSemanticCache: env.CERTSCORE_RUNTIME_SEMANTIC_CACHE_ENABLED,
+      });
   const nanoShadow = env.CERTSCORE_ROUTINE_REVIEW_SHADOW_ENABLED &&
+    allowPostResultModelCalls &&
+    !env.CERTSCORE_NANO_PRIMARY_POLICY_REVIEW_ENABLED &&
     !env.CERTSCORE_DUAL_NANO_CONSENSUS_SHADOW_ENABLED
     ? runNanoPolicyReviewShadow({
         apiKey: env.OPENAI_API_KEY,
@@ -229,7 +260,7 @@ async function runPolicyModelReview(input: {
         packet,
       })
     : Promise.resolve(null);
-  const dualNanoConsensusShadow = env.CERTSCORE_DUAL_NANO_CONSENSUS_SHADOW_ENABLED
+  const dualNanoConsensusShadow = env.CERTSCORE_DUAL_NANO_CONSENSUS_SHADOW_ENABLED && allowPostResultModelCalls
     ? runDualNanoConsensusPolicyReviewShadow({
         apiKey: env.OPENAI_API_KEY,
         canonicalMiniReferenceArtifact: canonicalReview.then((review) => review.artifact),
@@ -239,6 +270,7 @@ async function runPolicyModelReview(input: {
       })
     : Promise.resolve(null);
   const extractionReuseShadow = env.CERTSCORE_EXTRACTION_REUSE_SHADOW_ENABLED &&
+    allowPostResultModelCalls &&
     isSentinelPolicyReviewTarget(packet.scanContext.targetUrl)
     ? runExtractionReusePolicyReviewShadow({
         apiKey: env.OPENAI_API_KEY,
@@ -255,6 +287,7 @@ async function runPolicyModelReview(input: {
     dualNanoShadow,
   ] = await Promise.all([
     canonicalReview,
+    allowPostResultModelCalls &&
     env.CERTSCORE_PARALLEL_POLICY_REVIEW_ENABLED &&
     !env.CERTSCORE_PARALLEL_POLICY_PROJECTION_ENABLED
       ? runParallelPolicyReviewShadow({

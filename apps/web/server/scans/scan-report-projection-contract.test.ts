@@ -175,6 +175,7 @@ test("persisted projection carries one scan-bound canonical output packet", () =
       taxonomySnapshotSections: []
     },
     globalUnifiedFindings: [],
+    evidenceIndex: {},
     legacyScoreAssessmentInput: {
       coverageConfidence: "insufficient",
       coverageRatio: 0,
@@ -189,6 +190,7 @@ test("persisted projection carries one scan-bound canonical output packet", () =
       withholdingReason: "legacy_evidence_score_withheld:insufficient"
     },
     normalizedConcerns: [],
+    ownerUnifiedFindingIds: [],
     ownerUnifiedFindings: [],
     topFindingIds: []
   } satisfies PersistedCanonicalReportProjection;
@@ -207,6 +209,31 @@ test("persisted projection carries one scan-bound canonical output packet", () =
     ...transported,
     scan: { ...transported.scan, id: "00000000-0000-0000-0000-000000000000" }
   }), null);
+
+  const indexedFinding = {
+    unifiedFindingId: "unified-finding-1"
+  } as PersistedCanonicalReportProjection["globalUnifiedFindings"][number];
+  const indexedCanonicalReportProjection = {
+    ...canonicalReportProjection,
+    globalUnifiedFindings: [indexedFinding],
+    ownerUnifiedFindingIds: [indexedFinding.unifiedFindingId],
+    ownerUnifiedFindings: []
+  };
+  const indexedOwnerProjection = {
+    ...transported,
+    canonicalReportProjection: indexedCanonicalReportProjection
+  } as unknown as ScanDetailResponse;
+  assert.deepEqual(
+    getPersistedCanonicalReportProjection(indexedOwnerProjection)?.ownerUnifiedFindings,
+    [indexedFinding]
+  );
+  assert.equal(getPersistedCanonicalReportProjection({
+    ...indexedOwnerProjection,
+    canonicalReportProjection: {
+      ...indexedCanonicalReportProjection,
+      ownerUnifiedFindingIds: ["missing-finding"]
+    }
+  } as unknown as ScanDetailResponse), null);
 });
 
 test("projection sanitizes NUL characters rejected by PostgreSQL jsonb", () => {

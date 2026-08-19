@@ -1233,6 +1233,14 @@ resource "aws_ecs_service" "materializer" {
   wait_for_steady_state             = true
   depends_on                        = [aws_lb_listener_rule.materializer_staging_association]
   tags                              = local.common_tags
+
+  # The deployment workflow registers a materializer-specific task family with
+  # a larger CPU allocation while preserving the exact deployed web image and
+  # runtime configuration. Terraform owns the service and networking, while
+  # deployments own the immutable task revision.
+  lifecycle {
+    ignore_changes = [task_definition]
+  }
 }
 
 resource "aws_ecs_service" "mcp" {

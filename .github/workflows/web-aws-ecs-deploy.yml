@@ -59,6 +59,8 @@ jobs:
       ECS_CLUSTER_NAME: ${{ vars.AWS_WEB_ECS_CLUSTER }}
       ECS_CERTSCORE_SERVICE_NAME: ${{ vars.AWS_WEB_CERTSCORE_SERVICE }}
       ECS_MATERIALIZER_SERVICE_NAME: ${{ vars.AWS_WEB_MATERIALIZER_SERVICE || 'certscore-web-materializer' }}
+      MATERIALIZER_TASK_CPU: ${{ vars.AWS_WEB_MATERIALIZER_TASK_CPU || '1024' }}
+      MATERIALIZER_TASK_MEMORY: ${{ vars.AWS_WEB_MATERIALIZER_TASK_MEMORY || '2048' }}
       CERTSCORE_BASE_URL: ${{ vars.AWS_WEB_CERTSCORE_BASE_URL }}
       CERTSCORE_CHROME_EXTENSION_STORE_URL: ${{ vars.CERTSCORE_CHROME_EXTENSION_STORE_URL || 'https://chromewebstore.google.com/detail/certscore-ai/mjeaagdiegpaeokkdaghkndmkjhlbhbp' }}
 
@@ -295,6 +297,22 @@ jobs:
             --output text)"
           echo "TARGET_TASK_DEFINITION=${TARGET_TASK_DEFINITION}" >> "${GITHUB_ENV}"
 
+          # Projection is CPU-heavy and intentionally isolated from public web
+          # traffic. Register a distinct family so giving the materializer one
+          # full vCPU does not increase the public service's task size or let a
+          # later web revision silently return it to 0.5 vCPU.
+          jq --arg cpu "${MATERIALIZER_TASK_CPU}" --arg memory "${MATERIALIZER_TASK_MEMORY}" '
+            .family = (.family + "-materializer")
+            | .cpu = $cpu
+            | .memory = $memory
+          ' target-task-definition.json > target-materializer-task-definition.json
+
+          TARGET_MATERIALIZER_TASK_DEFINITION="$(aws ecs register-task-definition \
+            --cli-input-json file://target-materializer-task-definition.json \
+            --query 'taskDefinition.taskDefinitionArn' \
+            --output text)"
+          echo "TARGET_MATERIALIZER_TASK_DEFINITION=${TARGET_MATERIALIZER_TASK_DEFINITION}" >> "${GITHUB_ENV}"
+
           EXPECTED_LATEST_MIGRATION="$(find packages/db/migrations -maxdepth 1 -type f -name '*.sql' -exec basename {} \; | sort | tail -1)"
           AUXILIARY_OVERRIDES="$(jq -c --arg primary "${CONTAINER_NAME}" '[
             .containerDefinitions[]
@@ -342,7 +360,7 @@ jobs:
             aws ecs update-service \
               --cluster "${ECS_CLUSTER_NAME}" \
               --service "${ECS_MATERIALIZER_SERVICE_NAME}" \
-              --task-definition "${TARGET_TASK_DEFINITION}" \
+              --task-definition "${TARGET_MATERIALIZER_TASK_DEFINITION}" \
               --force-new-deployment >/dev/null
             echo "MATERIALIZER_SERVICE_DEPLOYED=true" >> "${GITHUB_ENV}"
           else

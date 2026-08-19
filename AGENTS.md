@@ -137,6 +137,8 @@ Keep passage location, candidate-topic extraction, normalization, evidence compr
 
 Model outputs must use strict structured schemas, application-side validation, explicit provenance, bounded inputs/outputs, and safe failed/inconclusive states. Batch policy and finding review where possible and cache policy review by canonical content hash, contract version, prompt version, schema version, and model.
 
+When `CERTSCORE_PARALLEL_POLICY_PROJECTION_ENABLED=1`, production report readiness must not start or await a fresh model call after `v2_lambda_result.received`. Static Mini review runs from the verified policy-evidence lane and caches by canonical policy content hash. Terminal projection may consume only a verified completed early/cached review plus deterministic runtime rows. If the semantic artifact is unavailable, fail closed without model-derived rows; directly comparable policy/runtime claims remain unknown. Do not restore terminal model fallback, polling delays, or display-derived findings to improve apparent coverage.
+
 Deterministic code remains authoritative for observed runtime facts, timestamps, canonical registries, legal-framework dates/validity, thresholds, severity, finding eligibility, scoring, and display projection. Model-review artifacts must remain internal and non-production until a separate production integration is explicitly approved.
 
 Model-review rollout evaluation must fail closed and must record review provenance honestly. `independently_reviewed` is reserved for evidence-only human review. `human_adjudicated` may be used when a named product owner reviews the retained evidence and a multi-model comparison, then personally decides every label. Human-adjudicated labels count for the approved precision-first observed-only production scope, but they must not be relabeled as independent review. The stricter full-status rollout gate still requires its canonical balance, coverage, precision, recall, and exact-agreement thresholds.
@@ -163,6 +165,21 @@ in the 25-case corpus. Those rows are canonical `human_adjudicated` calibration
 labels. The approved observed-only scope is production-eligible when its
 precision-first gate passes even if the separate full-status rollout gate
 remains blocked by recall or exact agreement.
+
+On August 18, 2026, the product owner set the operating goal that Mini be used
+for fewer than 3% of unique policy hashes reviewed by Nano. The Nano-primary
+precision mode uses one bounded Nano recovery pass for routine uncertainty;
+remaining uncertainty stays `unknown` or review and must not invoke Mini merely
+because confidence is low, evidence is insufficient, or absence is unproven.
+Mini is reserved for invariant-verified retained contradictions and must record
+row-level provenance. Cookie inventory remains deterministic. Only
+high-confidence, evidence-bound Nano `observed` rows and bounded Mini conflict
+adjudications may enter the existing observed-only GDPR Transparency path
+through persisted artifact -> normalized concern -> concern policy ->
+checklist projection. Nano absence, scoring changes, direct display findings,
+and surface-specific fallbacks remain prohibited. Keep the production switch
+off until corpus and fresh-cohort calibration demonstrate both the evidence
+quality gate and the Mini invocation-rate goal.
 
 Sensitive-context labels in v2 are review routing metadata only. They must not create stronger findings, customer-facing language, legal conclusions, or production eligibility.
 

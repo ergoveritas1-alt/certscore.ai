@@ -1,6 +1,7 @@
 import { projectExecutiveFindingsFromUnifiedPackets } from "../scans/executive-findings-projection";
 import { deriveCertScoreFindings } from "../scans/derive-findings";
 import { deriveGdprEprivacyCoverageChecklist } from "../scans/gdpr-eprivacy-coverage-checklist";
+import { hydrateChecklistPolicyEvidence } from "../scans/checklist-evidence-index";
 import { deriveGdprEprivacyCoveragePolicyOutcomes } from "../scans/gdpr-eprivacy-coverage-policy";
 import { getReportableGdprEprivacyCoverageItems } from "../scans/gdpr-eprivacy-reportable-rows";
 import { getHybridRuntimeEvidence } from "../scans/hybrid-runtime-evidence";
@@ -366,7 +367,12 @@ function buildPulseReportSurface(input: {
     regulatoryRelevance: row.regulatoryRelevance,
     vendor: row.vendor
   }));
-  const gdprEprivacyChecklist = persistedCanonicalProjection?.checklistRows ?? (() => {
+  const gdprEprivacyChecklist = persistedCanonicalProjection
+    ? hydrateChecklistPolicyEvidence(
+        persistedCanonicalProjection.checklistRows,
+        persistedCanonicalProjection.evidenceIndex,
+      )
+    : (() => {
     const runtimeArtifactNormalizedConcerns = buildNormalizedConcerns({
       reviewFindingCandidates: [],
       runtimeArtifacts: scanRecord.runtimeArtifacts,
@@ -390,7 +396,7 @@ function buildPulseReportSurface(input: {
       scanCompleted: scanRecord.scan.status === "completed",
       unifiedFindings: unifiedFindingPackets
     });
-  })();
+      })();
   const reportableGdprRows = getReportableGdprEprivacyCoverageItems(gdprEprivacyChecklist).map((item) => {
     const statusBasis = deriveGdprEprivacyCoverageChecklistRowRationale(item);
     return {

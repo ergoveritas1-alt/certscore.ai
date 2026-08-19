@@ -3,17 +3,24 @@ import type { UnifiedFindingDisplayPacket } from "../../lib/scans/unified-findin
 import type { GdprEprivacyCoverageChecklistItem } from "../../lib/scans/gdpr-eprivacy-coverage-checklist";
 import type { ScanDetailResponse } from "./get-scan-by-id";
 import type { VersionedScoreAssessmentInput } from "./score-assessment-repository";
+import type { ChecklistEvidenceIndex } from "../../lib/scans/checklist-evidence-index";
 
 export const PERSISTED_CANONICAL_REPORT_PROJECTION_VERSION =
+  "persisted-canonical-report-projection-v3";
+const LEGACY_PERSISTED_CANONICAL_REPORT_PROJECTION_VERSION =
   "persisted-canonical-report-projection-v2";
 
 export type PersistedCanonicalReportProjection = {
-  artifactVersion: typeof PERSISTED_CANONICAL_REPORT_PROJECTION_VERSION;
+  artifactVersion:
+    | typeof PERSISTED_CANONICAL_REPORT_PROJECTION_VERSION
+    | typeof LEGACY_PERSISTED_CANONICAL_REPORT_PROJECTION_VERSION;
   checklistRows: GdprEprivacyCoverageChecklistItem[];
   derivedContext: ScanReportUnifiedFindingState["derivedContext"];
+  evidenceIndex?: ChecklistEvidenceIndex;
   globalUnifiedFindings: UnifiedFindingDisplayPacket[];
   legacyScoreAssessmentInput: VersionedScoreAssessmentInput;
   normalizedConcerns: NonNullable<ScanReportUnifiedFindingState["normalizedConcerns"]>;
+  ownerUnifiedFindingIds?: string[];
   ownerUnifiedFindings: UnifiedFindingDisplayPacket[];
   topFindingIds: string[];
 };
@@ -34,7 +41,10 @@ export function getPersistedCanonicalReportProjection(
   const candidate = root.canonicalReportProjection;
   if (
     !isRecord(candidate) ||
-    candidate.artifactVersion !== PERSISTED_CANONICAL_REPORT_PROJECTION_VERSION ||
+    (
+      candidate.artifactVersion !== PERSISTED_CANONICAL_REPORT_PROJECTION_VERSION &&
+      candidate.artifactVersion !== LEGACY_PERSISTED_CANONICAL_REPORT_PROJECTION_VERSION
+    ) ||
     !Array.isArray(candidate.checklistRows) ||
     !isRecord(candidate.derivedContext) ||
     !Array.isArray(candidate.globalUnifiedFindings) ||
@@ -46,6 +56,35 @@ export function getPersistedCanonicalReportProjection(
     candidate.topFindingIds.some((value) => typeof value !== "string")
   ) {
     return null;
+  }
+
+  if (
+    candidate.artifactVersion === PERSISTED_CANONICAL_REPORT_PROJECTION_VERSION &&
+    (
+      !isRecord(candidate.evidenceIndex) ||
+      !Array.isArray(candidate.ownerUnifiedFindingIds) ||
+      candidate.ownerUnifiedFindingIds.some((value) => typeof value !== "string")
+    )
+  ) {
+    return null;
+  }
+
+  if (candidate.artifactVersion === PERSISTED_CANONICAL_REPORT_PROJECTION_VERSION) {
+    const globalById = new Map(
+      (candidate.globalUnifiedFindings as UnifiedFindingDisplayPacket[]).map((finding) => [
+        finding.unifiedFindingId,
+        finding,
+      ]),
+    );
+    if ((candidate.ownerUnifiedFindingIds as string[]).some((id) => !globalById.has(id))) {
+      return null;
+    }
+    const ownerUnifiedFindings = (candidate.ownerUnifiedFindingIds as string[])
+      .flatMap((id) => globalById.get(id) ?? []);
+    return {
+      ...candidate,
+      ownerUnifiedFindings,
+    } as PersistedCanonicalReportProjection;
   }
 
   return candidate as PersistedCanonicalReportProjection;
