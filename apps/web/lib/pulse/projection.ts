@@ -665,6 +665,13 @@ export function derivePulseReportScore(input: {
   unifiedFindingPackets?: ReturnType<typeof buildScanReportUnifiedFindings>;
 }) {
   const scanRecord = input.scanRecord;
+  const persistedReportScore =
+    scanRecord.snapshot?.report_projection_status === "ready"
+      ? finiteNumber(scanRecord.snapshot.certscore_overall)
+      : null;
+  if (persistedReportScore !== null) {
+    return boundedScore(persistedReportScore);
+  }
   const coverageLimited = input.coverageLimited ?? (deriveCoverage(scanRecord).status !== "complete");
   const surface = buildPulseReportSurface({
     coverageLimited,

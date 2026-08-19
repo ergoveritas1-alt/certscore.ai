@@ -164,6 +164,7 @@ test("Pulse and full-scan routes preserve 24-hour reuse and forceNewScan bypass"
   assert.match(apiV2CreateScanRoute, /GET as pulseGET/);
   assert.match(apiV2CreateScanRoute, /new URL\("\/api\/v1\/pulse"/);
   assert.match(publicScanRecordSource, /materializeLocalV2DagScanDetail/);
+  assert.match(publicScanRecordSource, /loadAnonymousPersistedScanReportProjection/);
   assert.match(pulseRoute, /getPublicScanRecord\(scanId/);
   assert.match(apiV2CreateScanRoute, /getPublicScanRecord\(scanId/);
   assert.match(apiV2ScanRoute, /getPublicScanRecord\(scanId/);

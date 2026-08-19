@@ -388,38 +388,6 @@ export function createCertScoreMcpServer(options: CertScoreMcpOptions = {}) {
       try {
         const internalMcpOperation = { operation: "scan_status" as const, scanId };
         const status = await client.scans.status(scanId, { internalMcpOperation });
-        const needsTerminalHydration = status.status === "completed" || status.status === "completed_limited";
-        if (needsTerminalHydration) {
-          try {
-            const scan = await client.scans.get(scanId, { internalMcpOperation });
-            const guided = withMcpScanProvenanceGuidance({
-              ...status,
-              type: "certscore_scan_job",
-              status: scan.status,
-              domain: scan.domain,
-              url: scan.url ?? null,
-              scanFrom: scan.scanFrom ?? null,
-              resultDisposition: scan.resultDisposition,
-              noGo: scan.noGo,
-              createdAt: scan.createdAt ?? null,
-              startedAt: scan.startedAt,
-              completedAt: scan.completedAt,
-              scanTimeSeconds: scan.scanTimeSeconds,
-              score: scan.score ?? null,
-              scoreStatus: scan.scoreStatus,
-              scoreVersion: scan.scoreVersion ?? null,
-              scoreUpdatedAt: scan.scoreUpdatedAt ?? null,
-              riskLevel: scan.riskLevel ?? null,
-              coverage: scan.coverage ?? null,
-              reportUrl: scan.links?.report ?? status.reportUrl ?? null,
-              links: { ...status.links, ...scan.links }
-            }, "existing_scan_retrieved");
-            return toToolResult(guided, scanStatusText(guided));
-          } catch {
-            // Preserve the API status response if the terminal scan resource is
-            // briefly unavailable during eventual-consistency windows.
-          }
-        }
         const guided = withMcpScanProvenanceGuidance({
           ...status,
           scanFrom: status.scanFrom ?? null

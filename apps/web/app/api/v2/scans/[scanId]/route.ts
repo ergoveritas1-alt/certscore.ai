@@ -42,7 +42,8 @@ export async function GET(request: Request, context: RouteContext) {
         status: 404
       });
     }
-    const canonicalStatus = buildApiV2ScanStatus(scanRecord);
+    const canonicalScan = buildApiV2ScanResource(scanRecord);
+    const canonicalStatus = buildApiV2ScanStatus(scanRecord, { canonicalScan });
     if (canonicalStatus.status !== "completed" && canonicalStatus.status !== "completed_limited") {
       const failed = canonicalStatus.status === "failed";
       const retryAfterSeconds = canonicalStatus.retryAfterSeconds ?? canonicalStatus.error?.retryAfterSeconds ?? (failed ? null : 2);
@@ -66,7 +67,7 @@ export async function GET(request: Request, context: RouteContext) {
     }
 
     return apiV2JsonResponse({
-      body: apiV2ScanResourceSchema.parse(buildApiV2ScanResource(scanRecord)),
+      body: apiV2ScanResourceSchema.parse(canonicalScan),
       requestId: id,
       route: "api-v2-scan",
       status: 200

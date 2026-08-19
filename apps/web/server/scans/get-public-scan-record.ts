@@ -1,27 +1,18 @@
-import { getAnonymousScanById } from "./get-scan-by-id";
+import { getAnonymousScanByIdForReadOnlyProjection } from "./get-scan-by-id";
 import { materializeLocalV2DagScanDetail } from "./local-v2-dag-report";
-import { getPersistedScanReportProjection } from "./scan-report-projection";
+import { loadAnonymousPersistedScanReportProjection } from "./scan-report-projection";
 
-export type PublicScanRecord = NonNullable<Awaited<ReturnType<typeof getAnonymousScanById>>>;
+export type PublicScanRecord = NonNullable<Awaited<ReturnType<typeof getAnonymousScanByIdForReadOnlyProjection>>>;
 
 export async function getPublicScanRecord(scanId: string, options: { logPrefix?: string } = {}) {
-  const scanRecord = await getAnonymousScanById(scanId).catch(() => null);
-  if (!scanRecord || scanRecord.scan.status !== "completed") {
-    return scanRecord;
+  const persistedReportProjection = await loadAnonymousPersistedScanReportProjection({ scanId }).catch(() => null);
+  if (persistedReportProjection) {
+    return persistedReportProjection;
   }
 
-  const persistedReportProjection = getPersistedScanReportProjection(scanRecord);
-  if (persistedReportProjection) {
-    return {
-      ...persistedReportProjection,
-      snapshot: {
-        ...persistedReportProjection.snapshot,
-        report_projection_computed_at: scanRecord.snapshot?.report_projection_computed_at,
-        report_projection_source_hash: scanRecord.snapshot?.report_projection_source_hash,
-        report_projection_status: scanRecord.snapshot?.report_projection_status,
-        report_projection_version: scanRecord.snapshot?.report_projection_version
-      }
-    };
+  const scanRecord = await getAnonymousScanByIdForReadOnlyProjection(scanId).catch(() => null);
+  if (!scanRecord || scanRecord.scan.status !== "completed") {
+    return scanRecord;
   }
 
   return materializeLocalV2DagScanDetail(scanRecord).catch((error) => {

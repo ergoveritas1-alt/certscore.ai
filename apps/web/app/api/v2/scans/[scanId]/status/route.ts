@@ -1,5 +1,5 @@
 import { API_V2_SCAN_ID_PATTERN, apiV2JsonResponse, buildApiV2Error, buildApiV2ScanStatus } from "../../../../../../lib/api-v2/scan-resource";
-import { getAnonymousScanById } from "../../../../../../server/scans/get-scan-by-id";
+import { getPublicScanRecord } from "../../../../../../server/scans/get-public-scan-record";
 import { enforceApiV2ScanReadThrottle } from "../../../../../../server/pulse/api-v2-read-throttle";
 
 export const dynamic = "force-dynamic";
@@ -38,7 +38,7 @@ export async function GET(request: Request, context: RouteContext) {
   if (throttled) return throttled;
 
   try {
-    const scanRecord = await getAnonymousScanById(scanId);
+    const scanRecord = await getPublicScanRecord(scanId, { logPrefix: "[api-v2-scan-status]" });
     if (!scanRecord) {
       return apiV2JsonResponse({
         body: buildApiV2Error({ code: "not_found", message: "Scan not found or not eligible for public API v2." }),

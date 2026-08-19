@@ -713,7 +713,10 @@ export function buildApiV2ScanDiagnostics(scanRecord: ScanDetailResponse): ApiV2
   });
 }
 
-export function buildApiV2ScanStatus(scanRecord: ScanDetailResponse, options: { nowMs?: number } = {}): ApiV2ScanJob {
+export function buildApiV2ScanStatus(
+  scanRecord: ScanDetailResponse,
+  options: { canonicalScan?: ApiV2ScanResource; nowMs?: number } = {}
+): ApiV2ScanJob {
   const scan = scanRecord.scan;
   const noGoProjection = projectExternalScanNoGo(scanRecord.runtimeArtifacts);
   const normalizedScanStatus = normalizeScanStatus(scan.status);
@@ -739,7 +742,7 @@ export function buildApiV2ScanStatus(scanRecord: ScanDetailResponse, options: { 
   const lastHeartbeatAt = terminal ? dateStringOrNull(scan.completedAt) : latestScanHeartbeat(scanRecord);
   const heartbeatMs = lastHeartbeatAt ? Date.parse(lastHeartbeatAt) : Number.NaN;
   const stalled = !terminal && Number.isFinite(heartbeatMs) && (options.nowMs ?? Date.now()) - heartbeatMs > API_V2_STALLED_AFTER_MS;
-  const canonicalScan = buildApiV2ScanResource(scanRecord);
+  const canonicalScan = options.canonicalScan ?? buildApiV2ScanResource(scanRecord);
   const phaseStartedAt = status === "queued"
     ? dateStringOrNull(scan.createdAt)
     : status === "finalizing"

@@ -1615,6 +1615,17 @@ export async function getAnonymousScanById(scanId: string) {
   });
 }
 
+export async function getAnonymousScanByIdForReadOnlyProjection(scanId: string) {
+  return loadScanDetailRecord({
+    anonymousOnly: true,
+    includeDomainBenchmark: false,
+    includeUrlscanSupplement: false,
+    organizationId: null,
+    scanId,
+    viewerEmail: null
+  });
+}
+
 export async function getPublicScanById(scanId: string) {
   return loadScanDetailRecord({
     includeUrlscanSupplement: false,

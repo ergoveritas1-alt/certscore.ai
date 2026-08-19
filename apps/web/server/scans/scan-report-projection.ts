@@ -88,6 +88,29 @@ type PersistedScanReportProjectionRow = {
   scan_status: string;
 };
 
+function projectionFromPersistedRow(row: PersistedScanReportProjectionRow): ScanDetailResponse | null {
+  const projection = readPersistedScanReportProjection({
+    scan: {
+      id: row.scan_id,
+      status: row.scan_status
+    } as ScanDetailResponse["scan"],
+    snapshot: row
+  });
+  if (!projection) {
+    return null;
+  }
+  return {
+    ...projection,
+    snapshot: {
+      ...(projection.snapshot ?? {}),
+      report_projection_computed_at: row.report_projection_computed_at,
+      report_projection_source_hash: row.report_projection_source_hash,
+      report_projection_status: row.report_projection_status,
+      report_projection_version: row.report_projection_version
+    }
+  } satisfies ScanDetailResponse;
+}
+
 const COMPLETED_REPORT_CACHE_MAX_ENTRIES = 8;
 const COMPLETED_REPORT_CACHE_TTL_MS = 10 * 60 * 1000;
 const completedReportProjectionCache = new Map<
@@ -186,13 +209,7 @@ export async function loadPersistedScanReportProjection(input: {
   if (!row) {
     return null;
   }
-  const projection = readPersistedScanReportProjection({
-    scan: {
-      id: row.scan_id,
-      status: row.scan_status
-    } as ScanDetailResponse["scan"],
-    snapshot: row
-  });
+  const projection = projectionFromPersistedRow(row);
   if (projection && row.report_projection_source_hash) {
     primeCompletedReportProjectionCache({
       generation: row.report_projection_source_hash,
@@ -201,6 +218,35 @@ export async function loadPersistedScanReportProjection(input: {
     });
   }
   return projection;
+}
+
+/**
+ * Reads only an anonymous scan's verified persisted projection. Unlike the
+ * general loader, this function establishes its own public-access scope before
+ * returning any cached or persisted report data.
+ */
+export async function loadAnonymousPersistedScanReportProjection(input: {
+  scanId: string;
+}) {
+  const row = await queryOne<PersistedScanReportProjectionRow>(
+    `select s.id as scan_id,
+            s.status as scan_status,
+            projection.report_projection_computed_at,
+            projection.report_projection_payload,
+            projection.report_projection_payload_sha256,
+            projection.report_projection_payload_size_bytes,
+            projection.report_projection_source_hash,
+            projection.report_projection_status,
+            projection.report_projection_version
+       from public.scans s
+       join public.scan_snapshots projection on projection.scan_id = s.id
+      where s.id = $1::uuid
+        and s.organization_id is null
+      limit 1`,
+    [input.scanId],
+    { readOnly: true }
+  );
+  return row ? projectionFromPersistedRow(row) : null;
 }
 
 export type ScanReportProjectionRow = {

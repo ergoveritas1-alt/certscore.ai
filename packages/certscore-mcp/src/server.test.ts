@@ -730,17 +730,6 @@ test("certscore_get_scan_status supports API v2 scanId status with timing fields
         type: "certscore_scan_job",
         jobId: "00000000-0000-4000-8000-000000000123",
         scanId: "00000000-0000-4000-8000-000000000123",
-        status: "completed",
-        startedAt: "2026-07-08T12:00:00.000Z",
-        completedAt: "2026-07-08T12:00:34.000Z",
-        scanTimeSeconds: 34
-      }
-    },
-    {
-      status: 200,
-      body: {
-        type: "certscore_scan",
-        scanId: "00000000-0000-4000-8000-000000000123",
         domain: "example.com",
         status: "completed",
         score: 78,
@@ -776,16 +765,15 @@ test("certscore_get_scan_status supports API v2 scanId status with timing fields
       assert.match(text, /provenance\/reuse state=existing_scan_retrieved/);
       assert.match(text, /Never infer its original scan region from the current request, the user's location, or a default execution region/);
       assertToolOutputSchema("certscore_get_scan_status", result);
-      assert.equal(mock.calls.length, 2);
+      assert.equal(mock.calls.length, 1);
       assert.match(mock.calls[0] ?? "", /\/api\/v2\/scans\/00000000-0000-4000-8000-000000000123\/status/);
-      assert.match(mock.calls[1] ?? "", /\/api\/v2\/scans\/00000000-0000-4000-8000-000000000123$/);
     });
   } finally {
     mock.restore();
   }
 });
 
-test("certscore_get_scan_status hydrates terminal API v2 status with completed-limited no-go details", async () => {
+test("certscore_get_scan_status preserves terminal API v2 completed-limited no-go details without a second read", async () => {
   const mock = installFetch([
     {
       status: 200,
@@ -794,17 +782,8 @@ test("certscore_get_scan_status hydrates terminal API v2 status with completed-l
         jobId: "scan_123",
         scanId: "scan_123",
         domain: "example.com",
-        status: "completed",
-        phase: "completed"
-      }
-    },
-    {
-      status: 200,
-      body: {
-        type: "certscore_scan",
-        scanId: "scan_123",
-        domain: "example.com",
         status: "completed_limited",
+        phase: "completed",
         resultDisposition: "no_go",
         noGo: {
           reasonCode: "parked_or_placeholder",
@@ -834,7 +813,7 @@ test("certscore_get_scan_status hydrates terminal API v2 status with completed-l
       assert.match(String(result.observationOnlyDisclaimer), /not proof of compliance/i);
       assert.equal(result.scanTimeSeconds, 3);
       assert.match(mock.calls[0] ?? "", /\/api\/v2\/scans\/scan_123\/status$/);
-      assert.match(mock.calls[1] ?? "", /\/api\/v2\/scans\/scan_123$/);
+      assert.equal(mock.calls.length, 1);
     });
   } finally {
     mock.restore();
@@ -1108,8 +1087,7 @@ test("completed Light tools preserve one final canonical score and metadata", as
   };
   const mock = installFetch([
     { status: 200, body: canonicalScan },
-    { status: 200, body: { type: "certscore_scan_job", jobId: "scan_123", scanId: "scan_123", status: "completed" } },
-    { status: 200, body: canonicalScan },
+    { status: 200, body: { ...canonicalScan, type: "certscore_scan_job", jobId: "scan_123" } },
     { status: 200, body: canonicalScan },
     { status: 200, body: { ...pulse, summary: { ...pulse.summary, score: 73 }, type: "certscore_pulse_summary" } },
     { status: 200, body: { type: "certscore_finding_list", scanId: "scan_123", findings: [apiFinding("finding_1")] } },
@@ -1136,7 +1114,7 @@ test("completed Light tools preserve one final canonical score and metadata", as
       assert.equal(created.reportUrl, "https://certscore.ai/scan/scan_123");
       assert.equal(status.reportUrl, "https://certscore.ai/scan/scan_123");
       assert.equal(bundle.reportUrl, "https://certscore.ai/scan/scan_123");
-      assert.equal(mock.calls.length, 7);
+      assert.equal(mock.calls.length, 6);
     });
   } finally {
     mock.restore();
