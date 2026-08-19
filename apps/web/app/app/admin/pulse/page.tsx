@@ -12,6 +12,7 @@ import { withServerTiming } from "../../../../server/performance/log-server-timi
 import { AdminNavigationProvider, AdminReportLink } from "../scans/admin-scan-actions";
 import { AdminScansFilterForm } from "../scans/admin-scans-filter-form";
 import { CanaryTrafficToggle } from "../../../../components/admin/canary-traffic-toggle";
+import { AdminTableRefreshBoundary } from "../../../../components/admin/admin-table-refresh-boundary";
 import {
   adminPolicyEvidenceDiagnosticTitle,
   adminPolicyEvidenceStageLabel,
@@ -381,6 +382,7 @@ export default async function AdminPulsePage({ searchParams }: AdminPulsePagePro
           <div className="flex items-center gap-3"><CanaryTrafficToggle basePath="/app/admin/pulse" includeCanary={includeCanary} searchParams={resolved} /><Suspense fallback={<AdminPulseOverviewFallback />}><AdminPulseOverview includeCanary={includeCanary} /></Suspense></div>
         </div>
       </CardHeader>
+      <AdminTableRefreshBoundary basePath="/app/admin/pulse" label="Refreshing API activity">
       <CardContent className="space-y-3 pt-0">
         <Suspense fallback={<AdminPulseFiltersFallback />}>
           <AdminPulseFilters
@@ -486,6 +488,7 @@ export default async function AdminPulsePage({ searchParams }: AdminPulsePagePro
           </table>
         </div>
       </CardContent>
+      </AdminTableRefreshBoundary>
     </Card>
     </AdminNavigationProvider>
   );

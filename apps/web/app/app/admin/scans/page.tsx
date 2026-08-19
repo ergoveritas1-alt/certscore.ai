@@ -12,6 +12,7 @@ import { AdminNavigationProvider, AdminScanActions } from "./admin-scan-actions"
 import { AdminScansAutoRefresh } from "./admin-scans-auto-refresh";
 import { AdminScansFilterForm } from "./admin-scans-filter-form";
 import { CanaryTrafficToggle } from "../../../../components/admin/canary-traffic-toggle";
+import { AdminTableRefreshBoundary } from "../../../../components/admin/admin-table-refresh-boundary";
 import {
   adminPolicyEvidenceDiagnosticTitle,
   adminPolicyEvidenceStageLabel,
@@ -297,6 +298,7 @@ async function AdminScansContent({ resolvedSearchParams }: { resolvedSearchParam
           </p></div>
         </div>
       </CardHeader>
+      <AdminTableRefreshBoundary basePath="/app/admin/scans" label="Refreshing scans">
       <CardContent className="min-w-0 space-y-3 pt-0">
         <AdminScansAutoRefresh targets={liveTargets} />
         <AdminScansFilterForm hasFilters={hasFilters} submitFirst>
@@ -398,6 +400,7 @@ async function AdminScansContent({ resolvedSearchParams }: { resolvedSearchParam
           </table>
         </div>
       </CardContent>
+      </AdminTableRefreshBoundary>
     </Card>
     </AdminNavigationProvider>
   );

@@ -4,6 +4,7 @@ import type { ReactNode } from "react";
 import "./globals.css";
 import { AnalyticsConsentBanner } from "../components/analytics/analytics-consent-banner";
 import { DataLayerClickTracker } from "../components/analytics/data-layer-events";
+import { ProductAnalyticsTracker } from "../components/analytics/product-analytics-tracker";
 import { buildConsentBootstrapScript } from "../lib/analytics/consent-bootstrap";
 import { SITE_NAME, SITE_URL } from "../lib/seo";
 
@@ -78,6 +79,7 @@ export default function RootLayout({ children }: RootLayoutProps) {
           })}
         </Script>
         <DataLayerClickTracker />
+        <ProductAnalyticsTracker />
         <AnalyticsConsentBanner />
         <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(organizationSchema) }} />
         <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(websiteSchema) }} />

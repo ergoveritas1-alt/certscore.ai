@@ -19,6 +19,7 @@ import {
   markCampaignLandingSeen,
   recordCampaignCompletedDomain
 } from "../../lib/attribution/campaign-attribution";
+import { trackProductEvent } from "../../lib/product-analytics/client";
 
 const PENDING_SCAN_STARTED_KEY = "certscore:analytics:pending-scan-started";
 
@@ -83,6 +84,7 @@ export function DataLayerClickTracker() {
         event: "registration_completed",
         auth_method: "password"
       });
+      trackProductEvent({ eventName: "account_created", category: "account", feature: "password_registration", outcome: "success" });
       const url = new URL(window.location.href);
       url.searchParams.delete("certscore_registration");
       window.history.replaceState({}, "", `${url.pathname}${url.search}${url.hash}`);
@@ -252,6 +254,7 @@ export function PendingScanStartedEvent() {
       scan_target_type: "domain",
       scan_status: "queued"
     });
+    trackProductEvent({ eventName: "scan_started", category: "scan", feature: `scan:${scanSource}`, outcome: "started" });
   }, []);
 
   return null;
@@ -272,6 +275,7 @@ export function ScanCompletedEvent({
       scan_source: scanSource,
       scan_status: "completed"
     });
+    trackProductEvent({ eventName: "scan_completed", category: "scan", feature: `scan:${scanSource}`, outcome: "success", route: pathname });
     if (domain) {
       const ordinal = recordCampaignCompletedDomain(domain);
       if (ordinal === 1) {

@@ -23,7 +23,7 @@ function AnalyticsConsentPanel(input: {
         <div className="space-y-1">
           <p className="text-sm font-semibold text-slate-950">Cookie and analytics preferences</p>
           <p className="text-sm leading-6 text-slate-600">
-            We use privacy-bounded Umami for anonymous pageviews and coarse product events by default. Optional Google analytics loads only after you allow it. You can reject optional analytics now and change this choice later from Cookie preferences.
+            We use privacy-conscious analytics to improve CertScore. You can opt out at any time. We do not record passwords, keystrokes, form contents, or session replays. Essential security and service operations may continue.
           </p>
         </div>
         <div className="mt-3 flex shrink-0 flex-wrap gap-2 md:mt-0">
@@ -62,7 +62,7 @@ function AnalyticsConsentPanel(input: {
       </div>
       {showSettings ? (
         <div className="mt-3 rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm leading-6 text-slate-600">
-          Optional analytics cookies and session-insight tools help CertScore.ai understand product usage and improve reliability. They stay off unless you choose Allow analytics. Necessary app, security, and account cookies may still run.
+          Analytics records limited product activity such as pages, actions, outcomes, and scan references. Optional Google analytics requires approval. Essential service and security telemetry is separate.
         </div>
       ) : null}
     </section>

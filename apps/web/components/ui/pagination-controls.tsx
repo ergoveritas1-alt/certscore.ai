@@ -91,7 +91,7 @@ export function PaginationControls({
         {normalizedPageCount !== null ? ` · Page ${page} of ${Math.max(1, normalizedPageCount)}` : ` · Page ${page}`}
       </p>
       <div className="flex flex-wrap items-center gap-2">
-        <form action={basePath} className="flex items-center gap-2">
+        <form action={basePath} className="flex items-center gap-2" data-admin-table-form={basePath}>
           {Object.entries(searchParams ?? {}).map(([key, value]) =>
             key === pageParamName || key === perPageParamName || value === null || value === undefined || value === "" ? null : (
               <input key={key} name={key} type="hidden" value={value} />
@@ -113,7 +113,7 @@ export function PaginationControls({
           </Button>
         </form>
         {showPageJump && normalizedPageCount !== null ? (
-          <form action={basePath} className="flex items-center gap-2">
+          <form action={basePath} className="flex items-center gap-2" data-admin-table-form={basePath}>
             {Object.entries(searchParams ?? {}).map(([key, value]) =>
               key === pageParamName || key === perPageParamName || value === null || value === undefined || value === "" ? null : (
                 <input key={key} name={key} type="hidden" value={value} />

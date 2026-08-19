@@ -7,6 +7,7 @@ import { loadAdminMcpTelemetryDashboard, listAdminMcpTelemetryEventsPage, type A
 import { withServerTiming } from "../../../../server/performance/log-server-timing";
 import { AdminScansFilterForm } from "../scans/admin-scans-filter-form";
 import { CanaryTrafficToggle } from "../../../../components/admin/canary-traffic-toggle";
+import { AdminTableRefreshBoundary } from "../../../../components/admin/admin-table-refresh-boundary";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -253,6 +254,7 @@ export default async function AdminMcpTelemetryPage({ searchParams }: AdminMcpPa
             <p className="text-sm text-slate-500">{number(eventPage.totalCount)} matching requests</p>
           </div>
         </CardHeader>
+        <AdminTableRefreshBoundary basePath="/app/admin/mcp" label="Refreshing MCP requests">
         <CardContent className="min-w-0 space-y-3 pt-0">
           <AdminScansFilterForm basePath="/app/admin/mcp" clearHref="/app/admin/mcp" hasFilters={hasFilters} submitFirst>
             <input name="snapshot" type="hidden" value={activeSnapshotPeriod} />
@@ -313,6 +315,7 @@ export default async function AdminMcpTelemetryPage({ searchParams }: AdminMcpPa
             </table>
           </div>
         </CardContent>
+        </AdminTableRefreshBoundary>
       </Card>
 
       <Card className="border-slate-200 bg-white">

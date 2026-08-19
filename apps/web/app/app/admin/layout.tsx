@@ -14,6 +14,7 @@ const navItems = [
   { href: "/app/admin/scans", label: "Scans" },
   { href: "/app/admin/pulse", label: "API activity" },
   { href: "/app/admin/mcp", label: "MCP operations" },
+  { href: "/app/admin/analytics", label: "Product analytics" },
   { href: "/app/admin/monitor-requests", label: "Monitor Requests" }
 ] as const;
 
@@ -32,7 +33,7 @@ export default async function AdminLayout({ children }: AdminLayoutProps) {
           <PendingLink
             key={item.href}
             href={item.href}
-            prefetch={false}
+            prefetch={item.href === "/app/admin/analytics" || item.href === "/app/admin/mcp"}
             className="app-raised-button rounded-full px-3.5 py-1.5 text-sm text-slate-700 hover:text-slate-950"
             idleContent={item.label}
             pendingContent="Opening…"

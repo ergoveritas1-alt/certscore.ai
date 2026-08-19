@@ -53,6 +53,7 @@ export function AdminScansFilterForm({ basePath = "/app/admin/scans", children, 
     <form
       aria-busy={isPending}
       className="flex flex-nowrap gap-1.5 overflow-x-auto rounded-xl border border-slate-200 bg-slate-50 p-2"
+      data-admin-table-form={basePath}
       method="get"
       onSubmit={handleSubmit}
     >
