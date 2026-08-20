@@ -142,6 +142,30 @@ test("scanner Lambda infrastructure is bounded and failure-aware", async () => {
   assert.match(source, /CERTSCORE_V2_DAG_LAMBDA_REQUIRE_REGIONAL_EGRESS\s+=\s+"true"/);
 });
 
+test("regional scanner dispatch is durable, deduplicated, and production-wired", async () => {
+  const [scannerModule, scannerRoot, validation, validationWorkflow] = await Promise.all([
+    readFile(scannerTerraformPath, "utf8"),
+    readFile("infra/aws/v2-dag-lambda/main.tf", "utf8"),
+    readFile("infra/aws/validation/main.tf", "utf8"),
+    readFile(".github/workflows/validation-aws-deploy.yml", "utf8"),
+  ]);
+
+  assert.match(scannerModule, /resource "aws_sqs_queue" "dispatch"/);
+  assert.match(scannerModule, /fifo_queue\s+=\s+true/);
+  assert.match(scannerModule, /visibility_timeout_seconds\s+=\s+900/);
+  assert.match(scannerModule, /maxReceiveCount\s+=\s+5/);
+  assert.match(scannerModule, /resource "aws_lambda_event_source_mapping" "dispatch"/);
+  assert.match(scannerModule, /batch_size\s+=\s+1/);
+  assert.match(scannerModule, /resource "aws_cloudwatch_metric_alarm" "dispatch_dlq"/);
+  assert.match(scannerRoot, /Sid\s+=\s+"ConsumeRegionalScannerDispatches"/);
+  assert.match(validation, /Sid\s+=\s+"PublishRegionalV2DagLambdaDispatches"/);
+  assert.match(validation, /CERTSCORE_V2_DAG_LAMBDA_DISPATCH_PUBLISH_ENABLED/);
+  assert.match(validationWorkflow, /VALIDATION_WORKER_LAMBDA_DISPATCH_PUBLISH_ENABLED: "1"/);
+  assert.match(validationWorkflow, /CERTSCORE_V2_DAG_LAMBDA_EU_DE_DISPATCH_QUEUE_URL/);
+  assert.match(validationWorkflow, /CERTSCORE_V2_DAG_LAMBDA_EU_IE_DISPATCH_QUEUE_URL/);
+  assert.match(validationWorkflow, /CERTSCORE_V2_DAG_LAMBDA_US_WEST_DISPATCH_QUEUE_URL/);
+});
+
 test("scanner NAT-free AWS service endpoints are private, scoped, and migration-safe", async () => {
   const source = await readFile(scannerTerraformPath, "utf8");
   const root = await readFile(scannerRootTerraformPath, "utf8");

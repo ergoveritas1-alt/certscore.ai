@@ -78,6 +78,8 @@ jobs:
       VALIDATION_WORKER_RUNTIME_BASE_CACHE_TAG: ${{ vars.VALIDATION_WORKER_RUNTIME_BASE_CACHE_TAG || 'validation-worker-runtime-base-cache' }}
       VALIDATION_WORKER_LAMBDA_RESULT_POLL_ENABLED: "1"
       VALIDATION_WORKER_LAMBDA_RESULT_POLL_SECONDS: "2"
+      VALIDATION_WORKER_LAMBDA_DISPATCH_PUBLISH_ENABLED: "1"
+      VALIDATION_WORKER_LAMBDA_DISPATCH_PUBLISH_SECONDS: "1"
       CERTSCORE_REVIEW_MODEL: ${{ vars.CERTSCORE_REVIEW_MODEL || 'gpt-5.4-mini' }}
       CERTSCORE_ROUTINE_REVIEW_MODEL: ${{ vars.CERTSCORE_ROUTINE_REVIEW_MODEL || 'gpt-5.4-nano' }}
       CERTSCORE_ROUTINE_REVIEW_SHADOW_ENABLED: ${{ vars.CERTSCORE_ROUTINE_REVIEW_SHADOW_ENABLED || '0' }}
@@ -272,6 +274,11 @@ jobs:
 
       - name: Register validation worker task definition
         run: |
+          account_id="$(aws sts get-caller-identity --query Account --output text)"
+          export VALIDATION_WORKER_LAMBDA_EU_DE_DISPATCH_QUEUE_URL="https://sqs.eu-central-1.amazonaws.com/${account_id}/certscore-v2-dag-local-production-dispatch.fifo"
+          export VALIDATION_WORKER_LAMBDA_EU_IE_DISPATCH_QUEUE_URL="https://sqs.eu-west-1.amazonaws.com/${account_id}/certscore-v2-dag-local-production-dispatch.fifo"
+          export VALIDATION_WORKER_LAMBDA_US_WEST_DISPATCH_QUEUE_URL="https://sqs.us-west-1.amazonaws.com/${account_id}/certscore-v2-dag-local-production-dispatch.fifo"
+
           current_task_definition="$(
             aws ecs describe-services \
               --cluster "${ECS_CLUSTER_NAME}" \
@@ -301,6 +308,11 @@ jobs:
                         | map(select(
                             .name != "CERTSCORE_V2_DAG_LAMBDA_RESULT_POLL_ENABLED"
                             and .name != "CERTSCORE_V2_DAG_LAMBDA_RESULT_POLL_SECONDS"
+                            and .name != "CERTSCORE_V2_DAG_LAMBDA_DISPATCH_PUBLISH_ENABLED"
+                            and .name != "CERTSCORE_V2_DAG_LAMBDA_DISPATCH_PUBLISH_SECONDS"
+                            and .name != "CERTSCORE_V2_DAG_LAMBDA_EU_DE_DISPATCH_QUEUE_URL"
+                            and .name != "CERTSCORE_V2_DAG_LAMBDA_EU_IE_DISPATCH_QUEUE_URL"
+                            and .name != "CERTSCORE_V2_DAG_LAMBDA_US_WEST_DISPATCH_QUEUE_URL"
                             and .name != "CERTSCORE_REVIEW_MODEL"
                             and .name != "CERTSCORE_ROUTINE_REVIEW_MODEL"
                             and .name != "CERTSCORE_ROUTINE_REVIEW_SHADOW_ENABLED"
@@ -321,6 +333,26 @@ jobs:
                             {
                               "name": "CERTSCORE_V2_DAG_LAMBDA_RESULT_POLL_SECONDS",
                               "value": env.VALIDATION_WORKER_LAMBDA_RESULT_POLL_SECONDS
+                            },
+                            {
+                              "name": "CERTSCORE_V2_DAG_LAMBDA_DISPATCH_PUBLISH_ENABLED",
+                              "value": env.VALIDATION_WORKER_LAMBDA_DISPATCH_PUBLISH_ENABLED
+                            },
+                            {
+                              "name": "CERTSCORE_V2_DAG_LAMBDA_DISPATCH_PUBLISH_SECONDS",
+                              "value": env.VALIDATION_WORKER_LAMBDA_DISPATCH_PUBLISH_SECONDS
+                            },
+                            {
+                              "name": "CERTSCORE_V2_DAG_LAMBDA_EU_DE_DISPATCH_QUEUE_URL",
+                              "value": env.VALIDATION_WORKER_LAMBDA_EU_DE_DISPATCH_QUEUE_URL
+                            },
+                            {
+                              "name": "CERTSCORE_V2_DAG_LAMBDA_EU_IE_DISPATCH_QUEUE_URL",
+                              "value": env.VALIDATION_WORKER_LAMBDA_EU_IE_DISPATCH_QUEUE_URL
+                            },
+                            {
+                              "name": "CERTSCORE_V2_DAG_LAMBDA_US_WEST_DISPATCH_QUEUE_URL",
+                              "value": env.VALIDATION_WORKER_LAMBDA_US_WEST_DISPATCH_QUEUE_URL
                             },
                             {
                               "name": "CERTSCORE_REVIEW_MODEL",

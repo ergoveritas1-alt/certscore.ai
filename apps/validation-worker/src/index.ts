@@ -6,6 +6,7 @@ import {
   startLocalV2DagLambdaResultPoller,
   startPersistedCompletedResultFinalizationRecovery,
 } from "./validation/local-v2-dag-lambda-results";
+import { startLocalV2DagLambdaDispatchPublisher } from "./validation/local-v2-dag-lambda-dispatch";
 import { recordValidationWorkerHeartbeat } from "./validation/repository";
 
 const HEARTBEAT_INTERVAL_MS = 30_000;
@@ -47,6 +48,15 @@ function bootstrapValidationWorker() {
   });
 
   void browserCleanup?.runNow("worker_startup");
+  startLocalV2DagLambdaDispatchPublisher({
+    enabled: env.CERTSCORE_V2_DAG_LAMBDA_DISPATCH_PUBLISH_ENABLED,
+    pollMs: env.CERTSCORE_V2_DAG_LAMBDA_DISPATCH_PUBLISH_SECONDS * 1000,
+    queueUrls: {
+      "eu-central-1": env.CERTSCORE_V2_DAG_LAMBDA_EU_DE_DISPATCH_QUEUE_URL,
+      "eu-west-1": env.CERTSCORE_V2_DAG_LAMBDA_EU_IE_DISPATCH_QUEUE_URL,
+      "us-west-1": env.CERTSCORE_V2_DAG_LAMBDA_US_WEST_DISPATCH_QUEUE_URL,
+    },
+  });
   startLocalV2DagLambdaResultPoller({
     enabled: env.CERTSCORE_V2_DAG_LAMBDA_RESULT_POLL_ENABLED,
     pollMs: env.CERTSCORE_V2_DAG_LAMBDA_RESULT_POLL_SECONDS * 1000,

@@ -1,5 +1,5 @@
 output "regional_resources" {
-  description = "Regional Lambda, result queue, DLQ, failure queue, and artifact bucket identifiers."
+  description = "Regional Lambda, durable dispatch/result queues, DLQs, failure queue, and artifact bucket identifiers."
   value = {
     eu_central_1 = module.eu_central_1.resources
     eu_west_1    = module.eu_west_1.resources

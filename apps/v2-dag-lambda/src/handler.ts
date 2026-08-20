@@ -617,6 +617,24 @@ export function parseLocalV2DagLambdaDispatchPayload(event: unknown): LocalV2Dag
   return payload;
 }
 
+export function unwrapLocalV2DagLambdaDispatchEvent(event: unknown) {
+  const record = asRecord(event);
+  if (!Array.isArray(record.Records)) {
+    return { payload: event, transport: "direct" as const };
+  }
+  if (record.Records.length !== 1) {
+    throw new Error("Regional scanner dispatch requires exactly one FIFO SQS record per invocation.");
+  }
+  const sqsRecord = asRecord(record.Records[0]);
+  if (sqsRecord.eventSource !== "aws:sqs" || typeof sqsRecord.body !== "string") {
+    throw new Error("Regional scanner dispatch received an invalid SQS event envelope.");
+  }
+  return {
+    payload: JSON.parse(sqsRecord.body) as unknown,
+    transport: "sqs_fifo" as const,
+  };
+}
+
 function parsePolicySurfaceSeeds(value: unknown): NonNullable<LocalV2DagLambdaDispatchPayload["policySurfaceSeeds"]> {
   if (!Array.isArray(value)) return [];
   const selected = new Map<string, NonNullable<LocalV2DagLambdaDispatchPayload["policySurfaceSeeds"]>[number]>();
@@ -3370,6 +3388,75 @@ export async function publishVerifiedPolicyEvidence(input: {
   return message;
 }
 
+function isMissingS3ObjectError(error: unknown) {
+  const record = asRecord(error);
+  const metadata = asRecord(record.$metadata);
+  return record.name === "NoSuchKey" || record.name === "NotFound" || metadata.httpStatusCode === 404;
+}
+
+async function replayCompletedSqsDispatch(input: {
+  payload: LocalV2DagLambdaDispatchPayload;
+  s3GetClient?: S3GetClient;
+  sqsClient?: SqsSendClient;
+  timeoutMs: number;
+}) {
+  const bucket = requireArtifactBucket();
+  const prefix = artifactKeyPrefix(input.payload).replace(/^\/+|\/+$/g, "");
+  const manifestKey = `${prefix}/LocalV2DagLambdaManifest.json`;
+  const scanArtifactKey = `${prefix}/CanonicalEvidenceBundle.json`;
+  const s3Client = input.s3GetClient ?? localV2DagLambdaS3Client(input.payload.awsRegion);
+  let manifestResponse: GetObjectCommandOutput;
+  try {
+    manifestResponse = await s3Client.send(new GetObjectCommand({ Bucket: bucket, Key: manifestKey }));
+  } catch (error) {
+    if (isMissingS3ObjectError(error)) return null;
+    throw error;
+  }
+  const [manifestBody, scanArtifactResponse] = await Promise.all([
+    streamToBuffer(manifestResponse.Body),
+    s3Client.send(new GetObjectCommand({ Bucket: bucket, Key: scanArtifactKey })),
+  ]);
+  const scanArtifactBody = await streamToBuffer(scanArtifactResponse.Body);
+  const manifest = asRecord(JSON.parse(manifestBody.toString("utf8")));
+  const generatedAt = compactString(manifest.generatedAt);
+  const completedAt = generatedAt && Number.isFinite(new Date(generatedAt).getTime())
+    ? new Date(generatedAt)
+    : new Date();
+  const result = buildLocalV2DagLambdaResultMessage({
+    artifactMetadata: {
+      manifestUri: {
+        sha256: createHash("sha256").update(manifestBody).digest("hex"),
+        sizeBytes: manifestBody.byteLength,
+      },
+      scanArtifactUri: {
+        sha256: createHash("sha256").update(scanArtifactBody).digest("hex"),
+        sizeBytes: scanArtifactBody.byteLength,
+      },
+    },
+    artifactPointers: {
+      manifestUri: s3Uri(bucket, manifestKey),
+      scanArtifactUri: s3Uri(bucket, scanArtifactKey),
+    },
+    completedAt,
+    payload: input.payload,
+    phaseTimings: parsePhaseTimings(manifest.phaseTimings),
+    status: "completed",
+  });
+  await sendLocalV2DagLambdaResultMessage({
+    message: result,
+    queueUrl: input.payload.resultQueueUrl,
+    sqsClient: input.sqsClient,
+    timeoutMs: input.timeoutMs,
+  });
+  console.info(JSON.stringify({
+    event: "v2_lambda_dispatch_replayed_from_retained_artifacts",
+    region: input.payload.awsRegion,
+    scan_id: input.payload.scanId,
+    transport: "sqs_fifo",
+  }));
+  return result;
+}
+
 export async function handler(event: unknown, options: HandlerOptions = {}) {
   let payload: LocalV2DagLambdaDispatchPayload | null = null;
   let handlerOutcome: "completed" | "failed" | "unknown" = "unknown";
@@ -3390,6 +3477,7 @@ export async function handler(event: unknown, options: HandlerOptions = {}) {
   let artifactChainTimeoutMs = LOCAL_V2_DAG_LAMBDA_DEFAULT_ARTIFACT_CHAIN_TIMEOUT_MS;
   let resultPublishTimeoutMs = LOCAL_V2_DAG_LAMBDA_DEFAULT_RESULT_PUBLISH_TIMEOUT_MS;
   let policyEvidenceHandoff: Promise<LocalV2DagLambdaPolicyEvidenceMessage | undefined> | undefined;
+  const dispatchEvent = unwrapLocalV2DagLambdaDispatchEvent(event);
 
   const remainingResultPublishMs = () => Math.max(
     10,
@@ -3397,7 +3485,7 @@ export async function handler(event: unknown, options: HandlerOptions = {}) {
   );
 
   try {
-    payload = parseLocalV2DagLambdaDispatchPayload(event);
+    payload = parseLocalV2DagLambdaDispatchPayload(dispatchEvent.payload);
     console.info(JSON.stringify({
       event: "v2_lambda_invocation_started",
       aws_request_id: options.awsRequestId ?? null,
@@ -3409,6 +3497,18 @@ export async function handler(event: unknown, options: HandlerOptions = {}) {
       target_environment: payload.targetEnvironment,
       worker_lane: payload.workerLane ?? null,
     }));
+    if (dispatchEvent.transport === "sqs_fifo" && payload.orchestrationMode !== "worker") {
+      const replayed = await replayCompletedSqsDispatch({
+        payload,
+        s3GetClient: options.s3GetClient,
+        sqsClient: options.sqsClient,
+        timeoutMs: remainingResultPublishMs(),
+      });
+      if (replayed) {
+        handlerOutcome = "completed";
+        return replayed;
+      }
+    }
     const workspaceRoot = options.workspaceRoot ?? process.cwd();
     const baseArtifactRoot = buildLocalV2DagLambdaArtifactRoot({
       scanId: payload.scanId,

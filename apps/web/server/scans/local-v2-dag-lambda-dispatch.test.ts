@@ -265,19 +265,19 @@ test("dispatch timeout is typed as uncertain and does not retry an ambiguous asy
   assert.ok(caught.timings.dispatchTotalMs >= 240);
 });
 
-test("uncertain dispatch acceptance is persisted as a terminal failed scan state", async () => {
-  const [repository, authenticatedCreate, anonymousCreate] = await Promise.all([
-    readFile("apps/web/server/scans/repository.ts", "utf8"),
-    readFile("apps/web/server/scans/create-full-scan.ts", "utf8"),
-    readFile("apps/web/server/scans/create-anonymous-full-scan.ts", "utf8"),
+test("production dispatch uses the durable scan-row outbox and FIFO scan-id deduplication", async () => {
+  const [runner, publisher] = await Promise.all([
+    readFile("apps/web/server/scans/local-v2-dag-dispatch-runner.ts", "utf8"),
+    readFile("apps/validation-worker/src/validation/local-v2-dag-lambda-dispatch.ts", "utf8"),
   ]);
 
-  assert.match(repository, /dispatchState: "accepted" \| "failed" \| "uncertain"/);
-  assert.match(repository, /\$3 in \('failed', 'uncertain'\)/);
-  for (const source of [authenticatedCreate, anonymousCreate]) {
-    assert.match(source, /error instanceof LocalV2DagLambdaDispatchError \? error\.dispatchState : "failed"/);
-    assert.match(source, /updateLocalV2DagLambdaDispatchState\(\{ dispatchState, errorMessage/);
-  }
+  assert.match(runner, /if \(!context\.simulatedLocalLambda\)/);
+  assert.match(runner, /transport: "sqs_fifo"/);
+  assert.match(publisher, /dispatchState}' = 'pending_dispatch'/);
+  assert.match(publisher, /for update skip locked/);
+  assert.match(publisher, /MessageDeduplicationId: dispatch\.scan_id/);
+  assert.match(publisher, /MessageGroupId: dispatch\.scan_id/);
+  assert.match(publisher, /'dispatchState', 'publish_retry'/);
 });
 
 test("dispatch payload fails closed when v2 DAG Lambda intent is absent", () => {

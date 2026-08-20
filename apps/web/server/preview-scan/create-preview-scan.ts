@@ -5,18 +5,12 @@ import type { LocalV2DagScanProfile } from "../scans/local-v2-dag-scan-config";
 import { getPreviewScanAvailability } from "./preview-scan-availability";
 import { createPreviewScanRecord, findOrCreateAnonymousPreviewDomain } from "./preview-scan-repository";
 import { insertPreviewScanEvent, setPreviewDomainLatestScan } from "./db";
-import { updateLocalV2DagLambdaDispatchState } from "../scans/repository";
 import {
-  LOCAL_V2_DAG_LAMBDA_DISPATCH_ACCEPTED_EVENT_TYPE,
-  LOCAL_V2_DAG_LAMBDA_DISPATCH_FAILED_EVENT_TYPE,
   LOCAL_V2_DAG_LAMBDA_DISPATCH_REQUESTED_EVENT_TYPE,
-  LOCAL_V2_DAG_LAMBDA_DISPATCH_STARTED_EVENT_TYPE,
-  LocalV2DagLambdaDispatchError,
-  dispatchLocalV2DagLambdaScan,
   isLocalV2DagLambdaIntentSimulated,
   summarizeLocalV2DagLambdaDispatchForEvent
 } from "../scans/local-v2-dag-lambda-dispatch";
-import { dispatchLocalV2DagSimulatedLambdaScan } from "../scans/local-v2-dag-lambda-simulated-dispatch";
+import { runLocalV2DagDispatch } from "../scans/local-v2-dag-dispatch-runner";
 import { requireDomainDns } from "../domains/domain-dns";
 
 export async function createPreviewScan(input: {
@@ -54,62 +48,15 @@ export async function createPreviewScan(input: {
       metadata: lambdaDispatch,
       scanId: scan.id
     });
-    await insertPreviewScanEvent({
+    const dispatchError = await runLocalV2DagDispatch({
       domainId: domain.id,
-      eventType: LOCAL_V2_DAG_LAMBDA_DISPATCH_STARTED_EVENT_TYPE,
-      message: "Invoking v2 DAG Lambda for preview scan execution.",
-      metadata: lambdaDispatch,
-      scanId: scan.id
+      localV2DagLambdaDispatch: lambdaDispatch,
+      organizationId: null,
+      scanConfig,
+      scanId: scan.id,
+      simulatedLocalLambda
     });
-
-    try {
-      const dispatchResult = await (simulatedLocalLambda
-        ? dispatchLocalV2DagSimulatedLambdaScan
-        : dispatchLocalV2DagLambdaScan)({
-        localCallbackUrl: null,
-        scanConfig,
-        scanId: scan.id
-      });
-      await updateLocalV2DagLambdaDispatchState({
-        acceptedAt: new Date().toISOString(),
-        dispatchState: "accepted",
-        invocationRequestId: dispatchResult.invocationRequestId,
-        scanId: scan.id
-      });
-      await insertPreviewScanEvent({
-        domainId: domain.id,
-        eventType: LOCAL_V2_DAG_LAMBDA_DISPATCH_ACCEPTED_EVENT_TYPE,
-        message: simulatedLocalLambda
-          ? "Local simulated Lambda completed the preview scan invocation."
-          : "AWS Lambda accepted the preview scan invocation.",
-        metadata: {
-          ...lambdaDispatch,
-          invocationRequestId: dispatchResult.invocationRequestId,
-          invocationStatusCode: dispatchResult.invocationStatusCode,
-          invocationType: dispatchResult.invocationType,
-          dispatchTimings: dispatchResult.timings,
-          simulatedLocalLambda
-        },
-        scanId: scan.id
-      });
-    } catch (error) {
-      const message = error instanceof Error ? error.message : "Preview scan Lambda dispatch failed.";
-      const dispatchState = error instanceof LocalV2DagLambdaDispatchError ? error.dispatchState : "failed";
-      await updateLocalV2DagLambdaDispatchState({ dispatchState, errorMessage: message, scanId: scan.id });
-      await insertPreviewScanEvent({
-        domainId: domain.id,
-        eventType: LOCAL_V2_DAG_LAMBDA_DISPATCH_FAILED_EVENT_TYPE,
-        message: "Preview scan Lambda dispatch failed; no fallback scanner execution was started.",
-        metadata: {
-          ...lambdaDispatch,
-          dispatchState,
-          errorMessage: message,
-          dispatchTimings: error instanceof LocalV2DagLambdaDispatchError ? error.timings : null
-        },
-        scanId: scan.id
-      });
-      throw error;
-    }
+    if (dispatchError) throw new Error(dispatchError);
   }
 
   await setPreviewDomainLatestScan(domain.id, scan.id);

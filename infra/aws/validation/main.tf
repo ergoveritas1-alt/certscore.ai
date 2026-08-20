@@ -38,6 +38,10 @@ locals {
     for key, region in local.v2_dag_lambda_regions :
     key => "https://sqs.${region}.amazonaws.com/${data.aws_caller_identity.current.account_id}/certscore-v2-dag-local-production-results"
   }
+  v2_dag_lambda_dispatch_queue_urls = {
+    for key, region in local.v2_dag_lambda_regions :
+    key => "https://sqs.${region}.amazonaws.com/${data.aws_caller_identity.current.account_id}/certscore-v2-dag-local-production-dispatch.fifo"
+  }
   v2_dag_lambda_artifact_object_arns = [
     for region in values(local.v2_dag_lambda_regions) :
     "arn:aws:s3:::certscore-v2-dag-local-artifacts-${region}-${data.aws_caller_identity.current.account_id}/v2-dag-lambda/local/*"
@@ -94,7 +98,12 @@ locals {
       { name = "CERTSCORE_V2_DAG_LAMBDA_RESULT_QUEUE_URL", value = local.v2_dag_lambda_queue_urls.eu_de },
       { name = "CERTSCORE_V2_DAG_LAMBDA_EU_DE_RESULT_QUEUE_URL", value = local.v2_dag_lambda_queue_urls.eu_de },
       { name = "CERTSCORE_V2_DAG_LAMBDA_EU_IE_RESULT_QUEUE_URL", value = local.v2_dag_lambda_queue_urls.eu_ie },
-      { name = "CERTSCORE_V2_DAG_LAMBDA_US_WEST_RESULT_QUEUE_URL", value = local.v2_dag_lambda_queue_urls.california }
+      { name = "CERTSCORE_V2_DAG_LAMBDA_US_WEST_RESULT_QUEUE_URL", value = local.v2_dag_lambda_queue_urls.california },
+      { name = "CERTSCORE_V2_DAG_LAMBDA_DISPATCH_PUBLISH_ENABLED", value = "1" },
+      { name = "CERTSCORE_V2_DAG_LAMBDA_DISPATCH_PUBLISH_SECONDS", value = "1" },
+      { name = "CERTSCORE_V2_DAG_LAMBDA_EU_DE_DISPATCH_QUEUE_URL", value = local.v2_dag_lambda_dispatch_queue_urls.eu_de },
+      { name = "CERTSCORE_V2_DAG_LAMBDA_EU_IE_DISPATCH_QUEUE_URL", value = local.v2_dag_lambda_dispatch_queue_urls.eu_ie },
+      { name = "CERTSCORE_V2_DAG_LAMBDA_US_WEST_DISPATCH_QUEUE_URL", value = local.v2_dag_lambda_dispatch_queue_urls.california }
     ],
     var.certscore_escalation_model != "" ? [{ name = "CERTSCORE_ESCALATION_MODEL", value = var.certscore_escalation_model }] : [],
     var.s3_endpoint != "" ? [{ name = "S3_ENDPOINT", value = var.s3_endpoint }] : [],
@@ -617,6 +626,15 @@ resource "aws_iam_role_policy" "task_exec" {
         Resource = [
           for region in values(local.v2_dag_lambda_regions) :
           "arn:aws:sqs:${region}:${data.aws_caller_identity.current.account_id}:certscore-v2-dag-local-production-results"
+        ]
+      },
+      {
+        Sid    = "PublishRegionalV2DagLambdaDispatches"
+        Effect = "Allow"
+        Action = ["sqs:SendMessage", "sqs:GetQueueAttributes", "sqs:GetQueueUrl"]
+        Resource = [
+          for region in values(local.v2_dag_lambda_regions) :
+          "arn:aws:sqs:${region}:${data.aws_caller_identity.current.account_id}:certscore-v2-dag-local-production-dispatch.fifo"
         ]
       },
       {

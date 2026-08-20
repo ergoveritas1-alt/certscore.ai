@@ -93,6 +93,15 @@ const workerEnvSchema = z.object({
   CERTSCORE_V2_DAG_LAMBDA_EU_IE_RESULT_QUEUE_URL: z.preprocess(emptyStringToUndefined, z.string().url().optional()),
   CERTSCORE_V2_DAG_LAMBDA_RESULT_QUEUE_URL: z.preprocess(emptyStringToUndefined, z.string().url().optional()),
   CERTSCORE_V2_DAG_LAMBDA_US_WEST_RESULT_QUEUE_URL: z.preprocess(emptyStringToUndefined, z.string().url().optional()),
+  CERTSCORE_V2_DAG_LAMBDA_EU_DE_DISPATCH_QUEUE_URL: z.preprocess(emptyStringToUndefined, z.string().url().optional()),
+  CERTSCORE_V2_DAG_LAMBDA_EU_IE_DISPATCH_QUEUE_URL: z.preprocess(emptyStringToUndefined, z.string().url().optional()),
+  CERTSCORE_V2_DAG_LAMBDA_US_WEST_DISPATCH_QUEUE_URL: z.preprocess(emptyStringToUndefined, z.string().url().optional()),
+  CERTSCORE_V2_DAG_LAMBDA_DISPATCH_PUBLISH_ENABLED: z.preprocess(emptyStringToUndefined, z.enum(["0", "1"]).optional())
+    .transform((value) => value !== "0"),
+  CERTSCORE_V2_DAG_LAMBDA_DISPATCH_PUBLISH_SECONDS: z.preprocess(
+    emptyStringToUndefined,
+    z.coerce.number().int().min(1).max(60).default(1)
+  ),
   CERTSCORE_V2_DAG_LAMBDA_TARGET_ENV: z.preprocess(
     emptyStringToUndefined,
     z.enum(["local", "production"]).default("local")

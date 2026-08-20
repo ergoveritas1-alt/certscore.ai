@@ -4,7 +4,6 @@ import {
   LOCAL_V2_DAG_LAMBDA_DISPATCH_FAILED_EVENT_TYPE,
   LOCAL_V2_DAG_LAMBDA_DISPATCH_STARTED_EVENT_TYPE,
   LocalV2DagLambdaDispatchError,
-  dispatchLocalV2DagLambdaScan,
   summarizeLocalV2DagLambdaDispatchForEvent
 } from "./local-v2-dag-lambda-dispatch";
 import { dispatchLocalV2DagSimulatedLambdaScan } from "./local-v2-dag-lambda-simulated-dispatch";
@@ -20,6 +19,20 @@ export type LocalV2DagDispatchContext = {
 };
 
 export async function runLocalV2DagDispatch(context: LocalV2DagDispatchContext): Promise<string | null> {
+  if (!context.simulatedLocalLambda) {
+    // The scan row is the transactional dispatch outbox. Its complete Lambda
+    // intent and pending_dispatch state were committed together, and the
+    // validation worker durably publishes that intent to regional FIFO SQS.
+    // Do not make a second, ambiguous direct Lambda Invoke request here.
+    console.info(JSON.stringify({
+      awsRegion: context.localV2DagLambdaDispatch.awsRegion,
+      event: "scan.lambda_dispatch_enqueued",
+      scanId: context.scanId,
+      transport: "sqs_fifo"
+    }));
+    return null;
+  }
+
   try {
     await insertQueuedFullScanEvent({
       domainId: context.domainId,
@@ -30,9 +43,7 @@ export async function runLocalV2DagDispatch(context: LocalV2DagDispatchContext):
       scanId: context.scanId
     });
 
-    const dispatchResult = await (context.simulatedLocalLambda
-      ? dispatchLocalV2DagSimulatedLambdaScan
-      : dispatchLocalV2DagLambdaScan)({
+    const dispatchResult = await dispatchLocalV2DagSimulatedLambdaScan({
       localCallbackUrl: null,
       scanConfig: context.scanConfig,
       scanId: context.scanId
@@ -49,9 +60,7 @@ export async function runLocalV2DagDispatch(context: LocalV2DagDispatchContext):
     await insertQueuedFullScanEvent({
       domainId: context.domainId,
       eventType: LOCAL_V2_DAG_LAMBDA_DISPATCH_ACCEPTED_EVENT_TYPE,
-      message: context.simulatedLocalLambda
-        ? "Local simulated Lambda completed the v2 DAG artifact-only scan invocation."
-        : "AWS Lambda accepted the local v2 DAG artifact-only scan invocation.",
+      message: "Local simulated Lambda completed the v2 DAG artifact-only scan invocation.",
       metadataJson: {
         ...context.localV2DagLambdaDispatch,
         invocationRequestId: dispatchResult.invocationRequestId,

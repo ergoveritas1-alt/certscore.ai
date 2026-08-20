@@ -43,6 +43,7 @@ import {
   parseLocalV2DagLambdaDispatchPayload,
   sendLocalV2DagLambdaResultMessage,
   serializeCanonicalEvidenceBundle,
+  unwrapLocalV2DagLambdaDispatchEvent,
   uploadAuxiliaryArtifactFiles,
   uploadArtifactFiles,
   writeEgressPreflightArtifact,
@@ -443,6 +444,64 @@ function validPayload(overrides: Record<string, unknown> = {}) {
     ...overrides
   };
 }
+
+test("regional FIFO SQS dispatch envelopes contain exactly one typed payload", () => {
+  const event = {
+    Records: [{
+      body: JSON.stringify(validPayload()),
+      eventSource: "aws:sqs",
+    }],
+  };
+  const unwrapped = unwrapLocalV2DagLambdaDispatchEvent(event);
+  assert.equal(unwrapped.transport, "sqs_fifo");
+  assert.equal(parseLocalV2DagLambdaDispatchPayload(unwrapped.payload).scanId, "scan-local-1");
+  assert.throws(
+    () => unwrapLocalV2DagLambdaDispatchEvent({ Records: [event.Records[0], event.Records[0]] }),
+    /exactly one FIFO SQS record/,
+  );
+});
+
+test("SQS redelivery replays retained completion without rerunning scanner work", async () => {
+  const previousBucket = process.env.CERTSCORE_V2_DAG_LAMBDA_ARTIFACT_BUCKET;
+  const previousPrefix = process.env.CERTSCORE_V2_DAG_LAMBDA_ARTIFACT_PREFIX;
+  process.env.CERTSCORE_V2_DAG_LAMBDA_ARTIFACT_BUCKET = "certscore-test-artifacts";
+  process.env.CERTSCORE_V2_DAG_LAMBDA_ARTIFACT_PREFIX = "v2-dag-lambda/local";
+  let artifactRuns = 0;
+  const sent: SendMessageCommand[] = [];
+  try {
+    const result = await handler({
+      Records: [{ body: JSON.stringify(validPayload()), eventSource: "aws:sqs" }],
+    }, {
+      runArtifactChain: async () => {
+        artifactRuns += 1;
+        throw new Error("scanner work must not rerun");
+      },
+      s3GetClient: {
+        async send(command: GetObjectCommand) {
+          const key = command.input.Key ?? "";
+          const body = key.endsWith("LocalV2DagLambdaManifest.json")
+            ? JSON.stringify({ generatedAt: "2026-08-20T20:00:00.000Z", phaseTimings: [] })
+            : JSON.stringify({ artifactVersion: "fixture" });
+          return { Body: Buffer.from(body) };
+        },
+      },
+      sqsClient: {
+        async send(command: SendMessageCommand) {
+          sent.push(command);
+          return { MessageId: "replayed-result" };
+        },
+      },
+    });
+    assert.equal(artifactRuns, 0);
+    assert.equal(sent.length, 1);
+    assert.equal(result.status, "completed");
+  } finally {
+    if (previousBucket === undefined) delete process.env.CERTSCORE_V2_DAG_LAMBDA_ARTIFACT_BUCKET;
+    else process.env.CERTSCORE_V2_DAG_LAMBDA_ARTIFACT_BUCKET = previousBucket;
+    if (previousPrefix === undefined) delete process.env.CERTSCORE_V2_DAG_LAMBDA_ARTIFACT_PREFIX;
+    else process.env.CERTSCORE_V2_DAG_LAMBDA_ARTIFACT_PREFIX = previousPrefix;
+  }
+});
 
 test("handler validates local v2 DAG Lambda dispatch contract", () => {
   const parsed = parseLocalV2DagLambdaDispatchPayload(validPayload());

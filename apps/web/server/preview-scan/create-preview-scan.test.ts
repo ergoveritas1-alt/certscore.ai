@@ -23,13 +23,11 @@ test("preview scans stay available without validation queue configuration", () =
   });
 });
 
-test("preview scan creation dispatches configured v2 Lambda execution and records its outcome", async () => {
+test("preview scan creation uses the same durable v2 Lambda dispatch path as full scans", async () => {
   const source = await readFile(new URL("./create-preview-scan.ts", import.meta.url), "utf8");
 
   assert.match(source, /summarizeLocalV2DagLambdaDispatchForEvent\(scanConfig\)/);
-  assert.match(source, /dispatchLocalV2DagLambdaScan\)\(\{/);
-  assert.match(source, /LOCAL_V2_DAG_LAMBDA_DISPATCH_ACCEPTED_EVENT_TYPE/);
-  assert.match(source, /updateLocalV2DagLambdaDispatchState\(\{/);
-  assert.match(source, /LOCAL_V2_DAG_LAMBDA_DISPATCH_FAILED_EVENT_TYPE/);
-  assert.match(source, /no fallback scanner execution was started/);
+  assert.match(source, /runLocalV2DagDispatch\(\{/);
+  assert.match(source, /simulatedLocalLambda/);
+  assert.doesNotMatch(source, /dispatchLocalV2DagLambdaScan/);
 });

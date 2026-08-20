@@ -1,5 +1,7 @@
 locals {
   result_dlq_name       = "${var.result_queue_name}-dlq"
+  dispatch_queue_name   = "${var.project_name}-production-dispatch.fifo"
+  dispatch_dlq_name     = "${var.project_name}-production-dispatch-dlq.fifo"
   failure_queue_name    = "${var.project_name}-async-failures"
   artifact_prefix       = trimsuffix(var.artifact_prefix, "/")
   vpc_endpoints_enabled = var.vpc_endpoint_config != null
@@ -355,6 +357,36 @@ resource "aws_sqs_queue" "async_failures" {
   }
 }
 
+resource "aws_sqs_queue" "dispatch_dlq" {
+  name                      = local.dispatch_dlq_name
+  fifo_queue                = true
+  message_retention_seconds = 1209600
+  sqs_managed_sse_enabled   = true
+  tags                      = var.tags
+}
+
+resource "aws_sqs_queue" "dispatch" {
+  name                        = local.dispatch_queue_name
+  fifo_queue                  = true
+  content_based_deduplication = false
+  message_retention_seconds   = 1209600
+  visibility_timeout_seconds  = 900
+  sqs_managed_sse_enabled     = true
+  redrive_policy = jsonencode({
+    deadLetterTargetArn = aws_sqs_queue.dispatch_dlq.arn
+    maxReceiveCount     = 5
+  })
+  tags = var.tags
+}
+
+resource "aws_sqs_queue_redrive_allow_policy" "dispatch" {
+  queue_url = aws_sqs_queue.dispatch_dlq.id
+  redrive_allow_policy = jsonencode({
+    redrivePermission = "byQueue"
+    sourceQueueArns   = [aws_sqs_queue.dispatch.arn]
+  })
+}
+
 resource "aws_cloudwatch_log_group" "scanner" {
   name              = "/aws/lambda/${var.function_name}"
   retention_in_days = var.log_retention_days
@@ -407,6 +439,15 @@ resource "aws_lambda_function_event_invoke_config" "scanner" {
   destination_config {
     on_failure { destination = aws_sqs_queue.async_failures.arn }
   }
+}
+
+resource "aws_lambda_event_source_mapping" "dispatch" {
+  event_source_arn = aws_sqs_queue.dispatch.arn
+  function_name    = aws_lambda_function.scanner.arn
+  batch_size       = 1
+  enabled          = true
+
+  depends_on = [aws_sqs_queue_redrive_allow_policy.dispatch]
 }
 
 resource "aws_cloudwatch_metric_alarm" "lambda_errors" {
@@ -502,6 +543,38 @@ resource "aws_cloudwatch_metric_alarm" "async_failures" {
   comparison_operator = "GreaterThanOrEqualToThreshold"
   treat_missing_data  = "notBreaching"
   dimensions          = { QueueName = aws_sqs_queue.async_failures.name }
+  alarm_actions       = var.alarm_actions
+  tags                = var.tags
+}
+
+resource "aws_cloudwatch_metric_alarm" "old_dispatches" {
+  alarm_name          = "${local.dispatch_queue_name}-${var.region}-oldest-message"
+  alarm_description   = "A regional scanner dispatch has waited at least five minutes in ${var.region}."
+  namespace           = "AWS/SQS"
+  metric_name         = "ApproximateAgeOfOldestMessage"
+  statistic           = "Maximum"
+  period              = 300
+  evaluation_periods  = 1
+  threshold           = 300
+  comparison_operator = "GreaterThanOrEqualToThreshold"
+  treat_missing_data  = "notBreaching"
+  dimensions          = { QueueName = aws_sqs_queue.dispatch.name }
+  alarm_actions       = var.alarm_actions
+  tags                = var.tags
+}
+
+resource "aws_cloudwatch_metric_alarm" "dispatch_dlq" {
+  alarm_name          = "${local.dispatch_dlq_name}-${var.region}-messages"
+  alarm_description   = "Regional scanner dispatches exhausted bounded retries in ${var.region}."
+  namespace           = "AWS/SQS"
+  metric_name         = "ApproximateNumberOfMessagesVisible"
+  statistic           = "Maximum"
+  period              = 300
+  evaluation_periods  = 1
+  threshold           = 1
+  comparison_operator = "GreaterThanOrEqualToThreshold"
+  treat_missing_data  = "notBreaching"
+  dimensions          = { QueueName = aws_sqs_queue.dispatch_dlq.name }
   alarm_actions       = var.alarm_actions
   tags                = var.tags
 }

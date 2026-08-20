@@ -30,6 +30,10 @@ locals {
       "arn:aws:sqs:${region}:${data.aws_caller_identity.current.account_id}:${var.project_name}-async-failures"
     ]
   ])
+  dispatch_queue_arns = [
+    for region in values(local.regions) :
+    "arn:aws:sqs:${region}:${data.aws_caller_identity.current.account_id}:${var.project_name}-production-dispatch.fifo"
+  ]
   web_bot_auth_environment = {
     WEB_BOT_AUTH_PRIVATE_KEY_PEM = data.aws_secretsmanager_secret_version.web_bot_auth_private_key.secret_string
   }
@@ -70,6 +74,17 @@ resource "aws_iam_role_policy" "scanner" {
         Effect   = "Allow"
         Action   = ["sqs:SendMessage"]
         Resource = local.queue_arns
+      },
+      {
+        Sid    = "ConsumeRegionalScannerDispatches"
+        Effect = "Allow"
+        Action = [
+          "sqs:ReceiveMessage",
+          "sqs:DeleteMessage",
+          "sqs:ChangeMessageVisibility",
+          "sqs:GetQueueAttributes"
+        ]
+        Resource = local.dispatch_queue_arns
       },
       {
         Sid    = "UseRetainedEvidenceObjects"
