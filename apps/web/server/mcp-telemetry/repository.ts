@@ -12,7 +12,9 @@ export async function persistMcpTelemetryEvent(event: McpTelemetryEvent) {
          target_hostname, is_canary, freshness, scan_from, scan_id, scan_decision, scan_status,
          outcome, transport_outcome, duration_ms, quota_outcome, error_code,
          client_name, requester_ip, requester_ip_hash, requester_network,
-         requested_resource_type, requested_resource
+         requested_resource_type, requested_resource,
+         caller_product, attribution_confidence, attribution_signals,
+         attribution_ruleset_version, execution_channel, installation_origin
        ) values (
          $1::uuid, $2::timestamptz, $3, $4, $5, $6, $7,
          $8, $9::uuid, $10, $11, $12, $13,
@@ -24,14 +26,15 @@ export async function persistMcpTelemetryEvent(event: McpTelemetryEvent) {
             where page.scan_id::text = $18 and page.page_url ~* '^https?://[^/?#]+/\\.well-known/certscore-canary/'
          )), $16, $17, $18, $19, $20,
          $21, $22, $23, $24, $25,
-         $26, $27::inet, $28, $29, $30, $31
+         $26, $27::inet, $28, $29, $30, $31,
+         $32, $33, $34::jsonb, $35, $36, $37
        )
        on conflict (event_id) do nothing
        returning event_id
      ), expired as (
        select event_id
          from public.mcp_tool_invocation_events
-        where occurred_at < now() - ($32::int * interval '1 day')
+        where occurred_at < now() - ($38::int * interval '1 day')
         order by occurred_at asc
         limit 500
      ), pruned as (
@@ -74,6 +77,12 @@ export async function persistMcpTelemetryEvent(event: McpTelemetryEvent) {
       event.requesterNetwork,
       event.requestedResourceType,
       event.requestedResource,
+      event.callerProduct,
+      event.attributionConfidence,
+      JSON.stringify(event.attributionSignals),
+      event.attributionRulesetVersion,
+      event.executionChannel,
+      event.installationOrigin,
       MCP_TELEMETRY_RETENTION_DAYS,
     ],
   );

@@ -38,9 +38,15 @@ test("hosted MCP client classification keeps verified and self-declared attribut
   });
   assert.deepEqual(verified, {
     actorId: null,
+    attributionConfidence: "inferred",
+    attributionRulesetVersion: "2026-08-20.1",
+    attributionSignals: ["anthropic_connector_network"],
     authClass: "anonymous",
+    callerProduct: "claude",
     clientFamily: "anthropic_claude",
     clientName: null,
+    executionChannel: "hosted_connector",
+    installationOrigin: "unknown",
     source: "anthropic",
     sourceAttribution: "verified_network",
   });
@@ -57,6 +63,9 @@ test("hosted MCP client classification keeps verified and self-declared attribut
   assert.equal(claimed.sourceAttribution, "self_declared_header");
   assert.equal(claimed.clientFamily, "openai_chatgpt");
   assert.equal(claimed.clientName, "chatgpt");
+  assert.equal(claimed.attributionConfidence, "inferred");
+  assert.deepEqual(claimed.attributionSignals, ["declared_client_info", "openai_header_claim"]);
+  assert.equal(claimed.installationOrigin, "unknown");
   assert.match(claimed.actorId ?? "", /^[a-f0-9]{24}$/);
   assert.equal(JSON.stringify(claimed).includes("opaque-user-value"), false);
 });
@@ -74,10 +83,32 @@ test("hosted MCP client classification keeps Codex distinct from generic OpenAI 
   assert.equal(codex.clientFamily, "openai_codex");
   assert.equal(codex.source, "openai");
   assert.equal(codex.sourceAttribution, "self_declared_client");
+  assert.equal(codex.callerProduct, "codex");
+  assert.equal(codex.attributionConfidence, "declared");
+  assert.equal(codex.executionChannel, "desktop_cli");
   assert.equal(unknown.clientFamily, "other");
   assert.equal(unknown.clientName, "generic-mcp-bridge");
-  assert.equal(unknown.source, "unknown");
   assert.equal(unknown.sourceAttribution, "unknown");
+  assert.equal(unknown.source, "unknown");
+});
+
+test("classification recognizes Gemini, Grok, and per-request MCP client metadata without claiming directory origin", () => {
+  const gemini = classifyHostedMcpClient({
+    clientInfoBody: { params: { _meta: { "io.modelcontextprotocol/clientInfo": { name: "Gemini CLI", version: "2" } } } },
+    headers: {}, requesterNetwork: "direct", secret, surface: "mcp_light",
+  });
+  const grok = classifyHostedMcpClient({
+    clientInfoBody: { params: { clientInfo: { name: "Grok xAI", version: "1" } } },
+    headers: {}, requesterNetwork: "direct", secret, surface: "mcp_light",
+  });
+
+  assert.equal(gemini.source, "google");
+  assert.equal(gemini.callerProduct, "gemini_cli");
+  assert.equal(gemini.attributionConfidence, "declared");
+  assert.equal(gemini.installationOrigin, "unknown");
+  assert.equal(grok.source, "xai");
+  assert.equal(grok.callerProduct, "grok");
+  assert.equal(grok.installationOrigin, "unknown");
 });
 
 test("telemetry differentiates all hosted MCP entrypoints and signs minimized events", async () => {
@@ -119,6 +150,8 @@ test("telemetry differentiates all hosted MCP entrypoints and signs minimized ev
     assert.match(String(events[index]?.requesterIpHash), /^[a-f0-9]{64}$/);
     assert.equal(events[index]?.requestedResource, "scan_123");
     assert.equal(events[index]?.clientName, "test client");
+    assert.equal(events[index]?.attributionConfidence, "inferred");
+    assert.equal(events[index]?.installationOrigin, "unknown");
   }
 });
 

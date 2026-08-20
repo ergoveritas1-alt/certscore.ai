@@ -5,15 +5,26 @@ import type { McpTelemetryEvent, McpTelemetrySurface } from "@website-signal-ris
 import { projectMcpToolInvocationObservation, type McpToolInvocationObservation } from "@certscore/mcp/server";
 import type { AnonymousRequesterNetwork } from "@website-signal-risk-scanner/shared";
 
-const { MCP_TELEMETRY_INTEGRATION, mcpTelemetryEndpoint, mcpTelemetryEventSchema } = shared;
+const {
+  MCP_CALLER_ATTRIBUTION_RULESET_VERSION,
+  MCP_TELEMETRY_INTEGRATION,
+  mcpTelemetryEndpoint,
+  mcpTelemetryEventSchema,
+} = shared;
 
 type TelemetryLogger = Pick<Console, "error">;
 
 type LightMcpClientContext = {
   actorId: string | null;
+  attributionConfidence: McpTelemetryEvent["attributionConfidence"];
+  attributionRulesetVersion: McpTelemetryEvent["attributionRulesetVersion"];
+  attributionSignals: McpTelemetryEvent["attributionSignals"];
   authClass: McpTelemetryEvent["authClass"];
+  callerProduct: McpTelemetryEvent["callerProduct"];
   clientFamily: McpTelemetryEvent["clientFamily"];
   clientName: string | null;
+  executionChannel: McpTelemetryEvent["executionChannel"];
+  installationOrigin: McpTelemetryEvent["installationOrigin"];
   source: McpTelemetryEvent["source"];
   sourceAttribution: McpTelemetryEvent["sourceAttribution"];
 };
@@ -55,7 +66,11 @@ function declaredClientName(body: unknown) {
   if (!body || typeof body !== "object" || Array.isArray(body)) return null;
   const params = (body as Record<string, unknown>).params;
   if (!params || typeof params !== "object" || Array.isArray(params)) return null;
-  const clientInfo = (params as Record<string, unknown>).clientInfo;
+  const meta = (params as Record<string, unknown>)._meta;
+  const perRequestClientInfo = meta && typeof meta === "object" && !Array.isArray(meta)
+    ? (meta as Record<string, unknown>)["io.modelcontextprotocol/clientInfo"]
+    : null;
+  const clientInfo = (params as Record<string, unknown>).clientInfo ?? perRequestClientInfo;
   if (!clientInfo || typeof clientInfo !== "object" || Array.isArray(clientInfo)) return null;
   const name = (clientInfo as Record<string, unknown>).name;
   if (typeof name !== "string") return null;
@@ -71,8 +86,29 @@ function clientFamily(name: string | null): McpTelemetryEvent["clientFamily"] {
   if (!name) return "unknown";
   if (/codex/i.test(name)) return "openai_codex";
   if (/chatgpt|openai/i.test(name)) return "openai_chatgpt";
+  if (/claude[\s._-]*code/i.test(name)) return "anthropic_claude_code";
   if (/claude|anthropic/i.test(name)) return "anthropic_claude";
+  if (/gemini/i.test(name)) return "google_gemini_cli";
+  if (/grok|\bxai\b/i.test(name)) return "xai_grok";
   return "other";
+}
+
+function callerProduct(family: McpTelemetryEvent["clientFamily"]): McpTelemetryEvent["callerProduct"] {
+  if (family === "openai_chatgpt") return "chatgpt";
+  if (family === "openai_codex") return "codex";
+  if (family === "anthropic_claude") return "claude";
+  if (family === "anthropic_claude_code") return "claude_code";
+  if (family === "google_gemini_cli") return "gemini_cli";
+  if (family === "xai_grok") return "grok";
+  return family === "other" ? "other" : "unknown";
+}
+
+function declaredProvider(family: McpTelemetryEvent["clientFamily"]): McpTelemetryEvent["source"] {
+  if (family === "openai_chatgpt" || family === "openai_codex") return "openai";
+  if (family === "anthropic_claude" || family === "anthropic_claude_code") return "anthropic";
+  if (family === "google_gemini_cli") return "google";
+  if (family === "xai_grok") return "xai";
+  return "unknown";
 }
 
 export function classifyHostedMcpClient(input: {
@@ -91,11 +127,9 @@ export function classifyHostedMcpClient(input: {
   const verifiedAnthropic = input.requesterNetwork === "anthropic";
   const source = verifiedAnthropic
     ? "anthropic"
-    : hasOpenAiHeaderClaim || family === "openai_chatgpt" || family === "openai_codex"
+    : hasOpenAiHeaderClaim
       ? "openai"
-      : family === "anthropic_claude"
-        ? "anthropic"
-        : "unknown";
+      : declaredProvider(family);
   const sourceAttribution = verifiedAnthropic
     ? "verified_network"
     : hasOpenAiHeaderClaim
@@ -107,11 +141,32 @@ export function classifyHostedMcpClient(input: {
     ?? ephemeralUserId
     ?? (verifiedAnthropic ? null : input.requesterBinding);
 
+  const attributionSignals: McpTelemetryEvent["attributionSignals"] = [];
+  if (verifiedAnthropic) attributionSignals.push("anthropic_connector_network");
+  if (family !== "unknown") attributionSignals.push("declared_client_info");
+  if (hasOpenAiHeaderClaim) attributionSignals.push("openai_header_claim");
+  const networkAndDeclarationAgree = verifiedAnthropic
+    && (family === "anthropic_claude" || family === "anthropic_claude_code");
+  const attributionConfidence: McpTelemetryEvent["attributionConfidence"] = networkAndDeclarationAgree
+    ? "corroborated"
+    : verifiedAnthropic || hasOpenAiHeaderClaim
+      ? "inferred"
+      : family !== "unknown"
+        ? "declared"
+        : "unknown";
+  const product = verifiedAnthropic && family === "unknown" ? "claude" : callerProduct(family);
+
   return {
     actorId: hashOpaque(input.secret, "actor", actorSource),
+    attributionConfidence,
+    attributionRulesetVersion: MCP_CALLER_ATTRIBUTION_RULESET_VERSION,
+    attributionSignals,
     authClass: input.surface === "mcp_authenticated" ? "authenticated" : "anonymous",
+    callerProduct: product,
     clientFamily: verifiedAnthropic && family === "unknown" ? "anthropic_claude" : family,
     clientName: declaredClientName(input.clientInfoBody),
+    executionChannel: verifiedAnthropic ? "hosted_connector" : product === "codex" || product === "claude_code" || product === "gemini_cli" ? "desktop_cli" : "unknown",
+    installationOrigin: "unknown",
     source,
     sourceAttribution,
   };
@@ -156,7 +211,11 @@ export function createHostedMcpTelemetry(input: CreateHostedMcpTelemetryInput) {
     const eventRequesterIp = requestContext?.requesterIp ?? input.requesterIp ?? null;
     const parsed = mcpTelemetryEventSchema.safeParse({
       actorId: client.actorId,
+      attributionConfidence: client.attributionConfidence,
+      attributionRulesetVersion: client.attributionRulesetVersion,
+      attributionSignals: client.attributionSignals,
       authClass: client.authClass,
+      callerProduct: client.callerProduct,
       clientName: client.clientName,
       clientFamily: client.clientFamily,
       durationMs: observation.durationMs,
@@ -165,6 +224,8 @@ export function createHostedMcpTelemetry(input: CreateHostedMcpTelemetryInput) {
       eventId: randomUUID(),
       freshness: observation.freshness,
       integration: MCP_TELEMETRY_INTEGRATION,
+      executionChannel: client.executionChannel,
+      installationOrigin: client.installationOrigin,
       isCanary: observation.isCanary,
       occurredAt: new Date().toISOString(),
       outcome: observation.outcome,

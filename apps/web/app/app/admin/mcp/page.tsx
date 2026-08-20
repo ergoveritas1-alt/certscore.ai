@@ -27,7 +27,9 @@ const surfaceLabels = {
 } as const;
 
 const surfaces = ["mcp_light", "mcp_anonymous", "mcp_authenticated"] as const;
-const sources = ["openai", "anthropic", "unknown"] as const;
+const sources = ["openai", "anthropic", "google", "xai", "other", "unknown"] as const;
+const products = ["chatgpt", "codex", "claude", "claude_code", "gemini_cli", "grok", "other", "unknown"] as const;
+const confidenceLevels = ["verified", "corroborated", "declared", "inferred", "unknown"] as const;
 const outcomes = ["success", "error", "rate_limited"] as const;
 const scanDecisions = ["reused", "new", "unavailable", "not_applicable"] as const;
 const timeSpans = ["all", "4h", "12h", "24h", "7d", "30d"] as const;
@@ -35,11 +37,13 @@ const snapshotPeriods = ["1h", "24h", "7d", "30d", "1y"] as const;
 
 type AdminMcpPageProps = {
   searchParams?: Promise<{
+    confidence?: string;
     decision?: string;
     includeCanary?: string;
     outcome?: string;
     page?: string;
     perPage?: string;
+    product?: string;
     q?: string;
     source?: string;
     sourcePeriod?: string;
@@ -65,17 +69,20 @@ function duration(value: number | null) {
 }
 
 function sourceLabel(source: string, attribution: string) {
-  const allowedAttribution = new Set(["verified_network", "self_declared_header", "self_declared_client"]);
-  if ((source !== "openai" && source !== "anthropic") || !allowedAttribution.has(attribution)) {
-    return "Unattributed";
-  }
-  return source === "openai" ? "OpenAI" : "Anthropic";
+  if (source === "unknown" || attribution === "unknown") return "Unattributed";
+  if (source === "xai") return "xAI";
+  if (source === "other") return "Other caller";
+  return formatLabel(source);
 }
 
-function sourceConfidenceLabel(source: AdminMcpTelemetryEvent["source"], attribution: string) {
-  if (source === "anthropic" && attribution === "verified_network") return "Verified connector network";
-  if (source === "openai" && attribution === "self_declared_header") return "OpenAI header signal";
-  if ((source === "openai" || source === "anthropic") && attribution === "self_declared_client") return "Client-declared";
+function sourceConfidenceLabel(source: AdminMcpTelemetryEvent["source"], confidenceOrLegacy: string) {
+  if (confidenceOrLegacy === "verified") return "Verified attribution";
+  if (confidenceOrLegacy === "corroborated") return "Corroborated signals";
+  if (confidenceOrLegacy === "declared") return "Client-declared";
+  if (confidenceOrLegacy === "inferred") return "Inferred signal";
+  if (source === "anthropic" && confidenceOrLegacy === "verified_network") return "Connector network signal";
+  if (source === "openai" && confidenceOrLegacy === "self_declared_header") return "OpenAI header claim";
+  if (confidenceOrLegacy === "self_declared_client") return "Client-declared";
   return "No provider signal";
 }
 
@@ -112,6 +119,8 @@ function sourceClass(source: AdminMcpTelemetryEvent["source"], attribution: stri
   if (sourceLabel(source, attribution) === "Unattributed") return "bg-slate-100 text-slate-600 ring-slate-200";
   if (source === "openai") return "bg-emerald-50 text-emerald-700 ring-emerald-100";
   if (source === "anthropic") return "bg-amber-50 text-amber-700 ring-amber-100";
+  if (source === "google") return "bg-blue-50 text-blue-700 ring-blue-100";
+  if (source === "xai") return "bg-zinc-100 text-zinc-800 ring-zinc-200";
   return "bg-slate-100 text-slate-600 ring-slate-200";
 }
 
@@ -222,6 +231,8 @@ export default async function AdminMcpTelemetryPage({ searchParams }: AdminMcpPa
   const includeCanary = resolved.includeCanary === "1";
   const activeSurface = normalizeOption(resolved.surface, surfaces);
   const activeSource = normalizeOption(resolved.source, sources);
+  const activeProduct = normalizeOption(resolved.product, products);
+  const activeConfidence = normalizeOption(resolved.confidence, confidenceLevels);
   const activeOutcome = normalizeOption(resolved.outcome, outcomes);
   const activeDecision = normalizeOption(resolved.decision, scanDecisions);
   const activeTimeSpan = normalizeOption(resolved.timeSpan, timeSpans) ?? "30d";
@@ -229,7 +240,7 @@ export default async function AdminMcpTelemetryPage({ searchParams }: AdminMcpPa
   const activeToolPeriod = normalizeOption(resolved.toolPeriod, snapshotPeriods) ?? "24h";
   const activeSourcePeriod = normalizeOption(resolved.sourcePeriod, snapshotPeriods) ?? "24h";
   const activeTool = resolved.tool?.trim().slice(0, 100) ?? "";
-  const hasFilters = Boolean(activeQuery || activeSurface || activeSource || activeOutcome || activeDecision || activeTool || activeTimeSpan !== "30d");
+  const hasFilters = Boolean(activeQuery || activeSurface || activeSource || activeProduct || activeConfidence || activeOutcome || activeDecision || activeTool || activeTimeSpan !== "30d");
   const [dashboard, eventPage] = await Promise.all([
     withServerTiming("app.admin.mcp_telemetry", () => loadAdminMcpTelemetryDashboard(
       activeSnapshotPeriod as AdminMcpSnapshotPeriod,
@@ -238,7 +249,9 @@ export default async function AdminMcpTelemetryPage({ searchParams }: AdminMcpPa
       includeCanary,
     )),
     withServerTiming("app.admin.mcp_telemetry.rows", () => listAdminMcpTelemetryEventsPage(pageSize, (page - 1) * pageSize, {
+      confidence: activeConfidence,
       outcome: activeOutcome,
+      product: activeProduct,
       query: activeQuery || null,
       scanDecision: activeDecision,
       source: activeSource,
@@ -298,6 +311,8 @@ export default async function AdminMcpTelemetryPage({ searchParams }: AdminMcpPa
               {activeQuery ? <input name="q" type="hidden" value={activeQuery} /> : null}
               {activeSurface ? <input name="surface" type="hidden" value={activeSurface} /> : null}
               {activeSource ? <input name="source" type="hidden" value={activeSource} /> : null}
+              {activeProduct ? <input name="product" type="hidden" value={activeProduct} /> : null}
+              {activeConfidence ? <input name="confidence" type="hidden" value={activeConfidence} /> : null}
               {activeTool ? <input name="tool" type="hidden" value={activeTool} /> : null}
               {activeOutcome ? <input name="outcome" type="hidden" value={activeOutcome} /> : null}
               {activeDecision ? <input name="decision" type="hidden" value={activeDecision} /> : null}
@@ -370,14 +385,16 @@ export default async function AdminMcpTelemetryPage({ searchParams }: AdminMcpPa
             {includeCanary ? <input name="includeCanary" type="hidden" value="1" /> : null}
             <input aria-label="Filter MCP requests by hostname, scan ID, request ID, opaque ID, tool, client, or error" className="h-10 min-w-[24rem] flex-[1_1_28rem] rounded-lg border border-slate-300 bg-white px-3 text-sm" defaultValue={activeQuery} name="q" placeholder="Hostname, scan ID, request ID, session, actor, client, error" />
             <select aria-label="Filter MCP requests by entrypoint" className="h-10 w-[10.5rem] shrink-0 rounded-lg border border-slate-300 bg-white px-2 text-xs" defaultValue={activeSurface ?? ""} name="surface"><option value="">Any entrypoint</option>{surfaces.map((surface) => <option key={surface} value={surface}>{surfaceLabels[surface]}</option>)}</select>
-            <select aria-label="Filter MCP requests by origin signal" className="h-10 w-[9.5rem] shrink-0 rounded-lg border border-slate-300 bg-white px-2 text-xs" defaultValue={activeSource ?? ""} name="source"><option value="">Any origin</option>{sources.map((source) => <option key={source} value={source}>{source === "unknown" ? "Unattributed" : `${formatLabel(source)} signal`}</option>)}</select>
+            <select aria-label="Filter MCP requests by caller provider" className="h-10 w-[9.5rem] shrink-0 rounded-lg border border-slate-300 bg-white px-2 text-xs" defaultValue={activeSource ?? ""} name="source"><option value="">Any provider</option>{sources.map((source) => <option key={source} value={source}>{source === "unknown" ? "Unattributed" : formatLabel(source)}</option>)}</select>
+            <select aria-label="Filter MCP requests by caller product" className="h-10 w-[9.5rem] shrink-0 rounded-lg border border-slate-300 bg-white px-2 text-xs" defaultValue={activeProduct ?? ""} name="product"><option value="">Any product</option>{products.map((product) => <option key={product} value={product}>{formatLabel(product)}</option>)}</select>
+            <select aria-label="Filter MCP requests by attribution confidence" className="h-10 w-[9.5rem] shrink-0 rounded-lg border border-slate-300 bg-white px-2 text-xs" defaultValue={activeConfidence ?? ""} name="confidence"><option value="">Any confidence</option>{confidenceLevels.map((confidence) => <option key={confidence} value={confidence}>{formatLabel(confidence)}</option>)}</select>
             <select aria-label="Filter MCP requests by tool" className="h-10 w-[13rem] shrink-0 rounded-lg border border-slate-300 bg-white px-2 text-xs" defaultValue={activeTool} name="tool"><option value="">Any tool</option>{toolOptions.map((tool) => <option key={tool} value={tool}>{tool}</option>)}</select>
             <select aria-label="Filter MCP requests by outcome" className="h-10 w-[8.5rem] shrink-0 rounded-lg border border-slate-300 bg-white px-2 text-xs" defaultValue={activeOutcome ?? ""} name="outcome"><option value="">Any outcome</option>{outcomes.map((outcome) => <option key={outcome} value={outcome}>{formatLabel(outcome)}</option>)}</select>
             <select aria-label="Filter MCP requests by scan decision" className="h-10 w-[9rem] shrink-0 rounded-lg border border-slate-300 bg-white px-2 text-xs" defaultValue={activeDecision ?? ""} name="decision"><option value="">Any decision</option>{scanDecisions.map((decision) => <option key={decision} value={decision}>{formatLabel(decision)}</option>)}</select>
             <select aria-label="Filter MCP requests by time span" className="h-10 w-[8.5rem] shrink-0 rounded-lg border border-slate-300 bg-white px-2 text-xs" defaultValue={activeTimeSpan} name="timeSpan">{timeSpans.map((timeSpan) => <option key={timeSpan} value={timeSpan}>{timeSpan === "all" ? "All retained" : timeSpan === "4h" ? "Past 4 hours" : timeSpan === "12h" ? "Past 12 hours" : timeSpan === "24h" ? "Past 24 hours" : timeSpan === "7d" ? "Past 7 days" : "Past 30 days"}</option>)}</select>
           </AdminScansFilterForm>
 
-          <PaginationControls basePath="/app/admin/mcp" itemLabel="MCP requests" page={page} pageCount={pageCount} pageSize={pageSize} searchParams={{ q: activeQuery, surface: activeSurface, source: activeSource, tool: activeTool, outcome: activeOutcome, decision: activeDecision, timeSpan: activeTimeSpan, snapshot: activeSnapshotPeriod, toolPeriod: activeToolPeriod, sourcePeriod: activeSourcePeriod, includeCanary: includeCanary ? "1" : null }} showPageJump totalCount={eventPage.totalCount} visibleCount={eventPage.items.length} />
+          <PaginationControls basePath="/app/admin/mcp" itemLabel="MCP requests" page={page} pageCount={pageCount} pageSize={pageSize} searchParams={{ q: activeQuery, surface: activeSurface, source: activeSource, product: activeProduct, confidence: activeConfidence, tool: activeTool, outcome: activeOutcome, decision: activeDecision, timeSpan: activeTimeSpan, snapshot: activeSnapshotPeriod, toolPeriod: activeToolPeriod, sourcePeriod: activeSourcePeriod, includeCanary: includeCanary ? "1" : null }} showPageJump totalCount={eventPage.totalCount} visibleCount={eventPage.items.length} />
 
           <div className="w-full max-w-full overflow-x-auto overscroll-x-contain rounded-xl border border-slate-200">
             <table className="table-fixed text-left text-xs" style={{ width: "3490px", minWidth: "3490px" }}>
@@ -394,7 +411,7 @@ export default async function AdminMcpTelemetryPage({ searchParams }: AdminMcpPa
               </colgroup>
               <thead className="sticky top-0 z-20 bg-slate-50 text-[10px] uppercase tracking-[0.08em] text-slate-500">
                 <tr>{[
-                  { label: "Status", className: "sticky left-0 z-30 bg-slate-50" }, { label: "Entrypoint" }, { label: "Origin" }, { label: "Client" },
+                  { label: "Status", className: "sticky left-0 z-30 bg-slate-50" }, { label: "Entrypoint" }, { label: "Caller attribution" }, { label: "Client / channel" },
                   { label: "Requester / caller IP" }, { label: "Requested" }, { label: "Page" }, { label: "Tranco" }, { label: "Score" }, { label: "Top" },
                   { label: "Privacy / CMP" }, { label: "A/R/O" }, { label: "Access" }, { label: "Transparency" }, { label: "Transport" }, { label: "Runtime" },
                   { label: "Time" }, { label: "Outcome" }, { label: "From" }, { label: "Freshness" }, { label: "Language" }, { label: "Industry" },
@@ -413,8 +430,8 @@ export default async function AdminMcpTelemetryPage({ searchParams }: AdminMcpPa
                     <tr className="group h-[62px] hover:bg-slate-50/70" key={event.event_id}>
                       <td className="sticky left-0 z-10 bg-white px-2.5 py-1.5 group-hover:bg-slate-50"><span className={`inline-flex items-center gap-1.5 font-semibold ${outcome.text}`}><span aria-hidden="true" className={`inline-block h-2.5 w-2.5 rounded-full ${outcome.dot}`} />{outcome.label}</span>{event.error_code ? <p className="mt-0.5 truncate text-[10px] text-rose-600" title={event.error_code}>{event.error_code}</p> : null}</td>
                       <td className="px-2.5 py-1.5"><span className={`inline-flex rounded-full px-1.5 py-0.5 text-[10px] font-semibold ring-1 ${surfaceClass(event.surface)}`}>{surfaceLabels[event.surface]}</span><p className="mt-1 text-[10px] text-slate-500">{event.auth_class}</p></td>
-                      <td className="px-2.5 py-1.5"><span className={`inline-flex max-w-full truncate rounded-full px-1.5 py-0.5 text-[10px] font-semibold ring-1 ${sourceClass(event.source, event.source_attribution)}`}>{sourceLabel(event.source, event.source_attribution)}</span><p className="mt-0.5 truncate text-[10px] text-slate-500" title={sourceConfidenceLabel(event.source, event.source_attribution)}>{sourceConfidenceLabel(event.source, event.source_attribution)}</p></td>
-                      <td className="px-2.5 py-1.5"><p className="truncate font-semibold text-slate-700" title={clientDetail(event)}>{clientDetail(event)}</p><p className="mt-0.5 truncate text-[10px] text-slate-400">{formatLabel(event.client_family)}</p></td>
+                      <td className="px-2.5 py-1.5"><span className={`inline-flex max-w-full truncate rounded-full px-1.5 py-0.5 text-[10px] font-semibold ring-1 ${sourceClass(event.source, event.source_attribution)}`}>{sourceLabel(event.source, event.source_attribution)}</span><p className="mt-0.5 truncate text-[10px] text-slate-500" title={`${sourceConfidenceLabel(event.source, event.attribution_confidence)} · Signals: ${event.attribution_signals.join(", ") || "none"} · Ruleset ${event.attribution_ruleset_version}`}>{formatLabel(event.caller_product)} · {sourceConfidenceLabel(event.source, event.attribution_confidence)}</p><p className="truncate text-[10px] text-slate-400">Directory: {formatLabel(event.installation_origin)}</p></td>
+                      <td className="px-2.5 py-1.5"><p className="truncate font-semibold text-slate-700" title={clientDetail(event)}>{clientDetail(event)}</p><p className="mt-0.5 truncate text-[10px] text-slate-400">{formatLabel(event.execution_channel)} · {formatLabel(event.client_family)}</p></td>
                       <td className="px-2.5 py-1.5"><p className="truncate font-mono text-[10px] font-medium text-slate-700" title={sourceIpLabel(event)}>{sourceIpLabel(event)}</p><p className="mt-0.5 truncate text-[10px] text-slate-400">{event.source_ip_source.replaceAll("_", " ")}</p></td>
                       <td className="px-2.5 py-1.5 text-[10px] leading-4" title={formatAdminDateTime(event.occurred_at)}><p>{requested.date}</p><p className="text-slate-500">{requested.time}</p></td>
                       <td className="px-2.5 py-1.5"><p className="line-clamp-2 break-all font-semibold leading-4 text-slate-900" title={requestedResourceLabel(event)}>{requestedResourceLabel(event)}</p></td>
@@ -454,7 +471,7 @@ export default async function AdminMcpTelemetryPage({ searchParams }: AdminMcpPa
               <div className="flex flex-wrap items-center justify-between gap-2">
                 <div><CardTitle>Tool distribution and latency</CardTitle><p className="mt-0.5 text-xs text-slate-500">{dashboard.toolAnalytics.label} · p50 / p95{activeToolPeriod === "1y" ? ` · limited to ${dashboard.retention.days}d retained data` : ""}</p></div>
                 <form action="/app/admin/mcp" className="flex items-center gap-2" method="get">
-                  {activeQuery ? <input name="q" type="hidden" value={activeQuery} /> : null}{activeSurface ? <input name="surface" type="hidden" value={activeSurface} /> : null}{activeSource ? <input name="source" type="hidden" value={activeSource} /> : null}{activeTool ? <input name="tool" type="hidden" value={activeTool} /> : null}{activeOutcome ? <input name="outcome" type="hidden" value={activeOutcome} /> : null}{activeDecision ? <input name="decision" type="hidden" value={activeDecision} /> : null}
+                  {activeQuery ? <input name="q" type="hidden" value={activeQuery} /> : null}{activeSurface ? <input name="surface" type="hidden" value={activeSurface} /> : null}{activeSource ? <input name="source" type="hidden" value={activeSource} /> : null}{activeProduct ? <input name="product" type="hidden" value={activeProduct} /> : null}{activeConfidence ? <input name="confidence" type="hidden" value={activeConfidence} /> : null}{activeTool ? <input name="tool" type="hidden" value={activeTool} /> : null}{activeOutcome ? <input name="outcome" type="hidden" value={activeOutcome} /> : null}{activeDecision ? <input name="decision" type="hidden" value={activeDecision} /> : null}
                   <input name="timeSpan" type="hidden" value={activeTimeSpan} /><input name="snapshot" type="hidden" value={activeSnapshotPeriod} /><input name="sourcePeriod" type="hidden" value={activeSourcePeriod} />
                   {includeCanary ? <input name="includeCanary" type="hidden" value="1" /> : null}
                   <label className="sr-only" htmlFor="mcp-tool-period">Tool analytics period</label>
@@ -497,7 +514,7 @@ export default async function AdminMcpTelemetryPage({ searchParams }: AdminMcpPa
               <div className="flex flex-wrap items-center justify-between gap-2">
                 <div><CardTitle>Source and access signals</CardTitle><p className="mt-0.5 text-xs text-slate-500">{dashboard.sourceAnalytics.label}{activeSourcePeriod === "1y" ? ` · limited to ${dashboard.retention.days}d retained data` : ""}</p></div>
                 <form action="/app/admin/mcp" className="flex items-center gap-2" method="get">
-                  {activeQuery ? <input name="q" type="hidden" value={activeQuery} /> : null}{activeSurface ? <input name="surface" type="hidden" value={activeSurface} /> : null}{activeSource ? <input name="source" type="hidden" value={activeSource} /> : null}{activeTool ? <input name="tool" type="hidden" value={activeTool} /> : null}{activeOutcome ? <input name="outcome" type="hidden" value={activeOutcome} /> : null}{activeDecision ? <input name="decision" type="hidden" value={activeDecision} /> : null}
+                  {activeQuery ? <input name="q" type="hidden" value={activeQuery} /> : null}{activeSurface ? <input name="surface" type="hidden" value={activeSurface} /> : null}{activeSource ? <input name="source" type="hidden" value={activeSource} /> : null}{activeProduct ? <input name="product" type="hidden" value={activeProduct} /> : null}{activeConfidence ? <input name="confidence" type="hidden" value={activeConfidence} /> : null}{activeTool ? <input name="tool" type="hidden" value={activeTool} /> : null}{activeOutcome ? <input name="outcome" type="hidden" value={activeOutcome} /> : null}{activeDecision ? <input name="decision" type="hidden" value={activeDecision} /> : null}
                   <input name="timeSpan" type="hidden" value={activeTimeSpan} /><input name="snapshot" type="hidden" value={activeSnapshotPeriod} /><input name="toolPeriod" type="hidden" value={activeToolPeriod} />
                   {includeCanary ? <input name="includeCanary" type="hidden" value="1" /> : null}
                   <label className="sr-only" htmlFor="mcp-source-period">Source analytics period</label>

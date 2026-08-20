@@ -95,7 +95,7 @@ type SourceRow = {
   calls: CountValue;
   client_family: string;
   session_count: CountValue;
-  source: "openai" | "anthropic" | "unknown";
+  source: "openai" | "anthropic" | "google" | "xai" | "other" | "unknown";
   source_attribution: string;
   surface: McpTelemetrySurface;
 };
@@ -111,17 +111,23 @@ export type AdminMcpTelemetryEvent = {
   access_posture_class: string | null;
   admin_summary_generated_at: string | null;
   actor_id: string | null;
+  attribution_confidence: "verified" | "corroborated" | "declared" | "inferred" | "unknown";
+  attribution_ruleset_version: string;
+  attribution_signals: string[];
   auth_class: "anonymous" | "authenticated";
   blocked_flag: boolean | null;
   captcha_flag: boolean | null;
   client_family: string;
   client_name: string | null;
+  caller_product: "chatgpt" | "codex" | "claude" | "claude_code" | "gemini_cli" | "grok" | "other" | "unknown";
   duration_ms: number;
   error_code: string | null;
   evidence_matrix: AdminEvidenceMatrix | null;
+  execution_channel: "hosted_connector" | "api_managed_mcp" | "desktop_cli" | "custom_mcp" | "unknown";
   event_id: string;
   freshness: "latest" | "refresh" | null;
   industry: string | null;
+  installation_origin: "openai_directory" | "anthropic_directory" | "xai_catalog" | "direct" | "unknown";
   mode_detail: string | null;
   mode_format: string | null;
   occurred_at: string;
@@ -143,7 +149,7 @@ export type AdminMcpTelemetryEvent = {
   scanner_egress_provider: string | null;
   score: number | null;
   session_id: string | null;
-  source: "openai" | "anthropic" | "unknown";
+  source: "openai" | "anthropic" | "google" | "xai" | "other" | "unknown";
   source_attribution: string;
   source_ip: string | null;
   source_ip_hash: string | null;
@@ -167,11 +173,13 @@ type AdminMcpTelemetryEventRow = Omit<AdminMcpTelemetryEvent, "evidence_matrix" 
 };
 
 export type AdminMcpTelemetryEventFilters = {
+  confidence?: "verified" | "corroborated" | "declared" | "inferred" | "unknown" | null;
   includeCanary?: boolean;
   outcome?: "success" | "error" | "rate_limited" | null;
   query?: string | null;
   scanDecision?: "reused" | "new" | "unavailable" | "not_applicable" | null;
-  source?: "openai" | "anthropic" | "unknown" | null;
+  product?: "chatgpt" | "codex" | "claude" | "claude_code" | "gemini_cli" | "grok" | "other" | "unknown" | null;
+  source?: "openai" | "anthropic" | "google" | "xai" | "other" | "unknown" | null;
   surface?: McpTelemetrySurface | null;
   timeSpan?: "all" | "4h" | "12h" | "24h" | "7d" | "30d";
   toolName?: string | null;
@@ -451,6 +459,8 @@ export async function listAdminMcpTelemetryEventsPage(
       or tool_name ilike ${parameter}
       or client_family ilike ${parameter}
       or coalesce(client_name, '') ilike ${parameter}
+      or caller_product ilike ${parameter}
+      or attribution_confidence ilike ${parameter}
       or coalesce(requested_resource, '') ilike ${parameter}
       or coalesce(requester_ip::text, '') ilike ${parameter}
       or error_code ilike ${parameter}
@@ -458,6 +468,8 @@ export async function listAdminMcpTelemetryEventsPage(
   }
   if (filters.surface) conditions.push(`surface = ${addValue(filters.surface)}`);
   if (filters.source) conditions.push(`source = ${addValue(filters.source)}`);
+  if (filters.product) conditions.push(`caller_product = ${addValue(filters.product)}`);
+  if (filters.confidence) conditions.push(`attribution_confidence = ${addValue(filters.confidence)}`);
   if (filters.toolName) conditions.push(`tool_name = ${addValue(filters.toolName.slice(0, 100))}`);
   if (filters.outcome) conditions.push(`outcome = ${addValue(filters.outcome)}`);
   if (filters.scanDecision) conditions.push(`scan_decision = ${addValue(filters.scanDecision)}`);
@@ -486,6 +498,8 @@ export async function listAdminMcpTelemetryEventsPage(
     query<AdminMcpTelemetryEventRow>(
       `select events.event_id, events.occurred_at, events.surface, events.source,
               events.source_attribution, events.auth_class, events.client_family, events.client_name,
+              events.caller_product, events.attribution_confidence, events.attribution_signals,
+              events.attribution_ruleset_version, events.execution_channel, events.installation_origin,
               events.tool_name, events.request_id,
               coalesce(events.target_hostname, canonical_domain.hostname) as target_hostname,
               case

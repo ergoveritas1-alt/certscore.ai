@@ -2,6 +2,57 @@ import { z } from "zod";
 
 export const MCP_TELEMETRY_INTEGRATION = "certscore-mcp" as const;
 export const MCP_TELEMETRY_RETENTION_DAYS = 90;
+export const MCP_CALLER_ATTRIBUTION_RULESET_VERSION = "2026-08-20.1" as const;
+
+export const mcpCallerProviderSchema = z.enum([
+  "openai",
+  "anthropic",
+  "google",
+  "xai",
+  "other",
+  "unknown",
+]);
+
+export const mcpCallerProductSchema = z.enum([
+  "chatgpt",
+  "codex",
+  "claude",
+  "claude_code",
+  "gemini_cli",
+  "grok",
+  "other",
+  "unknown",
+]);
+
+export const mcpCallerConfidenceSchema = z.enum([
+  "verified",
+  "corroborated",
+  "declared",
+  "inferred",
+  "unknown",
+]);
+
+export const mcpCallerExecutionChannelSchema = z.enum([
+  "hosted_connector",
+  "api_managed_mcp",
+  "desktop_cli",
+  "custom_mcp",
+  "unknown",
+]);
+
+export const mcpInstallationOriginSchema = z.enum([
+  "openai_directory",
+  "anthropic_directory",
+  "xai_catalog",
+  "direct",
+  "unknown",
+]);
+
+export const mcpAttributionSignalSchema = z.enum([
+  "anthropic_connector_network",
+  "declared_client_info",
+  "openai_header_claim",
+]);
 
 export const mcpTelemetrySurfaceSchema = z.enum([
   "mcp_light",
@@ -17,9 +68,18 @@ export const mcpTelemetryEventSchema = z.object({
     "openai_chatgpt",
     "openai_codex",
     "anthropic_claude",
+    "anthropic_claude_code",
+    "google_gemini_cli",
+    "xai_grok",
     "other",
     "unknown",
   ]),
+  attributionConfidence: mcpCallerConfidenceSchema,
+  attributionRulesetVersion: z.literal(MCP_CALLER_ATTRIBUTION_RULESET_VERSION),
+  attributionSignals: z.array(mcpAttributionSignalSchema).max(8),
+  callerProduct: mcpCallerProductSchema,
+  executionChannel: mcpCallerExecutionChannelSchema,
+  installationOrigin: mcpInstallationOriginSchema,
   durationMs: z.number().int().min(0).max(3_600_000),
   endpoint: z.enum(["/mcp/light", "/mcp/anonymous", "/mcp"]),
   errorCode: z.string().min(1).max(100).regex(/^[a-zA-Z0-9_.:-]+$/).nullable(),
@@ -41,7 +101,7 @@ export const mcpTelemetryEventSchema = z.object({
   scanId: z.string().min(1).max(128).regex(/^[a-zA-Z0-9_-]+$/).nullable(),
   scanStatus: z.string().min(1).max(64).regex(/^[a-zA-Z0-9_-]+$/).nullable(),
   sessionId: z.string().regex(/^[a-f0-9]{24}$/).nullable(),
-  source: z.enum(["openai", "anthropic", "unknown"]),
+  source: mcpCallerProviderSchema,
   sourceAttribution: z.enum([
     "verified_network",
     "self_declared_header",
