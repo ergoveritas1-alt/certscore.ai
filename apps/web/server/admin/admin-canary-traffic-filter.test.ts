@@ -8,6 +8,7 @@ const mcpPage = readFileSync("apps/web/app/app/admin/mcp/page.tsx", "utf8");
 const scansRepository = readFileSync("apps/web/server/admin/repository.ts", "utf8");
 const pulseRepository = readFileSync("apps/web/server/admin/list-pulse-requests.ts", "utf8");
 const mcpRepository = readFileSync("apps/web/server/admin/mcp-telemetry.ts", "utf8");
+const mcpCanaryBackfill = readFileSync("packages/db/migrations/0186_backfill_linked_mcp_canary_telemetry.sql", "utf8");
 
 test("canary traffic is excluded by default across admin activity surfaces", () => {
   for (const page of [scansPage, pulsePage, mcpPage]) {
@@ -16,8 +17,16 @@ test("canary traffic is excluded by default across admin activity surfaces", () 
   for (const page of [scansPage, pulsePage]) assert.match(page, /<AdminTrafficFilters/);
   assert.match(mcpPage, /<CanaryTrafficToggle/);
   assert.match(scansRepository, /not canary_filter/);
-  assert.match(pulseRepository, /requested_url, ''\) !~\* '\^https\?:\/\/\[\^\/\?#\]\+\/\\\\\.well-known\/certscore-canary\/'/);
+  assert.match(pulseRepository, /const PULSE_CANARY_TRAFFIC_SQL/);
+  assert.match(pulseRepository, /from scan_requests canary_sr[\s\S]*requested_url[\s\S]*certscore-canary/);
+  assert.match(pulseRepository, /from pulse_requests canary_pr[\s\S]*requested_url[\s\S]*certscore-canary/);
+  assert.match(pulseRepository, /from scan_pages canary_sp[\s\S]*page_url[\s\S]*certscore-canary/);
+  assert.match(pulseRepository, /and \(\$19::boolean = true or not \$\{PULSE_CANARY_TRAFFIC_SQL\}\)/);
   assert.match(mcpRepository, /is_canary = false/);
+  assert.match(mcpCanaryBackfill, /update public\.mcp_tool_invocation_events/);
+  assert.match(mcpCanaryBackfill, /from public\.scan_requests request[\s\S]*requested_url[\s\S]*certscore-canary/);
+  assert.match(mcpCanaryBackfill, /from public\.pulse_requests request[\s\S]*requested_url[\s\S]*certscore-canary/);
+  assert.match(mcpCanaryBackfill, /from public\.scan_pages page[\s\S]*page_url[\s\S]*certscore-canary/);
   assert.match(scansRepository, /with canary_scan_ids as materialized/);
   assert.match(scansRepository, /from public\.scan_requests sr[\s\S]*requested_url[\s\S]*certscore-canary/);
   assert.match(scansRepository, /from public\.pulse_requests pr[\s\S]*requested_url[\s\S]*certscore-canary/);

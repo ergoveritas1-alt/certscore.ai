@@ -21,6 +21,7 @@ test("MCP operations page makes the request ledger the primary navigable workspa
   assert.match(page, /\?\? "24h"/);
   assert.match(page, /Last year \(retained data\)/);
   assert.match(page, /dashboard\.trend\.map/);
+  assert.match(page, /Pacific time/);
   assert.match(page, /name="toolPeriod"/);
   assert.match(page, /name="sourcePeriod"/);
   assert.match(page, /dashboard\.toolAnalytics\.label/);
@@ -46,11 +47,25 @@ test("MCP operations page makes the request ledger the primary navigable workspa
   assert.doesNotMatch(page, /Invocation telemetry/);
   assert.match(page, /Unknown source/);
   assert.match(page, /allowedAttribution/);
-  assert.match(page, /Provider signal \/ client/);
+  assert.match(page, /Provider \/ client/);
+  assert.match(page, /Requester \/ caller IP/);
+  assert.match(page, /sourceIpLabel/);
+  assert.match(page, /\{sourceIpLabel\(event\)\}/);
   assert.match(page, /Recognized client info/);
   assert.match(page, /Unrecognized client info/);
   assert.match(page, /No client signal/);
   assert.match(page, /From scan/);
+  for (const heading of [
+    "Requested", "Page", "Tranco", "Score", "Top", "Privacy / CMP", "A/R/O", "Access",
+    "Transparency", "Transport", "Runtime", "Time", "Outcome", "From", "Freshness", "Language",
+    "Industry", "Mode", "Usage", "Scan ID", "Scanner egress",
+  ]) {
+    assert.match(page, new RegExp(`label: "${heading.replaceAll("/", "\\/")}"`));
+  }
+  assert.match(page, /EvidenceGroupCell/);
+  assert.match(page, /event\.evidence_matrix/);
+  assert.match(page, /event\.scanner_egress_id/);
+  assert.match(page, /event\.scan_elapsed_seconds/);
 });
 
 test("MCP telemetry dashboard queries bounded periods and never reads request payloads", () => {
@@ -64,6 +79,7 @@ test("MCP telemetry dashboard queries bounded periods and never reads request pa
   assert.match(repository, /sourceConfig\.bucketStart/);
   assert.match(repository, /snapshotConfig\.bucketStart/);
   assert.match(repository, /snapshotConfig\.bucketEnd/);
+  assert.match(repository, /bucket at time zone 'America\/Los_Angeles'/);
   assert.match(repository, /occurred_at >= now\(\) - interval '30 days'/);
   assert.match(repository, /limit 20/);
   assert.doesNotMatch(repository, /limit 40/);
@@ -74,8 +90,20 @@ test("MCP telemetry dashboard queries bounded periods and never reads request pa
   assert.match(repository, /target_hostname ilike/);
   assert.match(repository, /left join public\.scans canonical_scan/);
   assert.match(repository, /left join public\.domains canonical_domain/);
+  assert.match(repository, /from public\.scan_snapshots retained/);
+  assert.match(repository, /from public\.scan_pages page/);
+  assert.match(repository, /snapshot\.admin_evidence_matrix/);
+  assert.match(repository, /snapshot\.certscore_overall::int as score/);
+  assert.match(repository, /snapshot\.top_finding_count::int as top_finding_count/);
+  assert.match(repository, /canonical_scan\.egress_id as scanner_egress_id/);
+  assert.match(repository, /canonical_scan\.egress_provider as scanner_egress_provider/);
+  assert.match(repository, /extract\(epoch from \(canonical_scan\.completed_at - canonical_scan\.started_at\)\)/);
+  assert.match(repository, /parseAdminEvidenceMatrix/);
   assert.match(repository, /target_provenance/);
   assert.match(repository, /perspective_provenance/);
+  assert.match(repository, /requesterIpAttributionFromRequest/);
+  assert.match(repository, /from public\.pulse_requests request[\s\S]*request\.scan_id::text = events\.scan_id/);
+  assert.match(repository, /from public\.scan_requests request[\s\S]*fulfilled_by_scan_id[\s\S]*events\.scan_id/);
   assert.match(repository, /canonical_scan\.scan_config_json ->> 'scanFrom' in \('eu_de', 'eu_ie', 'california'\)/);
   assert.match(repository, /limit \$\{limitParameter\}/);
   assert.doesNotMatch(repository, /prompt|authorization|request_body|response_body|raw_header/i);

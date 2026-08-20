@@ -3,6 +3,8 @@ import "server-only";
 import { query, queryOne } from "@website-signal-risk-scanner/db";
 import { MCP_TELEMETRY_RETENTION_DAYS, type McpTelemetrySurface } from "@website-signal-risk-scanner/shared";
 import { calculateMcpTelemetryRates } from "../../lib/admin/mcp-telemetry-rates";
+import { requesterIpAttributionFromRequest, type RequesterIpAttributionSource } from "../../lib/admin/requester-ip-attribution";
+import { parseAdminEvidenceMatrix, type AdminEvidenceMatrix } from "../../lib/scans/admin-evidence-matrix";
 import { requirePlatformAdminContext } from "./platform-admin";
 
 type CountValue = number | string | null;
@@ -106,30 +108,56 @@ type HostnameRow = {
 };
 
 export type AdminMcpTelemetryEvent = {
+  access_posture_class: string | null;
+  admin_summary_generated_at: string | null;
   actor_id: string | null;
   auth_class: "anonymous" | "authenticated";
+  blocked_flag: boolean | null;
+  captcha_flag: boolean | null;
   client_family: string;
   duration_ms: number;
   error_code: string | null;
+  evidence_matrix: AdminEvidenceMatrix | null;
   event_id: string;
   freshness: "latest" | "refresh" | null;
+  industry: string | null;
+  mode_detail: string | null;
+  mode_format: string | null;
   occurred_at: string;
   outcome: "success" | "error" | "rate_limited";
+  page_url: string | null;
+  primary_language: string | null;
   quota_outcome: "allowed" | "rate_limited" | "not_applicable";
   request_id: string;
   scan_decision: "reused" | "new" | "unavailable" | "not_applicable";
+  scan_elapsed_seconds: number | null;
   scan_from: string | null;
   scan_id: string | null;
+  scan_outcome: string | null;
   scan_status: string | null;
+  scanner_egress_id: string | null;
+  scanner_egress_provider: string | null;
+  score: number | null;
   session_id: string | null;
   source: "openai" | "anthropic" | "unknown";
   source_attribution: string;
+  source_ip: string | null;
+  source_ip_hash: string | null;
+  source_ip_source: RequesterIpAttributionSource;
   surface: McpTelemetrySurface;
   target_hostname: string | null;
   target_provenance: "request" | "canonical_scan" | null;
   tool_name: string;
+  top_finding_count: number | null;
+  tranco_rank: number | null;
   transport_outcome: "mcp_result" | "mcp_error" | "http_429";
   perspective_provenance: "request" | "canonical_scan" | null;
+};
+
+type AdminMcpTelemetryEventRow = Omit<AdminMcpTelemetryEvent, "evidence_matrix" | "source_ip" | "source_ip_hash" | "source_ip_source"> & {
+  admin_evidence_matrix: unknown;
+  requester_request_context: unknown;
+  requester_requested_by: unknown;
 };
 
 export type AdminMcpTelemetryEventFilters = {
@@ -206,7 +234,7 @@ export async function loadAdminMcpTelemetryDashboard(
            interval '${snapshotConfig.step}'
          ) as bucket
        )
-       select to_char(buckets.bucket at time zone 'UTC', '${snapshotConfig.bucketLabel}') as bucket_label,
+       select to_char(buckets.bucket at time zone 'America/Los_Angeles', '${snapshotConfig.bucketLabel}') as bucket_label,
               count(events.event_id) as invocations,
               count(events.event_id) filter (where events.outcome = 'error') as errors,
               count(events.event_id) filter (where events.outcome = 'rate_limited') as quota_limited
@@ -446,7 +474,7 @@ export async function listAdminMcpTelemetryEventsPage(
       values,
       { readOnly: true },
     ),
-    query<AdminMcpTelemetryEvent>(
+    query<AdminMcpTelemetryEventRow>(
       `select events.event_id, events.occurred_at, events.surface, events.source,
               events.source_attribution, events.auth_class, events.client_family,
               events.tool_name, events.request_id,
@@ -472,7 +500,30 @@ export async function listAdminMcpTelemetryEventsPage(
               end as perspective_provenance,
               events.scan_id, events.scan_decision, events.scan_status, events.outcome,
               events.transport_outcome, events.duration_ms, events.quota_outcome, events.error_code,
-              events.session_id, events.actor_id
+              events.session_id, events.actor_id,
+              coalesce(requester.requested_url, canonical_page.page_url) as page_url,
+              requester.request_context ->> 'detail' as mode_detail,
+              requester.request_context ->> 'format' as mode_format,
+              snapshot.tranco_rank,
+              snapshot.certscore_overall::int as score,
+              snapshot.top_finding_count::int as top_finding_count,
+              snapshot.admin_evidence_matrix,
+              snapshot.access_posture_class,
+              snapshot.blocked_flag,
+              snapshot.captcha_flag,
+              snapshot.admin_summary_generated_at,
+              snapshot.scan_outcome,
+              snapshot.site_language_primary as primary_language,
+              snapshot.admin_industry_label as industry,
+              canonical_scan.egress_id as scanner_egress_id,
+              canonical_scan.egress_provider as scanner_egress_provider,
+              case
+                when canonical_scan.completed_at is not null and canonical_scan.started_at is not null
+                then extract(epoch from (canonical_scan.completed_at - canonical_scan.started_at))::float8
+                else null
+              end as scan_elapsed_seconds,
+              requester.request_context as requester_request_context,
+              requester.requested_by as requester_requested_by
          from public.mcp_tool_invocation_events events
          left join public.scans canonical_scan
            on canonical_scan.id = case
@@ -481,6 +532,56 @@ export async function listAdminMcpTelemetryEventsPage(
              else null
            end
          left join public.domains canonical_domain on canonical_domain.id = canonical_scan.domain_id
+         left join lateral (
+           select retained.tranco_rank,
+                  retained.certscore_overall,
+                  retained.top_finding_count,
+                  retained.admin_evidence_matrix,
+                  retained.access_posture_class,
+                  retained.blocked_flag,
+                  retained.captcha_flag,
+                  retained.admin_summary_generated_at,
+                  retained.scan_outcome,
+                  retained.site_language_primary,
+                  retained.admin_industry_label
+             from public.scan_snapshots retained
+            where retained.scan_id = canonical_scan.id
+            limit 1
+         ) snapshot on true
+         left join lateral (
+           select page.page_url
+             from public.scan_pages page
+            where page.scan_id = canonical_scan.id
+            order by case when page.page_type = 'homepage' then 0 else 1 end, page.page_url asc
+            limit 1
+         ) canonical_page on true
+         left join lateral (
+           select candidate.request_context, candidate.requested_by, candidate.requested_url
+             from (
+               select request.request_context, request.requested_by, request.requested_url, request.requested_at
+                 from public.pulse_requests request
+                where request.scan_id::text = events.scan_id
+               union all
+               select request.request_context, request.requested_by, request.requested_url, request.requested_at
+                 from public.scan_requests request
+                where coalesce(request.fulfilled_by_scan_id, request.scan_id)::text = events.scan_id
+             ) candidate
+            order by (
+              coalesce(
+                nullif(candidate.request_context ->> 'sourceIp', ''),
+                nullif(candidate.request_context -> 'provenance' ->> 'sourceIp', ''),
+                nullif(candidate.request_context ->> 'originIp', ''),
+                nullif(candidate.request_context -> 'provenance' ->> 'originIp', ''),
+                nullif(candidate.request_context ->> 'ipHash', ''),
+                nullif(candidate.request_context -> 'provenance' ->> 'ipHash', ''),
+                nullif(candidate.requested_by ->> 'sourceIp', ''),
+                nullif(candidate.requested_by ->> 'ipHash', '')
+              ) is not null
+            ) desc,
+            (nullif(candidate.requested_url, '') is not null) desc,
+            candidate.requested_at desc
+            limit 1
+         ) requester on true
          ${whereSql}
         order by events.occurred_at desc
         limit ${limitParameter}
@@ -491,7 +592,25 @@ export async function listAdminMcpTelemetryEventsPage(
   ]);
 
   return {
-    items: eventResult.rows,
+    items: eventResult.rows.map((row) => {
+      const requesterIp = requesterIpAttributionFromRequest({
+        request_context: row.requester_request_context,
+        requested_by: row.requester_requested_by,
+      });
+      const {
+        admin_evidence_matrix: rawEvidenceMatrix,
+        requester_request_context: _requestContext,
+        requester_requested_by: _requestedBy,
+        ...event
+      } = row;
+      return {
+        ...event,
+        evidence_matrix: parseAdminEvidenceMatrix(rawEvidenceMatrix),
+        source_ip: requesterIp.sourceIp,
+        source_ip_hash: requesterIp.ipHash,
+        source_ip_source: requesterIp.source,
+      };
+    }),
     totalCount: count(totalResult?.total_count ?? 0),
   };
 }

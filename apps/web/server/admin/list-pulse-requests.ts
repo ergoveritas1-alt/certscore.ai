@@ -164,7 +164,7 @@ const loadCachedAdminPulseOverviewCounts = unstable_cache(
            left join scans s on s.id = pr.scan_id
            left join integration_api_keys api_key on api_key.public_id = pr.requested_by ->> 'apiKeyId'
           where ${LOGICAL_PULSE_ACTIVITY_PREDICATE}
-            and coalesce(pr.requested_url, '') !~* '^https?://[^/?#]+/\\.well-known/certscore-canary/'
+            and not ${PULSE_CANARY_TRAFFIC_SQL}
             and coalesce(api_key.name, '') <> all($1::text[])
        )
        select
@@ -208,6 +208,31 @@ const LOGICAL_PULSE_ACTIVITY_PREDICATE = `not (
        and coalesce(parent.request_context ->> 'detail', '') = coalesce(pr.request_context ->> 'detail', '')
        and coalesce(parent.request_context ->> 'format', '') = coalesce(pr.request_context ->> 'format', '')
        and parent.requested_at between pr.requested_at - interval '20 minutes' and pr.requested_at
+  )
+)`;
+
+// SDK/MCP URL requests can be represented by a logical scanId follow-up whose
+// own requested_url is null. Classify Canary traffic from every retained URL
+// associated with the linked scan so that the logical row cannot leak through.
+const PULSE_CANARY_TRAFFIC_SQL = `(
+  coalesce(pr.requested_url, '') ~* '^https?://[^/?#]+/\\.well-known/certscore-canary/'
+  or exists (
+    select 1
+      from scan_requests canary_sr
+     where coalesce(canary_sr.fulfilled_by_scan_id, canary_sr.scan_id) = pr.scan_id
+       and coalesce(canary_sr.requested_url, '') ~* '^https?://[^/?#]+/\\.well-known/certscore-canary/'
+  )
+  or exists (
+    select 1
+      from pulse_requests canary_pr
+     where canary_pr.scan_id = pr.scan_id
+       and coalesce(canary_pr.requested_url, '') ~* '^https?://[^/?#]+/\\.well-known/certscore-canary/'
+  )
+  or exists (
+    select 1
+      from scan_pages canary_sp
+     where canary_sp.scan_id = pr.scan_id
+       and coalesce(canary_sp.page_url, '') ~* '^https?://[^/?#]+/\\.well-known/certscore-canary/'
   )
 )`;
 
@@ -276,7 +301,7 @@ const PULSE_ACTIVITY_FILTER_SQL = `
         pr.request_context -> 'provenance' ->> 'ipHash', pr.requested_by ->> 'sourceIp', pr.requested_by ->> 'ipHash'
       ) ilike any($18::text[])
     ))
-    and ($19::boolean = true or coalesce(pr.requested_url, '') !~* '^https?://[^/?#]+/\\.well-known/certscore-canary/')
+    and ($19::boolean = true or not ${PULSE_CANARY_TRAFFIC_SQL})
     and ($20::boolean = false or coalesce(api_key.name, '') <> all($21::text[]))`;
 
 function asRecord(value: unknown): Record<string, unknown> {
@@ -511,7 +536,7 @@ export async function getAdminPulseOverviewCounts(includeCanary = false, exclude
          left join scans s on s.id = pr.scan_id
          left join integration_api_keys api_key on api_key.public_id = pr.requested_by ->> 'apiKeyId'
         where ${LOGICAL_PULSE_ACTIVITY_PREDICATE}
-          and ($1::boolean = true or coalesce(pr.requested_url, '') !~* '^https?://[^/?#]+/\\.well-known/certscore-canary/')
+          and ($1::boolean = true or not ${PULSE_CANARY_TRAFFIC_SQL})
           and ($2::boolean = false or coalesce(api_key.name, '') <> all($3::text[]))
      )
      select count(*)::int as total,

@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { Card, CardContent, CardHeader, CardTitle } from "@website-signal-risk-scanner/ui";
+import { getScanFromMarkerInput, ScanFromMarker } from "../../../../components/scans/scan-from-icons";
 import { PaginationControls, normalizePage, normalizePageSize } from "../../../../components/ui/pagination-controls";
 import { formatAdminDateTime } from "../../../../lib/admin/date-time";
 import { getAdminAuthenticatedScanHref } from "../../../../server/admin/admin-scan-links";
@@ -8,6 +9,13 @@ import { withServerTiming } from "../../../../server/performance/log-server-timi
 import { AdminScansFilterForm } from "../scans/admin-scans-filter-form";
 import { CanaryTrafficToggle } from "../../../../components/admin/canary-traffic-toggle";
 import { AdminTableRefreshBoundary } from "../../../../components/admin/admin-table-refresh-boundary";
+import {
+  adminPolicyEvidenceDiagnosticTitle,
+  adminPolicyEvidenceStageLabel,
+  type AdminEvidenceAggregate,
+  type AdminEvidenceResult,
+  type AdminPolicyEvidenceDiagnostic,
+} from "../../../../lib/scans/admin-evidence-matrix";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -98,6 +106,69 @@ function sourceClass(source: AdminMcpTelemetryEvent["source"], attribution: stri
   if (source === "openai") return "bg-emerald-50 text-emerald-700 ring-emerald-100";
   if (source === "anthropic") return "bg-amber-50 text-amber-700 ring-amber-100";
   return "bg-slate-100 text-slate-600 ring-slate-200";
+}
+
+function sourceIpLabel(event: Pick<AdminMcpTelemetryEvent, "source_ip" | "source_ip_hash">) {
+  if (event.source_ip) return event.source_ip;
+  if (event.source_ip_hash) return `Hash ${event.source_ip_hash.slice(0, 12)}`;
+  return "IP not recorded";
+}
+
+const EVIDENCE_MARKS = {
+  observed: { mark: "✓", className: "text-emerald-700" },
+  gap_observed: { mark: "!", className: "text-rose-700" },
+  review_signal: { mark: "△", className: "text-amber-700" },
+  not_observed: { mark: "—", className: "text-slate-500" },
+  not_confirmed: { mark: "?", className: "text-amber-700" },
+  not_testable: { mark: "×", className: "text-slate-400" },
+  insufficient_evidence: { mark: "×", className: "text-slate-400" },
+  out_of_scope: { mark: "·", className: "text-slate-400" },
+} as const;
+
+const STATUS_LABELS = {
+  observed: "Observed", gap_observed: "Gap observed", review_signal: "Review signal", not_observed: "Not observed",
+  not_confirmed: "Not confirmed", not_testable: "Not testable", insufficient_evidence: "Insufficient evidence", out_of_scope: "Out of scope",
+} as const;
+
+function evidenceTitle(label: string, result: AdminEvidenceResult | null) {
+  return result ? `${label}: ${STATUS_LABELS[result.status]} — ${result.descriptor}` : `${label}: not projected for this request`;
+}
+
+function EvidenceCode({ code, disposition, label, result }: { code: string; disposition?: string | null; label: string; result: AdminEvidenceResult | null }) {
+  const presentation = result ? EVIDENCE_MARKS[result.status] : { mark: "·", className: "text-slate-300" };
+  const title = [evidenceTitle(label, result), disposition ? `Pipeline disposition: ${disposition.replaceAll("_", " ")}` : null]
+    .filter((value): value is string => Boolean(value))
+    .join(" · ");
+  return <span className={`whitespace-nowrap font-semibold ${presentation.className}`} title={title}>{code}{presentation.mark}</span>;
+}
+
+function EvidenceGroupCell({ aggregate, labels, policyEvidence, results }: { aggregate: AdminEvidenceAggregate | null; labels: Record<string, string>; policyEvidence?: AdminPolicyEvidenceDiagnostic | null; results: Record<string, AdminEvidenceResult | null> | null }) {
+  const summary = aggregate && aggregate.projected > 0 ? `${aggregate.observed}/${aggregate.total} ✓ · ${aggregate.review}△ · ${aggregate.concern}!` : "Not projected";
+  return <><p className="truncate text-[10px] font-medium text-slate-600" title={policyEvidence ? adminPolicyEvidenceDiagnosticTitle(policyEvidence) : undefined}>{policyEvidence ? `${adminPolicyEvidenceStageLabel(policyEvidence.stage)} · ` : ""}{summary}</p><p className="flex items-center gap-1.5 overflow-hidden text-[10px] leading-4">{Object.entries(labels).map(([code, label]) => <EvidenceCode code={code} disposition={policyEvidence?.topicDispositions?.[code]?.disposition} key={code} label={label} result={results?.[code] ?? null} />)}</p></>;
+}
+
+const TRANSPARENCY_LABELS = { CC: "Controller/contact", LB: "Legal basis", DR: "Data retention", PP: "Processing purposes", RC: "Recipients/categories", DS: "Data-subject rights", IT: "International transfers", PC: "Privacy contact", SA: "Supervisory authority", AD: "Automated decisions/profiling" };
+const TRANSPORT_LABELS = { HD: "HTTPS delivery", HR: "HTTP redirect", MC: "Mixed content", TC: "TLS certificate", FT: "Form transport" };
+const RUNTIME_LABELS = { FP: "Device ID/fingerprinting", SR: "Session replay", IF: "Third-party iframe", SM: "Social media", "3P": "Embedded third-party services" };
+
+function accessLabel(event: Pick<AdminMcpTelemetryEvent, "access_posture_class" | "admin_summary_generated_at" | "blocked_flag" | "captcha_flag">) {
+  if (event.captcha_flag) return "CAPTCHA";
+  if (event.blocked_flag || event.access_posture_class === "early_loss") return "Blocked";
+  if (event.access_posture_class === "robots_limited") return "Robots-limited";
+  if (event.access_posture_class === "degraded_but_useful") return "Limited";
+  return event.access_posture_class || event.admin_summary_generated_at ? "Clear" : "—";
+}
+
+function freshnessLabel(value: AdminMcpTelemetryEvent["freshness"]) {
+  if (value === "latest") return "Latest";
+  if (value === "refresh") return "Refresh";
+  return "—";
+}
+
+function scanElapsed(value: number | null) {
+  if (value === null) return "—";
+  const rounded = Math.round(value * 10) / 10;
+  return `${Number.isInteger(rounded) ? rounded : rounded.toFixed(1)}s`;
 }
 
 function clientSignalReason(attribution: string, clientFamily: string) {
@@ -198,7 +269,7 @@ export default async function AdminMcpTelemetryPage({ searchParams }: AdminMcpPa
           <div className="flex flex-wrap items-center justify-between gap-2">
             <div>
               <CardTitle>Operational snapshot</CardTitle>
-              <p className="mt-0.5 text-xs text-slate-500">All hosted MCP entrypoints · {dashboard.snapshot.label}{activeSnapshotPeriod === "1y" ? ` · limited to ${dashboard.retention.days}d retained data` : ""}</p>
+              <p className="mt-0.5 text-xs text-slate-500">All hosted MCP entrypoints · {dashboard.snapshot.label} · Pacific time{activeSnapshotPeriod === "1y" ? ` · limited to ${dashboard.retention.days}d retained data` : ""}</p>
             </div>
             <form action="/app/admin/mcp" className="flex items-center gap-2" method="get">
               {activeQuery ? <input name="q" type="hidden" value={activeQuery} /> : null}
@@ -236,7 +307,7 @@ export default async function AdminMcpTelemetryPage({ searchParams }: AdminMcpPa
 
           <div className="grid gap-4 border-t border-slate-100 p-3 lg:grid-cols-[1.4fr_1fr]">
             <div>
-              <div className="mb-1.5 flex items-center justify-between gap-2"><p className="text-xs font-semibold text-slate-700">{dashboard.snapshot.label} activity</p><p className="text-[10px] text-slate-400">{dashboard.trend[0]?.label ?? "Start"} — {dashboard.trend.at(-1)?.label ?? "Now"}</p></div>
+              <div className="mb-1.5 flex items-center justify-between gap-2"><p className="text-xs font-semibold text-slate-700">{dashboard.snapshot.label} activity</p><p className="text-[10px] text-slate-400">{dashboard.trend[0]?.label ?? "Start"} — {dashboard.trend.at(-1)?.label ?? "Now"} · Pacific time</p></div>
               <div aria-label={`MCP request trend: ${number(dashboard.metrics.invocations)} requests during ${dashboard.snapshot.label.toLowerCase()}`} className="flex h-14 items-end gap-1" role="img">
                 {dashboard.trend.map((bucket, index) => (
                   <div aria-hidden="true" className="min-w-0 flex-1 rounded-t bg-sky-500 transition hover:bg-sky-600" key={`${bucket.label}:${index}`} style={{ height: `${Math.max(bucket.invocations > 0 ? 4 : 1, (bucket.invocations / maxTrend) * 56)}px` }} title={`${bucket.label}: ${bucket.invocations} requests, ${bucket.errors} errors, ${bucket.quotaLimited} quota limited`} />
@@ -286,17 +357,25 @@ export default async function AdminMcpTelemetryPage({ searchParams }: AdminMcpPa
           <PaginationControls basePath="/app/admin/mcp" itemLabel="MCP requests" page={page} pageCount={pageCount} pageSize={pageSize} searchParams={{ q: activeQuery, surface: activeSurface, source: activeSource, tool: activeTool, outcome: activeOutcome, decision: activeDecision, timeSpan: activeTimeSpan, snapshot: activeSnapshotPeriod, toolPeriod: activeToolPeriod, sourcePeriod: activeSourcePeriod, includeCanary: includeCanary ? "1" : null }} showPageJump totalCount={eventPage.totalCount} visibleCount={eventPage.items.length} />
 
           <div className="w-full max-w-full overflow-x-auto overscroll-x-contain rounded-xl border border-slate-200">
-            <table className="w-[1760px] min-w-[1760px] table-fixed text-left text-xs">
+            <table className="table-fixed text-left text-xs" style={{ width: "3350px", minWidth: "3350px" }}>
               <colgroup>
-                <col className="w-[105px]" /><col className="w-[160px]" /><col className="w-[175px]" /><col className="w-[110px]" />
-                <col className="w-[220px]" /><col className="w-[210px]" /><col className="w-[95px]" /><col className="w-[95px]" />
-                <col className="w-[75px]" /><col className="w-[165px]" /><col className="w-[180px]" /><col className="w-[110px]" /><col className="w-[60px]" />
+                <col style={{ width: "100px" }} /><col style={{ width: "155px" }} /><col style={{ width: "180px" }} />
+                <col style={{ width: "150px" }} /><col style={{ width: "105px" }} /><col style={{ width: "230px" }} />
+                <col style={{ width: "70px" }} /><col style={{ width: "65px" }} /><col style={{ width: "55px" }} />
+                <col style={{ width: "170px" }} /><col style={{ width: "80px" }} /><col style={{ width: "115px" }} />
+                <col style={{ width: "205px" }} /><col style={{ width: "140px" }} /><col style={{ width: "150px" }} />
+                <col style={{ width: "80px" }} /><col style={{ width: "120px" }} /><col style={{ width: "65px" }} />
+                <col style={{ width: "110px" }} /><col style={{ width: "75px" }} /><col style={{ width: "170px" }} />
+                <col style={{ width: "120px" }} /><col style={{ width: "200px" }} /><col style={{ width: "180px" }} />
+                <col style={{ width: "190px" }} /><col style={{ width: "70px" }} />
               </colgroup>
               <thead className="sticky top-0 z-20 bg-slate-50 text-[10px] uppercase tracking-[0.08em] text-slate-500">
                 <tr>{[
-                  { label: "Status", className: "sticky left-0 z-30 bg-slate-50" }, { label: "Entrypoint" }, { label: "Provider signal / client" },
-                  { label: "Requested" }, { label: "Target" }, { label: "Tool" }, { label: "Decision" }, { label: "Perspective" },
-                  { label: "Latency" }, { label: "Scan ID" }, { label: "Request / event" }, { label: "Opaque IDs" },
+                  { label: "Status", className: "sticky left-0 z-30 bg-slate-50" }, { label: "Entrypoint" }, { label: "Provider / client" },
+                  { label: "Requester / caller IP" }, { label: "Requested" }, { label: "Page" }, { label: "Tranco" }, { label: "Score" }, { label: "Top" },
+                  { label: "Privacy / CMP" }, { label: "A/R/O" }, { label: "Access" }, { label: "Transparency" }, { label: "Transport" }, { label: "Runtime" },
+                  { label: "Time" }, { label: "Outcome" }, { label: "From" }, { label: "Freshness" }, { label: "Language" }, { label: "Industry" },
+                  { label: "Mode" }, { label: "Usage" }, { label: "Scan ID" }, { label: "Scanner egress" },
                   { label: "Open", className: "sticky right-0 z-30 bg-slate-50" },
                 ].map(({ label, className }) => <th className={`border-b border-slate-200 px-2.5 py-1.5 font-semibold ${className ?? ""}`} key={label}>{label}</th>)}</tr>
               </thead>
@@ -305,25 +384,40 @@ export default async function AdminMcpTelemetryPage({ searchParams }: AdminMcpPa
                   const outcome = outcomePresentation(event.outcome);
                   const requested = formatRequestedDateTime(event.occurred_at);
                   const scanHref = getAdminAuthenticatedScanHref(event.scan_id);
+                  const matrix = event.evidence_matrix;
+                  const marker = event.scan_from ? getScanFromMarkerInput(event.scan_from) : null;
                   return (
-                    <tr className="group h-[54px] hover:bg-slate-50/70" key={event.event_id}>
+                    <tr className="group h-[62px] hover:bg-slate-50/70" key={event.event_id}>
                       <td className="sticky left-0 z-10 bg-white px-2.5 py-1.5 group-hover:bg-slate-50"><span className={`inline-flex items-center gap-1.5 font-semibold ${outcome.text}`}><span aria-hidden="true" className={`inline-block h-2.5 w-2.5 rounded-full ${outcome.dot}`} />{outcome.label}</span>{event.error_code ? <p className="mt-0.5 truncate text-[10px] text-rose-600" title={event.error_code}>{event.error_code}</p> : null}</td>
                       <td className="px-2.5 py-1.5"><span className={`inline-flex rounded-full px-1.5 py-0.5 text-[10px] font-semibold ring-1 ${surfaceClass(event.surface)}`}>{surfaceLabels[event.surface]}</span><p className="mt-1 text-[10px] text-slate-500">{event.auth_class}</p></td>
-                      <td className="px-2.5 py-1.5"><span className={`inline-flex max-w-full truncate rounded-full px-1.5 py-0.5 text-[10px] font-semibold ring-1 ${sourceClass(event.source, event.source_attribution)}`}>{sourceLabel(event.source, event.source_attribution)}</span><p className="mt-1 truncate text-[10px] text-slate-500" title={`${formatLabel(event.client_family)} · ${clientSignalReason(event.source_attribution, event.client_family)}`}>{formatLabel(event.client_family)} · {clientSignalReason(event.source_attribution, event.client_family)}</p></td>
+                      <td className="px-2.5 py-1.5"><span className={`inline-flex max-w-full truncate rounded-full px-1.5 py-0.5 text-[10px] font-semibold ring-1 ${sourceClass(event.source, event.source_attribution)}`}>{sourceLabel(event.source, event.source_attribution)}</span><p className="mt-0.5 truncate text-[10px] text-slate-500" title={`${formatLabel(event.client_family)} · ${clientSignalReason(event.source_attribution, event.client_family)}`}>{formatLabel(event.client_family)} · {clientSignalReason(event.source_attribution, event.client_family)}</p></td>
+                      <td className="px-2.5 py-1.5"><p className="truncate font-mono text-[10px] font-medium text-slate-700" title={sourceIpLabel(event)}>{sourceIpLabel(event)}</p><p className="mt-0.5 truncate text-[10px] text-slate-400">{event.source_ip_source.replaceAll("_", " ")}</p></td>
                       <td className="px-2.5 py-1.5 text-[10px] leading-4" title={formatAdminDateTime(event.occurred_at)}><p>{requested.date}</p><p className="text-slate-500">{requested.time}</p></td>
-                      <td className="px-2.5 py-1.5"><p className="truncate font-mono text-[11px] font-semibold text-slate-900" title={event.target_hostname ?? "No target hostname"}>{event.target_hostname ?? "—"}</p><p className="mt-1 truncate text-[10px] text-slate-500">{[event.freshness ? formatLabel(event.freshness) : null, provenanceLabel(event.target_provenance)].filter(Boolean).join(" · ") || "No target context"}</p></td>
-                      <td className="px-2.5 py-1.5"><p className="truncate font-mono text-[10px] font-semibold text-slate-900" title={event.tool_name}>{event.tool_name}</p><p className="mt-1 truncate text-[10px] text-slate-500">{formatLabel(event.transport_outcome)}</p></td>
-                      <td className="px-2.5 py-1.5"><span className={`inline-flex rounded-full px-1.5 py-0.5 text-[10px] font-semibold ring-1 ${decisionClass(event.scan_decision)}`}>{formatLabel(event.scan_decision)}</span>{event.scan_status ? <p className="mt-1 truncate text-[10px] text-slate-500">{formatLabel(event.scan_status)}</p> : null}</td>
-                      <td className="px-2.5 py-1.5"><p className="font-medium text-slate-700">{event.scan_from ? formatLabel(event.scan_from) : "—"}</p>{provenanceLabel(event.perspective_provenance) ? <p className="mt-1 truncate text-[10px] text-slate-500">{provenanceLabel(event.perspective_provenance)}</p> : null}</td>
-                      <td className="px-2.5 py-1.5 font-semibold text-slate-900">{duration(event.duration_ms)}</td>
+                      <td className="px-2.5 py-1.5"><p className="line-clamp-2 break-all font-semibold leading-4 text-slate-900" title={event.page_url ?? event.target_hostname ?? "Page URL unavailable"}>{event.page_url ?? event.target_hostname ?? "Page URL unavailable"}</p></td>
+                      <td className="px-2.5 py-1.5 font-medium text-slate-700">{event.tranco_rank ? `#${event.tranco_rank.toLocaleString()}` : "—"}</td>
+                      <td className="px-2.5 py-1.5 font-semibold text-slate-900">{event.score !== null ? <><span>{event.score}</span><span className="text-[11px] font-normal text-slate-400">/100</span></> : "—"}</td>
+                      <td className="px-2.5 py-1.5 font-semibold text-slate-900">{event.top_finding_count ?? "—"}</td>
+                      <td className="px-2.5 py-1.5"><p className="flex gap-2 text-[10px]"><EvidenceCode code="Privacy" label="Privacy notice" result={matrix?.privacyConsent.privacyNotice ?? null} /><EvidenceCode code="CMP" label="CMP framework" result={matrix?.privacyConsent.cmp ?? null} /></p><p className="truncate text-[10px] text-slate-500" title={evidenceTitle("Consent mechanism", matrix?.privacyConsent.mechanism ?? null)}>Mechanism {matrix?.privacyConsent.cmpVendorName ?? (matrix?.privacyConsent.mechanism ? EVIDENCE_MARKS[matrix.privacyConsent.mechanism.status].mark : "·")}</p></td>
+                      <td className="px-2.5 py-1.5"><p className="flex gap-2 text-[10px]"><EvidenceCode code="A" label="Accept" result={matrix?.privacyConsent.accept ?? null} /><EvidenceCode code="R" label="Reject" result={matrix?.privacyConsent.reject ?? null} /><EvidenceCode code="O" label="Options" result={matrix?.privacyConsent.options ?? null} /></p><p className="truncate text-[10px] text-slate-400">Canonical controls</p></td>
+                      <td className="px-2.5 py-1.5 font-medium leading-4 text-slate-700"><span className="line-clamp-2 break-words">{accessLabel(event)}</span></td>
+                      <td className="px-2.5 py-1.5"><EvidenceGroupCell aggregate={matrix?.transparency.aggregate ?? null} labels={TRANSPARENCY_LABELS} policyEvidence={matrix?.policyEvidence} results={matrix?.transparency.results ?? null} /></td>
+                      <td className="px-2.5 py-1.5"><EvidenceGroupCell aggregate={matrix?.transport.aggregate ?? null} labels={TRANSPORT_LABELS} results={matrix?.transport.results ?? null} /></td>
+                      <td className="px-2.5 py-1.5"><EvidenceGroupCell aggregate={matrix?.runtime.aggregate ?? null} labels={RUNTIME_LABELS} results={matrix?.runtime.results ?? null} /></td>
+                      <td className="px-2.5 py-1.5 font-medium text-slate-800"><p>{scanElapsed(event.scan_elapsed_seconds)}</p><p className="text-[10px] text-slate-400">call {duration(event.duration_ms)}</p></td>
+                      <td className="px-2.5 py-1.5"><p className="truncate font-medium text-slate-700" title={event.scan_outcome ?? event.scan_status ?? event.outcome}>{formatLabel(event.scan_outcome ?? event.scan_status ?? event.outcome)}</p><p className="mt-0.5 truncate text-[10px] text-slate-400">{formatLabel(event.outcome)}</p></td>
+                      <td className="px-2.5 py-1.5" title={event.scan_from ? formatLabel(event.scan_from) : "Scan location not recorded"}>{marker ? <span aria-label={formatLabel(event.scan_from)} className="inline-flex"><ScanFromMarker flag={"flag" in marker ? marker.flag : undefined} icon={"icon" in marker ? marker.icon : undefined} selected /></span> : "—"}</td>
+                      <td className="px-2.5 py-1.5"><span className="inline-flex rounded-full bg-slate-100 px-1.5 py-0.5 text-[10px] font-semibold text-slate-600 ring-1 ring-slate-200">{freshnessLabel(event.freshness)}</span></td>
+                      <td className="px-2.5 py-1.5 font-medium uppercase text-slate-700">{event.primary_language ?? "—"}</td>
+                      <td className="truncate px-2.5 py-1.5 text-slate-700" title={event.industry ?? undefined}>{event.industry ?? "—"}</td>
+                      <td className="px-2.5 py-1.5"><span className={`inline-flex rounded-full px-1.5 py-0.5 text-[10px] font-semibold ring-1 ${decisionClass(event.scan_decision)}`}>{formatLabel(event.mode_detail ?? event.scan_decision)}</span><p className="mt-0.5 truncate text-[10px] text-slate-500">{event.mode_format ? formatLabel(event.mode_format) : provenanceLabel(event.target_provenance) ?? "MCP"}</p></td>
+                      <td className="px-2.5 py-1.5" title={`request ${event.request_id} · event ${event.event_id}`}><p className="truncate font-mono text-[10px] font-semibold text-slate-900">{event.tool_name}</p><p className="mt-0.5 truncate text-[10px] text-slate-500">{formatLabel(event.transport_outcome)} · {formatLabel(event.quota_outcome)}</p></td>
                       <td className="px-2.5 py-1.5"><p className="truncate font-mono text-[10px]" title={event.scan_id ?? undefined}>{event.scan_id ?? "—"}</p></td>
-                      <td className="px-2.5 py-1.5 font-mono text-[10px] text-slate-500"><p className="truncate" title={event.request_id}>req {event.request_id}</p><p className="mt-1 truncate" title={event.event_id}>evt {event.event_id}</p></td>
-                      <td className="px-2.5 py-1.5 font-mono text-[10px] text-slate-500"><p className="truncate" title={event.session_id ?? undefined}>session {event.session_id ?? "—"}</p><p className="mt-1 truncate" title={event.actor_id ?? undefined}>actor {event.actor_id ?? "—"}</p></td>
+                      <td className="px-2.5 py-1.5"><p className="truncate font-mono text-[10px] text-slate-700" title={event.scanner_egress_id ?? "Scanner egress not recorded"}>{event.scanner_egress_id ?? "Not recorded"}</p><p className="mt-0.5 truncate text-[10px] text-slate-400" title={event.scanner_egress_provider ?? undefined}>{event.scanner_egress_provider ?? "Outbound runtime"}</p></td>
                       <td className="sticky right-0 z-10 border-l border-slate-100 bg-white px-2 py-1.5 text-center group-hover:bg-slate-50">{scanHref ? <Link aria-label={`Open scan ${event.scan_id}`} className="inline-flex h-8 w-8 items-center justify-center rounded-full border border-slate-300 bg-white font-semibold text-sky-700" href={scanHref} prefetch={false}>→</Link> : <span className="text-slate-300">—</span>}</td>
                     </tr>
                   );
                 })}
-                {eventPage.items.length === 0 ? <tr><td className="px-4 py-10 text-center text-sm text-slate-500" colSpan={13}>No MCP requests match these filters.</td></tr> : null}
+                {eventPage.items.length === 0 ? <tr><td className="px-4 py-10 text-center text-sm text-slate-500" colSpan={26}>No MCP requests match these filters.</td></tr> : null}
               </tbody>
             </table>
           </div>
