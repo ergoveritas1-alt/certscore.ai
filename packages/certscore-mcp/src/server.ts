@@ -1,9 +1,9 @@
 import { CertScoreClient, CertScoreTimeoutError } from "@certscore/sdk";
-import { certScoreMcpToolContracts } from "@certscore/api-contracts";
+import { certScoreMcpToolContracts, isCanonicalScanId } from "@certscore/api-contracts";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import type { RequestInfo } from "@modelcontextprotocol/sdk/types.js";
 import { CERTSCORE_MCP_VERSION } from "./version.js";
-import { boundEvidencePacket, buildScanBundle, exportFindings, findingListText, limitPreConsentRows, markdownReportText, MAX_EVIDENCE_PACKET_CHARS, normalizeDetail, normalizeFormat, paginateFindingList, preConsentInventoryText, pulseReportText, scanBundleText, scanStatusText, toInvalidArgumentsToolError, toToolError, toToolResult, withMcpAgentGuidance, withMcpScanProvenanceGuidance } from "./tools.js";
+import { boundEvidencePacket, buildScanBundle, exportFindings, findingListText, limitPreConsentRows, markdownReportText, MAX_EVIDENCE_PACKET_CHARS, normalizeDetail, normalizeFormat, paginateFindingList, preConsentInventoryText, pulseReportText, scanBundleText, scanStatusText, toInvalidArgumentsToolError, toInvalidScanIdToolError, toToolError, toToolResult, withMcpAgentGuidance, withMcpScanProvenanceGuidance } from "./tools.js";
 
 export interface CertScoreMcpOptions {
   apiKey?: string;
@@ -15,11 +15,17 @@ export interface CertScoreMcpOptions {
   timeout?: number;
   toolProfile?: "full" | "light";
   exampleDomainDemoUrl?: string | null;
-  onToolInvocation?: (observation: McpToolInvocationObservation) => void | Promise<void>;
+  onToolInvocation?: (
+    observation: McpToolInvocationObservation,
+    requestContext: McpToolInvocationRequestContext,
+  ) => void | Promise<void>;
 }
 
 type CertScoreMcpToolName = (typeof certScoreMcpToolContracts)[number]["name"];
 type McpRequestExtra = { requestInfo?: RequestInfo };
+export type McpToolInvocationRequestContext = {
+  headers: RequestInfo["headers"] | null;
+};
 type CreateScanInput = {
   url: string;
   detail?: "tiny" | "quick" | "standard" | "full" | "summary" | "evidence";
@@ -54,6 +60,8 @@ export type McpToolInvocationObservation = {
   isCanary: boolean;
   outcome: "success" | "error" | "rate_limited";
   quotaOutcome: "allowed" | "rate_limited";
+  requestedResource: string | null;
+  requestedResourceType: "url" | "domain" | "scan_id" | "job_id" | null;
   scanDecision: "reused" | "new" | "unavailable" | "not_applicable";
   scanFrom: "eu_de" | "eu_ie" | "california" | null;
   scanId: string | null;
@@ -178,6 +186,29 @@ function telemetryHostname(value: unknown) {
   }
 }
 
+function telemetryUrl(value: unknown) {
+  if (typeof value !== "string") return null;
+  try {
+    const parsed = new URL(value.includes("://") ? value : `https://${value}`);
+    if (parsed.protocol !== "http:" && parsed.protocol !== "https:") return null;
+    return parsed.origin.slice(0, 512);
+  } catch {
+    return null;
+  }
+}
+
+function requestedTelemetryResource(args: Record<string, unknown>) {
+  const scanId = boundedTelemetryToken(args.scanId, 128);
+  if (scanId) return { requestedResource: scanId, requestedResourceType: "scan_id" as const };
+  const jobId = boundedTelemetryToken(args.jobId, 128);
+  if (jobId) return { requestedResource: jobId, requestedResourceType: "job_id" as const };
+  const url = telemetryUrl(args.url);
+  if (url) return { requestedResource: url, requestedResourceType: "url" as const };
+  const domain = telemetryHostname(args.domain);
+  if (domain) return { requestedResource: domain, requestedResourceType: "domain" as const };
+  return { requestedResource: null, requestedResourceType: null };
+}
+
 function isCertScoreCanaryUrl(value: unknown) {
   if (typeof value !== "string") return false;
   try {
@@ -207,6 +238,7 @@ export function projectMcpToolInvocationObservation(input: {
   const outcome = rateLimited ? "rate_limited" : isError ? "error" : "success";
   const resultScanId = boundedTelemetryToken(result.scanId ?? result.scan_id ?? result.jobId, 128);
   const inputScanId = boundedTelemetryToken(args.scanId, 128);
+  const requestedResource = requestedTelemetryResource(args);
   const targetHostname = input.toolName === "certscore_scan_site"
     ? telemetryHostname(args.url)
     : input.toolName === "certscore_get_latest_domain_scan"
@@ -232,6 +264,7 @@ export function projectMcpToolInvocationObservation(input: {
     isCanary,
     outcome,
     quotaOutcome: rateLimited ? "rate_limited" : "allowed",
+    ...requestedResource,
     scanDecision,
     scanFrom: args.scanFrom === "eu_de" || args.scanFrom === "eu_ie" || args.scanFrom === "california"
       ? args.scanFrom
@@ -249,10 +282,11 @@ export function projectMcpToolInvocationObservation(input: {
 function observeToolInvocation(
   observer: CertScoreMcpOptions["onToolInvocation"],
   observation: McpToolInvocationObservation,
+  requestContext: McpToolInvocationRequestContext,
 ) {
   if (!observer) return;
   queueMicrotask(() => {
-    Promise.resolve().then(() => observer(observation)).catch((error) => {
+    Promise.resolve().then(() => observer(observation, requestContext)).catch((error) => {
       console.error("[certscore-mcp] telemetry observer failed", {
         errorName: error instanceof Error ? error.name : "UnknownError",
         toolName: observation.toolName,
@@ -285,6 +319,17 @@ export function createCertScoreMcpServer(options: CertScoreMcpOptions = {}) {
     ? toInvalidArgumentsToolError(message)
     : sdkCreateToolError(message);
   const lightTools = new Set<CertScoreMcpToolName>(["certscore_scan_site", "certscore_get_scan_status", "certscore_get_scan_bundle"]);
+  const scanIdTools = new Set<CertScoreMcpToolName>([
+    "certscore_explain_finding",
+    "certscore_export_findings",
+    "certscore_get_evidence",
+    "certscore_get_pre_consent_cookies_trackers",
+    "certscore_get_report",
+    "certscore_get_scan",
+    "certscore_get_scan_bundle",
+    "certscore_get_scan_status",
+    "certscore_list_findings",
+  ]);
   const registerMcpTool = server.registerTool.bind(server) as any;
   const registerTool = (name: CertScoreMcpToolName, contract: unknown, handler: unknown) => {
     if (options.toolProfile === "light" && !lightTools.has(name)) {
@@ -294,13 +339,18 @@ export function createCertScoreMcpServer(options: CertScoreMcpOptions = {}) {
     registerMcpTool(name, contract, async (input: unknown, extra: McpRequestExtra) => {
       const startedAt = Date.now();
       try {
-        const result = await typedHandler(input, extra);
+        const scanId = input && typeof input === "object" && !Array.isArray(input)
+          ? (input as { scanId?: unknown }).scanId
+          : null;
+        const result = scanIdTools.has(name) && !isCanonicalScanId(scanId)
+          ? toInvalidScanIdToolError()
+          : await typedHandler(input, extra);
         observeToolInvocation(options.onToolInvocation, projectMcpToolInvocationObservation({
           args: input,
           durationMs: Date.now() - startedAt,
           result,
           toolName: name,
-        }));
+        }), { headers: extra.requestInfo?.headers ?? null });
         return result;
       } catch (error) {
         observeToolInvocation(options.onToolInvocation, {
@@ -313,7 +363,7 @@ export function createCertScoreMcpServer(options: CertScoreMcpOptions = {}) {
           errorCode: "handler_exception",
           outcome: "error",
           transportOutcome: "mcp_error",
-        });
+        }, { headers: extra.requestInfo?.headers ?? null });
         throw error;
       }
     });

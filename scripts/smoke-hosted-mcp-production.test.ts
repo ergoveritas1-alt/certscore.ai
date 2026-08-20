@@ -25,13 +25,13 @@ test("hosted MCP canary protects the exact Light and full tool contracts", () =>
 });
 
 test("hosted MCP canary requires a retained scan and environment-only bearer", () => {
-  assert.throws(() => readCanaryOptions({}, []), /existing retained scan ID/);
+  assert.throws(() => readCanaryOptions({}, []), /canonical UUID/);
   assert.throws(
     () => readCanaryOptions({ CERTSCORE_MCP_CANARY_SCAN_ID: "scan_123" }, []),
-    /short-lived scan:read mcp token/,
+    /canonical UUID/,
   );
   assert.throws(
-    () => readCanaryOptions({ CERTSCORE_MCP_ACCESS_TOKEN: "secret", CERTSCORE_MCP_CANARY_SCAN_ID: "scan_123" }, ["--access-token=secret"]),
+    () => readCanaryOptions({ CERTSCORE_MCP_ACCESS_TOKEN: "secret", CERTSCORE_MCP_CANARY_SCAN_ID: "11111111-1111-4111-8111-111111111111" }, ["--access-token=secret"]),
     /only through CERTSCORE_MCP_ACCESS_TOKEN/,
   );
 });

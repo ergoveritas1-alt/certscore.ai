@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { normalizeScanFrom, previewScanRequestSchema } from "@website-signal-risk-scanner/shared";
-import { checkDomainDns } from "../../../server/domains/domain-dns";
+import { checkDomainDns, isDomainDnsPreflightError } from "../../../server/domains/domain-dns";
 import {
   normalizeLocalV2DagRunViaLambda,
   normalizeLocalV2DagScanProfile
@@ -89,6 +89,15 @@ export async function POST(request: Request) {
       }
     );
   } catch (error) {
+    if (isDomainDnsPreflightError(error)) {
+      return NextResponse.json(
+        { code: error.code, error: error.message },
+        {
+          headers: error.retryAfterSeconds ? { "Retry-After": String(error.retryAfterSeconds) } : undefined,
+          status: error.retryable ? 503 : 400
+        }
+      );
+    }
     return NextResponse.json(
       {
         error: error instanceof Error ? error.message : "Preview scan could not be created."

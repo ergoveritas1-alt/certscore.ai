@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
-import { createCertScoreMcpServer, projectMcpToolInvocationObservation } from "./server.js";
+import { createCertScoreMcpServer, projectMcpToolInvocationObservation, type McpToolInvocationObservation } from "./server.js";
 
 test("scan-site telemetry classifies new and reused scans without retaining a URL path", () => {
   const created = projectMcpToolInvocationObservation({
@@ -25,6 +25,8 @@ test("scan-site telemetry classifies new and reused scans without retaining a UR
     isCanary: false,
     outcome: "success",
     quotaOutcome: "allowed",
+    requestedResource: "https://www.example.com",
+    requestedResourceType: "url",
     scanDecision: "new",
     scanFrom: "eu_de",
     scanId: "scan_new",
@@ -74,6 +76,8 @@ test("status and bundle telemetry retain only stable scan metadata", () => {
     assert.equal(observation.toolName, toolName);
     assert.equal(observation.scanId, "scan_123");
     assert.equal(observation.scanDecision, "not_applicable");
+    assert.equal(observation.requestedResource, "scan_123");
+    assert.equal(observation.requestedResourceType, "scan_id");
     assert.equal(observation.targetHostname, null);
   }
 });
@@ -110,10 +114,14 @@ test("failed and rate-limited tool results produce bounded outcomes", () => {
   });
   assert.equal(failed.outcome, "error");
   assert.equal(failed.errorCode, "not_found");
+  assert.equal(failed.requestedResource, "scan_123");
+  assert.equal(failed.requestedResourceType, "scan_id");
   assert.equal(JSON.stringify(failed).includes("sensitive detail"), false);
   assert.equal(limited.outcome, "rate_limited");
   assert.equal(limited.quotaOutcome, "rate_limited");
   assert.equal(limited.scanDecision, "unavailable");
+  assert.equal(limited.requestedResource, "https://example.com");
+  assert.equal(limited.requestedResourceType, "url");
 });
 
 test("telemetry observer failure never changes an MCP tool result", async () => {
@@ -141,6 +149,41 @@ test("telemetry observer failure never changes an MCP tool result", async () => 
     assert.equal(result.isError, undefined);
     assert.equal((result.structuredContent as Record<string, unknown>).scanId, "scan_123");
     await new Promise((resolve) => setImmediate(resolve));
+  } finally {
+    globalThis.fetch = previousFetch;
+    await client.close();
+    await server.close();
+  }
+});
+
+test("malformed scan IDs fail before origin work and still emit bounded telemetry", async () => {
+  const previousFetch = globalThis.fetch;
+  let fetchCalls = 0;
+  globalThis.fetch = (async () => {
+    fetchCalls += 1;
+    throw new Error("origin request must not start");
+  }) as typeof fetch;
+  const observations: McpToolInvocationObservation[] = [];
+  const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
+  const server = createCertScoreMcpServer({
+    onToolInvocation: (observation) => { observations.push(observation); },
+    toolProfile: "light",
+  });
+  const client = new Client({ name: "invalid-scan-id-test", version: "1.0.0" });
+  await Promise.all([server.connect(serverTransport), client.connect(clientTransport)]);
+  try {
+    const result = await client.callTool({
+      name: "certscore_get_scan_bundle",
+      arguments: { scanId: "x" },
+    });
+    assert.equal(result.isError, true);
+    assert.match(JSON.stringify(result.content), /invalid_scan_id/);
+    await new Promise((resolve) => setImmediate(resolve));
+    assert.equal(fetchCalls, 0);
+    assert.equal(observations.length, 1);
+    assert.equal(observations[0]?.errorCode, "invalid_scan_id");
+    assert.equal(observations[0]?.requestedResource, "x");
+    assert.equal(observations[0]?.requestedResourceType, "scan_id");
   } finally {
     globalThis.fetch = previousFetch;
     await client.close();

@@ -7,7 +7,7 @@ import {
 } from "@website-signal-risk-scanner/shared";
 import { getCurrentUser } from "../../../server/auth";
 import { isBetterAuthConfigurationError } from "../../../server/better-auth/env";
-import { checkDomainDns } from "../../../server/domains/domain-dns";
+import { checkDomainDns, isDomainDnsPreflightError } from "../../../server/domains/domain-dns";
 import { createOrQueueDomainScan } from "../../../server/domains/create-domain";
 import { createAnonymousFullScan } from "../../../server/scans/create-anonymous-full-scan";
 import {
@@ -353,6 +353,18 @@ export async function POST(request: Request) {
       }
     );
   } catch (error) {
+    if (isDomainDnsPreflightError(error)) {
+      return NextResponse.json(
+        { code: error.code, error: error.message },
+        {
+          headers: {
+            "Cache-Control": "no-store",
+            ...(error.retryAfterSeconds ? { "Retry-After": String(error.retryAfterSeconds) } : {})
+          },
+          status: error.retryable ? 503 : 400
+        }
+      );
+    }
     if (isAnonymousScanQuotaError(error)) {
       return NextResponse.json(
         {

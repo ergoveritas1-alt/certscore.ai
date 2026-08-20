@@ -65,6 +65,52 @@ test("Pulse validates DNS before creating a queued request or claiming the domai
   assert.match(routeSource, /dnsStatus\.retryable \? 503 : 400/);
 });
 
+test("full scans validate DNS before any scan creation path", async () => {
+  const routeSource = await readFile("apps/web/app/api/full-scan/route.ts", "utf8");
+  const dnsIndex = routeSource.lastIndexOf("const dnsStatuses = await Promise.all");
+
+  assert.ok(dnsIndex > 0);
+  for (const creationCall of [
+    "const anonymousScan = await createAnonymousFullScan",
+    "const preview = await createPreviewScan",
+    "createOrQueueDomainScan({",
+  ]) {
+    assert.ok(routeSource.lastIndexOf(creationCall) > dnsIndex, `${creationCall} must remain behind DNS preflight`);
+  }
+  assert.match(routeSource, /code: "domain_not_found"/);
+});
+
+test("scan creation primitives repeat DNS validation immediately before queueing", async () => {
+  const [anonymousSource, workspaceSource, previewSource] = await Promise.all([
+    readFile("apps/web/server/scans/create-anonymous-full-scan.ts", "utf8"),
+    readFile("apps/web/server/scans/create-full-scan.ts", "utf8"),
+    readFile("apps/web/server/preview-scan/create-preview-scan.ts", "utf8")
+  ]);
+
+  const anonymousDns = anonymousSource.indexOf("await requireDomainDns(input.hostname)");
+  assert.ok(anonymousDns > anonymousSource.indexOf('reuseDecision?.action === "reuse"'));
+  assert.ok(anonymousDns < anonymousSource.indexOf(": await claimAnonymousScanDailyQuota"));
+  assert.ok(anonymousDns < anonymousSource.indexOf("const scan = await createQueuedFullScan"));
+  assert.match(anonymousSource, /resolutionMode: "dns_preflight_rejected"/);
+
+  const workspaceDns = workspaceSource.indexOf("const dnsStatus = await checkDomainDns(domainRecord.domain.hostname)");
+  assert.ok(workspaceDns > workspaceSource.indexOf('reuseDecision?.action === "reuse"'));
+  assert.ok(workspaceDns < workspaceSource.indexOf("if (input.enforceMonthlyUsageLimit)"));
+  assert.ok(workspaceDns < workspaceSource.indexOf("scan = await createQueuedFullScan"));
+  assert.match(workspaceSource, /resolutionMode: "dns_preflight_rejected"/);
+
+  const previewDns = previewSource.indexOf("await requireDomainDns(input.hostname)");
+  assert.ok(previewDns > 0);
+  assert.ok(previewDns < previewSource.indexOf("const domain = await findOrCreateAnonymousPreviewDomain"));
+  assert.ok(previewDns < previewSource.indexOf("const scan = await createPreviewScanRecord"));
+});
+
+test("Pulse scan retrieval uses the canonical UUID validator", async () => {
+  const routeSource = await readFile("apps/web/app/api/v1/pulse/route.ts", "utf8");
+  assert.match(routeSource, /isCanonicalScanId\(scanId\)/);
+  assert.doesNotMatch(routeSource, /const SCAN_ID_PATTERN/);
+});
+
 test("Pulse domain cooldown is claimed atomically under concurrent requests", async () => {
   const repositorySource = await readFile("apps/web/server/pulse/repository.ts", "utf8");
   const functionAt = repositorySource.indexOf("export async function claimPulseDomainScanCreation");

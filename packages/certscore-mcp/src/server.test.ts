@@ -90,7 +90,7 @@ function assertToolOutputSchema(name: (typeof certScoreMcpToolContracts)[number]
 
 const pulse = {
   type: "certscore_pulse",
-  scanId: "scan_123",
+  scanId: "00000000-0000-4000-8000-000000000123",
   domain: "example.com",
   summary: { headline: "Automated scan surfaced review signals.", score: 72 },
   findings: [
@@ -103,7 +103,7 @@ const pulse = {
       evidence: {
         summary: "A third-party tracking request was observed before consent.",
         exampleEvents: [{ type: "request", vendor: "Example Analytics" }],
-        fullEvidenceUrl: "https://certscore.ai/scan/scan_123#finding-pre_consent_tracking_detected"
+        fullEvidenceUrl: "https://certscore.ai/scan/00000000-0000-4000-8000-000000000123#finding-pre_consent_tracking_detected"
       },
       evidenceDigest: { basis: "runtime_observation", hasTimingAnchor: true },
       reviewLenses: ["GDPR / ePrivacy"],
@@ -119,7 +119,7 @@ function apiFinding(id: string) {
   return {
     type: "certscore_finding",
     id,
-    scanId: "scan_123",
+    scanId: "00000000-0000-4000-8000-000000000123",
     label: "Tracking started before consent",
     criticality: "high",
     confidence: "good",
@@ -465,7 +465,7 @@ test("certscore_scan_site can return immediately for an explicitly asynchronous 
         type: "certscore_scan_job",
         status: "queued",
         jobId: "pulse_job_123",
-        scanId: "scan_123",
+        scanId: "00000000-0000-4000-8000-000000000123",
         executionMode: "new_scan",
         reused: false,
         freshnessDecision: "refresh_requested_new_scan"
@@ -481,10 +481,10 @@ test("certscore_scan_site can return immediately for an explicitly asynchronous 
       const result = parseToolJson(raw);
       assert.equal(result.type, "certscore_scan_job");
       assert.equal(result.status, "queued");
-      assert.equal(result.reportUrl, "https://certscore.ai/scan/scan_123");
+      assert.equal(result.reportUrl, "https://certscore.ai/scan/00000000-0000-4000-8000-000000000123");
       assert.equal((result.provenance as Record<string, unknown>).mode, "new_scan_started");
       assert.match(raw.content[0]?.type === "text" ? raw.content[0].text : "", /provenance=new_scan_started/);
-      assert.match(raw.content[0]?.type === "text" ? raw.content[0].text : "", /full report=https:\/\/certscore\.ai\/scan\/scan_123/);
+      assert.match(raw.content[0]?.type === "text" ? raw.content[0].text : "", /full report=https:\/\/certscore\.ai\/scan\/00000000-0000-4000-8000-000000000123/);
       assert.match(mock.calls[0] ?? "", /\/api\/v2\/scans$/);
     });
   } finally {
@@ -584,9 +584,9 @@ test("certscore_scan_site waits by default and returns the completed scan resour
         type: "certscore_scan_job",
         status: "queued",
         jobId: "pulse_job_123",
-        scanId: "scan_123",
+        scanId: "00000000-0000-4000-8000-000000000123",
         retryAfterSeconds: 0,
-        links: { status: "https://certscore.ai/api/v2/scans/scan_123/status" }
+        links: { status: "https://certscore.ai/api/v2/scans/00000000-0000-4000-8000-000000000123/status" }
       }
     },
     {
@@ -597,7 +597,7 @@ test("certscore_scan_site waits by default and returns the completed scan resour
         score: 78,
         riskLevel: "monitor",
         jobId: "pulse_job_123",
-        scanId: "scan_123"
+        scanId: "00000000-0000-4000-8000-000000000123"
       }
     },
     {
@@ -605,7 +605,7 @@ test("certscore_scan_site waits by default and returns the completed scan resour
       body: {
         type: "certscore_scan",
         status: "completed",
-        scanId: "scan_123",
+        scanId: "00000000-0000-4000-8000-000000000123",
         domain: "example.com",
         scanTimeSeconds: 21.4
       }
@@ -621,12 +621,12 @@ test("certscore_scan_site waits by default and returns the completed scan resour
       assert.equal(result.status, "completed");
       assert.equal(result.scanTimeSeconds, 21.4);
       assert.equal(mock.calls.length, 3);
-      assert.match(mock.calls[1] ?? "", /\/api\/v2\/scans\/scan_123\/status$/);
-      assert.match(mock.calls[2] ?? "", /\/api\/v2\/scans\/scan_123$/);
+      assert.match(mock.calls[1] ?? "", /\/api\/v2\/scans\/00000000-0000-4000-8000-000000000123\/status$/);
+      assert.match(mock.calls[2] ?? "", /\/api\/v2\/scans\/00000000-0000-4000-8000-000000000123$/);
       assert.equal(mock.requestHeaders[0]?.get("x-certscore-mcp-internal-operation"), null);
       assert.equal(mock.requestHeaders[1]?.get("x-certscore-mcp-internal-operation"), "scan_site_wait");
       assert.equal(mock.requestHeaders[2]?.get("x-certscore-mcp-internal-operation"), "scan_site_wait");
-      assert.equal(mock.requestHeaders[1]?.get("x-certscore-mcp-internal-scan-id"), "scan_123");
+      assert.equal(mock.requestHeaders[1]?.get("x-certscore-mcp-internal-scan-id"), "00000000-0000-4000-8000-000000000123");
       assert.match(mock.requestHeaders[1]?.get("x-certscore-mcp-internal-proof") ?? "", /^[A-Za-z0-9_-]+$/);
     }, {
       anonymousRequesterSecret: "mcp-internal-read-test-secret",
@@ -647,9 +647,9 @@ test("certscore_scan_site preserves the accepted scan identity when follow-up po
         type: "certscore_scan_job",
         status: "queued",
         jobId: "pulse_job_123",
-        scanId: "scan_123",
+        scanId: "00000000-0000-4000-8000-000000000123",
         retryAfterSeconds: 0,
-        links: { status: "https://certscore.ai/api/v2/scans/scan_123/status" }
+        links: { status: "https://certscore.ai/api/v2/scans/00000000-0000-4000-8000-000000000123/status" }
       }
     },
     {
@@ -671,7 +671,7 @@ test("certscore_scan_site preserves the accepted scan identity when follow-up po
 
       assert.equal(result.type, "certscore_scan_job");
       assert.equal(result.status, "queued");
-      assert.equal(result.scanId, "scan_123");
+      assert.equal(result.scanId, "00000000-0000-4000-8000-000000000123");
       assert.equal(result.jobId, "pulse_job_123");
       assert.equal(result.recommendedNextTool, "certscore_get_scan_status");
       assert.equal(result.error, null);
@@ -779,8 +779,8 @@ test("certscore_get_scan_status preserves terminal API v2 completed-limited no-g
       status: 200,
       body: {
         type: "certscore_scan_job",
-        jobId: "scan_123",
-        scanId: "scan_123",
+        jobId: "00000000-0000-4000-8000-000000000123",
+        scanId: "00000000-0000-4000-8000-000000000123",
         domain: "example.com",
         status: "completed_limited",
         phase: "completed",
@@ -802,7 +802,7 @@ test("certscore_get_scan_status preserves terminal API v2 completed-limited no-g
   ]);
   try {
     await withMcpClient(async (client) => {
-      const result = parseToolJson(await client.callTool({ name: "certscore_get_scan_status", arguments: { scanId: "scan_123" } }));
+      const result = parseToolJson(await client.callTool({ name: "certscore_get_scan_status", arguments: { scanId: "00000000-0000-4000-8000-000000000123" } }));
       assert.equal(result.status, "completed_limited");
       assert.equal(result.resultDisposition, "no_go");
       assert.equal((result.noGo as Record<string, unknown>).reasonCode, "parked_or_placeholder");
@@ -812,7 +812,7 @@ test("certscore_get_scan_status preserves terminal API v2 completed-limited no-g
       assert.equal((result.error as Record<string, unknown>).recommendedNextAction, "Publish the intended site.");
       assert.match(String(result.observationOnlyDisclaimer), /not proof of compliance/i);
       assert.equal(result.scanTimeSeconds, 3);
-      assert.match(mock.calls[0] ?? "", /\/api\/v2\/scans\/scan_123\/status$/);
+      assert.match(mock.calls[0] ?? "", /\/api\/v2\/scans\/00000000-0000-4000-8000-000000000123\/status$/);
       assert.equal(mock.calls.length, 1);
     });
   } finally {
@@ -822,12 +822,17 @@ test("certscore_get_scan_status preserves terminal API v2 completed-limited no-g
 
 test("certscore_get_scan_status returns complete errors for failed, expired, and rate-limited scans", async () => {
   const statuses = ["failed", "expired", "rate_limited"] as const;
+  const scanIds = {
+    failed: "00000000-0000-4000-8000-000000000201",
+    expired: "00000000-0000-4000-8000-000000000202",
+    rate_limited: "00000000-0000-4000-8000-000000000203",
+  } as const;
   const mock = installFetch(statuses.map((status) => ({
     status: 200,
     body: {
       type: "certscore_scan_job",
       jobId: `scan_${status}`,
-      scanId: `scan_${status}`,
+      scanId: scanIds[status],
       status,
       ...(status === "rate_limited" ? { retryAfterSeconds: 45 } : {})
     }
@@ -837,7 +842,7 @@ test("certscore_get_scan_status returns complete errors for failed, expired, and
       for (const status of statuses) {
         const result = parseToolJson(await client.callTool({
           name: "certscore_get_scan_status",
-          arguments: { scanId: `scan_${status}` }
+          arguments: { scanId: scanIds[status] }
         }));
         const error = result.error as Record<string, unknown>;
         assert.equal(result.status, status);
@@ -859,7 +864,7 @@ test("certscore_get_report supports markdown and JSON report retrieval", async (
   const mock = installFetch([{ status: 200, text: "# CertScore Pulse" }, { status: 200, body: pulse }]);
   try {
     await withMcpClient(async (client) => {
-      const markdownRaw = await client.callTool({ name: "certscore_get_report", arguments: { scanId: "scan_123", format: "markdown" } });
+      const markdownRaw = await client.callTool({ name: "certscore_get_report", arguments: { scanId: "00000000-0000-4000-8000-000000000123", format: "markdown" } });
       const markdown = parseToolJson(markdownRaw);
       assertToolOutputSchema("certscore_get_report", markdown);
       assert.equal(markdown.value, "# CertScore Pulse");
@@ -868,10 +873,10 @@ test("certscore_get_report supports markdown and JSON report retrieval", async (
       assert.match(markdownText, /Provenance: existing_scan_retrieved/);
       assert.match(markdownText, /not legal advice, certification, or a compliance determination/i);
 
-      const jsonRaw = await client.callTool({ name: "certscore_get_report", arguments: { scanId: "scan_123", detail: "full" } });
+      const jsonRaw = await client.callTool({ name: "certscore_get_report", arguments: { scanId: "00000000-0000-4000-8000-000000000123", detail: "full" } });
       const json = parseToolJson(jsonRaw);
       assertToolOutputSchema("certscore_get_report", json);
-      assert.equal(json.scanId, "scan_123");
+      assert.equal(json.scanId, "00000000-0000-4000-8000-000000000123");
       const jsonText = jsonRaw.content[0]?.type === "text" ? jsonRaw.content[0].text : "";
       assert.match(jsonText, /Tracking started before consent/);
       assert.match(jsonText, /CertScore score=72/);
@@ -888,14 +893,14 @@ test("certscore_get_evidence retrieves the bounded Evidence JSON artifact", asyn
   const mock = installFetch([{ status: 200, body: { ...pulse, type: "certscore_pulse_evidence" } }]);
   try {
     await withMcpClient(async (client) => {
-      const raw = await client.callTool({ name: "certscore_get_evidence", arguments: { scanId: "scan_123" } });
+      const raw = await client.callTool({ name: "certscore_get_evidence", arguments: { scanId: "00000000-0000-4000-8000-000000000123" } });
       const evidence = parseToolJson(raw);
       assertToolOutputSchema("certscore_get_evidence", evidence);
       assert.equal(evidence.type, "certscore_pulse_evidence");
       const text = raw.content[0]?.type === "text" ? raw.content[0].text : "";
       assert.match(text, /Tracking started before consent/);
       assert.match(text, /Do not infer technologies that are not listed/i);
-      assert.match(mock.calls[0] ?? "", /scanId=scan_123/);
+      assert.match(mock.calls[0] ?? "", /scanId=00000000-0000-4000-8000-000000000123/);
       assert.match(mock.calls[0] ?? "", /detail=evidence/);
     });
   } finally {
@@ -906,7 +911,7 @@ test("certscore_get_evidence retrieves the bounded Evidence JSON artifact", asyn
 test("certscore_get_scan_bundle returns a compact canonical summary by default", async () => {
   const scan = {
     type: "certscore_scan",
-    scanId: "scan_123",
+    scanId: "00000000-0000-4000-8000-000000000123",
     domain: "example.com",
     url: "https://example.com",
     status: "completed",
@@ -916,21 +921,21 @@ test("certscore_get_scan_bundle returns a compact canonical summary by default",
     startedAt: "2026-08-15T03:39:14.064Z",
     completedAt: "2026-08-15T03:39:36.015Z",
     coverage: { status: "partial" },
-    links: { self: "https://certscore.ai/api/v2/scans/scan_123" },
+    links: { self: "https://certscore.ai/api/v2/scans/00000000-0000-4000-8000-000000000123" },
     disclaimer: "Automated public-web observations for human and agentic review."
   };
   const mock = installFetch([
     { status: 200, body: scan },
     { status: 200, body: { ...pulse, summary: { ...pulse.summary, score: 88 }, type: "certscore_pulse_summary", executiveSummary: { issuesToReview: 1 }, counts: { totalAutomatedFindingCount: 1 } } },
-    { status: 200, body: { type: "certscore_finding_list", scanId: "scan_123", findings: [apiFinding("finding_1")] } },
-    { status: 200, body: { type: "certscore_pre_consent_cookies_trackers", scanId: "scan_123", domain: "example.com", summary: { rowCount: 1, trackerCount: 1, cookieCount: 1, requestCount: 1, vendorCount: 1, domainCount: 2 }, rows: [preConsentRow("row_1")] } }
+    { status: 200, body: { type: "certscore_finding_list", scanId: "00000000-0000-4000-8000-000000000123", findings: [apiFinding("finding_1")] } },
+    { status: 200, body: { type: "certscore_pre_consent_cookies_trackers", scanId: "00000000-0000-4000-8000-000000000123", domain: "example.com", summary: { rowCount: 1, trackerCount: 1, cookieCount: 1, requestCount: 1, vendorCount: 1, domainCount: 2 }, rows: [preConsentRow("row_1")] } }
   ]);
   try {
     await withMcpClient(async (client) => {
-      const raw = await client.callTool({ name: "certscore_get_scan_bundle", arguments: { scanId: "scan_123" } });
+      const raw = await client.callTool({ name: "certscore_get_scan_bundle", arguments: { scanId: "00000000-0000-4000-8000-000000000123" } });
       const bundle = parseToolJson(raw);
       assert.equal(bundle.type, "certscore_scan_bundle");
-      assert.equal(bundle.scanId, "scan_123");
+      assert.equal(bundle.scanId, "00000000-0000-4000-8000-000000000123");
       assert.equal(bundle.scanFrom, "eu_ie");
       assert.equal(bundle.createdAt, "2026-08-15T03:39:14.064Z");
       assert.equal(bundle.startedAt, "2026-08-15T03:39:14.064Z");
@@ -966,7 +971,7 @@ test("certscore_get_scan_bundle returns a compact canonical summary by default",
       assert.equal(mock.calls.length, 4);
       for (const headers of mock.requestHeaders) {
         assert.equal(headers.get("x-certscore-mcp-internal-operation"), "scan_bundle");
-        assert.equal(headers.get("x-certscore-mcp-internal-scan-id"), "scan_123");
+        assert.equal(headers.get("x-certscore-mcp-internal-scan-id"), "00000000-0000-4000-8000-000000000123");
         assert.match(headers.get("x-certscore-mcp-internal-proof") ?? "", /^[A-Za-z0-9_-]+$/);
       }
       const text = raw.content[0]?.type === "text" ? raw.content[0].text : "";
@@ -1014,7 +1019,7 @@ test("certscore_get_scan_bundle returns the canonical no-go result when the Puls
     status: 200,
     body: {
       type: "certscore_scan",
-      scanId: "scan_no_go",
+      scanId: "00000000-0000-4000-8000-000000000204",
       domain: "example.net",
       url: "https://example.net",
       status: "completed_limited",
@@ -1044,7 +1049,7 @@ test("certscore_get_scan_bundle returns the canonical no-go result when the Puls
     await withMcpClient(async (client) => {
       const bundle = parseToolJson(await client.callTool({
         name: "certscore_get_scan_bundle",
-        arguments: { scanId: "scan_no_go", detail: "evidence", maxBytes: 5000 }
+        arguments: { scanId: "00000000-0000-4000-8000-000000000204", detail: "evidence", maxBytes: 5000 }
       }));
       assert.equal(bundle.type, "certscore_scan_bundle");
       assert.equal(bundle.status, "completed_limited");
@@ -1069,7 +1074,7 @@ test("certscore_get_scan_bundle returns the canonical no-go result when the Puls
 test("completed Light tools preserve one final canonical score and metadata", async () => {
   const canonicalScan = {
     type: "certscore_scan",
-    scanId: "scan_123",
+    scanId: "00000000-0000-4000-8000-000000000123",
     domain: "example.com",
     url: "https://example.com",
     status: "completed",
@@ -1083,21 +1088,21 @@ test("completed Light tools preserve one final canonical score and metadata", as
     startedAt: "2026-08-05T20:00:00.000Z",
     completedAt: "2026-08-05T20:00:30.000Z",
     scanTimeSeconds: 30,
-    links: { report: "https://certscore.ai/scan/scan_123" }
+    links: { report: "https://certscore.ai/scan/00000000-0000-4000-8000-000000000123" }
   };
   const mock = installFetch([
     { status: 200, body: canonicalScan },
-    { status: 200, body: { ...canonicalScan, type: "certscore_scan_job", jobId: "scan_123" } },
+    { status: 200, body: { ...canonicalScan, type: "certscore_scan_job", jobId: "00000000-0000-4000-8000-000000000123" } },
     { status: 200, body: canonicalScan },
     { status: 200, body: { ...pulse, summary: { ...pulse.summary, score: 73 }, type: "certscore_pulse_summary" } },
-    { status: 200, body: { type: "certscore_finding_list", scanId: "scan_123", findings: [apiFinding("finding_1")] } },
-    { status: 200, body: { type: "certscore_pre_consent_cookies_trackers", scanId: "scan_123", domain: "example.com", summary: { rowCount: 1, trackerCount: 1, cookieCount: 1, requestCount: 1 }, rows: [preConsentRow("row_1")] } }
+    { status: 200, body: { type: "certscore_finding_list", scanId: "00000000-0000-4000-8000-000000000123", findings: [apiFinding("finding_1")] } },
+    { status: 200, body: { type: "certscore_pre_consent_cookies_trackers", scanId: "00000000-0000-4000-8000-000000000123", domain: "example.com", summary: { rowCount: 1, trackerCount: 1, cookieCount: 1, requestCount: 1 }, rows: [preConsentRow("row_1")] } }
   ]);
   try {
     await withMcpClient(async (client) => {
       const created = parseToolJson(await client.callTool({ name: "certscore_scan_site", arguments: { url: "https://example.com" } }));
-      const status = parseToolJson(await client.callTool({ name: "certscore_get_scan_status", arguments: { scanId: "scan_123" } }));
-      const bundle = parseToolJson(await client.callTool({ name: "certscore_get_scan_bundle", arguments: { scanId: "scan_123" } }));
+      const status = parseToolJson(await client.callTool({ name: "certscore_get_scan_status", arguments: { scanId: "00000000-0000-4000-8000-000000000123" } }));
+      const bundle = parseToolJson(await client.callTool({ name: "certscore_get_scan_bundle", arguments: { scanId: "00000000-0000-4000-8000-000000000123" } }));
 
       for (const key of [
         "status", "score", "scoreStatus", "scoreVersion", "scoreUpdatedAt", "riskLevel", "coverage",
@@ -1111,9 +1116,9 @@ test("completed Light tools preserve one final canonical score and metadata", as
       assert.equal(created.url, "https://example.com");
       assert.equal(status.url, "https://example.com");
       assert.equal(bundle.url, "https://example.com");
-      assert.equal(created.reportUrl, "https://certscore.ai/scan/scan_123");
-      assert.equal(status.reportUrl, "https://certscore.ai/scan/scan_123");
-      assert.equal(bundle.reportUrl, "https://certscore.ai/scan/scan_123");
+      assert.equal(created.reportUrl, "https://certscore.ai/scan/00000000-0000-4000-8000-000000000123");
+      assert.equal(status.reportUrl, "https://certscore.ai/scan/00000000-0000-4000-8000-000000000123");
+      assert.equal(bundle.reportUrl, "https://certscore.ai/scan/00000000-0000-4000-8000-000000000123");
       assert.equal(mock.calls.length, 6);
     });
   } finally {
@@ -1124,7 +1129,7 @@ test("completed Light tools preserve one final canonical score and metadata", as
 test("certscore_get_scan_bundle opts into bounded evidence and pre-consent inventory", async () => {
   const scan = {
     type: "certscore_scan",
-    scanId: "scan_123",
+    scanId: "00000000-0000-4000-8000-000000000123",
     domain: "example.com",
     status: "completed",
     score: 72,
@@ -1133,12 +1138,12 @@ test("certscore_get_scan_bundle opts into bounded evidence and pre-consent inven
   const mock = installFetch([
     { status: 200, body: scan },
     { status: 200, body: { ...pulse, type: "certscore_pulse_evidence", evidenceSafetyNotes: ["Public-safe evidence only."], projectedFindings: pulse.findings } },
-    { status: 200, body: { type: "certscore_finding_list", scanId: "scan_123", findings: [apiFinding("finding_1")] } },
-    { status: 200, body: { type: "certscore_pre_consent_cookies_trackers", scanId: "scan_123", domain: "example.com", summary: { rowCount: 1, trackerCount: 1, cookieCount: 0, requestCount: 1 }, rows: [preConsentRow("row_1")] } }
+    { status: 200, body: { type: "certscore_finding_list", scanId: "00000000-0000-4000-8000-000000000123", findings: [apiFinding("finding_1")] } },
+    { status: 200, body: { type: "certscore_pre_consent_cookies_trackers", scanId: "00000000-0000-4000-8000-000000000123", domain: "example.com", summary: { rowCount: 1, trackerCount: 1, cookieCount: 0, requestCount: 1 }, rows: [preConsentRow("row_1")] } }
   ]);
   try {
     await withMcpClient(async (client) => {
-      const bundle = parseToolJson(await client.callTool({ name: "certscore_get_scan_bundle", arguments: { scanId: "scan_123", detail: "evidence" } }));
+      const bundle = parseToolJson(await client.callTool({ name: "certscore_get_scan_bundle", arguments: { scanId: "00000000-0000-4000-8000-000000000123", detail: "evidence" } }));
       assert.ok(bundle.evidenceSummary);
       const inventory = bundle.preConsentCookiesTrackers as Record<string, unknown>;
       assert.equal((inventory.rows as unknown[]).length, 1);
@@ -1169,13 +1174,13 @@ test("certscore_get_evidence bounds oversized Evidence JSON artifacts", async ()
   }]);
   try {
     await withMcpClient(async (client) => {
-      const result = await client.callTool({ name: "certscore_get_evidence", arguments: { scanId: "scan_123" } });
+      const result = await client.callTool({ name: "certscore_get_evidence", arguments: { scanId: "00000000-0000-4000-8000-000000000123" } });
       const evidence = parseToolJson(result);
       const metadata = evidence.mcpMetadata as Record<string, unknown>;
       const text = result.content[0]?.type === "text" ? result.content[0].text : "";
 
       assert.equal(evidence.type, "certscore_pulse_evidence");
-      assert.equal(evidence.scanId, "scan_123");
+      assert.equal(evidence.scanId, "00000000-0000-4000-8000-000000000123");
       assert.equal(metadata.truncated, true);
       assert.ok(JSON.stringify(evidence).length <= 250_000);
       assert.ok(text.length <= 8_000);
@@ -1193,7 +1198,7 @@ test("certscore_export_findings uses full Pulse detail and certscore_explain_fin
       body: {
         type: "certscore_finding",
         id: "pre_consent_tracking_detected",
-        scanId: "scan_123",
+        scanId: "00000000-0000-4000-8000-000000000123",
         label: "Tracking started before consent",
         criticality: "critical",
         confidence: "strong",
@@ -1211,20 +1216,20 @@ test("certscore_export_findings uses full Pulse detail and certscore_explain_fin
   ]);
   try {
     await withMcpClient(async (client) => {
-      const exported = parseToolJson(await client.callTool({ name: "certscore_export_findings", arguments: { scanId: "scan_123" } }));
+      const exported = parseToolJson(await client.callTool({ name: "certscore_export_findings", arguments: { scanId: "00000000-0000-4000-8000-000000000123" } }));
       assert.equal(exported.type, "certscore_mcp_findings_export");
       assert.equal((exported.findings as unknown[]).length, 1);
 
       const explanation = parseToolJson(
         await client.callTool({
           name: "certscore_explain_finding",
-          arguments: { scanId: "scan_123", findingId: "pre_consent_tracking_detected" }
+          arguments: { scanId: "00000000-0000-4000-8000-000000000123", findingId: "pre_consent_tracking_detected" }
         })
       );
       assert.equal(explanation.type, "certscore_finding");
       assert.equal(explanation.id, "pre_consent_tracking_detected");
       assert.match(mock.calls[0] ?? "", /detail=full/);
-      assert.match(mock.calls[1] ?? "", /\/api\/v2\/scans\/scan_123\/findings\/pre_consent_tracking_detected/);
+      assert.match(mock.calls[1] ?? "", /\/api\/v2\/scans\/00000000-0000-4000-8000-000000000123\/findings\/pre_consent_tracking_detected/);
     });
   } finally {
     mock.restore();
@@ -1237,7 +1242,7 @@ test("API v2 MCP tools return scan timing, findings, and latest domain resources
       status: 200,
       body: {
         type: "certscore_scan",
-        scanId: "scan_123",
+        scanId: "00000000-0000-4000-8000-000000000123",
         domain: "example.com",
         status: "completed",
         startedAt: "2026-07-08T12:00:00.000Z",
@@ -1249,7 +1254,7 @@ test("API v2 MCP tools return scan timing, findings, and latest domain resources
       status: 200,
       body: {
         type: "certscore_finding_list",
-        scanId: "scan_123",
+        scanId: "00000000-0000-4000-8000-000000000123",
         findings: Array.from({ length: 3 }, (_, index) => apiFinding(`finding_${index + 1}`))
       }
     },
@@ -1257,7 +1262,7 @@ test("API v2 MCP tools return scan timing, findings, and latest domain resources
       status: 200,
       body: {
         type: "certscore_pre_consent_cookies_trackers",
-        scanId: "scan_123",
+        scanId: "00000000-0000-4000-8000-000000000123",
         domain: "example.com",
         summary: { rowCount: 3, trackerCount: 0, cookieCount: 0, requestCount: 0 },
         rows: Array.from({ length: 3 }, (_, index) => preConsentRow(`row_${index + 1}`))
@@ -1275,7 +1280,7 @@ test("API v2 MCP tools return scan timing, findings, and latest domain resources
       status: 200,
       body: {
         type: "certscore_pre_consent_cookies_trackers",
-        scanId: "scan_123",
+        scanId: "00000000-0000-4000-8000-000000000123",
         domain: "example.com",
         summary: { rowCount: 3, trackerCount: 0, cookieCount: 0, requestCount: 0 },
         rows: Array.from({ length: 3 }, (_, index) => preConsentRow(`latest_row_${index + 1}`))
@@ -1284,11 +1289,11 @@ test("API v2 MCP tools return scan timing, findings, and latest domain resources
   ]);
   try {
     await withMcpClient(async (client) => {
-      const scan = parseToolJson(await client.callTool({ name: "certscore_get_scan", arguments: { scanId: "scan_123" } }));
-      const findingsRaw = await client.callTool({ name: "certscore_list_findings", arguments: { scanId: "scan_123", limit: 1, offset: 1 } });
+      const scan = parseToolJson(await client.callTool({ name: "certscore_get_scan", arguments: { scanId: "00000000-0000-4000-8000-000000000123" } }));
+      const findingsRaw = await client.callTool({ name: "certscore_list_findings", arguments: { scanId: "00000000-0000-4000-8000-000000000123", limit: 1, offset: 1 } });
       const findings = parseToolJson(findingsRaw);
       assertToolOutputSchema("certscore_list_findings", findings);
-      const inventoryRaw = await client.callTool({ name: "certscore_get_pre_consent_cookies_trackers", arguments: { scanId: "scan_123", maxRows: 2 } });
+      const inventoryRaw = await client.callTool({ name: "certscore_get_pre_consent_cookies_trackers", arguments: { scanId: "00000000-0000-4000-8000-000000000123", maxRows: 2 } });
       const inventory = parseToolJson(inventoryRaw);
       assertToolOutputSchema("certscore_get_pre_consent_cookies_trackers", inventory);
       const latest = parseToolJson(
@@ -1340,9 +1345,9 @@ test("API v2 MCP tools return scan timing, findings, and latest domain resources
       assert.match(latestInventoryText, /Example Analytics/);
       assert.match(latestInventoryText, /1 of 3 rows returned \(truncated\)/);
       assert.match(latestInventoryText, /Do not infer technologies that are not listed/i);
-      assert.match(mock.calls[0] ?? "", /\/api\/v2\/scans\/scan_123$/);
-      assert.match(mock.calls[1] ?? "", /\/api\/v2\/scans\/scan_123\/findings$/);
-      assert.match(mock.calls[2] ?? "", /\/api\/v2\/scans\/scan_123\/pre-consent-cookies-trackers$/);
+      assert.match(mock.calls[0] ?? "", /\/api\/v2\/scans\/00000000-0000-4000-8000-000000000123$/);
+      assert.match(mock.calls[1] ?? "", /\/api\/v2\/scans\/00000000-0000-4000-8000-000000000123\/findings$/);
+      assert.match(mock.calls[2] ?? "", /\/api\/v2\/scans\/00000000-0000-4000-8000-000000000123\/pre-consent-cookies-trackers$/);
       assert.match(mock.calls[3] ?? "", /\/api\/v2\/domains\/example.com\/latest\?scanFrom=eu_ie$/);
       assert.match(mock.calls[4] ?? "", /\/api\/v2\/domains\/example.com\/latest\/pre-consent-cookies-trackers\?scanFrom=eu_ie$/);
     });
@@ -1385,7 +1390,7 @@ test("certscore_get_scan returns an MCP error while a scan resource is not ready
   ]);
   try {
     await withMcpClient(async (client) => {
-      const raw = await client.callTool({ name: "certscore_get_scan", arguments: { scanId: "scan_running" } });
+      const raw = await client.callTool({ name: "certscore_get_scan", arguments: { scanId: "00000000-0000-4000-8000-000000000205" } });
       const result = parseToolJson(raw);
       assert.equal(raw.isError, true);
       assert.equal(raw.structuredContent, undefined);

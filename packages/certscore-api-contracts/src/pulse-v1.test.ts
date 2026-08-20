@@ -11,6 +11,7 @@ import {
   buildPulseChatGptOpenApiDocument,
   buildPulseV1OpenApiDocument,
   certScoreMcpToolContracts,
+  isCanonicalScanId,
   mcpFindingListOutputSchema,
   mcpPreConsentCookiesTrackersOutputSchema,
   mcpPulseFreshnessSchema,
@@ -21,6 +22,14 @@ import {
   pulseResponseSchema,
   pulseStatusSchema
 } from "./index.js";
+
+test("canonical scan IDs require the database UUID shape", () => {
+  assert.equal(isCanonicalScanId("11111111-1111-4111-8111-111111111111"), true);
+  assert.equal(isCanonicalScanId("x"), false);
+  assert.equal(isCanonicalScanId("scan_123"), false);
+  assert.equal(isCanonicalScanId("------------------------------------"), false);
+  assert.equal(isCanonicalScanId("11111111-1111-4111-8111-111111111111-extra"), false);
+});
 
 const retrievedMcpGuidance = {
   scoreLabel: "CertScore score" as const,

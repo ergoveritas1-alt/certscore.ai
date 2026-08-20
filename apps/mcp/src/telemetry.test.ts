@@ -5,6 +5,12 @@ import { classifyHostedMcpClient, createHostedMcpTelemetry } from "./telemetry.j
 
 const secret = "hosted-mcp-telemetry-test-secret";
 
+function requesterIpHashForTest(value: string) {
+  return createHmac("sha256", secret)
+    .update(`mcp-telemetry:v1:requester-ip:${value}`, "utf8")
+    .digest("hex");
+}
+
 function observation(toolName = "certscore_get_scan_status") {
   return {
     durationMs: 42,
@@ -13,6 +19,8 @@ function observation(toolName = "certscore_get_scan_status") {
     isCanary: false,
     outcome: "success" as const,
     quotaOutcome: "allowed" as const,
+    requestedResource: "scan_123",
+    requestedResourceType: "scan_id" as const,
     scanDecision: "not_applicable" as const,
     scanFrom: null,
     scanId: "scan_123",
@@ -32,6 +40,7 @@ test("hosted MCP client classification keeps verified and self-declared attribut
     actorId: null,
     authClass: "anonymous",
     clientFamily: "anthropic_claude",
+    clientName: null,
     source: "anthropic",
     sourceAttribution: "verified_network",
   });
@@ -47,6 +56,7 @@ test("hosted MCP client classification keeps verified and self-declared attribut
   assert.equal(claimed.source, "openai");
   assert.equal(claimed.sourceAttribution, "self_declared_header");
   assert.equal(claimed.clientFamily, "openai_chatgpt");
+  assert.equal(claimed.clientName, "chatgpt");
   assert.match(claimed.actorId ?? "", /^[a-f0-9]{24}$/);
   assert.equal(JSON.stringify(claimed).includes("opaque-user-value"), false);
 });
@@ -65,6 +75,7 @@ test("hosted MCP client classification keeps Codex distinct from generic OpenAI 
   assert.equal(codex.source, "openai");
   assert.equal(codex.sourceAttribution, "self_declared_client");
   assert.equal(unknown.clientFamily, "other");
+  assert.equal(unknown.clientName, "generic-mcp-bridge");
   assert.equal(unknown.source, "unknown");
   assert.equal(unknown.sourceAttribution, "unknown");
 });
@@ -84,6 +95,7 @@ test("telemetry differentiates all hosted MCP entrypoints and signs minimized ev
       fetch: fetchMock,
       headers: { authorization: "Bearer do-not-store", "openai-conversation-id": "opaque-conversation" },
       requesterBinding: "anonymous:do-not-store",
+      requesterIp: "198.51.100.10",
       requesterNetwork: "direct",
       secret,
       sessionId: () => "raw-session-do-not-store",
@@ -103,7 +115,42 @@ test("telemetry differentiates all hosted MCP entrypoints and signs minimized ev
     assert.equal(request.body.includes("Bearer"), false);
     assert.equal(request.body.includes("do-not-store"), false);
     assert.match(String(events[index]?.sessionId), /^[a-f0-9]{24}$/);
+    assert.equal(events[index]?.requesterIp, "198.51.100.10");
+    assert.match(String(events[index]?.requesterIpHash), /^[a-f0-9]{64}$/);
+    assert.equal(events[index]?.requestedResource, "scan_123");
+    assert.equal(events[index]?.clientName, "test client");
   }
+});
+
+test("tool-call request context overrides session initialization IP attribution", async () => {
+  const requests: string[] = [];
+  const telemetry = createHostedMcpTelemetry({
+    baseUrl: "https://certscore.ai",
+    clientInfoBody: { params: { clientInfo: { name: "request-context-client", version: "1" } } },
+    fetch: (async (_input: RequestInfo | URL, init?: RequestInit) => {
+      requests.push(String(init?.body ?? ""));
+      return new Response(null, { status: 202 });
+    }) as typeof fetch,
+    headers: {},
+    requesterIp: "198.51.100.10",
+    requesterNetwork: "direct",
+    secret,
+    sessionId: () => "session_123",
+    surface: "mcp_light",
+  });
+
+  telemetry.observeToolInvocation(observation(), {
+    requesterIp: "203.0.113.44",
+    requesterNetwork: "anthropic",
+  });
+  await new Promise((resolve) => setImmediate(resolve));
+
+  assert.equal(requests.length, 1);
+  const event = JSON.parse(requests[0] ?? "{}") as Record<string, unknown>;
+  assert.equal(event.requesterIp, "203.0.113.44");
+  assert.equal(event.requesterNetwork, "anthropic");
+  assert.notEqual(event.requesterIpHash, requesterIpHashForTest("198.51.100.10"));
+  assert.equal(event.requesterIpHash, requesterIpHashForTest("203.0.113.44"));
 });
 
 test("telemetry delivery failure is contained and transport quota events are recorded", async () => {

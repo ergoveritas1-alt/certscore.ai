@@ -5,6 +5,8 @@ import test from "node:test";
 const page = readFileSync("apps/web/app/app/admin/mcp/page.tsx", "utf8");
 const layout = readFileSync("apps/web/app/app/admin/layout.tsx", "utf8");
 const repository = readFileSync("apps/web/server/admin/mcp-telemetry.ts", "utf8");
+const persistence = readFileSync("apps/web/server/mcp-telemetry/repository.ts", "utf8");
+const requestContextMigration = readFileSync("packages/db/migrations/0187_mcp_invocation_request_context.sql", "utf8");
 
 test("Admin navigation exposes a dedicated MCP operations button", () => {
   assert.match(layout, /href: "\/app\/admin\/mcp", label: "MCP operations"/);
@@ -45,12 +47,18 @@ test("MCP operations page makes the request ledger the primary navigable workspa
   assert.doesNotMatch(page, /Retention health:/);
   assert.doesNotMatch(page, /No events retained yet\. The retention target is 90 days/);
   assert.doesNotMatch(page, /Invocation telemetry/);
-  assert.match(page, /Unknown source/);
+  assert.match(page, /Unattributed/);
   assert.match(page, /allowedAttribution/);
-  assert.match(page, /Provider \/ client/);
+  assert.match(page, /label: "Origin"/);
+  assert.match(page, /label: "Client"/);
+  assert.match(page, /sourceConfidenceLabel/);
+  assert.match(page, /Directory discovery is not distinguishable from a custom connector/);
   assert.match(page, /Requester \/ caller IP/);
   assert.match(page, /sourceIpLabel/);
   assert.match(page, /\{sourceIpLabel\(event\)\}/);
+  assert.match(page, /clientDetail\(event\)/);
+  assert.match(page, /requestedResourceLabel\(event\)/);
+  assert.match(page, /Scan ID \$\{event\.requested_resource\}/);
   assert.match(page, /Recognized client info/);
   assert.match(page, /Unrecognized client info/);
   assert.match(page, /No client signal/);
@@ -102,9 +110,26 @@ test("MCP telemetry dashboard queries bounded periods and never reads request pa
   assert.match(repository, /target_provenance/);
   assert.match(repository, /perspective_provenance/);
   assert.match(repository, /requesterIpAttributionFromRequest/);
+  assert.match(repository, /events\.requester_ip::text as retained_requester_ip/);
+  assert.match(repository, /events\.requested_resource/);
+  assert.match(repository, /events\.client_name/);
   assert.match(repository, /from public\.pulse_requests request[\s\S]*request\.scan_id::text = events\.scan_id/);
   assert.match(repository, /from public\.scan_requests request[\s\S]*fulfilled_by_scan_id[\s\S]*events\.scan_id/);
   assert.match(repository, /canonical_scan\.scan_config_json ->> 'scanFrom' in \('eu_de', 'eu_ie', 'california'\)/);
   assert.match(repository, /limit \$\{limitParameter\}/);
   assert.doesNotMatch(repository, /prompt|authorization|request_body|response_body|raw_header/i);
+});
+
+test("MCP invocation persistence retains bounded request attribution for failed calls", () => {
+  for (const column of [
+    "client_name", "requester_ip", "requester_ip_hash", "requester_network",
+    "requested_resource_type", "requested_resource",
+  ]) {
+    assert.match(persistence, new RegExp(`event\\.${column.replace(/_([a-z])/g, (_, letter: string) => letter.toUpperCase())}`));
+    assert.match(requestContextMigration, new RegExp(`add column if not exists ${column}`));
+  }
+  assert.match(requestContextMigration, /90-day retention target/);
+  assert.match(requestContextMigration, /URL paths, and URL query values/);
+  assert.match(requestContextMigration, /set requested_resource_type = 'scan_id',[\s\S]*requested_resource = scan_id/);
+  assert.doesNotMatch(persistence, /request_body|raw_header|authorization|prompt/i);
 });

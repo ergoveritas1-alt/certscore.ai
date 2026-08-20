@@ -115,6 +115,7 @@ export type AdminMcpTelemetryEvent = {
   blocked_flag: boolean | null;
   captcha_flag: boolean | null;
   client_family: string;
+  client_name: string | null;
   duration_ms: number;
   error_code: string | null;
   evidence_matrix: AdminEvidenceMatrix | null;
@@ -129,6 +130,9 @@ export type AdminMcpTelemetryEvent = {
   primary_language: string | null;
   quota_outcome: "allowed" | "rate_limited" | "not_applicable";
   request_id: string;
+  requested_resource: string | null;
+  requested_resource_type: "url" | "domain" | "scan_id" | "job_id" | null;
+  requester_network: "anthropic" | "direct" | "unknown";
   scan_decision: "reused" | "new" | "unavailable" | "not_applicable";
   scan_elapsed_seconds: number | null;
   scan_from: string | null;
@@ -156,6 +160,8 @@ export type AdminMcpTelemetryEvent = {
 
 type AdminMcpTelemetryEventRow = Omit<AdminMcpTelemetryEvent, "evidence_matrix" | "source_ip" | "source_ip_hash" | "source_ip_source"> & {
   admin_evidence_matrix: unknown;
+  retained_requester_ip: string | null;
+  retained_requester_ip_hash: string | null;
   requester_request_context: unknown;
   requester_requested_by: unknown;
 };
@@ -444,6 +450,9 @@ export async function listAdminMcpTelemetryEventsPage(
       or actor_id ilike ${parameter}
       or tool_name ilike ${parameter}
       or client_family ilike ${parameter}
+      or coalesce(client_name, '') ilike ${parameter}
+      or coalesce(requested_resource, '') ilike ${parameter}
+      or coalesce(requester_ip::text, '') ilike ${parameter}
       or error_code ilike ${parameter}
     )`);
   }
@@ -476,7 +485,7 @@ export async function listAdminMcpTelemetryEventsPage(
     ),
     query<AdminMcpTelemetryEventRow>(
       `select events.event_id, events.occurred_at, events.surface, events.source,
-              events.source_attribution, events.auth_class, events.client_family,
+              events.source_attribution, events.auth_class, events.client_family, events.client_name,
               events.tool_name, events.request_id,
               coalesce(events.target_hostname, canonical_domain.hostname) as target_hostname,
               case
@@ -501,6 +510,9 @@ export async function listAdminMcpTelemetryEventsPage(
               events.scan_id, events.scan_decision, events.scan_status, events.outcome,
               events.transport_outcome, events.duration_ms, events.quota_outcome, events.error_code,
               events.session_id, events.actor_id,
+              events.requested_resource, events.requested_resource_type, events.requester_network,
+              events.requester_ip::text as retained_requester_ip,
+              events.requester_ip_hash as retained_requester_ip_hash,
               coalesce(requester.requested_url, canonical_page.page_url) as page_url,
               requester.request_context ->> 'detail' as mode_detail,
               requester.request_context ->> 'format' as mode_format,
@@ -599,6 +611,8 @@ export async function listAdminMcpTelemetryEventsPage(
       });
       const {
         admin_evidence_matrix: rawEvidenceMatrix,
+        retained_requester_ip: retainedRequesterIp,
+        retained_requester_ip_hash: retainedRequesterIpHash,
         requester_request_context: _requestContext,
         requester_requested_by: _requestedBy,
         ...event
@@ -606,9 +620,9 @@ export async function listAdminMcpTelemetryEventsPage(
       return {
         ...event,
         evidence_matrix: parseAdminEvidenceMatrix(rawEvidenceMatrix),
-        source_ip: requesterIp.sourceIp,
-        source_ip_hash: requesterIp.ipHash,
-        source_ip_source: requesterIp.source,
+        source_ip: retainedRequesterIp ?? requesterIp.sourceIp,
+        source_ip_hash: retainedRequesterIpHash ?? requesterIp.ipHash,
+        source_ip_source: retainedRequesterIp ? "event" : retainedRequesterIpHash ? "hash_only" : requesterIp.source,
       };
     }),
     totalCount: count(totalResult?.total_count ?? 0),

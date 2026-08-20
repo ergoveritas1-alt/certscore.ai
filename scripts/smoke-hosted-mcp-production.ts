@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { Client as McpClient } from "@modelcontextprotocol/sdk/client/index.js";
 import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
+import { isCanonicalScanId } from "../packages/certscore-api-contracts/src/api-v2.js";
 
 const DEFAULT_MCP_ORIGIN = "https://mcp.certscore.ai";
 
@@ -58,8 +59,8 @@ export function readCanaryOptions(
   if (!/^https:\/\//.test(mcpOrigin)) {
     throw new Error("Hosted production MCP canary requires an https:// MCP origin.");
   }
-  if (!/^[A-Za-z0-9_-]{1,128}$/.test(scanId)) {
-    throw new Error("Set CERTSCORE_MCP_CANARY_SCAN_ID to an existing retained scan ID. This canary never creates a scan.");
+  if (!isCanonicalScanId(scanId)) {
+    throw new Error("Set CERTSCORE_MCP_CANARY_SCAN_ID to an existing retained canonical UUID. This canary never creates a scan.");
   }
   if (!accessToken) {
     throw new Error("Set CERTSCORE_MCP_ACCESS_TOKEN to a short-lived scan:read mcp token. Tokens are never logged.");

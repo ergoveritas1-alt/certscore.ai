@@ -12,6 +12,8 @@ export type McpHttpSession = {
     observeTransportRateLimit(input: {
       body: unknown;
       durationMs: number;
+      requesterIp?: string | null;
+      requesterNetwork?: "anthropic" | "direct" | "unknown";
       scanId?: string | null;
       toolName: string;
     }): void;

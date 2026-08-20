@@ -12,6 +12,7 @@ export const mcpTelemetrySurfaceSchema = z.enum([
 export const mcpTelemetryEventSchema = z.object({
   actorId: z.string().regex(/^[a-f0-9]{24}$/).nullable(),
   authClass: z.enum(["anonymous", "authenticated"]),
+  clientName: z.string().min(1).max(100).regex(/^[a-zA-Z0-9][a-zA-Z0-9 ._:/+@()-]*$/).nullable(),
   clientFamily: z.enum([
     "openai_chatgpt",
     "openai_codex",
@@ -30,6 +31,11 @@ export const mcpTelemetryEventSchema = z.object({
   outcome: z.enum(["success", "error", "rate_limited"]),
   quotaOutcome: z.enum(["allowed", "rate_limited", "not_applicable"]),
   requestId: z.string().uuid(),
+  requestedResource: z.string().min(1).max(512).nullable(),
+  requestedResourceType: z.enum(["url", "domain", "scan_id", "job_id"]).nullable(),
+  requesterIp: z.string().ip().nullable(),
+  requesterIpHash: z.string().regex(/^[a-f0-9]{64}$/).nullable(),
+  requesterNetwork: z.enum(["anthropic", "direct", "unknown"]),
   scanDecision: z.enum(["reused", "new", "unavailable", "not_applicable"]),
   scanFrom: z.enum(["eu_de", "eu_ie", "california"]).nullable(),
   scanId: z.string().min(1).max(128).regex(/^[a-zA-Z0-9_-]+$/).nullable(),
@@ -46,7 +52,13 @@ export const mcpTelemetryEventSchema = z.object({
   targetHostname: z.string().min(1).max(253).nullable(),
   toolName: z.string().min(1).max(100).regex(/^[a-zA-Z0-9_.:-]+$/),
   transportOutcome: z.enum(["mcp_result", "mcp_error", "http_429"]),
-}).strict();
+}).strict().refine(
+  (event) => Boolean(event.requestedResource) === Boolean(event.requestedResourceType),
+  { message: "Requested resource and type must be retained together.", path: ["requestedResource"] },
+).refine(
+  (event) => Boolean(event.requesterIp) === Boolean(event.requesterIpHash),
+  { message: "Requester IP and hash must be retained together.", path: ["requesterIp"] },
+);
 
 export type McpTelemetryEvent = z.infer<typeof mcpTelemetryEventSchema>;
 export type McpTelemetrySurface = z.infer<typeof mcpTelemetrySurfaceSchema>;

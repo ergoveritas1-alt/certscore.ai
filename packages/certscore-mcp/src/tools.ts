@@ -173,6 +173,22 @@ export function toInvalidArgumentsToolError(errorMessage: string): CallToolResul
   };
 }
 
+export function toInvalidScanIdToolError(): CallToolResult {
+  const error: ActionableError = {
+    code: "invalid_scan_id",
+    field: "scanId",
+    message: "The scanId must be the canonical UUID returned by certscore_scan_site.",
+    retryable: false,
+    retryAfterSeconds: null,
+    recommendedNextAction: "Use the unchanged scanId returned by certscore_scan_site. Do not use placeholders, report URLs, domains, or job IDs.",
+    mcpCode: -32602
+  };
+  return {
+    content: [{ type: "text", text: JSON.stringify({ error }) }],
+    isError: true
+  };
+}
+
 function terminalErrorForResult(value: Record<string, any>): ActionableError | null {
   const existing = value.error && typeof value.error === "object" && !Array.isArray(value.error)
     ? value.error as Record<string, unknown>

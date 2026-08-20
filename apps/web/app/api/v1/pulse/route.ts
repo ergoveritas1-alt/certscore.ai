@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { NextResponse } from "next/server";
+import { isCanonicalScanId } from "@certscore/api-contracts";
 import { apiReadRateLimitGuidance, normalizeScanFrom, type ScanFrom } from "@website-signal-risk-scanner/shared";
 import { restrictScanFromForUser } from "../../../../server/scans/restricted-scan-options";
 import { SITE_URL } from "../../../../lib/seo";
@@ -31,7 +32,7 @@ import {
   type IntegrationApiKeyRecord,
   type IntegrationApiKeyScope
 } from "../../../../server/integrations/api-keys";
-import { checkDomainDns } from "../../../../server/domains/domain-dns";
+import { checkDomainDns, isDomainDnsPreflightError } from "../../../../server/domains/domain-dns";
 import { createAnonymousFullScan } from "../../../../server/scans/create-anonymous-full-scan";
 import { getPublicScanRecord, type PublicScanRecord } from "../../../../server/scans/get-public-scan-record";
 import {
@@ -57,7 +58,6 @@ import { logApiReadRateLimited } from "../../../../server/pulse/read-rate-log";
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
 
-const SCAN_ID_PATTERN = /^[0-9a-f-]{32,36}$/i;
 const GPT_ACTION_HOURLY_LIMIT = 5;
 const GPT_ACTION_DAILY_LIMIT = 20;
 const GPT_ACTION_MAX_WAIT_SECONDS = 35;
@@ -464,7 +464,7 @@ async function handlePulseGET(request: Request, options: PulseRouteOptions = {})
     }
 
     if (scanId) {
-      if (!SCAN_ID_PATTERN.test(scanId)) {
+      if (!isCanonicalScanId(scanId)) {
         return pulseJson(buildPulseError({ code: "invalid_url", message: "Invalid scan ID.", detail, format }), { status: 400 }, requestId, routeName);
       }
       const retrievalInput = {
@@ -1063,6 +1063,35 @@ async function handlePulseGET(request: Request, options: PulseRouteOptions = {})
       routeName
     );
   } catch (error) {
+    if (isDomainDnsPreflightError(error)) {
+      if (activePulseRequestId) {
+        await updatePulseRequestFailed({
+          errorCode: error.code,
+          errorMessage: error.message,
+          pulseRequestId: activePulseRequestId,
+          resolutionMode: "dns_preflight_rejected"
+        }).catch((updateError) => console.error("[pulse] DNS failure lifecycle update failed", { requestId, updateError }));
+      }
+      return pulseJson(
+        buildPulseError({
+          code: error.retryable ? "internal_error" : "invalid_url",
+          message: error.message,
+          retryAfterSeconds: error.retryAfterSeconds,
+          url: rawUrl,
+          detail,
+          format
+        }),
+        {
+          headers: {
+            "Cache-Control": "no-store",
+            ...(error.retryAfterSeconds ? { "Retry-After": String(error.retryAfterSeconds) } : {})
+          },
+          status: error.retryable ? 503 : 400
+        },
+        requestId,
+        routeName
+      );
+    }
     if (isAnonymousScanQuotaError(error)) {
       if (activePulseRequestId) {
         await updatePulseRequestRateLimited({

@@ -2,6 +2,12 @@ import { z } from "zod";
 import { pulseResponseSchema } from "./pulse-v1.js";
 import { scanNoGoResultSchema, scanResultDispositionSchema } from "./scan-no-go.js";
 
+export const CANONICAL_SCAN_ID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+export function isCanonicalScanId(value: unknown): value is string {
+  return typeof value === "string" && CANONICAL_SCAN_ID_PATTERN.test(value);
+}
+
 export const CERTSCORE_API_V2_VERSION = "v2";
 export const CERTSCORE_API_V2_SCHEMA_VERSION = "0.1.6";
 

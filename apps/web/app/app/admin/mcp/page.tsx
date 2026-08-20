@@ -67,9 +67,16 @@ function duration(value: number | null) {
 function sourceLabel(source: string, attribution: string) {
   const allowedAttribution = new Set(["verified_network", "self_declared_header", "self_declared_client"]);
   if ((source !== "openai" && source !== "anthropic") || !allowedAttribution.has(attribution)) {
-    return "Unknown source";
+    return "Unattributed";
   }
-  return `${source === "openai" ? "OpenAI" : "Anthropic"} · ${attribution.replaceAll("_", " ")}`;
+  return source === "openai" ? "OpenAI" : "Anthropic";
+}
+
+function sourceConfidenceLabel(source: AdminMcpTelemetryEvent["source"], attribution: string) {
+  if (source === "anthropic" && attribution === "verified_network") return "Verified connector network";
+  if (source === "openai" && attribution === "self_declared_header") return "OpenAI header signal";
+  if ((source === "openai" || source === "anthropic") && attribution === "self_declared_client") return "Client-declared";
+  return "No provider signal";
 }
 
 function normalizeOption<T extends string>(value: string | undefined, options: readonly T[]): T | null {
@@ -102,7 +109,7 @@ function surfaceClass(surface: AdminMcpTelemetryEvent["surface"]) {
 }
 
 function sourceClass(source: AdminMcpTelemetryEvent["source"], attribution: string) {
-  if (sourceLabel(source, attribution) === "Unknown source") return "bg-slate-100 text-slate-600 ring-slate-200";
+  if (sourceLabel(source, attribution) === "Unattributed") return "bg-slate-100 text-slate-600 ring-slate-200";
   if (source === "openai") return "bg-emerald-50 text-emerald-700 ring-emerald-100";
   if (source === "anthropic") return "bg-amber-50 text-amber-700 ring-amber-100";
   return "bg-slate-100 text-slate-600 ring-slate-200";
@@ -112,6 +119,22 @@ function sourceIpLabel(event: Pick<AdminMcpTelemetryEvent, "source_ip" | "source
   if (event.source_ip) return event.source_ip;
   if (event.source_ip_hash) return `Hash ${event.source_ip_hash.slice(0, 12)}`;
   return "IP not recorded";
+}
+
+function clientDetail(event: Pick<AdminMcpTelemetryEvent, "client_family" | "client_name" | "source_attribution">) {
+  const family = formatLabel(event.client_family);
+  return event.client_name
+    ? event.client_name
+    : `${family} · ${clientSignalReason(event.source_attribution, event.client_family)}`;
+}
+
+function requestedResourceLabel(event: Pick<AdminMcpTelemetryEvent, "page_url" | "requested_resource" | "requested_resource_type" | "target_hostname">) {
+  if (event.page_url) return event.page_url;
+  if (event.target_hostname) return event.target_hostname;
+  if (!event.requested_resource) return "Page URL unavailable";
+  if (event.requested_resource_type === "scan_id") return `Scan ID ${event.requested_resource}`;
+  if (event.requested_resource_type === "job_id") return `Job ID ${event.requested_resource}`;
+  return event.requested_resource;
 }
 
 const EVIDENCE_MARKS = {
@@ -347,7 +370,7 @@ export default async function AdminMcpTelemetryPage({ searchParams }: AdminMcpPa
             {includeCanary ? <input name="includeCanary" type="hidden" value="1" /> : null}
             <input aria-label="Filter MCP requests by hostname, scan ID, request ID, opaque ID, tool, client, or error" className="h-10 min-w-[24rem] flex-[1_1_28rem] rounded-lg border border-slate-300 bg-white px-3 text-sm" defaultValue={activeQuery} name="q" placeholder="Hostname, scan ID, request ID, session, actor, client, error" />
             <select aria-label="Filter MCP requests by entrypoint" className="h-10 w-[10.5rem] shrink-0 rounded-lg border border-slate-300 bg-white px-2 text-xs" defaultValue={activeSurface ?? ""} name="surface"><option value="">Any entrypoint</option>{surfaces.map((surface) => <option key={surface} value={surface}>{surfaceLabels[surface]}</option>)}</select>
-            <select aria-label="Filter MCP requests by provider signal" className="h-10 w-[8.5rem] shrink-0 rounded-lg border border-slate-300 bg-white px-2 text-xs" defaultValue={activeSource ?? ""} name="source"><option value="">Any provider</option>{sources.map((source) => <option key={source} value={source}>{source === "unknown" ? "Unknown" : `${formatLabel(source)} signal`}</option>)}</select>
+            <select aria-label="Filter MCP requests by origin signal" className="h-10 w-[9.5rem] shrink-0 rounded-lg border border-slate-300 bg-white px-2 text-xs" defaultValue={activeSource ?? ""} name="source"><option value="">Any origin</option>{sources.map((source) => <option key={source} value={source}>{source === "unknown" ? "Unattributed" : `${formatLabel(source)} signal`}</option>)}</select>
             <select aria-label="Filter MCP requests by tool" className="h-10 w-[13rem] shrink-0 rounded-lg border border-slate-300 bg-white px-2 text-xs" defaultValue={activeTool} name="tool"><option value="">Any tool</option>{toolOptions.map((tool) => <option key={tool} value={tool}>{tool}</option>)}</select>
             <select aria-label="Filter MCP requests by outcome" className="h-10 w-[8.5rem] shrink-0 rounded-lg border border-slate-300 bg-white px-2 text-xs" defaultValue={activeOutcome ?? ""} name="outcome"><option value="">Any outcome</option>{outcomes.map((outcome) => <option key={outcome} value={outcome}>{formatLabel(outcome)}</option>)}</select>
             <select aria-label="Filter MCP requests by scan decision" className="h-10 w-[9rem] shrink-0 rounded-lg border border-slate-300 bg-white px-2 text-xs" defaultValue={activeDecision ?? ""} name="decision"><option value="">Any decision</option>{scanDecisions.map((decision) => <option key={decision} value={decision}>{formatLabel(decision)}</option>)}</select>
@@ -357,9 +380,9 @@ export default async function AdminMcpTelemetryPage({ searchParams }: AdminMcpPa
           <PaginationControls basePath="/app/admin/mcp" itemLabel="MCP requests" page={page} pageCount={pageCount} pageSize={pageSize} searchParams={{ q: activeQuery, surface: activeSurface, source: activeSource, tool: activeTool, outcome: activeOutcome, decision: activeDecision, timeSpan: activeTimeSpan, snapshot: activeSnapshotPeriod, toolPeriod: activeToolPeriod, sourcePeriod: activeSourcePeriod, includeCanary: includeCanary ? "1" : null }} showPageJump totalCount={eventPage.totalCount} visibleCount={eventPage.items.length} />
 
           <div className="w-full max-w-full overflow-x-auto overscroll-x-contain rounded-xl border border-slate-200">
-            <table className="table-fixed text-left text-xs" style={{ width: "3350px", minWidth: "3350px" }}>
+            <table className="table-fixed text-left text-xs" style={{ width: "3490px", minWidth: "3490px" }}>
               <colgroup>
-                <col style={{ width: "100px" }} /><col style={{ width: "155px" }} /><col style={{ width: "180px" }} />
+                <col style={{ width: "100px" }} /><col style={{ width: "155px" }} /><col style={{ width: "140px" }} /><col style={{ width: "180px" }} />
                 <col style={{ width: "150px" }} /><col style={{ width: "105px" }} /><col style={{ width: "230px" }} />
                 <col style={{ width: "70px" }} /><col style={{ width: "65px" }} /><col style={{ width: "55px" }} />
                 <col style={{ width: "170px" }} /><col style={{ width: "80px" }} /><col style={{ width: "115px" }} />
@@ -371,7 +394,7 @@ export default async function AdminMcpTelemetryPage({ searchParams }: AdminMcpPa
               </colgroup>
               <thead className="sticky top-0 z-20 bg-slate-50 text-[10px] uppercase tracking-[0.08em] text-slate-500">
                 <tr>{[
-                  { label: "Status", className: "sticky left-0 z-30 bg-slate-50" }, { label: "Entrypoint" }, { label: "Provider / client" },
+                  { label: "Status", className: "sticky left-0 z-30 bg-slate-50" }, { label: "Entrypoint" }, { label: "Origin" }, { label: "Client" },
                   { label: "Requester / caller IP" }, { label: "Requested" }, { label: "Page" }, { label: "Tranco" }, { label: "Score" }, { label: "Top" },
                   { label: "Privacy / CMP" }, { label: "A/R/O" }, { label: "Access" }, { label: "Transparency" }, { label: "Transport" }, { label: "Runtime" },
                   { label: "Time" }, { label: "Outcome" }, { label: "From" }, { label: "Freshness" }, { label: "Language" }, { label: "Industry" },
@@ -390,10 +413,11 @@ export default async function AdminMcpTelemetryPage({ searchParams }: AdminMcpPa
                     <tr className="group h-[62px] hover:bg-slate-50/70" key={event.event_id}>
                       <td className="sticky left-0 z-10 bg-white px-2.5 py-1.5 group-hover:bg-slate-50"><span className={`inline-flex items-center gap-1.5 font-semibold ${outcome.text}`}><span aria-hidden="true" className={`inline-block h-2.5 w-2.5 rounded-full ${outcome.dot}`} />{outcome.label}</span>{event.error_code ? <p className="mt-0.5 truncate text-[10px] text-rose-600" title={event.error_code}>{event.error_code}</p> : null}</td>
                       <td className="px-2.5 py-1.5"><span className={`inline-flex rounded-full px-1.5 py-0.5 text-[10px] font-semibold ring-1 ${surfaceClass(event.surface)}`}>{surfaceLabels[event.surface]}</span><p className="mt-1 text-[10px] text-slate-500">{event.auth_class}</p></td>
-                      <td className="px-2.5 py-1.5"><span className={`inline-flex max-w-full truncate rounded-full px-1.5 py-0.5 text-[10px] font-semibold ring-1 ${sourceClass(event.source, event.source_attribution)}`}>{sourceLabel(event.source, event.source_attribution)}</span><p className="mt-0.5 truncate text-[10px] text-slate-500" title={`${formatLabel(event.client_family)} · ${clientSignalReason(event.source_attribution, event.client_family)}`}>{formatLabel(event.client_family)} · {clientSignalReason(event.source_attribution, event.client_family)}</p></td>
+                      <td className="px-2.5 py-1.5"><span className={`inline-flex max-w-full truncate rounded-full px-1.5 py-0.5 text-[10px] font-semibold ring-1 ${sourceClass(event.source, event.source_attribution)}`}>{sourceLabel(event.source, event.source_attribution)}</span><p className="mt-0.5 truncate text-[10px] text-slate-500" title={sourceConfidenceLabel(event.source, event.source_attribution)}>{sourceConfidenceLabel(event.source, event.source_attribution)}</p></td>
+                      <td className="px-2.5 py-1.5"><p className="truncate font-semibold text-slate-700" title={clientDetail(event)}>{clientDetail(event)}</p><p className="mt-0.5 truncate text-[10px] text-slate-400">{formatLabel(event.client_family)}</p></td>
                       <td className="px-2.5 py-1.5"><p className="truncate font-mono text-[10px] font-medium text-slate-700" title={sourceIpLabel(event)}>{sourceIpLabel(event)}</p><p className="mt-0.5 truncate text-[10px] text-slate-400">{event.source_ip_source.replaceAll("_", " ")}</p></td>
                       <td className="px-2.5 py-1.5 text-[10px] leading-4" title={formatAdminDateTime(event.occurred_at)}><p>{requested.date}</p><p className="text-slate-500">{requested.time}</p></td>
-                      <td className="px-2.5 py-1.5"><p className="line-clamp-2 break-all font-semibold leading-4 text-slate-900" title={event.page_url ?? event.target_hostname ?? "Page URL unavailable"}>{event.page_url ?? event.target_hostname ?? "Page URL unavailable"}</p></td>
+                      <td className="px-2.5 py-1.5"><p className="line-clamp-2 break-all font-semibold leading-4 text-slate-900" title={requestedResourceLabel(event)}>{requestedResourceLabel(event)}</p></td>
                       <td className="px-2.5 py-1.5 font-medium text-slate-700">{event.tranco_rank ? `#${event.tranco_rank.toLocaleString()}` : "—"}</td>
                       <td className="px-2.5 py-1.5 font-semibold text-slate-900">{event.score !== null ? <><span>{event.score}</span><span className="text-[11px] font-normal text-slate-400">/100</span></> : "—"}</td>
                       <td className="px-2.5 py-1.5 font-semibold text-slate-900">{event.top_finding_count ?? "—"}</td>
@@ -495,7 +519,7 @@ export default async function AdminMcpTelemetryPage({ searchParams }: AdminMcpPa
                 ))}
                 {dashboard.sources.length === 0 ? <p className="text-sm text-slate-500">No source signals retained during {dashboard.sourceAnalytics.label.toLowerCase()}.</p> : null}
               </div>
-              <p className="text-xs leading-5 text-slate-500">Self-declared headers and client names are useful routing signals but are not verified provider identity. Verified attribution currently applies only to recognized provider egress.</p>
+              <p className="text-xs leading-5 text-slate-500">Self-declared headers and client names are useful routing signals but are not verified provider identity. Verified attribution currently applies only to recognized provider egress. Directory discovery is not distinguishable from a custom connector unless the provider supplies a verifiable origin marker.</p>
             </CardContent>
       </Card>
 

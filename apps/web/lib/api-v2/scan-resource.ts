@@ -1,4 +1,5 @@
 import {
+  CANONICAL_SCAN_ID_PATTERN,
   apiV2DomainLatestScanSchema,
   apiV2EvidenceEventSummarySchema,
   apiV2FindingDetailSchema,
@@ -39,7 +40,7 @@ function absoluteUrl(path: string) {
   return new URL(path, process.env.NEXT_PUBLIC_APP_URL?.trim() || SITE_URL).toString();
 }
 
-export const API_V2_SCAN_ID_PATTERN = /^[0-9a-f-]{32,36}$/i;
+export const API_V2_SCAN_ID_PATTERN = CANONICAL_SCAN_ID_PATTERN;
 const API_V2_MAX_ACTIVE_SCAN_RETRY_AFTER_SECONDS = 5;
 const API_V2_STALLED_AFTER_MS = 120_000;
 

@@ -36,6 +36,7 @@ import {
 } from "./requester-ip-context";
 import type { CampaignAttribution } from "../../lib/attribution/campaign-attribution";
 import { ensureCanonicalScanReportProjectionForReuse } from "./canonical-scan-report-publisher";
+import { isDomainDnsPreflightError, requireDomainDns } from "../domains/domain-dns";
 
 type ScanQueueProvenance = {
   githubActor?: string | null;
@@ -175,6 +176,34 @@ export async function createAnonymousFullScan(input: {
     }).catch((error) => logScanRequestFailure("anonymous_queue_unavailable", error));
 
     throw new Error(fullScanQueueAvailability.reason ?? "Full scan queue is unavailable.");
+  }
+
+  try {
+    await requireDomainDns(input.hostname);
+  } catch (error) {
+    if (isDomainDnsPreflightError(error)) {
+      await recordScanRequest({
+        normalizedDomain: input.hostname,
+        normalizedUrl: input.normalizedUrl,
+        organizationId: null,
+        requestChannel: input.provenance?.source ?? "marketing-anonymous-full-scan",
+        requestedBy: { anonymous: true },
+        requestedUrl: input.normalizedUrl,
+        requestContext: {
+          bypassRecentScanReuse,
+          coveragePlanCode,
+          ipHash: requesterIpContext.ipHash,
+          provenance: input.provenance ?? null,
+          scanFrom,
+          sourceIp: requesterIpContext.sourceIp
+        },
+        errorCode: error.code,
+        errorMessage: error.message,
+        resolutionMode: "dns_preflight_rejected",
+        status: "rejected"
+      }).catch((recordError) => logScanRequestFailure("anonymous_dns_preflight", recordError));
+    }
+    throw error;
   }
 
   if (input.countAnonymousQuota !== false) {

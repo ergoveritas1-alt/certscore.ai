@@ -2,7 +2,7 @@ import { createHmac, randomUUID } from "node:crypto";
 import type { IncomingHttpHeaders } from "node:http";
 import shared from "@website-signal-risk-scanner/shared";
 import type { McpTelemetryEvent, McpTelemetrySurface } from "@website-signal-risk-scanner/shared";
-import type { McpToolInvocationObservation } from "@certscore/mcp/server";
+import { projectMcpToolInvocationObservation, type McpToolInvocationObservation } from "@certscore/mcp/server";
 import type { AnonymousRequesterNetwork } from "@website-signal-risk-scanner/shared";
 
 const { MCP_TELEMETRY_INTEGRATION, mcpTelemetryEndpoint, mcpTelemetryEventSchema } = shared;
@@ -13,6 +13,7 @@ type LightMcpClientContext = {
   actorId: string | null;
   authClass: McpTelemetryEvent["authClass"];
   clientFamily: McpTelemetryEvent["clientFamily"];
+  clientName: string | null;
   source: McpTelemetryEvent["source"];
   sourceAttribution: McpTelemetryEvent["sourceAttribution"];
 };
@@ -25,10 +26,16 @@ type CreateHostedMcpTelemetryInput = {
   headers: IncomingHttpHeaders;
   logger?: TelemetryLogger;
   requesterBinding?: string | null;
+  requesterIp?: string | null;
   requesterNetwork?: AnonymousRequesterNetwork;
   secret: string;
   sessionId: () => string | null;
   surface: McpTelemetrySurface;
+};
+
+type ToolRequestContext = {
+  requesterIp?: string | null;
+  requesterNetwork?: AnonymousRequesterNetwork;
 };
 
 function firstHeader(headers: IncomingHttpHeaders, name: string) {
@@ -51,7 +58,13 @@ function declaredClientName(body: unknown) {
   const clientInfo = (params as Record<string, unknown>).clientInfo;
   if (!clientInfo || typeof clientInfo !== "object" || Array.isArray(clientInfo)) return null;
   const name = (clientInfo as Record<string, unknown>).name;
-  return typeof name === "string" ? name.trim().toLowerCase().slice(0, 100) : null;
+  if (typeof name !== "string") return null;
+  const normalized = name.trim().toLowerCase()
+    .replace(/[^a-z0-9 ._:/+@()-]+/g, " ")
+    .replace(/\s+/g, " ")
+    .slice(0, 100)
+    .trim();
+  return normalized || null;
 }
 
 function clientFamily(name: string | null): McpTelemetryEvent["clientFamily"] {
@@ -98,9 +111,17 @@ export function classifyHostedMcpClient(input: {
     actorId: hashOpaque(input.secret, "actor", actorSource),
     authClass: input.surface === "mcp_authenticated" ? "authenticated" : "anonymous",
     clientFamily: verifiedAnthropic && family === "unknown" ? "anthropic_claude" : family,
+    clientName: declaredClientName(input.clientInfoBody),
     source,
     sourceAttribution,
   };
+}
+
+function requesterIpHash(secret: string, value: string | null | undefined) {
+  if (!value) return null;
+  return createHmac("sha256", secret)
+    .update(`mcp-telemetry:v1:requester-ip:${value}`, "utf8")
+    .digest("hex");
 }
 
 function telemetrySignature(secret: string, timestamp: string, body: string) {
@@ -121,16 +142,6 @@ function parsedToolArguments(body: unknown) {
   return args && typeof args === "object" && !Array.isArray(args) ? args as Record<string, unknown> : {};
 }
 
-function isCertScoreCanaryUrl(value: unknown) {
-  if (typeof value !== "string") return false;
-  try {
-    const parsed = new URL(/^https?:\/\//i.test(value) ? value : `https://${value}`);
-    return parsed.pathname.startsWith("/.well-known/certscore-canary/");
-  } catch {
-    return false;
-  }
-}
-
 export function createHostedMcpTelemetry(input: CreateHostedMcpTelemetryInput) {
   const fetchImpl = input.fetch ?? globalThis.fetch;
   const logger = input.logger ?? console;
@@ -140,11 +151,13 @@ export function createHostedMcpTelemetry(input: CreateHostedMcpTelemetryInput) {
 
   const report = (observation: Omit<McpToolInvocationObservation, "transportOutcome"> & {
     transportOutcome: McpTelemetryEvent["transportOutcome"];
-  }) => {
+  }, requestContext?: ToolRequestContext) => {
     const sessionValue = conversationId ?? input.sessionId();
+    const eventRequesterIp = requestContext?.requesterIp ?? input.requesterIp ?? null;
     const parsed = mcpTelemetryEventSchema.safeParse({
       actorId: client.actorId,
       authClass: client.authClass,
+      clientName: client.clientName,
       clientFamily: client.clientFamily,
       durationMs: observation.durationMs,
       endpoint: mcpTelemetryEndpoint(input.surface),
@@ -157,6 +170,11 @@ export function createHostedMcpTelemetry(input: CreateHostedMcpTelemetryInput) {
       outcome: observation.outcome,
       quotaOutcome: observation.quotaOutcome,
       requestId: randomUUID(),
+      requestedResource: observation.requestedResource,
+      requestedResourceType: observation.requestedResourceType,
+      requesterIp: eventRequesterIp,
+      requesterIpHash: requesterIpHash(input.secret, eventRequesterIp),
+      requesterNetwork: requestContext?.requesterNetwork ?? input.requesterNetwork ?? "unknown",
       scanDecision: observation.scanDecision,
       scanFrom: observation.scanFrom,
       scanId: observation.scanId,
@@ -172,6 +190,11 @@ export function createHostedMcpTelemetry(input: CreateHostedMcpTelemetryInput) {
     if (!parsed.success) {
       logger.error(JSON.stringify({
         event: "mcp.telemetry_event_rejected",
+        issues: parsed.error.issues.map((issue) => ({
+          code: issue.code,
+          keys: "keys" in issue ? issue.keys.slice(0, 8) : undefined,
+          path: issue.path.join("."),
+        })).slice(0, 8),
         surface: input.surface,
         toolName: sanitizedTransportToolName(observation.toolName),
       }));
@@ -203,26 +226,27 @@ export function createHostedMcpTelemetry(input: CreateHostedMcpTelemetryInput) {
   };
 
   return {
-    observeToolInvocation(observation: McpToolInvocationObservation) {
-      report(observation);
+    observeToolInvocation(observation: McpToolInvocationObservation, requestContext?: ToolRequestContext) {
+      report(observation, requestContext);
     },
-    observeTransportRateLimit(input: { body: unknown; durationMs: number; scanId?: string | null; toolName: string }) {
+    observeTransportRateLimit(input: { body: unknown; durationMs: number; requesterIp?: string | null; requesterNetwork?: AnonymousRequesterNetwork; scanId?: string | null; toolName: string }) {
       const args = parsedToolArguments(input.body);
-      report({
+      const projected = projectMcpToolInvocationObservation({
+        args,
         durationMs: input.durationMs,
+        result: { isError: true, structuredContent: { error: { code: "rate_limited" }, status: "rate_limited" } },
+        toolName: input.toolName,
+      });
+      report({
+        ...projected,
         errorCode: "rate_limited",
-        freshness: args.freshness === "refresh" ? "refresh" : input.toolName === "certscore_scan_site" ? "latest" : null,
-        isCanary: isCertScoreCanaryUrl(args.url),
         outcome: "rate_limited",
         quotaOutcome: "rate_limited",
         scanDecision: input.toolName === "certscore_scan_site" ? "unavailable" : "not_applicable",
-        scanFrom: args.scanFrom === "eu_de" || args.scanFrom === "eu_ie" || args.scanFrom === "california" ? args.scanFrom : null,
-        scanId: typeof input.scanId === "string" && /^[a-zA-Z0-9_-]{1,128}$/.test(input.scanId) ? input.scanId : null,
+        scanId: typeof input.scanId === "string" && /^[a-zA-Z0-9_-]{1,128}$/.test(input.scanId) ? input.scanId : projected.scanId,
         scanStatus: "rate_limited",
-        targetHostname: null,
-        toolName: input.toolName,
         transportOutcome: "http_429",
-      });
+      }, { requesterIp: input.requesterIp, requesterNetwork: input.requesterNetwork });
     },
   };
 }

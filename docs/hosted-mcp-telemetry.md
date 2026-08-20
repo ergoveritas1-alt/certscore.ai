@@ -20,7 +20,9 @@ Each completed hosted tool invocation produces one best-effort event with:
 - tool name
 - provider source classification and attribution basis
 - bounded client-family classification
+- bounded self-declared client name from the MCP initializer
 - anonymous/authenticated classification
+- trusted requester IP, HMAC-SHA256 IP attribution, and requester-network class from the specific tool-call request (with session initialization only as a fallback)
 - HMAC-derived opaque session and actor IDs, when safely measurable
 - normalized target hostname for scan creation and full-profile domain lookup tools
 - requested freshness and scan region when supplied
@@ -31,6 +33,7 @@ Each completed hosted tool invocation produces one best-effort event with:
 - duration in milliseconds
 - allowed, rate-limited, or not-applicable quota outcome
 - bounded error code
+- bounded requested resource: scan/job ID, normalized domain, or HTTP(S) origin
 
 The canonical event schema is `packages/shared/src/mcp-telemetry.ts`. Events are stored in `mcp_tool_invocation_events` with a 90-day retention target. The ingestion query deletes up to 500 expired rows on each accepted write, avoiding a separate scheduler or paid retention service. If traffic stops entirely, expired rows remain until the next accepted event triggers pruning.
 
@@ -53,14 +56,15 @@ Telemetry does not persist:
 - tool argument payloads or MCP response bodies
 - authentication tokens
 - raw headers
-- raw IP addresses
 - raw OpenAI conversation or ephemeral-user IDs
 - email addresses or account claims
-- raw user agents or client names
+- raw user agents, client versions, or MCP initializer payloads
 
 Existing opaque provider identifiers, MCP session IDs, and authenticated caller bindings are HMAC-derived into 24-character internal correlation IDs before leaving the MCP process. Provider-wide network bindings are not counted as unique actors.
 
-Normalized requested hostnames are retained because requested-site frequency is an explicit operational metric. Full requested URLs, paths, queries, and fragments are not stored in this telemetry table.
+Trusted requester IPs and their HMAC-SHA256 counterparts are retained under the same 90-day operational policy so failed calls that never produce a scan remain attributable. Client names are lowercased, character-bounded, and limited to the self-declared initializer name; versions and the rest of the initializer are discarded.
+
+Normalized requested hostnames and safe request resources are retained because requested-site frequency and failure diagnosis are explicit operational metrics. For URL inputs, telemetry stores only the HTTP(S) origin. Full requested URLs, paths, credentials, queries, and fragments are not stored in this telemetry table.
 
 ## Delivery and failure behavior
 
@@ -83,7 +87,7 @@ Platform admins can open `/app/admin/mcp`. The page reports:
 - 30-day daily trends
 - provider/access signal breakdowns with attribution labels
 - bounded frequently requested hostnames
-- recent privacy-minimized invocation rows
+- recent bounded invocation rows, including retained requester and client attribution
 
 No historical telemetry is invented. The dashboard starts accumulating data only after migration and deployment. Existing logs and API Activity records are not automatically backfilled because they cannot reliably reconstruct one event per MCP tool invocation with exact duration and session attribution.
 

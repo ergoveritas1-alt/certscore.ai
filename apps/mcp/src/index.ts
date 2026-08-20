@@ -279,8 +279,9 @@ async function handleMcp(req: IncomingMessage, res: ServerResponse, anonymous: b
     }
     return;
   }
-  const anonymousRequester = anonymous ? anonymousMcpRequester(req) : null;
-  const clientIp = anonymousRequester?.ip ?? null;
+  const requestSource = anonymousMcpRequester(req);
+  const anonymousRequester = anonymous ? requestSource : null;
+  const clientIp = requestSource.ip;
   let token: string | undefined;
   let tokenHash: string;
   let authenticatedCallerHash: string | null = null;
@@ -334,7 +335,8 @@ async function handleMcp(req: IncomingMessage, res: ServerResponse, anonymous: b
       clientInfoBody: parsedBody,
       headers: req.headers,
       requesterBinding: tokenHash,
-      requesterNetwork: anonymousRequester?.network,
+      requesterIp: clientIp,
+      requesterNetwork: requestSource.network,
       secret: env.jwtSecret,
       sessionId: () => transport.sessionId ?? null,
       surface
@@ -353,7 +355,15 @@ async function handleMcp(req: IncomingMessage, res: ServerResponse, anonymous: b
       exampleDomainDemoUrl: anonymous
         ? "https://ergoveritas.com/.well-known/certscore-canary/sentinels/broad-baseline.html"
         : null,
-      onToolInvocation: telemetry.observeToolInvocation
+      onToolInvocation: (observation, context) => {
+        const invocationSource = context.headers
+          ? anonymousMcpRequesterFromHeaders(context.headers)
+          : requestSource;
+        telemetry.observeToolInvocation(observation, {
+          requesterIp: invocationSource.ip,
+          requesterNetwork: invocationSource.network,
+        });
+      }
     });
     transport.onclose = () => {
       if (transport.sessionId) {
@@ -504,6 +514,8 @@ async function handleMcp(req: IncomingMessage, res: ServerResponse, anonymous: b
       session.telemetry?.observeTransportRateLimit({
         body: parsedBody,
         durationMs: Date.now() - requestStartedAt,
+        requesterIp: clientIp,
+        requesterNetwork: requestSource.network,
         scanId: readCall.target.startsWith("scan:") ? readCall.target.slice("scan:".length) : null,
         toolName: readCall.tool
       });

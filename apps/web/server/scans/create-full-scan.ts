@@ -62,6 +62,7 @@ import {
 } from "./requester-ip-context";
 import type { CampaignAttribution } from "../../lib/attribution/campaign-attribution";
 import { ensureCanonicalScanReportProjectionForReuse } from "./canonical-scan-report-publisher";
+import { checkDomainDns } from "../domains/domain-dns";
 
 export type CreateFullScanActionState = {
   error: string | null;
@@ -380,6 +381,21 @@ export async function queueFullScanForDomain(input: QueueFullScanInput): Promise
         scanId: null
       };
     }
+  }
+
+  const dnsStatus = await checkDomainDns(domainRecord.domain.hostname);
+  if (!dnsStatus.exists) {
+    const errorCode = dnsStatus.retryable ? "dns_unavailable" : "domain_not_found";
+    await logRequest({
+      errorCode,
+      errorMessage: dnsStatus.reason,
+      resolutionMode: "dns_preflight_rejected",
+      status: "rejected"
+    });
+    return {
+      error: dnsStatus.reason,
+      scanId: null
+    };
   }
 
   if (input.enforceMonthlyUsageLimit) {

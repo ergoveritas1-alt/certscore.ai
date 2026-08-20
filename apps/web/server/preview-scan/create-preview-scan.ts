@@ -17,6 +17,7 @@ import {
   summarizeLocalV2DagLambdaDispatchForEvent
 } from "../scans/local-v2-dag-lambda-dispatch";
 import { dispatchLocalV2DagSimulatedLambdaScan } from "../scans/local-v2-dag-lambda-simulated-dispatch";
+import { requireDomainDns } from "../domains/domain-dns";
 
 export async function createPreviewScan(input: {
   clientRequestId?: string | null;
@@ -28,6 +29,7 @@ export async function createPreviewScan(input: {
   scanFrom?: ScanFrom;
 }) {
   getPreviewScanAvailability();
+  await requireDomainDns(input.hostname);
 
   const domain = await findOrCreateAnonymousPreviewDomain(input.hostname, input.normalizedUrl);
   const scan = await createPreviewScanRecord({
