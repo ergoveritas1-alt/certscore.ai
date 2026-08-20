@@ -12,6 +12,7 @@ const scansPage = readFileSync("apps/web/app/app/admin/scans/page.tsx", "utf8");
 const analyticsRepository = readFileSync("apps/web/server/admin/product-analytics.ts", "utf8");
 const pulseRepository = readFileSync("apps/web/server/admin/list-pulse-requests.ts", "utf8");
 const scansRepository = readFileSync("apps/web/server/admin/repository.ts", "utf8");
+const trafficFilters = readFileSync("apps/web/components/admin/admin-traffic-filters.tsx", "utf8");
 
 test("Mac mini scan-bot traffic is excluded by default and can be explicitly included", () => {
   assert.equal(resolveExcludeMacMiniScanBot({}), true);
@@ -30,6 +31,10 @@ test("Mac mini scan-bot traffic is excluded by default and can be explicitly inc
   assert.match(analyticsRepository, /is_mac_mini_scan_bot = false/);
   assert.match(pulseRepository, /api_key\.name/);
   assert.match(scansRepository, /mac_mini_scan_bot_filter/);
+  assert.match(trafficFilters, /aria-label="Traffic visibility"/);
+  assert.match(trafficFilters, /aria-label="Canary traffic"/);
+  assert.match(trafficFilters, /aria-label="Mac mini scan bot traffic"/);
+  assert.equal((trafficFilters.match(/type="submit">Apply/g) ?? []).length, 1);
 });
 
 test("Events uses exclusion language, includes all bot classes, and renders compact breakdown grids", () => {

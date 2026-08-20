@@ -11,8 +11,7 @@ import { getAdminPulseFilterOptions, getAdminPulseOverviewCounts, listAdminPulse
 import { withServerTiming } from "../../../../server/performance/log-server-timing";
 import { AdminNavigationProvider, AdminReportLink } from "../scans/admin-scan-actions";
 import { AdminScansFilterForm } from "../scans/admin-scans-filter-form";
-import { CanaryTrafficToggle } from "../../../../components/admin/canary-traffic-toggle";
-import { MacMiniScanBotToggle } from "../../../../components/admin/mac-mini-scan-bot-toggle";
+import { AdminTrafficFilters } from "../../../../components/admin/admin-traffic-filters";
 import { AdminTableRefreshBoundary } from "../../../../components/admin/admin-table-refresh-boundary";
 import { resolveExcludeMacMiniScanBot } from "../../../../lib/admin/mac-mini-scan-bot";
 import {
@@ -381,12 +380,12 @@ export default async function AdminPulsePage({ searchParams }: AdminPulsePagePro
     <AdminNavigationProvider>
     <Card className="border-slate-200 bg-white">
       <CardHeader className="pb-2">
-        <div className="flex flex-col gap-2 lg:flex-row lg:items-end lg:justify-between">
+        <div className="space-y-3">
           <div className="space-y-1">
             <CardTitle>API Activity</CardTitle>
             <p className="text-sm text-slate-500">Logical programmatic requests across Pulse, MCP, SDK, and other integrations. Caller IP is the client or server that reached CertScore—not the scanned site. SDK/MCP result-fetch follow-ups are grouped with their initiating request.</p>
           </div>
-          <div className="flex flex-wrap items-center justify-end gap-2"><CanaryTrafficToggle basePath="/app/admin/pulse" includeCanary={includeCanary} searchParams={resolved} /><MacMiniScanBotToggle basePath="/app/admin/pulse" excludeMacMiniScanBot={excludeMacMiniScanBot} searchParams={resolved} /><Suspense fallback={<AdminPulseOverviewFallback />}><AdminPulseOverview excludeMacMiniScanBot={excludeMacMiniScanBot} includeCanary={includeCanary} /></Suspense></div>
+          <div className="flex flex-wrap items-center justify-end gap-x-4 gap-y-2"><AdminTrafficFilters basePath="/app/admin/pulse" excludeMacMiniScanBot={excludeMacMiniScanBot} includeCanary={includeCanary} searchParams={resolved} /><Suspense fallback={<AdminPulseOverviewFallback />}><AdminPulseOverview excludeMacMiniScanBot={excludeMacMiniScanBot} includeCanary={includeCanary} /></Suspense></div>
         </div>
       </CardHeader>
       <AdminTableRefreshBoundary basePath="/app/admin/pulse" label="Refreshing API activity">

@@ -322,7 +322,19 @@ function adminScanActivityBaseSql() {
         else 'unknown'
       end as access_filter
       ,coalesce(nullif(trim(ss.stop_reason_code), ''), ss.scan_outcome) as outcome_filter
-      ,exists (select 1 from public.scan_pages csp where csp.scan_id = s.id and csp.page_url ~* '^https?://[^/?#]+/\\.well-known/certscore-canary/') as canary_filter
+      ,(
+        exists (select 1 from public.scan_pages csp where csp.scan_id = s.id and csp.page_url ~* '^https?://[^/?#]+/\\.well-known/certscore-canary/')
+        or exists (
+          select 1 from public.scan_requests csr
+          where coalesce(csr.fulfilled_by_scan_id, csr.scan_id) = s.id
+            and coalesce(csr.requested_url, '') ~* '^https?://[^/?#]+/\\.well-known/certscore-canary/'
+        )
+        or exists (
+          select 1 from public.pulse_requests cpr
+          where cpr.scan_id = s.id
+            and coalesce(cpr.requested_url, '') ~* '^https?://[^/?#]+/\\.well-known/certscore-canary/'
+        )
+      ) as canary_filter
       ,(
         exists (
           select 1 from public.pulse_requests bot_pr
@@ -624,6 +636,23 @@ export async function loadAdminScanActivityPageRefs(
     filters.includeCanary === true && filters.excludeMacMiniScanBot === false
   );
 
+  const canUseDefaultActivityPath = Boolean(
+    !queryText &&
+    !status &&
+    !freshness &&
+    !language &&
+    !industry &&
+    !access &&
+    !outcome &&
+    !source &&
+    parsedSearch.exclusions.requester.length === 0 &&
+    parsedSearch.exclusions.domain.length === 0 &&
+    parsedSearch.exclusions.scanId.length === 0 &&
+    parsedSearch.exclusions.email.length === 0 &&
+    parsedSearch.exclusions.ip.length === 0 &&
+    parsedSearch.exclusions.source.length === 0
+  );
+
   const exactHostname = normalizeAdminExactHostname(queryText);
   const exactScanId = normalizeAdminExactScanId(queryText);
   const canUseExactIdentityPath = Boolean(
@@ -644,6 +673,111 @@ export async function loadAdminScanActivityPageRefs(
     parsedSearch.exclusions.source.length === 0 &&
     filters.includeCanary === true && filters.excludeMacMiniScanBot === false
   );
+
+  if (canUseDefaultActivityPath) {
+    const defaultResult = await query<AdminScanActivityPageResultRow>(
+      `with canary_scan_ids as materialized (
+         select sp.scan_id
+           from public.scan_pages sp
+          where sp.page_url ~* '^https?://[^/?#]+/\\.well-known/certscore-canary/'
+         union
+         select coalesce(sr.fulfilled_by_scan_id, sr.scan_id) as scan_id
+           from public.scan_requests sr
+          where coalesce(sr.fulfilled_by_scan_id, sr.scan_id) is not null
+            and coalesce(sr.requested_url, '') ~* '^https?://[^/?#]+/\\.well-known/certscore-canary/'
+         union
+         select pr.scan_id
+           from public.pulse_requests pr
+          where pr.scan_id is not null
+            and coalesce(pr.requested_url, '') ~* '^https?://[^/?#]+/\\.well-known/certscore-canary/'
+       ), mac_mini_scan_bot_keys as materialized (
+         select public_id
+           from public.integration_api_keys
+          where name = any($5::text[])
+       ), mac_mini_scan_bot_scan_ids as materialized (
+         select pr.scan_id
+           from public.pulse_requests pr
+           join mac_mini_scan_bot_keys bot_key on bot_key.public_id = pr.requested_by ->> 'apiKeyId'
+          where pr.scan_id is not null
+         union
+         select coalesce(sr.fulfilled_by_scan_id, sr.scan_id) as scan_id
+           from public.scan_requests sr
+           join mac_mini_scan_bot_keys bot_key on bot_key.public_id = sr.requested_by ->> 'apiKeyId'
+          where coalesce(sr.fulfilled_by_scan_id, sr.scan_id) is not null
+       ), activity as (
+         select 'scan'::text as row_kind,
+                ('scan:' || s.id::text) as activity_id,
+                s.id as scan_id,
+                null::text as request_public_id,
+                coalesce(s.completed_at, s.started_at, s.created_at) as activity_at
+           from public.scans s
+          where ($1::timestamptz is null or coalesce(s.completed_at, s.started_at, s.created_at) >= $1::timestamptz)
+            and ($2::text is null or coalesce(s.scan_config_json ->> 'scanFrom', 'default') = $2)
+            and ($3::boolean = true or not exists (select 1 from canary_scan_ids canary where canary.scan_id = s.id))
+            and ($4::boolean = false or not exists (select 1 from mac_mini_scan_bot_scan_ids bot where bot.scan_id = s.id))
+         union all
+         select 'request'::text as row_kind,
+                ('request:' || sr.public_id) as activity_id,
+                coalesce(sr.fulfilled_by_scan_id, sr.scan_id) as scan_id,
+                sr.public_id as request_public_id,
+                sr.requested_at as activity_at
+           from public.scan_requests sr
+           left join public.scans s on s.id = coalesce(sr.fulfilled_by_scan_id, sr.scan_id)
+          where (coalesce(sr.fulfilled_by_scan_id, sr.scan_id) is null or sr.resolution_mode = 'reused_existing_scan')
+            and ($1::timestamptz is null or sr.requested_at >= $1::timestamptz)
+            and ($2::text is null or coalesce(s.scan_config_json ->> 'scanFrom', sr.request_context ->> 'scanFrom', 'default') = $2)
+            and ($3::boolean = true or (
+              coalesce(sr.requested_url, '') !~* '^https?://[^/?#]+/\\.well-known/certscore-canary/'
+              and not exists (
+                select 1 from canary_scan_ids canary
+                where canary.scan_id = coalesce(sr.fulfilled_by_scan_id, sr.scan_id)
+              )
+            ))
+            and ($4::boolean = false or (
+              not exists (
+                select 1 from mac_mini_scan_bot_keys bot_key
+                where bot_key.public_id = sr.requested_by ->> 'apiKeyId'
+              )
+              and not exists (
+                select 1 from mac_mini_scan_bot_scan_ids bot
+                where bot.scan_id = coalesce(sr.fulfilled_by_scan_id, sr.scan_id)
+              )
+            ))
+       )
+       select activity.row_kind,
+              activity.activity_id,
+              activity.scan_id::text as scan_id,
+              activity.request_public_id,
+              activity.activity_at,
+              count(*) over ()::int as total_count
+         from activity
+        order by activity.activity_at desc, activity.activity_id desc
+        limit $6 offset $7`,
+      [
+        since,
+        scanFrom,
+        filters.includeCanary === true,
+        filters.excludeMacMiniScanBot !== false,
+        MAC_MINI_SCAN_BOT_API_KEY_NAMES,
+        limit,
+        offset
+      ],
+      { readOnly: true }
+    );
+    return {
+      rows: defaultResult.rows.flatMap((row): AdminScanActivityPageRef[] => {
+        if (!row.row_kind || !row.activity_id || !row.activity_at) return [];
+        return [{
+          activity_at: row.activity_at,
+          activity_id: row.activity_id,
+          request_public_id: row.request_public_id,
+          row_kind: row.row_kind,
+          scan_id: row.scan_id
+        }];
+      }),
+      totalCount: defaultResult.rows[0]?.total_count ?? 0
+    };
+  }
 
   if (canUseBoundedActivityPath) {
     const boundedResult = await query<AdminScanActivityPageResultRow>(
@@ -2264,7 +2398,11 @@ export async function loadAdminScanOverviewCounts(includeCanary = false, exclude
       `select coalesce(scan_config_json->>'scanFrom', 'default') as scan_from,
               count(*)::text as count
         from scans s
-        where ($1::boolean = true or not exists (select 1 from scan_pages sp where sp.scan_id = s.id and sp.page_url ~* '^https?://[^/?#]+/\\.well-known/certscore-canary/'))
+        where ($1::boolean = true or not (
+          exists (select 1 from scan_pages sp where sp.scan_id = s.id and sp.page_url ~* '^https?://[^/?#]+/\\.well-known/certscore-canary/')
+          or exists (select 1 from scan_requests csr where coalesce(csr.fulfilled_by_scan_id, csr.scan_id) = s.id and coalesce(csr.requested_url, '') ~* '^https?://[^/?#]+/\\.well-known/certscore-canary/')
+          or exists (select 1 from pulse_requests cpr where cpr.scan_id = s.id and coalesce(cpr.requested_url, '') ~* '^https?://[^/?#]+/\\.well-known/certscore-canary/')
+        ))
           and ($2::boolean = false or not (
             exists (
               select 1 from pulse_requests bot_pr
@@ -2287,7 +2425,19 @@ export async function loadAdminScanOverviewCounts(includeCanary = false, exclude
                    or resolution_mode = 'reused_existing_scan'
               )::int as unlinked_count
          from scan_requests sr
-        where ($1::boolean = true or coalesce(sr.requested_url, '') !~* '^https?://[^/?#]+/\\.well-known/certscore-canary/')
+        where ($1::boolean = true or (
+          coalesce(sr.requested_url, '') !~* '^https?://[^/?#]+/\\.well-known/certscore-canary/'
+          and not exists (
+            select 1 from scan_pages sp
+            where sp.scan_id = coalesce(sr.fulfilled_by_scan_id, sr.scan_id)
+              and sp.page_url ~* '^https?://[^/?#]+/\\.well-known/certscore-canary/'
+          )
+          and not exists (
+            select 1 from pulse_requests cpr
+            where cpr.scan_id = coalesce(sr.fulfilled_by_scan_id, sr.scan_id)
+              and coalesce(cpr.requested_url, '') ~* '^https?://[^/?#]+/\\.well-known/certscore-canary/'
+          )
+        ))
           and ($2::boolean = false or not (
             exists (select 1 from integration_api_keys bot_key where bot_key.public_id = sr.requested_by ->> 'apiKeyId' and bot_key.name = any($3::text[]))
             or exists (
@@ -2314,7 +2464,11 @@ export async function loadAdminScanOverviewCounts(includeCanary = false, exclude
                    or scan_outcome = 'content_capture_degraded'
               )::int as blocked_or_captcha_count
         from scan_snapshots ss
-        where ($1::boolean = true or not exists (select 1 from scan_pages sp where sp.scan_id = ss.scan_id and sp.page_url ~* '^https?://[^/?#]+/\\.well-known/certscore-canary/'))
+        where ($1::boolean = true or not (
+          exists (select 1 from scan_pages sp where sp.scan_id = ss.scan_id and sp.page_url ~* '^https?://[^/?#]+/\\.well-known/certscore-canary/')
+          or exists (select 1 from scan_requests csr where coalesce(csr.fulfilled_by_scan_id, csr.scan_id) = ss.scan_id and coalesce(csr.requested_url, '') ~* '^https?://[^/?#]+/\\.well-known/certscore-canary/')
+          or exists (select 1 from pulse_requests cpr where cpr.scan_id = ss.scan_id and coalesce(cpr.requested_url, '') ~* '^https?://[^/?#]+/\\.well-known/certscore-canary/')
+        ))
           and ($2::boolean = false or not (
             exists (
               select 1 from pulse_requests bot_pr

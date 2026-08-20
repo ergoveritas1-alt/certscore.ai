@@ -11,8 +11,7 @@ import { withServerTiming } from "../../../../server/performance/log-server-timi
 import { AdminNavigationProvider, AdminScanActions } from "./admin-scan-actions";
 import { AdminScansAutoRefresh } from "./admin-scans-auto-refresh";
 import { AdminScansFilterForm } from "./admin-scans-filter-form";
-import { CanaryTrafficToggle } from "../../../../components/admin/canary-traffic-toggle";
-import { MacMiniScanBotToggle } from "../../../../components/admin/mac-mini-scan-bot-toggle";
+import { AdminTrafficFilters } from "../../../../components/admin/admin-traffic-filters";
 import { AdminTableRefreshBoundary } from "../../../../components/admin/admin-table-refresh-boundary";
 import { resolveExcludeMacMiniScanBot } from "../../../../lib/admin/mac-mini-scan-bot";
 import {
@@ -292,12 +291,12 @@ async function AdminScansContent({ resolvedSearchParams }: { resolvedSearchParam
     <AdminNavigationProvider>
     <Card className="min-w-0 overflow-hidden border-slate-200 bg-white">
       <CardHeader className="pb-2">
-        <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
+        <div className="space-y-3">
           <div className="space-y-1">
             <CardTitle>Scan Admin</CardTitle>
             <p className="text-sm text-slate-500">Requester IP identifies who reached CertScore. Scanner egress identifies the outbound runtime that reached the target site.</p>
           </div>
-          <div className="flex flex-wrap items-center justify-end gap-2"><CanaryTrafficToggle basePath="/app/admin/scans" includeCanary={includeCanary} searchParams={resolvedSearchParams} /><MacMiniScanBotToggle basePath="/app/admin/scans" excludeMacMiniScanBot={excludeMacMiniScanBot} searchParams={resolvedSearchParams} /><p className="text-sm text-slate-500">
+          <div className="flex flex-wrap items-center justify-end gap-x-4 gap-y-2"><AdminTrafficFilters basePath="/app/admin/scans" excludeMacMiniScanBot={excludeMacMiniScanBot} includeCanary={includeCanary} searchParams={resolvedSearchParams} /><p className="text-sm text-slate-500">
             {scanMetrics.totalPhysicalScans} runs · {scanMetrics.totalScanRequests} requests
           </p></div>
         </div>
