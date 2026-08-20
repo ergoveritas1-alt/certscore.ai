@@ -12,7 +12,9 @@ import { withServerTiming } from "../../../../server/performance/log-server-timi
 import { AdminNavigationProvider, AdminReportLink } from "../scans/admin-scan-actions";
 import { AdminScansFilterForm } from "../scans/admin-scans-filter-form";
 import { CanaryTrafficToggle } from "../../../../components/admin/canary-traffic-toggle";
+import { MacMiniScanBotToggle } from "../../../../components/admin/mac-mini-scan-bot-toggle";
 import { AdminTableRefreshBoundary } from "../../../../components/admin/admin-table-refresh-boundary";
+import { resolveExcludeMacMiniScanBot } from "../../../../lib/admin/mac-mini-scan-bot";
 import {
   adminPolicyEvidenceDiagnosticTitle,
   adminPolicyEvidenceStageLabel,
@@ -30,7 +32,7 @@ const accessValues = ["any", "clear", "blocked", "captcha", "robots_limited", "l
 const timeSpans = ["all", "4h", "12h", "24h", "7d", "31d"] as const;
 
 type AdminPulsePageProps = {
-  searchParams?: Promise<{ page?: string; perPage?: string; q?: string; status?: string; route?: string; freshness?: string; access?: string; outcome?: string; language?: string; industry?: string; scanFrom?: string; timeSpan?: string; includeCanary?: string }>;
+  searchParams?: Promise<{ page?: string; perPage?: string; q?: string; status?: string; route?: string; freshness?: string; access?: string; outcome?: string; language?: string; industry?: string; scanFrom?: string; timeSpan?: string; includeCanary?: string; excludeMacMiniScanBot?: string; scanBotFilter?: string }>;
 };
 
 function normalizeStatus(value: string | undefined): AdminPulseRequestStatus | null {
@@ -161,12 +163,13 @@ type AdminPulseFilterState = {
   activeScanFrom: string;
   activeStatus: AdminPulseRequestStatus | null;
   activeTimeSpan: (typeof timeSpans)[number];
+  excludeMacMiniScanBot: boolean;
   includeCanary: boolean;
   hasFilters: boolean;
 };
 
-async function AdminPulseOverview({ includeCanary }: { includeCanary: boolean }) {
-  const counts = await withServerTiming("app.admin.api_activity.counts", () => getAdminPulseOverviewCounts(includeCanary));
+async function AdminPulseOverview({ excludeMacMiniScanBot, includeCanary }: { excludeMacMiniScanBot: boolean; includeCanary: boolean }) {
+  const counts = await withServerTiming("app.admin.api_activity.counts", () => getAdminPulseOverviewCounts(includeCanary, excludeMacMiniScanBot));
 
   return (
     <p className="text-sm text-slate-500">
@@ -191,6 +194,7 @@ async function AdminPulseFilters({
   activeScanFrom,
   activeStatus,
   activeTimeSpan,
+  excludeMacMiniScanBot,
   includeCanary,
   hasFilters
 }: AdminPulseFilterState) {
@@ -199,6 +203,8 @@ async function AdminPulseFilters({
   return (
     <AdminScansFilterForm basePath="/app/admin/pulse" clearHref="/app/admin/pulse" hasFilters={hasFilters} submitFirst>
       {includeCanary ? <input name="includeCanary" type="hidden" value="1" /> : null}
+      <input name="scanBotFilter" type="hidden" value="1" />
+      {excludeMacMiniScanBot ? <input name="excludeMacMiniScanBot" type="hidden" value="1" /> : null}
       <input
         aria-label="Filter by domain, scan ID, email, requester, or IP; use field not-equal syntax to exclude"
         className="h-10 min-w-[28rem] flex-[1_1_32rem] rounded-lg border border-slate-300 bg-white px-3 text-sm"
@@ -359,10 +365,11 @@ export default async function AdminPulsePage({ searchParams }: AdminPulsePagePro
   const activeScanFrom = SCAN_FROM_VALUES.includes(resolved.scanFrom as typeof SCAN_FROM_VALUES[number]) ? resolved.scanFrom as typeof SCAN_FROM_VALUES[number] : "any";
   const activeTimeSpan = normalizeOption(resolved.timeSpan, timeSpans, "all") as typeof timeSpans[number];
   const includeCanary = resolved.includeCanary === "1";
+  const excludeMacMiniScanBot = resolveExcludeMacMiniScanBot(resolved);
   const hasFilters = Boolean(activeQuery) || Boolean(activeStatus) || Boolean(activeRoute) || activeFreshness !== "any" || activeAccess !== "any" || Boolean(activeOutcome) || Boolean(activeLanguage) || Boolean(activeIndustry) || activeScanFrom !== "any" || activeTimeSpan !== "all";
   const pageSize = normalizePageSize(resolved.perPage);
   const page = normalizePage(resolved.page);
-  const requestListInput = { limit: pageSize, offset: (page - 1) * pageSize, query: activeQuery, status: activeStatus, route: activeRoute, freshness: activeFreshness, access: activeAccess, outcome: activeOutcome, language: activeLanguage, industry: activeIndustry, scanFrom: activeScanFrom, timeSpan: activeTimeSpan, includeCanary };
+  const requestListInput = { limit: pageSize, offset: (page - 1) * pageSize, query: activeQuery, status: activeStatus, route: activeRoute, freshness: activeFreshness, access: activeAccess, outcome: activeOutcome, language: activeLanguage, industry: activeIndustry, scanFrom: activeScanFrom, timeSpan: activeTimeSpan, includeCanary, excludeMacMiniScanBot };
   const requestPage = await withServerTiming("app.admin.api_activity.rows", () =>
     listAdminPulseRequestsPage(requestListInput)
   );
@@ -379,7 +386,7 @@ export default async function AdminPulsePage({ searchParams }: AdminPulsePagePro
             <CardTitle>API Activity</CardTitle>
             <p className="text-sm text-slate-500">Logical programmatic requests across Pulse, MCP, SDK, and other integrations. Caller IP is the client or server that reached CertScore—not the scanned site. SDK/MCP result-fetch follow-ups are grouped with their initiating request.</p>
           </div>
-          <div className="flex items-center gap-3"><CanaryTrafficToggle basePath="/app/admin/pulse" includeCanary={includeCanary} searchParams={resolved} /><Suspense fallback={<AdminPulseOverviewFallback />}><AdminPulseOverview includeCanary={includeCanary} /></Suspense></div>
+          <div className="flex flex-wrap items-center justify-end gap-2"><CanaryTrafficToggle basePath="/app/admin/pulse" includeCanary={includeCanary} searchParams={resolved} /><MacMiniScanBotToggle basePath="/app/admin/pulse" excludeMacMiniScanBot={excludeMacMiniScanBot} searchParams={resolved} /><Suspense fallback={<AdminPulseOverviewFallback />}><AdminPulseOverview excludeMacMiniScanBot={excludeMacMiniScanBot} includeCanary={includeCanary} /></Suspense></div>
         </div>
       </CardHeader>
       <AdminTableRefreshBoundary basePath="/app/admin/pulse" label="Refreshing API activity">
@@ -396,6 +403,7 @@ export default async function AdminPulsePage({ searchParams }: AdminPulsePagePro
             activeScanFrom={activeScanFrom}
             activeStatus={activeStatus}
             activeTimeSpan={activeTimeSpan}
+            excludeMacMiniScanBot={excludeMacMiniScanBot}
             includeCanary={includeCanary}
             hasFilters={hasFilters}
           />
@@ -407,7 +415,7 @@ export default async function AdminPulsePage({ searchParams }: AdminPulsePagePro
           page={page}
           pageCount={pageCount}
           pageSize={pageSize}
-          searchParams={{ q: activeQuery, status: activeStatus, route: activeRoute, freshness: activeFreshness, access: activeAccess, outcome: activeOutcome, language: activeLanguage, industry: activeIndustry, scanFrom: activeScanFrom, timeSpan: activeTimeSpan, includeCanary: includeCanary ? "1" : null }}
+          searchParams={{ q: activeQuery, status: activeStatus, route: activeRoute, freshness: activeFreshness, access: activeAccess, outcome: activeOutcome, language: activeLanguage, industry: activeIndustry, scanFrom: activeScanFrom, timeSpan: activeTimeSpan, includeCanary: includeCanary ? "1" : null, scanBotFilter: "1", excludeMacMiniScanBot: excludeMacMiniScanBot ? "1" : null }}
           showPageJump
           totalCount={filteredTotal}
           visibleCount={requests.length}

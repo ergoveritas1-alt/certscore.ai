@@ -12,7 +12,9 @@ import { AdminNavigationProvider, AdminScanActions } from "./admin-scan-actions"
 import { AdminScansAutoRefresh } from "./admin-scans-auto-refresh";
 import { AdminScansFilterForm } from "./admin-scans-filter-form";
 import { CanaryTrafficToggle } from "../../../../components/admin/canary-traffic-toggle";
+import { MacMiniScanBotToggle } from "../../../../components/admin/mac-mini-scan-bot-toggle";
 import { AdminTableRefreshBoundary } from "../../../../components/admin/admin-table-refresh-boundary";
+import { resolveExcludeMacMiniScanBot } from "../../../../lib/admin/mac-mini-scan-bot";
 import {
   adminPolicyEvidenceDiagnosticTitle,
   adminPolicyEvidenceStageLabel,
@@ -25,7 +27,7 @@ export const dynamic = "force-dynamic";
 export const revalidate = 0;
 
 type AdminScansPageProps = {
-  searchParams?: Promise<{ page?: string; perPage?: string; q?: string; status?: string; freshness?: string; access?: string; outcome?: string; language?: string; industry?: string; scanFrom?: string; timeSpan?: string; includeCanary?: string }>;
+  searchParams?: Promise<{ page?: string; perPage?: string; q?: string; status?: string; freshness?: string; access?: string; outcome?: string; language?: string; industry?: string; scanFrom?: string; timeSpan?: string; includeCanary?: string; excludeMacMiniScanBot?: string; scanBotFilter?: string }>;
 };
 
 const statuses = ["any", "no_go", "failed", "running", "queued", "limited", "completed"] as const;
@@ -253,9 +255,10 @@ async function AdminScansContent({ resolvedSearchParams }: { resolvedSearchParam
   const activeScanFrom = SCAN_FROM_VALUES.includes(resolvedSearchParams.scanFrom as typeof SCAN_FROM_VALUES[number]) ? resolvedSearchParams.scanFrom as typeof SCAN_FROM_VALUES[number] : "any";
   const activeTimeSpan = normalizeTimeSpan(resolvedSearchParams.timeSpan);
   const includeCanary = resolvedSearchParams.includeCanary === "1";
+  const excludeMacMiniScanBot = resolveExcludeMacMiniScanBot(resolvedSearchParams);
   const hasFilters = Boolean(activeQuery) || activeStatus !== "any" || activeFreshness !== "any" || activeAccess !== "any" || Boolean(activeOutcome) || Boolean(activeLanguage) || Boolean(activeIndustry) || activeScanFrom !== "any" || activeTimeSpan !== "all";
   const [scanMetrics, filterOptions, scanPage] = await Promise.all([
-    withServerTiming("app.admin.scans.metrics", () => getAdminScanOverviewMetrics(includeCanary)),
+    withServerTiming("app.admin.scans.metrics", () => getAdminScanOverviewMetrics(includeCanary, excludeMacMiniScanBot)),
     withServerTiming("app.admin.scans.filter-options", () => getAdminScanFilterOptions()),
     withServerTiming("app.admin.scans.list", () => listAdminScansPage(pageSize, (currentPage - 1) * pageSize, {
       query: activeQuery || null,
@@ -266,8 +269,9 @@ async function AdminScansContent({ resolvedSearchParams }: { resolvedSearchParam
       language: activeLanguage || null,
       industry: activeIndustry || null,
       scanFrom: activeScanFrom === "any" ? null : activeScanFrom,
-      timeSpan: activeTimeSpan
-      ,includeCanary
+      timeSpan: activeTimeSpan,
+      includeCanary,
+      excludeMacMiniScanBot
     }))
   ]);
   const totalCount = scanPage.totalCount;
@@ -293,7 +297,7 @@ async function AdminScansContent({ resolvedSearchParams }: { resolvedSearchParam
             <CardTitle>Scan Admin</CardTitle>
             <p className="text-sm text-slate-500">Requester IP identifies who reached CertScore. Scanner egress identifies the outbound runtime that reached the target site.</p>
           </div>
-          <div className="flex items-center gap-3"><CanaryTrafficToggle basePath="/app/admin/scans" includeCanary={includeCanary} searchParams={resolvedSearchParams} /><p className="text-sm text-slate-500">
+          <div className="flex flex-wrap items-center justify-end gap-2"><CanaryTrafficToggle basePath="/app/admin/scans" includeCanary={includeCanary} searchParams={resolvedSearchParams} /><MacMiniScanBotToggle basePath="/app/admin/scans" excludeMacMiniScanBot={excludeMacMiniScanBot} searchParams={resolvedSearchParams} /><p className="text-sm text-slate-500">
             {scanMetrics.totalPhysicalScans} runs · {scanMetrics.totalScanRequests} requests
           </p></div>
         </div>
@@ -303,6 +307,8 @@ async function AdminScansContent({ resolvedSearchParams }: { resolvedSearchParam
         <AdminScansAutoRefresh targets={liveTargets} />
         <AdminScansFilterForm hasFilters={hasFilters} submitFirst>
           {includeCanary ? <input name="includeCanary" type="hidden" value="1" /> : null}
+          <input name="scanBotFilter" type="hidden" value="1" />
+          {excludeMacMiniScanBot ? <input name="excludeMacMiniScanBot" type="hidden" value="1" /> : null}
           <input aria-label="Filter by domain, scan ID, email, requester, IP, or source; use field not-equal syntax to exclude" className="h-10 min-w-[28rem] flex-[1_1_32rem] rounded-lg border border-slate-300 bg-white px-3 text-sm" defaultValue={activeQuery} name="q" placeholder="Domain, scan_id, email, requester, IP · source:homepage-anonymous · ip!=66.*" />
           <select aria-label="Filter scans by status" className="h-10 w-[7.5rem] shrink-0 rounded-lg border border-slate-300 bg-white px-2 text-xs" defaultValue={activeStatus} name="status">{statuses.map((status) => <option key={status} value={status}>{status === "any" ? "Any status" : formatFilterLabel(status)}</option>)}</select>
           <select aria-label="Filter scans by freshness" className="h-10 w-[8rem] shrink-0 rounded-lg border border-slate-300 bg-white px-2 text-xs" defaultValue={activeFreshness} name="freshness">{freshnesses.map((freshness) => <option key={freshness} value={freshness}>{freshness === "any" ? "Any freshness" : freshness === "fresh" ? "Fresh" : freshness === "forced_fresh" ? "Forced fresh" : "Reused <24h"}</option>)}</select>
@@ -321,7 +327,7 @@ async function AdminScansContent({ resolvedSearchParams }: { resolvedSearchParam
           pageSize={pageSize}
           totalCount={totalCount}
           visibleCount={scans.length}
-          searchParams={{ q: activeQuery, status: activeStatus, freshness: activeFreshness, access: activeAccess, outcome: activeOutcome, language: activeLanguage, industry: activeIndustry, scanFrom: activeScanFrom, timeSpan: activeTimeSpan, includeCanary: includeCanary ? "1" : null }}
+          searchParams={{ q: activeQuery, status: activeStatus, freshness: activeFreshness, access: activeAccess, outcome: activeOutcome, language: activeLanguage, industry: activeIndustry, scanFrom: activeScanFrom, timeSpan: activeTimeSpan, includeCanary: includeCanary ? "1" : null, scanBotFilter: "1", excludeMacMiniScanBot: excludeMacMiniScanBot ? "1" : null }}
           showPageJump
         />
         <div className="w-full max-w-full overflow-x-auto overscroll-x-contain rounded-xl border border-slate-200">

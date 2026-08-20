@@ -14,6 +14,7 @@ import { adminNoGoSql, projectAdminNoGo, selectAdminActivityStatus, selectAdminS
 import { loadCachedAdminScanFilterOptions } from "./admin-query-cache";
 import { normalizeAdminActivityFilter, parseAdminActivitySearch } from "../../lib/admin/activity-search";
 import { requirePlatformAdminContext } from "./platform-admin";
+import { MAC_MINI_SCAN_BOT_API_KEY_NAMES } from "../../lib/admin/mac-mini-scan-bot";
 import { loadLatestVersionedScoreAssessments } from "../scans/score-assessment-repository";
 import { shouldUseLocalV2DagScanTool } from "../scans/local-v2-dag-scan-config";
 import { withServerTiming } from "../performance/log-server-timing";
@@ -161,8 +162,10 @@ const loadCachedAdminPulseOverviewCounts = unstable_cache(
          select pr.*, ${PULSE_EFFECTIVE_STATUS_SQL} as effective_status
            from pulse_requests pr
            left join scans s on s.id = pr.scan_id
+           left join integration_api_keys api_key on api_key.public_id = pr.requested_by ->> 'apiKeyId'
           where ${LOGICAL_PULSE_ACTIVITY_PREDICATE}
             and coalesce(pr.requested_url, '') !~* '^https?://[^/?#]+/\\.well-known/certscore-canary/'
+            and coalesce(api_key.name, '') <> all($1::text[])
        )
        select
          count(*)::int as total,
@@ -173,7 +176,7 @@ const loadCachedAdminPulseOverviewCounts = unstable_cache(
          (select count(*)::int from pulse_artifact_downloads where artifact_type = 'summary_json')::int as summary_json_downloads,
          (select count(*)::int from pulse_artifact_downloads where artifact_type = 'evidence_json')::int as evidence_json_downloads
        from logical_pulse_requests`,
-      [],
+      [MAC_MINI_SCAN_BOT_API_KEY_NAMES],
       { readOnly: true }
     );
 
@@ -187,7 +190,7 @@ const loadCachedAdminPulseOverviewCounts = unstable_cache(
       total: result?.total ?? 0
     } satisfies AdminPulseOverviewCounts;
   },
-  ["admin-pulse-overview-counts"],
+  ["admin-pulse-overview-counts-excluding-mac-mini-scan-bot"],
   { revalidate: 30 }
 );
 
@@ -273,7 +276,8 @@ const PULSE_ACTIVITY_FILTER_SQL = `
         pr.request_context -> 'provenance' ->> 'ipHash', pr.requested_by ->> 'sourceIp', pr.requested_by ->> 'ipHash'
       ) ilike any($18::text[])
     ))
-    and ($19::boolean = true or coalesce(pr.requested_url, '') !~* '^https?://[^/?#]+/\\.well-known/certscore-canary/')`;
+    and ($19::boolean = true or coalesce(pr.requested_url, '') !~* '^https?://[^/?#]+/\\.well-known/certscore-canary/')
+    and ($20::boolean = false or coalesce(api_key.name, '') <> all($21::text[]))`;
 
 function asRecord(value: unknown): Record<string, unknown> {
   return value && typeof value === "object" && !Array.isArray(value) ? (value as Record<string, unknown>) : {};
@@ -495,26 +499,34 @@ function buildDisplayResponseSummary(input: {
   };
 }
 
-export async function getAdminPulseOverviewCounts(includeCanary = false): Promise<AdminPulseOverviewCounts> {
+export async function getAdminPulseOverviewCounts(includeCanary = false, excludeMacMiniScanBot = true): Promise<AdminPulseOverviewCounts> {
   await requirePlatformAdminContext();
-  if (includeCanary) {
-    const result = await queryOne<{ completed: number; queued_or_running: number; rate_limited: number; total: number }>(
-      `with logical_pulse_requests as (
-         select pr.*, ${PULSE_EFFECTIVE_STATUS_SQL} as effective_status
-           from pulse_requests pr left join scans s on s.id = pr.scan_id
-          where ${LOGICAL_PULSE_ACTIVITY_PREDICATE}
-       )
-       select count(*)::int as total,
-              count(*) filter (where effective_status in ('completed', 'completed_limited'))::int as completed,
-              count(*) filter (where effective_status in ('queued', 'running', 'finalizing'))::int as queued_or_running,
-              count(*) filter (where effective_status = 'rate_limited')::int as rate_limited
-         from logical_pulse_requests`, [], { readOnly: true });
-    return { completed: result?.completed ?? 0, evidenceJsonDownloads: 0, feedback: 0, queuedOrRunning: result?.queued_or_running ?? 0, rateLimited: result?.rate_limited ?? 0, summaryJsonDownloads: 0, total: result?.total ?? 0 };
+  if (!includeCanary && excludeMacMiniScanBot) {
+    return await loadCachedAdminPulseOverviewCounts();
   }
-  return await loadCachedAdminPulseOverviewCounts();
+  const result = await queryOne<{ completed: number; queued_or_running: number; rate_limited: number; total: number }>(
+    `with logical_pulse_requests as (
+       select pr.*, ${PULSE_EFFECTIVE_STATUS_SQL} as effective_status
+         from pulse_requests pr
+         left join scans s on s.id = pr.scan_id
+         left join integration_api_keys api_key on api_key.public_id = pr.requested_by ->> 'apiKeyId'
+        where ${LOGICAL_PULSE_ACTIVITY_PREDICATE}
+          and ($1::boolean = true or coalesce(pr.requested_url, '') !~* '^https?://[^/?#]+/\\.well-known/certscore-canary/')
+          and ($2::boolean = false or coalesce(api_key.name, '') <> all($3::text[]))
+     )
+     select count(*)::int as total,
+            count(*) filter (where effective_status in ('completed', 'completed_limited'))::int as completed,
+            count(*) filter (where effective_status in ('queued', 'running', 'finalizing'))::int as queued_or_running,
+            count(*) filter (where effective_status = 'rate_limited')::int as rate_limited
+       from logical_pulse_requests`,
+    [includeCanary, excludeMacMiniScanBot, MAC_MINI_SCAN_BOT_API_KEY_NAMES],
+    { readOnly: true }
+  );
+  return { completed: result?.completed ?? 0, evidenceJsonDownloads: 0, feedback: 0, queuedOrRunning: result?.queued_or_running ?? 0, rateLimited: result?.rate_limited ?? 0, summaryJsonDownloads: 0, total: result?.total ?? 0 };
 }
 
 export type AdminPulseRequestListInput = {
+  excludeMacMiniScanBot?: boolean;
   includeCanary?: boolean;
   limit?: number;
   offset?: number;
@@ -644,7 +656,7 @@ export async function listAdminPulseRequestsPage(input: AdminPulseRequestListInp
       limit, offset, SCAN_NO_GO_SNAPSHOT_OUTCOMES, exclusionArray(parsedSearch.exclusions.requester), route,
       exclusionArray(parsedSearch.exclusions.domain), exclusionArray(parsedSearch.exclusions.scanId),
       exclusionArray(parsedSearch.exclusions.email), exclusionArray(parsedSearch.exclusions.ip),
-      input.includeCanary === true
+      input.includeCanary === true, input.excludeMacMiniScanBot !== false, MAC_MINI_SCAN_BOT_API_KEY_NAMES
     ],
     { readOnly: true }
   );
@@ -665,6 +677,8 @@ export async function listAdminPulseRequests(
 }
 
 export async function countAdminPulseRequests(input: {
+  excludeMacMiniScanBot?: boolean;
+  includeCanary?: boolean;
   query?: string | null;
   status?: AdminPulseRequestStatus | null;
   freshness?: string | null;
@@ -699,7 +713,8 @@ export async function countAdminPulseRequests(input: {
         normalizeAdminActivityFilter(input.access, ["any"]), normalizeAdminActivityFilter(input.outcome),
         0, 0, SCAN_NO_GO_SNAPSHOT_OUTCOMES, exclusionArray(parsedSearch.exclusions.requester), input.route ?? null,
         exclusionArray(parsedSearch.exclusions.domain), exclusionArray(parsedSearch.exclusions.scanId),
-        exclusionArray(parsedSearch.exclusions.email), exclusionArray(parsedSearch.exclusions.ip)
+        exclusionArray(parsedSearch.exclusions.email), exclusionArray(parsedSearch.exclusions.ip),
+        input.includeCanary === true, input.excludeMacMiniScanBot !== false, MAC_MINI_SCAN_BOT_API_KEY_NAMES
       ];
     })(),
     { readOnly: true }

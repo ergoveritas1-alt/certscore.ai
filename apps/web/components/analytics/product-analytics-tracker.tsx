@@ -4,7 +4,7 @@ import { usePathname } from "next/navigation";
 import { useEffect, useRef } from "react";
 import { useReportWebVitals } from "next/web-vitals";
 import { ANALYTICS_CONSENT_CHANGE_EVENT } from "../../lib/analytics/consent";
-import { normalizeAnalyticsRoute } from "../../lib/product-analytics/contract";
+import { analyticsRouteIdentifier } from "../../lib/product-analytics/contract";
 import { clearProductAnalyticsIdentity, trackProductEvent } from "../../lib/product-analytics/client";
 
 function stableElementId(element: HTMLElement) {
@@ -12,7 +12,7 @@ function stableElementId(element: HTMLElement) {
   if (declared) return declared;
   if (element instanceof HTMLAnchorElement) {
     const href = element.getAttribute("href");
-    return href?.startsWith("/") ? `link:${normalizeAnalyticsRoute(href)}` : "external_link";
+    return href?.startsWith("/") ? analyticsRouteIdentifier("link", href) : "external_link";
   }
   return element.id || element.getAttribute("name") || element.tagName.toLowerCase();
 }
@@ -21,7 +21,7 @@ function stableFormId(form: HTMLFormElement) {
   const declared = form.dataset.analyticsForm ?? form.dataset.analyticsId;
   if (declared) return declared;
   const action = form.getAttribute("action");
-  return action?.startsWith("/") ? `form:${normalizeAnalyticsRoute(action)}` : form.id || "form";
+  return action?.startsWith("/") ? analyticsRouteIdentifier("form", action, 80) : form.id || "form";
 }
 
 export function ProductAnalyticsTracker() {

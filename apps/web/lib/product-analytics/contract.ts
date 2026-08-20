@@ -67,6 +67,17 @@ export function normalizeAnalyticsRoute(value: string) {
     .slice(0, 300);
 }
 
+export function analyticsRouteIdentifier(prefix: string, value: string, maxLength = 100) {
+  const route = normalizeAnalyticsRoute(value);
+  const routeLabel = route
+    .split("/")
+    .filter(Boolean)
+    .join(":")
+    .replace(/[^a-z0-9._:-]+/gi, "-")
+    .replace(/-+/g, "-") || "root";
+  return `${prefix}:${routeLabel}`.slice(0, maxLength);
+}
+
 export function extractScanIdFromPath(value: string) {
   const match = value.match(/\/scans\/([0-9a-f-]{36})(?:[/?#]|$)/i);
   const candidate = match?.[1];

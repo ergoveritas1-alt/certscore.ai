@@ -1,6 +1,7 @@
 import "server-only";
 
 import { query, queryOne } from "@website-signal-risk-scanner/db";
+import { MAC_MINI_SCAN_BOT_API_KEY_NAMES } from "../../lib/admin/mac-mini-scan-bot";
 import { requirePlatformAdminContext } from "./platform-admin";
 
 export type ProductAnalyticsPeriod = "24h" | "7d" | "30d" | "90d";
@@ -19,7 +20,7 @@ const PERIODS = {
 
 type Count = string | number | null | undefined;
 type SummaryRow = { actors: Count; authenticated: Count; errors: Count; events: Count; page_views: Count; scans: Count; sessions: Count; opted_out: Count };
-type TrendRow = { bucket: string; events: Count; sessions: Count };
+type TrendRow = { bucket: string; bucket_start: string; events: Count; sessions: Count };
 type RouteRow = { normalized_route: string; events: Count; sessions: Count };
 type FeatureRow = { event_name: string; feature: string; events: Count; sessions: Count };
 
@@ -72,11 +73,27 @@ function operationalEndpointSql(route: string) {
   end)`;
 }
 
-function unifiedEventsCte(intervalParameter = "$1") {
+function unifiedEventsCte(intervalParameter = "$1", macMiniApiKeyNamesParameter = "$2") {
   const scanRequestRoute = eventRouteSql("requests.request_channel", "requests.request_context ->> 'source'");
   const pulseRoute = eventRouteSql("requests.request_channel", "coalesce(requests.request_context ->> 'source', requests.request_context ->> 'channel')");
   const scanEventRoute = eventRouteSql("coalesce(attribution.request_channel, scans.scan_config_json ->> 'source')", "attribution.request_source");
-  return `with request_attribution as (
+  return `with mac_mini_scan_bot_keys as (
+    select public_id
+      from public.integration_api_keys
+     where name = any(${macMiniApiKeyNamesParameter}::text[])
+  ), mac_mini_scan_bot_scans as (
+    select distinct requests.scan_id
+      from public.pulse_requests requests
+      join mac_mini_scan_bot_keys keys on keys.public_id = requests.requested_by ->> 'apiKeyId'
+     where requests.scan_id is not null
+       and requests.requested_at >= now() - ${intervalParameter}::interval - interval '1 day'
+    union
+    select distinct coalesce(requests.scan_id, requests.fulfilled_by_scan_id) as scan_id
+      from public.scan_requests requests
+      join mac_mini_scan_bot_keys keys on keys.public_id = requests.requested_by ->> 'apiKeyId'
+     where coalesce(requests.scan_id, requests.fulfilled_by_scan_id) is not null
+       and requests.requested_at >= now() - ${intervalParameter}::interval - interval '1 day'
+  ), request_attribution as (
     select distinct on (attributed.scan_id)
            attributed.scan_id, attributed.request_channel, attributed.request_source,
            attributed.user_id, attributed.requested_at
@@ -118,6 +135,7 @@ function unifiedEventsCte(intervalParameter = "$1") {
            events.is_authenticated,
            events.is_staff,
            events.is_bot,
+           false as is_mac_mini_scan_bot,
            null::text as target_hostname,
            'web_event'::text as source
       from public.product_analytics_events events
@@ -144,6 +162,8 @@ function unifiedEventsCte(intervalParameter = "$1") {
            requests.requested_by ? 'userId' as is_authenticated,
            false as is_staff,
            false as is_bot,
+           (exists (select 1 from mac_mini_scan_bot_keys keys where keys.public_id = requests.requested_by ->> 'apiKeyId')
+             or exists (select 1 from mac_mini_scan_bot_scans bot_scans where bot_scans.scan_id = coalesce(requests.scan_id, requests.fulfilled_by_scan_id))) as is_mac_mini_scan_bot,
            requests.normalized_domain as target_hostname,
            'scan_request'::text as source
       from public.scan_requests requests
@@ -170,6 +190,7 @@ function unifiedEventsCte(intervalParameter = "$1") {
            requests.requested_by ? 'userId' as is_authenticated,
            false as is_staff,
            false as is_bot,
+           exists (select 1 from mac_mini_scan_bot_keys keys where keys.public_id = requests.requested_by ->> 'apiKeyId') as is_mac_mini_scan_bot,
            requests.normalized_domain as target_hostname,
            'api_request'::text as source
       from public.pulse_requests requests
@@ -194,6 +215,10 @@ function unifiedEventsCte(intervalParameter = "$1") {
            events.auth_class = 'authenticated' as is_authenticated,
            false as is_staff,
            false as is_bot,
+           exists (
+             select 1 from mac_mini_scan_bot_scans bot_scans
+              where bot_scans.scan_id = case when events.scan_id ~* '^[0-9a-f-]{36}$' then events.scan_id::uuid end
+           ) as is_mac_mini_scan_bot,
            events.target_hostname,
            'mcp_tool'::text as source
       from public.mcp_tool_invocation_events events
@@ -220,6 +245,7 @@ function unifiedEventsCte(intervalParameter = "$1") {
            attribution.user_id is not null as is_authenticated,
            false as is_staff,
            false as is_bot,
+           exists (select 1 from mac_mini_scan_bot_scans bot_scans where bot_scans.scan_id = events.scan_id) as is_mac_mini_scan_bot,
            domains.hostname as target_hostname,
            'scan_lifecycle'::text as source
       from public.scan_events events
@@ -235,10 +261,10 @@ function number(value: Count) {
   return Number.isFinite(parsed) ? parsed : 0;
 }
 
-export async function loadProductAnalyticsDashboard(period: ProductAnalyticsPeriod, includeInternal = false, includeBots = false) {
+export async function loadProductAnalyticsDashboard(period: ProductAnalyticsPeriod, includeInternal = false, excludeMacMiniScanBot = true) {
   await requirePlatformAdminContext();
   const config = PERIODS[period] ?? PERIODS["24h"];
-  const audience = `${includeInternal ? "" : "and events.is_staff = false"} ${includeBots ? "" : "and events.is_bot = false"}`;
+  const audience = `${includeInternal ? "" : "and events.is_staff = false"} ${excludeMacMiniScanBot ? "and events.is_mac_mini_scan_bot = false" : ""}`;
   const cte = unifiedEventsCte();
   const [summary, trend, routes, features, recent] = await Promise.all([
     queryOne<SummaryRow>(
@@ -253,19 +279,20 @@ export async function loadProductAnalyticsDashboard(period: ProductAnalyticsPeri
               count(*) filter (where event_name = 'analytics_opted_out') as opted_out
          from unified_events events
         where true ${audience}`,
-      [config.interval],
+      [config.interval, MAC_MINI_SCAN_BOT_API_KEY_NAMES],
       { readOnly: true }
     ),
     query<TrendRow>(
       `${cte}
-       select to_char(date_bin(interval '${config.bucket}', occurred_at, timestamptz '2001-01-01') at time zone 'UTC', '${config.format}') as bucket,
+       select date_bin(interval '${config.bucket}', occurred_at, timestamptz '2001-01-01') as bucket_start,
+              to_char(date_bin(interval '${config.bucket}', occurred_at, timestamptz '2001-01-01') at time zone 'UTC', '${config.format}') as bucket,
               count(*) as events,
               count(distinct session_id) filter (where session_id is not null) as sessions
          from unified_events events
         where true ${audience}
         group by date_bin(interval '${config.bucket}', occurred_at, timestamptz '2001-01-01')
         order by min(occurred_at) asc`,
-      [config.interval],
+      [config.interval, MAC_MINI_SCAN_BOT_API_KEY_NAMES],
       { readOnly: true }
     ),
     query<RouteRow>(
@@ -274,7 +301,7 @@ export async function loadProductAnalyticsDashboard(period: ProductAnalyticsPeri
          from unified_events events
         where true ${audience}
         group by event_route order by events desc`,
-      [config.interval],
+      [config.interval, MAC_MINI_SCAN_BOT_API_KEY_NAMES],
       { readOnly: true }
     ),
     query<FeatureRow>(
@@ -283,7 +310,7 @@ export async function loadProductAnalyticsDashboard(period: ProductAnalyticsPeri
          from unified_events events
         where true ${audience}
         group by event_name, feature order by events desc limit 15`,
-      [config.interval],
+      [config.interval, MAC_MINI_SCAN_BOT_API_KEY_NAMES],
       { readOnly: true }
     ),
     query<ProductAnalyticsRecentEvent>(
@@ -298,7 +325,7 @@ export async function loadProductAnalyticsDashboard(period: ProductAnalyticsPeri
          left join public.domains on domains.id = scans.domain_id
         where true ${audience}
         order by events.occurred_at desc limit 100`,
-      [config.interval],
+      [config.interval, MAC_MINI_SCAN_BOT_API_KEY_NAMES],
       { readOnly: true }
     )
   ]);
@@ -310,7 +337,7 @@ export async function loadProductAnalyticsDashboard(period: ProductAnalyticsPeri
       authenticated: number(summary?.authenticated), pageViews: number(summary?.page_views), scans: number(summary?.scans),
       errors: number(summary?.errors), optedOut: number(summary?.opted_out)
     },
-    trend: trend.rows.map((row) => ({ bucket: row.bucket, events: number(row.events), sessions: number(row.sessions) })),
+    trend: trend.rows.map((row) => ({ bucket: row.bucket, bucketStart: row.bucket_start, events: number(row.events), sessions: number(row.sessions) })),
     routes: routes.rows.map((row) => ({ route: row.normalized_route, events: number(row.events), sessions: number(row.sessions) })),
     features: features.rows.map((row) => ({ eventName: row.event_name, feature: row.feature, events: number(row.events), sessions: number(row.sessions) })),
     recent: recent.rows
@@ -320,17 +347,17 @@ export async function loadProductAnalyticsDashboard(period: ProductAnalyticsPeri
 export async function listProductAnalyticsEventsPage(
   period: ProductAnalyticsPeriod,
   includeInternal: boolean,
-  includeBots: boolean,
+  excludeMacMiniScanBot: boolean,
   pageSize: number,
   offset: number,
   filters: ProductAnalyticsEventFilters = {}
 ) {
   await requirePlatformAdminContext();
   const config = PERIODS[period] ?? PERIODS["24h"];
-  const values: unknown[] = [config.interval];
+  const values: unknown[] = [config.interval, MAC_MINI_SCAN_BOT_API_KEY_NAMES];
   const clauses = ["true"];
   if (!includeInternal) clauses.push("events.is_staff = false");
-  if (!includeBots) clauses.push("events.is_bot = false");
+  if (excludeMacMiniScanBot) clauses.push("events.is_mac_mini_scan_bot = false");
   if (filters.eventName) { values.push(filters.eventName); clauses.push(`events.event_name = $${values.length}`); }
   if (filters.outcome) { values.push(filters.outcome); clauses.push(`events.outcome = $${values.length}`); }
   if (filters.route) { values.push(filters.route); clauses.push(`events.event_route = $${values.length}`); }

@@ -1,4 +1,4 @@
-import { handleOperationalEventPost } from "../../../../server/product-analytics/ingest-request";
+import { handleOperationalEventPost } from "../../../server/product-analytics/ingest-request";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";

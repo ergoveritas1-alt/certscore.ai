@@ -81,7 +81,7 @@ export function trackProductEvent(input: Omit<ProductAnalyticsPayload, "actorId"
 
   async function deliver(attempt = 0): Promise<void> {
     try {
-      const response = await fetch("/api/analytics/events", {
+      const response = await fetch("/api/operational-events", {
         method: "POST",
         headers: {
           "content-type": "application/json",

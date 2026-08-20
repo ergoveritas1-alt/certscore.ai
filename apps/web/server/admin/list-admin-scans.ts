@@ -271,7 +271,7 @@ export async function listAdminOverviewScans(limit = 10): Promise<AdminOverviewR
 export async function listAdminScansPage(
   limit = 50,
   offset = 0,
-  filters?: { email?: string | null; includeCanary?: boolean; query?: string | null; status?: AdminScanListStatus; freshness?: AdminScanListFreshness; access?: AdminScanListAccess; outcome?: string | null; language?: string | null; industry?: string | null; scanFrom?: string | null; timeSpan?: AdminScanListTimeSpan }
+  filters?: { email?: string | null; excludeMacMiniScanBot?: boolean; includeCanary?: boolean; query?: string | null; status?: AdminScanListStatus; freshness?: AdminScanListFreshness; access?: AdminScanListAccess; outcome?: string | null; language?: string | null; industry?: string | null; scanFrom?: string | null; timeSpan?: AdminScanListTimeSpan }
 ): Promise<{ items: AdminScanListItem[]; totalCount: number }> {
   await requirePlatformAdminContext();
   const requesterEmail = filters?.email?.trim().slice(0, 160) || null;
@@ -286,8 +286,9 @@ export async function listAdminScansPage(
       language: filters?.language,
       industry: filters?.industry,
       scanFrom: filters?.scanFrom,
-      timeSpan: filters?.timeSpan
-      ,includeCanary: filters?.includeCanary
+      timeSpan: filters?.timeSpan,
+      includeCanary: filters?.includeCanary,
+      excludeMacMiniScanBot: filters?.excludeMacMiniScanBot
     })
   );
   const selectedScanIds = [...new Set(page.rows.flatMap((row) => row.scan_id ? [row.scan_id] : []))];
@@ -533,9 +534,11 @@ export async function listAdminScansPage(
   return { items, totalCount: page.totalCount };
 }
 
-export async function getAdminScanOverviewMetrics(includeCanary = false): Promise<AdminScanOverviewMetrics> {
+export async function getAdminScanOverviewMetrics(includeCanary = false, excludeMacMiniScanBot = true): Promise<AdminScanOverviewMetrics> {
   await requirePlatformAdminContext();
-  return includeCanary ? await loadAdminScanOverviewCounts(true) : await loadCachedAdminScanOverviewCounts();
+  return !includeCanary && excludeMacMiniScanBot
+    ? await loadCachedAdminScanOverviewCounts()
+    : await loadAdminScanOverviewCounts(includeCanary, excludeMacMiniScanBot);
 }
 
 export async function getAdminScanFilterOptions() {

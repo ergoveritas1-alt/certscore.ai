@@ -23,11 +23,17 @@ test("opt-out persistence removes linkable identity", async () => {
 });
 
 test("event ingestion confirms persistence and exposes storage failure", async () => {
-  const route = await readFile(new URL("apps/web/app/api/analytics/events/route.ts", root), "utf8");
-  assert.doesNotMatch(route, /after\(async \(\) =>/);
-  assert.match(route, /product_analytics\.write_failed/);
-  assert.match(route, /status: 201/);
-  assert.match(route, /status: 503/);
+  const client = await readFile(new URL("apps/web/lib/product-analytics/client.ts", root), "utf8");
+  const handler = await readFile(new URL("apps/web/server/product-analytics/ingest-request.ts", root), "utf8");
+  const compatibilityRoute = await readFile(new URL("apps/web/app/api/analytics/events/route.ts", root), "utf8");
+  const operationalRoute = await readFile(new URL("apps/web/app/api/operational-events/route.ts", root), "utf8");
+  assert.match(client, /fetch\("\/api\/operational-events"/);
+  assert.doesNotMatch(handler, /after\(async \(\) =>/);
+  assert.match(handler, /product_analytics\.write_failed/);
+  assert.match(handler, /status: 201/);
+  assert.match(handler, /status: 503/);
+  assert.match(compatibilityRoute, /handleOperationalEventPost/);
+  assert.match(operationalRoute, /handleOperationalEventPost/);
 });
 
 test("optional analytics opt-out keeps bounded event delivery but removes client identity", async () => {
@@ -48,6 +54,15 @@ test("the main event projection spans every retained operational route", async (
     assert.match(adminEvents, new RegExp(`"${route}"|'${route}'`));
   }
   assert.match(adminEvents, /events\.event_route = \$/);
+});
+
+test("event trend rows use the timestamp bucket as their React identity", async () => {
+  const adminEvents = await readFile(new URL("apps/web/server/admin/product-analytics.ts", root), "utf8");
+  const analyticsPage = await readFile(new URL("apps/web/app/app/admin/analytics/page.tsx", root), "utf8");
+  assert.match(adminEvents, /as bucket_start/);
+  assert.match(adminEvents, /bucketStart: row\.bucket_start/);
+  assert.match(analyticsPage, /key=\{point\.bucketStart\}/);
+  assert.doesNotMatch(analyticsPage, /key=\{point\.bucket\}/);
 });
 
 test("authenticated app requests receive a deduplicated server event identity", async () => {

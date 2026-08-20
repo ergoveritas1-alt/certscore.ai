@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { extractScanIdFromPath, normalizeAnalyticsRoute, parseProductAnalyticsPayload } from "./contract";
+import { analyticsRouteIdentifier, extractScanIdFromPath, normalizeAnalyticsRoute, parseProductAnalyticsPayload } from "./contract";
 
 const validEvent = {
   eventName: "page_viewed",
@@ -20,6 +20,20 @@ test("normalizes path-carried sites, emails, numeric IDs, and opaque tokens", ()
   assert.equal(normalizeAnalyticsRoute("/users/person%40example.com"), "/users/:value");
   assert.equal(normalizeAnalyticsRoute("/items/12345"), "/items/:id");
   assert.equal(normalizeAnalyticsRoute("/status/0123456789abcdef0123456789abcdef"), "/status/:id");
+});
+
+test("creates contract-safe identifiers for route-backed links and forms", () => {
+  const formId = analyticsRouteIdentifier("form", "/app/admin/analytics?token=secret", 80);
+  assert.equal(formId, "form:app:admin:analytics");
+  assert.ok(parseProductAnalyticsPayload({
+    ...validEvent,
+    eventName: "form_submitted",
+    category: "form",
+    feature: formId,
+    formId,
+    outcome: "submitted"
+  }));
+  assert.equal(analyticsRouteIdentifier("link", "/app/scans/1c798510-8cac-4bf3-8bc8-dda2f57a444f"), "link:app:scans::id");
 });
 
 test("accepts only bounded structured product analytics fields", () => {
