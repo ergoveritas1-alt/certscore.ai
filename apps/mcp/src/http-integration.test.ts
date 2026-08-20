@@ -748,7 +748,7 @@ test("Streamable HTTP runtime initializes, lists tools, enforces auth, CORS, and
     assert.match(lightScanTool?.description ?? "", /privacy-policy disclosures/);
     assert.match(lightScanTool?.description ?? "", /GDPR\/ePrivacy transparency findings/);
     assert.match(lightScanTool?.description ?? "", /applicable CCPA\/CPRA review signals/);
-    assert.match(lightScanTool?.description ?? "", /Starts or reuses a public-web scan and waits up to 45 seconds by default/);
+    assert.match(lightScanTool?.description ?? "", /Starts or reuses a public-web scan with a 25-second total tool-call budget by default/);
     const freshnessSchema = lightScanTool?.inputSchema.properties?.freshness as { description?: string; enum?: string[] } | undefined;
     assert.deepEqual(freshnessSchema?.enum, ["latest", "refresh"]);
     assert.equal(

@@ -419,7 +419,7 @@ const status = await certscore_get_scan_status({ scanId });
         </Section>
 
         <Section eyebrow="Workflow" title="Recommended agent sequence">
-          <CodeBlock>{`1. certscore_scan_site with a public URL; it waits up to 45 seconds by default.
+          <CodeBlock>{`1. certscore_scan_site with a public URL; it uses a 25-second total tool-call budget by default, including scan creation.
 2. certscore_get_scan_status only when certscore_scan_site returns a non-terminal result containing scanId; poll with scanId only.
 3. certscore_get_scan_bundle for canonical status, findings, bounded evidence, and pre-consent inventory.
 4. certscore_get_report, certscore_get_evidence, certscore_list_findings, or cookie inventory only when a dedicated view is needed.

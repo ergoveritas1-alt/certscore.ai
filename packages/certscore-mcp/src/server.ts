@@ -1,4 +1,4 @@
-import { CertScoreClient, CertScoreTimeoutError } from "@certscore/sdk";
+import { CertScoreClient } from "@certscore/sdk";
 import { certScoreMcpToolContracts, isCanonicalScanId } from "@certscore/api-contracts";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import type { RequestInfo } from "@modelcontextprotocol/sdk/types.js";
@@ -71,7 +71,27 @@ export type McpToolInvocationObservation = {
   transportOutcome: "mcp_result" | "mcp_error";
 };
 
-const DEFAULT_MCP_SCAN_WAIT_MS = 45_000;
+const DEFAULT_MCP_SCAN_TOOL_BUDGET_MS = 25_000;
+const MAX_MCP_SCAN_TOOL_BUDGET_MS = 45_000;
+const MCP_SCAN_TOOL_RESPONSE_RESERVE_MS = 1_000;
+
+export function resolveMcpScanSiteWaitBudget(input: {
+  maxWaitSeconds?: number;
+  startedAtMs: number;
+  nowMs: number;
+}) {
+  const totalBudgetMs = Math.min(
+    input.maxWaitSeconds ? input.maxWaitSeconds * 1_000 : DEFAULT_MCP_SCAN_TOOL_BUDGET_MS,
+    MAX_MCP_SCAN_TOOL_BUDGET_MS,
+  );
+  const elapsedMs = Math.max(0, input.nowMs - input.startedAtMs);
+  return {
+    elapsedMs,
+    remainingWaitMs: Math.max(0, totalBudgetMs - elapsedMs - MCP_SCAN_TOOL_RESPONSE_RESERVE_MS),
+    responseReserveMs: MCP_SCAN_TOOL_RESPONSE_RESERVE_MS,
+    totalBudgetMs,
+  };
+}
 
 type ExampleDomainDemoSubstitution = {
   requestedUrl: string;
@@ -373,6 +393,7 @@ export function createCertScoreMcpServer(options: CertScoreMcpOptions = {}) {
     "certscore_scan_site",
     toolContract("certscore_scan_site"),
     async (input: CreateScanInput, extra: McpRequestExtra) => {
+      const toolStartedAtMs = Date.now();
       const client = clientForRequest(extra);
       const demoSubstitution = exampleDomainDemoSubstitution(input.url, options.exampleDomainDemoUrl);
       const effectiveUrl = demoSubstitution?.effectiveUrl ?? input.url;
@@ -385,11 +406,31 @@ export function createCertScoreMcpServer(options: CertScoreMcpOptions = {}) {
           const guided = withExampleDomainDemo(withMcpAgentGuidance(created as unknown as Record<string, any>), demoSubstitution);
           return toToolResult(guided, exampleDomainDemoText(guided, demoSubstitution));
         }
+        const waitBudget = resolveMcpScanSiteWaitBudget({
+          maxWaitSeconds: input.maxWaitSeconds,
+          nowMs: Date.now(),
+          startedAtMs: toolStartedAtMs,
+        });
+        if (waitBudget.remainingWaitMs === 0) {
+          console.warn(JSON.stringify({
+            event: "mcp.certscore_scan_site.wait_budget_consumed",
+            jobId: created.jobId ?? null,
+            scanId: created.scanId ?? created.scan_id ?? null,
+            status: created.status ?? null,
+            ...waitBudget,
+          }));
+          const guided = withExampleDomainDemo(withMcpAgentGuidance(created as unknown as Record<string, any>), demoSubstitution);
+          return toToolResult(guided, exampleDomainDemoText(guided, demoSubstitution));
+        }
+
+        const waitAbortController = new AbortController();
+        const waitAbortTimer = setTimeout(() => waitAbortController.abort(), waitBudget.remainingWaitMs);
         try {
           const internalMcpOperation = { operation: "scan_site_wait" as const, scanId: created.scanId ?? created.scan_id ?? created.jobId };
           const completed = await client.scans.wait(created, {
-            maxWaitMs: Math.min(input.maxWaitSeconds ? input.maxWaitSeconds * 1_000 : DEFAULT_MCP_SCAN_WAIT_MS, DEFAULT_MCP_SCAN_WAIT_MS),
-            internalMcpOperation
+            maxWaitMs: waitBudget.remainingWaitMs,
+            internalMcpOperation,
+            signal: waitAbortController.signal,
           });
           const guided = withExampleDomainDemo(withMcpAgentGuidance({
             ...completed,
@@ -403,27 +444,17 @@ export function createCertScoreMcpServer(options: CertScoreMcpOptions = {}) {
             errorName: error instanceof Error ? error.name : "UnknownError",
             jobId: created.jobId ?? null,
             scanId: scanId ?? null,
-            status: created.status ?? null
+            status: created.status ?? null,
+            ...waitBudget,
           }));
-          if (error instanceof CertScoreTimeoutError && scanId) {
-            try {
-              const guided = withExampleDomainDemo(withMcpAgentGuidance({
-                ...(await client.scans.status(scanId, { internalMcpOperation: { operation: "scan_site_wait", scanId } })),
-                ...scanCreationMetadata(created as unknown as Record<string, unknown>)
-              }), demoSubstitution);
-              return toToolResult(guided, exampleDomainDemoText(guided, demoSubstitution));
-            } catch {
-              // Creation already succeeded. Preserve that stable identity when
-              // the follow-up status read is briefly unavailable.
-            }
-          }
-
           // Waiting is a convenience layered on top of scan creation. Once the
           // API has accepted a scan, never turn a transient polling or hydration
           // failure into an identity-less tool error that encourages callers to
           // submit a second, non-idempotent certscore_scan_site request.
           const guided = withExampleDomainDemo(withMcpAgentGuidance(created as unknown as Record<string, any>), demoSubstitution);
           return toToolResult(guided, exampleDomainDemoText(guided, demoSubstitution));
+        } finally {
+          clearTimeout(waitAbortTimer);
         }
       } catch (error) {
         return toToolError(error);

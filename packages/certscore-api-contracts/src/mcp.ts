@@ -32,8 +32,8 @@ export const mcpScanSiteInputSchema = {
   url: mcpCreateScanInputSchema.url,
   freshness: mcpCreateScanInputSchema.freshness,
   scanFrom: mcpCreateScanInputSchema.scanFrom,
-  waitForCompletion: z.boolean().optional().describe("Wait for a completed scan resource in this tool call. Defaults to true. Set false only for an explicitly asynchronous workflow."),
-  maxWaitSeconds: z.number().int().min(1).max(45).optional().describe("Maximum time to wait before returning the still-running job. Defaults to 45 seconds; never turns an active scan into an error.")
+  waitForCompletion: z.boolean().optional().describe("Wait for a completed scan resource within this tool call's wall-clock budget. Defaults to true. Set false only for an explicitly asynchronous workflow."),
+  maxWaitSeconds: z.number().int().min(1).max(45).optional().describe("Total wall-clock budget for scan creation plus optional completion waiting. Defaults to 25 seconds. Creation time is deducted from polling; budget exhaustion returns the accepted active scan and stable scanId without an error.")
 } as const;
 
 export const mcpGetScanStatusInputSchema = {
@@ -478,7 +478,7 @@ export const certScoreMcpToolContracts = [
   {
     name: "certscore_scan_site",
     title: "Scan site",
-    description: "Use CertScore.ai to scan a public website for observable privacy and consent signals, including pre-consent cookies and browser storage, third-party trackers, consent-banner and CMP behavior, TLS/transport security, privacy-policy disclosures, GDPR/ePrivacy transparency findings, and applicable CCPA/CPRA review signals. Starts or reuses a public-web scan and waits up to 45 seconds by default. If status is queued, running, or finalizing, retain scanId and poll certscore_get_scan_status using only that scanId. Stop polling at completed, completed_limited, failed, expired, or rate_limited. For usable completion, call certscore_get_scan_bundle. No-go and limited coverage are observations, never proof of compliance.",
+    description: "Use CertScore.ai to scan a public website for observable privacy and consent signals, including pre-consent cookies and browser storage, third-party trackers, consent-banner and CMP behavior, TLS/transport security, privacy-policy disclosures, GDPR/ePrivacy transparency findings, and applicable CCPA/CPRA review signals. Starts or reuses a public-web scan with a 25-second total tool-call budget by default; scan creation time is deducted from completion waiting. If status is queued, running, or finalizing, retain scanId and poll certscore_get_scan_status using only that scanId. Stop polling at completed, completed_limited, failed, expired, or rate_limited. For usable completion, call certscore_get_scan_bundle. No-go and limited coverage are observations, never proof of compliance.",
     inputSchema: mcpScanSiteInputSchema,
     outputSchema: mcpScanSiteOutputSchema,
     annotations: scanCreationAnnotations
