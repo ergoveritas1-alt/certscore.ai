@@ -1181,6 +1181,70 @@ export type AdminScanOverviewCounts = {
   totalScans: number;
 };
 
+export type AdminScanOperationalSnapshotPeriod = "1h" | "24h" | "7d" | "30d" | "1y";
+
+export type AdminScanOperationalSnapshot = {
+  metrics: {
+    activeRuns: number;
+    completedRuns: number;
+    failedRuns: number;
+    limitedRuns: number;
+    noGoRuns: number;
+    p50DurationSeconds: number | null;
+    p95DurationSeconds: number | null;
+    requests: number;
+    reusedRequests: number;
+    runs: number;
+  };
+  period: {
+    label: string;
+    value: AdminScanOperationalSnapshotPeriod;
+  };
+  rates: {
+    completion: number | null;
+    failure: number | null;
+    limited: number | null;
+    reuse: number | null;
+  };
+  scanFromCounts: Array<{
+    completed: number;
+    count: number;
+    failed: number;
+    label: string;
+    value: string;
+  }>;
+  trend: Array<{
+    bucket: string;
+    failed: number;
+    label: string;
+    limited: number;
+    runs: number;
+  }>;
+};
+
+type AdminScanOperationalSnapshotRow = {
+  active_run_count: number | string | null;
+  completed_run_count: number | string | null;
+  failed_run_count: number | string | null;
+  limited_run_count: number | string | null;
+  no_go_run_count: number | string | null;
+  p50_duration_seconds: number | string | null;
+  p95_duration_seconds: number | string | null;
+  request_count: number | string | null;
+  reused_request_count: number | string | null;
+  run_count: number | string | null;
+  scan_from_counts: Array<{ completed: number | string; count: number | string; failed: number | string; scan_from: string }> | null;
+  trend: Array<{ bucket: string; failed: number | string; label: string; limited: number | string; runs: number | string }> | null;
+};
+
+const ADMIN_SCAN_OPERATIONAL_SNAPSHOT_CONFIG = {
+  "1h": { bucketEnd: "date_bin('5 minutes', now(), timestamptz '2001-01-01')", bucketLabel: "HH24:MI", bucketStart: "date_bin('5 minutes', now(), timestamptz '2001-01-01') - interval '55 minutes'", label: "Last hour", step: "5 minutes" },
+  "24h": { bucketEnd: "date_trunc('hour', now())", bucketLabel: "Mon DD HH24:00", bucketStart: "date_trunc('hour', now()) - interval '23 hours'", label: "Last 24 hours", step: "1 hour" },
+  "7d": { bucketEnd: "date_trunc('day', now())", bucketLabel: "Mon DD", bucketStart: "date_trunc('day', now()) - interval '6 days'", label: "Last 7 days", step: "1 day" },
+  "30d": { bucketEnd: "date_trunc('day', now())", bucketLabel: "Mon DD", bucketStart: "date_trunc('day', now()) - interval '29 days'", label: "Last 30 days", step: "1 day" },
+  "1y": { bucketEnd: "date_trunc('month', now())", bucketLabel: "Mon YYYY", bucketStart: "date_trunc('month', now()) - interval '11 months'", label: "Last year", step: "1 month" },
+} as const;
+
 export type AdminBlockedRunTelemetryRow = {
   asn?: number | null;
   block_vendor_guess?: string | null;
@@ -2389,6 +2453,180 @@ export async function updateAdminOrganizationPlan(input: {
       where id = $1`,
     [input.organizationId, input.plan, input.planStatus]
   );
+}
+
+export async function loadAdminScanOperationalSnapshot(
+  period: AdminScanOperationalSnapshotPeriod = "24h",
+  includeCanary = false,
+  excludeMacMiniScanBot = true,
+): Promise<AdminScanOperationalSnapshot> {
+  await ensureScanRequestLogTable();
+  const config = ADMIN_SCAN_OPERATIONAL_SNAPSHOT_CONFIG[period] ?? ADMIN_SCAN_OPERATIONAL_SNAPSHOT_CONFIG["24h"];
+  const result = await queryOne<AdminScanOperationalSnapshotRow>(
+    `with mac_mini_scan_bot_keys as materialized (
+       select public_id
+         from public.integration_api_keys
+        where name = any($3::text[])
+     ), visible_scans as materialized (
+       select s.id,
+              s.created_at,
+              s.started_at,
+              s.completed_at,
+              s.status,
+              coalesce(s.scan_config_json ->> 'scanFrom', 'default') as scan_from,
+              ss.access_posture_class,
+              ss.blocked_flag,
+              ss.captcha_flag,
+              ss.scan_outcome
+         from public.scans s
+         left join public.scan_snapshots ss on ss.scan_id = s.id
+        where s.created_at >= ${config.bucketStart}
+          and s.created_at < ${config.bucketEnd} + interval '${config.step}'
+          and ($1::boolean = true or not (
+            exists (select 1 from public.scan_pages sp where sp.scan_id = s.id and sp.page_url ~* '^https?://[^/?#]+/\\.well-known/certscore-canary/')
+            or exists (select 1 from public.scan_requests csr where coalesce(csr.fulfilled_by_scan_id, csr.scan_id) = s.id and coalesce(csr.requested_url, '') ~* '^https?://[^/?#]+/\\.well-known/certscore-canary/')
+            or exists (select 1 from public.pulse_requests cpr where cpr.scan_id = s.id and coalesce(cpr.requested_url, '') ~* '^https?://[^/?#]+/\\.well-known/certscore-canary/')
+          ))
+          and ($2::boolean = false or not (
+            exists (
+              select 1 from public.pulse_requests bot_pr
+              join mac_mini_scan_bot_keys bot_key on bot_key.public_id = bot_pr.requested_by ->> 'apiKeyId'
+              where bot_pr.scan_id = s.id
+            ) or exists (
+              select 1 from public.scan_requests bot_sr
+              join mac_mini_scan_bot_keys bot_key on bot_key.public_id = bot_sr.requested_by ->> 'apiKeyId'
+              where coalesce(bot_sr.fulfilled_by_scan_id, bot_sr.scan_id) = s.id
+            )
+          ))
+     ), visible_requests as materialized (
+       select sr.public_id, sr.resolution_mode
+         from public.scan_requests sr
+        where sr.requested_at >= ${config.bucketStart}
+          and sr.requested_at < ${config.bucketEnd} + interval '${config.step}'
+          and ($1::boolean = true or (
+            coalesce(sr.requested_url, '') !~* '^https?://[^/?#]+/\\.well-known/certscore-canary/'
+            and not exists (
+              select 1 from public.scan_pages sp
+              where sp.scan_id = coalesce(sr.fulfilled_by_scan_id, sr.scan_id)
+                and sp.page_url ~* '^https?://[^/?#]+/\\.well-known/certscore-canary/'
+            )
+            and not exists (
+              select 1 from public.pulse_requests cpr
+              where cpr.scan_id = coalesce(sr.fulfilled_by_scan_id, sr.scan_id)
+                and coalesce(cpr.requested_url, '') ~* '^https?://[^/?#]+/\\.well-known/certscore-canary/'
+            )
+          ))
+          and ($2::boolean = false or not (
+            exists (select 1 from mac_mini_scan_bot_keys bot_key where bot_key.public_id = sr.requested_by ->> 'apiKeyId')
+            or exists (
+              select 1 from public.pulse_requests bot_pr
+              join mac_mini_scan_bot_keys bot_key on bot_key.public_id = bot_pr.requested_by ->> 'apiKeyId'
+              where bot_pr.scan_id = coalesce(sr.fulfilled_by_scan_id, sr.scan_id)
+            )
+          ))
+     ), buckets as (
+       select generate_series(${config.bucketStart}, ${config.bucketEnd}, interval '${config.step}') as bucket
+     ), trend_rows as (
+       select buckets.bucket,
+              to_char(buckets.bucket at time zone 'America/Los_Angeles', '${config.bucketLabel}') as label,
+              count(scans.id)::int as runs,
+              count(scans.id) filter (where scans.status = 'failed')::int as failed,
+              count(scans.id) filter (where scans.access_posture_class in ('degraded_but_useful', 'robots_limited'))::int as limited
+         from buckets
+         left join visible_scans scans
+           on scans.created_at >= buckets.bucket
+          and scans.created_at < buckets.bucket + interval '${config.step}'
+        group by buckets.bucket
+        order by buckets.bucket asc
+     ), scan_from_rows as (
+       select scan_from,
+              count(*)::int as count,
+              count(*) filter (where status = 'completed')::int as completed,
+              count(*) filter (where status = 'failed')::int as failed
+         from visible_scans
+        group by scan_from
+     )
+     select (select count(*)::int from visible_scans) as run_count,
+            (select count(*)::int from visible_requests) as request_count,
+            (select count(*) filter (where resolution_mode = 'reused_existing_scan')::int from visible_requests) as reused_request_count,
+            (select count(*) filter (where status = 'completed')::int from visible_scans) as completed_run_count,
+            (select count(*) filter (where status = 'failed')::int from visible_scans) as failed_run_count,
+            (select count(*) filter (where status in ('queued', 'running', 'finalizing'))::int from visible_scans) as active_run_count,
+            (select count(*) filter (where access_posture_class in ('degraded_but_useful', 'robots_limited'))::int from visible_scans) as limited_run_count,
+            (select count(*) filter (
+              where scan_outcome = any($4::text[])
+                 or blocked_flag = true
+                 or captcha_flag = true
+                 or access_posture_class = 'early_loss'
+            )::int from visible_scans) as no_go_run_count,
+            (select percentile_cont(0.5) within group (order by extract(epoch from (completed_at - started_at)))
+               from visible_scans where completed_at is not null and started_at is not null and completed_at >= started_at) as p50_duration_seconds,
+            (select percentile_cont(0.95) within group (order by extract(epoch from (completed_at - started_at)))
+               from visible_scans where completed_at is not null and started_at is not null and completed_at >= started_at) as p95_duration_seconds,
+            (select coalesce(jsonb_agg(jsonb_build_object(
+              'bucket', bucket,
+              'label', label,
+              'runs', runs,
+              'failed', failed,
+              'limited', limited
+            ) order by bucket), '[]'::jsonb) from trend_rows) as trend,
+            (select coalesce(jsonb_agg(jsonb_build_object(
+              'scan_from', scan_from,
+              'count', count,
+              'completed', completed,
+              'failed', failed
+            ) order by scan_from), '[]'::jsonb) from scan_from_rows) as scan_from_counts`,
+    [includeCanary, excludeMacMiniScanBot, MAC_MINI_SCAN_BOT_API_KEY_NAMES, SCAN_NO_GO_SNAPSHOT_OUTCOMES],
+    { readOnly: true },
+  );
+
+  const value = (input: number | string | null | undefined) => {
+    const parsed = Number(input ?? 0);
+    return Number.isFinite(parsed) ? parsed : 0;
+  };
+  const nullableValue = (input: number | string | null | undefined) => input === null || input === undefined ? null : value(input);
+  const runs = value(result?.run_count);
+  const requests = value(result?.request_count);
+  const metric = {
+    activeRuns: value(result?.active_run_count),
+    completedRuns: value(result?.completed_run_count),
+    failedRuns: value(result?.failed_run_count),
+    limitedRuns: value(result?.limited_run_count),
+    noGoRuns: value(result?.no_go_run_count),
+    p50DurationSeconds: nullableValue(result?.p50_duration_seconds),
+    p95DurationSeconds: nullableValue(result?.p95_duration_seconds),
+    requests,
+    reusedRequests: value(result?.reused_request_count),
+    runs,
+  };
+
+  return {
+    metrics: metric,
+    period: { label: config.label, value: period },
+    rates: {
+      completion: runs > 0 ? metric.completedRuns / runs : null,
+      failure: runs > 0 ? metric.failedRuns / runs : null,
+      limited: runs > 0 ? metric.limitedRuns / runs : null,
+      reuse: requests > 0 ? metric.reusedRequests / requests : null,
+    },
+    scanFromCounts: SCAN_FROM_VALUES.map((scanFrom) => {
+      const row = result?.scan_from_counts?.find((candidate) => candidate.scan_from === scanFrom);
+      return {
+        completed: value(row?.completed),
+        count: value(row?.count),
+        failed: value(row?.failed),
+        label: formatScanFromLabel(scanFrom),
+        value: scanFrom,
+      };
+    }),
+    trend: (result?.trend ?? []).map((row) => ({
+      bucket: row.bucket,
+      failed: value(row.failed),
+      label: row.label,
+      limited: value(row.limited),
+      runs: value(row.runs),
+    })),
+  };
 }
 
 export async function loadAdminScanOverviewCounts(includeCanary = false, excludeMacMiniScanBot = true): Promise<AdminScanOverviewCounts> {

@@ -21,6 +21,8 @@ import {
 import { deriveDisplayCreatedAt } from "../scans/display-state";
 import {
   loadAdminScanActivityPageRefs,
+  type AdminScanOperationalSnapshot,
+  type AdminScanOperationalSnapshotPeriod,
   loadAdminScanOverviewCounts,
   loadAdminScanListPageData,
   loadAdminPulseScanAttributionRows,
@@ -43,6 +45,7 @@ import {
   type AdminEvidenceMatrix
 } from "../../lib/scans/admin-evidence-matrix";
 import {
+  loadCachedAdminScanOperationalSnapshot,
   loadCachedAdminScanFilterOptions,
   loadCachedAdminScanOverviewCounts
 } from "./admin-query-cache";
@@ -167,6 +170,8 @@ export type AdminScanOverviewMetrics = {
   totalScanRequests: number;
   totalScans: number;
 };
+
+export type { AdminScanOperationalSnapshot, AdminScanOperationalSnapshotPeriod };
 
 export type AdminOverviewRecentScan = {
   certscoreOverall: number | null;
@@ -539,6 +544,15 @@ export async function getAdminScanOverviewMetrics(includeCanary = false, exclude
   return !includeCanary && excludeMacMiniScanBot
     ? await loadCachedAdminScanOverviewCounts()
     : await loadAdminScanOverviewCounts(includeCanary, excludeMacMiniScanBot);
+}
+
+export async function getAdminScanOperationalSnapshot(
+  period: AdminScanOperationalSnapshotPeriod = "24h",
+  includeCanary = false,
+  excludeMacMiniScanBot = true,
+): Promise<AdminScanOperationalSnapshot> {
+  await requirePlatformAdminContext();
+  return await loadCachedAdminScanOperationalSnapshot(period, includeCanary, excludeMacMiniScanBot);
 }
 
 export async function getAdminScanFilterOptions() {

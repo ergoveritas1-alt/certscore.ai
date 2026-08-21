@@ -6,7 +6,7 @@ import { getScanFromMarkerInput, ScanFromMarker } from "../../../../components/s
 import { PaginationControls, normalizePage, normalizePageSize } from "../../../../components/ui/pagination-controls";
 import { formatAdminDateTime } from "../../../../lib/admin/date-time";
 import { classifyAdminRequestProvenance } from "../../../../lib/admin/request-provenance";
-import { getAdminScanFilterOptions, getAdminScanOverviewMetrics, listAdminScansPage, type AdminScanListAccess, type AdminScanListFreshness, type AdminScanListItem, type AdminScanListStatus, type AdminScanListTimeSpan } from "../../../../server/admin/list-admin-scans";
+import { getAdminScanFilterOptions, getAdminScanOperationalSnapshot, listAdminScansPage, type AdminScanListAccess, type AdminScanListFreshness, type AdminScanListItem, type AdminScanListStatus, type AdminScanListTimeSpan, type AdminScanOperationalSnapshotPeriod } from "../../../../server/admin/list-admin-scans";
 import { withServerTiming } from "../../../../server/performance/log-server-timing";
 import { AdminNavigationProvider, AdminScanActions } from "./admin-scan-actions";
 import { AdminScansAutoRefresh } from "./admin-scans-auto-refresh";
@@ -26,13 +26,14 @@ export const dynamic = "force-dynamic";
 export const revalidate = 0;
 
 type AdminScansPageProps = {
-  searchParams?: Promise<{ page?: string; perPage?: string; q?: string; status?: string; freshness?: string; access?: string; outcome?: string; language?: string; industry?: string; scanFrom?: string; timeSpan?: string; includeCanary?: string; excludeMacMiniScanBot?: string; scanBotFilter?: string }>;
+  searchParams?: Promise<{ page?: string; perPage?: string; q?: string; status?: string; freshness?: string; access?: string; outcome?: string; language?: string; industry?: string; scanFrom?: string; timeSpan?: string; includeCanary?: string; excludeMacMiniScanBot?: string; scanBotFilter?: string; snapshot?: string }>;
 };
 
 const statuses = ["any", "no_go", "failed", "running", "queued", "limited", "completed"] as const;
 const freshnesses = ["any", "fresh", "forced_fresh", "reused"] as const;
 const accessValues = ["any", "clear", "blocked", "captcha", "robots_limited", "limited", "unknown"] as const;
 const timeSpans = ["all", "4h", "12h", "24h", "7d", "31d"] as const;
+const snapshotPeriods = ["1h", "24h", "7d", "30d", "1y"] as const;
 function normalizeStatus(value: string | undefined): AdminScanListStatus {
   return statuses.includes(value as AdminScanListStatus) ? value as AdminScanListStatus : "any";
 }
@@ -44,6 +45,23 @@ function normalizeTimeSpan(value: string | undefined): AdminScanListTimeSpan {
 }
 function normalizeAccess(value: string | undefined): AdminScanListAccess {
   return accessValues.includes(value as AdminScanListAccess) ? value as AdminScanListAccess : "any";
+}
+
+function normalizeSnapshotPeriod(value: string | undefined): AdminScanOperationalSnapshotPeriod {
+  return snapshotPeriods.includes(value as AdminScanOperationalSnapshotPeriod) ? value as AdminScanOperationalSnapshotPeriod : "24h";
+}
+
+function snapshotNumber(value: number) {
+  return new Intl.NumberFormat("en-US").format(value);
+}
+
+function snapshotPercentage(value: number | null) {
+  return value === null ? "—" : `${(value * 100).toFixed(1)}%`;
+}
+
+function snapshotDuration(value: number | null) {
+  if (value === null) return "—";
+  return value >= 60 ? `${(value / 60).toFixed(1)}m` : `${value.toFixed(1)}s`;
 }
 
 function formatFilterLabel(value: string) {
@@ -255,9 +273,10 @@ async function AdminScansContent({ resolvedSearchParams }: { resolvedSearchParam
   const activeTimeSpan = normalizeTimeSpan(resolvedSearchParams.timeSpan);
   const includeCanary = resolvedSearchParams.includeCanary === "1";
   const excludeMacMiniScanBot = resolveExcludeMacMiniScanBot(resolvedSearchParams);
+  const activeSnapshotPeriod = normalizeSnapshotPeriod(resolvedSearchParams.snapshot);
   const hasFilters = Boolean(activeQuery) || activeStatus !== "any" || activeFreshness !== "any" || activeAccess !== "any" || Boolean(activeOutcome) || Boolean(activeLanguage) || Boolean(activeIndustry) || activeScanFrom !== "any" || activeTimeSpan !== "all";
-  const [scanMetrics, filterOptions, scanPage] = await Promise.all([
-    withServerTiming("app.admin.scans.metrics", () => getAdminScanOverviewMetrics(includeCanary, excludeMacMiniScanBot)),
+  const [operationalSnapshot, filterOptions, scanPage] = await Promise.all([
+    withServerTiming("app.admin.scans.operational_snapshot", () => getAdminScanOperationalSnapshot(activeSnapshotPeriod, includeCanary, excludeMacMiniScanBot)),
     withServerTiming("app.admin.scans.filter-options", () => getAdminScanFilterOptions()),
     withServerTiming("app.admin.scans.list", () => listAdminScansPage(pageSize, (currentPage - 1) * pageSize, {
       query: activeQuery || null,
@@ -277,6 +296,23 @@ async function AdminScansContent({ resolvedSearchParams }: { resolvedSearchParam
   const totalPages = Math.max(1, Math.ceil(totalCount / pageSize));
   const normalizedPage = Math.min(currentPage, totalPages);
   const scans = scanPage.items;
+  const maxSnapshotRuns = Math.max(1, ...operationalSnapshot.trend.map((bucket) => bucket.runs));
+  const snapshotMetrics = [
+    ["Runs", snapshotNumber(operationalSnapshot.metrics.runs), operationalSnapshot.period.label],
+    ["Requests", snapshotNumber(operationalSnapshot.metrics.requests), "scan requests"],
+    ["Completed", snapshotNumber(operationalSnapshot.metrics.completedRuns), "physical runs"],
+    ["Limited", snapshotNumber(operationalSnapshot.metrics.limitedRuns), "evidence-limited"],
+    ["Failed", snapshotNumber(operationalSnapshot.metrics.failedRuns), "physical runs"],
+    ["Duration", `${snapshotDuration(operationalSnapshot.metrics.p50DurationSeconds)} / ${snapshotDuration(operationalSnapshot.metrics.p95DurationSeconds)}`, "p50 / p95"],
+  ];
+  const snapshotRates = [
+    ["Completion", snapshotPercentage(operationalSnapshot.rates.completion)],
+    ["Failures", snapshotPercentage(operationalSnapshot.rates.failure)],
+    ["Limited", snapshotPercentage(operationalSnapshot.rates.limited)],
+    ["Reuse", snapshotPercentage(operationalSnapshot.rates.reuse)],
+    ["No-go", snapshotNumber(operationalSnapshot.metrics.noGoRuns)],
+    ["Active", snapshotNumber(operationalSnapshot.metrics.activeRuns)],
+  ];
   const liveTargets = scans.flatMap((scan) => {
     if (!["queued", "running", "finalizing"].includes(scan.status)) return [];
     const id = scan.rowKind === "scan" ? scan.scanId : scan.requestPublicId;
@@ -289,22 +325,60 @@ async function AdminScansContent({ resolvedSearchParams }: { resolvedSearchParam
 
   return (
     <AdminNavigationProvider>
-    <Card className="min-w-0 overflow-hidden border-slate-200 bg-white">
-      <CardHeader className="pb-2">
-        <div className="space-y-3">
-          <div className="space-y-1">
-            <CardTitle>Scan Admin</CardTitle>
-            <p className="text-sm text-slate-500">Requester IP identifies who reached CertScore. Scanner egress identifies the outbound runtime that reached the target site.</p>
-          </div>
-          <div className="flex flex-wrap items-center justify-end gap-x-4 gap-y-2"><AdminTrafficFilters basePath="/app/admin/scans" excludeMacMiniScanBot={excludeMacMiniScanBot} includeCanary={includeCanary} searchParams={resolvedSearchParams} /><p className="text-sm text-slate-500">
-            {scanMetrics.totalPhysicalScans} runs · {scanMetrics.totalScanRequests} requests
-          </p></div>
+    <div className="space-y-3">
+      <div className="flex flex-wrap items-end justify-between gap-2">
+        <div className="space-y-1">
+          <h2 className="text-2xl font-semibold tracking-tight text-slate-950">Scan Admin</h2>
+          <p className="text-sm text-slate-500">Requester IP identifies who reached CertScore. Scanner egress identifies the outbound runtime that reached the target site.</p>
         </div>
-      </CardHeader>
+        <AdminTrafficFilters basePath="/app/admin/scans" excludeMacMiniScanBot={excludeMacMiniScanBot} includeCanary={includeCanary} searchParams={resolvedSearchParams} />
+      </div>
+
+      <Card className="overflow-hidden border-slate-200 bg-white">
+        <CardHeader className="border-b border-slate-100 py-3">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <div>
+              <CardTitle>Operational snapshot</CardTitle>
+              <p className="mt-0.5 text-xs text-slate-500">Physical scan runs and scan requests · {operationalSnapshot.period.label} · Pacific time</p>
+            </div>
+            <form action="/app/admin/scans" className="flex items-center gap-2" method="get">
+              {Object.entries(resolvedSearchParams).map(([key, value]) => key === "page" || key === "snapshot" || !value ? null : <input key={key} name={key} type="hidden" value={value} />)}
+              <label className="sr-only" htmlFor="admin-scans-snapshot-period">Snapshot period</label>
+              <select className="h-9 rounded-full border border-slate-300 bg-white px-3 text-sm text-slate-700" defaultValue={activeSnapshotPeriod} id="admin-scans-snapshot-period" name="snapshot">
+                <option value="1h">Last hour</option><option value="24h">Last 24 hours</option><option value="7d">Last 7 days</option><option value="30d">Last 30 days</option><option value="1y">Last year</option>
+              </select>
+              <button className="app-raised-button inline-flex h-9 items-center rounded-full px-3 text-sm font-semibold text-slate-700" type="submit">Apply</button>
+            </form>
+          </div>
+        </CardHeader>
+        <CardContent className="p-0">
+          <div className="grid grid-cols-3 gap-px bg-slate-100 sm:grid-cols-6">
+            {snapshotMetrics.map(([label, value, detail]) => <div className="min-w-0 bg-white px-3 py-2.5" key={label}><p className="truncate text-[10px] font-semibold uppercase tracking-wide text-slate-500">{label}</p><p className="mt-0.5 truncate text-lg font-semibold text-slate-950">{value}</p><p className="truncate text-[10px] text-slate-400">{detail}</p></div>)}
+          </div>
+          <div className="grid gap-4 border-t border-slate-100 p-3 lg:grid-cols-[1.4fr_1fr]">
+            <div>
+              <div className="mb-1.5 flex items-center justify-between gap-2"><p className="text-xs font-semibold text-slate-700">{operationalSnapshot.period.label} activity</p><p className="text-[10px] text-slate-400">{operationalSnapshot.trend[0]?.label ?? "Start"} — {operationalSnapshot.trend.at(-1)?.label ?? "Now"} · Pacific time</p></div>
+              <div aria-label={`Scan activity trend: ${snapshotNumber(operationalSnapshot.metrics.runs)} runs during ${operationalSnapshot.period.label.toLowerCase()}`} className="flex h-14 items-end gap-1" role="img">
+                {operationalSnapshot.trend.map((bucket, index) => <div aria-hidden="true" className={`min-w-0 flex-1 rounded-t ${bucket.failed > 0 ? "bg-rose-400" : bucket.limited > 0 ? "bg-amber-400" : "bg-sky-500"}`} key={`${bucket.bucket}:${index}`} style={{ height: `${Math.max(bucket.runs > 0 ? 4 : 1, (bucket.runs / maxSnapshotRuns) * 56)}px` }} title={`${bucket.label}: ${bucket.runs} runs · ${bucket.failed} failed · ${bucket.limited} limited`} />)}
+              </div>
+            </div>
+            <div className="grid grid-cols-3 gap-1.5">
+              {snapshotRates.map(([label, value]) => <div className="rounded-lg bg-slate-50 px-2 py-1.5" key={label}><p className="truncate text-[10px] text-slate-500">{label}</p><p className="mt-0.5 text-sm font-semibold text-slate-950">{value}</p></div>)}
+            </div>
+          </div>
+          <div className="grid gap-px border-t border-slate-100 bg-slate-100 sm:grid-cols-2 xl:grid-cols-4">
+            {operationalSnapshot.scanFromCounts.map((scanFrom) => <div className="flex items-center justify-between gap-3 bg-white px-3 py-2.5" key={scanFrom.value}><div className="min-w-0"><p className="truncate text-xs font-semibold text-slate-900">{scanFrom.label}</p><p className="truncate text-[10px] text-slate-500">{snapshotNumber(scanFrom.completed)} completed · {snapshotNumber(scanFrom.failed)} failed</p></div><p className="shrink-0 text-lg font-semibold text-slate-950">{snapshotNumber(scanFrom.count)}</p></div>)}
+          </div>
+        </CardContent>
+      </Card>
+
+      <Card className="min-w-0 overflow-hidden border-slate-200 bg-white">
+      <CardHeader className="pb-2"><div className="flex flex-wrap items-end justify-between gap-2"><div><CardTitle>Scan activity</CardTitle><p className="mt-1 text-sm text-slate-500">Physical runs and retained scan requests matching the table filters.</p></div><p className="text-sm text-slate-500">{snapshotNumber(totalCount)} matching items</p></div></CardHeader>
       <AdminTableRefreshBoundary basePath="/app/admin/scans" label="Refreshing scans">
       <CardContent className="min-w-0 space-y-3 pt-0">
         <AdminScansAutoRefresh targets={liveTargets} />
         <AdminScansFilterForm hasFilters={hasFilters} submitFirst>
+          <input name="snapshot" type="hidden" value={activeSnapshotPeriod} />
           {includeCanary ? <input name="includeCanary" type="hidden" value="1" /> : null}
           <input name="scanBotFilter" type="hidden" value="1" />
           {excludeMacMiniScanBot ? <input name="excludeMacMiniScanBot" type="hidden" value="1" /> : null}
@@ -326,7 +400,7 @@ async function AdminScansContent({ resolvedSearchParams }: { resolvedSearchParam
           pageSize={pageSize}
           totalCount={totalCount}
           visibleCount={scans.length}
-          searchParams={{ q: activeQuery, status: activeStatus, freshness: activeFreshness, access: activeAccess, outcome: activeOutcome, language: activeLanguage, industry: activeIndustry, scanFrom: activeScanFrom, timeSpan: activeTimeSpan, includeCanary: includeCanary ? "1" : null, scanBotFilter: "1", excludeMacMiniScanBot: excludeMacMiniScanBot ? "1" : null }}
+          searchParams={{ q: activeQuery, status: activeStatus, freshness: activeFreshness, access: activeAccess, outcome: activeOutcome, language: activeLanguage, industry: activeIndustry, scanFrom: activeScanFrom, timeSpan: activeTimeSpan, snapshot: activeSnapshotPeriod, includeCanary: includeCanary ? "1" : null, scanBotFilter: "1", excludeMacMiniScanBot: excludeMacMiniScanBot ? "1" : null }}
           showPageJump
         />
         <div className="w-full max-w-full overflow-x-auto overscroll-x-contain rounded-xl border border-slate-200">
@@ -407,6 +481,7 @@ async function AdminScansContent({ resolvedSearchParams }: { resolvedSearchParam
       </CardContent>
       </AdminTableRefreshBoundary>
     </Card>
+    </div>
     </AdminNavigationProvider>
   );
 }

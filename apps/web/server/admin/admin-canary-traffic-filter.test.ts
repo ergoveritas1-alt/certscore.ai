@@ -14,8 +14,7 @@ test("canary traffic is excluded by default across admin activity surfaces", () 
   for (const page of [scansPage, pulsePage, mcpPage]) {
     assert.match(page, /includeCanary = .*includeCanary === "1"/);
   }
-  for (const page of [scansPage, pulsePage]) assert.match(page, /<AdminTrafficFilters/);
-  assert.match(mcpPage, /<CanaryTrafficToggle/);
+  for (const page of [scansPage, pulsePage, mcpPage]) assert.match(page, /<AdminTrafficFilters/);
   assert.match(scansRepository, /not canary_filter/);
   assert.match(pulseRepository, /const PULSE_CANARY_TRAFFIC_SQL/);
   assert.match(pulseRepository, /from scan_requests canary_sr[\s\S]*requested_url[\s\S]*certscore-canary/);

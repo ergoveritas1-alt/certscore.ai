@@ -3,6 +3,10 @@ import "server-only";
 import { query, queryOne } from "@website-signal-risk-scanner/db";
 import { MCP_TELEMETRY_RETENTION_DAYS, type McpTelemetrySurface } from "@website-signal-risk-scanner/shared";
 import { calculateMcpTelemetryRates } from "../../lib/admin/mcp-telemetry-rates";
+import {
+  MAC_MINI_SCAN_BOT_MCP_CLIENT_NAMES,
+  MAC_MINI_SCAN_BOT_REQUESTER_IPS,
+} from "../../lib/admin/mac-mini-scan-bot";
 import { requesterIpAttributionFromRequest, type RequesterIpAttributionSource } from "../../lib/admin/requester-ip-attribution";
 import { parseAdminEvidenceMatrix, type AdminEvidenceMatrix } from "../../lib/scans/admin-evidence-matrix";
 import { requirePlatformAdminContext } from "./platform-admin";
@@ -174,6 +178,7 @@ type AdminMcpTelemetryEventRow = Omit<AdminMcpTelemetryEvent, "evidence_matrix" 
 
 export type AdminMcpTelemetryEventFilters = {
   confidence?: "verified" | "corroborated" | "declared" | "inferred" | "unknown" | null;
+  excludeMacMiniScanBot?: boolean;
   includeCanary?: boolean;
   outcome?: "success" | "error" | "rate_limited" | null;
   query?: string | null;
@@ -207,17 +212,33 @@ function nullableNumber(value: CountValue) {
   return Number.isFinite(parsed) ? parsed : null;
 }
 
+function macMiniMcpTrafficFilter(alias = "") {
+  const prefix = alias ? `${alias}.` : "";
+  return `and ($1::boolean = false or not (
+    lower(coalesce(${prefix}client_name, '')) = any($2::text[])
+    or coalesce(${prefix}requester_ip::text, '') = any($3::text[])
+  ))`;
+}
+
 export async function loadAdminMcpTelemetryDashboard(
   snapshotPeriod: AdminMcpSnapshotPeriod = "24h",
   toolPeriod: AdminMcpSnapshotPeriod = "24h",
   sourcePeriod: AdminMcpSnapshotPeriod = "24h",
   includeCanary = false,
+  excludeMacMiniScanBot = true,
 ) {
   await requirePlatformAdminContext();
   const snapshotConfig = SNAPSHOT_CONFIG[snapshotPeriod] ?? SNAPSHOT_CONFIG["24h"];
   const toolConfig = SNAPSHOT_CONFIG[toolPeriod] ?? SNAPSHOT_CONFIG["24h"];
   const sourceConfig = SNAPSHOT_CONFIG[sourcePeriod] ?? SNAPSHOT_CONFIG["24h"];
   const canaryFilter = includeCanary ? "" : "and is_canary = false";
+  const macMiniFilter = macMiniMcpTrafficFilter();
+  const macMiniEventFilter = macMiniMcpTrafficFilter("events");
+  const dashboardFilterValues = [
+    excludeMacMiniScanBot,
+    MAC_MINI_SCAN_BOT_MCP_CLIENT_NAMES,
+    MAC_MINI_SCAN_BOT_REQUESTER_IPS,
+  ];
   const [summaryResult, trendResult, toolResult, surfaceResult, sourceResult, hostnameResult, retentionResult] = await Promise.all([
     queryOne<SummaryRow>(
       `select count(*) as invocation_count,
@@ -236,8 +257,9 @@ export async function loadAdminMcpTelemetryDashboard(
          from public.mcp_tool_invocation_events
         where occurred_at >= ${snapshotConfig.bucketStart}
           and occurred_at < ${snapshotConfig.bucketEnd} + interval '${snapshotConfig.step}'
-          ${canaryFilter}`,
-      [],
+          ${canaryFilter}
+          ${macMiniFilter}`,
+      dashboardFilterValues,
       { readOnly: true },
     ),
     query<TrendRow>(
@@ -257,9 +279,10 @@ export async function loadAdminMcpTelemetryDashboard(
            on events.occurred_at >= buckets.bucket
           and events.occurred_at < buckets.bucket + interval '${snapshotConfig.step}'
           ${canaryFilter.replace("and is_canary", "and events.is_canary")}
+          ${macMiniEventFilter}
         group by buckets.bucket
         order by buckets.bucket asc`,
-      [],
+      dashboardFilterValues,
       { readOnly: true },
     ),
     query<ToolRow>(
@@ -273,10 +296,11 @@ export async function loadAdminMcpTelemetryDashboard(
         where occurred_at >= ${toolConfig.bucketStart}
           and occurred_at < ${toolConfig.bucketEnd} + interval '${toolConfig.step}'
           ${canaryFilter}
+          ${macMiniFilter}
         group by surface, tool_name
         order by calls desc, surface asc, tool_name asc
         limit 100`,
-      [],
+      dashboardFilterValues,
       { readOnly: true },
     ),
     query<SurfaceRow>(
@@ -289,9 +313,10 @@ export async function loadAdminMcpTelemetryDashboard(
         where occurred_at >= ${snapshotConfig.bucketStart}
           and occurred_at < ${snapshotConfig.bucketEnd} + interval '${snapshotConfig.step}'
           ${canaryFilter}
+          ${macMiniFilter}
         group by surface
         order by calls desc`,
-      [],
+      dashboardFilterValues,
       { readOnly: true },
     ),
     query<SourceRow>(
@@ -303,10 +328,11 @@ export async function loadAdminMcpTelemetryDashboard(
         where occurred_at >= ${sourceConfig.bucketStart}
           and occurred_at < ${sourceConfig.bucketEnd} + interval '${sourceConfig.step}'
           ${canaryFilter}
+          ${macMiniFilter}
         group by surface, source, source_attribution, auth_class, client_family
         order by calls desc
         limit 50`,
-      [],
+      dashboardFilterValues,
       { readOnly: true },
     ),
     query<HostnameRow>(
@@ -318,10 +344,11 @@ export async function loadAdminMcpTelemetryDashboard(
         where occurred_at >= now() - interval '30 days'
           and target_hostname is not null
           ${canaryFilter}
+          ${macMiniFilter}
         group by target_hostname
         order by calls desc, scan_requests desc, target_hostname asc
         limit 20`,
-      [],
+      dashboardFilterValues,
       { readOnly: true },
     ),
     queryOne<RetentionRow>(
@@ -329,11 +356,11 @@ export async function loadAdminMcpTelemetryDashboard(
               max(occurred_at) as newest_event_at,
               count(*) as total_event_count,
               count(*) filter (
-                where occurred_at < now() - ($1::int * interval '1 day')
+                where occurred_at < now() - ($4::int * interval '1 day')
               ) as expired_event_count
          from public.mcp_tool_invocation_events
-        where true ${canaryFilter}`,
-      [MCP_TELEMETRY_RETENTION_DAYS],
+        where true ${canaryFilter} ${macMiniFilter}`,
+      [...dashboardFilterValues, MCP_TELEMETRY_RETENTION_DAYS],
       { readOnly: true },
     ),
   ]);
@@ -439,13 +466,21 @@ export async function listAdminMcpTelemetryEventsPage(
   await requirePlatformAdminContext();
 
   const conditions: string[] = [];
-  const values: Array<string | number> = [];
-  const addValue = (value: string | number) => {
+  const values: unknown[] = [];
+  const addValue = (value: unknown) => {
     values.push(value);
     return `$${values.length}`;
   };
   const queryText = filters.query?.trim().slice(0, 160) ?? "";
   if (!filters.includeCanary) conditions.push("is_canary = false");
+  if (filters.excludeMacMiniScanBot !== false) {
+    const clientNamesParameter = addValue(MAC_MINI_SCAN_BOT_MCP_CLIENT_NAMES);
+    const requesterIpsParameter = addValue(MAC_MINI_SCAN_BOT_REQUESTER_IPS);
+    conditions.push(`not (
+      lower(coalesce(client_name, '')) = any(${clientNamesParameter}::text[])
+      or coalesce(requester_ip::text, '') = any(${requesterIpsParameter}::text[])
+    )`);
+  }
 
   if (queryText) {
     const parameter = addValue(`%${queryText}%`);
