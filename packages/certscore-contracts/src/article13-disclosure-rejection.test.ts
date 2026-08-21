@@ -3,11 +3,54 @@ import test from "node:test";
 
 import {
   article13DisclosureRejectReason,
+  assessArticle13PolicyTextQuality,
   hasSubstantiveLegalBasisEvidence,
   hasSubstantiveProcessingPurposesEvidence,
   isArticle13DisclosureEvidenceUsable,
   type Article13DisclosureRejectionMode,
 } from "./article13-disclosure-rejection";
+
+test("retained-report policy quality accepts canonical Hungarian Russian and Estonian text", () => {
+  const policies = [
+    [
+      "hu",
+      "Adatvédelmi tájékoztató. A szolgáltató ismerteti a személyes adatok kezelésének célját, jogalapját és az érintettek jogait.",
+    ],
+    [
+      "ru",
+      "Политика обработки персональных данных. Настоящий документ описывает цели обработки персональных данных, правовые основания и права субъекта данных.",
+    ],
+    [
+      "et",
+      "Privaatsustingimused. Käesolev dokument selgitab isikuandmete töötlemise eesmärke, õiguslikku alust ja andmesubjekti õigusi.",
+    ],
+  ] as const;
+
+  for (const [locale, sentence] of policies) {
+    const assessment = assessArticle13PolicyTextQuality(sentence.repeat(12), {
+      mode: "retained_report",
+    });
+    assert.equal(assessment.usable, true, locale);
+    assert.ok(assessment.policyTermCount >= 1, locale);
+  }
+});
+
+test("retained-report policy quality rejects mixed-page text with a delayed policy heading", () => {
+  const unrelatedOpening =
+    "Public profiles advertisements telephone listings navigation and unrelated community content ".repeat(12);
+  const delayedPolicy = [
+    "Privaatsustingimused. Isikuandmete töötlemisel selgitame eesmärke, õiguslikku alust ja õigusi.",
+    "Andmesubjekt võib taotleda juurdepääsu, parandamist ja kustutamist ning võtta ühendust vastutava töötlejaga.",
+  ].join(" ").repeat(10);
+
+  const assessment = assessArticle13PolicyTextQuality(`${unrelatedOpening} ${delayedPolicy}`, {
+    mode: "retained_report",
+  });
+
+  assert.equal(assessment.usable, false);
+  assert.equal(assessment.policyTermCount, 0);
+  assert.equal(assessment.reason, "low_quality_non_policy_text");
+});
 
 const rejectionModes: Article13DisclosureRejectionMode[] = [
   "scan_core",

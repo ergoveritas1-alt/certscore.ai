@@ -3860,6 +3860,10 @@ test("summarizePolicySurfaces distinguishes bounded section inventory from compl
     url: "https://example.test/privacy",
     status: "fetched",
     textExcerpt: policyText,
+    documentRole: "policy_document",
+    documentFetchState: "fetched",
+    documentEvaluationState: "usable",
+    targetRelationship: "target_controller",
     contentCoverage: {
       status: "truncated",
       sourceTextChars: policyText.length,
@@ -3877,10 +3881,19 @@ test("summarizePolicySurfaces distinguishes bounded section inventory from compl
   }] as never, "example.test");
 
   const summary = summarizePolicySurfaces(surfaces, "example.test", { primaryLanguage: "en" });
+  const assessments = summary.article13CoverageAssessments as Array<Record<string, unknown>>;
+  const unmatchedAssessments = assessments.filter((assessment) => assessment.status !== "observed");
 
   assert.equal(summary.policyTextExtractionHealth.policyTextExtractionStatus, "ok");
+  assert.equal(summary.policyTextEvidenceProjection.projectionStatus, "verified_complete");
   assert.equal(summary.policyTextEvidenceProjection.documents[0]?.contentCoverage?.status, "truncated");
   assert.equal(summary.policyTextEvidenceProjection.documents[0]?.documentTextCoverage.status, "complete");
+  assert.equal(unmatchedAssessments.length > 0, true);
+  assert.equal(unmatchedAssessments.every((assessment) => assessment.coverageStatus === "insufficient"), true);
+  assert.equal(unmatchedAssessments.every((assessment) => assessment.status === "insufficient_retained_evidence"), true);
+  assert.equal(unmatchedAssessments.every((assessment) =>
+    (assessment.reasonCodes as string[]).includes("policy_document_content_coverage_incomplete")
+  ), true);
 });
 
 test("summarizePolicySurfaces uses a fetched child document instead of its privacy index", async () => {
@@ -4284,6 +4297,30 @@ test("summarizePolicySurfaces preserves access-challenge text as a distinct fail
 
   assert.equal(summary.policyTextExtractionHealth.policyTextExtractionStatus, "low_quality_access_challenge");
   assert.equal(summary.policyTextExtractionHealth.extractionFailureReason, "privacy_policy_access_challenge_retained");
+});
+
+test("summarizePolicySurfaces keeps mixed-page text with a delayed localized policy heading limited", async () => {
+  const { dedupePolicySurfaces, summarizePolicySurfaces } = await loadLocalV2DagReport();
+  const unrelatedOpening =
+    "Public profiles advertisements telephone listings navigation and unrelated community content ".repeat(12);
+  const delayedPolicy = [
+    "Privaatsustingimused. Isikuandmete töötlemisel selgitame eesmärke, õiguslikku alust ja õigusi.",
+    "Andmesubjekt võib taotleda juurdepääsu, parandamist ja kustutamist ning võtta ühendust vastutava töötlejaga.",
+  ].join(" ").repeat(10);
+  const surfaces = dedupePolicySurfaces([{
+    observationId: "mixed-page-privacy-et",
+    surfaceType: "privacy_policy",
+    url: "https://example.test/privacypolicy",
+    normalizedUrl: "https://example.test/privacypolicy",
+    confidence: 0.95,
+    status: "fetched",
+    textExcerpt: `${unrelatedOpening} ${delayedPolicy}`,
+  }] as never, "example.test");
+
+  const summary = summarizePolicySurfaces(surfaces, "example.test", { primaryLanguage: "et" });
+
+  assert.equal(summary.policyTextExtractionHealth.policyTextQuality.usable, false);
+  assert.equal(summary.policyTextExtractionHealth.policyTextExtractionStatus, "low_quality_non_policy_text");
 });
 
 test("summarizePolicySurfaces accepts substantive Portuguese policy text and production-credit topic evidence", async () => {

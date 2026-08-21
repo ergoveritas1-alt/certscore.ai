@@ -1,4 +1,5 @@
 import { classifyGdprTransparencyTopics } from "./gdpr-transparency-topic-classifier";
+import { PRIVACY_EVIDENCE_LOCALE_REGISTRY } from "./privacy-evidence-locale-registry";
 
 export const ARTICLE13_DISCLOSURE_TYPES = [
   "controller_contact",
@@ -299,7 +300,7 @@ function assessPolicyTextQuality(
     };
   }
 
-  const lower = normalized.toLowerCase();
+  const lower = normalized.normalize("NFKC").toLowerCase();
   const codeSignalPatterns = [
     /this\.gbar_/i,
     /\bCONFIG:\s*\[\[\[/,
@@ -316,24 +317,66 @@ function assessPolicyTextQuality(
   const codeSignalCount = codeSignalPatterns.reduce((count, pattern) => count + (pattern.test(normalized) ? 1 : 0), 0);
   const codeSymbolRatio = (normalized.match(/[{}[\];=<>]/g) ?? []).length / Math.max(normalized.length, 1);
   const totalTokens = normalized.split(/\s+/).filter(Boolean).length;
-  const alphabeticWords = mode === "scan_core"
-    ? (normalized.match(/[\p{L}][\p{L}'-]{2,}/gu) ?? [])
-    : (normalized.match(/\b[A-Za-z][A-Za-z'-]{2,}\b/g) ?? []);
+  const alphabeticWords = normalized.match(/[\p{L}][\p{L}'-]{2,}/gu) ?? [];
   const cjkCharacters = normalized.match(/[\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}]/gu) ?? [];
   const alphabeticWordRatio = Math.max(
     alphabeticWords.length / Math.max(totalTokens, 1),
     cjkCharacters.length / Math.max(normalized.replace(/\s/g, "").length, 1)
   );
-  const naturalLanguageSentenceCount =
+  const cjkNaturalLanguageSentenceCount = cjkCharacters.length > 0
+    ? normalized
+      .split(/[。！？]/u)
+      .slice(0, -1)
+      .filter((sentence) => sentence.trim().length >= 20)
+      .length
+    : 0;
+  const englishNaturalLanguageSentenceCount =
     (normalized.match(/\b(?:we|you|your|our|users?|individuals?|customers?|visitors?|people)\b[^.!?]{20,}[.!?]/gi) ?? []).length +
-    (normalized.match(/[^。！？]{20,}[。！？]/gu) ?? []).length;
-  const policyTermCount = uniqueStrings((lower.match(/\b(?:privacy|collect|use|information|personal data|personal information|data|retain|delete|share|rights|contact|transfer|consent|controller|processor|legal basis|lawful basis)\b/g) ?? [])).length;
+    cjkNaturalLanguageSentenceCount;
+  const unicodeNaturalLanguageSentenceCount = normalized
+    .split(/[.!?。！？؟]+/u)
+    .filter((sentence) =>
+      sentence.trim().length >= 40 &&
+      (sentence.match(/\p{L}+/gu) ?? []).length >= 6
+    ).length;
+  const naturalLanguageSentenceCount = Math.max(
+    englishNaturalLanguageSentenceCount,
+    unicodeNaturalLanguageSentenceCount,
+  );
+  const legacyPolicyTermCount = uniqueStrings((lower.match(/\b(?:privacy|collect|use|information|personal data|personal information|data|retain|delete|share|rights|contact|transfer|consent|controller|processor|legal basis|lawful basis)\b/g) ?? [])).length;
+  const opening = lower.slice(0, 800);
+  const canonicalPolicyTermCount = PRIVACY_EVIDENCE_LOCALE_REGISTRY.reduce((best, entry) => {
+    const labels = entry.privacyPolicyLabels.map((term) => term.normalize("NFKC").toLowerCase());
+    if (!labels.some((term) => opening.includes(term))) return best;
+    const terms = uniqueStrings([...labels, ...entry.contextHints]
+      .map((term) => term.normalize("NFKC").toLowerCase()));
+    return Math.max(best, terms.filter((term) => lower.includes(term)).length);
+  }, 0);
+  const policyTermCount = Math.max(legacyPolicyTermCount, canonicalPolicyTermCount);
+  const hasDelayedCanonicalPolicyLabel = canonicalPolicyTermCount === 0 && PRIVACY_EVIDENCE_LOCALE_REGISTRY.some((entry) =>
+    entry.privacyPolicyLabels.some((term) => {
+      const normalizedTerm = term.normalize("NFKC").toLowerCase();
+      const index = lower.indexOf(normalizedTerm);
+      return index >= 800;
+    })
+  );
   const escapedUrlCount = (normalized.match(/\\x2f|\\u003c|\\u003e|https?:\\\/\\\//gi) ?? []).length;
   const minifiedTokenCount = (normalized.match(/[A-Za-z_$][\w$]{0,8}\s*[=:]\s*\S{40,}/g) ?? []).length;
   const gdprTransparencyTopicMatchCount = classifyGdprTransparencyTopics({ text: normalized.slice(0, 40_000) }).matches.length;
+  const accessChallengeSignalCount = [
+    /\bclient challenge\b/i,
+    /\ba required part of this site couldn[’']t load\b/i,
+    /\bdisable any ad blockers\b/i,
+    /\bplease check your connection\b/i,
+    /\bentrez les caract[èe]res affich[ée]s\b/i,
+    /\bt[ée]l[ée]charger le captcha audio\b/i,
+    /\bcaptcha\b/i,
+  ].filter((pattern) => pattern.test(normalized)).length;
 
   let reason: string | undefined;
-  if (/\bthis\.gbar_|\bCONFIG:\s*\[\[\[|Copyright The Closure Library|SPDX-License-Identifier/i.test(normalized)) {
+  if (accessChallengeSignalCount >= 2) {
+    reason = "low_quality_access_challenge";
+  } else if (/\bthis\.gbar_|\bCONFIG:\s*\[\[\[|Copyright The Closure Library|SPDX-License-Identifier/i.test(normalized)) {
     reason = "low_quality_extracted_code_or_config";
   } else if (codeSignalCount >= 2 && naturalLanguageSentenceCount < 3) {
     reason = "low_quality_extracted_code_or_config";
@@ -345,16 +388,19 @@ function assessPolicyTextQuality(
     reason = "low_quality_extracted_code_or_config";
   } else if (normalized.length >= 500 && alphabeticWordRatio < 0.42) {
     reason = "low_quality_extracted_code_or_config";
+  } else if (normalized.length >= 500 && hasDelayedCanonicalPolicyLabel) {
+    reason = "low_quality_non_policy_text";
   } else if (
     normalized.length >= 500 &&
     policyTermCount < 2 &&
-    (mode === "retained_report" || gdprTransparencyTopicMatchCount < 1) &&
+    gdprTransparencyTopicMatchCount < 1 &&
     naturalLanguageSentenceCount < 2
   ) {
     reason = "low_quality_non_policy_text";
   }
 
   return {
+    accessChallengeSignalCount,
     alphabeticWordRatio,
     codeSignalCount,
     codeSymbolRatio,

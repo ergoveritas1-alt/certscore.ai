@@ -176,6 +176,87 @@ test("privacy-context contact channel candidates pass the production evidence ad
   assert.deepEqual(result.discardedArticle13DisclosureSignals, []);
 });
 
+test("full-document privacy context remains valid when a multilingual row excerpt retains its canonical matched term", () => {
+  const examples = [
+    {
+      locale: "hu" as const,
+      text: [
+        "Adatvédelmi tájékoztató.",
+        "Adataidat tájékoztatási célból használjuk.",
+        "Az adatokat a megőrzési idő lejárta után töröljük."
+      ].join(" ")
+    },
+    {
+      locale: "ru" as const,
+      text: [
+        "Политика конфиденциальности.",
+        "Цели обработки данных включают предоставление и защиту сервиса.",
+        "Пользователь может отозвать согласие на их обработку."
+      ].join(" ")
+    },
+    {
+      locale: "et" as const,
+      text: [
+        "Privaatsuspoliitika.",
+        "Isikuandmeid töötleme teenuse osutamise eesmärgil.",
+        "Andmed kustutatakse automaatselt 3 kuu pärast."
+      ].join(" ")
+    }
+  ];
+
+  for (const example of examples) {
+    const candidates = classifyGdprTransparencyTopics({
+      localeHints: [example.locale],
+      text: example.text
+    }).matches.map((match) => candidate({
+      classifierReasonCodes: match.reasonCodes,
+      confidence: match.confidence,
+      evidenceText: match.evidenceExcerpt,
+      matchStrength: match.matchStrength,
+      matchedLocale: match.matchedLocale,
+      matchedTerm: match.matchedTerm,
+      topic: match.topic
+    }));
+    const contextBoundCandidates = candidates.filter((item) =>
+      item.classifierReasonCodes.includes("variant_requires_privacy_context")
+    );
+    assert.equal(contextBoundCandidates.length > 0, true, example.locale);
+
+    const result = adaptGdprTransparencyTopicCandidatesForProduction({
+      policyTextQuality: { usable: true },
+      profile: GDPR_TRANSPARENCY_MULTILINGUAL_ARTICLE13_PROFILE,
+      surface: surface(contextBoundCandidates, { textExcerpt: example.text })
+    });
+
+    assert.equal(
+      result.acceptedProductionSignals.length,
+      contextBoundCandidates.length,
+      example.locale
+    );
+    assert.deepEqual(result.discardedArticle13DisclosureSignals, [], example.locale);
+  }
+});
+
+test("privacy-context provenance cannot rescue a row excerpt that omits its matched term", () => {
+  const forged = candidate({
+    classifierReasonCodes: ["matched_processing_purposes", "variant_requires_privacy_context"],
+    evidenceText: "Политика конфиденциальности без сведений о конкретной цели.",
+    matchStrength: "equivalent",
+    matchedLocale: "ru",
+    matchedTerm: "цели обработки данных",
+    topic: "processing_purposes"
+  });
+
+  const result = adaptGdprTransparencyTopicCandidatesForProduction({
+    policyTextQuality: { usable: true },
+    profile: GDPR_TRANSPARENCY_MULTILINGUAL_ARTICLE13_PROFILE,
+    surface: surface([forged])
+  });
+
+  assert.deepEqual(result.acceptedProductionSignals, []);
+  assert.equal(result.dispositions[0]?.rejectReason, "insufficient_row_specific_terms");
+});
+
 test("explicit GDPR Transparency profile accepts strong direct multilingual candidates from usable privacy-policy surfaces", () => {
   const examples: Array<{ locale: Locale; matchedTerm: string; text: string }> = [
     {

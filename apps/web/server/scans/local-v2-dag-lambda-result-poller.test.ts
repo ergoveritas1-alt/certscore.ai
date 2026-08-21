@@ -6,7 +6,7 @@ import path from "node:path";
 import { Readable } from "node:stream";
 import test from "node:test";
 import { GetObjectCommand } from "@aws-sdk/client-s3";
-import { DeleteMessageCommand, ReceiveMessageCommand } from "@aws-sdk/client-sqs";
+import { ChangeMessageVisibilityCommand, DeleteMessageCommand, ReceiveMessageCommand } from "@aws-sdk/client-sqs";
 import {
   LOCAL_V2_DAG_LAMBDA_RESULT_CONTRACT_VERSION,
   ingestLocalV2DagLambdaResultMessage,
@@ -101,6 +101,49 @@ test("SQS poller validates and deletes completed and failed local v2 DAG message
   });
   assert.deepEqual(handled, [scanUuid(1), scanUuid(2)]);
   assert.deepEqual(deleted, ["receipt-1", "receipt-2"]);
+});
+
+test("one-shot result polling immediately releases early policy evidence to the canonical consumer", async () => {
+  const released: Array<{ receiptHandle: string; visibilityTimeout: number }> = [];
+  const sqsClient = {
+    async send(command: ChangeMessageVisibilityCommand | DeleteMessageCommand | ReceiveMessageCommand) {
+      if (command instanceof ReceiveMessageCommand) {
+        return {
+          $metadata: {},
+          Messages: [{
+            Body: JSON.stringify({
+              contractVersion: "certscore.v2.lambda-policy-evidence-ready.v1",
+              messageKind: "policy_evidence_ready",
+              scanId: scanUuid(1),
+            }),
+            MessageId: "policy-message-1",
+            ReceiptHandle: "policy-receipt-1",
+          }],
+        };
+      }
+      if (command instanceof ChangeMessageVisibilityCommand) {
+        released.push({
+          receiptHandle: String(command.input.ReceiptHandle),
+          visibilityTimeout: Number(command.input.VisibilityTimeout),
+        });
+      } else {
+        assert.fail("policy evidence must not be deleted by the one-shot result poller");
+      }
+      return { $metadata: {} };
+    },
+  };
+
+  const result = await pollLocalV2DagLambdaResultQueue({
+    env: {
+      CERTSCORE_V2_DAG_LAMBDA_RESULT_QUEUE_URL: "https://sqs.eu-west-1.amazonaws.com/123/local-results",
+      CERTSCORE_V2_DAG_LAMBDA_TARGET_ENV: "local",
+    },
+    releasePolicyEvidenceMessages: true,
+    sqsClient,
+  });
+
+  assert.deepEqual(result, { deleted: 0, failed: 0, handled: 0, received: 1 });
+  assert.deepEqual(released, [{ receiptHandle: "policy-receipt-1", visibilityTimeout: 0 }]);
 });
 
 test("SQS poller handles at most three result messages concurrently", async () => {

@@ -1,4 +1,5 @@
 import type { SupportedGdprTransparencyLocale } from "./supported-languages";
+import { PRIVACY_EVIDENCE_LOCALE_REGISTRY } from "./privacy-evidence-locale-registry";
 
 export type GdprTransparencyTopic =
   | "controller_contact"
@@ -400,25 +401,32 @@ export const GDPR_TRANSPARENCY_TOPIC_PHRASE_REGISTRY: GdprTransparencyTopicPhras
     equivalent("dpo_contact", "должностное лицо по защите данных"),
     equivalent("dpo_contact", "контакт ответственного по защите данных"),
     direct("processing_purposes", "цели обработки персональных данных"),
+    equivalent("processing_purposes", "цели обработки данных", "requires_privacy_context"),
     equivalent("processing_purposes", "обрабатываем персональные данные для"),
     equivalent("processing_purposes", "используем ваши персональные данные для"),
     direct("legal_basis", "правовые основания обработки персональных данных"),
     direct("legal_basis", "правовое основание для обработки персональных данных"),
     equivalent("legal_basis", "правовых основаниях обработки персональных данных", "inflected"),
     equivalent("legal_basis", "законный интерес при обработке персональных данных"),
+    equivalent("legal_basis", "согласие на их обработку", "requires_privacy_context"),
+    equivalent("legal_basis", "согласия на их обработку", "requires_privacy_context"),
+    equivalent("legal_basis", "согласия на ее обработку", "requires_privacy_context"),
     direct("recipients_or_vendor_categories", "получатели персональных данных"),
     equivalent("recipients_or_vendor_categories", "категории получателей персональных данных"),
     equivalent("recipients_or_vendor_categories", "третьи лица которым мы передаем персональные данные"),
+    equivalent("recipients_or_vendor_categories", "передать данные третьим лицам", "requires_privacy_context"),
     direct("data_retention", "срок хранения персональных данных"),
     equivalent("data_retention", "сроки хранения персональных данных", "inflected"),
     equivalent("data_retention", "сроках хранения персональных данных", "inflected"),
     equivalent("data_retention", "период хранения персональных данных"),
     equivalent("data_retention", "храним персональные данные столько сколько необходимо"),
+    equivalent("data_retention", "в течение 1 одного года", "requires_privacy_context"),
     direct("data_subject_rights", "права субъекта персональных данных"),
     equivalent("data_subject_rights", "правами субъектов персональных данных", "inflected"),
     equivalent("data_subject_rights", "правах субъектов персональных данных", "inflected"),
     equivalent("data_subject_rights", "право на доступ к персональным данным"),
     equivalent("data_subject_rights", "право на удаление персональных данных"),
+    equivalent("data_subject_rights", "можете отозвать свое согласие", "requires_privacy_context"),
     direct("international_transfers", "трансграничная передача персональных данных"),
     equivalent("international_transfers", "трансграничную передачу персональных данных"),
     equivalent("international_transfers", "передача персональных данных за пределы европейской экономической зоны"),
@@ -660,18 +668,24 @@ export const GDPR_TRANSPARENCY_TOPIC_PHRASE_REGISTRY: GdprTransparencyTopicPhras
     direct("processing_purposes", "személyes adatok kezelésének célja"),
     equivalent("processing_purposes", "személyes adatok kezelésének célját", "accusative"),
     equivalent("processing_purposes", "személyes adatokat a következő célokból kezeljük"),
+    equivalent("processing_purposes", "személyes adataidat tájékoztatási célból használjuk"),
+    equivalent("processing_purposes", "adataidat tájékoztatási célból használjuk", "requires_privacy_context"),
     direct("legal_basis", "adatkezelés jogalapja"),
     equivalent("legal_basis", "személyes adatok kezelésének jogalapja"),
     equivalent("legal_basis", "adatkezelés jogalapját", "accusative"),
+    equivalent("legal_basis", "hozzájárulásod alapján kezelt adataid"),
     direct("recipients_or_vendor_categories", "személyes adatok címzettjei"),
     equivalent("recipients_or_vendor_categories", "személyes adatok címzettjeinek kategóriái"),
     equivalent("recipients_or_vendor_categories", "személyes adatok címzettjeinek kategóriáit", "accusative"),
+    equivalent("recipients_or_vendor_categories", "továbbítjuk harmadik felek részére", "requires_privacy_context"),
     direct("data_retention", "személyes adatok tárolásának időtartama"),
     equivalent("data_retention", "személyes adatok tárolásának időtartamát", "accusative"),
     equivalent("data_retention", "személyes adatok megőrzési ideje"),
+    equivalent("data_retention", "megőrzési idő elteltével a személyes adatokat töröljük"),
     direct("data_subject_rights", "érintett jogai"),
     equivalent("data_subject_rights", "érintett jogait", "accusative"),
     equivalent("data_subject_rights", "személyes adatokhoz való hozzáférés joga"),
+    equivalent("data_subject_rights", "hozzájárulásod bármikor visszavonható"),
     direct("international_transfers", "személyes adatok nemzetközi továbbítása"),
     equivalent("international_transfers", "személyes adatok nemzetközi továbbítását", "accusative"),
     equivalent("international_transfers", "személyes adatok harmadik országba történő továbbítása"),
@@ -681,6 +695,8 @@ export const GDPR_TRANSPARENCY_TOPIC_PHRASE_REGISTRY: GdprTransparencyTopicPhras
     direct("automated_decision_making_or_profiling", "automatizált döntéshozatal személyes adatok felhasználásával"),
     equivalent("automated_decision_making_or_profiling", "automatizált döntéshozatal ideértve a profilalkotást"),
     equivalent("automated_decision_making_or_profiling", "személyes adatok felhasználásával történő automatizált döntéshozatalt", "accusative"),
+    equivalent("automated_decision_making_or_profiling", "profilalkotáson alapuló közvetlen üzletszerzés"),
+    equivalent("automated_decision_making_or_profiling", "profilalkotáson alapuló közvetlen üzletszerzéshez történő hozzájárulás"),
   ]),
   ...da([
     direct("controller_contact", "den dataansvarlige"),
@@ -928,18 +944,24 @@ export const GDPR_TRANSPARENCY_TOPIC_PHRASE_REGISTRY: GdprTransparencyTopicPhras
     direct("processing_purposes", "isikuandmete töötlemise eesmärgid"),
     equivalent("processing_purposes", "isikuandmete töötlemise eesmärke", "partitive"),
     equivalent("processing_purposes", "töötleme isikuandmeid järgmistel eesmärkidel"),
+    equivalent("processing_purposes", "teenuse osutamise eesmärgil", "requires_privacy_context"),
     direct("legal_basis", "isikuandmete töötlemise õiguslik alus"),
     equivalent("legal_basis", "isikuandmete töötlemise õiguslikku alust", "partitive"),
     equivalent("legal_basis", "töötlemise õiguslik alus"),
+    equivalent("legal_basis", "nõusoleku töödelda", "requires_privacy_context"),
     direct("recipients_or_vendor_categories", "isikuandmete vastuvõtjad"),
     equivalent("recipients_or_vendor_categories", "isikuandmete vastuvõtjate kategooriad"),
     equivalent("recipients_or_vendor_categories", "isikuandmete vastuvõtjate kategooriaid", "partitive"),
+    equivalent("recipients_or_vendor_categories", "loovutatakse kolmandatele osapooltele", "requires_privacy_context"),
     direct("data_retention", "isikuandmete säilitamise ajavahemik"),
     equivalent("data_retention", "isikuandmete säilitamise ajavahemikku", "partitive"),
     equivalent("data_retention", "isikuandmete säilitamise tähtaeg"),
+    equivalent("data_retention", "kustub automaatselt kolme kuu möödudes", "requires_privacy_context"),
+    equivalent("data_retention", "kustub see automaatselt kolme kuu möödudes", "requires_privacy_context"),
     direct("data_subject_rights", "andmesubjekti õigused"),
     equivalent("data_subject_rights", "andmesubjekti õigusi", "partitive"),
     equivalent("data_subject_rights", "õigus tutvuda isikuandmetega"),
+    equivalent("data_subject_rights", "õigus eemaldada teenusest oma konto", "requires_privacy_context"),
     direct("international_transfers", "isikuandmete rahvusvaheline edastamine"),
     equivalent("international_transfers", "isikuandmete rahvusvahelist edastamist", "partitive"),
     equivalent("international_transfers", "isikuandmete edastamine kolmandasse riiki"),
@@ -1182,7 +1204,15 @@ function phraseScore(input: {
 }
 
 function hasPrivacyDisclosureContext(normalizedText: string) {
-  return /\b(?:privacy|gdpr|dati personali|protezione dei dati|titolare del trattamento|responsabili? del trattamento|diritti degli interessati|articolo (?:6|13|28|44))\b/i.test(normalizedText);
+  if (/\b(?:privacy|gdpr|dati personali|protezione dei dati|titolare del trattamento|responsabili? del trattamento|diritti degli interessati|articolo (?:6|13|28|44))\b/i.test(normalizedText)) {
+    return true;
+  }
+  return PRIVACY_EVIDENCE_LOCALE_REGISTRY.some((entry) =>
+    [...entry.privacyPolicyLabels, ...entry.contextHints.slice(0, 2)].some((term) => {
+      const normalizedTerm = normalizeGdprTransparencyText(term);
+      return normalizedTerm.length >= 5 && normalizedText.includes(normalizedTerm);
+    })
+  );
 }
 
 function usesBoundarylessScript(value: string) {

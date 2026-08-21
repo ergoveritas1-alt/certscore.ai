@@ -4,6 +4,7 @@ import {
   looksLikeArticle13PageChrome,
   looksLikeArticle13TableOfContents,
   normalizeArticle13Whitespace,
+  normalizeGdprTransparencyText,
   type PolicySurfaceObservation,
 } from "@certscore/contracts";
 
@@ -105,6 +106,17 @@ const CREDITWORTHY_MATCH_STRENGTHS = new Set<GdprTransparencyTopicCandidate["mat
 ]);
 
 const MIN_CREDITWORTHY_CONFIDENCE = 0.8;
+
+const PRIVACY_CONTEXT_BOUND_DISCLOSURE_TOPICS = new Set<Article13DisclosureType>([
+  "automated_decision_making_or_profiling",
+  "data_retention",
+  "data_subject_rights",
+  "international_transfers",
+  "legal_basis",
+  "processing_purposes",
+  "recipients_or_vendor_categories",
+  "supervisory_authority",
+]);
 
 export function adaptGdprTransparencyTopicCandidatesForProduction(
   input: GdprTransparencyTopicEvidenceAdapterInput,
@@ -226,11 +238,24 @@ function rejectReasonForCandidate(
   });
   if (
     article13RejectReason === "insufficient_row_specific_terms" &&
-    isPrivacyContextContactChannelCandidate(candidate)
+    (isPrivacyContextContactChannelCandidate(candidate) ||
+      isPrivacyContextBoundCanonicalCandidate(candidate))
   ) {
     return null;
   }
   return article13RejectReason;
+}
+
+function isPrivacyContextBoundCanonicalCandidate(candidate: GdprTransparencyTopicCandidate) {
+  if (
+    !PRIVACY_CONTEXT_BOUND_DISCLOSURE_TOPICS.has(candidate.topic) ||
+    !candidate.classifierReasonCodes.includes("variant_requires_privacy_context")
+  ) {
+    return false;
+  }
+  const evidenceText = normalizeGdprTransparencyText(candidate.evidenceText);
+  const matchedTerm = normalizeGdprTransparencyText(candidate.matchedTerm);
+  return matchedTerm.length >= 8 && evidenceText.includes(matchedTerm);
 }
 
 function isPrivacyContextContactChannelCandidate(candidate: GdprTransparencyTopicCandidate) {

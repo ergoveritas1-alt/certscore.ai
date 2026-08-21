@@ -547,6 +547,17 @@ async function processPolicyEvidenceReadyMessageUncoalesced(input: {
       packet.sourceHash,
     ],
   );
+  console.info(JSON.stringify({
+    event: "v2_policy_evidence.consumer_verified",
+    packet_generated_at: packet.generatedAt,
+    queue_region: input.queueRegion,
+    scan_id: scanId,
+    sqs_queue_latency_ms: input.consumer?.sentAt
+      ? Math.max(0, Date.parse(input.consumer.consumerReceivedAt) - Date.parse(input.consumer.sentAt))
+      : null,
+    target_environment: input.targetEnvironment,
+    verified_at: verifiedAt,
+  }));
   const env = getWorkerEnv();
   let reviewSummary: Record<string, unknown> = {
     reviewStatus: "disabled",
@@ -621,6 +632,14 @@ async function processPolicyEvidenceReadyMessageUncoalesced(input: {
       },
     ],
   );
+  console.info(JSON.stringify({
+    event: "v2_policy_evidence.consumer_retained",
+    processing_duration_ms: Math.max(0, Date.parse(reviewCompletedAt) - Date.parse(verifiedAt)),
+    queue_region: input.queueRegion,
+    review_status: stringValue(reviewSummary.reviewStatus) ?? "unknown",
+    scan_id: scanId,
+    target_environment: input.targetEnvironment,
+  }));
   return { packet, reviewSummary };
 }
 

@@ -1351,6 +1351,37 @@ test("does not classify generic operational copy in the five EU expansion locale
   }
 });
 
+test("classifies retained Hungarian Russian and Estonian policy wording without formal boilerplate", () => {
+  const cases = [
+    {
+      locale: "hu" as const,
+      text: "Adatvédelmi tájékoztató. Hozzájárulásod alapján kezelt adataid vannak. Személyes adataidat tájékoztatási célból használjuk. A megőrzési idő elteltével a személyes adatokat töröljük, és hozzájárulásod bármikor visszavonható. Személyes adataidat csak meghatározott esetekben továbbítjuk harmadik felek részére. Profilalkotáson alapuló közvetlen üzletszerzés is történhet.",
+      topics: ["processing_purposes", "legal_basis", "recipients_or_vendor_categories", "data_retention", "data_subject_rights", "automated_decision_making_or_profiling"],
+    },
+    {
+      locale: "ru" as const,
+      text: "Политика обработки персональных данных. Цели обработки данных включают обслуживание запросов. Вы даете согласие на их обработку и можете отозвать свое согласие. Администрация может передать данные третьим лицам и хранит журналы в течение 1 (одного) года.",
+      topics: ["processing_purposes", "legal_basis", "recipients_or_vendor_categories", "data_retention", "data_subject_rights"],
+    },
+    {
+      locale: "et" as const,
+      text: "Privaatsustingimused. Kasutaja annab nõusoleku töödelda isikuandmeid teenuse osutamise eesmärgil. Teavet loovutatakse kolmandatele osapooltele üksnes seaduse alusel. Kasutajal on õigus eemaldada teenusest oma konto, mis kustub automaatselt kolme kuu möödudes.",
+      topics: ["processing_purposes", "legal_basis", "recipients_or_vendor_categories", "data_retention", "data_subject_rights"],
+    },
+  ];
+
+  for (const fixture of cases) {
+    const result = classifyGdprTransparencyTopics({
+      text: fixture.text,
+      localeHints: [fixture.locale],
+    });
+    const topics = new Set(result.matches.map((match) => match.topic));
+    for (const topic of fixture.topics) {
+      assert.equal(topics.has(topic as never), true, `${fixture.locale}:${topic}`);
+    }
+  }
+});
+
 test("does not classify generic operational copy in the Nordic, Central European, Baltic, Ukrainian, or Turkish expansion locales", () => {
   const cases = [
     ["fi", "Tuotteiden säilytysaika riippuu varastosta, ja automaattinen lajittelu nopeuttaa toimituksia."],

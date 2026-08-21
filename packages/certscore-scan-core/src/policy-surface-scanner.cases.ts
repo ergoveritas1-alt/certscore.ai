@@ -39,6 +39,7 @@ import {
   recoverPolicyDocumentsFromRetainedRenderedLinks,
   resolvePrefetchedPolicyVisibleText,
   resolvePolicyVisibleText,
+  resolveRenderedPolicyVisibleText,
   settlePolicyCandidateProcessingBeforeDeadline,
   shouldRetryCanonicalPolicyHost,
   shouldTreatGuessedPrivacyDocumentAsInsufficient,
@@ -1357,6 +1358,25 @@ test("policy text resolution scopes legacy center-panel policy pages before reta
   assert.doesNotMatch(resolved, /UNRELATED-CONTACT-LISTING/);
 });
 
+test("rendered policy text resolution uses retained HTML for section scoping", async () => {
+  const policyParagraph = "Privaatsustingimused Andmekaitse. Teenusepakkuja t&#246;&#246;tleb kasutaja isikuandmeid teenuse osutamiseks ja s&#228;ilitab andmeid ainult vajaliku aja. ".repeat(12);
+  const unrelatedListing = "UNRELATED-CONTACT-LISTING public profile listing and telephone advertisement. ".repeat(18);
+  const html = `<!doctype html><html><body><div class="leftpanel">${unrelatedListing}</div><div class="centerpanel"><div><b>Privaatsustingimused</b></div><div><div></div><div><b>Andmekaitse</b><p>${policyParagraph}</p></div></div></div><div class="rightpanel">${unrelatedListing}</div></body></html>`;
+  const renderedBodyText = `Privaatsustingimused ${unrelatedListing} Andmekaitse ${policyParagraph} ${unrelatedListing}`;
+  const resolved = await resolveRenderedPolicyVisibleText({
+    html,
+    text: renderedBodyText,
+    baseUrl: "https://example.ee/privacypolicy",
+    surfaceType: "privacy_policy",
+    timeoutMs: 500,
+  });
+
+  assert.match(resolved, /Privaatsustingimused Andmekaitse/);
+  assert.match(resolved, /töötleb kasutaja isikuandmeid/);
+  assert.doesNotMatch(resolved, /&#(?:246|228);/);
+  assert.doesNotMatch(resolved, /UNRELATED-CONTACT-LISTING/);
+});
+
 test("policy text quality accepts substantive Unicode-language sentences", () => {
   const assessment = assessPolicyTextQuality([
     "سیاست حفظ حریم خصوصی توضیح می‌دهد که چگونه اطلاعات شخصی کاربران جمع‌آوری و پردازش می‌شود.",
@@ -1366,6 +1386,36 @@ test("policy text quality accepts substantive Unicode-language sentences", () =>
 
   assert.equal(assessment.usable, true);
   assert.ok(assessment.naturalLanguageSentenceCount >= 2);
+});
+
+test("policy text quality recognizes canonical Hungarian policy language", () => {
+  const assessment = assessPolicyTextQuality([
+    "Adatvédelmi tájékoztató.",
+    "A szolgáltató a személyes adatok kezeléséről, az adatvédelem biztosításáról és a hozzájárulás visszavonásáról ad tájékoztatást",
+    "Az érintett kérelmezheti adatai hozzáférését, helyesbítését és törlését",
+  ].join(" ").repeat(6));
+
+  assert.equal(assessment.usable, true);
+  assert.ok(assessment.policyTermCount >= 2);
+});
+
+test("policy text quality recognizes canonical Russian policy language", () => {
+  const assessment = assessPolicyTextQuality([
+    "Политика обработки персональных данных.",
+    "Настоящий документ описывает обработку персональных данных, конфиденциальность и согласие пользователя",
+    "Пользователь может запросить доступ, исправление или удаление своих данных",
+  ].join(" ").repeat(6));
+
+  assert.equal(assessment.usable, true);
+  assert.ok(assessment.policyTermCount >= 2);
+});
+
+test("policy text quality does not grant canonical term credit to a policy heading after mixed-page content", () => {
+  const unrelatedOpening = "Public profiles advertisements telephone listings navigation and unrelated community content ".repeat(12);
+  const delayedPolicy = "Privaatsustingimused Andmekaitse. Isikuandmed, privaatsus ja nõusolek.";
+  const assessment = assessPolicyTextQuality(`${unrelatedOpening} ${delayedPolicy}`);
+
+  assert.equal(assessment.policyTermCount, 0);
 });
 
 test("retained German legal hubs are not promoted to privacy evidence before content validation", () => {
@@ -5203,7 +5253,7 @@ async function withPolicyScan(
       ...options,
     });
     if (expectations.expectCompleted !== false) {
-      assert.equal(result.moduleRun.status, "completed");
+      assert.equal(result.moduleRun.status, "completed", JSON.stringify(result.moduleRun.errors));
     }
     await run({ result, baseUrl: server.baseUrl });
   } finally {

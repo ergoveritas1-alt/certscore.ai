@@ -137,7 +137,7 @@ export const PRIVACY_EVIDENCE_LOCALE_REGISTRY: readonly PrivacyEvidenceLocaleReg
     consentControls: { accept: ["قبول الكل", "السماح بالكل"], reject: ["رفض الكل", "عدم السماح بالكل"], options: ["إعدادات ملفات تعريف الارتباط", "إدارة التفضيلات"], necessaryOnly: ["الضرورية فقط", "ملفات تعريف الارتباط الضرورية فقط"] },
   }),
   locale("hu", {
-    privacyPolicyLabels: ["adatvédelmi irányelvek", "adatvédelmi tájékoztató", "adatvédelem"], privacyPolicyPathSlugs: ["adatvedelem", "adatvedelmi-tajekoztato"], cookiePolicyLabels: ["süti szabályzat"], cookiePolicyPathSlugs: ["suti-szabalyzat"], cookieSettingsLabels: ["süti beállítások"], termsLabels: ["felhasználási feltételek"], termsPathSlugs: ["aszf"], contextHints: ["adatvédelem", "személyes adatok", "süti", "hozzájárulás"], tldHints: [".hu"],
+    privacyPolicyLabels: ["adatvédelmi irányelvek", "adatvédelmi tájékoztató", "adatvédelmi tudnivalók", "adatvédelem"], privacyPolicyPathSlugs: ["adatvedelem", "adatvedelmi-tajekoztato"], cookiePolicyLabels: ["süti szabályzat"], cookiePolicyPathSlugs: ["suti-szabalyzat"], cookieSettingsLabels: ["süti beállítások"], termsLabels: ["felhasználási feltételek"], termsPathSlugs: ["aszf"], contextHints: ["adatvédelem", "személyes adatok", "süti", "hozzájárulás"], tldHints: [".hu"],
     consentControls: { accept: ["összes elfogadása", "mindent elfogadok"], reject: ["összes elutasítása", "mindent elutasítok", "nem kötelező sütik elutasítása"], options: ["süti beállítások", "beállítások kezelése"], necessaryOnly: ["csak a szükséges", "csak szükséges sütik"] },
   }),
   locale("ro", {

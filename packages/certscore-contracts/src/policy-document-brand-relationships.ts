@@ -19,6 +19,12 @@ export const CANONICAL_POLICY_DOCUMENT_BRAND_RELATIONSHIPS:
       ownerEntity: "Google",
       reasonCode: "canonical_relationship_tensorflow_google",
     },
+    {
+      targetDomain: "fortiguard.com",
+      policyDomains: ["fortinet.com"],
+      ownerEntity: "Fortinet",
+      reasonCode: "canonical_relationship_fortiguard_fortinet",
+    },
   ];
 
 export function canonicalPolicyDocumentBrandRelationship(input: {

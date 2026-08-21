@@ -1,6 +1,7 @@
 import {
   type ArtifactRef,
   article13DisclosureRejectReason as sharedArticle13DisclosureRejectReason,
+  assessArticle13PolicyTextQuality,
   canonicalPolicyDocumentBrandRelationship,
   classifyConsentSurfaceText,
   classifyGdprTransparencyTopics,
@@ -2280,8 +2281,9 @@ async function processPolicyCandidate({
         timingBreakdown,
         `policy rendered text resolution ${candidateIndex + 1}`,
         `Resolve bounded rendered document text for ${effectiveCandidate.deterministicSurfaceType}.`,
-        () => resolvePolicyVisibleText({
-          html: renderedFetched.text,
+        () => resolveRenderedPolicyVisibleText({
+          html: renderedFetched.html,
+          text: renderedFetched.text,
           baseUrl: effectiveCandidate.normalizedUrl,
           surfaceType: effectiveCandidate.deterministicSurfaceType,
           timeoutMs: Math.max(1_000, Math.min(3_000, remainingPolicyFetchMs(input, moduleStartedAtMs))),
@@ -3164,6 +3166,21 @@ export async function resolvePolicyVisibleText(input: {
   }
 
   return bestText;
+}
+
+export async function resolveRenderedPolicyVisibleText(input: {
+  html?: string;
+  text: string;
+  baseUrl: string;
+  surfaceType: PolicySurfaceObservation["surfaceType"];
+  timeoutMs: number;
+  deadlineAtMs?: number;
+  signal?: AbortSignal;
+}): Promise<string> {
+  return resolvePolicyVisibleText({
+    ...input,
+    html: input.html ?? input.text,
+  });
 }
 
 export function shouldUseDirectPolicyDocumentText(value: string): boolean {
@@ -5213,6 +5230,11 @@ export function policyDocumentRoleForChildSelection(
   }
   if (privacyChildren.some((child) =>
     child.selectionReasonCodes?.includes("latest_dated_privacy_document_link")
+  )) {
+    return "policy_index";
+  }
+  if (privacyChildren.some((child) =>
+    child.selectionReasonCodes?.includes("scan_region_policy_route_match")
   )) {
     return "policy_index";
   }
@@ -8844,115 +8866,7 @@ export type PolicyTextQualityAssessment = {
 };
 
 export function assessPolicyTextQuality(value: string): PolicyTextQualityAssessment {
-  const normalized = normalizeWhitespace(value);
-  const emptyAssessment = {
-    alphabeticWordRatio: 0,
-    codeSignalCount: 0,
-    codeSymbolRatio: 0,
-    naturalLanguageSentenceCount: 0,
-    policyTermCount: 0,
-    reason: "empty_policy_text",
-    usable: false
-  };
-  if (!normalized) {
-    return emptyAssessment;
-  }
-
-  const lower = normalized.toLowerCase();
-  const strongCodeSignals = [
-    /this\.gbar_/i,
-    /\bCONFIG:\s*\[\[\[/,
-    /Copyright The Closure Library/i,
-    /SPDX-License-Identifier/i,
-    /\b(?:var|const|let)\s+[A-Za-z_$][\w$]*\s*=/,
-    /function\s*\(/,
-    /=>/,
-    /_\.[A-Za-z_$][\w$]*\s*=/,
-    /Object\.definePropert(?:y|ies)/,
-    /(?:^|[;{])\s*[A-Za-z_$][\w$]*\s*:\s*function\b/
-  ];
-  const codeSignalCount = strongCodeSignals.reduce((count, pattern) => count + (pattern.test(normalized) ? 1 : 0), 0);
-  const codeSymbolCount = (normalized.match(/[{}[\];=<>]/g) ?? []).length;
-  const codeSymbolRatio = codeSymbolCount / Math.max(normalized.length, 1);
-  const escapedUrlCount = (normalized.match(/\\x2f|\\u003c|\\u003e|https?:\\\/\\\//gi) ?? []).length;
-  const minifiedTokenCount = (normalized.match(/[A-Za-z_$][\w$]{0,8}\s*[=:]\s*\S{40,}/g) ?? [])
-    .filter((token) => !/https?:\/\//i.test(token))
-    .length;
-  const totalTokens = normalized.split(/\s+/).filter(Boolean).length;
-  const alphabeticWords = normalized.match(/[\p{L}][\p{L}'-]{2,}/gu) ?? [];
-  const cjkCharacters = normalized.match(/[\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}]/gu) ?? [];
-  const alphabeticWordRatio = Math.max(
-    alphabeticWords.length / Math.max(totalTokens, 1),
-    cjkCharacters.length / Math.max(normalized.replace(/\s/g, "").length, 1)
-  );
-  const cjkNaturalLanguageSentenceCount = cjkCharacters.length > 0
-    ? normalized
-      .split(/[。！？]/u)
-      .slice(0, -1)
-      .filter((sentence) => sentence.trim().length >= 20)
-      .length
-    : 0;
-  const englishNaturalLanguageSentenceCount =
-    (normalized.match(/\b(?:we|you|your|our|users?|individuals?|customers?|visitors?|people)\b[^.!?]{20,}[.!?]/gi) ?? []).length +
-    cjkNaturalLanguageSentenceCount;
-  const unicodeNaturalLanguageSentenceCount = normalized
-    .split(/[.!?。！？؟]+/u)
-    .filter((sentence) =>
-      sentence.trim().length >= 40 &&
-      (sentence.match(/\p{L}+/gu) ?? []).length >= 6
-    ).length;
-  const naturalLanguageSentenceCount = Math.max(
-    englishNaturalLanguageSentenceCount,
-    unicodeNaturalLanguageSentenceCount,
-  );
-  const policyTermCount = uniqueStrings((lower.match(new RegExp([
-    "\\b(?:privacy|collect|use|information|personal data|personal information|data|retain|delete|share|rights|contact|transfer|consent|controller|processor|legal basis|lawful basis)\\b",
-    "\\b(?:datenschutz|personenbezogene daten|einwilligung|verarbeitung|aufsichtsbehörde)\\b",
-    "\\b(?:confidentialité|données personnelles|traitement|consentement|droits|responsable du traitement)\\b",
-    "\\b(?:privacidad|datos personales|tratamiento|consentimiento|derechos|responsable del tratamiento)\\b",
-    "\\b(?:privacy|dati personali|trattamento|consenso|diritti|titolare del trattamento)\\b",
-    "\\b(?:privacy|persoonsgegevens|avg|verwerking|toestemming|rechten|verwerkingsverantwoordelijke)\\b",
-    "\\b(?:prywatność|dane osobowe|rodo|przetwarzanie|zgoda|prawa|administrator danych)\\b",
-  ].join("|"), "g")) ?? [])).length;
-  const topicMatchCount = gdprTransparencyTopicMatchCount(normalized);
-  const accessChallengeSignals = [
-    /\bclient challenge\b/i,
-    /\ba required part of this site couldn[’']t load\b/i,
-    /\bdisable any ad blockers\b/i,
-    /\bplease check your connection\b/i,
-    /\bentrez les caract[èe]res affich[ée]s\b/i,
-    /\bt[ée]l[ée]charger le captcha audio\b/i,
-    /\bcaptcha\b/i,
-  ].filter((pattern) => pattern.test(normalized)).length;
-
-  let reason: string | undefined;
-  if (accessChallengeSignals >= 2) {
-    reason = "low_quality_access_challenge";
-  } else if (/\bthis\.gbar_|\bCONFIG:\s*\[\[\[|Copyright The Closure Library|SPDX-License-Identifier/i.test(normalized)) {
-    reason = "low_quality_extracted_code_or_config";
-  } else if (codeSignalCount >= 2 && naturalLanguageSentenceCount < 3) {
-    reason = "low_quality_extracted_code_or_config";
-  } else if (codeSymbolRatio > 0.12 && naturalLanguageSentenceCount < 4) {
-    reason = "low_quality_extracted_code_or_config";
-  } else if (escapedUrlCount >= 8 && naturalLanguageSentenceCount < 3) {
-    reason = "low_quality_extracted_code_or_config";
-  } else if (minifiedTokenCount >= 2 && naturalLanguageSentenceCount < 4) {
-    reason = "low_quality_extracted_code_or_config";
-  } else if (normalized.length >= 500 && alphabeticWordRatio < 0.42) {
-    reason = "low_quality_extracted_code_or_config";
-  } else if (normalized.length >= 500 && policyTermCount < 2 && topicMatchCount < 1 && naturalLanguageSentenceCount < 2) {
-    reason = "low_quality_non_policy_text";
-  }
-
-  return {
-    alphabeticWordRatio,
-    codeSignalCount,
-    codeSymbolRatio,
-    naturalLanguageSentenceCount,
-    policyTermCount,
-    reason,
-    usable: !reason
-  };
+  return assessArticle13PolicyTextQuality(value, { mode: "scan_core" });
 }
 
 function gdprTransparencyTopicMatchCount(text: string): number {
@@ -9113,12 +9027,21 @@ function htmlToVisibleText(html: string): string {
 
 function decodeBasicHtmlEntities(value: string): string {
   return value
+    .replace(/&#(\d+);/g, (match, codepoint: string) => decodeHtmlCodePoint(match, codepoint, 10))
+    .replace(/&#x([0-9a-f]+);/gi, (match, codepoint: string) => decodeHtmlCodePoint(match, codepoint, 16))
     .replace(/&nbsp;/g, " ")
     .replace(/&amp;/g, "&")
     .replace(/&apos;|&lsquo;|&rsquo;|&#39;|&#x27;|&#8216;|&#8217;|&#x2018;|&#x2019;/gi, "'")
     .replace(/&quot;|&#34;|&#x22;/gi, "\"")
     .replace(/&lt;/g, "<")
     .replace(/&gt;/g, ">");
+}
+
+function decodeHtmlCodePoint(match: string, value: string, radix: 10 | 16): string {
+  const codepoint = Number.parseInt(value, radix);
+  return Number.isInteger(codepoint) && codepoint >= 0 && codepoint <= 0x10ffff
+    ? String.fromCodePoint(codepoint)
+    : match;
 }
 
 function decodeEmbeddedHtml(html: string): string {

@@ -3358,6 +3358,13 @@ export async function publishVerifiedPolicyEvidence(input: {
     totalTimeoutMs: LOCAL_V2_DAG_LAMBDA_AWS_SEND_ATTEMPT_TIMEOUT_MS *
       (input.s3Client ? 1 : LOCAL_V2_DAG_LAMBDA_AWS_SEND_MAX_ATTEMPTS),
   });
+  console.info(JSON.stringify({
+    event: "v2_policy_evidence.artifact_retained",
+    region: input.payload.awsRegion,
+    scan_id: input.payload.scanId,
+    size_bytes: body.byteLength,
+    target_environment: input.payload.targetEnvironment,
+  }));
   const message: LocalV2DagLambdaPolicyEvidenceMessage = {
     artifactMetadata: { sha256, sizeBytes: body.byteLength },
     artifactOnly: true,
@@ -3385,6 +3392,13 @@ export async function publishVerifiedPolicyEvidence(input: {
     totalTimeoutMs: LOCAL_V2_DAG_LAMBDA_AWS_SEND_ATTEMPT_TIMEOUT_MS *
       (input.sqsClient ? 1 : LOCAL_V2_DAG_LAMBDA_AWS_SEND_MAX_ATTEMPTS),
   });
+  console.info(JSON.stringify({
+    event: "v2_policy_evidence.queue_published",
+    region: input.payload.awsRegion,
+    scan_id: input.payload.scanId,
+    size_bytes: body.byteLength,
+    target_environment: input.payload.targetEnvironment,
+  }));
   return message;
 }
 

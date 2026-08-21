@@ -67,6 +67,34 @@ test("does not generalize the TensorFlow relationship to unrelated Google policy
   assert.equal(result.targetRelationship, "service_provider");
 });
 
+test("attributes FortiGuard's canonical Fortinet-hosted notice as a first-party brand document", () => {
+  const result = classifyPolicyDocumentOwnership({
+    documentTitle: "Fortinet Privacy Policy",
+    documentUrl: "https://www.fortinet.com/corporate/about-us/privacy",
+    targetUrl: "https://www.fortiguard.com/",
+    text: "Fortinet explains how it processes personal data and protects privacy.",
+  });
+
+  assert.equal(result.targetRelationship, "first_party_brand");
+  assert.equal(result.documentOwnerEntity, "Fortinet");
+  assert.equal(result.ownershipConfidence, 0.98);
+  assert.deepEqual(result.ownershipReasonCodes, [
+    "canonical_first_party_brand_relationship",
+    "canonical_relationship_fortiguard_fortinet",
+  ]);
+});
+
+test("does not generalize the FortiGuard relationship to unrelated Fortinet policy links", () => {
+  const result = classifyPolicyDocumentOwnership({
+    documentTitle: "Fortinet Privacy Policy",
+    documentUrl: "https://www.fortinet.com/corporate/about-us/privacy",
+    targetUrl: "https://statefarm.com/",
+    text: "Fortinet explains how it processes personal data and protects privacy.",
+  });
+
+  assert.notEqual(result.targetRelationship, "first_party_brand");
+});
+
 test("attributes a corporate policy when the target is an enumerated subsidiary in the policy scope", () => {
   const result = classifyPolicyDocumentOwnership({
     documentTitle: "Privacy Policy - PAR Technology",

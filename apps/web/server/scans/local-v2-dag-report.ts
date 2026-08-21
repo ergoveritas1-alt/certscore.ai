@@ -9,7 +9,7 @@ import { Readable } from "node:stream";
 import { getDomain as getTldtsDomain } from "tldts";
 import {
   article13DisclosureRejectReason as sharedArticle13DisclosureRejectReason,
-  classifyGdprTransparencyTopics,
+  assessArticle13PolicyTextQuality,
   classifyConsentControlLabel,
   type ConsentControlAssessment,
   deriveConsentSurfaceInspectionOutcome,
@@ -2765,9 +2765,9 @@ export function summarizePolicySurfaces(
       row.surface.url,
     ]),
   });
-  const policyTextQuality = assessRetainedPolicyTextQuality(text, { multilingual: true });
+  const policyTextQuality = assessArticle13PolicyTextQuality(text, { mode: "retained_report" });
   const gdprTransparencyPolicyTextQuality = gdprTransparencyProductionEvidenceEnabled
-    ? assessRetainedPolicyTextQuality(text, { multilingual: true })
+    ? assessArticle13PolicyTextQuality(text, { mode: "retained_report" })
     : policyTextQuality;
   const observedPolicyTopicHints = uniqueStrings(article13Surfaces.flatMap((row) => row.surface.observedTopics ?? []));
   const article13SignalCandidates = article13Surfaces.flatMap((row) => {
@@ -2939,7 +2939,10 @@ export function summarizePolicySurfaces(
     completeOwnedPolicyDocuments.length > 0 &&
     completeOwnedPolicyDocuments.length === policyTextEvidenceProjection.documents.length &&
     completeOwnedPolicyDocuments.every(
-      (document) => document.retainedTextChars >= MIN_GDPR_TRANSPARENCY_ABSENCE_POLICY_TEXT_CHARS,
+      (document) =>
+        document.retainedTextChars >= MIN_GDPR_TRANSPARENCY_ABSENCE_POLICY_TEXT_CHARS &&
+        document.documentTextCoverage.status === "complete" &&
+        document.contentCoverage?.status === "complete",
     ) &&
     !policyIndexRetainedAsGoverningDocument &&
     unresolvedPolicyIndexChildren.length === 0 &&
@@ -2962,6 +2965,11 @@ export function summarizePolicySurfaces(
             ...(completeOwnedPolicyDocuments.some(
               (document) => document.retainedTextChars < MIN_GDPR_TRANSPARENCY_ABSENCE_POLICY_TEXT_CHARS,
             ) ? ["policy_text_below_absence_coverage_minimum_length"] : []),
+            ...(completeOwnedPolicyDocuments.some(
+              (document) =>
+                document.documentTextCoverage.status !== "complete" ||
+                document.contentCoverage?.status !== "complete",
+            ) ? ["policy_document_content_coverage_incomplete"] : []),
             ...(policyIndexRetainedAsGoverningDocument ? ["policy_index_is_not_substantive_policy_document"] : []),
             ...(unresolvedPolicyIndexChildren.length > 0 ? ["material_policy_index_children_not_fully_evaluated"] : []),
             ...(options.policyEvidenceLaneStatus === "degraded" ? ["policy_evidence_lane_degraded"] : []),
@@ -3278,7 +3286,7 @@ function buildPolicyTextEvidenceProjection(
     const reference = policySurfaceTextArtifactReference(surface);
     const retained = resolvePolicySurfaceTextEvidence(surface, context);
     const text = retained?.text ?? "";
-    const textQuality = assessRetainedPolicyTextQuality(text, { multilingual: true });
+    const textQuality = assessArticle13PolicyTextQuality(text, { mode: "retained_report" });
     const relationship = surface.targetRelationship ?? "unknown";
     const documentFetchState = surface.documentFetchState ?? (
       surface.status === "fetched" ? "fetched" :
@@ -3425,7 +3433,7 @@ function buildPolicyTextExtractionHealth(
   const policyIndexRetainedWithoutGoverningDocument =
     projectedDocuments.some((document) => document.documentRole === "policy_index") &&
     !projectedDocuments.some((document) => document.documentRole === "policy_document");
-  const textQuality = assessRetainedPolicyTextQuality(text, { multilingual: true });
+  const textQuality = assessArticle13PolicyTextQuality(text, { mode: "retained_report" });
   const retainedTextQualityStatus = textQuality.reason === "empty_policy_text"
     ? "empty_policy_text"
     : textQuality.reason === "low_quality_access_challenge"
@@ -3526,84 +3534,6 @@ function buildPolicyTextExtractionHealth(
     verifiedPolicyDocumentCount: projectedDocuments.filter((document) => document.artifactVerificationStatus === "verified").length,
     policyUrlRetained: policyUrls.length > 0,
     policyUrls
-  };
-}
-
-function assessRetainedPolicyTextQuality(value: string, options: { multilingual?: boolean } = {}) {
-  const text = value.replace(/\s+/g, " ").trim();
-  if (!text) {
-    return {
-      alphabeticWordRatio: 0,
-      codeSignalCount: 0,
-      codeSymbolRatio: 0,
-      naturalLanguageSentenceCount: 0,
-      policyTermCount: 0,
-      reason: "empty_policy_text",
-      usable: false
-    };
-  }
-  const lower = text.toLowerCase();
-  const codeSignals = [
-    /this\.gbar_/i,
-    /\bCONFIG:\s*\[\[\[/,
-    /Copyright The Closure Library/i,
-    /SPDX-License-Identifier/i,
-    /\b(?:var|const|let)\s+[A-Za-z_$][\w$]*\s*=/,
-    /function\s*\(/,
-    /=>/,
-    /_\.[A-Za-z_$][\w$]*\s*=/,
-    /Object\.definePropert(?:y|ies)/
-  ].reduce((count, pattern) => count + (pattern.test(text) ? 1 : 0), 0);
-  const codeSymbolRatio = (text.match(/[{}[\];=<>]/g) ?? []).length / Math.max(text.length, 1);
-  const totalTokens = text.split(/\s+/).filter(Boolean).length;
-  const alphabeticWords = options.multilingual
-    ? text.match(/\p{L}[\p{L}'-]{2,}/gu) ?? []
-    : text.match(/\b[A-Za-z][A-Za-z'-]{2,}\b/g) ?? [];
-  const alphabeticWordRatio = alphabeticWords.length / Math.max(totalTokens, 1);
-  const naturalLanguageSentencePattern = options.multilingual
-    ? /\b(?:we|you|your|our|users?|individuals?|customers?|visitors?|people|usted(?:es)?|sus?|nuestro|nuestra|usuarios?|personas?|interesados?|datos personales|traitement|données personnelles|personenbezogene daten|dati personali|persoonsgegevens|dane osobowe|nós|você|vocês|seus?|suas?|usuários?|titulares?|dados pessoais|tratamento de dados)\b[^.!?]{20,}[.!?]/giu
-    : /\b(?:we|you|your|our|users?|individuals?|customers?|visitors?|people)\b[^.!?]{20,}[.!?]/gi;
-  const naturalLanguageSentenceCount = (text.match(naturalLanguageSentencePattern) ?? []).length;
-  const policyTermPattern = options.multilingual
-    ? /\b(?:privacy|collect|use|information|personal data|personal information|data|retain|delete|share|rights|contact|transfer|consent|controller|processor|legal basis|lawful basis|privacidad|datos personales|protección de datos|tratamiento|responsable|delegado|derechos|reclamación|confidentialit[eé]|donn[eé]es personnelles|responsable du traitement|protection des donn[eé]es|droits|datenschutz|personenbezogene daten|verarbeitung|verantwortlicher|rechte|beschwerde|privacy|dati personali|trattamento|titolare|diritti|reclamo|privacybeleid|persoonsgegevens|verwerking|verwerkingsverantwoordelijke|rechten|klacht|prywatno[śs][ćc]|dane osobowe|przetwarzania|administrator|prawa|skargi|privacidade|dados pessoais|proteção de dados|tratamento|controlador|encarregado|direitos|reclamação|retenção|conservação|transferências)\b/giu
-    : /\b(?:privacy|collect|use|information|personal data|personal information|data|retain|delete|share|rights|contact|transfer|consent|controller|processor|legal basis|lawful basis)\b/g;
-  const policyTermCount = uniqueStrings((text.match(policyTermPattern) ?? []).map((value) => value.toLowerCase())).length;
-  const gdprTransparencyTopicMatchCount = options.multilingual
-    ? classifyGdprTransparencyTopics({ text: text.slice(0, 40_000) }).matches.length
-    : 0;
-  const escapedUrlCount = (text.match(/\\x2f|\\u003c|\\u003e|https?:\\\/\\\//gi) ?? []).length;
-  const minifiedTokenCount = (text.match(/[A-Za-z_$][\w$]{0,8}\s*[=:]\s*\S{40,}/g) ?? []).length;
-  const accessChallengeSignalCount = [
-    /\bclient challenge\b/i,
-    /\ba required part of this site couldn[’']t load\b/i,
-    /\bdisable any ad blockers\b/i,
-    /\bplease check your connection\b/i,
-    /\bentrez les caract[èe]res affich[ée]s\b/i,
-    /\bt[ée]l[ée]charger le captcha audio\b/i,
-    /\bcaptcha\b/i,
-  ].filter((pattern) => pattern.test(text)).length;
-  const reason =
-    accessChallengeSignalCount >= 2
-      ? "low_quality_access_challenge"
-      : /\bthis\.gbar_|\bCONFIG:\s*\[\[\[|Copyright The Closure Library|SPDX-License-Identifier/i.test(text) ||
-    (codeSignals >= 2 && naturalLanguageSentenceCount < 3) ||
-    (codeSymbolRatio > 0.12 && naturalLanguageSentenceCount < 4) ||
-    (escapedUrlCount >= 8 && naturalLanguageSentenceCount < 3) ||
-    (minifiedTokenCount >= 2 && naturalLanguageSentenceCount < 4) ||
-    (text.length >= 500 && alphabeticWordRatio < 0.42)
-        ? "low_quality_extracted_code_or_config"
-      : text.length >= 500 && policyTermCount < 2 && gdprTransparencyTopicMatchCount < 1 && naturalLanguageSentenceCount < 2
-        ? "low_quality_non_policy_text"
-        : undefined;
-  return {
-    accessChallengeSignalCount,
-    alphabeticWordRatio,
-    codeSignalCount: codeSignals,
-    codeSymbolRatio,
-    naturalLanguageSentenceCount,
-    policyTermCount,
-    reason,
-    usable: !reason
   };
 }
 

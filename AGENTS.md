@@ -18,9 +18,14 @@ If platform discovery is needed, inspect the repository’s deployment topology 
 Any change that can increase recurring infrastructure cost, per-request or
 per-scan spend, paid-service usage, model/API usage, storage/retention cost, or
 reserved/provisioned capacity requires explicit product-owner approval before
-implementation or deployment. Present the expected cost, benefit, and lower-cost
-alternatives first. Do not infer approval from a latency, reliability, or scaling
-request. Cost-neutral diagnostics and optimizations may proceed normally.
+implementation or deployment when the reasonably estimated incremental cost is
+$1 USD/month or more. Changes reasonably estimated below $1 USD/month are
+pre-approved, but the agent must disclose every such cost increase to the
+product owner, including the estimate, before or when proceeding. Record the
+estimate in the work summary. Present the expected cost, benefit, and lower-cost
+alternatives before requesting approval for changes at or above the threshold.
+Do not infer approval from a latency, reliability, or scaling request.
+Cost-neutral diagnostics and optimizations may proceed normally.
 
 ---
 

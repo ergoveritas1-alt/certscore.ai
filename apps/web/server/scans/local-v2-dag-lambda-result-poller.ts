@@ -1,9 +1,11 @@
 import { GetObjectCommand, S3Client, type GetObjectCommandOutput } from "@aws-sdk/client-s3";
 import {
+  ChangeMessageVisibilityCommand,
   DeleteMessageCommand,
   ReceiveMessageCommand,
   SQSClient,
   type MessageSystemAttributeName,
+  type ChangeMessageVisibilityCommandOutput,
   type DeleteMessageCommandOutput,
   type Message,
   type ReceiveMessageCommandOutput
@@ -49,7 +51,7 @@ function scannerBuildProvenance(message: LocalV2DagLambdaResultMessage) {
 }
 
 type SqsPollClient = {
-  send(command: DeleteMessageCommand | ReceiveMessageCommand): Promise<DeleteMessageCommandOutput | ReceiveMessageCommandOutput>;
+  send(command: ChangeMessageVisibilityCommand | DeleteMessageCommand | ReceiveMessageCommand): Promise<ChangeMessageVisibilityCommandOutput | DeleteMessageCommandOutput | ReceiveMessageCommandOutput>;
 };
 
 type S3GetClient = {
@@ -121,6 +123,16 @@ export function getConfiguredLocalV2DagLambdaResultQueueUrls(env: LocalV2DagLamb
 
 function asRecord(value: unknown): Record<string, unknown> {
   return value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : {};
+}
+
+function isPolicyEvidenceReadyMessage(rawMessage: string) {
+  try {
+    const message = asRecord(JSON.parse(rawMessage));
+    return message.contractVersion === "certscore.v2.lambda-policy-evidence-ready.v1" &&
+      message.messageKind === "policy_evidence_ready";
+  } catch {
+    return false;
+  }
 }
 
 async function readRetainedScanCompletionDiagnostics(
@@ -903,6 +915,7 @@ export async function pollLocalV2DagLambdaResultQueue(input: {
   maxMessages?: number;
   mirrorAuxiliaryArtifacts?: boolean;
   queueUrl?: string;
+  releasePolicyEvidenceMessages?: boolean;
   s3Client?: S3GetClient;
   sqsClient?: SqsPollClient;
   visibilityTimeoutSeconds?: number;
@@ -951,6 +964,18 @@ export async function pollLocalV2DagLambdaResultQueue(input: {
 
     const messageResults = await mapWithConcurrency(messages, RESULT_BATCH_CONCURRENCY, async (message) => {
       const rawMessage = messageBody(message);
+      if (input.releasePolicyEvidenceMessages && isPolicyEvidenceReadyMessage(rawMessage)) {
+        await sqsClient.send(new ChangeMessageVisibilityCommand({
+          QueueUrl: queueUrl,
+          ReceiptHandle: getReceiptHandle(message),
+          VisibilityTimeout: 0,
+        }));
+        console.info("[web] released early policy evidence for the canonical validation consumer", {
+          messageId: message.MessageId ?? null,
+          queueRegion,
+        });
+        return { deleted: 0, failed: 0, handled: 0 };
+      }
       const disposition = classifyV2DagLambdaResultDisposition(rawMessage);
       if (disposition.kind === "synthetic_verification") {
         await sqsClient.send(new DeleteMessageCommand({

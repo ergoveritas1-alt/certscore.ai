@@ -305,10 +305,17 @@ function startLambdaResultPump(args: Args) {
           maxMessages: 3,
           mirrorAuxiliaryArtifacts: false,
           queueUrl: queueUrl ?? undefined,
+          releasePolicyEvidenceMessages: true,
           visibilityTimeoutSeconds: 60,
           waitTimeSeconds: 1,
         });
-        if (result.received === 0) await sleep(250);
+        // Give the long-running validation consumer a fair opportunity to
+        // claim any early policy packet this one-shot terminal-result pump
+        // immediately released. The benchmark must never retain or project
+        // policy evidence through the web poller.
+        if (result.received === 0 || (result.handled === 0 && result.deleted === 0)) {
+          await sleep(250);
+        }
       } catch (error) {
         console.error(JSON.stringify({
           error: error instanceof Error ? error.message : String(error),
