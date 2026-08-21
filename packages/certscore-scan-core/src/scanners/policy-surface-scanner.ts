@@ -1,6 +1,7 @@
 import {
   type ArtifactRef,
   article13DisclosureRejectReason as sharedArticle13DisclosureRejectReason,
+  canonicalPolicyDocumentBrandRelationship,
   classifyConsentSurfaceText,
   classifyGdprTransparencyTopics,
   classifyPrivacySurface,
@@ -181,11 +182,26 @@ function policySurfaceCandidatesFromRetainedRenderedLinks(
   observationOnly = true,
 ): PolicySurfaceCandidate[] {
   return links.flatMap((link, index): PolicySurfaceCandidate[] => {
-    const deterministic = classifySurface({
+    const deterministicBase = classifySurface({
       linkText: link.linkText,
       url: link.href,
       localeHints: localeHintsFromDocumentLanguage(link.documentLanguage),
     });
+    const deterministic = deterministicBase.surfaceType === "unknown"
+      ? sameSiteGenericPolicyPdfClassification({
+          baseUrl: link.pageUrl,
+          candidateText: link.linkText,
+          domLocation: link.domLocation,
+          normalizedUrl: link.href,
+        }) ?? (!observationOnly
+          ? sameSitePolicyIndexClassification({
+              baseUrl: link.pageUrl,
+              candidateText: link.linkText,
+              domLocation: link.domLocation,
+              normalizedUrl: link.href,
+            })
+          : undefined) ?? deterministicBase
+      : deterministicBase;
     if (deterministic.surfaceType === "unknown" || deterministic.score <= 0.2) return [];
     const candidate: PolicySurfaceCandidate = {
       candidateId: `policy_preconsent_rendered_candidate_${index}`,
@@ -2317,7 +2333,13 @@ async function processPolicyCandidate({
     text: analysisVisibleText,
     title,
   });
-  if (!textQuality.usable || !documentSubstance.matchesExpectedSurface) {
+  const guessedThinPrivacyDocument = shouldTreatGuessedPrivacyDocumentAsInsufficient({
+    surfaceType: effectiveCandidate.deterministicSurfaceType,
+    discoveryMethod: effectiveCandidate.discoveryMethod,
+    clickable: effectiveCandidate.clickable,
+    text: analysisVisibleText,
+  });
+  if (!textQuality.usable || !documentSubstance.matchesExpectedSurface || guessedThinPrivacyDocument) {
     const childSelection = await selectOneHopPolicyIndexChildren({
       input,
       indexCandidate: effectiveCandidate,
@@ -2599,6 +2621,21 @@ export function assessPolicyDocumentSubstance(input: {
     /\bview (?:all )?(?:products|models|offers)\b/i,
   ].filter((pattern) => pattern.test(normalized)).length;
   if (input.surfaceType === "privacy_policy") {
+    const consentSurface = classifyConsentSurfaceText({ text: normalized });
+    const canonicalConsentControlIntents = canonicalConsentControlIntentsInText(normalized);
+    const consentControlIntentObserved = hasCanonicalConsentControlIntent(consentSurface) ||
+      canonicalConsentControlIntents.size >= 2;
+    if (
+      normalized.length < MAX_CONSENT_SETTINGS_SHELL_TEXT_CHARS &&
+      consentControlIntentObserved &&
+      (
+        consentSurface.likelyPresent ||
+        consentSurface.recoveryHintObserved ||
+        canonicalConsentControlIntents.size >= 2
+      )
+    ) {
+      return { matchesExpectedSurface: false, reasonCode: "consent_settings_shell" };
+    }
     const topicMatches = gdprTransparencyTopicMatchCount(normalized);
     const substantivePrivacySignals = [
       /\b(?:we|the (?:company|controller|organization))\s+(?:collect|process|use|share|disclose|retain|transfer)\b/i,
@@ -2611,18 +2648,6 @@ export function assessPolicyDocumentSubstance(input: {
     }
     if (substantivePrivacySignals >= 2) {
       return { matchesExpectedSurface: true, reasonCode: "substantive_privacy_signals" };
-    }
-    const consentSurface = classifyConsentSurfaceText({ text: normalized });
-    const consentControlIntentObserved = hasCanonicalConsentControlIntent(consentSurface);
-    if (
-      normalized.length < MAX_CONSENT_SETTINGS_SHELL_TEXT_CHARS &&
-      consentControlIntentObserved &&
-      (
-        consentSurface.likelyPresent ||
-        consentSurface.recoveryHintObserved
-      )
-    ) {
-      return { matchesExpectedSurface: false, reasonCode: "consent_settings_shell" };
     }
     // This is a mismatch guard, not a second policy classifier. Retained
     // multilingual or unusually-worded policy text should remain reviewable
@@ -2644,6 +2669,25 @@ export function assessPolicyDocumentSubstance(input: {
       : { matchesExpectedSurface: false, reasonCode: "obvious_navigation_shell" };
   }
   return { matchesExpectedSurface: true, reasonCode: "unrestricted_surface" };
+}
+
+function canonicalConsentControlIntentsInText(value: string) {
+  const normalized = value.normalize("NFKC").toLowerCase();
+  const intents = new Set<"accept" | "reject" | "options" | "necessary_only">();
+  for (const entry of PRIVACY_EVIDENCE_LOCALE_REGISTRY) {
+    const candidates = [
+      ["accept", [...entry.consentControls.accept, ...(entry.contextualConsentControls?.accept ?? [])]],
+      ["reject", [...entry.consentControls.reject, ...(entry.contextualConsentControls?.reject ?? [])]],
+      ["options", [...entry.consentControls.options, ...(entry.contextualConsentControls?.options ?? [])]],
+      ["necessary_only", [...entry.consentControls.necessaryOnly, ...(entry.contextualConsentControls?.necessaryOnly ?? [])]],
+    ] as const;
+    for (const [intent, phrases] of candidates) {
+      if (phrases.some((phrase) => normalized.includes(phrase.normalize("NFKC").toLowerCase()))) {
+        intents.add(intent);
+      }
+    }
+  }
+  return intents;
 }
 
 function hasCanonicalConsentControlIntent(input: { reasonCodes: readonly string[] }) {
@@ -3135,6 +3179,18 @@ export function shouldUseDirectPolicyDocumentText(value: string): boolean {
   );
 }
 
+export function shouldTreatGuessedPrivacyDocumentAsInsufficient(input: {
+  clickable: boolean;
+  discoveryMethod: PolicySurfaceCandidate["discoveryMethod"];
+  surfaceType: PolicySurfaceObservation["surfaceType"];
+  text: string;
+}): boolean {
+  return input.surfaceType === "privacy_policy" &&
+    input.discoveryMethod === "guessed_common_path" &&
+    !input.clickable &&
+    normalizeWhitespace(input.text).length < MAX_CONSENT_SETTINGS_SHELL_TEXT_CHARS;
+}
+
 async function resolveUrlOnlyPolicyStub(input: {
   currentUrl: string;
   visibleText: string;
@@ -3487,7 +3543,19 @@ function extractCandidates(baseUrl: string, html: string, visibleText: string, a
           matchedConcept: "GDPR notice",
           classifierReasonCodes: [...deterministicBase.classifierReasonCodes, "gdpr_notice_link", "one_hop_privacy_supplement"],
         }
-      : deterministicBase;
+      : deterministicBase.surfaceType === "unknown"
+        ? sameSiteGenericPolicyPdfClassification({
+            baseUrl,
+            candidateText,
+            domLocation,
+            normalizedUrl,
+          }) ?? sameSitePolicyIndexClassification({
+            baseUrl,
+            candidateText,
+            domLocation,
+            normalizedUrl,
+          }) ?? deterministicBase
+        : deterministicBase;
     if (isExternalUrlOnlyPolicyCandidate(baseUrl, normalizedUrl, candidateText, deterministic.surfaceType)) {
       continue;
     }
@@ -3532,6 +3600,74 @@ function extractCandidates(baseUrl: string, html: string, visibleText: string, a
     });
   }
   return candidates;
+}
+
+function sameSiteGenericPolicyPdfClassification(input: {
+  baseUrl: string;
+  candidateText: string;
+  domLocation: PolicySurfaceCandidate["domLocation"];
+  normalizedUrl: string;
+}): ReturnType<typeof classifySurface> | undefined {
+  if (!sameOrigin(input.baseUrl, input.normalizedUrl)) return undefined;
+  if (!["footer", "header", "body"].includes(input.domLocation)) return undefined;
+  let pathname: string;
+  try {
+    pathname = new URL(input.normalizedUrl).pathname;
+  } catch {
+    return undefined;
+  }
+  const fileName = pathname.split("/").pop() ?? "";
+  if (!/\.pdf$/i.test(fileName) || !/(?:^|[_-])(?:privacy|policy|politic|politika)(?:[_-]|\.)/i.test(fileName)) {
+    return undefined;
+  }
+  return {
+    surfaceType: "privacy_policy",
+    score: 0.52,
+    keywords: ["same_site_generic_policy_pdf"],
+    matchedConcept: "same_site_policy_pdf",
+    matchStrength: "contextual",
+    classifierReasonCodes: [
+      "matched_privacy_policy",
+      "match_strength_contextual",
+      "same_site_generic_policy_pdf",
+      "policy_pdf_requires_content_validation",
+    ],
+    classifierProvenance: "privacy_surface_classifier.v1",
+  };
+}
+
+function sameSitePolicyIndexClassification(input: {
+  baseUrl: string;
+  candidateText: string;
+  domLocation: PolicySurfaceCandidate["domLocation"];
+  normalizedUrl: string;
+}): ReturnType<typeof classifySurface> | undefined {
+  if (!sameOrigin(input.baseUrl, input.normalizedUrl)) return undefined;
+  if (!["footer", "header", "body"].includes(input.domLocation)) return undefined;
+
+  const normalizedLabel = normalizeWhitespace(input.candidateText).normalize("NFKC").toLowerCase();
+  const matchedEntry = PRIVACY_EVIDENCE_LOCALE_REGISTRY.find((entry) =>
+    (entry.policyIndexLabels ?? []).some((label) =>
+      normalizedLabel === label.normalize("NFKC").toLowerCase()
+    )
+  );
+  if (!matchedEntry) return undefined;
+
+  return {
+    surfaceType: "privacy_policy",
+    score: 0.56,
+    keywords: ["matched_policy_index_label", `locale_${matchedEntry.locale}`],
+    matchedConcept: "privacy_policy_index",
+    matchedLocale: matchedEntry.locale,
+    matchStrength: "contextual",
+    classifierReasonCodes: [
+      "matched_privacy_policy",
+      "match_strength_contextual",
+      "matched_policy_index_label",
+      "policy_index_requires_content_validation",
+    ],
+    classifierProvenance: "privacy_surface_classifier.v1",
+  };
 }
 
 function extractControlCandidates(baseUrl: string, html: string, visibleText: string): PolicySurfaceCandidate[] {
@@ -3949,9 +4085,19 @@ async function waitForRenderedPolicySurfaceCandidate(
     return;
   }
 
-  await page.waitForFunction(() => {
-    const textPattern = /\b(?:privacy policy|privacy notice|cookie policy|cookie notice|datenschutzerkl[aä]rung|politique de confidentialit[eé]|pol[ií]tica de privacidad|informativa (?:sulla )?privacy|privacybeleid|privacyverklaring|polityka prywatno[śs]ci|ustawienia prywatno[śs]ci)\b/i;
-    const hrefPattern = /(?:privacy|cookie|datenschutz|confidentialit[eé]|privacidad|informativa|privacybeleid|privacyverklaring|prywatno(?:sc|sci|ść|ści)|polityka-prywatno(?:sci|ści))/i;
+  const canonicalSurfaceTerms = uniqueStrings(PRIVACY_EVIDENCE_LOCALE_REGISTRY.flatMap((entry) => [
+    ...entry.privacyPolicyLabels,
+    ...entry.cookiePolicyLabels,
+    ...entry.cookieSettingsLabels,
+    ...(entry.combinedPrivacyCookieLabels ?? []),
+    ...(entry.policyIndexLabels ?? []),
+  ])).map((term) => term.normalize("NFKC").toLowerCase());
+  const canonicalPathTerms = uniqueStrings(PRIVACY_EVIDENCE_LOCALE_REGISTRY.flatMap((entry) => [
+    ...entry.privacyPolicyPathSlugs,
+    ...entry.cookiePolicyPathSlugs,
+  ])).map((term) => term.normalize("NFKC").toLowerCase());
+
+  await page.waitForFunction(({ surfaceTerms, pathTerms }: { surfaceTerms: string[]; pathTerms: string[] }) => {
     const elements = document.querySelectorAll("a[href], button, [role='button'], [role='link'], [aria-label], [title]");
     for (const element of elements) {
       const href = element.getAttribute("href") ??
@@ -3967,13 +4113,17 @@ async function waitForRenderedPolicySurfaceCandidate(
         element.getAttribute("aria-label"),
         element.getAttribute("title"),
         href,
-      ].filter(Boolean).join(" ").replace(/\s+/g, " ").trim();
-      if (textPattern.test(text) || hrefPattern.test(href)) {
+      ].filter(Boolean).join(" ").normalize("NFKC").replace(/\s+/g, " ").trim().toLowerCase();
+      const normalizedHref = href.normalize("NFKC").toLowerCase();
+      if (
+        surfaceTerms.some((term) => text.includes(term)) ||
+        pathTerms.some((term) => normalizedHref.includes(term))
+      ) {
         return true;
       }
     }
     return false;
-  }, undefined, {
+  }, { surfaceTerms: canonicalSurfaceTerms, pathTerms: canonicalPathTerms }, {
     polling: 250,
     timeout: timeoutMs,
   }).catch(() => undefined);
@@ -4124,6 +4274,7 @@ function commonPolicyPathsFor(baseUrl: string, localeHints: SupportedPrivacyEvid
     "/privacy",
     "/privacy-policy",
     "/privacy-policy/",
+    "/privacypolicy",
     "/privacy-notice",
     "/datenschutz",
   ];
@@ -5030,14 +5181,37 @@ function observationsForUnselectedPrivacyIndexChildren(
   );
 }
 
-function policyDocumentRoleForChildSelection(
+export function policyDocumentRoleForChildSelection(
   candidate: PolicySurfaceCandidate,
   selection: { fetchCandidates: PolicySurfaceCandidate[]; observedChildCandidates: PolicySurfaceCandidate[] },
   options: { substantiveDisclosureSignalCount?: number } = {},
 ): "policy_document" | "policy_index" | "unknown" {
   if (candidate.deterministicSurfaceType !== "privacy_policy") return "unknown";
   const retainedChildren = [...selection.fetchCandidates, ...selection.observedChildCandidates];
-  if (retainedChildren.some((child) =>
+  const directPrivacyClassification = candidate.deterministicClassifierReasonCodes
+    .includes("matched_privacy_policy");
+  const fragmentScopedCombinedPrivacyNotice =
+    candidate.deterministicClassifierReasonCodes.includes("variant_combined_privacy_terms_surface") &&
+    /#(?:privacy|privacy-policy|privacy-notice)(?:$|[/?_-])/i.test(candidate.normalizedUrl);
+  if (fragmentScopedCombinedPrivacyNotice) {
+    return "policy_document";
+  }
+  const privacyChildren = retainedChildren
+    .filter((child) => child.deterministicSurfaceType === "privacy_policy")
+    .filter((child) => !isSamePolicyDocumentRoute(candidate.normalizedUrl, child.normalizedUrl));
+  const onlyHistoricalPrivacyChildren = privacyChildren.length > 0 && privacyChildren.every((child) => {
+    try {
+      return /(?:^|[/_.-])(?:archive|archived|history|historical|old|previous|prior|20\d{2})(?:$|[/_.?=&-])/i
+        .test(new URL(child.normalizedUrl).pathname);
+    } catch {
+      return /(?:^|[/_.-])(?:archive|archived|history|historical|old|previous|prior|20\d{2})(?:$|[/_.?=&-])/i
+        .test(child.normalizedUrl);
+    }
+  });
+  if (directPrivacyClassification && onlyHistoricalPrivacyChildren) {
+    return "policy_document";
+  }
+  if (privacyChildren.some((child) =>
     child.selectionReasonCodes?.includes("latest_dated_privacy_document_link")
   )) {
     return "policy_index";
@@ -5049,15 +5223,33 @@ function policyDocumentRoleForChildSelection(
   if ((options.substantiveDisclosureSignalCount ?? 0) >= 2) {
     return "policy_document";
   }
-  if (retainedChildren.some((child) =>
+  if (privacyChildren.some((child) =>
     child.selectionReasonCodes?.includes("website_privacy_notice_for_scanned_site")
   )) {
     return "policy_index";
   }
-  const privacyChildCount = retainedChildren
-    .filter((child) => child.deterministicSurfaceType === "privacy_policy").length;
+  const privacyChildCount = privacyChildren.length;
   if (privacyChildCount >= 2) return "policy_index";
   return "policy_document";
+}
+
+function isSamePolicyDocumentRoute(parentUrl: string, childUrl: string): boolean {
+  try {
+    const parent = new URL(parentUrl);
+    const child = new URL(childUrl, parent);
+    const normalizePath = (value: string) => value.replace(/\/+$/, "") || "/";
+    if (parent.origin !== child.origin || normalizePath(parent.pathname) !== normalizePath(child.pathname)) {
+      return false;
+    }
+    const nonLocaleParams = (url: URL) => [...url.searchParams.entries()]
+      .filter(([name]) => !/^(?:l|lang|language|locale)$/i.test(name))
+      .sort(([leftName, leftValue], [rightName, rightValue]) =>
+        leftName.localeCompare(rightName) || leftValue.localeCompare(rightValue)
+      );
+    return JSON.stringify(nonLocaleParams(parent)) === JSON.stringify(nonLocaleParams(child));
+  } catch {
+    return false;
+  }
 }
 
 export function isGdprNoticeSupplementLink(linkText: string, normalizedUrl: string, surroundingTextExcerpt: string): boolean {
@@ -5409,6 +5601,22 @@ export function classifyPolicyDocumentOwnership(input: {
       targetRelationship: "target_controller",
       ownershipConfidence: 0.98,
       ownershipReasonCodes: ["same_registrable_domain_as_scan_target"],
+    };
+  }
+
+  const canonicalBrandRelationship = canonicalPolicyDocumentBrandRelationship({
+    targetUrl: input.targetUrl,
+    documentUrl: input.documentUrl,
+  });
+  if (canonicalBrandRelationship) {
+    return {
+      documentOwnerEntity: canonicalBrandRelationship.ownerEntity,
+      targetRelationship: "first_party_brand",
+      ownershipConfidence: 0.98,
+      ownershipReasonCodes: [
+        "canonical_first_party_brand_relationship",
+        canonicalBrandRelationship.reasonCode,
+      ],
     };
   }
 
@@ -7493,16 +7701,65 @@ function bestPolicyDocumentText(html: string, fallbackVisibleText: string): stri
   const sanitizedFallbackVisibleText = policyHtml === html
     ? fallbackVisibleText
     : htmlToVisibleText(policyHtml);
+  const legacyCenterPanelCandidates = extractLegacyCenterPanelPolicyBlocks(policyHtml)
+    .map((block) => stripConsentSurfacePreambleFromPolicyText(htmlToVisibleText(stripPageChromeHtml(block))))
+    .filter((text) => text.length > 0);
+  const scopedBodyCandidates = extractPolicyBodyCandidateTexts(policyHtml)
+    .map(stripConsentSurfacePreambleFromPolicyText)
+    .filter((text) => text.length > 0);
   const candidates = [
     ...extractStructuredPolicyMetadataTexts(policyHtml),
-    ...extractPolicyBodyCandidateTexts(policyHtml),
+    ...scopedBodyCandidates,
     htmlToVisibleText(stripPageChromeHtml(policyHtml)),
     sanitizedFallbackVisibleText,
-    htmlToVisibleText(html),
+    ...(policyHtml === html ? [htmlToVisibleText(html)] : []),
   ].map(stripConsentSurfacePreambleFromPolicyText).filter((text) => text.length > 0);
-  return candidates.reduce((best, candidate) =>
-    shouldAdoptPolicyDocumentText(candidate, best, { allowTopicDominant: true }) ? candidate : best,
+  const best = candidates.reduce((currentBest, candidate) =>
+    shouldAdoptPolicyDocumentText(candidate, currentBest, { allowTopicDominant: true }) ? candidate : currentBest,
   candidates[0] ?? fallbackVisibleText);
+  const legacyCenterPanel = preferredLegacyCenterPanelPolicyText(legacyCenterPanelCandidates, best);
+  if (legacyCenterPanel) return legacyCenterPanel;
+  return preferredScopedPolicyBodyText(scopedBodyCandidates, best) ?? best;
+}
+
+function preferredLegacyCenterPanelPolicyText(scopedCandidates: string[], fullCandidate: string): string | undefined {
+  const fullLength = normalizeWhitespace(fullCandidate).length;
+  const eligible = scopedCandidates.filter((candidate) => {
+    const normalized = normalizeWhitespace(candidate);
+    if (normalized.length < 500 || normalized.length < fullLength * 0.2) return false;
+    const classification = classifyPrivacySurface({
+      title: normalized.slice(0, 320),
+      surroundingText: normalized.slice(0, 8_000),
+    });
+    return classification.surfaceType !== "unknown" || gdprTransparencyTopicMatchCount(normalized) > 0;
+  });
+  if (eligible.length === 0) return undefined;
+  return eligible.reduce((best, candidate) =>
+    policyTextQualityScore(candidate) > policyTextQualityScore(best) ? candidate : best,
+  eligible[0]!);
+}
+
+function preferredScopedPolicyBodyText(scopedCandidates: string[], fullCandidate: string): string | undefined {
+  const fullLength = normalizeWhitespace(fullCandidate).length;
+  if (fullLength < 800) return undefined;
+  const minimumScopedLength = Math.max(500, Math.floor(fullLength * 0.25));
+  const maximumScopedLength = Math.floor(fullLength * 0.85);
+  const eligible = scopedCandidates.filter((candidate) => {
+    const length = normalizeWhitespace(candidate).length;
+    if (length < minimumScopedLength || length > maximumScopedLength) return false;
+    const classification = classifyPrivacySurface({
+      title: candidate.slice(0, 320),
+      surroundingText: candidate.slice(0, 8_000),
+    });
+    return classification.surfaceType !== "unknown" || gdprTransparencyTopicMatchCount(candidate) > 0;
+  });
+  if (eligible.length === 0) return undefined;
+  const selected = eligible.reduce((best, candidate) =>
+    policyTextQualityScore(candidate) > policyTextQualityScore(best) ? candidate : best,
+  eligible[0]!);
+  return policyTextQualityScore(selected) >= policyTextQualityScore(fullCandidate) - 50
+    ? selected
+    : undefined;
 }
 
 /**
@@ -8313,7 +8570,7 @@ function isCanonicalConsentSurfaceHtmlBlock(block: string) {
   const openingTag = block.match(/^<[^>]+>/i)?.[0] ?? "";
   const structurallyHidden = /\shidden(?:\s|=|>)/i.test(openingTag) ||
     /\baria-hidden=["']?true\b/i.test(openingTag) ||
-    /\bclass=["'][^"']*(?:^|[\s_-])hidden(?:[\s_-]|$)[^"']*["']/i.test(openingTag);
+    /\bclass=["'][^"']*(?:^|[\s_-])hidden(?:[\s_-][^"']*)?["']/i.test(openingTag);
   const structuralConsentSurface = /\b(?:id|class|role)=["'][^"']*(?:consent|cmp|cookie[-_]?banner|preference[-_]?center|privacy[-_]?choices?|(?:^|[\s_-])banner(?:[\s_-]|$))[^"']*["']/i.test(openingTag);
   if (structuralConsentSurface) {
     return true;
@@ -8442,14 +8699,16 @@ async function renderedPolicySemanticTextCandidates(page: Page): Promise<string[
 }
 
 function bestRenderedPolicyDocumentText(html: string, textCandidates: string[]): string {
-  const sanitizedTextCandidates = textCandidates.map(stripConsentSurfacePreambleFromPolicyText);
+  const policyHtml = stripCanonicalConsentSurfaceHtml(html);
+  const sanitizedTextCandidates = (policyHtml === html ? textCandidates : textCandidates.slice(1))
+    .map(stripConsentSurfacePreambleFromPolicyText);
   const bodyText = sanitizedTextCandidates.find((text) => normalizeWhitespace(text).length > 0) ?? "";
   if (!html) {
     return bodyText;
   }
   const candidates = [
     ...sanitizedTextCandidates,
-    htmlToVisibleText(stripPageChromeHtml(html)),
+    htmlToVisibleText(stripPageChromeHtml(policyHtml)),
   ].map(stripConsentSurfacePreambleFromPolicyText).map(normalizeWhitespace).filter((text) => text.length > 0);
   if (candidates.length === 0) {
     return html;
@@ -8495,6 +8754,11 @@ function extractHtmlBlocks(html: string, tagName: string): string[] {
 function extractAttributedPolicyBlocks(html: string): string[] {
   const pattern = /<(div|section|article)\b[^>]*(?:id|class|role)=["'][^"']*(?:privacy|policy|notice|legal|article|main|content)[^"']*["'][^>]*>[\s\S]*?<\/\1>/gi;
   return Array.from(html.matchAll(pattern), (match) => match[0] ?? "");
+}
+
+function extractLegacyCenterPanelPolicyBlocks(html: string): string[] {
+  const pattern = /<div\b[^>]*class=["'][^"']*\bcenterpanel\b[^"']*["'][^>]*>([\s\S]*?)(?=<div\b[^>]*class=["'][^"']*\brightpanel\b|$)/gi;
+  return Array.from(html.matchAll(pattern), (match) => match[1] ?? "");
 }
 
 function stripPageChromeHtml(html: string): string {
@@ -8569,7 +8833,7 @@ function policyTextQualityScore(text: string): number {
   return score;
 }
 
-type PolicyTextQualityAssessment = {
+export type PolicyTextQualityAssessment = {
   alphabeticWordRatio: number;
   codeSignalCount: number;
   codeSymbolRatio: number;
@@ -8579,7 +8843,7 @@ type PolicyTextQualityAssessment = {
   usable: boolean;
 };
 
-function assessPolicyTextQuality(value: string): PolicyTextQualityAssessment {
+export function assessPolicyTextQuality(value: string): PolicyTextQualityAssessment {
   const normalized = normalizeWhitespace(value);
   const emptyAssessment = {
     alphabeticWordRatio: 0,
@@ -8628,9 +8892,19 @@ function assessPolicyTextQuality(value: string): PolicyTextQualityAssessment {
       .filter((sentence) => sentence.trim().length >= 20)
       .length
     : 0;
-  const naturalLanguageSentenceCount =
+  const englishNaturalLanguageSentenceCount =
     (normalized.match(/\b(?:we|you|your|our|users?|individuals?|customers?|visitors?|people)\b[^.!?]{20,}[.!?]/gi) ?? []).length +
     cjkNaturalLanguageSentenceCount;
+  const unicodeNaturalLanguageSentenceCount = normalized
+    .split(/[.!?。！？؟]+/u)
+    .filter((sentence) =>
+      sentence.trim().length >= 40 &&
+      (sentence.match(/\p{L}+/gu) ?? []).length >= 6
+    ).length;
+  const naturalLanguageSentenceCount = Math.max(
+    englishNaturalLanguageSentenceCount,
+    unicodeNaturalLanguageSentenceCount,
+  );
   const policyTermCount = uniqueStrings((lower.match(new RegExp([
     "\\b(?:privacy|collect|use|information|personal data|personal information|data|retain|delete|share|rights|contact|transfer|consent|controller|processor|legal basis|lawful basis)\\b",
     "\\b(?:datenschutz|personenbezogene daten|einwilligung|verarbeitung|aufsichtsbehörde)\\b",
@@ -8888,22 +9162,12 @@ function anchoredPrivacySurfaceIndex(value: string, maxChars: number): number | 
   const lowerValue = value.toLowerCase();
   const headEnd = Math.floor(maxChars * 0.65);
   const tailStart = value.length - Math.max(0, maxChars - headEnd);
-  const terms = [
-    "privacy policy",
-    "privacy notice",
-    "privacy statement",
-    "cookie policy",
-    "cookie notice",
-    "datenschutzerklärung",
-    "datenschutzinformation",
-    "datenschutz",
-    "politique de confidentialité",
-    "confidentialité",
-    "política de privacidad",
-    "informativa sulla privacy",
-    "privacybeleid",
-    "polityka prywatności",
-  ];
+  const terms = uniqueStrings(PRIVACY_EVIDENCE_LOCALE_REGISTRY.flatMap((entry) => [
+    ...entry.privacyPolicyLabels,
+    ...entry.cookiePolicyLabels,
+    ...(entry.combinedPrivacyCookieLabels ?? []),
+    ...(entry.policyIndexLabels ?? []),
+  ])).map((term) => term.normalize("NFKC").toLowerCase());
 
   for (const term of terms) {
     let index = lowerValue.indexOf(term, headEnd);

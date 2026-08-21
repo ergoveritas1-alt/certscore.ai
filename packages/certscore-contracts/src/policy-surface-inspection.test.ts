@@ -14,9 +14,23 @@ function moduleRun(status: "completed" | "partial" | "failed" | "skipped_budget"
   };
 }
 
-test("policy inspection distinguishes a completed negative search from limited coverage", () => {
+test("policy inspection requires verified negative-search coverage before projecting absence", () => {
+  const unverified = derivePolicySurfaceInspectionOutcome({
+    modulesRun: [moduleRun("completed")],
+    policySurfaceObservations: [],
+  });
+  assert.equal(unverified.outcome, "indeterminate_limited_coverage");
+  assert.equal(unverified.coverageStatus, "limited");
+  assert.equal(unverified.linkDiscoveryCoverageStatus, "limited");
+  assert.equal(unverified.documentRetrievalCoverageStatus, "limited");
+  assert.equal(unverified.inspectionCompleted, true);
+  assert.deepEqual(unverified.limitationKeys, [
+    "privacy_policy_negative_search_coverage_not_verified",
+  ]);
+
   const completed = derivePolicySurfaceInspectionOutcome({
     modulesRun: [moduleRun("completed")],
+    negativeSearchCoverageVerified: true,
     policySurfaceObservations: [],
   });
   assert.equal(completed.outcome, "no_privacy_policy_observed_complete_coverage");

@@ -18,6 +18,7 @@ import {
   hasStaleLegalFrameworkReference,
   MIN_GDPR_TRANSPARENCY_ABSENCE_POLICY_TEXT_CHARS,
   MIN_GDPR_TRANSPARENCY_POLICY_TEXT_CHARS,
+  canonicalPolicyDocumentBrandRelationship,
   policyTextEvidenceProjectionSchema,
   SUPPORTED_GDPR_TRANSPARENCY_LOCALES,
   type CanonicalEvidenceBundle,
@@ -809,7 +810,8 @@ function hasSubstantivePolicySurfaceEvidence(surface: LocalV2PolicySurface) {
 }
 
 function isEvaluatedPrivacyPolicySurface(surface: LocalV2PolicySurface) {
-  return surface.surfaceType === "privacy_policy" && (
+  return surface.surfaceType === "privacy_policy" &&
+    surface.documentRole !== "policy_index" && (
     surface.documentEvaluationState === "usable" ||
     ((surface.status === undefined || ["fetched", "observed"].includes(surface.status)) &&
       hasSubstantivePolicySurfaceEvidence(surface))
@@ -2729,6 +2731,12 @@ export function summarizePolicySurfaces(
     isEvaluatedPrivacyPolicySurface(row.surface) &&
     !isGenericThirdPartyPrivacySurface(row, rootDomain, { homepageNoGo: options.homepageNoGo === true })
   );
+  const retainedTargetPrivacySurfaces = privacySurfaces.filter((row) =>
+    !isGenericThirdPartyPrivacySurface(row, rootDomain, { homepageNoGo: options.homepageNoGo === true })
+  ).sort((left, right) =>
+    Number(isEvaluatedPrivacyPolicySurface(right.surface)) -
+    Number(isEvaluatedPrivacyPolicySurface(left.surface))
+  );
   const article13Surfaces = selectArticle13PrivacySurfaces(
     evaluatedPrivacySurfaces.filter((row) =>
       !isSpecializedPrivacySurfaceForDifferentAudience(row, rootDomain)
@@ -2864,11 +2872,11 @@ export function summarizePolicySurfaces(
   const mentionedControls = uniqueStrings(policySurfaces.flatMap((row) => row.surface.mentionedControls ?? []));
   const processingErrorObserved = /processing error|privacy center.*error/i.test(text);
   const policyTextEvidenceProjection = buildPolicyTextEvidenceProjection(
-    article13Surfaces,
+    retainedTargetPrivacySurfaces,
     options.policyTextEvidenceContext,
   );
   const policyTextExtractionHealth = buildPolicyTextExtractionHealth(
-    article13Surfaces,
+    retainedTargetPrivacySurfaces,
     text,
     processingErrorObserved,
     policyPrimaryLanguage,
@@ -3612,6 +3620,11 @@ function isGenericThirdPartyPrivacySurface(
   rootDomain: string | null,
   options: { homepageNoGo?: boolean } = {}
 ) {
+  const relationship = row.surface.targetRelationship ?? "unknown";
+  if (["service_provider", "unrelated"].includes(relationship)) {
+    return true;
+  }
+
   const hostname = hostnameFromUrl(row.pageUrl ?? row.surface.normalizedUrl ?? row.surface.url);
   if (!hostname || sameSite(hostname, rootDomain)) {
     return false;
@@ -3619,6 +3632,14 @@ function isGenericThirdPartyPrivacySurface(
 
   if (options.homepageNoGo === true) {
     return true;
+  }
+
+  const canonicalBrandRelationship = canonicalPolicyDocumentBrandRelationship({
+    targetUrl: rootDomain?.includes("://") ? rootDomain : `https://${rootDomain}`,
+    documentUrl: row.pageUrl ?? row.surface.normalizedUrl ?? row.surface.url ?? "",
+  });
+  if (relationship === "first_party_brand" && canonicalBrandRelationship) {
+    return false;
   }
 
   const linkContext = [

@@ -257,6 +257,16 @@ test("classifies English data-protection privacy surfaces", () => {
   assert.equal(pathClassification.reasonCodes.includes("matched_url_pattern"), true);
 });
 
+test("classifies slash-separated combined privacy and terms labels as privacy documents", () => {
+  const classification = classifyPrivacySurface({
+    linkText: "Privacy / Terms",
+    url: "https://example.test/rechtliches.php",
+  });
+
+  assert.equal(classification.surfaceType, "privacy_policy");
+  assert.equal(classification.variant, "combined_privacy_terms_surface");
+});
+
 test("uses localized URL patterns as canonical surface hints", () => {
   const examples = [
     ["https://example.test/datenschutz", "privacy_policy"],
@@ -286,6 +296,10 @@ test("classifies common localized data-protection paths through the locale regis
     "https://example.test/ochrona-danych",
     "https://example.test/protecao-de-dados",
     "https://example.test/dataskydd",
+    "https://example.test/dataskyddsinformation",
+    "https://example.test/adatvedelem",
+    "https://example.test/privacypolicy",
+    "https://example.test/politic",
     "https://example.test/databeskyttelse",
     "https://example.test/tietosuoja",
     "https://example.test/andmekaitse",

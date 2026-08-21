@@ -2808,6 +2808,96 @@ test("summarizePolicySurfaces does not credit external vendor policies as first-
   assert.equal(summary.policyTextExtractionHealth.policyUrlRetained, false);
 });
 
+test("summarizePolicySurfaces enforces typed policy ownership before GDPR projection", async () => {
+  const { dedupePolicySurfaces, summarizePolicySurfaces } = await loadLocalV2DagReport();
+  const surfaces = dedupePolicySurfaces([
+    {
+      observationId: "microsoft-provider-policy",
+      surfaceType: "privacy_policy",
+      url: "https://www.microsoft.com/en-us/privacy/privacystatement",
+      status: "fetched",
+      documentEvaluationState: "usable",
+      documentRole: "policy_document",
+      targetRelationship: "service_provider",
+      ownershipConfidence: 0.94,
+      confidence: 0.95,
+      textExcerpt: "Microsoft is the controller. Contact the Microsoft privacy team.",
+      observedTopics: ["controller_contact"],
+      article13DisclosureSignals: [{
+        disclosureType: "controller_contact",
+        status: "observed",
+        evidenceText: "Contact the Microsoft privacy team.",
+        confidence: 0.9,
+        source: "deterministic",
+      }],
+    },
+  ] as never, "https://www.statefarm.com/");
+
+  const summary = summarizePolicySurfaces(surfaces, "statefarm.com");
+  assert.equal(summary.privacyPolicyPresent, false);
+  assert.deepEqual(summary.observedTopics, []);
+  assert.deepEqual(summary.article13DisclosureTypesObserved, []);
+});
+
+test("summarizePolicySurfaces does not project a privacy-policy index as a governing notice", async () => {
+  const { dedupePolicySurfaces, summarizePolicySurfaces } = await loadLocalV2DagReport();
+  const surfaces = dedupePolicySurfaces([{
+    observationId: "privacy-index",
+    surfaceType: "privacy_policy",
+    url: "https://example.test/privacy-index",
+    status: "fetched",
+    documentEvaluationState: "usable",
+    documentRole: "policy_index",
+    targetRelationship: "target_controller",
+    confidence: 0.95,
+    textExcerpt: "Privacy resources with links to several governing notices.",
+    observedTopics: ["processing_purposes"],
+    article13DisclosureSignals: [{
+      disclosureType: "processing_purposes",
+      status: "observed",
+      evidenceText: "We process personal data to provide the service.",
+      confidence: 0.9,
+      source: "deterministic",
+    }],
+  }] as never, "https://example.test/");
+
+  const summary = summarizePolicySurfaces(surfaces, "example.test");
+  assert.equal(summary.privacyPolicyPresent, false);
+  assert.deepEqual(summary.privacyPolicyUrls, []);
+  assert.deepEqual(summary.observedTopics, []);
+  assert.deepEqual(summary.article13DisclosureTypesObserved, []);
+});
+
+test("summarizePolicySurfaces accepts a typed cross-site first-party brand policy", async () => {
+  const { dedupePolicySurfaces, summarizePolicySurfaces } = await loadLocalV2DagReport();
+  const surfaces = dedupePolicySurfaces([
+    {
+      observationId: "google-first-party-brand-policy",
+      surfaceType: "privacy_policy",
+      url: "https://policies.google.com/privacy",
+      status: "fetched",
+      documentEvaluationState: "usable",
+      documentRole: "policy_document",
+      targetRelationship: "first_party_brand",
+      ownershipConfidence: 0.98,
+      confidence: 0.95,
+      textExcerpt: "Google explains the information it collects and the purposes for processing.",
+      observedTopics: ["processing_purposes"],
+      article13DisclosureSignals: [{
+        disclosureType: "processing_purposes",
+        status: "observed",
+        evidenceText: "Google explains the purposes for processing.",
+        confidence: 0.9,
+        source: "deterministic",
+      }],
+    },
+  ] as never, "https://www.tensorflow.org/");
+
+  const summary = summarizePolicySurfaces(surfaces, "tensorflow.org");
+  assert.equal(summary.privacyPolicyPresent, true);
+  assert.deepEqual(summary.observedTopics, ["processing_purposes"]);
+});
+
 test("summarizePolicySurfaces rejects consent-provider privacy policies without a provider host allowlist", async () => {
   const { dedupePolicySurfaces, summarizePolicySurfaces } = await loadLocalV2DagReport();
   const surfaces = dedupePolicySurfaces([

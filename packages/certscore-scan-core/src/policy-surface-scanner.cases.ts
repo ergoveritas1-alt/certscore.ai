@@ -15,6 +15,7 @@ import {
 import { createArtifactWriter } from "./artifact-writer.js";
 import {
   assessPolicyDocumentSubstance,
+  assessPolicyTextQuality,
   boundedPrefetchedPolicyAnalysisText,
   canonicalWwwPolicyUrlVariant,
   classifyPolicyDocumentOwnership,
@@ -31,6 +32,7 @@ import {
   isPolicySessionPrimerCompatible,
   mergePolicySurfaceObservations,
   POLICY_HOMEPAGE_FETCH_TIMEOUT_MS,
+  policyDocumentRoleForChildSelection,
   policySurfaceObservationsFromRetainedRenderedLinks,
   prioritizePolicyCandidateEvaluation,
   retainedArticle13SectionEvidenceFromSections,
@@ -39,6 +41,7 @@ import {
   resolvePolicyVisibleText,
   settlePolicyCandidateProcessingBeforeDeadline,
   shouldRetryCanonicalPolicyHost,
+  shouldTreatGuessedPrivacyDocumentAsInsufficient,
   shouldUseDirectPolicyDocumentText,
   shouldUseRenderedLowQualityFallbackSlot,
   stripConsentSurfacePreambleFromPolicyText,
@@ -511,6 +514,61 @@ test("browser-recovered privacy links receive a bounded canonical document fetch
     assert.ok((privacy?.gdprTransparencyTopicCandidates.length ?? 0) > 0);
   } finally {
     await server.close();
+    await rm(tempRoot, { recursive: true, force: true });
+  }
+});
+
+test("browser recovery fetches a same-site German legal hub and validates its substantive privacy content", async () => {
+  const policyText = Array.from({ length: 14 }, () =>
+    "This privacy notice explains how the controller processes personal data, the purposes and legal bases, recipients, retention criteria, international transfers, contact details, and access, deletion, correction, portability, restriction, and objection rights."
+  ).join(" ");
+  const server = createServer((request, response) => {
+    response.writeHead(200, { "content-type": "text/html; charset=utf-8" });
+    if (request.url === "/rechtliches.php") {
+      response.end(`<!doctype html><html lang="de"><body><h1>Rechtliches und Datenschutz</h1><p>${policyText}</p></body></html>`);
+      return;
+    }
+    response.end("<!doctype html><html lang=\"de\"><body><footer><a href=\"/rechtliches.php\">Rechtliches</a></footer></body></html>");
+  });
+  server.listen(0, "127.0.0.1");
+  await once(server, "listening");
+  const address = server.address();
+  assert.ok(address && typeof address === "object");
+  const homepageUrl = `http://127.0.0.1:${address.port}/`;
+  const tempRoot = await mkdtemp(path.join(tmpdir(), "certscore-policy-legal-hub-recovery-"));
+  try {
+    const artifactWriter = await createArtifactWriter(tempRoot);
+    const links = [{
+      documentLanguage: "de",
+      domLocation: "footer" as const,
+      href: `${homepageUrl}rechtliches.php`,
+      linkText: "Rechtliches",
+      pageUrl: homepageUrl,
+    }];
+    const recovered = await recoverPolicyDocumentsFromRetainedRenderedLinks({
+      scannerInput: {
+        url: homepageUrl,
+        normalizedUrl: homepageUrl,
+        scanStartedAtMs: Date.now(),
+        internalBudgetMs: 6_000,
+        artifactWriter,
+      },
+      links,
+      existingObservations: policySurfaceObservationsFromRetainedRenderedLinks({ links }),
+    });
+    const privacy = recovered.observations.find((observation) =>
+      observation.surfaceType === "privacy_policy"
+    );
+
+    assert.equal(privacy?.status, "fetched");
+    assert.equal(privacy?.documentEvaluationState, "usable");
+    assert.equal(privacy?.targetRelationship, "target_controller");
+    assert.equal(privacy?.classifierReasonCodes?.includes("policy_index_requires_content_validation"), true);
+  } finally {
+    server.closeAllConnections();
+    await new Promise<void>((resolve, reject) =>
+      server.close((error) => error ? reject(error) : resolve())
+    );
     await rm(tempRoot, { recursive: true, force: true });
   }
 });
@@ -1146,6 +1204,182 @@ test("retained combined privacy and cookie links produce both typed surfaces", (
   );
   assert.equal(observations.every((observation) => observation.status === "observed"), true);
   assert.equal(observations.every((observation) => observation.linkObservationState === "observed"), true);
+});
+
+test("retained combined privacy and terms links preserve the privacy document anchor", () => {
+  const observations = policySurfaceObservationsFromRetainedRenderedLinks({
+    links: [{
+      domLocation: "footer",
+      href: "https://example.test/policies.html#privacy",
+      linkText: "Privacy & Terms",
+      pageUrl: "https://example.test/",
+    }],
+  });
+
+  const privacy = observations.find((observation) => observation.surfaceType === "privacy_policy");
+  assert.equal(privacy?.normalizedUrl, "https://example.test/policies.html#privacy");
+  assert.equal(privacy?.classifierReasonCodes?.includes("variant_combined_privacy_terms_surface"), true);
+});
+
+test("retained slash-separated privacy and terms links remain typed privacy evidence", () => {
+  const observations = policySurfaceObservationsFromRetainedRenderedLinks({
+    links: [{
+      domLocation: "footer",
+      href: "https://example.test/rechtliches.php",
+      linkText: "Privacy / Terms",
+      pageUrl: "https://example.test/",
+    }],
+  });
+
+  const privacy = observations.find((observation) => observation.surfaceType === "privacy_policy");
+  assert.equal(privacy?.normalizedUrl, "https://example.test/rechtliches.php");
+  assert.equal(privacy?.classifierReasonCodes?.includes("variant_combined_privacy_terms_surface"), true);
+});
+
+test("directly linked localized privacy PDFs remain fetchable typed candidates", () => {
+  const observations = policySurfaceObservationsFromRetainedRenderedLinks({
+    links: [{
+      domLocation: "footer",
+      href: "https://example.ru/web_policy.pdf",
+      linkText: "Политика обработки персональных данных",
+      pageUrl: "https://example.ru/",
+    }],
+  });
+
+  const privacy = observations.find((observation) => observation.surfaceType === "privacy_policy");
+  assert.equal(privacy?.normalizedUrl, "https://example.ru/web_policy.pdf");
+  assert.equal(privacy?.linkObservationState, "observed");
+});
+
+test("same-site generically named policy PDFs remain typed observations pending content validation", () => {
+  const observations = policySurfaceObservationsFromRetainedRenderedLinks({
+    links: [{
+      domLocation: "footer",
+      href: "https://example.ru/example_policy.pdf",
+      linkText: "example_policy.pdf",
+      pageUrl: "https://example.ru/",
+    }],
+  });
+
+  const privacy = observations.find((observation) => observation.surfaceType === "privacy_policy");
+  assert.equal(privacy?.normalizedUrl, "https://example.ru/example_policy.pdf");
+  assert.equal(privacy?.linkObservationState, "observed");
+  assert.equal(privacy?.classifierReasonCodes?.includes("policy_pdf_requires_content_validation"), true);
+});
+
+test("fragment-scoped combined notices and current policies with only historical children remain policy documents", () => {
+  const combinedRole = policyDocumentRoleForChildSelection({
+    deterministicSurfaceType: "privacy_policy",
+    deterministicClassifierReasonCodes: [
+      "matched_privacy_policy",
+      "variant_combined_privacy_terms_surface",
+    ],
+    normalizedUrl: "https://example.test/policies.html#privacy",
+  } as never, {
+    fetchCandidates: [{ deterministicSurfaceType: "privacy_policy", normalizedUrl: "https://example.test/privacy.pdf" }] as never,
+    observedChildCandidates: [],
+  });
+  assert.equal(combinedRole, "policy_document");
+
+  const currentWithHistoryRole = policyDocumentRoleForChildSelection({
+    deterministicSurfaceType: "privacy_policy",
+    deterministicClassifierReasonCodes: ["matched_privacy_policy"],
+    normalizedUrl: "https://example.test/privacy",
+  } as never, {
+    fetchCandidates: [],
+    observedChildCandidates: [
+      { deterministicSurfaceType: "privacy_policy", normalizedUrl: "https://example.test/privacy_old_2016.pdf" },
+      { deterministicSurfaceType: "privacy_policy", normalizedUrl: "https://example.test/privacy/archive/2020" },
+    ] as never,
+  });
+  assert.equal(currentWithHistoryRole, "policy_document");
+});
+
+test("self fragments and locale variants do not turn substantive privacy pages into policy indexes", () => {
+  const role = policyDocumentRoleForChildSelection({
+    deterministicSurfaceType: "privacy_policy",
+    deterministicClassifierReasonCodes: ["matched_privacy_policy"],
+    normalizedUrl: "https://example.test/privacy",
+  } as never, {
+    fetchCandidates: [],
+    observedChildCandidates: [
+      { deterministicSurfaceType: "privacy_policy", normalizedUrl: "https://example.test/privacy#content" },
+      { deterministicSurfaceType: "privacy_policy", normalizedUrl: "https://example.test/privacy?l=en" },
+      { deterministicSurfaceType: "privacy_policy", normalizedUrl: "https://example.test/privacy" },
+      { deterministicSurfaceType: "privacy_policy", normalizedUrl: "https://example.test/privacy/job-applicants" },
+    ] as never,
+  });
+
+  assert.equal(role, "policy_document");
+});
+
+test("guessed title stubs remain insufficient while observed short policy links remain availability evidence", () => {
+  const titleStub = "hu lakossagi Adatvédelmi tájékoztató - Example Telecom";
+  assert.equal(shouldTreatGuessedPrivacyDocumentAsInsufficient({
+    surfaceType: "privacy_policy",
+    discoveryMethod: "guessed_common_path",
+    clickable: false,
+    text: titleStub,
+  }), true);
+  assert.equal(shouldTreatGuessedPrivacyDocumentAsInsufficient({
+    surfaceType: "privacy_policy",
+    discoveryMethod: "footer_link",
+    clickable: true,
+    text: titleStub,
+  }), false);
+});
+
+test("policy text resolution prefers a substantive scoped policy container over unrelated page listings", async () => {
+  const policyParagraph = "Privaatsustingimused Andmekaitse. Teenusepakkuja töötleb kasutaja isikuandmeid teenuse osutamiseks ja säilitab andmeid ainult vajaliku aja. ".repeat(12);
+  const unrelatedListing = "UNRELATED-CONTACT-LISTING public profile listing and telephone advertisement. ".repeat(18);
+  const resolved = await resolvePolicyVisibleText({
+    html: `<!doctype html><html><body><main>${unrelatedListing}<section class="privacy-policy-content"><h1>Privaatsustingimused</h1><p>${policyParagraph}</p></section><footer>${unrelatedListing}</footer></main></body></html>`,
+    baseUrl: "https://example.ee/privacypolicy",
+    surfaceType: "privacy_policy",
+    timeoutMs: 500,
+  });
+
+  assert.match(resolved, /Privaatsustingimused Andmekaitse/);
+  assert.doesNotMatch(resolved, /UNRELATED-CONTACT-LISTING/);
+});
+
+test("policy text resolution scopes legacy center-panel policy pages before retaining text", async () => {
+  const policyParagraph = "Privaatsustingimused Andmekaitse. Teenusepakkuja töötleb kasutaja isikuandmeid teenuse osutamiseks ja säilitab andmeid ainult vajaliku aja. ".repeat(12);
+  const unrelatedListing = "UNRELATED-CONTACT-LISTING public profile listing and telephone advertisement. ".repeat(18);
+  const resolved = await resolvePolicyVisibleText({
+    html: `<!doctype html><html><body><div class="leftpanel">${unrelatedListing}</div><div class="centerpanel"><div><b>Privaatsustingimused</b></div><div><div></div><div><b>Andmekaitse</b><p>${policyParagraph}</p></div></div></div><div class="rightpanel">${unrelatedListing}</div></body></html>`,
+    baseUrl: "https://example.ee/privacypolicy",
+    surfaceType: "privacy_policy",
+    timeoutMs: 500,
+  });
+
+  assert.match(resolved, /Privaatsustingimused Andmekaitse/);
+  assert.doesNotMatch(resolved, /UNRELATED-CONTACT-LISTING/);
+});
+
+test("policy text quality accepts substantive Unicode-language sentences", () => {
+  const assessment = assessPolicyTextQuality([
+    "سیاست حفظ حریم خصوصی توضیح می‌دهد که چگونه اطلاعات شخصی کاربران جمع‌آوری و پردازش می‌شود.",
+    "کاربران می‌توانند برای دسترسی حذف یا اصلاح داده‌های شخصی خود با مسئول مربوط تماس بگیرند.",
+    "اطلاعات تنها برای اهداف مشخص نگهداری می‌شود و حقوق افراد مطابق قوانین قابل اعمال است.",
+  ].join(" "));
+
+  assert.equal(assessment.usable, true);
+  assert.ok(assessment.naturalLanguageSentenceCount >= 2);
+});
+
+test("retained German legal hubs are not promoted to privacy evidence before content validation", () => {
+  const observations = policySurfaceObservationsFromRetainedRenderedLinks({
+    links: [{
+      documentLanguage: "de",
+      domLocation: "footer",
+      href: "https://learning.example/rechtliches.php",
+      linkText: "Rechtliches",
+      pageUrl: "https://learning.example/",
+    }],
+  });
+
+  assert.deepEqual(observations, []);
 });
 
 test("fetched policy evidence outranks a supplemental rendered-link observation", () => {
@@ -4069,6 +4303,23 @@ test("policySurfaceScanner adds localized common paths only for the detected loc
     assert.equal(fetchedUrls.has(`${baseUrl}/informativa-privacy`), false);
     assert.equal(fetchedUrls.has(`${baseUrl}/privacybeleid`), false);
   });
+});
+
+test("common-path discovery includes canonical aliases from the missed-surface cohort", () => {
+  const urls = new Set(commonPathCandidatesFor(
+    "https://example.test/",
+    0,
+    ["ru", "sv", "hu"],
+  ).map((candidate) => new URL(candidate.normalizedUrl).pathname));
+
+  for (const path of [
+    "/privacypolicy",
+    "/politic",
+    "/dataskyddsinformation",
+    "/adatvedelem",
+  ]) {
+    assert.equal(urls.has(path), true, path);
+  }
 });
 
 test("policySurfaceScanner retains visible terms links across policy gold corpus", async () => {

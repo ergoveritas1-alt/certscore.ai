@@ -39,6 +39,34 @@ test("retains a cross-site first-party notice only when the target brand is name
   assert.ok((result.ownershipConfidence ?? 0) >= 0.75);
 });
 
+test("attributes TensorFlow's canonical Google-hosted privacy policy as a first-party brand document", () => {
+  const result = classifyPolicyDocumentOwnership({
+    documentTitle: "Privacy Policy – Privacy & Terms – Google",
+    documentUrl: "https://policies.google.com/privacy",
+    targetUrl: "https://www.tensorflow.org/",
+    text: "Google explains the information it collects and why it collects it.",
+  });
+
+  assert.equal(result.targetRelationship, "first_party_brand");
+  assert.equal(result.documentOwnerEntity, "Google");
+  assert.equal(result.ownershipConfidence, 0.98);
+  assert.deepEqual(result.ownershipReasonCodes, [
+    "canonical_first_party_brand_relationship",
+    "canonical_relationship_tensorflow_google",
+  ]);
+});
+
+test("does not generalize the TensorFlow relationship to unrelated Google policy links", () => {
+  const result = classifyPolicyDocumentOwnership({
+    documentTitle: "Privacy Policy – Privacy & Terms – Google",
+    documentUrl: "https://policies.google.com/privacy",
+    targetUrl: "https://statefarm.com/",
+    text: "Google explains the information it collects and why it collects it.",
+  });
+
+  assert.equal(result.targetRelationship, "service_provider");
+});
+
 test("attributes a corporate policy when the target is an enumerated subsidiary in the policy scope", () => {
   const result = classifyPolicyDocumentOwnership({
     documentTitle: "Privacy Policy - PAR Technology",

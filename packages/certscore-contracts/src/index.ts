@@ -11,6 +11,7 @@ export * from "./article13-disclosure-rejection";
 export * from "./legal-framework-validity";
 export * from "./privacy-surface-classifier";
 export * from "./privacy-evidence-locale-registry";
+export * from "./policy-document-brand-relationships";
 export * from "./supported-languages";
 export * from "./model-assistance";
 export * from "./consent-control-assessment";
@@ -2100,6 +2101,7 @@ export const verifiedPolicyEvidencePacketSchema = z.object({
 
 export function derivePolicySurfaceInspectionOutcome(input: {
   modulesRun?: z.infer<typeof scanModuleRunSchema>[];
+  negativeSearchCoverageVerified?: boolean;
   policySurfaceObservations?: z.infer<typeof policySurfaceObservationSchema>[];
 }) {
   const observations = input.policySurfaceObservations ?? [];
@@ -2121,6 +2123,7 @@ export function derivePolicySurfaceInspectionOutcome(input: {
     observation.documentRole !== "policy_index"
   );
   const inspectionCompleted = policyRun?.status === "completed";
+  const negativeSearchCoverageVerified = inspectionCompleted && input.negativeSearchCoverageVerified === true;
   const limitationKeys = [
     !policyRun ? "policy_surface_inspection_runtime_not_run" : null,
     policyRun && policyRun.status !== "completed"
@@ -2136,17 +2139,20 @@ export function derivePolicySurfaceInspectionOutcome(input: {
     ) && !usablePrivacyDocumentRetained
       ? "privacy_policy_index_retained_governing_document_unresolved"
       : null,
+    !privacyPolicyObserved && inspectionCompleted && !negativeSearchCoverageVerified
+      ? "privacy_policy_negative_search_coverage_not_verified"
+      : null,
   ].filter((value): value is string => value !== null)
     .filter((value, index, values) => values.indexOf(value) === index)
     .slice(0, 16);
-  const linkDiscoveryCoverageStatus = privacyPolicyObserved || inspectionCompleted
+  const linkDiscoveryCoverageStatus = privacyPolicyObserved || negativeSearchCoverageVerified
     ? "complete" as const
     : "limited" as const;
   const documentRetrievalCoverageStatus = usablePrivacyDocumentRetained
     ? "usable" as const
     : privacyPolicyObserved
       ? "insufficient" as const
-      : inspectionCompleted
+      : negativeSearchCoverageVerified
         ? "insufficient" as const
         : "limited" as const;
   const coverageStatus = privacyPolicyObserved && !usablePrivacyDocumentRetained
@@ -2154,7 +2160,7 @@ export function derivePolicySurfaceInspectionOutcome(input: {
     : linkDiscoveryCoverageStatus;
   const outcome = privacyPolicyObserved
     ? "privacy_policy_observed" as const
-    : inspectionCompleted
+    : negativeSearchCoverageVerified
       ? "no_privacy_policy_observed_complete_coverage" as const
       : "indeterminate_limited_coverage" as const;
 
