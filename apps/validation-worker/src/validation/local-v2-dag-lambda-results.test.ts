@@ -496,6 +496,45 @@ test("validation worker records terminal completion before consuming embedded po
   assert.match(source, /POLICY_EVIDENCE_BACKGROUND_CONCURRENCY\s*=\s*2/);
 });
 
+test("verified early policy evidence durably schedules canonical reprojection without a display fallback", async () => {
+  const [migration, pipelineSource, repositorySource, resultSource] = await Promise.all([
+    readFile("packages/db/migrations/0189_policy_projection_reprojection.sql", "utf8"),
+    readFile("apps/validation-worker/src/validation/pipeline.ts", "utf8"),
+    readFile("apps/validation-worker/src/validation/repository.ts", "utf8"),
+    readFile("apps/validation-worker/src/validation/local-v2-dag-lambda-results.ts", "utf8"),
+  ]);
+
+  const verifiedEventIndex = resultSource.indexOf("POLICY_EVIDENCE_VERIFIED_EVENT_TYPE");
+  const staticReviewIndex = resultSource.indexOf("await runStaticPolicyReviewPacket", verifiedEventIndex);
+  const receivedEventIndex = resultSource.indexOf("POLICY_EVIDENCE_RECEIVED_EVENT_TYPE", staticReviewIndex);
+  assert.ok(verifiedEventIndex >= 0, "expected durable verified-evidence telemetry");
+  assert.ok(staticReviewIndex > verifiedEventIndex, "semantic review must follow retained-evidence verification");
+  assert.ok(receivedEventIndex > staticReviewIndex, "the canonical join wake-up must follow review completion");
+  assert.match(resultSource, /v2_policy_review\.started/);
+  assert.match(resultSource, /processingDurationMs/);
+  assert.match(resultSource, /reviewDurationMs/);
+
+  assert.match(migration, /new\.event_type = 'v2_policy_evidence\.received'/);
+  assert.match(migration, /next_recovery_mode := 'policy_projection_reprojection'/);
+  assert.match(
+    migration,
+    /recovery_mode is distinct from 'policy_projection_reprojection'[\s\S]*new\.metadata_json->>'recoveryMode' = 'policy_projection_reprojection'/,
+  );
+  assert.match(
+    migration,
+    /public\.nano_signal_work_items\.recovery_mode = 'policy_projection_reprojection'[\s\S]*excluded\.recovery_mode is distinct from 'policy_projection_reprojection'/,
+  );
+  assert.match(pipelineSource, /shouldReprojectAfterPolicyProjection/);
+  assert.match(pipelineSource, /input\.recoveryMode === "policy_projection_reprojection"/);
+  assert.match(repositorySource, /when \$5::text = 'policy_projection_reprojection' then 'pending'/);
+  assert.match(repositorySource, /or \$5::text = 'policy_projection_reprojection'/);
+  assert.match(
+    repositorySource,
+    /nano_signal_work_items\.recovery_mode = 'policy_projection_reprojection'[\s\S]*excluded\.recovery_mode is distinct from 'policy_projection_reprojection'/,
+  );
+  assert.doesNotMatch(migration, /insert into (?:public\.)?(?:unified_findings|scan_report)/i);
+});
+
 test("validation worker synchronizes linked API activity before acknowledging a Lambda result", async () => {
   const source = await readFile("apps/validation-worker/src/validation/local-v2-dag-lambda-results.ts", "utf8");
   const pulseUpdateIndex = source.indexOf("update pulse_requests");

@@ -293,7 +293,7 @@ export type NanoSignalScanLease = {
   client: PoolClient;
   pollCount: number;
   recovered: boolean;
-  recoveryMode: "browser_extension_signal_reprojection" | "completed_scan_backfill" | "missing_unified_projection" | null;
+  recoveryMode: "browser_extension_signal_reprojection" | "completed_scan_backfill" | "missing_unified_projection" | "policy_projection_reprojection" | null;
   scanId: string;
 };
 
@@ -1071,7 +1071,8 @@ async function claimNanoSignalScanLease(input: {
               when scan_events.metadata_json->>'recoveryMode' in (
                 'browser_extension_signal_reprojection',
                 'completed_scan_backfill',
-                'missing_unified_projection'
+                'missing_unified_projection',
+                'policy_projection_reprojection'
               )
               then scan_events.metadata_json->>'recoveryMode'
               else null
@@ -3296,11 +3297,36 @@ export async function parkNanoSignalEnrichmentUntilScanTerminal(input: {
        now()
      from parked_event
      on conflict (scan_id) do update
-       set requested_at = excluded.requested_at,
-           not_before = excluded.not_before,
-           poll_count = excluded.poll_count,
-           recovered = excluded.recovered,
-           recovery_mode = excluded.recovery_mode,
+       set requested_at = case
+             when nano_signal_work_items.recovery_mode = 'policy_projection_reprojection'
+              and excluded.recovery_mode is distinct from 'policy_projection_reprojection'
+               then nano_signal_work_items.requested_at
+             else excluded.requested_at
+           end,
+           not_before = case
+             when nano_signal_work_items.recovery_mode = 'policy_projection_reprojection'
+              and excluded.recovery_mode is distinct from 'policy_projection_reprojection'
+               then nano_signal_work_items.not_before
+             else excluded.not_before
+           end,
+           poll_count = case
+             when nano_signal_work_items.recovery_mode = 'policy_projection_reprojection'
+              and excluded.recovery_mode is distinct from 'policy_projection_reprojection'
+               then nano_signal_work_items.poll_count
+             else excluded.poll_count
+           end,
+           recovered = case
+             when nano_signal_work_items.recovery_mode = 'policy_projection_reprojection'
+              and excluded.recovery_mode is distinct from 'policy_projection_reprojection'
+               then nano_signal_work_items.recovered
+             else excluded.recovered
+           end,
+           recovery_mode = case
+             when nano_signal_work_items.recovery_mode = 'policy_projection_reprojection'
+              and excluded.recovery_mode is distinct from 'policy_projection_reprojection'
+               then nano_signal_work_items.recovery_mode
+             else excluded.recovery_mode
+           end,
            updated_at = now()`,
     [
       SCAN_EVENT_TYPES.nanoSignalEnrichmentWaiting,
@@ -3347,12 +3373,52 @@ export async function appendUnifiedFindingsCompletionAndQueueReportMaterializati
        join public.scans scan on scan.id = completed_event.scan_id
       where scan.status = 'completed'
      on conflict (scan_id) do update
-       set next_attempt_at = least(
+       set token_sha256 = case
+             when $5::text = 'policy_projection_reprojection' then excluded.token_sha256
+             else public.scan_score_materialization_requests.token_sha256
+           end,
+           status = case
+             when $5::text = 'policy_projection_reprojection' then 'pending'
+             else public.scan_score_materialization_requests.status
+           end,
+           attempt_count = case
+             when $5::text = 'policy_projection_reprojection'
+               then least(1000000, public.scan_score_materialization_requests.attempt_count + 1)
+             else public.scan_score_materialization_requests.attempt_count
+           end,
+           requested_at = case
+             when $5::text = 'policy_projection_reprojection' then excluded.requested_at
+             else public.scan_score_materialization_requests.requested_at
+           end,
+           completed_at = case
+             when $5::text = 'policy_projection_reprojection' then null
+             else public.scan_score_materialization_requests.completed_at
+           end,
+           last_error = case
+             when $5::text = 'policy_projection_reprojection' then null
+             else public.scan_score_materialization_requests.last_error
+           end,
+           first_failed_at = case
+             when $5::text = 'policy_projection_reprojection' then null
+             else public.scan_score_materialization_requests.first_failed_at
+           end,
+           last_attempt_at = case
+             when $5::text = 'policy_projection_reprojection' then null
+             else public.scan_score_materialization_requests.last_attempt_at
+           end,
+           next_attempt_at = least(
              public.scan_score_materialization_requests.next_attempt_at,
              excluded.next_attempt_at
            )
-       where public.scan_score_materialization_requests.status = 'pending'`,
-    [input.eventType, input.message, input.metadataJson ?? {}, input.scanId]
+       where public.scan_score_materialization_requests.status = 'pending'
+          or $5::text = 'policy_projection_reprojection'`,
+    [
+      input.eventType,
+      input.message,
+      input.metadataJson ?? {},
+      input.scanId,
+      input.metadataJson?.recoveryMode ?? null,
+    ]
   );
 }
 

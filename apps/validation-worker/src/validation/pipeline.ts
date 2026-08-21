@@ -410,7 +410,7 @@ async function requeueNanoSignalEnrichmentPoll(input: {
 }
 
 async function deriveAndPersistUnifiedFindingsForScan(input: {
-  recoveryMode?: "browser_extension_signal_reprojection" | "completed_scan_backfill" | "missing_unified_projection" | null;
+  recoveryMode?: "browser_extension_signal_reprojection" | "completed_scan_backfill" | "missing_unified_projection" | "policy_projection_reprojection" | null;
   scanId: string;
   suppressWorkflowEvents?: boolean;
   validationRunId?: string | null;
@@ -6615,7 +6615,7 @@ export async function processNanoDocRetrievalJob(input: { pollCount?: number; sc
 
 export async function processNanoSignalEnrichmentJob(input: {
   pollCount?: number;
-  recoveryMode?: "browser_extension_signal_reprojection" | "completed_scan_backfill" | "missing_unified_projection" | null;
+  recoveryMode?: "browser_extension_signal_reprojection" | "completed_scan_backfill" | "missing_unified_projection" | "policy_projection_reprojection" | null;
   scanId: string;
 }) {
   const { state } = await getValidationPipelineState();
@@ -7058,8 +7058,13 @@ export async function processNanoSignalEnrichmentJob(input: {
   }
 
   const shouldReprojectAfterBrowserExtensionSignals = input.recoveryMode === "browser_extension_signal_reprojection";
+  const shouldReprojectAfterPolicyProjection = input.recoveryMode === "policy_projection_reprojection";
 
-  if (!hasCompletedUnifiedDerivation || shouldReprojectAfterBrowserExtensionSignals) {
+  if (
+    !hasCompletedUnifiedDerivation ||
+    shouldReprojectAfterBrowserExtensionSignals ||
+    shouldReprojectAfterPolicyProjection
+  ) {
     await deriveAndPersistUnifiedFindingsForScan({
       recoveryMode: input.recoveryMode ?? null,
       scanId
@@ -7074,7 +7079,10 @@ export async function processNanoSignalEnrichmentJob(input: {
       });
     }
 
-    if (!shouldReprojectAfterBrowserExtensionSignals && (scanStatus === "completed" || scanType === "preview")) {
+    if (
+      !shouldReprojectAfterBrowserExtensionSignals &&
+      (scanStatus === "completed" || scanType === "preview")
+    ) {
       const workerEnv = getWorkerEnv();
       await ensureCompletedScanScoresPersisted({
         scanId,

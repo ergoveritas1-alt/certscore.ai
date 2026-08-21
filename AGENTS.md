@@ -5,6 +5,14 @@
 > **Package manager:** pnpm 10.6.3 (workspace monorepo with Turbo)
 > **Node engines:** `>=20.0.0 <25.0.0` (Node 25 is unsupported and can fail DNS resolution on localhost)
 
+## Absolute prohibition: Vercel
+
+WC01 and WS01 are AWS-only. Never use, inspect, load, recommend, or invoke any Vercel skill, plugin, documentation, CLI, API, integration, deployment, hosting, or build workflow for these repositories.
+
+A request containing “deploy,” “production,” “hosting,” “CI/CD,” or “release” must not trigger Vercel tooling. The only authorized deployment paths are the repository-controlled AWS workflows and scripts, including `scripts/deploy-fast.ts` and the checked-in GitHub Actions AWS workflows.
+
+If platform discovery is needed, inspect the repository’s deployment topology first. If any system capability suggests Vercel, treat it as inapplicable and continue with the canonical AWS path. Stop and ask before introducing any non-AWS deployment platform.
+
 ## Cost-change approval
 
 Any change that can increase recurring infrastructure cost, per-request or

@@ -33,6 +33,8 @@ const RESULT_CONTRACT_VERSION = "certscore.v2.lambda-dag-result.v1";
 const POLICY_EVIDENCE_MESSAGE_VERSION = "certscore.v2.lambda-policy-evidence-ready.v1";
 const POLICY_EVIDENCE_RECEIVED_EVENT_TYPE = "v2_policy_evidence.received";
 const POLICY_EVIDENCE_REJECTED_EVENT_TYPE = "v2_policy_evidence.rejected";
+const POLICY_EVIDENCE_VERIFIED_EVENT_TYPE = "v2_policy_evidence.verified";
+const POLICY_REVIEW_STARTED_EVENT_TYPE = "v2_policy_review.started";
 const RESULT_RECEIVED_EVENT_TYPE = "v2_lambda_result.received";
 const RESULT_FAILED_EVENT_TYPE = "v2_lambda_result.failed";
 const RESULT_BATCH_CONCURRENCY = 3;
@@ -377,7 +379,15 @@ function isPolicyEvidenceReadyMessage(raw: string) {
   }
 }
 
+type PolicyEvidenceConsumerMetadata = {
+  approximateReceiveCount: number | null;
+  consumerReceivedAt: string;
+  sentAt: string | null;
+  sqsMessageId: string | null;
+};
+
 async function processPolicyEvidenceReadyMessageUncoalesced(input: {
+  consumer?: PolicyEvidenceConsumerMetadata;
   queueRegion: string;
   raw: string;
   s3Client?: S3GetClient;
@@ -493,11 +503,81 @@ async function processPolicyEvidenceReadyMessageUncoalesced(input: {
   if (existing) {
     return { packet, reviewSummary: asRecord(existing.review_summary) };
   }
+  const verifiedAt = new Date().toISOString();
+  await query(
+    `insert into scan_events (scan_id, event_type, message, metadata_json)
+     select $1::uuid, lifecycle.event_type, lifecycle.message, lifecycle.metadata_json
+       from jsonb_to_recordset($2::jsonb) as lifecycle(
+         event_type text,
+         message text,
+         metadata_json jsonb
+       )
+      where not exists (
+        select 1
+          from scan_events existing
+         where existing.scan_id = $1::uuid
+           and existing.event_type = lifecycle.event_type
+           and existing.metadata_json->>'sourceHash' = $3
+      )`,
+    [
+      scanId,
+      JSON.stringify([
+        {
+          event_type: POLICY_EVIDENCE_VERIFIED_EVENT_TYPE,
+          message: "Early policy evidence packet and artifact identity verified.",
+          metadata_json: {
+            artifactOnly: true,
+            artifactPointer,
+            approximateReceiveCount: input.consumer?.approximateReceiveCount ?? null,
+            consumerReceivedAt: input.consumer?.consumerReceivedAt ?? null,
+            packetGeneratedAt: packet.generatedAt,
+            policyContentHash: packet.policyContentHash,
+            productionFindingIntegration: false,
+            queueRegion: input.queueRegion,
+            sentAt: input.consumer?.sentAt ?? null,
+            sourceHash: packet.sourceHash,
+            sqsMessageId: input.consumer?.sqsMessageId ?? null,
+            sqsQueueLatencyMs: input.consumer?.sentAt
+              ? Math.max(0, Date.parse(input.consumer.consumerReceivedAt) - Date.parse(input.consumer.sentAt))
+              : null,
+            verifiedAt,
+          },
+        },
+      ]),
+      packet.sourceHash,
+    ],
+  );
   const env = getWorkerEnv();
   let reviewSummary: Record<string, unknown> = {
     reviewStatus: "disabled",
   };
-  if (env.CERTSCORE_MINI_REVIEW_ENABLED && env.CERTSCORE_PARALLEL_POLICY_REVIEW_ENABLED) {
+  const earlyReviewEnabled = env.CERTSCORE_MINI_REVIEW_ENABLED && env.CERTSCORE_PARALLEL_POLICY_REVIEW_ENABLED;
+  if (earlyReviewEnabled) {
+    await query(
+      `insert into scan_events (scan_id, event_type, message, metadata_json)
+       select $1::uuid, $2, $3, $4::jsonb
+        where not exists (
+          select 1
+            from scan_events existing
+           where existing.scan_id = $1::uuid
+             and existing.event_type = $2
+             and existing.metadata_json->>'sourceHash' = $5
+        )`,
+      [
+        scanId,
+        POLICY_REVIEW_STARTED_EVENT_TYPE,
+        "Static policy review lifecycle started from verified retained evidence.",
+        {
+          artifactOnly: true,
+          policyContentHash: packet.policyContentHash,
+          productionFindingIntegration: false,
+          queueRegion: input.queueRegion,
+          sourceHash: packet.sourceHash,
+          startedAt: verifiedAt,
+        },
+        packet.sourceHash,
+      ],
+    );
     const reviewPacket = buildPolicyReviewPacketFromVerifiedPolicyEvidence(packet);
     if (reviewPacket) {
       const review = await runStaticPolicyReviewPacket({
@@ -516,6 +596,7 @@ async function processPolicyEvidenceReadyMessageUncoalesced(input: {
       reviewSummary = { reviewStatus: "skipped", skipReason: "no_usable_policy_documents" };
     }
   }
+  const reviewCompletedAt = new Date().toISOString();
   await query(
     `insert into scan_events (scan_id, event_type, message, metadata_json)
      values ($1::uuid, $2, $3, $4::jsonb)`,
@@ -529,8 +610,14 @@ async function processPolicyEvidenceReadyMessageUncoalesced(input: {
         policyContentHash: packet.policyContentHash,
         productionFindingIntegration: false,
         queueRegion: input.queueRegion,
+        processingDurationMs: Math.max(0, Date.parse(reviewCompletedAt) - Date.parse(verifiedAt)),
+        reviewCompletedAt,
+        ...(earlyReviewEnabled
+          ? { reviewDurationMs: Math.max(0, Date.parse(reviewCompletedAt) - Date.parse(verifiedAt)) }
+          : {}),
         reviewSummary,
         sourceHash: packet.sourceHash,
+        verifiedAt,
       },
     ],
   );
@@ -566,6 +653,7 @@ async function withResultFinalizationSlot<T>(operation: () => Promise<T>) {
 }
 
 async function processPolicyEvidenceReadyMessage(input: {
+  consumer?: PolicyEvidenceConsumerMetadata;
   queueRegion: string;
   raw: string;
   s3Client?: S3GetClient;
@@ -601,6 +689,12 @@ function startPolicyEvidenceReadyMessageProcessing(input: {
   const task = (async () => {
     try {
       await processPolicyEvidenceReadyMessage({
+        consumer: {
+          approximateReceiveCount: parseSqsInteger(input.message.Attributes?.ApproximateReceiveCount),
+          consumerReceivedAt: new Date().toISOString(),
+          sentAt: parseSqsEpochMillis(input.message.Attributes?.SentTimestamp),
+          sqsMessageId: input.message.MessageId ?? null,
+        },
         queueRegion: input.queueRegion,
         raw: input.raw,
         targetEnvironment: input.targetEnvironment,
