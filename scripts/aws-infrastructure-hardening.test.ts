@@ -192,6 +192,9 @@ test("scanner NAT-free AWS service endpoints are private, scoped, and migration-
   assert.match(source, /enable_dns_hostnames/);
   assert.match(source, /s3:GetObject/);
   assert.match(source, /s3:PutObject/);
+  assert.match(source, /AllowRetainedEvidencePrefixListing/);
+  assert.match(source, /Action\s+=\s+\["s3:ListBucket"\]/);
+  assert.match(source, /"s3:prefix"\s+=\s+\["\$\{local\.artifact_prefix\}\/\*"\]/);
   assert.match(source, /sqs:SendMessage/);
   assert.match(source, /lambda:InvokeFunction/);
 

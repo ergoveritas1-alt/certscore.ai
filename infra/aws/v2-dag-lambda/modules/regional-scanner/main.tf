@@ -140,13 +140,27 @@ resource "aws_vpc_endpoint" "s3" {
   route_table_ids   = var.vpc_endpoint_config.route_table_ids
   policy = jsonencode({
     Version = "2012-10-17"
-    Statement = [{
-      Sid       = "AllowRetainedEvidenceObjects"
-      Effect    = "Allow"
-      Principal = "*"
-      Action    = ["s3:GetObject", "s3:PutObject"]
-      Resource  = "arn:aws:s3:::${var.artifact_bucket}/${local.artifact_prefix}/*"
-    }]
+    Statement = [
+      {
+        Sid       = "AllowRetainedEvidenceObjects"
+        Effect    = "Allow"
+        Principal = "*"
+        Action    = ["s3:GetObject", "s3:PutObject"]
+        Resource  = "arn:aws:s3:::${var.artifact_bucket}/${local.artifact_prefix}/*"
+      },
+      {
+        Sid       = "AllowRetainedEvidencePrefixListing"
+        Effect    = "Allow"
+        Principal = "*"
+        Action    = ["s3:ListBucket"]
+        Resource  = "arn:aws:s3:::${var.artifact_bucket}"
+        Condition = {
+          StringLike = {
+            "s3:prefix" = ["${local.artifact_prefix}/*"]
+          }
+        }
+      }
+    ]
   })
 
   tags = merge(var.tags, {
