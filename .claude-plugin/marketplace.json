@@ -1,0 +1,19 @@
+{
+  "name": "certscore-ai",
+  "owner": {
+    "name": "ErgoVeritas, LLC",
+    "email": "support@certscore.ai"
+  },
+  "metadata": {
+    "description": "Official CertScore.ai agent integrations for evidence-backed public website privacy review."
+  },
+  "plugins": [
+    {
+      "name": "certscore-mcp-light",
+      "source": "./integrations/claude-code/certscore-mcp-light",
+      "description": "Free website privacy scanner for evidence-backed public website preflight.",
+      "category": "developer-tools",
+      "tags": ["mcp", "privacy", "website-analysis", "preflight"]
+    }
+  ]
+}

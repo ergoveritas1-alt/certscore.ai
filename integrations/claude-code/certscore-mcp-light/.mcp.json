@@ -1,0 +1,8 @@
+{
+  "mcpServers": {
+    "certscore": {
+      "type": "http",
+      "url": "https://mcp.certscore.ai/mcp/light"
+    }
+  }
+}

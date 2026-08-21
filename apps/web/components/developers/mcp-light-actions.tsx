@@ -63,7 +63,7 @@ export function McpLightScanDemo() {
         <Input aria-label="Public website URL" onChange={(event) => setUrl(event.target.value)} placeholder="https://ergoveritas.com/.well-known/certscore-canary/sentinels/broad-baseline.html" required type="url" value={url} />
         <Button disabled={pending} type="submit">{pending ? "Starting…" : "Run a free scan"}</Button>
       </div>
-      <p className="text-xs leading-5 text-slate-500">No account or API key. Uses the same 20-new-scans-per-day no-account allowance as Light MCP.</p>
+      <p className="text-xs leading-5 text-slate-500">No account or API key. This webpage demo uses the separate anonymous API allowance of 20 new scans per requester IP per UTC day; eligible recent-result reuse does not consume that allowance.</p>
       {error ? <p className="text-sm text-amber-800">{error} Contact support@certscore.ai if you need help or higher volume.</p> : null}
     </form>
   );

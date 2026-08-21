@@ -10,6 +10,8 @@ Public docs:
 - https://certscore.ai/developers/quickstart
 - https://certscore.ai/developers/reference
 - https://certscore.ai/api-pulse
+- [MCP Light installation and agent reference](../../docs/mcp-light-install.md)
+- [MCP Light marketplace workflow assets](../../docs/mcp-light-marketplace-assets.md)
 
 ## Light MCP — no authentication: start here
 
@@ -24,6 +26,8 @@ Tools: certscore_scan_site, certscore_get_scan_status, certscore_get_scan_bundle
 ```
 
 No signup, API key, bearer token, browser login, or OAuth is required. Light allows up to 50 genuinely new scans per UTC day across the public Light surface and up to 5 per rolling 10 minutes, with additional IP/provider safeguards. Reused eligible results do not consume quota.
+
+Light is a free website privacy scanner and cookie checker for public websites. It can return canonical evidence and findings for pre-consent cookies and storage, trackers and vendors, cookie banners, CMP and consent controls, privacy-policy and transparency surfaces, GDPR/ePrivacy and CCPA/CPRA review signals, and HTTPS/TLS transport observations. Typical uses include release privacy preflight, public vendor-domain review, landing-page tracker inspection, audit triage, and evidence collection before human privacy review.
 
 Codex setup:
 
@@ -58,6 +62,8 @@ Verification prompt:
 Success means the tool list contains exactly the three Light tools, no authorization page appears, and `certscore_scan_site` returns a stable `scanId` plus an explicit new-or-reused decision. An eligible reused result reports that quota was not consumed.
 
 CertScore results are automated observations from a public-web scan. No-go, not-observed, and limited-coverage results are not proof of compliance, absence of risk, or legal status. Review the retained evidence and applicable context before relying on a finding.
+
+Scans describe observable behavior at a point in time. Public sites may behave differently on later visits or in another execution context. CertScore findings and the CertScore score support human and agentic review; they are not legal advice, certification, or a compliance determination.
 
 ## Which MCP route should I use?
 

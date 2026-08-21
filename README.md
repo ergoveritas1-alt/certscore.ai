@@ -51,13 +51,17 @@ website-signal-risk-scanner/
 - regression summaries and scheduled rescans
 - lightweight branding for reports and PDFs
 
+## MCP Light
+
+CertScore.ai MCP Light is the no-auth, hosted three-tool integration for public website privacy scans. See the [agent installation guide](llms-install.md), [full Light installation reference](docs/mcp-light-install.md), and [MCP package guide](packages/certscore-mcp/README.md).
+
 ## Environment variables
 
-This monorepo should use [apps/web/.env.local](/Users/benmasek/WC01/apps/web/.env.local) as the single local development runtime env:
+This monorepo should use [apps/web/.env.local](apps/web/.env.local) as the single local development runtime env:
 
-- copy [apps/web/.env.example](/Users/benmasek/WC01/apps/web/.env.example) to [apps/web/.env.local](/Users/benmasek/WC01/apps/web/.env.local)
+- copy [apps/web/.env.example](apps/web/.env.example) to [apps/web/.env.local](apps/web/.env.local)
 
-Use [.env.example](/Users/benmasek/WC01/.env.example) only as a reference template for shared keys. Do not rely on a root `.env.local` for app runtime configuration.
+Use [.env.example](.env.example) only as a reference template for shared keys. Do not rely on a root `.env.local` for app runtime configuration.
 
 Recommended environment split inside `WC01`:
 
@@ -102,8 +106,8 @@ Use Node 20 or Node 22 LTS for local development. Node 25 is not supported here 
 2. Copy the environment template:
    - `cp apps/web/.env.example apps/web/.env.local`
 3. Start a dedicated PostgreSQL instance for local development.
-4. Apply the SQL migrations from [packages/db/migrations](/Users/benmasek/WC01/packages/db/migrations).
-5. Seed local development data when needed with [packages/db/seed/0001_dev_seed.sql](/Users/benmasek/WC01/packages/db/seed/0001_dev_seed.sql).
+4. Apply the SQL migrations from [packages/db/migrations](packages/db/migrations).
+5. Seed local development data when needed with [packages/db/seed/0001_dev_seed.sql](packages/db/seed/0001_dev_seed.sql).
 6. Configure Better Auth provider settings:
    - Google OAuth if enabled
    - email/password and verification settings as needed
@@ -146,11 +150,11 @@ Validation-specific checks:
 
 The scan pipeline test is deterministic and runs locally from `apps/validation-worker/src/validation/pipeline.test.ts`.
 
-The normalized concern lifecycle in `WC01` is documented in [docs/normalized-concern-pipeline.md](/Users/benmasek/WC01/docs/normalized-concern-pipeline.md).
+The normalized concern lifecycle in `WC01` is documented in [docs/normalized-concern-pipeline.md](docs/normalized-concern-pipeline.md).
 
 ## CI validation
 
-GitHub Actions workflow: [.github/workflows/accessibility-validation.yml](/Users/benmasek/WC01/.github/workflows/accessibility-validation.yml)
+GitHub Actions workflow: [.github/workflows/accessibility-validation.yml](.github/workflows/accessibility-validation.yml)
 
 - `worker-scan-pipeline-tests` runs on pushes to `main`, pull requests, and manual dispatch. It installs Chromium, typechecks `validation-worker`, and runs `pnpm test:scan-pipeline`.
 - `live-validation-smoke` runs after the deterministic job and executes `pnpm --filter @website-signal-risk-scanner/validation-worker smoke:validation` only when the runtime secrets are configured.
@@ -173,10 +177,10 @@ Use this runtime smoke helper:
 
 - `pnpm --filter @website-signal-risk-scanner/validation-worker scheduler`
 
-The full runtime QA sequence is documented in [docs/runtime-validation.md](/Users/benmasek/WC01/docs/runtime-validation.md).
-The validation pipeline design and deployment shape are documented in [docs/validation-pipeline-plan.md](/Users/benmasek/WC01/docs/validation-pipeline-plan.md).
-The validation crawler deployment and VM runbook is documented in [docs/validation-ops-runbook.md](/Users/benmasek/WC01/docs/validation-ops-runbook.md).
-Cloudflare Verified Bot setup is documented in [docs/cloudflare-web-bot-auth.md](/Users/benmasek/WC01/docs/cloudflare-web-bot-auth.md).
+The full runtime QA sequence is documented in [docs/runtime-validation.md](docs/runtime-validation.md).
+The validation pipeline design and deployment shape are documented in [docs/validation-pipeline-plan.md](docs/validation-pipeline-plan.md).
+The validation crawler deployment and VM runbook is documented in [docs/validation-ops-runbook.md](docs/validation-ops-runbook.md).
+Cloudflare Verified Bot setup is documented in [docs/cloudflare-web-bot-auth.md](docs/cloudflare-web-bot-auth.md).
 
 ## Web Bot Auth
 
@@ -203,11 +207,11 @@ Common commands:
 
 - the live public web deployment target is the AWS ECS/Fargate path for `certscore.ai`
 - `consentcheck.site` is owned outside WC01 and must not be deployed by this repo
-- `main` deploys through [/.github/workflows/web-aws-ecs-deploy.yml](/Users/benmasek/WC01/.github/workflows/web-aws-ecs-deploy.yml)
+- `main` deploys through [.github/workflows/web-aws-ecs-deploy.yml](.github/workflows/web-aws-ecs-deploy.yml)
 - run `pnpm ops:check:deploy` before or after topology changes to catch stale local assumptions
 - run `pnpm ops:check:live` against the public hosts to verify runtime target and revision alignment after deploy
-- treat [docs/aws-web-ecs-cutover-plan.md](/Users/benmasek/WC01/docs/aws-web-ecs-cutover-plan.md) as the active web deployment runbook
-- treat [docs/deploy-amplify.md](/Users/benmasek/WC01/docs/deploy-amplify.md) as future-state reference material only
+- treat [docs/aws-web-ecs-cutover-plan.md](docs/aws-web-ecs-cutover-plan.md) as the active web deployment runbook
+- treat [docs/deploy-amplify.md](docs/deploy-amplify.md) as future-state reference material only
 
 ### Validation And Scanner Runtime
 

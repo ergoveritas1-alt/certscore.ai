@@ -362,6 +362,127 @@ test("README documents current MCP tool surface and public docs", () => {
   assert.match(readme, /should not be displayed as `0`/);
 });
 
+test("Light registry metadata and distribution copy stay aligned", () => {
+  const manifest = JSON.parse(readFileSync(new URL("../server-light.json", import.meta.url), "utf8")) as {
+    description?: string;
+    icons?: Array<{ mimeType?: string; sizes?: string[]; src?: string }>;
+    name?: string;
+    remotes?: Array<{ type?: string; url?: string }>;
+    repository?: { subfolder?: string; url?: string };
+    title?: string;
+    version?: string;
+    websiteUrl?: string;
+  };
+  const install = readFileSync(new URL("../../../docs/mcp-light-install.md", import.meta.url), "utf8");
+  const marketplace = readFileSync(new URL("../../../docs/mcp-light-marketplace-assets.md", import.meta.url), "utf8");
+  const submissions = readFileSync(new URL("../../../docs/mcp-light-directory-submissions.md", import.meta.url), "utf8");
+  const packets = readFileSync(new URL("../../../docs/mcp-light-submission-packets.md", import.meta.url), "utf8");
+  const agentInstall = readFileSync(new URL("../../../llms-install.md", import.meta.url), "utf8");
+  const publicCopy = [install, marketplace, submissions, packets, agentInstall];
+
+  assert.equal(manifest.name, "ai.certscore/mcp-light");
+  assert.equal(manifest.title, "CertScore.ai MCP Light");
+  assert.equal(manifest.version, CERTSCORE_MCP_VERSION);
+  assert.equal(manifest.websiteUrl, "https://certscore.ai/mcp/light");
+  assert.deepEqual(manifest.remotes, [{ type: "streamable-http", url: "https://mcp.certscore.ai/mcp/light" }]);
+  assert.equal(manifest.repository?.url, "https://github.com/ergoveritas1-alt/certscore.ai");
+  assert.equal(manifest.repository?.subfolder, "packages/certscore-mcp");
+  assert.deepEqual(manifest.icons, [
+    {
+      src: "https://certscore.ai/certscore-mark-dark.png",
+      mimeType: "image/png",
+      sizes: ["512x512"],
+      theme: "light"
+    },
+    {
+      src: "https://certscore.ai/certscore-mark-light.png",
+      mimeType: "image/png",
+      sizes: ["512x512"],
+      theme: "dark"
+    }
+  ]);
+  assert.match(manifest.description ?? "", /^Free website privacy scanner/);
+
+  for (const source of publicCopy) {
+    assert.match(source, /CertScore\.ai MCP Light/);
+    assert.match(source, /ai\.certscore\/mcp-light/);
+    assert.match(source, /https:\/\/mcp\.certscore\.ai\/mcp\/light/);
+    assert.match(source, /Streamable HTTP/);
+    assert.match(source, /Authentication: none|Authentication \| None/i);
+    assert.match(source, /50 genuinely new scans per UTC day/);
+    assert.match(source, /5-new-scan rolling 10-minute/);
+    assert.match(source, /does not consume (?:the )?new-scan allowance|reuse does not consume (?:the )?(?:new-scan allowance|quota)/i);
+    assert.match(source, /certscore_scan_site/);
+    assert.match(source, /certscore_get_scan_status/);
+    assert.match(source, /certscore_get_scan_bundle/);
+    assert.match(source, /not legal advice, certification, or a compliance determination/i);
+  }
+});
+
+test("marketplace and public icon PNGs use the canonical faceted CertScore mark", () => {
+  const icon = readFileSync(new URL("../../../apps/web/public/images/mcp-directory/certscore-mcp-light-cline-400.png", import.meta.url));
+  const canonical256 = readFileSync(new URL("../../../certscore_logo_assets/certscore_logo_256.png", import.meta.url));
+  const canonical512 = readFileSync(new URL("../../../certscore_logo_assets/certscore_logo_512.png", import.meta.url));
+  const favicon = readFileSync(new URL("../../../apps/web/public/favicon.png", import.meta.url));
+  const markDark = readFileSync(new URL("../../../apps/web/public/certscore-mark-dark.png", import.meta.url));
+  const markLight = readFileSync(new URL("../../../apps/web/public/certscore-mark-light.png", import.meta.url));
+  const header = readFileSync(new URL("../../../apps/web/public/certscore-header-logo.png", import.meta.url));
+
+  assert.deepEqual([...icon.subarray(0, 8)], [137, 80, 78, 71, 13, 10, 26, 10]);
+  assert.equal(icon.readUInt32BE(16), 400);
+  assert.equal(icon.readUInt32BE(20), 400);
+  assert.deepEqual(favicon, canonical256);
+  assert.deepEqual(markDark, canonical512);
+  assert.deepEqual(markLight, canonical512);
+  assert.deepEqual(header, canonical512);
+});
+
+test("Cline and Kilo submission assets use their explicit Streamable HTTP schemas", () => {
+  const agentInstall = readFileSync(new URL("../../../llms-install.md", import.meta.url), "utf8");
+  const kilo = readFileSync(new URL("../../../integrations/kilo-code/certscore-mcp-light/MCP.yaml", import.meta.url), "utf8");
+
+  assert.match(agentInstall, /"type": "streamableHttp"/);
+  assert.match(agentInstall, /"autoApprove": \[\]/);
+  assert.match(agentInstall, /"type": "remote"/);
+  assert.match(kilo, /^id: certscore-mcp-light$/m);
+  assert.match(kilo, /^name: CertScore\.ai MCP Light$/m);
+  assert.match(kilo, /^category: web-automation$/m);
+  assert.match(kilo, /"type": "streamable-http"/);
+  assert.match(kilo, /"url": "https:\/\/mcp\.certscore\.ai\/mcp\/light"/);
+  assert.doesNotMatch(kilo, /Authorization|API_KEY|token|secret/i);
+});
+
+test("Claude Code Light plugin preserves the remote three-tool workflow", () => {
+  const plugin = JSON.parse(readFileSync(new URL("../../../integrations/claude-code/certscore-mcp-light/.claude-plugin/plugin.json", import.meta.url), "utf8")) as {
+    name?: string;
+    version?: string;
+  };
+  const mcp = JSON.parse(readFileSync(new URL("../../../integrations/claude-code/certscore-mcp-light/.mcp.json", import.meta.url), "utf8")) as {
+    mcpServers?: Record<string, { type?: string; url?: string }>;
+  };
+  const skill = readFileSync(new URL("../../../integrations/claude-code/certscore-mcp-light/skills/privacy-scan/SKILL.md", import.meta.url), "utf8");
+  const marketplace = JSON.parse(readFileSync(new URL("../../../.claude-plugin/marketplace.json", import.meta.url), "utf8")) as {
+    plugins?: Array<{ name?: string; source?: string }>;
+  };
+
+  assert.equal(plugin.name, "certscore-mcp-light");
+  assert.equal(plugin.version, CERTSCORE_MCP_VERSION);
+  assert.deepEqual(mcp.mcpServers, {
+    certscore: { type: "http", url: "https://mcp.certscore.ai/mcp/light" }
+  });
+  assert.deepEqual(marketplace.plugins?.map(({ name, source }) => ({ name, source })), [{
+    name: "certscore-mcp-light",
+    source: "./integrations/claude-code/certscore-mcp-light"
+  }]);
+  for (const tool of ["certscore_scan_site", "certscore_get_scan_status", "certscore_get_scan_bundle"]) {
+    assert.match(skill, new RegExp(tool));
+  }
+  assert.match(skill, /queued.*running.*finalizing/s);
+  assert.match(skill, /completed.*completed_limited.*failed.*expired.*rate_limited/s);
+  assert.match(skill, /not legal advice, certification, or a compliance determination/i);
+  assert.doesNotMatch(skill, /hook|autonomous/i);
+});
+
 test("doctor reports healthy API and missing API key without failing", async () => {
   const fetchCalls: string[] = [];
   const result = await getCertScoreMcpDoctorReport({

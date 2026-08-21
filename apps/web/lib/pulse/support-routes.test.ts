@@ -567,6 +567,8 @@ test("Light MCP onboarding is no-auth, copyable, and agent-complete", () => {
   assert.doesNotMatch(fullMcpPage, /Pass jobId only before a stable scanId is available/);
   assert.doesNotMatch(lightPage, /jobId/);
   assert.match(lightActions, /placeholder="https:\/\/ergoveritas\.com\/\.well-known\/certscore-canary\/sentinels\/broad-baseline\.html"/);
+  assert.match(lightActions, /separate anonymous API allowance of 20 new scans per requester IP per UTC day/);
+  assert.match(lightActions, /eligible recent-result reuse does not consume that allowance/);
 
   for (const source of [lightPage, fullMcpPage, readme, llms, llmsFull]) {
     for (const label of ["Light MCP — no authentication", "Hosted MCP — OAuth", "Local MCP — scoped API key"]) {
@@ -705,7 +707,7 @@ test("Developer API docs are discoverable by crawlers and agent manifests", asyn
   assert.equal(aiDiscovery.mcp.packageStatus, "homebrew_developer_preview");
   assert.equal(aiDiscovery.mcp.currentVersion, "0.2.12");
   assert.equal(aiDiscovery.mcp.hosted.endpoint, "https://mcp.certscore.ai/mcp");
-  assert.equal(aiDiscovery.mcp.hosted.currentVersion, "0.2.12");
+  assert.equal(aiDiscovery.mcp.hosted.currentVersion, "0.2.15");
   assert.match(aiDiscovery.mcp.hosted.authentication, /PKCE/);
   assert.equal(aiDiscovery.mcp.anonymous.endpoint, "https://mcp.certscore.ai/mcp/anonymous");
   assert.equal(aiDiscovery.mcp.anonymous.authentication, "none");
@@ -714,7 +716,20 @@ test("Developer API docs are discoverable by crawlers and agent manifests", asyn
   assert.equal(aiDiscovery.mcp.anonymous.recentReuseDoesNotConsumeQuota, true);
   assert.equal(aiDiscovery.mcp.light.endpoint, "https://mcp.certscore.ai/mcp/light");
   assert.equal(aiDiscovery.mcp.light.authentication, "none");
-  assert.equal(aiDiscovery.mcp.light.dailyNewScanLimit, 20);
+  assert.equal(aiDiscovery.mcp.light.registryName, "ai.certscore/mcp-light");
+  assert.equal(aiDiscovery.mcp.light.dailyNewScanLimit, 50);
+  assert.equal(aiDiscovery.mcp.light.limitKey, "requester_and_public_light_surface_utc_day");
+  assert.equal(aiDiscovery.mcp.light.rollingNewScanLimit, 5);
+  assert.equal(aiDiscovery.mcp.light.rollingWindowSeconds, 600);
+  assert.equal(aiDiscovery.mcp.light.recentReuseDoesNotConsumeQuota, true);
+  assert.equal(aiDiscovery.mcp.light.version, "0.2.15");
+  assert.equal(aiDiscovery.mcp.light.privacyUrl, "https://certscore.ai/privacy");
+  assert.equal(aiDiscovery.mcp.light.termsUrl, "https://certscore.ai/terms");
+  assert.equal(aiDiscovery.mcp.light.iconUrl, "https://certscore.ai/certscore-mark-dark.png");
+  assert.equal(aiDiscovery.mcp.light.darkBackgroundIconUrl, "https://certscore.ai/certscore-mark-light.png");
+  assert.equal(aiDiscovery.mcp.light.clineMarketplaceIconUrl, "https://certscore.ai/images/mcp-directory/certscore-mcp-light-cline-400.png");
+  assert.match(aiDiscovery.mcp.light.shortDescription, /^Free website privacy scanner/);
+  assert.match(aiDiscovery.mcp.light.longDescription, /not legal advice, certification, or a compliance determination/);
   assert.deepEqual(aiDiscovery.mcp.light.tools, ["certscore_scan_site", "certscore_get_scan_status", "certscore_get_scan_bundle"]);
   assert.equal(
     aiDiscovery.mcp.install,

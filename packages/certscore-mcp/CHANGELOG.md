@@ -1,5 +1,10 @@
 # certscore-mcp
 
+## Unreleased
+
+- Align MCP Light public metadata with the implemented 50-new-scan-per-UTC-day shared/requester policy and separate the 20-scan anonymous REST API allowance.
+- Add registry-ready Light identity, icon metadata, installation guidance, marketplace copy, and a minimal Claude Code plugin package without changing the MCP tool contract.
+
 ## 0.2.15
 
 - Reserve the first compact finding in both `findings` and `evidence` modes before optional summary, link, coverage, and evidence detail.

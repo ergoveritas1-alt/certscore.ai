@@ -1,14 +1,29 @@
 {
   "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
   "name": "ai.certscore/mcp-light",
-  "title": "CertScore.ai — Light mode",
-  "description": "No-account public website risk-signal scans with up to 50 new scans/day across Light, burst protection, and free recent-result reuse.",
+  "title": "CertScore.ai MCP Light",
+  "description": "Free website privacy scanner for pre-consent cookies, trackers, consent, policy, and HTTPS/TLS.",
   "status": "active",
   "repository": {
     "url": "https://github.com/ergoveritas1-alt/certscore.ai",
-    "source": "github"
+    "source": "github",
+    "subfolder": "packages/certscore-mcp"
   },
   "websiteUrl": "https://certscore.ai/mcp/light",
+  "icons": [
+    {
+      "src": "https://certscore.ai/certscore-mark-dark.png",
+      "mimeType": "image/png",
+      "sizes": ["512x512"],
+      "theme": "light"
+    },
+    {
+      "src": "https://certscore.ai/certscore-mark-light.png",
+      "mimeType": "image/png",
+      "sizes": ["512x512"],
+      "theme": "dark"
+    }
+  ],
   "version": "0.2.15",
   "remotes": [
     {

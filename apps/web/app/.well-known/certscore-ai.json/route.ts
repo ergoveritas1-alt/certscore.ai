@@ -2,7 +2,7 @@ import { API_READ_RATE_POLICY_OPENAPI_EXTENSION } from "@website-signal-risk-sca
 
 const discoveryDocument = {
   name: "CertScore AI and API discovery",
-  version: "2026-07-15",
+  version: "2026-08-21",
   type: "certscore_ai_discovery",
   description:
     "Vendor-neutral discovery document for CertScore public API, SDK, MCP, OpenAPI, and agent-readable documentation.",
@@ -109,18 +109,30 @@ const discoveryDocument = {
       protectedResourceMetadata: "https://mcp.certscore.ai/.well-known/oauth-protected-resource",
       authorizationServerMetadata: "https://certscore.ai/.well-known/oauth-authorization-server",
       authentication: "OAuth 2.0 authorization code with PKCE",
-      currentVersion: "0.2.12"
+      currentVersion: "0.2.15"
     },
     light: {
-      name: "CertScore.ai — Light mode",
+      name: "CertScore.ai MCP Light",
+      registryName: "ai.certscore/mcp-light",
+      shortDescription: "Free website privacy scanner to detect pre-consent cookies and trackers, CMP and consent controls, privacy policy, GDPR/ePrivacy and CCPA, and HTTPS/TLS signals.",
+      longDescription: "Free website privacy scanner and cookie checker for public websites. Detect pre-consent cookies and trackers, third-party tracking technologies, cookie banners, CMP and consent-management signals, privacy-policy and transparency findings, GDPR/ePrivacy and CCPA/CPRA review signals, and HTTPS/TLS transport observations. Give CertScore.ai a public website to collect structured, evidence-backed privacy findings for launch review, vendor review, audit triage, or human compliance review. Results include a CertScore score and supporting evidence for human and agentic review; they are not legal advice, certification, or a compliance determination.",
       landingPage: "https://certscore.ai/mcp/light",
       directoryListing: "https://smithery.ai/server/ben-qe1c/certscore-ai",
       transport: "streamable_http",
       endpoint: "https://mcp.certscore.ai/mcp/light",
       authentication: "none",
-      dailyNewScanLimit: 20,
-      limitKey: "requester_ip_utc_day",
+      dailyNewScanLimit: 50,
+      limitKey: "requester_and_public_light_surface_utc_day",
+      rollingNewScanLimit: 5,
+      rollingWindowSeconds: 600,
       recentReuseDoesNotConsumeQuota: true,
+      privacyUrl: "https://certscore.ai/privacy",
+      termsUrl: "https://certscore.ai/terms",
+      supportUrl: "https://certscore.ai/contact",
+      iconUrl: "https://certscore.ai/certscore-mark-dark.png",
+      darkBackgroundIconUrl: "https://certscore.ai/certscore-mark-light.png",
+      clineMarketplaceIconUrl: "https://certscore.ai/images/mcp-directory/certscore-mcp-light-cline-400.png",
+      version: "0.2.15",
       tools: ["certscore_scan_site", "certscore_get_scan_status", "certscore_get_scan_bundle"],
       intendedUse: "Frictionless no-account public website scans for new and low-volume agents."
     },
