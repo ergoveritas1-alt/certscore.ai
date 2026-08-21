@@ -158,6 +158,9 @@ test("regional scanner dispatch is durable, deduplicated, and production-wired",
   assert.match(scannerModule, /batch_size\s+=\s+1/);
   assert.match(scannerModule, /resource "aws_cloudwatch_metric_alarm" "dispatch_dlq"/);
   assert.match(scannerRoot, /Sid\s+=\s+"ConsumeRegionalScannerDispatches"/);
+  assert.match(scannerRoot, /Sid\s+=\s+"ListRetainedEvidencePrefix"/);
+  assert.match(scannerRoot, /Action\s+=\s+\["s3:ListBucket"\]/);
+  assert.match(scannerRoot, /"s3:prefix"\s+=\s+\["\$\{trimsuffix\(var\.artifact_prefix, "\/"\)\}\/\*"\]/);
   assert.match(validation, /Sid\s+=\s+"PublishRegionalV2DagLambdaDispatches"/);
   assert.match(validation, /CERTSCORE_V2_DAG_LAMBDA_DISPATCH_PUBLISH_ENABLED/);
   assert.match(validationWorkflow, /VALIDATION_WORKER_LAMBDA_DISPATCH_PUBLISH_ENABLED: "1"/);

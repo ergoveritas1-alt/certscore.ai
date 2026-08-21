@@ -96,6 +96,20 @@ resource "aws_iam_role_policy" "scanner" {
         ]
       },
       {
+        Sid    = "ListRetainedEvidencePrefix"
+        Effect = "Allow"
+        Action = ["s3:ListBucket"]
+        Resource = [
+          for bucket in values(local.artifact_buckets) :
+          "arn:aws:s3:::${bucket}"
+        ]
+        Condition = {
+          StringLike = {
+            "s3:prefix" = ["${trimsuffix(var.artifact_prefix, "/")}/*"]
+          }
+        }
+      },
+      {
         Sid    = "InvokeScannerShards"
         Effect = "Allow"
         Action = ["lambda:InvokeFunction"]
