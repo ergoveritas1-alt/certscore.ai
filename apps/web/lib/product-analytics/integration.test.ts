@@ -65,6 +65,30 @@ test("event trend rows use the timestamp bucket as their React identity", async 
   assert.doesNotMatch(analyticsPage, /key=\{point\.bucket\}/);
 });
 
+test("admin analytics defaults to 24 hours and offers a five-minute-bucketed last-hour view", async () => {
+  const adminEvents = await readFile(new URL("apps/web/server/admin/product-analytics.ts", root), "utf8");
+  const analyticsPage = await readFile(new URL("apps/web/app/app/admin/analytics/page.tsx", root), "utf8");
+  assert.match(adminEvents, /"1h": \{ interval: "1 hour", bucket: "5 minutes"/);
+  assert.match(analyticsPage, /option\(resolved\.period, periods\) \?\? "24h"/);
+  assert.match(analyticsPage, /<option value="1h">Last hour<\/option><option value="24h">Last 24 hours<\/option>/);
+});
+
+test("admin event rows project compact request context from already-retained telemetry", async () => {
+  const adminEvents = await readFile(new URL("apps/web/server/admin/product-analytics.ts", root), "utf8");
+  const analyticsPage = await readFile(new URL("apps/web/app/app/admin/analytics/page.tsx", root), "utf8");
+  for (const field of ["origin_ip", "origin_ip_hash", "freshness", "request_region", "duration_ms"]) {
+    assert.match(adminEvents, new RegExp(`events\\.${field}`));
+  }
+  assert.match(adminEvents, /to_jsonb\(events\) ->> 'requester_ip'/);
+  assert.match(adminEvents, /request_context ->> 'sourceIp'/);
+  assert.match(analyticsPage, />Time<\/th>/);
+  assert.match(analyticsPage, />Page \/ feature<\/th>/);
+  assert.match(analyticsPage, />Origin<\/th>/);
+  assert.match(analyticsPage, />Request<\/th>/);
+  assert.match(analyticsPage, /table-fixed/);
+  assert.match(analyticsPage, /formatAdminCompactDateTime/);
+});
+
 test("authenticated app requests receive a deduplicated server event identity", async () => {
   const middleware = await readFile(new URL("apps/web/middleware.ts", root), "utf8");
   const layout = await readFile(new URL("apps/web/app/app/layout.tsx", root), "utf8");

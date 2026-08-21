@@ -22,6 +22,17 @@ export type MacMiniScanBotFilterParams = {
   scanBotFilter?: string;
 };
 
+export type InternalAnalyticsFilterParams = {
+  audienceFilters?: string;
+  excludeInternal?: string;
+};
+
+export function resolveExcludeInternalAnalytics(params: InternalAnalyticsFilterParams) {
+  return params.audienceFilters === "1"
+    ? params.excludeInternal === "1"
+    : true;
+}
+
 export function resolveExcludeMacMiniScanBot(params: MacMiniScanBotFilterParams) {
   return params.scanBotFilter === "1"
     ? params.excludeMacMiniScanBot === "1"

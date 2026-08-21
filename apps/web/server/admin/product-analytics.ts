@@ -1,10 +1,14 @@
 import "server-only";
 
 import { query, queryOne } from "@website-signal-risk-scanner/db";
-import { MAC_MINI_SCAN_BOT_API_KEY_NAMES } from "../../lib/admin/mac-mini-scan-bot";
-import { requirePlatformAdminContext } from "./platform-admin";
+import {
+  MAC_MINI_SCAN_BOT_API_KEY_NAMES,
+  MAC_MINI_SCAN_BOT_MCP_CLIENT_NAMES,
+  MAC_MINI_SCAN_BOT_REQUESTER_IPS
+} from "../../lib/admin/mac-mini-scan-bot";
+import { getPlatformAdminEmails, requirePlatformAdminContext } from "./platform-admin";
 
-export type ProductAnalyticsPeriod = "24h" | "7d" | "30d" | "90d";
+export type ProductAnalyticsPeriod = "1h" | "24h" | "7d" | "30d" | "90d";
 export type ProductAnalyticsEventName = "page_viewed" | "navigation_clicked" | "action_clicked" | "form_started" | "form_submitted" | "form_succeeded" | "form_failed" | "scan_started" | "scan_completed" | "scan_viewed" | "report_viewed" | "scroll_depth_reached" | "session_engaged" | "web_vital_recorded" | "client_error" | "account_created" | "analytics_opted_in" | "analytics_opted_out";
 export type AdminEventName = ProductAnalyticsEventName | "scan_requested" | "api_request" | "mcp_tool_invoked" | "full_scan.started" | "full_scan.completed" | "preview_scan.started" | "preview_scan.completed" | "v2_lambda_result.received" | "v2_lambda_result.failed";
 export type ProductAnalyticsOutcome = "observed" | "started" | "submitted" | "success" | "failure" | "opted_in" | "opted_out";
@@ -12,6 +16,7 @@ export const ADMIN_EVENT_ROUTES = ["Web", "API", "Pulse", "SDK", "MCP", "Other"]
 export type AdminEventRoute = (typeof ADMIN_EVENT_ROUTES)[number];
 
 const PERIODS = {
+  "1h": { interval: "1 hour", bucket: "5 minutes", label: "Last hour", format: "HH24:MI" },
   "24h": { interval: "24 hours", bucket: "1 hour", label: "Last 24 hours", format: "HH24:00" },
   "7d": { interval: "7 days", bucket: "1 day", label: "Last 7 days", format: "Mon DD" },
   "30d": { interval: "30 days", bucket: "1 day", label: "Last 30 days", format: "Mon DD" },
@@ -29,6 +34,7 @@ export type ProductAnalyticsRecentEvent = {
   consent_state: string;
   country_code: string | null;
   device_class: string;
+  duration_ms: number | null;
   email: string | null;
   event_id: string;
   event_name: string;
@@ -37,7 +43,11 @@ export type ProductAnalyticsRecentEvent = {
   hostname: string | null;
   normalized_route: string;
   occurred_at: string;
+  origin_ip: string | null;
+  origin_ip_hash: string | null;
   outcome: string;
+  request_region: string | null;
+  freshness: string | null;
   scan_id: string | null;
   session_id: string | null;
   source: string;
@@ -73,11 +83,27 @@ function operationalEndpointSql(route: string) {
   end)`;
 }
 
-function unifiedEventsCte(intervalParameter = "$1", macMiniApiKeyNamesParameter = "$2") {
+function unifiedEventsCte(
+  intervalParameter = "$1",
+  macMiniApiKeyNamesParameter = "$2",
+  macMiniMcpClientNamesParameter = "$3",
+  macMiniRequesterIpsParameter = "$4",
+  platformAdminEmailsParameter = "$5"
+) {
   const scanRequestRoute = eventRouteSql("requests.request_channel", "requests.request_context ->> 'source'");
   const pulseRoute = eventRouteSql("requests.request_channel", "coalesce(requests.request_context ->> 'source', requests.request_context ->> 'channel')");
   const scanEventRoute = eventRouteSql("coalesce(attribution.request_channel, scans.scan_config_json ->> 'source')", "attribution.request_source");
-  return `with mac_mini_scan_bot_keys as (
+  return `with platform_admin_users as (
+    select users.id::text as user_id
+      from public.users
+     where lower(users.email) = any(${platformAdminEmailsParameter}::text[])
+  ), platform_admin_api_keys as (
+    select keys.public_id
+      from public.integration_api_keys keys
+      left join platform_admin_users admins on admins.user_id = keys.owner_user_id::text
+     where (admins.user_id is not null or lower(coalesce(keys.created_by, '')) = any(${platformAdminEmailsParameter}::text[]))
+       and keys.name <> all(${macMiniApiKeyNamesParameter}::text[])
+  ), mac_mini_scan_bot_keys as (
     select public_id
       from public.integration_api_keys
      where name = any(${macMiniApiKeyNamesParameter}::text[])
@@ -96,13 +122,21 @@ function unifiedEventsCte(intervalParameter = "$1", macMiniApiKeyNamesParameter 
   ), request_attribution as (
     select distinct on (attributed.scan_id)
            attributed.scan_id, attributed.request_channel, attributed.request_source,
-           attributed.user_id, attributed.requested_at
+           attributed.user_id, attributed.requested_at, attributed.origin_ip, attributed.origin_ip_hash,
+           attributed.freshness, attributed.request_region, attributed.is_staff
       from (
         select requests.scan_id,
                requests.request_channel,
                coalesce(requests.request_context ->> 'source', requests.request_context ->> 'channel') as request_source,
                case when requests.requested_by ->> 'userId' ~* '^[0-9a-f-]{36}$' then requests.requested_by ->> 'userId' end as user_id,
-               requests.requested_at
+               requests.requested_at,
+               coalesce(nullif(requests.request_context ->> 'sourceIp', ''), nullif(requests.request_context -> 'provenance' ->> 'sourceIp', ''), nullif(requests.requested_by ->> 'sourceIp', '')) as origin_ip,
+               coalesce(nullif(requests.request_context ->> 'ipHash', ''), nullif(requests.request_context ->> 'originIp', ''), nullif(requests.request_context -> 'provenance' ->> 'ipHash', ''), nullif(requests.request_context -> 'provenance' ->> 'originIp', ''), nullif(requests.requested_by ->> 'ipHash', '')) as origin_ip_hash,
+               case when requests.resolution_mode = 'reused_existing_scan' then 'reused'
+                    else coalesce(nullif(requests.request_context ->> 'freshness', ''), 'latest') end as freshness,
+               coalesce(nullif(requests.request_context ->> 'scanFrom', ''), nullif(requests.request_context -> 'provenance' ->> 'scanFrom', '')) as request_region,
+               (exists (select 1 from platform_admin_users admins where admins.user_id = requests.requested_by ->> 'userId')
+                or exists (select 1 from platform_admin_api_keys keys where keys.public_id = requests.requested_by ->> 'apiKeyId')) as is_staff
           from public.pulse_requests requests
          where requests.scan_id is not null
            and requests.requested_at >= now() - ${intervalParameter}::interval - interval '1 day'
@@ -111,7 +145,15 @@ function unifiedEventsCte(intervalParameter = "$1", macMiniApiKeyNamesParameter 
                requests.request_channel,
                requests.request_context ->> 'source' as request_source,
                case when requests.requested_by ->> 'userId' ~* '^[0-9a-f-]{36}$' then requests.requested_by ->> 'userId' end as user_id,
-               requests.requested_at
+               requests.requested_at,
+               coalesce(nullif(requests.request_context ->> 'sourceIp', ''), nullif(requests.request_context -> 'provenance' ->> 'sourceIp', ''), nullif(requests.requested_by ->> 'sourceIp', '')) as origin_ip,
+               coalesce(nullif(requests.request_context ->> 'ipHash', ''), nullif(requests.request_context ->> 'originIp', ''), nullif(requests.request_context -> 'provenance' ->> 'ipHash', ''), nullif(requests.request_context -> 'provenance' ->> 'originIp', ''), nullif(requests.requested_by ->> 'ipHash', '')) as origin_ip_hash,
+               case when requests.resolution_mode = 'reused_existing_scan' then 'reused'
+                    when requests.request_context ->> 'bypassRecentScanReuse' = 'true' then 'refresh'
+                    else coalesce(nullif(requests.request_context ->> 'freshness', ''), 'latest') end as freshness,
+               coalesce(nullif(requests.request_context ->> 'scanFrom', ''), nullif(requests.request_context -> 'provenance' ->> 'scanFrom', '')) as request_region,
+               (exists (select 1 from platform_admin_users admins where admins.user_id = requests.requested_by ->> 'userId')
+                or exists (select 1 from platform_admin_api_keys keys where keys.public_id = requests.requested_by ->> 'apiKeyId')) as is_staff
           from public.scan_requests requests
          where coalesce(requests.scan_id, requests.fulfilled_by_scan_id) is not null
            and requests.requested_at >= now() - ${intervalParameter}::interval - interval '1 day'
@@ -137,7 +179,12 @@ function unifiedEventsCte(intervalParameter = "$1", macMiniApiKeyNamesParameter 
            events.is_bot,
            false as is_mac_mini_scan_bot,
            null::text as target_hostname,
-           'web_event'::text as source
+           'web_event'::text as source,
+           null::text as origin_ip,
+           null::text as origin_ip_hash,
+           null::text as freshness,
+           null::text as request_region,
+           events.duration_ms
       from public.product_analytics_events events
      where events.occurred_at >= now() - ${intervalParameter}::interval
 
@@ -160,12 +207,20 @@ function unifiedEventsCte(intervalParameter = "$1", macMiniApiKeyNamesParameter 
            'server'::text as device_class,
            null::text as country_code,
            requests.requested_by ? 'userId' as is_authenticated,
-           false as is_staff,
+           (exists (select 1 from platform_admin_users admins where admins.user_id = requests.requested_by ->> 'userId')
+            or exists (select 1 from platform_admin_api_keys keys where keys.public_id = requests.requested_by ->> 'apiKeyId')) as is_staff,
            false as is_bot,
            (exists (select 1 from mac_mini_scan_bot_keys keys where keys.public_id = requests.requested_by ->> 'apiKeyId')
              or exists (select 1 from mac_mini_scan_bot_scans bot_scans where bot_scans.scan_id = coalesce(requests.scan_id, requests.fulfilled_by_scan_id))) as is_mac_mini_scan_bot,
            requests.normalized_domain as target_hostname,
-           'scan_request'::text as source
+           'scan_request'::text as source,
+           coalesce(nullif(requests.request_context ->> 'sourceIp', ''), nullif(requests.request_context -> 'provenance' ->> 'sourceIp', ''), nullif(requests.requested_by ->> 'sourceIp', '')) as origin_ip,
+           coalesce(nullif(requests.request_context ->> 'ipHash', ''), nullif(requests.request_context ->> 'originIp', ''), nullif(requests.request_context -> 'provenance' ->> 'ipHash', ''), nullif(requests.request_context -> 'provenance' ->> 'originIp', ''), nullif(requests.requested_by ->> 'ipHash', '')) as origin_ip_hash,
+           case when requests.resolution_mode = 'reused_existing_scan' then 'reused'
+                when requests.request_context ->> 'bypassRecentScanReuse' = 'true' then 'refresh'
+                else coalesce(nullif(requests.request_context ->> 'freshness', ''), 'latest') end as freshness,
+           coalesce(nullif(requests.request_context ->> 'scanFrom', ''), nullif(requests.request_context -> 'provenance' ->> 'scanFrom', '')) as request_region,
+           null::integer as duration_ms
       from public.scan_requests requests
      where requests.requested_at >= now() - ${intervalParameter}::interval
 
@@ -188,11 +243,18 @@ function unifiedEventsCte(intervalParameter = "$1", macMiniApiKeyNamesParameter 
            'server'::text as device_class,
            null::text as country_code,
            requests.requested_by ? 'userId' as is_authenticated,
-           false as is_staff,
+           (exists (select 1 from platform_admin_users admins where admins.user_id = requests.requested_by ->> 'userId')
+            or exists (select 1 from platform_admin_api_keys keys where keys.public_id = requests.requested_by ->> 'apiKeyId')) as is_staff,
            false as is_bot,
            exists (select 1 from mac_mini_scan_bot_keys keys where keys.public_id = requests.requested_by ->> 'apiKeyId') as is_mac_mini_scan_bot,
            requests.normalized_domain as target_hostname,
-           'api_request'::text as source
+           'api_request'::text as source,
+           coalesce(nullif(requests.request_context ->> 'sourceIp', ''), nullif(requests.request_context -> 'provenance' ->> 'sourceIp', ''), nullif(requests.requested_by ->> 'sourceIp', '')) as origin_ip,
+           coalesce(nullif(requests.request_context ->> 'ipHash', ''), nullif(requests.request_context ->> 'originIp', ''), nullif(requests.request_context -> 'provenance' ->> 'ipHash', ''), nullif(requests.request_context -> 'provenance' ->> 'originIp', ''), nullif(requests.requested_by ->> 'ipHash', '')) as origin_ip_hash,
+           case when requests.resolution_mode = 'reused_existing_scan' then 'reused'
+                else coalesce(nullif(requests.request_context ->> 'freshness', ''), 'latest') end as freshness,
+           coalesce(nullif(requests.request_context ->> 'scanFrom', ''), nullif(requests.request_context -> 'provenance' ->> 'scanFrom', '')) as request_region,
+           null::integer as duration_ms
       from public.pulse_requests requests
      where requests.requested_at >= now() - ${intervalParameter}::interval
 
@@ -213,15 +275,24 @@ function unifiedEventsCte(intervalParameter = "$1", macMiniApiKeyNamesParameter 
            'server'::text as device_class,
            null::text as country_code,
            events.auth_class = 'authenticated' as is_authenticated,
-           false as is_staff,
+           coalesce(attribution.is_staff, false) as is_staff,
            false as is_bot,
-           exists (
+           (exists (
              select 1 from mac_mini_scan_bot_scans bot_scans
               where bot_scans.scan_id = case when events.scan_id ~* '^[0-9a-f-]{36}$' then events.scan_id::uuid end
-           ) as is_mac_mini_scan_bot,
+           )
+           or lower(coalesce(to_jsonb(events) ->> 'client_name', '')) = any(${macMiniMcpClientNamesParameter}::text[])
+           or coalesce(to_jsonb(events) ->> 'requester_ip', '') = any(${macMiniRequesterIpsParameter}::text[])) as is_mac_mini_scan_bot,
            events.target_hostname,
-           'mcp_tool'::text as source
+           'mcp_tool'::text as source,
+           coalesce(nullif(to_jsonb(events) ->> 'requester_ip', ''), attribution.origin_ip) as origin_ip,
+           coalesce(nullif(to_jsonb(events) ->> 'requester_ip_hash', ''), attribution.origin_ip_hash) as origin_ip_hash,
+           events.freshness,
+           coalesce(events.scan_from, attribution.request_region) as request_region,
+           events.duration_ms
       from public.mcp_tool_invocation_events events
+      left join request_attribution attribution
+        on attribution.scan_id = case when events.scan_id ~* '^[0-9a-f-]{36}$' then events.scan_id::uuid end
      where events.occurred_at >= now() - ${intervalParameter}::interval
 
     union all
@@ -243,11 +314,16 @@ function unifiedEventsCte(intervalParameter = "$1", macMiniApiKeyNamesParameter 
            'server'::text as device_class,
            null::text as country_code,
            attribution.user_id is not null as is_authenticated,
-           false as is_staff,
+           coalesce(attribution.is_staff, false) as is_staff,
            false as is_bot,
            exists (select 1 from mac_mini_scan_bot_scans bot_scans where bot_scans.scan_id = events.scan_id) as is_mac_mini_scan_bot,
            domains.hostname as target_hostname,
-           'scan_lifecycle'::text as source
+           'scan_lifecycle'::text as source,
+           attribution.origin_ip,
+           attribution.origin_ip_hash,
+           attribution.freshness,
+           attribution.request_region,
+           null::integer as duration_ms
       from public.scan_events events
       left join request_attribution attribution on attribution.scan_id = events.scan_id
       left join public.scans scans on scans.id = events.scan_id
@@ -261,11 +337,29 @@ function number(value: Count) {
   return Number.isFinite(parsed) ? parsed : 0;
 }
 
+function unifiedEventQueryValues(interval: string): unknown[] {
+  return [
+    interval,
+    MAC_MINI_SCAN_BOT_API_KEY_NAMES,
+    MAC_MINI_SCAN_BOT_MCP_CLIENT_NAMES,
+    MAC_MINI_SCAN_BOT_REQUESTER_IPS,
+    [...getPlatformAdminEmails()]
+  ];
+}
+
+function visibilityClauses(includeInternal: boolean, excludeMacMiniScanBot: boolean) {
+  const clauses: string[] = [];
+  if (!includeInternal) clauses.push("events.is_staff = false");
+  if (excludeMacMiniScanBot) clauses.push("events.is_mac_mini_scan_bot = false");
+  return clauses;
+}
+
 export async function loadProductAnalyticsDashboard(period: ProductAnalyticsPeriod, includeInternal = false, excludeMacMiniScanBot = true) {
   await requirePlatformAdminContext();
   const config = PERIODS[period] ?? PERIODS["24h"];
-  const audience = `${includeInternal ? "" : "and events.is_staff = false"} ${excludeMacMiniScanBot ? "and events.is_mac_mini_scan_bot = false" : ""}`;
+  const audience = visibilityClauses(includeInternal, excludeMacMiniScanBot).map((clause) => `and ${clause}`).join(" ");
   const cte = unifiedEventsCte();
+  const values = unifiedEventQueryValues(config.interval);
   const [summary, trend, routes, features, recent] = await Promise.all([
     queryOne<SummaryRow>(
       `${cte}
@@ -279,7 +373,7 @@ export async function loadProductAnalyticsDashboard(period: ProductAnalyticsPeri
               count(*) filter (where event_name = 'analytics_opted_out') as opted_out
          from unified_events events
         where true ${audience}`,
-      [config.interval, MAC_MINI_SCAN_BOT_API_KEY_NAMES],
+      values,
       { readOnly: true }
     ),
     query<TrendRow>(
@@ -292,7 +386,7 @@ export async function loadProductAnalyticsDashboard(period: ProductAnalyticsPeri
         where true ${audience}
         group by date_bin(interval '${config.bucket}', occurred_at, timestamptz '2001-01-01')
         order by min(occurred_at) asc`,
-      [config.interval, MAC_MINI_SCAN_BOT_API_KEY_NAMES],
+      values,
       { readOnly: true }
     ),
     query<RouteRow>(
@@ -301,7 +395,7 @@ export async function loadProductAnalyticsDashboard(period: ProductAnalyticsPeri
          from unified_events events
         where true ${audience}
         group by event_route order by events desc`,
-      [config.interval, MAC_MINI_SCAN_BOT_API_KEY_NAMES],
+      values,
       { readOnly: true }
     ),
     query<FeatureRow>(
@@ -310,7 +404,7 @@ export async function loadProductAnalyticsDashboard(period: ProductAnalyticsPeri
          from unified_events events
         where true ${audience}
         group by event_name, feature order by events desc limit 15`,
-      [config.interval, MAC_MINI_SCAN_BOT_API_KEY_NAMES],
+      values,
       { readOnly: true }
     ),
     query<ProductAnalyticsRecentEvent>(
@@ -318,6 +412,8 @@ export async function loadProductAnalyticsDashboard(period: ProductAnalyticsPeri
        select events.event_id, events.occurred_at, events.event_route, events.event_name, events.feature, events.outcome,
               events.normalized_route, events.session_id::text, events.actor_id::text, events.scan_id::text,
               events.consent_state, events.device_class, events.country_code, events.source, users.email,
+              events.origin_ip, events.origin_ip_hash, events.freshness, events.duration_ms,
+              coalesce(events.request_region, scans.scan_config_json ->> 'scanFrom') as request_region,
               coalesce(events.target_hostname, domains.hostname) as hostname
          from unified_events events
          left join public.users on users.id::text = events.user_id
@@ -325,7 +421,7 @@ export async function loadProductAnalyticsDashboard(period: ProductAnalyticsPeri
          left join public.domains on domains.id = scans.domain_id
         where true ${audience}
         order by events.occurred_at desc limit 100`,
-      [config.interval, MAC_MINI_SCAN_BOT_API_KEY_NAMES],
+      values,
       { readOnly: true }
     )
   ]);
@@ -354,10 +450,8 @@ export async function listProductAnalyticsEventsPage(
 ) {
   await requirePlatformAdminContext();
   const config = PERIODS[period] ?? PERIODS["24h"];
-  const values: unknown[] = [config.interval, MAC_MINI_SCAN_BOT_API_KEY_NAMES];
-  const clauses = ["true"];
-  if (!includeInternal) clauses.push("events.is_staff = false");
-  if (excludeMacMiniScanBot) clauses.push("events.is_mac_mini_scan_bot = false");
+  const values = unifiedEventQueryValues(config.interval);
+  const clauses = ["true", ...visibilityClauses(includeInternal, excludeMacMiniScanBot)];
   if (filters.eventName) { values.push(filters.eventName); clauses.push(`events.event_name = $${values.length}`); }
   if (filters.outcome) { values.push(filters.outcome); clauses.push(`events.outcome = $${values.length}`); }
   if (filters.route) { values.push(filters.route); clauses.push(`events.event_route = $${values.length}`); }
@@ -365,7 +459,7 @@ export async function listProductAnalyticsEventsPage(
   if (queryText) {
     values.push(`%${queryText}%`);
     const parameter = `$${values.length}`;
-    clauses.push(`(events.event_route ilike ${parameter} or events.normalized_route ilike ${parameter} or events.feature ilike ${parameter} or events.event_name ilike ${parameter} or events.source ilike ${parameter} or events.session_id::text ilike ${parameter} or events.actor_id::text ilike ${parameter} or users.email ilike ${parameter} or coalesce(events.target_hostname, domains.hostname) ilike ${parameter})`);
+    clauses.push(`(events.event_route ilike ${parameter} or events.normalized_route ilike ${parameter} or events.feature ilike ${parameter} or events.event_name ilike ${parameter} or events.source ilike ${parameter} or events.session_id::text ilike ${parameter} or events.actor_id::text ilike ${parameter} or events.origin_ip ilike ${parameter} or events.origin_ip_hash ilike ${parameter} or events.freshness ilike ${parameter} or events.request_region ilike ${parameter} or users.email ilike ${parameter} or coalesce(events.target_hostname, domains.hostname) ilike ${parameter})`);
   }
   const where = clauses.join(" and ");
   const cte = unifiedEventsCte();
@@ -386,6 +480,8 @@ export async function listProductAnalyticsEventsPage(
        select events.event_id, events.occurred_at, events.event_route, events.event_name, events.feature, events.outcome,
               events.normalized_route, events.session_id::text, events.actor_id::text, events.scan_id::text,
               events.consent_state, events.device_class, events.country_code, events.source, users.email,
+              events.origin_ip, events.origin_ip_hash, events.freshness, events.duration_ms,
+              coalesce(events.request_region, scans.scan_config_json ->> 'scanFrom') as request_region,
               coalesce(events.target_hostname, domains.hostname) as hostname
          from unified_events events
          left join public.users on users.id::text = events.user_id
