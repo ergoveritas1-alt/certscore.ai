@@ -4132,9 +4132,62 @@ test("summarizePolicySurfaces keeps absence coverage insufficient while a materi
   assert.equal(legalBasis?.status, "observed");
   assert.equal(retention?.status, "insufficient_retained_evidence");
   assert.equal(retention?.coverageStatus, "insufficient");
-  assert.deepEqual(retention?.unresolvedPolicyIndexChildUrls, ["https://example.test/privacy/student"]);
+  assert.deepEqual(retention?.unresolvedMaterialPolicyChildUrls, ["https://example.test/privacy/student"]);
   assert.equal(
-    (retention?.reasonCodes as string[]).includes("material_policy_index_children_not_fully_evaluated"),
+    (retention?.reasonCodes as string[]).includes("material_linked_policy_supplements_not_fully_evaluated"),
+    true,
+  );
+});
+
+test("summarizePolicySurfaces keeps absence coverage insufficient while a material supplement from a substantive notice is unresolved", async () => {
+  const { dedupePolicySurfaces, summarizePolicySurfaces } = await loadLocalV2DagReport();
+  const policyText = [
+    "Privacy Notice. Example Institute is the controller for personal information.",
+    "We process personal information for stated purposes and share it with service providers.",
+  ].join(" ").repeat(30);
+  const surfaces = dedupePolicySurfaces([{
+    observationId: "substantive-privacy-notice",
+    surfaceType: "privacy_policy",
+    url: "https://example.test/privacy",
+    status: "fetched",
+    documentRole: "policy_document",
+    textExcerpt: policyText,
+  }] as never, "example.test");
+  const unresolvedSupplement = {
+    observationId: "linked-gdpr-supplement",
+    surfaceType: "privacy_policy",
+    url: "https://example.test/general-data-protection-regulation-notice",
+    normalizedUrl: "https://example.test/general-data-protection-regulation-notice",
+    confidence: 0.9,
+    status: "skipped_budget",
+    documentRole: "policy_document",
+    documentFetchState: "skipped_budget",
+    documentEvaluationState: "not_attempted",
+    traversalDepth: 1,
+    parentObservationId: "substantive-privacy-notice",
+    parentSurfaceUrl: "https://example.test/privacy",
+    selectionReasonCodes: [
+      "linked_from_retained_privacy_surface",
+      "material_gdpr_notice_supplement",
+      "one_hop_policy_document_candidate",
+    ],
+  } as never;
+
+  const summary = summarizePolicySurfaces(surfaces, "example.test", {
+    discoveredPolicySurfaces: [unresolvedSupplement],
+    primaryLanguage: "en",
+  });
+  const retention = (summary.article13CoverageAssessments as Array<Record<string, unknown>>)
+    .find((assessment) => assessment.topic === "data_retention");
+
+  assert.equal(retention?.coverageStatus, "insufficient");
+  assert.equal(retention?.status, "insufficient_retained_evidence");
+  assert.deepEqual(
+    retention?.unresolvedMaterialPolicyChildUrls,
+    ["https://example.test/general-data-protection-regulation-notice"],
+  );
+  assert.equal(
+    (retention?.reasonCodes as string[]).includes("material_linked_policy_supplements_not_fully_evaluated"),
     true,
   );
 });

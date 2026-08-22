@@ -1438,3 +1438,64 @@ test("classifies retained production false-negative wording before projection", 
     assert.equal(topics.has(fixture.topic), true, fixture.topic);
   }
 });
+
+test("classifies Caltech-shaped main-notice and linked GDPR-supplement disclosures", () => {
+  const mainNotice = classifyGdprTransparencyTopics({
+    localeHints: ["en"],
+    text: [
+      "Privacy Notice. This Notice governs how California Institute of Technology collects, uses, processes, discloses and retains personal information.",
+      "How We Use the Information We Collect. We may use information we collect from and about you for the following purposes: operating and improving the sites, providing support, communicating with you, security, analytics, research, and legal compliance.",
+      "How We Share Information. Service Providers. We may share or provide access to your information with service providers that use such information to perform services on our behalf.",
+      "Affiliates. We may share information with our affiliated entities. Third-party partners. We may share information with third parties that support our promotional efforts.",
+      "International Users. Personal data will be transferred from your country of origin to the United States, which may have different data protection laws than your jurisdiction.",
+      "Contact Us. If you have questions about this policy, please contact us via email at privacy@example.test.",
+    ].join(" "),
+  });
+  const mainTopics = new Set(mainNotice.matches.map((match) => match.topic));
+
+  assert.equal(mainTopics.has("controller_contact"), true);
+  assert.equal(mainTopics.has("processing_purposes"), true);
+  assert.equal(mainTopics.has("recipients_or_vendor_categories"), true);
+  assert.equal(mainTopics.has("international_transfers"), true);
+  assert.equal(mainTopics.has("dpo_contact"), false, "generic policy contact must not become a privacy-manager/DPO row");
+
+  const gdprSupplement = classifyGdprTransparencyTopics({
+    localeHints: ["en"],
+    text: [
+      "General Data Protection Regulation Notice.",
+      "Legal Basis. Caltech is required to have a legal basis for collecting personally identifiable information. The basis for our processing includes contract, legitimate interests, legal obligations, and consent.",
+      "Data Retention. We will retain your PII for as long as necessary for the stated uses and legal document retention obligations.",
+      "International Transfers. Data that you provide to us may be transferred to and stored at a destination outside the EU or the EEA.",
+      "Your Rights include the right to request the deletion of your personal data and the right to restrict or limit the ways in which we process your personal data.",
+      "You have the right to withhold consent to automated individual decision-making processes and the right to complain to a supervisory authority.",
+      "To submit a request, please contact Caltech's Privacy Manager at privacy@example.test.",
+    ].join(" "),
+  });
+  const supplementTopics = new Set(gdprSupplement.matches.map((match) => match.topic));
+
+  for (const topic of [
+    "legal_basis",
+    "data_retention",
+    "data_subject_rights",
+    "dpo_contact",
+    "international_transfers",
+    "supervisory_authority",
+    "automated_decision_making_or_profiling",
+  ] satisfies GdprTransparencyTopic[]) {
+    assert.equal(supplementTopics.has(topic), true, topic);
+  }
+});
+
+test("Caltech-shaped purpose and transfer phrases require privacy disclosure context", () => {
+  const classification = classifyGdprTransparencyTopics({
+    localeHints: ["en"],
+    text: [
+      "Operations handbook. How we use the information we collect from equipment for the following purposes: maintenance and inventory planning.",
+      "Inventory may be transferred to and stored at a destination outside the EU or the EEA.",
+    ].join(" "),
+  });
+  const topics = new Set(classification.matches.map((match) => match.topic));
+
+  assert.equal(topics.has("processing_purposes"), false);
+  assert.equal(topics.has("international_transfers"), false);
+});

@@ -7069,8 +7069,10 @@ function buildGdprTransparencyArticle13ConcernOutcome(
       matchedLocale: locale,
       productionCredit: rawEvidence.productionCredit,
       productionCreditProfile: rawEvidence.productionCreditProfile,
+      selectedPolicySectionUrl: sourceUrl,
       selectedEvidenceStrength: rawEvidence.selectedEvidenceStrength,
       source: "normalized_concern",
+      surfaceUrl: sourceUrl,
       status: concern.regulatoryChecklistEligibility === "observed"
         ? "observed"
         : state === "no_match_found"
@@ -8385,9 +8387,17 @@ function derivePolicyDisclosureOutcome(input: GdprEprivacyCoveragePolicyInput, c
   // Once the canonical normalized-concern projection is present, Article 13
   // checklist rows must not fall back to raw signals, retained excerpts, or
   // display-layer text matching. If no production-approved normalized concern
-  // exists, project the canonical neutral no-match result. Retain any rejected
-  // candidate for audit without turning it into an observed or absence finding.
+  // exists, project the canonical neutral not-confirmed result. Retain any
+  // rejected candidate for audit without turning it into an observed or
+  // absence finding. Only a normalized sufficient-coverage absence concern may
+  // project No match found.
   if (config.disclosureType && input.normalizedConcerns !== undefined) {
+    const article13CoverageAssessment = getObjectArray(summary, [
+      "article13CoverageAssessments",
+      "article13_coverage_assessments",
+    ]).find((assessment) =>
+      getString(assessment, ["topic"]) === config.disclosureType
+    ) ?? null;
     const retainedCandidateSource = getPolicyArticle13DisclosureSignals(summary).find((signal) =>
       getString(signal, ["disclosureType", "disclosure_type"]) === config.disclosureType
     );
@@ -8419,12 +8429,13 @@ function derivePolicyDisclosureOutcome(input: GdprEprivacyCoveragePolicyInput, c
       ].filter((value): value is string => Boolean(value)),
       {
         retainedEvidence: {
+          ...(article13CoverageAssessment ? { article13CoverageAssessment } : {}),
           canonicalProjectionState: retainedCandidate
             ? "retained_candidate_not_production_projectable"
             : "normalized_concern_unavailable",
           policyTextExtractionHealth: extractionHealth,
           ...(retainedCandidate ? { retainedCandidate } : {}),
-          signalObserved: "not_located_automatically",
+          signalObserved: "not_confirmed_canonical_projection_unavailable",
         },
       },
     );
@@ -9256,7 +9267,8 @@ function policyEvidenceAssessmentForOutcome(
   const signalObserved = getString(retained, ["signalObserved", "signal_observed"]);
   const extractionIncomplete =
     Boolean(extractionStatus && extractionStatus !== "ok") ||
-    signalObserved === "not_confirmed_extraction_limited";
+    signalObserved === "not_confirmed_extraction_limited" ||
+    signalObserved === "not_confirmed_canonical_projection_unavailable";
   const notLocatedAutomatically =
     outcome.status === "Not confirmed" &&
     !extractionIncomplete;

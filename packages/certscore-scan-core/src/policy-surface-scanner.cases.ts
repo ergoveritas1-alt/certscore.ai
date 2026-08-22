@@ -473,9 +473,113 @@ test("policySurfaceScanner recognizes bounded GDPR notice links from EU/EEA cont
     true,
   );
   assert.equal(
+    isGdprNoticeSupplementLink(
+      "here",
+      "https://caltech.example/general-data-protection-regulation-notice",
+      "If you reside in the European Economic Area, click here for additional information regarding rights and protections.",
+    ),
+    true,
+  );
+  assert.equal(
     isGdprNoticeSupplementLink("About us", "https://example.test/about", "Learn more about our team."),
     false,
   );
+});
+
+test("policySurfaceScanner retains a material GDPR supplement linked from a substantive privacy notice", async () => {
+  const mainBody = [
+    "Privacy Notice. Example Institute collects and uses personal information for specified processing purposes.",
+    "How We Use the Information We Collect. We may use information we collect from and about you for the following purposes: operating and improving the site, support, security, analytics, research, and legal compliance.",
+    "International users may have additional rights and protections under the General Data Protection Regulation.",
+    "Personal data will be transferred from your country of origin to the United States, which may have different data protection laws than your jurisdiction.",
+    "We explain how information is collected, used, disclosed, secured, and transferred in connection with this website.",
+  ].join(" ").repeat(14);
+  const supplementBody = [
+    "General Data Protection Regulation Notice.",
+    "Legal Basis. Example Institute is required to have a legal basis for collecting personally identifiable information. The basis for our processing includes contract, legitimate interests, legal obligations, and consent.",
+    "Data Retention. We will retain your PII for as long as necessary for the stated uses and legal document retention obligations.",
+    "International Transfers. Data that you provide to us may be transferred to and stored at a destination outside the EU or the EEA.",
+    "Your Rights include the right to request the deletion of your personal data and the right to restrict or limit the ways in which we process your personal data.",
+    "You have the right to withhold consent to automated individual decision-making processes and the right to complain to a supervisory authority.",
+    "To submit a request, please contact our Privacy Manager at privacy@example.test.",
+  ].join(" ").repeat(3);
+  const server = createServer((request, response) => {
+    response.setHeader("content-type", "text/html; charset=utf-8");
+    if (request.url === "/privacy") {
+      response.end(`<!doctype html><html><body><main>${mainBody}<p>If you reside in the European Economic Area, click <a href="/general-data-protection-regulation-notice">here</a> for additional information regarding rights and protections under the General Data Protection Regulation.</p></main></body></html>`);
+      return;
+    }
+    if (request.url === "/general-data-protection-regulation-notice") {
+      response.end(`<!doctype html><html><body><main>${supplementBody}</main></body></html>`);
+      return;
+    }
+    response.end('<!doctype html><html><body><footer><a href="/privacy">Privacy Notice</a></footer></body></html>');
+  });
+  server.listen(0, "127.0.0.1");
+  await once(server, "listening");
+  const address = server.address();
+  assert.ok(address && typeof address === "object");
+  const url = `http://127.0.0.1:${address.port}/`;
+  const tempRoot = await mkdtemp(path.join(tmpdir(), "certscore-policy-gdpr-supplement-"));
+
+  try {
+    const result = await policySurfaceScanner({
+      url,
+      normalizedUrl: url,
+      scanStartedAtMs: Date.now(),
+      internalBudgetMs: 12_000,
+      artifactWriter: await createArtifactWriter(tempRoot),
+      nanoAssistProvider: createDefaultMockNanoPolicyAssistProvider(),
+    });
+    const mainNotice = result.policySurfaceObservations.find((observation) =>
+      observation.normalizedUrl === `${url}privacy`
+    );
+    const supplement = result.policySurfaceObservations.find((observation) =>
+      observation.normalizedUrl === `${url}general-data-protection-regulation-notice`
+    );
+
+    assert.equal(mainNotice?.status, "fetched");
+    assert.equal(mainNotice?.documentRole, "policy_document");
+    assert.equal(
+      mainNotice?.gdprTransparencyTopicCandidates.some((candidate) => candidate.topic === "processing_purposes"),
+      true,
+    );
+    assert.equal(
+      mainNotice?.gdprTransparencyTopicCandidates.some((candidate) => candidate.topic === "international_transfers"),
+      true,
+    );
+    assert.equal(supplement?.status, "fetched");
+    assert.equal(supplement?.documentRole, "policy_document");
+    assert.equal(supplement?.traversalDepth, 1);
+    assert.equal(supplement?.parentObservationId, mainNotice?.observationId);
+    assert.equal(supplement?.selectionReasonCodes?.includes("material_gdpr_notice_supplement"), true);
+    assert.equal(
+      supplement?.selectionReasonCodes?.includes("deterministic_material_gdpr_supplement_selection"),
+      true,
+    );
+    const topics = new Set(supplement?.gdprTransparencyTopicCandidates.map((candidate) => candidate.topic));
+    for (const topic of [
+      "legal_basis",
+      "data_retention",
+      "data_subject_rights",
+      "dpo_contact",
+      "international_transfers",
+      "supervisory_authority",
+      "automated_decision_making_or_profiling",
+    ] as const) {
+      assert.equal(
+        topics.has(topic),
+        true,
+        `${topic}; retained topics: ${[...topics].join(", ")}`,
+      );
+    }
+  } finally {
+    server.closeAllConnections();
+    await new Promise<void>((resolve, reject) =>
+      server.close((error) => error ? reject(error) : resolve())
+    );
+    await rm(tempRoot, { recursive: true, force: true });
+  }
 });
 
 test("browser-recovered privacy links receive a bounded canonical document fetch", async () => {

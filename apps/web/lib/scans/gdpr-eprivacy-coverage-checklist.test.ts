@@ -368,6 +368,53 @@ test("GDPR Transparency checklist projection permits only the canonical three re
   }
 });
 
+test("unresolved material GDPR supplements project Not confirmed across policy and checklist", () => {
+  const runtimeArtifacts = {
+    policyDisclosureSummary: {
+      article13CoverageAssessments: [{
+        assessmentContractVersion: "gdpr_transparency_article13_coverage_assessment.v1",
+        coverageStatus: "insufficient",
+        policyDocumentIds: ["policy-1"],
+        policyDocumentRoles: ["policy_document"],
+        policyDocumentSha256: ["a".repeat(64)],
+        reasonCodes: ["material_linked_policy_supplements_not_fully_evaluated"],
+        sourceUrls: ["https://example.test/privacy"],
+        status: "insufficient_retained_evidence",
+        topic: "data_retention",
+        unresolvedMaterialPolicyChildUrls: [
+          "https://example.test/general-data-protection-regulation-notice",
+        ],
+      }],
+      privacyPolicyPresent: true,
+      privacyPolicyTextCharacterCount: 4_200,
+    },
+  };
+  const normalizedConcerns = buildNormalizedConcerns({
+    reviewFindingCandidates: [],
+    runtimeArtifacts,
+    validationFindings: [],
+  });
+  const coverageOutcomes = deriveGdprEprivacyCoveragePolicyOutcomes({
+    coverageLimited: false,
+    events: [],
+    normalizedConcerns,
+    runtimeArtifacts,
+    scanCompleted: true,
+    snapshot: {},
+  });
+  const rows = deriveGdprEprivacyCoverageChecklist({
+    coverageLimited: false,
+    coverageOutcomes,
+    scanCompleted: true,
+    unifiedFindings: [],
+  });
+  const retention = byId(rows, "retention_disclosure_observed");
+
+  assert.equal(retention.status, "Not confirmed");
+  assert.equal(getEvidenceLabel(retention), "Not confirmed");
+  assert.notEqual(getEvidenceLabel(retention), "No match found");
+});
+
 test("checklist preserves a neutral international-transfer no-match result over stale absence findings", () => {
   const items = deriveGdprEprivacyCoverageChecklist({
     coverageLimited: false,

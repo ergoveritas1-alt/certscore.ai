@@ -4457,6 +4457,7 @@ function deterministicFetchFallback(candidates: PolicySurfaceCandidate[]): Polic
     )
     .sort((left, right) =>
       surfacePriority(left.deterministicSurfaceType) - surfacePriority(right.deterministicSurfaceType) ||
+      materialPolicySupplementPriority(left) - materialPolicySupplementPriority(right) ||
       policyCandidateDiscoveryPriority(left) - policyCandidateDiscoveryPriority(right) ||
       policyCandidateProtectionPriority(left) - policyCandidateProtectionPriority(right) ||
       policyCandidateQualityScore(right) - policyCandidateQualityScore(left) ||
@@ -4770,6 +4771,10 @@ function mergeSupplementalPolicyCandidates(
   return capPolicyCandidatesWithSurfaceDiversity([...selected.values()], limit);
 }
 
+function materialPolicySupplementPriority(candidate: PolicySurfaceCandidate): number {
+  return isMaterialGdprNoticeSupplementCandidate(candidate) ? 0 : 1;
+}
+
 function capPolicyCandidatesWithSurfaceDiversity(
   candidates: PolicySurfaceCandidate[],
   limit: number,
@@ -4944,6 +4949,13 @@ function highValueSecondaryCandidatesFromPolicyPage(
   );
 }
 
+function isMaterialGdprNoticeSupplementCandidate(
+  candidate: PolicySurfaceCandidate,
+): boolean {
+  return candidate.deterministicClassifierReasonCodes.includes("gdpr_notice_link") &&
+    candidate.deterministicClassifierReasonCodes.includes("one_hop_privacy_supplement");
+}
+
 async function selectOneHopPolicyIndexChildren(input: {
   input: PolicySurfaceScannerInput;
   indexCandidate: PolicySurfaceCandidate;
@@ -4962,17 +4974,23 @@ async function selectOneHopPolicyIndexChildren(input: {
   }
 
   const parentObservationId = `policy_surface_${stableHash(input.indexCandidate.normalizedUrl)}`;
-  const childCandidates = input.candidates.map((candidate) => ({
-    ...candidate,
-    parentObservationId,
-    parentSurfaceUrl: input.indexCandidate.normalizedUrl,
-    traversalDepth: 1 as const,
-    selectionReasonCodes: uniqueStrings([
-      ...(candidate.selectionReasonCodes ?? []),
-      "linked_from_retained_privacy_policy_index",
-      "one_hop_policy_document_candidate",
-    ]),
-  }));
+  const childCandidates = input.candidates.map((candidate) => {
+    const materialGdprSupplement = isMaterialGdprNoticeSupplementCandidate(candidate);
+    return {
+      ...candidate,
+      parentObservationId,
+      parentSurfaceUrl: input.indexCandidate.normalizedUrl,
+      traversalDepth: 1 as const,
+      selectionReasonCodes: uniqueStrings([
+        ...(candidate.selectionReasonCodes ?? []),
+        "linked_from_retained_privacy_surface",
+        materialGdprSupplement
+          ? "material_gdpr_notice_supplement"
+          : "linked_from_retained_privacy_policy_index",
+        "one_hop_policy_document_candidate",
+      ]),
+    };
+  });
   const privacyCandidates = childCandidates.flatMap((candidate) => {
     const privacyCandidate = privacyIndexPrivacyChildCandidate(candidate);
     return privacyCandidate &&
@@ -4991,6 +5009,28 @@ async function selectOneHopPolicyIndexChildren(input: {
     return {
       fetchCandidates: nonPrivacyCandidates,
       observedChildCandidates: [],
+    };
+  }
+
+  const materialGdprSupplements = privacyCandidates
+    .filter(isMaterialGdprNoticeSupplementCandidate)
+    .sort((left, right) =>
+      right.deterministicScore - left.deterministicScore ||
+      left.normalizedUrl.localeCompare(right.normalizedUrl)
+    );
+  if (materialGdprSupplements.length > 0) {
+    const selected = materialGdprSupplements[0]!;
+    return {
+      fetchCandidates: [{
+        ...selected,
+        selectionReasonCodes: uniqueStrings([
+          ...(selected.selectionReasonCodes ?? []),
+          "deterministic_material_gdpr_supplement_selection",
+        ]),
+      }],
+      observedChildCandidates: privacyCandidates
+        .filter((candidate) => candidate.candidateId !== selected.candidateId)
+        .map(markUnselectedPrivacyIndexChild),
     };
   }
 
@@ -5302,7 +5342,12 @@ function isSamePolicyDocumentRoute(parentUrl: string, childUrl: string): boolean
 
 export function isGdprNoticeSupplementLink(linkText: string, normalizedUrl: string, surroundingTextExcerpt: string): boolean {
   const evidence = `${linkText} ${normalizedUrl} ${surroundingTextExcerpt}`;
-  const explicitNotice = /\b(?:gdpr|eu|eea|european\s+economic\s+area)\b.{0,80}\b(?:privacy|notice|rights|protections?)\b|\b(?:privacy|notice|rights|protections?)\b.{0,80}\b(?:gdpr|eu|eea|european\s+economic\s+area)\b/i.test(evidence);
+  const jurisdictionMarker = "(?:gdpr|general(?:[-_\\s]+)data(?:[-_\\s]+)protection(?:[-_\\s]+)regulation|eu|eea|european\\s+economic\\s+area)";
+  const explicitNotice = new RegExp(
+    `\\b${jurisdictionMarker}\\b.{0,100}\\b(?:privacy|notice|rights|protections?)\\b|` +
+      `\\b(?:privacy|notice|rights|protections?)\\b.{0,100}\\b${jurisdictionMarker}\\b`,
+    "i",
+  ).test(evidence);
   const contextualClickThrough = /\b(?:additional\s+(?:rights|protections?)|eu(?:ropean)?\s+(?:residents?|users?)|international\s+users?)\b.{0,140}\bclick\s+here\b/i.test(evidence);
   return explicitNotice || contextualClickThrough;
 }

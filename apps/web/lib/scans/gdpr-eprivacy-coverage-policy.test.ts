@@ -207,6 +207,7 @@ function makeGdprTransparencyArticle13Signal(input: {
   productionCredit?: boolean;
   productionCreditProfile?: string;
   selectedEvidenceStrength?: string;
+  selectedPolicySectionUrl?: string;
   status?: string;
 }) {
   const evidenceText = input.evidenceText ?? (
@@ -232,7 +233,7 @@ function makeGdprTransparencyArticle13Signal(input: {
     productionCreditProfile: input.productionCreditProfile ?? "gdpr_transparency_multilingual_article13_v1",
     selectedEvidenceStrength: input.selectedEvidenceStrength ?? "strong",
     selectedPolicySectionExcerpt: evidenceText,
-    selectedPolicySectionUrl: "https://example.test/privacy",
+    selectedPolicySectionUrl: input.selectedPolicySectionUrl ?? "https://example.test/privacy",
     source: "deterministic",
     status: input.status ?? "observed"
   };
@@ -456,6 +457,64 @@ test("deriveGdprEprivacyCoveragePolicyOutcomes gives checklist Observed credit t
   }
 });
 
+test("supplement topic provenance remains bound to the selected retained policy document", () => {
+  const mainUrl = "https://caltech.example/privacy-notice";
+  const supplementUrl = "https://caltech.example/general-data-protection-regulation-notice";
+  const signal = makeGdprTransparencyArticle13Signal({
+    disclosureType: "legal_basis",
+    evidenceText: "Under the GDPR, Example Institute is required to have a legal basis for collecting personally identifiable information.",
+    matchedLocale: "en",
+    matchedTerm: "legal basis for collecting personally identifiable information",
+    selectedPolicySectionUrl: supplementUrl,
+  });
+  const runtimeArtifacts = {
+    policyDisclosureSummary: {
+      article13DisclosureSignals: [signal],
+      gdprTransparencyEvidenceProfile: GDPR_TRANSPARENCY_MULTILINGUAL_ARTICLE13_PROFILE,
+      gdprTransparencyProductionEvidenceEnabled: true,
+      policyDocumentProvenance: [{
+        artifactRefs: ["policy_excerpt_main", "policy_surface_text_main"],
+        documentOwnerEntity: "caltech.example",
+        policyTitle: "Privacy Notice",
+        sourceUrl: mainUrl,
+        targetRelationship: "target_controller",
+      }, {
+        artifactRefs: ["policy_excerpt_supplement", "policy_surface_text_supplement"],
+        documentOwnerEntity: "caltech.example",
+        policyTitle: "General Data Protection Regulation Notice",
+        sourceUrl: supplementUrl,
+        targetRelationship: "target_controller",
+      }],
+      privacyPolicyPresent: true,
+      privacyPolicyTextCharacterCount: 4_200,
+      privacyPolicyUrls: [mainUrl, supplementUrl],
+    },
+  };
+  const outcomes = deriveGdprEprivacyCoveragePolicyOutcomes({
+    ...completedInputBase,
+    normalizedConcerns: buildNormalizedConcerns({
+      reviewFindingCandidates: [],
+      runtimeArtifacts,
+      validationFindings: [],
+    }),
+    runtimeArtifacts,
+    snapshot: {},
+  });
+  const retained = outcomes.legal_basis_disclosure_observed?.criticalEvidence.retainedEvidence;
+  const article13Signal = retained?.article13Signal as Record<string, unknown> | undefined;
+  const provenance = retained?.policyEvidenceProvenance as Record<string, unknown> | undefined;
+
+  assert.equal(outcomes.legal_basis_disclosure_observed?.status, "Observed");
+  assert.equal(article13Signal?.selectedPolicySectionUrl, supplementUrl);
+  assert.equal(article13Signal?.surfaceUrl, supplementUrl);
+  assert.equal(provenance?.sourceUrl, supplementUrl);
+  assert.equal(provenance?.policyTitle, "General Data Protection Regulation Notice");
+  assert.deepEqual(provenance?.artifactRefs, [
+    "policy_excerpt_supplement",
+    "policy_surface_text_supplement",
+  ]);
+});
+
 test("canonical GDPR Transparency projection does not fall back to raw observed signals", () => {
   const runtimeArtifacts = {
     policyDisclosureSummary: {
@@ -490,7 +549,7 @@ test("canonical GDPR Transparency projection does not fall back to raw observed 
   assert.equal(assessment?.scoreEffect, "none");
 });
 
-test("unprojected retained GDPR Transparency candidates canonically remain neutral no-match results", () => {
+test("unprojected retained GDPR Transparency candidates canonically remain not confirmed", () => {
   const retainedSignal = makeGdprTransparencyArticle13Signal({
     disclosureType: "processing_purposes",
     evidenceText: "We use personal data to provide requested services, answer customer questions, operate our platform, and protect user accounts.",
@@ -519,9 +578,62 @@ test("unprojected retained GDPR Transparency candidates canonically remain neutr
     outcome?.criticalEvidence.retainedEvidence.canonicalProjectionState,
     "retained_candidate_not_production_projectable",
   );
-  assert.equal(assessment?.result, "not_located_automatically");
+  assert.equal(assessment?.result, "extraction_incomplete");
   assert.equal(assessment?.scoreEffect, "none");
   assert.match(outcome?.limitation ?? "", /does not establish that the disclosure is absent/i);
+});
+
+test("insufficient GDPR Transparency coverage remains Not confirmed instead of No match found", () => {
+  const coverageAssessment = {
+    assessmentContractVersion: "gdpr_transparency_article13_coverage_assessment.v1",
+    coverageStatus: "insufficient",
+    policyDocumentIds: ["policy-1"],
+    policyDocumentRoles: ["policy_document"],
+    policyDocumentSha256: ["a".repeat(64)],
+    reasonCodes: ["material_linked_policy_supplements_not_fully_evaluated"],
+    sourceUrls: ["https://example.test/privacy"],
+    status: "insufficient_retained_evidence",
+    topic: "data_retention",
+    unresolvedMaterialPolicyChildUrls: [
+      "https://example.test/general-data-protection-regulation-notice",
+    ],
+  };
+  const runtimeArtifacts = {
+    policyDisclosureSummary: {
+      article13CoverageAssessments: [coverageAssessment],
+      privacyPolicyPresent: true,
+      privacyPolicyTextCharacterCount: 4_200,
+    },
+  };
+  const normalizedConcerns = buildNormalizedConcerns({
+    reviewFindingCandidates: [],
+    runtimeArtifacts,
+    validationFindings: [],
+  });
+  const outcomes = deriveGdprEprivacyCoveragePolicyOutcomes({
+    ...completedInputBase,
+    normalizedConcerns,
+    runtimeArtifacts,
+    snapshot: {},
+  });
+  const outcome = outcomes.retention_disclosure_observed;
+  const assessment = outcome?.criticalEvidence.retainedEvidence.policyEvidenceAssessment as
+    | Record<string, unknown>
+    | undefined;
+
+  assert.equal(
+    normalizedConcerns.some((concern) =>
+      concern.originKey === "gdpr_transparency.article13.data_retention"
+    ),
+    false,
+  );
+  assert.equal(outcome?.status, "Not confirmed");
+  assert.deepEqual(
+    outcome?.criticalEvidence.retainedEvidence.article13CoverageAssessment,
+    coverageAssessment,
+  );
+  assert.equal(assessment?.result, "extraction_incomplete");
+  assert.notEqual(assessment?.result, "not_located_automatically");
 });
 
 test("verified complete-policy absence projects neutral GDPR Transparency no-match results", () => {

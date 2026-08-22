@@ -2919,11 +2919,14 @@ export function summarizePolicySurfaces(
       url,
     } as LocalV2PolicySurface, null))
     .filter(Boolean));
-  const unresolvedPolicyIndexChildren = targetRelevantDiscoveredPrivacySurfaces.filter((surface) => {
+  const unresolvedMaterialPolicyChildren = targetRelevantDiscoveredPrivacySurfaces.filter((surface) => {
     const reasonCodes = surface.selectionReasonCodes ?? [];
+    const isMaterialLinkedPolicyChild =
+      reasonCodes.includes("linked_from_retained_privacy_policy_index") ||
+      reasonCodes.includes("material_gdpr_notice_supplement");
     if (
       surface.traversalDepth !== 1 ||
-      !reasonCodes.includes("linked_from_retained_privacy_policy_index") ||
+      !isMaterialLinkedPolicyChild ||
       reasonCodes.some((reasonCode) => explicitlyIrrelevantPolicyIndexChildReasonCodes.has(reasonCode))
     ) {
       return false;
@@ -2947,7 +2950,7 @@ export function summarizePolicySurfaces(
         document.contentCoverage?.status === "complete",
     ) &&
     !policyIndexRetainedAsGoverningDocument &&
-    unresolvedPolicyIndexChildren.length === 0 &&
+    unresolvedMaterialPolicyChildren.length === 0 &&
     options.policyEvidenceLaneStatus !== "degraded";
   const observedArticle13Types = new Set(dedupedArticle13DisclosureSignals
     .filter((signal) => signal.status === "observed")
@@ -2973,7 +2976,7 @@ export function summarizePolicySurfaces(
                 document.contentCoverage?.status !== "complete",
             ) ? ["policy_document_content_coverage_incomplete"] : []),
             ...(policyIndexRetainedAsGoverningDocument ? ["policy_index_is_not_substantive_policy_document"] : []),
-            ...(unresolvedPolicyIndexChildren.length > 0 ? ["material_policy_index_children_not_fully_evaluated"] : []),
+            ...(unresolvedMaterialPolicyChildren.length > 0 ? ["material_linked_policy_supplements_not_fully_evaluated"] : []),
             ...(options.policyEvidenceLaneStatus === "degraded" ? ["policy_evidence_lane_degraded"] : []),
           ],
     sourceUrls: completeOwnedPolicyDocuments.map((document) => document.finalUrl ?? document.requestedUrl),
@@ -2983,7 +2986,7 @@ export function summarizePolicySurfaces(
         ? "not_observed_with_sufficient_coverage"
         : "insufficient_retained_evidence",
     topic,
-    unresolvedPolicyIndexChildUrls: unresolvedPolicyIndexChildren
+    unresolvedMaterialPolicyChildUrls: unresolvedMaterialPolicyChildren
       .map((surface) => firstString(surface.finalUrl, surface.normalizedUrl, surface.url))
       .filter(Boolean),
   }));
