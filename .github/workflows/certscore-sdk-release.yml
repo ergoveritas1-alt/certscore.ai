@@ -2,6 +2,11 @@ name: CertScore SDK Release
 
 on:
   workflow_dispatch:
+    inputs:
+      tag:
+        description: "Release tag, for example certscore-sdk-v0.2.9"
+        required: true
+        type: string
   push:
     tags:
       - "certscore-sdk-v*"
@@ -14,7 +19,22 @@ jobs:
   publish:
     runs-on: ubuntu-latest
     steps:
+      - name: Resolve release tag
+        id: release
+        env:
+          RELEASE_TAG: ${{ inputs.tag || github.ref_name }}
+        run: |
+          set -euo pipefail
+          if [[ ! "${RELEASE_TAG}" =~ ^certscore-sdk-v[0-9]+\.[0-9]+\.[0-9]+([-.][0-9A-Za-z.-]+)?$ ]]; then
+            echo "Expected tag shaped certscore-sdk-vX.Y.Z, got ${RELEASE_TAG}" >&2
+            exit 1
+          fi
+          echo "tag=${RELEASE_TAG}" >> "${GITHUB_OUTPUT}"
+          echo "version=${RELEASE_TAG#certscore-sdk-v}" >> "${GITHUB_OUTPUT}"
+
       - uses: actions/checkout@v6
+        with:
+          ref: ${{ steps.release.outputs.tag }}
 
       - uses: pnpm/action-setup@v6
         with:
@@ -24,18 +44,53 @@ jobs:
         with:
           node-version: 22
           registry-url: https://registry.npmjs.org
-          cache: pnpm
+          package-manager-cache: false
 
-      - name: Verify tag and package version
+      - name: Install trusted publishing npm CLI
+        run: npm install --global npm@11.19.0
+
+      - name: Verify runtime versions
         run: |
-          expected="certscore-sdk-v$(node -p "require('./packages/certscore-sdk/package.json').version")"
-          if [ "${GITHUB_EVENT_NAME}" = "push" ]; then
-            test "${GITHUB_REF_NAME}" = "${expected}"
-          fi
+          set -euo pipefail
+          node --version
+          npm --version
+          test "$(npm --version)" = "11.19.0"
 
       - run: pnpm install --frozen-lockfile
+
+      - name: Verify release metadata
+        env:
+          RELEASE_VERSION: ${{ steps.release.outputs.version }}
+        run: |
+          node <<'NODE'
+          const pkg = require("./packages/certscore-sdk/package.json");
+
+          const fail = (message) => {
+            console.error(message);
+            process.exit(1);
+          };
+
+          if (pkg.name !== "@certscore/sdk") {
+            fail(`Expected package name @certscore/sdk, got ${pkg.name}`);
+          }
+          if (pkg.private === true) {
+            fail("@certscore/sdk must not be private");
+          }
+          if (pkg.publishConfig?.access !== "public") {
+            fail("@certscore/sdk publishConfig.access must be public");
+          }
+          if (pkg.version !== process.env.RELEASE_VERSION) {
+            fail(`Package version ${pkg.version} does not match release tag version ${process.env.RELEASE_VERSION}`);
+          }
+          NODE
+
+      - run: pnpm --filter @certscore/sdk typecheck
       - run: pnpm --filter @certscore/sdk test
       - run: pnpm --filter @certscore/sdk build
+
+      - name: Verify package contents
+        working-directory: packages/certscore-sdk
+        run: npm pack --dry-run
 
       - name: Publish with npm trusted publishing
         working-directory: packages/certscore-sdk
