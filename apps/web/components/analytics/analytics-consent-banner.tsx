@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
 import {
@@ -13,6 +14,8 @@ function AnalyticsConsentPanel(input: {
   onClose?: () => void;
 }) {
   const [showSettings, setShowSettings] = useState(false);
+  const choiceButtonClassName =
+    "rounded-full border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-800 transition hover:border-slate-500 hover:text-slate-950";
 
   return (
     <section
@@ -23,7 +26,11 @@ function AnalyticsConsentPanel(input: {
         <div className="space-y-1">
           <p className="text-sm font-semibold text-slate-950">Cookie and analytics preferences</p>
           <p className="text-sm leading-6 text-slate-600">
-            We use privacy-conscious analytics to improve CertScore. You can opt out at any time. We do not record passwords, keystrokes, form contents, or session replays. Essential security and service operations may continue.
+            Optional analytics improve CertScore. They are not used to collect passwords or form entries.{" "}
+            <Link className="font-medium text-sky-700 underline decoration-sky-200 underline-offset-2 hover:text-sky-800" href="/privacy#cookies-analytics">
+              Learn more
+            </Link>
+            .
           </p>
         </div>
         <div className="mt-3 flex shrink-0 flex-wrap gap-2 md:mt-0">
@@ -46,14 +53,14 @@ function AnalyticsConsentPanel(input: {
           ) : null}
           <button
             type="button"
-            className="rounded-full border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-700 transition hover:border-slate-400 hover:text-slate-950"
+            className={choiceButtonClassName}
             onClick={() => input.onChoose("denied")}
           >
             Reject analytics
           </button>
           <button
             type="button"
-            className="rounded-full bg-slate-950 px-4 py-2 text-sm font-semibold text-white transition hover:bg-slate-800"
+            className={choiceButtonClassName}
             onClick={() => input.onChoose("granted")}
           >
             Allow analytics
@@ -102,7 +109,7 @@ export function AnalyticsPreferencesButton() {
   return (
     <>
       <button type="button" className="hover:text-slate-900" onClick={() => setIsOpen(true)}>
-        Cookie / analytics preferences
+        Cookie preferences
       </button>
       {isOpen ? <AnalyticsConsentPanel onChoose={choose} onClose={() => setIsOpen(false)} /> : null}
     </>

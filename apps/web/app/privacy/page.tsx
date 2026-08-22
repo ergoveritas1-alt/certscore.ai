@@ -148,7 +148,11 @@ export default function PrivacyPage() {
 
         <div className="mt-10 space-y-8 rounded-[2rem] border border-slate-200 bg-white p-8">
           {sections.map((section) => (
-            <section key={section.title} className="space-y-2">
+            <section
+              key={section.title}
+              id={section.title.startsWith("8.") ? "cookies-analytics" : undefined}
+              className="scroll-mt-6 space-y-2"
+            >
               <h2 className="text-2xl font-semibold tracking-tight text-slate-900">{section.title}</h2>
               {section.body.map((paragraph) => (
                 <p key={paragraph} className="text-sm leading-6 text-slate-600">{paragraph}</p>
