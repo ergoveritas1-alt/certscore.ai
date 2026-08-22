@@ -6,6 +6,8 @@ import {
   INTEGRATION_API_KEY_HOURLY_LIMIT,
   INTEGRATION_ORGANIZATION_DAILY_LIMIT,
   INTEGRATION_ORGANIZATION_HOURLY_LIMIT,
+  OAUTH_SCAN_CREATE_DAILY_LIMIT,
+  OAUTH_SCAN_CREATE_HOURLY_LIMIT,
   SELF_SERVE_READ_ONLY_EMAIL_DAILY_ISSUANCE_LIMIT,
   SELF_SERVE_READ_ONLY_EMAIL_WINDOW_ISSUANCE_LIMIT,
   SELF_SERVE_READ_ONLY_IP_DAILY_ISSUANCE_LIMIT,
@@ -17,6 +19,7 @@ import {
   getIntegrationApiKeyPrefix,
   hashIntegrationApiKey,
   hashSelfServeApiKeyRequester,
+  integrationOrganizationScanCreateLimits,
   isDisposableEmailDomain,
   isIntegrationApiKeyScope,
   parseBearerToken,
@@ -92,6 +95,45 @@ test("OAuth access tokens map onto existing API/MCP bearer scopes", async () => 
     if (previousSecret === undefined) delete process.env.CERTSCORE_OAUTH_JWT_SECRET;
     else process.env.CERTSCORE_OAUTH_JWT_SECRET = previousSecret;
   }
+});
+
+test("OAuth scan creation uses bounded connector limits", async () => {
+  const previousSecret = process.env.CERTSCORE_OAUTH_JWT_SECRET;
+  process.env.CERTSCORE_OAUTH_JWT_SECRET = "integration-api-oauth-secret-long-enough";
+  const token = signCertScoreAccessToken({
+    audience: "https://mcp.certscore.ai",
+    clientId: "client_test",
+    issuer: "https://certscore.ai",
+    jwtSecret: process.env.CERTSCORE_OAUTH_JWT_SECRET,
+    organizationId: "org_test",
+    scopes: ["scan:read", "scan:create", "mcp"],
+    subject: "user_test",
+    userId: "user_test"
+  });
+  try {
+    const create = await validateCertScoreBearerToken(token, ["pulse:scan"]);
+    assert.equal(create.ok, true);
+    assert.equal(create.ok && create.key.hourlyLimit, OAUTH_SCAN_CREATE_HOURLY_LIMIT);
+    assert.equal(create.ok && create.key.dailyLimit, OAUTH_SCAN_CREATE_DAILY_LIMIT);
+  } finally {
+    if (previousSecret === undefined) delete process.env.CERTSCORE_OAUTH_JWT_SECRET;
+    else process.env.CERTSCORE_OAUTH_JWT_SECRET = previousSecret;
+  }
+});
+
+test("OAuth access-token rotation retains the workspace scan-creation limits", () => {
+  assert.deepEqual(integrationOrganizationScanCreateLimits("oauth_client_a_jti_a"), {
+    dailyLimit: OAUTH_SCAN_CREATE_DAILY_LIMIT,
+    hourlyLimit: OAUTH_SCAN_CREATE_HOURLY_LIMIT
+  });
+  assert.deepEqual(integrationOrganizationScanCreateLimits("oauth_client_a_jti_b"), {
+    dailyLimit: OAUTH_SCAN_CREATE_DAILY_LIMIT,
+    hourlyLimit: OAUTH_SCAN_CREATE_HOURLY_LIMIT
+  });
+  assert.deepEqual(integrationOrganizationScanCreateLimits("api_key_example"), {
+    dailyLimit: INTEGRATION_ORGANIZATION_DAILY_LIMIT,
+    hourlyLimit: INTEGRATION_ORGANIZATION_HOURLY_LIMIT
+  });
 });
 
 test("self-serve requester hashing and disposable-domain checks are normalized", () => {
@@ -273,6 +315,31 @@ test("decideIntegrationApiKeyUsageLimit blocks organization usage", () => {
       keyDailyCount: 0,
       organizationHourlyCount: 0,
       organizationDailyCount: INTEGRATION_ORGANIZATION_DAILY_LIMIT
+    }).reason,
+    "organization_daily_limit"
+  );
+});
+
+test("decideIntegrationApiKeyUsageLimit supports bounded OAuth organization limits", () => {
+  assert.equal(
+    decideIntegrationApiKeyUsageLimit({
+      keyHourlyCount: 0,
+      keyDailyCount: 0,
+      organizationHourlyCount: OAUTH_SCAN_CREATE_HOURLY_LIMIT,
+      organizationDailyCount: 0,
+      organizationHourlyLimit: OAUTH_SCAN_CREATE_HOURLY_LIMIT,
+      organizationDailyLimit: OAUTH_SCAN_CREATE_DAILY_LIMIT
+    }).reason,
+    "organization_hourly_limit"
+  );
+  assert.equal(
+    decideIntegrationApiKeyUsageLimit({
+      keyHourlyCount: 0,
+      keyDailyCount: 0,
+      organizationHourlyCount: 0,
+      organizationDailyCount: OAUTH_SCAN_CREATE_DAILY_LIMIT,
+      organizationHourlyLimit: OAUTH_SCAN_CREATE_HOURLY_LIMIT,
+      organizationDailyLimit: OAUTH_SCAN_CREATE_DAILY_LIMIT
     }).reason,
     "organization_daily_limit"
   );

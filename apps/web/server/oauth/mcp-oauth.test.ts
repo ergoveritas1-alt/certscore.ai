@@ -5,7 +5,7 @@ import {
   CERTSCORE_OAUTH_MCP_SCOPE,
   CERTSCORE_OAUTH_READ_SCOPE
 } from "@certscore/mcp-auth";
-import { resolveMcpOAuthScopeRequest } from "./mcp-oauth-scopes";
+import { isClaudeMcpOAuthClientMetadata, resolveMcpOAuthScopeRequest } from "./mcp-oauth-scopes";
 import { isAllowedMcpOAuthRedirectUri } from "./mcp-oauth-scopes";
 import { readFileSync } from "node:fs";
 
@@ -62,8 +62,49 @@ test("OAuth redirect URIs require HTTPS except for HTTP loopback clients", () =>
   assert.equal(isAllowedMcpOAuthRedirectUri("https://client.example/callback#fragment"), false);
 });
 
+test("automatic scan creation eligibility is limited to Claude's HTTPS callback", () => {
+  assert.equal(isClaudeMcpOAuthClientMetadata({ clientName: "Claude", redirectUris: ["https://claude.ai/api/mcp/auth_callback"] }), true);
+  assert.equal(isClaudeMcpOAuthClientMetadata({
+    clientName: "Claude",
+    redirectUris: ["https://claude.ai/api/mcp/auth_callback", "http://localhost:4312/callback"]
+  }), false);
+  assert.equal(isClaudeMcpOAuthClientMetadata({ clientName: "Claude", redirectUris: [] }), false);
+  assert.equal(isClaudeMcpOAuthClientMetadata({ clientName: "Claude", redirectUris: ["https://example.com/callback"] }), false);
+  assert.equal(isClaudeMcpOAuthClientMetadata({ clientName: "Other", redirectUris: ["https://claude.ai/api/mcp/auth_callback"] }), false);
+});
+
 test("invalid OAuth clients cannot select an external error redirect", () => {
   const source = readFileSync(new URL("../../app/api/v2/oauth/authorize/route.ts", import.meta.url), "utf8");
   assert.match(source, /redirect\("\/developers\/mcp\?oauth_error=invalid_request"\)/);
   assert.doesNotMatch(source, /redirectWithParams\(redirectUri \|\|/);
+});
+
+test("read-only OAuth consent directs empty workspaces to their first scan", () => {
+  const page = readFileSync(new URL("../../app/oauth/authorize/page.tsx", import.meta.url), "utf8");
+  const server = readFileSync(new URL("./mcp-oauth.ts", import.meta.url), "utf8");
+
+  assert.match(page, /This connection is read-only\./);
+  assert.match(page, /cannot create the first scan with the requested access/);
+  assert.match(page, /href="\/app#scan-a-site"/);
+  assert.match(page, /CERTSCORE_OAUTH_CREATE_SCOPE/);
+  assert.match(server, /getMcpOAuthWorkspaceActivity/);
+  assert.match(server, /from scans where organization_id = \$1/);
+});
+
+test("active Trial Claude connections receive grant-gated scan creation", () => {
+  const registrationRoute = readFileSync(new URL("../../app/api/v2/oauth/register/route.ts", import.meta.url), "utf8");
+  const server = readFileSync(new URL("./mcp-oauth.ts", import.meta.url), "utf8");
+
+  assert.match(registrationRoute, /isClaudeMcpOAuthClientMetadata/);
+  assert.match(registrationRoute, /requestedScopes, CERTSCORE_OAUTH_CREATE_SCOPE/);
+  assert.match(server, /organizations\.plan = 'free'/);
+  assert.match(server, /organizations\.plan_status = 'active'/);
+  assert.match(server, /jsonb_array_length\(mcp_oauth_clients\.redirect_uris\) > 0/);
+  assert.match(server, /redirect_uri !~ '\^https:\/\/claude\\\\\.ai/);
+  assert.match(server, /organization_members\.user_id::text = \$3/);
+  assert.match(registrationRoute, /CERTSCORE_OAUTH_CREATE_SCOPE/);
+  const consentPage = readFileSync(new URL("../../app/oauth/authorize/page.tsx", import.meta.url), "utf8");
+  assert.match(consentPage, /Claude can start your first scan\./);
+  assert.match(consentPage, /OAUTH_SCAN_CREATE_HOURLY_LIMIT/);
+  assert.match(consentPage, /OAUTH_SCAN_CREATE_DAILY_LIMIT/);
 });

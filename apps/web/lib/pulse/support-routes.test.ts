@@ -768,6 +768,11 @@ test("Developer API docs are discoverable by crawlers and agent manifests", asyn
   assert.equal(aiDiscovery.authentication.selfServeReadOnly.route, "https://certscore.ai/api/v2/keys/request");
   assert.deepEqual(aiDiscovery.authentication.selfServeReadOnly.issuedScopes, ["scan:read", "mcp"]);
   assert.equal(aiDiscovery.authentication.selfServeReadOnly.tokenPrefix, "cs_ro_");
+  assert.equal(aiDiscovery.mcp.hosted.claudeTrialScanCreation.automatic, true);
+  assert.equal(aiDiscovery.mcp.hosted.claudeTrialScanCreation.eligiblePlan, "free");
+  assert.equal(aiDiscovery.mcp.hosted.claudeTrialScanCreation.hourlyNewScanLimit, 20);
+  assert.equal(aiDiscovery.mcp.hosted.claudeTrialScanCreation.dailyNewScanLimit, 100);
+  assert.equal(aiDiscovery.mcp.hosted.claudeTrialScanCreation.recentReuseDoesNotConsumeQuota, true);
   assert.equal(aiDiscovery.rateLimits.docs, "https://certscore.ai/developers/reference");
   assert.equal(aiDiscovery.support.terms, "https://certscore.ai/terms");
   assert.equal(pulseDiscovery.developerHub, "https://certscore.ai/developers");

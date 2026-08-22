@@ -13,6 +13,24 @@ export type McpOAuthScopeResolution = {
   invalidScopes: string[];
 };
 
+export function isClaudeMcpOAuthClientMetadata(input: {
+  clientName: string;
+  redirectUris: readonly string[];
+}) {
+  if (input.clientName.trim().toLowerCase() !== "claude") {
+    return false;
+  }
+
+  return input.redirectUris.length > 0 && input.redirectUris.every((value) => {
+    try {
+      const url = new URL(value);
+      return url.protocol === "https:" && url.hostname === "claude.ai";
+    } catch {
+      return false;
+    }
+  });
+}
+
 function uniqueValues<T extends string>(values: readonly T[]) {
   return Array.from(new Set(values));
 }

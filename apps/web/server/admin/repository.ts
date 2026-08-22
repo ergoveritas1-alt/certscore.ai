@@ -1084,13 +1084,16 @@ export type AdminOrganizationScanSummaryRow = {
 };
 
 export type AdminUserOverviewRow = AdminUserRow & {
+  active_mcp_connector_count?: number;
   completed_scans: number;
   domain_count: number;
+  last_mcp_connector_at?: string | null;
   last_completed_scan_at: string | null;
   last_associated_scan_at: string | null;
   last_scan_at: string | null;
   last_scan_requested_at: string | null;
   membership_role: string | null;
+  mcp_connector_names?: string[] | null;
   organization_id: string | null;
   organization_name: string | null;
   organization_slug: string | null;
@@ -1935,6 +1938,23 @@ export async function loadAdminUsersPageData(
            left join better_auth_sessions on better_auth_sessions.user_id = better_auth_users.id
            join selected_users on selected_users.email = better_auth_users.email
           group by better_auth_users.email
+       ),
+       connector_activity as (
+         select tokens.owner_user_id,
+                array_agg(distinct clients.client_name order by clients.client_name) as connector_names,
+                count(distinct tokens.client_id) filter (
+                  where tokens.revoked_at is null
+                    and tokens.expires_at > timezone('utc', now())
+                )::int as active_connector_count,
+                max(greatest(
+                  tokens.created_at,
+                  coalesce(tokens.last_used_at, tokens.created_at),
+                  coalesce(tokens.revoked_at, tokens.created_at)
+                )) as last_connector_at
+           from mcp_oauth_refresh_tokens tokens
+           join mcp_oauth_clients clients on clients.client_id = tokens.client_id
+           join selected_users on selected_users.id::text = tokens.owner_user_id
+          group by tokens.owner_user_id
        )
        select selected_users.id,
               selected_users.email,
@@ -1944,6 +1964,9 @@ export async function loadAdminUsersPageData(
               selected_users.updated_at,
               coalesce(login_activity.account_role, 'user') as account_role,
               login_activity.last_login_at,
+              coalesce(connector_activity.connector_names, array[]::text[]) as mcp_connector_names,
+              coalesce(connector_activity.active_connector_count, 0)::int as active_mcp_connector_count,
+              connector_activity.last_connector_at as last_mcp_connector_at,
               selected_memberships.organization_id,
               selected_memberships.role as membership_role,
               organizations.name as organization_name,
@@ -1961,6 +1984,7 @@ export async function loadAdminUsersPageData(
               coalesce(request_activity.scan_request_count, 0)::int as scan_request_count
          from selected_users
          left join login_activity on login_activity.email = selected_users.email
+         left join connector_activity on connector_activity.owner_user_id = selected_users.id::text
          left join selected_memberships on selected_memberships.user_id = selected_users.id
          left join organizations on organizations.id = selected_memberships.organization_id
          left join lateral (

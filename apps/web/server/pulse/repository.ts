@@ -10,6 +10,7 @@ import {
 import type { PulseRequestContext } from "../../lib/pulse/types";
 import {
   decideIntegrationApiKeyUsageLimit,
+  integrationOrganizationScanCreateLimits,
   type IntegrationApiKeyRecord
 } from "../integrations/api-keys";
 import { ensurePulseTables } from "./schema";
@@ -343,13 +344,16 @@ export async function createPulseRequestWithApiKeyQuota(input: CreatePulseReques
       [input.key.publicId, input.key.organizationId]
     );
     const usageRow = usageResult.rows[0];
+    const organizationLimits = integrationOrganizationScanCreateLimits(input.key.publicId);
     const decision = decideIntegrationApiKeyUsageLimit({
       keyHourlyCount: Number(usageRow?.key_hourly_count ?? 0),
       keyDailyCount: Number(usageRow?.key_daily_count ?? 0),
       organizationHourlyCount: Number(usageRow?.organization_hourly_count ?? 0),
       organizationDailyCount: Number(usageRow?.organization_daily_count ?? 0),
       keyHourlyLimit: input.key.hourlyLimit,
-      keyDailyLimit: input.key.dailyLimit
+      keyDailyLimit: input.key.dailyLimit,
+      organizationHourlyLimit: organizationLimits.hourlyLimit,
+      organizationDailyLimit: organizationLimits.dailyLimit
     });
     if (!decision.allowed) {
       return decision;

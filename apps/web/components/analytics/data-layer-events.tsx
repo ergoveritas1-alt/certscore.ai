@@ -84,7 +84,6 @@ export function DataLayerClickTracker() {
         event: "registration_completed",
         auth_method: "password"
       });
-      trackProductEvent({ eventName: "account_created", category: "account", feature: "password_registration", outcome: "success" });
       const url = new URL(window.location.href);
       url.searchParams.delete("certscore_registration");
       window.history.replaceState({}, "", `${url.pathname}${url.search}${url.hash}`);

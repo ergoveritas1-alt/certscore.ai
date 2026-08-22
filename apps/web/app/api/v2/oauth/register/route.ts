@@ -1,12 +1,13 @@
 import { z } from "zod";
 import { NextResponse } from "next/server";
-import { oauthScopeString } from "@certscore/mcp-auth";
+import { CERTSCORE_OAUTH_CREATE_SCOPE, oauthScopeString } from "@certscore/mcp-auth";
 import { CERTSCORE_OAUTH_SUPPORTED_SCOPES } from "@certscore/mcp-auth";
 import {
   checkDynamicClientRegistrationLimit,
   cleanupUnusedMcpOAuthClients,
   getRequesterIp,
   hashRequester,
+  isClaudeMcpOAuthClientMetadata,
   registerMcpOAuthClient
 } from "../../../../../server/oauth/mcp-oauth";
 import { isAllowedMcpOAuthRedirectUri } from "../../../../../server/oauth/mcp-oauth-scopes";
@@ -74,6 +75,10 @@ export async function POST(request: Request) {
     return json({ error: "invalid_redirect_uri", error_description: "Redirect URIs must be HTTPS, localhost, or 127.0.0.1." }, 400);
   }
 
+  const clientName = parsed.data.client_name ?? "MCP Client";
+  const registrationScopes = isClaudeMcpOAuthClientMetadata({ clientName, redirectUris })
+    ? Array.from(new Set([...requestedScopes, CERTSCORE_OAUTH_CREATE_SCOPE]))
+    : requestedScopes;
   const requesterIpHash = hashRequester(getRequesterIp(request));
   await cleanupUnusedMcpOAuthClients();
   const limit = await checkDynamicClientRegistrationLimit(requesterIpHash);
@@ -86,9 +91,9 @@ export async function POST(request: Request) {
   }
 
   const client = await registerMcpOAuthClient({
-    clientName: parsed.data.client_name ?? "MCP Client",
+    clientName,
     redirectUris,
-    requestedScopes,
+    requestedScopes: registrationScopes,
     requesterIpHash
   });
   const now = Math.floor(Date.now() / 1000);
@@ -96,7 +101,7 @@ export async function POST(request: Request) {
     {
       client_id: client.clientId,
       client_id_issued_at: now,
-      client_name: parsed.data.client_name ?? "MCP Client",
+      client_name: clientName,
       redirect_uris: redirectUris,
       grant_types: ["authorization_code", "refresh_token"],
       response_types: ["code"],

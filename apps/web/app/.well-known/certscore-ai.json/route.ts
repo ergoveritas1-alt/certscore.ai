@@ -109,7 +109,15 @@ const discoveryDocument = {
       protectedResourceMetadata: "https://mcp.certscore.ai/.well-known/oauth-protected-resource",
       authorizationServerMetadata: "https://certscore.ai/.well-known/oauth-authorization-server",
       authentication: "OAuth 2.0 authorization code with PKCE",
-      currentVersion: "0.2.15"
+      currentVersion: "0.2.15",
+      claudeTrialScanCreation: {
+        automatic: true,
+        eligiblePlan: "free",
+        eligiblePlanStatus: "active",
+        hourlyNewScanLimit: 20,
+        dailyNewScanLimit: 100,
+        recentReuseDoesNotConsumeQuota: true
+      }
     },
     light: {
       name: "CertScore.ai MCP Light",
@@ -202,7 +210,7 @@ const discoveryDocument = {
   responseFormats: ["application/json", "text/markdown"],
   authentication: {
     summary:
-      "Low-volume agents can create scans without an account or credential at 20 new scans per requester IP per UTC day. Bearer API keys are supported for scoped API, SDK, and MCP integrations. Contact support@certscore.ai for a higher-volume allowance; read-only + MCP keys are self-serve for signed-in verified users, while scan:create remains support-gated.",
+      "Low-volume agents can create scans without an account or credential at 20 new scans per requester IP per UTC day. Bearer API keys are supported for scoped API, SDK, and MCP integrations. Read-only + MCP keys are self-serve for signed-in verified users. Active Trial workspaces connecting through Claude receive bounded hosted OAuth scan:create automatically; other integrations remain grant-gated.",
     accessStatus: "read_only_self_serve_scan_create_request",
     selfServeReadOnly: {
       route: "https://certscore.ai/api/v2/keys/request",
@@ -218,7 +226,7 @@ const discoveryDocument = {
     },
     requestEmail: "support@certscore.ai",
     requestInstructions:
-      "Use /api/v2/keys/request for read-only + MCP access. Email support@certscore.ai with organization, integration type, expected request volume, contact email, and requested scopes for scan:create.",
+      "Use /api/v2/keys/request for read-only + MCP access. Active Trial workspaces connecting through Claude receive hosted OAuth scan:create automatically at 20 new scans per hour and 100 per day per workspace. Other integrations can email support@certscore.ai with organization, integration type, expected request volume, contact email, and requested scopes for scan:create.",
     header: "Authorization: Bearer <token>",
     docs: "https://certscore.ai/developers/quickstart",
     currentScopes: ["scan:read", "scan:create", "mcp"],

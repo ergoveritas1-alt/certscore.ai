@@ -1,10 +1,17 @@
 import { redirect } from "next/navigation";
+import Link from "next/link";
 import { Card, CardContent, CardHeader, CardTitle } from "@website-signal-risk-scanner/ui";
-import { oauthScopeString } from "@certscore/mcp-auth";
+import { CERTSCORE_OAUTH_CREATE_SCOPE, oauthScopeString } from "@certscore/mcp-auth";
 import { SiteHeader } from "../../../components/layout/site-header";
 import { getCurrentUser } from "../../../server/auth";
 import { bootstrapAppUserSession } from "../../../server/bootstrap-user";
-import { getMcpOAuthClient, redirectUriAllowed, resolveMcpOAuthRequestedScopes } from "../../../server/oauth/mcp-oauth";
+import { OAUTH_SCAN_CREATE_DAILY_LIMIT, OAUTH_SCAN_CREATE_HOURLY_LIMIT } from "../../../server/integrations/api-keys";
+import {
+  getMcpOAuthClient,
+  getMcpOAuthWorkspaceActivity,
+  redirectUriAllowed,
+  resolveMcpOAuthRequestedScopes
+} from "../../../server/oauth/mcp-oauth";
 
 export const dynamic = "force-dynamic";
 
@@ -96,6 +103,9 @@ export default async function AuthorizePage({ searchParams }: AuthorizePageProps
     );
   }
   const requestedScope = oauthScopeString(scopeResolution.approvedScopes);
+  const workspaceActivity = await getMcpOAuthWorkspaceActivity(organization.id);
+  const canCreateScans = scopeResolution.approvedScopes.includes(CERTSCORE_OAUTH_CREATE_SCOPE);
+  const hasWorkspaceScans = workspaceActivity.scanCount > 0 || workspaceActivity.domainCount > 0;
 
   return (
     <main className="min-h-screen bg-slate-50">
@@ -115,6 +125,34 @@ export default async function AuthorizePage({ searchParams }: AuthorizePageProps
               <p className="font-semibold text-slate-900">Requested scopes</p>
               <p className="mt-2 font-mono text-xs">{requestedScope}</p>
             </div>
+            {!canCreateScans ? (
+              <div className={`rounded border p-4 text-sm leading-6 ${hasWorkspaceScans ? "border-sky-200 bg-sky-50 text-sky-900" : "border-amber-200 bg-amber-50 text-amber-950"}`}>
+                <p className="font-semibold">This connection is read-only.</p>
+                <p className="mt-1">
+                  {hasWorkspaceScans
+                    ? `${client.clientName} can review existing CertScore scans, but it cannot start a new scan.`
+                    : `${organization.name} has no scans yet. ${client.clientName} cannot create the first scan with the requested access.`}
+                </p>
+                {!hasWorkspaceScans ? (
+                  <p className="mt-2">
+                    After connecting, open {" "}
+                    <Link className="font-semibold underline decoration-amber-400 underline-offset-4" href="/app#scan-a-site" target="_blank">
+                      CertScore Scan a site
+                    </Link>{" "}
+                    to add a website and run the first scan.
+                  </p>
+                ) : null}
+              </div>
+            ) : null}
+            {canCreateScans && !hasWorkspaceScans ? (
+              <div className="rounded border border-emerald-200 bg-emerald-50 p-4 text-sm leading-6 text-emerald-950">
+                <p className="font-semibold">Claude can start your first scan.</p>
+                <p className="mt-1">
+                  After approval, Claude can create up to {OAUTH_SCAN_CREATE_HOURLY_LIMIT} genuinely new scans per hour and{" "}
+                  {OAUTH_SCAN_CREATE_DAILY_LIMIT} per day for this workspace. Eligible recent-result reuse does not consume the allowance.
+                </p>
+              </div>
+            ) : null}
             <form action="/api/v2/oauth/authorize" className="flex gap-3" method="post">
               <input name="client_id" type="hidden" value={clientId} />
               <input name="redirect_uri" type="hidden" value={redirectUri} />

@@ -176,7 +176,8 @@ API key setup:
 - Read-only + MCP keys are self-serve for signed-in verified users.
 - Sign in, verify email, then POST https://certscore.ai/api/v2/keys/request from the signed-in browser session.
 - Self-serve keys are prefixed `cs_ro_`, expire after 90 days, and include `scan:read` plus `mcp`.
-- Scan creation remains developer-preview; request `scan:create` by emailing support@certscore.ai.
+- Active Trial workspaces connecting through Claude receive hosted OAuth `scan:create` automatically, limited to 20 genuinely new scans per hour and 100 per day per workspace; eligible recent-result reuse does not consume that allowance.
+- Other clients remain developer-preview and can request `scan:create` by emailing support@certscore.ai.
 - Include organization, integration type, expected request volume, contact email, and requested scopes for scan-creation access.
 - REST API read-only usually needs `scan:read`.
 - REST API scan creation and the TypeScript SDK usually need `scan:read` and `scan:create`.

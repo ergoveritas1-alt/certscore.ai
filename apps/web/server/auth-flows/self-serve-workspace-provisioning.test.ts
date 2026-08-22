@@ -15,13 +15,17 @@ test("password and Google self-signups provision a dedicated workspace", async (
   assert.match(provisioner, /createUserWorkspaceIdentity\(context\.profile\.email\)/);
   assert.match(provisioner, /role: DEFAULT_NEW_MEMBERSHIP_ROLE/);
   assert.match(provisioner, /ensureOrganizationForUser/);
+  assert.match(provisioner, /eventName: "account_created"/);
+  assert.match(provisioner, /consentState: "operational"/);
+  assert.match(provisioner, /context\.user\.id\)\.catch/);
+  assert.doesNotMatch(await readFile("apps/web/components/analytics/data-layer-events.tsx", "utf8"), /trackProductEvent\(\{ eventName: "account_created"/);
 });
 
 test("self-serve provisioning is idempotent and serialized per user", async () => {
   const repository = await readFile("apps/web/server/users/repository.ts", "utf8");
   const provisioner = await readFile("apps/web/server/auth-flows/provision-self-serve-user.ts", "utf8");
 
-  assert.match(provisioner, /if \(context\.membership\) \{\s+return;/);
+  assert.match(provisioner, /context\.membership\?\.organization_id/);
   assert.match(repository, /export async function ensureOrganizationForUser/);
   assert.match(repository, /withWriteTransaction/);
   assert.match(repository, /where id = \$1\s+for update/);

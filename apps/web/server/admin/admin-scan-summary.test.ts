@@ -537,6 +537,10 @@ test("admin users paginate in SQL instead of loading the complete account histor
   assert.match(repositorySource, /limit \$1 offset \$2/);
   assert.match(repositorySource, /where scans\.submitted_by_user_id = selected_users\.id/);
   assert.match(sortSource, /lastScan: "greatest\(request_activity\.last_scan_requested_at, associated_activity\.last_scan_at\)"/);
+  assert.match(repositorySource, /from mcp_oauth_refresh_tokens tokens/);
+  assert.match(repositorySource, /active_mcp_connector_count/);
+  assert.match(pageSource, /activeMcpConnectorCount > 0 \? "connected" : "last connected"/);
+  assert.match(pageSource, /OAuth \{formatAdminCompactDateTime\(user\.lastMcpConnectorAt\)\}/);
 });
 
 test("admin scans poll lightweight status data and refresh only after a status change", async () => {

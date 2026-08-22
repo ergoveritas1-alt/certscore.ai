@@ -228,8 +228,9 @@ Authorization-server metadata:
 https://certscore.ai/.well-known/oauth-authorization-server`}</CodeBlock>
           <p className="max-w-3xl text-sm leading-7 text-slate-600">
             Read access requests the OAuth scopes <code className="rounded bg-white px-1">scan:read</code> and
-            <code className="ml-1 rounded bg-white px-1">mcp</code>. Scan creation additionally requires the support-gated
-            <code className="ml-1 rounded bg-white px-1">scan:create</code> scope.
+            <code className="ml-1 rounded bg-white px-1">mcp</code>. Active Trial workspaces connecting through Claude receive
+            <code className="ml-1 rounded bg-white px-1">scan:create</code> automatically, with up to 20 genuinely new scans per hour
+            and 100 per day per workspace. Eligible recent-result reuse does not consume that allowance. Other clients still require an explicit grant.
           </p>
         </Section>
         </div>
@@ -249,7 +250,8 @@ brew install --cask certscore-mcp`}</CodeBlock>
             <code className="rounded bg-white px-1">pulse:read</code> and <code className="rounded bg-white px-1">mcp</code>. Sign in,
             verify your email, then request the key from <code className="rounded bg-white px-1">/api/v2/keys/request</code>.
             Stdio tools that create scans require <code className="rounded bg-white px-1">pulse:scan</code>; hosted OAuth uses
-            <code className="ml-1 rounded bg-white px-1">scan:create</code>. Both remain support-gated at{" "}
+            <code className="ml-1 rounded bg-white px-1">scan:create</code>. Active Trial workspaces connecting through Claude receive
+            the hosted scope automatically. Other clients and local keys remain grant-gated at{" "}
             <a className="font-semibold text-sky-700 hover:text-sky-900" href="mailto:support@certscore.ai">
               support@certscore.ai
             </a>

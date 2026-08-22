@@ -129,6 +129,9 @@ test("Pulse integration quota counts scan creation but not polling or recent-res
 
   assert.match(routeSource, /mode: "url" as const, quotaClass: "scan_create" as const/);
   assert.match(repositorySource, /request_context->>'quotaClass' = 'scan_create'/);
+  assert.match(repositorySource, /integrationOrganizationScanCreateLimits\(input\.key\.publicId\)/);
+  assert.match(repositorySource, /organizationHourlyLimit: organizationLimits\.hourlyLimit/);
+  assert.match(repositorySource, /organizationDailyLimit: organizationLimits\.dailyLimit/);
   assert.match(repositorySource, /pg_advisory_xact_lock/);
   assert.match(repositorySource, /withWriteTransaction/);
   assert.ok(routeSource.indexOf("if (scanId)") < routeSource.indexOf("const reservedRequest = apiKeyUsageKey"));

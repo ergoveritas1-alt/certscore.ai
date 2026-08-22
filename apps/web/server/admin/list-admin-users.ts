@@ -19,6 +19,7 @@ import { latestActivityAt } from "../../lib/admin/latest-activity-at";
 
 export type AdminUserListItem = {
   accountRole: string;
+  activeMcpConnectorCount: number;
   authProvider: string;
   completedScans: number;
   createdAt: string;
@@ -29,9 +30,11 @@ export type AdminUserListItem = {
   lastCompletedScanAt: string | null;
   lastAssociatedScanAt: string | null;
   lastLoginAt: string | null;
+  lastMcpConnectorAt: string | null;
   lastScanAt: string | null;
   lastScanRequestedAt: string | null;
   membershipRole: string | null;
+  mcpConnectorNames: string[];
   organizationId: string | null;
   organizationName: string | null;
   organizationSlug: string | null;
@@ -108,6 +111,7 @@ export async function listAdminUsers(): Promise<AdminUserListItem[]> {
 
     return {
       accountRole: user.account_role,
+      activeMcpConnectorCount: 0,
       id: user.id,
       email: user.email,
       fullName: user.full_name,
@@ -115,10 +119,12 @@ export async function listAdminUsers(): Promise<AdminUserListItem[]> {
       createdAt: user.created_at,
       updatedAt: user.updated_at,
       lastLoginAt: user.last_login_at,
+      lastMcpConnectorAt: null,
       organizationId: organization?.id ?? null,
       organizationName: organization?.name ?? null,
       organizationSlug: organization?.slug ?? null,
       membershipRole: normalizeMembershipRole(membership?.role ?? null),
+      mcpConnectorNames: [],
       plan: (organization?.plan as PlanCode | null | undefined) ?? null,
       planStatus: (organization?.plan_status as PlanStatus | null | undefined) ?? null,
       domainCount: organization ? domainCounts.get(organization.id) ?? 0 : 0,
@@ -154,6 +160,7 @@ export async function listAdminUsersPage(
 function mapAdminUserOverviewRow(row: AdminUserOverviewRow): AdminUserListItem {
   return {
     accountRole: row.account_role,
+    activeMcpConnectorCount: Number(row.active_mcp_connector_count ?? 0),
     id: row.id,
     email: row.email,
     fullName: row.full_name,
@@ -161,10 +168,12 @@ function mapAdminUserOverviewRow(row: AdminUserOverviewRow): AdminUserListItem {
     createdAt: row.created_at,
     updatedAt: row.updated_at,
     lastLoginAt: row.last_login_at,
+    lastMcpConnectorAt: row.last_mcp_connector_at ?? null,
     organizationId: row.organization_id,
     organizationName: row.organization_name,
     organizationSlug: row.organization_slug,
     membershipRole: normalizeMembershipRole(row.membership_role),
+    mcpConnectorNames: row.mcp_connector_names ?? [],
     plan: (row.plan as PlanCode | null | undefined) ?? null,
     planStatus: (row.plan_status as PlanStatus | null | undefined) ?? null,
     domainCount: Number(row.domain_count ?? 0),

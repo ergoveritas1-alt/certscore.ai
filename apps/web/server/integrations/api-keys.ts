@@ -54,11 +54,19 @@ export const INTEGRATION_API_KEY_HOURLY_LIMIT = 60;
 export const INTEGRATION_API_KEY_DAILY_LIMIT = 500;
 export const INTEGRATION_ORGANIZATION_HOURLY_LIMIT = 300;
 export const INTEGRATION_ORGANIZATION_DAILY_LIMIT = 2500;
+export const OAUTH_SCAN_CREATE_HOURLY_LIMIT = 20;
+export const OAUTH_SCAN_CREATE_DAILY_LIMIT = 100;
 export const SELF_SERVE_READ_ONLY_KEY_EXPIRES_IN_DAYS = 90;
 export const SELF_SERVE_READ_ONLY_EMAIL_DAILY_ISSUANCE_LIMIT = 2;
 export const SELF_SERVE_READ_ONLY_EMAIL_WINDOW_ISSUANCE_LIMIT = 5;
 export const SELF_SERVE_READ_ONLY_IP_DAILY_ISSUANCE_LIMIT = 3;
 export const SELF_SERVE_READ_ONLY_IP_WINDOW_ISSUANCE_LIMIT = 15;
+
+export function integrationOrganizationScanCreateLimits(publicId: string) {
+  return publicId.startsWith("oauth_")
+    ? { dailyLimit: OAUTH_SCAN_CREATE_DAILY_LIMIT, hourlyLimit: OAUTH_SCAN_CREATE_HOURLY_LIMIT }
+    : { dailyLimit: INTEGRATION_ORGANIZATION_DAILY_LIMIT, hourlyLimit: INTEGRATION_ORGANIZATION_HOURLY_LIMIT };
+}
 
 const DISPOSABLE_EMAIL_DOMAINS = new Set([
   "10minutemail.com",
@@ -395,10 +403,13 @@ export async function checkIntegrationApiKeyUsageLimit(input: {
     organizationHourlyCount: Number(result?.organization_hourly_count ?? 0),
     organizationDailyCount: Number(result?.organization_daily_count ?? 0)
   };
+  const organizationLimits = integrationOrganizationScanCreateLimits(input.key.publicId);
   return decideIntegrationApiKeyUsageLimit({
     ...usage,
     keyHourlyLimit: input.key.hourlyLimit,
-    keyDailyLimit: input.key.dailyLimit
+    keyDailyLimit: input.key.dailyLimit,
+    organizationHourlyLimit: organizationLimits.hourlyLimit,
+    organizationDailyLimit: organizationLimits.dailyLimit
   });
 }
 
@@ -409,19 +420,23 @@ export function decideIntegrationApiKeyUsageLimit(usage: {
   organizationDailyCount: number;
   keyHourlyLimit?: number;
   keyDailyLimit?: number;
+  organizationHourlyLimit?: number;
+  organizationDailyLimit?: number;
 }) {
   const keyHourlyLimit = usage.keyHourlyLimit ?? INTEGRATION_API_KEY_HOURLY_LIMIT;
   const keyDailyLimit = usage.keyDailyLimit ?? INTEGRATION_API_KEY_DAILY_LIMIT;
+  const organizationHourlyLimit = usage.organizationHourlyLimit ?? INTEGRATION_ORGANIZATION_HOURLY_LIMIT;
+  const organizationDailyLimit = usage.organizationDailyLimit ?? INTEGRATION_ORGANIZATION_DAILY_LIMIT;
   if (usage.keyHourlyCount >= keyHourlyLimit) {
     return { allowed: false as const, retryAfterSeconds: 3600, reason: "api_key_hourly_limit" as const, usage };
   }
   if (usage.keyDailyCount >= keyDailyLimit) {
     return { allowed: false as const, retryAfterSeconds: 86400, reason: "api_key_daily_limit" as const, usage };
   }
-  if (usage.organizationHourlyCount >= INTEGRATION_ORGANIZATION_HOURLY_LIMIT) {
+  if (usage.organizationHourlyCount >= organizationHourlyLimit) {
     return { allowed: false as const, retryAfterSeconds: 3600, reason: "organization_hourly_limit" as const, usage };
   }
-  if (usage.organizationDailyCount >= INTEGRATION_ORGANIZATION_DAILY_LIMIT) {
+  if (usage.organizationDailyCount >= organizationDailyLimit) {
     return { allowed: false as const, retryAfterSeconds: 86400, reason: "organization_daily_limit" as const, usage };
   }
   return { allowed: true as const, retryAfterSeconds: 0, reason: null, usage };
@@ -479,13 +494,13 @@ function oauthKeyRecord(claims: {
     lastUsedAt: null,
     createdAt: new Date(claims.iat * 1000).toISOString(),
     revokedAt: null,
-    hourlyLimit: INTEGRATION_API_KEY_HOURLY_LIMIT,
-    dailyLimit: INTEGRATION_API_KEY_DAILY_LIMIT,
+    hourlyLimit: OAUTH_SCAN_CREATE_HOURLY_LIMIT,
+    dailyLimit: OAUTH_SCAN_CREATE_DAILY_LIMIT,
     usage: {
       hourlyCount: 0,
-      hourlyLimit: INTEGRATION_API_KEY_HOURLY_LIMIT,
+      hourlyLimit: OAUTH_SCAN_CREATE_HOURLY_LIMIT,
       dailyCount: 0,
-      dailyLimit: INTEGRATION_API_KEY_DAILY_LIMIT
+      dailyLimit: OAUTH_SCAN_CREATE_DAILY_LIMIT
     }
   };
 }

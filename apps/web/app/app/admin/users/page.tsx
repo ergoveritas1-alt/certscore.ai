@@ -186,7 +186,12 @@ export default async function AdminUsersPage({ searchParams }: AdminUsersPagePro
                     {formatAdminCompactDateTime(user.lastScanAt)}
                   </td>
                   <td className="whitespace-nowrap py-2.5 pr-4 align-top text-sm text-slate-600">
-                    {user.domainCount} domains <span className="text-slate-300">·</span> {user.totalScans} scans
+                    <p>{user.domainCount} domains <span className="text-slate-300">·</span> {user.totalScans} scans</p>
+                    {user.lastMcpConnectorAt ? (
+                      <p className="mt-1 text-xs text-violet-700" title={`Last OAuth activity ${formatAdminCompactDateTime(user.lastMcpConnectorAt)}`}>
+                        {user.mcpConnectorNames.join(", ") || "MCP"} {user.activeMcpConnectorCount > 0 ? "connected" : "last connected"} <span className="text-violet-300">·</span> OAuth {formatAdminCompactDateTime(user.lastMcpConnectorAt)}
+                      </p>
+                    ) : null}
                   </td>
                   <td className="whitespace-nowrap py-2.5 pr-4 align-top text-slate-600">
                     {user.organizationId ? (

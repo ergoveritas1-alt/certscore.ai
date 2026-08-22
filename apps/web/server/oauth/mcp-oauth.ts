@@ -14,12 +14,13 @@ import {
 import {
   normalizeMcpOAuthClientScopes,
   isAllowedMcpOAuthRedirectUri,
+  isClaudeMcpOAuthClientMetadata,
   resolveMcpOAuthScopeRequest,
   type McpOAuthScopeResolution
 } from "./mcp-oauth-scopes";
 import { getMcpOAuthIssuer, getMcpPublicUrl } from "./mcp-oauth-config";
 
-export { normalizeMcpOAuthClientScopes, resolveMcpOAuthScopeRequest, type McpOAuthScopeResolution };
+export { isClaudeMcpOAuthClientMetadata, normalizeMcpOAuthClientScopes, resolveMcpOAuthScopeRequest, type McpOAuthScopeResolution };
 export { getMcpOAuthIssuer, getMcpPublicUrl } from "./mcp-oauth-config";
 
 export type McpOAuthClient = {
@@ -28,6 +29,11 @@ export type McpOAuthClient = {
   redirectUris: string[];
   scope: CertScoreOAuthScope[];
   tokenEndpointAuthMethod: "none";
+};
+
+export type McpOAuthWorkspaceActivity = {
+  domainCount: number;
+  scanCount: number;
 };
 
 type McpOAuthClientRow = {
@@ -83,6 +89,20 @@ export function getMcpJwtSecret() {
   return secret;
 }
 
+export async function getMcpOAuthWorkspaceActivity(organizationId: string): Promise<McpOAuthWorkspaceActivity> {
+  const row = await queryOne<{ domain_count: number; scan_count: number }>(
+    `select (select count(*)::int from domains where organization_id = $1) as domain_count,
+            (select count(*)::int from scans where organization_id = $1) as scan_count`,
+    [organizationId],
+    { readOnly: true }
+  );
+
+  return {
+    domainCount: Number(row?.domain_count ?? 0),
+    scanCount: Number(row?.scan_count ?? 0)
+  };
+}
+
 export async function hasMcpOAuthScanCreateGrant(context: McpOAuthGrantContext) {
   const clientId = context.clientId?.trim() || null;
   const organizationId = context.organizationId?.trim() || null;
@@ -92,13 +112,35 @@ export async function hasMcpOAuthScanCreateGrant(context: McpOAuthGrantContext) 
   }
   const row = await queryOne<{ allowed: true }>(
     `select true as allowed
-       from mcp_oauth_scan_create_grants
-      where revoked_at is null
-        and (
-          (grant_kind = 'client' and grantee_id = $1)
-          or (grant_kind = 'organization' and grantee_id = $2)
-          or (grant_kind = 'user' and grantee_id = $3)
-        )
+      where exists (
+              select 1
+                from mcp_oauth_scan_create_grants
+               where revoked_at is null
+                 and (
+                   (grant_kind = 'client' and grantee_id = $1)
+                   or (grant_kind = 'organization' and grantee_id = $2)
+                   or (grant_kind = 'user' and grantee_id = $3)
+                 )
+            )
+         or exists (
+              select 1
+                from organizations
+                join organization_members
+                  on organization_members.organization_id = organizations.id
+                join mcp_oauth_clients
+                  on mcp_oauth_clients.client_id = $1
+               where organizations.id::text = $2
+                 and organization_members.user_id::text = $3
+                 and organizations.plan = 'free'
+                 and organizations.plan_status = 'active'
+                 and lower(btrim(mcp_oauth_clients.client_name)) = 'claude'
+                 and jsonb_array_length(mcp_oauth_clients.redirect_uris) > 0
+                 and not exists (
+                   select 1
+                     from jsonb_array_elements_text(mcp_oauth_clients.redirect_uris) redirect_uri
+                    where redirect_uri !~ '^https://claude\\.ai(?:/|$)'
+                 )
+            )
       limit 1`,
     [clientId, organizationId, ownerUserId],
     { readOnly: true }

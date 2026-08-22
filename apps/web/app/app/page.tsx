@@ -114,7 +114,7 @@ export default async function DashboardPage() {
       </div>
 
       <div className="grid gap-4 lg:grid-cols-2">
-        <Card className="border-sky-100 bg-[linear-gradient(145deg,#ffffff_0%,#f5fbff_100%)] shadow-sm">
+        <Card className="scroll-mt-6 border-sky-100 bg-[linear-gradient(145deg,#ffffff_0%,#f5fbff_100%)] shadow-sm" id="scan-a-site">
           <CardHeader className="pb-2 pt-5">
             <CardTitle>Scan a site</CardTitle>
           </CardHeader>

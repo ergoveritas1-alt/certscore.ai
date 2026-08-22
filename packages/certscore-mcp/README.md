@@ -150,7 +150,7 @@ https://mcp.certscore.ai/.well-known/oauth-protected-resource/mcp
 https://certscore.ai/.well-known/oauth-authorization-server
 ```
 
-The full hosted service uses OAuth authorization code with PKCE. Default read access requests `scan:read mcp`; support-gated scan creation additionally requests `scan:create`. The same tool implementation and output contracts power stdio and hosted transports.
+The full hosted service uses OAuth authorization code with PKCE. Default read access requests `scan:read mcp`. Active Trial workspaces connecting through Claude receive `scan:create` automatically, bounded to 20 genuinely new scans per hour and 100 per day per workspace; eligible recent-result reuse does not consume that allowance. Other clients continue to require an explicit scan-creation grant. The same tool implementation and output contracts power stdio and hosted transports.
 
 For low-volume agent discovery without account or OAuth setup, use the unauthenticated endpoint:
 
@@ -217,7 +217,7 @@ CERTSCORE_REQUEST_TIMEOUT_MS=300000
 
 ## Local MCP — scoped API key access
 
-Stdio API keys use `pulse:read` and `mcp`; creating scans additionally requires `pulse:scan`. Hosted OAuth uses `scan:read` and `mcp`, with support-gated `scan:create`. Request scan-creation access by emailing `support@certscore.ai` with your organization, MCP client, expected workflow, expected request volume, and contact email.
+Stdio API keys use `pulse:read` and `mcp`; creating scans additionally requires `pulse:scan`. Hosted OAuth uses `scan:read` and `mcp`. Active Trial workspaces connecting through Claude receive bounded `scan:create` automatically; other clients can request scan-creation access by emailing `support@certscore.ai` with the organization, MCP client, expected workflow, expected request volume, and contact email.
 
 ## Verify Install
 
