@@ -2,6 +2,8 @@
 
 This plugin connects Claude Code to the existing no-auth CertScore.ai MCP Light endpoint and adds the `/certscore-mcp-light:privacy-scan` workflow. It contains no hooks, autonomous actions, local executables, credentials, or write tools.
 
+Plugin package version: `0.2.15`. The hosted MCP runtime is also `0.2.15`.
+
 Connection:
 
 - Endpoint: `https://mcp.certscore.ai/mcp/light`

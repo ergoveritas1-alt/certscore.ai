@@ -1,0 +1,15 @@
+{
+  "$schema": "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json",
+  "name": "certscore-website-privacy-preflight",
+  "version": "1.0.0",
+  "description": "Free website privacy scanner to detect pre-consent cookies and trackers, CMP and consent controls, privacy-policy, GDPR/ePrivacy and CCPA, and HTTPS/TLS signals.",
+  "author": {
+    "name": "ErgoVeritas, LLC",
+    "email": "support@certscore.ai",
+    "url": "https://certscore.ai"
+  },
+  "homepage": "https://certscore.ai/mcp/light",
+  "repository": "https://github.com/ergoveritas1-alt/certscore.ai",
+  "license": "LicenseRef-CertScore-Developer-Preview",
+  "keywords": ["certscore", "mcp", "privacy", "website-analysis", "preflight"]
+}
