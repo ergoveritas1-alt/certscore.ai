@@ -14,6 +14,7 @@ import {
 } from "./runtime-cookie-priority";
 import { buildRegulatoryChecklistEvidenceHighlights } from "./regulatory-checklist-evidence-highlights";
 import { runtimeVendorDisclosureRowHasPromotionCategory } from "./runtime-vendor-disclosure";
+import { isGdprTransparencyReportRowId } from "./gdpr-transparency-report-contract";
 
 export type GdprEprivacyCoverageChecklistStatus =
   | "Observed"
@@ -2471,30 +2472,11 @@ function shouldPreferCoverageOutcomeForContextualInfrastructure(
   return readRetainedBoolean(retained, ["contextualInfrastructureOnly", "contextual_infrastructure_only"]) === true;
 }
 
-function shouldPreferGdprTransparencyNoMatchOutcome(
+function shouldPreferGdprTransparencyCoverageOutcome(
+  rowId: string,
   coverageOutcome: GdprEprivacyCoverageOutcome | undefined
 ) {
-  if (coverageOutcome?.status !== "Not confirmed") {
-    return false;
-  }
-
-  const retained = getRecordValue(coverageOutcome.criticalEvidence.retainedEvidence) ?? {};
-  const assessment = getNestedRecord(retained, [
-    "article13CoverageAssessment",
-    "article13_coverage_assessment"
-  ]);
-  if (!assessment) {
-    return false;
-  }
-
-  return (
-    readRetainedString(assessment, [
-      "assessmentContractVersion",
-      "assessment_contract_version"
-    ]) === "gdpr_transparency_article13_coverage_assessment.v1" &&
-    readRetainedString(assessment, ["coverageStatus", "coverage_status"]) === "sufficient" &&
-    readRetainedString(assessment, ["status"]) === "not_observed_with_sufficient_coverage"
-  );
+  return isGdprTransparencyReportRowId(rowId) && coverageOutcome !== undefined;
 }
 
 function isFindingEligibleForCoverageRow(rowId: string, finding: UnifiedFindingDisplayPacket) {
@@ -3375,6 +3357,55 @@ function collapseSessionReplayDiagnosticRows(items: GdprEprivacyCoverageChecklis
     .filter((item) => !SESSION_REPLAY_CHILD_ROW_IDS.has(item.id));
 }
 
+function canonicalizeGdprTransparencyChecklistItem(
+  item: GdprEprivacyCoverageChecklistItem,
+): GdprEprivacyCoverageChecklistItem {
+  if (!isGdprTransparencyReportRowId(item.id) || item.status === "Observed") {
+    return item;
+  }
+
+  const retainedEvidence = item.criticalEvidence.retainedEvidence;
+  const retainedAssessment = getRecordValue(
+    retainedEvidence.policyEvidenceAssessment ??
+    retainedEvidence.policy_evidence_assessment,
+  );
+  const assessmentResult = getStringValue(
+    retainedAssessment?.result ??
+    retainedAssessment?.assessmentResult ??
+    retainedAssessment?.assessment_result,
+  );
+  const policyEvidenceAssessment = {
+    ...(retainedAssessment ?? {}),
+    contractVersion: "certscore.policy-topic-evidence-assessment.v1",
+    result: assessmentResult ?? "extraction_incomplete",
+    scoreEffect: "none",
+    topicRelevance: getStringValue(
+      retainedAssessment?.topicRelevance ?? retainedAssessment?.topic_relevance,
+    ) ?? "unknown",
+  };
+  const criticalEvidence = {
+    ...item.criticalEvidence,
+    retainedEvidence: {
+      ...retainedEvidence,
+      gdprTransparencyReportStatusContract:
+        "observed_not_confirmed_no_match_found.v1",
+      policyEvidenceAssessment,
+      priorChecklistStatus:
+        item.status === "Not confirmed" ? undefined : item.status,
+    },
+  };
+
+  return buildChecklistItem({
+    criticalEvidence,
+    evidenceRefs: item.evidenceRefs,
+    explanation: item.explanation,
+    id: item.id,
+    label: item.label,
+    limitation: item.limitation,
+    status: "Not confirmed",
+  });
+}
+
 export function deriveGdprEprivacyCoverageChecklist(
   input: GdprEprivacyCoverageChecklistInput
 ): GdprEprivacyCoverageChecklistItem[] {
@@ -3426,7 +3457,7 @@ export function deriveGdprEprivacyCoverageChecklist(
         shouldPreferCoverageOutcomeForMissingReject(definition.id, coverageOutcome) ||
         shouldPreferCoverageOutcomeForConsentChoiceQuality(definition.id, coverageOutcome) ||
         shouldPreferCoverageOutcomeForContextualInfrastructure(definition.id, coverageOutcome) ||
-        shouldPreferGdprTransparencyNoMatchOutcome(coverageOutcome)
+        shouldPreferGdprTransparencyCoverageOutcome(definition.id, coverageOutcome)
       )
     ) {
       const specialized = specializeChecklistRow({
@@ -3597,5 +3628,6 @@ export function deriveGdprEprivacyCoverageChecklist(
 
   return collapseSessionReplayDiagnosticRows(rows
     .map((item) => applyVisualNoGoUiControlGuard(item, visualNoGoObserved))
-    .map(applyChecklistEvidenceDeducibilityGuard));
+    .map(applyChecklistEvidenceDeducibilityGuard))
+    .map(canonicalizeGdprTransparencyChecklistItem);
 }

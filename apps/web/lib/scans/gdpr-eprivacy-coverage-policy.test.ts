@@ -428,7 +428,11 @@ test("deriveGdprEprivacyCoveragePolicyOutcomes keeps legacy_only GDPR Transparen
     snapshot: {}
   });
 
-  assert.equal(outcomes.legal_basis_disclosure_observed?.status, baseline.legal_basis_disclosure_observed?.status);
+  assert.equal(baseline.legal_basis_disclosure_observed?.status, "Not testable");
+  assert.equal(outcomes.legal_basis_disclosure_observed?.status, "Not confirmed");
+  const assessment = outcomes.legal_basis_disclosure_observed?.criticalEvidence.retainedEvidence
+    .policyEvidenceAssessment as Record<string, unknown>;
+  assert.equal(assessment.result, "extraction_incomplete");
 });
 
 test("deriveGdprEprivacyCoveragePolicyOutcomes gives checklist Observed credit to approved multilingual Article 13 topics", () => {
@@ -450,6 +454,74 @@ test("deriveGdprEprivacyCoveragePolicyOutcomes gives checklist Observed credit t
       `${rowId} should retain normalized concern provenance`
     );
   }
+});
+
+test("canonical GDPR Transparency projection does not fall back to raw observed signals", () => {
+  const runtimeArtifacts = {
+    policyDisclosureSummary: {
+      article13DisclosureSignals: [{
+        confidence: 0.95,
+        disclosureType: "data_retention",
+        evidenceText: "Cookie settings are stored in your browser.",
+        selectedEvidenceStrength: "strong",
+        source: "deterministic",
+        status: "observed",
+      }],
+      privacyPolicyPresent: true,
+    },
+  };
+  const outcomes = deriveGdprEprivacyCoveragePolicyOutcomes({
+    ...completedInputBase,
+    normalizedConcerns: [],
+    runtimeArtifacts,
+    snapshot: {},
+  });
+  const outcome = outcomes.retention_disclosure_observed;
+
+  assert.equal(outcome?.status, "Not confirmed");
+  assert.equal(
+    outcome?.criticalEvidence.retainedEvidence.canonicalProjectionState,
+    "retained_candidate_not_production_projectable",
+  );
+  const assessment = outcome?.criticalEvidence.retainedEvidence.policyEvidenceAssessment as
+    | Record<string, unknown>
+    | undefined;
+  assert.equal(assessment?.result, "extraction_incomplete");
+  assert.equal(assessment?.scoreEffect, "none");
+});
+
+test("unprojected retained GDPR Transparency candidates canonically remain neutral no-match results", () => {
+  const retainedSignal = makeGdprTransparencyArticle13Signal({
+    disclosureType: "processing_purposes",
+    evidenceText: "We use personal data to provide requested services, answer customer questions, operate our platform, and protect user accounts.",
+    matchedLocale: "en",
+    matchedTerm: "use personal data to provide requested services",
+  });
+  const outcomes = deriveGdprEprivacyCoveragePolicyOutcomes({
+    ...completedInputBase,
+    normalizedConcerns: [],
+    runtimeArtifacts: {
+      policyDisclosureSummary: {
+        article13DisclosureSignals: [retainedSignal],
+        privacyPolicyPresent: true,
+        privacyPolicyTextCharacterCount: 4_200,
+      },
+    },
+    snapshot: {},
+  });
+  const outcome = outcomes.processing_purposes_disclosure;
+  const assessment = outcome?.criticalEvidence.retainedEvidence.policyEvidenceAssessment as
+    | Record<string, unknown>
+    | undefined;
+
+  assert.equal(outcome?.status, "Not confirmed");
+  assert.equal(
+    outcome?.criticalEvidence.retainedEvidence.canonicalProjectionState,
+    "retained_candidate_not_production_projectable",
+  );
+  assert.equal(assessment?.result, "not_located_automatically");
+  assert.equal(assessment?.scoreEffect, "none");
+  assert.match(outcome?.limitation ?? "", /does not establish that the disclosure is absent/i);
 });
 
 test("verified complete-policy absence projects neutral GDPR Transparency no-match results", () => {
@@ -738,7 +810,7 @@ test("deriveGdprEprivacyCoveragePolicyOutcomes observes direct Article 22-style 
   );
 });
 
-test("deriveGdprEprivacyCoveragePolicyOutcomes maps partial and ambiguous multilingual Article 13 evidence safely", () => {
+test("deriveGdprEprivacyCoveragePolicyOutcomes maps partial and ambiguous multilingual Article 13 evidence to neutral uncertainty", () => {
   const partial = deriveGdprEprivacyCoveragePolicyOutcomes({
     ...completedInputBase,
     normalizedConcerns: makeGdprTransparencyConcerns([
@@ -759,7 +831,7 @@ test("deriveGdprEprivacyCoveragePolicyOutcomes maps partial and ambiguous multil
     snapshot: {}
   });
 
-  assert.equal(partial.legal_basis_disclosure_observed?.status, "Review signal");
+  assert.equal(partial.legal_basis_disclosure_observed?.status, "Not confirmed");
   assert.notEqual(ambiguous.legal_basis_disclosure_observed?.status, "Observed");
   assert.equal(
     ambiguous.legal_basis_disclosure_observed?.criticalEvidence.retainedEvidence.gdprTransparencyArticle13Concern,
@@ -825,7 +897,7 @@ test("deriveGdprEprivacyCoveragePolicyOutcomes consumes structured Article 13 di
     retainedArticle13Signal(outcomes.controller_contact_disclosure!)!.evidenceText,
     "The controller can be contacted at privacy@example.test."
   );
-  assert.equal(outcomes.international_transfers_disclosure?.status, "Review signal");
+  assert.equal(outcomes.international_transfers_disclosure?.status, "Not confirmed");
 });
 
 test("policy disclosure rows fail closed when the versioned persisted policy projection is absent", () => {
@@ -1265,7 +1337,7 @@ test("international transfer disclosure uses retained section context when the s
   );
 });
 
-test("Privacy Shield wording is transfer review evidence and not processing-purpose credit", () => {
+test("Privacy Shield wording is retained transfer uncertainty and not processing-purpose credit", () => {
   const excerpt = "Our payment provider is certified under the EU-US Privacy Shield.";
   const outcomes = deriveGdprEprivacyCoveragePolicyOutcomes({
     ...completedInputBase,
@@ -1306,7 +1378,7 @@ test("Privacy Shield wording is transfer review evidence and not processing-purp
   });
 
   assert.notEqual(outcomes.processing_purposes_disclosure?.status, "Observed");
-  assert.equal(outcomes.international_transfers_disclosure?.status, "Review signal");
+  assert.equal(outcomes.international_transfers_disclosure?.status, "Not confirmed");
   assert.match(
     outcomes.international_transfers_disclosure?.limitation ?? "",
     /obsolete EU-US Privacy Shield reference/i,
@@ -1322,7 +1394,7 @@ test("Privacy Shield wording is transfer review evidence and not processing-purp
   );
 });
 
-test("discarded Privacy Shield evidence projects a transfer review signal without turning retention text into purposes evidence", () => {
+test("discarded Privacy Shield evidence projects neutral transfer uncertainty without turning retention text into purposes evidence", () => {
   const summary = {
     legalFrameworkValidityMatches: [
       {
@@ -1361,7 +1433,7 @@ test("discarded Privacy Shield evidence projects a transfer review signal withou
   });
 
   assert.notEqual(outcomes.processing_purposes_disclosure?.status, "Observed");
-  assert.equal(outcomes.international_transfers_disclosure?.status, "Review signal");
+  assert.equal(outcomes.international_transfers_disclosure?.status, "Not confirmed");
   assert.match(
     outcomes.international_transfers_disclosure?.limitation ?? "",
     /obsolete EU-US Privacy Shield reference/i
@@ -1740,7 +1812,7 @@ test("US privacy policy calibration separates contact, DPO, rights scope, transf
   );
   assert.equal(outcomes.retention_disclosure_observed?.status, "Observed");
   assert.equal(outcomes.international_transfers_disclosure?.status, "Observed");
-  assert.equal(outcomes.data_subject_rights_disclosure?.status, "Review signal");
+  assert.equal(outcomes.data_subject_rights_disclosure?.status, "Not confirmed");
   assert.equal(
     outcomes.data_subject_rights_disclosure?.criticalEvidence.retainedEvidence.rightsJurisdictionScope,
     "us_state_only"
@@ -1833,7 +1905,7 @@ test("deriveGdprEprivacyCoveragePolicyOutcomes does not treat deletion rights as
   assert.notEqual(outcomes.retention_disclosure_observed?.status, "Observed");
 });
 
-test("deriveGdprEprivacyCoveragePolicyOutcomes keeps weak retention wording in review", () => {
+test("deriveGdprEprivacyCoveragePolicyOutcomes keeps weak retention wording neutral", () => {
   const outcomes = deriveGdprEprivacyCoveragePolicyOutcomes({
     ...completedInputBase,
     runtimeArtifacts: {
@@ -1858,7 +1930,7 @@ test("deriveGdprEprivacyCoveragePolicyOutcomes keeps weak retention wording in r
     }
   });
 
-  assert.equal(outcomes.retention_disclosure_observed?.status, "Review signal");
+  assert.equal(outcomes.retention_disclosure_observed?.status, "Not confirmed");
 });
 
 test("deriveGdprEprivacyCoveragePolicyOutcomes does not observe retention from generic storage mechanics", () => {
@@ -1944,7 +2016,7 @@ test("deriveGdprEprivacyCoveragePolicyOutcomes prefers retention-specific retain
   );
 });
 
-test("deriveGdprEprivacyCoveragePolicyOutcomes treats guessed-only privacy notice as review", () => {
+test("deriveGdprEprivacyCoveragePolicyOutcomes treats guessed-only privacy notice as not confirmed", () => {
   const outcomes = deriveGdprEprivacyCoveragePolicyOutcomes({
     ...completedInputBase,
     runtimeArtifacts: {
@@ -1964,7 +2036,7 @@ test("deriveGdprEprivacyCoveragePolicyOutcomes treats guessed-only privacy notic
     }
   });
 
-  assert.equal(outcomes.privacy_notice_availability?.status, "Review signal");
+  assert.equal(outcomes.privacy_notice_availability?.status, "Not confirmed");
   assert.equal(outcomes.privacy_notice_availability?.criticalEvidence.retainedEvidence.signalObserved, "partial");
 });
 

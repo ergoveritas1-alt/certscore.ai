@@ -27,6 +27,7 @@ import {
   type GdprEprivacyChecklistPresentation,
   type GdprEprivacyChecklistPresentationRow,
 } from "../../lib/scans/gdpr-eprivacy-checklist-presentation";
+import { GDPR_TRANSPARENCY_REPORT_ROW_IDS } from "../../lib/scans/gdpr-transparency-report-contract";
 
 type GdprEprivacyCoverageChecklistCardProps = {
   defaultOpen?: boolean;
@@ -145,21 +146,7 @@ const REPORT_ROW_GROUPS = [
   },
   {
     title: "GDPR Transparency",
-    rowIds: [
-      "privacy_notice_availability",
-      "controller_contact_disclosure",
-      "processing_purposes_disclosure",
-      "legal_basis_disclosure_observed",
-      "recipients_vendor_categories_disclosure",
-      "retention_disclosure",
-      "retention_disclosure_observed",
-      "retention_disclosure_present",
-      "data_subject_rights_disclosure",
-      "international_transfers_disclosure",
-      "dpo_contact_point_disclosure",
-      "supervisory_authority_complaint_disclosure",
-      "automated_decision_making_profiling_disclosure"
-    ]
+    rowIds: GDPR_TRANSPARENCY_REPORT_ROW_IDS
   },
   {
     title: "Transport Security",

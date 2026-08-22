@@ -2236,7 +2236,7 @@ test("rejected diagnostic and non-credit GDPR Transparency evidence creates no p
   );
 });
 
-test("automated GDPR Transparency Article 13 evidence remains checklist review signal", () => {
+test("automated GDPR Transparency Article 13 topic presence remains checklist-only observed evidence", () => {
   const concerns = buildNormalizedConcerns({
     reviewFindingCandidates: [],
     runtimeArtifacts: {
@@ -2257,7 +2257,7 @@ test("automated GDPR Transparency Article 13 evidence remains checklist review s
   assert.ok(concern);
   assert.equal(concern.promotionEligibility, "internal_only");
   assert.equal(concern.externalSurfacingEligibility, "audit_only");
-  assert.equal(concern.regulatoryChecklistEligibility, "review_signal");
+  assert.equal(concern.regulatoryChecklistEligibility, "observed");
 });
 
 test("ambiguous GDPR Transparency Article 13 evidence receives no checklist credit", () => {
@@ -2647,5 +2647,122 @@ test("shadow or non-production Mini policy review cannot create normalized evide
       concern.originKey === "gdpr_transparency.article13.legal_basis"
     ),
     false
+  );
+});
+
+test("Mini observed labels cannot bypass deterministic topic invariants", () => {
+  const rows = [
+    ["processing_purposes", "Personal data means any information relating to an identified person."],
+    ["data_retention", "You can change cookie storage preferences in your browser."],
+    ["international_transfers", "Our services are available around the world."],
+    ["vendor_disclosures", "We never sell user-provided data for financial gain."],
+    ["data_subject_rights", "Depending on where you live, you may have certain rights."],
+  ].map(([topic, evidence]) => ({
+    topic,
+    status: "observed",
+    confidence: 0.96,
+    sourceDocumentIds: ["policy-1"],
+    sourceUrls: ["https://example.com/privacy"],
+    evidenceExcerpts: [evidence],
+    conflictingExcerpts: [],
+    reasonCodes: ["policy_review_invariants_applied_v1"],
+    rationale: "Candidate model label.",
+  }));
+  const concerns = buildNormalizedConcerns({
+    reviewFindingCandidates: [],
+    runtimeArtifacts: {
+      policyModelReviewArtifact: makeProductionPolicyModelReviewArtifact({ rows }),
+    },
+    validationFindings: [],
+  });
+
+  assert.equal(
+    concerns.some((concern) => concern.originKey.startsWith("gdpr_transparency.article13.")),
+    false,
+  );
+});
+
+test("Mini topic guards preserve explicit multilingual and punctuation-heavy evidence", () => {
+  const rows = [
+    [
+      "data_subject_rights",
+      "You may have rights relating to personal information, including the rights to: Request access… Request deletion… Request correction…",
+    ],
+    [
+      "international_transfers",
+      "Трансграничная передача персональных данных необходима, поскольку данные могут передаваться иностранным поставщикам услуг.",
+    ],
+    [
+      "processing_purposes",
+      "個人情報の利用目的：サービスの提供、改善、お問い合わせへの対応、および不正利用の防止。",
+    ],
+  ].map(([topic, evidence]) => ({
+    topic,
+    status: "observed",
+    confidence: 0.96,
+    sourceDocumentIds: ["policy-1"],
+    sourceUrls: ["https://example.com/privacy"],
+    evidenceExcerpts: [evidence],
+    conflictingExcerpts: [],
+    reasonCodes: ["policy_review_invariants_applied_v1"],
+    rationale: "Invariant-verified retained policy evidence.",
+  }));
+  const concerns = buildNormalizedConcerns({
+    reviewFindingCandidates: [],
+    runtimeArtifacts: {
+      policyModelReviewArtifact: makeProductionPolicyModelReviewArtifact({ rows }),
+    },
+    validationFindings: [],
+  });
+
+  assert.deepEqual(
+    concerns
+      .filter((concern) => concern.originKey.startsWith("gdpr_transparency.article13."))
+      .map((concern) => concern.originKey)
+      .sort(),
+    [
+      "gdpr_transparency.article13.data_subject_rights",
+      "gdpr_transparency.article13.international_transfers",
+      "gdpr_transparency.article13.processing_purposes",
+    ],
+  );
+});
+
+test("retained observed evidence blocks a contradictory no-match normalized concern", () => {
+  const runtimeArtifacts = {
+    policyDisclosureSummary: {
+      article13DisclosureSignals: [{
+        confidence: 0.9,
+        disclosureType: "supervisory_authority",
+        evidenceText: "You have the right to make a complaint to your local Supervisory Authority.",
+        selectedEvidenceStrength: "strong",
+        source: "deterministic",
+        status: "observed",
+      }],
+      article13CoverageAssessments: [{
+        assessmentContractVersion: "gdpr_transparency_article13_coverage_assessment.v1",
+        coverageStatus: "sufficient",
+        policyDocumentIds: ["policy-1"],
+        policyDocumentRoles: ["policy_document"],
+        policyDocumentSha256: ["a".repeat(64)],
+        reasonCodes: ["verified_complete_owned_policy_reviewed", "row_specific_disclosure_not_observed"],
+        sourceUrls: ["https://example.com/privacy"],
+        status: "not_observed_with_sufficient_coverage",
+        topic: "supervisory_authority",
+      }],
+    },
+  };
+  const concerns = buildNormalizedConcerns({
+    reviewFindingCandidates: [],
+    runtimeArtifacts,
+    validationFindings: [],
+  });
+
+  assert.equal(
+    concerns.some((concern) =>
+      concern.originKey === "gdpr_transparency.article13.supervisory_authority" &&
+      concern.observedValue === "no_match_found"
+    ),
+    false,
   );
 });

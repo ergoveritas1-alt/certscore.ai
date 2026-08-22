@@ -1409,3 +1409,32 @@ test("registry covers every supported locale", () => {
     assert.equal(registryLocales.has(locale), true, locale);
   }
 });
+
+test("classifies retained production false-negative wording before projection", () => {
+  const cases = [
+    {
+      topic: "supervisory_authority",
+      text: "Complaint. You have the right to make a complaint about our personal data handling practices to your local Supervisory Authority.",
+    },
+    {
+      topic: "controller_contact",
+      text: "Who is the controller of Personal Data? Mercado Libre is the controller of the data collected from users and visitors.",
+    },
+    {
+      topic: "recipients_or_vendor_categories",
+      text: "Your browser's push subscription endpoint is shared with Google, Mozilla, Apple, or Microsoft to deliver notifications.",
+    },
+    {
+      topic: "international_transfers",
+      text: "Cross-Border Transfer. We may transfer, use, and process your personal data in Taiwan or another location where our data-processing centers are located.",
+    },
+  ] as const;
+
+  for (const fixture of cases) {
+    const topics = new Set(classifyGdprTransparencyTopics({
+      localeHints: ["en"],
+      text: fixture.text,
+    }).matches.map((match) => match.topic));
+    assert.equal(topics.has(fixture.topic), true, fixture.topic);
+  }
+});

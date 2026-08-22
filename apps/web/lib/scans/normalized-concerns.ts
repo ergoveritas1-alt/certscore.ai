@@ -2690,6 +2690,16 @@ function buildGdprTransparencyArticle13AbsenceConcerns(
   const assessments = getPlainRecordArray(
     summary?.article13CoverageAssessments ?? summary?.article13_coverage_assessments
   );
+  const retainedObservedTopics = new Set([
+    ...assessments
+      .filter((assessment) => getRuntimeString(assessment, ["status"]) === "observed")
+      .map((assessment) => getRuntimeString(assessment, ["topic"]))
+      .filter((topic): topic is string => Boolean(topic)),
+    ...getGdprTransparencyArticle13Signals(summary)
+      .filter((signal) => getRuntimeString(signal, ["status"]) === "observed")
+      .map((signal) => getRuntimeString(signal, ["disclosureType", "disclosure_type"]))
+      .filter((topic): topic is string => Boolean(topic)),
+  ]);
 
   return assessments.flatMap((assessment) => {
     const contractVersion = getRuntimeString(assessment, [
@@ -2717,6 +2727,7 @@ function buildGdprTransparencyArticle13AbsenceConcerns(
       coverageStatus !== "sufficient" ||
       status !== "not_observed_with_sufficient_coverage" ||
       !topic ||
+      retainedObservedTopics.has(topic) ||
       sourceUrls.length === 0 ||
       policyDocumentSha256.length === 0 ||
       policyDocumentIds.length === 0 ||
@@ -2845,6 +2856,46 @@ const POLICY_MODEL_TOPIC_TO_GDPR_TRANSPARENCY_TOPIC = {
   data_subject_rights: "data_subject_rights",
 } as const;
 
+function modelReviewEvidenceMatchesKnownCrossTopicFalsePositive(
+  topic: (typeof POLICY_MODEL_TOPIC_TO_GDPR_TRANSPARENCY_TOPIC)[keyof typeof POLICY_MODEL_TOPIC_TO_GDPR_TRANSPARENCY_TOPIC],
+  evidenceText: string,
+) {
+  switch (topic) {
+    case "processing_purposes":
+      return (
+        /\bpersonal data means any information\b/i.test(evidenceText) ||
+        /\bcookies? (?:are|is) (?:simple )?text files?\b/i.test(evidenceText) ||
+        /\b(?:where|how) we store your information\b/i.test(evidenceText) ||
+        /\bretention of personal information\b|\bonly retain\b.{0,160}\bas long as\b/i.test(evidenceText) ||
+        (/\b(?:security|technical and organizational measures|technical measures|protect the security)\b/i.test(evidenceText) &&
+          !/\b(?:use|collect|process)(?:d|ing)?\b.{0,120}\b(?:to|for the purpose|in order to)\b/i.test(evidenceText))
+      );
+    case "data_retention":
+      return /\b(?:browser|cookie) (?:settings?|preferences?)\b|\bcookie storage preferences?\b/i.test(evidenceText) &&
+        /\b(?:storage|store|erase|clear|delete)\b/i.test(evidenceText) &&
+        !/\b(?:retain|retention period|as long as necessary|no longer needed)\b/i.test(evidenceText);
+    case "international_transfers":
+      return /\b(?:services?|servers?) (?:are )?(?:available|operate) (?:around|throughout) the world\b/i.test(evidenceText) &&
+        !/\b(?:personal data|personal information|your data|your information)\b.{0,180}\btransfer/i.test(evidenceText);
+    case "recipients_or_vendor_categories":
+      return (
+        /\bgoogle tag manager loads google analytics(?: and microsoft clarity)?\b/i.test(evidenceText) ||
+        /\bnever sell user-provided data for financial gain\b/i.test(evidenceText) ||
+        /\bnot responsible for (?:the )?(?:terms|privacy polic(?:y|ies)|safety)\b.{0,160}\bthird[- ]part/i.test(evidenceText)
+      );
+    case "data_subject_rights":
+      return (
+        /\b(?:(?:you|individuals?|data subjects?) (?:may|might) have|(?:may|might) (?:mean )?(?:you|individuals?|data subjects?) have) certain rights\b/i.test(evidenceText) &&
+          !/\b(?:access|delete|erasure|rectification|correct|object|restrict|portability)\b/i.test(evidenceText) ||
+        /\bright to (?:make|lodge|file) a complaint\b/i.test(evidenceText) &&
+          /\b(?:supervisory|data protection|privacy) authority\b/i.test(evidenceText) &&
+          !/\b(?:access|delete|erasure|rectification|correct|object|restrict|portability)\b/i.test(evidenceText)
+      );
+    default:
+      return false;
+  }
+}
+
 function buildGdprTransparencyModelReviewConcerns(
   runtimeArtifacts: Record<string, unknown> | null | undefined,
   domainContext?: ScanDomainContext
@@ -2881,6 +2932,9 @@ function buildGdprTransparencyModelReviewConcerns(
 
     const evidenceText = row.evidenceExcerpts[0] ?? null;
     const sourceUrl = row.sourceUrls[0] ?? null;
+    if (!evidenceText || modelReviewEvidenceMatchesKnownCrossTopicFalsePositive(topic, evidenceText)) {
+      return [];
+    }
     return [buildConcernFromSharedInput({
       categoryId: "privacy",
       description:

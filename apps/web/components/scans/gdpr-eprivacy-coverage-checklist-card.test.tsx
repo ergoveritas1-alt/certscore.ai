@@ -15,10 +15,15 @@ import {
   summarizeGdprEprivacyAssessmentDirections
 } from "../../lib/scans/gdpr-eprivacy-assessment-direction";
 import type { GdprEprivacyCoverageChecklistItem } from "../../lib/scans/gdpr-eprivacy-coverage-checklist";
+import { GDPR_TRANSPARENCY_REPORT_ROW_IDS } from "../../lib/scans/gdpr-transparency-report-contract";
 
 test("GDPR Transparency grouping includes every emitted Article 13 checklist row", () => {
   const source = readFileSync(new URL("./gdpr-eprivacy-coverage-checklist-card.tsx", import.meta.url), "utf8");
-  assert.match(source, /title: "GDPR Transparency"[\s\S]*automated_decision_making_profiling_disclosure/);
+  assert.match(source, /title: "GDPR Transparency"[\s\S]*GDPR_TRANSPARENCY_REPORT_ROW_IDS/);
+  assert.equal(
+    GDPR_TRANSPARENCY_REPORT_ROW_IDS.includes("automated_decision_making_profiling_disclosure"),
+    true,
+  );
 });
 
 test("getEvidenceLabel keeps insufficient evidence distinct from missing test coverage", () => {

@@ -47,7 +47,7 @@ export function isArticle13DisclosureEvidenceUsable(
 export function hasSubstantiveProcessingPurposesEvidence(value: string) {
   const text = normalizeArticle13Whitespace(value);
   const purposeOutcomePattern =
-    /\b(?:provide|deliver|operate|maintain|improve|develop|personalize|communicate|respond|answer|process|fulfil|fulfill|protect|secure|prevent|detect|measure|analy[sz]e|comply|send|administer|manage|support|facilitate|handle|perform|conduct|ensure|keep records?|follow[- ]?up|authenticate|optimise|optimize)\b/i;
+    /\b(?:provide|deliver|operate|maintain|improve|develop|personalize|communicate|respond|answer|process|fulfil|fulfill|protect|secure|prevent|detect|measure|analy[sz]e|understand|verify|diagnose|comply|send|administer|manage|support|facilitate|handle|perform|conduct|ensure|keep records?|follow[- ]?up|authenticate|optimise|optimize)\b/i;
   if (
     /\b(?:privacy shield|data privacy framework|\bdpf\b|standard contractual clauses?|\bsccs?\b|adequacy decision|international data transfer|cross-border transfer)\b/i.test(text) &&
     !/\b(?:purpose(?:s)? of (?:the )?(?:processing|collection|use)|why we (?:process|collect|use)|we (?:use|process|collect) (?:your )?(?:personal )?(?:data|information) (?:to|for))\b/i.test(text)
@@ -58,7 +58,11 @@ export function hasSubstantiveProcessingPurposesEvidence(value: string) {
   return (
     /\b(?:purpose(?:s)? of (?:the )?(?:processing|collection|use)(?: of (?:your )?(?:personal )?(?:data|information))?|why we (?:process|collect|use) (?:your )?(?:personal )?(?:data|information)|what do we use (?:your )?(?:personal )?(?:data|information) for|purposes? for which (?:we )?(?:process|collect|use))\b/i.test(text) ||
     (
-      /\b(?:we|[a-z][a-z0-9&.'’-]*(?:\s+[a-z][a-z0-9&.'’-]*){0,5})\s+(?:(?:use|uses|process|processes|collect|collects|store|stores)\s+(?:and\s+use\s+)?|describes?\s+processing\s+)(?:your )?(?:(?:personal )?(?:data|information)|details|email address|contact details|name|payment information|donation information)\b.{0,100}\b(?:to|for(?: the purpose of)?)\b.{1,160}/i.test(text) &&
+      /\bwe use (?:this|your|the) (?:personal )?(?:data|information) to\b/i.test(text) &&
+      purposeOutcomePattern.test(text)
+    ) ||
+    (
+      /\b(?:we|[a-z][a-z0-9&.'’-]*(?:\s+[a-z][a-z0-9&.'’-]*){0,5})\s+(?:(?:use|uses|process|processes|collect|collects|store|stores)\s+(?:and\s+use\s+)?|describes?\s+processing\s+)(?:(?:your|this) )?(?:(?:personal )?(?:data|information)|details|email address|contact details|name|payment information|donation information)\b.{0,100}\b(?:to|for(?: the purpose of)?)\b.{1,160}/i.test(text) &&
       purposeOutcomePattern.test(text)
     ) ||
     (
@@ -534,7 +538,7 @@ function hasLocalizedArticle13EvidenceContext(
   }
 }
 
-function hasSubstantiveRightsDisclosure(value: string) {
+export function hasSubstantiveRightsDisclosure(value: string) {
   return /\b(?:your rights|data subject rights|right to (?:access|delete|erasure|rectification|object|restrict|portability)|rights? to (?:access|delete|erasure|rectification|object|restrict|portability)|exercise (?:your )?rights|privacy controls|download a copy|export (?:your )?(?:data|information)|request to (?:remove|delete|access|correct))\b/i.test(value);
 }
 

@@ -1,6 +1,10 @@
 import type {
   GdprEprivacyCoverageChecklistItem
 } from "./gdpr-eprivacy-coverage-checklist";
+import {
+  deriveGdprTransparencyReportEvidenceLabel,
+  isGdprTransparencyReportRowId,
+} from "./gdpr-transparency-report-contract";
 
 export type EvidenceLabel = "Observed" | "Not observed" | "Potential gap" | "Partial concern" | "Not confirmed" | "No match found" | "Not testable";
 export type AssessmentDirection =
@@ -85,6 +89,12 @@ export function summarizeGdprEprivacyAssessmentDirections(
 }
 
 export function getEvidenceLabel(item: GdprEprivacyCoverageChecklistItem): EvidenceLabel {
+  if (isGdprTransparencyReportRowId(item.id)) {
+    return deriveGdprTransparencyReportEvidenceLabel({
+      assessmentResult: getPolicyEvidenceAssessmentResult(item),
+      status: item.status,
+    });
+  }
   if (item.status === "Insufficient evidence") {
     return "Not confirmed";
   }
@@ -455,6 +465,15 @@ function getObservedAssessmentDirection(item: GdprEprivacyCoverageChecklistItem)
 
 export function getAssessmentDirection(item: GdprEprivacyCoverageChecklistItem): AssessmentDirection {
   const evidenceLabel = getEvidenceLabel(item);
+  if (isGdprTransparencyReportRowId(item.id)) {
+    if (evidenceLabel === "Observed") {
+      return "positive_signal";
+    }
+    if (evidenceLabel === "No match found") {
+      return "technical_limitation";
+    }
+    return "technical_limitation";
+  }
   if (evidenceLabel === "Not testable" || evidenceLabel === "No match found") {
     return "technical_limitation";
   }

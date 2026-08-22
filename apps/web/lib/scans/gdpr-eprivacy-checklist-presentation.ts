@@ -18,6 +18,7 @@ import { deriveGdprEprivacyCoverageChecklistRowRationale } from "./gdpr-eprivacy
 import { deriveGdprEprivacyReviewSummary } from "./gdpr-eprivacy-review-summary";
 import { getReportableGdprEprivacyCoverageItems } from "./gdpr-eprivacy-reportable-rows";
 import { deriveRegulatoryCoverageScore, type RegulatoryCoverageScore } from "./regulatory-coverage-score";
+import { GDPR_TRANSPARENCY_REPORT_ROW_ID_SET } from "./gdpr-transparency-report-contract";
 
 export const GDPR_EPRIVACY_CHECKLIST_PRESENTATION_VERSION =
   "gdpr-eprivacy-checklist-presentation-v1";
@@ -47,22 +48,6 @@ export type GdprEprivacyChecklistPresentation = {
   rows: GdprEprivacyChecklistPresentationRow[];
   summaryCounts: GdprEprivacyAssessmentSummaryCounts;
 };
-
-const TRANSPARENCY_ROW_IDS = new Set([
-  "privacy_notice_availability",
-  "controller_contact_disclosure",
-  "processing_purposes_disclosure",
-  "legal_basis_disclosure_observed",
-  "recipients_vendor_categories_disclosure",
-  "retention_disclosure",
-  "retention_disclosure_observed",
-  "retention_disclosure_present",
-  "data_subject_rights_disclosure",
-  "international_transfers_disclosure",
-  "dpo_contact_point_disclosure",
-  "supervisory_authority_complaint_disclosure",
-  "automated_decision_making_profiling_disclosure",
-]);
 
 const TRANSPARENCY_DISCLOSURE_TYPE_BY_ROW_ID: Record<string, string> = {
   automated_decision_making_profiling_disclosure: "automated_decision_making_or_profiling",
@@ -164,7 +149,7 @@ export function buildGdprEprivacyChecklistPresentation(
         id: item.id,
         label: item.label,
         policyReviewCandidate:
-          TRANSPARENCY_ROW_IDS.has(item.id) &&
+          GDPR_TRANSPARENCY_REPORT_ROW_ID_SET.has(item.id) &&
           (evidenceLabel === "Observed" || evidenceLabel === "Not confirmed") &&
           hasTypedPolicyReviewEvidence(item),
         rationale: deriveGdprEprivacyCoverageChecklistRowRationale(item),

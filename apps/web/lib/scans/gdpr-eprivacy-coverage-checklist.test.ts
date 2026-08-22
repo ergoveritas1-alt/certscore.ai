@@ -16,6 +16,10 @@ import { buildRegulatoryGapTopFindings } from "./regulatory-gap-top-findings";
 import { buildNormalizedConcerns } from "./normalized-concerns";
 import type { RuntimeCookieEvidenceRow } from "./runtime-cookie-evidence";
 import type { UnifiedFindingDisplayPacket } from "./unified-findings";
+import {
+  GDPR_TRANSPARENCY_REPORT_ROW_ID_SET,
+  type GdprTransparencyReportEvidenceLabel,
+} from "./gdpr-transparency-report-contract";
 
 function makeFinding(
   unifiedFindingId: string,
@@ -47,6 +51,9 @@ function byId(items: GdprEprivacyCoverageChecklistItem[], id: string) {
 }
 
 function makeChecklistGdprTransparencyConcerns(disclosureType: string) {
+  const evidenceText = disclosureType === "automated_decision_making_or_profiling"
+    ? "Wij nemen uitsluitend geautomatiseerde besluiten, waaronder profilering, wanneer de privacyverklaring dit uitdrukkelijk beschrijft."
+    : "Localized bounded Article 13 evidence about personal data processing.";
   return buildNormalizedConcerns({
     reviewFindingCandidates: [],
     runtimeArtifacts: {
@@ -57,14 +64,14 @@ function makeChecklistGdprTransparencyConcerns(disclosureType: string) {
             classifierReasonCodes: [`matched_${disclosureType}`],
             confidence: 0.93,
             disclosureType,
-            evidenceText: "Localized bounded Article 13 evidence about personal data processing.",
+            evidenceText,
             matchStrength: "direct",
             matchedLocale: "nl",
             matchedTerm: "persoonsgegevens",
             productionCredit: true,
             productionCreditProfile: "gdpr_transparency_multilingual_article13_v1",
             selectedEvidenceStrength: "strong",
-            selectedPolicySectionExcerpt: "Localized bounded Article 13 evidence about personal data processing.",
+            selectedPolicySectionExcerpt: evidenceText,
             selectedPolicySectionUrl: "https://example.test/privacy",
             source: "deterministic",
             status: "observed"
@@ -242,7 +249,7 @@ test("checklist projects retained privacy contact evidence through normalized co
   assert.equal(privacyContact.criticalEvidence.projectedFindings.length, 0);
 });
 
-test("checklist presents profiling-adjacent GDPR Transparency evidence as a neutral no-match result", () => {
+test("checklist presents approved automated-decision GDPR Transparency evidence as observed", () => {
   const coverageOutcomes = deriveGdprEprivacyCoveragePolicyOutcomes({
     coverageLimited: false,
     normalizedConcerns: makeChecklistGdprTransparencyConcerns("automated_decision_making_or_profiling"),
@@ -259,10 +266,10 @@ test("checklist presents profiling-adjacent GDPR Transparency evidence as a neut
   });
   const automated = byId(items, "automated_decision_making_profiling_disclosure");
 
-  assert.equal(automated.status, "Not confirmed");
-  assert.equal(automated.assessmentStatus, "coverage_limitation");
-  assert.equal(getEvidenceLabel(automated), "No match found");
-  assert.equal(getAssessmentDirection(automated), "technical_limitation");
+  assert.equal(automated.status, "Observed");
+  assert.equal(automated.assessmentStatus, "checked");
+  assert.equal(getEvidenceLabel(automated), "Observed");
+  assert.equal(getAssessmentDirection(automated), "positive_signal");
   assert.equal(automated.criticalEvidence.projectedFindings.length, 0);
   assert.equal(
     automated.criticalEvidence.retainedEvidence.gdprTransparencyArticle13Concern !== undefined,
@@ -295,6 +302,71 @@ function makeCoverageOutcome(
     }
   };
 }
+
+test("GDPR Transparency checklist projection permits only the canonical three report values", () => {
+  const forbiddenSourceStatuses: GdprEprivacyCoverageOutcome["status"][] = [
+    "Gap observed",
+    "Insufficient evidence",
+    "Not observed",
+    "Not testable",
+    "Review signal",
+  ];
+  const allowedLabels = new Set<GdprTransparencyReportEvidenceLabel>([
+    "Observed",
+    "Not confirmed",
+    "No match found",
+  ]);
+
+  for (const sourceStatus of forbiddenSourceStatuses) {
+    const outcome = makeCoverageOutcome({
+      evidenceRefs: [],
+      limitation: `Source status: ${sourceStatus}`,
+      rowId: "controller_contact_disclosure",
+      status: sourceStatus,
+    });
+    const rows = deriveGdprEprivacyCoverageChecklist({
+      coverageLimited: false,
+      coverageOutcomes: { controller_contact_disclosure: outcome },
+      scanCompleted: true,
+      unifiedFindings: [],
+    });
+    const row = byId(rows, "controller_contact_disclosure");
+    assert.equal(row.status, "Not confirmed", sourceStatus);
+    assert.equal(getEvidenceLabel(row), "Not confirmed", sourceStatus);
+  }
+
+  const noMatchOutcome = makeCoverageOutcome({
+    evidenceRefs: [],
+    limitation: "No approved topic match was retained.",
+    retainedEvidence: {
+      policyEvidenceAssessment: {
+        contractVersion: "certscore.policy-topic-evidence-assessment.v1",
+        result: "not_located_automatically",
+        scoreEffect: "none",
+      },
+    },
+    rowId: "controller_contact_disclosure",
+    status: "Not confirmed",
+  });
+  const noMatchRows = deriveGdprEprivacyCoverageChecklist({
+    coverageLimited: false,
+    coverageOutcomes: { controller_contact_disclosure: noMatchOutcome },
+    scanCompleted: true,
+    unifiedFindings: [],
+  });
+  assert.equal(
+    getEvidenceLabel(byId(noMatchRows, "controller_contact_disclosure")),
+    "No match found",
+  );
+
+  for (const row of noMatchRows.filter((candidate) =>
+    GDPR_TRANSPARENCY_REPORT_ROW_ID_SET.has(candidate.id)
+  )) {
+    assert.equal(allowedLabels.has(getEvidenceLabel(row) as GdprTransparencyReportEvidenceLabel), true, row.id);
+    assert.notEqual(getEvidenceLabel(row), "Partial concern", row.id);
+    assert.notEqual(getEvidenceLabel(row), "Not testable", row.id);
+  }
+});
 
 test("checklist preserves a neutral international-transfer no-match result over stale absence findings", () => {
   const items = deriveGdprEprivacyCoverageChecklist({
@@ -1115,7 +1187,7 @@ test("deriveGdprEprivacyCoverageChecklist maps Article 13 disclosure findings in
   assert.equal(byId(items, "legal_basis_disclosure_observed").status, "Observed");
   assert.equal(byId(items, "retention_disclosure_observed").status, "Observed");
   assert.equal(byId(items, "supervisory_authority_complaint_disclosure").status, "Observed");
-  assert.equal(byId(items, "automated_decision_making_profiling_disclosure").status, "Not testable");
+  assert.equal(byId(items, "automated_decision_making_profiling_disclosure").status, "Not confirmed");
 });
 
 test("deriveGdprEprivacyCoverageChecklist labels retained post-consent session replay as observed", () => {
@@ -3568,5 +3640,5 @@ test("deriveGdprEprivacyReviewSummary excludes invalid 404 and footer excerpts f
   });
 
   const summary = deriveGdprEprivacyReviewSummary(items);
-  assert.match(summary.coverageText, /^35 of 38 in-scope rows had usable automated evidence\./);
+  assert.match(summary.coverageText, /^27 of 38 in-scope rows had usable automated evidence\./);
 });

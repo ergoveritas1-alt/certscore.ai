@@ -2798,7 +2798,9 @@ export function summarizePolicySurfaces(
   });
   const gdprTransparencyAdapterResults = article13Surfaces.map((row) => ({
     result: adaptGdprTransparencyTopicCandidatesForProduction({
-      isTargetRelevantPrivacyPolicy: true,
+      isTargetRelevantPrivacyPolicy: ["target_controller", "first_party_brand"].includes(
+        row.surface.targetRelationship ?? "unknown",
+      ),
       pageUrl: row.pageUrl ?? row.surface.normalizedUrl ?? row.surface.url,
       policyTextQuality: { usable: gdprTransparencyPolicyTextQuality.usable },
       profile: gdprTransparencyEvidenceProfile,

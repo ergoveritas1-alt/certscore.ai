@@ -8382,6 +8382,54 @@ function derivePolicyDisclosureOutcome(input: GdprEprivacyCoveragePolicyInput, c
     return gdprTransparencyConcernOutcome;
   }
 
+  // Once the canonical normalized-concern projection is present, Article 13
+  // checklist rows must not fall back to raw signals, retained excerpts, or
+  // display-layer text matching. If no production-approved normalized concern
+  // exists, project the canonical neutral no-match result. Retain any rejected
+  // candidate for audit without turning it into an observed or absence finding.
+  if (config.disclosureType && input.normalizedConcerns !== undefined) {
+    const retainedCandidateSource = getPolicyArticle13DisclosureSignals(summary).find((signal) =>
+      getString(signal, ["disclosureType", "disclosure_type"]) === config.disclosureType
+    );
+    const retainedCandidate = retainedCandidateSource
+      ? sanitizePolicyArticle13Signal(retainedCandidateSource)
+      : null;
+    const retainedCandidateText = getString(retainedCandidate, [
+      "selectedPolicySectionExcerpt",
+      "selected_policy_section_excerpt",
+      "evidenceText",
+      "evidence_text",
+    ]);
+    const sourceUrl = getString(retainedCandidate, [
+      "selectedPolicySectionUrl",
+      "selected_policy_section_url",
+      "surfaceUrl",
+      "surface_url",
+    ]);
+    return makeOutcome(
+      config.rowId,
+      "Not confirmed",
+      retainedCandidate
+        ? "No production-approved topic match was established. A retained candidate was rejected by the canonical projection and remains available for audit; this result does not establish that the disclosure is absent."
+        : "No production-approved topic match was established. This neutral result does not establish that the disclosure is absent.",
+      [
+        retainedCandidate ? `Evidence: unprojected ${config.label.toLowerCase()} candidate` : null,
+        retainedCandidateText ? `Excerpt: ${retainedCandidateText}` : null,
+        sourceUrl ? `Policy URL: ${sourceUrl}` : null,
+      ].filter((value): value is string => Boolean(value)),
+      {
+        retainedEvidence: {
+          canonicalProjectionState: retainedCandidate
+            ? "retained_candidate_not_production_projectable"
+            : "normalized_concern_unavailable",
+          policyTextExtractionHealth: extractionHealth,
+          ...(retainedCandidate ? { retainedCandidate } : {}),
+          signalObserved: "not_located_automatically",
+        },
+      },
+    );
+  }
+
   const privacyPolicyPresent =
     getBoolean(summary, ["privacyPolicyPresent", "privacy_policy_present"]) === true ||
     getBoolean(input.snapshot, ["privacy_policy_present", "privacyPolicyPresent"]) === true;
@@ -9190,13 +9238,17 @@ function calibratePolicyDisclosureOutcome(outcome: GdprEprivacyCoverageOutcome) 
   return outcome;
 }
 
-function policyEvidenceAssessmentForOutcome(outcome: GdprEprivacyCoverageOutcome) {
+function policyEvidenceAssessmentForOutcome(
+  outcome: GdprEprivacyCoverageOutcome,
+  summary?: Record<string, unknown> | null,
+) {
   const retained = outcome.criticalEvidence.retainedEvidence;
   const extractionHealth = getObject(retained, ["policyTextExtractionHealth", "policy_text_extraction_health"])
     ?? getObject(getObject(retained, ["policySurfaceSummary", "policy_surface_summary"]), [
       "policyTextExtractionHealth",
       "policy_text_extraction_health"
-    ]);
+    ])
+    ?? getPolicyTextExtractionHealth(summary);
   const extractionStatus = getString(extractionHealth, [
     "policyTextExtractionStatus",
     "policy_text_extraction_status"
@@ -9239,6 +9291,10 @@ function attachPolicyEvidenceProjection(
 ) {
   const summary = getPolicyDisclosureSummary(input.runtimeArtifacts);
   const retained = outcome.criticalEvidence.retainedEvidence;
+  const retainedPolicyEvidenceAssessment = getObject(retained, [
+    "policyEvidenceAssessment",
+    "policy_evidence_assessment",
+  ]);
   const article13Signal = getObject(retained, ["article13Signal", "article13_signal"]);
   const rowSpecificSectionEvidence = getObject(retained, [
     "rowSpecificSectionEvidence",
@@ -9301,10 +9357,36 @@ function attachPolicyEvidenceProjection(
       missingOrIncompleteSourceSignals: outcome.criticalEvidence.missingOrIncompleteSourceSignals,
       retainedEvidence: {
         ...retained,
-        policyEvidenceAssessment: policyEvidenceAssessmentForOutcome(outcome),
+        policyEvidenceAssessment: {
+          ...policyEvidenceAssessmentForOutcome(outcome, summary),
+          ...(retainedPolicyEvidenceAssessment ?? {}),
+        },
         policyEvidenceProvenance: provenance,
       }
     }
+  );
+}
+
+function canonicalizeGdprTransparencyDisclosureUncertainty(
+  outcome: GdprEprivacyCoverageOutcome,
+) {
+  if (outcome.status !== "Review signal") {
+    return outcome;
+  }
+  return makeOutcome(
+    outcome.rowId,
+    "Not confirmed",
+    outcome.limitation,
+    outcome.evidenceRefs,
+    {
+      missingOrIncompleteSourceSignals:
+        outcome.criticalEvidence.missingOrIncompleteSourceSignals,
+      retainedEvidence: {
+        ...outcome.criticalEvidence.retainedEvidence,
+        canonicalUncertaintyState: "not_confirmed",
+        priorPolicyStatus: "review_signal",
+      },
+    },
   );
 }
 
@@ -9313,6 +9395,7 @@ function derivePolicyDisclosureOutcomes(input: GdprEprivacyCoveragePolicyInput) 
     ...POLICY_DISCLOSURE_ROWS
       .map((config) => derivePolicyDisclosureOutcome(input, config))
       .map(calibratePolicyDisclosureOutcome)
+      .map(canonicalizeGdprTransparencyDisclosureUncertainty)
       .map((outcome) => attachPolicyEvidenceProjection(input, outcome)),
     derivePolicyTextExtractionOutcome(input),
   ].filter((outcome): outcome is GdprEprivacyCoverageOutcome => Boolean(outcome));

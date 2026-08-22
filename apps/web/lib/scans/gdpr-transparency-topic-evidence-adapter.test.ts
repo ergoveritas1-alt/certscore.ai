@@ -33,9 +33,15 @@ function candidate(input: Partial<Candidate> & Pick<Candidate, "topic" | "eviden
 
 function surface(candidates: Candidate[], input: Partial<Pick<
   PolicySurfaceObservation,
-  "normalizedUrl" | "status" | "surfaceType" | "textExcerpt" | "url"
+  | "article13DisclosureSignals"
+  | "normalizedUrl"
+  | "status"
+  | "surfaceType"
+  | "textExcerpt"
+  | "url"
 >> = {}) {
   return {
+    article13DisclosureSignals: [],
     gdprTransparencyTopicCandidates: candidates,
     normalizedUrl: "https://example.test/privacy",
     status: "fetched" as const,
@@ -140,7 +146,7 @@ test("compact purpose and service-provider candidates pass the production eviden
   assert.deepEqual(result.discardedArticle13DisclosureSignals, []);
 });
 
-test("privacy-context contact channel candidates pass the production evidence adapter", () => {
+test("privacy-context contact channel candidates credit controller contact but not an unlabelled DPO", () => {
   const text = [
     "Privacy Policy.",
     "Contact. If you email us, we receive the information you choose to include and use it to respond to your message.",
@@ -165,7 +171,7 @@ test("privacy-context contact channel candidates pass the production evidence ad
 
   assert.deepEqual(
     result.acceptedProductionSignals.map((signal) => signal.disclosureType).sort(),
-    ["controller_contact", "dpo_contact"]
+    ["controller_contact"]
   );
   assert.equal(
     result.acceptedProductionSignals.every((signal) =>
@@ -173,7 +179,10 @@ test("privacy-context contact channel candidates pass the production evidence ad
     ),
     true
   );
-  assert.deepEqual(result.discardedArticle13DisclosureSignals, []);
+  assert.equal(
+    result.dispositions.find((item) => item.candidate.topic === "dpo_contact")?.rejectReason,
+    "insufficient_row_specific_terms"
+  );
 });
 
 test("full-document privacy context remains valid when a multilingual row excerpt retains its canonical matched term", () => {
@@ -497,4 +506,171 @@ test("productionCredit true appears only on adapter-accepted evidence and never 
   assert.equal(sourceCandidate.productionCredit, false);
   assert.equal(result.dispositions[0]?.candidate.productionCredit, false);
   assert.equal(result.dispositions[0]?.productionCredit, false);
+});
+
+test("production adapter rejects calibrated English false-positive topic evidence", () => {
+  const candidates = [
+    candidate({
+      evidenceText: "Data controller means a natural or legal person that determines the purposes and means of processing personal data.",
+      matchedLocale: "en",
+      matchedTerm: "data controller",
+      topic: "controller_contact",
+    }),
+    candidate({
+      evidenceText: "If you no longer wish to receive marketing communications, you can contact us at marketing@example.test.",
+      matchedLocale: "en",
+      matchedTerm: "you can contact us at",
+      matchStrength: "equivalent",
+      classifierReasonCodes: ["matched_dpo_contact", "variant_requires_privacy_context"],
+      topic: "dpo_contact",
+    }),
+    candidate({
+      evidenceText: "Depending on your location, applicable privacy law may mean you have certain rights regarding personal information.",
+      matchedLocale: "en",
+      matchedTerm: "rights of data subject",
+      topic: "data_subject_rights",
+    }),
+    candidate({
+      evidenceText: "Personal data means any information relating to a person and processing means any operation performed on that information.",
+      matchedLocale: "en",
+      matchedTerm: "purposes of processing personal data",
+      topic: "processing_purposes",
+    }),
+    candidate({
+      evidenceText: "We never sell user-provided data for financial gain and take responsibility for protecting it.",
+      matchedLocale: "en",
+      matchedTerm: "third parties with whom we share personal data",
+      topic: "recipients_or_vendor_categories",
+    }),
+    candidate({
+      evidenceText: "You can alter browser settings to erase cookies or preserve your language preferences between visits.",
+      matchedLocale: "en",
+      matchedTerm: "retention period for personal data",
+      topic: "data_retention",
+    }),
+    candidate({
+      evidenceText: "We operate services and servers around the world, but this notice does not describe a transfer of personal data.",
+      matchedLocale: "en",
+      matchedTerm: "international transfers of personal data",
+      topic: "international_transfers",
+    }),
+  ];
+
+  const result = adaptGdprTransparencyTopicCandidatesForProduction({
+    policyTextQuality: { usable: true },
+    profile: GDPR_TRANSPARENCY_MULTILINGUAL_ARTICLE13_PROFILE,
+    surface: surface(candidates),
+  });
+
+  assert.deepEqual(result.acceptedProductionSignals, []);
+  assert.equal(result.dispositions.every((item) => item.productionCredit === false), true);
+});
+
+test("production adapter rejects calibrated multilingual role, definition, and cross-topic evidence", () => {
+  const candidates = [
+    candidate({
+      evidenceText: "Оператор персональных данных – государственный орган, муниципальный орган, юридическое или физическое лицо, определяющее цели обработки персональных данных.",
+      matchedLocale: "ru",
+      matchedTerm: "оператор персональных данных",
+      topic: "controller_contact",
+    }),
+    candidate({
+      evidenceText: "Le Client porteur du projet, ou à défaut l'Etablissement scolaire, est Responsable du traitement pour les données insérées sur la Plateforme.",
+      matchedLocale: "fr",
+      matchedTerm: "responsable du traitement",
+      topic: "controller_contact",
+    }),
+    candidate({
+      evidenceText: "個人情報保護方針 | ニュース | ログイン | トップ | 料金 | 事例 | 製品 | サポート --> 個人情報保護方針",
+      matchedLocale: "ja",
+      matchedTerm: "個人情報保護管理者",
+      topic: "controller_contact",
+    }),
+    candidate({
+      evidenceText: "Ciascuna società ricopre il ruolo di titolare del trattamento secondo la relativa definizione contenuta nell'articolo 4 del GDPR.",
+      matchedLocale: "it",
+      matchedTerm: "titolare del trattamento",
+      topic: "controller_contact",
+    }),
+    candidate({
+      evidenceText: "Il Gruppo opera nel rispetto dei diritti degli interessati. Il trattamento avviene principalmente nell'Unione Europea.",
+      matchedLocale: "it",
+      matchedTerm: "diritti degli interessati",
+      topic: "data_subject_rights",
+    }),
+    candidate({
+      evidenceText: "Оператор осуществляет обработку данных, а также определяет цели обработки персональных данных. Персональные данные – любая информация о лице.",
+      matchedLocale: "ru",
+      matchedTerm: "цели обработки персональных данных",
+      topic: "processing_purposes",
+    }),
+    candidate({
+      evidenceText: "Consultare la privacy policy del singolo social network, dove sono illustrate raccolta, utilizzo e conservazione dei dati.",
+      matchedLocale: "it",
+      matchedTerm: "conservazione dei dati",
+      topic: "data_retention",
+    }),
+  ];
+  const result = adaptGdprTransparencyTopicCandidatesForProduction({
+    policyTextQuality: { usable: true },
+    profile: GDPR_TRANSPARENCY_MULTILINGUAL_ARTICLE13_PROFILE,
+    surface: surface(candidates),
+  });
+
+  assert.deepEqual(result.acceptedProductionSignals, []);
+  assert.equal(result.dispositions.every((item) => item.productionCredit === false), true);
+});
+
+test("adapter binds a weak candidate to strong same-topic retained policy evidence", () => {
+  const weakCandidate = candidate({
+    evidenceText: "Data controller means the person who decides why personal data is processed.",
+    matchedLocale: "en",
+    matchedTerm: "data controller",
+    topic: "controller_contact",
+  });
+  const retainedEvidence =
+    "Example Ltd is the controller of your personal data. Contact our privacy team at privacy@example.test.";
+  const result = adaptGdprTransparencyTopicCandidatesForProduction({
+    isTargetRelevantPrivacyPolicy: true,
+    policyTextQuality: { usable: true },
+    profile: GDPR_TRANSPARENCY_MULTILINGUAL_ARTICLE13_PROFILE,
+    surface: surface([weakCandidate], {
+      article13DisclosureSignals: [{
+        confidence: 0.9,
+        disclosureType: "controller_contact",
+        evidenceText: retainedEvidence,
+        selectedEvidenceStrength: "strong",
+        selectedPolicySectionExcerpt: retainedEvidence,
+        selectedPolicySectionUrl: "https://example.test/privacy",
+        source: "deterministic",
+        status: "observed",
+      }],
+    }),
+  });
+
+  assert.equal(result.acceptedProductionSignals.length, 1);
+  assert.equal(
+    result.acceptedProductionSignals[0]?.evidenceSource,
+    "canonical_retained_article13_signal",
+  );
+  assert.equal(result.acceptedProductionSignals[0]?.evidenceText, retainedEvidence);
+});
+
+test("adapter does not project retained evidence when target ownership is unverified", () => {
+  const controllerCandidate = candidate({
+    evidenceText:
+      "Example Ltd is the controller of your personal data. Contact privacy@example.test.",
+    matchedLocale: "en",
+    matchedTerm: "data controller",
+    topic: "controller_contact",
+  });
+  const result = adaptGdprTransparencyTopicCandidatesForProduction({
+    isTargetRelevantPrivacyPolicy: false,
+    policyTextQuality: { usable: true },
+    profile: GDPR_TRANSPARENCY_MULTILINGUAL_ARTICLE13_PROFILE,
+    surface: surface([controllerCandidate]),
+  });
+
+  assert.deepEqual(result.acceptedProductionSignals, []);
+  assert.equal(result.dispositions[0]?.rejectReason, "non_privacy_policy_surface");
 });

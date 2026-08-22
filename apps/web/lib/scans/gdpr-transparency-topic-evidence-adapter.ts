@@ -27,7 +27,9 @@ export type GdprTransparencyProductionArticle13Evidence = {
   classifierReasonCodes: string[];
   confidence: number;
   disclosureType: Article13DisclosureType;
-  evidenceSource: "gdpr_transparency_topic_candidate";
+  evidenceSource:
+    | "gdpr_transparency_topic_candidate"
+    | "canonical_retained_article13_signal";
   evidenceText: string;
   matchStrength: "direct" | "equivalent";
   matchedLocale: GdprTransparencyTopicCandidate["matchedLocale"];
@@ -51,7 +53,8 @@ export type GdprTransparencyAdapterRejectReason =
   | "policy_text_quality_not_usable"
   | "candidate_strength_not_creditworthy"
   | "candidate_missing_classifier_provenance"
-  | "candidate_missing_topic_reason_code";
+  | "candidate_missing_topic_reason_code"
+  | "candidate_topic_invariants_failed";
 
 export type GdprTransparencyCandidateDisposition = {
   candidate: GdprTransparencyTopicCandidate;
@@ -89,7 +92,7 @@ export type GdprTransparencyTopicEvidenceAdapterInput = {
     | "surfaceType"
     | "textExcerpt"
     | "url"
-  >;
+  > & Partial<Pick<PolicySurfaceObservation, "article13DisclosureSignals">>;
 };
 
 export type GdprTransparencyTopicEvidenceAdapterResult = {
@@ -145,7 +148,11 @@ export function adaptGdprTransparencyTopicCandidatesForProduction(
   const dispositions: GdprTransparencyCandidateDisposition[] = [];
 
   for (const candidate of candidates) {
-    const rejectReason = rejectReasonForCandidate(input, candidate);
+    const candidateRejectReason = rejectReasonForCandidate(input, candidate);
+    const retainedSignal = candidateRejectReason
+      ? boundCanonicalRetainedSignal(input, candidate)
+      : null;
+    const rejectReason = retainedSignal ? null : candidateRejectReason;
     if (rejectReason) {
       dispositions.push({
         candidate,
@@ -172,13 +179,19 @@ export function adaptGdprTransparencyTopicCandidatesForProduction(
       continue;
     }
 
-    const evidenceText = boundedEvidence(candidate.evidenceText);
+    const evidenceText = boundedEvidence(
+      retainedSignal?.selectedPolicySectionExcerpt ??
+        retainedSignal?.evidenceText ??
+        candidate.evidenceText,
+    );
     acceptedProductionSignals.push({
       classifierProvenance: candidate.classifierProvenance,
       classifierReasonCodes: uniqueStrings(candidate.classifierReasonCodes).slice(0, 16),
       confidence: candidate.confidence,
       disclosureType: candidate.topic,
-      evidenceSource: "gdpr_transparency_topic_candidate",
+      evidenceSource: retainedSignal
+        ? "canonical_retained_article13_signal"
+        : "gdpr_transparency_topic_candidate",
       evidenceText,
       matchStrength: candidate.matchStrength as "direct" | "equivalent",
       matchedLocale: candidate.matchedLocale,
@@ -206,6 +219,48 @@ export function adaptGdprTransparencyTopicCandidatesForProduction(
     productionEvidenceEnabled,
     profile,
   };
+}
+
+function boundCanonicalRetainedSignal(
+  input: GdprTransparencyTopicEvidenceAdapterInput,
+  candidate: GdprTransparencyTopicCandidate,
+) {
+  const surfaceUrl = resolvedSurfaceUrl(input);
+  return (input.surface.article13DisclosureSignals ?? []).find((signal) => {
+    if (
+      signal.disclosureType !== candidate.topic ||
+      signal.status !== "observed" ||
+      signal.selectedEvidenceStrength !== "strong"
+    ) {
+      return false;
+    }
+    const signalUrl = signal.selectedPolicySectionUrl;
+    if (!surfaceUrl || !signalUrl || !samePolicyUrl(surfaceUrl, signalUrl)) {
+      return false;
+    }
+    const evidenceText =
+      signal.selectedPolicySectionExcerpt ?? signal.evidenceText ?? "";
+    return Boolean(evidenceText) &&
+      article13DisclosureRejectReason(evidenceText, candidate.topic, {
+        mode: "retained_report",
+      }) === null &&
+      !candidateMatchesKnownCrossTopicFalsePositive({
+        ...candidate,
+        evidenceText,
+      });
+  }) ?? null;
+}
+
+function samePolicyUrl(left: string, right: string) {
+  const normalize = (value: string) => {
+    try {
+      const url = new URL(value);
+      return `${url.hostname.replace(/^www\./i, "").toLowerCase()}${url.pathname.replace(/\/$/, "")}`;
+    } catch {
+      return value.trim().replace(/\/$/, "").toLowerCase();
+    }
+  };
+  return normalize(left) === normalize(right);
 }
 
 function rejectReasonForCandidate(
@@ -236,6 +291,9 @@ function rejectReasonForCandidate(
   const article13RejectReason = article13DisclosureRejectReason(candidate.evidenceText, candidate.topic, {
     mode: "multilingual_classifier",
   });
+  if (candidateMatchesKnownCrossTopicFalsePositive(candidate)) {
+    return "candidate_topic_invariants_failed";
+  }
   if (
     article13RejectReason === "insufficient_row_specific_terms" &&
     (isPrivacyContextContactChannelCandidate(candidate) ||
@@ -260,13 +318,63 @@ function isPrivacyContextBoundCanonicalCandidate(candidate: GdprTransparencyTopi
 
 function isPrivacyContextContactChannelCandidate(candidate: GdprTransparencyTopicCandidate) {
   return (
-    (candidate.topic === "controller_contact" || candidate.topic === "dpo_contact") &&
+    candidate.topic === "controller_contact" &&
     candidate.matchStrength === "equivalent" &&
     candidate.matchedLocale === "en" &&
     candidate.matchedTerm === "you can contact us at" &&
     candidate.classifierReasonCodes.includes("variant_requires_privacy_context") &&
     /\byou can contact us at\b.{0,160}\b[\w.+-]+@[\w.-]+\.[a-z]{2,}\b/i.test(candidate.evidenceText)
   );
+}
+
+function candidateMatchesKnownCrossTopicFalsePositive(candidate: GdprTransparencyTopicCandidate) {
+  const text = normalizeArticle13Whitespace(candidate.evidenceText);
+  switch (candidate.topic) {
+    case "controller_contact":
+      return (
+        (candidate.matchedLocale === "en" &&
+          /\bdata controller\s+(?:means|is defined as|refers to)\b/i.test(text)) ||
+        (candidate.matchedLocale === "ru" &&
+          /оператор персональных данных.{0,220}(?:государственный орган|юридическое или физическое лицо)/iu.test(text)) ||
+        (candidate.matchedLocale === "fr" &&
+          /(?:le client|l['’]etablissement scolaire).{0,120}responsable du traitement|n['’]est pas responsable du traitement/iu.test(text)) ||
+        (candidate.matchedLocale === "ja" &&
+          (!/(?:連絡|お問い合わせ|e-?mail|メール|住所|電話)/iu.test(text) ||
+            (text.match(/\||-->|トップ|ニュース|ログイン|料金|事例/gu) ?? []).length >= 5)) ||
+        (candidate.matchedLocale === "it" &&
+          /(?:finalità probatorie|secondo la relativa definizione contenuta)/iu.test(text)) ||
+        (candidate.matchedLocale === "pl" &&
+          /administratorem danych osobowych kandydata jest firma sandvik/iu.test(text) &&
+          !/(?:@|e-?mail|telefon|adres\s+(?:pocztowy|siedziby))/iu.test(text)) ||
+        (candidate.matchedLocale === "lt" &&
+          /yra asmens duomenų valdytojas.{0,180}užtikrinantis/iu.test(text) &&
+          !/(?:@|el\.\s*pašt|telefon|adresas|susisiekti)/iu.test(text))
+      );
+    case "processing_purposes":
+      return (
+        (candidate.matchedLocale === "ru" &&
+          /определя(?:ет|ющие) цели обработки персональных данных.{0,240}персональные данные\s*[—–-]/iu.test(text)) ||
+        (candidate.matchedLocale === "it" &&
+          /cookie ed altri strumenti di tracciamento/iu.test(text) &&
+          !/(?:al fine di|allo scopo di|per (?:fornire|erogare|gestire|migliorare|rispondere|proteggere))/iu.test(text))
+      );
+    case "data_retention":
+      return candidate.matchedLocale === "it" &&
+        /privacy policy del singolo social network/iu.test(text);
+    case "data_subject_rights":
+      return (
+        (candidate.matchedLocale === "en" &&
+          /\b(?:may|might) (?:mean )?(?:you|individuals?|data subjects?) have certain rights\b/i.test(text) &&
+          !/\b(?:access|delete|erasure|rectification|correct|object|restrict|portability|complaint)\b/i.test(text)) ||
+        (candidate.matchedLocale === "it" && /nel rispetto dei diritti degli interessati/iu.test(text)) ||
+        (candidate.matchedLocale === "lt" && /užtikrina duomenų subjekto teises/iu.test(text))
+      );
+    case "international_transfers":
+      return candidate.matchedLocale === "en" &&
+        /\b(?:does not|doesn['’]t|did not|didn['’]t) describe\b.{0,100}\btransfer/i.test(text);
+    default:
+      return false;
+  }
 }
 
 function rejectReasonToDiscardedArticle13Reason(
