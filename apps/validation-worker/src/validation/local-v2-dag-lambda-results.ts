@@ -57,6 +57,16 @@ export const REPORT_FINALIZATION_DURABLE_RECOVERY_SWEEP_MS = 2_000;
 const ORPHAN_DELAY_AGE_MS = 45_000;
 const ORPHAN_TERMINAL_AGE_MS = 930_000;
 
+export function isCanonicalResultFinalizationEligible(input: {
+  artifactVerified: boolean;
+  status: LambdaResultStatus;
+  targetEnvironment: LambdaTargetEnvironment;
+}) {
+  return input.status === "completed" &&
+    input.targetEnvironment === "production" &&
+    input.artifactVerified;
+}
+
 type LambdaResultStatus = "completed" | "failed";
 type LambdaTargetEnvironment = "local" | "production";
 type LambdaAwsRegion = "eu-central-1" | "eu-west-1" | "us-west-1";
@@ -1479,7 +1489,11 @@ export async function recordLocalV2DagLambdaResult(
     context.scanStatus === "failed" &&
     (parsedMessage.targetEnvironment === "local" || options.artifactVerification !== null && options.artifactVerification !== undefined) &&
     isRecoverableLateResultFailure(context.latestFailureEventType, context.latestFailureMetadata);
-  const acceptedForCanonicalProcessing = parsedMessage.status === "completed" && (
+  const acceptedForCanonicalProcessing = isCanonicalResultFinalizationEligible({
+    artifactVerified: options.artifactVerification !== null && options.artifactVerification !== undefined,
+    status: parsedMessage.status,
+    targetEnvironment: parsedMessage.targetEnvironment,
+  }) && (
     context.scanStatus === "queued" ||
     context.scanStatus === "running" ||
     context.scanStatus === "completed" ||
@@ -1994,6 +2008,9 @@ async function startCompletedResultFinalization(input: {
   queueRegion: string;
   webBaseUrl?: string;
 }) {
+  if (input.parsed.targetEnvironment !== "production") {
+    return false;
+  }
   if (resultFinalizationScanIds.has(input.parsed.scanId)) {
     return false;
   }
@@ -2096,10 +2113,8 @@ async function loadDuePersistedCompletedResultFinalizations() {
       where request.status = 'pending'
         and request.next_attempt_at <= now()
         and scan.status = 'completed'
-        and (
-          result.metadata_json->>'targetEnvironment' = 'local'
-          or result.metadata_json #>> '{artifactVerification,verifiedAt}' is not null
-        )
+        and result.metadata_json->>'targetEnvironment' = 'production'
+        and result.metadata_json #>> '{artifactVerification,verifiedAt}' is not null
         and exists (
           select 1 from public.scan_events merged
            where merged.scan_id = request.scan_id
@@ -2132,10 +2147,8 @@ async function discoverMissingCompletedResultFinalizations() {
           and result.metadata_json->>'resultStatus' = 'completed'
           and result.created_at >= now() - interval '7 days'
           and scan.status = 'completed'
-          and (
-            result.metadata_json->>'targetEnvironment' = 'local'
-            or result.metadata_json #>> '{artifactVerification,verifiedAt}' is not null
-          )
+          and result.metadata_json->>'targetEnvironment' = 'production'
+          and result.metadata_json #>> '{artifactVerification,verifiedAt}' is not null
           and exists (
             select 1 from public.scan_events merged
              where merged.scan_id = result.scan_id

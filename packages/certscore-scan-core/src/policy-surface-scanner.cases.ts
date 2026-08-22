@@ -4512,6 +4512,10 @@ test("policySurfaceScanner escalates when Nano provider is unavailable", async (
       true,
     );
     assert.deepEqual(result.policySurfaceObservations, []);
+    const diagnostics = await readPolicyCaptureDiagnostics(result);
+    assert.equal(diagnostics.fetchedCount, 0);
+    assert.equal(diagnostics.funnel.documentUsableCount, 0);
+    assert.ok(diagnostics.policyCaptureDurationMs >= 0);
   }, {}, { expectCompleted: false, useDefaultNanoProvider: false });
 });
 

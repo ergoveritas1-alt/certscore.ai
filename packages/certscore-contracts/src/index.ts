@@ -2120,7 +2120,11 @@ export function derivePolicySurfaceInspectionOutcome(input: {
     observation.surfaceType === "privacy_policy" &&
     observation.status === "fetched" &&
     observation.documentEvaluationState !== "insufficient" &&
-    observation.documentRole !== "policy_index"
+    observation.documentRole !== "policy_index" &&
+    (
+      observation.targetRelationship === "target_controller" ||
+      observation.targetRelationship === "first_party_brand"
+    )
   );
   const inspectionCompleted = policyRun?.status === "completed";
   const negativeSearchCoverageVerified = inspectionCompleted && input.negativeSearchCoverageVerified === true;

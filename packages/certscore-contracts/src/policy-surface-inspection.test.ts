@@ -75,6 +75,7 @@ test("retained privacy-policy evidence remains complete when later policy work i
       surfaceType: "privacy_policy",
       discoveryMethod: "footer_link",
       status: "fetched",
+      targetRelationship: "target_controller",
       evidenceRefs: [],
       artifactRefs: [],
       boundedTextExcerptIds: [],
@@ -102,6 +103,52 @@ test("retained privacy-policy evidence remains complete when later policy work i
   assert.equal(outcome.inspectionCompleted, false);
   assert.equal(outcome.privacyPolicyObserved, true);
   assert.deepEqual(outcome.observedSurfaceTypes, ["privacy_policy"]);
+});
+
+test("a fetched service-provider policy does not claim usable target-policy coverage", () => {
+  const outcome = derivePolicySurfaceInspectionOutcome({
+    modulesRun: [moduleRun("completed")],
+    policySurfaceObservations: [{
+      observationId: "provider-policy-only",
+      sourceScanner: "policy_surface",
+      scenario: "policy_surface_review",
+      consentStateAtTime: "not_applicable",
+      url: "https://privacy.vendor.test/policy",
+      normalizedUrl: "https://privacy.vendor.test/policy",
+      surfaceType: "privacy_policy",
+      discoveryMethod: "footer_link",
+      status: "fetched",
+      linkObservationState: "observed",
+      documentFetchState: "fetched",
+      documentEvaluationState: "usable",
+      documentRole: "policy_document",
+      targetRelationship: "service_provider",
+      evidenceRefs: [],
+      artifactRefs: [],
+      boundedTextExcerptIds: [],
+      observedTopics: [],
+      article13DisclosureSignals: [],
+      discardedArticle13DisclosureSignals: [],
+      gdprTransparencyTopicCandidates: [],
+      retainedPolicySections: [],
+      policyCookieDisclosures: [],
+      retainedArticle13SectionEvidence: [],
+      mentionedVendors: [],
+      mentionedPurposes: [],
+      mentionedRights: [],
+      mentionedControls: [],
+      assistMetadata: [],
+      confidence: 0.94,
+      directVsInferred: "direct",
+    }],
+  });
+
+  assert.equal(outcome.outcome, "privacy_policy_observed");
+  assert.equal(outcome.coverageStatus, "limited");
+  assert.equal(outcome.documentRetrievalCoverageStatus, "insufficient");
+  assert.deepEqual(outcome.limitationKeys, [
+    "privacy_policy_link_observed_document_not_retained",
+  ]);
 });
 
 test("an observed policy link does not claim usable document coverage", () => {

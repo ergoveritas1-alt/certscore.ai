@@ -9,12 +9,36 @@ import test from "node:test";
 import {
   getLambdaResultTargetEnvironment,
   getManualSmokeResultScanId,
+  isCanonicalResultFinalizationEligible,
   isRecoverableLateResultFailure,
   mirrorLocalV2DagLambdaArtifacts,
   parseLambdaResultMessage,
   productionArtifactChainRejectReason,
   verifyProductionArtifactChain,
 } from "./local-v2-dag-lambda-results";
+
+test("canonical result finalization accepts only verified production completions", () => {
+  assert.equal(isCanonicalResultFinalizationEligible({
+    artifactVerified: true,
+    status: "completed",
+    targetEnvironment: "local",
+  }), false);
+  assert.equal(isCanonicalResultFinalizationEligible({
+    artifactVerified: false,
+    status: "completed",
+    targetEnvironment: "production",
+  }), false);
+  assert.equal(isCanonicalResultFinalizationEligible({
+    artifactVerified: true,
+    status: "failed",
+    targetEnvironment: "production",
+  }), false);
+  assert.equal(isCanonicalResultFinalizationEligible({
+    artifactVerified: true,
+    status: "completed",
+    targetEnvironment: "production",
+  }), true);
+});
 
 test("validation worker mirrors completed local Lambda artifacts and auxiliary screenshots", async () => {
   const workspaceRoot = await mkdtemp(path.join(os.tmpdir(), "certscore-worker-v2-mirror-"));
@@ -376,6 +400,12 @@ test("validation worker frees result poll capacity after retaining the terminal 
   assert.match(source, /where request\.scan_id is null/);
   assert.match(source, /MATERIALIZATION_MISSING_REQUEST_DISCOVERY_INTERVAL_MS\s*=\s*300_000/);
   assert.match(source, /includeMissingRequests/);
+  assert.match(source, /input\.parsed\.targetEnvironment !== "production"/);
+  assert.equal(
+    (source.match(/result\.metadata_json->>'targetEnvironment' = 'production'/g) ?? []).length,
+    2,
+    "both durable finalization recovery paths must exclude local diagnostic results",
+  );
   assert.doesNotMatch(source, /order by result\.scan_id, result\.created_at desc\s+limit 25/);
 });
 

@@ -610,6 +610,27 @@ export async function policySurfaceScanner(
     runRenderedFetch: createConcurrencyLimiter(POLICY_RENDERED_FETCH_CONCURRENCY),
   };
 
+  const retainFailureDiagnostics = async () => {
+    if (artifactRefs.some((artifactRef) => artifactRef.artifactId === "policy_surface_capture_diagnostics")) {
+      return null;
+    }
+    try {
+      artifactRefs.push(await writePolicyCaptureDiagnostics({
+        input,
+        moduleStartedAtMs,
+        staticCandidateCount,
+        renderedCandidateCount,
+        observedCandidateCount,
+        commonPathFallbackUsed,
+        observations,
+        policyFetchDiagnostics,
+      }));
+      return null;
+    } catch (diagnosticError) {
+      return diagnosticError instanceof Error ? diagnosticError.message : String(diagnosticError);
+    }
+  };
+
   try {
     const seededCandidates = policySurfaceSeedCandidatesFor(input);
     const homepage = await recordPolicyTiming(
@@ -1298,6 +1319,7 @@ export async function policySurfaceScanner(
       artifactRefs,
     };
   } catch (error) {
+    const diagnosticWriteError = await retainFailureDiagnostics();
     const parentCancellation = abortReason(parentSignal);
     if (parentCancellation) throw parentCancellation;
     if (externalPolicyDeadlineReached || policyDeadlineController.signal.aborted) {
@@ -1306,7 +1328,10 @@ export async function policySurfaceScanner(
           observations.length > 0 ? "partial" : "skipped_budget",
           moduleStartedAt,
           moduleStartedAtMs,
-          [`Policy-surface lane reached its absolute ${policyModuleDeadlineMs}ms deadline; retained evidence is coverage-limited.`],
+          [
+            `Policy-surface lane reached its absolute ${policyModuleDeadlineMs}ms deadline; retained evidence is coverage-limited.`,
+            ...(diagnosticWriteError ? [`Policy-surface failure diagnostics could not be retained: ${diagnosticWriteError}`] : []),
+          ],
           timingBreakdown,
         )),
         policySurfaceObservations: observations,
@@ -1317,7 +1342,8 @@ export async function policySurfaceScanner(
       moduleRun: withSiteFacingNavigation(moduleRun("failed", moduleStartedAt, moduleStartedAtMs, [
         policyModuleDeadlineReached
           ? `Policy-surface module exceeded its ${policyModuleDeadlineMs}ms hard deadline; retained evidence may be incomplete.`
-          : error instanceof Error ? error.message : String(error)
+          : error instanceof Error ? error.message : String(error),
+        ...(diagnosticWriteError ? [`Policy-surface failure diagnostics could not be retained: ${diagnosticWriteError}`] : []),
       ], timingBreakdown)),
       policySurfaceObservations: observations,
       artifactRefs,
