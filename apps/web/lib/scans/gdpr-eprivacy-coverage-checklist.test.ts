@@ -221,6 +221,44 @@ test("checklist consumes approved multilingual GDPR Transparency Article 13 cove
   );
 });
 
+test("GDPR Transparency policy fails closed when normalized concerns are unavailable", () => {
+  const evidenceText = "We share personal data with service providers and professional advisers.";
+  const runtimeArtifacts = {
+    policyDisclosureSummary: {
+      article13DisclosureSignals: [{
+        classifierProvenance: "gdpr_transparency_topic_classifier.v1",
+        disclosureType: "recipients_or_vendor_categories",
+        evidenceText,
+        matchStrength: "direct",
+        productionCredit: true,
+        productionCreditProfile: "gdpr_transparency_multilingual_article13_v1",
+        selectedEvidenceStrength: "strong",
+        selectedPolicySectionExcerpt: evidenceText,
+        selectedPolicySectionUrl: "https://example.test/privacy",
+        status: "observed",
+      }],
+      gdprTransparencyEvidenceProfile: "gdpr_transparency_multilingual_article13_v1",
+      gdprTransparencyProductionEvidenceEnabled: true,
+    },
+  };
+  const coverageOutcomes = deriveGdprEprivacyCoveragePolicyOutcomes({
+    coverageLimited: false,
+    normalizedConcerns: undefined,
+    runtimeArtifacts,
+    scanCompleted: true,
+    snapshot: {},
+  });
+
+  assert.equal(
+    coverageOutcomes.recipients_vendor_categories_disclosure?.status,
+    "Not confirmed",
+  );
+  assert.equal(
+    coverageOutcomes.recipients_vendor_categories_disclosure?.criticalEvidence.retainedEvidence.canonicalProjectionState,
+    "retained_candidate_not_production_projectable",
+  );
+});
+
 test("checklist projects retained privacy contact evidence through normalized concerns without findings", () => {
   const normalizedConcerns = [
     ...makeChecklistGdprTransparencyConcerns("controller_contact"),
@@ -335,7 +373,7 @@ test("GDPR Transparency checklist projection permits only the canonical three re
     assert.equal(getEvidenceLabel(row), "Not confirmed", sourceStatus);
   }
 
-  const noMatchOutcome = makeCoverageOutcome({
+  const unqualifiedNoMatchOutcome = makeCoverageOutcome({
     evidenceRefs: [],
     limitation: "No approved topic match was retained.",
     retainedEvidence: {
@@ -347,6 +385,21 @@ test("GDPR Transparency checklist projection permits only the canonical three re
     },
     rowId: "controller_contact_disclosure",
     status: "Not confirmed",
+  });
+  const unqualifiedRows = deriveGdprEprivacyCoverageChecklist({
+    coverageLimited: false,
+    coverageOutcomes: { controller_contact_disclosure: unqualifiedNoMatchOutcome },
+    scanCompleted: true,
+    unifiedFindings: [],
+  });
+  assert.equal(
+    getEvidenceLabel(byId(unqualifiedRows, "controller_contact_disclosure")),
+    "Not confirmed",
+  );
+
+  const noMatchOutcome = makeCoverageOutcome({
+    ...unqualifiedNoMatchOutcome,
+    status: "No match found",
   });
   const noMatchRows = deriveGdprEprivacyCoverageChecklist({
     coverageLimited: false,
@@ -441,7 +494,7 @@ test("checklist preserves a neutral international-transfer no-match result over 
           }
         },
         rowId: "international_transfers_disclosure",
-        status: "Not confirmed"
+        status: "No match found"
       })
     },
     projectedFindings: [{
@@ -455,10 +508,10 @@ test("checklist preserves a neutral international-transfer no-match result over 
   });
 
   const transfer = byId(items, "international_transfers_disclosure");
-  assert.equal(transfer.status, "Not confirmed");
-  assert.equal(transfer.assessmentStatus, "coverage_limitation");
+  assert.equal(transfer.status, "No match found");
+  assert.equal(transfer.assessmentStatus, "checked");
   assert.equal(getEvidenceLabel(transfer), "No match found");
-  assert.equal(getAssessmentDirection(transfer), "technical_limitation");
+  assert.equal(getAssessmentDirection(transfer), "neutral_signal");
   assert.equal(transfer.criticalEvidence.pipeline.projectionStage, "coverage_policy");
   assert.deepEqual(transfer.criticalEvidence.projectedFindings, []);
 });
@@ -490,7 +543,7 @@ test("checklist keeps automated policy retrieval limitations neutral", () => {
   assert.equal(legalBasis.status, "Not confirmed");
   assert.equal(legalBasis.assessmentStatus, "coverage_limitation");
   assert.equal(legalBasis.evidenceState, "not_testable");
-  assert.equal(getEvidenceLabel(legalBasis), "No match found");
+  assert.equal(getEvidenceLabel(legalBasis), "Not confirmed");
   assert.equal(getAssessmentDirection(legalBasis), "technical_limitation");
   assert.equal(legalBasis.tone, "neutral");
 });

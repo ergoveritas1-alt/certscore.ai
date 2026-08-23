@@ -1,10 +1,10 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";
-import { createElement } from "react";
+import React, { createElement, type ComponentProps } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import {
-  GdprEprivacyCoverageChecklistCard,
+  GdprEprivacyCoverageChecklistCard as PersistedGdprEprivacyCoverageChecklistCard,
   GdprEprivacyCoverageSummaryPills,
   getGdprEprivacyCoverageChecklistRowRationaleForAudit,
   gdprPolicyExcerptPageTestHelpers
@@ -16,6 +16,19 @@ import {
 } from "../../lib/scans/gdpr-eprivacy-assessment-direction";
 import type { GdprEprivacyCoverageChecklistItem } from "../../lib/scans/gdpr-eprivacy-coverage-checklist";
 import { GDPR_TRANSPARENCY_REPORT_ROW_IDS } from "../../lib/scans/gdpr-transparency-report-contract";
+import { buildGdprEprivacyChecklistPresentation } from "../../lib/scans/gdpr-eprivacy-checklist-presentation";
+
+function GdprEprivacyCoverageChecklistCard(
+  props: Omit<ComponentProps<typeof PersistedGdprEprivacyCoverageChecklistCard>, "presentation"> & {
+    presentation?: ComponentProps<typeof PersistedGdprEprivacyCoverageChecklistCard>["presentation"];
+  },
+) {
+  const items = props.items ?? props.initialDetailItems ?? [];
+  return createElement(PersistedGdprEprivacyCoverageChecklistCard, {
+    ...props,
+    presentation: props.presentation ?? buildGdprEprivacyChecklistPresentation(items),
+  });
+}
 
 test("GDPR Transparency grouping includes every emitted Article 13 checklist row", () => {
   const source = readFileSync(new URL("./gdpr-eprivacy-coverage-checklist-card.tsx", import.meta.url), "utf8");
@@ -28,13 +41,13 @@ test("GDPR Transparency grouping includes every emitted Article 13 checklist row
 
 test("getEvidenceLabel keeps insufficient evidence distinct from missing test coverage", () => {
   const partialEvidence = makeChecklistItem({
-    assessmentStatus: "coverage_limitation",
+    assessmentStatus: "checked",
     evidenceState: "observed",
     status: "Insufficient evidence"
   });
   const missingCoverage = makeChecklistItem({
     assessmentStatus: "coverage_limitation",
-    evidenceState: "not_testable",
+    evidenceState: "not_observed",
     status: "Not testable"
   });
 
@@ -44,7 +57,7 @@ test("getEvidenceLabel keeps insufficient evidence distinct from missing test co
 
 test("getEvidenceLabel presents a neutral canonical policy no-match result distinctly", () => {
   const item = makeChecklistItem({
-    assessmentStatus: "coverage_limitation",
+    assessmentStatus: "checked",
     criticalEvidence: {
       retainedEvidence: {
         policyEvidenceAssessment: {
@@ -54,14 +67,14 @@ test("getEvidenceLabel presents a neutral canonical policy no-match result disti
         }
       }
     },
-    evidenceState: "not_testable",
+    evidenceState: "not_observed",
     id: "legal_basis_disclosure_observed",
     label: "Legal basis disclosure",
-    status: "Not confirmed"
+    status: "No match found"
   });
 
   assert.equal(getEvidenceLabel(item), "No match found");
-  assert.equal(getAssessmentDirection(item), "technical_limitation");
+  assert.equal(getAssessmentDirection(item), "neutral_signal");
   assert.equal(
     getGdprEprivacyCoverageChecklistRowRationaleForAudit(item),
     "CertScore retained a usable privacy policy but found no sufficiently direct legal-basis passage during automated analysis. This does not establish that the disclosure is absent."
@@ -80,7 +93,7 @@ test("getEvidenceLabel presents a neutral canonical policy no-match result disti
 
 test("profiling-adjacent policy evidence renders as no match instead of partial concern", () => {
   const item = makeChecklistItem({
-    assessmentStatus: "coverage_limitation",
+    assessmentStatus: "checked",
     criticalEvidence: {
       retainedEvidence: {
         article13Signal: {
@@ -96,10 +109,10 @@ test("profiling-adjacent policy evidence renders as no match instead of partial 
         signalObserved: "profiling_adjacent_evidence_without_direct_disclosure"
       }
     },
-    evidenceState: "not_testable",
+    evidenceState: "not_observed",
     id: "automated_decision_making_profiling_disclosure",
     label: "Automated decision-making / profiling disclosure",
-    status: "Not confirmed"
+    status: "No match found"
   });
   const html = renderToStaticMarkup(createElement(GdprEprivacyCoverageChecklistCard, {
     defaultOpen: true,
@@ -459,7 +472,7 @@ test("GdprEprivacyCoverageChecklistCard separates evidence labels from assessmen
   );
 });
 
-test("GdprEprivacyCoverageChecklistCard does not badge review-only advertising rows as observed", () => {
+test("GdprEprivacyCoverageChecklistCard omits deferred advertising inventory rows", () => {
   const html = renderToStaticMarkup(
     createElement(GdprEprivacyCoverageChecklistCard, {
       defaultOpen: true,
@@ -493,9 +506,9 @@ test("GdprEprivacyCoverageChecklistCard does not badge review-only advertising r
     })
   );
 
-  assert.match(html, />Partial concern</);
+  assert.doesNotMatch(html, /Advertising vendor signal/);
   assert.doesNotMatch(html, />Observed</);
-  assert.match(html, /No advertising infrastructure classification was retained/);
+  assert.doesNotMatch(html, /No advertising infrastructure classification was retained/);
 });
 
 test("GdprEprivacyCoverageChecklistCard describes extraction-limited Article 13 rows as coverage limited", () => {
@@ -534,7 +547,7 @@ test("GdprEprivacyCoverageChecklistCard describes extraction-limited Article 13 
 
   assert.equal(getAssessmentDirection(item), "technical_limitation");
   const rationale = getGdprEprivacyCoverageChecklistRowRationaleForAudit(item);
-  assert.match(rationale, /Coverage limited from retained policy-surface evidence/);
+  assert.match(rationale, /Coverage was limited by policy-surface evidence/);
   assert.match(rationale, /policy text extraction thin/);
   assert.match(rationale, /842 characters retained/);
   assert.doesNotMatch(rationale, /Partial support from retained/i);
@@ -601,7 +614,7 @@ test("GdprEprivacyCoverageChecklistCard renders row-specific extraction uncertai
 
   for (const row of rows) {
     assert.equal(getEvidenceLabel(row), "Not confirmed");
-    assert.equal(getAssessmentDirection(row), "review_signal");
+    assert.equal(getAssessmentDirection(row), "technical_limitation");
   }
 
   const html = renderToStaticMarkup(
@@ -839,7 +852,7 @@ test("GdprEprivacyCoverageChecklistCard includes pre-consent cookie vendor and p
   assert.doesNotMatch(html, /Cookie\/storage writes were observed before any recorded consent action; first seen 1.22s after scan start/);
 });
 
-test("GdprEprivacyCoverageChecklistCard combines advertising basis and retained evidence into one compact note", () => {
+test("GdprEprivacyCoverageChecklistCard omits deferred advertising basis inventory", () => {
   const html = renderToStaticMarkup(
     createElement(GdprEprivacyCoverageChecklistCard, {
       defaultOpen: true,
@@ -883,10 +896,8 @@ test("GdprEprivacyCoverageChecklistCard combines advertising basis and retained 
     })
   );
 
-  assert.match(
-    html,
-    /Advertising-infrastructure evidence was partially retained before consent: Google Ads \/ DoubleClick \(advertising measurement\); first seen 0.521s after scan start; no consent action was recorded first\./
-  );
+  assert.doesNotMatch(html, /Advertising-infrastructure evidence/);
+  assert.doesNotMatch(html, /Google Ads \/ DoubleClick/);
   assert.doesNotMatch(html, /Why this result/);
   assert.doesNotMatch(html, /Evidence summary/);
   assert.doesNotMatch(html, />Basis</);
@@ -1096,7 +1107,7 @@ test("GdprEprivacyCoverageChecklistCard shows captured policy review button for 
   assert.match(html, /aria-label="Open captured privacy policy for Legal basis disclosure"/);
   assert.match(html, /aria-label="Open captured privacy policy for Data subject rights disclosure"/);
   assert.match(html, /aria-label="Open captured privacy policy for Recipients\/vendor categories disclosed"/);
-  assert.match(html, /aria-label="Open captured privacy policy for Retention disclosure"/);
+  assert.doesNotMatch(html, /aria-label="Open captured privacy policy for Retention disclosure"/);
   assert.doesNotMatch(html, /aria-label="Open captured privacy policy for Supervisory authority complaint"/);
   assert.doesNotMatch(html, /aria-label="Open captured privacy policy for Pre-consent 3rd party tracking"/);
 });
@@ -1185,7 +1196,7 @@ test("GdprEprivacyCoverageChecklistCard shows policy review for every not-confir
   }
 });
 
-test("GdprEprivacyCoverageChecklistCard shows policy review for not-confirmed retention aliases when retained full policy text has a retention excerpt", () => {
+test("GdprEprivacyCoverageChecklistCard does not create policy review from summary-only retention aliases", () => {
   const html = renderToStaticMarkup(
     createElement(GdprEprivacyCoverageChecklistCard, {
       defaultOpen: true,
@@ -1223,7 +1234,7 @@ test("GdprEprivacyCoverageChecklistCard shows policy review for not-confirmed re
     })
   );
 
-  assert.match(html, /aria-label="Open captured privacy policy for Retention disclosure"/);
+  assert.doesNotMatch(html, /aria-label="Open captured privacy policy for Retention disclosure"/);
 });
 
 function escapeRegExp(value: string) {
@@ -1444,13 +1455,13 @@ test("GdprEprivacyCoverageChecklistCard explains international transfer evidence
   assert.doesNotMatch(html, /Policy text included matching disclosure evidence/);
 });
 
-test("GdprEprivacyCoverageChecklistCard explains supervisory-authority partial support", () => {
+test("GdprEprivacyCoverageChecklistCard keeps supervisory-authority partial support not confirmed", () => {
   const html = renderToStaticMarkup(
     createElement(GdprEprivacyCoverageChecklistCard, {
       defaultOpen: true,
       items: [
         makeChecklistItem({
-          assessmentStatus: "review_signal",
+          assessmentStatus: "coverage_limitation",
           criticalEvidence: {
             retainedEvidence: {
               article13Signal: {
@@ -1466,15 +1477,15 @@ test("GdprEprivacyCoverageChecklistCard explains supervisory-authority partial s
           evidenceState: "observed",
           id: "supervisory_authority_complaint_disclosure",
           label: "Supervisory authority complaint disclosure",
-          status: "Review signal"
+          status: "Not confirmed"
         })
       ],
       showSummaryStrip: false
     })
   );
 
-  assert.match(html, /Policy text referenced complaints, regulators, or data protection authorities/);
-  assert.match(html, /complete supervisory-authority complaint-right disclosure was not confirmed/);
+  assert.match(html, /Policy evidence was retained, but row-specific disclosure was not confirmed/);
+  assert.match(html, /We work with regulatory authorities and seek to resolve any complaints/);
 });
 
 test("GdprEprivacyCoverageChecklistCard makes policy no-match decisions inferable from the canonical packet", () => {
@@ -1483,7 +1494,7 @@ test("GdprEprivacyCoverageChecklistCard makes policy no-match decisions inferabl
       defaultOpen: true,
       items: [
         makeChecklistItem({
-          assessmentStatus: "coverage_limitation",
+          assessmentStatus: "checked",
           criticalEvidence: {
             retainedEvidence: {
               article13CoverageAssessment: {
@@ -1506,10 +1517,10 @@ test("GdprEprivacyCoverageChecklistCard makes policy no-match decisions inferabl
             statusBasis:
               "CertScore retained a usable policy but found no sufficiently direct matching passage for international transfer disclosure during automated analysis. This does not establish that the disclosure is absent."
           },
-          evidenceState: "not_testable",
+          evidenceState: "not_observed",
           id: "international_transfers_disclosure",
           label: "International transfer disclosure",
-          status: "Not confirmed"
+          status: "No match found"
         })
       ],
       showSummaryStrip: false
@@ -1521,7 +1532,7 @@ test("GdprEprivacyCoverageChecklistCard makes policy no-match decisions inferabl
   assert.doesNotMatch(html, /Potential gap/);
 });
 
-test("GdprEprivacyCoverageChecklistCard makes not-testable decisions inferable from missing source signals", () => {
+test("GdprEprivacyCoverageChecklistCard keeps missing-source GDPR decisions not confirmed", () => {
   const item = makeChecklistItem({
     assessmentStatus: "coverage_limitation",
     criticalEvidence: {
@@ -1542,7 +1553,7 @@ test("GdprEprivacyCoverageChecklistCard makes not-testable decisions inferable f
     evidenceState: "not_testable",
     id: "legal_basis_disclosure_observed",
     label: "Legal basis disclosure",
-    status: "Not testable"
+    status: "Not confirmed"
   });
   const html = renderToStaticMarkup(
     createElement(GdprEprivacyCoverageChecklistCard, {
@@ -1552,7 +1563,8 @@ test("GdprEprivacyCoverageChecklistCard makes not-testable decisions inferable f
     })
   );
 
-  assert.match(html, /Not testable from retained policy-surface evidence/);
+  assert.match(html, />Not confirmed</);
+  assert.match(html, /Not confirmed by policy-surface evidence/);
   assert.match(html, /expected reachable retained privacy policy surface; retained missing/);
 });
 
@@ -1587,7 +1599,7 @@ test("GdprEprivacyCoverageChecklistCard does not use observed runtime wording fo
     })
   );
 
-  assert.match(html, /Not testable from retained source-signal coverage evidence/);
+  assert.match(html, /Could not be fully evaluated using source-signal coverage evidence/);
   assert.match(html, /expected usable pre-consent runtime evidence; retained preConsentRuntimeScanner failed/);
   assert.doesNotMatch(html, /Tracking-classified 3rd party requests fired before any recorded consent action/);
 });
@@ -1752,7 +1764,7 @@ test("GdprEprivacyCoverageChecklistCard renders debug confidence metadata", () =
   assert.match(html, /Resolve vendor and purpose for 3rd party endpoints/);
 });
 
-test("GdprEprivacyCoverageChecklistCard avoids duplicate observed wording for not-observed rows", () => {
+test("GdprEprivacyCoverageChecklistCard avoids duplicate observed wording for not-confirmed rows", () => {
   const html = renderToStaticMarkup(
     createElement(GdprEprivacyCoverageChecklistCard, {
       defaultOpen: true,
@@ -1760,7 +1772,7 @@ test("GdprEprivacyCoverageChecklistCard avoids duplicate observed wording for no
         makeChecklistItem({
           id: "controller_contact_disclosure",
           label: "Controller/contact disclosure",
-          status: "Not observed"
+          status: "Not confirmed"
         }),
         makeChecklistItem({
           id: "privacy_notice_availability",
@@ -1771,7 +1783,7 @@ test("GdprEprivacyCoverageChecklistCard avoids duplicate observed wording for no
     })
   );
 
-  assert.match(html, /Not observed in scan evidence/);
+  assert.match(html, /Not confirmed by scan evidence/);
   assert.doesNotMatch(html, /observed was observed/i);
   assert.doesNotMatch(html, /availability was observed/i);
 });
@@ -1939,7 +1951,7 @@ test("GdprEprivacyCoverageChecklistCard does not render suggested follow-up capt
   assert.doesNotMatch(html, /standard or full/);
 });
 
-test("GdprEprivacyCoverageChecklistCard omits consent-control accessibility from summary when checked", () => {
+test("GdprEprivacyCoverageChecklistCard omits deferred consent-control accessibility rows", () => {
   const html = renderToStaticMarkup(
     createElement(GdprEprivacyCoverageChecklistCard, {
       defaultOpen: true,
@@ -1954,13 +1966,13 @@ test("GdprEprivacyCoverageChecklistCard omits consent-control accessibility from
     })
   );
 
-  assert.match(html, /Review retained evidence for consent-control accessibility/i);
+  assert.doesNotMatch(html, /consent-control accessibility/i);
   assert.doesNotMatch(html, /cross-border analytics\/tracking endpoint context/i);
   assert.doesNotMatch(html, /runtime vendor disclosure alignment/i);
   assert.doesNotMatch(html, /and accessibility of consent controls/i);
 });
 
-test("GdprEprivacyCoverageChecklistCard mentions consent-control accessibility only when reviewable", () => {
+test("GdprEprivacyCoverageChecklistCard omits deferred consent-control accessibility review rows", () => {
   const html = renderToStaticMarkup(
     createElement(GdprEprivacyCoverageChecklistCard, {
       defaultOpen: true,
@@ -1976,10 +1988,10 @@ test("GdprEprivacyCoverageChecklistCard mentions consent-control accessibility o
     })
   );
 
-  assert.match(html, /consent-control accessibility/i);
+  assert.doesNotMatch(html, /consent-control accessibility/i);
 });
 
-test("GdprEprivacyCoverageChecklistCard uses persistence wording without reduction metric", () => {
+test("GdprEprivacyCoverageChecklistCard omits deferred post-reject reduction rows", () => {
   const html = renderToStaticMarkup(
     createElement(GdprEprivacyCoverageChecklistCard, {
       defaultOpen: true,
@@ -1996,7 +2008,7 @@ test("GdprEprivacyCoverageChecklistCard uses persistence wording without reducti
     })
   );
 
-  assert.match(html, /Potential issue based on scan evidence; Test row basis/i);
+  assert.doesNotMatch(html, /Post-reject tracking reduction/i);
   assert.doesNotMatch(html, /did not materially decrease/i);
 });
 
@@ -2044,7 +2056,7 @@ test("GdprEprivacyCoverageChecklistCard names social media providers and timing"
   assert.doesNotMatch(html, /Potential gap from retained scanner evidence; A social\/media embed, plugin, widget, or pixel provider loaded before any recorded consent choice in retained network\/runtime evidence\\./i);
 });
 
-test("GdprEprivacyCoverageChecklistCard keeps generic cross-border asset hosts out of lead copy", () => {
+test("GdprEprivacyCoverageChecklistCard omits deferred cross-border endpoint rows", () => {
   const html = renderToStaticMarkup(
     createElement(GdprEprivacyCoverageChecklistCard, {
       defaultOpen: true,
@@ -2080,8 +2092,8 @@ test("GdprEprivacyCoverageChecklistCard keeps generic cross-border asset hosts o
     })
   );
 
-  assert.match(html, /Google Tag Manager, Google Analytics, and Microsoft Clarity/i);
-  assert.match(html, /Additional 3rd party asset endpoints were retained as supporting runtime context/i);
+  assert.doesNotMatch(html, /Google Tag Manager, Google Analytics, and Microsoft Clarity/i);
+  assert.doesNotMatch(html, /Additional 3rd party asset endpoints were retained as supporting runtime context/i);
 });
 
 test("GdprEprivacyCoverageChecklistCard does not throw when retained row rationale text is missing", () => {

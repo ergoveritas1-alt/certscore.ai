@@ -470,7 +470,7 @@ export function getAssessmentDirection(item: GdprEprivacyCoverageChecklistItem):
       return "positive_signal";
     }
     if (evidenceLabel === "No match found") {
-      return "technical_limitation";
+      return "neutral_signal";
     }
     return "technical_limitation";
   }

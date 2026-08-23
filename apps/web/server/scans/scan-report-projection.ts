@@ -44,7 +44,10 @@ import {
   SCAN_REPORT_PROJECTION_VERSION
 } from "./scan-report-projection-contract";
 import { indexChecklistPolicyEvidence } from "../../lib/scans/checklist-evidence-index";
-import { buildGdprEprivacyChecklistPresentation } from "../../lib/scans/gdpr-eprivacy-checklist-presentation";
+import {
+  buildGdprEprivacyChecklistPresentation,
+  isGdprEprivacyChecklistPresentation
+} from "../../lib/scans/gdpr-eprivacy-checklist-presentation";
 import {
   getScanReportProjectionGeneration,
   SCAN_REPORT_PROJECTION_NON_SOURCE_EVENT_TYPES
@@ -757,6 +760,12 @@ async function deriveScanReportProjection(
     ownerUnifiedFindings: [],
     topFindingIds: visibleCanonicalHighPriorityFindings.map((finding) => finding.id)
   };
+  if (!isGdprEprivacyChecklistPresentation(canonicalReportProjection.checklistPresentation)) {
+    throw new ScanReportProjectionNotReadyError(
+      scanRecord.scan.id,
+      "GDPR Transparency checklist presentation is not canonical"
+    );
+  }
 
   return { canonicalReportProjection, value };
 }

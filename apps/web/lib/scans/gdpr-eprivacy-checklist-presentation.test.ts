@@ -66,3 +66,31 @@ test("compact checklist presentation validator fails closed on malformed rows", 
     summaryCounts: {},
   }), false);
 });
+
+test("compact checklist presentation rejects split GDPR status and evidence labels", () => {
+  const presentation = buildGdprEprivacyChecklistPresentation([makePolicyRow()]);
+  assert.equal(isGdprEprivacyChecklistPresentation({
+    ...presentation,
+    rows: presentation.rows.map((row) => ({
+      ...row,
+      evidenceLabel: "No match found",
+      status: "Not confirmed",
+    })),
+  }), false);
+});
+
+test("compact checklist presentation rejects contradictory GDPR row state", () => {
+  const presentation = buildGdprEprivacyChecklistPresentation([makePolicyRow()]);
+  assert.equal(isGdprEprivacyChecklistPresentation({
+    ...presentation,
+    rows: presentation.rows.map((row) => ({
+      ...row,
+      assessmentDirection: "technical_limitation",
+      evidenceState: "not_testable",
+    })),
+  }), false);
+  assert.equal(isGdprEprivacyChecklistPresentation({
+    ...presentation,
+    rows: [...presentation.rows, presentation.rows[0]],
+  }), false);
+});

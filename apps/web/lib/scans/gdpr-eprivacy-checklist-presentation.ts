@@ -18,7 +18,10 @@ import { deriveGdprEprivacyCoverageChecklistRowRationale } from "./gdpr-eprivacy
 import { deriveGdprEprivacyReviewSummary } from "./gdpr-eprivacy-review-summary";
 import { getReportableGdprEprivacyCoverageItems } from "./gdpr-eprivacy-reportable-rows";
 import { deriveRegulatoryCoverageScore, type RegulatoryCoverageScore } from "./regulatory-coverage-score";
-import { GDPR_TRANSPARENCY_REPORT_ROW_ID_SET } from "./gdpr-transparency-report-contract";
+import {
+  GDPR_TRANSPARENCY_REPORT_ROW_ID_SET,
+  type GdprTransparencyReportEvidenceLabel,
+} from "./gdpr-transparency-report-contract";
 
 export const GDPR_EPRIVACY_CHECKLIST_PRESENTATION_VERSION =
   "gdpr-eprivacy-checklist-presentation-v1";
@@ -63,6 +66,12 @@ const TRANSPARENCY_DISCLOSURE_TYPE_BY_ROW_ID: Record<string, string> = {
   retention_disclosure_present: "data_retention",
   supervisory_authority_complaint_disclosure: "supervisory_authority",
 };
+
+const GDPR_TRANSPARENCY_REPORT_VALUE_SET = new Set<GdprTransparencyReportEvidenceLabel>([
+  "Observed",
+  "Not confirmed",
+  "No match found",
+]);
 
 function record(value: unknown) {
   return value && typeof value === "object" && !Array.isArray(value)
@@ -169,19 +178,40 @@ export function isGdprEprivacyChecklistPresentation(
     return false;
   }
   const candidate = value as Partial<GdprEprivacyChecklistPresentation>;
+  const seenRowIds = new Set<string>();
   return (
     candidate.artifactVersion === GDPR_EPRIVACY_CHECKLIST_PRESENTATION_VERSION &&
     Array.isArray(candidate.rows) &&
-    candidate.rows.every((row) =>
-      Boolean(
+    candidate.rows.every((row) => {
+      const structurallyValid = Boolean(
         row &&
           typeof row.id === "string" &&
           typeof row.label === "string" &&
           typeof row.rationale === "string" &&
           typeof row.evidenceLabel === "string" &&
           typeof row.assessmentDirection === "string",
-      ),
-    ) &&
+      );
+      if (!structurallyValid) return false;
+      if (seenRowIds.has(row.id)) return false;
+      seenRowIds.add(row.id);
+      if (!GDPR_TRANSPARENCY_REPORT_ROW_ID_SET.has(row.id)) return true;
+      if (!(
+        GDPR_TRANSPARENCY_REPORT_VALUE_SET.has(
+          row.evidenceLabel as GdprTransparencyReportEvidenceLabel,
+        ) && row.status === row.evidenceLabel
+      )) return false;
+      if (row.evidenceLabel === "Observed") {
+        return row.assessmentStatus === "checked" &&
+          row.assessmentDirection === "positive_signal" &&
+          row.evidenceState === "observed";
+      }
+      if (row.evidenceLabel === "No match found") {
+        return row.assessmentStatus === "checked" &&
+          row.assessmentDirection === "neutral_signal" &&
+          row.evidenceState === "not_observed";
+      }
+      return row.assessmentDirection !== "positive_signal";
+    }) &&
     Boolean(candidate.checklistScore && typeof candidate.checklistScore === "object") &&
     Boolean(candidate.reviewSummary && typeof candidate.reviewSummary === "object") &&
     Boolean(candidate.summaryCounts && typeof candidate.summaryCounts === "object")

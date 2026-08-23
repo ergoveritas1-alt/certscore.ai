@@ -18,6 +18,7 @@ import { isGdprTransparencyReportRowId } from "./gdpr-transparency-report-contra
 
 export type GdprEprivacyCoverageChecklistStatus =
   | "Observed"
+  | "No match found"
   | "Not confirmed"
   | "Not observed"
   | "Not testable"
@@ -559,6 +560,7 @@ function getAssessmentStatus(status: GdprEprivacyCoverageChecklistStatus): Regul
     case "Out of scope":
       return "not_applicable";
     case "Observed":
+    case "No match found":
     case "Not observed":
     default:
       return "checked";
@@ -579,7 +581,11 @@ function getEvidenceState(input: {
   if (input.status === "Out of scope" || input.assessmentStatus === "not_applicable") {
     return "not_applicable";
   }
-    if (input.status === "Not observed" || input.status === "Not confirmed") {
+    if (
+      input.status === "Not observed" ||
+      input.status === "Not confirmed" ||
+      input.status === "No match found"
+    ) {
       return "not_observed";
     }
   if (
@@ -3374,6 +3380,10 @@ function canonicalizeGdprTransparencyChecklistItem(
     retainedAssessment?.assessmentResult ??
     retainedAssessment?.assessment_result,
   );
+  const canonicalStatus =
+    item.status === "No match found"
+      ? "No match found" as const
+      : "Not confirmed" as const;
   const policyEvidenceAssessment = {
     ...(retainedAssessment ?? {}),
     contractVersion: "certscore.policy-topic-evidence-assessment.v1",
@@ -3391,7 +3401,7 @@ function canonicalizeGdprTransparencyChecklistItem(
         "observed_not_confirmed_no_match_found.v1",
       policyEvidenceAssessment,
       priorChecklistStatus:
-        item.status === "Not confirmed" ? undefined : item.status,
+        item.status === canonicalStatus ? undefined : item.status,
     },
   };
 
@@ -3402,7 +3412,7 @@ function canonicalizeGdprTransparencyChecklistItem(
     id: item.id,
     label: item.label,
     limitation: item.limitation,
-    status: "Not confirmed",
+    status: canonicalStatus,
   });
 }
 

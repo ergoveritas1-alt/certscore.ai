@@ -23,7 +23,6 @@ import {
 } from "../../lib/scans/gdpr-eprivacy-assessment-direction";
 import { deriveGdprEprivacyCoverageChecklistRowRationale } from "../../lib/scans/gdpr-eprivacy-checklist-rationale";
 import {
-  buildGdprEprivacyChecklistPresentation,
   type GdprEprivacyChecklistPresentation,
   type GdprEprivacyChecklistPresentationRow,
 } from "../../lib/scans/gdpr-eprivacy-checklist-presentation";
@@ -39,7 +38,7 @@ type GdprEprivacyCoverageChecklistCardProps = {
   initialDetailItems?: GdprEprivacyCoverageChecklistItem[];
   items?: GdprEprivacyCoverageChecklistItem[];
   evidenceIndex?: ChecklistEvidenceIndex;
-  presentation?: GdprEprivacyChecklistPresentation;
+  presentation: GdprEprivacyChecklistPresentation;
   projectionContext?: {
     mode: string;
     scannerExecutionMode: string;
@@ -206,15 +205,7 @@ function getGdprTransparencyPolicyReviewPayload(item: GdprEprivacyCoverageCheckl
   const retainedPolicySurfaceSnippetText = uniqueStrings([
     fullRetainedPolicyText,
     getString(summary.selectedPolicySectionExcerpt),
-    getString(summary.selected_policy_section_excerpt),
-    ...getPolicySummaryArticle13Signals(summary).flatMap((signal) => [
-      getString(signal.evidenceText),
-      getString(signal.evidence_text),
-      getString(signal.selectedPolicySectionExcerpt),
-      getString(signal.selected_policy_section_excerpt),
-      getString(signal.supportingContactContext),
-      getString(signal.supporting_contact_context)
-    ])
+    getString(summary.selected_policy_section_excerpt)
   ].filter((value): value is string => Boolean(value))).join("\n\n");
   const snippets = dedupePolicyHighlightSnippets([
     ...getGdprTransparencyPolicySnippets(item),
@@ -234,22 +225,6 @@ function getGdprTransparencyPolicyReviewPayload(item: GdprEprivacyCoverageCheckl
     getString(article13Signal?.selected_policy_section_excerpt),
     getString(article13Signal?.evidenceText),
     getString(article13Signal?.evidence_text),
-    ...getPolicySummaryArticle13SignalsForRow(summary, item).flatMap((signal) => [
-      getString(signal.selectedPolicySectionExcerpt),
-      getString(signal.selected_policy_section_excerpt),
-      getString(signal.evidenceText),
-      getString(signal.evidence_text)
-    ]),
-    getString(summary.selectedPolicySectionExcerpt),
-    getString(summary.selected_policy_section_excerpt),
-    ...getPolicySummaryArticle13Signals(summary).flatMap((signal) => [
-      getString(signal.evidenceText),
-      getString(signal.evidence_text),
-      getString(signal.selectedPolicySectionExcerpt),
-      getString(signal.selected_policy_section_excerpt),
-      getString(signal.supportingContactContext),
-      getString(signal.supporting_contact_context)
-    ]),
     fullRetainedPolicyText,
     retainedPolicySurfaceSnippetText
   ].filter((value): value is string => Boolean(value)));
@@ -362,45 +337,10 @@ function getGdprTransparencyPolicySnippets(item: GdprEprivacyCoverageChecklistIt
     getString(article13Signal?.selectedPolicySectionExcerpt),
     getString(article13Signal?.selected_policy_section_excerpt),
     getString(rowSpecificSectionEvidence?.selectedPolicySectionExcerpt),
-    getString(rowSpecificSectionEvidence?.selected_policy_section_excerpt),
-    ...getPolicySummaryArticle13SignalsForRow(summary, item).flatMap((signal) => [
-      getString(signal.evidenceText),
-      getString(signal.evidence_text),
-      getString(signal.selectedPolicySectionExcerpt),
-      getString(signal.selected_policy_section_excerpt)
-    ]),
-    getString(summary?.selectedPolicySectionExcerpt),
-    getString(summary?.selected_policy_section_excerpt)
+    getString(rowSpecificSectionEvidence?.selected_policy_section_excerpt)
   ].filter((value): value is string => Boolean(value))
     .map((value) => makePolicyHighlightSnippet(cleanEvidenceText(value), "Matched policy text", "fallback"))
     .filter((snippet) => snippet.text.length >= 24));
-}
-
-function getPolicySummaryArticle13SignalsForRow(
-  summary: Record<string, unknown> | null,
-  item: GdprEprivacyCoverageChecklistItem
-) {
-  const disclosureType = getArticle13DisclosureTypeForChecklistRow(item);
-  if (!summary || !disclosureType) {
-    return [];
-  }
-  return [
-    ...getRecordArray(summary.article13DisclosureSignals),
-    ...getRecordArray(summary.article_13_disclosure_signals)
-  ].filter((signal) =>
-    getString(signal.disclosureType) === disclosureType ||
-    getString(signal.disclosure_type) === disclosureType
-  );
-}
-
-function getPolicySummaryArticle13Signals(summary: Record<string, unknown> | null) {
-  if (!summary) {
-    return [];
-  }
-  return [
-    ...getRecordArray(summary.article13DisclosureSignals),
-    ...getRecordArray(summary.article_13_disclosure_signals)
-  ];
 }
 
 function getArticle13DisclosureTypeForChecklistRow(itemOrRowId: GdprEprivacyCoverageChecklistItem | string): Article13DisclosureType | null {
@@ -844,13 +784,18 @@ function ChecklistRowSummaryStrip({ rows }: { rows: GdprEprivacyChecklistPresent
     },
     {
       className: "border-slate-200 bg-white text-slate-700",
+      count: rows.filter((row) => row.evidenceLabel === "No match found").length,
+      label: "No match found",
+    },
+    {
+      className: "border-slate-200 bg-white text-slate-700",
       count: rows.filter((row) => row.evidenceLabel === "Potential gap").length + summary.coverageMissing,
       label: "Gaps / limits",
     },
   ];
 
   return (
-    <div className="grid grid-cols-2 gap-2 rounded-lg border border-slate-200 bg-slate-50 px-3 py-3 md:grid-cols-5">
+    <div className="grid grid-cols-2 gap-2 rounded-lg border border-slate-200 bg-slate-50 px-3 py-3 md:grid-cols-6">
       {entries.map((entry) => (
         <div key={entry.label} className={cn("rounded-md border px-3 py-2", entry.className)}>
           <div className="text-lg font-semibold leading-none text-slate-950">{entry.count}</div>
@@ -2949,10 +2894,7 @@ export function GdprEprivacyCoverageChecklistCard({
     () => hydrateChecklistPolicyEvidence(items ?? initialDetailItems ?? [], evidenceIndex),
     [evidenceIndex, initialDetailItems, items],
   );
-  const resolvedPresentation = React.useMemo(
-    () => presentation ?? buildGdprEprivacyChecklistPresentation(hydratedInitialItems),
-    [hydratedInitialItems, presentation],
-  );
+  const resolvedPresentation = presentation;
   const [detailsById, setDetailsById] = React.useState<Record<string, GdprEprivacyCoverageChecklistItem>>(
     () => Object.fromEntries(hydratedInitialItems.map((item) => [item.id, item])),
   );

@@ -25,6 +25,7 @@ import {
 
 export type GdprEprivacyCoverageOutcomeStatus =
   | "Gap observed"
+  | "No match found"
   | "Observed"
   | "Not confirmed"
   | "Not observed"
@@ -6900,7 +6901,7 @@ function getGdprTransparencyArticle13ChecklistConcern(
       const approvedConcernPosture = approvedDeterministicAbsenceEvidence
         ? concern.promotionEligibility === "internal_only" &&
           concern.externalSurfacingEligibility === "audit_only" &&
-          concern.regulatoryChecklistEligibility === "review_signal"
+          concern.regulatoryChecklistEligibility === "no_match_found"
         : concern.promotionEligibility === "internal_only" &&
           concern.externalSurfacingEligibility === "audit_only";
       return concern.originKey === `gdpr_transparency.article13.${topic}` &&
@@ -6927,7 +6928,13 @@ function getGdprTransparencyArticle13ChecklistConcern(
 }
 
 function gdprTransparencyChecklistEligibilityScore(value: unknown) {
-  return value === "observed" ? 2 : value === "review_signal" ? 1 : 0;
+  return value === "observed"
+    ? 3
+    : value === "no_match_found"
+      ? 2
+      : value === "review_signal"
+        ? 1
+        : 0;
 }
 
 function gdprTransparencyModelReviewEvidenceScore(
@@ -7155,7 +7162,7 @@ function buildGdprTransparencyArticle13ConcernOutcome(
   if (state === "no_match_found") {
     return makeOutcome(
       config.rowId,
-      "Not confirmed",
+      "No match found",
       `CertScore retained a usable policy but found no sufficiently direct matching passage for ${config.label.toLowerCase()} during automated analysis. This does not establish that the disclosure is absent.`,
       evidenceRefs,
       {
@@ -8391,7 +8398,7 @@ function derivePolicyDisclosureOutcome(input: GdprEprivacyCoveragePolicyInput, c
   // rejected candidate for audit without turning it into an observed or
   // absence finding. Only a normalized sufficient-coverage absence concern may
   // project No match found.
-  if (config.disclosureType && input.normalizedConcerns !== undefined) {
+  if (config.disclosureType) {
     const article13CoverageAssessment = getObjectArray(summary, [
       "article13CoverageAssessments",
       "article13_coverage_assessments",

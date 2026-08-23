@@ -17,6 +17,7 @@ export type AdminEvidenceStatus =
   | "gap_observed"
   | "review_signal"
   | "not_observed"
+  | "no_match_found"
   | "not_confirmed"
   | "not_testable"
   | "insufficient_evidence"
@@ -201,6 +202,7 @@ const STATUS_MAP: Record<GdprEprivacyCoverageChecklistStatus, AdminEvidenceStatu
   "Gap observed": "gap_observed",
   "Review signal": "review_signal",
   "Not observed": "not_observed",
+  "No match found": "no_match_found",
   "Not confirmed": "not_confirmed",
   "Not testable": "not_testable",
   "Insufficient evidence": "insufficient_evidence",

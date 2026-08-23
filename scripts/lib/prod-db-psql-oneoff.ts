@@ -1,5 +1,6 @@
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
+import { gzipSync } from "node:zlib";
 
 const execFileAsync = promisify(execFile);
 
@@ -32,7 +33,7 @@ export async function runProdDbSqlOneoff(input: RunProdDbSqlInput) {
   const sql = input.readOnly
     ? `begin transaction read only;\n${input.sql.replace(/;?\s*$/, ";")}\ncommit;`
     : input.sql.replace(/;?\s*$/, ";");
-  const queryB64 = Buffer.from(sql, "utf8").toString("base64");
+  const queryGzipB64 = gzipSync(Buffer.from(sql, "utf8"), { level: 9 }).toString("base64");
   const networkConfiguration = {
     awsvpcConfiguration: {
       assignPublicIp: "ENABLED",
@@ -41,12 +42,12 @@ export async function runProdDbSqlOneoff(input: RunProdDbSqlInput) {
     },
   };
   const command = [
-    `set -eu; test "\${PGSSLMODE:-}" = require; printf %s "$QUERY_B64" | base64 -d > /tmp/query.sql; echo __${marker}_START__; psql -X --no-password -v ON_ERROR_STOP=1 -P pager=off -P footer=off -t -A "$DATABASE_URL" -f /tmp/query.sql; echo __${marker}_END__`,
+    `set -eu; test "\${PGSSLMODE:-}" = require; printf %s "$QUERY_GZIP_B64" | base64 -d | gzip -dc > /tmp/query.sql; echo __${marker}_START__; psql -X --no-password -v ON_ERROR_STOP=1 -P pager=off -P footer=off -t -A "$DATABASE_URL" -f /tmp/query.sql; echo __${marker}_END__`,
   ];
   const overrides = {
     containerOverrides: [{
       command,
-      environment: [{ name: "QUERY_B64", value: queryB64 }],
+      environment: [{ name: "QUERY_GZIP_B64", value: queryGzipB64 }],
       name: containerName,
     }],
   };

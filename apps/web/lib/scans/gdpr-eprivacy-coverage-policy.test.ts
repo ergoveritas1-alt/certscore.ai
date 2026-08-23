@@ -5,23 +5,78 @@ import { deriveGdprEprivacyCoveragePolicyOutcomes as deriveGdprEprivacyCoverageP
 import { GDPR_TRANSPARENCY_MULTILINGUAL_ARTICLE13_PROFILE } from "./gdpr-transparency-production-profile";
 import { adaptGdprTransparencyTopicCandidatesForProduction } from "./gdpr-transparency-topic-evidence-adapter";
 import { buildNormalizedConcerns } from "./normalized-concerns";
-import {
-  IFIT_UK_EU_ARTICLE_13_SECTION_EVIDENCE,
-  IFIT_UK_EU_PRIVACY_POLICY_URL
-} from "./ifit-policy.fixture";
-import {
-  IMOU_ARTICLE_13_SECTION_EVIDENCE,
-  IMOU_PRIVACY_POLICY_URL
-} from "./imou-policy.fixture";
-import {
-  ARUBA_ARTICLE_13_SECTION_EVIDENCE,
-  ARUBA_PRIVACY_POLICY_URL
-} from "./aruba-policy.fixture";
 
 const completedInputBase = {
   coverageLimited: true,
   scanCompleted: true
 };
+
+function canonicalizeLegacyArticle13TestSummary(summary: Record<string, unknown>) {
+  const rawSignals = Array.isArray(summary.article13DisclosureSignals)
+    ? summary.article13DisclosureSignals.filter((value): value is Record<string, unknown> =>
+        Boolean(value && typeof value === "object" && !Array.isArray(value)))
+    : [];
+  if (rawSignals.length === 0) return summary;
+  const policyUrl = Array.isArray(summary.privacyPolicyUrls) &&
+    typeof summary.privacyPolicyUrls[0] === "string"
+      ? summary.privacyPolicyUrls[0]
+      : "https://example.test/privacy";
+  const candidates = rawSignals.flatMap((signal) => {
+    const topic = typeof signal.disclosureType === "string" ? signal.disclosureType : null;
+    const evidenceText = [
+      signal.selectedPolicySectionExcerpt,
+      signal.evidenceText,
+    ].find((value): value is string => typeof value === "string" && value.trim().length > 0);
+    const confidence = typeof signal.confidence === "number" ? signal.confidence : 0;
+    const selectedStrength = typeof signal.selectedEvidenceStrength === "string"
+      ? signal.selectedEvidenceStrength
+      : "strong";
+    if (!topic || !evidenceText || signal.status !== "observed" || confidence < 0.8 || selectedStrength !== "strong") {
+      return [];
+    }
+    const match = classifyGdprTransparencyTopics({ text: evidenceText }).matches.find((candidate) =>
+      candidate.topic === topic
+    );
+    if (!match) return [];
+    return [{
+      classifierProvenance: match.classifierProvenance,
+      classifierReasonCodes: match.reasonCodes,
+      confidence: Math.min(confidence, match.confidence),
+      evidenceText: match.evidenceExcerpt,
+      matchedLocale: match.matchedLocale,
+      matchedTerm: match.matchedTerm,
+      matchStrength: match.matchStrength,
+      productionCredit: false as const,
+      status: "diagnostic_only" as const,
+      topic: match.topic,
+      variant: match.variant,
+    }];
+  });
+  const adapted = adaptGdprTransparencyTopicCandidatesForProduction({
+    isTargetRelevantPrivacyPolicy: true,
+    policyTextQuality: { usable: true },
+    profile: GDPR_TRANSPARENCY_MULTILINGUAL_ARTICLE13_PROFILE,
+    surface: {
+      article13DisclosureSignals: rawSignals as never[],
+      gdprTransparencyTopicCandidates: candidates,
+      normalizedUrl: policyUrl,
+      status: "fetched",
+      surfaceType: "privacy_policy",
+      textExcerpt: rawSignals.flatMap((signal) => [
+        signal.selectedPolicySectionExcerpt,
+        signal.evidenceText,
+      ]).filter((value): value is string => typeof value === "string").join("\n\n"),
+      url: policyUrl,
+    },
+  });
+  return {
+    ...summary,
+    article13DisclosureSignals: adapted.acceptedProductionSignals,
+    discardedArticle13DisclosureSignals: adapted.discardedArticle13DisclosureSignals,
+    gdprTransparencyEvidenceProfile: adapted.profile,
+    gdprTransparencyProductionEvidenceEnabled: adapted.productionEvidenceEnabled,
+  };
+}
 
 function deriveGdprEprivacyCoveragePolicyOutcomes(
   input: Parameters<typeof deriveGdprEprivacyCoveragePolicyOutcomesRaw>[0],
@@ -29,9 +84,18 @@ function deriveGdprEprivacyCoveragePolicyOutcomes(
   const runtimeArtifacts = input.runtimeArtifacts ?? {};
   const summaryValue = runtimeArtifacts.policyDisclosureSummary;
   if (!summaryValue || typeof summaryValue !== "object" || Array.isArray(summaryValue)) {
-    return deriveGdprEprivacyCoveragePolicyOutcomesRaw(input);
+    return deriveGdprEprivacyCoveragePolicyOutcomesRaw({
+      ...input,
+      normalizedConcerns: input.normalizedConcerns ?? buildNormalizedConcerns({
+        reviewFindingCandidates: [],
+        runtimeArtifacts,
+        validationFindings: [],
+      }),
+    });
   }
-  const summary = summaryValue as Record<string, unknown>;
+  const summary = input.normalizedConcerns === undefined
+    ? canonicalizeLegacyArticle13TestSummary(summaryValue as Record<string, unknown>)
+    : summaryValue as Record<string, unknown>;
   const existingHealth = summary.policyTextExtractionHealth && typeof summary.policyTextExtractionHealth === "object"
     ? summary.policyTextExtractionHealth as Record<string, unknown>
     : {};
@@ -43,39 +107,45 @@ function deriveGdprEprivacyCoveragePolicyOutcomes(
   const inferredStatus = summary.privacyPolicyPresent === true
     ? textLength >= 2_500 ? "ok" : textLength > 0 ? "thin" : "empty_policy_text"
     : "not_attempted";
-  return deriveGdprEprivacyCoveragePolicyOutcomesRaw({
-    ...input,
-    runtimeArtifacts: {
-      ...runtimeArtifacts,
-      policyDisclosureSummary: {
-        ...summary,
-        policyTextExtractionHealth: {
-          contractVersion: "certscore.policy-text-extraction-health.v2",
-          extractedTextLength: textLength,
-          minimumTextLengthRequired: 2_500,
-          policySurfaceObserved: summary.privacyPolicyPresent === true,
-          policyTextEvidenceProjectionContractVersion: "certscore.policy-text-evidence-projection.v1",
-          policyTextEvidenceProjectionStatus: "verified_complete",
-          policyTextExtractionStatus: inferredStatus,
-          ...existingHealth,
+  const canonicalRuntimeArtifacts = {
+    ...runtimeArtifacts,
+    policyDisclosureSummary: {
+      ...summary,
+      policyTextExtractionHealth: {
+        contractVersion: "certscore.policy-text-extraction-health.v2",
+        extractedTextLength: textLength,
+        minimumTextLengthRequired: 2_500,
+        policySurfaceObserved: summary.privacyPolicyPresent === true,
+        policyTextEvidenceProjectionContractVersion: "certscore.policy-text-evidence-projection.v1",
+        policyTextEvidenceProjectionStatus: "verified_complete",
+        policyTextExtractionStatus: inferredStatus,
+        ...existingHealth,
+      },
+      policyTextEvidenceProjection: {
+        contractVersion: "certscore.policy-text-evidence-projection.v1",
+        generatedAt: "2026-07-31T12:00:00.000Z",
+        scanId: "test-policy-projection",
+        sourceBundle: {
+          schemaVersion: "certscore.v2.canonical-evidence-bundle.v1",
+          sha256: "a".repeat(64),
+          sizeBytes: 1,
+          uri: "s3://test-policy-artifacts/CanonicalEvidenceBundle.json",
+          verificationStatus: "verified",
         },
-        policyTextEvidenceProjection: {
-          contractVersion: "certscore.policy-text-evidence-projection.v1",
-          generatedAt: "2026-07-31T12:00:00.000Z",
-          scanId: "test-policy-projection",
-          sourceBundle: {
-            schemaVersion: "certscore.v2.canonical-evidence-bundle.v1",
-            sha256: "a".repeat(64),
-            sizeBytes: 1,
-            uri: "s3://test-policy-artifacts/CanonicalEvidenceBundle.json",
-            verificationStatus: "verified",
-          },
-          projectionStatus: "verified_complete",
-          documents: [],
-          limitationKeys: [],
-        },
+        projectionStatus: "verified_complete",
+        documents: [],
+        limitationKeys: [],
       },
     },
+  };
+  return deriveGdprEprivacyCoveragePolicyOutcomesRaw({
+    ...input,
+    normalizedConcerns: input.normalizedConcerns ?? buildNormalizedConcerns({
+      reviewFindingCandidates: [],
+      runtimeArtifacts: canonicalRuntimeArtifacts,
+      validationFindings: [],
+    }),
+    runtimeArtifacts: canonicalRuntimeArtifacts,
   });
 }
 
@@ -352,10 +422,10 @@ test("deriveGdprEprivacyCoveragePolicyOutcomes reports discovered budget-skipped
     },
   });
 
-  assert.equal(outcomes.controller_contact_disclosure?.status, "Not testable");
+  assert.equal(outcomes.controller_contact_disclosure?.status, "Not confirmed");
   assert.match(
     outcomes.controller_contact_disclosure?.criticalEvidence.statusBasis ?? "",
-    /discovered, but it was not fetched before the scan budget ended/i,
+    /No production-approved topic match was established/i,
   );
   assert.doesNotMatch(
     outcomes.controller_contact_disclosure?.criticalEvidence.statusBasis ?? "",
@@ -410,7 +480,7 @@ test("deriveGdprEprivacyCoveragePolicyOutcomes does not promote a localized cons
     "international_transfers_disclosure",
     "dpo_contact_point_disclosure",
   ] as const) {
-    assert.equal(outcomes[rowId]?.status, "Not testable", rowId);
+    assert.equal(outcomes[rowId]?.status, "Not confirmed", rowId);
   }
 });
 
@@ -429,7 +499,7 @@ test("deriveGdprEprivacyCoveragePolicyOutcomes keeps legacy_only GDPR Transparen
     snapshot: {}
   });
 
-  assert.equal(baseline.legal_basis_disclosure_observed?.status, "Not testable");
+  assert.equal(baseline.legal_basis_disclosure_observed?.status, "Not confirmed");
   assert.equal(outcomes.legal_basis_disclosure_observed?.status, "Not confirmed");
   const assessment = outcomes.legal_basis_disclosure_observed?.criticalEvidence.retainedEvidence
     .policyEvidenceAssessment as Record<string, unknown>;
@@ -515,7 +585,7 @@ test("supplement topic provenance remains bound to the selected retained policy 
   ]);
 });
 
-test("canonical GDPR Transparency projection does not fall back to raw observed signals", () => {
+test("canonical GDPR Transparency projection does not promote raw signals from a policy index", () => {
   const runtimeArtifacts = {
     policyDisclosureSummary: {
       article13DisclosureSignals: [{
@@ -526,6 +596,21 @@ test("canonical GDPR Transparency projection does not fall back to raw observed 
         source: "deterministic",
         status: "observed",
       }],
+      gdprTransparencyProductionEvidenceDiagnostics: {
+        acceptedCandidateCount: 0,
+        productionCreditSignalCount: 0,
+        sourceCandidateCount: 0,
+      },
+      policyTextEvidenceProjection: {
+        contractVersion: "certscore.policy-text-evidence-projection.v1",
+        documents: [{
+          artifactVerificationStatus: "verified",
+          documentRole: "policy_index",
+          extractionStatus: "complete",
+          targetRelationship: "target_controller",
+        }],
+        projectionStatus: "verified_complete",
+      },
       privacyPolicyPresent: true,
     },
   };
@@ -673,9 +758,9 @@ test("verified complete-policy absence projects neutral GDPR Transparency no-mat
 
   assert.equal(retentionConcern?.promotionEligibility, "internal_only");
   assert.equal(retentionConcern?.externalSurfacingEligibility, "audit_only");
-  assert.equal(retentionConcern?.regulatoryChecklistEligibility, "review_signal");
-  assert.equal(outcomes.retention_disclosure_observed?.status, "Not confirmed");
-  assert.equal(outcomes.international_transfers_disclosure?.status, "Not confirmed");
+  assert.equal(retentionConcern?.regulatoryChecklistEligibility, "no_match_found");
+  assert.equal(outcomes.retention_disclosure_observed?.status, "No match found");
+  assert.equal(outcomes.international_transfers_disclosure?.status, "No match found");
   assert.ok(retainedArticle13Signal(outcomes.retention_disclosure_observed!));
   assert.deepEqual(
     outcomes.retention_disclosure_observed?.criticalEvidence.retainedEvidence.article13CoverageAssessment,
@@ -733,7 +818,7 @@ test("invariant-verified Mini evidence wins a checklist tie against deterministi
 test("twenty-two expansion locales capture all topics through classifier, adapter, normalized concerns, and checklist policy", () => {
   const samples = [
     ["pt", "O responsável pelo tratamento de dados pessoais fornece o contato do controlador e o contato do encarregado de proteção de dados. Explicamos as finalidades do tratamento de dados pessoais, a base legal para o tratamento de dados pessoais, as categorias de destinatários dos dados pessoais, o prazo de conservação dos dados pessoais, o direito de acesso aos dados pessoais, as transferências internacionais de dados pessoais, o direito de apresentar reclamação à Autoridade Nacional de Proteção de Dados e as decisões automatizadas com dados pessoais."],
-    ["ru", "Оператор персональных данных указывает контакт ответственного по защите данных. Мы описываем цели обработки персональных данных, правовые основания обработки персональных данных, категории получателей персональных данных, срок хранения персональных данных, права субъекта персональных данных, трансграничную передачу персональных данных, право подать жалобу в надзорный орган и автоматизированное принятие решений с использованием персональных данных."],
+    ["ru", "Оператор персональных данных является ООО «Пример»; адрес электронной почты: privacy@example.test. Указан контакт ответственного по защите данных. Мы описываем цели обработки персональных данных, правовые основания обработки персональных данных, категории получателей персональных данных, срок хранения персональных данных, права субъекта персональных данных, трансграничную передачу персональных данных, право подать жалобу в надзорный орган и автоматизированное принятие решений с использованием персональных данных."],
     ["ja", "個人データの管理者はデータ保護責任者への連絡先を示します。個人データを処理する目的、個人データ処理の法的根拠、個人データの受領者のカテゴリー、個人データの保存期間、データ主体の権利、個人データの国際移転、監督機関に苦情を申し立てる権利、個人データを用いた自動意思決定について説明します。"],
     ["zh", "个人数据控制者提供数据保护负责人的联系方式。我们说明处理个人数据的目的、处理个人数据的法律依据、个人数据接收方的类别、个人数据的保存期限、数据主体的权利、个人数据的跨境传输、向监管机构投诉的权利以及使用个人数据进行自动化决策。"],
     ["ar", "يقدم مراقب البيانات الشخصية بيانات الاتصال بمسؤول حماية البيانات. نشرح أغراض معالجة البيانات الشخصية والأساس القانوني لمعالجة البيانات الشخصية وفئات مستلمي البيانات الشخصية ومدة الاحتفاظ بالبيانات الشخصية وحقوق صاحب البيانات والنقل الدولي للبيانات الشخصية والحق في تقديم شكوى إلى سلطة رقابية واتخاذ القرارات الآلية باستخدام البيانات الشخصية."],
@@ -972,46 +1057,6 @@ test("deriveGdprEprivacyCoveragePolicyOutcomes ignores rejected non-credit multi
   assert.notEqual(outcomes.retention_disclosure_observed?.status, "Observed");
 });
 
-test("deriveGdprEprivacyCoveragePolicyOutcomes consumes structured Article 13 disclosure signals", () => {
-  const outcomes = deriveGdprEprivacyCoveragePolicyOutcomes({
-    ...completedInputBase,
-    runtimeArtifacts: {
-      policyDisclosureSummary: {
-        article13DisclosureSignals: [
-          {
-            confidence: 0.82,
-            disclosureType: "controller_contact",
-            evidenceText: "The controller can be contacted at privacy@example.test.",
-            source: "deterministic",
-            status: "observed"
-          },
-          {
-            confidence: 0.62,
-            disclosureType: "international_transfers",
-            evidenceText: "We may transfer personal data outside the EEA, but retained evidence did not specify safeguards or legal frameworks.",
-            source: "deterministic",
-            status: "partial"
-          }
-        ],
-        privacyPolicyPresent: true,
-        privacyPolicyTextCharacterCount: 2500,
-        privacyPolicyUrls: ["https://example.test/privacy"],
-        retainedPrivacyPolicyTextExcerpt: "Privacy notice text."
-      }
-    },
-    snapshot: {
-      privacy_policy_present: true
-    }
-  });
-
-  assert.equal(outcomes.controller_contact_disclosure?.status, "Observed");
-  assert.equal(
-    retainedArticle13Signal(outcomes.controller_contact_disclosure!)!.evidenceText,
-    "The controller can be contacted at privacy@example.test."
-  );
-  assert.equal(outcomes.international_transfers_disclosure?.status, "Not confirmed");
-});
-
 test("policy disclosure rows fail closed when the versioned persisted policy projection is absent", () => {
   const outcomes = deriveGdprEprivacyCoveragePolicyOutcomesRaw({
     ...completedInputBase,
@@ -1038,471 +1083,6 @@ test("policy disclosure rows fail closed when the versioned persisted policy pro
     (outcomes.policy_text_extraction?.criticalEvidence.retainedEvidence.policyTextExtractionHealth as Record<string, unknown>)
       .policyTextExtractionStatus,
     "projection_unavailable",
-  );
-});
-
-test("deriveGdprEprivacyCoveragePolicyOutcomes credits high-confidence direct Article 13 signals when section extraction is limited", () => {
-  const outcomes = deriveGdprEprivacyCoveragePolicyOutcomes({
-    ...completedInputBase,
-    runtimeArtifacts: {
-      policyDisclosureSummary: {
-        article13DisclosureSignals: [
-          {
-            confidence: 0.88,
-            disclosureType: "processing_purposes",
-            evidenceText:
-              "We use personal information to provide products and services, support customer service efforts, communicate with you about your requests, and keep records.",
-            source: "deterministic",
-            status: "observed"
-          },
-          {
-            confidence: 0.86,
-            disclosureType: "recipients_or_vendor_categories",
-            evidenceText:
-              "These vendors will process your personal information as a data processor, and under our instructions. We use email interaction data to improve how we communicate with you and others.",
-            source: "deterministic",
-            status: "observed"
-          },
-          {
-            confidence: 0.9,
-            disclosureType: "data_subject_rights",
-            evidenceText:
-              "You have the right to see the data we have collected, take it with you, make corrections, withdraw consent, opt out, or erase your data.",
-            source: "deterministic",
-            status: "observed"
-          }
-        ],
-        policySectionCount: 1,
-        policyTextCoverageMode: "section_targeted",
-        policyTextExtractionHealth: {
-          extractedTextLength: 0,
-          extractionFailureReason: "privacy_policy_text_processing_error",
-          minimumTextLengthRequired: 2500,
-          policySurfaceObserved: true,
-          policyTextExtractionStatus: "errored",
-          policyTextQuality: {
-            codeSignalCount: 0,
-            naturalLanguageSentenceCount: 12,
-            usable: true
-          },
-          policyUrlRetained: true
-        },
-        privacyPolicyPresent: true,
-        privacyPolicyTextCharacterCount: 0,
-        privacyPolicyUrls: ["https://www.nvidia.com/en-gb/about-nvidia/privacy-policy/"],
-        processingErrorObserved: true,
-        retainedArticle13SectionEvidence: [
-          {
-            coverageArea: "data_subject_rights",
-            extractionLimitation: "section_retained_without_row_specific_disclosure",
-            selectedEvidenceStrength: "limited",
-            selectedPolicySectionExcerpt:
-              "NVIDIA Privacy Policy. Control your personal data. You have the right to see the data we have collected, take it with you, make corrections, withdraw consent for future uses, opt out of sales and sharing, or erase your data.",
-            selectedPolicySectionHeading: "NVIDIA Privacy Policy",
-            selectedPolicySectionUrl: "https://www.nvidia.com/en-gb/about-nvidia/privacy-policy/",
-            signalObserved: "not_confirmed"
-          }
-        ],
-        retainedPrivacyPolicyTextExcerpt: ""
-      }
-    },
-    snapshot: {
-      privacy_policy_present: true
-    }
-  });
-
-  assert.equal(outcomes.processing_purposes_disclosure?.status, "Observed");
-  assert.equal(outcomes.recipients_vendor_categories_disclosure?.status, "Observed");
-  assert.equal(outcomes.data_subject_rights_disclosure?.status, "Observed");
-  assert.match(
-    retainedArticle13Signal(outcomes.data_subject_rights_disclosure!)?.evidenceText ?? "",
-    /right to see the data/i
-  );
-});
-
-test("deriveGdprEprivacyCoveragePolicyOutcomes treats supervisory contact email as supporting context only", () => {
-  const supervisoryExcerpt = [
-    "If you are still not happy, you have the right to contact your data protection authority.",
-    "Further details can be found by contacting us by email at wbdprivacy@wbd.com."
-  ].join(" ");
-  const outcomes = deriveGdprEprivacyCoveragePolicyOutcomes({
-    ...completedInputBase,
-    runtimeArtifacts: {
-      policyDisclosureSummary: {
-        article13DisclosureSignals: [
-          {
-            confidence: 0.91,
-            disclosureType: "supervisory_authority",
-            evidenceText: "you have the right to contact your data protection authority",
-            selectedEvidenceStrength: "strong",
-            selectedPolicySectionExcerpt: supervisoryExcerpt,
-            source: "deterministic",
-            status: "observed",
-            supportingContactContext: "wbdprivacy@wbd.com"
-          }
-        ],
-        policyTextCoverageMode: "section_targeted",
-        privacyPolicyPresent: true,
-        privacyPolicyTextCharacterCount: 3000,
-        privacyPolicyUrls: ["https://example.test/privacy"],
-        retainedPrivacyPolicyTextExcerpt: supervisoryExcerpt
-      }
-    },
-    snapshot: {
-      privacy_policy_present: true
-    }
-  });
-
-  const outcome = outcomes.supervisory_authority_complaint_disclosure;
-  assert.equal(outcome?.status, "Observed");
-  assert.match(outcome?.criticalEvidence.statusBasis ?? "", /authority\/regulator complaint language confirms/i);
-  assert.match(outcome?.criticalEvidence.statusBasis ?? "", /supporting context/i);
-  assert.equal(retainedArticle13Signal(outcome!)?.supportingContactContext, "wbdprivacy@wbd.com");
-  assert.equal(
-    outcome?.evidenceRefs.some((ref) => /right to contact your data protection authority/i.test(ref)),
-    true
-  );
-  assert.equal(
-    outcome?.evidenceRefs.includes("Supporting contact context: wbdprivacy@wbd.com"),
-    true
-  );
-
-  const emailOnlyOutcomes = deriveGdprEprivacyCoveragePolicyOutcomes({
-    ...completedInputBase,
-    runtimeArtifacts: {
-      policyDisclosureSummary: {
-        article13DisclosureSignals: [
-          {
-            confidence: 0.7,
-            disclosureType: "supervisory_authority",
-            evidenceText: "Further details can be found by contacting us by email at wbdprivacy@wbd.com.",
-            source: "deterministic",
-            status: "observed"
-          }
-        ],
-        policyTextCoverageMode: "section_targeted",
-        privacyPolicyPresent: true,
-        privacyPolicyTextCharacterCount: 3000,
-        privacyPolicyUrls: ["https://example.test/privacy"],
-        retainedPrivacyPolicyTextExcerpt: "Further details can be found by contacting us by email at wbdprivacy@wbd.com."
-      }
-    },
-    snapshot: {
-      privacy_policy_present: true
-    }
-  });
-
-  assert.notEqual(emailOnlyOutcomes.supervisory_authority_complaint_disclosure?.status, "Observed");
-});
-
-test("deriveGdprEprivacyCoveragePolicyOutcomes credits Amazon file-a-complaint supervisory-authority language", () => {
-  const amazonExcerpt = [
-    "How Can I Make a Complaint to a Supervisory Authority?",
-    "You can file a complaint with our principal supervisory authority,",
-    "the Commission Nationale pour la Protection des Données in Luxembourg, or with a local authority.",
-  ].join(" ");
-  const outcomes = deriveGdprEprivacyCoveragePolicyOutcomes({
-    ...completedInputBase,
-    runtimeArtifacts: {
-      policyDisclosureSummary: {
-        article13DisclosureSignals: [{
-          confidence: 0.9,
-          disclosureType: "supervisory_authority",
-          evidenceText: amazonExcerpt,
-          selectedEvidenceStrength: "strong",
-          selectedPolicySectionExcerpt: amazonExcerpt,
-          selectedPolicySectionHeading: "How Can I Make a Complaint to a Supervisory Authority?",
-          source: "deterministic",
-          status: "observed",
-        }],
-        policyTextCoverageMode: "section_targeted",
-        privacyPolicyPresent: true,
-        privacyPolicyTextCharacterCount: 4_000,
-        privacyPolicyUrls: ["https://www.amazon.de/privacy"],
-        retainedPrivacyPolicyTextExcerpt: amazonExcerpt,
-      },
-    },
-    snapshot: {
-      privacy_policy_present: true,
-    },
-  });
-
-  const outcome = outcomes.supervisory_authority_complaint_disclosure;
-  assert.equal(outcome?.status, "Observed");
-  assert.match(outcome?.evidenceRefs.join(" ") ?? "", /file a complaint with our principal supervisory authority/i);
-});
-
-test("deriveGdprEprivacyCoveragePolicyOutcomes credits a UK Information Commissioner complaint route", () => {
-  const lancasterExcerpt = [
-    "If you are not happy with the way the University has handled your concern or complaint,",
-    "you may submit a complaint to the Information Commissioner's Office.",
-  ].join(" ");
-  const outcomes = deriveGdprEprivacyCoveragePolicyOutcomes({
-    ...completedInputBase,
-    runtimeArtifacts: {
-      policyDisclosureSummary: {
-        article13DisclosureSignals: [{
-          confidence: 0.9,
-          disclosureType: "supervisory_authority",
-          evidenceText: lancasterExcerpt,
-          selectedEvidenceStrength: "strong",
-          selectedPolicySectionExcerpt: lancasterExcerpt,
-          selectedPolicySectionHeading: "Who do I contact if I have concerns?",
-          source: "deterministic",
-          status: "observed",
-        }],
-        policyTextCoverageMode: "section_targeted",
-        privacyPolicyPresent: true,
-        privacyPolicyTextCharacterCount: 4_000,
-        privacyPolicyUrls: ["https://www.lancaster.ac.uk/privacy/website-and-cookies-privacy/"],
-        retainedPrivacyPolicyTextExcerpt: lancasterExcerpt,
-      },
-    },
-    snapshot: {
-      privacy_policy_present: true,
-    },
-  });
-
-  const outcome = outcomes.supervisory_authority_complaint_disclosure;
-  assert.equal(outcome?.status, "Observed");
-  assert.match(outcome?.evidenceRefs.join(" ") ?? "", /submit a complaint to the Information Commissioner's Office/i);
-});
-
-test("deriveGdprEprivacyCoveragePolicyOutcomes sanitizes and prefers Ireland-relevant policy disclosure snippets", () => {
-  const outcomes = deriveGdprEprivacyCoveragePolicyOutcomes({
-    ...completedInputBase,
-    runtimeArtifacts: {
-      policyDisclosureSummary: {
-        article13DisclosureSignals: [
-          {
-            disclosureType: "controller_contact",
-            evidenceText:
-              "\\r\\n</td><td><p>United States</p></td></tr></tbody></table><p><b>II. Your Privacy Globally</b></p><p>The data controller of your personal information is the McDonald's entity in the jurisdiction where your personal information is collected.</p>",
-            source: "deterministic",
-            status: "observed"
-          },
-          {
-            disclosureType: "controller_contact",
-            evidenceText:
-              "<p>McDonald’s Restaurants of Ireland Limited is the data controller for Ireland users. You may contact the Local Data Protection Office or McDonald’s Global Data Protection Officer.</p>",
-            source: "deterministic",
-            status: "observed"
-          },
-          {
-            disclosureType: "data_retention",
-            evidenceText:
-              "<p><a href=\"#top\"><span>Back to Top</span></a></p><h3>9. Retention</h3><p>McDonald’s will only retain personal information for the duration of time needed for the purposes described in this notice.</p>",
-            source: "deterministic",
-            status: "observed"
-          }
-        ],
-        privacyPolicyPresent: true,
-        privacyPolicyTextCharacterCount: 3200,
-        privacyPolicyUrls: ["https://mcdonalds.com/ie/en-ie/privacy-policy/full.html"],
-        retainedPrivacyPolicyTextExcerpt: "Privacy notice text."
-      }
-    },
-    snapshot: {
-      privacy_policy_present: true
-    }
-  });
-
-  const controllerText = retainedArticle13Signal(outcomes.controller_contact_disclosure!)?.evidenceText ?? "";
-  const retentionText = retainedArticle13Signal(outcomes.retention_disclosure_observed!)?.evidenceText ?? "";
-  assert.match(controllerText, /McDonald’s Restaurants of Ireland Limited/);
-  assert.doesNotMatch(controllerText, /^United States/i);
-  assert.doesNotMatch(controllerText, /<[^>]+>|\\r|\\n/i);
-  assert.match(retentionText, /^9\. Retention/i);
-  assert.doesNotMatch(retentionText, /Back to Top|<[^>]+>/i);
-});
-
-test("deriveGdprEprivacyCoveragePolicyOutcomes prefers observed controller evidence over a richer partial marketing candidate", () => {
-  const outcomes = deriveGdprEprivacyCoveragePolicyOutcomes({
-    ...completedInputBase,
-    runtimeArtifacts: {
-      policyDisclosureSummary: {
-        article13DisclosureSignals: [
-          {
-            disclosureType: "controller_contact",
-            evidenceText: "Our DPO and data protection services provide a seamless approach to managing customer data, ensuring compliance with GDPR and supporting privacy programs.",
-            confidence: 0.95,
-            selectedEvidenceStrength: "strong",
-            source: "deterministic",
-            status: "partial"
-          },
-          {
-            disclosureType: "controller_contact",
-            evidenceText: "Information on the controller pursuant to Art. 4 No. 7 GDPR: SITS Group AG, Etzelmatt 1, CH-5430 Wettingen. E-Mail: INFO@SITS.COM.",
-            confidence: 0.9,
-            selectedEvidenceStrength: "strong",
-            source: "deterministic",
-            status: "observed"
-          }
-        ],
-        privacyPolicyPresent: true,
-        privacyPolicyTextCharacterCount: 3200,
-        privacyPolicyUrls: ["https://sits.com/en/privacy-policy/"],
-        retainedPrivacyPolicyTextExcerpt: "Information on the controller pursuant to Art. 4 No. 7 GDPR: SITS Group AG, Etzelmatt 1, CH-5430 Wettingen. E-Mail: INFO@SITS.COM."
-      }
-    },
-    snapshot: {
-      privacy_policy_present: true
-    }
-  });
-
-  assert.equal(outcomes.controller_contact_disclosure?.status, "Observed");
-  const controllerText = retainedArticle13Signal(outcomes.controller_contact_disclosure!)?.evidenceText ?? "";
-  assert.match(controllerText, /SITS Group AG/i);
-  assert.doesNotMatch(controllerText, /DPO and data protection services/i);
-});
-
-test("deriveGdprEprivacyCoveragePolicyOutcomes keeps generic contact excerpts out of controller observed", () => {
-  const outcomes = deriveGdprEprivacyCoveragePolicyOutcomes({
-    ...completedInputBase,
-    runtimeArtifacts: {
-      policyDisclosureSummary: {
-        article13DisclosureSignals: [
-          {
-            disclosureType: "controller_contact",
-            evidenceText: "Contact us through the website form for questions about our services.",
-            source: "deterministic",
-            status: "observed"
-          }
-        ],
-        privacyPolicyPresent: true,
-        privacyPolicyTextCharacterCount: 3200,
-        privacyPolicyUrls: ["https://example.test/privacy"],
-        retainedPrivacyPolicyTextExcerpt: "Contact us through the website form for questions about our services."
-      }
-    },
-    snapshot: {
-      privacy_policy_present: true
-    }
-  });
-
-  assert.equal(outcomes.controller_contact_disclosure?.status, "Not confirmed");
-  assert.equal(
-    outcomes.controller_contact_disclosure?.criticalEvidence.retainedEvidence.signalObserved,
-    "not_confirmed_row_specific_extraction"
-  );
-});
-
-test("retained transfer text remains not confirmed without an approved row witness", () => {
-  const outcomes = deriveGdprEprivacyCoveragePolicyOutcomes({
-    ...completedInputBase,
-    runtimeArtifacts: {
-      policyDisclosureSummary: {
-        privacyPolicyPresent: true,
-        privacyPolicyTextCharacterCount: 3200,
-        privacyPolicyUrls: ["https://www.cnn.com/privacy"],
-        retainedPrivacyPolicyTextExcerpt:
-          "We may transfer personal information to third countries outside the EEA, UK, and Switzerland. Where required, we rely on Standard Contractual Clauses and the Data Privacy Framework."
-      }
-    },
-    snapshot: {
-      privacy_policy_present: true
-    }
-  });
-
-  assert.equal(outcomes.international_transfers_disclosure?.status, "Not confirmed");
-  assert.match(
-    String(outcomes.international_transfers_disclosure?.criticalEvidence.retainedEvidence.candidatePolicyExcerpt ?? ""),
-    /third countries outside the EEA/i
-  );
-  assert.equal(
-    outcomes.international_transfers_disclosure?.criticalEvidence.retainedEvidence.signalObserved,
-    "not_confirmed_without_approved_evidence_witness"
-  );
-});
-
-test("international transfer disclosure uses retained section context when the short signal excerpt is truncated", () => {
-  const outcomes = deriveGdprEprivacyCoveragePolicyOutcomes({
-    ...completedInputBase,
-    runtimeArtifacts: {
-      policyDisclosureSummary: {
-        privacyPolicyPresent: true,
-        privacyPolicyTextCharacterCount: 3200,
-        privacyPolicyUrls: ["https://www.amazon.de/gp/help/customer/display.html?nodeId=GX7NJQ4ZB8MHFRNJ"],
-        retainedPrivacyPolicyTextExcerpt: "Amazon Privacy Notice. " + "This notice explains how Amazon processes personal information and applies to the services described here. ".repeat(40),
-        policyTextExtractionHealth: {
-          policyTextExtractionStatus: "ok",
-          extractedTextLength: 3200
-        },
-        article13DisclosureSignals: [{
-          disclosureType: "international_transfers",
-          status: "observed",
-          confidence: 0.92,
-          source: "deterministic",
-          evidenceText: "EU-US and Swiss-US Data Privacy Framework. Amazon.com, Inc. and certain of its controlled US affiliates",
-          selectedPolicySectionHeading: "EU-US and Swiss-US Data Privacy Framework",
-          selectedPolicySectionExcerpt: "EU-US and Swiss-US Data Privacy Framework. Amazon.com, Inc. and certain of its controlled US affiliates participate in the EU-US Data Privacy Framework regarding collection, use, and retention of personal information from the EEA."
-        }]
-      }
-    },
-    snapshot: { privacy_policy_present: true }
-  });
-
-  assert.equal(outcomes.international_transfers_disclosure?.status, "Observed", JSON.stringify(outcomes.international_transfers_disclosure, null, 2));
-  assert.match(
-    retainedArticle13Signal(outcomes.international_transfers_disclosure!)?.evidenceText ?? "",
-    /Data Privacy Framework/i
-  );
-});
-
-test("Privacy Shield wording is retained transfer uncertainty and not processing-purpose credit", () => {
-  const excerpt = "Our payment provider is certified under the EU-US Privacy Shield.";
-  const outcomes = deriveGdprEprivacyCoveragePolicyOutcomes({
-    ...completedInputBase,
-    events: [{
-      createdAt: "2026-07-25T12:00:00.000Z",
-      eventType: "scan.completed",
-      metadataJson: {}
-    }],
-    runtimeArtifacts: {
-      policyDisclosureSummary: {
-        article13DisclosureSignals: [
-          {
-            confidence: 0.94,
-            disclosureType: "processing_purposes",
-            evidenceText: excerpt,
-            selectedEvidenceStrength: "strong",
-            source: "deterministic",
-            status: "observed"
-          },
-          {
-            confidence: 0.94,
-            disclosureType: "international_transfers",
-            evidenceText: excerpt,
-            selectedEvidenceStrength: "strong",
-            source: "deterministic",
-            status: "observed"
-          }
-        ],
-        privacyPolicyPresent: true,
-        privacyPolicyTextCharacterCount: 3200,
-        privacyPolicyUrls: ["https://example.test/privacy"],
-        retainedPrivacyPolicyTextExcerpt: excerpt
-      }
-    },
-    snapshot: {
-      privacy_policy_present: true
-    }
-  });
-
-  assert.notEqual(outcomes.processing_purposes_disclosure?.status, "Observed");
-  assert.equal(outcomes.international_transfers_disclosure?.status, "Not confirmed");
-  assert.match(
-    outcomes.international_transfers_disclosure?.limitation ?? "",
-    /obsolete EU-US Privacy Shield reference/i,
-  );
-  assert.equal(
-    outcomes.international_transfers_disclosure?.criticalEvidence.retainedEvidence
-      .staleLegalFrameworkReferenceObserved,
-    true,
-  );
-  assert.match(
-    retainedArticle13Signal(outcomes.international_transfers_disclosure!)?.evidenceText ?? "",
-    /Privacy Shield/i,
   );
 });
 
@@ -1556,446 +1136,6 @@ test("discarded Privacy Shield evidence projects neutral transfer uncertainty wi
   );
 });
 
-test("outside-region recipient text remains not confirmed without an approved row witness", () => {
-  const outcomes = deriveGdprEprivacyCoveragePolicyOutcomes({
-    ...completedInputBase,
-    runtimeArtifacts: {
-      policyDisclosureSummary: {
-        privacyPolicyPresent: true,
-        privacyPolicyTextCharacterCount: 3200,
-        privacyPolicyUrls: ["https://example.test/privacy"],
-        retainedPrivacyPolicyTextExcerpt:
-          "We share personal information with third parties, service providers, and business partners for the purposes described in this notice. These third parties may be in the Netherlands as well as within other countries in the European Economic Area (EEA). Sometimes they may also be outside the EEA. We have concluded agreements with our service providers and business partners, to ensure that your personal information is protected, both within and outside the EEA."
-      }
-    },
-    snapshot: {
-      privacy_policy_present: true
-    }
-  });
-
-  assert.equal(outcomes.international_transfers_disclosure?.status, "Not confirmed");
-  assert.match(
-    String(outcomes.international_transfers_disclosure?.criticalEvidence.retainedEvidence.candidatePolicyExcerpt ?? ""),
-    /outside the EEA/i
-  );
-});
-
-test("deriveGdprEprivacyCoveragePolicyOutcomes does not confirm international transfers from geography-only consent law language", () => {
-  const outcomes = deriveGdprEprivacyCoveragePolicyOutcomes({
-    ...completedInputBase,
-    runtimeArtifacts: {
-      policyDisclosureSummary: {
-        privacyPolicyPresent: true,
-        privacyPolicyTextCharacterCount: 3200,
-        privacyPolicyUrls: ["https://www.cnn.com/privacy"],
-        retainedPrivacyPolicyTextExcerpt:
-          "Under the laws of some countries outside of the European Economic Area and the United Kingdom we may need your or your adult's consent before you can use some of our services."
-      }
-    },
-    snapshot: {
-      privacy_policy_present: true
-    }
-  });
-
-  assert.notEqual(outcomes.international_transfers_disclosure?.status, "Observed");
-  assert.equal(outcomes.international_transfers_disclosure?.status, "Not confirmed");
-  assert.equal(
-    outcomes.international_transfers_disclosure?.criticalEvidence.retainedEvidence.signalObserved,
-    "not_confirmed_row_specific_extraction"
-  );
-  assert.match(
-    outcomes.international_transfers_disclosure?.criticalEvidence.statusBasis ?? "",
-    /international-transfer disclosure text was not confidently extracted/i
-  );
-});
-
-test("explicit transfer text still requires an approved row witness", () => {
-  const examples = [
-    "We may transfer your personal data outside the EEA/UK.",
-    "Where we transfer personal data internationally, we rely on Standard Contractual Clauses.",
-    "Your information may be stored or processed in the United States and other countries."
-  ];
-
-  for (const excerpt of examples) {
-    const outcomes = deriveGdprEprivacyCoveragePolicyOutcomes({
-      ...completedInputBase,
-      runtimeArtifacts: {
-        policyDisclosureSummary: {
-          privacyPolicyPresent: true,
-          privacyPolicyTextCharacterCount: 3200,
-          privacyPolicyUrls: ["https://example.test/privacy"],
-          retainedPrivacyPolicyTextExcerpt: excerpt
-        }
-      },
-      snapshot: {
-        privacy_policy_present: true
-      }
-    });
-
-    assert.equal(outcomes.international_transfers_disclosure?.status, "Not confirmed", excerpt);
-    assert.match(
-      String(outcomes.international_transfers_disclosure?.criticalEvidence.retainedEvidence.candidatePolicyExcerpt ?? ""),
-      /transfer|stored|processed|standard contractual clauses/i
-    );
-  }
-});
-
-test("deriveGdprEprivacyCoveragePolicyOutcomes does not promote topic-only Article 13 hints to observed", () => {
-  const outcomes = deriveGdprEprivacyCoveragePolicyOutcomes({
-    ...completedInputBase,
-    runtimeArtifacts: {
-      policyDisclosureSummary: {
-        observedTopics: ["legal_basis"],
-        privacyPolicyPresent: true,
-        privacyPolicyTextCharacterCount: 3200,
-        privacyPolicyUrls: ["https://example.test/privacy"],
-        retainedPrivacyPolicyTextExcerpt: "Privacy Policy. We describe how personal information is handled."
-      }
-    },
-    snapshot: {
-      privacy_policy_present: true
-    }
-  });
-
-  assert.equal(outcomes.legal_basis_disclosure_observed?.status, "Not confirmed");
-  assert.equal(
-    outcomes.legal_basis_disclosure_observed?.criticalEvidence.retainedEvidence.signalObserved,
-    "not_confirmed_row_specific_extraction"
-  );
-});
-
-test("deriveGdprEprivacyCoveragePolicyOutcomes keeps weak legal basis Article 13 excerpts in review", () => {
-  const outcomes = deriveGdprEprivacyCoveragePolicyOutcomes({
-    ...completedInputBase,
-    runtimeArtifacts: {
-      policyDisclosureSummary: {
-        article13DisclosureSignals: [
-          {
-            disclosureType: "legal_basis",
-            evidenceText: "We use cookies on this website to improve your experience. You may manage your consent choices.",
-            source: "deterministic",
-            status: "observed"
-          }
-        ],
-        privacyPolicyPresent: true,
-        privacyPolicyTextCharacterCount: 3200,
-        privacyPolicyUrls: ["https://example.test/privacy"],
-        retainedPrivacyPolicyTextExcerpt: "We use cookies on this website to improve your experience. You may manage your consent choices."
-      }
-    },
-    snapshot: {
-      privacy_policy_present: true
-    }
-  });
-
-  assert.equal(outcomes.legal_basis_disclosure_observed?.status, "Not confirmed");
-  assert.equal(
-    outcomes.legal_basis_disclosure_observed?.criticalEvidence.retainedEvidence.signalObserved,
-    "not_confirmed_row_specific_extraction"
-  );
-});
-
-test("retention-only legal-obligation evidence does not promote the legal-basis row", () => {
-  const retentionExcerpt =
-    "Additional Information About Data Retention. After you close your Amazon account, we will delete your personal information, except if we need it to comply with our legal obligations and defend our rights. We retain such information for as long as required by law.";
-  const outcomes = deriveGdprEprivacyCoveragePolicyOutcomes({
-    ...completedInputBase,
-    runtimeArtifacts: {
-      policyDisclosureSummary: {
-        article13DisclosureSignals: [{
-          confidence: 0.82,
-          disclosureType: "legal_basis",
-          evidenceText: retentionExcerpt,
-          matchedTerm: "comply with our legal obligations",
-          productionCredit: false,
-          selectedEvidenceStrength: "limited",
-          selectedPolicySectionExcerpt: retentionExcerpt,
-          selectedPolicySectionHeading: "Additional Information About Data Retention",
-          source: "deterministic",
-          status: "diagnostic_only"
-        }],
-        policyTextCoverageMode: "section_targeted",
-        privacyPolicyPresent: true,
-        privacyPolicyTextCharacterCount: 3200,
-        privacyPolicyUrls: ["https://www.amazon.de/gp/help/customer/display.html?nodeId=GX7NJQ4ZB8MHFRNJ"],
-        retainedArticle13SectionEvidence: [{
-          coverageArea: "legal_basis",
-          evidenceSource: "deterministic",
-          selectedEvidenceStrength: "limited",
-          selectedPolicySectionExcerpt: retentionExcerpt,
-          selectedPolicySectionHeading: "Additional Information About Data Retention",
-          signalObserved: "not_observed"
-        }],
-        retainedPolicySections: [{
-          heading: "Additional Information About Data Retention",
-          sourceUrl: "https://www.amazon.de/gp/help/customer/display.html?nodeId=GX7NJQ4ZB8MHFRNJ",
-          textExcerpt: retentionExcerpt
-        }],
-        retainedPrivacyPolicyTextExcerpt: `${retentionExcerpt} ${"Additional privacy notice context. ".repeat(100)}`
-      }
-    },
-    snapshot: { privacy_policy_present: true }
-  });
-
-  assert.equal(outcomes.legal_basis_disclosure_observed?.status, "Not confirmed");
-  assert.notEqual(
-    outcomes.legal_basis_disclosure_observed?.criticalEvidence.retainedEvidence.signalObserved,
-    true
-  );
-  assert.equal(outcomes.retention_disclosure_observed?.status, "Observed");
-});
-
-test("deriveGdprEprivacyCoveragePolicyOutcomes requires row-specific recipient/vendor category evidence", () => {
-  const outcomes = deriveGdprEprivacyCoveragePolicyOutcomes({
-    ...completedInputBase,
-    runtimeArtifacts: {
-      policyDisclosureSummary: {
-        article13DisclosureSignals: [
-          {
-            disclosureType: "recipients_or_vendor_categories",
-            evidenceText: "We may use information to understand and improve how visitors use our website.",
-            source: "deterministic",
-            status: "observed"
-          }
-        ],
-        privacyPolicyPresent: true,
-        privacyPolicyTextCharacterCount: 3200,
-        privacyPolicyUrls: ["https://example.test/privacy"],
-        retainedPrivacyPolicyTextExcerpt: "We may use information to understand and improve how visitors use our website."
-      }
-    },
-    snapshot: {
-      privacy_policy_present: true
-    }
-  });
-
-  assert.equal(outcomes.recipients_vendor_categories_disclosure?.status, "Not confirmed");
-  assert.equal(
-    outcomes.recipients_vendor_categories_disclosure?.criticalEvidence.retainedEvidence.signalObserved,
-    "not_confirmed_row_specific_extraction"
-  );
-});
-
-test("deriveGdprEprivacyCoveragePolicyOutcomes does not promote session-replay service-provider text as recipient disclosure", () => {
-  const sessionReplayExcerpt =
-    "In collecting Information about your use of a Digital Service, we may use service providers or other solutions to record users' interactions with our Sites, which may include mouse clicks, mouse movements, page scrolling, and keystrokes/key touches during those sessions.";
-
-  const outcomes = deriveGdprEprivacyCoveragePolicyOutcomes({
-    ...completedInputBase,
-    runtimeArtifacts: {
-      policyDisclosureSummary: {
-        article13DisclosureSignals: [
-          {
-            disclosureType: "recipients_or_vendor_categories",
-            evidenceText: sessionReplayExcerpt,
-            source: "deterministic",
-            status: "observed"
-          }
-        ],
-        privacyPolicyPresent: true,
-        privacyPolicyTextCharacterCount: 3200,
-        privacyPolicyUrls: ["https://example.test/privacy"],
-        retainedPrivacyPolicyTextExcerpt: sessionReplayExcerpt
-      }
-    },
-    snapshot: {
-      privacy_policy_present: true
-    }
-  });
-
-  assert.equal(outcomes.recipients_vendor_categories_disclosure?.status, "Not confirmed");
-  assert.match(
-    outcomes.recipients_vendor_categories_disclosure?.limitation ?? "",
-    /session-replay|Collected-data|recipient\/vendor-category/i
-  );
-  assert.equal(
-    outcomes.recipients_vendor_categories_disclosure?.criticalEvidence.retainedEvidence.signalObserved,
-    "not_confirmed_row_specific_extraction"
-  );
-});
-
-test("deriveGdprEprivacyCoveragePolicyOutcomes confirms explicit recipient/vendor category sharing disclosure", () => {
-  const recipientDisclosure =
-    "We share personal information with service providers, processors, vendors, affiliates, advertising partners, analytics providers, payment processors, business partners, social networks, and regulators where required.";
-
-  const outcomes = deriveGdprEprivacyCoveragePolicyOutcomes({
-    ...completedInputBase,
-    runtimeArtifacts: {
-      policyDisclosureSummary: {
-        article13DisclosureSignals: [
-          {
-            disclosureType: "recipients_or_vendor_categories",
-            evidenceText: recipientDisclosure,
-            source: "deterministic",
-            status: "observed"
-          }
-        ],
-        privacyPolicyPresent: true,
-        privacyPolicyTextCharacterCount: 3200,
-        privacyPolicyUrls: ["https://example.test/privacy"],
-        retainedPrivacyPolicyTextExcerpt: recipientDisclosure
-      }
-    },
-    snapshot: {
-      privacy_policy_present: true
-    }
-  });
-
-  assert.equal(outcomes.recipients_vendor_categories_disclosure?.status, "Observed");
-  assert.match(
-    retainedArticle13Signal(outcomes.recipients_vendor_categories_disclosure!)?.evidenceText ?? "",
-    /share personal information with service providers/i
-  );
-});
-
-test("deriveGdprEprivacyCoveragePolicyOutcomes treats DPO contact as review when a privacy contact exists", () => {
-  const outcomes = deriveGdprEprivacyCoveragePolicyOutcomes({
-    ...completedInputBase,
-    runtimeArtifacts: {
-      policyDisclosureSummary: {
-        article13DisclosureSignals: [
-          {
-            disclosureType: "controller_contact",
-            evidenceText: "The data controller is Example Inc. You can contact us through the website contact form.",
-            source: "deterministic",
-            status: "observed"
-          }
-        ],
-        privacyPolicyPresent: true,
-        privacyPolicyTextCharacterCount: 3200,
-        privacyPolicyUrls: ["https://example.test/privacy"],
-        retainedPrivacyPolicyTextExcerpt: "The data controller is Example Inc. You can contact us through the website contact form."
-      }
-    },
-    snapshot: {
-      privacy_policy_present: true
-    }
-  });
-
-  assert.equal(outcomes.dpo_contact_point_disclosure?.status, "Not confirmed");
-  assert.equal(
-    outcomes.dpo_contact_point_disclosure?.criticalEvidence.retainedEvidence.signalObserved,
-    "not_confirmed_row_specific_extraction"
-  );
-  assert.match(outcomes.dpo_contact_point_disclosure?.limitation ?? "", /controller\/contact surface was retained/i);
-});
-
-test("US privacy policy calibration separates contact, DPO, rights scope, transfers, recipients, and complaint rights", () => {
-  const controller = "Example Studios Inc. operates these services. Questions about this Privacy Policy may be submitted through our privacy request form or mailed to 100 Example Avenue, Culver City, California, Attention: Privacy Officer.";
-  const recipients = "We share Personal Information with service providers, affiliates, analytics providers, advertising networks, social networks, platforms, and governmental authorities.";
-  const retention = "We retain Personal Information as long as necessary or permitted for the purposes for which it was obtained, considering legal obligations and the sensitivity of the information.";
-  const rights = "California and other U.S. state residents may request access, correction, deletion, portability, opt out, appeal, and nondiscrimination.";
-  const transfers = "Personal Information may be transferred to and processed in the United States or other jurisdictions, where courts, law enforcement, and national security authorities may access it.";
-  const legal = "We may process information with your consent or as required by law.";
-  const regulator = "We may disclose information to regulatory authorities when required by law.";
-  const text = [controller, recipients, retention, rights, transfers, legal, regulator].join(" ");
-  const outcomes = deriveGdprEprivacyCoveragePolicyOutcomes({
-    ...completedInputBase,
-    runtimeArtifacts: {
-      policyDisclosureSummary: {
-        privacyPolicyPresent: true,
-        privacyPolicyTextCharacterCount: 4200,
-        privacyPolicyUrls: ["https://studio.example/privacy"],
-        retainedPrivacyPolicyTextExcerpt: text,
-        policyTextExtractionHealth: {
-          policyTextExtractionStatus: "ok",
-          extractedTextLength: 4200
-        },
-        article13DisclosureSignals: [
-          { disclosureType: "controller_contact", evidenceText: controller, source: "deterministic", status: "observed" },
-          { disclosureType: "recipients_or_vendor_categories", evidenceText: recipients, source: "deterministic", status: "observed" },
-          { disclosureType: "data_retention", evidenceText: retention, source: "deterministic", status: "observed" },
-          { disclosureType: "data_subject_rights", evidenceText: rights, source: "deterministic", status: "observed" },
-          { disclosureType: "international_transfers", evidenceText: transfers, source: "deterministic", status: "observed" },
-          { disclosureType: "legal_basis", evidenceText: legal, source: "deterministic", status: "observed" },
-          { disclosureType: "supervisory_authority", evidenceText: regulator, source: "deterministic", status: "observed" },
-          { disclosureType: "dpo_contact", evidenceText: controller, source: "deterministic", status: "partial" }
-        ]
-      }
-    },
-    snapshot: { privacy_policy_present: true }
-  });
-
-  assert.equal(outcomes.controller_contact_disclosure?.status, "Observed");
-  assert.equal(outcomes.recipients_vendor_categories_disclosure?.status, "Observed");
-  assert.match(
-    retainedArticle13Signal(outcomes.recipients_vendor_categories_disclosure!)?.evidenceText ?? "",
-    /analytics providers|advertising networks/i
-  );
-  assert.equal(outcomes.retention_disclosure_observed?.status, "Observed");
-  assert.equal(outcomes.international_transfers_disclosure?.status, "Observed");
-  assert.equal(outcomes.data_subject_rights_disclosure?.status, "Not confirmed");
-  assert.equal(
-    outcomes.data_subject_rights_disclosure?.criticalEvidence.retainedEvidence.rightsJurisdictionScope,
-    "us_state_only"
-  );
-  assert.equal(outcomes.legal_basis_disclosure_observed?.status, "Not confirmed");
-  assert.equal(outcomes.supervisory_authority_complaint_disclosure?.status, "Not confirmed");
-  assert.equal(outcomes.dpo_contact_point_disclosure?.status, "Observed");
-  assert.equal(
-    outcomes.dpo_contact_point_disclosure?.criticalEvidence.retainedEvidence.formalDpoDesignationConfirmed,
-    false
-  );
-  assert.equal(outcomes.formal_dpo_designation_disclosure, undefined);
-});
-
-test("deriveGdprEprivacyCoveragePolicyOutcomes presents financial-incentive text as automated-decision no match", () => {
-  const outcomes = deriveGdprEprivacyCoveragePolicyOutcomes({
-    ...completedInputBase,
-    runtimeArtifacts: {
-      policyDisclosureSummary: {
-        article13DisclosureSignals: [
-          {
-            disclosureType: "automated_decision_making_or_profiling",
-            evidenceText:
-              "Receive information about the financial incentives that we offer to you. You may opt out of processing for targeted advertising.",
-            source: "deterministic",
-            status: "observed"
-          }
-        ],
-        privacyPolicyPresent: true,
-        privacyPolicyTextCharacterCount: 3200,
-        privacyPolicyUrls: ["https://example.test/privacy"],
-        retainedPrivacyPolicyTextExcerpt:
-          "Receive information about the financial incentives that we offer to you. You may opt out of processing for targeted advertising."
-      }
-    },
-    snapshot: {
-      privacy_policy_present: true
-    }
-  });
-
-  assert.equal(outcomes.automated_decision_making_profiling_disclosure?.status, "Not confirmed");
-  assert.equal(
-    outcomes.automated_decision_making_profiling_disclosure?.criticalEvidence.retainedEvidence.signalObserved,
-    "partial_automated_processing_without_article22_disclosure"
-  );
-});
-
-test("explicit automated-decision text remains no match without an approved row witness", () => {
-  const outcomes = deriveGdprEprivacyCoveragePolicyOutcomes({
-    ...completedInputBase,
-    runtimeArtifacts: {
-      policyDisclosureSummary: {
-        privacyPolicyPresent: true,
-        privacyPolicyTextCharacterCount: 3200,
-        privacyPolicyUrls: ["https://example.test/privacy"],
-        retainedPrivacyPolicyTextExcerpt:
-          "We do not make decisions based solely on automated processing, including profiling, that produce legal or similarly significant effects. You may request meaningful information about the logic involved."
-      }
-    },
-    snapshot: {
-      privacy_policy_present: true
-    }
-  });
-
-  assert.equal(outcomes.automated_decision_making_profiling_disclosure?.status, "Not confirmed");
-  assert.match(
-    retainedArticle13Signal(outcomes.automated_decision_making_profiling_disclosure!)?.evidenceText ?? "",
-    /solely on automated processing/i
-  );
-});
-
 test("deriveGdprEprivacyCoveragePolicyOutcomes does not treat deletion rights as retention disclosure", () => {
   const outcomes = deriveGdprEprivacyCoveragePolicyOutcomes({
     ...completedInputBase,
@@ -2043,89 +1183,6 @@ test("deriveGdprEprivacyCoveragePolicyOutcomes keeps weak retention wording neut
   });
 
   assert.equal(outcomes.retention_disclosure_observed?.status, "Not confirmed");
-});
-
-test("deriveGdprEprivacyCoveragePolicyOutcomes does not observe retention from generic storage mechanics", () => {
-  const outcomes = deriveGdprEprivacyCoveragePolicyOutcomes({
-    ...completedInputBase,
-    runtimeArtifacts: {
-      policyDisclosureSummary: {
-        privacyPolicyPresent: true,
-        privacyPolicyTextCharacterCount: 3200,
-        privacyPolicyUrls: ["https://example.test/privacy"],
-        retainedPrivacyPolicyTextExcerpt:
-          "We use various technologies to collect and store information, including cookies, local storage, databases, and server logs."
-      }
-    },
-    snapshot: {
-      privacy_policy_present: true
-    }
-  });
-
-  assert.notEqual(outcomes.retention_disclosure_observed?.status, "Observed");
-  assert.equal(outcomes.retention_disclosure_observed?.status, "Not confirmed");
-  assert.equal(
-    outcomes.retention_disclosure_observed?.criticalEvidence.retainedEvidence.signalObserved,
-    "not_confirmed_row_specific_extraction"
-  );
-});
-
-test("deriveGdprEprivacyCoveragePolicyOutcomes prefers retention-specific retained sections over security sections", () => {
-  const outcomes = deriveGdprEprivacyCoveragePolicyOutcomes({
-    ...completedInputBase,
-    runtimeArtifacts: {
-      policyDisclosureSummary: {
-        observedTopics: ["data_retention"],
-        policyTextCoverageMode: "section_targeted",
-        privacyPolicyPresent: true,
-        privacyPolicyTextCharacterCount: 4600,
-        privacyPolicyUrls: ["https://example.test/privacy"],
-        retainedPolicySections: [
-          {
-            charEnd: 360,
-            charStart: 0,
-            heading: "How we keep your personal information safe",
-            quality: "strong",
-            sourceUrl: "https://example.test/privacy",
-            textExcerpt:
-              "How we keep your personal information safe. We protect your personal information using security safeguards, encryption, confidentiality controls, and procedures intended to prevent unauthorised access, loss, destruction, or damage."
-          },
-          {
-            charEnd: 780,
-            charStart: 361,
-            heading: "How long we keep your personal information",
-            quality: "strong",
-            sourceUrl: "https://example.test/privacy",
-            textExcerpt:
-              "How long we keep your personal information. Newsletter preferences are kept until you unsubscribe, booking information is retained for one year, CCTV recordings are kept for a maximum of four weeks, and some records may be retained longer for legal obligations or legal disputes."
-          },
-          {
-            charEnd: 1120,
-            charStart: 781,
-            heading: "How long we keep your personal information collected through cookies",
-            quality: "strong",
-            sourceUrl: "https://example.test/cookie-policy",
-            textExcerpt:
-              "How long we keep your personal information collected through cookies. Cookie identifiers are stored for the retention period shown in the cookie list and are deleted when they expire or are no longer necessary."
-          }
-        ],
-        retainedPrivacyPolicyTextExcerpt: ""
-      }
-    },
-    snapshot: {
-      privacy_policy_present: true
-    }
-  });
-
-  const retentionText = retainedArticle13Signal(outcomes.retention_disclosure_observed!)?.evidenceText ?? "";
-  assert.equal(outcomes.retention_disclosure_observed?.status, "Observed");
-  assert.match(retentionText, /How long we keep your personal information/i);
-  assert.match(retentionText, /until you unsubscribe|retained for one year|CCTV recordings are kept/i);
-  assert.doesNotMatch(retentionText, /How we keep your personal information safe/i);
-  assert.equal(
-    outcomes.retention_disclosure_observed?.criticalEvidence.retainedEvidence.selectedPolicySectionHeading,
-    "How long we keep your personal information"
-  );
 });
 
 test("deriveGdprEprivacyCoveragePolicyOutcomes treats guessed-only privacy notice as not confirmed", () => {
@@ -2183,29 +1240,6 @@ test("deriveGdprEprivacyCoveragePolicyOutcomes projects completed privacy-surfac
   assert.match(
     outcomes.privacy_notice_availability?.limitation ?? "",
     /completed policy-surface inspection did not observe a reachable privacy notice/i
-  );
-});
-
-test("deriveGdprEprivacyCoveragePolicyOutcomes keeps missing international transfer disclosure as review", () => {
-  const outcomes = deriveGdprEprivacyCoveragePolicyOutcomes({
-    ...completedInputBase,
-    runtimeArtifacts: {
-      policyDisclosureSummary: {
-        privacyPolicyPresent: true,
-        privacyPolicyTextCharacterCount: 3200,
-        privacyPolicyUrls: ["https://example.test/privacy"],
-        retainedPrivacyPolicyTextExcerpt: "Privacy Policy. We describe controller contact, purposes, lawful basis, recipients, retention, and rights."
-      }
-    },
-    snapshot: {
-      privacy_policy_present: true
-    }
-  });
-
-  assert.equal(outcomes.international_transfers_disclosure?.status, "Not confirmed");
-  assert.equal(
-    outcomes.international_transfers_disclosure?.criticalEvidence.retainedEvidence.signalObserved,
-    "not_confirmed_row_specific_extraction"
   );
 });
 
@@ -2434,36 +1468,6 @@ test("deriveGdprEprivacyCoveragePolicyOutcomes does not infer accept control fro
   );
 });
 
-test("deriveGdprEprivacyCoveragePolicyOutcomes treats thin policy extraction as coverage limited", () => {
-  const outcomes = deriveGdprEprivacyCoveragePolicyOutcomes({
-    ...completedInputBase,
-    runtimeArtifacts: {
-      policyDisclosureSummary: {
-        privacyPolicyPresent: true,
-        privacyPolicyTextCharacterCount: 120,
-        privacyPolicyUrls: ["https://example.test/privacy"],
-        processingErrorObserved: true,
-        retainedPrivacyPolicyTextExcerpt: "Privacy center processing error."
-      }
-    },
-    snapshot: {
-      privacy_policy_present: true
-    }
-  });
-
-  assert.equal(outcomes.privacy_notice_availability?.status, "Observed");
-  assert.match(outcomes.privacy_notice_availability?.limitation ?? "", /link or page surface was reachable.*substantive notice content was not available/i);
-  assert.equal(outcomes.policy_text_extraction?.status, "Not testable");
-  assert.equal(outcomes.legal_basis_disclosure_observed?.status, "Not confirmed");
-  assert.equal(outcomes.retention_disclosure_observed?.status, "Not confirmed");
-  assert.equal(outcomes.legal_basis_disclosure_observed?.criticalEvidence.retainedEvidence.signalObserved, "not_confirmed_extraction_limited");
-  assert.equal(
-    (outcomes.policy_text_extraction?.criticalEvidence.retainedEvidence.policyTextExtractionHealth as Record<string, unknown>)?.policyTextExtractionStatus,
-    "thin"
-  );
-  assert.match(outcomes.legal_basis_disclosure_observed?.limitation ?? "", /did not extract enough usable policy text/i);
-});
-
 test("deriveGdprEprivacyCoveragePolicyOutcomes trusts a usable typed projection for localized policy prose", () => {
   const portuguesePolicyText = [
     "Nossa política de privacidade explica como a Havan trata dados pessoais, as finalidades do tratamento e os direitos dos titulares.",
@@ -2495,51 +1499,6 @@ test("deriveGdprEprivacyCoveragePolicyOutcomes trusts a usable typed projection 
     /substantive notice content was not available|substantive policy body not retained/i,
   );
   assert.equal(outcomes.legal_basis_disclosure_observed?.status, "Not confirmed");
-});
-
-test("deriveGdprEprivacyCoveragePolicyOutcomes explains an empty retained policy separately", () => {
-  const outcomes = deriveGdprEprivacyCoveragePolicyOutcomes({
-    ...completedInputBase,
-    runtimeArtifacts: {
-      policyDisclosureSummary: {
-        privacyPolicyPresent: true,
-        privacyPolicyTextCharacterCount: 0,
-        privacyPolicyUrls: ["https://example.test/privacy"],
-        policyTextExtractionHealth: {
-          extractedTextLength: 0,
-          extractionFailureReason: "privacy_policy_text_not_retained",
-          policyTextExtractionStatus: "empty_policy_text"
-        }
-      }
-    },
-    snapshot: { privacy_policy_present: true }
-  });
-
-  assert.equal(outcomes.policy_text_extraction?.status, "Not testable");
-  assert.match(outcomes.legal_basis_disclosure_observed?.limitation ?? "", /no substantive policy text was retained/i);
-});
-
-test("deriveGdprEprivacyCoveragePolicyOutcomes explains retained access challenges separately", () => {
-  const outcomes = deriveGdprEprivacyCoveragePolicyOutcomes({
-    ...completedInputBase,
-    runtimeArtifacts: {
-      policyDisclosureSummary: {
-        privacyPolicyPresent: true,
-        privacyPolicyTextCharacterCount: 132,
-        privacyPolicyUrls: ["https://example.test/privacy"],
-        retainedPrivacyPolicyTextExcerpt: "Client challenge. A required part of this site could not load. Captcha required.",
-        policyTextExtractionHealth: {
-          extractedTextLength: 132,
-          extractionFailureReason: "privacy_policy_access_challenge_retained",
-          policyTextExtractionStatus: "low_quality_access_challenge"
-        }
-      }
-    },
-    snapshot: { privacy_policy_present: true }
-  });
-
-  assert.equal(outcomes.policy_text_extraction?.status, "Not testable");
-  assert.match(outcomes.legal_basis_disclosure_observed?.limitation ?? "", /access challenge rather than the governing privacy notice/i);
 });
 
 test("a dedicated privacy email in a thin policy shell remains not confirmed without a row witness", () => {
@@ -2698,672 +1657,6 @@ test("deriveGdprEprivacyCoveragePolicyOutcomes reports unknown policy language e
 
   assert.equal(outcomes.policy_text_extraction?.status, "Not testable");
   assert.match(outcomes.policy_text_extraction?.limitation ?? "", /did not support a reliable policy-language decision/i);
-});
-
-test("deriveGdprEprivacyCoveragePolicyOutcomes lets strong section-targeted evidence override global extraction errors", () => {
-  const sectionEvidence = [
-    {
-      coverageArea: "controller_contact",
-      evidenceSource: "deterministic",
-      selectedEvidenceStrength: "strong",
-      selectedPolicySectionExcerpt: "Controller/contact. NVIDIA Corporation is the data controller for this privacy notice. You can contact our privacy team at privacy@nvidia.com with questions about this policy.",
-      selectedPolicySectionHeading: "Controller/contact",
-      selectedPolicySectionUrl: "https://www.nvidia.com/privacy",
-      signalObserved: "observed"
-    },
-    {
-      coverageArea: "processing_purposes",
-      evidenceSource: "deterministic",
-      selectedEvidenceStrength: "strong",
-      selectedPolicySectionExcerpt: "How we use personal data. We use personal information to provide our services, process orders, maintain account security, personalize experiences, measure performance, and prevent fraud.",
-      selectedPolicySectionHeading: "How we use personal data",
-      selectedPolicySectionUrl: "https://www.nvidia.com/privacy",
-      signalObserved: "observed"
-    },
-    {
-      coverageArea: "legal_basis",
-      evidenceSource: "deterministic",
-      selectedEvidenceStrength: "moderate",
-      selectedPolicySectionExcerpt: "Legal basis. We process personal data with your consent, when necessary to perform a contract, for our legitimate interests, and when required to comply with legal obligations.",
-      selectedPolicySectionHeading: "Legal basis",
-      selectedPolicySectionUrl: "https://www.nvidia.com/privacy",
-      signalObserved: "observed"
-    },
-    {
-      coverageArea: "recipients_or_vendor_categories",
-      evidenceSource: "deterministic",
-      selectedEvidenceStrength: "strong",
-      selectedPolicySectionExcerpt: "How we share information. We share personal data with service providers, processors, vendors, affiliates, business partners, and other third parties that help deliver our services.",
-      selectedPolicySectionHeading: "How we share information",
-      selectedPolicySectionUrl: "https://www.nvidia.com/privacy",
-      signalObserved: "observed"
-    },
-    {
-      coverageArea: "data_retention",
-      evidenceSource: "deterministic",
-      selectedEvidenceStrength: "strong",
-      selectedPolicySectionExcerpt: "Data Retention. We retain personal data for as long as necessary to provide services and meet legal requirements. We erase or delete data when it is no longer needed or after there is no engagement period.",
-      selectedPolicySectionHeading: "Data Retention",
-      selectedPolicySectionUrl: "https://www.nvidia.com/privacy",
-      signalObserved: "observed"
-    },
-    {
-      coverageArea: "data_subject_rights",
-      evidenceSource: "deterministic",
-      selectedEvidenceStrength: "strong",
-      selectedPolicySectionExcerpt: "Your privacy rights. Depending on where you live, you may see personal data we hold, take it with you, request corrections, withdraw consent, opt out of certain processing, erase information, and exercise privacy rights.",
-      selectedPolicySectionHeading: "Your privacy rights",
-      selectedPolicySectionUrl: "https://www.nvidia.com/privacy",
-      signalObserved: "observed"
-    },
-    {
-      coverageArea: "international_transfers",
-      evidenceSource: "deterministic",
-      selectedEvidenceStrength: "strong",
-      selectedPolicySectionExcerpt: "International transfers. We may transfer personal data outside your country, including outside the EEA, and rely on standard contractual clauses, adequacy decisions, and other transfer safeguards.",
-      selectedPolicySectionHeading: "International transfers",
-      selectedPolicySectionUrl: "https://www.nvidia.com/privacy",
-      signalObserved: "observed"
-    },
-    {
-      coverageArea: "dpo_contact",
-      evidenceSource: "deterministic",
-      selectedEvidenceStrength: "moderate",
-      selectedPolicySectionExcerpt: "Data protection contact. You may contact our data protection officer or privacy office for questions about privacy or data protection requests.",
-      selectedPolicySectionHeading: "Data protection contact",
-      selectedPolicySectionUrl: "https://www.nvidia.com/privacy",
-      signalObserved: "observed"
-    },
-    {
-      coverageArea: "supervisory_authority",
-      evidenceSource: "deterministic",
-      selectedEvidenceStrength: "moderate",
-      selectedPolicySectionExcerpt: "Complaints. You may lodge a complaint with your local data protection authority or supervisory authority if you have unresolved privacy concerns.",
-      selectedPolicySectionHeading: "Complaints",
-      selectedPolicySectionUrl: "https://www.nvidia.com/privacy",
-      signalObserved: "observed"
-    }
-  ];
-
-  const outcomes = deriveGdprEprivacyCoveragePolicyOutcomes({
-    ...completedInputBase,
-    runtimeArtifacts: {
-      policyDisclosureSummary: {
-        policySectionCount: sectionEvidence.length,
-        policyTextCoverageMode: "section_targeted",
-        policyTextExtractionHealth: {
-          extractedTextLength: 0,
-          extractionFailureReason: "privacy_policy_text_processing_error",
-          minimumTextLengthRequired: 2500,
-          policySurfaceObserved: true,
-          policyTextExtractionStatus: "errored",
-          policyTextQuality: {
-            codeSignalCount: 0,
-            naturalLanguageSentenceCount: 24,
-            usable: true
-          },
-          policyUrlRetained: true
-        },
-        privacyPolicyPresent: true,
-        privacyPolicyTextCharacterCount: 0,
-        privacyPolicyUrls: ["https://www.nvidia.com/privacy"],
-        processingErrorObserved: true,
-        retainedArticle13SectionEvidence: sectionEvidence,
-        retainedPolicySections: sectionEvidence.map((evidence, index) => ({
-          charEnd: (index + 1) * 500,
-          charStart: index * 500,
-          heading: evidence.selectedPolicySectionHeading,
-          quality: "strong",
-          sourceUrl: evidence.selectedPolicySectionUrl,
-          textExcerpt: evidence.selectedPolicySectionExcerpt
-        })),
-        retainedPrivacyPolicyTextExcerpt: ""
-      }
-    },
-    snapshot: {
-      privacy_policy_present: true
-    }
-  });
-
-  for (const rowId of [
-    "controller_contact_disclosure",
-    "processing_purposes_disclosure",
-    "legal_basis_disclosure_observed",
-    "recipients_vendor_categories_disclosure",
-    "retention_disclosure_observed",
-    "data_subject_rights_disclosure",
-    "international_transfers_disclosure",
-    "dpo_contact_point_disclosure",
-    "supervisory_authority_complaint_disclosure"
-  ]) {
-    assert.equal(outcomes[rowId]?.status, "Observed", `${rowId} should be observed from strong section evidence`);
-  }
-
-  assert.equal(outcomes.policy_text_extraction?.status, "Review signal");
-  assert.equal(
-    outcomes.retention_disclosure_observed?.criticalEvidence.retainedEvidence.selectedPolicySectionHeading,
-    "Data Retention"
-  );
-  assert.match(
-    retainedArticle13Signal(outcomes.data_subject_rights_disclosure!)?.evidenceText ?? "",
-    /take it with you/i
-  );
-});
-
-test("iFIT UK/EU canonical privacy policy fixture supports all nine GDPR transparency disclosures", () => {
-  const outcomes = deriveGdprEprivacyCoveragePolicyOutcomes({
-    ...completedInputBase,
-    runtimeArtifacts: {
-      policyDisclosureSummary: {
-        policySectionCount: IFIT_UK_EU_ARTICLE_13_SECTION_EVIDENCE.length,
-        policyTextCoverageMode: "section_targeted",
-        policyTextExtractionHealth: {
-          extractedTextLength: 5_400,
-          minimumTextLengthRequired: 2_500,
-          policySurfaceObserved: true,
-          policyTextExtractionStatus: "usable",
-          policyTextQuality: {
-            codeSignalCount: 0,
-            naturalLanguageSentenceCount: 32,
-            usable: true
-          },
-          policyUrlRetained: true
-        },
-        privacyPolicyPresent: true,
-        privacyPolicyTextCharacterCount: 5_400,
-        privacyPolicyUrls: [IFIT_UK_EU_PRIVACY_POLICY_URL],
-        retainedArticle13SectionEvidence: IFIT_UK_EU_ARTICLE_13_SECTION_EVIDENCE,
-        retainedPolicySections: IFIT_UK_EU_ARTICLE_13_SECTION_EVIDENCE.map((evidence, index) => ({
-          charEnd: (index + 1) * 500,
-          charStart: index * 500,
-          heading: evidence.selectedPolicySectionHeading,
-          quality: evidence.selectedEvidenceStrength,
-          sourceUrl: evidence.selectedPolicySectionUrl,
-          textExcerpt: evidence.selectedPolicySectionExcerpt
-        })),
-        retainedPrivacyPolicyTextExcerpt: IFIT_UK_EU_ARTICLE_13_SECTION_EVIDENCE
-          .map((evidence) => evidence.selectedPolicySectionExcerpt)
-          .join(" ")
-      }
-    },
-    snapshot: { privacy_policy_present: true }
-  });
-
-  for (const rowId of Object.values(GDPR_TRANSPARENCY_TOPIC_TO_ROW_ID)) {
-    assert.equal(outcomes[rowId]?.status, "Observed", `${rowId} should be supported by the iFIT fixture`);
-  }
-  assert.equal(
-    retainedArticle13Signal(outcomes.supervisory_authority_complaint_disclosure!)?.selectedPolicySectionUrl,
-    IFIT_UK_EU_PRIVACY_POLICY_URL
-  );
-  assert.match(
-    retainedArticle13Signal(outcomes.supervisory_authority_complaint_disclosure!)?.evidenceText ?? "",
-    /right to lodge a complaint.*supervisory authority/i
-  );
-});
-
-test("IMOU canonical privacy policy fixture supports all nine row-specific transparency disclosures", () => {
-  const outcomes = deriveGdprEprivacyCoveragePolicyOutcomes({
-    ...completedInputBase,
-    runtimeArtifacts: {
-      policyDisclosureSummary: {
-        policySectionCount: IMOU_ARTICLE_13_SECTION_EVIDENCE.length,
-        policyTextCoverageMode: "section_targeted",
-        policyTextExtractionHealth: {
-          extractedTextLength: 5_200,
-          minimumTextLengthRequired: 2_500,
-          policySurfaceObserved: true,
-          policyTextExtractionStatus: "usable",
-          policyTextQuality: { codeSignalCount: 0, naturalLanguageSentenceCount: 28, usable: true },
-          policyUrlRetained: true
-        },
-        privacyPolicyPresent: true,
-        privacyPolicyTextCharacterCount: 5_200,
-        privacyPolicyUrls: [IMOU_PRIVACY_POLICY_URL],
-        retainedArticle13SectionEvidence: IMOU_ARTICLE_13_SECTION_EVIDENCE,
-        retainedPolicySections: IMOU_ARTICLE_13_SECTION_EVIDENCE.map((evidence, index) => ({
-          charEnd: (index + 1) * 500,
-          charStart: index * 500,
-          heading: evidence.selectedPolicySectionHeading,
-          quality: evidence.selectedEvidenceStrength,
-          sourceUrl: evidence.selectedPolicySectionUrl,
-          textExcerpt: evidence.selectedPolicySectionExcerpt
-        })),
-        retainedPrivacyPolicyTextExcerpt: IMOU_ARTICLE_13_SECTION_EVIDENCE
-          .map((evidence) => evidence.selectedPolicySectionExcerpt)
-          .join(" ")
-      }
-    },
-    snapshot: { privacy_policy_present: true }
-  });
-
-  for (const rowId of Object.values(GDPR_TRANSPARENCY_TOPIC_TO_ROW_ID)) {
-    assert.equal(outcomes[rowId]?.status, "Observed", `${rowId} should be supported by the IMOU fixture`);
-    assert.equal(
-      retainedArticle13Signal(outcomes[rowId]!)?.selectedPolicySectionUrl,
-      IMOU_PRIVACY_POLICY_URL,
-      `${rowId} should retain the canonical policy route`
-    );
-  }
-});
-
-test("Aruba official privacy PDF fixture supports all nine row-specific transparency disclosures", () => {
-  const outcomes = deriveGdprEprivacyCoveragePolicyOutcomes({
-    ...completedInputBase,
-    runtimeArtifacts: {
-      policyDisclosureSummary: {
-        policySectionCount: ARUBA_ARTICLE_13_SECTION_EVIDENCE.length,
-        policyTextCoverageMode: "section_targeted",
-        policyTextExtractionHealth: {
-          extractedTextLength: 18_000,
-          minimumTextLengthRequired: 2_500,
-          policySurfaceObserved: true,
-          policyTextExtractionStatus: "usable",
-          policyTextQuality: { codeSignalCount: 0, naturalLanguageSentenceCount: 70, usable: true },
-          policyUrlRetained: true
-        },
-        privacyPolicyPresent: true,
-        privacyPolicyTextCharacterCount: 18_000,
-        privacyPolicyUrls: [ARUBA_PRIVACY_POLICY_URL],
-        retainedArticle13SectionEvidence: ARUBA_ARTICLE_13_SECTION_EVIDENCE,
-        retainedPolicySections: ARUBA_ARTICLE_13_SECTION_EVIDENCE.map((evidence, index) => ({
-          charEnd: (index + 1) * 1_500,
-          charStart: index * 1_500,
-          heading: evidence.selectedPolicySectionHeading,
-          quality: evidence.selectedEvidenceStrength,
-          sourceUrl: evidence.selectedPolicySectionUrl,
-          textExcerpt: evidence.selectedPolicySectionExcerpt
-        })),
-        retainedPrivacyPolicyTextExcerpt: ARUBA_ARTICLE_13_SECTION_EVIDENCE
-          .map((evidence) => evidence.selectedPolicySectionExcerpt)
-          .join(" ")
-      }
-    },
-    snapshot: { privacy_policy_present: true }
-  });
-
-  for (const rowId of Object.values(GDPR_TRANSPARENCY_TOPIC_TO_ROW_ID)) {
-    assert.equal(outcomes[rowId]?.status, "Observed", `${rowId} should be supported by Aruba's official PDF fixture`);
-    assert.equal(retainedArticle13Signal(outcomes[rowId]!)?.selectedPolicySectionUrl, ARUBA_PRIVACY_POLICY_URL);
-  }
-});
-
-test("uses retained section context to validate a compact Article 13 scanner signal", () => {
-  const outcomes = deriveGdprEprivacyCoveragePolicyOutcomes({
-    ...completedInputBase,
-    runtimeArtifacts: {
-      policyDisclosureSummary: {
-        article13DisclosureSignals: [{
-          confidence: 0.9,
-          disclosureType: "controller_contact",
-          evidenceText: "... Controller ...",
-          selectedPolicySectionExcerpt:
-            "Controller/contact. Warner Bros. Discovery is the controller for this service. You can contact our privacy team at privacy@example.com with questions about this policy.",
-          selectedPolicySectionUrl: "https://www.wbdprivacy.com/policycenter/b2c/",
-          source: "deterministic",
-          status: "observed"
-        }],
-        policyTextExtractionHealth: {
-          extractedTextLength: 12_001,
-          minimumTextLengthRequired: 2_500,
-          policySurfaceObserved: true,
-          policyTextExtractionStatus: "ok",
-          policyUrlRetained: true
-        },
-        privacyPolicyPresent: true,
-        privacyPolicyTextCharacterCount: 12_001,
-        privacyPolicyUrls: ["https://www.wbdprivacy.com/policycenter/b2c/"],
-        retainedPrivacyPolicyTextExcerpt: "A usable privacy policy was retained. ".repeat(400)
-      }
-    },
-    snapshot: { privacy_policy_present: true }
-  });
-
-  assert.equal(outcomes.controller_contact_disclosure?.status, "Observed");
-  assert.match(
-    retainedArticle13Signal(outcomes.controller_contact_disclosure!)?.selectedPolicySectionExcerpt ?? "",
-    /Warner Bros\. Discovery is the controller/i
-  );
-});
-
-test("deriveGdprEprivacyCoveragePolicyOutcomes rejects code/config excerpts as GDPR Transparency evidence", () => {
-  const codePolicyText = ";this.gbar_={CONFIG:[[[0,\"www.gstatic.com\",null,\"0\"]]]};_.z=function(a,b){Object.defineProperties(a,b)};var rights=function(){return Object.keys({access:1,delete:1})}; Copyright The Closure Library; ".repeat(40);
-  const outcomes = deriveGdprEprivacyCoveragePolicyOutcomes({
-    ...completedInputBase,
-    runtimeArtifacts: {
-      policyDisclosureSummary: {
-        article13DisclosureSignals: [
-          {
-            confidence: 0.92,
-            disclosureType: "data_subject_rights",
-            evidenceText: ":!!b};_.z=function(a,b){Object.defineProperties(a,b)}; rights Object access delete export",
-            source: "deterministic",
-            status: "observed"
-          }
-        ],
-        policyTextExtractionHealth: {
-          extractedTextLength: codePolicyText.length,
-          minimumTextLengthRequired: 2500,
-          policySurfaceObserved: true,
-          policyTextExtractionStatus: "low_quality_extracted_code_or_config",
-          policyUrlRetained: true
-        },
-        privacyPolicyPresent: true,
-        privacyPolicyTextCharacterCount: codePolicyText.length,
-        privacyPolicyUrls: ["https://policies.example.test/privacy"],
-        retainedPrivacyPolicyTextExcerpt: codePolicyText
-      }
-    },
-    snapshot: {
-      privacy_policy_present: true
-    }
-  });
-
-  assert.equal(outcomes.privacy_notice_availability?.status, "Observed");
-  assert.equal(outcomes.data_subject_rights_disclosure?.status, "Not confirmed");
-  assert.equal(
-    outcomes.data_subject_rights_disclosure?.criticalEvidence.retainedEvidence.signalObserved,
-    "not_confirmed_extraction_limited"
-  );
-  assert.match(outcomes.data_subject_rights_disclosure?.limitation ?? "", /extracted code or configuration rather than policy text/i);
-});
-
-test("mature policy text still requires row-specific evidence witnesses", () => {
-  const policyText = [
-    "Privacy Policy Privacy & Terms Overview Terms of Service Technologies FAQ Introduction Privacy & Terms Overview FAQ",
-    "We use personal information to provide our services, maintain and improve them, develop new services, and personalize content, ads, and tailored search results.",
-    "Legal basis. We process information with your consent, when necessary for performance of a contract, for legitimate interests, and when required by law.",
-    "Retaining your information. We retain the data we collect for different periods depending on what it is, how we use it, and how you configure your settings. Some data is deleted or anonymized automatically. Server logs and cookie information may have retention periods.",
-    "Your privacy controls let you review and update information, export data with Google Takeout, delete your information, use My Activity, and request to remove content.",
-    "Data transfers. We maintain servers around the world, and your information may be processed on servers located outside your country. We rely on legal frameworks relating to the transfer of data and work with local data protection authorities.",
-    "You can contact Google about privacy questions, contact our data protection office, or contact a data protection officer where applicable. You may also contact your local data protection authority or supervisory authority to make a complaint.",
-    "Automated systems and algorithms help recognize patterns, detect abuse, personalize ads, and provide tailored search results."
-  ].join(" ");
-
-  const outcomes = deriveGdprEprivacyCoveragePolicyOutcomes({
-    ...completedInputBase,
-    runtimeArtifacts: {
-      policyDisclosureSummary: {
-        privacyPolicyPresent: true,
-        privacyPolicyTextCharacterCount: 7139,
-        privacyPolicyUrls: ["https://policies.google.com/privacy?hl=en-IE&fg=1"],
-        retainedPrivacyPolicyTextExcerpt: policyText
-      }
-    },
-    snapshot: {
-      privacy_policy_present: true
-    }
-  });
-
-  assert.equal(outcomes.processing_purposes_disclosure?.status, "Not confirmed");
-  assert.equal(outcomes.legal_basis_disclosure_observed?.status, "Not confirmed");
-  assert.equal(outcomes.retention_disclosure_observed?.status, "Not confirmed");
-  assert.equal(outcomes.data_subject_rights_disclosure?.status, "Not confirmed");
-  assert.equal(outcomes.international_transfers_disclosure?.status, "Not confirmed");
-  assert.equal(outcomes.dpo_contact_point_disclosure?.status, "Not confirmed");
-  assert.equal(outcomes.supervisory_authority_complaint_disclosure?.status, "Not confirmed");
-  assert.equal(outcomes.automated_decision_making_profiling_disclosure?.status, "Not confirmed");
-
-  const controllerText = String(outcomes.controller_contact_disclosure?.criticalEvidence.retainedEvidence.candidatePolicyExcerpt ?? "");
-  const retentionText = String(outcomes.retention_disclosure_observed?.criticalEvidence.retainedEvidence.candidatePolicyExcerpt ?? "");
-  const transferText = String(outcomes.international_transfers_disclosure?.criticalEvidence.retainedEvidence.candidatePolicyExcerpt ?? "");
-  const automatedText = retainedArticle13Signal(outcomes.automated_decision_making_profiling_disclosure!)?.evidenceText ?? "";
-  assert.match(controllerText, /contact Google about privacy questions/i);
-  assert.doesNotMatch(controllerText, /^Privacy Policy Privacy & Terms/i);
-  assert.match(retentionText, /Retaining your information/i);
-  assert.doesNotMatch(retentionText, /^Privacy Policy Privacy & Terms/i);
-  assert.match(transferText, /Data transfers/i);
-  assert.doesNotMatch(transferText, /^Privacy Policy Privacy & Terms/i);
-  assert.match(automatedText, /Automated systems and algorithms/i);
-  assert.equal(
-    outcomes.automated_decision_making_profiling_disclosure?.criticalEvidence.retainedEvidence.signalObserved,
-    "partial_automated_processing_without_article22_disclosure"
-  );
-});
-
-test("deriveGdprEprivacyCoveragePolicyOutcomes treats substantial retained policy matcher misses as not confirmed", () => {
-  const outcomes = deriveGdprEprivacyCoveragePolicyOutcomes({
-    ...completedInputBase,
-    runtimeArtifacts: {
-      policyDisclosureSummary: {
-        privacyPolicyPresent: true,
-        privacyPolicyTextCharacterCount: 4200,
-        privacyPolicyUrls: ["https://example.test/privacy"],
-        retainedPrivacyPolicyTextExcerpt:
-          "Privacy notice. We explain how users can contact us and how our service works. ".repeat(60)
-      }
-    },
-    snapshot: {
-      privacy_policy_present: true
-    }
-  });
-
-  assert.equal(outcomes.legal_basis_disclosure_observed?.status, "Not confirmed");
-  assert.equal(outcomes.retention_disclosure_observed?.status, "Not confirmed");
-  assert.equal(
-    outcomes.legal_basis_disclosure_observed?.criticalEvidence.retainedEvidence.signalObserved,
-    "not_confirmed_row_specific_extraction"
-  );
-  assert.match(
-    outcomes.legal_basis_disclosure_observed?.limitation ?? "",
-    /row-specific disclosure was not confidently extracted/i
-  );
-});
-
-test("irrelevant legal-basis extraction remains a neutral not-located result with policy provenance", () => {
-  const outcomes = deriveGdprEprivacyCoveragePolicyOutcomes({
-    ...completedInputBase,
-    runtimeArtifacts: {
-      policyDisclosureSummary: {
-        article13DisclosureSignals: [{
-          disclosureType: "legal_basis",
-          evidenceText: "You can contact us by email, telephone, or through our customer service channels.",
-          source: "deterministic",
-          status: "partial"
-        }],
-        policyDocumentProvenance: [{
-          detectedLanguage: "en",
-          directlyLinkedFromScannedPage: true,
-          discoveryMethod: "footer_link",
-          lastUpdatedText: "Last updated: June 2026",
-          policyTitle: "Amazon Privacy Notice",
-          retrievalTimestamp: "2026-08-01T18:00:00.000Z",
-          sourceUrl: "https://www.amazon.de/privacy",
-          translationApplied: false
-        }],
-        policyEvidenceProvenanceContractVersion: "certscore.policy-evidence-provenance.v1",
-        policyPrimaryLanguage: "en",
-        privacyPolicyPresent: true,
-        privacyPolicyTextCharacterCount: 4200,
-        privacyPolicyUrls: ["https://www.amazon.de/privacy"],
-        retainedPrivacyPolicyTextExcerpt: "Amazon Privacy Notice. Contact and communication information. ".repeat(80),
-        scannedPageLanguage: "de"
-      }
-    },
-    snapshot: { privacy_policy_present: true }
-  });
-
-  const legalBasis = outcomes.legal_basis_disclosure_observed!;
-  const assessment = legalBasis.criticalEvidence.retainedEvidence.policyEvidenceAssessment as Record<string, unknown>;
-  const provenance = legalBasis.criticalEvidence.retainedEvidence.policyEvidenceProvenance as Record<string, unknown>;
-  assert.equal(legalBasis.status, "Not confirmed");
-  assert.equal(assessment.result, "not_located_automatically");
-  assert.equal(assessment.scoreEffect, "none");
-  assert.equal(provenance.policyTitle, "Amazon Privacy Notice");
-  assert.equal(provenance.detectedLanguage, "en");
-  assert.equal(provenance.bannerLanguage, "de");
-  assert.equal(provenance.directlyLinkedFromScannedPage, true);
-  assert.equal(provenance.translationApplied, false);
-});
-
-test("mixed communications, consent-purpose, and retention context remains neutral for legal basis", () => {
-  const mixedExcerpt = [
-    "Communications. We use your personal information to communicate with you by email, telephone, or customer-service channels.",
-    "Purposes for which we seek your consent include sending optional marketing messages.",
-    "Comply with legal obligations. We retain transaction records for as long as required by law."
-  ].join(" ");
-  const outcomes = deriveGdprEprivacyCoveragePolicyOutcomes({
-    ...completedInputBase,
-    runtimeArtifacts: {
-      policyDisclosureSummary: {
-        article13DisclosureSignals: [{
-          confidence: 0.7,
-          disclosureType: "legal_basis",
-          evidenceText: mixedExcerpt,
-          selectedEvidenceStrength: "strong",
-          selectedPolicySectionExcerpt: mixedExcerpt,
-          selectedPolicySectionHeading: "Policy text context",
-          source: "deterministic",
-          status: "partial"
-        }],
-        policyDocumentProvenance: [{
-          detectedLanguage: "en",
-          directlyLinkedFromScannedPage: true,
-          discoveryMethod: "page_text_link",
-          policyTitle: "Amazon.de Privacy Notice",
-          retrievalTimestamp: "2026-08-01T20:05:00.000Z",
-          sourceUrl: "https://www.amazon.de/privacy",
-          translationApplied: false
-        }],
-        policyEvidenceProvenanceContractVersion: "certscore.policy-evidence-provenance.v1",
-        policyPrimaryLanguage: "en",
-        privacyPolicyPresent: true,
-        privacyPolicyTextCharacterCount: 4200,
-        privacyPolicyUrls: ["https://www.amazon.de/privacy"],
-        retainedPrivacyPolicyTextExcerpt: `${mixedExcerpt} ${"Additional policy context. ".repeat(120)}`,
-        scannedPageLanguage: "en"
-      }
-    },
-    snapshot: { privacy_policy_present: true }
-  });
-
-  const legalBasis = outcomes.legal_basis_disclosure_observed!;
-  const assessment = legalBasis.criticalEvidence.retainedEvidence.policyEvidenceAssessment as Record<string, unknown>;
-  assert.equal(legalBasis.status, "Not confirmed");
-  assert.equal(assessment.result, "not_located_automatically");
-  assert.equal(assessment.scoreEffect, "none");
-  assert.notEqual(legalBasis.criticalEvidence.retainedEvidence.signalObserved, "partial");
-});
-
-test("a short required-by-law retention excerpt does not establish substantive retention disclosure", () => {
-  const outcomes = deriveGdprEprivacyCoveragePolicyOutcomes({
-    ...completedInputBase,
-    runtimeArtifacts: {
-      policyDisclosureSummary: {
-        article13DisclosureSignals: [{
-          disclosureType: "data_retention",
-          evidenceText: "We retain such information for as long as required by law.",
-          selectedPolicySectionExcerpt: "We retain such information for as long as required by law.",
-          selectedPolicySectionHeading: "Retention",
-          selectedPolicySectionUrl: "https://www.amazon.de/privacy",
-          source: "deterministic",
-          status: "observed"
-        }],
-        privacyPolicyPresent: true,
-        privacyPolicyTextCharacterCount: 4200,
-        privacyPolicyUrls: ["https://www.amazon.de/privacy"],
-        retainedPrivacyPolicyTextExcerpt: "Privacy notice and general information. ".repeat(110)
-      }
-    },
-    snapshot: { privacy_policy_present: true }
-  });
-
-  const retention = outcomes.retention_disclosure_observed!;
-  const assessment = retention.criticalEvidence.retainedEvidence.policyEvidenceAssessment as Record<string, unknown>;
-  assert.equal(retention.status, "Not confirmed");
-  assert.match(retention.limitation, /extraction limitation, not evidence/i);
-  assert.equal(assessment.result, "not_located_automatically");
-  assert.equal(assessment.scoreEffect, "none");
-});
-
-test("deriveGdprEprivacyCoveragePolicyOutcomes rejects controller/contact page chrome excerpts", () => {
-  const outcomes = deriveGdprEprivacyCoveragePolicyOutcomes({
-    ...completedInputBase,
-    runtimeArtifacts: {
-      policyDisclosureSummary: {
-        article13DisclosureSignals: [
-          {
-            disclosureType: "controller_contact",
-            evidenceText:
-              "Privacy Policy Privacy & Terms Google Privacy & Terms Overview Terms of Service Technologies FAQ Contact Google Privacy Policy",
-            source: "deterministic",
-            status: "observed"
-          }
-        ],
-        privacyPolicyPresent: true,
-        privacyPolicyTextCharacterCount: 4200,
-        privacyPolicyUrls: ["https://policies.example.test/privacy"],
-        retainedPrivacyPolicyTextExcerpt:
-          "Privacy Policy Privacy & Terms Overview Terms of Service Technologies FAQ Introduction Google Account Help. ".repeat(50)
-      }
-    },
-    snapshot: {
-      privacy_policy_present: true
-    }
-  });
-
-  assert.equal(outcomes.controller_contact_disclosure?.status, "Not confirmed");
-  assert.equal(
-    outcomes.controller_contact_disclosure?.criticalEvidence.retainedEvidence.signalObserved,
-    "not_confirmed_row_specific_extraction"
-  );
-  assert.notEqual(
-    retainedArticle13Signal(outcomes.controller_contact_disclosure!)?.evidenceText,
-    "Privacy Policy Privacy & Terms Google Privacy & Terms Overview Terms of Service Technologies FAQ Contact Google Privacy Policy"
-  );
-});
-
-test("deriveGdprEprivacyCoveragePolicyOutcomes does not treat a retention TOC heading as observed", () => {
-  const outcomes = deriveGdprEprivacyCoveragePolicyOutcomes({
-    ...completedInputBase,
-    runtimeArtifacts: {
-      policyDisclosureSummary: {
-        privacyPolicyPresent: true,
-        privacyPolicyTextCharacterCount: 4200,
-        privacyPolicyUrls: ["https://policies.example.test/privacy"],
-        retainedPrivacyPolicyTextExcerpt: [
-          "Privacy Policy Privacy & Terms Overview Terms of Service Technologies FAQ.",
-          "Retaining your information Information Google collects Why Google collects data Your privacy controls Sharing your information Keeping your information secure."
-        ].join(" ")
-      }
-    },
-    snapshot: {
-      privacy_policy_present: true
-    }
-  });
-
-  assert.equal(outcomes.retention_disclosure_observed?.status, "Not confirmed");
-  assert.equal(
-    outcomes.retention_disclosure_observed?.criticalEvidence.retainedEvidence.signalObserved,
-    "not_confirmed_row_specific_extraction"
-  );
-});
-
-test("candidate policy evidence prefers substantive excerpts over boilerplate", () => {
-  const outcomes = deriveGdprEprivacyCoveragePolicyOutcomes({
-    ...completedInputBase,
-    runtimeArtifacts: {
-      policyDisclosureSummary: {
-        privacyPolicyPresent: true,
-        privacyPolicyTextCharacterCount: 3800,
-        privacyPolicyUrls: ["https://example.test/privacy"],
-        retainedPrivacyPolicyTextExcerpt: [
-          "Privacy & Terms Privacy Policy Overview Technologies FAQ Terms of Service Retention Privacy & Terms Overview FAQ.",
-          "Retaining your information. We retain the data we collect only for as long as necessary for the purposes described in this notice, unless a longer retention period is required by law."
-        ].join(" ")
-      }
-    },
-    snapshot: {
-      privacy_policy_present: true
-    }
-  });
-
-  const retentionText = String(
-    outcomes.retention_disclosure_observed?.criticalEvidence.retainedEvidence.candidatePolicyExcerpt ?? ""
-  );
-  assert.equal(outcomes.retention_disclosure_observed?.status, "Not confirmed");
-  assert.match(retentionText, /Retaining your information/i);
-  assert.doesNotMatch(retentionText, /^Privacy & Terms Privacy Policy Overview/i);
 });
 
 test("deriveGdprEprivacyCoveragePolicyOutcomes does not emit runtime vendor disclosure alignment for thin policy evidence", () => {

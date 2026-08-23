@@ -2276,7 +2276,7 @@ function getGdprTransparencyArticle13ChecklistEligibility(
     return "review_signal";
   }
   if (state === "no_match_found") {
-    return "review_signal";
+    return "no_match_found";
   }
   if (state !== "sufficient") {
     return "none";

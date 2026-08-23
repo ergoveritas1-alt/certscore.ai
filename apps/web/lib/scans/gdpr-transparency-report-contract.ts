@@ -39,7 +39,7 @@ export function deriveGdprTransparencyReportEvidenceLabel(input: {
   if (input.status === "Observed") {
     return "Observed";
   }
-  if (input.assessmentResult === "not_located_automatically") {
+  if (input.status === "No match found") {
     return "No match found";
   }
   return "Not confirmed";

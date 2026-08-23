@@ -146,42 +146,44 @@ test("compact purpose and service-provider candidates pass the production eviden
   assert.deepEqual(result.discardedArticle13DisclosureSignals, []);
 });
 
-test("privacy-context contact channel candidates credit controller contact but not an unlabelled DPO", () => {
+test("privacy-context contact channel candidates do not credit controller or DPO without a bound role", () => {
   const text = [
     "Privacy Policy.",
     "Contact. If you email us, we receive the information you choose to include and use it to respond to your message.",
     "You can contact us at ergoveritas1@gmail.com."
   ].join(" ");
-  const candidates = classifyGdprTransparencyTopics({ localeHints: ["en"], text }).matches.map((match) =>
+  const candidates = [
     candidate({
-      classifierReasonCodes: match.reasonCodes,
-      confidence: match.confidence,
-      evidenceText: match.evidenceExcerpt,
-      matchStrength: match.matchStrength,
-      matchedLocale: match.matchedLocale,
-      matchedTerm: match.matchedTerm,
-      topic: match.topic
+      classifierReasonCodes: ["matched_controller_contact", "variant_requires_topic_context"],
+      evidenceText: text,
+      matchStrength: "equivalent",
+      matchedLocale: "en",
+      matchedTerm: "you can contact us at",
+      topic: "controller_contact"
+    }),
+    candidate({
+      classifierReasonCodes: ["matched_dpo_contact", "variant_requires_privacy_context"],
+      evidenceText: text,
+      matchStrength: "equivalent",
+      matchedLocale: "en",
+      matchedTerm: "you can contact us at",
+      topic: "dpo_contact"
     })
-  );
+  ];
   const result = adaptGdprTransparencyTopicCandidatesForProduction({
     policyTextQuality: { usable: true },
     profile: GDPR_TRANSPARENCY_MULTILINGUAL_ARTICLE13_PROFILE,
     surface: surface(candidates, { textExcerpt: text })
   });
 
-  assert.deepEqual(
-    result.acceptedProductionSignals.map((signal) => signal.disclosureType).sort(),
-    ["controller_contact"]
-  );
+  assert.deepEqual(result.acceptedProductionSignals, []);
   assert.equal(
-    result.acceptedProductionSignals.every((signal) =>
-      signal.matchStrength === "equivalent" && signal.evidenceText.includes("ergoveritas1@gmail.com")
-    ),
-    true
+    result.dispositions.find((item) => item.candidate.topic === "controller_contact")?.rejectReason,
+    "candidate_topic_invariants_failed",
   );
   assert.equal(
     result.dispositions.find((item) => item.candidate.topic === "dpo_contact")?.rejectReason,
-    "insufficient_row_specific_terms"
+    "insufficient_row_specific_terms",
   );
 });
 
@@ -558,6 +560,14 @@ test("production adapter rejects calibrated English false-positive topic evidenc
       topic: "dpo_contact",
     }),
     candidate({
+      evidenceText: "Questions about this privacy policy can be submitted through our general contact form.",
+      matchedLocale: "en",
+      matchedTerm: "questions about this privacy policy",
+      matchStrength: "equivalent",
+      classifierReasonCodes: ["matched_controller_contact", "variant_requires_topic_context"],
+      topic: "controller_contact",
+    }),
+    candidate({
       evidenceText: "Depending on your location, applicable privacy law may mean you have certain rights regarding personal information.",
       matchedLocale: "en",
       matchedTerm: "rights of data subject",
@@ -603,6 +613,12 @@ test("production adapter rejects calibrated multilingual role, definition, and c
   const candidates = [
     candidate({
       evidenceText: "Оператор персональных данных – государственный орган, муниципальный орган, юридическое или физическое лицо, определяющее цели обработки персональных данных.",
+      matchedLocale: "ru",
+      matchedTerm: "оператор персональных данных",
+      topic: "controller_contact",
+    }),
+    candidate({
+      evidenceText: "Оператор персональных данных: вправе отстаивать свои интересы в суде; обязан предоставлять персональные данные третьим лицам в предусмотренных законом случаях.",
       matchedLocale: "ru",
       matchedTerm: "оператор персональных данных",
       topic: "controller_contact",

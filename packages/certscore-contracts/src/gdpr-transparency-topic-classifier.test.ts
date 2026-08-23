@@ -233,7 +233,7 @@ test("classifies direct US-policy transfer, recipient, and privacy-contact wordi
   assert.equal(byTopic.has("dpo_contact"), false);
 });
 
-test("classifies a retained privacy-policy contact channel without claiming generic business contact", () => {
+test("does not treat a generic privacy contact channel as controller or DPO evidence", () => {
   const retainedPolicy = classifyGdprTransparencyTopics({
     localeHints: ["en"],
     text: [
@@ -244,12 +244,17 @@ test("classifies a retained privacy-policy contact channel without claiming gene
   });
   const policyTopics = new Map(retainedPolicy.matches.map((match) => [match.topic, match]));
 
-  assert.equal(policyTopics.get("controller_contact")?.matchedTerm, "you can contact us at");
-  assert.equal(policyTopics.get("dpo_contact")?.matchedTerm, "you can contact us at");
-  assert.equal(policyTopics.get("controller_contact")?.matchStrength, "equivalent");
-  assert.equal(policyTopics.get("dpo_contact")?.matchStrength, "equivalent");
-  assert.match(policyTopics.get("controller_contact")?.evidenceExcerpt ?? "", /ergoveritas1@gmail\.com/i);
-  assert.match(policyTopics.get("dpo_contact")?.evidenceExcerpt ?? "", /ergoveritas1@gmail\.com/i);
+  assert.equal(policyTopics.has("controller_contact"), false);
+  assert.equal(policyTopics.has("dpo_contact"), false);
+
+  const controllerBoundContact = classifyGdprTransparencyTopics({
+    localeHints: ["en"],
+    text: "Example Ltd. is the data controller. Questions about this privacy policy can be sent to privacy@example.test."
+  });
+  assert.equal(
+    controllerBoundContact.matches.some((match) => match.topic === "controller_contact"),
+    true
+  );
 
   const genericBusinessContact = classifyGdprTransparencyTopics({
     localeHints: ["en"],
@@ -261,6 +266,48 @@ test("classifies a retained privacy-policy contact channel without claiming gene
     ),
     false
   );
+});
+
+test("requires processing context for legal-obligation legal-basis language", () => {
+  const bareCompliance = classifyGdprTransparencyTopics({
+    localeHints: ["en"],
+    text: "We preserve records and respond to lawful requests to comply with our legal obligations."
+  });
+  assert.equal(bareCompliance.matches.some((match) => match.topic === "legal_basis"), false);
+
+  const processingBasis = classifyGdprTransparencyTopics({
+    localeHints: ["en"],
+    text: "We process your personal data to comply with our legal obligations."
+  });
+  assert.equal(processingBasis.matches.some((match) => match.topic === "legal_basis"), true);
+});
+
+test("requires personal-data or recipient context for generic third-party sharing language", () => {
+  const genericSharing = classifyGdprTransparencyTopics({
+    localeHints: ["en"],
+    text: "Our editorial team may share information with third parties when discussing industry news."
+  });
+  assert.equal(
+    genericSharing.matches.some((match) => match.topic === "recipients_or_vendor_categories"),
+    false
+  );
+
+  const recipientDisclosure = classifyGdprTransparencyTopics({
+    localeHints: ["en"],
+    text: "We share information with third parties that act as service providers processing your personal data."
+  });
+  assert.equal(
+    recipientDisclosure.matches.some((match) => match.topic === "recipients_or_vendor_categories"),
+    true
+  );
+});
+
+test("does not treat a Japanese privacy-policy heading as controller-contact evidence", () => {
+  const headingOnly = classifyGdprTransparencyTopics({
+    localeHints: ["ja"],
+    text: "個人情報保護方針"
+  });
+  assert.equal(headingOnly.matches.some((match) => match.topic === "controller_contact"), false);
 });
 
 test("classifies representative GDPR Transparency snippets across supported locales", () => {
@@ -583,6 +630,25 @@ test("does not classify generic localized sales or support contact snippets as c
       classification.matches.some((match) => match.topic === "controller_contact"),
       false,
       `${example.locale} generic contact text should not classify controller_contact`,
+    );
+  }
+});
+
+test("requires a Russian controller identity or contact channel instead of a generic operator role", () => {
+  const genericRole = classifyGdprTransparencyTopics({
+    localeHints: ["ru"],
+    text: "Политика обработки персональных данных. Оператор персональных данных вправе отстаивать свои интересы в суде и обязан предоставлять данные в предусмотренных законом случаях.",
+  });
+  assert.equal(genericRole.matches.some((match) => match.topic === "controller_contact"), false);
+
+  for (const text of [
+    "Политика обработки персональных данных. Оператор персональных данных является ООО «Пример». Адрес электронной почты: privacy@example.test.",
+  ]) {
+    const identifiedController = classifyGdprTransparencyTopics({ localeHints: ["ru"], text });
+    assert.equal(
+      identifiedController.matches.some((match) => match.topic === "controller_contact"),
+      true,
+      text,
     );
   }
 });
@@ -1169,7 +1235,7 @@ test("classifies all GDPR Transparency topics in the five newly calibrated local
   const examples = [
     {
       locale: "ru",
-      text: "Оператор персональных данных указывает контакт ответственного по защите данных. Мы описываем цели обработки персональных данных, правовые основания обработки персональных данных, категории получателей персональных данных, срок хранения персональных данных, права субъекта персональных данных, трансграничную передачу персональных данных, право подать жалобу в надзорный орган и автоматизированное принятие решений с использованием персональных данных.",
+      text: "Политика обработки персональных данных. Оператор персональных данных указывает контакт ответственного по защите данных. Мы описываем цели обработки персональных данных, правовые основания обработки персональных данных, категории получателей персональных данных, срок хранения персональных данных, права субъекта персональных данных, трансграничную передачу персональных данных, право подать жалобу в надзорный орган и автоматизированное принятие решений с использованием персональных данных.",
     },
     {
       locale: "ja",
@@ -1500,7 +1566,11 @@ test("classifies Caltech-shaped main-notice and linked GDPR-supplement disclosur
   });
   const mainTopics = new Set(mainNotice.matches.map((match) => match.topic));
 
-  assert.equal(mainTopics.has("controller_contact"), true);
+  assert.equal(
+    mainTopics.has("controller_contact"),
+    false,
+    "generic policy contact without a bound controller identity must not satisfy controller contact",
+  );
   assert.equal(mainTopics.has("processing_purposes"), true);
   assert.equal(mainTopics.has("recipients_or_vendor_categories"), true);
   assert.equal(mainTopics.has("international_transfers"), true);

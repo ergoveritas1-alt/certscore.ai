@@ -296,8 +296,7 @@ function rejectReasonForCandidate(
   }
   if (
     article13RejectReason === "insufficient_row_specific_terms" &&
-    (isPrivacyContextContactChannelCandidate(candidate) ||
-      isContextBoundCanonicalCandidate(candidate))
+    isContextBoundCanonicalCandidate(candidate)
   ) {
     return null;
   }
@@ -318,26 +317,27 @@ function isContextBoundCanonicalCandidate(candidate: GdprTransparencyTopicCandid
   return matchedTerm.length >= 8 && evidenceText.includes(matchedTerm);
 }
 
-function isPrivacyContextContactChannelCandidate(candidate: GdprTransparencyTopicCandidate) {
-  return (
-    candidate.topic === "controller_contact" &&
-    candidate.matchStrength === "equivalent" &&
-    candidate.matchedLocale === "en" &&
-    candidate.matchedTerm === "you can contact us at" &&
-    candidate.classifierReasonCodes.includes("variant_requires_privacy_context") &&
-    /\byou can contact us at\b.{0,160}\b[\w.+-]+@[\w.-]+\.[a-z]{2,}\b/i.test(candidate.evidenceText)
-  );
-}
-
 function candidateMatchesKnownCrossTopicFalsePositive(candidate: GdprTransparencyTopicCandidate) {
   const text = normalizeArticle13Whitespace(candidate.evidenceText);
   switch (candidate.topic) {
     case "controller_contact":
       return (
         (candidate.matchedLocale === "en" &&
+          /^(?:data controller|data controller contact|controller operator of data|controller of data|questions about this privacy policy|questions about this policy please contact us|if you have questions about this policy please contact us|you can contact us at)$/i.test(candidate.matchedTerm) &&
+          !(
+            /\b(?:data controller|controller of (?:the )?(?:personal )?data|controller is|is the controller)\b/i.test(text) &&
+            /(?:@|\bemail\b|\be-mail\b|\bpostal\b|\baddress\b|\bphone\b|\btelephone\b|\bcontact\b)/i.test(text)
+          )) ||
+        (candidate.matchedLocale === "en" &&
           /\bdata controller\s+(?:means|is defined as|refers to)\b/i.test(text)) ||
         (candidate.matchedLocale === "ru" &&
-          /оператор персональных данных.{0,220}(?:государственный орган|юридическое или физическое лицо)/iu.test(text)) ||
+          candidate.matchedTerm === "оператор персональных данных" &&
+          !(
+            /оператор(?:ом)? персональных данных.{0,180}(?:@|e-?mail|электронн(?:ая|ой) почт|почтов(?:ый|ого) адрес|телефон|контакт|связаться)/iu.test(text) ||
+            /(?:@|e-?mail|электронн(?:ая|ой) почт|почтов(?:ый|ого) адрес|телефон|контакт|связаться).{0,180}оператор(?:ом)? персональных данных/iu.test(text) ||
+            /оператор(?:ом)? персональных данных\s*(?:(?:является|выступает)\s+|[-—–:]\s*)(?:ооо|ао|пао|зао|ип|[«"])/iu.test(text) ||
+            /(?:ооо|ао|пао|зао|ип|[«"])[^.!?]{0,180}(?:является|выступает)\s+оператор(?:ом)? персональных данных/iu.test(text)
+          )) ||
         (candidate.matchedLocale === "fr" &&
           /(?:le client|l['’]etablissement scolaire).{0,120}responsable du traitement|n['’]est pas responsable du traitement/iu.test(text)) ||
         (candidate.matchedLocale === "ja" &&

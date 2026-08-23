@@ -40,12 +40,8 @@ import {
   GdprEprivacyCoverageSummaryPills
 } from "./gdpr-eprivacy-coverage-checklist-card";
 import {
-  summarizeGdprEprivacyAssessmentDirections
-} from "../../lib/scans/gdpr-eprivacy-assessment-direction";
-import {
   hydrateChecklistPolicyEvidence,
 } from "../../lib/scans/checklist-evidence-index";
-import { buildGdprEprivacyChecklistPresentation } from "../../lib/scans/gdpr-eprivacy-checklist-presentation";
 import { InfoTip } from "./info-tip";
 import { RedirectFlowPanel } from "./redirect-flow-panel";
 import { RegulatoryChecklistSection } from "./regulatory-checklist-section";
@@ -7666,14 +7662,11 @@ export async function SharedScanDetailView({
   });
   const reportableGdprEprivacyCoverageChecklist = getReportableGdprEprivacyCoverageItems(gdprEprivacyCoverageChecklist);
   const checklistPresentation =
-    persistedCanonicalProjection?.checklistPresentation ??
-    buildGdprEprivacyChecklistPresentation(reportableGdprEprivacyCoverageChecklist);
+    persistedCanonicalProjection?.checklistPresentation ?? null;
   const lazyChecklistDetailsAvailable = Boolean(
     reportGeneration && persistedCanonicalProjection,
   );
-  const gdprEprivacyAssessmentSummaryCounts = summarizeGdprEprivacyAssessmentDirections(
-    reportableGdprEprivacyCoverageChecklist
-  );
+  const gdprEprivacyAssessmentSummaryCounts = checklistPresentation?.summaryCounts ?? null;
   const executivePolicySurfaces = deriveExecutivePolicySurfaces(
     scanRecord.policyEnrichment,
     scanRecord.snapshot,
@@ -7974,28 +7967,36 @@ export async function SharedScanDetailView({
             <RegulatoryChecklistSection
               headingLabel="GDPR / ePrivacy Evidence Checklist"
               headingTrailing={
-                <GdprEprivacyCoverageSummaryPills
-                  summaryCounts={gdprEprivacyAssessmentSummaryCounts}
-                />
+                gdprEprivacyAssessmentSummaryCounts ? (
+                  <GdprEprivacyCoverageSummaryPills
+                    summaryCounts={gdprEprivacyAssessmentSummaryCounts}
+                  />
+                ) : null
               }
               showAdvancedEvidenceToggle
               tabs={[
                 {
                   content: (
-                    <GdprEprivacyCoverageChecklistCard
-                      defaultOpen
-                      gdprEprivacyLens={gdprEprivacyExecutiveLens}
-                      initialDetailItems={
-                        lazyChecklistDetailsAvailable
-                          ? undefined
-                          : reportableGdprEprivacyCoverageChecklist
-                      }
-                      presentation={checklistPresentation}
-                      projectionContext={gdprProjectionContext}
-                      reportGeneration={reportGeneration}
-                      scanId={scanRecord.scan.id}
-                      showSummaryStrip={false}
-                    />
+                    checklistPresentation ? (
+                      <GdprEprivacyCoverageChecklistCard
+                        defaultOpen
+                        gdprEprivacyLens={gdprEprivacyExecutiveLens}
+                        initialDetailItems={
+                          lazyChecklistDetailsAvailable
+                            ? undefined
+                            : reportableGdprEprivacyCoverageChecklist
+                        }
+                        presentation={checklistPresentation}
+                        projectionContext={gdprProjectionContext}
+                        reportGeneration={reportGeneration}
+                        scanId={scanRecord.scan.id}
+                        showSummaryStrip={false}
+                      />
+                    ) : (
+                      <p className="rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-600">
+                        The canonical GDPR/ePrivacy report projection is unavailable. No checklist result was reconstructed in the display layer.
+                      </p>
+                    )
                   ),
                   id: "gdpr-eprivacy",
                   label: "GDPR / ePrivacy",

@@ -95,11 +95,11 @@ export const GDPR_TRANSPARENCY_TOPIC_PHRASE_REGISTRY: GdprTransparencyTopicPhras
     equivalent("controller_contact", "privacy contact"),
     equivalent("controller_contact", "data protection contact"),
     equivalent("controller_contact", "questions related to data processing can be sent to privacy"),
-    equivalent("controller_contact", "questions about this privacy policy"),
-    equivalent("controller_contact", "questions about this policy please contact us", "requires_privacy_context"),
-    equivalent("controller_contact", "if you have questions about this policy please contact us", "requires_privacy_context"),
+    equivalent("controller_contact", "questions about this privacy policy", "requires_topic_context"),
+    equivalent("controller_contact", "questions about this policy please contact us", "requires_topic_context"),
+    equivalent("controller_contact", "if you have questions about this policy please contact us", "requires_topic_context"),
     equivalent("controller_contact", "attention privacy officer"),
-    equivalent("controller_contact", "you can contact us at", "requires_privacy_context"),
+    equivalent("controller_contact", "you can contact us at", "requires_topic_context"),
     equivalent("controller_contact", "who is the controller of personal data", "requires_privacy_context"),
     equivalent("controller_contact", "is the controller of the data", "requires_privacy_context"),
     equivalent("controller_contact", "controller and contact", "requires_topic_context"),
@@ -109,7 +109,6 @@ export const GDPR_TRANSPARENCY_TOPIC_PHRASE_REGISTRY: GdprTransparencyTopicPhras
     equivalent("dpo_contact", "contact our dpo"),
     equivalent("dpo_contact", "privacy counsel"),
     equivalent("dpo_contact", "privacy manager", "requires_privacy_context"),
-    equivalent("dpo_contact", "you can contact us at", "requires_privacy_context"),
     direct("processing_purposes", "purposes of processing personal data"),
     direct("processing_purposes", "why we process personal data"),
     direct("processing_purposes", "use your personal data"),
@@ -131,7 +130,7 @@ export const GDPR_TRANSPARENCY_TOPIC_PHRASE_REGISTRY: GdprTransparencyTopicPhras
     equivalent("legal_basis", "legal basis for collecting personally identifiable information"),
     equivalent("legal_basis", "basis for our processing", "requires_privacy_context"),
     equivalent("legal_basis", "needed to fulfill a contract"),
-    equivalent("legal_basis", "comply with our legal obligations"),
+    equivalent("legal_basis", "comply with our legal obligations", "requires_topic_context"),
     equivalent("legal_basis", "legitimate interests for processing personal data"),
     equivalent("legal_basis", "relevant legitimate interest"),
     equivalent("legal_basis", "presence of the relevant legitimate interest"),
@@ -143,7 +142,7 @@ export const GDPR_TRANSPARENCY_TOPIC_PHRASE_REGISTRY: GdprTransparencyTopicPhras
     direct("recipients_or_vendor_categories", "share personal information with third parties"),
     equivalent("recipients_or_vendor_categories", "share personal information with service providers"),
     equivalent("recipients_or_vendor_categories", "share or provide access to your information with service providers"),
-    equivalent("recipients_or_vendor_categories", "share information with third parties", "requires_privacy_context"),
+    equivalent("recipients_or_vendor_categories", "share information with third parties", "requires_topic_context"),
     equivalent("recipients_or_vendor_categories", "content-delivery providers may process"),
     equivalent("recipients_or_vendor_categories", "service providers may process"),
     equivalent("recipients_or_vendor_categories", "service providers that process personal data"),
@@ -454,7 +453,7 @@ export const GDPR_TRANSPARENCY_TOPIC_PHRASE_REGISTRY: GdprTransparencyTopicPhras
     equivalent("automated_decision_making_or_profiling", "elaboração de perfis com dados pessoais"),
   ]),
   ...ru([
-    direct("controller_contact", "оператор персональных данных"),
+    direct("controller_contact", "оператор персональных данных", "requires_topic_context"),
     direct("controller_contact", "ответственный за обработку персональных данных"),
     equivalent("controller_contact", "контакт по вопросам защиты персональных данных"),
     direct("dpo_contact", "сотрудник по защите данных"),
@@ -501,7 +500,6 @@ export const GDPR_TRANSPARENCY_TOPIC_PHRASE_REGISTRY: GdprTransparencyTopicPhras
   ...ja([
     direct("controller_contact", "個人データの管理者"),
     direct("controller_contact", "個人情報取扱事業者"),
-    equivalent("controller_contact", "個人情報保護方針"),
     equivalent("controller_contact", "個人データ管理者への連絡先"),
     equivalent("controller_contact", "個人情報に関するお問い合わせ"),
     direct("dpo_contact", "データ保護責任者"),
@@ -1277,15 +1275,28 @@ function hasRequiredTopicContext(
 ) {
   switch (term.topic) {
     case "controller_contact":
-      return /\bcontroller and contact\b.{0,240}(?:@|email|e-mail|postal|address|phone|telephone|contact)/i.test(normalizedText);
+      return (
+        /\bcontroller and contact\b.{0,240}(?:@|email|e-mail|postal|address|phone|telephone|contact)/i.test(normalizedText) ||
+        /\b(?:data controller|controller of (?:the )?(?:personal )?data|controller is|is the controller)\b.{0,320}\b(?:questions about (?:this )?(?:privacy )?(?:policy|notice)|you can contact us at|contact us|email|e-mail|postal|address|phone|telephone|@)/i.test(normalizedText) ||
+        /\b(?:questions about (?:this )?(?:privacy )?(?:policy|notice)|you can contact us at|contact us|email|e-mail|postal|address|phone|telephone|@)\b.{0,320}\b(?:data controller|controller of (?:the )?(?:personal )?data|controller is|is the controller)\b/i.test(normalizedText) ||
+        /оператор(?:ом)? персональных данных.{0,180}(?:@|e-?mail|электронн(?:ая|ой) почт|почтов(?:ый|ого) адрес|телефон|контакт|связаться)/iu.test(normalizedText) ||
+        /(?:@|e-?mail|электронн(?:ая|ой) почт|почтов(?:ый|ого) адрес|телефон|контакт|связаться).{0,180}оператор(?:ом)? персональных данных/iu.test(normalizedText) ||
+        /оператор(?:ом)? персональных данных\s*(?:(?:является|выступает)\s+|[-—–:]\s*)(?:ооо|ао|пао|зао|ип|[«"])/iu.test(normalizedText) ||
+        /(?:ооо|ао|пао|зао|ип|[«"])[^.!?]{0,180}(?:является|выступает)\s+оператор(?:ом)? персональных данных/iu.test(normalizedText)
+      );
     case "processing_purposes":
       return /\b(?:process(?:es|ed|ing)?|uses?|collect(?:s|ed|ing)?)\b.{0,100}\b(?:personal data|personal information|account data|security logs?|information|data)\b.{0,100}\b(?:to|for|in order to)\b/i.test(normalizedText) ||
         /\b(?:personal data|personal information|account data|security logs?|information|data)\b.{0,100}\b(?:is|are)?\s*(?:process(?:ed|ing)?|used|collected)\b.{0,100}\b(?:to|for|in order to)\b/i.test(normalizedText);
     case "legal_basis":
       return /\b(?:process(?:es|ed|ing)?|uses?|collect(?:s|ed|ing)?)\b.{0,120}\b(?:personal data|personal information|account data|security logs?|information|data)\b.{0,160}\b(?:under a contract|legitimate-interest purpose)\b/i.test(normalizedText) ||
-        /\b(?:under a contract|legitimate-interest purpose)\b.{0,160}\b(?:process(?:es|ed|ing)?|uses?|collect(?:s|ed|ing)?)\b/i.test(normalizedText);
+        /\b(?:under a contract|legitimate-interest purpose)\b.{0,160}\b(?:process(?:es|ed|ing)?|uses?|collect(?:s|ed|ing)?)\b/i.test(normalizedText) ||
+        /\bprocess(?:es|ed|ing)?\b.{0,140}\b(?:personal data|personal information|your data|your information)\b.{0,180}\bcomply with (?:a |our )?legal obligations?\b/i.test(normalizedText) ||
+        /\bcomply with (?:a |our )?legal obligations?\b.{0,180}\bprocess(?:es|ed|ing)?\b.{0,140}\b(?:personal data|personal information|your data|your information)\b/i.test(normalizedText);
     case "recipients_or_vendor_categories":
-      return /\b(?:named )?(?:[a-z0-9-]+\s+)?vendors include\b\s+(?!(?:we|our|the|a|an)\b)[a-z0-9][a-z0-9 .&'-]{2,}/i.test(normalizedText);
+      return /\b(?:named )?(?:[a-z0-9-]+\s+)?vendors include\b\s+(?!(?:we|our|the|a|an)\b)[a-z0-9][a-z0-9 .&'-]{2,}/i.test(normalizedText) ||
+        /\bshare (?:your |the )?(?:personal data|personal information|your data|your information) with third parties\b/i.test(normalizedText) ||
+        /\bshare information with third parties\b.{0,180}\b(?:personal data|personal information|your data|your information|service providers?|processors?|recipients?|vendors?)\b/i.test(normalizedText) ||
+        /\b(?:personal data|personal information|your data|your information|service providers?|processors?|recipients?|vendors?)\b.{0,180}\bshare information with third parties\b/i.test(normalizedText);
     case "data_retention":
       return /\brecords are retained for\b.{0,100}(?:\b\d+\s*(?:days?|weeks?|months?|years?)\b|\bas long as\b|\buntil\b|\bafter\b)/i.test(normalizedText);
     case "international_transfers":

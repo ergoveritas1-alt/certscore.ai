@@ -154,6 +154,7 @@ const EVIDENCE_MARKS = {
   gap_observed: { mark: "!", className: "text-rose-700" },
   review_signal: { mark: "△", className: "text-amber-700" },
   not_observed: { mark: "—", className: "text-slate-500" },
+  no_match_found: { mark: "—", className: "text-slate-500" },
   not_confirmed: { mark: "?", className: "text-amber-700" },
   not_testable: { mark: "×", className: "text-slate-400" },
   insufficient_evidence: { mark: "×", className: "text-slate-400" },
@@ -162,7 +163,7 @@ const EVIDENCE_MARKS = {
 
 const STATUS_LABELS = {
   observed: "Observed", gap_observed: "Gap observed", review_signal: "Review signal", not_observed: "Not observed",
-  not_confirmed: "Not confirmed", not_testable: "Not testable", insufficient_evidence: "Insufficient evidence", out_of_scope: "Out of scope",
+  no_match_found: "No match found", not_confirmed: "Not confirmed", not_testable: "Not testable", insufficient_evidence: "Insufficient evidence", out_of_scope: "Out of scope",
 } as const;
 
 function evidenceTitle(label: string, result: AdminEvidenceResult | null) {

@@ -2006,7 +2006,7 @@ test("verified row-specific policy absence creates neutral GDPR Transparency no-
 
   assert.equal(noMatches.length, 2);
   assert.equal(noMatches.every((concern) => concern.observedValue === "no_match_found"), true);
-  assert.equal(noMatches.every((concern) => concern.regulatoryChecklistEligibility === "review_signal"), true);
+  assert.equal(noMatches.every((concern) => concern.regulatoryChecklistEligibility === "no_match_found"), true);
   assert.equal(noMatches.every((concern) => concern.suggestedUnifiedFindingId === undefined), true);
   assert.equal(noMatches.every((concern) => concern.promotionEligibility === "internal_only"), true);
   assert.equal(noMatches.every((concern) => concern.externalSurfacingEligibility === "audit_only"), true);
@@ -2728,7 +2728,7 @@ test("Mini topic guards preserve explicit multilingual and punctuation-heavy evi
   );
 });
 
-test("retained observed evidence blocks a contradictory no-match normalized concern", () => {
+test("an unapproved observed label cannot veto a verified no-match normalized concern", () => {
   const runtimeArtifacts = {
     policyDisclosureSummary: {
       article13DisclosureSignals: [{
@@ -2763,6 +2763,96 @@ test("retained observed evidence blocks a contradictory no-match normalized conc
       concern.originKey === "gdpr_transparency.article13.supervisory_authority" &&
       concern.observedValue === "no_match_found"
     ),
-    false,
+    true,
+  );
+});
+
+test("model-observed GDPR evidence supersedes same-document absence without dropping retained assessment", () => {
+  const absenceAssessment = {
+    assessmentContractVersion: "gdpr_transparency_article13_coverage_assessment.v1",
+    coverageStatus: "sufficient",
+    policyDocumentIds: ["policy-1"],
+    policyDocumentRoles: ["policy_document"],
+    policyDocumentSha256: ["a".repeat(64)],
+    reasonCodes: ["verified_complete_owned_policy_reviewed", "row_specific_disclosure_not_observed"],
+    sourceUrls: ["https://example.com/privacy"],
+    status: "not_observed_with_sufficient_coverage",
+    topic: "legal_basis",
+  };
+  const concerns = buildNormalizedConcerns({
+    reviewFindingCandidates: [],
+    runtimeArtifacts: {
+      policyDisclosureSummary: { article13CoverageAssessments: [absenceAssessment] },
+      policyModelReviewArtifact: makeProductionPolicyModelReviewArtifact(),
+    },
+    validationFindings: [],
+  }).filter((concern) => concern.originKey === "gdpr_transparency.article13.legal_basis");
+
+  assert.equal(concerns.length, 1);
+  assert.equal(concerns[0]?.regulatoryChecklistEligibility, "observed");
+  assert.deepEqual(
+    concerns[0]?.evidenceBundle.rawEvidence?.supersededArticle13CoverageAssessments,
+    [absenceAssessment],
+  );
+});
+
+test("matching URLs without retained document identity fail closed on observed/no-match conflict", () => {
+  const absenceAssessment = {
+    assessmentContractVersion: "gdpr_transparency_article13_coverage_assessment.v1",
+    coverageStatus: "sufficient",
+    policyDocumentIds: ["policy-1"],
+    policyDocumentRoles: ["policy_document"],
+    policyDocumentSha256: ["b".repeat(64)],
+    reasonCodes: ["verified_complete_owned_policy_reviewed", "row_specific_disclosure_not_observed"],
+    sourceUrls: ["https://example.test/privacy"],
+    status: "not_observed_with_sufficient_coverage",
+    topic: "legal_basis",
+  };
+  const concerns = buildNormalizedConcerns({
+    reviewFindingCandidates: [],
+    runtimeArtifacts: {
+      policyDisclosureSummary: {
+        ...makeGdprTransparencyPolicyDisclosureSummary({
+          signals: [makeApprovedGdprTransparencyArticle13Signal({ disclosureType: "legal_basis" })],
+        }),
+        article13CoverageAssessments: [absenceAssessment],
+      },
+    },
+    validationFindings: [],
+  }).filter((concern) => concern.originKey === "gdpr_transparency.article13.legal_basis");
+
+  assert.equal(concerns.length, 1);
+  assert.equal(concerns[0]?.observedValue, "ambiguous");
+  assert.equal(concerns[0]?.regulatoryChecklistEligibility, "none");
+});
+
+test("cross-document GDPR observed and absence conflict fails closed to one ambiguous concern", () => {
+  const concerns = buildNormalizedConcerns({
+    reviewFindingCandidates: [],
+    runtimeArtifacts: {
+      policyDisclosureSummary: {
+        article13CoverageAssessments: [{
+          assessmentContractVersion: "gdpr_transparency_article13_coverage_assessment.v1",
+          coverageStatus: "sufficient",
+          policyDocumentIds: ["policy-2"],
+          policyDocumentRoles: ["policy_document"],
+          policyDocumentSha256: ["c".repeat(64)],
+          reasonCodes: ["verified_complete_owned_policy_reviewed", "row_specific_disclosure_not_observed"],
+          sourceUrls: ["https://example.com/privacy-supplement"],
+          status: "not_observed_with_sufficient_coverage",
+          topic: "legal_basis",
+        }],
+      },
+      policyModelReviewArtifact: makeProductionPolicyModelReviewArtifact(),
+    },
+    validationFindings: [],
+  }).filter((concern) => concern.originKey === "gdpr_transparency.article13.legal_basis");
+
+  assert.equal(concerns.length, 1);
+  assert.equal(concerns[0]?.observedValue, "ambiguous");
+  assert.equal(concerns[0]?.regulatoryChecklistEligibility, "none");
+  assert.equal(
+    Array.isArray(concerns[0]?.evidenceBundle.rawEvidence?.retainedConflictingArticle13Assessments),
+    true,
   );
 });

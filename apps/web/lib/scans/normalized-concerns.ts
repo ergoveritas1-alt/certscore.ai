@@ -147,6 +147,7 @@ export type NormalizedConcernAssertionLevel = "weak" | "moderate" | "strong";
 
 export type NormalizedConcernRegulatoryChecklistEligibility =
   | "gap_observed"
+  | "no_match_found"
   | "observed"
   | "review_signal"
   | "none";
@@ -280,7 +281,12 @@ export type NormalizedConcern = {
   title: string;
 };
 
-export type GdprTransparencyArticle13ConcernState = "sufficient" | "partial" | "ambiguous" | "missing";
+export type GdprTransparencyArticle13ConcernState =
+  | "sufficient"
+  | "no_match_found"
+  | "partial"
+  | "ambiguous"
+  | "missing";
 
 export type ReviewFindingCandidateInput = {
   categoryId?: string;
@@ -2627,7 +2633,9 @@ function buildGdprTransparencyArticle13Concerns(
         }).matches.some((match) => match.topic === "processing_purposes");
       const extractedState = getGdprTransparencyArticle13ConcernState(signal);
       const state =
-        !processingPurposesEvidenceSubstantive && extractedState === "sufficient"
+        extractedState === "sufficient" && (!evidenceText || !sourceUrl)
+          ? "ambiguous"
+          : !processingPurposesEvidenceSubstantive && extractedState === "sufficient"
           ? "ambiguous"
           : staleLegalFrameworkReferenceObserved && topic === "international_transfers"
             ? "partial"
@@ -2690,16 +2698,6 @@ function buildGdprTransparencyArticle13AbsenceConcerns(
   const assessments = getPlainRecordArray(
     summary?.article13CoverageAssessments ?? summary?.article13_coverage_assessments
   );
-  const retainedObservedTopics = new Set([
-    ...assessments
-      .filter((assessment) => getRuntimeString(assessment, ["status"]) === "observed")
-      .map((assessment) => getRuntimeString(assessment, ["topic"]))
-      .filter((topic): topic is string => Boolean(topic)),
-    ...getGdprTransparencyArticle13Signals(summary)
-      .filter((signal) => getRuntimeString(signal, ["status"]) === "observed")
-      .map((signal) => getRuntimeString(signal, ["disclosureType", "disclosure_type"]))
-      .filter((topic): topic is string => Boolean(topic)),
-  ]);
 
   return assessments.flatMap((assessment) => {
     const contractVersion = getRuntimeString(assessment, [
@@ -2722,17 +2720,20 @@ function buildGdprTransparencyArticle13AbsenceConcerns(
       "policyDocumentRoles",
       "policy_document_roles"
     ]);
+    const reasonCodes = getRuntimeStringArray(assessment, ["reasonCodes", "reason_codes"]);
     if (
       contractVersion !== "gdpr_transparency_article13_coverage_assessment.v1" ||
       coverageStatus !== "sufficient" ||
       status !== "not_observed_with_sufficient_coverage" ||
       !topic ||
-      retainedObservedTopics.has(topic) ||
       sourceUrls.length === 0 ||
       policyDocumentSha256.length === 0 ||
+      policyDocumentSha256.some((hash) => !/^[a-f0-9]{64}$/i.test(hash)) ||
       policyDocumentIds.length === 0 ||
       policyDocumentRoles.length === 0 ||
-      policyDocumentRoles.some((role) => role !== "policy_document")
+      policyDocumentRoles.some((role) => role !== "policy_document") ||
+      !reasonCodes.includes("verified_complete_owned_policy_reviewed") ||
+      !reasonCodes.includes("row_specific_disclosure_not_observed")
     ) {
       return [];
     }
@@ -3810,6 +3811,123 @@ function buildPreConsentStorageAssessmentConcerns(
   ];
 }
 
+function getGdprTransparencyConcernState(concern: NormalizedConcern) {
+  const rawEvidence = concern.evidenceBundle.rawEvidence;
+  const value = rawEvidence?.gdprTransparencyArticle13ConcernState ??
+    rawEvidence?.gdpr_transparency_article13_concern_state;
+  return typeof value === "string" ? value : null;
+}
+
+function getGdprTransparencyConcernDocumentIds(concern: NormalizedConcern) {
+  const rawEvidence = concern.evidenceBundle.rawEvidence;
+  const values = [
+    rawEvidence?.sourceDocumentIds,
+    rawEvidence?.source_document_ids,
+    rawEvidence?.policyDocumentIds,
+    rawEvidence?.policy_document_ids,
+  ];
+  return new Set(values.flatMap((value) =>
+    Array.isArray(value)
+      ? value.filter((item): item is string => typeof item === "string" && item.length > 0)
+      : [],
+  ));
+}
+
+function concernsReferenceSameRetainedPolicy(
+  left: NormalizedConcern,
+  right: NormalizedConcern,
+) {
+  const leftDocumentIds = getGdprTransparencyConcernDocumentIds(left);
+  const rightDocumentIds = getGdprTransparencyConcernDocumentIds(right);
+  if ([...leftDocumentIds].some((id) => rightDocumentIds.has(id))) {
+    return true;
+  }
+  const leftHashes = new Set(getRuntimeStringArray(
+    left.evidenceBundle.rawEvidence,
+    ["policyDocumentSha256", "policy_document_sha256"],
+  ));
+  const rightHashes = new Set(getRuntimeStringArray(
+    right.evidenceBundle.rawEvidence,
+    ["policyDocumentSha256", "policy_document_sha256"],
+  ));
+  return [...leftHashes].some((hash) => rightHashes.has(hash));
+}
+
+/**
+ * Produces one canonical GDPR Transparency concern per topic while retaining
+ * superseded evidence inside that concern. A direct observed passage wins only
+ * when it is bound to the same retained policy as the sufficient-coverage
+ * absence assessment. Cross-document conflicts fail closed to Not confirmed.
+ */
+function resolveGdprTransparencyConcernConflicts(concerns: NormalizedConcern[]) {
+  const article13Concerns = concerns.filter((concern) =>
+    concern.originKey.startsWith("gdpr_transparency.article13.")
+  );
+  const replacements = new Map<NormalizedConcern, NormalizedConcern | null>();
+
+  for (const observed of article13Concerns.filter((concern) =>
+    getGdprTransparencyConcernState(concern) === "sufficient" &&
+    concern.regulatoryChecklistEligibility === "observed"
+  )) {
+    const absences = article13Concerns.filter((concern) =>
+      concern.originKey === observed.originKey &&
+      getGdprTransparencyConcernState(concern) === "no_match_found"
+    );
+    if (absences.length === 0) continue;
+
+    const comparableAbsences = absences.filter((absence) =>
+      concernsReferenceSameRetainedPolicy(observed, absence)
+    );
+    if (comparableAbsences.length === absences.length) {
+      const supersededAssessments = comparableAbsences.flatMap((absence) => {
+        const assessment = absence.evidenceBundle.rawEvidence?.article13CoverageAssessment ??
+          absence.evidenceBundle.rawEvidence?.article13_coverage_assessment;
+        return assessment && typeof assessment === "object" ? [assessment] : [];
+      });
+      replacements.set(observed, {
+        ...observed,
+        evidenceBundle: {
+          ...observed.evidenceBundle,
+          rawEvidence: {
+            ...(observed.evidenceBundle.rawEvidence ?? {}),
+            supersededArticle13CoverageAssessments: supersededAssessments,
+          },
+        },
+      });
+      for (const absence of comparableAbsences) replacements.set(absence, null);
+      continue;
+    }
+
+    const conflictEvidence = absences.map((absence) =>
+      absence.evidenceBundle.rawEvidence?.article13CoverageAssessment ??
+      absence.evidenceBundle.rawEvidence?.article13_coverage_assessment ??
+      absence.evidenceBundle.rawEvidence
+    );
+    replacements.set(observed, {
+      ...observed,
+      allowedNarrativeTier: "weak",
+      externalSurfacingEligibility: "audit_only",
+      observedValue: "ambiguous",
+      promotionEligibility: "internal_only",
+      regulatoryChecklistEligibility: "none",
+      evidenceBundle: {
+        ...observed.evidenceBundle,
+        rawEvidence: {
+          ...(observed.evidenceBundle.rawEvidence ?? {}),
+          gdprTransparencyArticle13ConcernState: "ambiguous",
+          retainedConflictingArticle13Assessments: conflictEvidence,
+        },
+      },
+    });
+    for (const absence of absences) replacements.set(absence, null);
+  }
+
+  return concerns.flatMap((concern) => {
+    const replacement = replacements.get(concern);
+    return replacement === null ? [] : [replacement ?? concern];
+  });
+}
+
 
 export function buildNormalizedConcerns(input: {
   domainContext?: ScanDomainContext;
@@ -3843,9 +3961,11 @@ export function buildNormalizedConcerns(input: {
     ...buildPolicyRuntimeContradictionConcerns(input.runtimeArtifacts, input.domainContext)
   ];
 
+  const resolvedConcerns = resolveGdprTransparencyConcernConflicts(concerns);
+
   return [
-    ...concerns,
-    ...buildCrossBorderTransferDisclosureGapCompanions(concerns, input.domainContext)
+    ...resolvedConcerns,
+    ...buildCrossBorderTransferDisclosureGapCompanions(resolvedConcerns, input.domainContext)
   ].flatMap(expandFinancialCompanionConcerns);
 }
 

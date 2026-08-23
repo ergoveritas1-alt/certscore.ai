@@ -196,7 +196,15 @@ async function main(): Promise<void> {
       increment(candidateCounts, topic);
       const rowId = CANDIDATE_TO_ROW[topic];
       const status = rowId ? string(byId.get(rowId)?.status) ?? "Unavailable" : null;
-      if (quality === "usable_topic_evidence" && rowId && status !== "Observed" && status !== "Review signal") increment(candidateProjectionMismatches, topic);
+      if (
+        candidate.productionCredit === true &&
+        quality === "usable_topic_evidence" &&
+        rowId &&
+        status !== "Observed" &&
+        status !== "Review signal"
+      ) {
+        increment(candidateProjectionMismatches, topic);
+      }
     }
     if (quality === "no_policy_surface") increment(firstBrokenPipelineStage, "observed_evidence.policy_surface_discovery");
     else if (quality === "document_fetch_failure") increment(firstBrokenPipelineStage, "observed_evidence.policy_document_fetch");
@@ -206,7 +214,13 @@ async function main(): Promise<void> {
     if (candidateItems.some((candidate) => {
       const rowId = CANDIDATE_TO_ROW[string(candidate.topic) ?? ""];
       const status = rowId ? string(byId.get(rowId)?.status) ?? "Unavailable" : "Observed";
-      return Boolean(quality === "usable_topic_evidence" && rowId && status !== "Observed" && status !== "Review signal");
+      return Boolean(
+        candidate.productionCredit === true &&
+        quality === "usable_topic_evidence" &&
+        rowId &&
+        status !== "Observed" &&
+        status !== "Review signal"
+      );
     })) {
       increment(firstBrokenPipelineStage, "post_classifier.normalized_concern_policy_or_projection");
     }
@@ -246,7 +260,7 @@ async function main(): Promise<void> {
       candidateCounts,
       candidateProjectionMismatches,
       firstBrokenPipelineStage,
-      interpretation: "A candidate present with a non-Observed/non-Review signal row indicates a post-classifier loss candidate; confirm against normalized concern and policy evidence before changing code.",
+      interpretation: "A production-credit candidate with a non-Observed/non-Review signal row indicates a post-adapter loss candidate; rejected diagnostic candidates are not projection mismatches.",
     },
     strata,
     reviewQueue: { screenshotJsonDisagreementCandidates: disagreementQueue.length },

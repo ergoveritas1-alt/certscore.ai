@@ -10,6 +10,8 @@ import {
 } from "../../lib/scans/gdpr-eprivacy-checklist-presentation";
 
 export const PERSISTED_CANONICAL_REPORT_PROJECTION_VERSION =
+  "persisted-canonical-report-projection-v5";
+const LEGACY_PERSISTED_CANONICAL_REPORT_PROJECTION_VERSION_V4 =
   "persisted-canonical-report-projection-v4";
 const LEGACY_PERSISTED_CANONICAL_REPORT_PROJECTION_VERSION_V3 =
   "persisted-canonical-report-projection-v3";
@@ -19,6 +21,7 @@ const LEGACY_PERSISTED_CANONICAL_REPORT_PROJECTION_VERSION_V2 =
 export type PersistedCanonicalReportProjection = {
   artifactVersion:
     | typeof PERSISTED_CANONICAL_REPORT_PROJECTION_VERSION
+    | typeof LEGACY_PERSISTED_CANONICAL_REPORT_PROJECTION_VERSION_V4
     | typeof LEGACY_PERSISTED_CANONICAL_REPORT_PROJECTION_VERSION_V3
     | typeof LEGACY_PERSISTED_CANONICAL_REPORT_PROJECTION_VERSION_V2;
   checklistPresentation?: GdprEprivacyChecklistPresentation;
@@ -51,6 +54,7 @@ export function getPersistedCanonicalReportProjection(
     !isRecord(candidate) ||
     (
       candidate.artifactVersion !== PERSISTED_CANONICAL_REPORT_PROJECTION_VERSION &&
+      candidate.artifactVersion !== LEGACY_PERSISTED_CANONICAL_REPORT_PROJECTION_VERSION_V4 &&
       candidate.artifactVersion !== LEGACY_PERSISTED_CANONICAL_REPORT_PROJECTION_VERSION_V3 &&
       candidate.artifactVersion !== LEGACY_PERSISTED_CANONICAL_REPORT_PROJECTION_VERSION_V2
     ) ||
@@ -69,6 +73,7 @@ export function getPersistedCanonicalReportProjection(
 
   const usesIndexedEvidence =
     candidate.artifactVersion === PERSISTED_CANONICAL_REPORT_PROJECTION_VERSION ||
+    candidate.artifactVersion === LEGACY_PERSISTED_CANONICAL_REPORT_PROJECTION_VERSION_V4 ||
     candidate.artifactVersion === LEGACY_PERSISTED_CANONICAL_REPORT_PROJECTION_VERSION_V3;
   if (
     usesIndexedEvidence &&
