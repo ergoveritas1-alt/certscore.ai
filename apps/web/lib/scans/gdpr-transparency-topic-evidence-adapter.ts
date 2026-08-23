@@ -297,17 +297,19 @@ function rejectReasonForCandidate(
   if (
     article13RejectReason === "insufficient_row_specific_terms" &&
     (isPrivacyContextContactChannelCandidate(candidate) ||
-      isPrivacyContextBoundCanonicalCandidate(candidate))
+      isContextBoundCanonicalCandidate(candidate))
   ) {
     return null;
   }
   return article13RejectReason;
 }
 
-function isPrivacyContextBoundCanonicalCandidate(candidate: GdprTransparencyTopicCandidate) {
+function isContextBoundCanonicalCandidate(candidate: GdprTransparencyTopicCandidate) {
   if (
     !PRIVACY_CONTEXT_BOUND_DISCLOSURE_TOPICS.has(candidate.topic) ||
-    !candidate.classifierReasonCodes.includes("variant_requires_privacy_context")
+    !candidate.classifierReasonCodes.some((reasonCode) =>
+      reasonCode === "variant_requires_privacy_context" || reasonCode === "variant_requires_topic_context"
+    )
   ) {
     return false;
   }

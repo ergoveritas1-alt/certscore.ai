@@ -7,6 +7,53 @@ import {
   type GdprTransparencyTopic,
 } from "./index.js";
 
+test("canonical English policy variants cover a complete GDPR transparency notice", () => {
+  const text = [
+    "Privacy notice describing how personal data is processed.",
+    "Controller and contact. Example Publisher Ltd. is the controller. Contact privacy@example.test or the data protection officer at dpo@example.test.",
+    "Purposes and legal-basis language. The service processes account data to provide a requested service under a contract and uses security logs for a stated legitimate-interest purpose.",
+    "Recipients. Named vendors include Example Hosting Ltd. and Example Analytics Ltd.; professional advisers may receive data when necessary.",
+    "Retention. Account records are retained for 24 months after closure.",
+    "International transfers. Transfers outside the EEA use current European Commission standard contractual clauses and supplementary safeguards.",
+    "Individual rights. Individuals may request access, correction, deletion, restriction, portability, or objection.",
+    "Individuals may complain to the Irish Data Protection Commission.",
+    "Automated decisions. The service does not make decisions producing legal or similarly significant effects solely by automated means.",
+  ].join(" ");
+
+  const matches = classifyGdprTransparencyTopics({ text, localeHints: ["en"] }).matches;
+  assert.deepEqual(
+    new Set(matches.map((match) => match.topic)),
+    new Set([
+      "controller_contact",
+      "dpo_contact",
+      "processing_purposes",
+      "legal_basis",
+      "recipients_or_vendor_categories",
+      "data_retention",
+      "data_subject_rights",
+      "international_transfers",
+      "supervisory_authority",
+      "automated_decision_making_or_profiling",
+    ]),
+  );
+  assert.equal(matches.every((match) =>
+    match.matchStrength === "direct" || match.matchStrength === "equivalent"
+  ), true);
+});
+
+test("canonical English policy variants require row-specific substantive context", () => {
+  const text = [
+    "Privacy Policy. Controller and contact.",
+    "Purposes and legal basis.",
+    "Records are retained for.",
+    "Our vendors include.",
+    "We collaborate with the Data Protection Commission.",
+    "The service may operate solely by automated means.",
+  ].join(" ");
+
+  assert.deepEqual(classifyGdprTransparencyTopics({ text, localeHints: ["en"] }).matches, []);
+});
+
 test("classifies canonical GDPR Transparency topics with bounded provenance", () => {
   const classification = classifyGdprTransparencyTopics({
     text: [

@@ -102,6 +102,7 @@ export const GDPR_TRANSPARENCY_TOPIC_PHRASE_REGISTRY: GdprTransparencyTopicPhras
     equivalent("controller_contact", "you can contact us at", "requires_privacy_context"),
     equivalent("controller_contact", "who is the controller of personal data", "requires_privacy_context"),
     equivalent("controller_contact", "is the controller of the data", "requires_privacy_context"),
+    equivalent("controller_contact", "controller and contact", "requires_topic_context"),
     equivalent("controller_contact", "companies are the controller"),
     direct("dpo_contact", "data protection officer"),
     equivalent("dpo_contact", "dpo contact"),
@@ -119,6 +120,8 @@ export const GDPR_TRANSPARENCY_TOPIC_PHRASE_REGISTRY: GdprTransparencyTopicPhras
     equivalent("processing_purposes", "use the information for the purposes for which it is provided"),
     equivalent("processing_purposes", "how we use your personal information"),
     equivalent("processing_purposes", "we use this information to"),
+    equivalent("processing_purposes", "purposes and legal basis", "requires_topic_context"),
+    equivalent("processing_purposes", "purposes and legal-basis", "requires_topic_context"),
     equivalent("processing_purposes", "uses personal data for the following goals"),
     equivalent("processing_purposes", "use personal data for the following goals"),
     direct("legal_basis", "legal basis for processing personal data"),
@@ -132,6 +135,8 @@ export const GDPR_TRANSPARENCY_TOPIC_PHRASE_REGISTRY: GdprTransparencyTopicPhras
     equivalent("legal_basis", "legitimate interests for processing personal data"),
     equivalent("legal_basis", "relevant legitimate interest"),
     equivalent("legal_basis", "presence of the relevant legitimate interest"),
+    equivalent("legal_basis", "under a contract", "requires_topic_context"),
+    equivalent("legal_basis", "legitimate-interest purpose", "requires_topic_context"),
     direct("recipients_or_vendor_categories", "recipients of personal data"),
     direct("recipients_or_vendor_categories", "categories of recipients of personal data"),
     direct("recipients_or_vendor_categories", "third parties with whom we share personal data"),
@@ -148,21 +153,26 @@ export const GDPR_TRANSPARENCY_TOPIC_PHRASE_REGISTRY: GdprTransparencyTopicPhras
     equivalent("recipients_or_vendor_categories", "our affiliates service providers and third parties"),
     equivalent("recipients_or_vendor_categories", "push subscription endpoint is shared"),
     equivalent("recipients_or_vendor_categories", "business partners who help us facilitate the services"),
+    equivalent("recipients_or_vendor_categories", "named vendors include", "requires_topic_context"),
+    equivalent("recipients_or_vendor_categories", "vendors include", "requires_topic_context"),
     direct("data_retention", "retention period for personal data"),
     direct("data_retention", "retain personal data"),
     equivalent("data_retention", "as long as necessary for processing"),
     equivalent("data_retention", "retain your pii for as long as necessary", "requires_privacy_context"),
+    equivalent("data_retention", "records are retained for", "requires_topic_context"),
     direct("data_subject_rights", "right to access your personal data"),
     direct("data_subject_rights", "right to erasure of personal data"),
     direct("data_subject_rights", "right to object to processing"),
     direct("data_subject_rights", "rights of data subject"),
     equivalent("data_subject_rights", "right to request the deletion of your personal data"),
     equivalent("data_subject_rights", "right to restrict or limit the ways in which we process your personal data"),
+    direct("data_subject_rights", "request access correction deletion restriction portability or objection"),
     direct("international_transfers", "international transfers of personal data"),
     direct("international_transfers", "international transfers of data"),
     equivalent("international_transfers", "data transfer to processors"),
     equivalent("international_transfers", "transfer your personal data outside your jurisdiction"),
     equivalent("international_transfers", "transfers of your data outside the eea"),
+    equivalent("international_transfers", "transfers outside the eea", "requires_topic_context"),
     equivalent("international_transfers", "transfer data to processors located outside"),
     equivalent("international_transfers", "processors located outside"),
     equivalent("international_transfers", "transfer personal data outside the european economic area"),
@@ -204,12 +214,15 @@ export const GDPR_TRANSPARENCY_TOPIC_PHRASE_REGISTRY: GdprTransparencyTopicPhras
     equivalent("supervisory_authority", "submit a complaint regarding the processing of personal data", "requires_privacy_context"),
     equivalent("supervisory_authority", "make a complaint before the national personal data protection authority"),
     equivalent("supervisory_authority", "lodge a complaint with the information commissioner's office"),
+    equivalent("supervisory_authority", "complain to the data protection commission", "requires_topic_context"),
+    equivalent("supervisory_authority", "data protection commission", "requires_topic_context"),
     equivalent("supervisory_authority", "lodge a complaint related to the processing of your personal data with the competent data protection authority"),
     direct("automated_decision_making_or_profiling", "automated decision-making using personal data"),
     equivalent("automated_decision_making_or_profiling", "automated decision-making for data processing"),
     equivalent("automated_decision_making_or_profiling", "automated individual decision-making processes", "requires_privacy_context"),
     equivalent("automated_decision_making_or_profiling", "profiling of personal data"),
     equivalent("automated_decision_making_or_profiling", "profiling for data processing"),
+    equivalent("automated_decision_making_or_profiling", "solely by automated means", "requires_topic_context"),
   ]),
   ...de([
     direct("controller_contact", "verantwortlicher für die datenverarbeitung"),
@@ -1099,6 +1112,7 @@ export function classifyGdprTransparencyTopics(
     .map(({ normalizedPhrase, term }) => ({
       term,
       score: phraseScore({
+        normalizedText,
         normalizedPhrase,
         privacyDisclosureContext,
         term,
@@ -1240,6 +1254,7 @@ type GdprTransparencyPhraseTrieNode = {
 const GDPR_TRANSPARENCY_PHRASE_TRIE = buildGdprTransparencyPhraseTrie();
 
 function phraseScore(input: {
+  normalizedText: string;
   normalizedPhrase: string;
   privacyDisclosureContext: boolean;
   term: GdprTransparencyTopicPhrase;
@@ -1247,7 +1262,41 @@ function phraseScore(input: {
   if (input.term.variant === "requires_privacy_context" && !input.privacyDisclosureContext) {
     return 0;
   }
+  if (
+    input.term.variant === "requires_topic_context" &&
+    (!input.privacyDisclosureContext || !hasRequiredTopicContext(input.normalizedText, input.term))
+  ) {
+    return 0;
+  }
   return 600 + input.normalizedPhrase.length + strengthRank(input.term.strength) * 80;
+}
+
+function hasRequiredTopicContext(
+  normalizedText: string,
+  term: GdprTransparencyTopicPhrase,
+) {
+  switch (term.topic) {
+    case "controller_contact":
+      return /\bcontroller and contact\b.{0,240}(?:@|email|e-mail|postal|address|phone|telephone|contact)/i.test(normalizedText);
+    case "processing_purposes":
+      return /\b(?:process(?:es|ed|ing)?|uses?|collect(?:s|ed|ing)?)\b.{0,100}\b(?:personal data|personal information|account data|security logs?|information|data)\b.{0,100}\b(?:to|for|in order to)\b/i.test(normalizedText) ||
+        /\b(?:personal data|personal information|account data|security logs?|information|data)\b.{0,100}\b(?:is|are)?\s*(?:process(?:ed|ing)?|used|collected)\b.{0,100}\b(?:to|for|in order to)\b/i.test(normalizedText);
+    case "legal_basis":
+      return /\b(?:process(?:es|ed|ing)?|uses?|collect(?:s|ed|ing)?)\b.{0,120}\b(?:personal data|personal information|account data|security logs?|information|data)\b.{0,160}\b(?:under a contract|legitimate-interest purpose)\b/i.test(normalizedText) ||
+        /\b(?:under a contract|legitimate-interest purpose)\b.{0,160}\b(?:process(?:es|ed|ing)?|uses?|collect(?:s|ed|ing)?)\b/i.test(normalizedText);
+    case "recipients_or_vendor_categories":
+      return /\b(?:named )?(?:[a-z0-9-]+\s+)?vendors include\b\s+(?!(?:we|our|the|a|an)\b)[a-z0-9][a-z0-9 .&'-]{2,}/i.test(normalizedText);
+    case "data_retention":
+      return /\brecords are retained for\b.{0,100}(?:\b\d+\s*(?:days?|weeks?|months?|years?)\b|\bas long as\b|\buntil\b|\bafter\b)/i.test(normalizedText);
+    case "international_transfers":
+      return /\btransfers outside the eea\b.{0,220}\b(?:personal data|data|standard contractual clauses|safeguards?|adequacy|third countr)/i.test(normalizedText);
+    case "supervisory_authority":
+      return /\b(?:complain|complaint|lodge|file|submit)\b.{0,140}\bdata protection commission\b|\bdata protection commission\b.{0,140}\b(?:complain|complaint|lodge|file|submit)\b/i.test(normalizedText);
+    case "automated_decision_making_or_profiling":
+      return /\b(?:decision(?:s| making)?|profiling)\b.{0,180}\bsolely by automated means\b/i.test(normalizedText);
+    default:
+      return true;
+  }
 }
 
 function hasPrivacyDisclosureContext(normalizedText: string) {

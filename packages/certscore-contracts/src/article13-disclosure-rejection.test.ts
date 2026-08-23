@@ -7,6 +7,7 @@ import {
   hasSubstantiveLegalBasisEvidence,
   hasSubstantiveProcessingPurposesEvidence,
   isArticle13DisclosureEvidenceUsable,
+  looksLikeArticle13TableOfContents,
   type Article13DisclosureRejectionMode,
 } from "./article13-disclosure-rejection";
 
@@ -254,6 +255,13 @@ test("Article 13 rejection contract rejects table-of-contents snippets consisten
     ),
     "table_of_contents_only",
   );
+});
+
+test("Article 13 rejection contract does not mistake third-person factual policy prose for a table of contents", () => {
+  const completeNotice =
+    "Controller contact. Calibration Publisher Ltd. is the controller. Purposes and legal basis. Calibration Publisher Ltd. processes account data to provide a requested service under a contract. Recipients. Named vendors include Example Hosting Ltd. Retention. Account records are retained for 24 months after closure. Rights. Individuals may request access, correction, deletion, restriction, portability, or objection.";
+
+  assert.equal(looksLikeArticle13TableOfContents(completeNotice, { mode: "multilingual_classifier" }), false);
 });
 
 test("Article 13 rejection contract preserves accepted legacy and multilingual examples", () => {

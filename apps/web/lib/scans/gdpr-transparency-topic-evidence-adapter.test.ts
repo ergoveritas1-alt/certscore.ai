@@ -266,6 +266,39 @@ test("privacy-context provenance cannot rescue a row excerpt that omits its matc
   assert.equal(result.dispositions[0]?.rejectReason, "insufficient_row_specific_terms");
 });
 
+test("topic-context variants preserve retained evidence through production adapter eligibility", () => {
+  const text = [
+    "Privacy notice describing how personal data is processed.",
+    "Controller and contact. Example Publisher Ltd. is the controller. Contact privacy@example.test or the data protection officer at dpo@example.test.",
+    "Purposes and legal-basis language. The service processes account data to provide a requested service under a contract and uses security logs for a stated legitimate-interest purpose.",
+    "Recipients. Named vendors include Example Hosting Ltd. and Example Analytics Ltd.; professional advisers may receive data when necessary.",
+    "Retention. Account records are retained for 24 months after closure.",
+    "International transfers. Transfers outside the EEA use standard contractual clauses and supplementary safeguards.",
+    "Individuals may request access, correction, deletion, restriction, portability, or objection, and may complain to the Irish Data Protection Commission.",
+    "The service does not make decisions producing legal effects solely by automated means.",
+  ].join(" ");
+  const candidates = classifyGdprTransparencyTopics({ localeHints: ["en"], text }).matches
+    .map((match) => candidate({
+      classifierReasonCodes: match.reasonCodes,
+      confidence: match.confidence,
+      evidenceText: match.evidenceExcerpt,
+      matchStrength: match.matchStrength,
+      matchedLocale: match.matchedLocale,
+      matchedTerm: match.matchedTerm,
+      topic: match.topic,
+    }));
+
+  const result = adaptGdprTransparencyTopicCandidatesForProduction({
+    policyTextQuality: { usable: true },
+    profile: GDPR_TRANSPARENCY_MULTILINGUAL_ARTICLE13_PROFILE,
+    surface: surface(candidates, { textExcerpt: text }),
+  });
+
+  assert.equal(candidates.length, 10);
+  assert.equal(result.acceptedProductionSignals.length, 10);
+  assert.deepEqual(result.discardedArticle13DisclosureSignals, []);
+});
+
 test("explicit GDPR Transparency profile accepts strong direct multilingual candidates from usable privacy-policy surfaces", () => {
   const examples: Array<{ locale: Locale; matchedTerm: string; text: string }> = [
     {

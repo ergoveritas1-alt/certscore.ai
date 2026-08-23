@@ -182,7 +182,10 @@ export function looksLikeArticle13TableOfContents(
     ? (text.match(/\b(?:introduction|information (?:we|google) collects?|why (?:we|google) collects?|your privacy controls|sharing your information|keeping your information|exporting|deleting|retaining|terms|faq|controller|legal basis|recipients|retention|rights|transfers|complaints)\b/gi) ?? []).length
     : (text.match(/\b(?:introduction|information (?:we|google) collects?|why (?:we|google) collects?|your privacy controls|sharing your information|keeping your information|exporting|deleting|retaining|terms|faq)\b/gi) ?? []).length;
   const hasDisclosureVerb = /\b(?:we|you|our)\s+(?:use|process|collect|retain|keep|store|share|transfer|disclose|provide|may|can|have|request|exercise)\b/i.test(text);
-  return tocTokens >= 4 && !hasDisclosureVerb;
+  const hasFactualDisclosureProse =
+    /\b(?:personal data|personal information|account data|account records?|security logs?|individuals?|data subjects?)\b.{0,100}\b(?:collect(?:ed|s|ing)?|process(?:ed|es|ing)?|use(?:d|s|ing)?|retain(?:ed|s|ing)?|keep|kept|stor(?:e|ed|es|ing)|share(?:d|s|ing)?|transfer(?:red|s|ring)?|disclos(?:e|ed|es|ing)|delet(?:e|ed|es|ing)|request(?:ed|s|ing)?)\b/i.test(text) ||
+    /\b(?:collect(?:ed|s|ing)?|process(?:ed|es|ing)?|use(?:d|s|ing)?|retain(?:ed|s|ing)?|keep|kept|stor(?:e|ed|es|ing)|share(?:d|s|ing)?|transfer(?:red|s|ring)?|disclos(?:e|ed|es|ing))\b.{0,100}\b(?:personal data|personal information|account data|account records?|security logs?)\b/i.test(text);
+  return tocTokens >= 4 && !hasDisclosureVerb && !hasFactualDisclosureProse;
 }
 
 export function isGenericArticle13StorageNotRetentionEvidence(value: string) {
