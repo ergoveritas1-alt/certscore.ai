@@ -4754,6 +4754,15 @@ test("summarizePolicySurfaces accepts GDPR Transparency candidates by default", 
   assert.deepEqual(summary.article13DisclosureTypesObserved, ["legal_basis"]);
   assert.deepEqual(summary.gdprTransparencyProductionEvidenceDiagnostics, {
     acceptedCandidateCount: 1,
+    candidateDispositions: [{
+      confidence: 0.93,
+      disposition: "accepted",
+      matchStrength: "direct",
+      matchedLocale: "es",
+      rejectionReason: null,
+      sourceObservationId: "target-privacy",
+      topic: "legal_basis"
+    }],
     diagnosticCandidateCount: 0,
     discardedCandidateCount: 0,
     productionCreditSignalCount: 1,
@@ -4907,6 +4916,35 @@ test("summarizePolicySurfaces supplements Article 13 signals only from opt-in ac
   assert.equal(acceptedSignal?.evidenceText, acceptedSpanish);
   assert.deepEqual(summary.gdprTransparencyProductionEvidenceDiagnostics, {
     acceptedCandidateCount: 1,
+    candidateDispositions: [
+      {
+        confidence: 0.93,
+        disposition: "accepted",
+        matchStrength: "direct",
+        matchedLocale: "es",
+        rejectionReason: null,
+        sourceObservationId: "target-privacy",
+        topic: "legal_basis"
+      },
+      {
+        confidence: 0.94,
+        disposition: "discarded",
+        matchStrength: "direct",
+        matchedLocale: "en",
+        rejectionReason: "table_of_contents_only",
+        sourceObservationId: "target-privacy",
+        topic: "legal_basis"
+      },
+      {
+        confidence: 0.91,
+        disposition: "diagnostic_only",
+        matchStrength: "weak",
+        matchedLocale: "en",
+        rejectionReason: "candidate_strength_not_creditworthy",
+        sourceObservationId: "target-privacy",
+        topic: "data_subject_rights"
+      }
+    ],
     diagnosticCandidateCount: 1,
     discardedCandidateCount: 1,
     productionCreditSignalCount: 1,
@@ -5000,6 +5038,15 @@ test("summarizePolicySurfaces credits French Article 13 candidates through the p
   );
   assert.deepEqual(summary.gdprTransparencyProductionEvidenceDiagnostics, {
     acceptedCandidateCount: 4,
+    candidateDispositions: candidates.map((candidate) => ({
+      confidence: candidate.confidence,
+      disposition: "accepted",
+      matchStrength: candidate.matchStrength,
+      matchedLocale: candidate.matchedLocale,
+      rejectionReason: null,
+      sourceObservationId: "lefigaro-style-privacy",
+      topic: candidate.topic
+    })),
     diagnosticCandidateCount: 0,
     discardedCandidateCount: 0,
     productionCreditSignalCount: 4,

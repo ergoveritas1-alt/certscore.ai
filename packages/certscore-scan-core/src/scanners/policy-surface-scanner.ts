@@ -2454,11 +2454,12 @@ async function processPolicyCandidate({
         gdprTransparencyTopicCandidatesFromRetainedPolicySections(policySections),
       )
     : [];
-  if (
-    finalGdprTransparencyTopicCandidates.length > 0 &&
-    deterministic.gdprTransparencyTopicCandidates.length === 0
-  ) {
-    deterministic.gdprTransparencyTopicCandidates = finalGdprTransparencyTopicCandidates;
+  const selectedGdprTransparencyTopicCandidates = mergeGdprTransparencyTopicCandidates(
+    deterministic.gdprTransparencyTopicCandidates,
+    finalGdprTransparencyTopicCandidates,
+  );
+  if (selectedGdprTransparencyTopicCandidates.length > 0) {
+    deterministic.gdprTransparencyTopicCandidates = selectedGdprTransparencyTopicCandidates;
     deterministic.confidence = Math.max(deterministic.confidence, 0.62);
   }
   const excerpt = boundedExcerpt(analysisVisibleText, prioritizedExcerptKeywords(deterministic));
@@ -6041,13 +6042,39 @@ export function gdprTransparencyTopicCandidatesFromRetainedPolicySections(
   return gdprTransparencyTopicCandidatesFromText(text);
 }
 
-function mergeGdprTransparencyTopicCandidates(
+const GDPR_TRANSPARENCY_MATCH_STRENGTH_RANK = {
+  weak: 1,
+  contextual: 2,
+  equivalent: 3,
+  direct: 4,
+} as const;
+
+function shouldReplaceGdprTransparencyTopicCandidate(
+  retained: PolicySurfaceObservation["gdprTransparencyTopicCandidates"][number],
+  candidate: PolicySurfaceObservation["gdprTransparencyTopicCandidates"][number],
+) {
+  const retainedStrength = GDPR_TRANSPARENCY_MATCH_STRENGTH_RANK[retained.matchStrength];
+  const candidateStrength = GDPR_TRANSPARENCY_MATCH_STRENGTH_RANK[candidate.matchStrength];
+  if (candidateStrength !== retainedStrength) {
+    return candidateStrength > retainedStrength;
+  }
+  if (candidate.confidence !== retained.confidence) {
+    return candidate.confidence > retained.confidence;
+  }
+  if (candidate.matchedTerm.length !== retained.matchedTerm.length) {
+    return candidate.matchedTerm.length > retained.matchedTerm.length;
+  }
+  return candidate.evidenceText.length > retained.evidenceText.length;
+}
+
+export function mergeGdprTransparencyTopicCandidates(
   primary: PolicySurfaceObservation["gdprTransparencyTopicCandidates"],
   supplemental: PolicySurfaceObservation["gdprTransparencyTopicCandidates"],
 ): PolicySurfaceObservation["gdprTransparencyTopicCandidates"] {
   const merged = new Map<PolicySurfaceObservation["gdprTransparencyTopicCandidates"][number]["topic"], PolicySurfaceObservation["gdprTransparencyTopicCandidates"][number]>();
   for (const candidate of [...primary, ...supplemental]) {
-    if (!merged.has(candidate.topic)) {
+    const retained = merged.get(candidate.topic);
+    if (!retained || shouldReplaceGdprTransparencyTopicCandidate(retained, candidate)) {
       merged.set(candidate.topic, candidate);
     }
   }

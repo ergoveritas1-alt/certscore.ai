@@ -172,6 +172,15 @@ type LocalV2DagLambdaPollResult = {
 
 type GdprTransparencyProductionEvidenceDiagnostics = {
   acceptedCandidateCount: number;
+  candidateDispositions: Array<{
+    confidence: number;
+    disposition: "accepted" | "diagnostic_only" | "discarded";
+    matchStrength: "direct" | "equivalent" | "contextual" | "weak";
+    matchedLocale: string;
+    rejectionReason: string | null;
+    sourceObservationId: string;
+    topic: string;
+  }>;
   diagnosticCandidateCount: number;
   discardedCandidateCount: number;
   productionCreditSignalCount: number;
@@ -2809,7 +2818,7 @@ export function summarizePolicySurfaces(
     row
   }));
   const gdprTransparencyProductionEvidenceDiagnostics =
-    gdprTransparencyAdapterDiagnostics(gdprTransparencyAdapterResults.map((row) => row.result));
+    gdprTransparencyAdapterDiagnostics(gdprTransparencyAdapterResults);
   const gdprTransparencyAcceptedArticle13Signals = gdprTransparencyAdapterResults.flatMap(({ result }) =>
     result.acceptedProductionSignals.map((signal) => ({
       classifierProvenance: signal.classifierProvenance,
@@ -3252,21 +3261,35 @@ export function summarizePolicySurfaces(
 const MAX_RETAINED_POLICY_DISCLOSURE_TEXT_CHARS = 40_000;
 
 function gdprTransparencyAdapterDiagnostics(
-  results: GdprTransparencyTopicEvidenceAdapterResult[]
+  results: Array<{
+    result: GdprTransparencyTopicEvidenceAdapterResult;
+    row: { surface: { observationId: string } };
+  }>,
 ): GdprTransparencyProductionEvidenceDiagnostics {
   const acceptedCandidateCount = results.reduce((count, result) =>
-    count + result.dispositions.filter((disposition) => disposition.disposition === "accepted").length, 0);
+    count + result.result.dispositions.filter((disposition) => disposition.disposition === "accepted").length, 0);
   const diagnosticCandidateCount = results.reduce((count, result) =>
-    count + result.dispositions.filter((disposition) => disposition.disposition === "diagnostic_only").length, 0);
+    count + result.result.dispositions.filter((disposition) => disposition.disposition === "diagnostic_only").length, 0);
   const discardedCandidateCount = results.reduce((count, result) =>
-    count + result.dispositions.filter((disposition) => disposition.disposition === "discarded").length, 0);
+    count + result.result.dispositions.filter((disposition) => disposition.disposition === "discarded").length, 0);
   return {
     acceptedCandidateCount,
+    candidateDispositions: results.flatMap(({ result, row }) =>
+      result.dispositions.map((disposition) => ({
+        confidence: disposition.candidate.confidence,
+        disposition: disposition.disposition,
+        matchStrength: disposition.candidate.matchStrength,
+        matchedLocale: disposition.candidate.matchedLocale,
+        rejectionReason: disposition.rejectReason ?? null,
+        sourceObservationId: row.surface.observationId,
+        topic: disposition.candidate.topic,
+      })),
+    ).slice(0, 160),
     diagnosticCandidateCount,
     discardedCandidateCount,
-    productionCreditSignalCount: results.reduce((count, result) => count + result.acceptedProductionSignals.length, 0),
+    productionCreditSignalCount: results.reduce((count, result) => count + result.result.acceptedProductionSignals.length, 0),
     rejectedCandidateCount: diagnosticCandidateCount + discardedCandidateCount,
-    sourceCandidateCount: results.reduce((count, result) => count + result.dispositions.length, 0)
+    sourceCandidateCount: results.reduce((count, result) => count + result.result.dispositions.length, 0)
   };
 }
 

@@ -30,6 +30,7 @@ import {
   isFetchablePolicyUrlForPolicySurface,
   isGdprNoticeSupplementLink,
   isPolicySessionPrimerCompatible,
+  mergeGdprTransparencyTopicCandidates,
   mergePolicySurfaceObservations,
   POLICY_HOMEPAGE_FETCH_TIMEOUT_MS,
   policyDocumentRoleForChildSelection,
@@ -2411,6 +2412,46 @@ test("policySurfaceScanner derives diagnostic GDPR Transparency candidates from 
     ),
     true
   );
+});
+
+test("GDPR Transparency candidate merge retains the strongest evidence for each topic", () => {
+  const candidate = (
+    matchStrength: "weak" | "contextual" | "equivalent" | "direct",
+    confidence: number,
+    evidenceText: string,
+  ) => ({
+    topic: "international_transfers" as const,
+    status: "diagnostic_only" as const,
+    evidenceText,
+    confidence,
+    classifierProvenance: "gdpr_transparency_topic_classifier.v1" as const,
+    matchedLocale: "en" as const,
+    matchedTerm: matchStrength === "direct" ? "international data transfers" : "transfers",
+    matchStrength,
+    classifierReasonCodes: [
+      "matched_international_transfers",
+      `match_strength_${matchStrength}`,
+    ],
+    productionCredit: false as const,
+  });
+  const weakFullTextCandidate = candidate(
+    "weak",
+    0.55,
+    "The introductory policy text refers generally to transfers.",
+  );
+  const directRetainedSectionCandidate = candidate(
+    "direct",
+    0.9,
+    "International data transfers use the safeguards described in this retained section.",
+  );
+
+  const selected = mergeGdprTransparencyTopicCandidates(
+    [weakFullTextCandidate],
+    [directRetainedSectionCandidate],
+  );
+
+  assert.equal(selected.length, 1);
+  assert.equal(selected[0], directRetainedSectionCandidate);
 });
 
 test("compact English policy sections retain purpose and service-provider GDPR Transparency candidates", () => {
