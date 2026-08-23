@@ -6,12 +6,29 @@ Target endpoint: `https://mcp.certscore.ai/mcp/microsoft`
 
 ## A. Executive verdict
 
-- **ENDPOINT IMPLEMENTATION READY:** YES, for review and deployment. The endpoint is locally implemented behind a default-off feature flag, is tenant/resource/client/role bound, and reuses the Light server. It is not present in production until the reviewed AWS deployment occurs.
+- **ENDPOINT IMPLEMENTATION READY:** YES. The scoped implementation was committed, built, scanned, deployed, and exercised through health and unauthenticated rejection. The enablement was then rolled back because the operator environment could not acquire the required fresh Entra token for the mandatory authenticated live gate.
 - **PACKAGE READY:** YES, for post-deployment Microsoft Developer Portal validation and upload. The archive contains the verified Key Vault URI, passes the live Microsoft vDevPreview schema, contains exactly the five expected root files and three canonical Light tools, and passes the targeted credential scan. Upload remains intentionally deferred.
 - **AZURE SETUP READY:** YES. Ben manually verified the two-app Entra topology, v2 resource token configuration, exact four enabled Key Vault secrets, Microsoft certification service-principal RBAC, successful client-credentials token acquisition, and the required token claims.
-- **PRODUCTION DEPLOYMENT REQUIRED:** YES.
+- **PRODUCTION DEPLOYMENT REQUIRED:** RETRY REQUIRED after an Azure-authenticated operator session is available for the initialize/tools-list gate.
 
-No deploy, AWS production mutation, production scan, commit, push, Partner Center validation, upload, or submission was performed. Read-only AWS inspection and Terraform planning were performed.
+The feature commits were pushed and the reviewed AWS rollout was performed. No production scan, Partner Center validation, upload, or submission was performed. Production currently runs the preserved pre-enable task definition with `microsoftEndpoint: null`.
+
+### Release execution outcome
+
+- Implementation commit: `c74b2f5b283614a9be6f3d53dccd554cb13a7cdb` (`Add tenant-bound Microsoft MCP endpoint`).
+- Verified-vault package commit and deployed image SHA: `0f0dc9547a30762f8c1c08ebde11d265d8ef021d` (`fix(mcp): use verified Microsoft Key Vault URI`).
+- AWS workflow: `MCP AWS ECS Deploy`, run `32661304333`, job `97247802150`, completed successfully for the deployed image SHA.
+- Workflow URL: `https://github.com/ergoveritas1-alt/certscore.ai/actions/runs/32661304333`.
+- Task definition before enablement: `arn:aws:ecs:us-west-1:199536052647:task-definition/certscore-web-mcp:62`.
+- Enabled task definition: `arn:aws:ecs:us-west-1:199536052647:task-definition/certscore-web-mcp:63`.
+- Current task definition after mandatory rollback: `arn:aws:ecs:us-west-1:199536052647:task-definition/certscore-web-mcp:62`.
+- The saved Terraform plan's non-no-op address set was programmatically asserted to be exactly `aws_ecs_service.mcp` and `aws_ecs_task_definition.mcp`; no other resource was applied.
+- Enabled health returned HTTP 200, `status: ok`, version `0.2.15`, and `microsoftEndpoint: https://mcp.certscore.ai/mcp/microsoft`.
+- An unauthenticated initialize request returned the designed HTTP 401 and no request-failure log event.
+- Authenticated initialize/tools-list was not attempted: neither local Azure CLI/cache/environment credentials nor an already authenticated Azure browser session was available. The local helper stopped before Key Vault access or endpoint authentication.
+- The rollback completed successfully. Current health returns HTTP 200, `status: ok`, and `microsoftEndpoint: null`; post-rollback Light verification passes with exact three-tool parity.
+- CloudWatch review of 72 MCP log events in the release window found zero bearer/JWT/client-secret/Authorization material, zero `mcp_http.request_failed` events, and zero validated Microsoft events, consistent with the authenticated request not occurring.
+- Production scans created by this release and QA: **0**.
 
 ## B. Architecture
 
@@ -116,10 +133,10 @@ All are non-secret. `CERTSCORE_MICROSOFT_JWKS_URL` exists only for mocked tests;
 
 - Runtime diff: one direct `jose` dependency, validated Microsoft configuration, a tenant-scoped remote-JWKS verifier, one default-off `/mcp/microsoft` sibling route, and focused unit/integration coverage. It reuses the exact Light tool server and existing quotas; it adds no database, scan-pipeline, listener, DNS, queue, storage, or secret dependency.
 - AWS diff: five non-secret Terraform variables and five ECS environment entries on the existing isolated `mcp-http` container. No IAM, task-role, security-group, ALB, DNS, certificate, service-count, CPU/memory, or AWS Secrets Manager change is present.
-- Live read-only inspection: `certscore-web-mcp` is healthy at task definition `certscore-web-mcp:60`, desired/running `1/1`, with image `certscore-web-mcp:3cb2b2aa8128809b1f3721efb9258ed163e49603`; it has none of the Microsoft environment entries and therefore does not expose the new route.
+- Live release result: the image workflow successfully deployed SHA `0f0dc9547a30762f8c1c08ebde11d265d8ef021d` as task definition `certscore-web-mcp:62`. The targeted Terraform enablement created task definition `certscore-web-mcp:63` with the five verified non-secret values and updated only the MCP service. Mandatory rollback restored `certscore-web-mcp:62`; production is healthy at desired/running `1/1` and does not currently expose the Microsoft route.
 - Full Terraform plan caveat: the current un-targeted plan is not deploy-safe. It proposes unrelated web task/service changes and would reconcile MCP from Terraform's older task-definition/image state. Do not run a full `terraform apply` for this rollout. Use the repository MCP image workflow first, then a reviewed MCP-only targeted Terraform plan/apply with the immutable deployed Git SHA passed as `mcp_image_tag` and the five verified values.
 
-Rollback: capture the active MCP task-definition ARN immediately before the targeted apply, and restore that exact revision if endpoint verification fails. `/mcp/light` and `/mcp` remain independent. Revoke the client credential or role separately only if an identity compromise is suspected.
+Rollback was exercised successfully by restoring the captured `certscore-web-mcp:62` task definition and waiting for service stability. `/mcp/light` remained independent and passed its complete no-lifecycle production verifier. Revoke the client credential or role separately only if an identity compromise is suspected.
 
 ## E. Auth validation
 
@@ -192,16 +209,16 @@ The ZIP has no wrapper directory, `.DS_Store`, absolute paths, symlinks, extra f
 | `terraform fmt -check -recursive` | PASS |
 | `terraform validate` | PASS |
 | Full production Terraform plan with verified values | REVIEWED/REJECTED FOR APPLY: also proposes unrelated web reconciliation and older MCP Terraform state |
-| MCP-only targeted Terraform plan with current immutable image and verified values | PASS SCOPE REVIEW: only `aws_ecs_task_definition.mcp` replacement and `aws_ecs_service.mcp` update; plan only, not applied |
+| MCP-only targeted Terraform plan/apply with immutable image and verified values | PASS/APPLIED: exact non-no-op set was `aws_ecs_task_definition.mcp` replacement and `aws_ecs_service.mcp` update; enablement was subsequently rolled back to task definition `62` because authenticated live QA could not be completed |
 | Live Microsoft vDevPreview manifest validation | PASS, zero errors |
 | ZIP names, dimensions, integrity, symlink/`.DS_Store`, JSON, SHA-256 checks | PASS |
 | Targeted package credential-pattern scan | PASS; no private key, JWT, bearer token, AWS/GitHub token, or assigned client-secret pattern |
 | `git diff --check` | PASS |
 | `pnpm audit --prod --audit-level high` | CAVEAT: existing repository audit is not clean (72 advisories: 1 critical, 32 high, 33 moderate, 6 low); no advisory names `jose` |
 
-The audit includes existing Better Auth, Next.js, PostCSS, `nanoid`, `fast-uri`, and `ip-address` paths; `fast-uri` and `ip-address` also occur under existing MCP dependency paths. `jose@6.2.2` was already resolved transitively and this change only makes it direct for the MCP runtime; no advisory names `jose`. Remediating or explicitly accepting the existing baseline is outside this endpoint diff but remains a production release decision.
+The critical advisory is Better Auth `GHSA-pw9m-5jxm-xr6h` / `CVE-2026-53512`: repository version `better-auth@1.6.5`, affected below `1.6.11`, through the root and `apps/web` paths. The advisory concerns refresh-token replay in Better Auth's legacy `oidcProvider()` or `mcp()` plugins for confidential OAuth clients. The deployed MCP container's filtered production dependency tree contains no Better Auth package, `/mcp/microsoft` uses the custom `jose` validator, no Better Auth plugin is imported by the MCP workspaces, and the currently deployed Light container has the same absence. `jose` is not implicated. Release acceptance was therefore recorded as an existing web/root baseline with no new MCP runtime exposure or invocation path.
 
-Read-only production checks passed for the existing Light endpoint and its exact three tools. Production health reports `microsoftEndpoint: null`, and `/mcp/microsoft` returns 404 as expected before deployment. No live Microsoft authentication QA or production scan was performed.
+Release checks passed for the Light endpoint and its exact three tools before enablement, during enablement, and after rollback. During enablement `/mcp/microsoft` returned the designed 401 without Authorization. Authenticated live QA remains incomplete solely because a fresh token could not be acquired from the operator environment; no invalid credential was presented and no endpoint authentication failure was observed. No production scan was performed.
 
 ## J. Costs
 
@@ -219,13 +236,12 @@ Both anticipated increments are below the repository's $1/month approval thresho
 - **Manifest schema:** Azure Key Vault currently requires the certification page's devPreview schema due the stable v1.27 schema mismatch. Revalidate current documentation and Developer Portal acceptance immediately before upload.
 - **Quota interaction:** Microsoft keeps anonymous Light-style scan safety and quotas. New scans are keyed by requester IP, so shared Microsoft egress can aggregate allowance; scan reuse mitigates this. Do not raise limits silently if certification traffic exposes contention.
 - **JWKS/network:** Cached JWKS avoids per-request calls, but initial/rotation refresh requires Microsoft login endpoint reachability. Failure is bounded and closed.
-- **Rollout:** The flag defaults off. The current full Terraform plan includes unrelated web reconciliation and older MCP Terraform state, so it must not be applied wholesale. Use the reviewed MCP-only sequence and retain the pre-enable task-definition ARN for rollback.
+- **Rollout:** The flag defaults off. The scoped sequence and rollback were both exercised successfully. The current AWS service is manually restored to task definition `62` while Terraform last created task definition `63`; rerun a fresh targeted plan rather than reusing the prior saved plan. Never apply the unrelated full Terraform reconciliation.
 - **Dependency baseline:** The existing production audit has high/critical advisories unrelated to `jose`; release review should explicitly accept or remediate that baseline.
 
 ## L. Exact next steps
 
-1. **Ben review/approval:** Review the implementation/infrastructure diff, this readiness report, the rebuilt ZIP/hash, the sub-$1/month cost disclosure, the dependency-audit baseline, and the MCP-only deployment sequence. The exact next action is to approve or reject committing this scoped work and proceeding to the AWS rollout; do not upload the package yet.
-2. **Commit and MCP image workflow:** From a clean reviewed branch, commit/push the scoped MCP, infrastructure, builder, lockfile, and output files. Let `.github/workflows/mcp-aws-ecs-deploy.yml` build, scan, deploy, and verify the immutable MCP image. Record the deployed Git SHA and task-definition ARN.
-3. **MCP-only configuration:** Run a targeted Terraform plan with `mcp_image_tag=<deployed Git SHA>` and the five exact verified Microsoft variables. Require a plan limited to replacement of `aws_ecs_task_definition.mcp` and update of `aws_ecs_service.mcp`; then apply that saved plan. Do not run an un-targeted apply.
-4. **Live QA:** Use the real Entra token only from a secure operator shell to test 401/403 behavior, valid initialize and exact tools/list parity, logs, and rollback readiness. Do not create a production scan unless Ben separately authorizes it. Confirm `/mcp/light` and `/mcp` remain unchanged.
-5. **Partner Center:** Validate the already-rebuilt ZIP in Microsoft Developer Portal, then upload/submit only after separate approval.
+1. **Exact next action for Ben:** Sign in to `https://portal.azure.com/` in the connected Chrome profile and reply that Azure is ready. Do not reveal or paste the client secret or token.
+2. **Retry enablement:** Generate a fresh MCP-only Terraform plan using image SHA `0f0dc9547a30762f8c1c08ebde11d265d8ef021d` and the five verified values. Reassert the exact two-resource non-no-op set, apply the new saved plan, and wait for stability.
+3. **Complete live QA:** Use Azure Cloud Shell or another secure authenticated operator shell to keep the Key Vault secret and fresh token in memory only. Perform MCP initialize and tools/list only, require exact three-tool parity, and recheck logs for token material and unexpected 5xx events. Do not call tools/call or create a scan.
+4. **Partner Center:** The ZIP artifact remains package-ready, but do not validate, upload, or submit it until the authenticated production gate passes and Ben separately authorizes that action.
