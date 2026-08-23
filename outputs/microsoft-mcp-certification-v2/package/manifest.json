@@ -31,7 +31,7 @@
           },
           "authorization": {
             "type": "AzureKeyVault",
-            "referenceId": "https://REPLACE-WITH-CERTSCORE-MCP-KEY-VAULT.vault.azure.net/"
+            "referenceId": "https://cs-msft-mcp-kv-7150890.vault.azure.net/"
           }
         }
       }
