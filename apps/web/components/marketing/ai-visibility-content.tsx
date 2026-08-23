@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { Badge, Button, Card, CardContent, CardHeader, CardTitle } from "@website-signal-risk-scanner/ui";
 import { FindingAtlasBrowser } from "./findings/finding-atlas-browser";
+import { CORE_MARKETING_POSITIONING } from "../../lib/marketing/core-positioning";
 import { getTopFindingAtlasItems } from "../../lib/marketing/finding-atlas";
 import {
   getGuideSampleFindings,
@@ -41,7 +42,7 @@ export function WebsiteBehaviorScanCta() {
         <div className="space-y-1">
           <p className="text-base font-semibold text-slate-950">Run a free website behavior scan</p>
           <p className="text-sm leading-6 text-slate-600">
-            Check observable tracking, cookies, consent, accessibility, and privacy risk signals.
+            Scan cookies, trackers, CMPs, consent, privacy policy, GDPR, CCPA, TLS, accessibility, and other public-web risk signals.
           </p>
         </div>
         <Button
@@ -88,7 +89,7 @@ export function AiVisibilityContent({
     aiSummary ??
     [
       `${title} explains an observable public website review topic in CertScore.ai's evidence-backed scanning workflow.`,
-      "CertScore.ai observes public website behavior around tracking, cookies, consent behavior, session replay indicators, fingerprinting-related signals, accessibility, and privacy disclosures. CertScore.ai findings are automated risk signals for human and agentic review and are not legal advice, certification, or compliance determinations."
+      `${CORE_MARKETING_POSITIONING} CertScore.ai also observes session replay indicators, fingerprinting-related signals, accessibility, and other public-web risk signals. Findings are automated signals for human and agentic review and are not legal advice, certification, or compliance determinations.`
     ];
 
   return (

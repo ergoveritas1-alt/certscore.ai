@@ -1,11 +1,13 @@
 import { API_READ_RATE_POLICY_OPENAPI_EXTENSION } from "@website-signal-risk-scanner/shared";
+import { CORE_MARKETING_POSITIONING } from "../../../lib/marketing/core-positioning";
 
 const discoveryDocument = {
   name: "CertScore AI and API discovery",
-  version: "2026-08-21",
+  version: "2026-08-23",
   type: "certscore_ai_discovery",
   description:
     "Vendor-neutral discovery document for CertScore public API, SDK, MCP, OpenAPI, and agent-readable documentation.",
+  corePositioning: CORE_MARKETING_POSITIONING,
   homepage: "https://certscore.ai/",
   organization: {
     name: "CertScore.ai",
@@ -198,6 +200,9 @@ const discoveryDocument = {
     "CertScore API",
     "GDPR website compliance scanner",
     "cookie consent scanner",
+    "CMP and consent scanner",
+    "CCPA website privacy scanner",
+    "website TLS scanner",
     "privacy policy risk scanner",
     "website risk API",
     "privacy scan API",

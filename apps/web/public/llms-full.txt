@@ -1,8 +1,14 @@
 # CertScore.ai full AI and API guide
 
-CertScore.ai is an automated public-web risk-signal scanner. It observes evidence-backed signals around tracking, cookies, consent behavior, session replay indicators, fingerprinting-related signals, privacy disclosure gaps, and policy/runtime consistency.
+Scan cookies, trackers, CMPs, consent, privacy policy, GDPR, CCPA, and TLS with CertScore.ai.
+
+CertScore.ai is an automated public-web risk-signal scanner. It observes evidence-backed signals around consent behavior, session replay indicators, fingerprinting-related signals, accessibility, privacy disclosure gaps, and policy/runtime consistency.
 
 CertScore.ai findings are automated public-web observations for human and agentic review. CertScore.ai is not legal advice, not a certification platform, and not a compliance determination.
+
+Canonical website: https://certscore.ai/
+
+Help and integration support: support@certscore.ai or https://certscore.ai/contact
 
 ## Universal AI discovery
 
@@ -400,6 +406,9 @@ These phrases describe the public integration surface:
 - evidence-backed website scan API
 - GDPR website compliance scanner
 - cookie consent scanner
+- CMP and consent scanner
+- CCPA website privacy scanner
+- website TLS scanner
 - privacy policy risk scanner
 
 ## Support

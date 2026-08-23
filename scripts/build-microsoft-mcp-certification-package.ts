@@ -42,11 +42,11 @@ const manifest = {
     termsOfUseUrl: "https://certscore.ai/terms"
   },
   name: {
-    short: "CertScore.ai Microsoft MCP",
+    short: "CertScore.ai Privacy",
     full: "CertScore.ai Website Privacy Scanner MCP for Microsoft"
   },
   description: {
-    short: "Evidence-backed privacy scans for public websites.",
+    short: "Scan cookies, trackers, CMPs, consent, privacy policy, GDPR, CCPA, and TLS.",
     full: "Microsoft-authenticated CertScore.ai MCP Light scans public websites for observable privacy, consent, policy, tracker, cookie/storage, and HTTPS/TLS signals. Results support human and agentic review and are not legal advice, certification, or a compliance determination."
   },
   agentConnectors: [{

@@ -10,6 +10,11 @@ import { GET as openApiGET } from "../../app/api/v1/openapi.json/route";
 import { GET as pulseHealthGET } from "../../app/api/v1/pulse-health/route";
 import { GET as pulseSelfTestGET } from "../../app/api/v1/pulse-self-test/route";
 import { POST as feedbackPOST } from "../../app/api/v1/pulse/feedback/route";
+import {
+  CORE_MARKETING_HOMEPAGE,
+  CORE_MARKETING_POSITIONING,
+  CORE_MARKETING_SUPPORT_EMAIL
+} from "../marketing/core-positioning";
 import { buildPulseError } from "./error";
 import { renderPulseMarkdown } from "./markdown";
 import { normalizePulseUrl } from "./request";
@@ -644,6 +649,9 @@ test("Developer API docs are discoverable by crawlers and agent manifests", asyn
   const sitemapUrls = sitemap().map((entry) => entry.url);
   const llms = readFileSync("apps/web/public/llms.txt", "utf8");
   const llmsFull = readFileSync("apps/web/public/llms-full.txt", "utf8");
+  const homepage = readFileSync("apps/web/app/(marketing)/page.tsx", "utf8");
+  const aiVisibilityContent = readFileSync("apps/web/components/marketing/ai-visibility-content.tsx", "utf8");
+  const gtmPositioning = readFileSync("docs/gtm/positioning.md", "utf8");
   const header = readFileSync("apps/web/components/layout/site-header.tsx", "utf8");
   const footer = readFileSync("apps/web/components/layout/site-footer.tsx", "utf8");
   const pageSources = [
@@ -657,6 +665,23 @@ test("Developer API docs are discoverable by crawlers and agent manifests", asyn
   ].map((path) => readFileSync(path, "utf8"));
   const aiDiscovery = await (aiDiscoveryGET(new Request("https://certscore.ai/.well-known/certscore-ai.json"))).json();
   const pulseDiscovery = await (discoveryGET(new Request("https://certscore.ai/.well-known/certscore-pulse"))).json();
+
+  assert.equal(aiDiscovery.corePositioning, CORE_MARKETING_POSITIONING);
+  assert.equal(aiDiscovery.homepage, CORE_MARKETING_HOMEPAGE);
+  assert.equal(aiDiscovery.organization.supportEmail, CORE_MARKETING_SUPPORT_EMAIL);
+  for (const term of ["cookies", "trackers", "CMPs", "consent", "privacy policy", "GDPR", "CCPA", "TLS"]) {
+    assert.ok(CORE_MARKETING_POSITIONING.includes(term), `core positioning should include ${term}`);
+  }
+  assert.match(llms, new RegExp(CORE_MARKETING_POSITIONING.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")));
+  assert.match(llmsFull, new RegExp(CORE_MARKETING_POSITIONING.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")));
+  assert.match(gtmPositioning, new RegExp(CORE_MARKETING_POSITIONING.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")));
+  assert.match(homepage, /CORE_MARKETING_POSITIONING/);
+  assert.match(aiVisibilityContent, /CORE_MARKETING_POSITIONING/);
+  assert.match(llms, /support@certscore\.ai/);
+  assert.match(llmsFull, /support@certscore\.ai/);
+  assert.ok(aiDiscovery.searchableTopics.includes("CMP and consent scanner"));
+  assert.ok(aiDiscovery.searchableTopics.includes("CCPA website privacy scanner"));
+  assert.ok(aiDiscovery.searchableTopics.includes("website TLS scanner"));
 
   for (const path of developerPaths) {
     assert.ok(sitemapUrls.includes(`https://certscore.ai${path}`), `${path} should be in sitemap`);

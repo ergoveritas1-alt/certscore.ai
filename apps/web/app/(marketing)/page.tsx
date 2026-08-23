@@ -9,6 +9,11 @@ import { DomainScanForm } from "../../components/marketing/domain-scan-form";
 import { HomepageFindingsOverview } from "../../components/marketing/homepage-findings-overview";
 import { ScannerSolutionAnimation } from "../../components/marketing/scanner-solution-animation";
 import { PendingButtonLink } from "../../components/ui/pending-link";
+import {
+  CORE_MARKETING_HOMEPAGE,
+  CORE_MARKETING_POSITIONING,
+  CORE_MARKETING_SUPPORT_EMAIL
+} from "../../lib/marketing/core-positioning";
 import { getFindingReferenceItems } from "../../lib/marketing/finding-atlas";
 import { createPageMetadata, SITE_URL } from "../../lib/seo";
 
@@ -17,8 +22,7 @@ const BOOK_DEMO_URL = "/contact-sales";
 export const metadata: Metadata = {
   ...createPageMetadata({
     title: "CertScore.ai — Evidence-Based Website Risk Signal Scanner",
-    description:
-      "Scan websites to review pre-consent tracking, third-party requests, cookie and storage activity, public policy surfaces, and disclosure-alignment signals.",
+    description: CORE_MARKETING_POSITIONING,
     path: "/"
   }),
   title: {
@@ -125,8 +129,19 @@ export default async function MarketingHomePage() {
     name: "CertScore.ai",
     applicationCategory: "BusinessApplication",
     operatingSystem: "Web",
-    description:
-      "CertScore.ai scans public websites for observable tracking, cookie, consent, accessibility, and privacy risk signals."
+    description: CORE_MARKETING_POSITIONING,
+    url: CORE_MARKETING_HOMEPAGE,
+    provider: {
+      "@type": "Organization",
+      name: "CertScore.ai",
+      url: CORE_MARKETING_HOMEPAGE,
+      contactPoint: {
+        "@type": "ContactPoint",
+        contactType: "customer support",
+        email: CORE_MARKETING_SUPPORT_EMAIL,
+        url: "https://certscore.ai/contact"
+      }
+    }
   };
   const findingRegistrySchema = {
     "@context": "https://schema.org",
@@ -175,7 +190,7 @@ export default async function MarketingHomePage() {
             </h1>
             <div className="max-w-[650px]">
               <p className="text-base leading-8 text-slate-300 sm:text-xl">
-                Scan for consent behavior, cookies, trackers, and privacy disclosures with evidence retained behind every finding.
+                Scan cookies, trackers, CMPs, consent, privacy policy, GDPR, CCPA, and TLS—with evidence retained behind every finding.
               </p>
               <p className="mt-2 text-sm font-semibold text-sky-400">
                 Built for developers and agencies reviewing client websites for GDPR and ePrivacy concerns.
