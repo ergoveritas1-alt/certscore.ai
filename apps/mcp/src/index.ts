@@ -10,12 +10,22 @@ import { McpHttpSessionStore } from "./session-store.js";
 import { McpReadThrottle, mcpReadCallsFromJsonRpc, mcpReadRateLimitGuidance } from "./read-throttle.js";
 import { anonymousMcpRequester, anonymousMcpRequesterFromHeaders, anonymousSessionBinding, authenticatedMcpCallerBinding } from "./requester-identity.js";
 import { createHostedMcpTelemetry } from "./telemetry.js";
+import { createMicrosoftEntraTokenValidator } from "./microsoft-entra-auth.js";
 import type { McpTelemetrySurface } from "@website-signal-risk-scanner/shared";
 
 const OPENAI_APPS_CHALLENGE_TOKEN = "RVujVoFeQNvwzz4Upt8IPh_f2Xm3qf2Uqa_-tr3VTeQ";
 
 const env = getEnv();
 const allowedOrigins = getAllowedOrigins(env);
+const microsoftTokenValidator = env.microsoftMcpEnabled
+  ? createMicrosoftEntraTokenValidator({
+      allowedClientId: env.CERTSCORE_MICROSOFT_ALLOWED_CLIENT_ID!,
+      audience: env.CERTSCORE_MICROSOFT_RESOURCE_AUDIENCE!,
+      jwksUrl: env.CERTSCORE_MICROSOFT_JWKS_URL,
+      requiredRole: env.CERTSCORE_MICROSOFT_REQUIRED_ROLE,
+      tenantId: env.CERTSCORE_MICROSOFT_TENANT_ID!
+    })
+  : null;
 const sessions = new McpHttpSessionStore({
   maxCount: env.SESSION_MAX_COUNT,
   ttlSeconds: env.SESSION_TTL_SECONDS
@@ -106,6 +116,23 @@ function unauthorized(
   });
 }
 
+function microsoftUnauthorized(
+  res: ServerResponse,
+  req: IncomingMessage,
+  reason: "missing_token" | "invalid_scheme" | "invalid_token" | "wrong_client" | "session_token_mismatch"
+) {
+  console.warn(JSON.stringify({ event: "mcp_http.microsoft_auth", outcome: "rejected", reason, source: "mcp-http" }));
+  json(res, 401, { error: "unauthorized", error_description: "Valid Microsoft Entra application bearer token required." }, {
+    ...corsHeaders(req),
+    "WWW-Authenticate": "Bearer"
+  });
+}
+
+function microsoftForbidden(res: ServerResponse, req: IncomingMessage) {
+  console.warn(JSON.stringify({ event: "mcp_http.microsoft_auth", outcome: "rejected", reason: "missing_role", source: "mcp-http" }));
+  json(res, 403, { error: "forbidden", error_description: "The Microsoft Entra application token lacks the required application role." }, corsHeaders(req));
+}
+
 async function readJsonBody(req: IncomingMessage) {
   const chunks: Buffer[] = [];
   for await (const chunk of req) {
@@ -138,6 +165,21 @@ function authenticate(req: IncomingMessage) {
     return { ok: false as const, reason: verified.reason };
   }
   return { ok: true as const, claims: verified.claims, token, tokenHash: sessions.hashToken(token) };
+}
+
+async function authenticateMicrosoft(req: IncomingMessage) {
+  const authorization = req.headers.authorization?.trim();
+  if (!authorization) {
+    return { ok: false as const, reason: "missing_token" as const };
+  }
+  const match = authorization.match(/^Bearer\s+([^\s]+)$/i);
+  if (!match?.[1]) {
+    return { ok: false as const, reason: "invalid_scheme" as const };
+  }
+  if (!microsoftTokenValidator) {
+    return { ok: false as const, reason: "invalid_token" as const };
+  }
+  return microsoftTokenValidator.verify(match[1]);
 }
 
 function isInitialize(body: unknown) {
@@ -263,18 +305,18 @@ function transportReason(res: ServerResponse): McpObservationReason | null {
   return res.statusCode === 406 ? "accept_not_supported" : "other";
 }
 
-async function handleMcp(req: IncomingMessage, res: ServerResponse, anonymous: boolean, light = false) {
+async function handleMcp(req: IncomingMessage, res: ServerResponse, anonymous: boolean, light = false, microsoft = false) {
   const requestStartedAt = Date.now();
   if (!hostAllowed(req)) {
     json(res, 403, { error: "forbidden", error_description: "Host or Origin is not allowed." }, corsHeaders(req));
-    if (anonymous) {
+    if (anonymous && !microsoft) {
       logAnonymousMcpObservation({ light, reasonCode: "host_rejected", req, res, sessionFound: null });
     }
     return;
   }
   if (!requestOriginAllowed(req)) {
     json(res, 403, { error: "forbidden", error_description: "Host or Origin is not allowed." }, corsHeaders(req));
-    if (anonymous) {
+    if (anonymous && !microsoft) {
       logAnonymousMcpObservation({ light, reasonCode: "origin_rejected", req, res, sessionFound: null });
     }
     return;
@@ -285,7 +327,19 @@ async function handleMcp(req: IncomingMessage, res: ServerResponse, anonymous: b
   let token: string | undefined;
   let tokenHash: string;
   let authenticatedCallerHash: string | null = null;
-  if (anonymous) {
+  let microsoftIdentity: { clientId: string; tenantId: string } | null = null;
+  if (microsoft) {
+    const auth = await authenticateMicrosoft(req);
+    if (!auth.ok) {
+      if (auth.reason === "missing_role") {
+        return microsoftForbidden(res, req);
+      }
+      return microsoftUnauthorized(res, req, auth.reason);
+    }
+    microsoftIdentity = { clientId: auth.clientId, tenantId: auth.tenantId };
+    tokenHash = sessions.hashToken(`microsoft-entra:${auth.tenantId}:${auth.clientId}`);
+    authenticatedCallerHash = tokenHash;
+  } else if (anonymous) {
     tokenHash = sessions.hashToken(light
       ? anonymousSessionBinding(anonymousRequester!)
       : `anonymous:${clientIp ?? "unknown-requester"}`);
@@ -305,7 +359,7 @@ async function handleMcp(req: IncomingMessage, res: ServerResponse, anonymous: b
       parsedBody = await readJsonBody(req);
     } catch {
       json(res, 400, { error: "invalid_request", error_description: "MCP request body must be valid JSON." }, corsHeaders(req));
-      if (anonymous) {
+      if (anonymous && !microsoft) {
         logAnonymousMcpObservation({
           light,
           reasonCode: "malformed_json",
@@ -396,7 +450,7 @@ async function handleMcp(req: IncomingMessage, res: ServerResponse, anonymous: b
       await server.close().catch((error) => console.error("[mcp-http] failed initialize server close failed", { error }));
       await transport.close().catch((error) => console.error("[mcp-http] failed initialize transport close failed", { error }));
     }
-    if (anonymous) {
+    if (anonymous && !microsoft) {
       logAnonymousMcpObservation({
         light,
         parsedBody,
@@ -408,14 +462,19 @@ async function handleMcp(req: IncomingMessage, res: ServerResponse, anonymous: b
         sessionTokenHash: transport.sessionId ? tokenHash : null
       });
     } else {
-      console.log(JSON.stringify({ event: "mcp_http.initialize", anonymous, source: "mcp-http" }));
+      console.log(JSON.stringify({
+        event: microsoft ? "mcp_http.microsoft_auth" : "mcp_http.initialize",
+        ...(microsoftIdentity ?? {}),
+        outcome: microsoft ? "validated" : undefined,
+        source: "mcp-http"
+      }));
     }
     return;
   }
 
   if (!session) {
     json(res, sessionId ? 404 : 400, { error: "invalid_session", error_description: "MCP session is missing or expired." }, corsHeaders(req));
-    if (anonymous) {
+    if (anonymous && !microsoft) {
       logAnonymousMcpObservation({
         light,
         parsedBody,
@@ -430,7 +489,10 @@ async function handleMcp(req: IncomingMessage, res: ServerResponse, anonymous: b
   }
   // Hosted MCP clients may distribute one anonymous Light session across egress addresses.
   // The opaque session ID remains authoritative; other surfaces retain requester binding.
-  if (session.tokenHash !== tokenHash && !light) {
+  if (session.tokenHash !== tokenHash && (!light || microsoft)) {
+    if (microsoft) {
+      return microsoftUnauthorized(res, req, "session_token_mismatch");
+    }
     if (anonymous) {
       json(res, 401, { error: "session_requester_mismatch", error_description: "The MCP session belongs to a different anonymous requester." }, corsHeaders(req));
       logAnonymousMcpObservation({
@@ -449,10 +511,13 @@ async function handleMcp(req: IncomingMessage, res: ServerResponse, anonymous: b
   }
   const readCalls = mcpReadCallsFromJsonRpc(parsedBody);
   for (const readCall of readCalls) {
-    const caller = light && anonymousRequester?.network === "anthropic" && sessionId
+    const publicLight = light && !microsoft;
+    const caller = publicLight && anonymousRequester?.network === "anthropic" && sessionId
       ? sessions.hashToken(`anonymous-session:${sessionId}`)
+      : microsoft
+        ? sessions.hashToken(`microsoft-anonymous:${clientIp ?? "unknown-requester"}`)
       : authenticatedCallerHash ?? tokenHash;
-    const provider = light && anonymousRequester?.network === "anthropic" ? "anthropic" : undefined;
+    const provider = publicLight && anonymousRequester?.network === "anthropic" ? "anthropic" : undefined;
     const decision = readThrottle.claim(caller, readCall, Date.now(), provider);
     if (!decision.allowed) {
       const guidance = mcpReadRateLimitGuidance(readCall, decision, {
@@ -519,7 +584,7 @@ async function handleMcp(req: IncomingMessage, res: ServerResponse, anonymous: b
         scanId: readCall.target.startsWith("scan:") ? readCall.target.slice("scan:".length) : null,
         toolName: readCall.tool
       });
-      if (anonymous) {
+      if (anonymous && !microsoft) {
         logAnonymousMcpObservation({
           light,
           parsedBody,
@@ -543,7 +608,7 @@ async function handleMcp(req: IncomingMessage, res: ServerResponse, anonymous: b
   if (req.method === "DELETE" && sessionId) {
     sessions.delete(sessionId);
   }
-  if (anonymous) {
+  if (anonymous && !microsoft) {
     const transportFailure = transportReason(res);
     logAnonymousMcpObservation({
       light,
@@ -558,7 +623,13 @@ async function handleMcp(req: IncomingMessage, res: ServerResponse, anonymous: b
       sessionTokenHash: session.tokenHash
     });
   } else {
-    console.log(JSON.stringify({ anonymous, event: "mcp_http.request", method: req.method, source: "mcp-http" }));
+    console.log(JSON.stringify({
+      event: microsoft ? "mcp_http.microsoft_auth" : "mcp_http.request",
+      ...(microsoftIdentity ?? {}),
+      method: req.method,
+      outcome: microsoft ? "validated" : undefined,
+      source: "mcp-http"
+    }));
   }
 }
 
@@ -586,6 +657,7 @@ const server = createServer(async (req, res) => {
     return json(res, 200, {
       anonymousEndpoint: `${env.MCP_PUBLIC_URL}/mcp/anonymous`,
       lightEndpoint: `${env.MCP_PUBLIC_URL}/mcp/light`,
+      microsoftEndpoint: env.microsoftMcpEnabled ? `${env.MCP_PUBLIC_URL}/mcp/microsoft` : null,
       type: "certscore_mcp_http_health",
       status: "ok",
       version: CERTSCORE_MCP_VERSION,
@@ -596,9 +668,10 @@ const server = createServer(async (req, res) => {
   if (url.pathname === "/.well-known/oauth-protected-resource/mcp" && req.method === "GET") {
     return json(res, 200, publicMetadata(), corsHeaders(req));
   }
-  if ((url.pathname === "/mcp" || url.pathname === "/mcp/anonymous" || url.pathname === "/mcp/light") && (req.method === "GET" || req.method === "POST" || req.method === "DELETE")) {
+  if ((url.pathname === "/mcp" || url.pathname === "/mcp/anonymous" || url.pathname === "/mcp/light" || (env.microsoftMcpEnabled && url.pathname === "/mcp/microsoft")) && (req.method === "GET" || req.method === "POST" || req.method === "DELETE")) {
     const anonymous = url.pathname !== "/mcp";
-    return handleMcp(req, res, anonymous, url.pathname === "/mcp/light").catch((error) => {
+    const microsoft = url.pathname === "/mcp/microsoft";
+    return handleMcp(req, res, anonymous, url.pathname === "/mcp/light" || microsoft, microsoft).catch((error) => {
       console.error(JSON.stringify({
         event: "mcp_http.request_failed",
         timestamp: new Date().toISOString(),
@@ -610,14 +683,16 @@ const server = createServer(async (req, res) => {
       } else {
         res.end();
       }
-      if (anonymous) {
+      if (anonymous && !microsoft) {
         logAnonymousMcpObservation({ light: url.pathname === "/mcp/light", reasonCode: "other", req, res, sessionFound: null });
       }
     });
   }
-  if ((url.pathname === "/mcp/anonymous" || url.pathname === "/mcp/light")) {
+  if ((url.pathname === "/mcp/anonymous" || url.pathname === "/mcp/light" || url.pathname === "/mcp/microsoft")) {
     json(res, 404, { error: "not_found" }, corsHeaders(req));
-    logAnonymousMcpObservation({ light: url.pathname === "/mcp/light", reasonCode: "other", req, res, sessionFound: null });
+    if (url.pathname !== "/mcp/microsoft") {
+      logAnonymousMcpObservation({ light: url.pathname === "/mcp/light", reasonCode: "other", req, res, sessionFound: null });
+    }
     return;
   }
   return json(res, 404, { error: "not_found" }, corsHeaders(req));

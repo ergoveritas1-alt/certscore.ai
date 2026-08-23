@@ -1,0 +1,45 @@
+{
+  "$schema": "https://developer.microsoft.com/en-us/json-schemas/teams/vDevPreview/MicrosoftTeams.schema.json",
+  "manifestVersion": "devPreview",
+  "version": "1.0.0",
+  "id": "b971ee8e-f595-4a87-8b18-a401171f821d",
+  "developer": {
+    "name": "CertScore.ai",
+    "mpnId": "7150890",
+    "websiteUrl": "https://certscore.ai/contact",
+    "privacyUrl": "https://certscore.ai/privacy",
+    "termsOfUseUrl": "https://certscore.ai/terms"
+  },
+  "name": {
+    "short": "CertScore.ai Microsoft MCP",
+    "full": "CertScore.ai Website Privacy Scanner MCP for Microsoft"
+  },
+  "description": {
+    "short": "Evidence-backed privacy scans for public websites.",
+    "full": "Microsoft-authenticated CertScore.ai MCP Light scans public websites for observable privacy, consent, policy, tracker, cookie/storage, and HTTPS/TLS signals. Results support human and agentic review and are not legal advice, certification, or a compliance determination."
+  },
+  "agentConnectors": [
+    {
+      "id": "certscore-microsoft-mcp",
+      "displayName": "CertScore.ai Website Privacy Scanner MCP",
+      "description": "Scan or reuse a public-website assessment, check status, and retrieve its bounded evidence-backed report bundle.",
+      "toolSource": {
+        "remoteMcpServer": {
+          "mcpServerUrl": "https://mcp.certscore.ai/mcp/microsoft",
+          "mcpToolDescription": {
+            "file": "mcptools.json"
+          },
+          "authorization": {
+            "type": "AzureKeyVault",
+            "referenceId": "https://REPLACE-WITH-CERTSCORE-MCP-KEY-VAULT.vault.azure.net/"
+          }
+        }
+      }
+    }
+  ],
+  "icons": {
+    "outline": "outline.png",
+    "color": "color.png"
+  },
+  "accentColor": "#020617"
+}

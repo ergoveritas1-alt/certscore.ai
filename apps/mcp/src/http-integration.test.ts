@@ -6,6 +6,7 @@ import test from "node:test";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
 import { signCertScoreAccessToken } from "@certscore/mcp-auth";
+import { exportJWK, generateKeyPair, SignJWT, type JWTPayload } from "jose";
 
 async function unusedPort() {
   const server = createServer();
@@ -153,6 +154,28 @@ test("Streamable HTTP runtime initializes, lists tools, enforces auth, CORS, and
   const origin = `http://127.0.0.1:${port}`;
   const apiOrigin = `http://127.0.0.1:${apiPort}`;
   const secret = "mcp-http-integration-secret-long-enough";
+  const microsoftTenantId = "11111111-1111-4111-8111-111111111111";
+  const microsoftAudience = "22222222-2222-4222-8222-222222222222";
+  const microsoftClientId = "33333333-3333-4333-8333-333333333333";
+  const wrongMicrosoftClientId = "44444444-4444-4444-8444-444444444444";
+  const microsoftIssuer = `https://login.microsoftonline.com/${microsoftTenantId}/v2.0`;
+  const microsoftKid = "microsoft-http-integration-key";
+  const { privateKey: microsoftPrivateKey, publicKey: microsoftPublicKey } = await generateKeyPair("RS256");
+  const microsoftPublicJwk = await exportJWK(microsoftPublicKey);
+  const signMicrosoftToken = async (overrides: JWTPayload = {}) => new SignJWT({
+    azp: microsoftClientId,
+    roles: ["Mcp.Access"],
+    tid: microsoftTenantId,
+    ver: "2.0",
+    ...overrides
+  })
+    .setProtectedHeader({ alg: "RS256", kid: microsoftKid, typ: "JWT" })
+    .setAudience(typeof overrides.aud === "string" ? overrides.aud : microsoftAudience)
+    .setIssuer(typeof overrides.iss === "string" ? overrides.iss : microsoftIssuer)
+    .setIssuedAt()
+    .setNotBefore(Math.floor(Date.now() / 1000) - 5)
+    .setExpirationTime(typeof overrides.exp === "number" ? overrides.exp : Math.floor(Date.now() / 1000) + 300)
+    .sign(microsoftPrivateKey);
   let forwardedClientIp: string | undefined;
   let apiAuthorization: string | undefined;
   let anonymousSurface: string | undefined;
@@ -161,9 +184,16 @@ test("Streamable HTTP runtime initializes, lists tools, enforces auth, CORS, and
   let authenticatedInternalOperation: string | undefined;
   let authenticatedInternalProof: string | undefined;
   let authenticatedInternalTimestamp: string | undefined;
+  let scanCreateRequestCount = 0;
   const apiServer = createHttpServer((request, response) => {
     const requestUrl = new URL(request.url ?? "/", apiOrigin);
+    if (request.method === "GET" && request.url === "/microsoft-jwks") {
+      response.writeHead(200, { "content-type": "application/json" });
+      response.end(JSON.stringify({ keys: [{ ...microsoftPublicJwk, alg: "RS256", kid: microsoftKid, use: "sig" }] }));
+      return;
+    }
     if (request.method === "POST" && request.url === "/api/v2/scans") {
+      scanCreateRequestCount += 1;
       forwardedClientIp = request.headers["x-forwarded-for"]?.toString();
       apiAuthorization = request.headers.authorization;
       anonymousSurface = request.headers["x-certscore-anonymous-surface"]?.toString();
@@ -299,7 +329,14 @@ test("Streamable HTTP runtime initializes, lists tools, enforces auth, CORS, and
       CERTSCORE_OAUTH_JWT_SECRET: secret,
       MCP_PUBLIC_URL: origin,
       OAUTH_ISSUER: "https://certscore.ai",
-      CORS_ALLOWED_ORIGINS: "https://allowed.example"
+      CORS_ALLOWED_ORIGINS: "https://allowed.example",
+      NODE_ENV: "test",
+      CERTSCORE_MICROSOFT_MCP_ENABLED: "1",
+      CERTSCORE_MICROSOFT_TENANT_ID: microsoftTenantId,
+      CERTSCORE_MICROSOFT_RESOURCE_AUDIENCE: microsoftAudience,
+      CERTSCORE_MICROSOFT_ALLOWED_CLIENT_ID: microsoftClientId,
+      CERTSCORE_MICROSOFT_REQUIRED_ROLE: "Mcp.Access",
+      CERTSCORE_MICROSOFT_JWKS_URL: `${apiOrigin}/microsoft-jwks`
     },
     stdio: ["ignore", "pipe", "pipe"]
   });
@@ -319,6 +356,7 @@ test("Streamable HTTP runtime initializes, lists tools, enforces auth, CORS, and
     const health = await fetch(`${origin}/healthz`).then((response) => response.json());
     assert.equal(health.anonymousEndpoint, `${origin}/mcp/anonymous`);
     assert.equal(health.lightEndpoint, `${origin}/mcp/light`);
+    assert.equal(health.microsoftEndpoint, `${origin}/mcp/microsoft`);
     const rootMetadata = await fetch(`${origin}/.well-known/oauth-protected-resource`);
     assert.equal(rootMetadata.status, 404);
     const pathMetadata = await fetch(`${origin}/.well-known/oauth-protected-resource/mcp`).then((response) => response.json());
@@ -327,6 +365,59 @@ test("Streamable HTTP runtime initializes, lists tools, enforces auth, CORS, and
     const lightMetadata = await fetch(`${origin}/.well-known/oauth-protected-resource/mcp/light`);
     assert.equal(lightMetadata.status, 404);
     assert.equal(lightMetadata.headers.get("www-authenticate"), null);
+
+    const microsoftRejectedBody = JSON.stringify({
+      jsonrpc: "2.0",
+      id: 9000,
+      method: "tools/call",
+      params: { name: "certscore_scan_site", arguments: { url: "https://example.com", waitForCompletion: false } }
+    });
+    const rejectedMicrosoftRequests: Array<[string, Record<string, string>, number]> = [
+      ["missing token", {}, 401],
+      ["invalid scheme", { authorization: "Basic not-a-bearer" }, 401],
+      ["malformed JWT", { authorization: "Bearer sensitive-malformed-jwt-marker" }, 401],
+      ["wrong issuer", { authorization: `Bearer ${await signMicrosoftToken({ iss: `https://login.microsoftonline.com/${wrongMicrosoftClientId}/v2.0` })}` }, 401],
+      ["wrong tenant", { authorization: `Bearer ${await signMicrosoftToken({ tid: wrongMicrosoftClientId })}` }, 401],
+      ["wrong audience", { authorization: `Bearer ${await signMicrosoftToken({ aud: wrongMicrosoftClientId })}` }, 401],
+      ["expired", { authorization: `Bearer ${await signMicrosoftToken({ exp: Math.floor(Date.now() / 1000) - 60 })}` }, 401],
+      ["missing role", { authorization: `Bearer ${await signMicrosoftToken({ roles: [] })}` }, 403],
+      ["wrong client", { authorization: `Bearer ${await signMicrosoftToken({ azp: wrongMicrosoftClientId })}` }, 401]
+    ];
+    for (const [name, headers, expectedStatus] of rejectedMicrosoftRequests) {
+      const response = await fetch(`${origin}/mcp/microsoft`, {
+        method: "POST",
+        headers: { ...headers, "content-type": "application/json", "x-forwarded-for": "198.51.100.80" },
+        body: microsoftRejectedBody
+      });
+      assert.equal(response.status, expectedStatus, name);
+      await response.text();
+    }
+    assert.equal(scanCreateRequestCount, 0, "rejected Microsoft requests must not reach scan creation or consume scan quota");
+
+    const microsoftToken = await signMicrosoftToken();
+    const microsoftTransport = new StreamableHTTPClientTransport(new URL(`${origin}/mcp/microsoft`), {
+      requestInit: { headers: { authorization: `Bearer ${microsoftToken}`, "x-forwarded-for": "198.51.100.81" } }
+    });
+    const microsoftClient = new Client({ name: "certscore-microsoft-http-integration", version: "0.1.0" });
+    await microsoftClient.connect(microsoftTransport);
+    const microsoftTools = await microsoftClient.listTools();
+    assert.equal(microsoftTools.tools.length, 3);
+    assert.deepEqual(microsoftTools.tools.map((tool) => tool.name).sort(), ["certscore_get_scan_bundle", "certscore_get_scan_status", "certscore_scan_site"]);
+    const microsoftCreated = await microsoftClient.callTool({
+      name: "certscore_scan_site",
+      arguments: { url: "https://example.com", waitForCompletion: false }
+    });
+    assert.equal(microsoftCreated.isError, undefined);
+    assert.match(JSON.stringify(microsoftCreated), /anonymous-mcp-job/);
+    assert.equal(scanCreateRequestCount, 1);
+    assert.equal(anonymousSurface, "mcp_light");
+    assert.equal(anonymousRequesterIp, "198.51.100.81");
+    assert.equal(apiAuthorization, undefined, "the Entra bearer token must not be forwarded as a CertScore API credential");
+    await microsoftClient.close();
+
+    assert.equal(diagnostics.includes(microsoftToken), false);
+    assert.equal(diagnostics.includes("sensitive-malformed-jwt-marker"), false);
+    assert.equal(diagnostics.includes(wrongMicrosoftClientId), false);
 
     const unauthenticated = await fetch(`${origin}/mcp`, {
       method: "POST",
@@ -739,6 +830,12 @@ test("Streamable HTTP runtime initializes, lists tools, enforces auth, CORS, and
     const lightClient = new Client({ name: "certscore-light-http-integration", version: "0.1.0" });
     await lightClient.connect(lightTransport);
     const lightTools = await lightClient.listTools();
+    const parityProjection = (tool: (typeof microsoftTools.tools)[number]) => ({
+      name: tool.name,
+      description: tool.description,
+      inputSchema: tool.inputSchema
+    });
+    assert.deepEqual(microsoftTools.tools.map(parityProjection), lightTools.tools.map(parityProjection));
     assert.deepEqual(lightTools.tools.map((tool) => tool.name).sort(), ["certscore_get_scan_bundle", "certscore_get_scan_status", "certscore_scan_site"]);
     const lightScanTool = lightTools.tools.find((tool) => tool.name === "certscore_scan_site");
     assert.match(lightScanTool?.description ?? "", /scan a public website for observable privacy and consent signals/);

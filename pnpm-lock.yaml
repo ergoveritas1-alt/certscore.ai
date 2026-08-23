@@ -52,6 +52,9 @@ importers:
       '@website-signal-risk-scanner/shared':
         specifier: workspace:*
         version: link:../../packages/shared
+      jose:
+        specifier: ^6.2.2
+        version: 6.2.2
       zod:
         specifier: ^3.25.76
         version: 3.25.76

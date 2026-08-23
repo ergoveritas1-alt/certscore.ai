@@ -1134,6 +1134,11 @@ resource "aws_ecs_task_definition" "mcp" {
         { name = "BUILD_RUNTIME_TARGET", value = var.build_runtime_target },
         { name = "OAUTH_ISSUER", value = "https://certscore.ai" },
         { name = "MCP_PUBLIC_URL", value = "https://mcp.certscore.ai" },
+        { name = "CERTSCORE_MICROSOFT_MCP_ENABLED", value = var.mcp_microsoft_enabled ? "1" : "0" },
+        { name = "CERTSCORE_MICROSOFT_TENANT_ID", value = var.mcp_microsoft_tenant_id },
+        { name = "CERTSCORE_MICROSOFT_RESOURCE_AUDIENCE", value = var.mcp_microsoft_resource_audience },
+        { name = "CERTSCORE_MICROSOFT_ALLOWED_CLIENT_ID", value = var.mcp_microsoft_allowed_client_id },
+        { name = "CERTSCORE_MICROSOFT_REQUIRED_ROLE", value = var.mcp_microsoft_required_role },
         { name = "NODE_ENV", value = "production" },
         { name = "SESSION_MAX_COUNT", value = "500" }
       ]

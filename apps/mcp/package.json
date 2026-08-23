@@ -21,6 +21,7 @@
     "@website-signal-risk-scanner/shared": "workspace:*",
     "@modelcontextprotocol/sdk": "^1.30.0",
     "@certscore/mcp": "workspace:*",
+    "jose": "^6.2.2",
     "zod": "^3.25.76"
   },
   "devDependencies": {

@@ -142,6 +142,36 @@ variable "mcp_domain_name" {
   default     = "mcp.certscore.ai"
 }
 
+variable "mcp_microsoft_enabled" {
+  description = "Enable the tenant-bound Microsoft Entra authenticated /mcp/microsoft sibling endpoint."
+  type        = bool
+  default     = false
+}
+
+variable "mcp_microsoft_tenant_id" {
+  description = "Microsoft Entra tenant GUID trusted by /mcp/microsoft. Not a secret."
+  type        = string
+  default     = ""
+}
+
+variable "mcp_microsoft_resource_audience" {
+  description = "Resource/API app client-ID GUID expected in v2 Entra access-token aud. Not a secret."
+  type        = string
+  default     = ""
+}
+
+variable "mcp_microsoft_allowed_client_id" {
+  description = "Confidential client app GUID expected in the Entra access-token azp claim. Not a secret."
+  type        = string
+  default     = ""
+}
+
+variable "mcp_microsoft_required_role" {
+  description = "Application role required in Microsoft Entra access tokens for /mcp/microsoft."
+  type        = string
+  default     = "Mcp.Access"
+}
+
 variable "mcp_certificate_arn" {
   description = "ACM certificate ARN in aws_region covering mcp_domain_name."
   type        = string
