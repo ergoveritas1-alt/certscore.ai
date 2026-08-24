@@ -1,13 +1,12 @@
 "use client";
 
-import React, { useActionState, useEffect, useMemo, useRef, useState } from "react";
+import React, { useActionState, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { sendReportEmailAction, type SendReportEmailActionState } from "../../server/scans/email-report";
 
 type ShareReportActionsProps = {
   domainLabel: string;
   scanId: string;
-  showMonitorSite?: boolean;
   visualEvidenceHref?: string | null;
   visualEvidenceOnly?: boolean;
   visualEvidenceWithheldReason?: "sensitive_visual_content" | "safety_check_unavailable" | null;
@@ -109,15 +108,6 @@ function EmailIcon() {
     <svg aria-hidden="true" className="h-4 w-4" viewBox="0 0 24 24">
       <rect x="4" y="6" width="16" height="12" rx="2.4" fill="none" stroke="currentColor" strokeWidth="1.8" />
       <path d="m5.5 8 6.5 5 6.5-5" fill="none" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.8" />
-    </svg>
-  );
-}
-
-function MonitorIcon() {
-  return (
-    <svg aria-hidden="true" className="h-4 w-4" viewBox="0 0 24 24">
-      <path d="M6 18h12M8 18v-5a4 4 0 0 1 8 0v5M10 20.2a2.4 2.4 0 0 0 4 0" fill="none" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.8" />
-      <path d="M6.5 10.5a6 6 0 0 1 11 0M4.5 8a9 9 0 0 1 15 0" fill="none" stroke="currentColor" strokeLinecap="round" strokeWidth="1.5" opacity="0.65" />
     </svg>
   );
 }
@@ -240,7 +230,6 @@ function ImageLoadingGlyph() {
 export function ShareReportActions({
   domainLabel,
   scanId,
-  showMonitorSite = false,
   visualEvidenceHref = null,
   visualEvidenceOnly = false,
   visualEvidenceWithheldReason = null
@@ -263,14 +252,6 @@ export function ShareReportActions({
     sendReportEmailAction,
     initialSendReportEmailActionState
   );
-  const monitorHref = useMemo(() => {
-    const params = new URLSearchParams({ website: domainLabel });
-    if (currentUrl) {
-      params.set("reportUrl", currentUrl);
-      params.set("source", currentUrl);
-    }
-    return `/monitor-site?${params.toString()}`;
-  }, [currentUrl, domainLabel]);
   useEffect(() => {
     setCurrentUrl(window.location.href);
   }, []);
@@ -410,19 +391,6 @@ export function ShareReportActions({
               <EmailIcon />
               <IconTooltip label={emailState.success ? "Sent" : "Email report"} />
             </button>
-            {showMonitorSite ? (
-              <Link
-                aria-label="Monitor this site"
-                className={iconActionClassName()}
-                data-analytics-cta-type="monitor"
-                data-analytics-event="report_cta_clicked"
-                href={monitorHref}
-                title="Monitor this site"
-              >
-                <MonitorIcon />
-                <IconTooltip label="Monitor this site" />
-              </Link>
-            ) : null}
           </>
         ) : null}
         {visualEvidenceHref ? (
@@ -483,7 +451,7 @@ export function ShareReportActions({
             <div className="space-y-1">
               <h2 className="text-base font-semibold text-slate-950">Email this report</h2>
               <p className="text-sm leading-6 text-slate-600">
-                Send a link to this CertScore.ai report for {domainLabel}.
+                Send the executive summary with links to the online and PDF reports for {domainLabel}.
               </p>
             </div>
             <form action={emailAction} className="mt-4 space-y-3">

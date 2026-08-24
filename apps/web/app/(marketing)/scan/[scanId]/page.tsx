@@ -10,6 +10,7 @@ import {
   deriveVisualAccessLimitationNotice
 } from "../../../../components/scans/shared-scan-detail-view";
 import { AgentSummaryActions, ShareReportActions } from "../../../../components/scans/share-report-actions";
+import { ReportDownloadActions } from "../../../../components/scans/report-download-actions";
 import { ScanStatusAutoRefresh } from "../../../../components/scans/scan-status-auto-refresh";
 import { PendingScanDetailView } from "../../../../components/scans/pending-scan-detail-view";
 import { ScanProgressReportVisible } from "../../../../components/scans/scan-progress-report-visible";
@@ -215,12 +216,15 @@ export default async function PublicScanDetailPage({ params, searchParams }: Pub
           headerActions={
             displayScanRecord.scan.status === "completed" ? (
               <div className="flex w-full flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
-                <ShareReportActions
-                  domainLabel={publicScanDomainLabel}
-                  scanId={displayScanRecord.scan.id}
-                  visualEvidenceHref={visualEvidenceHref}
-                  visualEvidenceWithheldReason={homepageScreenshotState?.status === "withheld" ? homepageScreenshotState.reason : null}
-                />
+                <div className="flex flex-wrap items-center gap-2">
+                  <ShareReportActions
+                    domainLabel={publicScanDomainLabel}
+                    scanId={displayScanRecord.scan.id}
+                    visualEvidenceHref={visualEvidenceHref}
+                    visualEvidenceWithheldReason={homepageScreenshotState?.status === "withheld" ? homepageScreenshotState.reason : null}
+                  />
+                  <ReportDownloadActions scanId={displayScanRecord.scan.id} />
+                </div>
                 <div className="w-full lg:ml-auto lg:max-w-[calc(16rem+20ch)]">
                   <DomainScanForm
                     buttonLabel="Scan"

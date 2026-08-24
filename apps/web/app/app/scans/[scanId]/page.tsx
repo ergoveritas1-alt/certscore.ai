@@ -11,6 +11,7 @@ import { ScanProgressReportVisible } from "../../../../components/scans/scan-pro
 import { ScanReportLoadingCard } from "../../../../components/scans/scan-report-loading-card";
 import { ScanReportRescanTransition } from "../../../../components/scans/scan-report-rescan-transition";
 import { ShareReportActions } from "../../../../components/scans/share-report-actions";
+import { ReportDownloadActions } from "../../../../components/scans/report-download-actions";
 import {
   hasPendingBrowserExtensionNormalization,
   hasPendingPostCompletionFindingWork,
@@ -236,7 +237,6 @@ async function ScanDetailReportContent({
   });
 
   const scanDomainLabel = displayScanRecord.scan.domainHostname?.trim() || "Scanned website";
-  const canUseAdvancedReportActions = isPlatformAdmin || membership.role === "admin" || membership.role === "advanced";
   const allowRestrictedScanOptions = canUseRestrictedScanOptions({
     membershipRole: membership.role,
     userEmail: user.email
@@ -272,13 +272,15 @@ async function ScanDetailReportContent({
         headerActions={
           displayScanRecord.scan.status === "completed" ? (
             <div className="flex w-full flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
-              <ShareReportActions
-                domainLabel={scanDomainLabel}
-                scanId={displayScanRecord.scan.id}
-                showMonitorSite={canUseAdvancedReportActions}
-                visualEvidenceHref={visualEvidenceHref}
-                visualEvidenceWithheldReason={homepageScreenshotState?.status === "withheld" ? homepageScreenshotState.reason : null}
-              />
+              <div className="flex flex-wrap items-center gap-2">
+                <ShareReportActions
+                  domainLabel={scanDomainLabel}
+                  scanId={displayScanRecord.scan.id}
+                  visualEvidenceHref={visualEvidenceHref}
+                  visualEvidenceWithheldReason={homepageScreenshotState?.status === "withheld" ? homepageScreenshotState.reason : null}
+                />
+                <ReportDownloadActions scanId={displayScanRecord.scan.id} />
+              </div>
               <div className="w-full lg:ml-auto lg:max-w-[calc(16rem+20ch)]">
                 <DomainScanForm
                   allowLocalExtensionScan

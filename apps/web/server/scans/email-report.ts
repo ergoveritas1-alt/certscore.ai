@@ -1,6 +1,7 @@
 "use server";
 
 import { createGmailTransport, getGmailConfig } from "../email/gmail";
+import { buildReportEmailText } from "./report-email-content";
 
 export type SendReportEmailActionState = {
   error: string | null;
@@ -52,21 +53,45 @@ export async function sendReportEmailAction(
   }
 
   const reportUrl = new URL(`/scan/${scanId}`, gmailConfig.appUrl).toString();
+  const pdfUrl = new URL(`/api/scans/${scanId}/report-export?format=pdf`, gmailConfig.appUrl).toString();
   const emailDomainLabel = formatEmailPlainTextDomain(domainLabel);
   const transporter = createGmailTransport(gmailConfig);
+  let executiveSummary: string[] = [];
+  let downloadablePdfUrl: string | null = null;
+  try {
+    const [
+      { buildCanonicalReportExport },
+      { loadPersistedScanReportProjection },
+      { getPublicScanStatusProjection },
+    ] = await Promise.all([
+      import("./report-export"),
+      import("./scan-report-projection"),
+      import("./scan-status-projection"),
+    ]);
+    const status = await getPublicScanStatusProjection(scanId);
+    const scanRecord = status?.reportReady
+      ? await loadPersistedScanReportProjection({ generation: status.reportGeneration, scanId })
+      : null;
+    const report = scanRecord ? buildCanonicalReportExport(scanRecord) : null;
+    if (report) {
+      executiveSummary = report.executiveSummary.sentences;
+      downloadablePdfUrl = pdfUrl;
+    }
+  } catch {
+    // Preserve the existing report-link email when the richer projection is temporarily unavailable.
+  }
 
   try {
     await transporter.sendMail({
       from: `"CertScore.ai Reports" <${gmailConfig.fromEmail}>`,
       to: recipientEmail,
       subject: `Your CertScore.ai report for ${domainLabel}`,
-      text: [
-        `Here is the CertScore.ai report for ${emailDomainLabel}:`,
-        "",
+      text: buildReportEmailText({
+        domainLabel: emailDomainLabel,
+        executiveSummary,
+        pdfUrl: downloadablePdfUrl,
         reportUrl,
-        "",
-        "Automated public-web observations. Review the evidence before relying on findings."
-      ].join("\n")
+      })
     });
   } catch {
     return {

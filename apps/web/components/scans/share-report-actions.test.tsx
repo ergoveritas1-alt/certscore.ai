@@ -14,19 +14,17 @@ import {
   VISUAL_EVIDENCE_RETRY_DELAYS_MS
 } from "./share-report-actions";
 
-test("monitor action is hidden by default and shown only when access is granted", () => {
-  const hidden = renderToStaticMarkup(createElement(ShareReportActions, {
+test("scan-report share actions do not expose the retired monitor action", async () => {
+  const markup = renderToStaticMarkup(createElement(ShareReportActions, {
     domainLabel: "example.com",
     scanId: "scan-1"
   }));
-  const visible = renderToStaticMarkup(createElement(ShareReportActions, {
-    domainLabel: "example.com",
-    scanId: "scan-1",
-    showMonitorSite: true
-  }));
+  const source = await import("node:fs/promises").then(({ readFile }) =>
+    readFile("apps/web/components/scans/share-report-actions.tsx", "utf8")
+  );
 
-  assert.doesNotMatch(hidden, /Monitor this site/);
-  assert.match(visible, /Monitor this site/);
+  assert.doesNotMatch(markup, /Monitor this site/);
+  assert.doesNotMatch(source, /showMonitorSite|MonitorIcon|Monitor this site/);
 });
 
 test("copy-link tooltip anchors from the left edge so its label is not clipped", async () => {

@@ -15,6 +15,7 @@ import {
   type SignalEnrichmentWorkflowStageStatus
 } from "@website-signal-risk-scanner/shared";
 import { CollapsibleSectionCard } from "./collapsible-section-card";
+import { ConsentControlEvidencePanel } from "./consent-control-evidence-panel";
 import { CopyJsonButton } from "./copy-json-button";
 import { ScanCompletedEvent } from "../analytics/data-layer-events";
 import { DiagnosticsPanel } from "./diagnostics-panel";
@@ -1396,6 +1397,13 @@ function getHybridRuntimeSummaryRows(runtimeArtifacts: Record<string, unknown> |
   const vendorSummary = getRecord(hybrid.vendorSummary);
   const rawThirdPartyDomains = getRecordStringArray(vendorSummary, "rawThirdPartyDomains")
     .filter((host) => !isCmpOrFunctionalVendorDomain(host));
+  const retainedStorageSnapshotCount = getFiniteNumber(storageSummary?.retainedStorageSnapshotCount);
+  const storageObservationStatus =
+    storageSummary?.localStorageObserved === true || storageSummary?.sessionStorageObserved === true
+      ? "Observed"
+      : retainedStorageSnapshotCount !== null && retainedStorageSnapshotCount > 0
+        ? "Not observed"
+        : "Unknown / review";
 
   return [
     { label: "Requests observed", value: networkSummary?.totalRequestCount },
@@ -1406,11 +1414,8 @@ function getHybridRuntimeSummaryRows(runtimeArtifacts: Record<string, unknown> |
     { label: "Cookie wall detected", value: consentSummary?.cookieWallDetected },
     { label: "Cookies seen", value: storageSummary?.cookiesSeenCount },
     {
-      label: "Storage writes",
-      value:
-        storageSummary?.localStorageWriteDetected === true || storageSummary?.sessionStorageWriteDetected === true
-          ? "Observed"
-          : "Not observed"
+      label: "Pre-interaction storage keys",
+      value: storageObservationStatus
     },
     { label: "Fingerprint tier", value: fingerprintSummary?.tier },
     { label: "Fingerprint reasons", value: fingerprintSummary?.reasons },
@@ -6822,7 +6827,6 @@ function buildResultHeroHighlights(input: {
   const highlights: string[] = [];
   const hybrid = getHybridRuntimeEvidence(input.runtimeArtifacts);
   const consentSummary = getRecord(hybrid?.consentSummary);
-  const consentVisual = getRecord(hybrid?.consentVisual);
   const uiSummary = getRecord(hybrid?.uiSummary);
   const mediaSummary = getRecord(hybrid?.mediaSummary);
   const fingerprintSummary = getRecord(hybrid?.fingerprintSummary);
@@ -6833,9 +6837,6 @@ function buildResultHeroHighlights(input: {
   }
   if (consentSummary?.cookieWallDetected === true || uiSummary?.forcedActionRequired === true) {
     highlights.push("Consent wall or forced interaction");
-  }
-  if (consentSummary?.rejectPresent === false || consentVisual?.rejectHidden === true) {
-    highlights.push("Reject path weakened");
   }
   if ((getFiniteNumber(fingerprintSummary?.tier) ?? 0) >= 2) {
     highlights.push(`Fingerprinting tier ${fingerprintSummary?.tier}`);
@@ -7958,10 +7959,20 @@ export async function SharedScanDetailView({
             />
           ) : null}
           {isNoGoReport ? null : (
-            <RuntimeInventoryTable
-              presentationState={scanReportRenderProjection.runtimeInventoryPresentation}
-              projection={scanReportRenderProjection.runtimeInventory}
-            />
+            <div className="space-y-5">
+              <RuntimeInventoryTable
+                presentationState={scanReportRenderProjection.runtimeInventoryPresentation}
+                projection={scanReportRenderProjection.runtimeInventory}
+              />
+              <ConsentControlEvidencePanel
+                assessment={
+                  runtimeArtifacts?.consentControlAssessment ??
+                  runtimeArtifacts?.consent_control_assessment ??
+                  hybridRuntimeEvidence?.consentControlAssessment ??
+                  hybridRuntimeEvidence?.consent_control_assessment
+                }
+              />
+            </div>
           )}
           {showRegulatoryChecklistSection ? (
             <RegulatoryChecklistSection
