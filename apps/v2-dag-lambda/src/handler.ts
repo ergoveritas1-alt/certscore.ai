@@ -24,6 +24,7 @@ import {
   type V2DagLambdaResultPurpose,
 } from "@certscore/contracts";
 import {
+  applyGoverningPolicySelection,
   chromiumContextOptions,
   chromiumLaunchArgs,
   chromiumLaunchOptions,
@@ -2140,9 +2141,11 @@ export function mergeLocalV2DagLambdaShardBundles(input: {
     consentActionCandidates: dedupeByField(bundles.flatMap((bundle) => bundle.consentActionCandidates), "candidateId"),
     consentActionAttempts: dedupeByField(bundles.flatMap((bundle) => bundle.consentActionAttempts), "attemptId"),
     consentFlowComparisons: [] as CanonicalEvidenceBundle["consentFlowComparisons"],
-    policySurfaceObservations: bundles.reduce(
-      (observations, bundle) => mergePolicySurfaceObservations(observations, bundle.policySurfaceObservations),
-      [] as CanonicalEvidenceBundle["policySurfaceObservations"],
+    policySurfaceObservations: applyGoverningPolicySelection(
+      bundles.reduce(
+        (observations, bundle) => mergePolicySurfaceObservations(observations, bundle.policySurfaceObservations),
+        [] as CanonicalEvidenceBundle["policySurfaceObservations"],
+      ),
     ),
     cmpRuntimeObservations: dedupeByField(bundles.flatMap((bundle) => bundle.cmpRuntimeObservations), "observationId"),
     screenshots: selectDiagnosticScreenshot(bundles.flatMap((bundle) => bundle.screenshots)),

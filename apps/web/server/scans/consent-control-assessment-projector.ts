@@ -402,8 +402,13 @@ export function deriveMaterializedConsentControlAssessment(input: {
           layer === "first_layer" &&
           control.visible === true &&
           actionType === "save_preferences" &&
-          observation.defaultToggleStatesObserved === true &&
-          observation.nonEssentialDefaultsOff === true &&
+          (
+            (
+              observation.defaultToggleStatesObserved === true &&
+              observation.nonEssentialDefaultsOff === true
+            ) ||
+            observation.necessaryPreferenceSelectionObserved === true
+          ) &&
           (observation.precheckedOptionalPurposeCount ?? 0) === 0;
         if (!savesAllOptionalDefaultsOff) {
           return [candidate];
@@ -416,7 +421,9 @@ export function deriveMaterializedConsentControlAssessment(input: {
             semanticRole: "necessary_only",
             classifierReasonCodes: unique([
               ...(candidate.classifierReasonCodes ?? []),
-              "save_preferences_with_all_optional_defaults_off",
+              observation.defaultToggleStatesObserved === true
+                ? "save_preferences_with_all_optional_defaults_off"
+                : "save_preferences_with_necessary_selection_observed",
             ]),
           },
         ];
@@ -512,8 +519,33 @@ export function deriveMaterializedConsentControlAssessment(input: {
     inspection.inspectionCompleted === true &&
     inspection.coverageStatus === "complete"
   );
+  const adaptiveInventoryStates = (input.bundle.consentUiObservations ?? []).map((observation) => {
+    const exitedPartial = (observation.inventoryDiagnostics?.timingMarkers ?? []).some((marker) =>
+      marker.includes(":calibrated_stable_partial_exit") ||
+      marker.includes(":calibrated_audit_complete_exit")
+    );
+    const visibleControls = (observation.controls ?? []).filter((control) => control.visible !== false);
+    const acceptObserved = observation.acceptControlObserved || visibleControls.some((control) =>
+      control.semanticRole === "explicit_accept" || control.actionType === "accept_all"
+    );
+    const rejectObserved = observation.rejectControlObserved || visibleControls.some((control) =>
+      control.semanticRole === "reject" || control.semanticRole === "necessary_only" || control.actionType === "reject_all"
+    );
+    const optionsObserved = observation.managePreferencesControlObserved || visibleControls.some((control) =>
+      control.semanticRole === "preferences" ||
+      control.actionType === "manage_preferences" ||
+      control.actionType === "save_preferences"
+    );
+    return {
+      complete: acceptObserved && rejectObserved && optionsObserved,
+      exitedPartial,
+    };
+  });
+  const unresolvedAdaptivePartialInventory =
+    adaptiveInventoryStates.some((state) => state.exitedPartial) &&
+    !adaptiveInventoryStates.some((state) => state.complete);
   const typedFirstLayerInventoryComplete =
-    hasTypedFirstLayerInventory && coordinatorInspectionComplete;
+    hasTypedFirstLayerInventory && coordinatorInspectionComplete && !unresolvedAdaptivePartialInventory;
   const explicitlyCompletedTypedInventoryChannels = (typedFirstLayerInventoryObservation?.captureDiagnostics?.completedChannels ?? [])
     .filter((channel): channel is "dom_inventory" | "accessibility_tree" =>
       channel === "dom_inventory" || channel === "accessibility_tree"
@@ -529,6 +561,7 @@ export function deriveMaterializedConsentControlAssessment(input: {
     : REQUIRED_CHANNELS;
   const coverageComplete =
     !input.noGo &&
+    !unresolvedAdaptivePartialInventory &&
     documentIdentityStatus === "matched" &&
     (
       typedFirstLayerInventoryComplete ||
@@ -540,6 +573,7 @@ export function deriveMaterializedConsentControlAssessment(input: {
       )
     );
   const verifiedInspectionComplete =
+    !unresolvedAdaptivePartialInventory &&
     inspection?.inspectionCompleted === true &&
     inspection.coverageStatus === "complete";
   const surfaceStatus =

@@ -1083,6 +1083,63 @@ test("resolves first-party Borlabs Cookie runtime markers as consent management"
   assert.ok(borlabs.matchSources.some((source) => source.matchedField === "dom_selector"));
 });
 
+test("resolves DSGVO All in One and tarteaucitron as consent management", () => {
+  const observations = resolveVendorObservations([
+    {
+      type: "script",
+      hostname: "example.test",
+      url: "https://example.test/wp-content/plugins/dsgvo-all-in-one/assets/js/dsgvoaio.js",
+    },
+    { type: "cmp_runtime", globalName: "tarteaucitron", matchSource: "cmp_runtime_probe" },
+    { type: "cmp_runtime", domSelector: "#tarteaucitronRoot", matchSource: "cmp_runtime_probe" },
+  ]);
+
+  assertResolved(
+    observations,
+    "DSGVO All in One",
+    "DSGVO All in One / tarteaucitron consent manager",
+    "consent_management",
+  );
+});
+
+test("resolves Sourcebuster script and sbjs cookies as first-party attribution evidence", () => {
+  const observations = resolveVendorObservations([
+    {
+      type: "script",
+      hostname: "shop.example.test",
+      url: "https://shop.example.test/wp-content/plugins/woocommerce/assets/js/sourcebuster/sourcebuster.min.js",
+    },
+    { type: "cookie", hostname: "shop.example.test", cookieName: "sbjs_current" },
+    { type: "cookie", hostname: "shop.example.test", cookieName: "sbjs_session" },
+  ]);
+
+  assertResolved(observations, "Sourcebuster.js", "Sourcebuster first-party attribution", "analytics");
+  const sourcebuster = observations.find((observation) => observation.vendor === "Sourcebuster.js");
+  assert.ok(sourcebuster?.regulatoryRelevance.includes("first_party_attribution"));
+  assert.deepEqual(sourcebuster?.matchedCookieNames.sort(), ["sbjs_current", "sbjs_session"]);
+});
+
+test("resolves self-hosted Matomo runtime and canonical cookies without host-specific inference", () => {
+  const observations = resolveVendorObservations([
+    {
+      type: "script",
+      hostname: "analytics.unified-web.digital.go.jp",
+      url: "https://analytics.unified-web.digital.go.jp/matomo.js",
+    },
+    { type: "cookie", hostname: "www.e-gov.go.jp", cookieName: "_pk_id.4.ac51" },
+    { type: "cookie", hostname: "www.e-gov.go.jp", cookieName: "_pk_ses.4.ac51" },
+  ]);
+
+  assertResolved(observations, "Matomo", "Matomo Analytics", "analytics");
+  const matomo = observations.find((observation) => observation.vendor === "Matomo");
+  assert.deepEqual(matomo?.matchedCookieNames.sort(), ["_pk_id.4.ac51", "_pk_ses.4.ac51"]);
+  assert.equal(resolveVendorObservations([{
+    type: "request",
+    hostname: "example.test",
+    url: "https://example.test/assets/matomo-guide.html",
+  }]).some((observation) => observation.vendor === "Matomo"), false);
+});
+
 test("resolves Drupal EU Cookie Compliance runtime markers as non-TCF consent management", () => {
   const observations = resolveVendorObservations([
     {

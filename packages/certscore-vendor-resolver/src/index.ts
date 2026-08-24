@@ -17,7 +17,7 @@ export {
   type TransferMechanism,
 } from "./cookie-knowledge-base";
 
-export const CANONICAL_VENDOR_RESOLVER_VERSION = "certscore-vendor-resolver-2026-08-09-wave22-cookie-knowledge-expansion";
+export const CANONICAL_VENDOR_RESOLVER_VERSION = "certscore-vendor-resolver-2026-08-24-sourcebuster-dsgvoaio-matomo";
 
 export type VendorResolverEvidenceType =
   | "request"
@@ -163,6 +163,26 @@ interface VendorRule {
 
 const rules: VendorRule[] = [
   {
+    entity: "DSGVO All in One for WP",
+    vendor: "DSGVO All in One",
+    product: "DSGVO All in One / tarteaucitron consent manager",
+    purpose: "consent_management",
+    regulatoryRelevance: ["consent_management", "preference_tooling"],
+    confidence: 0.98,
+    hostPatterns: [/(?:^|\.)tarteaucitron\.io$/i],
+    urlPatterns: [/dsgvo-all-in-one/i, /dsgvoaio/i, /tarteaucitron(?:\.min)?\.js(?:[?#]|$)/i],
+    allowUrlPatternWithoutHostMatch: true,
+    cookiePatterns: [/^dsgvoaio(?:_create)?$/i, /^tarteaucitron$/i],
+    globalPatterns: [/^(?:window\.)?(?:dsgvoaio|tarteaucitron)$/i],
+    storageKeyPatterns: [/^dsgvoaio(?:_create)?$/i, /^tarteaucitron$/i],
+    domSelectorPatterns: [
+      /^#tarteaucitron(?:Root|AlertBig|Personalize|CloseAlert)$/i,
+      /^\[id\^=['"]?tarteaucitron/i,
+      /^\[class\*=['"]?dsgvoaio/i,
+    ],
+    basisLabel: "dsgvoaio_tarteaucitron_cmp_runtime",
+  },
+  {
     entity: "Drupal",
     vendor: "Drupal",
     product: "Drupal EU Cookie Compliance module, non-TCF",
@@ -199,6 +219,22 @@ const rules: VendorRule[] = [
     storageKeyPatterns: [/^borlabs-cookie$/i, /^borlabsCookie$/i],
     domSelectorPatterns: [/^#BorlabsCookieBox$/i, /^\[data-borlabs-cookie-consent-required\]$/i, /^\.brlbs-/i],
     basisLabel: "borlabs_cookie_cmp_runtime",
+  },
+  {
+    entity: "Sourcebuster.js",
+    vendor: "Sourcebuster.js",
+    product: "Sourcebuster first-party attribution",
+    purpose: "analytics",
+    regulatoryRelevance: ["first_party_attribution", "storage_technology", "order_attribution"],
+    confidence: 0.99,
+    urlPatterns: [
+      /(?:^|\/)sourcebuster(?:\.min)?\.js(?:[?#]|$)/i,
+      /woocommerce\/assets\/js\/sourcebuster\/sourcebuster(?:\.min)?\.js(?:[?#]|$)/i,
+    ],
+    allowUrlPatternWithoutHostMatch: true,
+    cookiePatterns: [/^sbjs_(?:migrations|current_add|first_add|current|first|udata|session)$/i],
+    storageKeyPatterns: [/^sbjs_(?:migrations|current_add|first_add|current|first|udata|session)$/i],
+    basisLabel: "sourcebuster_first_party_attribution",
   },
   {
     entity: "Dealfront Group GmbH",
@@ -2425,7 +2461,7 @@ const rules: VendorRule[] = [
     basisLabel: "hcaptcha_security_runtime",
   },
   {
-    entity: "Matomo Cloud",
+    entity: "Matomo",
     vendor: "Matomo",
     product: "Matomo Analytics",
     purpose: "analytics",
@@ -2434,7 +2470,9 @@ const rules: VendorRule[] = [
     hostPatterns: [/\.matomo\.cloud$/i],
     urlPatterns: [/\/(?:matomo|piwik)\.(?:js|php)\b/i],
     requireUrlPatternMatch: true,
-    basisLabel: "matomo_cloud_analytics_runtime",
+    allowUrlPatternWithoutHostMatch: true,
+    cookiePatterns: [/^_pk_(?:id|ses|ref|cvar|hm)(?:[._-].*)?$/i],
+    basisLabel: "matomo_analytics_runtime",
   },
   {
     entity: "Umami Software, Inc.",

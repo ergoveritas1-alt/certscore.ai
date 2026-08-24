@@ -120,6 +120,24 @@ test("classifies an English website-and-cookies notice as a combined privacy-coo
   );
 });
 
+test("classifies combined privacy-cookie policy labels across all 40 primary locales", () => {
+  for (const entry of PRIVACY_EVIDENCE_LOCALE_REGISTRY) {
+    const label = entry.combinedPrivacyCookieLabels?.[0];
+    assert.ok(label, `${entry.locale} combined policy label`);
+    const classification = classifyPrivacySurface({
+      linkText: label,
+      localeHints: [entry.locale],
+    });
+    assert.equal(classification.surfaceType, "cookie_policy", entry.locale);
+    assert.equal(classification.variant, "combined_privacy_cookie_surface", entry.locale);
+    assert.equal(
+      classification.reasonCodes.includes("variant_combined_privacy_cookie_surface"),
+      true,
+      entry.locale,
+    );
+  }
+});
+
 test("classifies Dutch privacy-reglement document links without visible anchor text", () => {
   const classification = classifyPrivacySurface({
     linkText: "https://over.example.test/wp-content/uploads/2026/03/NOS-Privacy-Reglement-Maart-2026.pdf",
@@ -352,6 +370,43 @@ test("does not use neighboring footer text as the matched surface for unrelated 
     }).surfaceType,
     "unknown",
   );
+});
+
+test("does not promote localized news or editorial links that merely mention data protection", () => {
+  for (const input of [
+    {
+      linkText: "Leer más sobre protección de datos en el entorno digital",
+      surroundingText: "Noticias Política de privacidad y aviso legal",
+      url: "https://www.aepd.es/prensa-y-comunicacion/notas-de-prensa/proteccion-de-datos-entorno-digital",
+    },
+    {
+      linkText: "Actualités sur la protection des données",
+      surroundingText: "Actualités Données personnelles et sécurité",
+      url: "https://example.fr/actualites/protection-des-donnees",
+    },
+    {
+      linkText: "Leer más sobre recomendaciones para proteger la privacidad al usar IA",
+      surroundingText: "Noticias Política de privacidad y aviso legal",
+      url: "https://www.aepd.es/prensa-y-comunicacion/notas-de-prensa/recomendaciones-proteger-privacidad-ia",
+    },
+    {
+      linkText: "Mettre en place un délégué (DPO)",
+      surroundingText: "Protection des données",
+      url: "https://www.cnil.fr/fr/passer-laction/le-delegue-la-protection-des-donnees-dpo",
+    },
+  ]) {
+    assert.equal(classifyPrivacySurface(input).surfaceType, "unknown", input.linkText);
+  }
+});
+
+test("retains exact localized policy-document labels while rejecting embedded generic mentions", () => {
+  for (const linkText of [
+    "Política de privacidad y aviso legal",
+    "Données personnelles et sécurité",
+    "Protección de datos",
+  ]) {
+    assert.equal(classifyPrivacySurface({ linkText }).surfaceType, "privacy_policy", linkText);
+  }
 });
 
 test("keeps unrelated labels unknown", () => {

@@ -1,4 +1,7 @@
-import { classifyGdprTransparencyTopics } from "./gdpr-transparency-topic-classifier";
+import {
+  classifyGdprTransparencyTopics,
+  normalizeGdprTransparencyText,
+} from "./gdpr-transparency-topic-classifier";
 import { PRIVACY_EVIDENCE_LOCALE_REGISTRY } from "./privacy-evidence-locale-registry";
 
 export const ARTICLE13_DISCLOSURE_TYPES = [
@@ -185,7 +188,29 @@ export function looksLikeArticle13TableOfContents(
   const hasFactualDisclosureProse =
     /\b(?:personal data|personal information|account data|account records?|security logs?|individuals?|data subjects?)\b.{0,100}\b(?:collect(?:ed|s|ing)?|process(?:ed|es|ing)?|use(?:d|s|ing)?|retain(?:ed|s|ing)?|keep|kept|stor(?:e|ed|es|ing)|share(?:d|s|ing)?|transfer(?:red|s|ring)?|disclos(?:e|ed|es|ing)|delet(?:e|ed|es|ing)|request(?:ed|s|ing)?)\b/i.test(text) ||
     /\b(?:collect(?:ed|s|ing)?|process(?:ed|es|ing)?|use(?:d|s|ing)?|retain(?:ed|s|ing)?|keep|kept|stor(?:e|ed|es|ing)|share(?:d|s|ing)?|transfer(?:red|s|ring)?|disclos(?:e|ed|es|ing))\b.{0,100}\b(?:personal data|personal information|account data|account records?|security logs?)\b/i.test(text);
+  if (mode === "multilingual_classifier" && looksLikeCanonicalTopicInventory(text)) {
+    return true;
+  }
   return tocTokens >= 4 && !hasDisclosureVerb && !hasFactualDisclosureProse;
+}
+
+function looksLikeCanonicalTopicInventory(value: string): boolean {
+  const normalized = normalizeGdprTransparencyText(value);
+  const matches = classifyGdprTransparencyTopics({ text: normalized }).matches;
+  if (matches.length === 0) return false;
+
+  let remainder = normalized;
+  const removableTerms = [
+    ...matches.map((match) => normalizeGdprTransparencyText(match.matchedTerm)),
+    ...PRIVACY_EVIDENCE_LOCALE_REGISTRY.flatMap((entry) => entry.privacyPolicyLabels)
+      .map((term) => normalizeGdprTransparencyText(term)),
+  ].filter(Boolean).sort((left, right) => right.length - left.length);
+  for (const term of removableTerms) {
+    remainder = remainder.split(term).join(" ");
+  }
+
+  const remainderLetterCount = (remainder.match(/\p{L}/gu) ?? []).length;
+  return matches.length === 1 && remainderLetterCount < 12;
 }
 
 export function isGenericArticle13StorageNotRetentionEvidence(value: string) {

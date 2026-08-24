@@ -49,6 +49,16 @@ test("canonical NBCNews cookie knowledge separates non-essential categories from
   });
 });
 
+test("canonical Matomo cookie knowledge classifies retained _pk identifiers as non-essential analytics", () => {
+  for (const name of ["_pk_id.4.ac51", "_pk_ses.4.ac51", "_pk_ref.4.ac51"]) {
+    const knowledge = resolveCanonicalCookieKnowledge(name);
+    assert.equal(knowledge.category, "analytics", name);
+    assert.equal(knowledge.essentiality, "non_essential", name);
+    assert.equal(knowledge.vendor, "Matomo", name);
+  }
+  assert.equal(resolveCanonicalCookieKnowledge("pk_id").category, "unknown");
+});
+
 test("canonical Microsoft cookie knowledge keeps documented Clarity and identity purposes distinct", () => {
   assert.deepEqual(resolveCanonicalCookieKnowledge("CLID"), {
     category: "analytics",

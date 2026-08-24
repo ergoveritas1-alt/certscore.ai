@@ -39,7 +39,7 @@ const locale = (
  * classification. Exact action labels are intentionally narrow; generic words
  * such as “settings” remain context-gated in the classifier.
  */
-export const PRIVACY_EVIDENCE_LOCALE_REGISTRY: readonly PrivacyEvidenceLocaleRegistryEntry[] = [
+const BASE_PRIVACY_EVIDENCE_LOCALE_REGISTRY: readonly PrivacyEvidenceLocaleRegistryEntry[] = [
   locale("en", {
     privacyPolicyLabels: ["privacy policy", "privacy notice", "data protection"], privacyPolicyPathSlugs: ["privacy-policy", "privacypolicy", "privacy-notice", "data-protection"],
     cookiePolicyLabels: ["cookie policy", "cookie notice"], cookiePolicyPathSlugs: ["cookie-policy", "cookie-notice"],
@@ -52,7 +52,7 @@ export const PRIVACY_EVIDENCE_LOCALE_REGISTRY: readonly PrivacyEvidenceLocaleReg
     privacyPolicyLabels: ["política de privacidad", "aviso de privacidad", "protección de datos"], privacyPolicyPathSlugs: ["politica-de-privacidad", "privacidad", "proteccion-de-datos"],
     cookiePolicyLabels: ["política de cookies", "aviso de cookies"], cookiePolicyPathSlugs: ["politica-de-cookies"], cookieSettingsLabels: ["configuración de cookies", "preferencias de cookies"],
     termsLabels: ["términos y condiciones", "condiciones de uso"], termsPathSlugs: ["terminos-y-condiciones", "condiciones-de-uso"], contextHints: ["privacidad", "datos personales", "cookies", "consentimiento"], tldHints: [".es"],
-    consentControls: { accept: ["aceptar todo", "aceptar todas"], reject: ["rechazar todo", "rechazar todas"], options: ["configuración de cookies", "gestionar preferencias"], necessaryOnly: ["solo las necesarias", "solo cookies necesarias"] },
+    consentControls: { accept: ["aceptar todo", "aceptar todas"], reject: ["rechazar todo", "rechazar todas", "denegar todas", "denegar todo"], options: ["configuración de cookies", "gestionar preferencias"], necessaryOnly: ["solo las necesarias", "solo cookies necesarias"] },
   }),
   locale("de", {
     privacyPolicyLabels: ["datenschutzerklärung", "datenschutzinformation", "datenschutz"], privacyPolicyPathSlugs: ["datenschutz", "datenschutzerklaerung"], cookiePolicyLabels: ["cookie-richtlinie", "cookie-hinweis"], cookiePolicyPathSlugs: ["cookie-richtlinie"],
@@ -219,6 +219,58 @@ export const PRIVACY_EVIDENCE_LOCALE_REGISTRY: readonly PrivacyEvidenceLocaleReg
     consentControls: { accept: ["aceptar todo", "permitir todo"], reject: ["rexeitar todo", "rexeitar todos"], options: ["configuración de cookies", "xestionar preferencias"], necessaryOnly: ["só as necesarias", "só cookies necesarias"] },
   }),
 ] as const;
+
+const COMBINED_PRIVACY_COOKIE_LABELS_BY_LOCALE = {
+  en: ["privacy & cookie policy", "privacy and cookie policy", "website and cookies"],
+  es: ["política de privacidad y cookies"],
+  de: ["datenschutz- und cookie-richtlinie"],
+  ja: ["プライバシー・cookieポリシー"],
+  fr: ["politique de confidentialité et cookies", "données personnelles et cookies"],
+  ru: ["политика конфиденциальности и файлов cookie"],
+  pt: ["política de privacidade e cookies"],
+  it: ["informativa privacy e cookie"],
+  tr: ["gizlilik ve çerez politikası"],
+  zh: ["隐私和 cookie 政策"],
+  fa: ["سیاست حفظ حریم خصوصی و کوکی"],
+  nl: ["privacy- en cookiebeleid"],
+  pl: ["polityka prywatności i plików cookie"],
+  vi: ["chính sách quyền riêng tư và cookie"],
+  id: ["kebijakan privasi dan cookie"],
+  cs: ["zásady ochrany osobních údajů a cookies"],
+  ko: ["개인정보 및 쿠키 정책"],
+  sv: ["integritets- och cookiepolicy"],
+  uk: ["політика конфіденційності та cookie"],
+  el: ["πολιτική απορρήτου και cookies"],
+  ar: ["سياسة الخصوصية وملفات تعريف الارتباط"],
+  hu: ["adatvédelmi és süti szabályzat"],
+  ro: ["politica de confidențialitate și cookie-uri"],
+  th: ["นโยบายความเป็นส่วนตัวและคุกกี้"],
+  da: ["privatlivs- og cookiepolitik"],
+  sk: ["zásady ochrany osobných údajov a cookies"],
+  fi: ["tietosuoja- ja evästekäytäntö"],
+  bg: ["политика за поверителност и бисквитки"],
+  he: ["מדיניות פרטיות ועוגיות"],
+  sr: ["politika privatnosti i kolačića", "политика приватности и колачића"],
+  hr: ["politika privatnosti i kolačića"],
+  lt: ["privatumo ir slapukų politika"],
+  sl: ["varstvo zasebnosti in piškotkov"],
+  ca: ["política de privacitat i cookies"],
+  hi: ["गोपनीयता और कुकी नीति"],
+  nb: ["personvern- og informasjonskapselpolicy"],
+  et: ["privaatsus- ja küpsiste poliitika"],
+  lv: ["privātuma un sīkdatņu politika"],
+  az: ["məxfilik və kuki siyasəti"],
+  gl: ["política de privacidade e cookies"],
+} as const satisfies Record<SupportedPrivacyEvidenceLocale, readonly string[]>;
+
+export const PRIVACY_EVIDENCE_LOCALE_REGISTRY: readonly PrivacyEvidenceLocaleRegistryEntry[] =
+  BASE_PRIVACY_EVIDENCE_LOCALE_REGISTRY.map((entry) => ({
+    ...entry,
+    combinedPrivacyCookieLabels: [...new Set([
+      ...(entry.combinedPrivacyCookieLabels ?? []),
+      ...COMBINED_PRIVACY_COOKIE_LABELS_BY_LOCALE[entry.locale],
+    ])],
+  }));
 
 export const PRIVACY_EVIDENCE_LOCALE_BY_CODE = new Map(
   PRIVACY_EVIDENCE_LOCALE_REGISTRY.map((entry) => [entry.locale, entry] as const),

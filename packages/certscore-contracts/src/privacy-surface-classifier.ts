@@ -109,7 +109,7 @@ export const PRIVACY_SURFACE_PHRASE_REGISTRY: PrivacySurfacePhrase[] = [
   ...de([
     direct("privacy_policy", "datenschutzerklärung"),
     direct("privacy_policy", "datenschutzinformation"),
-    equivalent("privacy_policy", "datenschutz"),
+    equivalent("privacy_policy", "datenschutz", "generic_data_protection_label"),
     direct("cookie_policy", "cookie-richtlinie"),
     direct("cookie_policy", "cookie hinweis"),
     direct("cookie_policy", "cookie-erklärung"),
@@ -125,9 +125,9 @@ export const PRIVACY_SURFACE_PHRASE_REGISTRY: PrivacySurfacePhrase[] = [
   ...fr([
     direct("privacy_policy", "politique de confidentialité"),
     direct("privacy_policy", "avis de confidentialité"),
-    direct("privacy_policy", "données personnelles"),
-    direct("privacy_policy", "protection des données personnelles"),
-    direct("privacy_policy", "protection des données"),
+    direct("privacy_policy", "données personnelles et sécurité"),
+    direct("privacy_policy", "protection des données personnelles", "generic_data_protection_label"),
+    direct("privacy_policy", "protection des données", "generic_data_protection_label"),
     policyContextualEquivalent("privacy_policy", "confidentialité"),
     direct("cookie_policy", "politique relative aux cookies"),
     direct("cookie_policy", "politique cookies"),
@@ -146,7 +146,7 @@ export const PRIVACY_SURFACE_PHRASE_REGISTRY: PrivacySurfacePhrase[] = [
   ...es([
     direct("privacy_policy", "política de privacidad"),
     direct("privacy_policy", "aviso de privacidad"),
-    direct("privacy_policy", "protección de datos"),
+    direct("privacy_policy", "protección de datos", "generic_data_protection_label"),
     equivalent("privacy_policy", "privacidad"),
     direct("cookie_policy", "política de cookies"),
     direct("cookie_policy", "aviso de cookies"),
@@ -164,7 +164,7 @@ export const PRIVACY_SURFACE_PHRASE_REGISTRY: PrivacySurfacePhrase[] = [
     direct("privacy_policy", "informativa privacy generale", "general_scope"),
     direct("privacy_policy", "informativa sulla privacy"),
     direct("privacy_policy", "politica sulla privacy"),
-    direct("privacy_policy", "protezione dei dati"),
+    direct("privacy_policy", "protezione dei dati", "generic_data_protection_label"),
     equivalent("privacy_policy", "privacy"),
     direct("cookie_policy", "informativa sui cookie"),
     direct("cookie_policy", "cookie policy"),
@@ -262,6 +262,13 @@ const POLICY_CONTEXT_PATTERN =
   /\b(policy|notice|statement|legal|privacy|cookies?|data protection|personal data|datenschutz|datenschutzerkl[aä]rung|politique|mentions l[eé]gales|donn[eé]es personnelles|protection des donn[eé]es|vie priv[eé]e|pol[ií]tica|aviso legal|protecci[oó]n de datos|informativa|termini|privacybeleid|privacyverklaring|avg|polityka|regulamin|dane osobowe)\b/i;
 const POLICY_DOCUMENT_CONTEXT_PATTERN =
   /\b(policy|notice|statement|legal|privacy|personal data|data controller|gdpr|article 13|datenschutzerkl[aä]rung)\b/i;
+const GENERIC_DATA_PROTECTION_LABELS = new Set([
+  "datenschutz",
+  "protection des données",
+  "protection des données personnelles",
+  "protección de datos",
+  "protezione dei dati",
+]);
 
 export function classifyPrivacySurface(
   input: PrivacySurfaceClassifierInput,
@@ -276,9 +283,16 @@ export function classifyPrivacySurface(
   const policyContext = uniqueStrings([normalizedSurrounding, normalizedUrl]).join(" ");
   const policyContextSatisfied = POLICY_CONTEXT_PATTERN.test(policyContext);
   const policyDocumentContextSatisfied = POLICY_DOCUMENT_CONTEXT_PATTERN.test(policyContext);
+  const policyDocumentLabelContextSatisfied = /\b(?:policy|notice|statement|datenschutzerkl[aä]rung|politique de confidentialit[eé]|avis de confidentialit[eé]|pol[ií]tica de privacidad|aviso de privacidad|informativa(?: generale)? sulla privacy|politica sulla privacy)\b/i.test(labelText);
+  const editorialOrReferencePath = /\/(?:actualites?|news|press(?:-and-[^/]+)?|presse|prensa-y-comunicacion|noticias|agenda|eventos|webinarios?|guides?|guias?|documentos?|definition|lexique|services-en-ligne|passer-laction|certificacion|webform|laboratoire|transparencia|rgpd-analyse-impact|agencia-espanola-de-proteccion-de-datos)(?:[-_/\s]|$)/i.test(normalizedUrl);
+  const editorialOrReferenceLabel = /^(?:read more|learn more|lire la suite|en savoir plus|leer m[aá]s)\b/i.test(labelText) ||
+    /\b(?:news|actualit[eé]s|noticias|agenda|evento|webinario|curso|guide|gu[ií]a|recommandations?|orientaciones|certificaci[oó]n|revista|lexique|analyse d'impact|formulaire|laboratoire|laboratorio|inventario de actividades)\b/i.test(labelText);
 
   if (!haystack) {
     return unknown(["empty_surface_evidence"]);
+  }
+  if ((editorialOrReferencePath || editorialOrReferenceLabel) && !policyDocumentLabelContextSatisfied) {
+    return unknown(["editorial_or_reference_resource_not_policy_document"]);
   }
 
   const localeHints = new Set(input.localeHints ?? []);
@@ -294,6 +308,7 @@ export function classifyPrivacySurface(
         contextSatisfied,
         policyContextSatisfied,
         policyDocumentContextSatisfied,
+        policyDocumentLabelContextSatisfied,
       ),
     }))
     .filter((entry) => entry.score > 0)
@@ -310,9 +325,19 @@ export function classifyPrivacySurface(
     }))
     .filter((entry) => entry.score > 0)[0];
   const localeUrlMatch = canonicalLocaleUrlMatch(normalizedUrl, localeHints);
-  const urlMatch = localeUrlMatch && (!staticUrlMatch || localeUrlMatch.score >= staticUrlMatch.score)
+  const candidateUrlMatch = localeUrlMatch && (!staticUrlMatch || localeUrlMatch.score >= staticUrlMatch.score)
     ? localeUrlMatch
     : staticUrlMatch;
+  const embeddedGenericDataProtectionLabel = [
+    "datenschutz",
+    "protection des données",
+    "protection des données personnelles",
+    "protección de datos",
+    "protezione dei dati",
+  ].some((phrase) => labelText !== phrase && paddedIncludes(labelText, phrase));
+  const urlMatch = !phraseMatch && embeddedGenericDataProtectionLabel && !policyDocumentLabelContextSatisfied
+    ? undefined
+    : candidateUrlMatch;
 
   if (!phraseMatch && !urlMatch) {
     return unknown(["no_surface_match"]);
@@ -435,6 +460,7 @@ function phraseScore(
   contextSatisfied: boolean,
   policyContextSatisfied: boolean,
   policyDocumentContextSatisfied: boolean,
+  policyDocumentLabelContextSatisfied: boolean,
 ) {
   const phrase = normalizePrivacySurfaceText(term.phrase);
   if (!phrase) {
@@ -443,6 +469,13 @@ function phraseScore(
   const exact = normalizedLabel === phrase;
   const labelMatch = !exact && phrase.length >= 5 && paddedIncludes(normalizedLabel, phrase);
   if (!exact && !labelMatch) {
+    return 0;
+  }
+  if (
+    (term.variant === "generic_data_protection_label" || GENERIC_DATA_PROTECTION_LABELS.has(phrase)) &&
+    !exact &&
+    !policyDocumentLabelContextSatisfied
+  ) {
     return 0;
   }
   if (term.requiresPrivacyContext && !contextSatisfied) {

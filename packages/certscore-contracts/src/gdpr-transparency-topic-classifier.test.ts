@@ -1,8 +1,10 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import {
+  classifyGdprSupplementLink,
   classifyGdprTransparencyTopics,
   GDPR_TRANSPARENCY_TOPIC_PHRASE_REGISTRY,
+  PRIVACY_EVIDENCE_LOCALE_REGISTRY,
   SUPPORTED_GDPR_TRANSPARENCY_LOCALES,
   type GdprTransparencyTopic,
 } from "./index.js";
@@ -493,6 +495,39 @@ test("classifies German GDPR notice intro phrasing from retained policy text", (
     assert.ok(match.evidenceExcerpt.length <= 360);
   }
   assert.equal(topics.size >= 5, true);
+});
+
+test("classifies Jonneke-shaped German policy sections without relying on English anchors", () => {
+  const text = [
+    "Datenschutzerklärung. Verantwortlicher: Pferdeklinik Beispiel GmbH, Musterstraße 1, 12345 Musterstadt, E-Mail datenschutz@example.de.",
+    "Datenschutzbeauftragter. Unser Datenschutzbeauftragter ist unter datenschutzbeauftragter@example.de erreichbar.",
+    "Zwecke der Verarbeitung. Wir verarbeiten personenbezogene Daten zur Bereitstellung der Website, zur Bearbeitung von Anfragen und zur Erfüllung vertraglicher Pflichten.",
+    "Maßgebliche Rechtsgrundlagen. Die Verarbeitung erfolgt auf Grundlage einer Einwilligung, zur Vertragserfüllung, zur Erfüllung rechtlicher Verpflichtungen oder aufgrund berechtigter Interessen.",
+    "Offenlegung und Übermittlung von Daten. Daten können gegenüber Auftragsverarbeitern oder Dritten offengelegt oder an sie übermittelt werden.",
+    "Löschung von Daten. Die von uns verarbeiteten und gespeicherten Daten werden gelöscht, sobald der Zweck ihrer Verarbeitung entfällt und keine gesetzlichen Aufbewahrungspflichten entgegenstehen.",
+    "Rechte der betroffenen Personen. Betroffene Personen haben insbesondere das Recht auf Auskunft über diese Daten, Berichtigung, Löschung, Einschränkung der Verarbeitung, Widerspruch und Datenübertragbarkeit.",
+    "Übermittlungen in Drittländer erfolgen nur unter den besonderen Voraussetzungen der Art. 44 ff. DSGVO und mit geeigneten Garantien.",
+    "Betroffene Personen haben außerdem das Recht auf Beschwerde bei einer Aufsichtsbehörde.",
+  ].join(" ");
+
+  const topics = new Set(classifyGdprTransparencyTopics({
+    text,
+    localeHints: ["de"],
+  }).matches.map((match) => match.topic));
+
+  for (const topic of [
+    "controller_contact",
+    "dpo_contact",
+    "processing_purposes",
+    "legal_basis",
+    "recipients_or_vendor_categories",
+    "data_retention",
+    "data_subject_rights",
+    "international_transfers",
+    "supervisory_authority",
+  ] as const) {
+    assert.equal(topics.has(topic), true, `${topic}; retained topics: ${[...topics].join(", ")}`);
+  }
 });
 
 test("classifies Polish Article 13 policy wording with explicit processing context", () => {
@@ -1515,12 +1550,230 @@ test("does not classify generic operational copy in the Nordic, Central European
   }
 });
 
+test("classifies every GDPR Transparency topic across all 40 primary privacy locales", () => {
+  const expectedTopics: GdprTransparencyTopic[] = [
+    "controller_contact",
+    "dpo_contact",
+    "processing_purposes",
+    "legal_basis",
+    "recipients_or_vendor_categories",
+    "data_retention",
+    "data_subject_rights",
+    "international_transfers",
+    "supervisory_authority",
+    "automated_decision_making_or_profiling",
+  ];
+
+  for (const locale of SUPPORTED_GDPR_TRANSPARENCY_LOCALES) {
+    const representativeTerms = expectedTopics.map((topic) => {
+      const term = GDPR_TRANSPARENCY_TOPIC_PHRASE_REGISTRY.find((candidate) =>
+        candidate.locale === locale &&
+        candidate.topic === topic &&
+        candidate.variant === undefined
+      );
+      assert.ok(term, `${locale}:${topic} canonical term`);
+      return term.phrase;
+    });
+    const classification = classifyGdprTransparencyTopics({
+      localeHints: [locale],
+      text: representativeTerms.join(". "),
+    });
+    assert.deepEqual(
+      new Set(classification.matches.map((match) => match.topic)),
+      new Set(expectedTopics),
+      locale,
+    );
+    assert.equal(
+      classification.matches.every((match) =>
+        match.matchedLocale === locale &&
+        match.classifierProvenance === "gdpr_transparency_topic_classifier.v1" &&
+        match.evidenceExcerpt.length <= 360
+      ),
+      true,
+      locale,
+    );
+  }
+});
+
+test("does not classify generic operational copy in the eleven primary-locale expansion languages", () => {
+  const cases = [
+    ["fa", "زمان نگهداری کالا به موجودی انبار بستگی دارد و مرتب سازی خودکار تحویل را سریع تر می کند."],
+    ["vi", "Thời gian lưu kho của sản phẩm phụ thuộc vào nhà kho và việc phân loại tự động giúp giao hàng nhanh hơn."],
+    ["id", "Masa penyimpanan barang bergantung pada gudang dan penyortiran otomatis mempercepat pengiriman."],
+    ["ko", "상품 보관 기간은 창고에 따라 달라지며 자동 분류는 배송을 더 빠르게 합니다."],
+    ["th", "ระยะเวลาจัดเก็บสินค้าขึ้นอยู่กับคลังสินค้าและการคัดแยกอัตโนมัติช่วยให้จัดส่งเร็วขึ้น"],
+    ["he", "תקופת אחסון המוצרים תלויה במחסן ומיון אוטומטי מזרז את המשלוח."],
+    ["sr", "Period skladištenja robe zavisi od magacina, a automatizovano sortiranje ubrzava isporuku."],
+    ["ca", "El període d'emmagatzematge dels productes depèn del magatzem i la classificació automàtica accelera el lliurament."],
+    ["hi", "उत्पादों की भंडारण अवधि गोदाम पर निर्भर करती है और स्वचालित छंटाई वितरण को तेज करती है।"],
+    ["az", "Məhsulların anbarda saxlanma müddəti anbardan asılıdır və avtomatik çeşidləmə çatdırılmanı sürətləndirir."],
+    ["gl", "O período de almacenamento dos produtos depende do almacén e a clasificación automática acelera a entrega."],
+  ] as const;
+
+  for (const [locale, text] of cases) {
+    assert.deepEqual(classifyGdprTransparencyTopics({ text, localeHints: [locale] }).matches, [], locale);
+  }
+});
+
+test("retains locale alternatives for mixed-language policy sections without changing the default projection", () => {
+  const text = [
+    "Retention period for personal data.",
+    "व्यक्तिगत डेटा की अवधारण अवधि। यह नीति बताती है कि Example Services व्यक्तिगत जानकारी को 24 महीने तक रखती है।",
+  ].join(" ");
+  const defaultClassification = classifyGdprTransparencyTopics({ text });
+  const mixedClassification = classifyGdprTransparencyTopics({
+    maxMatches: 80,
+    retainLocaleAlternatives: true,
+    text,
+  });
+
+  assert.equal(
+    defaultClassification.matches.filter((match) => match.topic === "data_retention").length,
+    1,
+  );
+  assert.deepEqual(
+    new Set(mixedClassification.matches
+      .filter((match) => match.topic === "data_retention")
+      .map((match) => match.matchedLocale)),
+    new Set(["en", "hi"]),
+  );
+});
+
+test("selects substantive repeated topic evidence instead of an earlier contents occurrence in English and French", () => {
+  const cases = [
+    {
+      locale: "en" as const,
+      phrase: "legal basis for processing personal data",
+      substantive: "The legal basis for processing personal data is Article 6 GDPR: consent, contract, legal obligation, public task, and legitimate interests.",
+      expected: /Article 6 GDPR/,
+    },
+    {
+      locale: "fr" as const,
+      phrase: "base juridique du traitement des données personnelles",
+      substantive: "La base juridique du traitement des données personnelles est l'article 6 du RGPD : consentement, contrat, obligation légale et mission d'intérêt public.",
+      expected: /article 6 du RGPD/,
+    },
+  ];
+
+  for (const entry of cases) {
+    const text = [
+      `Contents | ${entry.phrase} | Recipients | Retention | Rights`,
+      "Navigation item ".repeat(80),
+      entry.substantive,
+    ].join(" ");
+    const match = classifyGdprTransparencyTopics({
+      localeHints: [entry.locale],
+      text,
+    }).matches.find((candidate) => candidate.topic === "legal_basis");
+
+    assert.ok(match, entry.locale);
+    assert.match(match.evidenceExcerpt, entry.expected, entry.locale);
+  }
+});
+
+test("normalizes primary-script punctuation and joiners without losing native evidence", () => {
+  const cases = [
+    ["hi", "व्यक्तिगत डेटा की अवधारण अवधि।", "data_retention"],
+    ["fa", "اهداف پردازش داده‌های شخصی؛", "processing_purposes"],
+    ["he", "תקופת שמירת המידע־האישי.", "data_retention"],
+  ] as const;
+
+  for (const [locale, text, topic] of cases) {
+    const match = classifyGdprTransparencyTopics({
+      localeHints: [locale],
+      text,
+    }).matches.find((candidate) => candidate.topic === topic);
+    assert.ok(match, `${locale}:${topic}`);
+    assert.equal(match.matchedLocale, locale);
+    assert.match(match.evidenceExcerpt, /\p{L}/u);
+  }
+});
+
 test("registry covers every supported locale", () => {
   const registryLocales = new Set(GDPR_TRANSPARENCY_TOPIC_PHRASE_REGISTRY.map((term) => term.locale));
 
   for (const locale of SUPPORTED_GDPR_TRANSPARENCY_LOCALES) {
     assert.equal(registryLocales.has(locale), true, locale);
   }
+});
+
+test("classifies bounded GDPR supplemental-policy links across every primary locale", () => {
+  for (const entry of PRIVACY_EVIDENCE_LOCALE_REGISTRY) {
+    const classification = classifyGdprSupplementLink({
+      linkText: entry.privacyPolicyLabels[0],
+      surroundingText: entry.contextHints.join(" "),
+      url: `https://example.test/${entry.locale}/gdpr`,
+    });
+    assert.equal(classification.likelySupplement, true, entry.locale);
+    assert.equal(classification.classifierProvenance, "gdpr_supplement_link_classifier.v1", entry.locale);
+    assert.ok(classification.matchedLocale, `${entry.locale} locale provenance`);
+    assert.equal(classification.reasonCodes.includes("canonical_gdpr_jurisdiction_marker"), true, entry.locale);
+    assert.equal(classification.reasonCodes.includes("canonical_privacy_surface_match"), true, entry.locale);
+  }
+});
+
+test("does not treat a general GDPR framework explainer as the site's supplemental privacy policy", () => {
+  const classification = classifyGdprSupplementLink({
+    linkText: "Règlement européen sur la protection des données",
+    url: "https://www.cnil.fr/fr/reglement-europeen-protection-donnees",
+  });
+
+  assert.equal(classification.likelySupplement, false);
+  assert.deepEqual(classification.reasonCodes, ["general_legal_framework_resource_not_policy_supplement"]);
+});
+
+test("classifies retained public-policy headings in German, French, Spanish, and Italian", () => {
+  const cases = [
+    {
+      locale: "de" as const,
+      text: "Datenschutzerklärung. Dauer der Speicherung: Die Daten werden gelöscht, wenn die Aufgabe erfüllt ist. Rechte der betroffenen Person: Sie können Auskunft, Berichtigung und Löschung verlangen. Name und Anschrift des DSB (Datenschutzbeauftragten): Behördlicher Datenschutzbeauftragter, datenschutz@example.de.",
+      topics: ["data_retention", "data_subject_rights", "dpo_contact"] as const,
+    },
+    {
+      locale: "fr" as const,
+      text: "Politique de confidentialité. Finalités et bases légales: le service traite vos données pour répondre à votre demande. Catégories de données et durée de conservation: les dossiers sont conservés trois ans. Qui sont les destinataires de vos données ? Nos prestataires techniques. Quels sont vos droits sur vos données et comment les exercer ? Vous pouvez demander l'accès et l'effacement. Transfert des données hors de l'Union européenne: des garanties appropriées sont appliquées. Vous disposez du droit d'introduire une réclamation ou une plainte auprès de la Commission Nationale de l'Informatique et des Libertés.",
+      topics: ["processing_purposes", "legal_basis", "data_retention", "recipients_or_vendor_categories", "data_subject_rights", "international_transfers", "supervisory_authority"] as const,
+    },
+    {
+      locale: "es" as const,
+      text: "Política de privacidad. Responsable del tratamiento: Agencia pública. Finalidad del tratamiento: prestar el servicio solicitado. Legitimación: artículo 6.1 e del RGPD. Conservación de datos: durante cinco años. Comunicación de datos: proveedores encargados del tratamiento. Derechos de las personas interesadas: acceso, rectificación, supresión y oposición.",
+      topics: ["controller_contact", "processing_purposes", "legal_basis", "data_retention", "recipients_or_vendor_categories", "data_subject_rights"] as const,
+    },
+    {
+      locale: "it" as const,
+      text: "Informativa sulla privacy. Trasferimento dei dati: i dati personali possono essere trasferiti fuori dallo Spazio economico europeo mediante clausole contrattuali standard.",
+      topics: ["international_transfers"] as const,
+    },
+  ];
+
+  for (const entry of cases) {
+    const classification = classifyGdprTransparencyTopics({ text: entry.text, localeHints: [entry.locale] });
+    const topics = new Set(classification.matches.map((match) => match.topic));
+    for (const topic of entry.topics) {
+      assert.equal(topics.has(topic), true, `${entry.locale}:${topic}; got ${[...topics].join(", ")}`);
+    }
+  }
+});
+
+test("recognizes localized GDPR acronyms without promoting unrelated acronym text", () => {
+  const positives = [
+    ["DSGVO Datenschutzerklärung", "https://example.de/dsgvo"],
+    ["Avis de confidentialité RGPD", "https://example.fr/rgpd"],
+    ["Polityka prywatności RODO", "https://example.pl/rodo"],
+    ["AVG privacyverklaring", "https://example.nl/avg"],
+  ] as const;
+  for (const [linkText, url] of positives) {
+    assert.equal(classifyGdprSupplementLink({ linkText, url }).likelySupplement, true, linkText);
+  }
+
+  assert.equal(classifyGdprSupplementLink({
+    linkText: "GDPR consulting services",
+    url: "https://example.test/services",
+  }).likelySupplement, false);
+  assert.equal(classifyGdprSupplementLink({
+    linkText: "Average delivery performance",
+    url: "https://example.test/avg-performance",
+  }).likelySupplement, false);
 });
 
 test("classifies retained production false-negative wording before projection", () => {

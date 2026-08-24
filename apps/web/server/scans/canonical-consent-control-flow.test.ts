@@ -311,6 +311,71 @@ test("limited empty first-layer inventory remains unknown through every canonica
   assert.equal(getEvidenceLabel(byId("reject_all_path_availability")), "Not testable");
 });
 
+test("an 8-second stable partial exit cannot become a missing-reject finding", () => {
+  const packet = retainedEvidencePacket({
+    firstLayerControls: [{ actionType: "accept_all", label: "Accept all" }],
+  });
+  packet.consentUiObservations[0]!.inventoryOutcome = "complete_with_controls";
+  packet.consentUiObservations[0]!.inventoryDiagnostics = {
+    candidateContainerCount: 1,
+    candidateControlCount: 1,
+    retainedControlCount: 1,
+    inventorySources: ["cmp_container"],
+    candidateLabels: ["Accept all"],
+    rejectionReasons: [],
+    timingMarkers: ["gate_8s:calibrated_stable_partial_exit"],
+  };
+  const assessment = deriveMaterializedConsentControlAssessment({
+    bundle: packet,
+    consentControlGeometryEvidence: geometryEvidence({
+      firstLayerControls: [{ actionType: "accept_all", label: "Accept all" }],
+    }),
+    consentSurfaceInspection: consentSurfaceInspection(true),
+    finalUrl: GENERIC_URL,
+    noGo: false,
+    requestedUrl: GENERIC_URL,
+  });
+
+  assert.equal(assessment.assessmentStatus, "limited");
+  assert.equal(assessment.coverage.status, "limited");
+  assert.equal(assessment.controls.accept.state, "observed");
+  assert.equal(assessment.controls.reject.state, "unknown");
+  assert.equal(assessment.controls.options.state, "unknown");
+});
+
+test("a visible necessary selection plus save-selection control projects a necessary-only reject path", () => {
+  const controls = [
+    { actionType: "accept_all" as const, label: "✓ Akzeptieren", matchedLocale: "en" as const },
+    {
+      actionType: "save_preferences" as const,
+      label: "Auswahl speichern",
+      matchedLocale: "en" as const,
+      classifierReasonCodes: ["variant_save_preferences"],
+    },
+    { actionType: "manage_preferences" as const, label: "Personalisieren", matchedLocale: "en" as const },
+  ];
+  const packet = retainedEvidencePacket({ firstLayerControls: controls });
+  packet.consentUiObservations[0]!.necessaryPreferenceSelectionObserved = true;
+  packet.consentUiObservations[0]!.necessaryPreferenceLabels = ["Essenziell"];
+  const assessment = deriveMaterializedConsentControlAssessment({
+    bundle: packet,
+    consentControlGeometryEvidence: geometryEvidence({ firstLayerControls: controls }),
+    consentSurfaceInspection: consentSurfaceInspection(true),
+    finalUrl: GENERIC_URL,
+    noGo: false,
+    requestedUrl: GENERIC_URL,
+  });
+
+  assert.equal(assessment.assessmentStatus, "complete");
+  assert.equal(assessment.controls.accept.state, "observed");
+  assert.equal(assessment.controls.reject.state, "observed");
+  assert.equal(assessment.controls.options.state, "observed");
+  assert.ok(assessment.evidence.some((evidence) =>
+    evidence.intent === "reject" &&
+    evidence.classifier?.reasonCodes.includes("save_preferences_with_necessary_selection_observed")
+  ));
+});
+
 test("limited no-evidence inventory stays unknown through assessment, concern policy, and checklist", () => {
   const packet = retainedEvidencePacket({ firstLayerControls: [] });
   packet.consentUiObservations[0]!.captureStatus = "no_evidence";

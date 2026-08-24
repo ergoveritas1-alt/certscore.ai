@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import { deriveConsentControlAssessment } from "@certscore/contracts";
 import {
   buildPreconsentEvidenceQualityFallback,
   createHybridRuntimeEvidenceProjectionCache,
@@ -178,6 +179,61 @@ test("derives pre-consent tracking and consent dark-pattern signals from hybrid 
     }
   } satisfies Record<string, unknown>;
   assert.equal(getHybridDerivedSignalValue(dismissRuntimeArtifacts, "privacy.dark_pattern_dismiss_without_reject"), true);
+});
+
+test("canonical consent assessment overrides a stale raw missing-reject summary", () => {
+  const assessment = deriveConsentControlAssessment({
+    scan: {
+      scanId: "scan-canonical-consent",
+      requestedUrl: "https://example.test/",
+      finalUrl: "https://example.test/",
+      scanStatus: "completed",
+      noGo: false,
+    },
+    document: {
+      canonicalDocumentId: "https://example.test/",
+      observedDocumentIds: ["https://example.test/"],
+      identityStatus: "matched",
+    },
+    observations: [{
+      observationId: "typed-controls",
+      observedAtMs: 1_000,
+      likelyPresent: true,
+      layerInspected: "first_layer",
+      documentId: "https://example.test/",
+      captureStatus: "observed",
+      inventoryOutcome: "complete_with_controls",
+      completedChannels: ["dom_inventory"],
+      incompleteChannels: [],
+      controls: [
+        { evidenceId: "accept", intent: "accept", layer: "first_layer", visible: true, actionable: true },
+        { evidenceId: "reject", intent: "reject", layer: "first_layer", visible: true, actionable: true },
+        { evidenceId: "options", intent: "options", layer: "first_layer", visible: true, actionable: true },
+      ],
+    }],
+    surface: { status: "observed_actionable", firstObservedAtMs: 1_000, lastObservedAtMs: 1_000 },
+    coverage: {
+      status: "complete",
+      requiredChannels: ["dom_inventory"],
+      completedChannels: ["dom_inventory"],
+      incompleteChannels: [],
+    },
+  });
+  const runtimeArtifacts = {
+    consentControlAssessment: assessment,
+    hybrid_runtime_evidence: {
+      consentControlAssessment: assessment,
+      consentSummary: {
+        acceptPresent: true,
+        bannerPresent: true,
+        rejectPresent: false,
+        rejectDepthClass: "absent",
+      },
+      consentVisual: { rejectHidden: true },
+    },
+  } satisfies Record<string, unknown>;
+
+  assert.equal(getHybridDerivedSignalValue(runtimeArtifacts, "privacy.dark_pattern_reject_button_missing"), false);
 });
 
 test("derives session replay vendors from hybrid request-to-vendor observations", () => {

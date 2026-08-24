@@ -622,8 +622,9 @@ export function normalizeUrlInput(input: string) {
   if (!parsed.hostname) {
     return null;
   }
-  const hostname = parsed.hostname.toLowerCase().replace(/^www\./, "");
-  const normalizedUrl = `https://${hostname}${parsed.pathname === "/" ? "/" : parsed.pathname}`;
+  const requestedHostname = parsed.hostname.toLowerCase();
+  const hostname = requestedHostname.replace(/^www\./, "");
+  const normalizedUrl = `https://${requestedHostname}${parsed.pathname === "/" ? "/" : parsed.pathname}`;
   return {
     input: trimmed,
     normalizedUrl,

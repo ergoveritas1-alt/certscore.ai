@@ -33,6 +33,14 @@ type CookieKnowledgeRule = Omit<CanonicalCookieKnowledge, "name"> & {
 
 const COOKIE_KNOWLEDGE_RULES: readonly CookieKnowledgeRule[] = [
   {
+    pattern: /^_pk_(?:id|ses|ref|cvar|hm)(?:[._-].*)?$/i,
+    category: "analytics",
+    dataTypes: ["analytics identifier", "visit and session measurement"],
+    description: "Matomo analytics cookie used to distinguish visits or retain analytics attribution and session state.",
+    essentiality: "non_essential",
+    vendor: "Matomo",
+  },
+  {
     pattern: /^ubid(?:-[a-z0-9]+)?$/i,
     category: "analytics",
     dataTypes: ["persistent browser identifier", "anonymous user identifier"],

@@ -1,4 +1,5 @@
 import type { PopulatedSignalRecord, ReportSignalSource } from "@website-signal-risk-scanner/shared";
+import { consentControlAssessmentSchema } from "@certscore/contracts";
 import {
   buildRuntimeCookieInventory,
   isFunctionalCookieExcludedFromTrackingEvidence
@@ -26,6 +27,23 @@ function getObjectArray(value: unknown) {
   return Array.isArray(value)
     ? value.filter((entry): entry is Record<string, unknown> => Boolean(entry) && typeof entry === "object" && !Array.isArray(entry))
     : [];
+}
+
+function getCanonicalConsentControlAssessment(
+  runtimeArtifacts: Record<string, unknown> | null | undefined,
+  hybrid: Record<string, unknown> | null,
+) {
+  const candidates = [
+    runtimeArtifacts?.consentControlAssessment,
+    runtimeArtifacts?.consent_control_assessment,
+    hybrid?.consentControlAssessment,
+    hybrid?.consent_control_assessment,
+  ];
+  for (const candidate of candidates) {
+    const parsed = consentControlAssessmentSchema.safeParse(candidate);
+    if (parsed.success) return parsed.data;
+  }
+  return null;
 }
 
 function getString(value: unknown) {
@@ -1519,6 +1537,17 @@ export function getHybridDerivedSignalValue(runtimeArtifacts: Record<string, unk
     case "privacy.dark_pattern_reject_button_missing": {
       const consentSummary = getRecord(hybrid.consentSummary);
       const consentVisual = getRecord(hybrid.consentVisual);
+      const assessment = getCanonicalConsentControlAssessment(runtimeArtifacts, hybrid);
+      if (assessment) {
+        if (assessment.controls.reject.state === "observed") return false;
+        if (
+          assessment.assessmentStatus !== "complete" ||
+          assessment.coverage.status !== "complete" ||
+          assessment.controls.reject.state === "unknown"
+        ) return undefined;
+        return assessment.surface.status === "observed_actionable" &&
+          assessment.controls.reject.state === "not_observed";
+      }
       const verifiedConsentSurface = hasVerifiedConsentSurface(hybrid, runtimeArtifacts);
       if (!verifiedConsentSurface) {
         return undefined;
@@ -1533,6 +1562,13 @@ export function getHybridDerivedSignalValue(runtimeArtifacts: Record<string, unk
     case "privacy.dark_pattern_accept_button_prominence": {
       const consentSummary = getRecord(hybrid.consentSummary);
       const consentVisual = getRecord(hybrid.consentVisual);
+      const assessment = getCanonicalConsentControlAssessment(runtimeArtifacts, hybrid);
+      if (assessment) {
+        if (
+          assessment.controls.accept.state !== "observed" ||
+          assessment.controls.reject.state !== "observed"
+        ) return undefined;
+      }
       const verifiedConsentSurface = hasVerifiedConsentSurface(hybrid, runtimeArtifacts);
       if (!verifiedConsentSurface) {
         return undefined;

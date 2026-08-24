@@ -4,8 +4,10 @@ import {
   SUPPORTED_PRIVACY_EVIDENCE_LOCALES,
 } from "./supported-languages";
 export * from "./consent-control-label-classifier";
+export * from "./consent-preference-category-classifier";
 export * from "./consent-language-classifier";
 export * from "./gdpr-transparency-topic-classifier";
+export * from "./gdpr-supplement-link-classifier";
 export * from "./gdpr-transparency-policy-thresholds";
 export * from "./article13-disclosure-rejection";
 export * from "./legal-framework-validity";
@@ -594,6 +596,8 @@ export const consentUiObservationSchema = z.object({
   defaultToggleStatesObserved: z.boolean().nullable().optional(),
   nonEssentialDefaultsOff: z.boolean().nullable().optional(),
   defaultTogglePurposeLabels: z.array(z.string().max(120)).default([]),
+  necessaryPreferenceSelectionObserved: z.boolean().nullable().optional(),
+  necessaryPreferenceLabels: z.array(z.string().max(120)).optional(),
   precheckedOptionalPurposeCount: z.number().int().nonnegative().default(0),
   precheckedOptionalPurposeLabels: z.array(z.string().max(120)).default([]),
   acceptControlObserved: z.boolean().default(false),
@@ -1520,6 +1524,44 @@ export const policyDocumentTextCoverageSchema = z.object({
   limitationKeys: z.array(z.string().max(120)).max(12).default([]),
 });
 
+export const gdprTransparencyTopicCoverageDiagnosticSchema = z.object({
+  contractVersion: z.literal("gdpr_transparency_topic_coverage_diagnostic.v1"),
+  topic: z.enum([
+    "controller_contact",
+    "processing_purposes",
+    "legal_basis",
+    "recipients_or_vendor_categories",
+    "data_retention",
+    "data_subject_rights",
+    "international_transfers",
+    "dpo_contact",
+    "supervisory_authority",
+    "automated_decision_making_or_profiling",
+  ]),
+  evaluationState: z.enum(["observed", "unknown"]),
+  coverageState: z.enum(["complete", "limited"]),
+  evidenceSectionSha256: z.string().regex(/^[a-f0-9]{64}$/).optional(),
+  sourceDocumentSha256: z.string().regex(/^[a-f0-9]{64}$/).optional(),
+  sectionExtractionMethod: z.enum([
+    "html_heading_hierarchy",
+    "html_definition_pair",
+    "html_labeled_block",
+    "html_table_row",
+    "visible_text_heading",
+    "canonical_topic_window",
+    "unstructured_body_window",
+  ]).optional(),
+  reasonCodes: z.array(z.string().max(120)).max(16).default([]),
+});
+
+export const governingPolicySelectionSchema = z.object({
+  contractVersion: z.literal("governing_policy_selection.v1"),
+  state: z.enum(["primary", "supporting", "ineligible"]),
+  rank: z.number().int().positive().optional(),
+  score: z.number().int().min(0).max(100),
+  reasonCodes: z.array(z.string().max(120)).max(16).default([]),
+});
+
 export const policySurfaceObservationSchema = z.object({
   observationId: z.string(),
   sourceScanner: z.string().default("policy_surface"),
@@ -1571,6 +1613,8 @@ export const policySurfaceObservationSchema = z.object({
   documentFetchState: z.enum(["not_attempted", "fetched", "failed", "skipped_budget"]).optional(),
   documentEvaluationState: z.enum(["not_attempted", "usable", "insufficient", "blocked"]).optional(),
   documentRole: z.enum(["policy_document", "policy_index", "unknown"]).optional(),
+  documentRoleReasonCodes: z.array(z.string().max(120)).max(12).optional(),
+  governingPolicySelection: governingPolicySelectionSchema.optional(),
   documentFormat: z.enum(["html", "pdf", "text", "unknown"]).optional(),
   contentType: z.string().max(160).optional(),
   compressedSizeBytes: z.number().int().nonnegative().optional(),
@@ -1738,6 +1782,18 @@ export const policySurfaceObservationSchema = z.object({
     sourceUrl: z.string(),
     heading: z.string().max(160),
     textExcerpt: z.string().max(1_200),
+    extractionMethod: z.enum([
+      "html_heading_hierarchy",
+      "html_definition_pair",
+      "html_labeled_block",
+      "html_table_row",
+      "visible_text_heading",
+      "canonical_topic_window",
+      "unstructured_body_window",
+    ]).optional(),
+    sourceOffsetBasis: z.enum(["normalized_visible_text", "sanitized_html"]).optional(),
+    documentTextSha256: z.string().regex(/^[a-f0-9]{64}$/).optional(),
+    evidenceTextSha256: z.string().regex(/^[a-f0-9]{64}$/).optional(),
     sourceTextChars: z.number().int().nonnegative().optional(),
     extractionState: z.enum(["complete", "truncated", "malformed"]).optional(),
     charStart: z.number().int().nonnegative().optional(),
@@ -1761,11 +1817,28 @@ export const policySurfaceObservationSchema = z.object({
     selectedPolicySectionHeading: z.string().max(160),
     selectedPolicySectionExcerpt: z.string().max(1_200),
     selectedPolicySectionUrl: z.string(),
+    sectionExtractionMethod: z.enum([
+      "html_heading_hierarchy",
+      "html_definition_pair",
+      "html_labeled_block",
+      "html_table_row",
+      "visible_text_heading",
+      "canonical_topic_window",
+      "unstructured_body_window",
+    ]).optional(),
+    sourceOffsetBasis: z.enum(["normalized_visible_text", "sanitized_html"]).optional(),
+    sourceDocumentTextSha256: z.string().regex(/^[a-f0-9]{64}$/).optional(),
+    evidenceTextSha256: z.string().regex(/^[a-f0-9]{64}$/).optional(),
+    sourceCharStart: z.number().int().nonnegative().optional(),
+    sourceCharEnd: z.number().int().nonnegative().optional(),
     evidenceSource: z.enum(["deterministic", "nano", "deterministic_plus_nano"]).default("deterministic"),
     selectedEvidenceStrength: z.enum(["strong", "partial", "limited"]).default("partial"),
     signalObserved: z.enum(["observed", "partial", "not_confirmed"]).default("partial"),
     extractionLimitation: z.string().max(240).optional(),
   })).default([]),
+  gdprTransparencyTopicCoverageDiagnostics: z.array(
+    gdprTransparencyTopicCoverageDiagnosticSchema,
+  ).max(10).optional(),
   mentionedVendors: z.array(z.string()).default([]),
   mentionedPurposes: z.array(z.string()).default([]),
   mentionedRights: z.array(z.string()).default([]),
@@ -1833,6 +1906,8 @@ export const policyTextEvidenceProjectionSchema = z.object({
     documentFetchState: z.enum(["not_attempted", "fetched", "failed", "skipped_budget"]),
     documentEvaluationState: z.enum(["not_attempted", "usable", "insufficient", "blocked"]),
     documentRole: z.enum(["policy_document", "policy_index", "unknown"]),
+    documentRoleReasonCodes: z.array(z.string().max(120)).max(12).optional(),
+    governingPolicySelection: governingPolicySelectionSchema.optional(),
     documentOwnerEntity: z.string().max(240).optional(),
     targetRelationship: z.enum([
       "target_controller",
@@ -1844,6 +1919,9 @@ export const policyTextEvidenceProjectionSchema = z.object({
     ownershipConfidence: z.number().min(0).max(1).optional(),
     contentCoverage: policySurfaceObservationSchema.shape.contentCoverage,
     documentTextCoverage: policyDocumentTextCoverageSchema,
+    gdprTransparencyTopicCoverageDiagnostics: z.array(
+      gdprTransparencyTopicCoverageDiagnosticSchema,
+    ).max(10).optional(),
     retainedTextChars: z.number().int().nonnegative(),
     retainedTextSha256: z.string().regex(/^[a-f0-9]{64}$/).optional(),
     extractionStatus: z.enum([
@@ -2316,6 +2394,7 @@ function hasVerifiedPositiveConsentCapture(
   observations: z.infer<typeof consentUiObservationSchema>[],
 ): boolean {
   return observations.some((observation) =>
+    !hasUnresolvedAdaptivePartialConsentInventory(observation) &&
     observation.captureStatus === "observed" &&
     observation.likelyPresent &&
     observation.layerInspected === "first_layer" &&
@@ -2337,6 +2416,32 @@ function hasVerifiedPositiveConsentCapture(
       observation.controls.some((control) => control.visible !== false)
     )
   );
+}
+
+function hasUnresolvedAdaptivePartialConsentInventory(
+  observation: z.infer<typeof consentUiObservationSchema>,
+): boolean {
+  const exitedFromPartialInventory = (observation.inventoryDiagnostics?.timingMarkers ?? []).some((marker) =>
+    marker.includes(":calibrated_stable_partial_exit") ||
+    marker.includes(":calibrated_audit_complete_exit")
+  );
+  if (!exitedFromPartialInventory) return false;
+
+  const visibleControls = observation.controls.filter((control) => control.visible !== false);
+  const acceptObserved = observation.acceptControlObserved || visibleControls.some((control) =>
+    control.semanticRole === "explicit_accept" || control.actionType === "accept_all"
+  );
+  const rejectObserved = observation.rejectControlObserved || visibleControls.some((control) =>
+    control.semanticRole === "reject" ||
+    control.semanticRole === "necessary_only" ||
+    control.actionType === "reject_all"
+  );
+  const optionsObserved = observation.managePreferencesControlObserved || visibleControls.some((control) =>
+    control.semanticRole === "preferences" ||
+    control.actionType === "manage_preferences" ||
+    control.actionType === "save_preferences"
+  );
+  return !(acceptObserved && rejectObserved && optionsObserved);
 }
 
 function hasVerifiedNegativeConsentCapture(
@@ -2548,14 +2653,17 @@ export function deriveConsentSurfaceInspectionOutcome(input: {
     representativeScreenshotUrls,
   });
   const consentLaneCompleted = terminalRecoveryCompleted || verifiedPositiveCaptureCompleted || verifiedNegativeCaptureCompleted;
-  const observationFailed = observations.length === 0 || !consentLaneCompleted && observations.some((observation) =>
-    observation.captureStatus === "incomplete" ||
-    (
-      observation.captureStatus === undefined &&
+  const observationFailed = observations.length === 0 || (
+    !consentLaneCompleted && observations.some((observation) =>
+      hasUnresolvedAdaptivePartialConsentInventory(observation) ||
+      observation.captureStatus === "incomplete" ||
       (
-        observation.basis.includes("bounded_capture_timeout_or_failure") ||
-        observation.basis.includes("inventory:probe_failed") ||
-        observation.basis.includes("geometry_capture_unavailable")
+        observation.captureStatus === undefined &&
+        (
+          observation.basis.includes("bounded_capture_timeout_or_failure") ||
+          observation.basis.includes("inventory:probe_failed") ||
+          observation.basis.includes("geometry_capture_unavailable")
+        )
       )
     )
   );

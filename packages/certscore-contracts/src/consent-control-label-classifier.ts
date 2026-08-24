@@ -609,6 +609,8 @@ export const CONSENT_CONTROL_PHRASE_REGISTRY: ConsentControlTerm[] = [
     equivalent("reject", "continuar solo con las cookies necesarias", "necessary_only"),
     equivalent("reject", "rechazar cookies funcionales", "category_functional"),
     equivalent("reject", "rechazar cookies publicitarias", "category_advertising"),
+    ...direct("reject", "denegar todas"),
+    ...direct("reject", "denegar todo"),
     ...direct("reject", "denegar cookies"),
 
     contextual("options", "configurar", { requiresConsentContext: true }),

@@ -110,6 +110,56 @@ test("verified empty consent evidence remains complete through non-terminal scan
   assert.equal(outcome.evidenceChannels.find((channel) => channel.channel === "geometry")?.status, "observed");
 });
 
+test("an adaptive early partial exit retains the observed control but keeps inspection coverage limited", () => {
+  const input = baseInput();
+  input.screenshots = [{
+    artifactId: "screenshot_pre_consent",
+    capturedAtMs: 8_100,
+    captureMethod: "primary_viewport_fallback",
+    consentStateAtTime: "pre_consent",
+    pagePhase: "network_idle",
+    path: "/bounded/pre-consent.png",
+    url: "https://example.test/",
+  }];
+  input.consentUiObservations![0] = {
+    ...input.consentUiObservations![0]!,
+    acceptControlObserved: true,
+    basis: ["inventory:first_layer_controls"],
+    captureStatus: "observed",
+    inventoryOutcome: "complete_with_controls",
+    captureDiagnostics: {
+      completedChannels: ["dom_inventory", "geometry"],
+      failedChannels: [],
+      timedOutChannels: [],
+    },
+    inventoryDiagnostics: {
+      candidateContainerCount: 1,
+      candidateControlCount: 1,
+      retainedControlCount: 1,
+      inventorySources: ["cmp_container"],
+      candidateLabels: ["Accept all"],
+      rejectionReasons: [],
+      timingMarkers: ["gate_8s:calibrated_stable_partial_exit"],
+    },
+    layerInspected: "first_layer",
+    likelyPresent: true,
+    visibleChoiceLabels: ["Accept all"],
+    controls: [{
+      actionType: "accept_all",
+      label: "Accept all",
+      semanticRole: "explicit_accept",
+      visible: true,
+    }],
+  };
+
+  const outcome = deriveConsentSurfaceInspectionOutcome(input);
+
+  assert.equal(outcome.outcome, "actionable_surface_observed");
+  assert.equal(outcome.coverageStatus, "limited");
+  assert.equal(outcome.inspectionCompleted, false);
+  assert.ok(outcome.limitationKeys.includes("consent_surface_inspection_observation_incomplete"));
+});
+
 test("an ambiguous OK acknowledgment retains a non-actionable consent surface", () => {
   const input = baseInput();
   input.consentUiObservations![0] = {

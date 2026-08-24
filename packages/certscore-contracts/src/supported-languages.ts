@@ -73,6 +73,17 @@ export const SUPPORTED_GDPR_TRANSPARENCY_LOCALES = [
   "et",
   "uk",
   "tr",
+  "fa",
+  "vi",
+  "id",
+  "ko",
+  "th",
+  "he",
+  "sr",
+  "ca",
+  "hi",
+  "az",
+  "gl",
 ] as const;
 
 export type SupportedGdprTransparencyLocale = typeof SUPPORTED_GDPR_TRANSPARENCY_LOCALES[number];

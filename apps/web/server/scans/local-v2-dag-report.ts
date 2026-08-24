@@ -2946,7 +2946,7 @@ export function summarizePolicySurfaces(
   const policyIndexRetainedAsGoverningDocument = policyTextEvidenceProjection.documents.some((document) =>
     document.documentRole === "policy_index"
   );
-  const absenceCoverageSufficient =
+  const absenceCoverageBaseSufficient =
     policyTextEvidenceProjection.projectionStatus === "verified_complete" &&
     policyTextExtractionHealth.policyTextExtractionStatus === "ok" &&
     policyTextExtractionHealth.gdprTransparencyLanguageSupported === true &&
@@ -2964,41 +2964,62 @@ export function summarizePolicySurfaces(
   const observedArticle13Types = new Set(dedupedArticle13DisclosureSignals
     .filter((signal) => signal.status === "observed")
     .map((signal) => signal.disclosureType));
-  const article13CoverageAssessments = article13CoverageTopics.map((topic) => ({
-    assessmentContractVersion: "gdpr_transparency_article13_coverage_assessment.v1",
-    coverageStatus: absenceCoverageSufficient ? "sufficient" : "insufficient",
-    policyDocumentIds: completeOwnedPolicyDocuments.map((document) => document.observationId),
-    policyDocumentRoles: completeOwnedPolicyDocuments.map((document) => document.documentRole),
-    policyDocumentSha256: completeOwnedPolicyDocuments.map((document) => document.retainedTextSha256).filter(Boolean),
-    reasonCodes: observedArticle13Types.has(topic)
-      ? ["row_specific_disclosure_observed"]
-      : absenceCoverageSufficient
-        ? ["verified_complete_owned_policy_reviewed", "row_specific_disclosure_not_observed"]
-        : [
-            "policy_absence_coverage_preconditions_not_met",
-            ...(completeOwnedPolicyDocuments.some(
-              (document) => document.retainedTextChars < MIN_GDPR_TRANSPARENCY_ABSENCE_POLICY_TEXT_CHARS,
-            ) ? ["policy_text_below_absence_coverage_minimum_length"] : []),
-            ...(completeOwnedPolicyDocuments.some(
-              (document) =>
-                document.documentTextCoverage.status !== "complete" ||
-                document.contentCoverage?.status !== "complete",
-            ) ? ["policy_document_content_coverage_incomplete"] : []),
-            ...(policyIndexRetainedAsGoverningDocument ? ["policy_index_is_not_substantive_policy_document"] : []),
-            ...(unresolvedMaterialPolicyChildren.length > 0 ? ["material_linked_policy_supplements_not_fully_evaluated"] : []),
-            ...(options.policyEvidenceLaneStatus === "degraded" ? ["policy_evidence_lane_degraded"] : []),
-          ],
-    sourceUrls: completeOwnedPolicyDocuments.map((document) => document.finalUrl ?? document.requestedUrl),
-    status: observedArticle13Types.has(topic)
-      ? "observed"
-      : absenceCoverageSufficient
-        ? "not_observed_with_sufficient_coverage"
-        : "insufficient_retained_evidence",
-    topic,
-    unresolvedMaterialPolicyChildUrls: unresolvedMaterialPolicyChildren
-      .map((surface) => firstString(surface.finalUrl, surface.normalizedUrl, surface.url))
-      .filter(Boolean),
-  }));
+  const article13CoverageAssessments = article13CoverageTopics.map((topic) => {
+    const topicDiagnostics = completeOwnedPolicyDocuments.flatMap((document) =>
+      (document.gdprTransparencyTopicCoverageDiagnostics ?? []).filter((diagnostic) =>
+        diagnostic.topic === topic &&
+        diagnostic.contractVersion === "gdpr_transparency_topic_coverage_diagnostic.v1"
+      )
+    );
+    const topicDiagnosticCoverageSufficient =
+      completeOwnedPolicyDocuments.length > 0 &&
+      topicDiagnostics.length === completeOwnedPolicyDocuments.length &&
+      topicDiagnostics.every((diagnostic) => diagnostic.coverageState === "complete");
+    const absenceCoverageSufficient =
+      absenceCoverageBaseSufficient && topicDiagnosticCoverageSufficient;
+    return {
+      assessmentContractVersion: "gdpr_transparency_article13_coverage_assessment.v1",
+      coverageStatus: absenceCoverageSufficient ? "sufficient" : "insufficient",
+      policyDocumentIds: completeOwnedPolicyDocuments.map((document) => document.observationId),
+      policyDocumentRoles: completeOwnedPolicyDocuments.map((document) => document.documentRole),
+      policyDocumentSha256: completeOwnedPolicyDocuments.map((document) => document.retainedTextSha256).filter(Boolean),
+      reasonCodes: observedArticle13Types.has(topic)
+        ? ["row_specific_disclosure_observed"]
+        : absenceCoverageSufficient
+          ? [
+              "verified_complete_owned_policy_reviewed",
+              "typed_topic_coverage_diagnostic_verified",
+              "row_specific_disclosure_not_observed",
+            ]
+          : [
+              "policy_absence_coverage_preconditions_not_met",
+              ...(!topicDiagnosticCoverageSufficient
+                ? ["typed_topic_coverage_diagnostic_missing_or_limited"]
+                : []),
+              ...(completeOwnedPolicyDocuments.some(
+                (document) => document.retainedTextChars < MIN_GDPR_TRANSPARENCY_ABSENCE_POLICY_TEXT_CHARS,
+              ) ? ["policy_text_below_absence_coverage_minimum_length"] : []),
+              ...(completeOwnedPolicyDocuments.some(
+                (document) =>
+                  document.documentTextCoverage.status !== "complete" ||
+                  document.contentCoverage?.status !== "complete",
+              ) ? ["policy_document_content_coverage_incomplete"] : []),
+              ...(policyIndexRetainedAsGoverningDocument ? ["policy_index_is_not_substantive_policy_document"] : []),
+              ...(unresolvedMaterialPolicyChildren.length > 0 ? ["material_linked_policy_supplements_not_fully_evaluated"] : []),
+              ...(options.policyEvidenceLaneStatus === "degraded" ? ["policy_evidence_lane_degraded"] : []),
+            ],
+      sourceUrls: completeOwnedPolicyDocuments.map((document) => document.finalUrl ?? document.requestedUrl),
+      status: observedArticle13Types.has(topic)
+        ? "observed"
+        : absenceCoverageSufficient
+          ? "not_observed_with_sufficient_coverage"
+          : "insufficient_retained_evidence",
+      topic,
+      unresolvedMaterialPolicyChildUrls: unresolvedMaterialPolicyChildren
+        .map((surface) => firstString(surface.finalUrl, surface.normalizedUrl, surface.url))
+        .filter(Boolean),
+    };
+  });
   const discoveredPrivacyPolicyUrls = uniqueStrings(targetRelevantDiscoveredPrivacySurfaces
     .map((surface) => firstString(surface.normalizedUrl, surface.url))
     .filter(Boolean));
@@ -3132,6 +3153,11 @@ export function summarizePolicySurfaces(
     };
   }).slice(0, 12);
   const selectedPrivacyPolicyDocument = article13Surfaces
+    .filter((row) => row.surface.governingPolicySelection?.state === "primary")
+    .sort((left, right) =>
+      (left.surface.governingPolicySelection?.rank ?? Number.MAX_SAFE_INTEGER) -
+      (right.surface.governingPolicySelection?.rank ?? Number.MAX_SAFE_INTEGER)
+    )[0] ?? article13Surfaces
     .filter((row) =>
       row.surface.traversalDepth === 1 &&
       row.surface.documentEvaluationState === "usable"
@@ -3395,11 +3421,15 @@ function buildPolicyTextEvidenceProjection(
       documentFetchState,
       documentEvaluationState,
       documentRole: surface.documentRole ?? "unknown",
+      documentRoleReasonCodes: surface.documentRoleReasonCodes ?? [],
+      governingPolicySelection: surface.governingPolicySelection,
       documentOwnerEntity: surface.documentOwnerEntity,
       targetRelationship: relationship,
       ownershipConfidence: surface.ownershipConfidence,
       contentCoverage: surface.contentCoverage,
       documentTextCoverage,
+      gdprTransparencyTopicCoverageDiagnostics:
+        surface.gdprTransparencyTopicCoverageDiagnostics ?? [],
       retainedTextChars: text.length,
       retainedTextSha256: text ? createHash("sha256").update(text).digest("hex") : undefined,
       extractionStatus,
@@ -3634,6 +3664,9 @@ function selectArticle13PrivacySurfaces(
   const prioritizeGeneralScope = (rows: typeof generalPrivacySurfaces) => rows
     .map((row, index) => ({ index, row }))
     .sort((left, right) =>
+      governingPolicySelectionPriority(left.row) - governingPolicySelectionPriority(right.row) ||
+      (left.row.surface.governingPolicySelection?.rank ?? Number.MAX_SAFE_INTEGER) -
+        (right.row.surface.governingPolicySelection?.rank ?? Number.MAX_SAFE_INTEGER) ||
       Number(isExplicitGeneralPrivacyNotice(right.row)) - Number(isExplicitGeneralPrivacyNotice(left.row)) ||
       left.index - right.index
     )
@@ -3645,6 +3678,18 @@ function selectArticle13PrivacySurfaces(
     ));
   }
   return prioritizeGeneralScope(scopedPrivacySurfaces.length > 0 ? scopedPrivacySurfaces : privacySurfaces);
+}
+
+function governingPolicySelectionPriority(
+  row: ReturnType<typeof dedupePolicySurfaces>[number],
+) {
+  switch (row.surface.governingPolicySelection?.state) {
+    case "primary": return 0;
+    case "supporting": return 1;
+    case undefined: return 2;
+    case "ineligible": return 3;
+    default: return 4;
+  }
 }
 
 function isExplicitGeneralPrivacyNotice(row: ReturnType<typeof dedupePolicySurfaces>[number]) {
@@ -5607,7 +5652,30 @@ function buildMaterializedLocalV2Detail(
       cookiesBeforeConsentCount,
       cookiesSeenCount: cookieIdentityCount,
       ...cookieEvidenceCounts,
+      localStorageKeys: uniqueStrings(
+        (bundle.storageSnapshots ?? [])
+          .filter((snapshot) => snapshot.consentStateAtTime === "pre_consent")
+          .flatMap((snapshot) => snapshot.localStorageKeys),
+      ).slice(0, 100),
+      localStorageObserved: (bundle.storageSnapshots ?? []).some((snapshot) =>
+        snapshot.consentStateAtTime === "pre_consent" && snapshot.localStorageKeys.length > 0
+      ),
       retainedCookieEventCount: cookieEvents.length,
+      retainedStorageSnapshotCount: (bundle.storageSnapshots ?? []).length,
+      sessionStorageKeys: uniqueStrings(
+        (bundle.storageSnapshots ?? [])
+          .filter((snapshot) => snapshot.consentStateAtTime === "pre_consent")
+          .flatMap((snapshot) => snapshot.sessionStorageKeys),
+      ).slice(0, 100),
+      sessionStorageObserved: (bundle.storageSnapshots ?? []).some((snapshot) =>
+        snapshot.consentStateAtTime === "pre_consent" && snapshot.sessionStorageKeys.length > 0
+      ),
+      storageConsentState: "pre_interaction",
+      storageFirstObservedAtMs: minimumNumber(
+        ...(bundle.storageSnapshots ?? [])
+          .filter((snapshot) => snapshot.consentStateAtTime === "pre_consent")
+          .map((snapshot) => snapshot.capturedAtMs),
+      ),
       thirdPartyCookieBeforeConsentCount: uniqueStrings(preconsentCookies
         .filter((event) => event.cookieParty === "third_party" || event.thirdParty === true)
         .map((event) => cookieIdentity(event))).length

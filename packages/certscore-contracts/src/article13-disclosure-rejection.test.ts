@@ -264,6 +264,13 @@ test("Article 13 rejection contract does not mistake third-person factual policy
   assert.equal(looksLikeArticle13TableOfContents(completeNotice, { mode: "multilingual_classifier" }), false);
 });
 
+test("Article 13 rejection contract preserves substantive German multi-topic prose", () => {
+  const completeNotice =
+    "Der Verantwortliche für die Datenverarbeitung nennt den Kontakt zum Datenschutz und den Kontakt zum Datenschutzbeauftragten. Wir erklären die Zwecke der Verarbeitung personenbezogener Daten, die Rechtsgrundlage für die Verarbeitung personenbezogener Daten, Kategorien von Empfängern personenbezogener Daten, die Speicherdauer personenbezogener Daten, das Recht auf Auskunft über personenbezogene Daten, die Übermittlung personenbezogener Daten in ein Drittland, das Recht auf Beschwerde bei einer Aufsichtsbehörde und automatisierte Entscheidungsfindung mit personenbezogenen Daten.";
+
+  assert.equal(looksLikeArticle13TableOfContents(completeNotice, { mode: "multilingual_classifier" }), false);
+});
+
 test("Article 13 rejection contract preserves accepted legacy and multilingual examples", () => {
   assert.equal(
     isArticle13DisclosureEvidenceUsable(

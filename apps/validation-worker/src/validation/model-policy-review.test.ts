@@ -153,6 +153,30 @@ test("bounded policy review text prefers the strongest retained retention passag
   assert.match(retained, /After account closure/i);
 });
 
+test("bounded policy review text retains distant German GDPR Transparency sections", () => {
+  const text = [
+    "Datenschutzerklärung. Diese Erklärung beschreibt die Verarbeitung personenbezogener Daten.",
+    "Allgemeine Hinweise zum Unternehmen und zur Website. ".repeat(520),
+    "Zwecke der Verarbeitung. Wir verarbeiten personenbezogene Daten zur Bereitstellung der Website und zur Bearbeitung von Anfragen.",
+    "Maßgebliche Rechtsgrundlagen. Die Verarbeitung erfolgt zur Vertragserfüllung, aufgrund berechtigter Interessen oder einer Einwilligung.",
+    "Offenlegung und Übermittlung von Daten. Daten können gegenüber Auftragsverarbeitern oder Dritten offengelegt werden.",
+    "Weitere allgemeine Hinweise zur Website. ".repeat(520),
+    "Löschung von Daten. Gespeicherte Daten werden gelöscht, sobald der Zweck ihrer Verarbeitung entfällt und keine gesetzlichen Aufbewahrungspflichten entgegenstehen.",
+    "Rechte der betroffenen Personen. Betroffene Personen haben das Recht auf Auskunft, Berichtigung, Löschung, Einschränkung, Widerspruch und Datenübertragbarkeit.",
+    "Übermittlungen in Drittländer erfolgen unter den Voraussetzungen der Art. 44 ff. DSGVO und mit geeigneten Garantien.",
+  ].join(" ");
+
+  const retained = selectBoundedPolicyReviewText(text);
+
+  assert.equal(retained.length <= 18_000, true);
+  assert.match(retained, /Zwecke der Verarbeitung/);
+  assert.match(retained, /Maßgebliche Rechtsgrundlagen/);
+  assert.match(retained, /Auftragsverarbeitern oder Dritten/);
+  assert.match(retained, /Löschung von Daten/);
+  assert.match(retained, /Rechte der betroffenen Personen/);
+  assert.match(retained, /Übermittlungen in Drittländer/);
+});
+
 test("canonical v2 policy surfaces become bounded review documents without raw runtime values", () => {
   const packet = buildPolicyReviewPacketFromCanonicalBundle({
     scanId: "22222222-2222-4222-8222-222222222222",
@@ -834,6 +858,48 @@ test("strong typed retained evidence confirms an observed topic when literal phr
   assert.equal(purposes?.status, "observed");
   assert.ok(purposes?.reasonCodes.includes("verified_retained_topic_evidence"));
   assert.equal(purposes?.evidenceExcerpts[0], retainedExcerpt);
+});
+
+test("strong typed German retention evidence survives canonical WC01 projection", async () => {
+  const retainedExcerpt =
+    "Löschung von Daten. Die von uns verarbeiteten und gespeicherten Daten werden gelöscht, sobald der Zweck ihrer Verarbeitung entfällt und keine gesetzlichen Aufbewahrungspflichten entgegenstehen.";
+  const packet = buildFixturePacket(retainedExcerpt);
+  packet.documents[0]!.extractedCandidates = {
+    retained_article13_section_evidence: [{
+      coverageArea: "data_retention",
+      selectedPolicySectionExcerpt: retainedExcerpt,
+      selectedPolicySectionHeading: "Löschung von Daten",
+      selectedPolicySectionUrl: packet.documents[0]!.canonicalUrl,
+      selectedEvidenceStrength: "strong",
+      signalObserved: "observed"
+    }]
+  };
+  const rows = completeRows({
+    data_retention: {
+      status: "observed",
+      confidence: 0.94,
+      sourceDocumentIds: [packet.documents[0]!.documentId],
+      sourceUrls: [packet.documents[0]!.canonicalUrl],
+      evidenceExcerpts: ["Löschung von Daten"],
+      reasonCodes: ["retention_criteria"],
+      rationale: "Substantive deletion criteria were retained."
+    }
+  });
+  const artifact = await reviewPolicyPacketWithMini({
+    apiKey: "test-key",
+    fetchImpl: async () => new Response(JSON.stringify({
+      model: "gpt-5.4-mini",
+      choices: [{ message: { content: JSON.stringify({ rows }) } }]
+    }), { status: 200 }),
+    mode: "shadow",
+    model: "gpt-5.4-mini",
+    packet
+  });
+
+  const retention = artifact.rows.find((row) => row.topic === "data_retention");
+  assert.equal(retention?.status, "observed");
+  assert.ok(retention?.reasonCodes.includes("verified_retention_passage_selected"));
+  assert.equal(retention?.evidenceExcerpts[0], retainedExcerpt);
 });
 
 test("typed retained topic evidence cannot rescue a model row without a matching document reference", async () => {

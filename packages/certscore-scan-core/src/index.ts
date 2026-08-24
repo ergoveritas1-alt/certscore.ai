@@ -12,6 +12,7 @@ import {
   type IframeEvent,
   type NetworkEvent,
   type NetworkResponseEvent,
+  type ObservedJourney,
   type PolicySurfaceObservation,
   type RuntimeCoverageSummary,
   type RuntimeEvidenceEvent,
@@ -53,6 +54,7 @@ import {
   type PreConsentRuntimeScannerResult,
 } from "./scanners/pre-consent-runtime-scanner.js";
 import {
+  applyGoverningPolicySelection,
   countRecoveredPolicySurfaceObservations,
   mergePolicySurfaceObservations,
   policySurfaceObservationsFromRetainedRenderedLinks,
@@ -927,6 +929,9 @@ export async function runScan(input: RunScanInput): Promise<CanonicalEvidenceBun
         policySurfaceResult.moduleRun.evidenceRefs.push(renderedPolicyEvidenceRef);
       }
     }
+    policySurfaceResult.policySurfaceObservations = applyGoverningPolicySelection(
+      policySurfaceResult.policySurfaceObservations,
+    );
     await phaseRecorder.record("policy_surface_for_output", "completed", {
       deadlineFallbackUsed: policySurfaceOutputDeadlineExpired,
       durationMs: policySurfaceResult.moduleRun.durationMs,
@@ -1019,21 +1024,7 @@ export async function runScan(input: RunScanInput): Promise<CanonicalEvidenceBun
     thirdPartyVendorsObserved: normalizedVendorObservations.some(
       (vendor) => !["consent_management", "infrastructure", "security", "performance_monitoring"].includes(vendor.purpose),
     ),
-    preConsentTrackingObserved: observedJourneys.some((journey) =>
-      journey.journeyType === "tracker" ||
-      (journey.purpose !== undefined &&
-        ["analytics", "advertising", "session_replay"].includes(journey.purpose) &&
-        journey.observedBehaviors.some((behavior) =>
-        [
-          "collection_endpoint_observed",
-          "cookie_set",
-          "cookie_sent",
-          "identifier_parameter_observed",
-          "advertising_click_id_observed",
-          "session_replay_collection_observed",
-        ].includes(behavior),
-        )),
-    ),
+    preConsentTrackingObserved: observedJourneys.some(journeyEstablishesPreConsentTracking),
     thirdPartyCookiesPreConsentObserved: observedJourneys.some(
       (journey) =>
         journey.journeyType === "cookie" &&
@@ -1296,19 +1287,7 @@ export function compactCanonicalEvidenceBundleForRetention(
     observedJourneys: retainedJourneys,
     derivedRuntimeSignals: {
       ...bundle.derivedRuntimeSignals,
-      preConsentTrackingObserved: retainedJourneys.some((journey) =>
-        journey.journeyType === "tracker" ||
-        journey.observedBehaviors.some((behavior) =>
-          [
-            "collection_endpoint_observed",
-            "cookie_set",
-            "cookie_sent",
-            "identifier_parameter_observed",
-            "advertising_click_id_observed",
-            "session_replay_collection_observed",
-          ].includes(behavior),
-        ),
-      ),
+      preConsentTrackingObserved: retainedJourneys.some(journeyEstablishesPreConsentTracking),
       thirdPartyCookiesPreConsentObserved: retainedJourneys.some(
         (journey) =>
           journey.journeyType === "cookie" &&
@@ -1358,6 +1337,31 @@ export function compactCanonicalEvidenceBundleForRetention(
     iframeEvents: retainPriorityEvents(compacted.iframeEvents, referencedEventIds, 40),
     runtimeTimeline: retainPriorityEvents(compacted.runtimeTimeline, referencedEventIds, 40),
   });
+}
+
+function journeyEstablishesPreConsentTracking(journey: ObservedJourney): boolean {
+  if (journey.firstObservedConsentState !== "pre_consent") {
+    return false;
+  }
+  if (["consent_management", "security", "infrastructure", "performance_monitoring"].includes(
+    journey.purpose ?? "unknown",
+  )) {
+    return false;
+  }
+  if (journey.journeyType === "tracker") {
+    return true;
+  }
+  if (!journey.purpose || !["analytics", "advertising", "session_replay"].includes(journey.purpose)) {
+    return false;
+  }
+  return journey.observedBehaviors.some((behavior) => [
+    "collection_endpoint_observed",
+    "cookie_set",
+    "cookie_sent",
+    "identifier_parameter_observed",
+    "advertising_click_id_observed",
+    "session_replay_collection_observed",
+  ].includes(behavior));
 }
 
 function boundModuleRunTimingBreakdown(
@@ -1610,6 +1614,7 @@ export {
   policySurfaceScannerPlaceholder,
 } from "./scanners/placeholders.js";
 export {
+  applyGoverningPolicySelection,
   mergePolicySurfaceObservations,
   policySurfaceScanner,
 } from "./scanners/policy-surface-scanner.js";

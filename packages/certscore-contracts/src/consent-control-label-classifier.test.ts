@@ -61,6 +61,18 @@ test("classifies direct consent controls across English, German, and French", ()
   assert.equal(classifyConsentControlLabel({ label: "Paramètres des cookies" }).intent, "options");
 });
 
+test("classifies the retained Spanish first-layer denial label as reject", () => {
+  const classification = classifyConsentControlLabel({
+    label: "Denegar todas",
+    contextText: "Utilizamos cookies propias y de terceros. Puede aceptar, denegar o configurar su selección.",
+    localeHints: ["es"],
+  });
+
+  assert.equal(classification.intent, "reject");
+  assert.equal(classification.semanticRole, "reject");
+  assert.equal(classification.matchedLocale, "es");
+});
+
 test("classifies the retained University of Ljubljana controls only in canonical Slovenian consent context", () => {
   const contextText = "Spletna stran Univerze v Ljubljani uporablja piškotke v skladu z našo politiko varovanja zasebnosti. Nujne smo že naložili, analitične pa lahko dovolite.";
   const accept = classifyConsentControlLabel({

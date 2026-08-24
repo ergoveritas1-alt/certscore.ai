@@ -27,6 +27,27 @@ const serverOnlyPath = require.resolve("server-only");
   paths: []
 };
 
+function completeUnknownGdprTransparencyTopicCoverageDiagnostics() {
+  return [
+    "controller_contact",
+    "processing_purposes",
+    "legal_basis",
+    "recipients_or_vendor_categories",
+    "data_retention",
+    "data_subject_rights",
+    "international_transfers",
+    "dpo_contact",
+    "supervisory_authority",
+    "automated_decision_making_or_profiling",
+  ].map((topic) => ({
+    contractVersion: "gdpr_transparency_topic_coverage_diagnostic.v1" as const,
+    topic,
+    evaluationState: "unknown" as const,
+    coverageState: "complete" as const,
+    reasonCodes: ["row_specific_disclosure_not_confirmed"],
+  }));
+}
+
 async function loadLocalV2DagReport() {
   const report = await import("./local-v2-dag-report");
   return {
@@ -4152,6 +4173,8 @@ test("summarizePolicySurfaces keeps absence coverage insufficient while a materi
     status: "fetched",
     documentRole: "policy_document",
     textExcerpt: policyText,
+    gdprTransparencyTopicCoverageDiagnostics:
+      completeUnknownGdprTransparencyTopicCoverageDiagnostics(),
   }] as never, "example.test");
   const unresolvedSupplement = {
     observationId: "linked-gdpr-supplement",
@@ -4204,7 +4227,17 @@ test("summarizePolicySurfaces permits absence coverage for a verified substantiv
     url: "https://example.test/privacy",
     status: "fetched",
     documentRole: "policy_document",
+    documentRoleReasonCodes: ["evidence_bound_substantive_policy_document"],
+    governingPolicySelection: {
+      contractVersion: "governing_policy_selection.v1",
+      state: "primary",
+      rank: 1,
+      score: 96,
+      reasonCodes: ["highest_ranked_eligible_governing_policy"],
+    },
     textExcerpt: policyText,
+    gdprTransparencyTopicCoverageDiagnostics:
+      completeUnknownGdprTransparencyTopicCoverageDiagnostics(),
   }] as never, "example.test");
 
   const summary = summarizePolicySurfaces(surfaces, "example.test", { primaryLanguage: "en" });
@@ -4214,6 +4247,46 @@ test("summarizePolicySurfaces permits absence coverage for a verified substantiv
   assert.equal(retention?.coverageStatus, "sufficient");
   assert.equal(retention?.status, "not_observed_with_sufficient_coverage");
   assert.deepEqual(retention?.policyDocumentRoles, ["policy_document"]);
+  assert.equal(
+    summary.policyTextEvidenceProjection.documents[0]
+      ?.gdprTransparencyTopicCoverageDiagnostics?.length,
+    10,
+  );
+  assert.equal(
+    summary.policyTextEvidenceProjection.documents[0]?.governingPolicySelection?.state,
+    "primary",
+  );
+  assert.deepEqual(
+    summary.policyTextEvidenceProjection.documents[0]?.documentRoleReasonCodes,
+    ["evidence_bound_substantive_policy_document"],
+  );
+});
+
+test("summarizePolicySurfaces keeps missing typed topic coverage unknown instead of inferring absence", async () => {
+  const { dedupePolicySurfaces, summarizePolicySurfaces } = await loadLocalV2DagReport();
+  const policyText = [
+    "Privacy Notice. Example Test is the controller for personal information.",
+    "We process personal information to provide services under contract and legitimate interests.",
+  ].join(" ").repeat(30);
+  const surfaces = dedupePolicySurfaces([{
+    observationId: "legacy-policy-without-topic-coverage",
+    surfaceType: "privacy_policy",
+    url: "https://example.test/privacy",
+    status: "fetched",
+    documentRole: "policy_document",
+    textExcerpt: policyText,
+  }] as never, "example.test");
+
+  const summary = summarizePolicySurfaces(surfaces, "example.test", { primaryLanguage: "en" });
+  const retention = (summary.article13CoverageAssessments as Array<Record<string, unknown>>)
+    .find((assessment) => assessment.topic === "data_retention");
+
+  assert.equal(retention?.coverageStatus, "insufficient");
+  assert.equal(retention?.status, "insufficient_retained_evidence");
+  assert.equal(
+    (retention?.reasonCodes as string[]).includes("typed_topic_coverage_diagnostic_missing_or_limited"),
+    true,
+  );
 });
 
 test("a complete 2,104-character governing policy supports deterministic absence coverage", async () => {
@@ -4230,6 +4303,8 @@ test("a complete 2,104-character governing policy supports deterministic absence
     status: "fetched",
     documentRole: "policy_document",
     textExcerpt: policyText,
+    gdprTransparencyTopicCoverageDiagnostics:
+      completeUnknownGdprTransparencyTopicCoverageDiagnostics(),
   }] as never, "example.test");
 
   const summary = summarizePolicySurfaces(surfaces, "example.test", { primaryLanguage: "en" });
@@ -4500,7 +4575,7 @@ test("summarizePolicySurfaces prefers the selected policy language over a differ
   }
 });
 
-test("summarizePolicySurfaces does not let a supported homepage mask an unsupported policy language", async () => {
+test("summarizePolicySurfaces uses the retained supported Korean policy language instead of the homepage language", async () => {
   const { dedupePolicySurfaces, summarizePolicySurfaces } = await loadLocalV2DagReport();
   const policyText = "이 개인정보 처리방침은 개인정보 처리 목적, 이용자 권리, 보관 기간 및 연락 방법을 설명합니다. ".repeat(35);
   const surfaces = dedupePolicySurfaces([{
@@ -4516,8 +4591,8 @@ test("summarizePolicySurfaces does not let a supported homepage mask an unsuppor
 
   assert.equal(summary.policyTextExtractionHealth.detectedPolicyLanguage, "ko");
   assert.equal(summary.policyTextExtractionHealth.detectedPolicyLanguageSource, "policy_surface");
-  assert.equal(summary.policyTextExtractionHealth.gdprTransparencyLanguageSupported, false);
-  assert.equal(summary.policyTextExtractionHealth.policyTextExtractionStatus, "unsupported_language");
+  assert.equal(summary.policyTextExtractionHealth.gdprTransparencyLanguageSupported, true);
+  assert.equal(summary.policyTextExtractionHealth.policyTextExtractionStatus, "ok");
 });
 
 test("summarizePolicySurfaces reports unknown when usable policy text has no reliable language evidence", async () => {
@@ -4541,7 +4616,7 @@ test("summarizePolicySurfaces reports unknown when usable policy text has no rel
   assert.equal(summary.policyTextExtractionHealth.extractionFailureReason, "privacy_policy_language_unknown");
 });
 
-test("summarizePolicySurfaces distinguishes unsupported policy language from low-quality content", async () => {
+test("summarizePolicySurfaces treats substantive Korean policy text as supported", async () => {
   const { dedupePolicySurfaces, summarizePolicySurfaces } = await loadLocalV2DagReport();
   const policyText = "이 개인정보 처리방침은 개인정보 처리 목적, 이용자 권리 및 연락 방법을 설명합니다. ".repeat(35);
   const surfaces = dedupePolicySurfaces([{
@@ -4555,10 +4630,10 @@ test("summarizePolicySurfaces distinguishes unsupported policy language from low
 
   const summary = summarizePolicySurfaces(surfaces, "example.test", { primaryLanguage: "ko" });
 
-  assert.equal(summary.policyTextExtractionHealth.policyTextExtractionStatus, "unsupported_language");
-  assert.equal(summary.policyTextExtractionHealth.extractionFailureReason, "privacy_policy_language_unsupported");
+  assert.equal(summary.policyTextExtractionHealth.policyTextExtractionStatus, "ok");
+  assert.equal(summary.policyTextExtractionHealth.extractionFailureReason, undefined);
   assert.equal(summary.policyTextExtractionHealth.detectedPolicyLanguage, "ko");
-  assert.equal(summary.policyTextExtractionHealth.gdprTransparencyLanguageSupported, false);
+  assert.equal(summary.policyTextExtractionHealth.gdprTransparencyLanguageSupported, true);
 });
 
 test("summarizePolicySurfaces separates weak Article 13 candidates from validated disclosure signals", async () => {
@@ -5387,11 +5462,21 @@ test("materializeLocalV2DagScanDetail verifies a checksum-matching local policy 
         documentFetchState: "fetched",
         documentFormat: "text",
         documentRole: "policy_document",
+        documentRoleReasonCodes: ["evidence_bound_substantive_policy_document"],
         documentTextCoverage: {
           limitationKeys: [],
           retainedTextChars: policyText.length,
           sourceTextChars: policyText.length,
           status: "complete"
+        },
+        gdprTransparencyTopicCoverageDiagnostics:
+          completeUnknownGdprTransparencyTopicCoverageDiagnostics(),
+        governingPolicySelection: {
+          contractVersion: "governing_policy_selection.v1",
+          rank: 1,
+          reasonCodes: ["highest_ranked_eligible_governing_policy"],
+          score: 96,
+          state: "primary"
         },
         normalizedUrl: "https://example.test/privacy",
         observationId: "verified-policy",

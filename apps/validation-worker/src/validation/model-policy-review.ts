@@ -7,6 +7,7 @@ import {
   policyModelReviewArtifactSchema,
   policyModelReviewRowSchema,
   type CanonicalEvidenceBundle,
+  type GdprTransparencyTopic,
   type PolicyModelReviewArtifact,
   type PolicyModelReviewRow,
   type VerifiedPolicyEvidencePacket
@@ -45,37 +46,14 @@ export const RUNTIME_POLICY_REVIEW_TOPICS = [
 ] as const;
 export type PolicyReviewTopic = (typeof POLICY_REVIEW_TOPICS)[number];
 
-const POLICY_REVIEW_TEXT_ANCHORS_BY_TOPIC = {
-  processing_purposes: [
-    /\b(?:how we use|purposes? for which|processing purposes?)\b/i,
-  ],
-  legal_basis: [
-    /\b(?:legal basis|lawful basis|article 6|legitimate interests?)\b/i,
-  ],
-  data_retention: [
-    /\b(?:retention|how long we retain|as long as necessary|retention criteria)\b/i,
-  ],
-  international_transfers: [
-    /\b(?:international transfers?|cross-border transfers?|data transfers?)\b/i,
-    /\b(?:personal data|personal information|information|data)\b.{0,100}\b(?:transferred|processed|stored|accessed)\b.{0,140}\b(?:united states|other jurisdictions|other countries|outside)\b/i,
-  ],
-  vendor_disclosures: [
-    /\b(?:sharing personal information|how we share|categories of third parties|service providers|advertising networks|analytics providers)\b/i,
-  ],
-  data_subject_rights: [
-    /\b(?:your privacy rights|your rights|california privacy rights|other state privacy rights)\b/i,
-    /\b(?:contact us|privacy officer|privacy office|data protection officer|controller)\b/i,
-    /\b(?:supervisory authority|data protection authority|lodge a complaint)\b/i,
-  ],
-  cookie_inventory: [
-    /\b(?:cookie inventory|cookies? and other technologies|cookie names?)\b/i,
-  ],
-  policy_runtime_consistency: [],
-} as const satisfies Record<PolicyReviewTopic, readonly RegExp[]>;
-
-const POLICY_REVIEW_TEXT_ANCHORS = Object.values(
-  POLICY_REVIEW_TEXT_ANCHORS_BY_TOPIC,
-).flat();
+const POLICY_REVIEW_GDPR_TOPIC = {
+  processing_purposes: "processing_purposes",
+  legal_basis: "legal_basis",
+  data_retention: "data_retention",
+  international_transfers: "international_transfers",
+  vendor_disclosures: "recipients_or_vendor_categories",
+  data_subject_rights: "data_subject_rights",
+} as const satisfies Partial<Record<PolicyReviewTopic, GdprTransparencyTopic>>;
 
 type FetchLike = typeof fetch;
 
@@ -364,6 +342,39 @@ function compactPolicyCandidate(row: Record<string, unknown>) {
   );
 }
 
+function canonicalPolicyReviewTopicExcerpts(
+  rawText: string,
+  topics: readonly PolicyReviewTopic[],
+  options: { afterChars?: number; beforeChars?: number } = {},
+) {
+  const requestedTopics = new Set<GdprTransparencyTopic>(
+    topics.flatMap((topic) => {
+      const canonicalTopic = POLICY_REVIEW_GDPR_TOPIC[topic as keyof typeof POLICY_REVIEW_GDPR_TOPIC];
+      return canonicalTopic ? [canonicalTopic] : [];
+    }),
+  );
+  if (requestedTopics.size === 0) {
+    return [];
+  }
+
+  const sourceLower = rawText.toLocaleLowerCase();
+  const beforeChars = options.beforeChars ?? 320;
+  const afterChars = options.afterChars ?? 1_180;
+  return classifyGdprTransparencyTopics({ text: rawText }).matches
+    .filter((match) => requestedTopics.has(match.topic))
+    .map((match) => {
+      const matchedTerm = match.matchedTerm.toLocaleLowerCase();
+      const matchIndex = sourceLower.indexOf(matchedTerm);
+      if (matchIndex < 0) {
+        return match.evidenceExcerpt;
+      }
+      return rawText.slice(
+        Math.max(0, matchIndex - beforeChars),
+        Math.min(rawText.length, matchIndex + match.matchedTerm.length + afterChars),
+      );
+    });
+}
+
 export function selectBoundedPolicyReviewText(rawText: string, limit = MAX_DOCUMENT_TEXT_CHARS) {
   if (rawText.length <= limit) {
     return rawText;
@@ -394,30 +405,18 @@ export function selectBoundedPolicyReviewText(rawText: string, limit = MAX_DOCUM
   // Preserve document identity and scope, then retain topic-balanced passages
   // from the complete source before reserving space for late contact sections.
   addExcerpt(0, 2_400);
-  const retentionPattern = new RegExp(
-    "\\b(?:how long do we keep|additional information about data retention|retention|how long we retain|as long as necessary|retention criteria)\\b",
-    "gi",
-  );
-  let strongestRetentionBounds: { end: number; score: number; start: number } | null = null;
-  for (const match of rawText.matchAll(retentionPattern)) {
-    if (match.index === undefined) continue;
-    const start = match.index;
-    const end = Math.min(rawText.length, start + 1_600);
-    const score = retentionEvidenceSpecificityScore(rawText.slice(start, end));
-    if (!strongestRetentionBounds || score > strongestRetentionBounds.score) {
-      strongestRetentionBounds = { end, score, start };
+  for (const excerpt of canonicalPolicyReviewTopicExcerpts(rawText, STATIC_POLICY_REVIEW_TOPICS)) {
+    const exactIndex = rawText.indexOf(excerpt);
+    if (exactIndex >= 0) {
+      addExcerpt(exactIndex, exactIndex + excerpt.length);
+    } else {
+      const remaining = limit - retainedChars;
+      if (remaining > 0) {
+        const separator = excerpts.length > 0 ? "\n\n[…]\n\n" : "";
+        excerpts.push(`${separator}${excerpt.slice(0, Math.max(0, remaining - separator.length))}`);
+        retainedChars += separator.length + Math.min(excerpt.length, Math.max(0, remaining - separator.length));
+      }
     }
-  }
-  if (strongestRetentionBounds) {
-    addExcerpt(strongestRetentionBounds.start, strongestRetentionBounds.end);
-  }
-  for (const anchor of POLICY_REVIEW_TEXT_ANCHORS) {
-    const match = anchor.exec(rawText);
-    anchor.lastIndex = 0;
-    if (!match || match.index === undefined) {
-      continue;
-    }
-    addExcerpt(match.index - 320, match.index + match[0].length + 1_180);
   }
   addExcerpt(rawText.length - 3_200, rawText.length);
 
@@ -463,16 +462,11 @@ export function selectEscalatedPolicyReviewText(input: {
     (input.expandRuntimeConsistencyAnchors ?? true) &&
     input.topics.includes("policy_runtime_consistency");
   const anchorTopics = includeAllTopics ? POLICY_REVIEW_TOPICS : input.topics;
-  for (const topic of anchorTopics) {
-    for (const anchor of POLICY_REVIEW_TEXT_ANCHORS_BY_TOPIC[topic]) {
-      const match = anchor.exec(input.rawText);
-      anchor.lastIndex = 0;
-      if (match?.index === undefined) continue;
-      addExcerpt(input.rawText.slice(
-        Math.max(0, match.index - 360),
-        Math.min(input.rawText.length, match.index + match[0].length + 1_240),
-      ));
-    }
+  for (const excerpt of canonicalPolicyReviewTopicExcerpts(input.rawText, anchorTopics, {
+    afterChars: 1_240,
+    beforeChars: 360,
+  })) {
+    addExcerpt(excerpt);
   }
   if (input.topics.includes("data_subject_rights")) {
     addExcerpt(input.rawText.slice(-1_200));
@@ -1227,6 +1221,24 @@ function retainedTopicSectionIsComplete(
   });
 }
 
+function hasStrongRetainedTopicObservation(
+  document: PolicyReviewPacketDocument,
+  topic: keyof typeof POLICY_TOPIC_TO_COVERAGE_AREA,
+) {
+  const retainedEvidence = document.extractedCandidates.retained_article13_section_evidence;
+  if (!Array.isArray(retainedEvidence)) {
+    return false;
+  }
+  const area = POLICY_TOPIC_TO_COVERAGE_AREA[topic];
+  return retainedEvidence.some((entry) => {
+    const record = getRecord(entry);
+    return getString(record.coverageArea) === area &&
+      getString(record.signalObserved) === "observed" &&
+      getString(record.selectedEvidenceStrength) === "strong" &&
+      (getString(record.selectedPolicySectionExcerpt)?.length ?? 0) >= 30;
+  });
+}
+
 function topicCoverageIsSufficient(
   packet: PolicyReviewPacket,
   topic: PolicyModelReviewRow["topic"],
@@ -1565,6 +1577,11 @@ export function buildNoComparablePolicyRuntimeRow(
 
 function hasSubstantiveRetentionEvidence(packet: PolicyReviewPacket) {
   const policyText = packet.documents.map((document) => document.text).join("\n");
+  if (packet.documents.some((document) =>
+    hasStrongRetainedTopicObservation(document, "data_retention")
+  )) {
+    return true;
+  }
   return [
     /\b(?:retention|storage)\s+period\b/i,
     /\bretention periods?\b.{0,120}\b(?:between|from|up to|at least|no more than)\s+\d+\b/i,
@@ -1663,6 +1680,10 @@ function canonicalRetentionEvidence(
   row: PolicyModelReviewRow,
   packet: PolicyReviewPacket,
 ): CanonicalRetainedTopicEvidence | null {
+  const retainedTypedEvidence = canonicalRetainedTopicEvidence(row, packet, "data_retention");
+  if (retainedTypedEvidence?.provenance === "verified_retained_packet") {
+    return retainedTypedEvidence;
+  }
   const referencedIds = new Set(row.sourceDocumentIds);
   const documents = packet.documents
     .filter((document) =>
@@ -1715,27 +1736,11 @@ function canonicalRetainedTopicEvidence(
   topic:
     | "processing_purposes"
     | "legal_basis"
+    | "data_retention"
     | "international_transfers"
     | "recipients_or_vendor_categories"
     | "data_subject_rights",
 ): CanonicalRetainedTopicEvidence | null {
-  const retainedEvidenceText = [
-    ...row.evidenceExcerpts,
-    ...row.conflictingExcerpts,
-  ].join("\n");
-  if (
-    classifyGdprTransparencyTopics({ text: retainedEvidenceText }).matches.some(
-      (match) => match.topic === topic,
-    )
-  ) {
-    return {
-      excerpt: row.evidenceExcerpts[0] ?? row.conflictingExcerpts[0] ?? "",
-      provenance: "review_excerpt",
-      sourceDocumentId: row.sourceDocumentIds[0] ?? "",
-      sourceUrl: row.sourceUrls[0] ?? "",
-    };
-  }
-
   const coverageArea = Object.entries(POLICY_TOPIC_TO_COVERAGE_AREA)
     .find(([, area]) => area === topic)?.[1];
   if (!coverageArea) {
@@ -1777,6 +1782,22 @@ function canonicalRetainedTopicEvidence(
         };
       }
     }
+  }
+  const retainedEvidenceText = [
+    ...row.evidenceExcerpts,
+    ...row.conflictingExcerpts,
+  ].join("\n");
+  if (
+    classifyGdprTransparencyTopics({ text: retainedEvidenceText }).matches.some(
+      (match) => match.topic === topic,
+    )
+  ) {
+    return {
+      excerpt: row.evidenceExcerpts[0] ?? row.conflictingExcerpts[0] ?? "",
+      provenance: "review_excerpt",
+      sourceDocumentId: row.sourceDocumentIds[0] ?? "",
+      sourceUrl: row.sourceUrls[0] ?? "",
+    };
   }
   return null;
 }

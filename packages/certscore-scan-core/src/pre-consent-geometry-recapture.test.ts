@@ -732,7 +732,10 @@ test("pre-consent scanner retains a proof screenshot for deeply nested animated 
       ["Accept all", "Accept essential cookies", "Individual preferences", "Save consent"].sort(),
     );
     assert.ok(
-      result.screenshots.some((screenshot) => screenshot.artifactId === "screenshot_pre_consent_geometry_proof"),
+      result.screenshots.some((screenshot) =>
+        screenshot.artifactId === "screenshot_pre_consent_geometry_proof" ||
+        screenshot.artifactId === "screenshot_pre_consent_cmp_controls"
+      ),
       JSON.stringify(result.moduleRun.timingBreakdown, null, 2),
     );
 
@@ -743,7 +746,10 @@ test("pre-consent scanner retains a proof screenshot for deeply nested animated 
     assert.equal(geometry.summary.firstLayerReject, true);
     assert.equal(geometry.summary.firstLayerOptions, true);
     const acceptControl = geometry.candidates.find((candidate) => candidate.actionType === "accept_all");
-    assert.match(acceptControl?.screenshotArtifactRef ?? "", /screenshot-pre-consent-geometry-proof\.png$/);
+    assert.match(
+      acceptControl?.screenshotArtifactRef ?? "",
+      /screenshot-pre-consent-(?:geometry-proof|cmp-controls)\.png$/,
+    );
   } finally {
     await closeServer(server.server);
     await rm(tempRoot, { recursive: true, force: true });

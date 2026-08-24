@@ -13,7 +13,15 @@ test("normalizes URL and domain input", () => {
 
   assert.equal(query?.hostname, "example.com");
   assert.equal(query?.domain, "example.com");
-  assert.equal(query?.normalizedUrl, "https://example.com/path/");
+  assert.equal(query?.normalizedUrl, "https://www.example.com/path/");
+});
+
+test("preserves a requested www hostname for local navigation while canonicalizing the artifact domain", () => {
+  const query = normalizeUrlInput("https://www.e-gov.go.jp/");
+
+  assert.equal(query?.hostname, "e-gov.go.jp");
+  assert.equal(query?.domain, "e-gov.go.jp");
+  assert.equal(query?.normalizedUrl, "https://www.e-gov.go.jp/");
 });
 
 test("matches artifacts by domain folder and extracts evidence preview summaries", async () => {

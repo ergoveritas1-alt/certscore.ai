@@ -1524,14 +1524,19 @@ function consentFlowHomeMarkup(caseName: StaticFixturePage): string {
   if (options.lateWithoutCmpRuntime) {
     return `
       <section>
-        <p>Fixture page whose consent surface is injected after ordinary post-settle retries.</p>
+        <p>Fixture page whose reject control is injected after ordinary post-settle retries.</p>
       </section>
-      <div id="late-consent-root"></div>
+      <div id="late-consent-banner" role="dialog" aria-label="Privacidad y cookies">
+        <p>Elige cómo puede utilizar este sitio las cookies opcionales.</p>
+        <button type="button">Configuración de cookies</button>
+        <button type="button">Aceptar todas</button>
+        <span id="late-consent-controls"></span>
+      </div>
       <script>
         setTimeout(() => {
-          const target = document.getElementById("late-consent-root");
+          const target = document.getElementById("late-consent-controls");
           if (!target) return;
-          target.innerHTML = '<div id="late-consent-banner" role="dialog" aria-label="Cookie consent"><p>Choose how this site may use optional cookies.</p><span role="button" tabindex="0">Accept all cookies</span><span role="button" tabindex="0">Accept only essential cookies</span><span role="button" tabindex="0">Cookie settings</span></div>';
+          target.innerHTML = '<button type="button">Denegar todas</button>';
         }, 6500);
       </script>
     `;
@@ -1588,13 +1593,16 @@ function consentFlowHomeMarkup(caseName: StaticFixturePage): string {
     return `
       <section>
         <p>Fixture page with CMP-rendered text-ish canonical consent controls.</p>
+        ${Array.from({ length: 60 }, (_, index) => `<span id="tarteaucitron-decoy-${index}">Fixture helper ${index}</span>`).join("")}
       </section>
       <script src="https://consent.cookiebot.com/uc.js"></script>
       <script>window.Cookiebot = { fixture: true };</script>
       <div id="cookiebot-banner" role="dialog" aria-label="Sutikimas" style="position: fixed; left: 24px; right: 24px; bottom: 24px; padding: 20px; border: 1px solid #111; background: #fff;">
-        <p>Atsakingas jūsų duomenų naudojimas. Naudojame slapukus, kad galėtume suasmeninti turinį ir analizuoti srautą. Galite pasirinkti, kas ir kokiais tikslais naudoja jūsų duomenis.</p>
-        <span id="accept-static" style="display: inline-block; padding: 10px; border: 1px solid #111;">Leisti visus slapukus</span>
-        <span id="options-static" style="display: inline-block; padding: 10px; border: 1px solid #111;">Rinktis</span>
+        <p>Atsakingas jūsų duomenų naudojimas. Naudojame slapukus, kad galėtume suasmeninti turinį ir analizuoti srautą. Galite pasirinkti, kas ir kokiais tikslais naudoja jūsų duomenis. Cookie-Einstellungen.</p>
+        <label class="dsgvoaio-checkbox"><input type="checkbox" checked disabled> Essenziell</label>
+        <span id="tarteaucitronPersonalize" onclick="void 0" style="display: inline-block; padding: 10px; border: 1px solid #111;">Leisti visus slapukus</span>
+        <span id="tarteaucitronCloseAlert" onclick="void 0" style="display: inline-block; padding: 10px; border: 1px solid #111;">Auswahl speichern</span>
+        <span id="tarteaucitronCustomize" onclick="void 0" style="display: inline-block; padding: 10px; border: 1px solid #111;">Rinktis</span>
       </div>
     `;
   }
@@ -2052,6 +2060,9 @@ function consentFlowHomeMarkup(caseName: StaticFixturePage): string {
     </section>
     <div id="banner" role="dialog" aria-label="Cookie consent">
       <p>We use cookies for analytics and advertising. Choose your consent setting.</p>
+      ${options.rejectSubscribe
+        ? '<label class="dsgvoaio-checkbox"><input type="checkbox" checked disabled> Essenziell</label>'
+        : ""}
       ${acceptButton}
       ${rejectButton}
       ${manageButton}

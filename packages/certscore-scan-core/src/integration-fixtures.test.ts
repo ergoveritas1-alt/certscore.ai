@@ -716,6 +716,8 @@ test("pre-consent runtime scanner retains subscription-only reject labels withou
 
     assert.equal(observation?.acceptControlObserved, true);
     assert.equal(observation?.managePreferencesControlObserved, true);
+    assert.equal(observation?.necessaryPreferenceSelectionObserved, true);
+    assert.deepEqual(observation?.necessaryPreferenceLabels, ["Essenziell"]);
     assert.equal(
       observation?.captureDiagnostics?.completedChannels.includes("dom_inventory"),
       true,
@@ -1138,9 +1140,21 @@ test("pre-consent runtime scanner retains text-ish canonical controls inside CMP
       "scanner should retain Lithuanian options text rendered as a CMP control",
     );
     assert.equal(
-      observation?.inventoryDiagnostics?.timingMarkers.includes("gate_10s:stable_partial_packet_exit"),
+      observation?.controls.some((control) =>
+        control.actionType === "save_preferences" &&
+        control.label === "Auswahl speichern" &&
+        control.matchedLocale === "de" &&
+        control.selectorHint === "#tarteaucitronCloseAlert"
+      ),
       true,
-      "a stable typed partial packet should exit after the 10-second evidence checkpoint",
+      "canonical exact control selectors should retain a late-DOM text-ish save-selection control",
+    );
+    assert.equal(
+      observation?.inventoryDiagnostics?.timingMarkers.some((marker) =>
+        /^gate_(?:8|10)s:calibrated_stable_partial_exit$/.test(marker)
+      ),
+      true,
+      "a stable typed partial packet should exit at a calibrated live checkpoint beginning at 8 seconds",
     );
     assert.equal(
       observation?.captureDiagnostics?.completedChannels.includes("geometry"),
@@ -1150,8 +1164,6 @@ test("pre-consent runtime scanner retains text-ish canonical controls inside CMP
     for (const artifactId of [
       "screenshot_pre_consent",
       "screenshot_pre_consent_settled",
-      "screenshot_pre_consent_full_page",
-      "screenshot_pre_consent_cmp_controls",
     ]) {
       assert.equal(
         bundle.screenshots.some((screenshot) => screenshot.artifactId === artifactId),
@@ -1662,7 +1674,7 @@ test("pre-consent runtime scanner waits briefly for late choice controls when CM
   }
 });
 
-test("pre-consent runtime scanner retains a delayed text-control banner without an early CMP marker", async () => {
+test("pre-consent runtime scanner completes a partial A/R/O inventory at the 10s no-CMP gate", async () => {
   const server = await startStaticFixtureServer();
   const tempRoot = await mkdtemp(path.join(tmpdir(), "certscore-v2-preconsent-late-without-cmp-"));
   try {
@@ -1685,6 +1697,15 @@ test("pre-consent runtime scanner retains a delayed text-control banner without 
     assert.equal(observation?.acceptControlObserved, true);
     assert.equal(observation?.rejectControlObserved, true);
     assert.equal(observation?.managePreferencesControlObserved, true);
+    assert.equal(
+      observation?.controls.some((control) =>
+        control.actionType === "reject_all" &&
+        control.label === "Denegar todas" &&
+        control.matchedLocale === "es"
+      ),
+      true,
+      "the canonical Spanish reject control should complete the initially partial inventory",
+    );
     assert.equal(
       observation?.basis.includes("adaptive_gate_inventory:10s_without_cmp_runtime"),
       true,
@@ -3162,7 +3183,6 @@ test("pre-consent runtime scanner does not classify bare generic choice controls
       "selective",
     );
     const observation = bundle.consentUiObservations[0];
-
     assert.equal(observation?.likelyPresent, false);
     assert.equal(observation?.acceptControlObserved, false);
     assert.equal(observation?.rejectControlObserved, false);

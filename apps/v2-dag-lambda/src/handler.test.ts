@@ -1862,7 +1862,22 @@ test("sharded bundle merge keeps the fetched policy observation over its earlier
     status: "fetched" as const,
     documentFetchState: "fetched" as const,
     documentEvaluationState: "usable" as const,
+    documentRole: "policy_document" as const,
     targetRelationship: "target_controller" as const,
+    contentCoverage: {
+      status: "complete" as const,
+      sourceTextChars: 1_200,
+      extractedSectionCount: 3,
+      retainedSectionCount: 3,
+      retainedTableRowCount: 0,
+      limitationKeys: [],
+    },
+    documentTextCoverage: {
+      status: "complete" as const,
+      sourceTextChars: 1_200,
+      retainedTextChars: 1_200,
+      limitationKeys: [],
+    },
     textExcerpt: "This privacy policy explains how we process and retain personal information.",
     artifactRefs: [{
       artifactId: "policy_surface_text_privacy",
@@ -1883,6 +1898,10 @@ test("sharded bundle merge keeps the fetched policy observation over its earlier
   assert.equal(merged.policySurfaceObservations[0]?.documentEvaluationState, "usable");
   assert.equal(merged.policySurfaceObservations[0]?.artifactRefs.length, 1);
   assert.equal(merged.policySurfaceObservations[0]?.targetRelationship, "target_controller");
+  assert.equal(
+    merged.policySurfaceObservations[0]?.governingPolicySelection?.state,
+    "primary",
+  );
 });
 
 test("artifact uploader returns durable metadata for all v2 JSON artifacts", async () => {

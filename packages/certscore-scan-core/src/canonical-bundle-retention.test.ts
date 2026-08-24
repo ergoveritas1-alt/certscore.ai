@@ -32,6 +32,29 @@ test("canonical bundle retention keeps report-critical evidence under 400 KB exc
   assert.equal(compacted.observedJourneys.some((journey) => journey.attributionStatus === "site_owned_infrastructure"), false);
 });
 
+test("canonical bundle retention does not convert CMP-only activity into pre-consent tracking", () => {
+  const bundle = oversizedGoogleLikeBundle();
+  const cookieJourney = bundle.observedJourneys.find((journey) => journey.displayName === "NID");
+  assert.ok(cookieJourney);
+  bundle.observedJourneys = [{
+    ...cookieJourney,
+    journeyId: "journey_cmp_consent_cookie",
+    key: "cookie:cmp_consent",
+    displayName: "cmp_consent",
+    vendor: "Example CMP",
+    purpose: "consent_management",
+    relatedCookies: ["cmp_consent"],
+    relatedEndpoints: ["https://cmp.example.test/consent"],
+    relatedVendors: ["Example CMP"],
+  }];
+  bundle.derivedRuntimeSignals.preConsentTrackingObserved = true;
+
+  const compacted = compactCanonicalEvidenceBundleForRetention(bundle);
+
+  assert.equal(compacted.derivedRuntimeSignals.preConsentTrackingObserved, false);
+  assert.equal(compacted.derivedRuntimeSignals.thirdPartyCookiesPreConsentObserved, false);
+});
+
 test("canonical bundle retention caps module timing breakdowns before schema validation", () => {
   const bundle = oversizedGoogleLikeBundle();
   bundle.modulesRun[0] = {

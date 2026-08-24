@@ -19,6 +19,7 @@ test("registry includes first-wave CMP vendors", () => {
     "Consentmanager",
     "Cookiebot",
     "CookieYes",
+    "DSGVO All in One / tarteaucitron",
     "Sourcepoint",
     "Didomi",
     "Quantcast Choice",
@@ -82,6 +83,22 @@ test("detects CookieYes by domains and consent cookie", () => {
   assert.equal(getKnownCmpVendorForHost("log.cookieyes.com"), "CookieYes");
   assert.equal(getKnownCmpVendorName({ cookieNames: ["cookieyes-consent"] }), "CookieYes");
   assert.equal(isKnownCmpCookieName("cookieyes-consent"), true);
+});
+
+test("does not infer CookieYes from an unrelated generic cky-prefixed class", () => {
+  assert.equal(getKnownCmpVendorName({ domSelectors: [".cky-layout-shell"] }), null);
+  assert.equal(getKnownCmpVendorName({ urls: ["https://example.test/assets/cky-layout.js"] }), null);
+});
+
+test("detects DSGVO All in One and tarteaucitron from exact runtime markers", () => {
+  assert.equal(
+    getKnownCmpVendorName({
+      domSelectors: ["#tarteaucitronRoot"],
+      jsGlobals: ["tarteaucitron"],
+      urls: ["https://example.test/wp-content/plugins/dsgvo-all-in-one/assets/js/dsgvoaio.js"],
+    }),
+    "DSGVO All in One / tarteaucitron",
+  );
 });
 
 test("detects Cookiebot European consent infrastructure", () => {
