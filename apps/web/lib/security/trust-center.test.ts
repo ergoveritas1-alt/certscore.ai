@@ -12,10 +12,9 @@ const discoverySource = readFileSync(new URL("../../app/.well-known/certscore-ai
 
 test("trust page publishes conservative assurance and reporting language", () => {
   assert.match(pageSource, /does not represent a third-party certification or legal compliance determination/);
-  assert.match(pageSource, /not currently representing this service as SOC 2, ISO 27001, FedRAMP/);
   assert.match(pageSource, /security@certscore\.ai/);
   assert.match(pageSource, /href="\/security"/);
-  assert.doesNotMatch(pageSource, /AES-256|certified compliant|independently audited|penetration test/i);
+  assert.doesNotMatch(pageSource, /Compliance &amp; assurance|SOC 2|AES-256|certified compliant|independently audited|penetration test/i);
 });
 
 test("trust page is present on public discovery surfaces", () => {

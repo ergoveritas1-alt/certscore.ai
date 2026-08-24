@@ -174,20 +174,6 @@ export default function TrustPage() {
           </Link>
         </section>
 
-        <section aria-labelledby="assurance" className="mt-6 rounded-2xl border border-slate-200 bg-slate-950 p-6 text-white shadow-sm sm:p-8">
-          <h2 id="assurance" className="text-2xl font-semibold tracking-tight">Compliance &amp; assurance</h2>
-          <p className="mt-3 max-w-3xl text-sm leading-6 text-slate-300">
-            CertScore.ai maintains technical and organizational controls appropriate to its current service and
-            risk profile. CertScore.ai is not currently representing this service as SOC 2, ISO 27001, FedRAMP,
-            HIPAA, PCI DSS, or another third-party certified service unless explicitly stated here.
-          </p>
-          <div className="mt-5 flex flex-wrap gap-x-5 gap-y-3 text-sm">
-            <Link className="font-medium text-sky-300 underline decoration-sky-700 underline-offset-4 hover:text-sky-200" href="/privacy">Privacy Policy</Link>
-            <Link className="font-medium text-sky-300 underline decoration-sky-700 underline-offset-4 hover:text-sky-200" href="/terms">Terms of Service</Link>
-            <Link className="font-medium text-sky-300 underline decoration-sky-700 underline-offset-4 hover:text-sky-200" href="/contact">Support and contact</Link>
-          </div>
-        </section>
-
         <section aria-labelledby="report-security" className="mt-6 rounded-2xl border border-sky-200 bg-sky-50 p-6 sm:p-8">
           <h2 id="report-security" className="text-2xl font-semibold tracking-tight text-slate-950">
             Report a security issue
