@@ -126,6 +126,7 @@ export const PRIVACY_SURFACE_PHRASE_REGISTRY: PrivacySurfacePhrase[] = [
     direct("privacy_policy", "politique de confidentialité"),
     direct("privacy_policy", "avis de confidentialité"),
     direct("privacy_policy", "données personnelles et sécurité"),
+    policyContextualEquivalent("privacy_policy", "données personnelles", "personal_data_policy_label"),
     direct("privacy_policy", "protection des données personnelles", "generic_data_protection_label"),
     direct("privacy_policy", "protection des données", "generic_data_protection_label"),
     policyContextualEquivalent("privacy_policy", "confidentialité"),
@@ -163,9 +164,10 @@ export const PRIVACY_SURFACE_PHRASE_REGISTRY: PrivacySurfacePhrase[] = [
     direct("privacy_policy", "informativa generale sulla privacy", "general_scope"),
     direct("privacy_policy", "informativa privacy generale", "general_scope"),
     direct("privacy_policy", "informativa sulla privacy"),
+    direct("privacy_policy", "informativa protezione dati", "data_protection_notice_label"),
     direct("privacy_policy", "politica sulla privacy"),
     direct("privacy_policy", "protezione dei dati", "generic_data_protection_label"),
-    equivalent("privacy_policy", "privacy"),
+    policyContextualEquivalent("privacy_policy", "privacy"),
     direct("cookie_policy", "informativa sui cookie"),
     direct("cookie_policy", "cookie policy"),
     direct("cookie_settings", "impostazioni cookie"),
@@ -286,7 +288,7 @@ export function classifyPrivacySurface(
   const policyDocumentLabelContextSatisfied = /\b(?:policy|notice|statement|datenschutzerkl[aä]rung|politique de confidentialit[eé]|avis de confidentialit[eé]|pol[ií]tica de privacidad|aviso de privacidad|informativa(?: generale)? sulla privacy|politica sulla privacy)\b/i.test(labelText);
   const editorialOrReferencePath = /\/(?:actualites?|news|press(?:-and-[^/]+)?|presse|prensa-y-comunicacion|noticias|agenda|eventos|webinarios?|guides?|guias?|documentos?|definition|lexique|services-en-ligne|passer-laction|certificacion|webform|laboratoire|transparencia|rgpd-analyse-impact|agencia-espanola-de-proteccion-de-datos)(?:[-_/\s]|$)/i.test(normalizedUrl);
   const editorialOrReferenceLabel = /^(?:read more|learn more|lire la suite|en savoir plus|leer m[aá]s)\b/i.test(labelText) ||
-    /\b(?:news|actualit[eé]s|noticias|agenda|evento|webinario|curso|guide|gu[ií]a|recommandations?|orientaciones|certificaci[oó]n|revista|lexique|analyse d'impact|formulaire|laboratoire|laboratorio|inventario de actividades)\b/i.test(labelText);
+    /\b(?:news|actualit[eé]s|noticias|agenda|evento|webinario|curso|guide|gu[ií]a|recommandations?|orientaciones|certificaci[oó]n|revista|lexique|analyse d'impact|formulaire|laboratoire|laboratorio|inventario de actividades|comunicato stampa|podcast)\b/i.test(labelText);
 
   if (!haystack) {
     return unknown(["empty_surface_evidence"]);

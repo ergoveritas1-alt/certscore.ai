@@ -91,4 +91,5 @@ test("buildNanoSignalDispatchFailureEvent persists a terminal failure on the thi
   assert.equal(terminal.terminal, true);
   assert.equal(terminal.metadataJson.attemptCount, 3);
   assert.equal(terminal.metadataJson.reason, "dispatcher_error");
+  assert.equal(terminal.metadataJson.recoveryMode, "completed_scan_backfill");
 });

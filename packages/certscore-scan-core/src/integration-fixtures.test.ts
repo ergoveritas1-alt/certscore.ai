@@ -2750,6 +2750,37 @@ test("rapid first-layer inventory retains typed controls from a child CMP frame"
   }
 });
 
+test("rapid first-layer inventory retains a defaults-off save surface as typed evidence", async () => {
+  const browser = await chromium.launch({ headless: true });
+  try {
+    const page = await browser.newPage({ viewport: { width: 1280, height: 720 } });
+    await page.setContent(`
+      <main><h1>Service</h1></main>
+      <div class="custom-cookie-banner" role="dialog" aria-label="Cookie consent">
+        <p>We use necessary cookies and optional analytics cookies.</p>
+        <label><input type="checkbox" checked disabled> Strictly necessary cookies</label>
+        <label><input type="checkbox"> Analytics cookies</label>
+        <button type="button">Accept all</button>
+        <button type="button">Save choices</button>
+      </div>
+    `);
+    const observation = await readRapidFirstLayerConsentUiObservation(
+      page,
+      Date.now(),
+      1_500,
+      "retry",
+    );
+
+    assert.equal(observation.managePreferencesControlObserved, true);
+    assert.equal(observation.defaultToggleStatesObserved, true);
+    assert.equal(observation.nonEssentialDefaultsOff, true);
+    assert.equal(observation.precheckedOptionalPurposeCount, 0);
+    assert.deepEqual(observation.defaultTogglePurposeLabels, ["Analytics cookies"]);
+  } finally {
+    await browser.close();
+  }
+});
+
 test("pre-consent runtime scanner does not treat off-viewport footer settings as CMP control proof", async () => {
   const server = await startStaticFixtureServer();
   const tempRoot = await mkdtemp(path.join(tmpdir(), "certscore-v2-preconsent-offscreen-footer-settings-"));

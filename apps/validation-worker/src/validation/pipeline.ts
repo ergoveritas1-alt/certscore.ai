@@ -38,7 +38,8 @@ import {
   updateScanDocumentSourceExtractions,
   updateScanStatus,
   updateValidationRun,
-  upsertValidationVerdict
+  upsertValidationVerdict,
+  type NanoSignalScanLease
 } from "./repository";
 import {
   ORPHANED_QUEUED_SCAN_DISPATCH_DEADLINE_MS,
@@ -104,6 +105,17 @@ export function getNanoSignalPolicyWaitDecision(pollCount: number) {
     action: nextPollCount >= MAX_NANO_SIGNAL_ENRICHMENT_POLLS ? "park" : "requeue",
     nextPollCount
   } as const;
+}
+
+export function buildNanoSignalTerminalFailureMetadata(input: {
+  error: string;
+  recoveryMode: NanoSignalScanLease["recoveryMode"];
+}) {
+  return {
+    error: input.error,
+    ...(input.recoveryMode ? { recoveryMode: input.recoveryMode } : {}),
+    stage: "nano_doc_signals"
+  };
 }
 
 const FINANCIAL_COMMERCIAL_SIGNAL_KEYS = new Set([
@@ -6970,12 +6982,12 @@ export async function processNanoSignalEnrichmentJob(input: {
     await appendScanWorkflowEvent({
       eventType: SCAN_EVENT_TYPES.nanoSignalEnrichmentFailed,
       message: "Nano document signal enrichment failed because the scan failed.",
-      metadataJson: {
+      metadataJson: buildNanoSignalTerminalFailureMetadata({
         error: typeof artifacts.scan?.error_message === "string" ? artifacts.scan.error_message : "scan_failed",
-        stage: "nano_doc_signals"
-      },
+        recoveryMode: input.recoveryMode ?? null
+      }),
       scanId
-    }).catch(() => undefined);
+    });
     return;
   }
 
@@ -7034,7 +7046,7 @@ export async function processNanoSignalEnrichmentJob(input: {
       sourceMode: artifacts.preferDocumentSources === true ? "document_sources" : "policy_enrichment"
     },
     scanId
-  }).catch(() => undefined);
+  });
 
   const validationDerivationState = await getValidationDerivationStateForScan(scanId).catch((error) => {
     console.error("[validation-worker] failed to check validation derivation state for scan", {

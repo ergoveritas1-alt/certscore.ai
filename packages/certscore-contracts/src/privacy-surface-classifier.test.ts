@@ -196,6 +196,45 @@ test("requires policy context for an ambiguous French privacy label", () => {
   assert.equal(classification.reasonCodes.includes("policy_context_satisfied"), true);
 });
 
+test("classifies concise French and Italian first-party data-protection policy labels", () => {
+  const french = classifyPrivacySurface({
+    linkText: "Données personnelles",
+    url: "https://example.test/fr/donnees-personnelles",
+    localeHints: ["fr"],
+  });
+  assert.equal(french.surfaceType, "privacy_policy");
+  assert.equal(french.matchedLocale, "fr");
+  assert.equal(french.variant, "personal_data_policy_label");
+
+  const italian = classifyPrivacySurface({
+    linkText: "Informativa protezione dati",
+    url: "https://example.test/informativa-protezione-dati",
+    localeHints: ["it"],
+  });
+  assert.equal(italian.surfaceType, "privacy_policy");
+  assert.equal(italian.matchedLocale, "it");
+  assert.equal(italian.variant, "data_protection_notice_label");
+});
+
+test("does not classify Italian privacy news and media titles as policy documents", () => {
+  for (const linkText of [
+    "Comunicato stampa - Garante privacy: nuova iniziativa",
+    "Podcast del Garante privacy",
+  ]) {
+    const classification = classifyPrivacySurface({
+      linkText,
+      url: "https://example.test/home/docweb/-/docweb-display/docweb/1234",
+      localeHints: ["it"],
+    });
+    assert.equal(classification.surfaceType, "unknown", linkText);
+    assert.equal(
+      classification.reasonCodes.includes("editorial_or_reference_resource_not_policy_document"),
+      true,
+      linkText,
+    );
+  }
+});
+
 test("does not classify generic data-protection marketing or customer stories as privacy policies", () => {
   for (const input of [
     {

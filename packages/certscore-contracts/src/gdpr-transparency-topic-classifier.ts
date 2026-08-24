@@ -153,6 +153,9 @@ export const GDPR_TRANSPARENCY_TOPIC_PHRASE_REGISTRY: GdprTransparencyTopicPhras
     direct("recipients_or_vendor_categories", "third parties with whom we share personal data"),
     direct("recipients_or_vendor_categories", "share personal information with third parties"),
     equivalent("recipients_or_vendor_categories", "share personal information with service providers"),
+    equivalent("recipients_or_vendor_categories", "pass on your data to the shipping provider"),
+    equivalent("recipients_or_vendor_categories", "pass on your data to a service provider"),
+    equivalent("recipients_or_vendor_categories", "pass on personal data to service providers"),
     equivalent("recipients_or_vendor_categories", "share or provide access to your information with service providers"),
     equivalent("recipients_or_vendor_categories", "share information with third parties", "requires_topic_context"),
     equivalent("recipients_or_vendor_categories", "content-delivery providers may process"),
@@ -235,6 +238,8 @@ export const GDPR_TRANSPARENCY_TOPIC_PHRASE_REGISTRY: GdprTransparencyTopicPhras
     equivalent("automated_decision_making_or_profiling", "automated individual decision-making processes", "requires_privacy_context"),
     equivalent("automated_decision_making_or_profiling", "profiling of personal data"),
     equivalent("automated_decision_making_or_profiling", "profiling for data processing"),
+    equivalent("automated_decision_making_or_profiling", "do not use your data for profiling"),
+    equivalent("automated_decision_making_or_profiling", "do not use personal data for profiling"),
     equivalent("automated_decision_making_or_profiling", "solely by automated means", "requires_topic_context"),
   ]),
   ...de([

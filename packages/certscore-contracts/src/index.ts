@@ -1653,6 +1653,7 @@ export const policySurfaceObservationSchema = z.object({
     "low_quality_access_challenge",
     "consent_settings_shell",
     "insufficient_policy_text",
+    "soft_404",
     "content_decoding_failed",
     "decompressed_body_too_large",
   ]).optional(),

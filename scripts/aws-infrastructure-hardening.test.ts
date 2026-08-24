@@ -80,6 +80,45 @@ test("production ops monitor assumes the validation role for ECS probes", async 
   );
 });
 
+test("production ops probe detects repeated Nano terminal failures per scan", async () => {
+  const source = await readFile("apps/validation-worker/scripts/prod-ops-db-probe.ts", "utf8");
+  const workflow = await readFile(".github/workflows/prod-ops-monitor.yml", "utf8");
+
+  assert.match(source, /OPS_NANO_SIGNAL_RETRY_WINDOW_MINUTES/);
+  assert.match(source, /OPS_NANO_SIGNAL_TERMINAL_ATTEMPT_LIMIT/);
+  assert.match(source, /DEFAULT_NANO_SIGNAL_RETRY_WINDOW_MINUTES = 30/);
+  assert.match(source, /signals\.nano_doc_enrichment_failed/);
+  assert.match(source, /group by scan_id/);
+  assert.match(source, /Nano signal enrichment retry loop detected/);
+  assert.match(workflow, /OPS_NANO_SIGNAL_RETRY_WINDOW_MINUTES:.*'30'/);
+});
+
+test("cost-neutral production ops probe detects event pressure and Nano amplification", async () => {
+  const source = await readFile("apps/validation-worker/scripts/prod-ops-db-probe.ts", "utf8");
+  const runner = await readFile("scripts/run-prod-ops-monitor-ecs.ts", "utf8");
+  const workflow = await readFile(".github/workflows/prod-ops-monitor.yml", "utf8");
+
+  assert.match(source, /DEFAULT_LIFECYCLE_EVENTS_PER_MINUTE_LIMIT = 50/);
+  assert.match(source, /DEFAULT_LIFECYCLE_EVENT_CONSECUTIVE_MINUTES = 3/);
+  assert.match(source, /DEFAULT_NANO_FAILURES_PER_MINUTE_LIMIT = 5/);
+  assert.match(source, /DEFAULT_NANO_FAILURE_CONSECUTIVE_MINUTES = 2/);
+  assert.match(source, /DEFAULT_NANO_AMPLIFICATION_WINDOW_MINUTES = 10/);
+  assert.match(source, /DEFAULT_NANO_STARTED_TO_REQUESTED_RATIO_LIMIT = 5/);
+  assert.match(source, /DEFAULT_NANO_DURABLE_GENERATION_CLAIM_LIMIT = 3/);
+  assert.match(source, /date_trunc\('minute', created_at\)/);
+  assert.match(source, /findConsecutiveMinuteThresholdBreach/);
+  assert.match(source, /nano_signal_work_items/);
+  assert.match(source, /work_items\.poll_count[\s\S]*signals\.nano_doc_enrichment_started/);
+  assert.match(workflow, /OPS_LIFECYCLE_EVENTS_PER_MINUTE_LIMIT:.*'50'/);
+  assert.match(workflow, /OPS_NANO_FAILURES_PER_MINUTE_LIMIT:.*'5'/);
+  assert.match(workflow, /OPS_NANO_STARTED_TO_REQUESTED_RATIO_LIMIT:.*'5'/);
+  assert.match(runner, /OPS_EVENT_PRESSURE_WINDOW_MINUTES/);
+  assert.match(runner, /OPS_NANO_DURABLE_GENERATION_CLAIM_LIMIT/);
+  assert.match(runner, /sendProbeFailureAlert/);
+  assert.match(runner, /database probe alert/);
+  assert.doesNotMatch(source, /put-metric-data|cloudwatch/i);
+});
+
 test("validation worker uses the measured low-utilization Fargate size", async () => {
   const workflow = await readFile(".github/workflows/validation-aws-deploy.yml", "utf8");
   const variables = await readFile("infra/aws/validation/variables.tf", "utf8");

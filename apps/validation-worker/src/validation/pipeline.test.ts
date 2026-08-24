@@ -2,6 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import {
   buildNanoDocumentContentHash,
+  buildNanoSignalTerminalFailureMetadata,
   buildValidationCollectWaitPatch,
   buildNanoDocCandidateUrls,
   deriveCookieDisclosureGapDiagnostic,
@@ -98,6 +99,31 @@ test("Nano signal policy waits become parked after the bounded poll window", () 
     action: "park",
     nextPollCount: 20
   });
+});
+
+test("Nano terminal failures retain policy-reprojection provenance", () => {
+  assert.deepEqual(
+    buildNanoSignalTerminalFailureMetadata({
+      error: "scanner failed",
+      recoveryMode: "policy_projection_reprojection"
+    }),
+    {
+      error: "scanner failed",
+      recoveryMode: "policy_projection_reprojection",
+      stage: "nano_doc_signals"
+    }
+  );
+
+  assert.deepEqual(
+    buildNanoSignalTerminalFailureMetadata({
+      error: "scanner failed",
+      recoveryMode: null
+    }),
+    {
+      error: "scanner failed",
+      stage: "nano_doc_signals"
+    }
+  );
 });
 
 test("retained-extraction shadow cohort is limited to owned sentinel pages", () => {

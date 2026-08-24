@@ -1,5 +1,6 @@
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
+import { createGmailTransport, getGmailConfig } from "../apps/web/server/email/gmail";
 
 const execFileAsync = promisify(execFile);
 const DEFAULT_CONTAINER_COMMAND = [
@@ -78,7 +79,17 @@ function getProbeEnvironment() {
   return [
     "AWS_REGION",
     "OPS_BASE_URL",
+    "OPS_EVENT_PRESSURE_WINDOW_MINUTES",
     "OPS_HEARTBEAT_STALE_MINUTES",
+    "OPS_LIFECYCLE_EVENT_CONSECUTIVE_MINUTES",
+    "OPS_LIFECYCLE_EVENTS_PER_MINUTE_LIMIT",
+    "OPS_NANO_AMPLIFICATION_WINDOW_MINUTES",
+    "OPS_NANO_DURABLE_GENERATION_CLAIM_LIMIT",
+    "OPS_NANO_FAILURE_CONSECUTIVE_MINUTES",
+    "OPS_NANO_FAILURES_PER_MINUTE_LIMIT",
+    "OPS_NANO_SIGNAL_RETRY_WINDOW_MINUTES",
+    "OPS_NANO_SIGNAL_TERMINAL_ATTEMPT_LIMIT",
+    "OPS_NANO_STARTED_TO_REQUESTED_RATIO_LIMIT",
     "OPS_REQUIRE_SCANNER_HEARTBEAT",
     "OPS_REQUIRE_VALIDATION_HEARTBEAT",
     "OPS_REPAIR_ORPHANED_QUEUED_SCANS",
@@ -92,6 +103,31 @@ function getProbeEnvironment() {
       return value ? { name, value } : null;
     })
     .filter((entry): entry is { name: string; value: string } => Boolean(entry));
+}
+
+function getAlertRecipients() {
+  return (process.env.OPS_ALERT_TO_EMAIL ?? process.env.FEEDBACK_TO_EMAIL ?? process.env.GMAIL_SMTP_USER ?? "")
+    .split(",")
+    .map((value) => value.trim())
+    .filter(Boolean);
+}
+
+async function sendProbeFailureAlert(lines: string[]) {
+  const gmailConfig = getGmailConfig();
+  const recipients = getAlertRecipients();
+
+  if (!gmailConfig || recipients.length === 0) {
+    return false;
+  }
+
+  const environment = getEnv("OPS_ALERT_ENVIRONMENT", "production");
+  await createGmailTransport(gmailConfig).sendMail({
+    from: `"CertScore.ai Ops Monitor" <${gmailConfig.fromEmail}>`,
+    subject: `[CertScore.ai Ops] ${environment} database probe alert`,
+    text: lines.join("\n"),
+    to: recipients.join(", ")
+  });
+  return true;
 }
 
 async function main() {
@@ -190,6 +226,7 @@ async function main() {
   const task = taskPayload.tasks?.[0];
   const taskContainer = task?.containers?.find((candidate) => candidate.name === containerName) ?? task?.containers?.[0];
   const exitCode = taskContainer?.exitCode ?? 1;
+  let probeLogMessages: string[] = [];
 
   if (logGroup && logPrefix) {
     const taskId = getTaskId(taskArn);
@@ -213,7 +250,8 @@ async function main() {
 
     if (logs) {
       const payload = parseJson<{ events?: { message?: string }[] }>(logs);
-      const messages = payload.events?.map((event) => event.message).filter(Boolean) ?? [];
+      const messages = payload.events?.map((event) => event.message).filter((message): message is string => Boolean(message)) ?? [];
+      probeLogMessages = messages;
 
       if (messages.length > 0) {
         console.log(messages.join("\n"));
@@ -222,11 +260,22 @@ async function main() {
   }
 
   if (exitCode !== 0) {
-    throw new Error(
-      `AWS-side prod DB probe failed with exit code ${exitCode}. Task status ${task?.lastStatus ?? "unknown"}; reason ${
-        taskContainer?.reason ?? task?.stoppedReason ?? "unknown"
-      }.`
-    );
+    const failureMessage = `AWS-side prod DB probe failed with exit code ${exitCode}. Task status ${task?.lastStatus ?? "unknown"}; reason ${
+      taskContainer?.reason ?? task?.stoppedReason ?? "unknown"
+    }.`;
+    const sent = await sendProbeFailureAlert([
+      failureMessage,
+      "",
+      "Probe output:",
+      ...(probeLogMessages.length > 0 ? probeLogMessages : ["No probe output was available."])
+    ]).catch((error) => {
+      console.error(`Could not send database probe alert: ${error instanceof Error ? error.message : String(error)}`);
+      return false;
+    });
+    if (!sent) {
+      console.error("Database probe alert email was not sent because Gmail sender config or OPS_ALERT_TO_EMAIL is missing.");
+    }
+    throw new Error(failureMessage);
   }
 }
 

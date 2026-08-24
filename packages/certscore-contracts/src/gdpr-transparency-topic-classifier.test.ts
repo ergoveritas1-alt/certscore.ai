@@ -128,6 +128,40 @@ test("classifies practical purpose and service-provider clauses from a compact p
   assert.equal(topics.has("recipients_or_vendor_categories"), true);
 });
 
+test("classifies evidence-bound onward-recipient and negative profiling disclosures", () => {
+  const classification = classifyGdprTransparencyTopics({
+    localeHints: ["en"],
+    text: [
+      "When you order images, we pass on your data to the shipping provider so it can deliver the order.",
+      "We do not use your data for profiling for advertising or eligibility decisions.",
+    ].join(" "),
+  });
+  const byTopic = new Map(classification.matches.map((match) => [match.topic, match]));
+
+  assert.match(
+    byTopic.get("recipients_or_vendor_categories")?.evidenceExcerpt ?? "",
+    /shipping provider/i,
+  );
+  assert.match(
+    byTopic.get("automated_decision_making_or_profiling")?.evidenceExcerpt ?? "",
+    /do not use your data for profiling/i,
+  );
+});
+
+test("does not promote generic passing-on or profile language without personal-data context", () => {
+  const classification = classifyGdprTransparencyTopics({
+    localeHints: ["en"],
+    text: "We pass on savings to customers and do not use public user profiles for advertising creative.",
+  });
+  assert.equal(
+    classification.matches.some((match) =>
+      match.topic === "recipients_or_vendor_categories" ||
+      match.topic === "automated_decision_making_or_profiling"
+    ),
+    false,
+  );
+});
+
 test("retention criteria do not become processing-purpose evidence", () => {
   const classification = classifyGdprTransparencyTopics({
     localeHints: ["en"],

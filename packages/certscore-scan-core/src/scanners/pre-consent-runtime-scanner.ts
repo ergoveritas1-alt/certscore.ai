@@ -6418,9 +6418,14 @@ async function readRapidFirstLayerConsentUiObservationUnbounded(
       visible: true;
     }>;
     contextText: string;
+    defaultTogglePurposeLabels: string[];
+    defaultToggleStatesObserved: boolean | null;
     hasPotentialToggle: boolean;
+    nonEssentialDefaultsOff: boolean | null;
     necessaryPreferenceLabels: string[];
     necessaryPreferenceSelectionObserved: boolean | null;
+    precheckedOptionalPurposeCount: number;
+    precheckedOptionalPurposeLabels: string[];
     rejectedNoContextLabels: string[];
   };
   type RapidConsentInventoryInput = {
@@ -6428,6 +6433,7 @@ async function readRapidFirstLayerConsentUiObservationUnbounded(
     canonicalConsentInventoryLabels: string[];
     canonicalConsentContextHints: string[];
     canonicalNecessaryPreferenceLabels: string[];
+    canonicalOptionalPreferenceLabels: string[];
   };
   const alreadyInstalled = await page.evaluate(() =>
     typeof (window as typeof window & { __certscoreRapidConsentInventory?: unknown })
@@ -6439,6 +6445,7 @@ async function readRapidFirstLayerConsentUiObservationUnbounded(
     const canonicalLabels = new Set(input.canonicalConsentInventoryLabels.map((value) => normalize(value).toLowerCase().replace(/\u0307/g, "")));
     const embeddedLabels = [...canonicalLabels].filter((value) => value.length >= 8);
     const necessaryPreferenceLabels = input.canonicalNecessaryPreferenceLabels.map((value) => normalize(value).toLowerCase());
+    const optionalPreferenceLabels = input.canonicalOptionalPreferenceLabels.map((value) => normalize(value).toLowerCase());
     const contextHints = input.canonicalConsentContextHints.map((value) => normalize(value).toLowerCase());
     const contextPattern = /cookie|cookies|privacy|consent|preference|preferences|tracking|analytics|marketing|data protection/i;
     const labelFor = (element) => normalize(
@@ -6498,6 +6505,7 @@ async function readRapidFirstLayerConsentUiObservationUnbounded(
       return element.tagName.toLowerCase();
     };
     const controls = [];
+    const strongConsentSurfaces = new Set();
     const contexts = [];
     const rejectedNoContextLabels = [];
     const seen = new Set();
@@ -6586,8 +6594,19 @@ async function readRapidFirstLayerConsentUiObservationUnbounded(
       if (seen.has(key)) continue;
       seen.add(key);
       contexts.push(contextText);
+      const strongConsentSurface = element.closest("[role='dialog'],[aria-modal='true'],[class*='cookie' i],[class*='consent' i],[id*='cookie' i],[id*='consent' i]");
+      const sameSurfaceCanonicalControlCount = strongConsentSurface
+        ? Array.from(strongConsentSurface.querySelectorAll(semanticControlSelector)).slice(0, 60).filter((candidate) => {
+            const candidateLabel = labelFor(candidate).slice(0, 120).toLowerCase().replace(/\u0307/g, "");
+            return canonicalLabels.has(candidateLabel) ||
+              embeddedLabels.some((phrase) => candidateLabel.length <= 80 && candidateLabel.includes(phrase));
+          }).length
+        : 0;
+      if (strongConsentSurface && sameSurfaceCanonicalControlCount >= 2) {
+        strongConsentSurfaces.add(strongConsentSurface);
+      }
       controls.push({
-        cmpScoped: scopedSeen.has(element),
+        cmpScoped: scopedSeen.has(element) || sameSurfaceCanonicalControlCount >= 2,
         label,
         role: element.getAttribute("role") || undefined,
         selectorHint: selectorHintFor(element),
@@ -6602,7 +6621,7 @@ async function readRapidFirstLayerConsentUiObservationUnbounded(
       if (probeBudgetExpired()) return false;
       return visibleInFirstLayer(element) && Boolean(consentContextFor(element));
     });
-    const necessaryPreferenceRows = Array.from(document.querySelectorAll(
+    const preferenceRows = Array.from(document.querySelectorAll(
       "input[type='checkbox'], input[type='radio'], [role='switch'], [role='checkbox'], [aria-checked]"
     )).slice(0, 200).flatMap((element) => {
       const id = element.getAttribute("id");
@@ -6629,23 +6648,38 @@ async function readRapidFirstLayerConsentUiObservationUnbounded(
       const necessary = necessaryPreferenceLabels.some((phrase) =>
         normalizedLabel === phrase || normalizedLabel.includes(phrase)
       );
-      const cmpScoped = combinedCmpContainers.some((container) =>
+      const optional = optionalPreferenceLabels.some((phrase) =>
+        normalizedLabel === phrase || normalizedLabel.includes(phrase)
+      );
+      const canonicalCmpScoped = combinedCmpContainers.some((container) =>
         container === element || container.contains?.(element)
       );
-      if (!label || !necessary || !cmpScoped) return [];
+      const strongConsentSurface = element.closest("[role='dialog'],[aria-modal='true'],[class*='cookie' i],[class*='consent' i],[id*='cookie' i],[id*='consent' i]");
+      const strongSurfaceScoped = Boolean(strongConsentSurface && strongConsentSurfaces.has(strongConsentSurface));
+      if (!label || necessary === optional || (!canonicalCmpScoped && !strongSurfaceScoped)) return [];
       const checked = element instanceof HTMLInputElement
         ? element.checked
         : element.getAttribute("aria-checked") === "true";
-      return [{ checked, label }];
+      return [{ category: necessary ? "necessary" : "optional", checked, label }];
     });
+    const necessaryPreferenceRows = preferenceRows.filter((row) => row.category === "necessary");
+    const optionalPreferenceRows = preferenceRows.filter((row) => row.category === "optional");
+    const precheckedOptionalPreferenceRows = optionalPreferenceRows.filter((row) => row.checked);
     return {
       controls,
       contextText: [...new Set(contexts)].join(" ").slice(0, 12_000),
+      defaultTogglePurposeLabels: [...new Set(optionalPreferenceRows.map((row) => row.label))].slice(0, 12),
+      defaultToggleStatesObserved: optionalPreferenceRows.length > 0 ? true : null,
       hasPotentialToggle,
+      nonEssentialDefaultsOff: optionalPreferenceRows.length > 0
+        ? precheckedOptionalPreferenceRows.length === 0
+        : null,
       necessaryPreferenceLabels: [...new Set(necessaryPreferenceRows.map((row) => row.label))].slice(0, 8),
       necessaryPreferenceSelectionObserved: necessaryPreferenceRows.length > 0
         ? necessaryPreferenceRows.some((row) => row.checked)
         : null,
+      precheckedOptionalPurposeCount: precheckedOptionalPreferenceRows.length,
+      precheckedOptionalPurposeLabels: [...new Set(precheckedOptionalPreferenceRows.map((row) => row.label))].slice(0, 10),
       rejectedNoContextLabels: [...new Set(rejectedNoContextLabels)],
     };
     };
@@ -6680,6 +6714,7 @@ async function readRapidFirstLayerConsentUiObservationUnbounded(
     canonicalConsentInventoryLabels: CANONICAL_CONSENT_INVENTORY_LABELS,
     canonicalConsentContextHints: CANONICAL_CONSENT_CONTEXT_HINTS,
     canonicalNecessaryPreferenceLabels: CANONICAL_NECESSARY_PREFERENCE_CATEGORY_LABELS,
+    canonicalOptionalPreferenceLabels: CANONICAL_OPTIONAL_PREFERENCE_CATEGORY_LABELS,
   });
 
   const classifiedControls = snapshot.controls.map((control) => ({
@@ -6727,13 +6762,13 @@ async function readRapidFirstLayerConsentUiObservationUnbounded(
     text: snapshot.contextText,
     controls,
     defaultToggleEvidence: {
-      defaultTogglePurposeLabels: [],
-      defaultToggleStatesObserved: null,
+      defaultTogglePurposeLabels: snapshot.defaultTogglePurposeLabels,
+      defaultToggleStatesObserved: snapshot.defaultToggleStatesObserved,
       necessaryPreferenceLabels: snapshot.necessaryPreferenceLabels,
       necessaryPreferenceSelectionObserved: snapshot.necessaryPreferenceSelectionObserved,
-      nonEssentialDefaultsOff: null,
-      precheckedOptionalPurposeCount: 0,
-      precheckedOptionalPurposeLabels: [],
+      nonEssentialDefaultsOff: snapshot.nonEssentialDefaultsOff,
+      precheckedOptionalPurposeCount: snapshot.precheckedOptionalPurposeCount,
+      precheckedOptionalPurposeLabels: snapshot.precheckedOptionalPurposeLabels,
     },
     fallbackBasis: controls.length > 0 ? ["inventory:rapid_first_layer_controls"] : [],
     inventoryDiagnostics: {

@@ -6,6 +6,16 @@ import { ORPHANED_QUEUED_SCAN_DISPATCH_DEADLINE_MS } from "../src/validation/orp
 
 const DEFAULT_BASE_URL = "https://certscore.ai";
 const DEFAULT_HEARTBEAT_STALE_MINUTES = 10;
+const DEFAULT_NANO_SIGNAL_RETRY_WINDOW_MINUTES = 30;
+const DEFAULT_NANO_SIGNAL_TERMINAL_ATTEMPT_LIMIT = 3;
+const DEFAULT_EVENT_PRESSURE_WINDOW_MINUTES = 30;
+const DEFAULT_LIFECYCLE_EVENTS_PER_MINUTE_LIMIT = 50;
+const DEFAULT_LIFECYCLE_EVENT_CONSECUTIVE_MINUTES = 3;
+const DEFAULT_NANO_FAILURES_PER_MINUTE_LIMIT = 5;
+const DEFAULT_NANO_FAILURE_CONSECUTIVE_MINUTES = 2;
+const DEFAULT_NANO_AMPLIFICATION_WINDOW_MINUTES = 10;
+const DEFAULT_NANO_STARTED_TO_REQUESTED_RATIO_LIMIT = 5;
+const DEFAULT_NANO_DURABLE_GENERATION_CLAIM_LIMIT = 3;
 const DEFAULT_SCAN_QUEUE_STALE_MINUTES = 10;
 const DEFAULT_SYNTHETIC_SCAN_DOMAIN = "ergoveritas.com";
 const DEFAULT_SYNTHETIC_SCAN_TIMEOUT_MINUTES = 15;
@@ -34,6 +44,35 @@ type QueuedScanBacklogRow = {
 type QueueSnapshotRow = {
   created_at: string | null;
   metadata_json: unknown;
+};
+
+type NanoSignalRetryLoopRow = {
+  failure_count: number;
+  first_seen_at: string;
+  last_seen_at: string;
+  request_count: number;
+  scan_id: string;
+  start_count: number;
+};
+
+type EventPressureMinuteRow = {
+  lifecycle_event_count: number;
+  minute: string;
+  nano_failure_count: number;
+};
+
+type NanoSignalAmplificationRow = {
+  request_count: number;
+  start_count: number;
+  started_to_requested_ratio: number;
+};
+
+type NanoSignalDurableGenerationLoopRow = {
+  observed_claim_count: number;
+  poll_count: number;
+  requested_at: string;
+  scan_id: string;
+  start_count: number;
 };
 
 type ScannerEcsState = {
@@ -264,6 +303,138 @@ async function getPreviousQueueSnapshot() {
   );
 }
 
+async function getNanoSignalRetryLoops(windowMinutes: number, terminalAttemptLimit: number) {
+  return query<NanoSignalRetryLoopRow>(
+    `select
+       scan_id::text as scan_id,
+       count(*) filter (where event_type = 'signals.nano_doc_enrichment_started')::int as start_count,
+       count(*) filter (where event_type = 'signals.nano_doc_enrichment_failed')::int as failure_count,
+       count(*) filter (where event_type = 'signals.nano_doc_enrichment_requested')::int as request_count,
+       min(created_at)::text as first_seen_at,
+       max(created_at)::text as last_seen_at
+     from scan_events
+     where scan_id is not null
+       and created_at >= now() - make_interval(mins => $1::int)
+       and event_type in (
+         'signals.nano_doc_enrichment_started',
+         'signals.nano_doc_enrichment_failed',
+         'signals.nano_doc_enrichment_requested'
+       )
+     group by scan_id
+     having count(*) filter (where event_type = 'signals.nano_doc_enrichment_failed') > $2::int
+     order by failure_count desc, last_seen_at desc
+     limit 10`,
+    [windowMinutes, terminalAttemptLimit],
+    { readOnly: true }
+  ).then((result) => result.rows);
+}
+
+async function getEventPressureMinuteRows(windowMinutes: number) {
+  return query<EventPressureMinuteRow>(
+    `select
+       date_trunc('minute', created_at)::text as minute,
+       count(*) filter (where scan_id is not null)::int as lifecycle_event_count,
+       count(*) filter (
+         where scan_id is not null
+           and event_type = 'signals.nano_doc_enrichment_failed'
+       )::int as nano_failure_count
+     from scan_events
+     where created_at >= now() - make_interval(mins => $1::int)
+     group by date_trunc('minute', created_at)
+     order by date_trunc('minute', created_at) asc`,
+    [windowMinutes],
+    { readOnly: true }
+  ).then((result) => result.rows);
+}
+
+async function getNanoSignalAmplification(windowMinutes: number) {
+  return queryOne<NanoSignalAmplificationRow>(
+    `select
+       count(*) filter (
+         where event_type = 'signals.nano_doc_enrichment_started'
+       )::int as start_count,
+       count(*) filter (
+         where event_type = 'signals.nano_doc_enrichment_requested'
+       )::int as request_count,
+       (
+         count(*) filter (where event_type = 'signals.nano_doc_enrichment_started')::double precision
+         / greatest(
+             count(*) filter (where event_type = 'signals.nano_doc_enrichment_requested'),
+             1
+           )::double precision
+       ) as started_to_requested_ratio
+     from scan_events
+     where scan_id is not null
+       and created_at >= now() - make_interval(mins => $1::int)
+       and event_type in (
+         'signals.nano_doc_enrichment_started',
+         'signals.nano_doc_enrichment_requested'
+       )`,
+    [windowMinutes],
+    { readOnly: true }
+  );
+}
+
+async function getNanoSignalDurableGenerationLoops(claimLimit: number) {
+  return query<NanoSignalDurableGenerationLoopRow>(
+    `select
+       work_items.scan_id::text as scan_id,
+       work_items.requested_at::text as requested_at,
+       work_items.poll_count::int as poll_count,
+       count(events.scan_id) filter (
+         where events.event_type = 'signals.nano_doc_enrichment_started'
+       )::int as start_count,
+       (
+         work_items.poll_count
+         + count(events.scan_id) filter (
+             where events.event_type = 'signals.nano_doc_enrichment_started'
+           )
+       )::int as observed_claim_count
+     from nano_signal_work_items work_items
+     left join scan_events events
+       on events.scan_id = work_items.scan_id
+      and events.created_at >= work_items.requested_at
+      and events.event_type = 'signals.nano_doc_enrichment_started'
+     group by work_items.scan_id, work_items.requested_at, work_items.poll_count
+     having (
+       work_items.poll_count
+       + count(events.scan_id) filter (
+           where events.event_type = 'signals.nano_doc_enrichment_started'
+         )
+     ) > $1::int
+     order by observed_claim_count desc, work_items.requested_at asc
+     limit 10`,
+    [claimLimit],
+    { readOnly: true }
+  ).then((result) => result.rows);
+}
+
+function findConsecutiveMinuteThresholdBreach(
+  rows: EventPressureMinuteRow[],
+  count: (row: EventPressureMinuteRow) => number,
+  threshold: number,
+  requiredConsecutiveMinutes: number
+) {
+  let run: EventPressureMinuteRow[] = [];
+
+  for (const row of rows) {
+    if (count(row) < threshold) {
+      run = [];
+      continue;
+    }
+
+    const priorMinuteMs = run.length > 0 ? new Date(run[run.length - 1]!.minute).getTime() : null;
+    const minuteMs = new Date(row.minute).getTime();
+    run = priorMinuteMs !== null && minuteMs - priorMinuteMs === 60_000 ? [...run, row] : [row];
+
+    if (run.length >= requiredConsecutiveMinutes) {
+      return run.slice(-requiredConsecutiveMinutes);
+    }
+  }
+
+  return [];
+}
+
 async function recordQueueSnapshot(backlog: QueuedScanBacklogRow, scanQueueStaleMinutes: number, status: SectionState) {
   await query(
     `insert into scan_events (event_type, message, metadata_json)
@@ -346,6 +517,46 @@ async function main() {
   const baseUrl = process.env.OPS_BASE_URL?.trim() || DEFAULT_BASE_URL;
   const staleThresholdMs = getNumberEnv("OPS_HEARTBEAT_STALE_MINUTES", DEFAULT_HEARTBEAT_STALE_MINUTES) * 60_000;
   const scanQueueStaleMinutes = getNumberEnv("OPS_SCAN_QUEUE_STALE_MINUTES", DEFAULT_SCAN_QUEUE_STALE_MINUTES);
+  const nanoSignalRetryWindowMinutes = getNumberEnv(
+    "OPS_NANO_SIGNAL_RETRY_WINDOW_MINUTES",
+    DEFAULT_NANO_SIGNAL_RETRY_WINDOW_MINUTES
+  );
+  const nanoSignalTerminalAttemptLimit = getNumberEnv(
+    "OPS_NANO_SIGNAL_TERMINAL_ATTEMPT_LIMIT",
+    DEFAULT_NANO_SIGNAL_TERMINAL_ATTEMPT_LIMIT
+  );
+  const eventPressureWindowMinutes = getNumberEnv(
+    "OPS_EVENT_PRESSURE_WINDOW_MINUTES",
+    DEFAULT_EVENT_PRESSURE_WINDOW_MINUTES
+  );
+  const lifecycleEventsPerMinuteLimit = getNumberEnv(
+    "OPS_LIFECYCLE_EVENTS_PER_MINUTE_LIMIT",
+    DEFAULT_LIFECYCLE_EVENTS_PER_MINUTE_LIMIT
+  );
+  const lifecycleEventConsecutiveMinutes = getNumberEnv(
+    "OPS_LIFECYCLE_EVENT_CONSECUTIVE_MINUTES",
+    DEFAULT_LIFECYCLE_EVENT_CONSECUTIVE_MINUTES
+  );
+  const nanoFailuresPerMinuteLimit = getNumberEnv(
+    "OPS_NANO_FAILURES_PER_MINUTE_LIMIT",
+    DEFAULT_NANO_FAILURES_PER_MINUTE_LIMIT
+  );
+  const nanoFailureConsecutiveMinutes = getNumberEnv(
+    "OPS_NANO_FAILURE_CONSECUTIVE_MINUTES",
+    DEFAULT_NANO_FAILURE_CONSECUTIVE_MINUTES
+  );
+  const nanoAmplificationWindowMinutes = getNumberEnv(
+    "OPS_NANO_AMPLIFICATION_WINDOW_MINUTES",
+    DEFAULT_NANO_AMPLIFICATION_WINDOW_MINUTES
+  );
+  const nanoStartedToRequestedRatioLimit = getNumberEnv(
+    "OPS_NANO_STARTED_TO_REQUESTED_RATIO_LIMIT",
+    DEFAULT_NANO_STARTED_TO_REQUESTED_RATIO_LIMIT
+  );
+  const nanoDurableGenerationClaimLimit = getNumberEnv(
+    "OPS_NANO_DURABLE_GENERATION_CLAIM_LIMIT",
+    DEFAULT_NANO_DURABLE_GENERATION_CLAIM_LIMIT
+  );
   const syntheticScanEnabled = getBooleanEnv("OPS_SYNTHETIC_SCAN_ENABLED", false);
   const syntheticScanDomain = process.env.OPS_SYNTHETIC_SCAN_DOMAIN?.trim() || DEFAULT_SYNTHETIC_SCAN_DOMAIN;
   const syntheticScanTimeoutMinutes = getNumberEnv("OPS_SYNTHETIC_SCAN_TIMEOUT_MINUTES", DEFAULT_SYNTHETIC_SCAN_TIMEOUT_MINUTES);
@@ -356,6 +567,7 @@ async function main() {
   let scannerHeartbeatHealthy = false;
   const sections = {
     databaseAndBacklog: { details: [], status: "ok" as SectionState },
+    nanoSignalEnrichment: { details: [], status: "ok" as SectionState },
     workerHeartbeats: { details: [], status: "skipped" as SectionState },
     scannerQueueCanary: { details: [], status: "ok" as SectionState }
   };
@@ -402,6 +614,105 @@ async function main() {
     }
   } else {
     mark(sections.workerHeartbeats, "skipped", requireValidationHeartbeat ? "Validation pipeline is disabled." : "Validation heartbeat freshness is disabled.");
+  }
+
+  const nanoSignalRetryLoops = await getNanoSignalRetryLoops(
+    nanoSignalRetryWindowMinutes,
+    nanoSignalTerminalAttemptLimit
+  );
+  if (nanoSignalRetryLoops.length > 0) {
+    for (const retryLoop of nanoSignalRetryLoops) {
+      finding(
+        findings,
+        sections.nanoSignalEnrichment,
+        `Nano signal enrichment retry loop detected for scan ${retryLoop.scan_id}: ${retryLoop.failure_count} terminal failures, ${retryLoop.start_count} starts, and ${retryLoop.request_count} requests between ${retryLoop.first_seen_at} and ${retryLoop.last_seen_at}.`
+      );
+    }
+  } else {
+    mark(
+      sections.nanoSignalEnrichment,
+      "ok",
+      `No scan exceeded ${nanoSignalTerminalAttemptLimit} Nano terminal failures in the last ${nanoSignalRetryWindowMinutes}m.`
+    );
+  }
+
+  const [eventPressureMinuteRows, nanoSignalAmplification, nanoSignalDurableGenerationLoops] = await Promise.all([
+    getEventPressureMinuteRows(eventPressureWindowMinutes),
+    getNanoSignalAmplification(nanoAmplificationWindowMinutes),
+    getNanoSignalDurableGenerationLoops(nanoDurableGenerationClaimLimit)
+  ]);
+  const lifecycleEventBreach = findConsecutiveMinuteThresholdBreach(
+    eventPressureMinuteRows,
+    (row) => row.lifecycle_event_count,
+    lifecycleEventsPerMinuteLimit,
+    lifecycleEventConsecutiveMinutes
+  );
+  const nanoFailureBreach = findConsecutiveMinuteThresholdBreach(
+    eventPressureMinuteRows,
+    (row) => row.nano_failure_count,
+    nanoFailuresPerMinuteLimit,
+    nanoFailureConsecutiveMinutes
+  );
+
+  if (lifecycleEventBreach.length > 0) {
+    finding(
+      findings,
+      sections.nanoSignalEnrichment,
+      `Scan-lifecycle event pressure exceeded ${lifecycleEventsPerMinuteLimit}/minute for ${lifecycleEventConsecutiveMinutes} consecutive minutes (${lifecycleEventBreach.map((row) => `${row.minute}: ${row.lifecycle_event_count}`).join(", ")}).`
+    );
+  } else {
+    mark(
+      sections.nanoSignalEnrichment,
+      "ok",
+      `Scan-lifecycle event pressure stayed below ${lifecycleEventsPerMinuteLimit}/minute for ${lifecycleEventConsecutiveMinutes} consecutive minutes in the last ${eventPressureWindowMinutes}m.`
+    );
+  }
+
+  if (nanoFailureBreach.length > 0) {
+    finding(
+      findings,
+      sections.nanoSignalEnrichment,
+      `Nano terminal failures reached ${nanoFailuresPerMinuteLimit}/minute for ${nanoFailureConsecutiveMinutes} consecutive minutes (${nanoFailureBreach.map((row) => `${row.minute}: ${row.nano_failure_count}`).join(", ")}).`
+    );
+  } else {
+    mark(
+      sections.nanoSignalEnrichment,
+      "ok",
+      `Nano terminal failures stayed below ${nanoFailuresPerMinuteLimit}/minute for ${nanoFailureConsecutiveMinutes} consecutive minutes in the last ${eventPressureWindowMinutes}m.`
+    );
+  }
+
+  if (
+    nanoSignalAmplification &&
+    nanoSignalAmplification.started_to_requested_ratio > nanoStartedToRequestedRatioLimit
+  ) {
+    finding(
+      findings,
+      sections.nanoSignalEnrichment,
+      `Nano start amplification exceeded ${nanoStartedToRequestedRatioLimit}:1 over ${nanoAmplificationWindowMinutes}m (${nanoSignalAmplification.start_count} starts / ${nanoSignalAmplification.request_count} requests; ratio ${nanoSignalAmplification.started_to_requested_ratio.toFixed(2)}:1).`
+    );
+  } else {
+    mark(
+      sections.nanoSignalEnrichment,
+      "ok",
+      `Nano start amplification stayed at or below ${nanoStartedToRequestedRatioLimit}:1 over ${nanoAmplificationWindowMinutes}m (${nanoSignalAmplification?.start_count ?? 0} starts / ${nanoSignalAmplification?.request_count ?? 0} requests).`
+    );
+  }
+
+  if (nanoSignalDurableGenerationLoops.length > 0) {
+    for (const loop of nanoSignalDurableGenerationLoops) {
+      finding(
+        findings,
+        sections.nanoSignalEnrichment,
+        `Nano durable work generation for scan ${loop.scan_id} exceeded ${nanoDurableGenerationClaimLimit} observed claims without changing generation (${loop.observed_claim_count} claims: ${loop.start_count} starts + poll count ${loop.poll_count}; requested ${loop.requested_at}).`
+      );
+    }
+  } else {
+    mark(
+      sections.nanoSignalEnrichment,
+      "ok",
+      `No active Nano durable work generation exceeded ${nanoDurableGenerationClaimLimit} observed claims.`
+    );
   }
 
   if (requireScannerHeartbeat) {
@@ -503,6 +814,9 @@ async function main() {
         sections,
         queuedFullScans: backlog?.queued_count ?? null,
         repairedOrphanedQueuedScans: repairedOrphanedScanIds.length,
+        nanoSignalRetryLoopCount: nanoSignalRetryLoops.length,
+        nanoSignalDurableGenerationLoopCount: nanoSignalDurableGenerationLoops.length,
+        nanoSignalStartedToRequestedRatio: nanoSignalAmplification?.started_to_requested_ratio ?? null,
         syntheticScanEnabled,
         validationHeartbeatAt: validationSettings?.last_worker_heartbeat_at ?? null
       },

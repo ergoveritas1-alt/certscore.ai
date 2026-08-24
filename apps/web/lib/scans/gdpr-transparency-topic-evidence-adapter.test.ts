@@ -146,6 +146,35 @@ test("compact purpose and service-provider candidates pass the production eviden
   assert.deepEqual(result.discardedArticle13DisclosureSignals, []);
 });
 
+test("onward-recipient and negative-profiling disclosures pass the canonical production adapter", () => {
+  const text = [
+    "When you order images, we pass on your data to the shipping provider so it can deliver the order.",
+    "We do not use your data for profiling for advertising or eligibility decisions.",
+  ].join(" ");
+  const classified = classifyGdprTransparencyTopics({ text, localeHints: ["en"] });
+  const candidates = classified.matches.map((match) => candidate({
+    classifierReasonCodes: match.reasonCodes,
+    confidence: match.confidence,
+    evidenceText: match.evidenceExcerpt,
+    matchStrength: match.matchStrength,
+    matchedLocale: match.matchedLocale,
+    matchedTerm: match.matchedTerm,
+    topic: match.topic,
+  }));
+  const result = adaptGdprTransparencyTopicCandidatesForProduction({
+    policyTextQuality: { usable: true },
+    profile: GDPR_TRANSPARENCY_MULTILINGUAL_ARTICLE13_PROFILE,
+    surface: surface(candidates, { textExcerpt: text }),
+  });
+
+  assert.deepEqual(
+    result.acceptedProductionSignals.map((signal) => signal.disclosureType).sort(),
+    ["automated_decision_making_or_profiling", "recipients_or_vendor_categories"],
+    JSON.stringify(result.dispositions),
+  );
+  assert.deepEqual(result.discardedArticle13DisclosureSignals, []);
+});
+
 test("privacy-context contact channel candidates do not credit controller or DPO without a bound role", () => {
   const text = [
     "Privacy Policy.",

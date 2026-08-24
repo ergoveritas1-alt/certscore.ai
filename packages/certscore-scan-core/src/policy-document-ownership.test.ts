@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import {
+  assessPolicyDocumentSubstance,
   classifyPolicyDocumentOwnership,
   policyDocumentMatchesExpectedSurface
 } from "./scanners/policy-surface-scanner.js";
@@ -200,4 +201,31 @@ test("keeps bounded multilingual policy text reviewable without an English-only 
     title: "Privacybeleid",
     text: "Wij leggen uit welke persoonsgegevens wij verwerken, waarom wij dit doen en hoe lang wij deze bewaren."
   }), true);
+});
+
+test("rejects localized soft-404 policy documents before ownership and topic extraction", () => {
+  for (const input of [
+    {
+      finalUrl: "https://example.test/PageNotFoundError.aspx?requestUrl=/privacy",
+      title: "Página no encontrada 404",
+      text: "La página solicitada no existe. Volver al inicio.",
+    },
+    {
+      finalUrl: "https://example.test/privacy",
+      title: "Page non trouvée",
+      text: "404 - Page non trouvée. Retour à l'accueil.",
+    },
+    {
+      finalUrl: "https://example.test/privacy",
+      title: "ページが見つかりません",
+      text: "お探しのページが見つかりません。",
+    },
+  ]) {
+    const assessment = assessPolicyDocumentSubstance({
+      surfaceType: "privacy_policy",
+      ...input,
+    });
+    assert.equal(assessment.matchesExpectedSurface, false, input.title);
+    assert.equal(assessment.reasonCode, "soft_404", input.title);
+  }
 });

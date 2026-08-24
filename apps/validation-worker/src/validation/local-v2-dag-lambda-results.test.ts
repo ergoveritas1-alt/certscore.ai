@@ -556,6 +556,18 @@ test("verified early policy evidence durably schedules canonical reprojection wi
   );
   assert.match(pipelineSource, /shouldReprojectAfterPolicyProjection/);
   assert.match(pipelineSource, /input\.recoveryMode === "policy_projection_reprojection"/);
+  assert.match(
+    pipelineSource,
+    /nanoSignalEnrichmentFailed[\s\S]*buildNanoSignalTerminalFailureMetadata\([\s\S]*recoveryMode: input\.recoveryMode \?\? null/,
+  );
+  assert.doesNotMatch(
+    pipelineSource,
+    /nanoSignalEnrichmentFailed[\s\S]{0,500}\.catch\(\(\) => undefined\)/,
+  );
+  assert.doesNotMatch(
+    pipelineSource,
+    /nanoSignalEnrichmentCompleted[\s\S]{0,1500}\.catch\(\(\) => undefined\)/,
+  );
   assert.match(repositorySource, /when \$5::text = 'policy_projection_reprojection' then 'pending'/);
   assert.match(repositorySource, /or \$5::text = 'policy_projection_reprojection'/);
   assert.match(

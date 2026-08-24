@@ -2473,6 +2473,7 @@ async function processPolicyCandidate({
     surfaceType: effectiveCandidate.deterministicSurfaceType,
     text: analysisVisibleText,
     title,
+    finalUrl: fetchedFinalUrl,
   });
   const guessedThinPrivacyDocument = shouldTreatGuessedPrivacyDocumentAsInsufficient({
     surfaceType: effectiveCandidate.deterministicSurfaceType,
@@ -2509,7 +2510,9 @@ async function processPolicyCandidate({
         fetchFailureReason:
           documentSubstance.reasonCode === "consent_settings_shell"
             ? "consent_settings_shell"
-            : "insufficient_policy_text",
+            : documentSubstance.reasonCode === "soft_404"
+              ? "soft_404"
+              : "insufficient_policy_text",
         title,
         textExcerpt: boundedExcerpt(analysisVisibleText, []),
         confidence: Math.max(0.35, Math.min(0.55, candidate.assisted?.confidence ?? candidate.deterministicScore)),
@@ -2768,6 +2771,7 @@ export type PolicyDocumentSubstanceAssessment = {
     | "consent_settings_shell"
     | "multilingual_policy_reviewable"
     | "obvious_navigation_shell"
+    | "soft_404"
     | "substantive_privacy_signals"
     | "substantive_topic_match"
     | "surface_specific_signal"
@@ -2783,8 +2787,16 @@ export function assessPolicyDocumentSubstance(input: {
   surfaceType: PolicySurfaceObservation["surfaceType"];
   text: string;
   title?: string;
+  finalUrl?: string;
 }): PolicyDocumentSubstanceAssessment {
   const normalized = normalizeWhitespace(`${input.title ?? ""}\n${input.text}`);
+  if (looksLikePolicyDocumentSoft404({
+    finalUrl: input.finalUrl,
+    text: normalized,
+    title: input.title,
+  })) {
+    return { matchesExpectedSurface: false, reasonCode: "soft_404" };
+  }
   const obviousNavigationShellSignals = [
     /\bexplore (?:our|the)\b/i,
     /\bbuild your\b/i,
@@ -2842,6 +2854,19 @@ export function assessPolicyDocumentSubstance(input: {
       : { matchesExpectedSurface: false, reasonCode: "obvious_navigation_shell" };
   }
   return { matchesExpectedSurface: true, reasonCode: "unrestricted_surface" };
+}
+
+export function looksLikePolicyDocumentSoft404(input: {
+  finalUrl?: string;
+  text: string;
+  title?: string;
+}): boolean {
+  const finalUrl = input.finalUrl ?? "";
+  const bounded = normalizeWhitespace(`${input.title ?? ""} ${input.text}`).slice(0, 2_500);
+  const urlMarker = /(?:^|[\/_-])(?:404|410|page[-_]?not[-_]?found|pagenotfound|not[-_]?found)(?:[\/_?&=.-]|$)/i.test(finalUrl);
+  const contentMarker = /\b(?:404|410|page not found|the page (?:you requested|you are looking for) (?:was not|could not be) found|seite nicht gefunden|page non trouv[eé]e|pagina non trovata|p[aá]gina no encontrada)\b/i.test(bounded) ||
+    /ページが見つかりません/.test(bounded);
+  return contentMarker || (urlMarker && /\b(?:not found|nicht gefunden|non trouv[eé]e|non trovata|no encontrada|見つかりません|error)\b/i.test(bounded));
 }
 
 function canonicalConsentControlIntentsInText(value: string) {
@@ -5785,6 +5810,7 @@ function observationFromCandidate(
     "consent_settings_shell",
     "insufficient_policy_text",
     "low_quality_access_challenge",
+    "soft_404",
   ].includes(input.fetchFailureReason ?? "");
   const documentFetchState = input.status === "fetched" || fetchedButNotUsable
     ? "fetched" as const
@@ -5798,7 +5824,8 @@ function observationFromCandidate(
     : input.fetchFailureReason === "low_quality_access_challenge"
       ? "blocked" as const
       : input.fetchFailureReason === "insufficient_policy_text" ||
-          input.fetchFailureReason === "consent_settings_shell"
+          input.fetchFailureReason === "consent_settings_shell" ||
+          input.fetchFailureReason === "soft_404"
         ? "insufficient" as const
         : "not_attempted" as const;
   const directlyLinkedFromScannedPage =
