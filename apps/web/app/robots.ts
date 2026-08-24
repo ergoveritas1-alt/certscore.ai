@@ -31,6 +31,7 @@ const publicAllowPaths = [
   "/llms.txt",
   "/llms-full.txt",
   "/sample-report",
+  "/trust",
   "/solutions",
   "/solutions/"
 ];

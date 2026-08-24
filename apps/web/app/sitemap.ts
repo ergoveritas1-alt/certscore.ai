@@ -43,6 +43,8 @@ const staticPaths = [
   "/solutions/cookie-consent-scanner",
   "/solutions/privacy-policy-risk-scanner",
   "/terms",
+  "/trust",
+  "/security",
   "/privacy",
   "/privacy-request",
   "/findings",

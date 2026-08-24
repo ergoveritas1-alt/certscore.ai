@@ -10,8 +10,34 @@ const nextConfig = {
   devIndicators: false,
   output: "standalone",
   outputFileTracingRoot: path.join(__dirname, "../.."),
+  poweredByHeader: false,
   async headers() {
     return [
+      {
+        source: "/:path*",
+        headers: [
+          {
+            key: "Content-Security-Policy",
+            value: "frame-ancestors 'none'"
+          },
+          {
+            key: "Referrer-Policy",
+            value: "strict-origin-when-cross-origin"
+          },
+          {
+            key: "Strict-Transport-Security",
+            value: "max-age=31536000"
+          },
+          {
+            key: "X-Content-Type-Options",
+            value: "nosniff"
+          },
+          {
+            key: "X-Frame-Options",
+            value: "DENY"
+          }
+        ]
+      },
       {
         source: "/api/v1/:path*",
         headers: [

@@ -1,0 +1,5 @@
+# A pull request affecting production code must be reviewed by a person other
+# than its author. GitHub branch protection must require one CODEOWNER approval;
+# this file identifies the protected scope but cannot enable that repository
+# setting by itself.
+* @ergoveritas1

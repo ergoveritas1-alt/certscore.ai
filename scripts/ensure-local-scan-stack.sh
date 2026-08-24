@@ -28,11 +28,35 @@ fail() {
 }
 
 load_web_env() {
+  local line
+  local line_number=0
+  local key
+  local value
+
   [[ -f "${WEB_ENV_FILE}" ]] || fail "missing ${WEB_ENV_FILE}"
-  set -a
-  # shellcheck disable=SC1090
-  source "${WEB_ENV_FILE}"
-  set +a
+
+  while IFS= read -r line || [[ -n "${line}" ]]; do
+    line_number=$((line_number + 1))
+
+    if [[ "${line}" =~ ^[[:space:]]*$ || "${line}" =~ ^[[:space:]]*# ]]; then
+      continue
+    fi
+
+    if [[ ! "${line}" =~ ^[[:space:]]*(export[[:space:]]+)?([A-Za-z_][A-Za-z0-9_]*)[[:space:]]*=(.*)$ ]]; then
+      log "ignoring malformed dotenv entry at ${WEB_ENV_FILE}:${line_number}"
+      continue
+    fi
+
+    key="${BASH_REMATCH[2]}"
+    value="${BASH_REMATCH[3]}"
+    value="${value#"${value%%[![:space:]]*}"}"
+
+    if [[ "${value}" =~ ^\"(.*)\"[[:space:]]*$ || "${value}" =~ ^\'(.*)\'[[:space:]]*$ ]]; then
+      value="${BASH_REMATCH[1]}"
+    fi
+
+    export "${key}=${value}"
+  done <"${WEB_ENV_FILE}"
 }
 
 is_port_listening() {

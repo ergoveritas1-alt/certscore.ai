@@ -1,0 +1,51 @@
+version: 2
+
+updates:
+  - package-ecosystem: npm
+    directory: "/"
+    schedule:
+      interval: weekly
+      day: monday
+      time: "09:00"
+      timezone: America/Los_Angeles
+    open-pull-requests-limit: 10
+    labels:
+      - dependencies
+      - security
+
+  - package-ecosystem: github-actions
+    directory: "/"
+    schedule:
+      interval: weekly
+      day: monday
+      time: "09:15"
+      timezone: America/Los_Angeles
+    labels:
+      - dependencies
+      - security
+
+  - package-ecosystem: docker
+    directory: "/apps/web"
+    schedule: &docker_schedule
+      interval: weekly
+      day: monday
+      time: "09:30"
+      timezone: America/Los_Angeles
+    labels: &dependency_labels
+      - dependencies
+      - security
+
+  - package-ecosystem: docker
+    directory: "/apps/validation-worker"
+    schedule: *docker_schedule
+    labels: *dependency_labels
+
+  - package-ecosystem: docker
+    directory: "/apps/mcp"
+    schedule: *docker_schedule
+    labels: *dependency_labels
+
+  - package-ecosystem: docker
+    directory: "/apps/v2-dag-lambda"
+    schedule: *docker_schedule
+    labels: *dependency_labels

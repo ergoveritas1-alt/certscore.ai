@@ -42,7 +42,7 @@ const manifest = {
     termsOfUseUrl: "https://certscore.ai/terms"
   },
   name: {
-    short: "CertScore.ai Privacy",
+    short: "CertScore Web Privacy Scanner",
     full: "CertScore.ai Website Privacy Scanner MCP for Microsoft"
   },
   description: {

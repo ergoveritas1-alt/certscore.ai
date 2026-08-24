@@ -59,3 +59,7 @@
 - canonical taxonomy IDs and unified finding IDs remain stable across that pipeline
 
 See [normalized-concern-pipeline.md](/Users/benmasek/WC01/docs/normalized-concern-pipeline.md).
+
+## Operations
+
+- [Basic disaster recovery and backup/restore plan](./disaster-recovery.md)

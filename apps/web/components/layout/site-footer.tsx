@@ -48,6 +48,8 @@ const footerSections = [
 
 const companyLegalLinks = [
   { href: "/contact", label: "Contact" },
+  { href: "/trust", label: "Trust & Security" },
+  { href: "/security", label: "Security" },
   { href: "/privacy", label: "Privacy Policy" },
   { href: "/terms", label: "Terms" },
   { href: "/privacy-request", label: "Privacy Request" },

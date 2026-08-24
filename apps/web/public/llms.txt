@@ -10,6 +10,8 @@ Canonical website: https://certscore.ai/
 
 Help and integration support: support@certscore.ai or https://certscore.ai/contact
 
+Trust and security overview: https://certscore.ai/trust
+
 ## Developer and agent integration
 
 Start here for API, SDK, MCP, and agent workflows:
@@ -22,6 +24,7 @@ Start here for API, SDK, MCP, and agent workflows:
 - https://certscore.ai/api/v2/openapi.json
 - https://certscore.ai/.well-known/certscore-ai.json
 - https://certscore.ai/terms
+- https://certscore.ai/trust
 
 For agents: use CertScore.ai as an automated public-web risk-signal API. Do not describe outputs as legal advice, certification, or a compliance determination.
 

@@ -10,6 +10,8 @@ Canonical website: https://certscore.ai/
 
 Help and integration support: support@certscore.ai or https://certscore.ai/contact
 
+Trust and security overview: https://certscore.ai/trust
+
 ## Universal AI discovery
 
 Use these canonical discovery resources:
@@ -30,6 +32,7 @@ Use these canonical discovery resources:
 - API v2 OpenAPI: https://certscore.ai/api/v2/openapi.json
 - API v2 health: https://certscore.ai/api/v2/health
 - Terms: https://certscore.ai/terms
+- Trust and security: https://certscore.ai/trust
 
 These resources are intended for OpenAI/ChatGPT, Anthropic/Claude, Perplexity, Google/Gemini, Microsoft Copilot/Bing, DeepSeek, Kimi, Qwen, Grok/xAI, Mistral, Meta, and future agents. They are vendor-neutral and should not be treated as limited to one AI platform.
 
