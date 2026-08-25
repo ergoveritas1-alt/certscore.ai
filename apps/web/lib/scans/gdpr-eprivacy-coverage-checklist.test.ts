@@ -1,11 +1,18 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { deriveConsentControlAssessment } from "@certscore/contracts";
+import {
+  classifyGdprTransparencyTopics,
+  deriveConsentControlAssessment,
+  type GdprTransparencyTopic,
+  type PolicySurfaceObservation,
+} from "@certscore/contracts";
+import { getCertScorePrivacyPolicyText } from "../../app/privacy/privacy-policy-content";
 import {
   deriveGdprEprivacyCoverageChecklist,
   type GdprEprivacyCoverageChecklistItem
 } from "./gdpr-eprivacy-coverage-checklist";
 import { getAssessmentDirection, getEvidenceLabel } from "./gdpr-eprivacy-assessment-direction";
+import { deriveGdprEprivacyCoverageChecklistRowRationale } from "./gdpr-eprivacy-checklist-rationale";
 import {
   deriveGdprEprivacyCoveragePolicyOutcomes,
   type GdprEprivacyCoverageOutcome
@@ -20,6 +27,8 @@ import {
   GDPR_TRANSPARENCY_REPORT_ROW_ID_SET,
   type GdprTransparencyReportEvidenceLabel,
 } from "./gdpr-transparency-report-contract";
+import { adaptGdprTransparencyTopicCandidatesForProduction } from "./gdpr-transparency-topic-evidence-adapter";
+import { GDPR_TRANSPARENCY_MULTILINGUAL_ARTICLE13_PROFILE } from "./gdpr-transparency-production-profile";
 
 function makeFinding(
   unifiedFindingId: string,
@@ -221,6 +230,125 @@ test("checklist consumes approved multilingual GDPR Transparency Article 13 cove
   );
 });
 
+test("CertScore privacy policy evidence projects every GDPR Transparency row through the canonical pipeline", () => {
+  const policyText = getCertScorePrivacyPolicyText();
+  const classification = classifyGdprTransparencyTopics({
+    localeHints: ["en"],
+    text: policyText,
+  });
+  const candidates: PolicySurfaceObservation["gdprTransparencyTopicCandidates"] =
+    classification.matches.map((match) => ({
+      classifierProvenance: match.classifierProvenance,
+      classifierReasonCodes: match.reasonCodes,
+      confidence: match.confidence,
+      evidenceText: match.evidenceExcerpt,
+      matchStrength: match.matchStrength,
+      matchedLocale: match.matchedLocale,
+      matchedTerm: match.matchedTerm,
+      productionCredit: false,
+      status: "diagnostic_only",
+      topic: match.topic,
+    }));
+  const adaptation = adaptGdprTransparencyTopicCandidatesForProduction({
+    isTargetRelevantPrivacyPolicy: true,
+    pageUrl: "https://certscore.ai/privacy",
+    policyTextQuality: { usable: true },
+    profile: GDPR_TRANSPARENCY_MULTILINGUAL_ARTICLE13_PROFILE,
+    surface: {
+      gdprTransparencyTopicCandidates: candidates,
+      normalizedUrl: "https://certscore.ai/privacy",
+      status: "fetched",
+      surfaceType: "privacy_policy",
+      textExcerpt: policyText,
+      url: "https://certscore.ai/privacy",
+    },
+  });
+  const expectedTopics = [
+    "automated_decision_making_or_profiling",
+    "controller_contact",
+    "data_retention",
+    "data_subject_rights",
+    "dpo_contact",
+    "international_transfers",
+    "legal_basis",
+    "processing_purposes",
+    "recipients_or_vendor_categories",
+    "supervisory_authority",
+  ] satisfies GdprTransparencyTopic[];
+
+  assert.match(
+    classification.matches.find((match) => match.topic === "controller_contact")?.matchedTerm ?? "",
+    /controller/i,
+  );
+  assert.equal(
+    classification.matches.find((match) => match.topic === "dpo_contact")?.variant,
+    "privacy_contact_point",
+  );
+
+  assert.deepEqual(
+    adaptation.acceptedProductionSignals
+      .map((signal) => signal.disclosureType)
+      .sort(),
+    [...expectedTopics].sort(),
+  );
+  assert.deepEqual(adaptation.discardedArticle13DisclosureSignals, []);
+
+  const runtimeArtifacts = {
+    policyDisclosureSummary: {
+      article13DisclosureSignals: adaptation.acceptedProductionSignals,
+      gdprTransparencyEvidenceProfile: adaptation.profile,
+      gdprTransparencyProductionEvidenceEnabled: adaptation.productionEvidenceEnabled,
+    },
+  };
+  const normalizedConcerns = buildNormalizedConcerns({
+    reviewFindingCandidates: [],
+    runtimeArtifacts,
+    validationFindings: [],
+  });
+
+  assert.deepEqual(
+    normalizedConcerns
+      .filter((concern) => concern.originKey.startsWith("gdpr_transparency.article13."))
+      .map((concern) => concern.originKey.replace("gdpr_transparency.article13.", ""))
+      .sort(),
+    [...expectedTopics].sort(),
+  );
+
+  const coverageOutcomes = deriveGdprEprivacyCoveragePolicyOutcomes({
+    coverageLimited: false,
+    events: [],
+    normalizedConcerns,
+    runtimeArtifacts,
+    scanCompleted: true,
+    snapshot: {},
+  });
+  const items = deriveGdprEprivacyCoverageChecklist({
+    coverageLimited: false,
+    coverageOutcomes,
+    projectedFindings: [],
+    scanCompleted: true,
+    unifiedFindings: [],
+  });
+  const expectedRows = [
+    "automated_decision_making_profiling_disclosure",
+    "controller_contact_disclosure",
+    "data_subject_rights_disclosure",
+    "dpo_contact_point_disclosure",
+    "international_transfers_disclosure",
+    "legal_basis_disclosure_observed",
+    "processing_purposes_disclosure",
+    "recipients_vendor_categories_disclosure",
+    "retention_disclosure_observed",
+    "supervisory_authority_complaint_disclosure",
+  ];
+
+  for (const rowId of expectedRows) {
+    const row = byId(items, rowId);
+    assert.equal(row.status, "Observed", rowId);
+    assert.equal(row.criticalEvidence.projectedFindings.length, 0, rowId);
+  }
+});
+
 test("GDPR Transparency policy fails closed when normalized concerns are unavailable", () => {
   const evidenceText = "We share personal data with service providers and professional advisers.";
   const runtimeArtifacts = {
@@ -340,6 +468,68 @@ function makeCoverageOutcome(
     }
   };
 }
+
+test("Accept-only evidence consolidates missing Options into the refusal-path concern", () => {
+  const items = deriveGdprEprivacyCoverageChecklist({
+    coverageLimited: false,
+    coverageOutcomes: {
+      reject_all_path_availability: makeCoverageOutcome({
+        evidenceRefs: ["Evidence: complete first-layer inventory"],
+        limitation: "No reject, necessary-only, or equivalent refusal control was retained.",
+        retainedEvidence: {
+          consentSurfaceObserved: true,
+          rejectControlObserved: false,
+        },
+        rowId: "reject_all_path_availability",
+        status: "Gap observed",
+      }),
+      options_settings_preferences_control: makeCoverageOutcome({
+        evidenceRefs: ["Evidence: complete first-layer inventory"],
+        limitation: "Missing Options is supporting context for refusal-path review, not a standalone gap.",
+        retainedEvidence: {
+          optionsAbsenceSupportsRefusalPathOnly: true,
+          optionsControlObserved: false,
+          scoreEffect: "none",
+        },
+        rowId: "options_settings_preferences_control",
+        status: "Not observed",
+      }),
+    },
+    projectedFindings: [],
+    scanCompleted: true,
+    unifiedFindings: [],
+  });
+  const reject = byId(items, "reject_all_path_availability");
+  const options = byId(items, "options_settings_preferences_control");
+  const findings = buildRegulatoryGapTopFindings({
+    gdprEprivacyArea: {
+      id: "gdpr_eprivacy",
+      title: "GDPR / ePrivacy",
+      rows: getReportableGdprEprivacyCoverageItems(items),
+    },
+  });
+
+  assert.equal(reject.assessmentStatus, "gap_observed");
+  assert.equal(options.status, "Not observed");
+  assert.equal(options.assessmentStatus, "checked");
+  assert.equal(getAssessmentDirection(options), "neutral_signal");
+  assert.match(
+    deriveGdprEprivacyCoverageChecklistRowRationale(options),
+    /supporting context for the refusal-path review/i,
+  );
+  assert.equal(
+    findings.some((finding) =>
+      finding.id === "regulatory_gap__gdpr_eprivacy__reject_all_path_availability"
+    ),
+    true,
+  );
+  assert.equal(
+    findings.some((finding) =>
+      finding.id === "regulatory_gap__gdpr_eprivacy__options_settings_preferences_control"
+    ),
+    false,
+  );
+});
 
 test("GDPR Transparency checklist projection permits only the canonical three report values", () => {
   const forbiddenSourceStatuses: GdprEprivacyCoverageOutcome["status"][] = [
@@ -840,6 +1030,7 @@ test("getReportableGdprEprivacyCoverageItems omits standalone runtime vendor sig
   assert.equal(rowIds.has("advertising_retargeting_vendor_signal_observed"), false);
   assert.equal(rowIds.has("retargeting_behavioral_advertising_signal_observed"), false);
   assert.equal(rowIds.has("analytics_vendor_observed"), false);
+  assert.equal(rowIds.has("public_collection_surfaces"), false);
 });
 
 test("reportable GDPR/ePrivacy rows keep deferred vendor signals out of top findings", () => {

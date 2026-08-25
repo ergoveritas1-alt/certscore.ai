@@ -206,6 +206,26 @@ test("classifies German Microsoft-style consent controls", () => {
   }).intent, "options");
 });
 
+test("classifies retained German VERSTANDEN as accept only in cookie-consent context", () => {
+  const classification = classifyConsentControlLabel({
+    label: "VERSTANDEN",
+    contextText:
+      "Diese Seite verwendet Cookies, um die Nutzerfreundlichkeit zu verbessern. Mit der weiteren Verwendung stimmst du dem zu.",
+    localeHints: ["de"],
+  });
+
+  assert.equal(classification.intent, "accept");
+  assert.equal(classification.semanticRole, "explicit_accept");
+  assert.equal(classification.matchedLocale, "de");
+  assert.equal(classification.matchStrength, "contextual");
+  assert.equal(classification.contextSatisfied, true);
+  assert.equal(classification.variant, "approval_acknowledgment");
+  assert.equal(
+    classifyConsentControlLabel({ label: "VERSTANDEN", localeHints: ["de"] }).intent,
+    "unknown",
+  );
+});
+
 test("classifies British spelling choice controls as options", () => {
   const classification = classifyConsentControlLabel({ label: "Customise my choices" });
   assert.equal(classification.intent, "options");

@@ -20,6 +20,7 @@ test("registry includes first-wave CMP vendors", () => {
     "Cookiebot",
     "CookieYes",
     "DSGVO All in One / tarteaucitron",
+    "BST DSGVO Cookie notice plugin, non-TCF",
     "Sourcepoint",
     "Didomi",
     "Quantcast Choice",
@@ -99,6 +100,21 @@ test("detects DSGVO All in One and tarteaucitron from exact runtime markers", ()
     }),
     "DSGVO All in One / tarteaucitron",
   );
+});
+
+test("detects the distinct BST DSGVO Cookie notice plugin from retained runtime markers", () => {
+  const [detection] = detectKnownCmps({
+    domSelectors: ["a.bst-popup-link"],
+    urls: [
+      "https://example.test/wp-content/plugins/bst-dsgvo-cookie/includes/js/scripts.js?ver=1.0",
+      "https://example.test/wp-content/plugins/bst-dsgvo-cookie/includes/js/bst-message.js?ver=1.0",
+    ],
+  });
+
+  assert.equal(detection?.canonicalName, "BST DSGVO Cookie notice plugin, non-TCF");
+  assert.deepEqual(detection?.standards, []);
+  assert.ok(detection?.matchedSignals.some((signal) => signal.source === "script"));
+  assert.ok(detection?.matchedSignals.some((signal) => signal.source === "dom"));
 });
 
 test("detects Cookiebot European consent infrastructure", () => {

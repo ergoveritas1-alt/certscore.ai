@@ -1,7 +1,11 @@
 import "server-only";
 
 import { createHash } from "node:crypto";
-import { consentControlAssessmentSchema, type ConsentControlAssessment } from "@certscore/contracts";
+import {
+  collectionSurfaceAssessmentSchema,
+  consentControlAssessmentSchema,
+  type ConsentControlAssessment,
+} from "@certscore/contracts";
 import { query, queryOne } from "@website-signal-risk-scanner/db";
 import type { ScanDetailResponse } from "./get-scan-by-id";
 import {
@@ -59,6 +63,7 @@ import {
   PERSISTED_CANONICAL_REPORT_PROJECTION_VERSION,
   type PersistedCanonicalReportProjection
 } from "./persisted-canonical-report-projection";
+import { buildPreConsentBrowserStorageProjection } from "./pre-consent-browser-storage-projection";
 
 /**
  * The scan detail record already includes the scan_snapshots row. Once that
@@ -739,10 +744,23 @@ async function deriveScanReportProjection(
   });
   const indexedChecklistEvidence = indexChecklistPolicyEvidence(checklist);
   const ownerUnifiedFindings = buildScanReportUnifiedFindingsFromState(reportState);
+  const collectionSurfaceAssessmentCandidate =
+    record(projectionScanRecord.runtimeArtifacts)?.collectionSurfaceAssessment ??
+    record(projectionScanRecord.runtimeArtifacts)?.collection_surface_assessment;
+  const collectionSurfaceAssessment = collectionSurfaceAssessmentSchema.safeParse(
+    collectionSurfaceAssessmentCandidate
+  );
   const canonicalReportProjection: PersistedCanonicalReportProjection = {
     artifactVersion: PERSISTED_CANONICAL_REPORT_PROJECTION_VERSION,
     checklistPresentation: buildGdprEprivacyChecklistPresentation(checklist),
     checklistRows: indexedChecklistEvidence.rows,
+    collectionSurfaceAssessment: collectionSurfaceAssessment.success
+      ? collectionSurfaceAssessment.data
+      : null,
+    preConsentBrowserStorageProjection: buildPreConsentBrowserStorageProjection({
+      runtimeArtifacts: projectionScanRecord.runtimeArtifacts,
+      scanId: scanRecord.scan.id,
+    }),
     derivedContext: reportState.derivedContext,
     evidenceIndex: indexedChecklistEvidence.evidenceIndex,
     globalUnifiedFindings: reportState.globalUnifiedFindings,

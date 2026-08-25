@@ -311,12 +311,33 @@ test("limited empty first-layer inventory remains unknown through every canonica
   assert.equal(getEvidenceLabel(byId("reject_all_path_availability")), "Not testable");
 });
 
-test("an 8-second stable partial exit cannot become a missing-reject finding", () => {
+test("a verified settled stable partial exit persists missing controls as not observed", () => {
   const packet = retainedEvidencePacket({
     firstLayerControls: [{ actionType: "accept_all", label: "Accept all" }],
   });
+  packet.screenshots = [{
+    artifactId: "screenshot-pre-consent-settled",
+    capturedAtMs: 1_050,
+    captureMethod: "primary_viewport_fallback",
+    consentStateAtTime: "pre_consent",
+    pagePhase: "network_idle",
+    path: "artifacts/screenshot-pre-consent-settled.png",
+    url: GENERIC_URL,
+  }];
+  packet.consentUiObservations[0]!.basis = [
+    "inventory:first_layer_controls",
+    "settled_control_inventory_completed",
+    "inventory:paired_settled_frame_completed",
+  ];
+  packet.consentUiObservations[0]!.captureDiagnostics = {
+    completedChannels: ["dom_inventory", "geometry"],
+    failedChannels: [],
+    timedOutChannels: [],
+  };
+  packet.consentUiObservations[0]!.documentUrl = GENERIC_URL;
   packet.consentUiObservations[0]!.inventoryOutcome = "complete_with_controls";
   packet.consentUiObservations[0]!.inventoryDiagnostics = {
+    blockingInaccessibleFrameCount: 0,
     candidateContainerCount: 1,
     candidateControlCount: 1,
     retainedControlCount: 1,
@@ -336,11 +357,11 @@ test("an 8-second stable partial exit cannot become a missing-reject finding", (
     requestedUrl: GENERIC_URL,
   });
 
-  assert.equal(assessment.assessmentStatus, "limited");
-  assert.equal(assessment.coverage.status, "limited");
+  assert.equal(assessment.assessmentStatus, "complete");
+  assert.equal(assessment.coverage.status, "complete");
   assert.equal(assessment.controls.accept.state, "observed");
-  assert.equal(assessment.controls.reject.state, "unknown");
-  assert.equal(assessment.controls.options.state, "unknown");
+  assert.equal(assessment.controls.reject.state, "not_observed");
+  assert.equal(assessment.controls.options.state, "not_observed");
 });
 
 test("a visible necessary selection plus save-selection control projects a necessary-only reject path", () => {
@@ -767,11 +788,11 @@ test("canonical consent-control flow preserves site-agnostic prominence and abse
       },
       expectedAssessmentOptions: "not_observed",
       expectedAssessmentReject: "not_observed",
-      expectedChecklistEligibility: "gap_observed",
-      expectedGapFinding: true,
-      expectedRowStatus: "Gap observed",
-      expectedScore: 0,
-      expectedState: "no_granular_controls_retained"
+      expectedChecklistEligibility: "none",
+      expectedGapFinding: false,
+      expectedRowStatus: "Not observed",
+      expectedScore: null,
+      expectedState: "accept_without_refusal_or_settings"
     },
     {
       name: "incomplete retained control inventory",

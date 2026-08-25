@@ -241,8 +241,8 @@ test("normalizes consent options prominence before concern policy assigns checkl
       })
     },
     {
-      expectedEligibility: "gap_observed",
-      expectedState: "no_granular_controls_retained",
+      expectedEligibility: "none",
+      expectedState: "accept_without_refusal_or_settings",
       assessment: makeConsentOptionsAssessment({
         firstLayer: [
           { actionType: "accept_all", intent: "accept", label: "Accept all" }
@@ -1869,6 +1869,75 @@ test("runtime coverage limitation artifacts create audit-only normalized concern
   );
 });
 
+test("collection surface inventory creates context-only concern without a finding mapping", () => {
+  const concerns = buildNormalizedConcerns({
+    reviewFindingCandidates: [],
+    runtimeArtifacts: {
+      collectionSurfaceAssessment: {
+        contractVersion: "certscore.collection-surface-assessment.v1",
+        scanId: "scan-1",
+        assessedAt: "2026-08-24T12:00:00.000Z",
+        assessmentStatus: "observed",
+        sourceInventoryContractVersion: "certscore.collection-surface-inventory.v1",
+        sourceHash: "a".repeat(64),
+        sourceLane: "runtime_evidence",
+        pageUrl: "https://example.com/",
+        coverage: {
+          status: "complete",
+          documentScope: "main_document",
+          interactionMode: "none",
+          candidateFormCount: 1,
+          retainedFormCount: 1,
+          candidateFieldCount: 1,
+          retainedFieldCount: 1,
+          inspectedFormCandidateCount: 1,
+          inspectedFieldCandidateCount: 1,
+          candidateScanTruncated: false,
+          retentionTruncated: false,
+          reasonCodes: [],
+        },
+        forms: [{
+          formRef: "form-0",
+          structure: "native_form",
+          surfaceType: "newsletter",
+          pageUrl: "https://example.com/",
+          method: "post",
+          actionRelationship: "self",
+          candidateFieldCount: 1,
+          retainedFieldCount: 1,
+          fieldsTruncated: false,
+          fields: [{
+            fieldRef: "field-0",
+            elementType: "input",
+            inputType: "email",
+            semanticCategory: "email",
+            label: "Email",
+            required: true,
+            disabled: false,
+            readOnly: false,
+            evidenceRefs: [],
+            confidence: 0.9,
+            directVsInferred: "direct",
+          }],
+          evidenceRefs: [],
+          confidence: 0.9,
+          directVsInferred: "direct",
+        }],
+        limitationKeys: [],
+        evidenceRefs: ["CanonicalEvidenceBundle.json#collectionSurfaceInventory"],
+        productionProjectable: true,
+      },
+    },
+    validationFindings: [],
+  });
+  const concern = concerns.find((candidate) => candidate.originKey === "collection_surface.inventory.observed");
+  assert.ok(concern);
+  assert.equal(concern.promotionEligibility, "internal_only");
+  assert.equal(concern.externalSurfacingEligibility, "suppress");
+  assert.equal(concern.suggestedUnifiedFindingId, undefined);
+  assert.equal(concern.regulatoryChecklistEligibility, "observed");
+});
+
 test("lane disagreement remains a limited-runtime concern and does not become a scan no-go concern", () => {
   const concerns = buildNormalizedConcerns({
     reviewFindingCandidates: [],
@@ -2140,13 +2209,20 @@ test("adapter-approved Portuguese GDPR Transparency evidence creates a normalize
   assert.equal(concern.evidenceBundle.rawEvidence?.productionCredit, true);
 });
 
-test("adapter-approved evidence from each newly calibrated locale creates a normalized concern", () => {
+test("adapter-approved Wave 1-3 locale evidence creates normalized concerns", () => {
   const examples = [
-    ["ru", "Правовые основания обработки персональных данных включают согласие и договор."],
-    ["ja", "個人データ処理の法的根拠には、同意および契約の履行が含まれます。"],
-    ["zh", "处理个人数据的法律依据包括同意以及履行合同。"],
-    ["ar", "يشمل الأساس القانوني لمعالجة البيانات الشخصية الموافقة وتنفيذ العقد."],
-    ["sv", "Rättslig grund för behandling av personuppgifter omfattar samtycke och avtal."],
+    ["de", "Die Datenverarbeitung erfolgt auf Grundlage von Art. 6."],
+    ["ru", "Обработка данных осуществляется на основании статьи 6."],
+    ["pt", "O tratamento de dados baseia-se no artigo 6."],
+    ["es", "El tratamiento de datos se basa en el artículo 6."],
+    ["fr", "Le traitement des données est fondé sur l'article 6."],
+    ["it", "Il trattamento dei dati si basa sull'articolo 6."],
+    ["nl", "De gegevensverwerking is gebaseerd op artikel 6."],
+    ["pl", "Przetwarzanie danych odbywa się na podstawie art. 6."],
+    ["ja", "GDPR第6条に基づく個人データ処理。"],
+    ["zh", "根据GDPR第6条处理个人数据。"],
+    ["ar", "تستند معالجة البيانات إلى المادة 6."],
+    ["tr", "Veri işleme GDPR Madde 6 uyarınca gerçekleştirilir."],
   ] as const;
 
   for (const [matchedLocale, evidenceText] of examples) {

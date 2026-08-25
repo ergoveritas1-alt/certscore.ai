@@ -255,6 +255,12 @@ function getRegulatoryTopFindingConcernKind(row: RegulatoryGapTopFindingRow): Re
   if (isArticle13ExtractionLimitedRow(row)) {
     return null;
   }
+  if (
+    row.id === "options_settings_preferences_control" &&
+    retainedBoolean(row, ["optionsAbsenceSupportsRefusalPathOnly"])
+  ) {
+    return null;
+  }
   if (row.assessmentStatus === "gap_observed") {
     if (isRiskSignalRow(row.id) && !isObservedPotentialConcernRow(row)) {
       return null;

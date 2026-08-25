@@ -194,6 +194,108 @@ test("fingerprinting projection requires retained API access plus a pre-consent 
   );
 });
 
+test("CollectionSurfaceAssessment v1 preserves verified provenance and fails closed on document drift", async () => {
+  const { deriveCollectionSurfaceAssessment } = await loadLocalV2DagReport();
+  const inventory: NonNullable<CanonicalEvidenceBundle["collectionSurfaceInventory"]> = {
+    contractVersion: "certscore.collection-surface-inventory.v1",
+    inventoryId: "inventory-1",
+    sourceLane: "runtime_evidence",
+    sourceScanner: "pre_consent_runtime",
+    scenario: "fresh_pre_consent",
+    observedAtMs: 100,
+    consentStateAtTime: "pre_consent",
+    pageUrl: "https://example.com/contact?ignored=1",
+    coverage: {
+      status: "complete",
+      documentScope: "main_document",
+      interactionMode: "none",
+      candidateFormCount: 1,
+      retainedFormCount: 1,
+      candidateFieldCount: 1,
+      retainedFieldCount: 1,
+      inspectedFormCandidateCount: 1,
+      inspectedFieldCandidateCount: 1,
+      candidateScanTruncated: false,
+      retentionTruncated: false,
+      reasonCodes: [],
+    },
+    forms: [{
+      formRef: "form-0",
+      structure: "native_form",
+      surfaceType: "contact",
+      title: "Contact",
+      pageUrl: "https://example.com/contact",
+      method: "post",
+      actionRelationship: "self",
+      candidateFieldCount: 1,
+      retainedFieldCount: 1,
+      fieldsTruncated: false,
+      fields: [{
+        fieldRef: "field-0",
+        elementType: "input",
+        inputType: "email",
+        semanticCategory: "email",
+        label: "Email",
+        required: true,
+        disabled: false,
+        readOnly: false,
+        evidenceRefs: [],
+        confidence: 0.9,
+        directVsInferred: "direct",
+      }],
+      evidenceRefs: [],
+      confidence: 0.9,
+      directVsInferred: "direct",
+    }],
+    evidenceRefs: [],
+    confidence: 0.9,
+    directVsInferred: "direct",
+  };
+  const bundle = {
+    collectionSurfaceInventory: inventory,
+    scanId: "scan-1",
+    scanLaneRuns: [{ laneId: "runtime_evidence", executionOutcome: "completed" }],
+  } as unknown as CanonicalEvidenceBundle;
+  const observed = deriveCollectionSurfaceAssessment({
+    bundle,
+    canonicalDocumentUrl: "https://example.com/contact",
+    scanId: "scan-1",
+    assessedAt: "2026-08-24T12:00:00.000Z",
+  });
+  assert.equal(observed.assessmentStatus, "observed");
+  assert.match(observed.sourceHash ?? "", /^[a-f0-9]{64}$/);
+  assert.equal(observed.sourceLane, "runtime_evidence");
+  assert.equal(observed.forms.length, 1);
+
+  const drifted = deriveCollectionSurfaceAssessment({
+    bundle,
+    canonicalDocumentUrl: "https://example.com/checkout",
+    scanId: "scan-1",
+    assessedAt: "2026-08-24T12:00:00.000Z",
+  });
+  assert.equal(drifted.assessmentStatus, "not_testable");
+  assert.deepEqual(drifted.forms, []);
+  assert.ok(drifted.limitationKeys.includes("collection_surface_document_mismatch"));
+
+  const wrongScan = deriveCollectionSurfaceAssessment({
+    bundle,
+    canonicalDocumentUrl: "https://example.com/contact",
+    scanId: "scan-2",
+    assessedAt: "2026-08-24T12:00:00.000Z",
+  });
+  assert.equal(wrongScan.assessmentStatus, "not_testable");
+  assert.ok(wrongScan.limitationKeys.includes("collection_surface_scan_identity_mismatch"));
+
+  const unavailableFromLegacyBundle = deriveCollectionSurfaceAssessment({
+    bundle: { scanId: "scan-1" } as unknown as CanonicalEvidenceBundle,
+    canonicalDocumentUrl: "https://example.com/contact",
+    scanId: "scan-1",
+    assessedAt: "2026-08-24T12:00:00.000Z",
+  });
+  assert.equal(unavailableFromLegacyBundle.assessmentStatus, "not_testable");
+  assert.ok(unavailableFromLegacyBundle.limitationKeys.includes("collection_surface_inventory_unavailable"));
+});
+
 test("policy/runtime projection persists a linked typed contradiction triplet", async () => {
   const { buildPolicyRuntimeComparisonProjection } = await loadLocalV2DagReport();
   const projection = buildPolicyRuntimeComparisonProjection({
@@ -1983,6 +2085,30 @@ test("requires a concrete canonical host, request, cookie, or runtime signature 
     product: "Yandex Metrica",
     purpose: "analytics",
     vendor: "Yandex"
+  } as never), true);
+
+  const facebookPagePluginUrl = "https://www.facebook.com/plugins/page.php?href=https%3A%2F%2Fexample.test";
+  assert.equal(hasConcreteCanonicalVendorAnchor({
+    basis: ["meta_pixel_endpoint_or_cookie", "hostname_match"],
+    confidence: 0.96,
+    entity: "Meta Platforms, Inc.",
+    matchedHostnames: ["www.facebook.com"],
+    matchedUrls: [facebookPagePluginUrl],
+    observationId: "stale-meta-pixel",
+    product: "Meta Pixel",
+    purpose: "advertising",
+    vendor: "Meta"
+  } as never), false);
+  assert.equal(hasConcreteCanonicalVendorAnchor({
+    basis: ["facebook_page_plugin_embed", "url_pattern_match"],
+    confidence: 0.99,
+    entity: "Meta Platforms, Inc.",
+    matchedHostnames: ["www.facebook.com"],
+    matchedUrls: [facebookPagePluginUrl],
+    observationId: "facebook-page-plugin",
+    product: "Facebook Page Plugin",
+    purpose: "infrastructure",
+    vendor: "Facebook"
   } as never), true);
 });
 

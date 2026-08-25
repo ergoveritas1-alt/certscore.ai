@@ -1102,6 +1102,41 @@ test("resolves DSGVO All in One and tarteaucitron as consent management", () => 
   );
 });
 
+test("resolves BST DSGVO Cookie separately as a non-TCF consent notice plugin", () => {
+  const observations = resolveVendorObservations([
+    {
+      type: "script",
+      hostname: "www.pferdeklinik-roentorf.de",
+      url: "https://www.pferdeklinik-roentorf.de/wp-content/plugins/bst-dsgvo-cookie/includes/js/scripts.js?ver=1.0",
+      matchSource: "script_url",
+    },
+    {
+      type: "script",
+      hostname: "www.pferdeklinik-roentorf.de",
+      url: "https://www.pferdeklinik-roentorf.de/wp-content/plugins/bst-dsgvo-cookie/includes/js/bst-message.js?ver=1.0",
+      matchSource: "script_url",
+    },
+    {
+      type: "cmp_runtime",
+      domSelector: "a.bst-popup-link",
+      matchSource: "cmp_runtime_probe",
+    },
+  ]);
+
+  assertResolved(
+    observations,
+    "BST DSGVO Cookie",
+    "BST DSGVO Cookie notice plugin, non-TCF",
+    "consent_management",
+  );
+  const observation = observations.find((row) => row.vendor === "BST DSGVO Cookie");
+  assert.ok(observation);
+  assert.equal(resolveVendorDisplayCategory(observation), "Cookie compliance");
+  assert.equal(observations.some((row) => row.vendor === "DSGVO All in One"), false);
+  assert.ok(observation.matchSources.some((source) => source.matchedField === "url_pattern"));
+  assert.ok(observation.matchSources.some((source) => source.matchedField === "dom_selector"));
+});
+
 test("resolves Sourcebuster script and sbjs cookies as first-party attribution evidence", () => {
   const observations = resolveVendorObservations([
     {
@@ -1945,6 +1980,60 @@ test("does not retain host-only static adtech URLs as advertising matched URLs",
   assert.deepEqual(meta.matchedUrls, [
     "https://www.facebook.com/tr?id=123&ev=PageView",
   ]);
+});
+
+test("classifies the Facebook Page Plugin as a social embed without inventing Meta Pixel evidence", () => {
+  const pagePluginUrl = "https://www.facebook.com/plugins/page.php?href=https%3A%2F%2Fexample.test";
+  const observations = resolveVendorObservations([
+    request(pagePluginUrl, "www.facebook.com"),
+    {
+      type: "iframe",
+      url: pagePluginUrl,
+      hostname: "www.facebook.com",
+      matchSource: "iframe_src",
+    },
+  ]);
+
+  assert.equal(observations.length, 1);
+  const pagePlugin = observations[0];
+  assert.ok(pagePlugin);
+  assert.equal(pagePlugin.vendor, "Facebook");
+  assert.equal(pagePlugin.product, "Facebook Page Plugin");
+  assert.equal(pagePlugin.purpose, "infrastructure");
+  assert.equal(pagePlugin.basis.includes("facebook_page_plugin_embed"), true);
+  assert.equal(pagePlugin.regulatoryRelevance.includes("social_embed"), true);
+  assert.equal(pagePlugin.regulatoryRelevance.includes("advertising"), false);
+  assert.equal(resolveVendorDisplayCategory(pagePlugin), "Embedded media");
+  assert.equal(observations.some((item) => item.product === "Meta Pixel"), false);
+});
+
+test("keeps Meta Pixel attribution bound to Pixel endpoints or cookie signatures", () => {
+  const observations = resolveVendorObservations([
+    request("https://connect.facebook.net/en_US/fbevents.js", "connect.facebook.net"),
+    request("https://www.facebook.com/tr?id=123&ev=PageView", "www.facebook.com"),
+    {
+      type: "cookie",
+      cookieName: "_fbp",
+      hostname: "example.test",
+    },
+  ]);
+
+  assert.equal(observations.length, 1);
+  assertResolved(observations, "Meta", "Meta Pixel", "advertising");
+  const metaPixel = observations[0];
+  assert.ok(metaPixel);
+  assert.deepEqual(metaPixel.matchedUrls.sort(), [
+    "https://connect.facebook.net/en_US/fbevents.js",
+    "https://www.facebook.com/tr?id=123&ev=PageView",
+  ]);
+  assert.deepEqual(metaPixel.matchedCookieNames, ["_fbp"]);
+
+  assert.deepEqual(
+    resolveVendorObservations([
+      request("https://www.facebook.com/example-page", "www.facebook.com"),
+    ]),
+    [],
+  );
 });
 
 test("resolves Google ad traffic quality as security support not tracker purpose", () => {

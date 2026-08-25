@@ -330,6 +330,67 @@ test("topic-context variants preserve retained evidence through production adapt
   assert.deepEqual(result.discardedArticle13DisclosureSignals, []);
 });
 
+test("substantive corporate policy observations traverse the canonical production adapter", () => {
+  const text = [
+    "Privacy Policy.",
+    "This Privacy Policy contains: What Information Do We Collect? How Do We Use the Information We Collect? Who Do We Disclose Your Information To? International Transfers.",
+    "How Do We Use the Information We Collect? We use this Information to provide, secure, personalize, and improve our services.",
+    "Retention. We only keep Information for as long as we need it to fulfil the purpose we are using it for, as permitted by law.",
+    "Who Do We Disclose Your Information To? We disclose Information to service providers that host, deliver, secure, and analyze our services.",
+    "Individual Rights. You have the Right to access and rectification, erasure, restriction, portability, and objection.",
+    "You may object to processing of your Information on the basis of our legitimate interests.",
+    "International Transfers. Your Information may be transferred to, and processed in, the United States with appropriate safeguards.",
+    "If you have questions about this Privacy Policy, contact us and our Data Protection Officer at privacy@example.test.",
+    "You may lodge a complaint before the supervisory authority for data protection in your country.",
+  ].join(" ");
+  const candidates = classifyGdprTransparencyTopics({ localeHints: ["en"], text }).matches
+    .map((match) => candidate({
+      classifierReasonCodes: match.reasonCodes,
+      confidence: match.confidence,
+      evidenceText: match.evidenceExcerpt,
+      matchStrength: match.matchStrength,
+      matchedLocale: match.matchedLocale,
+      matchedTerm: match.matchedTerm,
+      topic: match.topic,
+    }));
+
+  const result = adaptGdprTransparencyTopicCandidatesForProduction({
+    isTargetRelevantPrivacyPolicy: true,
+    policyTextQuality: { usable: true },
+    profile: GDPR_TRANSPARENCY_MULTILINGUAL_ARTICLE13_PROFILE,
+    surface: surface(candidates, { textExcerpt: text }),
+  });
+
+  assert.deepEqual(
+    new Set(result.acceptedProductionSignals.map((signal) => signal.disclosureType)),
+    new Set([
+      "controller_contact",
+      "dpo_contact",
+      "processing_purposes",
+      "legal_basis",
+      "recipients_or_vendor_categories",
+      "data_retention",
+      "data_subject_rights",
+      "international_transfers",
+      "supervisory_authority",
+    ]),
+  );
+  assert.deepEqual(result.discardedArticle13DisclosureSignals, []);
+  assert.equal(result.dispositions.every((item) => item.disposition === "accepted"), true);
+  assert.match(
+    result.acceptedProductionSignals.find((signal) =>
+      signal.disclosureType === "processing_purposes"
+    )?.evidenceText ?? "",
+    /provide, secure, personalize, and improve/i,
+  );
+  assert.match(
+    result.acceptedProductionSignals.find((signal) =>
+      signal.disclosureType === "recipients_or_vendor_categories"
+    )?.evidenceText ?? "",
+    /service providers that host, deliver, secure, and analyze/i,
+  );
+});
+
 test("explicit GDPR Transparency profile accepts strong direct multilingual candidates from usable privacy-policy surfaces", () => {
   const examples: Array<{ locale: Locale; matchedTerm: string; text: string }> = [
     {
@@ -430,6 +491,51 @@ test("explicit GDPR Transparency profile accepts strong direct multilingual cand
     assert.equal(signal.evidenceText.length <= 640, true);
   }
   assert.equal(candidates.every((item) => item.productionCredit === false), true);
+});
+
+test("Wave 1-3 native classifier variants survive the canonical production adapter", () => {
+  const examples: Array<{ locale: Locale; text: string }> = [
+    { locale: "de", text: "Datenschutzerklärung. Die Datenverarbeitung erfolgt auf Grundlage von Art. 6. Sie haben das Recht auf Datenübertragbarkeit und das Recht auf Einschränkung der Verarbeitung." },
+    { locale: "ru", text: "Политика конфиденциальности. Обработка данных осуществляется на основании статьи 6. Вы имеете право на переносимость данных и право на ограничение обработки." },
+    { locale: "pt", text: "Política de privacidade. O tratamento de dados baseia-se no artigo 6. Tem direito à portabilidade dos dados e direito à limitação do tratamento." },
+    { locale: "es", text: "Política de privacidad. El tratamiento de datos se basa en el artículo 6. Tiene derecho a la portabilidad de los datos y derecho a la limitación del tratamiento." },
+    { locale: "fr", text: "Politique de confidentialité. Le traitement des données est fondé sur l'article 6. Vous disposez du droit à la portabilité des données et du droit à la limitation du traitement." },
+    { locale: "it", text: "Informativa sulla privacy. Il trattamento dei dati si basa sull'articolo 6. Ha diritto alla portabilità dei dati e diritto alla limitazione del trattamento." },
+    { locale: "nl", text: "Privacybeleid. De gegevensverwerking is gebaseerd op artikel 6. U heeft recht op overdraagbaarheid van gegevens en recht op beperking van de verwerking." },
+    { locale: "pl", text: "Polityka prywatności. Przetwarzanie danych odbywa się na podstawie art. 6. Masz prawo do przenoszenia danych i prawo do ograniczenia przetwarzania." },
+    { locale: "ja", text: "プライバシーポリシー。GDPR第6条に基づく個人データ処理。データポータビリティの権利および個人データの処理を制限する権利があります。" },
+    { locale: "zh", text: "隐私政策。根据GDPR第6条处理个人数据。您享有数据可携权以及限制处理个人数据的权利。" },
+    { locale: "ar", text: "سياسة الخصوصية. تستند معالجة البيانات إلى المادة 6. لك الحق في نقل البيانات والحق في تقييد المعالجة." },
+    { locale: "tr", text: "Gizlilik politikası. Veri işleme GDPR Madde 6 uyarınca gerçekleştirilir. Veri taşınabilirliği hakkı ve işlemenin kısıtlanmasını talep etme hakkı vardır." },
+  ];
+
+  for (const example of examples) {
+    const candidates = classifyGdprTransparencyTopics({
+      localeHints: [example.locale],
+      text: example.text,
+    }).matches.map((match) => candidate({
+      classifierReasonCodes: match.reasonCodes,
+      confidence: match.confidence,
+      evidenceText: match.evidenceExcerpt,
+      matchStrength: match.matchStrength,
+      matchedLocale: match.matchedLocale,
+      matchedTerm: match.matchedTerm,
+      topic: match.topic,
+    }));
+    const result = adaptGdprTransparencyTopicCandidatesForProduction({
+      isTargetRelevantPrivacyPolicy: true,
+      policyTextQuality: { usable: true },
+      profile: GDPR_TRANSPARENCY_MULTILINGUAL_ARTICLE13_PROFILE,
+      surface: surface(candidates, { textExcerpt: example.text }),
+    });
+
+    assert.deepEqual(
+      new Set(result.acceptedProductionSignals.map((signal) => signal.disclosureType)),
+      new Set(["legal_basis", "data_subject_rights"]),
+      `${example.locale}: ${JSON.stringify(result.dispositions)}`,
+    );
+    assert.deepEqual(result.discardedArticle13DisclosureSignals, [], example.locale);
+  }
 });
 
 test("weak and contextual GDPR Transparency candidates are not production-credit evidence", () => {
@@ -751,4 +857,52 @@ test("adapter does not project retained evidence when target ownership is unveri
 
   assert.deepEqual(result.acceptedProductionSignals, []);
   assert.equal(result.dispositions[0]?.rejectReason, "non_privacy_policy_surface");
+});
+
+test("retained Article 4 and Article 6 variants pass the canonical production evidence adapter", () => {
+  const text = [
+    "Privacy Policy.",
+    "Information on the controller pursuant to Art. 4 No. 7 GDPR. Example Group AG, Privacy Street 1. E-mail: privacy@example.test.",
+    "Data Protection Officer: Jane Privacy, dpo@example.test.",
+    "What do we use your data for? The data will be processed for the following purposes: website delivery, communication, and security.",
+    "Data processing is based on Art. 6 (1) lit. f GDPR.",
+    "Recipient of the data: Example Services Germany GmbH.",
+    "The data is stored for as long as its processing is necessary for these purposes.",
+    "You have the right to data portability and the right to request the restriction of the processing of your personal data.",
+    "Data transfers to third countries are secured by appropriate safeguards pursuant to Art. 46 GDPR.",
+    "You have the right to lodge a complaint with a supervisory authority.",
+  ].join(" ");
+  const classified = classifyGdprTransparencyTopics({ text, localeHints: ["en"] });
+  const candidates = classified.matches.map((match) => candidate({
+    classifierReasonCodes: match.reasonCodes,
+    confidence: match.confidence,
+    evidenceText: match.evidenceExcerpt,
+    matchStrength: match.matchStrength,
+    matchedLocale: match.matchedLocale,
+    matchedTerm: match.matchedTerm,
+    topic: match.topic,
+  }));
+  const result = adaptGdprTransparencyTopicCandidatesForProduction({
+    isTargetRelevantPrivacyPolicy: true,
+    policyTextQuality: { usable: true },
+    profile: GDPR_TRANSPARENCY_MULTILINGUAL_ARTICLE13_PROFILE,
+    surface: surface(candidates, { textExcerpt: text }),
+  });
+
+  assert.deepEqual(
+    result.acceptedProductionSignals.map((signal) => signal.disclosureType).sort(),
+    [
+      "controller_contact",
+      "data_retention",
+      "data_subject_rights",
+      "dpo_contact",
+      "international_transfers",
+      "legal_basis",
+      "processing_purposes",
+      "recipients_or_vendor_categories",
+      "supervisory_authority",
+    ],
+    JSON.stringify(result.dispositions),
+  );
+  assert.deepEqual(result.discardedArticle13DisclosureSignals, []);
 });

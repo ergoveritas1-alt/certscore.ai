@@ -111,6 +111,31 @@ test("retains localized consent controls when banner locale differs from documen
   }
 });
 
+test("retains BST DSGVO Cookie identity and contextual VERSTANDEN accept evidence", async () => {
+  const artifact = await captureFixture(`
+    <script src="https://www.example.test/wp-content/plugins/bst-dsgvo-cookie/includes/js/bst-message.js?ver=1.0"></script>
+    <style>
+      #bst-cookie-notice { position: fixed; left: 0; bottom: 0; width: 1000px; padding: 20px; background: #333; color: white; }
+    </style>
+    <section id="bst-cookie-notice">
+      <p>Diese Seite verwendet Cookies, um die Nutzerfreundlichkeit zu verbessern. Mit der weiteren Verwendung stimmst du dem zu.</p>
+      <button type="button">VERSTANDEN</button>
+      <a class="bst-popup-link" href="#cookie-information">Weitere Informationen</a>
+    </section>
+  `);
+
+  assert.equal(artifact.summary.cmpDetected, true);
+  assert.equal(artifact.summary.cmpName, "BST DSGVO Cookie notice plugin, non-TCF");
+  assert.equal(artifact.summary.firstLayerAccept, true);
+  assert.equal(artifact.summary.firstLayerReject, false);
+  assert.equal(artifact.summary.firstLayerOptions, false);
+  const accept = findCandidate(artifact, "VERSTANDEN");
+  assert.equal(accept?.actionType, "accept_all");
+  assert.equal(accept?.decisionStatus, "confirmed_visible");
+  assert.equal(accept?.matchStrength, "contextual");
+  assert.ok(accept?.classifierReasonCodes.includes("variant_approval_acknowledgment"));
+});
+
 test("classifies sibling-wrapped inline preferences as one retained consent action cluster", async () => {
   const artifact = await captureFixture(`
     <section id="cookie-banner" role="dialog" aria-label="Cookies and advertising choices" style="position: fixed; left: 0; top: 0; width: 1000px; padding: 24px; background: white;">

@@ -4,6 +4,7 @@ import {
   buildBrowserExtensionRequestInventoryRows,
   buildReportSurfaceVendorProjection,
   buildRuntimeInventoryGroupRows,
+  buildRuntimeInventoryUngroupedRows,
   buildSanitizedRequestEvidenceRows,
   buildTrackerInventoryGroupRows,
   suppressUnsupportedCmpAliasRows,
@@ -653,6 +654,104 @@ test("deduplicates product aliases while retaining their raw domains and cookies
   assert.deepEqual(groupedRows[0]?.attributionSignatures, ["twitter_pixel_request", "x_analytics_request"]);
   assert.deepEqual(groupedRows[0]?.domains, ["t.co", "analytics.twitter.com"]);
   assert.deepEqual(groupedRows[0]?.cookieNames, ["personalization_id", "guest_id_ads"]);
+});
+
+test("grouped tracker request counts sum disjoint domains without double-counting overlap", () => {
+  const makeRow = (input: {
+    domain: string;
+    label: string;
+    requestCount: number;
+  }) => ({
+    category: "infrastructure",
+    confidence: 0.95,
+    cookieNames: [],
+    domains: [input.domain],
+    firstSeenMs: 100,
+    label: input.label,
+    observedVia: ["request"],
+    party: "third_party" as const,
+    preConsent: true,
+    requestCount: input.requestCount,
+    source: "browser_extension_bx01",
+  });
+  const rows = buildTrackerInventoryGroupRows([
+    makeRow({ domain: "fonts.googleapis.com", label: "Google Fonts", requestCount: 2 }),
+    makeRow({ domain: "fonts.gstatic.com", label: "Google Fonts", requestCount: 1 }),
+    makeRow({ domain: "fonts.googleapis.com", label: "Google Fonts", requestCount: 2 }),
+    makeRow({ domain: "facebook.com", label: "Facebook Page Plugin", requestCount: 2 }),
+  ]);
+  const google = rows.find((row) => row.vendor === "Google Fonts");
+  const facebook = rows.find((row) => row.vendor === "Facebook Page Plugin");
+
+  assert.equal(google?.requestCount, 3);
+  assert.deepEqual(google?.domains, ["fonts.googleapis.com", "fonts.gstatic.com"]);
+  assert.equal(facebook?.requestCount, 2);
+  assert.equal(rows.reduce((total, row) => total + (row.requestCount ?? 0), 0), 5);
+});
+
+test("row-level inventory does not merge cookie records into a tracker row and emit them twice", () => {
+  const cookieNames = [
+    "sbjs_migrations",
+    "sbjs_current_add",
+    "sbjs_first_add",
+    "sbjs_current",
+    "sbjs_first",
+    "sbjs_udata",
+    "sbjs_session",
+  ];
+  const rows = buildRuntimeInventoryUngroupedRows({
+    cookieRows: cookieNames.map((cookieName) => ({
+      category: "analytics",
+      cookieName,
+      domain: ".pferdeklinik-muehlen.de",
+      evidenceGrade: "high",
+      firstObservedAtMs: 5_420,
+      initiatorDomain: "pferdeklinik-muehlen.de",
+      initiatorVendor: "Sourcebuster.js",
+      nonEssential: false,
+      party: "first_party",
+      setAtMs: 5_420,
+      setMethod: "document_cookie",
+      timingEvidence: "cookie_write_observed",
+    })) as never,
+    firstPartyDomain: "pferdeklinik-muehlen.de",
+    trackerRows: [
+      {
+        category: "analytics",
+        confidence: 0.95,
+        cookieNames,
+        domains: ["pferdeklinik-muehlen.de"],
+        firstSeenMs: 2_360,
+        label: "Sourcebuster.js",
+        observedVia: ["cookie"],
+        party: "first_party",
+        preConsent: true,
+        requestCount: null,
+        source: "runtime",
+      },
+      {
+        category: "consent_management",
+        confidence: 0.95,
+        cookieNames: [],
+        domains: ["pferdeklinik-muehlen.de"],
+        firstSeenMs: 2_350,
+        label: "DSGVO All in One",
+        observedVia: ["script"],
+        party: "first_party",
+        preConsent: true,
+        requestCount: null,
+        source: "runtime",
+      },
+    ],
+  });
+  const sourcebusterTracker = rows.find((row) => row.type === "tracker" && row.vendor === "Sourcebuster.js");
+  const sourcebusterCookies = rows.filter((row) => row.type === "cookie" && row.vendor === "Sourcebuster.js");
+
+  assert.equal(rows.length, 9);
+  assert.equal(sourcebusterTracker?.observedRecordCount, 1);
+  assert.deepEqual(sourcebusterTracker?.cookieNames, cookieNames);
+  assert.equal(sourcebusterCookies.length, 7);
+  assert.equal(rows.reduce((total, row) => total + row.observedRecordCount, 0), 9);
 });
 
 test("consolidates common runtime aliases and suppresses unsupported CMP identities", () => {

@@ -2324,6 +2324,9 @@ function getConsentOptionsControlChecklistEligibility(input: {
   if (state === "no_granular_controls_retained") {
     return "gap_observed";
   }
+  if (state === "accept_without_refusal_or_settings") {
+    return "none";
+  }
   return "none";
 }
 

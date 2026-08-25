@@ -1156,6 +1156,9 @@ export async function runScan(input: RunScanInput): Promise<CanonicalEvidenceBun
       ...preConsentResult.consentUiObservations,
       ...(consentFlowResult?.consentUiObservations ?? []),
     ],
+    ...(preConsentResult.collectionSurfaceInventory
+      ? { collectionSurfaceInventory: preConsentResult.collectionSurfaceInventory }
+      : {}),
     collectionSurfaceObservations: preConsentResult.collectionSurfaceObservations,
     consentInteractionEvents: consentFlowResult?.consentInteractionEvents ?? [],
     consentFlowObservations: consentFlowResult?.consentFlowObservations ?? [],
@@ -2738,6 +2741,7 @@ export function shouldAttemptScreenshotOnlyFallback(
     result.networkResponseEvents.length > 0 ||
     result.cookieEvents.length > 0 ||
     result.vendorResolverInputs.length > 0 ||
+    Boolean(result.collectionSurfaceInventory) ||
     result.collectionSurfaceObservations.length > 0;
   if (!retainedEvidence) {
     return false;

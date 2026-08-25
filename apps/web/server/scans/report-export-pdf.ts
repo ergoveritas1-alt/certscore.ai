@@ -1,5 +1,30 @@
 import type { CanonicalReportExport } from "./report-export";
 import { deflateSync, inflateSync } from "node:zlib";
+import { isGdprTransparencyReportRowId } from "../../lib/scans/gdpr-transparency-report-contract";
+
+const TRANSPORT_SECURITY_ROW_IDS = new Set([
+  "transport_security_https_delivery",
+  "transport_security_tls_certificate",
+  "transport_security_http_redirect",
+  "transport_security_mixed_content",
+  "transport_security_form_transport",
+]);
+
+function isTransportSecurityRowId(id: unknown): id is string {
+  return typeof id === "string" && TRANSPORT_SECURITY_ROW_IDS.has(id);
+}
+
+function isTransportSecurityFinding(finding: Record<string, unknown>) {
+  const presentation = record(finding.presentation);
+  return [
+    finding.id,
+    finding.unifiedFindingId,
+    finding.findingId,
+    finding.checklistRowId,
+    presentation?.findingId,
+    presentation?.checklistRowId,
+  ].some(isTransportSecurityRowId);
+}
 
 export type ReportPdfVisualEvidence = {
   body: Buffer;
@@ -55,7 +80,7 @@ function paeth(left: number, above: number, upperLeft: number) {
       : upperLeft;
 }
 
-function decodePng(body: Buffer): PdfImage | null {
+function decodePng(body: Buffer, matte: readonly [number, number, number] = [255, 255, 255]): PdfImage | null {
   if (body.length < 33 || !body.subarray(0, 8).equals(Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]))) return null;
   let offset = 8;
   let width = 0;
@@ -121,9 +146,9 @@ function decodePng(body: Buffer): PdfImage | null {
     const green = channels <= 2 ? decoded[source]! : decoded[source + 1]!;
     const blue = channels <= 2 ? decoded[source]! : decoded[source + 2]!;
     const alpha = channels === 2 ? decoded[source + 1]! : channels === 4 ? decoded[source + 3]! : 255;
-    rgb[target] = Math.round((red * alpha + 255 * (255 - alpha)) / 255);
-    rgb[target + 1] = Math.round((green * alpha + 255 * (255 - alpha)) / 255);
-    rgb[target + 2] = Math.round((blue * alpha + 255 * (255 - alpha)) / 255);
+    rgb[target] = Math.round((red * alpha + matte[0] * (255 - alpha)) / 255);
+    rgb[target + 1] = Math.round((green * alpha + matte[1] * (255 - alpha)) / 255);
+    rgb[target + 2] = Math.round((blue * alpha + matte[2] * (255 - alpha)) / 255);
   }
   return {
     bitsPerComponent: 8,
@@ -135,9 +160,12 @@ function decodePng(body: Buffer): PdfImage | null {
   };
 }
 
-function decodePdfImage(visualEvidence: ReportPdfVisualEvidence | null | undefined) {
+function decodePdfImage(
+  visualEvidence: ReportPdfVisualEvidence | null | undefined,
+  matte?: readonly [number, number, number],
+) {
   if (!visualEvidence?.body.length) return null;
-  return decodeJpeg(visualEvidence.body) ?? decodePng(visualEvidence.body);
+  return decodeJpeg(visualEvidence.body) ?? decodePng(visualEvidence.body, matte);
 }
 
 function ascii(value: unknown) {
@@ -267,13 +295,20 @@ function findingDisplay(finding: Record<string, unknown>) {
 
 function reportLines(report: CanonicalReportExport, image: PdfImage | null): PdfLine[] {
   const findings = report.projection.unifiedFindings as Array<Record<string, unknown>>;
+  const mainFindings = findings.filter((finding) => !isTransportSecurityFinding(finding));
+  const transportFindings = findings.filter(isTransportSecurityFinding);
   const review = report.gdprEprivacyReview;
-  const appendix = report.appendix.cookieAndTrackerInventory;
+  const transparencyAppendix = report.appendix.gdprTransparency;
+  const runtimeAppendix = report.appendix.cookieAndTrackerInventory;
+  const transportRows = review?.rows.filter((row) => isTransportSecurityRowId(row.id)) ?? [];
+  const mainChecklistRows = review?.rows.filter((row) =>
+    !isGdprTransparencyReportRowId(row.id) && !isTransportSecurityRowId(row.id)
+  ) ?? [];
   const lines: PdfLine[] = [
-    { text: "CertScore GDPR / ePrivacy evidence report", size: 20, bold: true, gapAfter: 5, kind: "coverTitle" },
+    { text: "GDPR / ePrivacy evidence report", size: 21, bold: true, gapAfter: 5, kind: "coverTitle" },
     { text: report.scan.domainHostname ?? "Website scan", size: 14, bold: true, gapAfter: 8, kind: "coverDomain" },
     { text: `Scan ID: ${report.scan.id}`, size: 8, kind: "coverMeta" },
-    { text: `Completed: ${report.scan.completedAt ?? "Not available"}`, size: 8, gapAfter: 25, kind: "coverMeta" },
+    { text: `Completed: ${report.scan.completedAt ?? "Not available"}`, size: 8, gapAfter: 35, kind: "coverMeta" },
     { text: `Scan region: ${report.scan.scanFrom || "Not retained"}  |  Duration: ${formatDuration(report.scan.durationMs)}`, size: 9, kind: "caption" },
     { text: `Report generated: ${report.generatedAt}`, size: 9, kind: "caption", gapAfter: image ? 6 : 11 },
     ...(image
@@ -306,7 +341,6 @@ function reportLines(report: CanonicalReportExport, image: PdfImage | null): Pdf
   const assessment = report.consentControlAssessment;
   if (assessment) {
     lines.push(
-      { text: `Assessment: ${titleCase(assessment.assessmentStatus)}; evidence coverage: ${titleCase(assessment.coverage.status)}` },
       { text: `Accept control: ${titleCase(assessment.controls.accept.state)}` },
       { text: `Reject / necessary-only control: ${titleCase(assessment.controls.reject.state)}` },
       { text: `Options / settings control: ${titleCase(assessment.controls.options.state)}` },
@@ -317,8 +351,8 @@ function reportLines(report: CanonicalReportExport, image: PdfImage | null): Pdf
   }
 
   lines.push({ text: "", gapAfter: 2 }, sectionHeading("Key findings"));
-  if (findings.length === 0) lines.push({ text: "No owner-projected unified findings were retained." });
-  findings.forEach((finding, index) => {
+  if (mainFindings.length === 0) lines.push({ text: "No non-transport owner-projected unified findings were retained." });
+  mainFindings.forEach((finding, index) => {
     const display = findingDisplay(finding);
     lines.push({
       text: `${index + 1}. ${ascii(display.name)} [${titleCase(display.severity)}]`,
@@ -333,10 +367,14 @@ function reportLines(report: CanonicalReportExport, image: PdfImage | null): Pdf
   });
 
   lines.push({ text: "", gapAfter: 2 }, sectionHeading("Detailed GDPR / ePrivacy checklist"));
-  if (!review || review.rows.length === 0) {
-    lines.push({ text: "No checklist presentation rows were retained." });
+  lines.push(...wrappedLines("GDPR Transparency and Transport Security rows are presented separately in their dedicated appendices.", {
+    size: 9,
+    gapAfter: 3,
+  }));
+  if (!review || mainChecklistRows.length === 0) {
+    lines.push({ text: "No main-checklist presentation rows were retained." });
   } else {
-    review.rows.forEach((row, index) => {
+    mainChecklistRows.forEach((row, index) => {
       lines.push({ text: `${index + 1}. ${row.label}: ${row.evidenceLabel}`, bold: true, gapAfter: 1, keepWithNextHeight: 18 });
       lines.push(...wrappedLines(row.rationale, { indent: 10, size: 9, gapAfter: 3 }));
     });
@@ -353,19 +391,90 @@ function reportLines(report: CanonicalReportExport, image: PdfImage | null): Pdf
     ...wrappedLines(report.notice, { size: 9, gapAfter: 5 }),
   );
 
-  lines.push(sectionHeading(appendix.title, true));
-  lines.push(...wrappedLines(appendix.scopeNote, { size: 9, gapAfter: 4 }));
+  lines.push(sectionHeading(transparencyAppendix.title, true));
+  lines.push(...wrappedLines(transparencyAppendix.scopeNote, { size: 9, gapAfter: 4 }));
   lines.push(...wrappedLines(
-    `Inventory summary: ${appendix.summary.totalRows} retained rows (${appendix.summary.cookieRows} cookies, ${appendix.summary.trackerRows} trackers); ${appendix.summary.groupedEntities} grouped entities; ${appendix.summary.requestEvidenceRows} sanitized request-evidence rows; ${appendix.summary.dataFlowRows} data-flow rows.`,
+    `Transparency summary: ${transparencyAppendix.summary.totalRows} rows; ${transparencyAppendix.summary.observedRows} observed; ${transparencyAppendix.summary.notConfirmedRows} not confirmed; ${transparencyAppendix.summary.noMatchRows} no match found.`,
+    { bold: true, gapAfter: 5 },
+  ));
+  if (transparencyAppendix.rows.length === 0) {
+    lines.push({ text: "No persisted GDPR Transparency checklist rows were retained." });
+  }
+  transparencyAppendix.rows.forEach((row, index) => {
+    lines.push({
+      text: `${index + 1}. ${row.label}: ${row.evidenceLabel}`,
+      size: 11,
+      bold: true,
+      gapAfter: 1,
+      gapBefore: 2,
+      keepWithNextHeight: 28,
+      kind: "itemHeading",
+    });
+    lines.push(...wrappedLines(row.rationale, { indent: 10, size: 9, gapAfter: 2 }));
+    lines.push(...wrappedLines(
+      `Assessment: ${titleCase(row.assessmentStatus)} | Evidence state: ${titleCase(row.evidenceState)} | Direction: ${titleCase(row.assessmentDirection)}${row.scannerCoverageGap ? " | Scanner coverage gap retained" : ""}`,
+      { indent: 10, size: 8, gapAfter: 3 },
+    ));
+  });
+
+  lines.push(sectionHeading("Appendix: Transport Security", true));
+  lines.push(...wrappedLines(
+    "These rows reproduce the persisted Transport Security checklist projection. They describe bounded HTTPS, TLS certificate, HTTP redirect, mixed-content, and form-transport observations without changing the canonical findings or evidence.",
+    { size: 9, gapAfter: 4 },
+  ));
+  lines.push(...wrappedLines(
+    `Transport Security summary: ${transportRows.length} checklist rows; ${transportFindings.length} projected findings.`,
+    { bold: true, gapAfter: 5 },
+  ));
+  if (transportRows.length === 0) {
+    lines.push({ text: "No persisted Transport Security checklist rows were retained." });
+  }
+  transportRows.forEach((row, index) => {
+    lines.push({
+      text: `${index + 1}. ${row.label}: ${row.evidenceLabel}`,
+      size: 11,
+      bold: true,
+      gapAfter: 1,
+      gapBefore: 2,
+      keepWithNextHeight: 28,
+      kind: "itemHeading",
+    });
+    lines.push(...wrappedLines(row.rationale, { indent: 10, size: 9, gapAfter: 2 }));
+    lines.push(...wrappedLines(
+      `Assessment: ${titleCase(row.assessmentStatus)} | Evidence state: ${titleCase(row.evidenceState)} | Direction: ${titleCase(row.assessmentDirection)}${row.scannerCoverageGap ? " | Scanner coverage gap retained" : ""}`,
+      { indent: 10, size: 8, gapAfter: 3 },
+    ));
+  });
+  transportFindings.forEach((finding, index) => {
+    const display = findingDisplay(finding);
+    lines.push({
+      text: `Finding ${index + 1}. ${ascii(display.name)} [${titleCase(display.severity)}]`,
+      size: 11,
+      bold: true,
+      gapAfter: 1,
+      gapBefore: 3,
+      keepWithNextHeight: 28,
+      kind: "itemHeading",
+    });
+    if (display.description) lines.push(...wrappedLines(display.description, { indent: 10, size: 9 }));
+    if (display.why) lines.push(...wrappedLines(`Why it matters: ${display.why}`, { indent: 10, size: 9 }));
+    if (display.fix) lines.push(...wrappedLines(`Suggested review action: ${display.fix}`, { indent: 10, size: 9 }));
+    if (display.confidence) lines.push({ text: `Retained confidence: ${display.confidence}`, indent: 10, size: 8, gapAfter: 3 });
+  });
+
+  lines.push(sectionHeading(runtimeAppendix.title, true));
+  lines.push(...wrappedLines(runtimeAppendix.scopeNote, { size: 9, gapAfter: 4 }));
+  lines.push(...wrappedLines(
+    `Inventory summary: ${runtimeAppendix.summary.totalRows} retained rows (${runtimeAppendix.summary.cookieRows} cookies, ${runtimeAppendix.summary.trackerRows} trackers); ${runtimeAppendix.summary.groupedEntities} grouped entities; ${runtimeAppendix.summary.requestEvidenceRows} sanitized request-evidence rows; ${runtimeAppendix.summary.dataFlowRows} data-flow rows.`,
     { bold: true, gapAfter: 3 },
   ));
-  if (appendix.presentationMessage) {
-    lines.push(...wrappedLines(appendix.presentationMessage, { gapAfter: 3 }));
+  if (runtimeAppendix.presentationMessage) {
+    lines.push(...wrappedLines(runtimeAppendix.presentationMessage, { gapAfter: 3 }));
   }
-  if (appendix.summary.omittedRows > 0) {
-    lines.push({ text: `${appendix.summary.omittedRows} rows were omitted by the bounded 500-row export limit.`, gapAfter: 3 });
+  if (runtimeAppendix.summary.omittedRows > 0) {
+    lines.push({ text: `${runtimeAppendix.summary.omittedRows} rows were omitted by the bounded 500-row export limit.`, gapAfter: 3 });
   }
-  appendix.rows.forEach((row) => {
+  runtimeAppendix.rows.forEach((row) => {
     lines.push({
       text: `${row.rowNumber}. ${titleCase(row.type)} - ${row.vendor}`,
       size: 11,
@@ -491,35 +600,24 @@ function textColor(line: PdfLine) {
 
 function lineX(line: PdfLine, hasBrandLogo: boolean) {
   if (line.kind === "coverTitle" || line.kind === "coverDomain" || line.kind === "coverMeta") {
-    return hasBrandLogo ? 148 : 50;
+    return hasBrandLogo ? 126 : 50;
   }
   if (line.kind === "section") return 64;
   if (line.kind === "itemHeading") return 60;
   return 50 + (line.indent ?? 0);
 }
 
-function containedImageCommand(image: PdfImage, resourceName: string, frame: {
-  x: number;
-  y: number;
-  width: number;
-  height: number;
-  padding: number;
-}) {
-  const innerWidth = frame.width - frame.padding * 2;
-  const innerHeight = frame.height - frame.padding * 2;
-  const scale = Math.min(innerWidth / image.width, innerHeight / image.height);
+function brandLogoCommand(image: PdfImage) {
+  const frame = { x: 48, y: 733, width: 64, height: 64 };
+  const scale = Math.min(frame.width / image.width, frame.height / image.height);
   const drawWidth = image.width * scale;
   const drawHeight = image.height * scale;
-  const drawX = frame.x + frame.padding + (innerWidth - drawWidth) / 2;
-  const drawY = frame.y + frame.padding + (innerHeight - drawHeight) / 2;
+  const drawX = frame.x + (frame.width - drawWidth) / 2;
+  const drawY = frame.y + (frame.height - drawHeight) / 2;
   return [
     "q",
-    "1 1 1 rg",
-    `${frame.x} ${frame.y} ${frame.width} ${frame.height} re f`,
-    "0.733 0.827 0.914 RG 0.8 w",
-    `${frame.x} ${frame.y} ${frame.width} ${frame.height} re S`,
     `${drawWidth.toFixed(2)} 0 0 ${drawHeight.toFixed(2)} ${drawX.toFixed(2)} ${drawY.toFixed(2)} cm`,
-    `/${resourceName} Do`,
+    "/Logo Do",
     "Q",
   ].join("\n");
 }
@@ -598,7 +696,7 @@ export function renderCanonicalReportPdf(
   } = {},
 ) {
   const image = decodePdfImage(options.visualEvidence);
-  const brandLogo = decodePdfImage(options.brandLogo);
+  const brandLogo = decodePdfImage(options.brandLogo, [9, 20, 45]);
   const pages = paginate(reportLines(report, image));
   const objects: string[] = [];
   const add = (body: string) => {
@@ -622,11 +720,11 @@ export function renderCanonicalReportPdf(
     const commands: string[] = [
       "0.973 0.98 0.988 rg 0 0 612 842 re f",
       pageIndex === 0
-        ? "0.035 0.078 0.176 rg 0 700 612 142 re f\n0.055 0.647 0.914 rg 0 696 612 4 re f\nBT /F2 8 Tf 0.733 0.894 0.976 rg 491 814 Td (CERTSCORE.AI) Tj ET"
+        ? "0.035 0.078 0.176 rg 0 690 612 152 re f\n0.055 0.647 0.914 rg 0 686 612 4 re f\nBT /F2 9 Tf 0.733 0.894 0.976 rg 485 814 Td (CERTSCORE.AI) Tj ET"
         : "0.035 0.078 0.176 rg 0 812 612 30 re f\n0.055 0.647 0.914 rg 0 809 612 3 re f\nBT /F2 8 Tf 1 1 1 rg 50 823 Td (CERTSCORE.AI  -  GDPR / ePrivacy evidence report) Tj ET",
     ];
     if (pageIndex === 0 && brandLogo) {
-      commands.push(containedImageCommand(brandLogo, "Logo", { x: 50, y: 724, width: 78, height: 78, padding: 5 }));
+      commands.push(brandLogoCommand(brandLogo));
     }
     for (const line of pageLines) {
       y -= line.gapBefore ?? 0;

@@ -1415,6 +1415,7 @@ test("three-lane merge keeps consent visuals, runtime coverage, and policy evide
     artifactRoot,
     scanId: "scan-local-1",
     consentProof: canonicalBundleFixture("scan-local-1", {
+      collectionSurfaceInventory: collectionSurfaceInventoryFixture("consent-lane-form"),
       automatedAccessObservation: {
         status: "available",
         version: "automated-access-observation-v1",
@@ -1445,6 +1446,7 @@ test("three-lane merge keeps consent visuals, runtime coverage, and policy evide
       },
     }),
     runtimeEvidence: canonicalBundleFixture("scan-local-1", {
+      collectionSurfaceInventory: collectionSurfaceInventoryFixture("runtime-lane-form"),
       automatedAccessObservation: {
         status: "available",
         version: "automated-access-observation-v1",
@@ -1495,6 +1497,7 @@ test("three-lane merge keeps consent visuals, runtime coverage, and policy evide
       },
     }),
     policyEvidence: canonicalBundleFixture("scan-local-1", {
+      collectionSurfaceInventory: collectionSurfaceInventoryFixture("policy-lane-form"),
       scanLaneRuns: [laneRunFixture("policy_evidence", "invoke-policy")],
       artifactRefs: [{
         artifactId: "policy_surface_text_privacy",
@@ -1521,6 +1524,7 @@ test("three-lane merge keeps consent visuals, runtime coverage, and policy evide
   assert.equal(merged.derivedRuntimeSignals.consentBannerLikelyPresent, true);
   assert.equal(merged.derivedRuntimeSignals.preConsentTrackingObserved, true);
   assert.equal(merged.runtimeCoverage?.coverageStatus, "usable");
+  assert.equal(merged.collectionSurfaceInventory?.forms[0]?.title, "runtime-lane-form");
   assert.deepEqual(merged.automatedAccessObservation, {
     status: "available",
     version: "automated-access-observation-v1",
@@ -2240,6 +2244,64 @@ function canonicalBundleFixture(
     storageSnapshots: [],
     url: "https://example.com/",
     ...overrides
+  };
+}
+
+function collectionSurfaceInventoryFixture(title: string): NonNullable<CanonicalEvidenceBundle["collectionSurfaceInventory"]> {
+  return {
+    contractVersion: "certscore.collection-surface-inventory.v1",
+    inventoryId: `inventory-${title}`,
+    sourceLane: "runtime_evidence",
+    sourceScanner: "pre_consent_runtime",
+    scenario: "fresh_pre_consent",
+    observedAtMs: 100,
+    consentStateAtTime: "pre_consent",
+    pageUrl: "https://example.com/",
+    coverage: {
+      status: "complete",
+      documentScope: "main_document",
+      interactionMode: "none",
+      candidateFormCount: 1,
+      retainedFormCount: 1,
+      candidateFieldCount: 1,
+      retainedFieldCount: 1,
+      inspectedFormCandidateCount: 1,
+      inspectedFieldCandidateCount: 1,
+      candidateScanTruncated: false,
+      retentionTruncated: false,
+      reasonCodes: [],
+    },
+    forms: [{
+      formRef: "form-0",
+      structure: "native_form",
+      surfaceType: "contact",
+      title,
+      pageUrl: "https://example.com/",
+      method: "post",
+      actionRelationship: "self",
+      candidateFieldCount: 1,
+      retainedFieldCount: 1,
+      fieldsTruncated: false,
+      fields: [{
+        fieldRef: "field-0",
+        elementType: "input",
+        inputType: "email",
+        semanticCategory: "email",
+        label: "Email",
+        required: true,
+        disabled: false,
+        readOnly: false,
+        evidenceRefs: [],
+        confidence: 0.9,
+        directVsInferred: "direct",
+      }],
+      evidenceRefs: [],
+      confidence: 0.9,
+      directVsInferred: "direct",
+    }],
+    evidenceRefs: [],
+    confidence: 0.9,
+    directVsInferred: "direct",
   };
 }
 

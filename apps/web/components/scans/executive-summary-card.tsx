@@ -95,6 +95,12 @@ export type ExecutivePolicySurface = {
   pageUrl: string | null;
 };
 
+export type ExecutiveConsentControlProjection = {
+  accept: boolean | null;
+  options: boolean | null;
+  reject: boolean | null;
+};
+
 export type ExecutiveScanInterruption = {
   details: string[];
   label: string;
@@ -242,12 +248,11 @@ function formatTrackerFootprintLabels(input: {
   domainCount: number;
   vendorCount: number;
 }) {
-  const total = input.domainCount + input.vendorCount;
   const vendorLabel = `${input.vendorCount} ${input.vendorCount === 1 ? "vendor" : "vendors"}`;
   const domainLabel = `${input.domainCount} ${input.domainCount === 1 ? "domain" : "domains"}`;
   return {
-    detail: `${vendorLabel}, ${domainLabel}`,
-    title: total > 0 ? `Tracker footprint (${total})` : "Tracker footprint",
+    detail: `${vendorLabel} · ${domainLabel}`,
+    title: "Tracker footprint",
   };
 }
 
@@ -2162,8 +2167,8 @@ function NotScoredSnapshotPane() {
 
 function CompactSnapshotPanel(input: { children: React.ReactNode; title: React.ReactNode }) {
   return (
-    <div className="rounded-[1.05rem] border border-slate-200 bg-white px-3 py-2">
-      <p className="mb-1.5 text-[10px] font-semibold uppercase tracking-[0.16em] text-slate-500">{input.title}</p>
+    <div className="rounded-[1.05rem] border border-slate-200 bg-white px-3 py-1.5">
+      <p className="mb-1 text-[10px] font-semibold uppercase leading-3 tracking-[0.16em] text-slate-500">{input.title}</p>
       {input.children}
     </div>
   );
@@ -2179,8 +2184,8 @@ function CompactChevronRightIcon() {
 
 function CompactWarningBadgeIcon() {
   return (
-    <span className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-full border border-rose-200 bg-rose-50 text-rose-700" aria-hidden="true">
-      <svg className="h-4 w-4" viewBox="0 0 20 20" fill="none">
+    <span className="inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-full border border-rose-200 bg-rose-50 text-rose-700" aria-hidden="true">
+      <svg className="h-3.5 w-3.5" viewBox="0 0 20 20" fill="none">
         <path d="M10 3.4 18 16H2L10 3.4Z" stroke="currentColor" strokeLinejoin="round" strokeWidth="1.8" />
         <path d="M10 7.2v4.2" stroke="currentColor" strokeLinecap="round" strokeWidth="1.8" />
         <path d="M10 14.2h.01" stroke="currentColor" strokeLinecap="round" strokeWidth="2.4" />
@@ -2192,7 +2197,7 @@ function CompactWarningBadgeIcon() {
 function CompactSnapshotSurfaceRow(input: { detail?: string | null; label: string }) {
   if (input.detail) {
     return (
-      <details className="group/snapshot-surface rounded-xl border border-slate-200 bg-slate-50/80 px-2.5 py-1.5">
+      <details className="group/snapshot-surface rounded-xl border border-slate-200 bg-slate-50/80 px-2.5 py-1">
         <summary className="flex cursor-pointer list-none items-center justify-between gap-3 marker:hidden [&::-webkit-details-marker]:hidden">
           <span className="min-w-0 truncate text-sm font-medium text-slate-700">{input.label}</span>
           <span className="inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-600 shadow-sm transition group-open/snapshot-surface:rotate-90">
@@ -2214,8 +2219,77 @@ function CompactSnapshotSurfaceRow(input: { detail?: string | null; label: strin
   }
 
   return (
-    <div className="mb-1.5 flex items-center justify-between gap-3 rounded-xl border border-slate-200 bg-slate-50/80 px-2.5 py-1.5 text-xs font-medium text-slate-700 last:mb-0">
+    <div className="mb-1.5 flex items-center justify-between gap-3 rounded-xl border border-slate-200 bg-slate-50/80 px-2.5 py-1 text-xs font-medium text-slate-700 last:mb-0">
       <span>{input.label}</span>
+    </div>
+  );
+}
+
+function getCompactConsentControlPresentation(state: boolean | null) {
+  if (state === true) {
+    return {
+      glyph: "✓",
+      label: "Observed",
+      glyphTone: "border-emerald-200/90 bg-white/80 text-emerald-700 shadow-[inset_0_1px_0_rgba(255,255,255,0.9),0_1px_2px_rgba(5,150,105,0.16)]",
+      tone: "border-emerald-200 bg-gradient-to-b from-emerald-50 to-emerald-100/75 text-emerald-900 shadow-[inset_0_1px_0_rgba(255,255,255,0.95),0_2px_4px_rgba(5,150,105,0.14)]",
+    };
+  }
+  if (state === false) {
+    return {
+      glyph: "—",
+      label: "Not observed",
+      glyphTone: "border-slate-200/90 bg-white/80 text-slate-500 shadow-[inset_0_1px_0_rgba(255,255,255,0.9),0_1px_2px_rgba(15,23,42,0.12)]",
+      tone: "border-slate-200 bg-gradient-to-b from-white to-slate-100 text-slate-700 shadow-[inset_0_1px_0_rgba(255,255,255,0.95),0_2px_4px_rgba(15,23,42,0.1)]",
+    };
+  }
+  return {
+    glyph: "?",
+    label: "Unknown",
+    glyphTone: "border-amber-200/90 bg-white/80 text-amber-700 shadow-[inset_0_1px_0_rgba(255,255,255,0.9),0_1px_2px_rgba(217,119,6,0.14)]",
+    tone: "border-amber-200 bg-gradient-to-b from-amber-50 to-amber-100/70 text-amber-900 shadow-[inset_0_1px_0_rgba(255,255,255,0.95),0_2px_4px_rgba(217,119,6,0.12)]",
+  };
+}
+
+function CompactConsentControlState(input: {
+  label: "Accept" | "Reject" | "Options";
+  state: boolean | null;
+}) {
+  const presentation = getCompactConsentControlPresentation(input.state);
+  return (
+    <div
+      aria-label={`${input.label} control: ${presentation.label}`}
+      className={`flex h-[22px] min-w-0 items-center justify-center gap-0.5 rounded-[0.6rem] border px-1 ${presentation.tone}`}
+      data-consent-control-state={input.state === true ? "observed" : input.state === false ? "not_observed" : "unknown"}
+      title={`${input.label}: ${presentation.label}`}
+    >
+      <span
+        aria-hidden="true"
+        className={`inline-flex h-4 w-4 shrink-0 items-center justify-center rounded-full border text-[9px] font-bold leading-none ${presentation.glyphTone}`}
+      >
+        {presentation.glyph}
+      </span>
+      <span className="shrink-0 whitespace-nowrap text-[9px] font-semibold leading-none">{input.label}</span>
+    </div>
+  );
+}
+
+export function CompactConsentControlsCard(input: {
+  projection?: ExecutiveConsentControlProjection | null;
+}) {
+  return (
+    <div className="rounded-[1rem] border border-slate-200 bg-gradient-to-b from-white to-slate-50/90 px-3 py-1 shadow-[inset_0_1px_0_rgba(255,255,255,0.95),0_2px_7px_rgba(15,23,42,0.06)]">
+      <p className="mb-0.5 text-[10px] font-semibold uppercase leading-[10px] tracking-[0.16em] text-slate-500">
+        Consent controls
+      </p>
+      <div
+        aria-label="Accept, Reject, and Options control detection"
+        className="grid grid-cols-3 gap-1.5"
+        data-testid="executive-consent-controls-card"
+      >
+        <CompactConsentControlState label="Accept" state={input.projection?.accept ?? null} />
+        <CompactConsentControlState label="Reject" state={input.projection?.reject ?? null} />
+        <CompactConsentControlState label="Options" state={input.projection?.options ?? null} />
+      </div>
     </div>
   );
 }
@@ -2225,6 +2299,7 @@ function ExecutiveSignalSnapshotPane(input: {
   cmpDisplayName: string;
   cmpStatusAvailable: boolean;
   cmpVendorName?: string | null;
+  consentControls?: ExecutiveConsentControlProjection | null;
   consentSurfaceStatus?: string | null;
   domainTruncationNote?: string | null;
   policySurfaceLabelsByUrl: Map<string, string[]>;
@@ -2279,7 +2354,7 @@ function ExecutiveSignalSnapshotPane(input: {
           {runtimeMetricsReliable && input.cmpStatusAvailable ? (
             <VendorBrandChip
               category="cmp"
-              className="h-6 w-6 rounded-full p-0"
+              className="h-5 w-5 rounded-full p-0"
               hideLabel
               label={input.recognizedCmpLabel ?? input.cmpVendorName ?? "Unknown CMP"}
               showMeta={false}
@@ -2303,7 +2378,7 @@ function ExecutiveSignalSnapshotPane(input: {
             <span className="inline-flex min-w-0 rounded-full border border-slate-200 bg-slate-50 px-2.5 py-0.5 text-[11px] font-semibold uppercase leading-4 tracking-[0.16em] text-slate-500">
               <span className="truncate">{trackerDetailLabel}</span>
             </span>
-            <span className="inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-600 shadow-sm transition group-open/tracker-footprint:rotate-90">
+            <span className="inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-600 shadow-sm transition group-open/tracker-footprint:rotate-90">
               <CompactChevronRightIcon />
             </span>
           </summary>
@@ -2366,6 +2441,7 @@ function ExecutiveSignalSnapshotPane(input: {
           )}
         </div>
       </CompactSnapshotPanel>
+      <CompactConsentControlsCard projection={input.consentControls} />
     </>
   );
 }
@@ -4237,6 +4313,7 @@ export function ExecutiveSummaryCard(input: {
   coverageDiagnosticIndicators?: CoverageDiagnosticIndicator[] | null;
   coverageLevel?: string | null;
   cmpVendorName?: string | null;
+  consentControls?: ExecutiveConsentControlProjection | null;
   consentSurfaceStatus?: string | null;
   cookieBannerPresent?: boolean | null;
   domainBenchmark: DomainBenchmarkCardData;
@@ -4690,6 +4767,7 @@ export function ExecutiveSummaryCard(input: {
                 cmpDisplayName={cmpDisplayName}
                 cmpStatusAvailable={cmpStatusAvailable}
                 cmpVendorName={input.cmpVendorName}
+                consentControls={input.consentControls}
                 consentSurfaceStatus={input.consentSurfaceStatus}
                 domainTruncationNote={domainTruncationNote}
                 policySurfaceLabelsByUrl={policySurfaceLabelsByUrl}

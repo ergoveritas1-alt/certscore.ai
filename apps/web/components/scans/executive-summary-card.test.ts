@@ -7,6 +7,7 @@ import { renderToStaticMarkup } from "react-dom/server";
 import {
   buildRegulatoryLenses,
   buildRegulatoryLensesFromUnifiedPackets,
+  CompactConsentControlsCard,
   ExecutiveSummaryCard
 } from "./executive-summary-card";
 import { ADA_ACCESSIBILITY_FIXTURES } from "../../lib/scans/ada-accessibility.fixtures";
@@ -21,6 +22,36 @@ test("Executive storage metric uses the concise non-essential label", () => {
   assert.match(source, /Counts non-essential storage found before consent\. Essential storage is excluded/);
   assert.match(source, /beforeConsentStorageScope === "nonessential_only"/);
   assert.match(source, /const isStorageMetric = input\.label === "Non-essential storage"/);
+});
+
+test("compact A/R/O card renders persisted tri-state control projections without findings", () => {
+  const html = renderToStaticMarkup(createElement(CompactConsentControlsCard, {
+    projection: {
+      accept: true,
+      reject: false,
+      options: null,
+    },
+  }));
+
+  assert.match(html, /Consent controls/);
+  assert.match(html, /Accept control: Observed/);
+  assert.match(html, /Reject control: Not observed/);
+  assert.match(html, /Options control: Unknown/);
+  assert.match(html, /data-consent-control-state="observed"/);
+  assert.match(html, /data-consent-control-state="not_observed"/);
+  assert.match(html, /data-consent-control-state="unknown"/);
+  assert.match(html, /grid-cols-3/);
+  assert.doesNotMatch(html, /<details/);
+  assert.doesNotMatch(html, /finding|severity|violation/i);
+});
+
+test("compact A/R/O card appears immediately below policy surfaces", () => {
+  const source = readFileSync(new URL("./executive-summary-card.tsx", import.meta.url), "utf8");
+  const policyCardIndex = source.indexOf('<CompactSnapshotPanel title="Policy surfaces">');
+  const consentControlsCardIndex = source.indexOf("<CompactConsentControlsCard projection={input.consentControls} />");
+
+  assert.ok(policyCardIndex >= 0);
+  assert.ok(consentControlsCardIndex > policyCardIndex);
 });
 
 test("executive summary metrics do not render explanatory wording below their values", () => {
@@ -958,7 +989,7 @@ test("ExecutiveSummaryCard hides review lenses when viewer access disallows them
   assert.doesNotMatch(html, /Runtime/);
   assert.doesNotMatch(html, /Review lenses/);
   assert.match(html, /Consent platform/);
-  assert.match(html, /h-7 w-7 shrink-0 items-center justify-center rounded-full border border-rose-200 bg-rose-50 text-rose-700/);
+  assert.match(html, /h-5 w-5 shrink-0 items-center justify-center rounded-full border border-rose-200 bg-rose-50 text-rose-700/);
   assert.doesNotMatch(html, /h-10 w-10 shrink-0 items-center justify-center rounded-xl/);
 });
 
@@ -1036,8 +1067,8 @@ test("ExecutiveSummaryCard renders real vendor logo lookups in vendor badges", (
   assert.doesNotMatch(html, /Vendor mix/);
   assert.match(html, /Tracker footprint/);
   assert.doesNotMatch(html, /View observed vendors and domains/);
-  assert.match(html, /Tracker footprint \(9\)/);
-  assert.match(html, /5 vendors, 4 domains/);
+  assert.doesNotMatch(html, /Tracker footprint \(9\)/);
+  assert.match(html, /5 vendors · 4 domains/);
   assert.match(html, /OneTrust/);
   assert.match(html, /Google Ads/);
   assert.match(html, /\/vendor-logos\/onetrust\.png/);
@@ -1078,7 +1109,7 @@ test("ExecutiveSummaryCard distinguishes cookie-only runtime observations from t
   }));
 
   assert.match(html, /Tracker footprint/);
-  assert.match(html, /0 vendors, 0 domains/);
+  assert.match(html, /0 vendors · 0 domains/);
   assert.match(html, /4 cookies were observed before consent/);
   assert.match(html, /No third-party tracker vendors or domains were resolved/);
 });
@@ -1128,8 +1159,8 @@ test("ExecutiveSummaryCard renders logo badges for observed tracker vendors and 
   assert.match(html, /\/vendor-logos\/magnite\.png/);
   assert.match(html, /\/vendor-logos\/facebook\.png/);
   assert.match(html, /\/vendor-logos\/onetrust\.png/);
-  assert.match(html, /Tracker footprint \(16\)/);
-  assert.match(html, /6 vendors, 10 domains/);
+  assert.doesNotMatch(html, /Tracker footprint \(16\)/);
+  assert.match(html, /6 vendors · 10 domains/);
   assert.doesNotMatch(html, /13 more\.\.\./);
   assert.match(html, /\/vendor-logos\/adobe\.png/);
   assert.match(html, /\/vendor-logos\/jwplayer\.png/);
@@ -3023,8 +3054,8 @@ test("ExecutiveSummaryCard keeps tracker disclosure counts aligned with the full
   );
 
   assert.doesNotMatch(html, /13 third-party domains observed; 1 classified tracker vendor identified\./);
-  assert.match(html, /Tracker footprint \(14\)/);
-  assert.match(html, /1 vendor, 13 domains/);
+  assert.doesNotMatch(html, /Tracker footprint \(14\)/);
+  assert.match(html, /1 vendor · 13 domains/);
   assert.doesNotMatch(html, /11 more\.\.\./);
   assert.doesNotMatch(html, /1 vendor names and 13 third-party domains/);
   assert.doesNotMatch(html, /ads 1/);
@@ -3061,8 +3092,8 @@ test("ExecutiveSummaryCard uses domain-only tracker expand copy when no classifi
   );
 
   assert.doesNotMatch(html, /1 third-party domain observed; no classified tracker vendors identified\./);
-  assert.match(html, /Tracker footprint \(1\)/);
-  assert.match(html, /0 vendors, 1 domain/);
+  assert.doesNotMatch(html, /Tracker footprint \(1\)/);
+  assert.match(html, /0 vendors · 1 domain/);
   assert.doesNotMatch(html, /View observed vendors and domains/);
 });
 
@@ -3171,8 +3202,8 @@ test("ExecutiveSummaryCard labels truncated observed domain lists", () => {
   );
 
   assert.doesNotMatch(html, /11 third-party domains observed; no classified tracker vendors identified\./);
-  assert.match(html, /Tracker footprint \(11\)/);
-  assert.match(html, /0 vendors, 11 domains/);
+  assert.doesNotMatch(html, /Tracker footprint \(11\)/);
+  assert.match(html, /0 vendors · 11 domains/);
   assert.doesNotMatch(html, /8 more\.\.\./);
   assert.match(html, /observed-10\.example/);
   assert.match(html, /observed-11\.example/);
@@ -3434,8 +3465,8 @@ test("ExecutiveSummaryCard renders accessibility-only self-scan copy without pri
   assert.doesNotMatch(html, /Next step: review affected text\/background color pairs/);
   assert.doesNotMatch(html, /Automated accessibility signals are the main review area\./);
   assert.doesNotMatch(html, /1 third-party domain observed; no classified tracker vendors identified\./);
-  assert.match(html, /Tracker footprint \(1\)/);
-  assert.match(html, /0 vendors, 1 domain/);
+  assert.doesNotMatch(html, /Tracker footprint \(1\)/);
+  assert.match(html, /0 vendors · 1 domain/);
   assert.doesNotMatch(html, /View observed vendors and domains/);
   assert.equal(
     (html.match(/1 third-party domain observed; no classified tracker vendors identified\./g) ?? []).length,

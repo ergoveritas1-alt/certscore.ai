@@ -2,6 +2,7 @@ import { getRuntimeVendorDisclosureEvidence } from "./runtime-vendor-disclosure"
 import { derivePolicyCoverageContext, getWeakPolicyEvidenceLimitation } from "./policy-coverage-context";
 import {
   classifyConsentControlLabel,
+  collectionSurfaceAssessmentSchema,
   consentControlAssessmentSchema,
   evaluateLegalFrameworkValidity,
   hasStaleLegalFrameworkReference,
@@ -4909,6 +4910,12 @@ function deriveOptionsSettingsPreferencesControlOutcome(input: GdprEprivacyCover
       ...(state === "balanced_accept_decline_no_first_layer_settings"
         ? { balancedAcceptDeclineWithoutFirstLayerSettings: true }
         : {}),
+      ...(state === "accept_without_refusal_or_settings"
+        ? {
+            optionsAbsenceSupportsRefusalPathOnly: true,
+            scoreEffect: "none",
+          }
+        : {}),
       consentOptionsControlProminenceConcern: {
         canonicalConcernKey: prominenceConcern.canonicalConcernKey,
         originKey: prominenceConcern.originKey,
@@ -4982,6 +4989,19 @@ function deriveOptionsSettingsPreferencesControlOutcome(input: GdprEprivacyCover
         "options_settings_preferences_control",
         "Review signal",
         "Accept and Decline controls were observed on the first-layer consent surface. A separate preferences or granular-settings control was not retained on that layer. This is not necessarily a compliance gap where refusal is as easy as acceptance. Verify whether users can later review, vary, or withdraw consent by purpose.",
+        concernEvidenceRefs,
+        { retainedEvidence }
+      );
+    }
+
+    if (
+      prominenceConcern.regulatoryChecklistEligibility === "none" &&
+      state === "accept_without_refusal_or_settings"
+    ) {
+      return makeOutcome(
+        "options_settings_preferences_control",
+        "Not observed",
+        "A complete first-layer inventory retained an Accept control but no separate Options control. Because no reject, necessary-only, or equivalent refusal control was retained either, the missing Options control is supporting context for refusal-path review rather than a standalone options-control gap.",
         concernEvidenceRefs,
         { retainedEvidence }
       );
@@ -9149,7 +9169,7 @@ function calibratePolicyDisclosureOutcome(outcome: GdprEprivacyCoverageOutcome) 
     outcome.rowId === "retention_disclosure_observed" &&
     outcome.status === "Observed" &&
     /\b(?:retain|keep|store)\b[\s\S]{0,80}\b(?:as long as|required by law|required under applicable law)\b/i.test(evidenceText) &&
-    !/\b(?:as long as necessary|for the purposes?|account remains active|delete|deletion|erase|anonymi[sz]e|limitation period|legal claims?|disputes?|contractual|fraud|security|tax|accounting|specific retention period|retention schedule)\b/i.test(evidenceText)
+    !/\b(?:as long as necessary|as long as (?:we )?need.{0,100}(?:fulfil|fulfill|meet|serve).{0,60}(?:the )?purposes?|for the purposes?|account remains active|delete|deletion|erase|anonymi[sz]e|limitation period|legal claims?|disputes?|contractual|fraud|security|tax|accounting|specific retention period|retention schedule)\b/i.test(evidenceText)
   ) {
     return makeOutcome(
       outcome.rowId,
@@ -9625,6 +9645,86 @@ function deriveSensitiveSurfaceOutcome(input: GdprEprivacyCoveragePolicyInput) {
     }
 
   return null;
+}
+
+function deriveCollectionSurfaceInventoryOutcome(input: GdprEprivacyCoveragePolicyInput) {
+  const candidate = getObject(input.runtimeArtifacts, [
+    "collectionSurfaceAssessment",
+    "collection_surface_assessment",
+  ]);
+  const parsed = collectionSurfaceAssessmentSchema.safeParse(candidate);
+  const concern = (input.normalizedConcerns ?? []).find((row) =>
+    row.originKey === "collection_surface.inventory.observed"
+  );
+  if (!parsed.success) {
+    return makeOutcome(
+      "public_collection_surfaces",
+      "Not testable",
+      "A verified CollectionSurfaceAssessment v1 was not available in the persisted scan projection.",
+      [],
+      {
+        missingOrIncompleteSourceSignals: [sourceGap(
+          "scan_runtime_artifacts.collection_surface_assessment",
+          "verified CollectionSurfaceAssessment v1",
+          "missing_or_malformed",
+          "Required before public collection surfaces can be projected.",
+        )],
+      },
+    );
+  }
+  const assessment = parsed.data;
+  const fieldCount = assessment.forms.reduce((total, form) => total + form.fields.length, 0);
+  const evidenceRefs = assessment.evidenceRefs;
+  const retainedEvidence = {
+    collectionSurfaceAssessment: assessment,
+    scoreEffect: "none",
+    normalizedConcernKey: concern?.canonicalConcernKey ?? null,
+    formCount: assessment.forms.length,
+    fieldCount,
+    coverageStatus: assessment.coverage?.status ?? "failed",
+  };
+  if (assessment.assessmentStatus === "observed") {
+    return makeOutcome(
+      "public_collection_surfaces",
+      "Observed",
+      `${assessment.forms.length} public data collection surface${assessment.forms.length === 1 ? " was" : "s were"} retained from the rendered main document. Form presence alone is not a negative finding.`,
+      evidenceRefs,
+      { retainedEvidence },
+    );
+  }
+  if (assessment.assessmentStatus === "limited" && assessment.forms.length > 0) {
+    return makeOutcome(
+      "public_collection_surfaces",
+      "Observed",
+      `${assessment.forms.length} public data collection surface${assessment.forms.length === 1 ? " was" : "s were"} retained, but the bounded inventory was truncated and cannot support absence conclusions.`,
+      evidenceRefs,
+      { retainedEvidence },
+    );
+  }
+  if (assessment.assessmentStatus === "not_observed") {
+    return makeOutcome(
+      "public_collection_surfaces",
+      "Not observed",
+      "No visible data-entry forms were observed in the tested main document. This does not cover linked pages, frames, shadow roots, or interaction-gated steps.",
+      evidenceRefs,
+      { retainedEvidence },
+    );
+  }
+  return makeOutcome(
+    "public_collection_surfaces",
+    "Not testable",
+    "Collection-surface evidence was unavailable, mismatched, or incomplete, so form absence is not inferred.",
+    evidenceRefs,
+    {
+      missingOrIncompleteSourceSignals: [sourceGap(
+        "collectionSurfaceAssessment.assessmentStatus",
+        "observed or complete not_observed assessment",
+        assessment.assessmentStatus,
+        "Required before the collection-surface checklist row can be classified.",
+      )],
+      retainedEvidence,
+    },
+  );
 }
 
 function evaluateSensitiveFormsWithThirdPartyTracking(
@@ -11360,6 +11460,7 @@ export function deriveGdprEprivacyCoveragePolicyOutcomes(input: GdprEprivacyCove
     derivePostRejectOutcome(input),
     derivePreferenceWithdrawalOutcome(input),
     ...derivePolicyDisclosureOutcomes(input),
+    deriveCollectionSurfaceInventoryOutcome(input),
     deriveSensitiveSurfaceOutcome(input),
     deriveSessionReplayFingerprintingOutcome(input),
     deriveDeviceFingerprintingSignalOutcome(input),

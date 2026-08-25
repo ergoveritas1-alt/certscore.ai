@@ -2799,6 +2799,64 @@ test("compact English policy sections retain purpose and service-provider GDPR T
   assert.equal(candidates.every((candidate) => candidate.productionCredit === false), true);
 });
 
+test("retained CertScore policy sections produce typed candidates for every GDPR Transparency topic", () => {
+  const candidates = gdprTransparencyTopicCandidatesFromRetainedPolicySections([
+    {
+      heading: "Controller and contact",
+      textExcerpt: "CertScore.ai is the controller for personal data described in this Privacy Policy. Contact privacy@certscore.ai with privacy questions."
+    },
+    {
+      heading: "Purposes of processing personal data and legal bases",
+      textExcerpt: "CertScore.ai processes personal data to administer accounts, authenticate users, deliver requested scans and reports, provide support, secure the service, and prevent fraud. The legal basis for processing personal data includes performance of a contract, legitimate interests, consent for optional analytics, and legal obligations."
+    },
+    {
+      heading: "Recipients of personal data",
+      textExcerpt: "Recipients of personal data may include cloud hosting, database, email delivery, payment processing, customer-support, security, and analytics service providers that receive or process information on our behalf."
+    },
+    {
+      heading: "Data retention",
+      textExcerpt: "We retain personal data only for as long as necessary for the purposes described in this policy. Retention criteria include account status, configured retention settings, service-delivery needs, and legal or security requirements."
+    },
+    {
+      heading: "Your privacy rights",
+      textExcerpt: "You may request access, correction, deletion, restriction, portability, or objection in relation to your personal data."
+    },
+    {
+      heading: "International transfers of personal data",
+      textExcerpt: "International transfers of personal data may occur when service providers process information in the United States or another country."
+    },
+    {
+      heading: "Supervisory authority complaints",
+      textExcerpt: "Where the GDPR applies, you have the right to lodge a complaint with a supervisory authority."
+    },
+    {
+      heading: "Automated decision-making and profiling",
+      textExcerpt: "CertScore.ai does not use personal data for profiling or make decisions based solely on automated processing that produce legal or similarly significant effects for individuals."
+    },
+    {
+      heading: "Privacy contact point",
+      textExcerpt: "Privacy contact point: contact privacy@certscore.ai for privacy questions and data-subject requests."
+    }
+  ]);
+  const topics = new Set(candidates.map((candidate) => candidate.topic));
+
+  assert.deepEqual(topics, new Set([
+    "automated_decision_making_or_profiling",
+    "controller_contact",
+    "data_retention",
+    "data_subject_rights",
+    "dpo_contact",
+    "international_transfers",
+    "legal_basis",
+    "processing_purposes",
+    "recipients_or_vendor_categories",
+    "supervisory_authority",
+  ]));
+  assert.equal(candidates.every((candidate) =>
+    candidate.status === "diagnostic_only" && candidate.productionCredit === false
+  ), true);
+});
+
 test("compact generic privacy contact sections do not create controller or DPO candidates", () => {
   const candidates = gdprTransparencyTopicCandidatesFromRetainedPolicySections([
     {

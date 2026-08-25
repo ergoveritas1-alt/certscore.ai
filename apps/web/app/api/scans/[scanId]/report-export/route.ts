@@ -22,8 +22,8 @@ function error(status: number, message: string) {
 
 async function loadReportBrandLogo() {
   const candidates = [
-    path.join(process.cwd(), "public", "certscore-header-logo.png"),
-    path.join(process.cwd(), "apps", "web", "public", "certscore-header-logo.png"),
+    path.join(process.cwd(), "public", "certscore-mark-light.png"),
+    path.join(process.cwd(), "apps", "web", "public", "certscore-mark-light.png"),
   ];
   for (const candidate of candidates) {
     try {

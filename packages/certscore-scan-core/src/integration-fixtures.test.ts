@@ -3582,6 +3582,13 @@ test("scan-core treats a substantive branded login page as scannable", async () 
     assert.equal(bundle.scan_no_go_assessment, undefined);
     assert.equal(bundle.visual_access_review, undefined);
     assert.notEqual(bundle.runtimeCoverage?.coverageStatus, "limited_none");
+    assert.equal(bundle.collectionSurfaceInventory?.coverage.status, "complete");
+    assert.equal(bundle.collectionSurfaceInventory?.forms.length, 1);
+    assert.equal(bundle.collectionSurfaceInventory?.forms[0]?.surfaceType, "account");
+    assert.deepEqual(
+      bundle.collectionSurfaceInventory?.forms[0]?.fields.map((field) => field.semanticCategory),
+      ["password", "email"],
+    );
   } finally {
     await server.close();
     await rm(tempRoot, { recursive: true, force: true });

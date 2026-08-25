@@ -11,6 +11,9 @@ import {
   article13DisclosureRejectReason as sharedArticle13DisclosureRejectReason,
   assessArticle13PolicyTextQuality,
   classifyConsentControlLabel,
+  COLLECTION_SURFACE_ASSESSMENT_VERSION,
+  collectionSurfaceAssessmentSchema,
+  type CollectionSurfaceAssessment,
   type ConsentControlAssessment,
   deriveConsentSurfaceInspectionOutcome,
   derivePolicySurfaceInspectionOutcome,
@@ -2090,7 +2093,11 @@ export function hasConcreteCanonicalVendorAnchor(vendor: NormalizedVendorObserva
       )
     ];
     const concreteMatches = resolveVendorObservations(resolverInputs);
-    if (concreteMatches.some((match) => match.entity === vendor.entity)) {
+    const retainedProductIdentity = firstString(vendor.product, vendor.vendor, vendor.entity);
+    if (concreteMatches.some((match) =>
+      match.entity === vendor.entity &&
+      firstString(match.product, match.vendor, match.entity) === retainedProductIdentity
+    )) {
       return true;
     }
     const nonLabelRuntimeBasis = (vendor.basis ?? []).some((basis) =>
@@ -3785,6 +3792,30 @@ function isCookieSpecificPrivacySurface(row: ReturnType<typeof dedupePolicySurfa
 }
 
 function summarizeCollectionSurfaces(bundle: CanonicalEvidenceBundle) {
+  const inventory = bundle.collectionSurfaceInventory;
+  if (inventory) {
+    const fields = inventory.forms.flatMap((form) => form.fields);
+    return {
+      collectionSurfaceCount: inventory.forms.length,
+      collectionSurfacesObserved: inventory.forms.length > 0,
+      fieldCount: fields.length,
+      fieldTypes: uniqueStrings(fields.map((field) => field.inputType)),
+      hasEmailField: fields.some((field) => field.semanticCategory === "email"),
+      hasSensitiveFieldHint: fields.some((field) => [
+        "password",
+        "payment_card",
+        "bank_account",
+        "government_id",
+        "social_security_number",
+        "date_of_birth",
+        "health",
+      ].includes(field.semanticCategory)),
+      inventoryRetained: true,
+      inventoryVersion: inventory.contractVersion,
+      labels: uniqueStrings(fields.map((field) => field.label)).slice(0, 12),
+      surfaceTypes: uniqueStrings(inventory.forms.map((form) => form.surfaceType)),
+    };
+  }
   const inventoryRetained = Array.isArray(bundle.collectionSurfaceObservations);
   const observations = (bundle.collectionSurfaceObservations ?? []).slice(0, 25);
   const surfaceTypes = uniqueStrings(observations.map((row) => row.surfaceType));
@@ -3798,6 +3829,84 @@ function summarizeCollectionSurfaces(bundle: CanonicalEvidenceBundle) {
     labels: uniqueStrings(observations.flatMap((row) => row.labels ?? [])).slice(0, 12),
     surfaceTypes
   };
+}
+
+function collectionSurfacePageMatches(left: string, right: string) {
+  try {
+    const normalize = (value: string) => {
+      const parsed = new URL(value);
+      return `${parsed.hostname.toLowerCase()}${parsed.pathname.replace(/\/$/, "") || "/"}`;
+    };
+    return normalize(left) === normalize(right);
+  } catch {
+    return false;
+  }
+}
+
+export function deriveCollectionSurfaceAssessment(input: {
+  bundle: CanonicalEvidenceBundle;
+  canonicalDocumentUrl: string | null;
+  scanId: string;
+  assessedAt?: string;
+}): CollectionSurfaceAssessment {
+  const inventory = input.bundle.collectionSurfaceInventory;
+  const scanLaneRuns = input.bundle.scanLaneRuns ?? [];
+  const runtimeLane = scanLaneRuns.find((lane) => lane.laneId === "runtime_evidence");
+  if (!inventory) {
+    return collectionSurfaceAssessmentSchema.parse({
+      contractVersion: COLLECTION_SURFACE_ASSESSMENT_VERSION,
+      scanId: input.scanId,
+      assessedAt: input.assessedAt ?? new Date().toISOString(),
+      assessmentStatus: "not_testable",
+      sourceInventoryContractVersion: null,
+      sourceHash: null,
+      sourceLane: "runtime_evidence",
+      pageUrl: null,
+      coverage: null,
+      forms: [],
+      limitationKeys: ["collection_surface_inventory_unavailable"],
+      evidenceRefs: [],
+      productionProjectable: true,
+    });
+  }
+  const sourceHash = createHash("sha256").update(JSON.stringify(inventory)).digest("hex");
+  const laneFailed = runtimeLane?.executionOutcome === "failed";
+  const laneUnverified = scanLaneRuns.length > 0 && !runtimeLane;
+  const scanIdentityMismatch = input.bundle.scanId !== input.scanId;
+  const documentMismatch = Boolean(
+    input.canonicalDocumentUrl &&
+    !collectionSurfacePageMatches(inventory.pageUrl, input.canonicalDocumentUrl)
+  );
+  const limitationKeys = uniqueStrings([
+    ...inventory.coverage.reasonCodes,
+    laneFailed ? "runtime_evidence_lane_failed" : null,
+    laneUnverified ? "runtime_evidence_lane_unverified" : null,
+    scanIdentityMismatch ? "collection_surface_scan_identity_mismatch" : null,
+    documentMismatch ? "collection_surface_document_mismatch" : null,
+  ].filter((value): value is string => Boolean(value))).slice(0, 12);
+  const assessmentStatus: CollectionSurfaceAssessment["assessmentStatus"] =
+    inventory.coverage.status === "failed" || laneFailed || laneUnverified || scanIdentityMismatch || documentMismatch
+      ? "not_testable"
+      : inventory.coverage.status === "limited"
+        ? "limited"
+        : inventory.forms.length > 0
+          ? "observed"
+          : "not_observed";
+  return collectionSurfaceAssessmentSchema.parse({
+    contractVersion: COLLECTION_SURFACE_ASSESSMENT_VERSION,
+    scanId: input.scanId,
+    assessedAt: input.assessedAt ?? new Date().toISOString(),
+    assessmentStatus,
+    sourceInventoryContractVersion: inventory.contractVersion,
+    sourceHash,
+    sourceLane: "runtime_evidence",
+    pageUrl: inventory.pageUrl,
+    coverage: inventory.coverage,
+    forms: assessmentStatus === "not_testable" ? [] : inventory.forms,
+    limitationKeys,
+    evidenceRefs: ["CanonicalEvidenceBundle.json#collectionSurfaceInventory"],
+    productionProjectable: true,
+  });
 }
 
 export function deriveSensitiveThirdPartyTrackingCorrelation(input: {
@@ -5274,6 +5383,11 @@ function buildMaterializedLocalV2Detail(
     !isGenericThirdPartyPrivacySurface(row, rootDomain, { homepageNoGo: Boolean(localV2NoGo) })
   );
   const collectionSurfaceSummary = summarizeCollectionSurfaces(bundle);
+  const collectionSurfaceAssessment = deriveCollectionSurfaceAssessment({
+    bundle,
+    canonicalDocumentUrl,
+    scanId: scanRecord.scan.id,
+  });
   const transportSecuritySummary = summarizeTransportSecurity(bundle);
   const privacySurface = targetRelevantVerifiedPolicySurfaces.find((row) => row.surface.surfaceType === "privacy_policy");
   const termsSurface = verifiedPolicySurfaces.find((row) => row.surface.surfaceType === "terms");
@@ -5762,6 +5876,8 @@ function buildMaterializedLocalV2Detail(
     consent_preconsent_violation_count: runtimeEvidenceReportable ? promotionGradeRequestPurposeRows.length : 0,
     collection_surface_count: collectionSurfaceSummary.collectionSurfaceCount,
     collection_surface_observed: collectionSurfaceSummary.collectionSurfacesObserved,
+    collectionSurfaceAssessment,
+    collection_surface_assessment: collectionSurfaceAssessment,
     collectionSurfaceSummary,
     collection_surface_summary: collectionSurfaceSummary,
     transportSecuritySummary,

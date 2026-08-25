@@ -20,7 +20,7 @@ const serverOnlyPath = require.resolve("server-only");
   paths: []
 };
 
-test("pre-consent inventory keeps retained counts visible in the widened purpose column", () => {
+test("pre-consent inventory exposes retained request counts with a compact consistent label", () => {
   const source = readFileSync("apps/web/components/scans/shared-scan-detail-view.tsx", "utf8");
 
   assert.match(source, /\{presentationState\.message\}/);
@@ -29,15 +29,59 @@ test("pre-consent inventory keeps retained counts visible in the widened purpose
   assert.match(source, /projection=\{scanReportRenderProjection\.runtimeInventory\}/);
   assert.doesNotMatch(source, /<td[^>]*>No retained cookies or trackers were detected for this scan\.<\/td>/);
   assert.doesNotMatch(source, /No retained cookie or tracker rows for this scan\./);
-  assert.match(source, /\["Type", "Vendor", "Purpose", "Evidence", "First seen", "Cookie name\(s\)", "Domain", "Destination", "Confidence", "Relationship", "Category", "Priority"\]/);
+  assert.match(source, /\["Type", "Vendor", "Purpose", "Evidence", "First seen", "Requests", "Cookie name\(s\)", "Domain", "Destination", "Confidence", "Relationship", "Category", "Priority"\]/);
   assert.match(source, /label="Vendor"[\s\S]*label="Purpose"[\s\S]*>Evidence<\/[a-z]+>[\s\S]*>Relationship<\/[a-z]+>[\s\S]*>Category<\/[a-z]+>/);
   assert.doesNotMatch(source, /label="Count"/);
   assert.match(source, /w-\[165px\]/);
-  assert.match(source, /<span className="shrink-0">\(\{row\.observedRecordCount\}\)<\/span>/);
-  assert.match(source, /formatInventoryPurposeWithCount\(row\)/);
-  assert.match(source, /`\$\{getInventoryPurposeLabel\(row\)\}\(\$\{row\.observedRecordCount\}\)`/);
-  assert.doesNotMatch(source, />Req\.<\/[a-z]+>/);
-  assert.doesNotMatch(source, /"Requests"/);
+  assert.match(source, />Req\.<\/th>/);
+  assert.match(source, /Req\. \{row\.requestCount \?\? "—"\}/);
+  assert.match(source, /\{row\.requestCount \?\? "—"\}<\/td>/);
+  assert.match(source, /row\.requestCount \?\? "—",/);
+  assert.doesNotMatch(source, /PreConsentBrowserStorageSummary/);
+  assert.doesNotMatch(source, /Browser storage objects/);
+  assert.match(source, /<InventoryEvidenceSegmentation rows=\{inventoryRows\} \/>/);
+  assert.match(source, /<InventoryPurposeCard rows=\{inventoryRows\} \/>/);
+  assert.match(source, /<InventoryPartyAttributionDonut rows=\{inventoryRows\} \/>/);
+});
+
+test("evidence mix reconciles with the canonical row-level inventory", async () => {
+  const { buildInventoryEvidenceCounts } = await import("./shared-scan-detail-view");
+  const sourcebusterTracker = {
+    macroCategory: "Functional" as const,
+    observedRecordCount: 1,
+    priority: "medium" as const,
+    purpose: "Analytics",
+    purposes: ["Analytics"],
+  };
+  const contextualSourcebusterCookie = {
+    macroCategory: "Functional" as const,
+    observedRecordCount: 1,
+    priority: "contextual" as const,
+    purpose: "Analytics",
+    purposes: ["Analytics"],
+  };
+  const dsgvoTracker = {
+    macroCategory: "Essential" as const,
+    observedRecordCount: 1,
+    priority: "contextual" as const,
+    purpose: "Cookie compliance",
+    purposes: ["Cookie compliance"],
+  };
+
+  assert.deepEqual(
+    buildInventoryEvidenceCounts([
+      sourcebusterTracker,
+      ...Array.from({ length: 7 }, () => contextualSourcebusterCookie),
+      dsgvoTracker,
+    ]),
+    {
+      contextualCount: 8,
+      necessaryCount: 0,
+      nonEssentialCount: 1,
+      rawRecordCount: 9,
+      reviewCount: 0,
+    }
+  );
 });
 
 test("site relationship doughnut is derived directly from canonical site relationships", async () => {

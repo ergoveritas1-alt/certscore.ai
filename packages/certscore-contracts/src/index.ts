@@ -19,6 +19,7 @@ export * from "./model-assistance";
 export * from "./consent-control-assessment";
 export * from "./consent-control-calibration";
 export * from "./lambda-result-disposition";
+export * from "./pre-consent-browser-storage-projection";
 
 export const directVsInferredSchema = z.enum([
   "direct",
@@ -670,6 +671,165 @@ export const collectionSurfaceObservationSchema = z.object({
   confidence: confidenceSchema,
   directVsInferred: directVsInferredSchema,
 });
+
+export const COLLECTION_SURFACE_INVENTORY_VERSION = "certscore.collection-surface-inventory.v1";
+export const COLLECTION_SURFACE_ASSESSMENT_VERSION = "certscore.collection-surface-assessment.v1";
+export const MAX_COLLECTION_SURFACE_FORMS = 10;
+export const MAX_COLLECTION_SURFACE_FIELDS_PER_FORM = 20;
+export const MAX_COLLECTION_SURFACE_FIELDS = 60;
+export const MAX_COLLECTION_SURFACE_INVENTORY_BYTES = 64 * 1024;
+
+export const collectionSurfaceSemanticCategorySchema = z.enum([
+  "search",
+  "name",
+  "email",
+  "phone",
+  "address",
+  "password",
+  "payment_card",
+  "bank_account",
+  "government_id",
+  "social_security_number",
+  "date_of_birth",
+  "health",
+  "geolocation",
+  "file_upload",
+  "free_text",
+  "selection",
+  "boolean_choice",
+  "unknown",
+]);
+
+export const collectionSurfaceEvidenceRefSchema = z.object({
+  refId: z.string().min(1).max(120),
+  eventId: z.string().min(1).max(120).optional(),
+  artifactId: z.string().min(1).max(120).optional(),
+  eventType: z.string().min(1).max(80).optional(),
+}).strict();
+
+export const collectionSurfaceFieldSchema = z.object({
+  fieldRef: z.string().min(1).max(80),
+  elementType: z.enum(["input", "textarea", "select"]),
+  inputType: z.string().min(1).max(40),
+  semanticCategory: collectionSurfaceSemanticCategorySchema,
+  label: z.string().min(1).max(120).optional(),
+  autocompleteToken: z.string().min(1).max(80).optional(),
+  required: z.boolean(),
+  disabled: z.boolean(),
+  readOnly: z.boolean(),
+  evidenceRefs: z.array(collectionSurfaceEvidenceRefSchema).max(2).default([]),
+  confidence: confidenceSchema,
+  directVsInferred: directVsInferredSchema,
+}).strict();
+
+export const collectionSurfaceFormSchema = z.object({
+  formRef: z.string().min(1).max(80),
+  structure: z.enum(["native_form", "role_form", "unassociated_controls"]),
+  surfaceType: z.enum(["search", "newsletter", "contact", "account", "checkout", "generic_form", "unknown"]),
+  title: z.string().min(1).max(120).optional(),
+  pageUrl: z.string().min(1).max(500),
+  method: z.enum(["get", "post", "dialog", "other", "unknown"]),
+  actionRelationship: z.enum(["same_site", "third_party", "self", "none", "unknown"]),
+  actionHostname: z.string().min(1).max(255).optional(),
+  candidateFieldCount: z.number().int().nonnegative(),
+  retainedFieldCount: z.number().int().nonnegative().max(MAX_COLLECTION_SURFACE_FIELDS_PER_FORM),
+  fieldsTruncated: z.boolean(),
+  fields: z.array(collectionSurfaceFieldSchema).max(MAX_COLLECTION_SURFACE_FIELDS_PER_FORM),
+  evidenceRefs: z.array(collectionSurfaceEvidenceRefSchema).max(4).default([]),
+  confidence: confidenceSchema,
+  directVsInferred: directVsInferredSchema,
+}).strict().superRefine((form, context) => {
+  if (form.retainedFieldCount !== form.fields.length) {
+    context.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: "retainedFieldCount must equal the retained fields array length",
+      path: ["retainedFieldCount"],
+    });
+  }
+  if (form.fieldsTruncated !== (form.candidateFieldCount > form.retainedFieldCount)) {
+    context.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: "fieldsTruncated must reflect omitted candidate fields",
+      path: ["fieldsTruncated"],
+    });
+  }
+});
+
+export const collectionSurfaceInventoryCoverageSchema = z.object({
+  status: z.enum(["complete", "limited", "failed"]),
+  documentScope: z.literal("main_document"),
+  interactionMode: z.literal("none"),
+  candidateFormCount: z.number().int().nonnegative(),
+  retainedFormCount: z.number().int().nonnegative().max(MAX_COLLECTION_SURFACE_FORMS),
+  candidateFieldCount: z.number().int().nonnegative(),
+  retainedFieldCount: z.number().int().nonnegative().max(MAX_COLLECTION_SURFACE_FIELDS),
+  inspectedFormCandidateCount: z.number().int().nonnegative().max(50),
+  inspectedFieldCandidateCount: z.number().int().nonnegative().max(250),
+  candidateScanTruncated: z.boolean(),
+  retentionTruncated: z.boolean(),
+  reasonCodes: z.array(z.string().min(1).max(80)).max(12).default([]),
+}).strict();
+
+export const collectionSurfaceInventorySchema = z.object({
+  contractVersion: z.literal(COLLECTION_SURFACE_INVENTORY_VERSION),
+  inventoryId: z.string().min(1).max(120),
+  sourceLane: z.literal("runtime_evidence"),
+  sourceScanner: z.string().min(1).max(80),
+  scenario: z.string().min(1).max(80),
+  observedAtMs: z.number().int().nonnegative(),
+  consentStateAtTime: consentStateSchema,
+  pageUrl: z.string().min(1).max(500),
+  coverage: collectionSurfaceInventoryCoverageSchema,
+  forms: z.array(collectionSurfaceFormSchema).max(MAX_COLLECTION_SURFACE_FORMS),
+  evidenceRefs: z.array(collectionSurfaceEvidenceRefSchema).max(8).default([]),
+  confidence: confidenceSchema,
+  directVsInferred: directVsInferredSchema,
+}).strict().superRefine((inventory, context) => {
+  const retainedFieldCount = inventory.forms.reduce((total, form) => total + form.fields.length, 0);
+  if (inventory.coverage.retainedFormCount !== inventory.forms.length) {
+    context.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: "coverage.retainedFormCount must equal the retained forms array length",
+      path: ["coverage", "retainedFormCount"],
+    });
+  }
+  if (inventory.coverage.retainedFieldCount !== retainedFieldCount) {
+    context.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: "coverage.retainedFieldCount must equal all retained form fields",
+      path: ["coverage", "retainedFieldCount"],
+    });
+  }
+  if (retainedFieldCount > MAX_COLLECTION_SURFACE_FIELDS) {
+    context.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: `Collection surface inventory cannot retain more than ${MAX_COLLECTION_SURFACE_FIELDS} fields`,
+      path: ["forms"],
+    });
+  }
+  if (new TextEncoder().encode(JSON.stringify(inventory)).byteLength > MAX_COLLECTION_SURFACE_INVENTORY_BYTES) {
+    context.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: `Collection surface inventory exceeds ${MAX_COLLECTION_SURFACE_INVENTORY_BYTES} serialized bytes`,
+    });
+  }
+});
+
+export const collectionSurfaceAssessmentSchema = z.object({
+  contractVersion: z.literal(COLLECTION_SURFACE_ASSESSMENT_VERSION),
+  scanId: z.string().min(1).max(160),
+  assessedAt: z.string().datetime(),
+  assessmentStatus: z.enum(["observed", "not_observed", "limited", "not_testable"]),
+  sourceInventoryContractVersion: z.literal(COLLECTION_SURFACE_INVENTORY_VERSION).nullable(),
+  sourceHash: z.string().regex(/^[a-f0-9]{64}$/).nullable(),
+  sourceLane: z.literal("runtime_evidence"),
+  pageUrl: z.string().min(1).max(500).nullable(),
+  coverage: collectionSurfaceInventoryCoverageSchema.nullable(),
+  forms: z.array(collectionSurfaceFormSchema).max(MAX_COLLECTION_SURFACE_FORMS),
+  limitationKeys: z.array(z.string().min(1).max(80)).max(12).default([]),
+  evidenceRefs: z.array(z.string().min(1).max(240)).max(12).default([]),
+  productionProjectable: z.literal(true),
+}).strict();
 
 const transportUrlSchema = z.string().max(500);
 const transportSchemeSchema = z.enum(["http", "https", "other", "unknown"]);
@@ -2310,52 +2470,20 @@ function consentPacketDocumentIdentity(value: string | null | undefined): string
   }
 }
 
-export function isVerifiedTerminalConsentPacket(
-  observation: z.infer<typeof consentUiObservationSchema>,
-  context?: {
-    expectedDocumentIdentity?: z.infer<typeof browserDocumentIdentitySchema>;
-    expectedDocumentUrl?: string | null;
-    representativeScreenshots?: Array<{
-      documentIdentity?: z.infer<typeof browserDocumentIdentitySchema>;
-      url: string;
-    }>;
-    representativeScreenshotUrls?: string[];
-  },
-): boolean {
-  const completedChannels = observation.captureDiagnostics?.completedChannels ?? [];
-  const timedOutChannels = observation.captureDiagnostics?.timedOutChannels ?? [];
-  const failedChannels = observation.captureDiagnostics?.failedChannels ?? [];
-  const controls = observation.controls ?? [];
-  const terminalBasis = (observation.basis ?? []).some((basis) =>
-    basis === "recovery:independent_consent_capture_completed" ||
-    basis === "recovery:bounded_same_session_consent_packet_completed"
-  );
-  const coherentInventory =
-    observation.inventoryOutcome === "complete_empty"
-      ? observation.captureStatus === "no_evidence" &&
-        observation.likelyPresent === false &&
-        controls.length === 0
-      : observation.inventoryOutcome === "complete_with_controls" &&
-        observation.captureStatus === "observed" &&
-        observation.likelyPresent === true &&
-        controls.length > 0;
-  if (
-    !terminalBasis ||
-    !coherentInventory ||
-    observation.layerInspected !== "first_layer" ||
-    !completedChannels.includes("dom_inventory") ||
-    !completedChannels.includes("geometry") ||
-    timedOutChannels.length > 0 ||
-    failedChannels.length > 0 ||
-    (observation.inventoryDiagnostics?.blockingInaccessibleFrameCount ?? 0) > 0 ||
-    (
-      observation.boundedSameSessionRecoveryOutcome !== undefined &&
-      observation.boundedSameSessionRecoveryOutcome !== "completed"
-    )
-  ) {
-    return false;
-  }
+type ConsentEvidenceBindingContext = {
+  expectedDocumentIdentity?: z.infer<typeof browserDocumentIdentitySchema>;
+  expectedDocumentUrl?: string | null;
+  representativeScreenshots?: Array<{
+    documentIdentity?: z.infer<typeof browserDocumentIdentitySchema>;
+    url: string;
+  }>;
+  representativeScreenshotUrls?: string[];
+};
 
+function consentObservationMatchesBindingContext(
+  observation: z.infer<typeof consentUiObservationSchema>,
+  context?: ConsentEvidenceBindingContext,
+): boolean {
   const observationDocument = consentPacketDocumentIdentity(observation.documentUrl);
   const expectedDocument = consentPacketDocumentIdentity(context?.expectedDocumentUrl);
   const observationDocumentToken = observation.documentIdentity?.token;
@@ -2391,11 +2519,102 @@ export function isVerifiedTerminalConsentPacket(
   return true;
 }
 
+export function isVerifiedTerminalConsentPacket(
+  observation: z.infer<typeof consentUiObservationSchema>,
+  context?: ConsentEvidenceBindingContext,
+): boolean {
+  const completedChannels = observation.captureDiagnostics?.completedChannels ?? [];
+  const timedOutChannels = observation.captureDiagnostics?.timedOutChannels ?? [];
+  const failedChannels = observation.captureDiagnostics?.failedChannels ?? [];
+  const controls = observation.controls ?? [];
+  const terminalBasis = (observation.basis ?? []).some((basis) =>
+    basis === "recovery:independent_consent_capture_completed" ||
+    basis === "recovery:bounded_same_session_consent_packet_completed"
+  );
+  const coherentInventory =
+    observation.inventoryOutcome === "complete_empty"
+      ? observation.captureStatus === "no_evidence" &&
+        observation.likelyPresent === false &&
+        controls.length === 0
+      : observation.inventoryOutcome === "complete_with_controls" &&
+        observation.captureStatus === "observed" &&
+        observation.likelyPresent === true &&
+        controls.length > 0;
+  if (
+    !terminalBasis ||
+    !coherentInventory ||
+    observation.layerInspected !== "first_layer" ||
+    !completedChannels.includes("dom_inventory") ||
+    !completedChannels.includes("geometry") ||
+    timedOutChannels.length > 0 ||
+    failedChannels.length > 0 ||
+    (observation.inventoryDiagnostics?.blockingInaccessibleFrameCount ?? 0) > 0 ||
+    (
+      observation.boundedSameSessionRecoveryOutcome !== undefined &&
+      observation.boundedSameSessionRecoveryOutcome !== "completed"
+    )
+  ) {
+    return false;
+  }
+
+  return consentObservationMatchesBindingContext(observation, context);
+}
+
+function hasAdaptivePartialExitMarker(observation: z.infer<typeof consentUiObservationSchema>): boolean {
+  return (observation.inventoryDiagnostics?.timingMarkers ?? []).some((marker) =>
+    marker.includes(":calibrated_stable_partial_exit") ||
+    marker.includes(":calibrated_audit_complete_exit")
+  );
+}
+
+export function isVerifiedStablePartialConsentInventory(
+  observation: z.infer<typeof consentUiObservationSchema>,
+  context?: ConsentEvidenceBindingContext,
+): boolean {
+  const completedChannels = observation.captureDiagnostics?.completedChannels ?? [];
+  const representativeEvidenceProvided = Boolean(
+    context?.representativeScreenshots || context?.representativeScreenshotUrls
+  );
+  const representativeEvidenceCount =
+    (context?.representativeScreenshots?.length ?? 0) +
+    (context?.representativeScreenshotUrls?.length ?? 0);
+  return (
+    hasAdaptivePartialExitMarker(observation) &&
+    observation.inventoryOutcome === "complete_with_controls" &&
+    observation.captureStatus === "observed" &&
+    observation.likelyPresent === true &&
+    observation.layerInspected === "first_layer" &&
+    observation.controls.some((control) => control.visible !== false) &&
+    completedChannels.includes("dom_inventory") &&
+    completedChannels.includes("geometry") &&
+    (observation.captureDiagnostics?.timedOutChannels.length ?? 0) === 0 &&
+    (observation.captureDiagnostics?.failedChannels.length ?? 0) === 0 &&
+    (observation.inventoryDiagnostics?.blockingInaccessibleFrameCount ?? 0) === 0 &&
+    observation.basis.includes("settled_control_inventory_completed") &&
+    observation.basis.includes("inventory:paired_settled_frame_completed") &&
+    representativeEvidenceProvided &&
+    representativeEvidenceCount > 0 &&
+    consentObservationMatchesBindingContext(observation, context)
+  );
+}
+
+export function hasUnresolvedAdaptivePartialConsentInventory(
+  observations: z.infer<typeof consentUiObservationSchema>[],
+  context?: ConsentEvidenceBindingContext,
+): boolean {
+  const exitedPartialInventories = observations.filter(hasAdaptivePartialExitMarker);
+  return exitedPartialInventories.length > 0 &&
+    !exitedPartialInventories.some((observation) =>
+      isVerifiedStablePartialConsentInventory(observation, context)
+    );
+}
+
 function hasVerifiedPositiveConsentCapture(
   observations: z.infer<typeof consentUiObservationSchema>[],
+  context?: ConsentEvidenceBindingContext,
 ): boolean {
   return observations.some((observation) =>
-    !hasUnresolvedAdaptivePartialConsentInventory(observation) &&
+    !hasUnresolvedAdaptivePartialConsentInventory([observation], context) &&
     observation.captureStatus === "observed" &&
     observation.likelyPresent &&
     observation.layerInspected === "first_layer" &&
@@ -2419,38 +2638,9 @@ function hasVerifiedPositiveConsentCapture(
   );
 }
 
-function hasUnresolvedAdaptivePartialConsentInventory(
-  observation: z.infer<typeof consentUiObservationSchema>,
-): boolean {
-  const exitedFromPartialInventory = (observation.inventoryDiagnostics?.timingMarkers ?? []).some((marker) =>
-    marker.includes(":calibrated_stable_partial_exit") ||
-    marker.includes(":calibrated_audit_complete_exit")
-  );
-  if (!exitedFromPartialInventory) return false;
-
-  const visibleControls = observation.controls.filter((control) => control.visible !== false);
-  const acceptObserved = observation.acceptControlObserved || visibleControls.some((control) =>
-    control.semanticRole === "explicit_accept" || control.actionType === "accept_all"
-  );
-  const rejectObserved = observation.rejectControlObserved || visibleControls.some((control) =>
-    control.semanticRole === "reject" ||
-    control.semanticRole === "necessary_only" ||
-    control.actionType === "reject_all"
-  );
-  const optionsObserved = observation.managePreferencesControlObserved || visibleControls.some((control) =>
-    control.semanticRole === "preferences" ||
-    control.actionType === "manage_preferences" ||
-    control.actionType === "save_preferences"
-  );
-  return !(acceptObserved && rejectObserved && optionsObserved);
-}
-
 function hasVerifiedNegativeConsentCapture(
   observations: z.infer<typeof consentUiObservationSchema>[],
-  context?: {
-    expectedDocumentUrl?: string | null;
-    representativeScreenshotUrls?: string[];
-  },
+  context?: ConsentEvidenceBindingContext,
 ): boolean {
   return observations.some((observation) =>
     observation.inventoryOutcome === "complete_empty" &&
@@ -2481,22 +2671,25 @@ function deriveConsentEvidenceChannels(input: {
 }): ConsentEvidenceChannel[] {
   const preConsentRun = input.modulesRun.find((moduleRun) => moduleRun.moduleName === "preConsentRuntimeScanner");
   const observations = input.consentUiObservations;
-  const expectedDocumentUrl = input.domSnapshots.at(-1)?.url ??
+  const expectedDocumentSnapshot = input.domSnapshots.at(-1);
+  const expectedDocumentUrl = expectedDocumentSnapshot?.url ??
     observations.at(-1)?.documentUrl ?? null;
-  const representativeScreenshotUrls = input.screenshots
+  const representativeScreenshots = input.screenshots
     .filter((screenshot) => screenshot.consentStateAtTime === "pre_consent")
-    .map((screenshot) => screenshot.url);
-  const terminalRecoveryCompleted = observations.some((observation) =>
-    isVerifiedTerminalConsentPacket(observation, {
-      expectedDocumentUrl,
-      representativeScreenshotUrls,
-    })
-  );
-  const verifiedPositiveCaptureCompleted = hasVerifiedPositiveConsentCapture(observations);
-  const verifiedNegativeCaptureCompleted = hasVerifiedNegativeConsentCapture(observations, {
+    .map((screenshot) => ({
+      documentIdentity: screenshot.documentIdentity,
+      url: screenshot.url,
+    }));
+  const bindingContext: ConsentEvidenceBindingContext = {
+    expectedDocumentIdentity: expectedDocumentSnapshot?.documentIdentity,
     expectedDocumentUrl,
-    representativeScreenshotUrls,
-  });
+    representativeScreenshots,
+  };
+  const terminalRecoveryCompleted = observations.some((observation) =>
+    isVerifiedTerminalConsentPacket(observation, bindingContext)
+  );
+  const verifiedPositiveCaptureCompleted = hasVerifiedPositiveConsentCapture(observations, bindingContext);
+  const verifiedNegativeCaptureCompleted = hasVerifiedNegativeConsentCapture(observations, bindingContext);
   const consentLaneCompleted = terminalRecoveryCompleted || verifiedPositiveCaptureCompleted || verifiedNegativeCaptureCompleted;
   const runtimeIncomplete = preConsentRun?.status !== "completed" && !consentLaneCompleted;
   const hasObservationBasis = (pattern: RegExp) => observations.some((observation) =>
@@ -2637,33 +2830,38 @@ export function deriveConsentSurfaceInspectionOutcome(input: {
   // script/library signal cannot be projected as a confirmed banner.
   const consentSurfaceObserved = Boolean(visibleObservation);
   const preConsentRun = (input.modulesRun ?? []).find((moduleRun) => moduleRun.moduleName === "preConsentRuntimeScanner");
-  const expectedDocumentUrl = input.domSnapshots?.at(-1)?.url ??
+  const expectedDocumentSnapshot = input.domSnapshots?.at(-1);
+  const expectedDocumentUrl = expectedDocumentSnapshot?.url ??
     observations.at(-1)?.documentUrl ?? null;
-  const representativeScreenshotUrls = (input.screenshots ?? [])
+  const representativeScreenshots = (input.screenshots ?? [])
     .filter((screenshot) => screenshot.consentStateAtTime === "pre_consent")
-    .map((screenshot) => screenshot.url);
-  const terminalRecoveryCompleted = observations.some((observation) =>
-    isVerifiedTerminalConsentPacket(observation, {
-      expectedDocumentUrl,
-      representativeScreenshotUrls,
-    })
-  );
-  const verifiedPositiveCaptureCompleted = hasVerifiedPositiveConsentCapture(observations);
-  const verifiedNegativeCaptureCompleted = hasVerifiedNegativeConsentCapture(observations, {
+    .map((screenshot) => ({
+      documentIdentity: screenshot.documentIdentity,
+      url: screenshot.url,
+    }));
+  const bindingContext: ConsentEvidenceBindingContext = {
+    expectedDocumentIdentity: expectedDocumentSnapshot?.documentIdentity,
     expectedDocumentUrl,
-    representativeScreenshotUrls,
-  });
+    representativeScreenshots,
+  };
+  const terminalRecoveryCompleted = observations.some((observation) =>
+    isVerifiedTerminalConsentPacket(observation, bindingContext)
+  );
+  const verifiedPositiveCaptureCompleted = hasVerifiedPositiveConsentCapture(observations, bindingContext);
+  const verifiedNegativeCaptureCompleted = hasVerifiedNegativeConsentCapture(observations, bindingContext);
   const consentLaneCompleted = terminalRecoveryCompleted || verifiedPositiveCaptureCompleted || verifiedNegativeCaptureCompleted;
   const observationFailed = observations.length === 0 || (
-    !consentLaneCompleted && observations.some((observation) =>
-      hasUnresolvedAdaptivePartialConsentInventory(observation) ||
-      observation.captureStatus === "incomplete" ||
-      (
-        observation.captureStatus === undefined &&
+    !consentLaneCompleted && (
+      hasUnresolvedAdaptivePartialConsentInventory(observations, bindingContext) ||
+      observations.some((observation) =>
+        observation.captureStatus === "incomplete" ||
         (
-          observation.basis.includes("bounded_capture_timeout_or_failure") ||
-          observation.basis.includes("inventory:probe_failed") ||
-          observation.basis.includes("geometry_capture_unavailable")
+          observation.captureStatus === undefined &&
+          (
+            observation.basis.includes("bounded_capture_timeout_or_failure") ||
+            observation.basis.includes("inventory:probe_failed") ||
+            observation.basis.includes("geometry_capture_unavailable")
+          )
         )
       )
     )
@@ -2882,6 +3080,7 @@ export const canonicalEvidenceBundleSchema = z.object({
   iframeEvents: z.array(iframeEventSchema),
   consentUiObservations: z.array(consentUiObservationSchema),
   collectionSurfaceObservations: z.array(collectionSurfaceObservationSchema).default([]),
+  collectionSurfaceInventory: collectionSurfaceInventorySchema.optional(),
   consentInteractionEvents: z.array(consentInteractionEventSchema).default([]),
   consentFlowObservations: z.array(consentFlowObservationSchema).default([]),
   consentActionCandidates: z.array(consentActionCandidateSchema).default([]),
@@ -3074,6 +3273,13 @@ export type ScriptEvent = z.infer<typeof scriptEventSchema>;
 export type IframeEvent = z.infer<typeof iframeEventSchema>;
 export type ConsentUiObservation = z.infer<typeof consentUiObservationSchema>;
 export type CollectionSurfaceObservation = z.infer<typeof collectionSurfaceObservationSchema>;
+export type CollectionSurfaceSemanticCategory = z.infer<typeof collectionSurfaceSemanticCategorySchema>;
+export type CollectionSurfaceEvidenceRef = z.infer<typeof collectionSurfaceEvidenceRefSchema>;
+export type CollectionSurfaceField = z.infer<typeof collectionSurfaceFieldSchema>;
+export type CollectionSurfaceForm = z.infer<typeof collectionSurfaceFormSchema>;
+export type CollectionSurfaceInventoryCoverage = z.infer<typeof collectionSurfaceInventoryCoverageSchema>;
+export type CollectionSurfaceInventory = z.infer<typeof collectionSurfaceInventorySchema>;
+export type CollectionSurfaceAssessment = z.infer<typeof collectionSurfaceAssessmentSchema>;
 export type ConsentInteractionEvent = z.infer<typeof consentInteractionEventSchema>;
 export type ConsentFlowScenario = z.infer<typeof consentFlowScenarioSchema>;
 export type ConsentScenarioPlanningMode = z.infer<typeof consentScenarioPlanningModeSchema>;

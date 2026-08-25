@@ -5,6 +5,7 @@ const DEFERRED_NON_PRODUCTION_ROW_IDS = new Set([
   "analytics_vendor_observed",
   "post_reject_tracking_reduction",
   "preference_withdrawal_control",
+  "public_collection_surfaces",
   "retargeting_behavioral_advertising_signal_observed",
   "sensitive_surfaces_third_party_tracking",
   "cross_border_endpoint_review",
@@ -15,6 +16,10 @@ const DEFERRED_NON_PRODUCTION_ROW_IDS = new Set([
   "consent_choice_quality"
 ]);
 
+export function isReportableGdprEprivacyCoverageRowId(id: string) {
+  return !DEFERRED_NON_PRODUCTION_ROW_IDS.has(id);
+}
+
 export function getReportableGdprEprivacyCoverageItems(items: GdprEprivacyCoverageChecklistItem[]) {
-  return items.filter((item) => !DEFERRED_NON_PRODUCTION_ROW_IDS.has(item.id));
+  return items.filter((item) => isReportableGdprEprivacyCoverageRowId(item.id));
 }

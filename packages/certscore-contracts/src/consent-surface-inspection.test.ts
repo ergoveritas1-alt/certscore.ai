@@ -110,7 +110,7 @@ test("verified empty consent evidence remains complete through non-terminal scan
   assert.equal(outcome.evidenceChannels.find((channel) => channel.channel === "geometry")?.status, "observed");
 });
 
-test("an adaptive early partial exit retains the observed control but keeps inspection coverage limited", () => {
+test("a settled, paired stable partial exit completes the bounded control inventory", () => {
   const input = baseInput();
   input.screenshots = [{
     artifactId: "screenshot_pre_consent",
@@ -124,7 +124,11 @@ test("an adaptive early partial exit retains the observed control but keeps insp
   input.consentUiObservations![0] = {
     ...input.consentUiObservations![0]!,
     acceptControlObserved: true,
-    basis: ["inventory:first_layer_controls"],
+    basis: [
+      "inventory:first_layer_controls",
+      "settled_control_inventory_completed",
+      "inventory:paired_settled_frame_completed",
+    ],
     captureStatus: "observed",
     inventoryOutcome: "complete_with_controls",
     captureDiagnostics: {
@@ -143,6 +147,7 @@ test("an adaptive early partial exit retains the observed control but keeps insp
     },
     layerInspected: "first_layer",
     likelyPresent: true,
+    documentUrl: "https://example.test/",
     visibleChoiceLabels: ["Accept all"],
     controls: [{
       actionType: "accept_all",
@@ -155,9 +160,18 @@ test("an adaptive early partial exit retains the observed control but keeps insp
   const outcome = deriveConsentSurfaceInspectionOutcome(input);
 
   assert.equal(outcome.outcome, "actionable_surface_observed");
-  assert.equal(outcome.coverageStatus, "limited");
-  assert.equal(outcome.inspectionCompleted, false);
-  assert.ok(outcome.limitationKeys.includes("consent_surface_inspection_observation_incomplete"));
+  assert.equal(outcome.coverageStatus, "complete");
+  assert.equal(outcome.inspectionCompleted, true);
+  assert.equal(outcome.limitationKeys.includes("consent_surface_inspection_observation_incomplete"), false);
+
+  input.consentUiObservations![0]!.basis = [
+    "inventory:first_layer_controls",
+    "settled_control_inventory_completed",
+  ];
+  const unpairedOutcome = deriveConsentSurfaceInspectionOutcome(input);
+  assert.equal(unpairedOutcome.coverageStatus, "limited");
+  assert.equal(unpairedOutcome.inspectionCompleted, false);
+  assert.ok(unpairedOutcome.limitationKeys.includes("consent_surface_inspection_observation_incomplete"));
 });
 
 test("an ambiguous OK acknowledgment retains a non-actionable consent surface", () => {

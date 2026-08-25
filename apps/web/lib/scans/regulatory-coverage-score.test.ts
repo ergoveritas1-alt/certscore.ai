@@ -33,6 +33,31 @@ test("unknown checklist rows withhold scoring instead of receiving a silent fall
   assert.match(result.summary, /configuration is missing/i);
 });
 
+test("registered contextual collection inventory does not withhold or affect scoring", () => {
+  const result = deriveRegulatoryCoverageScore({
+    framework: "gdpr_eprivacy",
+    rows: [
+      {
+        assessmentStatus: "checked",
+        criticalEvidence: { retainedEvidence: { scoreEffect: "none" } },
+        evidenceState: "observed",
+        id: "public_collection_surfaces",
+        status: "Observed"
+      },
+      {
+        assessmentStatus: "checked",
+        evidenceState: "observed",
+        id: "privacy_notice_availability",
+        status: "Observed"
+      }
+    ]
+  });
+
+  assert.equal(result.score, 100);
+  assert.equal(result.coverageRatio, 1);
+  assert.doesNotMatch(result.summary, /configuration is missing/i);
+});
+
 test("balanced Accept and Decline without first-layer settings does not incur a material score penalty", () => {
   const result = deriveRegulatoryCoverageScore({
     framework: "gdpr_eprivacy",
@@ -50,6 +75,35 @@ test("balanced Accept and Decline without first-layer settings does not incur a 
   });
 
   assert.equal(result.score, 100);
+});
+
+test("Accept-only missing Options is not scored separately from the refusal-path concern", () => {
+  const result = deriveRegulatoryCoverageScore({
+    framework: "gdpr_eprivacy",
+    rows: [
+      {
+        assessmentStatus: "checked",
+        criticalEvidence: {
+          retainedEvidence: {
+            optionsAbsenceSupportsRefusalPathOnly: true,
+            scoreEffect: "none",
+          },
+        },
+        evidenceState: "not_observed",
+        id: "options_settings_preferences_control",
+        status: "Not observed",
+      },
+      {
+        assessmentStatus: "checked",
+        evidenceState: "observed",
+        id: "privacy_notice_availability",
+        status: "Observed",
+      },
+    ],
+  });
+
+  assert.equal(result.score, 100);
+  assert.equal(result.coverageRatio, 1);
 });
 
 test("contextual inline and persistent settings links do not incur a material score penalty", () => {

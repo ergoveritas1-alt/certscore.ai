@@ -1,5 +1,6 @@
 import {
   deriveConsentControlAssessment,
+  hasUnresolvedAdaptivePartialConsentInventory,
   isVerifiedTerminalConsentPacket,
   type CanonicalEvidenceBundle,
   type ConsentControlAssessment,
@@ -519,31 +520,18 @@ export function deriveMaterializedConsentControlAssessment(input: {
     inspection.inspectionCompleted === true &&
     inspection.coverageStatus === "complete"
   );
-  const adaptiveInventoryStates = (input.bundle.consentUiObservations ?? []).map((observation) => {
-    const exitedPartial = (observation.inventoryDiagnostics?.timingMarkers ?? []).some((marker) =>
-      marker.includes(":calibrated_stable_partial_exit") ||
-      marker.includes(":calibrated_audit_complete_exit")
-    );
-    const visibleControls = (observation.controls ?? []).filter((control) => control.visible !== false);
-    const acceptObserved = observation.acceptControlObserved || visibleControls.some((control) =>
-      control.semanticRole === "explicit_accept" || control.actionType === "accept_all"
-    );
-    const rejectObserved = observation.rejectControlObserved || visibleControls.some((control) =>
-      control.semanticRole === "reject" || control.semanticRole === "necessary_only" || control.actionType === "reject_all"
-    );
-    const optionsObserved = observation.managePreferencesControlObserved || visibleControls.some((control) =>
-      control.semanticRole === "preferences" ||
-      control.actionType === "manage_preferences" ||
-      control.actionType === "save_preferences"
-    );
-    return {
-      complete: acceptObserved && rejectObserved && optionsObserved,
-      exitedPartial,
-    };
-  });
-  const unresolvedAdaptivePartialInventory =
-    adaptiveInventoryStates.some((state) => state.exitedPartial) &&
-    !adaptiveInventoryStates.some((state) => state.complete);
+  const unresolvedAdaptivePartialInventory = hasUnresolvedAdaptivePartialConsentInventory(
+    input.bundle.consentUiObservations ?? [],
+    {
+      expectedDocumentUrl: canonicalDocumentId,
+      representativeScreenshots: (input.bundle.screenshots ?? [])
+        .filter((screenshot) => screenshot.consentStateAtTime === "pre_consent")
+        .map((screenshot) => ({
+          documentIdentity: screenshot.documentIdentity,
+          url: screenshot.url,
+        })),
+    },
+  );
   const typedFirstLayerInventoryComplete =
     hasTypedFirstLayerInventory && coordinatorInspectionComplete && !unresolvedAdaptivePartialInventory;
   const explicitlyCompletedTypedInventoryChannels = (typedFirstLayerInventoryObservation?.captureDiagnostics?.completedChannels ?? [])

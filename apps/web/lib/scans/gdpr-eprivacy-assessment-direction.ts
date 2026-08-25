@@ -480,6 +480,12 @@ export function getAssessmentDirection(item: GdprEprivacyCoverageChecklistItem):
   if (evidenceLabel === "Not confirmed" && retainedPolicySurfaceExtractionLimited(item)) {
     return "technical_limitation";
   }
+  if (
+    item.id === "options_settings_preferences_control" &&
+    retainedBoolean(item, ["optionsAbsenceSupportsRefusalPathOnly"])
+  ) {
+    return "neutral_signal";
+  }
   if (evidenceLabel === "Potential gap" || item.assessmentStatus === "gap_observed") {
     return "potential_concern";
   }

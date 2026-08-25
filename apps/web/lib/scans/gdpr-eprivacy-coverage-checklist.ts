@@ -399,6 +399,15 @@ const CHECKLIST_ROWS: ChecklistRowDefinition[] = [
     requiresPublicWebCoverage: true
   },
   {
+    id: "public_collection_surfaces",
+    label: "Public data collection surfaces",
+    explanation: "Whether bounded visible form and field metadata was retained from the tested main document. Form presence alone is contextual and non-scoring.",
+    findingIds: [],
+    defaultFindingStatus: "Observed",
+    notObservedText: "No visible data-entry forms were observed in the tested main document.",
+    requiresPublicWebCoverage: true
+  },
+  {
     id: "sensitive_surfaces_third_party_tracking",
     label: "Sensitive surfaces with 3rd party tracking",
     explanation: "Whether forms or sensitive flows appeared alongside 3rd party tracking or measurement scripts.",

@@ -209,6 +209,15 @@ test("explicit consent reliance remains usable legal-basis evidence", () => {
   );
 });
 
+test("abbreviated Article 6 framing remains substantive legal-basis evidence", () => {
+  const text =
+    "Privacy Policy. Data processing is based on Art. 6 (1) lit. f GDPR because the controller has a legitimate interest in securing the website.";
+
+  for (const mode of ["scan_core", "retained_report", "multilingual_classifier"] as const) {
+    assert.equal(article13DisclosureRejectReason(text, "legal_basis", { mode }), null, mode);
+  }
+});
+
 test("named-controller purpose statements qualify as processing-purposes evidence", () => {
   assert.equal(
     hasSubstantiveProcessingPurposesEvidence(
@@ -581,5 +590,33 @@ test("Article 13 rejection contract rejects IMOU 404 and product-footer chrome",
   for (const mode of ["scan_core", "retained_report"] satisfies Article13DisclosureRejectionMode[]) {
     assert.equal(article13DisclosureRejectReason(imou404, "data_subject_rights", { mode }), "page_chrome_or_navigation");
     assert.equal(article13DisclosureRejectReason(imouFooter, "controller_contact", { mode }), "page_chrome_or_navigation");
+  }
+});
+
+test("Article 13 rejection contract does not promote an explicitly absent DPO", () => {
+  const absentDesignation =
+    "Privacy notice. CertScore.ai does not currently appoint or publish a Data Protection Officer for this service.";
+
+  for (const mode of rejectionModes) {
+    assert.equal(
+      article13DisclosureRejectReason(absentDesignation, "dpo_contact", { mode }),
+      "insufficient_row_specific_terms",
+      `${mode} should reject a negated DPO designation`,
+    );
+  }
+});
+
+test("Article 13 rejection contract accepts a substantive privacy contact point without inventing a DPO", () => {
+  const contactPoint = [
+    "Privacy Contact Point. Email privacy@certscore.ai for privacy questions and data-subject requests.",
+    "CertScore.ai has not appointed a Data Protection Officer.",
+  ].join(" ");
+
+  for (const mode of rejectionModes) {
+    assert.equal(
+      isArticle13DisclosureEvidenceUsable(contactPoint, "dpo_contact", { mode }),
+      true,
+      `${mode} should retain the observed privacy contact point`,
+    );
   }
 });

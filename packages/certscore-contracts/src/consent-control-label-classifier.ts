@@ -357,6 +357,10 @@ export const CONSENT_CONTROL_PHRASE_REGISTRY: ConsentControlTerm[] = [
     ...direct("accept", "ausgewählte erlauben"),
     equivalent("accept", "funktionale cookies akzeptieren", "category_functional"),
     equivalent("accept", "werbe-cookies akzeptieren", "category_advertising"),
+    contextual("accept", "verstanden", {
+      requiresConsentContext: true,
+      variant: "approval_acknowledgment",
+    }),
     weak("accept", "ok", { requiresConsentContext: true }),
     weak("accept", "ja", { requiresConsentContext: true }),
 

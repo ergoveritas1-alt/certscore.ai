@@ -372,6 +372,9 @@ function getSpecificChecklistRowRationale(item: GdprEprivacyCoverageChecklistIte
       ...getStringArrayFromEvidenceKeys(evidence, ["visibleOptionsLabels", "visible_options_labels", "preferenceLabels", "preference_labels", "buttonLabels", "button_labels"]),
       ...extractQuotedButtonLabels(item.criticalEvidence.statusBasis)
     ]).slice(0, 3);
+    if (evidence.optionsAbsenceSupportsRefusalPathOnly === true) {
+      return "No separate options/settings control was observed alongside the retained Accept control. Because no reject or equivalent refusal control was retained either, this is supporting context for the refusal-path review rather than a standalone options-control gap.";
+    }
     if (evidenceLabel === "Observed") {
       return labels.length > 0
         ? `An options/settings/preferences control was observed from structured consent-control evidence: ${formatList(labels)}. This confirms availability, not post-click behavior.`

@@ -6,8 +6,9 @@ import {
 } from "../../lib/scans/runtime-inventory-projection";
 import type { ScanDetailResponse } from "./get-scan-by-id";
 import { getPersistedCanonicalReportProjection } from "./persisted-canonical-report-projection";
+import { isGdprTransparencyReportRowId } from "../../lib/scans/gdpr-transparency-report-contract";
 
-export const CANONICAL_REPORT_EXPORT_VERSION = "canonical-report-export-v2" as const;
+export const CANONICAL_REPORT_EXPORT_VERSION = "canonical-report-export-v4" as const;
 const MAX_APPENDIX_INVENTORY_ROWS = 500;
 const MAX_APPENDIX_ARRAY_ITEMS = 50;
 
@@ -230,6 +231,25 @@ function buildRuntimeAppendix(scanRecord: ScanDetailResponse, normalizedConcerns
   };
 }
 
+function buildGdprTransparencyAppendix(
+  checklistPresentation: NonNullable<ReturnType<typeof getPersistedCanonicalReportProjection>>["checklistPresentation"],
+) {
+  const rows = checklistPresentation?.rows.filter((row) =>
+    isGdprTransparencyReportRowId(row.id)
+  ) ?? [];
+  return {
+    title: "Appendix: GDPR Transparency",
+    scopeNote: "These rows reproduce the persisted GDPR Transparency checklist projection. They describe retained policy-surface evidence and do not independently establish legal compliance or disclosure completeness.",
+    summary: {
+      totalRows: rows.length,
+      observedRows: rows.filter((row) => row.evidenceLabel === "Observed").length,
+      notConfirmedRows: rows.filter((row) => row.evidenceLabel === "Not confirmed").length,
+      noMatchRows: rows.filter((row) => row.evidenceLabel === "No match found").length,
+    },
+    rows,
+  };
+}
+
 export function buildCanonicalReportExport(scanRecord: ScanDetailResponse) {
   const canonical = getPersistedCanonicalReportProjection(scanRecord);
   if (!canonical) return null;
@@ -294,6 +314,7 @@ export function buildCanonicalReportExport(scanRecord: ScanDetailResponse) {
       })),
     ],
     appendix: {
+      gdprTransparency: buildGdprTransparencyAppendix(canonical.checklistPresentation),
       cookieAndTrackerInventory: buildRuntimeAppendix(scanRecord, normalizedConcerns),
     },
     notice: "CertScore reports observed risk signals and retained evidence. It is not a legal certification, a determination of compliance, or legal advice.",

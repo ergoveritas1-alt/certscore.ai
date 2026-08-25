@@ -3,6 +3,7 @@ import {
   type AutomatedAccessObservation,
   type BrowserDocumentIdentity,
   type CmpRuntimeObservation,
+  type CollectionSurfaceInventory,
   type CollectionSurfaceObservation,
   type CookieEvent,
   type CookieSnapshot,
@@ -80,6 +81,12 @@ import {
   isTransientMainDocumentStatus,
   navigationTransportRecoveryUrls,
 } from "../transport-fallback.js";
+import {
+  buildCollectionSurfaceInventory,
+  legacyCollectionSurfaceObservationsFromInventory,
+  MAX_COLLECTION_SURFACE_INSPECTED_FIELDS,
+  type CollectionSurfaceCaptureSnapshot,
+} from "../collection-surface-inventory.js";
 
 const SOURCE_SCANNER = "pre_consent_runtime";
 const SCENARIO = "fresh_pre_consent";
@@ -450,6 +457,7 @@ export interface PreConsentRuntimeScannerResult {
   scriptEvents: ScriptEvent[];
   iframeEvents: IframeEvent[];
   consentUiObservations: ConsentUiObservation[];
+  collectionSurfaceInventory?: CollectionSurfaceInventory;
   collectionSurfaceObservations: CollectionSurfaceObservation[];
   cmpRuntimeObservations: CmpRuntimeObservation[];
   transportSecurityObservations: TransportSecurityObservation[];
@@ -824,6 +832,7 @@ export async function preConsentRuntimeScanner(
   let retainedStorageSnapshot: StorageSnapshot | undefined;
   let retainedConsentUiObservation: ConsentUiObservation | undefined;
   let consentUiInspectionAttempted = false;
+  let retainedCollectionSurfaceInventory: CollectionSurfaceInventory | undefined;
   let retainedCollectionSurfaceObservations: CollectionSurfaceObservation[] = [];
   let retainedCmpRuntimeObservations: CmpRuntimeObservation[] = [];
   let retainedTransportSecurityObservation: TransportSecurityObservation | undefined;
@@ -898,6 +907,9 @@ export async function preConsentRuntimeScanner(
       scriptEvents: [...scriptEvents],
       iframeEvents: [...iframeEvents],
       consentUiObservations: retainedConsentUiObservations,
+      ...(retainedCollectionSurfaceInventory
+        ? { collectionSurfaceInventory: retainedCollectionSurfaceInventory }
+        : {}),
       collectionSurfaceObservations: [...retainedCollectionSurfaceObservations],
       cmpRuntimeObservations: captureConsentEvidence ? [...retainedCmpRuntimeObservations] : [],
       transportSecurityObservations: retainedTransportSecurityObservation
@@ -1750,6 +1762,7 @@ export async function preConsentRuntimeScanner(
     );
     const {
       apiAccesses,
+      collectionSurfaceInventory,
       collectionSurfaceObservations,
       domText: initialDomText,
       frames,
@@ -1762,6 +1775,7 @@ export async function preConsentRuntimeScanner(
       postSettleRenderedPolicyLinks,
     );
     retainedStorageSnapshot = storageSnapshot;
+    retainedCollectionSurfaceInventory = collectionSurfaceInventory;
     retainedCollectionSurfaceObservations = collectionSurfaceObservations;
     let consentObservation = lateAccessibilityObservation &&
       isStrongerConsentUiObservation(lateAccessibilityObservation, initialConsentObservation)
@@ -3514,6 +3528,7 @@ export async function preConsentRuntimeScanner(
       scriptEvents,
       iframeEvents,
       consentUiObservations: captureConsentEvidence ? [consentObservation] : [],
+      ...(collectionSurfaceInventory ? { collectionSurfaceInventory } : {}),
       collectionSurfaceObservations,
       cmpRuntimeObservations: captureConsentEvidence ? cmpRuntimeObservations : [],
       transportSecurityObservations: transportSecurityObservation ? [transportSecurityObservation] : [],
@@ -3637,6 +3652,9 @@ export async function preConsentRuntimeScanner(
       scriptEvents,
       iframeEvents,
       consentUiObservations: retainedConsentUiObservations,
+      ...(retainedCollectionSurfaceInventory
+        ? { collectionSurfaceInventory: retainedCollectionSurfaceInventory }
+        : {}),
       collectionSurfaceObservations: retainedCollectionSurfaceObservations,
       cmpRuntimeObservations: captureConsentEvidence ? retainedCmpRuntimeObservations : [],
       transportSecurityObservations: retainedTransportSecurityObservation
@@ -4478,7 +4496,7 @@ function signalTypeForMatchSource(
 
 type ConsolidatedPageEvidenceSnapshot = {
   apiAccesses: Array<{ apiName: string; category: string; timestampMs: number }>;
-  collectionRows: Array<{ fieldType: string; labels: string[] }>;
+  collectionCapture: CollectionSurfaceCaptureSnapshot;
   domText: string;
   frames: Array<{ name?: string; src?: string }>;
   localStorageEntries: Record<string, string>;
@@ -4501,6 +4519,7 @@ async function captureConsentProofPageEvidence(input: {
   timingBreakdown: NonNullable<ScanModuleRun["timingBreakdown"]>;
 }): Promise<{
   apiAccesses: RuntimeEvidenceEvent[];
+  collectionSurfaceInventory?: CollectionSurfaceInventory;
   collectionSurfaceObservations: CollectionSurfaceObservation[];
   domText: string;
   frames: IframeEvent[];
@@ -4523,6 +4542,7 @@ async function captureConsentProofPageEvidence(input: {
   );
   return {
     apiAccesses: [],
+    collectionSurfaceInventory: undefined,
     collectionSurfaceObservations: [],
     domText,
     frames: [],
@@ -4542,6 +4562,7 @@ async function capturePostSettlePageEvidence(input: {
   timingBreakdown: NonNullable<ScanModuleRun["timingBreakdown"]>;
 }): Promise<{
   apiAccesses: RuntimeEvidenceEvent[];
+  collectionSurfaceInventory?: CollectionSurfaceInventory;
   collectionSurfaceObservations: CollectionSurfaceObservation[];
   domText: string;
   frames: IframeEvent[];
@@ -4607,6 +4628,7 @@ async function capturePostSettlePageEvidence(input: {
         })()
       : {
           apiAccesses: [],
+          collectionSurfaceInventory: undefined,
           collectionSurfaceObservations: [],
           domText: "",
           frames: [],
@@ -4656,7 +4678,7 @@ async function capturePostSettlePageEvidence(input: {
     };
   }
 
-  const [storageSnapshot, scripts, frames, apiAccesses, collectionSurfaceObservations, domText, renderedPolicyLinks] = await Promise.all([
+  const [storageSnapshot, scripts, frames, apiAccesses, collectionSurfaceInventory, domText, renderedPolicyLinks] = await Promise.all([
     recordBoundedTiming(
       input.timingBreakdown,
       "page evidence: storage snapshot",
@@ -4694,8 +4716,8 @@ async function capturePostSettlePageEvidence(input: {
       "page evidence: collection surfaces",
       "Legacy bounded public collection-surface capture retained after the consolidated snapshot was unavailable.",
       1_500,
-      () => captureCollectionSurfaceObservations(input.page, input.scanStartedAtMs, input.normalizedUrl),
-      () => [],
+      () => captureCollectionSurfaceInventory(input.page, input.scanStartedAtMs, input.normalizedUrl),
+      () => undefined,
     ),
     recordBoundedTiming(
       input.timingBreakdown,
@@ -4721,11 +4743,30 @@ async function capturePostSettlePageEvidence(input: {
     "page evidence: consolidated fallback",
     "The atomic snapshot was unavailable; legacy read-only evidence collectors retained coverage.",
   );
-  return { apiAccesses, collectionSurfaceObservations, domText, frames, scripts, storageSnapshot, renderedPolicyLinks };
+  return {
+    apiAccesses,
+    collectionSurfaceInventory,
+    collectionSurfaceObservations: collectionSurfaceInventory
+      ? legacyCollectionSurfaceObservationsFromInventory(collectionSurfaceInventory)
+      : [],
+    domText,
+    frames,
+    scripts,
+    storageSnapshot,
+    renderedPolicyLinks,
+  };
 }
 
 async function captureConsolidatedPageEvidenceSnapshot(page: Page): Promise<ConsolidatedPageEvidenceSnapshot> {
-  return page.evaluate(() => {
+  const cmpSelectors = KNOWN_CMP_REGISTRY.flatMap((definition) => definition.domSelectors ?? []).slice(0, 100);
+  return page.evaluate(({ cmpSelectors, maxFieldCandidates }) => {
+    // tsx/esbuild can preserve nested browser-callback names by emitting calls to
+    // its module-scoped __name helper. Playwright serializes only this callback,
+    // so provide the no-op helper in the page before any nested callback runs.
+    const globalWithNameHelper = globalThis as typeof globalThis & { __name?: <T>(target: T) => T };
+    globalWithNameHelper.__name ??= function(target) {
+      return target;
+    };
     const localStorageEntries: Record<string, string> = {};
     const sessionStorageEntries: Record<string, string> = {};
     try {
@@ -4740,44 +4781,109 @@ async function captureConsolidatedPageEvidenceSnapshot(page: Page): Promise<Cons
         if (key) sessionStorageEntries[key] = "[redacted]";
       }
     } catch {}
-    const collectionRows = [...document.querySelectorAll("input, textarea, select")]
-      .filter((element) => {
-        const type = (element.getAttribute("type") || "").toLowerCase();
-        return !["hidden", "submit", "button", "reset", "image"].includes(type);
-      })
-      .slice(0, 40)
-      .map((element) => {
-        const labels = new Set<string>();
-        for (const value of [
-          element.getAttribute("aria-label"),
-          element.getAttribute("placeholder"),
-          element.getAttribute("name"),
-          element.getAttribute("type"),
-          element.getAttribute("role"),
-        ]) {
-          if (value) labels.add(value);
-        }
-        const id = element.getAttribute("id");
-        if (id) {
-          try {
-            document.querySelectorAll(`label[for="${CSS.escape(id)}"]`).forEach((label) => {
-              const text = label.textContent?.trim();
-              if (text) labels.add(text);
-            });
-          } catch {}
-        }
-        const closestLabel = element.closest("label")?.textContent?.trim();
-        if (closestLabel) labels.add(closestLabel);
-        const formText = element.closest("form")?.textContent?.replace(/\s+/g, " ").trim().slice(0, 160);
-        const normalizedLabels = [...labels]
-          .map((label) => label.replace(/\s+/g, " ").trim())
-          .filter(Boolean)
-          .slice(0, 6);
-        return {
-          fieldType: (element.getAttribute("type") || element.tagName.toLowerCase()).toLowerCase(),
-          labels: [...new Set([...normalizedLabels, ...(formText ? [formText] : [])])].slice(0, 8),
-        };
-      });
+    const allFieldCandidates = document.querySelectorAll("input, textarea, select");
+    const inspectedFieldCandidates = Array.from(
+      { length: Math.min(allFieldCandidates.length, maxFieldCandidates) },
+      (_, index) => allFieldCandidates.item(index),
+    ).filter((candidate): candidate is HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement => Boolean(candidate));
+    const groupRefs = new WeakMap<Element, string>();
+    let nextGroupRef = 0;
+    const groupRefFor = (element: Element) => {
+      const nativeForm = element.closest("form");
+      const roleForm = nativeForm ? null : element.closest('[role="form"]');
+      const group = nativeForm ?? roleForm;
+      if (!group) return "unassociated_controls";
+      const existing = groupRefs.get(group);
+      if (existing) return existing;
+      const value = `${nativeForm ? "native_form" : "role_form"}_${nextGroupRef++}`;
+      groupRefs.set(group, value);
+      return value;
+    };
+    const isVisible = (element: Element) => {
+      const style = window.getComputedStyle(element);
+      const rect = element.getBoundingClientRect();
+      return style.display !== "none" && style.visibility !== "hidden" && Number(style.opacity || "1") > 0 && rect.width > 0 && rect.height > 0;
+    };
+    const isCmpOwned = (element: Element) => cmpSelectors.some((selector) => {
+      try {
+        return Boolean(element.closest(selector));
+      } catch {
+        return false;
+      }
+    });
+    const boundedText = (value: string | null | undefined, maxLength: number) => {
+      const normalized = value?.replace(/\s+/g, " ").trim() ?? "";
+      return normalized ? normalized.slice(0, maxLength) : undefined;
+    };
+    const labelFor = (element: Element) => {
+      const labels: string[] = [];
+      const id = element.getAttribute("id");
+      if (id) {
+        try {
+          document.querySelectorAll(`label[for="${CSS.escape(id)}"]`).forEach((label) => {
+            const text = boundedText(label.textContent, 120);
+            if (text) labels.push(text);
+          });
+        } catch {}
+      }
+      for (const value of [
+        element.closest("label")?.textContent,
+        element.getAttribute("aria-label"),
+        element.getAttribute("placeholder"),
+        element.getAttribute("name"),
+      ]) {
+        const text = boundedText(value, 120);
+        if (text) labels.push(text);
+      }
+      return [...new Set(labels)][0];
+    };
+    const titleFor = (group: Element | null) => {
+      if (!group) return undefined;
+      return boundedText(
+        group.getAttribute("aria-label") ??
+        group.querySelector("legend")?.textContent ??
+        group.querySelector("h1, h2, h3, h4")?.textContent,
+        120,
+      );
+    };
+    const rows = inspectedFieldCandidates.flatMap((element, domOrder) => {
+      const type = (element.getAttribute("type") || element.tagName.toLowerCase()).toLowerCase();
+      if (["hidden", "submit", "button", "reset", "image"].includes(type) || !isVisible(element) || isCmpOwned(element)) {
+        return [];
+      }
+      const nativeForm = element.closest("form");
+      const roleForm = nativeForm ? null : element.closest('[role="form"]');
+      const group = nativeForm ?? roleForm;
+      const action = nativeForm?.getAttribute("action")?.trim();
+      let actionHostname: string | undefined;
+      if (action) {
+        try {
+          actionHostname = new URL(action, window.location.href).hostname || undefined;
+        } catch {}
+      }
+      const input = element as HTMLInputElement;
+      return [{
+        groupKey: groupRefFor(element),
+        structure: nativeForm ? "native_form" as const : roleForm ? "role_form" as const : "unassociated_controls" as const,
+        title: titleFor(group),
+        method: nativeForm?.getAttribute("method") ?? undefined,
+        actionHostname,
+        elementType: element.tagName.toLowerCase() as "input" | "textarea" | "select",
+        inputType: type || element.tagName.toLowerCase(),
+        label: labelFor(element),
+        autocompleteToken: boundedText(element.getAttribute("autocomplete"), 80),
+        required: input.required === true,
+        disabled: input.disabled === true,
+        readOnly: "readOnly" in input && input.readOnly === true,
+        domOrder,
+      }];
+    });
+    const collectionCapture = {
+      pageUrl: window.location.href,
+      rows,
+      inspectedFieldCandidateCount: inspectedFieldCandidates.length,
+      candidateScanTruncated: allFieldCandidates.length > inspectedFieldCandidates.length,
+    };
     const anchorElements: HTMLAnchorElement[] = [];
     const pendingRoots: Array<Document | ShadowRoot> = [document];
     const seenRoots = new Set<Document | ShadowRoot>();
@@ -4824,7 +4930,7 @@ async function captureConsolidatedPageEvidenceSnapshot(page: Page): Promise<Cons
     };
     return {
       apiAccesses: (apiScope.__certscoreBrowserApiAccesses ?? []).slice(0, 60),
-      collectionRows,
+      collectionCapture,
       domText: document.body?.innerText ?? "",
       frames: [...document.querySelectorAll("iframe")].map((frame) => ({
         src: frame.src || undefined,
@@ -4840,7 +4946,7 @@ async function captureConsolidatedPageEvidenceSnapshot(page: Page): Promise<Cons
       })),
       sessionStorageEntries,
     };
-  });
+  }, { cmpSelectors, maxFieldCandidates: MAX_COLLECTION_SURFACE_INSPECTED_FIELDS });
 }
 
 function consolidatedPageEvidenceFromSnapshot(
@@ -4863,16 +4969,17 @@ function consolidatedPageEvidenceFromSnapshot(
     valuesRedacted: true,
     evidenceRefs: [],
   };
+  const collectionSurfaceInventory = buildCollectionSurfaceInventory(
+    snapshot.collectionCapture,
+    input.scanStartedAtMs,
+  );
   return {
     storageSnapshot,
     scripts: scriptEventsFromRows(snapshot.scripts, input.scanStartedAtMs, input.firstPartyHostname),
     frames: iframeEventsFromRows(snapshot.frames, input.scanStartedAtMs, input.firstPartyHostname),
     apiAccesses: browserApiAccessEventsFromRows(snapshot.apiAccesses, input.scanStartedAtMs, input.normalizedUrl),
-    collectionSurfaceObservations: collectionSurfaceObservationsFromRows(
-      snapshot.collectionRows,
-      input.scanStartedAtMs,
-      input.normalizedUrl,
-    ),
+    collectionSurfaceInventory,
+    collectionSurfaceObservations: legacyCollectionSurfaceObservationsFromInventory(collectionSurfaceInventory),
     domText: snapshot.domText,
     renderedPolicyLinks: retainedRenderedPolicyLinks(snapshot.links, snapshot.pageUrl || input.normalizedUrl),
   };
@@ -9329,108 +9436,16 @@ function uniqueRejectionReasons(
   return unique([...values]) as NonNullable<ConsentUiObservation["inventoryDiagnostics"]>["rejectionReasons"];
 }
 
-function classifyCollectionSurface(input: {
-  fieldTypes: string[];
-  labels: string[];
-}): CollectionSurfaceObservation["surfaceType"] {
-  const haystack = `${input.fieldTypes.join(" ")} ${input.labels.join(" ")}`.toLowerCase();
-  if (/search/.test(haystack)) {
-    return "search";
-  }
-  if (/newsletter|subscribe|email updates|sign up/.test(haystack)) {
-    return "newsletter";
-  }
-  if (/contact|message|support/.test(haystack)) {
-    return "contact";
-  }
-  if (/login|sign in|account|register|password/.test(haystack)) {
-    return "account";
-  }
-  if (/checkout|payment|billing|shipping|cart/.test(haystack)) {
-    return "checkout";
-  }
-  return input.fieldTypes.length > 0 ? "generic_form" : "other";
-}
-
-async function captureCollectionSurfaceObservations(
+async function captureCollectionSurfaceInventory(
   page: Page,
   scanStartedAtMs: number,
   pageUrl: string,
-): Promise<CollectionSurfaceObservation[]> {
-  const rows = await page.evaluate(() => {
-    const textFor = (element: Element) => {
-      const labels = new Set<string>();
-      const id = element.getAttribute("id");
-      const ariaLabel = element.getAttribute("aria-label");
-      const placeholder = element.getAttribute("placeholder");
-      const name = element.getAttribute("name");
-      const type = element.getAttribute("type");
-      const role = element.getAttribute("role");
-      if (ariaLabel) labels.add(ariaLabel);
-      if (placeholder) labels.add(placeholder);
-      if (name) labels.add(name);
-      if (type) labels.add(type);
-      if (role) labels.add(role);
-      if (id) {
-        document.querySelectorAll(`label[for="${CSS.escape(id)}"]`).forEach((label) => {
-          const text = label.textContent?.trim();
-          if (text) labels.add(text);
-        });
-      }
-      const closestLabel = element.closest("label")?.textContent?.trim();
-      if (closestLabel) labels.add(closestLabel);
-      return [...labels].map((label) => label.replace(/\s+/g, " ").trim()).filter(Boolean).slice(0, 6);
-    };
-    return [...document.querySelectorAll("input, textarea, select")]
-      .filter((element) => {
-        const input = element as HTMLInputElement;
-        const type = (input.getAttribute("type") || "").toLowerCase();
-        return !["hidden", "submit", "button", "reset", "image"].includes(type);
-      })
-      .slice(0, 40)
-      .map((element, index) => {
-        const input = element as HTMLInputElement;
-        const form = element.closest("form");
-        const formText = form?.textContent?.replace(/\s+/g, " ").trim().slice(0, 160);
-        return {
-          fieldType: (input.getAttribute("type") || element.tagName.toLowerCase()).toLowerCase(),
-          index,
-          labels: [...new Set([...textFor(element), ...(formText ? [formText] : [])])].slice(0, 8),
-        };
-      });
-  }).catch(() => []);
-
-  return collectionSurfaceObservationsFromRows(rows, scanStartedAtMs, pageUrl);
-}
-
-function collectionSurfaceObservationsFromRows(
-  rows: Array<{ fieldType: string; labels: string[] }>,
-  scanStartedAtMs: number,
-  pageUrl: string,
-): CollectionSurfaceObservation[] {
-  return rows.slice(0, 25).map((row, index) => {
-    const labels = row.labels.map((label) => label.slice(0, 120)).filter(Boolean);
-    const fieldTypes = [...new Set([row.fieldType].filter(Boolean))];
-    const surfaceType = classifyCollectionSurface({ fieldTypes, labels });
-    const haystack = labels.join(" ").toLowerCase();
-    return {
-      observationId: `collection_surface_pre_consent_${index}`,
-      observedAtMs: elapsed(scanStartedAtMs),
-      sourceScanner: SOURCE_SCANNER,
-      scenario: SCENARIO,
-      consentStateAtTime: "pre_consent",
-      pageUrl,
-      surfaceType,
-      controlCount: 1,
-      fieldTypes,
-      labels,
-      hasEmailField: fieldTypes.includes("email") || /email|e-mail/.test(haystack),
-      hasSensitiveFieldHint: /health|medical|password|ssn|social security|credit card|card number|birth|date of birth/.test(haystack),
-      evidenceRefs: [],
-      confidence: labels.length > 0 ? 0.82 : 0.68,
-      directVsInferred: "direct",
-    };
-  });
+): Promise<CollectionSurfaceInventory> {
+  const snapshot = await captureConsolidatedPageEvidenceSnapshot(page);
+  return buildCollectionSurfaceInventory({
+    ...snapshot.collectionCapture,
+    pageUrl: snapshot.collectionCapture.pageUrl || pageUrl,
+  }, scanStartedAtMs);
 }
 
 async function captureTransportSecurityObservation(input: {

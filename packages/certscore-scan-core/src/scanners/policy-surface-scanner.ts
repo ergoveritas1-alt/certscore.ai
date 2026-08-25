@@ -8884,7 +8884,9 @@ export function retainedArticle13SectionEvidenceFromSections(
       return [];
     }
     const canonicalMatches = canonicalMatchesBySection.get(selected) ?? [];
-    const excerpt = bestSectionExcerptForProfile(selected, profile, canonicalMatches);
+    const excerpt = rowSpecificPolicyExcerpt(
+      bestSectionExcerptForProfile(selected, profile, canonicalMatches),
+    );
     const signalObserved = sectionEvidenceStatus(
       profile,
       excerpt,
@@ -8912,6 +8914,14 @@ export function retainedArticle13SectionEvidenceFromSections(
           : undefined,
     }];
   });
+}
+
+function rowSpecificPolicyExcerpt(value: string): string {
+  const excerpt = normalizeWhitespace(value);
+  const firstUrlIndex = excerpt.search(/\bhttps?:\/\//i);
+  return firstUrlIndex >= 80
+    ? excerpt.slice(0, firstUrlIndex).trim()
+    : excerpt;
 }
 
 function bestSectionForProfile(

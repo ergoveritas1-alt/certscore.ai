@@ -1245,6 +1245,23 @@ export function buildCookieInventoryGroupRows(rows: RuntimeCookieEvidenceRow[], 
   });
 }
 
+function mergeGroupedTrackerRequestCount(
+  existing: Pick<TrackerInventoryGroupRow, "domains" | "requestCount">,
+  candidate: Pick<TrackerInventoryGroupRow, "domains" | "requestCount">
+) {
+  if (existing.requestCount === null) return candidate.requestCount;
+  if (candidate.requestCount === null) return existing.requestCount;
+
+  const hasProvablyDisjointDomains =
+    existing.domains.length > 0 &&
+    candidate.domains.length > 0 &&
+    candidate.domains.every((domain) => !existing.domains.includes(domain));
+
+  return hasProvablyDisjointDomains
+    ? existing.requestCount + candidate.requestCount
+    : Math.max(existing.requestCount, candidate.requestCount);
+}
+
 export function buildTrackerInventoryGroupRows(rows: TrackerInventoryRow[]) {
   const grouped = new Map<string, TrackerInventoryGroupRow>();
   for (const row of rows) {
@@ -1300,7 +1317,7 @@ export function buildTrackerInventoryGroupRows(rows: TrackerInventoryRow[]) {
       regulatoryRelevance: uniqueStrings([...existing.regulatoryRelevance, ...candidate.regulatoryRelevance]),
       attributionSignatures: uniqueStrings([...existing.attributionSignatures, ...candidate.attributionSignatures]),
       priority: priorityWeight(candidate.priority) > priorityWeight(existing.priority) ? candidate.priority : existing.priority,
-      requestCount: Math.max(existing.requestCount ?? 0, candidate.requestCount ?? 0) || existing.requestCount || candidate.requestCount,
+      requestCount: mergeGroupedTrackerRequestCount(existing, candidate),
       syncedIdentifiers: uniqueStrings([...(existing.syncedIdentifiers ?? []), ...(candidate.syncedIdentifiers ?? [])])
     });
   }
@@ -1471,9 +1488,9 @@ export function buildRuntimeInventoryGroupRows(input: {
 
 /**
  * Preserve one display row for each retained cookie and tracker observation.
- * The grouped projection remains available for summary cards and charts; this
- * projection is intentionally row-level so the inventory table does not hide
- * individual cookie names or tracker observations behind vendor aggregation.
+ * This projection is intentionally row-level so the inventory table and its
+ * summary charts do not hide or double-count individual cookie names or tracker
+ * observations behind vendor aggregation.
  */
 export function buildRuntimeInventoryUngroupedRows(input: {
   cookieRows: RuntimeCookieEvidenceRow[];
@@ -1493,7 +1510,7 @@ export function buildRuntimeInventoryUngroupedRows(input: {
   ).filter((row) => row.type === "cookie");
   const trackerRows = input.trackerRows.flatMap((trackerRow) =>
     buildRuntimeInventoryGroupRows({
-      cookieRows: input.cookieRows,
+      cookieRows: [],
       dataFlows: input.dataFlows,
       firstPartyDomain: input.firstPartyDomain,
       requestRows: input.requestRows,

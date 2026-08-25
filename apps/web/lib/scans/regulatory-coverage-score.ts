@@ -11,9 +11,9 @@ type RegulatoryCoverageRow = {
   status: string;
 };
 
-type RegulatoryCoverageRowConfig = {
-  weight: number;
-};
+type RegulatoryCoverageRowConfig =
+  | { weight: number }
+  | { scoreEffect: "none" };
 
 export type RegulatoryCoverageScore = {
   coverageConfidence: "high" | "medium" | "low" | "insufficient";
@@ -73,6 +73,7 @@ const GDPR_EPRIVACY_ROW_WEIGHTS: Record<string, RegulatoryCoverageRowConfig> = {
   preference_withdrawal_control: { weight: 7 },
   privacy_notice_availability: { weight: 5 },
   processing_purposes_disclosure: { weight: 5 },
+  public_collection_surfaces: { scoreEffect: "none" },
   recipients_vendor_categories_disclosure: { weight: 5 },
   reject_all_path_availability: { weight: 10 },
   retention_disclosure_observed: { weight: 5 },
@@ -336,11 +337,15 @@ export function deriveRegulatoryCoverageScore(input: {
   let coveredWeight = 0;
 
   for (const row of input.rows) {
+    const config = configs[row.id];
+    if (config && "scoreEffect" in config && config.scoreEffect === "none") {
+      continue;
+    }
     const factor = getRowFactor(row);
     if (factor === null) {
       continue;
     }
-    const weight = configs[row.id]?.weight;
+    const weight = config && "weight" in config ? config.weight : undefined;
     if (weight === undefined) {
       continue;
     }

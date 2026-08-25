@@ -11,6 +11,64 @@ const completedInputBase = {
   scanCompleted: true
 };
 
+function collectionSurfaceAssessmentFixture(status: "observed" | "limited" | "not_observed" | "not_testable") {
+  const hasForm = status === "observed" || status === "limited";
+  return {
+    contractVersion: "certscore.collection-surface-assessment.v1",
+    scanId: "scan-collection",
+    assessedAt: "2026-08-24T12:00:00.000Z",
+    assessmentStatus: status,
+    sourceInventoryContractVersion: status === "not_testable" ? null : "certscore.collection-surface-inventory.v1",
+    sourceHash: status === "not_testable" ? null : "a".repeat(64),
+    sourceLane: "runtime_evidence",
+    pageUrl: status === "not_testable" ? null : "https://example.test/",
+    coverage: status === "not_testable" ? null : {
+      status: status === "limited" ? "limited" : "complete",
+      documentScope: "main_document",
+      interactionMode: "none",
+      candidateFormCount: status === "limited" ? 43 : hasForm ? 1 : 0,
+      retainedFormCount: hasForm ? 1 : 0,
+      candidateFieldCount: status === "limited" ? 100 : hasForm ? 1 : 0,
+      retainedFieldCount: hasForm ? 1 : 0,
+      inspectedFormCandidateCount: status === "limited" ? 43 : hasForm ? 1 : 0,
+      inspectedFieldCandidateCount: status === "limited" ? 100 : hasForm ? 1 : 0,
+      candidateScanTruncated: status === "limited",
+      retentionTruncated: status === "limited",
+      reasonCodes: status === "limited" ? ["candidate_scan_truncated"] : [],
+    },
+    forms: hasForm ? [{
+      formRef: "form-0",
+      structure: "native_form",
+      surfaceType: "newsletter",
+      pageUrl: "https://example.test/",
+      method: "post",
+      actionRelationship: "self",
+      candidateFieldCount: 1,
+      retainedFieldCount: 1,
+      fieldsTruncated: false,
+      fields: [{
+        fieldRef: "field-0",
+        elementType: "input",
+        inputType: "email",
+        semanticCategory: "email",
+        label: "Email",
+        required: true,
+        disabled: false,
+        readOnly: false,
+        evidenceRefs: [],
+        confidence: 0.9,
+        directVsInferred: "direct",
+      }],
+      evidenceRefs: [],
+      confidence: 0.9,
+      directVsInferred: "direct",
+    }] : [],
+    limitationKeys: status === "not_testable" ? ["runtime_evidence_lane_unverified"] : status === "limited" ? ["candidate_scan_truncated"] : [],
+    evidenceRefs: [],
+    productionProjectable: true,
+  };
+}
+
 function canonicalizeLegacyArticle13TestSummary(summary: Record<string, unknown>) {
   const rawSignals = Array.isArray(summary.article13DisclosureSignals)
     ? summary.article13DisclosureSignals.filter((value): value is Record<string, unknown> =>
@@ -148,6 +206,28 @@ function deriveGdprEprivacyCoveragePolicyOutcomes(
     runtimeArtifacts: canonicalRuntimeArtifacts,
   });
 }
+
+test("public collection surfaces remain contextual and fail closed when unavailable", () => {
+  const observed = deriveGdprEprivacyCoveragePolicyOutcomes({
+    ...completedInputBase,
+    runtimeArtifacts: { collectionSurfaceAssessment: collectionSurfaceAssessmentFixture("observed") },
+  });
+  assert.equal(observed.public_collection_surfaces?.status, "Observed");
+  assert.match(observed.public_collection_surfaces?.limitation ?? "", /not a negative finding/i);
+
+  const limited = deriveGdprEprivacyCoveragePolicyOutcomes({
+    ...completedInputBase,
+    runtimeArtifacts: { collectionSurfaceAssessment: collectionSurfaceAssessmentFixture("limited") },
+  });
+  assert.equal(limited.public_collection_surfaces?.status, "Observed");
+  assert.match(limited.public_collection_surfaces?.limitation ?? "", /truncated/i);
+
+  const unavailable = deriveGdprEprivacyCoveragePolicyOutcomes({
+    ...completedInputBase,
+    runtimeArtifacts: { collectionSurfaceAssessment: collectionSurfaceAssessmentFixture("not_testable") },
+  });
+  assert.equal(unavailable.public_collection_surfaces?.status, "Not testable");
+});
 
 function makeCanonicalConsentAssessment(input: {
   controls?: Array<{
@@ -1183,6 +1263,31 @@ test("deriveGdprEprivacyCoveragePolicyOutcomes keeps weak retention wording neut
   });
 
   assert.equal(outcomes.retention_disclosure_observed?.status, "Not confirmed");
+});
+
+test("deriveGdprEprivacyCoveragePolicyOutcomes credits substantive purpose-bound retention criteria", () => {
+  const evidenceText =
+    "Retention. We only keep Information for as long as we need it to fulfil the purpose we are using it for, as permitted by law.";
+  const normalizedConcerns = makeGdprTransparencyConcerns([
+    makeGdprTransparencyArticle13Signal({
+      disclosureType: "data_retention",
+      evidenceText,
+      matchedLocale: "en",
+      matchedTerm: "we only keep information for as long as we need",
+    }),
+  ]);
+  const outcomes = deriveGdprEprivacyCoveragePolicyOutcomes({
+    ...completedInputBase,
+    normalizedConcerns,
+    runtimeArtifacts: {},
+    snapshot: {},
+  });
+
+  assert.equal(outcomes.retention_disclosure_observed?.status, "Observed");
+  assert.match(
+    outcomes.retention_disclosure_observed?.evidenceRefs.join(" ") ?? "",
+    /fulfil the purpose/i,
+  );
 });
 
 test("deriveGdprEprivacyCoveragePolicyOutcomes treats guessed-only privacy notice as not confirmed", () => {
@@ -6690,7 +6795,7 @@ test("persistent footer preference link is contextual without becoming first-lay
   assert.match(outcome?.limitation ?? "", /persistent preferences or cookie-settings link/i);
 });
 
-test("no granular controls anywhere remains a potential gap", () => {
+test("Accept without Reject or Options keeps missing Options as refusal-path context", () => {
   const assessment = makeCanonicalConsentAssessment({
     controls: [
       { actionType: "accept_all", intent: "accept", label: "Accept all" },
@@ -6703,8 +6808,13 @@ test("no granular controls anywhere remains a potential gap", () => {
   });
 
   const outcome = outcomes.options_settings_preferences_control;
-  assert.equal(outcome?.status, "Gap observed");
+  assert.equal(outcomes.reject_all_path_availability?.status, "Review signal");
+  assert.equal(outcome?.status, "Not observed");
   assert.equal(outcome?.criticalEvidence.retainedEvidence.balancedAcceptDeclineWithoutFirstLayerSettings, undefined);
+  assert.equal(outcome?.criticalEvidence.retainedEvidence.optionsAbsenceSupportsRefusalPathOnly, true);
+  assert.equal(outcome?.criticalEvidence.retainedEvidence.scoreEffect, "none");
+  assert.match(outcome?.limitation ?? "", /supporting context for refusal-path review/i);
+  assert.match(outcome?.limitation ?? "", /rather than a standalone options-control gap/i);
 });
 
 test("limited canonical consent assessment cannot create missing-control findings", () => {

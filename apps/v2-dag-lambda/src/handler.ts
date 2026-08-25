@@ -2113,6 +2113,9 @@ export function mergeLocalV2DagLambdaShardBundles(input: {
   workerBundles: CanonicalEvidenceBundle[];
 }): CanonicalEvidenceBundle {
   const bundles = [input.base, ...input.workerBundles];
+  const runtimeEvidenceBundle = bundles.find((bundle) =>
+    bundle.scanLaneRuns.some((lane) => lane.laneId === "runtime_evidence")
+  );
   const homepageScreenshot = bundles.find(
     (bundle) => bundle.homepageScreenshot?.status === "withheld" &&
       bundle.homepageScreenshot.reason === "sensitive_visual_content",
@@ -2135,6 +2138,7 @@ export function mergeLocalV2DagLambdaShardBundles(input: {
     storageSnapshots: dedupeByArtifactId(bundles.flatMap((bundle) => bundle.storageSnapshots)),
     scriptEvents: dedupeByEventId(bundles.flatMap((bundle) => bundle.scriptEvents)),
     iframeEvents: dedupeByEventId(bundles.flatMap((bundle) => bundle.iframeEvents)),
+    collectionSurfaceInventory: runtimeEvidenceBundle?.collectionSurfaceInventory,
     consentUiObservations: dedupeByField(bundles.flatMap((bundle) => bundle.consentUiObservations), "observationId"),
     consentInteractionEvents: dedupeByField(bundles.flatMap((bundle) => bundle.consentInteractionEvents), "eventId"),
     consentFlowObservations: dedupeByField(bundles.flatMap((bundle) => bundle.consentFlowObservations), "observationId"),
@@ -2263,6 +2267,7 @@ export function mergeLocalV2DagLambdaEvidenceLaneBundles(input: {
     storageSnapshots: runtimeEvidence.storageSnapshots,
     scriptEvents: runtimeEvidence.scriptEvents,
     iframeEvents: runtimeEvidence.iframeEvents,
+    collectionSurfaceInventory: runtimeEvidence.collectionSurfaceInventory,
     collectionSurfaceObservations: runtimeEvidence.collectionSurfaceObservations ?? [],
     consentUiObservations: consentProof.consentUiObservations,
     consentInteractionEvents: consentProof.consentInteractionEvents,

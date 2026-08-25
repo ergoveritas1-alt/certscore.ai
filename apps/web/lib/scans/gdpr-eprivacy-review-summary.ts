@@ -190,7 +190,9 @@ function hasUsableObservedTransparencyEvidence(item: GdprEprivacyCoverageCheckli
 export function deriveGdprEprivacyUsableCoverageSummary(
   items: GdprEprivacyCoverageChecklistItem[]
 ) {
-  const inScopeRows = items.filter((item) => item.assessmentStatus !== "not_applicable");
+  const inScopeRows = items.filter((item) =>
+    item.assessmentStatus !== "not_applicable" && item.id !== "public_collection_surfaces"
+  );
   const extractionLimitedTransparencyRows = inScopeRows.filter((item) =>
     getString(getRetainedEvidence(item), ["signalObserved", "signal_observed"]) === "not_confirmed_extraction_limited"
   );

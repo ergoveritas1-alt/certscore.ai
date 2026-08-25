@@ -1,5 +1,6 @@
 import {
   classifyGdprTransparencyTopics,
+  collectionSurfaceAssessmentSchema,
   consentControlAssessmentSchema,
   evaluateLegalFrameworkValidity,
   hasStaleLegalFrameworkReference,
@@ -160,6 +161,7 @@ export type ConsentOptionsControlProminenceState =
   | "inline_link"
   | "persistent_link"
   | "balanced_accept_decline_no_first_layer_settings"
+  | "accept_without_refusal_or_settings"
   | "no_granular_controls_retained"
   | "insufficient_retained_evidence";
 
@@ -3045,6 +3047,55 @@ function getScanNoGoAssessment(runtimeArtifacts: Record<string, unknown> | null 
   return getRuntimeRecord(runtimeArtifacts, ["scanNoGoAssessment", "scan_no_go_assessment"]);
 }
 
+function buildCollectionSurfaceAssessmentConcerns(
+  runtimeArtifacts: Record<string, unknown> | null | undefined,
+  domainContext?: ScanDomainContext,
+): NormalizedConcern[] {
+  const candidate = getRuntimeRecord(runtimeArtifacts, [
+    "collectionSurfaceAssessment",
+    "collection_surface_assessment",
+  ]);
+  const parsed = collectionSurfaceAssessmentSchema.safeParse(candidate);
+  if (
+    !parsed.success ||
+    (parsed.data.assessmentStatus !== "observed" && parsed.data.assessmentStatus !== "limited") ||
+    parsed.data.forms.length === 0
+  ) {
+    return [];
+  }
+  const fieldCount = parsed.data.forms.reduce((total, form) => total + form.fields.length, 0);
+  const concern = buildConcernFromSharedInput({
+    categoryId: "privacy",
+    description: "Bounded public data-entry form and field metadata was retained from the rendered main document.",
+    domainContext,
+    evidence: parsed.data.evidenceRefs,
+    observedValue: `${parsed.data.forms.length} forms, ${fieldCount} fields`,
+    originKey: "collection_surface.inventory.observed",
+    originType: "runtime_artifact",
+    rawEvidence: {
+      collectionSurfaceAssessment: parsed.data,
+      collectionSurfaceInventoryObserved: true,
+      evidenceRefs: parsed.data.evidenceRefs,
+      pageUrl: parsed.data.pageUrl,
+      runtimeCoverageStatus: parsed.data.coverage?.status ?? "failed",
+    },
+    severity: "low",
+    signalKey: "privacy.collection_surface_inventory_observed",
+    signalLabel: "Public data collection surfaces observed",
+    signalSource: "runtime_artifact_signal",
+    sourceType: "signal",
+    title: "Public data collection surfaces observed",
+  });
+  return [{
+    ...concern,
+    allowedNarrativeTier: parsed.data.assessmentStatus === "observed" ? "strong" : "moderate",
+    externalSurfacingEligibility: "suppress",
+    promotionEligibility: "internal_only",
+    regulatoryChecklistEligibility: "observed",
+    suggestedUnifiedFindingId: undefined,
+  }];
+}
+
 function getRuntimeCoverageSummary(runtimeArtifacts: Record<string, unknown> | null | undefined) {
   return getRuntimeRecord(runtimeArtifacts, [
     "runtimeCoverage",
@@ -3482,7 +3533,10 @@ function buildConsentOptionsControlProminenceConcerns(
                   : assessment.controls.accept.state === "observed" &&
                       assessment.controls.reject.state === "observed"
                     ? "balanced_accept_decline_no_first_layer_settings"
-                    : "no_granular_controls_retained";
+                    : assessment.controls.accept.state === "observed" &&
+                        assessment.controls.reject.state === "not_observed"
+                      ? "accept_without_refusal_or_settings"
+                      : "no_granular_controls_retained";
   const retainedControls = [...firstLayerOptions, ...persistentOptions]
     .slice(0, 8)
     .map((evidence) => ({
@@ -3945,6 +3999,7 @@ export function buildNormalizedConcerns(input: {
     }),
     ...buildScanNoGoAssessmentConcerns(input.runtimeArtifacts, input.domainContext),
     ...buildRuntimeCoverageLimitationConcerns(input.runtimeArtifacts, input.domainContext),
+    ...buildCollectionSurfaceAssessmentConcerns(input.runtimeArtifacts, input.domainContext),
     ...buildConsentSurfaceAssessmentConcerns(input.runtimeArtifacts, input.domainContext),
     ...buildConsentNoSurfaceConcerns(input.runtimeArtifacts, input.domainContext),
     ...buildConsentControlInventoryConcerns(input.runtimeArtifacts, input.domainContext),

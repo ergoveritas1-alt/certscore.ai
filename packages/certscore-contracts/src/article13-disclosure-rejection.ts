@@ -78,7 +78,7 @@ export function hasSubstantiveProcessingPurposesEvidence(value: string) {
 export function hasSubstantiveLegalBasisEvidence(value: string) {
   const text = normalizeArticle13Whitespace(value);
   const explicitBasisFraming =
-    /\b(?:legal bas(?:is|es)|lawful bas(?:is|es)|basis for processing|article\s*6|pursuant to article\s*6)\b/i.test(text);
+    /\b(?:legal bas(?:is|es)|lawful bas(?:is|es)|basis for processing|art(?:icle)?\.?\s*6|pursuant to art(?:icle)?\.?\s*6)\b/i.test(text);
   if (explicitBasisFraming) {
     return true;
   }
@@ -104,6 +104,25 @@ export function hasSubstantiveLegalBasisEvidence(value: string) {
   });
 }
 
+function hasExplicitlyNegatedDpoDesignation(value: string) {
+  const text = normalizeArticle13Whitespace(value);
+  const rolePattern = "(?:data protection officer|dpo)";
+  return [
+    new RegExp(`\\b(?:do|does|did) not(?: currently)? (?:have|appoint|designate|name|publish|employ)\\b.{0,80}\\b${rolePattern}\\b`, "i"),
+    new RegExp(`\\b(?:have|has|had) not(?: currently)? (?:appointed|designated|named|published|employed)\\b.{0,80}\\b${rolePattern}\\b`, "i"),
+    new RegExp(`\\bno(?: separate| formal| appointed| designated| named){0,4} ${rolePattern}\\b`, "i"),
+    new RegExp(`\\b${rolePattern}\\b.{0,80}\\b(?:has|have|is|was) not (?:been )?(?:appointed|designated|named|assigned)\\b`, "i"),
+  ].some((pattern) => pattern.test(text));
+}
+
+function hasSubstantivePrivacyContactPoint(value: string) {
+  const text = normalizeArticle13Whitespace(value);
+  return (
+    /\bprivacy contact point\b.{0,220}(?:@|email|e-mail|mail|address|phone|telephone|contact|request form)/i.test(text) ||
+    /(?:@|email|e-mail|mail|address|phone|telephone|contact|request form).{0,220}\bprivacy contact point\b/i.test(text)
+  );
+}
+
 export function article13DisclosureRejectReason(
   value: string,
   disclosureType: Article13DisclosureType | string | undefined,
@@ -113,6 +132,13 @@ export function article13DisclosureRejectReason(
   const text = normalizeArticle13Whitespace(value);
   if (text.length < 35) {
     return "low_confidence_or_ambiguous";
+  }
+  if (
+    disclosureType === "dpo_contact" &&
+    hasExplicitlyNegatedDpoDesignation(text) &&
+    !hasSubstantivePrivacyContactPoint(text)
+  ) {
+    return "insufficient_row_specific_terms";
   }
   if (
     disclosureType === "international_transfers" &&
@@ -466,7 +492,7 @@ function hasScanCoreRowSpecificArticle13Terms(
     case "international_transfers":
       return /\b(?:data transfers?|international transfer|cross-border transfer|standard contractual clauses|adequacy decision|servers around the world|processed? (?:on servers )?outside (?:your )?country|outside (?:of )?the country where you live|legal frameworks? relating to the transfer of data|data protection laws vary|outside (?:the )?(?:eea|european economic area|uk|united kingdom|eu|european union)|third countr(?:y|ies)|data privacy framework|\bdpf\b|privacy shield|(?:personal data|personal information|information|data).{0,160}(?:transferred|processed|stored|accessed).{0,180}(?:united states|other jurisdictions|other countries|outside)|transfer (?:your )?(?:personal )?(?:data|information).{0,220}(?:located )?outside (?:of )?(?:your )?country|(?:third parties|service providers?|business partners?|processors?|vendors?|recipients?).{0,220}outside (?:the )?(?:eea|european economic area|uk|united kingdom|eu|european union)|agreements?.{0,220}(?:personal information|personal data|data|information).{0,220}(?:protect|protected|safeguard|outside (?:the )?(?:eea|european economic area|uk|united kingdom|eu|european union)))\b/i.test(text);
     case "dpo_contact":
-      return /\b(?:data protection officer|\bdpo\b|data protection contact|privacy counsel.{0,180}(?:contact|email|mail|address|@)|(?:contact|email|mail|address|@).{0,180}privacy counsel)\b/i.test(text);
+      return /\b(?:data protection officer|\bdpo\b|data protection contact|privacy contact point|privacy counsel.{0,180}(?:contact|email|mail|address|@)|(?:contact|email|mail|address|@).{0,180}privacy counsel)\b/i.test(text);
     case "supervisory_authority":
       return /\b(?:(?:lodge|file|submit|make)\s+a\s+complaint.{0,160}(?:supervisory|data protection|regulator|authority|information commissioner)|complaints?.{0,200}(?:data protection authorit(?:y|ies)|supervisory authorit(?:y|ies)|regulator|information commissioner)|complain to (?:(?:a|your|the|our|local)\s+)?(?:(?:data protection|supervisory)\s+)?(?:regulator|authority|information commissioner)|(?:supervisory authority|data protection authority|local data protection authorit(?:y|ies)|information commissioner['’]s office).{0,160}complaint|compliance (?:and|&) cooperation with regulators.{0,320}(?:complaints?|regulatory authorities|local data protection authorities|resolve)|formal written complaints?.{0,180}(?:regulatory authorities|local data protection authorities|regulators?)|unresolved complaints?.{0,180}(?:regulatory authorities|local data protection authorities|regulators?)|regulators?.{0,120}(?:complaints?|authorities|resolve))\b/i.test(text);
     case "automated_decision_making_or_profiling":
@@ -499,7 +525,7 @@ function hasRetainedReportRowSpecificArticle13Terms(
     case "international_transfers":
       return /\b(?:data transfers?.{0,320}(?:servers around the world|outside (?:of )?the country|legal frameworks?|data privacy frameworks?|safeguards)|international transfer|cross-border transfer|standard contractual clauses|adequacy decision|servers around the world|processed? (?:on servers )?outside (?:your )?country|outside (?:of )?the country where you live|legal frameworks? relating to the transfer of data|data protection laws vary|outside (?:the )?(?:eea|european economic area|uk|united kingdom|eu|european union)|third countr(?:y|ies)|data privacy framework|\bdpf\b|privacy shield|(?:personal data|personal information|information|data).{0,160}(?:transferred|processed|stored|accessed).{0,180}(?:united states|other jurisdictions|other countries|outside)|transfer (?:your )?(?:personal )?(?:data|information).{0,220}(?:located )?outside (?:of )?(?:your )?country|(?:third parties|third-party|service providers?|business partners?|partners?|vendors?|processors?|subprocessors?|affiliates?|recipients?).{0,260}(?:outside (?:the )?(?:eea|european economic area|uk|united kingdom|eu|european union)|third countr(?:y|ies)|foreign countr(?:y|ies)|other countries|countries outside)|agreements?.{0,260}(?:personal information|personal data|data|information).{0,260}(?:protect|protected|safeguard|outside (?:the )?(?:eea|european economic area|uk|united kingdom|eu|european union)))\b/i.test(text);
     case "dpo_contact":
-      return /\b(?:data protection officer|\bdpo\b|data protection contact|privacy counsel.{0,180}(?:contact|email|mail|address|@)|(?:contact|email|mail|address|@).{0,180}privacy counsel)\b/i.test(text);
+      return /\b(?:data protection officer|\bdpo\b|data protection contact|privacy contact point|privacy counsel.{0,180}(?:contact|email|mail|address|@)|(?:contact|email|mail|address|@).{0,180}privacy counsel)\b/i.test(text);
     case "supervisory_authority":
       return /\b(?:(?:lodge|file|submit|make)\s+a\s+complaint.{0,160}(?:supervisory|data protection|regulator|authority|information commissioner)|complaints?.{0,200}(?:data protection authorit(?:y|ies)|supervisory authorit(?:y|ies)|regulator|information commissioner)|complain to (?:(?:a|your|the|our|local)\s+)?(?:(?:data protection|supervisory)\s+)?(?:regulator|authority|information commissioner)|(?:supervisory authority|data protection authority|local data protection authorit(?:y|ies)|information commissioner['’]s office).{0,160}complaint|compliance (?:and|&) cooperation with regulators.{0,320}(?:complaints?|regulatory authorities|local data protection authorities|resolve)|formal written complaints?.{0,180}(?:regulatory authorities|local data protection authorities|regulators?)|unresolved complaints?.{0,180}(?:regulatory authorities|local data protection authorities|regulators?)|regulators?.{0,120}(?:complaints?|authorities|resolve))\b/i.test(text);
     case "automated_decision_making_or_profiling":
@@ -543,7 +569,7 @@ function hasLocalizedArticle13EvidenceContext(
     case "controller_contact":
       return /(?:controller|privacy contact|data protection contact|verantwortlicher|verantwortlich für die datenverarbeitung|responsable du traitement|responsable del tratamiento|titolare del trattamento|titolari del trattamento|verwerkingsverantwoordelijke|administrator danych|controlador dos dados|responsável pelo tratamento|contato do controlador)/i.test(normalized);
     case "dpo_contact":
-      return /(?:data protection officer|dpo|privacy counsel|datenschutzbeauftrag|délégué à la protection|delegado de protección|responsabile della protezione|functionaris voor gegevensbescherming|inspektor ochrony danych|iod|encarregado de proteção de dados|responsabilul cu protecția datelor|pověřenec pro ochranu osobních údajů|υπεύθυνος προστασίας δεδομένων|adatvédelmi tisztviselő|databeskyttelsesrådgiver|tietosuojavastaava|zodpovedná osoba pre ochranu osobných údajov|длъжностно лице по защита на данните|službenik za zaštitu podataka|personvernombud|pooblaščena oseba za varstvo podatkov|duomenų apsaugos pareigūnas|datu aizsardzības speciālists|andmekaitsespetsialist|відповідальна особа із захисту даних|уповноважений із захисту даних|veri koruma görevlisi|資料保護長)/i.test(normalized) &&
+      return /(?:data protection officer|dpo|privacy contact point|privacy counsel|datenschutzbeauftrag|délégué à la protection|delegado de protección|responsabile della protezione|functionaris voor gegevensbescherming|inspektor ochrony danych|iod|encarregado de proteção de dados|responsabilul cu protecția datelor|pověřenec pro ochranu osobních údajů|υπεύθυνος προστασίας δεδομένων|adatvédelmi tisztviselő|databeskyttelsesrådgiver|tietosuojavastaava|zodpovedná osoba pre ochranu osobných údajov|длъжностно лице по защита на данните|službenik za zaštitu podataka|personvernombud|pooblaščena oseba za varstvo podatkov|duomenų apsaugos pareigūnas|datu aizsardzības speciālists|andmekaitsespetsialist|відповідальна особа із захисту даних|уповноважений із захисту даних|veri koruma görevlisi|資料保護長)/i.test(normalized) &&
         /(?:reach|reached|available|contact|email|mail|address|postal|@\w|erreichen|kontakt|unter|postadresse|joignable|répond|repond|adresse|atiende|correo|contattar|contatto|risponde|indirizzo|bereikbaar|helpt|odpowiada|pytania|contato|endereço|correio eletrônico|聯絡|聯繫|聯絡方式|datele de contact|contacta|adresă|kontaktní údaje|kontaktovat|στοιχεία επικοινωνίας|επικοινωνήσετε|elérhetőségei|kapcsolatba léphet|kontaktoplysninger|kontakte|yhteystiedot|ottaa yhteyttä|kontaktné údaje|kontaktovať|данни за контакт|свържете|kontaktni podaci|kontaktirati|kontaktopplysninger|kontaktni podatki|stopite v stik|kontaktiniai duomenys|susisiekti|kontaktinformācija|sazināties|kontaktandmed|võtta ühendust|контактні дані|зв'язатися|iletişim bilgileri|iletişime geçin)/i.test(normalized);
     case "processing_purposes":
       return /(?:purpose|purposes|why we process|we process|we use|zweck|zwecke|verarbeiten|verarbeitet|finalité|finalités|tratamos|finalidad|finalità|trattiamo|doeleinden|verwerken|cele|przetwarzamy|finalidade|finalidades|utilizamos|usamos)/i.test(normalized);

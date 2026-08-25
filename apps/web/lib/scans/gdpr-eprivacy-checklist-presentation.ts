@@ -16,7 +16,10 @@ import {
 } from "./gdpr-eprivacy-assessment-direction";
 import { deriveGdprEprivacyCoverageChecklistRowRationale } from "./gdpr-eprivacy-checklist-rationale";
 import { deriveGdprEprivacyReviewSummary } from "./gdpr-eprivacy-review-summary";
-import { getReportableGdprEprivacyCoverageItems } from "./gdpr-eprivacy-reportable-rows";
+import {
+  getReportableGdprEprivacyCoverageItems,
+  isReportableGdprEprivacyCoverageRowId,
+} from "./gdpr-eprivacy-reportable-rows";
 import { deriveRegulatoryCoverageScore, type RegulatoryCoverageScore } from "./regulatory-coverage-score";
 import {
   GDPR_TRANSPARENCY_REPORT_ROW_ID_SET,
@@ -216,4 +219,41 @@ export function isGdprEprivacyChecklistPresentation(
     Boolean(candidate.reviewSummary && typeof candidate.reviewSummary === "object") &&
     Boolean(candidate.summaryCounts && typeof candidate.summaryCounts === "object")
   );
+}
+
+export function filterGdprEprivacyChecklistPresentationForReport(
+  presentation: GdprEprivacyChecklistPresentation,
+): GdprEprivacyChecklistPresentation {
+  const rows = presentation.rows.filter((row) =>
+    isReportableGdprEprivacyCoverageRowId(row.id)
+  );
+  if (rows.length === presentation.rows.length) return presentation;
+  const summaryCounts = rows.reduce<GdprEprivacyAssessmentSummaryCounts>((counts, row) => {
+    if (row.assessmentDirection === "technical_limitation") {
+      counts.technical_limitation += 1;
+    } else if (row.assessmentDirection === "positive_signal") {
+      counts.positive_signal += 1;
+    } else if (row.assessmentDirection === "neutral_signal") {
+      counts.neutral_signal += 1;
+    } else if (row.assessmentStatus === "gap_observed" || row.status === "Gap observed") {
+      counts.gap_observed += 1;
+    } else if (row.assessmentDirection === "potential_concern") {
+      counts.potential_concern += 1;
+    } else {
+      counts.review_signal += 1;
+    }
+    return counts;
+  }, {
+    gap_observed: 0,
+    neutral_signal: 0,
+    positive_signal: 0,
+    potential_concern: 0,
+    review_signal: 0,
+    technical_limitation: 0,
+  });
+  return {
+    ...presentation,
+    rows,
+    summaryCounts,
+  };
 }

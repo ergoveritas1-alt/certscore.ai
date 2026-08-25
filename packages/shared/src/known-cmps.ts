@@ -218,6 +218,18 @@ export const KNOWN_CMP_REGISTRY: KnownCmpDefinition[] = [
     urlPatterns: [/dsgvo-all-in-one/i, /dsgvoaio/i, /tarteaucitron(?:\.min)?\.js/i]
   },
   {
+    aliases: ["BST DSGVO Cookie", "bst-dsgvo-cookie"],
+    canonicalName: "BST DSGVO Cookie notice plugin, non-TCF",
+    domains: [],
+    domSelectors: [".bst-popup-link"],
+    evidenceTreatment: "cmp_infrastructure",
+    role: "consent management platform",
+    standards: [],
+    urlPatterns: [
+      /(?:^|\/)wp-content\/plugins\/bst-dsgvo-cookie(?:\/|[?#]|$)/i,
+    ],
+  },
+  {
     aliases: ["Borlabs Cookie", "Borlabs Cookie CMP", "BorlabsCookie"],
     canonicalName: "Borlabs Cookie",
     cookieNames: ["borlabs-cookie", "borlabsCookie"],

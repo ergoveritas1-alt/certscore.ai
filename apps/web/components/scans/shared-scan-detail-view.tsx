@@ -15,7 +15,6 @@ import {
   type SignalEnrichmentWorkflowStageStatus
 } from "@website-signal-risk-scanner/shared";
 import { CollapsibleSectionCard } from "./collapsible-section-card";
-import { ConsentControlEvidencePanel } from "./consent-control-evidence-panel";
 import { CopyJsonButton } from "./copy-json-button";
 import { ScanCompletedEvent } from "../analytics/data-layer-events";
 import { DiagnosticsPanel } from "./diagnostics-panel";
@@ -23,6 +22,7 @@ import { EvidenceJsonBlock } from "./evidence-json-block";
 import {
   ExecutiveSummaryCard,
   buildRegulatoryLensesFromUnifiedPackets,
+  type ExecutiveConsentControlProjection,
   type ExecutivePolicySurface,
   type ExecutiveScanInterruption,
   type ExecutiveTimelineEvent
@@ -187,7 +187,9 @@ import { ViewerTimestamp } from "../time/viewer-timestamp";
 import type { CertScoreFinding } from "../../lib/scans/finding-registry";
 import { deriveCanonicalOverallScoreForReport } from "../../server/scans/canonical-overall-score";
 import { deriveSharedScanDetailGdprEprivacyCoverageChecklist } from "../../server/scans/scan-detail-checklist";
-import { getPersistedCanonicalReportProjection } from "../../server/scans/persisted-canonical-report-projection";
+import {
+  getPersistedCanonicalReportProjection,
+} from "../../server/scans/persisted-canonical-report-projection";
 export { deriveCanonicalOverallScoreForReport } from "../../server/scans/canonical-overall-score";
 export { deriveSharedScanDetailGdprEprivacyCoverageChecklist } from "../../server/scans/scan-detail-checklist";
 
@@ -830,13 +832,14 @@ function InventoryPurposeCard({ rows }: { rows: InventoryGroupRow[] }) {
 
 function buildRuntimeInventoryCopyPayload(rows: InventoryGroupRow[]) {
   const copyRows = [
-    ["Type", "Vendor", "Purpose", "Evidence", "First seen", "Cookie name(s)", "Domain", "Destination", "Confidence", "Relationship", "Category", "Priority"],
+    ["Type", "Vendor", "Purpose", "Evidence", "First seen", "Requests", "Cookie name(s)", "Domain", "Destination", "Confidence", "Relationship", "Category", "Priority"],
     ...rows.map((row) => [
       row.type === "cookie" ? "Cookie" : "Tracker",
       row.vendor,
       getInventoryPurposeLabel(row),
       classifyInventoryEvidence(row),
       formatFirstSeenMs(row.firstSeenMs),
+      row.requestCount ?? "—",
       row.cookieNames.join(", ") || "—",
       row.domains.join(", ") || "—",
       row.dataFlows.map((flow) => [
@@ -949,16 +952,30 @@ function InventoryEvidenceCell({ row }: { row: InventoryGroupRow }) {
   return <span className={`inline-flex rounded-md px-1.5 py-0.5 text-[10px] font-semibold leading-4 ${tone}`}>{evidence}</span>;
 }
 
-function InventoryEvidenceSegmentation({ rows }: { rows: InventoryGroupRow[] }) {
-  const rawRecordCount = rows.reduce((total, row) => total + row.observedRecordCount, 0);
+export function buildInventoryEvidenceCounts(
+  rows: Array<Pick<InventoryGroupRow, "macroCategory" | "observedRecordCount" | "priority" | "purpose" | "purposes">>
+) {
   const countEvidence = (classification: ReturnType<typeof classifyInventoryEvidence>) => rows.reduce(
     (total, row) => total + (classifyInventoryEvidence(row) === classification ? row.observedRecordCount : 0),
     0
   );
-  const necessaryCount = countEvidence("Essential");
-  const contextualCount = countEvidence("Contextual");
-  const reviewCount = countEvidence("Review");
-  const nonEssentialCount = countEvidence("Non-essential");
+  return {
+    contextualCount: countEvidence("Contextual"),
+    necessaryCount: countEvidence("Essential"),
+    nonEssentialCount: countEvidence("Non-essential"),
+    rawRecordCount: rows.reduce((total, row) => total + row.observedRecordCount, 0),
+    reviewCount: countEvidence("Review"),
+  };
+}
+
+function InventoryEvidenceSegmentation({ rows }: { rows: InventoryGroupRow[] }) {
+  const {
+    contextualCount,
+    necessaryCount,
+    nonEssentialCount,
+    rawRecordCount,
+    reviewCount,
+  } = buildInventoryEvidenceCounts(rows);
 
   const totalClassified = necessaryCount + contextualCount + nonEssentialCount + reviewCount;
   const necessaryShare = totalClassified > 0 ? (necessaryCount / totalClassified) * 100 : 0;
@@ -1031,7 +1048,7 @@ function RuntimeInventoryTable({
             <InfoTip
               align="start"
               placement="top"
-              text="Each retained cookie and tracker observation is shown as its own row. Summary cards above may still aggregate related observations for readability."
+              text="Rows show retained cookie and tracker observations. Request counts show how many retained third-party request events each tracker row represents."
             />
           </p>
         </summary>
@@ -1045,11 +1062,11 @@ function RuntimeInventoryTable({
         {hasRetainedInventory ? (
           <div className="grid gap-4 px-3.5 pb-5 pt-0 lg:px-5">
           <div className="grid gap-3 lg:grid-cols-3 lg:items-stretch">
-            <InventoryEvidenceSegmentation rows={groupedInventoryRows} />
-            <InventoryPurposeCard rows={groupedInventoryRows} />
+            <InventoryEvidenceSegmentation rows={inventoryRows} />
+            <InventoryPurposeCard rows={inventoryRows} />
             <div className="min-h-0 overflow-visible rounded-xl border border-slate-200 bg-slate-50/70 px-4 py-3">
               <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">Site relationship</p>
-              <InventoryPartyAttributionDonut rows={groupedInventoryRows} />
+              <InventoryPartyAttributionDonut rows={inventoryRows} />
             </div>
           </div>
           <div className="space-y-2 lg:hidden" aria-label="Cookies and trackers mobile list">
@@ -1067,7 +1084,8 @@ function RuntimeInventoryTable({
                 <div className="mt-2 grid grid-cols-2 gap-x-3 gap-y-1 text-[11px] text-slate-500">
                   <span>{row.type === "cookie" ? "Cookie" : "Tracker"}</span>
                   <span className="text-right"><InventoryEvidenceCell row={row} /></span>
-                  <span className="text-right">{formatInventoryTiming(row)}</span>
+                  <span>{formatInventoryTiming(row)}</span>
+                  <span className="text-right">Req. {row.requestCount ?? "—"}</span>
                   <span className="truncate">{row.domains.join(", ") || "Domain not retained"}</span>
                   <span className="text-right">{formatInventoryRelationship(row)}</span>
                 </div>
@@ -1077,7 +1095,7 @@ function RuntimeInventoryTable({
           <div className="hidden overflow-hidden rounded-xl border border-slate-200 lg:block">
             <div className="max-h-[370px] overflow-auto">
             <InventorySortRuntime tableId="preconsent-inventory-table" />
-            <table id="preconsent-inventory-table" className="w-[1315px] min-w-[1315px] max-w-[1315px] table-fixed border-collapse text-left text-[13px]">
+            <table id="preconsent-inventory-table" className="w-[1375px] min-w-[1375px] max-w-[1375px] table-fixed border-collapse text-left text-[13px]">
               <caption className="sr-only">Pre-consent cookies and trackers inventory</caption>
               <thead className="bg-slate-50 text-[10px] uppercase tracking-[0.08em] text-slate-500 shadow-[0_2px_8px_-6px_rgba(15,23,42,0.55)]">
                 <tr>
@@ -1086,6 +1104,7 @@ function RuntimeInventoryTable({
                   <th title="Observed purpose classification for this cookie or tracker" className="sticky top-0 z-20 w-[165px] whitespace-nowrap border-b border-slate-200 bg-slate-50 px-2 py-2 font-semibold"><InventorySortButton tableId="preconsent-inventory-table" sortKey="purpose" label="Purpose" /></th>
                   <th title="Consent evidence classification" className="sticky top-0 z-20 w-[105px] whitespace-nowrap border-b border-slate-200 bg-slate-50 px-2 py-2 font-semibold">Evidence</th>
                   <th title="Elapsed time from scan start to observation" className="sticky top-0 z-20 w-[80px] whitespace-nowrap border-b border-slate-200 bg-slate-50 px-2 py-2 font-semibold"><InventorySortButton tableId="preconsent-inventory-table" sortKey="firstSeen" label="Observed" /></th>
+                  <th title="Retained third-party request events represented by this row" className="sticky top-0 z-20 w-[60px] whitespace-nowrap border-b border-slate-200 bg-slate-50 px-2 py-2 text-center font-semibold">Req.</th>
                   <th title="Cookie or tracker names retained in this observation." className="sticky top-0 z-20 w-[132px] max-w-[132px] whitespace-nowrap border-b border-slate-200 bg-slate-50 px-2 py-2 font-semibold">
                     <span className="inline-flex items-center gap-1">
                       Name(s)
@@ -1128,6 +1147,7 @@ function RuntimeInventoryTable({
                     </td>
                     <td className="whitespace-nowrap px-2 py-1.5 align-middle"><InventoryEvidenceCell row={row} /></td>
                     <td className="truncate whitespace-nowrap px-2 py-1.5 align-middle" title={row.type === "cookie" && row.firstSeenMs === null && /snapshot/.test(row.timingEvidence ?? "") ? "Present before recorded consent — write timing unconfirmed" : undefined}>{formatInventoryTiming(row)}</td>
+                    <td className="whitespace-nowrap px-2 py-1.5 text-center tabular-nums align-middle" title={row.requestCount === null ? "Request count was not retained for this row" : `${row.requestCount} retained request event${row.requestCount === 1 ? "" : "s"}`}>{row.requestCount ?? "—"}</td>
                     <td className="max-w-[132px] truncate whitespace-nowrap px-2 py-1.5 align-middle" title={row.cookieNames.join(", ") || undefined}>{row.cookieNames.join(", ") || "—"}</td>
                     <td className="max-w-[150px] truncate whitespace-nowrap px-2 py-1.5 align-middle" title={row.domains.join(", ") || undefined}>{row.domains.join(", ") || "—"}</td>
                     <td className="px-2 py-1.5 align-top"><InventoryDataFlowCell row={row} /></td>
@@ -7676,6 +7696,11 @@ export async function SharedScanDetailView({
     scanRecord.scan.domainHostname
   );
   const consentSurfaceCoverageItem = gdprEprivacyCoverageChecklist.find((item) => item.id === "consent_surface_observed");
+  const executiveConsentControls: ExecutiveConsentControlProjection = {
+    accept: getRecordOptionalBoolean(snapshot, "consent_accept_observed"),
+    reject: getRecordOptionalBoolean(snapshot, "consent_reject_observed"),
+    options: getRecordOptionalBoolean(snapshot, "consent_options_observed"),
+  };
   const executiveCookieBannerPresent =
     consentSurfaceCoverageItem?.status === "Observed"
       ? true
@@ -7909,6 +7934,7 @@ export async function SharedScanDetailView({
             coverageMicrocards={coverageMicrocards}
             coverageLevel={executiveCoverageLevel}
             cmpVendorName={typeof scanRecord.snapshot?.cmp_vendor_name === "string" ? scanRecord.snapshot.cmp_vendor_name : null}
+            consentControls={executiveConsentControls}
             consentSurfaceStatus={consentSurfaceCoverageItem?.status ?? null}
             cookieBannerPresent={executiveCookieBannerPresent}
             domainBenchmark={scanRecord.domainBenchmark}
@@ -7964,19 +7990,11 @@ export async function SharedScanDetailView({
                 presentationState={scanReportRenderProjection.runtimeInventoryPresentation}
                 projection={scanReportRenderProjection.runtimeInventory}
               />
-              <ConsentControlEvidencePanel
-                assessment={
-                  runtimeArtifacts?.consentControlAssessment ??
-                  runtimeArtifacts?.consent_control_assessment ??
-                  hybridRuntimeEvidence?.consentControlAssessment ??
-                  hybridRuntimeEvidence?.consent_control_assessment
-                }
-              />
             </div>
           )}
           {showRegulatoryChecklistSection ? (
             <RegulatoryChecklistSection
-              headingLabel="GDPR / ePrivacy Evidence Checklist"
+              headingLabel="GDPR / ePrivacy Evidence"
               headingTrailing={
                 gdprEprivacyAssessmentSummaryCounts ? (
                   <GdprEprivacyCoverageSummaryPills

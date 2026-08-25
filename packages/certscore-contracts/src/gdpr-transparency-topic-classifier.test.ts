@@ -402,6 +402,110 @@ test("classifies representative GDPR Transparency snippets across supported loca
   }
 });
 
+test("classifies Wave 1-3 native Article 13 variants without English anchors", () => {
+  const examples = [
+    {
+      locale: "de",
+      text: "Kontaktdaten des Verantwortlichen. Wofür wir Ihre personenbezogenen Daten verwenden. Die Datenverarbeitung erfolgt auf Grundlage von Art. 6. Empfänger der personenbezogenen Daten. Personenbezogene Daten werden nur so lange gespeichert, wie dies für die Zwecke erforderlich ist. Sie haben das Recht auf Datenübertragbarkeit und das Recht auf Einschränkung der Verarbeitung. Die Übermittlung personenbezogener Daten in Drittländer erfolgt mit geeigneten Garantien.",
+    },
+    {
+      locale: "ru",
+      text: "Контактные данные оператора персональных данных. Для чего мы используем ваши персональные данные. Обработка данных осуществляется на основании статьи 6. Получатель персональных данных. Персональные данные хранятся только столько, сколько необходимо для целей. Вы имеете право на переносимость данных и право на ограничение обработки. Передача персональных данных в третьи страны осуществляется с гарантиями.",
+    },
+    {
+      locale: "pt",
+      text: "Dados de contacto do responsável pelo tratamento. Para que usamos os seus dados pessoais. O tratamento de dados baseia-se no artigo 6. Destinatário dos dados pessoais. Os dados pessoais são conservados apenas enquanto forem necessários para as finalidades. Tem direito à portabilidade dos dados e direito à limitação do tratamento. A transferência de dados pessoais para países terceiros utiliza garantias adequadas.",
+    },
+    {
+      locale: "es",
+      text: "Datos de contacto del responsable del tratamiento. Para qué utilizamos sus datos personales. El tratamiento de datos se basa en el artículo 6. Destinatario de los datos personales. Los datos personales se conservan solo mientras sean necesarios para las finalidades. Tiene derecho a la portabilidad de los datos y derecho a la limitación del tratamiento. La transferencia de datos personales a terceros países se realiza con garantías adecuadas.",
+    },
+    {
+      locale: "fr",
+      text: "Coordonnées du responsable du traitement. À quelles fins nous utilisons vos données personnelles. Le traitement des données est fondé sur l'article 6. Destinataire des données personnelles. Les données personnelles ne sont conservées que pendant la durée nécessaire aux finalités. Vous disposez du droit à la portabilité des données et du droit à la limitation du traitement. Le transfert de données personnelles vers des pays tiers repose sur des garanties appropriées.",
+    },
+    {
+      locale: "it",
+      text: "Dati di contatto del titolare del trattamento. Per quali finalità utilizziamo i suoi dati personali. Il trattamento dei dati si basa sull'articolo 6. Destinatario dei dati personali. I dati personali sono conservati solo per il tempo necessario alle finalità. Ha diritto alla portabilità dei dati e diritto alla limitazione del trattamento. Il trasferimento dei dati personali verso paesi terzi avviene con garanzie adeguate.",
+    },
+    {
+      locale: "nl",
+      text: "Contactgegevens van de verwerkingsverantwoordelijke. Waarvoor wij uw persoonsgegevens gebruiken. De gegevensverwerking is gebaseerd op artikel 6. Ontvanger van persoonsgegevens. Persoonsgegevens worden slechts bewaard zolang dat nodig is voor de doeleinden. U heeft recht op overdraagbaarheid van gegevens en recht op beperking van de verwerking. Doorgifte van persoonsgegevens aan derde landen gebeurt met passende waarborgen.",
+    },
+    {
+      locale: "pl",
+      text: "Dane kontaktowe administratora danych osobowych. W jakich celach wykorzystujemy dane osobowe. Przetwarzanie danych odbywa się na podstawie art. 6. Odbiorca danych osobowych. Dane osobowe są przechowywane tylko tak długo, jak jest to konieczne do celów. Masz prawo do przenoszenia danych i prawo do ograniczenia przetwarzania. Przekazywanie danych osobowych do państw trzecich odbywa się z odpowiednimi zabezpieczeniami.",
+    },
+    {
+      locale: "ja",
+      text: "個人情報取扱事業者の連絡先。個人情報を何のために利用するか。GDPR第6条に基づく個人データ処理。個人データの提供先。利用目的に必要な期間に限り個人データを保存します。データポータビリティの権利および個人データの処理を制限する権利があります。第三国への個人データの移転には適切な保護措置を講じます。",
+    },
+    {
+      locale: "zh",
+      text: "个人信息处理者的联系方式。我们为何使用您的个人信息。根据GDPR第6条处理个人数据。个人信息接收方。仅在实现处理目的所必需的期限内保留个人信息。您享有数据可携权以及限制处理个人数据的权利。向第三国传输个人数据时采用适当保障。",
+    },
+    {
+      locale: "ar",
+      text: "بيانات الاتصال بالمتحكم في البيانات الشخصية. لماذا نستخدم بياناتك الشخصية. تستند معالجة البيانات إلى المادة 6. مستلم البيانات الشخصية. لا نحتفظ بالبيانات الشخصية إلا طالما كان ذلك ضروريا للأغراض. لك الحق في نقل البيانات والحق في تقييد المعالجة. يتم نقل البيانات الشخصية إلى دول ثالثة بضمانات مناسبة.",
+    },
+    {
+      locale: "tr",
+      text: "Kişisel veri sorumlusunun iletişim bilgileri. Kişisel verilerinizi hangi amaçlarla kullanıyoruz. Veri işleme GDPR Madde 6 uyarınca gerçekleştirilir. Kişisel verilerin alıcısı. Kişisel veriler amaçlar için gerekli olduğu sürece saklanır. Veri taşınabilirliği hakkı ve işlemenin kısıtlanmasını talep etme hakkı vardır. Kişisel verilerin üçüncü ülkelere aktarılması uygun güvencelere tabidir.",
+    },
+  ] as const;
+  const expectedTopics = [
+    "controller_contact",
+    "processing_purposes",
+    "legal_basis",
+    "recipients_or_vendor_categories",
+    "data_retention",
+    "data_subject_rights",
+    "international_transfers",
+  ] satisfies GdprTransparencyTopic[];
+
+  for (const example of examples) {
+    const classification = classifyGdprTransparencyTopics({
+      localeHints: [example.locale],
+      text: example.text,
+    });
+    for (const topic of expectedTopics) {
+      const match = classification.matches.find((candidate) =>
+        candidate.topic === topic && candidate.matchedLocale === example.locale
+      );
+      assert.ok(match, `${example.locale} should classify ${topic}`);
+      assert.equal(match.classifierProvenance, "gdpr_transparency_topic_classifier.v1");
+      assert.ok(match.evidenceExcerpt.length <= 360);
+    }
+  }
+});
+
+test("Wave 1-3 expansion does not promote generic localized Article 6, transfer, or storage copy", () => {
+  const examples = [
+    ["de", "Artikel 6 der Satzung behandelt internationale Überweisungen und die Speicherung von Waren."],
+    ["ru", "Статья 6 договора регулирует международные переводы и хранение товаров."],
+    ["pt", "O artigo 6 do contrato trata de transferências bancárias e armazenamento de mercadorias."],
+    ["es", "El artículo 6 del contrato regula transferencias bancarias y almacenamiento de mercancías."],
+    ["fr", "L'article 6 du contrat concerne les virements bancaires et le stockage des marchandises."],
+    ["it", "L'articolo 6 del contratto disciplina i bonifici internazionali e lo stoccaggio delle merci."],
+    ["nl", "Artikel 6 van het contract gaat over bankoverschrijvingen en goederenopslag."],
+    ["pl", "Artykuł 6 umowy dotyczy przelewów bankowych i magazynowania towarów."],
+    ["ja", "契約第6条は国際送金と商品の保管について定めます。"],
+    ["zh", "合同第6条规定国际汇款和货物仓储。"],
+    ["ar", "تنظم المادة 6 من العقد التحويلات المصرفية الدولية وتخزين البضائع."],
+    ["tr", "Sözleşmenin 6. maddesi uluslararası banka havalelerini ve ürün depolamayı düzenler."],
+  ] as const;
+
+  for (const [locale, text] of examples) {
+    const topics = classifyGdprTransparencyTopics({
+      localeHints: [locale],
+      text,
+    }).matches.map((match) => match.topic);
+    assert.equal(topics.includes("legal_basis"), false, locale);
+    assert.equal(topics.includes("data_retention"), false, locale);
+    assert.equal(topics.includes("international_transfers"), false, locale);
+  }
+});
+
 test("classifies structured Italian Article 13 table headings and scope language", () => {
   const classification = classifyGdprTransparencyTopics({
     localeHints: ["it"],
@@ -1902,4 +2006,166 @@ test("Caltech-shaped purpose and transfer phrases require privacy disclosure con
 
   assert.equal(topics.has("processing_purposes"), false);
   assert.equal(topics.has("international_transfers"), false);
+});
+
+test("classifies retained CertScore policy wording at the observation boundary", () => {
+  const classification = classifyGdprTransparencyTopics({
+    localeHints: ["en"],
+    text: [
+      "Privacy Policy. Service providers that may receive or process information on our behalf include AWS, Stripe, Gmail SMTP, Google Analytics, and Microsoft Clarity.",
+      "We retain account data while an account remains active and as needed to provide the service.",
+      "You have rights to request access to personal data, deletion, correction, portability, restriction, or objection.",
+      "Personal information is transferred across borders when our service providers process it in another country.",
+      "CertScore.ai does not use personal data for profiling or make decisions based solely on automated processing that produce legal or similarly significant effects.",
+    ].join(" "),
+  });
+  const topics = new Set(classification.matches.map((match) => match.topic));
+
+  for (const topic of [
+    "recipients_or_vendor_categories",
+    "data_retention",
+    "data_subject_rights",
+    "international_transfers",
+    "automated_decision_making_or_profiling",
+  ] satisfies GdprTransparencyTopic[]) {
+    assert.equal(topics.has(topic), true, topic);
+  }
+});
+
+test("classifies substantive corporate privacy-policy wording before report projection", () => {
+  const classification = classifyGdprTransparencyTopics({
+    localeHints: ["en"],
+    text: [
+      "Privacy Policy.",
+      "How Do We Use the Information We Collect? We use this Information to provide, secure, personalize, and improve our services.",
+      "Retention. We only keep Information for as long as we need it to fulfil the purpose we are using it for, as permitted by law.",
+      "Who Do We Disclose Your Information To? We disclose Information to service providers that host, deliver, secure, and analyze our services.",
+      "Individual Rights. You have the Right to access and rectification, erasure, restriction, portability, and objection.",
+      "You may object to processing of your Information on the basis of our legitimate interests.",
+      "International Transfers. Your Information may be transferred to, and processed in, the United States with appropriate safeguards.",
+      "If you have questions about this Privacy Policy, contact us and our Data Protection Officer at privacy@example.test.",
+      "You may lodge a complaint before the supervisory authority for data protection in your country.",
+    ].join(" "),
+  });
+  const topics = new Set(classification.matches.map((match) => match.topic));
+
+  for (const topic of [
+    "controller_contact",
+    "dpo_contact",
+    "processing_purposes",
+    "legal_basis",
+    "recipients_or_vendor_categories",
+    "data_retention",
+    "data_subject_rights",
+    "international_transfers",
+    "supervisory_authority",
+  ] satisfies GdprTransparencyTopic[]) {
+    assert.equal(topics.has(topic), true, topic);
+  }
+  assert.equal(
+    classification.matches.every((match) =>
+      match.classifierProvenance === "gdpr_transparency_topic_classifier.v1" &&
+      match.matchedLocale === "en" &&
+      match.evidenceExcerpt.length <= 360
+    ),
+    true,
+  );
+});
+
+test("corporate-policy variants remain unknown without privacy-disclosure context", () => {
+  const classification = classifyGdprTransparencyTopics({
+    localeHints: ["en"],
+    text: [
+      "Operations handbook.",
+      "How do we use the information we collect from warehouse sensors?",
+      "Who do we disclose your information to when routing a support ticket?",
+      "We only keep information for as long as we need to troubleshoot equipment.",
+      "Employees have a right to access and rectification of payroll records.",
+      "Shipment information may be transferred to and processed in the United States.",
+    ].join(" "),
+  });
+
+  assert.deepEqual(classification.matches, []);
+});
+
+test("keeps a negated DPO designation separate from an observed privacy contact point", () => {
+  const negatedDesignation = classifyGdprTransparencyTopics({
+    localeHints: ["en"],
+    text: "CertScore.ai does not currently publish or designate a Data Protection Officer.",
+  });
+  assert.equal(
+    negatedDesignation.matches.some((match) => match.topic === "dpo_contact"),
+    false,
+  );
+
+  const contactPoint = classifyGdprTransparencyTopics({
+    localeHints: ["en"],
+    text: [
+      "Privacy Contact Point. Email privacy@certscore.ai for privacy questions and data-subject requests.",
+      "CertScore.ai has not appointed a Data Protection Officer.",
+    ].join(" "),
+  });
+  const privacyContact = contactPoint.matches.find((match) => match.topic === "dpo_contact");
+
+  assert.ok(privacyContact);
+  assert.equal(privacyContact.variant, "privacy_contact_point");
+});
+
+test("classifies retained Article 4 and Article 6 policy wording without semantic-review fallback", () => {
+  const classification = classifyGdprTransparencyTopics({
+    localeHints: ["en"],
+    text: [
+      "Privacy Policy.",
+      "Information on the controller pursuant to Art. 4 No. 7 GDPR. Example Group AG, Privacy Street 1. E-mail: privacy@example.test.",
+      "Data Protection Officer: Jane Privacy, dpo@example.test.",
+      "What do we use your data for? The data will be processed for the following purposes: website delivery, communication, and security.",
+      "Data processing is based on Art. 6 (1) lit. f GDPR.",
+      "Recipient of the data: Example Services Germany GmbH.",
+      "The data is stored for as long as its processing is necessary for these purposes.",
+      "You have the right to data portability and the right to request the restriction of the processing of your personal data.",
+      "Data transfers to third countries are secured by appropriate safeguards pursuant to Art. 46 GDPR.",
+      "You have the right to lodge a complaint with a supervisory authority.",
+    ].join(" "),
+  });
+  const topics = new Set(classification.matches.map((match) => match.topic));
+
+  for (const topic of [
+    "controller_contact",
+    "dpo_contact",
+    "processing_purposes",
+    "legal_basis",
+    "recipients_or_vendor_categories",
+    "data_retention",
+    "data_subject_rights",
+    "international_transfers",
+    "supervisory_authority",
+  ] satisfies GdprTransparencyTopic[]) {
+    assert.equal(topics.has(topic), true, topic);
+  }
+});
+
+test("SITS-shaped broad English variants remain unknown in operational copy", () => {
+  const classification = classifyGdprTransparencyTopics({
+    localeHints: ["en"],
+    text: [
+      "Analytics operations handbook.",
+      "What do we use your data for? We use warehouse telemetry to schedule maintenance.",
+      "Recipient of the data: the next queue consumer.",
+      "The data is stored for as long as its processing is necessary for troubleshooting.",
+    ].join(" "),
+  });
+
+  assert.deepEqual(classification.matches, []);
+});
+
+test("Article 4 controller heading alone does not establish controller contact", () => {
+  const classification = classifyGdprTransparencyTopics({
+    localeHints: ["en"],
+    text: "Privacy Policy. Information on the controller pursuant to Art. 4 No. 7 GDPR. See the applicable notice for details.",
+  });
+
+  assert.equal(
+    classification.matches.some((match) => match.topic === "controller_contact"),
+    false,
+  );
 });

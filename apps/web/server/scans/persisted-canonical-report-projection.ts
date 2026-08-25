@@ -5,11 +5,22 @@ import type { ScanDetailResponse } from "./get-scan-by-id";
 import type { VersionedScoreAssessmentInput } from "./score-assessment-repository";
 import type { ChecklistEvidenceIndex } from "../../lib/scans/checklist-evidence-index";
 import {
+  collectionSurfaceAssessmentSchema,
+  preConsentBrowserStorageProjectionSchema,
+  type CollectionSurfaceAssessment,
+  type PreConsentBrowserStorageProjection,
+} from "@certscore/contracts";
+import {
+  filterGdprEprivacyChecklistPresentationForReport,
   isGdprEprivacyChecklistPresentation,
   type GdprEprivacyChecklistPresentation,
 } from "../../lib/scans/gdpr-eprivacy-checklist-presentation";
 
 export const PERSISTED_CANONICAL_REPORT_PROJECTION_VERSION =
+  "persisted-canonical-report-projection-v7";
+const LEGACY_PERSISTED_CANONICAL_REPORT_PROJECTION_VERSION_V6 =
+  "persisted-canonical-report-projection-v6";
+const LEGACY_PERSISTED_CANONICAL_REPORT_PROJECTION_VERSION_V5 =
   "persisted-canonical-report-projection-v5";
 const LEGACY_PERSISTED_CANONICAL_REPORT_PROJECTION_VERSION_V4 =
   "persisted-canonical-report-projection-v4";
@@ -21,10 +32,14 @@ const LEGACY_PERSISTED_CANONICAL_REPORT_PROJECTION_VERSION_V2 =
 export type PersistedCanonicalReportProjection = {
   artifactVersion:
     | typeof PERSISTED_CANONICAL_REPORT_PROJECTION_VERSION
+    | typeof LEGACY_PERSISTED_CANONICAL_REPORT_PROJECTION_VERSION_V6
+    | typeof LEGACY_PERSISTED_CANONICAL_REPORT_PROJECTION_VERSION_V5
     | typeof LEGACY_PERSISTED_CANONICAL_REPORT_PROJECTION_VERSION_V4
     | typeof LEGACY_PERSISTED_CANONICAL_REPORT_PROJECTION_VERSION_V3
     | typeof LEGACY_PERSISTED_CANONICAL_REPORT_PROJECTION_VERSION_V2;
   checklistPresentation?: GdprEprivacyChecklistPresentation;
+  collectionSurfaceAssessment: CollectionSurfaceAssessment | null;
+  preConsentBrowserStorageProjection?: PreConsentBrowserStorageProjection;
   checklistRows: GdprEprivacyCoverageChecklistItem[];
   derivedContext: ScanReportUnifiedFindingState["derivedContext"];
   evidenceIndex?: ChecklistEvidenceIndex;
@@ -38,6 +53,12 @@ export type PersistedCanonicalReportProjection = {
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return Boolean(value && typeof value === "object" && !Array.isArray(value));
+}
+
+function reportChecklistPresentation(value: unknown) {
+  return isGdprEprivacyChecklistPresentation(value)
+    ? filterGdprEprivacyChecklistPresentationForReport(value)
+    : undefined;
 }
 
 /**
@@ -54,6 +75,8 @@ export function getPersistedCanonicalReportProjection(
     !isRecord(candidate) ||
     (
       candidate.artifactVersion !== PERSISTED_CANONICAL_REPORT_PROJECTION_VERSION &&
+      candidate.artifactVersion !== LEGACY_PERSISTED_CANONICAL_REPORT_PROJECTION_VERSION_V6 &&
+      candidate.artifactVersion !== LEGACY_PERSISTED_CANONICAL_REPORT_PROJECTION_VERSION_V5 &&
       candidate.artifactVersion !== LEGACY_PERSISTED_CANONICAL_REPORT_PROJECTION_VERSION_V4 &&
       candidate.artifactVersion !== LEGACY_PERSISTED_CANONICAL_REPORT_PROJECTION_VERSION_V3 &&
       candidate.artifactVersion !== LEGACY_PERSISTED_CANONICAL_REPORT_PROJECTION_VERSION_V2
@@ -73,6 +96,8 @@ export function getPersistedCanonicalReportProjection(
 
   const usesIndexedEvidence =
     candidate.artifactVersion === PERSISTED_CANONICAL_REPORT_PROJECTION_VERSION ||
+    candidate.artifactVersion === LEGACY_PERSISTED_CANONICAL_REPORT_PROJECTION_VERSION_V6 ||
+    candidate.artifactVersion === LEGACY_PERSISTED_CANONICAL_REPORT_PROJECTION_VERSION_V5 ||
     candidate.artifactVersion === LEGACY_PERSISTED_CANONICAL_REPORT_PROJECTION_VERSION_V4 ||
     candidate.artifactVersion === LEGACY_PERSISTED_CANONICAL_REPORT_PROJECTION_VERSION_V3;
   if (
@@ -87,7 +112,16 @@ export function getPersistedCanonicalReportProjection(
   }
   if (
     candidate.artifactVersion === PERSISTED_CANONICAL_REPORT_PROJECTION_VERSION &&
-    !isGdprEprivacyChecklistPresentation(candidate.checklistPresentation)
+    (
+      !isGdprEprivacyChecklistPresentation(candidate.checklistPresentation) ||
+      !preConsentBrowserStorageProjectionSchema.safeParse(
+        candidate.preConsentBrowserStorageProjection
+      ).success ||
+      !(
+        candidate.collectionSurfaceAssessment === null ||
+        collectionSurfaceAssessmentSchema.safeParse(candidate.collectionSurfaceAssessment).success
+      )
+    )
   ) {
     return null;
   }
@@ -106,9 +140,13 @@ export function getPersistedCanonicalReportProjection(
       .flatMap((id) => globalById.get(id) ?? []);
     return {
       ...candidate,
+      checklistPresentation: reportChecklistPresentation(candidate.checklistPresentation),
       ownerUnifiedFindings,
     } as PersistedCanonicalReportProjection;
   }
 
-  return candidate as PersistedCanonicalReportProjection;
+  return {
+    ...candidate,
+    checklistPresentation: reportChecklistPresentation(candidate.checklistPresentation),
+  } as PersistedCanonicalReportProjection;
 }

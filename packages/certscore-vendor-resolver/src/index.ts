@@ -17,7 +17,7 @@ export {
   type TransferMechanism,
 } from "./cookie-knowledge-base";
 
-export const CANONICAL_VENDOR_RESOLVER_VERSION = "certscore-vendor-resolver-2026-08-24-sourcebuster-dsgvoaio-matomo";
+export const CANONICAL_VENDOR_RESOLVER_VERSION = "certscore-vendor-resolver-2026-08-25-sourcebuster-dsgvoaio-bst-dsgvo-cookie-matomo-facebook-page-plugin";
 
 export type VendorResolverEvidenceType =
   | "request"
@@ -162,6 +162,20 @@ interface VendorRule {
 }
 
 const rules: VendorRule[] = [
+  {
+    entity: "BST DSGVO Cookie",
+    vendor: "BST DSGVO Cookie",
+    product: "BST DSGVO Cookie notice plugin, non-TCF",
+    purpose: "consent_management",
+    regulatoryRelevance: ["consent_management"],
+    confidence: 0.98,
+    urlPatterns: [
+      /(?:^|\/)wp-content\/plugins\/bst-dsgvo-cookie(?:\/|[?#]|$)/i,
+    ],
+    allowUrlPatternWithoutHostMatch: true,
+    domSelectorPatterns: [/^\.bst-popup-link$/i, /^a\.bst-popup-link$/i],
+    basisLabel: "bst_dsgvo_cookie_notice_runtime",
+  },
   {
     entity: "DSGVO All in One for WP",
     vendor: "DSGVO All in One",
@@ -1618,10 +1632,28 @@ const rules: VendorRule[] = [
     regulatoryRelevance: ["consent", "advertising", "cross_site_tracking"],
     confidence: 0.96,
     hostPatterns: [/^connect\.facebook\.net$/i, /^www\.facebook\.com$/i],
-    urlPatterns: [/\/tr\b/i, /\/fbevents\.js\b/i],
+    urlPatterns: [
+      /^https:\/\/www\.facebook\.com\/tr(?:[/?#]|$)/i,
+      /^https:\/\/connect\.facebook\.net\/(?:[^/?#]+\/)?fbevents\.js(?:[?#]|$)/i,
+    ],
+    allowUrlPatternWithoutHostMatch: true,
     cookiePatterns: [/^_fbp$/i, /^_fbc$/i],
     storageKeyPatterns: [/^_fbp$/i, /^_fbc$/i],
+    requireUrlPatternMatch: true,
     basisLabel: "meta_pixel_endpoint_or_cookie",
+  },
+  {
+    entity: "Meta Platforms, Inc.",
+    vendor: "Facebook",
+    product: "Facebook Page Plugin",
+    purpose: "infrastructure",
+    regulatoryRelevance: ["embedded_content", "social_embed", "social_media", "third_party_runtime"],
+    confidence: 0.99,
+    hostPatterns: [/^www\.facebook\.com$/i],
+    urlPatterns: [/^https:\/\/www\.facebook\.com\/plugins\/page\.php(?:[?#]|$)/i],
+    allowUrlPatternWithoutHostMatch: true,
+    requireUrlPatternMatch: true,
+    basisLabel: "facebook_page_plugin_embed",
   },
   {
     entity: "Microsoft Corporation",
@@ -4247,7 +4279,7 @@ export function resolveVendorDisplayCategory(input: VendorDisplayCategoryInput):
   if (
     (
       /\bembedded_content\b|\bsocial_embed\b|\bvideo_player\b/.test(relevance) &&
-      /\bembed(?:ded)?\b|\bplayer\b|\bwidget\b/.test(label)
+      /\bembed(?:ded)?\b|\bplayer\b|\bplugin\b|\bwidget\b/.test(label)
     ) ||
     /\bvideo_player\b|\bsocial_embed\b/.test(purpose)
   ) {

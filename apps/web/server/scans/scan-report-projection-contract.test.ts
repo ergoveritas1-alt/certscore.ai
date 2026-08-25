@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import test from "node:test";
 import { deriveConsentControlAssessment } from "@certscore/contracts";
+import { PRE_CONSENT_BROWSER_STORAGE_PROJECTION_VERSION } from "@certscore/contracts";
 import { deriveGdprEprivacyCoveragePolicyOutcomes } from "../../lib/scans/gdpr-eprivacy-coverage-policy";
 import {
   buildPersistedFirstLayerConsentEvidence,
@@ -165,6 +166,22 @@ test("persisted projection carries one scan-bound canonical output packet", () =
   const canonicalReportProjection = {
     artifactVersion: PERSISTED_CANONICAL_REPORT_PROJECTION_VERSION,
     checklistPresentation: buildGdprEprivacyChecklistPresentation([]),
+    collectionSurfaceAssessment: null,
+    preConsentBrowserStorageProjection: {
+      contractVersion: PRE_CONSENT_BROWSER_STORAGE_PROJECTION_VERSION,
+      scanId: scanRecord.scan.id,
+      assessmentStatus: "not_testable",
+      consentState: "pre_interaction",
+      localStorageKeys: [],
+      sessionStorageKeys: [],
+      retainedStorageSnapshotCount: 0,
+      storageFirstObservedAtMs: null,
+      valuesRedacted: true,
+      evidenceRefs: [],
+      limitationKeys: ["storage_snapshot_not_retained"],
+      sourceHash: "a".repeat(64),
+      sourceLane: "runtime_evidence",
+    },
     checklistRows: [],
     derivedContext: {
       accessibilityIssueRows: [],
