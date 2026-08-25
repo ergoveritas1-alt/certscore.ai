@@ -40,14 +40,15 @@ test("builds downloads from the persisted canonical projection only", () => {
   const report = buildCanonicalReportExport(scanRecord());
 
   assert.ok(report);
-  assert.equal(report.artifactVersion, "canonical-report-export-v4");
+  assert.equal(report.artifactVersion, "canonical-report-export-v5");
   assert.equal(report.scan.domainHostname, "example.test");
   assert.equal(report.executiveSummary.sentences.length, 3);
   assert.match(report.executiveSummary.sentences[2] ?? "", /not a determination of legal compliance/i);
   assert.deepEqual(report.projection.unifiedFindings, []);
   assert.equal(report.appendix.cookieAndTrackerInventory.summary.totalRows, 0);
+  assert.equal(report.appendix.dataCollectionSurfaces.summary.totalForms, 0);
+  assert.equal(report.appendix.dataCollectionSurfaces.assessmentStatus, "unavailable");
   assert.equal(report.appendix.gdprTransparency.summary.totalRows, 0);
-  assert.equal("dataCollectionSurfaces" in report.appendix, false);
   assert.doesNotMatch(JSON.stringify(report), /rawDisplayOnlyFinding|must-not-be-exported/);
   assert.ok(report.limitations.some((limitation) => limitation.code === "post_choice_effectiveness_not_tested"));
 });
@@ -59,7 +60,7 @@ test("fails closed when a canonical persisted projection is unavailable", () => 
   assert.equal(buildCanonicalReportExport(record as unknown as ScanDetailResponse), null);
 });
 
-test("projects GDPR Transparency without surfacing retained collection assessments", () => {
+test("projects GDPR Transparency and retained collection assessments into separate appendices", () => {
   const scan = scanRecord() as unknown as Record<string, any>;
   scan.canonicalReportProjection.checklistPresentation = {
     artifactVersion: "gdpr-eprivacy-checklist-presentation-v1",
@@ -116,15 +117,51 @@ test("projects GDPR Transparency without surfacing retained collection assessmen
     sourceHash: "a".repeat(64),
     assessedAt: "2026-08-24T00:00:20.000Z",
     pageUrl: "https://example.test/contact",
-    coverage: { candidateFormCount: 1, candidateFieldCount: 1 },
+    coverage: {
+      status: "complete",
+      documentScope: "main_document",
+      interactionMode: "none",
+      candidateFormCount: 1,
+      retainedFormCount: 1,
+      candidateFieldCount: 1,
+      retainedFieldCount: 1,
+      inspectedFormCandidateCount: 1,
+      inspectedFieldCandidateCount: 1,
+      candidateScanTruncated: false,
+      retentionTruncated: false,
+      reasonCodes: [],
+    },
     limitationKeys: [],
     evidenceRefs: ["inventory-ref"],
     forms: [{
       formRef: "form-1",
+      structure: "native_form",
+      surfaceType: "contact",
       title: "Contact form",
+      pageUrl: "https://example.test/contact",
+      method: "post",
+      actionRelationship: "self",
+      candidateFieldCount: 1,
+      retainedFieldCount: 1,
       fieldsTruncated: false,
-      fields: [{ fieldRef: "field-1", label: "Email address" }],
+      fields: [{
+        fieldRef: "field-1",
+        elementType: "input",
+        inputType: "email",
+        semanticCategory: "email",
+        label: "Email address",
+        required: true,
+        disabled: false,
+        readOnly: false,
+        evidenceRefs: [],
+        confidence: 0.95,
+        directVsInferred: "direct",
+      }],
+      evidenceRefs: [],
+      confidence: 0.95,
+      directVsInferred: "direct",
     }],
+    productionProjectable: true,
   };
 
   const report = buildCanonicalReportExport(scan as unknown as ScanDetailResponse);
@@ -135,6 +172,9 @@ test("projects GDPR Transparency without surfacing retained collection assessmen
     ["controller_contact_disclosure"],
   );
   assert.equal(report.gdprEprivacyReview?.rows.some((row) => row.id === "public_collection_surfaces"), false);
-  assert.equal("dataCollectionSurfaces" in report.appendix, false);
-  assert.doesNotMatch(JSON.stringify(report.appendix), /Email address|Contact form|collection-surface/i);
+  assert.equal(report.appendix.dataCollectionSurfaces.summary.totalForms, 1);
+  assert.equal(report.appendix.dataCollectionSurfaces.summary.totalFields, 1);
+  assert.equal(report.appendix.dataCollectionSurfaces.forms[0]?.title, "Contact form");
+  assert.equal(report.appendix.dataCollectionSurfaces.forms[0]?.fields[0]?.label, "Email address");
+  assert.doesNotMatch(JSON.stringify(report.appendix.gdprTransparency), /Email address|Contact form|collection-surface/i);
 });

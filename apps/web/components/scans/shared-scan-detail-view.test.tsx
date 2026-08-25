@@ -42,6 +42,12 @@ test("pre-consent inventory exposes retained request counts with a compact consi
   assert.match(source, /<InventoryEvidenceSegmentation rows=\{inventoryRows\} \/>/);
   assert.match(source, /<InventoryPurposeCard rows=\{inventoryRows\} \/>/);
   assert.match(source, /<InventoryPartyAttributionDonut rows=\{inventoryRows\} \/>/);
+  assert.match(source, /<DataCollectionSurfacesSection/);
+  assert.match(
+    source,
+    /assessment=\{persistedCanonicalProjection\?\.collectionSurfaceAssessment \?\? null\}/
+  );
+  assert.doesNotMatch(source, /public_collection_surfaces/);
 });
 
 test("evidence mix reconciles with the canonical row-level inventory", async () => {

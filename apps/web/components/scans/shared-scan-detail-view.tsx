@@ -16,6 +16,7 @@ import {
 } from "@website-signal-risk-scanner/shared";
 import { CollapsibleSectionCard } from "./collapsible-section-card";
 import { CopyJsonButton } from "./copy-json-button";
+import { DataCollectionSurfacesSection } from "./data-collection-surfaces-section";
 import { ScanCompletedEvent } from "../analytics/data-layer-events";
 import { DiagnosticsPanel } from "./diagnostics-panel";
 import { EvidenceJsonBlock } from "./evidence-json-block";
@@ -7989,6 +7990,9 @@ export async function SharedScanDetailView({
               <RuntimeInventoryTable
                 presentationState={scanReportRenderProjection.runtimeInventoryPresentation}
                 projection={scanReportRenderProjection.runtimeInventory}
+              />
+              <DataCollectionSurfacesSection
+                assessment={persistedCanonicalProjection?.collectionSurfaceAssessment ?? null}
               />
             </div>
           )}

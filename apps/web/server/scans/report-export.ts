@@ -1,4 +1,7 @@
-import { consentControlAssessmentSchema } from "@certscore/contracts";
+import {
+  consentControlAssessmentSchema,
+  type CollectionSurfaceAssessment,
+} from "@certscore/contracts";
 import {
   buildRuntimeInventoryProjectionFromScan,
   classifyInventoryEvidence,
@@ -8,7 +11,7 @@ import type { ScanDetailResponse } from "./get-scan-by-id";
 import { getPersistedCanonicalReportProjection } from "./persisted-canonical-report-projection";
 import { isGdprTransparencyReportRowId } from "../../lib/scans/gdpr-transparency-report-contract";
 
-export const CANONICAL_REPORT_EXPORT_VERSION = "canonical-report-export-v4" as const;
+export const CANONICAL_REPORT_EXPORT_VERSION = "canonical-report-export-v5" as const;
 const MAX_APPENDIX_INVENTORY_ROWS = 500;
 const MAX_APPENDIX_ARRAY_ITEMS = 50;
 
@@ -250,6 +253,44 @@ function buildGdprTransparencyAppendix(
   };
 }
 
+function buildDataCollectionSurfacesAppendix(
+  assessment: CollectionSurfaceAssessment | null | undefined,
+) {
+  const forms = assessment?.forms ?? [];
+  const fieldCount = forms.reduce((total, form) => total + form.fields.length, 0);
+  const candidateFormCount = assessment?.coverage?.candidateFormCount ?? forms.length;
+  const candidateFieldCount = assessment?.coverage?.candidateFieldCount ?? fieldCount;
+  const presentationMessage = !assessment
+    ? "A persisted collection-surface assessment was not available for this scan."
+    : assessment.assessmentStatus === "not_observed"
+      ? "No forms were found in the completed, read-only main-document inventory."
+      : assessment.assessmentStatus === "limited"
+        ? "Retained forms are listed below, but collection-surface coverage was limited. Missing forms or fields remain unknown."
+        : assessment.assessmentStatus === "not_testable"
+          ? "Collection-surface evidence was not testable. No absence conclusion was created."
+          : "The retained read-only main-document inventory is listed below. Field values are never captured or retained.";
+
+  return {
+    title: "Appendix: Data collection surfaces",
+    scopeNote: "This appendix reproduces the persisted CollectionSurfaceAssessment projection from the runtime-evidence lane. It describes form and field structure observed in the rendered main document without submitting forms, entering data, or creating a finding from display context.",
+    assessmentStatus: assessment?.assessmentStatus ?? "unavailable",
+    presentationMessage,
+    pageUrl: assessment?.pageUrl ?? null,
+    coverage: assessment?.coverage ?? null,
+    summary: {
+      totalForms: forms.length,
+      totalFields: fieldCount,
+      candidateForms: candidateFormCount,
+      candidateFields: candidateFieldCount,
+      omittedForms: Math.max(0, candidateFormCount - forms.length),
+      omittedFields: Math.max(0, candidateFieldCount - fieldCount),
+    },
+    limitationKeys: assessment?.limitationKeys ?? [],
+    evidenceRefs: assessment?.evidenceRefs ?? [],
+    forms,
+  };
+}
+
 export function buildCanonicalReportExport(scanRecord: ScanDetailResponse) {
   const canonical = getPersistedCanonicalReportProjection(scanRecord);
   if (!canonical) return null;
@@ -314,8 +355,11 @@ export function buildCanonicalReportExport(scanRecord: ScanDetailResponse) {
       })),
     ],
     appendix: {
-      gdprTransparency: buildGdprTransparencyAppendix(canonical.checklistPresentation),
       cookieAndTrackerInventory: buildRuntimeAppendix(scanRecord, normalizedConcerns),
+      dataCollectionSurfaces: buildDataCollectionSurfacesAppendix(
+        canonical.collectionSurfaceAssessment ?? null,
+      ),
+      gdprTransparency: buildGdprTransparencyAppendix(canonical.checklistPresentation),
     },
     notice: "CertScore reports observed risk signals and retained evidence. It is not a legal certification, a determination of compliance, or legal advice.",
   };

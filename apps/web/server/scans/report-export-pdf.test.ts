@@ -6,7 +6,7 @@ import type { CanonicalReportExport } from "./report-export";
 test("renders a multi-section canonical report as a valid bounded PDF", () => {
   const report = {
     artifactType: "certscore_canonical_report_export",
-    artifactVersion: "canonical-report-export-v4",
+    artifactVersion: "canonical-report-export-v5",
     generatedAt: "2026-08-24T00:00:00.000Z",
     scan: {
       id: "00000000-0000-0000-0000-000000000001",
@@ -170,6 +170,66 @@ test("renders a multi-section canonical report as a valid bounded PDF", () => {
           cookieDetails: [],
         }],
       },
+      dataCollectionSurfaces: {
+        title: "Appendix: Data collection surfaces",
+        scopeNote: "Persisted read-only collection-surface assessment only.",
+        assessmentStatus: "observed",
+        presentationMessage: "The retained read-only main-document inventory is listed below.",
+        pageUrl: "https://example.test/contact",
+        coverage: {
+          status: "complete",
+          documentScope: "main_document",
+          interactionMode: "none",
+          candidateFormCount: 1,
+          retainedFormCount: 1,
+          candidateFieldCount: 1,
+          retainedFieldCount: 1,
+          inspectedFormCandidateCount: 1,
+          inspectedFieldCandidateCount: 1,
+          candidateScanTruncated: false,
+          retentionTruncated: false,
+          reasonCodes: [],
+        },
+        summary: {
+          totalForms: 1,
+          totalFields: 1,
+          candidateForms: 1,
+          candidateFields: 1,
+          omittedForms: 0,
+          omittedFields: 0,
+        },
+        limitationKeys: [],
+        evidenceRefs: ["CanonicalEvidenceBundle.json#collectionSurfaceInventory"],
+        forms: [{
+          formRef: "form-1",
+          structure: "native_form",
+          surfaceType: "contact",
+          title: "Contact form",
+          pageUrl: "https://example.test/contact",
+          method: "post",
+          actionRelationship: "self",
+          candidateFieldCount: 1,
+          retainedFieldCount: 1,
+          fieldsTruncated: false,
+          fields: [{
+            fieldRef: "field-1",
+            elementType: "input",
+            inputType: "email",
+            semanticCategory: "email",
+            label: "Work email",
+            autocompleteToken: "email",
+            required: true,
+            disabled: false,
+            readOnly: false,
+            evidenceRefs: [{ refId: "field-ref-1" }],
+            confidence: 0.95,
+            directVsInferred: "direct",
+          }],
+          evidenceRefs: [{ refId: "form-ref-1" }],
+          confidence: 0.95,
+          directVsInferred: "direct",
+        }],
+      },
     },
     notice: "Observed evidence only.",
   } as unknown as CanonicalReportExport;
@@ -179,8 +239,16 @@ test("renders a multi-section canonical report as a valid bounded PDF", () => {
   assert.match(pdf.toString("latin1"), /\/Type \/Catalog/);
   assert.match(pdf.toString("latin1"), /Executive summary/);
   assert.match(pdf.toString("latin1"), /Appendix: Detailed cookie and tracker inventory/);
+  assert.match(pdf.toString("latin1"), /Appendix: Data collection surfaces/);
   assert.match(pdf.toString("latin1"), /Appendix: GDPR Transparency/);
   assert.match(pdf.toString("latin1"), /Appendix: Transport Security/);
+  const cookieAppendixIndex = pdf.toString("latin1").indexOf("Appendix: Detailed cookie and tracker inventory");
+  const collectionAppendixIndex = pdf.toString("latin1").indexOf("Appendix: Data collection surfaces");
+  const transparencyAppendixIndex = pdf.toString("latin1").indexOf("Appendix: GDPR Transparency");
+  const transportAppendixIndex = pdf.toString("latin1").indexOf("Appendix: Transport Security");
+  assert.ok(cookieAppendixIndex < collectionAppendixIndex);
+  assert.ok(collectionAppendixIndex < transparencyAppendixIndex);
+  assert.ok(transparencyAppendixIndex < transportAppendixIndex);
   assert.equal(pdf.toString("latin1").match(/Valid SSL\/TLS certificate/g)?.length, 1);
   assert.equal(pdf.toString("latin1").match(/TLS certificate review/g)?.length, 1);
   assert.ok(
@@ -190,11 +258,13 @@ test("renders a multi-section canonical report as a valid bounded PDF", () => {
   assert.doesNotMatch(
     pdf.toString("latin1").slice(
       pdf.toString("latin1").indexOf("Key findings"),
-      pdf.toString("latin1").indexOf("Appendix: GDPR Transparency"),
+      cookieAppendixIndex,
     ),
     /Valid SSL\/TLS certificate|TLS certificate review/,
   );
-  assert.doesNotMatch(pdf.toString("latin1"), /Data collection surfaces|Public data collection surfaces|Work email/);
+  assert.match(pdf.toString("latin1"), /Contact form/);
+  assert.match(pdf.toString("latin1"), /Work email/);
+  assert.doesNotMatch(pdf.toString("latin1"), /Public data collection surfaces/);
   assert.equal(pdf.toString("latin1").match(/Controller\/contact disclosure/g)?.length, 1);
   assert.doesNotMatch(pdf.toString("latin1"), /Assessment: Complete; evidence coverage: Complete/);
   assert.match(pdf.toString("latin1"), /Accept control: Observed/);

@@ -238,6 +238,12 @@ function formatDuration(value: unknown) {
     : "Not available";
 }
 
+function formatConfidence(value: unknown) {
+  return typeof value === "number" && Number.isFinite(value)
+    ? `${Math.round(value * 100)}%`
+    : "Not retained";
+}
+
 type PdfLine = {
   text: string;
   size?: number;
@@ -300,6 +306,7 @@ function reportLines(report: CanonicalReportExport, image: PdfImage | null): Pdf
   const review = report.gdprEprivacyReview;
   const transparencyAppendix = report.appendix.gdprTransparency;
   const runtimeAppendix = report.appendix.cookieAndTrackerInventory;
+  const collectionAppendix = report.appendix.dataCollectionSurfaces;
   const transportRows = review?.rows.filter((row) => isTransportSecurityRowId(row.id)) ?? [];
   const mainChecklistRows = review?.rows.filter((row) =>
     !isGdprTransparencyReportRowId(row.id) && !isTransportSecurityRowId(row.id)
@@ -391,77 +398,6 @@ function reportLines(report: CanonicalReportExport, image: PdfImage | null): Pdf
     ...wrappedLines(report.notice, { size: 9, gapAfter: 5 }),
   );
 
-  lines.push(sectionHeading(transparencyAppendix.title, true));
-  lines.push(...wrappedLines(transparencyAppendix.scopeNote, { size: 9, gapAfter: 4 }));
-  lines.push(...wrappedLines(
-    `Transparency summary: ${transparencyAppendix.summary.totalRows} rows; ${transparencyAppendix.summary.observedRows} observed; ${transparencyAppendix.summary.notConfirmedRows} not confirmed; ${transparencyAppendix.summary.noMatchRows} no match found.`,
-    { bold: true, gapAfter: 5 },
-  ));
-  if (transparencyAppendix.rows.length === 0) {
-    lines.push({ text: "No persisted GDPR Transparency checklist rows were retained." });
-  }
-  transparencyAppendix.rows.forEach((row, index) => {
-    lines.push({
-      text: `${index + 1}. ${row.label}: ${row.evidenceLabel}`,
-      size: 11,
-      bold: true,
-      gapAfter: 1,
-      gapBefore: 2,
-      keepWithNextHeight: 28,
-      kind: "itemHeading",
-    });
-    lines.push(...wrappedLines(row.rationale, { indent: 10, size: 9, gapAfter: 2 }));
-    lines.push(...wrappedLines(
-      `Assessment: ${titleCase(row.assessmentStatus)} | Evidence state: ${titleCase(row.evidenceState)} | Direction: ${titleCase(row.assessmentDirection)}${row.scannerCoverageGap ? " | Scanner coverage gap retained" : ""}`,
-      { indent: 10, size: 8, gapAfter: 3 },
-    ));
-  });
-
-  lines.push(sectionHeading("Appendix: Transport Security", true));
-  lines.push(...wrappedLines(
-    "These rows reproduce the persisted Transport Security checklist projection. They describe bounded HTTPS, TLS certificate, HTTP redirect, mixed-content, and form-transport observations without changing the canonical findings or evidence.",
-    { size: 9, gapAfter: 4 },
-  ));
-  lines.push(...wrappedLines(
-    `Transport Security summary: ${transportRows.length} checklist rows; ${transportFindings.length} projected findings.`,
-    { bold: true, gapAfter: 5 },
-  ));
-  if (transportRows.length === 0) {
-    lines.push({ text: "No persisted Transport Security checklist rows were retained." });
-  }
-  transportRows.forEach((row, index) => {
-    lines.push({
-      text: `${index + 1}. ${row.label}: ${row.evidenceLabel}`,
-      size: 11,
-      bold: true,
-      gapAfter: 1,
-      gapBefore: 2,
-      keepWithNextHeight: 28,
-      kind: "itemHeading",
-    });
-    lines.push(...wrappedLines(row.rationale, { indent: 10, size: 9, gapAfter: 2 }));
-    lines.push(...wrappedLines(
-      `Assessment: ${titleCase(row.assessmentStatus)} | Evidence state: ${titleCase(row.evidenceState)} | Direction: ${titleCase(row.assessmentDirection)}${row.scannerCoverageGap ? " | Scanner coverage gap retained" : ""}`,
-      { indent: 10, size: 8, gapAfter: 3 },
-    ));
-  });
-  transportFindings.forEach((finding, index) => {
-    const display = findingDisplay(finding);
-    lines.push({
-      text: `Finding ${index + 1}. ${ascii(display.name)} [${titleCase(display.severity)}]`,
-      size: 11,
-      bold: true,
-      gapAfter: 1,
-      gapBefore: 3,
-      keepWithNextHeight: 28,
-      kind: "itemHeading",
-    });
-    if (display.description) lines.push(...wrappedLines(display.description, { indent: 10, size: 9 }));
-    if (display.why) lines.push(...wrappedLines(`Why it matters: ${display.why}`, { indent: 10, size: 9 }));
-    if (display.fix) lines.push(...wrappedLines(`Suggested review action: ${display.fix}`, { indent: 10, size: 9 }));
-    if (display.confidence) lines.push({ text: `Retained confidence: ${display.confidence}`, indent: 10, size: 8, gapAfter: 3 });
-  });
-
   lines.push(sectionHeading(runtimeAppendix.title, true));
   lines.push(...wrappedLines(runtimeAppendix.scopeNote, { size: 9, gapAfter: 4 }));
   lines.push(...wrappedLines(
@@ -534,6 +470,152 @@ function reportLines(report: CanonicalReportExport, image: PdfImage | null): Pdf
       ));
     });
     lines.push({ text: "", gapAfter: 3 });
+  });
+
+  lines.push(sectionHeading(collectionAppendix.title, true));
+  lines.push(...wrappedLines(collectionAppendix.scopeNote, { size: 9, gapAfter: 4 }));
+  lines.push(...wrappedLines(
+    `Inventory summary: ${collectionAppendix.summary.totalForms} retained forms; ${collectionAppendix.summary.totalFields} retained fields; assessment ${titleCase(collectionAppendix.assessmentStatus)}.`,
+    { bold: true, gapAfter: 3 },
+  ));
+  lines.push(...wrappedLines(collectionAppendix.presentationMessage, { gapAfter: 3 }));
+  if (collectionAppendix.pageUrl) {
+    lines.push(...wrappedLines(`Assessed page: ${collectionAppendix.pageUrl}`, { size: 9, gapAfter: 2 }));
+  }
+  if (collectionAppendix.coverage) {
+    lines.push(...wrappedLines(
+      `Coverage: ${titleCase(collectionAppendix.coverage.status)}; document scope ${titleCase(collectionAppendix.coverage.documentScope)}; interaction mode ${titleCase(collectionAppendix.coverage.interactionMode)}; inspected ${collectionAppendix.coverage.inspectedFormCandidateCount} form candidates and ${collectionAppendix.coverage.inspectedFieldCandidateCount} field candidates.`,
+      { size: 9, gapAfter: 2 },
+    ));
+  }
+  if (collectionAppendix.summary.omittedForms > 0 || collectionAppendix.summary.omittedFields > 0) {
+    lines.push(...wrappedLines(
+      `Bounded retention omitted ${collectionAppendix.summary.omittedForms} forms and ${collectionAppendix.summary.omittedFields} fields from the candidate inventory.`,
+      { size: 9, gapAfter: 2 },
+    ));
+  }
+  if (collectionAppendix.limitationKeys.length > 0) {
+    lines.push(...wrappedLines(`Limitations: ${join(collectionAppendix.limitationKeys)}`, {
+      size: 8,
+      gapAfter: 3,
+    }));
+  }
+  if (collectionAppendix.forms.length === 0) {
+    lines.push({
+      text: collectionAppendix.assessmentStatus === "not_observed"
+        ? "No forms found."
+        : "No form rows were retained; the assessment message above governs interpretation.",
+    });
+  }
+  collectionAppendix.forms.forEach((form, formIndex) => {
+    lines.push({
+      text: `${formIndex + 1}. ${form.title ?? titleCase(form.surfaceType)}`,
+      size: 11,
+      bold: true,
+      gapAfter: 1,
+      gapBefore: 2,
+      keepWithNextHeight: 40,
+      kind: "itemHeading",
+    });
+    lines.push(...wrappedLines(
+      `Page: ${form.pageUrl} | Structure: ${titleCase(form.structure)} | Surface type: ${titleCase(form.surfaceType)} | Method: ${titleCase(form.method)}`,
+      { indent: 10, size: 9 },
+    ));
+    lines.push(...wrappedLines(
+      `Action: ${titleCase(form.actionRelationship)}${form.actionHostname ? ` (${form.actionHostname})` : ""} | Fields retained: ${form.retainedFieldCount} of ${form.candidateFieldCount} | Truncated: ${yesNo(form.fieldsTruncated)} | Confidence: ${formatConfidence(form.confidence)} | Basis: ${titleCase(form.directVsInferred)}`,
+      { indent: 10, size: 9, gapAfter: 2 },
+    ));
+    if (form.evidenceRefs.length > 0) {
+      lines.push(...wrappedLines(
+        `Form evidence references: ${join(form.evidenceRefs.map((reference) => reference.refId))}`,
+        { indent: 10, size: 8, gapAfter: 2 },
+      ));
+    }
+    form.fields.forEach((field, fieldIndex) => {
+      const state = field.disabled ? "disabled" : field.readOnly ? "read-only" : "available";
+      lines.push(...wrappedLines(
+        `Field ${fieldIndex + 1}: ${field.label ?? "Label not retained"}; element ${titleCase(field.elementType)}; input type ${titleCase(field.inputType)}; category ${titleCase(field.semanticCategory)}; required ${yesNo(field.required)}; state ${state}; autocomplete ${field.autocompleteToken ?? "not retained"}; confidence ${formatConfidence(field.confidence)}; basis ${titleCase(field.directVsInferred)}.`,
+        { indent: 18, size: 8, gapAfter: 1 },
+      ));
+      if (field.evidenceRefs.length > 0) {
+        lines.push(...wrappedLines(
+          `Field evidence references: ${join(field.evidenceRefs.map((reference) => reference.refId))}`,
+          { indent: 18, size: 8 },
+        ));
+      }
+    });
+    lines.push({ text: "", gapAfter: 3 });
+  });
+
+  lines.push(sectionHeading(transparencyAppendix.title, true));
+  lines.push(...wrappedLines(transparencyAppendix.scopeNote, { size: 9, gapAfter: 4 }));
+  lines.push(...wrappedLines(
+    `Transparency summary: ${transparencyAppendix.summary.totalRows} rows; ${transparencyAppendix.summary.observedRows} observed; ${transparencyAppendix.summary.notConfirmedRows} not confirmed; ${transparencyAppendix.summary.noMatchRows} no match found.`,
+    { bold: true, gapAfter: 5 },
+  ));
+  if (transparencyAppendix.rows.length === 0) {
+    lines.push({ text: "No persisted GDPR Transparency checklist rows were retained." });
+  }
+  transparencyAppendix.rows.forEach((row, index) => {
+    lines.push({
+      text: `${index + 1}. ${row.label}: ${row.evidenceLabel}`,
+      size: 11,
+      bold: true,
+      gapAfter: 1,
+      gapBefore: 2,
+      keepWithNextHeight: 28,
+      kind: "itemHeading",
+    });
+    lines.push(...wrappedLines(row.rationale, { indent: 10, size: 9, gapAfter: 2 }));
+    lines.push(...wrappedLines(
+      `Assessment: ${titleCase(row.assessmentStatus)} | Evidence state: ${titleCase(row.evidenceState)} | Direction: ${titleCase(row.assessmentDirection)}${row.scannerCoverageGap ? " | Scanner coverage gap retained" : ""}`,
+      { indent: 10, size: 8, gapAfter: 3 },
+    ));
+  });
+
+  lines.push(sectionHeading("Appendix: Transport Security", true));
+  lines.push(...wrappedLines(
+    "These rows reproduce the persisted Transport Security checklist projection. They describe bounded HTTPS, TLS certificate, HTTP redirect, mixed-content, and form-transport observations without changing the canonical findings or evidence.",
+    { size: 9, gapAfter: 4 },
+  ));
+  lines.push(...wrappedLines(
+    `Transport Security summary: ${transportRows.length} checklist rows; ${transportFindings.length} projected findings.`,
+    { bold: true, gapAfter: 5 },
+  ));
+  if (transportRows.length === 0) {
+    lines.push({ text: "No persisted Transport Security checklist rows were retained." });
+  }
+  transportRows.forEach((row, index) => {
+    lines.push({
+      text: `${index + 1}. ${row.label}: ${row.evidenceLabel}`,
+      size: 11,
+      bold: true,
+      gapAfter: 1,
+      gapBefore: 2,
+      keepWithNextHeight: 28,
+      kind: "itemHeading",
+    });
+    lines.push(...wrappedLines(row.rationale, { indent: 10, size: 9, gapAfter: 2 }));
+    lines.push(...wrappedLines(
+      `Assessment: ${titleCase(row.assessmentStatus)} | Evidence state: ${titleCase(row.evidenceState)} | Direction: ${titleCase(row.assessmentDirection)}${row.scannerCoverageGap ? " | Scanner coverage gap retained" : ""}`,
+      { indent: 10, size: 8, gapAfter: 3 },
+    ));
+  });
+  transportFindings.forEach((finding, index) => {
+    const display = findingDisplay(finding);
+    lines.push({
+      text: `Finding ${index + 1}. ${ascii(display.name)} [${titleCase(display.severity)}]`,
+      size: 11,
+      bold: true,
+      gapAfter: 1,
+      gapBefore: 3,
+      keepWithNextHeight: 28,
+      kind: "itemHeading",
+    });
+    if (display.description) lines.push(...wrappedLines(display.description, { indent: 10, size: 9 }));
+    if (display.why) lines.push(...wrappedLines(`Why it matters: ${display.why}`, { indent: 10, size: 9 }));
+    if (display.fix) lines.push(...wrappedLines(`Suggested review action: ${display.fix}`, { indent: 10, size: 9 }));
+    if (display.confidence) lines.push({ text: `Retained confidence: ${display.confidence}`, indent: 10, size: 8, gapAfter: 3 });
   });
 
   if (image) {
