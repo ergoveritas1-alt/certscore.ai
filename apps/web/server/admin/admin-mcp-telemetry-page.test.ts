@@ -124,6 +124,12 @@ test("MCP telemetry dashboard queries bounded periods and never reads request pa
   assert.doesNotMatch(repository, /prompt|authorization|request_body|response_body|raw_header/i);
 });
 
+test("MCP traffic exclusions resolve linked scan identities once per query", () => {
+  assert.match(repository, /scan_id = any\(array\(/);
+  assert.doesNotMatch(repository, /where request\.scan_id::text = \$\{prefix\}scan_id/);
+  assert.doesNotMatch(repository, /fulfilled_by_scan_id, request\.scan_id\)::text = \$\{prefix\}scan_id/);
+});
+
 test("MCP invocation persistence retains bounded request attribution for failed calls", () => {
   for (const column of [
     "client_name", "requester_ip", "requester_ip_hash", "requester_network",

@@ -190,20 +190,20 @@ function nullableNumber(value: CountValue) {
 
 function macMiniMcpTrafficFilter(alias: string, excludeParameter: string, apiKeyNamesParameter: string) {
   const prefix = alias ? `${alias}.` : "";
-  return `and (${excludeParameter}::boolean = false or not exists (
-    select 1
-      from (
-        select request.requested_by
-          from public.pulse_requests request
-         where request.scan_id::text = ${prefix}scan_id
-        union all
-        select request.requested_by
-          from public.scan_requests request
-         where coalesce(request.fulfilled_by_scan_id, request.scan_id)::text = ${prefix}scan_id
-      ) linked_request
-      join public.integration_api_keys linked_key on linked_key.public_id = linked_request.requested_by ->> 'apiKeyId'
-     where linked_key.name = any(${apiKeyNamesParameter}::text[])
-  ))`;
+  return `and (${excludeParameter}::boolean = false or not coalesce(
+    ${prefix}scan_id = any(array(
+      select request.scan_id::text
+        from public.pulse_requests request
+        join public.integration_api_keys linked_key on linked_key.public_id = request.requested_by ->> 'apiKeyId'
+       where request.scan_id is not null
+         and linked_key.name = any(${apiKeyNamesParameter}::text[])
+      union
+      select coalesce(request.fulfilled_by_scan_id, request.scan_id)::text
+        from public.scan_requests request
+        join public.integration_api_keys linked_key on linked_key.public_id = request.requested_by ->> 'apiKeyId'
+       where coalesce(request.fulfilled_by_scan_id, request.scan_id) is not null
+         and linked_key.name = any(${apiKeyNamesParameter}::text[])
+    )), false))`;
 }
 
 function internalQaMcpTrafficFilter(alias: string, emailParameter: string, requesterIpParameter: string, clientNameParameter: string) {
@@ -212,22 +212,23 @@ function internalQaMcpTrafficFilter(alias: string, emailParameter: string, reque
     ${prefix}is_canary
     or lower(coalesce(${prefix}client_name, '')) = any(${clientNameParameter}::text[])
     or coalesce(${prefix}requester_ip::text, '') = any(${requesterIpParameter}::text[])
-    or exists (
-      select 1
-        from (
-          select request.requested_by
-            from public.pulse_requests request
-           where request.scan_id::text = ${prefix}scan_id
-          union all
-          select request.requested_by
-            from public.scan_requests request
-           where coalesce(request.fulfilled_by_scan_id, request.scan_id)::text = ${prefix}scan_id
-        ) linked_request
-        left join public.integration_api_keys linked_key on linked_key.public_id = linked_request.requested_by ->> 'apiKeyId'
-        left join public.users linked_user on linked_user.id::text = coalesce(linked_request.requested_by ->> 'userId', linked_key.owner_user_id::text)
-        left join public.better_auth_users linked_auth_user on linked_auth_user.id = linked_request.requested_by ->> 'userId'
-       where lower(coalesce(linked_user.email, linked_auth_user.email, linked_key.created_by, '')) = any(${emailParameter}::text[])
-    )
+    or coalesce(${prefix}scan_id = any(array(
+      select request.scan_id::text
+        from public.pulse_requests request
+        left join public.integration_api_keys linked_key on linked_key.public_id = request.requested_by ->> 'apiKeyId'
+        left join public.users linked_user on linked_user.id::text = coalesce(request.requested_by ->> 'userId', linked_key.owner_user_id::text)
+        left join public.better_auth_users linked_auth_user on linked_auth_user.id = request.requested_by ->> 'userId'
+       where request.scan_id is not null
+         and lower(coalesce(linked_user.email, linked_auth_user.email, linked_key.created_by, '')) = any(${emailParameter}::text[])
+      union
+      select coalesce(request.fulfilled_by_scan_id, request.scan_id)::text
+        from public.scan_requests request
+        left join public.integration_api_keys linked_key on linked_key.public_id = request.requested_by ->> 'apiKeyId'
+        left join public.users linked_user on linked_user.id::text = coalesce(request.requested_by ->> 'userId', linked_key.owner_user_id::text)
+        left join public.better_auth_users linked_auth_user on linked_auth_user.id = request.requested_by ->> 'userId'
+       where coalesce(request.fulfilled_by_scan_id, request.scan_id) is not null
+         and lower(coalesce(linked_user.email, linked_auth_user.email, linked_key.created_by, '')) = any(${emailParameter}::text[])
+    )), false)
   )`;
 }
 
