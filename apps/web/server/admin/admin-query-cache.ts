@@ -11,7 +11,7 @@ import {
 export const loadCachedAdminScanOperationalSnapshot = unstable_cache(
   async (period: AdminScanOperationalSnapshotPeriod, includeCanary: boolean, excludeMacMiniScanBot: boolean) =>
     loadAdminScanOperationalSnapshot(period, includeCanary, excludeMacMiniScanBot),
-  ["admin-scan-operational-snapshot-v1"],
+  ["admin-scan-operational-snapshot-v2"],
   { revalidate: 30 }
 );
 

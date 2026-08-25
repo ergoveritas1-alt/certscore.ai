@@ -5,6 +5,8 @@ import test from "node:test";
 const page = readFileSync("apps/web/app/app/admin/mcp/page.tsx", "utf8");
 const layout = readFileSync("apps/web/app/app/admin/layout.tsx", "utf8");
 const repository = readFileSync("apps/web/server/admin/mcp-telemetry.ts", "utf8");
+const snapshotComponent = readFileSync("apps/web/components/admin/admin-operational-snapshot.tsx", "utf8");
+const snapshotContract = readFileSync("apps/web/lib/admin/admin-operational-snapshot.ts", "utf8");
 const persistence = readFileSync("apps/web/server/mcp-telemetry/repository.ts", "utf8");
 const requestContextMigration = readFileSync("packages/db/migrations/0187_mcp_invocation_request_context.sql", "utf8");
 
@@ -18,12 +20,13 @@ test("MCP operations page makes the request ledger the primary navigable workspa
   assert.match(page, /Authenticated · \/mcp/);
   assert.match(page, /Self-declared headers and client names are useful routing signals/);
   assert.match(page, /MCP request activity/);
-  assert.match(page, /<CardTitle>Operational snapshot<\/CardTitle>/);
-  assert.match(page, /snapshotPeriods = \["1h", "24h", "7d", "30d", "1y"\]/);
+  assert.match(page, /<AdminOperationalSnapshot/);
+  assert.match(snapshotComponent, /<CardTitle>Operational snapshot<\/CardTitle>/);
+  assert.match(snapshotContract, /\["1h", "24h", "7d", "30d", "1y"\]/);
   assert.match(page, /\?\? "24h"/);
   assert.match(page, /Last year \(retained data\)/);
   assert.match(page, /dashboard\.trend\.map/);
-  assert.match(page, /Pacific time/);
+  assert.match(snapshotComponent, /Pacific time/);
   assert.match(page, /name="toolPeriod"/);
   assert.match(page, /name="sourcePeriod"/);
   assert.match(page, /dashboard\.toolAnalytics\.label/);
@@ -33,8 +36,8 @@ test("MCP operations page makes the request ledger the primary navigable workspa
   assert.match(page, /Self-declared headers and client names are useful routing signals/);
   assert.ok(page.indexOf("Tool distribution and latency") < page.indexOf("{hasActivity ? ("));
   assert.ok(page.indexOf("Source and access signals") < page.indexOf("{hasActivity ? ("));
-  assert.ok(page.indexOf("Operational snapshot") < page.indexOf("MCP request activity"));
-  assert.ok(page.indexOf("Operational snapshot") < page.indexOf("Tool distribution and latency"));
+  assert.ok(page.indexOf("<AdminOperationalSnapshot") < page.indexOf("MCP request activity"));
+  assert.ok(page.indexOf("<AdminOperationalSnapshot") < page.indexOf("Tool distribution and latency"));
   assert.doesNotMatch(page, /Tool activity and latency/);
   assert.doesNotMatch(page, /Provider and access signals/);
   assert.match(page, /<AdminScansFilterForm[^>]+submitFirst>/);
@@ -48,9 +51,9 @@ test("MCP operations page makes the request ledger the primary navigable workspa
   assert.doesNotMatch(page, /No events retained yet\. The retention target is 90 days/);
   assert.doesNotMatch(page, /Invocation telemetry/);
   assert.match(page, /Unattributed/);
-  assert.match(page, /allowedAttribution/);
-  assert.match(page, /label: "Origin"/);
-  assert.match(page, /label: "Client"/);
+  assert.match(page, /sourceLabel/);
+  assert.match(page, /label: "Caller attribution"/);
+  assert.match(page, /label: "Client \/ channel"/);
   assert.match(page, /sourceConfidenceLabel/);
   assert.match(page, /Directory discovery is not distinguishable from a custom connector/);
   assert.match(page, /Requester \/ caller IP/);
@@ -77,9 +80,9 @@ test("MCP operations page makes the request ledger the primary navigable workspa
 });
 
 test("MCP telemetry dashboard queries bounded periods and never reads request payloads", () => {
-  assert.match(repository, /SNAPSHOT_CONFIG/);
-  assert.match(repository, /date_bin\('5 minutes'/);
-  assert.match(repository, /date_trunc\('month'/);
+  assert.match(repository, /ADMIN_OPERATIONAL_SNAPSHOT_CONFIG/);
+  assert.match(snapshotContract, /date_bin\('5 minutes'/);
+  assert.match(snapshotContract, /date_trunc\('month'/);
   assert.match(repository, /snapshotPeriod: AdminMcpSnapshotPeriod = "24h"/);
   assert.match(repository, /toolPeriod: AdminMcpSnapshotPeriod = "24h"/);
   assert.match(repository, /sourcePeriod: AdminMcpSnapshotPeriod = "24h"/);
@@ -87,6 +90,7 @@ test("MCP telemetry dashboard queries bounded periods and never reads request pa
   assert.match(repository, /sourceConfig\.bucketStart/);
   assert.match(repository, /snapshotConfig\.bucketStart/);
   assert.match(repository, /snapshotConfig\.bucketEnd/);
+  assert.match(repository, /revalidate: 30/);
   assert.match(repository, /bucket at time zone 'America\/Los_Angeles'/);
   assert.match(repository, /occurred_at >= now\(\) - interval '30 days'/);
   assert.match(repository, /limit 20/);

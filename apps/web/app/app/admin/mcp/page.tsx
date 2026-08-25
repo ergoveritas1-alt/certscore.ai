@@ -8,8 +8,10 @@ import { loadAdminMcpTelemetryDashboard, listAdminMcpTelemetryEventsPage, type A
 import { withServerTiming } from "../../../../server/performance/log-server-timing";
 import { AdminScansFilterForm } from "../scans/admin-scans-filter-form";
 import { AdminTrafficFilters } from "../../../../components/admin/admin-traffic-filters";
+import { AdminOperationalSnapshot } from "../../../../components/admin/admin-operational-snapshot";
 import { AdminTableRefreshBoundary } from "../../../../components/admin/admin-table-refresh-boundary";
-import { resolveExcludeMacMiniScanBot } from "../../../../lib/admin/mac-mini-scan-bot";
+import { adminOperationalSnapshotDelta, adminOperationalSnapshotHealth, adminOperationalSnapshotHref } from "../../../../lib/admin/admin-operational-snapshot";
+import { adminTrafficScopeVisibility, resolveAdminTrafficScope } from "../../../../lib/admin/admin-traffic-scope";
 import {
   adminPolicyEvidenceDiagnosticTitle,
   adminPolicyEvidenceStageLabel,
@@ -51,6 +53,7 @@ type AdminMcpPageProps = {
     sourcePeriod?: string;
     snapshot?: string;
     scanBotFilter?: string;
+    traffic?: string;
     surface?: string;
     timeSpan?: string;
     tool?: string;
@@ -232,8 +235,9 @@ export default async function AdminMcpTelemetryPage({ searchParams }: AdminMcpPa
   const page = normalizePage(resolved.page);
   const pageSize = normalizePageSize(resolved.perPage, 20);
   const activeQuery = resolved.q?.trim().slice(0, 160) ?? "";
-  const includeCanary = resolved.includeCanary === "1";
-  const excludeMacMiniScanBot = resolveExcludeMacMiniScanBot(resolved);
+  const trafficScope = resolveAdminTrafficScope(resolved);
+  const { includeInternalQa: includeCanary, includeMacMini } = adminTrafficScopeVisibility(trafficScope);
+  const excludeMacMiniScanBot = !includeMacMini;
   const activeSurface = normalizeOption(resolved.surface, surfaces);
   const activeSource = normalizeOption(resolved.source, sources);
   const activeProduct = normalizeOption(resolved.product, products);
@@ -268,25 +272,28 @@ export default async function AdminMcpTelemetryPage({ searchParams }: AdminMcpPa
       excludeMacMiniScanBot,
     })),
   ]);
-  const maxTrend = Math.max(1, ...dashboard.trend.map((bucket) => bucket.invocations));
   const hasActivity = dashboard.retention.totalEvents > 0 || dashboard.metrics.invocations > 0;
   const pageCount = Math.max(1, Math.ceil(eventPage.totalCount / pageSize));
   const toolOptions = Array.from(new Set([activeTool, ...dashboard.tools.map((tool) => tool.toolName)].filter(Boolean))).sort();
+  const requestDelta = adminOperationalSnapshotDelta(dashboard.metrics.invocations, dashboard.comparison.invocations);
+  const errorDelta = adminOperationalSnapshotDelta(dashboard.metrics.errors, dashboard.comparison.errors, "higher_is_bad");
+  const latencyDelta = adminOperationalSnapshotDelta(dashboard.metrics.p95DurationMs ?? 0, dashboard.comparison.p95DurationMs ?? 0, "higher_is_bad");
+  const snapshotHref = (values: Record<string, string | null | undefined>) => adminOperationalSnapshotHref("/app/admin/mcp", { snapshot: activeSnapshotPeriod, traffic: trafficScope, ...values });
   const summaryMetrics = [
-    ["Requests", number(dashboard.metrics.invocations), dashboard.snapshot.label],
-    ["Sessions", number(dashboard.metrics.sessions), "opaque"],
-    ["Actors", number(dashboard.metrics.actors), "opaque"],
-    ["Scans", number(dashboard.metrics.scans), "tool calls"],
-    ["Successful", number(dashboard.metrics.successes), "requests"],
-    ["Latency", `${duration(dashboard.metrics.p50DurationMs)} / ${duration(dashboard.metrics.p95DurationMs)}`, "p50 / p95"],
+    { label: "Requests", value: number(dashboard.metrics.invocations), detail: dashboard.snapshot.label, definition: "requests" as const, comparison: requestDelta.label, anomaly: requestDelta.anomaly, href: snapshotHref({}) },
+    { label: "Sessions", value: number(dashboard.metrics.sessions), detail: "opaque", definition: "sessions" as const },
+    { label: "Actors", value: number(dashboard.metrics.actors), detail: "opaque", definition: "actors" as const },
+    { label: "Scans", value: number(dashboard.metrics.scans), detail: "tool calls", definition: "scans" as const, href: snapshotHref({ tool: "certscore_scan_site" }) },
+    { label: "Successful", value: number(dashboard.metrics.successes), detail: "requests", definition: "successful" as const, href: snapshotHref({ outcome: "success" }) },
+    { label: "Latency", value: `${duration(dashboard.metrics.p50DurationMs)} / ${duration(dashboard.metrics.p95DurationMs)}`, detail: "p50 / p95", definition: "latency" as const, comparison: latencyDelta.label, anomaly: latencyDelta.anomaly },
   ];
   const rateMetrics = [
-    ["Reuse", percentage(dashboard.rates.scanReuseRate)],
-    ["Errors", percentage(dashboard.rates.errorRate)],
-    ["Quota", percentage(dashboard.rates.quotaHitRate)],
-    ["Bundles / scan", dashboard.rates.bundlePerScanRatio?.toFixed(2) ?? "—"],
-    ["Polls / scan", dashboard.rates.statusPollsPerScanRatio?.toFixed(2) ?? "—"],
-    ["New scans", number(dashboard.metrics.newScans)],
+    { label: "Reuse", value: percentage(dashboard.rates.scanReuseRate), href: snapshotHref({ decision: "reused" }) },
+    { label: "Errors", value: percentage(dashboard.rates.errorRate), href: snapshotHref({ outcome: "error" }), anomaly: errorDelta.anomaly },
+    { label: "Quota", value: percentage(dashboard.rates.quotaHitRate), href: snapshotHref({ outcome: "rate_limited" }) },
+    { label: "Bundles / scan", value: dashboard.rates.bundlePerScanRatio?.toFixed(2) ?? "—", href: snapshotHref({ tool: "certscore_get_scan_bundle" }) },
+    { label: "Polls / scan", value: dashboard.rates.statusPollsPerScanRatio?.toFixed(2) ?? "—", href: snapshotHref({ tool: "certscore_get_scan_status" }) },
+    { label: "New scans", value: number(dashboard.metrics.newScans), href: snapshotHref({ decision: "new" }) },
   ];
 
   return (
@@ -297,7 +304,7 @@ export default async function AdminMcpTelemetryPage({ searchParams }: AdminMcpPa
           <h2 className="text-2xl font-semibold tracking-tight text-slate-950">MCP operations</h2>
         </div>
         <div className="flex items-center gap-3">
-          <AdminTrafficFilters basePath="/app/admin/mcp" excludeMacMiniScanBot={excludeMacMiniScanBot} includeCanary={includeCanary} searchParams={resolved} />
+          <AdminTrafficFilters basePath="/app/admin/mcp" scope={trafficScope} searchParams={resolved} />
           {dashboard.retention.totalEvents > 0 ? (
           <p className="text-xs text-slate-500">
             {dashboard.retention.days}d retention · {number(dashboard.retention.totalEvents)} events
@@ -307,73 +314,20 @@ export default async function AdminMcpTelemetryPage({ searchParams }: AdminMcpPa
         </div>
       </div>
 
-      <Card className="overflow-hidden border-slate-200 bg-white">
-        <CardHeader className="border-b border-slate-100 py-3">
-          <div className="flex flex-wrap items-center justify-between gap-2">
-            <div>
-              <CardTitle>Operational snapshot</CardTitle>
-              <p className="mt-0.5 text-xs text-slate-500">All hosted MCP entrypoints · {dashboard.snapshot.label} · Pacific time{activeSnapshotPeriod === "1y" ? ` · limited to ${dashboard.retention.days}d retained data` : ""}</p>
-            </div>
-            <form action="/app/admin/mcp" className="flex items-center gap-2" method="get">
-              {activeQuery ? <input name="q" type="hidden" value={activeQuery} /> : null}
-              {activeSurface ? <input name="surface" type="hidden" value={activeSurface} /> : null}
-              {activeSource ? <input name="source" type="hidden" value={activeSource} /> : null}
-              {activeProduct ? <input name="product" type="hidden" value={activeProduct} /> : null}
-              {activeConfidence ? <input name="confidence" type="hidden" value={activeConfidence} /> : null}
-              {activeTool ? <input name="tool" type="hidden" value={activeTool} /> : null}
-              {activeOutcome ? <input name="outcome" type="hidden" value={activeOutcome} /> : null}
-              {activeDecision ? <input name="decision" type="hidden" value={activeDecision} /> : null}
-              <input name="timeSpan" type="hidden" value={activeTimeSpan} />
-              <input name="toolPeriod" type="hidden" value={activeToolPeriod} />
-              <input name="sourcePeriod" type="hidden" value={activeSourcePeriod} />
-              {includeCanary ? <input name="includeCanary" type="hidden" value="1" /> : null}
-              <input name="scanBotFilter" type="hidden" value="1" />
-              {excludeMacMiniScanBot ? <input name="excludeMacMiniScanBot" type="hidden" value="1" /> : null}
-              <label className="sr-only" htmlFor="mcp-snapshot-period">Snapshot period</label>
-              <select className="h-9 rounded-full border border-slate-300 bg-white px-3 text-sm text-slate-700" defaultValue={activeSnapshotPeriod} id="mcp-snapshot-period" name="snapshot">
-                <option value="1h">Last hour</option>
-                <option value="24h">Last 24 hours</option>
-                <option value="7d">Last 7 days</option>
-                <option value="30d">Last 30 days</option>
-                <option value="1y">Last year (retained data)</option>
-              </select>
-              <button className="app-raised-button inline-flex h-9 items-center rounded-full px-3 text-sm font-semibold text-slate-700" type="submit">Apply</button>
-            </form>
-          </div>
-        </CardHeader>
-        <CardContent className="p-0">
-          <div className="grid grid-cols-3 gap-px bg-slate-100 sm:grid-cols-6">
-            {summaryMetrics.map(([label, value, detail]) => (
-              <div className="min-w-0 bg-white px-3 py-2.5" key={label}>
-                <p className="truncate text-[10px] font-semibold uppercase tracking-wide text-slate-500">{label}</p>
-                <p className="mt-0.5 truncate text-lg font-semibold text-slate-950">{value}</p>
-                <p className="truncate text-[10px] text-slate-400">{detail}</p>
-              </div>
-            ))}
-          </div>
-
-          <div className="grid gap-4 border-t border-slate-100 p-3 lg:grid-cols-[1.4fr_1fr]">
-            <div>
-              <div className="mb-1.5 flex items-center justify-between gap-2"><p className="text-xs font-semibold text-slate-700">{dashboard.snapshot.label} activity</p><p className="text-[10px] text-slate-400">{dashboard.trend[0]?.label ?? "Start"} — {dashboard.trend.at(-1)?.label ?? "Now"} · Pacific time</p></div>
-              <div aria-label={`MCP request trend: ${number(dashboard.metrics.invocations)} requests during ${dashboard.snapshot.label.toLowerCase()}`} className="flex h-14 items-end gap-1" role="img">
-                {dashboard.trend.map((bucket, index) => (
-                  <div aria-hidden="true" className="min-w-0 flex-1 rounded-t bg-sky-500 transition hover:bg-sky-600" key={`${bucket.label}:${index}`} style={{ height: `${Math.max(bucket.invocations > 0 ? 4 : 1, (bucket.invocations / maxTrend) * 56)}px` }} title={`${bucket.label}: ${bucket.invocations} requests, ${bucket.errors} errors, ${bucket.quotaLimited} quota limited`} />
-                ))}
-              </div>
-            </div>
-            <div className="grid grid-cols-3 gap-1.5">
-              {rateMetrics.map(([label, value]) => <div className="rounded-lg bg-slate-50 px-2 py-1.5" key={label}><p className="truncate text-[10px] text-slate-500">{label}</p><p className="mt-0.5 text-sm font-semibold text-slate-950">{value}</p></div>)}
-            </div>
-          </div>
-
-          <div className="grid gap-px border-t border-slate-100 bg-slate-100 md:grid-cols-3">
-            {surfaces.map((surface) => {
-              const row = dashboard.surfaces.find((item) => item.surface === surface);
-              return <div className="flex items-center justify-between gap-3 bg-white px-3 py-2.5" key={surface}><div className="min-w-0"><p className="truncate text-xs font-semibold text-slate-900">{surfaceLabels[surface]}</p><p className="truncate text-[10px] text-slate-500">{number(row?.sessions ?? 0)} sessions · {number(row?.actors ?? 0)} actors · {number(row?.errors ?? 0)} errors</p></div><p className="shrink-0 text-lg font-semibold text-slate-950">{number(row?.calls ?? 0)}</p></div>;
-            })}
-          </div>
-        </CardContent>
-      </Card>
+      <AdminOperationalSnapshot
+        ariaLabel={`MCP request trend: ${number(dashboard.metrics.invocations)} requests during ${dashboard.snapshot.label.toLowerCase()}`}
+        basePath="/app/admin/mcp"
+        breakdown={surfaces.map((surface) => { const row = dashboard.surfaces.find((item) => item.surface === surface); return { label: surfaceLabels[surface], value: number(row?.calls ?? 0), detail: `${number(row?.sessions ?? 0)} sessions · ${number(row?.actors ?? 0)} actors · ${number(row?.errors ?? 0)} errors`, href: snapshotHref({ surface }) }; })}
+        breakdownColumns="md:grid-cols-3"
+        health={adminOperationalSnapshotHealth(dashboard.newestAt, activeSnapshotPeriod as AdminMcpSnapshotPeriod)}
+        metrics={summaryMetrics}
+        period={activeSnapshotPeriod as AdminMcpSnapshotPeriod}
+        rates={rateMetrics}
+        searchParams={resolved}
+        subtitle={`All hosted MCP entrypoints · ${dashboard.snapshot.label}${activeSnapshotPeriod === "1y" ? ` · limited to ${dashboard.retention.days}d retained data` : ""}`}
+        trend={dashboard.trend.map((bucket, index) => ({ key: `${bucket.label}:${index}`, label: bucket.label, value: bucket.invocations, title: `${bucket.label}: ${bucket.invocations} requests, ${bucket.errors} errors, ${bucket.quotaLimited} quota limited`, className: bucket.errors > 0 ? "bg-rose-400 hover:bg-rose-500" : bucket.quotaLimited > 0 ? "bg-amber-400 hover:bg-amber-500" : undefined }))}
+        trendTotal={dashboard.snapshot.label}
+      />
 
       <Card className="min-w-0 overflow-hidden border-slate-200 bg-white">
         <CardHeader className="pb-2">
@@ -391,9 +345,7 @@ export default async function AdminMcpTelemetryPage({ searchParams }: AdminMcpPa
             <input name="snapshot" type="hidden" value={activeSnapshotPeriod} />
             <input name="toolPeriod" type="hidden" value={activeToolPeriod} />
             <input name="sourcePeriod" type="hidden" value={activeSourcePeriod} />
-            {includeCanary ? <input name="includeCanary" type="hidden" value="1" /> : null}
-            <input name="scanBotFilter" type="hidden" value="1" />
-            {excludeMacMiniScanBot ? <input name="excludeMacMiniScanBot" type="hidden" value="1" /> : null}
+            <input name="traffic" type="hidden" value={trafficScope} />
             <input aria-label="Filter MCP requests by hostname, scan ID, request ID, opaque ID, tool, client, or error" className="h-10 min-w-[24rem] flex-[1_1_28rem] rounded-lg border border-slate-300 bg-white px-3 text-sm" defaultValue={activeQuery} name="q" placeholder="Hostname, scan ID, request ID, session, actor, client, error" />
             <select aria-label="Filter MCP requests by entrypoint" className="h-10 w-[10.5rem] shrink-0 rounded-lg border border-slate-300 bg-white px-2 text-xs" defaultValue={activeSurface ?? ""} name="surface"><option value="">Any entrypoint</option>{surfaces.map((surface) => <option key={surface} value={surface}>{surfaceLabels[surface]}</option>)}</select>
             <select aria-label="Filter MCP requests by caller provider" className="h-10 w-[9.5rem] shrink-0 rounded-lg border border-slate-300 bg-white px-2 text-xs" defaultValue={activeSource ?? ""} name="source"><option value="">Any provider</option>{sources.map((source) => <option key={source} value={source}>{source === "unknown" ? "Unattributed" : formatLabel(source)}</option>)}</select>
@@ -405,7 +357,7 @@ export default async function AdminMcpTelemetryPage({ searchParams }: AdminMcpPa
             <select aria-label="Filter MCP requests by time span" className="h-10 w-[8.5rem] shrink-0 rounded-lg border border-slate-300 bg-white px-2 text-xs" defaultValue={activeTimeSpan} name="timeSpan">{timeSpans.map((timeSpan) => <option key={timeSpan} value={timeSpan}>{timeSpan === "all" ? "All retained" : timeSpan === "4h" ? "Past 4 hours" : timeSpan === "12h" ? "Past 12 hours" : timeSpan === "24h" ? "Past 24 hours" : timeSpan === "7d" ? "Past 7 days" : "Past 30 days"}</option>)}</select>
           </AdminScansFilterForm>
 
-          <PaginationControls basePath="/app/admin/mcp" itemLabel="MCP requests" page={page} pageCount={pageCount} pageSize={pageSize} searchParams={{ q: activeQuery, surface: activeSurface, source: activeSource, product: activeProduct, confidence: activeConfidence, tool: activeTool, outcome: activeOutcome, decision: activeDecision, timeSpan: activeTimeSpan, snapshot: activeSnapshotPeriod, toolPeriod: activeToolPeriod, sourcePeriod: activeSourcePeriod, includeCanary: includeCanary ? "1" : null, scanBotFilter: "1", excludeMacMiniScanBot: excludeMacMiniScanBot ? "1" : null }} showPageJump totalCount={eventPage.totalCount} visibleCount={eventPage.items.length} />
+          <PaginationControls basePath="/app/admin/mcp" itemLabel="MCP requests" page={page} pageCount={pageCount} pageSize={pageSize} searchParams={{ q: activeQuery, surface: activeSurface, source: activeSource, product: activeProduct, confidence: activeConfidence, tool: activeTool, outcome: activeOutcome, decision: activeDecision, timeSpan: activeTimeSpan, snapshot: activeSnapshotPeriod, toolPeriod: activeToolPeriod, sourcePeriod: activeSourcePeriod, traffic: trafficScope }} showPageJump totalCount={eventPage.totalCount} visibleCount={eventPage.items.length} />
 
           <div className="w-full max-w-full overflow-x-auto overscroll-x-contain rounded-xl border border-slate-200">
             <table className="table-fixed text-left text-xs" style={{ width: "3490px", minWidth: "3490px" }}>
@@ -463,7 +415,7 @@ export default async function AdminMcpTelemetryPage({ searchParams }: AdminMcpPa
                       <td className="truncate px-2.5 py-1.5 text-slate-700" title={event.industry ?? undefined}>{event.industry ?? "—"}</td>
                       <td className="px-2.5 py-1.5"><span className={`inline-flex rounded-full px-1.5 py-0.5 text-[10px] font-semibold ring-1 ${decisionClass(event.scan_decision)}`}>{formatLabel(event.mode_detail ?? event.scan_decision)}</span><p className="mt-0.5 truncate text-[10px] text-slate-500">{event.mode_format ? formatLabel(event.mode_format) : provenanceLabel(event.target_provenance) ?? "MCP"}</p></td>
                       <td className="px-2.5 py-1.5" title={`request ${event.request_id} · event ${event.event_id}`}><p className="truncate font-mono text-[10px] font-semibold text-slate-900">{event.tool_name}</p><p className="mt-0.5 truncate text-[10px] text-slate-500">{formatLabel(event.transport_outcome)} · {formatLabel(event.quota_outcome)}</p></td>
-                      <td className="px-2.5 py-1.5"><p className="truncate font-mono text-[10px]" title={event.scan_id ?? undefined}>{event.scan_id ?? "—"}</p></td>
+                      <td className="px-2.5 py-1.5"><p className="truncate font-mono text-[10px]" title={event.scan_id ?? undefined}>{event.scan_id ?? "—"}</p><p className="mt-0.5 flex gap-1.5 text-[9px]">{event.scan_id ? <><Link className="text-sky-700 hover:underline" href={adminOperationalSnapshotHref("/app/admin/scans", { q: event.scan_id, traffic: trafficScope })} prefetch={false}>Scans</Link><Link className="text-sky-700 hover:underline" href={adminOperationalSnapshotHref("/app/admin/analytics", { q: event.scan_id, traffic: trafficScope })} prefetch={false}>Events</Link><Link className="text-sky-700 hover:underline" href={adminOperationalSnapshotHref("/app/admin/pulse", { q: event.scan_id, traffic: trafficScope })} prefetch={false}>API</Link></> : <Link className="text-sky-700 hover:underline" href={adminOperationalSnapshotHref("/app/admin/analytics", { q: event.request_id, traffic: trafficScope })} prefetch={false}>Events</Link>}</p></td>
                       <td className="px-2.5 py-1.5"><p className="truncate font-mono text-[10px] text-slate-700" title={event.scanner_egress_id ?? "Scanner egress not recorded"}>{event.scanner_egress_id ?? "Not recorded"}</p><p className="mt-0.5 truncate text-[10px] text-slate-400" title={event.scanner_egress_provider ?? undefined}>{event.scanner_egress_provider ?? "Outbound runtime"}</p></td>
                       <td className="sticky right-0 z-10 border-l border-slate-100 bg-white px-2 py-1.5 text-center group-hover:bg-slate-50">{scanHref ? <Link aria-label={`Open scan ${event.scan_id}`} className="inline-flex h-8 w-8 items-center justify-center rounded-full border border-slate-300 bg-white font-semibold text-sky-700" href={scanHref} prefetch={false}>→</Link> : <span className="text-slate-300">—</span>}</td>
                     </tr>
@@ -484,9 +436,7 @@ export default async function AdminMcpTelemetryPage({ searchParams }: AdminMcpPa
                 <form action="/app/admin/mcp" className="flex items-center gap-2" method="get">
                   {activeQuery ? <input name="q" type="hidden" value={activeQuery} /> : null}{activeSurface ? <input name="surface" type="hidden" value={activeSurface} /> : null}{activeSource ? <input name="source" type="hidden" value={activeSource} /> : null}{activeProduct ? <input name="product" type="hidden" value={activeProduct} /> : null}{activeConfidence ? <input name="confidence" type="hidden" value={activeConfidence} /> : null}{activeTool ? <input name="tool" type="hidden" value={activeTool} /> : null}{activeOutcome ? <input name="outcome" type="hidden" value={activeOutcome} /> : null}{activeDecision ? <input name="decision" type="hidden" value={activeDecision} /> : null}
                   <input name="timeSpan" type="hidden" value={activeTimeSpan} /><input name="snapshot" type="hidden" value={activeSnapshotPeriod} /><input name="sourcePeriod" type="hidden" value={activeSourcePeriod} />
-                  {includeCanary ? <input name="includeCanary" type="hidden" value="1" /> : null}
-                  <input name="scanBotFilter" type="hidden" value="1" />
-                  {excludeMacMiniScanBot ? <input name="excludeMacMiniScanBot" type="hidden" value="1" /> : null}
+                  <input name="traffic" type="hidden" value={trafficScope} />
                   <label className="sr-only" htmlFor="mcp-tool-period">Tool analytics period</label>
                   <select className="h-9 rounded-full border border-slate-300 bg-white px-3 text-sm text-slate-700" defaultValue={activeToolPeriod} id="mcp-tool-period" name="toolPeriod"><option value="1h">Last hour</option><option value="24h">Last 24 hours</option><option value="7d">Last 7 days</option><option value="30d">Last 30 days</option><option value="1y">Last year (retained data)</option></select>
                   <button className="app-raised-button inline-flex h-9 items-center rounded-full px-3 text-sm font-semibold text-slate-700" type="submit">Apply</button>
@@ -529,9 +479,7 @@ export default async function AdminMcpTelemetryPage({ searchParams }: AdminMcpPa
                 <form action="/app/admin/mcp" className="flex items-center gap-2" method="get">
                   {activeQuery ? <input name="q" type="hidden" value={activeQuery} /> : null}{activeSurface ? <input name="surface" type="hidden" value={activeSurface} /> : null}{activeSource ? <input name="source" type="hidden" value={activeSource} /> : null}{activeProduct ? <input name="product" type="hidden" value={activeProduct} /> : null}{activeConfidence ? <input name="confidence" type="hidden" value={activeConfidence} /> : null}{activeTool ? <input name="tool" type="hidden" value={activeTool} /> : null}{activeOutcome ? <input name="outcome" type="hidden" value={activeOutcome} /> : null}{activeDecision ? <input name="decision" type="hidden" value={activeDecision} /> : null}
                   <input name="timeSpan" type="hidden" value={activeTimeSpan} /><input name="snapshot" type="hidden" value={activeSnapshotPeriod} /><input name="toolPeriod" type="hidden" value={activeToolPeriod} />
-                  {includeCanary ? <input name="includeCanary" type="hidden" value="1" /> : null}
-                  <input name="scanBotFilter" type="hidden" value="1" />
-                  {excludeMacMiniScanBot ? <input name="excludeMacMiniScanBot" type="hidden" value="1" /> : null}
+                  <input name="traffic" type="hidden" value={trafficScope} />
                   <label className="sr-only" htmlFor="mcp-source-period">Source analytics period</label>
                   <select className="h-9 rounded-full border border-slate-300 bg-white px-3 text-sm text-slate-700" defaultValue={activeSourcePeriod} id="mcp-source-period" name="sourcePeriod"><option value="1h">Last hour</option><option value="24h">Last 24 hours</option><option value="7d">Last 7 days</option><option value="30d">Last 30 days</option><option value="1y">Last year (retained data)</option></select>
                   <button className="app-raised-button inline-flex h-9 items-center rounded-full px-3 text-sm font-semibold text-slate-700" type="submit">Apply</button>

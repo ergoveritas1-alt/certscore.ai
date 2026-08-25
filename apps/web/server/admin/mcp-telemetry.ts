@@ -1,12 +1,19 @@
 import "server-only";
 
+import { unstable_cache } from "next/cache";
 import { query, queryOne } from "@website-signal-risk-scanner/db";
 import { MCP_TELEMETRY_RETENTION_DAYS, type McpTelemetrySurface } from "@website-signal-risk-scanner/shared";
 import { calculateMcpTelemetryRates } from "../../lib/admin/mcp-telemetry-rates";
+import { MAC_MINI_SCAN_BOT_API_KEY_NAMES } from "../../lib/admin/mac-mini-scan-bot";
 import {
-  MAC_MINI_SCAN_BOT_MCP_CLIENT_NAMES,
-  MAC_MINI_SCAN_BOT_REQUESTER_IPS,
-} from "../../lib/admin/mac-mini-scan-bot";
+  INTERNAL_QA_EMAILS,
+  INTERNAL_QA_MCP_CLIENT_NAMES,
+  INTERNAL_QA_REQUESTER_IPS,
+} from "../../lib/admin/admin-traffic-scope";
+import {
+  ADMIN_OPERATIONAL_SNAPSHOT_CONFIG,
+  type AdminOperationalSnapshotPeriod,
+} from "../../lib/admin/admin-operational-snapshot";
 import { requesterIpAttributionFromRequest, type RequesterIpAttributionSource } from "../../lib/admin/requester-ip-attribution";
 import { parseAdminEvidenceMatrix, type AdminEvidenceMatrix } from "../../lib/scans/admin-evidence-matrix";
 import { requirePlatformAdminContext } from "./platform-admin";
@@ -18,6 +25,7 @@ type SummaryRow = {
   bundle_count: CountValue;
   error_count: CountValue;
   invocation_count: CountValue;
+  newest_event_at: string | null;
   new_scan_count: CountValue;
   p50_duration_ms: CountValue;
   p95_duration_ms: CountValue;
@@ -29,6 +37,12 @@ type SummaryRow = {
   success_count: CountValue;
 };
 
+type ComparisonRow = {
+  error_count: CountValue;
+  invocation_count: CountValue;
+  p95_duration_ms: CountValue;
+};
+
 type TrendRow = {
   bucket_label: string;
   errors: CountValue;
@@ -36,45 +50,7 @@ type TrendRow = {
   quota_limited: CountValue;
 };
 
-export type AdminMcpSnapshotPeriod = "1h" | "24h" | "7d" | "30d" | "1y";
-
-const SNAPSHOT_CONFIG = {
-  "1h": {
-    bucketEnd: "date_bin('5 minutes', now(), timestamptz '2001-01-01')",
-    bucketLabel: "HH24:MI",
-    bucketStart: "date_bin('5 minutes', now(), timestamptz '2001-01-01') - interval '55 minutes'",
-    label: "Last hour",
-    step: "5 minutes",
-  },
-  "24h": {
-    bucketEnd: "date_trunc('hour', now())",
-    bucketLabel: "Mon DD HH24:00",
-    bucketStart: "date_trunc('hour', now()) - interval '23 hours'",
-    label: "Last 24 hours",
-    step: "1 hour",
-  },
-  "7d": {
-    bucketEnd: "date_trunc('day', now())",
-    bucketLabel: "Mon DD",
-    bucketStart: "date_trunc('day', now()) - interval '6 days'",
-    label: "Last 7 days",
-    step: "1 day",
-  },
-  "30d": {
-    bucketEnd: "date_trunc('day', now())",
-    bucketLabel: "Mon DD",
-    bucketStart: "date_trunc('day', now()) - interval '29 days'",
-    label: "Last 30 days",
-    step: "1 day",
-  },
-  "1y": {
-    bucketEnd: "date_trunc('month', now())",
-    bucketLabel: "Mon YYYY",
-    bucketStart: "date_trunc('month', now()) - interval '11 months'",
-    label: "Last year",
-    step: "1 month",
-  },
-} as const;
+export type AdminMcpSnapshotPeriod = AdminOperationalSnapshotPeriod;
 
 type ToolRow = {
   calls: CountValue;
@@ -212,34 +188,70 @@ function nullableNumber(value: CountValue) {
   return Number.isFinite(parsed) ? parsed : null;
 }
 
-function macMiniMcpTrafficFilter(alias = "") {
+function macMiniMcpTrafficFilter(alias: string, excludeParameter: string, apiKeyNamesParameter: string) {
   const prefix = alias ? `${alias}.` : "";
-  return `and ($1::boolean = false or not (
-    lower(coalesce(${prefix}client_name, '')) = any($2::text[])
-    or coalesce(${prefix}requester_ip::text, '') = any($3::text[])
+  return `and (${excludeParameter}::boolean = false or not exists (
+    select 1
+      from (
+        select request.requested_by
+          from public.pulse_requests request
+         where request.scan_id::text = ${prefix}scan_id
+        union all
+        select request.requested_by
+          from public.scan_requests request
+         where coalesce(request.fulfilled_by_scan_id, request.scan_id)::text = ${prefix}scan_id
+      ) linked_request
+      join public.integration_api_keys linked_key on linked_key.public_id = linked_request.requested_by ->> 'apiKeyId'
+     where linked_key.name = any(${apiKeyNamesParameter}::text[])
   ))`;
 }
 
-export async function loadAdminMcpTelemetryDashboard(
+function internalQaMcpTrafficFilter(alias: string, emailParameter: string, requesterIpParameter: string, clientNameParameter: string) {
+  const prefix = alias ? `${alias}.` : "";
+  return `and not (
+    ${prefix}is_canary
+    or lower(coalesce(${prefix}client_name, '')) = any(${clientNameParameter}::text[])
+    or coalesce(${prefix}requester_ip::text, '') = any(${requesterIpParameter}::text[])
+    or exists (
+      select 1
+        from (
+          select request.requested_by
+            from public.pulse_requests request
+           where request.scan_id::text = ${prefix}scan_id
+          union all
+          select request.requested_by
+            from public.scan_requests request
+           where coalesce(request.fulfilled_by_scan_id, request.scan_id)::text = ${prefix}scan_id
+        ) linked_request
+        left join public.integration_api_keys linked_key on linked_key.public_id = linked_request.requested_by ->> 'apiKeyId'
+        left join public.users linked_user on linked_user.id::text = coalesce(linked_request.requested_by ->> 'userId', linked_key.owner_user_id::text)
+        left join public.better_auth_users linked_auth_user on linked_auth_user.id = linked_request.requested_by ->> 'userId'
+       where lower(coalesce(linked_user.email, linked_auth_user.email, linked_key.created_by, '')) = any(${emailParameter}::text[])
+    )
+  )`;
+}
+
+async function loadAdminMcpTelemetryDashboardUncached(
   snapshotPeriod: AdminMcpSnapshotPeriod = "24h",
   toolPeriod: AdminMcpSnapshotPeriod = "24h",
   sourcePeriod: AdminMcpSnapshotPeriod = "24h",
   includeCanary = false,
   excludeMacMiniScanBot = true,
 ) {
-  await requirePlatformAdminContext();
-  const snapshotConfig = SNAPSHOT_CONFIG[snapshotPeriod] ?? SNAPSHOT_CONFIG["24h"];
-  const toolConfig = SNAPSHOT_CONFIG[toolPeriod] ?? SNAPSHOT_CONFIG["24h"];
-  const sourceConfig = SNAPSHOT_CONFIG[sourcePeriod] ?? SNAPSHOT_CONFIG["24h"];
-  const canaryFilter = includeCanary ? "" : "and is_canary = false";
-  const macMiniFilter = macMiniMcpTrafficFilter();
-  const macMiniEventFilter = macMiniMcpTrafficFilter("events");
+  const snapshotConfig = ADMIN_OPERATIONAL_SNAPSHOT_CONFIG[snapshotPeriod] ?? ADMIN_OPERATIONAL_SNAPSHOT_CONFIG["24h"];
+  const toolConfig = ADMIN_OPERATIONAL_SNAPSHOT_CONFIG[toolPeriod] ?? ADMIN_OPERATIONAL_SNAPSHOT_CONFIG["24h"];
+  const sourceConfig = ADMIN_OPERATIONAL_SNAPSHOT_CONFIG[sourcePeriod] ?? ADMIN_OPERATIONAL_SNAPSHOT_CONFIG["24h"];
+  const internalQaFilter = includeCanary ? "" : internalQaMcpTrafficFilter("events", "$3", "$4", "$5");
+  const macMiniFilter = macMiniMcpTrafficFilter("events", "$1", "$2");
+  const macMiniEventFilter = macMiniMcpTrafficFilter("events", "$1", "$2");
   const dashboardFilterValues = [
     excludeMacMiniScanBot,
-    MAC_MINI_SCAN_BOT_MCP_CLIENT_NAMES,
-    MAC_MINI_SCAN_BOT_REQUESTER_IPS,
+    MAC_MINI_SCAN_BOT_API_KEY_NAMES,
+    INTERNAL_QA_EMAILS,
+    INTERNAL_QA_REQUESTER_IPS,
+    INTERNAL_QA_MCP_CLIENT_NAMES,
   ];
-  const [summaryResult, trendResult, toolResult, surfaceResult, sourceResult, hostnameResult, retentionResult] = await Promise.all([
+  const [summaryResult, trendResult, toolResult, surfaceResult, sourceResult, hostnameResult, retentionResult, comparisonResult] = await Promise.all([
     queryOne<SummaryRow>(
       `select count(*) as invocation_count,
               count(distinct session_id) filter (where session_id is not null) as session_count,
@@ -252,12 +264,13 @@ export async function loadAdminMcpTelemetryDashboard(
               count(*) filter (where outcome = 'rate_limited') as quota_limited_count,
               count(*) filter (where scan_decision = 'reused') as reused_scan_count,
               count(*) filter (where scan_decision = 'new') as new_scan_count,
+              max(occurred_at) as newest_event_at,
               percentile_cont(0.5) within group (order by duration_ms) as p50_duration_ms,
               percentile_cont(0.95) within group (order by duration_ms) as p95_duration_ms
-         from public.mcp_tool_invocation_events
+         from public.mcp_tool_invocation_events events
         where occurred_at >= ${snapshotConfig.bucketStart}
           and occurred_at < ${snapshotConfig.bucketEnd} + interval '${snapshotConfig.step}'
-          ${canaryFilter}
+          ${internalQaFilter}
           ${macMiniFilter}`,
       dashboardFilterValues,
       { readOnly: true },
@@ -278,7 +291,7 @@ export async function loadAdminMcpTelemetryDashboard(
          left join public.mcp_tool_invocation_events events
            on events.occurred_at >= buckets.bucket
           and events.occurred_at < buckets.bucket + interval '${snapshotConfig.step}'
-          ${canaryFilter.replace("and is_canary", "and events.is_canary")}
+          ${includeCanary ? "" : internalQaMcpTrafficFilter("events", "$3", "$4", "$5")}
           ${macMiniEventFilter}
         group by buckets.bucket
         order by buckets.bucket asc`,
@@ -292,10 +305,10 @@ export async function loadAdminMcpTelemetryDashboard(
               count(*) filter (where outcome <> 'success') as errors,
               percentile_cont(0.5) within group (order by duration_ms) as p50_duration_ms,
               percentile_cont(0.95) within group (order by duration_ms) as p95_duration_ms
-         from public.mcp_tool_invocation_events
+         from public.mcp_tool_invocation_events events
         where occurred_at >= ${toolConfig.bucketStart}
           and occurred_at < ${toolConfig.bucketEnd} + interval '${toolConfig.step}'
-          ${canaryFilter}
+          ${internalQaFilter}
           ${macMiniFilter}
         group by surface, tool_name
         order by calls desc, surface asc, tool_name asc
@@ -309,10 +322,10 @@ export async function loadAdminMcpTelemetryDashboard(
               count(*) filter (where outcome <> 'success') as errors,
               count(distinct session_id) filter (where session_id is not null) as sessions,
               count(distinct actor_id) filter (where actor_id is not null) as actors
-         from public.mcp_tool_invocation_events
+         from public.mcp_tool_invocation_events events
         where occurred_at >= ${snapshotConfig.bucketStart}
           and occurred_at < ${snapshotConfig.bucketEnd} + interval '${snapshotConfig.step}'
-          ${canaryFilter}
+          ${internalQaFilter}
           ${macMiniFilter}
         group by surface
         order by calls desc`,
@@ -324,10 +337,10 @@ export async function loadAdminMcpTelemetryDashboard(
               count(*) as calls,
               count(distinct session_id) filter (where session_id is not null) as session_count,
               count(distinct actor_id) filter (where actor_id is not null) as actor_count
-         from public.mcp_tool_invocation_events
+         from public.mcp_tool_invocation_events events
         where occurred_at >= ${sourceConfig.bucketStart}
           and occurred_at < ${sourceConfig.bucketEnd} + interval '${sourceConfig.step}'
-          ${canaryFilter}
+          ${internalQaFilter}
           ${macMiniFilter}
         group by surface, source, source_attribution, auth_class, client_family
         order by calls desc
@@ -340,10 +353,10 @@ export async function loadAdminMcpTelemetryDashboard(
               count(*) as calls,
               count(*) filter (where tool_name = 'certscore_scan_site') as scan_requests,
               max(occurred_at) as last_requested_at
-         from public.mcp_tool_invocation_events
+         from public.mcp_tool_invocation_events events
         where occurred_at >= now() - interval '30 days'
           and target_hostname is not null
-          ${canaryFilter}
+          ${internalQaFilter}
           ${macMiniFilter}
         group by target_hostname
         order by calls desc, scan_requests desc, target_hostname asc
@@ -356,17 +369,30 @@ export async function loadAdminMcpTelemetryDashboard(
               max(occurred_at) as newest_event_at,
               count(*) as total_event_count,
               count(*) filter (
-                where occurred_at < now() - ($4::int * interval '1 day')
+                where occurred_at < now() - ($6::int * interval '1 day')
               ) as expired_event_count
-         from public.mcp_tool_invocation_events
-        where true ${canaryFilter} ${macMiniFilter}`,
+         from public.mcp_tool_invocation_events events
+        where true ${internalQaFilter} ${macMiniFilter}`,
       [...dashboardFilterValues, MCP_TELEMETRY_RETENTION_DAYS],
+      { readOnly: true },
+    ),
+    queryOne<ComparisonRow>(
+      `select count(*) as invocation_count,
+              count(*) filter (where outcome = 'error') as error_count,
+              percentile_cont(0.95) within group (order by duration_ms) as p95_duration_ms
+         from public.mcp_tool_invocation_events events
+        where occurred_at >= ${snapshotConfig.previousStart}
+          and occurred_at < ${snapshotConfig.bucketStart}
+          ${internalQaFilter}
+          ${macMiniFilter}`,
+      dashboardFilterValues,
       { readOnly: true },
     ),
   ]);
 
   const summary = summaryResult ?? {
     actor_count: 0, bundle_count: 0, error_count: 0, invocation_count: 0,
+    newest_event_at: null,
     new_scan_count: 0, p50_duration_ms: null, p95_duration_ms: null,
     quota_limited_count: 0, reused_scan_count: 0, scan_count: 0,
     session_count: 0, status_count: 0, success_count: 0,
@@ -388,6 +414,11 @@ export async function loadAdminMcpTelemetryDashboard(
   };
 
   return {
+    comparison: {
+      errors: count(comparisonResult?.error_count ?? 0),
+      invocations: count(comparisonResult?.invocation_count ?? 0),
+      p95DurationMs: nullableNumber(comparisonResult?.p95_duration_ms ?? null),
+    },
     snapshot: {
       label: snapshotConfig.label,
       period: snapshotPeriod,
@@ -424,6 +455,7 @@ export async function loadAdminMcpTelemetryDashboard(
       oldestEventAt: retentionResult?.oldest_event_at ?? null,
       totalEvents: count(retentionResult?.total_event_count ?? 0),
     },
+    newestAt: summary.newest_event_at,
     sources: sourceResult.rows.map((row) => ({
       actors: count(row.actor_count),
       authClass: row.auth_class,
@@ -458,6 +490,23 @@ export async function loadAdminMcpTelemetryDashboard(
   };
 }
 
+const loadCachedAdminMcpTelemetryDashboard = unstable_cache(
+  loadAdminMcpTelemetryDashboardUncached,
+  ["admin-mcp-operational-snapshot-v1"],
+  { revalidate: 30 },
+);
+
+export async function loadAdminMcpTelemetryDashboard(
+  snapshotPeriod: AdminMcpSnapshotPeriod = "24h",
+  toolPeriod: AdminMcpSnapshotPeriod = "24h",
+  sourcePeriod: AdminMcpSnapshotPeriod = "24h",
+  includeCanary = false,
+  excludeMacMiniScanBot = true,
+) {
+  await requirePlatformAdminContext();
+  return loadCachedAdminMcpTelemetryDashboard(snapshotPeriod, toolPeriod, sourcePeriod, includeCanary, excludeMacMiniScanBot);
+}
+
 export async function listAdminMcpTelemetryEventsPage(
   limit: number,
   offset: number,
@@ -472,14 +521,15 @@ export async function listAdminMcpTelemetryEventsPage(
     return `$${values.length}`;
   };
   const queryText = filters.query?.trim().slice(0, 160) ?? "";
-  if (!filters.includeCanary) conditions.push("is_canary = false");
+  if (!filters.includeCanary) {
+    const emailParameter = addValue(INTERNAL_QA_EMAILS);
+    const requesterIpParameter = addValue(INTERNAL_QA_REQUESTER_IPS);
+    const clientNameParameter = addValue(INTERNAL_QA_MCP_CLIENT_NAMES);
+    conditions.push(internalQaMcpTrafficFilter("events", emailParameter, requesterIpParameter, clientNameParameter).replace(/^and /, ""));
+  }
   if (filters.excludeMacMiniScanBot !== false) {
-    const clientNamesParameter = addValue(MAC_MINI_SCAN_BOT_MCP_CLIENT_NAMES);
-    const requesterIpsParameter = addValue(MAC_MINI_SCAN_BOT_REQUESTER_IPS);
-    conditions.push(`not (
-      lower(coalesce(client_name, '')) = any(${clientNamesParameter}::text[])
-      or coalesce(requester_ip::text, '') = any(${requesterIpsParameter}::text[])
-    )`);
+    const apiKeyNamesParameter = addValue(MAC_MINI_SCAN_BOT_API_KEY_NAMES);
+    conditions.push(macMiniMcpTrafficFilter("events", "true", apiKeyNamesParameter).replace(/^and /, ""));
   }
 
   if (queryText) {
@@ -525,7 +575,7 @@ export async function listAdminMcpTelemetryEventsPage(
   const [totalResult, eventResult] = await Promise.all([
     queryOne<TotalRow>(
       `select count(*) as total_count
-         from public.mcp_tool_invocation_events
+         from public.mcp_tool_invocation_events events
          ${whereSql}`,
       values,
       { readOnly: true },

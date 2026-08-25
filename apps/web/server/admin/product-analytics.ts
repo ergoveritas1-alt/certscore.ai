@@ -1,30 +1,29 @@
 import "server-only";
 
+import { unstable_cache } from "next/cache";
 import { query, queryOne } from "@website-signal-risk-scanner/db";
+import { MAC_MINI_SCAN_BOT_API_KEY_NAMES } from "../../lib/admin/mac-mini-scan-bot";
 import {
-  MAC_MINI_SCAN_BOT_API_KEY_NAMES,
-  MAC_MINI_SCAN_BOT_MCP_CLIENT_NAMES,
-  MAC_MINI_SCAN_BOT_REQUESTER_IPS
-} from "../../lib/admin/mac-mini-scan-bot";
+  INTERNAL_QA_EMAILS,
+  INTERNAL_QA_MCP_CLIENT_NAMES,
+  INTERNAL_QA_REQUESTER_IPS,
+} from "../../lib/admin/admin-traffic-scope";
 import { getPlatformAdminEmails, requirePlatformAdminContext } from "./platform-admin";
+import {
+  ADMIN_OPERATIONAL_SNAPSHOT_CONFIG,
+  type AdminOperationalSnapshotPeriod,
+} from "../../lib/admin/admin-operational-snapshot";
 
-export type ProductAnalyticsPeriod = "1h" | "24h" | "7d" | "30d" | "90d";
+export type ProductAnalyticsPeriod = AdminOperationalSnapshotPeriod;
 export type ProductAnalyticsEventName = "page_viewed" | "navigation_clicked" | "action_clicked" | "form_started" | "form_submitted" | "form_succeeded" | "form_failed" | "scan_started" | "scan_completed" | "scan_viewed" | "report_viewed" | "scroll_depth_reached" | "session_engaged" | "web_vital_recorded" | "client_error" | "account_created" | "analytics_opted_in" | "analytics_opted_out";
 export type AdminEventName = ProductAnalyticsEventName | "scan_requested" | "api_request" | "mcp_tool_invoked" | "full_scan.started" | "full_scan.completed" | "preview_scan.started" | "preview_scan.completed" | "v2_lambda_result.received" | "v2_lambda_result.failed";
 export type ProductAnalyticsOutcome = "observed" | "started" | "submitted" | "success" | "failure" | "opted_in" | "opted_out";
 export const ADMIN_EVENT_ROUTES = ["Web", "API", "Pulse", "SDK", "MCP", "Other"] as const;
 export type AdminEventRoute = (typeof ADMIN_EVENT_ROUTES)[number];
 
-const PERIODS = {
-  "1h": { interval: "1 hour", bucket: "5 minutes", label: "Last hour", format: "HH24:MI" },
-  "24h": { interval: "24 hours", bucket: "1 hour", label: "Last 24 hours", format: "HH24:00" },
-  "7d": { interval: "7 days", bucket: "1 day", label: "Last 7 days", format: "Mon DD" },
-  "30d": { interval: "30 days", bucket: "1 day", label: "Last 30 days", format: "Mon DD" },
-  "90d": { interval: "90 days", bucket: "1 day", label: "Last 90 days", format: "Mon DD" }
-} as const;
-
 type Count = string | number | null | undefined;
-type SummaryRow = { actors: Count; authenticated: Count; errors: Count; events: Count; page_views: Count; scans: Count; sessions: Count; opted_out: Count };
+type SummaryRow = { actors: Count; authenticated: Count; errors: Count; events: Count; newest_at: string | null; p50_duration_ms: Count; p95_duration_ms: Count; page_views: Count; scans: Count; sessions: Count; opted_out: Count };
+type ComparisonRow = { errors: Count; events: Count; p95_duration_ms: Count };
 type TrendRow = { bucket: string; bucket_start: string; events: Count; sessions: Count };
 type RouteRow = { normalized_route: string; events: Count; sessions: Count };
 type FeatureRow = { event_name: string; feature: string; events: Count; sessions: Count };
@@ -83,12 +82,30 @@ function operationalEndpointSql(route: string) {
   end)`;
 }
 
+function internalQaRequestSql(requests: string, internalQaRequesterIpsParameter: string, internalQaClientNamesParameter: string) {
+  return `(
+    exists (select 1 from platform_admin_users admins where admins.user_id = ${requests}.requested_by ->> 'userId')
+    or exists (select 1 from platform_admin_api_keys keys where keys.public_id = ${requests}.requested_by ->> 'apiKeyId')
+    or coalesce(${requests}.requested_url, '') ~* '^https?://[^/?#]+/\\.well-known/certscore-canary/'
+    or coalesce(
+      nullif(${requests}.request_context ->> 'sourceIp', ''),
+      nullif(${requests}.request_context -> 'provenance' ->> 'sourceIp', ''),
+      nullif(${requests}.requested_by ->> 'sourceIp', '')
+    ) = any(${internalQaRequesterIpsParameter}::text[])
+    or lower(coalesce(
+      nullif(${requests}.request_context ->> 'clientName', ''),
+      nullif(${requests}.request_context ->> 'client', ''),
+      ''
+    )) = any(${internalQaClientNamesParameter}::text[])
+  )`;
+}
+
 function unifiedEventsCte(
   intervalParameter = "$1",
   macMiniApiKeyNamesParameter = "$2",
-  macMiniMcpClientNamesParameter = "$3",
-  macMiniRequesterIpsParameter = "$4",
-  platformAdminEmailsParameter = "$5"
+  platformAdminEmailsParameter = "$3",
+  internalQaRequesterIpsParameter = "$4",
+  internalQaClientNamesParameter = "$5"
 ) {
   const scanRequestRoute = eventRouteSql("requests.request_channel", "requests.request_context ->> 'source'");
   const pulseRoute = eventRouteSql("requests.request_channel", "coalesce(requests.request_context ->> 'source', requests.request_context ->> 'channel')");
@@ -135,8 +152,7 @@ function unifiedEventsCte(
                case when requests.resolution_mode = 'reused_existing_scan' then 'reused'
                     else coalesce(nullif(requests.request_context ->> 'freshness', ''), 'latest') end as freshness,
                coalesce(nullif(requests.request_context ->> 'scanFrom', ''), nullif(requests.request_context -> 'provenance' ->> 'scanFrom', '')) as request_region,
-               (exists (select 1 from platform_admin_users admins where admins.user_id = requests.requested_by ->> 'userId')
-                or exists (select 1 from platform_admin_api_keys keys where keys.public_id = requests.requested_by ->> 'apiKeyId')) as is_staff
+               ${internalQaRequestSql("requests", internalQaRequesterIpsParameter, internalQaClientNamesParameter)} as is_staff
           from public.pulse_requests requests
          where requests.scan_id is not null
            and requests.requested_at >= now() - ${intervalParameter}::interval - interval '1 day'
@@ -152,8 +168,7 @@ function unifiedEventsCte(
                     when requests.request_context ->> 'bypassRecentScanReuse' = 'true' then 'refresh'
                     else coalesce(nullif(requests.request_context ->> 'freshness', ''), 'latest') end as freshness,
                coalesce(nullif(requests.request_context ->> 'scanFrom', ''), nullif(requests.request_context -> 'provenance' ->> 'scanFrom', '')) as request_region,
-               (exists (select 1 from platform_admin_users admins where admins.user_id = requests.requested_by ->> 'userId')
-                or exists (select 1 from platform_admin_api_keys keys where keys.public_id = requests.requested_by ->> 'apiKeyId')) as is_staff
+               ${internalQaRequestSql("requests", internalQaRequesterIpsParameter, internalQaClientNamesParameter)} as is_staff
           from public.scan_requests requests
          where coalesce(requests.scan_id, requests.fulfilled_by_scan_id) is not null
            and requests.requested_at >= now() - ${intervalParameter}::interval - interval '1 day'
@@ -207,8 +222,7 @@ function unifiedEventsCte(
            'server'::text as device_class,
            null::text as country_code,
            requests.requested_by ? 'userId' as is_authenticated,
-           (exists (select 1 from platform_admin_users admins where admins.user_id = requests.requested_by ->> 'userId')
-            or exists (select 1 from platform_admin_api_keys keys where keys.public_id = requests.requested_by ->> 'apiKeyId')) as is_staff,
+           ${internalQaRequestSql("requests", internalQaRequesterIpsParameter, internalQaClientNamesParameter)} as is_staff,
            false as is_bot,
            (exists (select 1 from mac_mini_scan_bot_keys keys where keys.public_id = requests.requested_by ->> 'apiKeyId')
              or exists (select 1 from mac_mini_scan_bot_scans bot_scans where bot_scans.scan_id = coalesce(requests.scan_id, requests.fulfilled_by_scan_id))) as is_mac_mini_scan_bot,
@@ -243,8 +257,7 @@ function unifiedEventsCte(
            'server'::text as device_class,
            null::text as country_code,
            requests.requested_by ? 'userId' as is_authenticated,
-           (exists (select 1 from platform_admin_users admins where admins.user_id = requests.requested_by ->> 'userId')
-            or exists (select 1 from platform_admin_api_keys keys where keys.public_id = requests.requested_by ->> 'apiKeyId')) as is_staff,
+           ${internalQaRequestSql("requests", internalQaRequesterIpsParameter, internalQaClientNamesParameter)} as is_staff,
            false as is_bot,
            exists (select 1 from mac_mini_scan_bot_keys keys where keys.public_id = requests.requested_by ->> 'apiKeyId') as is_mac_mini_scan_bot,
            requests.normalized_domain as target_hostname,
@@ -275,14 +288,15 @@ function unifiedEventsCte(
            'server'::text as device_class,
            null::text as country_code,
            events.auth_class = 'authenticated' as is_authenticated,
-           coalesce(attribution.is_staff, false) as is_staff,
+           (coalesce(attribution.is_staff, false)
+             or events.is_canary
+             or lower(coalesce(to_jsonb(events) ->> 'client_name', '')) = any(${internalQaClientNamesParameter}::text[])
+             or coalesce(to_jsonb(events) ->> 'requester_ip', '') = any(${internalQaRequesterIpsParameter}::text[])) as is_staff,
            false as is_bot,
            (exists (
              select 1 from mac_mini_scan_bot_scans bot_scans
               where bot_scans.scan_id = case when events.scan_id ~* '^[0-9a-f-]{36}$' then events.scan_id::uuid end
-           )
-           or lower(coalesce(to_jsonb(events) ->> 'client_name', '')) = any(${macMiniMcpClientNamesParameter}::text[])
-           or coalesce(to_jsonb(events) ->> 'requester_ip', '') = any(${macMiniRequesterIpsParameter}::text[])) as is_mac_mini_scan_bot,
+           )) as is_mac_mini_scan_bot,
            events.target_hostname,
            'mcp_tool'::text as source,
            coalesce(nullif(to_jsonb(events) ->> 'requester_ip', ''), attribution.origin_ip) as origin_ip,
@@ -341,9 +355,9 @@ function unifiedEventQueryValues(interval: string): unknown[] {
   return [
     interval,
     MAC_MINI_SCAN_BOT_API_KEY_NAMES,
-    MAC_MINI_SCAN_BOT_MCP_CLIENT_NAMES,
-    MAC_MINI_SCAN_BOT_REQUESTER_IPS,
-    [...getPlatformAdminEmails()]
+    [...new Set([...getPlatformAdminEmails(), ...INTERNAL_QA_EMAILS])],
+    INTERNAL_QA_REQUESTER_IPS,
+    INTERNAL_QA_MCP_CLIENT_NAMES,
   ];
 }
 
@@ -354,13 +368,12 @@ function visibilityClauses(includeInternal: boolean, excludeMacMiniScanBot: bool
   return clauses;
 }
 
-export async function loadProductAnalyticsDashboard(period: ProductAnalyticsPeriod, includeInternal = false, excludeMacMiniScanBot = true) {
-  await requirePlatformAdminContext();
-  const config = PERIODS[period] ?? PERIODS["24h"];
+async function loadProductAnalyticsDashboardUncached(period: ProductAnalyticsPeriod, includeInternal = false, excludeMacMiniScanBot = true) {
+  const config = ADMIN_OPERATIONAL_SNAPSHOT_CONFIG[period] ?? ADMIN_OPERATIONAL_SNAPSHOT_CONFIG["24h"];
   const audience = visibilityClauses(includeInternal, excludeMacMiniScanBot).map((clause) => `and ${clause}`).join(" ");
   const cte = unifiedEventsCte();
   const values = unifiedEventQueryValues(config.interval);
-  const [summary, trend, routes, features, recent] = await Promise.all([
+  const [summary, trend, routes, features, recent, comparison] = await Promise.all([
     queryOne<SummaryRow>(
       `${cte}
        select count(*) as events,
@@ -370,7 +383,10 @@ export async function loadProductAnalyticsDashboard(period: ProductAnalyticsPeri
               count(*) filter (where event_name in ('page_viewed', 'scan_viewed', 'report_viewed')) as page_views,
               count(distinct scan_id) filter (where scan_id is not null) as scans,
               count(*) filter (where event_name = 'client_error' or outcome = 'failure' or event_name ~* 'failed|error') as errors,
-              count(*) filter (where event_name = 'analytics_opted_out') as opted_out
+              count(*) filter (where event_name = 'analytics_opted_out') as opted_out,
+              max(occurred_at) as newest_at,
+              percentile_cont(0.5) within group (order by duration_ms) filter (where duration_ms is not null and duration_ms >= 0) as p50_duration_ms,
+              percentile_cont(0.95) within group (order by duration_ms) filter (where duration_ms is not null and duration_ms >= 0) as p95_duration_ms
          from unified_events events
         where true ${audience}`,
       values,
@@ -378,13 +394,13 @@ export async function loadProductAnalyticsDashboard(period: ProductAnalyticsPeri
     ),
     query<TrendRow>(
       `${cte}
-       select date_bin(interval '${config.bucket}', occurred_at, timestamptz '2001-01-01') as bucket_start,
-              to_char(date_bin(interval '${config.bucket}', occurred_at, timestamptz '2001-01-01') at time zone 'UTC', '${config.format}') as bucket,
+       select date_bin(interval '${config.step}', occurred_at, timestamptz '2001-01-01') as bucket_start,
+              to_char(date_bin(interval '${config.step}', occurred_at, timestamptz '2001-01-01') at time zone 'America/Los_Angeles', '${config.bucketLabel}') as bucket,
               count(*) as events,
               count(distinct session_id) filter (where session_id is not null) as sessions
          from unified_events events
         where true ${audience}
-        group by date_bin(interval '${config.bucket}', occurred_at, timestamptz '2001-01-01')
+        group by date_bin(interval '${config.step}', occurred_at, timestamptz '2001-01-01')
         order by min(occurred_at) asc`,
       values,
       { readOnly: true }
@@ -423,21 +439,52 @@ export async function loadProductAnalyticsDashboard(period: ProductAnalyticsPeri
         order by events.occurred_at desc limit 100`,
       values,
       { readOnly: true }
-    )
+    ),
+    queryOne<ComparisonRow>(
+      `${unifiedEventsCte()}
+       select count(*) as events,
+              count(*) filter (where event_name = 'client_error' or outcome = 'failure' or event_name ~* 'failed|error') as errors,
+              percentile_cont(0.95) within group (order by duration_ms) filter (where duration_ms is not null and duration_ms >= 0) as p95_duration_ms
+         from unified_events events
+        where events.occurred_at >= ${config.previousStart}
+          and events.occurred_at < ${config.bucketStart}
+          ${audience}`,
+      unifiedEventQueryValues(config.comparisonInterval),
+      { readOnly: true },
+    ),
   ]);
 
   return {
+    comparison: {
+      errors: number(comparison?.errors),
+      events: number(comparison?.events),
+      p95DurationMs: comparison?.p95_duration_ms === null || comparison?.p95_duration_ms === undefined ? null : number(comparison.p95_duration_ms),
+    },
     label: config.label,
     metrics: {
       events: number(summary?.events), sessions: number(summary?.sessions), actors: number(summary?.actors),
       authenticated: number(summary?.authenticated), pageViews: number(summary?.page_views), scans: number(summary?.scans),
-      errors: number(summary?.errors), optedOut: number(summary?.opted_out)
+      errors: number(summary?.errors), optedOut: number(summary?.opted_out),
+      p50DurationMs: summary?.p50_duration_ms === null || summary?.p50_duration_ms === undefined ? null : number(summary.p50_duration_ms),
+      p95DurationMs: summary?.p95_duration_ms === null || summary?.p95_duration_ms === undefined ? null : number(summary.p95_duration_ms)
     },
+    newestAt: summary?.newest_at ?? null,
     trend: trend.rows.map((row) => ({ bucket: row.bucket, bucketStart: row.bucket_start, events: number(row.events), sessions: number(row.sessions) })),
     routes: routes.rows.map((row) => ({ route: row.normalized_route, events: number(row.events), sessions: number(row.sessions) })),
     features: features.rows.map((row) => ({ eventName: row.event_name, feature: row.feature, events: number(row.events), sessions: number(row.sessions) })),
     recent: recent.rows
   };
+}
+
+const loadCachedProductAnalyticsDashboard = unstable_cache(
+  loadProductAnalyticsDashboardUncached,
+  ["admin-events-operational-snapshot-v1"],
+  { revalidate: 30 },
+);
+
+export async function loadProductAnalyticsDashboard(period: ProductAnalyticsPeriod, includeInternal = false, excludeMacMiniScanBot = true) {
+  await requirePlatformAdminContext();
+  return loadCachedProductAnalyticsDashboard(period, includeInternal, excludeMacMiniScanBot);
 }
 
 export async function listProductAnalyticsEventsPage(
@@ -449,7 +496,7 @@ export async function listProductAnalyticsEventsPage(
   filters: ProductAnalyticsEventFilters = {}
 ) {
   await requirePlatformAdminContext();
-  const config = PERIODS[period] ?? PERIODS["24h"];
+  const config = ADMIN_OPERATIONAL_SNAPSHOT_CONFIG[period] ?? ADMIN_OPERATIONAL_SNAPSHOT_CONFIG["24h"];
   const values = unifiedEventQueryValues(config.interval);
   const clauses = ["true", ...visibilityClauses(includeInternal, excludeMacMiniScanBot)];
   if (filters.eventName) { values.push(filters.eventName); clauses.push(`events.event_name = $${values.length}`); }

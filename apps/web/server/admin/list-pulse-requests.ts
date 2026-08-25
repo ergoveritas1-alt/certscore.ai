@@ -7,7 +7,7 @@ import {
   normalizeScanFrom,
   SCAN_NO_GO_SNAPSHOT_OUTCOMES
 } from "@website-signal-risk-scanner/shared";
-import { adminApiRouteSql, classifyAdminApiRoute, type AdminApiRoute } from "../../lib/admin/api-route";
+import { ADMIN_API_ROUTES, adminApiRouteSql, classifyAdminApiRoute, type AdminApiRoute } from "../../lib/admin/api-route";
 import { requesterIpAttributionFromContext, type RequesterIpAttributionSource } from "../../lib/admin/requester-ip-attribution";
 import { inferPrimaryLanguage, type PrimaryLanguageConfidence, type PrimaryLanguageSource } from "../../lib/scans/primary-language";
 import { adminNoGoSql, projectAdminNoGo, selectAdminActivityStatus, selectAdminScanOutcome, type AdminNoGoProjection } from "./admin-no-go";
@@ -15,6 +15,15 @@ import { loadCachedAdminScanFilterOptions } from "./admin-query-cache";
 import { normalizeAdminActivityFilter, parseAdminActivitySearch } from "../../lib/admin/activity-search";
 import { requirePlatformAdminContext } from "./platform-admin";
 import { MAC_MINI_SCAN_BOT_API_KEY_NAMES } from "../../lib/admin/mac-mini-scan-bot";
+import {
+  INTERNAL_QA_EMAILS,
+  INTERNAL_QA_MCP_CLIENT_NAMES,
+  INTERNAL_QA_REQUESTER_IPS,
+} from "../../lib/admin/admin-traffic-scope";
+import {
+  ADMIN_OPERATIONAL_SNAPSHOT_CONFIG,
+  type AdminOperationalSnapshotPeriod,
+} from "../../lib/admin/admin-operational-snapshot";
 import { loadLatestVersionedScoreAssessments } from "../scans/score-assessment-repository";
 import { shouldUseLocalV2DagScanTool } from "../scans/local-v2-dag-scan-config";
 import { withServerTiming } from "../performance/log-server-timing";
@@ -147,6 +156,71 @@ export type AdminPulseOverviewCounts = {
   total: number;
 };
 
+export type AdminPulseOperationalSnapshotPeriod = AdminOperationalSnapshotPeriod;
+
+export type AdminPulseOperationalSnapshot = {
+  metrics: {
+    active: number;
+    actors: number;
+    errors: number;
+    newScans: number;
+    p50DurationSeconds: number | null;
+    p95DurationSeconds: number | null;
+    rateLimited: number;
+    requests: number;
+    reused: number;
+    scans: number;
+    successful: number;
+  };
+  comparison: {
+    errors: number;
+    p95DurationSeconds: number | null;
+    requests: number;
+  };
+  newestAt: string | null;
+  period: { label: string; value: AdminPulseOperationalSnapshotPeriod };
+  rates: {
+    error: number | null;
+    quota: number | null;
+    reuse: number | null;
+    success: number | null;
+  };
+  routes: Array<{
+    completed: number;
+    count: number;
+    errors: number;
+    route: AdminApiRoute;
+  }>;
+  trend: Array<{
+    bucket: string;
+    errors: number;
+    label: string;
+    rateLimited: number;
+    requests: number;
+  }>;
+};
+
+type AdminPulseOperationalSnapshotRow = {
+  active_count: number | string | null;
+  actor_count: number | string | null;
+  error_count: number | string | null;
+  new_scan_count: number | string | null;
+  p50_duration_seconds: number | string | null;
+  p95_duration_seconds: number | string | null;
+  rate_limited_count: number | string | null;
+  request_count: number | string | null;
+  newest_at: string | null;
+  previous_error_count: number | string | null;
+  previous_p95_duration_seconds: number | string | null;
+  previous_request_count: number | string | null;
+  reused_count: number | string | null;
+  route_counts: Array<{ completed: number | string; count: number | string; errors: number | string; route: AdminApiRoute }> | null;
+  scan_count: number | string | null;
+  successful_count: number | string | null;
+  trend: Array<{ bucket: string; errors: number | string; label: string; rate_limited: number | string; requests: number | string }> | null;
+};
+
+
 const loadCachedAdminPulseOverviewCounts = unstable_cache(
   async () => {
     const result = await queryOne<{
@@ -163,8 +237,10 @@ const loadCachedAdminPulseOverviewCounts = unstable_cache(
            from pulse_requests pr
            left join scans s on s.id = pr.scan_id
            left join integration_api_keys api_key on api_key.public_id = pr.requested_by ->> 'apiKeyId'
+           left join users app_user on app_user.id::text = coalesce(pr.requested_by ->> 'userId', api_key.owner_user_id::text)
+           left join better_auth_users auth_user on auth_user.id = pr.requested_by ->> 'userId'
           where ${LOGICAL_PULSE_ACTIVITY_PREDICATE}
-            and not ${PULSE_CANARY_TRAFFIC_SQL}
+            and not ${pulseInternalQaTrafficSql("$2", "$3", "$4")}
             and coalesce(api_key.name, '') <> all($1::text[])
        )
        select
@@ -176,7 +252,7 @@ const loadCachedAdminPulseOverviewCounts = unstable_cache(
          (select count(*)::int from pulse_artifact_downloads where artifact_type = 'summary_json')::int as summary_json_downloads,
          (select count(*)::int from pulse_artifact_downloads where artifact_type = 'evidence_json')::int as evidence_json_downloads
        from logical_pulse_requests`,
-      [MAC_MINI_SCAN_BOT_API_KEY_NAMES],
+      [MAC_MINI_SCAN_BOT_API_KEY_NAMES, INTERNAL_QA_EMAILS, INTERNAL_QA_REQUESTER_IPS, INTERNAL_QA_MCP_CLIENT_NAMES],
       { readOnly: true }
     );
 
@@ -235,6 +311,24 @@ const PULSE_CANARY_TRAFFIC_SQL = `(
        and coalesce(canary_sp.page_url, '') ~* '^https?://[^/?#]+/\\.well-known/certscore-canary/'
   )
 )`;
+
+function pulseInternalQaTrafficSql(emailParameter: string, requesterIpParameter: string, clientNameParameter: string) {
+  return `(
+    ${PULSE_CANARY_TRAFFIC_SQL}
+    or lower(coalesce(app_user.email, auth_user.email, api_key.created_by, '')) = any(${emailParameter}::text[])
+    or trim(split_part(coalesce(
+      nullif(pr.request_context ->> 'sourceIp', ''),
+      nullif(pr.request_context -> 'provenance' ->> 'sourceIp', ''),
+      nullif(pr.requested_by ->> 'sourceIp', ''),
+      ''
+    ), '/', 1)) = any(${requesterIpParameter}::text[])
+    or lower(coalesce(
+      nullif(pr.request_context ->> 'clientName', ''),
+      nullif(pr.request_context ->> 'client', ''),
+      ''
+    )) = any(${clientNameParameter}::text[])
+  )`;
+}
 
 const PULSE_NO_GO_SQL = adminNoGoSql({
   accessPosture: "ss.access_posture_class",
@@ -301,7 +395,7 @@ const PULSE_ACTIVITY_FILTER_SQL = `
         pr.request_context -> 'provenance' ->> 'ipHash', pr.requested_by ->> 'sourceIp', pr.requested_by ->> 'ipHash'
       ) ilike any($18::text[])
     ))
-    and ($19::boolean = true or not ${PULSE_CANARY_TRAFFIC_SQL})
+    and ($19::boolean = true or not ${pulseInternalQaTrafficSql("$22", "$23", "$24")})
     and ($20::boolean = false or coalesce(api_key.name, '') <> all($21::text[]))`;
 
 function asRecord(value: unknown): Record<string, unknown> {
@@ -535,8 +629,10 @@ export async function getAdminPulseOverviewCounts(includeCanary = false, exclude
          from pulse_requests pr
          left join scans s on s.id = pr.scan_id
          left join integration_api_keys api_key on api_key.public_id = pr.requested_by ->> 'apiKeyId'
+         left join users app_user on app_user.id::text = coalesce(pr.requested_by ->> 'userId', api_key.owner_user_id::text)
+         left join better_auth_users auth_user on auth_user.id = pr.requested_by ->> 'userId'
         where ${LOGICAL_PULSE_ACTIVITY_PREDICATE}
-          and ($1::boolean = true or not ${PULSE_CANARY_TRAFFIC_SQL})
+          and ($1::boolean = true or not ${pulseInternalQaTrafficSql("$4", "$5", "$6")})
           and ($2::boolean = false or coalesce(api_key.name, '') <> all($3::text[]))
      )
      select count(*)::int as total,
@@ -544,10 +640,178 @@ export async function getAdminPulseOverviewCounts(includeCanary = false, exclude
             count(*) filter (where effective_status in ('queued', 'running', 'finalizing'))::int as queued_or_running,
             count(*) filter (where effective_status = 'rate_limited')::int as rate_limited
        from logical_pulse_requests`,
-    [includeCanary, excludeMacMiniScanBot, MAC_MINI_SCAN_BOT_API_KEY_NAMES],
+    [includeCanary, excludeMacMiniScanBot, MAC_MINI_SCAN_BOT_API_KEY_NAMES, INTERNAL_QA_EMAILS, INTERNAL_QA_REQUESTER_IPS, INTERNAL_QA_MCP_CLIENT_NAMES],
     { readOnly: true }
   );
   return { completed: result?.completed ?? 0, evidenceJsonDownloads: 0, feedback: 0, queuedOrRunning: result?.queued_or_running ?? 0, rateLimited: result?.rate_limited ?? 0, summaryJsonDownloads: 0, total: result?.total ?? 0 };
+}
+
+async function loadAdminPulseOperationalSnapshot(
+  period: AdminPulseOperationalSnapshotPeriod = "24h",
+  includeCanary = false,
+  excludeMacMiniScanBot = true,
+): Promise<AdminPulseOperationalSnapshot> {
+  const config = ADMIN_OPERATIONAL_SNAPSHOT_CONFIG[period] ?? ADMIN_OPERATIONAL_SNAPSHOT_CONFIG["24h"];
+  const result = await queryOne<AdminPulseOperationalSnapshotRow>(
+    `with visible_requests as materialized (
+       select pr.public_id,
+              pr.requested_at,
+              pr.scan_id,
+              pr.elapsed_seconds,
+              pr.resolution_mode,
+              ${PULSE_EFFECTIVE_STATUS_SQL} as effective_status,
+              ${PULSE_API_ROUTE_SQL} as api_route,
+              coalesce(
+                nullif(pr.requested_by ->> 'apiKeyId', ''),
+                nullif(pr.requested_by ->> 'userId', ''),
+                nullif(pr.request_context ->> 'sourceIp', ''),
+                nullif(pr.request_context ->> 'ipHash', ''),
+                nullif(pr.request_context -> 'provenance' ->> 'sourceIp', ''),
+                nullif(pr.request_context -> 'provenance' ->> 'ipHash', '')
+              ) as actor_id
+         from public.pulse_requests pr
+         left join public.scans s on s.id = pr.scan_id
+         left join public.integration_api_keys api_key on api_key.public_id = pr.requested_by ->> 'apiKeyId'
+         left join public.users app_user on app_user.id::text = coalesce(pr.requested_by ->> 'userId', api_key.owner_user_id::text)
+         left join public.better_auth_users auth_user on auth_user.id = pr.requested_by ->> 'userId'
+        where ${LOGICAL_PULSE_ACTIVITY_PREDICATE}
+          and pr.requested_at >= ${config.previousStart}
+          and pr.requested_at < ${config.bucketEnd} + interval '${config.step}'
+          and ($1::boolean = true or not ${pulseInternalQaTrafficSql("$4", "$5", "$6")})
+          and ($2::boolean = false or coalesce(api_key.name, '') <> all($3::text[]))
+     ), current_requests as materialized (
+       select * from visible_requests where requested_at >= ${config.bucketStart}
+     ), previous_requests as materialized (
+       select * from visible_requests where requested_at < ${config.bucketStart}
+     ), buckets as (
+       select generate_series(${config.bucketStart}, ${config.bucketEnd}, interval '${config.step}') as bucket
+     ), trend_rows as (
+       select buckets.bucket,
+              to_char(buckets.bucket at time zone 'America/Los_Angeles', '${config.bucketLabel}') as label,
+              count(requests.public_id)::int as requests,
+              count(requests.public_id) filter (where requests.effective_status in ('failed', 'expired'))::int as errors,
+              count(requests.public_id) filter (where requests.effective_status = 'rate_limited')::int as rate_limited
+         from buckets
+         left join current_requests requests
+           on requests.requested_at >= buckets.bucket
+          and requests.requested_at < buckets.bucket + interval '${config.step}'
+        group by buckets.bucket
+        order by buckets.bucket asc
+     ), route_rows as (
+       select api_route as route,
+              count(*)::int as count,
+              count(*) filter (where effective_status in ('completed', 'completed_limited'))::int as completed,
+              count(*) filter (where effective_status in ('failed', 'expired', 'rate_limited'))::int as errors
+         from current_requests
+        group by api_route
+     )
+     select count(*)::int as request_count,
+            max(requested_at) as newest_at,
+            count(distinct actor_id) filter (where actor_id is not null)::int as actor_count,
+            count(distinct scan_id) filter (where scan_id is not null)::int as scan_count,
+            count(*) filter (where effective_status in ('completed', 'completed_limited'))::int as successful_count,
+            count(*) filter (where effective_status in ('queued', 'running', 'finalizing'))::int as active_count,
+            count(*) filter (where effective_status in ('failed', 'expired'))::int as error_count,
+            count(*) filter (where effective_status = 'rate_limited')::int as rate_limited_count,
+            count(*) filter (where resolution_mode = 'reused_existing_scan')::int as reused_count,
+            count(distinct scan_id) filter (where scan_id is not null and coalesce(resolution_mode, '') <> 'reused_existing_scan')::int as new_scan_count,
+            percentile_cont(0.5) within group (order by elapsed_seconds) filter (where elapsed_seconds is not null and elapsed_seconds >= 0) as p50_duration_seconds,
+            percentile_cont(0.95) within group (order by elapsed_seconds) filter (where elapsed_seconds is not null and elapsed_seconds >= 0) as p95_duration_seconds,
+            (select count(*)::int from previous_requests) as previous_request_count,
+            (select count(*) filter (where effective_status in ('failed', 'expired'))::int from previous_requests) as previous_error_count,
+            (select percentile_cont(0.95) within group (order by elapsed_seconds) filter (where elapsed_seconds is not null and elapsed_seconds >= 0) from previous_requests) as previous_p95_duration_seconds,
+            (select coalesce(jsonb_agg(jsonb_build_object(
+              'bucket', bucket,
+              'label', label,
+              'requests', requests,
+              'errors', errors,
+              'rate_limited', rate_limited
+            ) order by bucket), '[]'::jsonb) from trend_rows) as trend,
+            (select coalesce(jsonb_agg(jsonb_build_object(
+              'route', route,
+              'count', count,
+              'completed', completed,
+              'errors', errors
+            ) order by count desc, route), '[]'::jsonb) from route_rows) as route_counts
+       from current_requests`,
+    [
+      includeCanary,
+      excludeMacMiniScanBot,
+      MAC_MINI_SCAN_BOT_API_KEY_NAMES,
+      INTERNAL_QA_EMAILS,
+      INTERNAL_QA_REQUESTER_IPS,
+      INTERNAL_QA_MCP_CLIENT_NAMES,
+    ],
+    { readOnly: true },
+  );
+
+  const numberValue = (value: number | string | null | undefined) => {
+    const parsed = Number(value ?? 0);
+    return Number.isFinite(parsed) ? parsed : 0;
+  };
+  const nullableNumber = (value: number | string | null | undefined) => value === null || value === undefined ? null : numberValue(value);
+  const requests = numberValue(result?.request_count);
+  const metrics = {
+    active: numberValue(result?.active_count),
+    actors: numberValue(result?.actor_count),
+    errors: numberValue(result?.error_count),
+    newScans: numberValue(result?.new_scan_count),
+    p50DurationSeconds: nullableNumber(result?.p50_duration_seconds),
+    p95DurationSeconds: nullableNumber(result?.p95_duration_seconds),
+    rateLimited: numberValue(result?.rate_limited_count),
+    requests,
+    reused: numberValue(result?.reused_count),
+    scans: numberValue(result?.scan_count),
+    successful: numberValue(result?.successful_count),
+  };
+
+  return {
+    comparison: {
+      errors: numberValue(result?.previous_error_count),
+      p95DurationSeconds: nullableNumber(result?.previous_p95_duration_seconds),
+      requests: numberValue(result?.previous_request_count),
+    },
+    metrics,
+    newestAt: result?.newest_at ?? null,
+    period: { label: config.label, value: period },
+    rates: {
+      error: requests > 0 ? metrics.errors / requests : null,
+      quota: requests > 0 ? metrics.rateLimited / requests : null,
+      reuse: requests > 0 ? metrics.reused / requests : null,
+      success: requests > 0 ? metrics.successful / requests : null,
+    },
+    routes: ADMIN_API_ROUTES.map((route) => {
+      const row = result?.route_counts?.find((candidate) => candidate.route === route);
+      return {
+        completed: numberValue(row?.completed),
+        count: numberValue(row?.count),
+        errors: numberValue(row?.errors),
+        route,
+      };
+    }),
+    trend: (result?.trend ?? []).map((row) => ({
+      bucket: row.bucket,
+      errors: numberValue(row.errors),
+      label: row.label,
+      rateLimited: numberValue(row.rate_limited),
+      requests: numberValue(row.requests),
+    })),
+  };
+}
+
+const loadCachedAdminPulseOperationalSnapshot = unstable_cache(
+  loadAdminPulseOperationalSnapshot,
+  ["admin-pulse-operational-snapshot-v1"],
+  { revalidate: 30 },
+);
+
+export async function getAdminPulseOperationalSnapshot(
+  period: AdminPulseOperationalSnapshotPeriod = "24h",
+  includeCanary = false,
+  excludeMacMiniScanBot = true,
+): Promise<AdminPulseOperationalSnapshot> {
+  await requirePlatformAdminContext();
+  return loadCachedAdminPulseOperationalSnapshot(period, includeCanary, excludeMacMiniScanBot);
 }
 
 export type AdminPulseRequestListInput = {
@@ -651,9 +915,9 @@ export async function listAdminPulseRequestsPage(input: AdminPulseRequestListInp
        left join scan_runtime_artifacts sra on sra.scan_id = pr.scan_id
        left join scans s on s.id = pr.scan_id
        left join domains domain on domain.id = s.domain_id
-       left join users app_user on app_user.id::text = pr.requested_by ->> 'userId'
-       left join better_auth_users auth_user on auth_user.id = pr.requested_by ->> 'userId'
        left join integration_api_keys api_key on api_key.public_id = pr.requested_by ->> 'apiKeyId'
+       left join users app_user on app_user.id::text = coalesce(pr.requested_by ->> 'userId', api_key.owner_user_id::text)
+       left join better_auth_users auth_user on auth_user.id = pr.requested_by ->> 'userId'
       ${PULSE_ACTIVITY_FILTER_SQL}
       order by pr.requested_at desc
       limit $10 offset $11
@@ -681,7 +945,8 @@ export async function listAdminPulseRequestsPage(input: AdminPulseRequestListInp
       limit, offset, SCAN_NO_GO_SNAPSHOT_OUTCOMES, exclusionArray(parsedSearch.exclusions.requester), route,
       exclusionArray(parsedSearch.exclusions.domain), exclusionArray(parsedSearch.exclusions.scanId),
       exclusionArray(parsedSearch.exclusions.email), exclusionArray(parsedSearch.exclusions.ip),
-      input.includeCanary === true, input.excludeMacMiniScanBot !== false, MAC_MINI_SCAN_BOT_API_KEY_NAMES
+      input.includeCanary === true, input.excludeMacMiniScanBot !== false, MAC_MINI_SCAN_BOT_API_KEY_NAMES,
+      INTERNAL_QA_EMAILS, INTERNAL_QA_REQUESTER_IPS, INTERNAL_QA_MCP_CLIENT_NAMES
     ],
     { readOnly: true }
   );
