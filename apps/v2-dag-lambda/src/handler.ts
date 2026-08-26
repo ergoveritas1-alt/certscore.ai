@@ -73,7 +73,9 @@ const LOCAL_V2_DAG_LAMBDA_CONSENT_PROOF_FALLBACK_BUDGET_MS = 6_000;
 const LOCAL_V2_DAG_LAMBDA_AWS_SEND_ATTEMPT_TIMEOUT_MS = 4_000;
 const LOCAL_V2_DAG_LAMBDA_AWS_SEND_MAX_ATTEMPTS = 3;
 const LOCAL_V2_DAG_LAMBDA_EGRESS_LIGHTWEIGHT_TOTAL_TIMEOUT_MS = 5_000;
-const LOCAL_V2_DAG_LAMBDA_DEFAULT_EGRESS_REFLECTOR_URL =
+const LOCAL_V2_DAG_LAMBDA_PRIMARY_EGRESS_REFLECTOR_URL =
+  "https://checkip.amazonaws.com/";
+const LOCAL_V2_DAG_LAMBDA_DEFAULT_EGRESS_FALLBACK_URL =
   "https://certscore.ai/.well-known/certscore-egress";
 
 export type LocalV2DagLambdaDispatchPayload = {
@@ -1295,9 +1297,9 @@ export async function writeEgressPreflightArtifact(
         expectedEgressRegion,
         httpStatus: response.status,
         observed: parsed,
-        provider: "certscore.ai",
+        provider: "checkip.amazonaws.com",
       });
-      artifact.provider = "certscore.ai";
+      artifact.provider = "checkip.amazonaws.com";
       artifact.probeStatus = assessment.probeStatus;
       artifact.observed = parsed;
       artifact.error = assessment.error;
@@ -1330,7 +1332,10 @@ export async function writeEgressPreflightArtifact(
     browser = await chromium.launch(chromiumLaunchOptions({ headless: true }));
     const context = await browser.newContext(chromiumContextOptions());
     const page = await context.newPage();
-    const response = await page.goto("https://checkip.amazonaws.com/", {
+    const fallbackUrl = firstTrimmedRuntimeEnv(process.env, [
+      "CERTSCORE_V2_DAG_LAMBDA_EGRESS_REFLECTOR_URL",
+    ]) ?? LOCAL_V2_DAG_LAMBDA_DEFAULT_EGRESS_FALLBACK_URL;
+    const response = await page.goto(fallbackUrl, {
       timeout: 7_500,
       waitUntil: "domcontentloaded"
     });
@@ -1341,9 +1346,9 @@ export async function writeEgressPreflightArtifact(
       expectedEgressRegion,
       httpStatus: response?.status() ?? 0,
       observed: parsed,
-      provider: "checkip.amazonaws.com",
+      provider: "certscore.ai",
     });
-    artifact.provider = "checkip.amazonaws.com";
+    artifact.provider = "certscore.ai";
     artifact.probeStatus = assessment.probeStatus;
     artifact.observed = parsed;
     artifact.error = assessment.error;
@@ -1486,9 +1491,7 @@ export function parseEgressProbeResponse(text: string) {
 export async function fetchEgressProbeThroughProxy(
   proxyServer: string,
   totalTimeoutMs = LOCAL_V2_DAG_LAMBDA_EGRESS_LIGHTWEIGHT_TOTAL_TIMEOUT_MS,
-  probeUrlValue = firstTrimmedRuntimeEnv(process.env, [
-    "CERTSCORE_V2_DAG_LAMBDA_EGRESS_REFLECTOR_URL",
-  ]) ?? LOCAL_V2_DAG_LAMBDA_DEFAULT_EGRESS_REFLECTOR_URL,
+  probeUrlValue = LOCAL_V2_DAG_LAMBDA_PRIMARY_EGRESS_REFLECTOR_URL,
 ): Promise<{ status: number; text: string }> {
   const proxyUrl = new URL(proxyServer.includes("://") ? proxyServer : `http://${proxyServer}`);
   const probeUrl = new URL(probeUrlValue);
@@ -1572,7 +1575,7 @@ export async function fetchEgressProbeThroughProxy(
           agent: false,
           createConnection: () => secureSocket!,
           headers: {
-            Accept: "application/json",
+            Accept: "text/plain, application/json;q=0.9",
             "User-Agent": "CertScore-Egress-Preflight/1.0",
           },
           hostname: probeUrl.hostname,

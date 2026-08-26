@@ -554,7 +554,9 @@ test("handler bounds and validates policy surface seeds", () => {
 test("lightweight egress probe enforces one hard total deadline", async () => {
   const proxy = createHttpServer();
   let tunnelSocket: { destroy(): void } | undefined;
-  proxy.on("connect", (_request, socket) => {
+  let connectTarget: string | undefined;
+  proxy.on("connect", (request, socket) => {
+    connectTarget = request.url;
     tunnelSocket = socket;
     socket.write("HTTP/1.1 200 Connection Established\r\n\r\n");
   });
@@ -569,6 +571,7 @@ test("lightweight egress probe enforces one hard total deadline", async () => {
       /exceeded 100ms total deadline/,
     );
     assert.ok(Date.now() - startedAt < 1_000);
+    assert.equal(connectTarget, "checkip.amazonaws.com:443");
   } finally {
     tunnelSocket?.destroy();
     await new Promise<void>((resolve, reject) => proxy.close((error) => error ? reject(error) : resolve()));
@@ -665,14 +668,14 @@ test("regional egress guard binds Chrome egress to the configured proxy public I
   assert.equal(egressIpMatchesExpected("34.218.187.36", undefined), true);
 });
 
-test("owned egress reflector verifies region through the configured exact IP binding", () => {
+test("plain-IP egress reflector verifies region through the configured exact IP binding", () => {
   const expectedHash = `sha256:${createHash("sha256").update("203.0.113.42").digest("hex")}`;
   const assessment = assessEgressProbeObservation({
     expectedEgressPublicIpHash: expectedHash,
     expectedEgressRegion: "California",
     httpStatus: 200,
     observed: { ip: "203.0.113.42" },
-    provider: "certscore.ai",
+    provider: "checkip.amazonaws.com",
   });
   assert.equal(assessment.probeStatus, "available");
   assert.equal(assessment.regionMatches, true);
@@ -686,7 +689,7 @@ test("egress preflight fails closed on provider throttling or an unexpected publ
     expectedEgressRegion: "California",
     httpStatus: 429,
     observed: null,
-    provider: "ipinfo.io",
+    provider: "checkip.amazonaws.com",
   });
   assert.equal(throttled.probeStatus, "failed");
   assert.match(throttled.error ?? "", /HTTP 429/);
@@ -1127,18 +1130,18 @@ test("handler retains bounded egress diagnostics for an immediate preflight fail
           artifactVersion: "certscore.v2.lambda-egress-preflight.v1",
           attempts: [{
             durationMs: 42,
-            error: "Egress probe provider ipinfo.io returned HTTP 429.",
+            error: "Egress probe provider checkip.amazonaws.com returned HTTP 503.",
             mode: "lightweight_proxy",
             observed: { ip: "203.0.113.42" },
             probeStatus: "failed",
-            provider: "ipinfo.io",
+            provider: "checkip.amazonaws.com",
             regionVerificationSource: "provider_observation",
           }],
-          error: "Egress probe provider ipinfo.io returned HTTP 429.",
+          error: "Egress probe provider checkip.amazonaws.com returned HTTP 503.",
           expectedEgressPublicIpHash: "sha256:expected",
           expectedEgressRegion: "California",
           probeStatus: "failed",
-          provider: "ipinfo.io",
+          provider: "checkip.amazonaws.com",
           proxyModeEnabled: true,
           regionVerificationSource: "provider_observation",
         }));
@@ -1165,7 +1168,7 @@ test("handler retains bounded egress diagnostics for an immediate preflight fail
     const diagnostic = JSON.parse(uploads[0]!.body);
     assert.equal(diagnostic.artifactVersion, "certscore.v2_lambda_failure_diagnostic.2");
     assert.equal(diagnostic.egressPreflight.probeStatus, "failed");
-    assert.equal(diagnostic.egressPreflight.attempts[0].provider, "ipinfo.io");
+    assert.equal(diagnostic.egressPreflight.attempts[0].provider, "checkip.amazonaws.com");
     assert.match(diagnostic.egressPreflight.attempts[0].observedPublicIpHash, /^sha256:[a-f0-9]{64}$/);
     assert.equal(JSON.stringify(diagnostic).includes("203.0.113.42"), false);
   } finally {

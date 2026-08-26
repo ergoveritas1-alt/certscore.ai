@@ -59,7 +59,7 @@ California public IP `18.144.181.165` and the configured public-IP hash.
 | Target websites, CMP assets, browser journeys | Playwright / scan-core | Regional EC2 proxy at private `172.31.*:3128` | Preserve proxy instance, SG rule, private route, and egress hash. |
 | Policy documents and policy redirects | `policy-surface-scanner.ts` Node `fetch`/`http(s)` | Proxy-aware bounded transport | Verify through retained preflight and canary before NAT route removal. |
 | Runtime transport probes | `pre-consent-runtime-scanner.ts` Node `fetch` | Proxy-aware bounded transport | Verify through retained preflight and canary before NAT route removal. |
-| Egress identity preflight | `apps/v2-dag-lambda/src/handler.ts` | Explicit HTTPS CONNECT through the regional proxy to `ipinfo.io` | Existing path is compatible; compare the retained hash before/after. |
+| Egress identity preflight | `apps/v2-dag-lambda/src/handler.ts` | Explicit HTTPS CONNECT through the regional proxy to AWS CheckIP, with the owned CertScore reflector as a browser fallback | Existing path is compatible; compare the retained hash before/after. |
 | OpenAI Nano policy assist | `nano-policy-assist-provider.ts` | Proxy-aware bounded transport to `https://api.openai.com/v1/chat/completions` | Verify through retained preflight and canary. The key value was not read or logged. |
 | OpenAI consent visual assist | `nano-consent-ui-assist-provider.ts` and visual review | Proxy-aware bounded transport to OpenAI when enabled | Same verification requirement; post-consent production flow is currently disabled. |
 | S3 retained evidence | `@aws-sdk/client-s3` GetObject/PutObject | Regional AWS endpoint | S3 gateway endpoint on the Lambda route table, with object-prefix policy. |
