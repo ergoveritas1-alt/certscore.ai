@@ -45,6 +45,19 @@ test("all four operational snapshots cache expensive aggregation for fast refres
   }
 });
 
+test("all four dashboards time snapshots and rows independently", () => {
+  const timingLabels = [
+    ["app.admin.scans.operational_snapshot", "app.admin.scans.list"],
+    ["app.admin.events.operational_snapshot", "app.admin.events.rows"],
+    ["app.admin.mcp_telemetry", "app.admin.mcp_telemetry.rows"],
+    ["app.admin.api_activity.operational_snapshot", "app.admin.api_activity.rows"],
+  ];
+  pages.forEach((page, index) => {
+    for (const label of timingLabels[index] ?? []) assert.match(page, new RegExp(label.replaceAll(".", "\\.")));
+    assert.match(page, /Promise\.all/);
+  });
+});
+
 test("all four activity ledgers expose cross-dashboard correlation links", () => {
   for (const page of pages) {
     for (const destination of ["/app/admin/scans", "/app/admin/analytics", "/app/admin/pulse", "/app/admin/mcp"]) {

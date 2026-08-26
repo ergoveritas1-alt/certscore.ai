@@ -8,6 +8,7 @@ import { AdminOperationalSnapshot } from "../../../../components/admin/admin-ope
 import { adminOperationalSnapshotDelta, adminOperationalSnapshotHealth, adminOperationalSnapshotHref } from "../../../../lib/admin/admin-operational-snapshot";
 import { adminTrafficScopeVisibility, resolveAdminTrafficScope } from "../../../../lib/admin/admin-traffic-scope";
 import { getAdminAuthenticatedScanHref } from "../../../../server/admin/admin-scan-links";
+import { withServerTiming } from "../../../../server/performance/log-server-timing";
 import {
   ADMIN_EVENT_ROUTES,
   loadProductAnalyticsDashboard,
@@ -71,8 +72,12 @@ export default async function ProductAnalyticsPage({ searchParams }: Props) {
   const pageSize = normalizePageSize(resolved.perPage, 20);
   const hasFilters = Boolean(eventName || outcome || query || route);
   const [dashboard, eventPage] = await Promise.all([
-    loadProductAnalyticsDashboard(period, includeInternal, excludeMacMiniScanBot),
-    listProductAnalyticsEventsPage(period, includeInternal, excludeMacMiniScanBot, pageSize, (page - 1) * pageSize, { eventName, outcome, query, route })
+    withServerTiming("app.admin.events.operational_snapshot", () =>
+      loadProductAnalyticsDashboard(period, includeInternal, excludeMacMiniScanBot)
+    ),
+    withServerTiming("app.admin.events.rows", () =>
+      listProductAnalyticsEventsPage(period, includeInternal, excludeMacMiniScanBot, pageSize, (page - 1) * pageSize, { eventName, outcome, query, route })
+    )
   ]);
   const eventDelta = adminOperationalSnapshotDelta(dashboard.metrics.events, dashboard.comparison.events);
   const errorDelta = adminOperationalSnapshotDelta(dashboard.metrics.errors, dashboard.comparison.errors, "higher_is_bad");
