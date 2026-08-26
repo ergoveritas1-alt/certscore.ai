@@ -3,7 +3,7 @@ import { GetObjectCommand, PutObjectCommand, S3Client, type GetObjectCommandOutp
 import { SQSClient, SendMessageCommand, type SendMessageCommandOutput } from "@aws-sdk/client-sqs";
 import { createHash } from "node:crypto";
 import { request as httpRequest, type ClientRequest } from "node:http";
-import { request as httpsRequest } from "node:https";
+import { Agent as HttpsAgent, request as httpsRequest } from "node:https";
 import { isIP } from "node:net";
 import type { Duplex } from "node:stream";
 import path from "node:path";
@@ -1516,6 +1516,7 @@ export async function fetchEgressProbeThroughProxy(
 
   return new Promise((resolve, reject) => {
     let connectRequestHandle: ClientRequest | undefined;
+    let probeAgent: HttpsAgent | undefined;
     let probeRequest: ClientRequest | undefined;
     let secureSocket: TLSSocket | undefined;
     let tunnelSocket: Duplex | undefined;
@@ -1532,6 +1533,7 @@ export async function fetchEgressProbeThroughProxy(
       settled = true;
       if (totalTimer) clearTimeout(totalTimer);
       probeRequest?.destroy();
+      probeAgent?.destroy();
       secureSocket?.destroy();
       tunnelSocket?.destroy();
       connectRequestHandle?.destroy();
@@ -1571,9 +1573,14 @@ export async function fetchEgressProbeThroughProxy(
       secureSocket.once("error", fail);
       secureSocket.once("secureConnect", () => {
         if (settled || !secureSocket) return;
+        probeAgent = new HttpsAgent({ keepAlive: false });
+        // The HTTPS request must reuse the TLS socket established through the
+        // regional proxy. Passing createConnection directly to https.request
+        // with agent:false can be ignored by Node's one-shot Agent, causing a
+        // second direct connection that cannot leave the scanner VPC.
+        probeAgent.createConnection = () => secureSocket!;
         probeRequest = httpsRequest({
-          agent: false,
-          createConnection: () => secureSocket!,
+          agent: probeAgent,
           headers: {
             Accept: "text/plain, application/json;q=0.9",
             "User-Agent": "CertScore-Egress-Preflight/1.0",
