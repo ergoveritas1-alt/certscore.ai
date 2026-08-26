@@ -8,6 +8,7 @@ import {
   type TrackerInventoryRuntimeArtifactRow,
   type TrackerInventoryTrackerRow
 } from "./repository";
+import { normalizeCompletedScanRows } from "./normalize-completed-scan-rows";
 
 export type OrganizationTrackerLeaderboardItem = {
   advertisingCount: number;
@@ -46,9 +47,9 @@ export type OrganizationPreconsentLeaderboardItem = {
 };
 
 export async function getOrganizationTrackerInventory(organizationId: string) {
-  const completedScans = await loadTrackerInventoryCompletedScans(organizationId);
+  const completedScans = normalizeCompletedScanRows(await loadTrackerInventoryCompletedScans(organizationId));
 
-  const latestByDomain = new Map<string, TrackerInventoryCompletedScanRow>();
+  const latestByDomain = new Map<string, (typeof completedScans)[number]>();
   for (const scan of completedScans) {
     if (!scan.domain_id || latestByDomain.has(scan.domain_id)) {
       continue;

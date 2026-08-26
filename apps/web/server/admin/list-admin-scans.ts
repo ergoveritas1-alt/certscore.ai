@@ -171,8 +171,6 @@ export type AdminScanOverviewMetrics = {
   totalScans: number;
 };
 
-export type { AdminScanOperationalSnapshot, AdminScanOperationalSnapshotPeriod };
-
 export type AdminOverviewRecentScan = {
   certscoreOverall: number | null;
   cmpVendorName: string | null;

@@ -54,8 +54,7 @@ const ACCESSIBILITY_BATCH_FINDING_IDS = [
 const CONSENT_UI_BATCH_FINDING_IDS = [
   "reject_option_missing_or_hidden",
   "forced_consent_interaction",
-  "asymmetric_consent_ui",
-  "consent_dark_patterns_detected"
+  "asymmetric_consent_ui"
 ] as const;
 
 const RUNTIME_TRACKING_BATCH_FINDING_IDS = [
@@ -89,20 +88,11 @@ const REVIEWED_FINDING_REFERENCE_IDS = [
 
 const EXECUTIVE_SUMMARY_TOP_FINDING_ID_STRINGS: readonly string[] = EXECUTIVE_SUMMARY_TOP_FINDING_IDS;
 const PUBLIC_FINDING_REFERENCE_IDS = EXECUTIVE_SUMMARY_TOP_FINDING_ID_STRINGS.filter(
-  (findingId) => findingId !== "scan_quality_visual_no_go" && findingId !== "cpra_cba_opt_out_missing"
+  (findingId) =>
+    findingId !== "scan_quality_visual_no_go" &&
+    findingId !== "cpra_cba_opt_out_missing" &&
+    findingId !== "consent_dark_patterns_detected"
 );
-const PUBLIC_HOMEPAGE_CAROUSEL_FINDING_IDS = EXECUTIVE_SUMMARY_TOP_FINDING_ID_STRINGS.filter(
-  (findingId) => findingId !== "cpra_cba_opt_out_missing"
-);
-
-function parseHomepageCarouselCopyIds() {
-  const source = readFileSync("apps/web/components/marketing/homepage-findings-overview.tsx", "utf8");
-  const match = source.match(/const HOMEPAGE_FINDING_CAROUSEL_COPY = \{([\s\S]*?)\n\} satisfies Record/);
-
-  assert.ok(match, "homepage carousel copy map should be statically parseable");
-
-  return [...(match[1] ?? "").matchAll(/^  ([a-z0-9_]+): \{/gm)].map((entry) => entry[1]);
-}
 
 function makePublicHiddenSampleJson(finding: ReturnType<typeof getFindingReferenceItems>[number]) {
   const payload = finding.sample.payload as Record<string, unknown>;
@@ -143,7 +133,7 @@ test("homepage finding examples align with each finding subtype", () => {
   assert.match(findings.get("cookie_disclosure_gap")?.exampleEvidence[0]?.code ?? "", /artifact=cookie_disclosure_001/);
   assert.match(findings.get("cookie_disclosure_gap")?.exampleEvidence[0]?.code ?? "", /runtime_vendor_not_disclosed/);
   assert.match(findings.get("long_lived_cookie_retention_review")?.exampleEvidence[0]?.code ?? "", /artifact=cookie_retention_001/);
-  assert.match(findings.get("long_lived_cookie_retention_review")?.exampleEvidence[0]?.code ?? "", /CertScore product review threshold/);
+  assert.match(findings.get("long_lived_cookie_retention_review")?.exampleEvidence[0]?.code ?? "", /CertScore\.ai product review threshold/);
   assert.match(findings.get("rtb_cookie_sync_observed")?.exampleEvidence[0]?.code ?? "", /artifact=req_003/);
   assert.match(findings.get("cross_domain_identifier_sharing_observed")?.exampleEvidence[0]?.code ?? "", /artifact=req_004/);
   assert.match(findings.get("session_recording_services_detected")?.exampleEvidence[0]?.code ?? "", /artifact=req_005/);
@@ -153,7 +143,6 @@ test("homepage finding examples align with each finding subtype", () => {
   assert.match(findings.get("reject_option_missing_or_hidden")?.exampleEvidence[0]?.code ?? "", /artifact=consent_ui_001/);
   assert.match(findings.get("forced_consent_interaction")?.exampleEvidence[0]?.code ?? "", /artifact=consent_ui_002/);
   assert.match(findings.get("asymmetric_consent_ui")?.exampleEvidence[0]?.code ?? "", /artifact=consent_ui_003/);
-  assert.match(findings.get("consent_dark_patterns_detected")?.exampleEvidence[0]?.code ?? "", /artifact=consent_ui_004/);
   assert.match(findings.get("policy_behavior_contradiction_detected")?.exampleEvidence[0]?.code ?? "", /runtime_vendor_not_disclosed/);
 });
 
@@ -164,13 +153,15 @@ test("finding reference index is exactly the official executive top findings", (
   );
 });
 
-test("homepage mini findings carousel copy covers only official executive top findings", () => {
+test("homepage findings overview uses the GDPR and ePrivacy checklist presentation", () => {
   const homepageSource = readFileSync("apps/web/app/(marketing)/page.tsx", "utf8");
-  const expectedIds = [...PUBLIC_HOMEPAGE_CAROUSEL_FINDING_IDS].sort();
+  const overviewSource = readFileSync("apps/web/components/marketing/homepage-findings-overview.tsx", "utf8");
 
   assert.match(homepageSource, /const findings = getFindingReferenceItems\(\);/);
   assert.match(homepageSource, /<HomepageFindingsOverview findings=\{findings\} \/>/);
-  assert.deepEqual(parseHomepageCarouselCopyIds().sort(), expectedIds);
+  assert.match(overviewSource, /const HOMEPAGE_GDPR_EPRIVACY_CHECKLIST_FINDINGS = \[/);
+  assert.match(overviewSource, /href: "\/findings\/reject_option_missing_or_hidden"/);
+  assert.doesNotMatch(overviewSource, /HOMEPAGE_FINDING_CAROUSEL_COPY/);
 });
 
 test("public finding references omit deferred CCPA/CPRA context", () => {
@@ -261,8 +252,8 @@ test("pre-consent atlas copy keeps evidence and regulatory caveats explicit", ()
   const finding = getFindingReferenceItems().find((item) => item.id === "pre_consent_tracking_detected");
 
   assert.ok(finding);
-  assert.match(finding.observed, /classified non-essential/);
-  assert.match(finding.observed, /prior consent state associated with that purpose/);
+  assert.match(finding.observed, /promotion-grade non-essential activity/);
+  assert.match(finding.observed, /before any recorded affirmative consent action/);
   assert.doesNotMatch(finding.observed, /authorizing that purpose/);
   assert.match(finding.detectionMethodology, /tag manager/);
   assert.match(finding.detectionMethodology, /vendor name alone/);
@@ -412,7 +403,7 @@ test("finding atlas browser uses context-aware related reading", () => {
 
   assert.match(source, /function getRelatedReadingLinks\(finding: FindingReferenceItem\)/);
   assert.match(source, /finding\.category === "Accessibility"[\s\S]*ACCESSIBILITY_RELATED_READING/);
-  assert.match(source, /ACCESSIBILITY_RELATED_READING = \[[\s\S]*\/guides\/wcag-website-checklist[\s\S]*Accessibility signals[\s\S]*\]/);
+  assert.match(source, /const ACCESSIBILITY_RELATED_READING: typeof PRIVACY_RELATED_READING = \[\];/);
   assert.doesNotMatch(source, /ACCESSIBILITY_RELATED_READING = \[[\s\S]*Tracking before consent[\s\S]*\]/);
   assert.doesNotMatch(source, /ACCESSIBILITY_RELATED_READING = \[[\s\S]*Cookie consent enforcement[\s\S]*\]/);
   assert.doesNotMatch(source, /ACCESSIBILITY_RELATED_READING = \[[\s\S]*Third-party cookies and RTB sync[\s\S]*\]/);
@@ -579,7 +570,7 @@ test("consent UI batch findings use the approved evidence-first template", () =>
     assert.equal(finding.criticality, "medium");
     assert.equal(finding.sample.sourceLabel, "Illustrative public evidence sample");
     assert.notEqual(finding.benchmark.sourceLabel, "Illustrative public evidence sample");
-    assert.match(finding.observed, /Retained consent-surface evidence/);
+    assert.match(finding.observed, /consent-surface evidence|first-layer consent surface/);
     assert.match(finding.detectionMethodology, /retains representative .*consent-surface evidence|retains representative evidence for consent prompts/);
     assert.match(finding.detectionMethodology, /review signals/);
     assert.match(finding.confidenceSemantics, /Good when retained consent-surface evidence/);
@@ -1182,10 +1173,10 @@ test("pre-consent finding detail route has SEO and GEO-ready page copy", () => {
   const copy = getFindingReferencePageCopy(finding);
 
   assert.equal(copy.pagePath, "/findings/pre_consent_tracking_detected");
-  assert.equal(copy.pageTitle, "Third-party tracking observed before recorded consent finding reference");
-  assert.match(copy.pageDescription, /classified non-essential/);
-  assert.match(copy.pageDescription, /prior consent state associated with that purpose/);
-  assert.match(pageSource, /const headingTitle = activeFinding\?\.title \?\? "CertScore findings reference"/);
+  assert.equal(copy.pageTitle, `${finding.title} finding reference`);
+  assert.match(copy.pageDescription, /promotion-grade non-essential activity/);
+  assert.match(copy.pageDescription, /before any recorded affirmative consent action/);
+  assert.match(pageSource, /const headingTitle = activeFinding\?\.title \?\? "CertScore\.ai findings reference"/);
   assert.match(pageSource, /<h1[\s\S]*\{headingTitle\}[\s\S]*<\/h1>/);
   assert.match(pageSource, /createPublicArticleSchema/);
   assert.match(pageSource, /createDefinedTermSchema/);

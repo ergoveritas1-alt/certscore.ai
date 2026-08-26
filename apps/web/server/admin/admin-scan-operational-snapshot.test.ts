@@ -7,6 +7,7 @@ const repository = readFileSync("apps/web/server/admin/repository.ts", "utf8");
 const cache = readFileSync("apps/web/server/admin/admin-query-cache.ts", "utf8");
 const component = readFileSync("apps/web/components/admin/admin-operational-snapshot.tsx", "utf8");
 const contract = readFileSync("apps/web/lib/admin/admin-operational-snapshot.ts", "utf8");
+const actions = readFileSync("apps/web/server/admin/list-admin-scans.ts", "utf8");
 
 test("Admin Scans renders a bounded operational snapshot with scan-specific metrics", () => {
   assert.match(page, /<AdminOperationalSnapshot/);
@@ -40,4 +41,15 @@ test("snapshot period and traffic filters survive table filtering and pagination
   assert.match(page, /snapshot: activeSnapshotPeriod/);
   assert.match(page, /excludeMacMiniScanBot/);
   assert.match(page, /includeCanary/);
+});
+
+test("Admin Scans keeps imported types out of the server action export surface", () => {
+  assert.doesNotMatch(actions, /export type \{ AdminScanOperationalSnapshot/);
+  assert.match(page, /ADMIN_OPERATIONAL_SNAPSHOT_PERIODS/);
+  assert.match(page, /type AdminOperationalSnapshotPeriod/);
+});
+
+test("Admin Scans does not append an inferred posture to outcome filter labels", () => {
+  assert.match(page, /filterOptions\.outcomes\.map\(\(outcome\) => <option[^>]+>\{formatFilterLabel\(outcome\)\}/);
+  assert.doesNotMatch(page, /filterOptions\.outcomes\.map\(\(outcome\) => <option[^>]+>\{formatScanOutcome\(outcome/);
 });

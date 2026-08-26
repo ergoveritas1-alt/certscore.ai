@@ -65,10 +65,10 @@ export default async function AdminPulseDetailPage({ params }: AdminPulseDetailP
             <Field label="Scan from" value={request.scanFromLabel} />
             <Field label="Detail / format" value={`${formatLabel(detail)} / ${formatLabel(format)}`} />
             <Field label="Freshness / wait" value={`${formatLabel(freshness)} / ${typeof waitSeconds === "number" ? waitSeconds : 0}s`} />
-            <Field label="Requested" value={formatAdminDateTime(request.requestedAt, { includeSeconds: true })} />
-            <Field label="Completed" value={formatAdminDateTime(request.completedAt, { includeSeconds: true })} />
+            <Field label="Requested" value={formatAdminDateTime(request.requestedAt)} />
+            <Field label="Completed" value={formatAdminDateTime(request.completedAt)} />
             <Field label="Elapsed" value={request.elapsedSeconds === null ? "Not recorded" : `${request.elapsedSeconds}s`} />
-            <Field label="Updated" value={formatAdminDateTime(request.updatedAt, { includeSeconds: true })} />
+            <Field label="Updated" value={formatAdminDateTime(request.updatedAt)} />
           </CardContent>
         </Card>
 
@@ -173,7 +173,7 @@ export default async function AdminPulseDetailPage({ params }: AdminPulseDetailP
                         <p className="text-xs text-slate-500">{download.cachedOrReused === null ? "Cache unknown" : download.cachedOrReused ? "Cached/reused" : "Fresh"}</p>
                       </td>
                       <td className="py-3 pr-4 align-top text-slate-700">{download.byteSize === null ? "Not recorded" : download.byteSize.toLocaleString()}</td>
-                      <td className="py-3 align-top text-slate-700">{formatAdminDateTime(download.createdAt, { includeSeconds: true })}</td>
+                      <td className="py-3 align-top text-slate-700">{formatAdminDateTime(download.createdAt)}</td>
                     </tr>
                   ))}
                 </tbody>
@@ -198,7 +198,7 @@ export default async function AdminPulseDetailPage({ params }: AdminPulseDetailP
                   {feedback.reason ? (
                     <span className="rounded-full bg-slate-100 px-2 py-1 text-xs font-semibold text-slate-700">{formatLabel(feedback.reason)}</span>
                   ) : null}
-                  <span className="text-xs text-slate-500">{formatAdminDateTime(feedback.createdAt, { includeSeconds: true })}</span>
+                  <span className="text-xs text-slate-500">{formatAdminDateTime(feedback.createdAt)}</span>
                 </div>
                 {feedback.comment ? <p className="mt-3 whitespace-pre-wrap leading-6">{feedback.comment}</p> : null}
                 <div className="mt-3 grid gap-2 text-xs text-slate-500 md:grid-cols-3">

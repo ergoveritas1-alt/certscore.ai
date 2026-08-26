@@ -2,7 +2,6 @@ export const ADMIN_LOCAL_TIME_ZONE = "America/Los_Angeles";
 
 type AdminDateTimeOptions = {
   fallback?: string;
-  includeSeconds?: boolean;
 };
 
 export function formatAdminDateTime(value: string | Date | null | undefined, options: AdminDateTimeOptions = {}) {
@@ -22,7 +21,7 @@ export function formatAdminDateTime(value: string | Date | null | undefined, opt
     year: "numeric",
     hour: "numeric",
     minute: "2-digit",
-    second: options.includeSeconds ? "2-digit" : undefined,
+    second: "2-digit",
     hour12: true,
     timeZone: ADMIN_LOCAL_TIME_ZONE,
     timeZoneName: "short"
@@ -44,6 +43,7 @@ export function formatAdminCompactDateTime(value: string | Date | null | undefin
     day: "numeric",
     hour: "numeric",
     minute: "2-digit",
+    second: "2-digit",
     hour12: true,
     timeZone: ADMIN_LOCAL_TIME_ZONE
   }).format(date);

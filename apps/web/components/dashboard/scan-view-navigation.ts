@@ -1,4 +1,4 @@
-const SCAN_REPORT_PATH_PATTERN = /^\/app\/scans\/[^/]+\/?$/;
+const SCAN_REPORT_PATH_PATTERN = /^\/app\/scans(?:o)?\/[^/]+\/?$/;
 
 export function isScanReportPath(pathname: string) {
   return SCAN_REPORT_PATH_PATTERN.test(pathname);

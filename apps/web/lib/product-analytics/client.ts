@@ -97,7 +97,7 @@ export function trackProductEvent(input: Omit<ProductAnalyticsPayload, "actorId"
         await new Promise((resolve) => window.setTimeout(resolve, 250 * (attempt + 1)));
         return deliver(attempt + 1);
       }
-      console.error("[certscore] operational event ingestion failed", {
+      console.warn("[certscore] operational event ingestion failed", {
         errorName: error instanceof Error ? error.name : "UnknownError",
         eventName: payload.eventName,
         route: payload.route

@@ -3,9 +3,84 @@ import { readFile } from "node:fs/promises";
 import test from "node:test";
 
 const pages = [
-  "apps/web/app/app/scans/[scanId]/page.tsx",
-  "apps/web/app/(marketing)/scan/[scanId]/page.tsx",
+  "apps/web/app/app/scans/[scanId]/legacy-page.tsx",
+  "apps/web/app/(marketing)/scano/[scanId]/page.tsx",
 ];
+
+test("refreshed public report consumes the persisted projection and preserves the scano comparison route", async () => {
+  const source = await readFile("apps/web/app/(marketing)/scan/[scanId]/page.tsx", "utf8");
+
+  assert.match(source, /ShadowScanReport/);
+  assert.match(source, /variant="timeline"/);
+  assert.match(source, /\/scano\//);
+  assert.match(source, /loadPersistedScanReportProjection/);
+  assert.match(source, /buildTimelineReportModel\(persistedReportProjection\)/);
+  assert.match(source, /isPendingScanStatus\(statusProjection\.status\)/);
+});
+
+test("refreshed authenticated report preserves scoped access and the scanso comparison route", async () => {
+  const source = await readFile("apps/web/app/app/scans/[scanId]/page.tsx", "utf8");
+  const comparisonRoute = await readFile("apps/web/app/app/scanso/[scanId]/page.tsx", "utf8");
+
+  assert.match(source, /getOrganizationScanStatusProjection\(\{ organizationId: organization\.id, scanId \}\)/);
+  assert.match(source, /loadPersistedScanReportProjection\(\{/);
+  assert.match(source, /organizationId: isPlatformAdmin \? null : organization\.id/);
+  assert.match(source, /buildTimelineReportModel\(persistedReportProjection\)/);
+  assert.match(source, /mode="authenticated"/);
+  assert.match(source, /\/app\/scanso\//);
+  assert.match(comparisonRoute, /scans\/\[scanId\]\/legacy-page/);
+});
+
+test("timeline model is projection-backed for findings, checklist rows, inventory, evidence, and correction steps", async () => {
+  const source = await readFile("apps/web/components/scans/report-lab/timeline-report-model.ts", "utf8");
+  const report = await readFile("apps/web/components/scans/report-lab/shadow-scan-report.tsx", "utf8");
+
+  assert.match(source, /getPersistedCanonicalReportProjection\(scanRecord\)/);
+  assert.match(source, /hydrateChecklistPolicyEvidence/);
+  assert.match(source, /getReportableGdprEprivacyCoverageItems\(checklistRows\)/);
+  assert.match(source, /GDPR_TRANSPARENCY_REPORT_ROW_ID_SET\.has\(row\.id\)/);
+  assert.match(source, /deriveGdprEprivacyCoverageChecklistRowRationale\(item\)/);
+  assert.match(source, /buildRuntimeInventoryProjectionFromScan/);
+  assert.match(source, /buildChecklistConcernTopFindings\(checklistRows\)/);
+  assert.match(source, /selectCanonicalHighPriorityFindings/);
+  assert.match(source, /buildExecutiveTimelineEvents/);
+  assert.match(source, /inventoryProjection\.ungroupedRows/);
+  assert.match(source, /vendorSurfaceProjection\.execSummary/);
+  assert.match(source, /requestCount: row\.requestCount/);
+  assert.match(source, /entityRelationship: entityRelationshipLabel\(row\.entityRelationship\)/);
+  assert.match(source, /certscore_overall/);
+  assert.match(source, /local_v2_dag_scan_core_duration_ms/);
+  assert.match(source, /durationFromTimestamps\(scanRecord\.scan\)/);
+  assert.match(source, /\["cmp_vendor_name", "cmpVendorName"\]/);
+  assert.doesNotMatch(report, /report\.inventory\.find\(\(row\) => \/consent\|cookie compliance/);
+  assert.match(report, /RegulatoryChecklistEvidenceDetails/);
+  assert.match(report, /RegulatoryChecklistCorrectionSteps/);
+  assert.doesNotMatch(report, /Requests \/ records/);
+  assert.match(report, /InventoryConfidenceDots/);
+  assert.match(report, /InventoryTypeIcon/);
+  assert.match(report, /report\.coverage\.review/);
+  assert.match(report, /mode === "authenticated"/);
+  assert.match(report, /-mx-5[^"\n]*lg:-mx-10/);
+});
+
+test("refreshed report keeps repeated retained evidence and vendors on unique React keys", async () => {
+  const source = await readFile("apps/web/components/scans/report-lab/shadow-scan-report.tsx", "utf8");
+
+  assert.match(source, /finding\.vendors\.map\(\(vendor, index\) =>/);
+  assert.match(source, /key=\{`\$\{vendor\}:\$\{index\}`\}/);
+  assert.match(source, /finding\.evidence\.map\(\(item, index\) =>/);
+  assert.match(source, /key=\{`\$\{item\}:\$\{index\}`\}/);
+});
+
+test("shared signed-out header and footer default to the report-width alignment", async () => {
+  const header = await readFile("apps/web/components/layout/site-header.tsx", "utf8");
+  const footer = await readFile("apps/web/components/layout/site-footer.tsx", "utf8");
+
+  assert.match(header, /wide = true/);
+  assert.match(header, /max-w-\[90rem\] px-5 lg:px-10/);
+  assert.match(footer, /wide = true/);
+  assert.match(footer, /max-w-\[90rem\] px-5 lg:px-10/);
+});
 
 test("pending scan pages return a minimal projection before full report construction", async () => {
   for (const page of pages) {
@@ -48,7 +123,7 @@ test("report projection repair uses the canonical publisher and supports an audi
 });
 
 test("completed dashboard reports stream an honest report shell before detailed evidence", async () => {
-  const source = await readFile("apps/web/app/app/scans/[scanId]/page.tsx", "utf8");
+  const source = await readFile("apps/web/app/app/scans/[scanId]/legacy-page.tsx", "utf8");
   const loadingStateStart = source.indexOf("function ScanDetailLoadingState");
   const loadingStateEnd = source.indexOf("export default async function", loadingStateStart);
   const loadingState = source.slice(loadingStateStart, loadingStateEnd);
@@ -67,7 +142,7 @@ test("completed dashboard reports stream an honest report shell before detailed 
 });
 
 test("captured-image availability is not gated by dashboard access level", async () => {
-  const source = await readFile("apps/web/app/app/scans/[scanId]/page.tsx", "utf8");
+  const source = await readFile("apps/web/app/app/scans/[scanId]/legacy-page.tsx", "utf8");
   const visualEvidenceStart = source.indexOf("const visualEvidenceArtifacts");
   const visualEvidenceEnd = source.indexOf("const visualEvidenceHref", visualEvidenceStart);
   const visualEvidenceBlock = source.slice(visualEvidenceStart, visualEvidenceEnd);
@@ -136,7 +211,7 @@ test("terminal failed v2 scans bypass completed-report finalization", async () =
 });
 
 test("completed report caches do not send full scan records through the Next data cache", async () => {
-  const dashboardPage = await readFile("apps/web/app/app/scans/[scanId]/page.tsx", "utf8");
+  const dashboardPage = await readFile("apps/web/app/app/scans/[scanId]/legacy-page.tsx", "utf8");
   const materializer = await readFile("apps/web/server/scans/local-v2-dag-report.ts", "utf8");
 
   assert.doesNotMatch(dashboardPage, /unstable_cache/);

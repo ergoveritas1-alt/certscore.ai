@@ -43,6 +43,8 @@ test("optional analytics opt-out keeps bounded event delivery but removes client
   assert.match(client, /"x-certscore-analytics-consent": choice === "denied" \? "denied"/);
   assert.match(client, /attempt < 2/);
   assert.match(client, /operational event ingestion failed/);
+  assert.match(client, /console\.warn\("\[certscore\] operational event ingestion failed"/);
+  assert.doesNotMatch(client, /console\.error\("\[certscore\] operational event ingestion failed"/);
 });
 
 test("the main event projection spans every retained operational route", async () => {
@@ -59,18 +61,23 @@ test("the main event projection spans every retained operational route", async (
 test("event trend rows use the timestamp bucket as their React identity", async () => {
   const adminEvents = await readFile(new URL("apps/web/server/admin/product-analytics.ts", root), "utf8");
   const analyticsPage = await readFile(new URL("apps/web/app/app/admin/analytics/page.tsx", root), "utf8");
+  const snapshot = await readFile(new URL("apps/web/components/admin/admin-operational-snapshot.tsx", root), "utf8");
   assert.match(adminEvents, /as bucket_start/);
   assert.match(adminEvents, /bucketStart: row\.bucket_start/);
-  assert.match(analyticsPage, /key=\{point\.bucketStart\}/);
-  assert.doesNotMatch(analyticsPage, /key=\{point\.bucket\}/);
+  assert.match(analyticsPage, /key: point\.bucketStart/);
+  assert.match(snapshot, /key=\{bucket\.key\}/);
+  assert.doesNotMatch(analyticsPage, /key: point\.bucket,/);
 });
 
 test("admin analytics defaults to 24 hours and offers a five-minute-bucketed last-hour view", async () => {
-  const adminEvents = await readFile(new URL("apps/web/server/admin/product-analytics.ts", root), "utf8");
+  const snapshotContract = await readFile(new URL("apps/web/lib/admin/admin-operational-snapshot.ts", root), "utf8");
+  const snapshotComponent = await readFile(new URL("apps/web/components/admin/admin-operational-snapshot.tsx", root), "utf8");
   const analyticsPage = await readFile(new URL("apps/web/app/app/admin/analytics/page.tsx", root), "utf8");
-  assert.match(adminEvents, /"1h": \{ interval: "1 hour", bucket: "5 minutes"/);
-  assert.match(analyticsPage, /option\(resolved\.period, periods\) \?\? "24h"/);
-  assert.match(analyticsPage, /<option value="1h">Last hour<\/option><option value="24h">Last 24 hours<\/option>/);
+  assert.match(snapshotContract, /"1h": \{/);
+  assert.match(snapshotContract, /step: "5 minutes"/);
+  assert.match(analyticsPage, /option\(resolved\.snapshot \?\? resolved\.period, periods\) \?\? "24h"/);
+  assert.match(snapshotComponent, /value === "1h" \? "Last hour"/);
+  assert.match(snapshotComponent, /value === "24h" \? "Last 24 hours"/);
 });
 
 test("admin event rows project compact request context from already-retained telemetry", async () => {

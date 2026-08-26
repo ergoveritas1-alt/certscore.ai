@@ -29,7 +29,12 @@ const resourceLinks = [
   { href: "/compare", label: "Compare" }
 ];
 
-export function SiteHeader() {
+type SiteHeaderProps = {
+  mobilePrimaryAction?: "contact" | "sign-in";
+  wide?: boolean;
+};
+
+export function SiteHeader({ mobilePrimaryAction = "contact", wide = true }: SiteHeaderProps = {}) {
   const pathname = usePathname();
 
   function isActive(href: string) {
@@ -46,7 +51,7 @@ export function SiteHeader() {
 
   return (
     <header className="sticky top-0 z-50 border-b border-slate-200/70 bg-white/90 shadow-[0_1px_10px_rgba(15,23,42,0.04)] backdrop-blur">
-      <div className="mx-auto flex max-w-6xl items-center justify-between gap-3 px-4 py-3.5 sm:px-6">
+      <div className={`mx-auto flex items-center justify-between gap-3 py-3.5 ${wide ? "max-w-[90rem] px-5 lg:px-10" : "max-w-6xl px-4 sm:px-6"}`}>
         <div className="min-w-0 flex items-center overflow-visible">
           <CertScoreLogo compact showText size="small" className="shrink-0" />
         </div>
@@ -107,13 +112,25 @@ export function SiteHeader() {
         </nav>
 
         <div className="flex items-center gap-2 md:hidden">
-          <Link
-            href="/contact"
-            aria-current={isActive("/contact") ? "page" : undefined}
-            className="rounded-xl border border-sky-200 bg-sky-50 px-3 py-2 text-sm font-semibold text-sky-700 transition hover:border-sky-300 hover:bg-sky-100"
-          >
-            Contact
-          </Link>
+          {mobilePrimaryAction === "sign-in" ? (
+            <PendingButtonLink
+              data-analytics-cta-location="header"
+              data-analytics-event="sign_in_clicked"
+              href="/login"
+              idleContent="Sign in"
+              pendingContent="Opening..."
+              size="sm"
+              variant="secondary"
+            />
+          ) : (
+            <Link
+              href="/contact"
+              aria-current={isActive("/contact") ? "page" : undefined}
+              className="rounded-xl border border-sky-200 bg-sky-50 px-3 py-2 text-sm font-semibold text-sky-700 transition hover:border-sky-300 hover:bg-sky-100"
+            >
+              Contact
+            </Link>
+          )}
           <details className="relative">
           <summary
             aria-label="Open navigation menu"

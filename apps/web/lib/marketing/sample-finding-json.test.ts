@@ -150,7 +150,7 @@ test("illustrative public samples remain sanitized for client exposure", () => {
   assert.match(JSON.stringify(getSampleFindingById("policy_behavior_contradiction_detected")?.payload), /strongerFindingHandling/);
   assert.equal(getSampleFindingById("long_lived_cookie_retention_review")?.label, "Long-lived cookie retention review");
   assert.match(JSON.stringify(getSampleFindingById("long_lived_cookie_retention_review")?.payload), /cookieRetentionEvidence/);
-  assert.match(JSON.stringify(getSampleFindingById("long_lived_cookie_retention_review")?.payload), /CertScore product review threshold/);
+  assert.match(JSON.stringify(getSampleFindingById("long_lived_cookie_retention_review")?.payload), /CertScore\.ai product review threshold/);
   assert.equal(getSampleFindingById("third_party_cookie_pre_consent")?.label, "Third-party cookie or storage observed before consent");
   assert.equal(getSampleFindingById("session_recording_services_detected")?.label, "Session replay service signal observed");
   assert.equal(

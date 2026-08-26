@@ -105,7 +105,7 @@ function formatRequestedDateTime(value: string) {
   if (Number.isNaN(parsed.getTime())) return { date: "Unavailable", time: "" };
   return {
     date: new Intl.DateTimeFormat("en-US", { month: "short", day: "numeric", year: "numeric", timeZone: "America/Los_Angeles" }).format(parsed),
-    time: new Intl.DateTimeFormat("en-US", { hour: "numeric", minute: "2-digit", hour12: true, timeZone: "America/Los_Angeles", timeZoneName: "short" }).format(parsed),
+    time: new Intl.DateTimeFormat("en-US", { hour: "numeric", minute: "2-digit", second: "2-digit", hour12: true, timeZone: "America/Los_Angeles", timeZoneName: "short" }).format(parsed),
   };
 }
 

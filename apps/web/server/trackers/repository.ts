@@ -3,7 +3,7 @@
 import { query } from "@website-signal-risk-scanner/db";
 
 export type TrackerInventoryCompletedScanRow = {
-  completed_at: string;
+  completed_at: string | Date;
   domain_id: string | null;
   id: string;
 };

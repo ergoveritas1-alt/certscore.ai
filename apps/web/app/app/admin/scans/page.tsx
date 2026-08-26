@@ -6,7 +6,7 @@ import { getScanFromMarkerInput, ScanFromMarker } from "../../../../components/s
 import { PaginationControls, normalizePage, normalizePageSize } from "../../../../components/ui/pagination-controls";
 import { formatAdminDateTime } from "../../../../lib/admin/date-time";
 import { classifyAdminRequestProvenance } from "../../../../lib/admin/request-provenance";
-import { getAdminScanFilterOptions, getAdminScanOperationalSnapshot, listAdminScansPage, type AdminScanListAccess, type AdminScanListFreshness, type AdminScanListItem, type AdminScanListStatus, type AdminScanListTimeSpan, type AdminScanOperationalSnapshotPeriod } from "../../../../server/admin/list-admin-scans";
+import { getAdminScanFilterOptions, getAdminScanOperationalSnapshot, listAdminScansPage, type AdminScanListAccess, type AdminScanListFreshness, type AdminScanListItem, type AdminScanListStatus, type AdminScanListTimeSpan } from "../../../../server/admin/list-admin-scans";
 import { withServerTiming } from "../../../../server/performance/log-server-timing";
 import { AdminNavigationProvider, AdminScanActions } from "./admin-scan-actions";
 import { AdminScansAutoRefresh } from "./admin-scans-auto-refresh";
@@ -14,7 +14,7 @@ import { AdminScansFilterForm } from "./admin-scans-filter-form";
 import { AdminTrafficFilters } from "../../../../components/admin/admin-traffic-filters";
 import { AdminOperationalSnapshot } from "../../../../components/admin/admin-operational-snapshot";
 import { AdminTableRefreshBoundary } from "../../../../components/admin/admin-table-refresh-boundary";
-import { adminOperationalSnapshotDelta, adminOperationalSnapshotHealth, adminOperationalSnapshotHref } from "../../../../lib/admin/admin-operational-snapshot";
+import { ADMIN_OPERATIONAL_SNAPSHOT_PERIODS, adminOperationalSnapshotDelta, adminOperationalSnapshotHealth, adminOperationalSnapshotHref, type AdminOperationalSnapshotPeriod } from "../../../../lib/admin/admin-operational-snapshot";
 import { adminTrafficScopeVisibility, resolveAdminTrafficScope } from "../../../../lib/admin/admin-traffic-scope";
 import {
   adminPolicyEvidenceDiagnosticTitle,
@@ -35,7 +35,7 @@ const statuses = ["any", "no_go", "failed", "running", "queued", "limited", "com
 const freshnesses = ["any", "fresh", "forced_fresh", "reused"] as const;
 const accessValues = ["any", "clear", "blocked", "captcha", "robots_limited", "limited", "unknown"] as const;
 const timeSpans = ["all", "4h", "12h", "24h", "7d", "31d"] as const;
-const snapshotPeriods = ["1h", "24h", "7d", "30d", "1y"] as const;
+const snapshotPeriods = ADMIN_OPERATIONAL_SNAPSHOT_PERIODS;
 function normalizeStatus(value: string | undefined): AdminScanListStatus {
   return statuses.includes(value as AdminScanListStatus) ? value as AdminScanListStatus : "any";
 }
@@ -49,8 +49,8 @@ function normalizeAccess(value: string | undefined): AdminScanListAccess {
   return accessValues.includes(value as AdminScanListAccess) ? value as AdminScanListAccess : "any";
 }
 
-function normalizeSnapshotPeriod(value: string | undefined): AdminScanOperationalSnapshotPeriod {
-  return snapshotPeriods.includes(value as AdminScanOperationalSnapshotPeriod) ? value as AdminScanOperationalSnapshotPeriod : "24h";
+function normalizeSnapshotPeriod(value: string | undefined): AdminOperationalSnapshotPeriod {
+  return snapshotPeriods.includes(value as AdminOperationalSnapshotPeriod) ? value as AdminOperationalSnapshotPeriod : "24h";
 }
 
 function snapshotNumber(value: number) {
@@ -137,6 +137,7 @@ function formatRequestedDateTime(value: string | null) {
     time: new Intl.DateTimeFormat("en-US", {
       hour: "numeric",
       minute: "2-digit",
+      second: "2-digit",
       hour12: true,
       timeZone: "America/Los_Angeles",
       timeZoneName: "short"
@@ -368,7 +369,7 @@ async function AdminScansContent({ resolvedSearchParams }: { resolvedSearchParam
           <select aria-label="Filter scans by status" className="h-10 w-[7.5rem] shrink-0 rounded-lg border border-slate-300 bg-white px-2 text-xs" defaultValue={activeStatus} name="status">{statuses.map((status) => <option key={status} value={status}>{status === "any" ? "Any status" : formatFilterLabel(status)}</option>)}</select>
           <select aria-label="Filter scans by freshness" className="h-10 w-[8rem] shrink-0 rounded-lg border border-slate-300 bg-white px-2 text-xs" defaultValue={activeFreshness} name="freshness">{freshnesses.map((freshness) => <option key={freshness} value={freshness}>{freshness === "any" ? "Any freshness" : freshness === "fresh" ? "Fresh" : freshness === "forced_fresh" ? "Forced fresh" : "Reused <24h"}</option>)}</select>
           <select aria-label="Filter scans by access posture" className="h-10 w-[8rem] shrink-0 rounded-lg border border-slate-300 bg-white px-2 text-xs" defaultValue={activeAccess} name="access"><option value="any">Any access</option>{accessValues.slice(1).map((access) => <option key={access} value={access}>{access === "robots_limited" ? "Robots-limited" : access === "captcha" ? "CAPTCHA" : formatFilterLabel(access)}</option>)}</select>
-          <select aria-label="Filter scans by outcome" className="h-10 w-[12rem] shrink-0 rounded-lg border border-slate-300 bg-white px-2 text-xs" defaultValue={activeOutcome} name="outcome"><option value="">Any outcome</option>{filterOptions.outcomes.map((outcome) => <option key={outcome} value={outcome}>{formatScanOutcome(outcome, outcome.startsWith("reachability_blocked") || ["robots_restricted", "transport_failure", "timeout_navigation", "unknown_access_limitation", "domain_inactive_or_unstable"].includes(outcome))}</option>)}</select>
+          <select aria-label="Filter scans by outcome" className="h-10 w-[12rem] shrink-0 rounded-lg border border-slate-300 bg-white px-2 text-xs" defaultValue={activeOutcome} name="outcome"><option value="">Any outcome</option>{filterOptions.outcomes.map((outcome) => <option key={outcome} value={outcome}>{formatFilterLabel(outcome)}</option>)}</select>
           <select aria-label="Filter scans by language" className="h-10 w-[7rem] shrink-0 rounded-lg border border-slate-300 bg-white px-2 text-xs" defaultValue={activeLanguage} name="language"><option value="">Any language</option>{filterOptions.languages.map((language) => <option key={language} value={language}>{language}</option>)}</select>
           <select aria-label="Filter scans by industry" className="h-10 w-[10.5rem] shrink-0 rounded-lg border border-slate-300 bg-white px-2 text-xs" defaultValue={activeIndustry} name="industry"><option value="">Any industry</option>{filterOptions.industries.map((industry) => <option key={industry} value={industry}>{industry}</option>)}</select>
           <select aria-label="Filter scans by origin" className="h-10 w-[7.5rem] shrink-0 rounded-lg border border-slate-300 bg-white px-2 text-xs" defaultValue={activeScanFrom} name="scanFrom"><option value="any">Any origin</option>{SCAN_FROM_VALUES.map((scanFrom) => <option key={scanFrom} value={scanFrom}>{formatScanFromLabel(scanFrom)}</option>)}</select>

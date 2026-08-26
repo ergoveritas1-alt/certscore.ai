@@ -1557,6 +1557,7 @@ export function buildRuntimeInventoryProjectionFromScan(scanRecord: ScanDetailRe
     dataFlows,
     requestRows,
     trackerRows,
+    vendorSurfaceProjection,
     groupedRows: buildRuntimeInventoryGroupRows({
       cookieRows,
       dataFlows,

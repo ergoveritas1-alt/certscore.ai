@@ -56,7 +56,12 @@ const companyLegalLinks = [
   { href: "/login", label: "Sign in", analyticsEvent: "sign_in_clicked" }
 ];
 
-export function SiteFooter() {
+type SiteFooterProps = {
+  hideDisclaimer?: boolean;
+  wide?: boolean;
+};
+
+export function SiteFooter({ hideDisclaimer = false, wide = true }: SiteFooterProps = {}) {
   const certscoreGptUrl = getCertScoreGptUrl();
   const sections = footerSections.map((section) =>
     section.title === "Resources"
@@ -77,11 +82,13 @@ export function SiteFooter() {
   );
   return (
     <footer className="border-t border-slate-200 bg-white">
-      <div className="mx-auto flex max-w-6xl flex-col gap-6 px-4 py-8 text-sm text-slate-500 sm:px-6">
-        <p className="max-w-none text-xs leading-5 text-slate-500 lg:whitespace-nowrap">
-          {FOOTER_DISCLAIMER_COPY}
-        </p>
-        <div className="grid gap-7 border-t border-slate-100 pt-6 sm:grid-cols-2 lg:grid-cols-4">
+      <div className={`mx-auto flex flex-col gap-6 py-8 text-sm text-slate-500 ${wide ? "max-w-[90rem] px-5 lg:px-10" : "max-w-6xl px-4 sm:px-6"}`}>
+        {!hideDisclaimer ? (
+          <p className="max-w-none text-xs leading-5 text-slate-500 lg:whitespace-nowrap">
+            {FOOTER_DISCLAIMER_COPY}
+          </p>
+        ) : null}
+        <div className={`grid gap-7 sm:grid-cols-2 lg:grid-cols-4 ${hideDisclaimer ? "" : "border-t border-slate-100 pt-6"}`}>
           {sections.map((section) => (
             <nav key={section.title} aria-label={section.title} className="space-y-3">
               <p className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-400">{section.title}</p>

@@ -600,7 +600,7 @@ const preConsentTrackingDetected = {
   "created_at": "2026-05-18T18:20:10.442Z",
   "scanned_at": "2026-05-18T18:20:18.912Z",
   "finding_id": "pre_consent_tracking_detected",
-  "finding_label": "Third-party tracking observed before recorded consent",
+  "finding_label": "Non-essential analytics initiated before a recorded affirmative choice",
   "section": "Privacy & Tracking",
   "evidenceConfidence": "strong",
   "directVsInferred": "direct_observation",
@@ -1712,7 +1712,7 @@ const illustrativeCpraPrivacyChoiceOptOut = {
 
 const PRE_CONSENT_TRACKING_SAMPLE: SampleFindingJson = {
   findingId: "pre_consent_tracking_detected",
-  label: "Third-party tracking observed before recorded consent",
+  label: "Non-essential analytics initiated before a recorded affirmative choice",
   sourceLabel: "Illustrative public evidence sample",
   payload: preConsentTrackingDetected
 };

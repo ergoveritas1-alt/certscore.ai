@@ -9,6 +9,7 @@ import {
 test("recognizes a scan report path", () => {
   assert.equal(isScanReportPath("/app/scans/0112a54a"), true);
   assert.equal(isScanReportPath("/app/scans/0112a54a/"), true);
+  assert.equal(isScanReportPath("/app/scanso/0112a54a"), true);
 });
 
 test("rejects non-report and nested scan paths", () => {
