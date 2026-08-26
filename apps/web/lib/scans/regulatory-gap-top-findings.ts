@@ -47,6 +47,17 @@ type RegulatoryGapAreaConfig = {
 const DEFAULT_REGULATORY_GAP_REMEDIATION =
   "Review the retained checklist evidence, confirm whether the row is applicable to the site, and address the underlying implementation or disclosure gap if confirmed.";
 
+const REGULATORY_GAP_REMEDIATION_BY_ROW_ID: Partial<Record<string, string>> = {
+  pre_consent_cookies_storage:
+    "Review the retained cookie and storage rows, confirm purpose and necessity, and gate confirmed non-essential writes until the relevant consent state is available.",
+  pre_consent_third_party_tracking:
+    "Review the retained vendor and request timing evidence, confirm purpose and necessity, and gate confirmed non-essential requests until the relevant consent state is available.",
+  reject_all_path_availability:
+    "Review the retained first-layer consent-control inventory. If it confirms no reject or necessary-only control, add a visible refusal action and retest regional and device variants.",
+  session_replay_fingerprinting_review:
+    "Review consent timing, masking, exclusions, sensitive-page coverage, and disclosure for the retained replay/behavioral-analytics signal; correct confirmed gaps and retest."
+};
+
 function getRegulatoryGapRemediation(row: RegulatoryGapTopFindingRow) {
   const projectedFindings = row.criticalEvidence?.projectedFindings;
   if (Array.isArray(projectedFindings)) {
@@ -64,7 +75,7 @@ function getRegulatoryGapRemediation(row: RegulatoryGapTopFindingRow) {
       }
     }
   }
-  return DEFAULT_REGULATORY_GAP_REMEDIATION;
+  return REGULATORY_GAP_REMEDIATION_BY_ROW_ID[row.id] ?? DEFAULT_REGULATORY_GAP_REMEDIATION;
 }
 
 function getPolicySourceUrl(row: RegulatoryGapTopFindingRow) {

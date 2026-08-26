@@ -1414,6 +1414,7 @@ export function buildScanBundle(input: {
       actualBytes: 0,
       fullPayloadBytes: 0,
       truncated: false,
+      canonicalFindingsComplete: allFindings.length === findings.length,
       truncationReason: null,
       omittedSections: [...intentionallyOmitted],
       deduplicatedSections: detail === "full"
@@ -1450,12 +1451,18 @@ export function buildScanBundle(input: {
   };
   const refreshTruncationGuidance = () => {
     const completeBytes = bundle.mcpMetadata.fullPayloadBytes;
+    const canonicalFindingsComplete =
+      bundle.findingsMetadata.returned === bundle.findingsMetadata.total &&
+      bundle.findingsMetadata.truncated === false;
+    bundle.mcpMetadata.canonicalFindingsComplete = canonicalFindingsComplete;
     bundle.mcpMetadata.nextRecommendedMaxBytes = completeBytes <= responseCeilingBytes
       ? Math.max(5_000, Math.ceil(completeBytes / 1_000) * 1_000)
       : null;
-    bundle.recommendedNextAction = bundle.mcpMetadata.nextRecommendedMaxBytes
-      ? `Retry with maxBytes=${bundle.mcpMetadata.nextRecommendedMaxBytes} to retrieve the complete requested tier, or open ${bundle.reportUrl ? "the report URL" : "an available content URL"}.`
-      : `The complete requested tier exceeds the MCP byte ceiling; open ${bundle.reportUrl ? "the report URL" : "an available content URL"}.`;
+    bundle.recommendedNextAction = canonicalFindingsComplete
+      ? "Canonical findings complete; retry only for omitted envelope detail."
+      : bundle.mcpMetadata.nextRecommendedMaxBytes
+        ? `Retry with maxBytes=${bundle.mcpMetadata.nextRecommendedMaxBytes} to retrieve the complete requested tier, or open ${bundle.reportUrl ? "the report URL" : "an available content URL"}.`
+        : `The complete requested tier exceeds the MCP byte ceiling; open ${bundle.reportUrl ? "the report URL" : "an available content URL"}.`;
     refresh();
   };
 
@@ -1658,6 +1665,8 @@ export function buildScanBundle(input: {
         actualBytes: 0,
         fullPayloadBytes: bundle.mcpMetadata.fullPayloadBytes,
         truncated: true,
+        canonicalFindingsComplete:
+          bundle.findingsMetadata.total === Math.min(1, bundle.findings.length),
         truncationReason: "minimal_canonical_result_returned_to_byte_limit",
         omittedSections: [...new Set([
           ...bundle.mcpMetadata.omittedSections,

@@ -198,7 +198,7 @@ test("buildScanBundle honors the caller's byte budget", () => {
   assert.equal(bundle.preConsentCookiesTrackers.truncated, true);
 });
 
-test("Light response ceiling is explicit and directs oversized complete tiers to canonical URLs", () => {
+test("Light response ceiling is explicit and does not recommend refetching complete canonical findings", () => {
   const bundle = buildScanBundle({
     detail: "full",
     evidence: { ...report, evidenceSafetyNotes: ["x".repeat(20_000)] },
@@ -230,7 +230,9 @@ test("Light response ceiling is explicit and directs oversized complete tiers to
   assert.equal(bundle.mcpMetadata.responseBudgetClamped, true);
   assert.ok(bundle.mcpMetadata.fullPayloadBytes > 25_000);
   assert.equal(bundle.mcpMetadata.nextRecommendedMaxBytes, null);
-  assert.match(bundle.recommendedNextAction, /exceeds the MCP byte ceiling/i);
+  assert.equal(bundle.mcpMetadata.canonicalFindingsComplete, true);
+  assert.match(bundle.recommendedNextAction, /Canonical findings complete/i);
+  assert.match(bundle.recommendedNextAction, /retry only for omitted envelope detail/i);
   assert.ok(bundle.mcpMetadata.actualBytes <= 25_000);
   assert.doesNotThrow(() => mcpScanBundleOutputSchema.parse(bundle));
 });
@@ -720,6 +722,9 @@ test("5000-byte findings bundles preserve realistic core finding rows before opt
   assert.equal(bundle.findingsMetadata.returned, 5);
   assert.equal(bundle.findingsMetadata.total, 5);
   assert.equal(bundle.findingsMetadata.truncated, false);
+  assert.equal(bundle.mcpMetadata.canonicalFindingsComplete, true);
+  assert.match(bundle.recommendedNextAction, /Canonical findings complete/);
+  assert.match(bundle.recommendedNextAction, /only for omitted envelope detail/);
   assert.equal(bundle.evidenceUrlTemplate, "{contentUrls.findings}/{findingId}");
   assert.ok(bundle.findings.every((finding: Record<string, any>) => !("evidenceUrl" in finding)));
   assert.equal(bundle.mcpMetadata.contentUrls.findings, `https://certscore.ai/api/v2/scans/${scanId}/findings`);
@@ -790,6 +795,7 @@ test("byte-budget truncation explains omissions and the next useful limit", () =
   } as any);
 
   assert.equal(bundle.mcpMetadata.truncated, true);
+  assert.equal(bundle.mcpMetadata.canonicalFindingsComplete, false);
   assert.ok(bundle.mcpMetadata.omittedSections.length > 0);
   assert.ok(bundle.mcpMetadata.fullPayloadBytes > bundle.mcpMetadata.actualBytes);
   assert.equal(bundle.mcpMetadata.nextRecommendedMaxBytes, Math.ceil(bundle.mcpMetadata.fullPayloadBytes / 1_000) * 1_000);
