@@ -32,6 +32,8 @@ Light intentionally exposes exactly three tools:
 - `certscore_get_scan_status`: poll an active scan using only its stable `scanId`. Honor the returned retry delay and stop at a terminal state.
 - `certscore_get_scan_bundle`: after a usable terminal completion, retrieve a bounded, public-safe bundle of canonical findings, evidence summaries and references, coverage, limitations, score metadata, and report links.
 
+MCP Light applies a 25,000-byte response ceiling. Larger requested bundle budgets are explicitly clamped in response metadata; when the complete tier exceeds the ceiling, use the returned canonical report or evidence URL rather than repeatedly increasing `maxBytes`.
+
 The bundle can include observations about pre-consent cookies and browser storage, trackers and resolved vendors, CMP and consent-control signals, privacy-policy and disclosure surfaces, GDPR/ePrivacy and CCPA/CPRA review signals, and HTTPS/TLS transport. It returns only evidence and findings present in the canonical scan projection.
 
 ## Scan lifecycle
@@ -49,6 +51,8 @@ If a retryable error is returned without a `scanId`, wait for `retryAfterSeconds
 Light permits up to 50 genuinely new scans per UTC day across both the requester and the shared public Light surface. It also applies a 5-new-scan rolling 10-minute limit across both scopes, with additional abuse safeguards.
 
 With the default `freshness=latest`, an eligible completed scan from the prior 24 hours may be reused. Reuse is reported in the scan response and does not consume the new-scan allowance. `freshness=refresh` bypasses recent-result reuse, but it does not bypass validation, quota, or throttling.
+
+Provenance separates the current retrieval from the original creation decision. `retrievalMode=creation_response` means the result came directly from `certscore_scan_site`; `retrievalMode=scan_id_lookup` means a later status or bundle call fetched the scan by ID. `creationDecision` reports `new_scan` or `reused_scan` only when that fact was retained and otherwise stays `unknown`. Do not treat a scan-ID lookup as proof that the original scan was reused. `scanAgeSeconds` is numeric when a retained age or completion timestamp is available.
 
 The webpage and anonymous REST API use a separate 20-new-scans-per-requester-IP-per-UTC-day allowance. That API allowance is not the Light MCP allowance.
 
@@ -74,7 +78,7 @@ Scans represent observable public-web behavior at a point in time, and a site ma
 - Authorization or browser login appears: verify the endpoint ends in `/mcp/light`, remove auth headers, and reconnect. `/mcp` is the separate authenticated endpoint.
 - No `scanId` is present: honor `retryAfterSeconds` and retry `certscore_scan_site`; do not poll status yet.
 - A scan stays active: honor the status response's retry guidance rather than polling tightly.
-- The bundle is truncated: inspect `omittedSections` and `nextRecommendedMaxBytes`, then retry with a larger `maxBytes` or follow a returned content URL.
+- The bundle is truncated: inspect `omittedSections`, `fullPayloadBytes`, and `nextRecommendedMaxBytes`, then retry once with the returned complete-tier limit or follow a returned content URL. Compact core findings retain their public evidence anchors before optional inventory detail is removed. A short canonical `nextStep` is retained only when it fits without displacing a finding; use the finding URL or complete tier for longer actions.
 - A quota response is returned: reuse an eligible result or wait for `Retry-After` or the UTC reset. Contact support for higher-volume needs.
 
 Support: https://certscore.ai/contact or `support@certscore.ai`

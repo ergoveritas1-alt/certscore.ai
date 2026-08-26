@@ -30,6 +30,50 @@ test("buildRegulatoryGapTopFindings preserves the canonical policy anchor for ve
   );
 });
 
+test("buildRegulatoryGapTopFindings reuses canonical remediation from a projected finding", () => {
+  const [finding] = buildRegulatoryGapTopFindings({
+    gdprEprivacyArea: {
+      id: "gdpr_eprivacy",
+      title: "GDPR / ePrivacy",
+      rows: [{
+        assessmentStatus: "gap_observed",
+        id: "cross_border_endpoint_review",
+        label: "Cross-border endpoint review",
+        criticalEvidence: {
+          projectedFindings: [{
+            id: "cross_border_endpoint_transfer_review_signal",
+            label: "Cross-border endpoint transfer review signal"
+          }]
+        }
+      }]
+    }
+  });
+
+  assert.equal(
+    finding?.remediation,
+    "Review observed endpoint vendors, regions, and disclosures, then document transfer mechanisms or reduce non-essential cross-border endpoint use where appropriate."
+  );
+});
+
+test("buildRegulatoryGapTopFindings keeps conservative remediation without a canonical projected finding", () => {
+  const [finding] = buildRegulatoryGapTopFindings({
+    gdprEprivacyArea: {
+      id: "gdpr_eprivacy",
+      title: "GDPR / ePrivacy",
+      rows: [{
+        assessmentStatus: "gap_observed",
+        id: "retention_disclosure_observed",
+        label: "Retention disclosure"
+      }]
+    }
+  });
+
+  assert.equal(
+    finding?.remediation,
+    "Review the retained checklist evidence, confirm whether the row is applicable to the site, and address the underlying implementation or disclosure gap if confirmed."
+  );
+});
+
 test("buildRegulatoryGapTopFindings promotes potential-concern rows only", () => {
   const findings = buildRegulatoryGapTopFindings({
     gdprEprivacyArea: {

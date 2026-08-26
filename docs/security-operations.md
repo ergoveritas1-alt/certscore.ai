@@ -26,7 +26,7 @@ Dependabot, the quarterly scan, a vendor advisory, or another credible report.
 A patch may be replaced by a documented mitigation that removes exposure.
 Anything not completed within the SLA needs a dated risk acceptance from the
 product owner, the compensating control, and a new remediation date. Emergency
-patches follow the same testing and independent-review requirements as other
+patches follow the same testing and change-record requirements as other
 production changes.
 
 Dependabot checks the pnpm workspace, GitHub Actions, and all production
@@ -49,8 +49,8 @@ Current directly controlled runtime baseline:
 | Container OS | Debian 12 Bookworm LTS (`node:22-bookworm-slim`) | LTS through 2028-06-30 on amd64/arm64 | Review by 2028-04-01 |
 
 AWS-managed service versions and the Chromium package installed in scanner
-images are checked during the same quarterly review. The reviewer records the
-date, checked components, sources, result, and any follow-up issue in the
+images are checked during the same quarterly review. The product owner records
+the date, checked components, sources, result, and any follow-up issue in the
 quarterly workflow run summary or a linked issue. The answer to "unsupported
 OS/software in production" remains **No** only while this inventory and the
 latest successful review show no unsupported component.
@@ -69,25 +69,22 @@ tracks them under the patch SLA. This is a lightweight repository and
 infrastructure-as-code scan; it is not a penetration test or a claim that the
 running public application received authenticated DAST.
 
-## Independent production change approval
+## Single-owner production change control
 
-All production code changes must use a pull request and receive approval from
-at least one person other than the change author before merge. The reviewer
-must assess the code, tests, security impact, migration/rollback implications,
-and any recurring-cost change. GitHub's audit history is the evidence.
+WC01 currently has one repository owner and does not require a second-person
+approval for production changes. Production code changes still use a pull
+request so the proposed diff, automated checks, security impact,
+migration/rollback implications, and any recurring-cost change remain in the
+GitHub audit history. The product owner may author and merge that pull request
+after the required checks pass.
 
-`CODEOWNERS` declares the protected scope. To make this control effective, the
-repository administrator must first add the second reviewer's GitHub username
-to `CODEOWNERS`, then configure the `main` ruleset to:
+`CODEOWNERS` is ownership-routing metadata only. Branch rulesets and production
+deployment environments must not require an unavailable reviewer or Code Owner
+approval while the repository has a single owner. Conversation-resolution,
+force-push, deletion, and required-check protections may still be enabled
+without adding a human approval requirement.
 
-1. Require a pull request before merging.
-2. Require at least one approval and require review from Code Owners.
-3. Dismiss stale approvals when new commits are pushed.
-4. Require conversation resolution and block force pushes/deletions.
-5. Apply the rule to administrators without a bypass for normal changes.
-
-Production GitHub environments used by the AWS deployment workflows should
-also require a reviewer other than the person who initiated the deployment.
-Until a second reviewer is assigned and these GitHub settings are verified,
-the questionnaire answer for independent approval of every production code
-change must remain **No**.
+If a second maintainer is added later, independent review may be reintroduced
+through an explicit policy update and matching GitHub repository and
+environment settings. Until then, any questionnaire asking whether every
+production change receives independent approval must be answered **No**.

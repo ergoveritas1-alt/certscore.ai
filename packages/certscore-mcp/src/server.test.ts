@@ -267,6 +267,7 @@ test("CertScore Light exposes only the focused no-account workflow", async () =>
     assert.equal(bundleTool?.inputSchema.additionalProperties, false);
     assert.deepEqual((bundleTool?.inputSchema.properties?.detail as { enum?: string[] })?.enum, ["summary", "findings", "evidence", "full"]);
     assert.equal((bundleTool?.inputSchema.properties?.maxBytes as { minimum?: number })?.minimum, 5_000);
+    assert.match((bundleTool?.inputSchema.properties?.maxBytes as { description?: string })?.description ?? "", /Light.*25000-byte ceiling/i);
     assert.ok(bundleTool?.outputSchema?.required?.includes("detail"));
     assert.ok(bundleTool?.outputSchema?.required?.includes("error"));
     assert.ok(bundleTool?.outputSchema?.required?.includes("provenance"));
@@ -288,7 +289,7 @@ test("CertScore Light exposes only the focused no-account workflow", async () =>
     assert.ok(inventorySchema?.properties?.returned);
     assert.ok(inventorySchema?.properties?.truncated);
     const metadataSchema = bundleTool?.outputSchema?.properties?.mcpMetadata as { required?: string[] } | undefined;
-    for (const field of ["requestedMaxBytes", "actualBytes", "truncated", "truncationReason", "omittedSections", "nextRecommendedMaxBytes", "omittedContentAvailableViaUrl", "contentUrls"]) {
+    for (const field of ["requestedMaxBytes", "effectiveMaxBytes", "responseCeilingBytes", "responseBudgetClamped", "actualBytes", "truncated", "truncationReason", "omittedSections", "nextRecommendedMaxBytes", "omittedContentAvailableViaUrl", "contentUrls"]) {
       assert.ok(metadataSchema?.required?.includes(field), `mcpMetadata.${field} must be required`);
     }
   }, { toolProfile: "light" });
@@ -620,7 +621,9 @@ test("certscore_scan_site can return immediately for an explicitly asynchronous 
       assert.equal(result.status, "queued");
       assert.equal(result.reportUrl, "https://certscore.ai/scan/00000000-0000-4000-8000-000000000123");
       assert.equal((result.provenance as Record<string, unknown>).mode, "new_scan_started");
-      assert.match(raw.content[0]?.type === "text" ? raw.content[0].text : "", /provenance=new_scan_started/);
+      assert.equal((result.provenance as Record<string, unknown>).retrievalMode, "creation_response");
+      assert.equal((result.provenance as Record<string, unknown>).creationDecision, "new_scan");
+      assert.match(raw.content[0]?.type === "text" ? raw.content[0].text : "", /retrieval=creation_response; creation=new_scan/);
       assert.match(raw.content[0]?.type === "text" ? raw.content[0].text : "", /full report=https:\/\/certscore\.ai\/scan\/00000000-0000-4000-8000-000000000123/);
       assert.match(mock.calls[0] ?? "", /\/api\/v2\/scans$/);
     });
@@ -722,6 +725,9 @@ test("certscore_scan_site identifies an existing completed scan reuse", async ()
         arguments: { url: "https://example.com" }
       }));
       assert.equal((result.provenance as Record<string, unknown>).mode, "existing_completed_scan_reused");
+      assert.equal((result.provenance as Record<string, unknown>).retrievalMode, "creation_response");
+      assert.equal((result.provenance as Record<string, unknown>).creationDecision, "reused_scan");
+      assert.equal((result.provenance as Record<string, unknown>).scanAgeSeconds, 90);
       assert.equal((result.provenance as Record<string, unknown>).reused, true);
       assert.equal((result.provenance as Record<string, unknown>).freshnessDecision, "reused_existing_scan");
       assert.equal(mock.calls.length, 1);
@@ -959,6 +965,7 @@ test("certscore_get_scan_status supports API v2 scanId status with timing fields
       const result = parseToolJson(raw);
       assert.equal(result.type, "certscore_scan_job");
       assert.equal(result.scanId, "00000000-0000-4000-8000-000000000123");
+      assert.equal(result.jobId, undefined);
       assert.equal(result.scanFrom, "eu_ie");
       assert.equal(result.createdAt, "2026-07-08T11:59:59.000Z");
       assert.equal(result.startedAt, "2026-07-08T12:00:00.000Z");
@@ -967,10 +974,13 @@ test("certscore_get_scan_status supports API v2 scanId status with timing fields
       assert.equal(result.score, 78);
       assert.equal(result.riskLevel, "monitor");
       assert.equal((result.provenance as Record<string, unknown>).mode, "existing_scan_retrieved");
+      assert.equal((result.provenance as Record<string, unknown>).retrievalMode, "scan_id_lookup");
+      assert.equal((result.provenance as Record<string, unknown>).creationDecision, "unknown");
       const text = raw.content[0]?.type === "text" ? raw.content[0].text : "";
       assert.match(text, /scanFrom\/execution region=eu_ie/);
       assert.match(text, /completedAt=2026-07-08T12:00:34\.000Z/);
-      assert.match(text, /provenance\/reuse state=existing_scan_retrieved/);
+      assert.match(text, /retrieval mode=scan_id_lookup/);
+      assert.match(text, /original creation decision=unknown/);
       assert.match(text, /Never infer its original scan region from the current request, the user's location, or a default execution region/);
       assertToolOutputSchema("certscore_get_scan_status", result);
       assert.equal(mock.calls.length, 1);
@@ -1078,7 +1088,7 @@ test("certscore_get_report supports markdown and JSON report retrieval", async (
       assert.equal(markdown.value, "# CertScore Pulse");
       const markdownText = markdownRaw.content[0]?.type === "text" ? markdownRaw.content[0].text : "";
       assert.match(markdownText, /# CertScore Pulse/);
-      assert.match(markdownText, /Provenance: existing_scan_retrieved/);
+      assert.match(markdownText, /Provenance: retrieval=scan_id_lookup; original creation=unknown/);
       assert.match(markdownText, /not legal advice, certification, or a compliance determination/i);
 
       const jsonRaw = await client.callTool({ name: "certscore_get_report", arguments: { scanId: "00000000-0000-4000-8000-000000000123", detail: "full" } });
@@ -1158,6 +1168,10 @@ test("certscore_get_scan_bundle returns a compact canonical summary by default",
       assert.equal((bundle.findingsMetadata as Record<string, unknown>).total, 1);
       assert.equal((bundle.findingsMetadata as Record<string, unknown>).truncated, false);
       assert.equal(bundle.detail, "summary");
+      assert.equal((bundle.mcpMetadata as Record<string, unknown>).requestedMaxBytes, 25_000);
+      assert.equal((bundle.mcpMetadata as Record<string, unknown>).effectiveMaxBytes, 25_000);
+      assert.equal((bundle.mcpMetadata as Record<string, unknown>).responseCeilingBytes, 25_000);
+      assert.equal((bundle.mcpMetadata as Record<string, unknown>).responseBudgetClamped, false);
       assert.ok(!((bundle.mcpMetadata as Record<string, unknown>).omittedSections as string[]).includes("findings"));
       assert.equal(bundle.evidenceSummary, undefined);
       const inventory = bundle.preConsentCookiesTrackers as Record<string, unknown>;
@@ -1187,7 +1201,8 @@ test("certscore_get_scan_bundle returns a compact canonical summary by default",
       assert.match(responseContract, /^Response contract:/);
       assert.match(text, /scanFrom\/execution region=eu_ie/);
       assert.match(text, /completedAt=2026-08-15T03:39:36\.015Z/);
-      assert.match(text, /provenance\/reuse state=existing_scan_retrieved/);
+      assert.match(text, /retrieval mode=scan_id_lookup/);
+      assert.match(text, /original creation decision=unknown/);
       assert.ok(text.indexOf(responseContract) < text.indexOf("CertScore score=72"));
       assert.ok(text.indexOf(responseContract) < text.indexOf("Canonical projected findings:"));
       assert.match(responseContract, /criticality, priority, and confidence are CertScore metadata/i);
@@ -1216,6 +1231,42 @@ test("certscore_get_scan_bundle returns a compact canonical summary by default",
       forwardedClientIp: "203.0.113.44",
       toolProfile: "light"
     });
+  } finally {
+    mock.restore();
+  }
+});
+
+test("CertScore Light clamps oversized bundle budgets and reports the applied ceiling", async () => {
+  const scan = {
+    type: "certscore_scan",
+    scanId: "00000000-0000-4000-8000-000000000123",
+    domain: "example.com",
+    url: "https://example.com",
+    status: "completed",
+    score: 72,
+    links: { report: "https://certscore.ai/scan/00000000-0000-4000-8000-000000000123" }
+  };
+  const mock = installFetch([
+    { status: 200, body: scan },
+    { status: 200, body: pulse },
+    { status: 200, body: { type: "certscore_finding_list", scanId: scan.scanId, findings: [apiFinding("finding_1")] } },
+    { status: 200, body: { type: "certscore_pre_consent_cookies_trackers", scanId: scan.scanId, domain: "example.com", summary: { rowCount: 0 }, rows: [] } }
+  ]);
+  try {
+    await withMcpClient(async (client) => {
+      const raw = await client.callTool({
+        name: "certscore_get_scan_bundle",
+        arguments: { scanId: scan.scanId, detail: "full", maxBytes: 200_000 }
+      });
+      const bundle = parseToolJson(raw);
+      const metadata = bundle.mcpMetadata as Record<string, unknown>;
+      assert.equal(metadata.requestedMaxBytes, 200_000);
+      assert.equal(metadata.effectiveMaxBytes, 25_000);
+      assert.equal(metadata.responseCeilingBytes, 25_000);
+      assert.equal(metadata.responseBudgetClamped, true);
+      assert.ok(Number(metadata.actualBytes) <= 25_000);
+      assertToolOutputSchema("certscore_get_scan_bundle", bundle);
+    }, { toolProfile: "light" });
   } finally {
     mock.restore();
   }
