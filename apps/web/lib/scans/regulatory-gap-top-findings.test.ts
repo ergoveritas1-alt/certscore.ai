@@ -74,6 +74,38 @@ test("buildRegulatoryGapTopFindings keeps conservative remediation without a can
   );
 });
 
+test("buildRegulatoryGapTopFindings uses evidence-safe row remediation for canonical runtime and consent wrappers", () => {
+  const rowCases = [
+    ["pre_consent_cookies_storage", /retained cookie and storage rows/i],
+    ["pre_consent_third_party_tracking", /vendor and request timing evidence/i],
+    ["reject_all_path_availability", /if it confirms no reject or necessary-only control/i],
+    ["session_replay_fingerprinting_review", /masking, exclusions/i]
+  ] as const;
+
+  for (const [id, expected] of rowCases) {
+    const [finding] = buildRegulatoryGapTopFindings({
+      gdprEprivacyArea: {
+        id: "gdpr_eprivacy",
+        title: "GDPR / ePrivacy",
+        rows: [{
+          assessmentStatus: "gap_observed",
+          id,
+          label: id,
+          ...(id === "pre_consent_cookies_storage"
+            ? { criticalEvidence: { retainedEvidence: { cookieStoragePriority: "high" } } }
+            : id === "pre_consent_third_party_tracking"
+              ? { criticalEvidence: { retainedEvidence: { trackerPriority: "high" } } }
+              : id === "session_replay_fingerprinting_review"
+                ? { evidenceState: "observed" }
+                : {})
+        }]
+      }
+    });
+
+    assert.match(finding?.remediation ?? "", expected);
+  }
+});
+
 test("buildRegulatoryGapTopFindings promotes potential-concern rows only", () => {
   const findings = buildRegulatoryGapTopFindings({
     gdprEprivacyArea: {

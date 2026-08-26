@@ -147,7 +147,7 @@ Light MCP — no authentication workflow:
 6. Stop polling at a terminal status, then call certscore_get_scan_bundle.
 7. Use detail=findings with maxBytes=8000 for a compact finding review, or detail=evidence with maxBytes=8000 for evidence digests and references.
 8. Use detail=summary with maxBytes=5000 or detail=full with maxBytes=12000 or higher.
-9. If truncated, inspect actualBytes, truncated, omittedSections, nextRecommendedMaxBytes, and content URLs, then follow recommendedNextAction or increase maxBytes.
+9. If truncated, inspect canonicalFindingsComplete first. When true, retry only for omitted envelope detail; otherwise inspect actualBytes, omittedSections, nextRecommendedMaxBytes, and content URLs, then follow recommendedNextAction or increase maxBytes.
 
 Light allows up to 50 genuinely new scans per UTC day across the public Light surface and 5 per rolling 10 minutes. Reused eligible results do not consume quota.
 

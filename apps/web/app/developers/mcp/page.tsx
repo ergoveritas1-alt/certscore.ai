@@ -168,7 +168,7 @@ full      maxBytes=12000 or higher`}</CodeBlock>
             A 5,000-byte response prioritizes compact core finding rows over optional inventory and duplicate envelope fields. When repeated
             per-finding URLs are omitted, use <code>evidenceUrlTemplate</code> with <code>contentUrls.findings</code> and the returned finding ID.
             Inspect <code>actualBytes</code>, <code>truncated</code>, <code>omittedSections</code>,
-            <code>nextRecommendedMaxBytes</code>, and returned report or evidence content URLs.
+            <code>canonicalFindingsComplete</code>, <code>nextRecommendedMaxBytes</code>, and returned report or evidence content URLs.
           </p>
           <p className="max-w-3xl text-sm font-semibold leading-7 text-slate-800">
             Call <code>certscore_get_scan_status</code> only after <code>certscore_scan_site</code> returns a <code>scanId</code>. A retryable response without
@@ -193,7 +193,7 @@ full      maxBytes=12000 or higher`}</CodeBlock>
               ["No scanId was returned", <>Retry <code>certscore_scan_site</code> only when the error says <code>retryable: true</code>. Never poll status without <code>scanId</code>.</>],
               ["Rate limited", <>Wait for <code>retryAfterSeconds</code> or stop. Eligible recent-result reuse does not consume quota.</>],
               ["Result was reused", <>Report it as reused. The eligible prior result was returned and quota was not consumed.</>],
-              ["Bundle was truncated", <>Follow <code>nextRecommendedMaxBytes</code>, increase <code>maxBytes</code>, or open a returned report or evidence URL.</>],
+              ["Bundle was truncated", <>If <code>canonicalFindingsComplete</code> is true, retry only for omitted envelope detail. Otherwise follow <code>nextRecommendedMaxBytes</code>, increase <code>maxBytes</code>, or open a returned report or evidence URL.</>],
               ["Coverage was limited", <><code>completed_limited</code>, no-go, and not-observed are automated observations, not proof of compliance.</>]
             ].map(([title, guidance]) => (
               <div className="rounded-lg border border-slate-200 bg-white p-4" key={String(title)}>

@@ -289,7 +289,7 @@ test("CertScore Light exposes only the focused no-account workflow", async () =>
     assert.ok(inventorySchema?.properties?.returned);
     assert.ok(inventorySchema?.properties?.truncated);
     const metadataSchema = bundleTool?.outputSchema?.properties?.mcpMetadata as { required?: string[] } | undefined;
-    for (const field of ["requestedMaxBytes", "effectiveMaxBytes", "responseCeilingBytes", "responseBudgetClamped", "actualBytes", "truncated", "truncationReason", "omittedSections", "nextRecommendedMaxBytes", "omittedContentAvailableViaUrl", "contentUrls"]) {
+    for (const field of ["requestedMaxBytes", "effectiveMaxBytes", "responseCeilingBytes", "responseBudgetClamped", "actualBytes", "truncated", "canonicalFindingsComplete", "truncationReason", "omittedSections", "nextRecommendedMaxBytes", "omittedContentAvailableViaUrl", "contentUrls"]) {
       assert.ok(metadataSchema?.required?.includes(field), `mcpMetadata.${field} must be required`);
     }
   }, { toolProfile: "light" });
