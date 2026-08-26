@@ -165,8 +165,9 @@ findings  maxBytes=8000
 evidence  maxBytes=8000
 full      maxBytes=12000 or higher`}</CodeBlock>
           <p className="max-w-3xl text-sm leading-7 text-slate-600">
-            A 5,000-byte response may intentionally omit optional sections while preserving a compact finding or evidence reference when
-            available. Inspect <code>actualBytes</code>, <code>truncated</code>, <code>omittedSections</code>,
+            A 5,000-byte response prioritizes compact core finding rows over optional inventory and duplicate envelope fields. When repeated
+            per-finding URLs are omitted, use <code>evidenceUrlTemplate</code> with <code>contentUrls.findings</code> and the returned finding ID.
+            Inspect <code>actualBytes</code>, <code>truncated</code>, <code>omittedSections</code>,
             <code>nextRecommendedMaxBytes</code>, and returned report or evidence content URLs.
           </p>
           <p className="max-w-3xl text-sm font-semibold leading-7 text-slate-800">
