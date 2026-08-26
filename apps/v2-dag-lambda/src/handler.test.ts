@@ -553,7 +553,11 @@ test("handler bounds and validates policy surface seeds", () => {
 test("lightweight egress probe enforces one hard total deadline", async () => {
   const proxy = createHttpServer();
   let tunnelSocket: { destroy(): void } | undefined;
-  proxy.on("connect", (_request, socket) => {
+  let connectTarget: string | undefined;
+  const priorConnectHost = process.env.CERTSCORE_V2_DAG_LAMBDA_EGRESS_REFLECTOR_CONNECT_HOST;
+  process.env.CERTSCORE_V2_DAG_LAMBDA_EGRESS_REFLECTOR_CONNECT_HOST = "owned-origin.example";
+  proxy.on("connect", (request, socket) => {
+    connectTarget = request.url;
     tunnelSocket = socket;
     socket.write("HTTP/1.1 200 Connection Established\r\n\r\n");
   });
@@ -568,7 +572,13 @@ test("lightweight egress probe enforces one hard total deadline", async () => {
       /exceeded 100ms total deadline/,
     );
     assert.ok(Date.now() - startedAt < 1_000);
+    assert.equal(connectTarget, "owned-origin.example:443");
   } finally {
+    if (priorConnectHost === undefined) {
+      delete process.env.CERTSCORE_V2_DAG_LAMBDA_EGRESS_REFLECTOR_CONNECT_HOST;
+    } else {
+      process.env.CERTSCORE_V2_DAG_LAMBDA_EGRESS_REFLECTOR_CONNECT_HOST = priorConnectHost;
+    }
     tunnelSocket?.destroy();
     await new Promise<void>((resolve, reject) => proxy.close((error) => error ? reject(error) : resolve()));
   }

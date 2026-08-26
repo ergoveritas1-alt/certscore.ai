@@ -1490,11 +1490,17 @@ export async function fetchEgressProbeThroughProxy(
 ): Promise<{ status: number; text: string }> {
   const proxyUrl = new URL(proxyServer.includes("://") ? proxyServer : `http://${proxyServer}`);
   const probeUrl = new URL(probeUrlValue);
+  const reflectorConnectHost = firstTrimmedRuntimeEnv(process.env, [
+    "CERTSCORE_V2_DAG_LAMBDA_EGRESS_REFLECTOR_CONNECT_HOST",
+  ]) ?? probeUrl.hostname;
   if (proxyUrl.protocol !== "http:" && proxyUrl.protocol !== "https:") {
     throw new Error(`Unsupported lightweight egress proxy protocol: ${proxyUrl.protocol}`);
   }
   if (probeUrl.protocol !== "https:") {
     throw new Error(`Unsupported lightweight egress reflector protocol: ${probeUrl.protocol}`);
+  }
+  if (!/^[a-z0-9.-]+$/i.test(reflectorConnectHost)) {
+    throw new Error("Invalid lightweight egress reflector connect host.");
   }
   const proxyUsername = firstTrimmedRuntimeEnv(process.env, [
     "CERTSCORE_V2_DAG_LAMBDA_PROXY_USERNAME",
@@ -1540,10 +1546,10 @@ export async function fetchEgressProbeThroughProxy(
     connectRequestHandle = connectRequest({
       hostname: proxyUrl.hostname,
       method: "CONNECT",
-      path: `${probeUrl.hostname}:${probeUrl.port || "443"}`,
+      path: `${reflectorConnectHost}:${probeUrl.port || "443"}`,
       port: proxyUrl.port ? Number(proxyUrl.port) : proxyUrl.protocol === "https:" ? 443 : 80,
       headers: {
-        Host: `${probeUrl.hostname}:${probeUrl.port || "443"}`,
+        Host: `${reflectorConnectHost}:${probeUrl.port || "443"}`,
         ...(proxyAuthorization ? { "Proxy-Authorization": proxyAuthorization } : {}),
       },
     });

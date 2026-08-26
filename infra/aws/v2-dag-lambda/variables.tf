@@ -99,6 +99,17 @@ variable "web_bot_auth_private_key_secret_id" {
   default     = "consentcheck/web-bot-auth-private-key-pem"
 }
 
+variable "egress_reflector_connect_host" {
+  description = "Direct AWS origin hostname used for the HTTPS egress reflector tunnel while retaining certscore.ai as the TLS SNI and HTTP Host."
+  type        = string
+  default     = "certscore-web-alb-527275258.us-west-1.elb.amazonaws.com"
+
+  validation {
+    condition     = can(regex("^[A-Za-z0-9.-]+$", var.egress_reflector_connect_host))
+    error_message = "egress_reflector_connect_host must be a hostname without a scheme, port, path, or wildcard."
+  }
+}
+
 variable "expected_egress_region_by_region" {
   description = "Optional expected public region reported by the regional proxy egress preflight. Set the US-CA lane to California only after its proxy public IP is actually California-based."
   type        = map(string)
