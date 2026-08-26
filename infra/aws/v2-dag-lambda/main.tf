@@ -34,9 +34,8 @@ locals {
     for region in values(local.regions) :
     "arn:aws:sqs:${region}:${data.aws_caller_identity.current.account_id}:${var.project_name}-production-dispatch.fifo"
   ]
-  scanner_shared_environment = {
-    CERTSCORE_V2_DAG_LAMBDA_EGRESS_REFLECTOR_CONNECT_HOST = var.egress_reflector_connect_host
-    WEB_BOT_AUTH_PRIVATE_KEY_PEM                          = data.aws_secretsmanager_secret_version.web_bot_auth_private_key.secret_string
+  web_bot_auth_environment = {
+    WEB_BOT_AUTH_PRIVATE_KEY_PEM = data.aws_secretsmanager_secret_version.web_bot_auth_private_key.secret_string
   }
 }
 
@@ -145,7 +144,7 @@ module "eu_central_1" {
   alarm_actions                    = lookup(var.alarm_actions_by_region, local.regions.eu_central_1, [])
   artifact_bucket                  = local.artifact_buckets.eu_central_1
   artifact_prefix                  = var.artifact_prefix
-  environment_variables            = merge(lookup(var.environment_variables_by_region, "eu-central-1", {}), local.scanner_shared_environment)
+  environment_variables            = merge(lookup(var.environment_variables_by_region, "eu-central-1", {}), local.web_bot_auth_environment)
   function_name                    = local.function_name
   image_uri                        = var.image_uris.eu_central_1
   locale                           = "de-DE"
@@ -176,7 +175,7 @@ module "eu_west_1" {
   alarm_actions                    = lookup(var.alarm_actions_by_region, local.regions.eu_west_1, [])
   artifact_bucket                  = local.artifact_buckets.eu_west_1
   artifact_prefix                  = var.artifact_prefix
-  environment_variables            = merge(lookup(var.environment_variables_by_region, "eu-west-1", {}), local.scanner_shared_environment)
+  environment_variables            = merge(lookup(var.environment_variables_by_region, "eu-west-1", {}), local.web_bot_auth_environment)
   function_name                    = local.function_name
   image_uri                        = var.image_uris.eu_west_1
   locale                           = "en-IE"
@@ -207,7 +206,7 @@ module "us_west_1" {
   alarm_actions                    = lookup(var.alarm_actions_by_region, local.regions.us_west_1, [])
   artifact_bucket                  = local.artifact_buckets.us_west_1
   artifact_prefix                  = var.artifact_prefix
-  environment_variables            = merge(lookup(var.environment_variables_by_region, "us-west-1", {}), local.scanner_shared_environment)
+  environment_variables            = merge(lookup(var.environment_variables_by_region, "us-west-1", {}), local.web_bot_auth_environment)
   function_name                    = local.function_name
   image_uri                        = var.image_uris.us_west_1
   locale                           = "en-US"

@@ -4,6 +4,7 @@ import { SQSClient, SendMessageCommand, type SendMessageCommandOutput } from "@a
 import { createHash } from "node:crypto";
 import { request as httpRequest, type ClientRequest } from "node:http";
 import { request as httpsRequest } from "node:https";
+import { isIP } from "node:net";
 import type { Duplex } from "node:stream";
 import path from "node:path";
 import { mkdir, readdir, readFile, writeFile } from "node:fs/promises";
@@ -1329,7 +1330,7 @@ export async function writeEgressPreflightArtifact(
     browser = await chromium.launch(chromiumLaunchOptions({ headless: true }));
     const context = await browser.newContext(chromiumContextOptions());
     const page = await context.newPage();
-    const response = await page.goto("https://ipinfo.io/json", {
+    const response = await page.goto("https://checkip.amazonaws.com/", {
       timeout: 7_500,
       waitUntil: "domcontentloaded"
     });
@@ -1340,9 +1341,9 @@ export async function writeEgressPreflightArtifact(
       expectedEgressRegion,
       httpStatus: response?.status() ?? 0,
       observed: parsed,
-      provider: "ipinfo.io",
+      provider: "checkip.amazonaws.com",
     });
-    artifact.provider = "ipinfo.io";
+    artifact.provider = "checkip.amazonaws.com";
     artifact.probeStatus = assessment.probeStatus;
     artifact.observed = parsed;
     artifact.error = assessment.error;
@@ -1458,7 +1459,7 @@ function regionalEgressRequired(env: NodeJS.ProcessEnv = process.env) {
   return value === "true" || value === "1" || value === "yes" || value === "on";
 }
 
-function parseEgressProbeResponse(text: string) {
+export function parseEgressProbeResponse(text: string) {
   try {
     const value = JSON.parse(text);
     if (!value || typeof value !== "object" || Array.isArray(value)) {
@@ -1477,7 +1478,8 @@ function parseEgressProbeResponse(text: string) {
       ...(compactString(record.timezone) ? { timezone: compactString(record.timezone)!.slice(0, 80) } : {})
     };
   } catch {
-    return null;
+    const ip = text.trim();
+    return isIP(ip) ? { ip } : null;
   }
 }
 
@@ -1490,17 +1492,11 @@ export async function fetchEgressProbeThroughProxy(
 ): Promise<{ status: number; text: string }> {
   const proxyUrl = new URL(proxyServer.includes("://") ? proxyServer : `http://${proxyServer}`);
   const probeUrl = new URL(probeUrlValue);
-  const reflectorConnectHost = firstTrimmedRuntimeEnv(process.env, [
-    "CERTSCORE_V2_DAG_LAMBDA_EGRESS_REFLECTOR_CONNECT_HOST",
-  ]) ?? probeUrl.hostname;
   if (proxyUrl.protocol !== "http:" && proxyUrl.protocol !== "https:") {
     throw new Error(`Unsupported lightweight egress proxy protocol: ${proxyUrl.protocol}`);
   }
   if (probeUrl.protocol !== "https:") {
     throw new Error(`Unsupported lightweight egress reflector protocol: ${probeUrl.protocol}`);
-  }
-  if (!/^[a-z0-9.-]+$/i.test(reflectorConnectHost)) {
-    throw new Error("Invalid lightweight egress reflector connect host.");
   }
   const proxyUsername = firstTrimmedRuntimeEnv(process.env, [
     "CERTSCORE_V2_DAG_LAMBDA_PROXY_USERNAME",
@@ -1546,10 +1542,10 @@ export async function fetchEgressProbeThroughProxy(
     connectRequestHandle = connectRequest({
       hostname: proxyUrl.hostname,
       method: "CONNECT",
-      path: `${reflectorConnectHost}:${probeUrl.port || "443"}`,
+      path: `${probeUrl.hostname}:${probeUrl.port || "443"}`,
       port: proxyUrl.port ? Number(proxyUrl.port) : proxyUrl.protocol === "https:" ? 443 : 80,
       headers: {
-        Host: `${reflectorConnectHost}:${probeUrl.port || "443"}`,
+        Host: `${probeUrl.hostname}:${probeUrl.port || "443"}`,
         ...(proxyAuthorization ? { "Proxy-Authorization": proxyAuthorization } : {}),
       },
     });

@@ -42,6 +42,7 @@ import {
   mergeLocalV2DagLambdaShardBundles,
   mirrorWorkerArtifactsIntoFinalArtifactRoot,
   parseLocalV2DagLambdaDispatchPayload,
+  parseEgressProbeResponse,
   sendLocalV2DagLambdaResultMessage,
   serializeCanonicalEvidenceBundle,
   unwrapLocalV2DagLambdaDispatchEvent,
@@ -553,11 +554,7 @@ test("handler bounds and validates policy surface seeds", () => {
 test("lightweight egress probe enforces one hard total deadline", async () => {
   const proxy = createHttpServer();
   let tunnelSocket: { destroy(): void } | undefined;
-  let connectTarget: string | undefined;
-  const priorConnectHost = process.env.CERTSCORE_V2_DAG_LAMBDA_EGRESS_REFLECTOR_CONNECT_HOST;
-  process.env.CERTSCORE_V2_DAG_LAMBDA_EGRESS_REFLECTOR_CONNECT_HOST = "owned-origin.example";
-  proxy.on("connect", (request, socket) => {
-    connectTarget = request.url;
+  proxy.on("connect", (_request, socket) => {
     tunnelSocket = socket;
     socket.write("HTTP/1.1 200 Connection Established\r\n\r\n");
   });
@@ -572,16 +569,15 @@ test("lightweight egress probe enforces one hard total deadline", async () => {
       /exceeded 100ms total deadline/,
     );
     assert.ok(Date.now() - startedAt < 1_000);
-    assert.equal(connectTarget, "owned-origin.example:443");
   } finally {
-    if (priorConnectHost === undefined) {
-      delete process.env.CERTSCORE_V2_DAG_LAMBDA_EGRESS_REFLECTOR_CONNECT_HOST;
-    } else {
-      process.env.CERTSCORE_V2_DAG_LAMBDA_EGRESS_REFLECTOR_CONNECT_HOST = priorConnectHost;
-    }
     tunnelSocket?.destroy();
     await new Promise<void>((resolve, reject) => proxy.close((error) => error ? reject(error) : resolve()));
   }
+});
+
+test("egress probe parser accepts the bounded plain-IP response from AWS CheckIP", () => {
+  assert.deepEqual(parseEgressProbeResponse("203.0.113.42\n"), { ip: "203.0.113.42" });
+  assert.equal(parseEgressProbeResponse("not an IP"), null);
 });
 
 test("browser-fallback handoff preserves the failed lightweight egress attempt", async () => {
