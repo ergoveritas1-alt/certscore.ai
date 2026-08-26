@@ -664,7 +664,28 @@ test("5000-byte findings bundles preserve realistic core finding rows before opt
         evidenceBasis: "public_report_projection"
       }))
     },
-    report,
+    report: {
+      ...report,
+      summary: {
+        headline: "Automated scan surfaced public-web review signals with retained evidence.",
+        score: 61
+      },
+      transportSecurity: {
+        status: "available",
+        evidenceRetained: true,
+        observationCounts: {
+          total: 5,
+          observedPositive: 5,
+          concernOrReview: 0,
+          notObserved: 0,
+          unavailable: 0
+        },
+        observations: [],
+        limitations: [
+          "Only the listed canonical observations are represented. Do not infer HSTS, supported TLS versions, cipher suites, or certificate properties that are not explicitly returned."
+        ]
+      }
+    },
     scan: {
       type: "certscore_scan",
       scanId,
@@ -707,11 +728,13 @@ test("5000-byte findings bundles preserve realistic core finding rows before opt
   assert.equal(bundle.preConsentCookiesTrackers, undefined);
   assert.equal(bundle.links, undefined);
   assert.equal(bundle.timing, undefined);
+  assert.equal(bundle.summary, undefined);
   assert.ok(bundle.mcpMetadata.omittedSections.includes("additionalPreConsentRows"));
   assert.ok(bundle.mcpMetadata.omittedSections.includes("findingEvidenceUrls"));
   assert.ok(bundle.mcpMetadata.omittedSections.includes("preConsentCookiesTrackers"));
   assert.ok(bundle.mcpMetadata.omittedSections.includes("links"));
   assert.ok(bundle.mcpMetadata.omittedSections.includes("timing"));
+  assert.ok(bundle.mcpMetadata.omittedSections.includes("summary"));
   assert.ok(bundle.mcpMetadata.actualBytes <= 5_000);
   assert.doesNotThrow(() => mcpScanBundleOutputSchema.parse(bundle));
 });
