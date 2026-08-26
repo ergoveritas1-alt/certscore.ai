@@ -74,6 +74,7 @@ export type McpToolInvocationObservation = {
 const DEFAULT_MCP_SCAN_TOOL_BUDGET_MS = 25_000;
 const MAX_MCP_SCAN_TOOL_BUDGET_MS = 45_000;
 const MCP_SCAN_TOOL_RESPONSE_RESERVE_MS = 1_000;
+const LIGHT_MCP_BUNDLE_RESPONSE_CEILING_BYTES = 25_000;
 
 export function resolveMcpScanSiteWaitBudget(input: {
   maxWaitSeconds?: number;
@@ -484,6 +485,7 @@ export function createCertScoreMcpServer(options: CertScoreMcpOptions = {}) {
         const status = await client.scans.status(scanId, { internalMcpOperation });
         const guided = withMcpScanProvenanceGuidance({
           ...status,
+          jobId: undefined,
           scanFrom: status.scanFrom ?? null
         } as unknown as Record<string, any>, "existing_scan_retrieved");
         return toToolResult(guided, scanStatusText(guided));
@@ -548,6 +550,12 @@ export function createCertScoreMcpServer(options: CertScoreMcpOptions = {}) {
     async ({ scanId, detail = "summary", maxBytes, maxFindings, maxPreConsentRows }: GetScanBundleInput, extra: McpRequestExtra) => {
       const client = clientForRequest(extra);
       try {
+        const responseCeilingBytes = options.toolProfile === "light"
+          ? LIGHT_MCP_BUNDLE_RESPONSE_CEILING_BYTES
+          : 200_000;
+        const requestedMaxBytes = maxBytes ?? (options.toolProfile === "light"
+          ? LIGHT_MCP_BUNDLE_RESPONSE_CEILING_BYTES
+          : 50_000);
         const internalMcpOperation = { operation: "scan_bundle" as const, scanId };
         const scan = await retryTransientOriginFailure(() => client.scans.get(scanId, { internalMcpOperation }));
         if (scan.status === "completed_limited" && scan.resultDisposition === "no_go") {
@@ -555,11 +563,13 @@ export function createCertScoreMcpServer(options: CertScoreMcpOptions = {}) {
             detail,
             evidence: null,
             findings: { type: "certscore_finding_list", scanId, findings: [] },
-            maxBytes,
+            maxBytes: requestedMaxBytes,
             maxFindings,
             maxPreConsentRows,
             preConsentCookiesTrackers: null,
             report: null,
+            requestedMaxBytes,
+            responseCeilingBytes,
             scan
           });
           return toToolResult(bundle, scanBundleText(bundle));
@@ -578,11 +588,13 @@ export function createCertScoreMcpServer(options: CertScoreMcpOptions = {}) {
           detail,
           evidence,
           findings,
-          maxBytes,
+          maxBytes: requestedMaxBytes,
           maxFindings,
           maxPreConsentRows,
           preConsentCookiesTrackers,
           report,
+          requestedMaxBytes,
+          responseCeilingBytes,
           scan
         });
         return toToolResult(bundle, scanBundleText(bundle));

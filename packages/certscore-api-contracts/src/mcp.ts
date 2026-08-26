@@ -57,7 +57,7 @@ export const mcpGetEvidenceInputSchema = {
 export const mcpGetScanBundleInputSchema = {
   scanId: z.string().min(1).describe("Stable CertScore scan ID."),
   detail: z.enum(["summary", "findings", "evidence", "full"]).optional().describe("Response detail. Defaults to summary; evidence and full opt into heavier retained context."),
-  maxBytes: z.number().int().min(5000).max(200000).optional().describe("Maximum serialized structured response size in bytes. Defaults to 50000."),
+  maxBytes: z.number().int().min(5000).max(200000).optional().describe("Requested serialized structured response budget in bytes. The full profile defaults to 50000. MCP Light defaults to and applies a transport-safe 25000-byte ceiling; larger Light requests are clamped and reported in response metadata."),
   maxFindings: z.number().int().min(1).max(50).optional().describe("Maximum compact findings to return. Defaults to 5 for summary and 20 otherwise."),
   maxPreConsentRows: z.number().int().min(1).max(50).optional().describe("Maximum compact pre-consent inventory rows to return. Defaults to 20.")
 } as const;
@@ -157,6 +157,9 @@ const mcpExecutiveSummarySchema = z.object({
 
 export const mcpScanProvenanceSchema = z.object({
   mode: z.enum(["new_scan_started", "existing_completed_scan_reused", "existing_scan_retrieved", "unknown"]),
+  retrievalMode: z.enum(["creation_response", "scan_id_lookup", "unknown"]),
+  creationDecision: z.enum(["new_scan", "reused_scan", "unknown"]),
+  scanAgeSeconds: z.number().int().min(0).nullable(),
   executionMode: z.enum(["new_scan", "reused_scan"]).nullable(),
   reused: z.boolean().nullable(),
   freshnessDecision: z.string().nullable()
@@ -197,6 +200,17 @@ export const mcpScanBundlePreConsentSchema = z.object({
   total: z.number().int().min(0),
   returned: z.number().int().min(0),
   truncated: z.boolean()
+}).strict();
+
+export const mcpScanBundleCoreFindingSchema = z.object({
+  type: z.literal("certscore_finding"),
+  id: z.string(),
+  label: z.string(),
+  criticality: apiV2FindingDetailSchema.shape.criticality,
+  confidence: apiV2FindingDetailSchema.shape.confidence,
+  plainEnglish: z.string(),
+  nextStep: z.string().optional(),
+  evidenceUrl: z.string().max(2048).nullable()
 }).strict();
 
 export const mcpCreateScanOutputSchema = z
@@ -383,7 +397,7 @@ export const mcpScanBundleOutputSchema = z
       counts: z.record(z.union([z.number(), z.boolean(), z.null()])).nullable(),
       agentInterpretation: pulseAgentInterpretationSchema.nullable()
     }).strict(),
-    findings: z.array(apiV2FindingDetailSchema),
+    findings: z.array(z.union([apiV2FindingDetailSchema, mcpScanBundleCoreFindingSchema])),
     findingsMetadata: z.object({
       shown: z.number().int().min(0),
       returned: z.number().int().min(0),
@@ -404,10 +418,15 @@ export const mcpScanBundleOutputSchema = z
       heavyEvidenceIncluded: z.boolean(),
       findingsTruncated: z.boolean(),
       requestedMaxBytes: z.number().int().min(5000),
+      effectiveMaxBytes: z.number().int().min(5000).max(200000),
+      responseCeilingBytes: z.number().int().min(5000).max(200000),
+      responseBudgetClamped: z.boolean(),
       actualBytes: z.number().int().min(0),
+      fullPayloadBytes: z.number().int().min(0),
       truncated: z.boolean(),
       truncationReason: z.string().nullable(),
       omittedSections: z.array(z.string()),
+      deduplicatedSections: z.array(z.string()),
       nextRecommendedMaxBytes: z.number().int().min(5000).max(200000).nullable(),
       omittedContentAvailableViaUrl: z.boolean(),
       contentUrls: z.record(z.string())
@@ -518,7 +537,7 @@ export const certScoreMcpToolContracts = [
   {
     name: "certscore_get_scan_bundle",
     title: "Get scan bundle",
-    description: "Call after completed or completed_limited status. Every usable completed bundle returns a self-contained concise TextContent digest plus matching structuredContent, including canonical execution region (scanFrom) and timestamps when available. For a reused or retrieved existing scan, use only persisted scanFrom and timestamps; never infer its original region from the current request, the user's location, or a default, and report unavailable provenance as unavailable. The default summary includes the canonical report overview, up to five compact public-safe projected findings across the scan's observed domains, and bounded row-level pre-consent cookie/tracker evidence; detail=findings increases the default finding allowance, evidence adds bounded evidence digests and references, and full adds all available bounded sections. Every response declares finding and evidence total/returned/truncated counts, byte-budget metadata, omittedSections, retrieval URLs, and nextRecommendedMaxBytes when truncated. Enumerate only returned observations and projected findings. Treat criticality, priority, and confidence as CertScore metadata; regulatory review lenses are non-determinative CertScore review context, not legal severity, legal exposure, or a compliance determination. Missing consent-action evidence does not establish Accept, Reject, or Decline behavior. Do not extrapolate observed embeds, vendors, or requests into unobserved cookies, fingerprinting, tracking, or processing. The CertScore score covers observable scan signals only; do not infer unobserved technologies or legal compliance status, and never interpret no-go, not-observed, or limited coverage as proof of compliance.",
+    description: "Call after completed or completed_limited status. Every usable completed bundle returns a self-contained concise TextContent digest plus matching structuredContent, including canonical execution region (scanFrom) and timestamps when available. For a reused or retrieved existing scan, use only persisted scanFrom and timestamps; never infer its original region from the current request, the user's location, or a default, and report unavailable provenance as unavailable. The default summary includes the canonical report overview, up to five compact public-safe projected findings across the scan's observed domains, and bounded row-level pre-consent cookie/tracker evidence; detail=findings increases the default finding allowance, evidence adds bounded evidence digests and references, and full adds all available bounded sections. MCP Light applies a 25000-byte response ceiling so full results remain transport-safe; use returned content URLs when the complete requested tier exceeds it. Every response declares finding and evidence total/returned/truncated counts, requested and effective byte budgets, the response ceiling, omittedSections, retrieval URLs, and nextRecommendedMaxBytes when the complete tier fits the ceiling. Enumerate only returned observations and projected findings. Treat criticality, priority, and confidence as CertScore metadata; regulatory review lenses are non-determinative CertScore review context, not legal severity, legal exposure, or a compliance determination. Missing consent-action evidence does not establish Accept, Reject, or Decline behavior. Do not extrapolate observed embeds, vendors, or requests into unobserved cookies, fingerprinting, tracking, or processing. The CertScore score covers observable scan signals only; do not infer unobserved technologies or legal compliance status, and never interpret no-go, not-observed, or limited coverage as proof of compliance.",
     inputSchema: mcpGetScanBundleInputSchema,
     outputSchema: mcpScanBundleOutputSchema,
     annotations: accountedInternalReadAnnotations

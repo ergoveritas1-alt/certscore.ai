@@ -8,13 +8,17 @@ const EVIDENCE_ARRAY_ITEMS = 40;
 const EVIDENCE_OBJECT_KEYS = 80;
 const MAX_TOOL_TEXT_CHARS = 8_000;
 const LEGAL_REVIEW_DISCLAIMER = "CertScore results are automated public-web observations for human and agentic review, not legal advice, certification, or a compliance determination.";
-const SCAN_PROVENANCE_GROUNDING = "For a reused or retrieved existing scan, use only persisted scanFrom and timestamps. Never infer its original scan region from the current request, the user's location, or a default execution region. If persisted region or timestamps are unavailable, report them as unavailable.";
+const SCAN_PROVENANCE_GROUNDING = "retrievalMode describes how the current tool response obtained the scan; creationDecision describes whether the original scan request created or reused a scan only when that decision is retained. Never infer an unknown creationDecision from scan_id_lookup. For a reused or retrieved existing scan, use only persisted scanFrom and timestamps. Never infer its original scan region from the current request, the user's location, or a default execution region. If persisted region or timestamps are unavailable, report them as unavailable.";
 const INTERPRETATION_STATEMENT = "The CertScore score covers observable public-web scan signals only. Do not infer technologies that are not listed in the returned evidence or any legal compliance status.";
 const SCAN_BUNDLE_RESPONSE_CONTRACT = `Response contract: Report only observed CertScore evidence and CertScore classifications. criticality, priority, and confidence are CertScore metadata; regulatory review lenses are non-determinative CertScore review context—not legal severity, legal exposure, or a compliance determination. Absence of captured consent-action evidence does not establish what happens after Accept, Reject, or Decline. Do not extrapolate an observed embed, vendor, or request into unobserved cookies, fingerprinting, tracking, or processing, and do not infer violations or compliance beyond what CertScore observed. ${SCAN_PROVENANCE_GROUNDING}`;
 const SCAN_BUNDLE_INTERPRETATION_STATEMENT = "Report only observed CertScore evidence and persisted CertScore classifications. Without corresponding captured post-action evidence, do not infer what Accept, Reject, Decline, or another consent action would do; say the scan does not establish what happens after that action. Do not speculate that an observed embed, vendor, or request may cause additional cookies, fingerprinting, tracking, or processing unless CertScore observed that behavior. Treat returned priority or severity as a CertScore classification, not regulatory criticality or legal exposure; prefer ‘observed privacy risk signal’ or ‘CertScore finding’. Do not infer unobserved technologies, legal compliance, or a legal violation from scores or findings.";
+const COMPACT_SCAN_BUNDLE_INTERPRETATION_STATEMENT = "Use only returned CertScore observations and classifications. Do not infer unobserved technologies, post-consent behavior, legal compliance, or violations. Treat priority and severity as CertScore metadata.";
 const OBSERVATION_ONLY_DISCLAIMER = `${LEGAL_REVIEW_DISCLAIMER} No-go, not-observed, and limited-coverage results are not proof of compliance.`;
+const COMPACT_OBSERVATION_ONLY_DISCLAIMER = "Automated public-web observation, not legal advice or a compliance determination; missing or limited evidence is not proof of compliance.";
 
 type ScanProvenanceMode = "new_scan_started" | "existing_completed_scan_reused" | "existing_scan_retrieved" | "unknown";
+type ScanRetrievalMode = "creation_response" | "scan_id_lookup" | "unknown";
+type ScanCreationDecision = "new_scan" | "reused_scan" | "unknown";
 
 function interpretationGuidance(statement = INTERPRETATION_STATEMENT) {
   return {
@@ -64,7 +68,13 @@ function toolResultSummary(payload: unknown) {
   const provenanceRecord = record.provenance && typeof record.provenance === "object" && !Array.isArray(record.provenance)
     ? record.provenance as Record<string, unknown>
     : null;
-  const provenance = typeof provenanceRecord?.mode === "string" ? `; provenance=${provenanceRecord.mode}` : "";
+  const retrieval = typeof provenanceRecord?.retrievalMode === "string" ? `; retrieval=${provenanceRecord.retrievalMode}` : "";
+  const creation = typeof provenanceRecord?.creationDecision === "string" ? `; creation=${provenanceRecord.creationDecision}` : "";
+  const provenance = retrieval || creation
+    ? `${retrieval}${creation}`
+    : typeof provenanceRecord?.mode === "string"
+      ? `; provenance=${provenanceRecord.mode}`
+      : "";
   return `CertScore ${type}${status}${scanId}${score}${provenance}${report}. Full result is in structuredContent.`;
 }
 
@@ -247,6 +257,9 @@ function terminalErrorForResult(value: Record<string, any>): ActionableError | n
 
 function scanProvenance(value: Record<string, any>, fallbackMode: ScanProvenanceMode): {
   mode: ScanProvenanceMode;
+  retrievalMode: ScanRetrievalMode;
+  creationDecision: ScanCreationDecision;
+  scanAgeSeconds: number | null;
   executionMode: "new_scan" | "reused_scan" | null;
   reused: boolean | null;
   freshnessDecision: string | null;
@@ -260,8 +273,31 @@ function scanProvenance(value: Record<string, any>, fallbackMode: ScanProvenance
     : executionMode === "reused_scan" || reused === true
       ? "existing_completed_scan_reused"
       : fallbackMode;
+  const retrievalMode = fallbackMode === "existing_scan_retrieved"
+    ? "scan_id_lookup"
+    : executionMode !== null || reused !== null
+      ? "creation_response"
+      : "unknown";
+  const creationDecision = executionMode === "new_scan" || reused === false
+    ? "new_scan"
+    : executionMode === "reused_scan" || reused === true
+      ? "reused_scan"
+      : "unknown";
+  const retainedAgeSeconds = typeof value.reusedScanAgeSeconds === "number" && Number.isFinite(value.reusedScanAgeSeconds) && value.reusedScanAgeSeconds >= 0
+    ? Math.floor(value.reusedScanAgeSeconds)
+    : null;
+  const completedAtMs = typeof value.completedAt === "string" ? Date.parse(value.completedAt) : Number.NaN;
+  const completedAgeSeconds = Number.isFinite(completedAtMs)
+    ? Math.max(0, Math.floor((Date.now() - completedAtMs) / 1_000))
+    : null;
+  const scanAgeSeconds = retrievalMode === "creation_response"
+    ? retainedAgeSeconds ?? completedAgeSeconds
+    : completedAgeSeconds;
   return {
     mode,
+    retrievalMode,
+    creationDecision,
+    scanAgeSeconds,
     executionMode,
     reused,
     freshnessDecision: typeof value.freshnessDecision === "string" ? value.freshnessDecision : null
@@ -381,13 +417,49 @@ function boundedText(value: unknown, maxChars: number) {
   if (typeof value !== "string") {
     return value;
   }
-  return value.length > maxChars ? `${value.slice(0, maxChars)}…[truncated]` : value;
+  if (value.length <= maxChars) {
+    return value;
+  }
+  const marker = "…[truncated]";
+  const contentLimit = Math.max(1, maxChars - marker.length);
+  const candidate = value.slice(0, contentLimit);
+  const boundary = candidate.search(/\s+\S*$/);
+  const bounded = boundary >= Math.floor(contentLimit * 0.6)
+    ? candidate.slice(0, boundary)
+    : candidate;
+  return `${bounded.trimEnd()}${marker}`;
 }
 
-function compactBundleFinding(finding: Record<string, any>) {
+function compactFindingLink(finding: Record<string, any>) {
+  const self = typeof finding.links?.self === "string" && finding.links.self.trim()
+    ? finding.links.self.trim()
+    : typeof finding.evidence?.excerpt?.evidenceUrl === "string" && finding.evidence.excerpt.evidenceUrl.trim()
+      ? finding.evidence.excerpt.evidenceUrl.trim()
+      : null;
+  return self ? { self: self.slice(0, 2_048) } : undefined;
+}
+
+function compactBundleFinding(finding: Record<string, any>, tier: "standard" | "core" = "standard") {
   const evidence = finding.evidence && typeof finding.evidence === "object" && !Array.isArray(finding.evidence)
     ? finding.evidence as Record<string, unknown>
     : {};
+  const core = tier === "core";
+  const links = compactFindingLink(finding);
+  if (core) {
+    const compactNextStep = typeof finding.nextStep === "string" && finding.nextStep.trim().length <= 64
+      ? finding.nextStep.trim()
+      : null;
+    return {
+      type: finding.type,
+      id: finding.id,
+      label: boundedText(finding.label, 140),
+      criticality: finding.criticality,
+      confidence: finding.confidence,
+      plainEnglish: boundedText(finding.plainEnglish, 180),
+      ...(compactNextStep ? { nextStep: compactNextStep } : {}),
+      evidenceUrl: links?.self ?? null
+    };
+  }
   return {
     type: finding.type,
     id: finding.id,
@@ -410,8 +482,44 @@ function compactBundleFinding(finding: Record<string, any>) {
       ...(evidence.hasConsentContext !== undefined ? { hasConsentContext: evidence.hasConsentContext } : {}),
       ...(evidence.hasPolicyAnchor !== undefined ? { hasPolicyAnchor: evidence.hasPolicyAnchor } : {})
     },
-    ...(finding.nextStep !== undefined ? { nextStep: boundedText(finding.nextStep, 180) } : {})
+    ...(finding.nextStep !== undefined ? { nextStep: boundedText(finding.nextStep, 180) } : {}),
+    ...(links ? { links } : {})
   };
+}
+
+function deduplicatedFullReport(input: {
+  findings: Record<string, any>[];
+  report: Record<string, unknown>;
+  transportSecurity: Record<string, unknown>;
+}) {
+  const report = input.report;
+  const residual = { ...report };
+  const deduplicatedSections: string[] = [];
+  const returnedFindings = new Map(input.findings.flatMap((finding) => typeof finding.id === "string" ? [[finding.id, finding] as const] : []));
+  for (const key of ["findings", "topFindings"] as const) {
+    const section = residual[key];
+    const sectionFindingIds = Array.isArray(section)
+      ? section.flatMap((finding) => finding && typeof finding === "object" && typeof (finding as Record<string, unknown>).id === "string"
+        ? [(finding as Record<string, unknown>).id as string]
+        : [])
+      : [];
+    const coveredByCanonicalProjection = sectionFindingIds.every((id) => {
+      const finding = returnedFindings.get(id);
+      return finding
+        && typeof finding.plainEnglish === "string"
+        && typeof finding.evidence?.summary === "string"
+        && compactFindingLink(finding) !== undefined;
+    });
+    if (Array.isArray(section) && sectionFindingIds.length === section.length && coveredByCanonicalProjection) {
+      delete residual[key];
+      deduplicatedSections.push(`fullReport.${key}`);
+    }
+  }
+  if ("transportSecurity" in residual && JSON.stringify(residual.transportSecurity) === JSON.stringify(input.transportSecurity)) {
+    delete residual.transportSecurity;
+    deduplicatedSections.push("fullReport.transportSecurity");
+  }
+  return { deduplicatedSections, residual };
 }
 
 function distinctSummaryFindings(findings: Record<string, any>[]) {
@@ -853,7 +961,10 @@ function findingText(finding: Record<string, any>, priorityLabel = "criticality"
   const lenses = Array.isArray(finding.reviewLenses) && finding.reviewLenses.length > 0
     ? finding.reviewLenses.slice(0, 2).join(", ")
     : "not classified";
-  return `- ${finding.label ?? finding.id ?? "Projected finding"}; ${priorityLabel}=${finding.criticality ?? "unknown"}; confidence=${finding.confidence ?? "unknown"}; observation=${finding.plainEnglish ?? evidence.summary ?? "No compact description available"}; evidence=${evidence.basis ?? "unknown"}/${evidence.phase ?? "phase unknown"}: ${evidence.summary ?? "No compact evidence summary available"}; review lenses=${lenses}.`;
+  const nextStep = typeof finding.nextStep === "string" && finding.nextStep.trim()
+    ? `; canonical next step=${boundedText(finding.nextStep.trim(), 180)}`
+    : "";
+  return `- ${finding.label ?? finding.id ?? "Projected finding"}; ${priorityLabel}=${finding.criticality ?? "unknown"}; confidence=${finding.confidence ?? "unknown"}; observation=${finding.plainEnglish ?? evidence.summary ?? "No compact description available"}; evidence=${evidence.basis ?? "unknown"}/${evidence.phase ?? "phase unknown"}: ${evidence.summary ?? "No compact evidence summary available"}; review lenses=${lenses}${nextStep}.`;
 }
 
 function executiveOverviewText(summary: Record<string, any> | null | undefined) {
@@ -906,7 +1017,8 @@ function reportUrlFor(value: Record<string, any>) {
 
 function canonicalScanProvenanceText(value: Record<string, any>) {
   const present = (field: unknown) => typeof field === "string" && field.trim() ? field.trim() : "unavailable";
-  return `Canonical scan provenance: scanId=${present(extractScanId(value))}; scanFrom/execution region=${present(value.scanFrom)}; completedAt=${present(value.completedAt)}; startedAt=${present(value.startedAt)}; createdAt=${present(value.createdAt)}; provenance/reuse state=${present(value.provenance?.mode)}.`;
+  const numeric = (field: unknown) => typeof field === "number" && Number.isFinite(field) ? String(field) : "unavailable";
+  return `Canonical scan provenance: scanId=${present(extractScanId(value))}; scanFrom/execution region=${present(value.scanFrom)}; completedAt=${present(value.completedAt)}; startedAt=${present(value.startedAt)}; createdAt=${present(value.createdAt)}; retrieval mode=${present(value.provenance?.retrievalMode)}; original creation decision=${present(value.provenance?.creationDecision)}; scan age seconds=${numeric(value.provenance?.scanAgeSeconds)}; compatibility provenance mode=${present(value.provenance?.mode)}.`;
 }
 
 export function scanStatusText(value: Record<string, any>) {
@@ -926,7 +1038,7 @@ function boundedResultText(header: string, bodyLines: string[], value: Record<st
   const reportUrl = reportUrlFor(value);
   const lines = [
     header,
-    `Provenance: ${value.provenance?.mode ?? "existing_scan_retrieved"}.`,
+    `Provenance: retrieval=${value.provenance?.retrievalMode ?? "unknown"}; original creation=${value.provenance?.creationDecision ?? "unknown"}; scan age seconds=${value.provenance?.scanAgeSeconds ?? "unavailable"}.`,
     `Full report: ${reportUrl ?? "not available"}.`
   ];
   let rendered = 0;
@@ -1122,6 +1234,20 @@ function scanBundleTransportSecurity(report: Record<string, unknown>, detail: "s
   }
 
   const observations = Array.isArray(source.observations) ? source.observations : [];
+  const compactObservations = observations.slice(0, 8).map((observation) => {
+    const row = observation && typeof observation === "object" && !Array.isArray(observation)
+      ? observation as Record<string, unknown>
+      : {};
+    return {
+      id: row.id,
+      label: boundedText(row.label, 140),
+      status: row.status,
+      assessmentStatus: row.assessmentStatus,
+      evidenceState: row.evidenceState,
+      summary: boundedText(row.summary, 180),
+      evidenceRefs: []
+    };
+  });
   return {
     status: source.status === "available" || source.status === "limited" ? source.status : "unavailable",
     evidenceRetained: source.evidenceRetained === true,
@@ -1135,7 +1261,7 @@ function scanBundleTransportSecurity(report: Record<string, unknown>, detail: "s
           unavailable: observations.length
         },
     observations: detail === "summary" || detail === "findings"
-      ? []
+      ? compactObservations
       : observations.map((observation) => compactEvidenceValue(observation, {
           arrayItems: 6,
           depth: 4,
@@ -1167,6 +1293,8 @@ export function buildScanBundle(input: {
   maxPreConsentRows?: number;
   preConsentCookiesTrackers?: PreConsentCookiesTrackers | null;
   report: PulseResult | null;
+  requestedMaxBytes?: number;
+  responseCeilingBytes?: number;
   scan: ScanResource;
 }) {
   const detail = input.detail ?? "summary";
@@ -1180,6 +1308,7 @@ export function buildScanBundle(input: {
   const findings = selectedFindings
     .slice(0, maxFindings)
     .map((finding) => detail === "full" ? finding : compactBundleFinding(finding));
+  const deduplicatedReport = deduplicatedFullReport({ findings, report, transportSecurity });
   const preConsentCookiesTrackers = input.preConsentCookiesTrackers
     ? preConsentBundleSection(input.preConsentCookiesTrackers, maxPreConsentRows)
     : null;
@@ -1187,7 +1316,9 @@ export function buildScanBundle(input: {
     ...(input.scan.links ?? {}),
     ...(report.links && typeof report.links === "object" && !Array.isArray(report.links) ? report.links : {})
   };
-  const maxBytes = Math.min(200_000, Math.max(5_000, input.maxBytes ?? 50_000));
+  const requestedMaxBytes = Math.min(200_000, Math.max(5_000, input.requestedMaxBytes ?? input.maxBytes ?? 50_000));
+  const responseCeilingBytes = Math.min(200_000, Math.max(5_000, input.responseCeilingBytes ?? 200_000));
+  const maxBytes = Math.min(requestedMaxBytes, responseCeilingBytes);
   const contentUrls = Object.fromEntries(Object.entries({
     report: input.scan.links?.report ?? links.report,
     findings: links.findings,
@@ -1248,7 +1379,7 @@ export function buildScanBundle(input: {
       ? { evidenceSummary: bundleEvidenceSummary(evidence, allFindings, links, detail === "full") }
       : {}),
     ...(detail === "full" ? {
-      fullReport: compactEvidenceValue(report, {
+      fullReport: compactEvidenceValue(deduplicatedReport.residual, {
         arrayItems: 50,
         depth: 8,
         objectKeys: 100,
@@ -1269,11 +1400,16 @@ export function buildScanBundle(input: {
       detail,
       heavyEvidenceIncluded: detail === "evidence" || detail === "full",
       findingsTruncated: allFindings.length > findings.length,
-      requestedMaxBytes: maxBytes,
+      requestedMaxBytes,
+      effectiveMaxBytes: maxBytes,
+      responseCeilingBytes,
+      responseBudgetClamped: requestedMaxBytes > maxBytes,
       actualBytes: 0,
+      fullPayloadBytes: 0,
       truncated: false,
       truncationReason: null,
       omittedSections: [...intentionallyOmitted],
+      deduplicatedSections: detail === "full" ? deduplicatedReport.deduplicatedSections : [],
       nextRecommendedMaxBytes: null,
       omittedContentAvailableViaUrl: intentionallyOmitted.size > 0 && Object.keys(contentUrls).length > 0,
       contentUrls
@@ -1282,19 +1418,26 @@ export function buildScanBundle(input: {
     disclaimer: LEGAL_REVIEW_DISCLAIMER
   };
 
-  const recommendationCandidates: number[] = [];
-  const markBudgetOmitted = (section: string, reason: string, requiredBytes = bundle.mcpMetadata.actualBytes) => {
+  const markBudgetOmitted = (section: string, reason: string) => {
     bundle.mcpMetadata.truncated = true;
     bundle.mcpMetadata.truncationReason ??= reason;
     if (!bundle.mcpMetadata.omittedSections.includes(section)) {
       bundle.mcpMetadata.omittedSections.push(section);
     }
-    recommendationCandidates.push(requiredBytes);
     bundle.mcpMetadata.omittedContentAvailableViaUrl = Object.keys(contentUrls).length > 0;
   };
   const refresh = () => updateBundleActualBytes(bundle);
+  const captureFullPayloadBytes = () => {
+    for (let attempt = 0; attempt < 3; attempt += 1) {
+      refresh();
+      const measured = bundle.mcpMetadata.actualBytes;
+      if (bundle.mcpMetadata.fullPayloadBytes === measured) break;
+      bundle.mcpMetadata.fullPayloadBytes = measured;
+    }
+    refresh();
+  };
 
-  refresh();
+  captureFullPayloadBytes();
   if (bundle.mcpMetadata.actualBytes > maxBytes && bundle.fullReport) {
     markBudgetOmitted("fullReport", "full_report_omitted_to_byte_limit");
     delete bundle.fullReport;
@@ -1304,14 +1447,6 @@ export function buildScanBundle(input: {
     const compactSummary = bundleEvidenceSummary(evidence, allFindings, links, false);
     markBudgetOmitted("evidenceDiagnostics", "evidence_diagnostics_omitted_to_byte_limit");
     bundle.evidenceSummary = compactSummary;
-    refresh();
-  }
-  const inventoryRows = bundle.preConsentCookiesTrackers?.rows;
-  while (bundle.mcpMetadata.actualBytes > maxBytes && Array.isArray(inventoryRows) && inventoryRows.length > 1) {
-    markBudgetOmitted("additionalPreConsentRows", "evidence_inventory_reduced_to_byte_limit");
-    inventoryRows.pop();
-    bundle.preConsentCookiesTrackers.returned = inventoryRows.length;
-    bundle.preConsentCookiesTrackers.truncated = true;
     refresh();
   }
   if (
@@ -1328,13 +1463,9 @@ export function buildScanBundle(input: {
     };
     refresh();
   }
-  while (bundle.mcpMetadata.actualBytes > maxBytes && bundle.findings.length > 1) {
-    markBudgetOmitted("additionalFindings", "findings_reduced_to_byte_limit");
-    bundle.findings.pop();
-    bundle.findingsMetadata.shown = bundle.findings.length;
-    bundle.findingsMetadata.returned = bundle.findings.length;
-    bundle.findingsMetadata.truncated = true;
-    bundle.mcpMetadata.findingsTruncated = true;
+  if (bundle.mcpMetadata.actualBytes > maxBytes && bundle.findings.length > 0) {
+    markBudgetOmitted("findingDetail", "findings_compacted_to_preserve_core_rows");
+    bundle.findings = bundle.findings.map((finding: Record<string, any>) => compactBundleFinding(finding, "core"));
     refresh();
   }
   if (bundle.mcpMetadata.actualBytes > maxBytes) {
@@ -1362,18 +1493,24 @@ export function buildScanBundle(input: {
     bundle.links = Object.fromEntries(Object.entries(bundle.links).filter(([key]) => ["self", "report"].includes(key)));
     refresh();
   }
+  if (bundle.mcpMetadata.actualBytes > maxBytes) {
+    markBudgetOmitted("duplicateGuidance", "guidance_compacted_to_preserve_priority_content");
+    bundle.interpretationGuidance = interpretationGuidance(COMPACT_SCAN_BUNDLE_INTERPRETATION_STATEMENT);
+    bundle.observationOnlyDisclaimer = COMPACT_OBSERVATION_ONLY_DISCLAIMER;
+    bundle.disclaimer = null;
+    refresh();
+  }
   if (bundle.mcpMetadata.actualBytes > maxBytes && bundle.evidenceSummary) {
     markBudgetOmitted("evidenceDetail", "evidence_compacted_to_preserve_priority_content");
     bundle.evidenceSummary = compactPriorityEvidenceSummary(bundle.evidenceSummary);
     refresh();
   }
-  if (bundle.mcpMetadata.actualBytes > maxBytes && bundle.findings.length > 0) {
-    markBudgetOmitted("findings", "finding_omitted_to_byte_limit");
-    bundle.findings = [];
-    bundle.findingsMetadata.shown = 0;
-    bundle.findingsMetadata.returned = 0;
-    bundle.findingsMetadata.truncated = bundle.findingsMetadata.total > 0;
-    bundle.mcpMetadata.findingsTruncated = bundle.findingsMetadata.total > 0;
+  const inventoryRows = bundle.preConsentCookiesTrackers?.rows;
+  while (bundle.mcpMetadata.actualBytes > maxBytes && Array.isArray(inventoryRows) && inventoryRows.length > 0) {
+    markBudgetOmitted("additionalPreConsentRows", "evidence_inventory_reduced_to_preserve_findings");
+    inventoryRows.pop();
+    bundle.preConsentCookiesTrackers.returned = inventoryRows.length;
+    bundle.preConsentCookiesTrackers.truncated = true;
     refresh();
   }
   if (bundle.mcpMetadata.actualBytes > maxBytes && bundle.evidenceSummary) {
@@ -1382,10 +1519,23 @@ export function buildScanBundle(input: {
     bundle.mcpMetadata.heavyEvidenceIncluded = false;
     refresh();
   }
+  while (bundle.mcpMetadata.actualBytes > maxBytes && bundle.findings.length > 1) {
+    markBudgetOmitted("additionalFindings", "findings_reduced_to_byte_limit");
+    bundle.findings.pop();
+    bundle.findingsMetadata.shown = bundle.findings.length;
+    bundle.findingsMetadata.returned = bundle.findings.length;
+    bundle.findingsMetadata.truncated = true;
+    bundle.mcpMetadata.findingsTruncated = true;
+    refresh();
+  }
   if (bundle.mcpMetadata.truncated) {
-    const required = Math.min(...recommendationCandidates.filter((value) => Number.isFinite(value) && value > maxBytes));
-    bundle.mcpMetadata.nextRecommendedMaxBytes = Math.min(200_000, Math.max(maxBytes + 1_000, Math.ceil((Number.isFinite(required) ? required : maxBytes + 1_000) / 1_000) * 1_000));
-    bundle.recommendedNextAction = `Retry with maxBytes=${bundle.mcpMetadata.nextRecommendedMaxBytes} or open ${bundle.reportUrl ? "the report URL" : "an available content URL"}.`;
+    const completeBytes = bundle.mcpMetadata.fullPayloadBytes;
+    bundle.mcpMetadata.nextRecommendedMaxBytes = completeBytes <= responseCeilingBytes
+      ? Math.max(5_000, Math.ceil(completeBytes / 1_000) * 1_000)
+      : null;
+    bundle.recommendedNextAction = bundle.mcpMetadata.nextRecommendedMaxBytes
+      ? `Retry with maxBytes=${bundle.mcpMetadata.nextRecommendedMaxBytes} to retrieve the complete requested tier, or open ${bundle.reportUrl ? "the report URL" : "an available content URL"}.`
+      : `The complete requested tier exceeds the MCP byte ceiling; open ${bundle.reportUrl ? "the report URL" : "an available content URL"}.`;
     refresh();
   }
   if (bundle.mcpMetadata.actualBytes > maxBytes) {
@@ -1418,12 +1568,12 @@ export function buildScanBundle(input: {
         counts: bundle.summary?.counts ?? null,
         agentInterpretation: null
       },
-      findings: [],
+      findings: bundle.findings.slice(0, 1),
       findingsMetadata: {
-        shown: 0,
-        returned: 0,
+        shown: Math.min(1, bundle.findings.length),
+        returned: Math.min(1, bundle.findings.length),
         total: bundle.findingsMetadata.total,
-        truncated: bundle.findingsMetadata.total > 0
+        truncated: bundle.findingsMetadata.total > Math.min(1, bundle.findings.length)
       },
       transportSecurity: {
         status: bundle.transportSecurity.status,
@@ -1449,13 +1599,24 @@ export function buildScanBundle(input: {
       mcpMetadata: {
         detail,
         heavyEvidenceIncluded: false,
-        findingsTruncated: bundle.findingsMetadata.total > 0,
-        requestedMaxBytes: maxBytes,
+        findingsTruncated: bundle.findingsMetadata.total > Math.min(1, bundle.findings.length),
+        requestedMaxBytes,
+        effectiveMaxBytes: maxBytes,
+        responseCeilingBytes,
+        responseBudgetClamped: requestedMaxBytes > maxBytes,
         actualBytes: 0,
+        fullPayloadBytes: bundle.mcpMetadata.fullPayloadBytes,
         truncated: true,
         truncationReason: "minimal_canonical_result_returned_to_byte_limit",
-        omittedSections: [...new Set([...bundle.mcpMetadata.omittedSections, "summaryDetail", "findings", "evidence", ...(bundle.preConsentCookiesTrackers?.total > 0 ? ["additionalPreConsentRows"] : [])])],
-        nextRecommendedMaxBytes: bundle.mcpMetadata.nextRecommendedMaxBytes ?? Math.min(200_000, maxBytes + 1_000),
+        omittedSections: [...new Set([
+          ...bundle.mcpMetadata.omittedSections,
+          "summaryDetail",
+          "evidence",
+          ...(bundle.findingsMetadata.total > Math.min(1, bundle.findings.length) ? ["additionalFindings"] : []),
+          ...(bundle.preConsentCookiesTrackers?.total > 0 ? ["additionalPreConsentRows"] : [])
+        ])],
+        deduplicatedSections: bundle.mcpMetadata.deduplicatedSections,
+        nextRecommendedMaxBytes: bundle.mcpMetadata.nextRecommendedMaxBytes,
         omittedContentAvailableViaUrl: Object.keys(contentUrls).length > 0,
         contentUrls
       },

@@ -1,4 +1,4 @@
-import type { CertScoreFinding } from "./finding-registry";
+import { CERT_SCORE_FINDING_REGISTRY, type CertScoreFinding } from "./finding-registry";
 
 export type RegulatoryGapTopFindingRow = {
   assessmentDirection?: string;
@@ -43,6 +43,29 @@ type RegulatoryGapAreaConfig = {
   lawLabel: string;
   priorityBase: number;
 };
+
+const DEFAULT_REGULATORY_GAP_REMEDIATION =
+  "Review the retained checklist evidence, confirm whether the row is applicable to the site, and address the underlying implementation or disclosure gap if confirmed.";
+
+function getRegulatoryGapRemediation(row: RegulatoryGapTopFindingRow) {
+  const projectedFindings = row.criticalEvidence?.projectedFindings;
+  if (Array.isArray(projectedFindings)) {
+    for (const projectedFinding of projectedFindings) {
+      if (!projectedFinding || typeof projectedFinding !== "object" || Array.isArray(projectedFinding)) {
+        continue;
+      }
+      const id = (projectedFinding as Record<string, unknown>).id;
+      if (typeof id !== "string") {
+        continue;
+      }
+      const remediation = CERT_SCORE_FINDING_REGISTRY[id]?.remediation;
+      if (typeof remediation === "string" && remediation.trim().length > 0) {
+        return remediation;
+      }
+    }
+  }
+  return DEFAULT_REGULATORY_GAP_REMEDIATION;
+}
 
 function getPolicySourceUrl(row: RegulatoryGapTopFindingRow) {
   const retainedEvidence = row.criticalEvidence?.retainedEvidence ?? row.retainedEvidence;
@@ -172,8 +195,7 @@ function findingsForArea(
         section: "Privacy & Tracking",
         defaultSurfacePriority: config.priorityBase - index,
         whyItMatters: getRegulatoryGapWhyItMatters(row, config),
-        remediation:
-          "Review the retained checklist evidence, confirm whether the row is applicable to the site, and address the underlying implementation or disclosure gap if confirmed.",
+        remediation: getRegulatoryGapRemediation(row),
         confidence: "good",
         directVsInferred: "mixed",
         evidenceDetails: {

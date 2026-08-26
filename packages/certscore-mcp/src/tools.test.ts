@@ -187,12 +187,52 @@ test("buildScanBundle honors the caller's byte budget", () => {
 
   assert.ok(new TextEncoder().encode(JSON.stringify(bundle)).byteLength <= 8_000);
   assert.equal((bundle.mcpMetadata as Record<string, unknown>).requestedMaxBytes, 8_000);
+  assert.equal((bundle.mcpMetadata as Record<string, unknown>).effectiveMaxBytes, 8_000);
+  assert.equal((bundle.mcpMetadata as Record<string, unknown>).responseCeilingBytes, 200_000);
+  assert.equal((bundle.mcpMetadata as Record<string, unknown>).responseBudgetClamped, false);
   assert.equal((bundle.mcpMetadata as Record<string, unknown>).truncated, true);
   assert.equal((bundle.mcpMetadata as Record<string, unknown>).actualBytes, new TextEncoder().encode(JSON.stringify(bundle)).byteLength);
   assert.equal(typeof (bundle.mcpMetadata as Record<string, unknown>).truncationReason, "string");
   assert.equal(bundle.preConsentCookiesTrackers.total, 20);
   assert.equal(bundle.preConsentCookiesTrackers.returned, bundle.preConsentCookiesTrackers.rows.length);
   assert.equal(bundle.preConsentCookiesTrackers.truncated, true);
+});
+
+test("Light response ceiling is explicit and directs oversized complete tiers to canonical URLs", () => {
+  const bundle = buildScanBundle({
+    detail: "full",
+    evidence: { ...report, evidenceSafetyNotes: ["x".repeat(20_000)] },
+    findings: {
+      type: "certscore_finding_list",
+      findings: Array.from({ length: 20 }, (_, index) => ({
+        ...publicFinding(`finding_${index}`),
+        plainEnglish: `Observed canonical projection ${index}: ${"x".repeat(2_000)}`
+      }))
+    },
+    maxBytes: 200_000,
+    maxFindings: 20,
+    preConsentCookiesTrackers: null,
+    report,
+    requestedMaxBytes: 200_000,
+    responseCeilingBytes: 25_000,
+    scan: {
+      type: "certscore_scan",
+      scanId: "scan_123",
+      domain: "example.com",
+      status: "completed",
+      links: { report: "https://certscore.ai/scan/scan_123" }
+    }
+  } as any);
+
+  assert.equal(bundle.mcpMetadata.requestedMaxBytes, 200_000);
+  assert.equal(bundle.mcpMetadata.effectiveMaxBytes, 25_000);
+  assert.equal(bundle.mcpMetadata.responseCeilingBytes, 25_000);
+  assert.equal(bundle.mcpMetadata.responseBudgetClamped, true);
+  assert.ok(bundle.mcpMetadata.fullPayloadBytes > 25_000);
+  assert.equal(bundle.mcpMetadata.nextRecommendedMaxBytes, null);
+  assert.match(bundle.recommendedNextAction, /exceeds the MCP byte ceiling/i);
+  assert.ok(bundle.mcpMetadata.actualBytes <= 25_000);
+  assert.doesNotThrow(() => mcpScanBundleOutputSchema.parse(bundle));
 });
 
 test("documented 8 KB findings budget preserves compact row-level pre-consent evidence", () => {
@@ -305,6 +345,10 @@ test("buildScanBundle implements materially distinct detail modes", () => {
   assert.equal(full.detail, "full");
   assert.equal(full.evidenceSummary !== undefined, true);
   assert.equal(full.fullReport !== undefined, true);
+  assert.equal(full.fullReport.findings, undefined);
+  assert.equal(full.fullReport.topFindings !== undefined, true);
+  assert.equal(full.fullReport.transportSecurity, undefined);
+  assert.deepEqual(full.mcpMetadata.deduplicatedSections, []);
   assert.equal(summary.preConsentCookiesTrackers.returned, 1);
   assert.equal(summary.preConsentCookiesTrackers.rows[0]?.evidenceClassification.basis, "public_report_projection");
 });
@@ -349,6 +393,8 @@ test("scan bundle exposes bounded canonical transport security across detail mod
   };
   const reportWithTransport = {
     ...report,
+    findings: [publicFinding("tls")],
+    topFindings: [publicFinding("tls")],
     transportSecurity,
     executiveSummary: {
       consentPlatform: "OneTrust",
@@ -383,24 +429,52 @@ test("scan bundle exposes bounded canonical transport security across detail mod
   const summary = buildScanBundle({ ...common, detail: "summary" });
   const evidence = buildScanBundle({ ...common, detail: "evidence" });
   const full = buildScanBundle({ ...common, detail: "full" });
+  const tightFindings = buildScanBundle({
+    ...common,
+    detail: "findings",
+    findings: {
+      type: "certscore_finding_list",
+      findings: Array.from({ length: 5 }, (_, index) => publicFinding(
+        `finding_${index}`,
+        "Observed runtime evidence surfaced a bounded review signal that should be reviewed against the retained evidence."
+      ))
+    },
+    maxBytes: 5_000
+  });
 
   mcpScanBundleOutputSchema.parse(summary);
   mcpScanBundleOutputSchema.parse(evidence);
   mcpScanBundleOutputSchema.parse(full);
   assert.equal(summary.transportSecurity.status, "available");
-  assert.deepEqual(summary.transportSecurity.observations, []);
+  assert.equal(summary.transportSecurity.observations.length, 5);
+  assert.equal(summary.transportSecurity.observations[0]?.label, "HTTPS delivery for scanned pages");
+  assert.deepEqual(summary.transportSecurity.observations[0]?.evidenceRefs, []);
   assert.equal(evidence.transportSecurity.observations.length, 5);
   assert.equal(evidence.transportSecurity.retainedSummary, undefined);
   assert.equal(full.transportSecurity.observations.length, 5);
   assert.equal(full.transportSecurity.retainedSummary.validTlsCertificate, true);
+  assert.equal(full.fullReport.findings, undefined);
+  assert.equal(full.fullReport.topFindings, undefined);
+  assert.equal(full.fullReport.transportSecurity, undefined);
+  assert.deepEqual(full.mcpMetadata.deduplicatedSections, [
+    "fullReport.findings",
+    "fullReport.topFindings",
+    "fullReport.transportSecurity"
+  ]);
   assert.equal(full.preConsentCookiesTrackers.rows[0]?.name, "cmp");
   assert.equal(full.findings[0]?.id, "tls");
   assert.equal(full.summary.executiveSummary.consentPlatform, "OneTrust");
   assert.deepEqual(full.summary.executiveSummary.trackerFootprint, { vendors: 2, domains: 3, cookies: 1 });
   assert.equal(full.summary.executiveSummary.policySurfaces[0]?.url, "https://example.com/privacy");
+  assert.match(scanBundleText(summary), /Transport security: status=available/);
+  assert.match(scanBundleText(summary), /Valid SSL\/TLS certificate; status=Observed/);
   assert.match(scanBundleText(evidence), /Transport security: status=available/);
   assert.match(scanBundleText(evidence), /Valid SSL\/TLS certificate; status=Observed/);
   assert.doesNotMatch(JSON.stringify(full.transportSecurity), /hstsEnabled|tlsVersionMinSupported|cipherSuites/);
+  assert.equal(tightFindings.findingsMetadata.returned, 5);
+  assert.equal(tightFindings.transportSecurity.observations.length, 0);
+  assert.ok(tightFindings.mcpMetadata.omittedSections.includes("transportSecurityDetail"));
+  assert.ok(tightFindings.mcpMetadata.actualBytes <= 5_000);
 });
 
 test("scan bundle explicitly reports unavailable transport evidence without a positive conclusion", () => {
@@ -506,7 +580,10 @@ test("findings and evidence modes preserve useful content at the 5000-byte minim
 
   assert.equal(findings.findings.length, 1);
   assert.equal(findings.findings[0]?.id, "finding_1");
-  assert.equal(findings.findings[0]?.links, undefined);
+  assert.equal(
+    findings.findings[0]?.links?.self ?? findings.findings[0]?.evidenceUrl,
+    "https://certscore.ai/api/v2/scans/scan_123/findings/finding_1"
+  );
   assert.ok(findings.mcpMetadata.actualBytes <= 5_000);
   assert.equal(evidence.findings.length, 1);
   assert.equal(evidence.evidenceSummary.digests[0]?.findingId, "finding_1");
@@ -514,6 +591,74 @@ test("findings and evidence modes preserve useful content at the 5000-byte minim
   assert.ok(evidence.mcpMetadata.actualBytes <= 5_000);
   assert.doesNotThrow(() => mcpScanBundleOutputSchema.parse(findings));
   assert.doesNotThrow(() => mcpScanBundleOutputSchema.parse(evidence));
+});
+
+test("5000-byte findings bundles preserve realistic core finding rows before optional inventory", () => {
+  const bundle = buildScanBundle({
+    detail: "findings",
+    findings: {
+      type: "certscore_finding_list",
+      scanId: "scan_123",
+      findings: Array.from({ length: 5 }, (_, index) => ({
+        ...publicFinding(`finding_${index}`, "Observed runtime evidence surfaced a bounded review signal that should be reviewed against the retained evidence."),
+        nextStep: index === 0
+          ? "Delay non-essential requests until consent state is established."
+          : "Review the retained checklist evidence, confirm whether the row is applicable to the site, and address the underlying implementation or disclosure gap if confirmed."
+      }))
+    },
+    maxBytes: 5_000,
+    preConsentCookiesTrackers: {
+      type: "certscore_pre_consent_cookies_trackers",
+      scanId: "scan_123",
+      domain: "example.com",
+      summary: { rowCount: 3, trackerCount: 3, cookieCount: 2, requestCount: 8 },
+      rows: Array.from({ length: 3 }, (_, index) => ({
+        id: `tracker_${index}`,
+        kind: "tracker",
+        name: `Vendor ${index}`,
+        vendor: `Vendor ${index}`,
+        purpose: "Analytics",
+        category: "Analytics",
+        confidence: "high",
+        party: "third_party",
+        priority: "high",
+        domains: [`tracker${index}.example`],
+        cookieDetails: [{ name: `cookie_${index}` }],
+        firstObservedAtMs: 1_000 + index * 250,
+        phase: "pre_consent",
+        observedBeforeConsent: true,
+        evidenceBasis: "public_report_projection"
+      }))
+    },
+    report,
+    scan: {
+      type: "certscore_scan",
+      scanId: "scan_123",
+      domain: "example.com",
+      url: "https://example.com",
+      status: "completed",
+      score: 61,
+      scoreStatus: "final",
+      links: {
+        self: "https://certscore.ai/api/v2/scans/scan_123",
+        report: "https://certscore.ai/scan/scan_123",
+        findings: "https://certscore.ai/api/v2/scans/scan_123/findings",
+        pulse: "https://certscore.ai/api/v2/scans/scan_123/pulse",
+        preConsentCookiesTrackers: "https://certscore.ai/api/v2/scans/scan_123/pre-consent-cookies-trackers"
+      }
+    }
+  } as any);
+
+  assert.equal(bundle.findingsMetadata.returned, 5);
+  assert.equal(bundle.findingsMetadata.total, 5);
+  assert.equal(bundle.findingsMetadata.truncated, false);
+  assert.ok(bundle.findings.every((finding: Record<string, any>) => typeof finding.evidenceUrl === "string"));
+  assert.equal(bundle.findings[0]?.nextStep, "Delay non-essential requests until consent state is established.");
+  assert.ok(bundle.findings.slice(1).every((finding: Record<string, any>) => finding.nextStep === undefined));
+  assert.equal(bundle.preConsentCookiesTrackers.returned, 0);
+  assert.ok(bundle.mcpMetadata.omittedSections.includes("additionalPreConsentRows"));
+  assert.ok(bundle.mcpMetadata.actualBytes <= 5_000);
+  assert.doesNotThrow(() => mcpScanBundleOutputSchema.parse(bundle));
 });
 
 test("byte-budget truncation explains omissions and the next useful limit", () => {
@@ -543,7 +688,8 @@ test("byte-budget truncation explains omissions and the next useful limit", () =
 
   assert.equal(bundle.mcpMetadata.truncated, true);
   assert.ok(bundle.mcpMetadata.omittedSections.length > 0);
-  assert.ok(bundle.mcpMetadata.nextRecommendedMaxBytes > 5_000);
+  assert.ok(bundle.mcpMetadata.fullPayloadBytes > bundle.mcpMetadata.actualBytes);
+  assert.equal(bundle.mcpMetadata.nextRecommendedMaxBytes, Math.ceil(bundle.mcpMetadata.fullPayloadBytes / 1_000) * 1_000);
   assert.equal(bundle.mcpMetadata.omittedContentAvailableViaUrl, true);
   assert.equal(typeof bundle.mcpMetadata.contentUrls.report, "string");
   assert.match(bundle.recommendedNextAction, /Retry with maxBytes=/);
@@ -633,7 +779,8 @@ test("scan bundle text exposes compact row evidence, neutral score terminology, 
   assert.match(responseContract, /Do not extrapolate an observed embed, vendor, or request into unobserved cookies, fingerprinting, tracking, or processing/i);
   assert.match(text, /CertScore score=56/);
   assert.doesNotMatch(text, /compliance score/i);
-  assert.match(text, /provenance\/reuse state=existing_scan_retrieved/i);
+  assert.match(text, /retrieval mode=scan_id_lookup/i);
+  assert.match(text, /original creation decision=unknown/i);
   assert.match(text, /Full report: https:\/\/certscore\.ai\/scan\/scan_123/);
   assert.match(text, /tracker: Bombora/);
   assert.match(text, /cookies=visitor_id/);
@@ -678,11 +825,16 @@ test("Light read projections expose canonical provenance for reused and newly cr
     assert.equal(status.scanFrom, "eu_ie");
     assert.equal(status.completedAt, "2026-08-15T03:39:36.015Z");
     assert.equal(status.provenance.mode, fixture.expectedMode);
+    assert.equal(status.provenance.retrievalMode, "creation_response");
+    assert.equal(status.provenance.creationDecision, fixture.executionMode);
+    assert.equal(typeof status.provenance.scanAgeSeconds, "number");
     assert.match(text, /scanId=scan_provenance/);
     assert.match(text, /scanFrom\/execution region=eu_ie/);
     assert.match(text, /completedAt=2026-08-15T03:39:36\.015Z/);
     assert.match(text, /startedAt=2026-08-15T03:39:14\.064Z/);
-    assert.match(text, new RegExp(`provenance/reuse state=${fixture.expectedMode}`));
+    assert.match(text, /retrieval mode=creation_response/);
+    assert.match(text, new RegExp(`original creation decision=${fixture.executionMode}`));
+    assert.match(text, new RegExp(`compatibility provenance mode=${fixture.expectedMode}`));
     assert.match(text, /Never infer its original scan region from the current request, the user's location, or a default execution region/);
     assert.match(status.interpretationGuidance.statement, /use only persisted scanFrom and timestamps/);
     assert.doesNotThrow(() => mcpScanStatusOutputSchema.parse(status));
@@ -710,8 +862,13 @@ test("Light read projections expose canonical provenance for reused and newly cr
     assert.equal(bundle.scanFrom, "eu_ie");
     assert.equal(bundle.completedAt, "2026-08-15T03:39:36.015Z");
     assert.equal(bundle.provenance.mode, fixture.expectedMode);
+    assert.equal(bundle.provenance.retrievalMode, "scan_id_lookup");
+    assert.equal(bundle.provenance.creationDecision, fixture.executionMode);
+    assert.equal(typeof bundle.provenance.scanAgeSeconds, "number");
     assert.match(bundleText, /scanFrom\/execution region=eu_ie/);
-    assert.match(bundleText, new RegExp(`provenance/reuse state=${fixture.expectedMode}`));
+    assert.match(bundleText, /retrieval mode=scan_id_lookup/);
+    assert.match(bundleText, new RegExp(`original creation decision=${fixture.executionMode}`));
+    assert.match(bundleText, new RegExp(`compatibility provenance mode=${fixture.expectedMode}`));
     assert.doesNotThrow(() => mcpScanBundleOutputSchema.parse(bundle));
   }
 });
@@ -745,9 +902,26 @@ test("Light read projections report legacy missing provenance as unavailable wit
 
   assert.equal(status.scanFrom, null);
   assert.equal(bundle.scanFrom, null);
+  assert.deepEqual(
+    {
+      retrievalMode: status.provenance.retrievalMode,
+      creationDecision: status.provenance.creationDecision,
+      scanAgeSeconds: status.provenance.scanAgeSeconds
+    },
+    { retrievalMode: "scan_id_lookup", creationDecision: "unknown", scanAgeSeconds: null }
+  );
+  assert.deepEqual(
+    {
+      retrievalMode: bundle.provenance.retrievalMode,
+      creationDecision: bundle.provenance.creationDecision,
+      scanAgeSeconds: bundle.provenance.scanAgeSeconds
+    },
+    { retrievalMode: "scan_id_lookup", creationDecision: "unknown", scanAgeSeconds: null }
+  );
   for (const text of [statusText, bundleText]) {
     assert.match(text, /scanFrom\/execution region=unavailable/);
     assert.match(text, /completedAt=unavailable; startedAt=unavailable; createdAt=unavailable/);
+    assert.match(text, /retrieval mode=scan_id_lookup; original creation decision=unknown; scan age seconds=unavailable/);
     assert.match(text, /Never infer its original scan region from the current request, the user's location, or a default execution region/);
     assert.doesNotMatch(text, /scanFrom\/execution region=(eu_de|eu_ie|california)/);
   }

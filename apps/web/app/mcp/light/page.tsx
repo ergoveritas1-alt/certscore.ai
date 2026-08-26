@@ -155,7 +155,7 @@ export default function McpLightPage() {
               <thead className="border-b border-slate-200 bg-slate-50 text-slate-700"><tr><th className="px-4 py-3 font-semibold">Outcome</th><th className="px-4 py-3 font-semibold">What the agent should do</th></tr></thead>
               <tbody className="divide-y divide-slate-100 text-slate-600">
                 <tr><td className="px-4 py-3 font-mono">completed</td><td className="px-4 py-3">Call <code>certscore_get_scan_bundle</code> and summarize the result.</td></tr>
-                <tr><td className="px-4 py-3 font-mono">reused_scan</td><td className="px-4 py-3">Report that an eligible prior result was reused and quota was not consumed.</td></tr>
+                <tr><td className="px-4 py-3 font-mono">reused_scan</td><td className="px-4 py-3">Report that an eligible prior scan was reused and quota was not consumed. Keep this original creation decision separate from a later <code>scan_id_lookup</code>.</td></tr>
                 <tr><td className="px-4 py-3 font-mono">queued / running / finalizing</td><td className="px-4 py-3">Retain <code>scanId</code> and poll <code>certscore_get_scan_status</code> using <code>scanId</code> only.</td></tr>
                 <tr><td className="px-4 py-3 font-mono">completed_limited / no-go</td><td className="px-4 py-3">Explain the limitation and never treat it as proof of compliance or absence of risk.</td></tr>
                 <tr><td className="px-4 py-3 font-mono">retryable error without scanId</td><td className="px-4 py-3">Wait <code>retryAfterSeconds</code> and retry <code>certscore_scan_site</code>; do not poll status.</td></tr>
@@ -183,8 +183,8 @@ export default function McpLightPage() {
           <CodeBlock>{`Transport: Streamable HTTP\nURL: ${endpoint}\nAuthentication: None`}</CodeBlock>
           <p className="mt-4 text-sm leading-7 text-slate-600">
             Bundle detail is explicit: <code>summary</code> returns the compact default, <code>findings</code> adds bounded finding detail,
-            <code>evidence</code> adds retained-evidence summaries and references, and <code>full</code> adds the bounded public report.
-            Use <code>maxBytes</code> to set a 5,000–200,000 byte budget; the response reports requested bytes, actual bytes, and any truncation reason.
+            <code>evidence</code> adds retained-evidence summaries and references, and <code>full</code> adds the bounded public report without repeating findings or transport sections already present at the top level.
+            Use <code>maxBytes</code> to request a byte budget. Light applies a transport-safe 25,000-byte ceiling and reports the requested budget, effective budget, ceiling, actual bytes, complete-tier bytes, and any truncation reason.
           </p>
           <div className="mt-5 overflow-x-auto rounded-lg border border-slate-200 bg-white">
             <table className="min-w-[680px] table-fixed w-full text-left text-sm">
@@ -195,11 +195,11 @@ export default function McpLightPage() {
               </colgroup>
               <thead className="border-b border-slate-200 bg-slate-50 text-slate-700"><tr><th className="px-4 py-3 font-semibold">detail</th><th className="px-4 py-3 font-semibold">Recommended maxBytes</th><th className="px-4 py-3 font-semibold">Use</th></tr></thead>
               <tbody className="divide-y divide-slate-100 text-slate-600">
-                {[["summary", "5000", "Canonical overview"], ["findings", "8000", "Compact finding review"], ["evidence", "8000", "Finding plus evidence digests and references"], ["full", "12000 or higher", "All available bounded sections"]].map(([detail, maxBytes, use]) => <tr key={detail}><td className="px-4 py-3 font-mono">{detail}</td><td className="px-4 py-3 font-mono">{maxBytes}</td><td className="px-4 py-3">{use}</td></tr>)}
+                {[["summary", "5000", "Canonical overview"], ["findings", "8000", "Compact finding review"], ["evidence", "8000", "Finding plus evidence digests and references"], ["full", "12000–25000", "All available bounded sections within the Light ceiling"]].map(([detail, maxBytes, use]) => <tr key={detail}><td className="px-4 py-3 font-mono">{detail}</td><td className="px-4 py-3 font-mono">{maxBytes}</td><td className="px-4 py-3">{use}</td></tr>)}
               </tbody>
             </table>
           </div>
-          <p className="mt-4 text-sm leading-7 text-slate-600">A 5,000-byte response may intentionally omit optional sections while still returning a compact finding or evidence reference when available. Inspect <code>actualBytes</code>, <code>truncated</code>, <code>omittedSections</code>, <code>nextRecommendedMaxBytes</code>, and the report or evidence content URLs before retrying.</p>
+              <p className="mt-4 text-sm leading-7 text-slate-600">A 5,000-byte response preserves compact core findings and their evidence anchors before reducing optional inventory or detail. Short canonical <code>nextStep</code> actions are retained only when they fit without displacing a finding; use the finding URL or complete tier for longer actions. Inspect <code>requestedMaxBytes</code>, <code>effectiveMaxBytes</code>, <code>responseCeilingBytes</code>, <code>actualBytes</code>, <code>fullPayloadBytes</code>, <code>truncated</code>, <code>omittedSections</code>, <code>nextRecommendedMaxBytes</code>, and the report or evidence content URLs before retrying.</p>
           <p className="mt-4 text-sm text-slate-600">
             Prefer a managed directory connection? Find CertScore.ai on{" "}
             <a className="font-semibold text-sky-700 hover:text-sky-800" href="https://smithery.ai/server/ben-qe1c/certscore-ai" rel="noopener" target="_blank">Smithery</a>.
@@ -221,8 +221,8 @@ export default function McpLightPage() {
             <li><strong>Connection check:</strong> a successful Streamable HTTP connection completes initialization and lists the three Light tools without opening an authorization page.</li>
             <li><strong>Missing scanId:</strong> retry <code>certscore_scan_site</code> only when the error says <code>retryable: true</code>; never poll <code>certscore_get_scan_status</code> without <code>scanId</code>.</li>
             <li><strong>Rate limited:</strong> follow <code>retryAfterSeconds</code> and <code>recommendedNextAction</code>, or reuse an eligible result. The daily allowance resets at the returned UTC time.</li>
-            <li><strong>Reused result:</strong> report that the eligible prior scan was reused and quota was not consumed.</li>
-            <li><strong>Truncated bundle:</strong> follow <code>nextRecommendedMaxBytes</code>, increase <code>maxBytes</code>, or open one of the returned content URLs.</li>
+            <li><strong>Provenance:</strong> <code>retrievalMode</code> describes the current tool call, while <code>creationDecision</code> says whether the original scan was new or reused only when retained. Never treat <code>scan_id_lookup</code> alone as proof of reuse; report <code>unknown</code> honestly. Use numeric <code>scanAgeSeconds</code> when available.</li>
+            <li><strong>Truncated bundle:</strong> follow <code>nextRecommendedMaxBytes</code> only when it fits <code>responseCeilingBytes</code>; otherwise open one of the returned canonical report or evidence content URLs.</li>
             <li><strong>Invalid URL:</strong> correct the <code>url</code> field using the structured <code>invalid_arguments</code> response, then retry <code>certscore_scan_site</code> with a public HTTP or HTTPS URL.</li>
             <li><strong>Limited result:</strong> <code>completed_limited</code>, no-go, not-observed, and limited coverage are observations only, never proof of compliance. Transport failures instead return <code>failed</code>, <code>expired</code>, or a connection error with retry guidance.</li>
           </ul>
