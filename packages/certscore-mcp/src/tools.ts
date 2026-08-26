@@ -1563,6 +1563,11 @@ export function buildScanBundle(input: {
     delete bundle.timing;
     refresh();
   }
+  if (bundle.mcpMetadata.actualBytes > maxBytes && bundle.summary) {
+    markBudgetOmitted("summary", "duplicate_summary_envelope_omitted_to_preserve_findings");
+    delete bundle.summary;
+    refresh();
+  }
   if (bundle.mcpMetadata.actualBytes > maxBytes && bundle.mcpMetadata.truncated) {
     refreshTruncationGuidance();
   }

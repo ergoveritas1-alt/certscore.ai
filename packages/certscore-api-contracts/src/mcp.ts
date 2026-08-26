@@ -396,7 +396,7 @@ export const mcpScanBundleOutputSchema = z
       executiveSummary: mcpExecutiveSummarySchema.nullable(),
       counts: z.record(z.union([z.number(), z.boolean(), z.null()])).nullable(),
       agentInterpretation: pulseAgentInterpretationSchema.nullable()
-    }).strict(),
+    }).strict().optional(),
     findings: z.array(z.union([apiV2FindingDetailSchema, mcpScanBundleCoreFindingSchema])),
     findingsMetadata: z.object({
       shown: z.number().int().min(0),
