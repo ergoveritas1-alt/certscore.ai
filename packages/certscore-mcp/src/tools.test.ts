@@ -594,13 +594,47 @@ test("findings and evidence modes preserve useful content at the 5000-byte minim
 });
 
 test("5000-byte findings bundles preserve realistic core finding rows before optional inventory", () => {
+  const scanId = "00000000-0000-4000-8000-000000000500";
+  const fixtureFindings = [
+    {
+      id: "regulatory_gap__gdpr_eprivacy__pre_consent_cookies_storage",
+      label: "Non-essential pre-consent cookies/storage",
+      plainEnglish: "2 non-essential cookie or browser-storage items were observed before consent. First observed at 4.48s after scan start."
+    },
+    {
+      id: "regulatory_gap__gdpr_eprivacy__pre_consent_third_party_tracking",
+      label: "Pre-consent non-essential tracking",
+      plainEnglish: "Pre-consent non-essential tracking evidence was retained before consent: Example Analytics; first seen 2.74s after scan start; no consent action was recorded first."
+    },
+    {
+      id: "regulatory_gap__gdpr_eprivacy__reject_all_path_availability",
+      label: "Decline consent control",
+      plainEnglish: "Partial support from scan evidence; no observable refusal path was retained before non-essential activity."
+    },
+    {
+      id: "regulatory_gap__gdpr_eprivacy__session_replay_fingerprinting_review",
+      label: "Session replay signal",
+      plainEnglish: "Session replay or behavioral analytics signals were observed before any recorded consent action."
+    },
+    {
+      id: "session_recording_services_detected",
+      label: "Session replay service signal observed",
+      plainEnglish: "A session-replay collection endpoint was observed during runtime collection."
+    }
+  ];
   const bundle = buildScanBundle({
     detail: "findings",
     findings: {
       type: "certscore_finding_list",
-      scanId: "scan_123",
-      findings: Array.from({ length: 5 }, (_, index) => ({
-        ...publicFinding(`finding_${index}`, "Observed runtime evidence surfaced a bounded review signal that should be reviewed against the retained evidence."),
+      scanId,
+      findings: fixtureFindings.map((fixtureFinding, index) => ({
+        ...publicFinding(fixtureFinding.id, fixtureFinding.plainEnglish),
+        label: fixtureFinding.label,
+        scanId,
+        links: {
+          self: `https://certscore.ai/api/v2/scans/${scanId}/findings/${fixtureFinding.id}`,
+          report: `https://certscore.ai/scan/${scanId}`
+        },
         nextStep: index === 0
           ? "Delay non-essential requests until consent state is established."
           : "Review the retained checklist evidence, confirm whether the row is applicable to the site, and address the underlying implementation or disclosure gap if confirmed."
@@ -609,7 +643,7 @@ test("5000-byte findings bundles preserve realistic core finding rows before opt
     maxBytes: 5_000,
     preConsentCookiesTrackers: {
       type: "certscore_pre_consent_cookies_trackers",
-      scanId: "scan_123",
+      scanId,
       domain: "example.com",
       summary: { rowCount: 3, trackerCount: 3, cookieCount: 2, requestCount: 8 },
       rows: Array.from({ length: 3 }, (_, index) => ({
@@ -633,18 +667,31 @@ test("5000-byte findings bundles preserve realistic core finding rows before opt
     report,
     scan: {
       type: "certscore_scan",
-      scanId: "scan_123",
+      scanId,
       domain: "example.com",
       url: "https://example.com",
       status: "completed",
+      scanFrom: "eu_ie",
+      createdAt: "2026-08-26T05:39:14.256Z",
+      startedAt: "2026-08-26T05:39:14.256Z",
+      completedAt: "2026-08-26T05:39:33.077Z",
+      scanTimeSeconds: 18.8,
       score: 61,
       scoreStatus: "final",
+      scoreVersion: "gdpr-eprivacy-canonical-shadow-v7",
+      scoreUpdatedAt: "2026-08-26T05:39:33.077Z",
+      riskLevel: "review_recommended",
+      coverage: {
+        status: "partial",
+        summary: "Automated public-web scan completed with coverage limitations.",
+        limitations: ["Automated public-web scan only."]
+      },
       links: {
-        self: "https://certscore.ai/api/v2/scans/scan_123",
-        report: "https://certscore.ai/scan/scan_123",
-        findings: "https://certscore.ai/api/v2/scans/scan_123/findings",
-        pulse: "https://certscore.ai/api/v2/scans/scan_123/pulse",
-        preConsentCookiesTrackers: "https://certscore.ai/api/v2/scans/scan_123/pre-consent-cookies-trackers"
+        self: `https://certscore.ai/api/v2/scans/${scanId}`,
+        report: `https://certscore.ai/scan/${scanId}`,
+        findings: `https://certscore.ai/api/v2/scans/${scanId}/findings`,
+        pulse: `https://certscore.ai/api/v2/scans/${scanId}/pulse`,
+        preConsentCookiesTrackers: `https://certscore.ai/api/v2/scans/${scanId}/pre-consent-cookies-trackers`
       }
     }
   } as any);
@@ -652,12 +699,45 @@ test("5000-byte findings bundles preserve realistic core finding rows before opt
   assert.equal(bundle.findingsMetadata.returned, 5);
   assert.equal(bundle.findingsMetadata.total, 5);
   assert.equal(bundle.findingsMetadata.truncated, false);
-  assert.ok(bundle.findings.every((finding: Record<string, any>) => typeof finding.evidenceUrl === "string"));
+  assert.equal(bundle.evidenceUrlTemplate, "{contentUrls.findings}/{findingId}");
+  assert.ok(bundle.findings.every((finding: Record<string, any>) => !("evidenceUrl" in finding)));
+  assert.equal(bundle.mcpMetadata.contentUrls.findings, `https://certscore.ai/api/v2/scans/${scanId}/findings`);
   assert.equal(bundle.findings[0]?.nextStep, "Delay non-essential requests until consent state is established.");
   assert.ok(bundle.findings.slice(1).every((finding: Record<string, any>) => finding.nextStep === undefined));
-  assert.equal(bundle.preConsentCookiesTrackers.returned, 0);
+  assert.equal(bundle.preConsentCookiesTrackers, undefined);
+  assert.equal(bundle.links, undefined);
+  assert.equal(bundle.timing, undefined);
   assert.ok(bundle.mcpMetadata.omittedSections.includes("additionalPreConsentRows"));
+  assert.ok(bundle.mcpMetadata.omittedSections.includes("findingEvidenceUrls"));
+  assert.ok(bundle.mcpMetadata.omittedSections.includes("preConsentCookiesTrackers"));
+  assert.ok(bundle.mcpMetadata.omittedSections.includes("links"));
+  assert.ok(bundle.mcpMetadata.omittedSections.includes("timing"));
   assert.ok(bundle.mcpMetadata.actualBytes <= 5_000);
+  assert.doesNotThrow(() => mcpScanBundleOutputSchema.parse(bundle));
+});
+
+test("full bundles deduplicate per-finding disclaimers into the top-level guidance", () => {
+  const finding = {
+    ...publicFinding("finding_with_disclaimer"),
+    disclaimer: "Repeated finding disclaimer."
+  };
+  const bundle = buildScanBundle({
+    detail: "full",
+    findings: { type: "certscore_finding_list", scanId: "scan_123", findings: [finding] },
+    preConsentCookiesTrackers: null,
+    report,
+    scan: {
+      type: "certscore_scan",
+      scanId: "scan_123",
+      domain: "example.com",
+      status: "completed",
+      score: 72
+    }
+  } as any);
+
+  assert.equal(bundle.findings[0]?.disclaimer, undefined);
+  assert.ok(bundle.mcpMetadata.deduplicatedSections.includes("findings[].disclaimer"));
+  assert.equal(typeof bundle.observationOnlyDisclaimer, "string");
   assert.doesNotThrow(() => mcpScanBundleOutputSchema.parse(bundle));
 });
 

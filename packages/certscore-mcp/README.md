@@ -53,7 +53,7 @@ Canonical Light workflow:
 8. If truncated, follow `recommendedNextAction` or increase `maxBytes`.
 9. Summarize findings together with coverage limitations and the report URL.
 
-Recommended bundle budgets are `maxBytes=5000` for `summary`, `maxBytes=8000` for `findings`, `maxBytes=8000` for `evidence`, and `maxBytes=12000` to `25000` for `full`. MCP Light applies a 25,000-byte response ceiling so results remain within practical client limits; larger requested budgets are reported but clamped. A 5,000-byte response may intentionally omit optional sections while still returning a compact finding or evidence reference when available. Inspect `requestedMaxBytes`, `effectiveMaxBytes`, `responseCeilingBytes`, `actualBytes`, `fullPayloadBytes`, `truncated`, `omittedSections`, `nextRecommendedMaxBytes`, and returned report or evidence content URLs.
+Recommended bundle budgets are `maxBytes=5000` for `summary`, `maxBytes=8000` for `findings`, `maxBytes=8000` for `evidence`, and `maxBytes=12000` to `25000` for `full`. MCP Light applies a 25,000-byte response ceiling so results remain within practical client limits; larger requested budgets are reported but clamped. At the 5,000-byte floor, compact core finding rows take priority over optional inventory and duplicate envelope fields. When repeated per-finding URLs are omitted, `evidenceUrlTemplate` points to `contentUrls.findings` and the returned finding ID so the same canonical evidence endpoint remains derivable. Inspect `requestedMaxBytes`, `effectiveMaxBytes`, `responseCeilingBytes`, `actualBytes`, `fullPayloadBytes`, `truncated`, `omittedSections`, `nextRecommendedMaxBytes`, and returned report or evidence content URLs.
 
 Verification prompt:
 

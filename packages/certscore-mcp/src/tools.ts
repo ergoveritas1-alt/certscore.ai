@@ -439,6 +439,11 @@ function compactFindingLink(finding: Record<string, any>) {
   return self ? { self: self.slice(0, 2_048) } : undefined;
 }
 
+function withoutFindingDisclaimer(finding: Record<string, any>) {
+  const { disclaimer: _disclaimer, ...rest } = finding;
+  return rest;
+}
+
 function compactBundleFinding(finding: Record<string, any>, tier: "standard" | "core" = "standard") {
   const evidence = finding.evidence && typeof finding.evidence === "object" && !Array.isArray(finding.evidence)
     ? finding.evidence as Record<string, unknown>
@@ -1305,9 +1310,11 @@ export function buildScanBundle(input: {
   const transportSecurity = scanBundleTransportSecurity(report, detail);
   const allFindings = Array.isArray(input.findings.findings) ? input.findings.findings : [];
   const selectedFindings = detail === "summary" ? distinctSummaryFindings(allFindings) : allFindings;
-  const findings = selectedFindings
-    .slice(0, maxFindings)
-    .map((finding) => detail === "full" ? finding : compactBundleFinding(finding));
+  const selectedFindingRows = selectedFindings.slice(0, maxFindings);
+  const findingDisclaimersDeduplicated = detail === "full"
+    && selectedFindingRows.some((finding) => typeof finding.disclaimer === "string");
+  const findings = selectedFindingRows
+    .map((finding) => detail === "full" ? withoutFindingDisclaimer(finding) : compactBundleFinding(finding));
   const deduplicatedReport = deduplicatedFullReport({ findings, report, transportSecurity });
   const preConsentCookiesTrackers = input.preConsentCookiesTrackers
     ? preConsentBundleSection(input.preConsentCookiesTrackers, maxPreConsentRows)
@@ -1409,7 +1416,12 @@ export function buildScanBundle(input: {
       truncated: false,
       truncationReason: null,
       omittedSections: [...intentionallyOmitted],
-      deduplicatedSections: detail === "full" ? deduplicatedReport.deduplicatedSections : [],
+      deduplicatedSections: detail === "full"
+        ? [
+            ...deduplicatedReport.deduplicatedSections,
+            ...(findingDisclaimersDeduplicated ? ["findings[].disclaimer"] : [])
+          ]
+        : [],
       nextRecommendedMaxBytes: null,
       omittedContentAvailableViaUrl: intentionallyOmitted.size > 0 && Object.keys(contentUrls).length > 0,
       contentUrls
@@ -1434,6 +1446,16 @@ export function buildScanBundle(input: {
       if (bundle.mcpMetadata.fullPayloadBytes === measured) break;
       bundle.mcpMetadata.fullPayloadBytes = measured;
     }
+    refresh();
+  };
+  const refreshTruncationGuidance = () => {
+    const completeBytes = bundle.mcpMetadata.fullPayloadBytes;
+    bundle.mcpMetadata.nextRecommendedMaxBytes = completeBytes <= responseCeilingBytes
+      ? Math.max(5_000, Math.ceil(completeBytes / 1_000) * 1_000)
+      : null;
+    bundle.recommendedNextAction = bundle.mcpMetadata.nextRecommendedMaxBytes
+      ? `Retry with maxBytes=${bundle.mcpMetadata.nextRecommendedMaxBytes} to retrieve the complete requested tier, or open ${bundle.reportUrl ? "the report URL" : "an available content URL"}.`
+      : `The complete requested tier exceeds the MCP byte ceiling; open ${bundle.reportUrl ? "the report URL" : "an available content URL"}.`;
     refresh();
   };
 
@@ -1513,6 +1535,37 @@ export function buildScanBundle(input: {
     bundle.preConsentCookiesTrackers.truncated = true;
     refresh();
   }
+  if (
+    bundle.mcpMetadata.actualBytes > maxBytes &&
+    bundle.findings.length > 1 &&
+    typeof contentUrls.findings === "string"
+  ) {
+    markBudgetOmitted("findingEvidenceUrls", "finding_evidence_urls_replaced_by_template");
+    bundle.evidenceUrlTemplate = "{contentUrls.findings}/{findingId}";
+    bundle.findings = bundle.findings.map((finding: Record<string, any>) => {
+      const { evidenceUrl: _evidenceUrl, ...rest } = finding;
+      return rest;
+    });
+    refresh();
+  }
+  if (bundle.mcpMetadata.actualBytes > maxBytes && bundle.preConsentCookiesTrackers) {
+    markBudgetOmitted("preConsentCookiesTrackers", "pre_consent_summary_omitted_to_preserve_findings");
+    delete bundle.preConsentCookiesTrackers;
+    refresh();
+  }
+  if (bundle.mcpMetadata.actualBytes > maxBytes && bundle.links) {
+    markBudgetOmitted("links", "duplicate_links_omitted_to_preserve_findings");
+    delete bundle.links;
+    refresh();
+  }
+  if (bundle.mcpMetadata.actualBytes > maxBytes && bundle.timing) {
+    markBudgetOmitted("timing", "duplicate_timing_envelope_omitted_to_preserve_findings");
+    delete bundle.timing;
+    refresh();
+  }
+  if (bundle.mcpMetadata.actualBytes > maxBytes && bundle.mcpMetadata.truncated) {
+    refreshTruncationGuidance();
+  }
   if (bundle.mcpMetadata.actualBytes > maxBytes && bundle.evidenceSummary) {
     markBudgetOmitted("evidence", "evidence_digest_omitted_to_byte_limit");
     delete bundle.evidenceSummary;
@@ -1529,14 +1582,7 @@ export function buildScanBundle(input: {
     refresh();
   }
   if (bundle.mcpMetadata.truncated) {
-    const completeBytes = bundle.mcpMetadata.fullPayloadBytes;
-    bundle.mcpMetadata.nextRecommendedMaxBytes = completeBytes <= responseCeilingBytes
-      ? Math.max(5_000, Math.ceil(completeBytes / 1_000) * 1_000)
-      : null;
-    bundle.recommendedNextAction = bundle.mcpMetadata.nextRecommendedMaxBytes
-      ? `Retry with maxBytes=${bundle.mcpMetadata.nextRecommendedMaxBytes} to retrieve the complete requested tier, or open ${bundle.reportUrl ? "the report URL" : "an available content URL"}.`
-      : `The complete requested tier exceeds the MCP byte ceiling; open ${bundle.reportUrl ? "the report URL" : "an available content URL"}.`;
-    refresh();
+    refreshTruncationGuidance();
   }
   if (bundle.mcpMetadata.actualBytes > maxBytes) {
     const minimal: Record<string, any> = {
