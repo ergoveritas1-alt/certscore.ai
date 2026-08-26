@@ -72,6 +72,8 @@ const LOCAL_V2_DAG_LAMBDA_CONSENT_PROOF_FALLBACK_BUDGET_MS = 6_000;
 const LOCAL_V2_DAG_LAMBDA_AWS_SEND_ATTEMPT_TIMEOUT_MS = 4_000;
 const LOCAL_V2_DAG_LAMBDA_AWS_SEND_MAX_ATTEMPTS = 3;
 const LOCAL_V2_DAG_LAMBDA_EGRESS_LIGHTWEIGHT_TOTAL_TIMEOUT_MS = 5_000;
+const LOCAL_V2_DAG_LAMBDA_DEFAULT_EGRESS_REFLECTOR_URL =
+  "https://certscore.ai/.well-known/certscore-egress";
 
 export type LocalV2DagLambdaDispatchPayload = {
   artifactOnly: true;
@@ -1196,7 +1198,7 @@ export function serializeCanonicalEvidenceBundle(value: unknown) {
   return JSON.stringify(value);
 }
 
-type EgressProbeObservation = {
+export type EgressProbeObservation = {
   asn?: string;
   country?: string;
   ip?: string;
@@ -1213,7 +1215,16 @@ type EgressProbeAttempt = {
   observed: EgressProbeObservation | null;
   probeStatus: "available" | "failed" | "skipped";
   provider: string | null;
+  regionVerificationSource?: "configured_exact_ip_binding" | "provider_observation" | "not_required";
   startedAt: string;
+};
+
+type EgressProbeAssessment = {
+  error: string | null;
+  ipMatches: boolean;
+  probeStatus: "available" | "failed";
+  regionMatches: boolean;
+  regionVerificationSource: "configured_exact_ip_binding" | "provider_observation" | "not_required";
 };
 
 export async function writeEgressPreflightArtifact(
@@ -1249,6 +1260,7 @@ export async function writeEgressPreflightArtifact(
     proxyModeEnabled: proxyEnabled,
     probeStatus: "skipped" as "available" | "failed" | "skipped",
     provider: null as string | null,
+    regionVerificationSource: "not_required" as EgressProbeAssessment["regionVerificationSource"],
     observed: null as EgressProbeObservation | null,
     startedAt: new Date(startedAt).toISOString(),
     error: null as null | string,
@@ -1277,18 +1289,18 @@ export async function writeEgressPreflightArtifact(
         LOCAL_V2_DAG_LAMBDA_EGRESS_LIGHTWEIGHT_TOTAL_TIMEOUT_MS,
       );
       const parsed = parseEgressProbeResponse(response.text);
-      const regionMatches = egressRegionMatchesExpected(parsed?.region, expectedEgressRegion);
-      const ipMatches = egressIpMatchesExpected(parsed?.ip, expectedEgressPublicIpHash);
-      artifact.provider = "ipinfo.io";
-      artifact.probeStatus = response.status >= 200 && response.status < 300 && parsed && regionMatches && ipMatches ? "available" : "failed";
+      const assessment = assessEgressProbeObservation({
+        expectedEgressPublicIpHash,
+        expectedEgressRegion,
+        httpStatus: response.status,
+        observed: parsed,
+        provider: "certscore.ai",
+      });
+      artifact.provider = "certscore.ai";
+      artifact.probeStatus = assessment.probeStatus;
       artifact.observed = parsed;
-      artifact.error = artifact.probeStatus === "available"
-        ? null
-        : !ipMatches && expectedEgressPublicIpHash
-          ? "Observed egress IP did not match the configured regional proxy public-IP hash."
-          : !regionMatches && expectedEgressRegion
-            ? `Observed egress region ${parsed?.region ?? "unknown"} did not match expected region ${expectedEgressRegion}.`
-            : `Unexpected lightweight egress preflight response: HTTP ${response.status}`;
+      artifact.error = assessment.error;
+      artifact.regionVerificationSource = assessment.regionVerificationSource;
     } catch (error) {
       artifact.probeStatus = "failed";
       artifact.error = error instanceof Error ? error.message.slice(0, 240) : "unknown_lightweight_egress_preflight_error";
@@ -1323,18 +1335,18 @@ export async function writeEgressPreflightArtifact(
     });
     const text = (await page.locator("body").textContent({ timeout: 2_000 })) ?? "";
     const parsed = parseEgressProbeResponse(text);
-    const regionMatches = egressRegionMatchesExpected(parsed?.region, expectedEgressRegion);
-    const ipMatches = egressIpMatchesExpected(parsed?.ip, expectedEgressPublicIpHash);
+    const assessment = assessEgressProbeObservation({
+      expectedEgressPublicIpHash,
+      expectedEgressRegion,
+      httpStatus: response?.status() ?? 0,
+      observed: parsed,
+      provider: "ipinfo.io",
+    });
     artifact.provider = "ipinfo.io";
-    artifact.probeStatus = response && response.ok() && parsed && regionMatches && ipMatches ? "available" : "failed";
+    artifact.probeStatus = assessment.probeStatus;
     artifact.observed = parsed;
-    artifact.error = artifact.probeStatus === "available"
-      ? null
-      : !ipMatches && expectedEgressPublicIpHash
-        ? "Observed egress IP did not match the configured regional proxy public-IP hash."
-        : !regionMatches && expectedEgressRegion
-          ? `Observed egress region ${parsed?.region ?? "unknown"} did not match expected region ${expectedEgressRegion}.`
-          : `Unexpected egress preflight response: HTTP ${response?.status() ?? 0}`;
+    artifact.error = assessment.error;
+    artifact.regionVerificationSource = assessment.regionVerificationSource;
     await context.close().catch(() => undefined);
   } catch (error) {
     artifact.probeStatus = "failed";
@@ -1356,6 +1368,7 @@ function egressProbeAttempt(
     observed: EgressProbeObservation | null;
     probeStatus: "available" | "failed" | "skipped";
     provider: string | null;
+    regionVerificationSource?: EgressProbeAssessment["regionVerificationSource"];
   },
   mode: EgressProbeAttempt["mode"],
   startedAt: number,
@@ -1369,6 +1382,9 @@ function egressProbeAttempt(
     observed: artifact.observed,
     probeStatus: artifact.probeStatus,
     provider: artifact.provider,
+    ...(artifact.regionVerificationSource
+      ? { regionVerificationSource: artifact.regionVerificationSource }
+      : {}),
     startedAt: new Date(startedAt).toISOString(),
   };
 }
@@ -1395,6 +1411,46 @@ export function egressIpMatchesExpected(observedIp: string | undefined, expected
   if (!expected) return true;
   if (!observedIp?.trim()) return false;
   return `sha256:${createHash("sha256").update(observedIp.trim()).digest("hex")}` === expected;
+}
+
+export function assessEgressProbeObservation(input: {
+  expectedEgressPublicIpHash?: string;
+  expectedEgressRegion?: string;
+  httpStatus: number;
+  observed: EgressProbeObservation | null;
+  provider: string;
+}): EgressProbeAssessment {
+  const ipMatches = egressIpMatchesExpected(input.observed?.ip, input.expectedEgressPublicIpHash);
+  const providerRegionAvailable = Boolean(input.observed?.region?.trim());
+  const regionVerificationSource: EgressProbeAssessment["regionVerificationSource"] =
+    !input.expectedEgressRegion
+      ? "not_required"
+      : providerRegionAvailable
+        ? "provider_observation"
+        : input.expectedEgressPublicIpHash && ipMatches
+          ? "configured_exact_ip_binding"
+          : "provider_observation";
+  const regionMatches = !input.expectedEgressRegion
+    || (providerRegionAvailable
+      ? egressRegionMatchesExpected(input.observed?.region, input.expectedEgressRegion)
+      : regionVerificationSource === "configured_exact_ip_binding");
+  const successfulHttp = input.httpStatus >= 200 && input.httpStatus < 300;
+  const probeStatus = successfulHttp && Boolean(input.observed) && ipMatches && regionMatches
+    ? "available"
+    : "failed";
+  const error = probeStatus === "available"
+    ? null
+    : !successfulHttp
+      ? `Egress probe provider ${input.provider} returned HTTP ${input.httpStatus}.`
+      : !input.observed
+        ? `Egress probe provider ${input.provider} returned an unusable response.`
+        : !ipMatches && input.expectedEgressPublicIpHash
+          ? "Observed egress IP did not match the configured regional proxy public-IP hash."
+          : !regionMatches && input.expectedEgressRegion
+            ? `Observed egress region ${input.observed.region ?? "unknown"} did not match expected region ${input.expectedEgressRegion}.`
+            : `Egress probe provider ${input.provider} did not satisfy the required identity checks.`;
+
+  return { error, ipMatches, probeStatus, regionMatches, regionVerificationSource };
 }
 
 function regionalEgressRequired(env: NodeJS.ProcessEnv = process.env) {
@@ -1428,10 +1484,17 @@ function parseEgressProbeResponse(text: string) {
 export async function fetchEgressProbeThroughProxy(
   proxyServer: string,
   totalTimeoutMs = LOCAL_V2_DAG_LAMBDA_EGRESS_LIGHTWEIGHT_TOTAL_TIMEOUT_MS,
+  probeUrlValue = firstTrimmedRuntimeEnv(process.env, [
+    "CERTSCORE_V2_DAG_LAMBDA_EGRESS_REFLECTOR_URL",
+  ]) ?? LOCAL_V2_DAG_LAMBDA_DEFAULT_EGRESS_REFLECTOR_URL,
 ): Promise<{ status: number; text: string }> {
   const proxyUrl = new URL(proxyServer.includes("://") ? proxyServer : `http://${proxyServer}`);
+  const probeUrl = new URL(probeUrlValue);
   if (proxyUrl.protocol !== "http:" && proxyUrl.protocol !== "https:") {
     throw new Error(`Unsupported lightweight egress proxy protocol: ${proxyUrl.protocol}`);
+  }
+  if (probeUrl.protocol !== "https:") {
+    throw new Error(`Unsupported lightweight egress reflector protocol: ${probeUrl.protocol}`);
   }
   const proxyUsername = firstTrimmedRuntimeEnv(process.env, [
     "CERTSCORE_V2_DAG_LAMBDA_PROXY_USERNAME",
@@ -1477,10 +1540,10 @@ export async function fetchEgressProbeThroughProxy(
     connectRequestHandle = connectRequest({
       hostname: proxyUrl.hostname,
       method: "CONNECT",
-      path: "ipinfo.io:443",
+      path: `${probeUrl.hostname}:${probeUrl.port || "443"}`,
       port: proxyUrl.port ? Number(proxyUrl.port) : proxyUrl.protocol === "https:" ? 443 : 80,
       headers: {
-        Host: "ipinfo.io:443",
+        Host: `${probeUrl.hostname}:${probeUrl.port || "443"}`,
         ...(proxyAuthorization ? { "Proxy-Authorization": proxyAuthorization } : {}),
       },
     });
@@ -1497,7 +1560,7 @@ export async function fetchEgressProbeThroughProxy(
       }
       secureSocket = tlsConnect({
         rejectUnauthorized: true,
-        servername: "ipinfo.io",
+        servername: probeUrl.hostname,
         socket,
       });
       secureSocket.once("error", fail);
@@ -1510,10 +1573,10 @@ export async function fetchEgressProbeThroughProxy(
             Accept: "application/json",
             "User-Agent": "CertScore-Egress-Preflight/1.0",
           },
-          hostname: "ipinfo.io",
+          hostname: probeUrl.hostname,
           method: "GET",
-          path: "/json",
-          port: 443,
+          path: `${probeUrl.pathname}${probeUrl.search}`,
+          port: probeUrl.port ? Number(probeUrl.port) : 443,
         }, (probeResponse) => {
           const chunks: Buffer[] = [];
           let sizeBytes = 0;
@@ -2827,9 +2890,43 @@ async function writeAndUploadFailureDiagnostic(input: {
       };
     })
     : [];
+  const egressRecord: Record<string, unknown> = await readFile(path.join(input.artifactRoot, "EgressPreflight.json"), "utf8")
+    .then((value) => asRecord(JSON.parse(value)))
+    .catch((): Record<string, unknown> => ({}));
+  const egressAttempts = Array.isArray(egressRecord.attempts)
+    ? egressRecord.attempts.slice(0, 4).map((value) => {
+      const row = asRecord(value);
+      const observed = asRecord(row.observed);
+      const observedIp = compactString(observed.ip);
+      return {
+        durationMs: typeof row.durationMs === "number" ? row.durationMs : undefined,
+        error: compactString(row.error)?.slice(0, 240) ?? null,
+        mode: compactString(row.mode)?.slice(0, 40) ?? "unknown",
+        observedPublicIpHash: observedIp
+          ? `sha256:${createHash("sha256").update(observedIp).digest("hex")}`
+          : null,
+        probeStatus: compactString(row.probeStatus)?.slice(0, 40) ?? "unknown",
+        provider: compactString(row.provider)?.slice(0, 80) ?? null,
+        regionVerificationSource: compactString(row.regionVerificationSource)?.slice(0, 80) ?? null,
+      };
+    })
+    : [];
+  const egressPreflight = Object.keys(egressRecord).length > 0
+    ? {
+      artifactVersion: compactString(egressRecord.artifactVersion)?.slice(0, 80) ?? null,
+      attempts: egressAttempts,
+      error: compactString(egressRecord.error)?.slice(0, 240) ?? null,
+      expectedEgressPublicIpHash: compactString(egressRecord.expectedEgressPublicIpHash)?.slice(0, 80) ?? null,
+      expectedEgressRegion: compactString(egressRecord.expectedEgressRegion)?.slice(0, 80) ?? null,
+      probeStatus: compactString(egressRecord.probeStatus)?.slice(0, 40) ?? null,
+      provider: compactString(egressRecord.provider)?.slice(0, 80) ?? null,
+      proxyModeEnabled: egressRecord.proxyModeEnabled === true,
+      regionVerificationSource: compactString(egressRecord.regionVerificationSource)?.slice(0, 80) ?? null,
+    }
+    : null;
   const body = Buffer.from(`${JSON.stringify({
     artifactOnly: true,
-    artifactVersion: "certscore.v2_lambda_failure_diagnostic.1",
+    artifactVersion: "certscore.v2_lambda_failure_diagnostic.2",
     cancellationReason: input.cancellationReason.slice(0, 240),
     cancellationObservedAt: input.cancellationObservedAt.toISOString(),
     ...(input.cancellationRequestedAt ? {
@@ -2846,6 +2943,7 @@ async function writeAndUploadFailureDiagnostic(input: {
     generatedAt: new Date().toISOString(),
     diagnosticUploadStartedAt: new Date().toISOString(),
     handlerElapsedMs: Date.now() - input.handlerStartedAt.getTime(),
+    egressPreflight,
     lastCheckpoint: checkpoints.at(-1) ?? null,
     phaseCheckpoints: checkpoints,
     productionFindingIntegration: false,
@@ -3756,8 +3854,7 @@ export async function handler(event: unknown, options: HandlerOptions = {}) {
     let failureDiagnostic: Awaited<ReturnType<typeof writeAndUploadFailureDiagnostic>> | undefined;
     if (
       artifactRoot &&
-      diagnosticBudgetAvailable &&
-      (scannerDeadlineAborted || error instanceof LocalV2DagLambdaSafetyTimeoutError)
+      diagnosticBudgetAvailable
     ) {
       const diagnosticUploadStartedAt = now();
       console.info("[v2-lambda-terminal] failure diagnostic upload started", {

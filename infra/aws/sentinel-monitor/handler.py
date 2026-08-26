@@ -184,6 +184,41 @@ def assess_freshness_verification_failure(error, created=None):
         "freshnessVerificationError": str(error)[:500],
     }
 
+def terminal_scan_error(value):
+    """Extract the bounded terminal error already returned by a scan transport."""
+    if not isinstance(value, dict):
+        return None, None
+    candidates = [value]
+    for key in ("result", "structuredContent", "scan", "data"):
+        nested = value.get(key)
+        if isinstance(nested, dict):
+            candidates.append(nested)
+    for candidate in candidates:
+        error = candidate.get("error")
+        if isinstance(error, dict):
+            message = error.get("message") or error.get("detail") or error.get("error")
+            code = error.get("code") or error.get("type")
+        else:
+            message = error
+            code = candidate.get("errorCode")
+        if isinstance(message, str) and message.strip():
+            return message.strip()[:500], str(code)[:120] if code else None
+    return None, None
+
+def terminal_failure_freshness(created=None):
+    """Freshness is not applicable when execution itself reached a terminal failure."""
+    created = created if isinstance(created, dict) else {}
+    return {
+        "authoritativeCreatedAt": None,
+        "authoritativeUrl": None,
+        "creationMetadataFreshnessDecision": created.get("freshnessDecision"),
+        "creationMetadataReportedReuse": scan_creation_metadata_reports_reuse(created),
+        "freshness": "not_applicable_terminal_failure",
+        "freshnessIssue": False,
+        "freshnessReason": None,
+        "freshnessReasonCodes": [],
+    }
+
 def scanner_incident_for_row(row):
     """Return at most one execution incident per scan, with all reason codes."""
     reasons = []
@@ -192,8 +227,15 @@ def scanner_incident_for_row(row):
         reasons.append("freshness verification failed: " + str(row.get("freshnessReason") or "unknown reason"))
         reason_codes.extend(row.get("freshnessReasonCodes") or ["freshness_invariant_failed"])
     if status(row) not in USABLE_SCAN_STATUSES:
-        reasons.append("scan did not reach a completed usable status")
-        reason_codes.append("scan_not_completed")
+        terminal_error = row.get("terminalError")
+        if terminal_error:
+            reasons.append("scan failed: " + str(terminal_error))
+            reason_codes.append("scan_terminal_failure")
+            if row.get("terminalErrorCode"):
+                reason_codes.append("scan_error_" + str(row.get("terminalErrorCode"))[:80])
+        else:
+            reasons.append("scan did not reach a completed usable status")
+            reason_codes.append("scan_not_completed")
     if not reasons:
         return None
     return {
@@ -210,6 +252,9 @@ def reconcile_scanner_incidents(incidents, api_key, run_started_at):
         sid = incident.get("scanId")
         requested_url = incident.get("requestedUrl")
         if not sid or not requested_url:
+            unresolved.append(incident)
+            continue
+        if status(incident) in ("failed", "expired", "error", "no_go") and incident.get("terminalError"):
             unresolved.append(incident)
             continue
         try:
@@ -429,12 +474,17 @@ def handler(event, context):
             sid, st, bundle, created = out; observed = signals(bundle)
             missing = [s for s in p.get("expectedSignals", []) if not observed.get(s)]
             requested_url = ROOT + p["url"]
-            try:
-                authoritative = load_authoritative_scan(sid, key)
-                freshness = assess_authoritative_freshness(requested_url, started, authoritative, created)
-            except Exception as error:
-                freshness = assess_freshness_verification_failure(error, created)
-            row = {"page": p["key"], "requestedUrl": requested_url, "location": loc, "transport": transport, "scanId": sid, "status": status(st), "durationMs": int((time.time()-t)*1000), "throttleSeconds": throttle_seconds, "expectedSignals": p.get("expectedSignals", []), "observedSignals": [name for name, present in observed.items() if present], "missing": missing, "comparison": "findings_and_evidence", "pollCount": st.get("sentinelPollCount", 0) if isinstance(st, dict) else 0, "firstPollAt": st.get("sentinelFirstPollAt") if isinstance(st, dict) else None, "lastPollAt": st.get("sentinelLastPollAt") if isinstance(st, dict) else None, **freshness}
+            scan_status = status(st)
+            terminal_error, terminal_error_code = terminal_scan_error(st)
+            if scan_status in ("failed", "expired", "error", "no_go"):
+                freshness = terminal_failure_freshness(created)
+            else:
+                try:
+                    authoritative = load_authoritative_scan(sid, key)
+                    freshness = assess_authoritative_freshness(requested_url, started, authoritative, created)
+                except Exception as error:
+                    freshness = assess_freshness_verification_failure(error, created)
+            row = {"page": p["key"], "requestedUrl": requested_url, "location": loc, "transport": transport, "scanId": sid, "status": scan_status, "terminalError": terminal_error, "terminalErrorCode": terminal_error_code, "durationMs": int((time.time()-t)*1000), "throttleSeconds": throttle_seconds, "expectedSignals": p.get("expectedSignals", []), "observedSignals": [name for name, present in observed.items() if present], "missing": missing, "comparison": "findings_and_evidence", "pollCount": st.get("sentinelPollCount", 0) if isinstance(st, dict) else 0, "firstPollAt": st.get("sentinelFirstPollAt") if isinstance(st, dict) else None, "lastPollAt": st.get("sentinelLastPollAt") if isinstance(st, dict) else None, **freshness}
             if missing: corpus_issues.append({**row, "issue": "required signals missing: " + ", ".join(missing)})
             incident = scanner_incident_for_row(row)
             if incident:

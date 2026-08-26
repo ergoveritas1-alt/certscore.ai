@@ -113,6 +113,34 @@ class AuthoritativeFreshnessTests(unittest.TestCase):
 
 
 class ScannerIncidentTests(unittest.TestCase):
+    def test_terminal_failure_reports_transport_error_without_freshness_noise(self):
+        message, code = handler.terminal_scan_error({
+            "status": "failed",
+            "error": {
+                "code": "v2_dag_lambda_worker_failed",
+                "message": "Required regional scanner egress preflight did not verify configured proxy and expected public region.",
+            },
+        })
+        freshness = handler.terminal_failure_freshness({"freshnessDecision": "queued_new_scan"})
+        incident = handler.scanner_incident_for_row({
+            "scanId": "scan-failed",
+            "status": "failed",
+            "terminalError": message,
+            "terminalErrorCode": code,
+            **freshness,
+        })
+
+        self.assertFalse(freshness["freshnessIssue"])
+        self.assertEqual(freshness["freshness"], "not_applicable_terminal_failure")
+        self.assertEqual(
+            incident["issue"],
+            "scan failed: Required regional scanner egress preflight did not verify configured proxy and expected public region.",
+        )
+        self.assertEqual(
+            incident["issueCodes"],
+            ["scan_terminal_failure", "scan_error_v2_dag_lambda_worker_failed"],
+        )
+
     def test_one_scan_produces_one_incident_with_multiple_reason_codes(self):
         incident = handler.scanner_incident_for_row({
             "scanId": "scan-123",
@@ -165,6 +193,27 @@ class ScannerIncidentTests(unittest.TestCase):
         self.assertEqual(len(resolved), 1)
         self.assertEqual(resolved[0]["status"], "completed")
         self.assertNotIn("freshnessVerificationError", resolved[0])
+
+    def test_pre_email_reconciliation_does_not_replace_a_known_terminal_failure_with_a_404(self):
+        incident = {
+            "scanId": "scan-failed",
+            "requestedUrl": "https://ergoveritas.com/.well-known/canary.html",
+            "status": "failed",
+            "terminalError": "regional egress preflight failed",
+            "issue": "scan failed: regional egress preflight failed",
+            "issueCodes": ["scan_terminal_failure"],
+        }
+
+        with mock.patch.object(handler, "load_authoritative_scan") as load:
+            unresolved, resolved = handler.reconcile_scanner_incidents(
+                [incident],
+                "test-api-key",
+                "2026-08-12T16:25:30Z",
+            )
+
+        load.assert_not_called()
+        self.assertEqual(unresolved, [incident])
+        self.assertEqual(resolved, [])
 
 
 class McpIdentityTests(unittest.TestCase):
