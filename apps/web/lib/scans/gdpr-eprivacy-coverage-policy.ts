@@ -6207,6 +6207,11 @@ function derivePostRejectOutcome(input: GdprEprivacyCoveragePolicyInput) {
     "refusalSignalContradictsAction",
     "refusal_signal_contradicts_action"
   ]) === true;
+  const persistenceScoreEffect = getString(reductionEvidence, ["scoreEffect", "score_effect"]);
+  const storagePresenceDoesNotEstablishActiveUse = getBoolean(reductionEvidence, [
+    "storagePresenceDoesNotEstablishActiveUse",
+    "storage_presence_does_not_establish_active_use"
+  ]) === true;
   const retainedRejectInteractionFailureClass =
     getString(reductionEvidence, ["rejectInteractionFailureClass", "reject_interaction_failure_class"]) ??
       getStringArray(reductionEvidence, ["negativeReasonCodes", "negative_reason_codes"]).find((reason) =>
@@ -6234,6 +6239,8 @@ function derivePostRejectOutcome(input: GdprEprivacyCoveragePolicyInput) {
     preConsentStorageNotClearedCount,
     preConsentStorageNotClearedItems: compactArray(preConsentStorageNotClearedItems, 5),
     refusalSignalContradictsAction,
+    scoreEffect: persistenceScoreEffect === "none" ? "none" : "canonical_post_refusal_policy",
+    storagePresenceDoesNotEstablishActiveUse,
     rejectInteractionFailureClass,
     rejectInteractionFailureReason,
     rejectInteractionConfirmed: rejectInteractionSucceeded
@@ -6347,6 +6354,26 @@ function derivePostRejectOutcome(input: GdprEprivacyCoveragePolicyInput) {
   }
 
   if (reductionStatus === "not_reduced") {
+    const persistenceOnly =
+      preConsentStorageNotClearedCount > 0 &&
+      postRejectNonEssentialRequestsRetained !== true &&
+      concretePostRejectNonEssentialRows.length === 0 &&
+      !refusalSignalContradictsAction;
+    if (persistenceOnly) {
+      return makeOutcome(
+        "post_reject_tracking_reduction",
+        "Review signal",
+        "A confirmed reject action was retained, and the exact same classified non-essential storage value remained in the settled snapshot. Stored presence alone does not establish active post-refusal use.",
+        reductionEvidenceRefs,
+        {
+          retainedEvidence: {
+            ...postRejectRetainedEvidence,
+            scoreEffect: "none",
+            storagePresenceDoesNotEstablishActiveUse: true
+          }
+        }
+      );
+    }
     const hasConcretePostRejectPersistenceEvidence =
       postRejectNonEssentialRequestsRetained === true &&
       concretePostRejectNonEssentialRows.length > 0;

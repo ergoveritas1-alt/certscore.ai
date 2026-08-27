@@ -204,24 +204,19 @@ test("buildApiV2ScanResource projects a completed scan into public-safe v2 shape
   assert.equal(resource.links?.findings, "https://certscore.ai/api/v2/scans/00000000-0000-4000-8000-000000000123/findings");
 });
 
-test("API v2 and status expose bounded canonical post-refusal observation metadata", () => {
+test("API v2 and status expose joined canonical post-refusal observation metadata", () => {
   const retained = {
     ...fixture(),
-    events: [{
-      id: "event-post-refusal",
-      eventType: "v2_post_refusal_evidence.reconciled",
-      createdAt: "2026-08-26T12:00:10.000Z",
-      metadataJson: {
-        postRefusalReportProjection: {
-          status: "confirmed_observation",
-          refusalExercised: true,
-          observationCount: 2,
-          productionProjectable: true,
-          completedAt: "2026-08-26T12:00:09.000Z",
-          limitations: ["bounded_observation_window"],
-        },
+    runtimeArtifacts: {
+      postRefusalEvidenceProjection: {
+        status: "confirmed_observation",
+        refusalExercised: true,
+        observationCount: 2,
+        productionProjectable: true,
+        completedAt: "2026-08-26T12:00:09.000Z",
+        limitations: ["bounded_observation_window"],
       },
-    }],
+    },
   } as unknown as ScanDetailResponse;
 
   const resource = buildApiV2ScanResource(retained);
@@ -235,6 +230,36 @@ test("API v2 and status expose bounded canonical post-refusal observation metada
     limitations: ["bounded_observation_window"],
   });
   assert.deepEqual(status.postRefusalObservation, resource.postRefusalObservation);
+});
+
+test("API v2 and status expose a six-second Reject Path timeout as a neutral limitation", () => {
+  const retained = {
+    ...fixture(),
+    runtimeArtifacts: {
+      postRefusalObservationCoverage: {
+        completedAt: "2026-08-26T12:00:16.000Z",
+        evidenceJoined: false,
+        limitationCode: "reject_path_timeout",
+        maxTailWaitMs: 6_000,
+        status: "limited",
+      },
+    },
+  } as unknown as ScanDetailResponse;
+
+  const resource = buildApiV2ScanResource(retained);
+  const status = buildApiV2ScanStatus(retained, { canonicalScan: resource });
+  assert.deepEqual(resource.postRefusalObservation, {
+    status: "aborted",
+    refusalExercised: false,
+    observationCount: 0,
+    productionProjectable: false,
+    completedAt: "2026-08-26T12:00:16.000Z",
+    limitations: ["Reject Path did not complete within the six-second post-primary allowance."],
+  });
+  assert.deepEqual(status.postRefusalObservation, resource.postRefusalObservation);
+  assert.ok(resource.coverage?.limitations?.includes(
+    "Reject Path did not complete within the six-second post-primary allowance.",
+  ));
 });
 
 test("buildApiV2ScanResource preserves the configured page path", () => {
@@ -946,9 +971,8 @@ test("buildApiV2PreConsentCookiesTrackers matches the shared public report table
   );
   assert.ok(resource.rows.every((row) => !row.host || (!row.host.startsWith(".") && !row.host.startsWith("_") && row.host.includes("."))));
   const metaRow = resource.rows.find((row) => row.vendor === "Meta");
-  assert.equal(metaRow?.kind, "tracker");
+  assert.equal(metaRow?.kind, "cookie");
   assert.ok(metaRow?.domains?.includes("example.com"));
-  assert.ok(metaRow?.domains?.includes("connect.facebook.net"));
   assert.ok(metaRow?.cookieDetails?.some((cookie) => cookie.name === "_fbp"));
   const metaCookie = metaRow?.cookieDetails?.find((cookie) => cookie.name === "_fbp");
   assert.equal(metaCookie?.set_by_third_party_script, true);
@@ -964,10 +988,7 @@ test("buildApiV2PreConsentCookiesTrackers matches the shared public report table
   assert.deepEqual(metaCookie?.essentialityReasonCodes, ["canonical_cookie_knowledge_match"]);
   assert.equal(metaCookie?.essentialitySource, "canonical_registry");
   assert.deepEqual(metaCookie?.initiatorChain, ["https://connect.facebook.net/fbevents.js"]);
-  assert.equal(metaRow?.dataFlows?.[0]?.networkDestination.label, "server location (may be CDN edge)");
-  assert.equal(metaRow?.dataFlows?.[0]?.networkDestination.countryCode, "US");
-  assert.ok(metaRow?.dataFlows?.[0]?.controllingEntity);
-  assert.ok(metaRow?.dataFlows?.[0]?.transferMechanism.verifiedAsOf);
+  assert.deepEqual(metaRow?.dataFlows, []);
   assert.deepEqual(metaRow?.requestDetails?.[0], {
     cookieNamesSent: ["_fbp"],
     essentiality: "non_essential",

@@ -5857,6 +5857,7 @@ function buildMaterializedLocalV2Detail(
     : getReconciledPostRefusalReportProjection(scanRecord);
   const postRefusalRuntimeProjection = buildPostRefusalRuntimeProjection(
     postRefusalReportProjection,
+    bundle.postRefusalLaneOutcome,
   );
   const inheritedRuntimeArtifacts = providedScanNoGoAssessment || localV2NoGo
     ? { ...(scanRecord.runtimeArtifacts ?? {}) }

@@ -5724,8 +5724,8 @@ const UNIFIED_FINDING_PRESENTATION_COPY_OVERRIDES: Record<
     whyThisMatters: "Non-essential activity after a confirmed refusal can show that the consent control is not enforcing the visitor's recorded choice."
   },
   pre_consent_storage_not_cleared: {
-    suggestedFix: "Review non-essential storage created before choice and clear or deactivate it when refusal is confirmed unless it is genuinely necessary.",
-    whyThisMatters: "Non-essential identifiers that remain after refusal can continue carrying state even when no new tracker request is observed."
+    suggestedFix: "Review the retained identifier and either clear it after confirmed refusal or document and verify that it remains inactive and is not transmitted or used.",
+    whyThisMatters: "The exact same classified non-essential identifier remained stored after refusal. Stored presence alone does not establish active post-refusal use."
   },
   refusal_signal_contradicts_action: {
     suggestedFix: "Correct the CMP state transition so the post-refusal consent signal records denied optional purposes consistently with the confirmed reject action.",

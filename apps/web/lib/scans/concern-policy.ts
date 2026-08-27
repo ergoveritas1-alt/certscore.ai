@@ -1060,6 +1060,21 @@ function isRejectTrackingPersistenceConcern(
   return /reject_did_not_reduce_tracking|reject_did_not_reduce_third_party_cookies|post_refusal_non_essential_activity|pre_consent_storage_not_cleared|refusal_signal_contradicts_action|reject_tracking_persists_after_reject|reject.*tracking|reject.*third[-_ ]party.*cookies/.test(haystack);
 }
 
+function isStoredIdentifierPersistenceConcern(
+  concern: Pick<NormalizedConcern, "canonicalConcernKey" | "suggestedUnifiedFindingId" | "originKey" | "title">
+) {
+  return [
+    concern.canonicalConcernKey,
+    concern.suggestedUnifiedFindingId,
+    concern.originKey,
+    concern.title
+  ]
+    .filter(Boolean)
+    .join(" ")
+    .toLowerCase()
+    .includes("pre_consent_storage_not_cleared");
+}
+
 function hasProductionProjectablePostRefusalEvidence(
   rawEvidence: Record<string, unknown> | null | undefined
 ) {
@@ -1067,7 +1082,10 @@ function hasProductionProjectablePostRefusalEvidence(
     getBooleanEvidence(rawEvidence, ["postRefusalProductionProjectable"]) !== true ||
     getBooleanEvidence(rawEvidence, ["refusalExercised"]) !== true ||
     getFirstString(rawEvidence, ["refusalRegistrationStatus"]) !== "confirmed" ||
-    getBooleanEvidence(rawEvidence, ["directPostRefusalRuntimeEvidence"]) !== true
+    (
+      getBooleanEvidence(rawEvidence, ["directPostRefusalRuntimeEvidence"]) !== true &&
+      getBooleanEvidence(rawEvidence, ["exactUnchangedStoragePersistenceEvidence"]) !== true
+    )
   ) {
     return false;
   }
@@ -2820,7 +2838,9 @@ export function deriveConcernPolicy(input: {
         externalSurfacingEligibility: "eligible",
         negativeEvidenceFlags: [...negativeEvidenceFlags],
         promotionEligibility: "eligible",
-        regulatoryChecklistEligibility: "gap_observed"
+        regulatoryChecklistEligibility: isStoredIdentifierPersistenceConcern(input.concern)
+          ? "review_signal"
+          : "gap_observed"
       };
     }
     return {
@@ -3218,7 +3238,9 @@ export function deriveConcernPolicy(input: {
         externalSurfacingEligibility: "eligible",
         negativeEvidenceFlags: [...negativeEvidenceFlags],
         promotionEligibility: "eligible",
-        regulatoryChecklistEligibility: "gap_observed"
+        regulatoryChecklistEligibility: isStoredIdentifierPersistenceConcern(input.concern)
+          ? "review_signal"
+          : "gap_observed"
       };
     }
     return {

@@ -249,30 +249,23 @@ function getRetainedEvidence(row: RegulatoryCoverageRow) {
     : {};
 }
 
-function nonemptyArray(value: unknown) {
-  return Array.isArray(value) && value.length > 0;
-}
-
-function confirmedPostRefusalStorageReview(row: RegulatoryCoverageRow) {
-  if (row.id !== "post_reject_tracking_reduction") return false;
-  const retained = getRetainedEvidence(row);
-  const rejectConfirmed =
-    retained.rejectInteractionConfirmed === true ||
-    retained.refusalExercised === true;
-  const storageRetained =
-    retained.preConsentStorageNotCleared === true ||
-    retained.pre_consent_storage_not_cleared === true ||
-    (typeof retained.preConsentStorageNotClearedCount === "number" && retained.preConsentStorageNotClearedCount > 0) ||
-    (typeof retained.pre_consent_storage_not_cleared_count === "number" && retained.pre_consent_storage_not_cleared_count > 0) ||
-    nonemptyArray(retained.persistedVendors) ||
-    nonemptyArray(retained.nonEssentialItemsPersistingAfterRefusal);
-  return rejectConfirmed && storageRetained;
-}
-
 function getGdprEprivacyRowDeduction(row: RegulatoryCoverageRow) {
   if (isExcludedFromDenominator(row) || isCoverageLimited(row)) return 0;
   const policy = GDPR_EPRIVACY_POSTURE_POLICIES[row.id];
   if (!policy) return 0;
+
+  const retained = getRetainedEvidence(row);
+  if (row.id === "post_reject_tracking_reduction") {
+    if (
+      (retained.rejectInteractionConfirmed === true || retained.refusalExercised === true) &&
+      (retained.refusalSignalContradictsAction === true || retained.refusal_signal_contradicts_action === true)
+    ) {
+      return policy.gapDeduction;
+    }
+    if (retained.scoreEffect === "none") return 0;
+    if (row.assessmentStatus === "gap_observed") return policy.gapDeduction;
+    return 0;
+  }
 
   if (row.assessmentStatus === "gap_observed") {
     return policy.gapDeduction;
@@ -281,7 +274,6 @@ function getGdprEprivacyRowDeduction(row: RegulatoryCoverageRow) {
     return 0;
   }
 
-  const retained = getRetainedEvidence(row);
   if (
     row.id === "options_settings_preferences_control" &&
     (
@@ -303,16 +295,6 @@ function getGdprEprivacyRowDeduction(row: RegulatoryCoverageRow) {
   ) {
     return 0;
   }
-  if (row.id === "post_reject_tracking_reduction") {
-    if (
-      (retained.rejectInteractionConfirmed === true || retained.refusalExercised === true) &&
-      (retained.refusalSignalContradictsAction === true || retained.refusal_signal_contradicts_action === true)
-    ) {
-      return policy.gapDeduction;
-    }
-    return confirmedPostRefusalStorageReview(row) ? policy.reviewDeduction : 0;
-  }
-
   const missingSignals = row.criticalEvidence?.missingOrIncompleteSourceSignals;
   return Array.isArray(missingSignals) && missingSignals.length > 0
     ? 0
@@ -433,13 +415,17 @@ function hasWeakNegativeCoverage(row: RegulatoryCoverageRow) {
 
 function isExcludedFromDenominator(row: RegulatoryCoverageRow) {
   const retained = getRetainedEvidence(row);
+  const confirmedPostRefusalContradiction =
+    row.id === "post_reject_tracking_reduction" &&
+    (retained.rejectInteractionConfirmed === true || retained.refusalExercised === true) &&
+    (retained.refusalSignalContradictsAction === true || retained.refusal_signal_contradicts_action === true);
   const policyEvidenceAssessment = retained.policyEvidenceAssessment &&
     typeof retained.policyEvidenceAssessment === "object" &&
     !Array.isArray(retained.policyEvidenceAssessment)
       ? retained.policyEvidenceAssessment as Record<string, unknown>
       : null;
   return (
-    retained.scoreEffect === "none" ||
+    (retained.scoreEffect === "none" && !confirmedPostRefusalContradiction) ||
     policyEvidenceAssessment?.scoreEffect === "none" ||
     row.assessmentStatus === "not_applicable" ||
     row.status === "not_applicable" ||

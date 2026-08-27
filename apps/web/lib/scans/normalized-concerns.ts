@@ -3895,7 +3895,12 @@ function buildPostRefusalObservationConcerns(
     ...persistedStorageRows.map((row) => getStringValue(row.vendor))
   ]);
   const commonEvidence = {
-    directPostRefusalRuntimeEvidence: true,
+    directPostRefusalRuntimeEvidence: activityRows.length > 0 || contradictionObserved,
+    exactUnchangedStoragePersistenceEvidence:
+      persistedStorageRows.length > 0 &&
+      persistedStorageRows.every((row) =>
+        row.exactIdentityVerified === true && row.sameValueHashVerified === true
+      ),
     postRefusalPacketSha256: packetSha256,
     postRefusalProductionProjectable: true,
     refusalExercised: true,
@@ -3939,7 +3944,7 @@ function buildPostRefusalObservationConcerns(
       ? [buildConcernFromSharedInput({
           categoryId: "enforcement_outcomes_after_user_choice",
           description:
-            "Classified non-essential storage present before the reject action remained present after confirmed refusal.",
+            "The exact same classified non-essential storage value was present before the reject action and in the settled snapshot after confirmed refusal. Stored presence alone does not establish active post-refusal use.",
           domainContext,
           evidence: persistedStorageRows.slice(0, 12).map((row) =>
             `storage:${getStringValue(row.name) ?? "unknown"}`
@@ -3950,14 +3955,16 @@ function buildPostRefusalObservationConcerns(
           rawEvidence: {
             ...commonEvidence,
             preConsentStorageNotCleared: persistedStorageRows,
-            pre_consent_storage_not_cleared: persistedStorageRows
+            pre_consent_storage_not_cleared: persistedStorageRows,
+            scoreEffect: "none",
+            storagePresenceDoesNotEstablishActiveUse: true
           },
-          severity: "medium",
+          severity: "low",
           signalKey: "privacy.pre_consent_storage_not_cleared",
-          signalLabel: "Pre-consent storage remained after refusal",
+          signalLabel: "Same non-essential identifier remained stored after refusal",
           signalSource: "runtime_artifact_signal",
           sourceType: "signal",
-          title: "Pre-consent storage was not cleared after refusal"
+          title: "Same non-essential identifier remained stored after refusal"
         })]
       : []),
     ...(contradictionObserved

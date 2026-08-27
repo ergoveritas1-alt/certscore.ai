@@ -2029,7 +2029,7 @@ export const REPORT_SIGNALS: ReportSignalDefinition[] = [
   defineReportSignal(
     "runtime_artifact_signal",
     "privacy.pre_consent_storage_not_cleared",
-    "Pre-consent storage remained after refusal",
+    "Same non-essential identifier remained stored after refusal",
     "enforcement_outcomes_after_user_choice",
     ["third_party_network_cookie_surface"],
     ["consent_lawful_basis_user_choice"]
@@ -2920,7 +2920,7 @@ export const REPORT_UNIFIED_FINDINGS = [
   }),
   defineReportUnifiedFinding({
     id: "pre_consent_storage_not_cleared",
-    label: "Pre-consent storage remained after refusal",
+    label: "Same non-essential identifier remained stored after refusal",
     owner: "enforcement_outcomes_after_user_choice",
     mirrors: ["third_party_network_cookie_surface"],
     overlays: ["consent_lawful_basis_user_choice"],

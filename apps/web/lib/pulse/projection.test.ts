@@ -313,6 +313,55 @@ function pulseScanRecord(overrides: Record<string, unknown> = {}) {
   } as never;
 }
 
+test("Pulse reports a Reject Path barrier timeout without changing completed scan status", () => {
+  const pulse = buildPulseProjection({
+    detail: "summary",
+    format: "json",
+    freshnessMode: "latest",
+    pulseRequestId: "reject-timeout-fixture",
+    requestedUrl: "https://example.com/",
+    resolutionMode: "test",
+    scanRecord: pulseScanRecord({
+      accessPostureSummary: {
+        homepageFetchStatus: "ok",
+        interruptionLabel: null,
+        interruptionReason: null,
+        stopOutcomeTitle: null,
+        stopReason: null,
+        stopReviewTitle: null,
+      },
+      runtimeArtifacts: {
+        postRefusalObservationCoverage: {
+          completedAt: "2026-08-26T12:00:16.000Z",
+          evidenceJoined: false,
+          limitationCode: "reject_path_timeout",
+          maxTailWaitMs: 6_000,
+          status: "limited",
+        },
+      },
+      scan: {
+        completedAt: "2026-08-26T12:00:16.000Z",
+        createdAt: "2026-08-26T12:00:00.000Z",
+        domainHostname: "example.com",
+        id: "00000000-0000-4000-8000-000000000123",
+        pagesRequested: 1,
+        pagesScanned: 1,
+        startedAt: "2026-08-26T12:00:01.000Z",
+        status: "completed",
+      },
+      snapshot: { certscore_overall: 80 },
+    }),
+    waitSeconds: 0,
+  }) as Record<string, unknown>;
+  const coverage = pulse.coverage as { limitations?: string[]; status?: string };
+
+  assert.equal(pulse.scanStatus, "completed");
+  assert.equal(coverage.status, "complete");
+  assert.ok(coverage.limitations?.includes(
+    "Reject Path did not complete within the six-second post-primary allowance.",
+  ));
+});
+
 test("Pulse projection does not cap top findings by detail level", () => {
   const source = readFileSync(new URL("./projection.ts", import.meta.url), "utf8");
 

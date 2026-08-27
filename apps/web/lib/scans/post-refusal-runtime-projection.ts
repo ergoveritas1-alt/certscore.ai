@@ -1,4 +1,7 @@
-import type { PostRefusalReportProjection } from "@certscore/contracts";
+import type {
+  PostRefusalLaneOutcome,
+  PostRefusalReportProjection,
+} from "@certscore/contracts";
 
 /**
  * Maps the verified, bounded WS01 supplement into the canonical WC01 runtime
@@ -7,8 +10,56 @@ import type { PostRefusalReportProjection } from "@certscore/contracts";
  */
 export function buildPostRefusalRuntimeProjection(
   projection: PostRefusalReportProjection | null,
+  laneOutcome?: PostRefusalLaneOutcome | null,
 ) {
-  if (!projection) return {};
+  const coverageProjection = laneOutcome
+    ? {
+        completedAt: laneOutcome.completedAt,
+        evidenceJoined: laneOutcome.evidenceJoined,
+        limitationCode: laneOutcome.limitationCode ?? null,
+        maxTailWaitMs: laneOutcome.maxTailWaitMs,
+        status: laneOutcome.status === "joined"
+          ? "complete"
+          : laneOutcome.status === "not_applicable"
+            ? "not_applicable"
+            : "limited",
+      }
+    : null;
+  if (!projection) {
+    if (!coverageProjection) return {};
+    if (coverageProjection.status === "not_applicable") {
+      return {
+        postRefusalObservationCoverage: coverageProjection,
+        post_refusal_observation_coverage: coverageProjection,
+      };
+    }
+    const limitationMessage = coverageProjection.limitationCode === "reject_path_timeout"
+      ? "Reject Path did not complete within the six-second post-primary allowance."
+      : "Reject Path worker failed before verified evidence could be joined.";
+    const unavailableReductionEvidence = {
+      concretePostRejectNonEssentialDetailsRetained: false,
+      postRejectNonEssentialActivityRetained: false,
+      postRejectNonEssentialRequestCount: 0,
+      postRejectNonEssentialRequests: [],
+      postRejectRequestRecordsObserved: false,
+      postRejectWindowAvailable: false,
+      preConsentStorageNotCleared: false,
+      preConsentStorageNotClearedCount: 0,
+      preConsentStorageNotClearedItems: [],
+      productionProjectable: false,
+      reductionEvaluationStatus: "not_testable",
+      refusalSignalContradictsAction: false,
+      rejectInteractionConfirmed: false,
+      rejectInteractionFailureClass: coverageProjection.limitationCode,
+      rejectInteractionFailureReason: limitationMessage,
+    };
+    return {
+      postRefusalObservationCoverage: coverageProjection,
+      post_refusal_observation_coverage: coverageProjection,
+      postRejectTrackingReductionEvidence: unavailableReductionEvidence,
+      post_reject_tracking_reduction_evidence: unavailableReductionEvidence,
+    };
+  }
   const confirmed = projection.productionProjectable &&
     projection.registrationStatus === "confirmed" &&
     projection.refusalExercised;
@@ -32,17 +83,20 @@ export function buildPostRefusalRuntimeProjection(
       }))
     : [];
   const persistedStorage = confirmed
-    ? projection.preConsentStorageNotCleared.map((row) => ({
-        category: row.category ?? "unknown",
-        name: row.name,
-        nonEssential: true,
-        storageType: row.storageType,
-        ...(row.vendor ? { vendor: row.vendor } : {}),
-      }))
+    ? projection.preConsentStorageNotCleared
+        .filter((row) => row.exactIdentityVerified && row.sameValueHashVerified)
+        .map((row) => ({
+          category: row.category ?? "unknown",
+          exactIdentityVerified: true,
+          name: row.name,
+          nonEssential: true,
+          sameValueHashVerified: true,
+          storageType: row.storageType,
+          ...(row.vendor ? { vendor: row.vendor } : {}),
+        }))
     : [];
-  const failureObserved = activityRows.length > 0 ||
-    persistedStorage.length > 0 ||
-    projection.contradictionObserved;
+  const activeFailureObserved = activityRows.length > 0 || projection.contradictionObserved;
+  const persistenceOnly = persistedStorage.length > 0 && !activeFailureObserved;
   const reductionEvidence = {
     concretePostRejectNonEssentialDetailsRetained: activityRows.length > 0,
     postRejectNonEssentialActivityRetained: activityRows.length > 0,
@@ -55,14 +109,24 @@ export function buildPostRefusalRuntimeProjection(
     preConsentStorageNotClearedItems: persistedStorage,
     productionProjectable: projection.productionProjectable,
     reductionEvaluationStatus: confirmed
-      ? failureObserved ? "not_reduced" : "no_post_reject_non_essential_observed"
+      ? activeFailureObserved || persistenceOnly
+        ? "not_reduced"
+        : "no_post_reject_non_essential_observed"
       : "not_testable",
     refusalSignalContradictsAction: confirmed && projection.contradictionObserved,
     rejectInteractionConfirmed: confirmed,
     reportProjectionContractVersion: projection.contractVersion,
+    scoreEffect: persistenceOnly ? "none" : "canonical_post_refusal_policy",
+    storagePresenceDoesNotEstablishActiveUse: persistedStorage.length > 0,
     ...(projection.packetSha256 ? { sourcePacketSha256: projection.packetSha256 } : {}),
   };
   return {
+    ...(coverageProjection
+      ? {
+          postRefusalObservationCoverage: coverageProjection,
+          post_refusal_observation_coverage: coverageProjection,
+        }
+      : {}),
     postRefusalEvidenceProjection: projection,
     post_refusal_evidence_projection: projection,
     postRejectTrackingReductionEvidence: reductionEvidence,

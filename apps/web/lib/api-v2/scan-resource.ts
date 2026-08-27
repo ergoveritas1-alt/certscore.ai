@@ -527,9 +527,31 @@ function deriveApiV2PostRefusalObservation(scanRecord: ScanDetailResponse) {
       Date.parse(right.createdAt) - Date.parse(left.createdAt) || right.id.localeCompare(left.id)
     )[0];
   const metadata = plainRecord(event?.metadataJson);
-  const projection = plainRecord(metadata?.postRefusalReportProjection);
+  const runtimeArtifacts = plainRecord(scanRecord.runtimeArtifacts);
+  const projection = plainRecord(
+    runtimeArtifacts?.postRefusalEvidenceProjection ??
+    runtimeArtifacts?.post_refusal_evidence_projection ??
+    metadata?.postRefusalReportProjection,
+  );
   const status = stringOrNull(projection?.status);
-  if (!status || !supportedStatuses.has(status)) return null;
+  if (!status || !supportedStatuses.has(status)) {
+    const coverage = plainRecord(
+      runtimeArtifacts?.postRefusalObservationCoverage ??
+      runtimeArtifacts?.post_refusal_observation_coverage,
+    );
+    const limitationCode = stringOrNull(coverage?.limitationCode);
+    if (coverage?.status !== "limited" || !limitationCode) return null;
+    return {
+      status: "aborted" as const,
+      refusalExercised: false,
+      observationCount: 0,
+      productionProjectable: false,
+      completedAt: dateStringOrNull(coverage.completedAt),
+      limitations: [limitationCode === "reject_path_timeout"
+        ? "Reject Path did not complete within the six-second post-primary allowance."
+        : "Reject Path worker failed before verified evidence could be joined."],
+    };
+  }
   return {
     status: status as
       | "confirmed_observation"
@@ -558,6 +580,17 @@ function deriveCoverage(scanRecord: ScanDetailResponse) {
     };
   }
   const posture = scanRecord.accessPostureSummary;
+  const runtimeArtifacts = plainRecord(scanRecord.runtimeArtifacts);
+  const postRefusalCoverage = plainRecord(
+    runtimeArtifacts?.postRefusalObservationCoverage ??
+    runtimeArtifacts?.post_refusal_observation_coverage,
+  );
+  const postRefusalLimitationCode = stringOrNull(postRefusalCoverage?.limitationCode);
+  const postRefusalLimitation = postRefusalCoverage?.status === "limited"
+    ? postRefusalLimitationCode === "reject_path_timeout"
+      ? "Reject Path did not complete within the six-second post-primary allowance."
+      : "Reject Path worker failed before verified evidence could be joined."
+    : null;
   const homepageObserved = scanRecord.scan.pagesScanned > 0 || posture.homepageFetchStatus === "ok";
   const limited =
     scanRecord.scan.status !== "completed" ||
@@ -575,7 +608,10 @@ function deriveCoverage(scanRecord: ScanDetailResponse) {
   return {
     status,
     summary,
-    limitations: ["Automated public-web scan only."]
+    limitations: [
+      "Automated public-web scan only.",
+      ...(postRefusalLimitation ? [postRefusalLimitation] : []),
+    ]
   };
 }
 

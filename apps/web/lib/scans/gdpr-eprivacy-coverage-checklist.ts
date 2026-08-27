@@ -376,14 +376,14 @@ const CHECKLIST_ROWS: ChecklistRowDefinition[] = [
   {
     id: "post_reject_tracking_reduction",
     label: "Post-choice tracking reduction",
-    explanation: "Deferred from the current production core scanner; retained post-choice tracking evidence is review context, not a production gap conclusion.",
+    explanation: "Whether a confirmed reject action was followed by retained non-essential activity, a contradictory consent signal, or the exact same classified non-essential storage value.",
     findingIds: [
       "reject_did_not_reduce_tracking",
       "reject_did_not_reduce_third_party_cookies",
       "reject_tracking_persists_after_reject"
     ],
     defaultFindingStatus: "Review signal",
-    notObservedText: "Post-choice tracking reduction is deferred from the current production core scanner.",
+    notObservedText: "No eligible non-essential post-refusal activity or contradictory consent signal was retained after the confirmed reject action.",
     requiresPublicWebCoverage: true
   },
   {
@@ -671,7 +671,7 @@ function getMissingEvidenceNeeded(input: {
     case "consent_choice_quality":
       return "Confirmed granular preference center evidence, purpose/vendor choices, default toggle states, save choices, and accept/reject visual parity.";
     case "post_reject_tracking_reduction":
-      return "Post-choice consent-flow automation is deferred from the production core scanner; use retained evidence only as analyst review context.";
+      return "Confirmed reject action plus refusal-anchored request/write evidence, a contradictory consent signal, or exact unchanged storage identity-and-value evidence.";
     case "preference_withdrawal_control":
       return "Cookie preference center, cookie-category controls, or consent-withdrawal control tied to GDPR/ePrivacy cookie consent.";
     case "sensitive_surfaces_third_party_tracking":
@@ -2397,6 +2397,20 @@ function specializeChecklistRow(input: {
       explanation: "A reject interaction was confirmed and retained evidence showed non-essential tracking decreased after refusal. This positive control does not neutralize pre-consent tracking observed before any choice.",
       label: input.definition.label,
       status: "Observed" as const
+    };
+  }
+
+  if (
+    input.definition.id === "post_reject_tracking_reduction" &&
+    input.status === "Review signal" &&
+    input.coverageOutcome?.criticalEvidence.retainedEvidence.scoreEffect === "none" &&
+    input.coverageOutcome.criticalEvidence.retainedEvidence.preConsentStorageNotCleared === true
+  ) {
+    return {
+      evidenceRefs: input.evidenceRefs,
+      explanation: "The exact same classified non-essential storage identity and value were present before the reject action and in the settled snapshot after confirmed refusal. Stored presence alone does not establish active post-refusal use, so this review signal does not affect score.",
+      label: "Same non-essential identifier remained stored after refusal",
+      status: "Review signal" as const
     };
   }
 

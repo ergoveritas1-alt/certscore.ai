@@ -720,7 +720,20 @@ function deriveCoverage(scanRecord: ScanDetailResponse) {
     };
   }
   const posture = scanRecord.accessPostureSummary;
-  const interruptions =
+  const runtimeArtifacts = asRecord(scanRecord.runtimeArtifacts);
+  const postRefusalCoverage = asRecord(
+    runtimeArtifacts?.postRefusalObservationCoverage ??
+    runtimeArtifacts?.post_refusal_observation_coverage,
+  );
+  const postRefusalLimitationCode = typeof postRefusalCoverage?.limitationCode === "string"
+    ? postRefusalCoverage.limitationCode
+    : null;
+  const postRefusalLimitation = postRefusalCoverage?.status === "limited"
+    ? postRefusalLimitationCode === "reject_path_timeout"
+      ? "Reject Path did not complete within the six-second post-primary allowance."
+      : "Reject Path worker failed before verified evidence could be joined."
+    : null;
+  const accessInterruptions =
     posture.interruptionLabel || posture.interruptionReason || posture.stopOutcomeTitle || posture.stopReviewTitle || posture.stopReason
       ? [
           {
@@ -734,6 +747,12 @@ function deriveCoverage(scanRecord: ScanDetailResponse) {
           }
         ]
       : [];
+  const interruptions = [
+    ...accessInterruptions,
+    ...(postRefusalLimitation
+      ? [{ label: "Reject Path unavailable", reason: postRefusalLimitation }]
+      : []),
+  ];
   const homepageObserved = scanRecord.scan.pagesScanned > 0 || posture.homepageFetchStatus === "ok";
   const limited =
     scanRecord.scan.status !== "completed" ||
@@ -756,7 +775,11 @@ function deriveCoverage(scanRecord: ScanDetailResponse) {
     homepageObserved,
     interruptionCount: interruptions.length,
     summary,
-    limitations: ["Automated public-web scan only.", PULSE_COVERAGE_LIMITATION_COPY],
+    limitations: [
+      "Automated public-web scan only.",
+      PULSE_COVERAGE_LIMITATION_COPY,
+      ...(postRefusalLimitation ? [postRefusalLimitation] : []),
+    ],
     interruptions: interruptions.slice(0, 10)
   };
 }

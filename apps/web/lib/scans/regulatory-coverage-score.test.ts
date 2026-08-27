@@ -361,24 +361,65 @@ test("confirmed post-refusal enforcement failure has a six-point family maximum"
   assert.equal(repeated.score, 94);
 });
 
-test("confirmed passive post-refusal storage persistence has a three-point effect", () => {
+test("confirmed passive post-refusal storage persistence is score-neutral", () => {
+  const result = deriveRegulatoryCoverageScore({
+    framework: "gdpr_eprivacy",
+    rows: [
+      {
+        assessmentStatus: "checked",
+        evidenceState: "observed",
+        id: "privacy_notice_availability",
+        status: "Observed"
+      },
+      {
+        assessmentStatus: "review_signal",
+        criticalEvidence: {
+          retainedEvidence: {
+            preConsentStorageNotClearedCount: 1,
+            rejectInteractionConfirmed: true,
+            scoreEffect: "none",
+            storagePresenceDoesNotEstablishActiveUse: true
+          }
+        },
+        evidenceState: "observed",
+        id: "post_reject_tracking_reduction",
+        status: "Review signal"
+      }
+    ]
+  });
+  const baseline = deriveRegulatoryCoverageScore({
+    framework: "gdpr_eprivacy",
+    rows: [{
+      assessmentStatus: "checked",
+      evidenceState: "observed",
+      id: "privacy_notice_availability",
+      status: "Observed"
+    }]
+  });
+
+  assert.equal(result.score, baseline.score);
+});
+
+test("passive persistence cannot suppress a separately retained post-refusal contradiction", () => {
   const result = deriveRegulatoryCoverageScore({
     framework: "gdpr_eprivacy",
     rows: [{
-      assessmentStatus: "review_signal",
+      assessmentStatus: "gap_observed",
       criticalEvidence: {
         retainedEvidence: {
           preConsentStorageNotClearedCount: 1,
-          rejectInteractionConfirmed: true
+          refusalSignalContradictsAction: true,
+          rejectInteractionConfirmed: true,
+          scoreEffect: "none"
         }
       },
       evidenceState: "observed",
       id: "post_reject_tracking_reduction",
-      status: "Review signal"
+      status: "Gap observed"
     }]
   });
 
-  assert.equal(result.score, 97);
+  assert.equal(result.score, 94);
 });
 
 test("unconfirmed post-refusal review remains score-neutral", () => {
