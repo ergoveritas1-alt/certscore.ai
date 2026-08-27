@@ -6,6 +6,7 @@ import type { SharedScanConfig } from "@website-signal-risk-scanner/shared";
 import {
   LOCAL_V2_DAG_LAMBDA_RESULT_CONTRACT_VERSION,
   buildLocalV2DagLambdaDispatchPayload,
+  type LocalV2DagLambdaDispatchPayload,
   type LocalV2DagLambdaDispatchResult
 } from "./local-v2-dag-lambda-dispatch";
 import { handleLocalV2DagLambdaResultMessage } from "./local-v2-dag-lambda-result-poller";
@@ -58,6 +59,47 @@ class LocalDiskS3ReadClient {
   }
 }
 
+type LocalParityArgsPayload = Pick<
+  LocalV2DagLambdaDispatchPayload,
+  "awsRegion" | "debugOverrides" | "postRefusalObservation" | "profile" | "scanId" | "targetUrl"
+>;
+
+export function buildLocalV2DagSimulatedLambdaArgs(input: {
+  artifactDir: string;
+  outPath: string;
+  payload: LocalParityArgsPayload;
+}) {
+  const args = [
+    "--env-file=apps/web/.env.local",
+    "--import",
+    "tsx",
+    "scripts/run-local-v2-dag-lambda-parity.ts",
+    "--",
+    "--target-url",
+    input.payload.targetUrl,
+    "--aws-region",
+    input.payload.awsRegion,
+    "--profile",
+    input.payload.profile,
+    "--scan-id",
+    input.payload.scanId,
+    "--artifact-dir",
+    input.artifactDir,
+    "--out",
+    input.outPath,
+    "--variant",
+    "wc01-local-simulated-lambda"
+  ];
+
+  if (input.payload.debugOverrides && Object.keys(input.payload.debugOverrides).length > 0) {
+    args.push("--debug-overrides", JSON.stringify(input.payload.debugOverrides));
+  }
+  if (input.payload.postRefusalObservation?.enabled === true) {
+    args.push("--post-refusal-config", JSON.stringify(input.payload.postRefusalObservation));
+  }
+  return args;
+}
+
 export async function dispatchLocalV2DagSimulatedLambdaScan(input: {
   localCallbackUrl?: string | null;
   scanConfig: SharedScanConfig | Record<string, unknown>;
@@ -68,31 +110,7 @@ export async function dispatchLocalV2DagSimulatedLambdaScan(input: {
   const root = workspaceRoot();
   const artifactDir = "artifacts/local-v2-dag-lambda-simulated";
   const outPath = `${artifactDir}/${payload.scanId}/summary.json`;
-  const args = [
-    "--env-file=apps/web/.env.local",
-    "--import",
-    "tsx",
-    "scripts/run-local-v2-dag-lambda-parity.ts",
-    "--",
-    "--target-url",
-    payload.targetUrl,
-    "--aws-region",
-    payload.awsRegion,
-    "--profile",
-    payload.profile,
-    "--scan-id",
-    payload.scanId,
-    "--artifact-dir",
-    artifactDir,
-    "--out",
-    outPath,
-    "--variant",
-    "wc01-local-simulated-lambda"
-  ];
-
-  if (payload.debugOverrides && Object.keys(payload.debugOverrides).length > 0) {
-    args.push("--debug-overrides", JSON.stringify(payload.debugOverrides));
-  }
+  const args = buildLocalV2DagSimulatedLambdaArgs({ artifactDir, outPath, payload });
 
   await execFileAsync(process.execPath, args, {
     cwd: root,

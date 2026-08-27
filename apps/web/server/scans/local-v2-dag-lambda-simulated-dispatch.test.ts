@@ -1,7 +1,10 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { readFile } from "node:fs/promises";
-import { selectSimulatedLambdaTerminalResultMessages } from "./local-v2-dag-lambda-simulated-dispatch";
+import {
+  buildLocalV2DagSimulatedLambdaArgs,
+  selectSimulatedLambdaTerminalResultMessages
+} from "./local-v2-dag-lambda-simulated-dispatch";
 
 const terminalResult = {
   contractVersion: "certscore.v2.lambda-dag-result.v1",
@@ -37,6 +40,39 @@ test("simulated Lambda terminal routing fails closed for missing or duplicate re
     () => selectSimulatedLambdaTerminalResultMessages([terminalResult, terminalResult]),
     /received 2/
   );
+});
+
+test("simulated Lambda carries the exact typed Reject observation configuration into the parity process", () => {
+  const postRefusalObservation = {
+    actionSearchTimeoutMs: 1_500,
+    confirmationTimeoutMs: 1_500,
+    dispatchDelayMs: 500,
+    enabled: true as const,
+    interactionAuthorization: {
+      authorizationId: "ergoveritas_owned_post_refusal_canary.v1" as const,
+      kind: "owned_canary" as const
+    },
+    observationWindowMs: 8_000,
+    resolver: {
+      kind: "canonical_cmp_registry" as const,
+      recipeSetId: "canonical-cmp-registry-reject-v7" as const
+    }
+  };
+  const args = buildLocalV2DagSimulatedLambdaArgs({
+    artifactDir: "artifacts/local-v2-dag-lambda-simulated",
+    outPath: "artifacts/local-v2-dag-lambda-simulated/scan-canary/summary.json",
+    payload: {
+      awsRegion: "eu-west-1",
+      profile: "standard",
+      postRefusalObservation,
+      scanId: "scan-canary",
+      targetUrl: "https://ergoveritas.com/.well-known/certscore-canary/post-refusal/reject-ignored.html"
+    }
+  });
+  const configIndex = args.indexOf("--post-refusal-config");
+
+  assert.ok(configIndex > 0);
+  assert.deepEqual(JSON.parse(args[configIndex + 1] ?? "null"), postRefusalObservation);
 });
 
 test("local Lambda executables exit after their durable handoffs are awaited", async () => {

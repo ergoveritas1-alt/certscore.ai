@@ -24,6 +24,7 @@ type Args = {
   functionName: string;
   outPath: string;
   profile: "full" | "standard" | "tiny";
+  postRefusalConfig: Record<string, unknown> | null;
   postRefusalEnabled: boolean;
   postRefusalWorkerMode: PostRefusalWorkerMode;
   scanId: string;
@@ -271,7 +272,7 @@ async function main() {
       ...(args.debugOverrides ? { debugOverrides: args.debugOverrides } : {}),
       ...(args.postRefusalEnabled
         ? {
-            postRefusalObservation: {
+            postRefusalObservation: args.postRefusalConfig ?? {
               actionSearchTimeoutMs: 1_500,
               cmpCanonicalName: "OneTrust",
               confirmation: {
@@ -485,6 +486,7 @@ function parseArgs(argv: string[]): Args {
     functionName: "certscore-v2-dag-local-lambda",
     outPath: "artifacts/local-v2-dag-lambda-parity/latest.json",
     profile: "full",
+    postRefusalConfig: null,
     postRefusalEnabled: false,
     postRefusalWorkerMode: "normal",
     scanId: `local-lambda-parity-${randomUUID()}`,
@@ -510,6 +512,9 @@ function parseArgs(argv: string[]): Args {
     } else if (arg === "--profile") {
       args.profile = normalizeProfile(requiredValue(argv, ++index, arg));
     } else if (arg === "--post-refusal") {
+      args.postRefusalEnabled = true;
+    } else if (arg === "--post-refusal-config") {
+      args.postRefusalConfig = parseJsonObjectArg(requiredValue(argv, ++index, arg), arg);
       args.postRefusalEnabled = true;
     } else if (arg === "--post-refusal-worker-mode") {
       args.postRefusalEnabled = true;
@@ -539,6 +544,7 @@ function printUsage() {
     "  --aws-region <region>    eu-central-1, eu-west-1, or us-west-1. Default: eu-central-1",
     "  --profile <profile>      full, standard, or tiny. Default: full",
     "  --post-refusal           Enable the local four-lane Reject Path barrier.",
+    "  --post-refusal-config <json> Enable Reject Path with the typed WC01 dispatch configuration.",
     "  --post-refusal-worker-mode <mode> normal, failure, or timeout. Implies --post-refusal.",
     "  --scan-id <id>           Stable scan ID. Default: local-lambda-parity-<uuid>",
     "  --artifact-dir <path>    Artifact base directory. Default: artifacts/local-v2-dag-lambda-parity",
