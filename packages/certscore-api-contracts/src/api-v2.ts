@@ -9,12 +9,27 @@ export function isCanonicalScanId(value: unknown): value is string {
 }
 
 export const CERTSCORE_API_V2_VERSION = "v2";
-export const CERTSCORE_API_V2_SCHEMA_VERSION = "0.1.6";
+export const CERTSCORE_API_V2_SCHEMA_VERSION = "0.1.7";
 
 export const apiV2Disclaimer =
   "CertScore outputs are automated public-web observations for human and agentic review. They are not legal advice, certification, or a compliance determination.";
 
 export const apiV2ScanStatusSchema = z.enum(["queued", "running", "finalizing", "completed", "completed_limited", "failed", "expired", "rate_limited"]);
+export const apiV2PostRefusalObservationSchema = z.object({
+  status: z.enum([
+    "confirmed_observation",
+    "confirmed_clean",
+    "unconfirmed",
+    "not_attempted",
+    "unsupported",
+    "aborted",
+  ]),
+  refusalExercised: z.boolean(),
+  observationCount: z.number().int().min(0),
+  productionProjectable: z.boolean(),
+  completedAt: z.string().nullable(),
+  limitations: z.array(z.string()).max(24),
+}).strict();
 export const apiV2ScanFreshnessSchema = z.enum(["latest", "refresh"]);
 export const apiV2ScanFromSchema = z.enum(["eu_de", "eu_ie", "california"]);
 export const apiV2FindingCriticalitySchema = z.enum(["critical", "high", "medium", "low", "info", "unknown"]);
@@ -112,6 +127,7 @@ export const apiV2ScanJobSchema = z
     scoreVersion: z.string().nullable().optional(),
     scoreUpdatedAt: z.string().nullable().optional(),
     riskLevel: z.string().nullable().optional(),
+    postRefusalObservation: apiV2PostRefusalObservationSchema.nullable().optional(),
     coverage: z
       .object({
         status: z.string().optional(),
@@ -166,6 +182,7 @@ export const apiV2ScanResourceSchema = z
     scoreVersion: z.string().nullable().optional(),
     scoreUpdatedAt: z.string().nullable().optional(),
     riskLevel: z.string().nullable().optional(),
+    postRefusalObservation: apiV2PostRefusalObservationSchema.nullable().optional(),
     coverage: z
       .object({
         status: z.string().optional(),

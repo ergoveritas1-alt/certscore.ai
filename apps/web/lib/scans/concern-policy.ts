@@ -1057,7 +1057,32 @@ function isRejectTrackingPersistenceConcern(
     .join(" ")
     .toLowerCase();
 
-  return /reject_did_not_reduce_tracking|reject_did_not_reduce_third_party_cookies|reject_tracking_persists_after_reject|reject.*tracking|reject.*third[-_ ]party.*cookies/.test(haystack);
+  return /reject_did_not_reduce_tracking|reject_did_not_reduce_third_party_cookies|post_refusal_non_essential_activity|pre_consent_storage_not_cleared|refusal_signal_contradicts_action|reject_tracking_persists_after_reject|reject.*tracking|reject.*third[-_ ]party.*cookies/.test(haystack);
+}
+
+function hasProductionProjectablePostRefusalEvidence(
+  rawEvidence: Record<string, unknown> | null | undefined
+) {
+  if (
+    getBooleanEvidence(rawEvidence, ["postRefusalProductionProjectable"]) !== true ||
+    getBooleanEvidence(rawEvidence, ["refusalExercised"]) !== true ||
+    getFirstString(rawEvidence, ["refusalRegistrationStatus"]) !== "confirmed" ||
+    getBooleanEvidence(rawEvidence, ["directPostRefusalRuntimeEvidence"]) !== true
+  ) {
+    return false;
+  }
+  return (
+    getObjectArrayEvidence(rawEvidence, [
+      "postRefusalNonEssentialActivity",
+      "post_refusal_non_essential_activity",
+      "preConsentStorageNotCleared",
+      "pre_consent_storage_not_cleared"
+    ]).length > 0 ||
+    getBooleanEvidence(rawEvidence, [
+      "refusalSignalContradictsAction",
+      "refusal_signal_contradicts_action"
+    ]) === true
+  );
 }
 
 function getObjectArrayEvidence(rawEvidence: Record<string, unknown> | null | undefined, keys: string[]) {
@@ -2789,6 +2814,15 @@ export function deriveConcernPolicy(input: {
   }
 
   if (isRejectTrackingPersistenceConcern(input.concern)) {
+    if (hasProductionProjectablePostRefusalEvidence(input.rawEvidence)) {
+      return {
+        allowedNarrativeTier: "strong",
+        externalSurfacingEligibility: "eligible",
+        negativeEvidenceFlags: [...negativeEvidenceFlags],
+        promotionEligibility: "eligible",
+        regulatoryChecklistEligibility: "gap_observed"
+      };
+    }
     return {
       allowedNarrativeTier: "weak",
       externalSurfacingEligibility: "audit_only",
@@ -3178,6 +3212,15 @@ export function deriveConcernPolicy(input: {
   }
 
   if (isRejectTrackingPersistenceConcern(input.concern)) {
+    if (hasProductionProjectablePostRefusalEvidence(input.rawEvidence)) {
+      return {
+        allowedNarrativeTier: "strong",
+        externalSurfacingEligibility: "eligible",
+        negativeEvidenceFlags: [...negativeEvidenceFlags],
+        promotionEligibility: "eligible",
+        regulatoryChecklistEligibility: "gap_observed"
+      };
+    }
     return {
       allowedNarrativeTier: "weak",
       externalSurfacingEligibility: "audit_only",

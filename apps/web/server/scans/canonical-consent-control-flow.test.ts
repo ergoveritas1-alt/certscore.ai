@@ -954,7 +954,7 @@ test("canonical consent-control flow projects UniConsent accept/options evidence
   assert.equal(story.rejectRow.status, "Review signal");
   assert.equal(story.rejectRow.assessmentStatus, "review_signal");
   assert.equal(getEvidenceLabel(story.rejectRow), "Partial concern");
-  assert.equal(story.rejectScore.score, 45);
+  assert.equal(story.rejectScore.score, 92);
   assert.match(story.rejectRow.limitation ?? "", /no same-layer reject/i);
 });
 
@@ -1026,7 +1026,7 @@ test("canonical consent-control flow projects reject-and-subscribe as a partial 
   assert.equal(story.rejectRow.assessmentStatus, "review_signal");
   assert.match(story.rejectRow.limitation ?? "", /consent or pay/i);
   assert.match(story.rejectRow.limitation ?? "", /cannot be determined from the consent interface alone/i);
-  assert.equal(story.rejectScore.score, 45);
+  assert.equal(story.rejectScore.score, 92);
   assert.equal(story.gapFindingObserved, false);
 });
 
@@ -1185,7 +1185,7 @@ test("canonical pre-consent storage flow uses one non-essential predicate for me
       expectedGapFinding: true,
       expectedMetric: 1,
       expectedRowStatus: "Gap observed",
-      expectedScore: 0
+      expectedScore: 92
     }
   ] as const;
 

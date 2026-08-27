@@ -541,6 +541,29 @@ function distinctSummaryFindings(findings: Record<string, any>[]) {
   });
 }
 
+const POST_REFUSAL_FINDING_IDS = new Set([
+  "post_refusal_non_essential_activity",
+  "pre_consent_storage_not_cleared",
+  "refusal_signal_contradicts_action",
+]);
+
+function postRefusalTruncationPriority(finding: Record<string, any>) {
+  const id = typeof finding.id === "string" ? finding.id : "";
+  if (POST_REFUSAL_FINDING_IDS.has(id)) return 0;
+  if (/^pre_consent_|preconsent/i.test(id)) return 2;
+  return 1;
+}
+
+function prioritizeFindingsForBoundedBundle(findings: Record<string, any>[]) {
+  return findings
+    .map((finding, index) => ({ finding, index }))
+    .sort((left, right) =>
+      postRefusalTruncationPriority(left.finding) - postRefusalTruncationPriority(right.finding) ||
+      left.index - right.index
+    )
+    .map(({ finding }) => finding);
+}
+
 function compactPriorityEvidenceSummary(summary: Record<string, any>) {
   const firstDigest = Array.isArray(summary.digests) ? summary.digests[0] : null;
   const firstReference = summary.references && typeof summary.references === "object" && !Array.isArray(summary.references)
@@ -1308,7 +1331,9 @@ export function buildScanBundle(input: {
   const evidence = (input.evidence ?? {}) as Record<string, unknown>;
   const report = (input.report ?? {}) as Record<string, unknown>;
   const transportSecurity = scanBundleTransportSecurity(report, detail);
-  const allFindings = Array.isArray(input.findings.findings) ? input.findings.findings : [];
+  const allFindings = prioritizeFindingsForBoundedBundle(
+    Array.isArray(input.findings.findings) ? input.findings.findings : [],
+  );
   const selectedFindings = detail === "summary" ? distinctSummaryFindings(allFindings) : allFindings;
   const selectedFindingRows = selectedFindings.slice(0, maxFindings);
   const findingDisclaimersDeduplicated = detail === "full"
@@ -1351,6 +1376,7 @@ export function buildScanBundle(input: {
     scoreVersion: input.scan.scoreVersion ?? null,
     scoreUpdatedAt: input.scan.scoreUpdatedAt ?? null,
     riskLevel: input.scan.riskLevel ?? null,
+    postRefusalObservation: input.scan.postRefusalObservation ?? null,
     provenance: scanProvenance(input.scan as unknown as Record<string, any>, "existing_scan_retrieved"),
     interpretationGuidance: interpretationGuidance(SCAN_BUNDLE_INTERPRETATION_STATEMENT),
     resultDisposition: input.scan.resultDisposition ?? null,
@@ -1610,6 +1636,7 @@ export function buildScanBundle(input: {
       scoreVersion: bundle.scoreVersion,
       scoreUpdatedAt: bundle.scoreUpdatedAt,
       riskLevel: bundle.riskLevel,
+      postRefusalObservation: bundle.postRefusalObservation,
       provenance: bundle.provenance,
       interpretationGuidance: bundle.interpretationGuidance,
       resultDisposition: bundle.resultDisposition,

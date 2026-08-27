@@ -33,6 +33,7 @@ function projection(overrides: Partial<ScanStatusProjection> = {}): ScanStatusPr
     id: "e77dfaed-f1b0-4993-bd1f-5d913e595c4a",
     organizationId: null,
     profile: "standard",
+    postRefusalObservationExpected: false,
     reportGeneration: null,
     reportInputsReady: false,
     reportProjectionRequired: true,

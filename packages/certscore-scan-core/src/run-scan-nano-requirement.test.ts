@@ -50,3 +50,24 @@ test("runScan escalates before policy scan when Nano policy credentials are miss
     await rm(tempRoot, { recursive: true, force: true });
   }
 });
+
+test("runScan rejects deterministic local policy assist on public targets", async () => {
+  const tempRoot = await mkdtemp(path.join(tmpdir(), "certscore-v2-local-policy-provider-"));
+  try {
+    await assert.rejects(
+      () => runScan({
+        url: "https://example.com",
+        evidenceLane: "policy_evidence",
+        outDir: path.join(tempRoot, "policy-out"),
+        localPolicyNanoAssistProvider: {
+          async classifyLinks(input) {
+            return { assistId: input.assistId, rankedCandidates: [] };
+          },
+        },
+      }),
+      /restricted to loopback scan targets/,
+    );
+  } finally {
+    await rm(tempRoot, { recursive: true, force: true });
+  }
+});

@@ -123,6 +123,16 @@ test("detects Cookiebot European consent infrastructure", () => {
   assert.equal(isKnownCmpInfrastructureUrl("https://consentcdn.cookiebot.eu/uc.js"), true);
 });
 
+test("canonical CMP registry owns deterministic reject-control selectors", () => {
+  const selectors = new Map(KNOWN_CMP_REGISTRY.map((entry) => [
+    entry.canonicalName,
+    entry.rejectControlSelectors ?? [],
+  ]));
+  assert.deepEqual(selectors.get("OneTrust"), ["#onetrust-reject-all-handler"]);
+  assert.deepEqual(selectors.get("Cookiebot"), ["#CybotCookiebotDialogBodyButtonDecline"]);
+  assert.deepEqual(selectors.get("Usercentrics"), ['button[data-testid="uc-deny-all-button"]']);
+});
+
 test("detects Usercentrics service domains", () => {
   assert.equal(getKnownCmpVendorForHost("app.usercentrics.eu"), "Usercentrics");
   assert.equal(getKnownCmpVendorForHost("api.usercentrics.eu"), "Usercentrics");

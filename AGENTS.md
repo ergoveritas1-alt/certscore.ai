@@ -86,9 +86,12 @@ Missing, malformed, stale, or unverifiable evidence must fail closed to an unkno
 
 If a downstream result is incorrect, trace the first broken stage in this sequence and fix it there. Do not add surface-specific fallbacks.
 
-### Three-lane production Lambda evidence capture
+### Three-lane production Lambda evidence capture with optional reject observation
 
-Production v2 DAG Lambda scans fan out into exactly three independent, bounded browser-session lanes, then merge into one canonical evidence bundle before WC01 assessment or projection:
+Production v2 DAG Lambda scans fan out into exactly three required, independent,
+bounded passive browser-session lanes. Those three lanes remain the primary
+result-readiness barrier and merge into one canonical evidence bundle before
+WC01 assessment or projection:
 
 ```text
 consent-proof lane: typed first-layer A/R/O inventory + geometry + representative screenshot
@@ -99,11 +102,28 @@ policy-evidence lane: policy discovery, ownership, retrieval, retained text/exce
 → ConsentControlAssessment v2 and the canonical downstream flow
 ```
 
+An explicitly enabled scan may also launch one optional, independently bounded
+`reject_observation` browser branch. It is supplemental and must never delay,
+replace, synthesize, or fill a required lane. Start it with a bounded dispatch
+offset (2 seconds by default) to avoid an immediate four-browser burst. If its
+verified packet is ready before the required three-lane barrier, the coordinator
+may attach it to the same canonical result generation. Otherwise publish the
+normal result without waiting and retain a parent-scan- and base-evidence-hash-
+bound supplement for an idempotent later generation. A neutral, unsupported,
+unconfirmed, cancelled, failed, stale, or unverifiable reject packet must not
+request projection or affect score.
+
 The consent-proof lane must capture typed A/R/O, geometry, and the representative pre-consent screenshot from the same browser session. It may use bounded same-session settling and recapture, but it must not click consent controls. The runtime lane must not spend its budget on consent screenshots or screenshot recovery. The policy lane owns policy-surface work and must not depend on spare time left by consent or runtime capture.
 
 Keep lane ownership strict when merging. Consent evidence and visuals come from consent-proof; runtime facts come from runtime-evidence; policy observations come from policy-evidence. Do not let one lane synthesize, infer, or overwrite another lane's evidence. Preserve lane artifact provenance, verify retained pointers, and publish only the merged canonical bundle through the existing persistence path.
 
-The coordinator is orchestration only: it must not run a fourth browser scan. Worker artifacts use isolated lane prefixes while retaining the parent scan identity. A failed or unverifiable required lane must fail closed or remain explicitly limited; it must not be filled from display context or another lane's absence.
+The coordinator is orchestration only. It may dispatch the optional
+`reject_observation` worker when the feature is explicitly enabled and the
+target passes the reject-interaction authorization gate, but it must not run
+browser work in the coordinator process. Worker artifacts use isolated lane
+prefixes while retaining the parent scan identity. A failed or unverifiable
+required lane must fail closed or remain explicitly limited; it must not be
+filled from display context, the reject branch, or another lane's absence.
 
 A `complete` `ConsentControlAssessment v2` must contain binary A/R/O states (`observed` or `not_observed`). If any required first-layer inventory is incomplete, stale, document-mismatched, or unbound to the representative evidence, the assessment remains `limited` with the affected controls `unknown`. Unknown reduction must come from better upstream evidence capture, never from probabilistic or display-layer conversion to absence.
 
@@ -205,7 +225,33 @@ quality gate and the Mini invocation-rate goal.
 
 Sensitive-context labels in v2 are review routing metadata only. They must not create stronger findings, customer-facing language, legal conclusions, or production eligibility.
 
-Post-consent consent-flow runtime is intentionally disabled for WC01 scanner runs. Do not run, enable, or add paths that click accept, reject, opt-out, save, or other consent controls against public sites. Consent-flow runtime artifacts may be analyzed only from retained historical/local fixtures; new scanner-quality work should use pre-consent observation, policy-surface discovery, deterministic fixtures, retained replay artifacts, and explicit limitation reporting instead. Consent-flow-dependent review rows are internal review aids only; use them to enhance GDPR/ePrivacy Evidence Review clarity, not as required production scanner coverage.
+General post-consent consent-flow runtime remains disabled for WC01 scanner
+runs. A narrow reject-only observation path is authorized for deterministic
+fixtures, explicitly owned canaries such as ErgoVeritas, and per-run public
+calibration targets that are explicitly allowlisted through the canonical
+scan-quality selection and contact/cooldown controls. Every non-loopback run
+requires an explicit reject-observation feature flag and an exact host
+authorization; do not infer authorization from the presence of a banner.
+
+The reject observer may perform at most one deterministic first-layer `reject`
+or necessary-only-equivalent action in a fresh isolated browser context. It
+must use TCF or a canonical named-CMP action recipe; no guessed DOM/text
+fallback is permitted. It must not click Accept, Options/Manage, privacy
+opt-out, Save, forms, authentication, purchases, or unrelated controls; follow
+deeper preference-center paths; reuse visitor state; or interact where the
+action could affect an account or transaction. Unknown CMPs and unresolved
+controls fail closed without a click. Evidence is eligible only after confirmed
+semantic refusal registration, with an anchored grace rule for already-in-
+flight activity. Coverage failure is score-neutral and must never be converted
+to an observed gap.
+
+Retain bounded, display-safe reject evidence and provenance; do not retain raw
+TC strings, raw cookie values, sensitive query values, or unbounded bodies.
+Consent-flow-dependent review rows remain evidence aids and must enter
+production only through the typed retained-evidence contract, normalized
+concern, concern policy, and unified finding/checklist path. Reject interaction
+must remain separately disableable without affecting the three required lanes
+or normal report availability.
 
 ### WC01 responsibility boundary
 

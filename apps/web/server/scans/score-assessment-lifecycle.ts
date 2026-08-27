@@ -6,7 +6,7 @@ import type { PublicScanRecord } from "./get-public-scan-record";
 import { materializeLocalV2DagScanDetail } from "./local-v2-dag-report";
 import {
   buildLegacyGdprEprivacyVersionedAssessmentInput,
-  LEGACY_GDPR_EPRIVACY_SCORE_VERSION
+  CURRENT_GDPR_EPRIVACY_SCORE_VERSION
 } from "./score-assessment-projection";
 import {
   hasVersionedScoreAssessment,
@@ -71,7 +71,7 @@ export async function persistCompletedLegacyGdprEprivacyAssessment(input: {
     hasVersionedScoreAssessment({
       scanId: input.scanId,
       scoreKind: "gdpr_eprivacy_evidence",
-      scoreVersion: LEGACY_GDPR_EPRIVACY_SCORE_VERSION
+      scoreVersion: CURRENT_GDPR_EPRIVACY_SCORE_VERSION
     })
   );
   if (legacyAlreadyPersisted) {

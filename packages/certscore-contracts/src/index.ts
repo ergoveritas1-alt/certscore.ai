@@ -3,6 +3,7 @@ import {
   SUPPORTED_GDPR_TRANSPARENCY_LOCALES,
   SUPPORTED_PRIVACY_EVIDENCE_LOCALES,
 } from "./supported-languages";
+import { postRefusalEvidencePacketSchema } from "./post-refusal-observation";
 export * from "./consent-control-label-classifier";
 export * from "./consent-preference-category-classifier";
 export * from "./consent-language-classifier";
@@ -20,6 +21,7 @@ export * from "./consent-control-assessment";
 export * from "./consent-control-calibration";
 export * from "./lambda-result-disposition";
 export * from "./pre-consent-browser-storage-projection";
+export * from "./post-refusal-observation";
 
 export const directVsInferredSchema = z.enum([
   "direct",
@@ -3068,6 +3070,7 @@ export const canonicalEvidenceBundleSchema = z.object({
   scanProfile: scanProfileSchema,
   modulesRun: z.array(scanModuleRunSchema),
   scanLaneRuns: z.array(scanLaneRunSchema).max(8).default([]),
+  postRefusalEvidence: postRefusalEvidencePacketSchema.optional(),
   runtimeTimeline: z.array(runtimeEvidenceEventSchema),
   networkEvents: z.array(networkEventSchema),
   networkResponseEvents: z.array(networkResponseEventSchema).default([]),

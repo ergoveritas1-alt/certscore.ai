@@ -34,6 +34,7 @@ import {
   isInventoryDisplayHostname,
   type InventoryGroupRow
 } from "../scans/runtime-inventory-projection";
+import { GDPR_EPRIVACY_EVIDENCE_SCORE_VERSION } from "../scans/regulatory-coverage-score";
 import { SITE_URL } from "../seo";
 
 function absoluteUrl(path: string) {
@@ -97,6 +98,7 @@ type PulseStatusLike = {
   reportUrl?: string | null;
   resultDisposition?: "no_go";
   noGo?: ScanNoGoResult;
+  postRefusalObservation?: ApiV2ScanResource["postRefusalObservation"];
   error?: {
     code: string;
     message: string;
@@ -162,10 +164,10 @@ function riskLevelFromScore(score: number | null) {
   if (score === null) {
     return "unknown";
   }
-  if (score < 45) {
+  if (score < 40) {
     return "significant_review_recommended";
   }
-  if (score < 75) {
+  if (score < 85) {
     return "review_recommended";
   }
   return "monitor";
@@ -507,6 +509,45 @@ export function projectedFindingsFromPulse(pulse: PulseResponse): PulseFindingLi
   return [...byId.values()];
 }
 
+function deriveApiV2PostRefusalObservation(scanRecord: ScanDetailResponse) {
+  const supportedStatuses = new Set([
+    "confirmed_observation",
+    "confirmed_clean",
+    "unconfirmed",
+    "not_attempted",
+    "unsupported",
+    "aborted",
+  ]);
+  const event = [...scanRecord.events]
+    .filter((candidate) =>
+      candidate.eventType === "v2_post_refusal_evidence.reconciled" ||
+      candidate.eventType === "v2_post_refusal_evidence.received"
+    )
+    .sort((left, right) =>
+      Date.parse(right.createdAt) - Date.parse(left.createdAt) || right.id.localeCompare(left.id)
+    )[0];
+  const metadata = plainRecord(event?.metadataJson);
+  const projection = plainRecord(metadata?.postRefusalReportProjection);
+  const status = stringOrNull(projection?.status);
+  if (!status || !supportedStatuses.has(status)) return null;
+  return {
+    status: status as
+      | "confirmed_observation"
+      | "confirmed_clean"
+      | "unconfirmed"
+      | "not_attempted"
+      | "unsupported"
+      | "aborted",
+    refusalExercised: projection?.refusalExercised === true,
+    observationCount: Math.max(0, finiteInt(projection?.observationCount) ?? 0),
+    productionProjectable: projection?.productionProjectable === true,
+    completedAt: dateStringOrNull(projection?.completedAt),
+    limitations: Array.isArray(projection?.limitations)
+      ? projection.limitations.filter((value): value is string => typeof value === "string").slice(0, 24)
+      : [],
+  };
+}
+
 function deriveCoverage(scanRecord: ScanDetailResponse) {
   const noGoProjection = projectExternalScanNoGo(scanRecord.runtimeArtifacts);
   if (noGoProjection) {
@@ -549,8 +590,9 @@ export function buildApiV2ScanResource(
   const noGoProjection = projectExternalScanNoGo(scanRecord.runtimeArtifacts);
   const canonicalResultState = apiV2CanonicalResultState(scanRecord);
   const scoreStatus = canonicalResultState === "final" ? "final" : "provisional";
-  const scoreVersion = stringOrNull(scanRecord.snapshot?.score_version) ?? "gdpr-eprivacy-evidence.legacy-v1";
+  const scoreVersion = stringOrNull(scanRecord.snapshot?.score_version) ?? GDPR_EPRIVACY_EVIDENCE_SCORE_VERSION;
   const scoreUpdatedAt = dateStringOrNull(scanRecord.snapshot?.score_scored_at ?? scan.completedAt);
+  const postRefusalObservation = deriveApiV2PostRefusalObservation(scanRecord);
   const configuredUrl = typeof scan.scanConfigJson?.normalizedUrl === "string"
     ? scan.scanConfigJson.normalizedUrl
     : null;
@@ -580,6 +622,7 @@ export function buildApiV2ScanResource(
     scoreVersion,
     scoreUpdatedAt,
     riskLevel: noGoProjection ? null : riskLevelFromScore(score),
+    postRefusalObservation,
     coverage: deriveCoverage(scanRecord),
     links: {
       self: absoluteUrl(`/api/v2/scans/${scan.id}`),
@@ -784,6 +827,7 @@ export function buildApiV2ScanStatus(
     scoreVersion: canonicalScan.scoreVersion ?? null,
     scoreUpdatedAt: canonicalScan.scoreUpdatedAt ?? null,
     riskLevel: canonicalScan.riskLevel ?? null,
+    postRefusalObservation: canonicalScan.postRefusalObservation ?? null,
     coverage: canonicalScan.coverage ?? null,
     lastUpdatedAt: lastHeartbeatAt ?? undefined,
     phaseStartedAt,

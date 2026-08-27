@@ -1,0 +1,32 @@
+{
+  "contractVersion": "certscore.post_refusal_owned_canary.1",
+  "owner": "ErgoVeritas",
+  "artifactOnly": true,
+  "consentInteractionAllowed": true,
+  "interactionPolicy": {
+    "action": "reject_only",
+    "authorizationId": "ergoveritas_owned_post_refusal_canary.v1",
+    "authorizedHostname": "ergoveritas.com",
+    "authorizedPathPrefix": "/.well-known/certscore-canary/post-refusal/",
+    "maximumActionsPerBrowserContext": 1,
+    "deterministicResolverRequired": true,
+    "domGuessingAllowed": false
+  },
+  "indexingAllowed": false,
+  "targets": [
+    {
+      "key": "ergoveritas-post-refusal-honored",
+      "url": "https://ergoveritas.com/.well-known/certscore-canary/post-refusal/reject-honored.html",
+      "cmpRecipe": "OneTrust",
+      "expectedRefusalRegistration": "confirmed",
+      "expectedPostRefusalActivity": false
+    },
+    {
+      "key": "ergoveritas-post-refusal-ignored",
+      "url": "https://ergoveritas.com/.well-known/certscore-canary/post-refusal/reject-ignored.html",
+      "cmpRecipe": "OneTrust",
+      "expectedRefusalRegistration": "confirmed",
+      "expectedPostRefusalActivity": true
+    }
+  ]
+}

@@ -3,6 +3,7 @@ import {
   type SharedCrawlSeedHint,
   type SharedScanConfig,
 } from "@website-signal-risk-scanner/shared";
+import type { PostRefusalLambdaDispatchConfig } from "@certscore/contracts";
 import {
   LOCAL_V2_DAG_LAMBDA_DISPATCH_CONTRACT_VERSION,
   LOCAL_V2_DAG_SCAN_PROCESSOR,
@@ -48,6 +49,7 @@ export type LocalV2DagLambdaDispatchPayload = {
     SharedCrawlSeedHint,
     "confidence" | "hintType" | "source" | "sourceCompletedAt" | "sourceScanId" | "url"
   >>;
+  postRefusalObservation?: PostRefusalLambdaDispatchConfig;
 };
 
 const MAX_POLICY_SURFACE_SEEDS = 12;
@@ -103,6 +105,45 @@ function policySurfaceSeedsFromConfig(config: SharedScanConfig | Record<string, 
     if (selected.size >= MAX_POLICY_SURFACE_SEEDS) break;
   }
   return [...selected.values()];
+}
+
+function postRefusalObservationFromIntent(input: {
+  intent: Record<string, unknown>;
+  targetUrl: string;
+}): PostRefusalLambdaDispatchConfig | undefined {
+  if (input.intent.postRefusalRejectWorkerEnabled !== true || input.intent.orchestrationMode !== "sharded") {
+    return undefined;
+  }
+  let target: URL;
+  try {
+    target = new URL(input.targetUrl);
+  } catch {
+    return undefined;
+  }
+  const loopback = (target.protocol === "http:" || target.protocol === "https:") &&
+    ["localhost", "127.0.0.1", "[::1]"].includes(target.hostname);
+  const ownedCanary = target.protocol === "https:" &&
+    target.hostname === "ergoveritas.com" &&
+    target.pathname.startsWith("/.well-known/certscore-canary/post-refusal/");
+  if (!loopback && !ownedCanary) return undefined;
+  return {
+    enabled: true,
+    dispatchDelayMs: 2_000,
+    observationWindowMs: 8_000,
+    confirmationTimeoutMs: 1_500,
+    actionSearchTimeoutMs: 1_500,
+    cmpCanonicalName: "OneTrust",
+    confirmation: {
+      kind: "tcf_purposes_denied",
+      purposeIds: [1, 2, 3, 4, 7, 9, 10],
+    },
+    interactionAuthorization: loopback
+      ? { authorizationId: "loopback_local_lab", kind: "loopback" }
+      : {
+          authorizationId: "ergoveritas_owned_post_refusal_canary.v1",
+          kind: "owned_canary",
+        },
+  };
 }
 
 export type LocalV2DagLambdaDispatchSummary = {
@@ -366,6 +407,8 @@ export function buildLocalV2DagLambdaDispatchPayload(input: {
   }
   const awsRegion = requireAwsRegion(intent.awsRegion);
   const policySurfaceSeeds = policySurfaceSeedsFromConfig(input.scanConfig);
+  const targetUrl = requireString(config.normalizedUrl, "normalizedUrl");
+  const postRefusalObservation = postRefusalObservationFromIntent({ intent, targetUrl });
 
   return {
     artifactOnly: true,
@@ -381,6 +424,7 @@ export function buildLocalV2DagLambdaDispatchPayload(input: {
     orchestrationMode: intent.orchestrationMode === "sharded" ? "sharded" : "single",
     processor: LOCAL_V2_DAG_SCAN_PROCESSOR,
     ...(policySurfaceSeeds.length > 0 ? { policySurfaceSeeds } : {}),
+    ...(postRefusalObservation ? { postRefusalObservation } : {}),
     productionFindingIntegration: false,
     profile: getProfile(config),
     resultHandoff: "sqs",
@@ -390,7 +434,7 @@ export function buildLocalV2DagLambdaDispatchPayload(input: {
     scannerRuntime: "certscore-v2-dag-parallel-path",
     targetEnvironment:
       intent.targetEnvironment === "production" ? "production" : "local",
-    targetUrl: requireString(config.normalizedUrl, "normalizedUrl"),
+    targetUrl,
     vpcMode: intent.vpcMode
   };
 }

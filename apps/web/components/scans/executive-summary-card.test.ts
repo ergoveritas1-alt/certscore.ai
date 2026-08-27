@@ -86,7 +86,7 @@ test("GDPR/ePrivacy lens consumes only the supplied canonical posture score", ()
   assert.equal(unscored[0]?.score, null);
   assert.equal(unscored[0]?.ratingLabel, "Not scored");
   assert.equal(scored[0]?.score, 27);
-  assert.equal(scored[0]?.ratingLabel, "Needs work");
+  assert.equal(scored[0]?.ratingLabel, "High-priority remediation");
 
   const source = readFileSync(new URL("./executive-summary-card.tsx", import.meta.url), "utf8");
   assert.doesNotMatch(source, /const gdprScore = clampScore\(\s*84 -/);
@@ -276,7 +276,7 @@ test("buildRegulatoryLenses treats canonical pre-consent and dark-pattern cards 
 
   assert.deepEqual(lenses.map((lens) => lens.acronym), ["GDPR / ePrivacy"]);
   assert.equal(gdprLens?.summary, "Pre-consent third-party activity is the main review item.");
-  assert.equal(gdprLens?.ratingLabel, "Needs work");
+  assert.equal(gdprLens?.ratingLabel, "High-priority remediation");
   assert.ok(gdprLens?.findings.some((finding) => finding.id === "consent_dark_patterns_detected"));
 });
 

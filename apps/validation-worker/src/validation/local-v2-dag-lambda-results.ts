@@ -12,9 +12,17 @@ import {
   type Message
 } from "@aws-sdk/client-sqs";
 import {
+  POST_REFUSAL_LAMBDA_EVIDENCE_MESSAGE_VERSION,
   VERIFIED_POLICY_EVIDENCE_PACKET_VERSION,
   classifyV2DagLambdaResultDisposition,
+  postRefusalEvidencePacketSchema,
+  postRefusalLambdaEvidenceMessageSchema,
+  postRefusalReportProjectionSchema,
+  projectPostRefusalEvidenceForReport,
   verifiedPolicyEvidencePacketSchema,
+  type PostRefusalEvidencePacket,
+  type PostRefusalLambdaEvidenceMessage,
+  type PostRefusalReportProjection,
   type VerifiedPolicyEvidencePacket,
 } from "@certscore/contracts";
 import { query, queryOne } from "@website-signal-risk-scanner/db";
@@ -31,6 +39,9 @@ import { runStaticPolicyReviewPacket } from "./model-policy-review-runner";
 const PROCESSOR = "local-certscore-v2-dag-parallel-v1";
 const RESULT_CONTRACT_VERSION = "certscore.v2.lambda-dag-result.v1";
 const POLICY_EVIDENCE_MESSAGE_VERSION = "certscore.v2.lambda-policy-evidence-ready.v1";
+const POST_REFUSAL_EVIDENCE_VERIFIED_EVENT_TYPE = "v2_post_refusal_evidence.verified";
+const POST_REFUSAL_EVIDENCE_RECEIVED_EVENT_TYPE = "v2_post_refusal_evidence.received";
+const POST_REFUSAL_EVIDENCE_RECONCILED_EVENT_TYPE = "v2_post_refusal_evidence.reconciled";
 const POLICY_EVIDENCE_RECEIVED_EVENT_TYPE = "v2_policy_evidence.received";
 const POLICY_EVIDENCE_REJECTED_EVENT_TYPE = "v2_policy_evidence.rejected";
 const POLICY_EVIDENCE_VERIFIED_EVENT_TYPE = "v2_policy_evidence.verified";
@@ -387,6 +398,240 @@ function isPolicyEvidenceReadyMessage(raw: string) {
   } catch {
     return false;
   }
+}
+
+function isPostRefusalEvidenceReadyMessage(raw: string) {
+  try {
+    const record = asRecord(JSON.parse(raw));
+    return record.contractVersion === POST_REFUSAL_LAMBDA_EVIDENCE_MESSAGE_VERSION &&
+      record.messageKind === "post_refusal_evidence_ready";
+  } catch {
+    return false;
+  }
+}
+
+export async function verifyPostRefusalEvidenceReadyMessage(input: {
+  expectedTargetEnvironment: LambdaTargetEnvironment;
+  raw: string;
+  s3Client?: S3GetClient;
+}): Promise<{
+  message: PostRefusalLambdaEvidenceMessage;
+  packet: PostRefusalEvidencePacket;
+}> {
+  const message = postRefusalLambdaEvidenceMessageSchema.parse(JSON.parse(input.raw));
+  if (message.targetEnvironment !== input.expectedTargetEnvironment) {
+    throw new Error("Post-refusal evidence target environment does not match this worker.");
+  }
+  if (message.packetMetadata.sizeBytes > 2 * 1024 * 1024) {
+    throw new Error("Post-refusal evidence packet exceeds the bounded retained-artifact size.");
+  }
+  const { bucket, key } = parseS3Uri(message.packetPointer);
+  const client = input.s3Client ?? new S3Client({ region: inferS3ArtifactRegion(bucket) });
+  const response = await client.send(new GetObjectCommand({ Bucket: bucket, Key: key }));
+  if (
+    typeof response.ContentLength === "number" &&
+    response.ContentLength !== message.packetMetadata.sizeBytes
+  ) {
+    throw new Error("Post-refusal evidence content length did not verify.");
+  }
+  const body = await streamToBuffer(response.Body);
+  const sha256 = createHash("sha256").update(body).digest("hex");
+  if (
+    sha256 !== message.packetMetadata.sha256 ||
+    body.byteLength !== message.packetMetadata.sizeBytes
+  ) {
+    throw new Error("Post-refusal evidence checksum or size did not verify.");
+  }
+  const packet = postRefusalEvidencePacketSchema.parse(JSON.parse(body.toString("utf8")));
+  if (
+    packet.parentScanId !== message.parentScanId ||
+    message.scanId !== message.parentScanId ||
+    packet.observations.length !== message.observationCount ||
+    packet.refusalRegistration.refusalExercised !== message.refusalExercised ||
+    packet.productionProjectable !== message.productionFindingIntegration
+  ) {
+    throw new Error("Post-refusal evidence packet identity does not match its handoff message.");
+  }
+  const expectedStatus = packet.refusalRegistration.status === "confirmed"
+    ? packet.observations.length > 0 ? "confirmed_observation" : "confirmed_clean"
+    : packet.refusalRegistration.status;
+  if (message.status !== expectedStatus) {
+    throw new Error("Post-refusal evidence packet status does not match its handoff message.");
+  }
+  return { message, packet };
+}
+
+async function reconcilePostRefusalEvidenceWithCanonicalBase(
+  scanId: string,
+  providedProjection?: PostRefusalReportProjection,
+) {
+  const row = await queryOne<{
+    base_sha256: string | null;
+    packet_sha256: string | null;
+    projection_json: unknown;
+  }>(
+    `select terminal.metadata_json#>>'{artifactVerification,scanArtifact,sha256}' as base_sha256,
+            supplement.metadata_json->>'packetSha256' as packet_sha256,
+            supplement.metadata_json->'postRefusalReportProjection' as projection_json
+       from scan_events supplement
+       join scan_events terminal
+         on terminal.scan_id = supplement.scan_id
+        and terminal.event_type = $2
+      where supplement.scan_id = $1::uuid
+        and supplement.event_type = $3
+      order by terminal.created_at desc, supplement.created_at desc
+      limit 1`,
+    [scanId, RESULT_RECEIVED_EVENT_TYPE, POST_REFUSAL_EVIDENCE_RECEIVED_EVENT_TYPE],
+    { readOnly: true },
+  );
+  if (!row?.base_sha256 || !row.packet_sha256) return false;
+  const projection = providedProjection ?? postRefusalReportProjectionSchema.parse(row.projection_json);
+  await queryOne<{ id: string }>(
+    `with reconciled_event as (
+       insert into scan_events (scan_id, event_type, message, metadata_json)
+       select $1::uuid, $2, $3, $4::jsonb
+        where not exists (
+          select 1 from scan_events existing
+           where existing.scan_id = $1::uuid
+             and existing.event_type = $2
+             and existing.metadata_json->>'baseEvidenceSha256' = $5
+             and existing.metadata_json->>'postRefusalPacketSha256' = $6
+        )
+       returning id, scan_id
+     ), snapshot_invalidated as (
+       update scan_snapshots
+          set report_projection_status = 'pending',
+              report_projection_error = null
+        where scan_id in (select scan_id from reconciled_event)
+          and $7::boolean
+       returning scan_id
+     ), materialization_request as (
+       insert into public.scan_score_materialization_requests (
+         scan_id, token_sha256, status, attempt_count, requested_at, completed_at,
+         last_error, first_failed_at, last_attempt_at, next_attempt_at
+       )
+       select scan_id, repeat('0', 64), 'pending', 1, now(), null,
+              null, null, null, now()
+         from reconciled_event
+        where $7::boolean
+       on conflict (scan_id) do update
+         set token_sha256 = excluded.token_sha256,
+             status = 'pending',
+             attempt_count = least(
+               1000000,
+               public.scan_score_materialization_requests.attempt_count + 1
+             ),
+             requested_at = now(),
+             completed_at = null,
+             last_error = null,
+             first_failed_at = null,
+             last_attempt_at = null,
+             next_attempt_at = now()
+       returning scan_id
+     )
+     select id::text as id from reconciled_event`,
+    [
+      scanId,
+      POST_REFUSAL_EVIDENCE_RECONCILED_EVENT_TYPE,
+      "Verified post-refusal evidence was bound to the retained canonical base for canonical report projection.",
+      {
+        artifactOnly: !projection.productionProjectable,
+        baseEvidenceSha256: row.base_sha256,
+        canonicalProjection: projection.productionProjectable,
+        postRefusalPacketSha256: row.packet_sha256,
+        postRefusalReportProjection: projection,
+        productionFindingIntegration: projection.productionProjectable,
+        projectionStatus: projection.productionProjectable
+          ? "canonical_projection_candidate"
+          : "neutral_no_projection",
+        reconciledAt: new Date().toISOString(),
+        scoreImpact: projection.productionProjectable ? "canonical_policy" : "none",
+      },
+      row.base_sha256,
+      row.packet_sha256,
+      projection.productionProjectable,
+    ],
+  );
+  return true;
+}
+
+async function processPostRefusalEvidenceReadyMessage(input: {
+  queueRegion: string;
+  raw: string;
+  s3Client?: S3GetClient;
+  targetEnvironment: LambdaTargetEnvironment;
+  workspaceRoot?: string;
+}) {
+  const verified = await verifyPostRefusalEvidenceReadyMessage({
+    expectedTargetEnvironment: input.targetEnvironment,
+    raw: input.raw,
+    s3Client: input.s3Client,
+  });
+  if (input.targetEnvironment === "local") {
+    const outDir = localV2DagArtifactRoot(verified.message.scanId, input.workspaceRoot);
+    await mkdir(outDir, { recursive: true });
+    await writeFile(
+      path.join(outDir, "PostRefusalEvidencePacket.json"),
+      `${JSON.stringify(verified.packet, null, 2)}\n`,
+      "utf8",
+    );
+    return { ...verified, reconciled: false };
+  }
+  if (!isUuid(verified.message.scanId)) {
+    throw new Error("Production post-refusal evidence requires a canonical UUID scan identity.");
+  }
+  const existingScan = await queryOne<{ id: string }>(
+    "select id::text as id from scans where id = $1::uuid limit 1",
+    [verified.message.scanId],
+    { readOnly: true },
+  );
+  if (!existingScan) {
+    throw new Error(`Cannot retain post-refusal evidence for unknown scan ${verified.message.scanId}.`);
+  }
+  const metadata = {
+    artifactOnly: true,
+    generatedAt: verified.message.generatedAt,
+    observationCount: verified.message.observationCount,
+    packetPointer: verified.message.packetPointer,
+    packetSha256: verified.message.packetMetadata.sha256,
+    packetSizeBytes: verified.message.packetMetadata.sizeBytes,
+    parentDispatchSha256: verified.message.parentDispatchSha256,
+    postRefusalReportProjection: projectPostRefusalEvidenceForReport({
+      packet: verified.packet,
+      packetSha256: verified.message.packetMetadata.sha256,
+    }),
+    productionFindingIntegration: verified.message.productionFindingIntegration,
+    queueRegion: input.queueRegion,
+    refusalExercised: verified.message.refusalExercised,
+    status: verified.message.status,
+    verifiedAt: new Date().toISOString(),
+  };
+  await query(
+    `insert into scan_events (scan_id, event_type, message, metadata_json)
+     select $1::uuid, lifecycle.event_type, lifecycle.message, $4::jsonb
+       from unnest($2::text[], $3::text[]) as lifecycle(event_type, message)
+      where not exists (
+        select 1 from scan_events existing
+         where existing.scan_id = $1::uuid
+           and existing.event_type = lifecycle.event_type
+           and existing.metadata_json->>'packetSha256' = $5
+      )`,
+    [
+      verified.message.scanId,
+      [POST_REFUSAL_EVIDENCE_VERIFIED_EVENT_TYPE, POST_REFUSAL_EVIDENCE_RECEIVED_EVENT_TYPE],
+      [
+        "Post-refusal evidence packet checksum, size, contract, and identity verified.",
+        "Verified post-refusal evidence was retained for canonical reconciliation.",
+      ],
+      metadata,
+      verified.message.packetMetadata.sha256,
+    ],
+  );
+  const reconciled = await reconcilePostRefusalEvidenceWithCanonicalBase(
+    verified.message.scanId,
+    metadata.postRefusalReportProjection,
+  );
+  return { ...verified, reconciled };
 }
 
 type PolicyEvidenceConsumerMetadata = {
@@ -1872,6 +2117,41 @@ async function pollOnce(input: {
   const messages = response.Messages ?? [];
   const outcomes = await mapWithConcurrency(messages, RESULT_BATCH_CONCURRENCY, async (message) => {
     const rawMessage = messageBody(message);
+    if (isPostRefusalEvidenceReadyMessage(rawMessage)) {
+      try {
+        const result = await processPostRefusalEvidenceReadyMessage({
+          queueRegion: input.queueRegion,
+          raw: rawMessage,
+          targetEnvironment: input.targetEnvironment,
+        });
+        await input.client.send(new DeleteMessageCommand({
+          QueueUrl: input.queueUrl,
+          ReceiptHandle: receiptHandle(message),
+        }));
+        console.info("[validation-worker] retained post-refusal evidence supplement", {
+          observationCount: result.packet.observations.length,
+          reconciled: result.reconciled,
+          scanId: result.message.scanId,
+          status: result.message.status,
+        });
+        return { deleted: 1, failed: 0, handled: 1 };
+      } catch (error) {
+        const resultTargetEnvironment = getLambdaResultTargetEnvironment(rawMessage);
+        if (resultTargetEnvironment && resultTargetEnvironment !== input.targetEnvironment) {
+          await input.client.send(new ChangeMessageVisibilityCommand({
+            QueueUrl: input.queueUrl,
+            ReceiptHandle: receiptHandle(message),
+            VisibilityTimeout: 0,
+          }));
+          return { deleted: 0, failed: 0, handled: 0 };
+        }
+        console.error("[validation-worker] post-refusal evidence message rejected", {
+          error: error instanceof Error ? error.message : String(error),
+          messageId: message.MessageId ?? null,
+        });
+        return { deleted: 0, failed: 1, handled: 0 };
+      }
+    }
     if (isPolicyEvidenceReadyMessage(rawMessage)) {
       const started = startPolicyEvidenceReadyMessageProcessing({
         client: input.client,
@@ -1929,6 +2209,14 @@ async function pollOnce(input: {
           sqsMessageId: message.MessageId ?? null
         }
       });
+      if (parsed.targetEnvironment === "production") {
+        await reconcilePostRefusalEvidenceWithCanonicalBase(parsed.scanId).catch((error) => {
+          console.warn("[validation-worker] deferred post-refusal/base reconciliation", {
+            error: error instanceof Error ? error.message : String(error),
+            scanId: parsed.scanId,
+          });
+        });
+      }
       const lambdaCompletedAtMs = Date.parse(parsed.completedAt);
       console.info(JSON.stringify({
         event: "validation.v2_lambda_result.handoff",

@@ -5719,6 +5719,18 @@ const UNIFIED_FINDING_PRESENTATION_COPY_OVERRIDES: Record<
     suggestedFix: "Verify the reject path actually suppresses the non-essential vendors that were present at baseline, and re-test the post-reject runtime path with concrete request-level evidence.",
     whyThisMatters: "If non-essential tracking persists after reject, the site may be signaling a meaningful choice that is not actually enforced."
   },
+  post_refusal_non_essential_activity: {
+    suggestedFix: "Update the reject path so confirmed refusal suppresses non-essential network requests and storage writes, then re-test the same post-refusal window.",
+    whyThisMatters: "Non-essential activity after a confirmed refusal can show that the consent control is not enforcing the visitor's recorded choice."
+  },
+  pre_consent_storage_not_cleared: {
+    suggestedFix: "Review non-essential storage created before choice and clear or deactivate it when refusal is confirmed unless it is genuinely necessary.",
+    whyThisMatters: "Non-essential identifiers that remain after refusal can continue carrying state even when no new tracker request is observed."
+  },
+  refusal_signal_contradicts_action: {
+    suggestedFix: "Correct the CMP state transition so the post-refusal consent signal records denied optional purposes consistently with the confirmed reject action.",
+    whyThisMatters: "A consent signal that grants purposes after confirmed refusal can communicate a choice state that contradicts the visitor's action."
+  },
   consent_mechanism_absent: {
     suggestedFix: "Add a clear consent control surface before non-essential tracking starts, and make sure users can reject or manage that tracking without extra friction.",
     whyThisMatters: "If no consent controls are presented, users may not get a meaningful chance to manage non-essential tracking before it begins."

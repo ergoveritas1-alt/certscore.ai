@@ -204,6 +204,39 @@ test("buildApiV2ScanResource projects a completed scan into public-safe v2 shape
   assert.equal(resource.links?.findings, "https://certscore.ai/api/v2/scans/00000000-0000-4000-8000-000000000123/findings");
 });
 
+test("API v2 and status expose bounded canonical post-refusal observation metadata", () => {
+  const retained = {
+    ...fixture(),
+    events: [{
+      id: "event-post-refusal",
+      eventType: "v2_post_refusal_evidence.reconciled",
+      createdAt: "2026-08-26T12:00:10.000Z",
+      metadataJson: {
+        postRefusalReportProjection: {
+          status: "confirmed_observation",
+          refusalExercised: true,
+          observationCount: 2,
+          productionProjectable: true,
+          completedAt: "2026-08-26T12:00:09.000Z",
+          limitations: ["bounded_observation_window"],
+        },
+      },
+    }],
+  } as unknown as ScanDetailResponse;
+
+  const resource = buildApiV2ScanResource(retained);
+  const status = buildApiV2ScanStatus(retained, { canonicalScan: resource });
+  assert.deepEqual(resource.postRefusalObservation, {
+    status: "confirmed_observation",
+    refusalExercised: true,
+    observationCount: 2,
+    productionProjectable: true,
+    completedAt: "2026-08-26T12:00:09.000Z",
+    limitations: ["bounded_observation_window"],
+  });
+  assert.deepEqual(status.postRefusalObservation, resource.postRefusalObservation);
+});
+
 test("buildApiV2ScanResource preserves the configured page path", () => {
   const resource = buildApiV2ScanResource(fixture({
     scanConfigJson: { normalizedUrl: "https://example.com/test/consent.html" }

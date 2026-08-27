@@ -2020,6 +2020,30 @@ export const REPORT_SIGNALS: ReportSignalDefinition[] = [
   ),
   defineReportSignal(
     "runtime_artifact_signal",
+    "privacy.post_refusal_non_essential_activity",
+    "Non-essential activity after refusal",
+    "enforcement_outcomes_after_user_choice",
+    ["third_party_network_cookie_surface"],
+    ["consent_lawful_basis_user_choice", "tracking_profiling_sensitive_data_risk"]
+  ),
+  defineReportSignal(
+    "runtime_artifact_signal",
+    "privacy.pre_consent_storage_not_cleared",
+    "Pre-consent storage remained after refusal",
+    "enforcement_outcomes_after_user_choice",
+    ["third_party_network_cookie_surface"],
+    ["consent_lawful_basis_user_choice"]
+  ),
+  defineReportSignal(
+    "runtime_artifact_signal",
+    "privacy.refusal_signal_contradicts_action",
+    "Refusal signal contradicted action",
+    "enforcement_outcomes_after_user_choice",
+    [],
+    ["consent_lawful_basis_user_choice", "opt_out_choice_design_dark_pattern_risk"]
+  ),
+  defineReportSignal(
+    "runtime_artifact_signal",
     "consent_reject_reduced_third_party_cookies",
     "Reject reduced third-party cookies",
     "enforcement_outcomes_after_user_choice",
@@ -2884,6 +2908,32 @@ export const REPORT_UNIFIED_FINDINGS = [
     overlays: ["consent_lawful_basis_user_choice", "tracking_profiling_sensitive_data_risk"],
     signalMappings: [{ source: "runtime_artifact_signal", key: "consent_reject_reduced_tracking" }],
     aliases: ["Reject interaction did not reduce tracking", "Reject path did not reduce tracking"]
+  }),
+  defineReportUnifiedFinding({
+    id: "post_refusal_non_essential_activity",
+    label: "Non-essential activity continued after refusal",
+    owner: "enforcement_outcomes_after_user_choice",
+    mirrors: ["third_party_network_cookie_surface"],
+    overlays: ["consent_lawful_basis_user_choice", "tracking_profiling_sensitive_data_risk"],
+    signalMappings: [{ source: "runtime_artifact_signal", key: "privacy.post_refusal_non_essential_activity" }],
+    aliases: ["Post-refusal non-essential activity", "Non-essential activity after reject"]
+  }),
+  defineReportUnifiedFinding({
+    id: "pre_consent_storage_not_cleared",
+    label: "Pre-consent storage remained after refusal",
+    owner: "enforcement_outcomes_after_user_choice",
+    mirrors: ["third_party_network_cookie_surface"],
+    overlays: ["consent_lawful_basis_user_choice"],
+    signalMappings: [{ source: "runtime_artifact_signal", key: "privacy.pre_consent_storage_not_cleared" }],
+    aliases: ["Pre-consent storage not cleared", "Non-essential storage persisted after reject"]
+  }),
+  defineReportUnifiedFinding({
+    id: "refusal_signal_contradicts_action",
+    label: "Consent signal contradicted confirmed refusal",
+    owner: "enforcement_outcomes_after_user_choice",
+    overlays: ["consent_lawful_basis_user_choice", "opt_out_choice_design_dark_pattern_risk"],
+    signalMappings: [{ source: "runtime_artifact_signal", key: "privacy.refusal_signal_contradicts_action" }],
+    aliases: ["Refusal signal contradicts action", "TCF signal contradicted reject"]
   }),
   defineReportUnifiedFinding({
     id: "reject_did_not_reduce_third_party_cookies",

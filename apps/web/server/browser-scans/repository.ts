@@ -7,6 +7,7 @@ import type { AuthenticatedAppUser } from "../auth-flows/types";
 import { bootstrapAppUserSession } from "../bootstrap-user";
 import { createOrganizationDomain, findOrganizationDomainByNormalizedUrl } from "../domains/repository";
 import { findOrCreateAnonymousPreviewDomain } from "../preview-scan/preview-scan-repository";
+import { CURRENT_GDPR_EPRIVACY_SCORE_VERSION } from "../scans/score-assessment-projection";
 import { deriveBrowserScanCanonicalMaterializationFromObservedSignals } from "./canonical-materialization";
 import { summarizeBrowserEvidence, type BrowserScanArtifactRow, type BrowserScanEventRow } from "./evidence-summary";
 import { buildBrowserObservedSignalPackageFromEvidence } from "./observed-signal-package";
@@ -743,7 +744,7 @@ export async function completeBrowserScanSession(input: {
       browserScanId: input.browserScanId,
       error: error instanceof Error ? error.message : String(error),
       scanId: canonicalScanId,
-      scoreVersion: "gdpr-eprivacy-evidence.legacy-v1"
+      scoreVersion: CURRENT_GDPR_EPRIVACY_SCORE_VERSION
     });
   }
 

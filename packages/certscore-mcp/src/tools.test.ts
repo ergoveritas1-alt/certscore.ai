@@ -299,6 +299,63 @@ test("documented 8 KB findings budget preserves compact row-level pre-consent ev
   assert.doesNotThrow(() => mcpScanBundleOutputSchema.parse(bundle));
 });
 
+test("5 KB floor keeps canonical post-refusal findings ahead of pre-consent findings", () => {
+  const orderedIds = [
+    "pre_consent_tracking_detected",
+    "pre_consent_cookie_storage",
+    "post_refusal_non_essential_activity",
+    "pre_consent_storage_not_cleared",
+    "refusal_signal_contradicts_action",
+  ];
+  const bundle = buildScanBundle({
+    detail: "findings",
+    findings: {
+      type: "certscore_finding_list",
+      scanId: "scan_post_refusal_budget",
+      findings: orderedIds.map((id) => publicFinding(id)),
+    },
+    maxBytes: 5_000,
+    preConsentCookiesTrackers: {
+      type: "certscore_pre_consent_cookies_trackers",
+      rows: Array.from({ length: 20 }, (_, index) => ({
+        id: `inventory_${index}`,
+        kind: "tracker",
+        name: `Inventory ${index}`,
+        cookieNames: [],
+        vendor: `Vendor ${index}`,
+        purpose: "Analytics",
+        category: "Analytics",
+        confidence: "high",
+      })),
+      summary: { rowCount: 20 },
+    },
+    report,
+    scan: {
+      type: "certscore_scan",
+      scanId: "scan_post_refusal_budget",
+      domain: "example.com",
+      status: "completed",
+      links: {
+        findings: "https://certscore.ai/api/v2/scans/scan_post_refusal_budget/findings",
+        report: "https://certscore.ai/scan/scan_post_refusal_budget",
+      },
+    },
+  } as any);
+
+  assert.deepEqual(
+    bundle.findings.slice(0, 3).map((finding: Record<string, unknown>) => finding.id),
+    [
+      "post_refusal_non_essential_activity",
+      "pre_consent_storage_not_cleared",
+      "refusal_signal_contradicts_action",
+    ],
+  );
+  assert.equal(bundle.findingsMetadata.returned, 5);
+  assert.equal(bundle.mcpMetadata.canonicalFindingsComplete, true);
+  assert.ok(bundle.mcpMetadata.actualBytes <= 5_000);
+  assert.doesNotThrow(() => mcpScanBundleOutputSchema.parse(bundle));
+});
+
 test("buildScanBundle implements materially distinct detail modes", () => {
   const common = {
     evidence: { ...report, evidenceSafetyNotes: ["Retained evidence is bounded."] },

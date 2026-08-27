@@ -128,7 +128,7 @@ function getNumber(record: Record<string, unknown> | null | undefined, keys: str
 }
 
 const MAX_RUNTIME_ELAPSED_MS = 10 * 60 * 1000;
-const POST_CHOICE_FLOW_DEFERRED_FROM_PRODUCTION_CORE: boolean = true;
+const POST_CHOICE_FLOW_DEFERRED_FROM_PRODUCTION_CORE: boolean = false;
 
 function normalizeRuntimeElapsedMs(value: number | null | undefined) {
   if (typeof value !== "number" || !Number.isFinite(value)) {
@@ -6118,7 +6118,7 @@ function hasConcretePostRejectNonEssentialDetail(row: Record<string, unknown>) {
     ]) !== null;
   const category = getPostRejectRowCategory(row);
   const eligibleCategory = category
-    ? /analytics|advertising|tracking|marketing|measurement|adtech|session[_\s-]?replay/i.test(category)
+    ? /analytics|advertising|tracking|marketing|measurement|adtech|session[_\s-]?replay|tag[_\s-]?management|performance[_\s-]?monitoring/i.test(category)
     : false;
   const timingOrCounts =
     getNumber(row, ["msAfterReject", "ms_after_reject", "timestampMs", "timestamp_ms", "requestCount", "request_count"]) !== null ||
@@ -6195,6 +6195,18 @@ function derivePostRejectOutcome(input: GdprEprivacyCoveragePolicyInput) {
     );
   const postRejectNonEssentialRows = getPostRejectNonEssentialRows(reductionEvidence);
   const concretePostRejectNonEssentialRows = postRejectNonEssentialRows.filter(hasConcretePostRejectNonEssentialDetail);
+  const preConsentStorageNotClearedCount = getNumber(reductionEvidence, [
+    "preConsentStorageNotClearedCount",
+    "pre_consent_storage_not_cleared_count"
+  ]) ?? 0;
+  const preConsentStorageNotClearedItems = getObjectArray(reductionEvidence, [
+    "preConsentStorageNotClearedItems",
+    "pre_consent_storage_not_cleared_items"
+  ]);
+  const refusalSignalContradictsAction = getBoolean(reductionEvidence, [
+    "refusalSignalContradictsAction",
+    "refusal_signal_contradicts_action"
+  ]) === true;
   const retainedRejectInteractionFailureClass =
     getString(reductionEvidence, ["rejectInteractionFailureClass", "reject_interaction_failure_class"]) ??
       getStringArray(reductionEvidence, ["negativeReasonCodes", "negative_reason_codes"]).find((reason) =>
@@ -6218,12 +6230,19 @@ function derivePostRejectOutcome(input: GdprEprivacyCoveragePolicyInput) {
     postRejectVendors: compactArray(postRejectVendors, 5),
     postRejectWindowAvailable,
     reductionEvaluationStatus: reductionStatus,
+    preConsentStorageNotCleared: preConsentStorageNotClearedCount > 0,
+    preConsentStorageNotClearedCount,
+    preConsentStorageNotClearedItems: compactArray(preConsentStorageNotClearedItems, 5),
+    refusalSignalContradictsAction,
     rejectInteractionFailureClass,
     rejectInteractionFailureReason,
     rejectInteractionConfirmed: rejectInteractionSucceeded
   };
 
-  if (POST_CHOICE_FLOW_DEFERRED_FROM_PRODUCTION_CORE) {
+  if (
+    POST_CHOICE_FLOW_DEFERRED_FROM_PRODUCTION_CORE ||
+    getBoolean(reductionEvidence, ["productionProjectable", "production_projectable"]) !== true
+  ) {
     return makeOutcome(
       "post_reject_tracking_reduction",
       "Not testable",
@@ -10281,6 +10300,7 @@ function getPostRejectSessionReplayEvidence(input: GdprEprivacyCoveragePolicyInp
     postRejectRequestUrls: compactArray(sessionReplayRequestUrls, 5),
     postRejectSessionReplayRows: compactArray(rows, 5),
     postRejectWindowAvailable,
+    productionProjectable: getBoolean(reductionEvidence, ["productionProjectable", "production_projectable"]),
     reductionEvaluationStatus: reductionStatus,
     rejectInteractionConfirmed,
     vendors: compactArray(sessionReplayVendors, 5)
@@ -10966,7 +10986,10 @@ function deriveSessionReplayAfterRefusalOutcome(input: GdprEprivacyCoveragePolic
     "post_reject_window_available"
   ]);
 
-  if (POST_CHOICE_FLOW_DEFERRED_FROM_PRODUCTION_CORE) {
+  if (
+    POST_CHOICE_FLOW_DEFERRED_FROM_PRODUCTION_CORE ||
+    getBoolean(postRejectEvidence, ["productionProjectable", "production_projectable"]) !== true
+  ) {
     return makeOutcome(
       "session_replay_after_refusal",
       "Not testable",

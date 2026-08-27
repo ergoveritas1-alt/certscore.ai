@@ -69,6 +69,15 @@ export type StaticFixturePage =
   | "consent-simple-accept-reject"
   | "consent-sits-style-preferences"
   | "consent-tracking-persists-after-reject"
+  | "post-refusal-reject-honored"
+  | "post-refusal-reject-ignored"
+  | "post-refusal-reject-missing"
+  | "post-refusal-reject-unconfirmed"
+  | "post-refusal-reject-inflight"
+  | "post-refusal-onetrust-tcf-honored"
+  | "post-refusal-onetrust-tcf-contradiction"
+  | "post-refusal-cookiebot-fast"
+  | "post-refusal-usercentrics-delayed"
   | "ga-collection"
   | "ga-first-party-vendor-associated-cookie"
   | "generic-bare-choice-controls"
@@ -262,6 +271,15 @@ const fixtureSlugs: Record<StaticFixturePage, string> = {
   "consent-simple-accept-reject": "consent-simple",
   "consent-sits-style-preferences": "consent-sits-style-preferences",
   "consent-tracking-persists-after-reject": "consent-persists",
+  "post-refusal-reject-honored": "post-refusal-reject-honored",
+  "post-refusal-reject-ignored": "post-refusal-reject-ignored",
+  "post-refusal-reject-missing": "post-refusal-reject-missing",
+  "post-refusal-reject-unconfirmed": "post-refusal-reject-unconfirmed",
+  "post-refusal-reject-inflight": "post-refusal-reject-inflight",
+  "post-refusal-onetrust-tcf-honored": "post-refusal-onetrust-tcf-honored",
+  "post-refusal-onetrust-tcf-contradiction": "post-refusal-onetrust-tcf-contradiction",
+  "post-refusal-cookiebot-fast": "post-refusal-cookiebot-fast",
+  "post-refusal-usercentrics-delayed": "post-refusal-usercentrics-delayed",
   "ga-collection": "ga-page",
   "ga-first-party-vendor-associated-cookie": "ga-first-party-cookie",
   "generic-bare-choice-controls": "generic-bare-choice-controls",
@@ -400,7 +418,7 @@ const fixturePrivacyPdfNl = createTextPdf([
   "U heeft het recht om klacht in te dienen bij een toezichthoudende autoriteit.",
 ].join("\n"));
 
-export async function startStaticFixtureServer(): Promise<StaticFixtureServer> {
+export async function startStaticFixtureServer(options: { port?: number } = {}): Promise<StaticFixtureServer> {
   const requestCounts = new Map<string, number>();
   const server = createServer((request, response) => {
     const pathname = new URL(request.url ?? "/", "http://fixture.local").pathname;
@@ -409,7 +427,7 @@ export async function startStaticFixtureServer(): Promise<StaticFixtureServer> {
   });
   await new Promise<void>((resolve, reject) => {
     server.once("error", reject);
-    server.listen(0, "127.0.0.1", () => {
+    server.listen(options.port ?? 0, "127.0.0.1", () => {
       server.off("error", reject);
       resolve();
     });
@@ -977,6 +995,19 @@ function handleRequest(request: IncomingMessage, response: ServerResponse): void
     return;
   }
 
+  if (url.pathname === "/post-refusal/inflight.gif") {
+    const timer = setTimeout(() => {
+      if (response.destroyed) return;
+      response.writeHead(200, {
+        "Content-Type": "image/gif",
+        "Content-Length": String(onePixelGif.length),
+      });
+      response.end(onePixelGif);
+    }, 1_200);
+    request.once("close", () => clearTimeout(timer));
+    return;
+  }
+
   if (url.pathname === "/policies/article13-latin1-es") {
     response.writeHead(200, { "Content-Type": "text/html; charset=iso-8859-15" });
     response.end(Buffer.from(`<!doctype html>
@@ -1179,6 +1210,9 @@ function headMarkup(caseName: StaticFixturePage): string {
 }
 
 function bodyMarkup(caseName: StaticFixturePage): string {
+  if (caseName.startsWith("post-refusal-")) {
+    return postRefusalFixtureMarkup(caseName);
+  }
   if (caseName.startsWith("consent-")) {
     return consentFlowHomeMarkup(caseName);
   }
@@ -1378,6 +1412,135 @@ function bodyMarkup(caseName: StaticFixturePage): string {
     `;
   }
   return "";
+}
+
+function postRefusalFixtureMarkup(caseName: StaticFixturePage): string {
+  if (
+    caseName === "post-refusal-onetrust-tcf-honored" ||
+    caseName === "post-refusal-onetrust-tcf-contradiction" ||
+    caseName === "post-refusal-cookiebot-fast" ||
+    caseName === "post-refusal-usercentrics-delayed"
+  ) {
+    return namedCmpPostRefusalFixtureMarkup(caseName);
+  }
+  const rejectMissing = caseName === "post-refusal-reject-missing";
+  const rejectUnconfirmed = caseName === "post-refusal-reject-unconfirmed";
+  const rejectIgnored = caseName === "post-refusal-reject-ignored";
+  const rejectInflight = caseName === "post-refusal-reject-inflight";
+  return `
+    <section>
+      <h1>Post-refusal localhost fixture</h1>
+      <p>This deterministic fixture is restricted to local scanner development.</p>
+    </section>
+    <div id="certscore-fixture-consent-banner" role="dialog" aria-label="Cookie consent">
+      <p>We use optional analytics cookies. Choose whether to accept or reject them.</p>
+      <button type="button" data-certscore-consent-action="accept">Accept all</button>
+      ${rejectMissing
+        ? ""
+        : '<button id="certscore-fixture-reject" type="button" data-certscore-consent-action="reject">Reject all</button>'}
+    </div>
+    <script>
+      const fixtureMode = ${JSON.stringify(caseName)};
+      document.cookie = "_ga=GA1.1.LOCALFIXTURE; Path=/; SameSite=Lax";
+      if (${JSON.stringify(rejectInflight)}) {
+        const inFlight = new Image();
+        inFlight.alt = "";
+        inFlight.src = "/post-refusal/inflight.gif?started=before-refusal";
+        document.body.appendChild(inFlight);
+      }
+      document.getElementById("certscore-fixture-reject")?.addEventListener("click", () => {
+        document.getElementById("certscore-fixture-consent-banner")?.remove();
+        if (${JSON.stringify(rejectUnconfirmed)}) return;
+
+        localStorage.setItem("certscore_fixture_consent", "rejected");
+        if (!${JSON.stringify(rejectIgnored)}) {
+          document.cookie = "_ga=; Path=/; Max-Age=0; SameSite=Lax";
+        }
+        if (${JSON.stringify(rejectIgnored)}) {
+          setTimeout(() => {
+            document.cookie = "_gid=GA1.1.POSTREFUSAL; Path=/; SameSite=Lax";
+            const analytics = new Image();
+            analytics.alt = "";
+            analytics.src = "https://www.google-analytics.com/g/collect?v=2&tid=G-LOCALFIXTURE&en=post_refusal";
+            document.body.appendChild(analytics);
+          }, 60);
+        }
+      });
+    </script>
+  `;
+}
+
+function namedCmpPostRefusalFixtureMarkup(caseName: StaticFixturePage): string {
+  const oneTrust = caseName === "post-refusal-onetrust-tcf-honored" ||
+    caseName === "post-refusal-onetrust-tcf-contradiction";
+  const contradiction = caseName === "post-refusal-onetrust-tcf-contradiction";
+  const cookiebot = caseName === "post-refusal-cookiebot-fast";
+  const usercentrics = caseName === "post-refusal-usercentrics-delayed";
+  const bannerId = oneTrust
+    ? "onetrust-banner-sdk"
+    : cookiebot
+      ? "CybotCookiebotDialog"
+      : "usercentrics-root";
+  const rejectButton = oneTrust
+    ? '<button id="onetrust-reject-all-handler" type="button">Reject all</button>'
+    : cookiebot
+      ? '<button id="CybotCookiebotDialogBodyButtonDecline" type="button">Reject all</button>'
+      : '<button data-testid="uc-deny-all-button" type="button">Reject all</button>';
+  const bannerMarkup = `
+    <div id="${bannerId}" role="dialog" aria-label="Cookie consent">
+      <p>Optional purposes require a choice.</p>
+      ${rejectButton}
+    </div>`;
+  const renderDelayMs = usercentrics ? 1_200 : 0;
+  return `
+    <section>
+      <h1>Named CMP post-refusal localhost fixture</h1>
+      <p>Fixture CMP: ${oneTrust ? "OneTrust" : cookiebot ? "Cookiebot" : "Usercentrics"}</p>
+    </section>
+    <div id="certscore-cmp-fixture-root"></div>
+    <script>
+      const fixtureMode = ${JSON.stringify(caseName)};
+      let tcfState = {
+        eventStatus: "tcloaded",
+        tcString: "CERTSCORE-TCF-PRE-ACTION",
+        purpose: { consents: Object.fromEntries(Array.from({ length: 10 }, (_, index) => [String(index + 1), true])) }
+      };
+      if (${JSON.stringify(oneTrust)}) {
+        window.__tcfapi = (command, version, callback) => {
+          if (command !== "getTCData" || version !== 2) return callback({}, false);
+          callback(JSON.parse(JSON.stringify(tcfState)), true);
+        };
+      }
+      const renderBanner = () => {
+        document.getElementById("certscore-cmp-fixture-root").innerHTML = ${JSON.stringify(bannerMarkup)};
+        const reject = document.querySelector(${JSON.stringify(
+          oneTrust
+            ? "#onetrust-reject-all-handler"
+            : cookiebot
+              ? "#CybotCookiebotDialogBodyButtonDecline"
+              : 'button[data-testid="uc-deny-all-button"]',
+        )});
+        reject.addEventListener("click", () => {
+          document.getElementById(${JSON.stringify(bannerId)})?.remove();
+          localStorage.setItem("certscore_fixture_consent", "rejected");
+          if (${JSON.stringify(oneTrust)}) {
+            tcfState = {
+              eventStatus: "useractioncomplete",
+              tcString: ${JSON.stringify(contradiction ? "CERTSCORE-TCF-CONTRADICTION" : "CERTSCORE-TCF-DENIED")},
+              purpose: {
+                consents: Object.fromEntries(Array.from({ length: 10 }, (_, index) => [
+                  String(index + 1),
+                  ${JSON.stringify(contradiction)} && index === 0
+                ]))
+              }
+            };
+          }
+        });
+      };
+      if (${renderDelayMs} > 0) setTimeout(renderBanner, ${renderDelayMs});
+      else renderBanner();
+    </script>
+  `;
 }
 
 function consentFlowHomeMarkup(caseName: StaticFixturePage): string {

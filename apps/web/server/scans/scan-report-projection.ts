@@ -56,8 +56,10 @@ import {
   getScanReportProjectionGeneration,
   SCAN_REPORT_PROJECTION_NON_SOURCE_EVENT_TYPES
 } from "./scan-report-projection-generation";
-import { getReportableGdprEprivacyCoverageItems } from "../../lib/scans/gdpr-eprivacy-reportable-rows";
-import { deriveRegulatoryCoverageScore } from "../../lib/scans/regulatory-coverage-score";
+import {
+  deriveRegulatoryCoverageScore,
+  GDPR_EPRIVACY_EVIDENCE_SCORE_VERSION
+} from "../../lib/scans/regulatory-coverage-score";
 import { buildLegacyGdprEprivacyVersionedAssessmentInput } from "./score-assessment-projection";
 import {
   PERSISTED_CANONICAL_REPORT_PROJECTION_VERSION,
@@ -732,7 +734,7 @@ async function deriveScanReportProjection(
     egressProvider,
     durationMs: numberValue(scanRecord.scan.durationMs),
     scoreSource: canonicalScore === null ? (score === null ? null : "legacy.scan_snapshot") : "canonical.gdpr_eprivacy",
-    scoreVersion: canonicalScore === null ? null : "gdpr-eprivacy-canonical-shadow-v7",
+    scoreVersion: canonicalScore === null ? null : GDPR_EPRIVACY_EVIDENCE_SCORE_VERSION,
     scoreScoredAt: scanRecord.scan.completedAt
   };
   if (!scanRecord.scan.completedAt) {
@@ -740,7 +742,7 @@ async function deriveScanReportProjection(
   }
   const legacyScoreAssessment = deriveRegulatoryCoverageScore({
     framework: "gdpr_eprivacy",
-    rows: getReportableGdprEprivacyCoverageItems(checklist)
+    rows: checklist
   });
   const indexedChecklistEvidence = indexChecklistPolicyEvidence(checklist);
   const ownerUnifiedFindings = buildScanReportUnifiedFindingsFromState(reportState);

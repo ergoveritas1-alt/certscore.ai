@@ -1,7 +1,8 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import {
-  buildLegacyGdprEprivacyVersionedAssessmentInput
+  buildLegacyGdprEprivacyVersionedAssessmentInput,
+  CURRENT_GDPR_EPRIVACY_SCORE_VERSION
 } from "./score-assessment-projection";
 
 const assessment = {
@@ -10,7 +11,7 @@ const assessment = {
   score: 71,
   scoreKind: "gdpr_eprivacy_evidence" as const,
   scoreSource: "wc01.regulatory-coverage-score",
-  scoreVersion: "gdpr-eprivacy-evidence.legacy-v1"
+  scoreVersion: CURRENT_GDPR_EPRIVACY_SCORE_VERSION
 };
 
 test("versioned legacy assessment retains only surfaced finding ids", () => {
@@ -35,6 +36,86 @@ test("versioned legacy assessment retains only surfaced finding ids", () => {
   assert.equal(projected.withholdingReason, undefined);
 });
 
+test("versioned score fingerprint binds confirmed post-refusal scoring evidence", () => {
+  const common = {
+    assessment,
+    scanId: "00000000-0000-4000-8000-000000000003",
+    scoredAt: "2026-07-21T12:00:00.000Z",
+    unifiedFindings: []
+  };
+  const unconfirmed = buildLegacyGdprEprivacyVersionedAssessmentInput({
+    ...common,
+    checklistRows: [{
+      assessmentStatus: "review_signal",
+      criticalEvidence: {
+        retainedEvidence: {
+          preConsentStorageNotClearedCount: 1,
+          rejectInteractionConfirmed: false
+        }
+      },
+      evidenceState: "observed",
+      id: "post_reject_tracking_reduction",
+      status: "Review signal"
+    }]
+  });
+  const confirmed = buildLegacyGdprEprivacyVersionedAssessmentInput({
+    ...common,
+    checklistRows: [{
+      assessmentStatus: "review_signal",
+      criticalEvidence: {
+        retainedEvidence: {
+          preConsentStorageNotClearedCount: 1,
+          rejectInteractionConfirmed: true
+        }
+      },
+      evidenceState: "observed",
+      id: "post_reject_tracking_reduction",
+      status: "Review signal"
+    }]
+  });
+
+  assert.notEqual(unconfirmed.inputProjectionFingerprint, confirmed.inputProjectionFingerprint);
+});
+
+test("versioned score fingerprint binds refusal-signal contradictions", () => {
+  const common = {
+    assessment,
+    scanId: "00000000-0000-4000-8000-000000000004",
+    scoredAt: "2026-08-26T12:00:00.000Z",
+    unifiedFindings: [],
+  };
+  const withoutContradiction = buildLegacyGdprEprivacyVersionedAssessmentInput({
+    ...common,
+    checklistRows: [{
+      assessmentStatus: "review_signal",
+      criticalEvidence: { retainedEvidence: { rejectInteractionConfirmed: true } },
+      evidenceState: "observed",
+      id: "post_reject_tracking_reduction",
+      status: "Review signal",
+    }],
+  });
+  const withContradiction = buildLegacyGdprEprivacyVersionedAssessmentInput({
+    ...common,
+    checklistRows: [{
+      assessmentStatus: "review_signal",
+      criticalEvidence: {
+        retainedEvidence: {
+          refusalSignalContradictsAction: true,
+          rejectInteractionConfirmed: true,
+        },
+      },
+      evidenceState: "observed",
+      id: "post_reject_tracking_reduction",
+      status: "Review signal",
+    }],
+  });
+
+  assert.notEqual(
+    withoutContradiction.inputProjectionFingerprint,
+    withContradiction.inputProjectionFingerprint,
+  );
+});
+
 test("legacy assessment records deterministic withholding", () => {
   const projected = buildLegacyGdprEprivacyVersionedAssessmentInput({
     assessment: { ...assessment, coverageConfidence: "insufficient", score: null },
@@ -45,5 +126,5 @@ test("legacy assessment records deterministic withholding", () => {
   });
 
   assert.equal(projected.scoreValue, null);
-  assert.equal(projected.withholdingReason, "legacy_evidence_score_withheld:insufficient");
+  assert.equal(projected.withholdingReason, "gdpr_eprivacy_posture_score_withheld:insufficient");
 });

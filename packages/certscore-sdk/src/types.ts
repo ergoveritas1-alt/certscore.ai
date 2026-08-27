@@ -119,6 +119,21 @@ export interface ScanCreationMetadata {
   recommendedNextTool?: "certscore_get_scan_status" | "certscore_get_scan_bundle";
 }
 
+export interface PostRefusalObservation {
+  status:
+    | "confirmed_observation"
+    | "confirmed_clean"
+    | "unconfirmed"
+    | "not_attempted"
+    | "unsupported"
+    | "aborted";
+  refusalExercised: boolean;
+  observationCount: number;
+  productionProjectable: boolean;
+  completedAt: string | null;
+  limitations: string[];
+}
+
 export interface ScanResource extends ScanCreationMetadata {
   type: "certscore_scan";
   scanId: string;
@@ -137,6 +152,7 @@ export interface ScanResource extends ScanCreationMetadata {
   scoreVersion?: string | null;
   scoreUpdatedAt?: string | null;
   riskLevel?: string | null;
+  postRefusalObservation?: PostRefusalObservation | null;
   coverage?: {
     status?: string;
     summary?: string;
@@ -169,6 +185,7 @@ export interface ScanJob extends ScanCreationMetadata {
   scoreVersion?: string | null;
   scoreUpdatedAt?: string | null;
   riskLevel?: string | null;
+  postRefusalObservation?: PostRefusalObservation | null;
   coverage?: ScanResource["coverage"] | null;
   lastUpdatedAt?: string;
   phaseStartedAt?: string | null;

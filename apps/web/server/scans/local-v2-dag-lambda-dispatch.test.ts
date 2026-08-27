@@ -147,6 +147,43 @@ test("drops stale prior policy URLs before Lambda dispatch", () => {
   assert.equal(payload.policySurfaceSeeds, undefined);
 });
 
+test("adds the default-off reject worker only for sharded owned-canary dispatch", () => {
+  const canaryConfig = buildLambdaScanConfig();
+  canaryConfig.hostname = "ergoveritas.com";
+  canaryConfig.normalizedUrl =
+    "https://ergoveritas.com/.well-known/certscore-canary/post-refusal/reject-honored.html";
+  canaryConfig.execution = {
+    ...canaryConfig.execution,
+    v2DagLambda: {
+      ...(canaryConfig.execution?.v2DagLambda as Record<string, unknown>),
+      orchestrationMode: "sharded",
+      postRefusalRejectWorkerEnabled: true,
+    },
+  };
+  const canaryPayload = buildLocalV2DagLambdaDispatchPayload({
+    scanConfig: canaryConfig,
+    scanId: "scan-canary-reject",
+  });
+  assert.equal(canaryPayload.postRefusalObservation?.dispatchDelayMs, 2_000);
+  assert.equal(canaryPayload.postRefusalObservation?.interactionAuthorization.kind, "owned_canary");
+  assert.equal(canaryPayload.postRefusalObservation?.cmpCanonicalName, "OneTrust");
+
+  const ordinaryConfig = buildLambdaScanConfig();
+  ordinaryConfig.execution = {
+    ...ordinaryConfig.execution,
+    v2DagLambda: {
+      ...(ordinaryConfig.execution?.v2DagLambda as Record<string, unknown>),
+      orchestrationMode: "sharded",
+      postRefusalRejectWorkerEnabled: true,
+    },
+  };
+  const ordinaryPayload = buildLocalV2DagLambdaDispatchPayload({
+    scanConfig: ordinaryConfig,
+    scanId: "scan-ordinary",
+  });
+  assert.equal(ordinaryPayload.postRefusalObservation, undefined);
+});
+
 test("builds local Lambda dispatch payload with bounded debug overrides", () => {
   const payload = buildLocalV2DagLambdaDispatchPayload({
     localCallbackUrl: null,

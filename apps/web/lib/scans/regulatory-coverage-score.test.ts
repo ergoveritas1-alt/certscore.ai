@@ -125,7 +125,7 @@ test("contextual inline and persistent settings links do not incur a material sc
   }
 });
 
-test("no-surface consent rows attribute score effect only to the reject partial concern", () => {
+test("no-surface consent rows attribute an eight-point deduction only to the reject partial concern", () => {
   const rows = [
     "consent_surface_observed",
     "cmp_framework_signal_observed",
@@ -154,7 +154,7 @@ test("no-surface consent rows attribute score effect only to the reject partial 
     ]
   });
 
-  assert.equal(result.score, 45);
+  assert.equal(result.score, 92);
   assert.equal(result.coverageRatio, 1);
 });
 
@@ -220,7 +220,7 @@ test("confirmed non-essential pre-consent storage retains its substantive score 
     }]
   });
 
-  assert.equal(result.score, 0);
+  assert.equal(result.score, 92);
 });
 
 test("California score is derived from evidence-gated checklist rows", () => {
@@ -314,11 +314,151 @@ test("GDPR/ePrivacy score uses the same row-led scoring mechanics", () => {
   assert.equal(strongScore.scoreVersion, GDPR_EPRIVACY_EVIDENCE_SCORE_VERSION);
   assert.equal(strongScore.scoreSource, REGULATORY_COVERAGE_SCORE_SOURCE);
   assert.equal(strongScore.ratingLabel, "Strong");
-  assert.match(strongScore.summary, /evidence-gated checklist rows/i);
+  assert.match(strongScore.summary, /confirmed concern families/i);
   assert.doesNotMatch(strongScore.summary, /\d+ checked|\d+ review|\d+ gap/i);
-  assert.equal(gapScore.score, 6);
+  assert.equal(gapScore.score, 88);
   assert.equal(gapScore.coverageConfidence, "low");
-  assert.equal(gapScore.ratingLabel, "Needs work");
+  assert.equal(gapScore.ratingLabel, "Strong");
+});
+
+test("coverage limitations reduce confidence without changing posture", () => {
+  const result = deriveRegulatoryCoverageScore({
+    framework: "gdpr_eprivacy",
+    rows: [
+      {
+        assessmentStatus: "checked",
+        evidenceState: "observed",
+        id: "privacy_notice_availability",
+        status: "Observed"
+      },
+      {
+        assessmentStatus: "coverage_limitation",
+        criticalEvidence: { missingOrIncompleteSourceSignals: [{ field: "rejectActionConfirmed" }] },
+        evidenceState: "not_testable",
+        id: "post_reject_tracking_reduction",
+        status: "Not testable"
+      }
+    ]
+  });
+
+  assert.equal(result.score, 100);
+  assert.equal(result.coverageConfidence, "low");
+  assert.match(result.summary, /coverage affects confidence, not the score/i);
+});
+
+test("confirmed post-refusal enforcement failure has a six-point family maximum", () => {
+  const row = {
+    assessmentStatus: "gap_observed",
+    criticalEvidence: { retainedEvidence: { rejectInteractionConfirmed: true } },
+    evidenceState: "observed",
+    id: "post_reject_tracking_reduction",
+    status: "Gap observed"
+  } as const;
+  const single = deriveRegulatoryCoverageScore({ framework: "gdpr_eprivacy", rows: [row] });
+  const repeated = deriveRegulatoryCoverageScore({ framework: "gdpr_eprivacy", rows: [row, row, row] });
+
+  assert.equal(single.score, 94);
+  assert.equal(repeated.score, 94);
+});
+
+test("confirmed passive post-refusal storage persistence has a three-point effect", () => {
+  const result = deriveRegulatoryCoverageScore({
+    framework: "gdpr_eprivacy",
+    rows: [{
+      assessmentStatus: "review_signal",
+      criticalEvidence: {
+        retainedEvidence: {
+          preConsentStorageNotClearedCount: 1,
+          rejectInteractionConfirmed: true
+        }
+      },
+      evidenceState: "observed",
+      id: "post_reject_tracking_reduction",
+      status: "Review signal"
+    }]
+  });
+
+  assert.equal(result.score, 97);
+});
+
+test("unconfirmed post-refusal review remains score-neutral", () => {
+  const result = deriveRegulatoryCoverageScore({
+    framework: "gdpr_eprivacy",
+    rows: [
+      {
+        assessmentStatus: "checked",
+        evidenceState: "observed",
+        id: "privacy_notice_availability",
+        status: "Observed"
+      },
+      {
+        assessmentStatus: "review_signal",
+        criticalEvidence: {
+          retainedEvidence: {
+            preConsentStorageNotClearedCount: 1,
+            rejectInteractionConfirmed: false
+          }
+        },
+        evidenceState: "observed",
+        id: "post_reject_tracking_reduction",
+        status: "Review signal"
+      }
+    ]
+  });
+
+  assert.equal(result.score, 100);
+});
+
+test("systemic pre-consent, refusal-path, and post-refusal failures cap poor posture at twenty", () => {
+  const result = deriveRegulatoryCoverageScore({
+    framework: "gdpr_eprivacy",
+    rows: [
+      {
+        assessmentStatus: "gap_observed",
+        evidenceState: "observed",
+        id: "pre_consent_third_party_tracking",
+        status: "Gap observed"
+      },
+      {
+        assessmentStatus: "review_signal",
+        evidenceState: "observed",
+        id: "reject_all_path_availability",
+        status: "Review signal"
+      },
+      {
+        assessmentStatus: "gap_observed",
+        criticalEvidence: { retainedEvidence: { rejectInteractionConfirmed: true } },
+        evidenceState: "observed",
+        id: "post_reject_tracking_reduction",
+        status: "Gap observed"
+      }
+    ]
+  });
+
+  assert.equal(result.score, 20);
+  assert.equal(result.ratingLabel, "High-priority remediation");
+});
+
+test("sensitive runtime plus consent enforcement caps poor posture at twenty", () => {
+  const result = deriveRegulatoryCoverageScore({
+    framework: "gdpr_eprivacy",
+    rows: [
+      {
+        assessmentStatus: "gap_observed",
+        evidenceState: "observed",
+        id: "pre_consent_third_party_tracking",
+        status: "Gap observed"
+      },
+      {
+        assessmentStatus: "gap_observed",
+        evidenceState: "observed",
+        id: "sensitive_surfaces_third_party_tracking",
+        status: "Gap observed"
+      }
+    ]
+  });
+
+  assert.equal(result.score, 20);
 });
 
 test("technical policy extraction limitations do not affect the GDPR/ePrivacy score", () => {

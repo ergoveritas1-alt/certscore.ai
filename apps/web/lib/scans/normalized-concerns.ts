@@ -3865,6 +3865,127 @@ function buildPreConsentStorageAssessmentConcerns(
   ];
 }
 
+function buildPostRefusalObservationConcerns(
+  runtimeArtifacts: Record<string, unknown> | null | undefined,
+  domainContext?: ScanDomainContext
+) {
+  const projection = getRuntimeRecord(runtimeArtifacts, [
+    "postRefusalEvidenceProjection",
+    "post_refusal_evidence_projection"
+  ]);
+  if (
+    !projection ||
+    getRuntimeBoolean(projection, ["productionProjectable"]) !== true ||
+    getRuntimeBoolean(projection, ["refusalExercised"]) !== true ||
+    getRuntimeString(projection, ["registrationStatus"]) !== "confirmed"
+  ) {
+    return [];
+  }
+
+  const activityRows = getRuntimeObjectArray(projection, ["postRefusalActivity"]);
+  const persistedStorageRows = getRuntimeObjectArray(projection, ["preConsentStorageNotCleared"]);
+  const contradictionObserved = getRuntimeBoolean(projection, ["contradictionObserved"]) === true;
+  const packetSha256 = getRuntimeString(projection, ["packetSha256"]);
+  const runtimeRequestUrls = activityRows.flatMap((row) => {
+    const url = getStringValue(row.url);
+    return url ? [url] : [];
+  });
+  const runtimeVendors = uniqueStrings([
+    ...activityRows.map((row) => getStringValue(row.vendor)),
+    ...persistedStorageRows.map((row) => getStringValue(row.vendor))
+  ]);
+  const commonEvidence = {
+    directPostRefusalRuntimeEvidence: true,
+    postRefusalPacketSha256: packetSha256,
+    postRefusalProductionProjectable: true,
+    refusalExercised: true,
+    refusalRegistrationStatus: "confirmed",
+    runtimeEvidenceArtifacts: [
+      ...(packetSha256 ? [`post-refusal-packet:sha256:${packetSha256}`] : []),
+      ...runtimeRequestUrls,
+      ...persistedStorageRows.slice(0, 8).map((row) =>
+        `storage:${getStringValue(row.name) ?? "unknown"}`
+      )
+    ],
+    runtimeRequestUrls,
+    runtimeVendors
+  };
+
+  return [
+    ...(activityRows.length > 0
+      ? [buildConcernFromSharedInput({
+          categoryId: "enforcement_outcomes_after_user_choice",
+          description:
+            "A confirmed reject action was followed by classified non-essential network or storage-write activity in the retained post-refusal window.",
+          domainContext,
+          evidence: runtimeRequestUrls,
+          observedValue: `${activityRows.length} post-refusal non-essential event(s)`,
+          originKey: "privacy.post_refusal_non_essential_activity",
+          originType: "runtime_artifact",
+          rawEvidence: {
+            ...commonEvidence,
+            postRefusalNonEssentialActivity: activityRows,
+            post_refusal_non_essential_activity: activityRows
+          },
+          severity: "high",
+          signalKey: "privacy.post_refusal_non_essential_activity",
+          signalLabel: "Non-essential activity after refusal",
+          signalSource: "runtime_artifact_signal",
+          sourceType: "signal",
+          title: "Non-essential activity continued after refusal"
+        })]
+      : []),
+    ...(persistedStorageRows.length > 0
+      ? [buildConcernFromSharedInput({
+          categoryId: "enforcement_outcomes_after_user_choice",
+          description:
+            "Classified non-essential storage present before the reject action remained present after confirmed refusal.",
+          domainContext,
+          evidence: persistedStorageRows.slice(0, 12).map((row) =>
+            `storage:${getStringValue(row.name) ?? "unknown"}`
+          ),
+          observedValue: `${persistedStorageRows.length} non-essential storage item(s) persisted`,
+          originKey: "privacy.pre_consent_storage_not_cleared",
+          originType: "runtime_artifact",
+          rawEvidence: {
+            ...commonEvidence,
+            preConsentStorageNotCleared: persistedStorageRows,
+            pre_consent_storage_not_cleared: persistedStorageRows
+          },
+          severity: "medium",
+          signalKey: "privacy.pre_consent_storage_not_cleared",
+          signalLabel: "Pre-consent storage remained after refusal",
+          signalSource: "runtime_artifact_signal",
+          sourceType: "signal",
+          title: "Pre-consent storage was not cleared after refusal"
+        })]
+      : []),
+    ...(contradictionObserved
+      ? [buildConcernFromSharedInput({
+          categoryId: "enforcement_outcomes_after_user_choice",
+          description:
+            "The retained post-refusal TCF state encoded one or more purpose grants after a separately confirmed reject action.",
+          domainContext,
+          evidence: packetSha256 ? [`post-refusal-packet:sha256:${packetSha256}`] : [],
+          observedValue: "refusal signal contradicted confirmed action",
+          originKey: "privacy.refusal_signal_contradicts_action",
+          originType: "runtime_artifact",
+          rawEvidence: {
+            ...commonEvidence,
+            refusalSignalContradictsAction: true,
+            refusal_signal_contradicts_action: true
+          },
+          severity: "high",
+          signalKey: "privacy.refusal_signal_contradicts_action",
+          signalLabel: "Refusal signal contradicted action",
+          signalSource: "runtime_artifact_signal",
+          sourceType: "signal",
+          title: "Consent signal contradicted the confirmed refusal"
+        })]
+      : [])
+  ];
+}
+
 function getGdprTransparencyConcernState(concern: NormalizedConcern) {
   const rawEvidence = concern.evidenceBundle.rawEvidence;
   const value = rawEvidence?.gdprTransparencyArticle13ConcernState ??
@@ -4007,6 +4128,7 @@ export function buildNormalizedConcerns(input: {
     ...buildConsentOptionsControlProminenceConcerns(input.runtimeArtifacts, input.domainContext),
     ...buildConsentPaidDeclinePathConcerns(input.runtimeArtifacts, input.domainContext),
     ...buildPreConsentStorageAssessmentConcerns(input.runtimeArtifacts, input.domainContext),
+    ...buildPostRefusalObservationConcerns(input.runtimeArtifacts, input.domainContext),
     ...buildCmpLoadOrderConcerns(input.runtimeArtifacts, input.domainContext),
     ...buildRtbCookieSyncConcerns(input.runtimeArtifacts, input.domainContext),
     ...buildGdprTransparencyArticle13Concerns(input.runtimeArtifacts, input.domainContext),

@@ -23,6 +23,8 @@ import {
   MIN_GDPR_TRANSPARENCY_POLICY_TEXT_CHARS,
   canonicalPolicyDocumentBrandRelationship,
   policyTextEvidenceProjectionSchema,
+  postRefusalReportProjectionSchema,
+  projectPostRefusalEvidenceForReport,
   SUPPORTED_GDPR_TRANSPARENCY_LOCALES,
   type CanonicalEvidenceBundle,
   type NormalizedVendorObservation,
@@ -47,6 +49,7 @@ import {
   type GdprTransparencyProductionEvidenceProfile
 } from "../../lib/scans/gdpr-transparency-production-profile";
 import { getProductionPolicyModelReviewRevision } from "../../lib/scans/policy-model-review-revision";
+import { buildPostRefusalRuntimeProjection } from "../../lib/scans/post-refusal-runtime-projection";
 import {
   findRuntimeCanonicalEntityOwner,
 } from "../../lib/scans/runtime-vendor-ownership";
@@ -81,6 +84,23 @@ function getRecord(value: unknown, key: string) {
 
 function getString(value: unknown) {
   return typeof value === "string" && value.trim() ? value.trim() : null;
+}
+
+function getReconciledPostRefusalReportProjection(
+  scanRecord: Pick<ScanDetailResponse, "events">,
+) {
+  for (const event of [...scanRecord.events]
+    .filter((candidate) => candidate.eventType === "v2_post_refusal_evidence.reconciled")
+    .sort((left, right) =>
+      Date.parse(right.createdAt) - Date.parse(left.createdAt) || right.id.localeCompare(left.id)
+    )) {
+    const metadata = isRecord(event.metadataJson) ? event.metadataJson : null;
+    const parsed = postRefusalReportProjectionSchema.safeParse(
+      metadata?.postRefusalReportProjection,
+    );
+    if (parsed.success) return parsed.data;
+  }
+  return null;
 }
 
 export function resolveFinalMaterializedScanOutcome(input: { existingOutcome: unknown }) {
@@ -5832,12 +5852,19 @@ function buildMaterializedLocalV2Detail(
     }
   };
   const timingArtifacts = buildLocalV2DagTimingArtifacts(bundle);
+  const postRefusalReportProjection = bundle.postRefusalEvidence
+    ? projectPostRefusalEvidenceForReport({ packet: bundle.postRefusalEvidence })
+    : getReconciledPostRefusalReportProjection(scanRecord);
+  const postRefusalRuntimeProjection = buildPostRefusalRuntimeProjection(
+    postRefusalReportProjection,
+  );
   const inheritedRuntimeArtifacts = providedScanNoGoAssessment || localV2NoGo
     ? { ...(scanRecord.runtimeArtifacts ?? {}) }
     : withoutStaleLocalV2NoGoArtifacts(scanRecord.runtimeArtifacts);
   const runtimeArtifacts = {
     ...inheritedRuntimeArtifacts,
     ...timingArtifacts,
+    ...postRefusalRuntimeProjection,
     scanLaneRuns: bundle.scanLaneRuns,
     local_v2_dag_scan_core_duration_ms: durationMsFromTimestamps(bundle.startedAt, bundle.completedAt),
     wc01ProductionProjection: {
@@ -5846,7 +5873,7 @@ function buildMaterializedLocalV2Detail(
       mode: LOCAL_V2_DAG_WC01_PROJECTION_MODE,
       pipeline: "normalized_concern_policy_unified_finding",
       scannerExecutionMode: LOCAL_V2_DAG_SCANNER_EXECUTION_MODE,
-      scope: ["gdpr_transparency_observed_topics"],
+      scope: ["gdpr_transparency_observed_topics", "post_refusal_enforcement"],
       source: "verified_canonical_evidence_bundle",
       version: LOCAL_V2_DAG_WC01_PROJECTION_VERSION
     },

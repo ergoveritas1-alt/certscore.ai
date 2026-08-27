@@ -16,6 +16,7 @@ export type ScanStatusProjection = {
   id: string;
   organizationId: string | null;
   profile: string;
+  postRefusalObservationExpected: boolean;
   reportGeneration: string | null;
   reportInputsReady: boolean;
   reportProjectionRequired: boolean;
@@ -51,6 +52,7 @@ type ScanStatusProjectionRow = {
   id: string;
   organization_id: string | null;
   profile: string | null;
+  post_refusal_observation_expected: boolean;
   report_generation: string | null;
   report_inputs_ready: boolean;
   report_projection_required: boolean;
@@ -76,6 +78,7 @@ function project(row: ScanStatusProjectionRow | null): ScanStatusProjection | nu
     id: row.id,
     organizationId: row.organization_id,
     profile: row.profile === "tiny" ? "tiny" : "standard",
+    postRefusalObservationExpected: row.post_refusal_observation_expected,
     reportGeneration: row.report_generation,
     reportInputsReady: row.report_inputs_ready,
     reportProjectionRequired: row.report_projection_required,
@@ -100,6 +103,10 @@ const PROJECTION_SQL = `select s.id,
          nullif(s.scan_config_json ->> 'profile', ''),
          'standard'
        ) as profile
+       , coalesce(
+           (s.scan_config_json #>> '{execution,v2DagLambda,postRefusalRejectWorkerEnabled}')::boolean,
+           false
+         ) as post_refusal_observation_expected
        , coalesce(s.scan_config_json ->> 'processor' = '${LOCAL_V2_DAG_SCAN_PROCESSOR}', false) as report_projection_required
        , case
            when s.scan_config_json ->> 'processor' = '${LOCAL_V2_DAG_SCAN_PROCESSOR}' then
@@ -243,6 +250,7 @@ export function buildLightweightScanStatusResponse(projection: ScanStatusProject
       generation: projection.reportGeneration,
       status: projection.reportReady ? "ready" : "finalizing"
     },
+    postRefusalObservationExpected: projection.postRefusalObservationExpected,
     progress: {
       stage: deriveCanonicalScanProgressStage(projection)
     },

@@ -4,6 +4,7 @@ import { PendingScanDetailView } from "../../../../components/scans/pending-scan
 import { ShadowScanReport } from "../../../../components/scans/report-lab/shadow-scan-report";
 import { buildTimelineReportModel } from "../../../../components/scans/report-lab/timeline-report-model";
 import { ScanProgressReportVisible } from "../../../../components/scans/scan-progress-report-visible";
+import { ScanReportGenerationRefresh } from "../../../../components/scans/scan-report-generation-refresh";
 import { isPlatformAdminEmail } from "../../../../server/admin/platform-admin";
 import { getDashboardContext } from "../../../../server/auth";
 import { withServerTiming } from "../../../../server/performance/log-server-timing";
@@ -104,6 +105,11 @@ export default async function ScanDetailPage({ params }: ScanDetailPageProps) {
     <>
       <PendingScanStartedEvent />
       <ScanProgressReportVisible scanId={scanId} />
+      <ScanReportGenerationRefresh
+        enabled={statusProjection.postRefusalObservationExpected}
+        reportGeneration={statusProjection.reportGeneration}
+        scanId={scanId}
+      />
       <ShadowScanReport
         allowRestrictedScanOptions={canUseRestrictedScanOptions({
           membershipRole: membership.role,

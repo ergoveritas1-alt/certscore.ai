@@ -1304,11 +1304,14 @@ function clampScore(value: number) {
 }
 
 function buildTone(score: number) {
-  if (score >= 72) {
+  if (score >= 85) {
     return { label: "Strong", toneClass: "border-emerald-200 bg-emerald-50 text-emerald-800" };
   }
-  if (score >= 50) {
+  if (score >= 65) {
     return { label: "Watch", toneClass: "border-amber-200 bg-amber-50 text-amber-800" };
+  }
+  if (score < 40) {
+    return { label: "High-priority remediation", toneClass: "border-rose-300 bg-rose-100 text-rose-900" };
   }
   return { label: "Needs work", toneClass: "border-rose-200 bg-rose-50 text-rose-800" };
 }

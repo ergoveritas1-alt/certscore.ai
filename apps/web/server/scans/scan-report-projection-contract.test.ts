@@ -35,7 +35,7 @@ const statusProjectionPath = "apps/web/server/scans/scan-status-projection.ts";
 test("scan report projection requires the canonical v2 consent assessment", async () => {
   const source = await readFile(projectionPath, "utf8");
 
-  assert.match(source, /scoreVersion: canonicalScore === null \? null : "gdpr-eprivacy-canonical-shadow-v7"/);
+  assert.match(source, /scoreVersion: canonicalScore === null \? null : GDPR_EPRIVACY_EVIDENCE_SCORE_VERSION/);
   assert.match(source, /buildRuntimeCookieInventory/);
   assert.match(source, /runtimeCookieRows/);
   assert.match(source, /Refusing to mark scan .* report projection ready before ConsentControlAssessment v2 is materialized/);

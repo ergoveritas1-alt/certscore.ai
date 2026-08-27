@@ -25,6 +25,7 @@ import {
   LOCAL_V2_DAG_LAMBDA_POLICY_SHUTDOWN_RESERVE_MS,
   LOCAL_V2_DAG_LAMBDA_SHARDED_HANDLER_SAFETY_TIMEOUT_MS,
   LOCAL_V2_DAG_SCAN_PROCESSOR,
+  POST_REFUSAL_REJECT_WORKER_FEATURE_FLAG,
   artifactPointersFromS3Keys,
   assessEgressProbeObservation,
   buildLocalV2DagLambdaLaneRun,
@@ -37,12 +38,16 @@ import {
   egressRegionMatchesExpected,
   fetchEgressProbeThroughProxy,
   handler,
+  invokeLocalV2DagLambdaWorker,
   invokeLocalV2DagLambdaWorkers,
+  isPostRefusalRejectWorkerEnabled,
   mergeLocalV2DagLambdaEvidenceLaneBundles,
   mergeLocalV2DagLambdaShardBundles,
   mirrorWorkerArtifactsIntoFinalArtifactRoot,
   parseLocalV2DagLambdaDispatchPayload,
   parseEgressProbeResponse,
+  postRefusalParentDispatchSha256,
+  runLocalV2DagLambdaPostRefusalArtifactChain,
   sendLocalV2DagLambdaResultMessage,
   serializeCanonicalEvidenceBundle,
   unwrapLocalV2DagLambdaDispatchEvent,
@@ -68,6 +73,148 @@ test("sharded orchestration fans out exactly one consent, runtime, and policy ev
     "runtime_evidence",
     "policy_evidence",
   ]);
+});
+
+test("post-refusal dispatch is typed, exact-target authorized, and default off", () => {
+  const payload = parseLocalV2DagLambdaDispatchPayload(validPayload({
+    postRefusalObservation: {
+      enabled: true,
+      dispatchDelayMs: 2_000,
+      observationWindowMs: 8_000,
+      confirmationTimeoutMs: 1_500,
+      actionSearchTimeoutMs: 1_500,
+      cmpCanonicalName: "OneTrust",
+      confirmation: { kind: "tcf_purposes_denied", purposeIds: [1, 2, 3, 4, 7, 9, 10] },
+      interactionAuthorization: {
+        kind: "owned_canary",
+        authorizationId: "ergoveritas_owned_post_refusal_canary.v1",
+      },
+    },
+  }));
+
+  assert.equal(payload.postRefusalObservation?.dispatchDelayMs, 2_000);
+  assert.equal(isPostRefusalRejectWorkerEnabled(payload, {}), false);
+  assert.equal(isPostRefusalRejectWorkerEnabled(payload, {
+    [POST_REFUSAL_REJECT_WORKER_FEATURE_FLAG]: "1",
+  }), true);
+  assert.match(postRefusalParentDispatchSha256(payload), /^[a-f0-9]{64}$/);
+});
+
+test("reject worker invocation clears the coordinator launch delay without changing parent identity", async () => {
+  const parentPayload = parseLocalV2DagLambdaDispatchPayload(validPayload({
+    orchestrationMode: "sharded",
+    postRefusalObservation: {
+      enabled: true,
+      dispatchDelayMs: 2_000,
+      cmpCanonicalName: "OneTrust",
+      confirmation: { kind: "tcf_purposes_denied", purposeIds: [1] },
+      interactionAuthorization: {
+        kind: "owned_canary",
+        authorizationId: "ergoveritas_owned_post_refusal_canary.v1",
+      },
+    },
+  }));
+  let childPayload: Record<string, unknown> | undefined;
+  await invokeLocalV2DagLambdaWorker({
+    parentPayload,
+    parentScanId: parentPayload.scanId,
+    workerLane: "reject_observation",
+    lambdaClient: {
+      async send(command) {
+        childPayload = JSON.parse(Buffer.from(command.input.Payload ?? []).toString("utf8"));
+        return {
+          StatusCode: 200,
+          Payload: Buffer.from(JSON.stringify({
+            artifactMetadata: {
+              postRefusalPacketUri: { sha256: "a".repeat(64), sizeBytes: 10 },
+            },
+            artifactPointers: {
+              postRefusalPacketUri: "s3://test-bucket/reject/PostRefusalEvidencePacket.json",
+            },
+            postRefusalEvidence: {
+              artifactOnly: true,
+              contractVersion: "certscore.v2.lambda-post-refusal-evidence-ready.v1",
+              generatedAt: "2026-08-26T12:00:00.000Z",
+              messageKind: "post_refusal_evidence_ready",
+              packetMetadata: { sha256: "a".repeat(64), sizeBytes: 10 },
+              packetPointer: "s3://test-bucket/reject/PostRefusalEvidencePacket.json",
+              parentDispatchSha256: "b".repeat(64),
+              parentScanId: parentPayload.scanId,
+              processor: LOCAL_V2_DAG_SCAN_PROCESSOR,
+              productionFindingIntegration: false,
+              refusalExercised: false,
+              observationCount: 0,
+              scanId: parentPayload.scanId,
+              status: "unsupported",
+              targetEnvironment: "local",
+            },
+            scanId: parentPayload.scanId,
+            status: "completed",
+            workerLane: "reject_observation",
+          })),
+        };
+      },
+    },
+  });
+
+  assert.equal(childPayload?.scanId, parentPayload.scanId);
+  assert.equal(childPayload?.workerLane, "reject_observation");
+  assert.equal(
+    (childPayload?.postRefusalObservation as Record<string, unknown>)?.dispatchDelayMs,
+    0,
+  );
+});
+
+test("reject worker retains and independently publishes a neutral unsupported packet", async () => {
+  const priorFlag = process.env[POST_REFUSAL_REJECT_WORKER_FEATURE_FLAG];
+  const priorBucket = process.env.CERTSCORE_V2_DAG_LAMBDA_ARTIFACT_BUCKET;
+  const outDir = await mkdtemp(path.join(os.tmpdir(), "certscore-reject-worker-"));
+  const puts: PutObjectCommand[] = [];
+  const sends: SendMessageCommand[] = [];
+  process.env[POST_REFUSAL_REJECT_WORKER_FEATURE_FLAG] = "1";
+  process.env.CERTSCORE_V2_DAG_LAMBDA_ARTIFACT_BUCKET = "test-artifact-bucket";
+  try {
+    const payload = parseLocalV2DagLambdaDispatchPayload(validPayload({
+      orchestrationMode: "worker",
+      targetEnvironment: "production",
+      targetUrl: "https://ergoveritas.com/.well-known/certscore-canary/post-refusal/reject-honored.html",
+      workerLane: "reject_observation",
+      postRefusalObservation: {
+        enabled: true,
+        dispatchDelayMs: 0,
+        observationWindowMs: 8_000,
+        confirmationTimeoutMs: 1_500,
+        actionSearchTimeoutMs: 1_500,
+        cmpCanonicalName: "Unknown CMP",
+        confirmation: { kind: "tcf_purposes_denied", purposeIds: [1] },
+        interactionAuthorization: {
+          kind: "owned_canary",
+          authorizationId: "ergoveritas_owned_post_refusal_canary.v1",
+        },
+      },
+    }));
+    const result = await runLocalV2DagLambdaPostRefusalArtifactChain(payload, {
+      artifactRoot: outDir,
+      s3Client: { async send(command) { puts.push(command as PutObjectCommand); return {}; } },
+      sqsClient: { async send(command) { sends.push(command); return {}; } },
+    });
+
+    assert.equal(puts.length, 1);
+    assert.equal(sends.length, 1);
+    assert.equal(result.postRefusalEvidence?.status, "unsupported");
+    assert.equal(result.postRefusalEvidence?.refusalExercised, false);
+    assert.equal(result.postRefusalEvidence?.observationCount, 0);
+    assert.match(result.artifactPointers?.postRefusalPacketUri ?? "", /PostRefusalEvidencePacket\.json$/);
+    const message = JSON.parse(String(sends[0].input.MessageBody));
+    assert.equal(message.messageKind, "post_refusal_evidence_ready");
+    assert.equal(message.parentScanId, payload.scanId);
+  } finally {
+    if (priorFlag === undefined) delete process.env[POST_REFUSAL_REJECT_WORKER_FEATURE_FLAG];
+    else process.env[POST_REFUSAL_REJECT_WORKER_FEATURE_FLAG] = priorFlag;
+    if (priorBucket === undefined) delete process.env.CERTSCORE_V2_DAG_LAMBDA_ARTIFACT_BUCKET;
+    else process.env.CERTSCORE_V2_DAG_LAMBDA_ARTIFACT_BUCKET = priorBucket;
+    await rm(outDir, { recursive: true, force: true });
+  }
 });
 
 test("lane instrumentation retains the first top-level response and distinguishes physical invocations", () => {

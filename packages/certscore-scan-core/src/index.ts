@@ -60,8 +60,10 @@ import {
   policySurfaceObservationsFromRetainedRenderedLinks,
   policySurfaceScanner,
   recoverPolicyDocumentsFromRetainedRenderedLinks,
+  type PolicyNanoAssistProvider,
   type PolicySurfaceScannerResult,
 } from "./scanners/policy-surface-scanner.js";
+import { isLoopbackPostRefusalTarget } from "./post-refusal-target-authorization.js";
 import { chromiumContextOptions, chromiumLaunchOptions, chromiumProxyOptions } from "./playwright-runtime.js";
 import { captureConsentControlGeometry } from "./consent-control-geometry.js";
 import {
@@ -95,6 +97,34 @@ export {
 } from "./playwright-runtime.js";
 
 export { proxyFetch } from "./proxy-fetch.js";
+
+export {
+  runPostRefusalObserver,
+  type PostRefusalActionRecipe,
+  type PostRefusalObserverInput,
+} from "./post-refusal-observer.js";
+
+export {
+  authorizePostRefusalTarget,
+  ERGOVERITAS_POST_REFUSAL_CANARY_AUTHORIZATION_ID,
+  isLoopbackPostRefusalTarget,
+  type PostRefusalInteractionAuthorization,
+  type PostRefusalTargetAuthorizationDecision,
+} from "./post-refusal-target-authorization.js";
+
+export {
+  decidePostRefusalCooperativeAbort,
+  decidePostRefusalReportPublication,
+  type PostRefusalCooperativeAbortDecision,
+  type PostRefusalReportPublicationDecision,
+} from "./post-refusal-orchestration.js";
+
+export {
+  buildPostRefusalSupplementEnvelope,
+  canonicalSha256,
+} from "./post-refusal-supplement.js";
+
+export { buildPostRefusalCmpActionRecipe } from "./post-refusal-cmp-recipes.js";
 
 export {
   assertPublicTestContactAllowed,
@@ -144,6 +174,8 @@ export interface RunScanInput {
   /** Absolute policy-lane deadline used to preserve scanner shutdown and result-publication time. */
   policySurfaceDeadlineAtMs?: number;
   policySurfaceSeeds?: PolicySurfaceSeed[];
+  /** Deterministic loopback-only diagnostic provider; never accepted for public targets. */
+  localPolicyNanoAssistProvider?: PolicyNanoAssistProvider;
   preConsentScreenshotMode?: "always" | "selective" | "never";
   preConsentScreenshotTimeoutMs?: number;
   /**
@@ -319,7 +351,12 @@ export async function runScan(input: RunScanInput): Promise<CanonicalEvidenceBun
   const effectivePreConsentScreenshotMode = evidenceLane === "runtime_evidence" || evidenceLane === "policy_evidence"
     ? "never"
     : input.preConsentScreenshotMode ?? (leanPreConsent ? "selective" : "always");
-  const nanoPolicyAssistProvider = policySurfaceEnabled ? createOpenAiNanoPolicyAssistProviderFromEnv() : undefined;
+  if (input.localPolicyNanoAssistProvider && !isLoopbackPostRefusalTarget(input.url)) {
+    throw new Error("A local policy-assist provider is restricted to loopback scan targets.");
+  }
+  const nanoPolicyAssistProvider = policySurfaceEnabled
+    ? input.localPolicyNanoAssistProvider ?? createOpenAiNanoPolicyAssistProviderFromEnv()
+    : undefined;
   const nanoConsentUiAssistProvider = consentFlowEnabled
     ? (await import("./nano-consent-ui-assist-provider.js")).createOpenAiNanoConsentUiAssistProviderFromEnv()
     : undefined;

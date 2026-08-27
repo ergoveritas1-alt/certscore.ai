@@ -376,6 +376,7 @@ export const mcpScanBundleOutputSchema = z
     scoreVersion: z.string().nullable(),
     scoreUpdatedAt: z.string().nullable(),
     riskLevel: z.string().nullable(),
+    postRefusalObservation: apiV2ScanResourceSchema.shape.postRefusalObservation.nullable(),
     provenance: mcpScanProvenanceSchema,
     interpretationGuidance: mcpInterpretationGuidanceSchema,
     resultDisposition: scanResultDispositionSchema.nullable().optional(),

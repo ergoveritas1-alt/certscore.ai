@@ -32,6 +32,7 @@ export const LOCAL_V2_DAG_LAMBDA_CONSERVATIVE_PRECONSENT_DEFAULTS = {
 
 export type LocalV2DagScanEnv = {
   CERTSCORE_LOCALHOST_FULL_SCAN_QUEUE_ENABLED?: string;
+  CERTSCORE_POST_REFUSAL_REJECT_WORKER_ENABLED?: string;
   CERTSCORE_V2_DAG_LAMBDA_ENABLED?: string;
   CERTSCORE_V2_DAG_LAMBDA_EU_DE_ENABLED?: string;
   CERTSCORE_V2_DAG_LAMBDA_EU_DE_FUNCTION_NAME?: string;
@@ -210,6 +211,7 @@ export function getLocalV2DagLambdaConfiguration(
     functionName,
     missing,
     orchestrationMode: env.CERTSCORE_V2_DAG_LAMBDA_ORCHESTRATION_MODE === "sharded" ? "sharded" as const : "single" as const,
+    postRefusalRejectWorkerEnabled: env.CERTSCORE_POST_REFUSAL_REJECT_WORKER_ENABLED === "1",
     resultQueueUrl: resultQueueUrl ?? (simulatedLocalLambda ? "local://certscore-v2-dag-lambda-simulated-results" : null),
     simulatedLocalLambda,
     targetEnvironment,
@@ -304,6 +306,9 @@ export function applyLocalV2DagScanConfig(
               debugOverrides: lambdaDebugOverridesForDispatch(options.lambdaDebugOverrides),
               localOnly: lambdaConfig.targetEnvironment === "local",
               orchestrationMode: lambdaConfig.orchestrationMode,
+              ...(lambdaConfig.postRefusalRejectWorkerEnabled
+                ? { postRefusalRejectWorkerEnabled: true }
+                : {}),
               processor: LOCAL_V2_DAG_SCAN_PROCESSOR,
               productionFindingIntegration: false,
               scannerExecutionMode: LOCAL_V2_DAG_SCANNER_EXECUTION_MODE,
