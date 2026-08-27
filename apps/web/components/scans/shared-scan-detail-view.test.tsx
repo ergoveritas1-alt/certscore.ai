@@ -202,6 +202,13 @@ test("active timeline report passes the same canonical Reject checklist projecti
   assert.match(report, /<CompactRejectPathCard projection=\{report\.rejectPath\} \/>/);
   assert.match(report, /data-testid="post-reject-timeline"/);
   assert.match(report, /<RejectPathTimeline report=\{report\} \/>/);
+  assert.match(report, /data-testid="post-reject-activity-inventory"/);
+  assert.match(report, /<PostRejectActivityInventory report=\{report\} \/>/);
+  assert.match(report, /After optional cookies and tracking were rejected/);
+  assert.match(report, /Expected after Reject:/);
+  assert.match(report, /does not necessarily require every previously stored cookie to be deleted/);
+  assert.match(model, /Non-essential activity after confirmed Reject/);
+  assert.match(model, /replace\(\/Post-choice tracking reduction\/gi, postRejectCopy\.title\)/);
   assert.doesNotMatch(model, /buildExecutiveRejectPathProjection\(scanRecord\.runtimeArtifacts/);
 });
 

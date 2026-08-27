@@ -227,6 +227,9 @@ function policyEvidenceForRow(item: GdprEprivacyCoverageChecklistItem, capturedA
 
 function mapChecklistRow(item: GdprEprivacyCoverageChecklistItem, capturedAt: string): ShadowEvidenceRow {
   const evidenceJson = checklistEvidenceJson(item);
+  const title = item.id === "post_reject_tracking_reduction"
+    ? "Non-essential activity after confirmed Reject"
+    : item.label;
   return {
     canonicalEvidenceJson: JSON.stringify(evidenceJson, (_key, value) => typeof value === "bigint" ? value.toString() : value, 2),
     correctionSteps: [],
@@ -236,7 +239,7 @@ function mapChecklistRow(item: GdprEprivacyCoverageChecklistItem, capturedAt: st
     policyEvidence: policyEvidenceForRow(item, capturedAt),
     status: checklistStatus(item),
     summary: deriveGdprEprivacyCoverageChecklistRowRationale(item),
-    title: item.label,
+    title,
   };
 }
 
@@ -279,7 +282,22 @@ function mapChecklistFinding(
     if (/privacy|policy|disclosure|retention|rights|transfer|controller|recipient/i.test(row.id)) return "Policy & transparency";
     return finding.section;
   })();
+  const postRejectCopy = (() => {
+    if (row?.id !== "post_reject_tracking_reduction") return null;
+    const retainedEvidence = record(row.evidenceJson.retainedEvidence);
+    if (retainedEvidence?.refusalSignalContradictsAction === true) {
+      return {
+        summary: "The cookie banner’s Reject control was confirmed, but the retained consent state still encoded granted purposes afterward.",
+        title: "Consent state contradicted confirmed Reject",
+      };
+    }
+    return {
+      summary: "After the cookie banner’s Reject control was confirmed, qualifying non-essential requests or storage writes were retained in the post-Reject window.",
+      title: "Non-essential activity after confirmed Reject",
+    };
+  })();
   const summary = (() => {
+    if (postRejectCopy) return postRejectCopy.summary;
     if (row?.id !== "pre_consent_cookies_storage") return finding.shortSummary;
     const retainedEvidence = record(row.evidenceJson.retainedEvidence);
     const evidenceRefs = retainedEvidence?.evidenceRefs;
@@ -289,9 +307,12 @@ function mapChecklistFinding(
     if (!firstRef) return finding.shortSummary;
     return `Cookies or browser storage were retained before consent. First retained item: ${firstRef.replace(/[.\s]+$/, "")}. Essentiality was not confirmed for every item.`;
   })();
+  const evidence = postRejectCopy
+    ? finding.evidencePreview.map((item) => item.replace(/Post-choice tracking reduction/gi, postRejectCopy.title))
+    : finding.evidencePreview;
   return {
     correctionSteps: row?.correctionSteps.length ? row.correctionSteps : [finding.remediation],
-    evidence: finding.evidencePreview,
+    evidence,
     evidenceJson: row?.evidenceJson ?? {
       evidenceDetails: finding.evidenceDetails,
       evidenceRefs: finding.evidenceRefs,
@@ -302,7 +323,7 @@ function mapChecklistFinding(
     rank,
     status: concernKind === "partial_rating" ? "Partial concern" : "Potential gap",
     summary,
-    title: finding.label,
+    title: postRejectCopy?.title ?? finding.label,
     vendors: [],
   };
 }

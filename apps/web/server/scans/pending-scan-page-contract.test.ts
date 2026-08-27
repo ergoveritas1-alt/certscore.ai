@@ -67,6 +67,12 @@ test("timeline model is projection-backed for findings, checklist rows, inventor
   assert.match(report, /data-testid="timeline-reject-path-card"/);
   assert.match(report, /data-testid="post-reject-timeline"/);
   assert.match(report, /<RejectPathTimeline report=\{report\} \/>/);
+  assert.match(report, /data-testid="post-reject-activity-inventory"/);
+  assert.match(report, /<PostRejectActivityInventory report=\{report\} \/>/);
+  assert.match(report, /After optional cookies and tracking were rejected/);
+  assert.match(report, /Optional request suppressed/);
+  assert.match(report, /unchanged stored presence remains a separate review-only signal/);
+  assert.match(source, /item\.id === "post_reject_tracking_reduction"[\s\S]*Non-essential activity after confirmed Reject/);
   assert.match(report, /mode === "authenticated"/);
   assert.match(report, /-mx-5[^"\n]*lg:-mx-10/);
 });

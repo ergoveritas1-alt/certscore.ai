@@ -400,6 +400,7 @@ function SignalSnapshot({ report }: { report: ShadowReportData }) {
 }
 
 function BenchmarkComparison({ report }: { report: ShadowReportData }) {
+  const benchmarkLabel = report.scan.benchmark.replace(/\s+\(likely [^)]+\)\s*$/i, "");
   const rows = [
     { label: "Third-party requests", site: report.metrics.thirdPartyRequests },
     { label: "Non-essential storage", site: report.metrics.nonEssentialStorage }
@@ -407,12 +408,8 @@ function BenchmarkComparison({ report }: { report: ShadowReportData }) {
 
   return (
     <div className="mt-10 border-l-4 border-sky-500 pl-4">
-      <div className="flex flex-wrap items-center justify-between gap-2">
-        <div>
-          <p className="text-xs font-semibold uppercase text-zinc-500">{report.scan.benchmark} benchmark context</p>
-        </div>
-        <span className="rounded-md border border-zinc-200 bg-white px-2 py-1 text-[0.68rem] font-semibold text-zinc-600">Industry: {report.scan.benchmark}</span>
-      </div>
+      <p className="text-xs font-semibold uppercase text-zinc-500">Industry benchmark</p>
+      <p className="mt-1 text-sm font-semibold leading-5 text-zinc-800">{benchmarkLabel}</p>
       <div className="mt-4 grid gap-4 sm:grid-cols-2">
         {rows.map((row) => (
           <div key={row.label}>
@@ -615,7 +612,9 @@ function RejectPathTimeline({ report }: { report: ShadowReportData }) {
     ? {
         badge: "Issue observed",
         detail: projection.note,
-        label: "Reject did not suppress all qualifying activity",
+        label: (projection.timelineEvents?.length ?? 0) > 0
+          ? "Reject did not suppress all qualifying activity"
+          : projection.label,
         tone: "concern" as const,
       }
     : projection.state === "review_signal"
@@ -656,11 +655,14 @@ function RejectPathTimeline({ report }: { report: ShadowReportData }) {
     <div className="mt-10 border-t border-zinc-300 pt-8" data-reject-path-state={projection.state} data-testid="post-reject-timeline">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
-          <p className="text-xs font-semibold uppercase text-sky-700">After Reject timeline</p>
-          <h3 className="mt-1 text-xl font-semibold text-zinc-950">What happened after confirmed refusal</h3>
-          <p className="mt-1 text-xs leading-5 text-zinc-500">Offsets begin when refusal was confirmed and include only retained post-Refusal evidence.</p>
+          <p className="text-xs font-semibold uppercase text-sky-700">After Reject</p>
+          <h3 className="mt-1 text-xl font-semibold text-zinc-950">After optional cookies and tracking were rejected</h3>
+          <p className="mt-1 text-xs leading-5 text-zinc-500">Offsets begin when the cookie banner’s Reject control was confirmed.</p>
         </div>
         <span className={`rounded-md border px-2.5 py-1 text-[0.68rem] font-semibold uppercase ${toneClasses}`}>{outcome.badge}</span>
+      </div>
+      <div className="mt-4 rounded-md border border-sky-200 bg-sky-50 px-3 py-2 text-xs leading-5 text-sky-950">
+        <span className="font-semibold">Expected after Reject:</span> optional trackers should stop sending requests and creating or updating browser storage during the observed window.
       </div>
       <div className="mt-6 overflow-x-auto pb-2">
         <div className="relative min-w-[48rem] pt-10">
@@ -677,6 +679,62 @@ function RejectPathTimeline({ report }: { report: ShadowReportData }) {
           </div>
         </div>
       </div>
+    </div>
+  );
+}
+
+function PostRejectActivityInventory({ report }: { report: ShadowReportData }) {
+  const projection = report.rejectPath;
+  if (!projection || projection.state === "incomplete" || projection.observationWindowMs === null) {
+    return null;
+  }
+  const events = projection.timelineEvents ?? [];
+  const clean = projection.state === "no_issue_observed" && events.length === 0;
+  const contradictionOnly = projection.state === "issue_observed" && events.length === 0;
+
+  return (
+    <div className="mt-10 border-t border-zinc-300 pt-8" data-testid="post-reject-activity-inventory">
+      <div className="flex flex-wrap items-end justify-between gap-3">
+        <div>
+          <p className="text-xs font-semibold uppercase text-sky-700">Post-Reject activity</p>
+          <h3 className="mt-1 text-xl font-semibold text-zinc-950">Requests and storage writes after Reject</h3>
+          <p className="mt-1 max-w-4xl text-xs leading-5 text-zinc-500">Reject should suppress new optional activity. It does not necessarily require every previously stored cookie to be deleted; unchanged stored presence remains a separate review-only signal.</p>
+        </div>
+        <span className={`${monoClass} rounded-md border px-2 py-1 text-xs font-semibold ${clean ? "border-emerald-200 bg-emerald-50 text-emerald-800" : events.length > 0 || contradictionOnly ? "border-rose-200 bg-rose-50 text-rose-800" : "border-amber-200 bg-amber-50 text-amber-900"}`}>
+          {events.length} active {events.length === 1 ? "event" : "events"}
+        </span>
+      </div>
+      {events.length > 0 ? (
+        <div className="mt-5 overflow-x-auto border border-zinc-200 bg-white">
+          <table className="w-full min-w-[52rem] border-collapse text-left text-xs">
+            <thead className="bg-zinc-50 text-zinc-500">
+              <tr>{["Activity", "Retained evidence", "After Reject", "Expected", "Result"].map((label) => <th className="border-b border-zinc-200 px-3 py-2 font-medium" key={label}>{label}</th>)}</tr>
+            </thead>
+            <tbody>
+              {events.map((event, index) => {
+                const storageWrite = /storage/i.test(event.label);
+                return (
+                  <tr className="border-b border-zinc-100 last:border-0" key={`${event.atMs}:${event.label}:${index}`}>
+                    <td className="px-3 py-3 font-semibold text-zinc-900">{event.label}</td>
+                    <td className="px-3 py-3 text-zinc-600">{event.detail ?? "Retained event detail unavailable"}</td>
+                    <td className={`${monoClass} px-3 py-3 text-zinc-700`}>{formatRejectTimelineOffset(event.atMs)}</td>
+                    <td className="px-3 py-3 text-zinc-600">{storageWrite ? "No new optional write" : "Optional request suppressed"}</td>
+                    <td className="px-3 py-3"><span className="rounded-md border border-rose-200 bg-rose-50 px-2 py-1 font-semibold text-rose-800">Observed after Reject</span></td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      ) : (
+        <p className={`mt-5 rounded-md border px-3 py-3 text-sm ${clean ? "border-emerald-200 bg-emerald-50 text-emerald-900" : contradictionOnly ? "border-rose-200 bg-rose-50 text-rose-900" : "border-amber-200 bg-amber-50 text-amber-950"}`}>
+          {clean
+            ? "No qualifying non-essential request or storage write was retained after confirmed Reject."
+            : contradictionOnly
+              ? "No qualifying request or storage-write row was retained. The reported issue is the separate consent-state contradiction shown in the Reject result."
+              : projection.note}
+        </p>
+      )}
     </div>
   );
 }
@@ -1178,6 +1236,7 @@ function TimelineVariant({
           <p className="mt-1 text-xs leading-5 text-zinc-500">First-seen timestamps place retained third-party requests and embeds relative to the first observed consent banner.</p>
           <div className="mt-6"><HorizontalTimeline dominant report={report} /></div>
           <RejectPathTimeline report={report} />
+          <PostRejectActivityInventory report={report} />
           <RuntimeInventoryTable report={report} />
         </div>
       </section>
