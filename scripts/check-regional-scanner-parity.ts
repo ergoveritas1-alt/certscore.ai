@@ -125,6 +125,10 @@ const observed = REGIONS.map((region) => {
   ]);
   const config = fn.Configuration ?? {};
   const env = config.Environment?.Variables ?? {};
+  const postRefusalRejectWorkerEnabled = env.CERTSCORE_POST_REFUSAL_REJECT_WORKER_ENABLED ?? "0";
+  if (postRefusalRejectWorkerEnabled !== "0" && postRefusalRejectWorkerEnabled !== "1") {
+    errors.push(`${region}: Reject worker enable flag must be 0 or 1, received ${postRefusalRejectWorkerEnabled}.`);
+  }
   const context = EXPECTED_CONTEXT[region];
   const required = [
     ["memory", config.MemorySize, 3008],
@@ -206,6 +210,7 @@ const observed = REGIONS.map((region) => {
   }
   return {
     imageDigest: fn.Code?.ResolvedImageUri?.split("@")[1],
+    postRefusalRejectWorkerEnabled,
     region,
   };
 });
@@ -214,6 +219,9 @@ const baselineDigest = observed[0]?.imageDigest;
 for (const entry of observed) {
   if (!baselineDigest || entry.imageDigest !== baselineDigest) {
     errors.push(`${entry.region}: scanner image digest does not match the Ireland baseline.`);
+  }
+  if (entry.postRefusalRejectWorkerEnabled !== observed[0]?.postRefusalRejectWorkerEnabled) {
+    errors.push(`${entry.region}: Reject worker enable flag does not match the Ireland baseline.`);
   }
 }
 

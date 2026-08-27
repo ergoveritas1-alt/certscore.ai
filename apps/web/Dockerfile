@@ -40,6 +40,11 @@ RUN --mount=type=cache,id=wc01-web-pnpm-store,target=/pnpm/store \
 
 FROM build-dependencies AS builder
 
+# Next's production compilation now exceeds V8's default ~4 GB old-space
+# ceiling. Keep the larger heap scoped to the image builder; it is not carried
+# into the ECS runtime stage.
+ENV NODE_OPTIONS="--max-old-space-size=6144"
+
 COPY packages/shared ./packages/shared
 COPY packages/ui ./packages/ui
 COPY packages/db ./packages/db

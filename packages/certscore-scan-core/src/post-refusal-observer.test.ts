@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { createHash } from "node:crypto";
 import test from "node:test";
 import {
   decodeTcfV2PurposeConsents,
@@ -51,6 +52,26 @@ test("reject honored confirms registration without post-refusal activity", async
     assert.ok(
       packet.refusalRegistration.actionDispatchedAtMs - packet.storage.preActionCapturedAtMs <=
         POST_REFUSAL_PRE_ACTION_BASELINE_MAX_AGE_MS,
+    );
+  });
+});
+
+test("retained packets redact target query values and bind the exact target by hash", async () => {
+  await withFixture("post-refusal-reject-honored", async (url) => {
+    const exactTargetUrl = `${url}?session_token=sensitive-value#fragment`;
+    const packet = await observe(exactTargetUrl);
+    const expectedRetainedUrl = new URL(exactTargetUrl);
+    expectedRetainedUrl.search = "";
+    expectedRetainedUrl.hash = "";
+    const expectedHashedUrl = new URL(exactTargetUrl);
+    expectedHashedUrl.hash = "";
+
+    assert.equal(packet.targetUrl, expectedRetainedUrl.toString());
+    assert.equal(packet.normalizedUrl, expectedRetainedUrl.toString());
+    assert.equal(packet.targetUrl.includes("sensitive-value"), false);
+    assert.equal(
+      packet.exactTargetSha256,
+      createHash("sha256").update(expectedHashedUrl.toString()).digest("hex"),
     );
   });
 });

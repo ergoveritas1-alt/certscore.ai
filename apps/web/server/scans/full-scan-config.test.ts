@@ -563,6 +563,8 @@ test("queued full-scan config can dispatch v2 DAG Lambda outside localhost when 
       CERTSCORE_V2_DAG_LAMBDA_ORCHESTRATION_MODE: "sharded",
       CERTSCORE_V2_DAG_LAMBDA_RESULT_QUEUE_URL: "https://sqs.eu-west-1.amazonaws.com/123/certscore-v2-dag-prod-results",
       CERTSCORE_V2_DAG_LAMBDA_TARGET_ENV: "production",
+      CERTSCORE_POST_REFUSAL_REJECT_WORKER_ENABLED: "1",
+      CERTSCORE_POST_REFUSAL_REJECT_WORKER_ROLLOUT_MODE: "all_eligible",
       NEXT_PUBLIC_APP_URL: "https://certscore.ai",
       NODE_ENV: "production"
     },
@@ -585,10 +587,36 @@ test("queued full-scan config can dispatch v2 DAG Lambda outside localhost when 
   assert.equal(v2DagLambda?.targetEnvironment, "production");
   assert.equal(v2DagLambda?.vpcMode, "vpc");
   assert.equal(v2DagLambda?.productionFindingIntegration, false);
+  assert.equal(v2DagLambda?.postRefusalRejectWorkerEnabled, true);
+  assert.equal(v2DagLambda?.postRefusalRejectWorkerRolloutMode, "all_eligible");
   assert.deepEqual(v2DagLambda?.debugOverrides, {
     scenarioConcurrency: 1,
     scenarioResourceMode: "cmp_safe"
   });
+});
+
+test("reject worker enable flag defaults to owned-canary rollout", () => {
+  const config = buildQueuedFullScanConfig({
+    env: {
+      CERTSCORE_POST_REFUSAL_REJECT_WORKER_ENABLED: "1",
+      CERTSCORE_V2_DAG_LAMBDA_ENABLED: "true",
+      CERTSCORE_V2_DAG_LAMBDA_FUNCTION_NAME: "certscore-v2-dag-prod",
+      CERTSCORE_V2_DAG_LAMBDA_ORCHESTRATION_MODE: "sharded",
+      CERTSCORE_V2_DAG_LAMBDA_RESULT_QUEUE_URL: "https://sqs.eu-west-1.amazonaws.com/123/certscore-v2-dag-prod-results",
+      CERTSCORE_V2_DAG_LAMBDA_TARGET_ENV: "production",
+      NEXT_PUBLIC_APP_URL: "https://certscore.ai",
+      NODE_ENV: "production",
+    },
+    hostname: "example.com",
+    localV2DagRunViaLambda: true,
+    maxPages: 3,
+    normalizedUrl: "https://example.com/",
+    profile: "homepage",
+    source: "manual-dashboard",
+  });
+  const v2DagLambda = config.execution?.v2DagLambda as Record<string, unknown> | undefined;
+  assert.equal(v2DagLambda?.postRefusalRejectWorkerEnabled, true);
+  assert.equal(v2DagLambda?.postRefusalRejectWorkerRolloutMode, "owned_canary");
 });
 
 test("production full-scan config ignores Lambda-off requests", () => {

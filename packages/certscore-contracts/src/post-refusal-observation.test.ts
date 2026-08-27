@@ -198,6 +198,7 @@ test("Lambda reject dispatch is bounded and requires explicit interaction author
 test("normal sharded reject dispatch binds the canonical resolver to an exact scan target", () => {
   const valid = postRefusalLambdaDispatchConfigSchema.parse({
     enabled: true,
+    rolloutMode: "all_eligible",
     resolver: {
       kind: "canonical_cmp_registry",
       recipeSetId: "canonical-cmp-registry-reject-v7",
@@ -211,6 +212,7 @@ test("normal sharded reject dispatch binds the canonical resolver to an exact sc
   });
 
   assert.equal(valid.resolver.kind, "canonical_cmp_registry");
+  assert.equal(valid.rolloutMode, "all_eligible");
   assert.equal(valid.interactionAuthorization.kind, "scan_target");
   assert.equal(postRefusalLambdaDispatchConfigSchema.safeParse({
     ...valid,
@@ -218,6 +220,10 @@ test("normal sharded reject dispatch binds the canonical resolver to an exact sc
       ...valid.interactionAuthorization,
       authorizationId: "reusable-host-authorization",
     },
+  }).success, false);
+  assert.equal(postRefusalLambdaDispatchConfigSchema.safeParse({
+    ...valid,
+    rolloutMode: "owned_canary",
   }).success, false);
 });
 

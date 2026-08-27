@@ -64,6 +64,16 @@ const ROOT_FULL_CHECKS: Check[] = [
     key: "lambda-tests",
     label: "v2 DAG Lambda tests",
     command: ["pnpm", "--filter", "@website-signal-risk-scanner/v2-dag-lambda", "test"]
+  },
+  {
+    key: "canonical-projection-parity",
+    label: "canonical projection parity",
+    command: ["pnpm", "test:canonical-projection-parity"]
+  },
+  {
+    key: "post-refusal-release",
+    label: "post-refusal release contracts",
+    command: ["pnpm", "test:post-refusal-release"]
   }
 ];
 
@@ -100,6 +110,16 @@ const TARGETS: Target[] = [
           "apps/web/server/scans/restricted-scan-options.test.ts",
           "scripts/assert-forward-web-deploy.test.ts"
         ]
+      },
+      {
+        key: "canonical-projection-parity",
+        label: "canonical projection parity",
+        command: ["pnpm", "test:canonical-projection-parity"]
+      },
+      {
+        key: "post-refusal-release",
+        label: "post-refusal release contracts",
+        command: ["pnpm", "test:post-refusal-release"]
       }
     ]
   },
@@ -169,6 +189,11 @@ const TARGETS: Target[] = [
         key: "lambda-tests",
         label: "v2 DAG Lambda tests",
         command: ["pnpm", "--filter", "@website-signal-risk-scanner/v2-dag-lambda", "test"]
+      },
+      {
+        key: "post-refusal-release",
+        label: "post-refusal release contracts",
+        command: ["pnpm", "test:post-refusal-release"]
       }
     ]
   },

@@ -53,6 +53,7 @@ test("simulated Lambda carries the exact typed Reject observation configuration 
       kind: "owned_canary" as const
     },
     observationWindowMs: 8_000,
+    rolloutMode: "owned_canary" as const,
     resolver: {
       kind: "canonical_cmp_registry" as const,
       recipeSetId: "canonical-cmp-registry-reject-v7" as const

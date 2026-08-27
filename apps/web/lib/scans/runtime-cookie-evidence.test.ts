@@ -142,8 +142,9 @@ test("Daily cookies separate proven writes, snapshot presence, and Funding Choic
   const rows = new Map(inventory.rows.map((row) => [row.cookieName, row]));
 
   assert.equal(rows.get("daily-ppid")?.category, "unknown");
-  assert.equal(rows.get("id5")?.nonEssential, false);
-  assert.equal(isEligibleNonEssentialPreconsentStorageRow(rows.get("id5")!), false);
+  assert.equal(rows.get("id5")?.category, "advertising");
+  assert.equal(rows.get("id5")?.nonEssential, true);
+  assert.equal(isEligibleNonEssentialPreconsentStorageRow(rows.get("id5")!), true);
   for (const name of ["_gcl_au", "_ga", "_gid", "_ga_TF2974TV1H", "FCCDCF"]) {
     assert.equal(rows.get(name)?.setAtMs, null, name);
     assert.equal(rows.get(name)?.timingEvidence, "periodic_cookie_snapshot", name);
@@ -707,7 +708,7 @@ test("canonical security-cookie classification overrides stale advertising flags
   assert.equal(getRuntimeCookieReviewPriority(inventory.rows[0]!), "contextual");
 });
 
-test("IMOU redirect-hop load-balancer cookies remain first-party necessary context", () => {
+test("IMOU redirect-hop load-balancer cookies remain first-party infrastructure context", () => {
   const cookieNames = ["AWSALBTG", "AWSALBTGCORS", "AWSALBAPP-0", "AWSALBAPP-1", "AWSALBAPP-2", "AWSALBAPP-3"];
   const inventory = buildRuntimeCookieInventory({
     hybridRuntimeEvidence: {
@@ -731,7 +732,7 @@ test("IMOU redirect-hop load-balancer cookies remain first-party necessary conte
 
   assert.equal(inventory.rows.length, 6);
   for (const row of inventory.rows) {
-    assert.equal(row.category, "necessary", row.cookieName);
+    assert.equal(row.category, "infrastructure", row.cookieName);
     assert.equal(row.nonEssential, false, row.cookieName);
     assert.equal(row.party, "first_party", row.cookieName);
     assert.equal(getRuntimeCookiePrimaryProvider(row), "AWS Elastic Load Balancing", row.cookieName);

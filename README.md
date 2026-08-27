@@ -99,7 +99,7 @@ Optional but recommended:
 
 ## Local development setup
 
-Use Node 20 or Node 22 LTS for local development. Node 25 is not supported here and can fail DNS resolution for app routes and external service calls on localhost.
+Use Node 22, 23, or 24 for local development. Node 20 is below the workspace engine floor, and Node 25 is not supported because it can fail DNS resolution for app routes and external service calls on localhost.
 
 1. Install dependencies:
    - `pnpm install`

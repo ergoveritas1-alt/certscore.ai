@@ -220,7 +220,7 @@ type LocalV2DagLambdaArtifactPointer = {
 
 function getLocalV2DagLambdaArtifactPointer(
   scanRecord: ScanDetailResponse,
-  field: "manifestUri" | "scanArtifactUri"
+  field: "manifestUri" | "scanArtifactUri" | "postRefusalPacketUri"
 ): LocalV2DagLambdaArtifactPointer | null {
   return scanRecord.events
     .filter((event) => event.eventType === "v2_lambda_result.received")
@@ -5852,8 +5852,17 @@ function buildMaterializedLocalV2Detail(
     }
   };
   const timingArtifacts = buildLocalV2DagTimingArtifacts(bundle);
+  const postRefusalPacketPointer = getLocalV2DagLambdaArtifactPointer(
+    scanRecord,
+    "postRefusalPacketUri",
+  );
   const postRefusalReportProjection = bundle.postRefusalEvidence
-    ? projectPostRefusalEvidenceForReport({ packet: bundle.postRefusalEvidence })
+    ? projectPostRefusalEvidenceForReport({
+        packet: bundle.postRefusalEvidence,
+        ...(postRefusalPacketPointer?.sha256
+          ? { packetSha256: postRefusalPacketPointer.sha256 }
+          : {}),
+      })
     : getReconciledPostRefusalReportProjection(scanRecord);
   const postRefusalRuntimeProjection = buildPostRefusalRuntimeProjection(
     postRefusalReportProjection,

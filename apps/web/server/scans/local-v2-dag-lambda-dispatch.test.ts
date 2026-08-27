@@ -175,6 +175,7 @@ test("adds the default-off reject worker to eligible sharded scans with target-s
       ...(ordinaryConfig.execution?.v2DagLambda as Record<string, unknown>),
       orchestrationMode: "sharded",
       postRefusalRejectWorkerEnabled: true,
+      postRefusalRejectWorkerRolloutMode: "all_eligible",
     },
   };
   const ordinaryPayload = buildLocalV2DagLambdaDispatchPayload({
@@ -194,6 +195,21 @@ test("adds the default-off reject worker to eligible sharded scans with target-s
       : undefined,
     ordinaryPayload.scanId,
   );
+
+  const canaryOnlyOrdinaryConfig = buildLambdaScanConfig();
+  canaryOnlyOrdinaryConfig.execution = {
+    ...canaryOnlyOrdinaryConfig.execution,
+    v2DagLambda: {
+      ...(canaryOnlyOrdinaryConfig.execution?.v2DagLambda as Record<string, unknown>),
+      orchestrationMode: "sharded",
+      postRefusalRejectWorkerEnabled: true,
+      postRefusalRejectWorkerRolloutMode: "owned_canary",
+    },
+  };
+  assert.equal(buildLocalV2DagLambdaDispatchPayload({
+    scanConfig: canaryOnlyOrdinaryConfig,
+    scanId: "scan-ordinary-canary-only",
+  }).postRefusalObservation, undefined);
 });
 
 test("builds local Lambda dispatch payload with bounded debug overrides", () => {

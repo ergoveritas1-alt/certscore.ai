@@ -43,6 +43,8 @@ The reject observer:
 - emits no finding unless semantic refusal registration is confirmed;
 - excludes requests already in flight at the refusal anchor;
 - retains bounded metadata and hashes storage values and TC strings;
+- strips query values and fragments from retained target URLs while binding the
+  exact authorized target through `exactTargetSha256`;
 - identifies cookies by exact name/domain/path/partition and web storage by
   exact origin/type/key;
 - treats storage as persistent only when that exact identity has the same value
@@ -56,8 +58,11 @@ The reject observer:
 The initial named-CMP coverage is OneTrust, Cookiebot, and Usercentrics. Unknown
 CMPs and unresolved controls fail closed without a click.
 
-With the feature flag enabled, every eligible ordinary sharded scan receives
-the exact-target authorization in its dispatch payload. The authorization does
+The enable flag defaults to the `owned_canary` rollout mode, which permits only
+loopback fixtures and the owned ErgoVeritas canary. Ordinary eligible sharded
+scans receive exact-target authorization only when
+`CERTSCORE_POST_REFUSAL_REJECT_WORKER_ROLLOUT_MODE=all_eligible` is also set.
+The authorization does
 not grant interaction with a host generally and cannot be reused by another
 scan. Non-sharded scans, non-HTTPS public targets, redirects away from the exact
 authorized URL, ambiguous recipe matches, and unsupported CMPs remain neutral.
@@ -184,3 +189,7 @@ The optional 3,008 MB Reject worker cost profile was approved on August 26,
 provider; their incremental API cost is conservatively below $0.25. No AWS
 deployment, production push, or production scan occurred for this acceptance
 pass.
+
+Before switching to `all_eligible`, the release summary must record the
+expected per-scan and monthly AWS Lambda increase for the current scan volume.
+The owned-canary rollout remains the lower-cost validation alternative.

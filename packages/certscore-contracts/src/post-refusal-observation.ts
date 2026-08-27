@@ -337,6 +337,7 @@ export const postRefusalEvidencePacketSchema = z.object({
   productionProjectable: z.boolean(),
   scanId: z.string().min(1).max(160),
   parentScanId: z.string().min(1).max(160).optional(),
+  exactTargetSha256: z.string().regex(/^[a-f0-9]{64}$/).optional(),
   targetUrl: z.string().url().max(500),
   normalizedUrl: z.string().url().max(500),
   observationBranch: z.literal("reject_only"),
@@ -804,12 +805,21 @@ const postRefusalResolverConfigSchema = z.discriminatedUnion("kind", [
 
 export const postRefusalLambdaDispatchConfigSchema = z.object({
   enabled: z.literal(true),
+  rolloutMode: z.enum(["owned_canary", "all_eligible"]).default("owned_canary"),
   dispatchDelayMs: z.number().int().min(0).max(10_000).default(500),
   observationWindowMs: z.number().int().min(0).max(30_000).default(8_000),
   confirmationTimeoutMs: z.number().int().min(50).max(5_000).default(1_500),
   actionSearchTimeoutMs: z.number().int().min(0).max(10_000).default(1_500),
   resolver: postRefusalResolverConfigSchema,
   interactionAuthorization: postRefusalInteractionAuthorizationSchema,
+}).superRefine((config, context) => {
+  if (config.interactionAuthorization.kind === "scan_target" && config.rolloutMode !== "all_eligible") {
+    context.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: "Ordinary exact-target authorization requires all_eligible Reject rollout mode.",
+      path: ["rolloutMode"],
+    });
+  }
 });
 
 export const POST_REFUSAL_LAMBDA_EVIDENCE_DESCRIPTOR_VERSION =

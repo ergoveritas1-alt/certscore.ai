@@ -912,6 +912,29 @@ test("SQS redelivery replays retained completion without rerunning scanner work"
   process.env.CERTSCORE_V2_DAG_LAMBDA_ARTIFACT_PREFIX = "v2-dag-lambda/local";
   let artifactRuns = 0;
   const sent: SendMessageCommand[] = [];
+  const postRefusalPacketUri = "s3://certscore-test-artifacts/v2-dag-lambda/local/scan-local-1/lanes/reject_observation/PostRefusalEvidencePacket.json";
+  const laneTimingSummary = {
+    contractVersion: "certscore.v2.lambda-lane-timing.v1",
+    coordinatorStartedAt: "2026-08-20T19:59:40.000Z",
+    generatedAt: "2026-08-20T20:00:00.000Z",
+    lanes: ["consent_proof", "runtime_evidence", "policy_evidence", "reject_observation"].map((lane) => ({
+      coordinatorElapsedMs: 1_000,
+      evidenceJoined: true,
+      invocationStartedAt: "2026-08-20T19:59:40.000Z",
+      lane,
+      outcome: "completed",
+      terminalOutcomeDeltaFromPassiveBarrierMs: lane === "reject_observation" ? -100 : 0,
+      terminalOutcomeObservedAt: "2026-08-20T19:59:59.000Z",
+      workerReportedCompletedAt: "2026-08-20T19:59:59.000Z",
+      workerReportedHandlerDurationMs: 900,
+    })),
+    maxRejectTailWaitMs: 6_000,
+    passiveLaneBarrierCompletedAt: "2026-08-20T19:59:59.100Z",
+    rejectCompletedBeforeOrAtPassiveBarrier: true,
+    rejectLaneAddedWaitMs: 0,
+    rejectLaneJoin: "joined",
+    rejectTailDeltaMs: -100,
+  };
   try {
     const result = await handler({
       Records: [{ body: JSON.stringify(validPayload()), eventSource: "aws:sqs" }],
@@ -924,7 +947,15 @@ test("SQS redelivery replays retained completion without rerunning scanner work"
         async send(command: GetObjectCommand) {
           const key = command.input.Key ?? "";
           const body = key.endsWith("LocalV2DagLambdaManifest.json")
-            ? JSON.stringify({ generatedAt: "2026-08-20T20:00:00.000Z", phaseTimings: [] })
+            ? JSON.stringify({
+                artifactMetadata: {
+                  postRefusalPacketUri: { sha256: "c".repeat(64), sizeBytes: 1_024 },
+                },
+                generatedAt: "2026-08-20T20:00:00.000Z",
+                laneTimingSummary,
+                phaseTimings: [],
+                pointers: { postRefusalPacketUri },
+              })
             : JSON.stringify({ artifactVersion: "fixture" });
           return { Body: Buffer.from(body) };
         },
@@ -939,6 +970,15 @@ test("SQS redelivery replays retained completion without rerunning scanner work"
     assert.equal(artifactRuns, 0);
     assert.equal(sent.length, 1);
     assert.equal(result.status, "completed");
+    assert.equal(result.artifactPointers?.postRefusalPacketUri, postRefusalPacketUri);
+    assert.deepEqual(result.artifactMetadata?.postRefusalPacketUri, {
+      sha256: "c".repeat(64),
+      sizeBytes: 1_024,
+    });
+    assert.deepEqual(result.laneTimingSummary, laneTimingSummary);
+    const replayedMessage = JSON.parse(String(sent[0]?.input.MessageBody));
+    assert.equal(replayedMessage.artifactPointers.postRefusalPacketUri, postRefusalPacketUri);
+    assert.deepEqual(replayedMessage.laneTimingSummary, laneTimingSummary);
   } finally {
     if (previousBucket === undefined) delete process.env.CERTSCORE_V2_DAG_LAMBDA_ARTIFACT_BUCKET;
     else process.env.CERTSCORE_V2_DAG_LAMBDA_ARTIFACT_BUCKET = previousBucket;

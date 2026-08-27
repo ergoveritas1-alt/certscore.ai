@@ -1226,6 +1226,8 @@ async function runLocalV2DagLambdaScanBundle(
 async function writeAndUploadLocalV2DagLambdaArtifacts(input: {
   artifactRoot: string;
   bundle: CanonicalEvidenceBundle;
+  joinedPostRefusalArtifact?: Pick<LocalV2DagLambdaShardResult, "artifactMetadata" | "artifactPointers">;
+  laneTimingSummary?: LocalV2DagLambdaLaneTimingSummary;
   payload: LocalV2DagLambdaDispatchPayload;
   phaseTimings: LocalV2DagLambdaPhaseTiming[];
   s3Client?: S3PutClient;
@@ -1255,12 +1257,18 @@ async function writeAndUploadLocalV2DagLambdaArtifacts(input: {
   await timeLambdaPhase(phaseTimings, "scan_artifact_write", () => writeCompactJson(scanArtifactPath, bundle));
 
   const manifestPath = path.join(artifactRoot, "LocalV2DagLambdaManifest.json");
-  const pointers = artifactPointersFromS3Keys({
+  const corePointers = artifactPointersFromS3Keys({
     bucket: requireArtifactBucket(),
     keyPrefix: artifactKeyPrefix(payload),
     manifestFileName: "LocalV2DagLambdaManifest.json",
     scanArtifactFileName: "CanonicalEvidenceBundle.json"
   });
+  const joinedPostRefusalPacketUri = input.joinedPostRefusalArtifact?.artifactPointers?.postRefusalPacketUri;
+  const joinedPostRefusalPacketMetadata = input.joinedPostRefusalArtifact?.artifactMetadata?.postRefusalPacketUri;
+  const pointers: LocalV2DagLambdaArtifactPointers = {
+    ...corePointers,
+    ...(joinedPostRefusalPacketUri ? { postRefusalPacketUri: joinedPostRefusalPacketUri } : {}),
+  };
   // Make the canonical evidence bundle durable before auxiliary uploads start.
   // Large screenshot sets must not contend with or starve the core artifact.
   const scanArtifactMetadata = await timeLambdaPhase(phaseTimings, "scan_artifact_upload", () => uploadArtifactFiles({
@@ -1282,6 +1290,10 @@ async function writeAndUploadLocalV2DagLambdaArtifacts(input: {
     artifactRoot,
     auxiliaryArtifacts,
     bundle,
+    ...(joinedPostRefusalPacketMetadata ? {
+      artifactMetadata: { postRefusalPacketUri: joinedPostRefusalPacketMetadata },
+    } : {}),
+    ...(input.laneTimingSummary ? { laneTimingSummary: input.laneTimingSummary } : {}),
     payload,
     phaseTimings,
     pointers,
@@ -1299,7 +1311,10 @@ async function writeAndUploadLocalV2DagLambdaArtifacts(input: {
   return {
     artifactMetadata: {
       ...scanArtifactMetadata,
-      ...manifestArtifactMetadata
+      ...manifestArtifactMetadata,
+      ...(joinedPostRefusalPacketMetadata
+        ? { postRefusalPacketUri: joinedPostRefusalPacketMetadata }
+        : {}),
     },
     artifactPointers: pointers,
     phaseTimings
@@ -2241,6 +2256,10 @@ export async function runLocalV2DagLambdaShardedArtifactChain(
   const artifacts = await writeAndUploadLocalV2DagLambdaArtifacts({
     artifactRoot,
     bundle,
+    ...(postRefusalJoin === "joined" && postRefusalState.result
+      ? { joinedPostRefusalArtifact: postRefusalState.result }
+      : {}),
+    laneTimingSummary,
     payload,
     phaseTimings,
     s3Client: options.s3Client,
@@ -2785,6 +2804,85 @@ function parseArtifactMetadataEntry(value: unknown) {
   const sha256 = compactString(record.sha256);
   const sizeBytes = typeof record.sizeBytes === "number" ? record.sizeBytes : null;
   return sha256 && sizeBytes !== null ? { sha256, sizeBytes } : undefined;
+}
+
+function parseLaneTimingSummaryRecord(value: unknown): LocalV2DagLambdaLaneTimingSummary | undefined {
+  const record = asRecord(value);
+  if (record.contractVersion !== LOCAL_V2_DAG_LAMBDA_LANE_TIMING_CONTRACT_VERSION) return undefined;
+  const coordinatorStartedAt = compactString(record.coordinatorStartedAt);
+  const generatedAt = compactString(record.generatedAt);
+  const passiveLaneBarrierCompletedAt = compactString(record.passiveLaneBarrierCompletedAt);
+  const rejectLaneJoin = record.rejectLaneJoin;
+  const integer = (candidate: unknown, nonnegative = false) => {
+    if (typeof candidate !== "number" || !Number.isFinite(candidate)) return null;
+    const rounded = Math.round(candidate);
+    return nonnegative ? Math.max(0, rounded) : rounded;
+  };
+  const maxRejectTailWaitMs = integer(record.maxRejectTailWaitMs, true);
+  const rejectLaneAddedWaitMs = integer(record.rejectLaneAddedWaitMs, true);
+  if (
+    !coordinatorStartedAt || !generatedAt || !passiveLaneBarrierCompletedAt ||
+    !Number.isFinite(Date.parse(coordinatorStartedAt)) ||
+    !Number.isFinite(Date.parse(generatedAt)) ||
+    !Number.isFinite(Date.parse(passiveLaneBarrierCompletedAt)) ||
+    maxRejectTailWaitMs === null || rejectLaneAddedWaitMs === null ||
+    (rejectLaneJoin !== "disabled" && rejectLaneJoin !== "failed" &&
+      rejectLaneJoin !== "joined" && rejectLaneJoin !== "not_applicable" &&
+      rejectLaneJoin !== "timed_out") ||
+    !Array.isArray(record.lanes)
+  ) return undefined;
+  const validLanes = new Set<LocalV2DagLambdaEvidenceLane>([
+    "consent_proof",
+    "runtime_evidence",
+    "policy_evidence",
+    "reject_observation",
+  ]);
+  const validOutcomes = new Set<LocalV2DagLambdaLaneTiming["outcome"]>([
+    "completed",
+    "disabled",
+    "failed",
+    "not_applicable",
+    "timed_out",
+  ]);
+  const lanes = record.lanes.flatMap((candidate): LocalV2DagLambdaLaneTiming[] => {
+    const laneRecord = asRecord(candidate);
+    const lane = compactString(laneRecord.lane) as LocalV2DagLambdaEvidenceLane | null;
+    const outcome = compactString(laneRecord.outcome) as LocalV2DagLambdaLaneTiming["outcome"] | null;
+    if (!lane || !validLanes.has(lane) || !outcome || !validOutcomes.has(outcome)) return [];
+    const nullableDate = (field: string) => {
+      const parsed = compactString(laneRecord[field]);
+      return parsed && Number.isFinite(Date.parse(parsed)) ? parsed : null;
+    };
+    const nullableInteger = (field: string, nonnegative = false) =>
+      laneRecord[field] === null || laneRecord[field] === undefined
+        ? null
+        : integer(laneRecord[field], nonnegative);
+    return [{
+      coordinatorElapsedMs: nullableInteger("coordinatorElapsedMs", true),
+      evidenceJoined: laneRecord.evidenceJoined === true,
+      invocationStartedAt: nullableDate("invocationStartedAt"),
+      lane,
+      outcome,
+      terminalOutcomeDeltaFromPassiveBarrierMs: nullableInteger("terminalOutcomeDeltaFromPassiveBarrierMs"),
+      terminalOutcomeObservedAt: nullableDate("terminalOutcomeObservedAt"),
+      workerReportedCompletedAt: nullableDate("workerReportedCompletedAt"),
+      workerReportedHandlerDurationMs: nullableInteger("workerReportedHandlerDurationMs", true),
+    }];
+  });
+  if (lanes.length !== 4 || new Set(lanes.map((lane) => lane.lane)).size !== 4) return undefined;
+  const rejectCompleted = record.rejectCompletedBeforeOrAtPassiveBarrier;
+  return {
+    contractVersion: LOCAL_V2_DAG_LAMBDA_LANE_TIMING_CONTRACT_VERSION,
+    coordinatorStartedAt,
+    generatedAt,
+    lanes,
+    maxRejectTailWaitMs,
+    passiveLaneBarrierCompletedAt,
+    rejectCompletedBeforeOrAtPassiveBarrier: typeof rejectCompleted === "boolean" ? rejectCompleted : null,
+    rejectLaneAddedWaitMs,
+    rejectLaneJoin,
+    rejectTailDeltaMs: integer(record.rejectTailDeltaMs),
+  };
 }
 
 function parsePhaseTimings(value: unknown): LocalV2DagLambdaPhaseTiming[] {
@@ -4032,8 +4130,10 @@ export async function uploadArtifactFiles(input: {
 
 async function writeManifest(input: {
   artifactRoot: string;
+  artifactMetadata?: LocalV2DagLambdaArtifactMetadata;
   auxiliaryArtifacts: LocalV2DagLambdaAuxiliaryArtifact[];
   bundle: CanonicalEvidenceBundle;
+  laneTimingSummary?: LocalV2DagLambdaLaneTimingSummary;
   payload: LocalV2DagLambdaDispatchPayload;
   phaseTimings: LocalV2DagLambdaPhaseTiming[];
   pointers: LocalV2DagLambdaArtifactPointers;
@@ -4042,9 +4142,11 @@ async function writeManifest(input: {
   const manifestPath = path.join(input.artifactRoot, "LocalV2DagLambdaManifest.json");
   await writeFile(manifestPath, `${JSON.stringify({
     artifactOnly: true,
+    ...(input.artifactMetadata ? { artifactMetadata: input.artifactMetadata } : {}),
     auxiliaryArtifacts: input.auxiliaryArtifacts,
     contractVersion: "certscore.v2.lambda-dag-artifact-manifest.v1",
     generatedAt: new Date().toISOString(),
+    ...(input.laneTimingSummary ? { laneTimingSummary: input.laneTimingSummary } : {}),
     modulesRun: input.bundle.modulesRun.map((moduleRun) => ({
       durationMs: moduleRun.durationMs,
       errorCount: (moduleRun.errors ?? []).length,
@@ -4424,6 +4526,9 @@ async function replayCompletedSqsDispatch(input: {
   ]);
   const scanArtifactBody = await streamToBuffer(scanArtifactResponse.Body);
   const manifest = asRecord(JSON.parse(manifestBody.toString("utf8")));
+  const retainedArtifactMetadata = parseArtifactMetadataRecord(manifest.artifactMetadata);
+  const retainedArtifactPointers = parseArtifactPointersRecord(manifest.pointers);
+  const retainedLaneTimingSummary = parseLaneTimingSummaryRecord(manifest.laneTimingSummary);
   const generatedAt = compactString(manifest.generatedAt);
   const completedAt = generatedAt && Number.isFinite(new Date(generatedAt).getTime())
     ? new Date(generatedAt)
@@ -4438,13 +4543,20 @@ async function replayCompletedSqsDispatch(input: {
         sha256: createHash("sha256").update(scanArtifactBody).digest("hex"),
         sizeBytes: scanArtifactBody.byteLength,
       },
+      ...(retainedArtifactMetadata.postRefusalPacketUri
+        ? { postRefusalPacketUri: retainedArtifactMetadata.postRefusalPacketUri }
+        : {}),
     },
     artifactPointers: {
       manifestUri: s3Uri(bucket, manifestKey),
       scanArtifactUri: s3Uri(bucket, scanArtifactKey),
+      ...(retainedArtifactPointers.postRefusalPacketUri
+        ? { postRefusalPacketUri: retainedArtifactPointers.postRefusalPacketUri }
+        : {}),
     },
     completedAt,
     payload: input.payload,
+    ...(retainedLaneTimingSummary ? { laneTimingSummary: retainedLaneTimingSummary } : {}),
     phaseTimings: parsePhaseTimings(manifest.phaseTimings),
     status: "completed",
   });

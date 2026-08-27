@@ -287,14 +287,18 @@ export async function runPostRefusalObserver(
       fields.registration.refusalRegisteredAtMs !== undefined;
     const resolverRecipe = selectedRecipe ?? (actionRecipes.length === 1 ? actionRecipes[0] : undefined);
     const resolverMethod = resolverRecipe?.resolverMethod ?? candidateSetResolverMethod(actionRecipes);
+    const exactTargetUrl = normalizeTargetUrl(input.url);
+    const retainedTargetUrl = sanitizeUrl(exactTargetUrl);
+    const retainedNormalizedUrl = sanitizeUrl(normalizedUrl);
     const packet = postRefusalEvidencePacketSchema.parse({
       artifactVersion: "certscore.post_refusal_evidence.v1",
       artifactOnly: true,
       productionProjectable: productionProjectable && confirmedRefusal,
       scanId: input.scanId,
       ...(input.parentScanId ? { parentScanId: input.parentScanId } : {}),
-      targetUrl: input.url,
-      normalizedUrl,
+      exactTargetSha256: hashValue(exactTargetUrl),
+      targetUrl: retainedTargetUrl,
+      normalizedUrl: retainedNormalizedUrl,
       observationBranch: "reject_only",
       phase: "post_action",
       consentAction: "reject",

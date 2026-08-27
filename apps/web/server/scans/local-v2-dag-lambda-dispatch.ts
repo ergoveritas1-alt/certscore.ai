@@ -115,6 +115,9 @@ function postRefusalObservationFromIntent(input: {
   if (input.intent.postRefusalRejectWorkerEnabled !== true || input.intent.orchestrationMode !== "sharded") {
     return undefined;
   }
+  const rolloutMode = input.intent.postRefusalRejectWorkerRolloutMode === "all_eligible"
+    ? "all_eligible"
+    : "owned_canary";
   let target: URL;
   try {
     target = new URL(input.targetUrl);
@@ -131,9 +134,10 @@ function postRefusalObservationFromIntent(input: {
     !target.password &&
     !target.port &&
     !target.hash;
-  if (!loopback && !ownedCanary && !exactProductionTarget) return undefined;
+  if (!loopback && !ownedCanary && (rolloutMode !== "all_eligible" || !exactProductionTarget)) return undefined;
   return {
     enabled: true,
+    rolloutMode,
     dispatchDelayMs: 500,
     observationWindowMs: 8_000,
     confirmationTimeoutMs: 1_500,

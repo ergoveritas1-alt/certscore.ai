@@ -3,7 +3,7 @@
 > **Project:** CertScore (`certscore.ai`) — a production-minded MVP for scanning public websites for accessibility, privacy, cookie, policy, and disclosure risk signals.
 > **Repo codename:** `WC01`
 > **Package manager:** pnpm 10.6.3 (workspace monorepo with Turbo)
-> **Node engines:** `>=20.0.0 <25.0.0` (Node 25 is unsupported and can fail DNS resolution on localhost)
+> **Node engines:** `>=22.0.0 <25.0.0` (Node 25 is unsupported and can fail DNS resolution on localhost)
 
 ## Absolute prohibition: Vercel
 
@@ -460,7 +460,7 @@ WC01/
 
 ### Technology stack
 
-- **Runtime:** Node.js 20/22
+- **Runtime:** Node.js 22–24
 - **Package manager:** pnpm 10.6.3 with `node-linker=hoisted`
 - **Build orchestration:** Turbo 2.5
 - **Web framework:** Next.js 15 (App Router, `output: "standalone"`)
