@@ -8,6 +8,43 @@ export type PostRefusalReportPublicationDecision = {
     | "reject_packet_not_ready_without_delaying_primary";
 };
 
+export type PostRefusalLaneTimingComparison = {
+  consentProofDeltaMs: number;
+  policyEvidenceDeltaMs: number;
+  primaryReadyAtMs: number;
+  rejectReadyBeforeConsentProof: boolean;
+  rejectReadyBeforePrimary: boolean;
+  runtimeEvidenceDeltaMs: number;
+};
+
+export function comparePostRefusalLaneReadiness(input: {
+  laneReadyAtMs: {
+    consent_proof: number;
+    policy_evidence: number;
+    runtime_evidence: number;
+  };
+  rejectReadyAtMs: number;
+}): PostRefusalLaneTimingComparison {
+  const consentProofReadyAtMs = nonnegativeMs(input.laneReadyAtMs.consent_proof);
+  const policyEvidenceReadyAtMs = nonnegativeMs(input.laneReadyAtMs.policy_evidence);
+  const runtimeEvidenceReadyAtMs = nonnegativeMs(input.laneReadyAtMs.runtime_evidence);
+  const rejectReadyAtMs = nonnegativeMs(input.rejectReadyAtMs);
+  const primaryReadyAtMs = Math.max(
+    consentProofReadyAtMs,
+    policyEvidenceReadyAtMs,
+    runtimeEvidenceReadyAtMs,
+  );
+
+  return {
+    consentProofDeltaMs: rejectReadyAtMs - consentProofReadyAtMs,
+    policyEvidenceDeltaMs: rejectReadyAtMs - policyEvidenceReadyAtMs,
+    primaryReadyAtMs,
+    rejectReadyBeforeConsentProof: rejectReadyAtMs <= consentProofReadyAtMs,
+    rejectReadyBeforePrimary: rejectReadyAtMs <= primaryReadyAtMs,
+    runtimeEvidenceDeltaMs: rejectReadyAtMs - runtimeEvidenceReadyAtMs,
+  };
+}
+
 export function decidePostRefusalReportPublication(input: {
   primaryReadyAtMs: number;
   rejectReadyAtMs: number;

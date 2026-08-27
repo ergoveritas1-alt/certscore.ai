@@ -8,11 +8,15 @@ import {
   type PostRefusalLabCase,
 } from "../post-refusal-lab-cases.js";
 import { runPostRefusalObserver } from "../post-refusal-observer.js";
-import { decidePostRefusalReportPublication } from "../post-refusal-orchestration.js";
+import {
+  comparePostRefusalLaneReadiness,
+  decidePostRefusalReportPublication,
+} from "../post-refusal-orchestration.js";
 import { buildPostRefusalSupplementEnvelope } from "../post-refusal-supplement.js";
 import {
   authorizePostRefusalTarget,
   ERGOVERITAS_POST_REFUSAL_CANARY_AUTHORIZATION_ID,
+  getOwnedPostRefusalCanaryRecipeCase,
   isLoopbackPostRefusalTarget,
   type PostRefusalInteractionAuthorization,
 } from "../post-refusal-target-authorization.js";
@@ -76,7 +80,9 @@ async function main(): Promise<void> {
           fixture,
           repetition,
           primaryReadyAtMs: run.primaryReadyAtMs,
+          consentProofReadyAtMs: run.laneReadyAtMs.consent_proof,
           rejectReadyAtMs: run.rejectReadyAtMs,
+          rejectReadyVsConsentProofDeltaMs: run.laneTimingComparison.consentProofDeltaMs,
           rejectReadyDeltaMs: run.publicationDecision.rejectReadyDeltaMs,
           mode: run.publicationDecision.mode,
           observations: run.observationCount,
@@ -88,7 +94,7 @@ async function main(): Promise<void> {
   }
 
   const report = {
-    artifactVersion: "certscore.post_refusal_three_lane_cohort.v1",
+    artifactVersion: "certscore.post_refusal_three_lane_cohort.v2",
     artifactOnly: true,
     productionProjectable: false,
     generatedAt,
@@ -109,6 +115,7 @@ async function main(): Promise<void> {
       policyProvider: args.policyProvider,
       targetUrl: args.targetUrl ?? null,
       primaryBarrier: "all_three_local_evidence_lanes_completed",
+      laneSpecificTiming: "reject_ready_compared_with_each_required_lane",
     },
     summary: summarize(runs),
     runs,
@@ -193,7 +200,11 @@ async function runCase(input: {
     policyPromise,
     rejectPromise,
   ]);
-  const primaryReadyAtMs = Math.max(...Object.values(laneReadyAtMs));
+  const laneTimingComparison = comparePostRefusalLaneReadiness({
+    laneReadyAtMs,
+    rejectReadyAtMs: rejectPacket.timing.readyAtMs,
+  });
+  const primaryReadyAtMs = laneTimingComparison.primaryReadyAtMs;
   const publicationDecision = decidePostRefusalReportPublication({
     primaryReadyAtMs,
     rejectReadyAtMs: rejectPacket.timing.readyAtMs,
@@ -214,6 +225,7 @@ async function runCase(input: {
     fixture: input.fixture,
     repetition: input.repetition,
     laneReadyAtMs,
+    laneTimingComparison,
     primaryReadyAtMs,
     rejectReadyAtMs: rejectPacket.timing.readyAtMs,
     refusalRegistrationStatus: rejectPacket.refusalRegistration.status,
@@ -226,14 +238,23 @@ async function runCase(input: {
 
 function summarize(runs: Array<Awaited<ReturnType<typeof runCase>>>) {
   const deltas = runs.map((run) => run.publicationDecision.rejectReadyDeltaMs).sort((a, b) => a - b);
+  const consentProofDeltas = runs
+    .map((run) => run.laneTimingComparison.consentProofDeltaMs)
+    .sort((a, b) => a - b);
   return {
     runCount: runs.length,
+    rejectReadyBeforeConsentProofCount: runs.filter(
+      (run) => run.laneTimingComparison.rejectReadyBeforeConsentProof,
+    ).length,
     rejectReadyBeforePrimaryCount: runs.filter((run) => run.rejectReadyAtMs <= run.primaryReadyAtMs).length,
     initialReportCount: runs.filter((run) => run.publicationDecision.mode !== "late_generation").length,
     lateGenerationCount: runs.filter((run) => run.publicationDecision.mode === "late_generation").length,
     medianRejectReadyDeltaMs: median(deltas),
     minimumRejectReadyDeltaMs: deltas[0] ?? 0,
     maximumRejectReadyDeltaMs: deltas.at(-1) ?? 0,
+    medianRejectReadyVsConsentProofDeltaMs: median(consentProofDeltas),
+    minimumRejectReadyVsConsentProofDeltaMs: consentProofDeltas[0] ?? 0,
+    maximumRejectReadyVsConsentProofDeltaMs: consentProofDeltas.at(-1) ?? 0,
   };
 }
 
@@ -314,6 +335,17 @@ function parseArgs(argv: string[]) {
   }
   if (parsed.ownedErgoCanary && parsed.publicAllowlistId) {
     throw new Error("Choose either --owned-ergo-canary or --public-allowlist-id, not both.");
+  }
+  if (parsed.ownedErgoCanary && parsed.targetUrl) {
+    const requiredRecipeCase = getOwnedPostRefusalCanaryRecipeCase(parsed.targetUrl);
+    if (!requiredRecipeCase) {
+      throw new Error("--owned-ergo-canary requires one exact registered owned-canary page URL.");
+    }
+    if (parsed.fixtures[0] !== requiredRecipeCase) {
+      throw new Error(
+        `Owned ErgoVeritas canaries require --fixtures ${requiredRecipeCase} for their canonical CMP recipe.`,
+      );
+    }
   }
   if (
     parsed.targetUrl &&

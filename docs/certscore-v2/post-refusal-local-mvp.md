@@ -153,9 +153,20 @@ pnpm v2:post-refusal-cohort -- --policy-provider real --repetitions 1 \
   --owned-ergo-canary
 ```
 
-The owned-canary switch does not authorize other ErgoVeritas paths or the
-`www` hostname. The canary manifest permits one reject action only and forbids
-DOM guessing.
+Both owned pages use the canonical OneTrust/TCF recipe, including the ignored
+variant:
+
+```sh
+pnpm v2:post-refusal-cohort -- --policy-provider real --repetitions 1 \
+  --fixtures tcf \
+  --target-url https://ergoveritas.com/.well-known/certscore-canary/post-refusal/reject-ignored.html \
+  --owned-ergo-canary
+```
+
+The owned-canary switch authorizes only the two exact registered page URLs,
+not other ErgoVeritas paths, query variants, runtime assets, or the `www`
+hostname. A mismatched fixture/recipe selection fails before browser launch.
+The canary manifest permits one reject action only and forbids DOM guessing.
 
 One public target can be calibrated locally only with a per-run exact-host/path
 allowlist ID and the real policy provider. The observer re-authorizes the final
@@ -260,22 +271,52 @@ Messages are retained as scan events and bound to the verified base bundle hash
 when both halves exist. A verified confirmed packet enters the canonical report
 generation path; coverage failures and unconfirmed refusal remain score-neutral.
 
-The Lambda runtime remains restricted to loopback and the exact owned
-ErgoVeritas canary prefix. The local cohort runner additionally supports one
+The Lambda runtime remains restricted to loopback and the two exact owned
+ErgoVeritas canary page URLs. The local cohort runner additionally supports one
 exact per-run public calibration target. Public allowlist mode is not enabled in
 the Lambda handler and was not deployed.
 
 ## Fresh owned-canary timing
 
-Two fresh real-provider repetitions per owned live canary produced:
+Five fresh real-provider repetitions per owned live canary produced:
 
-- reject honored: both packets ready before the primary barrier, with a 2.644–
-  3.291 second lead (2.967 second median) and no observations; and
-- reject ignored: both packets ready before the primary barrier, with a 9.650–
-  10.860 second lead (10.255 second median) and three expected observations per
-  run.
+- reject honored: all five packets confirmed clean, contained no observations,
+  and were ready 1.875–3.156 seconds before the primary barrier (2.350 second
+  median); and
+- reject ignored: all five packets confirmed the expected failure, contained
+  exactly three expected observations each, and were ready 10.311–12.483 seconds
+  before the primary barrier (10.584 second median).
 
-The approved initial-report join wait remained zero in all four runs.
+The approved initial-report join wait remained zero in all ten runs.
+
+## Consent-proof-specific timing
+
+The repeated cohort artifact is now version 2 and records reject readiness
+against each required lane, not only the latest three-lane barrier. A fresh
+ten-run deterministic cohort produced:
+
+- reject packet ready before consent-proof: 4 of 10;
+- reject packet ready before the complete three-lane barrier: 10 of 10;
+- median reject delta versus consent-proof: +301 ms, with a -6.014 to
+  +2.005 second range; and
+- median reject lead versus the complete barrier: 4.795 seconds, with a 1.438
+  to 9.710 second range.
+
+Five fresh real-provider repetitions per owned live page showed the expected
+behavior split:
+
+- reject honored: all five confirmed clean with zero observations; reject
+  finished 1.903–2.342 seconds after consent-proof but 1.875–3.156 seconds
+  before the complete barrier; and
+- reject ignored: all five confirmed with the expected three observations;
+  reject finished 5.645–12.483 seconds before consent-proof and 10.311–12.483
+  seconds before the complete barrier.
+
+An initial ignored-canary invocation used the local `ignored` recipe instead
+of the canary's canonical OneTrust/TCF recipe. It safely returned two neutral
+`not_attempted` packets, which exposed a cohort-CLI configuration foot-gun.
+Owned-canary authorization is now exact-page scoped and rejects a mismatched
+recipe before browser launch.
 
 ## Initial public calibration
 

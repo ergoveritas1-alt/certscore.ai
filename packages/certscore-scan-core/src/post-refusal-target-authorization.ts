@@ -33,10 +33,37 @@ export type PostRefusalTargetAuthorizationDecision = {
     | "explicit_allowlist_target_mismatch";
 };
 
-const OWNED_POST_REFUSAL_CANARY_TARGETS = [{
-  hostname: "ergoveritas.com",
-  pathPrefix: "/.well-known/certscore-canary/post-refusal/",
-}] as const;
+const OWNED_POST_REFUSAL_CANARY_TARGETS = [
+  {
+    hostname: "ergoveritas.com",
+    pathname: "/.well-known/certscore-canary/post-refusal/reject-honored.html",
+    recipeCase: "tcf",
+  },
+  {
+    hostname: "ergoveritas.com",
+    pathname: "/.well-known/certscore-canary/post-refusal/reject-ignored.html",
+    recipeCase: "tcf",
+  },
+] as const;
+
+export function getOwnedPostRefusalCanaryRecipeCase(targetUrl: string): "tcf" | undefined {
+  let target: URL;
+  try {
+    target = new URL(targetUrl);
+  } catch {
+    return undefined;
+  }
+  return OWNED_POST_REFUSAL_CANARY_TARGETS.find((candidate) =>
+    target.protocol === "https:" &&
+    !target.username &&
+    !target.password &&
+    !target.port &&
+    !target.search &&
+    !target.hash &&
+    target.hostname.toLowerCase() === candidate.hostname &&
+    target.pathname === candidate.pathname
+  )?.recipeCase;
+}
 
 export function isLoopbackPostRefusalTarget(targetUrl: string): boolean {
   try {
@@ -76,7 +103,7 @@ export function authorizePostRefusalTarget(
   }
 
   if (authorization.kind === "owned_canary") {
-    const authorized = targetMatches(target, OWNED_POST_REFUSAL_CANARY_TARGETS);
+    const authorized = getOwnedPostRefusalCanaryRecipeCase(targetUrl) !== undefined;
     return decision(
       authorization,
       authorized,

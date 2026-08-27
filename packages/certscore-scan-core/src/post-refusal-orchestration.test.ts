@@ -1,9 +1,44 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import {
+  comparePostRefusalLaneReadiness,
   decidePostRefusalCooperativeAbort,
   decidePostRefusalReportPublication,
 } from "./post-refusal-orchestration.js";
+
+test("compares reject readiness with consent proof and the full primary barrier separately", () => {
+  assert.deepEqual(comparePostRefusalLaneReadiness({
+    laneReadyAtMs: {
+      consent_proof: 4_000,
+      runtime_evidence: 9_000,
+      policy_evidence: 12_000,
+    },
+    rejectReadyAtMs: 8_000,
+  }), {
+    consentProofDeltaMs: 4_000,
+    policyEvidenceDeltaMs: -4_000,
+    primaryReadyAtMs: 12_000,
+    rejectReadyBeforeConsentProof: false,
+    rejectReadyBeforePrimary: true,
+    runtimeEvidenceDeltaMs: -1_000,
+  });
+});
+
+test("treats equal readiness timestamps as ready before the compared lane", () => {
+  const comparison = comparePostRefusalLaneReadiness({
+    laneReadyAtMs: {
+      consent_proof: 5_000,
+      runtime_evidence: 4_000,
+      policy_evidence: 3_000,
+    },
+    rejectReadyAtMs: 5_000,
+  });
+
+  assert.equal(comparison.rejectReadyBeforeConsentProof, true);
+  assert.equal(comparison.rejectReadyBeforePrimary, true);
+  assert.equal(comparison.consentProofDeltaMs, 0);
+  assert.equal(comparison.primaryReadyAtMs, 5_000);
+});
 
 test("zero-wait join includes an already-ready reject packet", () => {
   assert.deepEqual(decidePostRefusalReportPublication({

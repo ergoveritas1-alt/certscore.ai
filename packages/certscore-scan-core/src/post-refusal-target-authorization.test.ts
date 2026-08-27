@@ -3,6 +3,7 @@ import test from "node:test";
 import {
   authorizePostRefusalTarget,
   ERGOVERITAS_POST_REFUSAL_CANARY_AUTHORIZATION_ID,
+  getOwnedPostRefusalCanaryRecipeCase,
 } from "./post-refusal-target-authorization.js";
 
 test("loopback authorization cannot be reused for public targets", () => {
@@ -26,6 +27,10 @@ test("owned-canary authorization is exact-host and path scoped", () => {
     authorization,
   ).authorized, true);
   assert.equal(authorizePostRefusalTarget(
+    "https://ergoveritas.com/.well-known/certscore-canary/post-refusal/reject-ignored.html",
+    authorization,
+  ).authorized, true);
+  assert.equal(authorizePostRefusalTarget(
     "https://www.ergoveritas.com/.well-known/certscore-canary/post-refusal/reject-honored.html",
     authorization,
   ).authorized, false);
@@ -33,6 +38,21 @@ test("owned-canary authorization is exact-host and path scoped", () => {
     "https://ergoveritas.com/.well-known/certscore-canary/sentinels/broad-baseline.html",
     authorization,
   ).authorized, false);
+  assert.equal(authorizePostRefusalTarget(
+    "https://ergoveritas.com/.well-known/certscore-canary/post-refusal/post-refusal-runtime.js",
+    authorization,
+  ).authorized, false);
+  assert.equal(authorizePostRefusalTarget(
+    "https://ergoveritas.com/.well-known/certscore-canary/post-refusal/reject-honored.html?variant=other",
+    authorization,
+  ).authorized, false);
+  assert.equal(authorizePostRefusalTarget(
+    "https://ergoveritas.com/.well-known/certscore-canary/post-refusal/reject-honored.html#other",
+    authorization,
+  ).authorized, false);
+  assert.equal(getOwnedPostRefusalCanaryRecipeCase(
+    "https://ergoveritas.com/.well-known/certscore-canary/post-refusal/reject-ignored.html",
+  ), "tcf");
 });
 
 test("explicit public authorization requires an exact HTTPS host and path prefix", () => {
