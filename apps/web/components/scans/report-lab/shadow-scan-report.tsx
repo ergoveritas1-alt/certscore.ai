@@ -379,12 +379,12 @@ function SignalSnapshot({ report }: { report: ShadowReportData }) {
             <span className="flex items-center gap-2 text-xs font-semibold text-zinc-800">{observedControls} of 3 observed <span aria-hidden="true" className="text-zinc-400 transition group-open/signal:rotate-45">+</span></span>
           </summary>
           <div className="mt-3"><ControlStatusGrid compact report={report} /></div>
+          {report.rejectPath ? (
+            <div className="mt-3" data-testid="timeline-reject-path-card">
+              <CompactRejectPathCard projection={report.rejectPath} />
+            </div>
+          ) : null}
         </details>
-        {report.rejectPath ? (
-          <div className="py-2" data-testid="timeline-reject-path-card">
-            <CompactRejectPathCard projection={report.rejectPath} />
-          </div>
-        ) : null}
         {report.metrics.forms > 0 ? (
           <details className="group/signal py-2">
             <summary className="flex cursor-pointer list-none items-center justify-between gap-3 [&::-webkit-details-marker]:hidden">
@@ -594,6 +594,87 @@ function HorizontalTimeline({ dominant = false, report }: { dominant?: boolean; 
               ) : null}
             </div>
           ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function formatRejectTimelineOffset(milliseconds: number) {
+  if (milliseconds < 1_000) return `${Math.round(milliseconds)}ms`;
+  const seconds = Math.round(milliseconds / 100) / 10;
+  return `${seconds}s`;
+}
+
+function RejectPathTimeline({ report }: { report: ShadowReportData }) {
+  const projection = report.rejectPath;
+  if (!projection || projection.state === "incomplete" || projection.observationWindowMs === null) {
+    return null;
+  }
+  const outcome = projection.state === "issue_observed"
+    ? {
+        badge: "Issue observed",
+        detail: projection.note,
+        label: "Reject did not suppress all qualifying activity",
+        tone: "concern" as const,
+      }
+    : projection.state === "review_signal"
+      ? {
+          badge: "Review signal",
+          detail: projection.note,
+          label: "Post-Reject outcome needs review",
+          tone: "review" as const,
+        }
+      : {
+          badge: "No issue observed",
+          detail: projection.note,
+          label: "No qualifying post-Reject issue observed",
+          tone: "positive" as const,
+        };
+  const events = [
+    {
+      atMs: 0,
+      detail: "A deterministic resolver registered a confirmed refusal state.",
+      label: "Reject confirmed",
+      tone: "positive" as const,
+    },
+    ...(projection.timelineEvents ?? []).map((event) => ({ ...event, tone: "concern" as const })),
+    {
+      atMs: projection.observationWindowMs,
+      detail: outcome.detail,
+      label: outcome.label,
+      tone: outcome.tone,
+    },
+  ];
+  const toneClasses = projection.state === "issue_observed"
+    ? "border-rose-300 bg-rose-50 text-rose-800"
+    : projection.state === "review_signal"
+      ? "border-amber-300 bg-amber-50 text-amber-900"
+      : "border-emerald-300 bg-emerald-50 text-emerald-800";
+
+  return (
+    <div className="mt-10 border-t border-zinc-300 pt-8" data-reject-path-state={projection.state} data-testid="post-reject-timeline">
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <p className="text-xs font-semibold uppercase text-sky-700">After Reject timeline</p>
+          <h3 className="mt-1 text-xl font-semibold text-zinc-950">What happened after confirmed refusal</h3>
+          <p className="mt-1 text-xs leading-5 text-zinc-500">Offsets begin when refusal was confirmed and include only retained post-Refusal evidence.</p>
+        </div>
+        <span className={`rounded-md border px-2.5 py-1 text-[0.68rem] font-semibold uppercase ${toneClasses}`}>{outcome.badge}</span>
+      </div>
+      <div className="mt-6 overflow-x-auto pb-2">
+        <div className="relative min-w-[48rem] pt-10">
+          <div className="absolute left-0 right-0 top-[3.7rem] h-px bg-zinc-300" />
+          <div className="relative grid gap-4" style={{ gridTemplateColumns: `repeat(${Math.max(events.length, 2)}, minmax(0, 1fr))` }}>
+            {events.map((event, index) => (
+              <div className="relative min-w-0" key={`${event.atMs}:${event.label}:${index}`}>
+                <span className={`absolute top-[0.72rem] h-3 w-3 rounded-full border-2 border-white ring-1 ${event.tone === "concern" ? "bg-rose-500 ring-rose-500" : event.tone === "review" ? "bg-amber-500 ring-amber-500" : "bg-emerald-600 ring-emerald-600"}`} />
+                <p className={`${monoClass} text-xs font-semibold ${event.tone === "concern" ? "text-rose-700" : event.tone === "review" ? "text-amber-800" : "text-emerald-700"}`}>{formatRejectTimelineOffset(event.atMs)}</p>
+                <p className="mt-9 text-sm font-semibold text-zinc-950">{event.label}</p>
+                <p className="mt-1 max-w-[14rem] text-xs leading-5 text-zinc-500">{event.detail}</p>
+              </div>
+            ))}
+          </div>
         </div>
       </div>
     </div>
@@ -1096,6 +1177,7 @@ function TimelineVariant({
           <p className="text-xs font-semibold uppercase text-rose-700">Cookies and trackers timeline</p>
           <p className="mt-1 text-xs leading-5 text-zinc-500">First-seen timestamps place retained third-party requests and embeds relative to the first observed consent banner.</p>
           <div className="mt-6"><HorizontalTimeline dominant report={report} /></div>
+          <RejectPathTimeline report={report} />
           <RuntimeInventoryTable report={report} />
         </div>
       </section>
@@ -1252,6 +1334,7 @@ function EvidenceDirectory({ report }: { report: ShadowReportData }) {
                 <VendorBrandChip label={consentVendor} showMeta={false} />
                 <p className="text-sm leading-6 text-zinc-600">CMP identity and control context are retained in the canonical consent projection.</p>
               </div>
+              {report.rejectPath ? <div className="mt-5"><CompactRejectPathCard projection={report.rejectPath} /></div> : null}
               <EvidenceIndexRows rows={report.consentRows} />
             </details>
             <details className="group/tracking border-b border-r border-zinc-200 p-5">

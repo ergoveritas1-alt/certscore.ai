@@ -41,6 +41,24 @@ test("executive overview explains a narrow consent review in plain language", ()
   assert.match(copy, /visitor choice/i);
 });
 
+test("executive overview names a confirmed Reject-path failure", () => {
+  const copy = buildExecutiveOverview({
+    ...baseInput,
+    findings: [
+      { summary: "Non-essential activity persisted after confirmed Reject.", title: "Post-choice tracking reduction" },
+      { summary: "Cookies were retained before consent.", title: "Pre-consent cookies/storage" },
+    ],
+    rejectPath: {
+      observationWindowMs: 8_000,
+      state: "issue_observed",
+    },
+  });
+
+  assertBounded(copy);
+  assert.match(copy, /confirmed Reject path did not stop qualifying non-essential activity/i);
+  assert.match(copy, /8-second post-Reject window/i);
+});
+
 test("executive overview summarizes a focused mixed review without creating new findings", () => {
   const copy = buildExecutiveOverview({
     ...baseInput,

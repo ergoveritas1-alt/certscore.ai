@@ -1346,6 +1346,24 @@ function formatRejectPersistenceEvidence(row: Record<string, unknown>) {
   };
 }
 
+function formatRejectTimelineEvent(row: Record<string, unknown>) {
+  const atMs = getOptionalFiniteNumber(row, "msAfterReject");
+  if (atMs === null) {
+    return null;
+  }
+  const vendor = getOptionalString(row, "vendor");
+  const hostname = getOptionalString(row, "hostname");
+  const storageName = getOptionalString(row, "cookieName") ?? getOptionalString(row, "storageKey");
+  const activityType = getOptionalString(row, "activityType");
+  return {
+    atMs,
+    detail: [vendor, hostname, storageName]
+      .filter((value, index, values): value is string => Boolean(value) && values.indexOf(value) === index)
+      .join(" · ") || null,
+    label: activityType === "storage_write" ? "Non-essential storage write" : "Non-essential request",
+  };
+}
+
 /**
  * Formats the canonical checklist result for the executive report. It does not
  * inspect scanner artifacts or determine finding eligibility.
@@ -1366,6 +1384,10 @@ export function buildExecutiveRejectPathProjection(
   const contradictionObserved = retained.refusalSignalContradictsAction === true;
   const observationWindowMs = getOptionalFiniteNumber(retained, "observationWindowMs");
   const resolverMethod = getOptionalString(retained, "resolverMethod");
+  const timelineEvents = activityRows
+    .map(formatRejectTimelineEvent)
+    .filter((event): event is NonNullable<typeof event> => Boolean(event))
+    .sort((left, right) => left.atMs - right.atMs);
 
   if (item.status === "Gap observed") {
     return {
@@ -1381,6 +1403,7 @@ export function buildExecutiveRejectPathProjection(
       resolverMethod,
       scoreEffect: "deduction",
       state: "issue_observed",
+      timelineEvents,
     };
   }
 
@@ -1393,6 +1416,7 @@ export function buildExecutiveRejectPathProjection(
       resolverMethod,
       scoreEffect: "none",
       state: "review_signal",
+      timelineEvents,
     };
   }
 
@@ -1405,6 +1429,7 @@ export function buildExecutiveRejectPathProjection(
       resolverMethod,
       scoreEffect: "none",
       state: "no_issue_observed",
+      timelineEvents,
     };
   }
 
@@ -1416,6 +1441,7 @@ export function buildExecutiveRejectPathProjection(
     resolverMethod,
     scoreEffect: "none",
     state: "incomplete",
+    timelineEvents,
   };
 }
 

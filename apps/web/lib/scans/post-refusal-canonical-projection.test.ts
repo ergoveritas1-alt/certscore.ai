@@ -241,11 +241,11 @@ test("confirmed post-refusal evidence reaches canonical concerns, findings, chec
     ],
   );
   assert.deepEqual(
-    result.candidates.map((candidate) => candidate.normalizedConcern.suggestedUnifiedFindingId).sort(),
+    result.candidates.map((candidate) => candidate.signalKey).sort(),
     [
-      "post_refusal_non_essential_activity",
-      "pre_consent_storage_not_cleared",
-      "refusal_signal_contradicts_action",
+      "privacy.post_refusal_non_essential_activity",
+      "privacy.pre_consent_storage_not_cleared",
+      "privacy.refusal_signal_contradicts_action",
     ],
   );
   assert.equal(result.postRejectRow.status, "Gap observed");

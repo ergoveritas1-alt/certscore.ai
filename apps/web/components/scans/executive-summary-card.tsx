@@ -112,6 +112,11 @@ export type ExecutiveRejectPathProjection = {
   resolverMethod: string | null;
   scoreEffect: "deduction" | "none";
   state: "issue_observed" | "review_signal" | "no_issue_observed" | "incomplete";
+  timelineEvents?: Array<{
+    atMs: number;
+    detail: string | null;
+    label: string;
+  }>;
 };
 
 export type ExecutiveScanInterruption = {

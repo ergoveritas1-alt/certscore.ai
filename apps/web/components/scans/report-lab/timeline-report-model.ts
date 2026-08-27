@@ -41,6 +41,7 @@ const CHECKLIST_GROUPS = {
     "reject_all_path_availability",
     "accept_consent_control",
     "options_settings_preferences_control",
+    "post_reject_tracking_reduction",
     "cookie_notice_policy_availability",
   ]),
   tracking: new Set([
@@ -437,7 +438,10 @@ export function buildTimelineReportModel(scanRecord: ScanDetailResponse): Shadow
   });
   timeline.sort((left, right) => left.atMs - right.atMs);
 
-  const summaryCounts = canonical.checklistPresentation?.summaryCounts ?? summarizeEvidenceRows(evidenceRows);
+  // Reconcile presentation counts from the same canonical checklist rows used
+  // by this report. This keeps retained reports aligned when the versioned
+  // reportable-row policy changes after their persisted presentation summary.
+  const summaryCounts = summarizeEvidenceRows(evidenceRows);
   const canonicalScore = deriveCanonicalOverallScoreForReport({
     checklistRows,
     unifiedFindings: canonical.ownerUnifiedFindings,
@@ -451,6 +455,7 @@ export function buildTimelineReportModel(scanRecord: ScanDetailResponse): Shadow
     limitedCount: summaryCounts.technical_limitation,
     limitedItems: checklistRows.filter((row) => checklistStatus(row) === "Limited").map((row) => row.label),
     positiveCount: summaryCounts.positive_signal,
+    rejectPath,
     timeline,
     transportPositiveCount: evidenceRows.filter((row) => CHECKLIST_GROUPS.transport.has(row.id) && row.status === "Observed").length,
   });

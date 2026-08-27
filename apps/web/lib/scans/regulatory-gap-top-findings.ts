@@ -52,6 +52,8 @@ const REGULATORY_GAP_REMEDIATION_BY_ROW_ID: Partial<Record<string, string>> = {
     "Review the retained cookie and storage rows, confirm purpose and necessity, and gate confirmed non-essential writes until the relevant consent state is available.",
   pre_consent_third_party_tracking:
     "Review the retained vendor and request timing evidence, confirm purpose and necessity, and gate confirmed non-essential requests until the relevant consent state is available.",
+  post_reject_tracking_reduction:
+    "Ensure a confirmed Reject suppresses optional tracker requests and storage writes, then retest the same post-Refusal observation window.",
   reject_all_path_availability:
     "Review the retained first-layer consent-control inventory. If it confirms no reject or necessary-only control, add a visible refusal action and retest regional and device variants.",
   session_replay_fingerprinting_review:

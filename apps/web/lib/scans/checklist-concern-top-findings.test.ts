@@ -102,6 +102,32 @@ test("canonical high-priority selection retains the checklist tracking concern",
   );
 });
 
+test("canonical checklist concerns promote a production-projectable post-Reject failure", () => {
+  const findings = buildChecklistConcernTopFindings([
+    row({
+      criticalEvidence: {
+        missingOrIncompleteSourceSignals: [],
+        pipeline,
+        projectedFindings: [],
+        retainedEvidence: {
+          postRejectNonEssentialActivityRetained: true,
+          productionProjectable: true,
+          rejectInteractionConfirmed: true,
+        },
+        statusBasis: "Qualifying non-essential activity persisted after confirmed Reject.",
+      },
+      id: "post_reject_tracking_reduction",
+      label: "Post-choice tracking reduction",
+      status: "Gap observed",
+    }),
+  ]);
+
+  assert.deepEqual(findings.map((finding) => finding.id), [
+    "regulatory_gap__gdpr_eprivacy__post_reject_tracking_reduction",
+  ]);
+  assert.match(findings[0]?.remediation ?? "", /confirmed Reject suppresses optional tracker requests/i);
+});
+
 test("canonical high-priority selection has no standalone runtime-finding input", () => {
   assert.deepEqual(selectCanonicalHighPriorityFindings([]), []);
 });

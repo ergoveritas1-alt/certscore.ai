@@ -112,6 +112,11 @@ test("executive Reject projection formats only the canonical checklist outcome",
     resolverMethod: "cmp_registry_recipe",
     scoreEffect: "deduction",
     state: "issue_observed",
+    timelineEvents: [{
+      atMs: 120,
+      detail: "Example Analytics · analytics.example.test",
+      label: "Non-essential request",
+    }],
   });
 });
 
@@ -169,11 +174,14 @@ test("executive Reject projection distinguishes score-neutral persistence, clean
     detail: "Example Analytics · cookie",
     label: "_analytics",
   }]);
+  assert.deepEqual(persistence?.timelineEvents, []);
   assert.equal(clean?.state, "no_issue_observed");
   assert.equal(clean?.scoreEffect, "none");
+  assert.deepEqual(clean?.timelineEvents, []);
   assert.match(clean?.note ?? "", /bounded observation window/);
   assert.equal(incomplete?.state, "incomplete");
   assert.equal(incomplete?.scoreEffect, "none");
+  assert.deepEqual(incomplete?.timelineEvents, []);
   assert.match(incomplete?.note ?? "", /does not affect the score/);
 });
 
@@ -192,6 +200,8 @@ test("active timeline report passes the same canonical Reject checklist projecti
   assert.match(model, /buildExecutiveRejectPathProjection\([\s\S]*item\.id === "post_reject_tracking_reduction"[\s\S]*\)/);
   assert.match(model, /rejectPath,/);
   assert.match(report, /<CompactRejectPathCard projection=\{report\.rejectPath\} \/>/);
+  assert.match(report, /data-testid="post-reject-timeline"/);
+  assert.match(report, /<RejectPathTimeline report=\{report\} \/>/);
   assert.doesNotMatch(model, /buildExecutiveRejectPathProjection\(scanRecord\.runtimeArtifacts/);
 });
 

@@ -14,6 +14,10 @@ type ExecutiveOverviewInput = {
   limitedCount: number;
   limitedItems: string[];
   positiveCount: number;
+  rejectPath?: {
+    observationWindowMs: number | null;
+    state: "issue_observed" | "review_signal" | "no_issue_observed" | "incomplete";
+  } | null;
   timeline: Array<{
     at: string;
     label: string;
@@ -59,6 +63,19 @@ export function buildExecutiveOverview(input: ExecutiveOverviewInput) {
     && input.controls.reject === "Not observed"
     && input.controls.options === "Not observed";
   const limitedItems = [...new Set(input.limitedItems.map((item) => item.trim()).filter(Boolean))];
+  const rejectObservationWindowMs = input.rejectPath?.observationWindowMs;
+  const rejectWindow = typeof rejectObservationWindowMs === "number"
+    ? `${Number.isInteger(rejectObservationWindowMs / 1_000) ? rejectObservationWindowMs / 1_000 : Math.round(rejectObservationWindowMs / 100) / 10}-second`
+    : "bounded";
+  const rejectOutcome = input.rejectPath?.state === "issue_observed"
+    ? `The confirmed Reject path did not stop qualifying non-essential activity during the retained ${rejectWindow} post-Reject window.`
+    : input.rejectPath?.state === "review_signal"
+      ? "The Reject test completed, but retained storage persistence remains a score-neutral review signal rather than proof of active post-Refusal use."
+      : input.rejectPath?.state === "no_issue_observed"
+        ? `The confirmed Reject path completed without a qualifying issue in the retained ${rejectWindow} post-Reject window.`
+        : input.rejectPath?.state === "incomplete"
+          ? "Reject-path testing did not complete and did not affect the score."
+          : null;
   const limitation = (() => {
     if (input.limitedCount === 0) return "No checklist items were technically limited in this retained scan.";
     if (input.limitedCount === 1 && limitedItems[0] === "Post-choice tracking reduction") {
@@ -112,5 +129,5 @@ export function buildExecutiveOverview(input: ExecutiveOverviewInput) {
     : input.positiveCount > 0
       ? "Other retained checks included positive observations."
       : null;
-  return fitExecutiveOverview([opening, focus, activity ?? "", positive ?? "", limitation]);
+  return fitExecutiveOverview([opening, focus, rejectOutcome ?? "", activity ?? "", positive ?? "", limitation]);
 }
