@@ -5,6 +5,7 @@ import {
   classifyNavigationFailure,
   inspectRecoverableCommittedDocument,
   persistedNonEssentialStorage,
+  POST_REFUSAL_PRE_ACTION_BASELINE_MAX_AGE_MS,
   postRefusalStorageIdentityHash,
   responseCookieNamesFromHeaders,
   runPostRefusalObserver,
@@ -45,6 +46,12 @@ test("reject honored confirms registration without post-refusal activity", async
     assert.equal(packet.storage.writesAfterRefusal.filter((write) => write.nonEssential).length, 0);
     assert.equal(packet.storage.nonEssentialItemsPersistingAfterRefusal.length, 0);
     assert.equal(packet.observations.length, 0);
+    assert.ok(packet.storage.preActionCapturedAtMs !== undefined);
+    assert.ok(packet.refusalRegistration.actionDispatchedAtMs !== undefined);
+    assert.ok(
+      packet.refusalRegistration.actionDispatchedAtMs - packet.storage.preActionCapturedAtMs <=
+        POST_REFUSAL_PRE_ACTION_BASELINE_MAX_AGE_MS,
+    );
   });
 });
 
@@ -323,6 +330,12 @@ test("a pre-dispatch actionability failure is deterministically re-resolved once
     assert.equal(packet.refusalRegistration.refusalExercised, true);
     assert.equal(packet.interactionDiagnostics?.click.outcome, "completed");
     assert.equal(packet.interactionDiagnostics?.click.reResolvedBeforeDispatch, true);
+    assert.ok(packet.storage.preActionCapturedAtMs !== undefined);
+    assert.ok(packet.refusalRegistration.actionDispatchedAtMs !== undefined);
+    assert.ok(
+      packet.refusalRegistration.actionDispatchedAtMs - packet.storage.preActionCapturedAtMs <=
+        POST_REFUSAL_PRE_ACTION_BASELINE_MAX_AGE_MS,
+    );
   });
 });
 

@@ -34,6 +34,7 @@ import {
 const POST_REFUSAL_SOURCE = "post_refusal_observer";
 const DEFAULT_OBSERVATION_WINDOW_MS = 8_000;
 const DEFAULT_CONFIRMATION_TIMEOUT_MS = 1_500;
+export const POST_REFUSAL_PRE_ACTION_BASELINE_MAX_AGE_MS = 250;
 const MAX_REQUESTS = 96;
 const MAX_POST_REGISTRATION_REQUESTS = 96;
 const MAX_STORAGE_ITEMS = 96;
@@ -635,8 +636,9 @@ export async function runPostRefusalObserver(
     selectedRecipe = resolution.recipe;
     let control = resolution.control;
 
-    const preActionStorage = await captureStorage(context, page, input.url, limitations);
-    const preActionCapturedAtMs = elapsed(parentScanStartedAtMs);
+    let preActionStorage = await captureStorage(context, page, input.url, limitations);
+    let preActionCapturedAtEpochMs = Date.now();
+    let preActionCapturedAtMs = elapsed(parentScanStartedAtMs, preActionCapturedAtEpochMs);
     if (cancellation()) {
       return await finalize({
         resolverFound: true,
@@ -717,6 +719,24 @@ export async function runPostRefusalObserver(
         postActionStorage: await captureStorage(context, page, input.url, limitations).catch(() => []),
         requests: classifyRequests(retainedRequests(), parentScanStartedAtMs),
       });
+    }
+    if (
+      Date.now() - preActionCapturedAtEpochMs >
+        POST_REFUSAL_PRE_ACTION_BASELINE_MAX_AGE_MS
+    ) {
+      const refreshedPreActionStorage = await captureStorage(
+        context,
+        page,
+        input.url,
+        limitations,
+      ).catch(() => undefined);
+      if (refreshedPreActionStorage) {
+        preActionStorage = refreshedPreActionStorage;
+        preActionCapturedAtEpochMs = Date.now();
+        preActionCapturedAtMs = elapsed(parentScanStartedAtMs, preActionCapturedAtEpochMs);
+      } else {
+        limitations.push("pre_action_storage_baseline_refresh_unavailable");
+      }
     }
     const actionDispatchedAtEpochMs = Date.now();
     const actionDispatchedAtMs = elapsed(parentScanStartedAtMs, actionDispatchedAtEpochMs);
