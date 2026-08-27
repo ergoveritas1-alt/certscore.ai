@@ -25,6 +25,7 @@ import {
   buildRegulatoryLensesFromUnifiedPackets,
   type ExecutiveConsentControlProjection,
   type ExecutivePolicySurface,
+  type ExecutiveRejectPathProjection,
   type ExecutiveScanInterruption,
   type ExecutiveTimelineEvent
 } from "./executive-summary-card";
@@ -1304,6 +1305,118 @@ export function getRecordOptionalBoolean(record: unknown, key: string) {
 
   const value = (record as Record<string, unknown>)[key];
   return typeof value === "boolean" ? value : null;
+}
+
+function getOptionalFiniteNumber(record: Record<string, unknown>, key: string) {
+  const value = record[key];
+  return typeof value === "number" && Number.isFinite(value) && value >= 0 ? value : null;
+}
+
+function getOptionalString(record: Record<string, unknown>, key: string) {
+  const value = record[key];
+  return typeof value === "string" && value.length > 0 ? value : null;
+}
+
+function formatRejectEvidenceActivity(row: Record<string, unknown>) {
+  const vendor = getOptionalString(row, "vendor");
+  const hostname = getOptionalString(row, "hostname");
+  const storageName = getOptionalString(row, "cookieName") ?? getOptionalString(row, "storageKey");
+  const activityType = getOptionalString(row, "activityType");
+  const msAfterReject = getOptionalFiniteNumber(row, "msAfterReject");
+  return {
+    label: vendor ?? hostname ?? storageName ?? "Non-essential activity",
+    detail: [
+      activityType === "storage_write" ? "storage write" : activityType === "network_request" ? "request" : null,
+      vendor && hostname ? hostname : null,
+      storageName && storageName !== vendor ? storageName : null,
+      msAfterReject !== null ? `${Math.round(msAfterReject)}ms after Reject` : null,
+    ].filter((value): value is string => Boolean(value)).join(" · ") || null,
+  };
+}
+
+function formatRejectPersistenceEvidence(row: Record<string, unknown>) {
+  const name = getOptionalString(row, "name");
+  const vendor = getOptionalString(row, "vendor");
+  const storageType = getOptionalString(row, "storageType");
+  return {
+    label: name ?? vendor ?? "Retained storage identifier",
+    detail: [vendor && vendor !== name ? vendor : null, storageType?.replaceAll("_", " ") ?? null]
+      .filter((value): value is string => Boolean(value))
+      .join(" · ") || null,
+  };
+}
+
+/**
+ * Formats the canonical checklist result for the executive report. It does not
+ * inspect scanner artifacts or determine finding eligibility.
+ */
+export function buildExecutiveRejectPathProjection(
+  item: GdprEprivacyCoverageChecklistItem | null | undefined,
+): ExecutiveRejectPathProjection | null {
+  if (!item || item.id !== "post_reject_tracking_reduction" || item.status === "Out of scope") {
+    return null;
+  }
+  const retained = getRecord(item.criticalEvidence.retainedEvidence) ?? {};
+  const activityRows = Array.isArray(retained.postRejectNonEssentialRequests)
+    ? retained.postRejectNonEssentialRequests.map(getRecord).filter((row): row is Record<string, unknown> => Boolean(row))
+    : [];
+  const persistenceRows = Array.isArray(retained.preConsentStorageNotClearedItems)
+    ? retained.preConsentStorageNotClearedItems.map(getRecord).filter((row): row is Record<string, unknown> => Boolean(row))
+    : [];
+  const contradictionObserved = retained.refusalSignalContradictsAction === true;
+  const observationWindowMs = getOptionalFiniteNumber(retained, "observationWindowMs");
+  const resolverMethod = getOptionalString(retained, "resolverMethod");
+
+  if (item.status === "Gap observed") {
+    return {
+      evidenceRows: [
+        ...(contradictionObserved
+          ? [{ label: "TCF consent state", detail: "Purposes remained granted after confirmed Reject." }]
+          : []),
+        ...activityRows.map(formatRejectEvidenceActivity),
+      ].slice(0, 3),
+      label: contradictionObserved ? "Consent signal contradicted Reject" : "Activity observed after Reject",
+      note: item.note,
+      observationWindowMs,
+      resolverMethod,
+      scoreEffect: "deduction",
+      state: "issue_observed",
+    };
+  }
+
+  if (item.status === "Review signal") {
+    return {
+      evidenceRows: persistenceRows.map(formatRejectPersistenceEvidence).slice(0, 3),
+      label: item.label,
+      note: item.note,
+      observationWindowMs,
+      resolverMethod,
+      scoreEffect: "none",
+      state: "review_signal",
+    };
+  }
+
+  if (item.status === "Not observed") {
+    return {
+      evidenceRows: [],
+      label: "No post-Reject issue observed",
+      note: "A confirmed Reject and bounded observation window were retained. No qualifying post-Reject issue was observed in that window.",
+      observationWindowMs,
+      resolverMethod,
+      scoreEffect: "none",
+      state: "no_issue_observed",
+    };
+  }
+
+  return {
+    evidenceRows: [],
+    label: "Reject path incomplete",
+    note: `${item.note} This limitation does not affect the score.`,
+    observationWindowMs,
+    resolverMethod,
+    scoreEffect: "none",
+    state: "incomplete",
+  };
 }
 
 function getRecordNumber(record: unknown, key: string) {
@@ -7697,6 +7810,10 @@ export async function SharedScanDetailView({
     scanRecord.scan.domainHostname
   );
   const consentSurfaceCoverageItem = gdprEprivacyCoverageChecklist.find((item) => item.id === "consent_surface_observed");
+  const postRejectTrackingReductionItem = gdprEprivacyCoverageChecklist.find(
+    (item) => item.id === "post_reject_tracking_reduction"
+  );
+  const executiveRejectPath = buildExecutiveRejectPathProjection(postRejectTrackingReductionItem);
   const executiveConsentControls: ExecutiveConsentControlProjection = {
     accept: getRecordOptionalBoolean(snapshot, "consent_accept_observed"),
     reject: getRecordOptionalBoolean(snapshot, "consent_reject_observed"),
@@ -7950,6 +8067,7 @@ export async function SharedScanDetailView({
             preConsentVendorNames={certScoreSummary.preConsentVendorNames}
             requestedHost={certScoreSummary.requestedHost}
             regulatoryRisk={scanRecord.regulatoryRisk}
+            rejectPath={executiveRejectPath}
             resolvedVendorNames={executiveResolvedVendorNames}
             score={executiveDisplayedScore}
             scoreLabel="Overall score"

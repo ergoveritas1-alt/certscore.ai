@@ -8,6 +8,7 @@ import {
   buildRegulatoryLenses,
   buildRegulatoryLensesFromUnifiedPackets,
   CompactConsentControlsCard,
+  CompactRejectPathCard,
   ExecutiveSummaryCard
 } from "./executive-summary-card";
 import { ADA_ACCESSIBILITY_FIXTURES } from "../../lib/scans/ada-accessibility.fixtures";
@@ -52,6 +53,74 @@ test("compact A/R/O card appears immediately below policy surfaces", () => {
 
   assert.ok(policyCardIndex >= 0);
   assert.ok(consentControlsCardIndex > policyCardIndex);
+});
+
+test("compact Reject-path card renders canonical outcome, bounded evidence, timing, and score treatment", () => {
+  const html = renderToStaticMarkup(createElement(CompactRejectPathCard, {
+    projection: {
+      evidenceRows: [{
+        detail: "request · 120ms after Reject",
+        label: "Example Analytics",
+      }],
+      label: "Activity observed after Reject",
+      note: "A confirmed Reject and eligible post-Reject activity were retained.",
+      observationWindowMs: 8_000,
+      resolverMethod: "cmp_registry_recipe",
+      scoreEffect: "deduction",
+      state: "issue_observed",
+    },
+  }));
+
+  assert.match(html, /After Reject/);
+  assert.match(html, /Issue observed/);
+  assert.match(html, /Activity observed after Reject/);
+  assert.match(html, /Example Analytics/);
+  assert.match(html, /120ms after Reject/);
+  assert.match(html, /8s observation/);
+  assert.match(html, /CMP registry resolver/);
+  assert.match(html, /Included in score/);
+  assert.match(html, /data-reject-path-state="issue_observed"/);
+});
+
+test("compact Reject-path card keeps persistence review and incomplete coverage score-neutral", () => {
+  const persistenceHtml = renderToStaticMarkup(createElement(CompactRejectPathCard, {
+    projection: {
+      evidenceRows: [{ detail: "Example Analytics · cookie", label: "_analytics" }],
+      label: "Same non-essential identifier remained stored after refusal",
+      note: "Stored presence alone does not establish active use.",
+      observationWindowMs: 8_000,
+      resolverMethod: "cmp_registry_recipe",
+      scoreEffect: "none",
+      state: "review_signal",
+    },
+  }));
+  const incompleteHtml = renderToStaticMarkup(createElement(CompactRejectPathCard, {
+    projection: {
+      evidenceRows: [],
+      label: "Reject path incomplete",
+      note: "No confirmed Reject was retained. This limitation does not affect the score.",
+      observationWindowMs: null,
+      resolverMethod: null,
+      scoreEffect: "none",
+      state: "incomplete",
+    },
+  }));
+
+  assert.match(persistenceHtml, /Review signal/);
+  assert.match(persistenceHtml, /Stored presence alone does not establish active use/);
+  assert.match(persistenceHtml, /No score effect/);
+  assert.match(incompleteHtml, /Incomplete/);
+  assert.match(incompleteHtml, /does not affect the score/);
+  assert.match(incompleteHtml, /No score effect/);
+});
+
+test("compact Reject-path card appears after the persisted A/R/O control card", () => {
+  const source = readFileSync(new URL("./executive-summary-card.tsx", import.meta.url), "utf8");
+  const consentControlsCardIndex = source.indexOf("<CompactConsentControlsCard projection={input.consentControls} />");
+  const rejectPathCardIndex = source.indexOf("<CompactRejectPathCard projection={input.rejectPath} />");
+
+  assert.ok(consentControlsCardIndex >= 0);
+  assert.ok(rejectPathCardIndex > consentControlsCardIndex);
 });
 
 test("executive summary metrics do not render explanatory wording below their values", () => {
@@ -353,7 +422,7 @@ test("buildRegulatoryLenses explains degraded lenses even without mapped top-lev
   assert.deepEqual(lenses.map((lens) => lens.acronym), ["GDPR / ePrivacy"]);
 });
 
-test("buildRegulatoryLenses keeps post-reject tracking out of GDPR production lens while deferred", () => {
+test("buildRegulatoryLenses keeps an unverified legacy reject finding outside the canonical GDPR lens", () => {
   const lenses = buildRegulatoryLenses([
     makeFinding("reject_tracking_persists_after_reject", "Non-essential tracking continued after reject", {
       confidence: "strong",

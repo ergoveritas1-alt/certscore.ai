@@ -249,6 +249,46 @@ test("confirmed post-refusal evidence reaches canonical concerns, findings, chec
     ],
   );
   assert.equal(result.postRejectRow.status, "Gap observed");
+  const reductionEvidence = result.runtimeArtifacts.postRejectTrackingReductionEvidence as Record<string, unknown>;
+  assert.equal(reductionEvidence.observationWindowMs, 8_000);
+  assert.equal(reductionEvidence.resolverMethod, "cmp_registry_recipe");
+  assert.equal(result.postRejectRow.criticalEvidence.retainedEvidence.observationWindowMs, 8_000);
+  assert.equal(result.postRejectRow.criticalEvidence.retainedEvidence.resolverMethod, "cmp_registry_recipe");
+  const score = deriveRegulatoryCoverageScore({
+    framework: "gdpr_eprivacy",
+    rows: [result.postRejectRow],
+  });
+  assert.equal(score.score, 94);
+});
+
+test("confirmed TCF contradiction independently reaches a scored canonical checklist gap", () => {
+  const result = projectCanonical(packet({
+    tcf: {
+      postRefusalState: {
+        observedAtMs: 710,
+        eventStatus: "useractioncomplete",
+        apiSuccess: true,
+        tcStringHash: "c".repeat(64),
+        tcStringParseStatus: "parsed_v2",
+        purposeGrantedIds: [1],
+        purposeGrantSource: "tc_string",
+      },
+    },
+    observations: [{
+      observationType: "refusal_signal_contradicts_action",
+      observedAtMs: 710,
+      msOffsetFromRefusal: 160,
+      evidenceKeys: ["tcf.postRefusalTcString"],
+    }],
+  }));
+
+  assert.deepEqual(
+    result.normalizedConcerns.map((concern) => concern.originKey),
+    ["privacy.refusal_signal_contradicts_action"],
+  );
+  assert.equal(result.postRejectRow.status, "Gap observed");
+  assert.equal(result.postRejectRow.criticalEvidence.retainedEvidence.refusalSignalContradictsAction, true);
+  assert.match(result.postRejectRow.note, /independent of network activity/);
   const score = deriveRegulatoryCoverageScore({
     framework: "gdpr_eprivacy",
     rows: [result.postRejectRow],

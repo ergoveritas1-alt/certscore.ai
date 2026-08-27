@@ -2391,6 +2391,25 @@ function specializeChecklistRow(input: {
     };
   }
 
+  if (input.definition.id === "post_reject_tracking_reduction" && input.status === "Gap observed") {
+    const retained = input.coverageOutcome?.criticalEvidence.retainedEvidence;
+    const contradictionObserved = retained?.refusalSignalContradictsAction === true;
+    const activityObserved =
+      typeof retained?.postRejectNonEssentialRequestCount === "number" &&
+      retained.postRejectNonEssentialRequestCount > 0;
+    return {
+      evidenceRefs: input.evidenceRefs,
+      explanation: contradictionObserved
+        ? activityObserved
+          ? "A reject action was confirmed, eligible non-essential activity was retained after refusal, and the post-refusal TCF consent state still encoded granted purposes."
+          : "A reject action was confirmed, but the retained post-refusal TCF consent state still encoded granted purposes. This contradiction is independent of network activity."
+        : input.coverageOutcome?.limitation ??
+          "A reject action and post-reject comparison window were retained, and eligible non-essential activity persisted after refusal.",
+      label: input.definition.label,
+      status: "Gap observed" as const
+    };
+  }
+
   if (input.definition.id === "post_reject_tracking_reduction" && input.status === "Observed") {
     return {
       evidenceRefs: input.evidenceRefs,

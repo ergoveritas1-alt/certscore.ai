@@ -50,6 +50,141 @@ test("pre-consent inventory exposes retained request counts with a compact consi
   assert.doesNotMatch(source, /public_collection_surfaces/);
 });
 
+function makePostRejectChecklistItem(input: {
+  explanation?: string;
+  label?: string;
+  retainedEvidence?: Record<string, unknown>;
+  status: GdprEprivacyCoverageChecklistItem["status"];
+}): GdprEprivacyCoverageChecklistItem {
+  return {
+    assessmentStatus: input.status === "Gap observed"
+      ? "gap_observed"
+      : input.status === "Review signal"
+        ? "review_signal"
+        : input.status === "Not observed"
+          ? "checked"
+          : "coverage_limitation",
+    criticalEvidence: {
+      missingOrIncompleteSourceSignals: [],
+      pipeline: {
+        concernPolicyKey: "post_reject_tracking_reduction",
+        projectionStage: "coverage_policy",
+        wc01NormalizedConcernKey: "privacy.post_refusal_non_essential_activity",
+        ws01EvidenceRole: "post_refusal_observation",
+      },
+      projectedFindings: [],
+      retainedEvidence: input.retainedEvidence ?? {},
+      statusBasis: input.status,
+    },
+    evidenceRefs: ["Evidence: post-reject tracking reduction evidence"],
+    evidenceState: input.status === "Not observed" ? "not_observed" : input.status === "Not confirmed" ? "not_observed" : "observed",
+    explanation: input.explanation ?? "Canonical Reject-path explanation.",
+    id: "post_reject_tracking_reduction",
+    label: input.label ?? "Post-choice tracking reduction",
+    note: input.explanation ?? "Canonical Reject-path explanation.",
+    status: input.status,
+    tone: input.status === "Gap observed" ? "warning" : input.status === "Review signal" ? "review" : "neutral",
+  };
+}
+
+test("executive Reject projection formats only the canonical checklist outcome", async () => {
+  const { buildExecutiveRejectPathProjection } = await import("./shared-scan-detail-view");
+  const projected = buildExecutiveRejectPathProjection(makePostRejectChecklistItem({
+    status: "Gap observed",
+    retainedEvidence: {
+      observationWindowMs: 8_000,
+      postRejectNonEssentialRequests: [{
+        activityType: "network_request",
+        hostname: "analytics.example.test",
+        msAfterReject: 120,
+        vendor: "Example Analytics",
+      }],
+      refusalSignalContradictsAction: false,
+      resolverMethod: "cmp_registry_recipe",
+    },
+  }));
+
+  assert.deepEqual(projected, {
+    evidenceRows: [{ detail: "request · analytics.example.test · 120ms after Reject", label: "Example Analytics" }],
+    label: "Activity observed after Reject",
+    note: "Canonical Reject-path explanation.",
+    observationWindowMs: 8_000,
+    resolverMethod: "cmp_registry_recipe",
+    scoreEffect: "deduction",
+    state: "issue_observed",
+  });
+});
+
+test("executive Reject projection identifies an independently retained TCF contradiction", async () => {
+  const { buildExecutiveRejectPathProjection } = await import("./shared-scan-detail-view");
+  const projected = buildExecutiveRejectPathProjection(makePostRejectChecklistItem({
+    explanation: "A confirmed Reject still encoded granted TCF purposes independently of network activity.",
+    status: "Gap observed",
+    retainedEvidence: {
+      observationWindowMs: 8_000,
+      postRejectNonEssentialRequests: [],
+      refusalSignalContradictsAction: true,
+      resolverMethod: "tcf_api_cmp_registry_recipe",
+    },
+  }));
+
+  assert.equal(projected?.state, "issue_observed");
+  assert.equal(projected?.label, "Consent signal contradicted Reject");
+  assert.equal(projected?.scoreEffect, "deduction");
+  assert.match(projected?.note ?? "", /independently of network activity/);
+  assert.deepEqual(projected?.evidenceRows, [{
+    detail: "Purposes remained granted after confirmed Reject.",
+    label: "TCF consent state",
+  }]);
+});
+
+test("executive Reject projection distinguishes score-neutral persistence, clean, and incomplete outcomes", async () => {
+  const { buildExecutiveRejectPathProjection } = await import("./shared-scan-detail-view");
+  const persistence = buildExecutiveRejectPathProjection(makePostRejectChecklistItem({
+    explanation: "Stored presence alone does not establish active post-refusal use.",
+    label: "Same non-essential identifier remained stored after refusal",
+    status: "Review signal",
+    retainedEvidence: {
+      observationWindowMs: 8_000,
+      preConsentStorageNotClearedItems: [{
+        name: "_analytics",
+        storageType: "cookie",
+        vendor: "Example Analytics",
+      }],
+      resolverMethod: "cmp_registry_recipe",
+    },
+  }));
+  const clean = buildExecutiveRejectPathProjection(makePostRejectChecklistItem({
+    status: "Not observed",
+    retainedEvidence: { observationWindowMs: 8_000 },
+  }));
+  const incomplete = buildExecutiveRejectPathProjection(makePostRejectChecklistItem({
+    explanation: "Reject click did not register.",
+    status: "Not confirmed",
+  }));
+
+  assert.equal(persistence?.state, "review_signal");
+  assert.equal(persistence?.scoreEffect, "none");
+  assert.deepEqual(persistence?.evidenceRows, [{
+    detail: "Example Analytics · cookie",
+    label: "_analytics",
+  }]);
+  assert.equal(clean?.state, "no_issue_observed");
+  assert.equal(clean?.scoreEffect, "none");
+  assert.match(clean?.note ?? "", /bounded observation window/);
+  assert.equal(incomplete?.state, "incomplete");
+  assert.equal(incomplete?.scoreEffect, "none");
+  assert.match(incomplete?.note ?? "", /does not affect the score/);
+});
+
+test("shared report passes the canonical Reject checklist projection into the executive card", () => {
+  const source = readFileSync("apps/web/components/scans/shared-scan-detail-view.tsx", "utf8");
+
+  assert.match(source, /buildExecutiveRejectPathProjection\(postRejectTrackingReductionItem\)/);
+  assert.match(source, /rejectPath=\{executiveRejectPath\}/);
+  assert.doesNotMatch(source, /buildExecutiveRejectPathProjection\(runtimeArtifacts/);
+});
+
 test("evidence mix reconciles with the canonical row-level inventory", async () => {
   const { buildInventoryEvidenceCounts } = await import("./shared-scan-detail-view");
   const sourcebusterTracker = {

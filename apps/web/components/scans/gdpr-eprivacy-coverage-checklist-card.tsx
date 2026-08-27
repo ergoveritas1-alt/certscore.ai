@@ -2498,7 +2498,7 @@ function getGdprReviewedAreas(items: Array<{ id: string }>) {
     rowIds.has("reject_all_path_availability") ? "refusal path availability" : null,
     rowIds.has("accept_consent_control") ? "accept consent control availability" : null,
     rowIds.has("options_settings_preferences_control") ? "options/settings/preferences control availability" : null,
-    rowIds.has("post_reject_tracking_reduction") ? "deferred refusal-path tracking evidence" : null,
+    rowIds.has("post_reject_tracking_reduction") ? "refusal-path tracking evidence" : null,
     rowIds.has("preference_withdrawal_control") ? "withdrawal or preference-control evidence" : null,
     rowIds.has("sensitive_surfaces_third_party_tracking") ? "sensitive-surface tracking context" : null,
     rowIds.has("session_replay_fingerprinting_review") ||

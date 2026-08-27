@@ -101,6 +101,19 @@ export type ExecutiveConsentControlProjection = {
   reject: boolean | null;
 };
 
+export type ExecutiveRejectPathProjection = {
+  evidenceRows: Array<{
+    detail: string | null;
+    label: string;
+  }>;
+  label: string;
+  note: string;
+  observationWindowMs: number | null;
+  resolverMethod: string | null;
+  scoreEffect: "deduction" | "none";
+  state: "issue_observed" | "review_signal" | "no_issue_observed" | "incomplete";
+};
+
 export type ExecutiveScanInterruption = {
   details: string[];
   label: string;
@@ -2297,6 +2310,105 @@ export function CompactConsentControlsCard(input: {
   );
 }
 
+function getCompactRejectPathPresentation(state: ExecutiveRejectPathProjection["state"]) {
+  switch (state) {
+    case "issue_observed":
+      return {
+        badge: "Issue observed",
+        badgeTone: "border-rose-200 bg-rose-50 text-rose-800",
+        cardTone: "border-rose-200 bg-gradient-to-b from-white to-rose-50/70",
+      };
+    case "review_signal":
+      return {
+        badge: "Review signal",
+        badgeTone: "border-amber-200 bg-amber-50 text-amber-800",
+        cardTone: "border-amber-200 bg-gradient-to-b from-white to-amber-50/70",
+      };
+    case "no_issue_observed":
+      return {
+        badge: "No issue observed",
+        badgeTone: "border-emerald-200 bg-emerald-50 text-emerald-800",
+        cardTone: "border-emerald-200 bg-gradient-to-b from-white to-emerald-50/70",
+      };
+    default:
+      return {
+        badge: "Incomplete",
+        badgeTone: "border-slate-200 bg-slate-50 text-slate-700",
+        cardTone: "border-slate-200 bg-gradient-to-b from-white to-slate-50/90",
+      };
+  }
+}
+
+function formatRejectObservationWindow(observationWindowMs: number) {
+  const seconds = observationWindowMs / 1000;
+  return `${Number.isInteger(seconds) ? seconds.toFixed(0) : seconds.toFixed(1)}s observation`;
+}
+
+function formatRejectResolverMethod(resolverMethod: string) {
+  switch (resolverMethod) {
+    case "tcf_api_cmp_registry_recipe":
+      return "TCF + CMP registry resolver";
+    case "cmp_registry_recipe":
+      return "CMP registry resolver";
+    case "local_fixture_recipe":
+      return "Deterministic fixture resolver";
+    default:
+      return "Deterministic resolver";
+  }
+}
+
+export function CompactRejectPathCard(input: {
+  projection?: ExecutiveRejectPathProjection | null;
+}) {
+  if (!input.projection) {
+    return null;
+  }
+  const presentation = getCompactRejectPathPresentation(input.projection.state);
+  const context = [
+    input.projection.observationWindowMs !== null
+      ? formatRejectObservationWindow(input.projection.observationWindowMs)
+      : null,
+    input.projection.resolverMethod
+      ? formatRejectResolverMethod(input.projection.resolverMethod)
+      : null,
+  ].filter((value): value is string => Boolean(value));
+
+  return (
+    <div
+      className={`rounded-[1rem] border px-3 py-2 shadow-[inset_0_1px_0_rgba(255,255,255,0.95),0_2px_7px_rgba(15,23,42,0.06)] ${presentation.cardTone}`}
+      data-reject-path-state={input.projection.state}
+      data-testid="executive-reject-path-card"
+    >
+      <div className="flex items-center justify-between gap-2">
+        <p className="text-[10px] font-semibold uppercase leading-[10px] tracking-[0.16em] text-slate-500">
+          After Reject
+        </p>
+        <span className={`rounded-full border px-2 py-0.5 text-[9px] font-semibold uppercase tracking-[0.12em] ${presentation.badgeTone}`}>
+          {presentation.badge}
+        </span>
+      </div>
+      <p className="mt-1 text-xs font-semibold leading-4 text-slate-950">{input.projection.label}</p>
+      <p className="mt-1 text-[11px] leading-4 text-slate-600">{input.projection.note}</p>
+      {context.length > 0 ? (
+        <p className="mt-1 text-[10px] font-medium leading-4 text-slate-500">{context.join(" · ")}</p>
+      ) : null}
+      {input.projection.evidenceRows.length > 0 ? (
+        <ul className="mt-1.5 space-y-1" aria-label="Retained Reject-path evidence">
+          {input.projection.evidenceRows.map((row, index) => (
+            <li className="rounded-lg border border-white/80 bg-white/75 px-2 py-1 text-[10px] leading-4 text-slate-700" key={`${row.label}:${index}`}>
+              <span className="font-semibold text-slate-900">{row.label}</span>
+              {row.detail ? <span> · {row.detail}</span> : null}
+            </li>
+          ))}
+        </ul>
+      ) : null}
+      <p className="mt-1.5 text-[9px] font-semibold uppercase tracking-[0.12em] text-slate-500">
+        {input.projection.scoreEffect === "deduction" ? "Included in score" : "No score effect"}
+      </p>
+    </div>
+  );
+}
+
 function ExecutiveSignalSnapshotPane(input: {
   beforeConsentCookieCount: number;
   cmpDisplayName: string;
@@ -2307,6 +2419,7 @@ function ExecutiveSignalSnapshotPane(input: {
   domainTruncationNote?: string | null;
   policySurfaceLabelsByUrl: Map<string, string[]>;
   policySurfaces: ExecutivePolicySurface[];
+  rejectPath?: ExecutiveRejectPathProjection | null;
   recognizedCmpLabel?: string | null;
   trackerFootprintDetailLabel?: string | null;
   trackerFootprintTitle?: string | null;
@@ -2445,6 +2558,7 @@ function ExecutiveSignalSnapshotPane(input: {
         </div>
       </CompactSnapshotPanel>
       <CompactConsentControlsCard projection={input.consentControls} />
+      <CompactRejectPathCard projection={input.rejectPath} />
     </>
   );
 }
@@ -4318,6 +4432,7 @@ export function ExecutiveSummaryCard(input: {
   cmpVendorName?: string | null;
   consentControls?: ExecutiveConsentControlProjection | null;
   consentSurfaceStatus?: string | null;
+  rejectPath?: ExecutiveRejectPathProjection | null;
   cookieBannerPresent?: boolean | null;
   domainBenchmark: DomainBenchmarkCardData;
   externalCoverageContextAvailable?: boolean | null;
@@ -4775,6 +4890,7 @@ export function ExecutiveSummaryCard(input: {
                 domainTruncationNote={domainTruncationNote}
                 policySurfaceLabelsByUrl={policySurfaceLabelsByUrl}
                 policySurfaces={policySurfaces}
+                rejectPath={input.rejectPath}
                 recognizedCmpLabel={recognizedCmpBrand?.label}
                 trackerFootprintDetailLabel={trackerFootprintLabels.detail}
                 trackerFootprintTitle={trackerFootprintLabels.title}

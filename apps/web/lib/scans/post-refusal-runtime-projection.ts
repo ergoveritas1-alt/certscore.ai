@@ -4,9 +4,9 @@ import type {
 } from "@certscore/contracts";
 
 /**
- * Maps the verified, bounded WS01 supplement into the canonical WC01 runtime
- * evidence shape consumed by normalized concerns and checklist policy. This
- * mapper is deliberately presentation-free: it cannot create a finding.
+ * Maps the verified, bounded WS01 Reject observation into the canonical WC01
+ * runtime evidence shape consumed by normalized concerns and checklist policy.
+ * This mapper is deliberately presentation-free: it cannot create a finding.
  */
 export function buildPostRefusalRuntimeProjection(
   projection: PostRefusalReportProjection | null,
@@ -104,6 +104,7 @@ export function buildPostRefusalRuntimeProjection(
     postRejectNonEssentialRequests: activityRows,
     postRejectRequestRecordsObserved: confirmed,
     postRejectWindowAvailable: confirmed,
+    observationWindowMs: confirmed ? projection.observationWindowMs : null,
     preConsentStorageNotCleared: persistedStorage.length > 0,
     preConsentStorageNotClearedCount: persistedStorage.length,
     preConsentStorageNotClearedItems: persistedStorage,
@@ -116,6 +117,7 @@ export function buildPostRefusalRuntimeProjection(
     refusalSignalContradictsAction: confirmed && projection.contradictionObserved,
     rejectInteractionConfirmed: confirmed,
     reportProjectionContractVersion: projection.contractVersion,
+    resolverMethod: projection.resolverMethod,
     scoreEffect: persistenceOnly ? "none" : "canonical_post_refusal_policy",
     storagePresenceDoesNotEstablishActiveUse: persistedStorage.length > 0,
     ...(projection.packetSha256 ? { sourcePacketSha256: projection.packetSha256 } : {}),

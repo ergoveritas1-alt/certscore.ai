@@ -6212,6 +6212,11 @@ function derivePostRejectOutcome(input: GdprEprivacyCoveragePolicyInput) {
     "storagePresenceDoesNotEstablishActiveUse",
     "storage_presence_does_not_establish_active_use"
   ]) === true;
+  const observationWindowMs = getNumber(reductionEvidence, [
+    "observationWindowMs",
+    "observation_window_ms"
+  ]);
+  const resolverMethod = getString(reductionEvidence, ["resolverMethod", "resolver_method"]);
   const retainedRejectInteractionFailureClass =
     getString(reductionEvidence, ["rejectInteractionFailureClass", "reject_interaction_failure_class"]) ??
       getStringArray(reductionEvidence, ["negativeReasonCodes", "negative_reason_codes"]).find((reason) =>
@@ -6234,11 +6239,13 @@ function derivePostRejectOutcome(input: GdprEprivacyCoveragePolicyInput) {
     postRejectRequestRecordsObserved,
     postRejectVendors: compactArray(postRejectVendors, 5),
     postRejectWindowAvailable,
+    observationWindowMs,
     reductionEvaluationStatus: reductionStatus,
     preConsentStorageNotCleared: preConsentStorageNotClearedCount > 0,
     preConsentStorageNotClearedCount,
     preConsentStorageNotClearedItems: compactArray(preConsentStorageNotClearedItems, 5),
     refusalSignalContradictsAction,
+    resolverMethod,
     scoreEffect: persistenceScoreEffect === "none" ? "none" : "canonical_post_refusal_policy",
     storagePresenceDoesNotEstablishActiveUse,
     rejectInteractionFailureClass,
@@ -6374,21 +6381,25 @@ function derivePostRejectOutcome(input: GdprEprivacyCoveragePolicyInput) {
         }
       );
     }
-    const hasConcretePostRejectPersistenceEvidence =
+    const hasConcretePostRejectActivityEvidence =
       postRejectNonEssentialRequestsRetained === true &&
       concretePostRejectNonEssentialRows.length > 0;
-    const projectionSuppressionReason = hasConcretePostRejectPersistenceEvidence
+    const hasConcretePostRejectFailureEvidence =
+      hasConcretePostRejectActivityEvidence || refusalSignalContradictsAction;
+    const projectionSuppressionReason = hasConcretePostRejectFailureEvidence
       ? null
       : "Eligible post-reject non-essential vendor/request/cookie details with category, URL/domain, timing, and consent state were not retained.";
     return makeOutcome(
       "post_reject_tracking_reduction",
-      hasConcretePostRejectPersistenceEvidence ? "Gap observed" : "Review signal",
-      hasConcretePostRejectPersistenceEvidence
+      hasConcretePostRejectFailureEvidence ? "Gap observed" : "Review signal",
+      refusalSignalContradictsAction && !hasConcretePostRejectActivityEvidence
+        ? "A reject action was confirmed, but the retained post-refusal TCF consent state still encoded granted purposes. This contradiction is independent of network activity."
+        : hasConcretePostRejectActivityEvidence
         ? "A reject action and post-reject comparison window were retained, and eligible non-essential tracking activity persisted after reject."
         : "A reject action and post-reject comparison window were retained, and post-reject non-essential activity was observed, but CertScore.ai did not retain enough canonical detail to project a post-reject persistence gap.",
       reductionEvidenceRefs,
       {
-        missingOrIncompleteSourceSignals: hasConcretePostRejectPersistenceEvidence
+        missingOrIncompleteSourceSignals: hasConcretePostRejectFailureEvidence
           ? []
           : [
               sourceGap(
@@ -6400,7 +6411,7 @@ function derivePostRejectOutcome(input: GdprEprivacyCoveragePolicyInput) {
             ],
         retainedEvidence: {
           ...postRejectRetainedEvidence,
-          ...(hasConcretePostRejectPersistenceEvidence
+          ...(hasConcretePostRejectFailureEvidence
             ? {}
             : {
                 missingEvidenceNeeded: [
