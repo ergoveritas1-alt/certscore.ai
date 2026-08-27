@@ -70,14 +70,44 @@ export type StaticFixturePage =
   | "consent-sits-style-preferences"
   | "consent-tracking-persists-after-reject"
   | "post-refusal-reject-honored"
+  | "post-refusal-certscore-owned-analytics"
+  | "post-refusal-reject-observation-long-task"
+  | "post-refusal-reject-action-phase-nonessential"
   | "post-refusal-reject-ignored"
   | "post-refusal-reject-missing"
+  | "post-refusal-reject-persistence-only"
   | "post-refusal-reject-unconfirmed"
   | "post-refusal-reject-inflight"
+  | "post-refusal-reject-inflight-redirect-flood"
+  | "post-refusal-reject-click-fails"
+  | "post-refusal-reject-click-confirmed-after-error"
+  | "post-refusal-reject-reresolved-before-click"
+  | "post-refusal-reject-stale-storage"
+  | "post-refusal-reject-request-flood"
+  | "post-refusal-reject-storage-write-flood"
+  | "post-refusal-reject-bing-uet-write"
+  | "post-refusal-reject-adobe-consent-propagation"
+  | "post-refusal-reject-lowercase-fs-site-state"
+  | "post-refusal-reject-server-cookie"
+  | "post-refusal-reject-third-party-cookie"
   | "post-refusal-onetrust-tcf-honored"
+  | "post-refusal-onetrust-tcf-ignored"
+  | "post-refusal-onetrust-no-reject"
   | "post-refusal-onetrust-tcf-contradiction"
+  | "post-refusal-onetrust-tcf-stale"
+  | "post-refusal-onetrust-tcf-delayed-contradiction"
+  | "post-refusal-onetrust-tcf-storage-unavailable"
+  | "post-refusal-onetrust-cookie-confirmed"
+  | "post-refusal-onetrust-continue-without-accepting"
+  | "post-refusal-onetrust-cookie-navigation"
+  | "post-refusal-onetrust-cookie-stale"
   | "post-refusal-cookiebot-fast"
+  | "post-refusal-cookiebot-level-optin-decline-all"
+  | "post-refusal-cookiebot-cookie-stale"
   | "post-refusal-usercentrics-delayed"
+  | "post-refusal-usercentrics-legacy-deny"
+  | "post-refusal-usercentrics-storage-stale"
+  | "post-refusal-canonical-cmp-ambiguous"
   | "ga-collection"
   | "ga-first-party-vendor-associated-cookie"
   | "generic-bare-choice-controls"
@@ -272,14 +302,44 @@ const fixtureSlugs: Record<StaticFixturePage, string> = {
   "consent-sits-style-preferences": "consent-sits-style-preferences",
   "consent-tracking-persists-after-reject": "consent-persists",
   "post-refusal-reject-honored": "post-refusal-reject-honored",
+  "post-refusal-certscore-owned-analytics": "post-refusal-certscore-owned-analytics",
+  "post-refusal-reject-observation-long-task": "post-refusal-reject-observation-long-task",
+  "post-refusal-reject-action-phase-nonessential": "post-refusal-reject-action-phase-nonessential",
   "post-refusal-reject-ignored": "post-refusal-reject-ignored",
   "post-refusal-reject-missing": "post-refusal-reject-missing",
+  "post-refusal-reject-persistence-only": "post-refusal-reject-persistence-only",
   "post-refusal-reject-unconfirmed": "post-refusal-reject-unconfirmed",
   "post-refusal-reject-inflight": "post-refusal-reject-inflight",
+  "post-refusal-reject-inflight-redirect-flood": "post-refusal-reject-inflight-redirect-flood",
+  "post-refusal-reject-click-fails": "post-refusal-reject-click-fails",
+  "post-refusal-reject-click-confirmed-after-error": "post-refusal-reject-click-confirmed-after-error",
+  "post-refusal-reject-reresolved-before-click": "post-refusal-reject-reresolved-before-click",
+  "post-refusal-reject-stale-storage": "post-refusal-reject-stale-storage",
+  "post-refusal-reject-request-flood": "post-refusal-reject-request-flood",
+  "post-refusal-reject-storage-write-flood": "post-refusal-reject-storage-write-flood",
+  "post-refusal-reject-bing-uet-write": "post-refusal-reject-bing-uet-write",
+  "post-refusal-reject-adobe-consent-propagation": "post-refusal-reject-adobe-consent-propagation",
+  "post-refusal-reject-lowercase-fs-site-state": "post-refusal-reject-lowercase-fs-site-state",
+  "post-refusal-reject-server-cookie": "post-refusal-reject-server-cookie",
+  "post-refusal-reject-third-party-cookie": "post-refusal-reject-third-party-cookie",
   "post-refusal-onetrust-tcf-honored": "post-refusal-onetrust-tcf-honored",
+  "post-refusal-onetrust-tcf-ignored": "post-refusal-onetrust-tcf-ignored",
+  "post-refusal-onetrust-no-reject": "post-refusal-onetrust-no-reject",
   "post-refusal-onetrust-tcf-contradiction": "post-refusal-onetrust-tcf-contradiction",
+  "post-refusal-onetrust-tcf-stale": "post-refusal-onetrust-tcf-stale",
+  "post-refusal-onetrust-tcf-delayed-contradiction": "post-refusal-onetrust-tcf-delayed-contradiction",
+  "post-refusal-onetrust-tcf-storage-unavailable": "post-refusal-onetrust-tcf-storage-unavailable",
+  "post-refusal-onetrust-cookie-confirmed": "post-refusal-onetrust-cookie-confirmed",
+  "post-refusal-onetrust-continue-without-accepting": "post-refusal-onetrust-continue-without-accepting",
+  "post-refusal-onetrust-cookie-navigation": "post-refusal-onetrust-cookie-navigation",
+  "post-refusal-onetrust-cookie-stale": "post-refusal-onetrust-cookie-stale",
   "post-refusal-cookiebot-fast": "post-refusal-cookiebot-fast",
+  "post-refusal-cookiebot-level-optin-decline-all": "post-refusal-cookiebot-level-optin-decline-all",
+  "post-refusal-cookiebot-cookie-stale": "post-refusal-cookiebot-cookie-stale",
   "post-refusal-usercentrics-delayed": "post-refusal-usercentrics-delayed",
+  "post-refusal-usercentrics-legacy-deny": "post-refusal-usercentrics-legacy-deny",
+  "post-refusal-usercentrics-storage-stale": "post-refusal-usercentrics-storage-stale",
+  "post-refusal-canonical-cmp-ambiguous": "post-refusal-canonical-cmp-ambiguous",
   "ga-collection": "ga-page",
   "ga-first-party-vendor-associated-cookie": "ga-first-party-cookie",
   "generic-bare-choice-controls": "generic-bare-choice-controls",
@@ -464,6 +524,12 @@ function handleRequest(request: IncomingMessage, response: ServerResponse): void
     }
     response.writeHead(404, { "Content-Type": "text/plain" });
     response.end("unknown fixture");
+    return;
+  }
+
+  if (url.pathname === "/post-refusal/navigation-settled") {
+    response.writeHead(200, { "Content-Type": "text/html; charset=utf-8" });
+    response.end("<!doctype html><html><body><main>Refusal navigation settled.</main></body></html>");
     return;
   }
 
@@ -1008,6 +1074,37 @@ function handleRequest(request: IncomingMessage, response: ServerResponse): void
     return;
   }
 
+  if (url.pathname === "/post-refusal/inflight-redirect") {
+    const timer = setTimeout(() => {
+      if (response.destroyed) return;
+      response.writeHead(302, {
+        "Cache-Control": "no-store",
+        Location: "https://www.google-analytics.com/g/collect?v=2&tid=G-LOCALFIXTURE&en=inflight_redirect",
+      });
+      response.end();
+    }, 300);
+    request.once("close", () => clearTimeout(timer));
+    return;
+  }
+
+  if (url.pathname === "/post-refusal/noise.gif") {
+    response.writeHead(200, {
+      "Content-Type": "image/gif",
+      "Content-Length": String(onePixelGif.length),
+    });
+    response.end(onePixelGif);
+    return;
+  }
+
+  if (url.pathname === "/post-refusal/set-cookie") {
+    response.writeHead(204, {
+      "Cache-Control": "no-store",
+      "Set-Cookie": "_gid=GA1.1.SERVER_POST_REFUSAL; Path=/; SameSite=Lax; HttpOnly",
+    });
+    response.end();
+    return;
+  }
+
   if (url.pathname === "/policies/article13-latin1-es") {
     response.writeHead(200, { "Content-Type": "text/html; charset=iso-8859-15" });
     response.end(Buffer.from(`<!doctype html>
@@ -1415,18 +1512,78 @@ function bodyMarkup(caseName: StaticFixturePage): string {
 }
 
 function postRefusalFixtureMarkup(caseName: StaticFixturePage): string {
+  if (caseName === "post-refusal-certscore-owned-analytics") {
+    return `
+      <section aria-label="Cookie and analytics preferences">
+        <p>Optional analytics help improve CertScore.</p>
+        <div>
+          <button type="button">Cookie settings</button>
+          <button id="certscore-owned-reject" type="button">Reject analytics</button>
+          <button type="button">Allow analytics</button>
+        </div>
+      </section>
+      <script>
+        document.getElementById("certscore-owned-reject")?.addEventListener("click", () => {
+          localStorage.setItem("certscore:analytics-consent:v1", "denied");
+          document.querySelector('section[aria-label="Cookie and analytics preferences"]')?.remove();
+        });
+      </script>
+    `;
+  }
+  if (caseName === "post-refusal-canonical-cmp-ambiguous") {
+    return `
+      <section>
+        <h1>Ambiguous canonical CMP reject fixture</h1>
+        <p>Two deterministic CMP controls are intentionally actionable.</p>
+      </section>
+      <div id="onetrust-banner-sdk">
+        <button id="onetrust-reject-all-handler" type="button">Reject all</button>
+      </div>
+      <div id="CybotCookiebotDialog">
+        <button id="CybotCookiebotDialogBodyButtonDecline" type="button">Reject all</button>
+      </div>
+    `;
+  }
   if (
     caseName === "post-refusal-onetrust-tcf-honored" ||
+    caseName === "post-refusal-onetrust-tcf-ignored" ||
+    caseName === "post-refusal-onetrust-no-reject" ||
     caseName === "post-refusal-onetrust-tcf-contradiction" ||
+    caseName === "post-refusal-onetrust-tcf-stale" ||
+    caseName === "post-refusal-onetrust-tcf-delayed-contradiction" ||
+    caseName === "post-refusal-onetrust-tcf-storage-unavailable" ||
+    caseName === "post-refusal-onetrust-cookie-confirmed" ||
+    caseName === "post-refusal-onetrust-continue-without-accepting" ||
+    caseName === "post-refusal-onetrust-cookie-navigation" ||
+    caseName === "post-refusal-onetrust-cookie-stale" ||
     caseName === "post-refusal-cookiebot-fast" ||
-    caseName === "post-refusal-usercentrics-delayed"
+    caseName === "post-refusal-cookiebot-level-optin-decline-all" ||
+    caseName === "post-refusal-cookiebot-cookie-stale" ||
+    caseName === "post-refusal-usercentrics-delayed" ||
+    caseName === "post-refusal-usercentrics-legacy-deny" ||
+    caseName === "post-refusal-usercentrics-storage-stale"
   ) {
     return namedCmpPostRefusalFixtureMarkup(caseName);
   }
   const rejectMissing = caseName === "post-refusal-reject-missing";
   const rejectUnconfirmed = caseName === "post-refusal-reject-unconfirmed";
   const rejectIgnored = caseName === "post-refusal-reject-ignored";
+  const rejectObservationLongTask = caseName === "post-refusal-reject-observation-long-task";
   const rejectInflight = caseName === "post-refusal-reject-inflight";
+  const rejectInflightRedirectFlood = caseName === "post-refusal-reject-inflight-redirect-flood";
+  const rejectActionPhaseNonessential = caseName === "post-refusal-reject-action-phase-nonessential";
+  const rejectPersistenceOnly = caseName === "post-refusal-reject-persistence-only";
+  const rejectClickFails = caseName === "post-refusal-reject-click-fails";
+  const rejectClickConfirmedAfterError = caseName === "post-refusal-reject-click-confirmed-after-error";
+  const rejectReresolvedBeforeClick = caseName === "post-refusal-reject-reresolved-before-click";
+  const rejectStaleStorage = caseName === "post-refusal-reject-stale-storage";
+  const rejectRequestFlood = caseName === "post-refusal-reject-request-flood";
+  const rejectStorageWriteFlood = caseName === "post-refusal-reject-storage-write-flood";
+  const rejectBingUetWrite = caseName === "post-refusal-reject-bing-uet-write";
+  const rejectAdobeConsentPropagation = caseName === "post-refusal-reject-adobe-consent-propagation";
+  const rejectLowercaseFsSiteState = caseName === "post-refusal-reject-lowercase-fs-site-state";
+  const rejectServerCookie = caseName === "post-refusal-reject-server-cookie";
+  const rejectThirdPartyCookie = caseName === "post-refusal-reject-third-party-cookie";
   return `
     <section>
       <h1>Post-refusal localhost fixture</h1>
@@ -1437,32 +1594,102 @@ function postRefusalFixtureMarkup(caseName: StaticFixturePage): string {
       <button type="button" data-certscore-consent-action="accept">Accept all</button>
       ${rejectMissing
         ? ""
-        : '<button id="certscore-fixture-reject" type="button" data-certscore-consent-action="reject">Reject all</button>'}
+        : `<button id="certscore-fixture-reject" type="button" data-certscore-consent-action="reject"${rejectClickFails ? ' style="pointer-events:none"' : ""}>Reject all</button>`}
+      ${rejectReresolvedBeforeClick
+        ? '<div id="certscore-fixture-click-overlay" style="position:fixed;inset:0;z-index:1000"></div>'
+        : ""}
     </div>
     <script>
       const fixtureMode = ${JSON.stringify(caseName)};
       document.cookie = "_ga=GA1.1.LOCALFIXTURE; Path=/; SameSite=Lax";
+      if (${JSON.stringify(rejectLowercaseFsSiteState)}) {
+        localStorage.setItem("fs_closing_native_notifications_toast_session_count", "1");
+      }
+      if (${JSON.stringify(rejectStaleStorage)}) {
+        localStorage.setItem("certscore_fixture_consent", "rejected");
+        if (${JSON.stringify(rejectObservationLongTask)}) {
+          setTimeout(() => {
+            const blockedUntil = performance.now() + 500;
+            while (performance.now() < blockedUntil) {}
+          }, 30);
+        }
+      }
+      if (${JSON.stringify(rejectRequestFlood || rejectInflightRedirectFlood)}) {
+        for (let index = 0; index < 120; index += 1) {
+          fetch("/post-refusal/noise.gif?index=" + index).catch(() => undefined);
+        }
+      }
+      if (${JSON.stringify(rejectStorageWriteFlood)}) {
+        for (let index = 0; index < 120; index += 1) {
+          localStorage.setItem("certscore_noise_" + index, String(index));
+        }
+      }
       if (${JSON.stringify(rejectInflight)}) {
         const inFlight = new Image();
         inFlight.alt = "";
         inFlight.src = "/post-refusal/inflight.gif?started=before-refusal";
         document.body.appendChild(inFlight);
       }
+      if (${JSON.stringify(rejectInflightRedirectFlood)}) {
+        const redirectingInFlight = new Image();
+        redirectingInFlight.alt = "";
+        redirectingInFlight.src = "/post-refusal/inflight-redirect?started=before-refusal";
+        document.body.appendChild(redirectingInFlight);
+      }
+      if (${JSON.stringify(rejectReresolvedBeforeClick)}) {
+        setTimeout(() => document.getElementById("certscore-fixture-click-overlay")?.remove(), 1300);
+      }
       document.getElementById("certscore-fixture-reject")?.addEventListener("click", () => {
         document.getElementById("certscore-fixture-consent-banner")?.remove();
-        if (${JSON.stringify(rejectUnconfirmed)}) return;
+        if (${JSON.stringify(rejectUnconfirmed || rejectStaleStorage)}) return;
 
+        if (${JSON.stringify(rejectActionPhaseNonessential)}) {
+          document.cookie = "mp_action_phase_mixpanel=ACTION_PHASE; Path=/; SameSite=Lax";
+        }
         localStorage.setItem("certscore_fixture_consent", "rejected");
-        if (!${JSON.stringify(rejectIgnored)}) {
+        if (${JSON.stringify(rejectClickConfirmedAfterError)}) {
+          const blockedUntil = performance.now() + 2200;
+          while (performance.now() < blockedUntil) {}
+          return;
+        }
+        if (!${JSON.stringify(rejectIgnored || rejectRequestFlood || rejectServerCookie || rejectPersistenceOnly)}) {
           document.cookie = "_ga=; Path=/; Max-Age=0; SameSite=Lax";
         }
-        if (${JSON.stringify(rejectIgnored)}) {
+        if (${JSON.stringify(rejectIgnored || rejectRequestFlood)}) {
           setTimeout(() => {
             document.cookie = "_gid=GA1.1.POSTREFUSAL; Path=/; SameSite=Lax";
             const analytics = new Image();
             analytics.alt = "";
             analytics.src = "https://www.google-analytics.com/g/collect?v=2&tid=G-LOCALFIXTURE&en=post_refusal";
             document.body.appendChild(analytics);
+          }, 60);
+        }
+        if (${JSON.stringify(rejectStorageWriteFlood)}) {
+          setTimeout(() => {
+            document.cookie = "_gid=GA1.1.POSTREFUSAL_FLOOD; Path=/; SameSite=Lax";
+          }, 60);
+        }
+        if (${JSON.stringify(rejectBingUetWrite)}) {
+          setTimeout(() => {
+            localStorage.setItem("_uetsid", "POST_REFUSAL_UET_SESSION");
+            document.cookie = "_uetvid=POST_REFUSAL_UET_VISITOR; Path=/; SameSite=Lax";
+          }, 60);
+        }
+        if (${JSON.stringify(rejectAdobeConsentPropagation)}) {
+          setTimeout(() => {
+            fetch("https://adobedc.demdex.net/ee/v1/privacy/set-consent", { method: "POST" })
+              .catch(() => undefined);
+          }, 60);
+        }
+        if (${JSON.stringify(rejectServerCookie)}) {
+          setTimeout(() => fetch("/post-refusal/set-cookie", { credentials: "include" }), 60);
+        }
+        if (${JSON.stringify(rejectThirdPartyCookie)}) {
+          setTimeout(() => {
+            const thirdPartyCookie = new Image();
+            thirdPartyCookie.alt = "";
+            thirdPartyCookie.src = "https://cookie-fixture.example/post-refusal-cookie";
+            document.body.appendChild(thirdPartyCookie);
           }, 60);
         }
       });
@@ -1472,24 +1699,63 @@ function postRefusalFixtureMarkup(caseName: StaticFixturePage): string {
 
 function namedCmpPostRefusalFixtureMarkup(caseName: StaticFixturePage): string {
   const oneTrust = caseName === "post-refusal-onetrust-tcf-honored" ||
-    caseName === "post-refusal-onetrust-tcf-contradiction";
+    caseName === "post-refusal-onetrust-tcf-ignored" ||
+    caseName === "post-refusal-onetrust-no-reject" ||
+    caseName === "post-refusal-onetrust-tcf-contradiction" ||
+    caseName === "post-refusal-onetrust-tcf-stale" ||
+    caseName === "post-refusal-onetrust-tcf-delayed-contradiction" ||
+    caseName === "post-refusal-onetrust-tcf-storage-unavailable" ||
+    caseName === "post-refusal-onetrust-cookie-confirmed" ||
+    caseName === "post-refusal-onetrust-continue-without-accepting" ||
+    caseName === "post-refusal-onetrust-cookie-navigation" ||
+    caseName === "post-refusal-onetrust-cookie-stale";
   const contradiction = caseName === "post-refusal-onetrust-tcf-contradiction";
-  const cookiebot = caseName === "post-refusal-cookiebot-fast";
-  const usercentrics = caseName === "post-refusal-usercentrics-delayed";
+  const ignored = caseName === "post-refusal-onetrust-tcf-ignored";
+  const noReject = caseName === "post-refusal-onetrust-no-reject";
+  const staleTcf = caseName === "post-refusal-onetrust-tcf-stale";
+  const delayedContradiction = caseName === "post-refusal-onetrust-tcf-delayed-contradiction";
+  const storageUnavailable = caseName === "post-refusal-onetrust-tcf-storage-unavailable";
+  const cookieConfirmed = caseName === "post-refusal-onetrust-cookie-confirmed";
+  const continueWithoutAccepting = caseName === "post-refusal-onetrust-continue-without-accepting";
+  const cookieNavigation = caseName === "post-refusal-onetrust-cookie-navigation";
+  const staleCookie = caseName === "post-refusal-onetrust-cookie-stale";
+  const cookieConfirmation = cookieConfirmed || continueWithoutAccepting || cookieNavigation || staleCookie;
+  const cookiebotLevelOptinDeclineAll = caseName === "post-refusal-cookiebot-level-optin-decline-all";
+  const cookiebot = caseName === "post-refusal-cookiebot-fast" ||
+    cookiebotLevelOptinDeclineAll ||
+    caseName === "post-refusal-cookiebot-cookie-stale";
+  const cookiebotCookieStale = caseName === "post-refusal-cookiebot-cookie-stale";
+  const usercentrics = caseName === "post-refusal-usercentrics-delayed" ||
+    caseName === "post-refusal-usercentrics-legacy-deny" ||
+    caseName === "post-refusal-usercentrics-storage-stale";
+  const usercentricsLegacyDeny = caseName === "post-refusal-usercentrics-legacy-deny";
+  const usercentricsStorageStale = caseName === "post-refusal-usercentrics-storage-stale";
   const bannerId = oneTrust
     ? "onetrust-banner-sdk"
     : cookiebot
       ? "CybotCookiebotDialog"
       : "usercentrics-root";
   const rejectButton = oneTrust
-    ? '<button id="onetrust-reject-all-handler" type="button">Reject all</button>'
+    ? noReject
+      ? '<button id="onetrust-accept-btn-handler" type="button">Accept all</button>'
+      : continueWithoutAccepting
+      ? '<button class="onetrust-close-btn-handler banner-close-button" type="button">Continue without accepting</button>'
+      : '<button id="onetrust-reject-all-handler" type="button">Reject all</button>'
     : cookiebot
-      ? '<button id="CybotCookiebotDialogBodyButtonDecline" type="button">Reject all</button>'
-      : '<button data-testid="uc-deny-all-button" type="button">Reject all</button>';
+      ? cookiebotLevelOptinDeclineAll
+        ? '<button id="CybotCookiebotDialogBodyLevelButtonLevelOptinDeclineAll" type="button">Deny</button>'
+        : '<button id="CybotCookiebotDialogBodyButtonDecline" type="button">Reject all</button>'
+      : usercentricsLegacyDeny
+        ? '<footer id="uc-cmp-footer"><button id="deny" type="button">Reject all</button></footer>'
+        : '<footer id="uc-cmp-footer"><button data-testid="uc-deny-all-button" type="button">Reject all</button></footer>';
+  const separateOneTrustCloseButton = oneTrust && !continueWithoutAccepting && !noReject
+    ? '<button class="onetrust-close-btn-handler onetrust-close-btn-ui banner-close-button ot-close-icon" type="button" aria-label="Close"></button>'
+    : "";
   const bannerMarkup = `
-    <div id="${bannerId}" role="dialog" aria-label="Cookie consent">
+    <div id="${bannerId}"${continueWithoutAccepting ? ' class="ot-close-btn-link"' : ""} role="dialog" aria-label="Cookie consent">
       <p>Optional purposes require a choice.</p>
       ${rejectButton}
+      ${separateOneTrustCloseButton}
     </div>`;
   const renderDelayMs = usercentrics ? 1_200 : 0;
   return `
@@ -1500,12 +1766,32 @@ function namedCmpPostRefusalFixtureMarkup(caseName: StaticFixturePage): string {
     <div id="certscore-cmp-fixture-root"></div>
     <script>
       const fixtureMode = ${JSON.stringify(caseName)};
+      if (${JSON.stringify(storageUnavailable)}) {
+        const blockedLocalStorage = window.localStorage;
+        const blockedSessionStorage = window.sessionStorage;
+        const originalEntries = Object.entries;
+        Object.entries = function(value) {
+          if (value === blockedLocalStorage || value === blockedSessionStorage) {
+            throw new DOMException("Storage snapshot blocked", "SecurityError");
+          }
+          return originalEntries(value);
+        };
+      }
       let tcfState = {
-        eventStatus: "tcloaded",
-        tcString: "CERTSCORE-TCF-PRE-ACTION",
-        purpose: { consents: Object.fromEntries(Array.from({ length: 10 }, (_, index) => [String(index + 1), true])) }
+        eventStatus: ${JSON.stringify(staleTcf ? "useractioncomplete" : "tcloaded")},
+        tcString: ${JSON.stringify(tcfV2CoreString(staleTcf ? [] : [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]))},
+        purpose: { consents: Object.fromEntries(Array.from({ length: 10 }, (_, index) => [String(index + 1), ${JSON.stringify(!staleTcf)}])) }
       };
-      if (${JSON.stringify(oneTrust)}) {
+      if (${JSON.stringify(cookieConfirmation)}) {
+        document.cookie = "OptanonConsent=baseline; Path=/; SameSite=Lax";
+      }
+      if (${JSON.stringify(cookiebotCookieStale)}) {
+        document.cookie = "CookieConsent=baseline; Path=/; SameSite=Lax";
+      }
+      if (${JSON.stringify(usercentrics)}) {
+        localStorage.setItem(${JSON.stringify(usercentricsLegacyDeny ? "ucString" : "uc_settings")}, "baseline");
+      }
+      if (${JSON.stringify(oneTrust && !cookieConfirmation)}) {
         window.__tcfapi = (command, version, callback) => {
           if (command !== "getTCData" || version !== 2) return callback({}, false);
           callback(JSON.parse(JSON.stringify(tcfState)), true);
@@ -1515,18 +1801,41 @@ function namedCmpPostRefusalFixtureMarkup(caseName: StaticFixturePage): string {
         document.getElementById("certscore-cmp-fixture-root").innerHTML = ${JSON.stringify(bannerMarkup)};
         const reject = document.querySelector(${JSON.stringify(
           oneTrust
-            ? "#onetrust-reject-all-handler"
+            ? continueWithoutAccepting
+              ? "button.onetrust-close-btn-handler.banner-close-button"
+              : "#onetrust-reject-all-handler"
             : cookiebot
-              ? "#CybotCookiebotDialogBodyButtonDecline"
-              : 'button[data-testid="uc-deny-all-button"]',
+              ? cookiebotLevelOptinDeclineAll
+                ? "#CybotCookiebotDialogBodyLevelButtonLevelOptinDeclineAll"
+                : "#CybotCookiebotDialogBodyButtonDecline"
+              : usercentricsLegacyDeny
+                ? "#uc-cmp-footer #deny"
+                : 'button[data-testid="uc-deny-all-button"]',
         )});
-        reject.addEventListener("click", () => {
+        reject?.addEventListener("click", () => {
           document.getElementById(${JSON.stringify(bannerId)})?.remove();
           localStorage.setItem("certscore_fixture_consent", "rejected");
+          if (${JSON.stringify(cookiebot)}) {
+            document.cookie = "CookieConsent=${cookiebotCookieStale ? "baseline" : "necessary-only"}; Path=/; SameSite=Lax";
+          }
+          if (${JSON.stringify(usercentrics)}) {
+            localStorage.setItem(
+              ${JSON.stringify(usercentricsLegacyDeny ? "ucString" : "uc_settings")},
+              ${JSON.stringify(usercentricsStorageStale ? "baseline" : "denied")},
+            );
+          }
           if (${JSON.stringify(oneTrust)}) {
+            if (${JSON.stringify(cookieConfirmation)}) {
+              document.cookie = "OptanonConsent=${staleCookie ? "baseline" : "rejected"}; Path=/; SameSite=Lax";
+              if (${JSON.stringify(cookieNavigation)}) {
+                setTimeout(() => window.location.assign("/post-refusal/navigation-settled"), 25);
+              }
+              return;
+            }
+            if (${JSON.stringify(staleTcf)}) return;
             tcfState = {
               eventStatus: "useractioncomplete",
-              tcString: ${JSON.stringify(contradiction ? "CERTSCORE-TCF-CONTRADICTION" : "CERTSCORE-TCF-DENIED")},
+              tcString: ${JSON.stringify(tcfV2CoreString(contradiction ? [1] : []))},
               purpose: {
                 consents: Object.fromEntries(Array.from({ length: 10 }, (_, index) => [
                   String(index + 1),
@@ -1534,6 +1843,29 @@ function namedCmpPostRefusalFixtureMarkup(caseName: StaticFixturePage): string {
                 ]))
               }
             };
+            if (${JSON.stringify(ignored)}) {
+              setTimeout(() => {
+                document.cookie = "_gid=GA1.1.POSTREFUSAL_ONETRUST; Path=/; SameSite=Lax";
+                const analytics = new Image();
+                analytics.alt = "";
+                analytics.src = "https://www.google-analytics.com/g/collect?v=2&tid=G-LOCALFIXTURE&en=post_refusal";
+                document.body.appendChild(analytics);
+              }, 60);
+            }
+            if (${JSON.stringify(delayedContradiction)}) {
+              setTimeout(() => {
+                tcfState = {
+                  eventStatus: "useractioncomplete",
+                  tcString: ${JSON.stringify(tcfV2CoreString([1]))},
+                  purpose: {
+                    consents: Object.fromEntries(Array.from({ length: 10 }, (_, index) => [
+                      String(index + 1),
+                      index === 0
+                    ]))
+                  }
+                };
+              }, 90);
+            }
           }
         });
       };
@@ -1541,6 +1873,25 @@ function namedCmpPostRefusalFixtureMarkup(caseName: StaticFixturePage): string {
       else renderBanner();
     </script>
   `;
+}
+
+function tcfV2CoreString(grantedPurposeIds: number[]): string {
+  const bytes = Buffer.alloc(22);
+  const setBit = (index: number, enabled: boolean) => {
+    if (!enabled) return;
+    bytes[Math.floor(index / 8)]! |= 1 << (7 - (index % 8));
+  };
+  const setNumber = (offset: number, length: number, value: number) => {
+    for (let index = 0; index < length; index += 1) {
+      setBit(offset + index, ((value >> (length - index - 1)) & 1) === 1);
+    }
+  };
+  setNumber(0, 6, 2);
+  const granted = new Set(grantedPurposeIds);
+  for (let purposeId = 1; purposeId <= 24; purposeId += 1) {
+    setBit(152 + purposeId - 1, granted.has(purposeId));
+  }
+  return bytes.toString("base64url");
 }
 
 function consentFlowHomeMarkup(caseName: StaticFixturePage): string {

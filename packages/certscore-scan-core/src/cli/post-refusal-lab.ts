@@ -13,8 +13,9 @@ import {
 import {
   decidePostRefusalCooperativeAbort,
   decidePostRefusalReportPublication,
+  POST_REFUSAL_CANONICAL_BARRIER_MAX_TAIL_WAIT_MS,
 } from "../post-refusal-orchestration.js";
-import { buildPostRefusalSupplementEnvelope } from "../post-refusal-supplement.js";
+import { buildPostRefusalReconciliationEnvelope } from "../post-refusal-reconciliation.js";
 import { startStaticFixtureServer } from "../test-fixtures/static-server.js";
 
 void main().catch((error: unknown) => {
@@ -100,15 +101,16 @@ async function main() {
       primaryReadyAtMs: consentProofReadyAtMs,
       rejectReadyAtMs: rejectPacket.timing.readyAtMs,
       approvedJoinWaitMs: args.joinWaitMs,
+      maxTailWaitMs: POST_REFUSAL_CANONICAL_BARRIER_MAX_TAIL_WAIT_MS,
     });
-    const supplementEnvelope = buildPostRefusalSupplementEnvelope({
+    const reconciliationEnvelope = buildPostRefusalReconciliationEnvelope({
       parentScanId: runId,
       baseEvidence: consentProof.bundle,
       packet: rejectPacket,
       publicationDecision,
     });
-    const supplementPath = path.join(outDir, "PostRefusalSupplementEnvelope.json");
-    await writeFile(supplementPath, `${JSON.stringify(supplementEnvelope, null, 2)}\n`, "utf8");
+    const reconciliationPath = path.join(outDir, "PostRefusalReconciliationEnvelope.json");
+    await writeFile(reconciliationPath, `${JSON.stringify(reconciliationEnvelope, null, 2)}\n`, "utf8");
     const report = {
       artifactVersion: "certscore.post_refusal_timing_lab.v1",
       artifactOnly: true,
@@ -143,11 +145,10 @@ async function main() {
         timing: rejectPacket.timing,
       },
       publicationDecision,
-      supplement: {
-        path: supplementPath,
-        status: supplementEnvelope.status,
-        disposition: supplementEnvelope.disposition,
-        candidateGeneration: supplementEnvelope.reportGeneration?.candidateGeneration ?? null,
+      reconciliation: {
+        path: reconciliationPath,
+        status: reconciliationEnvelope.status,
+        disposition: reconciliationEnvelope.disposition,
       },
       cooperativeAbortSignal: abortSignal ?? null,
       limitations: [
@@ -160,14 +161,14 @@ async function main() {
     await writeFile(reportPath, `${JSON.stringify(report, null, 2)}\n`, "utf8");
     console.log(JSON.stringify({
       reportPath,
-      supplementPath,
+      reconciliationPath,
       consentProofReadyAtMs,
       rejectReadyAtMs: rejectPacket.timing.readyAtMs,
       rejectReadyDeltaMs: publicationDecision.rejectReadyDeltaMs,
       publicationMode: publicationDecision.mode,
       registrationStatus: rejectPacket.refusalRegistration.status,
       observations: rejectPacket.observations.length,
-      supplementDisposition: supplementEnvelope.disposition,
+      reconciliationDisposition: reconciliationEnvelope.disposition,
     }, null, 2));
   } finally {
     await server?.close();
@@ -186,7 +187,7 @@ function parseArgs(argv: string[]) {
     joinWaitMs: number;
   } = {
     fixture: "ignored",
-    delayMs: 2_000,
+    delayMs: 500,
     observationMs: 8_000,
     confirmationMs: 1_500,
     actionSearchMs: 1_500,

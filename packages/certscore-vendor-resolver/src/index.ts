@@ -17,7 +17,7 @@ export {
   type TransferMechanism,
 } from "./cookie-knowledge-base";
 
-export const CANONICAL_VENDOR_RESOLVER_VERSION = "certscore-vendor-resolver-2026-08-25-sourcebuster-dsgvoaio-bst-dsgvo-cookie-matomo-facebook-page-plugin";
+export const CANONICAL_VENDOR_RESOLVER_VERSION = "certscore-vendor-resolver-2026-08-27-sourcebuster-dsgvoaio-bst-dsgvo-cookie-matomo-facebook-page-plugin-vwo-consent-state-bing-uet-storage-adobe-consent-fullstory-case-liveperson-storage-sitecore-analytics-uid-owner-braze-snowplow-storage";
 
 export type VendorResolverEvidenceType =
   | "request"
@@ -364,6 +364,18 @@ const rules: VendorRule[] = [
   {
     entity: "Adobe Inc.",
     vendor: "Adobe",
+    product: "Adobe Experience Cloud consent propagation",
+    purpose: "consent_management",
+    regulatoryRelevance: ["consent", "consent_management"],
+    confidence: 0.99,
+    hostPatterns: [/\.demdex\.net$/i],
+    urlPatterns: [/\/ee\/v1\/privacy\/set-consent\b/i],
+    requireUrlPatternMatch: true,
+    basisLabel: "adobe_experience_cloud_consent_propagation_endpoint",
+  },
+  {
+    entity: "Adobe Inc.",
+    vendor: "Adobe",
     product: "Adobe Fonts / Typekit",
     purpose: "infrastructure",
     regulatoryRelevance: ["cdn", "font_delivery", "third_party_runtime"],
@@ -439,6 +451,7 @@ const rules: VendorRule[] = [
     hostPatterns: [/\.demdex\.net$/i],
     urlPatterns: [/\/(?:id(?:\/rd)?|event)\b/i, /\/ibs:/i, /\/demconf\.jpg\b/i],
     cookiePatterns: [/^demdex$/i],
+    requireUrlPatternMatch: true,
     basisLabel: "adobe_demdex_audience_manager_endpoint_or_cookie",
   },
   {
@@ -524,12 +537,24 @@ const rules: VendorRule[] = [
     purpose: "advertising",
     regulatoryRelevance: ["consent", "advertising", "cross_site_tracking"],
     confidence: 0.94,
-    hostPatterns: [/\.criteo\.com$/i, /\.criteo\.net$/i],
+    hostPatterns: [/(?:^|\.)criteo\.com$/i, /(?:^|\.)criteo\.net$/i],
     urlPatterns: [/\/r\/d/i, /\/dis\/dis\.aspx/i],
-    cookiePatterns: [/^uid$/i, /^cto_bundle$/i],
+    cookiePatterns: [/^cto_bundle$/i],
     suppressCookieMatchedHostname: true,
     storageKeyPatterns: [/criteo/i],
     basisLabel: "criteo_endpoint_or_cookie",
+  },
+  {
+    entity: "Criteo SA",
+    vendor: "Criteo",
+    product: "Criteo",
+    purpose: "advertising",
+    regulatoryRelevance: ["consent", "advertising", "cross_site_tracking"],
+    confidence: 0.99,
+    hostPatterns: [/(?:^|\.)criteo\.com$/i, /(?:^|\.)criteo\.net$/i],
+    cookiePatterns: [/^uid$/i],
+    requireHostPatternForCookieMatch: true,
+    basisLabel: "criteo_owned_uid_cookie",
   },
   {
     entity: "AdRiver LLC",
@@ -1729,7 +1754,7 @@ const rules: VendorRule[] = [
     hostPatterns: [/\.fullstory\.com$/i, /^rs\.fullstory\.com$/i, /^edge\.fullstory\.com$/i, /\.fullstoryedge\.com$/i],
     urlPatterns: [/\/s\/fs\.js\b/i, /\/rec\//i, /\/s\/settings\//i],
     cookiePatterns: [/^fs_uid$/i],
-    storageKeyPatterns: [/^fs_uid$/i, /^FS_/i],
+    storageKeyPatterns: [/^fs_uid$/i, /^FS_/],
     basisLabel: "fullstory_script_endpoint_or_cookie",
   },
   {
@@ -1955,6 +1980,16 @@ const rules: VendorRule[] = [
   {
     entity: "Wingify Software Pvt. Ltd.",
     vendor: "VWO",
+    product: "VWO consent state",
+    purpose: "consent_management",
+    regulatoryRelevance: ["consent", "consent_management"],
+    confidence: 0.99,
+    cookiePatterns: [/^_vwo_consent$/i],
+    basisLabel: "vwo_exact_consent_state_cookie",
+  },
+  {
+    entity: "Wingify Software Pvt. Ltd.",
+    vendor: "VWO",
     product: "Visual Website Optimizer",
     purpose: "analytics",
     regulatoryRelevance: ["consent", "analytics", "experimentation", "ab_testing", "personalization"],
@@ -1999,8 +2034,10 @@ const rules: VendorRule[] = [
     purpose: "analytics",
     regulatoryRelevance: ["consent", "analytics", "audience_measurement", "advertising_measurement", "market_research"],
     confidence: 0.92,
-    hostPatterns: [/\.scorecardresearch\.com$/i],
+    hostPatterns: [/(?:^|\.)scorecardresearch\.com$/i],
     urlPatterns: [/\/b\?/i, /\/p\?/i],
+    cookiePatterns: [/^UID$/i],
+    requireHostPatternForCookieMatch: true,
     basisLabel: "scorecardresearch_audience_measurement_endpoint",
   },
   {
@@ -2339,7 +2376,19 @@ const rules: VendorRule[] = [
     confidence: 0.91,
     hostPatterns: [/\.appboycdn\.com$/i, /\.braze\.com$/i],
     urlPatterns: [/\/(?:api|sdk|track|events)\b/i],
+    storageKeyPatterns: [/^ab\.storage\.[A-Za-z0-9_.-]+$/],
     basisLabel: "braze_marketing_automation_endpoint",
+  },
+  {
+    entity: "Snowplow Analytics Ltd",
+    vendor: "Snowplow",
+    product: "Snowplow Analytics",
+    purpose: "analytics",
+    regulatoryRelevance: ["consent", "analytics", "event_tracking", "first_party_runtime"],
+    confidence: 0.99,
+    cookiePatterns: [/^_sp_(?:id|ses)\.[A-Za-z0-9]+$/],
+    storageKeyPatterns: [/^snowplowOutQueue_[A-Za-z0-9_.-]+$/],
+    basisLabel: "snowplow_browser_storage",
   },
   {
     entity: "Contentsquare SA",
@@ -2373,6 +2422,8 @@ const rules: VendorRule[] = [
     confidence: 0.91,
     hostPatterns: [/^bat\.bing\.com$/i],
     urlPatterns: [/\/(?:action|p|bat)\b/i],
+    cookiePatterns: [/^_uetsid$/i, /^_uetvid$/i],
+    storageKeyPatterns: [/^_uetsid$/i, /^_uetvid$/i],
     basisLabel: "microsoft_bing_uet_endpoint",
   },
   {
@@ -3389,8 +3440,20 @@ const rules: VendorRule[] = [
     confidence: 0.97,
     hostPatterns: [/^lptag\.liveperson\.net$/i, /^lpcdn\.lpsnmedia\.net$/i],
     urlPatterns: [/^https:\/\/lptag\.liveperson\.net\/(?:tag\/tag\.js|lptag\/api\/account\/[A-Za-z0-9_-]+\/configuration\/applications)(?:\?|$)/i, /^https:\/\/lpcdn\.lpsnmedia\.net\/le_(?:secure_storage|unified_window)\/[^?#]+(?:\?|$)/i],
+    cookiePatterns: [/^LPVID$/i, /^LPSID-[A-Za-z0-9_-]+$/i, /^LPCID-[A-Za-z0-9_-]+$/i, /^LPCKEY-[A-Za-z0-9_-]+$/i],
+    storageKeyPatterns: [/^LPVID$/i, /^LPSID-[A-Za-z0-9_-]+$/i, /^lpLastVisit-[A-Za-z0-9_-]+$/i, /^lpTabId$/i, /^lpPmCalleeDfs$/i],
     requireUrlPatternMatch: true,
     basisLabel: "liveperson_web_messaging_runtime",
+  },
+  {
+    entity: "Sitecore Corporation A/S",
+    vendor: "Sitecore",
+    product: "Sitecore Experience Analytics",
+    purpose: "analytics",
+    regulatoryRelevance: ["consent", "analytics", "visitor_tracking", "first_party_runtime"],
+    confidence: 1,
+    cookiePatterns: [/^SC_ANALYTICS_GLOBAL_COOKIE$/],
+    basisLabel: "sitecore_experience_analytics_cookie",
   },
   {
     entity: "SolarWinds Worldwide, LLC",

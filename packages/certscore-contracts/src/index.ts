@@ -3,7 +3,10 @@ import {
   SUPPORTED_GDPR_TRANSPARENCY_LOCALES,
   SUPPORTED_PRIVACY_EVIDENCE_LOCALES,
 } from "./supported-languages";
-import { postRefusalEvidencePacketSchema } from "./post-refusal-observation";
+import {
+  postRefusalEvidencePacketSchema,
+  postRefusalLaneOutcomeSchema,
+} from "./post-refusal-observation";
 export * from "./consent-control-label-classifier";
 export * from "./consent-preference-category-classifier";
 export * from "./consent-language-classifier";
@@ -3071,6 +3074,7 @@ export const canonicalEvidenceBundleSchema = z.object({
   modulesRun: z.array(scanModuleRunSchema),
   scanLaneRuns: z.array(scanLaneRunSchema).max(8).default([]),
   postRefusalEvidence: postRefusalEvidencePacketSchema.optional(),
+  postRefusalLaneOutcome: postRefusalLaneOutcomeSchema.optional(),
   runtimeTimeline: z.array(runtimeEvidenceEventSchema),
   networkEvents: z.array(networkEventSchema),
   networkResponseEvents: z.array(networkResponseEventSchema).default([]),

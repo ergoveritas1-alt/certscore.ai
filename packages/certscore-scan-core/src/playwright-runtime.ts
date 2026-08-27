@@ -2,6 +2,14 @@ import type { BrowserContextOptions, LaunchOptions } from "playwright";
 
 const DEFAULT_VIEWPORT = { width: 1366, height: 900 } as const;
 
+export const US_WEST_LAMBDA_CHROMIUM_CONTEXT_ENV = Object.freeze({
+  CERTSCORE_V2_DAG_LAMBDA_CHROMIUM_ACCEPT_LANGUAGE: "en-US,en;q=0.9",
+  CERTSCORE_V2_DAG_LAMBDA_CHROMIUM_LOCALE: "en-US",
+  CERTSCORE_V2_DAG_LAMBDA_CHROMIUM_TIMEZONE_ID: "America/Los_Angeles",
+  CERTSCORE_V2_DAG_LAMBDA_CHROMIUM_USER_AGENT:
+    "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/150.0.0.0 Safari/537.36",
+} as const);
+
 export function isAwsLambdaRuntime(env: NodeJS.ProcessEnv = process.env) {
   return Boolean(env.AWS_LAMBDA_FUNCTION_NAME || env.AWS_LAMBDA_RUNTIME_API);
 }
@@ -111,4 +119,11 @@ export function chromiumLaunchOptions(input: { headless: boolean; env?: NodeJS.P
     ...(proxy ? { proxy } : {}),
     headless: input.headless
   };
+}
+
+export function isLocalHeadedFallbackEnabled(env: NodeJS.ProcessEnv = process.env) {
+  const explicit = env.CERTSCORE_V2_HEADED_FALLBACK?.trim();
+  if (explicit === "0" || explicit === "false") return false;
+  if (explicit === "1" || explicit === "true") return true;
+  return env.NODE_ENV !== "production" && process.platform === "darwin" && !env.CI;
 }

@@ -1,31 +1,29 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { postRefusalEvidencePacketSchema } from "@certscore/contracts";
-import { buildPostRefusalSupplementEnvelope } from "./post-refusal-supplement.js";
+import { buildPostRefusalReconciliationEnvelope } from "./post-refusal-reconciliation.js";
 
-test("confirmed late evidence creates a hash-bound next-generation candidate", () => {
+test("confirmed evidence creates a hash-bound canonical reconciliation record", () => {
   const packet = confirmedPacket(1);
-  const envelope = buildPostRefusalSupplementEnvelope({
+  const envelope = buildPostRefusalReconciliationEnvelope({
     parentScanId: "parent-scan",
     baseEvidence: { scanId: "parent-scan", evidence: ["base"] },
     packet,
     publicationDecision: {
-      mode: "late_generation",
+      mode: "single_reconciliation",
       rejectReadyDeltaMs: 8_000,
-      addedInitialReportWaitMs: 0,
-      reason: "reject_packet_not_ready_without_delaying_primary",
+      addedInitialReportWaitMs: 8_000,
+      reason: "reject_packet_extended_canonical_barrier",
     },
-    baseGeneration: 3,
   });
 
   assert.equal(envelope.status, "confirmed_observation");
-  assert.equal(envelope.disposition, "late_generation_candidate");
-  assert.deepEqual(envelope.reportGeneration, { baseGeneration: 3, candidateGeneration: 4 });
+  assert.equal(envelope.disposition, "joined_at_canonical_barrier");
   assert.match(envelope.baseEvidenceSha256, /^[a-f0-9]{64}$/);
   assert.match(envelope.postRefusalPacketSha256, /^[a-f0-9]{64}$/);
 });
 
-test("unconfirmed evidence stays neutral and cannot request report projection", () => {
+test("unconfirmed evidence stays neutral and is not joined", () => {
   const packet = confirmedPacket(0);
   const unconfirmed = postRefusalEvidencePacketSchema.parse({
     ...packet,
@@ -37,12 +35,12 @@ test("unconfirmed evidence stays neutral and cannot request report projection", 
       witnesses: [],
     },
   });
-  const envelope = buildPostRefusalSupplementEnvelope({
+  const envelope = buildPostRefusalReconciliationEnvelope({
     parentScanId: "parent-scan",
     baseEvidence: { scanId: "parent-scan" },
     packet: unconfirmed,
     publicationDecision: {
-      mode: "initial_report",
+      mode: "single_reconciliation",
       rejectReadyDeltaMs: -100,
       addedInitialReportWaitMs: 0,
       reason: "reject_packet_ready_before_primary",
@@ -50,11 +48,40 @@ test("unconfirmed evidence stays neutral and cannot request report projection", 
   });
 
   assert.equal(envelope.status, "unconfirmed");
-  assert.equal(envelope.disposition, "neutral_no_projection");
-  assert.equal(envelope.reportGeneration, undefined);
+  assert.equal(envelope.disposition, "not_joined");
+});
+
+test("confirmed evidence outside the canonical barrier remains unjoined", () => {
+  const envelope = buildPostRefusalReconciliationEnvelope({
+    parentScanId: "parent-scan",
+    baseEvidence: { scanId: "parent-scan" },
+    packet: confirmedPacket(1),
+    publicationDecision: {
+      mode: "single_reconciliation_limited",
+      rejectReadyDeltaMs: 8_000,
+      addedInitialReportWaitMs: 6_000,
+      reason: "reject_path_exceeded_canonical_barrier",
+    },
+  });
+
+  assert.equal(envelope.disposition, "not_joined");
+  assert.ok(envelope.limitations.includes("canonical_join_deadline_exceeded"));
 });
 
 function confirmedPacket(observationCount: number) {
+  const request = {
+    requestId: "request-1",
+    sanitizedUrl: "https://analytics.example.test/collect",
+    hostname: "analytics.example.test",
+    resourceType: "fetch",
+    startedAtMs: 30,
+    completedAtMs: 40,
+    inFlightAtRefusalRegistration: false,
+    msOffsetFromRefusal: 10,
+    vendor: "Example Analytics",
+    purpose: "analytics" as const,
+    nonEssential: true,
+  };
   return postRefusalEvidencePacketSchema.parse({
     artifactVersion: "certscore.post_refusal_evidence.v1",
     artifactOnly: true,
@@ -96,11 +123,13 @@ function confirmedPacket(observationCount: number) {
       readyAtMs: 267,
     },
     network: {
-      requests: [],
-      postRefusalNonEssentialRequests: [],
+      requests: observationCount > 0 ? [request] : [],
+      postRefusalNonEssentialRequests: observationCount > 0 ? [request] : [],
       activeRequestIdsAtRefusalRegistration: [],
     },
     storage: {
+      preActionCapturedAtMs: 5,
+      postActionCapturedAtMs: 25,
       preAction: [],
       postAction: [],
       writesAfterRefusal: [],
@@ -112,6 +141,7 @@ function confirmedPacket(observationCount: number) {
           observedAtMs: 30,
           requestId: "request-1",
           msOffsetFromRefusal: 10,
+          vendor: "Example Analytics",
           evidenceKeys: ["confirmed_refusal_registration"],
         }]
       : [],

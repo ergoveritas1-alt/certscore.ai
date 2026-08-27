@@ -17,6 +17,12 @@ export type PostRefusalInteractionAuthorization =
         hostname: string;
         pathPrefix: string;
       }>;
+    }
+  | {
+      authorizationId: "sharded_scan_exact_target.v1";
+      kind: "scan_target";
+      normalizedUrl: string;
+      scanId: string;
     };
 
 export type PostRefusalTargetAuthorizationDecision = {
@@ -27,10 +33,13 @@ export type PostRefusalTargetAuthorizationDecision = {
     | "authorized_loopback"
     | "authorized_owned_canary"
     | "authorized_explicit_allowlist"
+    | "authorized_scan_target"
     | "invalid_target_url"
     | "loopback_authorization_requires_loopback_target"
     | "owned_canary_target_mismatch"
-    | "explicit_allowlist_target_mismatch";
+    | "explicit_allowlist_target_mismatch"
+    | "scan_target_mismatch"
+    | "scan_target_scan_identity_mismatch";
 };
 
 const OWNED_POST_REFUSAL_CANARY_TARGETS = [
@@ -78,6 +87,7 @@ export function isLoopbackPostRefusalTarget(targetUrl: string): boolean {
 export function authorizePostRefusalTarget(
   targetUrl: string,
   authorization: PostRefusalInteractionAuthorization,
+  scanId?: string,
 ): PostRefusalTargetAuthorizationDecision {
   let target: URL;
   try {
@@ -98,7 +108,9 @@ export function authorizePostRefusalTarget(
       false,
       authorization.kind === "owned_canary"
         ? "owned_canary_target_mismatch"
-        : "explicit_allowlist_target_mismatch",
+        : authorization.kind === "scan_target"
+          ? "scan_target_mismatch"
+          : "explicit_allowlist_target_mismatch",
     );
   }
 
@@ -108,6 +120,20 @@ export function authorizePostRefusalTarget(
       authorization,
       authorized,
       authorized ? "authorized_owned_canary" : "owned_canary_target_mismatch",
+    );
+  }
+
+  if (authorization.kind === "scan_target") {
+    if (!scanId || scanId !== authorization.scanId) {
+      return decision(authorization, false, "scan_target_scan_identity_mismatch");
+    }
+    const authorizedTarget = normalizeExactTargetUrl(authorization.normalizedUrl);
+    const requestedTarget = normalizeExactTargetUrl(targetUrl);
+    const authorized = authorizedTarget !== undefined && requestedTarget === authorizedTarget;
+    return decision(
+      authorization,
+      authorized,
+      authorized ? "authorized_scan_target" : "scan_target_mismatch",
     );
   }
 
@@ -124,6 +150,18 @@ export function authorizePostRefusalTarget(
   );
 }
 
+function normalizeExactTargetUrl(value: string): string | undefined {
+  try {
+    const parsed = new URL(value);
+    if (parsed.protocol !== "https:" || parsed.username || parsed.password || parsed.port || parsed.hash) {
+      return undefined;
+    }
+    return parsed.toString();
+  } catch {
+    return undefined;
+  }
+}
+
 function targetMatches(
   target: URL,
   authorizedTargets: readonly { hostname: string; pathPrefix: string }[],
@@ -131,14 +169,18 @@ function targetMatches(
   const hostname = target.hostname.toLowerCase();
   return authorizedTargets.some((candidate) =>
     hostname === candidate.hostname &&
-    target.pathname.startsWith(candidate.pathPrefix)
+    (
+      candidate.pathPrefix === "/" ||
+      target.pathname === candidate.pathPrefix ||
+      target.pathname.startsWith(`${candidate.pathPrefix}/`)
+    )
   );
 }
 
 function normalizePathPrefix(value: string): string | undefined {
   const trimmed = value.trim();
   if (!trimmed.startsWith("/") || trimmed.includes("?") || trimmed.includes("#")) return undefined;
-  return trimmed.endsWith("/") ? trimmed : `${trimmed}/`;
+  return trimmed === "/" ? trimmed : trimmed.replace(/\/+$/, "");
 }
 
 function decision(

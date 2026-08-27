@@ -109,7 +109,10 @@ export const KNOWN_CMP_REGISTRY: KnownCmpDefinition[] = [
     evidenceTreatment: "cmp_infrastructure",
     globalNames: ["OneTrust", "Optanon", "OptanonWrapper"],
     reopenControlHints: ["cookie settings", "privacy choices", "do not sell or share", "onetrust"],
-    rejectControlSelectors: ["#onetrust-reject-all-handler"],
+    rejectControlSelectors: [
+      "#onetrust-reject-all-handler",
+      "#onetrust-banner-sdk.ot-close-btn-link button.onetrust-close-btn-handler.banner-close-button",
+    ],
     role: "consent management platform",
     standards: ["tcf", "gpp", "usp", "gpc", "google_consent_mode"],
     storageKeys: ["OptanonConsent", "OptanonAlertBoxClosed"],
@@ -137,7 +140,10 @@ export const KNOWN_CMP_REGISTRY: KnownCmpDefinition[] = [
     evidenceTreatment: "cmp_infrastructure",
     globalNames: ["UC_UI", "UC_UI_SUPPRESS_CMP_DISPLAY", "usercentrics"],
     reopenControlHints: ["usercentrics", "privacy settings", "cookie settings"],
-    rejectControlSelectors: ['button[data-testid="uc-deny-all-button"]'],
+    rejectControlSelectors: [
+      'button[data-testid="uc-deny-all-button"]',
+      "#uc-cmp-footer #deny",
+    ],
     role: "consent management platform",
     standards: ["tcf", "gpp", "google_consent_mode"],
     storageKeys: ["uc_settings", "ucString", "uc_user_interaction"],
@@ -166,7 +172,10 @@ export const KNOWN_CMP_REGISTRY: KnownCmpDefinition[] = [
     evidenceTreatment: "cmp_infrastructure",
     globalNames: ["Cookiebot", "CookieConsent"],
     reopenControlHints: ["cookiebot", "cookie declaration", "change your consent"],
-    rejectControlSelectors: ["#CybotCookiebotDialogBodyButtonDecline"],
+    rejectControlSelectors: [
+      "#CybotCookiebotDialogBodyButtonDecline",
+      "#CybotCookiebotDialogBodyLevelButtonLevelOptinDeclineAll",
+    ],
     role: "consent management platform",
     standards: ["tcf", "gpp", "google_consent_mode"],
     urlPatterns: [/cookiebot/i]

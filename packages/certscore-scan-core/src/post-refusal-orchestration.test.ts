@@ -40,40 +40,52 @@ test("treats equal readiness timestamps as ready before the compared lane", () =
   assert.equal(comparison.primaryReadyAtMs, 5_000);
 });
 
-test("zero-wait join includes an already-ready reject packet", () => {
+test("single reconciliation adds no wait when reject evidence is already ready", () => {
   assert.deepEqual(decidePostRefusalReportPublication({
     primaryReadyAtMs: 10_000,
     rejectReadyAtMs: 9_500,
   }), {
-    mode: "initial_report",
+    mode: "single_reconciliation",
     rejectReadyDeltaMs: -500,
     addedInitialReportWaitMs: 0,
     reason: "reject_packet_ready_before_primary",
   });
 });
 
-test("zero-wait join publishes a late generation instead of slowing primary", () => {
+test("single reconciliation waits when reject evidence finishes after the passive lanes", () => {
   assert.deepEqual(decidePostRefusalReportPublication({
     primaryReadyAtMs: 10_000,
     rejectReadyAtMs: 10_001,
   }), {
-    mode: "late_generation",
+    mode: "single_reconciliation",
     rejectReadyDeltaMs: 1,
-    addedInitialReportWaitMs: 0,
-    reason: "reject_packet_not_ready_without_delaying_primary",
+    addedInitialReportWaitMs: 1,
+    reason: "reject_packet_extended_canonical_barrier",
   });
 });
 
-test("bounded join reports its exact added initial latency", () => {
+test("legacy join-window input does not reintroduce a second publication branch", () => {
   assert.deepEqual(decidePostRefusalReportPublication({
     primaryReadyAtMs: 10_000,
     rejectReadyAtMs: 10_350,
     approvedJoinWaitMs: 500,
   }), {
-    mode: "initial_report_with_bounded_wait",
+    mode: "single_reconciliation",
     rejectReadyDeltaMs: 350,
     addedInitialReportWaitMs: 350,
-    reason: "reject_packet_ready_inside_approved_join_window",
+    reason: "reject_packet_extended_canonical_barrier",
+  });
+});
+
+test("single reconciliation caps the reject tail at six seconds and remains one publication", () => {
+  assert.deepEqual(decidePostRefusalReportPublication({
+    primaryReadyAtMs: 10_000,
+    rejectReadyAtMs: 18_500,
+  }), {
+    mode: "single_reconciliation_limited",
+    rejectReadyDeltaMs: 8_500,
+    addedInitialReportWaitMs: 6_000,
+    reason: "reject_path_exceeded_canonical_barrier",
   });
 });
 

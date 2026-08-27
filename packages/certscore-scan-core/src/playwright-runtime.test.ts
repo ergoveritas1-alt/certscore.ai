@@ -1,14 +1,27 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import {
+  US_WEST_LAMBDA_CHROMIUM_CONTEXT_ENV,
   chromiumContextOptions,
   chromiumExecutablePath,
   chromiumLaunchArgs,
   chromiumLaunchOptions,
   chromiumProxyOptions,
   isAwsLambdaRuntime,
+  isLocalHeadedFallbackEnabled,
   lambdaChromiumSingleProcessEnabled
 } from "./playwright-runtime";
+
+test("us-west Lambda browser context defaults are reusable by localhost calibration", () => {
+  assert.deepEqual(chromiumContextOptions(US_WEST_LAMBDA_CHROMIUM_CONTEXT_ENV), {
+    ignoreHTTPSErrors: true,
+    viewport: { width: 1366, height: 900 },
+    userAgent: "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/150.0.0.0 Safari/537.36",
+    locale: "en-US",
+    timezoneId: "America/Los_Angeles",
+    extraHTTPHeaders: { "Accept-Language": "en-US,en;q=0.9" },
+  });
+});
 
 test("detects AWS Lambda runtime from bounded environment keys", () => {
   assert.equal(isAwsLambdaRuntime({}), false);
@@ -48,6 +61,11 @@ test("builds Chromium launch options without changing headless intent", () => {
     args: ["--no-sandbox", "--disable-dev-shm-usage"],
     headless: true
   });
+});
+
+test("local headed fallback can be explicitly enabled or disabled", () => {
+  assert.equal(isLocalHeadedFallbackEnabled({ CERTSCORE_V2_HEADED_FALLBACK: "1" }), true);
+  assert.equal(isLocalHeadedFallbackEnabled({ CERTSCORE_V2_HEADED_FALLBACK: "false" }), false);
 });
 
 test("builds default Chromium context options for scanner captures", () => {

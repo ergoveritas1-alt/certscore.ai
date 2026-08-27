@@ -1,6 +1,9 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { buildPostRefusalCmpActionRecipe } from "./post-refusal-cmp-recipes.js";
+import {
+  buildCanonicalPostRefusalActionRecipes,
+  buildPostRefusalCmpActionRecipe,
+} from "./post-refusal-cmp-recipes.js";
 
 test("builds deterministic reject recipes from the canonical CMP registry", () => {
   const oneTrust = buildPostRefusalCmpActionRecipe({
@@ -25,10 +28,19 @@ test("builds deterministic reject recipes from the canonical CMP registry", () =
     },
   });
 
-  assert.equal(oneTrust?.controlSelector, "#onetrust-reject-all-handler");
+  assert.equal(
+    oneTrust?.controlSelector,
+    "#onetrust-reject-all-handler, #onetrust-banner-sdk.ot-close-btn-link button.onetrust-close-btn-handler.banner-close-button",
+  );
   assert.equal(oneTrust?.resolverMethod, "tcf_api_cmp_registry_recipe");
-  assert.equal(cookiebot?.controlSelector, "#CybotCookiebotDialogBodyButtonDecline");
-  assert.equal(usercentrics?.controlSelector, 'button[data-testid="uc-deny-all-button"]');
+  assert.equal(
+    cookiebot?.controlSelector,
+    "#CybotCookiebotDialogBodyButtonDecline, #CybotCookiebotDialogBodyLevelButtonLevelOptinDeclineAll",
+  );
+  assert.equal(
+    usercentrics?.controlSelector,
+    'button[data-testid="uc-deny-all-button"], #uc-cmp-footer #deny',
+  );
 });
 
 test("unknown CMPs fail closed without a recipe", () => {
@@ -36,4 +48,18 @@ test("unknown CMPs fail closed without a recipe", () => {
     cmpCanonicalName: "Unknown CMP",
     confirmation: { kind: "tcf_purposes_denied" },
   }), undefined);
+});
+
+test("canonical Usercentrics confirmation requires an exact uc_settings transition", () => {
+  const usercentrics = buildCanonicalPostRefusalActionRecipes().find((recipe) =>
+    recipe.cmpId === "Usercentrics"
+  );
+
+  assert.ok(usercentrics);
+  assert.equal(usercentrics.recipeId, "canonical-cmp:Usercentrics:reject:v4");
+  assert.deepEqual(usercentrics.confirmation, {
+    kind: "tcf_purposes_denied_or_cmp_storage_keys_changed",
+    storageType: "local_storage",
+    keys: ["uc_settings", "ucString"],
+  });
 });

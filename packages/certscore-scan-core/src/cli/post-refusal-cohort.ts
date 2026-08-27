@@ -7,12 +7,17 @@ import {
   postRefusalLabRecipe,
   type PostRefusalLabCase,
 } from "../post-refusal-lab-cases.js";
+import {
+  buildCanonicalPostRefusalActionRecipes,
+  CANONICAL_POST_REFUSAL_RECIPE_SET_ID,
+} from "../post-refusal-cmp-recipes.js";
 import { runPostRefusalObserver } from "../post-refusal-observer.js";
 import {
   comparePostRefusalLaneReadiness,
   decidePostRefusalReportPublication,
+  POST_REFUSAL_CANONICAL_BARRIER_MAX_TAIL_WAIT_MS,
 } from "../post-refusal-orchestration.js";
-import { buildPostRefusalSupplementEnvelope } from "../post-refusal-supplement.js";
+import { buildPostRefusalReconciliationEnvelope } from "../post-refusal-reconciliation.js";
 import {
   authorizePostRefusalTarget,
   ERGOVERITAS_POST_REFUSAL_CANARY_AUTHORIZATION_ID,
@@ -64,6 +69,7 @@ async function main(): Promise<void> {
       for (const fixture of args.fixtures) {
         const run = await runCase({
           actionSearchMs: args.actionSearchMs,
+          canonicalCmpRegistry: args.canonicalCmpRegistry,
           dispatchDelayMs: args.dispatchDelayMs,
           fixture,
           joinWaitMs: args.joinWaitMs,
@@ -111,6 +117,9 @@ async function main(): Promise<void> {
       dispatchDelayMs: args.dispatchDelayMs,
       observationWindowMs: args.observationMs,
       actionSearchTimeoutMs: args.actionSearchMs,
+      rejectResolverMode: args.canonicalCmpRegistry
+        ? CANONICAL_POST_REFUSAL_RECIPE_SET_ID
+        : "single_explicit_recipe",
       approvedJoinWaitMs: args.joinWaitMs,
       policyProvider: args.policyProvider,
       targetUrl: args.targetUrl ?? null,
@@ -135,6 +144,7 @@ async function main(): Promise<void> {
 
 async function runCase(input: {
   actionSearchMs: number;
+  canonicalCmpRegistry: boolean;
   dispatchDelayMs: number;
   fixture: PostRefusalLabCase;
   interactionAuthorization: PostRefusalInteractionAuthorization;
@@ -179,11 +189,23 @@ async function runCase(input: {
   const consentPromise = runLane("consent_proof");
   const runtimePromise = runLane("runtime_evidence");
   const policyPromise = runLane("policy_evidence");
+  const recipeCandidates = input.canonicalCmpRegistry
+    ? buildCanonicalPostRefusalActionRecipes()
+    : undefined;
+  if (input.canonicalCmpRegistry && !recipeCandidates?.length) {
+    throw new Error("Canonical CMP registry did not produce any reject recipes.");
+  }
   const rejectPromise = runPostRefusalObserver({
     scanId: `post-refusal-${input.fixture}-${input.repetition}`,
     parentScanId: `three-lane-${input.fixture}-${input.repetition}`,
     url: input.targetUrl,
-    recipe: postRefusalLabRecipe(input.fixture),
+    recipe: recipeCandidates?.[0] ?? postRefusalLabRecipe(input.fixture),
+    ...(recipeCandidates
+      ? {
+          recipeCandidates,
+          recipeSetId: CANONICAL_POST_REFUSAL_RECIPE_SET_ID,
+        }
+      : {}),
     scanStartedAtMs,
     dispatchDelayMs: input.dispatchDelayMs,
     observationWindowMs: input.observationMs,
@@ -209,30 +231,52 @@ async function runCase(input: {
     primaryReadyAtMs,
     rejectReadyAtMs: rejectPacket.timing.readyAtMs,
     approvedJoinWaitMs: input.joinWaitMs,
+    maxTailWaitMs: POST_REFUSAL_CANONICAL_BARRIER_MAX_TAIL_WAIT_MS,
   });
-  const supplement = buildPostRefusalSupplementEnvelope({
+  const reconciliation = buildPostRefusalReconciliationEnvelope({
     parentScanId: `three-lane-${input.fixture}-${input.repetition}`,
     baseEvidence: { consentProof, runtimeEvidence, policyEvidence },
     packet: rejectPacket,
     publicationDecision,
   });
   await writeFile(
-    path.join(input.outDir, "PostRefusalSupplementEnvelope.json"),
-    `${JSON.stringify(supplement, null, 2)}\n`,
+    path.join(input.outDir, "PostRefusalReconciliationEnvelope.json"),
+    `${JSON.stringify(reconciliation, null, 2)}\n`,
     "utf8",
   );
+  const scanNoGoAssessment = consentProof.scan_no_go_assessment ??
+    runtimeEvidence.scan_no_go_assessment ??
+    policyEvidence.scan_no_go_assessment;
+  const completedAtMs = Date.now();
   return {
+    targetUrl: input.targetUrl,
     fixture: input.fixture,
     repetition: input.repetition,
+    startedAt: new Date(scanStartedAtMs).toISOString(),
+    completedAt: new Date(completedAtMs).toISOString(),
+    scannerRuntimeStarted: true,
+    status: "completed" as const,
+    runtime: {
+      noGoCandidate: scanNoGoAssessment?.decision === "no_go",
+      noGoReasons: scanNoGoAssessment?.decision === "no_go"
+        ? scanNoGoAssessment.reasonCodes
+        : [],
+    },
     laneReadyAtMs,
     laneTimingComparison,
     primaryReadyAtMs,
     rejectReadyAtMs: rejectPacket.timing.readyAtMs,
+    resolverFound: rejectPacket.resolver.found,
+    resolverMethod: rejectPacket.resolver.method,
+    resolverRecipeId: rejectPacket.resolver.recipeId,
+    resolverCmpId: rejectPacket.resolver.cmpId ?? null,
+    resolverReason: rejectPacket.resolver.reason ?? null,
     refusalRegistrationStatus: rejectPacket.refusalRegistration.status,
+    refusalRegistrationReason: rejectPacket.refusalRegistration.reason ?? null,
     observationCount: rejectPacket.observations.length,
     observationExitReason: rejectPacket.timing.observationExitReason ?? null,
     publicationDecision,
-    supplementDisposition: supplement.disposition,
+    reconciliationDisposition: reconciliation.disposition,
   };
 }
 
@@ -243,12 +287,20 @@ function summarize(runs: Array<Awaited<ReturnType<typeof runCase>>>) {
     .sort((a, b) => a - b);
   return {
     runCount: runs.length,
+    resolverFoundCount: runs.filter((run) => run.resolverFound).length,
+    confirmedRefusalCount: runs.filter((run) => run.refusalRegistrationStatus === "confirmed").length,
+    neutralOrUnconfirmedCount: runs.filter((run) => run.refusalRegistrationStatus !== "confirmed").length,
+    observationCount: runs.reduce((count, run) => count + run.observationCount, 0),
     rejectReadyBeforeConsentProofCount: runs.filter(
       (run) => run.laneTimingComparison.rejectReadyBeforeConsentProof,
     ).length,
     rejectReadyBeforePrimaryCount: runs.filter((run) => run.rejectReadyAtMs <= run.primaryReadyAtMs).length,
-    initialReportCount: runs.filter((run) => run.publicationDecision.mode !== "late_generation").length,
-    lateGenerationCount: runs.filter((run) => run.publicationDecision.mode === "late_generation").length,
+    singleReconciliationCount: runs.length,
+    rejectPathTimeoutCount: runs.filter(
+      (run) => run.publicationDecision.mode === "single_reconciliation_limited",
+    ).length,
+    initialReportCount: runs.length,
+    lateGenerationCount: 0,
     medianRejectReadyDeltaMs: median(deltas),
     minimumRejectReadyDeltaMs: deltas[0] ?? 0,
     maximumRejectReadyDeltaMs: deltas.at(-1) ?? 0,
@@ -269,6 +321,7 @@ function median(values: number[]): number {
 function parseArgs(argv: string[]) {
   const parsed: {
     actionSearchMs: number;
+    canonicalCmpRegistry: boolean;
     dispatchDelayMs: number;
     fixtures: PostRefusalLabCase[];
     joinWaitMs: number;
@@ -281,7 +334,8 @@ function parseArgs(argv: string[]) {
     targetUrl?: string;
   } = {
     actionSearchMs: 1_500,
-    dispatchDelayMs: 2_000,
+    canonicalCmpRegistry: false,
+    dispatchDelayMs: 500,
     fixtures: DEFAULT_CASES,
     joinWaitMs: 0,
     observationMs: 8_000,
@@ -292,7 +346,9 @@ function parseArgs(argv: string[]) {
   for (let index = 0; index < argv.length; index += 1) {
     const key = argv[index];
     const value = argv[index + 1];
-    if (key === "--fixtures" && value) {
+    if (key === "--canonical-cmp-registry") {
+      parsed.canonicalCmpRegistry = true;
+    } else if (key === "--fixtures" && value) {
       const fixtures = value.split(",").filter((item): item is PostRefusalLabCase =>
         item in POST_REFUSAL_LAB_CASES
       );
@@ -302,7 +358,7 @@ function parseArgs(argv: string[]) {
     } else if (key === "--repetitions" && value) {
       parsed.repetitions = numberArg(value, 1, 20);
       index += 1;
-    } else if (key === "--delay-ms" && value) {
+    } else if ((key === "--delay-ms" || key === "--dispatch-delay-ms") && value) {
       parsed.dispatchDelayMs = numberArg(value, 0, 10_000);
       index += 1;
     } else if (key === "--observation-ms" && value) {
@@ -328,13 +384,33 @@ function parseArgs(argv: string[]) {
     } else if (key === "--out" && value) {
       parsed.out = path.resolve(value);
       index += 1;
+    } else {
+      throw new Error(`Unknown or incomplete argument: ${key ?? "<missing>"}.`);
     }
   }
   if (parsed.targetUrl && parsed.fixtures.length !== 1) {
     throw new Error("--target-url requires exactly one --fixtures recipe selection.");
   }
+  if (parsed.fixtures[0] === "certscoreOwnedAnalytics") {
+    const target = parsed.targetUrl ? new URL(parsed.targetUrl) : null;
+    if (
+      !target ||
+      target.protocol !== "https:" ||
+      target.hostname !== "certscore.ai" ||
+      target.pathname !== "/" ||
+      target.search ||
+      target.hash
+    ) {
+      throw new Error(
+        "--fixtures certscoreOwnedAnalytics is restricted to the exact https://certscore.ai/ owned canary.",
+      );
+    }
+  }
   if (parsed.ownedErgoCanary && parsed.publicAllowlistId) {
     throw new Error("Choose either --owned-ergo-canary or --public-allowlist-id, not both.");
+  }
+  if (parsed.canonicalCmpRegistry && (!parsed.targetUrl || !parsed.publicAllowlistId)) {
+    throw new Error("--canonical-cmp-registry requires one explicitly allowlisted public --target-url.");
   }
   if (parsed.ownedErgoCanary && parsed.targetUrl) {
     const requiredRecipeCase = getOwnedPostRefusalCanaryRecipeCase(parsed.targetUrl);

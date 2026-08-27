@@ -17,6 +17,7 @@
     "post-refusal-lab": "node --import tsx ./src/cli/post-refusal-lab.ts",
     "post-refusal-fixtures": "node --import tsx ./src/cli/post-refusal-fixtures.ts",
     "post-refusal-cohort": "node --import tsx ./src/cli/post-refusal-cohort.ts",
+    "post-refusal-public-cohort": "node --import tsx ./src/cli/post-refusal-public-cohort.ts",
     "replay": "node --import tsx ./src/cli/replay.ts",
     "calibrate": "node --import tsx ./src/cli/calibrate.ts",
     "calibrate:no-go-corpus": "node --import tsx ./src/cli/calibrate-no-go-corpus.ts",

@@ -628,6 +628,26 @@ test("resolves the second production-discovered vendor wave", () => {
   }
 });
 
+test("resolves exact Bing UET cookie and local-storage identifiers through the canonical resolver", () => {
+  const observations = resolveVendorObservations([
+    { type: "cookie", cookieName: "_uetsid", hostname: "example.test" },
+    { type: "cookie", cookieName: "_uetvid", hostname: "example.test" },
+    { type: "cmp_runtime", storageKey: "_uetsid", hostname: "example.test" },
+    { type: "cmp_runtime", storageKey: "_uetvid", hostname: "example.test" },
+  ]);
+
+  assert.equal(observations.length, 1);
+  assert.ok(observations.every((item) =>
+    item.vendor === "Microsoft" &&
+    item.product === "Microsoft Advertising / Bing UET" &&
+    item.purpose === "advertising"
+  ));
+  assert.deepEqual(observations[0]?.matchedCookieNames, ["_uetsid", "_uetvid"]);
+  assert.equal(observations[0]?.matchSources.filter((source) =>
+    source.source === "storage_key"
+  ).length, 2);
+});
+
 test("keeps Amazon Publisher Services separate from generic Amazon Ads", () => {
   const observations = resolveVendorObservations([
     { type: "request", url: "https://c.aps.amazon-adsystem.com/aps/prebid" },
@@ -1345,6 +1365,23 @@ test("does not attribute Snowplow analytics cookies to Sourcepoint", () => {
   ]);
 
   assert.equal(observations.some((observation) => observation.vendor === "Sourcepoint"), false);
+  assertResolved(observations, "Snowplow", "Snowplow Analytics", "analytics");
+});
+
+test("resolves exact Braze and Snowplow browser-storage namespaces", () => {
+  const observations = resolveVendorObservations([
+    { type: "cmp_runtime", storageKey: "ab.storage.device.4657e56a-7825-4d18-b33a-274a0998d802", hostname: "www.vouchercodes.co.uk" },
+    { type: "cmp_runtime", storageKey: "snowplowOutQueue_vc-site", hostname: "www.vouchercodes.co.uk" },
+    { type: "cmp_runtime", storageKey: "ab.storage", hostname: "www.vouchercodes.co.uk" },
+  ]);
+
+  assertResolved(observations, "Braze", "Braze", "analytics");
+  assertResolved(observations, "Snowplow", "Snowplow Analytics", "analytics");
+  assert.equal(
+    resolveVendorObservations([{ type: "cmp_runtime", storageKey: "ab.storage", hostname: "www.vouchercodes.co.uk" }])
+      .some((item) => item.vendor === "Braze"),
+    false,
+  );
 });
 
 test("resolves session replay libraries by product-specific evidence", () => {
@@ -1365,6 +1402,62 @@ test("resolves session replay libraries by product-specific evidence", () => {
   const hotjar = observations.find((item) => item.product === "Hotjar");
   assert.ok(hotjar);
   assert.equal(hotjar.matchedHostnames.includes("static.hotjar.com"), true);
+});
+
+test("does not treat lowercase site-local fs UI state as FullStory storage", () => {
+  const observations = resolveVendorObservations([
+    {
+      type: "cmp_runtime",
+      storageKey: "fs_closing_native_notifications_toast_session_count",
+      hostname: "www.flashscore.pt",
+    },
+    {
+      type: "cmp_runtime",
+      storageKey: "FS_PAGE_VISIBILITY",
+      hostname: "example.test",
+    },
+  ]);
+
+  assert.equal(observations.some((item) => item.matchedHostnames.includes("www.flashscore.pt")), false);
+  assertResolved(observations, "FullStory", "FullStory", "session_replay");
+});
+
+test("resolves LivePerson monitoring cookies and browser storage without broad lp-prefix matching", () => {
+  const observations = resolveVendorObservations([
+    { type: "cookie", cookieName: "LPVID", hostname: "www.rbs.co.uk" },
+    { type: "cookie", cookieName: "LPSID-49343281", hostname: "www.rbs.co.uk" },
+  ]);
+
+  const livePerson = observations.find((item) => item.vendor === "LivePerson");
+  assert.ok(livePerson);
+  assert.equal(livePerson.product, "LivePerson Web Messaging");
+  assert.equal(livePerson.purpose, "customer_support");
+  assert.equal(livePerson.matchedCookieNames.includes("LPVID"), true);
+  assert.equal(livePerson.matchedCookieNames.includes("LPSID-49343281"), true);
+  for (const storageKey of ["lpLastVisit-49343281", "lpTabId"]) {
+    assertResolved(
+      resolveVendorObservations([{ type: "cmp_runtime", storageKey, hostname: "www.rbs.co.uk" }]),
+      "LivePerson",
+      "LivePerson Web Messaging",
+      "customer_support",
+    );
+  }
+  assert.equal(
+    resolveVendorObservations([{ type: "cmp_runtime", storageKey: "lpTestCase", hostname: "www.rbs.co.uk" }])
+      .some((item) => item.vendor === "LivePerson"),
+    false,
+  );
+});
+
+test("resolves the exact Sitecore Experience Analytics tracking cookie", () => {
+  const observations = resolveVendorObservations([
+    { type: "cookie", cookieName: "SC_ANALYTICS_GLOBAL_COOKIE", hostname: "www.stroke.org" },
+    { type: "cookie", cookieName: "SC_TRACKING_CONSENT", hostname: "www.stroke.org" },
+  ]);
+
+  assertResolved(observations, "Sitecore", "Sitecore Experience Analytics", "analytics");
+  const sitecore = observations.find((item) => item.vendor === "Sitecore");
+  assert.deepEqual(sitecore?.matchedCookieNames, ["SC_ANALYTICS_GLOBAL_COOKIE"]);
 });
 
 test("resolves Microsoft Clarity collection host without generic collect matching", () => {
@@ -1659,12 +1752,22 @@ test("keeps native ad hosts without promoting host-incompatible generic exchange
   assert.equal(yandex.matchedHostnames.includes("yandex.com"), true);
 
   const criteo = observations.find((item) => item.product === "Criteo");
-  assert.ok(criteo);
-  assert.deepEqual(criteo.matchedHostnames, []);
-  assert.deepEqual(criteo.matchedCookieNames, ["uid"]);
+  assert.equal(criteo, undefined);
 
   const openX = observations.find((item) => item.product === "OpenX");
   assert.equal(openX, undefined);
+});
+
+test("attributes the generic UID cookie only when its canonical owner hostname matches", () => {
+  const observations = resolveVendorObservations([
+    { type: "cookie", cookieName: "UID", hostname: "scorecardresearch.com" },
+    { type: "cookie", cookieName: "uid", hostname: "criteo.com" },
+    { type: "cookie", cookieName: "uid", hostname: "example.test" },
+  ]);
+
+  assertResolved(observations, "ScorecardResearch / Comscore", "ScorecardResearch", "analytics");
+  assertResolved(observations, "Criteo", "Criteo", "advertising");
+  assert.equal(observations.some((item) => item.matchedHostnames.includes("example.test")), false);
 });
 
 test("classifies Contentful assets and VK Mail.ru ad endpoints", () => {
@@ -1738,6 +1841,19 @@ test("classifies VWO and Claydar marketing analytics endpoints", () => {
 
   assertResolved(observations, "VWO", "Visual Website Optimizer", "analytics");
   assertResolved(observations, "Claydar", "Claydar", "analytics");
+});
+
+test("keeps the exact VWO consent-state cookie out of experimentation activity", () => {
+  const observations = resolveVendorObservations([{
+    type: "cookie",
+    cookieName: "_vwo_consent",
+    hostname: "example.test",
+  }]);
+  const consentState = observations.find((item) => item.product === "VWO consent state");
+
+  assert.ok(consentState);
+  assert.equal(consentState.purpose, "consent_management");
+  assert.equal(consentState.confidence, 0.99);
 });
 
 test("classifies HubSpot runtime families without collapsing consent tooling into marketing", () => {
@@ -1884,6 +2000,18 @@ test("resolves specific adtech and analytics endpoints", () => {
   );
   assert.equal(observations.some((item) => item.vendor === "The Trade Desk"), true);
   assert.equal(observations.some((item) => item.vendor === "Segment"), true);
+});
+
+test("keeps Adobe consent propagation separate from Demdex advertising activity", () => {
+  const observations = resolveVendorObservations([request(
+    "https://adobedc.demdex.net/ee/v1/privacy/set-consent",
+    "adobedc.demdex.net",
+  )]);
+
+  assert.equal(observations.length, 1);
+  assert.equal(observations[0]?.product, "Adobe Experience Cloud consent propagation");
+  assert.equal(observations[0]?.purpose, "consent_management");
+  assert.equal(observations.some((item) => item.purpose === "advertising"), false);
 });
 
 test("resolves repeated advertising and measurement endpoint families", () => {

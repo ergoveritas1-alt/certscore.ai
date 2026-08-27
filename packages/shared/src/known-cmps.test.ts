@@ -128,9 +128,18 @@ test("canonical CMP registry owns deterministic reject-control selectors", () =>
     entry.canonicalName,
     entry.rejectControlSelectors ?? [],
   ]));
-  assert.deepEqual(selectors.get("OneTrust"), ["#onetrust-reject-all-handler"]);
-  assert.deepEqual(selectors.get("Cookiebot"), ["#CybotCookiebotDialogBodyButtonDecline"]);
-  assert.deepEqual(selectors.get("Usercentrics"), ['button[data-testid="uc-deny-all-button"]']);
+  assert.deepEqual(selectors.get("OneTrust"), [
+    "#onetrust-reject-all-handler",
+    "#onetrust-banner-sdk.ot-close-btn-link button.onetrust-close-btn-handler.banner-close-button",
+  ]);
+  assert.deepEqual(selectors.get("Cookiebot"), [
+    "#CybotCookiebotDialogBodyButtonDecline",
+    "#CybotCookiebotDialogBodyLevelButtonLevelOptinDeclineAll",
+  ]);
+  assert.deepEqual(selectors.get("Usercentrics"), [
+    'button[data-testid="uc-deny-all-button"]',
+    "#uc-cmp-footer #deny",
+  ]);
 });
 
 test("detects Usercentrics service domains", () => {

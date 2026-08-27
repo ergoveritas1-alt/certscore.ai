@@ -1,11 +1,13 @@
+export const POST_REFUSAL_CANONICAL_BARRIER_MAX_TAIL_WAIT_MS = 6_000;
+
 export type PostRefusalReportPublicationDecision = {
-  mode: "initial_report" | "initial_report_with_bounded_wait" | "late_generation";
+  mode: "single_reconciliation" | "single_reconciliation_limited";
   rejectReadyDeltaMs: number;
   addedInitialReportWaitMs: number;
   reason:
     | "reject_packet_ready_before_primary"
-    | "reject_packet_ready_inside_approved_join_window"
-    | "reject_packet_not_ready_without_delaying_primary";
+    | "reject_packet_extended_canonical_barrier"
+    | "reject_path_exceeded_canonical_barrier";
 };
 
 export type PostRefusalLaneTimingComparison = {
@@ -48,34 +50,38 @@ export function comparePostRefusalLaneReadiness(input: {
 export function decidePostRefusalReportPublication(input: {
   primaryReadyAtMs: number;
   rejectReadyAtMs: number;
+  /** Retained for old calibration callers; the single barrier no longer has a late branch. */
   approvedJoinWaitMs?: number;
+  maxTailWaitMs?: number;
 }): PostRefusalReportPublicationDecision {
   const primaryReadyAtMs = nonnegativeMs(input.primaryReadyAtMs);
   const rejectReadyAtMs = nonnegativeMs(input.rejectReadyAtMs);
-  const approvedJoinWaitMs = nonnegativeMs(input.approvedJoinWaitMs ?? 0);
+  const maxTailWaitMs = nonnegativeMs(
+    input.maxTailWaitMs ?? POST_REFUSAL_CANONICAL_BARRIER_MAX_TAIL_WAIT_MS,
+  );
   const rejectReadyDeltaMs = rejectReadyAtMs - primaryReadyAtMs;
 
   if (rejectReadyDeltaMs <= 0) {
     return {
-      mode: "initial_report",
+      mode: "single_reconciliation",
       rejectReadyDeltaMs,
       addedInitialReportWaitMs: 0,
       reason: "reject_packet_ready_before_primary",
     };
   }
-  if (rejectReadyDeltaMs <= approvedJoinWaitMs) {
+  if (rejectReadyDeltaMs > maxTailWaitMs) {
     return {
-      mode: "initial_report_with_bounded_wait",
+      mode: "single_reconciliation_limited",
       rejectReadyDeltaMs,
-      addedInitialReportWaitMs: rejectReadyDeltaMs,
-      reason: "reject_packet_ready_inside_approved_join_window",
+      addedInitialReportWaitMs: maxTailWaitMs,
+      reason: "reject_path_exceeded_canonical_barrier",
     };
   }
   return {
-    mode: "late_generation",
+    mode: "single_reconciliation",
     rejectReadyDeltaMs,
-    addedInitialReportWaitMs: 0,
-    reason: "reject_packet_not_ready_without_delaying_primary",
+    addedInitialReportWaitMs: rejectReadyDeltaMs,
+    reason: "reject_packet_extended_canonical_barrier",
   };
 }
 

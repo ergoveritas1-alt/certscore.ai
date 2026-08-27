@@ -1,51 +1,39 @@
 import {
-  postRefusalSupplementEnvelopeSchema,
+  postRefusalReconciliationEnvelopeSchema,
   type PostRefusalEvidencePacket,
-  type PostRefusalSupplementEnvelope,
+  type PostRefusalReconciliationEnvelope,
 } from "@certscore/contracts";
 import { createHash } from "node:crypto";
 import type { PostRefusalReportPublicationDecision } from "./post-refusal-orchestration.js";
 
-export function buildPostRefusalSupplementEnvelope(input: {
+export function buildPostRefusalReconciliationEnvelope(input: {
   parentScanId: string;
   baseEvidence: unknown;
   packet: PostRefusalEvidencePacket;
   publicationDecision: PostRefusalReportPublicationDecision;
-  baseGeneration?: number;
-}): PostRefusalSupplementEnvelope {
-  const baseGeneration = Math.max(0, Math.round(input.baseGeneration ?? 0));
+}): PostRefusalReconciliationEnvelope {
   const confirmed = input.packet.refusalRegistration.status === "confirmed" &&
     input.packet.refusalRegistration.refusalExercised;
-  const status = supplementStatus(input.packet);
-  const disposition = !confirmed
-    ? "neutral_no_projection" as const
-    : input.publicationDecision.mode === "late_generation"
-      ? "late_generation_candidate" as const
-      : "opportunistic_initial_join_candidate" as const;
+  const joined = confirmed && input.publicationDecision.mode === "single_reconciliation";
 
-  return postRefusalSupplementEnvelopeSchema.parse({
-    artifactVersion: "certscore.post_refusal_supplement.v1",
+  return postRefusalReconciliationEnvelopeSchema.parse({
+    artifactVersion: "certscore.post_refusal_reconciliation.v1",
     artifactOnly: true,
     productionProjectable: false,
     parentScanId: input.parentScanId,
     baseEvidenceSha256: canonicalSha256(input.baseEvidence),
     postRefusalPacketSha256: canonicalSha256(input.packet),
     createdAt: new Date().toISOString(),
-    status,
-    disposition,
-    ...(disposition === "neutral_no_projection"
-      ? {}
-      : {
-          reportGeneration: {
-            baseGeneration,
-            candidateGeneration: baseGeneration + 1,
-          },
-        }),
+    status: reconciliationStatus(input.packet),
+    disposition: joined ? "joined_at_canonical_barrier" : "not_joined",
     observationCount: input.packet.observations.length,
     refusalExercised: input.packet.refusalRegistration.refusalExercised,
     limitations: [
-      "artifact_only_candidate_not_persisted",
+      "artifact_only_reconciliation_record",
       "canonical_projection_not_enabled",
+      ...(input.publicationDecision.mode === "single_reconciliation_limited"
+        ? ["canonical_join_deadline_exceeded"]
+        : []),
     ],
   });
 }
@@ -54,7 +42,9 @@ export function canonicalSha256(value: unknown): string {
   return createHash("sha256").update(stableJson(value)).digest("hex");
 }
 
-function supplementStatus(packet: PostRefusalEvidencePacket): PostRefusalSupplementEnvelope["status"] {
+function reconciliationStatus(
+  packet: PostRefusalEvidencePacket,
+): PostRefusalReconciliationEnvelope["status"] {
   switch (packet.refusalRegistration.status) {
     case "confirmed":
       return packet.observations.length > 0 ? "confirmed_observation" : "confirmed_clean";

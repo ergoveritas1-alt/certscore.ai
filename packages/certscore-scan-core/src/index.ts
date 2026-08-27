@@ -64,7 +64,12 @@ import {
   type PolicySurfaceScannerResult,
 } from "./scanners/policy-surface-scanner.js";
 import { isLoopbackPostRefusalTarget } from "./post-refusal-target-authorization.js";
-import { chromiumContextOptions, chromiumLaunchOptions, chromiumProxyOptions } from "./playwright-runtime.js";
+import {
+  chromiumContextOptions,
+  chromiumLaunchOptions,
+  chromiumProxyOptions,
+  isLocalHeadedFallbackEnabled,
+} from "./playwright-runtime.js";
 import { captureConsentControlGeometry } from "./consent-control-geometry.js";
 import {
   buildConsentGeometryEgressDiagnostic,
@@ -93,6 +98,7 @@ export {
   chromiumLaunchOptions,
   chromiumProxyOptions,
   isAwsLambdaRuntime,
+  isLocalHeadedFallbackEnabled,
   lambdaChromiumSingleProcessEnabled,
 } from "./playwright-runtime.js";
 
@@ -115,16 +121,21 @@ export {
 export {
   decidePostRefusalCooperativeAbort,
   decidePostRefusalReportPublication,
+  POST_REFUSAL_CANONICAL_BARRIER_MAX_TAIL_WAIT_MS,
   type PostRefusalCooperativeAbortDecision,
   type PostRefusalReportPublicationDecision,
 } from "./post-refusal-orchestration.js";
 
 export {
-  buildPostRefusalSupplementEnvelope,
+  buildPostRefusalReconciliationEnvelope,
   canonicalSha256,
-} from "./post-refusal-supplement.js";
+} from "./post-refusal-reconciliation.js";
 
-export { buildPostRefusalCmpActionRecipe } from "./post-refusal-cmp-recipes.js";
+export {
+  buildCanonicalPostRefusalActionRecipes,
+  buildPostRefusalCmpActionRecipe,
+  CANONICAL_POST_REFUSAL_RECIPE_SET_ID,
+} from "./post-refusal-cmp-recipes.js";
 
 export {
   assertPublicTestContactAllowed,
@@ -3405,17 +3416,6 @@ function shouldRetryConsentFlowWithHeaded(
   }
   const errorText = (result.moduleRun.errors ?? []).join("\n");
   return /ERR_HTTP2_PROTOCOL_ERROR|ERR_QUIC_PROTOCOL_ERROR|net::ERR_|Timeout \d+ms exceeded|page\.goto/i.test(errorText);
-}
-
-function isLocalHeadedFallbackEnabled() {
-  const explicit = process.env.CERTSCORE_V2_HEADED_FALLBACK?.trim();
-  if (explicit === "0" || explicit === "false") {
-    return false;
-  }
-  if (explicit === "1" || explicit === "true") {
-    return true;
-  }
-  return process.env.NODE_ENV !== "production" && process.platform === "darwin" && !process.env.CI;
 }
 
 function isCaptureReplayHeadedRetryEnabled() {
