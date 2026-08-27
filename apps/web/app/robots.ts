@@ -8,6 +8,8 @@ const publicAllowPaths = [
   "/what-is-certscore",
   "/pricing",
   "/press",
+  "/releases",
+  "/releases/",
   "/guides",
   "/guides/",
   "/benchmarks",

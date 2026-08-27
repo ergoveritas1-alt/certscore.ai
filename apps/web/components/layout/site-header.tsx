@@ -22,6 +22,7 @@ const resourceLinks = [
   { href: "/gdpr", label: "GDPR privacy" },
   { href: "/guides", label: "Guides" },
   { href: "/benchmarks", label: "Benchmarks" },
+  { href: "/releases", label: "Releases" },
   { href: "/findings", label: "Findings" },
   { href: "/developers", label: "Developers" },
   { href: "/regulatory", label: "Regulatory pages" },

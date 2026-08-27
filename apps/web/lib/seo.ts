@@ -8,10 +8,18 @@ type CreatePageMetadataInput = {
   description: string;
   path: string;
   robots?: Metadata["robots"];
+  socialImage?: {
+    alt: string;
+    height: number;
+    path: string;
+    width: number;
+  };
 };
 
-export function createPageMetadata({ title, description, path, robots }: CreatePageMetadataInput): Metadata {
+export function createPageMetadata({ title, description, path, robots, socialImage }: CreatePageMetadataInput): Metadata {
   const url = new URL(path, SITE_URL).toString();
+  const resolvedSocialImage = socialImage;
+  const imageUrl = resolvedSocialImage ? new URL(resolvedSocialImage.path, SITE_URL).toString() : null;
 
   return {
     title,
@@ -25,12 +33,25 @@ export function createPageMetadata({ title, description, path, robots }: CreateP
       description,
       url,
       siteName: SITE_NAME,
-      type: "website"
+      type: "website",
+      ...(imageUrl && resolvedSocialImage
+        ? {
+            images: [
+              {
+                alt: resolvedSocialImage.alt,
+                height: resolvedSocialImage.height,
+                url: imageUrl,
+                width: resolvedSocialImage.width
+              }
+            ]
+          }
+        : {})
     },
     twitter: {
       card: "summary_large_image",
       title,
-      description
+      description,
+      ...(imageUrl ? { images: [imageUrl] } : {})
     }
   };
 }

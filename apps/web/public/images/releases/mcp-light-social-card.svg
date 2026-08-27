@@ -1,0 +1,29 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="630" viewBox="0 0 1200 630" role="img" aria-labelledby="title description">
+  <title id="title">CertScore.ai MCP Light</title>
+  <desc id="description">Website privacy scanning for AI agents</desc>
+  <defs>
+    <linearGradient id="background" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#020d20" />
+      <stop offset="0.58" stop-color="#0b1a3f" />
+      <stop offset="1" stop-color="#12346f" />
+    </linearGradient>
+    <radialGradient id="glow" cx="0.76" cy="0.28" r="0.7">
+      <stop offset="0" stop-color="#38bdf8" stop-opacity="0.34" />
+      <stop offset="1" stop-color="#38bdf8" stop-opacity="0" />
+    </radialGradient>
+  </defs>
+  <rect width="1200" height="630" rx="0" fill="url(#background)" />
+  <rect width="1200" height="630" fill="url(#glow)" />
+  <path d="M760 80h360v360H760z" fill="none" stroke="#38bdf8" stroke-opacity="0.12" stroke-width="2" />
+  <path d="M820 140h360v360H820z" fill="none" stroke="#38bdf8" stroke-opacity="0.08" stroke-width="2" />
+  <circle cx="1010" cy="178" r="5" fill="#7dd3fc" />
+  <circle cx="1094" cy="292" r="5" fill="#7dd3fc" fill-opacity="0.72" />
+  <circle cx="914" cy="382" r="5" fill="#7dd3fc" fill-opacity="0.56" />
+  <path d="M1010 178 1094 292 914 382 1010 178Z" fill="none" stroke="#7dd3fc" stroke-opacity="0.28" stroke-width="2" />
+  <text x="82" y="108" fill="#7dd3fc" font-family="Arial, Helvetica, sans-serif" font-size="26" font-weight="700" letter-spacing="5">CERTSCORE.AI</text>
+  <text x="82" y="270" fill="#ffffff" font-family="Arial, Helvetica, sans-serif" font-size="92" font-weight="700" letter-spacing="-3">MCP LIGHT</text>
+  <text x="82" y="346" fill="#cbd5e1" font-family="Arial, Helvetica, sans-serif" font-size="36" font-weight="400">Website privacy scanning</text>
+  <text x="82" y="394" fill="#cbd5e1" font-family="Arial, Helvetica, sans-serif" font-size="36" font-weight="400">for AI agents</text>
+  <rect x="82" y="488" width="330" height="62" rx="31" fill="#0ea5e9" />
+  <text x="247" y="529" text-anchor="middle" fill="#020617" font-family="Arial, Helvetica, sans-serif" font-size="22" font-weight="700">NO ACCOUNT REQUIRED</text>
+</svg>

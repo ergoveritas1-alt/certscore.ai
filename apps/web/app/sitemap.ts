@@ -1,5 +1,6 @@
 import type { MetadataRoute } from "next";
 import { getFindingReferenceItems } from "../lib/marketing/finding-atlas";
+import { getPublishedReleases, releasePath } from "../lib/releases";
 import { SITE_URL } from "../lib/seo";
 
 const staticPaths = [
@@ -29,6 +30,7 @@ const staticPaths = [
   "/developers/sdk",
   "/developers/mcp",
   "/mcp/light",
+  "/releases",
   "/claude",
   "/developers/examples",
   "/faq",
@@ -82,6 +84,7 @@ const staticPaths = [
 
 export default function sitemap(): MetadataRoute.Sitemap {
   const findingPaths = getFindingReferenceItems().map((finding) => `/findings/${finding.id}`);
+  const releasePaths = getPublishedReleases().map(releasePath);
 
-  return [...staticPaths, ...findingPaths].map((path) => ({ url: `${SITE_URL}${path}` }));
+  return [...staticPaths, ...releasePaths, ...findingPaths].map((path) => ({ url: `${SITE_URL}${path}` }));
 }

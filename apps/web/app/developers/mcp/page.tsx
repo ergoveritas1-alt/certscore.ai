@@ -50,6 +50,12 @@ export default function DeveloperMcpPage() {
           >
             Watch the OpenAI MCP integration demo
           </a>
+          <p className="mt-4 text-sm text-slate-600">
+            Recent release:{" "}
+            <Link className="font-semibold text-sky-700 hover:text-sky-900" href="/releases/mcp-light">
+              CertScore.ai MCP Light is now available
+            </Link>
+          </p>
         </section>
 
         <section
