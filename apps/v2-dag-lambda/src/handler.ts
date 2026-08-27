@@ -12,13 +12,13 @@ import { connect as tlsConnect, type TLSSocket } from "node:tls";
 import { chromium } from "playwright";
 import {
   VERIFIED_POLICY_EVIDENCE_PACKET_VERSION,
-  POST_REFUSAL_LAMBDA_EVIDENCE_MESSAGE_VERSION,
+  POST_REFUSAL_LAMBDA_EVIDENCE_DESCRIPTOR_VERSION,
   canonicalEvidenceBundleSchema,
   classifyV2DagLambdaResultDisposition,
   derivePolicySurfaceInspectionOutcome,
   postRefusalEvidencePacketSchema,
   postRefusalLambdaDispatchConfigSchema,
-  postRefusalLambdaEvidenceMessageSchema,
+  postRefusalLambdaEvidenceDescriptorSchema,
   verifiedPolicyEvidencePacketSchema,
   type CanonicalEvidenceBundle,
   type ConsentFlowScenario,
@@ -27,7 +27,7 @@ import {
   type ScreenshotArtifact,
   type PostRefusalEvidencePacket,
   type PostRefusalLambdaDispatchConfig,
-  type PostRefusalLambdaEvidenceMessage,
+  type PostRefusalLambdaEvidenceDescriptor,
   type VerifiedPolicyEvidencePacket,
   type V2DagLambdaResultPurpose,
 } from "@certscore/contracts";
@@ -37,11 +37,14 @@ import {
   chromiumLaunchArgs,
   chromiumLaunchOptions,
   buildScanEvidenceLaneAssessment,
+  buildCanonicalPostRefusalActionRecipes,
   buildPostRefusalCmpActionRecipe,
   canonicalSha256,
+  decidePostRefusalCooperativeAbort,
   isAwsLambdaRuntime,
   lambdaChromiumSingleProcessEnabled,
   mergePolicySurfaceObservations,
+  POST_REFUSAL_CANONICAL_BARRIER_MAX_TAIL_WAIT_MS,
   runPostRefusalObserver,
   runScan,
   type RunScanInput
@@ -64,6 +67,11 @@ export const LOCAL_V2_DAG_SCANNER_RUNTIME = "certscore-v2-dag-parallel-path";
 export const POST_CONSENT_FLOW_SCANNING_ENABLED = false;
 export const POST_REFUSAL_REJECT_WORKER_FEATURE_FLAG =
   "CERTSCORE_POST_REFUSAL_REJECT_WORKER_ENABLED" as const;
+export const POST_REFUSAL_REJECT_WORKER_DEFAULT_DISPATCH_DELAY_MS = 500;
+export const POST_REFUSAL_REJECT_WORKER_MAX_TAIL_WAIT_MS =
+  POST_REFUSAL_CANONICAL_BARRIER_MAX_TAIL_WAIT_MS;
+export const LOCAL_V2_DAG_LAMBDA_LANE_TIMING_CONTRACT_VERSION =
+  "certscore.v2.lambda-lane-timing.v1" as const;
 export const LOCAL_V2_DAG_LAMBDA_DEFAULT_PRECONSENT_SCREENSHOT_TIMEOUT_MS = 15_000;
 export const LOCAL_V2_DAG_LAMBDA_DEFAULT_PRECONSENT_VISUAL_FALLBACK_DEADLINE_MS = 15_000;
 export const LOCAL_V2_DAG_LAMBDA_DEFAULT_HANDLER_SAFETY_TIMEOUT_MS = 30_000;
@@ -110,6 +118,8 @@ export type LocalV2DagLambdaDispatchPayload = {
     sourceScanId: string;
     url: string;
   }>;
+  /** Exact digest of the coordinator dispatch, propagated only to workers. */
+  parentDispatchSha256?: string;
   postRefusalObservation?: PostRefusalLambdaDispatchConfig;
   coordinatorPlanSummary?: LocalV2DagLambdaCoordinatorPlanSummary;
   debugOverrides?: LocalV2DagLambdaDebugOverrides;
@@ -168,6 +178,7 @@ export type LocalV2DagLambdaResultMessage = {
     message: string;
   };
   handlerTiming?: LocalV2DagLambdaHandlerTiming;
+  laneTimingSummary?: LocalV2DagLambdaLaneTimingSummary;
   phaseTimings?: LocalV2DagLambdaPhaseTiming[];
   /**
    * Verified pointer fallback for consumers that receive this terminal message
@@ -175,6 +186,11 @@ export type LocalV2DagLambdaResultMessage = {
    * artifact-only and non-projectable until matched to terminal evidence.
    */
   policyEvidence?: LocalV2DagLambdaPolicyEvidenceMessage;
+  /**
+   * Cryptographically binds the optional reject-observation lane evidence to
+   * the exact parent dispatch reconciled into this terminal result.
+   */
+  parentDispatchSha256?: string;
   processor: typeof LOCAL_V2_DAG_SCAN_PROCESSOR;
   productionFindingIntegration: false;
   resultPurpose: V2DagLambdaResultPurpose;
@@ -213,6 +229,30 @@ export type LocalV2DagLambdaPolicyEvidenceMessage = {
 
 type LocalV2DagLambdaArtifactPointers = NonNullable<LocalV2DagLambdaResultMessage["artifactPointers"]>;
 type LocalV2DagLambdaArtifactMetadata = NonNullable<LocalV2DagLambdaResultMessage["artifactMetadata"]>;
+
+export function attachJoinedPostRefusalArtifactPointer<T extends {
+    artifactMetadata: LocalV2DagLambdaArtifactMetadata;
+    artifactPointers: LocalV2DagLambdaArtifactPointers;
+    phaseTimings: LocalV2DagLambdaPhaseTiming[];
+  }>(
+  artifacts: T,
+  result: Pick<LocalV2DagLambdaShardResult, "artifactMetadata" | "artifactPointers">,
+): T {
+  const packetMetadata = result.artifactMetadata?.postRefusalPacketUri;
+  const packetPointer = result.artifactPointers?.postRefusalPacketUri;
+  if (!packetMetadata || !packetPointer) return artifacts;
+  return {
+    ...artifacts,
+    artifactMetadata: {
+      ...artifacts.artifactMetadata,
+      postRefusalPacketUri: packetMetadata,
+    },
+    artifactPointers: {
+      ...artifacts.artifactPointers,
+      postRefusalPacketUri: packetPointer,
+    },
+  } as T;
+}
 type LocalV2DagLambdaAuxiliaryArtifact = {
   fileName: string;
   sha256: string;
@@ -245,6 +285,29 @@ type LocalV2DagLambdaHandlerTiming = {
   scanPhaseLabel?: string;
   scanPhaseStartedAt?: string;
 };
+export type LocalV2DagLambdaLaneTiming = {
+  coordinatorElapsedMs: number | null;
+  evidenceJoined: boolean;
+  invocationStartedAt: string | null;
+  lane: LocalV2DagLambdaEvidenceLane;
+  outcome: "completed" | "disabled" | "failed" | "not_applicable" | "timed_out";
+  terminalOutcomeDeltaFromPassiveBarrierMs: number | null;
+  terminalOutcomeObservedAt: string | null;
+  workerReportedCompletedAt: string | null;
+  workerReportedHandlerDurationMs: number | null;
+};
+export type LocalV2DagLambdaLaneTimingSummary = {
+  contractVersion: typeof LOCAL_V2_DAG_LAMBDA_LANE_TIMING_CONTRACT_VERSION;
+  coordinatorStartedAt: string;
+  generatedAt: string;
+  lanes: LocalV2DagLambdaLaneTiming[];
+  maxRejectTailWaitMs: number;
+  passiveLaneBarrierCompletedAt: string;
+  rejectCompletedBeforeOrAtPassiveBarrier: boolean | null;
+  rejectLaneAddedWaitMs: number;
+  rejectLaneJoin: "disabled" | "failed" | "joined" | "not_applicable" | "timed_out";
+  rejectTailDeltaMs: number | null;
+};
 type LocalV2DagLambdaWorkerLane =
   | "coordinator"
   | "consent_proof"
@@ -260,6 +323,9 @@ export const LOCAL_V2_DAG_LAMBDA_EVIDENCE_WORKER_LANES = [
   "runtime_evidence",
   "policy_evidence",
 ] as const satisfies readonly LocalV2DagLambdaWorkerLane[];
+type LocalV2DagLambdaEvidenceLane =
+  | (typeof LOCAL_V2_DAG_LAMBDA_EVIDENCE_WORKER_LANES)[number]
+  | "reject_observation";
 type LocalV2DagLambdaDebugOverrides = {
   actionFinalSettleMs?: number;
   actionSearchDeadlineMs?: number;
@@ -306,8 +372,15 @@ type LocalV2DagLambdaConsentActionRecipe = {
 type LocalV2DagLambdaShardResult = {
   artifactMetadata?: LocalV2DagLambdaArtifactMetadata;
   artifactPointers?: LocalV2DagLambdaArtifactPointers;
+  completedAt?: string;
+  coordinatorTiming?: {
+    invocationStartedAt: string;
+    responseReceivedAt: string;
+    durationMs: number;
+  };
+  handlerTiming?: LocalV2DagLambdaHandlerTiming;
   phaseTimings?: LocalV2DagLambdaPhaseTiming[];
-  postRefusalEvidence?: PostRefusalLambdaEvidenceMessage;
+  postRefusalEvidence?: PostRefusalLambdaEvidenceDescriptor;
   consentRejectAvailability?: {
     inventoryComplete: boolean;
     rejectControlObserved: boolean;
@@ -326,7 +399,7 @@ type S3PutClient = {
 };
 
 type S3GetClient = {
-  send(command: GetObjectCommand): Promise<GetObjectCommandOutput>;
+  send(command: GetObjectCommand, options?: { abortSignal?: AbortSignal }): Promise<GetObjectCommandOutput>;
 };
 
 function localV2DagLambdaS3Client(region: string): S3Client {
@@ -344,14 +417,15 @@ function localV2DagLambdaS3Client(region: string): S3Client {
 }
 
 type LambdaInvokeClient = {
-  send(command: InvokeCommand): Promise<InvokeCommandOutput>;
+  send(command: InvokeCommand, options?: { abortSignal?: AbortSignal }): Promise<InvokeCommandOutput>;
 };
 
 type ArtifactChainResult = {
   artifactMetadata?: LocalV2DagLambdaResultMessage["artifactMetadata"];
   artifactPointers?: LocalV2DagLambdaResultMessage["artifactPointers"];
+  laneTimingSummary?: LocalV2DagLambdaLaneTimingSummary;
   phaseTimings?: LocalV2DagLambdaPhaseTiming[];
-  postRefusalEvidence?: PostRefusalLambdaEvidenceMessage;
+  postRefusalEvidence?: PostRefusalLambdaEvidenceDescriptor;
 };
 
 export type LocalV2DagLambdaRuntimeDiagnostics = ReturnType<typeof buildLocalV2DagLambdaRuntimeDiagnostics>;
@@ -597,6 +671,10 @@ export function parseLocalV2DagLambdaDispatchPayload(event: unknown): LocalV2Dag
   const postRefusalObservation = record.postRefusalObservation === undefined
     ? undefined
     : postRefusalLambdaDispatchConfigSchema.parse(record.postRefusalObservation);
+  const parentDispatchSha256 = compactString(record.parentDispatchSha256);
+  if (parentDispatchSha256 && !/^[a-f0-9]{64}$/.test(parentDispatchSha256)) {
+    throw new Error("Local v2 DAG Lambda parent dispatch checksum is invalid.");
+  }
   const payload: LocalV2DagLambdaDispatchPayload = {
     artifactOnly: true,
     awsRegion: parseAwsRegion(record.awsRegion),
@@ -612,6 +690,7 @@ export function parseLocalV2DagLambdaDispatchPayload(event: unknown): LocalV2Dag
     profile: record.profile === "tiny" ? "tiny" : "standard",
     processor: LOCAL_V2_DAG_SCAN_PROCESSOR,
     ...(policySurfaceSeeds.length > 0 ? { policySurfaceSeeds } : {}),
+    ...(parentDispatchSha256 ? { parentDispatchSha256 } : {}),
     ...(postRefusalObservation ? { postRefusalObservation } : {}),
     ...(coordinatorPlanSummary ? { coordinatorPlanSummary } : {}),
     ...(debugOverrides ? { debugOverrides } : {}),
@@ -647,6 +726,9 @@ export function parseLocalV2DagLambdaDispatchPayload(event: unknown): LocalV2Dag
   }
   if (payload.orchestrationMode === "worker" && !payload.workerLane) {
     throw new Error("Local v2 DAG Lambda worker dispatch requires a workerLane.");
+  }
+  if (payload.workerLane === "reject_observation" && !payload.parentDispatchSha256) {
+    throw new Error("Reject-observation worker dispatch requires the exact parent dispatch checksum.");
   }
 
   return payload;
@@ -1038,7 +1120,7 @@ export async function runLocalV2DagLambdaArtifactChain(
     }
   }
 
-  return writeAndUploadLocalV2DagLambdaArtifacts({
+  const artifacts = await writeAndUploadLocalV2DagLambdaArtifacts({
     artifactRoot,
     bundle,
     payload,
@@ -1048,6 +1130,7 @@ export async function runLocalV2DagLambdaArtifactChain(
     screenshotSafetyReviewCoordinator,
     signal: options.artifactSignal ?? options.signal
   });
+  return artifacts;
 }
 
 async function runLocalV2DagLambdaScanBundle(
@@ -1655,26 +1738,41 @@ export async function fetchEgressProbeThroughProxy(
 }
 
 export function postRefusalParentDispatchSha256(
-  payload: Pick<
-    LocalV2DagLambdaDispatchPayload,
-    "awsRegion" | "contractVersion" | "functionName" | "processor" | "resultPurpose" |
-      "scanId" | "scannerRuntime" | "targetEnvironment" | "targetUrl"
-  >,
+  payload: LocalV2DagLambdaDispatchPayload,
 ) {
   return canonicalSha256({
+    artifactOnly: payload.artifactOnly,
     awsRegion: payload.awsRegion,
+    callbackCorrelationId: payload.callbackCorrelationId,
+    ...(payload.coordinatorPlanSummary
+      ? { coordinatorPlanSummary: payload.coordinatorPlanSummary }
+      : {}),
     contractVersion: payload.contractVersion,
+    ...(payload.debugOverrides ? { debugOverrides: payload.debugOverrides } : {}),
     functionName: payload.functionName,
+    hostname: payload.hostname,
+    localCallbackUrl: payload.localCallbackUrl,
+    orchestrationMode: payload.orchestrationMode ?? "single",
+    ...(payload.policySurfaceSeeds ? { policySurfaceSeeds: payload.policySurfaceSeeds } : {}),
+    ...(payload.postRefusalObservation
+      ? { postRefusalObservation: payload.postRefusalObservation }
+      : {}),
     processor: payload.processor,
+    productionFindingIntegration: payload.productionFindingIntegration,
+    profile: payload.profile,
+    resultHandoff: payload.resultHandoff,
     resultPurpose: payload.resultPurpose,
+    resultQueueUrl: payload.resultQueueUrl,
     scanId: payload.scanId,
     scannerRuntime: payload.scannerRuntime,
+    ...(payload.strongEvidenceMode ? { strongEvidenceMode: payload.strongEvidenceMode } : {}),
     targetEnvironment: payload.targetEnvironment,
     targetUrl: payload.targetUrl,
+    vpcMode: payload.vpcMode,
   });
 }
 
-function postRefusalMessageStatus(packet: PostRefusalEvidencePacket): PostRefusalLambdaEvidenceMessage["status"] {
+function postRefusalDescriptorStatus(packet: PostRefusalEvidencePacket): PostRefusalLambdaEvidenceDescriptor["status"] {
   switch (packet.refusalRegistration.status) {
     case "confirmed":
       return packet.observations.length > 0 ? "confirmed_observation" : "confirmed_clean";
@@ -1698,7 +1796,7 @@ function unsupportedPostRefusalPacket(input: {
   return postRefusalEvidencePacketSchema.parse({
     artifactVersion: "certscore.post_refusal_evidence.v1",
     artifactOnly: true,
-    productionProjectable: true,
+    productionProjectable: false,
     scanId: `${input.payload.scanId}:reject_observation`,
     parentScanId: input.payload.scanId,
     targetUrl: input.payload.targetUrl,
@@ -1712,8 +1810,12 @@ function unsupportedPostRefusalPacket(input: {
       found: false,
       method: "cmp_registry_recipe",
       confidence: 0,
-      recipeId: `canonical-cmp:${config.cmpCanonicalName}:reject:unsupported`,
-      cmpId: config.cmpCanonicalName,
+      recipeId: config.resolver.kind === "canonical_cmp_registry"
+        ? `${config.resolver.recipeSetId}:unsupported`
+        : `canonical-cmp:${config.resolver.cmpCanonicalName}:reject:unsupported`,
+      ...(config.resolver.kind === "named_cmp"
+        ? { cmpId: config.resolver.cmpCanonicalName }
+        : {}),
       reason: input.reason.slice(0, 240),
     },
     refusalRegistration: {
@@ -1751,35 +1853,12 @@ function unsupportedPostRefusalPacket(input: {
   });
 }
 
-export async function sendPostRefusalEvidenceReadyMessage(input: {
-  message: PostRefusalLambdaEvidenceMessage;
-  queueUrl: string;
-  sqsClient?: SqsSendClient;
-  timeoutMs?: number;
-}) {
-  const timeoutMs = Math.max(10, input.timeoutMs ?? LOCAL_V2_DAG_LAMBDA_DEFAULT_RESULT_PUBLISH_TIMEOUT_MS);
-  const command = new SendMessageCommand({
-    MessageBody: JSON.stringify(postRefusalLambdaEvidenceMessageSchema.parse(input.message)),
-    QueueUrl: input.queueUrl,
-  });
-  await sendWithBoundedRetries({
-    attemptTimeoutMs: timeoutMs,
-    maxAttempts: 1,
-    operation: (attemptSignal) => (
-      input.sqsClient ?? new SQSClient({ region: parseQueueRegion(input.queueUrl) })
-    ).send(command, { abortSignal: attemptSignal }),
-    operationLabel: "Post-refusal evidence SQS publication",
-    totalTimeoutMs: timeoutMs,
-  });
-}
-
 export async function runLocalV2DagLambdaPostRefusalArtifactChain(
   payload: LocalV2DagLambdaDispatchPayload,
   options: {
     artifactRoot: string;
     s3Client?: S3PutClient;
     signal?: AbortSignal;
-    sqsClient?: SqsSendClient;
   },
 ): Promise<ArtifactChainResult> {
   if (payload.workerLane !== "reject_observation" || !payload.postRefusalObservation) {
@@ -1790,18 +1869,20 @@ export async function runLocalV2DagLambdaPostRefusalArtifactChain(
   }
   const config = payload.postRefusalObservation;
   if (
-    (config.interactionAuthorization.kind === "loopback" && payload.targetEnvironment !== "local") ||
-    config.interactionAuthorization.kind === "explicit_allowlist"
+    config.interactionAuthorization.kind === "loopback" && payload.targetEnvironment !== "local"
   ) {
-    throw new Error("This post-refusal cohort is restricted to local loopback and the owned Ergo Veritas canary.");
+    throw new Error("Loopback post-refusal authorization requires the local target environment.");
   }
   const phaseTimings: LocalV2DagLambdaPhaseTiming[] = [];
   await mkdir(options.artifactRoot, { recursive: true });
-  const recipe = buildPostRefusalCmpActionRecipe({
-    cmpCanonicalName: config.cmpCanonicalName,
-    confirmation: config.confirmation,
-  });
+  const recipes = config.resolver.kind === "canonical_cmp_registry"
+    ? buildCanonicalPostRefusalActionRecipes()
+    : [buildPostRefusalCmpActionRecipe({
+        cmpCanonicalName: config.resolver.cmpCanonicalName,
+        confirmation: config.resolver.confirmation,
+      })].flatMap((recipe) => recipe ? [recipe] : []);
   const packet = await timeLambdaPhase(phaseTimings, "post_refusal_observation", async () => {
+    const recipe = recipes[0];
     if (!recipe) {
       return unsupportedPostRefusalPacket({
         payload,
@@ -1818,6 +1899,14 @@ export async function runLocalV2DagLambdaPostRefusalArtifactChain(
       parentScanId: payload.scanId,
       productionProjectable: true,
       recipe,
+      ...(recipes.length > 1
+        ? {
+            recipeCandidates: recipes,
+            recipeSetId: config.resolver.kind === "canonical_cmp_registry"
+              ? config.resolver.recipeSetId
+              : undefined,
+          }
+        : {}),
       scanId: `${payload.scanId}:reject_observation`,
       signal: options.signal,
       url: payload.targetUrl,
@@ -1837,37 +1926,30 @@ export async function runLocalV2DagLambdaPostRefusalArtifactChain(
     }), { abortSignal: options.signal });
   });
   const packetPointer = s3Uri(bucket, key);
-  const message = postRefusalLambdaEvidenceMessageSchema.parse({
+  const descriptor = postRefusalLambdaEvidenceDescriptorSchema.parse({
     artifactOnly: true,
-    contractVersion: POST_REFUSAL_LAMBDA_EVIDENCE_MESSAGE_VERSION,
+    contractVersion: POST_REFUSAL_LAMBDA_EVIDENCE_DESCRIPTOR_VERSION,
     generatedAt: new Date().toISOString(),
-    messageKind: "post_refusal_evidence_ready",
+    descriptorKind: "post_refusal_evidence_descriptor",
     packetMetadata: { sha256, sizeBytes: body.byteLength },
     packetPointer,
-    parentDispatchSha256: postRefusalParentDispatchSha256(payload),
+    parentDispatchSha256: payload.parentDispatchSha256!,
     parentScanId: payload.scanId,
     processor: LOCAL_V2_DAG_SCAN_PROCESSOR,
-    productionFindingIntegration: true,
+    productionFindingIntegration: packet.productionProjectable,
     refusalExercised: packet.refusalRegistration.refusalExercised,
     observationCount: packet.observations.length,
     scanId: payload.scanId,
-    status: postRefusalMessageStatus(packet),
+    status: postRefusalDescriptorStatus(packet),
     targetEnvironment: payload.targetEnvironment,
   });
-  await timeLambdaPhase(phaseTimings, "post_refusal_supplement_publish", () =>
-    sendPostRefusalEvidenceReadyMessage({
-      message,
-      queueUrl: payload.resultQueueUrl,
-      sqsClient: options.sqsClient,
-    })
-  );
   return {
     artifactMetadata: {
       postRefusalPacketUri: { sha256, sizeBytes: body.byteLength },
     },
     artifactPointers: { postRefusalPacketUri: packetPointer },
     phaseTimings,
-    postRefusalEvidence: message,
+    postRefusalEvidence: descriptor,
   };
 }
 
@@ -1885,8 +1967,10 @@ export async function runLocalV2DagLambdaShardedArtifactChain(
 ): Promise<{
   artifactMetadata: LocalV2DagLambdaArtifactMetadata;
   artifactPointers: LocalV2DagLambdaArtifactPointers;
+  laneTimingSummary: LocalV2DagLambdaLaneTimingSummary;
   phaseTimings: LocalV2DagLambdaPhaseTiming[];
 }> {
+  const coordinatorStartedAtMs = Date.now();
   const workspaceRoot = options.workspaceRoot ?? process.cwd();
   const artifactRoot = path.resolve(workspaceRoot, options.artifactRoot);
   const phaseTimings: LocalV2DagLambdaPhaseTiming[] = [];
@@ -1894,44 +1978,61 @@ export async function runLocalV2DagLambdaShardedArtifactChain(
   await mkdir(artifactRoot, { recursive: true });
   const evidenceWorkerLanes = LOCAL_V2_DAG_LAMBDA_EVIDENCE_WORKER_LANES;
   const postRefusalState: {
+    cancelledNoReject: boolean;
+    dispatchStartedAtMs?: number;
     error?: string;
+    outcomeObservedAtMs?: number;
     result?: LocalV2DagLambdaShardResult;
     settled: boolean;
-    skippedReason?: "complete_consent_inventory_without_reject";
     started: boolean;
-  } = { settled: false, started: false };
-  let consentRejectAvailability: LocalV2DagLambdaShardResult["consentRejectAvailability"];
+    timedOut: boolean;
+  } = { cancelledNoReject: false, settled: false, started: false, timedOut: false };
+  let postRefusalWorkerPromise: Promise<void> | undefined;
+  const postRefusalAbortController = new AbortController();
+  postRefusalAbortController.signal.addEventListener("abort", () => {
+    postRefusalState.error = postRefusalState.cancelledNoReject
+      ? "reject_control_not_observed"
+      : "reject_path_exceeded_post_primary_join_budget";
+    postRefusalState.outcomeObservedAtMs = Date.now();
+    postRefusalState.settled = true;
+    postRefusalState.timedOut = !postRefusalState.cancelledNoReject;
+  }, { once: true });
   if (isPostRefusalRejectWorkerEnabled(payload)) {
     postRefusalState.started = true;
-    void waitForPostRefusalDispatchDelay(
-      payload.postRefusalObservation?.dispatchDelayMs ?? 2_000,
-      options.signal,
+    const postRefusalWorkerSignal = options.signal
+      ? AbortSignal.any([options.signal, postRefusalAbortController.signal])
+      : postRefusalAbortController.signal;
+    postRefusalWorkerPromise = waitForPostRefusalDispatchDelay(
+      payload.postRefusalObservation?.dispatchDelayMs ??
+        POST_REFUSAL_REJECT_WORKER_DEFAULT_DISPATCH_DELAY_MS,
+      postRefusalWorkerSignal,
     )
       .then(() => {
-        if (
-          consentRejectAvailability?.inventoryComplete &&
-          !consentRejectAvailability.rejectControlObserved
-        ) {
-          postRefusalState.skippedReason = "complete_consent_inventory_without_reject";
-          postRefusalState.settled = true;
-          return undefined;
-        }
+        postRefusalState.dispatchStartedAtMs = Date.now();
         return invokeLocalV2DagLambdaWorker({
           lambdaClient: options.lambdaClient,
           parentPayload: payload,
           parentScanId: payload.scanId,
+          signal: postRefusalWorkerSignal,
           workerLane: "reject_observation",
         });
       })
       .then((result) => {
-        if (!result) return;
+        // RequestResponse cancellation stops the coordinator from accepting a
+        // late lane result, but AWS may still finish an already-running worker.
+        // Never let that late response reopen a terminal no-Reject or timeout
+        // decision, and never give it an independent publication path.
+        if (postRefusalState.cancelledNoReject || postRefusalState.timedOut) return;
         postRefusalState.result = result;
+        postRefusalState.outcomeObservedAtMs = Date.now();
         postRefusalState.settled = true;
       })
       .catch((error) => {
+        if (postRefusalState.timedOut || postRefusalState.cancelledNoReject) return;
         postRefusalState.error = error instanceof Error ? error.message : String(error);
+        postRefusalState.outcomeObservedAtMs = Date.now();
         postRefusalState.settled = true;
-        console.warn("[v2-lambda-post-refusal] optional worker failed closed", {
+        console.warn("[v2-lambda-post-refusal] worker failed closed", {
           error: postRefusalState.error,
           scanId: payload.scanId,
         });
@@ -1940,16 +2041,37 @@ export async function runLocalV2DagLambdaShardedArtifactChain(
   const workerResults = await timeLambdaPhase(phaseTimings, "worker_invocations", () =>
     invokeLocalV2DagLambdaWorkers({
       lambdaClient: options.lambdaClient,
+      onWorkerResult: (result) => {
+        if (
+          result.workerLane !== "consent_proof" ||
+          !postRefusalState.started ||
+          postRefusalState.cancelledNoReject ||
+          postRefusalState.timedOut ||
+          !result.consentRejectAvailability
+        ) return;
+        const returnedRejectStatus = postRefusalState.result?.postRefusalEvidence?.status;
+        const rejectActionMayHaveDispatched = returnedRejectStatus !== undefined &&
+          returnedRejectStatus !== "not_attempted" &&
+          returnedRejectStatus !== "unsupported";
+        const cancellation = decidePostRefusalCooperativeAbort({
+          consentInventoryComplete: result.consentRejectAvailability.inventoryComplete,
+          rejectControlObserved: result.consentRejectAvailability.rejectControlObserved,
+          rejectActionDispatched: rejectActionMayHaveDispatched,
+        });
+        if (!cancellation.abortRequested) return;
+        postRefusalState.cancelledNoReject = true;
+        postRefusalAbortController.abort(new Error(cancellation.reason));
+        console.info("[v2-lambda-post-refusal] cooperative cancellation requested", {
+          reason: cancellation.reason,
+          scanId: payload.scanId,
+        });
+      },
       parentPayload: payload,
       parentScanId: payload.scanId,
-      onWorkerResult: (result) => {
-        if (result.workerLane === "consent_proof") {
-          consentRejectAvailability = result.consentRejectAvailability;
-        }
-      },
       workerLanes: evidenceWorkerLanes,
     })
   );
+  const passiveLaneBarrierCompletedAtMs = Date.now();
   const workerBundles = await timeLambdaPhase(phaseTimings, "worker_bundle_download", () =>
     Promise.all(workerResults.map((result) =>
       readWorkerBundleFromArtifactResult(result, { awsRegion: payload.awsRegion, s3GetClient: options.s3GetClient })
@@ -1982,45 +2104,132 @@ export async function runLocalV2DagLambdaShardedArtifactChain(
       scanId: payload.scanId,
     })
   );
-  let postRefusalJoin: "disabled" | "pending_late_supplement" | "joined" | "failed" | "cancelled_no_reject" =
-    postRefusalState.started ? "pending_late_supplement" : "disabled";
-  if (postRefusalState.settled && postRefusalState.result) {
-    try {
-      const packet = await timeLambdaPhase(phaseTimings, "post_refusal_zero_wait_join", () =>
-        readPostRefusalPacketFromArtifactResult(postRefusalState.result!, {
-          awsRegion: payload.awsRegion,
-          s3GetClient: options.s3GetClient,
-        })
-      );
-      bundle = canonicalEvidenceBundleSchema.parse({
-        ...bundle,
-        postRefusalEvidence: packet,
-      });
-      postRefusalJoin = "joined";
-    } catch (error) {
-      postRefusalJoin = "failed";
-      postRefusalState.error = error instanceof Error ? error.message : String(error);
+  let addedInitialBarrierWaitMs = 0;
+  let postRefusalBarrierStartedAtMs: number | undefined;
+  if (postRefusalWorkerPromise) {
+    postRefusalBarrierStartedAtMs = Date.now();
+    const completedInsideBarrier = await timeLambdaPhase(
+      phaseTimings,
+      "post_refusal_barrier_join",
+      () => awaitPostRefusalWorkerWithinTailBudget({
+        abortController: postRefusalAbortController,
+        maxTailWaitMs: POST_REFUSAL_REJECT_WORKER_MAX_TAIL_WAIT_MS,
+        passiveLaneBarrierCompletedAtMs,
+        workerPromise: postRefusalWorkerPromise!,
+      }),
+    );
+    if (!completedInsideBarrier && !postRefusalState.cancelledNoReject) {
+      postRefusalState.error = "reject_path_exceeded_post_primary_join_budget";
+      postRefusalState.outcomeObservedAtMs = passiveLaneBarrierCompletedAtMs +
+        POST_REFUSAL_REJECT_WORKER_MAX_TAIL_WAIT_MS;
+      postRefusalState.settled = true;
+      postRefusalState.timedOut = true;
     }
-  } else if (postRefusalState.settled && postRefusalState.error) {
-    postRefusalJoin = "failed";
-  } else if (postRefusalState.skippedReason) {
-    postRefusalJoin = "cancelled_no_reject";
   }
+  let postRefusalJoin: "disabled" | "joined" | "failed" | "not_applicable" | "timed_out" =
+    postRefusalState.started ? "failed" : "disabled";
+  let joinedPostRefusalPacket: PostRefusalEvidencePacket | undefined;
+  if (postRefusalState.cancelledNoReject) {
+    postRefusalJoin = "not_applicable";
+  } else if (postRefusalState.timedOut) {
+    postRefusalJoin = "timed_out";
+  }
+  if (!postRefusalState.cancelledNoReject && !postRefusalState.timedOut && postRefusalState.result) {
+    try {
+      let packet: PostRefusalEvidencePacket | undefined;
+      const packetJoinedInsideBarrier = await timeLambdaPhase(
+        phaseTimings,
+        "post_refusal_packet_join",
+        () => awaitPostRefusalWorkerWithinTailBudget({
+          abortController: postRefusalAbortController,
+          maxTailWaitMs: POST_REFUSAL_REJECT_WORKER_MAX_TAIL_WAIT_MS,
+          passiveLaneBarrierCompletedAtMs,
+          workerPromise: readPostRefusalPacketFromArtifactResult(postRefusalState.result!, {
+            awsRegion: payload.awsRegion,
+            s3GetClient: options.s3GetClient,
+            signal: postRefusalAbortController.signal,
+          }).then((verifiedPacket) => {
+            packet = verifiedPacket;
+          }),
+        }),
+      );
+      if (packetJoinedInsideBarrier && packet) {
+        joinedPostRefusalPacket = packet;
+        postRefusalJoin = "joined";
+      } else {
+        postRefusalJoin = "timed_out";
+      }
+    } catch (error) {
+      if (postRefusalState.timedOut) {
+        postRefusalJoin = "timed_out";
+      } else {
+        postRefusalJoin = "failed";
+        postRefusalState.error = error instanceof Error ? error.message : String(error);
+      }
+    }
+  }
+  if (postRefusalBarrierStartedAtMs !== undefined) {
+    addedInitialBarrierWaitMs = Math.min(
+      POST_REFUSAL_REJECT_WORKER_MAX_TAIL_WAIT_MS,
+      Math.max(0, Date.now() - postRefusalBarrierStartedAtMs),
+    );
+  }
+  if (postRefusalState.started) {
+    const outcomeCompletedAt = joinedPostRefusalPacket?.completedAt ?? new Date().toISOString();
+    bundle = canonicalEvidenceBundleSchema.parse({
+      ...bundle,
+      completedAt: latestIsoTimestamp(bundle.completedAt, outcomeCompletedAt),
+      ...(joinedPostRefusalPacket ? { postRefusalEvidence: joinedPostRefusalPacket } : {}),
+      postRefusalLaneOutcome: {
+        contractVersion: "certscore.post_refusal_lane_outcome.v1",
+        completedAt: outcomeCompletedAt,
+        evidenceJoined: postRefusalJoin === "joined",
+        maxTailWaitMs: POST_REFUSAL_REJECT_WORKER_MAX_TAIL_WAIT_MS,
+        status: postRefusalJoin,
+        ...(postRefusalJoin === "timed_out"
+          ? { limitationCode: "reject_path_timeout" }
+          : postRefusalJoin === "not_applicable"
+            ? { limitationCode: "reject_control_not_observed" }
+          : postRefusalJoin === "failed"
+            ? { limitationCode: "reject_path_worker_failed" }
+            : {}),
+      },
+    });
+  }
+  const allWorkerResults = postRefusalState.result
+    ? [...workerResults, postRefusalState.result]
+    : workerResults;
+  const laneTimingSummary = buildLocalV2DagLambdaLaneTimingSummary({
+    addedRejectWaitMs: addedInitialBarrierWaitMs,
+    coordinatorStartedAtMs,
+    generatedAtMs: Date.now(),
+    passiveLaneBarrierCompletedAtMs,
+    passiveWorkerResults: workerResults,
+    postRefusal: {
+      dispatchStartedAtMs: postRefusalState.dispatchStartedAtMs,
+      join: postRefusalJoin,
+      outcomeObservedAtMs: postRefusalState.outcomeObservedAtMs,
+      result: postRefusalState.result,
+    },
+  });
   await writeJson(path.join(artifactRoot, "LocalV2DagLambdaShardSummary.json"), {
     artifactOnly: true,
     artifactVersion: "certscore.v2.lambda.evidence-lane-summary.v1",
     generatedAt: new Date().toISOString(),
     productionFindingIntegration: false,
+    laneTimingSummary,
     postRefusalObservation: {
-      addedInitialBarrierWaitMs: 0,
+      addedInitialBarrierWaitMs,
       featureEnabled: postRefusalState.started,
       join: postRefusalJoin,
-      skippedReason: postRefusalState.skippedReason ?? null,
+      maxTailWaitMs: POST_REFUSAL_REJECT_WORKER_MAX_TAIL_WAIT_MS,
       workerError: postRefusalState.error ?? null,
     },
     scanId: payload.scanId,
-    workerLanes: evidenceWorkerLanes,
-    workerResults: workerResults.map((result) => ({
+    workerLanes: postRefusalState.started
+      ? [...evidenceWorkerLanes, "reject_observation"]
+      : evidenceWorkerLanes,
+    workerResults: allWorkerResults.map((result) => ({
       artifactPointers: result.artifactPointers,
       phaseTimings: result.phaseTimings ?? [],
       scanId: result.scanId,
@@ -2029,7 +2238,7 @@ export async function runLocalV2DagLambdaShardedArtifactChain(
     }))
   });
 
-  return writeAndUploadLocalV2DagLambdaArtifacts({
+  const artifacts = await writeAndUploadLocalV2DagLambdaArtifacts({
     artifactRoot,
     bundle,
     payload,
@@ -2038,6 +2247,9 @@ export async function runLocalV2DagLambdaShardedArtifactChain(
     scanTuning,
     signal: options.artifactSignal ?? options.signal,
   });
+  const artifactsWithLaneTimings = { ...artifacts, laneTimingSummary };
+  if (postRefusalJoin !== "joined" || !postRefusalState.result) return artifactsWithLaneTimings;
+  return attachJoinedPostRefusalArtifactPointer(artifactsWithLaneTimings, postRefusalState.result);
 }
 
 async function timeLambdaPhase<T>(
@@ -2239,38 +2451,49 @@ export async function invokeLocalV2DagLambdaWorker(input: {
   lambdaClient?: LambdaInvokeClient;
   parentPayload: LocalV2DagLambdaDispatchPayload;
   parentScanId: string;
+  signal?: AbortSignal;
   workerLane: LocalV2DagLambdaWorkerLane;
 }): Promise<LocalV2DagLambdaShardResult> {
   const lambdaClient = input.lambdaClient ?? new LambdaClient({ region: input.parentPayload.awsRegion });
   const workerLane = input.workerLane;
-    const workerPayload: LocalV2DagLambdaDispatchPayload = {
-      ...input.parentPayload,
-      callbackCorrelationId: input.parentScanId,
-      ...(input.coordinatorPlanSummary ? { coordinatorPlanSummary: input.coordinatorPlanSummary } : {}),
-      ...(workerLane === "reject_observation" && input.parentPayload.postRefusalObservation
-        ? {
-            postRefusalObservation: {
-              ...input.parentPayload.postRefusalObservation,
-              dispatchDelayMs: 0,
-            },
-          }
-        : {}),
-      orchestrationMode: "worker",
-      scanId: input.parentScanId,
-      workerLane
-    };
-    const response = await lambdaClient.send(new InvokeCommand({
-      FunctionName: input.parentPayload.functionName,
-      InvocationType: "RequestResponse",
-      Payload: Buffer.from(JSON.stringify(workerPayload))
-    }));
-    if ((response.StatusCode ?? 0) < 200 || (response.StatusCode ?? 0) >= 300) {
-      throw new Error(`Local v2 DAG Lambda worker ${workerLane} was not accepted: status ${response.StatusCode ?? 0}.`);
-    }
-    if (response.FunctionError) {
-      throw new Error(`Local v2 DAG Lambda worker ${workerLane} failed: ${response.FunctionError}.`);
-    }
-    return parseLocalV2DagLambdaShardResult(response.Payload, workerLane);
+  const workerPayload: LocalV2DagLambdaDispatchPayload = {
+    ...input.parentPayload,
+    callbackCorrelationId: input.parentScanId,
+    ...(input.coordinatorPlanSummary ? { coordinatorPlanSummary: input.coordinatorPlanSummary } : {}),
+    ...(workerLane === "reject_observation" && input.parentPayload.postRefusalObservation
+      ? {
+          parentDispatchSha256: postRefusalParentDispatchSha256(input.parentPayload),
+          postRefusalObservation: {
+            ...input.parentPayload.postRefusalObservation,
+            dispatchDelayMs: 0,
+          },
+        }
+      : {}),
+    orchestrationMode: "worker",
+    scanId: input.parentScanId,
+    workerLane
+  };
+  const invocationStartedAtMs = Date.now();
+  const response = await lambdaClient.send(new InvokeCommand({
+    FunctionName: input.parentPayload.functionName,
+    InvocationType: "RequestResponse",
+    Payload: Buffer.from(JSON.stringify(workerPayload))
+  }), { abortSignal: input.signal });
+  const responseReceivedAtMs = Date.now();
+  if ((response.StatusCode ?? 0) < 200 || (response.StatusCode ?? 0) >= 300) {
+    throw new Error(`Local v2 DAG Lambda worker ${workerLane} was not accepted: status ${response.StatusCode ?? 0}.`);
+  }
+  if (response.FunctionError) {
+    throw new Error(`Local v2 DAG Lambda worker ${workerLane} failed: ${response.FunctionError}.`);
+  }
+  return {
+    ...parseLocalV2DagLambdaShardResult(response.Payload, workerLane),
+    coordinatorTiming: {
+      durationMs: Math.max(0, responseReceivedAtMs - invocationStartedAtMs),
+      invocationStartedAt: new Date(invocationStartedAtMs).toISOString(),
+      responseReceivedAt: new Date(responseReceivedAtMs).toISOString(),
+    },
+  };
 }
 
 async function waitForPostRefusalDispatchDelay(delayMs: number, signal?: AbortSignal) {
@@ -2287,6 +2510,167 @@ async function waitForPostRefusalDispatchDelay(delayMs: number, signal?: AbortSi
       reject(signal.reason ?? new Error("Post-refusal worker dispatch aborted."));
     }, { once: true });
   });
+}
+
+export async function awaitPostRefusalWorkerWithinTailBudget(input: {
+  abortController: AbortController;
+  maxTailWaitMs?: number;
+  passiveLaneBarrierCompletedAtMs: number;
+  workerPromise: Promise<void>;
+}): Promise<boolean> {
+  if (input.abortController.signal.aborted) return false;
+  const maxTailWaitMs = Math.max(0, Math.round(
+    input.maxTailWaitMs ?? POST_REFUSAL_REJECT_WORKER_MAX_TAIL_WAIT_MS,
+  ));
+  const remainingMs = input.passiveLaneBarrierCompletedAtMs + maxTailWaitMs - Date.now();
+  if (remainingMs <= 0) {
+    input.abortController.abort(new Error("Reject Path exceeded its post-primary join budget."));
+    return false;
+  }
+  let timer: NodeJS.Timeout | undefined;
+  try {
+    return await Promise.race([
+      input.workerPromise.then(() => true),
+      new Promise<false>((resolve) => {
+        timer = setTimeout(() => {
+          input.abortController.abort(new Error("Reject Path exceeded its post-primary join budget."));
+          resolve(false);
+        }, remainingMs);
+      }),
+    ]);
+  } finally {
+    if (timer) clearTimeout(timer);
+  }
+}
+
+function latestIsoTimestamp(left: string, right: string): string {
+  const leftMs = Date.parse(left);
+  const rightMs = Date.parse(right);
+  if (!Number.isFinite(leftMs)) return right;
+  if (!Number.isFinite(rightMs)) return left;
+  return rightMs > leftMs ? right : left;
+}
+
+export function buildLocalV2DagLambdaLaneTimingSummary(input: {
+  addedRejectWaitMs: number;
+  coordinatorStartedAtMs: number;
+  generatedAtMs: number;
+  passiveLaneBarrierCompletedAtMs: number;
+  passiveWorkerResults: LocalV2DagLambdaShardResult[];
+  postRefusal: {
+    dispatchStartedAtMs?: number;
+    join: "disabled" | "failed" | "joined" | "not_applicable" | "timed_out";
+    outcomeObservedAtMs?: number;
+    result?: LocalV2DagLambdaShardResult;
+  };
+}): LocalV2DagLambdaLaneTimingSummary {
+  const passiveLaneBarrierCompletedAtMs = Math.max(0, Math.round(input.passiveLaneBarrierCompletedAtMs));
+  const timingFromResult = (
+    lane: LocalV2DagLambdaEvidenceLane,
+    result: LocalV2DagLambdaShardResult,
+    evidenceJoined: boolean,
+    outcome: LocalV2DagLambdaLaneTiming["outcome"] = "completed",
+  ): LocalV2DagLambdaLaneTiming => {
+    const invocationStartedAtMs = parseTimestampMs(result.coordinatorTiming?.invocationStartedAt)
+      ?? parseTimestampMs(result.handlerTiming?.handlerStartedAt);
+    const terminalOutcomeObservedAtMs = parseTimestampMs(result.coordinatorTiming?.responseReceivedAt)
+      ?? parseTimestampMs(result.completedAt);
+    const coordinatorElapsedMs = result.coordinatorTiming?.durationMs
+      ?? (invocationStartedAtMs !== null && terminalOutcomeObservedAtMs !== null
+        ? Math.max(0, terminalOutcomeObservedAtMs - invocationStartedAtMs)
+        : result.handlerTiming?.handlerDurationMs ?? null);
+    return {
+      coordinatorElapsedMs,
+      evidenceJoined,
+      invocationStartedAt: invocationStartedAtMs === null ? null : new Date(invocationStartedAtMs).toISOString(),
+      lane,
+      outcome,
+      terminalOutcomeDeltaFromPassiveBarrierMs: terminalOutcomeObservedAtMs === null
+        ? null
+        : terminalOutcomeObservedAtMs - passiveLaneBarrierCompletedAtMs,
+      terminalOutcomeObservedAt: terminalOutcomeObservedAtMs === null
+        ? null
+        : new Date(terminalOutcomeObservedAtMs).toISOString(),
+      workerReportedCompletedAt: result.completedAt ?? result.handlerTiming?.completedAt ?? null,
+      workerReportedHandlerDurationMs: result.handlerTiming?.handlerDurationMs ?? null,
+    };
+  };
+
+  const passiveResultsByLane = new Map(input.passiveWorkerResults.map((result) => [result.workerLane, result]));
+  const lanes: LocalV2DagLambdaLaneTiming[] = LOCAL_V2_DAG_LAMBDA_EVIDENCE_WORKER_LANES.map((lane) => {
+    const result = passiveResultsByLane.get(lane);
+    if (!result) {
+      return {
+        coordinatorElapsedMs: null,
+        evidenceJoined: false,
+        invocationStartedAt: null,
+        lane,
+        outcome: "failed",
+        terminalOutcomeDeltaFromPassiveBarrierMs: null,
+        terminalOutcomeObservedAt: null,
+        workerReportedCompletedAt: null,
+        workerReportedHandlerDurationMs: null,
+      };
+    }
+    return timingFromResult(lane, result, true);
+  });
+
+  let rejectTiming: LocalV2DagLambdaLaneTiming;
+  if (input.postRefusal.result && input.postRefusal.join !== "not_applicable") {
+    rejectTiming = timingFromResult(
+      "reject_observation",
+      input.postRefusal.result,
+      input.postRefusal.join === "joined",
+      input.postRefusal.join === "joined" ? "completed" : input.postRefusal.join,
+    );
+  } else {
+    const invocationStartedAtMs = input.postRefusal.dispatchStartedAtMs ?? null;
+    const terminalOutcomeObservedAtMs = input.postRefusal.outcomeObservedAtMs ?? null;
+    rejectTiming = {
+      coordinatorElapsedMs: invocationStartedAtMs !== null && terminalOutcomeObservedAtMs !== null
+        ? Math.max(0, terminalOutcomeObservedAtMs - invocationStartedAtMs)
+        : null,
+      evidenceJoined: false,
+      invocationStartedAt: invocationStartedAtMs === null ? null : new Date(invocationStartedAtMs).toISOString(),
+      lane: "reject_observation",
+      outcome: input.postRefusal.join === "joined" ? "failed" : input.postRefusal.join,
+      terminalOutcomeDeltaFromPassiveBarrierMs: terminalOutcomeObservedAtMs === null
+        ? null
+        : terminalOutcomeObservedAtMs - passiveLaneBarrierCompletedAtMs,
+      terminalOutcomeObservedAt: terminalOutcomeObservedAtMs === null
+        ? null
+        : new Date(terminalOutcomeObservedAtMs).toISOString(),
+      workerReportedCompletedAt: null,
+      workerReportedHandlerDurationMs: null,
+    };
+  }
+  lanes.push(rejectTiming);
+  const rejectReturnedAtMs = input.postRefusal.join === "not_applicable" || !input.postRefusal.result
+    ? input.postRefusal.outcomeObservedAtMs ?? null
+    : parseTimestampMs(input.postRefusal.result.coordinatorTiming?.responseReceivedAt)
+      ?? parseTimestampMs(input.postRefusal.result.completedAt);
+  const rejectTailDeltaMs = rejectReturnedAtMs === null
+    ? null
+    : rejectReturnedAtMs - passiveLaneBarrierCompletedAtMs;
+
+  return {
+    contractVersion: LOCAL_V2_DAG_LAMBDA_LANE_TIMING_CONTRACT_VERSION,
+    coordinatorStartedAt: new Date(input.coordinatorStartedAtMs).toISOString(),
+    generatedAt: new Date(input.generatedAtMs).toISOString(),
+    lanes,
+    maxRejectTailWaitMs: POST_REFUSAL_REJECT_WORKER_MAX_TAIL_WAIT_MS,
+    passiveLaneBarrierCompletedAt: new Date(passiveLaneBarrierCompletedAtMs).toISOString(),
+    rejectCompletedBeforeOrAtPassiveBarrier: rejectTailDeltaMs === null ? null : rejectTailDeltaMs <= 0,
+    rejectLaneAddedWaitMs: Math.max(0, Math.round(input.addedRejectWaitMs)),
+    rejectLaneJoin: input.postRefusal.join,
+    rejectTailDeltaMs,
+  };
+}
+
+function parseTimestampMs(value: string | undefined): number | null {
+  if (!value) return null;
+  const parsed = Date.parse(value);
+  return Number.isFinite(parsed) ? parsed : null;
 }
 
 function parseLocalV2DagLambdaShardResult(
@@ -2306,9 +2690,11 @@ function parseLocalV2DagLambdaShardResult(
     throw new Error(`Local v2 DAG Lambda worker ${expectedWorkerLane} returned ${String(parsed.status)}${errorMessage ? `: ${errorMessage}` : "."}`);
   }
   const artifactPointers = parseArtifactPointersRecord(parsed.artifactPointers);
+  const completedAt = compactString(parsed.completedAt) ?? undefined;
+  const handlerTiming = parseLocalV2DagLambdaHandlerTimingRecord(parsed.handlerTiming);
   const postRefusalEvidence = parsed.postRefusalEvidence === undefined
     ? undefined
-    : postRefusalLambdaEvidenceMessageSchema.parse(parsed.postRefusalEvidence);
+    : postRefusalLambdaEvidenceDescriptorSchema.parse(parsed.postRefusalEvidence);
   const consentRejectAvailabilityRecord = asRecord(parsed.consentRejectAvailability);
   const consentRejectAvailability =
     typeof consentRejectAvailabilityRecord.inventoryComplete === "boolean" &&
@@ -2327,12 +2713,46 @@ function parseLocalV2DagLambdaShardResult(
   return {
     artifactMetadata: parseArtifactMetadataRecord(parsed.artifactMetadata),
     artifactPointers,
+    ...(completedAt ? { completedAt } : {}),
+    ...(handlerTiming ? { handlerTiming } : {}),
     phaseTimings: parsePhaseTimings(parsed.phaseTimings),
     ...(postRefusalEvidence ? { postRefusalEvidence } : {}),
     ...(consentRejectAvailability ? { consentRejectAvailability } : {}),
     scanId: requireString(parsed, "scanId"),
     status: "completed",
     workerLane
+  };
+}
+
+function parseLocalV2DagLambdaHandlerTimingRecord(value: unknown): LocalV2DagLambdaHandlerTiming | undefined {
+  const record = asRecord(value);
+  const completedAt = compactString(record.completedAt);
+  const handlerStartedAt = compactString(record.handlerStartedAt);
+  const handlerDurationMs = finiteNonNegativeNumber(record.handlerDurationMs);
+  if (!completedAt || !handlerStartedAt || handlerDurationMs === undefined) return undefined;
+  const optionalDuration = (field: string) => finiteNonNegativeNumber(record[field]);
+  const optionalString = (field: string) => compactString(record[field]);
+  return {
+    ...(optionalString("artifactChainCompletedAt")
+      ? { artifactChainCompletedAt: optionalString("artifactChainCompletedAt")! }
+      : {}),
+    ...(optionalDuration("artifactChainDurationMs") !== undefined
+      ? { artifactChainDurationMs: Math.round(optionalDuration("artifactChainDurationMs")!) }
+      : {}),
+    ...(optionalString("artifactChainStartedAt")
+      ? { artifactChainStartedAt: optionalString("artifactChainStartedAt")! }
+      : {}),
+    completedAt,
+    ...(optionalString("firstPhaseLabel") ? { firstPhaseLabel: optionalString("firstPhaseLabel")!.slice(0, 80) } : {}),
+    ...(optionalString("firstPhaseStartedAt") ? { firstPhaseStartedAt: optionalString("firstPhaseStartedAt")! } : {}),
+    handlerDurationMs: Math.round(handlerDurationMs),
+    handlerStartedAt,
+    ...(optionalString("scanPhaseCompletedAt") ? { scanPhaseCompletedAt: optionalString("scanPhaseCompletedAt")! } : {}),
+    ...(optionalDuration("scanPhaseDurationMs") !== undefined
+      ? { scanPhaseDurationMs: Math.round(optionalDuration("scanPhaseDurationMs")!) }
+      : {}),
+    ...(optionalString("scanPhaseLabel") ? { scanPhaseLabel: optionalString("scanPhaseLabel")!.slice(0, 80) } : {}),
+    ...(optionalString("scanPhaseStartedAt") ? { scanPhaseStartedAt: optionalString("scanPhaseStartedAt")! } : {}),
   };
 }
 
@@ -2445,7 +2865,11 @@ async function readConsentRejectAvailabilityFromArtifactRoot(artifactRoot: strin
 
 async function readPostRefusalPacketFromArtifactResult(
   result: LocalV2DagLambdaShardResult,
-  options: { awsRegion?: LocalV2DagLambdaAwsRegion; s3GetClient?: S3GetClient },
+  options: {
+    awsRegion?: LocalV2DagLambdaAwsRegion;
+    s3GetClient?: S3GetClient;
+    signal?: AbortSignal;
+  },
 ) {
   const uri = result.artifactPointers?.postRefusalPacketUri;
   if (!uri) {
@@ -2455,7 +2879,10 @@ async function readPostRefusalPacketFromArtifactResult(
   const s3Client = options.s3GetClient ?? localV2DagLambdaS3Client(
     options.awsRegion ?? LOCAL_V2_DAG_LAMBDA_AWS_REGION,
   );
-  const response = await s3Client.send(new GetObjectCommand({ Bucket: bucket, Key: key }));
+  const response = await s3Client.send(
+    new GetObjectCommand({ Bucket: bucket, Key: key }),
+    { abortSignal: options.signal },
+  );
   const body = await streamToBuffer(response.Body);
   const expected = result.artifactMetadata?.postRefusalPacketUri;
   const sha256 = createHash("sha256").update(body).digest("hex");
@@ -3684,6 +4111,7 @@ export function buildLocalV2DagLambdaResultMessage(input: {
   completedAt: Date;
   error?: { code?: string; message: string };
   handlerTiming?: LocalV2DagLambdaHandlerTiming;
+  laneTimingSummary?: LocalV2DagLambdaLaneTimingSummary;
   payload: LocalV2DagLambdaDispatchPayload;
   phaseTimings?: LocalV2DagLambdaPhaseTiming[];
   policyEvidence?: LocalV2DagLambdaPolicyEvidenceMessage;
@@ -3699,8 +4127,12 @@ export function buildLocalV2DagLambdaResultMessage(input: {
     contractVersion: LOCAL_V2_DAG_LAMBDA_RESULT_CONTRACT_VERSION,
     ...(input.error ? { error: sanitizeError(input.error) } : {}),
     ...(input.handlerTiming ? { handlerTiming: input.handlerTiming } : {}),
+    ...(input.laneTimingSummary ? { laneTimingSummary: input.laneTimingSummary } : {}),
     ...(input.phaseTimings ? { phaseTimings: input.phaseTimings } : {}),
     ...(input.policyEvidence ? { policyEvidence: input.policyEvidence } : {}),
+    ...(input.payload.postRefusalObservation
+      ? { parentDispatchSha256: postRefusalParentDispatchSha256(input.payload) }
+      : {}),
     processor: LOCAL_V2_DAG_SCAN_PROCESSOR,
     productionFindingIntegration: false,
     resultPurpose: input.payload.resultPurpose,
@@ -4097,7 +4529,6 @@ export async function handler(event: unknown, options: HandlerOptions = {}) {
             artifactRoot: runOptions.artifactRoot,
             s3Client: options.s3Client,
             signal: runOptions.signal,
-            sqsClient: options.sqsClient,
           })
         : dispatchPayload.orchestrationMode === "sharded"
         ? runLocalV2DagLambdaShardedArtifactChain(dispatchPayload, {
@@ -4261,10 +4692,20 @@ export async function handler(event: unknown, options: HandlerOptions = {}) {
       const consentRejectAvailability = payload.workerLane === "consent_proof" && artifactRoot
         ? await readConsentRejectAvailabilityFromArtifactRoot(artifactRoot)
         : undefined;
+      const completedAt = now();
+      const workerHandlerTiming = buildLocalV2DagLambdaHandlerTiming({
+        artifactChainCompletedAt,
+        artifactChainStartedAt,
+        completedAt,
+        handlerStartedAt,
+        phaseTimings: artifactResult.phaseTimings,
+      });
       handlerOutcome = "completed";
       return {
         artifactMetadata: artifactResult.artifactMetadata,
         artifactPointers: artifactResult.artifactPointers,
+        completedAt: completedAt.toISOString(),
+        handlerTiming: workerHandlerTiming,
         phaseTimings: artifactResult.phaseTimings,
         ...(artifactResult.postRefusalEvidence
           ? { postRefusalEvidence: artifactResult.postRefusalEvidence }
@@ -4289,6 +4730,9 @@ export async function handler(event: unknown, options: HandlerOptions = {}) {
         handlerStartedAt,
         phaseTimings
       }),
+      ...(artifactResult.laneTimingSummary
+        ? { laneTimingSummary: artifactResult.laneTimingSummary }
+        : {}),
       payload,
       phaseTimings,
       ...(policyEvidence ? { policyEvidence } : {}),

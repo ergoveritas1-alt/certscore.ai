@@ -14,117 +14,8 @@ import {
   mirrorLocalV2DagLambdaArtifacts,
   parseLambdaResultMessage,
   productionArtifactChainRejectReason,
-  verifyPostRefusalEvidenceReadyMessage,
   verifyProductionArtifactChain,
 } from "./local-v2-dag-lambda-results";
-
-test("validation worker verifies a hash-bound confirmed post-refusal packet", async () => {
-  const packet = {
-    artifactVersion: "certscore.post_refusal_evidence.v1",
-    artifactOnly: true,
-    productionProjectable: false,
-    scanId: "scan-1:reject_observation",
-    parentScanId: "scan-1",
-    targetUrl: "https://ergoveritas.com/.well-known/certscore-canary/post-refusal/reject-honored.html",
-    normalizedUrl: "https://ergoveritas.com/.well-known/certscore-canary/post-refusal/reject-honored.html",
-    observationBranch: "reject_only",
-    phase: "post_action",
-    consentAction: "reject",
-    startedAt: "2026-08-26T20:00:00.000Z",
-    completedAt: "2026-08-26T20:00:01.000Z",
-    resolver: {
-      found: true,
-      method: "tcf_api_cmp_registry_recipe",
-      confidence: 1,
-      recipeId: "canonical-cmp:OneTrust:reject:v1",
-      cmpId: "OneTrust",
-    },
-    refusalRegistration: {
-      status: "confirmed",
-      refusalExercised: true,
-      actionDispatchedAtMs: 600,
-      refusalRegisteredAtMs: 650,
-      witnesses: [{
-        witnessType: "tcf_user_action_complete",
-        observedAtMs: 650,
-        expectedState: "all_configured_purposes_denied",
-        corroboratingOnly: false,
-      }],
-    },
-    observationWindowMs: 8_000,
-    timing: {
-      dispatchDelayMs: 0,
-      navigationMs: 400,
-      resolverMs: 100,
-      confirmationMs: 50,
-      observationMs: 350,
-      totalMs: 1_000,
-      readyAtMs: 3_000,
-    },
-    network: {
-      requests: [],
-      postRefusalNonEssentialRequests: [],
-      activeRequestIdsAtRefusalRegistration: [],
-    },
-    storage: {
-      preAction: [],
-      postAction: [],
-      writesAfterRefusal: [],
-      nonEssentialItemsPersistingAfterRefusal: [],
-    },
-    observations: [],
-    cancellation: { requested: false, outcome: "not_requested" },
-    limitations: ["artifact_only_not_production_projectable"],
-  };
-  const body = Buffer.from(JSON.stringify(packet));
-  const message = {
-    artifactOnly: true,
-    contractVersion: "certscore.v2.lambda-post-refusal-evidence-ready.v1",
-    generatedAt: "2026-08-26T20:00:01.100Z",
-    messageKind: "post_refusal_evidence_ready",
-    packetMetadata: {
-      sha256: createHash("sha256").update(body).digest("hex"),
-      sizeBytes: body.byteLength,
-    },
-    packetPointer: "s3://certscore-artifacts-eu-west-1/scans/scan-1/PostRefusalEvidencePacket.json",
-    parentDispatchSha256: "a".repeat(64),
-    parentScanId: "scan-1",
-    processor: "local-certscore-v2-dag-parallel-v1",
-    productionFindingIntegration: false,
-    refusalExercised: true,
-    observationCount: 0,
-    scanId: "scan-1",
-    status: "confirmed_clean",
-    targetEnvironment: "local",
-  };
-  const verified = await verifyPostRefusalEvidenceReadyMessage({
-    expectedTargetEnvironment: "local",
-    raw: JSON.stringify(message),
-    s3Client: {
-      async send() {
-        return { $metadata: {}, ContentLength: body.byteLength, Body: Readable.from([body]) as never };
-      },
-    },
-  });
-
-  assert.equal(verified.packet.refusalRegistration.refusalExercised, true);
-  assert.equal(verified.message.status, "confirmed_clean");
-  await assert.rejects(
-    verifyPostRefusalEvidenceReadyMessage({
-      expectedTargetEnvironment: "local",
-      raw: JSON.stringify({
-        ...message,
-        packetMetadata: { ...message.packetMetadata, sha256: "b".repeat(64) },
-      }),
-      s3Client: {
-        async send() {
-          return { $metadata: {}, Body: Readable.from([body]) as never };
-        },
-      },
-    }),
-    /checksum or size did not verify/,
-  );
-});
 
 test("canonical result finalization accepts only verified production completions", () => {
   assert.equal(isCanonicalResultFinalizationEligible({
@@ -373,6 +264,79 @@ test("late results recover only typed transient control-plane failures", () => {
   }), false);
 });
 
+test("terminal result parsing retains only a canonical parent dispatch checksum", () => {
+  const message = {
+    artifactOnly: true,
+    completedAt: "2026-08-26T20:00:05.000Z",
+    contractVersion: "certscore.v2.lambda-dag-result.v1",
+    parentDispatchSha256: "a".repeat(64),
+    processor: "local-certscore-v2-dag-parallel-v1",
+    productionFindingIntegration: false,
+    scanId: "scan-local-1",
+    status: "completed",
+    targetEnvironment: "local",
+  };
+
+  assert.equal(
+    parseLambdaResultMessage(JSON.stringify(message), "local").parentDispatchSha256,
+    message.parentDispatchSha256,
+  );
+  assert.throws(
+    () => parseLambdaResultMessage(JSON.stringify({
+      ...message,
+      parentDispatchSha256: "not-a-canonical-sha",
+    }), "local"),
+    /parent dispatch checksum is invalid/,
+  );
+});
+
+test("validation worker retains bounded four-lane timing telemetry for later cohort queries", async () => {
+  const lanes = [
+    ["consent_proof", 4_000, -1_000],
+    ["runtime_evidence", 5_000, 0],
+    ["policy_evidence", 3_000, -2_000],
+    ["reject_observation", 6_200, 1_200],
+  ].map(([lane, elapsedMs, deltaMs]) => ({
+    coordinatorElapsedMs: elapsedMs,
+    evidenceJoined: true,
+    invocationStartedAt: "2026-08-26T20:00:00.000Z",
+    lane,
+    outcome: "completed",
+    terminalOutcomeDeltaFromPassiveBarrierMs: deltaMs,
+    terminalOutcomeObservedAt: new Date(Date.parse("2026-08-26T20:00:05.000Z") + Number(deltaMs)).toISOString(),
+    workerReportedCompletedAt: new Date(Date.parse("2026-08-26T20:00:00.000Z") + Number(elapsedMs) - 50).toISOString(),
+    workerReportedHandlerDurationMs: Number(elapsedMs) - 50,
+  }));
+  const parsed = parseLambdaResultMessage(JSON.stringify({
+    artifactOnly: true,
+    completedAt: "2026-08-26T20:00:06.250Z",
+    contractVersion: "certscore.v2.lambda-dag-result.v1",
+    laneTimingSummary: {
+      contractVersion: "certscore.v2.lambda-lane-timing.v1",
+      coordinatorStartedAt: "2026-08-26T20:00:00.000Z",
+      generatedAt: "2026-08-26T20:00:06.250Z",
+      lanes,
+      maxRejectTailWaitMs: 6_000,
+      passiveLaneBarrierCompletedAt: "2026-08-26T20:00:05.000Z",
+      rejectCompletedBeforeOrAtPassiveBarrier: false,
+      rejectLaneAddedWaitMs: 1_200,
+      rejectLaneJoin: "joined",
+      rejectTailDeltaMs: 1_200,
+    },
+    processor: "local-certscore-v2-dag-parallel-v1",
+    productionFindingIntegration: false,
+    scanId: "scan-lane-timing-1",
+    status: "completed",
+    targetEnvironment: "local",
+  }), "local");
+
+  assert.equal(parsed.laneTimingSummary?.lanes.length, 4);
+  assert.equal(parsed.laneTimingSummary?.rejectTailDeltaMs, 1_200);
+  assert.equal(parsed.laneTimingSummary?.rejectLaneAddedWaitMs, 1_200);
+  const source = await readFile("apps/validation-worker/src/validation/local-v2-dag-lambda-results.ts", "utf8");
+  assert.match(source, /lambdaLaneTimingSummary:\s*parsedMessage\.laneTimingSummary/);
+});
+
 test("validation worker retains bounded scanner runtime provenance from Lambda results", () => {
   const result = parseLambdaResultMessage(JSON.stringify({
     artifactOnly: true,
@@ -548,21 +512,13 @@ test("unified completion durably queues and immediately dispatches canonical rep
   assert.match(indexSource, /startPersistedCompletedResultFinalizationRecovery/);
 });
 
-test("late post-refusal reconciliation atomically invalidates and queues a new report generation", async () => {
+test("validation worker exposes no independent post-refusal message or regeneration path", async () => {
   const source = await readFile("apps/validation-worker/src/validation/local-v2-dag-lambda-results.ts", "utf8");
-  const reconcileStart = source.indexOf("async function reconcilePostRefusalEvidenceWithCanonicalBase");
-  const reconcileEnd = source.indexOf("async function processPostRefusalEvidenceReadyMessage", reconcileStart);
-  const body = source.slice(reconcileStart, reconcileEnd);
 
-  assert.match(body, /with reconciled_event as/);
-  assert.match(body, /snapshot_invalidated as/);
-  assert.match(body, /materialization_request as/);
-  assert.match(body, /report_projection_status = 'pending'/);
-  assert.match(body, /insert into public\.scan_score_materialization_requests/);
-  assert.match(body, /status = 'pending'/);
-  assert.match(body, /token_sha256 = excluded\.token_sha256/);
-  assert.match(body, /where \$7::boolean/);
-  assert.match(body, /canonicalProjection: projection\.productionProjectable/);
+  assert.doesNotMatch(source, /post_refusal_evidence_ready/);
+  assert.doesNotMatch(source, /processPostRefusalEvidenceReadyMessage/);
+  assert.doesNotMatch(source, /reconcilePostRefusalEvidenceWithCanonicalBase/);
+  assert.doesNotMatch(source, /v2_post_refusal_evidence\.(?:received|verified|reconciled)/);
 });
 
 test("validation worker owns projection finalization across the result-to-findings race", async () => {

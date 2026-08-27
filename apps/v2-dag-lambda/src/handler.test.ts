@@ -25,10 +25,15 @@ import {
   LOCAL_V2_DAG_LAMBDA_POLICY_SHUTDOWN_RESERVE_MS,
   LOCAL_V2_DAG_LAMBDA_SHARDED_HANDLER_SAFETY_TIMEOUT_MS,
   LOCAL_V2_DAG_SCAN_PROCESSOR,
+  POST_REFUSAL_REJECT_WORKER_DEFAULT_DISPATCH_DELAY_MS,
+  POST_REFUSAL_REJECT_WORKER_MAX_TAIL_WAIT_MS,
   POST_REFUSAL_REJECT_WORKER_FEATURE_FLAG,
+  attachJoinedPostRefusalArtifactPointer,
+  awaitPostRefusalWorkerWithinTailBudget,
   artifactPointersFromS3Keys,
   assessEgressProbeObservation,
   buildLocalV2DagLambdaLaneRun,
+  buildLocalV2DagLambdaLaneTimingSummary,
   buildLocalV2DagLambdaResultMessage,
   buildVerifiedPolicyEvidencePacket,
   buildLocalV2DagLambdaRuntimeDiagnostics,
@@ -79,12 +84,15 @@ test("post-refusal dispatch is typed, exact-target authorized, and default off",
   const payload = parseLocalV2DagLambdaDispatchPayload(validPayload({
     postRefusalObservation: {
       enabled: true,
-      dispatchDelayMs: 2_000,
+      dispatchDelayMs: 500,
       observationWindowMs: 8_000,
       confirmationTimeoutMs: 1_500,
       actionSearchTimeoutMs: 1_500,
-      cmpCanonicalName: "OneTrust",
-      confirmation: { kind: "tcf_purposes_denied", purposeIds: [1, 2, 3, 4, 7, 9, 10] },
+      resolver: {
+        kind: "named_cmp",
+        cmpCanonicalName: "OneTrust",
+        confirmation: { kind: "tcf_purposes_denied", purposeIds: [1, 2, 3, 4, 7, 9, 10] },
+      },
       interactionAuthorization: {
         kind: "owned_canary",
         authorizationId: "ergoveritas_owned_post_refusal_canary.v1",
@@ -92,7 +100,10 @@ test("post-refusal dispatch is typed, exact-target authorized, and default off",
     },
   }));
 
-  assert.equal(payload.postRefusalObservation?.dispatchDelayMs, 2_000);
+  assert.equal(
+    payload.postRefusalObservation?.dispatchDelayMs,
+    POST_REFUSAL_REJECT_WORKER_DEFAULT_DISPATCH_DELAY_MS,
+  );
   assert.equal(isPostRefusalRejectWorkerEnabled(payload, {}), false);
   assert.equal(isPostRefusalRejectWorkerEnabled(payload, {
     [POST_REFUSAL_REJECT_WORKER_FEATURE_FLAG]: "1",
@@ -105,9 +116,12 @@ test("reject worker invocation clears the coordinator launch delay without chang
     orchestrationMode: "sharded",
     postRefusalObservation: {
       enabled: true,
-      dispatchDelayMs: 2_000,
-      cmpCanonicalName: "OneTrust",
-      confirmation: { kind: "tcf_purposes_denied", purposeIds: [1] },
+      dispatchDelayMs: 500,
+      resolver: {
+        kind: "named_cmp",
+        cmpCanonicalName: "OneTrust",
+        confirmation: { kind: "tcf_purposes_denied", purposeIds: [1] },
+      },
       interactionAuthorization: {
         kind: "owned_canary",
         authorizationId: "ergoveritas_owned_post_refusal_canary.v1",
@@ -133,9 +147,9 @@ test("reject worker invocation clears the coordinator launch delay without chang
             },
             postRefusalEvidence: {
               artifactOnly: true,
-              contractVersion: "certscore.v2.lambda-post-refusal-evidence-ready.v1",
+              contractVersion: "certscore.v2.lambda-post-refusal-evidence-descriptor.v1",
               generatedAt: "2026-08-26T12:00:00.000Z",
-              messageKind: "post_refusal_evidence_ready",
+              descriptorKind: "post_refusal_evidence_descriptor",
               packetMetadata: { sha256: "a".repeat(64), sizeBytes: 10 },
               packetPointer: "s3://test-bucket/reject/PostRefusalEvidencePacket.json",
               parentDispatchSha256: "b".repeat(64),
@@ -163,19 +177,200 @@ test("reject worker invocation clears the coordinator launch delay without chang
     (childPayload?.postRefusalObservation as Record<string, unknown>)?.dispatchDelayMs,
     0,
   );
+  assert.equal(childPayload?.parentDispatchSha256, postRefusalParentDispatchSha256(parentPayload));
+  const changedConfirmation = parseLocalV2DagLambdaDispatchPayload(validPayload({
+    orchestrationMode: "sharded",
+    postRefusalObservation: {
+      ...parentPayload.postRefusalObservation,
+      resolver: {
+        kind: "named_cmp",
+        cmpCanonicalName: "OneTrust",
+        confirmation: { kind: "tcf_purposes_denied", purposeIds: [1, 2] },
+      },
+    },
+  }));
+  assert.notEqual(
+    postRefusalParentDispatchSha256(changedConfirmation),
+    postRefusalParentDispatchSha256(parentPayload),
+  );
 });
 
-test("reject worker retains and independently publishes a neutral unsupported packet", async () => {
+test("Reject Path uses a 500 ms launch offset and a six-second post-primary tail cap", async () => {
+  assert.equal(POST_REFUSAL_REJECT_WORKER_DEFAULT_DISPATCH_DELAY_MS, 500);
+  assert.equal(POST_REFUSAL_REJECT_WORKER_MAX_TAIL_WAIT_MS, 6_000);
+
+  const completedController = new AbortController();
+  assert.equal(await awaitPostRefusalWorkerWithinTailBudget({
+    abortController: completedController,
+    maxTailWaitMs: 25,
+    passiveLaneBarrierCompletedAtMs: Date.now(),
+    workerPromise: Promise.resolve(),
+  }), true);
+  assert.equal(completedController.signal.aborted, false);
+
+  const timedOutController = new AbortController();
+  const startedAt = Date.now();
+  assert.equal(await awaitPostRefusalWorkerWithinTailBudget({
+    abortController: timedOutController,
+    maxTailWaitMs: 25,
+    passiveLaneBarrierCompletedAtMs: startedAt,
+    workerPromise: new Promise<void>(() => undefined),
+  }), false);
+  assert.equal(timedOutController.signal.aborted, true);
+  assert.ok(Date.now() - startedAt < 250);
+});
+
+test("Reject Path worker return and packet verification share one absolute tail deadline", async () => {
+  const controller = new AbortController();
+  const passiveLaneBarrierCompletedAtMs = Date.now();
+  const firstStageCompleted = await awaitPostRefusalWorkerWithinTailBudget({
+    abortController: controller,
+    maxTailWaitMs: 100,
+    passiveLaneBarrierCompletedAtMs,
+    workerPromise: new Promise<void>((resolve) => setTimeout(resolve, 10)),
+  });
+  const secondStageCompleted = await awaitPostRefusalWorkerWithinTailBudget({
+    abortController: controller,
+    maxTailWaitMs: 100,
+    passiveLaneBarrierCompletedAtMs,
+    workerPromise: new Promise<void>(() => undefined),
+  });
+
+  assert.equal(firstStageCompleted, true);
+  assert.equal(secondStageCompleted, false);
+  assert.equal(controller.signal.aborted, true);
+  assert.ok(Date.now() - passiveLaneBarrierCompletedAtMs < 500);
+});
+
+test("lane timing summary makes all four completion times and the reject barrier delta queryable", () => {
+  const coordinatorStartedAtMs = Date.parse("2026-08-26T20:00:00.000Z");
+  const passiveLaneBarrierCompletedAtMs = coordinatorStartedAtMs + 5_000;
+  const result = (
+    workerLane: "consent_proof" | "runtime_evidence" | "policy_evidence" | "reject_observation",
+    responseOffsetMs: number,
+  ) => ({
+    completedAt: new Date(coordinatorStartedAtMs + responseOffsetMs - 50).toISOString(),
+    coordinatorTiming: {
+      durationMs: responseOffsetMs,
+      invocationStartedAt: new Date(coordinatorStartedAtMs).toISOString(),
+      responseReceivedAt: new Date(coordinatorStartedAtMs + responseOffsetMs).toISOString(),
+    },
+    handlerTiming: {
+      completedAt: new Date(coordinatorStartedAtMs + responseOffsetMs - 50).toISOString(),
+      handlerDurationMs: responseOffsetMs - 50,
+      handlerStartedAt: new Date(coordinatorStartedAtMs).toISOString(),
+    },
+    scanId: "scan-lane-timing-1",
+    status: "completed" as const,
+    workerLane,
+  });
+  const reject = result("reject_observation", 6_200);
+  const summary = buildLocalV2DagLambdaLaneTimingSummary({
+    addedRejectWaitMs: 1_200,
+    coordinatorStartedAtMs,
+    generatedAtMs: coordinatorStartedAtMs + 6_250,
+    passiveLaneBarrierCompletedAtMs,
+    passiveWorkerResults: [
+      result("consent_proof", 4_000),
+      result("runtime_evidence", 5_000),
+      result("policy_evidence", 3_000),
+    ],
+    postRefusal: {
+      dispatchStartedAtMs: coordinatorStartedAtMs + 500,
+      join: "joined",
+      outcomeObservedAtMs: coordinatorStartedAtMs + 6_200,
+      result: reject,
+    },
+  });
+
+  assert.equal(summary.lanes.length, 4);
+  assert.equal(summary.passiveLaneBarrierCompletedAt, "2026-08-26T20:00:05.000Z");
+  assert.equal(summary.rejectCompletedBeforeOrAtPassiveBarrier, false);
+  assert.equal(summary.rejectTailDeltaMs, 1_200);
+  assert.equal(summary.rejectLaneAddedWaitMs, 1_200);
+  assert.deepEqual(
+    summary.lanes.map((lane) => [lane.lane, lane.coordinatorElapsedMs, lane.terminalOutcomeDeltaFromPassiveBarrierMs]),
+    [
+      ["consent_proof", 4_000, -1_000],
+      ["runtime_evidence", 5_000, 0],
+      ["policy_evidence", 3_000, -2_000],
+      ["reject_observation", 6_200, 1_200],
+    ],
+  );
+
+  const timedOut = buildLocalV2DagLambdaLaneTimingSummary({
+    addedRejectWaitMs: 6_000,
+    coordinatorStartedAtMs,
+    generatedAtMs: coordinatorStartedAtMs + 11_000,
+    passiveLaneBarrierCompletedAtMs,
+    passiveWorkerResults: [
+      result("consent_proof", 4_000),
+      result("runtime_evidence", 5_000),
+      result("policy_evidence", 3_000),
+    ],
+    postRefusal: {
+      dispatchStartedAtMs: coordinatorStartedAtMs + 500,
+      join: "timed_out",
+      outcomeObservedAtMs: coordinatorStartedAtMs + 11_000,
+    },
+  });
+  const timedOutReject = timedOut.lanes.find((lane) => lane.lane === "reject_observation");
+  assert.equal(timedOut.rejectLaneJoin, "timed_out");
+  assert.equal(timedOut.rejectLaneAddedWaitMs, 6_000);
+  assert.equal(timedOut.rejectTailDeltaMs, 6_000);
+  assert.equal(timedOutReject?.outcome, "timed_out");
+  assert.equal(timedOutReject?.terminalOutcomeDeltaFromPassiveBarrierMs, 6_000);
+
+  const noRejectObservedAtMs = passiveLaneBarrierCompletedAtMs - 200;
+  const notApplicable = buildLocalV2DagLambdaLaneTimingSummary({
+    addedRejectWaitMs: 0,
+    coordinatorStartedAtMs,
+    generatedAtMs: coordinatorStartedAtMs + 5_050,
+    passiveLaneBarrierCompletedAtMs,
+    passiveWorkerResults: [
+      result("consent_proof", 4_800),
+      result("runtime_evidence", 5_000),
+      result("policy_evidence", 3_000),
+    ],
+    postRefusal: {
+      dispatchStartedAtMs: coordinatorStartedAtMs + 500,
+      join: "not_applicable",
+      outcomeObservedAtMs: noRejectObservedAtMs,
+      result: result("reject_observation", 1_500),
+    },
+  });
+  const notApplicableReject = notApplicable.lanes.find((lane) => lane.lane === "reject_observation");
+  assert.equal(notApplicable.rejectLaneJoin, "not_applicable");
+  assert.equal(notApplicable.rejectTailDeltaMs, -200);
+  assert.equal(notApplicable.rejectCompletedBeforeOrAtPassiveBarrier, true);
+  assert.equal(notApplicableReject?.outcome, "not_applicable");
+  assert.equal(notApplicableReject?.evidenceJoined, false);
+  assert.equal(notApplicableReject?.terminalOutcomeDeltaFromPassiveBarrierMs, -200);
+
+  const terminal = buildLocalV2DagLambdaResultMessage({
+    completedAt: new Date(coordinatorStartedAtMs + 6_250),
+    laneTimingSummary: summary,
+    payload: parseLocalV2DagLambdaDispatchPayload(validPayload()),
+    status: "completed",
+  });
+  const parsedTerminal = parseLocalV2DagLambdaResultMessage(JSON.stringify(terminal), {
+    expectedTargetEnvironment: "local",
+  });
+  assert.equal(parsedTerminal.laneTimingSummary?.rejectTailDeltaMs, 1_200);
+  assert.equal(parsedTerminal.laneTimingSummary?.lanes.length, 4);
+});
+
+test("reject worker retains a neutral unsupported packet for the coordinator without publishing independently", async () => {
   const priorFlag = process.env[POST_REFUSAL_REJECT_WORKER_FEATURE_FLAG];
   const priorBucket = process.env.CERTSCORE_V2_DAG_LAMBDA_ARTIFACT_BUCKET;
   const outDir = await mkdtemp(path.join(os.tmpdir(), "certscore-reject-worker-"));
   const puts: PutObjectCommand[] = [];
-  const sends: SendMessageCommand[] = [];
   process.env[POST_REFUSAL_REJECT_WORKER_FEATURE_FLAG] = "1";
   process.env.CERTSCORE_V2_DAG_LAMBDA_ARTIFACT_BUCKET = "test-artifact-bucket";
   try {
     const payload = parseLocalV2DagLambdaDispatchPayload(validPayload({
       orchestrationMode: "worker",
+      parentDispatchSha256: "c".repeat(64),
       targetEnvironment: "production",
       targetUrl: "https://ergoveritas.com/.well-known/certscore-canary/post-refusal/reject-honored.html",
       workerLane: "reject_observation",
@@ -185,8 +380,11 @@ test("reject worker retains and independently publishes a neutral unsupported pa
         observationWindowMs: 8_000,
         confirmationTimeoutMs: 1_500,
         actionSearchTimeoutMs: 1_500,
-        cmpCanonicalName: "Unknown CMP",
-        confirmation: { kind: "tcf_purposes_denied", purposeIds: [1] },
+        resolver: {
+          kind: "named_cmp",
+          cmpCanonicalName: "Unknown CMP",
+          confirmation: { kind: "tcf_purposes_denied", purposeIds: [1] },
+        },
         interactionAuthorization: {
           kind: "owned_canary",
           authorizationId: "ergoveritas_owned_post_refusal_canary.v1",
@@ -196,18 +394,61 @@ test("reject worker retains and independently publishes a neutral unsupported pa
     const result = await runLocalV2DagLambdaPostRefusalArtifactChain(payload, {
       artifactRoot: outDir,
       s3Client: { async send(command) { puts.push(command as PutObjectCommand); return {}; } },
-      sqsClient: { async send(command) { sends.push(command); return {}; } },
     });
 
     assert.equal(puts.length, 1);
-    assert.equal(sends.length, 1);
     assert.equal(result.postRefusalEvidence?.status, "unsupported");
     assert.equal(result.postRefusalEvidence?.refusalExercised, false);
     assert.equal(result.postRefusalEvidence?.observationCount, 0);
     assert.match(result.artifactPointers?.postRefusalPacketUri ?? "", /PostRefusalEvidencePacket\.json$/);
-    const message = JSON.parse(String(sends[0].input.MessageBody));
-    assert.equal(message.messageKind, "post_refusal_evidence_ready");
-    assert.equal(message.parentScanId, payload.scanId);
+  } finally {
+    if (priorFlag === undefined) delete process.env[POST_REFUSAL_REJECT_WORKER_FEATURE_FLAG];
+    else process.env[POST_REFUSAL_REJECT_WORKER_FEATURE_FLAG] = priorFlag;
+    if (priorBucket === undefined) delete process.env.CERTSCORE_V2_DAG_LAMBDA_ARTIFACT_BUCKET;
+    else process.env.CERTSCORE_V2_DAG_LAMBDA_ARTIFACT_BUCKET = priorBucket;
+    await rm(outDir, { recursive: true, force: true });
+  }
+});
+
+test("reject worker accepts an exact public calibration allowlist and remains neutral when the CMP is unsupported", async () => {
+  const priorFlag = process.env[POST_REFUSAL_REJECT_WORKER_FEATURE_FLAG];
+  const priorBucket = process.env.CERTSCORE_V2_DAG_LAMBDA_ARTIFACT_BUCKET;
+  const outDir = await mkdtemp(path.join(os.tmpdir(), "certscore-reject-public-calibration-"));
+  const puts: PutObjectCommand[] = [];
+  process.env[POST_REFUSAL_REJECT_WORKER_FEATURE_FLAG] = "1";
+  process.env.CERTSCORE_V2_DAG_LAMBDA_ARTIFACT_BUCKET = "test-artifact-bucket";
+  try {
+    const payload = parseLocalV2DagLambdaDispatchPayload(validPayload({
+      orchestrationMode: "worker",
+      parentDispatchSha256: "d".repeat(64),
+      targetEnvironment: "local",
+      targetUrl: "https://www.orange.es/",
+      workerLane: "reject_observation",
+      postRefusalObservation: {
+        enabled: true,
+        dispatchDelayMs: 0,
+        observationWindowMs: 8_000,
+        confirmationTimeoutMs: 1_500,
+        actionSearchTimeoutMs: 10_000,
+        resolver: {
+          kind: "named_cmp",
+          cmpCanonicalName: "Unknown CMP",
+          confirmation: { kind: "tcf_purposes_denied", purposeIds: [1] },
+        },
+        interactionAuthorization: {
+          authorizationId: "calibration-orange-es",
+          kind: "explicit_allowlist",
+          targets: [{ hostname: "www.orange.es", pathPrefix: "/" }],
+        },
+      },
+    }));
+    const result = await runLocalV2DagLambdaPostRefusalArtifactChain(payload, {
+      artifactRoot: outDir,
+      s3Client: { async send(command) { puts.push(command as PutObjectCommand); return {}; } },
+    });
+
+    assert.equal(puts.length, 1);
+    assert.equal(result.postRefusalEvidence?.status, "unsupported");
   } finally {
     if (priorFlag === undefined) delete process.env[POST_REFUSAL_REJECT_WORKER_FEATURE_FLAG];
     else process.env[POST_REFUSAL_REJECT_WORKER_FEATURE_FLAG] = priorFlag;
@@ -568,6 +809,60 @@ test("terminal result retains the verified early-policy pointer as an ordering f
 
   assert.deepEqual(result.policyEvidence, policyEvidence);
   assert.equal(result.policyEvidence?.productionFindingIntegration, false);
+});
+
+test("terminal result cryptographically binds enabled reject evidence to its parent dispatch", () => {
+  const payload = parseLocalV2DagLambdaDispatchPayload(validPayload({
+    postRefusalObservation: {
+      enabled: true,
+      dispatchDelayMs: 500,
+      resolver: {
+        kind: "named_cmp",
+        cmpCanonicalName: "OneTrust",
+        confirmation: { kind: "tcf_purposes_denied", purposeIds: [1] },
+      },
+      interactionAuthorization: {
+        kind: "owned_canary",
+        authorizationId: "ergoveritas_owned_post_refusal_canary.v1",
+      },
+    },
+  }));
+  const result = buildLocalV2DagLambdaResultMessage({
+    completedAt: new Date("2026-08-26T20:00:05.000Z"),
+    payload,
+    status: "completed",
+  });
+  const passiveResult = buildLocalV2DagLambdaResultMessage({
+    completedAt: new Date("2026-08-26T20:00:05.000Z"),
+    payload: parseLocalV2DagLambdaDispatchPayload(validPayload()),
+    status: "completed",
+  });
+
+  assert.equal(result.parentDispatchSha256, postRefusalParentDispatchSha256(payload));
+  assert.match(result.parentDispatchSha256 ?? "", /^[a-f0-9]{64}$/);
+  assert.equal(passiveResult.parentDispatchSha256, undefined);
+});
+
+test("the single-barrier Reject Path join retains its packet digest on the terminal artifact set", () => {
+  const joined = attachJoinedPostRefusalArtifactPointer({
+    artifactMetadata: {
+      scanArtifactUri: { sha256: "a".repeat(64), sizeBytes: 100 },
+    },
+    artifactPointers: {
+      scanArtifactUri: "s3://test-bucket/scan/CanonicalEvidenceBundle.json",
+    },
+    phaseTimings: [],
+  }, {
+    artifactMetadata: {
+      postRefusalPacketUri: { sha256: "b".repeat(64), sizeBytes: 50 },
+    },
+    artifactPointers: {
+      postRefusalPacketUri: "s3://test-bucket/scan/reject/PostRefusalEvidencePacket.json",
+    },
+  });
+
+  assert.equal(joined.artifactMetadata.postRefusalPacketUri?.sha256, "b".repeat(64));
+  assert.match(joined.artifactPointers.postRefusalPacketUri ?? "", /PostRefusalEvidencePacket/);
 });
 
 function validPayload(overrides: Record<string, unknown> = {}) {

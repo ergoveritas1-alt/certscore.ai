@@ -11,8 +11,11 @@ import {
   LOCAL_V2_DAG_LAMBDA_DEFAULT_PRECONSENT_VISUAL_FALLBACK_DEADLINE_MS,
   type LocalV2DagLambdaAwsRegion,
   LOCAL_V2_DAG_SCAN_PROCESSOR,
+  POST_REFUSAL_REJECT_WORKER_FEATURE_FLAG,
   handler
 } from "../apps/v2-dag-lambda/src/handler";
+
+type PostRefusalWorkerMode = "normal" | "failure" | "timeout";
 
 type Args = {
   artifactDir: string;
@@ -21,6 +24,8 @@ type Args = {
   functionName: string;
   outPath: string;
   profile: "full" | "standard" | "tiny";
+  postRefusalEnabled: boolean;
+  postRefusalWorkerMode: PostRefusalWorkerMode;
   scanId: string;
   targetUrl: string;
   variantLabel: string | null;
@@ -110,16 +115,31 @@ class LocalCaptureSqsClient {
 class LocalRecursiveLambdaClient {
   constructor(
     private readonly input: {
+      postRefusalWorkerMode: PostRefusalWorkerMode;
       s3Client: LocalDiskS3Client;
       sqsClient: LocalCaptureSqsClient;
       workspaceRoot: string;
     }
   ) {}
 
-  async send(command: InvokeCommand) {
+  async send(command: InvokeCommand, options?: { abortSignal?: AbortSignal }) {
     const payload = command.input.Payload
       ? JSON.parse(Buffer.from(command.input.Payload).toString("utf8")) as unknown
       : {};
+    const payloadRecord = asRecord(payload);
+    if (payloadRecord.workerLane === "reject_observation") {
+      if (this.input.postRefusalWorkerMode === "failure") {
+        return {
+          $metadata: {},
+          FunctionError: "Unhandled",
+          Payload: Buffer.from(JSON.stringify({ errorMessage: "simulated reject worker failure" })),
+          StatusCode: 200,
+        };
+      }
+      if (this.input.postRefusalWorkerMode === "timeout") {
+        return await rejectWhenAborted(options?.abortSignal);
+      }
+    }
     const result = await handler(payload, {
       lambdaClient: this,
       s3Client: this.input.s3Client,
@@ -159,7 +179,12 @@ async function main() {
   const fakeS3Root = path.join(artifactBaseDir, "_fake-s3");
   const s3Client = new LocalDiskS3Client(fakeS3Root);
   const sqsClient = new LocalCaptureSqsClient();
-  const lambdaClient = new LocalRecursiveLambdaClient({ s3Client, sqsClient, workspaceRoot });
+  const lambdaClient = new LocalRecursiveLambdaClient({
+    postRefusalWorkerMode: args.postRefusalWorkerMode,
+    s3Client,
+    sqsClient,
+    workspaceRoot,
+  });
   const target = new URL(args.targetUrl);
   const startedAt = Date.now();
 
@@ -185,6 +210,7 @@ async function main() {
     "CERTSCORE_V2_DAG_LAMBDA_PROXY_PASSWORD",
     "CERTSCORE_V2_DAG_LAMBDA_PROXY_SERVER",
     "CERTSCORE_V2_DAG_LAMBDA_PROXY_USERNAME",
+    POST_REFUSAL_REJECT_WORKER_FEATURE_FLAG,
     "CERTSCORE_V2_DAG_LAMBDA_SCENARIO_CONCURRENCY",
     "CERTSCORE_V2_DAG_LAMBDA_SCENARIO_RESOURCE_MODE",
     "SCAN_EGRESS_LABEL",
@@ -194,6 +220,15 @@ async function main() {
 
   try {
     applyRegionalLambdaParityEnv(args.awsRegion);
+    if (target.hostname === "127.0.0.1" || target.hostname === "localhost" || target.hostname === "::1") {
+      // The parity fixture must exercise local Chromium directly even when the
+      // developer env file also contains production-region proxy settings.
+      delete process.env.CERTSCORE_V2_DAG_LAMBDA_PROXY_SERVER;
+      delete process.env.CERTSCORE_V2_DAG_LAMBDA_PROXY_USERNAME;
+      delete process.env.CERTSCORE_V2_DAG_LAMBDA_PROXY_PASSWORD;
+      delete process.env.SCAN_PROXY_SERVER;
+      process.env.SCAN_PROXY_ENABLED = "false";
+    }
     process.env.AWS_LAMBDA_FUNCTION_MEMORY_SIZE = "3008";
     process.env.AWS_LAMBDA_FUNCTION_NAME = args.functionName;
     const localArtifactBucketBase = process.env.S3_BUCKET?.trim() || "scan-artifacts";
@@ -215,6 +250,11 @@ async function main() {
     process.env.CERTSCORE_V2_DAG_LAMBDA_PRECONSENT_VISUAL_FALLBACK_DEADLINE_MS = String(LOCAL_V2_DAG_LAMBDA_DEFAULT_PRECONSENT_VISUAL_FALLBACK_DEADLINE_MS);
     process.env.CERTSCORE_V2_DAG_LAMBDA_SCENARIO_CONCURRENCY = "1";
     process.env.CERTSCORE_V2_DAG_LAMBDA_SCENARIO_RESOURCE_MODE = "cmp_safe";
+    if (args.postRefusalEnabled) {
+      process.env[POST_REFUSAL_REJECT_WORKER_FEATURE_FLAG] = "1";
+    } else {
+      delete process.env[POST_REFUSAL_REJECT_WORKER_FEATURE_FLAG];
+    }
 
     const payload = {
       artifactOnly: true,
@@ -229,6 +269,26 @@ async function main() {
       productionFindingIntegration: false,
       profile: args.profile,
       ...(args.debugOverrides ? { debugOverrides: args.debugOverrides } : {}),
+      ...(args.postRefusalEnabled
+        ? {
+            postRefusalObservation: {
+              actionSearchTimeoutMs: 1_500,
+              cmpCanonicalName: "OneTrust",
+              confirmation: {
+                kind: "tcf_purposes_denied",
+                purposeIds: [1, 2, 3, 4, 7, 9, 10],
+              },
+              confirmationTimeoutMs: 1_500,
+              dispatchDelayMs: 500,
+              enabled: true,
+              interactionAuthorization: {
+                authorizationId: "loopback_local_lab",
+                kind: "loopback",
+              },
+              observationWindowMs: 8_000,
+            },
+          }
+        : {}),
       resultHandoff: "sqs",
       resultPurpose: "synthetic_verification",
       resultQueueUrl: "local://certscore-v2-dag-local-parity-results",
@@ -265,7 +325,8 @@ async function main() {
       scanId: args.scanId,
       sqsMessages: sqsClient.messages,
       targetUrl: args.targetUrl,
-      variantLabel: args.variantLabel
+      variantLabel: args.variantLabel,
+      postRefusalWorkerMode: args.postRefusalWorkerMode,
     });
 
     await mkdir(path.dirname(path.resolve(workspaceRoot, args.outPath)), { recursive: true });
@@ -294,6 +355,7 @@ async function buildSummary(input: {
   sqsMessages: string[];
   targetUrl: string;
   variantLabel: string | null;
+  postRefusalWorkerMode: PostRefusalWorkerMode;
 }) {
   const bundle = await readOptionalJson(path.join(input.artifactRoot, "CanonicalEvidenceBundle.json"));
   const manifest = await readOptionalJson(path.join(input.artifactRoot, "LocalV2DagLambdaManifest.json"));
@@ -308,6 +370,7 @@ async function buildSummary(input: {
     generatedAt: new Date().toISOString(),
     resultStatus: typeof resultRecord.status === "string" ? resultRecord.status : "unknown",
     scanId: input.scanId,
+    postRefusalWorkerMode: input.postRefusalWorkerMode,
     sqsMessages: input.sqsMessages.map((message) => safeJsonParse(message) ?? message),
     targetUrl: input.targetUrl,
     variantLabel: input.variantLabel,
@@ -320,6 +383,7 @@ async function buildSummary(input: {
       networkResponseEvents: arrayLength(bundleRecord.networkResponseEvents),
       screenshots: arrayLength(bundleRecord.screenshots)
     },
+    postRefusal: summarizePostRefusal(bundleRecord),
     manifest: {
       auxiliaryArtifactCount: arrayLength(asRecord(manifest).auxiliaryArtifacts),
       hasCoordinatorPlanSummary: Boolean(asRecord(manifest).coordinatorPlanSummary),
@@ -389,6 +453,7 @@ function summarizeShardSummary(value: unknown) {
   return {
     coordinatorPlannedScenarios: coordinatorSummary.plannedScenarios ?? [],
     coordinatorSkippedScenarios: coordinatorSummary.skippedScenarios ?? [],
+    laneTimingSummary: record.laneTimingSummary ?? null,
     workerResults: Array.isArray(record.workerResults)
       ? record.workerResults.map((worker) => {
         const workerRecord = asRecord(worker);
@@ -420,6 +485,8 @@ function parseArgs(argv: string[]): Args {
     functionName: "certscore-v2-dag-local-lambda",
     outPath: "artifacts/local-v2-dag-lambda-parity/latest.json",
     profile: "full",
+    postRefusalEnabled: false,
+    postRefusalWorkerMode: "normal",
     scanId: `local-lambda-parity-${randomUUID()}`,
     targetUrl: "https://www.webmd.com/",
     variantLabel: null
@@ -442,6 +509,11 @@ function parseArgs(argv: string[]): Args {
       args.outPath = requiredValue(argv, ++index, arg);
     } else if (arg === "--profile") {
       args.profile = normalizeProfile(requiredValue(argv, ++index, arg));
+    } else if (arg === "--post-refusal") {
+      args.postRefusalEnabled = true;
+    } else if (arg === "--post-refusal-worker-mode") {
+      args.postRefusalEnabled = true;
+      args.postRefusalWorkerMode = normalizePostRefusalWorkerMode(requiredValue(argv, ++index, arg));
     } else if (arg === "--scan-id") {
       args.scanId = requiredValue(argv, ++index, arg);
     } else if (arg === "--target-url") {
@@ -466,6 +538,8 @@ function printUsage() {
     "  --target-url <url>       Site to scan. Default: https://www.webmd.com/",
     "  --aws-region <region>    eu-central-1, eu-west-1, or us-west-1. Default: eu-central-1",
     "  --profile <profile>      full, standard, or tiny. Default: full",
+    "  --post-refusal           Enable the local four-lane Reject Path barrier.",
+    "  --post-refusal-worker-mode <mode> normal, failure, or timeout. Implies --post-refusal.",
     "  --scan-id <id>           Stable scan ID. Default: local-lambda-parity-<uuid>",
     "  --artifact-dir <path>    Artifact base directory. Default: artifacts/local-v2-dag-lambda-parity",
     "  --out <path>             Summary JSON path. Default: artifacts/local-v2-dag-lambda-parity/latest.json",
@@ -494,6 +568,36 @@ function normalizeProfile(value: string): Args["profile"] {
     return value;
   }
   return "full";
+}
+
+function normalizePostRefusalWorkerMode(value: string): PostRefusalWorkerMode {
+  if (value === "normal" || value === "failure" || value === "timeout") return value;
+  throw new Error(`Unsupported post-refusal worker mode: ${value}`);
+}
+
+async function rejectWhenAborted(signal?: AbortSignal): Promise<never> {
+  if (!signal) return await new Promise<never>(() => undefined);
+  if (signal.aborted) throw signal.reason ?? new Error("Simulated reject worker aborted.");
+  return await new Promise<never>((_resolve, reject) => {
+    signal.addEventListener("abort", () => {
+      reject(signal.reason ?? new Error("Simulated reject worker aborted."));
+    }, { once: true });
+  });
+}
+
+function summarizePostRefusal(bundleRecord: Record<string, unknown>) {
+  const laneOutcome = asRecord(bundleRecord.postRefusalLaneOutcome);
+  const packet = asRecord(bundleRecord.postRefusalEvidence);
+  const registration = asRecord(packet.refusalRegistration);
+  const observations = Array.isArray(packet.observations) ? packet.observations : [];
+  return {
+    laneOutcome: Object.keys(laneOutcome).length > 0 ? laneOutcome : null,
+    observationCount: observations.length,
+    observationTypes: observations.map((observation) => asRecord(observation).observationType ?? null),
+    productionProjectable: packet.productionProjectable ?? null,
+    refusalExercised: registration.refusalExercised ?? null,
+    registrationStatus: registration.status ?? null,
+  };
 }
 
 function parseJsonObjectArg(value: string, flag: string): Record<string, unknown> {

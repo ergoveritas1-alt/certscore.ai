@@ -109,6 +109,7 @@ function policySurfaceSeedsFromConfig(config: SharedScanConfig | Record<string, 
 
 function postRefusalObservationFromIntent(input: {
   intent: Record<string, unknown>;
+  scanId: string;
   targetUrl: string;
 }): PostRefusalLambdaDispatchConfig | undefined {
   if (input.intent.postRefusalRejectWorkerEnabled !== true || input.intent.orchestrationMode !== "sharded") {
@@ -125,23 +126,32 @@ function postRefusalObservationFromIntent(input: {
   const ownedCanary = target.protocol === "https:" &&
     target.hostname === "ergoveritas.com" &&
     target.pathname.startsWith("/.well-known/certscore-canary/post-refusal/");
-  if (!loopback && !ownedCanary) return undefined;
+  const exactProductionTarget = target.protocol === "https:" &&
+    !target.username &&
+    !target.password &&
+    !target.port &&
+    !target.hash;
+  if (!loopback && !ownedCanary && !exactProductionTarget) return undefined;
   return {
     enabled: true,
-    dispatchDelayMs: 2_000,
+    dispatchDelayMs: 500,
     observationWindowMs: 8_000,
     confirmationTimeoutMs: 1_500,
     actionSearchTimeoutMs: 1_500,
-    cmpCanonicalName: "OneTrust",
-    confirmation: {
-      kind: "tcf_purposes_denied",
-      purposeIds: [1, 2, 3, 4, 7, 9, 10],
+    resolver: {
+      kind: "canonical_cmp_registry",
+      recipeSetId: "canonical-cmp-registry-reject-v7",
     },
     interactionAuthorization: loopback
       ? { authorizationId: "loopback_local_lab", kind: "loopback" }
-      : {
+      : ownedCanary ? {
           authorizationId: "ergoveritas_owned_post_refusal_canary.v1",
           kind: "owned_canary",
+        } : {
+          authorizationId: "sharded_scan_exact_target.v1",
+          kind: "scan_target",
+          normalizedUrl: target.toString(),
+          scanId: input.scanId,
         },
   };
 }
@@ -182,6 +192,29 @@ export type LocalV2DagLambdaHandlerTiming = {
   scanPhaseStartedAt?: string;
 };
 
+export type LocalV2DagLambdaLaneTimingSummary = {
+  contractVersion: "certscore.v2.lambda-lane-timing.v1";
+  coordinatorStartedAt: string;
+  generatedAt: string;
+  lanes: Array<{
+    coordinatorElapsedMs: number | null;
+    evidenceJoined: boolean;
+    invocationStartedAt: string | null;
+    lane: "consent_proof" | "runtime_evidence" | "policy_evidence" | "reject_observation";
+    outcome: "completed" | "disabled" | "failed" | "not_applicable" | "timed_out";
+    terminalOutcomeDeltaFromPassiveBarrierMs: number | null;
+    terminalOutcomeObservedAt: string | null;
+    workerReportedCompletedAt: string | null;
+    workerReportedHandlerDurationMs: number | null;
+  }>;
+  maxRejectTailWaitMs: number;
+  passiveLaneBarrierCompletedAt: string;
+  rejectCompletedBeforeOrAtPassiveBarrier: boolean | null;
+  rejectLaneAddedWaitMs: number;
+  rejectLaneJoin: "disabled" | "failed" | "joined" | "not_applicable" | "timed_out";
+  rejectTailDeltaMs: number | null;
+};
+
 export type LocalV2DagLambdaResultMessage = {
   artifactOnly: true;
   artifactMetadata?: {
@@ -220,6 +253,8 @@ export type LocalV2DagLambdaResultMessage = {
     message: string;
   };
   handlerTiming?: LocalV2DagLambdaHandlerTiming;
+  laneTimingSummary?: LocalV2DagLambdaLaneTimingSummary;
+  parentDispatchSha256?: string;
   phaseTimings?: LocalV2DagLambdaPhaseTiming[];
   processor: typeof LOCAL_V2_DAG_SCAN_PROCESSOR;
   productionFindingIntegration: false;
@@ -408,7 +443,11 @@ export function buildLocalV2DagLambdaDispatchPayload(input: {
   const awsRegion = requireAwsRegion(intent.awsRegion);
   const policySurfaceSeeds = policySurfaceSeedsFromConfig(input.scanConfig);
   const targetUrl = requireString(config.normalizedUrl, "normalizedUrl");
-  const postRefusalObservation = postRefusalObservationFromIntent({ intent, targetUrl });
+  const postRefusalObservation = postRefusalObservationFromIntent({
+    intent,
+    scanId: input.scanId,
+    targetUrl,
+  });
 
   return {
     artifactOnly: true,
@@ -687,6 +726,80 @@ function parseHandlerTiming(value: unknown): LocalV2DagLambdaHandlerTiming | und
   };
 }
 
+function parseLaneTimingSummary(value: unknown): LocalV2DagLambdaLaneTimingSummary | undefined {
+  const record = asRecord(value);
+  if (record.contractVersion !== "certscore.v2.lambda-lane-timing.v1") return undefined;
+  const coordinatorStartedAt = stringValue(record.coordinatorStartedAt);
+  const generatedAt = stringValue(record.generatedAt);
+  const passiveLaneBarrierCompletedAt = stringValue(record.passiveLaneBarrierCompletedAt);
+  const rejectLaneJoin = record.rejectLaneJoin;
+  const maxRejectTailWaitMs = finiteInteger(record.maxRejectTailWaitMs, { nonnegative: true });
+  const rejectLaneAddedWaitMs = finiteInteger(record.rejectLaneAddedWaitMs, { nonnegative: true });
+  if (
+    !coordinatorStartedAt || !generatedAt || !passiveLaneBarrierCompletedAt ||
+    !Number.isFinite(Date.parse(coordinatorStartedAt)) ||
+    !Number.isFinite(Date.parse(generatedAt)) ||
+    !Number.isFinite(Date.parse(passiveLaneBarrierCompletedAt)) ||
+    maxRejectTailWaitMs === null || rejectLaneAddedWaitMs === null ||
+    (rejectLaneJoin !== "disabled" && rejectLaneJoin !== "failed" &&
+      rejectLaneJoin !== "joined" && rejectLaneJoin !== "not_applicable" &&
+      rejectLaneJoin !== "timed_out") ||
+    !Array.isArray(record.lanes)
+  ) return undefined;
+  const validLanes = new Set(["consent_proof", "runtime_evidence", "policy_evidence", "reject_observation"]);
+  const validOutcomes = new Set(["completed", "disabled", "failed", "not_applicable", "timed_out"]);
+  const lanes = record.lanes.flatMap((value) => {
+    const laneRecord = asRecord(value);
+    const lane = stringValue(laneRecord.lane);
+    const outcome = stringValue(laneRecord.outcome);
+    if (!lane || !validLanes.has(lane) || !outcome || !validOutcomes.has(outcome)) return [];
+    const nullableDate = (field: string) => {
+      const candidate = stringValue(laneRecord[field]);
+      return candidate && Number.isFinite(Date.parse(candidate)) ? candidate : null;
+    };
+    return [{
+      coordinatorElapsedMs: nullableInteger(laneRecord.coordinatorElapsedMs, { nonnegative: true }),
+      evidenceJoined: laneRecord.evidenceJoined === true,
+      invocationStartedAt: nullableDate("invocationStartedAt"),
+      lane: lane as LocalV2DagLambdaLaneTimingSummary["lanes"][number]["lane"],
+      outcome: outcome as LocalV2DagLambdaLaneTimingSummary["lanes"][number]["outcome"],
+      terminalOutcomeDeltaFromPassiveBarrierMs: nullableInteger(
+        laneRecord.terminalOutcomeDeltaFromPassiveBarrierMs,
+      ),
+      terminalOutcomeObservedAt: nullableDate("terminalOutcomeObservedAt"),
+      workerReportedCompletedAt: nullableDate("workerReportedCompletedAt"),
+      workerReportedHandlerDurationMs: nullableInteger(
+        laneRecord.workerReportedHandlerDurationMs,
+        { nonnegative: true },
+      ),
+    }];
+  });
+  if (lanes.length !== 4 || new Set(lanes.map((lane) => lane.lane)).size !== 4) return undefined;
+  const rejectCompleted = record.rejectCompletedBeforeOrAtPassiveBarrier;
+  return {
+    contractVersion: "certscore.v2.lambda-lane-timing.v1",
+    coordinatorStartedAt,
+    generatedAt,
+    lanes,
+    maxRejectTailWaitMs,
+    passiveLaneBarrierCompletedAt,
+    rejectCompletedBeforeOrAtPassiveBarrier: typeof rejectCompleted === "boolean" ? rejectCompleted : null,
+    rejectLaneAddedWaitMs,
+    rejectLaneJoin,
+    rejectTailDeltaMs: nullableInteger(record.rejectTailDeltaMs),
+  };
+}
+
+function finiteInteger(value: unknown, options: { nonnegative?: boolean } = {}): number | null {
+  if (typeof value !== "number" || !Number.isFinite(value)) return null;
+  const rounded = Math.round(value);
+  return options.nonnegative ? Math.max(0, rounded) : rounded;
+}
+
+function nullableInteger(value: unknown, options: { nonnegative?: boolean } = {}): number | null {
+  return value === null || value === undefined ? null : finiteInteger(value, options);
+}
+
 export function parseLocalV2DagLambdaResultMessage(
   rawMessage: unknown,
   options: { expectedTargetEnvironment?: LocalV2DagLambdaTargetEnvironment } = {}
@@ -743,6 +856,17 @@ export function parseLocalV2DagLambdaResultMessage(
   const handlerTiming = parseHandlerTiming(record.handlerTiming);
   if (handlerTiming) {
     parsed.handlerTiming = handlerTiming;
+  }
+  const laneTimingSummary = parseLaneTimingSummary(record.laneTimingSummary);
+  if (laneTimingSummary) {
+    parsed.laneTimingSummary = laneTimingSummary;
+  }
+  const parentDispatchSha256 = stringValue(record.parentDispatchSha256);
+  if (parentDispatchSha256 && !/^[a-f0-9]{64}$/.test(parentDispatchSha256)) {
+    throw new Error("Local v2 DAG Lambda result parent dispatch checksum is invalid.");
+  }
+  if (parentDispatchSha256) {
+    parsed.parentDispatchSha256 = parentDispatchSha256;
   }
   const scannerGitSha = stringValue(record.scannerGitSha);
   if (scannerGitSha) {

@@ -147,7 +147,7 @@ test("drops stale prior policy URLs before Lambda dispatch", () => {
   assert.equal(payload.policySurfaceSeeds, undefined);
 });
 
-test("adds the default-off reject worker only for sharded owned-canary dispatch", () => {
+test("adds the default-off reject worker to eligible sharded scans with target-scoped authorization", () => {
   const canaryConfig = buildLambdaScanConfig();
   canaryConfig.hostname = "ergoveritas.com";
   canaryConfig.normalizedUrl =
@@ -164,9 +164,9 @@ test("adds the default-off reject worker only for sharded owned-canary dispatch"
     scanConfig: canaryConfig,
     scanId: "scan-canary-reject",
   });
-  assert.equal(canaryPayload.postRefusalObservation?.dispatchDelayMs, 2_000);
+  assert.equal(canaryPayload.postRefusalObservation?.dispatchDelayMs, 500);
   assert.equal(canaryPayload.postRefusalObservation?.interactionAuthorization.kind, "owned_canary");
-  assert.equal(canaryPayload.postRefusalObservation?.cmpCanonicalName, "OneTrust");
+  assert.equal(canaryPayload.postRefusalObservation?.resolver.kind, "canonical_cmp_registry");
 
   const ordinaryConfig = buildLambdaScanConfig();
   ordinaryConfig.execution = {
@@ -181,7 +181,19 @@ test("adds the default-off reject worker only for sharded owned-canary dispatch"
     scanConfig: ordinaryConfig,
     scanId: "scan-ordinary",
   });
-  assert.equal(ordinaryPayload.postRefusalObservation, undefined);
+  assert.equal(ordinaryPayload.postRefusalObservation?.interactionAuthorization.kind, "scan_target");
+  assert.equal(
+    ordinaryPayload.postRefusalObservation?.interactionAuthorization.kind === "scan_target"
+      ? ordinaryPayload.postRefusalObservation.interactionAuthorization.normalizedUrl
+      : undefined,
+    ordinaryPayload.targetUrl,
+  );
+  assert.equal(
+    ordinaryPayload.postRefusalObservation?.interactionAuthorization.kind === "scan_target"
+      ? ordinaryPayload.postRefusalObservation.interactionAuthorization.scanId
+      : undefined,
+    ordinaryPayload.scanId,
+  );
 });
 
 test("builds local Lambda dispatch payload with bounded debug overrides", () => {
@@ -378,6 +390,7 @@ test("parses SQS-style v2 DAG Lambda result messages as internal artifacts only"
         startedAt: "2026-06-15T17:59:59.958Z",
         status: "completed"
       }],
+      parentDispatchSha256: "c".repeat(64),
       processor: LOCAL_V2_DAG_SCAN_PROCESSOR,
       productionFindingIntegration: false,
       scanId: "scan-local-1",
@@ -405,6 +418,7 @@ test("parses SQS-style v2 DAG Lambda result messages as internal artifacts only"
   assert.equal(parsed.status, "completed");
   assert.equal(parsed.productionFindingIntegration, false);
   assert.equal(parsed.artifactOnly, true);
+  assert.equal(parsed.parentDispatchSha256, "c".repeat(64));
   assert.equal(parsed.artifactPointers?.manifestUri, "s3://certscore-dev-artifacts/v2/scan-local-1/manifest.json");
   assert.equal(parsed.artifactPointers?.failureDiagnosticUri, "s3://certscore-dev-artifacts/v2/scan-local-1/failure/FailureDiagnostic.json");
   assert.deepEqual(parsed.artifactMetadata?.failureDiagnosticUri, { sha256: "a".repeat(64), sizeBytes: 512 });

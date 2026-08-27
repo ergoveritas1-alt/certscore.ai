@@ -16,7 +16,6 @@ import { ReportDownloadActions } from "../../../../components/scans/report-downl
 import { ScanStatusAutoRefresh } from "../../../../components/scans/scan-status-auto-refresh";
 import { PendingScanDetailView } from "../../../../components/scans/pending-scan-detail-view";
 import { ScanProgressReportVisible } from "../../../../components/scans/scan-progress-report-visible";
-import { ScanReportGenerationRefresh } from "../../../../components/scans/scan-report-generation-refresh";
 import {
   hasPendingBrowserExtensionNormalization,
   hasPendingPostCompletionFindingWork
@@ -216,11 +215,6 @@ export default async function PublicScanDetailPage({ params, searchParams }: Pub
   return (
     <main className="min-h-screen bg-white">
       <ScanProgressReportVisible scanId={displayScanRecord.scan.id} />
-      <ScanReportGenerationRefresh
-        enabled={statusProjection.postRefusalObservationExpected}
-        reportGeneration={statusProjection.reportGeneration}
-        scanId={displayScanRecord.scan.id}
-      />
       <SiteHeader />
       <section className="mx-auto max-w-6xl px-6 py-16">
         <SharedScanDetailView
