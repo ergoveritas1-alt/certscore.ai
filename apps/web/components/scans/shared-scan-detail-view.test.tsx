@@ -185,6 +185,16 @@ test("shared report passes the canonical Reject checklist projection into the ex
   assert.doesNotMatch(source, /buildExecutiveRejectPathProjection\(runtimeArtifacts/);
 });
 
+test("active timeline report passes the same canonical Reject checklist projection into its signal snapshot", () => {
+  const model = readFileSync("apps/web/components/scans/report-lab/timeline-report-model.ts", "utf8");
+  const report = readFileSync("apps/web/components/scans/report-lab/shadow-scan-report.tsx", "utf8");
+
+  assert.match(model, /buildExecutiveRejectPathProjection\([\s\S]*item\.id === "post_reject_tracking_reduction"[\s\S]*\)/);
+  assert.match(model, /rejectPath,/);
+  assert.match(report, /<CompactRejectPathCard projection=\{report\.rejectPath\} \/>/);
+  assert.doesNotMatch(model, /buildExecutiveRejectPathProjection\(scanRecord\.runtimeArtifacts/);
+});
+
 test("evidence mix reconciles with the canonical row-level inventory", async () => {
   const { buildInventoryEvidenceCounts } = await import("./shared-scan-detail-view");
   const sourcebusterTracker = {

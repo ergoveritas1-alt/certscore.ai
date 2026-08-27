@@ -44,6 +44,9 @@ test("timeline model is projection-backed for findings, checklist rows, inventor
   assert.match(source, /buildChecklistConcernTopFindings\(checklistRows\)/);
   assert.match(source, /selectCanonicalHighPriorityFindings/);
   assert.match(source, /buildExecutiveTimelineEvents/);
+  assert.match(source, /buildExecutiveRejectPathProjection/);
+  assert.match(source, /item\.id === "post_reject_tracking_reduction"/);
+  assert.match(source, /rejectPath,/);
   assert.match(source, /inventoryProjection\.ungroupedRows/);
   assert.match(source, /vendorSurfaceProjection\.execSummary/);
   assert.match(source, /requestCount: row\.requestCount/);
@@ -59,6 +62,8 @@ test("timeline model is projection-backed for findings, checklist rows, inventor
   assert.match(report, /InventoryConfidenceDots/);
   assert.match(report, /InventoryTypeIcon/);
   assert.match(report, /report\.coverage\.review/);
+  assert.match(report, /<CompactRejectPathCard projection=\{report\.rejectPath\} \/>/);
+  assert.match(report, /data-testid="timeline-reject-path-card"/);
   assert.match(report, /mode === "authenticated"/);
   assert.match(report, /-mx-5[^"\n]*lg:-mx-10/);
 });

@@ -1,3 +1,5 @@
+import type { ExecutiveRejectPathProjection } from "../executive-summary-card";
+
 export const SHADOW_REPORT_SCAN_ID = "333757ef-ddc0-4d68-aef8-f220859706c9";
 
 export const SHADOW_REPORT_SOURCE_URL =
@@ -122,6 +124,7 @@ export type ShadowReportData = {
   };
   controls: { accept: string; options: string; reject: string };
   consentVendor: string | null;
+  rejectPath?: ExecutiveRejectPathProjection | null;
   coverage: {
     concern: number;
     contextual: number;

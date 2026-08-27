@@ -22,7 +22,10 @@ import type { ScanDetailResponse } from "../../../server/scans/get-scan-by-id";
 import { deriveCanonicalOverallScoreForReport } from "../../../server/scans/canonical-overall-score";
 import { getPersistedCanonicalReportProjection } from "../../../server/scans/persisted-canonical-report-projection";
 import { getVisualEvidenceArtifacts } from "../../../lib/scans/visual-evidence";
-import { buildExecutiveTimelineEvents } from "../shared-scan-detail-view";
+import {
+  buildExecutiveRejectPathProjection,
+  buildExecutiveTimelineEvents,
+} from "../shared-scan-detail-view";
 import type {
   ShadowEvidenceRow,
   ShadowEvidenceStatus,
@@ -409,6 +412,9 @@ export function buildTimelineReportModel(scanRecord: ScanDetailResponse): Shadow
   const retainedDurationMs = retainedScanDurationMs(scanRecord);
   const durationMs = retainedDurationMs ?? 0;
   const consentVendor = retainedConsentVendor(scanRecord);
+  const rejectPath = buildExecutiveRejectPathProjection(
+    checklistRows.find((item) => item.id === "post_reject_tracking_reduction"),
+  );
   const timeline: ShadowReportData["timeline"] = [
     { at: "0s", atMs: 0, detail: "Public page observation began", label: "Scan start", tone: "neutral" },
     ...buildExecutiveTimelineEvents(scanRecord.runtimeArtifacts, reportableChecklistRows).map((event) => ({
@@ -514,6 +520,7 @@ export function buildTimelineReportModel(scanRecord: ScanDetailResponse): Shadow
     },
     nextStep,
     preConsentRuntimeRows: evidenceRows.filter((row) => CHECKLIST_GROUPS.runtime.has(row.id)),
+    rejectPath,
     relatedRows: [],
     scan: {
       benchmark: scanRecord.domainBenchmark?.industry ?? "Comparable public websites",

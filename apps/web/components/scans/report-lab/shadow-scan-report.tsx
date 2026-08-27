@@ -6,6 +6,7 @@ import { AgentSummaryActions, ShareReportActions } from "../share-report-actions
 import { getScanFromMarkerInput, ScanFromMarker } from "../scan-from-icons";
 import type { ServerScanFrom } from "../scan-from-select";
 import { VendorBrandChip } from "../vendor-brand-chip";
+import { CompactRejectPathCard } from "../executive-summary-card";
 import { ShadowReportShareMenu } from "./shadow-report-actions";
 import { ShadowPolicyEvidenceViewer } from "./shadow-policy-evidence-viewer";
 import {
@@ -379,6 +380,11 @@ function SignalSnapshot({ report }: { report: ShadowReportData }) {
           </summary>
           <div className="mt-3"><ControlStatusGrid compact report={report} /></div>
         </details>
+        {report.rejectPath ? (
+          <div className="py-2" data-testid="timeline-reject-path-card">
+            <CompactRejectPathCard projection={report.rejectPath} />
+          </div>
+        ) : null}
         {report.metrics.forms > 0 ? (
           <details className="group/signal py-2">
             <summary className="flex cursor-pointer list-none items-center justify-between gap-3 [&::-webkit-details-marker]:hidden">
