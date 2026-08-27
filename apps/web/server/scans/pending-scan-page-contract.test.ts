@@ -63,6 +63,12 @@ test("timeline model is projection-backed for findings, checklist rows, inventor
   assert.match(report, /InventoryConfidenceDots/);
   assert.match(report, /InventoryTypeIcon/);
   assert.match(report, /report\.coverage\.review/);
+  assert.match(report, />Policy surfaces</);
+  assert.match(report, /\{privacyUrls\.length\} found/);
+  assert.doesNotMatch(report, />Privacy surfaces</);
+  assert.doesNotMatch(report, /observedPrivacyRows/);
+  assert.match(report, /observedGdprTransparencyRows/);
+  assert.match(report, /\{observedGdprTransparencyRows\} of \{report\.gdprTransparencyRows\.length\} observed/);
   assert.match(report, /<CompactRejectPathCard projection=\{report\.rejectPath\} \/>/);
   assert.match(report, /data-testid="timeline-reject-path-card"/);
   assert.match(report, /data-testid="post-reject-timeline"/);

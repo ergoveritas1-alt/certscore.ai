@@ -7,6 +7,7 @@ import {
   INTERNAL_QA_MCP_CLIENT_NAMES,
   INTERNAL_QA_REQUESTER_IPS,
   adminTrafficScopeVisibility,
+  isAdminTrafficClassificationVisible,
   resolveAdminTrafficScope,
 } from "../../lib/admin/admin-traffic-scope";
 import { MAC_MINI_SCAN_BOT_API_KEY_NAMES } from "../../lib/admin/mac-mini-scan-bot";
@@ -33,6 +34,23 @@ test("one canonical preset independently controls Internal / QA and Mac mini vis
   assert.equal(resolveAdminTrafficScope({ includeCanary: "1" }), "include_internal_qa");
   assert.equal(resolveAdminTrafficScope({ scanBotFilter: "1" }), "include_mac_mini");
   assert.equal(resolveAdminTrafficScope({ includeCanary: "1", scanBotFilter: "1" }), "all");
+});
+
+test("Mac mini classification takes precedence over overlapping Internal / QA identity", () => {
+  const overlap = { isInternalQa: true, isMacMini: true };
+  assert.equal(isAdminTrafficClassificationVisible("external", overlap), false);
+  assert.equal(isAdminTrafficClassificationVisible("include_internal_qa", overlap), false);
+  assert.equal(isAdminTrafficClassificationVisible("include_mac_mini", overlap), true);
+  assert.equal(isAdminTrafficClassificationVisible("all", overlap), true);
+
+  assert.equal(isAdminTrafficClassificationVisible("include_mac_mini", {
+    isInternalQa: true,
+    isMacMini: false,
+  }), false);
+  assert.equal(isAdminTrafficClassificationVisible("include_internal_qa", {
+    isInternalQa: false,
+    isMacMini: true,
+  }), false);
 });
 
 test("the Internal / QA identity list contains the requested exact identities", () => {
@@ -67,4 +85,6 @@ test("Mac mini filtering remains credential-based across operational repositorie
   assert.match(analyticsRepository, /events\.is_mac_mini_scan_bot = false/);
   assert.match(pulseRepository, /api_key\.name/);
   assert.match(scansRepository, /mac_mini_scan_bot_filter/);
+  assert.match(scansRepository, /adminTrafficVisibilitySql/);
+  assert.match(scansRepository, /excludeMacMiniParameter[\s\S]*macMiniFilter[\s\S]*not \$\{macMiniFilter\}[\s\S]*includeInternalQaParameter/);
 });

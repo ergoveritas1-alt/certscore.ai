@@ -1,6 +1,6 @@
 import shared from "@website-signal-risk-scanner/shared";
 import type { AnonymousRequesterNetwork } from "@website-signal-risk-scanner/shared";
-import type { CertScoreAccessTokenClaims } from "@certscore/mcp-auth";
+export { authenticatedMcpCallerBinding } from "@certscore/mcp-auth";
 import type { IncomingMessage } from "node:http";
 
 const { anonymousRequesterNetwork, getTrustedRequestSourceIp } = shared;
@@ -37,8 +37,4 @@ export function anonymousSessionBinding(requester: AnonymousMcpRequester) {
   return requester.network === "anthropic"
     ? "anonymous-provider:anthropic"
     : `anonymous:${requester.ip ?? "unknown-requester"}`;
-}
-
-export function authenticatedMcpCallerBinding(claims: Pick<CertScoreAccessTokenClaims, "iss" | "sub">) {
-  return `authenticated-oauth:${claims.iss}:${claims.sub}`;
 }

@@ -21,7 +21,8 @@ test("Internal / QA traffic is excluded by default across all four admin activit
     assert.match(page, /<AdminTrafficFilters/);
   }
 
-  assert.match(scansRepository, /not canary_filter/);
+  assert.match(scansRepository, /adminTrafficVisibilitySql/);
+  assert.match(scansRepository, /internalQaFilter: "canary_filter"/);
   assert.match(scansRepository, /INTERNAL_QA_EMAILS/);
   assert.match(scansRepository, /INTERNAL_QA_REQUESTER_IPS/);
   assert.match(scansRepository, /INTERNAL_QA_MCP_CLIENT_NAMES/);
@@ -42,10 +43,10 @@ test("Admin Scans filters traffic before detailed row enrichment and in overview
     scansRepository.indexOf("if (canUseDefaultActivityPath)") < scansRepository.indexOf("const baseSql = adminScanActivityBaseSql()")
   );
   assert.match(scansRepository, /with canary_scan_ids as materialized/);
-  assert.match(scansRepository, /not exists \(select 1 from canary_scan_ids canary where canary\.scan_id = s\.id\)/);
+  assert.match(scansRepository, /internalQaFilter: "exists \(select 1 from canary_scan_ids canary where canary\.scan_id = s\.id\)"/);
   assert.match(scansRepository, /internalQaLinkedRequestSql\("s\.id"/);
   assert.match(scansRepository, /internalQaLinkedRequestSql\("ss\.scan_id"/);
-  assert.match(scansRepository, /not exists \(select 1 from mac_mini_scan_bot_scan_ids bot where bot\.scan_id = s\.id\)/);
+  assert.match(scansRepository, /macMiniFilter: "exists \(select 1 from mac_mini_scan_bot_scan_ids bot where bot\.scan_id = s\.id\)"/);
 });
 
 test("the canonical traffic preset survives filters and pagination", () => {

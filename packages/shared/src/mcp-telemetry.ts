@@ -60,6 +60,26 @@ export const mcpTelemetrySurfaceSchema = z.enum([
   "mcp_authenticated",
 ]);
 
+export const mcpActivationStageSchema = z.enum([
+  "mcp_initialized",
+  "mcp_tools_listed",
+  "mcp_first_tool_invoked",
+  "mcp_scan_requested",
+]);
+
+export const mcpActivationEventSchema = z.object({
+  actorId: z.string().regex(/^[a-f0-9]{24}$/),
+  callerProduct: mcpCallerProductSchema,
+  clientName: z.string().min(1).max(100).regex(/^[a-zA-Z0-9][a-zA-Z0-9 ._:/+@()-]*$/).nullable(),
+  eventId: z.string().uuid(),
+  eventType: z.literal("activation"),
+  occurredAt: z.string().datetime(),
+  organizationId: z.string().uuid().nullable(),
+  source: mcpCallerProviderSchema,
+  stage: mcpActivationStageSchema,
+  userId: z.string().uuid(),
+}).strict();
+
 export const mcpTelemetryEventSchema = z.object({
   actorId: z.string().regex(/^[a-f0-9]{24}$/).nullable(),
   authClass: z.enum(["anonymous", "authenticated"]),
@@ -121,6 +141,8 @@ export const mcpTelemetryEventSchema = z.object({
 );
 
 export type McpTelemetryEvent = z.infer<typeof mcpTelemetryEventSchema>;
+export type McpActivationEvent = z.infer<typeof mcpActivationEventSchema>;
+export type McpActivationStage = z.infer<typeof mcpActivationStageSchema>;
 export type McpTelemetrySurface = z.infer<typeof mcpTelemetrySurfaceSchema>;
 
 export function mcpTelemetryEndpoint(surface: McpTelemetrySurface): McpTelemetryEvent["endpoint"] {

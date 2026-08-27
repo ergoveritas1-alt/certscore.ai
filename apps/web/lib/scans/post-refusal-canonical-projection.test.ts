@@ -258,7 +258,7 @@ test("confirmed post-refusal evidence reaches canonical concerns, findings, chec
     framework: "gdpr_eprivacy",
     rows: [result.postRejectRow],
   });
-  assert.equal(score.score, 94);
+  assert.equal(score.score, 85);
 });
 
 test("confirmed TCF contradiction independently reaches a scored canonical checklist gap", () => {
@@ -293,7 +293,7 @@ test("confirmed TCF contradiction independently reaches a scored canonical check
     framework: "gdpr_eprivacy",
     rows: [result.postRejectRow],
   });
-  assert.equal(score.score, 94);
+  assert.equal(score.score, 85);
 });
 
 test("exact unchanged storage persistence is factual, review-only, and score-neutral", () => {

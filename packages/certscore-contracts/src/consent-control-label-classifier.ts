@@ -423,6 +423,7 @@ export const CONSENT_CONTROL_PHRASE_REGISTRY: ConsentControlTerm[] = [
     contextual("options", "optionen", { requiresConsentContext: true }),
     ...direct("options", "weitere optionen"),
     contextual("options", "anpassen", { requiresConsentContext: true }),
+    contextual("options", "bearbeiten", { requiresConsentContext: true }),
     contextual("options", "personalisieren", { requiresConsentContext: true }),
     contextual("options", "konfigurieren", { requiresConsentContext: true }),
     ...direct("options", "präferenzcenter"),
@@ -891,6 +892,7 @@ export const consentControlTerms = CONSENT_CONTROL_PHRASE_REGISTRY;
 // into consent controls when unrelated privacy language exists elsewhere on
 // the page.
 const CONTEXTUAL_EXACT_LABEL_ONLY_PHRASES = new Set([
+  "bearbeiten",
   "continue",
   "decline",
   "details",

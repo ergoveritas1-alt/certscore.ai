@@ -1,5 +1,10 @@
 import { createHmac, timingSafeEqual } from "node:crypto";
-import { mcpTelemetryEventSchema, type McpTelemetryEvent } from "@website-signal-risk-scanner/shared";
+import {
+  mcpActivationEventSchema,
+  mcpTelemetryEventSchema,
+  type McpActivationEvent,
+  type McpTelemetryEvent
+} from "@website-signal-risk-scanner/shared";
 
 const MAX_CLOCK_SKEW_SECONDS = 300;
 
@@ -15,7 +20,10 @@ export function verifyMcpTelemetryEnvelope(input: {
   proof: string | null;
   secret: string | null;
   timestamp: string | null;
-}): { event: McpTelemetryEvent; ok: true } | { ok: false; reason: string } {
+}):
+  | { event: McpTelemetryEvent; kind: "tool_invocation"; ok: true }
+  | { event: McpActivationEvent; kind: "activation"; ok: true }
+  | { ok: false; reason: string } {
   if (!input.secret || !input.proof || !input.timestamp || !/^\d{1,12}$/.test(input.timestamp)) {
     return { ok: false, reason: "missing_or_invalid_authentication" };
   }
@@ -36,12 +44,19 @@ export function verifyMcpTelemetryEnvelope(input: {
   } catch {
     return { ok: false, reason: "invalid_json" };
   }
-  const event = mcpTelemetryEventSchema.safeParse(parsed);
-  if (!event.success) {
+  const toolEvent = mcpTelemetryEventSchema.safeParse(parsed);
+  if (toolEvent.success) {
+    if (Math.abs(Date.parse(toolEvent.data.occurredAt) - nowMs) > MAX_CLOCK_SKEW_SECONDS * 1_000) {
+      return { ok: false, reason: "invalid_occurred_at" };
+    }
+    return { event: toolEvent.data, kind: "tool_invocation", ok: true };
+  }
+  const activationEvent = mcpActivationEventSchema.safeParse(parsed);
+  if (!activationEvent.success) {
     return { ok: false, reason: "invalid_event" };
   }
-  if (Math.abs(Date.parse(event.data.occurredAt) - nowMs) > MAX_CLOCK_SKEW_SECONDS * 1_000) {
+  if (Math.abs(Date.parse(activationEvent.data.occurredAt) - nowMs) > MAX_CLOCK_SKEW_SECONDS * 1_000) {
     return { ok: false, reason: "invalid_occurred_at" };
   }
-  return { event: event.data, ok: true };
+  return { event: activationEvent.data, kind: "activation", ok: true };
 }

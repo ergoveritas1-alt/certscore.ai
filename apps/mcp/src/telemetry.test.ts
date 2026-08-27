@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { createHmac } from "node:crypto";
+import { readFileSync } from "node:fs";
 import test from "node:test";
 import { classifyHostedMcpClient, createHostedMcpTelemetry } from "./telemetry.js";
 
@@ -68,6 +69,94 @@ test("hosted MCP client classification keeps verified and self-declared attribut
   assert.equal(claimed.installationOrigin, "unknown");
   assert.match(claimed.actorId ?? "", /^[a-f0-9]{24}$/);
   assert.equal(JSON.stringify(claimed).includes("opaque-user-value"), false);
+});
+
+test("authenticated telemetry accepts the canonical opaque OAuth actor ID", () => {
+  const actorId = "0123456789abcdef01234567";
+  const classified = classifyHostedMcpClient({
+    authenticatedActorBinding: "legacy-binding",
+    authenticatedActorId: actorId,
+    headers: {},
+    secret,
+    surface: "mcp_authenticated"
+  });
+  assert.equal(classified.actorId, actorId);
+  assert.equal(classified.authClass, "authenticated");
+});
+
+test("authenticated telemetry signs bounded MCP activation stages", async () => {
+  const requests: string[] = [];
+  const telemetry = createHostedMcpTelemetry({
+    authenticatedActorId: "0123456789abcdef01234567",
+    authenticatedOrganizationId: "00000000-0000-4000-8000-000000000002",
+    authenticatedUserId: "00000000-0000-4000-8000-000000000003",
+    baseUrl: "https://certscore.ai",
+    clientInfoBody: { params: { clientInfo: { name: "Claude", version: "do-not-store" } } },
+    fetch: (async (_input: RequestInfo | URL, init?: RequestInit) => {
+      requests.push(String(init?.body ?? ""));
+      return new Response(null, { status: 202 });
+    }) as typeof fetch,
+    headers: {},
+    secret,
+    sessionId: () => null,
+    surface: "mcp_authenticated"
+  });
+  telemetry.observeActivation("mcp_initialized");
+  telemetry.observeActivation("mcp_tools_listed");
+  await new Promise((resolve) => setImmediate(resolve));
+
+  assert.equal(requests.length, 2);
+  assert.deepEqual(requests.map((body) => JSON.parse(body).stage), ["mcp_initialized", "mcp_tools_listed"]);
+  for (const body of requests) {
+    assert.equal(body.includes("do-not-store"), false);
+    assert.equal(JSON.parse(body).eventType, "activation");
+  }
+});
+
+test("authenticated MCP runtime records initialization and tool discovery", () => {
+  const source = readFileSync(new URL("./index.ts", import.meta.url), "utf8");
+  assert.match(source, /telemetry\.observeActivation\("mcp_initialized"\)/);
+  assert.match(source, /session\.telemetry\?\.observeActivation\("mcp_tools_listed"\)/);
+  assert.match(source, /jsonRpcMethod\(parsedBody\) === "tools\/list"/);
+});
+
+test("authenticated tool telemetry records first-tool and attempted scan-request activation once per session", async () => {
+  const requests: string[] = [];
+  const telemetry = createHostedMcpTelemetry({
+    authenticatedActorId: "0123456789abcdef01234567",
+    authenticatedOrganizationId: "00000000-0000-4000-8000-000000000002",
+    authenticatedUserId: "00000000-0000-4000-8000-000000000003",
+    baseUrl: "https://certscore.ai",
+    fetch: (async (_input: RequestInfo | URL, init?: RequestInit) => {
+      requests.push(String(init?.body ?? ""));
+      return new Response(null, { status: 202 });
+    }) as typeof fetch,
+    headers: {},
+    secret,
+    sessionId: () => null,
+    surface: "mcp_authenticated"
+  });
+  const scanObservation = {
+    ...observation("certscore_scan_site"),
+    errorCode: "upstream_unavailable",
+    outcome: "error" as const,
+    requestedResource: "https://example.com",
+    requestedResourceType: "url" as const,
+    scanDecision: "unavailable" as const,
+    scanId: null,
+    scanStatus: "failed",
+    targetHostname: "example.com"
+  };
+  telemetry.observeToolInvocation(scanObservation);
+  telemetry.observeToolInvocation(scanObservation);
+  await new Promise((resolve) => setImmediate(resolve));
+
+  const activationStages = requests
+    .map((body) => JSON.parse(body) as { eventType?: string; stage?: string })
+    .filter((event) => event.eventType === "activation")
+    .map((event) => event.stage);
+  assert.deepEqual(activationStages, ["mcp_first_tool_invoked", "mcp_scan_requested"]);
+  assert.equal(requests.length, 4);
 });
 
 test("hosted MCP client classification keeps Codex distinct from generic OpenAI client names", () => {

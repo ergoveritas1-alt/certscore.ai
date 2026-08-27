@@ -160,11 +160,12 @@ export async function restrictMcpOAuthScopes(scopes: string[] | readonly string[
 }
 
 export async function resolveMcpOAuthRequestedScopes(input: {
-  client: Pick<McpOAuthClient, "scope">;
+  client: Pick<McpOAuthClient, "clientName" | "redirectUris" | "scope">;
   requestedScopes: readonly string[];
   context: McpOAuthGrantContext;
 }) {
   const resolution = resolveMcpOAuthScopeRequest({
+    autoIncludeGrantedCreateScope: isClaudeMcpOAuthClientMetadata(input.client),
     clientScopes: input.client.scope,
     requestedScopes: input.requestedScopes,
     scanCreateGranted: await hasMcpOAuthScanCreateGrant(input.context)

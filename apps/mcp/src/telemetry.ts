@@ -1,13 +1,14 @@
 import { createHmac, randomUUID } from "node:crypto";
 import type { IncomingHttpHeaders } from "node:http";
 import shared from "@website-signal-risk-scanner/shared";
-import type { McpTelemetryEvent, McpTelemetrySurface } from "@website-signal-risk-scanner/shared";
+import type { McpActivationStage, McpTelemetryEvent, McpTelemetrySurface } from "@website-signal-risk-scanner/shared";
 import { projectMcpToolInvocationObservation, type McpToolInvocationObservation } from "@certscore/mcp/server";
 import type { AnonymousRequesterNetwork } from "@website-signal-risk-scanner/shared";
 
 const {
   MCP_CALLER_ATTRIBUTION_RULESET_VERSION,
   MCP_TELEMETRY_INTEGRATION,
+  mcpActivationEventSchema,
   mcpTelemetryEndpoint,
   mcpTelemetryEventSchema,
 } = shared;
@@ -30,7 +31,10 @@ type LightMcpClientContext = {
 };
 
 type CreateHostedMcpTelemetryInput = {
+  authenticatedActorId?: string | null;
   authenticatedActorBinding?: string | null;
+  authenticatedOrganizationId?: string | null;
+  authenticatedUserId?: string | null;
   baseUrl: string;
   clientInfoBody?: unknown;
   fetch?: typeof fetch;
@@ -112,6 +116,7 @@ function declaredProvider(family: McpTelemetryEvent["clientFamily"]): McpTelemet
 }
 
 export function classifyHostedMcpClient(input: {
+  authenticatedActorId?: string | null;
   authenticatedActorBinding?: string | null;
   clientInfoBody?: unknown;
   headers: IncomingHttpHeaders;
@@ -157,7 +162,9 @@ export function classifyHostedMcpClient(input: {
   const product = verifiedAnthropic && family === "unknown" ? "claude" : callerProduct(family);
 
   return {
-    actorId: hashOpaque(input.secret, "actor", actorSource),
+    actorId: input.authenticatedActorId && /^[a-f0-9]{24}$/.test(input.authenticatedActorId)
+      ? input.authenticatedActorId
+      : hashOpaque(input.secret, "actor", actorSource),
     attributionConfidence,
     attributionRulesetVersion: MCP_CALLER_ATTRIBUTION_RULESET_VERSION,
     attributionSignals,
@@ -203,6 +210,60 @@ export function createHostedMcpTelemetry(input: CreateHostedMcpTelemetryInput) {
   const client = classifyHostedMcpClient(input);
   const conversationId = firstHeader(input.headers, "openai-conversation-id");
   const ingestionUrl = new URL("/api/internal/mcp-telemetry", input.baseUrl);
+  const sentActivationStages = new Set<McpActivationStage>();
+
+  const deliver = (event: { eventId: string }, context: { stage?: string; toolName?: string }) => {
+    const body = JSON.stringify(event);
+    const timestamp = String(Math.floor(Date.now() / 1_000));
+    void Promise.resolve().then(() => fetchImpl(ingestionUrl, {
+        body,
+        headers: {
+          "content-type": "application/json; charset=utf-8",
+          "x-certscore-mcp-telemetry-proof": telemetrySignature(input.secret, timestamp, body),
+          "x-certscore-mcp-telemetry-timestamp": timestamp,
+        },
+        method: "POST",
+        signal: AbortSignal.timeout(1_500),
+      })).then((response) => {
+      if (!response.ok) throw new Error(`Telemetry ingestion returned HTTP ${response.status}.`);
+    }).catch((error) => {
+      logger.error(JSON.stringify({
+        event: "mcp.telemetry_write_failed",
+        errorName: error instanceof Error ? error.name : "UnknownError",
+        stage: context.stage ?? null,
+        surface: input.surface,
+        toolName: context.toolName ?? null,
+      }));
+    });
+  };
+
+  const reportActivation = (stage: McpActivationStage) => {
+    if (!input.authenticatedUserId || !client.actorId) return;
+    if (sentActivationStages.has(stage)) return;
+    const parsed = mcpActivationEventSchema.safeParse({
+      actorId: client.actorId,
+      callerProduct: client.callerProduct,
+      clientName: client.clientName,
+      eventId: randomUUID(),
+      eventType: "activation",
+      occurredAt: new Date().toISOString(),
+      organizationId: input.authenticatedOrganizationId ?? null,
+      source: client.source,
+      stage,
+      userId: input.authenticatedUserId,
+    });
+    if (!parsed.success) {
+      logger.error(JSON.stringify({
+        event: "mcp.activation_event_rejected",
+        issues: parsed.error.issues.map((issue) => ({ code: issue.code, path: issue.path.join(".") })).slice(0, 8),
+        stage,
+        surface: input.surface,
+      }));
+      return;
+    }
+    sentActivationStages.add(stage);
+    deliver(parsed.data, { stage });
+  };
 
   const report = (observation: Omit<McpToolInvocationObservation, "transportOutcome"> & {
     transportOutcome: McpTelemetryEvent["transportOutcome"];
@@ -261,32 +322,19 @@ export function createHostedMcpTelemetry(input: CreateHostedMcpTelemetryInput) {
       }));
       return;
     }
-    const event = parsed.data;
-    const body = JSON.stringify(event);
-    const timestamp = String(Math.floor(Date.now() / 1_000));
-
-    void Promise.resolve().then(() => fetchImpl(ingestionUrl, {
-        body,
-        headers: {
-          "content-type": "application/json; charset=utf-8",
-          "x-certscore-mcp-telemetry-proof": telemetrySignature(input.secret, timestamp, body),
-          "x-certscore-mcp-telemetry-timestamp": timestamp,
-        },
-        method: "POST",
-        signal: AbortSignal.timeout(1_500),
-      })).then((response) => {
-      if (!response.ok) throw new Error(`Telemetry ingestion returned HTTP ${response.status}.`);
-    }).catch((error) => {
-      logger.error(JSON.stringify({
-        event: "mcp.telemetry_write_failed",
-        errorName: error instanceof Error ? error.name : "UnknownError",
-        surface: input.surface,
-        toolName: event.toolName,
-      }));
-    });
+    deliver(parsed.data, { toolName: parsed.data.toolName });
+    if (input.surface === "mcp_authenticated") {
+      reportActivation("mcp_first_tool_invoked");
+      if (observation.toolName === "certscore_scan_site") {
+        reportActivation("mcp_scan_requested");
+      }
+    }
   };
 
   return {
+    observeActivation(stage: McpActivationStage) {
+      reportActivation(stage);
+    },
     observeToolInvocation(observation: McpToolInvocationObservation, requestContext?: ToolRequestContext) {
       report(observation, requestContext);
     },

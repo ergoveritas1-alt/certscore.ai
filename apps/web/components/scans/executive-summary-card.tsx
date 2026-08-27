@@ -17,6 +17,7 @@ import type { FindingCriticalityBadge } from "../../lib/scans/finding-criticalit
 import { getFindingDensityBenchmark } from "../../lib/scans/finding-density-benchmarks";
 import type { CertScoreFinding } from "../../lib/scans/finding-registry";
 import { getRegulatoryLensAnchor } from "../../lib/scans/regulatory-lens-anchor";
+import { getGdprEprivacyPostureTone } from "../../lib/scans/regulatory-coverage-score";
 import {
   getPublicReportConfidenceDefinition,
   getPublicReportFindingDisplayForCertFinding
@@ -1322,16 +1323,8 @@ function clampScore(value: number) {
 }
 
 function buildTone(score: number) {
-  if (score >= 85) {
-    return { label: "Strong", toneClass: "border-emerald-200 bg-emerald-50 text-emerald-800" };
-  }
-  if (score >= 65) {
-    return { label: "Watch", toneClass: "border-amber-200 bg-amber-50 text-amber-800" };
-  }
-  if (score < 40) {
-    return { label: "High-priority remediation", toneClass: "border-rose-300 bg-rose-100 text-rose-900" };
-  }
-  return { label: "Needs work", toneClass: "border-rose-200 bg-rose-50 text-rose-800" };
+  const tone = getGdprEprivacyPostureTone(score);
+  return { label: tone.ratingLabel, toneClass: tone.toneClass };
 }
 
 function buildMinimalRegulatoryLens(input: {
@@ -2365,7 +2358,11 @@ function formatRejectResolverMethod(resolverMethod: string) {
 export function CompactRejectPathCard(input: {
   projection?: ExecutiveRejectPathProjection | null;
 }) {
-  if (!input.projection) {
+  if (
+    !input.projection
+    || input.projection.state === "incomplete"
+    || input.projection.observationWindowMs === null
+  ) {
     return null;
   }
   const presentation = getCompactRejectPathPresentation(input.projection.state);

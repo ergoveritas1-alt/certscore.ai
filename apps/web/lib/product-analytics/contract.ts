@@ -15,6 +15,11 @@ export const PRODUCT_ANALYTICS_EVENT_NAMES = [
   "web_vital_recorded",
   "client_error",
   "account_created",
+  "oauth_authorized",
+  "mcp_initialized",
+  "mcp_tools_listed",
+  "mcp_first_tool_invoked",
+  "mcp_scan_requested",
   "analytics_opted_in",
   "analytics_opted_out"
 ] as const;

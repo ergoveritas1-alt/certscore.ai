@@ -82,7 +82,7 @@ test("compact Reject-path card renders canonical outcome, bounded evidence, timi
   assert.match(html, /data-reject-path-state="issue_observed"/);
 });
 
-test("compact Reject-path card keeps persistence review and incomplete coverage score-neutral", () => {
+test("compact Reject-path card keeps persistence review score-neutral and hides incomplete coverage", () => {
   const persistenceHtml = renderToStaticMarkup(createElement(CompactRejectPathCard, {
     projection: {
       evidenceRows: [{ detail: "Example Analytics · cookie", label: "_analytics" }],
@@ -109,9 +109,7 @@ test("compact Reject-path card keeps persistence review and incomplete coverage 
   assert.match(persistenceHtml, /Review signal/);
   assert.match(persistenceHtml, /Stored presence alone does not establish active use/);
   assert.match(persistenceHtml, /No score effect/);
-  assert.match(incompleteHtml, /Incomplete/);
-  assert.match(incompleteHtml, /does not affect the score/);
-  assert.match(incompleteHtml, /No score effect/);
+  assert.equal(incompleteHtml, "");
 });
 
 test("compact Reject-path card appears after the persisted A/R/O control card", () => {
@@ -870,7 +868,7 @@ test("buildRegulatoryLenses maps consent-choice review signals into GDPR without
   const gdprLens = lenses.find((lens) => lens.acronym === "GDPR / ePrivacy");
 
   assert.equal(gdprLens?.summary, "No major consent-triggering issue surfaced in the top findings.");
-  assert.equal(gdprLens?.ratingLabel, "Strong");
+  assert.equal(gdprLens?.ratingLabel, "Watch");
   assert.deepEqual(regulatoryFindingLabels(gdprLens?.findings ?? []), [
     "Decline consent control",
     "Consent prompt appeared to require interaction"

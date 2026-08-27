@@ -53,6 +53,18 @@ test("accepts only bounded structured product analytics fields", () => {
   assert.equal("authorization" in parsed, false);
 });
 
+test("accepts the OAuth-to-MCP activation funnel event names", () => {
+  for (const eventName of ["oauth_authorized", "mcp_initialized", "mcp_tools_listed", "mcp_first_tool_invoked", "mcp_scan_requested"] as const) {
+    assert.ok(parseProductAnalyticsPayload({
+      ...validEvent,
+      category: eventName === "oauth_authorized" ? "account" : "interaction",
+      eventName,
+      feature: "mcp:claude",
+      outcome: "success"
+    }));
+  }
+});
+
 test("rejects identifiers and campaigns that look sensitive", () => {
   const parsed = parseProductAnalyticsPayload({
     ...validEvent,

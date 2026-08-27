@@ -40,6 +40,16 @@ export function adminTrafficScopeVisibility(scope: AdminTrafficScope) {
   };
 }
 
+export function isAdminTrafficClassificationVisible(
+  scope: AdminTrafficScope,
+  classification: { isInternalQa: boolean; isMacMini: boolean },
+) {
+  const visibility = adminTrafficScopeVisibility(scope);
+  if (classification.isMacMini) return visibility.includeMacMini;
+  if (classification.isInternalQa) return visibility.includeInternalQa;
+  return true;
+}
+
 export function adminTrafficScopeLabel(scope: AdminTrafficScope) {
   if (scope === "include_internal_qa") return "Include Internal / QA";
   if (scope === "include_mac_mini") return "Include Mac mini";

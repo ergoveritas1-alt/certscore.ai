@@ -1,6 +1,23 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { mcpTelemetryEndpoint, mcpTelemetryEventSchema } from "./mcp-telemetry";
+import { mcpActivationEventSchema, mcpTelemetryEndpoint, mcpTelemetryEventSchema } from "./mcp-telemetry";
+
+test("MCP activation telemetry accepts only bounded authenticated funnel stages", () => {
+  const event = mcpActivationEventSchema.parse({
+    actorId: "a".repeat(24),
+    callerProduct: "claude",
+    clientName: "claude",
+    eventId: "00000000-0000-4000-8000-000000000001",
+    eventType: "activation",
+    occurredAt: "2026-08-27T12:00:00.000Z",
+    organizationId: "00000000-0000-4000-8000-000000000002",
+    source: "anthropic",
+    stage: "mcp_initialized",
+    userId: "00000000-0000-4000-8000-000000000003"
+  });
+  assert.equal(event.stage, "mcp_initialized");
+  assert.equal(mcpActivationEventSchema.safeParse({ ...event, authorization: "Bearer secret" }).success, false);
+});
 
 test("MCP telemetry accepts only bounded structured metadata", () => {
   const event = mcpTelemetryEventSchema.parse({

@@ -2,12 +2,15 @@ import { redirect } from "next/navigation";
 import { oauthScopeString } from "@certscore/mcp-auth";
 import { getCurrentUser } from "../../../../../server/auth";
 import { bootstrapAppUserSession } from "../../../../../server/bootstrap-user";
+import { isPlatformAdminEmail } from "../../../../../server/admin/platform-admin";
 import {
   createAuthorizationCode,
   getMcpOAuthClient,
   redirectUriAllowed,
   resolveMcpOAuthRequestedScopes
 } from "../../../../../server/oauth/mcp-oauth";
+import { isClaudeMcpOAuthClientMetadata } from "../../../../../server/oauth/mcp-oauth-scopes";
+import { persistProductAnalyticsEvent } from "../../../../../server/product-analytics/repository";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -88,6 +91,30 @@ export async function POST(request: Request) {
     ownerUserId: user.id,
     redirectUri,
     scopes: scopeResolution.approvedScopes
+  });
+  await persistProductAnalyticsEvent({
+    category: "account",
+    eventName: "oauth_authorized",
+    feature: isClaudeMcpOAuthClientMetadata(client) ? "mcp:claude" : "mcp:oauth",
+    outcome: "success",
+    route: "/oauth/authorize"
+  }, {
+    browserFamily: "server",
+    consentState: "operational",
+    countryCode: null,
+    deviceClass: "unknown",
+    isBot: false,
+    isStaff: isPlatformAdminEmail(sessionUser.email),
+    osFamily: "server",
+    organizationId: organization.id,
+    referringDomain: null,
+    userId: user.id
+  }).catch((error) => {
+    console.error(JSON.stringify({
+      event: "oauth_authorized.write_failed",
+      clientKind: isClaudeMcpOAuthClientMetadata(client) ? "claude" : "other",
+      errorClass: error instanceof Error ? error.name : "UnknownError"
+    }));
   });
   redirectWithParams(redirectUri, {
     code,

@@ -1,11 +1,38 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import {
+  authenticatedMcpCallerBinding,
   mapOAuthScopesToIntegrationScopes,
+  mcpTelemetryActorId,
   normalizeOAuthScopes,
   signCertScoreAccessToken,
   verifyCertScoreAccessToken
 } from "./index.js";
+
+test("authenticated MCP telemetry actor IDs are stable and privacy-preserving", () => {
+  assert.equal(
+    authenticatedMcpCallerBinding({ iss: "https://certscore.ai", sub: "user_123" }),
+    "authenticated-oauth:https://certscore.ai:user_123"
+  );
+  const actorId = mcpTelemetryActorId({
+    issuer: "https://certscore.ai",
+    jwtSecret: "test-secret",
+    subject: "user_123"
+  });
+  assert.match(actorId, /^[a-f0-9]{24}$/);
+  assert.equal(actorId, "a4c64b54b00aead73aa2d387");
+  assert.equal(actorId, mcpTelemetryActorId({
+    issuer: "https://certscore.ai",
+    jwtSecret: "test-secret",
+    subject: "user_123"
+  }));
+  assert.notEqual(actorId, mcpTelemetryActorId({
+    issuer: "https://certscore.ai",
+    jwtSecret: "test-secret",
+    subject: "user_456"
+  }));
+  assert.equal(actorId.includes("user_123"), false);
+});
 
 test("OAuth scopes map onto existing CertScore integration scopes", () => {
   assert.deepEqual(normalizeOAuthScopes("scan:read mcp unknown"), ["scan:read", "mcp"]);

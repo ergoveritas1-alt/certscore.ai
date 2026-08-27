@@ -65,18 +65,24 @@ export function normalizeMcpOAuthClientScopes(scopes: string[] | readonly string
 }
 
 export function resolveMcpOAuthScopeRequest(input: {
+  autoIncludeGrantedCreateScope?: boolean;
   clientScopes: readonly string[];
   requestedScopes: readonly string[];
   scanCreateGranted: boolean;
 }): McpOAuthScopeResolution {
-  const requestedTokens = uniqueValues(tokenizeScopes(input.requestedScopes));
+  const normalizedClientScopes = normalizeOAuthScopes([...input.clientScopes]);
+  const requestedTokens = uniqueValues([
+    ...tokenizeScopes(input.requestedScopes),
+    ...(input.autoIncludeGrantedCreateScope && normalizedClientScopes.includes(CERTSCORE_OAUTH_CREATE_SCOPE)
+      ? [CERTSCORE_OAUTH_CREATE_SCOPE]
+      : [])
+  ]);
   const supportedScopes = [CERTSCORE_OAUTH_READ_SCOPE, CERTSCORE_OAUTH_CREATE_SCOPE, CERTSCORE_OAUTH_MCP_SCOPE] as const;
   const invalidScopes = requestedTokens.filter((scope) => !supportedScopes.includes(scope as CertScoreOAuthScope));
   const supportedRequested = requestedTokens.filter((scope): scope is CertScoreOAuthScope =>
     supportedScopes.includes(scope as CertScoreOAuthScope)
   );
   const normalizedRequested = normalizeMcpOAuthClientScopes(supportedRequested);
-  const normalizedClientScopes = normalizeOAuthScopes([...input.clientScopes]);
   const downgradedScopes = normalizedRequested.filter((scope) => scope === CERTSCORE_OAUTH_CREATE_SCOPE && !input.scanCreateGranted);
   const approvedScopes = normalizedRequested.filter((scope) => {
     if (scope === CERTSCORE_OAUTH_CREATE_SCOPE) {

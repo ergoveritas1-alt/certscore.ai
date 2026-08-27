@@ -525,7 +525,7 @@ test("admin users paginate in SQL instead of loading the complete account histor
 
   assert.match(pageSource, /listAdminUsersPage\(pageSize,/);
   assert.doesNotMatch(pageSource, /listAdminUsers\(\)/);
-  assert.match(pageSource, /const \[requestedUserPage, workspaces\] = await Promise\.all\(\[/);
+  assert.match(pageSource, /const \[requestedUserPage, workspaces, mcpActivationFunnel\] = await Promise\.all\(\[/);
   assert.match(pageSource, /app\.admin\.users\.workspaces/);
   assert.match(pageSource, /pendingContent=/);
   assert.doesNotMatch(pageSource, />Last requested</);
@@ -538,8 +538,23 @@ test("admin users paginate in SQL instead of loading the complete account histor
   assert.match(sortSource, /lastScan: "greatest\(request_activity\.last_scan_requested_at, associated_activity\.last_scan_at\)"/);
   assert.match(repositorySource, /from mcp_oauth_refresh_tokens tokens/);
   assert.match(repositorySource, /active_mcp_connector_count/);
-  assert.match(pageSource, /activeMcpConnectorCount > 0 \? "connected" : "last connected"/);
-  assert.match(pageSource, /OAuth \{formatAdminCompactDateTime\(user\.lastMcpConnectorAt\)\}/);
+  assert.match(repositorySource, /from public\.mcp_tool_invocation_events/);
+  assert.match(repositorySource, /actor_id = any\(\$1::text\[\]\)/);
+  assert.match(repositorySource, /event_name in \('oauth_authorized', 'mcp_initialized', 'mcp_tools_listed'\)/);
+  assert.match(repositorySource, /feature = 'mcp:claude'/);
+  assert.match(repositorySource, /stage\.event_name = 'mcp_first_tool_invoked'/);
+  assert.match(repositorySource, /stage\.event_name = 'mcp_scan_requested'/);
+  assert.match(listSource, /mcpTelemetryActorId/);
+  assert.match(pageSource, /Claude activation funnel/);
+  assert.match(pageSource, /within 24h/);
+  assert.match(pageSource, /within 1h/);
+  assert.match(pageSource, /activeMcpConnectorCount > 0 \? "authorized" : user\.lastMcpOAuthAuthorizedAt \? "approved" : "authorization ended"/);
+  assert.match(pageSource, /lastMcpOAuthAuthorizedAt \?\? user\.lastMcpConnectorAt/);
+  assert.match(pageSource, /Activation:/);
+  assert.match(pageSource, /awaiting initialization/);
+  assert.match(pageSource, /awaiting tool discovery/);
+  assert.match(pageSource, /MCP usage \(90d\):/);
+  assert.match(pageSource, /lastMcpToolInvocationAt/);
 });
 
 test("admin scans poll lightweight status data and refresh only after a status change", async () => {
@@ -590,18 +605,21 @@ test("admin scan list logs its expensive production stages separately", async ()
   assert.match(listSource, /app\.admin\.scans\.score-attribution/);
 });
 
-test("admin section navigation avoids speculative heavy-page loads and has a loading boundary", async () => {
+test("admin section navigation prefetches only lightweight pages and has a loading boundary", async () => {
   const layoutSource = await readFile("apps/web/app/app/admin/layout.tsx", "utf8");
   const loadingSource = await readFile("apps/web/app/app/admin/loading.tsx", "utf8");
   const actionsSource = await readFile("apps/web/app/app/admin/scans/admin-scan-actions.tsx", "utf8");
   const overviewSource = await readFile("apps/web/app/app/admin/page.tsx", "utf8");
   const appShellSource = await readFile("apps/web/components/dashboard/app-shell.tsx", "utf8");
 
-  assert.match(layoutSource, /href=\{item\.href\}\s+prefetch=\{false\}/);
-  assert.doesNotMatch(layoutSource, /href=\{item\.href\}\s+prefetch\s/);
+  assert.match(
+    layoutSource,
+    /prefetch=\{item\.href === "\/app\/admin\/analytics" \|\| item\.href === "\/app\/admin\/mcp"\}/,
+  );
+  assert.doesNotMatch(layoutSource, /prefetch=\{true\}/);
   assert.match(loadingSource, /aria-label="Loading admin page"/);
   assert.match(loadingSource, /aria-busy="true"/);
   assert.equal((actionsSource.match(/prefetch=\{false\}/g) ?? []).length, 2);
   assert.equal((overviewSource.match(/prefetch=\{false\}/g) ?? []).length, 7);
-  assert.equal((appShellSource.match(/prefetch=\{false\}/g) ?? []).length, 2);
+  assert.equal((appShellSource.match(/prefetch=\{false\}/g) ?? []).length, 1);
 });

@@ -12,6 +12,10 @@ test("analytics schema excludes sensitive payload and raw network fields", async
   assert.match(migration, /90-day raw-event retention target/);
   assert.match(operationalMigration, /'operational'/);
   assert.match(operationalMigration, /necessary authenticated first-party activity/i);
+  const activationMigration = await readFile(new URL("packages/db/migrations/0190_mcp_activation_funnel.sql", root), "utf8");
+  for (const eventName of ["oauth_authorized", "mcp_initialized", "mcp_tools_listed", "mcp_first_tool_invoked", "mcp_scan_requested"]) {
+    assert.match(activationMigration, new RegExp(eventName));
+  }
 });
 
 test("opt-out persistence removes linkable identity", async () => {
@@ -56,6 +60,17 @@ test("the main event projection spans every retained operational route", async (
     assert.match(adminEvents, new RegExp(`"${route}"|'${route}'`));
   }
   assert.match(adminEvents, /events\.event_route = \$/);
+});
+
+test("signed MCP activation stages enter the operational event ledger", async () => {
+  const ingestion = await readFile(new URL("apps/web/lib/mcp-telemetry/ingestion.ts", root), "utf8");
+  const route = await readFile(new URL("apps/web/app/api/internal/mcp-telemetry/route.ts", root), "utf8");
+  const repository = await readFile(new URL("apps/web/server/mcp-telemetry/repository.ts", root), "utf8");
+  assert.match(ingestion, /mcpActivationEventSchema/);
+  assert.match(route, /verified\.kind === "activation"/);
+  assert.match(route, /persistMcpActivationEvent/);
+  assert.match(repository, /eventName: event\.stage/);
+  assert.match(repository, /consentState: "operational"/);
 });
 
 test("event trend rows use the timestamp bucket as their React identity", async () => {

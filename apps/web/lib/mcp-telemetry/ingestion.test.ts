@@ -49,6 +49,21 @@ function event() {
   };
 }
 
+function activationEvent() {
+  return {
+    actorId: "a".repeat(24),
+    callerProduct: "claude",
+    clientName: "claude",
+    eventId: "00000000-0000-4000-8000-000000000004",
+    eventType: "activation",
+    occurredAt: "2026-08-19T12:00:00.000Z",
+    organizationId: "00000000-0000-4000-8000-000000000005",
+    source: "anthropic",
+    stage: "mcp_tools_listed",
+    userId: "00000000-0000-4000-8000-000000000006"
+  };
+}
+
 function envelope(value: unknown) {
   const body = JSON.stringify(value);
   const proof = createHmac("sha256", secret).update(`${timestamp}.${body}`).digest("base64url");
@@ -59,7 +74,14 @@ test("MCP telemetry ingestion accepts a fresh signed strict event", () => {
   const signed = envelope(event());
   const result = verifyMcpTelemetryEnvelope({ ...signed, nowMs, secret, timestamp });
   assert.equal(result.ok, true);
-  if (result.ok) assert.equal(result.event.toolName, "certscore_scan_site");
+  if (result.ok && result.kind === "tool_invocation") assert.equal(result.event.toolName, "certscore_scan_site");
+});
+
+test("MCP telemetry ingestion accepts a signed activation stage", () => {
+  const signed = envelope(activationEvent());
+  const result = verifyMcpTelemetryEnvelope({ ...signed, nowMs, secret, timestamp });
+  assert.equal(result.ok, true);
+  if (result.ok && result.kind === "activation") assert.equal(result.event.stage, "mcp_tools_listed");
 });
 
 test("MCP telemetry ingestion rejects stale, altered, or sensitive payloads", () => {
@@ -69,4 +91,6 @@ test("MCP telemetry ingestion rejects stale, altered, or sensitive payloads", ()
 
   const sensitive = envelope({ ...event(), authorization: "Bearer secret" });
   assert.deepEqual(verifyMcpTelemetryEnvelope({ ...sensitive, nowMs, secret, timestamp }), { ok: false, reason: "invalid_event" });
+  const sensitiveActivation = envelope({ ...activationEvent(), prompt: "private prompt" });
+  assert.deepEqual(verifyMcpTelemetryEnvelope({ ...sensitiveActivation, nowMs, secret, timestamp }), { ok: false, reason: "invalid_event" });
 });

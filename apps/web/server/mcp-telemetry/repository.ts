@@ -1,7 +1,35 @@
 import "server-only";
 
-import { query } from "@website-signal-risk-scanner/db";
-import { MCP_TELEMETRY_RETENTION_DAYS, type McpTelemetryEvent } from "@website-signal-risk-scanner/shared";
+import { query, queryOne } from "@website-signal-risk-scanner/db";
+import { MCP_TELEMETRY_RETENTION_DAYS, type McpActivationEvent, type McpTelemetryEvent } from "@website-signal-risk-scanner/shared";
+import { isPlatformAdminEmail } from "../admin/platform-admin";
+import { persistProductAnalyticsEvent } from "../product-analytics/repository";
+
+export async function persistMcpActivationEvent(event: McpActivationEvent) {
+  const user = await queryOne<{ email: string }>(
+    `select email from public.users where id = $1::uuid limit 1`,
+    [event.userId],
+    { readOnly: true }
+  );
+  await persistProductAnalyticsEvent({
+    category: "interaction",
+    eventName: event.stage,
+    feature: `mcp:${event.callerProduct}`,
+    outcome: "success",
+    route: "/mcp"
+  }, {
+    browserFamily: "server",
+    consentState: "operational",
+    countryCode: null,
+    deviceClass: "unknown",
+    isBot: false,
+    isStaff: isPlatformAdminEmail(user?.email),
+    osFamily: "server",
+    organizationId: event.organizationId,
+    referringDomain: null,
+    userId: event.userId
+  }, event.eventId);
+}
 
 export async function persistMcpTelemetryEvent(event: McpTelemetryEvent) {
   await query(

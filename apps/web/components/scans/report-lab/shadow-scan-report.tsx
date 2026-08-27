@@ -7,6 +7,7 @@ import { getScanFromMarkerInput, ScanFromMarker } from "../scan-from-icons";
 import type { ServerScanFrom } from "../scan-from-select";
 import { VendorBrandChip } from "../vendor-brand-chip";
 import { CompactRejectPathCard } from "../executive-summary-card";
+import { getGdprEprivacyPostureTone } from "../../../lib/scans/regulatory-coverage-score";
 import { ShadowReportShareMenu } from "./shadow-report-actions";
 import { ShadowPolicyEvidenceViewer } from "./shadow-policy-evidence-viewer";
 import {
@@ -148,7 +149,7 @@ function ReportIdentity({
 
 function ScoreScale({ compact = false, report }: { compact?: boolean; report: ShadowReportData }) {
   const score = report.score.value;
-  const scoreColor = score >= 70 ? "#18845d" : score >= 40 ? "#d59620" : "#e34b67";
+  const scoreColor = getGdprEprivacyPostureTone(score).ringColor;
   const priorityCount = report.findings.length;
   const assessment = priorityCount === 0
     ? "No priority issues"
@@ -315,7 +316,6 @@ function ControlStatusGrid({ compact = false, report }: { compact?: boolean; rep
 function SignalSnapshot({ report }: { report: ShadowReportData }) {
   const consentVendor = report.consentVendor ?? "Not identified";
   const privacyUrls = [...new Set(report.gdprTransparencyRows.flatMap((row) => row.policyEvidence?.sourceUrl ? [row.policyEvidence.sourceUrl] : []))];
-  const observedPrivacyRows = report.gdprTransparencyRows.filter((row) => row.status === "Observed").length;
   const observedTransportRows = report.transportRows.filter((row) => row.status === "Observed").length;
   const observedControls = Object.values(report.controls).filter((value) => value === "Observed").length;
   return (
@@ -352,8 +352,8 @@ function SignalSnapshot({ report }: { report: ShadowReportData }) {
         </details>
         <details className="group/signal py-2">
           <summary className="flex cursor-pointer list-none items-center justify-between gap-3 [&::-webkit-details-marker]:hidden">
-            <span className="text-xs font-medium text-zinc-500">Privacy surfaces</span>
-            <span className="flex items-center gap-2 text-xs font-semibold text-zinc-800"><span className={monoClass}>{observedPrivacyRows} of {report.gdprTransparencyRows.length} observed</span><span aria-hidden="true" className="text-zinc-400 transition group-open/signal:rotate-45">+</span></span>
+            <span className="text-xs font-medium text-zinc-500">Policy surfaces</span>
+            <span className="flex items-center gap-2 text-xs font-semibold text-zinc-800"><span className={monoClass}>{privacyUrls.length} found</span><span aria-hidden="true" className="text-zinc-400 transition group-open/signal:rotate-45">+</span></span>
           </summary>
           <ul className={`${monoClass} mt-3 space-y-2 break-all text-[0.68rem] leading-5 text-zinc-600`}>
             {privacyUrls.length > 0 ? privacyUrls.map((url) => <li key={url}>{url}</li>) : <li>No public policy URL was retained in the display projection.</li>}
@@ -959,6 +959,10 @@ function InventoryRowDetails({ row }: { row: InventoryRow }) {
 }
 
 function RuntimeInventoryTable({ report }: { report: ShadowReportData }) {
+  const inventoryScrollClasses = report.inventory.length > 8
+    ? "max-h-[48rem] overflow-auto"
+    : "overflow-x-auto";
+
   return (
     <div className="mt-9 border-y border-zinc-300 bg-white">
       <div className="px-4 py-4">
@@ -981,9 +985,12 @@ function RuntimeInventoryTable({ report }: { report: ShadowReportData }) {
         <p className="mx-4 mb-4 max-w-3xl border-t border-zinc-200 pt-4 text-xs leading-5 text-zinc-500">
           Every retained cookie, storage, tracker, and request group from the canonical runtime inventory is available below.
         </p>
-        <div className="overflow-x-auto border border-zinc-200 bg-white">
+        <div
+          className={`${inventoryScrollClasses} border border-zinc-200 bg-white`}
+          data-inventory-scroll={report.inventory.length > 8 ? "bounded" : "unbounded"}
+        >
         <table className="w-full min-w-[86rem] table-fixed border-collapse text-left text-xs">
-          <thead className="bg-zinc-50 text-zinc-500">
+          <thead className="sticky top-0 z-20 bg-zinc-50 text-zinc-500 shadow-[0_2px_8px_-6px_rgba(24,24,27,0.55)]">
             <tr>
               {[
                 ["More", "w-[5.5rem]"], ["Vendor", "w-[10rem]"], ["Type", "w-[4rem]"], ["Purpose", "w-[11rem]"],
@@ -1370,6 +1377,7 @@ function MinimalVariant({ report }: { report: ShadowReportData }) {
 
 function EvidenceDirectory({ report }: { report: ShadowReportData }) {
   const consentVendor = report.consentVendor ?? "Consent platform not identified";
+  const observedGdprTransparencyRows = report.gdprTransparencyRows.filter((row) => row.status === "Observed").length;
   return (
     <section className="border-t border-zinc-950 bg-white" id="evidence">
       <div className="mx-auto max-w-[90rem] px-5 py-12 lg:px-10 lg:py-16">
@@ -1405,7 +1413,7 @@ function EvidenceDirectory({ report }: { report: ShadowReportData }) {
             </details>
             <details className="group/policy border-b border-r border-zinc-200 p-5">
               <summary className="flex cursor-pointer list-none items-center justify-between gap-4 [&::-webkit-details-marker]:hidden">
-                <div><p className="text-xs font-semibold uppercase text-zinc-500">Policy and transparency</p><h3 className="mt-1 text-lg font-semibold text-zinc-950">All {report.gdprTransparencyRows.length} GDPR Transparency rows</h3></div>
+                <div><p className="text-xs font-semibold uppercase text-zinc-500">Policy and transparency</p><h3 className="mt-1 text-lg font-semibold text-zinc-950">{observedGdprTransparencyRows} of {report.gdprTransparencyRows.length} observed</h3></div>
                 <span aria-hidden="true" className="text-zinc-400 transition group-open/policy:rotate-45">+</span>
               </summary>
               <div className="mt-5 divide-y divide-zinc-200 border-t border-zinc-200">

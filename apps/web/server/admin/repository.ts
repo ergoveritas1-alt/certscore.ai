@@ -47,6 +47,23 @@ function internalQaLinkedRequestSql(
   )`;
 }
 
+function adminTrafficVisibilitySql(input: {
+  excludeMacMiniParameter: string;
+  includeInternalQaParameter: string;
+  internalQaFilter: string;
+  macMiniFilter: string;
+}) {
+  const internalQaFilter = `(${input.internalQaFilter})`;
+  const macMiniFilter = `(${input.macMiniFilter})`;
+  return `(
+    (${input.excludeMacMiniParameter}::boolean = false and ${macMiniFilter})
+    or (
+      not ${macMiniFilter}
+      and (${input.includeInternalQaParameter}::boolean = true or not ${internalQaFilter})
+    )
+  )`;
+}
+
 export type AdminScanQueryRow = {
   completed_at: string | null;
   created_at: string;
@@ -642,8 +659,12 @@ function adminScanActivityBaseSql() {
        and ($11::text is null or outcome_filter = $11)
        and ($14::text is null or lower(source_filter) = lower($14))
        and ($19::text[] is null or not (coalesce(source_filter, '') ilike any($19::text[])))
-       and ($20::boolean = true or not canary_filter)
-       and ($21::boolean = false or not mac_mini_scan_bot_filter)
+       and ${adminTrafficVisibilitySql({
+         excludeMacMiniParameter: "$21",
+         includeInternalQaParameter: "$20",
+         internalQaFilter: "canary_filter",
+         macMiniFilter: "mac_mini_scan_bot_filter",
+       })}
   )`;
 }
 
@@ -797,8 +818,12 @@ export async function loadAdminScanActivityPageRefs(
            from public.scans s
           where ($1::timestamptz is null or coalesce(s.completed_at, s.started_at, s.created_at) >= $1::timestamptz)
             and ($2::text is null or coalesce(s.scan_config_json ->> 'scanFrom', 'default') = $2)
-            and ($3::boolean = true or not exists (select 1 from canary_scan_ids canary where canary.scan_id = s.id))
-            and ($4::boolean = false or not exists (select 1 from mac_mini_scan_bot_scan_ids bot where bot.scan_id = s.id))
+            and ${adminTrafficVisibilitySql({
+              excludeMacMiniParameter: "$4",
+              includeInternalQaParameter: "$3",
+              internalQaFilter: "exists (select 1 from canary_scan_ids canary where canary.scan_id = s.id)",
+              macMiniFilter: "exists (select 1 from mac_mini_scan_bot_scan_ids bot where bot.scan_id = s.id)",
+            })}
          union all
          select 'request'::text as row_kind,
                 ('request:' || sr.public_id) as activity_id,
@@ -813,26 +838,30 @@ export async function loadAdminScanActivityPageRefs(
           where (coalesce(sr.fulfilled_by_scan_id, sr.scan_id) is null or sr.resolution_mode = 'reused_existing_scan')
             and ($1::timestamptz is null or sr.requested_at >= $1::timestamptz)
             and ($2::text is null or coalesce(s.scan_config_json ->> 'scanFrom', sr.request_context ->> 'scanFrom', 'default') = $2)
-            and ($3::boolean = true or (
-              coalesce(sr.requested_url, '') !~* '^https?://[^/?#]+/\\.well-known/certscore-canary/'
-              and lower(coalesce(request_user.email, request_auth_user.email, request_key.created_by, '')) <> all($6::text[])
-              and trim(split_part(coalesce(nullif(sr.request_context ->> 'sourceIp', ''), nullif(sr.request_context -> 'provenance' ->> 'sourceIp', ''), nullif(sr.requested_by ->> 'sourceIp', ''), ''), '/', 1)) <> all($7::text[])
-              and lower(coalesce(nullif(sr.request_context ->> 'clientName', ''), nullif(sr.request_context ->> 'client', ''), '')) <> all($8::text[])
-              and not exists (
-                select 1 from canary_scan_ids canary
-                where canary.scan_id = coalesce(sr.fulfilled_by_scan_id, sr.scan_id)
-              )
-            ))
-            and ($4::boolean = false or (
-              not exists (
-                select 1 from mac_mini_scan_bot_keys bot_key
-                where bot_key.public_id = sr.requested_by ->> 'apiKeyId'
-              )
-              and not exists (
-                select 1 from mac_mini_scan_bot_scan_ids bot
-                where bot.scan_id = coalesce(sr.fulfilled_by_scan_id, sr.scan_id)
-              )
-            ))
+            and ${adminTrafficVisibilitySql({
+              excludeMacMiniParameter: "$4",
+              includeInternalQaParameter: "$3",
+              internalQaFilter: `
+                coalesce(sr.requested_url, '') ~* '^https?://[^/?#]+/\\.well-known/certscore-canary/'
+                or lower(coalesce(request_user.email, request_auth_user.email, request_key.created_by, '')) = any($6::text[])
+                or trim(split_part(coalesce(nullif(sr.request_context ->> 'sourceIp', ''), nullif(sr.request_context -> 'provenance' ->> 'sourceIp', ''), nullif(sr.requested_by ->> 'sourceIp', ''), ''), '/', 1)) = any($7::text[])
+                or lower(coalesce(nullif(sr.request_context ->> 'clientName', ''), nullif(sr.request_context ->> 'client', ''), '')) = any($8::text[])
+                or exists (
+                  select 1 from canary_scan_ids canary
+                  where canary.scan_id = coalesce(sr.fulfilled_by_scan_id, sr.scan_id)
+                )
+              `,
+              macMiniFilter: `
+                exists (
+                  select 1 from mac_mini_scan_bot_keys bot_key
+                  where bot_key.public_id = sr.requested_by ->> 'apiKeyId'
+                )
+                or exists (
+                  select 1 from mac_mini_scan_bot_scan_ids bot
+                  where bot.scan_id = coalesce(sr.fulfilled_by_scan_id, sr.scan_id)
+                )
+              `,
+            })}
        )
        select activity.row_kind,
               activity.activity_id,
@@ -1204,6 +1233,31 @@ export type AdminUserOverviewMetricsRow = {
   team_plan_users: number;
   total_users: number;
   total_workspaces: number;
+};
+
+export type AdminMcpToolUsageRow = {
+  actor_id: string;
+  last_tool_invocation_at: string | null;
+  tool_invocation_count: number;
+};
+
+export type AdminMcpActivationRow = {
+  last_mcp_initialized_at: string | null;
+  last_mcp_tools_listed_at: string | null;
+  last_oauth_authorized_at: string | null;
+  user_id: string;
+};
+
+export type AdminMcpActivationFunnelRow = {
+  authorized_users: number;
+  first_tool_1h: number;
+  first_tool_24h: number;
+  initialized_1h: number;
+  initialized_24h: number;
+  scan_requested_1h: number;
+  scan_requested_24h: number;
+  tools_listed_1h: number;
+  tools_listed_24h: number;
 };
 
 export type AdminPolicyReviewQueueRow = {
@@ -2125,6 +2179,130 @@ export async function loadAdminUsersPageData(
   };
 }
 
+export async function loadAdminMcpToolUsageByActorIds(actorIds: readonly string[]): Promise<AdminMcpToolUsageRow[]> {
+  const normalizedActorIds = Array.from(new Set(actorIds))
+    .filter((actorId) => /^[a-f0-9]{24}$/.test(actorId))
+    .slice(0, 100);
+  if (normalizedActorIds.length === 0) {
+    return [];
+  }
+  const result = await query<AdminMcpToolUsageRow>(
+    `select actor_id,
+            count(*)::int as tool_invocation_count,
+            max(occurred_at) as last_tool_invocation_at
+       from public.mcp_tool_invocation_events
+      where actor_id = any($1::text[])
+        and auth_class = 'authenticated'
+        and occurred_at >= timezone('utc', now()) - interval '90 days'
+      group by actor_id`,
+    [normalizedActorIds],
+    { readOnly: true }
+  );
+  return result.rows;
+}
+
+export async function loadAdminMcpActivationByUserIds(userIds: readonly string[]): Promise<AdminMcpActivationRow[]> {
+  const normalizedUserIds = Array.from(new Set(userIds))
+    .filter((userId) => /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(userId))
+    .slice(0, 100);
+  if (normalizedUserIds.length === 0) {
+    return [];
+  }
+  const result = await query<AdminMcpActivationRow>(
+    `select user_id::text as user_id,
+            max(occurred_at) filter (where event_name = 'oauth_authorized') as last_oauth_authorized_at,
+            max(occurred_at) filter (where event_name = 'mcp_initialized') as last_mcp_initialized_at,
+            max(occurred_at) filter (where event_name = 'mcp_tools_listed') as last_mcp_tools_listed_at
+       from public.product_analytics_events
+      where user_id = any($1::uuid[])
+        and feature = 'mcp:claude'
+        and event_name in ('oauth_authorized', 'mcp_initialized', 'mcp_tools_listed')
+        and occurred_at >= timezone('utc', now()) - interval '90 days'
+      group by user_id`,
+    [normalizedUserIds],
+    { readOnly: true }
+  );
+  return result.rows;
+}
+
+export async function loadAdminMcpActivationFunnel(): Promise<AdminMcpActivationFunnelRow> {
+  const row = await queryOne<AdminMcpActivationFunnelRow>(
+    `with authorized_users as (
+       select user_id, min(occurred_at) as authorized_at
+        from public.product_analytics_events
+        where event_name = 'oauth_authorized'
+          and feature = 'mcp:claude'
+          and user_id is not null
+          and is_staff = false
+          and occurred_at >= timezone('utc', now()) - interval '90 days'
+        group by user_id
+     )
+     select count(*)::int as authorized_users,
+            count(*) filter (where exists (
+              select 1 from public.product_analytics_events stage
+               where stage.user_id = authorized_users.user_id and stage.event_name = 'mcp_initialized'
+                 and stage.feature = 'mcp:claude'
+                 and stage.occurred_at between authorized_users.authorized_at and authorized_users.authorized_at + interval '1 hour'
+            ))::int as initialized_1h,
+            count(*) filter (where exists (
+              select 1 from public.product_analytics_events stage
+               where stage.user_id = authorized_users.user_id and stage.event_name = 'mcp_initialized'
+                 and stage.feature = 'mcp:claude'
+                 and stage.occurred_at between authorized_users.authorized_at and authorized_users.authorized_at + interval '24 hours'
+            ))::int as initialized_24h,
+            count(*) filter (where exists (
+              select 1 from public.product_analytics_events stage
+               where stage.user_id = authorized_users.user_id and stage.event_name = 'mcp_tools_listed'
+                 and stage.feature = 'mcp:claude'
+                 and stage.occurred_at between authorized_users.authorized_at and authorized_users.authorized_at + interval '1 hour'
+            ))::int as tools_listed_1h,
+            count(*) filter (where exists (
+              select 1 from public.product_analytics_events stage
+               where stage.user_id = authorized_users.user_id and stage.event_name = 'mcp_tools_listed'
+                 and stage.feature = 'mcp:claude'
+                 and stage.occurred_at between authorized_users.authorized_at and authorized_users.authorized_at + interval '24 hours'
+            ))::int as tools_listed_24h,
+            count(*) filter (where exists (
+              select 1 from public.product_analytics_events stage
+               where stage.user_id = authorized_users.user_id and stage.event_name = 'mcp_first_tool_invoked'
+                 and stage.feature = 'mcp:claude'
+                 and stage.occurred_at between authorized_users.authorized_at and authorized_users.authorized_at + interval '1 hour'
+            ))::int as first_tool_1h,
+            count(*) filter (where exists (
+              select 1 from public.product_analytics_events stage
+               where stage.user_id = authorized_users.user_id and stage.event_name = 'mcp_first_tool_invoked'
+                 and stage.feature = 'mcp:claude'
+                 and stage.occurred_at between authorized_users.authorized_at and authorized_users.authorized_at + interval '24 hours'
+            ))::int as first_tool_24h,
+            count(*) filter (where exists (
+              select 1 from public.product_analytics_events stage
+               where stage.user_id = authorized_users.user_id and stage.event_name = 'mcp_scan_requested'
+                 and stage.feature = 'mcp:claude'
+                 and stage.occurred_at between authorized_users.authorized_at and authorized_users.authorized_at + interval '1 hour'
+            ))::int as scan_requested_1h,
+            count(*) filter (where exists (
+              select 1 from public.product_analytics_events stage
+               where stage.user_id = authorized_users.user_id and stage.event_name = 'mcp_scan_requested'
+                 and stage.feature = 'mcp:claude'
+                 and stage.occurred_at between authorized_users.authorized_at and authorized_users.authorized_at + interval '24 hours'
+            ))::int as scan_requested_24h
+       from authorized_users`,
+    [],
+    { readOnly: true }
+  );
+  return row ?? {
+    authorized_users: 0,
+    first_tool_1h: 0,
+    first_tool_24h: 0,
+    initialized_1h: 0,
+    initialized_24h: 0,
+    scan_requested_1h: 0,
+    scan_requested_24h: 0,
+    tools_listed_1h: 0,
+    tools_listed_24h: 0
+  };
+}
+
 export async function loadAdminUserOverviewData(limit = 8): Promise<{
   metrics: AdminUserOverviewMetricsRow | null;
   users: AdminUserOverviewRow[];
@@ -2582,6 +2760,48 @@ export async function loadAdminScanOperationalSnapshot(
 ): Promise<AdminScanOperationalSnapshot> {
   await ensureScanRequestLogTable();
   const config = ADMIN_OPERATIONAL_SNAPSHOT_CONFIG[period] ?? ADMIN_OPERATIONAL_SNAPSHOT_CONFIG["24h"];
+  const snapshotScanInternalQaFilter = `
+    exists (select 1 from public.scan_pages sp where sp.scan_id = s.id and sp.page_url ~* '^https?://[^/?#]+/\\.well-known/certscore-canary/')
+    or exists (select 1 from public.scan_requests csr where coalesce(csr.fulfilled_by_scan_id, csr.scan_id) = s.id and coalesce(csr.requested_url, '') ~* '^https?://[^/?#]+/\\.well-known/certscore-canary/')
+    or exists (select 1 from public.pulse_requests cpr where cpr.scan_id = s.id and coalesce(cpr.requested_url, '') ~* '^https?://[^/?#]+/\\.well-known/certscore-canary/')
+    or ${internalQaLinkedRequestSql("s.id", "$5", "$6", "$7")}
+  `;
+  const snapshotScanMacMiniFilter = `
+    exists (
+      select 1 from public.pulse_requests bot_pr
+      join mac_mini_scan_bot_keys bot_key on bot_key.public_id = bot_pr.requested_by ->> 'apiKeyId'
+      where bot_pr.scan_id = s.id
+    ) or exists (
+      select 1 from public.scan_requests bot_sr
+      join mac_mini_scan_bot_keys bot_key on bot_key.public_id = bot_sr.requested_by ->> 'apiKeyId'
+      where coalesce(bot_sr.fulfilled_by_scan_id, bot_sr.scan_id) = s.id
+    )
+  `;
+  const snapshotRequestInternalQaFilter = `
+    coalesce(sr.requested_url, '') ~* '^https?://[^/?#]+/\\.well-known/certscore-canary/'
+    or exists (
+      select 1 from public.scan_pages sp
+      where sp.scan_id = coalesce(sr.fulfilled_by_scan_id, sr.scan_id)
+        and sp.page_url ~* '^https?://[^/?#]+/\\.well-known/certscore-canary/'
+    )
+    or exists (
+      select 1 from public.pulse_requests cpr
+      where cpr.scan_id = coalesce(sr.fulfilled_by_scan_id, sr.scan_id)
+        and coalesce(cpr.requested_url, '') ~* '^https?://[^/?#]+/\\.well-known/certscore-canary/'
+    )
+    or lower(coalesce(request_user.email, request_auth_user.email, request_key.created_by, '')) = any($5::text[])
+    or trim(split_part(coalesce(nullif(sr.request_context ->> 'sourceIp', ''), nullif(sr.request_context -> 'provenance' ->> 'sourceIp', ''), nullif(sr.requested_by ->> 'sourceIp', ''), ''), '/', 1)) = any($6::text[])
+    or lower(coalesce(nullif(sr.request_context ->> 'clientName', ''), nullif(sr.request_context ->> 'client', ''), '')) = any($7::text[])
+    or ${internalQaLinkedRequestSql("coalesce(sr.fulfilled_by_scan_id, sr.scan_id)", "$5", "$6", "$7")}
+  `;
+  const snapshotRequestMacMiniFilter = `
+    exists (select 1 from mac_mini_scan_bot_keys bot_key where bot_key.public_id = sr.requested_by ->> 'apiKeyId')
+    or exists (
+      select 1 from public.pulse_requests bot_pr
+      join mac_mini_scan_bot_keys bot_key on bot_key.public_id = bot_pr.requested_by ->> 'apiKeyId'
+      where bot_pr.scan_id = coalesce(sr.fulfilled_by_scan_id, sr.scan_id)
+    )
+  `;
   const result = await queryOne<AdminScanOperationalSnapshotRow>(
     `with mac_mini_scan_bot_keys as materialized (
        select public_id
@@ -2602,23 +2822,12 @@ export async function loadAdminScanOperationalSnapshot(
          left join public.scan_snapshots ss on ss.scan_id = s.id
         where s.created_at >= ${config.previousStart}
           and s.created_at < ${config.bucketEnd} + interval '${config.step}'
-          and ($1::boolean = true or not (
-            exists (select 1 from public.scan_pages sp where sp.scan_id = s.id and sp.page_url ~* '^https?://[^/?#]+/\\.well-known/certscore-canary/')
-            or exists (select 1 from public.scan_requests csr where coalesce(csr.fulfilled_by_scan_id, csr.scan_id) = s.id and coalesce(csr.requested_url, '') ~* '^https?://[^/?#]+/\\.well-known/certscore-canary/')
-            or exists (select 1 from public.pulse_requests cpr where cpr.scan_id = s.id and coalesce(cpr.requested_url, '') ~* '^https?://[^/?#]+/\\.well-known/certscore-canary/')
-            or ${internalQaLinkedRequestSql("s.id", "$5", "$6", "$7")}
-          ))
-          and ($2::boolean = false or not (
-            exists (
-              select 1 from public.pulse_requests bot_pr
-              join mac_mini_scan_bot_keys bot_key on bot_key.public_id = bot_pr.requested_by ->> 'apiKeyId'
-              where bot_pr.scan_id = s.id
-            ) or exists (
-              select 1 from public.scan_requests bot_sr
-              join mac_mini_scan_bot_keys bot_key on bot_key.public_id = bot_sr.requested_by ->> 'apiKeyId'
-              where coalesce(bot_sr.fulfilled_by_scan_id, bot_sr.scan_id) = s.id
-            )
-          ))
+          and ${adminTrafficVisibilitySql({
+            excludeMacMiniParameter: "$2",
+            includeInternalQaParameter: "$1",
+            internalQaFilter: snapshotScanInternalQaFilter,
+            macMiniFilter: snapshotScanMacMiniFilter,
+          })}
      ), all_visible_requests as materialized (
        select sr.public_id, sr.requested_at, sr.resolution_mode
          from public.scan_requests sr
@@ -2627,31 +2836,12 @@ export async function loadAdminScanOperationalSnapshot(
          left join public.better_auth_users request_auth_user on request_auth_user.id = sr.requested_by ->> 'userId'
         where sr.requested_at >= ${config.previousStart}
           and sr.requested_at < ${config.bucketEnd} + interval '${config.step}'
-          and ($1::boolean = true or (
-            coalesce(sr.requested_url, '') !~* '^https?://[^/?#]+/\\.well-known/certscore-canary/'
-            and not exists (
-              select 1 from public.scan_pages sp
-              where sp.scan_id = coalesce(sr.fulfilled_by_scan_id, sr.scan_id)
-                and sp.page_url ~* '^https?://[^/?#]+/\\.well-known/certscore-canary/'
-            )
-            and not exists (
-              select 1 from public.pulse_requests cpr
-              where cpr.scan_id = coalesce(sr.fulfilled_by_scan_id, sr.scan_id)
-                and coalesce(cpr.requested_url, '') ~* '^https?://[^/?#]+/\\.well-known/certscore-canary/'
-            )
-            and lower(coalesce(request_user.email, request_auth_user.email, request_key.created_by, '')) <> all($5::text[])
-            and trim(split_part(coalesce(nullif(sr.request_context ->> 'sourceIp', ''), nullif(sr.request_context -> 'provenance' ->> 'sourceIp', ''), nullif(sr.requested_by ->> 'sourceIp', ''), ''), '/', 1)) <> all($6::text[])
-            and lower(coalesce(nullif(sr.request_context ->> 'clientName', ''), nullif(sr.request_context ->> 'client', ''), '')) <> all($7::text[])
-            and not ${internalQaLinkedRequestSql("coalesce(sr.fulfilled_by_scan_id, sr.scan_id)", "$5", "$6", "$7")}
-          ))
-          and ($2::boolean = false or not (
-            exists (select 1 from mac_mini_scan_bot_keys bot_key where bot_key.public_id = sr.requested_by ->> 'apiKeyId')
-            or exists (
-              select 1 from public.pulse_requests bot_pr
-              join mac_mini_scan_bot_keys bot_key on bot_key.public_id = bot_pr.requested_by ->> 'apiKeyId'
-              where bot_pr.scan_id = coalesce(sr.fulfilled_by_scan_id, sr.scan_id)
-            )
-          ))
+          and ${adminTrafficVisibilitySql({
+            excludeMacMiniParameter: "$2",
+            includeInternalQaParameter: "$1",
+            internalQaFilter: snapshotRequestInternalQaFilter,
+            macMiniFilter: snapshotRequestMacMiniFilter,
+          })}
      ), visible_scans as materialized (
        select * from all_visible_scans where created_at >= ${config.bucketStart}
      ), visible_requests as materialized (

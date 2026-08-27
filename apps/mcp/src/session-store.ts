@@ -9,6 +9,7 @@ export type McpHttpSession = {
   tokenHash: string;
   transport: StreamableHTTPServerTransport;
   telemetry?: {
+    observeActivation(stage: "mcp_initialized" | "mcp_tools_listed" | "mcp_first_tool_invoked" | "mcp_scan_requested"): void;
     observeTransportRateLimit(input: {
       body: unknown;
       durationMs: number;

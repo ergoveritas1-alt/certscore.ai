@@ -1,12 +1,18 @@
 "use server";
 
 import type { PlanCode, PlanStatus } from "@website-signal-risk-scanner/shared";
+import { mcpTelemetryActorId } from "@certscore/mcp-auth";
 import type { AdminUsersSortDirection, AdminUsersSortKey } from "./admin-users-sort";
 import {
+  loadAdminMcpActivationByUserIds,
+  loadAdminMcpActivationFunnel,
+  loadAdminMcpToolUsageByActorIds,
   loadAdminUserOverviewData,
   loadAdminUsersPageData,
   loadAdminUsersData,
+  type AdminMcpActivationRow,
   type AdminUserOverviewMetricsRow,
+  type AdminMcpToolUsageRow,
   type AdminUserOverviewRow,
   type AdminDomainSummaryRow as DomainRow,
   type AdminMembershipRow as MembershipRow,
@@ -16,6 +22,7 @@ import {
 } from "./repository";
 import { requirePlatformAdminContext } from "./platform-admin";
 import { latestActivityAt } from "../../lib/admin/latest-activity-at";
+import { getMcpOAuthIssuer } from "../oauth/mcp-oauth-config";
 
 export type AdminUserListItem = {
   accountRole: string;
@@ -31,10 +38,15 @@ export type AdminUserListItem = {
   lastAssociatedScanAt: string | null;
   lastLoginAt: string | null;
   lastMcpConnectorAt: string | null;
+  lastMcpInitializedAt: string | null;
+  lastMcpOAuthAuthorizedAt: string | null;
+  lastMcpToolInvocationAt: string | null;
+  lastMcpToolsListedAt: string | null;
   lastScanAt: string | null;
   lastScanRequestedAt: string | null;
   membershipRole: string | null;
   mcpConnectorNames: string[];
+  mcpToolInvocationCount: number | null;
   organizationId: string | null;
   organizationName: string | null;
   organizationSlug: string | null;
@@ -51,6 +63,34 @@ export type AdminUserOverviewMetrics = {
   totalUsers: number;
   totalWorkspaces: number;
 };
+
+export type AdminMcpActivationFunnel = {
+  authorizedUsers: number;
+  firstTool1h: number;
+  firstTool24h: number;
+  initialized1h: number;
+  initialized24h: number;
+  scanRequested1h: number;
+  scanRequested24h: number;
+  toolsListed1h: number;
+  toolsListed24h: number;
+};
+
+export async function getAdminMcpActivationFunnel(): Promise<AdminMcpActivationFunnel> {
+  await requirePlatformAdminContext();
+  const row = await loadAdminMcpActivationFunnel();
+  return {
+    authorizedUsers: Number(row.authorized_users ?? 0),
+    firstTool1h: Number(row.first_tool_1h ?? 0),
+    firstTool24h: Number(row.first_tool_24h ?? 0),
+    initialized1h: Number(row.initialized_1h ?? 0),
+    initialized24h: Number(row.initialized_24h ?? 0),
+    scanRequested1h: Number(row.scan_requested_1h ?? 0),
+    scanRequested24h: Number(row.scan_requested_24h ?? 0),
+    toolsListed1h: Number(row.tools_listed_1h ?? 0),
+    toolsListed24h: Number(row.tools_listed_24h ?? 0)
+  };
+}
 
 function normalizeMembershipRole(role: string | null) {
   if (role === "owner") {
@@ -120,11 +160,16 @@ export async function listAdminUsers(): Promise<AdminUserListItem[]> {
       updatedAt: user.updated_at,
       lastLoginAt: user.last_login_at,
       lastMcpConnectorAt: null,
+      lastMcpInitializedAt: null,
+      lastMcpOAuthAuthorizedAt: null,
+      lastMcpToolInvocationAt: null,
+      lastMcpToolsListedAt: null,
       organizationId: organization?.id ?? null,
       organizationName: organization?.name ?? null,
       organizationSlug: organization?.slug ?? null,
       membershipRole: normalizeMembershipRole(membership?.role ?? null),
       mcpConnectorNames: [],
+      mcpToolInvocationCount: null,
       plan: (organization?.plan as PlanCode | null | undefined) ?? null,
       planStatus: (organization?.plan_status as PlanStatus | null | undefined) ?? null,
       domainCount: organization ? domainCounts.get(organization.id) ?? 0 : 0,
@@ -151,13 +196,18 @@ export async function listAdminUsersPage(
 }> {
   await requirePlatformAdminContext();
   const page = await loadAdminUsersPageData(limit, offset, sortKey, direction);
+  const items = await mapAdminUserOverviewRows(page.users);
   return {
-    items: page.users.map(mapAdminUserOverviewRow),
+    items,
     totalCount: page.totalCount
   };
 }
 
-function mapAdminUserOverviewRow(row: AdminUserOverviewRow): AdminUserListItem {
+function mapAdminUserOverviewRow(
+  row: AdminUserOverviewRow,
+  mcpActivation: AdminMcpActivationRow | null = null,
+  mcpUsage: AdminMcpToolUsageRow | null = null
+): AdminUserListItem {
   return {
     accountRole: row.account_role,
     activeMcpConnectorCount: Number(row.active_mcp_connector_count ?? 0),
@@ -169,11 +219,16 @@ function mapAdminUserOverviewRow(row: AdminUserOverviewRow): AdminUserListItem {
     updatedAt: row.updated_at,
     lastLoginAt: row.last_login_at,
     lastMcpConnectorAt: row.last_mcp_connector_at ?? null,
+    lastMcpInitializedAt: mcpActivation?.last_mcp_initialized_at ?? null,
+    lastMcpOAuthAuthorizedAt: mcpActivation?.last_oauth_authorized_at ?? null,
+    lastMcpToolInvocationAt: mcpUsage?.last_tool_invocation_at ?? null,
+    lastMcpToolsListedAt: mcpActivation?.last_mcp_tools_listed_at ?? null,
     organizationId: row.organization_id,
     organizationName: row.organization_name,
     organizationSlug: row.organization_slug,
     membershipRole: normalizeMembershipRole(row.membership_role),
     mcpConnectorNames: row.mcp_connector_names ?? [],
+    mcpToolInvocationCount: mcpUsage ? Number(mcpUsage.tool_invocation_count ?? 0) : null,
     plan: (row.plan as PlanCode | null | undefined) ?? null,
     planStatus: (row.plan_status as PlanStatus | null | undefined) ?? null,
     domainCount: Number(row.domain_count ?? 0),
@@ -186,6 +241,34 @@ function mapAdminUserOverviewRow(row: AdminUserOverviewRow): AdminUserListItem {
     scanRequestCount: Number(row.scan_request_count ?? 0),
     associatedScanCount: Number(row.associated_scan_count ?? 0)
   };
+}
+
+function configuredMcpJwtSecret() {
+  return process.env.CERTSCORE_OAUTH_JWT_SECRET?.trim() || process.env.JWT_SIGNING_KEY?.trim() || null;
+}
+
+async function mapAdminUserOverviewRows(rows: AdminUserOverviewRow[]) {
+  const activationRowsPromise = loadAdminMcpActivationByUserIds(rows.map((row) => row.id));
+  const jwtSecret = configuredMcpJwtSecret();
+  const actorIdByUserId = new Map(jwtSecret ? rows.map((row) => [
+    row.id,
+    mcpTelemetryActorId({ issuer: getMcpOAuthIssuer(), jwtSecret, subject: row.id })
+  ]) : []);
+  const [activationRows, usageRows] = await Promise.all([
+    activationRowsPromise,
+    jwtSecret ? loadAdminMcpToolUsageByActorIds([...actorIdByUserId.values()]) : Promise.resolve([])
+  ]);
+  const activationByUserId = new Map(activationRows.map((activation) => [activation.user_id, activation]));
+  const usageByActorId = new Map(usageRows.map((usage) => [usage.actor_id, usage]));
+  return rows.map((row) => {
+    const actorId = actorIdByUserId.get(row.id);
+    const usage = actorId ? usageByActorId.get(actorId) ?? {
+      actor_id: actorId,
+      last_tool_invocation_at: null,
+      tool_invocation_count: 0
+    } : null;
+    return mapAdminUserOverviewRow(row, activationByUserId.get(row.id) ?? null, usage);
+  });
 }
 
 function mapOverviewMetrics(row: AdminUserOverviewMetricsRow | null): AdminUserOverviewMetrics {
@@ -207,9 +290,10 @@ export async function getAdminUserOverview(input: { limit?: number } = {}): Prom
 }> {
   await requirePlatformAdminContext();
   const { metrics, users } = await loadAdminUserOverviewData(input.limit ?? 8);
+  const recentUsers = await mapAdminUserOverviewRows(users);
 
   return {
     metrics: mapOverviewMetrics(metrics),
-    recentUsers: users.map(mapAdminUserOverviewRow)
+    recentUsers
   };
 }

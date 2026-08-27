@@ -15,7 +15,7 @@ import {
 } from "../../lib/admin/admin-operational-snapshot";
 
 export type ProductAnalyticsPeriod = AdminOperationalSnapshotPeriod;
-export type ProductAnalyticsEventName = "page_viewed" | "navigation_clicked" | "action_clicked" | "form_started" | "form_submitted" | "form_succeeded" | "form_failed" | "scan_started" | "scan_completed" | "scan_viewed" | "report_viewed" | "scroll_depth_reached" | "session_engaged" | "web_vital_recorded" | "client_error" | "account_created" | "analytics_opted_in" | "analytics_opted_out";
+export type ProductAnalyticsEventName = "page_viewed" | "navigation_clicked" | "action_clicked" | "form_started" | "form_submitted" | "form_succeeded" | "form_failed" | "scan_started" | "scan_completed" | "scan_viewed" | "report_viewed" | "scroll_depth_reached" | "session_engaged" | "web_vital_recorded" | "client_error" | "account_created" | "oauth_authorized" | "mcp_initialized" | "mcp_tools_listed" | "mcp_first_tool_invoked" | "mcp_scan_requested" | "analytics_opted_in" | "analytics_opted_out";
 export type AdminEventName = ProductAnalyticsEventName | "scan_requested" | "api_request" | "mcp_tool_invoked" | "full_scan.started" | "full_scan.completed" | "preview_scan.started" | "preview_scan.completed" | "v2_lambda_result.received" | "v2_lambda_result.failed";
 export type ProductAnalyticsOutcome = "observed" | "started" | "submitted" | "success" | "failure" | "opted_in" | "opted_out";
 export const ADMIN_EVENT_ROUTES = ["Web", "API", "Pulse", "SDK", "MCP", "Other"] as const;

@@ -4,7 +4,7 @@ import { MembershipRoleForm, type MembershipRole } from "../../../../components/
 import { OrganizationPlanForm } from "../../../../components/admin/organization-plan-form";
 import { PaginationControls, normalizePage, normalizePageSize } from "../../../../components/ui/pagination-controls";
 import { formatAdminCompactDateTime } from "../../../../lib/admin/date-time";
-import { listAdminUsersPage } from "../../../../server/admin/list-admin-users";
+import { getAdminMcpActivationFunnel, listAdminUsersPage } from "../../../../server/admin/list-admin-users";
 import { normalizeAdminUsersSortDirection, normalizeAdminUsersSortKey } from "../../../../server/admin/admin-users-sort";
 import { withServerTiming } from "../../../../server/performance/log-server-timing";
 import { updateMembershipRoleFormAction } from "../../../../server/admin/update-membership-role";
@@ -49,6 +49,15 @@ function sortHref(sortKey: keyof typeof SORT_LABELS, currentSort: keyof typeof S
   return `/app/admin/users?${new URLSearchParams({ dir: direction, sort: sortKey }).toString()}`;
 }
 
+function occurredAtOrAfter(value: string | null, boundary: string | null) {
+  if (!value || !boundary) return false;
+  return Date.parse(value) >= Date.parse(boundary);
+}
+
+function activationRate(value: number, total: number) {
+  return total > 0 ? `${Math.round((value / total) * 100)}%` : "—";
+}
+
 function SortHeader({
   currentDirection,
   currentSort,
@@ -91,12 +100,13 @@ export default async function AdminUsersPage({ searchParams }: AdminUsersPagePro
   const requestedPage = normalizePage(resolved.page);
   const sortKey = normalizeAdminUsersSortKey(resolved.sort);
   const direction = normalizeAdminUsersSortDirection(resolved.dir);
-  const [requestedUserPage, workspaces] = await Promise.all([
+  const [requestedUserPage, workspaces, mcpActivationFunnel] = await Promise.all([
     withServerTiming(
       "app.admin.users.list",
       () => listAdminUsersPage(pageSize, (requestedPage - 1) * pageSize, sortKey, direction)
     ),
-    withServerTiming("app.admin.users.workspaces", () => listCompanies())
+    withServerTiming("app.admin.users.workspaces", () => listCompanies()),
+    withServerTiming("app.admin.users.mcp_activation", () => getAdminMcpActivationFunnel())
   ]);
   const pageCount = Math.max(1, Math.ceil(requestedUserPage.totalCount / pageSize));
   const page = Math.min(requestedPage, pageCount);
@@ -118,6 +128,30 @@ export default async function AdminUsersPage({ searchParams }: AdminUsersPagePro
       {userCreated ? <div className="rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-800" role="status">User and workspace created successfully. A welcome email with a secure password setup link was sent.</div> : null}
       {existingUserWorkspaceCreated ? <div className="rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-800" role="status">That account already existed without a workspace. A new workspace was created and a fresh password setup link was sent.</div> : null}
       {userAlreadyExists ? <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800" role="status">That user already exists and is assigned to a workspace. Use the existing user row to manage their workspace.</div> : null}
+      <Card className="border-violet-200 bg-violet-50/40">
+        <CardHeader>
+          <CardTitle>Claude activation funnel</CardTitle>
+          <p className="text-sm text-slate-600">External users authorized during the last 90 days. Conversion is measured from each user&apos;s first retained authorization.</p>
+        </CardHeader>
+        <CardContent className="grid gap-2 sm:grid-cols-2 xl:grid-cols-5">
+          {[
+            { baseline: true, label: "OAuth approved", oneHour: mcpActivationFunnel.authorizedUsers, twentyFourHours: mcpActivationFunnel.authorizedUsers },
+            { label: "MCP initialized", oneHour: mcpActivationFunnel.initialized1h, twentyFourHours: mcpActivationFunnel.initialized24h },
+            { label: "Tools listed", oneHour: mcpActivationFunnel.toolsListed1h, twentyFourHours: mcpActivationFunnel.toolsListed24h },
+            { label: "First tool", oneHour: mcpActivationFunnel.firstTool1h, twentyFourHours: mcpActivationFunnel.firstTool24h },
+            { label: "Scan requested", oneHour: mcpActivationFunnel.scanRequested1h, twentyFourHours: mcpActivationFunnel.scanRequested24h }
+          ].map((stage) => (
+            <div className="rounded-lg border border-violet-100 bg-white px-3 py-2" key={stage.label}>
+              <p className="text-xs font-semibold text-slate-700">{stage.label}</p>
+              {stage.baseline ? (
+                <><p className="mt-1 text-lg font-semibold text-slate-950">{stage.twentyFourHours}</p><p className="text-xs text-slate-500">retained cohort</p></>
+              ) : (
+                <><p className="mt-1 text-lg font-semibold text-slate-950">{stage.twentyFourHours} <span className="text-xs font-medium text-slate-500">{activationRate(stage.twentyFourHours, mcpActivationFunnel.authorizedUsers)} within 24h</span></p><p className="text-xs text-slate-500">{stage.oneHour} within 1h</p></>
+              )}
+            </div>
+          ))}
+        </CardContent>
+      </Card>
       <Card className="border-slate-200 bg-white">
         <CardHeader><CardTitle>Create user</CardTitle><p className="text-sm text-slate-600">Create a user, automatically assign them a new workspace, and send a secure link to set their password.</p></CardHeader>
         <CardContent>
@@ -157,6 +191,9 @@ export default async function AdminUsersPage({ searchParams }: AdminUsersPagePro
             <tbody className="divide-y divide-slate-100 [&_td]:align-top">
               {users.map((user) => {
                 const assignmentFormId = `assign-user-${user.id}`;
+                const oauthAuthorizedAt = user.lastMcpOAuthAuthorizedAt ?? user.lastMcpConnectorAt;
+                const initializedAfterAuthorization = occurredAtOrAfter(user.lastMcpInitializedAt, user.lastMcpOAuthAuthorizedAt);
+                const toolsListedAfterAuthorization = occurredAtOrAfter(user.lastMcpToolsListedAt, user.lastMcpOAuthAuthorizedAt);
                 return (
                   <tr key={user.id}>
                   <td className="py-2.5 pr-4 align-top">
@@ -187,10 +224,23 @@ export default async function AdminUsersPage({ searchParams }: AdminUsersPagePro
                   </td>
                   <td className="whitespace-nowrap py-2.5 pr-4 align-top text-sm text-slate-600">
                     <p>{user.domainCount} domains <span className="text-slate-300">·</span> {user.totalScans} scans</p>
-                    {user.lastMcpConnectorAt ? (
-                      <p className="mt-1 text-xs text-violet-700" title={`Last OAuth activity ${formatAdminCompactDateTime(user.lastMcpConnectorAt)}`}>
-                        {user.mcpConnectorNames.join(", ") || "MCP"} {user.activeMcpConnectorCount > 0 ? "connected" : "last connected"} <span className="text-violet-300">·</span> OAuth {formatAdminCompactDateTime(user.lastMcpConnectorAt)}
-                      </p>
+                    {oauthAuthorizedAt ? (
+                      <>
+                        <p className="mt-1 text-xs text-violet-700" title={`Last OAuth authorization activity ${formatAdminCompactDateTime(oauthAuthorizedAt)}`}>
+                          {user.mcpConnectorNames.join(", ") || "MCP"} {user.activeMcpConnectorCount > 0 ? "authorized" : user.lastMcpOAuthAuthorizedAt ? "approved" : "authorization ended"} <span className="text-violet-300">·</span> OAuth {formatAdminCompactDateTime(oauthAuthorizedAt)}
+                        </p>
+                        {user.lastMcpOAuthAuthorizedAt ? (
+                          <p className="mt-0.5 text-xs text-slate-500">
+                            Activation: {initializedAfterAuthorization ? "MCP initialized" : "awaiting initialization"} <span className="text-slate-300">·</span> {toolsListedAfterAuthorization ? "Tools listed" : "awaiting tool discovery"}
+                          </p>
+                        ) : null}
+                        <p className="mt-0.5 text-xs text-slate-500">
+                          MCP usage (90d): {user.mcpToolInvocationCount === null
+                            ? "unavailable"
+                            : `${user.mcpToolInvocationCount} tool ${user.mcpToolInvocationCount === 1 ? "call" : "calls"}`}
+                          {user.lastMcpToolInvocationAt ? <> <span className="text-slate-300">·</span> Last used {formatAdminCompactDateTime(user.lastMcpToolInvocationAt)}</> : null}
+                        </p>
+                      </>
                     ) : null}
                   </td>
                   <td className="whitespace-nowrap py-2.5 pr-4 align-top text-slate-600">

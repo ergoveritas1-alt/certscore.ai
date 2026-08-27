@@ -58,8 +58,8 @@ test("report projection writer and readiness query share one version contract", 
     readFile(statusProjectionPath, "utf8")
   ]);
 
-  assert.equal(SCAN_REPORT_PROJECTION_VERSION, "scan-report-projection-v19");
-  assert.match(contractSource, /SCAN_REPORT_PROJECTION_VERSION = "scan-report-projection-v19"/);
+  assert.equal(SCAN_REPORT_PROJECTION_VERSION, "scan-report-projection-v24");
+  assert.match(contractSource, /SCAN_REPORT_PROJECTION_VERSION = "scan-report-projection-v24"/);
   assert.match(projectionSource, /from "\.\/scan-report-projection-contract"/);
   assert.match(statusSource, /from "\.\/scan-report-projection-contract"/);
   assert.match(

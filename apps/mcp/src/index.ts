@@ -2,7 +2,7 @@ import { createServer, type IncomingMessage, type ServerResponse } from "node:ht
 import { createHmac, randomUUID } from "node:crypto";
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
 import { LATEST_PROTOCOL_VERSION, SUPPORTED_PROTOCOL_VERSIONS } from "@modelcontextprotocol/sdk/types.js";
-import { verifyCertScoreAccessToken } from "@certscore/mcp-auth";
+import { mcpTelemetryActorId, verifyCertScoreAccessToken } from "@certscore/mcp-auth";
 import { createCertScoreMcpServer } from "@certscore/mcp/server";
 import { CERTSCORE_MCP_VERSION } from "@certscore/mcp/version";
 import { getAllowedOrigins, getEnv } from "./env.js";
@@ -327,6 +327,9 @@ async function handleMcp(req: IncomingMessage, res: ServerResponse, anonymous: b
   let token: string | undefined;
   let tokenHash: string;
   let authenticatedCallerHash: string | null = null;
+  let authenticatedActorId: string | null = null;
+  let authenticatedOrganizationId: string | null = null;
+  let authenticatedUserId: string | null = null;
   let microsoftIdentity: { clientId: string; tenantId: string } | null = null;
   if (microsoft) {
     const auth = await authenticateMicrosoft(req);
@@ -351,6 +354,13 @@ async function handleMcp(req: IncomingMessage, res: ServerResponse, anonymous: b
     token = auth.token;
     tokenHash = auth.tokenHash;
     authenticatedCallerHash = sessions.hashToken(authenticatedMcpCallerBinding(auth.claims));
+    authenticatedActorId = mcpTelemetryActorId({
+      issuer: auth.claims.iss,
+      jwtSecret: env.jwtSecret,
+      subject: auth.claims.sub
+    });
+    authenticatedOrganizationId = auth.claims.certscore.organizationId;
+    authenticatedUserId = auth.claims.certscore.userId ?? auth.claims.sub;
   }
   const sessionId = req.headers["mcp-session-id"]?.toString();
   let parsedBody: unknown;
@@ -384,7 +394,10 @@ async function handleMcp(req: IncomingMessage, res: ServerResponse, anonymous: b
         ? "mcp_anonymous"
         : "mcp_authenticated";
     const telemetry = createHostedMcpTelemetry({
+      authenticatedActorId,
       authenticatedActorBinding: authenticatedCallerHash,
+      authenticatedOrganizationId,
+      authenticatedUserId,
       baseUrl: env.CERTSCORE_BASE_URL,
       clientInfoBody: parsedBody,
       headers: req.headers,
@@ -431,6 +444,9 @@ async function handleMcp(req: IncomingMessage, res: ServerResponse, anonymous: b
     }
     installSseKeepalive(res);
     await transport.handleRequest(req, res, parsedBody);
+    if (!anonymous && !microsoft && res.statusCode < 400 && transport.sessionId) {
+      telemetry.observeActivation("mcp_initialized");
+    }
     if (transport.sessionId) {
       const sessionResult = sessions.set(transport.sessionId, {
         server,
@@ -605,6 +621,9 @@ async function handleMcp(req: IncomingMessage, res: ServerResponse, anonymous: b
   }
   installSseKeepalive(res);
   await session.transport.handleRequest(req, res, parsedBody);
+  if (!anonymous && !microsoft && res.statusCode < 400 && jsonRpcMethod(parsedBody) === "tools/list") {
+    session.telemetry?.observeActivation("mcp_tools_listed");
+  }
   if (req.method === "DELETE" && sessionId) {
     sessions.delete(sessionId);
   }

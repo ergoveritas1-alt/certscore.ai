@@ -1,4 +1,4 @@
-import { createHmac, randomBytes, timingSafeEqual } from "node:crypto";
+import { createHash, createHmac, randomBytes, timingSafeEqual } from "node:crypto";
 import { z } from "zod";
 
 export const CERTSCORE_OAUTH_READ_SCOPE = "scan:read";
@@ -29,6 +29,24 @@ export type CertScoreAccessTokenClaims = {
     userId: string | null;
   };
 };
+
+export function authenticatedMcpCallerBinding(claims: Pick<CertScoreAccessTokenClaims, "iss" | "sub">) {
+  return `authenticated-oauth:${claims.iss}:${claims.sub}`;
+}
+
+export function mcpTelemetryActorId(input: {
+  issuer: string;
+  jwtSecret: string;
+  subject: string;
+}) {
+  const callerHash = createHash("sha256")
+    .update(authenticatedMcpCallerBinding({ iss: input.issuer, sub: input.subject }), "utf8")
+    .digest("hex");
+  return createHmac("sha256", input.jwtSecret)
+    .update(`mcp-telemetry:v1:actor:${callerHash}`, "utf8")
+    .digest("hex")
+    .slice(0, 24);
+}
 
 const accessTokenClaimsSchema = z.object({
   aud: z.string().min(1),

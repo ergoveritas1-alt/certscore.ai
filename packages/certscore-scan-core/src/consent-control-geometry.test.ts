@@ -111,6 +111,33 @@ test("retains localized consent controls when banner locale differs from documen
   }
 });
 
+test("retains German Bearbeiten as a first-layer options button in consent context", async () => {
+  const artifact = await captureFixture(`
+    <script>document.documentElement.lang = "de";</script>
+    <section role="dialog" aria-label="Wir verwenden Cookies" style="position: fixed; left: 80px; bottom: 40px; width: 720px; padding: 24px; background: white;">
+      <h2>Wir verwenden Cookies</h2>
+      <p>Einige Cookies sind technisch notwendig, andere dienen der Analyse oder Werbung.</p>
+      <div style="display: flex; gap: 12px;">
+        <button type="button">Alle akzeptieren</button>
+        <button type="button">Ablehnen</button>
+        <button type="button">Bearbeiten</button>
+      </div>
+    </section>
+  `);
+
+  assert.equal(artifact.summary.firstLayerAccept, true);
+  assert.equal(artifact.summary.firstLayerReject, true);
+  assert.equal(artifact.summary.firstLayerOptions, true);
+
+  const options = findCandidate(artifact, "Bearbeiten");
+  assert.equal(options?.actionType, "manage_preferences");
+  assert.equal(options?.decisionStatus, "confirmed_visible");
+  assert.equal(options?.layer, "first_layer");
+  assert.equal(options?.presentationType, "dedicated_button");
+  assert.equal(options?.matchedLocale, "de");
+  assert.equal(options?.matchStrength, "contextual");
+});
+
 test("retains BST DSGVO Cookie identity and contextual VERSTANDEN accept evidence", async () => {
   const artifact = await captureFixture(`
     <script src="https://www.example.test/wp-content/plugins/bst-dsgvo-cookie/includes/js/bst-message.js?ver=1.0"></script>

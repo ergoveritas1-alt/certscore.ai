@@ -1185,7 +1185,7 @@ test("canonical pre-consent storage flow uses one non-essential predicate for me
       expectedGapFinding: true,
       expectedMetric: 1,
       expectedRowStatus: "Gap observed",
-      expectedScore: 92
+      expectedScore: 94
     }
   ] as const;
 

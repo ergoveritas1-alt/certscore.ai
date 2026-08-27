@@ -206,6 +206,32 @@ test("classifies German Microsoft-style consent controls", () => {
   }).intent, "options");
 });
 
+test("classifies German Bearbeiten as options only in bounded consent context", () => {
+  const classification = classifyConsentControlLabel({
+    label: "Bearbeiten",
+    contextText:
+      "Wir verwenden Cookies. Einige Cookies sind technisch notwendig, andere dienen der Analyse oder Werbung.",
+    localeHints: ["de"],
+  });
+
+  assert.equal(classification.intent, "options");
+  assert.equal(classification.semanticRole, "preferences");
+  assert.equal(classification.matchedTerm, "bearbeiten");
+  assert.equal(classification.matchedLocale, "de");
+  assert.equal(classification.matchStrength, "contextual");
+  assert.equal(classification.contextSatisfied, true);
+
+  assert.equal(
+    classifyConsentControlLabel({ label: "Bearbeiten", localeHints: ["de"] }).intent,
+    "unknown",
+  );
+  assert.equal(classifyConsentControlLabel({
+    label: "Profil bearbeiten",
+    contextText: "Wir verwenden Cookies.",
+    localeHints: ["de"],
+  }).intent, "unknown");
+});
+
 test("classifies retained German VERSTANDEN as accept only in cookie-consent context", () => {
   const classification = classifyConsentControlLabel({
     label: "VERSTANDEN",

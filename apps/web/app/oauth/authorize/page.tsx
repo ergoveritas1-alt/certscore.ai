@@ -151,6 +151,10 @@ export default async function AuthorizePage({ searchParams }: AuthorizePageProps
                   After approval, Claude can create up to {OAUTH_SCAN_CREATE_HOURLY_LIMIT} genuinely new scans per hour and{" "}
                   {OAUTH_SCAN_CREATE_DAILY_LIMIT} per day for this workspace. Eligible recent-result reuse does not consume the allowance.
                 </p>
+                <p className="mt-3 font-semibold">After approval, return to Claude and try:</p>
+                <code className="mt-1 block rounded border border-emerald-200 bg-white px-3 py-2 text-xs text-emerald-950">
+                  Scan https://your-site.com with CertScore and summarize the findings.
+                </code>
               </div>
             ) : null}
             <form action="/api/v2/oauth/authorize" className="flex gap-3" method="post">
