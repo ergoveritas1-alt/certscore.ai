@@ -21,6 +21,10 @@ Use these canonical discovery resources:
 - Universal AI/API manifest: https://certscore.ai/.well-known/certscore-ai.json
 - Sitemap: https://certscore.ai/sitemap.xml
 - Robots: https://certscore.ai/robots.txt
+- Releases: https://certscore.ai/releases
+- MCP Light release: https://certscore.ai/releases/mcp-light
+- Release feed: https://certscore.ai/releases/feed.xml
+- MCP Light product and quickstart: https://certscore.ai/mcp/light
 - Developer hub: https://certscore.ai/developers
 - Scanner solutions: https://certscore.ai/solutions
 - API quickstart: https://certscore.ai/developers/quickstart

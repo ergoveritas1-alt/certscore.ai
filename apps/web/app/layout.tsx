@@ -7,6 +7,7 @@ import { DataLayerClickTracker } from "../components/analytics/data-layer-events
 import { ProductAnalyticsTracker } from "../components/analytics/product-analytics-tracker";
 import { buildConsentBootstrapScript } from "../lib/analytics/consent-bootstrap";
 import { SITE_NAME, SITE_URL } from "../lib/seo";
+import { getCertScoreSocialProfileUrls } from "../lib/social";
 
 const GOOGLE_TAG_ID = "G-B6TQVX35ZB";
 const UMAMI_SCRIPT_URL = "https://cloud.umami.is/script.js";
@@ -58,7 +59,8 @@ export default function RootLayout({ children }: RootLayoutProps) {
     "@type": "Organization",
     name: SITE_NAME,
     url: SITE_URL,
-    logo: `${SITE_URL}/certscore-header-logo.png`
+    logo: `${SITE_URL}/certscore-header-logo.png`,
+    sameAs: getCertScoreSocialProfileUrls()
   };
   const websiteSchema = {
     "@context": "https://schema.org",

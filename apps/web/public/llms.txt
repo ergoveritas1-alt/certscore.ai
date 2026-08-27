@@ -15,6 +15,7 @@ Trust and security overview: https://certscore.ai/trust
 ## Developer and agent integration
 
 Start here for API, SDK, MCP, and agent workflows:
+- https://certscore.ai/mcp/light
 - https://certscore.ai/developers
 - https://certscore.ai/developers/quickstart
 - https://certscore.ai/developers/reference
@@ -53,6 +54,9 @@ Search aliases: CertScore.ai, CertScore API, CertScore MCP, website risk API, pr
 
 - https://certscore.ai/
 - https://certscore.ai/llms-full.txt
+- https://certscore.ai/releases
+- https://certscore.ai/releases/mcp-light
+- https://certscore.ai/releases/feed.xml
 - https://certscore.ai/how-it-works
 - https://certscore.ai/methodology
 - https://certscore.ai/pricing

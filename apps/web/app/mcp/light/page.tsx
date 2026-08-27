@@ -79,6 +79,11 @@ export default function McpLightPage() {
               <Link className="rounded-md border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-800 hover:border-sky-400 hover:text-sky-800" href="#openai-mcp-demo">Watch the demo</Link>
             </div>
             <p className="text-sm text-slate-500">Streamable HTTP with no API key and no OAuth. Light allows up to 50 genuinely new scans per UTC day across the public Light surface and 5 per rolling 10 minutes; reused eligible results do not consume quota. Contact <a className="font-semibold text-sky-700" href="mailto:support@certscore.ai">support@certscore.ai</a> for higher volume.</p>
+            <p className="text-sm">
+              <Link className="font-semibold text-sky-700 hover:text-sky-900" href="/releases/mcp-light">
+                Read the MCP Light launch release <span aria-hidden="true">→</span>
+              </Link>
+            </p>
           </div>
           <div className="rounded-xl border border-slate-800 bg-slate-950 p-5 text-slate-100 shadow-xl">
             <p className="mb-3 text-xs font-semibold uppercase tracking-[0.16em] text-sky-300">Remote MCP endpoint</p>

@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { getCertScoreGptUrl } from "../../lib/marketing/certscore-gpt";
 import { AnalyticsPreferencesButton } from "../analytics/analytics-consent-banner";
+import { SocialFollowLinks } from "../releases/social-follow-links";
 import { FOOTER_COPYRIGHT_COPY, FOOTER_DISCLAIMER_COPY } from "./footer-copy";
 
 const footerSections = [
@@ -21,6 +22,7 @@ const footerSections = [
     links: [
       { href: "/guides", label: "Guides" },
       { href: "/benchmarks", label: "Benchmarks" },
+      { href: "/releases", label: "Releases" },
       { href: "/findings", label: "Findings" },
       { href: "/developers/reference", label: "API reference" },
       { href: "/developers/sdk", label: "SDK docs" },
@@ -132,6 +134,10 @@ export function SiteFooter({ hideDisclaimer = false, wide = true }: SiteFooterPr
               ))}
               <div className="flex justify-start">
                 <AnalyticsPreferencesButton />
+              </div>
+              <div className="mt-3 border-t border-slate-100 pt-3">
+                <p className="mb-2 text-xs font-semibold uppercase tracking-[0.14em] text-slate-400">Follow</p>
+                <SocialFollowLinks compact />
               </div>
             </div>
           </nav>

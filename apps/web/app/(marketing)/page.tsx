@@ -8,6 +8,7 @@ import { SiteHeader } from "../../components/layout/site-header";
 import { DomainScanForm } from "../../components/marketing/domain-scan-form";
 import { HomepageFindingsOverview } from "../../components/marketing/homepage-findings-overview";
 import { ScannerSolutionAnimation } from "../../components/marketing/scanner-solution-animation";
+import { ReleaseCard } from "../../components/releases/release-card";
 import { PendingButtonLink } from "../../components/ui/pending-link";
 import {
   CORE_MARKETING_HOMEPAGE,
@@ -15,6 +16,7 @@ import {
   CORE_MARKETING_SUPPORT_EMAIL
 } from "../../lib/marketing/core-positioning";
 import { getFindingReferenceItems } from "../../lib/marketing/finding-atlas";
+import { getPublishedReleases } from "../../lib/releases";
 import { createPageMetadata, SITE_URL } from "../../lib/seo";
 
 const SAMPLE_REPORT_URL = "https://certscore.ai/scan/f20f885d-10d4-4a07-899f-f7ea5a1825d8";
@@ -123,6 +125,7 @@ function PersonaIcon({ index }: { index: number }) {
 
 export default async function MarketingHomePage() {
   const findings = getFindingReferenceItems();
+  const latestReleases = getPublishedReleases().slice(0, 3);
   const softwareApplicationSchema = {
     "@context": "https://schema.org",
     "@type": "SoftwareApplication",
@@ -329,6 +332,28 @@ export default async function MarketingHomePage() {
           </div>
         </div>
       </section>
+
+      {latestReleases.length > 0 ? (
+        <section className="border-b border-slate-200 bg-slate-50">
+          <div className="mx-auto max-w-6xl px-4 py-12 sm:px-6 sm:py-14">
+            <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
+              <div className="max-w-3xl space-y-3">
+                <Badge tone="neutral">Product updates</Badge>
+                <h2 className="text-3xl font-semibold tracking-tight text-slate-950">Latest from CertScore.ai</h2>
+                <p className="text-sm leading-6 text-slate-600">
+                  Meaningful product releases, privacy-detection capabilities, integrations, and developer tools.
+                </p>
+              </div>
+              <Link className="text-sm font-semibold text-sky-700 transition hover:text-sky-900" href="/releases">
+                View all releases <span aria-hidden="true">→</span>
+              </Link>
+            </div>
+            <div className="mt-8 grid gap-5 lg:grid-cols-3">
+              {latestReleases.map((release) => <ReleaseCard headingLevel="h3" key={release.slug} release={release} />)}
+            </div>
+          </div>
+        </section>
+      ) : null}
 
       <section className="bg-slate-50">
         <div className="mx-auto max-w-6xl px-4 py-8 sm:px-6 sm:py-10">
