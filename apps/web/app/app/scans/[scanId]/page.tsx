@@ -38,15 +38,6 @@ export default async function ScanDetailPage({ params }: ScanDetailPageProps) {
   );
   if (!statusProjection) notFound();
 
-  if (
-    isCompletedScanStatus(statusProjection.status) &&
-    statusProjection.reportProjectionRequired &&
-    statusProjection.historicalReportReady &&
-    !statusProjection.reportReady
-  ) {
-    redirect(legacyScanHref(scanId));
-  }
-
   const waitingForReportProjection =
     isCompletedScanStatus(statusProjection.status) &&
     statusProjection.reportProjectionRequired &&

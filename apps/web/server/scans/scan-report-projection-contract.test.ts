@@ -13,6 +13,7 @@ import {
   buildPersistedScanReportProjection,
   completionToReportProjectionMs,
   isCurrentScanReportProjectionReady,
+  isReadableScanReportProjectionReady,
   MAX_SCAN_REPORT_PROJECTION_BYTES,
   readPersistedScanReportProjection,
   REPORT_PROJECTION_READY_WARNING_MS,
@@ -51,7 +52,7 @@ test("scan report projection requires the canonical v2 consent assessment", asyn
   );
 });
 
-test("report projection writer and readiness query share one version contract", async () => {
+test("report projection writer stays current while readiness uses the bounded readable-version contract", async () => {
   const [contractSource, projectionSource, statusSource] = await Promise.all([
     readFile(projectionContractPath, "utf8"),
     readFile(projectionPath, "utf8"),
@@ -64,7 +65,7 @@ test("report projection writer and readiness query share one version contract", 
   assert.match(statusSource, /from "\.\/scan-report-projection-contract"/);
   assert.match(
     statusSource,
-    /projection\.report_projection_version = '\$\{SCAN_REPORT_PROJECTION_VERSION\}'/
+    /READABLE_SCAN_REPORT_PROJECTION_VERSIONS\.map/
   );
   assert.doesNotMatch(projectionSource, /scan-report-projection-v\d+/);
   assert.doesNotMatch(statusSource, /scan-report-projection-v\d+/);
@@ -337,6 +338,20 @@ test("only a ready current-version projection satisfies readiness", () => {
   assert.equal(isCurrentScanReportProjectionReady({
     ...current,
     report_projection_computed_at: ""
+  }), false);
+});
+
+test("verified v19 projections remain readable without becoming current publication output", () => {
+  const historical = {
+    report_projection_computed_at: "2026-08-27T17:28:31.376Z",
+    report_projection_status: "ready",
+    report_projection_version: "scan-report-projection-v19"
+  };
+  assert.equal(isReadableScanReportProjectionReady(historical), true);
+  assert.equal(isCurrentScanReportProjectionReady(historical), false);
+  assert.equal(isReadableScanReportProjectionReady({
+    ...historical,
+    report_projection_version: "scan-report-projection-v18"
   }), false);
 });
 

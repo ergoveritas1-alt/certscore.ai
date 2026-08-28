@@ -106,7 +106,6 @@ export default async function ScanDetailPage({ params, searchParams }: ScanDetai
   const waitingForReportProjection =
     isCompletedScanStatus(statusProjection.status) &&
     statusProjection.reportProjectionRequired &&
-    !statusProjection.historicalReportReady &&
     !statusProjection.reportReady;
   if (isPendingScanStatus(statusProjection.status) || waitingForReportProjection) {
     return (
@@ -178,7 +177,6 @@ async function ScanDetailReportContent({
   if (
     isCompletedScanStatus(statusProjection.status) &&
     statusProjection.reportProjectionRequired &&
-    !statusProjection.historicalReportReady &&
     !localPersistedReportProjection
   ) {
     return (

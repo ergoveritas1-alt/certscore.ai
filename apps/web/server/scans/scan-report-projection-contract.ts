@@ -3,6 +3,10 @@ import type { ScanDetailResponse } from "./get-scan-by-id";
 import type { PersistedCanonicalReportProjection } from "./persisted-canonical-report-projection";
 
 export const SCAN_REPORT_PROJECTION_VERSION = "scan-report-projection-v24";
+export const READABLE_SCAN_REPORT_PROJECTION_VERSIONS = [
+  "scan-report-projection-v19",
+  SCAN_REPORT_PROJECTION_VERSION,
+] as const;
 export const REPORT_PROJECTION_READY_WARNING_MS = 15_000;
 export const MAX_SCAN_REPORT_PROJECTION_BYTES = 6 * 1024 * 1024;
 
@@ -35,6 +39,26 @@ export function isCurrentScanReportProjectionReady(
     projection &&
     projection.report_projection_status === "ready" &&
     projection.report_projection_version === SCAN_REPORT_PROJECTION_VERSION &&
+    (
+      (
+        typeof projection.report_projection_computed_at === "string" &&
+        projection.report_projection_computed_at.trim().length > 0
+      ) ||
+      projection.report_projection_computed_at instanceof Date
+    )
+  );
+}
+
+export function isReadableScanReportProjectionReady(
+  projection: ScanReportProjectionReadiness | null | undefined
+) {
+  return Boolean(
+    projection &&
+    projection.report_projection_status === "ready" &&
+    typeof projection.report_projection_version === "string" &&
+    (READABLE_SCAN_REPORT_PROJECTION_VERSIONS as readonly string[]).includes(
+      projection.report_projection_version
+    ) &&
     (
       (
         typeof projection.report_projection_computed_at === "string" &&
@@ -186,7 +210,7 @@ export function buildPersistedScanReportProjection(
 export function readPersistedScanReportProjection(
   scanRecord: Pick<ScanDetailResponse, "scan" | "snapshot">
 ): ScanDetailResponse | null {
-  if (!isCurrentScanReportProjectionReady(scanRecord.snapshot) || !isRecord(scanRecord.snapshot)) {
+  if (!isReadableScanReportProjectionReady(scanRecord.snapshot) || !isRecord(scanRecord.snapshot)) {
     return null;
   }
   const payload = scanRecord.snapshot.report_projection_payload;
