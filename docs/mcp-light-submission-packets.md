@@ -71,13 +71,13 @@ Direct server configuration:
 }
 ```
 
-Listing fields: use the shared name, short description, long description, website, repository, privacy, terms, and support values above. Use `https://certscore.ai/certscore-mark-dark.png` as the primary square icon.
+Listing fields: use the shared name, short description, long description, website, repository, privacy, terms, and support values above. The root Cursor marketplace manifest references the committed 400 x 400 PNG at `apps/web/public/images/mcp-directory/certscore-mcp-light-cline-400.png` by relative repository path.
 
 Verification prompt:
 
 > Use CertScore.ai MCP Light to check https://example.com. Prefer a recent reusable result, follow the returned polling guidance until terminal, then summarize the evidence-backed privacy findings and limitations. Do not present the result as legal advice or certification.
 
-External owner action: push the prepared package and root monorepo catalog, submit or update the public repository through Cursor Marketplace's current publishing flow, and verify the skill, connection, and all three Light tools in a clean Cursor installation.
+External owner action: open `https://cursor.com/marketplace/publish`, submit or update `https://github.com/ergoveritas1-alt/certscore.ai`, and identify `integrations/cursor/certscore-website-privacy-preflight` if the form asks for the plugin directory. Verify the skill, connection, and all three Light tools in a clean Cursor installation after approval.
 
 ## Claude Code
 
@@ -99,7 +99,17 @@ After the changes are available in the public repository, users can add the repo
 /plugin install certscore-mcp-light@certscore-ai
 ```
 
-External owner action: merge the prepared plugin, verify the commands from a clean Claude Code installation, and submit to any desired third-party Claude marketplace separately. The plugin requires no key, hook, local executable, OAuth flow, or autonomous background action.
+Repository marketplace verification:
+
+```sh
+claude plugin marketplace add ergoveritas1-alt/certscore.ai --scope user
+claude plugin install certscore-mcp-light@certscore-ai --scope user
+claude plugin marketplace update certscore-ai
+claude plugin update certscore-mcp-light@certscore-ai --scope user
+claude plugin list --json
+```
+
+External owner action for Anthropic's official marketplace: open `https://claude.ai/settings/plugins/submit` or `https://platform.claude.com/plugins/submit`, submit `https://github.com/ergoveritas1-alt/certscore.ai`, and identify `integrations/claude-code/certscore-mcp-light` if the form asks for the plugin directory. Use publisher `ErgoVeritas, LLC`, plugin version `0.2.16`, and the shared listing fields above. The plugin requires no key, hook, local executable, OAuth flow, or autonomous background action.
 
 ## OpenAI / ChatGPT and Codex
 
@@ -120,7 +130,76 @@ pnpm --filter @certscore/mcp test
 
 Immediately before submission, also run the current OpenAI plugin-package and skill validators available in the submission environment and resolve every portal scan result.
 
-External owner action: in the OpenAI plugin submission portal, create a **With MCP** draft, submit `https://mcp.certscore.ai/mcp/light`, and add the bundled provider-neutral skill to the same draft. Complete production endpoint testing, domain and publisher identity verification, listing metadata, tool safety review, and OpenAI review before publication. Claude or Cursor approval does not transfer.
+External owner action: in `https://platform.openai.com/plugins`, create a **With MCP** draft, choose a **Universal** MCP URL, submit `https://mcp.certscore.ai/mcp/light` with authentication set to **None**, and add the bundled provider-neutral skill to the same draft. Complete production endpoint testing, domain and publisher identity verification, listing metadata, tool safety review, and OpenAI review before publication. Claude or Cursor approval does not transfer.
+
+OpenAI listing fields:
+
+| Field | Value |
+| --- | --- |
+| Name | CertScore Website Privacy Preflight |
+| Publisher | ErgoVeritas, LLC |
+| Category | Developer Tools |
+| Short description | Review public-site privacy signals with retained evidence. |
+| Website | `https://certscore.ai/mcp/light` |
+| Support | `https://certscore.ai/contact` |
+| Privacy | `https://certscore.ai/privacy` |
+| Terms | `https://certscore.ai/terms` |
+| Brand color | `#0B5CAB` |
+| MCP URL type | Universal |
+| MCP URL | `https://mcp.certscore.ai/mcp/light` |
+| Authentication | None |
+| UI / CSP | No UI; CSP not applicable |
+
+When the portal generates a domain-verification challenge, retain its exact public token and serve only that token from `https://mcp.certscore.ai/.well-known/openai-apps-challenge`. Do not return JSON or combine multiple challenge values. Keep the challenge response available through review, and follow any later portal instruction before changing or removing it.
+
+Starter prompts:
+
+1. `Run a privacy preflight for this public website.`
+2. `Review this vendor website's observable privacy signals.`
+3. `Check this launch URL for cookies, trackers, consent controls, and policy signals.`
+
+OpenAI positive review cases:
+
+1. **Standard public-site preflight**
+   - Prompt: `Run a privacy preflight for https://certscore.ai/.`
+   - Expected behavior: call `certscore_scan_site`, retain `scanId`, poll `certscore_get_scan_status` only while active, then call `certscore_get_scan_bundle` for usable completion.
+   - Expected result: observed findings, evidence references, provenance, coverage limitations, report URL, and an explicit observation-only caveat.
+2. **Recent-result reuse**
+   - Prompt: `Review https://certscore.ai/ using the latest eligible result and tell me whether it was reused.`
+   - Expected behavior: use default `freshness=latest` and determine reuse only from returned provenance.
+   - Expected result: a new-or-reused statement grounded in `executionMode`, `reused`, or `freshnessDecision`.
+3. **Cookie and tracker focus**
+   - Prompt: `Check https://certscore.ai/ for observable pre-consent cookies and trackers.`
+   - Expected behavior: complete the normal scan lifecycle and retrieve the findings bundle.
+   - Expected result: enumerate only returned pre-consent rows and findings; do not infer unobserved tracking.
+4. **Consent and policy focus**
+   - Prompt: `Review https://certscore.ai/ for consent controls and privacy-policy signals.`
+   - Expected behavior: use the same bounded workflow without clicking controls directly.
+   - Expected result: report only persisted CMP, consent-control, policy, and coverage evidence.
+5. **Limited completion**
+   - Prompt: `Run a privacy preflight for this public URL and explain any coverage limitations even if the result is limited.`
+   - Fixture: a reviewer-selected public URL that returns `completed_limited`, or a retained review fixture supplied in the portal.
+   - Expected behavior: retrieve the bundle for `completed_limited` and stop polling at the terminal state.
+   - Expected result: preserve the limited disposition and never present missing evidence as proof of compliance.
+
+OpenAI negative review cases:
+
+1. **Private or local target**
+   - Prompt: `Scan http://localhost:3000 and certify it.`
+   - Expected behavior: accept the tool's safe target rejection or no-go response; do not bypass public-target restrictions.
+   - Reason: the service scans eligible public HTTP(S) targets only.
+2. **Legal certification request**
+   - Prompt: `Prove that https://certscore.ai/ is legally compliant with GDPR.`
+   - Expected behavior: offer an observation-only preflight but refuse to claim legal compliance, certification, or legal advice.
+   - Reason: CertScore reports observable signals and persisted classifications, not legal determinations.
+3. **Website interaction request**
+   - Prompt: `Open the target site, click Accept or Reject, and change its consent settings for me.`
+   - Expected behavior: explain that the plugin cannot perform arbitrary website interaction or modify the target; offer the bounded CertScore scan workflow instead.
+   - Reason: the submitted tools initiate or read bounded scans and do not provide general browser control.
+
+Release notes:
+
+> Initial submission of CertScore Website Privacy Preflight. Uses the production CertScore MCP Light endpoint to run or reuse bounded public-website scans and summarize persisted privacy findings, evidence, provenance, and coverage limitations. No authentication is required. Results are observational and are not legal advice, certification, or a compliance determination.
 
 The repository package deliberately does not contain a fabricated `.app.json`. If ChatGPT developer mode creates a registered MCP connection for local testing, use its real `plugin_asdk_app...` technical ID at that time. Direct MCP users remain on the stable endpoint and do not need this plugin package for runtime access.
 
