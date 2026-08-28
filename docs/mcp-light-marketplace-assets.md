@@ -46,6 +46,8 @@ Use this workflow before a public website launch, during vendor-domain review, f
 7. Preserve important evidence references, coverage limitations, provenance, and truncation notices.
 8. Never infer unobserved technology, consent behavior, legal violations, or compliance from missing or limited evidence.
 
+For a confirmed `postRefusalObservation`, report its typed interpretation directly. `termination.kind=evidence_satisfied` means the observer intentionally stopped after retaining qualifying evidence; it does not make the confirmed observation inconclusive. Keep `coverageLimitations` scoped to additional behavior or persistence that was not measured, and determine scan reuse only from returned provenance fields.
+
 ## Links for listing forms
 
 - Landing page: https://certscore.ai/mcp/light

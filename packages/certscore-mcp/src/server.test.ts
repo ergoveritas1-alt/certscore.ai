@@ -484,6 +484,56 @@ test("Claude Code Light plugin preserves the remote three-tool workflow", () => 
   assert.doesNotMatch(skill, /hook|autonomous/i);
 });
 
+test("Cursor and OpenAI plugin packages preserve independent release versions and the Light workflow", () => {
+  const cursorPlugin = JSON.parse(readFileSync(new URL("../../../integrations/cursor/certscore-website-privacy-preflight/plugin.json", import.meta.url), "utf8")) as {
+    name?: string;
+    version?: string;
+  };
+  const cursorMcp = JSON.parse(readFileSync(new URL("../../../integrations/cursor/certscore-website-privacy-preflight/mcp.json", import.meta.url), "utf8")) as {
+    mcpServers?: Record<string, { type?: string; url?: string }>;
+  };
+  const cursorMarketplace = JSON.parse(readFileSync(new URL("../../../.cursor-plugin/marketplace.json", import.meta.url), "utf8")) as {
+    plugins?: Array<{ name?: string; source?: string; version?: string }>;
+  };
+  const openAiPlugin = JSON.parse(readFileSync(new URL("../../../integrations/openai/certscore-website-privacy-preflight/.codex-plugin/plugin.json", import.meta.url), "utf8")) as {
+    mcpServers?: string;
+    name?: string;
+    skills?: string;
+    version?: string;
+  };
+  const openAiMcp = JSON.parse(readFileSync(new URL("../../../integrations/openai/certscore-website-privacy-preflight/.mcp.json", import.meta.url), "utf8")) as {
+    mcpServers?: Record<string, { type?: string; url?: string }>;
+  };
+  const openAiSkill = readFileSync(new URL("../../../integrations/openai/certscore-website-privacy-preflight/skills/website-privacy-preflight/SKILL.md", import.meta.url), "utf8");
+  const openAiMetadata = readFileSync(new URL("../../../integrations/openai/certscore-website-privacy-preflight/skills/website-privacy-preflight/agents/openai.yaml", import.meta.url), "utf8");
+
+  assert.equal(cursorPlugin.name, "certscore-website-privacy-preflight");
+  assert.equal(cursorPlugin.version, "1.0.1");
+  assert.deepEqual(cursorMcp.mcpServers, {
+    certscore: { type: "streamable-http", url: "https://mcp.certscore.ai/mcp/light" }
+  });
+  assert.deepEqual(cursorMarketplace.plugins?.map(({ name, source, version }) => ({ name, source, version })), [{
+    name: "certscore-website-privacy-preflight",
+    source: "integrations/cursor/certscore-website-privacy-preflight",
+    version: "1.0.1"
+  }]);
+
+  assert.equal(openAiPlugin.name, "certscore-website-privacy-preflight");
+  assert.equal(openAiPlugin.version, "1.0.0");
+  assert.equal(openAiPlugin.skills, "./skills/");
+  assert.equal(openAiPlugin.mcpServers, "./.mcp.json");
+  assert.deepEqual(openAiMcp.mcpServers, {
+    certscore: { type: "http", url: "https://mcp.certscore.ai/mcp/light" }
+  });
+  assert.match(openAiMetadata, /transport: "streamable_http"/);
+  assert.match(openAiMetadata, /url: "https:\/\/mcp\.certscore\.ai\/mcp\/light"/);
+  assert.doesNotMatch(openAiSkill, /Claude|Cursor/);
+  for (const tool of ["certscore_scan_site", "certscore_get_scan_status", "certscore_get_scan_bundle"]) {
+    assert.match(openAiSkill, new RegExp(tool));
+  }
+  assert.match(openAiSkill, /not legal advice, certification, or a compliance determination/i);
+});
+
 test("doctor reports healthy API and missing API key without failing", async () => {
   const fetchCalls: string[] = [];
   const result = await getCertScoreMcpDoctorReport({

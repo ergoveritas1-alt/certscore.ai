@@ -106,6 +106,8 @@ MCP workflow:
 1. certscore_scan_site with a public URL. It waits up to 45 seconds for completion by default.
 2. certscore_get_scan_status only when certscore_scan_site returns a non-terminal job; prefer the stable scanId.
 3. certscore_get_scan_bundle for canonical status, compact findings, bounded evidence, and pre-consent inventory.
+
+For a confirmed postRefusalObservation, report its typed interpretation directly. termination.kind=evidence_satisfied means the observer intentionally stopped after retaining qualifying evidence; it does not make the confirmed observation inconclusive. Keep coverageLimitations scoped to additional behavior or persistence that was not measured. Determine scan reuse only from returned provenance fields such as executionMode, reused, and freshnessDecision.
 4. Fetch report, evidence, certscore_list_findings, or cookie inventory only when the task needs that dedicated view.
 5. certscore_explain_finding for evidence summaries, caveats, and next steps.
 6. certscore_get_latest_domain_scan to find the latest eligible public scan for a domain.

@@ -703,6 +703,53 @@ export function buildCertScoreApiV2OpenApiDocument() {
             disclaimer: { type: "string" }
           }
         },
+        PostRefusalObservation: {
+          type: "object",
+          additionalProperties: false,
+          required: [
+            "status",
+            "refusalExercised",
+            "observationCount",
+            "productionProjectable",
+            "verdict",
+            "interpretation",
+            "observationStrategy",
+            "termination",
+            "completedAt",
+            "coverageLimitations",
+            "limitations"
+          ],
+          properties: {
+            status: { type: "string", enum: ["confirmed_observation", "confirmed_clean", "unconfirmed", "not_attempted", "unsupported", "aborted"] },
+            refusalExercised: { type: "boolean" },
+            observationCount: { type: "integer", minimum: 0 },
+            productionProjectable: { type: "boolean" },
+            verdict: {
+              type: "string",
+              enum: [
+                "eligible_nonessential_activity_observed_after_confirmed_refusal",
+                "retained_consent_signal_contradiction_observed_after_confirmed_refusal",
+                "no_eligible_nonessential_activity_observed_during_completed_window",
+                "no_confirmed_post_refusal_verdict"
+              ]
+            },
+            interpretation: { type: "string", maxLength: 500 },
+            observationStrategy: { type: "string", enum: ["stop_on_first_eligible_activity", "not_applicable"] },
+            termination: {
+              type: "object",
+              additionalProperties: false,
+              required: ["kind", "intentional", "trigger"],
+              properties: {
+                kind: { type: "string", enum: ["evidence_satisfied", "window_elapsed", "unavailable"] },
+                intentional: { type: "boolean" },
+                trigger: { type: "string", enum: ["non_essential_request_observed", "non_essential_storage_write_observed", "refusal_signal_contradiction_observed", "window_elapsed", "reject_path_timeout", "worker_failed", "unavailable"] }
+              }
+            },
+            completedAt: { type: ["string", "null"], format: "date-time" },
+            coverageLimitations: { type: "array", maxItems: 24, items: { type: "string" } },
+            limitations: { type: "array", maxItems: 24, deprecated: true, description: "Deprecated compatibility alias for coverageLimitations.", items: { type: "string" } }
+          }
+        },
         ScanJob: {
           type: "object",
           additionalProperties: true,
@@ -726,6 +773,7 @@ export function buildCertScoreApiV2OpenApiDocument() {
             scoreVersion: { type: ["string", "null"] },
             scoreUpdatedAt: { type: ["string", "null"], format: "date-time" },
             riskLevel: { type: ["string", "null"] },
+            postRefusalObservation: { $ref: "#/components/schemas/PostRefusalObservation" },
             coverage: { type: ["object", "null"], additionalProperties: true },
             lastUpdatedAt: { type: "string" },
             phaseStartedAt: { type: ["string", "null"] },
@@ -785,6 +833,7 @@ export function buildCertScoreApiV2OpenApiDocument() {
             scoreVersion: { type: ["string", "null"] },
             scoreUpdatedAt: { type: ["string", "null"], format: "date-time" },
             riskLevel: { type: ["string", "null"] },
+            postRefusalObservation: { $ref: "#/components/schemas/PostRefusalObservation" },
             coverage: { type: "object", additionalProperties: true },
             executionMode: { type: "string", enum: ["new_scan", "reused_scan"] },
             reused: { type: "boolean" },

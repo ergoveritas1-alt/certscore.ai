@@ -113,7 +113,7 @@ const discoveryDocument = {
       protectedResourceMetadata: "https://mcp.certscore.ai/.well-known/oauth-protected-resource",
       authorizationServerMetadata: "https://certscore.ai/.well-known/oauth-authorization-server",
       authentication: "OAuth 2.0 authorization code with PKCE",
-      currentVersion: "0.2.15",
+      currentVersion: "0.2.16",
       claudeTrialScanCreation: {
         automatic: true,
         eligiblePlan: "free",
@@ -144,7 +144,7 @@ const discoveryDocument = {
       iconUrl: "https://certscore.ai/certscore-mark-dark.png",
       darkBackgroundIconUrl: "https://certscore.ai/certscore-mark-light.png",
       clineMarketplaceIconUrl: "https://certscore.ai/images/mcp-directory/certscore-mcp-light-cline-400.png",
-      version: "0.2.15",
+      version: "0.2.16",
       tools: ["certscore_scan_site", "certscore_get_scan_status", "certscore_get_scan_bundle"],
       intendedUse: "Frictionless no-account public website scans for new and low-volume agents."
     },

@@ -1,6 +1,6 @@
 {
   "name": "certscore-mcp-light",
-  "version": "0.2.15",
+  "version": "0.2.16",
   "description": "Free website privacy scanner for evidence-backed public website preflight.",
   "author": {
     "name": "ErgoVeritas, LLC",

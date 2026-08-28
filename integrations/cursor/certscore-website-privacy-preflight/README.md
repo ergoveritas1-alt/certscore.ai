@@ -7,11 +7,13 @@ Website Privacy Preflight connects Cursor to the existing no-auth CertScore.ai M
 - Agent Plugin manifest: `plugin.json`
 - Streamable HTTP MCP configuration: `mcp.json`
 - Agent skill: `skills/website-privacy-preflight/SKILL.md`
+- Monorepo marketplace catalog: `../../../.cursor-plugin/marketplace.json`
 
 ## Connection
 
+- Cursor plugin version: `1.0.1`
 - Canonical MCP identity: `ai.certscore/mcp-light`
-- Hosted MCP version: `0.2.15`
+- Hosted MCP version: `0.2.16`
 - Endpoint: `https://mcp.certscore.ai/mcp/light`
 - Authentication: none
 - Tools: `certscore_scan_site`, `certscore_get_scan_status`, `certscore_get_scan_bundle`

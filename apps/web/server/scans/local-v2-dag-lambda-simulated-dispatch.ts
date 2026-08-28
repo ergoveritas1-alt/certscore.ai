@@ -12,6 +12,10 @@ import {
 import { handleLocalV2DagLambdaResultMessage } from "./local-v2-dag-lambda-result-poller";
 
 const execFileAsync = promisify(execFile);
+// Keep the local simulator inside the same bounded execution envelope as the
+// deployed coordinator, while leaving enough time to persist a terminal
+// result before the 930s orphan-reconciliation deadline.
+export const LOCAL_V2_DAG_SIMULATED_EXECUTION_TIMEOUT_MS = 915_000;
 
 type LocalLambdaParitySummary = {
   fakeS3Root?: string;
@@ -120,6 +124,8 @@ export async function dispatchLocalV2DagSimulatedLambdaScan(input: {
       PLAYWRIGHT_BROWSERS_PATH: "",
       TSX_TSCONFIG_PATH: "tsconfig.base.json"
     },
+    killSignal: "SIGTERM",
+    timeout: LOCAL_V2_DAG_SIMULATED_EXECUTION_TIMEOUT_MS,
     maxBuffer: 10 * 1024 * 1024
   });
 

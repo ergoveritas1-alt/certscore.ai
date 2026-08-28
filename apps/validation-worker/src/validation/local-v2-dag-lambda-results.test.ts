@@ -682,10 +682,22 @@ test("validation worker continuously reconciles accepted scans without terminal 
   assert.match(source, /ORPHAN_TERMINAL_AGE_MS\s*=\s*930_000/);
   assert.match(source, /v2_lambda_result\.delayed/);
   assert.match(source, /lambda_terminal_result_absent_after_execution_deadline/);
+  assert.match(source, /simulated_lambda_dispatch_interrupted_before_terminal_result/);
+  assert.match(source, /simulatedLocalLambda}' = 'true'/);
+  assert.match(source, /started\.event_type = 'v2_lambda_dispatch\.started'/);
   assert.match(source, /for update of s skip locked/);
-  assert.match(source, /void loopReconciliation\(\)/);
+  assert.match(source, /startLocalV2DagLambdaOrphanReconciler/);
   assert.match(source, /v2_lambda_result\.received/);
   assert.match(source, /v2_lambda_result\.failed/);
+});
+
+test("validation worker starts orphan reconciliation independently of SQS result polling", async () => {
+  const source = await readFile("apps/validation-worker/src/index.ts", "utf8");
+  const resultPollerIndex = source.indexOf("startLocalV2DagLambdaResultPoller({");
+  const orphanReconcilerIndex = source.indexOf("startLocalV2DagLambdaOrphanReconciler();");
+
+  assert.ok(resultPollerIndex >= 0);
+  assert.ok(orphanReconcilerIndex > resultPollerIndex);
 });
 
 test("validation worker records Lambda result event before marking scan completed", async () => {

@@ -9,7 +9,7 @@ CertScore.ai MCP Light is the no-account, low-friction remote MCP for evidence-b
 | Endpoint | `https://mcp.certscore.ai/mcp/light` |
 | Transport | Streamable HTTP |
 | Authentication | None; do not send an API key, bearer token, or OAuth configuration |
-| Version | `0.2.15` |
+| Version | `0.2.16` |
 
 Configure an MCP client as a remote HTTP server with the endpoint above. Product configuration formats differ, so use the client's current remote-MCP UI or documentation rather than adapting a local stdio example.
 
@@ -20,7 +20,7 @@ codex mcp add certscore --url https://mcp.certscore.ai/mcp/light
 claude mcp add --transport http certscore https://mcp.certscore.ai/mcp/light
 ```
 
-This repository also contains a validated Claude Code plugin package at `integrations/claude-code/certscore-mcp-light` and marketplace catalog at `.claude-plugin/marketplace.json`. External marketplace inclusion or repository registration is intentionally not performed here.
+This repository also contains separately versioned integration packages for Claude Code at `integrations/claude-code/certscore-mcp-light`, Cursor at `integrations/cursor/certscore-website-privacy-preflight`, and OpenAI/ChatGPT/Codex at `integrations/openai/certscore-website-privacy-preflight`. The Claude repository marketplace catalog is at `.claude-plugin/marketplace.json`. External marketplace submission or public plugin publication is intentionally not performed here.
 
 For Cursor, Cline, Kilo, GitHub, and other MCP clients, select Streamable HTTP (sometimes labeled HTTP or remote MCP), enter the endpoint, and leave authentication and headers empty.
 

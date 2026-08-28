@@ -132,7 +132,28 @@ export interface PostRefusalObservation {
   refusalExercised: boolean;
   observationCount: number;
   productionProjectable: boolean;
+  verdict:
+    | "eligible_nonessential_activity_observed_after_confirmed_refusal"
+    | "retained_consent_signal_contradiction_observed_after_confirmed_refusal"
+    | "no_eligible_nonessential_activity_observed_during_completed_window"
+    | "no_confirmed_post_refusal_verdict";
+  interpretation: string;
+  observationStrategy: "stop_on_first_eligible_activity" | "not_applicable";
+  termination: {
+    kind: "evidence_satisfied" | "window_elapsed" | "unavailable";
+    intentional: boolean;
+    trigger:
+      | "non_essential_request_observed"
+      | "non_essential_storage_write_observed"
+      | "refusal_signal_contradiction_observed"
+      | "window_elapsed"
+      | "reject_path_timeout"
+      | "worker_failed"
+      | "unavailable";
+  };
   completedAt: string | null;
+  coverageLimitations: string[];
+  /** @deprecated Use coverageLimitations. */
   limitations: string[];
 }
 

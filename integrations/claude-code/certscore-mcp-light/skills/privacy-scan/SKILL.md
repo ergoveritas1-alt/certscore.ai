@@ -14,4 +14,6 @@ Use CertScore.ai MCP Light to review the public HTTP or HTTPS URL supplied by th
 6. Summarize the highest-value returned findings and evidence, including pre-consent cookies or trackers, CMP or consent-control signals, policy or disclosure observations, HTTPS/TLS observations, coverage limitations, provenance, important evidence references, and the report URL.
 7. Preserve truncation notices and follow `nextRecommendedMaxBytes` when additional returned evidence is necessary.
 
+When `postRefusalObservation.status` is `confirmed_observation`, report its typed `interpretation` directly. If `termination.kind` is `evidence_satisfied`, explain that the observer intentionally stopped after qualifying evidence was retained; do not characterize that stop as uncertainty about the confirmed observation. Keep `coverageLimitations` scoped to additional behavior or persistence that was not measured. Determine scan reuse only from returned provenance such as `executionMode`, `reused`, or `freshnessDecision`.
+
 Report only observed CertScore evidence and persisted CertScore classifications. Do not infer unobserved technologies, post-consent behavior, legal violations, or compliance. Results are not legal advice, certification, or a compliance determination.

@@ -214,7 +214,15 @@ test("API v2 and status expose joined canonical post-refusal observation metadat
         observationCount: 2,
         productionProjectable: true,
         completedAt: "2026-08-26T12:00:09.000Z",
-        limitations: ["bounded_observation_window"],
+        contradictionObserved: false,
+        postRefusalActivity: [
+          { activityType: "storage_write" },
+          { activityType: "storage_write" },
+        ],
+        limitations: [
+          "observation_early_exit:non_essential_storage_write_observed",
+          "persistence_observation_not_settled_due_to_early_exit",
+        ],
       },
     },
   } as unknown as ScanDetailResponse;
@@ -226,8 +234,17 @@ test("API v2 and status expose joined canonical post-refusal observation metadat
     refusalExercised: true,
     observationCount: 2,
     productionProjectable: true,
+    verdict: "eligible_nonessential_activity_observed_after_confirmed_refusal",
+    interpretation: "Reject was confirmed, and eligible non-essential storage activity was observed afterward.",
+    observationStrategy: "stop_on_first_eligible_activity",
+    termination: {
+      kind: "evidence_satisfied",
+      intentional: true,
+      trigger: "non_essential_storage_write_observed",
+    },
     completedAt: "2026-08-26T12:00:09.000Z",
-    limitations: ["bounded_observation_window"],
+    coverageLimitations: ["The remainder of the persistence window was not measured."],
+    limitations: ["The remainder of the persistence window was not measured."],
   });
   assert.deepEqual(status.postRefusalObservation, resource.postRefusalObservation);
 });
@@ -253,8 +270,17 @@ test("API v2 and status expose a six-second Reject Path timeout as a neutral lim
     refusalExercised: false,
     observationCount: 0,
     productionProjectable: false,
+    verdict: "no_confirmed_post_refusal_verdict",
+    interpretation: "Reject Path did not complete within the six-second post-primary allowance, so no post-refusal verdict was established.",
+    observationStrategy: "not_applicable",
+    termination: {
+      kind: "unavailable",
+      intentional: false,
+      trigger: "reject_path_timeout",
+    },
     completedAt: "2026-08-26T12:00:16.000Z",
-    limitations: ["Reject Path did not complete within the six-second post-primary allowance."],
+    coverageLimitations: ["Reject Path did not complete within the six-second post-primary allowance, so no post-refusal verdict was established."],
+    limitations: ["Reject Path did not complete within the six-second post-primary allowance, so no post-refusal verdict was established."],
   });
   assert.deepEqual(status.postRefusalObservation, resource.postRefusalObservation);
   assert.ok(resource.coverage?.limitations?.includes(

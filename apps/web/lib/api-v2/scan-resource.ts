@@ -557,17 +557,76 @@ function deriveApiV2PostRefusalObservation(scanRecord: ScanDetailResponse) {
     );
     const limitationCode = stringOrNull(coverage?.limitationCode);
     if (coverage?.status !== "limited" || !limitationCode) return null;
+    const interpretation = limitationCode === "reject_path_timeout"
+      ? "Reject Path did not complete within the six-second post-primary allowance, so no post-refusal verdict was established."
+      : "Reject Path worker failed before verified evidence could be joined, so no post-refusal verdict was established.";
+    const coverageLimitations = [interpretation];
     return {
       status: "aborted" as const,
       refusalExercised: false,
       observationCount: 0,
       productionProjectable: false,
+      verdict: "no_confirmed_post_refusal_verdict" as const,
+      interpretation,
+      observationStrategy: "not_applicable" as const,
+      termination: {
+        kind: "unavailable" as const,
+        intentional: false,
+        trigger: limitationCode === "reject_path_timeout"
+          ? "reject_path_timeout" as const
+          : "worker_failed" as const,
+      },
       completedAt: dateStringOrNull(coverage.completedAt),
-      limitations: [limitationCode === "reject_path_timeout"
-        ? "Reject Path did not complete within the six-second post-primary allowance."
-        : "Reject Path worker failed before verified evidence could be joined."],
+      coverageLimitations,
+      limitations: coverageLimitations,
     };
   }
+  const rawLimitations = Array.isArray(projection?.limitations)
+    ? projection.limitations.filter((value): value is string => typeof value === "string").slice(0, 24)
+    : [];
+  const earlyExit = rawLimitations
+    .find((value) => value.startsWith("observation_early_exit:"))
+    ?.slice("observation_early_exit:".length);
+  const supportedEarlyExitTriggers = new Set([
+    "non_essential_request_observed",
+    "non_essential_storage_write_observed",
+    "refusal_signal_contradiction_observed",
+  ]);
+  const evidenceSatisfied = Boolean(earlyExit && supportedEarlyExitTriggers.has(earlyExit));
+  const coverageLimitations = [...new Set(rawLimitations
+    .filter((value) => !value.startsWith("observation_early_exit:") || !evidenceSatisfied)
+    .map((value) => value === "persistence_observation_not_settled_due_to_early_exit"
+      ? "The remainder of the persistence window was not measured."
+      : value))].slice(0, 24);
+  const activityRows = Array.isArray(projection?.postRefusalActivity)
+    ? projection.postRefusalActivity.filter((value) => value && typeof value === "object" && !Array.isArray(value)) as Record<string, unknown>[]
+    : [];
+  const storageObserved = activityRows.some((row) => row.activityType === "storage_write");
+  const networkObserved = activityRows.some((row) => row.activityType === "network_request");
+  const contradictionObserved = projection?.contradictionObserved === true;
+  const verdict = status === "confirmed_observation"
+    ? activityRows.length > 0
+      ? "eligible_nonessential_activity_observed_after_confirmed_refusal" as const
+      : contradictionObserved
+        ? "retained_consent_signal_contradiction_observed_after_confirmed_refusal" as const
+        : "eligible_nonessential_activity_observed_after_confirmed_refusal" as const
+    : status === "confirmed_clean"
+      ? "no_eligible_nonessential_activity_observed_during_completed_window" as const
+      : "no_confirmed_post_refusal_verdict" as const;
+  const interpretation = status === "confirmed_observation"
+    ? storageObserved && networkObserved
+      ? "Reject was confirmed, and eligible non-essential network and storage activity was observed afterward."
+      : storageObserved
+        ? "Reject was confirmed, and eligible non-essential storage activity was observed afterward."
+        : networkObserved
+          ? "Reject was confirmed, and eligible non-essential network activity was observed afterward."
+          : contradictionObserved
+            ? "Reject was confirmed, and a retained consent signal contradicted the refusal afterward."
+            : "Reject was confirmed, and an eligible post-refusal observation was retained afterward."
+    : status === "confirmed_clean"
+      ? "Reject was confirmed. No eligible non-essential activity was observed during the completed bounded window."
+      : "No confirmed post-refusal verdict was established.";
+  const confirmed = status === "confirmed_observation" || status === "confirmed_clean";
   return {
     status: status as
       | "confirmed_observation"
@@ -579,10 +638,38 @@ function deriveApiV2PostRefusalObservation(scanRecord: ScanDetailResponse) {
     refusalExercised: projection?.refusalExercised === true,
     observationCount: Math.max(0, finiteInt(projection?.observationCount) ?? 0),
     productionProjectable: projection?.productionProjectable === true,
+    verdict,
+    interpretation,
+    observationStrategy: confirmed ? "stop_on_first_eligible_activity" as const : "not_applicable" as const,
+    termination: confirmed
+      ? evidenceSatisfied
+        ? {
+            kind: "evidence_satisfied" as const,
+            intentional: true,
+            trigger: earlyExit as
+              | "non_essential_request_observed"
+              | "non_essential_storage_write_observed"
+              | "refusal_signal_contradiction_observed",
+          }
+        : earlyExit
+          ? {
+              kind: "unavailable" as const,
+              intentional: false,
+              trigger: "unavailable" as const,
+            }
+          : {
+            kind: "window_elapsed" as const,
+            intentional: true,
+            trigger: "window_elapsed" as const,
+            }
+      : {
+          kind: "unavailable" as const,
+          intentional: false,
+          trigger: "unavailable" as const,
+        },
     completedAt: dateStringOrNull(projection?.completedAt),
-    limitations: Array.isArray(projection?.limitations)
-      ? projection.limitations.filter((value): value is string => typeof value === "string").slice(0, 24)
-      : [],
+    coverageLimitations,
+    limitations: coverageLimitations,
   };
 }
 

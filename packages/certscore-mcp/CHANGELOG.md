@@ -2,8 +2,13 @@
 
 ## Unreleased
 
+## 0.2.16
+
+- Make confirmed Reject Path outcomes explicit with typed verdict, observation strategy, intentional termination metadata, direct agent interpretation, and separately scoped coverage limitations.
+- State confirmed post-refusal evidence and intentional evidence-satisfied termination directly in MCP TextContent, tool guidance, and packaged workflow skills.
 - Align MCP Light public metadata with the implemented 50-new-scan-per-UTC-day shared/requester policy and separate the 20-scan anonymous REST API allowance.
 - Add registry-ready Light identity, icon metadata, installation guidance, marketplace copy, and a minimal Claude Code plugin package without changing the MCP tool contract.
+- Prepare separately versioned Cursor `1.0.1` and OpenAI `1.0.0` plugin packages with the updated provider-neutral privacy-preflight workflow and the hosted Light endpoint.
 
 ## 0.2.15
 

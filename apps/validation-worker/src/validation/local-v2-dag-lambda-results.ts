@@ -2515,7 +2515,98 @@ export async function reconcileOrphanedLocalV2DagLambdaScans(input: {
      returning scan_id::text`,
     [PROCESSOR, terminalOlderThanMs]
   );
-  return { delayed: delayed.rows.length, failed: failed.rows.length };
+  const interrupted = await query<{ scan_id: string }>(
+    `with stale as (
+       select s.id, s.domain_id, s.organization_id
+         from scans s
+        where s.status in ('queued', 'running')
+          and s.scan_type = 'full'
+          and s.scan_config_json #>> '{execution,v2DagLambda,processor}' = $1
+          and s.scan_config_json #>> '{execution,v2DagLambda,simulatedLocalLambda}' = 'true'
+          and coalesce(s.started_at, s.created_at) < now() - ($2::int * interval '1 millisecond')
+          and exists (
+            select 1 from scan_events started
+             where started.scan_id = s.id
+               and started.event_type = 'v2_lambda_dispatch.started'
+          )
+          and not exists (
+            select 1 from scan_events terminal
+             where terminal.scan_id = s.id
+               and terminal.event_type in (
+                 'v2_lambda_dispatch.accepted',
+                 'v2_lambda_result.received',
+                 'v2_lambda_result.failed',
+                 'v2_lambda_dispatch.failed',
+                 'ops.scan_marked_failed'
+               )
+          )
+        order by coalesce(s.started_at, s.created_at)
+        limit 25
+        for update of s skip locked
+     ), updated as (
+       update scans s
+          set status = 'failed',
+              completed_at = coalesce(s.completed_at, now()),
+              error_message = 'The local scanner process ended before it returned a terminal result. No result was inferred; start a new scan.',
+              scan_config_json = jsonb_set(
+                s.scan_config_json,
+                '{execution,v2DagLambda}',
+                coalesce(s.scan_config_json #> '{execution,v2DagLambda}', '{}'::jsonb) || jsonb_build_object(
+                  'dispatchState', 'failed',
+                  'reconciledAt', now(),
+                  'reconciliationReason', 'simulated_lambda_dispatch_interrupted_before_terminal_result'
+                ),
+                true
+              ),
+              updated_at = now()
+         from stale
+        where s.id = stale.id
+          and s.status in ('queued', 'running')
+       returning s.id, stale.domain_id, stale.organization_id
+     )
+     insert into scan_events (scan_id, domain_id, organization_id, event_type, message, metadata_json)
+     select id,
+            domain_id,
+            organization_id,
+            'ops.scan_marked_failed',
+            'The local simulated scanner process ended before a terminal result was persisted.',
+            jsonb_build_object(
+              'maxTerminalAgeMs', $2::int,
+              'reason', 'simulated_lambda_dispatch_interrupted_before_terminal_result',
+              'source', 'validation-worker-orphan-reconciler'
+            )
+       from updated
+     returning scan_id::text`,
+    [PROCESSOR, terminalOlderThanMs]
+  );
+  return { delayed: delayed.rows.length, failed: failed.rows.length, interrupted: interrupted.rows.length };
+}
+
+export function startLocalV2DagLambdaOrphanReconciler() {
+  let stopped = false;
+  const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+
+  async function loop() {
+    while (!stopped) {
+      try {
+        const orphaned = await reconcileOrphanedLocalV2DagLambdaScans();
+        if (orphaned.delayed > 0 || orphaned.failed > 0 || orphaned.interrupted > 0) {
+          console.warn("[validation-worker] reconciled delayed v2 DAG Lambda scans", orphaned);
+        }
+      } catch (error) {
+        console.error("[validation-worker] v2 DAG Lambda orphan reconciliation failed", {
+          error: error instanceof Error ? error.message : String(error)
+        });
+      }
+      await sleep(ORPHAN_RECONCILIATION_INTERVAL_MS);
+    }
+  }
+
+  console.info("[validation-worker] v2 DAG Lambda orphan reconciler started", {
+    intervalMs: ORPHAN_RECONCILIATION_INTERVAL_MS,
+  });
+  void loop();
+  return { stop() { stopped = true; } };
 }
 
 export function startLocalV2DagLambdaResultPoller(options: LocalV2DagLambdaResultPollerOptions) {
@@ -2564,22 +2655,6 @@ export function startLocalV2DagLambdaResultPoller(options: LocalV2DagLambdaResul
     }
   }
 
-  async function loopReconciliation() {
-    while (!stopped) {
-      try {
-        const orphaned = await reconcileOrphanedLocalV2DagLambdaScans();
-        if (orphaned.delayed > 0 || orphaned.failed > 0) {
-          console.warn("[validation-worker] reconciled delayed v2 DAG Lambda scans", orphaned);
-        }
-      } catch (error) {
-        console.error("[validation-worker] v2 DAG Lambda orphan reconciliation failed", {
-          error: error instanceof Error ? error.message : String(error)
-        });
-      }
-      await sleep(ORPHAN_RECONCILIATION_INTERVAL_MS);
-    }
-  }
-
   console.info("[validation-worker] v2 DAG Lambda result poller started", {
     pollMs: options.pollMs,
     pollConcurrency: RESULT_QUEUE_POLL_CONCURRENCY,
@@ -2592,8 +2667,6 @@ export function startLocalV2DagLambdaResultPoller(options: LocalV2DagLambdaResul
       void loopQueue(queueUrl);
     }
   }
-  void loopReconciliation();
-
   return {
     stop() {
       stopped = true;

@@ -1,0 +1,13 @@
+interface:
+  display_name: "Website Privacy Preflight"
+  short_description: "Review public-site privacy evidence"
+  default_prompt: "Use $website-privacy-preflight to review this public website's privacy signals."
+dependencies:
+  tools:
+    - type: "mcp"
+      value: "certscore"
+      description: "CertScore.ai MCP Light public website privacy scanner"
+      transport: "streamable_http"
+      url: "https://mcp.certscore.ai/mcp/light"
+policy:
+  allow_implicit_invocation: true

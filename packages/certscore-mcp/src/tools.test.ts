@@ -963,11 +963,50 @@ test("scan bundle text exposes compact row evidence, neutral score terminology, 
   assert.match(text, /Do not infer unobserved technologies, legal compliance, or a legal violation from scores or findings/i);
   assert.match(text, /CertScore priority=high/i);
   assert.doesNotMatch(text, /compliance score|compliant baseline|criticality=/i);
-  assert.equal(
-    bundle.interpretationGuidance.statement,
-    "Report only observed CertScore evidence and persisted CertScore classifications. Without corresponding captured post-action evidence, do not infer what Accept, Reject, Decline, or another consent action would do; say the scan does not establish what happens after that action. Do not speculate that an observed embed, vendor, or request may cause additional cookies, fingerprinting, tracking, or processing unless CertScore observed that behavior. Treat returned priority or severity as a CertScore classification, not regulatory criticality or legal exposure; prefer ‘observed privacy risk signal’ or ‘CertScore finding’. Do not infer unobserved technologies, legal compliance, or a legal violation from scores or findings."
-  );
+  assert.match(bundle.interpretationGuidance.statement, /When postRefusalObservation is confirmed and termination\.kind is evidence_satisfied/i);
+  assert.match(bundle.interpretationGuidance.statement, /observation stopped intentionally after qualifying evidence was retained/i);
+  assert.match(bundle.interpretationGuidance.statement, /mention unmeasured longer-term persistence only when relevant/i);
   assert.ok(text.length <= 8_000);
+});
+
+test("scan bundle makes intentional post-refusal evidence termination explicit", () => {
+  const bundle = buildScanBundle({
+    detail: "summary",
+    findings: { type: "certscore_finding_list", scanId: "scan_reject", findings: [] },
+    preConsentCookiesTrackers: null,
+    report,
+    scan: {
+      type: "certscore_scan",
+      scanId: "scan_reject",
+      domain: "example.com",
+      status: "completed",
+      score: 42,
+      postRefusalObservation: {
+        status: "confirmed_observation",
+        refusalExercised: true,
+        observationCount: 2,
+        productionProjectable: true,
+        verdict: "eligible_nonessential_activity_observed_after_confirmed_refusal",
+        interpretation: "Reject was confirmed, and eligible non-essential storage activity was observed afterward.",
+        observationStrategy: "stop_on_first_eligible_activity",
+        termination: {
+          kind: "evidence_satisfied",
+          intentional: true,
+          trigger: "non_essential_storage_write_observed",
+        },
+        completedAt: "2026-08-26T12:00:09.000Z",
+        coverageLimitations: ["The remainder of the persistence window was not measured."],
+        limitations: ["The remainder of the persistence window was not measured."],
+      },
+    },
+  } as any);
+
+  const text = scanBundleText(bundle);
+  assert.match(text, /Reject Path: Reject was confirmed, and eligible non-essential storage activity was observed afterward\./);
+  assert.match(text, /observation then stopped intentionally because qualifying evidence had been captured/i);
+  assert.match(text, /Reject Path coverage limitation: The remainder of the persistence window was not measured\./);
+  assert.doesNotMatch(text, /observation_early_exit|persistence_observation_not_settled_due_to_early_exit/);
+  assert.doesNotThrow(() => mcpScanBundleOutputSchema.parse(bundle));
 });
 
 test("Light read projections expose canonical provenance for reused and newly created scans", () => {

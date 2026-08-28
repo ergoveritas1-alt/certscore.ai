@@ -205,10 +205,10 @@ test("Light workflow descriptions preserve scan guidance and ground canonical pr
     status?.description,
     "Poll with only the stable scanId returned by certscore_scan_site. Active responses include phase, heartbeat, estimated progress, stalled state, retry delay, and canonical scan provenance when available. Terminal responses include the CertScore score, risk, coverage, execution region (scanFrom), timestamps, report URL, and an explicit next action. For a reused or retrieved existing scan, use only persisted scanFrom and timestamps; never infer its original region from the current request, the user's location, or a default. Report unavailable provenance as unavailable. Stop polling at any terminal status."
   );
-  assert.equal(
-    bundle?.description,
-    "Call after completed or completed_limited status. Every usable completed bundle returns a self-contained concise TextContent digest plus matching structuredContent, including canonical execution region (scanFrom) and timestamps when available. For a reused or retrieved existing scan, use only persisted scanFrom and timestamps; never infer its original region from the current request, the user's location, or a default, and report unavailable provenance as unavailable. The default summary includes the canonical report overview, up to five compact public-safe projected findings across the scan's observed domains, and bounded row-level pre-consent cookie/tracker evidence; detail=findings increases the default finding allowance, evidence adds bounded evidence digests and references, and full adds all available bounded sections. MCP Light applies a 25000-byte response ceiling so full results remain transport-safe; use returned content URLs when the complete requested tier exceeds it. At the 5000-byte floor, core finding rows take priority over optional inventory and duplicate envelope fields; evidenceUrlTemplate may replace repeated per-finding URLs while preserving their canonical derivation from contentUrls.findings and findingId. Every response declares finding and evidence total/returned/truncated counts, canonicalFindingsComplete, requested and effective byte budgets, the response ceiling, omittedSections, retrieval URLs, and nextRecommendedMaxBytes when the complete tier fits the ceiling. When canonicalFindingsComplete is true, retry only if omitted envelope detail is needed. Enumerate only returned observations and projected findings. Treat criticality, priority, and confidence as CertScore metadata; regulatory review lenses are non-determinative CertScore review context, not legal severity, legal exposure, or a compliance determination. Missing consent-action evidence does not establish Accept, Reject, or Decline behavior. Do not extrapolate observed embeds, vendors, or requests into unobserved cookies, fingerprinting, tracking, or processing. The CertScore score covers observable scan signals only; do not infer unobserved technologies or legal compliance status, and never interpret no-go, not-observed, or limited coverage as proof of compliance."
-  );
+  assert.match(bundle?.description ?? "", /Post-refusal observation may intentionally stop as soon as qualifying non-essential activity/i);
+  assert.match(bundle?.description ?? "", /termination\.kind=evidence_satisfied is positive evidence/i);
+  assert.match(bundle?.description ?? "", /coverageLimitations scoped to additional behavior or persistence that was not measured/i);
+  assert.match(bundle?.description ?? "", /Missing consent-action evidence does not establish Accept, Reject, or Decline behavior/i);
 });
 
 test("certscore_scan_site parameter guidance preserves economical intent-aligned selection", () => {
@@ -465,13 +465,21 @@ test("API v2 draft OpenAPI locks resource path and operation names", () => {
   };
   walk(document.paths);
 
-  assert.equal(document.info.version, "0.1.7");
+  assert.equal(document.info.version, "0.1.8");
   assert.ok(document.paths["/api/v2/keys/request"]);
   assert.ok(document.paths["/api/v2/auth/check"]);
   assert.ok(document.paths["/api/v2/scans"]);
   assert.deepEqual(
     document.components.schemas.CreateScanRequest.properties.scanFrom.enum,
     ["eu_de", "eu_ie", "california"]
+  );
+  assert.equal(
+    document.components.schemas.Scan.properties.postRefusalObservation.$ref,
+    "#/components/schemas/PostRefusalObservation",
+  );
+  assert.deepEqual(
+    document.components.schemas.PostRefusalObservation.properties.termination.properties.kind.enum,
+    ["evidence_satisfied", "window_elapsed", "unavailable"],
   );
   assert.ok(document.paths["/api/v2/scans/{scanId}/findings/{findingId}"]);
   assert.ok(document.paths["/api/v2/domains/{domain}/latest"]);

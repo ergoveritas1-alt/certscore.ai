@@ -3,6 +3,7 @@ import { createBrowserCleanupScheduler } from "./browser-cleanup";
 import { getWorkerEnv } from "./env";
 import { startValidationDispatcher } from "./validation/dispatcher";
 import {
+  startLocalV2DagLambdaOrphanReconciler,
   startLocalV2DagLambdaResultPoller,
   startPersistedCompletedResultFinalizationRecovery,
 } from "./validation/local-v2-dag-lambda-results";
@@ -69,6 +70,8 @@ function bootstrapValidationWorker() {
     webBaseUrl: env.CERTSCORE_WEB_BASE_URL,
     targetEnvironment: env.CERTSCORE_V2_DAG_LAMBDA_TARGET_ENV
   });
+  // Recovery must still run when a regional result queue is disabled or unavailable.
+  startLocalV2DagLambdaOrphanReconciler();
   startPersistedCompletedResultFinalizationRecovery({
     webBaseUrl: env.CERTSCORE_WEB_BASE_URL,
   });

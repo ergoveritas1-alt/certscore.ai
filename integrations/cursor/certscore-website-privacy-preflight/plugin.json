@@ -1,7 +1,7 @@
 {
   "$schema": "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json",
   "name": "certscore-website-privacy-preflight",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "Free website privacy scanner to detect pre-consent cookies and trackers, CMP and consent controls, privacy-policy, GDPR/ePrivacy and CCPA, and HTTPS/TLS signals.",
   "author": {
     "name": "ErgoVeritas, LLC",

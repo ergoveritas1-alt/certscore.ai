@@ -12,7 +12,7 @@
       "name": "certscore-website-privacy-preflight",
       "source": "integrations/cursor/certscore-website-privacy-preflight",
       "description": "Free website privacy preflight powered by CertScore.ai MCP Light.",
-      "version": "1.0.0",
+      "version": "1.0.1",
       "author": {
         "name": "ErgoVeritas, LLC",
         "email": "support@certscore.ai"

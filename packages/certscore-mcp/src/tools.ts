@@ -10,8 +10,8 @@ const MAX_TOOL_TEXT_CHARS = 8_000;
 const LEGAL_REVIEW_DISCLAIMER = "CertScore results are automated public-web observations for human and agentic review, not legal advice, certification, or a compliance determination.";
 const SCAN_PROVENANCE_GROUNDING = "retrievalMode describes how the current tool response obtained the scan; creationDecision describes whether the original scan request created or reused a scan only when that decision is retained. Never infer an unknown creationDecision from scan_id_lookup. For a reused or retrieved existing scan, use only persisted scanFrom and timestamps. Never infer its original scan region from the current request, the user's location, or a default execution region. If persisted region or timestamps are unavailable, report them as unavailable.";
 const INTERPRETATION_STATEMENT = "The CertScore score covers observable public-web scan signals only. Do not infer technologies that are not listed in the returned evidence or any legal compliance status.";
-const SCAN_BUNDLE_RESPONSE_CONTRACT = `Response contract: Report only observed CertScore evidence and CertScore classifications. criticality, priority, and confidence are CertScore metadata; regulatory review lenses are non-determinative CertScore review context—not legal severity, legal exposure, or a compliance determination. Absence of captured consent-action evidence does not establish what happens after Accept, Reject, or Decline. Do not extrapolate an observed embed, vendor, or request into unobserved cookies, fingerprinting, tracking, or processing, and do not infer violations or compliance beyond what CertScore observed. ${SCAN_PROVENANCE_GROUNDING}`;
-const SCAN_BUNDLE_INTERPRETATION_STATEMENT = "Report only observed CertScore evidence and persisted CertScore classifications. Without corresponding captured post-action evidence, do not infer what Accept, Reject, Decline, or another consent action would do; say the scan does not establish what happens after that action. Do not speculate that an observed embed, vendor, or request may cause additional cookies, fingerprinting, tracking, or processing unless CertScore observed that behavior. Treat returned priority or severity as a CertScore classification, not regulatory criticality or legal exposure; prefer ‘observed privacy risk signal’ or ‘CertScore finding’. Do not infer unobserved technologies, legal compliance, or a legal violation from scores or findings.";
+const SCAN_BUNDLE_RESPONSE_CONTRACT = `Response contract: Report only observed CertScore evidence and CertScore classifications. criticality, priority, and confidence are CertScore metadata; regulatory review lenses are non-determinative CertScore review context—not legal severity, legal exposure, or a compliance determination. Absence of captured consent-action evidence does not establish what happens after Accept, Reject, or Decline. A confirmed post-refusal observation with termination.kind=evidence_satisfied means the observer intentionally stopped after retaining qualifying evidence; do not treat that termination as uncertainty about the returned observation. Keep any separately returned coverage limitation scoped to what was not measured. Do not extrapolate an observed embed, vendor, or request into unobserved cookies, fingerprinting, tracking, or processing, and do not infer violations or compliance beyond what CertScore observed. ${SCAN_PROVENANCE_GROUNDING}`;
+const SCAN_BUNDLE_INTERPRETATION_STATEMENT = "Report only observed CertScore evidence and persisted CertScore classifications. Without corresponding captured post-action evidence, do not infer what Accept, Reject, Decline, or another consent action would do; say the scan does not establish what happens after that action. When postRefusalObservation is confirmed and termination.kind is evidence_satisfied, state the returned post-refusal observation directly and explain that observation stopped intentionally after qualifying evidence was retained. Do not characterize that termination as uncertainty about the observation; mention unmeasured longer-term persistence only when relevant. Do not speculate that an observed embed, vendor, or request may cause additional cookies, fingerprinting, tracking, or processing unless CertScore observed that behavior. Treat returned priority or severity as a CertScore classification, not regulatory criticality or legal exposure; prefer ‘observed privacy risk signal’ or ‘CertScore finding’. Do not infer unobserved technologies, legal compliance, or a legal violation from scores or findings.";
 const COMPACT_SCAN_BUNDLE_INTERPRETATION_STATEMENT = "Use only returned CertScore observations and classifications. Do not infer unobserved technologies, post-consent behavior, legal compliance, or violations. Treat priority and severity as CertScore metadata.";
 const OBSERVATION_ONLY_DISCLAIMER = `${LEGAL_REVIEW_DISCLAIMER} No-go, not-observed, and limited-coverage results are not proof of compliance.`;
 const COMPACT_OBSERVATION_ONLY_DISCLAIMER = "Automated public-web observation, not legal advice or a compliance determination; missing or limited evidence is not proof of compliance.";
@@ -1178,6 +1178,23 @@ export function scanBundleText(bundle: Record<string, any>) {
     : null;
   if (coverage) {
     append(`Coverage: status=${coverage.status ?? "unknown"}; ${coverage.summary ?? "Review limitations before interpreting absence."}`);
+  }
+  const postRefusal = bundle.postRefusalObservation && typeof bundle.postRefusalObservation === "object" && !Array.isArray(bundle.postRefusalObservation)
+    ? bundle.postRefusalObservation as Record<string, any>
+    : null;
+  if (postRefusal && typeof postRefusal.interpretation === "string") {
+    const termination = postRefusal.termination && typeof postRefusal.termination === "object" && !Array.isArray(postRefusal.termination)
+      ? postRefusal.termination as Record<string, unknown>
+      : null;
+    const intentionalEvidenceStop = termination?.kind === "evidence_satisfied" && termination.intentional === true
+      ? " The observation then stopped intentionally because qualifying evidence had been captured."
+      : "";
+    append(`Reject Path: ${postRefusal.interpretation}${intentionalEvidenceStop}`);
+    for (const limitation of Array.isArray(postRefusal.coverageLimitations)
+      ? postRefusal.coverageLimitations.slice(0, 3)
+      : []) {
+      append(`Reject Path coverage limitation: ${limitation}`);
+    }
   }
   const overview = executiveOverviewText(bundle.summary?.executiveSummary);
   if (overview) append(overview);

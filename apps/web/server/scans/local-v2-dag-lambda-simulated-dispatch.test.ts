@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { readFile } from "node:fs/promises";
 import {
+  LOCAL_V2_DAG_SIMULATED_EXECUTION_TIMEOUT_MS,
   buildLocalV2DagSimulatedLambdaArgs,
   selectSimulatedLambdaTerminalResultMessages
 } from "./local-v2-dag-lambda-simulated-dispatch";
@@ -90,4 +91,13 @@ test("local Lambda executables exit after their durable handoffs are awaited", a
     assert.ok(successExit > main, `${path} must exit immediately after a successful durable handoff`);
     assert.ok(failureExit > successExit, `${path} must preserve a non-zero failure exit`);
   }
+});
+
+test("simulated Lambda execution is bounded below the orphan terminal deadline", async () => {
+  const source = await readFile("apps/web/server/scans/local-v2-dag-lambda-simulated-dispatch.ts", "utf8");
+
+  assert.equal(LOCAL_V2_DAG_SIMULATED_EXECUTION_TIMEOUT_MS, 915_000);
+  assert.ok(LOCAL_V2_DAG_SIMULATED_EXECUTION_TIMEOUT_MS < 930_000);
+  assert.match(source, /timeout: LOCAL_V2_DAG_SIMULATED_EXECUTION_TIMEOUT_MS/);
+  assert.match(source, /killSignal: "SIGTERM"/);
 });

@@ -1,0 +1,33 @@
+{
+  "name": "certscore-website-privacy-preflight",
+  "version": "1.0.0",
+  "description": "Evidence-backed privacy preflight for public websites using CertScore.ai MCP Light.",
+  "author": {
+    "name": "ErgoVeritas, LLC",
+    "email": "support@certscore.ai",
+    "url": "https://certscore.ai"
+  },
+  "homepage": "https://certscore.ai/mcp/light",
+  "repository": "https://github.com/ergoveritas1-alt/certscore.ai",
+  "license": "LicenseRef-CertScore-Developer-Preview",
+  "keywords": ["certscore", "mcp", "privacy", "website-analysis", "preflight"],
+  "skills": "./skills/",
+  "interface": {
+    "displayName": "Website Privacy Preflight",
+    "shortDescription": "Review public-site privacy signals with retained evidence.",
+    "longDescription": "Use CertScore.ai MCP Light to scan a public website, follow the bounded scan lifecycle, and summarize persisted privacy findings, evidence, provenance, and coverage limitations for human review.",
+    "developerName": "ErgoVeritas, LLC",
+    "category": "Developer Tools",
+    "capabilities": ["Interactive", "Read"],
+    "websiteURL": "https://certscore.ai/mcp/light",
+    "privacyPolicyURL": "https://certscore.ai/privacy",
+    "termsOfServiceURL": "https://certscore.ai/terms",
+    "defaultPrompt": [
+      "Run a privacy preflight for this public website.",
+      "Review this vendor website's observable privacy signals.",
+      "Check this launch URL for cookies, trackers, and consent signals."
+    ],
+    "brandColor": "#0B5CAB"
+  },
+  "mcpServers": "./.mcp.json"
+}
