@@ -205,7 +205,7 @@ OpenAI negative review cases:
 
 Release notes:
 
-> Adds explicit guidance and review coverage for CertScore's bounded post-refusal cookie and tracker observation on eligible sites after a confirmed Reject action. The plugin uses the production CertScore MCP Light endpoint to run or reuse bounded public-website scans and summarize persisted privacy findings, evidence, provenance, and coverage limitations. No authentication is required. Results are observational and are not legal advice, certification, or a compliance determination.
+> Upgrades CertScore.ai Privacy Scanner with bounded Reject Path review on eligible sites: after a confirmed Reject action, CertScore can report persisted non-essential cookie or tracker activity with provenance and explicit coverage limitations. The plugin also reviews pre-consent cookies and trackers, consent controls and CMP signals, privacy-policy transparency, GDPR/ePrivacy and CCPA/CPRA context, and HTTPS/TLS observations. It can reuse eligible recent scans, return the CertScore score and supporting evidence, and link to the full report. Results are observational and are not legal advice, certification, or a compliance determination.
 
 The repository package deliberately does not contain a fabricated `.app.json`. If ChatGPT developer mode creates a registered MCP connection for local testing, use its real `plugin_asdk_app...` technical ID at that time. Direct MCP users remain on the stable endpoint and do not need this plugin package for runtime access.
 
