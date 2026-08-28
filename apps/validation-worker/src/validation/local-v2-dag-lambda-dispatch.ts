@@ -1,4 +1,5 @@
 import { SendMessageCommand, SQSClient } from "@aws-sdk/client-sqs";
+import type { PostRefusalLambdaDispatchConfig } from "@certscore/contracts";
 import { query, withWriteTransaction } from "@website-signal-risk-scanner/db";
 import { isFreshPriorScanAccelerationSource } from "@website-signal-risk-scanner/shared";
 import { randomUUID } from "node:crypto";
@@ -97,6 +98,59 @@ function policySurfaceSeeds(scanConfig: Record<string, unknown>) {
   return [...selected.values()];
 }
 
+function postRefusalObservationFromIntent(input: {
+  intent: Record<string, unknown>;
+  scanId: string;
+  targetUrl: string;
+}): PostRefusalLambdaDispatchConfig | undefined {
+  if (input.intent.postRefusalRejectWorkerEnabled !== true || input.intent.orchestrationMode !== "sharded") {
+    return undefined;
+  }
+  const rolloutMode = input.intent.postRefusalRejectWorkerRolloutMode === "all_eligible"
+    ? "all_eligible"
+    : "owned_canary";
+  let target: URL;
+  try {
+    target = new URL(input.targetUrl);
+  } catch {
+    return undefined;
+  }
+  const loopback = (target.protocol === "http:" || target.protocol === "https:") &&
+    ["localhost", "127.0.0.1", "[::1]"].includes(target.hostname);
+  const ownedCanary = target.protocol === "https:" &&
+    target.hostname === "ergoveritas.com" &&
+    target.pathname.startsWith("/.well-known/certscore-canary/post-refusal/");
+  const exactProductionTarget = target.protocol === "https:" &&
+    !target.username &&
+    !target.password &&
+    !target.port &&
+    !target.hash;
+  if (!loopback && !ownedCanary && (rolloutMode !== "all_eligible" || !exactProductionTarget)) return undefined;
+  return {
+    enabled: true,
+    rolloutMode,
+    dispatchDelayMs: 500,
+    observationWindowMs: 8_000,
+    confirmationTimeoutMs: 1_500,
+    actionSearchTimeoutMs: 1_500,
+    resolver: {
+      kind: "canonical_cmp_registry",
+      recipeSetId: "canonical-cmp-registry-reject-v7",
+    },
+    interactionAuthorization: loopback
+      ? { authorizationId: "loopback_local_lab", kind: "loopback" }
+      : ownedCanary ? {
+          authorizationId: "ergoveritas_owned_post_refusal_canary.v1",
+          kind: "owned_canary",
+        } : {
+          authorizationId: "sharded_scan_exact_target.v1",
+          kind: "scan_target",
+          normalizedUrl: target.toString(),
+          scanId: input.scanId,
+        },
+  };
+}
+
 export function buildDurableLocalV2DagLambdaDispatchPayload(input: {
   scanConfig: Record<string, unknown>;
   scanId: string;
@@ -106,6 +160,12 @@ export function buildDurableLocalV2DagLambdaDispatchPayload(input: {
   const intent = asRecord(execution.v2DagLambda);
   const region = awsRegion(intent.awsRegion);
   const seeds = policySurfaceSeeds(input.scanConfig);
+  const targetUrl = requiredString(input.scanConfig.normalizedUrl, "normalizedUrl");
+  const postRefusalObservation = postRefusalObservationFromIntent({
+    intent,
+    scanId: input.scanId,
+    targetUrl,
+  });
   if (intent.contractVersion !== DISPATCH_CONTRACT_VERSION || intent.processor !== PROCESSOR) {
     throw new Error("Durable Lambda dispatch intent has an unsupported contract or processor.");
   }
@@ -129,6 +189,7 @@ export function buildDurableLocalV2DagLambdaDispatchPayload(input: {
     orchestrationMode: intent.orchestrationMode === "sharded" ? "sharded" as const : "single" as const,
     processor: PROCESSOR,
     ...(seeds.length > 0 ? { policySurfaceSeeds: seeds } : {}),
+    ...(postRefusalObservation ? { postRefusalObservation } : {}),
     productionFindingIntegration: false as const,
     profile: parallel.profile === "tiny" || input.scanConfig.profile === "tiny" ? "tiny" as const : "standard" as const,
     resultHandoff: "sqs" as const,
@@ -137,7 +198,7 @@ export function buildDurableLocalV2DagLambdaDispatchPayload(input: {
     scanId: input.scanId,
     scannerRuntime: SCANNER_RUNTIME,
     targetEnvironment: intent.targetEnvironment === "production" ? "production" as const : "local" as const,
-    targetUrl: requiredString(input.scanConfig.normalizedUrl, "normalizedUrl"),
+    targetUrl,
     vpcMode: intent.vpcMode,
   };
 }

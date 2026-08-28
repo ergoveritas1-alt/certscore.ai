@@ -286,8 +286,16 @@ jobs:
             del(.taskDefinitionArn,.revision,.status,.requiresAttributes,.compatibilities,.registeredAt,.registeredBy,.deregisteredAt)
             | .containerDefinitions[0].image = $image
             | .containerDefinitions[0].environment = (
-                [(.containerDefinitions[0].environment // [])[] | select(.name != "CERTSCORE_CHROME_EXTENSION_STORE_URL")]
-                + [{name:"CERTSCORE_CHROME_EXTENSION_STORE_URL",value:$extension_url}]
+                [(.containerDefinitions[0].environment // [])[] | select(
+                  .name != "CERTSCORE_CHROME_EXTENSION_STORE_URL"
+                  and .name != "CERTSCORE_POST_REFUSAL_REJECT_WORKER_ENABLED"
+                  and .name != "CERTSCORE_POST_REFUSAL_REJECT_WORKER_ROLLOUT_MODE"
+                )]
+                + [
+                    {name:"CERTSCORE_CHROME_EXTENSION_STORE_URL",value:$extension_url},
+                    {name:"CERTSCORE_POST_REFUSAL_REJECT_WORKER_ENABLED",value:"1"},
+                    {name:"CERTSCORE_POST_REFUSAL_REJECT_WORKER_ROLLOUT_MODE",value:"all_eligible"}
+                  ]
               )
           ' current-task-definition.json > target-task-definition.json
 
