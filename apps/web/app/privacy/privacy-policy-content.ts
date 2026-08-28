@@ -11,7 +11,7 @@ export const CERTSCORE_PRIVACY_POLICY_SECTIONS = [
   {
     title: "1. Overview",
     body: [
-      "This Privacy Policy describes how CertScore.ai collects, uses, stores, and retains information when you use certscore.ai and the CertScore.ai service.",
+      "This Privacy Policy describes how CertScore.ai collects, uses, stores, and retains information when you use certscore.ai, the CertScore.ai service, or the CertScore.ai Website Privacy Scanner MCP app distributed through Microsoft Marketplace.",
       "CertScore.ai is the controller of personal data described in this policy unless this policy states otherwise. Contact the controller at privacy@certscore.ai."
     ]
   },
