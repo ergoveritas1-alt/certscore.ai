@@ -135,7 +135,7 @@ function postRefusalObservationFromIntent(input: {
     actionSearchTimeoutMs: 1_500,
     resolver: {
       kind: "canonical_cmp_registry",
-      recipeSetId: "canonical-cmp-registry-reject-v7",
+      recipeSetId: "canonical-consent-control-reject-v8",
     },
     interactionAuthorization: loopback
       ? { authorizationId: "loopback_local_lab", kind: "loopback" }

@@ -150,15 +150,15 @@ test("toToolResult returns concise text and structured content without duplicati
   assert.equal(result.content[0]?.text, "CertScore fixture. Full result is in structuredContent.");
 });
 
-test("guided scan and status TextContent exposes the canonical report URL from scanId", () => {
+test("guided active scan status withholds the report URL until the canonical report is ready", () => {
   const result = toToolResult(withMcpAgentGuidance({
     type: "certscore_scan_job",
     scanId: "scan_123",
     status: "running"
   }));
 
-  assert.equal((result.structuredContent as Record<string, unknown>).reportUrl, "https://certscore.ai/scan/scan_123");
-  assert.match(result.content[0]?.type === "text" ? result.content[0].text : "", /full report=https:\/\/certscore\.ai\/scan\/scan_123/);
+  assert.equal((result.structuredContent as Record<string, unknown>).reportUrl, null);
+  assert.doesNotMatch(result.content[0]?.type === "text" ? result.content[0].text : "", /full report=/);
 });
 
 test("buildScanBundle honors the caller's byte budget", () => {
@@ -1251,9 +1251,12 @@ test("toToolError promotes typed creation quota details", () => {
     status: 429
   }));
   const payload = JSON.parse(result.content[0]?.type === "text" ? result.content[0].text : "{}") as {
-    error?: { creationRateLimit?: unknown };
+    error?: { creationRateLimit?: unknown; recommendedNextAction?: string; retryAfterSeconds?: number | null };
   };
   assert.deepEqual(payload.error?.creationRateLimit, creationRateLimit);
+  assert.equal(payload.error?.retryAfterSeconds, 30);
+  assert.match(payload.error?.recommendedNextAction ?? "", /No scan was created/i);
+  assert.match(payload.error?.recommendedNextAction ?? "", /contact support@certscore\.ai/i);
 });
 
 test("paginateFindingList applies MCP-side limit and offset", () => {

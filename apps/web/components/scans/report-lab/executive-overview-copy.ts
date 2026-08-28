@@ -15,6 +15,7 @@ type ExecutiveOverviewInput = {
   limitedItems: string[];
   positiveCount: number;
   rejectPath?: {
+    note?: string | null;
     observationWindowMs: number | null;
     state: "issue_observed" | "review_signal" | "no_issue_observed" | "incomplete";
   } | null;
@@ -64,6 +65,7 @@ export function buildExecutiveOverview(input: ExecutiveOverviewInput) {
     && input.controls.options === "Not observed";
   const limitedItems = [...new Set(input.limitedItems.map((item) => item.trim()).filter(Boolean))];
   const rejectObservationWindowMs = input.rejectPath?.observationWindowMs;
+  const rejectIncompleteReason = input.rejectPath?.note?.trim();
   const rejectWindow = typeof rejectObservationWindowMs === "number"
     ? `${Number.isInteger(rejectObservationWindowMs / 1_000) ? rejectObservationWindowMs / 1_000 : Math.round(rejectObservationWindowMs / 100) / 10}-second`
     : "bounded";
@@ -74,12 +76,14 @@ export function buildExecutiveOverview(input: ExecutiveOverviewInput) {
       : input.rejectPath?.state === "no_issue_observed"
         ? `The confirmed Reject path completed without a qualifying issue in the retained ${rejectWindow} post-Reject window.`
         : input.rejectPath?.state === "incomplete"
-          ? "Reject-path testing did not complete and did not affect the score."
+          ? rejectIncompleteReason
+            ? `Reject-path testing did not complete and did not affect the score. ${rejectIncompleteReason}`
+            : "Reject-path testing did not complete and did not affect the score."
           : null;
   const limitation = (() => {
     if (input.limitedCount === 0) return "No checklist items were technically limited in this retained scan.";
     if (input.limitedCount === 1 && limitedItems[0] === "Post-choice tracking reduction") {
-      return "Post-choice tracking was not tested because consent controls are not clicked; it remains unassessed.";
+      return "Post-choice tracking was not tested and remains unassessed without a confirmed refusal state.";
     }
     if (input.limitedCount === 1 && limitedItems[0]) {
       return `Limited evidence remains for ${limitedItems[0]}; verify that row manually.`;

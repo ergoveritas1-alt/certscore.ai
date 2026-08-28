@@ -30,6 +30,7 @@ import {
   authorizePostRefusalTarget,
   type PostRefusalInteractionAuthorization,
 } from "./post-refusal-target-authorization.js";
+import { captureConsentControlGeometry } from "./consent-control-geometry.js";
 
 const POST_REFUSAL_SOURCE = "post_refusal_observer";
 const DEFAULT_OBSERVATION_WINDOW_MS = 8_000;
@@ -51,7 +52,12 @@ export interface PostRefusalActionRecipe {
   artifactVersion: "certscore.post_refusal_action_recipe.v1";
   recipeId: string;
   cmpId?: string;
-  resolverMethod?: "local_fixture_recipe" | "cmp_registry_recipe" | "tcf_api_cmp_registry_recipe";
+  resolverMethod?:
+    | "local_fixture_recipe"
+    | "cmp_registry_recipe"
+    | "tcf_api_cmp_registry_recipe"
+    | "owned_site_recipe"
+    | "canonical_consent_control_registry_recipe";
   controlSelector: string;
   bannerSelector?: string;
   confirmation:
@@ -80,6 +86,11 @@ export interface PostRefusalActionRecipe {
         purposeIds?: number[];
         storageType: "local_storage" | "session_storage";
         keys: string[];
+      }
+    | {
+        kind: "canonical_reject_transition";
+        controlSelector: string;
+        bannerSelector: string;
       };
 }
 
@@ -96,6 +107,13 @@ export interface PostRefusalObserverInput {
    */
   recipeCandidates?: PostRefusalActionRecipe[];
   recipeSetId?: string;
+  /**
+   * When registered CMP and owned-site recipes do not resolve, use the
+   * canonical consent-control inventory to select one unambiguous visible
+   * first-layer Reject control. Confirmation still requires a retained
+   * post-action transition; classification alone never confirms refusal.
+   */
+  allowCanonicalRejectDiscovery?: boolean;
   scanStartedAtMs?: number;
   dispatchDelayMs?: number;
   observationWindowMs?: number;
@@ -169,11 +187,22 @@ type RefusalConfirmationBaseline =
       snapshot?: TcfDataSnapshot;
       storageStateHashes: Record<string, string | undefined>;
       lastSequence: number;
+    }
+  | {
+      kind: "canonical_reject_transition";
+      controlVisible: boolean;
+      bannerVisible: boolean;
+      lastSequence: number;
+      pageUrl: string;
     };
 
 type RefusalConfirmationState = {
   stateHash: string;
-  witnessType: "cmp_storage_state" | "tcf_user_action_complete" | "cmp_cookie_state";
+  witnessType:
+    | "cmp_storage_state"
+    | "tcf_user_action_complete"
+    | "cmp_cookie_state"
+    | "canonical_refusal_state";
   key?: string;
   expectedState: string;
 };
@@ -614,12 +643,21 @@ export async function runPostRefusalObserver(
     }
 
     const resolverStartedAtMs = Date.now();
-    const resolution = await waitForDeterministicRecipe(
+    let resolution = await waitForDeterministicRecipe(
       page,
       actionRecipes,
-      actionSearchTimeoutMs,
+      input.allowCanonicalRejectDiscovery
+        ? Math.min(500, actionSearchTimeoutMs)
+        : actionSearchTimeoutMs,
       input.signal,
     );
+    if (resolution.status === "not_found" && input.allowCanonicalRejectDiscovery) {
+      resolution = await waitForCanonicalRejectControlRecipe(
+        page,
+        Math.max(0, actionSearchTimeoutMs - Math.min(500, actionSearchTimeoutMs)),
+        input.signal,
+      );
+    }
     timing.resolverMs = Math.max(0, Date.now() - resolverStartedAtMs);
     if (resolution.status !== "found") {
       const resolverReason = resolution.status === "ambiguous"
@@ -1559,6 +1597,60 @@ async function waitForDeterministicRecipe(
   return { status: "not_found" };
 }
 
+async function waitForCanonicalRejectControlRecipe(
+  page: Page,
+  timeoutMs: number,
+  signal?: AbortSignal,
+): Promise<DeterministicRecipeResolution> {
+  const deadlineAtMs = Date.now() + timeoutMs;
+  do {
+    if (signal?.aborted) return { status: "aborted" };
+    const geometry = await captureConsentControlGeometry(page, {
+      candidateLimit: 48,
+      containerLimit: 16,
+      timeoutMs: Math.max(250, Math.min(750, timeoutMs || 250)),
+    }).catch(() => undefined);
+    const candidates = geometry?.candidates.filter((candidate) =>
+      candidate.actionType === "reject_all" &&
+      candidate.decisionStatus === "confirmed_visible" &&
+      candidate.layer === "first_layer" &&
+      candidate.frameContext.frameKind === "main_frame" &&
+      candidate.enabled &&
+      candidate.intersectsViewport &&
+      candidate.classifierConfidence >= 0.8 &&
+      candidate.consentContextConfirmed &&
+      Boolean(candidate.selectorHint)
+    ) ?? [];
+    if (candidates.length > 1) return { status: "ambiguous" };
+    const candidate = candidates[0];
+    if (candidate) {
+      const transitionSurfaceSelector = candidate.containerSelectorHint ?? candidate.selectorHint;
+      const recipe: PostRefusalActionRecipe = {
+        artifactVersion: "certscore.post_refusal_action_recipe.v1",
+        recipeId: `canonical-control:reject:v1:${hashValue([
+          candidate.normalizedLabel,
+          candidate.selectorHint,
+          transitionSurfaceSelector,
+        ].join("\n")).slice(0, 24)}`,
+        ...(geometry?.cmp.name ? { cmpId: geometry.cmp.name } : {}),
+        resolverMethod: "canonical_consent_control_registry_recipe",
+        controlSelector: candidate.selectorHint,
+        bannerSelector: transitionSurfaceSelector,
+        confirmation: {
+          kind: "canonical_reject_transition",
+          controlSelector: candidate.selectorHint,
+          bannerSelector: transitionSurfaceSelector,
+        },
+      };
+      const resolved = await waitForDeterministicRecipe(page, [recipe], 100, signal);
+      if (resolved.status !== "not_found") return resolved;
+    }
+    if (Date.now() >= deadlineAtMs) break;
+    await waitForDelay(Math.min(50, Math.max(0, deadlineAtMs - Date.now())), signal).catch(() => undefined);
+  } while (Date.now() <= deadlineAtMs);
+  return { status: "not_found" };
+}
+
 function validatedActionRecipes(input: PostRefusalObserverInput): PostRefusalActionRecipe[] {
   const recipes = input.recipeCandidates?.length ? input.recipeCandidates : [input.recipe];
   if (recipes.length > 8) {
@@ -1611,7 +1703,9 @@ function candidateSetResolverMethod(
     ? "tcf_api_cmp_registry_recipe"
     : recipes.every((recipe) => recipe.resolverMethod === "cmp_registry_recipe")
       ? "cmp_registry_recipe"
-      : "local_fixture_recipe";
+      : recipes.every((recipe) => recipe.resolverMethod === "local_fixture_recipe")
+        ? "local_fixture_recipe"
+        : "canonical_consent_control_registry_recipe";
 }
 
 async function waitForRefusalConfirmation(
@@ -1623,6 +1717,43 @@ async function waitForRefusalConfirmation(
   timeoutMs: number,
   signal?: AbortSignal,
 ): Promise<RefusalConfirmationState | undefined> {
+  if (confirmation.kind === "canonical_reject_transition") {
+    if (
+      baseline.kind !== "canonical_reject_transition" ||
+      !baseline.controlVisible ||
+      !baseline.bannerVisible
+    ) return undefined;
+    const deadlineAtMs = Date.now() + timeoutMs;
+    while (Date.now() <= deadlineAtMs) {
+      if (signal?.aborted) return undefined;
+      const [controlVisible, bannerVisible] = await Promise.all([
+        locatorIsVisible(page, confirmation.controlSelector),
+        locatorIsVisible(page, confirmation.bannerSelector),
+      ]);
+      const refusalState = await findCanonicalRefusalStateWrite(
+        context,
+        page,
+        baseline.lastSequence,
+        actionDispatchedAtEpochMs,
+      );
+      if (
+        !controlVisible &&
+        !bannerVisible &&
+        page.url() === baseline.pageUrl &&
+        refusalState
+      ) {
+        return {
+          stateHash: refusalState.stateHash,
+          witnessType: "canonical_refusal_state",
+          key: refusalState.key,
+          expectedState: "canonical_consent_refusal_state_written_after_action",
+        };
+      }
+      await waitForDelay(25, signal).catch(() => undefined);
+    }
+    return undefined;
+  }
+
   if (confirmation.kind === "local_storage_equals") {
     const value = await waitForLocalStorageValue(
       page,
@@ -1762,6 +1893,20 @@ async function captureRefusalConfirmationBaseline(
   page: Page,
   confirmation: PostRefusalActionRecipe["confirmation"],
 ): Promise<RefusalConfirmationBaseline> {
+  if (confirmation.kind === "canonical_reject_transition") {
+    const [controlVisible, bannerVisible, writes] = await Promise.all([
+      locatorIsVisible(page, confirmation.controlSelector),
+      locatorIsVisible(page, confirmation.bannerSelector),
+      readStorageWrites(page),
+    ]);
+    return {
+      kind: "canonical_reject_transition",
+      controlVisible,
+      bannerVisible,
+      lastSequence: writes.at(-1)?.sequence ?? 0,
+      pageUrl: page.url(),
+    };
+  }
   if (confirmation.kind === "local_storage_equals") {
     return {
       kind: "local_storage_equals",
@@ -1813,6 +1958,70 @@ async function captureRefusalConfirmationBaseline(
     kind: "tcf_purposes_denied",
     snapshot: await readTcfData(page).catch(() => undefined),
   };
+}
+
+async function locatorIsVisible(page: Page, selector: string): Promise<boolean> {
+  const locator = page.locator(selector);
+  const count = Math.min(await locator.count().catch(() => 0), 2);
+  for (let index = 0; index < count; index += 1) {
+    if (await locator.nth(index).isVisible().catch(() => false)) return true;
+  }
+  return false;
+}
+
+const CANONICAL_CONSENT_STATE_KEY_PATTERN =
+  /(?:consent|cookie|privacy|tracking|analytics|marketing|advertising|opt[-_]?out)/i;
+const CANONICAL_REFUSAL_STATE_PATTERN =
+  /(?:^|[^a-z])(?:denied|rejected|reject(?:ed)?[_ -]?all|essential[_ -]?only|necessary[_ -]?only|opted[_ -]?out)(?:$|[^a-z])/i;
+const CANONICAL_DISABLED_PURPOSE_PATTERN =
+  /["']?(?:analytics|marketing|advertising|tracking)["']?\s*[:=]\s*(?:false|0|["']denied["'])/i;
+
+async function findCanonicalRefusalStateWrite(
+  context: BrowserContext,
+  page: Page,
+  baselineSequence: number,
+  actionDispatchedAtEpochMs: number,
+): Promise<{ key: string; stateHash: string } | undefined> {
+  const writes = (await readStorageWrites(page)).filter((write) =>
+    write.sequence > baselineSequence &&
+    write.observedAtEpochMs >= actionDispatchedAtEpochMs &&
+    CANONICAL_CONSENT_STATE_KEY_PATTERN.test(write.name)
+  );
+  for (const write of writes) {
+    let value: string | undefined;
+    if (write.storageType === "cookie") {
+      const matches = (await context.cookies()).filter((cookie) => cookie.name === write.name);
+      if (matches.length === 1) value = matches[0]?.value;
+    } else {
+      value = await page.evaluate(({ key, storageType }) => {
+        try {
+          return (storageType === "local_storage" ? window.localStorage : window.sessionStorage).getItem(key) ?? undefined;
+        } catch {
+          return undefined;
+        }
+      }, { key: write.name, storageType: write.storageType }).catch(() => undefined);
+    }
+    if (!value) continue;
+    let decodedValue = value.slice(0, 2_048);
+    try {
+      decodedValue = decodeURIComponent(decodedValue);
+    } catch {
+      // Inspect the bounded original when the value is not valid URI encoding.
+    }
+    const normalized = decodedValue.trim().toLowerCase();
+    const explicitBooleanDenial = (normalized === "false" || normalized === "0") &&
+      CANONICAL_CONSENT_STATE_KEY_PATTERN.test(write.name);
+    if (
+      !explicitBooleanDenial &&
+      !CANONICAL_REFUSAL_STATE_PATTERN.test(normalized) &&
+      !CANONICAL_DISABLED_PURPOSE_PATTERN.test(normalized)
+    ) continue;
+    return {
+      key: write.name.slice(0, 160),
+      stateHash: hashValue(value),
+    };
+  }
+  return undefined;
 }
 
 async function cmpStorageStateHash(

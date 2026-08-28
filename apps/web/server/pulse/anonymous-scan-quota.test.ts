@@ -115,18 +115,24 @@ test("anonymous scan quota errors are identifiable without exposing requester da
   const error = new AnonymousScanQuotaError(123);
 
   assert.equal(isAnonymousScanQuotaError(error), true);
-  assert.equal(error.message.includes("123"), false);
+  assert.match(error.message, /No scan was created/i);
+  assert.match(error.message, /2 minutes 3 seconds/i);
   assert.match(error.message, /20 genuinely new scans/);
   assert.match(error.message, /support@certscore\.ai/);
   assert.match(error.message, /login\?mode=create_account/);
   assert.match(error.message, /does not automatically change the anonymous endpoint limit/i);
   assert.equal(error.retryAfterSeconds, 123);
+  assert.equal(
+    error.recommendedNextAction,
+    "No scan was created. Retry the same request in 2 minutes 3 seconds. If the limit continues after that delay, contact support@certscore.ai."
+  );
 });
 
 test("shared Light scan quota guidance does not imply registration bypasses the active window", () => {
   const error = new AnonymousScanQuotaError(60, { limit: 60, scope: "surface", window: "burst", windowSeconds: 600 });
 
   assert.match(error.message, /60 genuinely new scans per 10 minutes/i);
+  assert.match(error.message, /retry in 1 minute/i);
   assert.match(error.message, /shared public-Light limit/i);
   assert.match(error.message, /registering an account will not bypass/i);
   assert.doesNotMatch(error.message, /login\?mode=create_account/);

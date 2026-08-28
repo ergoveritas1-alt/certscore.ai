@@ -35,6 +35,7 @@ import {
 import { checkDomainDns, isDomainDnsPreflightError } from "../../../../server/domains/domain-dns";
 import { createAnonymousFullScan } from "../../../../server/scans/create-anonymous-full-scan";
 import { getPublicScanRecord, type PublicScanRecord } from "../../../../server/scans/get-public-scan-record";
+import { getPublicScanStatusProjection } from "../../../../server/scans/scan-status-projection";
 import {
   getRecentScanReuseEligibility
 } from "../../../../server/scans/recent-scan-reuse";
@@ -173,7 +174,28 @@ function parseForceNewScan(value: string | null) {
 }
 
 async function loadPulseScanRecord(scanId: string) {
-  return getPublicScanRecord(scanId, { logPrefix: "[pulse]" });
+  const [status, scanRecord] = await Promise.all([
+    getPublicScanStatusProjection(scanId).catch(() => null),
+    getPublicScanRecord(scanId, { logPrefix: "[pulse]" }),
+  ]);
+  if (
+    scanRecord &&
+    scanRecord.scan.status === "completed" &&
+    (
+      !status ||
+      (
+        status.reportProjectionRequired &&
+        !status.reportReady &&
+        (status.status === "completed" || status.status === "completed_limited")
+      )
+    )
+  ) {
+    return {
+      ...scanRecord,
+      scan: { ...scanRecord.scan, status: "finalizing" },
+    } as PublicScanRecord;
+  }
+  return scanRecord;
 }
 
 function pulseUnavailableResponse(input: {
@@ -1113,6 +1135,7 @@ async function handlePulseGET(request: Request, options: PulseRouteOptions = {})
             windowSeconds: error.windowSeconds
           },
           message: error.message,
+          recommendedNextAction: error.recommendedNextAction,
           retryAfterSeconds: error.retryAfterSeconds,
           url: rawUrl,
           detail,

@@ -141,6 +141,7 @@ export interface ConsentControlCandidateEvidence {
   matchStrength?: string;
   classifierReasonCodes: string[];
   classifierConfidence: number;
+  consentContextConfirmed?: boolean;
   diagnosticClassifications?: ConsentControlDiagnosticClassification[];
   effectiveVisibility?: "direct" | "visible_via_actionable_proxy";
   actionableControlCandidateId?: string;
@@ -268,7 +269,7 @@ const DEFAULT_CONTAINER_LIMIT = 12;
 // Browser-side patterns only broaden candidate/context capture; canonical intent
 // classification and production credit still flow through the contracts classifier.
 const CONSENT_CONTEXT_PATTERN = canonicalPhrasePattern([
-  "cookie", "cookies", "consent", "privacy", "tracking", "advertising", "marketing",
+  "cookie", "cookies", "consent", "privacy", "tracking", "analytics", "advertising", "marketing",
   "optanon", "onetrust", "cmp", "trustarc", "didomi", "usercentrics", "cookiebot", "consentmanager",
   "drupal", "eu cookie compliance", "sliding popup",
   ...PRIVACY_EVIDENCE_LOCALE_REGISTRY.flatMap((entry) => entry.contextHints),
@@ -824,6 +825,7 @@ function buildCandidateEvidence(
     matchStrength: classification.matchStrength,
     classifierReasonCodes: classification.reasonCodes,
     classifierConfidence: classification.confidence,
+    consentContextConfirmed: CONSENT_CONTEXT_PATTERN.test(candidate.contextText),
     diagnosticClassifications,
     effectiveVisibility: decisionStatus === "confirmed_visible" ? "direct" : undefined,
     decisionStatus,

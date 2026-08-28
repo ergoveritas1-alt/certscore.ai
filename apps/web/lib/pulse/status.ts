@@ -91,7 +91,10 @@ export function buildPulseStatus(input: PulseStatusInput) {
   const completedSteps = PULSE_STATUS_STEPS.slice(0, phaseIndex).filter((step) => step !== "completed");
   const remainingSteps = PULSE_STATUS_STEPS.slice(phaseIndex + 1);
   const resultUrl = input.resultUrl ?? absoluteUrl(`/api/v1/pulse?jobId=${input.jobId}`);
-  const reportUrl = input.reportUrl ?? (input.scanId ? absoluteUrl(`/scan/${input.scanId}`) : null);
+  const reportReady = effectiveStatus === "completed" || effectiveStatus === "completed_limited";
+  const reportUrl = reportReady
+    ? input.reportUrl ?? (input.scanId ? absoluteUrl(`/scan/${input.scanId}`) : null)
+    : null;
 
   return {
     type: "certscore_pulse_status",

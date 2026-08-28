@@ -201,7 +201,7 @@ test("normal sharded reject dispatch binds the canonical resolver to an exact sc
     rolloutMode: "all_eligible",
     resolver: {
       kind: "canonical_cmp_registry",
-      recipeSetId: "canonical-cmp-registry-reject-v7",
+      recipeSetId: "canonical-consent-control-reject-v8",
     },
     interactionAuthorization: {
       authorizationId: "sharded_scan_exact_target.v1",

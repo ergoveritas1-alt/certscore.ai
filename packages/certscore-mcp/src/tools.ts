@@ -52,18 +52,11 @@ function toolResultSummary(payload: unknown) {
   const recordLinks = record.links && typeof record.links === "object" && !Array.isArray(record.links)
     ? record.links as Record<string, unknown>
     : null;
-  const stableScanId = typeof record.scanId === "string" && record.scanId.trim()
-    ? record.scanId.trim()
-    : typeof record.scan_id === "string" && record.scan_id.trim()
-      ? record.scan_id.trim()
-      : null;
   const reportUrl = typeof record.reportUrl === "string" && record.reportUrl.trim()
     ? record.reportUrl.trim()
     : typeof recordLinks?.report === "string" && recordLinks.report.trim()
       ? recordLinks.report.trim()
-      : stableScanId
-        ? `https://certscore.ai/scan/${encodeURIComponent(stableScanId)}`
-        : null;
+      : null;
   const report = reportUrl ? `; full report=${reportUrl}` : "";
   const provenanceRecord = record.provenance && typeof record.provenance === "object" && !Array.isArray(record.provenance)
     ? record.provenance as Record<string, unknown>
@@ -113,10 +106,15 @@ export function toToolError(error: unknown): CallToolResult {
         : null;
   const code = error instanceof CertScoreError ? error.code : "internal_error";
   const message = error instanceof Error ? error.message : "Unknown CertScore MCP error.";
+  const creationRateLimit = terminalError?.creationRateLimit && typeof terminalError.creationRateLimit === "object" && !Array.isArray(terminalError.creationRateLimit)
+    ? terminalError.creationRateLimit
+    : null;
   const recommendedNextAction = typeof terminalError?.recommendedNextAction === "string"
     ? terminalError.recommendedNextAction
+    : creationRateLimit
+      ? `No scan was created. Wait ${retryAfterSeconds ?? 30} seconds, then retry the same request. If the limit continues after that delay, contact support@certscore.ai.`
     : retryable
-      ? `Wait ${retryAfterSeconds ?? 30} seconds, then retry the same request. Stop and contact CertScore support if the error repeats.`
+      ? `Wait ${retryAfterSeconds ?? 30} seconds, then retry the same request. Stop and contact support@certscore.ai if the error repeats.`
       : "Correct the request using the error details, then retry only if the requested operation is still appropriate.";
   const payload = {
     error: {
@@ -125,8 +123,8 @@ export function toToolError(error: unknown): CallToolResult {
       retryable,
       retryAfterSeconds,
       recommendedNextAction,
-      ...(terminalError?.creationRateLimit && typeof terminalError.creationRateLimit === "object" && !Array.isArray(terminalError.creationRateLimit)
-        ? { creationRateLimit: terminalError.creationRateLimit }
+      ...(creationRateLimit
+        ? { creationRateLimit }
         : {}),
       ...(error instanceof CertScoreError ? {
         name: error.name,
@@ -320,13 +318,15 @@ export function withMcpAgentGuidance<T extends Record<string, any>>(value: T, fa
     : typeof value.scan_id === "string" && value.scan_id.trim()
       ? value.scan_id.trim()
       : null;
-  const reportUrl = typeof value.reportUrl === "string" && value.reportUrl.trim()
-    ? value.reportUrl.trim()
-    : typeof value.links?.report === "string" && value.links.report.trim()
-      ? value.links.report.trim()
-      : stableScanId
-        ? `https://certscore.ai/scan/${encodeURIComponent(stableScanId)}`
-        : null;
+  const reportUrl = usable
+    ? typeof value.reportUrl === "string" && value.reportUrl.trim()
+      ? value.reportUrl.trim()
+      : typeof value.links?.report === "string" && value.links.report.trim()
+        ? value.links.report.trim()
+        : stableScanId
+          ? `https://certscore.ai/scan/${encodeURIComponent(stableScanId)}`
+          : null
+    : null;
   return {
     ...value,
     error,

@@ -6,6 +6,7 @@ import { logPulseGptActionEvent } from "../../../../../../lib/pulse/gpt-action-a
 import { getPulseRequesterContext, trustedMcpInternalRead } from "../../../../../../lib/pulse/request";
 import { buildPulseStatus } from "../../../../../../lib/pulse/status";
 import { getPublicScanRecord } from "../../../../../../server/scans/get-public-scan-record";
+import { getPublicScanStatusProjection } from "../../../../../../server/scans/scan-status-projection";
 import { claimPulseReadQuota, getPulseRequestByJobId, updatePulseRequestLifecycle } from "../../../../../../server/pulse/repository";
 import { logApiReadRateLimited } from "../../../../../../server/pulse/read-rate-log";
 import { pulseRetrievalPrincipal } from "../../../../../../server/pulse/retrieval-quota";
@@ -141,7 +142,18 @@ export async function GET(request: Request, context: RouteContext) {
       ? pulseRequest.request_context.recovery as Record<string, unknown>
       : null;
     if (pulseRequest.scan_id) {
-      const scanRecord = await getPublicScanRecord(pulseRequest.scan_id, { logPrefix: "[pulse-status]" }).catch(() => null);
+      const [scanRecord, statusProjection] = await Promise.all([
+        getPublicScanRecord(pulseRequest.scan_id, { logPrefix: "[pulse-status]" }).catch(() => null),
+        getPublicScanStatusProjection(pulseRequest.scan_id).catch(() => null),
+      ]);
+      const reportFinalizing = Boolean(
+        !statusProjection ||
+        (
+          statusProjection.reportProjectionRequired &&
+          !statusProjection.reportReady &&
+          (statusProjection.status === "completed" || statusProjection.status === "completed_limited")
+        )
+      );
       if (scanRecord?.scan.status === "completed") {
         noGoProjection = projectExternalScanNoGo(scanRecord.runtimeArtifacts);
         const fallback = await queueAlternateRegionRecovery({
@@ -168,13 +180,19 @@ export async function GET(request: Request, context: RouteContext) {
           pulseRequest.status = "queued";
           pulseRequest.phase = "queued";
         } else {
-          status = scanRecord.accessPostureSummary.interruptionReason || scanRecord.scan.pagesScanned < scanRecord.scan.pagesRequested
-            ? "completed_limited"
-            : "completed";
-          completedAt = scanRecord.scan.completedAt;
+          if (reportFinalizing) {
+            status = "finalizing";
+            completedAt = null;
+          } else {
+            status = scanRecord.accessPostureSummary.interruptionReason || scanRecord.scan.pagesScanned < scanRecord.scan.pagesRequested
+              ? "completed_limited"
+              : "completed";
+            completedAt = scanRecord.scan.completedAt;
+          }
         }
-      } else if (scanRecord?.scan.status === "running") {
+      } else if (scanRecord?.scan.status === "running" || scanRecord?.scan.status === "finalizing") {
         status = "running";
+        if (scanRecord.scan.status === "finalizing") status = "finalizing";
       } else if (scanRecord?.scan.status === "failed") {
         status = "failed";
       }
@@ -182,8 +200,8 @@ export async function GET(request: Request, context: RouteContext) {
 
     const phase = ["completed", "completed_limited", "failed", "expired", "rate_limited"].includes(status)
       ? status
-      : status === "running"
-        ? "running"
+      : status === "running" || status === "finalizing"
+        ? status
         : pulseRequest.phase ?? status;
     if (status !== pulseRequest.status || phase !== pulseRequest.phase || (completedAt && !pulseRequest.completed_at)) {
       await updatePulseRequestLifecycle({

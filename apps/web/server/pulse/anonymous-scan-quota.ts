@@ -49,6 +49,15 @@ export function retryAfterNextUtcDay(now = new Date()) {
   return Math.max(1, Math.ceil((nextDay.getTime() - now.getTime()) / 1000));
 }
 
+export function formatAnonymousScanRetryDelay(retryAfterSeconds: number) {
+  const boundedSeconds = Math.max(1, Math.ceil(retryAfterSeconds));
+  const minutes = Math.floor(boundedSeconds / 60);
+  const seconds = boundedSeconds % 60;
+  if (minutes === 0) return `${seconds} ${seconds === 1 ? "second" : "seconds"}`;
+  if (seconds === 0) return `${minutes} ${minutes === 1 ? "minute" : "minutes"}`;
+  return `${minutes} ${minutes === 1 ? "minute" : "minutes"} ${seconds} ${seconds === 1 ? "second" : "seconds"}`;
+}
+
 export function decideAnonymousScanQuota(input: {
   currentCount: number;
   limit?: number;
@@ -165,6 +174,7 @@ export class AnonymousScanQuotaError extends Error {
   readonly code = "anonymous_scan_daily_limit";
   readonly limit: number;
   readonly retryAfterSeconds: number;
+  readonly recommendedNextAction: string;
   readonly scope: LightMcpScanQuotaScope | "requester";
   readonly window: LightMcpScanQuotaWindow | "daily";
   readonly windowSeconds: number | null;
@@ -182,21 +192,23 @@ export class AnonymousScanQuotaError extends Error {
     const window = options?.window ?? "daily";
     const scope = options?.scope ?? "requester";
     const anonymousLimitName = options?.lightMcp ? "anonymous Light MCP limit" : "anonymous endpoint limit";
+    const retryDelay = formatAnonymousScanRetryDelay(retryAfterSeconds);
     const burstMinutes = Math.max(1, Math.round((options?.windowSeconds ?? LIGHT_MCP_NEW_SCAN_POLICY.burstWindowSeconds) / 60));
     const recovery = scope === "surface"
       ? "This is a shared public-Light limit; registering an account will not bypass the active window. Contact support@certscore.ai if it repeatedly affects legitimate use."
       : `If you need higher-volume scanning, create an account at https://certscore.ai/login?mode=create_account and contact support@certscore.ai to request a custom automated-access allowance. Creating an account does not automatically change the ${anonymousLimitName}.`;
     super(
       window === "concurrent"
-        ? `The anonymous Light MCP already has ${limit} active scans for the ${scope} scope. Wait for an active scan to finish, then retry after Retry-After. ${recovery}`
+        ? `No scan was created because the anonymous Light MCP already has ${limit} active scans for the ${scope} scope. Retry in ${retryDelay}, after an active scan has had time to finish. ${recovery}`
         : window === "burst"
-        ? `The anonymous Light MCP allows ${limit} genuinely new scans per ${burstMinutes} minutes for the active ${scope} scope. Reuse an eligible result or wait for Retry-After before trying again. ${recovery}`
-        : `The no-account allowance is ${limit} genuinely new scans per UTC day. ` +
-          `Reuse an eligible recent result or try again after the UTC reset. ${recovery}`
+        ? `No scan was created because the anonymous Light MCP limit of ${limit} genuinely new scans per ${burstMinutes} minutes is active for the ${scope} scope. Reuse an eligible result or retry in ${retryDelay}. ${recovery}`
+        : `No scan was created because the no-account allowance of ${limit} genuinely new scans per UTC day is exhausted. ` +
+          `Reuse an eligible recent result or retry in ${retryDelay}, after the UTC reset. ${recovery}`
     );
     this.name = "AnonymousScanQuotaError";
     this.limit = limit;
     this.retryAfterSeconds = retryAfterSeconds;
+    this.recommendedNextAction = `No scan was created. Retry the same request in ${retryDelay}. If the limit continues after that delay, contact support@certscore.ai.`;
     this.scope = scope;
     this.window = window;
     this.windowSeconds = window === "burst"

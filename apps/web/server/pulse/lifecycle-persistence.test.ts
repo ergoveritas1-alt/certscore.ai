@@ -16,6 +16,21 @@ test("Pulse status polling persists terminal lifecycle state", async () => {
   assert.doesNotMatch(repository, /timezone\('utc', now\(\)\)/);
 });
 
+test("Pulse keeps completed scanner work finalizing until the canonical report projection is ready", async () => {
+  const [pulseRoute, statusRoute, statusBuilder] = await Promise.all([
+    readFile("apps/web/app/api/v1/pulse/route.ts", "utf8"),
+    readFile("apps/web/app/api/v1/pulse/status/[jobId]/route.ts", "utf8"),
+    readFile("apps/web/lib/pulse/status.ts", "utf8"),
+  ]);
+
+  assert.match(pulseRoute, /getPublicScanStatusProjection/);
+  assert.match(pulseRoute, /scan: \{ \.\.\.scanRecord\.scan, status: "finalizing" \}/);
+  assert.match(statusRoute, /const reportFinalizing = Boolean/);
+  assert.match(statusRoute, /status = "finalizing"/);
+  assert.match(statusBuilder, /const reportReady = effectiveStatus === "completed" \|\| effectiveStatus === "completed_limited"/);
+  assert.match(statusBuilder, /reportReady[\s\S]*\? input\.reportUrl/);
+});
+
 test("Pulse timestamptz columns use timezone-aware now without a second timezone conversion", async () => {
   const schemaSource = await readFile("apps/web/server/pulse/schema.ts", "utf8");
   const migration = await readFile("packages/db/migrations/0136_pulse_timestamptz_defaults.sql", "utf8");
@@ -90,7 +105,7 @@ test("scan creation primitives repeat DNS validation immediately before queueing
   const anonymousDns = anonymousSource.indexOf("await requireDomainDns(input.hostname)");
   assert.ok(anonymousDns > anonymousSource.indexOf('reuseDecision?.action === "reuse"'));
   assert.ok(anonymousDns < anonymousSource.indexOf(": await claimAnonymousScanDailyQuota"));
-  assert.ok(anonymousDns < anonymousSource.indexOf("const scan = await createQueuedFullScan"));
+  assert.ok(anonymousDns < anonymousSource.indexOf("scan = await createQueuedFullScan"));
   assert.match(anonymousSource, /resolutionMode: "dns_preflight_rejected"/);
 
   const workspaceDns = workspaceSource.indexOf("const dnsStatus = await checkDomainDns(domainRecord.domain.hostname)");

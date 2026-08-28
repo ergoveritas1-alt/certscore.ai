@@ -62,7 +62,7 @@ export function buildConsentBootstrapScript(googleTagId: string, umami?: {
       }
 
       function loadUmami(){
-        if (w.certscoreUmamiLoaded || !umamiScriptUrl || !umamiWebsiteId) {
+        if (w.certscoreAnalyticsConsent !== 'granted' || w.certscoreUmamiLoaded || !umamiScriptUrl || !umamiWebsiteId) {
           return;
         }
 
@@ -70,7 +70,7 @@ export function buildConsentBootstrapScript(googleTagId: string, umami?: {
         w.certscoreUmamiEventQueue = w.certscoreUmamiEventQueue || [];
 
         w.certscoreBeforeUmamiSend = function(type, payload){
-          if (!payload || typeof payload !== 'object') {
+          if (w.certscoreAnalyticsConsent !== 'granted' || !payload || typeof payload !== 'object') {
             return false;
           }
 
@@ -135,13 +135,12 @@ export function buildConsentBootstrapScript(googleTagId: string, umami?: {
 
       function loadAnalytics(){
         loadGoogleTag();
+        loadUmami();
       }
 
       w.certscoreLoadGoogleTag = loadGoogleTag;
       w.certscoreLoadUmami = loadUmami;
       w.certscoreLoadAnalytics = loadAnalytics;
-
-      loadUmami();
 
       if (storedChoice === 'granted') {
         loadAnalytics();

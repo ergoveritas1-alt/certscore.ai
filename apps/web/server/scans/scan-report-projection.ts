@@ -121,7 +121,7 @@ function projectionFromPersistedRow(row: PersistedScanReportProjectionRow): Scan
   } satisfies ScanDetailResponse;
 }
 
-const COMPLETED_REPORT_CACHE_MAX_ENTRIES = 8;
+const COMPLETED_REPORT_CACHE_MAX_ENTRIES = 32;
 const COMPLETED_REPORT_CACHE_TTL_MS = 10 * 60 * 1000;
 const completedReportProjectionCache = new Map<
   string,

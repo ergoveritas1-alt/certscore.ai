@@ -47,6 +47,7 @@ function AnalyticsConsentPanel(input: {
           </button>
           <button
             type="button"
+            data-certscore-consent-action="reject"
             className={choiceButtonClassName}
             onClick={() => input.onChoose("denied")}
           >

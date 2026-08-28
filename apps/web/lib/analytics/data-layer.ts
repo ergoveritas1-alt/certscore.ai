@@ -144,12 +144,11 @@ export function pushDataLayerEvent(event: CertScoreDataLayerEvent) {
     return;
   }
 
-  pushUmamiEvent(event);
-
   if (!hasAnalyticsConsent()) {
     return;
   }
 
+  pushUmamiEvent(event);
   window.dataLayer = window.dataLayer ?? [];
   const attributedEvent = withCampaignAttribution(event);
   window.dataLayer.push(attributedEvent);
@@ -161,12 +160,11 @@ export function pushDataLayerEventBeforeNavigation(event: CertScoreDataLayerEven
     return Promise.resolve();
   }
 
-  pushUmamiEvent(event);
-
   if (!hasAnalyticsConsent()) {
     return Promise.resolve();
   }
 
+  pushUmamiEvent(event);
   return new Promise<void>((resolve) => {
     let didResolve = false;
     const finish = () => {

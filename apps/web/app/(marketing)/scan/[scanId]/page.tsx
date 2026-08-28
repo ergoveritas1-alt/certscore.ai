@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { notFound, redirect } from "next/navigation";
+import { cache } from "react";
 import { SiteFooter } from "../../../../components/layout/site-footer";
 import { SiteHeader } from "../../../../components/layout/site-header";
 import { PendingScanDetailView } from "../../../../components/scans/pending-scan-detail-view";
@@ -19,6 +20,11 @@ import {
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
+
+const loadReadyReport = cache((scanId: string) =>
+  loadPersistedScanReportProjection({ scanId })
+);
+const loadScanStatus = cache((scanId: string) => getPublicScanStatusProjection(scanId));
 
 type PublicScanDetailPageProps = {
   params: Promise<{ scanId: string }>;
@@ -62,8 +68,10 @@ function pendingReport(
 export async function generateMetadata({ params }: PublicScanDetailPageProps): Promise<Metadata> {
   const { scanId } = await params;
   const localFixture = process.env.NODE_ENV !== "production" && scanId === SHADOW_REPORT_SCAN_ID;
-  const statusProjection = localFixture ? null : await getPublicScanStatusProjection(scanId);
-  const domain = statusProjection?.domainHostname ?? (localFixture ? SHADOW_REPORT.scan.host : null);
+  const persistedReport = localFixture ? null : await loadReadyReport(scanId);
+  const statusProjection = localFixture || persistedReport ? null : await loadScanStatus(scanId);
+  const domain = persistedReport?.scan.domainHostname ?? statusProjection?.domainHostname ??
+    (localFixture ? SHADOW_REPORT.scan.host : null);
   if (!domain) {
     return { title: "Scan not found | CertScore.ai", robots: { follow: false, index: false } };
   }
@@ -81,6 +89,7 @@ export async function generateMetadata({ params }: PublicScanDetailPageProps): P
 }
 
 export default async function PublicScanDetailPage({ params, searchParams }: PublicScanDetailPageProps) {
+  const routeStartedAt = performance.now();
   const [{ scanId }, resolvedSearchParams] = await Promise.all([
     params,
     searchParams ?? Promise.resolve({}),
@@ -92,7 +101,26 @@ export default async function PublicScanDetailPage({ params, searchParams }: Pub
     return <ShadowScanReport report={SHADOW_REPORT} variant="timeline" />;
   }
 
-  const statusProjection = await getPublicScanStatusProjection(scanId);
+  const projectionStartedAt = performance.now();
+  const readyReport = await loadReadyReport(scanId);
+  const projectionLoadMs = Math.round(performance.now() - projectionStartedAt);
+  if (readyReport) {
+    const modelStartedAt = performance.now();
+    const report = buildTimelineReportModel(readyReport);
+    console.info("[public-scan-report] ready projection rendered", {
+      modelBuildMs: Math.round(performance.now() - modelStartedAt),
+      projectionLoadMs,
+      projectionPayloadBytes: readyReport.snapshot?.report_projection_payload_size_bytes ?? null,
+      routeElapsedMs: Math.round(performance.now() - routeStartedAt),
+      scanId,
+      sourceHash: readyReport.snapshot?.report_projection_source_hash ?? null,
+    });
+    return <ShadowScanReport report={report} variant="timeline" />;
+  }
+
+  const statusStartedAt = performance.now();
+  const statusProjection = await loadScanStatus(scanId);
+  const statusLoadMs = Math.round(performance.now() - statusStartedAt);
   if (!statusProjection) notFound();
 
   const waitingForReportProjection =
@@ -109,15 +137,20 @@ export default async function PublicScanDetailPage({ params, searchParams }: Pub
   }
 
   const persistedReportProjection = statusProjection.reportReady
-    ? await loadPersistedScanReportProjection({
-        generation: statusProjection.reportGeneration,
+    ? await loadReadyReport(
         scanId,
-      })
+      )
     : null;
   if (!persistedReportProjection) {
     return pendingReport(statusProjection, true);
   }
 
   const report = buildTimelineReportModel(persistedReportProjection);
+  console.info("[public-scan-report] fallback projection rendered", {
+    projectionLoadMs,
+    routeElapsedMs: Math.round(performance.now() - routeStartedAt),
+    scanId,
+    statusLoadMs,
+  });
   return <ShadowScanReport report={report} variant="timeline" />;
 }

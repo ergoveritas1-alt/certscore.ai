@@ -6,6 +6,7 @@ import { getScanFromMarkerInput, ScanFromMarker } from "../../../../components/s
 import { PaginationControls, normalizePage, normalizePageSize } from "../../../../components/ui/pagination-controls";
 import { formatAdminDateTime } from "../../../../lib/admin/date-time";
 import { classifyAdminRequestProvenance } from "../../../../lib/admin/request-provenance";
+import { projectAdminRequestAdmission } from "../../../../lib/admin/admin-request-admission";
 import { getAdminScanFilterOptions, getAdminScanOperationalSnapshot, listAdminScansPage, type AdminScanListAccess, type AdminScanListFreshness, type AdminScanListItem, type AdminScanListStatus, type AdminScanListTimeSpan } from "../../../../server/admin/list-admin-scans";
 import { withServerTiming } from "../../../../server/performance/log-server-timing";
 import { AdminNavigationProvider, AdminScanActions } from "./admin-scan-actions";
@@ -31,7 +32,7 @@ type AdminScansPageProps = {
   searchParams?: Promise<{ page?: string; perPage?: string; q?: string; status?: string; freshness?: string; access?: string; outcome?: string; language?: string; industry?: string; scanFrom?: string; timeSpan?: string; includeCanary?: string; excludeMacMiniScanBot?: string; scanBotFilter?: string; snapshot?: string; traffic?: string }>;
 };
 
-const statuses = ["any", "no_go", "failed", "running", "queued", "limited", "completed"] as const;
+const statuses = ["any", "no_go", "rejected", "failed", "running", "queued", "limited", "completed"] as const;
 const freshnesses = ["any", "fresh", "forced_fresh", "reused"] as const;
 const accessValues = ["any", "clear", "blocked", "captcha", "robots_limited", "limited", "unknown"] as const;
 const timeSpans = ["all", "4h", "12h", "24h", "7d", "31d"] as const;
@@ -81,7 +82,11 @@ function ScanSizeCell({ matrix }: { matrix: AdminScanListItem["evidenceMatrix"] 
   return <><p className="truncate font-medium text-slate-700" title={website ? `${website.totalBytes.toLocaleString()} measured transfer bytes · ${website.completeness}` : undefined}>Site load {website ? `${website.megabytes.toFixed(2)} MB` : "—"}</p><p className="truncate text-[10px] text-slate-500" title={policy ? `${policy.compressedBytes?.toLocaleString() ?? "unknown"} compressed bytes · ${policy.url}` : undefined}>Policy {policy?.compressedKilobytes !== null && policy?.compressedKilobytes !== undefined ? `${policy.compressedKilobytes.toFixed(1)} KB` : "—"}</p></>;
 }
 
-function getScanFreshnessBadge(scan: Pick<AdminScanListItem, "freshRescanRequested" | "requestResolutionMode" | "rowKind">) {
+function getScanFreshnessBadge(scan: Pick<AdminScanListItem, "freshRescanRequested" | "interruptionReason" | "linkedScanId" | "requestResolutionMode" | "rowKind" | "status">) {
+  const requestAdmission = projectAdminRequestAdmission(scan);
+  if (requestAdmission) {
+    return { className: "bg-rose-50 text-rose-700 ring-1 ring-rose-100", label: requestAdmission.freshnessLabel };
+  }
   if (scan.requestResolutionMode === "reused_existing_scan") {
     return { className: "bg-sky-50 text-sky-700 ring-1 ring-sky-100", label: "Reused <24h" };
   }
@@ -95,6 +100,10 @@ function getScanFreshnessBadge(scan: Pick<AdminScanListItem, "freshRescanRequest
 }
 
 function getOperationalStatus(scan: AdminScanListItem) {
+  const requestAdmission = projectAdminRequestAdmission(scan);
+  if (requestAdmission) {
+    return { className: "bg-rose-500", label: requestAdmission.label };
+  }
   if (scan.noGoFlag || scan.accessPostureClass === "early_loss" || scan.blockedFlag || scan.captchaFlag) {
     return { className: "bg-rose-500", label: "No-go" };
   }
@@ -223,6 +232,8 @@ const TRANSPORT_LABELS = { HD: "HTTPS delivery", HR: "HTTP redirect", MC: "Mixed
 const RUNTIME_LABELS = { FP: "Device ID/fingerprinting", SR: "Session replay", IF: "Third-party iframe", SM: "Social media", "3P": "Embedded third-party services" };
 
 function getAccessLabel(scan: AdminScanListItem) {
+  const requestAdmission = projectAdminRequestAdmission(scan);
+  if (requestAdmission) return `Admission · ${requestAdmission.detail}`;
   if (scan.noGoFlag) {
     const category = scan.noGoLimitationKind === "scanner_access_limitation"
       ? "Access"

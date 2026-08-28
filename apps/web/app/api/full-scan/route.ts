@@ -379,6 +379,7 @@ export async function POST(request: Request) {
             windowSeconds: error.windowSeconds
           },
           error: error.message,
+          recommendedNextAction: error.recommendedNextAction,
           retryAfterSeconds: error.retryAfterSeconds
         },
         {

@@ -1518,7 +1518,7 @@ function postRefusalFixtureMarkup(caseName: StaticFixturePage): string {
         <p>Optional analytics help improve CertScore.</p>
         <div>
           <button type="button">Cookie settings</button>
-          <button id="certscore-owned-reject" type="button">Reject analytics</button>
+          <button id="certscore-owned-reject" data-certscore-consent-action="reject" type="button">Reject analytics</button>
           <button type="button">Allow analytics</button>
         </div>
       </section>

@@ -56,7 +56,7 @@ test("simulated Lambda carries the exact typed Reject observation configuration 
     rolloutMode: "owned_canary" as const,
     resolver: {
       kind: "canonical_cmp_registry" as const,
-      recipeSetId: "canonical-cmp-registry-reject-v7" as const
+      recipeSetId: "canonical-consent-control-reject-v8" as const
     }
   };
   const args = buildLocalV2DagSimulatedLambdaArgs({

@@ -2,7 +2,21 @@ import { KNOWN_CMP_REGISTRY } from "@website-signal-risk-scanner/shared";
 import type { PostRefusalActionRecipe } from "./post-refusal-observer.js";
 
 export const CANONICAL_POST_REFUSAL_RECIPE_SET_ID =
-  "canonical-cmp-registry-reject-v7";
+  "canonical-consent-control-reject-v8";
+
+export const CERTSCORE_OWNED_ANALYTICS_REJECT_RECIPE: PostRefusalActionRecipe = {
+  artifactVersion: "certscore.post_refusal_action_recipe.v1",
+  recipeId: "certscore-owned-analytics-consent-reject-v2",
+  cmpId: "certscore_owned_analytics_consent",
+  resolverMethod: "owned_site_recipe",
+  controlSelector: '[data-certscore-consent-action="reject"]',
+  bannerSelector: 'section[aria-label="Cookie and analytics preferences"]',
+  confirmation: {
+    kind: "local_storage_equals",
+    key: "certscore:analytics-consent:v1",
+    expectedValue: "denied",
+  },
+};
 
 export function buildPostRefusalCmpActionRecipe(input: {
   cmpCanonicalName: string;
@@ -52,7 +66,7 @@ export function buildPostRefusalCmpActionRecipe(input: {
  * the observer still requires exactly one actionable selector before clicking.
  */
 export function buildCanonicalPostRefusalActionRecipes(): PostRefusalActionRecipe[] {
-  return KNOWN_CMP_REGISTRY.flatMap((definition) => {
+  return [CERTSCORE_OWNED_ANALYTICS_REJECT_RECIPE, ...KNOWN_CMP_REGISTRY.flatMap((definition) => {
     if (!definition.rejectControlSelectors?.length || !definition.standards?.includes("tcf")) return [];
     const recipe = buildPostRefusalCmpActionRecipe({
       cmpCanonicalName: definition.canonicalName,
@@ -74,5 +88,5 @@ export function buildCanonicalPostRefusalActionRecipes(): PostRefusalActionRecip
           : { kind: "tcf_purposes_denied" },
     });
     return recipe ? [recipe] : [];
-  });
+  })];
 }

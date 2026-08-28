@@ -230,7 +230,7 @@ export type AdminScanActivityFilters = {
   excludeMacMiniScanBot?: boolean;
   includeCanary?: boolean;
   query?: string | null;
-  status?: "any" | "no_go" | "failed" | "running" | "queued" | "limited" | "completed";
+  status?: "any" | "no_go" | "rejected" | "failed" | "running" | "queued" | "limited" | "completed";
   freshness?: "any" | "fresh" | "forced_fresh" | "reused";
   access?: "any" | "clear" | "blocked" | "captcha" | "robots_limited" | "limited" | "unknown";
   outcome?: string | null;
@@ -643,6 +643,7 @@ function adminScanActivityBaseSql() {
          $2::text is null
          or $2 = 'any'
          or ($2 = 'no_go' and no_go_flag)
+         or ($2 = 'rejected' and row_kind = 'request' and status in ('rejected', 'rate_limited'))
          or ($2 = 'failed' and status = 'failed')
          or ($2 = 'running' and status = 'running')
          or ($2 = 'queued' and status = 'queued')

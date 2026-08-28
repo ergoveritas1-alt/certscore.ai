@@ -11,7 +11,9 @@ import { CAMPAIGN_ATTRIBUTION_STORAGE_KEY } from "../attribution/campaign-attrib
 
 type MockWindow = {
   certscoreAnalyticsConsent?: "granted" | "denied";
+  certscoreLoadAnalytics?: () => void;
   certscoreLoadGoogleTag?: () => void;
+  certscoreUmamiEventQueue?: Array<{ eventName: string; properties: Record<string, unknown> }>;
   dataLayer?: unknown[];
   dispatchEvent: (event: Event) => boolean;
   gtag?: (...args: unknown[]) => void;
@@ -258,12 +260,13 @@ test("pre-navigation scan events still dispatch when consent is granted", async 
   await pending;
 });
 
-test("saved analytics consent applies Google consent mode and loads Google tag only when granted", () => {
+test("saved analytics consent applies consent mode, loads analytics only when granted, and clears denied queues", () => {
   let loadCount = 0;
   const mockWindow = installWindow({
     certscoreAnalyticsConsent: "denied",
     dataLayer: [],
-    certscoreLoadGoogleTag: () => {
+    certscoreUmamiEventQueue: [{ eventName: "queued", properties: {} }],
+    certscoreLoadAnalytics: () => {
       loadCount += 1;
     }
   });
@@ -272,6 +275,7 @@ test("saved analytics consent applies Google consent mode and loads Google tag o
 
   assert.equal(storage.get(ANALYTICS_CONSENT_STORAGE_KEY), "denied");
   assert.equal(loadCount, 0);
+  assert.deepEqual(mockWindow.certscoreUmamiEventQueue, []);
   assert.deepEqual(mockWindow.dataLayer?.at(-1), [
     "consent",
     "update",

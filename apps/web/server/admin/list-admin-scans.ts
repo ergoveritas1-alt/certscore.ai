@@ -198,7 +198,7 @@ export type BlockedRunTelemetry = {
   successRateByEgress: Array<{ egress: string; successRate: number; total: number }>;
 };
 
-export type AdminScanListStatus = "any" | "no_go" | "failed" | "running" | "queued" | "limited" | "completed";
+export type AdminScanListStatus = "any" | "no_go" | "rejected" | "failed" | "running" | "queued" | "limited" | "completed";
 export type AdminScanListFreshness = "any" | "fresh" | "forced_fresh" | "reused";
 export type AdminScanListAccess = "any" | "clear" | "blocked" | "captcha" | "robots_limited" | "limited" | "unknown";
 export type AdminScanListTimeSpan = "all" | "4h" | "12h" | "24h" | "7d" | "31d";

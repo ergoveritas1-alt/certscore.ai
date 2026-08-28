@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { buildPulseStatus } from "./status";
 
-test("Pulse status includes durable scan id aliases for later full report retrieval", () => {
+test("Pulse status retains durable scan IDs but withholds report links until readiness", () => {
   const status = buildPulseStatus({
     jobId: "pulse_job_123",
     scanId: "scan_abc123",
@@ -15,7 +15,7 @@ test("Pulse status includes durable scan id aliases for later full report retrie
   assert.equal(status.scanId, "scan_abc123");
   assert.equal(status.scan_id, "scan_abc123");
   assert.match(status.resultUrl ?? "", /jobId=pulse_job_123/);
-  assert.match(status.reportUrl ?? "", /\/scan\/scan_abc123/);
+  assert.equal(status.reportUrl, null);
 });
 
 test("Pulse status does not publish stale queued progress for completed scans", () => {

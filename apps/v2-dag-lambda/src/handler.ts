@@ -1905,6 +1905,7 @@ export async function runLocalV2DagLambdaPostRefusalArtifactChain(
       });
     }
     return runPostRefusalObserver({
+      allowCanonicalRejectDiscovery: config.resolver.kind === "canonical_cmp_registry",
       actionSearchTimeoutMs: config.actionSearchTimeoutMs,
       confirmationTimeoutMs: config.confirmationTimeoutMs,
       dispatchDelayMs: 0,

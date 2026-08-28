@@ -4,7 +4,7 @@ import test from "node:test";
 import { buildConsentBootstrapScript } from "./consent-bootstrap";
 import { pushDataLayerEvent, toUmamiEvent } from "./data-layer";
 
-test("Umami loads by default with bounded production settings", () => {
+test("Umami loads only after optional analytics consent with bounded production settings", () => {
   const script = buildConsentBootstrapScript("G-TEST", {
     domains: ["certscore.ai", "www.certscore.ai"],
     scriptUrl: "https://cloud.umami.is/script.js",
@@ -12,7 +12,7 @@ test("Umami loads by default with bounded production settings", () => {
   });
 
   assert.doesNotThrow(() => new Function(script));
-  assert.doesNotMatch(script, /certscoreAnalyticsConsent !== 'granted' \|\| w\.certscoreUmamiLoaded/);
+  assert.match(script, /certscoreAnalyticsConsent !== 'granted' \|\| w\.certscoreUmamiLoaded/);
   assert.match(script, /certscoreLoadAnalytics/);
   assert.match(script, /certscoreLoadUmami/);
   assert.match(script, /cloud\.umami\.is\/script\.js/);
@@ -21,6 +21,7 @@ test("Umami loads by default with bounded production settings", () => {
   assert.match(script, /data-exclude-search/);
   assert.match(script, /data-before-send/);
   assert.match(script, /certscoreBeforeUmamiSend/);
+  assert.match(script, /certscoreAnalyticsConsent !== 'granted' \|\| !payload/);
   assert.match(script, /\/scan\/:scan/);
   assert.match(script, /\/pulse\/:domain/);
   assert.match(script, /delete sanitized\.title/);
@@ -29,12 +30,12 @@ test("Umami loads by default with bounded production settings", () => {
   assert.match(script, /certscore\.ai,www\.certscore\.ai/);
 });
 
-test("coarse product events reach Umami before the optional-consent gate", async () => {
-  const source = await readFile("apps/web/lib/analytics/data-layer.ts", "utf8");
-  assert.match(source, /pushUmamiEvent\(event\);\s+\n\s+if \(!hasAnalyticsConsent\(\)\)/);
+test("coarse product events remain behind the optional-consent gate", async () => {
+  const source = await readFile(new URL("./data-layer.ts", import.meta.url), "utf8");
+  assert.match(source, /if \(!hasAnalyticsConsent\(\)\)[\s\S]*?pushUmamiEvent\(event\)/);
 });
 
-test("Umami receives coarse events when optional analytics consent is denied", () => {
+test("Umami receives no coarse events when optional analytics consent is denied", () => {
   const calls: unknown[][] = [];
   Object.defineProperty(globalThis, "window", {
     configurable: true,
@@ -47,11 +48,11 @@ test("Umami receives coarse events when optional analytics consent is denied", (
 
   pushDataLayerEvent({ event: "pricing_cta_clicked", cta_type: "monitoring", plan: "private-plan-value" });
 
-  assert.deepEqual(calls, [["pricing_cta_clicked", { cta_type: "monitoring" }]]);
+  assert.deepEqual(calls, []);
   Reflect.deleteProperty(globalThis, "window");
 });
 
-test("early Umami events queue in sanitized form until the tracker loads", () => {
+test("events are not retained for later Umami delivery before consent", () => {
   Object.defineProperty(globalThis, "window", {
     configurable: true,
     value: {
@@ -62,9 +63,7 @@ test("early Umami events queue in sanitized form until the tracker loads", () =>
 
   pushDataLayerEvent({ event: "mcp_light_action", action: "scan", target: "customer.example" });
 
-  assert.deepEqual(window.certscoreUmamiEventQueue, [
-    { eventName: "mcp_light_action", properties: { action: "scan" } }
-  ]);
+  assert.equal(window.certscoreUmamiEventQueue, undefined);
   Reflect.deleteProperty(globalThis, "window");
 });
 

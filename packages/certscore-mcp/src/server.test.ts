@@ -619,12 +619,12 @@ test("certscore_scan_site can return immediately for an explicitly asynchronous 
       const result = parseToolJson(raw);
       assert.equal(result.type, "certscore_scan_job");
       assert.equal(result.status, "queued");
-      assert.equal(result.reportUrl, "https://certscore.ai/scan/00000000-0000-4000-8000-000000000123");
+      assert.equal(result.reportUrl, null);
       assert.equal((result.provenance as Record<string, unknown>).mode, "new_scan_started");
       assert.equal((result.provenance as Record<string, unknown>).retrievalMode, "creation_response");
       assert.equal((result.provenance as Record<string, unknown>).creationDecision, "new_scan");
       assert.match(raw.content[0]?.type === "text" ? raw.content[0].text : "", /retrieval=creation_response; creation=new_scan/);
-      assert.match(raw.content[0]?.type === "text" ? raw.content[0].text : "", /full report=https:\/\/certscore\.ai\/scan\/00000000-0000-4000-8000-000000000123/);
+      assert.doesNotMatch(raw.content[0]?.type === "text" ? raw.content[0].text : "", /full report=/);
       assert.match(mock.calls[0] ?? "", /\/api\/v2\/scans$/);
     });
   } finally {

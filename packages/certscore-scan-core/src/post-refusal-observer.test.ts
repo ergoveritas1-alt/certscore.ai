@@ -90,6 +90,67 @@ test("the exact CertScore owned canary recipe confirms its semantic denial state
   });
 });
 
+test("canonical control discovery exercises one visible non-CMP Reject control and confirms its refusal state", async () => {
+  await withFixture("post-refusal-certscore-owned-analytics", async (url) => {
+    const packet = await observe(url, {
+      allowCanonicalRejectDiscovery: true,
+      recipe: {
+        ...recipe,
+        recipeId: "missing-registered-recipe",
+        controlSelector: "#registered-reject-not-present",
+      },
+      actionSearchTimeoutMs: 1_000,
+    });
+
+    assert.equal(packet.resolver.found, true);
+    assert.equal(packet.resolver.method, "canonical_consent_control_registry_recipe");
+    assert.match(packet.resolver.recipeId, /^canonical-control:reject:v1:/);
+    assert.equal(packet.refusalRegistration.status, "confirmed");
+    assert.equal(packet.refusalRegistration.refusalExercised, true);
+    assert.equal(packet.refusalRegistration.witnesses.some((witness) =>
+      witness.witnessType === "canonical_refusal_state" &&
+      witness.corroboratingOnly === false
+    ), true);
+  });
+});
+
+test("canonical control discovery does not click generic page choices without consent context", async () => {
+  await withFixture("generic-bare-choice-controls", async (url) => {
+    const packet = await observe(url, {
+      allowCanonicalRejectDiscovery: true,
+      recipe: {
+        ...recipe,
+        recipeId: "missing-registered-recipe",
+        controlSelector: "#registered-reject-not-present",
+      },
+      actionSearchTimeoutMs: 700,
+    });
+
+    assert.equal(packet.resolver.found, false);
+    assert.equal(packet.refusalRegistration.status, "not_attempted");
+    assert.equal(packet.refusalRegistration.refusalExercised, false);
+  });
+});
+
+test("canonical control discovery does not confirm banner removal without a fresh refusal state", async () => {
+  await withFixture("post-refusal-reject-unconfirmed", async (url) => {
+    const packet = await observe(url, {
+      allowCanonicalRejectDiscovery: true,
+      recipe: {
+        ...recipe,
+        recipeId: "missing-registered-recipe",
+        controlSelector: "#registered-reject-not-present",
+      },
+      actionSearchTimeoutMs: 1_000,
+      confirmationTimeoutMs: 100,
+    });
+
+    assert.equal(packet.resolver.found, true);
+    assert.equal(packet.refusalRegistration.status, "unconfirmed");
+    assert.equal(packet.refusalRegistration.refusalExercised, false);
+  });
+});
+
 test("the settle window remains bounded when page-context polling is blocked by a long task", async () => {
   await withFixture("post-refusal-reject-observation-long-task", async (url) => {
     const packet = await observe(url, { observationWindowMs: 150 });
@@ -466,11 +527,11 @@ test("TCF refusal confirms user-action-complete with all configured purposes den
   });
 });
 
-test("canonical CMP recipe set selects the one actionable deterministic control", async () => {
+test("canonical reject recipe set selects the one actionable deterministic control", async () => {
   const recipeCandidates = buildCanonicalPostRefusalActionRecipes();
   assert.deepEqual(
     recipeCandidates.map((candidate) => candidate.cmpId),
-    ["OneTrust", "Usercentrics", "Cookiebot"],
+    ["certscore_owned_analytics_consent", "OneTrust", "Usercentrics", "Cookiebot"],
   );
   await withFixture("post-refusal-onetrust-tcf-honored", async (url) => {
     const packet = await observe(url, {

@@ -14,6 +14,8 @@ export const postRefusalResolverSchema = z.object({
     "local_fixture_recipe",
     "cmp_registry_recipe",
     "tcf_api_cmp_registry_recipe",
+    "owned_site_recipe",
+    "canonical_consent_control_registry_recipe",
   ]),
   confidence: z.number().min(0).max(1),
   recipeId: z.string().min(1).max(160),
@@ -27,6 +29,7 @@ export const postRefusalRegistrationWitnessSchema = z.object({
     "tcf_user_action_complete",
     "cmp_cookie_state",
     "banner_transition",
+    "canonical_refusal_state",
   ]),
   observedAtMs: z.number().int().nonnegative(),
   key: z.string().max(160).optional(),
@@ -794,7 +797,7 @@ const postRefusalConfirmationSchema = z.discriminatedUnion("kind", [
 const postRefusalResolverConfigSchema = z.discriminatedUnion("kind", [
   z.object({
     kind: z.literal("canonical_cmp_registry"),
-    recipeSetId: z.literal("canonical-cmp-registry-reject-v7"),
+    recipeSetId: z.literal("canonical-consent-control-reject-v8"),
   }),
   z.object({
     kind: z.literal("named_cmp"),

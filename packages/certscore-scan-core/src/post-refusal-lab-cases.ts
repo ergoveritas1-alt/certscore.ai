@@ -1,5 +1,6 @@
 import { buildPostRefusalCmpActionRecipe } from "./post-refusal-cmp-recipes.js";
 import type { PostRefusalActionRecipe } from "./post-refusal-observer.js";
+import { CERTSCORE_OWNED_ANALYTICS_REJECT_RECIPE } from "./post-refusal-cmp-recipes.js";
 import type { StaticFixturePage } from "./test-fixtures/static-server.js";
 
 export const POST_REFUSAL_LAB_CASES = {
@@ -39,21 +40,6 @@ const LOCAL_REJECT_RECIPE: PostRefusalActionRecipe = {
     kind: "local_storage_equals",
     key: "certscore_fixture_consent",
     expectedValue: "rejected",
-  },
-};
-
-export const CERTSCORE_OWNED_ANALYTICS_REJECT_RECIPE: PostRefusalActionRecipe = {
-  artifactVersion: "certscore.post_refusal_action_recipe.v1",
-  recipeId: "certscore-owned-analytics-consent-reject-v1",
-  cmpId: "certscore_owned_analytics_consent",
-  resolverMethod: "local_fixture_recipe",
-  controlSelector:
-    'section[aria-label="Cookie and analytics preferences"] button:nth-of-type(2)',
-  bannerSelector: 'section[aria-label="Cookie and analytics preferences"]',
-  confirmation: {
-    kind: "local_storage_equals",
-    key: "certscore:analytics-consent:v1",
-    expectedValue: "denied",
   },
 };
 

@@ -177,6 +177,18 @@ test("Admin Scans gives access outcomes room for at most two visible lines", asy
   assert.match(pageSource, /title=\{accessLabel\}/);
 });
 
+test("Admin Scans exposes persisted request admission failures", async () => {
+  const pageSource = await readFile("apps/web/app/app/admin/scans/page.tsx", "utf8");
+  const listSource = await readFile("apps/web/server/admin/list-admin-scans.ts", "utf8");
+  const repositorySource = await readFile("apps/web/server/admin/repository.ts", "utf8");
+
+  assert.match(pageSource, /projectAdminRequestAdmission/);
+  assert.match(pageSource, /Admission · \$\{requestAdmission\.detail\}/);
+  assert.match(pageSource, /"rejected"/);
+  assert.match(listSource, /"rejected"/);
+  assert.match(repositorySource, /\$2 = 'rejected'.*status in \('rejected', 'rate_limited'\)/);
+});
+
 test("Admin activity pagination supports a direct page jump", async () => {
   const controls = await readFile("apps/web/components/ui/pagination-controls.tsx", "utf8");
   const scansPage = await readFile("apps/web/app/app/admin/scans/page.tsx", "utf8");

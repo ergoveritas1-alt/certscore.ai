@@ -71,6 +71,8 @@ export function saveAnalyticsConsent(choice: AnalyticsConsentChoice) {
       window.certscoreLoadGoogleTag?.();
       window.certscoreLoadUmami?.();
     }
+  } else {
+    window.certscoreUmamiEventQueue = [];
   }
 
   window.dispatchEvent(new CustomEvent(ANALYTICS_CONSENT_CHANGE_EVENT, { detail: { choice } }));
