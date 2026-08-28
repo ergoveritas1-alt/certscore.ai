@@ -1,6 +1,6 @@
 # Website Privacy Preflight for ChatGPT and Codex
 
-This package contains the provider-neutral skill and remote MCP wiring for an OpenAI **With MCP** plugin submission.
+This package contains the provider-neutral skill and remote MCP wiring for an OpenAI **With MCP** plugin submission. It covers persisted public-website privacy evidence, including eligible bounded post-refusal observation of non-essential cookie or tracker activity after a confirmed Reject action.
 
 ## Included components
 
@@ -11,7 +11,7 @@ This package contains the provider-neutral skill and remote MCP wiring for an Op
 
 ## Release identities
 
-- OpenAI plugin version: `1.0.0`
+- OpenAI plugin version: `2.0.0`
 - Hosted MCP version: `0.2.16`
 - Production Streamable HTTP endpoint: `https://mcp.certscore.ai/mcp/light`
 - Authentication: none

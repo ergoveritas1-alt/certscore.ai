@@ -24,11 +24,11 @@ Light permits 50 genuinely new scans per UTC day across requester and shared pub
 
 Short description:
 
-> Free website privacy scanner to detect pre-consent cookies and trackers, CMP and consent controls, privacy policy, GDPR/ePrivacy and CCPA, and HTTPS/TLS signals.
+> Review public-site privacy signals, including eligible bounded post-refusal cookie and tracker observations.
 
 Long description:
 
-> Free website privacy scanner and cookie checker for public websites. Detect pre-consent cookies and trackers, third-party tracking technologies, cookie banners, CMP and consent-management signals, privacy-policy and transparency findings, GDPR/ePrivacy and CCPA/CPRA review signals, and HTTPS/TLS transport observations.
+> CertScore.ai scans public websites and summarizes persisted privacy evidence covering cookies and trackers, consent controls, privacy-policy signals, GDPR/ePrivacy and CCPA/CPRA context, and HTTPS/TLS. On eligible sites, it also performs a bounded post-refusal review of non-essential cookie or tracker activity after a confirmed Reject action.
 >
 > Give CertScore.ai a public website to collect structured, evidence-backed privacy findings for launch review, vendor review, audit triage, or human compliance review. Results include a CertScore score and supporting evidence for human and agentic review; they are not legal advice, certification, or a compliance determination.
 
@@ -117,7 +117,7 @@ Prepared plugin package: `integrations/openai/certscore-website-privacy-prefligh
 
 The package contains:
 
-- `.codex-plugin/plugin.json` at OpenAI plugin version `1.0.0`;
+- `.codex-plugin/plugin.json` at OpenAI plugin version `2.0.0`;
 - provider-neutral workflow instructions under `skills/website-privacy-preflight`;
 - explicit dependency on the production Streamable HTTP endpoint;
 - repository-test remote MCP wiring without credentials or placeholder connection IDs.
@@ -136,10 +136,12 @@ OpenAI listing fields:
 
 | Field | Value |
 | --- | --- |
-| Name | CertScore Website Privacy Preflight |
-| Publisher | ErgoVeritas, LLC |
+| Name | CertScore.ai Privacy Scanner |
+| Version | `2.0.0` |
+| Publisher | CertScore.ai, LLC |
+| Contact email | `ben@certscore.ai` |
 | Category | Developer Tools |
-| Short description | Review public-site privacy signals with retained evidence. |
+| Short description | Review privacy and post-refusal evidence. |
 | Website | `https://certscore.ai/mcp/light` |
 | Support | `https://certscore.ai/contact` |
 | Privacy | `https://certscore.ai/privacy` |
@@ -156,7 +158,7 @@ Starter prompts:
 
 1. `Run a privacy preflight for this public website.`
 2. `Review this vendor website's observable privacy signals.`
-3. `Check this launch URL for cookies, trackers, consent controls, and policy signals.`
+3. `Check this launch URL for cookies, trackers, consent controls, policy signals, and eligible post-refusal observations.`
 
 OpenAI positive review cases:
 
@@ -176,7 +178,11 @@ OpenAI positive review cases:
    - Prompt: `Review https://certscore.ai/ for consent controls and privacy-policy signals.`
    - Expected behavior: use the same bounded workflow without clicking controls directly.
    - Expected result: report only persisted CMP, consent-control, policy, and coverage evidence.
-5. **Limited completion**
+5. **Post-refusal cookie and tracker focus**
+   - Prompt: `After a confirmed Reject action, did https://certscore.ai/ show any eligible non-essential cookie or tracker activity?`
+   - Expected behavior: complete the normal bounded scan lifecycle and report only the persisted typed `postRefusalObservation`; do not click controls directly or infer activity when the observation is unavailable, neutral, unsupported, or limited.
+   - Expected result: state whether a confirmed observation was returned, preserve its typed interpretation and provenance, and explain the explicit coverage limitations.
+6. **Limited completion**
    - Prompt: `Run a privacy preflight for this public URL and explain any coverage limitations even if the result is limited.`
    - Fixture: a reviewer-selected public URL that returns `completed_limited`, or a retained review fixture supplied in the portal.
    - Expected behavior: retrieve the bundle for `completed_limited` and stop polling at the terminal state.
@@ -194,12 +200,12 @@ OpenAI negative review cases:
    - Reason: CertScore reports observable signals and persisted classifications, not legal determinations.
 3. **Website interaction request**
    - Prompt: `Open the target site, click Accept or Reject, and change its consent settings for me.`
-   - Expected behavior: explain that the plugin cannot perform arbitrary website interaction or modify the target; offer the bounded CertScore scan workflow instead.
-   - Reason: the submitted tools initiate or read bounded scans and do not provide general browser control.
+   - Expected behavior: explain that the plugin cannot perform arbitrary website interaction or modify consent settings; offer the bounded CertScore scan workflow, which may perform one eligible deterministic Reject action within the scanner's authorization and safety gates.
+   - Reason: the submitted tools initiate or read bounded scans and do not provide general browser control; post-refusal review is restricted to the scanner's typed, one-action workflow.
 
 Release notes:
 
-> Initial submission of CertScore Website Privacy Preflight. Uses the production CertScore MCP Light endpoint to run or reuse bounded public-website scans and summarize persisted privacy findings, evidence, provenance, and coverage limitations. No authentication is required. Results are observational and are not legal advice, certification, or a compliance determination.
+> Adds explicit guidance and review coverage for CertScore's bounded post-refusal cookie and tracker observation on eligible sites after a confirmed Reject action. The plugin uses the production CertScore MCP Light endpoint to run or reuse bounded public-website scans and summarize persisted privacy findings, evidence, provenance, and coverage limitations. No authentication is required. Results are observational and are not legal advice, certification, or a compliance determination.
 
 The repository package deliberately does not contain a fabricated `.app.json`. If ChatGPT developer mode creates a registered MCP connection for local testing, use its real `plugin_asdk_app...` technical ID at that time. Direct MCP users remain on the stable endpoint and do not need this plugin package for runtime access.
 

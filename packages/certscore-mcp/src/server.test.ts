@@ -519,7 +519,7 @@ test("Cursor and OpenAI plugin packages preserve independent release versions an
   }]);
 
   assert.equal(openAiPlugin.name, "certscore-website-privacy-preflight");
-  assert.equal(openAiPlugin.version, "1.0.0");
+  assert.equal(openAiPlugin.version, "2.0.0");
   assert.equal(openAiPlugin.skills, "./skills/");
   assert.equal(openAiPlugin.mcpServers, "./.mcp.json");
   assert.deepEqual(openAiMcp.mcpServers, {
@@ -527,6 +527,9 @@ test("Cursor and OpenAI plugin packages preserve independent release versions an
   });
   assert.match(openAiMetadata, /transport: "streamable_http"/);
   assert.match(openAiMetadata, /url: "https:\/\/mcp\.certscore\.ai\/mcp\/light"/);
+  assert.match(JSON.stringify(openAiPlugin), /post-refusal/i);
+  assert.match(openAiMetadata, /post-refusal/i);
+  assert.match(openAiSkill, /post-refusal/i);
   assert.doesNotMatch(openAiSkill, /Claude|Cursor/);
   for (const tool of ["certscore_scan_site", "certscore_get_scan_status", "certscore_get_scan_bundle"]) {
     assert.match(openAiSkill, new RegExp(tool));
