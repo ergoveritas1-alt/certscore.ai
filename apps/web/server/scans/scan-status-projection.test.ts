@@ -17,10 +17,16 @@ const serverOnlyPath = require.resolve("server-only");
 import type { ScanStatusProjection } from "./scan-status-projection";
 
 let buildLightweightScanStatusResponse: typeof import("./scan-status-projection").buildLightweightScanStatusResponse;
+let buildLightweightApiV2ScanStatusInput: typeof import("./scan-status-projection").buildLightweightApiV2ScanStatusInput;
 
 async function getBuildLightweightScanStatusResponse() {
   buildLightweightScanStatusResponse ??= (await import("./scan-status-projection")).buildLightweightScanStatusResponse;
   return buildLightweightScanStatusResponse;
+}
+
+async function getBuildLightweightApiV2ScanStatusInput() {
+  buildLightweightApiV2ScanStatusInput ??= (await import("./scan-status-projection")).buildLightweightApiV2ScanStatusInput;
+  return buildLightweightApiV2ScanStatusInput;
 }
 
 function projection(overrides: Partial<ScanStatusProjection> = {}): ScanStatusProjection {
@@ -94,4 +100,80 @@ test("lightweight status does not apply the fallback to non-completed scans", as
   const build = await getBuildLightweightScanStatusResponse();
   const response = build(projection({ status: "running" }));
   assert.equal(response.reportReadiness.status, "finalizing");
+});
+
+test("API v2 lightweight status never promotes completed work before its report projection is ready", async () => {
+  const build = await getBuildLightweightApiV2ScanStatusInput();
+  const response = build(projection({
+    pagesRequested: 1,
+    pagesScanned: 1,
+    reportReady: false,
+    score: 92,
+    status: "completed",
+  }));
+
+  assert.equal(response.status, "finalizing");
+  assert.equal(response.score, null);
+  assert.equal(response.scoreStatus, "provisional");
+});
+
+test("API v2 lightweight status exposes only persisted terminal score metadata", async () => {
+  const build = await getBuildLightweightApiV2ScanStatusInput();
+  const response = build(projection({
+    lastHeartbeatAt: "2026-07-29T18:44:41.000Z",
+    pagesRequested: 1,
+    pagesScanned: 1,
+    reportReady: true,
+    scanFrom: "eu_ie",
+    score: 92,
+    scoreUpdatedAt: "2026-07-29T18:44:41.000Z",
+    scoreVersion: "overall-score.v1",
+  }));
+
+  assert.equal(response.status, "completed");
+  assert.equal(response.score, 92);
+  assert.equal(response.scoreStatus, "final");
+  assert.equal(response.scoreVersion, "overall-score.v1");
+  assert.equal(response.scanFrom, "eu_ie");
+  assert.equal(response.lastHeartbeatAt, "2026-07-29T18:44:41.000Z");
+});
+
+test("API v2 lightweight status projects retained no-go assessment without report hydration", async () => {
+  const build = await getBuildLightweightApiV2ScanStatusInput();
+  const response = build(projection({
+    reportReady: false,
+    scanNoGoAssessment: {
+      decision: "no_go",
+      reasonCodes: ["target_access_denied"],
+    },
+    status: "completed",
+  }));
+
+  assert.equal(response.status, "completed_limited");
+  assert.equal(response.resultDisposition, "no_go");
+  assert.equal(response.score, null);
+});
+
+test("API v2 lightweight status fails closed when persisted report projection failed", async () => {
+  const build = await getBuildLightweightApiV2ScanStatusInput();
+  const response = build(projection({
+    reportProjectionStatus: "failed",
+    reportReady: false,
+    status: "completed",
+  }));
+
+  assert.equal(response.status, "failed");
+  assert.equal(response.error?.code, "report_projection_failed");
+  assert.equal(response.score, null);
+});
+
+test("API v2 status route uses bounded status and persisted-report reads only", async () => {
+  const { readFile } = await import("node:fs/promises");
+  const source = await readFile("apps/web/app/api/v2/scans/[scanId]/status/route.ts", "utf8");
+
+  assert.match(source, /getAnonymousScanStatusProjection/);
+  assert.match(source, /loadAnonymousPersistedScanReportProjection/);
+  assert.match(source, /buildLightweightApiV2ScanStatusInput/);
+  assert.doesNotMatch(source, /getPublicScanRecord/);
+  assert.doesNotMatch(source, /materializeLocalV2DagScanDetail/);
 });

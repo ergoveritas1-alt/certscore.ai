@@ -96,6 +96,13 @@ type PulseStatusLike = {
   retryAfterSeconds?: number | null;
   resultUrl?: string | null;
   reportUrl?: string | null;
+  riskLevel?: string | null;
+  scanFrom?: string | null;
+  score?: number | null;
+  scoreStatus?: "provisional" | "final";
+  scoreUpdatedAt?: string | null;
+  scoreVersion?: string | null;
+  coverage?: ApiV2ScanJob["coverage"];
   resultDisposition?: "no_go";
   noGo?: ScanNoGoResult;
   postRefusalObservation?: ApiV2ScanResource["postRefusalObservation"];
@@ -949,6 +956,7 @@ export function buildApiV2ScanJobFromPulseStatus(
     scanId,
     domain: status.domain ?? null,
     url: options.requestedUrl ?? (status.domain ? `https://${status.domain}` : null),
+    scanFrom: publicScanFrom(status.scanFrom),
     status: normalizedStatus,
     ...(status.resultDisposition ? { resultDisposition: status.resultDisposition } : {}),
     ...(status.noGo ? { noGo: status.noGo } : {}),
@@ -965,6 +973,12 @@ export function buildApiV2ScanJobFromPulseStatus(
     startedAt: dateStringOrNull(status.startedAt),
     completedAt: dateStringOrNull(status.completedAt),
     scanTimeSeconds,
+    score: finiteScore(status.score),
+    scoreStatus: status.scoreStatus,
+    scoreVersion: status.scoreVersion ?? null,
+    scoreUpdatedAt: dateStringOrNull(status.scoreUpdatedAt),
+    riskLevel: status.riskLevel ?? null,
+    coverage: status.coverage ?? null,
     lastUpdatedAt: dateStringOrNull(status.lastUpdatedAt ?? status.completedAt ?? status.createdAt) ?? undefined,
     phaseStartedAt: dateStringOrNull(status.phaseStartedAt ?? status.startedAt ?? status.createdAt),
     lastHeartbeatAt: dateStringOrNull(status.lastHeartbeatAt ?? status.lastUpdatedAt ?? status.completedAt ?? status.createdAt),

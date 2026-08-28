@@ -53,6 +53,9 @@ type ToolRequestContext = {
   requesterNetwork?: AnonymousRequesterNetwork;
 };
 
+const TELEMETRY_ACK_TIMEOUT_MS = 10_000;
+const TELEMETRY_DELIVERY_ATTEMPTS = 2;
+
 function firstHeader(headers: IncomingHttpHeaders, name: string) {
   const value = headers[name];
   return Array.isArray(value) ? value[0]?.trim() || null : value?.trim() || null;
@@ -215,7 +218,7 @@ export function createHostedMcpTelemetry(input: CreateHostedMcpTelemetryInput) {
   const deliver = (event: { eventId: string }, context: { stage?: string; toolName?: string }) => {
     const body = JSON.stringify(event);
     const timestamp = String(Math.floor(Date.now() / 1_000));
-    void Promise.resolve().then(() => fetchImpl(ingestionUrl, {
+    const send = (attempt: number): Promise<void> => Promise.resolve().then(() => fetchImpl(ingestionUrl, {
         body,
         headers: {
           "content-type": "application/json; charset=utf-8",
@@ -223,11 +226,18 @@ export function createHostedMcpTelemetry(input: CreateHostedMcpTelemetryInput) {
           "x-certscore-mcp-telemetry-timestamp": timestamp,
         },
         method: "POST",
-        signal: AbortSignal.timeout(1_500),
+        signal: AbortSignal.timeout(TELEMETRY_ACK_TIMEOUT_MS),
       })).then((response) => {
       if (!response.ok) throw new Error(`Telemetry ingestion returned HTTP ${response.status}.`);
     }).catch((error) => {
+      if (attempt < TELEMETRY_DELIVERY_ATTEMPTS) {
+        return send(attempt + 1);
+      }
+      throw error;
+    });
+    void send(1).catch((error) => {
       logger.error(JSON.stringify({
+        attempts: TELEMETRY_DELIVERY_ATTEMPTS,
         event: "mcp.telemetry_write_failed",
         errorName: error instanceof Error ? error.name : "UnknownError",
         stage: context.stage ?? null,
@@ -238,7 +248,7 @@ export function createHostedMcpTelemetry(input: CreateHostedMcpTelemetryInput) {
   };
 
   const reportActivation = (stage: McpActivationStage) => {
-    if (!input.authenticatedUserId || !client.actorId) return;
+    if (!client.actorId) return;
     if (sentActivationStages.has(stage)) return;
     const parsed = mcpActivationEventSchema.safeParse({
       actorId: client.actorId,
@@ -250,7 +260,7 @@ export function createHostedMcpTelemetry(input: CreateHostedMcpTelemetryInput) {
       organizationId: input.authenticatedOrganizationId ?? null,
       source: client.source,
       stage,
-      userId: input.authenticatedUserId,
+      userId: input.authenticatedUserId ?? null,
     });
     if (!parsed.success) {
       logger.error(JSON.stringify({

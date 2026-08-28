@@ -360,7 +360,7 @@ async function handleMcp(req: IncomingMessage, res: ServerResponse, anonymous: b
       subject: auth.claims.sub
     });
     authenticatedOrganizationId = auth.claims.certscore.organizationId;
-    authenticatedUserId = auth.claims.certscore.userId ?? auth.claims.sub;
+    authenticatedUserId = auth.claims.certscore.userId ?? null;
   }
   const sessionId = req.headers["mcp-session-id"]?.toString();
   let parsedBody: unknown;

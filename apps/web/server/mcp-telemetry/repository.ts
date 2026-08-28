@@ -6,11 +6,13 @@ import { isPlatformAdminEmail } from "../admin/platform-admin";
 import { persistProductAnalyticsEvent } from "../product-analytics/repository";
 
 export async function persistMcpActivationEvent(event: McpActivationEvent) {
-  const user = await queryOne<{ email: string }>(
-    `select email from public.users where id = $1::uuid limit 1`,
-    [event.userId],
-    { readOnly: true }
-  );
+  const user = event.userId
+    ? await queryOne<{ email: string }>(
+        `select email from public.users where id = $1::uuid limit 1`,
+        [event.userId],
+        { readOnly: true }
+      )
+    : null;
   await persistProductAnalyticsEvent({
     category: "interaction",
     eventName: event.stage,

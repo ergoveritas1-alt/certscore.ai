@@ -113,11 +113,37 @@ test("authenticated telemetry signs bounded MCP activation stages", async () => 
   }
 });
 
+test("authenticated activation telemetry keeps non-database subjects actor-only", async () => {
+  const requests: string[] = [];
+  const telemetry = createHostedMcpTelemetry({
+    authenticatedActorId: "0123456789abcdef01234567",
+    authenticatedOrganizationId: "00000000-0000-4000-8000-000000000002",
+    authenticatedUserId: null,
+    baseUrl: "https://certscore.ai",
+    fetch: (async (_input: RequestInfo | URL, init?: RequestInit) => {
+      requests.push(String(init?.body ?? ""));
+      return new Response(null, { status: 202 });
+    }) as typeof fetch,
+    headers: {},
+    secret,
+    sessionId: () => null,
+    surface: "mcp_authenticated"
+  });
+
+  telemetry.observeActivation("mcp_initialized");
+  await new Promise((resolve) => setImmediate(resolve));
+
+  assert.equal(requests.length, 1);
+  assert.equal(JSON.parse(requests[0] ?? "{}").userId, null);
+});
+
 test("authenticated MCP runtime records initialization and tool discovery", () => {
   const source = readFileSync(new URL("./index.ts", import.meta.url), "utf8");
   assert.match(source, /telemetry\.observeActivation\("mcp_initialized"\)/);
   assert.match(source, /session\.telemetry\?\.observeActivation\("mcp_tools_listed"\)/);
   assert.match(source, /jsonRpcMethod\(parsedBody\) === "tools\/list"/);
+  assert.match(source, /authenticatedUserId = auth\.claims\.certscore\.userId \?\? null/);
+  assert.doesNotMatch(source, /authenticatedUserId = auth\.claims\.certscore\.userId \?\? auth\.claims\.sub/);
 });
 
 test("authenticated tool telemetry records first-tool and attempted scan-request activation once per session", async () => {
@@ -224,11 +250,17 @@ test("telemetry differentiates all hosted MCP entrypoints and signs minimized ev
   }
   await new Promise((resolve) => setImmediate(resolve));
 
-  assert.equal(requests.length, 3);
-  const events = requests.map((request) => JSON.parse(request.body) as Record<string, unknown>);
+  const activationEvents = requests
+    .map((request) => JSON.parse(request.body) as Record<string, unknown>)
+    .filter((event) => event.eventType === "activation");
+  const toolRequests = requests.filter((request) => JSON.parse(request.body).eventType !== "activation");
+  assert.equal(toolRequests.length, 3);
+  assert.equal(activationEvents.length, 1);
+  assert.equal(activationEvents[0]?.userId, null);
+  const events = toolRequests.map((request) => JSON.parse(request.body) as Record<string, unknown>);
   assert.deepEqual(events.map((event) => event.endpoint), ["/mcp/light", "/mcp/anonymous", "/mcp"]);
   assert.deepEqual(events.map((event) => event.surface), ["mcp_light", "mcp_anonymous", "mcp_authenticated"]);
-  for (const [index, request] of requests.entries()) {
+  for (const [index, request] of toolRequests.entries()) {
     const timestamp = request.headers.get("x-certscore-mcp-telemetry-timestamp") ?? "";
     const expected = createHmac("sha256", secret).update(`${timestamp}.${request.body}`).digest("base64url");
     assert.equal(request.headers.get("x-certscore-mcp-telemetry-proof"), expected);
@@ -277,9 +309,10 @@ test("tool-call request context overrides session initialization IP attribution"
 
 test("telemetry delivery failure is contained and transport quota events are recorded", async () => {
   const failures: string[] = [];
+  let attempts = 0;
   const telemetry = createHostedMcpTelemetry({
     baseUrl: "https://certscore.ai",
-    fetch: (() => { throw new Error("database unavailable"); }) as typeof fetch,
+    fetch: (() => { attempts += 1; throw new Error("database unavailable"); }) as typeof fetch,
     headers: {},
     logger: { error: (message?: unknown) => { failures.push(String(message)); } },
     requesterBinding: "anonymous:203.0.113.1",
@@ -295,9 +328,40 @@ test("telemetry delivery failure is contained and transport quota events are rec
     toolName: "certscore_get_scan_bundle",
   }));
   await new Promise((resolve) => setImmediate(resolve));
+  assert.equal(attempts, 2);
   assert.equal(failures.length, 1);
   assert.match(failures[0] ?? "", /mcp\.telemetry_write_failed/);
+  assert.match(failures[0] ?? "", /"attempts":2/);
   assert.equal(failures[0]?.includes("database unavailable"), false);
+});
+
+test("telemetry retries the same idempotent event before reporting a delivery failure", async () => {
+  const bodies: string[] = [];
+  const failures: string[] = [];
+  const telemetry = createHostedMcpTelemetry({
+    baseUrl: "https://certscore.ai",
+    fetch: (async (_input: RequestInfo | URL, init?: RequestInit) => {
+      bodies.push(String(init?.body ?? ""));
+      if (bodies.length === 1) {
+        const error = new Error("acknowledgement deadline exceeded");
+        error.name = "TimeoutError";
+        throw error;
+      }
+      return new Response(null, { status: 202 });
+    }) as typeof fetch,
+    headers: {},
+    logger: { error: (message?: unknown) => { failures.push(String(message)); } },
+    secret,
+    sessionId: () => "session_123",
+    surface: "mcp_light",
+  });
+
+  telemetry.observeToolInvocation(observation());
+  await new Promise((resolve) => setImmediate(resolve));
+
+  assert.equal(bodies.length, 2);
+  assert.equal(bodies[0], bodies[1]);
+  assert.equal(failures.length, 0);
 });
 
 test("invalid projected metadata is rejected without throwing or sending", async () => {

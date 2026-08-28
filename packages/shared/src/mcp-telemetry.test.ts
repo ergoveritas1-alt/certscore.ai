@@ -17,6 +17,8 @@ test("MCP activation telemetry accepts only bounded authenticated funnel stages"
   });
   assert.equal(event.stage, "mcp_initialized");
   assert.equal(mcpActivationEventSchema.safeParse({ ...event, authorization: "Bearer secret" }).success, false);
+  assert.equal(mcpActivationEventSchema.safeParse({ ...event, userId: null }).success, true);
+  assert.equal(mcpActivationEventSchema.safeParse({ ...event, userId: "non-database-subject" }).success, false);
 });
 
 test("MCP telemetry accepts only bounded structured metadata", () => {

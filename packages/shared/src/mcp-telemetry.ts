@@ -77,7 +77,7 @@ export const mcpActivationEventSchema = z.object({
   organizationId: z.string().uuid().nullable(),
   source: mcpCallerProviderSchema,
   stage: mcpActivationStageSchema,
-  userId: z.string().uuid(),
+  userId: z.string().uuid().nullable(),
 }).strict();
 
 export const mcpTelemetryEventSchema = z.object({

@@ -1,6 +1,7 @@
 import "server-only";
 
 import { queryOne } from "@website-signal-risk-scanner/db";
+import { projectExternalScanNoGo } from "@website-signal-risk-scanner/shared";
 import { LOCAL_V2_DAG_SCAN_PROCESSOR } from "./local-v2-dag-scan-config";
 import {
   MAX_SCAN_REPORT_PROJECTION_BYTES,
@@ -15,16 +16,26 @@ export type ScanStatusProjection = {
   pageUrl: string | null;
   errorMessage: string | null;
   id: string;
+  lastHeartbeatAt?: string | null;
   organizationId: string | null;
+  pagesRequested?: number;
+  pagesScanned?: number;
   profile: string;
   postRefusalObservationExpected: boolean;
   reportGeneration: string | null;
   reportInputsReady: boolean;
   reportProjectionRequired: boolean;
   reportReady: boolean;
+  reportProjectionStatus?: string | null;
+  scanFrom?: string | null;
+  scanNoGoAssessment?: Record<string, unknown> | null;
+  score?: number | null;
+  scoreUpdatedAt?: string | null;
+  scoreVersion?: string | null;
   browserExtensionNormalizationReady: boolean;
   startedAt: string | null;
   status: string;
+  visualAccessReview?: Record<string, unknown> | null;
 };
 
 export type CanonicalScanProgressStage = "prepare" | "scan" | "review" | "report" | "complete";
@@ -51,16 +62,26 @@ type ScanStatusProjectionRow = {
   page_url: string | null;
   error_message: string | null;
   id: string;
+  last_heartbeat_at: string | Date | null;
   organization_id: string | null;
+  pages_requested: number;
+  pages_scanned: number;
   profile: string | null;
   post_refusal_observation_expected: boolean;
   report_generation: string | null;
   report_inputs_ready: boolean;
   report_projection_required: boolean;
   report_ready: boolean;
+  report_projection_status: string | null;
+  scan_from: string | null;
+  scan_no_go_assessment: Record<string, unknown> | null;
+  score: number | null;
+  score_updated_at: string | Date | null;
+  score_version: string | null;
   browser_extension_normalization_ready: boolean;
   started_at: string | Date | null;
   status: string;
+  visual_access_review: Record<string, unknown> | null;
 };
 
 function iso(value: string | Date | null) {
@@ -77,16 +98,26 @@ function project(row: ScanStatusProjectionRow | null): ScanStatusProjection | nu
     pageUrl: row.page_url,
     errorMessage: row.error_message,
     id: row.id,
+    lastHeartbeatAt: iso(row.last_heartbeat_at),
     organizationId: row.organization_id,
+    pagesRequested: row.pages_requested,
+    pagesScanned: row.pages_scanned,
     profile: row.profile === "tiny" ? "tiny" : "standard",
     postRefusalObservationExpected: row.post_refusal_observation_expected,
     reportGeneration: row.report_generation,
     reportInputsReady: row.report_inputs_ready,
     reportProjectionRequired: row.report_projection_required,
     reportReady: row.report_ready,
+    reportProjectionStatus: row.report_projection_status,
+    scanFrom: row.scan_from,
+    scanNoGoAssessment: row.scan_no_go_assessment,
+    score: row.score,
+    scoreUpdatedAt: iso(row.score_updated_at),
+    scoreVersion: row.score_version,
     browserExtensionNormalizationReady: row.browser_extension_normalization_ready,
     startedAt: iso(row.started_at),
     status: row.status,
+    visualAccessReview: row.visual_access_review,
   };
 }
 
@@ -97,8 +128,23 @@ const PROJECTION_SQL = `select s.id,
        s.started_at,
        s.completed_at,
        s.error_message,
+       s.pages_requested,
+       s.pages_scanned,
        d.hostname as domain_hostname,
        nullif(s.scan_config_json #>> '{normalizedUrl}', '') as page_url,
+       nullif(s.scan_config_json ->> 'scanFrom', '') as scan_from,
+       snapshot.certscore_overall as score,
+       snapshot.score_scored_at as score_updated_at,
+       snapshot.score_version,
+       snapshot.report_projection_status,
+       snapshot.scan_no_go_assessment,
+       snapshot.visual_access_review,
+       coalesce(
+         (select max(event.created_at) from scan_events event where event.scan_id = s.id),
+         s.completed_at,
+         s.started_at,
+         s.created_at
+       ) as last_heartbeat_at,
        coalesce(
          nullif(s.scan_config_json #>> '{execution,v2DagParallel,profile}', ''),
          nullif(s.scan_config_json ->> 'profile', ''),
@@ -152,7 +198,8 @@ const PROJECTION_SQL = `select s.id,
               and normalized.event_type in ('browser_extension.observed_signals_ingested', 'browser_extension.normalization_failed')
          ) as browser_extension_normalization_ready
   from scans s
-  left join domains d on d.id = s.domain_id`;
+  left join domains d on d.id = s.domain_id
+  left join scan_snapshots snapshot on snapshot.scan_id = s.id`;
 
 export async function getOrganizationScanStatusProjection(input: {
   organizationId: string;
@@ -263,5 +310,103 @@ export function buildLightweightScanStatusResponse(projection: ScanStatusProject
       startedAt: projection.startedAt,
       status: projection.status,
     },
+  };
+}
+
+function apiV2ProjectionStatus(projection: ScanStatusProjection, hasNoGo: boolean) {
+  if (hasNoGo && (projection.status === "completed" || projection.status === "completed_limited")) {
+    return "completed_limited" as const;
+  }
+  if (projection.reportProjectionStatus === "failed" && (projection.status === "completed" || projection.status === "completed_limited")) {
+    return "failed" as const;
+  }
+  if ((projection.status === "completed" || projection.status === "completed_limited") && !projection.reportReady) {
+    return "finalizing" as const;
+  }
+  if (
+    projection.status === "queued" ||
+    projection.status === "running" ||
+    projection.status === "completed" ||
+    projection.status === "completed_limited" ||
+    projection.status === "failed" ||
+    projection.status === "expired" ||
+    projection.status === "rate_limited"
+  ) {
+    return projection.status;
+  }
+  return "running" as const;
+}
+
+/**
+ * Projects the bounded status row into the API v2 job builder input. This path
+ * deliberately excludes report hydration and artifact materialization.
+ */
+export function buildLightweightApiV2ScanStatusInput(projection: ScanStatusProjection) {
+  const runtimeArtifacts = {
+    ...(projection.scanNoGoAssessment
+      ? { scan_no_go_assessment: projection.scanNoGoAssessment }
+      : {}),
+    ...(projection.visualAccessReview
+      ? { visual_access_review: projection.visualAccessReview }
+      : {}),
+  };
+  const noGoProjection = projectExternalScanNoGo(runtimeArtifacts);
+  const status = apiV2ProjectionStatus(projection, Boolean(noGoProjection));
+  const terminal = status === "completed" || status === "completed_limited" || status === "failed" || status === "expired" || status === "rate_limited";
+  const score = terminal && projection.reportReady && !noGoProjection && typeof projection.score === "number"
+    ? projection.score
+    : null;
+  const pagesRequested = Math.max(1, projection.pagesRequested ?? 1);
+  const pagesScanned = Math.max(0, projection.pagesScanned ?? 0);
+  const reportProjectionError = status === "failed" && projection.reportProjectionStatus === "failed"
+    ? {
+        code: "report_projection_failed",
+        message: "The scan completed, but its canonical report result could not be finalized.",
+        retryable: true,
+        retryAfterSeconds: 30,
+        recommendedNextAction: "Retry certscore_scan_site with freshness=refresh. If the failure repeats, stop and contact CertScore support.",
+      }
+    : undefined;
+
+  return {
+    jobId: projection.id,
+    scanId: projection.id,
+    domain: projection.domainHostname,
+    status,
+    ...(noGoProjection ?? {}),
+    ...(reportProjectionError ? { error: reportProjectionError } : {}),
+    createdAt: projection.createdAt,
+    startedAt: projection.startedAt,
+    completedAt: projection.completedAt,
+    lastHeartbeatAt: projection.lastHeartbeatAt ?? projection.completedAt ?? projection.startedAt ?? projection.createdAt,
+    lastUpdatedAt: projection.lastHeartbeatAt ?? projection.completedAt ?? projection.startedAt ?? projection.createdAt,
+    scanFrom: projection.scanFrom === "eu_de" || projection.scanFrom === "eu_ie" || projection.scanFrom === "california"
+      ? projection.scanFrom
+      : undefined,
+    score,
+    scoreStatus: terminal && projection.reportReady ? "final" as const : "provisional" as const,
+    scoreVersion: score === null ? null : projection.scoreVersion ?? null,
+    scoreUpdatedAt: score === null ? null : projection.scoreUpdatedAt ?? projection.completedAt,
+    riskLevel: score === null
+      ? null
+      : score < 40
+        ? "significant_review_recommended"
+        : score < 85
+          ? "review_recommended"
+          : "monitor",
+    coverage: noGoProjection
+      ? {
+          status: noGoProjection.noGo.limitationKind,
+          summary: noGoProjection.noGo.summary,
+          limitations: [noGoProjection.noGo.explanation],
+        }
+      : {
+          status: pagesScanned >= pagesRequested && projection.status === "completed" ? "complete" : "partial",
+          summary: pagesScanned > 0
+            ? "Automated public-web scan completed for the observed public surfaces."
+            : "Coverage was limited; absence of findings should not be interpreted as absence of risk.",
+          limitations: ["Automated public-web scan only."],
+        },
+    retryAfterSeconds: terminal ? null : undefined,
   };
 }

@@ -1,5 +1,6 @@
-import { API_V2_SCAN_ID_PATTERN, apiV2JsonResponse, buildApiV2Error, buildApiV2ScanStatus } from "../../../../../../lib/api-v2/scan-resource";
-import { getPublicScanRecord } from "../../../../../../server/scans/get-public-scan-record";
+import { API_V2_SCAN_ID_PATTERN, apiV2JsonResponse, buildApiV2Error, buildApiV2ScanJobFromPulseStatus, buildApiV2ScanStatus } from "../../../../../../lib/api-v2/scan-resource";
+import { loadAnonymousPersistedScanReportProjection } from "../../../../../../server/scans/scan-report-projection";
+import { buildLightweightApiV2ScanStatusInput, getAnonymousScanStatusProjection } from "../../../../../../server/scans/scan-status-projection";
 import { enforceApiV2ScanReadThrottle } from "../../../../../../server/pulse/api-v2-read-throttle";
 
 export const dynamic = "force-dynamic";
@@ -38,8 +39,8 @@ export async function GET(request: Request, context: RouteContext) {
   if (throttled) return throttled;
 
   try {
-    const scanRecord = await getPublicScanRecord(scanId, { logPrefix: "[api-v2-scan-status]" });
-    if (!scanRecord) {
+    const projection = await getAnonymousScanStatusProjection(scanId);
+    if (!projection) {
       return apiV2JsonResponse({
         body: buildApiV2Error({ code: "not_found", message: "Scan not found or not eligible for public API v2." }),
         requestId: id,
@@ -48,7 +49,15 @@ export async function GET(request: Request, context: RouteContext) {
       });
     }
 
-    const scanStatus = buildApiV2ScanStatus(scanRecord);
+    const persistedReport = projection.reportReady
+      ? await loadAnonymousPersistedScanReportProjection({ scanId }).catch(() => null)
+      : null;
+    const scanStatus = persistedReport
+      ? buildApiV2ScanStatus(persistedReport)
+      : buildApiV2ScanJobFromPulseStatus(
+          buildLightweightApiV2ScanStatusInput(projection),
+          { requestedUrl: projection.pageUrl ?? undefined }
+        );
     const retryAfter = scanStatus.retryAfterSeconds === null || scanStatus.retryAfterSeconds === undefined
       ? undefined
       : String(scanStatus.retryAfterSeconds);
