@@ -111,6 +111,10 @@ test("MCP telemetry dashboard queries bounded periods and never reads request pa
   assert.match(repository, /canonical_scan\.egress_provider as scanner_egress_provider/);
   assert.match(repository, /extract\(epoch from \(canonical_scan\.completed_at - canonical_scan\.started_at\)\)/);
   assert.match(repository, /parseAdminEvidenceMatrix/);
+  assert.match(repository, /isAdminMcpEvidenceUnavailable/);
+  assert.match(repository, /evidenceUnavailable \? null : parseAdminEvidenceMatrix/);
+  assert.match(repository, /score: evidenceUnavailable \? null : event\.score/);
+  assert.match(repository, /top_finding_count: evidenceUnavailable \? null : event\.top_finding_count/);
   assert.match(repository, /target_provenance/);
   assert.match(repository, /perspective_provenance/);
   assert.match(repository, /requesterIpAttributionFromRequest/);

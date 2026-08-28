@@ -118,6 +118,7 @@ export class CertScoreClient {
   private readonly forwardedClientIp?: string;
   private readonly anonymousRequesterSecret?: string;
   private readonly anonymousSurface?: "mcp_light" | "mcp_anonymous";
+  private readonly anonymousRequesterSession?: string;
   private readonly timeout: number;
   public readonly scans: ScanResourceClient;
   public readonly findings: FindingResourceClient;
@@ -132,6 +133,7 @@ export class CertScoreClient {
     this.forwardedClientIp = options.forwardedClientIp?.trim() || undefined;
     this.anonymousRequesterSecret = options.anonymousRequesterSecret?.trim() || undefined;
     this.anonymousSurface = options.anonymousSurface ?? undefined;
+    this.anonymousRequesterSession = options.anonymousRequesterSession?.trim() || undefined;
     this.timeout = options.timeout ?? DEFAULT_TIMEOUT_MS;
     this.scans = {
       create: (url, scanOptions) => this.createScanResource(url, scanOptions),
@@ -644,12 +646,17 @@ export class CertScoreClient {
       if (this.anonymousRequesterSecret) {
         const timestamp = String(Math.floor(Date.now() / 1000));
         const surface = this.anonymousSurface ?? "mcp_anonymous";
-        const message = `${timestamp}.${this.forwardedClientIp}.${surface}`;
+        const message = this.anonymousRequesterSession
+          ? `${timestamp}.${this.forwardedClientIp}.${surface}.${this.anonymousRequesterSession}`
+          : `${timestamp}.${this.forwardedClientIp}.${surface}`;
         const proof = createHmac("sha256", this.anonymousRequesterSecret).update(message).digest("base64url");
         headers["X-CertScore-Anonymous-Requester-IP"] = this.forwardedClientIp;
         headers["X-CertScore-Anonymous-Requester-Timestamp"] = timestamp;
         headers["X-CertScore-Anonymous-Requester-Proof"] = proof;
         headers["X-CertScore-Anonymous-Surface"] = surface;
+        if (this.anonymousRequesterSession) {
+          headers["X-CertScore-Anonymous-Requester-Session"] = this.anonymousRequesterSession;
+        }
       }
     }
     if (internalMcpOperation && this.anonymousRequesterSecret) {

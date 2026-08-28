@@ -76,19 +76,29 @@ function verifiedAnonymousMcpRequester(headers: Headers) {
   const timestamp = headers.get("x-certscore-anonymous-requester-timestamp")?.trim() || null;
   const proof = headers.get("x-certscore-anonymous-requester-proof")?.trim() || null;
   const surfaceValue = headers.get("x-certscore-anonymous-surface")?.trim() || null;
+  const sessionBindingValue = headers.get("x-certscore-anonymous-requester-session")?.trim() || null;
+  const sessionBinding = sessionBindingValue && /^[A-Za-z0-9_-]{16,128}$/.test(sessionBindingValue)
+    ? sessionBindingValue
+    : null;
   const surface: AnonymousMcpSurface | null = surfaceValue === "mcp_light" || surfaceValue === "mcp_anonymous" ? surfaceValue : null;
   const secret = process.env.CERTSCORE_OAUTH_JWT_SECRET?.trim() || process.env.JWT_SIGNING_KEY?.trim();
-  if (!ip || !timestamp || !proof || !secret || (surfaceValue && !surface) || !freshProofTimestamp(timestamp)) {
+  if (!ip || !timestamp || !proof || !secret || (surfaceValue && !surface) || (sessionBindingValue && !sessionBinding) || !freshProofTimestamp(timestamp)) {
     return null;
   }
   const expected = createHmac("sha256", secret)
-    .update(surface ? `${timestamp}.${ip}.${surface}` : `${timestamp}.${ip}`)
+    .update(sessionBinding
+      ? `${timestamp}.${ip}.${surface ?? "mcp_anonymous"}.${sessionBinding}`
+      : surface ? `${timestamp}.${ip}.${surface}` : `${timestamp}.${ip}`)
     .digest("base64url");
   if (!safeProofEqual(expected, proof)) {
     return null;
   }
   const normalizedIp = normalizeRequestSourceIp(ip);
-  return normalizedIp ? { ip: normalizedIp, surface: surface ?? "mcp_anonymous" } : null;
+  return normalizedIp ? {
+    ip: normalizedIp,
+    sessionHash: sessionBinding ? createHash("sha256").update(sessionBinding).digest("hex") : null,
+    surface: surface ?? "mcp_anonymous"
+  } : null;
 }
 
 export function trustedMcpInternalRead(request: Request, expected: {
@@ -121,6 +131,7 @@ export function getPulseRequesterContext(request: Request) {
 
   return {
     anonymousMcpSurface: verifiedMcp?.surface ?? null,
+    anonymousMcpSessionHash: verifiedMcp?.sessionHash ?? null,
     anonymousRequesterNetwork: anonymousRequesterNetwork(ip),
     ipHash: ip ? createHash("sha256").update(ip).digest("hex") : null,
     referer: headers.get("referer")?.slice(0, 500) || null,

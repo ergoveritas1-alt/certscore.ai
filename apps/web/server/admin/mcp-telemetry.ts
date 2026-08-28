@@ -2,7 +2,7 @@ import "server-only";
 
 import { unstable_cache } from "next/cache";
 import { query, queryOne } from "@website-signal-risk-scanner/db";
-import { MCP_TELEMETRY_RETENTION_DAYS, type McpTelemetrySurface } from "@website-signal-risk-scanner/shared";
+import { isScanNoGoSnapshotOutcome, MCP_TELEMETRY_RETENTION_DAYS, type McpTelemetrySurface } from "@website-signal-risk-scanner/shared";
 import { calculateMcpTelemetryRates } from "../../lib/admin/mcp-telemetry-rates";
 import { MAC_MINI_SCAN_BOT_API_KEY_NAMES } from "../../lib/admin/mac-mini-scan-bot";
 import {
@@ -151,6 +151,13 @@ type AdminMcpTelemetryEventRow = Omit<AdminMcpTelemetryEvent, "evidence_matrix" 
   requester_request_context: unknown;
   requester_requested_by: unknown;
 };
+
+export function isAdminMcpEvidenceUnavailable(input: Pick<AdminMcpTelemetryEvent, "scan_outcome" | "scan_status">) {
+  return isScanNoGoSnapshotOutcome(input.scan_outcome)
+    || input.scan_status === "failed"
+    || input.scan_status === "expired"
+    || input.scan_status === "rate_limited";
+}
 
 export type AdminMcpTelemetryEventFilters = {
   confidence?: "verified" | "corroborated" | "declared" | "inferred" | "unknown" | null;
@@ -717,9 +724,12 @@ export async function listAdminMcpTelemetryEventsPage(
         requester_requested_by: _requestedBy,
         ...event
       } = row;
+      const evidenceUnavailable = isAdminMcpEvidenceUnavailable(event);
       return {
         ...event,
-        evidence_matrix: parseAdminEvidenceMatrix(rawEvidenceMatrix),
+        evidence_matrix: evidenceUnavailable ? null : parseAdminEvidenceMatrix(rawEvidenceMatrix),
+        score: evidenceUnavailable ? null : event.score,
+        top_finding_count: evidenceUnavailable ? null : event.top_finding_count,
         source_ip: retainedRequesterIp ?? requesterIp.sourceIp,
         source_ip_hash: retainedRequesterIpHash ?? requesterIp.ipHash,
         source_ip_source: retainedRequesterIp ? "event" : retainedRequesterIpHash ? "hash_only" : requesterIp.source,

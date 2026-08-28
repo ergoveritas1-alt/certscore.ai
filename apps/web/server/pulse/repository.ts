@@ -701,20 +701,28 @@ export async function claimAnonymousScanDailyQuota(input: {
 }
 
 type LightMcpNewScanUsageRow = {
-  oldest_requester_burst_at: string | null;
+  oldest_ip_burst_at: string | null;
+  oldest_session_burst_at: string | null;
   oldest_surface_burst_at: string | null;
-  requester_burst_count: number | string;
-  requester_daily_count: number | string;
+  ip_burst_count: number | string;
+  ip_daily_count: number | string;
+  session_burst_count: number | string;
+  session_daily_count: number | string;
   surface_burst_count: number | string;
   surface_daily_count: number | string;
 };
 
 function lightMcpUsage(row: LightMcpNewScanUsageRow | undefined) {
   return {
-    requester: {
-      burstCount: Number(row?.requester_burst_count ?? 0),
-      dailyCount: Number(row?.requester_daily_count ?? 0),
-      oldestBurstAt: row?.oldest_requester_burst_at ?? null
+    session: {
+      burstCount: Number(row?.session_burst_count ?? 0),
+      dailyCount: Number(row?.session_daily_count ?? 0),
+      oldestBurstAt: row?.oldest_session_burst_at ?? null
+    },
+    ip: {
+      burstCount: Number(row?.ip_burst_count ?? 0),
+      dailyCount: Number(row?.ip_daily_count ?? 0),
+      oldestBurstAt: row?.oldest_ip_burst_at ?? null
     },
     surface: {
       burstCount: Number(row?.surface_burst_count ?? 0),
@@ -725,49 +733,59 @@ function lightMcpUsage(row: LightMcpNewScanUsageRow | undefined) {
 }
 
 const LIGHT_MCP_NEW_SCAN_USAGE_SQL = `select
-  count(*) filter (where requested_at > now() - make_interval(secs => $2::int))::int as surface_burst_count,
-  count(*) filter (where requester_key = $1 and requested_at > now() - make_interval(secs => $2::int))::int as requester_burst_count,
+  count(*) filter (where requested_at > now() - make_interval(secs => $3::int))::int as surface_burst_count,
+  count(*) filter (where requester_key = $1 and requested_at > now() - make_interval(secs => $3::int))::int as session_burst_count,
+  count(*) filter (where coalesce(ip_key, requester_key) = $2 and requested_at > now() - make_interval(secs => $3::int))::int as ip_burst_count,
   count(*) filter (where requested_at >= date_trunc('day', now() at time zone 'utc') at time zone 'utc')::int as surface_daily_count,
-  count(*) filter (where requester_key = $1 and requested_at >= date_trunc('day', now() at time zone 'utc') at time zone 'utc')::int as requester_daily_count,
-  min(requested_at) filter (where requested_at > now() - make_interval(secs => $2::int)) as oldest_surface_burst_at,
-  min(requested_at) filter (where requester_key = $1 and requested_at > now() - make_interval(secs => $2::int)) as oldest_requester_burst_at
+  count(*) filter (where requester_key = $1 and requested_at >= date_trunc('day', now() at time zone 'utc') at time zone 'utc')::int as session_daily_count,
+  count(*) filter (where coalesce(ip_key, requester_key) = $2 and requested_at >= date_trunc('day', now() at time zone 'utc') at time zone 'utc')::int as ip_daily_count,
+  min(requested_at) filter (where requested_at > now() - make_interval(secs => $3::int)) as oldest_surface_burst_at,
+  min(requested_at) filter (where requester_key = $1 and requested_at > now() - make_interval(secs => $3::int)) as oldest_session_burst_at,
+  min(requested_at) filter (where coalesce(ip_key, requester_key) = $2 and requested_at > now() - make_interval(secs => $3::int)) as oldest_ip_burst_at
 from light_mcp_new_scan_events
 where requested_at > now() - interval '1 day'
    or requested_at >= date_trunc('day', now() at time zone 'utc') at time zone 'utc'`;
 
 /** Atomically reserves one genuinely new scan against both requester and whole-Light safety rails. */
-export async function claimLightMcpNewScanQuota(input: { requesterKey: string }) {
+export async function claimLightMcpNewScanQuota(input: { ipKey: string; sessionKey: string }) {
   await ensurePulseTables();
   return withWriteTransaction(async (client) => {
     await client.query("select pg_advisory_xact_lock(hashtext($1))", ["light-mcp-new-scan-surface"]);
     const usageResult = await client.query<LightMcpNewScanUsageRow>(LIGHT_MCP_NEW_SCAN_USAGE_SQL, [
-      input.requesterKey,
+      input.sessionKey,
+      input.ipKey,
       LIGHT_MCP_NEW_SCAN_POLICY.burstWindowSeconds
     ]);
     const decision = decideLightMcpNewScanQuota({ usage: lightMcpUsage(usageResult.rows[0]) });
     if (!decision.allowed) return decision;
     await client.query(
-      "insert into light_mcp_new_scan_events (requester_key) values ($1)",
-      [input.requesterKey]
+      "insert into light_mcp_new_scan_events (requester_key, ip_key) values ($1, $2)",
+      [input.sessionKey, input.ipKey]
     );
     return decision;
   });
 }
 
-export async function getLightMcpNewScanQuotaState(input: { requesterKey: string; now?: Date }) {
+export async function getLightMcpNewScanQuotaState(input: { ipKey: string; sessionKey: string; now?: Date }) {
   await ensurePulseTables();
   const row = await queryOne<LightMcpNewScanUsageRow>(LIGHT_MCP_NEW_SCAN_USAGE_SQL, [
-    input.requesterKey,
+    input.sessionKey,
+    input.ipKey,
     LIGHT_MCP_NEW_SCAN_POLICY.burstWindowSeconds
   ], { readOnly: true });
   const usage = lightMcpUsage(row ?? undefined);
-  const used = Math.max(usage.surface.dailyCount, usage.requester.dailyCount);
+  const limit = LIGHT_MCP_NEW_SCAN_POLICY.session.dailyLimit;
+  const remaining = Math.max(0, Math.min(
+    LIGHT_MCP_NEW_SCAN_POLICY.session.dailyLimit - usage.session.dailyCount,
+    LIGHT_MCP_NEW_SCAN_POLICY.ip.dailyLimit - usage.ip.dailyCount,
+    LIGHT_MCP_NEW_SCAN_POLICY.surface.dailyLimit - usage.surface.dailyCount
+  ));
   const now = input.now ?? new Date();
   return {
-    limit: LIGHT_MCP_NEW_SCAN_POLICY.dailyLimit,
-    remaining: Math.max(0, LIGHT_MCP_NEW_SCAN_POLICY.dailyLimit - used),
+    limit,
+    remaining,
     resetAt: new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() + 1)).toISOString(),
-    used
+    used: limit - remaining
   };
 }
 

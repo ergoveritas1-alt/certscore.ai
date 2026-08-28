@@ -181,6 +181,7 @@ test("Streamable HTTP runtime initializes, lists tools, enforces auth, CORS, and
   let anonymousSurface: string | undefined;
   let anonymousRequesterIp: string | undefined;
   let anonymousRequesterProof: string | undefined;
+  let anonymousRequesterSession: string | undefined;
   let authenticatedInternalOperation: string | undefined;
   let authenticatedInternalProof: string | undefined;
   let authenticatedInternalTimestamp: string | undefined;
@@ -199,6 +200,7 @@ test("Streamable HTTP runtime initializes, lists tools, enforces auth, CORS, and
       anonymousSurface = request.headers["x-certscore-anonymous-surface"]?.toString();
       anonymousRequesterIp = request.headers["x-certscore-anonymous-requester-ip"]?.toString();
       anonymousRequesterProof = request.headers["x-certscore-anonymous-requester-proof"]?.toString();
+      anonymousRequesterSession = request.headers["x-certscore-anonymous-requester-session"]?.toString();
       response.writeHead(202, { "content-type": "application/json" });
       response.end(JSON.stringify({
         type: "certscore_scan_job",
@@ -411,6 +413,7 @@ test("Streamable HTTP runtime initializes, lists tools, enforces auth, CORS, and
     assert.match(JSON.stringify(microsoftCreated), /anonymous-mcp-job/);
     assert.equal(scanCreateRequestCount, 1);
     assert.equal(anonymousSurface, "mcp_light");
+    assert.match(anonymousRequesterSession ?? "", /^[A-Za-z0-9_-]{16,128}$/);
     assert.equal(anonymousRequesterIp, "198.51.100.81");
     assert.equal(apiAuthorization, undefined, "the Entra bearer token must not be forwarded as a CertScore API credential");
     await microsoftClient.close();

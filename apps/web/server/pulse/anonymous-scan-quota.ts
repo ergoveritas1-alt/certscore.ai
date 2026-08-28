@@ -1,11 +1,12 @@
 export const ANONYMOUS_SCAN_DAILY_LIMIT = 20;
 export const LIGHT_MCP_NEW_SCAN_POLICY = {
-  burstLimit: 5,
   burstWindowSeconds: 10 * 60,
-  dailyLimit: 50
+  session: { burstLimit: 20, dailyLimit: 60 },
+  ip: { burstLimit: 30, dailyLimit: 100 },
+  surface: { burstLimit: 60, dailyLimit: 200 }
 } as const;
 
-export type LightMcpScanQuotaScope = "requester" | "surface";
+export type LightMcpScanQuotaScope = "session" | "ip" | "surface";
 export type LightMcpScanQuotaWindow = "burst" | "daily";
 
 export type AnonymousScanQuotaDecision =
@@ -27,10 +28,17 @@ export function anonymousScanQuotaKey(ipHash: string | null | undefined) {
 export function lightMcpScanRequesterKey(input: {
   ipHash: string | null | undefined;
   network: string | null | undefined;
+  sessionHash?: string | null | undefined;
 }) {
+  const sessionHash = input.sessionHash?.trim();
+  if (sessionHash) return `session:${sessionHash}`;
   return input.network === "anthropic"
     ? "provider:anthropic"
     : `ip:${anonymousScanQuotaKey(input.ipHash)}`;
+}
+
+export function lightMcpScanIpKey(ipHash: string | null | undefined) {
+  return `ip:${anonymousScanQuotaKey(ipHash)}`;
 }
 
 export function retryAfterNextUtcDay(now = new Date()) {
@@ -74,16 +82,16 @@ export function decideLightMcpNewScanQuota(input: {
   }>;
 }) {
   const now = input.now ?? new Date();
-  const checks = (["surface", "requester"] as const).flatMap((scope) => [
+  const checks = (["surface", "ip", "session"] as const).flatMap((scope) => [
     {
       count: input.usage[scope].burstCount,
-      limit: LIGHT_MCP_NEW_SCAN_POLICY.burstLimit,
+      limit: LIGHT_MCP_NEW_SCAN_POLICY[scope].burstLimit,
       scope,
       window: "burst" as const
     },
     {
       count: input.usage[scope].dailyCount,
-      limit: LIGHT_MCP_NEW_SCAN_POLICY.dailyLimit,
+      limit: LIGHT_MCP_NEW_SCAN_POLICY[scope].dailyLimit,
       scope,
       window: "daily" as const
     }
@@ -120,23 +128,26 @@ export class AnonymousScanQuotaError extends Error {
   readonly retryAfterSeconds: number;
   readonly scope: LightMcpScanQuotaScope | "requester";
   readonly window: LightMcpScanQuotaWindow | "daily";
+  readonly windowSeconds: number | null;
 
   constructor(retryAfterSeconds: number, options?: {
     lightMcp?: boolean;
     limit?: number;
     scope?: LightMcpScanQuotaScope;
     window?: LightMcpScanQuotaWindow;
+    windowSeconds?: number | null;
   }) {
     const limit = options?.limit ?? ANONYMOUS_SCAN_DAILY_LIMIT;
     const window = options?.window ?? "daily";
     const scope = options?.scope ?? "requester";
     const anonymousLimitName = options?.lightMcp ? "anonymous Light MCP limit" : "anonymous endpoint limit";
+    const burstMinutes = Math.max(1, Math.round((options?.windowSeconds ?? LIGHT_MCP_NEW_SCAN_POLICY.burstWindowSeconds) / 60));
     const recovery = scope === "surface"
       ? "This is a shared public-Light limit; registering an account will not bypass the active window. Contact support@certscore.ai if it repeatedly affects legitimate use."
       : `If you need higher-volume scanning, create an account at https://certscore.ai/login?mode=create_account and contact support@certscore.ai to request a custom automated-access allowance. Creating an account does not automatically change the ${anonymousLimitName}.`;
     super(
       window === "burst"
-        ? `The anonymous Light MCP allows ${limit} genuinely new scans per 10 minutes. Reuse an eligible result or wait for Retry-After before trying again. ${recovery}`
+        ? `The anonymous Light MCP allows ${limit} genuinely new scans per ${burstMinutes} minutes for the active ${scope} scope. Reuse an eligible result or wait for Retry-After before trying again. ${recovery}`
         : `The no-account allowance is ${limit} genuinely new scans per UTC day. ` +
           `Reuse an eligible recent result or try again after the UTC reset. ${recovery}`
     );
@@ -145,6 +156,9 @@ export class AnonymousScanQuotaError extends Error {
     this.retryAfterSeconds = retryAfterSeconds;
     this.scope = scope;
     this.window = window;
+    this.windowSeconds = window === "burst"
+      ? options?.windowSeconds ?? LIGHT_MCP_NEW_SCAN_POLICY.burstWindowSeconds
+      : null;
   }
 }
 

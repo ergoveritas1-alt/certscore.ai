@@ -5,6 +5,7 @@ import { shouldUseLocalV2DagScanTool } from "./local-v2-dag-scan-config";
 
 export type ScanRequesterIpContext = {
   anonymousMcpSurface?: "mcp_light" | "mcp_anonymous" | null;
+  anonymousMcpSessionHash?: string | null;
   anonymousRequesterNetwork?: AnonymousRequesterNetwork;
   ipHash: string | null;
   sourceIp: string | null;
@@ -12,12 +13,13 @@ export type ScanRequesterIpContext = {
 
 export function getScanRequesterIpContext(headers: Pick<Headers, "get">): ScanRequesterIpContext {
   if (shouldUseLocalV2DagScanTool()) {
-    return { anonymousMcpSurface: null, anonymousRequesterNetwork: "unknown", ipHash: null, sourceIp: null };
+    return { anonymousMcpSurface: null, anonymousMcpSessionHash: null, anonymousRequesterNetwork: "unknown", ipHash: null, sourceIp: null };
   }
   const sourceIp = getTrustedRequestSourceIp(headers)?.slice(0, 120) ?? null;
 
   return {
     anonymousMcpSurface: null,
+    anonymousMcpSessionHash: null,
     anonymousRequesterNetwork: anonymousRequesterNetwork(sourceIp),
     ipHash: sourceIp ? createHash("sha256").update(sourceIp).digest("hex") : null,
     sourceIp
@@ -36,6 +38,7 @@ export function normalizeScanRequesterIpContext(
     : null;
   return {
     anonymousMcpSurface,
+    anonymousMcpSessionHash: value?.anonymousMcpSessionHash?.trim().slice(0, 128) || null,
     anonymousRequesterNetwork: value?.anonymousRequesterNetwork ?? anonymousRequesterNetwork(sourceIp),
     ipHash,
     sourceIp

@@ -11,7 +11,7 @@ import {
 import { getPublicScanRecord } from "../../../../server/scans/get-public-scan-record";
 import { getPulseRequesterContext } from "../../../../lib/pulse/request";
 import { getAnonymousScanDailyQuotaState, getLightMcpNewScanQuotaState } from "../../../../server/pulse/repository";
-import { lightMcpScanRequesterKey } from "../../../../server/pulse/anonymous-scan-quota";
+import { lightMcpScanIpKey, lightMcpScanRequesterKey } from "../../../../server/pulse/anonymous-scan-quota";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -119,10 +119,14 @@ export async function POST(request: Request) {
     const pulseBody = await pulseResponse.json().catch(() => null);
     const anonymousQuota = anonymousRequester
       ? anonymousRequester.anonymousMcpSurface === "mcp_light"
-        ? await getLightMcpNewScanQuotaState({ requesterKey: lightMcpScanRequesterKey({
-            ipHash: anonymousRequester.ipHash,
-            network: anonymousRequester.anonymousRequesterNetwork
-          }) })
+        ? await getLightMcpNewScanQuotaState({
+            ipKey: lightMcpScanIpKey(anonymousRequester.ipHash),
+            sessionKey: lightMcpScanRequesterKey({
+              ipHash: anonymousRequester.ipHash,
+              network: anonymousRequester.anonymousRequesterNetwork,
+              sessionHash: anonymousRequester.anonymousMcpSessionHash
+            })
+          })
         : await getAnonymousScanDailyQuotaState({ ipHash: anonymousRequester.ipHash })
       : null;
 

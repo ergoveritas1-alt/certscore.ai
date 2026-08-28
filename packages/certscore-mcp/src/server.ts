@@ -10,6 +10,7 @@ export interface CertScoreMcpOptions {
   baseUrl?: string;
   forwardedClientIp?: string | null;
   resolveForwardedClientIp?: (headers: RequestInfo["headers"]) => string | null;
+  resolveAnonymousRequesterSession?: () => string | null;
   anonymousRequesterSecret?: string | null;
   anonymousSurface?: "mcp_light" | "mcp_anonymous" | null;
   timeout?: number;
@@ -317,18 +318,25 @@ function observeToolInvocation(
 }
 
 export function createCertScoreMcpServer(options: CertScoreMcpOptions = {}) {
-  const createClient = (forwardedClientIp: string | null | undefined) => new CertScoreClient({
+  const createClient = (
+    forwardedClientIp: string | null | undefined,
+    anonymousRequesterSession?: string | null
+  ) => new CertScoreClient({
     apiKey: options.apiKey,
     baseUrl: options.baseUrl,
     clientName: "mcp",
     forwardedClientIp,
     anonymousRequesterSecret: options.anonymousRequesterSecret,
     anonymousSurface: options.anonymousSurface,
+    anonymousRequesterSession,
     timeout: options.timeout
   });
-  const client = createClient(options.forwardedClientIp);
+  const client = createClient(options.forwardedClientIp, options.resolveAnonymousRequesterSession?.());
   const clientForRequest = (extra: { requestInfo?: RequestInfo }) => options.resolveForwardedClientIp
-    ? createClient(options.resolveForwardedClientIp(extra.requestInfo?.headers ?? {}))
+    ? createClient(
+        options.resolveForwardedClientIp(extra.requestInfo?.headers ?? {}),
+        options.resolveAnonymousRequesterSession?.()
+      )
     : client;
 
   const server = new McpServer({

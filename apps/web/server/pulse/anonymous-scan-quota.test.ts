@@ -7,6 +7,7 @@ import {
   decideAnonymousScanQuota,
   decideLightMcpNewScanQuota,
   isAnonymousScanQuotaError,
+  lightMcpScanIpKey,
   lightMcpScanRequesterKey,
   retryAfterNextUtcDay,
   AnonymousScanQuotaError
@@ -25,46 +26,51 @@ test("anonymous scans allow up to the daily limit and report remaining capacity"
   });
 });
 
-function lightUsage(overrides: Partial<Record<"requester" | "surface", Partial<{ burstCount: number; dailyCount: number; oldestBurstAt: string | null }>>> = {}) {
+function lightUsage(overrides: Partial<Record<"session" | "ip" | "surface", Partial<{ burstCount: number; dailyCount: number; oldestBurstAt: string | null }>>> = {}) {
   return {
-    requester: { burstCount: 0, dailyCount: 0, oldestBurstAt: null, ...overrides.requester },
+    session: { burstCount: 0, dailyCount: 0, oldestBurstAt: null, ...overrides.session },
+    ip: { burstCount: 0, dailyCount: 0, oldestBurstAt: null, ...overrides.ip },
     surface: { burstCount: 0, dailyCount: 0, oldestBurstAt: null, ...overrides.surface }
   };
 }
 
-test("Light MCP new scans have a five-per-ten-minute whole-surface burst rail", () => {
+test("Light MCP new scans have a sixty-per-ten-minute whole-surface burst rail", () => {
   const now = new Date("2026-08-14T12:05:00.000Z");
-  assert.equal(decideLightMcpNewScanQuota({ usage: lightUsage() }).remaining, 4);
+  assert.equal(decideLightMcpNewScanQuota({ usage: lightUsage() }).remaining, 19);
   const denied = decideLightMcpNewScanQuota({
     now,
-    usage: lightUsage({ surface: { burstCount: 5, oldestBurstAt: "2026-08-14T12:00:30.000Z" } })
+    usage: lightUsage({ surface: { burstCount: 60, oldestBurstAt: "2026-08-14T12:00:30.000Z" } })
   });
   assert.equal(denied.allowed, false);
   if (denied.allowed) return;
   assert.equal(denied.scope, "surface");
   assert.equal(denied.window, "burst");
-  assert.equal(denied.limit, LIGHT_MCP_NEW_SCAN_POLICY.burstLimit);
+  assert.equal(denied.limit, LIGHT_MCP_NEW_SCAN_POLICY.surface.burstLimit);
   assert.equal(denied.retryAfterSeconds, 330);
 });
 
-test("Light MCP new scans have a fifty-per-UTC-day surface and requester rail", () => {
+test("Light MCP new scans have independent session, IP, and surface daily rails", () => {
   const denied = decideLightMcpNewScanQuota({
     now: new Date("2026-08-14T23:59:30.000Z"),
-    usage: lightUsage({ requester: { dailyCount: 50 } })
+    usage: lightUsage({ session: { dailyCount: 60 } })
   });
   assert.equal(denied.allowed, false);
   if (denied.allowed) return;
-  assert.equal(denied.scope, "requester");
+  assert.equal(denied.scope, "session");
   assert.equal(denied.window, "daily");
-  assert.equal(denied.limit, 50);
+  assert.equal(denied.limit, LIGHT_MCP_NEW_SCAN_POLICY.session.dailyLimit);
   assert.equal(denied.retryAfterSeconds, 30);
 });
 
-test("Anthropic egress rotates into one provider safety bucket while direct IPs remain distinct", () => {
+test("stable MCP sessions survive rotating provider egress while IP rails remain distinct", () => {
+  assert.equal(lightMcpScanRequesterKey({ ipHash: "hash-a", network: "direct", sessionHash: "session-a" }), "session:session-a");
+  assert.equal(lightMcpScanRequesterKey({ ipHash: "hash-b", network: "direct", sessionHash: "session-a" }), "session:session-a");
   assert.equal(lightMcpScanRequesterKey({ ipHash: "hash-a", network: "anthropic" }), "provider:anthropic");
   assert.equal(lightMcpScanRequesterKey({ ipHash: "hash-b", network: "anthropic" }), "provider:anthropic");
   assert.equal(lightMcpScanRequesterKey({ ipHash: "hash-a", network: "direct" }), "ip:hash-a");
   assert.equal(lightMcpScanRequesterKey({ ipHash: "hash-b", network: "direct" }), "ip:hash-b");
+  assert.equal(lightMcpScanIpKey("hash-a"), "ip:hash-a");
+  assert.equal(lightMcpScanIpKey("hash-b"), "ip:hash-b");
 });
 
 test("eligible reuse returns before the atomic Light new-scan claim", async () => {
@@ -103,16 +109,16 @@ test("anonymous scan quota errors are identifiable without exposing requester da
 });
 
 test("shared Light scan quota guidance does not imply registration bypasses the active window", () => {
-  const error = new AnonymousScanQuotaError(60, { limit: 5, scope: "surface", window: "burst" });
+  const error = new AnonymousScanQuotaError(60, { limit: 60, scope: "surface", window: "burst", windowSeconds: 600 });
 
-  assert.match(error.message, /5 genuinely new scans per 10 minutes/i);
+  assert.match(error.message, /60 genuinely new scans per 10 minutes/i);
   assert.match(error.message, /shared public-Light limit/i);
   assert.match(error.message, /registering an account will not bypass/i);
   assert.doesNotMatch(error.message, /login\?mode=create_account/);
 });
 
-test("requester-scoped Light quota guidance identifies the anonymous Connector limit", () => {
-  const error = new AnonymousScanQuotaError(60, { lightMcp: true, limit: 5, scope: "requester", window: "burst" });
+test("session-scoped Light quota guidance identifies the anonymous Connector limit", () => {
+  const error = new AnonymousScanQuotaError(60, { lightMcp: true, limit: 20, scope: "session", window: "burst", windowSeconds: 600 });
 
   assert.match(error.message, /create an account at https:\/\/certscore\.ai\/login\?mode=create_account/i);
   assert.match(error.message, /does not automatically change the anonymous Light MCP limit/i);

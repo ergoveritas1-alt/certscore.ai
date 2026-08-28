@@ -38,17 +38,20 @@ test("Pulse requester context accepts only a fresh signed anonymous MCP requeste
     const ip = "203.0.113.44";
     const timestamp = String(Math.floor(Date.now() / 1000));
     const surface = "mcp_light";
-    const proof = createHmac("sha256", secret).update(`${timestamp}.${ip}.${surface}`).digest("base64url");
+    const session = "opaque-session-binding-123456";
+    const proof = createHmac("sha256", secret).update(`${timestamp}.${ip}.${surface}.${session}`).digest("base64url");
     const verified = getPulseRequesterContext(new Request("https://certscore.ai/api/v2/scans", {
       headers: {
         "x-certscore-anonymous-requester-ip": ip,
         "x-certscore-anonymous-requester-timestamp": timestamp,
         "x-certscore-anonymous-requester-proof": proof,
+        "x-certscore-anonymous-requester-session": session,
         "x-certscore-anonymous-surface": surface
       }
     }));
     assert.equal(verified.sourceIp, ip);
     assert.equal(verified.anonymousMcpSurface, "mcp_light");
+    assert.match(verified.anonymousMcpSessionHash ?? "", /^[a-f0-9]{64}$/);
     assert.ok(verified.ipHash);
 
     const invalid = getPulseRequesterContext(new Request("https://certscore.ai/api/v2/scans", {

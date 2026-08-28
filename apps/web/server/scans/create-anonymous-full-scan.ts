@@ -28,7 +28,7 @@ import { runLocalV2DagDispatch, type LocalV2DagDispatchContext } from "./local-v
 import { resolveRecentScanReuseDecision, RECENT_SCAN_REUSE_WINDOW_HOURS } from "./recent-scan-reuse";
 import { logScanRequestFailure, recordScanRequest } from "./scan-request-log";
 import { lookupTrancoRankMetadata } from "./tranco-rank-metadata";
-import { AnonymousScanQuotaError, lightMcpScanRequesterKey } from "../pulse/anonymous-scan-quota";
+import { AnonymousScanQuotaError, lightMcpScanIpKey, lightMcpScanRequesterKey } from "../pulse/anonymous-scan-quota";
 import { claimAnonymousScanDailyQuota, claimLightMcpNewScanQuota } from "../pulse/repository";
 import {
   normalizeScanRequesterIpContext,
@@ -210,10 +210,12 @@ export async function createAnonymousFullScan(input: {
     const isLightMcp = requesterIpContext.anonymousMcpSurface === "mcp_light";
     const lightRequesterKey = lightMcpScanRequesterKey({
       ipHash: requesterIpContext.ipHash ?? input.provenance?.originIp,
-      network: requesterIpContext.anonymousRequesterNetwork
+      network: requesterIpContext.anonymousRequesterNetwork,
+      sessionHash: requesterIpContext.anonymousMcpSessionHash
     });
+    const lightIpKey = lightMcpScanIpKey(requesterIpContext.ipHash ?? input.provenance?.originIp);
     const quota = isLightMcp
-      ? await claimLightMcpNewScanQuota({ requesterKey: lightRequesterKey })
+      ? await claimLightMcpNewScanQuota({ ipKey: lightIpKey, sessionKey: lightRequesterKey })
       : await claimAnonymousScanDailyQuota({
           ipHash: requesterIpContext.ipHash ?? input.provenance?.originIp
         });
@@ -229,6 +231,12 @@ export async function createAnonymousFullScan(input: {
           coveragePlanCode,
           ipHash: requesterIpContext.ipHash,
           provenance: input.provenance ?? null,
+          quota: "scope" in quota ? {
+            limit: quota.limit,
+            scope: quota.scope,
+            window: quota.window,
+            windowSeconds: quota.windowSeconds
+          } : null,
           scanFrom,
           sourceIp: requesterIpContext.sourceIp
         },
@@ -243,7 +251,8 @@ export async function createAnonymousFullScan(input: {
         ...("limit" in quota ? {
           limit: quota.limit,
           scope: quota.scope,
-          window: quota.window
+          window: quota.window,
+          windowSeconds: quota.windowSeconds
         } : {})
       });
     }

@@ -42,6 +42,8 @@ export interface CertScoreClientOptions {
   anonymousRequesterSecret?: string | null;
   /** Authenticated internal gateway surface, bound into anonymous requester proofs. */
   anonymousSurface?: "mcp_light" | "mcp_anonymous" | null;
+  /** Stable, opaque hosted-MCP session binding used for anonymous quota fairness across rotating egress IPs. */
+  anonymousRequesterSession?: string | null;
   timeout?: number;
 }
 

@@ -416,6 +416,11 @@ async function handleMcp(req: IncomingMessage, res: ServerResponse, anonymous: b
       resolveForwardedClientIp: anonymous && light
         ? (headers) => anonymousMcpRequesterFromHeaders(headers).ip
         : undefined,
+      resolveAnonymousRequesterSession: anonymous && light
+        ? () => transport.sessionId
+          ? sessions.hashToken(`anonymous-light-session:${transport.sessionId}`)
+          : null
+        : undefined,
       anonymousSurface: anonymous ? (light ? "mcp_light" : "mcp_anonymous") : null,
       timeout: env.CERTSCORE_REQUEST_TIMEOUT_MS,
       toolProfile: light ? "light" : "full",

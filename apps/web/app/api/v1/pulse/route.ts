@@ -1112,6 +1112,9 @@ async function handlePulseGET(request: Request, options: PulseRouteOptions = {})
         {
           headers: {
             "Cache-Control": "no-store",
+            "X-CertScore-RateLimit-Limit": String(error.limit),
+            "X-CertScore-RateLimit-Scope": error.scope,
+            "X-CertScore-RateLimit-Window": error.window,
             "Retry-After": String(error.retryAfterSeconds)
           },
           status: 429

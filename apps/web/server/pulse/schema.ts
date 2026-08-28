@@ -85,14 +85,21 @@ async function createPulseTables() {
     create table if not exists public.light_mcp_new_scan_events (
       id bigserial primary key,
       requester_key text not null,
+      ip_key text,
       requested_at timestamptz not null default now()
     );
+
+    alter table public.light_mcp_new_scan_events
+      add column if not exists ip_key text;
 
     create index if not exists light_mcp_new_scan_events_requested_at_idx
       on public.light_mcp_new_scan_events (requested_at desc);
 
     create index if not exists light_mcp_new_scan_events_requester_requested_at_idx
       on public.light_mcp_new_scan_events (requester_key, requested_at desc);
+
+    create index if not exists light_mcp_new_scan_events_ip_requested_at_idx
+      on public.light_mcp_new_scan_events (ip_key, requested_at desc);
 
     create table if not exists public.pulse_domain_throttles (
       normalized_domain text primary key,
