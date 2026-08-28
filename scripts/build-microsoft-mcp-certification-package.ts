@@ -7,7 +7,8 @@ import sharp from "sharp";
 
 const outputRoot = resolve("outputs/microsoft-mcp-certification-v2");
 const packageDir = join(outputRoot, "package");
-const zipPath = join(outputRoot, "certscore-microsoft-mcp-package-v1.0.0.zip");
+const packageVersion = "1.0.1";
+const zipPath = join(outputRoot, `certscore-microsoft-mcp-package-v${packageVersion}.zip`);
 const templateKeyVaultUri = "https://REPLACE-WITH-CERTSCORE-MCP-KEY-VAULT.vault.azure.net/";
 const keyVaultUri = process.env.CERTSCORE_MICROSOFT_KEY_VAULT_URI?.trim() || templateKeyVaultUri;
 
@@ -19,7 +20,7 @@ async function lightTools() {
   const { createCertScoreMcpServer } = await import("../packages/certscore-mcp/dist/server.js");
   const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
   const server = createCertScoreMcpServer({ toolProfile: "light" });
-  const client = new Client({ name: "certscore-microsoft-package-builder", version: "1.0.0" });
+  const client = new Client({ name: "certscore-microsoft-package-builder", version: packageVersion });
   await Promise.all([server.connect(serverTransport), client.connect(clientTransport)]);
   try {
     return (await client.listTools()).tools;
@@ -32,27 +33,33 @@ async function lightTools() {
 const manifest = {
   $schema: "https://developer.microsoft.com/en-us/json-schemas/teams/vDevPreview/MicrosoftTeams.schema.json",
   manifestVersion: "devPreview",
-  version: "1.0.0",
+  version: packageVersion,
   id: "b971ee8e-f595-4a87-8b18-a401171f821d",
   developer: {
     name: "CertScore.ai",
     mpnId: "7150890",
     websiteUrl: "https://certscore.ai/contact",
     privacyUrl: "https://certscore.ai/privacy",
-    termsOfUseUrl: "https://certscore.ai/terms"
+    termsOfUseUrl: "https://certscore.ai/terms",
+    contactInfo: {
+      defaultSupport: {
+        userEmailsForChatSupport: ["support@certscore.ai"],
+        emailsForEmailSupport: ["support@certscore.ai"]
+      }
+    }
   },
   name: {
     short: "CertScore Web Privacy Scanner",
     full: "CertScore.ai Website Privacy Scanner MCP for Microsoft"
   },
   description: {
-    short: "Scan cookies, trackers, CMPs, consent, privacy policy, GDPR, CCPA, and TLS.",
-    full: "Microsoft-authenticated CertScore.ai MCP Light scans public websites for observable privacy, consent, policy, tracker, cookie/storage, and HTTPS/TLS signals. Results support human and agentic review and are not legal advice, certification, or a compliance determination."
+    short: "Scan consent and post-refusal tracking, cookies, CMPs, policies, and TLS.",
+    full: "Microsoft-authenticated CertScore.ai MCP Light scans public websites for observable privacy, consent, policy, tracker, cookie/storage, and HTTPS/TLS signals. For eligible scans, its bounded Reject Path can confirm refusal and retain evidence of qualifying non-essential activity or a contradictory consent signal afterward. Results support review and are not legal advice, certification, or a compliance determination."
   },
   agentConnectors: [{
     id: "certscore-microsoft-mcp",
     displayName: "CertScore.ai Website Privacy Scanner MCP",
-    description: "Scan or reuse a public-website assessment, check status, and retrieve its bounded evidence-backed report bundle.",
+    description: "Scan or reuse a public-website assessment, check status, and retrieve its bounded evidence-backed report bundle, including confirmed Reject Path observations when eligible.",
     toolSource: {
       remoteMcpServer: {
         mcpServerUrl: "https://mcp.certscore.ai/mcp/microsoft",
@@ -70,7 +77,7 @@ const manifest = {
 
 const intro = `# CertScore.ai Website Privacy Scanner MCP
 
-CertScore.ai provides evidence-backed website privacy scanning for public websites. It observes bounded public-web signals such as pre-consent cookies and browser storage, third-party trackers, CMP and consent controls, privacy-policy signals, GDPR/ePrivacy and CCPA/CPRA review signals, and HTTPS/TLS behavior.
+CertScore.ai provides evidence-backed website privacy scanning for public websites. It observes bounded public-web signals such as pre-consent cookies and browser storage, third-party trackers, CMP and consent controls, privacy-policy signals, GDPR/ePrivacy and CCPA/CPRA review signals, and HTTPS/TLS behavior. For eligible scans, its bounded Reject Path can perform one deterministic first-layer refusal and retain confirmed evidence of qualifying non-essential activity or a contradictory consent signal afterward.
 
 This is the Microsoft-authenticated edition of CertScore.ai MCP Light. Microsoft authenticates service-to-service with a tenant-bound Microsoft Entra application token. End users do not need separate CertScore credentials.
 
@@ -92,6 +99,8 @@ Results are evidence-backed automated observations of public websites for human 
 
 - Scans cover observable public-web behavior from the selected execution region and time; site behavior can vary by location, session, account state, personalization, and later changes.
 - \`completed_limited\` is usable but has explicit coverage limitations. Read those limitations before interpreting findings.
+- Reject Path observation is available only for eligible scans with a supported, deterministically resolved first-layer refusal control. Unsupported, unconfirmed, failed, or timed-out observations remain explicit, score-neutral coverage limitations.
+- A confirmed Reject Path observation may stop intentionally after qualifying evidence is retained. This establishes the returned observation, but it does not establish behavior outside the measured post-refusal window.
 - Missing consent-action evidence does not establish Accept, Reject, Decline, or deeper preference behavior.
 - Do not extrapolate observed vendors, embeds, requests, cookies, fingerprinting, tracking, or processing beyond what the retained evidence supports.
 - Authentication is service-to-service. Microsoft Entra or Azure Key Vault configuration failures require administrator or publisher remediation rather than end-user CertScore login.
@@ -125,7 +134,7 @@ async function main() {
     sharp(Buffer.from(outlineSvg)).resize(32, 32).png().toFile(join(packageDir, "outline.png"))
   ]);
 
-  const packageTimestamp = new Date("2026-08-22T00:00:00.000Z");
+  const packageTimestamp = new Date("2026-08-28T00:00:00.000Z");
   await Promise.all(["manifest.json", "mcptools.json", "intro.md", "color.png", "outline.png"]
     .map((name) => utimes(join(packageDir, name), packageTimestamp, packageTimestamp)));
 

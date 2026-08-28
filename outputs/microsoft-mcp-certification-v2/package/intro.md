@@ -1,6 +1,6 @@
 # CertScore.ai Website Privacy Scanner MCP
 
-CertScore.ai provides evidence-backed website privacy scanning for public websites. It observes bounded public-web signals such as pre-consent cookies and browser storage, third-party trackers, CMP and consent controls, privacy-policy signals, GDPR/ePrivacy and CCPA/CPRA review signals, and HTTPS/TLS behavior.
+CertScore.ai provides evidence-backed website privacy scanning for public websites. It observes bounded public-web signals such as pre-consent cookies and browser storage, third-party trackers, CMP and consent controls, privacy-policy signals, GDPR/ePrivacy and CCPA/CPRA review signals, and HTTPS/TLS behavior. For eligible scans, its bounded Reject Path can perform one deterministic first-layer refusal and retain confirmed evidence of qualifying non-essential activity or a contradictory consent signal afterward.
 
 This is the Microsoft-authenticated edition of CertScore.ai MCP Light. Microsoft authenticates service-to-service with a tenant-bound Microsoft Entra application token. End users do not need separate CertScore credentials.
 
@@ -22,6 +22,8 @@ Results are evidence-backed automated observations of public websites for human 
 
 - Scans cover observable public-web behavior from the selected execution region and time; site behavior can vary by location, session, account state, personalization, and later changes.
 - `completed_limited` is usable but has explicit coverage limitations. Read those limitations before interpreting findings.
+- Reject Path observation is available only for eligible scans with a supported, deterministically resolved first-layer refusal control. Unsupported, unconfirmed, failed, or timed-out observations remain explicit, score-neutral coverage limitations.
+- A confirmed Reject Path observation may stop intentionally after qualifying evidence is retained. This establishes the returned observation, but it does not establish behavior outside the measured post-refusal window.
 - Missing consent-action evidence does not establish Accept, Reject, Decline, or deeper preference behavior.
 - Do not extrapolate observed vendors, embeds, requests, cookies, fingerprinting, tracking, or processing beyond what the retained evidence supports.
 - Authentication is service-to-service. Microsoft Entra or Azure Key Vault configuration failures require administrator or publisher remediation rather than end-user CertScore login.

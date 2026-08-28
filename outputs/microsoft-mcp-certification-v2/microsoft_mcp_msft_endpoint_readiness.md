@@ -1,13 +1,13 @@
 # CertScore.ai Microsoft MCP endpoint readiness
 
-Assessment date: 2026-08-23
+Assessment date: 2026-08-23; package refresh: 2026-08-28
 Repository: `/Users/benmasek/WC01`
 Target endpoint: `https://mcp.certscore.ai/mcp/microsoft`
 
 ## A. Executive verdict
 
 - **ENDPOINT IMPLEMENTATION READY:** YES. The scoped implementation was committed, built, scanned, deployed, enabled, and verified with a fresh real Entra client-credentials token through initialize and tools/list only. Production is healthy with the Microsoft endpoint enabled.
-- **PACKAGE READY:** YES — READY TO UPLOAD when Ben separately authorizes the Partner Center action. The archive contains the verified Key Vault URI, passes the live Microsoft vDevPreview schema, contains exactly the five expected root files and three canonical Light tools, and passes the targeted credential scan. Upload remains intentionally deferred.
+- **PACKAGE READY:** YES — READY TO UPLOAD when Ben separately authorizes the Partner Center action. Package v1.0.1 contains the verified Key Vault URI, exactly the five expected root files and three canonical Light tools, current support metadata, and marketplace copy that explains the bounded Reject Path and confirmed post-refusal observations. Offline structure, JSON, ASCII, icon, archive-integrity, and credential checks pass. Upload remains intentionally deferred so Partner Center can run its authenticated validator immediately before submission.
 - **AZURE SETUP READY:** YES. Ben manually verified the two-app Entra topology, v2 resource token configuration, exact four enabled Key Vault secrets, Microsoft certification service-principal RBAC, successful client-credentials token acquisition, and the required token claims.
 - **PRODUCTION DEPLOYMENT REQUIRED:** COMPLETE.
 
@@ -28,6 +28,7 @@ The feature commits were pushed and the reviewed AWS rollout was completed. No p
 - Authenticated QA used Ben's authenticated Azure Cloud Shell and kept the Key Vault secret and access token in shell memory without printing either. Token acquisition passed; initialize returned HTTP 200 using protocol `2025-06-18`; the initialized notification returned HTTP 202; tools/list returned HTTP 200; and session close returned HTTP 200.
 - Authenticated tools/list returned exactly `certscore_get_scan_bundle`, `certscore_get_scan_status`, and `certscore_scan_site`. The canonicalized tool schema SHA-256 was `553071f0561eeae06331f3ecae0c8c45e116a8e084b46ad0e8fe1e3947810d2a`, exactly matching the independently computed production Light digest. No tool was called.
 - Current health returns HTTP 200, `status: ok`, and the exact Microsoft endpoint. Final Light verification passes with exact three-tool parity and its lifecycle scan branch skipped.
+- On 2026-08-28, current health again returned HTTP 200, `status: ok`, version `0.2.16`, and the exact Microsoft endpoint.
 - CloudWatch review of the final QA window found 26 MCP log events: four validated Microsoft events, the expected one rejected anonymous request, zero bearer/JWT/client-secret/Authorization material, zero `mcp_http.request_failed` events, zero rate-limit events, and zero scan-tool or scan-creation events.
 - Production scans created by this release and QA: **0**.
 
@@ -74,7 +75,7 @@ Ben manually verified these Azure components and a real client-credentials token
 
 ## C. Microsoft requirements reconciliation
 
-Official live sources consulted again on 2026-08-23:
+Official live sources consulted again on 2026-08-28:
 
 - [MCP server certification](https://learn.microsoft.com/en-us/microsoft-agent-365/mcp-certification).
 - [Register MCP servers as Agent Connectors](https://learn.microsoft.com/en-us/microsoftteams/platform/m365-apps/agent-connectors).
@@ -114,7 +115,7 @@ For Entra client credentials, the Key Vault `AzureActiveDirectoryResourceId` is 
 - `outputs/microsoft-mcp-certification-v2/package/intro.md`
 - `outputs/microsoft-mcp-certification-v2/package/color.png`
 - `outputs/microsoft-mcp-certification-v2/package/outline.png`
-- `outputs/microsoft-mcp-certification-v2/certscore-microsoft-mcp-package-v1.0.0.zip`
+- `outputs/microsoft-mcp-certification-v2/certscore-microsoft-mcp-package-v1.0.1.zip`
 - `outputs/microsoft-mcp-certification-v2/azure_setup.md`
 - `outputs/microsoft-mcp-certification-v2/microsoft_mcp_msft_endpoint_readiness.md`
 
@@ -184,14 +185,14 @@ Repository-side verification relies on Ben's manual Azure evidence; this work di
 
 | File | SHA-256 | Validation |
 |---|---|---|
-| `manifest.json` | `d7db21f44ab4988a499c1d14c4451d32769adc8bc1974a3a5df63353f073f8e1` | Valid live vDevPreview schema; verified Key Vault URI |
-| `mcptools.json` | `2012e9ecafdb6bb040a61c241267d424139b3da293a75ee093a1553d2b1a2934` | Valid JSON; exactly three canonical Light tools |
-| `intro.md` | `1bf22fc2bc8333ac5c2f3cd74df3a737848f18d1dea1c194a7e4006e890bcf32` | Boundary-safe Microsoft edition positioning |
+| `manifest.json` | `13db13904ced3edf00f013a4b67098db9cdc87ff227190b312ef72172b332257` | Microsoft 365 Agents Toolkit schema validation passes; verified Key Vault URI; current support and Reject Path metadata |
+| `mcptools.json` | `07e480e62c61a66cd92d42e5a038a82c65195ea5d1d25f7aa13643dda46c14c3` | Valid JSON; exactly three canonical Light tools with current post-refusal semantics |
+| `intro.md` | `36c53088cbd4d6400610a5e3f933ef93426648969c91781bb4edbc3d4ab79820` | Boundary-safe Microsoft edition positioning and bounded Reject Path guidance |
 | `color.png` | `f4ffa4ab982d404b098e835090a5a21987623f6e95103ad81c6495587d1022d2` | 192x192 RGBA/sRGB; existing vector brand mark within 120x120 safe area |
 | `outline.png` | `e5eaa533c6d61c0018f8a931d5f1990a24de4da63cb21d26529f07cb67ad8b80` | 32x32 RGBA/sRGB; transparent background and white outline mark |
-| ZIP | `f02dfc8225e9a0ed7ab0434884a4f10822bdecfde801c26901346b0968376ba7` | Integrity passes; exact five root files; deterministic timestamp/order |
+| ZIP | `22181cd1c67354e34a9cd8728bba2c1ae76b34bb6fa0760a4c581435c03b03c8` | v1.0.1; integrity passes; exact five root files; deterministic timestamp/order |
 
-The ZIP has no wrapper directory, `.DS_Store`, absolute paths, symlinks, extra files, or detected credential patterns. Both JSON files parse. The live vDevPreview manifest schema reports zero errors. The manifest contains `authorization.type=AzureKeyVault` and the exact verified vault URI. The archive is package-ready, but upload remains intentionally blocked on production endpoint deployment and bounded live authentication QA.
+The ZIP has no wrapper directory, `.DS_Store`, absolute paths, symlinks, extra files, or detected credential patterns. Both JSON files parse, the manifest and tool-definition headers are ASCII-only, and the manifest contains `authorization.type=AzureKeyVault` with the exact verified vault URI. The archive is package-ready. The Microsoft 365 Agents Toolkit package validator requires an authenticated Microsoft 365 developer session, so the final Microsoft validation is intentionally deferred to the authenticated Partner Center upload flow.
 
 ## I. Tests
 
@@ -213,7 +214,7 @@ The ZIP has no wrapper directory, `.DS_Store`, absolute paths, symlinks, extra f
 | MCP-only targeted Terraform plan/apply with immutable image and verified values | PASS/APPLIED: final exact non-no-op set was `aws_ecs_task_definition.mcp` replacement and `aws_ecs_service.mcp` update; task definition `64` is stable and enabled |
 | Live authenticated Entra initialize and tools/list | PASS: initialize 200, initialized notification 202, tools/list 200, exact three tools, exact Light schema digest, zero tools/call |
 | Final CloudWatch safety/no-side-effect review | PASS: zero credential material, request failures, rate-limit events, scan-tool events, or scan-creation events |
-| Live Microsoft vDevPreview manifest validation | PASS, zero errors |
+| `atk validate --manifest-file ...` using Microsoft 365 Agents Toolkit 1.1.15 | PASS, corresponding schema and validation rules |
 | ZIP names, dimensions, integrity, symlink/`.DS_Store`, JSON, SHA-256 checks | PASS |
 | Targeted package credential-pattern scan | PASS; no private key, JWT, bearer token, AWS/GitHub token, or assigned client-secret pattern |
 | `git diff --check` | PASS |
@@ -244,6 +245,6 @@ Both anticipated increments are below the repository's $1/month approval thresho
 
 ## L. Exact next steps
 
-1. **Exact next action for Ben:** Review this final readiness report and provide separate explicit authorization when ready to validate/upload the existing ZIP in Partner Center. No further AWS, Azure, token, or scan action is required for endpoint readiness.
-2. **Partner Center:** The ZIP is ready to upload. Revalidate the current Developer Portal schema immediately before upload because of the documented devPreview/stable-schema mismatch; do not upload or submit without Ben's separate authorization.
+1. **Exact next action for Ben:** Open Partner Center and create an **Apps and Agents for M365 and Copilot** offer, then upload `certscore-microsoft-mcp-package-v1.0.1.zip`. No further AWS, Azure, token, scan, or Entra-security action is required for endpoint readiness.
+2. **Partner Center:** Run the authenticated package validator during upload because of the documented devPreview/stable-schema mismatch. Fix any blocking validator issue before submission; do not submit the offer until Ben separately authorizes the final external submission action.
 3. **Operations:** Keep task definition `62` recorded as the immediate rollback target and retain the current Key Vault credential-rotation/expiry process. Do not place the client secret in AWS or the repository.

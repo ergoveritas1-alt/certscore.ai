@@ -1,28 +1,38 @@
 {
   "$schema": "https://developer.microsoft.com/en-us/json-schemas/teams/vDevPreview/MicrosoftTeams.schema.json",
   "manifestVersion": "devPreview",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "id": "b971ee8e-f595-4a87-8b18-a401171f821d",
   "developer": {
     "name": "CertScore.ai",
     "mpnId": "7150890",
     "websiteUrl": "https://certscore.ai/contact",
     "privacyUrl": "https://certscore.ai/privacy",
-    "termsOfUseUrl": "https://certscore.ai/terms"
+    "termsOfUseUrl": "https://certscore.ai/terms",
+    "contactInfo": {
+      "defaultSupport": {
+        "userEmailsForChatSupport": [
+          "support@certscore.ai"
+        ],
+        "emailsForEmailSupport": [
+          "support@certscore.ai"
+        ]
+      }
+    }
   },
   "name": {
     "short": "CertScore Web Privacy Scanner",
     "full": "CertScore.ai Website Privacy Scanner MCP for Microsoft"
   },
   "description": {
-    "short": "Scan cookies, trackers, CMPs, consent, privacy policy, GDPR, CCPA, and TLS.",
-    "full": "Microsoft-authenticated CertScore.ai MCP Light scans public websites for observable privacy, consent, policy, tracker, cookie/storage, and HTTPS/TLS signals. Results support human and agentic review and are not legal advice, certification, or a compliance determination."
+    "short": "Scan consent and post-refusal tracking, cookies, CMPs, policies, and TLS.",
+    "full": "Microsoft-authenticated CertScore.ai MCP Light scans public websites for observable privacy, consent, policy, tracker, cookie/storage, and HTTPS/TLS signals. For eligible scans, its bounded Reject Path can confirm refusal and retain evidence of qualifying non-essential activity or a contradictory consent signal afterward. Results support review and are not legal advice, certification, or a compliance determination."
   },
   "agentConnectors": [
     {
       "id": "certscore-microsoft-mcp",
       "displayName": "CertScore.ai Website Privacy Scanner MCP",
-      "description": "Scan or reuse a public-website assessment, check status, and retrieve its bounded evidence-backed report bundle.",
+      "description": "Scan or reuse a public-website assessment, check status, and retrieve its bounded evidence-backed report bundle, including confirmed Reject Path observations when eligible.",
       "toolSource": {
         "remoteMcpServer": {
           "mcpServerUrl": "https://mcp.certscore.ai/mcp/microsoft",
