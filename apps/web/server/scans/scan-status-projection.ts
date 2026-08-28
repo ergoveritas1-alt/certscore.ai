@@ -18,6 +18,7 @@ export type ScanStatusProjection = {
   profile: string;
   postRefusalObservationExpected: boolean;
   reportGeneration: string | null;
+  historicalReportReady: boolean;
   reportInputsReady: boolean;
   reportProjectionRequired: boolean;
   reportReady: boolean;
@@ -54,6 +55,7 @@ type ScanStatusProjectionRow = {
   profile: string | null;
   post_refusal_observation_expected: boolean;
   report_generation: string | null;
+  historical_report_ready: boolean;
   report_inputs_ready: boolean;
   report_projection_required: boolean;
   report_ready: boolean;
@@ -80,6 +82,7 @@ function project(row: ScanStatusProjectionRow | null): ScanStatusProjection | nu
     profile: row.profile === "tiny" ? "tiny" : "standard",
     postRefusalObservationExpected: row.post_refusal_observation_expected,
     reportGeneration: row.report_generation,
+    historicalReportReady: row.historical_report_ready,
     reportInputsReady: row.report_inputs_ready,
     reportProjectionRequired: row.report_projection_required,
     reportReady: row.report_ready,
@@ -139,6 +142,20 @@ const PROJECTION_SQL = `select s.id,
                 and ready.event_type in ('signals.merge_completed', 'findings.unified_derivation_completed')
            )
          end as report_ready
+       , case
+           when s.scan_config_json ->> 'processor' = '${LOCAL_V2_DAG_SCAN_PROCESSOR}' then exists (
+             select 1 from scan_snapshots projection
+              where projection.scan_id = s.id
+                and projection.report_projection_status = 'ready'
+                and projection.report_projection_version is distinct from '${SCAN_REPORT_PROJECTION_VERSION}'
+                and projection.report_projection_computed_at is not null
+                and projection.report_projection_source_hash ~ '^[0-9a-f]{64}$'
+                and projection.report_projection_payload is not null
+                and projection.report_projection_payload_sha256 ~ '^[0-9a-f]{64}$'
+                and projection.report_projection_payload_size_bytes between 1 and ${MAX_SCAN_REPORT_PROJECTION_BYTES}
+           )
+           else false
+         end as historical_report_ready
        , (select projection.report_projection_source_hash
             from scan_snapshots projection
            where projection.scan_id = s.id

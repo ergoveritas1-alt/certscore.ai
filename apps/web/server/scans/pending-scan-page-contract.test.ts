@@ -199,6 +199,19 @@ test("completed report shells remain projection-only and never publish from the 
   }
 });
 
+test("completed scans with a historical projection never re-enter live progress", async () => {
+  const [currentPage, legacyPage, statusProjection] = await Promise.all([
+    readFile("apps/web/app/app/scans/[scanId]/page.tsx", "utf8"),
+    readFile("apps/web/app/app/scans/[scanId]/legacy-page.tsx", "utf8"),
+    readFile("apps/web/server/scans/scan-status-projection.ts", "utf8"),
+  ]);
+
+  assert.match(currentPage, /statusProjection\.historicalReportReady[\s\S]*?redirect\(legacyScanHref\(scanId\)\)/);
+  assert.match(legacyPage, /reportProjectionRequired &&[\s\S]*?!statusProjection\.historicalReportReady &&[\s\S]*?!statusProjection\.reportReady/);
+  assert.match(statusProjection, /report_projection_version is distinct from '\$\{SCAN_REPORT_PROJECTION_VERSION\}'/);
+  assert.match(statusProjection, /end as historical_report_ready/);
+});
+
 test("report projection timestamps preserve timestamptz semantics", async () => {
   const [projection, backfill] = await Promise.all([
     readFile("apps/web/server/scans/scan-report-projection.ts", "utf8"),

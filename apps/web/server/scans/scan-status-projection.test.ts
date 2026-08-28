@@ -31,6 +31,7 @@ function projection(overrides: Partial<ScanStatusProjection> = {}): ScanStatusPr
     pageUrl: "https://example.com/",
     errorMessage: null,
     id: "e77dfaed-f1b0-4993-bd1f-5d913e595c4a",
+    historicalReportReady: false,
     organizationId: null,
     profile: "standard",
     postRefusalObservationExpected: false,
