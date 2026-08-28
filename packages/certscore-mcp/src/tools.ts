@@ -125,6 +125,9 @@ export function toToolError(error: unknown): CallToolResult {
       retryable,
       retryAfterSeconds,
       recommendedNextAction,
+      ...(terminalError?.creationRateLimit && typeof terminalError.creationRateLimit === "object" && !Array.isArray(terminalError.creationRateLimit)
+        ? { creationRateLimit: terminalError.creationRateLimit }
+        : {}),
       ...(error instanceof CertScoreError ? {
         name: error.name,
         status: error.status,

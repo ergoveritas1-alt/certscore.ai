@@ -215,6 +215,7 @@ export async function queueFullScanForDomain(input: QueueFullScanInput): Promise
     requireSuccess?: boolean;
     resolutionMode?: string | null;
     reusedCompletedAt?: string | null;
+    reuseWindowHours?: number | null;
     scanId?: string | null;
     status: ScanRequestStatus;
   }) => {
@@ -238,6 +239,9 @@ export async function queueFullScanForDomain(input: QueueFullScanInput): Promise
         ipHash: requesterIpContext.ipHash,
         planCode: input.planCode,
         provenance: input.provenance ?? null,
+        reuseWindowSeconds: details.resolutionMode === "reused_existing_scan" && details.reuseWindowHours
+          ? Math.round(details.reuseWindowHours * 60 * 60)
+          : null,
         sourceIp: requesterIpContext.sourceIp,
         localV2DagRunViaLambda: Boolean(input.localV2DagRunViaLambda),
         scanType: input.scanType ?? "full",
@@ -246,8 +250,9 @@ export async function queueFullScanForDomain(input: QueueFullScanInput): Promise
       },
       resolutionMode: details.resolutionMode ?? null,
       reusedCompletedAt: details.reusedCompletedAt ?? null,
-      reuseWindowHours:
-        details.resolutionMode === "reused_existing_scan" ? RECENT_SCAN_REUSE_WINDOW_HOURS : null,
+      reuseWindowHours: details.resolutionMode === "reused_existing_scan"
+        ? Math.ceil(details.reuseWindowHours ?? RECENT_SCAN_REUSE_WINDOW_HOURS)
+        : null,
       scanId: details.scanId ?? null,
       status: details.status
     });
@@ -293,6 +298,7 @@ export async function queueFullScanForDomain(input: QueueFullScanInput): Promise
               : false,
           resolutionMode: "reused_existing_scan",
           reusedCompletedAt: recentScan.completedAt,
+          reuseWindowHours: reuseDecision.eligibility.reuseWindowHours,
           scanId: recentScan.id,
           status: "reused_recent_scan"
         });

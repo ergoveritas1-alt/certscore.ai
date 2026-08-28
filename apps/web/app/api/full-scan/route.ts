@@ -369,6 +369,15 @@ export async function POST(request: Request) {
       return NextResponse.json(
         {
           code: error.code,
+          creationRateLimit: {
+            kind: error.window === "concurrent" ? "concurrency" : "new_scan",
+            limit: error.limit,
+            remaining: 0,
+            scope: error.scope,
+            used: error.used ?? error.limit,
+            windowId: error.window,
+            windowSeconds: error.windowSeconds
+          },
           error: error.message,
           retryAfterSeconds: error.retryAfterSeconds
         },

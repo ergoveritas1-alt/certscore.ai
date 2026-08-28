@@ -113,6 +113,15 @@ type PulseErrorLike = {
     code?: string;
     message?: string;
     retryAfterSeconds?: number | null;
+    creationRateLimit?: {
+      kind: "new_scan" | "concurrency";
+      limit: number;
+      remaining: number;
+      scope: "session" | "ip" | "surface" | "requester";
+      used: number;
+      windowId: "burst" | "daily" | "concurrent";
+      windowSeconds: number | null;
+    } | null;
   };
 };
 
@@ -1035,6 +1044,7 @@ export function buildApiV2ErrorFromPulse(input: {
     code,
     message: input.body.error?.message ?? input.fallbackMessage,
     retryAfterSeconds: input.body.error?.retryAfterSeconds,
+    creationRateLimit: input.body.error?.creationRateLimit ?? undefined,
     retryable: code === "rate_limited" || code === "scan_unavailable" || code === "internal_error"
   });
 }
@@ -1078,6 +1088,15 @@ export function buildApiV2Error(input: {
     windowId: "burst" | "daily";
     windowSeconds: number;
   };
+  creationRateLimit?: {
+    kind: "new_scan" | "concurrency";
+    limit: number;
+    remaining: number;
+    scope: "session" | "ip" | "surface" | "requester";
+    used: number;
+    windowId: "burst" | "daily" | "concurrent";
+    windowSeconds: number | null;
+  };
 }) {
   const retryable = input.retryable ?? (input.code === "rate_limited" || input.code === "scan_unavailable" || input.code === "internal_error");
   const retryAfterSeconds = input.retryAfterSeconds ?? (retryable ? 30 : null);
@@ -1098,7 +1117,8 @@ export function buildApiV2Error(input: {
       retryable,
       retryAfterSeconds,
       recommendedNextAction,
-      ...(input.rateLimit ? { rateLimit: input.rateLimit } : {})
+      ...(input.rateLimit ? { rateLimit: input.rateLimit } : {}),
+      ...(input.creationRateLimit ? { creationRateLimit: input.creationRateLimit } : {})
     },
     links: {
       docs: absoluteUrl("/api/v2/openapi.json")

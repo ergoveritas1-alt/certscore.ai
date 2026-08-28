@@ -1103,6 +1103,15 @@ async function handlePulseGET(request: Request, options: PulseRouteOptions = {})
       return pulseJson(
         buildPulseError({
           code: "rate_limited",
+          creationRateLimit: {
+            kind: error.window === "concurrent" ? "concurrency" : "new_scan",
+            limit: error.limit,
+            remaining: 0,
+            scope: error.scope,
+            used: error.used ?? error.limit,
+            windowId: error.window,
+            windowSeconds: error.windowSeconds
+          },
           message: error.message,
           retryAfterSeconds: error.retryAfterSeconds,
           url: rawUrl,

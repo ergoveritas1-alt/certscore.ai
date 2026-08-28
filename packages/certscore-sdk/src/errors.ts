@@ -48,14 +48,16 @@ export class InvalidUrlError extends CertScoreError {
 
 export class ThrottledError extends CertScoreError {
   retryAfterSeconds?: number;
+  creationRateLimit?: Record<string, unknown>;
 
   constructor(
     message: string,
-    options: { status?: number; code?: string; retryAfterSeconds?: number; responseBody?: unknown; cause?: unknown } = {}
+    options: { status?: number; code?: string; retryAfterSeconds?: number; creationRateLimit?: Record<string, unknown>; responseBody?: unknown; cause?: unknown } = {}
   ) {
     super(message, options);
     this.name = "ThrottledError";
     this.retryAfterSeconds = options.retryAfterSeconds;
+    this.creationRateLimit = options.creationRateLimit;
   }
 }
 

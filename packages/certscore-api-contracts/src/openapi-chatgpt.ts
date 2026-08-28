@@ -274,6 +274,12 @@ export function buildPulseChatGptOpenApiDocument() {
                   nullable: true,
                   additionalProperties: true,
                   description: "For scan-read 429 responses: canonical policy version, profile, scope, window, limit, usage, and requested units."
+                },
+                creationRateLimit: {
+                  type: "object",
+                  nullable: true,
+                  additionalProperties: true,
+                  description: "For new-scan 429 responses: quota or concurrency kind, scope, window, limit, usage, and remaining capacity."
                 }
               }
             },

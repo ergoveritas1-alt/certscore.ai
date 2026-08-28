@@ -19,6 +19,7 @@ import {
   LIGHT_MCP_NEW_SCAN_POLICY,
   anonymousScanQuotaKey,
   decideAnonymousScanQuota,
+  decideLightMcpScanConcurrency,
   decideLightMcpNewScanQuota,
   retryAfterNextUtcDay,
   type AnonymousScanQuotaDecision
@@ -751,6 +752,33 @@ export async function claimLightMcpNewScanQuota(input: { ipKey: string; sessionK
   await ensurePulseTables();
   return withWriteTransaction(async (client) => {
     await client.query("select pg_advisory_xact_lock(hashtext($1))", ["light-mcp-new-scan-surface"]);
+    const activeResult = await client.query<{
+      ip_count: number | string;
+      session_count: number | string;
+      surface_count: number | string;
+    }>(`select
+          count(*)::int as surface_count,
+          count(*) filter (where requester_key = $1)::int as session_count,
+          count(*) filter (where ip_key = $2)::int as ip_count
+        from light_mcp_active_scan_claims claim
+        left join scans scan on scan.id = claim.scan_id
+       where claim.released_at is null
+         and (
+           (claim.scan_id is null and claim.expires_at > now())
+           or (claim.scan_id is not null and scan.status not in ('completed', 'failed', 'expired', 'cancelled'))
+         )`, [
+      input.sessionKey,
+      input.ipKey
+    ]);
+    const active = activeResult.rows[0];
+    const concurrencyDecision = decideLightMcpScanConcurrency({
+      usage: {
+        session: Number(active?.session_count ?? 0),
+        ip: Number(active?.ip_count ?? 0),
+        surface: Number(active?.surface_count ?? 0)
+      }
+    });
+    if (!concurrencyDecision.allowed) return concurrencyDecision;
     const usageResult = await client.query<LightMcpNewScanUsageRow>(LIGHT_MCP_NEW_SCAN_USAGE_SQL, [
       input.sessionKey,
       input.ipKey,
@@ -762,8 +790,39 @@ export async function claimLightMcpNewScanQuota(input: { ipKey: string; sessionK
       "insert into light_mcp_new_scan_events (requester_key, ip_key) values ($1, $2)",
       [input.sessionKey, input.ipKey]
     );
-    return decision;
+    const claimResult = await client.query<{ id: string }>(
+      `insert into light_mcp_active_scan_claims (requester_key, ip_key, expires_at)
+       values ($1, $2, now() + make_interval(secs => $3::int))
+       returning id`,
+      [input.sessionKey, input.ipKey, LIGHT_MCP_NEW_SCAN_POLICY.concurrencyLeaseSeconds]
+    );
+    return { ...decision, concurrencyClaimId: claimResult.rows[0]!.id };
   });
+}
+
+export async function bindLightMcpScanConcurrencyClaim(input: { claimId: string; scanId: string }) {
+  await ensurePulseTables();
+  const result = await query(
+    `update light_mcp_active_scan_claims
+        set scan_id = $2
+      where id = $1
+        and released_at is null
+        and expires_at > now()`,
+    [input.claimId, input.scanId]
+  );
+  if (result.rowCount !== 1) {
+    throw new Error("Light MCP concurrency claim could not be bound to the created scan.");
+  }
+}
+
+export async function releaseLightMcpScanConcurrencyClaim(claimId: string) {
+  await ensurePulseTables();
+  await query(
+    `update light_mcp_active_scan_claims
+        set released_at = coalesce(released_at, now())
+      where id = $1`,
+    [claimId]
+  );
 }
 
 export async function getLightMcpNewScanQuotaState(input: { ipKey: string; sessionKey: string; now?: Date }) {

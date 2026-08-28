@@ -396,6 +396,31 @@ test("429 maps to ThrottledError with Retry-After", async () => {
   }
 });
 
+test("429 exposes typed new-scan quota details", async () => {
+  const creationRateLimit = {
+    kind: "concurrency",
+    limit: 4,
+    remaining: 0,
+    scope: "session",
+    used: 4,
+    windowId: "concurrent",
+    windowSeconds: null
+  };
+  const mock = installFetch([{ status: 429, body: {
+    type: "certscore_pulse_error",
+    error: { code: "rate_limited", creationRateLimit, message: "Wait for an active scan." }
+  } }]);
+  try {
+    const client = new CertScoreClient();
+    await assert.rejects(
+      () => client.scan("https://example.com"),
+      (error: unknown) => error instanceof ThrottledError && error.creationRateLimit?.kind === "concurrency"
+    );
+  } finally {
+    mock.restore();
+  }
+});
+
 test("failed and expired statuses map to ScanFailedError", async () => {
   for (const status of ["failed", "expired"] as const) {
     const mock = installFetch([

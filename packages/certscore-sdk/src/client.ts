@@ -595,7 +595,15 @@ export class CertScoreClient {
       throw new InvalidUrlError(message, { status: response.status, code, responseBody: body });
     }
     if (response.status === 429 || code === "pulse_throttled" || code === "rate_limited") {
-      throw new ThrottledError(message, { status: response.status, code, retryAfterSeconds, responseBody: body });
+      const errorRecord = body && typeof body === "object" && !Array.isArray(body) && "error" in body
+        ? (body as { error?: unknown }).error
+        : null;
+      const creationRateLimit = errorRecord && typeof errorRecord === "object" && !Array.isArray(errorRecord) && "creationRateLimit" in errorRecord
+        && (errorRecord as { creationRateLimit?: unknown }).creationRateLimit
+        && typeof (errorRecord as { creationRateLimit?: unknown }).creationRateLimit === "object"
+        ? (errorRecord as { creationRateLimit: Record<string, unknown> }).creationRateLimit
+        : undefined;
+      throw new ThrottledError(message, { status: response.status, code, retryAfterSeconds, creationRateLimit, responseBody: body });
     }
     throw new CertScoreApiError(message, { status: response.status, code, responseBody: body });
   }

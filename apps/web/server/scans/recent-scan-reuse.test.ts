@@ -4,6 +4,8 @@ import {
   evaluateRecentScanReuseCandidates,
   getRecentScanReuseEligibility,
   isScanWithinReuseWindow,
+  NO_GO_REUSE_WINDOW_HOURS,
+  reuseWindowHoursForCandidate,
   resolveRecentScanReuseDecision,
   type RecentScanReuseCandidate,
   type RecentScanReuseInput
@@ -21,6 +23,18 @@ const baseInput: RecentScanReuseInput = {
   organizationId: null,
   scanFrom: "eu_ie"
 };
+
+test("no-go transport, access, and TLS results use reason-specific cooldowns", () => {
+  assert.equal(reuseWindowHoursForCandidate({ noGoDecision: "no_go", scanOutcome: "navigation_transport_failure" }), NO_GO_REUSE_WINDOW_HOURS.transport);
+  assert.equal(reuseWindowHoursForCandidate({ noGoDecision: "no_go", scanOutcome: "access_denied_or_forbidden_page" }), NO_GO_REUSE_WINDOW_HOURS.accessDenied);
+  assert.equal(reuseWindowHoursForCandidate({ noGoDecision: "no_go", scanOutcome: "tls_or_certificate_error" }), NO_GO_REUSE_WINDOW_HOURS.tls);
+  assert.equal(reuseWindowHoursForCandidate({
+    noGoDecision: "no_go",
+    noGoReasonCodes: ["access_denied_or_forbidden_page", "scan_no_go_corroborated"],
+    scanOutcome: "unknown"
+  }), NO_GO_REUSE_WINDOW_HOURS.accessDenied);
+  assert.equal(reuseWindowHoursForCandidate({ noGoDecision: null, scanOutcome: "navigation_transport_failure" }), 24);
+});
 
 function candidate(overrides: Partial<RecentScanReuseCandidate> = {}): RecentScanReuseCandidate {
   return {
@@ -160,6 +174,7 @@ test("completed scans without usable coverage are excluded unless an explicit no
   assert.equal(eligibility({}, [candidate({ scanOutcome: "navigation_transport_failure" })]).eligible, false);
   assert.equal(eligibility({}, [candidate({
     accessPostureClass: "early_loss",
+    completedAt: "2026-07-11T11:45:00.000Z",
     coverageLevel: "limited_none",
     noGoDecision: "no_go",
     pagesScanned: 0,

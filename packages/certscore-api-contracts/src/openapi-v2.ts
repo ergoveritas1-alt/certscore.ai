@@ -1143,6 +1143,21 @@ export function buildCertScoreApiV2OpenApiDocument() {
                     usedUnits: { type: "integer" },
                     requestedUnits: { type: "integer" }
                   }
+                },
+                creationRateLimit: {
+                  type: "object",
+                  additionalProperties: false,
+                  description: "Present for new-scan quota or concurrency throttles.",
+                  required: ["kind", "scope", "windowId", "windowSeconds", "limit", "used", "remaining"],
+                  properties: {
+                    kind: { type: "string", enum: ["new_scan", "concurrency"] },
+                    scope: { type: "string", enum: ["session", "ip", "surface", "requester"] },
+                    windowId: { type: "string", enum: ["burst", "daily", "concurrent"] },
+                    windowSeconds: { type: ["integer", "null"] },
+                    limit: { type: "integer" },
+                    used: { type: "integer" },
+                    remaining: { type: "integer" }
+                  }
                 }
               }
             },

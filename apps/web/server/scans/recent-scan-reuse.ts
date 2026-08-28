@@ -6,6 +6,11 @@ import {
 } from "./local-v2-dag-scan-config";
 
 export const RECENT_SCAN_REUSE_WINDOW_HOURS = 24;
+export const NO_GO_REUSE_WINDOW_HOURS = {
+  accessDenied: 0.5,
+  tls: 1,
+  transport: 1 / 6
+} as const;
 
 export type RecentScanReuseCandidate = {
   accessPostureClass: string | null;
@@ -15,6 +20,7 @@ export type RecentScanReuseCandidate = {
   id: string;
   normalizedUrl: string;
   noGoDecision?: string | null;
+  noGoReasonCodes?: string[] | null;
   organizationId: string | null;
   pagesRequested: number;
   pagesScanned: number;
@@ -106,6 +112,37 @@ function hasReusableCoverage(scan: {
     !NON_REUSABLE_SCAN_OUTCOMES.has(scan.scanOutcome ?? "")
   );
   return hasLegacyCoverage || hasReusableV2LambdaArtifact(scan);
+}
+
+const ACCESS_DENIED_NO_GO_OUTCOMES = new Set([
+  "access_denied_or_forbidden_page",
+  "captcha_or_challenge",
+  "homepage_access_blocked",
+  "homepage_rate_limited_429",
+  "homepage_security_challenge",
+  "rate_limited_429"
+]);
+const TLS_NO_GO_OUTCOMES = new Set(["homepage_tls_or_certificate_error", "tls_or_certificate_error"]);
+const TRANSPORT_NO_GO_OUTCOMES = new Set(["navigation_transport_failure", "timeout_navigation", "transport_failure"]);
+
+export function reuseWindowHoursForCandidate(
+  scan: { noGoDecision?: string | null; noGoReasonCodes?: string[] | null; scanOutcome?: string | null },
+  requestedWindowHours = RECENT_SCAN_REUSE_WINDOW_HOURS
+) {
+  if (scan.noGoDecision !== "no_go") {
+    return requestedWindowHours;
+  }
+  const outcome = scan.noGoReasonCodes?.find((code) => code !== "scan_no_go_corroborated") ?? scan.scanOutcome ?? "";
+  if (TRANSPORT_NO_GO_OUTCOMES.has(outcome)) {
+    return Math.min(requestedWindowHours, NO_GO_REUSE_WINDOW_HOURS.transport);
+  }
+  if (ACCESS_DENIED_NO_GO_OUTCOMES.has(outcome)) {
+    return Math.min(requestedWindowHours, NO_GO_REUSE_WINDOW_HOURS.accessDenied);
+  }
+  if (TLS_NO_GO_OUTCOMES.has(outcome)) {
+    return Math.min(requestedWindowHours, NO_GO_REUSE_WINDOW_HOURS.tls);
+  }
+  return requestedWindowHours;
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -230,7 +267,11 @@ export function findRecentCompletedScanInHistory(scans: ScanHistoryCandidate[], 
           scan.id.length > 0 &&
           scan.status === "completed" &&
           hasReusableCoverage(scan) &&
-          isScanWithinReuseWindow({ completedAt: scan.completedAt, now })
+          isScanWithinReuseWindow({
+            completedAt: scan.completedAt,
+            now,
+            windowHours: reuseWindowHoursForCandidate(scan)
+          })
       )
       .sort((left, right) => new Date(right.completedAt ?? 0).getTime() - new Date(left.completedAt ?? 0).getTime())[0] ?? null
   );
@@ -261,7 +302,11 @@ export function evaluateRecentScanReuseCandidates(
         row.status === "completed" &&
         hasReusableCoverage(row) &&
         (row.scanType ?? "full") === "full" &&
-        isScanWithinReuseWindow({ completedAt: row.completedAt, now: input.now, windowHours: reuseWindowHours }) &&
+        isScanWithinReuseWindow({
+          completedAt: row.completedAt,
+          now: input.now,
+          windowHours: reuseWindowHoursForCandidate(row, reuseWindowHours)
+        }) &&
         normalizeScanFrom(row.scanFrom) === effectiveScanFrom &&
         Number.isFinite(row.pagesRequested) &&
         row.pagesRequested >= minPagesRequested
@@ -285,7 +330,7 @@ export function evaluateRecentScanReuseCandidates(
     effectiveScanFrom,
     eligible: true,
     minPagesRequested,
-    reuseWindowHours
+    reuseWindowHours: reuseWindowHoursForCandidate(candidate, reuseWindowHours)
   };
 }
 
@@ -311,6 +356,11 @@ async function loadRecentScanReuseCandidates(input: RecentScanReuseInput) {
               sra.scan_no_go_assessment->>'decision',
               ss.scan_no_go_assessment->>'decision'
             ) as "noGoDecision",
+            coalesce(
+              sra.scan_no_go_assessment->'reasonCodes',
+              ss.scan_no_go_assessment->'reasonCodes',
+              '[]'::jsonb
+            ) as "noGoReasonCodes",
             d.hostname,
             coalesce(s.scan_config_json->>'normalizedUrl', d.normalized_url) as "normalizedUrl",
             s.scan_config_json->>'processor' as "v2ReportProcessor",

@@ -1235,6 +1235,27 @@ test("toToolError marks generic errors as MCP errors", () => {
   assert.equal(typeof payload.error?.recommendedNextAction, "string");
 });
 
+test("toToolError promotes typed creation quota details", () => {
+  const creationRateLimit = {
+    kind: "concurrency",
+    limit: 4,
+    remaining: 0,
+    scope: "session",
+    used: 4,
+    windowId: "concurrent",
+    windowSeconds: null
+  };
+  const result = toToolError(new CertScoreError("Wait", {
+    code: "rate_limited",
+    responseBody: { error: { creationRateLimit } },
+    status: 429
+  }));
+  const payload = JSON.parse(result.content[0]?.type === "text" ? result.content[0].text : "{}") as {
+    error?: { creationRateLimit?: unknown };
+  };
+  assert.deepEqual(payload.error?.creationRateLimit, creationRateLimit);
+});
+
 test("paginateFindingList applies MCP-side limit and offset", () => {
   const result = paginateFindingList({
     type: "certscore_finding_list",

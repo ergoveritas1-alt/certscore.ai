@@ -1,13 +1,16 @@
 export const ANONYMOUS_SCAN_DAILY_LIMIT = 20;
 export const LIGHT_MCP_NEW_SCAN_POLICY = {
   burstWindowSeconds: 10 * 60,
+  concurrencyRetryAfterSeconds: 15,
+  concurrencyLeaseSeconds: 15 * 60,
   session: { burstLimit: 20, dailyLimit: 60 },
   ip: { burstLimit: 30, dailyLimit: 100 },
-  surface: { burstLimit: 60, dailyLimit: 200 }
+  surface: { burstLimit: 60, dailyLimit: 200 },
+  concurrency: { session: 4, ip: 8, surface: 20 }
 } as const;
 
 export type LightMcpScanQuotaScope = "session" | "ip" | "surface";
-export type LightMcpScanQuotaWindow = "burst" | "daily";
+export type LightMcpScanQuotaWindow = "burst" | "daily" | "concurrent";
 
 export type AnonymousScanQuotaDecision =
   | {
@@ -102,6 +105,7 @@ export function decideLightMcpNewScanQuota(input: {
       allowed: false as const,
       limit: exceeded.limit,
       remaining: 0,
+      used: exceeded.count,
       retryAfterSeconds: exceeded.window === "burst"
         ? retryAfterRollingWindow(input.usage[exceeded.scope].oldestBurstAt, now, LIGHT_MCP_NEW_SCAN_POLICY.burstWindowSeconds)
         : retryAfterNextUtcDay(now),
@@ -122,6 +126,41 @@ export function decideLightMcpNewScanQuota(input: {
   };
 }
 
+export function decideLightMcpScanConcurrency(input: {
+  usage: Record<LightMcpScanQuotaScope, number>;
+}) {
+  const exceeded = (["surface", "ip", "session"] as const)
+    .map((scope) => ({
+      count: input.usage[scope],
+      limit: LIGHT_MCP_NEW_SCAN_POLICY.concurrency[scope],
+      scope
+    }))
+    .find((check) => check.count >= check.limit);
+  if (exceeded) {
+    return {
+      allowed: false as const,
+      limit: exceeded.limit,
+      remaining: 0,
+      retryAfterSeconds: LIGHT_MCP_NEW_SCAN_POLICY.concurrencyRetryAfterSeconds,
+      scope: exceeded.scope,
+      used: exceeded.count,
+      window: "concurrent" as const,
+      windowSeconds: null
+    };
+  }
+  return {
+    allowed: true as const,
+    remaining: Math.min(
+      LIGHT_MCP_NEW_SCAN_POLICY.concurrency.session - input.usage.session - 1,
+      LIGHT_MCP_NEW_SCAN_POLICY.concurrency.ip - input.usage.ip - 1,
+      LIGHT_MCP_NEW_SCAN_POLICY.concurrency.surface - input.usage.surface - 1
+    ),
+    retryAfterSeconds: 0 as const,
+    scope: null,
+    window: null
+  };
+}
+
 export class AnonymousScanQuotaError extends Error {
   readonly code = "anonymous_scan_daily_limit";
   readonly limit: number;
@@ -129,11 +168,13 @@ export class AnonymousScanQuotaError extends Error {
   readonly scope: LightMcpScanQuotaScope | "requester";
   readonly window: LightMcpScanQuotaWindow | "daily";
   readonly windowSeconds: number | null;
+  readonly used: number | null;
 
   constructor(retryAfterSeconds: number, options?: {
     lightMcp?: boolean;
     limit?: number;
     scope?: LightMcpScanQuotaScope;
+    used?: number;
     window?: LightMcpScanQuotaWindow;
     windowSeconds?: number | null;
   }) {
@@ -146,7 +187,9 @@ export class AnonymousScanQuotaError extends Error {
       ? "This is a shared public-Light limit; registering an account will not bypass the active window. Contact support@certscore.ai if it repeatedly affects legitimate use."
       : `If you need higher-volume scanning, create an account at https://certscore.ai/login?mode=create_account and contact support@certscore.ai to request a custom automated-access allowance. Creating an account does not automatically change the ${anonymousLimitName}.`;
     super(
-      window === "burst"
+      window === "concurrent"
+        ? `The anonymous Light MCP already has ${limit} active scans for the ${scope} scope. Wait for an active scan to finish, then retry after Retry-After. ${recovery}`
+        : window === "burst"
         ? `The anonymous Light MCP allows ${limit} genuinely new scans per ${burstMinutes} minutes for the active ${scope} scope. Reuse an eligible result or wait for Retry-After before trying again. ${recovery}`
         : `The no-account allowance is ${limit} genuinely new scans per UTC day. ` +
           `Reuse an eligible recent result or try again after the UTC reset. ${recovery}`
@@ -159,6 +202,7 @@ export class AnonymousScanQuotaError extends Error {
     this.windowSeconds = window === "burst"
       ? options?.windowSeconds ?? LIGHT_MCP_NEW_SCAN_POLICY.burstWindowSeconds
       : null;
+    this.used = typeof options?.used === "number" ? options.used : null;
   }
 }
 

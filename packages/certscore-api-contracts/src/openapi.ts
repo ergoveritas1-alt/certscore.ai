@@ -328,6 +328,20 @@ export function buildPulseV1OpenApiDocument() {
                   type: ["object", "null"],
                   additionalProperties: true,
                   description: "For scan-read 429 responses: canonical policy version, profile, scope, window, limit, usage, and requested units."
+                },
+                creationRateLimit: {
+                  type: ["object", "null"],
+                  additionalProperties: false,
+                  description: "For new-scan 429 responses: quota or concurrency kind, scope, window, limit, usage, and remaining capacity.",
+                  properties: {
+                    kind: { type: "string", enum: ["new_scan", "concurrency"] },
+                    scope: { type: "string", enum: ["session", "ip", "surface", "requester"] },
+                    windowId: { type: "string", enum: ["burst", "daily", "concurrent"] },
+                    windowSeconds: { type: ["integer", "null"] },
+                    limit: { type: "integer" },
+                    used: { type: "integer" },
+                    remaining: { type: "integer" }
+                  }
                 }
               }
             },

@@ -781,6 +781,15 @@ export interface PulseErrorResponse {
   request?: Record<string, unknown>;
   error?: {
     code?: string;
+    creationRateLimit?: {
+      kind: "new_scan" | "concurrency";
+      limit: number;
+      remaining: number;
+      scope: "session" | "ip" | "surface" | "requester";
+      used: number;
+      windowId: "burst" | "daily" | "concurrent";
+      windowSeconds: number | null;
+    } | null;
     message?: string;
     retryAfterSeconds?: number | null;
     [key: string]: unknown;

@@ -667,6 +667,15 @@ test("buildApiV2ErrorFromPulse maps Pulse throttles to v2 rate-limit errors", ()
     body: {
       error: {
         code: "pulse_throttled",
+        creationRateLimit: {
+          kind: "concurrency",
+          limit: 4,
+          remaining: 0,
+          scope: "session",
+          used: 4,
+          windowId: "concurrent",
+          windowSeconds: null
+        },
         message: "A Pulse scan for this domain was requested recently.",
         retryAfterSeconds: 60
       }
@@ -679,6 +688,15 @@ test("buildApiV2ErrorFromPulse maps Pulse throttles to v2 rate-limit errors", ()
   assert.equal(error.error.retryable, true);
   assert.equal(error.error.recommendedNextAction, "Wait for the recommended delay, then retry the same request.");
   assert.equal(error.error.retryAfterSeconds, 60);
+  assert.deepEqual(error.error.creationRateLimit, {
+    kind: "concurrency",
+    limit: 4,
+    remaining: 0,
+    scope: "session",
+    used: 4,
+    windowId: "concurrent",
+    windowSeconds: null
+  });
 });
 
 test("buildApiV2DomainLatestScan wraps the latest public scan or null", () => {

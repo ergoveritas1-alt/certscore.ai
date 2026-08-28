@@ -25,11 +25,16 @@ import {
 } from "./local-v2-dag-lambda-dispatch";
 import type { LocalV2DagScanProfile } from "./local-v2-dag-scan-config";
 import { runLocalV2DagDispatch, type LocalV2DagDispatchContext } from "./local-v2-dag-dispatch-runner";
-import { resolveRecentScanReuseDecision, RECENT_SCAN_REUSE_WINDOW_HOURS } from "./recent-scan-reuse";
+import { resolveRecentScanReuseDecision } from "./recent-scan-reuse";
 import { logScanRequestFailure, recordScanRequest } from "./scan-request-log";
 import { lookupTrancoRankMetadata } from "./tranco-rank-metadata";
 import { AnonymousScanQuotaError, lightMcpScanIpKey, lightMcpScanRequesterKey } from "../pulse/anonymous-scan-quota";
-import { claimAnonymousScanDailyQuota, claimLightMcpNewScanQuota } from "../pulse/repository";
+import {
+  bindLightMcpScanConcurrencyClaim,
+  claimAnonymousScanDailyQuota,
+  claimLightMcpNewScanQuota,
+  releaseLightMcpScanConcurrencyClaim
+} from "../pulse/repository";
 import {
   normalizeScanRequesterIpContext,
   type ScanRequesterIpContext
@@ -127,12 +132,13 @@ export async function createAnonymousFullScan(input: {
             localV2DagRunViaLambda: Boolean(input.localV2DagRunViaLambda),
             minimumReusablePagesRequested: minimumReusablePagesRequested ?? null,
             provenance: input.provenance ?? null,
+            reuseWindowSeconds: Math.round(reuseDecision.eligibility.reuseWindowHours * 60 * 60),
             scanFrom,
             sourceIp: requesterIpContext.sourceIp
           },
           resolutionMode: "reused_existing_scan",
           reusedCompletedAt: recentScan.completedAt,
-          reuseWindowHours: RECENT_SCAN_REUSE_WINDOW_HOURS,
+          reuseWindowHours: Math.ceil(reuseDecision.eligibility.reuseWindowHours),
           scanId: recentScan.id,
           status: "reused_recent_scan"
         }).catch((error) => logScanRequestFailure("anonymous_recent_scan_reuse", error));
@@ -206,6 +212,7 @@ export async function createAnonymousFullScan(input: {
     throw error;
   }
 
+  let lightMcpConcurrencyClaimId: string | null = null;
   if (input.countAnonymousQuota !== false) {
     const isLightMcp = requesterIpContext.anonymousMcpSurface === "mcp_light";
     const lightRequesterKey = lightMcpScanRequesterKey({
@@ -234,6 +241,7 @@ export async function createAnonymousFullScan(input: {
           quota: "scope" in quota ? {
             limit: quota.limit,
             scope: quota.scope,
+            used: quota.used,
             window: quota.window,
             windowSeconds: quota.windowSeconds
           } : null,
@@ -251,10 +259,14 @@ export async function createAnonymousFullScan(input: {
         ...("limit" in quota ? {
           limit: quota.limit,
           scope: quota.scope,
+          used: quota.used,
           window: quota.window,
           windowSeconds: quota.windowSeconds
         } : {})
       });
+    }
+    if ("concurrencyClaimId" in quota) {
+      lightMcpConcurrencyClaimId = quota.concurrencyClaimId;
     }
   }
 
@@ -301,16 +313,29 @@ export async function createAnonymousFullScan(input: {
     scanType: "full"
   });
 
-  const scan = await createQueuedFullScan({
-    domainId: domain.id,
-    initialStatus: localV2DagLambdaDispatch ? "running" : "queued",
-    organizationId: null,
-    pagesRequested,
-    queueOrigin: queueMetadata.queueOrigin,
-    queuePriority: queueMetadata.queuePriority,
-    scanConfigJson: scanConfig,
-    submittedByUserId: null
-  });
+  let scan: { id: string };
+  try {
+    scan = await createQueuedFullScan({
+      domainId: domain.id,
+      initialStatus: localV2DagLambdaDispatch ? "running" : "queued",
+      organizationId: null,
+      pagesRequested,
+      queueOrigin: queueMetadata.queueOrigin,
+      queuePriority: queueMetadata.queuePriority,
+      scanConfigJson: scanConfig,
+      submittedByUserId: null
+    });
+  } catch (error) {
+    if (lightMcpConcurrencyClaimId) {
+      await releaseLightMcpScanConcurrencyClaim(lightMcpConcurrencyClaimId).catch((releaseError) => {
+        console.error("[web] Light MCP concurrency claim release failed", { releaseError });
+      });
+    }
+    throw error;
+  }
+  if (lightMcpConcurrencyClaimId) {
+    await bindLightMcpScanConcurrencyClaim({ claimId: lightMcpConcurrencyClaimId, scanId: scan.id });
+  }
 
   await recordScanRequest({
     fulfilledByScanId: scan.id,

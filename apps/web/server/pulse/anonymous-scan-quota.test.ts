@@ -5,6 +5,7 @@ import {
   ANONYMOUS_SCAN_DAILY_LIMIT,
   LIGHT_MCP_NEW_SCAN_POLICY,
   decideAnonymousScanQuota,
+  decideLightMcpScanConcurrency,
   decideLightMcpNewScanQuota,
   isAnonymousScanQuotaError,
   lightMcpScanIpKey,
@@ -60,6 +61,20 @@ test("Light MCP new scans have independent session, IP, and surface daily rails"
   assert.equal(denied.window, "daily");
   assert.equal(denied.limit, LIGHT_MCP_NEW_SCAN_POLICY.session.dailyLimit);
   assert.equal(denied.retryAfterSeconds, 30);
+});
+
+test("Light MCP active scans have independent concurrency rails", () => {
+  const allowed = decideLightMcpScanConcurrency({ usage: { session: 3, ip: 3, surface: 3 } });
+  assert.equal(allowed.allowed, true);
+  assert.equal(allowed.remaining, 0);
+
+  const denied = decideLightMcpScanConcurrency({ usage: { session: 4, ip: 4, surface: 4 } });
+  assert.equal(denied.allowed, false);
+  if (denied.allowed) return;
+  assert.equal(denied.scope, "session");
+  assert.equal(denied.window, "concurrent");
+  assert.equal(denied.limit, 4);
+  assert.equal(denied.used, 4);
 });
 
 test("stable MCP sessions survive rotating provider egress while IP rails remain distinct", () => {

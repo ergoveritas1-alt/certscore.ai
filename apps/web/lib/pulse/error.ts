@@ -21,8 +21,19 @@ type PulseRateLimit = {
   windowSeconds: number;
 };
 
+export type PulseCreationRateLimit = {
+  kind: "new_scan" | "concurrency";
+  limit: number;
+  remaining: number;
+  scope: "session" | "ip" | "surface" | "requester";
+  used: number;
+  windowId: "burst" | "daily" | "concurrent";
+  windowSeconds: number | null;
+};
+
 export function buildPulseError(input: {
   code: string;
+  creationRateLimit?: PulseCreationRateLimit;
   message: string;
   rateLimit?: PulseRateLimit;
   recommendedNextAction?: string;
@@ -51,7 +62,8 @@ export function buildPulseError(input: {
       message: input.message,
       retryAfterSeconds: input.retryAfterSeconds ?? null,
       recommendedNextAction: input.recommendedNextAction ?? null,
-      rateLimit: input.rateLimit ?? null
+      rateLimit: input.rateLimit ?? null,
+      creationRateLimit: input.creationRateLimit ?? null
     },
     resolution: input.resolution ?? null,
     feedback: {

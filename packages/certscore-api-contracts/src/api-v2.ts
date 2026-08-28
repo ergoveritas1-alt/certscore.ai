@@ -87,6 +87,17 @@ export const apiV2ErrorSchema = z
             windowId: z.enum(["burst", "daily"]),
             windowSeconds: z.number().int().positive()
           })
+          .optional(),
+        creationRateLimit: z
+          .object({
+            kind: z.enum(["new_scan", "concurrency"]),
+            limit: z.number().int().positive(),
+            remaining: z.number().int().nonnegative(),
+            scope: z.enum(["session", "ip", "surface", "requester"]),
+            used: z.number().int().nonnegative(),
+            windowId: z.enum(["burst", "daily", "concurrent"]),
+            windowSeconds: z.number().int().positive().nullable()
+          })
           .optional()
       })
       .passthrough(),
