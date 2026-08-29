@@ -740,6 +740,10 @@ test("Developer API docs are discoverable by crawlers and agent manifests", asyn
   assert.equal(aiDiscovery.mcp.light.endpoint, "https://mcp.certscore.ai/mcp/light");
   assert.equal(aiDiscovery.mcp.light.authentication, "none");
   assert.equal(aiDiscovery.mcp.light.registryName, "ai.certscore/mcp-light");
+  assert.equal(aiDiscovery.mcp.light.registryListing, "https://registry.modelcontextprotocol.io/?q=ai.certscore%2Fmcp-light");
+  assert.equal(aiDiscovery.mcp.light.registryApiLookup, "https://registry.modelcontextprotocol.io/v0.1/servers?search=ai.certscore%2Fmcp-light");
+  assert.equal(aiDiscovery.mcp.light.registryStatus, "active");
+  assert.equal(aiDiscovery.mcp.light.registryLatest, true);
   assert.equal(aiDiscovery.mcp.light.dailyNewScanLimit, 50);
   assert.equal(aiDiscovery.mcp.light.limitKey, "requester_and_public_light_surface_utc_day");
   assert.equal(aiDiscovery.mcp.light.rollingNewScanLimit, 5);
@@ -752,6 +756,7 @@ test("Developer API docs are discoverable by crawlers and agent manifests", asyn
   assert.equal(aiDiscovery.mcp.light.darkBackgroundIconUrl, "https://certscore.ai/certscore-mark-light.png");
   assert.equal(aiDiscovery.mcp.light.clineMarketplaceIconUrl, "https://certscore.ai/images/mcp-directory/certscore-mcp-light-cline-400.png");
   assert.match(aiDiscovery.mcp.light.shortDescription, /^Free website privacy scanner/);
+  assert.match(aiDiscovery.mcp.light.longDescription, /only after a Reject action is confirmed and qualifying evidence is retained/);
   assert.match(aiDiscovery.mcp.light.longDescription, /not legal advice, certification, or a compliance determination/);
   assert.deepEqual(aiDiscovery.mcp.light.tools, ["certscore_scan_site", "certscore_get_scan_status", "certscore_get_scan_bundle"]);
   assert.equal(

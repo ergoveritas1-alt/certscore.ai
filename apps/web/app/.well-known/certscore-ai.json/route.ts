@@ -3,7 +3,7 @@ import { CORE_MARKETING_POSITIONING } from "../../../lib/marketing/core-position
 
 const discoveryDocument = {
   name: "CertScore AI and API discovery",
-  version: "2026-08-23",
+  version: "2026-08-29",
   type: "certscore_ai_discovery",
   description:
     "Vendor-neutral discovery document for CertScore public API, SDK, MCP, OpenAPI, and agent-readable documentation.",
@@ -127,8 +127,12 @@ const discoveryDocument = {
       name: "CertScore.ai MCP Light",
       registryName: "ai.certscore/mcp-light",
       shortDescription: "Free website privacy scanner to detect pre-consent cookies and trackers, CMP and consent controls, privacy policy, GDPR/ePrivacy and CCPA, and HTTPS/TLS signals.",
-      longDescription: "Free website privacy scanner and cookie checker for public websites. Detect pre-consent cookies and trackers, third-party tracking technologies, cookie banners, CMP and consent-management signals, privacy-policy and transparency findings, GDPR/ePrivacy and CCPA/CPRA review signals, and HTTPS/TLS transport observations. Give CertScore.ai a public website to collect structured, evidence-backed privacy findings for launch review, vendor review, audit triage, or human compliance review. Results include a CertScore score and supporting evidence for human and agentic review; they are not legal advice, certification, or a compliance determination.",
+      longDescription: "Free website privacy scanner and cookie checker for public websites. Detect pre-consent cookies and trackers, third-party tracking technologies, cookie banners, CMP and consent-management signals, privacy-policy and transparency findings, GDPR/ePrivacy and CCPA/CPRA review signals, and HTTPS/TLS transport observations. On eligible sites, CertScore reports bounded post-refusal observations only after a Reject action is confirmed and qualifying evidence is retained. Give CertScore.ai a public website to collect structured, evidence-backed privacy findings for launch review, vendor review, audit triage, or human compliance review. Results include a CertScore score and supporting evidence for human and agentic review; they are not legal advice, certification, or a compliance determination.",
       landingPage: "https://certscore.ai/mcp/light",
+      registryListing: "https://registry.modelcontextprotocol.io/?q=ai.certscore%2Fmcp-light",
+      registryApiLookup: "https://registry.modelcontextprotocol.io/v0.1/servers?search=ai.certscore%2Fmcp-light",
+      registryStatus: "active",
+      registryLatest: true,
       directoryListing: "https://smithery.ai/server/ben-qe1c/certscore-ai",
       transport: "streamable_http",
       endpoint: "https://mcp.certscore.ai/mcp/light",
