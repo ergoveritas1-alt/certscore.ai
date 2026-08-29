@@ -6,7 +6,7 @@ import { SiteHeader } from "../../../components/layout/site-header";
 import { CopyMcpValue, McpLightScanDemo, McpLightTrackedLink } from "../../../components/developers/mcp-light-actions";
 import { CodeBlock } from "../../developers/developer-pages";
 import { MCP_LIGHT_CURSOR_DIRECTORY_URL, MCP_LIGHT_CURSOR_INSTALL_URL, MCP_LIGHT_ROLE_PROMPTS } from "../../../lib/mcp-light-public-links";
-import { createPageMetadata } from "../../../lib/seo";
+import { createBreadcrumbSchema, createFaqPageSchema, createPageMetadata, createSoftwareApplicationSchema } from "../../../lib/seo";
 
 const endpoint = "https://mcp.certscore.ai/mcp/light";
 const openAiMcpDemoPath = "/videos/openai-mcp-certscore-demo.mp4";
@@ -14,13 +14,52 @@ const codexSetupCommand = "codex mcp add certscore --url https://mcp.certscore.a
 const firstRunPrompt = "Scan https://ergoveritas.com/.well-known/certscore-canary/sentinels/broad-baseline.html. If certscore_scan_site includes preConsentPreview, treat it as a partial preview and continue the workflow. Distinguish captured totals from bounded returned identities; use trackingVendorCount for non-operational tracking vendors and keep operationalVendors separate. Do not compare the compatibility preview trackerCount with the completed inventory's broader trackerCount. Never report preview counts as final totals. If certscore_scan_site returns a queued, running, or finalizing result, retain the returned scanId and poll certscore_get_scan_status using scanId only. If certscore_scan_site returns a retryable error without a scanId, wait for retryAfterSeconds and retry certscore_scan_site; do not call certscore_get_scan_status until a scanId exists. Once the scan reaches a terminal status, call certscore_get_scan_bundle with detail=findings and maxBytes=8000. Summarize whether the result was new or reused, the score, risk level, findings, evidence links, coverage limitations, and report URL. Explain truncation or omitted sections when present. Treat results as automated public-web observations, not legal conclusions, certifications, or compliance determinations.";
 const verificationPrompt = "List the available CertScore tools and confirm that certscore_scan_site, certscore_get_scan_status, and certscore_get_scan_bundle are available. Then scan https://ergoveritas.com/.well-known/certscore-canary/sentinels/broad-baseline.html and report whether the result was new or reused.";
 const agentDisclaimer = "CertScore results are automated observations from a public-web scan. No-go, not-observed, and limited-coverage results are not proof of compliance, absence of risk, or legal status. Review the retained evidence and applicable context before relying on a finding.";
+const registryUrl = "https://registry.modelcontextprotocol.io/?q=ai.certscore%2Fmcp-light";
+const mcpLightVersion = "0.2.16";
+const pageDescription = "Free website privacy scanner and cookie checker for public websites. Detect pre-consent cookies and trackers, consent signals, eligible Reject Path post-refusal observations, policy findings, regulatory review signals, and HTTPS/TLS observations.";
 
 export const metadata: Metadata = createPageMetadata({
-  description: "Free website privacy scanner and cookie checker for public websites. Detect pre-consent cookies and trackers, consent signals, Reject Path post-refusal observations, policy findings, regulatory review signals, and HTTPS/TLS observations.",
+  description: pageDescription,
   path: "/mcp/light",
   robots: { follow: true, index: true },
+  socialImage: {
+    alt: "CertScore.ai MCP Light website privacy scanner",
+    height: 630,
+    path: "/images/releases/mcp-light-social-card.png",
+    width: 1200
+  },
   title: "CertScore.ai Light MCP — no-account website privacy scans"
 });
+
+const schemas = [
+  {
+    ...createSoftwareApplicationSchema({
+      description: pageDescription,
+      path: "/mcp/light",
+      title: "CertScore.ai MCP Light"
+    }),
+    applicationSubCategory: "Model Context Protocol server",
+    softwareVersion: mcpLightVersion,
+    featureList: [
+      "Public website privacy-risk scans",
+      "Pre-consent cookie and tracker observations",
+      "Consent-control and policy signals",
+      "Eligible bounded post-refusal observations",
+      "HTTPS and TLS observations"
+    ],
+    sameAs: [registryUrl, MCP_LIGHT_CURSOR_DIRECTORY_URL, "https://github.com/ergoveritas1-alt/certscore.ai"]
+  },
+  createFaqPageSchema([
+    { question: "Does CertScore.ai MCP Light require an account or API key?", answer: "No. MCP Light uses Streamable HTTP and requires no account, API key, bearer token, browser login, or OAuth." },
+    { question: "What tools does CertScore.ai MCP Light provide?", answer: "It provides certscore_scan_site, certscore_get_scan_status, and certscore_get_scan_bundle for a bounded scan-to-report workflow." },
+    { question: "Does CertScore.ai certify legal compliance?", answer: "No. Results are automated public-web observations for human and agentic review, not legal advice, certification, or a compliance determination." }
+  ]),
+  createBreadcrumbSchema([
+    { name: "Home", path: "/" },
+    { name: "Developers", path: "/developers" },
+    { name: "MCP Light", path: "/mcp/light" }
+  ])
+];
 
 const clients = [
   ["Claude", "Add a custom remote MCP connector and paste the Light endpoint."],
@@ -46,6 +85,9 @@ const workflow = [
 export default function McpLightPage() {
   return (
     <main className="min-h-screen bg-slate-50">
+      {schemas.map((schema) => (
+        <script key={JSON.stringify(schema)} type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(schema) }} />
+      ))}
       <SiteHeader />
       <section aria-labelledby="route-choice" className="border-b border-sky-200 bg-sky-50">
         <div className="mx-auto max-w-6xl px-6 py-10">
@@ -92,6 +134,9 @@ export default function McpLightPage() {
               <Link className="font-semibold text-sky-700 hover:text-sky-900" href="/releases/mcp-light">
                 Read the MCP Light launch release <span aria-hidden="true">→</span>
               </Link>
+            </p>
+            <p className="text-sm text-slate-600">
+              Official MCP Registry: <a className="font-semibold text-sky-700 hover:text-sky-900" href={registryUrl} rel="noreferrer" target="_blank"><code>ai.certscore/mcp-light</code> v{mcpLightVersion}</a> · Published by CertScore.ai, LLC
             </p>
           </div>
           <div className="rounded-xl border border-slate-800 bg-slate-950 p-5 text-slate-100 shadow-xl">

@@ -19,6 +19,8 @@ export function McpLightTrackedLink({
   return (
     <a
       className={className}
+      data-analytics-feature="mcp_light_distribution"
+      data-analytics-id={`mcp_light:${trackingTarget}`}
       href={href}
       onClick={() => pushDataLayerEvent({ event: "mcp_light_action", action: "connect", target: trackingTarget })}
       rel="noreferrer"
@@ -46,7 +48,7 @@ export function CopyMcpValue({ label, value }: { label: string; value: string })
   }
 
   return (
-    <button className="rounded-md border border-slate-300 bg-white px-3 py-2 text-sm font-semibold text-slate-800 hover:border-sky-400 hover:text-sky-800" onClick={copy} type="button">
+    <button className="rounded-md border border-slate-300 bg-white px-3 py-2 text-sm font-semibold text-slate-800 hover:border-sky-400 hover:text-sky-800" data-analytics-feature="mcp_light_distribution" data-analytics-id={`mcp_light:copy:${label.toLowerCase().replace(/[^a-z0-9]+/g, "_")}`} onClick={copy} type="button">
       {copied ? "Copied" : `Copy ${label}`}
     </button>
   );
@@ -85,7 +87,7 @@ export function McpLightScanDemo() {
     <form className="space-y-3" onSubmit={submit}>
       <div className="flex flex-col gap-3 sm:flex-row">
         <Input aria-label="Public website URL" onChange={(event) => setUrl(event.target.value)} placeholder="https://ergoveritas.com/.well-known/certscore-canary/sentinels/broad-baseline.html" required type="url" value={url} />
-        <Button disabled={pending} type="submit">{pending ? "Starting…" : "Run a free scan"}</Button>
+        <Button data-analytics-feature="mcp_light_live_demo" data-analytics-id="mcp_light:live_demo_scan" disabled={pending} type="submit">{pending ? "Starting…" : "Run a free scan"}</Button>
       </div>
       <p className="text-xs leading-5 text-slate-500">No account or API key. This webpage demo uses the separate anonymous API allowance of 20 new scans per requester IP per UTC day; eligible recent-result reuse does not consume that allowance.</p>
       {error ? <p className="text-sm text-amber-800">{error} Contact support@certscore.ai if you need help or higher volume.</p> : null}

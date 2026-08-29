@@ -7,6 +7,7 @@ These packets are the canonical copy and status reference for external directory
 | Field | Value |
 | --- | --- |
 | Name | CertScore.ai MCP Light |
+| Legal owner / publisher | CertScore.ai, LLC |
 | Registry name | `ai.certscore/mcp-light` |
 | Version | `0.2.16` |
 | Endpoint | `https://mcp.certscore.ai/mcp/light` |
@@ -82,7 +83,9 @@ Verification prompt:
 
 > Use CertScore.ai MCP Light to check https://example.com. Prefer a recent reusable result, follow the returned polling guidance until terminal, then summarize the evidence-backed privacy findings and limitations. Do not present the result as legal advice or certification.
 
-External owner action: open `https://cursor.com/marketplace/publish`, submit or update `https://github.com/ergoveritas1-alt/certscore.ai`, and identify `integrations/cursor/certscore-website-privacy-preflight` if the form asks for the plugin directory. Verify the skill, connection, and all three Light tools in a clean Cursor installation after approval.
+Verified August 29, 2026: the community Cursor Directory listing is live at `https://cursor.directory/plugins/certscoreai-mcp-light` with the intended description, one skill, one Streamable HTTP server, and the correct no-auth Light endpoint. The official Cursor Marketplace does not yet return a CertScore listing, so its review remains pending.
+
+Status: **paused by product-owner request on August 29, 2026**. Take no further Cursor submission, monitoring, install, or marketplace action until the owner resumes it. When resumed after approval, verify the publisher, source repository, `1.0.1` integration version, skill, no-auth connection, and all three Light tools in a clean Cursor installation. Do not create a duplicate submission while the current review is pending.
 
 ## Claude Code
 
@@ -114,7 +117,7 @@ claude plugin update certscore-mcp-light@certscore-ai --scope user
 claude plugin list --json
 ```
 
-External owner action for Anthropic's official marketplace: open `https://claude.ai/settings/plugins/submit` or `https://platform.claude.com/plugins/submit`, submit `https://github.com/ergoveritas1-alt/certscore.ai`, and identify `integrations/claude-code/certscore-mcp-light` if the form asks for the plugin directory. Use publisher `ErgoVeritas, LLC`, plugin version `0.2.16`, and the shared listing fields above. The plugin requires no key, hook, local executable, OAuth flow, or autonomous background action.
+External owner action for Anthropic's official marketplace: open `https://claude.ai/settings/plugins/submit` or `https://platform.claude.com/plugins/submit`, submit `https://github.com/ergoveritas1-alt/certscore.ai`, and identify `integrations/claude-code/certscore-mcp-light` if the form asks for the plugin directory. Use publisher `CertScore.ai, LLC`, plugin version `0.2.16`, and the shared listing fields above. The plugin requires no key, hook, local executable, OAuth flow, or autonomous background action.
 
 ## OpenAI / ChatGPT and Codex
 
@@ -218,6 +221,8 @@ The repository package deliberately does not contain a fabricated `.app.json`. I
 
 ## Cline
 
+PR-ready current catalog artifact: `integrations/cline/certscore-mcp-light/entry.json`.
+
 Repository URL:
 
 ```text
@@ -242,7 +247,11 @@ Reason for addition:
 
 Suggested category: `Developer Tools` or `Web Services`.
 
-External owner action: open the `MCP Server Submission` issue form in Cline's official MCP marketplace repository. Provide the repository URL and 400 × 400 PNG above. The form requires confirmation that Cline can set up the server using only `README.md` and/or `llms-install.md`, and that the server is stable and ready for public use; check those boxes only after personally verifying both statements. Put the reason above in `Additional Information`.
+Current submission route verified August 29, 2026: add `registry/mcps/certscore-mcp-light/entry.json` to `cline/marketplace`, run `npm run validate`, and open a pull request. The older `cline/mcp-marketplace` issue route remains online but is no longer the canonical package prepared here.
+
+Clean Cline CLI installation was verified with an isolated configuration using `cline mcp install certscore-light --transport streamable-http https://mcp.certscore.ai/mcp/light --yes`. It produced the intended `streamableHttp` configuration with no headers, credentials, or warnings. The independent production contract check then initialized the same endpoint and listed exactly the three Light tools.
+
+Submission status: **in review**. Pull request: https://github.com/cline/marketplace/pull/75
 
 ## Kilo
 
@@ -263,6 +272,8 @@ The prepared artifact uses Kilo's required `MCP.yaml` fields, the `web-automatio
 
 External owner action: copy the prepared artifact to `mcps/certscore-mcp-light/MCP.yaml` in a current fork of `Kilo-Org/kilo-marketplace`, run that repository's current checks, and submit a pull request. Reconcile any schema change made after this artifact was prepared. Do not add credentials or substitute the authenticated CertScore MCP endpoint.
 
+Submission status: **in review**. Pull request: https://github.com/Kilo-Org/kilo-marketplace/pull/250. The current marketplace generator completed locally and included CertScore.ai MCP Light in the generated 127-entry catalog.
+
 ## Docker MCP Catalog
 
 Status: blocked for submission.
@@ -277,7 +288,7 @@ Product-owner decision required: either keep Docker out of scope, or separately 
 - Confirm the public icon returns an image response and is exactly 400 × 400.
 - Confirm `https://mcp.certscore.ai/healthz` reports hosted version `0.2.16`.
 - Confirm the Light endpoint requires no authentication and lists exactly `certscore_scan_site`, `certscore_get_scan_status`, and `certscore_get_scan_bundle`.
-- Confirm the Claude package is `0.2.16`, the Cursor package is `1.0.1`, and the OpenAI package is `1.0.0`.
+- Confirm the Claude package is `0.2.16`, the Cursor package is `1.0.1`, and the OpenAI package is `2.0.0`.
 - Re-run the relevant official validator immediately before each submission.
 - Use the exact Light endpoint; do not substitute the authenticated or anonymous legacy endpoint.
 - Do not claim legal advice, certification, compliance determination, unlimited use, or a Docker image.

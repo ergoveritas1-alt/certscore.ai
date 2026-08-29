@@ -105,6 +105,27 @@ This telemetry cannot measure:
 
 The dashboard repeats this limitation so infrastructure request counts are not presented as discovery or marketplace analytics.
 
+## MCP Light growth funnel
+
+For growth analysis, keep discovery and product activation as two privacy-separated funnels:
+
+- consented first-party product analytics measures `/mcp/light` page views, stable install/setup action identifiers, campaign attribution, and the separate webpage demo
+- essential hosted MCP telemetry measures initialization, tools listing, tool invocations, scan decisions/status, completed bundle retrieval, and repeat opaque sessions or actors
+
+Do not add a cross-site install token, target URL, prompt, raw client identifier, or marketplace user identifier to join these funnels. Compare aggregate cohorts by day, declared client family, and campaign instead. Marketplace impressions and installations remain unobservable unless the provider supplies aggregate analytics.
+
+The weekly growth view should exclude internal QA, canaries, and the Mac mini scan bot, then report:
+
+- Light initialized sessions or actors
+- successful `certscore_scan_site` calls and new/reused decisions
+- scans that reached `completed` or `completed_limited`
+- successful `certscore_get_scan_bundle` calls
+- bundle-per-scan and status-polls-per-scan ratios
+- seven-day and 30-day repeat opaque actors when safely measurable
+- error, rate-limit, and p50/p95 duration rates
+
+A completed or limited scan is not the same as a successful user outcome; completed-bundle retrieval is the stronger activation signal. Request counts must not be described as installs or marketplace conversion.
+
 ## Production canary and operational checks
 
 The hosted production canary exercises all three entrypoints without creating a scan. It requires an existing retained scan ID and a short-lived authenticated MCP token supplied only through the environment:

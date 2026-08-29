@@ -25,6 +25,8 @@ Use these canonical discovery resources:
 - MCP Light release: https://certscore.ai/releases/mcp-light
 - Release feed: https://certscore.ai/releases/feed.xml
 - MCP Light product and quickstart: https://certscore.ai/mcp/light
+- Official MCP Registry listing: https://registry.modelcontextprotocol.io/?q=ai.certscore%2Fmcp-light
+- Cursor Directory listing: https://cursor.directory/plugins/certscoreai-mcp-light
 - Developer hub: https://certscore.ai/developers
 - Scanner solutions: https://certscore.ai/solutions
 - API quickstart: https://certscore.ai/developers/quickstart
@@ -39,6 +41,8 @@ Use these canonical discovery resources:
 - Trust and security: https://certscore.ai/trust
 
 These resources are intended for OpenAI/ChatGPT, Anthropic/Claude, Perplexity, Google/Gemini, Microsoft Copilot/Bing, DeepSeek, Kimi, Qwen, Grok/xAI, Mistral, Meta, and future agents. They are vendor-neutral and should not be treated as limited to one AI platform.
+
+The canonical MCP Light registry identity is `ai.certscore/mcp-light`, the current hosted MCP version is `0.2.16`, and the publisher and legal owner is CertScore.ai, LLC.
 
 ## Agent quick path
 

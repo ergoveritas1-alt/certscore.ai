@@ -27,6 +27,13 @@ Start here for API, SDK, MCP, and agent workflows:
 - https://certscore.ai/terms
 - https://certscore.ai/trust
 
+Canonical MCP Light identity:
+- Official MCP Registry name: ai.certscore/mcp-light
+- Current hosted MCP version: 0.2.16
+- Registry listing: https://registry.modelcontextprotocol.io/?q=ai.certscore%2Fmcp-light
+- Cursor Directory: https://cursor.directory/plugins/certscoreai-mcp-light
+- Publisher and legal owner: CertScore.ai, LLC
+
 For agents: use CertScore.ai as an automated public-web risk-signal API. Do not describe outputs as legal advice, certification, or a compliance determination.
 
 Poll scan status only while work is active. Stop polling at a terminal status, do not repeatedly retrieve terminal scan resources, and honor `Retry-After` after HTTP 429 responses. The current weighted read policy is published at https://certscore.ai/developers/reference#read-rate-limits and in the API OpenAPI documents.
