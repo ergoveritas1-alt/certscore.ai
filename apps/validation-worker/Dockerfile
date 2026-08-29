@@ -22,6 +22,7 @@ COPY apps/browser-extension/package.json ./apps/browser-extension/package.json
 COPY apps/v2-dag-lambda/package.json ./apps/v2-dag-lambda/package.json
 COPY apps/validation-worker/package.json ./apps/validation-worker/package.json
 COPY apps/web/package.json ./apps/web/package.json
+COPY packages/certscore-api-contracts/package.json ./packages/certscore-api-contracts/package.json
 COPY packages/certscore-contracts/package.json ./packages/certscore-contracts/package.json
 COPY packages/certscore-mcp/package.json ./packages/certscore-mcp/package.json
 COPY packages/certscore-report-adapter/package.json ./packages/certscore-report-adapter/package.json
@@ -41,6 +42,7 @@ RUN --mount=type=cache,id=wc01-validation-worker-pnpm-store,target=/pnpm/store \
 
 COPY apps/web ./apps/web
 COPY apps/validation-worker ./apps/validation-worker
+COPY packages/certscore-api-contracts ./packages/certscore-api-contracts
 COPY packages/certscore-contracts ./packages/certscore-contracts
 COPY packages/certscore-scan-core ./packages/certscore-scan-core
 COPY packages/certscore-vendor-resolver ./packages/certscore-vendor-resolver
@@ -51,6 +53,7 @@ COPY packages/validation-shared ./packages/validation-shared
 
 RUN rm -rf \
   ./apps/validation-worker/dist \
+  ./packages/certscore-api-contracts/dist \
   ./packages/certscore-contracts/dist \
   ./packages/certscore-scan-core/dist \
   ./packages/certscore-vendor-resolver/dist \
@@ -59,6 +62,7 @@ RUN rm -rf \
   ./packages/db/dist \
   ./packages/validation-shared/dist
 
+RUN pnpm --filter @certscore/api-contracts build
 RUN pnpm --filter @certscore/contracts build
 RUN pnpm --filter @certscore/vendor-resolver build
 RUN pnpm --filter @website-signal-risk-scanner/shared build
@@ -105,6 +109,7 @@ COPY --from=build /app/apps/validation-worker/dist ./apps/validation-worker/dist
 # Always overlay runtime contracts consumed by the compiled worker so its
 # validators and contract constants are from the same build as the worker.
 COPY --from=build /app/packages/certscore-contracts/dist ./node_modules/@certscore/contracts/dist
+COPY --from=build /app/packages/certscore-api-contracts/dist ./node_modules/@certscore/api-contracts/dist
 COPY --from=build /app/packages/certscore-scan-core/dist ./node_modules/@certscore/scan-core/dist
 # The runtime base intentionally contains a resolver for standalone operation,
 # but its contents can lag a resolver-only release. Always copy the resolver
