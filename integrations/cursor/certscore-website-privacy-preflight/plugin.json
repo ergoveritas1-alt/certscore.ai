@@ -10,6 +10,6 @@
   },
   "homepage": "https://certscore.ai/mcp/light",
   "repository": "https://github.com/ergoveritas1-alt/certscore.ai",
-  "license": "LicenseRef-CertScore-Developer-Preview",
+  "license": "Apache-2.0",
   "keywords": ["certscore", "mcp", "privacy", "website-analysis", "preflight"]
 }
