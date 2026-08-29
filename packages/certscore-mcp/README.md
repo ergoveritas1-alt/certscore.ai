@@ -6,6 +6,9 @@ Status: public developer preview. Version 0.2.16 makes confirmed Reject Path out
 
 Public docs:
 
+- [Add CertScore to Cursor](https://cursor.com/link/mcp/install?name=certscore&config=eyJ1cmwiOiJodHRwczovL21jcC5jZXJ0c2NvcmUuYWkvbWNwL2xpZ2h0In0%3D)
+- [MCP Light landing page](https://certscore.ai/mcp/light?utm_source=github&utm_medium=package_readme&utm_campaign=mcp_light)
+- [Cursor Directory listing](https://cursor.directory/plugins/certscoreai-mcp-light)
 - https://certscore.ai/developers/mcp
 - https://certscore.ai/developers/quickstart
 - https://certscore.ai/developers/reference
@@ -27,7 +30,7 @@ Tools: certscore_scan_site, certscore_get_scan_status, certscore_get_scan_bundle
 
 No signup, API key, bearer token, browser login, or OAuth is required. Light allows up to 50 genuinely new scans per UTC day across the public Light surface and up to 5 per rolling 10 minutes, with additional IP/provider safeguards. Reused eligible results do not consume quota.
 
-Light is a free website privacy scanner and cookie checker for public websites. It can return canonical evidence and findings for pre-consent cookies and storage, trackers and vendors, cookie banners, CMP and consent controls, privacy-policy and transparency surfaces, GDPR/ePrivacy and CCPA/CPRA review signals, and HTTPS/TLS transport observations. Typical uses include release privacy preflight, public vendor-domain review, landing-page tracker inspection, audit triage, and evidence collection before human privacy review.
+Light is a free website privacy scanner and cookie checker for public websites. It can return canonical evidence and findings for pre-consent cookies and storage, trackers and vendors, cookie banners, CMP and consent controls, eligible Reject Path post-refusal observations, privacy-policy and transparency surfaces, GDPR/ePrivacy and CCPA/CPRA review signals, and HTTPS/TLS transport observations. Typical uses include release privacy preflight, public vendor-domain review, landing-page tracker inspection, audit triage, and evidence collection before human privacy review.
 
 Codex setup:
 

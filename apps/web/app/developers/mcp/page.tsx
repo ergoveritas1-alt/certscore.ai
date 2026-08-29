@@ -1,10 +1,12 @@
 import type { Metadata } from "next";
 import Link from "next/link";
+import { CopyMcpValue, McpLightTrackedLink } from "../../../components/developers/mcp-light-actions";
+import { MCP_LIGHT_CURSOR_DIRECTORY_URL, MCP_LIGHT_CURSOR_INSTALL_URL, MCP_LIGHT_ROLE_PROMPTS } from "../../../lib/mcp-light-public-links";
 import { createPageMetadata } from "../../../lib/seo";
 import { ApiReadRatePolicyDetails, CodeBlock, DeveloperShell, Section, mcpTools } from "../developer-pages";
 
 const description =
-  "Connect agents to the CertScore.ai MCP server for website compliance review workflows using scan, status, finding, explanation, and latest-domain tools.";
+  "Connect agents to the free CertScore.ai website privacy scanner and cookie checker for evidence-backed cookies, trackers, consent and Reject Path observations, policy findings, regulatory review signals, and HTTPS/TLS observations.";
 const lightEndpoint = "https://mcp.certscore.ai/mcp/light";
 const openAiMcpDemoPath = "/videos/openai-mcp-certscore-demo.mp4";
 const codexSetupCommand = "codex mcp add certscore --url https://mcp.certscore.ai/mcp/light";
@@ -133,6 +135,23 @@ ${lightEndpoint}
 Transport: Streamable HTTP
 Authentication: None
 Tools: certscore_scan_site, certscore_get_scan_status, certscore_get_scan_bundle`}</CodeBlock>
+          <h3 className="mt-6 font-semibold text-slate-950">Cursor setup</h3>
+          <div className="mt-3 flex flex-wrap gap-3">
+            <McpLightTrackedLink
+              className="rounded-md bg-sky-700 px-4 py-2 text-sm font-semibold text-white hover:bg-sky-800"
+              href={MCP_LIGHT_CURSOR_INSTALL_URL}
+              trackingTarget="cursor_install_developer_docs"
+            >
+              Add to Cursor
+            </McpLightTrackedLink>
+            <McpLightTrackedLink
+              className="rounded-md border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-800 hover:border-sky-400 hover:text-sky-800"
+              href={MCP_LIGHT_CURSOR_DIRECTORY_URL}
+              trackingTarget="cursor_directory_developer_docs"
+            >
+              View Cursor Directory listing
+            </McpLightTrackedLink>
+          </div>
           <h3 className="mt-6 font-semibold text-slate-950">Codex setup</h3>
           <CodeBlock>{codexSetupCommand}</CodeBlock>
           <p className="mt-3 max-w-3xl text-sm leading-7 text-slate-600">
@@ -147,6 +166,21 @@ Tools: certscore_scan_site, certscore_get_scan_status, certscore_get_scan_bundle
             canary intentionally contains test signals, so its findings are useful for exercising the API rather than evaluating a production site.
           </p>
           <p className="max-w-3xl text-sm leading-7 text-slate-600">{agentDisclaimer}</p>
+        </Section>
+
+        <Section eyebrow="Example prompts" title="Launch, vendor, and audit reviews">
+          <div className="grid gap-4 lg:grid-cols-3">
+            {MCP_LIGHT_ROLE_PROMPTS.map(({ label, prompt }) => (
+              <article className="flex flex-col rounded-lg border border-slate-200 bg-white p-5" key={label}>
+                <h3 className="font-semibold text-slate-950">{label}</h3>
+                <p className="mt-3 flex-1 text-sm leading-6 text-slate-600">{prompt}</p>
+                <div className="mt-5"><CopyMcpValue label={`${label} prompt`} value={prompt} /></div>
+              </article>
+            ))}
+          </div>
+          <p className="max-w-3xl text-sm leading-7 text-slate-600">
+            Reject Path observations are reported only when the scan has eligible, confirmed post-refusal evidence. Unsupported, unavailable, or limited Reject Path coverage remains explicit and score-neutral.
+          </p>
         </Section>
 
         <Section eyebrow="Light workflow" title="The canonical three-tool sequence">

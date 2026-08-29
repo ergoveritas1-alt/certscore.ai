@@ -2,8 +2,32 @@
 
 import { Button, Input } from "@website-signal-risk-scanner/ui";
 import { useRouter } from "next/navigation";
-import { type FormEvent, useEffect, useRef, useState } from "react";
+import { type FormEvent, type ReactNode, useEffect, useRef, useState } from "react";
 import { pushDataLayerEvent } from "../../lib/analytics/data-layer";
+
+export function McpLightTrackedLink({
+  children,
+  className,
+  href,
+  trackingTarget
+}: {
+  children: ReactNode;
+  className: string;
+  href: string;
+  trackingTarget: string;
+}) {
+  return (
+    <a
+      className={className}
+      href={href}
+      onClick={() => pushDataLayerEvent({ event: "mcp_light_action", action: "connect", target: trackingTarget })}
+      rel="noreferrer"
+      target="_blank"
+    >
+      {children}
+    </a>
+  );
+}
 
 export function CopyMcpValue({ label, value }: { label: string; value: string }) {
   const [copied, setCopied] = useState(false);

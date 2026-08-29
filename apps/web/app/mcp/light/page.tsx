@@ -3,8 +3,9 @@ import Link from "next/link";
 import { Badge } from "@website-signal-risk-scanner/ui";
 import { SiteFooter } from "../../../components/layout/site-footer";
 import { SiteHeader } from "../../../components/layout/site-header";
-import { CopyMcpValue, McpLightScanDemo } from "../../../components/developers/mcp-light-actions";
+import { CopyMcpValue, McpLightScanDemo, McpLightTrackedLink } from "../../../components/developers/mcp-light-actions";
 import { CodeBlock } from "../../developers/developer-pages";
+import { MCP_LIGHT_CURSOR_DIRECTORY_URL, MCP_LIGHT_CURSOR_INSTALL_URL, MCP_LIGHT_ROLE_PROMPTS } from "../../../lib/mcp-light-public-links";
 import { createPageMetadata } from "../../../lib/seo";
 
 const endpoint = "https://mcp.certscore.ai/mcp/light";
@@ -15,7 +16,7 @@ const verificationPrompt = "List the available CertScore tools and confirm that 
 const agentDisclaimer = "CertScore results are automated observations from a public-web scan. No-go, not-observed, and limited-coverage results are not proof of compliance, absence of risk, or legal status. Review the retained evidence and applicable context before relying on a finding.";
 
 export const metadata: Metadata = createPageMetadata({
-  description: "Connect any MCP agent to CertScore.ai and scan public websites instantly with no account, API key, or OAuth. Includes up to 50 new scans per UTC day across Light.",
+  description: "Free website privacy scanner and cookie checker for public websites. Detect pre-consent cookies and trackers, consent signals, Reject Path post-refusal observations, policy findings, regulatory review signals, and HTTPS/TLS observations.",
   path: "/mcp/light",
   robots: { follow: true, index: true },
   title: "CertScore.ai Light MCP — no-account website privacy scans"
@@ -72,8 +73,15 @@ export default function McpLightPage() {
           <div className="space-y-6">
             <Badge tone="neutral">Light MCP — no authentication</Badge>
             <h1 className="text-4xl font-semibold tracking-tight text-slate-950 sm:text-5xl">Give your agent a URL. Get a website privacy-risk scan.</h1>
-            <p className="max-w-3xl text-lg leading-8 text-slate-600">No signup, API key, bearer token, browser login, or OAuth. Connect once and let an MCP-capable agent scan public websites for privacy, cookie, tracker, consent, policy, and disclosure risk signals.</p>
+            <p className="max-w-3xl text-lg leading-8 text-slate-600">No signup, API key, bearer token, browser login, or OAuth. Connect once and let an MCP-capable agent scan public websites for cookies, trackers, third-party technologies, CMP and consent signals, eligible Reject Path post-refusal observations, policy and transparency findings, regulatory review signals, and HTTPS/TLS observations.</p>
             <div className="flex flex-wrap gap-3">
+              <McpLightTrackedLink
+                className="rounded-md bg-sky-700 px-4 py-2 text-sm font-semibold text-white hover:bg-sky-800"
+                href={MCP_LIGHT_CURSOR_INSTALL_URL}
+                trackingTarget="cursor_install"
+              >
+                Add to Cursor
+              </McpLightTrackedLink>
               <CopyMcpValue label="Codex command" value={codexSetupCommand} />
               <CopyMcpValue label="first-run prompt" value={firstRunPrompt} />
               <Link className="rounded-md bg-slate-950 px-4 py-2 text-sm font-semibold text-white hover:bg-slate-800" href="#try">Try it now</Link>
@@ -129,6 +137,32 @@ export default function McpLightPage() {
           <CodeBlock>{firstRunPrompt}</CodeBlock>
           <p className="mt-4 max-w-3xl text-sm leading-7 text-slate-600">The ErgoVeritas canary page is a controlled, stable test site for demonstrating the complete scan, status, and bundle flow. Substitute your own public URL at any time.</p>
           <p className="mt-4 max-w-4xl text-sm leading-7 text-slate-600">{agentDisclaimer}</p>
+        </section>
+
+        <section className="rounded-xl border border-sky-200 bg-sky-50 p-6" id="cursor">
+          <p className="text-xs font-semibold uppercase tracking-[0.16em] text-sky-800">Cursor quickstart</p>
+          <h2 className="mt-2 text-2xl font-semibold text-slate-950">Install CertScore in one click</h2>
+          <p className="mt-3 max-w-3xl text-sm leading-7 text-slate-700">
+            Add the hosted, no-auth Light MCP directly to Cursor. Cursor will show the server configuration before installation; no API key, OAuth flow, or local executable is required.
+          </p>
+          <div className="mt-5 flex flex-wrap gap-3">
+            <McpLightTrackedLink
+              className="rounded-md bg-slate-950 px-4 py-2 text-sm font-semibold text-white hover:bg-slate-800"
+              href={MCP_LIGHT_CURSOR_INSTALL_URL}
+              trackingTarget="cursor_install"
+            >
+              Add to Cursor
+            </McpLightTrackedLink>
+            <McpLightTrackedLink
+              className="rounded-md border border-sky-300 bg-white px-4 py-2 text-sm font-semibold text-sky-800 hover:border-sky-500 hover:text-sky-950"
+              href={MCP_LIGHT_CURSOR_DIRECTORY_URL}
+              trackingTarget="cursor_directory"
+            >
+              View Cursor Directory listing
+            </McpLightTrackedLink>
+            <CopyMcpValue label="MCP endpoint" value={endpoint} />
+          </div>
+          <p className="mt-4 text-xs leading-5 text-slate-600">After installation, confirm Cursor discovers exactly the three Light tools, then use one of the prompts below.</p>
         </section>
 
         <section className="rounded-xl border border-slate-200 bg-white p-6">
@@ -252,15 +286,16 @@ export default function McpLightPage() {
         </section>
 
         <section>
-          <h2 className="text-2xl font-semibold text-slate-950">Five useful agent workflows</h2>
-          <div className="mt-5 grid gap-4 md:grid-cols-2">
-            {[
-              "Scan my website for cookies and trackers observed before consent.",
-              "Compare the privacy-risk signals from these three public websites.",
-              "Review this domain before vendor onboarding and summarize evidence-backed concerns.",
-              "Identify the most important privacy, consent, policy, and disclosure risks on this site.",
-              "Scan this list of public websites and create a concise review table with coverage limitations."
-            ].map((prompt) => <div className="rounded-lg border border-slate-200 bg-white p-5 text-sm leading-6 text-slate-700" key={prompt}>{prompt}</div>)}
+          <p className="text-xs font-semibold uppercase tracking-[0.16em] text-sky-700">Copy and run</p>
+          <h2 className="mt-2 text-2xl font-semibold text-slate-950">Prompts for three common reviews</h2>
+          <div className="mt-5 grid gap-4 lg:grid-cols-3">
+            {MCP_LIGHT_ROLE_PROMPTS.map(({ label, prompt }) => (
+              <article className="flex flex-col rounded-lg border border-slate-200 bg-white p-5" key={label}>
+                <h3 className="font-semibold text-slate-950">{label}</h3>
+                <p className="mt-3 flex-1 text-sm leading-6 text-slate-700">{prompt}</p>
+                <div className="mt-5"><CopyMcpValue label={`${label} prompt`} value={prompt} /></div>
+              </article>
+            ))}
           </div>
         </section>
 
