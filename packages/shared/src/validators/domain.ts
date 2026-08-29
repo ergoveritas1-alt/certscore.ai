@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { extractHostname, normalizeUrl } from "../utils/url";
+import { extractHostname, isNonPublicTargetUrlError, normalizeUrl } from "../utils/url";
 
 export const hexColorSchema = z
   .string()
@@ -14,10 +14,11 @@ const rawDomainInputSchema = z
   .superRefine((value, context) => {
     try {
       normalizeUrl(value);
-    } catch {
+    } catch (error) {
       context.addIssue({
         code: z.ZodIssueCode.custom,
-        message: "Enter a valid website domain, such as example.com."
+        message: "Enter a valid website domain, such as example.com.",
+        params: isNonPublicTargetUrlError(error) ? { reasonCode: error.reasonCode } : undefined
       });
     }
   });
@@ -49,6 +50,12 @@ export const createDomainRequestSchema = z
       hostname: extractHostname(normalizedUrl)
     };
   });
+
+export function getDomainValidationReasonCode(error: z.ZodError): "non_public_target" | null {
+  return error.issues.some((issue) =>
+    issue.code === z.ZodIssueCode.custom && issue.params?.reasonCode === "non_public_target"
+  ) ? "non_public_target" : null;
+}
 
 export function parseDomainBatchInput(input: string) {
   const parts = input

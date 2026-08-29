@@ -1,7 +1,12 @@
 import { randomUUID } from "node:crypto";
 import { NextResponse } from "next/server";
 import { isCanonicalScanId } from "@certscore/api-contracts";
-import { apiReadRateLimitGuidance, normalizeScanFrom, type ScanFrom } from "@website-signal-risk-scanner/shared";
+import {
+  apiReadRateLimitGuidance,
+  normalizeScanFrom,
+  PUBLIC_TARGET_POLICY_VERSION,
+  type ScanFrom
+} from "@website-signal-risk-scanner/shared";
 import { restrictScanFromForUser } from "../../../../server/scans/restricted-scan-options";
 import { SITE_URL } from "../../../../lib/seo";
 import { applyPulseCors, pulseOptionsResponse } from "../../../../lib/pulse/cors";
@@ -685,6 +690,14 @@ async function handlePulseGET(request: Request, options: PulseRouteOptions = {})
 
     const normalized = normalizePulseUrl(rawUrl);
     if (!normalized.ok) {
+      if (normalized.reasonCode === "non_public_target") {
+        console.warn("[scan-target] rejected", {
+          event: "scan_target_rejected",
+          policyVersion: PUBLIC_TARGET_POLICY_VERSION,
+          reason: normalized.reasonCode,
+          stage: "admission"
+        });
+      }
       if (gptAction) {
         logPulseGptActionEvent("pulse_gpt_action_error", {
           detail,
@@ -697,7 +710,14 @@ async function handlePulseGET(request: Request, options: PulseRouteOptions = {})
           wait: waitSeconds
         });
       }
-      return pulseJson(buildPulseError({ code: "invalid_url", message: normalized.message, url: rawUrl, detail, format }), { status: 400 }, requestId, routeName);
+      return pulseJson(buildPulseError({
+        code: "invalid_url",
+        reasonCode: normalized.reasonCode,
+        message: normalized.message,
+        url: normalized.reasonCode === "non_public_target" ? null : rawUrl,
+        detail,
+        format
+      }), { status: 400 }, requestId, routeName);
     }
 
     const dnsStatus = await checkDomainDns(normalized.normalizedDomain);

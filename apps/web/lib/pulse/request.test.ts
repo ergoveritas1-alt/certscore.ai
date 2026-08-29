@@ -30,6 +30,14 @@ test("Pulse URL normalization accepts domains and rejects invalid input", () => 
   assert.equal(normalizePulseUrl("not a url").ok, false);
 });
 
+test("Pulse URL normalization identifies non-public targets without returning the input", () => {
+  assert.deepEqual(normalizePulseUrl("http://127.0.0.1"), {
+    ok: false,
+    message: "Enter a valid public URL or domain.",
+    reasonCode: "non_public_target"
+  });
+});
+
 test("Pulse requester context accepts only a fresh signed anonymous MCP requester proof", () => {
   const previousSecret = process.env.CERTSCORE_OAUTH_JWT_SECRET;
   const secret = "anonymous-mcp-requester-test-secret";

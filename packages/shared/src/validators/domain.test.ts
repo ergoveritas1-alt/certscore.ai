@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { parseDomainBatchInput } from "./domain";
-import { normalizeUrl } from "../utils/url";
+import { createDomainRequestSchema, getDomainValidationReasonCode, parseDomainBatchInput } from "./domain";
+import { isNonPublicTargetUrlError, normalizeUrl } from "../utils/url";
 
 test("parseDomainBatchInput parses space, comma, and semicolon separated domains", () => {
   const parsed = parseDomainBatchInput("example.com, coinbase.com howeycoins.com;cnn.com");
@@ -34,7 +34,19 @@ test("normalizeUrl rejects non-public literal and local hostname targets", () =>
     "http://0177.0.0.1",
     "http://127.1"
   ]) {
-    assert.throws(() => normalizeUrl(value), /Invalid hostname/, value);
+    assert.throws(() => normalizeUrl(value), (error) => {
+      assert.equal(isNonPublicTargetUrlError(error), true, value);
+      return true;
+    });
+  }
+});
+
+test("domain validation preserves the non-public target reason without retaining the input", () => {
+  const parsed = createDomainRequestSchema.safeParse({ domain: "http://169.254.169.254/latest/meta-data/" });
+  assert.equal(parsed.success, false);
+  if (!parsed.success) {
+    assert.equal(getDomainValidationReasonCode(parsed.error), "non_public_target");
+    assert.equal(JSON.stringify(parsed.error.issues).includes("169.254.169.254"), false);
   }
 });
 

@@ -1,5 +1,9 @@
 import { createHash, createHmac, timingSafeEqual } from "node:crypto";
-import { anonymousRequesterNetwork, createDomainRequestSchema } from "@website-signal-risk-scanner/shared";
+import {
+  anonymousRequesterNetwork,
+  createDomainRequestSchema,
+  getDomainValidationReasonCode
+} from "@website-signal-risk-scanner/shared";
 import { getTrustedRequestSourceIp, normalizeRequestSourceIp } from "../request-source-ip";
 import type { PulseDetail, PulseFormat, PulseFreshnessMode } from "./types";
 
@@ -37,7 +41,8 @@ export function normalizePulseUrl(value: string) {
   if (!parsed.success) {
     return {
       ok: false as const,
-      message: "Enter a valid public URL or domain."
+      message: "Enter a valid public URL or domain.",
+      reasonCode: getDomainValidationReasonCode(parsed.error)
     };
   }
 

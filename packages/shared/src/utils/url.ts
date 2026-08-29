@@ -4,6 +4,19 @@ import {
   isLocalOnlyTargetHostname
 } from "../network/public-target-policy";
 
+export class NonPublicTargetUrlError extends Error {
+  readonly reasonCode = "non_public_target" as const;
+
+  constructor() {
+    super("Invalid hostname");
+    this.name = "NonPublicTargetUrlError";
+  }
+}
+
+export function isNonPublicTargetUrlError(error: unknown): error is NonPublicTargetUrlError {
+  return error instanceof NonPublicTargetUrlError;
+}
+
 export function normalizeUrl(input: string): string {
   const trimmedInput = input.trim().replace(/^htps:\/\//i, "https://").replace(/^htp:\/\//i, "http://");
 
@@ -23,12 +36,17 @@ export function normalizeUrl(input: string): string {
   }
 
   const literal = classifyPublicTargetAddress(url.hostname);
-  if (literal.family === 6 || (literal.family === 4 && !literal.public)) {
+  if (literal.family !== null && !literal.public) {
+    throw new NonPublicTargetUrlError();
+  }
+  if (literal.family === 6) {
     throw new Error("Invalid hostname");
+  }
+  if (isLocalOnlyTargetHostname(url.hostname)) {
+    throw new NonPublicTargetUrlError();
   }
   if (
     (literal.family === null && !url.hostname.includes(".")) ||
-    isLocalOnlyTargetHostname(url.hostname) ||
     (literal.family === null && url.hostname.split(".").some((label) => !/^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$/i.test(label)))
   ) {
     throw new Error("Invalid hostname");
