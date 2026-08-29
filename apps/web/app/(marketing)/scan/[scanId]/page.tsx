@@ -52,6 +52,7 @@ function pendingReport(
         <PendingScanDetailView
           createdAt={statusProjection.createdAt}
           domainHostname={statusProjection.domainHostname}
+          initialPreConsentPreview={statusProjection.preConsentPreview ?? null}
           pageUrl={statusProjection.pageUrl}
           pendingPostCompletionWork={waitingForProjection}
           profile={statusProjection.profile}

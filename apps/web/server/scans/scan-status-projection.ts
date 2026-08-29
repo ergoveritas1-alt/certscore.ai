@@ -305,6 +305,7 @@ export function buildLightweightScanStatusResponse(projection: ScanStatusProject
   return {
     domain: projection.domainHostname,
     browserExtensionNormalizationReady: projection.browserExtensionNormalizationReady,
+    ...(projection.preConsentPreview ? { preConsentPreview: projection.preConsentPreview } : {}),
     reportReadiness: {
       generation: projection.reportGeneration,
       status: projection.reportReady ? "ready" : "finalizing"

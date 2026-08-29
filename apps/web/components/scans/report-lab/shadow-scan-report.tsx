@@ -7,6 +7,10 @@ import { getScanFromMarkerInput, ScanFromMarker } from "../scan-from-icons";
 import type { ServerScanFrom } from "../scan-from-select";
 import { VendorBrandChip } from "../vendor-brand-chip";
 import { CompactRejectPathCard } from "../executive-summary-card";
+import {
+  RuntimeInventorySummaryCard,
+  RuntimeObservationTimeline,
+} from "../runtime-observation-sections";
 import { getGdprEprivacyPostureTone } from "../../../lib/scans/regulatory-coverage-score";
 import { ShadowReportShareMenu } from "./shadow-report-actions";
 import { ShadowPolicyEvidenceViewer } from "./shadow-policy-evidence-viewer";
@@ -559,42 +563,7 @@ function FindingsList({ dense = false, priority = false, report }: { dense?: boo
 }
 
 function HorizontalTimeline({ dominant = false, report }: { dominant?: boolean; report: ShadowReportData }) {
-  const events = report.timeline;
-  const consentEvent = events.find((event) => /consent/i.test(event.label));
-  const firstConcern = events.find((event) => event.tone === "concern");
-  const leadMs = consentEvent && firstConcern && consentEvent.atMs > firstConcern.atMs
-    ? consentEvent.atMs - firstConcern.atMs
-    : null;
-  return (
-    <div className="overflow-x-auto pb-2">
-      <div className={`${dominant ? "min-w-[58rem]" : "min-w-[48rem]"} relative pt-12`}>
-        <div className="absolute left-0 right-0 top-[4.2rem] h-px bg-zinc-300" />
-        <div className="relative grid gap-4" style={{ gridTemplateColumns: `repeat(${Math.max(events.length, 2)}, minmax(0, 1fr))` }}>
-          {events.map((event) => (
-            <div className="relative min-w-0" key={`${event.at}-${event.label}`}>
-              <span className={`absolute top-[0.72rem] h-3 w-3 rounded-full border-2 border-white ring-1 ${event.tone === "concern" ? "bg-rose-500 ring-rose-500" : event.tone === "positive" ? "bg-emerald-600 ring-emerald-600" : "bg-zinc-500 ring-zinc-500"}`} />
-              {/consent/i.test(event.label) ? (
-                <span aria-hidden="true" className="absolute left-[0.31rem] top-[1.45rem] h-6 border-l-2 border-dashed border-emerald-500" />
-              ) : null}
-              <p className={`${monoClass} text-xs font-semibold ${event.tone === "concern" ? "text-rose-700" : "text-zinc-600"}`}>{event.at}</p>
-              <div className="mt-9 flex min-h-7 items-center gap-2">
-                <p className={`${dominant ? "text-base" : "text-sm"} font-semibold text-zinc-950`}>{event.label}</p>
-                {event.vendor ? (
-                  <VendorBrandChip className="!h-7 !w-7 [&>span]:!h-4 [&>span]:!w-4" hideLabel label={event.vendor} showMeta={false} />
-                ) : null}
-              </div>
-              <p className="mt-1 max-w-[11rem] overflow-hidden text-xs leading-5 text-zinc-500 [display:-webkit-box] [-webkit-box-orient:vertical] [-webkit-line-clamp:2]">{event.detail}</p>
-              {event === firstConcern && leadMs !== null ? (
-                <span className="absolute -top-10 left-0 whitespace-nowrap rounded-md bg-rose-50 px-2 py-1 text-[0.65rem] font-semibold text-rose-800">
-                  {Math.round(leadMs / 10) / 100}s before consent surface
-                </span>
-              ) : null}
-            </div>
-          ))}
-        </div>
-      </div>
-    </div>
-  );
+  return <RuntimeObservationTimeline dominant={dominant} events={report.timeline} />;
 }
 
 function formatRejectTimelineOffset(milliseconds: number) {
@@ -964,27 +933,14 @@ function RuntimeInventoryTable({ report }: { report: ShadowReportData }) {
     : "overflow-x-auto";
 
   return (
-    <div className="mt-9 border-y border-zinc-300 bg-white">
-      <div className="px-4 py-4">
-        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between sm:gap-4">
-          <div>
-            <p className="text-xs font-semibold uppercase text-zinc-500">Cookie and tracker inventory</p>
-            <h3 className="mt-1 text-base font-semibold text-zinc-950 sm:text-lg">Every retained vendor and request group</h3>
-          </div>
-          <span className="flex shrink-0 items-center gap-3 text-xs font-semibold text-zinc-700">
-            <span className={monoClass}>{report.metrics.vendors} vendors · {report.metrics.domains} domains</span>
-          </span>
-        </div>
-        <CompactInventoryMix report={report} />
-      </div>
-      <details className="group/runtime border-t border-zinc-200">
-        <summary className="flex cursor-pointer list-none items-center justify-between gap-4 px-4 py-3 text-sm font-semibold text-zinc-800 transition hover:bg-zinc-50 [&::-webkit-details-marker]:hidden">
-          <span>View full inventory table</span>
-          <span aria-hidden="true" className="inline-flex h-7 w-7 items-center justify-center rounded-full border border-zinc-300 bg-white text-lg text-zinc-500 transition group-open/runtime:rotate-45">+</span>
-        </summary>
-        <p className="mx-4 mb-4 max-w-3xl border-t border-zinc-200 pt-4 text-xs leading-5 text-zinc-500">
-          Every retained cookie, storage, tracker, and request group from the canonical runtime inventory is available below.
-        </p>
+    <RuntimeInventorySummaryCard
+      description="Every retained cookie, storage, tracker, and request group from the canonical runtime inventory is available below."
+      detailsLabel="View full inventory table"
+      eyebrow="Cookie and tracker inventory"
+      heading="Every retained vendor and request group"
+      inventory={report.inventory}
+      summary={`${report.metrics.vendors} vendors · ${report.metrics.domains} domains`}
+    >
         <div
           className={`${inventoryScrollClasses} border border-zinc-200 bg-white`}
           data-inventory-scroll={report.inventory.length > 8 ? "bounded" : "unbounded"}
@@ -1026,8 +982,7 @@ function RuntimeInventoryTable({ report }: { report: ShadowReportData }) {
           </tbody>
         </table>
         </div>
-      </details>
-    </div>
+    </RuntimeInventorySummaryCard>
   );
 }
 

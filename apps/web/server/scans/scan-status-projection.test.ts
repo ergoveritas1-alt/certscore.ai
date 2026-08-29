@@ -102,6 +102,32 @@ test("lightweight status does not apply the fallback to non-completed scans", as
   assert.equal(response.reportReadiness.status, "finalizing");
 });
 
+test("browser lightweight status exposes a persisted preview without report hydration", async () => {
+  const build = await getBuildLightweightScanStatusResponse();
+  const response = build(projection({
+    completedAt: null,
+    preConsentPreview: {
+      type: "certscore_pre_consent_preview",
+      resultStage: "preliminary",
+      final: false,
+      sourceLane: "runtime_evidence",
+      generatedAt: "2026-08-28T18:00:03.000Z",
+      runtimeCoverage: { status: "usable", limitationKeys: [] },
+      summary: { cookieCount: 1, trackerCount: 1, thirdPartyRequestCount: 1, vendorCount: 1 },
+      cookies: [],
+      trackers: [],
+      truncated: { cookies: false, trackers: false },
+      mustContinuePolling: true,
+      observationOnlyDisclaimer: "Preliminary passive observations only; continue polling.",
+    },
+    status: "running",
+  }));
+
+  assert.equal(response.preConsentPreview?.final, false);
+  assert.equal(response.reportReadiness.status, "finalizing");
+  assert.equal(response.progress.stage, "scan");
+});
+
 test("API v2 lightweight status never promotes completed work before its report projection is ready", async () => {
   const build = await getBuildLightweightApiV2ScanStatusInput();
   const response = build(projection({

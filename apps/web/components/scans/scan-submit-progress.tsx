@@ -99,6 +99,7 @@ export function ScanSubmissionPendingIndicator({
 export function ScanSubmitProgressBar({
   active,
   compact = false,
+  dense = false,
   initialProgressValue,
   nowMs,
   onProgressValueChange,
@@ -112,6 +113,7 @@ export function ScanSubmitProgressBar({
 }: {
   active: boolean;
   compact?: boolean;
+  dense?: boolean;
   initialProgressValue?: number | null;
   nowMs: number;
   onProgressValueChange?: (value: number) => void;
@@ -196,22 +198,29 @@ export function ScanSubmitProgressBar({
   }
 
   return (
-    <div aria-live="polite" className={compact ? "rounded-xl border border-slate-200 bg-white px-3 py-2 shadow-sm" : "rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3"}>
-      <div className={compact ? "flex items-center justify-between gap-3 text-xs font-medium text-slate-600" : "flex items-center justify-between gap-3 text-sm font-medium text-slate-700"}>
+    <div
+      aria-live="polite"
+      className={compact
+        ? "rounded-xl border border-slate-200 bg-white px-3 py-2 shadow-sm"
+        : dense
+          ? "rounded-xl border border-slate-200 bg-slate-50 px-3 py-2"
+          : "rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3"}
+    >
+      <div className={compact || dense ? "flex items-center justify-between gap-3 text-xs font-medium text-slate-600" : "flex items-center justify-between gap-3 text-sm font-medium text-slate-700"}>
         <span className="min-w-0 truncate">{progressDisplay.label}</span>
         <span className="inline-flex shrink-0 items-center gap-1.5">
           <ScanActivityIndicator className="text-sky-500" />
           <span>{elapsedSeconds}s elapsed</span>
         </span>
       </div>
-      {!compact ? <p className="mt-1 text-xs text-slate-500">{progressDisplay.detail}</p> : null}
+      {!compact ? <p className={dense ? "mt-0.5 text-[11px] text-slate-500" : "mt-1 text-xs text-slate-500"}>{progressDisplay.detail}</p> : null}
       <div
         aria-label={progressDisplay.ariaLabel}
         aria-valuemax={100}
         aria-valuemin={0}
         aria-valuenow={displayedProgressValue}
         aria-valuetext={progressDisplay.ariaValueText}
-        className={compact ? "mt-2 h-2 overflow-hidden rounded-full bg-slate-200" : "mt-3 h-2.5 overflow-hidden rounded-full bg-slate-200"}
+        className={compact || dense ? "mt-2 h-2 overflow-hidden rounded-full bg-slate-200" : "mt-3 h-2.5 overflow-hidden rounded-full bg-slate-200"}
         role="progressbar"
       >
         <div
@@ -224,7 +233,7 @@ export function ScanSubmitProgressBar({
           }}
         />
       </div>
-      <div className={compact ? "mt-2 flex items-center justify-between gap-2" : "mt-3 flex items-center justify-between gap-3"} aria-hidden="true">
+      <div className={compact || dense ? "mt-2 flex items-center justify-between gap-2" : "mt-3 flex items-center justify-between gap-3"} aria-hidden="true">
         {progressDisplay.steps.map((step) => (
           <span
             key={step.label}
@@ -431,18 +440,20 @@ export function LocalV2DagScanProgressCard({
   return (
     <section
       aria-live="polite"
-      className={`rounded-3xl border border-sky-200 bg-white p-5 shadow-[0_18px_60px_-32px_rgba(14,165,233,0.45)] transition-opacity duration-300 ${revealProgress ? "opacity-100" : "opacity-0"}`}
+      className={`rounded-2xl border border-sky-200 bg-white p-3 shadow-[0_14px_44px_-30px_rgba(14,165,233,0.4)] transition-opacity duration-300 ${revealProgress ? "opacity-100" : "opacity-0"}`}
+      data-density="compact"
     >
-      <div className="mb-4 flex flex-wrap items-start justify-between gap-3">
+      <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
         <div className="min-w-0 space-y-1">
           <p className="text-xs font-semibold uppercase tracking-[0.18em] text-sky-600">Scan in progress</p>
         </div>
-        <span className="inline-flex items-center gap-1.5 rounded-full border border-sky-200 bg-sky-50 px-3 py-1 text-xs font-semibold text-sky-800">
+        <span className="inline-flex items-center gap-1.5 rounded-full border border-sky-200 bg-sky-50 px-2.5 py-0.5 text-[11px] font-semibold text-sky-800">
           {badgeLabel}
         </span>
       </div>
       <ScanSubmitProgressBar
         active
+        dense
         initialProgressValue={initialProgressValue}
         nowMs={nowMs}
         profileValue={profileValue}

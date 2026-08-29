@@ -39,6 +39,25 @@ test("server scan status determines the active progress phase", () => {
   assert.doesNotMatch(html, /Building your report/);
 });
 
+test("dense progress retains phase detail and milestone labels with compact spacing", () => {
+  const html = renderToStaticMarkup(
+    <ScanSubmitProgressBar
+      active
+      dense
+      nowMs={6_000}
+      progressStage="scan"
+      scanStatus="running"
+      startedAtMs={0}
+    />
+  );
+
+  assert.match(html, /Capturing page evidence and website signals/);
+  assert.match(html, />Prepare</);
+  assert.match(html, />Scan</);
+  assert.match(html, /rounded-xl border border-slate-200 bg-slate-50 px-3 py-2/);
+  assert.match(html, /mt-2 h-2 overflow-hidden/);
+});
+
 test("canonical progress milestones override coarse scan status", () => {
   const reviewHtml = renderToStaticMarkup(
     <ScanSubmitProgressBar active nowMs={40_000} progressStage="review" scanStatus="completed" startedAtMs={0} />

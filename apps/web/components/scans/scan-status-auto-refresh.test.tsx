@@ -86,12 +86,30 @@ test("getPolledScanProgress retains canonical review and report milestones", () 
     progress: { stage: "review" },
     reportReadiness: { status: "finalizing" },
     scan: { status: "completed" }
-  }), { reportReady: false, stage: "review", status: "completed" });
+  }), { preConsentPreview: null, reportReady: false, stage: "review", status: "completed" });
   assert.deepEqual(getPolledScanProgress({
     progress: { stage: "report" },
     reportReadiness: { status: "finalizing" },
     scan: { status: "completed" }
-  }), { reportReady: false, stage: "report", status: "completed" });
+  }), { preConsentPreview: null, reportReady: false, stage: "report", status: "completed" });
+});
+
+test("getPolledScanProgress retains a preliminary runtime preview without promoting readiness", () => {
+  const progress = getPolledScanProgress({
+    preConsentPreview: {
+      type: "certscore_pre_consent_preview",
+      resultStage: "preliminary",
+      final: false,
+      sourceLane: "runtime_evidence",
+    },
+    progress: { stage: "scan" },
+    reportReadiness: { status: "finalizing" },
+    scan: { status: "running" },
+  });
+
+  assert.equal(progress.preConsentPreview?.final, false);
+  assert.equal(progress.reportReady, false);
+  assert.equal(progress.stage, "scan");
 });
 
 test("completed scans remain non-terminal while report projection is finalizing", () => {

@@ -1,11 +1,13 @@
 "use client";
 
+import type { ApiV2PreConsentRuntimePreview } from "@certscore/api-contracts";
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { readActiveScanSession } from "../../lib/scans/active-scan-session";
 import { getScanProgressRuntime, recordScanDuration } from "../../lib/scans/scan-progress-timing";
 import { type PolledScanProgress, ScanStatusAutoRefresh } from "./scan-status-auto-refresh";
 import { LocalV2DagScanProgressCard } from "./scan-submit-progress";
+import { PreConsentRuntimePreviewCard } from "./pre-consent-runtime-preview-card";
 
 export const TERMINAL_NAVIGATION_DELAY_MS = 0;
 export const TERMINAL_REFRESH_FALLBACK_MS = 20_000;
@@ -28,6 +30,7 @@ export function getProgressHandoffValue(input: { hasSubmissionHandoff: boolean; 
 export function PendingScanDetailView({
   createdAt,
   domainHostname,
+  initialPreConsentPreview = null,
   pageUrl,
   pendingPostCompletionWork = false,
   profile,
@@ -37,6 +40,7 @@ export function PendingScanDetailView({
 }: {
   createdAt: string;
   domainHostname: string | null;
+  initialPreConsentPreview?: ApiV2PreConsentRuntimePreview | null;
   pageUrl?: string | null;
   pendingPostCompletionWork?: boolean;
   profile: string;
@@ -49,6 +53,7 @@ export function PendingScanDetailView({
     ? "review"
     : status === "queued" ? "prepare" : status === "running" ? "scan" : "review";
   const [progress, setProgress] = useState<PolledScanProgress>({
+    preConsentPreview: initialPreConsentPreview,
     reportReady: false,
     stage: initialStage,
     status
@@ -76,7 +81,11 @@ export function PendingScanDetailView({
     }, TERMINAL_REFRESH_FALLBACK_MS);
   }, [router]);
   const handleProgress = useCallback((nextProgress: PolledScanProgress) => {
-    if (nextProgress.reportReady && !progressRef.current.reportReady && typeof window !== "undefined") {
+    const retainedProgress = {
+      ...nextProgress,
+      preConsentPreview: nextProgress.preConsentPreview ?? progressRef.current.preConsentPreview,
+    };
+    if (retainedProgress.reportReady && !progressRef.current.reportReady && typeof window !== "undefined") {
       const activeScanSession = readActiveScanSession();
       if (activeScanSession?.scanId === scanId) {
         try {
@@ -92,8 +101,8 @@ export function PendingScanDetailView({
         }
       }
     }
-    progressRef.current = nextProgress;
-    setProgress(nextProgress);
+    progressRef.current = retainedProgress;
+    setProgress(retainedProgress);
   }, [domainHostname, profile, scanId]);
   useEffect(() => {
     if (handoffScanIdRef.current === scanId) {
@@ -129,10 +138,10 @@ export function PendingScanDetailView({
   }, [handleProgress, initialStage, scanId, status]);
 
   return (
-    <div className="space-y-8">
+    <div className="space-y-4" data-density="compact">
       <div>
-        <p className="text-sm font-medium uppercase tracking-[0.18em] text-slate-500">CertScore.ai scan</p>
-        <h1 className="mt-2 flex min-w-0 max-w-full items-baseline gap-2 text-3xl font-semibold tracking-tight text-slate-950 sm:text-4xl">
+        <p className="text-xs font-medium uppercase tracking-[0.18em] text-slate-500">CertScore.ai scan</p>
+        <h1 className="mt-1 flex min-w-0 max-w-full items-baseline gap-2 text-2xl font-semibold leading-tight tracking-tight text-slate-950 sm:text-3xl">
           <span className="shrink-0">Scan:</span>
           <span className="min-w-0 truncate" title={pageUrl?.trim() || domainHostname?.trim() || "website"}>
             {pageUrl?.trim() || domainHostname?.trim() || "website"}
@@ -151,6 +160,9 @@ export function PendingScanDetailView({
         startedAtMs={progressHandoff.startedAtMs}
         targetLabel={domainHostname ?? pageUrl ?? ""}
       />
+      {progress.preConsentPreview ? (
+        <PreConsentRuntimePreviewCard preview={progress.preConsentPreview} startedAt={startedAt} />
+      ) : null}
       <ScanStatusAutoRefresh
         onTerminalNavigation={handleTerminalNavigation}
         onProgress={handleProgress}

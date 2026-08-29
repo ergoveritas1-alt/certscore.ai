@@ -114,6 +114,7 @@ export default async function ScanDetailPage({ params, searchParams }: ScanDetai
         <PendingScanDetailView
           createdAt={statusProjection.createdAt}
           domainHostname={statusProjection.domainHostname}
+          initialPreConsentPreview={statusProjection.preConsentPreview ?? null}
           pageUrl={statusProjection.pageUrl}
           pendingPostCompletionWork={waitingForReportProjection}
           profile={statusProjection.profile}
@@ -183,6 +184,7 @@ async function ScanDetailReportContent({
       <PendingScanDetailView
         createdAt={statusProjection.createdAt}
         domainHostname={statusProjection.domainHostname}
+        initialPreConsentPreview={statusProjection.preConsentPreview ?? null}
         pageUrl={statusProjection.pageUrl}
         pendingPostCompletionWork
         profile={statusProjection.profile}

@@ -49,6 +49,7 @@ export default async function ScanDetailPage({ params }: ScanDetailPageProps) {
         <PendingScanDetailView
           createdAt={statusProjection.createdAt}
           domainHostname={statusProjection.domainHostname}
+          initialPreConsentPreview={statusProjection.preConsentPreview ?? null}
           pageUrl={statusProjection.pageUrl}
           pendingPostCompletionWork={waitingForReportProjection}
           profile={statusProjection.profile}
@@ -83,6 +84,7 @@ export default async function ScanDetailPage({ params }: ScanDetailPageProps) {
       <PendingScanDetailView
         createdAt={statusProjection.createdAt}
         domainHostname={statusProjection.domainHostname}
+        initialPreConsentPreview={statusProjection.preConsentPreview ?? null}
         pageUrl={statusProjection.pageUrl}
         pendingPostCompletionWork
         profile={statusProjection.profile}

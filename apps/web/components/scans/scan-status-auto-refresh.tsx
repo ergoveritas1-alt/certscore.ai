@@ -1,8 +1,10 @@
 "use client";
 
+import type { ApiV2PreConsentRuntimePreview } from "@certscore/api-contracts";
 import React, { useEffect, useRef } from "react";
 
 export type PolledScanProgress = {
+  preConsentPreview: ApiV2PreConsentRuntimePreview | null;
   reportReady: boolean;
   stage: "prepare" | "scan" | "review" | "report" | "complete";
   status: string | null;
@@ -94,7 +96,15 @@ export function getPolledScanProgress(payload: unknown): PolledScanProgress {
           ? "scan"
           : "prepare";
 
-  return { reportReady: readiness.reportReady, stage, status };
+  const preview = record?.preConsentPreview && typeof record.preConsentPreview === "object" && !Array.isArray(record.preConsentPreview)
+    ? record.preConsentPreview as Record<string, unknown>
+    : null;
+  const preConsentPreview = preview?.type === "certscore_pre_consent_preview" &&
+    preview.resultStage === "preliminary" && preview.final === false && preview.sourceLane === "runtime_evidence"
+    ? preview as ApiV2PreConsentRuntimePreview
+    : null;
+
+  return { preConsentPreview, reportReady: readiness.reportReady, stage, status };
 }
 
 export function getNavigablePolledScanStatus(
