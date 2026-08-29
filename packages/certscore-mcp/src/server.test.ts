@@ -5,7 +5,7 @@ import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
 import { certScoreMcpToolContracts } from "@certscore/api-contracts";
 import { CERTSCORE_MCP_VERSION, getCertScoreMcpDoctorReport } from "./index.js";
-import { createCertScoreMcpServer, resolveMcpScanSiteWaitBudget } from "./server.js";
+import { createCertScoreMcpServer } from "./server.js";
 
 type MockResponse = {
   status: number;
@@ -231,6 +231,10 @@ test("CertScore Light exposes only the focused no-account workflow", async () =>
     });
     assert.ok(scanSiteTool?.outputSchema?.required?.includes("error"));
     assert.ok(scanSiteTool?.outputSchema?.required?.includes("recommendedNextAction"));
+    assert.match(scanSiteTool?.description ?? "", /never waits for a new scan to finish/);
+    assert.match(scanSiteTool?.description ?? "", /do not resubmit certscore_scan_site/);
+    assert.match((scanSiteTool?.inputSchema.properties?.waitForCompletion as { description?: string })?.description ?? "", /Deprecated compatibility field; accepted but ignored/);
+    assert.match((scanSiteTool?.inputSchema.properties?.maxWaitSeconds as { description?: string })?.description ?? "", /Deprecated compatibility field; accepted but ignored/);
     const freshnessSchema = scanSiteTool?.inputSchema.properties?.freshness as { description?: string; enum?: string[] } | undefined;
     assert.deepEqual(freshnessSchema?.enum, ["latest", "refresh"]);
     assert.equal(
@@ -257,6 +261,7 @@ test("CertScore Light exposes only the focused no-account workflow", async () =>
     assert.match(statusTool?.description ?? "", /execution region \(scanFrom\), timestamps/);
     assert.match(statusTool?.description ?? "", /never infer its original region from the current request, the user's location, or a default/i);
     assert.match(statusTool?.description ?? "", /Report unavailable provenance as unavailable/);
+    assert.match(statusTool?.description ?? "", /never poll in parallel/);
     const bundleTool = tools.tools.find((tool) => tool.name === "certscore_get_scan_bundle");
     assert.deepEqual(bundleTool?.annotations, {
       readOnlyHint: true,
@@ -632,23 +637,7 @@ test("version constant stays aligned with package version", () => {
   assert.equal(packageJson.engines?.node, ">=20");
 });
 
-test("certscore_scan_site deducts scan creation time and response headroom from its wall-clock budget", () => {
-  assert.deepEqual(resolveMcpScanSiteWaitBudget({ startedAtMs: 1_000, nowMs: 6_000 }), {
-    elapsedMs: 5_000,
-    remainingWaitMs: 19_000,
-    responseReserveMs: 1_000,
-    totalBudgetMs: 25_000,
-  });
-  assert.deepEqual(resolveMcpScanSiteWaitBudget({ maxWaitSeconds: 10, startedAtMs: 1_000, nowMs: 10_500 }), {
-    elapsedMs: 9_500,
-    remainingWaitMs: 0,
-    responseReserveMs: 1_000,
-    totalBudgetMs: 10_000,
-  });
-  assert.equal(resolveMcpScanSiteWaitBudget({ maxWaitSeconds: 60, startedAtMs: 0, nowMs: 0 }).totalBudgetMs, 45_000);
-});
-
-test("certscore_scan_site can return immediately for an explicitly asynchronous workflow", async () => {
+test("certscore_scan_site returns a newly accepted scan immediately by default", async () => {
   const mock = installFetch([
     {
       status: 202,
@@ -667,7 +656,7 @@ test("certscore_scan_site can return immediately for an explicitly asynchronous 
     await withMcpClient(async (client) => {
       const raw = await client.callTool({
           name: "certscore_scan_site",
-          arguments: { url: "https://example.com", freshness: "refresh", scanFrom: "eu_ie", waitForCompletion: false }
+          arguments: { url: "https://example.com", freshness: "refresh", scanFrom: "eu_ie" }
         });
       const result = parseToolJson(raw);
       assert.equal(result.type, "certscore_scan_job");
@@ -678,14 +667,17 @@ test("certscore_scan_site can return immediately for an explicitly asynchronous 
       assert.equal((result.provenance as Record<string, unknown>).creationDecision, "new_scan");
       assert.match(raw.content[0]?.type === "text" ? raw.content[0].text : "", /retrieval=creation_response; creation=new_scan/);
       assert.doesNotMatch(raw.content[0]?.type === "text" ? raw.content[0].text : "", /full report=/);
+      assert.equal(result.recommendedNextTool, "certscore_get_scan_status");
+      assert.match(String(result.recommendedNextAction), /Do not poll in parallel or resubmit certscore_scan_site/);
       assert.match(mock.calls[0] ?? "", /\/api\/v2\/scans$/);
+      assert.equal(mock.calls.length, 1);
     });
   } finally {
     mock.restore();
   }
 });
 
-test("certscore_scan_site returns the accepted scan without an extra status read when its total budget is consumed", async () => {
+test("certscore_scan_site accepts legacy wait fields as no-ops without a status read", async () => {
   const mock = installFetch([
     {
       status: 202,
@@ -702,7 +694,7 @@ test("certscore_scan_site returns the accepted scan without an extra status read
     await withMcpClient(async (client) => {
       const result = parseToolJson(await client.callTool({
         name: "certscore_scan_site",
-        arguments: { url: "https://example.com", maxWaitSeconds: 1 },
+        arguments: { url: "https://example.com", maxWaitSeconds: 45, waitForCompletion: true },
       }));
 
       assert.equal(result.type, "certscore_scan_job");
@@ -713,46 +705,6 @@ test("certscore_scan_site returns the accepted scan without an extra status read
     });
   } finally {
     mock.restore();
-  }
-});
-
-test("certscore_scan_site aborts an in-flight status read before the total tool-call deadline", async () => {
-  const previous = globalThis.fetch;
-  let callCount = 0;
-  let statusReadAborted = false;
-  globalThis.fetch = (async (_input: RequestInfo | URL, init?: RequestInit) => {
-    callCount += 1;
-    if (callCount === 1) {
-      return jsonResponse(202, {
-        type: "certscore_scan_job",
-        status: "queued",
-        jobId: "pulse_job_abort",
-        scanId: "00000000-0000-4000-8000-000000000125",
-        retryAfterSeconds: 0,
-      });
-    }
-    return await new Promise<Response>((_resolve, reject) => {
-      init?.signal?.addEventListener("abort", () => {
-        statusReadAborted = true;
-        reject(init.signal?.reason ?? new DOMException("Aborted", "AbortError"));
-      }, { once: true });
-    });
-  }) as typeof fetch;
-  try {
-    await withMcpClient(async (client) => {
-      const result = parseToolJson(await client.callTool({
-        name: "certscore_scan_site",
-        arguments: { url: "https://example.com", maxWaitSeconds: 2 },
-      }));
-
-      assert.equal(statusReadAborted, true);
-      assert.equal(callCount, 2);
-      assert.equal(result.status, "queued");
-      assert.equal(result.scanId, "00000000-0000-4000-8000-000000000125");
-      assert.equal(result.recommendedNextTool, "certscore_get_scan_status");
-    });
-  } finally {
-    globalThis.fetch = previous;
   }
 });
 
@@ -840,112 +792,6 @@ test("certscore_scan_site forwards EU-Germany, EU-Ireland, and California contex
     } finally {
       mock.restore();
     }
-  }
-});
-
-test("certscore_scan_site waits by default and returns the completed scan resource", async () => {
-  const mock = installFetch([
-    {
-      status: 202,
-      body: {
-        type: "certscore_scan_job",
-        status: "queued",
-        jobId: "pulse_job_123",
-        scanId: "00000000-0000-4000-8000-000000000123",
-        retryAfterSeconds: 0,
-        links: { status: "https://certscore.ai/api/v2/scans/00000000-0000-4000-8000-000000000123/status" }
-      }
-    },
-    {
-      status: 200,
-      body: {
-        type: "certscore_scan_job",
-        status: "completed",
-        score: 78,
-        riskLevel: "monitor",
-        jobId: "pulse_job_123",
-        scanId: "00000000-0000-4000-8000-000000000123"
-      }
-    },
-    {
-      status: 200,
-      body: {
-        type: "certscore_scan",
-        status: "completed",
-        scanId: "00000000-0000-4000-8000-000000000123",
-        domain: "example.com",
-        scanTimeSeconds: 21.4
-      }
-    }
-  ]);
-  try {
-    await withMcpClient(async (client) => {
-      const result = parseToolJson(await client.callTool({
-        name: "certscore_scan_site",
-        arguments: { url: "https://example.com" }
-      }));
-      assert.equal(result.type, "certscore_scan");
-      assert.equal(result.status, "completed");
-      assert.equal(result.scanTimeSeconds, 21.4);
-      assert.equal(mock.calls.length, 3);
-      assert.match(mock.calls[1] ?? "", /\/api\/v2\/scans\/00000000-0000-4000-8000-000000000123\/status$/);
-      assert.match(mock.calls[2] ?? "", /\/api\/v2\/scans\/00000000-0000-4000-8000-000000000123$/);
-      assert.equal(mock.requestHeaders[0]?.get("x-certscore-mcp-internal-operation"), null);
-      assert.equal(mock.requestHeaders[1]?.get("x-certscore-mcp-internal-operation"), "scan_site_wait");
-      assert.equal(mock.requestHeaders[2]?.get("x-certscore-mcp-internal-operation"), "scan_site_wait");
-      assert.equal(mock.requestHeaders[1]?.get("x-certscore-mcp-internal-scan-id"), "00000000-0000-4000-8000-000000000123");
-      assert.match(mock.requestHeaders[1]?.get("x-certscore-mcp-internal-proof") ?? "", /^[A-Za-z0-9_-]+$/);
-    }, {
-      anonymousRequesterSecret: "mcp-internal-read-test-secret",
-      anonymousSurface: "mcp_light",
-      forwardedClientIp: "203.0.113.44",
-      toolProfile: "light"
-    });
-  } finally {
-    mock.restore();
-  }
-});
-
-test("certscore_scan_site preserves the accepted scan identity when follow-up polling fails", async () => {
-  const mock = installFetch([
-    {
-      status: 202,
-      body: {
-        type: "certscore_scan_job",
-        status: "queued",
-        jobId: "pulse_job_123",
-        scanId: "00000000-0000-4000-8000-000000000123",
-        retryAfterSeconds: 0,
-        links: { status: "https://certscore.ai/api/v2/scans/00000000-0000-4000-8000-000000000123/status" }
-      }
-    },
-    {
-      status: 503,
-      body: {
-        error: {
-          code: "internal_error",
-          message: "Status is temporarily unavailable."
-        }
-      }
-    }
-  ]);
-  try {
-    await withMcpClient(async (client) => {
-      const result = parseToolJson(await client.callTool({
-        name: "certscore_scan_site",
-        arguments: { url: "https://example.com" }
-      }));
-
-      assert.equal(result.type, "certscore_scan_job");
-      assert.equal(result.status, "queued");
-      assert.equal(result.scanId, "00000000-0000-4000-8000-000000000123");
-      assert.equal(result.jobId, "pulse_job_123");
-      assert.equal(result.recommendedNextTool, "certscore_get_scan_status");
-      assert.equal(result.error, null);
-      assert.equal(mock.calls.length, 2);
-    });
-  } finally {
-    mock.restore();
   }
 });
 

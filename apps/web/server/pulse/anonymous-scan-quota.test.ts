@@ -100,6 +100,13 @@ test("eligible reuse returns before the atomic Light new-scan claim", async () =
   const decision = repository.indexOf("decideLightMcpNewScanQuota", lock);
   const insert = repository.indexOf("insert into light_mcp_new_scan_events", decision);
   assert.ok(lock > 0 && decision > lock && insert > decision);
+  assert.match(repository, /light_mcp\.scan_admission/);
+  assert.match(repository, /capacityWarning/);
+  const admissionLogger = repository.slice(
+    repository.indexOf("function logLightMcpScanAdmission"),
+    repository.indexOf("export async function claimLightMcpNewScanQuota")
+  );
+  assert.doesNotMatch(admissionLogger, /sessionKey|ipKey|requester_key|ip_key/);
 });
 
 test("anonymous scans reject at the daily limit until the next UTC day", () => {

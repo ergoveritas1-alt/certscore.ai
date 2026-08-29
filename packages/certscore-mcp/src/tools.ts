@@ -312,6 +312,9 @@ export function withMcpAgentGuidance<T extends Record<string, any>>(value: T, fa
   const status = String(value.status ?? "");
   const active = status === "queued" || status === "running" || status === "finalizing";
   const usable = status === "completed" || status === "completed_limited";
+  const retryAfterSeconds = typeof value.retryAfterSeconds === "number" && Number.isFinite(value.retryAfterSeconds)
+    ? Math.max(1, Math.ceil(value.retryAfterSeconds))
+    : null;
   const error = terminalErrorForResult(value);
   const stableScanId = typeof value.scanId === "string" && value.scanId.trim()
     ? value.scanId.trim()
@@ -336,9 +339,9 @@ export function withMcpAgentGuidance<T extends Record<string, any>>(value: T, fa
     interpretationGuidance: interpretationGuidance(),
     recommendedNextTool: active ? "certscore_get_scan_status" : usable ? "certscore_get_scan_bundle" : null,
     recommendedNextAction: error?.recommendedNextAction ?? value.recommendedNextAction ?? (active
-      ? `Poll certscore_get_scan_status with scanId ${value.scanId ?? value.jobId} after the recommended delay.`
+      ? `${retryAfterSeconds === null ? "Wait for the recommended delay" : `Wait at least ${retryAfterSeconds} seconds`}, then call certscore_get_scan_status once with scanId ${stableScanId ?? value.jobId}. Do not poll in parallel or resubmit certscore_scan_site while this scan is active.`
       : usable
-        ? `Call certscore_get_scan_bundle with scanId ${value.scanId ?? value.jobId} for the canonical findings and limitations.`
+        ? `Call certscore_get_scan_bundle with scanId ${stableScanId ?? value.jobId} for the canonical findings and limitations.`
         : "Review the result and retained limitations."),
     observationOnlyDisclaimer: OBSERVATION_ONLY_DISCLAIMER
   };

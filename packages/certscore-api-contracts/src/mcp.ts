@@ -32,8 +32,8 @@ export const mcpScanSiteInputSchema = {
   url: mcpCreateScanInputSchema.url,
   freshness: mcpCreateScanInputSchema.freshness,
   scanFrom: mcpCreateScanInputSchema.scanFrom,
-  waitForCompletion: z.boolean().optional().describe("Wait for a completed scan resource within this tool call's wall-clock budget. Defaults to true. Set false only for an explicitly asynchronous workflow."),
-  maxWaitSeconds: z.number().int().min(1).max(45).optional().describe("Total wall-clock budget for scan creation plus optional completion waiting. Defaults to 25 seconds. Creation time is deducted from polling; budget exhaustion returns the accepted active scan and stable scanId without an error.")
+  waitForCompletion: z.boolean().optional().describe("Deprecated compatibility field; accepted but ignored. certscore_scan_site always returns promptly after completed-result reuse or scan creation and never waits for a new scan to finish."),
+  maxWaitSeconds: z.number().int().min(1).max(45).optional().describe("Deprecated compatibility field; accepted but ignored because certscore_scan_site does not wait for scan completion.")
 } as const;
 
 export const mcpGetScanStatusInputSchema = {
@@ -500,7 +500,7 @@ export const certScoreMcpToolContracts = [
   {
     name: "certscore_scan_site",
     title: "Scan site",
-    description: "Use CertScore.ai to scan a public website for observable privacy and consent signals, including pre-consent cookies and browser storage, third-party trackers, consent-banner and CMP behavior, TLS/transport security, privacy-policy disclosures, GDPR/ePrivacy transparency findings, and applicable CCPA/CPRA review signals. Starts or reuses a public-web scan with a 25-second total tool-call budget by default; scan creation time is deducted from completion waiting. If status is queued, running, or finalizing, retain scanId and poll certscore_get_scan_status using only that scanId. Stop polling at completed, completed_limited, failed, expired, or rate_limited. For usable completion, call certscore_get_scan_bundle. No-go and limited coverage are observations, never proof of compliance.",
+    description: "Validate a public website URL and either reuse an eligible completed CertScore scan or create a new public-web scan for observable privacy and consent signals, including pre-consent storage, trackers, consent/CMP behavior, transport security, policy disclosures, and GDPR/ePrivacy or CCPA/CPRA review signals. Returns promptly after reuse or scan creation and never waits for a new scan to finish. If status is queued, running, or finalizing, retain the unchanged scanId, wait at least retryAfterSeconds, and call certscore_get_scan_status; do not resubmit certscore_scan_site for that scan. Stop polling at completed, completed_limited, failed, expired, or rate_limited. At completed or completed_limited, call certscore_get_scan_bundle. No-go and limited coverage are observations, never proof of compliance.",
     inputSchema: mcpScanSiteInputSchema,
     outputSchema: mcpScanSiteOutputSchema,
     annotations: scanCreationAnnotations
@@ -516,7 +516,7 @@ export const certScoreMcpToolContracts = [
   {
     name: "certscore_get_scan_status",
     title: "Get scan status",
-    description: "Poll with only the stable scanId returned by certscore_scan_site. Active responses include phase, heartbeat, estimated progress, stalled state, retry delay, and canonical scan provenance when available. Terminal responses include the CertScore score, risk, coverage, execution region (scanFrom), timestamps, report URL, and an explicit next action. For a reused or retrieved existing scan, use only persisted scanFrom and timestamps; never infer its original region from the current request, the user's location, or a default. Report unavailable provenance as unavailable. Stop polling at any terminal status.",
+    description: "Poll an accepted scan using only the unchanged scanId returned by certscore_scan_site. Wait at least retryAfterSeconds between calls, never poll in parallel, and never resubmit certscore_scan_site while the scan is active. Active responses include phase, heartbeat, estimated progress, stalled state, retry delay, and canonical scan provenance when available. Terminal responses include the CertScore score, risk, coverage, execution region (scanFrom), timestamps, report URL, and an explicit next action. For a reused or retrieved existing scan, use only persisted scanFrom and timestamps; never infer its original region from the current request, the user's location, or a default. Report unavailable provenance as unavailable. Stop polling at any terminal status; at completed or completed_limited, call certscore_get_scan_bundle.",
     inputSchema: mcpGetScanStatusInputSchema,
     outputSchema: mcpScanStatusOutputSchema,
     annotations: readOnlyInternalAnnotations
