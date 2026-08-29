@@ -1,7 +1,7 @@
 {
   "name": "certscore-ai",
   "owner": {
-    "name": "ErgoVeritas, LLC",
+    "name": "CertScore.ai, LLC",
     "email": "support@certscore.ai"
   },
   "metadata": {
@@ -14,7 +14,7 @@
       "description": "Free website privacy preflight powered by CertScore.ai MCP Light.",
       "version": "1.0.1",
       "author": {
-        "name": "ErgoVeritas, LLC",
+        "name": "CertScore.ai, LLC",
         "email": "support@certscore.ai"
       },
       "homepage": "https://certscore.ai/mcp/light",

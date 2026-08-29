@@ -498,6 +498,7 @@ test("Claude Code Light plugin preserves the remote three-tool workflow", () => 
 
 test("Cursor and OpenAI plugin packages preserve independent release versions and the Light workflow", () => {
   const cursorPlugin = JSON.parse(readFileSync(new URL("../../../integrations/cursor/certscore-website-privacy-preflight/plugin.json", import.meta.url), "utf8")) as {
+    author?: { name?: string };
     license?: string;
     name?: string;
     version?: string;
@@ -506,7 +507,8 @@ test("Cursor and OpenAI plugin packages preserve independent release versions an
     mcpServers?: Record<string, { type?: string; url?: string }>;
   };
   const cursorMarketplace = JSON.parse(readFileSync(new URL("../../../.cursor-plugin/marketplace.json", import.meta.url), "utf8")) as {
-    plugins?: Array<{ license?: string; name?: string; source?: string; version?: string }>;
+    owner?: { name?: string };
+    plugins?: Array<{ author?: { name?: string }; license?: string; name?: string; source?: string; version?: string }>;
   };
   const cursorLicense = readFileSync(new URL("../../../integrations/cursor/certscore-website-privacy-preflight/LICENSE", import.meta.url), "utf8");
   const cursorReadme = readFileSync(new URL("../../../integrations/cursor/certscore-website-privacy-preflight/README.md", import.meta.url), "utf8");
@@ -534,7 +536,10 @@ test("Cursor and OpenAI plugin packages preserve independent release versions an
   assert.equal(cursorPlugin.license, "Apache-2.0");
   assert.equal(cursorMarketplace.plugins?.[0]?.license, "Apache-2.0");
   assert.match(cursorLicense, /Apache License\s+Version 2\.0, January 2004/);
-  assert.match(cursorLicense, /Copyright 2026 ErgoVeritas, LLC/);
+  assert.equal(cursorPlugin.author?.name, "CertScore.ai, LLC");
+  assert.equal(cursorMarketplace.owner?.name, "CertScore.ai, LLC");
+  assert.equal(cursorMarketplace.plugins?.[0]?.author?.name, "CertScore.ai, LLC");
+  assert.match(cursorLicense, /Copyright 2026 CertScore\.ai, LLC/);
   assert.match(cursorReadme, /license applies only to the files in `integrations\/cursor\/certscore-website-privacy-preflight`/);
   assert.match(cursorReadme, /trademarks.*other repository components remain governed by their respective licenses and terms/is);
   assert.deepEqual(cursorMcp.mcpServers, {

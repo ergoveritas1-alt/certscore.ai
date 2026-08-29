@@ -34,4 +34,4 @@ Terms: https://certscore.ai/terms
 
 This Cursor integration package is licensed under the Apache License 2.0. That license applies only to the files in `integrations/cursor/certscore-website-privacy-preflight`.
 
-CertScore services, APIs, scanner implementations, trademarks, and other repository components remain governed by their respective licenses and terms. The Apache License 2.0 does not grant permission to use ErgoVeritas or CertScore trade names, trademarks, service marks, or product names except as the license permits for describing the origin of this integration.
+CertScore services, APIs, scanner implementations, trademarks, and other repository components remain governed by their respective licenses and terms. The Apache License 2.0 does not grant permission to use CertScore.ai, LLC trade names, trademarks, service marks, or product names except as the license permits for describing the origin of this integration.

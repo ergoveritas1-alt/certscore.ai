@@ -4,7 +4,7 @@
   "version": "1.0.1",
   "description": "Free website privacy scanner to detect pre-consent cookies and trackers, CMP and consent controls, privacy-policy, GDPR/ePrivacy and CCPA, and HTTPS/TLS signals.",
   "author": {
-    "name": "ErgoVeritas, LLC",
+    "name": "CertScore.ai, LLC",
     "email": "support@certscore.ai",
     "url": "https://certscore.ai"
   },
