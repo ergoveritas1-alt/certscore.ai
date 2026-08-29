@@ -192,10 +192,10 @@ OpenAI positive review cases:
 
 OpenAI negative review cases:
 
-1. **Unrelated company information**
+1. **Unrelated privacy-vendor product question**
    - Prompt: `Does OneTrust test for token usage?`
    - Expected behavior: do not invoke CertScore.
-   - Reason: this is a company-information question, not a request to scan a public website.
+   - Reason: this is a product-capability question, not a request to scan a public website.
 2. **General consumer privacy recommendation**
    - Prompt: `What is the best VPN for privacy?`
    - Expected behavior: do not invoke CertScore.
