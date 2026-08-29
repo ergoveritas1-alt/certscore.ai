@@ -158,42 +158,42 @@ When the portal generates a domain-verification challenge, retain its exact publ
 
 Starter prompts:
 
-1. `Run a fresh privacy preflight for https://ergoveritas.com/.well-known/certscore-canary/sentinels/broad-baseline.html. Show any preliminary cookie and tracker preview immediately, then continue to the final report.`
-2. `Review https://ergoveritas.com/.well-known/certscore-canary/runtime/storage.html and distinguish the fast preliminary storage evidence from the completed scan results.`
-3. `Check https://ergoveritas.com/.well-known/certscore-canary/post-refusal/reject-ignored.html for eligible activity after a confirmed Reject action.`
+1. `Run a fresh privacy preflight for https://ergoveritas.com/test1.html. Show any preliminary cookie and tracker preview immediately, then continue to the final report.`
+2. `Review https://ergoveritas.com/test2.html and provide cookie, CMP, and consent-control evidence from the completed scan results.`
+3. `Check https://ergoveritas.com/test3.html for eligible activity after a confirmed Reject action.`
 
 OpenAI positive review cases:
 
 1. **Fast preliminary cookie/tracker preview**
-   - Prompt: `Run a fresh privacy scan of https://ergoveritas.com/.well-known/certscore-canary/sentinels/broad-baseline.html. Show me any early cookie and tracker evidence as soon as it is available, then give me the completed report.`
+   - Prompt: `Run a fresh privacy scan of https://ergoveritas.com/test1.html. Show me any early cookie and tracker evidence as soon as it is available, then give me the completed report.`
    - Tools: `certscore_scan_site`, `certscore_get_scan_status` only while active, then `certscore_get_scan_bundle`.
    - Expected behavior: use `freshness=refresh`; retain the stable `scanId`; if `preConsentPreview` is returned, surface it promptly as preliminary evidence and continue the workflow without resubmitting the scan.
    - Expected result: distinguish captured counts from bounded returned identities, keep `trackingVendorCount` separate from `operationalVendors`, never report preview counts as final, then supersede the preview with the completed bundle's final returned tally, findings, limitations, provenance, and report URL.
-2. **Runtime storage on a distinct internal page**
-   - Prompt: `Review https://ergoveritas.com/.well-known/certscore-canary/runtime/storage.html for observable pre-consent cookies and browser storage, using the latest eligible scan.`
+2. **Pre-consent cookie and storage evidence**
+   - Prompt: `Review https://ergoveritas.com/test2.html for observable pre-consent cookies and browser storage, using the latest eligible scan.`
    - Tools: `certscore_scan_site`, `certscore_get_scan_status` only while active, then `certscore_get_scan_bundle`.
    - Expected behavior: prefer `freshness=latest`, report new-versus-reused only from returned provenance, and present any `preConsentPreview` before waiting for completion.
-   - Expected result: enumerate only returned cookie, storage, and vendor observations; do not infer third-party tracking when it was not observed; preserve final coverage limitations.
-3. **Shadow-DOM consent controls**
-   - Prompt: `Check https://ergoveritas.com/.well-known/certscore-canary/consent/shadow-dom.html for observable Accept, Reject, and Options controls and explain the evidence.`
+   - Expected result: enumerate only returned cookie, storage, vendor, and consent-control observations; preserve unknown states and final coverage limitations rather than inferring unobserved behavior.
+3. **Reject controls and before/after evidence**
+   - Prompt: `Check https://ergoveritas.com/test3.html for observable Reject controls and explain the evidence before and after the Reject path is selected.`
    - Tools: `certscore_scan_site`, `certscore_get_scan_status` only while active, then `certscore_get_scan_bundle`.
    - Expected behavior: use the bounded CertScore workflow without performing arbitrary browser interaction.
-   - Expected result: report only persisted CMP and consent-control evidence, preserve unknown or limited states, and avoid turning missing evidence into an observed gap.
-4. **Policy transparency and transport**
-   - Prompt: `Review https://ergoveritas.com/.well-known/certscore-canary/policy/privacy.html for GDPR transparency and HTTPS/TLS observations.`
+   - Expected result: report only persisted consent-control and runtime evidence, preserve unknown or limited states, and avoid turning missing evidence into an observed gap.
+4. **GDPR transparency and transport**
+   - Prompt: `Review https://ergoveritas.com/test4.html for GDPR transparency and HTTPS/TLS observations.`
    - Tools: `certscore_scan_site`, `certscore_get_scan_status` only while active, then `certscore_get_scan_bundle`.
    - Expected behavior: complete the canonical scan lifecycle and retrieve the findings bundle.
    - Expected result: report only returned policy, disclosure, and transport observations with evidence and limitations; do not make a legal-compliance determination.
 5. **Deterministic post-refusal observation**
-   - Prompt: `On https://ergoveritas.com/.well-known/certscore-canary/post-refusal/reject-ignored.html, did CertScore observe eligible non-essential cookie or tracker activity after a confirmed Reject action?`
+   - Prompt: `On https://ergoveritas.com/test3.html, did CertScore observe eligible non-essential cookie or tracker activity after a confirmed Reject action?`
    - Tools: `certscore_scan_site`, `certscore_get_scan_status` only while active, then `certscore_get_scan_bundle`.
-   - Expected behavior: complete the bounded workflow and report only the persisted typed `postRefusalObservation`; do not click controls directly or infer activity when the observation is unavailable, neutral, unsupported, or limited.
+   - Expected behavior: complete the bounded workflow and report only the persisted typed `postRefusalObservation`; do not click controls directly outside the authorized scanner lane or infer activity when the observation is unavailable, neutral, unsupported, or limited.
    - Expected result: preserve the typed interpretation, provenance, termination reason, and explicit coverage limitations.
 
 OpenAI negative review cases:
 
 1. **Unrelated company information**
-   - Prompt: `How much revenue does OneTrust make?`
+   - Prompt: `Does OneTrust test for token usage?`
    - Expected behavior: do not invoke CertScore.
    - Reason: this is a company-information question, not a request to scan a public website.
 2. **General consumer privacy recommendation**

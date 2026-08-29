@@ -47,7 +47,7 @@ test("durable publisher forwards the owned-canary Reject observation contract", 
     scanId,
     scanConfig: {
       hostname: "ergoveritas.com",
-      normalizedUrl: "https://ergoveritas.com/.well-known/certscore-canary/post-refusal/reject-ignored.html",
+      normalizedUrl: "https://ergoveritas.com/test3.html",
       execution: {
         v2DagLambda: {
           awsRegion: "eu-west-1",

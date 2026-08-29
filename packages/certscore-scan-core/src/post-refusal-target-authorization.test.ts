@@ -31,6 +31,10 @@ test("owned-canary authorization is exact-host and path scoped", () => {
     authorization,
   ).authorized, true);
   assert.equal(authorizePostRefusalTarget(
+    "https://ergoveritas.com/test3.html",
+    authorization,
+  ).authorized, true);
+  assert.equal(authorizePostRefusalTarget(
     "https://www.ergoveritas.com/.well-known/certscore-canary/post-refusal/reject-honored.html",
     authorization,
   ).authorized, false);
@@ -53,6 +57,12 @@ test("owned-canary authorization is exact-host and path scoped", () => {
   assert.equal(getOwnedPostRefusalCanaryRecipeCase(
     "https://ergoveritas.com/.well-known/certscore-canary/post-refusal/reject-ignored.html",
   ), "tcf");
+  assert.equal(getOwnedPostRefusalCanaryRecipeCase(
+    "https://ergoveritas.com/test3.html",
+  ), "tcf");
+  assert.equal(getOwnedPostRefusalCanaryRecipeCase(
+    "https://ergoveritas.com/test3.html?variant=other",
+  ), undefined);
 });
 
 test("explicit public authorization requires an exact HTTPS host and path prefix", () => {

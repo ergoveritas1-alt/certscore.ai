@@ -556,18 +556,12 @@ test("Cursor and OpenAI plugin packages preserve independent release versions an
   assert.match(openAiSkill, /operationalVendors/);
   assert.match(openAiSkill, /Never present preview counts as final totals/i);
   assert.deepEqual(openAiPlugin.interface?.defaultPrompt?.map((prompt) => new URL((prompt.match(/https:\/\/[^\s]+/)?.[0] ?? "").replace(/[.,]$/, "")).pathname), [
-    "/.well-known/certscore-canary/sentinels/broad-baseline.html",
-    "/.well-known/certscore-canary/runtime/storage.html",
-    "/.well-known/certscore-canary/post-refusal/reject-ignored.html"
+    "/test1.html",
+    "/test2.html",
+    "/test3.html"
   ]);
-  for (const path of [
-    "sentinels/broad-baseline.html",
-    "runtime/storage.html",
-    "consent/shadow-dom.html",
-    "policy/privacy.html",
-    "post-refusal/reject-ignored.html"
-  ]) {
-    assert.match(openAiSubmissionPacket, new RegExp(`https://ergoveritas\\.com/\\.well-known/certscore-canary/${path.replaceAll(".", "\\.")}`));
+  for (const path of ["test1.html", "test2.html", "test3.html", "test4.html"]) {
+    assert.match(openAiSubmissionPacket, new RegExp(`https://ergoveritas\\.com/${path.replaceAll(".", "\\.")}`));
   }
   assert.doesNotMatch(openAiSkill, /Claude|Cursor/);
   for (const tool of ["certscore_scan_site", "certscore_get_scan_status", "certscore_get_scan_bundle"]) {

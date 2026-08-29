@@ -151,7 +151,7 @@ test("adds the default-off reject worker to eligible sharded scans with target-s
   const canaryConfig = buildLambdaScanConfig();
   canaryConfig.hostname = "ergoveritas.com";
   canaryConfig.normalizedUrl =
-    "https://ergoveritas.com/.well-known/certscore-canary/post-refusal/reject-honored.html";
+    "https://ergoveritas.com/test3.html";
   canaryConfig.execution = {
     ...canaryConfig.execution,
     v2DagLambda: {

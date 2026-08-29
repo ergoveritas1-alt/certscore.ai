@@ -53,6 +53,11 @@ const OWNED_POST_REFUSAL_CANARY_TARGETS = [
     pathname: "/.well-known/certscore-canary/post-refusal/reject-ignored.html",
     recipeCase: "tcf",
   },
+  {
+    hostname: "ergoveritas.com",
+    pathname: "/test3.html",
+    recipeCase: "tcf",
+  },
 ] as const;
 
 export function getOwnedPostRefusalCanaryRecipeCase(targetUrl: string): "tcf" | undefined {
