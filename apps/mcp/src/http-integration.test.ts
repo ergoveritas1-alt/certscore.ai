@@ -873,18 +873,21 @@ test("Streamable HTTP runtime initializes, lists tools, enforces auth, CORS, and
       "Optional execution region for a newly queued scan. Omit when the user did not request a jurisdiction or regional perspective; use eu_de or eu_ie for explicit EU/GDPR/ePrivacy requests and california for explicit California/CCPA/CPRA requests. Do not use multiple regions unless comparison is requested, and do not infer EU from consent or California from a U.S. user location."
     );
     assert.deepEqual(lightScanTool?.annotations, {
+      title: "Scan site",
       readOnlyHint: false,
       destructiveHint: false,
       idempotentHint: false,
       openWorldHint: true
     });
     assert.deepEqual(lightTools.tools.find((tool) => tool.name === "certscore_get_scan_status")?.annotations, {
+      title: "Get scan status",
       readOnlyHint: true,
       destructiveHint: false,
       idempotentHint: true,
       openWorldHint: false
     });
     assert.deepEqual(lightTools.tools.find((tool) => tool.name === "certscore_get_scan_bundle")?.annotations, {
+      title: "Get scan bundle",
       readOnlyHint: true,
       destructiveHint: false,
       idempotentHint: false,
