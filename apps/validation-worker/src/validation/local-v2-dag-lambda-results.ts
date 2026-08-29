@@ -12,9 +12,12 @@ import {
   type Message
 } from "@aws-sdk/client-sqs";
 import {
+  VERIFIED_PRE_CONSENT_RUNTIME_PREVIEW_PACKET_VERSION,
   VERIFIED_POLICY_EVIDENCE_PACKET_VERSION,
   classifyV2DagLambdaResultDisposition,
+  verifiedPreConsentRuntimePreviewPacketSchema,
   verifiedPolicyEvidencePacketSchema,
+  type VerifiedPreConsentRuntimePreviewPacket,
   type VerifiedPolicyEvidencePacket,
 } from "@certscore/contracts";
 import { query, queryOne } from "@website-signal-risk-scanner/db";
@@ -31,6 +34,10 @@ import { runStaticPolicyReviewPacket } from "./model-policy-review-runner";
 const PROCESSOR = "local-certscore-v2-dag-parallel-v1";
 const RESULT_CONTRACT_VERSION = "certscore.v2.lambda-dag-result.v1";
 const POLICY_EVIDENCE_MESSAGE_VERSION = "certscore.v2.lambda-policy-evidence-ready.v1";
+const RUNTIME_PREVIEW_MESSAGE_VERSION = "certscore.v2.lambda-runtime-preview-ready.v1";
+const RUNTIME_PREVIEW_RECEIVED_EVENT_TYPE = "v2_runtime_preview.received";
+const RUNTIME_PREVIEW_REJECTED_EVENT_TYPE = "v2_runtime_preview.rejected";
+const MAX_RUNTIME_PREVIEW_PACKET_BYTES = 128_000;
 const POLICY_EVIDENCE_RECEIVED_EVENT_TYPE = "v2_policy_evidence.received";
 const POLICY_EVIDENCE_REJECTED_EVENT_TYPE = "v2_policy_evidence.rejected";
 const POLICY_EVIDENCE_VERIFIED_EVENT_TYPE = "v2_policy_evidence.verified";
@@ -109,6 +116,20 @@ type LambdaPolicyEvidenceMessage = {
   generatedAt: string;
   messageKind: "policy_evidence_ready";
   policyContentHash: string;
+  processor: typeof PROCESSOR;
+  productionFindingIntegration: false;
+  scanId: string;
+  sourceHash: string;
+  targetEnvironment: LambdaTargetEnvironment;
+};
+
+export type LambdaRuntimePreviewMessage = {
+  artifactMetadata: { sha256: string; sizeBytes: number };
+  artifactOnly: true;
+  artifactPointer: string;
+  contractVersion: typeof RUNTIME_PREVIEW_MESSAGE_VERSION;
+  generatedAt: string;
+  messageKind: "runtime_preview_ready";
   processor: typeof PROCESSOR;
   productionFindingIntegration: false;
   scanId: string;
@@ -409,6 +430,16 @@ function isPolicyEvidenceReadyMessage(raw: string) {
     const record = asRecord(JSON.parse(raw));
     return record.contractVersion === POLICY_EVIDENCE_MESSAGE_VERSION &&
       record.messageKind === "policy_evidence_ready";
+  } catch {
+    return false;
+  }
+}
+
+export function isRuntimePreviewReadyMessage(raw: string) {
+  try {
+    const record = asRecord(JSON.parse(raw));
+    return record.contractVersion === RUNTIME_PREVIEW_MESSAGE_VERSION &&
+      record.messageKind === "runtime_preview_ready";
   } catch {
     return false;
   }
@@ -727,6 +758,213 @@ async function processPolicyEvidenceReadyMessage(input: {
       policyEvidenceProcessingInFlight.delete(key);
     }
   }
+}
+
+class TerminalEarlyRuntimePreviewError extends Error {
+  constructor(readonly code: string, message: string, readonly scanId: string | null) {
+    super(message);
+    this.name = "TerminalEarlyRuntimePreviewError";
+  }
+}
+
+function parseRuntimePreviewMessage(raw: string, expectedTargetEnvironment: LambdaTargetEnvironment): LambdaRuntimePreviewMessage {
+  const record = asRecord(JSON.parse(raw));
+  const metadata = asRecord(record.artifactMetadata);
+  const targetEnvironment = record.targetEnvironment === "production"
+    ? "production"
+    : record.targetEnvironment === "local"
+      ? "local"
+      : null;
+  const scanId = stringValue(record.scanId);
+  const artifactPointer = stringValue(record.artifactPointer);
+  const sha256 = stringValue(metadata.sha256);
+  const sourceHash = stringValue(record.sourceHash);
+  const sizeBytes = typeof metadata.sizeBytes === "number" && Number.isSafeInteger(metadata.sizeBytes)
+    ? metadata.sizeBytes
+    : null;
+  if (
+    record.artifactOnly !== true ||
+    record.productionFindingIntegration !== false ||
+    record.processor !== PROCESSOR ||
+    record.contractVersion !== RUNTIME_PREVIEW_MESSAGE_VERSION ||
+    record.messageKind !== "runtime_preview_ready" ||
+    targetEnvironment !== expectedTargetEnvironment ||
+    !isUuid(scanId) ||
+    !artifactPointer?.startsWith("s3://") ||
+    !sha256 ||
+    !/^[a-f0-9]{64}$/i.test(sha256) ||
+    !sourceHash ||
+    !/^[a-f0-9]{64}$/i.test(sourceHash) ||
+    sizeBytes === null ||
+    sizeBytes <= 0 ||
+    sizeBytes > MAX_RUNTIME_PREVIEW_PACKET_BYTES
+  ) {
+    throw new TerminalEarlyRuntimePreviewError(
+      "message_identity_invalid",
+      "Early runtime preview message identity is invalid.",
+      scanId,
+    );
+  }
+  return {
+    artifactMetadata: { sha256, sizeBytes },
+    artifactOnly: true,
+    artifactPointer,
+    contractVersion: RUNTIME_PREVIEW_MESSAGE_VERSION,
+    generatedAt: stringValue(record.generatedAt) ?? new Date(0).toISOString(),
+    messageKind: "runtime_preview_ready",
+    processor: PROCESSOR,
+    productionFindingIntegration: false,
+    scanId,
+    sourceHash,
+    targetEnvironment,
+  };
+}
+
+export function verifyPreConsentRuntimePreviewPacket(input: {
+  body: Buffer;
+  message: LambdaRuntimePreviewMessage;
+}): VerifiedPreConsentRuntimePreviewPacket {
+  const bodySha256 = createHash("sha256").update(input.body).digest("hex");
+  if (
+    bodySha256 !== input.message.artifactMetadata.sha256 ||
+    input.body.byteLength !== input.message.artifactMetadata.sizeBytes
+  ) {
+    throw new TerminalEarlyRuntimePreviewError(
+      "artifact_integrity_invalid",
+      "Early runtime preview artifact checksum or size did not verify.",
+      input.message.scanId,
+    );
+  }
+  let packet: VerifiedPreConsentRuntimePreviewPacket;
+  try {
+    packet = verifiedPreConsentRuntimePreviewPacketSchema.parse(JSON.parse(input.body.toString("utf8")));
+  } catch {
+    throw new TerminalEarlyRuntimePreviewError(
+      "packet_contract_invalid",
+      "Early runtime preview packet contract is invalid.",
+      input.message.scanId,
+    );
+  }
+  if (
+    packet.contractVersion !== VERIFIED_PRE_CONSENT_RUNTIME_PREVIEW_PACKET_VERSION ||
+    packet.scanId !== input.message.scanId ||
+    packet.sourceHash !== input.message.sourceHash
+  ) {
+    throw new TerminalEarlyRuntimePreviewError(
+      "packet_identity_mismatch",
+      "Early runtime preview packet identity does not match its message.",
+      input.message.scanId,
+    );
+  }
+  const { sourceHash, ...unsignedPacket } = packet;
+  const computedSourceHash = createHash("sha256").update(JSON.stringify(unsignedPacket)).digest("hex");
+  if (computedSourceHash !== sourceHash) {
+    throw new TerminalEarlyRuntimePreviewError(
+      "packet_source_hash_invalid",
+      "Early runtime preview packet source hash did not verify.",
+      input.message.scanId,
+    );
+  }
+  return packet;
+}
+
+async function processRuntimePreviewReadyMessage(input: {
+  consumer?: PolicyEvidenceConsumerMetadata;
+  queueRegion: string;
+  raw: string;
+  s3Client?: S3GetClient;
+  targetEnvironment: LambdaTargetEnvironment;
+}) {
+  const message = parseRuntimePreviewMessage(input.raw, input.targetEnvironment);
+  const existingScan = await queryOne<{ id: string; normalized_url: string | null }>(
+    `select s.id::text as id,
+            coalesce(nullif(s.scan_config_json->>'normalizedUrl', ''), d.normalized_url) as normalized_url
+       from scans s
+       left join domains d on d.id = s.domain_id
+      where s.id = $1::uuid
+      limit 1`,
+    [message.scanId],
+    { readOnly: true },
+  );
+  if (!existingScan) {
+    throw new Error(`Cannot retain early runtime preview for unknown scan ${message.scanId}.`);
+  }
+  let bucket: string;
+  let key: string;
+  try {
+    ({ bucket, key } = parseS3Uri(message.artifactPointer));
+  } catch {
+    throw new TerminalEarlyRuntimePreviewError(
+      "artifact_pointer_invalid",
+      "Early runtime preview artifact pointer is invalid.",
+      message.scanId,
+    );
+  }
+  const expectedKeySuffix = `/${message.scanId}/lanes/runtime_evidence/VerifiedPreConsentRuntimePreviewPacket.json`;
+  if (!key.endsWith(expectedKeySuffix)) {
+    throw new TerminalEarlyRuntimePreviewError(
+      "artifact_pointer_identity_mismatch",
+      "Early runtime preview artifact pointer does not match its scan and lane identity.",
+      message.scanId,
+    );
+  }
+  const s3Client = input.s3Client ?? new S3Client({ region: inferS3ArtifactRegion(bucket) });
+  const response = await s3Client.send(new GetObjectCommand({ Bucket: bucket, Key: key }));
+  if (
+    typeof response.ContentLength === "number" &&
+    response.ContentLength !== message.artifactMetadata.sizeBytes
+  ) {
+    throw new TerminalEarlyRuntimePreviewError(
+      "artifact_integrity_invalid",
+      "Early runtime preview artifact content length did not verify.",
+      message.scanId,
+    );
+  }
+  const packet = verifyPreConsentRuntimePreviewPacket({
+    body: await streamToBuffer(response.Body),
+    message,
+  });
+  if (!existingScan.normalized_url || packet.normalizedUrl !== existingScan.normalized_url) {
+    throw new TerminalEarlyRuntimePreviewError(
+      "packet_target_mismatch",
+      "Early runtime preview packet target does not match its persisted scan.",
+      message.scanId,
+    );
+  }
+  const retainedAt = new Date().toISOString();
+  await query(
+    `insert into scan_events (scan_id, event_type, message, metadata_json)
+     select $1::uuid, $2, $3, $4::jsonb
+      where not exists (
+        select 1 from scan_events existing
+         where existing.scan_id = $1::uuid
+           and existing.event_type = $2
+           and existing.metadata_json->>'sourceHash' = $5
+      )`,
+    [
+      message.scanId,
+      RUNTIME_PREVIEW_RECEIVED_EVENT_TYPE,
+      "Verified preliminary passive pre-consent runtime observations were retained.",
+      {
+        artifactOnly: true,
+        artifactPointer: message.artifactPointer,
+        preview: packet.preview,
+        productionFindingIntegration: false,
+        queueRegion: input.queueRegion,
+        retainedAt,
+        sourceHash: packet.sourceHash,
+        sqsMessageId: input.consumer?.sqsMessageId ?? null,
+      },
+      packet.sourceHash,
+    ],
+  );
+  console.info(JSON.stringify({
+    event: "v2_runtime_preview.consumer_retained",
+    queue_region: input.queueRegion,
+    scan_id: message.scanId,
+    target_environment: input.targetEnvironment,
+  }));
+  return packet;
 }
 
 function startPolicyEvidenceReadyMessageProcessing(input: {
@@ -1983,6 +2221,70 @@ async function pollOnce(input: {
   const messages = response.Messages ?? [];
   const outcomes = await mapWithConcurrency(messages, RESULT_BATCH_CONCURRENCY, async (message) => {
     const rawMessage = messageBody(message);
+    if (isRuntimePreviewReadyMessage(rawMessage)) {
+      try {
+        await processRuntimePreviewReadyMessage({
+          consumer: {
+            approximateReceiveCount: parseSqsInteger(message.Attributes?.ApproximateReceiveCount),
+            consumerReceivedAt: new Date().toISOString(),
+            sentAt: parseSqsEpochMillis(message.Attributes?.SentTimestamp),
+            sqsMessageId: message.MessageId ?? null,
+          },
+          queueRegion: input.queueRegion,
+          raw: rawMessage,
+          targetEnvironment: input.targetEnvironment,
+        });
+        await input.client.send(new DeleteMessageCommand({
+          QueueUrl: input.queueUrl,
+          ReceiptHandle: receiptHandle(message),
+        }));
+        return { deleted: 1, failed: 0, handled: 1 };
+      } catch (error) {
+        const resultTargetEnvironment = getLambdaResultTargetEnvironment(rawMessage);
+        if (resultTargetEnvironment && resultTargetEnvironment !== input.targetEnvironment) {
+          await input.client.send(new ChangeMessageVisibilityCommand({
+            QueueUrl: input.queueUrl,
+            ReceiptHandle: receiptHandle(message),
+            VisibilityTimeout: 0,
+          }));
+          return { deleted: 0, failed: 0, handled: 0 };
+        }
+        if (error instanceof TerminalEarlyRuntimePreviewError) {
+          if (isUuid(error.scanId)) {
+            await query(
+              `insert into scan_events (scan_id, event_type, message, metadata_json)
+               values ($1::uuid, $2, $3, $4::jsonb)`,
+              [
+                error.scanId,
+                RUNTIME_PREVIEW_REJECTED_EVENT_TYPE,
+                "Early runtime preview packet was rejected before public retrieval.",
+                {
+                  productionFindingIntegration: false,
+                  queueRegion: input.queueRegion,
+                  reasonCode: error.code,
+                  sourceHash: stringValue(asRecord(JSON.parse(rawMessage)).sourceHash),
+                },
+              ],
+            );
+          }
+          await input.client.send(new DeleteMessageCommand({
+            QueueUrl: input.queueUrl,
+            ReceiptHandle: receiptHandle(message),
+          }));
+          console.warn("[validation-worker] acknowledged terminal early runtime preview rejection", {
+            reasonCode: error.code,
+            scanId: error.scanId,
+          });
+          return { deleted: 1, failed: 0, handled: 0 };
+        }
+        console.error("[validation-worker] early runtime preview message rejected", {
+          error: error instanceof Error ? error.message : String(error),
+          messageId: message.MessageId ?? null,
+          queueRegion: input.queueRegion,
+        });
+        return { deleted: 0, failed: 1, handled: 0 };
+      }
+    }
     if (isPolicyEvidenceReadyMessage(rawMessage)) {
       const started = startPolicyEvidenceReadyMessageProcessing({
         client: input.client,

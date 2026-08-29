@@ -341,9 +341,7 @@ test("Pulse docs page source includes integration-critical guidance", () => {
   assert.match(source, /without changing evidence, concern, finding, or projection logic/);
   assert.match(source, /authenticated MCP smoke/);
   assert.match(source, /certscore_get_scan_status/);
-  assert.match(source, /certscore_get_report/);
-  assert.match(source, /certscore_export_findings/);
-  assert.match(source, /certscore_explain_finding/);
+  assert.match(source, /certScoreMcpToolContracts/);
   assert.match(source, /Account browsing and drift comparison tools are not part of the initial MCP scope/);
   assert.match(source, /href: "https:\/\/certscore\.ai\/api\/v1\/pulse\?url=https:\/\/kbdlab\.io&detail=tiny"/);
   assert.match(source, /href: "https:\/\/certscore\.ai\/api\/v1\/pulse\?url=https:\/\/kbdlab\.io&format=markdown"/);
@@ -524,7 +522,7 @@ test("Light MCP onboarding is no-auth, copyable, and agent-complete", () => {
   const docs = [lightPage, fullMcpPage, readme, llms, llmsFull];
   const setupCommand = "codex mcp add certscore --url https://mcp.certscore.ai/mcp/light";
   const canaryUrl = "https://ergoveritas.com/.well-known/certscore-canary/sentinels/broad-baseline.html";
-  const firstRunPrompt = `Scan ${canaryUrl}. If certscore_scan_site returns a queued, running, or finalizing result, retain the returned scanId and poll certscore_get_scan_status using scanId only. If certscore_scan_site returns a retryable error without a scanId, wait for retryAfterSeconds and retry certscore_scan_site; do not call certscore_get_scan_status until a scanId exists. Once the scan reaches a terminal status, call certscore_get_scan_bundle with detail=findings and maxBytes=8000. Summarize whether the result was new or reused, the score, risk level, findings, evidence links, coverage limitations, and report URL. Explain truncation or omitted sections when present. Treat results as automated public-web observations, not legal conclusions, certifications, or compliance determinations.`;
+  const firstRunPrompt = `Scan ${canaryUrl}. If certscore_scan_site includes preConsentPreview, treat it as a partial preview and continue the workflow. Distinguish captured totals from bounded returned identities; use trackingVendorCount for non-operational tracking vendors and keep operationalVendors separate. Do not compare the compatibility preview trackerCount with the completed inventory's broader trackerCount. Never report preview counts as final totals. If certscore_scan_site returns a queued, running, or finalizing result, retain the returned scanId and poll certscore_get_scan_status using scanId only. If certscore_scan_site returns a retryable error without a scanId, wait for retryAfterSeconds and retry certscore_scan_site; do not call certscore_get_scan_status until a scanId exists. Once the scan reaches a terminal status, call certscore_get_scan_bundle with detail=findings and maxBytes=8000. Summarize whether the result was new or reused, the score, risk level, findings, evidence links, coverage limitations, and report URL. Explain truncation or omitted sections when present. Treat results as automated public-web observations, not legal conclusions, certifications, or compliance determinations.`;
   const verificationPrompt = `List the available CertScore tools and confirm that certscore_scan_site, certscore_get_scan_status, and certscore_get_scan_bundle are available. Then scan ${canaryUrl} and report whether the result was new or reused.`;
   const disclaimer = "CertScore results are automated observations from a public-web scan. No-go, not-observed, and limited-coverage results are not proof of compliance, absence of risk, or legal status. Review the retained evidence and applicable context before relying on a finding.";
 

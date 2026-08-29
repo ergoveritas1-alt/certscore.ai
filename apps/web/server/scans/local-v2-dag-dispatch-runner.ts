@@ -18,6 +18,8 @@ export type LocalV2DagDispatchContext = {
   simulatedLocalLambda: boolean;
 };
 
+const localSimulatedDispatchTasks = new Map<string, Promise<void>>();
+
 export async function runLocalV2DagDispatch(context: LocalV2DagDispatchContext): Promise<string | null> {
   if (!context.simulatedLocalLambda) {
     // The scan row is the transactional dispatch outbox. Its complete Lambda
@@ -33,6 +35,22 @@ export async function runLocalV2DagDispatch(context: LocalV2DagDispatchContext):
     return null;
   }
 
+  startLocalV2DagSimulatedDispatch(context);
+  return null;
+}
+
+export function startLocalV2DagSimulatedDispatch(context: LocalV2DagDispatchContext) {
+  if (localSimulatedDispatchTasks.has(context.scanId)) return;
+  const task = executeLocalV2DagSimulatedDispatch(context);
+  localSimulatedDispatchTasks.set(context.scanId, task);
+  void task.finally(() => {
+    if (localSimulatedDispatchTasks.get(context.scanId) === task) {
+      localSimulatedDispatchTasks.delete(context.scanId);
+    }
+  });
+}
+
+async function executeLocalV2DagSimulatedDispatch(context: LocalV2DagDispatchContext) {
   try {
     await insertQueuedFullScanEvent({
       domainId: context.domainId,
@@ -83,7 +101,6 @@ export async function runLocalV2DagDispatch(context: LocalV2DagDispatchContext):
       eventPersistenceMs: Date.now() - eventPersistenceStartedAtMs,
       scanId: context.scanId
     }));
-    return null;
   } catch (error) {
     const message = error instanceof Error ? error.message : "Local v2 DAG Lambda dispatch failed.";
     const dispatchState = error instanceof LocalV2DagLambdaDispatchError ? error.dispatchState : "failed";
@@ -110,6 +127,9 @@ export async function runLocalV2DagDispatch(context: LocalV2DagDispatchContext):
         scanId: context.scanId
       });
     }
-    return message;
+    console.error("[web] asynchronous local v2 DAG simulated Lambda dispatch failed", {
+      error: message,
+      scanId: context.scanId,
+    });
   }
 }

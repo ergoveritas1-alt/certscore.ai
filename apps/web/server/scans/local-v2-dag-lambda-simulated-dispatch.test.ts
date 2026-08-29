@@ -1,9 +1,13 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { readFile } from "node:fs/promises";
+import { appendFile, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import path from "node:path";
 import {
   LOCAL_V2_DAG_SIMULATED_EXECUTION_TIMEOUT_MS,
   buildLocalV2DagSimulatedLambdaArgs,
+  consumeSimulatedLambdaMessageStream,
+  selectSimulatedLambdaRuntimePreviewMessages,
   selectSimulatedLambdaTerminalResultMessages
 } from "./local-v2-dag-lambda-simulated-dispatch";
 
@@ -23,6 +27,48 @@ test("simulated Lambda routes only the terminal result through terminal ingestio
     selectSimulatedLambdaTerminalResultMessages([earlyPolicyEvidence, terminalResult]),
     [terminalResult]
   );
+});
+
+test("simulated Lambda selects only the typed early runtime preview message", () => {
+  const runtimePreview = {
+    contractVersion: "certscore.v2.lambda-runtime-preview-ready.v1",
+    messageKind: "runtime_preview_ready",
+    scanId: terminalResult.scanId,
+  };
+  assert.deepEqual(
+    selectSimulatedLambdaRuntimePreviewMessages([
+      { contractVersion: "certscore.v2.lambda-policy-evidence-ready.v1", messageKind: "policy_evidence_ready" },
+      runtimePreview,
+      terminalResult,
+    ]),
+    [runtimePreview],
+  );
+});
+
+test("simulated Lambda consumes complete NDJSON messages before child completion", async () => {
+  const root = await mkdtemp(path.join(tmpdir(), "certscore-local-lambda-message-stream-"));
+  const messageStreamPath = path.join(root, "messages.ndjson");
+  let settled = false;
+  const observed: unknown[] = [];
+  let consumption: Promise<{ processedLineCount: number }> | null = null;
+  try {
+    await writeFile(messageStreamPath, "", "utf8");
+    consumption = consumeSimulatedLambdaMessageStream({
+      isExecutionSettled: () => settled,
+      messageStreamPath,
+      onMessage: async (message) => { observed.push(message); },
+      pollMs: 5,
+    });
+    await appendFile(messageStreamPath, `${JSON.stringify({ messageKind: "runtime_preview_ready", scanId: terminalResult.scanId })}\n`, "utf8");
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    assert.equal(observed.length, 1, "the preview must be consumed while the child is still running");
+    settled = true;
+    await consumption;
+  } finally {
+    settled = true;
+    await consumption;
+    await rm(root, { recursive: true, force: true });
+  }
 });
 
 test("simulated Lambda terminal routing accepts serialized parity messages", () => {
@@ -62,6 +108,7 @@ test("simulated Lambda carries the exact typed Reject observation configuration 
   };
   const args = buildLocalV2DagSimulatedLambdaArgs({
     artifactDir: "artifacts/local-v2-dag-lambda-simulated",
+    messageStreamPath: "artifacts/local-v2-dag-lambda-simulated/scan-canary/sqs-messages.ndjson",
     outPath: "artifacts/local-v2-dag-lambda-simulated/scan-canary/summary.json",
     payload: {
       awsRegion: "eu-west-1",
@@ -75,6 +122,10 @@ test("simulated Lambda carries the exact typed Reject observation configuration 
 
   assert.ok(configIndex > 0);
   assert.deepEqual(JSON.parse(args[configIndex + 1] ?? "null"), postRefusalObservation);
+  assert.equal(
+    args[args.indexOf("--message-stream") + 1],
+    "artifacts/local-v2-dag-lambda-simulated/scan-canary/sqs-messages.ndjson",
+  );
 });
 
 test("local Lambda executables exit after their durable handoffs are awaited", async () => {

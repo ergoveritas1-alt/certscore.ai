@@ -1,5 +1,6 @@
 import "server-only";
 
+import { apiV2PreConsentRuntimePreviewSchema, type ApiV2PreConsentRuntimePreview } from "@certscore/api-contracts";
 import { queryOne } from "@website-signal-risk-scanner/db";
 import { projectExternalScanNoGo } from "@website-signal-risk-scanner/shared";
 import { LOCAL_V2_DAG_SCAN_PROCESSOR } from "./local-v2-dag-scan-config";
@@ -22,6 +23,7 @@ export type ScanStatusProjection = {
   pagesScanned?: number;
   profile: string;
   postRefusalObservationExpected: boolean;
+  preConsentPreview?: ApiV2PreConsentRuntimePreview;
   reportGeneration: string | null;
   reportInputsReady: boolean;
   reportProjectionRequired: boolean;
@@ -68,6 +70,7 @@ type ScanStatusProjectionRow = {
   pages_scanned: number;
   profile: string | null;
   post_refusal_observation_expected: boolean;
+  pre_consent_preview: unknown;
   report_generation: string | null;
   report_inputs_ready: boolean;
   report_projection_required: boolean;
@@ -91,6 +94,7 @@ function iso(value: string | Date | null) {
 
 function project(row: ScanStatusProjectionRow | null): ScanStatusProjection | null {
   if (!row) return null;
+  const preConsentPreview = apiV2PreConsentRuntimePreviewSchema.safeParse(row.pre_consent_preview);
   return {
     completedAt: iso(row.completed_at),
     createdAt: iso(row.created_at) as string,
@@ -104,6 +108,7 @@ function project(row: ScanStatusProjectionRow | null): ScanStatusProjection | nu
     pagesScanned: row.pages_scanned,
     profile: row.profile === "tiny" ? "tiny" : "standard",
     postRefusalObservationExpected: row.post_refusal_observation_expected,
+    ...(preConsentPreview.success ? { preConsentPreview: preConsentPreview.data } : {}),
     reportGeneration: row.report_generation,
     reportInputsReady: row.report_inputs_ready,
     reportProjectionRequired: row.report_projection_required,
@@ -154,6 +159,12 @@ const PROJECTION_SQL = `select s.id,
            (s.scan_config_json #>> '{execution,v2DagLambda,postRefusalRejectWorkerEnabled}')::boolean,
            false
          ) as post_refusal_observation_expected
+       , (select event.metadata_json->'preview'
+            from scan_events event
+           where event.scan_id = s.id
+             and event.event_type = 'v2_runtime_preview.received'
+           order by event.created_at desc
+           limit 1) as pre_consent_preview
        , coalesce(s.scan_config_json ->> 'processor' = '${LOCAL_V2_DAG_SCAN_PROCESSOR}', false) as report_projection_required
        , case
            when s.scan_config_json ->> 'processor' = '${LOCAL_V2_DAG_SCAN_PROCESSOR}' then
@@ -375,6 +386,7 @@ export function buildLightweightApiV2ScanStatusInput(projection: ScanStatusProje
     status,
     ...(noGoProjection ?? {}),
     ...(reportProjectionError ? { error: reportProjectionError } : {}),
+    ...(projection.preConsentPreview ? { preConsentPreview: projection.preConsentPreview } : {}),
     createdAt: projection.createdAt,
     startedAt: projection.startedAt,
     completedAt: projection.completedAt,

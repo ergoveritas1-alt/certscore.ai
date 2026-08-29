@@ -9,7 +9,7 @@ export function isCanonicalScanId(value: unknown): value is string {
 }
 
 export const CERTSCORE_API_V2_VERSION = "v2";
-export const CERTSCORE_API_V2_SCHEMA_VERSION = "0.1.8";
+export const CERTSCORE_API_V2_SCHEMA_VERSION = "0.1.9";
 
 export const apiV2Disclaimer =
   "CertScore outputs are automated public-web observations for human and agentic review. They are not legal advice, certification, or a compliance determination.";
@@ -79,6 +79,97 @@ const apiV2ScanCreationMetadataShape = {
   upgradeMessage: z.string().nullable().optional(),
   recommendedNextTool: z.enum(["certscore_get_scan_status", "certscore_get_scan_bundle"]).optional()
 } as const;
+
+export const apiV2PreConsentRuntimePreviewSchema = z.object({
+  type: z.literal("certscore_pre_consent_preview"),
+  resultStage: z.literal("preliminary"),
+  final: z.literal(false),
+  sourceLane: z.literal("runtime_evidence"),
+  generatedAt: z.string().datetime(),
+  runtimeCoverage: z.object({
+    status: z.enum(["usable", "limited_partial", "limited_none", "not_applicable"]),
+    limitationKeys: z.array(z.string().min(1).max(120)).max(16),
+  }).strict(),
+  summary: z.object({
+    cookieCount: z.number().int().min(0),
+    returnedCookieCount: z.number().int().min(0).optional(),
+    trackerCount: z.number().int().min(0),
+    trackingVendorCount: z.number().int().min(0).optional(),
+    returnedTrackingVendorCount: z.number().int().min(0).optional(),
+    operationalVendorCount: z.number().int().min(0).optional(),
+    returnedOperationalVendorCount: z.number().int().min(0).optional(),
+    thirdPartyRequestCount: z.number().int().min(0),
+    vendorCount: z.number().int().min(0),
+  }).strict(),
+  cookies: z.array(z.object({
+    name: z.string().min(1).max(256),
+    domain: z.string().min(1).max(253).nullable(),
+    party: z.enum(["first_party", "third_party", "unknown"]),
+    purpose: z.enum([
+      "analytics",
+      "advertising",
+      "marketing",
+      "personalization",
+      "session_replay",
+      "consent_management",
+      "tag_management",
+      "infrastructure",
+      "security",
+      "performance_monitoring",
+      "customer_support",
+      "unknown",
+    ]),
+    essentiality: z.enum(["essential", "non_essential", "unknown"]),
+    observedAtMs: z.number().int().min(0).nullable(),
+  }).strict()).max(20),
+  trackers: z.array(z.object({
+    vendor: z.string().min(1).max(160),
+    product: z.string().min(1).max(160).nullable(),
+    purpose: z.enum([
+      "analytics",
+      "advertising",
+      "marketing",
+      "personalization",
+      "session_replay",
+      "consent_management",
+      "tag_management",
+      "infrastructure",
+      "security",
+      "performance_monitoring",
+      "customer_support",
+      "unknown",
+    ]),
+    confidence: z.number().min(0).max(1),
+    domains: z.array(z.string().min(1).max(253)).max(8),
+  }).strict()).max(20),
+  operationalVendors: z.array(z.object({
+    vendor: z.string().min(1).max(160),
+    product: z.string().min(1).max(160).nullable(),
+    purpose: z.enum([
+      "analytics",
+      "advertising",
+      "marketing",
+      "personalization",
+      "session_replay",
+      "consent_management",
+      "tag_management",
+      "infrastructure",
+      "security",
+      "performance_monitoring",
+      "customer_support",
+      "unknown",
+    ]),
+    confidence: z.number().min(0).max(1),
+    domains: z.array(z.string().min(1).max(253)).max(8),
+  }).strict()).max(20).optional(),
+  truncated: z.object({
+    cookies: z.boolean(),
+    trackers: z.boolean(),
+    operationalVendors: z.boolean().optional(),
+  }).strict(),
+  mustContinuePolling: z.literal(true),
+  observationOnlyDisclaimer: z.string().min(1).max(500),
+}).strict();
 
 export const apiV2LinksSchema = z
   .object({
@@ -166,6 +257,7 @@ export const apiV2ScanJobSchema = z
     scoreUpdatedAt: z.string().nullable().optional(),
     riskLevel: z.string().nullable().optional(),
     postRefusalObservation: apiV2PostRefusalObservationSchema.nullable().optional(),
+    preConsentPreview: apiV2PreConsentRuntimePreviewSchema.optional(),
     coverage: z
       .object({
         status: z.string().optional(),
@@ -506,6 +598,14 @@ export const apiV2PreConsentCookiesTrackersSummarySchema = z
   .object({
     rowCount: z.number().int().min(0),
     trackerCount: z.number().int().min(0),
+    trackerCountScope: z.literal("canonical_inventory_rows_including_operational").optional(),
+    trackerCategoryCounts: z.object({
+      advertising: z.number().int().min(0),
+      analytics: z.number().int().min(0),
+      essential: z.number().int().min(0),
+      functional: z.number().int().min(0),
+      review: z.number().int().min(0),
+    }).strict().optional(),
     cookieCount: z.number().int().min(0),
     requestCount: z.number().int().min(0),
     vendorCount: z.number().int().min(0).default(0),
@@ -536,4 +636,5 @@ export type ApiV2DomainLatestScan = z.infer<typeof apiV2DomainLatestScanSchema>;
 export type ApiV2ScanPulse = z.infer<typeof apiV2ScanPulseSchema>;
 export type ApiV2ScanDiagnostics = z.infer<typeof apiV2ScanDiagnosticsSchema>;
 export type ApiV2PreConsentCookiesTrackers = z.infer<typeof apiV2PreConsentCookiesTrackersSchema>;
+export type ApiV2PreConsentRuntimePreview = z.infer<typeof apiV2PreConsentRuntimePreviewSchema>;
 export type ApiV2Error = z.infer<typeof apiV2ErrorSchema>;

@@ -14,6 +14,7 @@ import {
   type NetworkResponseEvent,
   type ObservedJourney,
   type PolicySurfaceObservation,
+  type PreConsentRuntimePreview,
   type RuntimeCoverageSummary,
   type RuntimeEvidenceEvent,
   type ScanProfile,
@@ -51,6 +52,7 @@ import {
   readRapidFirstLayerConsentUiObservation,
   readDeclaredDocumentLanguage,
   reconcileConsentUiRecapture,
+  type PreConsentRuntimeCheckpoint,
   type PreConsentRuntimeScannerResult,
 } from "./scanners/pre-consent-runtime-scanner.js";
 import {
@@ -242,6 +244,11 @@ export interface RunScanInput {
    * CanonicalEvidenceBundle.
    */
   onPolicySurfaceComplete?: (result: PolicySurfaceScannerResult) => void;
+  /**
+   * Non-blocking retrieval-only handoff for the passive runtime checkpoint.
+   * It is preliminary and must never enter canonical finding or score paths.
+   */
+  onPreConsentRuntimePreview?: (preview: PreConsentRuntimePreview) => void;
 }
 
 export interface PolicySurfaceSeed {
@@ -429,6 +436,55 @@ export async function runScan(input: RunScanInput): Promise<CanonicalEvidenceBun
     label: "scanner_started" | "browser_launch" | "browser_context" | "probe_install" | "page_navigation";
     status: "started" | "completed";
   } | undefined;
+  let preConsentRuntimePreviewDelivered = false;
+  const notifyPreConsentRuntimePreview = (checkpoint: PreConsentRuntimeCheckpoint) => {
+    if (
+      preConsentRuntimePreviewDelivered ||
+      evidenceLane !== "runtime_evidence" ||
+      !input.onPreConsentRuntimePreview
+    ) {
+      return;
+    }
+    preConsentRuntimePreviewDelivered = true;
+    try {
+      const normalizedVendorObservations = resolveVendorObservations(checkpoint.vendorResolverInputs);
+      const thirdPartyRequests = checkpoint.networkEvents.filter(isThirdPartyNetworkEvent).length;
+      const cookiesBeforeConsent = checkpoint.cookieSnapshots.reduce(
+        (sum, snapshot) => sum + snapshot.cookies.length,
+        0,
+      );
+      input.onPreConsentRuntimePreview(buildPreConsentRuntimePreview({
+        completedAt: checkpoint.completedAt,
+        cookieEvents: checkpoint.cookieEvents,
+        cookieSnapshots: checkpoint.cookieSnapshots,
+        networkEvents: checkpoint.networkEvents,
+        normalizedVendorObservations,
+        runtimeCoverage: {
+          coverageStatus: "limited_partial",
+          limitationKeys: [
+            checkpoint.observedAtMs >= 6_000
+              ? "six_second_passive_checkpoint"
+              : "runtime_lane_completed_before_six_second_checkpoint",
+          ],
+          fallbackModesUsed: [],
+          observationCounts: {
+            networkEvents: checkpoint.networkEvents.length,
+            thirdPartyRequests,
+            cookieEvents: checkpoint.cookieEvents.length,
+            cookiesBeforeConsent,
+            normalizedVendors: normalizedVendorObservations.length,
+            observedJourneys: 0,
+          },
+          silentEmpty: false,
+          notes: [
+            "This bounded passive checkpoint is retrieval-only; the canonical scan continues to completion.",
+          ],
+        },
+      }));
+    } catch {
+      // Preliminary retrieval observers must never affect canonical capture.
+    }
+  };
   const preConsentResultPromise = preConsentEnabled
     ? settlePreConsentRuntimeWithinDeadline({
       deadlineMs: preConsentModuleDeadlineMs,
@@ -451,6 +507,7 @@ export async function runScan(input: RunScanInput): Promise<CanonicalEvidenceBun
         screenshotMode: effectivePreConsentScreenshotMode,
         screenshotTimeoutMs: input.preConsentScreenshotTimeoutMs,
         onScreenshotCaptured: input.onPreConsentScreenshotCaptured,
+        onPassiveRuntimeCheckpoint: notifyPreConsentRuntimePreview,
         lateConsentGateMs: input.lateConsentGateMs,
         consentGateAuditHoldout: input.consentGateAuditHoldout,
         lateConsentGeometryShadowEnabled,
@@ -494,6 +551,14 @@ export async function runScan(input: RunScanInput): Promise<CanonicalEvidenceBun
   try {
     await phaseRecorder.record("pre_consent_runtime", preConsentEnabled ? "started" : "skipped");
     preConsentResult = await preConsentResultPromise;
+    notifyPreConsentRuntimePreview({
+      completedAt: preConsentResult.moduleRun.completedAt ?? new Date().toISOString(),
+      cookieEvents: preConsentResult.cookieEvents,
+      cookieSnapshots: preConsentResult.cookieSnapshots,
+      networkEvents: preConsentResult.networkEvents,
+      observedAtMs: Math.max(0, Date.now() - startedAtMs),
+      vendorResolverInputs: preConsentResult.vendorResolverInputs,
+    });
     throwUnlessRuntimeEvidenceFinalizationOnly({
       allowRuntimeEvidenceFinalizationAfterAbort: input.allowRuntimeEvidenceFinalizationAfterAbort,
       evidenceLane,
@@ -1847,6 +1912,127 @@ export function deriveRuntimeCoverageSummary(input: {
     observationCounts,
     silentEmpty,
     notes,
+  };
+}
+
+const PRE_CONSENT_RUNTIME_PREVIEW_MAX_ROWS = 20;
+const PRE_CONSENT_RUNTIME_PREVIEW_DISCLAIMER =
+  "Partial preview of passive runtime observations only. Captured counts and returned identity counts are separate; returned identity lists are bounded. trackingVendorCount excludes operational, security, and consent-management vendors and is not comparable to the completed inventory's broader trackerCount. This is not a finding, score, or final result. Continue polling, then retrieve the canonical scan bundle.";
+
+function previewDomain(value: string | undefined) {
+  if (!value) return null;
+  const normalized = value.trim().toLowerCase().replace(/^\.+|\.+$/g, "");
+  return normalized && normalized.length <= 253 && /^[a-z0-9:_-]+(?:\.[a-z0-9:_-]+)*$/i.test(normalized)
+    ? normalized
+    : null;
+}
+
+/**
+ * Builds a bounded public-safe retrieval preview from the completed passive
+ * runtime lane. It deliberately bypasses concern/finding projection and must
+ * never be used as a production finding or scoring input.
+ */
+export function buildPreConsentRuntimePreview(
+  bundle: Pick<CanonicalEvidenceBundle,
+    "completedAt" |
+    "cookieEvents" |
+    "cookieSnapshots" |
+    "networkEvents" |
+    "normalizedVendorObservations" |
+    "runtimeCoverage"
+  >,
+): PreConsentRuntimePreview {
+  const cookiesByIdentity = new Map<string, PreConsentRuntimePreview["cookies"][number]>();
+  for (const event of bundle.cookieEvents) {
+    if (event.consentStateAtTime !== "pre_consent" && event.consentStateAtTime !== "no_ui_observed") continue;
+    const domain = previewDomain(event.cookieDomain);
+    const key = `${event.cookieName}\u0000${domain ?? ""}`;
+    if (!cookiesByIdentity.has(key)) {
+      cookiesByIdentity.set(key, {
+        name: event.cookieName.slice(0, 256),
+        domain,
+        party: event.cookieParty,
+        purpose: event.cookiePurpose,
+        essentiality: event.cookieEssentiality,
+        observedAtMs: event.timestampMs,
+      });
+    }
+  }
+  for (const snapshot of bundle.cookieSnapshots) {
+    if (snapshot.consentStateAtTime !== "pre_consent" && snapshot.consentStateAtTime !== "no_ui_observed") continue;
+    for (const cookie of snapshot.cookies) {
+      const domain = previewDomain(cookie.domain);
+      const key = `${cookie.name}\u0000${domain ?? ""}`;
+      if (!cookiesByIdentity.has(key)) {
+        cookiesByIdentity.set(key, {
+          name: cookie.name.slice(0, 256),
+          domain,
+          party: "unknown",
+          purpose: "unknown",
+          essentiality: "unknown",
+          observedAtMs: snapshot.capturedAtMs,
+        });
+      }
+    }
+  }
+
+  const vendorCandidates = bundle.normalizedVendorObservations.map((observation) => ({
+      vendor: observation.vendor.slice(0, 160),
+      product: observation.product?.slice(0, 160) ?? null,
+      purpose: observation.purpose,
+      confidence: observation.confidence,
+      domains: uniqueStrings(observation.matchedHostnames.map(previewDomain).filter((value): value is string => Boolean(value))).slice(0, 8),
+    }));
+  const cookies = [...cookiesByIdentity.values()];
+  const uniqueVendorCandidates = vendorCandidates.filter((candidate, index, candidates) =>
+    candidates.findIndex((other) =>
+      other.vendor === candidate.vendor &&
+      other.product === candidate.product &&
+      other.purpose === candidate.purpose
+    ) === index
+  );
+  const operationalPurposes = new Set(["consent_management", "infrastructure", "security"]);
+  const trackers = uniqueVendorCandidates.filter((candidate) => !operationalPurposes.has(candidate.purpose));
+  const operationalVendors = uniqueVendorCandidates.filter((candidate) => operationalPurposes.has(candidate.purpose));
+  const runtimeCoverage = bundle.runtimeCoverage ?? {
+    coverageStatus: "limited_none" as const,
+    limitationKeys: ["runtime_coverage_summary_unavailable"],
+  };
+
+  return {
+    type: "certscore_pre_consent_preview",
+    resultStage: "preliminary",
+    final: false,
+    sourceLane: "runtime_evidence",
+    generatedAt: bundle.completedAt,
+    runtimeCoverage: {
+      status: runtimeCoverage.coverageStatus,
+      limitationKeys: runtimeCoverage.limitationKeys.slice(0, 16),
+    },
+    summary: {
+      cookieCount: cookies.length,
+      returnedCookieCount: Math.min(cookies.length, PRE_CONSENT_RUNTIME_PREVIEW_MAX_ROWS),
+      // trackerCount remains as a compatibility alias. trackingVendorCount is
+      // the explicit metric and intentionally excludes operational, security,
+      // and consent-management vendor observations.
+      trackerCount: trackers.length,
+      trackingVendorCount: trackers.length,
+      returnedTrackingVendorCount: Math.min(trackers.length, PRE_CONSENT_RUNTIME_PREVIEW_MAX_ROWS),
+      operationalVendorCount: operationalVendors.length,
+      returnedOperationalVendorCount: Math.min(operationalVendors.length, PRE_CONSENT_RUNTIME_PREVIEW_MAX_ROWS),
+      thirdPartyRequestCount: bundle.networkEvents.filter(isThirdPartyNetworkEvent).length,
+      vendorCount: bundle.normalizedVendorObservations.length,
+    },
+    cookies: cookies.slice(0, PRE_CONSENT_RUNTIME_PREVIEW_MAX_ROWS),
+    trackers: trackers.slice(0, PRE_CONSENT_RUNTIME_PREVIEW_MAX_ROWS),
+    operationalVendors: operationalVendors.slice(0, PRE_CONSENT_RUNTIME_PREVIEW_MAX_ROWS),
+    truncated: {
+      cookies: cookies.length > PRE_CONSENT_RUNTIME_PREVIEW_MAX_ROWS,
+      trackers: trackers.length > PRE_CONSENT_RUNTIME_PREVIEW_MAX_ROWS,
+      operationalVendors: operationalVendors.length > PRE_CONSENT_RUNTIME_PREVIEW_MAX_ROWS,
+    },
+    mustContinuePolling: true,
+    observationOnlyDisclaimer: PRE_CONSENT_RUNTIME_PREVIEW_DISCLAIMER,
   };
 }
 

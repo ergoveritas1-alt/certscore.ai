@@ -29,6 +29,61 @@ DATABASE_URL=postgresql://postgres:postgres@127.0.0.1:5432/certscore
 DATABASE_SSL_MODE=disable
 ```
 
+For the fully local sharded Lambda simulator, also use:
+
+```bash
+NEXT_PUBLIC_APP_URL=http://localhost:3000
+CERTSCORE_V2_DAG_LAMBDA_ENABLED=true
+CERTSCORE_V2_DAG_LAMBDA_SIMULATED=true
+CERTSCORE_V2_DAG_LAMBDA_ORCHESTRATION_MODE=sharded
+CERTSCORE_V2_DAG_LAMBDA_TARGET_ENV=local
+```
+
+## Run The MCP Light Preview Workflow Locally
+
+Start the local scan stack:
+
+```bash
+pnpm local:scan:ready
+```
+
+Start MCP Light in another terminal:
+
+```bash
+CERTSCORE_BASE_URL=http://127.0.0.1:3000 \
+MCP_PUBLIC_URL=http://127.0.0.1:3004 \
+OAUTH_ISSUER=http://127.0.0.1:3004 \
+CERTSCORE_OAUTH_JWT_SECRET=local-test-secret-at-least-16 \
+CERTSCORE_MCP_INITIAL_PRECONSENT_PREVIEW_WAIT_MS=10000 \
+pnpm dev:mcp
+```
+
+Run one fresh owned-canary case:
+
+```bash
+pnpm mcp:light:benchmark -- \
+  --endpoint http://127.0.0.1:3004/mcp/light \
+  --case-ids owned-canary-1 \
+  --concurrency 1 \
+  --timeout-seconds 180 \
+  --run-id localhost-preview-6s
+```
+
+The initial `certscore_scan_site` result must retain one stable `scanId`. When
+the bounded runtime handoff arrives in time, it must also report
+`initialPreConsentPreviewReturned=true`, preliminary cookie/tracker counts, and
+an active status. The benchmark must then poll sequentially, reach a usable
+terminal status, and retrieve a scan-bound bundle without submitting another
+scan. A one-case run still reports the full-suite reuse and legacy-case gates as
+unexercised; evaluate the individual case result for this focused smoke.
+
+The localhost simulator writes its streamed fake-SQS messages to
+`artifacts/local-v2-dag-lambda-simulated/<scanId>/sqs-messages.ndjson`. This
+bridge is local-only. It verifies the preview message, artifact checksum,
+packet source hash, scan identity, and normalized target before retaining the
+same `v2_runtime_preview.received` event consumed by status projection. It does
+not alter AWS dispatch or production result ingestion.
+
 ## Apply Migration
 
 ```bash

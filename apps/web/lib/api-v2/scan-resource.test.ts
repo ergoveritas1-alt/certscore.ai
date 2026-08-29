@@ -636,6 +636,47 @@ test("buildApiV2ScanJobFromPulseStatus maps pending Pulse jobs to v2 status", ()
   assert.equal(status.links?.status, "https://certscore.ai/api/v2/scans/00000000-0000-4000-8000-000000000123/status");
 });
 
+test("buildApiV2ScanJobFromPulseStatus preserves a preliminary runtime preview on an active job", () => {
+  const status = buildApiV2ScanJobFromPulseStatus({
+    jobId: "pulse_job_preview",
+    scanId: "00000000-0000-4000-8000-000000000123",
+    domain: "example.com",
+    status: "running",
+    preConsentPreview: {
+      type: "certscore_pre_consent_preview",
+      resultStage: "preliminary",
+      final: false,
+      sourceLane: "runtime_evidence",
+      generatedAt: "2026-08-28T18:00:03.000Z",
+      runtimeCoverage: { status: "usable", limitationKeys: [] },
+      summary: { cookieCount: 1, trackerCount: 1, thirdPartyRequestCount: 1, vendorCount: 1 },
+      cookies: [{
+        name: "_ga",
+        domain: "example.com",
+        party: "first_party",
+        purpose: "analytics",
+        essentiality: "non_essential",
+        observedAtMs: 1_200,
+      }],
+      trackers: [{
+        vendor: "Google",
+        product: "Google Analytics",
+        purpose: "analytics",
+        confidence: 0.96,
+        domains: ["www.google-analytics.com"],
+      }],
+      truncated: { cookies: false, trackers: false },
+      mustContinuePolling: true,
+      observationOnlyDisclaimer: "Preliminary passive observations only; continue polling for the canonical result.",
+    },
+  });
+
+  assert.equal(status.status, "running");
+  assert.equal(status.preConsentPreview?.summary.trackerCount, 1);
+  assert.equal(status.preConsentPreview?.final, false);
+  assert.equal(status.preConsentPreview?.mustContinuePolling, true);
+});
+
 test("buildApiV2ScanJobFromPulseStatus preserves a requested page path", () => {
   const status = buildApiV2ScanJobFromPulseStatus({
     jobId: "job-path",
@@ -1018,6 +1059,11 @@ test("buildApiV2PreConsentCookiesTrackers matches the shared public report table
     row.cookieDetails.map((cookie) => `${cookie.cookieName}\u0000${cookie.domain ?? ""}`)
   )).size);
   assert.equal(resource.summary.trackerCount, projection.groupedRows.filter((row) => row.type === "tracker").length);
+  assert.equal(resource.summary.trackerCountScope, "canonical_inventory_rows_including_operational");
+  assert.equal(
+    Object.values(resource.summary.trackerCategoryCounts ?? {}).reduce((sum, count) => sum + count, 0),
+    resource.summary.trackerCount,
+  );
   assert.ok(resource.summary.cookieCount > 0);
   assert.ok(resource.summary.trackerCount > 0);
   assert.deepEqual(
@@ -1145,6 +1191,14 @@ test("buildApiV2PreConsentCookiesTrackers returns a valid empty response", () =>
   assert.deepEqual(resource.summary, {
     rowCount: 0,
     trackerCount: 0,
+    trackerCountScope: "canonical_inventory_rows_including_operational",
+    trackerCategoryCounts: {
+      advertising: 0,
+      analytics: 0,
+      essential: 0,
+      functional: 0,
+      review: 0,
+    },
     cookieCount: 0,
     requestCount: 0,
     vendorCount: 0,

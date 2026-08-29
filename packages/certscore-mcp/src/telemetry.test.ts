@@ -136,6 +136,7 @@ test("telemetry observer failure never changes an MCP tool result", async () => 
   }), { status: 202, headers: { "content-type": "application/json" } })) as typeof fetch;
   const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
   const server = createCertScoreMcpServer({
+    initialPreConsentPreviewWaitMs: 0,
     onToolInvocation: () => { throw new Error("storage unavailable"); },
     toolProfile: "light",
   });

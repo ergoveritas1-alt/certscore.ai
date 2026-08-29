@@ -16,6 +16,7 @@ const envSchema = z.object({
   SESSION_MAX_COUNT: z.coerce.number().int().positive().default(500),
   CORS_ALLOWED_ORIGINS: z.string().optional(),
   CERTSCORE_REQUEST_TIMEOUT_MS: z.coerce.number().int().positive().optional(),
+  CERTSCORE_MCP_INITIAL_PRECONSENT_PREVIEW_WAIT_MS: z.coerce.number().int().min(0).max(10000).default(10000),
   CERTSCORE_MICROSOFT_MCP_ENABLED: z.enum(["0", "1"]).default("0"),
   CERTSCORE_MICROSOFT_TENANT_ID: optionalUuid,
   CERTSCORE_MICROSOFT_RESOURCE_AUDIENCE: optionalUuid,

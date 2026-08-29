@@ -1,5 +1,5 @@
 import { createHash, randomUUID } from "node:crypto";
-import { mkdir, readFile, readdir, writeFile } from "node:fs/promises";
+import { appendFile, mkdir, readFile, readdir, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { GetObjectCommand, PutObjectCommand } from "@aws-sdk/client-s3";
 import { SendMessageCommand } from "@aws-sdk/client-sqs";
@@ -22,6 +22,7 @@ type Args = {
   awsRegion: LocalV2DagLambdaAwsRegion;
   debugOverrides: Record<string, unknown> | null;
   functionName: string;
+  messageStreamPath: string | null;
   outPath: string;
   profile: "full" | "standard" | "tiny";
   postRefusalConfig: Record<string, unknown> | null;
@@ -107,8 +108,14 @@ class LocalDiskS3Client {
 class LocalCaptureSqsClient {
   readonly messages: string[] = [];
 
+  constructor(private readonly messageStreamPath: string | null = null) {}
+
   async send(command: SendMessageCommand) {
-    this.messages.push(String(command.input.MessageBody ?? ""));
+    const message = String(command.input.MessageBody ?? "");
+    this.messages.push(message);
+    if (this.messageStreamPath) {
+      await appendFile(this.messageStreamPath, `${message}\n`, "utf8");
+    }
     return { $metadata: {} };
   }
 }
@@ -178,8 +185,17 @@ async function main() {
   const workspaceRoot = process.cwd();
   const artifactBaseDir = path.resolve(workspaceRoot, args.artifactDir);
   const fakeS3Root = path.join(artifactBaseDir, "_fake-s3");
+  const messageStreamPath = resolveMessageStreamPath({
+    artifactBaseDir,
+    messageStreamPath: args.messageStreamPath,
+    workspaceRoot,
+  });
+  if (messageStreamPath) {
+    await mkdir(path.dirname(messageStreamPath), { recursive: true });
+    await writeFile(messageStreamPath, "", "utf8");
+  }
   const s3Client = new LocalDiskS3Client(fakeS3Root);
-  const sqsClient = new LocalCaptureSqsClient();
+  const sqsClient = new LocalCaptureSqsClient(messageStreamPath);
   const lambdaClient = new LocalRecursiveLambdaClient({
     postRefusalWorkerMode: args.postRefusalWorkerMode,
     s3Client,
@@ -484,6 +500,7 @@ function parseArgs(argv: string[]): Args {
       strongEvidenceMode: "webmd"
     },
     functionName: "certscore-v2-dag-local-lambda",
+    messageStreamPath: null,
     outPath: "artifacts/local-v2-dag-lambda-parity/latest.json",
     profile: "full",
     postRefusalConfig: null,
@@ -505,6 +522,8 @@ function parseArgs(argv: string[]): Args {
       args.debugOverrides = parseJsonObjectArg(requiredValue(argv, ++index, arg), arg);
     } else if (arg === "--function-name") {
       args.functionName = requiredValue(argv, ++index, arg);
+    } else if (arg === "--message-stream") {
+      args.messageStreamPath = requiredValue(argv, ++index, arg);
     } else if (arg === "--no-debug-overrides") {
       args.debugOverrides = null;
     } else if (arg === "--out") {
@@ -548,6 +567,7 @@ function printUsage() {
     "  --post-refusal-worker-mode <mode> normal, failure, or timeout. Implies --post-refusal.",
     "  --scan-id <id>           Stable scan ID. Default: local-lambda-parity-<uuid>",
     "  --artifact-dir <path>    Artifact base directory. Default: artifacts/local-v2-dag-lambda-parity",
+    "  --message-stream <path>  Optional NDJSON stream of fake SQS messages, constrained to artifact-dir.",
     "  --out <path>             Summary JSON path. Default: artifacts/local-v2-dag-lambda-parity/latest.json",
     "  --debug-overrides <json> Lambda debug overrides. Defaults to WebMD strong-evidence settings.",
     "  --no-debug-overrides     Run with only env tuning.",
@@ -556,6 +576,20 @@ function printUsage() {
     "Example:",
     "  pnpm v2:local-dag-lambda-parity -- --target-url https://www.webmd.com/ --variant webmd-local-parity"
   ].join("\n"));
+}
+
+function resolveMessageStreamPath(input: {
+  artifactBaseDir: string;
+  messageStreamPath: string | null;
+  workspaceRoot: string;
+}) {
+  if (!input.messageStreamPath) return null;
+  const resolved = path.resolve(input.workspaceRoot, input.messageStreamPath);
+  const relative = path.relative(input.artifactBaseDir, resolved);
+  if (!relative || relative.startsWith("..") || path.isAbsolute(relative)) {
+    throw new Error("--message-stream must resolve to a file inside --artifact-dir.");
+  }
+  return resolved;
 }
 
 function normalizeTargetUrl(value: string) {

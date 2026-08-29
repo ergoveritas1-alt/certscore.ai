@@ -11,6 +11,7 @@ import { mkdir, readdir, readFile, writeFile } from "node:fs/promises";
 import { connect as tlsConnect, type TLSSocket } from "node:tls";
 import { chromium } from "playwright";
 import {
+  VERIFIED_PRE_CONSENT_RUNTIME_PREVIEW_PACKET_VERSION,
   VERIFIED_POLICY_EVIDENCE_PACKET_VERSION,
   POST_REFUSAL_LAMBDA_EVIDENCE_DESCRIPTOR_VERSION,
   canonicalEvidenceBundleSchema,
@@ -20,6 +21,7 @@ import {
   postRefusalLambdaDispatchConfigSchema,
   postRefusalLambdaEvidenceDescriptorSchema,
   verifiedPolicyEvidencePacketSchema,
+  verifiedPreConsentRuntimePreviewPacketSchema,
   type CanonicalEvidenceBundle,
   type ConsentFlowScenario,
   type ScanLaneRun,
@@ -28,7 +30,9 @@ import {
   type PostRefusalEvidencePacket,
   type PostRefusalLambdaDispatchConfig,
   type PostRefusalLambdaEvidenceDescriptor,
+  type PreConsentRuntimePreview,
   type VerifiedPolicyEvidencePacket,
+  type VerifiedPreConsentRuntimePreviewPacket,
   type V2DagLambdaResultPurpose,
 } from "@certscore/contracts";
 import {
@@ -64,6 +68,8 @@ export const LOCAL_V2_DAG_LAMBDA_DISPATCH_CONTRACT_VERSION = "certscore.v2.lambd
 export const LOCAL_V2_DAG_LAMBDA_RESULT_CONTRACT_VERSION = "certscore.v2.lambda-dag-result.v1";
 export const LOCAL_V2_DAG_LAMBDA_POLICY_EVIDENCE_MESSAGE_VERSION =
   "certscore.v2.lambda-policy-evidence-ready.v1" as const;
+export const LOCAL_V2_DAG_LAMBDA_RUNTIME_PREVIEW_MESSAGE_VERSION =
+  "certscore.v2.lambda-runtime-preview-ready.v1" as const;
 export const LOCAL_V2_DAG_SCAN_PROCESSOR = "local-certscore-v2-dag-parallel-v1";
 export const LOCAL_V2_DAG_SCANNER_RUNTIME = "certscore-v2-dag-parallel-path";
 export const POST_CONSENT_FLOW_SCANNING_ENABLED = false;
@@ -222,6 +228,20 @@ export type LocalV2DagLambdaPolicyEvidenceMessage = {
   generatedAt: string;
   messageKind: "policy_evidence_ready";
   policyContentHash: string;
+  processor: typeof LOCAL_V2_DAG_SCAN_PROCESSOR;
+  productionFindingIntegration: false;
+  scanId: string;
+  sourceHash: string;
+  targetEnvironment: "local" | "production";
+};
+
+export type LocalV2DagLambdaRuntimePreviewMessage = {
+  artifactMetadata: { sha256: string; sizeBytes: number };
+  artifactOnly: true;
+  artifactPointer: string;
+  contractVersion: typeof LOCAL_V2_DAG_LAMBDA_RUNTIME_PREVIEW_MESSAGE_VERSION;
+  generatedAt: string;
+  messageKind: "runtime_preview_ready";
   processor: typeof LOCAL_V2_DAG_SCAN_PROCESSOR;
   productionFindingIntegration: false;
   scanId: string;
@@ -445,6 +465,7 @@ type HandlerOptions = {
     artifactRoot: string;
     onScanCoreComplete?: () => void;
     onPolicySurfaceComplete?: NonNullable<RunScanInput["onPolicySurfaceComplete"]>;
+    onRuntimePreviewComplete?: (preview: PreConsentRuntimePreview) => void;
     physicalInvocationId?: string;
     policySurfaceDeadlineAtMs?: number;
     preConsentModuleDeadlineMs?: number;
@@ -1062,6 +1083,7 @@ export async function runLocalV2DagLambdaArtifactChain(
     forceAllowedScenarioPlanning?: boolean;
     onScanCoreComplete?: () => void;
     onPolicySurfaceComplete?: NonNullable<RunScanInput["onPolicySurfaceComplete"]>;
+    onRuntimePreviewComplete?: (preview: PreConsentRuntimePreview) => void;
     physicalInvocationId?: string;
     phaseLabelPrefix?: string;
     preConsentScreenshotMode?: "always" | "selective" | "never";
@@ -1104,6 +1126,7 @@ export async function runLocalV2DagLambdaArtifactChain(
     preConsentVisualFallbackDeadlineAtMs: options.preConsentVisualFallbackDeadlineAtMs,
     onScanCoreComplete: options.onScanCoreComplete,
     onPolicySurfaceComplete: options.onPolicySurfaceComplete,
+    onRuntimePreviewComplete: options.onRuntimePreviewComplete,
     physicalInvocationId: options.physicalInvocationId,
     scanTuning,
     screenshotSafetyReviewCoordinator,
@@ -1142,6 +1165,7 @@ async function runLocalV2DagLambdaScanBundle(
     artifactRoot: string;
     onScanCoreComplete?: () => void;
     onPolicySurfaceComplete?: NonNullable<RunScanInput["onPolicySurfaceComplete"]>;
+    onRuntimePreviewComplete?: (preview: PreConsentRuntimePreview) => void;
     physicalInvocationId?: string;
     phaseLabelPrefix?: string;
     phaseTimings: LocalV2DagLambdaPhaseTiming[];
@@ -1173,6 +1197,7 @@ async function runLocalV2DagLambdaScanBundle(
         outDir: options.artifactRoot,
         onPreConsentScreenshotCaptured: options.screenshotSafetyReviewCoordinator.schedule,
         onPolicySurfaceComplete: options.onPolicySurfaceComplete,
+        onPreConsentRuntimePreview: options.onRuntimePreviewComplete,
         policyOutputGraceMs: 1_000,
         policyPlanningDeadlineMs: 1_500,
         policySurfaceDeadlineAtMs: options.policySurfaceDeadlineAtMs,
@@ -4362,7 +4387,7 @@ export async function sendLocalV2DagLambdaResultMessage(input: {
   });
 }
 
-function policyEvidenceHash(value: unknown) {
+function sha256Json(value: unknown) {
   return createHash("sha256").update(JSON.stringify(value)).digest("hex");
 }
 
@@ -4392,7 +4417,7 @@ export function buildVerifiedPolicyEvidencePacket(input: {
   result: Parameters<NonNullable<RunScanInput["onPolicySurfaceComplete"]>>[0];
 }): VerifiedPolicyEvidencePacket {
   const policySurfaceObservations = input.result.policySurfaceObservations;
-  const policyContentHash = policyEvidenceHash(policySurfaceObservations);
+  const policyContentHash = sha256Json(policySurfaceObservations);
   const generatedAt = input.result.moduleRun.completedAt ?? new Date().toISOString();
   const unsigned = {
     artifactOnly: true as const,
@@ -4419,7 +4444,7 @@ export function buildVerifiedPolicyEvidencePacket(input: {
   const { sourceHash: _placeholder, ...normalizedUnsigned } = normalized;
   return verifiedPolicyEvidencePacketSchema.parse({
     ...normalizedUnsigned,
-    sourceHash: policyEvidenceHash(normalizedUnsigned),
+    sourceHash: sha256Json(normalizedUnsigned),
   });
 }
 
@@ -4491,6 +4516,97 @@ export async function publishVerifiedPolicyEvidence(input: {
   });
   console.info(JSON.stringify({
     event: "v2_policy_evidence.queue_published",
+    region: input.payload.awsRegion,
+    scan_id: input.payload.scanId,
+    size_bytes: body.byteLength,
+    target_environment: input.payload.targetEnvironment,
+  }));
+  return message;
+}
+
+export function buildVerifiedPreConsentRuntimePreviewPacket(input: {
+  payload: LocalV2DagLambdaDispatchPayload;
+  preview: PreConsentRuntimePreview;
+}): VerifiedPreConsentRuntimePreviewPacket {
+  const unsigned = {
+    artifactOnly: true as const,
+    contractVersion: VERIFIED_PRE_CONSENT_RUNTIME_PREVIEW_PACKET_VERSION,
+    normalizedUrl: input.payload.targetUrl,
+    preview: input.preview,
+    productionFindingIntegration: false as const,
+    scanId: input.payload.scanId,
+  };
+  const normalized = verifiedPreConsentRuntimePreviewPacketSchema.parse({
+    ...unsigned,
+    sourceHash: "0".repeat(64),
+  });
+  const { sourceHash: _placeholder, ...normalizedUnsigned } = normalized;
+  return verifiedPreConsentRuntimePreviewPacketSchema.parse({
+    ...normalizedUnsigned,
+    sourceHash: sha256Json(normalizedUnsigned),
+  });
+}
+
+export async function publishVerifiedPreConsentRuntimePreview(input: {
+  packet: VerifiedPreConsentRuntimePreviewPacket;
+  payload: LocalV2DagLambdaDispatchPayload;
+  s3Client?: S3PutClient;
+  sqsClient?: SqsSendClient;
+}) {
+  const body = Buffer.from(`${JSON.stringify(input.packet, null, 2)}\n`, "utf8");
+  const sha256 = createHash("sha256").update(body).digest("hex");
+  const bucket = requireArtifactBucket();
+  const key = `${artifactKeyPrefix(input.payload).replace(/^\/+|\/+$/g, "")}/VerifiedPreConsentRuntimePreviewPacket.json`;
+  await sendWithBoundedRetries({
+    attemptTimeoutMs: LOCAL_V2_DAG_LAMBDA_AWS_SEND_ATTEMPT_TIMEOUT_MS,
+    maxAttempts: input.s3Client ? 1 : LOCAL_V2_DAG_LAMBDA_AWS_SEND_MAX_ATTEMPTS,
+    operation: (attemptSignal) => (
+      input.s3Client ?? localV2DagLambdaS3Client(input.payload.awsRegion)
+    ).send(new PutObjectCommand({
+      Body: body,
+      Bucket: bucket,
+      ContentType: "application/json",
+      Key: key,
+      Metadata: {
+        "certscore-artifact-field": "verifiedPreConsentRuntimePreviewPacket",
+        "certscore-artifact-sha256": sha256,
+        "certscore-artifact-size-bytes": String(body.byteLength),
+        "certscore-production-finding-integration": "false",
+        "certscore-v2-artifact-only": "true",
+      },
+    }), { abortSignal: attemptSignal }),
+    operationLabel: "S3 verified pre-consent runtime preview upload",
+    totalTimeoutMs: LOCAL_V2_DAG_LAMBDA_AWS_SEND_ATTEMPT_TIMEOUT_MS *
+      (input.s3Client ? 1 : LOCAL_V2_DAG_LAMBDA_AWS_SEND_MAX_ATTEMPTS),
+  });
+  const message: LocalV2DagLambdaRuntimePreviewMessage = {
+    artifactMetadata: { sha256, sizeBytes: body.byteLength },
+    artifactOnly: true,
+    artifactPointer: s3Uri(bucket, key),
+    contractVersion: LOCAL_V2_DAG_LAMBDA_RUNTIME_PREVIEW_MESSAGE_VERSION,
+    generatedAt: input.packet.preview.generatedAt,
+    messageKind: "runtime_preview_ready",
+    processor: LOCAL_V2_DAG_SCAN_PROCESSOR,
+    productionFindingIntegration: false,
+    scanId: input.payload.scanId,
+    sourceHash: input.packet.sourceHash,
+    targetEnvironment: input.payload.targetEnvironment,
+  };
+  await sendWithBoundedRetries({
+    attemptTimeoutMs: LOCAL_V2_DAG_LAMBDA_AWS_SEND_ATTEMPT_TIMEOUT_MS,
+    maxAttempts: input.sqsClient ? 1 : LOCAL_V2_DAG_LAMBDA_AWS_SEND_MAX_ATTEMPTS,
+    operation: (attemptSignal) => (
+      input.sqsClient ?? new SQSClient({ region: parseQueueRegion(input.payload.resultQueueUrl) })
+    ).send(new SendMessageCommand({
+      MessageBody: JSON.stringify(message),
+      QueueUrl: input.payload.resultQueueUrl,
+    }), { abortSignal: attemptSignal }),
+    operationLabel: "Verified pre-consent runtime preview SQS publication",
+    totalTimeoutMs: LOCAL_V2_DAG_LAMBDA_AWS_SEND_ATTEMPT_TIMEOUT_MS *
+      (input.sqsClient ? 1 : LOCAL_V2_DAG_LAMBDA_AWS_SEND_MAX_ATTEMPTS),
+  });
+  console.info(JSON.stringify({
+    event: "v2_runtime_preview.queue_published",
     region: input.payload.awsRegion,
     scan_id: input.payload.scanId,
     size_bytes: body.byteLength,
@@ -4598,6 +4714,7 @@ export async function handler(event: unknown, options: HandlerOptions = {}) {
   let artifactChainTimeoutMs = LOCAL_V2_DAG_LAMBDA_DEFAULT_ARTIFACT_CHAIN_TIMEOUT_MS;
   let resultPublishTimeoutMs = LOCAL_V2_DAG_LAMBDA_DEFAULT_RESULT_PUBLISH_TIMEOUT_MS;
   let policyEvidenceHandoff: Promise<LocalV2DagLambdaPolicyEvidenceMessage | undefined> | undefined;
+  let runtimePreviewHandoff: Promise<LocalV2DagLambdaRuntimePreviewMessage | undefined> | undefined;
   const dispatchEvent = unwrapLocalV2DagLambdaDispatchEvent(event);
 
   const remainingResultPublishMs = () => Math.max(
@@ -4766,6 +4883,30 @@ export async function handler(event: unknown, options: HandlerOptions = {}) {
             });
           }
         },
+        onRuntimePreviewComplete: (preview) => {
+          if (payload?.orchestrationMode !== "worker" || payload.workerLane !== "runtime_evidence") return;
+          if (runtimePreviewHandoff) return;
+          try {
+            const packet = buildVerifiedPreConsentRuntimePreviewPacket({ payload, preview });
+            runtimePreviewHandoff = publishVerifiedPreConsentRuntimePreview({
+              packet,
+              payload,
+              s3Client: options.s3Client,
+              sqsClient: options.sqsClient,
+            }).catch((error): undefined => {
+              console.warn("[v2-lambda-runtime-preview] early verified preview handoff failed closed", {
+                error: error instanceof Error ? error.message : String(error),
+                scanId: payload?.scanId,
+              });
+              return undefined;
+            });
+          } catch (error) {
+            console.warn("[v2-lambda-runtime-preview] early verified preview handoff failed closed", {
+              error: error instanceof Error ? error.message : String(error),
+              scanId: payload?.scanId,
+            });
+          }
+        },
         physicalInvocationId: options.awsRequestId ?? undefined,
         policySurfaceDeadlineAtMs:
           handlerStartedAtMs + scannerWorkTimeoutMs - LOCAL_V2_DAG_LAMBDA_POLICY_SHUTDOWN_RESERVE_MS,
@@ -4810,7 +4951,7 @@ export async function handler(event: unknown, options: HandlerOptions = {}) {
       // The dedicated policy worker preserves the existing early, verified
       // policy handoff. Await it before returning so Lambda freeze cannot drop
       // the S3 packet or its non-terminal SQS notification.
-      await policyEvidenceHandoff;
+      await Promise.all([policyEvidenceHandoff, runtimePreviewHandoff]);
       const consentRejectAvailability = payload.workerLane === "consent_proof" && artifactRoot
         ? await readConsentRejectAvailabilityFromArtifactRoot(artifactRoot)
         : undefined;

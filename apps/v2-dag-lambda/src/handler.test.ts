@@ -11,7 +11,16 @@ import { fileURLToPath } from "node:url";
 import { build } from "esbuild";
 import { GetObjectCommand, PutObjectCommand } from "@aws-sdk/client-s3";
 import { SendMessageCommand } from "@aws-sdk/client-sqs";
-import type { CanonicalEvidenceBundle, ConsentActionAttempt, ConsentFlowObservation, ScreenshotArtifact } from "@certscore/contracts";
+import {
+  cookieEventSchema,
+  networkEventSchema,
+  normalizedVendorObservationSchema,
+  type CanonicalEvidenceBundle,
+  type ConsentActionAttempt,
+  type ConsentFlowObservation,
+  type ScreenshotArtifact,
+} from "@certscore/contracts";
+import { buildPreConsentRuntimePreview } from "@certscore/scan-core";
 import { parseLocalV2DagLambdaResultMessage } from "../../web/server/scans/local-v2-dag-lambda-dispatch";
 import {
   LOCAL_V2_DAG_LAMBDA_DEFAULT_ARTIFACT_CHAIN_TIMEOUT_MS,
@@ -35,6 +44,7 @@ import {
   buildLocalV2DagLambdaLaneRun,
   buildLocalV2DagLambdaLaneTimingSummary,
   buildLocalV2DagLambdaResultMessage,
+  buildVerifiedPreConsentRuntimePreviewPacket,
   buildVerifiedPolicyEvidencePacket,
   buildLocalV2DagLambdaRuntimeDiagnostics,
   buildScannerRuntimeProvenance,
@@ -52,6 +62,7 @@ import {
   parseLocalV2DagLambdaDispatchPayload,
   parseEgressProbeResponse,
   postRefusalParentDispatchSha256,
+  publishVerifiedPreConsentRuntimePreview,
   runLocalV2DagLambdaPostRefusalArtifactChain,
   sendLocalV2DagLambdaResultMessage,
   serializeCanonicalEvidenceBundle,
@@ -782,6 +793,163 @@ test("early policy handoff packet is typed, hash-bound, and non-projectable", ()
     sourceHash,
     createHash("sha256").update(JSON.stringify(unsigned)).digest("hex"),
   );
+});
+
+test("early runtime preview packet retains bounded passive cookie and tracker observations without projecting findings", () => {
+  const payload = parseLocalV2DagLambdaDispatchPayload(validPayload());
+  const preview = buildPreConsentRuntimePreview(canonicalBundleFixture(payload.scanId, {
+      cookieEvents: [cookieEventSchema.parse({
+        eventId: "cookie-ga",
+        eventType: "cookie",
+        timestampMs: 1_200,
+        sourceScanner: "pre_consent_runtime",
+        scenario: "fresh_pre_consent",
+        consentStateAtTime: "pre_consent",
+        pagePhase: "network_idle",
+        evidenceRefs: [],
+        confidence: 0.98,
+        directVsInferred: "direct",
+        cookieName: "_ga",
+        cookieDomain: ".example.com",
+        cookieParty: "first_party",
+        vendorAssociated: true,
+        cookiePurpose: "analytics",
+        cookieEssentiality: "non_essential",
+        operation: "browser_snapshot",
+        valueRedacted: true,
+      })],
+      networkEvents: [networkEventSchema.parse({
+        eventId: "network-ga",
+        eventType: "network_request",
+        timestampMs: 1_300,
+        sourceScanner: "pre_consent_runtime",
+        scenario: "fresh_pre_consent",
+        consentStateAtTime: "pre_consent",
+        pagePhase: "network_idle",
+        evidenceRefs: [],
+        confidence: 0.97,
+        directVsInferred: "direct",
+        requestId: "request-ga",
+        method: "GET",
+        requestUrl: "https://www.google-analytics.com/g/collect?secret=redacted",
+        requestHostname: "www.google-analytics.com",
+        thirdParty: true,
+        isThirdParty: true,
+      })],
+      normalizedVendorObservations: [normalizedVendorObservationSchema.parse({
+        observationId: "vendor-google-analytics",
+        entity: "Google",
+        vendor: "Google",
+        product: "Google Analytics",
+        purpose: "analytics",
+        confidence: 0.96,
+        basis: ["canonical_vendor_registry"],
+        matchedEvidenceIds: ["network-ga", "cookie-ga"],
+        matchedHostnames: ["www.google-analytics.com"],
+        matchedUrls: ["https://www.google-analytics.com/g/collect?secret=redacted"],
+        matchedCookieNames: ["_ga"],
+      })],
+      runtimeCoverage: {
+        coverageStatus: "usable",
+        limitationKeys: [],
+        fallbackModesUsed: [],
+        observationCounts: {
+          networkEvents: 1,
+          thirdPartyRequests: 1,
+          cookieEvents: 1,
+          cookiesBeforeConsent: 1,
+          normalizedVendors: 1,
+          observedJourneys: 0,
+        },
+        silentEmpty: false,
+        notes: [],
+      },
+    }));
+  const packet = buildVerifiedPreConsentRuntimePreviewPacket({
+    payload,
+    preview,
+  });
+  const { sourceHash, ...unsigned } = packet;
+  const serialized = JSON.stringify(packet);
+
+  assert.equal(packet.artifactOnly, true);
+  assert.equal(packet.productionFindingIntegration, false);
+  assert.equal(packet.preview.final, false);
+  assert.equal(packet.preview.mustContinuePolling, true);
+  assert.deepEqual(packet.preview.summary, {
+    cookieCount: 1,
+    returnedCookieCount: 1,
+    trackerCount: 1,
+    trackingVendorCount: 1,
+    returnedTrackingVendorCount: 1,
+    operationalVendorCount: 0,
+    returnedOperationalVendorCount: 0,
+    thirdPartyRequestCount: 1,
+    vendorCount: 1,
+  });
+  assert.deepEqual(packet.preview.cookies[0], {
+    name: "_ga",
+    domain: "example.com",
+    party: "first_party",
+    purpose: "analytics",
+    essentiality: "non_essential",
+    observedAtMs: 1_200,
+  });
+  assert.deepEqual(packet.preview.trackers[0], {
+    vendor: "Google",
+    product: "Google Analytics",
+    purpose: "analytics",
+    confidence: 0.96,
+    domains: ["www.google-analytics.com"],
+  });
+  assert.equal(sourceHash, createHash("sha256").update(JSON.stringify(unsigned)).digest("hex"));
+  assert.doesNotMatch(serialized, /secret=redacted/);
+  assert.equal("findings" in packet.preview, false);
+  assert.equal("score" in packet.preview, false);
+});
+
+test("early runtime preview publication writes one bounded S3 packet and one non-terminal SQS message", async () => {
+  const previousBucket = process.env.CERTSCORE_V2_DAG_LAMBDA_ARTIFACT_BUCKET;
+  const puts: PutObjectCommand[] = [];
+  const sends: SendMessageCommand[] = [];
+  process.env.CERTSCORE_V2_DAG_LAMBDA_ARTIFACT_BUCKET = "runtime-preview-test-bucket";
+  try {
+    const payload = parseLocalV2DagLambdaDispatchPayload(validPayload({
+      orchestrationMode: "worker",
+      workerLane: "runtime_evidence",
+    }));
+    const packet = buildVerifiedPreConsentRuntimePreviewPacket({
+      payload,
+      preview: buildPreConsentRuntimePreview(canonicalBundleFixture(payload.scanId)),
+    });
+    const message = await publishVerifiedPreConsentRuntimePreview({
+      packet,
+      payload,
+      s3Client: {
+        async send(command) {
+          puts.push(command as PutObjectCommand);
+          return {};
+        },
+      },
+      sqsClient: {
+        async send(command) {
+          sends.push(command as SendMessageCommand);
+          return {};
+        },
+      },
+    });
+
+    assert.equal(puts.length, 1);
+    assert.equal(sends.length, 1);
+    assert.match(String(puts[0]?.input.Key), /VerifiedPreConsentRuntimePreviewPacket\.json$/);
+    assert.equal(message.messageKind, "runtime_preview_ready");
+    assert.equal(message.productionFindingIntegration, false);
+    assert.equal(message.sourceHash, packet.sourceHash);
+    assert.deepEqual(JSON.parse(String(sends[0]?.input.MessageBody)), message);
+  } finally {
+    if (previousBucket === undefined) delete process.env.CERTSCORE_V2_DAG_LAMBDA_ARTIFACT_BUCKET;
+    else process.env.CERTSCORE_V2_DAG_LAMBDA_ARTIFACT_BUCKET = previousBucket;
+  }
 });
 
 test("terminal result retains the verified early-policy pointer as an ordering fallback", () => {
@@ -1912,6 +2080,62 @@ test("policy evidence worker completes the verified early handoff without publis
     const message = JSON.parse(sentMessages[0] ?? "{}") as Record<string, unknown>;
     assert.equal(message.messageKind, "policy_evidence_ready");
     assert.equal(String(message.artifactPointer).includes("/lanes/policy_evidence/"), true);
+  } finally {
+    if (previousBucket === undefined) {
+      delete process.env.CERTSCORE_V2_DAG_LAMBDA_ARTIFACT_BUCKET;
+    } else {
+      process.env.CERTSCORE_V2_DAG_LAMBDA_ARTIFACT_BUCKET = previousBucket;
+    }
+  }
+});
+
+test("runtime evidence worker completes the six-second preview handoff without waiting for its terminal bundle", async () => {
+  const previousBucket = process.env.CERTSCORE_V2_DAG_LAMBDA_ARTIFACT_BUCKET;
+  process.env.CERTSCORE_V2_DAG_LAMBDA_ARTIFACT_BUCKET = "certscore-test-artifacts";
+  const sentMessages: string[] = [];
+  let uploadedObjects = 0;
+  try {
+    const preview = buildPreConsentRuntimePreview(canonicalBundleFixture("scan-local-1"));
+    let previewCallbackReturnedBeforeArtifactChain = false;
+    const result = await handler(validPayload({
+      orchestrationMode: "worker",
+      workerLane: "runtime_evidence",
+    }), {
+      runArtifactChain: async (_payload, runOptions) => {
+        runOptions.onRuntimePreviewComplete?.(preview);
+        previewCallbackReturnedBeforeArtifactChain = true;
+        return {
+          artifactMetadata: {
+            scanArtifactUri: { sha256: "a".repeat(64), sizeBytes: 123 },
+          },
+          artifactPointers: {
+            scanArtifactUri: "s3://certscore-test-artifacts/v2/scan-local-1/lanes/runtime_evidence/CanonicalEvidenceBundle.json",
+          },
+          phaseTimings: [],
+        };
+      },
+      s3Client: {
+        async send() {
+          uploadedObjects += 1;
+          return { $metadata: {} };
+        },
+      },
+      sqsClient: {
+        async send(command: SendMessageCommand) {
+          sentMessages.push(String(command.input.MessageBody));
+          return { $metadata: {} };
+        },
+      },
+    });
+
+    assert.equal(previewCallbackReturnedBeforeArtifactChain, true);
+    assert.equal(result.status, "completed");
+    assert.equal(result.workerLane, "runtime_evidence");
+    assert.equal(uploadedObjects, 1);
+    assert.equal(sentMessages.length, 1);
+    const message = JSON.parse(sentMessages[0] ?? "{}") as Record<string, unknown>;
+    assert.equal(message.messageKind, "runtime_preview_ready");
+    assert.equal(String(message.artifactPointer).includes("/lanes/runtime_evidence/"), true);
   } finally {
     if (previousBucket === undefined) {
       delete process.env.CERTSCORE_V2_DAG_LAMBDA_ARTIFACT_BUCKET;

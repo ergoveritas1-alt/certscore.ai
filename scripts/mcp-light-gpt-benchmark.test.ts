@@ -59,6 +59,11 @@ test("report detects an eliminated long initial hold and renders reusable markdo
     initialResponseLatencyMs: 500,
     initialClassification: "immediate_completed_reuse",
     initialStatus: "completed",
+    initialPreConsentPreviewReturned: false,
+    initialPreviewCoverageStatus: null,
+    initialPreviewCookieCount: null,
+    initialPreviewTrackerCount: null,
+    initialTextContent: "CertScore scan accepted: scanId=scan-1; status=completed.",
     scanId: "scan-1",
     retryAfterSeconds: null,
     legacyWaitParametersSent: false,
@@ -84,7 +89,7 @@ test("report detects an eliminated long initial hold and renders reusable markdo
     telemetryCorrelation: { clientIdentifier: "benchmark-case-1", sessionId: "session", timeWindowStart: "start", timeWindowEnd: "end" },
     error: null,
   } satisfies BenchmarkCaseResult;
-  const commonDescription = "returns promptly and never waits; retryAfterSeconds certscore_get_scan_status do not resubmit certscore_scan_site";
+  const commonDescription = "runtime lane completes or reaches its six-second checkpoint; trackingVendorCount excludes infrastructure, security, and consent-management vendors; capped at approximately 9–11 seconds total; falls back to the stable scanId without a preview; retryAfterSeconds certscore_get_scan_status do not resubmit certscore_scan_site";
   const report = buildReport({
     runId: "run",
     endpoint: "https://mcp.certscore.ai/mcp/light",
@@ -103,6 +108,10 @@ test("report detects an eliminated long initial hold and renders reusable markdo
         clientIdentifier: "benchmark-case-2",
         initialClassification: "new_pending_scan",
         initialStatus: "queued",
+        initialPreConsentPreviewReturned: true,
+        initialPreviewCoverageStatus: "usable",
+        initialPreviewCookieCount: 3,
+        initialPreviewTrackerCount: 2,
         initialResponseLatencyMs: 700,
         legacyWaitParametersSent: true,
       },
@@ -116,5 +125,8 @@ test("report detects an eliminated long initial hold and renders reusable markdo
   assert.equal(report.assessment.initialHoldEliminated, true);
   assert.equal(report.assessment.passed, true);
   assert.equal(report.assessment.readyForBroaderTraffic, true);
-  assert.match(renderMarkdown(report), /Initial certscore_scan_site p95 was 700 ms/);
+  const markdown = renderMarkdown(report);
+  assert.match(markdown, /Initial certscore_scan_site p95 was 700 ms/);
+  assert.match(markdown, /## Exact initial MCP TextContent/);
+  assert.match(markdown, /CertScore scan accepted: scanId=scan-1; status=completed\./);
 });

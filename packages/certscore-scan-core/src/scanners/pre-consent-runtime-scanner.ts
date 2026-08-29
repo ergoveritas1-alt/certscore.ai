@@ -91,6 +91,7 @@ import {
 
 const SOURCE_SCANNER = "pre_consent_runtime";
 const SCENARIO = "fresh_pre_consent";
+export const PRE_CONSENT_RUNTIME_PREVIEW_CHECKPOINT_MS = 6_000;
 type BrowserDocumentIdentityState = { current?: BrowserDocumentIdentity };
 const browserDocumentIdentityByPage = new WeakMap<Page, BrowserDocumentIdentity>();
 
@@ -185,6 +186,13 @@ export interface PreConsentRuntimeScannerInput {
   screenshotTimeoutMs?: number;
   /** Non-blocking retention-review handoff; screenshot pixels never create findings. */
   onScreenshotCaptured?: (screenshot: ScreenshotArtifact) => void;
+  /**
+   * Retrieval-only passive checkpoint for an accepted scan. The callback is
+   * advisory, fires at most once, and cannot create findings or score effects.
+   */
+  onPassiveRuntimeCheckpoint?: (checkpoint: PreConsentRuntimeCheckpoint) => void;
+  /** Deterministic direct-scanner test override; production runScan uses 6s. */
+  passiveRuntimeCheckpointMs?: number;
   /** Bounded local diagnostic override for the no-early-CMP delayed-surface gate. */
   lateConsentGateMs?: number;
   /** Deterministic calibration/test override for the 5% probability-gate audit holdout. */
@@ -209,6 +217,15 @@ export interface PreConsentRuntimeScannerInput {
    * returned as an explicitly partial result.
    */
   softDeadlineSignal?: AbortSignal;
+}
+
+export interface PreConsentRuntimeCheckpoint {
+  completedAt: string;
+  cookieEvents: CookieEvent[];
+  cookieSnapshots: CookieSnapshot[];
+  networkEvents: NetworkEvent[];
+  observedAtMs: number;
+  vendorResolverInputs: VendorResolverInput[];
 }
 
 export interface FixtureRouteFulfiller {
@@ -840,6 +857,74 @@ export async function preConsentRuntimeScanner(
   let retainedTransportSecurityObservation: TransportSecurityObservation | undefined;
   let retainedTransportSecurityArtifactRef: ArtifactRef | undefined;
   let retainedRenderedPolicyLinkEvidence: RetainedRenderedPolicyLink[] = [];
+
+  let passiveRuntimeCheckpointPromise: Promise<void> | undefined;
+  const emitPassiveRuntimeCheckpoint = () => {
+    if (
+      passiveRuntimeCheckpointPromise ||
+      captureScope !== "runtime_evidence" ||
+      !input.onPassiveRuntimeCheckpoint
+    ) {
+      return passiveRuntimeCheckpointPromise;
+    }
+    passiveRuntimeCheckpointPromise = (async () => {
+      try {
+        const observedAtMs = elapsed(input.scanStartedAtMs);
+        const checkpointCookieEvents = cookieEvents.map((event) => ({ ...event }));
+        const checkpointNetworkEvents = networkEvents.map((event) => ({ ...event }));
+        const checkpointVendorResolverInputs = vendorResolverInputs.map((resolverInput) => ({ ...resolverInput }));
+        const checkpointCookies = await browserContext.cookies().catch(() => []);
+        applyFinalDocumentPartyClassification({
+          finalDocumentUrl: safePageUrl(page, effectiveNavigationUrl),
+          networkEvents: checkpointNetworkEvents,
+          networkResponseEvents: [],
+          cookieEvents: checkpointCookieEvents,
+          scriptEvents: [],
+          iframeEvents: [],
+        });
+        const checkpointCookieSnapshot: CookieSnapshot = {
+          artifactId: "cookie_snapshot_pre_consent_preview_checkpoint",
+          capturedAtMs: observedAtMs,
+          consentStateAtTime: "pre_consent",
+          cookies: checkpointCookies.map((cookie) => ({
+            name: cookie.name,
+            domain: cookie.domain,
+            path: cookie.path,
+            expires: cookie.expires,
+            httpOnly: cookie.httpOnly,
+            secure: cookie.secure,
+            sameSite: cookie.sameSite,
+          })),
+          cookieNames: checkpointCookies.map((cookie) => cookie.name),
+          evidenceRefs: [],
+        };
+        input.onPassiveRuntimeCheckpoint?.({
+          completedAt: new Date().toISOString(),
+          cookieEvents: checkpointCookieEvents,
+          cookieSnapshots: [checkpointCookieSnapshot],
+          networkEvents: checkpointNetworkEvents,
+          observedAtMs,
+          vendorResolverInputs: checkpointVendorResolverInputs,
+        });
+      } catch {
+        // Preliminary capture and retrieval observers must never affect the
+        // canonical runtime lane.
+      }
+    })();
+    return passiveRuntimeCheckpointPromise;
+  };
+  const passiveRuntimeCheckpointDelayMs = Math.max(
+    0,
+    input.scanStartedAtMs +
+      Math.max(0, input.passiveRuntimeCheckpointMs ?? PRE_CONSENT_RUNTIME_PREVIEW_CHECKPOINT_MS) -
+      Date.now(),
+  );
+  const passiveRuntimeCheckpointTimer = captureScope === "runtime_evidence" && input.onPassiveRuntimeCheckpoint
+    ? setTimeout(() => {
+        void emitPassiveRuntimeCheckpoint();
+      }, passiveRuntimeCheckpointDelayMs)
+    : undefined;
+  passiveRuntimeCheckpointTimer?.unref();
 
   const buildSoftDeadlineResult = (): PreConsentRuntimeScannerResult => {
     applyFinalDocumentPartyClassification({
@@ -3672,6 +3757,8 @@ export async function preConsentRuntimeScanner(
       renderedPolicyLinks: captureRenderedPolicyEvidence ? retainedRenderedPolicyLinkEvidence : [],
     };
   } finally {
+    if (passiveRuntimeCheckpointTimer) clearTimeout(passiveRuntimeCheckpointTimer);
+    if (passiveRuntimeCheckpointPromise) await passiveRuntimeCheckpointPromise;
     input.signal?.removeEventListener("abort", abortRuntime);
     page.off("crash", recordPageCrash);
     if (networkMetadataSession) {

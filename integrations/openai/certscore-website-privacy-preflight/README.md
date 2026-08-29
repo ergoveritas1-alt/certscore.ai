@@ -19,6 +19,8 @@ This package contains the provider-neutral skill and remote MCP wiring for an Op
 
 The package version and hosted MCP version are intentionally independent. A hosted MCP deployment updates direct MCP users at the stable URL; publishing this plugin separately distributes the bundled workflow instructions through ChatGPT and Codex.
 
+For a newly accepted scan, `certscore_scan_site` returns the stable `scanId` and may include a bounded `preConsentPreview` as soon as the runtime lane completes or reaches its six-second checkpoint. Captured counts and returned identity counts are separate because returned lists are bounded. `trackingVendorCount` excludes infrastructure, security, and consent-management vendors, which appear separately in `operationalVendors`; the compatibility preview `trackerCount` must not be compared directly with the completed inventory's broader `trackerCount`. ChatGPT and Codex must continue with `certscore_get_scan_status`, then retrieve `certscore_get_scan_bundle` after completed or completed_limited before reporting the full scan results and final returned tally.
+
 ## Public submission
 
 In OpenAI's plugin submission portal, create a **With MCP** draft, submit the production endpoint above, and add the bundled skill from this package to the same draft. Complete domain verification, listing metadata, safety review, and publisher identity requirements in the portal before submission.

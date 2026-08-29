@@ -60,6 +60,31 @@ const scanJobExample = {
   estimatedRemainingSeconds: null,
   stalled: false,
   retryAfterSeconds: 2,
+  preConsentPreview: {
+    type: "certscore_pre_consent_preview",
+    resultStage: "preliminary",
+    final: false,
+    sourceLane: "runtime_evidence",
+    generatedAt: "2026-06-30T12:00:04.000Z",
+    runtimeCoverage: { status: "usable", limitationKeys: [] },
+    summary: {
+      cookieCount: 1,
+      returnedCookieCount: 1,
+      trackerCount: 1,
+      trackingVendorCount: 1,
+      returnedTrackingVendorCount: 1,
+      operationalVendorCount: 0,
+      returnedOperationalVendorCount: 0,
+      thirdPartyRequestCount: 3,
+      vendorCount: 1
+    },
+    cookies: [{ name: "_ga", domain: "ergoveritas.com", party: "first_party", purpose: "analytics", essentiality: "non_essential", observedAtMs: 1200 }],
+    trackers: [{ vendor: "Example Analytics", product: "Example Analytics Pixel", purpose: "analytics", confidence: 0.95, domains: ["analytics.example.test"] }],
+    operationalVendors: [],
+    truncated: { cookies: false, trackers: false, operationalVendors: false },
+    mustContinuePolling: true,
+    observationOnlyDisclaimer: "Partial preview of passive runtime observations only. Counts are partial, not the full scan tally. Continue polling until terminal status, then retrieve the canonical scan bundle."
+  },
   reportUrl: "https://certscore.ai/scan/00000000-0000-4000-8000-000000000123",
   recommendedNextAction: "Poll certscore_get_scan_status with scanId 00000000-0000-4000-8000-000000000123 after the recommended delay.",
   executionMode: "new_scan",
@@ -155,6 +180,8 @@ const preConsentCookiesTrackersExample = {
   summary: {
     rowCount: 2,
     trackerCount: 1,
+    trackerCountScope: "canonical_inventory_rows_including_operational",
+    trackerCategoryCounts: { advertising: 0, analytics: 1, essential: 0, functional: 0, review: 0 },
     cookieCount: 1,
     requestCount: 3
   },
@@ -210,7 +237,14 @@ const preConsentCookiesTrackersExample = {
 
 const emptyPreConsentCookiesTrackersExample = {
   ...preConsentCookiesTrackersExample,
-  summary: { rowCount: 0, trackerCount: 0, cookieCount: 0, requestCount: 0 },
+  summary: {
+    rowCount: 0,
+    trackerCount: 0,
+    trackerCountScope: "canonical_inventory_rows_including_operational",
+    trackerCategoryCounts: { advertising: 0, analytics: 0, essential: 0, functional: 0, review: 0 },
+    cookieCount: 0,
+    requestCount: 0
+  },
   rows: []
 } as const;
 
@@ -750,6 +784,101 @@ export function buildCertScoreApiV2OpenApiDocument() {
             limitations: { type: "array", maxItems: 24, deprecated: true, description: "Deprecated compatibility alias for coverageLimitations.", items: { type: "string" } }
           }
         },
+        PreConsentRuntimePreview: {
+          type: "object",
+          additionalProperties: false,
+          required: ["type", "resultStage", "final", "sourceLane", "generatedAt", "runtimeCoverage", "summary", "cookies", "trackers", "truncated", "mustContinuePolling", "observationOnlyDisclaimer"],
+          properties: {
+            type: { type: "string", const: "certscore_pre_consent_preview" },
+            resultStage: { type: "string", const: "preliminary" },
+            final: { type: "boolean", const: false },
+            sourceLane: { type: "string", const: "runtime_evidence" },
+            generatedAt: { type: "string", format: "date-time" },
+            runtimeCoverage: {
+              type: "object",
+              additionalProperties: false,
+              required: ["status", "limitationKeys"],
+              properties: {
+                status: { type: "string", enum: ["usable", "limited_partial", "limited_none", "not_applicable"] },
+                limitationKeys: { type: "array", maxItems: 16, items: { type: "string", minLength: 1, maxLength: 120 } }
+              }
+            },
+            summary: {
+              type: "object",
+              additionalProperties: false,
+              required: ["cookieCount", "trackerCount", "thirdPartyRequestCount", "vendorCount"],
+              properties: {
+                cookieCount: { type: "integer", minimum: 0 },
+                returnedCookieCount: { type: "integer", minimum: 0, description: "Number of cookie identity rows included in this bounded preview." },
+                trackerCount: { type: "integer", minimum: 0, deprecated: true, description: "Compatibility alias for trackingVendorCount; not comparable to the completed inventory's broader trackerCount." },
+                trackingVendorCount: { type: "integer", minimum: 0, description: "Unique non-operational vendor/product/purpose observations captured at the checkpoint." },
+                returnedTrackingVendorCount: { type: "integer", minimum: 0, description: "Number of tracking-vendor identity rows included in this bounded preview." },
+                operationalVendorCount: { type: "integer", minimum: 0, description: "Unique infrastructure, security, and consent-management vendor observations captured separately from tracking vendors." },
+                returnedOperationalVendorCount: { type: "integer", minimum: 0 },
+                thirdPartyRequestCount: { type: "integer", minimum: 0 },
+                vendorCount: { type: "integer", minimum: 0 }
+              }
+            },
+            cookies: {
+              type: "array",
+              maxItems: 20,
+              items: {
+                type: "object",
+                additionalProperties: false,
+                required: ["name", "domain", "party", "purpose", "essentiality", "observedAtMs"],
+                properties: {
+                  name: { type: "string", minLength: 1, maxLength: 256 },
+                  domain: { type: ["string", "null"], minLength: 1, maxLength: 253 },
+                  party: { type: "string", enum: ["first_party", "third_party", "unknown"] },
+                  purpose: { type: "string", enum: ["analytics", "advertising", "marketing", "personalization", "session_replay", "consent_management", "tag_management", "infrastructure", "security", "performance_monitoring", "customer_support", "unknown"] },
+                  essentiality: { type: "string", enum: ["essential", "non_essential", "unknown"] },
+                  observedAtMs: { type: ["integer", "null"], minimum: 0 }
+                }
+              }
+            },
+            trackers: {
+              type: "array",
+              maxItems: 20,
+              items: {
+                type: "object",
+                additionalProperties: false,
+                required: ["vendor", "product", "purpose", "confidence", "domains"],
+                properties: {
+                  vendor: { type: "string", minLength: 1, maxLength: 160 },
+                  product: { type: ["string", "null"], minLength: 1, maxLength: 160 },
+                  purpose: { type: "string", enum: ["analytics", "advertising", "marketing", "personalization", "session_replay", "consent_management", "tag_management", "infrastructure", "security", "performance_monitoring", "customer_support", "unknown"] },
+                  confidence: { type: "number", minimum: 0, maximum: 1 },
+                  domains: { type: "array", maxItems: 8, items: { type: "string", minLength: 1, maxLength: 253 } }
+                }
+              }
+            },
+            operationalVendors: {
+              type: "array",
+              maxItems: 20,
+              description: "Infrastructure, security, and consent-management vendors observed separately from trackingVendorCount.",
+              items: {
+                type: "object",
+                additionalProperties: false,
+                required: ["vendor", "product", "purpose", "confidence", "domains"],
+                properties: {
+                  vendor: { type: "string", minLength: 1, maxLength: 160 },
+                  product: { type: ["string", "null"], minLength: 1, maxLength: 160 },
+                  purpose: { type: "string", enum: ["analytics", "advertising", "marketing", "personalization", "session_replay", "consent_management", "tag_management", "infrastructure", "security", "performance_monitoring", "customer_support", "unknown"] },
+                  confidence: { type: "number", minimum: 0, maximum: 1 },
+                  domains: { type: "array", maxItems: 8, items: { type: "string", minLength: 1, maxLength: 253 } }
+                }
+              }
+            },
+            truncated: {
+              type: "object",
+              additionalProperties: false,
+              required: ["cookies", "trackers"],
+              properties: { cookies: { type: "boolean" }, trackers: { type: "boolean" }, operationalVendors: { type: "boolean" } }
+            },
+            mustContinuePolling: { type: "boolean", const: true },
+            observationOnlyDisclaimer: { type: "string", minLength: 1, maxLength: 500 }
+          }
+        },
         ScanJob: {
           type: "object",
           additionalProperties: true,
@@ -774,6 +903,7 @@ export function buildCertScoreApiV2OpenApiDocument() {
             scoreUpdatedAt: { type: ["string", "null"], format: "date-time" },
             riskLevel: { type: ["string", "null"] },
             postRefusalObservation: { $ref: "#/components/schemas/PostRefusalObservation" },
+            preConsentPreview: { $ref: "#/components/schemas/PreConsentRuntimePreview" },
             coverage: { type: ["object", "null"], additionalProperties: true },
             lastUpdatedAt: { type: "string" },
             phaseStartedAt: { type: ["string", "null"] },
@@ -1112,7 +1242,20 @@ export function buildCertScoreApiV2OpenApiDocument() {
               required: ["rowCount", "trackerCount", "cookieCount", "requestCount"],
               properties: {
                 rowCount: { type: "integer", minimum: 0 },
-                trackerCount: { type: "integer", minimum: 0 },
+                trackerCount: { type: "integer", minimum: 0, description: "Canonical inventory rows with kind=tracker, including operational categories." },
+                trackerCountScope: { type: "string", const: "canonical_inventory_rows_including_operational" },
+                trackerCategoryCounts: {
+                  type: "object",
+                  additionalProperties: false,
+                  required: ["advertising", "analytics", "essential", "functional", "review"],
+                  properties: {
+                    advertising: { type: "integer", minimum: 0 },
+                    analytics: { type: "integer", minimum: 0 },
+                    essential: { type: "integer", minimum: 0 },
+                    functional: { type: "integer", minimum: 0 },
+                    review: { type: "integer", minimum: 0 }
+                  }
+                },
                 cookieCount: { type: "integer", minimum: 0 },
                 requestCount: { type: "integer", minimum: 0 }
               }

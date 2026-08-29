@@ -3,7 +3,7 @@ import { certScoreMcpToolContracts, isCanonicalScanId } from "@certscore/api-con
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import type { RequestInfo } from "@modelcontextprotocol/sdk/types.js";
 import { CERTSCORE_MCP_VERSION } from "./version.js";
-import { boundEvidencePacket, buildScanBundle, exportFindings, findingListText, limitPreConsentRows, markdownReportText, MAX_EVIDENCE_PACKET_CHARS, normalizeDetail, normalizeFormat, paginateFindingList, preConsentInventoryText, pulseReportText, scanBundleText, scanStatusText, toInvalidArgumentsToolError, toInvalidScanIdToolError, toToolError, toToolResult, withMcpAgentGuidance, withMcpScanProvenanceGuidance } from "./tools.js";
+import { boundEvidencePacket, buildScanBundle, exportFindings, findingListText, limitPreConsentRows, markdownReportText, MAX_EVIDENCE_PACKET_CHARS, normalizeDetail, normalizeFormat, paginateFindingList, preConsentInventoryText, pulseReportText, scanBundleText, scanSiteText, scanStatusText, toInvalidArgumentsToolError, toInvalidScanIdToolError, toToolError, toToolResult, withMcpAgentGuidance, withMcpScanProvenanceGuidance } from "./tools.js";
 
 export interface CertScoreMcpOptions {
   apiKey?: string;
@@ -15,6 +15,7 @@ export interface CertScoreMcpOptions {
   anonymousSurface?: "mcp_light" | "mcp_anonymous" | null;
   timeout?: number;
   toolProfile?: "full" | "light";
+  initialPreConsentPreviewWaitMs?: number;
   exampleDomainDemoUrl?: string | null;
   onToolInvocation?: (
     observation: McpToolInvocationObservation,
@@ -73,6 +74,10 @@ export type McpToolInvocationObservation = {
 };
 
 const LIGHT_MCP_BUNDLE_RESPONSE_CEILING_BYTES = 25_000;
+const MCP_SCAN_SITE_TARGET_RESPONSE_MS = 11_000;
+const MCP_SCAN_SITE_TARGET_RESPONSE_RESERVE_MS = 250;
+const MCP_SCAN_SITE_PREVIEW_POLL_INTERVAL_MS = 750;
+const MCP_SCAN_SITE_MAX_PREVIEW_WAIT_MS = 10_000;
 
 type ExampleDomainDemoSubstitution = {
   requestedUrl: string;
@@ -106,10 +111,9 @@ function withExampleDomainDemo<T extends Record<string, any>>(value: T, substitu
 }
 
 function exampleDomainDemoText(value: Record<string, any>, substitution: ExampleDomainDemoSubstitution | null) {
-  if (!substitution) return undefined;
-  const status = typeof value.status === "string" ? ` Status=${value.status}.` : "";
-  const scanId = typeof value.scanId === "string" ? ` ScanId=${value.scanId}.` : "";
-  return `${substitution.message}${status}${scanId} Full result and substitution provenance are in structuredContent.`;
+  return scanSiteText(value, substitution
+    ? [`${substitution.message} Substitution provenance is in structuredContent.`]
+    : []);
 }
 
 async function retryTransientOriginFailure<T>(operation: () => Promise<T>): Promise<T> {
@@ -122,6 +126,33 @@ async function retryTransientOriginFailure<T>(operation: () => Promise<T>): Prom
     }
     return operation();
   }
+}
+
+function scanCreationMetadata(value: Record<string, unknown>) {
+  return {
+    executionMode: value.executionMode,
+    reused: value.reused,
+    reusedScanAgeSeconds: value.reusedScanAgeSeconds,
+    freshnessDecision: value.freshnessDecision,
+    quotaConsumed: value.quotaConsumed,
+    anonymousQuotaLimit: value.anonymousQuotaLimit,
+    anonymousQuotaRemaining: value.anonymousQuotaRemaining,
+    anonymousQuotaResetAt: value.anonymousQuotaResetAt,
+    upgradeSupportEmail: value.upgradeSupportEmail,
+    upgradeMessage: value.upgradeMessage
+  };
+}
+
+function activeScan(value: Record<string, unknown>) {
+  return value.status === "queued" || value.status === "running" || value.status === "finalizing";
+}
+
+function hasPreConsentPreview(value: Record<string, unknown>) {
+  return Boolean(value.preConsentPreview && typeof value.preConsentPreview === "object" && !Array.isArray(value.preConsentPreview));
+}
+
+function delay(ms: number) {
+  return new Promise<void>((resolve) => setTimeout(resolve, ms));
 }
 
 function toolContract(name: CertScoreMcpToolName): any {
@@ -366,7 +397,8 @@ export function createCertScoreMcpServer(options: CertScoreMcpOptions = {}) {
     "certscore_scan_site",
     toolContract("certscore_scan_site"),
     async (input: CreateScanInput, extra: McpRequestExtra) => {
-      const creationStartedAtMs = Date.now();
+      const toolStartedAtMs = Date.now();
+      const creationStartedAtMs = toolStartedAtMs;
       const client = clientForRequest(extra);
       const demoSubstitution = exampleDomainDemoSubstitution(input.url, options.exampleDomainDemoUrl);
       const effectiveUrl = demoSubstitution?.effectiveUrl ?? input.url;
@@ -383,7 +415,71 @@ export function createCertScoreMcpServer(options: CertScoreMcpOptions = {}) {
           reused: created.reused === true,
           status: created.status ?? null,
         }));
-        const guided = withExampleDomainDemo(withMcpAgentGuidance(created as unknown as Record<string, any>), demoSubstitution);
+        let initialResult = created as unknown as Record<string, any>;
+        const stableScanId = typeof created.scanId === "string" && created.scanId
+          ? created.scanId
+          : typeof created.scan_id === "string" && created.scan_id
+            ? created.scan_id
+            : typeof created.jobId === "string" && created.jobId
+              ? created.jobId
+              : null;
+        const configuredPreviewWaitMs = options.toolProfile === "light"
+          ? Math.min(
+              Math.max(0, options.initialPreConsentPreviewWaitMs ?? 10_000),
+              MCP_SCAN_SITE_MAX_PREVIEW_WAIT_MS,
+            )
+          : 0;
+        const totalRemainingMs = Math.max(
+          0,
+          toolStartedAtMs + MCP_SCAN_SITE_TARGET_RESPONSE_MS - MCP_SCAN_SITE_TARGET_RESPONSE_RESERVE_MS - Date.now(),
+        );
+        const previewWaitMs = Math.min(configuredPreviewWaitMs, totalRemainingMs);
+        if (stableScanId && previewWaitMs > 0 && activeScan(initialResult)) {
+          const previewWaitStartedAtMs = Date.now();
+          const previewDeadlineMs = previewWaitStartedAtMs + previewWaitMs;
+          let internalReadCount = 0;
+          try {
+            while (Date.now() < previewDeadlineMs && activeScan(initialResult) && !hasPreConsentPreview(initialResult)) {
+              await delay(Math.min(MCP_SCAN_SITE_PREVIEW_POLL_INTERVAL_MS, previewDeadlineMs - Date.now()));
+              const requestRemainingMs = previewDeadlineMs - Date.now();
+              if (requestRemainingMs <= 0) break;
+              const waitAbortController = new AbortController();
+              const waitAbortTimer = setTimeout(() => waitAbortController.abort(), requestRemainingMs);
+              try {
+                internalReadCount += 1;
+                const status = await client.scans.status(stableScanId, {
+                  internalMcpOperation: { operation: "scan_site_wait", scanId: stableScanId },
+                  signal: waitAbortController.signal,
+                });
+                initialResult = {
+                  ...status,
+                  ...scanCreationMetadata(created as unknown as Record<string, unknown>),
+                } as Record<string, any>;
+              } finally {
+                clearTimeout(waitAbortTimer);
+              }
+            }
+          } catch (error) {
+            console.warn(JSON.stringify({
+              event: "mcp.certscore_scan_site.preview_wait_deferred",
+              durationMs: Date.now() - previewWaitStartedAtMs,
+              errorName: error instanceof Error ? error.name : "UnknownError",
+              hasPreview: hasPreConsentPreview(initialResult),
+              internalReadCount,
+              scanId: stableScanId,
+            }));
+          }
+          console.log(JSON.stringify({
+            event: "mcp.certscore_scan_site.preview_wait_completed",
+            durationMs: Date.now() - previewWaitStartedAtMs,
+            hasPreview: hasPreConsentPreview(initialResult),
+            internalReadCount,
+            scanId: stableScanId,
+            status: initialResult.status ?? null,
+            totalDurationMs: Date.now() - toolStartedAtMs,
+          }));
+        }
+        const guided = withExampleDomainDemo(withMcpAgentGuidance(initialResult), demoSubstitution);
         return toToolResult(guided, exampleDomainDemoText(guided, demoSubstitution));
       } catch (error) {
         console.warn(JSON.stringify({

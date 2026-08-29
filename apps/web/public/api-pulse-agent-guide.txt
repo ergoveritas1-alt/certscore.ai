@@ -103,14 +103,15 @@ REST API scan creation and TypeScript SDK workflows usually need scan:read and s
 MCP read tools usually need scan:read and mcp. MCP scan creation also needs scan:create.
 
 MCP workflow:
-1. certscore_scan_site with a public URL. It waits up to 45 seconds for completion by default.
-2. certscore_get_scan_status only when certscore_scan_site returns a non-terminal job; prefer the stable scanId.
-3. certscore_get_scan_bundle for canonical status, compact findings, bounded evidence, and pre-consent inventory.
+1. certscore_scan_site with a public URL. A newly accepted scan returns its stable scanId and may include a partial preConsentPreview when the runtime lane completes or reaches its six-second checkpoint; otherwise it falls back to the stable scanId alone.
+2. Treat preConsentPreview only as partial checkpoint context. Distinguish captured totals from bounded returned identities. trackingVendorCount excludes operational, security, and consent-management vendors, which are returned separately; do not compare the preview trackerCount with the completed inventory's broader trackerCount.
+3. certscore_get_scan_status while certscore_scan_site remains non-terminal; use only the stable scanId and never poll in parallel.
+4. After completed or completed_limited, call certscore_get_scan_bundle before reporting full scan results. Use the bundle for the completed scan's final returned tally, canonical status, compact findings, bounded evidence, and limitations.
 
 For a confirmed postRefusalObservation, report its typed interpretation directly. termination.kind=evidence_satisfied means the observer intentionally stopped after retaining qualifying evidence; it does not make the confirmed observation inconclusive. Keep coverageLimitations scoped to additional behavior or persistence that was not measured. Determine scan reuse only from returned provenance fields such as executionMode, reused, and freshnessDecision.
-4. Fetch report, evidence, certscore_list_findings, or cookie inventory only when the task needs that dedicated view.
-5. certscore_explain_finding for evidence summaries, caveats, and next steps.
-6. certscore_get_latest_domain_scan to find the latest eligible public scan for a domain.
+5. Fetch report, evidence, certscore_list_findings, or cookie inventory only when the task needs that dedicated view.
+6. certscore_explain_finding for evidence summaries, caveats, and next steps.
+7. certscore_get_latest_domain_scan to find the latest eligible public scan for a domain.
 
 certscore_scan_site reports reused, freshnessDecision, quotaConsumed, anonymousQuotaRemaining, anonymousQuotaResetAt, and recommendedNextTool.
 

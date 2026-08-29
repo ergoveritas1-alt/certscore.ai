@@ -117,6 +117,48 @@ test("API v2 lightweight status never promotes completed work before its report 
   assert.equal(response.scoreStatus, "provisional");
 });
 
+test("API v2 lightweight status exposes a persisted preview without promoting the active scan", async () => {
+  const build = await getBuildLightweightApiV2ScanStatusInput();
+  const response = build(projection({
+    completedAt: null,
+    preConsentPreview: {
+      type: "certscore_pre_consent_preview",
+      resultStage: "preliminary",
+      final: false,
+      sourceLane: "runtime_evidence",
+      generatedAt: "2026-08-28T18:00:03.000Z",
+      runtimeCoverage: { status: "usable", limitationKeys: [] },
+      summary: { cookieCount: 1, trackerCount: 1, thirdPartyRequestCount: 1, vendorCount: 1 },
+      cookies: [{
+        name: "_ga",
+        domain: "example.com",
+        party: "first_party",
+        purpose: "analytics",
+        essentiality: "non_essential",
+        observedAtMs: 1_200,
+      }],
+      trackers: [{
+        vendor: "Google",
+        product: "Google Analytics",
+        purpose: "analytics",
+        confidence: 0.96,
+        domains: ["www.google-analytics.com"],
+      }],
+      truncated: { cookies: false, trackers: false },
+      mustContinuePolling: true,
+      observationOnlyDisclaimer: "Preliminary passive observations only; continue polling for the canonical result.",
+    },
+    reportReady: false,
+    status: "running",
+  }));
+
+  assert.equal(response.status, "running");
+  assert.equal(response.score, null);
+  assert.equal(response.preConsentPreview?.final, false);
+  assert.equal(response.preConsentPreview?.mustContinuePolling, true);
+  assert.equal(response.preConsentPreview?.summary.cookieCount, 1);
+});
+
 test("API v2 lightweight status exposes only persisted terminal score metadata", async () => {
   const build = await getBuildLightweightApiV2ScanStatusInput();
   const response = build(projection({

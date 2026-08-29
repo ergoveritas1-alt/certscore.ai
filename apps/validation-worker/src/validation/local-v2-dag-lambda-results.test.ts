@@ -6,16 +6,97 @@ import os from "node:os";
 import path from "node:path";
 import { Readable } from "node:stream";
 import test from "node:test";
+import { VERIFIED_PRE_CONSENT_RUNTIME_PREVIEW_PACKET_VERSION } from "@certscore/contracts";
 import {
   getLambdaResultTargetEnvironment,
   getManualSmokeResultScanId,
   isCanonicalResultFinalizationEligible,
   isRecoverableLateResultFailure,
+  isRuntimePreviewReadyMessage,
   mirrorLocalV2DagLambdaArtifacts,
   parseLambdaResultMessage,
   productionArtifactChainRejectReason,
+  verifyPreConsentRuntimePreviewPacket,
   verifyProductionArtifactChain,
+  type LambdaRuntimePreviewMessage,
 } from "./local-v2-dag-lambda-results";
+
+test("validation worker verifies the preliminary runtime packet checksum, identity, contract, and source hash", () => {
+  const scanId = "00000000-0000-4000-8000-000000000123";
+  const unsignedPacket = {
+    artifactOnly: true as const,
+    contractVersion: VERIFIED_PRE_CONSENT_RUNTIME_PREVIEW_PACKET_VERSION,
+    normalizedUrl: "https://example.com/",
+    preview: {
+      type: "certscore_pre_consent_preview" as const,
+      resultStage: "preliminary" as const,
+      final: false as const,
+      sourceLane: "runtime_evidence" as const,
+      generatedAt: "2026-08-28T18:00:03.000Z",
+      runtimeCoverage: { status: "usable" as const, limitationKeys: [] },
+      summary: { cookieCount: 1, trackerCount: 1, thirdPartyRequestCount: 1, vendorCount: 1 },
+      cookies: [{
+        name: "_ga",
+        domain: "example.com",
+        party: "first_party" as const,
+        purpose: "analytics" as const,
+        essentiality: "non_essential" as const,
+        observedAtMs: 1_200,
+      }],
+      trackers: [{
+        vendor: "Google",
+        product: "Google Analytics",
+        purpose: "analytics" as const,
+        confidence: 0.96,
+        domains: ["www.google-analytics.com"],
+      }],
+      truncated: { cookies: false, trackers: false },
+      mustContinuePolling: true as const,
+      observationOnlyDisclaimer: "Preliminary passive observations only; continue polling for the canonical result.",
+    },
+    productionFindingIntegration: false as const,
+    scanId,
+  };
+  const sourceHash = createHash("sha256").update(JSON.stringify(unsignedPacket)).digest("hex");
+  const packet = { ...unsignedPacket, sourceHash };
+  const body = Buffer.from(`${JSON.stringify(packet, null, 2)}\n`, "utf8");
+  const message: LambdaRuntimePreviewMessage = {
+    artifactMetadata: {
+      sha256: createHash("sha256").update(body).digest("hex"),
+      sizeBytes: body.byteLength,
+    },
+    artifactOnly: true,
+    artifactPointer: "s3://certscore-production-artifacts/v2/scan/VerifiedPreConsentRuntimePreviewPacket.json",
+    contractVersion: "certscore.v2.lambda-runtime-preview-ready.v1",
+    generatedAt: packet.preview.generatedAt,
+    messageKind: "runtime_preview_ready",
+    processor: "local-certscore-v2-dag-parallel-v1",
+    productionFindingIntegration: false,
+    scanId,
+    sourceHash,
+    targetEnvironment: "production",
+  };
+
+  assert.equal(isRuntimePreviewReadyMessage(JSON.stringify(message)), true);
+  assert.deepEqual(verifyPreConsentRuntimePreviewPacket({ body, message }), packet);
+
+  const invalidPacket = { ...packet, sourceHash: "0".repeat(64) };
+  const invalidBody = Buffer.from(JSON.stringify(invalidPacket), "utf8");
+  assert.throws(
+    () => verifyPreConsentRuntimePreviewPacket({
+      body: invalidBody,
+      message: {
+        ...message,
+        artifactMetadata: {
+          sha256: createHash("sha256").update(invalidBody).digest("hex"),
+          sizeBytes: invalidBody.byteLength,
+        },
+        sourceHash: invalidPacket.sourceHash,
+      },
+    }),
+    /source hash did not verify/,
+  );
+});
 
 test("canonical result finalization accepts only verified production completions", () => {
   assert.equal(isCanonicalResultFinalizationEligible({

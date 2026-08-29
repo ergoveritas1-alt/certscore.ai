@@ -49,6 +49,15 @@ function toolResultSummary(payload: unknown) {
   const status = typeof record.status === "string" ? `; status=${record.status}` : "";
   const scanId = typeof record.scanId === "string" ? `; scanId=${record.scanId}` : "";
   const score = typeof record.score === "number" ? `; CertScore score=${record.score}` : "";
+  const preview = record.preConsentPreview && typeof record.preConsentPreview === "object" && !Array.isArray(record.preConsentPreview)
+    ? record.preConsentPreview as Record<string, unknown>
+    : null;
+  const previewSummary = preview?.summary && typeof preview.summary === "object" && !Array.isArray(preview.summary)
+    ? preview.summary as Record<string, unknown>
+    : null;
+  const preliminary = preview
+    ? `; preliminary pre-consent preview=cookies ${previewSummary?.cookieCount ?? "unknown"}, trackers ${previewSummary?.trackerCount ?? "unknown"}, third-party requests ${previewSummary?.thirdPartyRequestCount ?? "unknown"}; preview is not final—continue status polling`
+    : "";
   const recordLinks = record.links && typeof record.links === "object" && !Array.isArray(record.links)
     ? record.links as Record<string, unknown>
     : null;
@@ -68,7 +77,7 @@ function toolResultSummary(payload: unknown) {
     : typeof provenanceRecord?.mode === "string"
       ? `; provenance=${provenanceRecord.mode}`
       : "";
-  return `CertScore ${type}${status}${scanId}${score}${provenance}${report}. Full result is in structuredContent.`;
+  return `CertScore ${type}${status}${scanId}${score}${preliminary}${provenance}${report}. Full result is in structuredContent.`;
 }
 
 export function toToolResult(payload: unknown, text?: string): CallToolResult {
@@ -323,6 +332,11 @@ export function withMcpAgentGuidance<T extends Record<string, any>>(value: T, fa
     : typeof value.scan_id === "string" && value.scan_id.trim()
       ? value.scan_id.trim()
       : null;
+  const hasPreConsentPreview = Boolean(
+    value.preConsentPreview &&
+    typeof value.preConsentPreview === "object" &&
+    !Array.isArray(value.preConsentPreview),
+  );
   const reportUrl = usable
     ? typeof value.reportUrl === "string" && value.reportUrl.trim()
       ? value.reportUrl.trim()
@@ -330,8 +344,13 @@ export function withMcpAgentGuidance<T extends Record<string, any>>(value: T, fa
         ? value.links.report.trim()
         : stableScanId
           ? `https://certscore.ai/scan/${encodeURIComponent(stableScanId)}`
-          : null
+      : null
     : null;
+  const returnedNextAction = typeof value.recommendedNextAction === "string" && value.recommendedNextAction.trim()
+    ? value.recommendedNextAction.trim()
+    : null;
+  const activePollAction = returnedNextAction ?? `${retryAfterSeconds === null ? "Wait for the recommended delay" : `Wait at least ${retryAfterSeconds} seconds`}, then call certscore_get_scan_status once with scanId ${stableScanId ?? value.jobId}.`;
+  const activeNextAction = `${hasPreConsentPreview ? "The returned preConsentPreview is a partial preview of passive evidence. Its counts are checkpoint-only partial counts, not the full scan tally; do not present them as final totals or stop the workflow. " : ""}${activePollAction} Continue with certscore_get_scan_status using the unchanged scanId ${stableScanId ?? value.jobId}. Do not poll in parallel or resubmit certscore_scan_site while this scan is active. After completed or completed_limited, call certscore_get_scan_bundle for the completed scan's final returned tally, canonical findings, and limitations.`;
   return {
     ...value,
     error,
@@ -340,11 +359,11 @@ export function withMcpAgentGuidance<T extends Record<string, any>>(value: T, fa
     provenance: scanProvenance(value, fallbackProvenanceMode),
     interpretationGuidance: interpretationGuidance(),
     recommendedNextTool: active ? "certscore_get_scan_status" : usable ? "certscore_get_scan_bundle" : null,
-    recommendedNextAction: error?.recommendedNextAction ?? value.recommendedNextAction ?? (active
-      ? `${retryAfterSeconds === null ? "Wait for the recommended delay" : `Wait at least ${retryAfterSeconds} seconds`}, then call certscore_get_scan_status once with scanId ${stableScanId ?? value.jobId}. Do not poll in parallel or resubmit certscore_scan_site while this scan is active.`
-      : usable
-        ? `Call certscore_get_scan_bundle with scanId ${stableScanId ?? value.jobId} for the canonical findings and limitations.`
-        : "Review the result and retained limitations."),
+    recommendedNextAction: error?.recommendedNextAction ?? (active
+      ? activeNextAction
+      : returnedNextAction ?? (usable
+        ? `Call certscore_get_scan_bundle with scanId ${stableScanId ?? value.jobId} for the completed scan's final returned tally, canonical findings, and limitations.`
+        : "Review the result and retained limitations.")),
     observationOnlyDisclaimer: OBSERVATION_ONLY_DISCLAIMER
   };
 }
@@ -1059,14 +1078,140 @@ function canonicalScanProvenanceText(value: Record<string, any>) {
 
 export function scanStatusText(value: Record<string, any>) {
   const reportUrl = reportUrlFor(value);
-  return [
+  return boundedPreviewResultText([
     `CertScore scan status: status=${value.status ?? "unknown"}.`,
+  ], preConsentPreviewTextLines(value), [
     canonicalScanProvenanceText(value),
     `Full report: ${reportUrl ?? "not available"}.`,
     OBSERVATION_ONLY_DISCLAIMER,
     INTERPRETATION_STATEMENT,
     SCAN_PROVENANCE_GROUNDING
-  ].join("\n");
+  ]);
+}
+
+export function scanSiteText(value: Record<string, any>, leadingLines: string[] = []) {
+  const scanId = extractScanId(value) ?? "unknown";
+  const active = value.status === "queued" || value.status === "running" || value.status === "finalizing";
+  const nextAction = typeof value.recommendedNextAction === "string" && value.recommendedNextAction.trim()
+    ? value.recommendedNextAction.trim()
+    : active
+      ? `Call certscore_get_scan_status sequentially with scanId ${scanId}; do not resubmit certscore_scan_site.`
+      : "Review the returned result and retained limitations.";
+  return boundedPreviewResultText([...leadingLines,
+    `CertScore scan accepted: scanId=${scanId}; status=${value.status ?? "unknown"}.`,
+  ], preConsentPreviewTextLines(value), [
+    `Next: ${nextAction}`,
+    `Provenance: retrieval=${value.provenance?.retrievalMode ?? "unknown"}; creation=${value.provenance?.creationDecision ?? "unknown"}.`,
+    canonicalScanProvenanceText(value),
+    OBSERVATION_ONLY_DISCLAIMER,
+    INTERPRETATION_STATEMENT,
+  ]);
+}
+
+function compactPreviewValue(value: unknown, fallback = "unknown", maxChars = 280) {
+  if (value === null || value === undefined) return fallback;
+  const normalized = String(value).replace(/\s+/g, " ").trim();
+  if (!normalized) return fallback;
+  return normalized.length > maxChars ? `${normalized.slice(0, Math.max(1, maxChars - 1))}…` : normalized;
+}
+
+function previewObservedTiming(value: unknown) {
+  return typeof value === "number" && Number.isFinite(value) && value >= 0
+    ? `${Math.round(value)}ms (t+${(value / 1_000).toFixed(3)}s)`
+    : "unavailable";
+}
+
+function preConsentPreviewTextLines(value: Record<string, any>) {
+  const preview = value.preConsentPreview && typeof value.preConsentPreview === "object" && !Array.isArray(value.preConsentPreview)
+    ? value.preConsentPreview as Record<string, any>
+    : null;
+  if (!preview) return [];
+  const cookies = Array.isArray(preview.cookies) ? preview.cookies : [];
+  const trackers = Array.isArray(preview.trackers) ? preview.trackers : [];
+  const operationalVendors = Array.isArray(preview.operationalVendors) ? preview.operationalVendors : [];
+  const summary = preview.summary && typeof preview.summary === "object" && !Array.isArray(preview.summary)
+    ? preview.summary as Record<string, unknown>
+    : {};
+  const coverage = preview.runtimeCoverage && typeof preview.runtimeCoverage === "object" && !Array.isArray(preview.runtimeCoverage)
+    ? preview.runtimeCoverage as Record<string, unknown>
+    : {};
+  const capturedCookieCount = summary.cookieCount ?? cookies.length;
+  const returnedCookieCount = summary.returnedCookieCount ?? cookies.length;
+  const capturedTrackingVendorCount = summary.trackingVendorCount ?? summary.trackerCount ?? trackers.length;
+  const returnedTrackingVendorCount = summary.returnedTrackingVendorCount ?? trackers.length;
+  const capturedOperationalVendorCount = summary.operationalVendorCount ?? operationalVendors.length;
+  const returnedOperationalVendorCount = summary.returnedOperationalVendorCount ?? operationalVendors.length;
+  const lines = [
+    `Partial pre-consent runtime preview: generated=${compactPreviewValue(preview.generatedAt, "unavailable", 80)}; lane=${compactPreviewValue(preview.sourceLane, "runtime_evidence", 80)}; coverage=${compactPreviewValue(coverage.status, "unknown", 80)}; cookies captured=${capturedCookieCount}; cookie identities returned=${returnedCookieCount}; tracking vendors captured=${capturedTrackingVendorCount}; tracking vendor identities returned=${returnedTrackingVendorCount}; operational/security/consent vendors captured=${capturedOperationalVendorCount}; operational identities returned=${returnedOperationalVendorCount}; all classified vendor observations=${summary.vendorCount ?? "unknown"}; third-party requests=${summary.thirdPartyRequestCount ?? "unknown"}.`,
+    "PARTIAL PREVIEW: These are checkpoint-only partial counts, not the full scan tally. Do not present them as final totals or stop the workflow. Wait for terminal scan status, then call certscore_get_scan_bundle for the completed scan's final returned tally, canonical findings, and coverage limitations.",
+    "Metric scope: tracking vendors exclude operational, security, and consent-management vendors. The completed inventory's broader trackerCount may include those categories, so do not compare that field directly with trackingVendorCount.",
+  ];
+  if (cookies.length > 0) {
+    lines.push("Cookies observed before a consent choice (metadata only; no cookie values):");
+    for (const candidate of cookies) {
+      const cookie = candidate && typeof candidate === "object" && !Array.isArray(candidate)
+        ? candidate as Record<string, unknown>
+        : {};
+      lines.push(`- Cookie ${compactPreviewValue(cookie.name, "unnamed", 256)}; domain=${compactPreviewValue(cookie.domain, "unavailable", 253)}; party=${compactPreviewValue(cookie.party, "unknown", 40)}; category/purpose=${compactPreviewValue(cookie.purpose, "unknown", 80)}; essentiality=${compactPreviewValue(cookie.essentiality, "unknown", 40)}; observedAtMs=${previewObservedTiming(cookie.observedAtMs)}.`);
+    }
+  } else {
+    lines.push("Cookies observed before a consent choice: none returned in this preliminary preview.");
+  }
+  if (trackers.length > 0) {
+    lines.push("Tracking vendors/products observed before a consent choice:");
+    for (const candidate of trackers) {
+      const tracker = candidate && typeof candidate === "object" && !Array.isArray(candidate)
+        ? candidate as Record<string, unknown>
+        : {};
+      const domains = Array.isArray(tracker.domains)
+        ? tracker.domains.map((domain) => compactPreviewValue(domain, "unknown", 253)).join(", ")
+        : "none returned";
+      lines.push(`- Tracking vendor ${compactPreviewValue(tracker.vendor, "unknown", 160)}; product=${compactPreviewValue(tracker.product, "unavailable", 160)}; category/purpose=${compactPreviewValue(tracker.purpose, "unknown", 80)}; confidence=${compactPreviewValue(tracker.confidence, "unknown", 20)}; domains=${compactPreviewValue(domains, "none returned", 800)}.`);
+    }
+    lines.push("Tracker timing: per-tracker first-seen milliseconds are not part of the preliminary preview contract; do not infer them from cookie timing.");
+  } else {
+    lines.push("Tracking vendors/products observed before a consent choice: none returned in this partial preview.");
+  }
+  if (operationalVendors.length > 0) {
+    lines.push("Operational, security, or consent-management vendors observed (separate from trackingVendorCount):");
+    for (const candidate of operationalVendors) {
+      const vendor = candidate && typeof candidate === "object" && !Array.isArray(candidate)
+        ? candidate as Record<string, unknown>
+        : {};
+      const domains = Array.isArray(vendor.domains)
+        ? vendor.domains.map((domain) => compactPreviewValue(domain, "unknown", 253)).join(", ")
+        : "none returned";
+      lines.push(`- Operational vendor ${compactPreviewValue(vendor.vendor, "unknown", 160)}; product=${compactPreviewValue(vendor.product, "unavailable", 160)}; category/purpose=${compactPreviewValue(vendor.purpose, "unknown", 80)}; confidence=${compactPreviewValue(vendor.confidence, "unknown", 20)}; domains=${compactPreviewValue(domains, "none returned", 800)}.`);
+    }
+  }
+  if (
+    String(capturedCookieCount) !== String(returnedCookieCount) ||
+    String(capturedTrackingVendorCount) !== String(returnedTrackingVendorCount) ||
+    String(capturedOperationalVendorCount) !== String(returnedOperationalVendorCount)
+  ) {
+    lines.push(`Preview identity lists are bounded: ${capturedCookieCount} cookies captured/${returnedCookieCount} identities returned; ${capturedTrackingVendorCount} tracking vendors captured/${returnedTrackingVendorCount} identities returned; ${capturedOperationalVendorCount} operational vendors captured/${returnedOperationalVendorCount} identities returned. Use captured counts for checkpoint coverage and returned arrays for names.`);
+  }
+  const disclaimer = typeof preview.observationOnlyDisclaimer === "string" && preview.observationOnlyDisclaimer.trim()
+    ? preview.observationOnlyDisclaimer.trim()
+    : "Preliminary passive observations only; not findings, a score, or a final result.";
+  lines.push(`${compactPreviewValue(disclaimer, "Preliminary passive observations only.", 500)} Continue sequential status polling until terminal status; at completed or completed_limited, retrieve certscore_get_scan_bundle before reporting the full scan results or final returned tally.`);
+  return lines;
+}
+
+function boundedPreviewResultText(prefix: string[], bodyLines: string[], suffix: string[]) {
+  const lines = [...prefix];
+  let rendered = 0;
+  for (const line of bodyLines) {
+    if ([...lines, line, ...suffix].join("\n").length > MAX_TOOL_TEXT_CHARS) break;
+    lines.push(line);
+    rendered += 1;
+  }
+  if (rendered < bodyLines.length) {
+    const omitted = `${bodyLines.length - rendered} additional preliminary preview line${bodyLines.length - rendered === 1 ? " was" : "s were"} omitted from TextContent to preserve the size limit; all bounded rows remain in structuredContent.`;
+    if ([...lines, omitted, ...suffix].join("\n").length <= MAX_TOOL_TEXT_CHARS) lines.push(omitted);
+  }
+  lines.push(...suffix);
+  return lines.join("\n");
 }
 
 function boundedResultText(header: string, bodyLines: string[], value: Record<string, any>) {

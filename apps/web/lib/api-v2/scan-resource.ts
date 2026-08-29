@@ -106,6 +106,7 @@ type PulseStatusLike = {
   resultDisposition?: "no_go";
   noGo?: ScanNoGoResult;
   postRefusalObservation?: ApiV2ScanResource["postRefusalObservation"];
+  preConsentPreview?: ApiV2ScanJob["preConsentPreview"];
   error?: {
     code: string;
     message: string;
@@ -1048,6 +1049,7 @@ export function buildApiV2ScanJobFromPulseStatus(
     status: normalizedStatus,
     ...(status.resultDisposition ? { resultDisposition: status.resultDisposition } : {}),
     ...(status.noGo ? { noGo: status.noGo } : {}),
+    ...(status.preConsentPreview ? { preConsentPreview: status.preConsentPreview } : {}),
     phase: status.phase ?? (
       normalizedStatus === "completed" || normalizedStatus === "completed_limited"
         ? "completed"
@@ -1482,6 +1484,14 @@ export function buildApiV2PreConsentCookiesTrackers(scanRecord: ScanDetailRespon
     (row.cookieDetails ?? []).map((cookie) => `${cookie.name}\u0000${cookie.domain ?? ""}`)
   ));
   const uniqueDomains = new Set(rows.flatMap((row) => row.domains ?? (row.host ? [row.host] : [])));
+  const trackerRows = rows.filter((row) => row.kind === "tracker");
+  const trackerCategoryCounts = {
+    advertising: trackerRows.filter((row) => row.category === "Advertising").length,
+    analytics: trackerRows.filter((row) => row.category === "Analytics").length,
+    essential: trackerRows.filter((row) => row.category === "Essential").length,
+    functional: trackerRows.filter((row) => row.category === "Functional").length,
+    review: trackerRows.filter((row) => !["Advertising", "Analytics", "Essential", "Functional"].includes(row.category)).length,
+  };
   const resource = {
     type: "certscore_pre_consent_cookies_trackers",
     scanId: scan.id,
@@ -1489,7 +1499,9 @@ export function buildApiV2PreConsentCookiesTrackers(scanRecord: ScanDetailRespon
     generatedAt: dateStringOrNull(scan.completedAt ?? scan.startedAt ?? scan.createdAt) ?? new Date(0).toISOString(),
     summary: {
       rowCount: rows.length,
-      trackerCount: rows.filter((row) => row.kind === "tracker").length,
+      trackerCount: trackerRows.length,
+      trackerCountScope: "canonical_inventory_rows_including_operational" as const,
+      trackerCategoryCounts,
       cookieCount: uniqueCookieKeys.size,
       requestCount: rows.reduce((total, row) => total + (row.requestCount ?? 0), 0),
       vendorCount: rows.length,
