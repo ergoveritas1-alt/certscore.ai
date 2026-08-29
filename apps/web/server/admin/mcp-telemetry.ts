@@ -218,7 +218,7 @@ function internalQaMcpTrafficFilter(alias: string, emailParameter: string, reque
   return `and not (
     ${prefix}is_canary
     or lower(coalesce(${prefix}client_name, '')) = any(${clientNameParameter}::text[])
-    or coalesce(${prefix}requester_ip::text, '') = any(${requesterIpParameter}::text[])
+    or coalesce(host(${prefix}requester_ip), '') = any(${requesterIpParameter}::text[])
     or coalesce(${prefix}scan_id = any(array(
       select request.scan_id::text
         from public.pulse_requests request

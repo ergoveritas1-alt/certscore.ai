@@ -64,6 +64,11 @@ test("the Internal / QA identity list contains the requested exact identities", 
     assert.match(repository, /INTERNAL_QA_REQUESTER_IPS/);
     assert.match(repository, /INTERNAL_QA_MCP_CLIENT_NAMES/);
   }
+
+  assert.match(mcpRepository, /host\(\$\{prefix\}requester_ip\)/);
+  assert.match(analyticsRepository, /host\(events\.requester_ip\)/);
+  assert.doesNotMatch(mcpRepository, /requester_ip::text, ''\) = any\(\$\{requesterIpParameter\}/);
+  assert.doesNotMatch(analyticsRepository, /to_jsonb\(events\) ->> 'requester_ip', ''\) = any/);
 });
 
 test("all four pages render the same minimal auto-applying traffic dropdown", () => {

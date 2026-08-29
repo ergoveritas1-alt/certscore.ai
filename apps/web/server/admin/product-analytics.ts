@@ -291,7 +291,7 @@ function unifiedEventsCte(
            (coalesce(attribution.is_staff, false)
              or events.is_canary
              or lower(coalesce(to_jsonb(events) ->> 'client_name', '')) = any(${internalQaClientNamesParameter}::text[])
-             or coalesce(to_jsonb(events) ->> 'requester_ip', '') = any(${internalQaRequesterIpsParameter}::text[])) as is_staff,
+             or coalesce(host(events.requester_ip), '') = any(${internalQaRequesterIpsParameter}::text[])) as is_staff,
            false as is_bot,
            (exists (
              select 1 from mac_mini_scan_bot_scans bot_scans
