@@ -41,7 +41,7 @@ import {
 } from "./requester-ip-context";
 import type { CampaignAttribution } from "../../lib/attribution/campaign-attribution";
 import { ensureCanonicalScanReportProjectionForReuse } from "./canonical-scan-report-publisher";
-import { isDomainDnsPreflightError, requireDomainDns } from "../domains/domain-dns";
+import { requireDomainDns } from "../domains/domain-dns";
 
 type ScanQueueProvenance = {
   githubActor?: string | null;
@@ -71,6 +71,9 @@ export async function createAnonymousFullScan(input: {
   scheduleBackgroundTask?: (task: () => Promise<void>) => void;
   scanFrom?: ScanFrom;
 }) {
+  // Validate before any reuse lookup, quota work, or persistence. A previously
+  // completed scan must never make a target that is private now eligible.
+  await requireDomainDns(input.hostname);
   const scanFrom = normalizeScanFrom(input.scanFrom);
   const coveragePlanCode = input.coveragePlanCode ?? "free";
   const planLimits = await getPlanLimits(coveragePlanCode);
@@ -182,34 +185,6 @@ export async function createAnonymousFullScan(input: {
     }).catch((error) => logScanRequestFailure("anonymous_queue_unavailable", error));
 
     throw new Error(fullScanQueueAvailability.reason ?? "Full scan queue is unavailable.");
-  }
-
-  try {
-    await requireDomainDns(input.hostname);
-  } catch (error) {
-    if (isDomainDnsPreflightError(error)) {
-      await recordScanRequest({
-        normalizedDomain: input.hostname,
-        normalizedUrl: input.normalizedUrl,
-        organizationId: null,
-        requestChannel: input.provenance?.source ?? "marketing-anonymous-full-scan",
-        requestedBy: { anonymous: true },
-        requestedUrl: input.normalizedUrl,
-        requestContext: {
-          bypassRecentScanReuse,
-          coveragePlanCode,
-          ipHash: requesterIpContext.ipHash,
-          provenance: input.provenance ?? null,
-          scanFrom,
-          sourceIp: requesterIpContext.sourceIp
-        },
-        errorCode: error.code,
-        errorMessage: error.message,
-        resolutionMode: "dns_preflight_rejected",
-        status: "rejected"
-      }).catch((recordError) => logScanRequestFailure("anonymous_dns_preflight", recordError));
-    }
-    throw error;
   }
 
   let lightMcpConcurrencyClaimId: string | null = null;

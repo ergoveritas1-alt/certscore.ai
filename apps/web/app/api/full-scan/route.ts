@@ -161,15 +161,19 @@ export async function POST(request: Request) {
       const failedDnsStatus = dnsStatuses.find((item) => !item.status.exists);
 
       if (failedDnsStatus) {
+        const code = failedDnsStatus.status.reasonCode === "non_public_target"
+          ? "invalid_url"
+          : failedDnsStatus.status.retryable ? "dns_unavailable" : "domain_not_found";
         return NextResponse.json(
           {
-            code: "domain_not_found",
+            code,
+            reasonCode: failedDnsStatus.status.reasonCode,
             error:
               intakeDomains.length === 1
                 ? failedDnsStatus.status.reason
                 : `${failedDnsStatus.domain}: ${failedDnsStatus.status.reason}`
           },
-          { status: 400 }
+          { status: failedDnsStatus.status.retryable ? 503 : 400 }
         );
       }
     }

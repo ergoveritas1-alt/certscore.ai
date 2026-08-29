@@ -4,6 +4,7 @@ import * as tls from "node:tls";
 import { Readable } from "node:stream";
 import type { ClientRequest, IncomingMessage } from "node:http";
 import type { TLSSocket } from "node:tls";
+import { assertPublicNetworkUrl, publicNetworkGuardEnabled } from "./public-network-guard.js";
 
 const PROXY_SERVER_KEYS = [
   "CERTSCORE_V2_DAG_LAMBDA_PROXY_SERVER",
@@ -25,16 +26,16 @@ export function configuredProxyServer(env: Record<string, string | undefined> = 
   return firstTrimmed(env, PROXY_SERVER_KEYS);
 }
 
-export function proxyFetch(
+export async function proxyFetch(
   input: RequestInfo | URL,
   init: RequestInit | undefined = undefined,
   env: Record<string, string | undefined> = process.env,
   fallback: typeof fetch = fetch,
 ): Promise<Response> {
+  const target = new URL(typeof input === "string" ? input : input instanceof URL ? input : input.url);
+  if (publicNetworkGuardEnabled(env)) await assertPublicNetworkUrl(target);
   const proxyServer = configuredProxyServer(env);
   if (!proxyServer) return fallback(input, init);
-
-  const target = new URL(typeof input === "string" ? input : input instanceof URL ? input : input.url);
   if (target.protocol !== "http:" && target.protocol !== "https:") {
     return fallback(input, init);
   }
@@ -42,16 +43,19 @@ export function proxyFetch(
   return requestThroughProxy(target, init, env);
 }
 
-export function connectTlsThroughConfiguredProxy(
+export async function connectTlsThroughConfiguredProxy(
   target: { hostname: string; port: number; servername?: string },
   signal?: AbortSignal,
   env: Record<string, string | undefined> = process.env,
 ): Promise<TLSSocket | null> {
+  if (publicNetworkGuardEnabled(env)) {
+    await assertPublicNetworkUrl(`https://${target.hostname}:${target.port}`);
+  }
   const proxyServer = configuredProxyServer(env);
-  if (!proxyServer) return Promise.resolve(null);
+  if (!proxyServer) return null;
   const proxy = new URL(proxyServer.includes("://") ? proxyServer : `http://${proxyServer}`);
   if (proxy.protocol !== "http:" && proxy.protocol !== "https:") {
-    return Promise.reject(new Error(`Unsupported egress proxy protocol: ${proxy.protocol}`));
+    throw new Error(`Unsupported egress proxy protocol: ${proxy.protocol}`);
   }
 
   return new Promise<TLSSocket>((resolve, reject) => {

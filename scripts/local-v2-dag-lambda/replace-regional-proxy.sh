@@ -112,6 +112,22 @@ proxy_security_group_id="$(node -e 'const x=JSON.parse(process.argv[1]); process
 proxy_subnet_id="$(node -e 'const x=JSON.parse(process.argv[1]); process.stdout.write(x.SubnetId ?? "")' "$old_network_interface_json")"
 allocation_id="$(node -e 'const x=JSON.parse(process.argv[1]); process.stdout.write(x.Association?.AllocationId ?? "")' "$old_network_interface_json")"
 public_ip="$(node -e 'const x=JSON.parse(process.argv[1]); process.stdout.write(x.Association?.PublicIp ?? "")' "$old_network_interface_json")"
+lambda_security_group_ids="$(node - "$lambda_json" <<'NODE'
+const { readFileSync } = require("node:fs");
+const fn = JSON.parse(readFileSync(process.argv[2], "utf8"));
+process.stdout.write((fn.Configuration?.VpcConfig?.SecurityGroupIds ?? []).join(" "));
+NODE
+)"
+endpoint_security_group_ids="$(aws ec2 describe-vpc-endpoints \
+  --region "$region" \
+  --filters "Name=vpc-id,Values=${vpc_id}" "Name=vpc-endpoint-type,Values=Interface" \
+  --query 'VpcEndpoints[].Groups[].GroupId' \
+  --output text)"
+s3_prefix_list_id="$(aws ec2 describe-managed-prefix-lists \
+  --region "$region" \
+  --filters Name=prefix-list-name,Values="com.amazonaws.${region}.s3" \
+  --query 'PrefixLists[0].PrefixListId' \
+  --output text)"
 
 for required in "$old_instance_id" "$proxy_security_group_id" "$proxy_subnet_id" "$allocation_id" "$public_ip"; do
   if [[ -z "$required" ]]; then
@@ -147,6 +163,19 @@ if [[ "$apply" != "--apply" ]]; then
   exit 0
 fi
 
+for lambda_security_group_id in $lambda_security_group_ids; do
+  aws ec2 revoke-security-group-egress --region "$region" --group-id "$lambda_security_group_id" --ip-permissions IpProtocol=-1,IpRanges='[{CidrIp=0.0.0.0/0}]' >/dev/null 2>&1 || true
+  aws ec2 authorize-security-group-egress --region "$region" --group-id "$lambda_security_group_id" --ip-permissions "IpProtocol=tcp,FromPort=3128,ToPort=3128,UserIdGroupPairs=[{GroupId=${proxy_security_group_id},Description=Scanner-proxy-only}]" >/dev/null 2>&1 || true
+  aws ec2 authorize-security-group-egress --region "$region" --group-id "$lambda_security_group_id" --ip-permissions "IpProtocol=udp,FromPort=53,ToPort=53,IpRanges=[{CidrIp=${vpc_cidr},Description=VPC-DNS}]" >/dev/null 2>&1 || true
+  aws ec2 authorize-security-group-egress --region "$region" --group-id "$lambda_security_group_id" --ip-permissions "IpProtocol=tcp,FromPort=53,ToPort=53,IpRanges=[{CidrIp=${vpc_cidr},Description=VPC-DNS-TCP}]" >/dev/null 2>&1 || true
+  for endpoint_security_group_id in $endpoint_security_group_ids; do
+    aws ec2 authorize-security-group-egress --region "$region" --group-id "$lambda_security_group_id" --ip-permissions "IpProtocol=tcp,FromPort=443,ToPort=443,UserIdGroupPairs=[{GroupId=${endpoint_security_group_id},Description=Private-AWS-endpoint}]" >/dev/null 2>&1 || true
+  done
+  if [[ -n "$s3_prefix_list_id" && "$s3_prefix_list_id" != "None" ]]; then
+    aws ec2 authorize-security-group-egress --region "$region" --group-id "$lambda_security_group_id" --ip-permissions "IpProtocol=tcp,FromPort=443,ToPort=443,PrefixListIds=[{PrefixListId=${s3_prefix_list_id},Description=S3-gateway}]" >/dev/null 2>&1 || true
+  fi
+done
+
 new_instance_id="$(aws ec2 run-instances \
   --region "$region" \
   --image-id "$ami_id" \
@@ -155,7 +184,7 @@ new_instance_id="$(aws ec2 run-instances \
   --subnet-id "$proxy_subnet_id" \
   --security-group-ids "$proxy_security_group_id" \
   --associate-public-ip-address \
-  --metadata-options HttpTokens=required,HttpPutResponseHopLimit=2,HttpEndpoint=enabled \
+  --metadata-options HttpTokens=required,HttpPutResponseHopLimit=1,HttpEndpoint=enabled \
   --user-data "file://${user_data}" \
   --tag-specifications \
     "ResourceType=instance,Tags=[{Key=Name,Value=${location_slug}-ec2-proxy-t4g-micro},{Key=Project,Value=CertScore},{Key=Purpose,Value=lambda-browser-egress-proxy},{Key=CertScoreProxyConfig,Value=${proxy_config_tag}}]" \
@@ -224,6 +253,7 @@ const variables = { ...(fn.Configuration?.Environment?.Variables ?? {}) };
 const proxyServer = `http://${privateIp}:3128`;
 variables.CERTSCORE_V2_DAG_LAMBDA_PROXY_SERVER = proxyServer;
 variables.SCAN_PROXY_SERVER = proxyServer;
+variables.CERTSCORE_PUBLIC_NETWORK_GUARD_DISABLED = "false";
 variables.CERTSCORE_V2_DAG_LAMBDA_EGRESS_ID = `aws-ec2-proxy:${region}:${allocationId}`;
 variables.CERTSCORE_V2_DAG_LAMBDA_EGRESS_PROVIDER = "aws-ec2-proxy";
 variables.CERTSCORE_V2_DAG_LAMBDA_EGRESS_PUBLIC_IP_HASH = `sha256:${createHash("sha256").update(publicIp).digest("hex")}`;

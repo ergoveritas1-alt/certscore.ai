@@ -725,6 +725,17 @@ test("buildApiV2ErrorFromPulse maps Pulse throttles to v2 rate-limit errors", ()
   });
 });
 
+test("buildApiV2ErrorFromPulse preserves non-public target classification", () => {
+  const error = buildApiV2ErrorFromPulse({
+    body: { error: { code: "invalid_url", message: "Target is not eligible.", reasonCode: "non_public_target" } },
+    fallbackMessage: "Request failed.",
+    status: 400
+  });
+  assert.equal(error.error.code, "invalid_url");
+  assert.equal(error.error.reasonCode, "non_public_target");
+  assert.equal(error.error.retryable, false);
+});
+
 test("buildApiV2DomainLatestScan wraps the latest public scan or null", () => {
   const withScan = buildApiV2DomainLatestScan({
     domain: "example.com",

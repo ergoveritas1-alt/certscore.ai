@@ -3,6 +3,7 @@ import "server-only";
 import { createHash, randomBytes } from "node:crypto";
 import { MIN_GDPR_TRANSPARENCY_POLICY_TEXT_CHARS } from "@certscore/contracts";
 import { query, queryOne } from "@website-signal-risk-scanner/db";
+import { normalizeUrl } from "@website-signal-risk-scanner/shared";
 import type { AuthenticatedAppUser } from "../auth-flows/types";
 import { bootstrapAppUserSession } from "../bootstrap-user";
 import { createOrganizationDomain, findOrganizationDomainByNormalizedUrl } from "../domains/repository";
@@ -216,12 +217,7 @@ export function getBrowserScanTokenFromRequest(request: Request) {
 }
 
 export function normalizeBrowserScanUrl(rawUrl: string) {
-  const url = new URL(rawUrl);
-  if (url.protocol !== "http:" && url.protocol !== "https:") {
-    throw new Error("Only http and https URLs can be scanned.");
-  }
-
-  url.hash = "";
+  const url = new URL(normalizeUrl(rawUrl));
   return {
     hostname: url.hostname.toLowerCase(),
     normalizedUrl: url.toString()

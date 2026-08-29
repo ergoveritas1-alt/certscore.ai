@@ -14,6 +14,7 @@ import {
   updateAdminMonitorSiteRequestSetup
 } from "./repository";
 import { requirePlatformAdminContext } from "./platform-admin";
+import { requireDomainDns } from "../domains/domain-dns";
 
 const prepareMonitorSiteSetupSchema = z.object({
   organizationId: z.string().uuid("Choose a workspace."),
@@ -40,6 +41,7 @@ export async function prepareMonitorSiteSetupFormAction(formData: FormData): Pro
   if (!parsedDomain.success) {
     throw new Error("Monitor request website could not be normalized for setup.");
   }
+  await requireDomainDns(parsedDomain.data.hostname);
 
   const organizationState = await loadDomainOrganizationAndSettings(parsed.organizationId);
   if (!organizationState.organization) {

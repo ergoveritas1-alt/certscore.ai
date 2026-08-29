@@ -40,6 +40,7 @@ import {
   buildCanonicalPostRefusalActionRecipes,
   buildPostRefusalCmpActionRecipe,
   canonicalSha256,
+  assertPublicNetworkUrl,
   decidePostRefusalCooperativeAbort,
   isAwsLambdaRuntime,
   lambdaChromiumSingleProcessEnabled,
@@ -47,6 +48,7 @@ import {
   POST_REFUSAL_CANONICAL_BARRIER_MAX_TAIL_WAIT_MS,
   runPostRefusalObserver,
   runScan,
+  publicNetworkGuardEnabled,
   type RunScanInput
 } from "@certscore/scan-core";
 import {
@@ -4605,6 +4607,13 @@ export async function handler(event: unknown, options: HandlerOptions = {}) {
 
   try {
     payload = parseLocalV2DagLambdaDispatchPayload(dispatchEvent.payload);
+    if (payload.targetEnvironment === "production" && !publicNetworkGuardEnabled(process.env)) {
+      throw new Error("Production scanner network guard must remain enabled.");
+    }
+    const validatedTarget = await assertPublicNetworkUrl(payload.targetUrl);
+    if (validatedTarget.hostname.toLowerCase() !== payload.hostname.toLowerCase()) {
+      throw new Error("Lambda scan target hostname does not match its validated target URL.");
+    }
     console.info(JSON.stringify({
       event: "v2_lambda_invocation_started",
       aws_request_id: options.awsRequestId ?? null,

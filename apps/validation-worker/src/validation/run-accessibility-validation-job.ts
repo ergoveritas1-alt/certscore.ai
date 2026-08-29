@@ -4,6 +4,7 @@ import { runAccessibilityScan } from "../accessibility/run-accessibility-scan";
 import { persistAccessibilityResults } from "../accessibility/persist-accessibility-results";
 import { setupRequestBlocking } from "../browser/request-blocking";
 import { cleanupRuntimeScanArtifacts, getRuntimeScanArtifactOptions } from "./runtime-scan-artifacts";
+import { assertPublicNetworkUrl, installPublicNetworkGuardRoute } from "@certscore/scan-core";
 
 /**
  * Standalone validation job that runs an accessibility scan against a scan's
@@ -47,10 +48,12 @@ export async function runAccessibilityValidationJob(scanId: string): Promise<{
     scanId,
     stage: "accessibility-validation"
   });
+  await assertPublicNetworkUrl(finalUrl);
   const browser = await chromium.launch({ headless: true, ...artifactOptions.launchOptions });
   const context = await browser.newContext(artifactOptions.contextOptions);
   const page = await context.newPage();
   const requestBlocking = await setupRequestBlocking(page, { mode: "full" });
+  await installPublicNetworkGuardRoute(page);
 
   try {
     console.info("[accessibility-job] navigating", { scanId, url: finalUrl });

@@ -15,8 +15,11 @@ test("checkDomainDns accepts domains with IPv4 records", async () => {
   });
 
   assert.deepEqual(status, {
+    addressFamilyCounts: { ipv4: 1, ipv6: 0 },
     exists: true,
+    policyVersion: "certscore.public-target.v1",
     reason: null,
+    reasonCode: null,
     retryable: false
   });
 });
@@ -30,8 +33,11 @@ test("checkDomainDns accepts domains with IPv6 records", async () => {
   });
 
   assert.deepEqual(status, {
+    addressFamilyCounts: { ipv4: 0, ipv6: 1 },
     exists: true,
+    policyVersion: "certscore.public-target.v1",
     reason: null,
+    reasonCode: null,
     retryable: false
   });
 });
@@ -64,7 +70,10 @@ test("checkDomainDns accepts domains resolved by platform lookup fallback", asyn
 
   assert.deepEqual(status, {
     exists: true,
+    addressFamilyCounts: { ipv4: 1, ipv6: 0 },
+    policyVersion: "certscore.public-target.v1",
     reason: null,
+    reasonCode: null,
     retryable: false
   });
 });
@@ -87,7 +96,7 @@ test("checkDomainDns reports resolver timeouts as retryable instead of nonexiste
   assert.match(status.reason, /could not verify/i);
 });
 
-test("checkDomainDns accepts a positive lookup when record resolvers are temporarily unavailable", async () => {
+test("checkDomainDns fails closed when one address family is temporarily unavailable", async () => {
   const status = await checkDomainDnsWithResolvers("example.com", {
     lookup: async () => [{ address: "93.184.216.34", family: 4 }],
     resolve4: async () => {
@@ -98,9 +107,31 @@ test("checkDomainDns accepts a positive lookup when record resolvers are tempora
     }
   });
 
-  assert.deepEqual(status, {
-    exists: true,
-    reason: null,
-    retryable: false
+  assert.equal(status.exists, false);
+  assert.equal(status.retryable, true);
+  assert.equal(status.reasonCode, "dns_unavailable");
+});
+
+test("checkDomainDns rejects private-only and mixed public/private answers", async () => {
+  for (const addresses of [["127.0.0.1"], ["93.184.216.34", "10.0.0.1"]]) {
+    const status = await checkDomainDnsWithResolvers("fixture.example", {
+      lookup: async () => addresses.map((address) => ({ address, family: 4 })),
+      resolve4: async () => addresses,
+      resolve6: async () => { throw dnsError("ENODATA"); }
+    });
+    assert.equal(status.exists, false);
+    assert.equal(status.retryable, false);
+    assert.equal(status.reasonCode, "non_public_target");
+    assert.doesNotMatch(status.reason, /127\.0\.0\.1|10\.0\.0\.1/);
+  }
+});
+
+test("checkDomainDns rejects a CNAME terminal private address", async () => {
+  const status = await checkDomainDnsWithResolvers("alias.example", {
+    lookup: async () => [{ address: "169.254.169.254", family: 4 }],
+    resolve4: async () => ["169.254.169.254"],
+    resolve6: async () => { throw dnsError("ENODATA"); }
   });
+  assert.equal(status.exists, false);
+  assert.equal(status.reasonCode, "non_public_target");
 });

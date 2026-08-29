@@ -48,6 +48,7 @@ import {
 } from "./pre-consent-runtime-scanner.js";
 import type { PreConsentRuntimeScannerResult } from "./pre-consent-runtime-scanner.js";
 import { maybeFulfillHeavyResource, type HeavyResourcePreserveOptions } from "../resource-stubbing.js";
+import { installPublicNetworkGuardRoute } from "../public-network-guard.js";
 import {
   normalizeResearchCandidate,
   writeConsentActionRecipeResearchArtifact,
@@ -931,6 +932,7 @@ async function runScenario(
         await route.continue();
       });
     }
+    await installPublicNetworkGuardRoute(context);
 
     page.on("request", (request) => {
       const requestUrl = request.url();
@@ -2316,6 +2318,7 @@ async function enrichExternalBaselineForPlanning(
         await route.continue();
       });
     }
+    await installPublicNetworkGuardRoute(context);
     const page = await context.newPage();
     const navigationTimeoutMs = Math.min(8_000, remainingDeadlineMs(deadlineAtMs, 8_000));
     if (navigationTimeoutMs <= 0) {

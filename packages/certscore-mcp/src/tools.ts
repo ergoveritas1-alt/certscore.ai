@@ -105,6 +105,7 @@ export function toToolError(error: unknown): CallToolResult {
         ? 30
         : null;
   const code = error instanceof CertScoreError ? error.code : "internal_error";
+  const reasonCode = terminalError?.reasonCode === "non_public_target" ? "non_public_target" : null;
   const message = error instanceof Error ? error.message : "Unknown CertScore MCP error.";
   const creationRateLimit = terminalError?.creationRateLimit && typeof terminalError.creationRateLimit === "object" && !Array.isArray(terminalError.creationRateLimit)
     ? terminalError.creationRateLimit
@@ -119,6 +120,7 @@ export function toToolError(error: unknown): CallToolResult {
   const payload = {
     error: {
       code,
+      reasonCode,
       message,
       retryable,
       retryAfterSeconds,

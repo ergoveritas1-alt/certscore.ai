@@ -33,6 +33,7 @@ export * from "./utils/crawler-identity";
 export * from "./utils/finding-comparison";
 export * from "./utils/scan-signal-workflow";
 export * from "./utils/url";
+export * from "./network/public-target-policy";
 export * from "./utils/scheduling";
 export * from "./load-test-control";
 export * from "./load-test-egress-budget";

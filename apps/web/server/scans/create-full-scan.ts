@@ -264,6 +264,20 @@ export async function queueFullScanForDomain(input: QueueFullScanInput): Promise
     return request.catch((error) => logScanRequestFailure("workspace_full_scan_request", error));
   };
 
+  const dnsStatus = await checkDomainDns(domainRecord.domain.hostname);
+  if (!dnsStatus.exists) {
+    const errorCode = dnsStatus.reasonCode === "non_public_target"
+      ? "invalid_url"
+      : dnsStatus.retryable ? "dns_unavailable" : "domain_not_found";
+    await logRequest({
+      errorCode,
+      errorMessage: dnsStatus.reason,
+      resolutionMode: "dns_preflight_rejected",
+      status: "rejected"
+    });
+    return { error: dnsStatus.reason, scanId: null };
+  }
+
   const reuseDecision = await resolveRecentScanReuseDecision({
       forceNewScan: bypassRecentScanReuse,
       minPagesRequested: pagesRequested,
@@ -387,21 +401,6 @@ export async function queueFullScanForDomain(input: QueueFullScanInput): Promise
         scanId: null
       };
     }
-  }
-
-  const dnsStatus = await checkDomainDns(domainRecord.domain.hostname);
-  if (!dnsStatus.exists) {
-    const errorCode = dnsStatus.retryable ? "dns_unavailable" : "domain_not_found";
-    await logRequest({
-      errorCode,
-      errorMessage: dnsStatus.reason,
-      resolutionMode: "dns_preflight_rejected",
-      status: "rejected"
-    });
-    return {
-      error: dnsStatus.reason,
-      scanId: null
-    };
   }
 
   if (input.enforceMonthlyUsageLimit) {

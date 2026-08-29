@@ -109,6 +109,9 @@ importers:
       '@certscore/contracts':
         specifier: workspace:*
         version: link:../../packages/certscore-contracts
+      '@certscore/scan-core':
+        specifier: workspace:*
+        version: link:../../packages/certscore-scan-core
       '@certscore/vendor-resolver':
         specifier: workspace:*
         version: link:../../packages/certscore-vendor-resolver

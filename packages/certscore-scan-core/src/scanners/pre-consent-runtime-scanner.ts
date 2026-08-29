@@ -68,6 +68,7 @@ import { enrichNetworkDestination } from "../network-destination.js";
 import { normalizePublicIpAddress } from "../public-ip-address.js";
 import { maybeFulfillHeavyResource } from "../resource-stubbing.js";
 import { installWebBotAuthRoute } from "../web-bot-auth-routing.js";
+import { installPublicNetworkGuardRoute } from "../public-network-guard.js";
 import { abortReason, boundedCleanup, throwIfAborted } from "../abort.js";
 import {
   boundedInitiatorChain,
@@ -641,6 +642,7 @@ export async function preConsentRuntimeScanner(
     });
   }
   const webBotAuthRoute = await installWebBotAuthRoute(browserContext);
+  await installPublicNetworkGuardRoute(browserContext);
 
   page.on("request", (request) => {
     const requestUrl = request.url();

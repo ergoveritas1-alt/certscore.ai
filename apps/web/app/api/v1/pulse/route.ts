@@ -700,6 +700,43 @@ async function handlePulseGET(request: Request, options: PulseRouteOptions = {})
       return pulseJson(buildPulseError({ code: "invalid_url", message: normalized.message, url: rawUrl, detail, format }), { status: 400 }, requestId, routeName);
     }
 
+    const dnsStatus = await checkDomainDns(normalized.normalizedDomain);
+    if (!dnsStatus.exists) {
+      console.warn("[pulse] target DNS preflight rejected", {
+        reasonCode: dnsStatus.reasonCode,
+        requestId,
+        retryable: dnsStatus.retryable
+      });
+      if (gptAction) {
+        logPulseGptActionEvent("pulse_gpt_action_error", {
+          detail,
+          elapsedMs: Date.now() - startedAt,
+          errorCode: dnsStatus.retryable ? "internal_error" : "invalid_url",
+          format,
+          requestId,
+          route: "/api/v1/pulse/gpt",
+          statusCode: dnsStatus.retryable ? 503 : 400,
+          wait: waitSeconds
+        });
+      }
+      return pulseJson(
+        buildPulseError({
+          code: dnsStatus.retryable ? "internal_error" : "invalid_url",
+          reasonCode: dnsStatus.reasonCode === "non_public_target" ? "non_public_target" : null,
+          message: dnsStatus.reason,
+          retryAfterSeconds: dnsStatus.retryable ? 60 : null,
+          url: rawUrl,
+          detail,
+          format
+        }),
+        dnsStatus.retryable
+          ? { headers: { "Cache-Control": "no-store", "Retry-After": "60" }, status: 503 }
+          : { headers: { "Cache-Control": "no-store" }, status: 400 },
+        requestId,
+        routeName
+      );
+    }
+
     if (gptAction) {
       logPulseGptActionEvent("pulse_gpt_action_scan_requested", {
         detail,
@@ -796,43 +833,6 @@ async function handlePulseGET(request: Request, options: PulseRouteOptions = {})
         requestContext: contextBase,
         routeOptions: { gptAction, routeName }
       });
-    }
-
-    const dnsStatus = await checkDomainDns(normalized.normalizedDomain);
-    if (!dnsStatus.exists) {
-      console.warn("[pulse] domain DNS preflight rejected", {
-        domain: normalized.normalizedDomain,
-        requestId,
-        retryable: dnsStatus.retryable
-      });
-      if (gptAction) {
-        logPulseGptActionEvent("pulse_gpt_action_error", {
-          detail,
-          domain: normalized.normalizedDomain,
-          elapsedMs: Date.now() - startedAt,
-          errorCode: dnsStatus.retryable ? "internal_error" : "invalid_url",
-          format,
-          requestId,
-          route: "/api/v1/pulse/gpt",
-          statusCode: dnsStatus.retryable ? 503 : 400,
-          wait: waitSeconds
-        });
-      }
-      return pulseJson(
-        buildPulseError({
-          code: dnsStatus.retryable ? "internal_error" : "invalid_url",
-          message: dnsStatus.reason,
-          retryAfterSeconds: dnsStatus.retryable ? 60 : null,
-          url: rawUrl,
-          detail,
-          format
-        }),
-        dnsStatus.retryable
-          ? { headers: { "Cache-Control": "no-store", "Retry-After": "60" }, status: 503 }
-          : { headers: { "Cache-Control": "no-store" }, status: 400 },
-        requestId,
-        routeName
-      );
     }
 
     const newScanRequestInput = {

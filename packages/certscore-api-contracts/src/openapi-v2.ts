@@ -788,6 +788,7 @@ export function buildCertScoreApiV2OpenApiDocument() {
               required: ["code", "message", "retryable", "retryAfterSeconds", "recommendedNextAction"],
               properties: {
                 code: { type: "string" },
+                reasonCode: { type: ["string", "null"], enum: ["non_public_target", null] },
                 message: { type: "string" },
                 retryable: { type: "boolean" },
                 retryAfterSeconds: { type: ["integer", "null"] },

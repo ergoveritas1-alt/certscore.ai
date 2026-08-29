@@ -1298,6 +1298,28 @@ test("toToolError promotes typed creation quota details", () => {
   assert.match(payload.error?.recommendedNextAction ?? "", /contact support@certscore\.ai/i);
 });
 
+test("toToolError preserves the non-public target reason without exposing an address", () => {
+  const result = toToolError(new CertScoreError("This target is not eligible for public website scanning.", {
+    code: "invalid_url",
+    responseBody: { error: { reasonCode: "non_public_target", retryable: false } },
+    status: 400
+  }));
+  const payload = JSON.parse(result.content[0]?.type === "text" ? result.content[0].text : "{}") as {
+    error?: { code?: string; reasonCode?: string | null; retryable?: boolean };
+  };
+  assert.deepEqual(payload.error, {
+    code: "invalid_url",
+    message: "This target is not eligible for public website scanning.",
+    retryable: false,
+    retryAfterSeconds: null,
+    recommendedNextAction: "Correct the request using the error details, then retry only if the requested operation is still appropriate.",
+    reasonCode: "non_public_target",
+    name: "CertScoreError",
+    status: 400,
+    responseBody: { error: { reasonCode: "non_public_target", retryable: false } }
+  });
+});
+
 test("paginateFindingList applies MCP-side limit and offset", () => {
   const result = paginateFindingList({
     type: "certscore_finding_list",

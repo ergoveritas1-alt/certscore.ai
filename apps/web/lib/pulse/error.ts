@@ -33,6 +33,7 @@ export type PulseCreationRateLimit = {
 
 export function buildPulseError(input: {
   code: string;
+  reasonCode?: "non_public_target" | null;
   creationRateLimit?: PulseCreationRateLimit;
   message: string;
   rateLimit?: PulseRateLimit;
@@ -59,6 +60,7 @@ export function buildPulseError(input: {
     },
     error: {
       code: input.code,
+      reasonCode: input.reasonCode ?? null,
       message: input.message,
       retryAfterSeconds: input.retryAfterSeconds ?? null,
       recommendedNextAction: input.recommendedNextAction ?? null,

@@ -268,6 +268,7 @@ export const pulseErrorSchema = z
     error: z
       .object({
         code: pulseErrorCodeSchema,
+        reasonCode: z.enum(["non_public_target"]).nullable().optional(),
         message: z.string(),
         retryAfterSeconds: z.number().int().nullable().optional(),
         recommendedNextAction: z.string().nullable().optional(),

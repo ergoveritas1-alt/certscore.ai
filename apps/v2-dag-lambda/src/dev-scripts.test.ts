@@ -106,6 +106,26 @@ test("regional proxy replacement can rotate EIPs with a blue-green cutover", asy
   );
 });
 
+test("regional proxy configuration blocks non-public destinations at two network layers", async () => {
+  const proxyConfig = await readRepoFile("scripts/local-v2-dag-lambda/canonical-regional-proxy-user-data.sh");
+  const provision = await readRepoFile("scripts/local-v2-dag-lambda/provision-us-ca-network.sh");
+  const replacement = await readRepoFile("scripts/local-v2-dag-lambda/replace-regional-proxy.sh");
+
+  assert.match(proxyConfig, /http_access deny nonpublic_v4/);
+  assert.match(proxyConfig, /http_access deny nonpublic_v6/);
+  assert.match(proxyConfig, /169\.254\.0\.0\/16/);
+  assert.match(proxyConfig, /fd00:ec2::254|fc00::\/7/);
+  assert.ok(proxyConfig.indexOf("http_access deny nonpublic_v4") < proxyConfig.indexOf("http_access allow vpcsrc"));
+  assert.match(proxyConfig, /iptables -A OUTPUT -m owner --uid-owner/);
+  assert.match(proxyConfig, /ip6tables -A OUTPUT -m owner --uid-owner/);
+  assert.match(provision, /revoke-security-group-egress/);
+  assert.match(provision, /Scanner-proxy-only/);
+  assert.match(provision, /Private-AWS-endpoints/);
+  assert.match(provision, /S3-gateway/);
+  assert.match(provision, /HttpPutResponseHopLimit=1/);
+  assert.match(replacement, /HttpPutResponseHopLimit=1/);
+});
+
 test("dev image setup uses local names and refuses non-dev resource names", async () => {
   const setupScript = await readRepoFile("scripts/local-v2-dag-lambda/setup-dev-aws-image.sh");
 

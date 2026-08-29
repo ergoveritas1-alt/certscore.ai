@@ -1,5 +1,6 @@
 import {
   isFreshPriorScanAccelerationSource,
+  normalizeUrl,
   type SharedCrawlSeedHint,
   type SharedScanConfig,
 } from "@website-signal-risk-scanner/shared";
@@ -446,7 +447,11 @@ export function buildLocalV2DagLambdaDispatchPayload(input: {
   }
   const awsRegion = requireAwsRegion(intent.awsRegion);
   const policySurfaceSeeds = policySurfaceSeedsFromConfig(input.scanConfig);
-  const targetUrl = requireString(config.normalizedUrl, "normalizedUrl");
+  const targetUrl = normalizeUrl(requireString(config.normalizedUrl, "normalizedUrl"));
+  const hostname = requireString(config.hostname, "hostname").toLowerCase();
+  if (new URL(targetUrl).hostname.toLowerCase() !== hostname) {
+    throw new Error("Local v2 DAG Lambda target hostname does not match normalizedUrl.");
+  }
   const postRefusalObservation = postRefusalObservationFromIntent({
     intent,
     scanId: input.scanId,
@@ -462,7 +467,7 @@ export function buildLocalV2DagLambdaDispatchPayload(input: {
     ...(asRecord(intent.debugOverrides) && Object.keys(asRecord(intent.debugOverrides)).length > 0
       ? { debugOverrides: asRecord(intent.debugOverrides) as LocalV2DagLambdaDebugOverrides }
       : {}),
-    hostname: requireString(config.hostname, "hostname"),
+    hostname,
     localCallbackUrl: stringValue(input.localCallbackUrl),
     orchestrationMode: intent.orchestrationMode === "sharded" ? "sharded" : "single",
     processor: LOCAL_V2_DAG_SCAN_PROCESSOR,

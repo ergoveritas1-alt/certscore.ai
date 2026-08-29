@@ -321,6 +321,7 @@ export function buildPulseV1OpenApiDocument() {
                   type: "string",
                   enum: ["invalid_url", "not_found", "pulse_throttled", "rate_limited", "internal_error", "scan_unavailable", "unauthorized", "forbidden"]
                 },
+                reasonCode: { type: ["string", "null"], enum: ["non_public_target", null] },
                 message: { type: "string" },
                 retryAfterSeconds: { type: ["integer", "null"] },
                 recommendedNextAction: { type: ["string", "null"] },

@@ -43,6 +43,7 @@ test("proxyFetch sends HTTP requests through the configured proxy", async () => 
     const response = await proxyFetch(`http://127.0.0.1:${targetPort}/health?via=proxy`, {
       headers: { "x-test": "proxy" },
     }, {
+      CERTSCORE_PUBLIC_NETWORK_GUARD_DISABLED: "true",
       SCAN_PROXY_ENABLED: "true",
       SCAN_PROXY_SERVER: `http://127.0.0.1:${proxyPort}`,
     });
@@ -50,6 +51,7 @@ test("proxyFetch sends HTTP requests through the configured proxy", async () => 
     assert.equal(await response.text(), "GET:/health?via=proxy");
 
     const noContentResponse = await proxyFetch(`http://127.0.0.1:${targetPort}/no-content`, undefined, {
+      CERTSCORE_PUBLIC_NETWORK_GUARD_DISABLED: "true",
       SCAN_PROXY_ENABLED: "true",
       SCAN_PROXY_SERVER: `http://127.0.0.1:${proxyPort}`,
     });
@@ -62,8 +64,10 @@ test("proxyFetch sends HTTP requests through the configured proxy", async () => 
   }
 });
 
-test("proxyFetch preserves direct local behavior when no proxy is configured", async () => {
-  const response = await proxyFetch("http://example.test", undefined, {}, async () => new Response("direct"));
+test("proxyFetch preserves explicitly opted-out local test behavior when no proxy is configured", async () => {
+  const response = await proxyFetch("http://example.test", undefined, {
+    CERTSCORE_PUBLIC_NETWORK_GUARD_DISABLED: "true",
+  }, async () => new Response("direct"));
   assert.equal(await response.text(), "direct");
 });
 
@@ -85,6 +89,7 @@ test("proxyFetch contains HTTPS tunnel socket errors when a request is aborted",
     const pending = proxyFetch("https://example.test/", {
       signal: controller.signal,
     }, {
+      CERTSCORE_PUBLIC_NETWORK_GUARD_DISABLED: "true",
       SCAN_PROXY_ENABLED: "true",
       SCAN_PROXY_SERVER: `http://127.0.0.1:${proxyPort}`,
     });

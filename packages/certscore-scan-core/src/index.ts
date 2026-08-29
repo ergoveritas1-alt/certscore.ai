@@ -77,6 +77,7 @@ import {
 } from "./consent-geometry-access.js";
 import { maybeFulfillHeavyResource } from "./resource-stubbing.js";
 import { installWebBotAuthRoute } from "./web-bot-auth-routing.js";
+import { assertPublicNetworkUrl, installPublicNetworkGuardRoute, publicNetworkGuardEnabled } from "./public-network-guard.js";
 import { throwIfAborted } from "./abort.js";
 import {
   classifyNavigationFailure,
@@ -103,6 +104,14 @@ export {
 } from "./playwright-runtime.js";
 
 export { proxyFetch } from "./proxy-fetch.js";
+export {
+  assertPublicNetworkUrl,
+  guardedPublicFetch,
+  installPublicNetworkGuardRoute,
+  publicNetworkGuardEnabled,
+  PublicNetworkGuardError,
+  PUBLIC_NETWORK_GUARD_ERROR_CODE,
+} from "./public-network-guard.js";
 
 export {
   runPostRefusalObserver,
@@ -318,6 +327,7 @@ export function normalizePolicySurfaceResultForEarlyHandoff(
 
 export async function runScan(input: RunScanInput): Promise<CanonicalEvidenceBundle> {
   throwIfAborted(input.signal);
+  if (publicNetworkGuardEnabled()) await assertPublicNetworkUrl(input.url);
   const startedAtMs = Date.now();
   const startedAt = new Date(startedAtMs).toISOString();
   const scanProfile = getScanProfile(input.profile ?? "tiny");
@@ -3003,6 +3013,7 @@ export async function capturePreConsentScreenshotOnlyFallback(input: {
         });
       }
       await installWebBotAuthRoute(context);
+      await installPublicNetworkGuardRoute(context);
       const page = await context.newPage();
       const navigationUrls = input.navigationUrls?.length
         ? input.navigationUrls

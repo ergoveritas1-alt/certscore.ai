@@ -47,6 +47,7 @@ import { abortReason, boundedCleanup, throwIfAborted } from "../abort.js";
 import { getRegistrableDomainFromUrl } from "../domain-utils.js";
 import { httpTransportFallbackUrl } from "../transport-fallback.js";
 import { installWebBotAuthRoute } from "../web-bot-auth-routing.js";
+import { installPublicNetworkGuardRoute } from "../public-network-guard.js";
 
 const SOURCE_SCANNER = "policy_surface";
 const SCENARIO = "policy_surface_review";
@@ -3044,6 +3045,7 @@ async function fetchRenderedPolicyDocumentText(input: {
       context = await browser.newContext(chromiumContextOptions());
       releaseAbortContext = bindAbortSignalToBrowserContext(context, input.input.signal);
       await installWebBotAuthRoute(context);
+      await installPublicNetworkGuardRoute(context);
       page = await context.newPage();
     } else if (retainedRecoveryPage.isClosed()) {
       // A late visual-capture failure can close the original page after the
@@ -4012,6 +4014,7 @@ async function extractRenderedCandidates(
     context = await browser.newContext(chromiumContextOptions());
     releaseAbortContext = bindAbortSignalToBrowserContext(context, input.signal);
     await installWebBotAuthRoute(context);
+    await installPublicNetworkGuardRoute(context);
     const page = await context.newPage();
     const navigationTimeoutMs = input.discoveryMode === "fast" ? 4_000 : 8_000;
     await page.goto(input.normalizedUrl, {

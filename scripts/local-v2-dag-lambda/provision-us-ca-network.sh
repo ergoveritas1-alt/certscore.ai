@@ -86,12 +86,25 @@ if [[ -z "$endpoint_sg_id" || "$endpoint_sg_id" == "None" ]]; then
   aws ec2 authorize-security-group-egress --region "$region" --group-id "$endpoint_sg_id" --ip-permissions IpProtocol=tcp,FromPort=443,ToPort=443,IpRanges='[{CidrIp=0.0.0.0/0,Description=Endpoint-egress}]' >/dev/null 2>&1 || true
 fi
 
+# Lambda may reach the public internet only through the regional Squid proxy.
+# AWS control-plane traffic stays on the private endpoints/S3 gateway and DNS
+# is limited to the VPC resolver range.
+aws ec2 revoke-security-group-egress --region "$region" --group-id "$lambda_sg_id" --ip-permissions IpProtocol=-1,IpRanges='[{CidrIp=0.0.0.0/0}]' >/dev/null 2>&1 || true
+aws ec2 authorize-security-group-egress --region "$region" --group-id "$lambda_sg_id" --ip-permissions "IpProtocol=tcp,FromPort=3128,ToPort=3128,UserIdGroupPairs=[{GroupId=${proxy_sg_id},Description=Scanner-proxy-only}]" >/dev/null 2>&1 || true
+aws ec2 authorize-security-group-egress --region "$region" --group-id "$lambda_sg_id" --ip-permissions "IpProtocol=tcp,FromPort=443,ToPort=443,UserIdGroupPairs=[{GroupId=${endpoint_sg_id},Description=Private-AWS-endpoints}]" >/dev/null 2>&1 || true
+aws ec2 authorize-security-group-egress --region "$region" --group-id "$lambda_sg_id" --ip-permissions "IpProtocol=udp,FromPort=53,ToPort=53,IpRanges=[{CidrIp=${vpc_cidr},Description=VPC-DNS}]" >/dev/null 2>&1 || true
+aws ec2 authorize-security-group-egress --region "$region" --group-id "$lambda_sg_id" --ip-permissions "IpProtocol=tcp,FromPort=53,ToPort=53,IpRanges=[{CidrIp=${vpc_cidr},Description=VPC-DNS-TCP}]" >/dev/null 2>&1 || true
+s3_prefix_list_id="$(aws ec2 describe-managed-prefix-lists --region "$region" --filters Name=prefix-list-name,Values="com.amazonaws.${region}.s3" --query 'PrefixLists[0].PrefixListId' --output text)"
+if [[ -n "$s3_prefix_list_id" && "$s3_prefix_list_id" != "None" ]]; then
+  aws ec2 authorize-security-group-egress --region "$region" --group-id "$lambda_sg_id" --ip-permissions "IpProtocol=tcp,FromPort=443,ToPort=443,PrefixListIds=[{PrefixListId=${s3_prefix_list_id},Description=S3-gateway}]" >/dev/null 2>&1 || true
+fi
+
 proxy_instance_id="$(aws ec2 describe-instances --region "$region" --filters Name=vpc-id,Values="$vpc_id" Name=tag:Name,Values="certscore-us-ca-proxy-t4g-micro" Name=instance-state-name,Values=pending,running,stopping,stopped --query 'Reservations[0].Instances[0].InstanceId' --output text)"
 allocation_id="$(aws ec2 describe-addresses --region "$region" --filters Name=tag:Name,Values="certscore-us-ca-proxy-eip" --query 'Addresses[0].AllocationId' --output text)"
 if [[ -z "$proxy_instance_id" || "$proxy_instance_id" == "None" ]]; then
   ami_id="$(aws ssm get-parameter --region "$region" --name /aws/service/ami-amazon-linux-latest/al2023-ami-kernel-6.1-arm64 --query 'Parameter.Value' --output text)"
   user_data="$(sed -e "s|__CERTSCORE_VISIBLE_HOSTNAME__|certscore-us-ca-proxy|g" -e "s|__CERTSCORE_LAMBDA_VPC_CIDR__|${vpc_cidr}|g" "$template_path")"
-  proxy_instance_id="$(aws ec2 run-instances --region "$region" --image-id "$ami_id" --instance-type t4g.micro --credit-specification CpuCredits=unlimited --subnet-id "$public_subnet_id" --security-group-ids "$proxy_sg_id" --associate-public-ip-address --metadata-options HttpTokens=required,HttpPutResponseHopLimit=2,HttpEndpoint=enabled --user-data "$user_data" --tag-specifications "ResourceType=instance,Tags=[{Key=Name,Value=certscore-us-ca-proxy-t4g-micro},{Key=Project,Value=${project}},{Key=Purpose,Value=${purpose}},{Key=CertScoreProxyConfig,Value=us-ca-vpc-v1}]" --query 'Instances[0].InstanceId' --output text)"
+  proxy_instance_id="$(aws ec2 run-instances --region "$region" --image-id "$ami_id" --instance-type t4g.micro --credit-specification CpuCredits=unlimited --subnet-id "$public_subnet_id" --security-group-ids "$proxy_sg_id" --associate-public-ip-address --metadata-options HttpTokens=required,HttpPutResponseHopLimit=1,HttpEndpoint=enabled --user-data "$user_data" --tag-specifications "ResourceType=instance,Tags=[{Key=Name,Value=certscore-us-ca-proxy-t4g-micro},{Key=Project,Value=${project}},{Key=Purpose,Value=${purpose}},{Key=CertScoreProxyConfig,Value=us-ca-vpc-v1}]" --query 'Instances[0].InstanceId' --output text)"
   aws ec2 wait instance-running --region "$region" --instance-ids "$proxy_instance_id"
 fi
 if [[ -z "$allocation_id" || "$allocation_id" == "None" ]]; then

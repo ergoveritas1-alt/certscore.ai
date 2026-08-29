@@ -28,18 +28,6 @@ export async function POST(request: Request) {
       );
     }
 
-    const existingScan = await findScanByClientRequestId(typeof payload.requestId === "string" ? payload.requestId : null);
-    if (existingScan) {
-      return NextResponse.json(
-        {
-          previewUrl: `/scan/${existingScan.id}`,
-          scanId: existingScan.id,
-          statusUrl: `/api/preview-scan/${existingScan.id}`
-        },
-        { headers: { "Cache-Control": "no-store" }, status: 202 }
-      );
-    }
-
     const localV2DagScanProfile = normalizeLocalV2DagScanProfile(payload?.localV2ScanProfile ?? payload?.v2ScanProfile);
     const scanFrom = restrictScanFromForUser({
       canUseRestrictedScanOptions: false,
@@ -58,10 +46,25 @@ export async function POST(request: Request) {
     if (!dnsStatus.exists) {
       return NextResponse.json(
         {
-          code: "domain_not_found",
+          code: dnsStatus.reasonCode === "non_public_target"
+            ? "invalid_url"
+            : dnsStatus.retryable ? "dns_unavailable" : "domain_not_found",
+          reasonCode: dnsStatus.reasonCode,
           error: dnsStatus.reason
         },
-        { status: 400 }
+        { status: dnsStatus.retryable ? 503 : 400 }
+      );
+    }
+
+    const existingScan = await findScanByClientRequestId(typeof payload.requestId === "string" ? payload.requestId : null);
+    if (existingScan) {
+      return NextResponse.json(
+        {
+          previewUrl: `/scan/${existingScan.id}`,
+          scanId: existingScan.id,
+          statusUrl: `/api/preview-scan/${existingScan.id}`
+        },
+        { headers: { "Cache-Control": "no-store" }, status: 202 }
       );
     }
 
@@ -91,7 +94,7 @@ export async function POST(request: Request) {
   } catch (error) {
     if (isDomainDnsPreflightError(error)) {
       return NextResponse.json(
-        { code: error.code, error: error.message },
+        { code: error.code, reasonCode: error.reasonCode, error: error.message },
         {
           headers: error.retryAfterSeconds ? { "Retry-After": String(error.retryAfterSeconds) } : undefined,
           status: error.retryable ? 503 : 400

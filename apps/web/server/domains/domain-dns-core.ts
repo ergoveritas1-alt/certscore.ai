@@ -1,12 +1,23 @@
+import {
+  PUBLIC_TARGET_POLICY_VERSION,
+  classifyPublicTargetAddress
+} from "@website-signal-risk-scanner/shared";
+
 export type DomainDnsStatus =
   | {
       exists: true;
+      addressFamilyCounts: { ipv4: number; ipv6: number };
+      policyVersion: typeof PUBLIC_TARGET_POLICY_VERSION;
       reason: null;
+      reasonCode: null;
       retryable: false;
     }
   | {
       exists: false;
+      addressFamilyCounts: { ipv4: number; ipv6: number };
+      policyVersion: typeof PUBLIC_TARGET_POLICY_VERSION;
       reason: string;
+      reasonCode: "dns_unavailable" | "domain_not_found" | "non_public_target";
       retryable: boolean;
     };
 
@@ -20,21 +31,35 @@ function getDnsErrorCode(error: unknown) {
   return typeof error === "object" && error !== null && "code" in error ? String(error.code) : null;
 }
 
-type DnsResolution = "found" | "not_found" | "unavailable";
+type DnsResolution = {
+  addresses: string[];
+  status: "found" | "not_found" | "unavailable";
+};
+
+function addressesFromRecords(records: unknown): string[] {
+  const values = Array.isArray(records) ? records : records ? [records] : [];
+  return values.flatMap((record) => {
+    if (typeof record === "string") return [record];
+    if (record && typeof record === "object" && "address" in record && typeof record.address === "string") {
+      return [record.address];
+    }
+    return [];
+  });
+}
 
 async function resolveDnsRecords(hostname: string, resolver: DnsResolver): Promise<DnsResolution> {
   try {
-    const records = await resolver(hostname);
-    return Array.isArray(records) && records.length > 0 ? "found" : "not_found";
+    const addresses = addressesFromRecords(await resolver(hostname));
+    return { addresses, status: addresses.length > 0 ? "found" : "not_found" };
   } catch (error) {
     const code = getDnsErrorCode(error);
 
     if (code && NO_RECORD_CODES.has(code)) {
-      return "not_found";
+      return { addresses: [], status: "not_found" };
     }
 
     if (code && TRANSIENT_DNS_CODES.has(code)) {
-      return "unavailable";
+      return { addresses: [], status: "unavailable" };
     }
 
     throw error;
@@ -48,50 +73,69 @@ export async function checkDomainDnsWithResolvers(
   const normalizedHostname = hostname.trim().toLowerCase();
 
   try {
-    const [ipv4, ipv6] = await Promise.all([
+    const [ipv4, ipv6, lookup] = await Promise.all([
       resolveDnsRecords(normalizedHostname, resolvers.resolve4),
-      resolveDnsRecords(normalizedHostname, resolvers.resolve6)
+      resolveDnsRecords(normalizedHostname, resolvers.resolve6),
+      resolvers.lookup
+        ? resolveLookupRecord(normalizedHostname, resolvers.lookup)
+        : Promise.resolve({ addresses: [], status: "not_found" } satisfies DnsResolution)
     ]);
-
-    if (ipv4 === "found" || ipv6 === "found") {
-      return {
-        exists: true,
-        reason: null,
-        retryable: false
-      };
-    }
-
-    const lookup = resolvers.lookup ? await resolveLookupRecord(normalizedHostname, resolvers.lookup) : "not_found";
-    if (lookup === "found") {
-      return {
-        exists: true,
-        reason: null,
-        retryable: false
-      };
-    }
-
-    if (ipv4 === "unavailable" || ipv6 === "unavailable" || lookup === "unavailable") {
+    const addresses = [...new Set([...ipv4.addresses, ...ipv6.addresses, ...lookup.addresses])];
+    const classifications = addresses.map(classifyPublicTargetAddress);
+    const addressFamilyCounts = {
+      ipv4: classifications.filter((entry) => entry.family === 4).length,
+      ipv6: classifications.filter((entry) => entry.family === 6).length
+    };
+    if (classifications.some((entry) => !entry.public)) {
       return {
         exists: false,
+        addressFamilyCounts,
+        policyVersion: PUBLIC_TARGET_POLICY_VERSION,
+        reason: "This target is not eligible for public website scanning. Enter a publicly reachable HTTP or HTTPS website.",
+        reasonCode: "non_public_target",
+        retryable: false
+      };
+    }
+    if ([ipv4, ipv6, lookup].some((resolution) => resolution.status === "unavailable")) {
+      return {
+        exists: false,
+        addressFamilyCounts,
+        policyVersion: PUBLIC_TARGET_POLICY_VERSION,
         reason: "We could not verify that domain right now. Try again in a minute.",
+        reasonCode: "dns_unavailable",
         retryable: true
+      };
+    }
+    if (addresses.length > 0) {
+      return {
+        exists: true,
+        addressFamilyCounts,
+        policyVersion: PUBLIC_TARGET_POLICY_VERSION,
+        reason: null,
+        reasonCode: null,
+        retryable: false
       };
     }
 
     return {
       exists: false,
+      addressFamilyCounts,
+      policyVersion: PUBLIC_TARGET_POLICY_VERSION,
       reason: "We could not find DNS records for that domain. Check the spelling and try again.",
+      reasonCode: "domain_not_found",
       retryable: false
     };
   } catch (error) {
     console.error("[domain-dns] DNS validation failed", {
-      error: error instanceof Error ? error.message : String(error),
-      hostname: normalizedHostname
+      error: error instanceof Error ? error.message : String(error)
     });
 
     return {
       exists: false,
+      addressFamilyCounts: { ipv4: 0, ipv6: 0 },
+      policyVersion: PUBLIC_TARGET_POLICY_VERSION,
       reason: "We could not verify that domain right now. Try again in a minute.",
+      reasonCode: "dns_unavailable",
       retryable: true
     };
   }
@@ -99,17 +143,17 @@ export async function checkDomainDnsWithResolvers(
 
 async function resolveLookupRecord(hostname: string, resolver: DnsLookupResolver): Promise<DnsResolution> {
   try {
-    const record = await resolver(hostname);
-    return (Array.isArray(record) ? record.length > 0 : Boolean(record)) ? "found" : "not_found";
+    const addresses = addressesFromRecords(await resolver(hostname));
+    return { addresses, status: addresses.length > 0 ? "found" : "not_found" };
   } catch (error) {
     const code = getDnsErrorCode(error);
 
     if (code && NO_RECORD_CODES.has(code)) {
-      return "not_found";
+      return { addresses: [], status: "not_found" };
     }
 
     if (code && TRANSIENT_DNS_CODES.has(code)) {
-      return "unavailable";
+      return { addresses: [], status: "unavailable" };
     }
 
     throw error;

@@ -1,5 +1,6 @@
 import { getWorkerEnv } from "../env";
 import { buildValidationWorkerDocumentHeaders } from "../web-bot-auth";
+import { guardedPublicFetch } from "@certscore/scan-core";
 
 const OPENAI_API_URL = "https://api.openai.com/v1/chat/completions";
 
@@ -342,9 +343,8 @@ function extractRenderedLegalCandidates(input: { discoveredFrom: string; html: s
 async function fetchRenderedLegalCandidates(url: string, discoveredFrom: string) {
   try {
     const request = buildValidationWorkerDocumentHeaders({ url });
-    const response = await fetch(url, {
+    const response = await guardedPublicFetch(url, {
       headers: request.headers,
-      redirect: "follow",
       signal: AbortSignal.timeout(10_000)
     });
     if (!response.ok) {

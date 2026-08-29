@@ -1,4 +1,5 @@
 import { createHash } from "node:crypto";
+import { guardedPublicFetch, installPublicNetworkGuardRoute } from "@certscore/scan-core";
 import {
   SCAN_EVENT_TYPES,
   buildFindingComparisonKey,
@@ -5549,6 +5550,7 @@ async function renderNanoDocumentFallback(input: {
         const page = await context.newPage();
         const { setupRequestBlocking } = await import("../browser/request-blocking");
         const requestBlocking = await setupRequestBlocking(page, { mode: "full" });
+        await installPublicNetworkGuardRoute(page);
         try {
           await page.goto(input.canonicalUrl, { timeout: 20_000, waitUntil: "domcontentloaded" });
           await page.waitForLoadState("networkidle", { timeout: 8_000 }).catch(() => undefined);
@@ -5615,9 +5617,8 @@ async function fetchNanoDocumentSource(input: {
       referer: input.referer,
       url: input.url
     });
-    const response = await fetch(input.url, {
+    const response = await guardedPublicFetch(input.url, {
       headers: request.headers,
-      redirect: "follow",
       signal: AbortSignal.timeout(10_000)
     });
     const fetchedUrl = response.url || input.url;
