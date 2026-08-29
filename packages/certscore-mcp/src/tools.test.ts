@@ -161,6 +161,42 @@ test("guided active scan status withholds the report URL until the canonical rep
   assert.doesNotMatch(result.content[0]?.type === "text" ? result.content[0].text : "", /full report=/);
 });
 
+test("MCP Light polling guidance waits 15 seconds after creation and adapts active status polling", () => {
+  const created = withMcpAgentGuidance({
+    type: "certscore_scan_job",
+    scanId: "scan_created",
+    status: "running",
+    retryAfterSeconds: 1,
+  }, "unknown", "scan_creation");
+  const queued = withMcpScanProvenanceGuidance({
+    type: "certscore_scan_job",
+    scanId: "scan_queued",
+    status: "queued",
+    retryAfterSeconds: 1,
+  }, "existing_scan_retrieved");
+  const running = withMcpScanProvenanceGuidance({
+    type: "certscore_scan_job",
+    scanId: "scan_running",
+    status: "running",
+    retryAfterSeconds: 1,
+  }, "existing_scan_retrieved");
+  const finalizing = withMcpScanProvenanceGuidance({
+    type: "certscore_scan_job",
+    scanId: "scan_finalizing",
+    status: "finalizing",
+    retryAfterSeconds: 2,
+  }, "existing_scan_retrieved");
+
+  assert.equal(created.retryAfterSeconds, 15);
+  assert.match(created.recommendedNextAction, /Wait at least 15 seconds/);
+  assert.equal(queued.retryAfterSeconds, 10);
+  assert.match(queued.recommendedNextAction, /Wait at least 10 seconds/);
+  assert.equal(running.retryAfterSeconds, 5);
+  assert.match(running.recommendedNextAction, /Wait at least 5 seconds/);
+  assert.equal(finalizing.retryAfterSeconds, 5);
+  assert.match(scanStatusText(finalizing), /Next: Wait at least 5 seconds/);
+});
+
 test("scanSiteText lists bounded partial-preview cookie, tracker, category, and timing observations", () => {
   const guided = withMcpAgentGuidance({
     type: "certscore_scan_job",
@@ -217,7 +253,7 @@ test("scanSiteText lists bounded partial-preview cookie, tracker, category, and 
 
   assert.match(guided.recommendedNextAction, /partial preview of passive evidence/i);
   assert.match(guided.recommendedNextAction, /not the full scan tally/i);
-  assert.match(guided.recommendedNextAction, /Poll status after the returned delay/);
+  assert.match(guided.recommendedNextAction, /Wait at least 2 seconds/);
   assert.match(guided.recommendedNextAction, /certscore_get_scan_bundle for the completed scan's final returned tally/i);
   assert.match(text, /scanId=scan_preview_123; status=running/);
   assert.match(text, /cookies captured=1; cookie identities returned=1; tracking vendors captured=1; tracking vendor identities returned=1/);

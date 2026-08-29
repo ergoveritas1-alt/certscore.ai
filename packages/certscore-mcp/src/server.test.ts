@@ -268,7 +268,7 @@ test("CertScore Light exposes only the focused no-account workflow", async () =>
     assert.match(statusTool?.description ?? "", /execution region \(scanFrom\), timestamps/);
     assert.match(statusTool?.description ?? "", /never infer its original region from the current request, the user's location, or a default/i);
     assert.match(statusTool?.description ?? "", /Report unavailable provenance as unavailable/);
-    assert.match(statusTool?.description ?? "", /never poll in parallel/);
+    assert.match(statusTool?.description ?? "", /never poll in parallel/i);
     const bundleTool = tools.tools.find((tool) => tool.name === "certscore_get_scan_bundle");
     assert.deepEqual(bundleTool?.annotations, {
       readOnlyHint: true,
@@ -758,6 +758,7 @@ test("MCP Light certscore_scan_site returns a verified preliminary preview withi
       const preview = result.preConsentPreview as Record<string, any>;
       assert.equal(result.scanId, scanId);
       assert.equal(result.status, "running");
+      assert.equal(result.retryAfterSeconds, 15);
       assert.equal(preview.final, false);
       assert.equal(preview.summary.cookieCount, 1);
       assert.equal(preview.summary.trackerCount, 1);
@@ -773,6 +774,7 @@ test("MCP Light certscore_scan_site returns a verified preliminary preview withi
       assert.match(text, /Cookie _ga; domain=example\.com; party=first_party; category\/purpose=analytics; essentiality=non_essential; observedAtMs=1200ms \(t\+1\.200s\)/);
       assert.match(text, /Tracking vendor Example Analytics; product=Example Analytics Pixel; category\/purpose=analytics; confidence=0\.95; domains=analytics\.example\.test/);
       assert.match(text, /call certscore_get_scan_status once/i);
+      assert.match(text, /Wait at least 15 seconds/i);
       assert.match(text, /certscore_get_scan_bundle for the completed scan's final returned tally/i);
       assert.equal(mock.calls.length, 2);
       assert.equal(mock.requestHeaders[1]?.get("x-certscore-mcp-internal-operation"), "scan_site_wait");

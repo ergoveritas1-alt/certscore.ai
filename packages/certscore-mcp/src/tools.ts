@@ -15,6 +15,11 @@ const SCAN_BUNDLE_INTERPRETATION_STATEMENT = "Report only observed CertScore evi
 const COMPACT_SCAN_BUNDLE_INTERPRETATION_STATEMENT = "Use only returned CertScore observations and classifications. Do not infer unobserved technologies, post-consent behavior, legal compliance, or violations. Treat priority and severity as CertScore metadata.";
 const OBSERVATION_ONLY_DISCLAIMER = `${LEGAL_REVIEW_DISCLAIMER} No-go, not-observed, and limited-coverage results are not proof of compliance.`;
 const COMPACT_OBSERVATION_ONLY_DISCLAIMER = "Automated public-web observation, not legal advice or a compliance determination; missing or limited evidence is not proof of compliance.";
+const MCP_SCAN_CREATION_POLL_DELAY_SECONDS = 15;
+const MCP_QUEUED_POLL_DELAY_SECONDS = 10;
+const MCP_RUNNING_POLL_DELAY_SECONDS = 5;
+
+type McpPollGuidanceContext = "scan_creation" | "scan_status" | "upstream";
 
 type ScanProvenanceMode = "new_scan_started" | "existing_completed_scan_reused" | "existing_scan_retrieved" | "unknown";
 type ScanRetrievalMode = "creation_response" | "scan_id_lookup" | "unknown";
@@ -316,16 +321,27 @@ function scanProvenance(value: Record<string, any>, fallbackMode: ScanProvenance
   };
 }
 
-export function withMcpAgentGuidance<T extends Record<string, any>>(value: T, fallbackProvenanceMode: ScanProvenanceMode = "unknown"): T & {
+export function withMcpAgentGuidance<T extends Record<string, any>>(
+  value: T,
+  fallbackProvenanceMode: ScanProvenanceMode = "unknown",
+  pollGuidanceContext: McpPollGuidanceContext = "upstream",
+): T & {
   error: ActionableError | null;
   observationOnlyDisclaimer: string;
 } {
   const status = String(value.status ?? "");
   const active = status === "queued" || status === "running" || status === "finalizing";
   const usable = status === "completed" || status === "completed_limited";
-  const retryAfterSeconds = typeof value.retryAfterSeconds === "number" && Number.isFinite(value.retryAfterSeconds)
+  const upstreamRetryAfterSeconds = typeof value.retryAfterSeconds === "number" && Number.isFinite(value.retryAfterSeconds)
     ? Math.max(1, Math.ceil(value.retryAfterSeconds))
     : null;
+  const retryAfterSeconds = active && pollGuidanceContext === "scan_creation"
+    ? MCP_SCAN_CREATION_POLL_DELAY_SECONDS
+    : active && pollGuidanceContext === "scan_status"
+      ? status === "queued"
+        ? MCP_QUEUED_POLL_DELAY_SECONDS
+        : MCP_RUNNING_POLL_DELAY_SECONDS
+      : upstreamRetryAfterSeconds;
   const error = terminalErrorForResult(value);
   const stableScanId = typeof value.scanId === "string" && value.scanId.trim()
     ? value.scanId.trim()
@@ -349,10 +365,11 @@ export function withMcpAgentGuidance<T extends Record<string, any>>(value: T, fa
   const returnedNextAction = typeof value.recommendedNextAction === "string" && value.recommendedNextAction.trim()
     ? value.recommendedNextAction.trim()
     : null;
-  const activePollAction = returnedNextAction ?? `${retryAfterSeconds === null ? "Wait for the recommended delay" : `Wait at least ${retryAfterSeconds} seconds`}, then call certscore_get_scan_status once with scanId ${stableScanId ?? value.jobId}.`;
+  const activePollAction = `${retryAfterSeconds === null ? "Wait for the recommended delay" : `Wait at least ${retryAfterSeconds} seconds`}, then call certscore_get_scan_status once with scanId ${stableScanId ?? value.jobId}.`;
   const activeNextAction = `${hasPreConsentPreview ? "The returned preConsentPreview is a partial preview of passive evidence. Its counts are checkpoint-only partial counts, not the full scan tally; do not present them as final totals or stop the workflow. " : ""}${activePollAction} Continue with certscore_get_scan_status using the unchanged scanId ${stableScanId ?? value.jobId}. Do not poll in parallel or resubmit certscore_scan_site while this scan is active. After completed or completed_limited, call certscore_get_scan_bundle for the completed scan's final returned tally, canonical findings, and limitations.`;
   return {
     ...value,
+    retryAfterSeconds,
     error,
     reportUrl,
     scoreLabel: "CertScore score",
@@ -369,7 +386,7 @@ export function withMcpAgentGuidance<T extends Record<string, any>>(value: T, fa
 }
 
 export function withMcpScanProvenanceGuidance(value: Record<string, any>, fallbackProvenanceMode: ScanProvenanceMode) {
-  const guided = withMcpAgentGuidance(value, fallbackProvenanceMode);
+  const guided = withMcpAgentGuidance(value, fallbackProvenanceMode, "scan_status");
   return {
     ...guided,
     interpretationGuidance: interpretationGuidance(`${INTERPRETATION_STATEMENT} ${SCAN_PROVENANCE_GROUNDING}`)
@@ -1078,9 +1095,13 @@ function canonicalScanProvenanceText(value: Record<string, any>) {
 
 export function scanStatusText(value: Record<string, any>) {
   const reportUrl = reportUrlFor(value);
+  const nextAction = typeof value.recommendedNextAction === "string" && value.recommendedNextAction.trim()
+    ? value.recommendedNextAction.trim()
+    : "Review the returned status and retained limitations.";
   return boundedPreviewResultText([
     `CertScore scan status: status=${value.status ?? "unknown"}.`,
   ], preConsentPreviewTextLines(value), [
+    `Next: ${nextAction}`,
     canonicalScanProvenanceText(value),
     `Full report: ${reportUrl ?? "not available"}.`,
     OBSERVATION_ONLY_DISCLAIMER,

@@ -200,7 +200,8 @@ test("Light workflow descriptions preserve scan guidance and ground canonical pr
   assert.match(status.description, /compatibility preview trackerCount is not comparable/i);
   assert.match(status.description, /before reporting full scan results/i);
   assert.match(scanSite.description, /preview is not final/i);
-  assert.match(scanSite.description, /wait at least retryAfterSeconds, and call certscore_get_scan_status/);
+  assert.match(scanSite.description, /retryAfterSeconds of 15 seconds, and call certscore_get_scan_status/);
+  assert.match(scanSite.description, /10 seconds while queued and 5 seconds while running or finalizing/);
   assert.match(scanSite.description, /do not resubmit certscore_scan_site/);
   assert.match(scanSite.description, /At completed or completed_limited, call certscore_get_scan_bundle/);
   for (const concept of [
@@ -215,9 +216,10 @@ test("Light workflow descriptions preserve scan guidance and ground canonical pr
   ]) {
     assert.match(scanSite.description, concept);
   }
-  assert.match(status?.description ?? "", /Wait at least retryAfterSeconds between calls/);
-  assert.match(status?.description ?? "", /never poll in parallel/);
-  assert.match(status?.description ?? "", /never resubmit certscore_scan_site/);
+  assert.match(status?.description ?? "", /wait at least its returned retryAfterSeconds of 15 seconds before the first status call/i);
+  assert.match(status?.description ?? "", /10 seconds while queued and 5 seconds while running or finalizing/);
+  assert.match(status?.description ?? "", /never poll in parallel/i);
+  assert.match(status?.description ?? "", /never resubmit certscore_scan_site/i);
   assert.match(status?.description ?? "", /continue polling after receiving the preview/);
   assert.match(status?.description ?? "", /at completed or completed_limited, call certscore_get_scan_bundle/);
   assert.match(bundle?.description ?? "", /Post-refusal observation may intentionally stop as soon as qualifying non-essential activity/i);

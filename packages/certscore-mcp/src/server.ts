@@ -479,7 +479,7 @@ export function createCertScoreMcpServer(options: CertScoreMcpOptions = {}) {
             totalDurationMs: Date.now() - toolStartedAtMs,
           }));
         }
-        const guided = withExampleDomainDemo(withMcpAgentGuidance(initialResult), demoSubstitution);
+        const guided = withExampleDomainDemo(withMcpAgentGuidance(initialResult, "unknown", "scan_creation"), demoSubstitution);
         return toToolResult(guided, exampleDomainDemoText(guided, demoSubstitution));
       } catch (error) {
         console.warn(JSON.stringify({
