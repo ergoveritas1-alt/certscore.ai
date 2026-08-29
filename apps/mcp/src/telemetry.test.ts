@@ -84,6 +84,36 @@ test("authenticated telemetry accepts the canonical opaque OAuth actor ID", () =
   assert.equal(classified.authClass, "authenticated");
 });
 
+test("lifecycle correlation exposes only bounded client metadata and records accepted delivery", async () => {
+  const deliveries: string[] = [];
+  const telemetry = createHostedMcpTelemetry({
+    baseUrl: "https://certscore.ai",
+    clientInfoBody: { params: { clientInfo: { name: "Codex Desktop", version: "1" } } },
+    fetch: (async () => new Response(null, { status: 202 })) as typeof fetch,
+    headers: { "openai-conversation-id": "private-conversation-value" },
+    logger: {
+      error: () => {},
+      log: (message?: unknown) => deliveries.push(String(message)),
+    },
+    secret,
+    sessionId: () => "private-session-value",
+    surface: "mcp_light",
+  });
+
+  const context = telemetry.observationContext();
+  assert.equal(context.callerProduct, "codex");
+  assert.equal(context.clientFamily, "openai_codex");
+  assert.match(context.sessionCorrelationId ?? "", /^[a-f0-9]{24}$/);
+  assert.equal(JSON.stringify(context).includes("private-conversation-value"), false);
+  assert.equal(JSON.stringify(context).includes("private-session-value"), false);
+
+  telemetry.observeToolInvocation(observation());
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.equal(deliveries.length, 1);
+  assert.match(deliveries[0] ?? "", /"event":"mcp\.telemetry_delivery"/);
+  assert.match(deliveries[0] ?? "", /"outcome":"accepted"/);
+});
+
 test("authenticated telemetry signs bounded MCP activation stages", async () => {
   const requests: string[] = [];
   const telemetry = createHostedMcpTelemetry({

@@ -13,7 +13,7 @@ const {
   mcpTelemetryEventSchema,
 } = shared;
 
-type TelemetryLogger = Pick<Console, "error">;
+type TelemetryLogger = Pick<Console, "error"> & Partial<Pick<Console, "log">>;
 
 type LightMcpClientContext = {
   actorId: string | null;
@@ -29,6 +29,10 @@ type LightMcpClientContext = {
   source: McpTelemetryEvent["source"];
   sourceAttribution: McpTelemetryEvent["sourceAttribution"];
 };
+
+export type HostedMcpObservationContext = Pick<LightMcpClientContext,
+  "attributionConfidence" | "callerProduct" | "clientFamily" | "clientName" | "source" | "sourceAttribution"
+> & { sessionCorrelationId: string | null };
 
 type CreateHostedMcpTelemetryInput = {
   authenticatedActorId?: string | null;
@@ -215,10 +219,22 @@ export function createHostedMcpTelemetry(input: CreateHostedMcpTelemetryInput) {
   const ingestionUrl = new URL("/api/internal/mcp-telemetry", input.baseUrl);
   const sentActivationStages = new Set<McpActivationStage>();
 
+  let sessionCorrelationId = hashOpaque(input.secret, "session", conversationId);
+  const observationContext = (): HostedMcpObservationContext => ({
+    attributionConfidence: client.attributionConfidence,
+    callerProduct: client.callerProduct,
+    clientFamily: client.clientFamily,
+    clientName: client.clientName,
+    sessionCorrelationId: sessionCorrelationId ??= hashOpaque(input.secret, "session", input.sessionId()),
+    source: client.source,
+    sourceAttribution: client.sourceAttribution,
+  });
+
   const deliver = (event: { eventId: string }, context: { stage?: string; toolName?: string }) => {
+    const deliveryStartedAt = Date.now();
     const body = JSON.stringify(event);
     const timestamp = String(Math.floor(Date.now() / 1_000));
-    const send = (attempt: number): Promise<void> => Promise.resolve().then(() => fetchImpl(ingestionUrl, {
+    const send = (attempt: number): Promise<number> => Promise.resolve().then(() => fetchImpl(ingestionUrl, {
         body,
         headers: {
           "content-type": "application/json; charset=utf-8",
@@ -227,17 +243,29 @@ export function createHostedMcpTelemetry(input: CreateHostedMcpTelemetryInput) {
         },
         method: "POST",
         signal: AbortSignal.timeout(TELEMETRY_ACK_TIMEOUT_MS),
-      })).then((response) => {
+    })).then((response) => {
       if (!response.ok) throw new Error(`Telemetry ingestion returned HTTP ${response.status}.`);
+      return attempt;
     }).catch((error) => {
       if (attempt < TELEMETRY_DELIVERY_ATTEMPTS) {
         return send(attempt + 1);
       }
       throw error;
     });
-    void send(1).catch((error) => {
+    void send(1).then((attempts) => {
+      logger.log?.(JSON.stringify({
+        attempts,
+        durationMs: Date.now() - deliveryStartedAt,
+        event: "mcp.telemetry_delivery",
+        outcome: "accepted",
+        stage: context.stage ?? null,
+        surface: input.surface,
+        toolName: context.toolName ?? null,
+      }));
+    }).catch((error) => {
       logger.error(JSON.stringify({
         attempts: TELEMETRY_DELIVERY_ATTEMPTS,
+        durationMs: Date.now() - deliveryStartedAt,
         event: "mcp.telemetry_write_failed",
         errorName: error instanceof Error ? error.name : "UnknownError",
         stage: context.stage ?? null,
@@ -342,6 +370,7 @@ export function createHostedMcpTelemetry(input: CreateHostedMcpTelemetryInput) {
   };
 
   return {
+    observationContext,
     observeActivation(stage: McpActivationStage) {
       reportActivation(stage);
     },

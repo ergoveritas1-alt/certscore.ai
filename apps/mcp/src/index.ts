@@ -257,6 +257,7 @@ function responseContentType(res: ServerResponse) {
 }
 
 function logAnonymousMcpObservation(input: {
+  clientContext?: ReturnType<ReturnType<typeof createHostedMcpTelemetry>["observationContext"]> | null;
   light: boolean;
   parsedBody?: unknown;
   reasonCode?: McpObservationReason | null;
@@ -265,6 +266,7 @@ function logAnonymousMcpObservation(input: {
   res: ServerResponse;
   sessionFound: boolean | null;
   sessionTokenHash?: string | null;
+  startedAtMs?: number;
 }) {
   const { route, surface } = anonymousMcpSurface(input.light);
   const requesterIdentityHash = shortIdentityHash(input.requesterTokenHash ?? null);
@@ -274,6 +276,7 @@ function logAnonymousMcpObservation(input: {
     event: "mcp_http.request_observed",
     timestamp: new Date().toISOString(),
     source: "mcp-http",
+    durationMs: input.startedAtMs === undefined ? null : Math.max(0, Date.now() - input.startedAtMs),
     surface,
     route,
     httpMethod: input.req.method ?? null,
@@ -291,6 +294,13 @@ function logAnonymousMcpObservation(input: {
       : null,
     requesterIdentityHash,
     sessionIdentityHash,
+    sessionCorrelationId: input.clientContext?.sessionCorrelationId ?? null,
+    callerProduct: input.clientContext?.callerProduct ?? null,
+    clientFamily: input.clientContext?.clientFamily ?? null,
+    clientName: input.clientContext?.clientName ?? null,
+    attributedSource: input.clientContext?.source ?? null,
+    sourceAttribution: input.clientContext?.sourceAttribution ?? null,
+    attributionConfidence: input.clientContext?.attributionConfidence ?? null,
     responseContentType: responseContentType(input.res),
     reasonCode: input.reasonCode ?? null
   };
@@ -473,6 +483,7 @@ async function handleMcp(req: IncomingMessage, res: ServerResponse, anonymous: b
     }
     if (anonymous && !microsoft) {
       logAnonymousMcpObservation({
+        clientContext: telemetry.observationContext(),
         light,
         parsedBody,
         reasonCode: transportReason(res),
@@ -480,7 +491,8 @@ async function handleMcp(req: IncomingMessage, res: ServerResponse, anonymous: b
         requesterTokenHash: tokenHash,
         res,
         sessionFound: false,
-        sessionTokenHash: transport.sessionId ? tokenHash : null
+        sessionTokenHash: transport.sessionId ? tokenHash : null,
+        startedAtMs: requestStartedAt
       });
     } else {
       console.log(JSON.stringify({
@@ -517,6 +529,7 @@ async function handleMcp(req: IncomingMessage, res: ServerResponse, anonymous: b
     if (anonymous) {
       json(res, 401, { error: "session_requester_mismatch", error_description: "The MCP session belongs to a different anonymous requester." }, corsHeaders(req));
       logAnonymousMcpObservation({
+        clientContext: session.telemetry?.observationContext() ?? null,
         light,
         parsedBody,
         reasonCode: "session_requester_mismatch",
@@ -524,7 +537,8 @@ async function handleMcp(req: IncomingMessage, res: ServerResponse, anonymous: b
         requesterTokenHash: tokenHash,
         res,
         sessionFound: true,
-        sessionTokenHash: session.tokenHash
+        sessionTokenHash: session.tokenHash,
+        startedAtMs: requestStartedAt
       });
       return;
     }
@@ -607,6 +621,7 @@ async function handleMcp(req: IncomingMessage, res: ServerResponse, anonymous: b
       });
       if (anonymous && !microsoft) {
         logAnonymousMcpObservation({
+          clientContext: session.telemetry?.observationContext() ?? null,
           light,
           parsedBody,
           reasonCode: "rate_limited",
@@ -614,7 +629,8 @@ async function handleMcp(req: IncomingMessage, res: ServerResponse, anonymous: b
           requesterTokenHash: tokenHash,
           res,
           sessionFound: true,
-          sessionTokenHash: session.tokenHash
+          sessionTokenHash: session.tokenHash,
+          startedAtMs: requestStartedAt
         });
       }
       return;
@@ -635,6 +651,7 @@ async function handleMcp(req: IncomingMessage, res: ServerResponse, anonymous: b
   if (anonymous && !microsoft) {
     const transportFailure = transportReason(res);
     logAnonymousMcpObservation({
+      clientContext: session.telemetry?.observationContext() ?? null,
       light,
       parsedBody,
       reasonCode: transportFailure ?? (light && session.tokenHash !== tokenHash
@@ -644,7 +661,8 @@ async function handleMcp(req: IncomingMessage, res: ServerResponse, anonymous: b
       requesterTokenHash: tokenHash,
       res,
       sessionFound: true,
-      sessionTokenHash: session.tokenHash
+      sessionTokenHash: session.tokenHash,
+      startedAtMs: requestStartedAt
     });
   } else {
     console.log(JSON.stringify({

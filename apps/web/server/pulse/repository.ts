@@ -747,6 +747,37 @@ from light_mcp_new_scan_events
 where requested_at > now() - interval '1 day'
    or requested_at >= date_trunc('day', now() at time zone 'utc') at time zone 'utc'`;
 
+function logLightMcpScanAdmission(input: {
+  active: { session: number; ip: number; surface: number };
+  decision: ReturnType<typeof decideLightMcpNewScanQuota> | ReturnType<typeof decideLightMcpScanConcurrency>;
+  usage?: ReturnType<typeof lightMcpUsage>;
+}) {
+  const utilization = {
+    concurrency: input.active.surface / LIGHT_MCP_NEW_SCAN_POLICY.concurrency.surface,
+    burst: (input.usage?.surface.burstCount ?? 0) / LIGHT_MCP_NEW_SCAN_POLICY.surface.burstLimit,
+    daily: (input.usage?.surface.dailyCount ?? 0) / LIGHT_MCP_NEW_SCAN_POLICY.surface.dailyLimit
+  };
+  const peakSurfaceUtilization = Math.max(...Object.values(utilization));
+  const event = {
+    event: "light_mcp.scan_admission",
+    level: !input.decision.allowed || peakSurfaceUtilization >= 0.7 ? "warn" : "info",
+    outcome: input.decision.allowed ? "allowed" : "denied",
+    scope: input.decision.scope,
+    window: input.decision.window,
+    retryAfterSeconds: input.decision.retryAfterSeconds,
+    active: input.active,
+    usage: input.usage ? {
+      session: { burst: input.usage.session.burstCount, daily: input.usage.session.dailyCount },
+      ip: { burst: input.usage.ip.burstCount, daily: input.usage.ip.dailyCount },
+      surface: { burst: input.usage.surface.burstCount, daily: input.usage.surface.dailyCount }
+    } : null,
+    surfaceUtilization: utilization,
+    capacityWarning: peakSurfaceUtilization >= 0.7,
+    policy: LIGHT_MCP_NEW_SCAN_POLICY
+  };
+  (event.level === "warn" ? console.warn : console.log)(JSON.stringify(event));
+}
+
 /** Atomically reserves one genuinely new scan against both requester and whole-Light safety rails. */
 export async function claimLightMcpNewScanQuota(input: { ipKey: string; sessionKey: string }) {
   await ensurePulseTables();
@@ -771,21 +802,29 @@ export async function claimLightMcpNewScanQuota(input: { ipKey: string; sessionK
       input.ipKey
     ]);
     const active = activeResult.rows[0];
+    const activeUsage = {
+      session: Number(active?.session_count ?? 0),
+      ip: Number(active?.ip_count ?? 0),
+      surface: Number(active?.surface_count ?? 0)
+    };
     const concurrencyDecision = decideLightMcpScanConcurrency({
-      usage: {
-        session: Number(active?.session_count ?? 0),
-        ip: Number(active?.ip_count ?? 0),
-        surface: Number(active?.surface_count ?? 0)
-      }
+      usage: activeUsage
     });
-    if (!concurrencyDecision.allowed) return concurrencyDecision;
+    if (!concurrencyDecision.allowed) {
+      logLightMcpScanAdmission({ active: activeUsage, decision: concurrencyDecision });
+      return concurrencyDecision;
+    }
     const usageResult = await client.query<LightMcpNewScanUsageRow>(LIGHT_MCP_NEW_SCAN_USAGE_SQL, [
       input.sessionKey,
       input.ipKey,
       LIGHT_MCP_NEW_SCAN_POLICY.burstWindowSeconds
     ]);
-    const decision = decideLightMcpNewScanQuota({ usage: lightMcpUsage(usageResult.rows[0]) });
-    if (!decision.allowed) return decision;
+    const usage = lightMcpUsage(usageResult.rows[0]);
+    const decision = decideLightMcpNewScanQuota({ usage });
+    if (!decision.allowed) {
+      logLightMcpScanAdmission({ active: activeUsage, decision, usage });
+      return decision;
+    }
     await client.query(
       "insert into light_mcp_new_scan_events (requester_key, ip_key) values ($1, $2)",
       [input.sessionKey, input.ipKey]
@@ -796,6 +835,7 @@ export async function claimLightMcpNewScanQuota(input: { ipKey: string; sessionK
        returning id`,
       [input.sessionKey, input.ipKey, LIGHT_MCP_NEW_SCAN_POLICY.concurrencyLeaseSeconds]
     );
+    logLightMcpScanAdmission({ active: activeUsage, decision, usage });
     return { ...decision, concurrencyClaimId: claimResult.rows[0]!.id };
   });
 }

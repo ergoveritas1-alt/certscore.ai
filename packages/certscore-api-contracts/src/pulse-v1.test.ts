@@ -184,27 +184,26 @@ test("Light workflow descriptions preserve scan guidance and ground canonical pr
   const status = certScoreMcpToolContracts.find((tool) => tool.name === "certscore_get_scan_status");
   const bundle = certScoreMcpToolContracts.find((tool) => tool.name === "certscore_get_scan_bundle");
   assert.ok(scanSite);
-  assert.equal(
-    scanSite.description,
-    "Use CertScore.ai to scan a public website for observable privacy and consent signals, including pre-consent cookies and browser storage, third-party trackers, consent-banner and CMP behavior, TLS/transport security, privacy-policy disclosures, GDPR/ePrivacy transparency findings, and applicable CCPA/CPRA review signals. Starts or reuses a public-web scan with a 25-second total tool-call budget by default; scan creation time is deducted from completion waiting. If status is queued, running, or finalizing, retain scanId and poll certscore_get_scan_status using only that scanId. Stop polling at completed, completed_limited, failed, expired, or rate_limited. For usable completion, call certscore_get_scan_bundle. No-go and limited coverage are observations, never proof of compliance."
-  );
+  assert.match(scanSite.description, /Returns promptly after reuse or scan creation and never waits for a new scan to finish/);
+  assert.match(scanSite.description, /wait at least retryAfterSeconds, and call certscore_get_scan_status/);
+  assert.match(scanSite.description, /do not resubmit certscore_scan_site/);
+  assert.match(scanSite.description, /At completed or completed_limited, call certscore_get_scan_bundle/);
   for (const concept of [
-    /scan a public website/,
+    /public website URL/,
     /observable privacy and consent signals/,
-    /pre-consent cookies and browser storage/,
-    /third-party trackers/,
-    /consent-banner and CMP behavior/,
-    /TLS\/transport security/,
-    /privacy-policy disclosures/,
-    /GDPR\/ePrivacy transparency findings/,
-    /applicable CCPA\/CPRA review signals/
+    /pre-consent storage/,
+    /trackers/,
+    /consent\/CMP behavior/,
+    /transport security/,
+    /policy disclosures/,
+    /GDPR\/ePrivacy or CCPA\/CPRA review signals/
   ]) {
     assert.match(scanSite.description, concept);
   }
-  assert.equal(
-    status?.description,
-    "Poll with only the stable scanId returned by certscore_scan_site. Active responses include phase, heartbeat, estimated progress, stalled state, retry delay, and canonical scan provenance when available. Terminal responses include the CertScore score, risk, coverage, execution region (scanFrom), timestamps, report URL, and an explicit next action. For a reused or retrieved existing scan, use only persisted scanFrom and timestamps; never infer its original region from the current request, the user's location, or a default. Report unavailable provenance as unavailable. Stop polling at any terminal status."
-  );
+  assert.match(status?.description ?? "", /Wait at least retryAfterSeconds between calls/);
+  assert.match(status?.description ?? "", /never poll in parallel/);
+  assert.match(status?.description ?? "", /never resubmit certscore_scan_site/);
+  assert.match(status?.description ?? "", /at completed or completed_limited, call certscore_get_scan_bundle/);
   assert.match(bundle?.description ?? "", /Post-refusal observation may intentionally stop as soon as qualifying non-essential activity/i);
   assert.match(bundle?.description ?? "", /termination\.kind=evidence_satisfied is positive evidence/i);
   assert.match(bundle?.description ?? "", /coverageLimitations scoped to additional behavior or persistence that was not measured/i);
