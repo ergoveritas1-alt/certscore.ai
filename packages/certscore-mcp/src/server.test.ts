@@ -430,6 +430,13 @@ test("Light registry metadata and distribution copy stay aligned", () => {
     assert.match(source, /certscore_get_scan_bundle/);
     assert.match(source, /not legal advice, certification, or a compliance determination/i);
   }
+
+  for (const source of [submissions, packets]) {
+    assert.match(source, /Official MCP Registry/);
+    assert.match(source, /Version `0\.2\.16` was published.*August 28, 2026/i);
+    assert.match(source, /active latest version of `ai\.certscore\/mcp-light`/i);
+    assert.match(source, /https:\/\/registry\.modelcontextprotocol\.io\/\?q=ai\.certscore%2Fmcp-light/);
+  }
 });
 
 test("marketplace and public icon PNGs use the canonical faceted CertScore mark", () => {

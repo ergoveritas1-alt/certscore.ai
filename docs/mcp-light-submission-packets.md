@@ -1,6 +1,6 @@
 # CertScore.ai MCP Light submission packets
 
-These packets are ready to copy after the repository changes and public icon have been deployed through the repository-controlled AWS release path. They do not authorize or perform an external submission.
+These packets are the canonical copy and status reference for external directory submissions. Each platform section records whether publication is complete or still requires owner action.
 
 ## Shared listing fields
 
@@ -36,18 +36,23 @@ Long description:
 
 Submission artifact: `packages/certscore-mcp/server-light.json`.
 
+Publication status: **complete**. Version `0.2.16` was published to the Official MCP Registry on August 28, 2026 and is the active latest version of `ai.certscore/mcp-light`.
+
+- Registry listing: https://registry.modelcontextprotocol.io/?q=ai.certscore%2Fmcp-light
+- Registry API lookup: https://registry.modelcontextprotocol.io/v0.1/servers?search=ai.certscore%2Fmcp-light
+
 Pre-publish checks from the repository root:
 
 ```sh
 mcp-publisher validate packages/certscore-mcp/server-light.json
 ```
 
-External owner action:
+Future release procedure:
 
-1. Merge and deploy the prepared metadata and assets.
-2. Authenticate the `ai.certscore` namespace using an official MCP Registry-supported method.
+1. Update `packages/certscore-mcp/server-light.json` to the new released version and validate it.
+2. Authenticate the existing `ai.certscore` namespace using an Official MCP Registry-supported method.
 3. Run the publisher against `packages/certscore-mcp/server-light.json`.
-4. Confirm that the published record resolves to version `0.2.16`, the Light endpoint, and exactly three tools.
+4. Confirm that the new record is active and latest, resolves to the Light endpoint, and preserves the intended three-tool workflow.
 
 Do not publish `packages/certscore-mcp/server.json` as the Light listing.
 

@@ -49,7 +49,7 @@ The separate `ai.certscore/mcp` manifest and `https://mcp.certscore.ai/mcp` endp
 
 ## Submission notes
 
-- GitHub MCP Registry: publish `packages/certscore-mcp/server-light.json` only after domain-namespace authentication and a final live validation.
+- GitHub MCP Registry: publication is complete. Version `0.2.16` was published to the Official MCP Registry on August 28, 2026 and is the active latest version of `ai.certscore/mcp-light`; verify it at https://registry.modelcontextprotocol.io/?q=ai.certscore%2Fmcp-light and use `packages/certscore-mcp/server-light.json` for future releases after validation and existing namespace authentication.
 - Claude Code: the validated plugin package is in `integrations/claude-code/certscore-mcp-light`, with the repository marketplace catalog at `.claude-plugin/marketplace.json`.
 - Cursor: the marketplace-ready Agent Plugin package is in `integrations/cursor/certscore-website-privacy-preflight` at integration version `1.0.1`.
 - OpenAI: the provider-neutral **With MCP** package is in `integrations/openai/certscore-website-privacy-preflight` at plugin version `2.0.0`; its production endpoint and bundled preview-aware skill must be scanned and submitted together through OpenAI's portal.
