@@ -508,6 +508,12 @@ test("Cursor and OpenAI plugin packages preserve independent release versions an
     plugins?: Array<{ name?: string; source?: string; version?: string }>;
   };
   const openAiPlugin = JSON.parse(readFileSync(new URL("../../../integrations/openai/certscore-website-privacy-preflight/.codex-plugin/plugin.json", import.meta.url), "utf8")) as {
+    description?: string;
+    interface?: {
+      defaultPrompt?: string[];
+      longDescription?: string;
+      shortDescription?: string;
+    };
     mcpServers?: string;
     name?: string;
     skills?: string;
@@ -518,6 +524,7 @@ test("Cursor and OpenAI plugin packages preserve independent release versions an
   };
   const openAiSkill = readFileSync(new URL("../../../integrations/openai/certscore-website-privacy-preflight/skills/website-privacy-preflight/SKILL.md", import.meta.url), "utf8");
   const openAiMetadata = readFileSync(new URL("../../../integrations/openai/certscore-website-privacy-preflight/skills/website-privacy-preflight/agents/openai.yaml", import.meta.url), "utf8");
+  const openAiSubmissionPacket = readFileSync(new URL("../../../docs/mcp-light-submission-packets.md", import.meta.url), "utf8");
 
   assert.equal(cursorPlugin.name, "certscore-website-privacy-preflight");
   assert.equal(cursorPlugin.version, "1.0.1");
@@ -542,6 +549,26 @@ test("Cursor and OpenAI plugin packages preserve independent release versions an
   assert.match(JSON.stringify(openAiPlugin), /post-refusal/i);
   assert.match(openAiMetadata, /post-refusal/i);
   assert.match(openAiSkill, /post-refusal/i);
+  assert.match(JSON.stringify(openAiPlugin), /preliminary cookie\/tracker/i);
+  assert.match(openAiMetadata, /preliminary cookie and tracker evidence/i);
+  assert.match(openAiSkill, /preConsentPreview/);
+  assert.match(openAiSkill, /trackingVendorCount/);
+  assert.match(openAiSkill, /operationalVendors/);
+  assert.match(openAiSkill, /Never present preview counts as final totals/i);
+  assert.deepEqual(openAiPlugin.interface?.defaultPrompt?.map((prompt) => new URL((prompt.match(/https:\/\/[^\s]+/)?.[0] ?? "").replace(/[.,]$/, "")).pathname), [
+    "/.well-known/certscore-canary/sentinels/broad-baseline.html",
+    "/.well-known/certscore-canary/runtime/storage.html",
+    "/.well-known/certscore-canary/post-refusal/reject-ignored.html"
+  ]);
+  for (const path of [
+    "sentinels/broad-baseline.html",
+    "runtime/storage.html",
+    "consent/shadow-dom.html",
+    "policy/privacy.html",
+    "post-refusal/reject-ignored.html"
+  ]) {
+    assert.match(openAiSubmissionPacket, new RegExp(`https://ergoveritas\\.com/\\.well-known/certscore-canary/${path.replaceAll(".", "\\.")}`));
+  }
   assert.doesNotMatch(openAiSkill, /Claude|Cursor/);
   for (const tool of ["certscore_scan_site", "certscore_get_scan_status", "certscore_get_scan_bundle"]) {
     assert.match(openAiSkill, new RegExp(tool));

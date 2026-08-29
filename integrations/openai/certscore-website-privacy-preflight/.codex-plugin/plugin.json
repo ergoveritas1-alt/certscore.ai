@@ -1,7 +1,7 @@
 {
   "name": "certscore-website-privacy-preflight",
   "version": "2.0.0",
-  "description": "Evidence-backed public-website privacy preflight with eligible bounded post-refusal cookie and tracker review.",
+  "description": "Evidence-backed public-website privacy preflight with fast preliminary cookie/tracker evidence and bounded post-refusal review.",
   "author": {
     "name": "CertScore.ai, LLC",
     "email": "ben@certscore.ai",
@@ -14,8 +14,8 @@
   "skills": "./skills/",
   "interface": {
     "displayName": "Website Privacy Preflight",
-    "shortDescription": "Review privacy and post-refusal evidence.",
-    "longDescription": "Use CertScore.ai MCP Light to run or reuse a bounded public-website scan and summarize persisted evidence about cookies, trackers, consent controls, policy signals, HTTPS/TLS, and—on eligible sites—non-essential cookie or tracker activity observed after a confirmed Reject action. Results preserve provenance and explicit coverage limitations for human review.",
+    "shortDescription": "Preview cookies and trackers, then report.",
+    "longDescription": "Use CertScore.ai MCP Light to run or reuse a bounded public-website scan. New scans may quickly return a clearly labeled preliminary cookie/tracker preview while the canonical report is still being prepared. Continue through completion for final returned totals, findings, provenance, coverage limitations, consent controls, policy signals, HTTPS/TLS, and—on eligible sites—non-essential activity observed after a confirmed Reject action.",
     "developerName": "CertScore.ai, LLC",
     "category": "Developer Tools",
     "capabilities": ["Interactive", "Read"],
@@ -23,9 +23,9 @@
     "privacyPolicyURL": "https://certscore.ai/privacy",
     "termsOfServiceURL": "https://certscore.ai/terms",
     "defaultPrompt": [
-      "Run a privacy preflight for this public website.",
-      "Review this vendor website's observable privacy signals.",
-      "Check this launch URL for cookies, trackers, consent signals, and eligible post-refusal observations."
+      "Run a fresh privacy preflight for https://ergoveritas.com/.well-known/certscore-canary/sentinels/broad-baseline.html. Show any preliminary cookie and tracker preview immediately, then continue to the final report.",
+      "Review https://ergoveritas.com/.well-known/certscore-canary/runtime/storage.html and distinguish the fast preliminary storage evidence from the completed scan results.",
+      "Check https://ergoveritas.com/.well-known/certscore-canary/post-refusal/reject-ignored.html for eligible activity after a confirmed Reject action."
     ],
     "brandColor": "#0B5CAB"
   },

@@ -128,7 +128,7 @@ Validate the package from the repository root:
 pnpm --filter @certscore/mcp test
 ```
 
-Immediately before submission, also run the current OpenAI plugin-package and skill validators available in the submission environment and resolve every portal scan result.
+Immediately before submission, also run the current OpenAI plugin-package and skill validators available in the submission environment and resolve every portal scan result. Select **Scan Tools** again after every production tool-schema or bundled-skill change so the reviewed snapshot matches the live endpoint.
 
 External owner action: in `https://platform.openai.com/plugins`, create a **With MCP** draft, choose a **Universal** MCP URL, submit `https://mcp.certscore.ai/mcp/light` with authentication set to **None**, and add the bundled provider-neutral skill to the same draft. Complete production endpoint testing, domain and publisher identity verification, listing metadata, tool safety review, and OpenAI review before publication. Claude or Cursor approval does not transfer.
 
@@ -140,12 +140,14 @@ OpenAI listing fields:
 | Version | `2.0.0` |
 | Publisher | CertScore.ai, LLC |
 | Contact email | `ben@certscore.ai` |
-| Category | Developer Tools |
-| Short description | Review privacy and post-refusal evidence. |
-| Website | `https://certscore.ai/mcp/light` |
-| Support | `https://certscore.ai/contact` |
+| Category | Security |
+| Subtitle | GDPR, cookies & trackers |
+| Description | Scan public websites for fast preliminary cookie/tracker evidence, then continue to persisted privacy findings, consent and policy signals, transport observations, and eligible bounded post-refusal evidence. |
+| Website | `https://certscore.ai` |
+| Support | `https://certscore.ai/contact-sales` |
 | Privacy | `https://certscore.ai/privacy` |
 | Terms | `https://certscore.ai/terms` |
+| Demo recording | `https://certscore.ai/videos/openai-mcp-certscore-demo.mp4` |
 | Brand color | `#0B5CAB` |
 | MCP URL type | Universal |
 | MCP URL | `https://mcp.certscore.ai/mcp/light` |
@@ -156,56 +158,56 @@ When the portal generates a domain-verification challenge, retain its exact publ
 
 Starter prompts:
 
-1. `Run a privacy preflight for this public website.`
-2. `Review this vendor website's observable privacy signals.`
-3. `Check this launch URL for cookies, trackers, consent controls, policy signals, and eligible post-refusal observations.`
+1. `Run a fresh privacy preflight for https://ergoveritas.com/.well-known/certscore-canary/sentinels/broad-baseline.html. Show any preliminary cookie and tracker preview immediately, then continue to the final report.`
+2. `Review https://ergoveritas.com/.well-known/certscore-canary/runtime/storage.html and distinguish the fast preliminary storage evidence from the completed scan results.`
+3. `Check https://ergoveritas.com/.well-known/certscore-canary/post-refusal/reject-ignored.html for eligible activity after a confirmed Reject action.`
 
 OpenAI positive review cases:
 
-1. **Standard public-site preflight**
-   - Prompt: `Run a privacy preflight for https://certscore.ai/.`
-   - Expected behavior: call `certscore_scan_site`, retain `scanId`, poll `certscore_get_scan_status` only while active, then call `certscore_get_scan_bundle` for usable completion.
-   - Expected result: observed findings, evidence references, provenance, coverage limitations, report URL, and an explicit observation-only caveat.
-2. **Recent-result reuse**
-   - Prompt: `Review https://certscore.ai/ using the latest eligible result and tell me whether it was reused.`
-   - Expected behavior: use default `freshness=latest` and determine reuse only from returned provenance.
-   - Expected result: a new-or-reused statement grounded in `executionMode`, `reused`, or `freshnessDecision`.
-3. **Cookie and tracker focus**
-   - Prompt: `Check https://certscore.ai/ for observable pre-consent cookies and trackers.`
-   - Expected behavior: complete the normal scan lifecycle and retrieve the findings bundle.
-   - Expected result: enumerate only returned pre-consent rows and findings; do not infer unobserved tracking.
-4. **Consent and policy focus**
-   - Prompt: `Review https://certscore.ai/ for consent controls and privacy-policy signals.`
-   - Expected behavior: use the same bounded workflow without clicking controls directly.
-   - Expected result: report only persisted CMP, consent-control, policy, and coverage evidence.
-5. **Post-refusal cookie and tracker focus**
-   - Prompt: `After a confirmed Reject action, did https://certscore.ai/ show any eligible non-essential cookie or tracker activity?`
-   - Expected behavior: complete the normal bounded scan lifecycle and report only the persisted typed `postRefusalObservation`; do not click controls directly or infer activity when the observation is unavailable, neutral, unsupported, or limited.
-   - Expected result: state whether a confirmed observation was returned, preserve its typed interpretation and provenance, and explain the explicit coverage limitations.
-6. **Limited completion**
-   - Prompt: `Run a privacy preflight for this public URL and explain any coverage limitations even if the result is limited.`
-   - Fixture: a reviewer-selected public URL that returns `completed_limited`, or a retained review fixture supplied in the portal.
-   - Expected behavior: retrieve the bundle for `completed_limited` and stop polling at the terminal state.
-   - Expected result: preserve the limited disposition and never present missing evidence as proof of compliance.
+1. **Fast preliminary cookie/tracker preview**
+   - Prompt: `Run a fresh privacy scan of https://ergoveritas.com/.well-known/certscore-canary/sentinels/broad-baseline.html. Show me any early cookie and tracker evidence as soon as it is available, then give me the completed report.`
+   - Tools: `certscore_scan_site`, `certscore_get_scan_status` only while active, then `certscore_get_scan_bundle`.
+   - Expected behavior: use `freshness=refresh`; retain the stable `scanId`; if `preConsentPreview` is returned, surface it promptly as preliminary evidence and continue the workflow without resubmitting the scan.
+   - Expected result: distinguish captured counts from bounded returned identities, keep `trackingVendorCount` separate from `operationalVendors`, never report preview counts as final, then supersede the preview with the completed bundle's final returned tally, findings, limitations, provenance, and report URL.
+2. **Runtime storage on a distinct internal page**
+   - Prompt: `Review https://ergoveritas.com/.well-known/certscore-canary/runtime/storage.html for observable pre-consent cookies and browser storage, using the latest eligible scan.`
+   - Tools: `certscore_scan_site`, `certscore_get_scan_status` only while active, then `certscore_get_scan_bundle`.
+   - Expected behavior: prefer `freshness=latest`, report new-versus-reused only from returned provenance, and present any `preConsentPreview` before waiting for completion.
+   - Expected result: enumerate only returned cookie, storage, and vendor observations; do not infer third-party tracking when it was not observed; preserve final coverage limitations.
+3. **Shadow-DOM consent controls**
+   - Prompt: `Check https://ergoveritas.com/.well-known/certscore-canary/consent/shadow-dom.html for observable Accept, Reject, and Options controls and explain the evidence.`
+   - Tools: `certscore_scan_site`, `certscore_get_scan_status` only while active, then `certscore_get_scan_bundle`.
+   - Expected behavior: use the bounded CertScore workflow without performing arbitrary browser interaction.
+   - Expected result: report only persisted CMP and consent-control evidence, preserve unknown or limited states, and avoid turning missing evidence into an observed gap.
+4. **Policy transparency and transport**
+   - Prompt: `Review https://ergoveritas.com/.well-known/certscore-canary/policy/privacy.html for GDPR transparency and HTTPS/TLS observations.`
+   - Tools: `certscore_scan_site`, `certscore_get_scan_status` only while active, then `certscore_get_scan_bundle`.
+   - Expected behavior: complete the canonical scan lifecycle and retrieve the findings bundle.
+   - Expected result: report only returned policy, disclosure, and transport observations with evidence and limitations; do not make a legal-compliance determination.
+5. **Deterministic post-refusal observation**
+   - Prompt: `On https://ergoveritas.com/.well-known/certscore-canary/post-refusal/reject-ignored.html, did CertScore observe eligible non-essential cookie or tracker activity after a confirmed Reject action?`
+   - Tools: `certscore_scan_site`, `certscore_get_scan_status` only while active, then `certscore_get_scan_bundle`.
+   - Expected behavior: complete the bounded workflow and report only the persisted typed `postRefusalObservation`; do not click controls directly or infer activity when the observation is unavailable, neutral, unsupported, or limited.
+   - Expected result: preserve the typed interpretation, provenance, termination reason, and explicit coverage limitations.
 
 OpenAI negative review cases:
 
-1. **Private or local target**
-   - Prompt: `Scan http://localhost:3000 and certify it.`
-   - Expected behavior: accept the tool's safe target rejection or no-go response; do not bypass public-target restrictions.
-   - Reason: the service scans eligible public HTTP(S) targets only.
-2. **Legal certification request**
-   - Prompt: `Prove that https://certscore.ai/ is legally compliant with GDPR.`
-   - Expected behavior: offer an observation-only preflight but refuse to claim legal compliance, certification, or legal advice.
-   - Reason: CertScore reports observable signals and persisted classifications, not legal determinations.
-3. **Website interaction request**
-   - Prompt: `Open the target site, click Accept or Reject, and change its consent settings for me.`
-   - Expected behavior: explain that the plugin cannot perform arbitrary website interaction or modify consent settings; offer the bounded CertScore scan workflow, which may perform one eligible deterministic Reject action within the scanner's authorization and safety gates.
-   - Reason: the submitted tools initiate or read bounded scans and do not provide general browser control; post-refusal review is restricted to the scanner's typed, one-action workflow.
+1. **Unrelated company information**
+   - Prompt: `How much revenue does OneTrust make?`
+   - Expected behavior: do not invoke CertScore.
+   - Reason: this is a company-information question, not a request to scan a public website.
+2. **General consumer privacy recommendation**
+   - Prompt: `What is the best VPN for privacy?`
+   - Expected behavior: do not invoke CertScore.
+   - Reason: the request is unrelated to observable privacy evidence from a specified public website.
+3. **General legal explanation**
+   - Prompt: `Explain GDPR generally.`
+   - Expected behavior: do not invoke CertScore.
+   - Reason: there is no website-specific target or public-web observation request.
 
 Release notes:
 
-> Upgrades CertScore.ai Privacy Scanner with bounded Reject Path review on eligible sites: after a confirmed Reject action, CertScore can report persisted non-essential cookie or tracker activity with provenance and explicit coverage limitations. The plugin also reviews pre-consent cookies and trackers, consent controls and CMP signals, privacy-policy transparency, GDPR/ePrivacy and CCPA/CPRA context, and HTTPS/TLS observations. It can reuse eligible recent scans, return the CertScore score and supporting evidence, and link to the full report. Results are observational and are not legal advice, certification, or a compliance determination.
+> Upgrades CertScore.ai Privacy Scanner with a fast preliminary cookie and tracker preview for newly accepted scans. When the runtime lane completes or reaches its six-second checkpoint, CertScore may return bounded `preConsentPreview` evidence within roughly 9–11 seconds so users can see early cookie and vendor observations while the full scan continues. Preview counts are explicitly partial and are superseded by the completed bundle's final returned tally and canonical findings. Version 2.0.0 also adds bounded Reject Path review on eligible sites, plus consent controls, privacy-policy transparency, GDPR/ePrivacy and CCPA/CPRA context, HTTPS/TLS observations, provenance, and explicit coverage limitations. Results are observational and are not legal advice, certification, or a compliance determination.
 
 The repository package deliberately does not contain a fabricated `.app.json`. If ChatGPT developer mode creates a registered MCP connection for local testing, use its real `plugin_asdk_app...` technical ID at that time. Direct MCP users remain on the stable endpoint and do not need this plugin package for runtime access.
 

@@ -52,7 +52,7 @@ The separate `ai.certscore/mcp` manifest and `https://mcp.certscore.ai/mcp` endp
 - GitHub MCP Registry: publish `packages/certscore-mcp/server-light.json` only after domain-namespace authentication and a final live validation.
 - Claude Code: the validated plugin package is in `integrations/claude-code/certscore-mcp-light`, with the repository marketplace catalog at `.claude-plugin/marketplace.json`.
 - Cursor: the marketplace-ready Agent Plugin package is in `integrations/cursor/certscore-website-privacy-preflight` at integration version `1.0.1`.
-- OpenAI: the provider-neutral **With MCP** package is in `integrations/openai/certscore-website-privacy-preflight` at plugin version `1.0.0`; its production endpoint and bundled skill must be submitted together through OpenAI's portal.
+- OpenAI: the provider-neutral **With MCP** package is in `integrations/openai/certscore-website-privacy-preflight` at plugin version `2.0.0`; its production endpoint and bundled preview-aware skill must be scanned and submitted together through OpenAI's portal.
 - Cline and Kilo: reuse the platform-neutral workflow and instruction copy in `docs/mcp-light-marketplace-assets.md`; create platform-owned manifests only in the official submission repository or UI.
 - Docker MCP Catalog: do not submit the current remote-only Light distribution. Catalog work remains blocked unless a separate container distribution is approved and implemented; never imply that the hosted Light service is a downloadable Docker image.
 - Copy-ready, platform-specific fields and remaining external actions are in `docs/mcp-light-submission-packets.md`.
