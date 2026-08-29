@@ -30,10 +30,15 @@ test("owned-canary authorization is exact-host and path scoped", () => {
     "https://ergoveritas.com/.well-known/certscore-canary/post-refusal/reject-ignored.html",
     authorization,
   ).authorized, true);
-  assert.equal(authorizePostRefusalTarget(
-    "https://ergoveritas.com/test3.html",
-    authorization,
-  ).authorized, true);
+  for (let number = 1; number <= 4; number += 1) {
+    assert.equal(authorizePostRefusalTarget(
+      `https://ergoveritas.com/test${number}.html`,
+      authorization,
+    ).authorized, true);
+    assert.equal(getOwnedPostRefusalCanaryRecipeCase(
+      `https://ergoveritas.com/test${number}.html`,
+    ), "tcf");
+  }
   assert.equal(authorizePostRefusalTarget(
     "https://www.ergoveritas.com/.well-known/certscore-canary/post-refusal/reject-honored.html",
     authorization,
@@ -56,9 +61,6 @@ test("owned-canary authorization is exact-host and path scoped", () => {
   ).authorized, false);
   assert.equal(getOwnedPostRefusalCanaryRecipeCase(
     "https://ergoveritas.com/.well-known/certscore-canary/post-refusal/reject-ignored.html",
-  ), "tcf");
-  assert.equal(getOwnedPostRefusalCanaryRecipeCase(
-    "https://ergoveritas.com/test3.html",
   ), "tcf");
   assert.equal(getOwnedPostRefusalCanaryRecipeCase(
     "https://ergoveritas.com/test3.html?variant=other",

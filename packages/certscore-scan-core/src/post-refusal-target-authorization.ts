@@ -55,7 +55,22 @@ const OWNED_POST_REFUSAL_CANARY_TARGETS = [
   },
   {
     hostname: "ergoveritas.com",
+    pathname: "/test1.html",
+    recipeCase: "tcf",
+  },
+  {
+    hostname: "ergoveritas.com",
+    pathname: "/test2.html",
+    recipeCase: "tcf",
+  },
+  {
+    hostname: "ergoveritas.com",
     pathname: "/test3.html",
+    recipeCase: "tcf",
+  },
+  {
+    hostname: "ergoveritas.com",
+    pathname: "/test4.html",
     recipeCase: "tcf",
   },
 ] as const;

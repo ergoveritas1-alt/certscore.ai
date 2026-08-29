@@ -120,7 +120,7 @@ function postRefusalObservationFromIntent(input: {
   const ownedCanary = target.protocol === "https:" &&
     target.hostname === "ergoveritas.com" &&
     (target.pathname.startsWith("/.well-known/certscore-canary/post-refusal/") ||
-      target.pathname === "/test3.html");
+      /^\/test[1-4]\.html$/.test(target.pathname));
   const exactProductionTarget = target.protocol === "https:" &&
     !target.username &&
     !target.password &&

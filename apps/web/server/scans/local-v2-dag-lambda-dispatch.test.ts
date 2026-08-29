@@ -148,25 +148,26 @@ test("drops stale prior policy URLs before Lambda dispatch", () => {
 });
 
 test("adds the default-off reject worker to eligible sharded scans with target-scoped authorization", () => {
-  const canaryConfig = buildLambdaScanConfig();
-  canaryConfig.hostname = "ergoveritas.com";
-  canaryConfig.normalizedUrl =
-    "https://ergoveritas.com/test3.html";
-  canaryConfig.execution = {
-    ...canaryConfig.execution,
-    v2DagLambda: {
-      ...(canaryConfig.execution?.v2DagLambda as Record<string, unknown>),
-      orchestrationMode: "sharded",
-      postRefusalRejectWorkerEnabled: true,
-    },
-  };
-  const canaryPayload = buildLocalV2DagLambdaDispatchPayload({
-    scanConfig: canaryConfig,
-    scanId: "scan-canary-reject",
-  });
-  assert.equal(canaryPayload.postRefusalObservation?.dispatchDelayMs, 500);
-  assert.equal(canaryPayload.postRefusalObservation?.interactionAuthorization.kind, "owned_canary");
-  assert.equal(canaryPayload.postRefusalObservation?.resolver.kind, "canonical_cmp_registry");
+  for (let number = 1; number <= 4; number += 1) {
+    const canaryConfig = buildLambdaScanConfig();
+    canaryConfig.hostname = "ergoveritas.com";
+    canaryConfig.normalizedUrl = `https://ergoveritas.com/test${number}.html`;
+    canaryConfig.execution = {
+      ...canaryConfig.execution,
+      v2DagLambda: {
+        ...(canaryConfig.execution?.v2DagLambda as Record<string, unknown>),
+        orchestrationMode: "sharded",
+        postRefusalRejectWorkerEnabled: true,
+      },
+    };
+    const canaryPayload = buildLocalV2DagLambdaDispatchPayload({
+      scanConfig: canaryConfig,
+      scanId: `scan-canary-reject-${number}`,
+    });
+    assert.equal(canaryPayload.postRefusalObservation?.dispatchDelayMs, 500);
+    assert.equal(canaryPayload.postRefusalObservation?.interactionAuthorization.kind, "owned_canary");
+    assert.equal(canaryPayload.postRefusalObservation?.resolver.kind, "canonical_cmp_registry");
+  }
 
   const ordinaryConfig = buildLambdaScanConfig();
   ordinaryConfig.execution = {

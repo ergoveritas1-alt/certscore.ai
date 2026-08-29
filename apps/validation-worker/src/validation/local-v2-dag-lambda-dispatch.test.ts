@@ -42,35 +42,37 @@ test("durable publisher fails closed for malformed committed dispatch intent", (
 });
 
 test("durable publisher forwards the owned-canary Reject observation contract", () => {
-  const scanId = "4f75b34a-9755-468d-b8f9-bec6042e94d7";
-  const payload = buildDurableLocalV2DagLambdaDispatchPayload({
-    scanId,
-    scanConfig: {
-      hostname: "ergoveritas.com",
-      normalizedUrl: "https://ergoveritas.com/test3.html",
-      execution: {
-        v2DagLambda: {
-          awsRegion: "eu-west-1",
-          contractVersion: "certscore.v2.lambda-dag-dispatch.v1",
-          functionName: "certscore-v2-dag-local-lambda",
-          orchestrationMode: "sharded",
-          postRefusalRejectWorkerEnabled: true,
-          postRefusalRejectWorkerRolloutMode: "all_eligible",
-          processor: "local-certscore-v2-dag-parallel-v1",
-          resultHandoff: "sqs",
-          resultQueueUrl: "https://sqs.eu-west-1.amazonaws.com/123/results",
-          scannerRuntime: "certscore-v2-dag-parallel-path",
-          targetEnvironment: "production",
-          vpcMode: "vpc",
+  for (let number = 1; number <= 4; number += 1) {
+    const scanId = `4f75b34a-9755-468d-b8f9-bec6042e94d${number}`;
+    const payload = buildDurableLocalV2DagLambdaDispatchPayload({
+      scanId,
+      scanConfig: {
+        hostname: "ergoveritas.com",
+        normalizedUrl: `https://ergoveritas.com/test${number}.html`,
+        execution: {
+          v2DagLambda: {
+            awsRegion: "eu-west-1",
+            contractVersion: "certscore.v2.lambda-dag-dispatch.v1",
+            functionName: "certscore-v2-dag-local-lambda",
+            orchestrationMode: "sharded",
+            postRefusalRejectWorkerEnabled: true,
+            postRefusalRejectWorkerRolloutMode: "all_eligible",
+            processor: "local-certscore-v2-dag-parallel-v1",
+            resultHandoff: "sqs",
+            resultQueueUrl: "https://sqs.eu-west-1.amazonaws.com/123/results",
+            scannerRuntime: "certscore-v2-dag-parallel-path",
+            targetEnvironment: "production",
+            vpcMode: "vpc",
+          },
         },
       },
-    },
-  });
+    });
 
-  assert.equal(payload.postRefusalObservation?.enabled, true);
-  assert.equal(payload.postRefusalObservation?.rolloutMode, "all_eligible");
-  assert.equal(payload.postRefusalObservation?.dispatchDelayMs, 500);
-  assert.equal(payload.postRefusalObservation?.interactionAuthorization.kind, "owned_canary");
+    assert.equal(payload.postRefusalObservation?.enabled, true);
+    assert.equal(payload.postRefusalObservation?.rolloutMode, "all_eligible");
+    assert.equal(payload.postRefusalObservation?.dispatchDelayMs, 500);
+    assert.equal(payload.postRefusalObservation?.interactionAuthorization.kind, "owned_canary");
+  }
 });
 
 test("durable publisher forwards exact-target authorization for eligible public scans", () => {
