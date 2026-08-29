@@ -69,6 +69,9 @@ test("the Internal / QA identity list contains the requested exact identities", 
   assert.match(analyticsRepository, /host\(events\.requester_ip\)/);
   assert.doesNotMatch(mcpRepository, /requester_ip::text, ''\) = any\(\$\{requesterIpParameter\}/);
   assert.doesNotMatch(analyticsRepository, /to_jsonb\(events\) ->> 'requester_ip', ''\) = any/);
+  assert.match(mcpRepository, /if \(!includeCanary\) \{[\s\S]*dashboardFilterValues\.push/);
+  assert.match(mcpRepository, /retentionDaysParameter = `\$\$\{dashboardFilterValues\.length \+ 1\}`/);
+  assert.doesNotMatch(mcpRepository, /\$6::int \* interval '1 day'/);
 });
 
 test("all four pages render the same minimal auto-applying traffic dropdown", () => {

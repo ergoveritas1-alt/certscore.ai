@@ -252,13 +252,18 @@ async function loadAdminMcpTelemetryDashboardUncached(
   const internalQaFilter = includeCanary ? "" : internalQaMcpTrafficFilter("events", "$3", "$4", "$5");
   const macMiniFilter = macMiniMcpTrafficFilter("events", "$1", "$2");
   const macMiniEventFilter = macMiniMcpTrafficFilter("events", "$1", "$2");
-  const dashboardFilterValues = [
+  const dashboardFilterValues: unknown[] = [
     excludeMacMiniScanBot,
     MAC_MINI_SCAN_BOT_API_KEY_NAMES,
-    INTERNAL_QA_EMAILS,
-    INTERNAL_QA_REQUESTER_IPS,
-    INTERNAL_QA_MCP_CLIENT_NAMES,
   ];
+  if (!includeCanary) {
+    dashboardFilterValues.push(
+      INTERNAL_QA_EMAILS,
+      INTERNAL_QA_REQUESTER_IPS,
+      INTERNAL_QA_MCP_CLIENT_NAMES,
+    );
+  }
+  const retentionDaysParameter = `$${dashboardFilterValues.length + 1}`;
   const [summaryResult, trendResult, toolResult, surfaceResult, sourceResult, hostnameResult, retentionResult, comparisonResult] = await Promise.all([
     queryOne<SummaryRow>(
       `select count(*) as invocation_count,
@@ -377,7 +382,7 @@ async function loadAdminMcpTelemetryDashboardUncached(
               max(occurred_at) as newest_event_at,
               count(*) as total_event_count,
               count(*) filter (
-                where occurred_at < now() - ($6::int * interval '1 day')
+                where occurred_at < now() - (${retentionDaysParameter}::int * interval '1 day')
               ) as expired_event_count
          from public.mcp_tool_invocation_events events
         where true ${internalQaFilter} ${macMiniFilter}`,
