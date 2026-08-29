@@ -158,8 +158,8 @@ When the portal generates a domain-verification challenge, retain its exact publ
 
 Starter prompts:
 
-1. `Run a fresh privacy preflight for https://ergoveritas.com/test1.html. Show any preliminary cookie and tracker preview immediately, then continue to the final report.`
-2. `Review https://ergoveritas.com/test2.html and provide cookie, CMP, and consent-control evidence from the completed scan results.`
+1. `Scan https://ergoveritas.com/test1.html. Show the preliminary cookie/tracker preview, then continue to the final report.`
+2. `Review https://ergoveritas.com/test2.html and provide cookie, CMP, and consent control evidence from the completed scan results.`
 3. `Check https://ergoveritas.com/test3.html for eligible activity after a confirmed Reject action.`
 
 OpenAI positive review cases:

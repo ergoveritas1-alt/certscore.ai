@@ -23,8 +23,8 @@
     "privacyPolicyURL": "https://certscore.ai/privacy",
     "termsOfServiceURL": "https://certscore.ai/terms",
     "defaultPrompt": [
-      "Run a fresh privacy preflight for https://ergoveritas.com/test1.html. Show any preliminary cookie and tracker preview immediately, then continue to the final report.",
-      "Review https://ergoveritas.com/test2.html and provide cookie, CMP, and consent-control evidence from the completed scan results.",
+      "Scan https://ergoveritas.com/test1.html. Show the preliminary cookie/tracker preview, then continue to the final report.",
+      "Review https://ergoveritas.com/test2.html and provide cookie, CMP, and consent control evidence from the completed scan results.",
       "Check https://ergoveritas.com/test3.html for eligible activity after a confirmed Reject action."
     ],
     "brandColor": "#0B5CAB"
