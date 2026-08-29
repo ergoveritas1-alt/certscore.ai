@@ -6,7 +6,7 @@ Status: public developer preview. Version 0.2.16 makes confirmed Reject Path out
 
 Public docs:
 
-- [Add CertScore to Cursor](https://cursor.com/link/mcp/install?name=certscore&config=eyJ1cmwiOiJodHRwczovL21jcC5jZXJ0c2NvcmUuYWkvbWNwL2xpZ2h0In0%3D)
+- [Add CertScore to Cursor](https://cursor.com/link/mcp/install?name=CertScore.ai&config=eyJ1cmwiOiJodHRwczovL21jcC5jZXJ0c2NvcmUuYWkvbWNwL2xpZ2h0In0%3D)
 - [MCP Light landing page](https://certscore.ai/mcp/light?utm_source=github&utm_medium=package_readme&utm_campaign=mcp_light)
 - [Cursor Directory listing](https://cursor.directory/plugins/certscoreai-mcp-light)
 - https://certscore.ai/developers/mcp

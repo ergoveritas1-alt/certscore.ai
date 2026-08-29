@@ -10,7 +10,7 @@ test("MCP Light public links expose the Cursor install and directory paths", () 
   const install = new URL(MCP_LIGHT_CURSOR_INSTALL_URL);
   assert.equal(install.origin, "https://cursor.com");
   assert.equal(install.pathname, "/link/mcp/install");
-  assert.equal(install.searchParams.get("name"), "certscore");
+  assert.equal(install.searchParams.get("name"), "CertScore.ai");
 
   const encodedConfig = install.searchParams.get("config");
   assert.ok(encodedConfig);

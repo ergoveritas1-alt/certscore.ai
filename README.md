@@ -55,7 +55,7 @@ website-signal-risk-scanner/
 
 CertScore.ai MCP Light is the free, no-auth, hosted three-tool integration for public website privacy scans. It detects evidence-backed privacy, cookie, tracker, consent, policy, regulatory-review, HTTPS/TLS, and eligible Reject Path post-refusal signals. Results include a CertScore score and supporting evidence for human and agentic review; they are not legal advice, certification, or a compliance determination.
 
-[Add CertScore to Cursor](https://cursor.com/link/mcp/install?name=certscore&config=eyJ1cmwiOiJodHRwczovL21jcC5jZXJ0c2NvcmUuYWkvbWNwL2xpZ2h0In0%3D) · [MCP Light landing page](https://certscore.ai/mcp/light?utm_source=github&utm_medium=repository&utm_campaign=mcp_light) · [Cursor Directory listing](https://cursor.directory/plugins/certscoreai-mcp-light) · [Agent installation guide](llms-install.md) · [Full installation reference](docs/mcp-light-install.md) · [MCP package guide](packages/certscore-mcp/README.md)
+[Add CertScore to Cursor](https://cursor.com/link/mcp/install?name=CertScore.ai&config=eyJ1cmwiOiJodHRwczovL21jcC5jZXJ0c2NvcmUuYWkvbWNwL2xpZ2h0In0%3D) · [MCP Light landing page](https://certscore.ai/mcp/light?utm_source=github&utm_medium=repository&utm_campaign=mcp_light) · [Cursor Directory listing](https://cursor.directory/plugins/certscoreai-mcp-light) · [Agent installation guide](llms-install.md) · [Full installation reference](docs/mcp-light-install.md) · [MCP package guide](packages/certscore-mcp/README.md)
 
 Try it with: `Use CertScore.ai to review [PUBLIC URL] before launch. Report the CertScore score, evidence-backed findings, Reject Path observations when available, coverage limitations, and the report URL.`
 

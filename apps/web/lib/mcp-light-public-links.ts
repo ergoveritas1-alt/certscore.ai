@@ -1,5 +1,5 @@
 export const MCP_LIGHT_CURSOR_INSTALL_URL =
-  "https://cursor.com/link/mcp/install?name=certscore&config=eyJ1cmwiOiJodHRwczovL21jcC5jZXJ0c2NvcmUuYWkvbWNwL2xpZ2h0In0%3D";
+  "https://cursor.com/link/mcp/install?name=CertScore.ai&config=eyJ1cmwiOiJodHRwczovL21jcC5jZXJ0c2NvcmUuYWkvbWNwL2xpZ2h0In0%3D";
 
 export const MCP_LIGHT_CURSOR_DIRECTORY_URL = "https://cursor.directory/plugins/certscoreai-mcp-light";
 
