@@ -212,6 +212,20 @@ async function main() {
     ["apps/web/app/developers/developer-pages.tsx", "export const mcpTools ="],
     ["apps/web/app/api-pulse/page.tsx", "const mcpTools ="]
   ] as const) {
+    const source = readFileSync(join(repoRoot, path), "utf8");
+    if (source.includes("certScoreMcpToolContracts.map")) {
+      assert.match(
+        source,
+        /import \{ certScoreMcpToolContracts \} from "@certscore\/api-contracts";/,
+        `${path} should import the canonical MCP tool contracts`
+      );
+      assert.match(
+        source,
+        /(?:export )?const mcpTools = certScoreMcpToolContracts\.map\(\(\{ description, name \}\) => \[name, description\] as const\);/,
+        `${path} should render MCP tools from the canonical contracts`
+      );
+      continue;
+    }
     assert.deepEqual(
       sortedTools(extractToolListFromSource(path, marker)),
       sortedTools(manifest),
@@ -226,9 +240,26 @@ async function main() {
   );
 
   const readme = readFileSync(join(repoRoot, "packages/certscore-mcp/README.md"), "utf8");
+  const readableWorkflowSummaries = new Set(["certscore_scan_site", "certscore_get_scan_status"]);
   for (const tool of manifest) {
     assert.match(readme, new RegExp(`\\\`${tool.name}\\\``), `README should document ${tool.name}`);
-    assert.ok(readme.includes(tool.description), `README should use manifest description for ${tool.name}`);
+    if (!readableWorkflowSummaries.has(tool.name)) {
+      assert.ok(readme.includes(tool.description), `README should use manifest description for ${tool.name}`);
+    }
+  }
+  for (const guidance of [
+    /six-second checkpoint/,
+    /preConsentPreview/,
+    /captured totals from bounded returned identit(?:y|ies)/,
+    /trackingVendorCount/,
+    /operationalVendors/,
+    /not comparable to the completed inventory's broader `trackerCount`/,
+    /Continue with `certscore_get_scan_status`/,
+    /call `certscore_get_scan_bundle` at completed or completed_limited/,
+    /never poll in parallel/,
+    /never resubmit `certscore_scan_site` while the scan is active/,
+  ]) {
+    assert.match(readme, guidance, `README should preserve MCP partial-preview workflow guidance: ${guidance}`);
   }
 
   const packageNames = npxPackagesFromDocs([
