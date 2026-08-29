@@ -506,7 +506,7 @@ export const certScoreMcpToolContracts = [
     description: "Validate a public website URL and either reuse an eligible completed CertScore scan or create a new public-web scan for observable privacy and consent signals, including pre-consent storage, trackers, consent/CMP behavior, transport security, policy disclosures, and GDPR/ePrivacy or CCPA/CPRA review signals. A newly accepted scan returns its stable scanId and may also include preConsentPreview: a bounded partial preview of passive cookie/tracker observations captured when the runtime lane completes or reaches its six-second checkpoint. The preview separates captured counts from returned identity counts, which may be lower because identity arrays are bounded. trackingVendorCount excludes infrastructure, security, and consent-management vendors; those appear separately in operationalVendors. The compatibility trackerCount in the preview aliases trackingVendorCount and must not be compared directly with the completed inventory's broader trackerCount, which includes operational categories. The MCP text lists returned cookies with name, domain, party, purpose/category, essentiality, and observedAtMs, plus tracking and operational vendors with product, purpose/category, confidence, and domains; per-vendor first-seen timing is not available in this preliminary contract. Every preview count is checkpoint-only and not the full scan tally: never present it as a final total and never stop the workflow because a preview was returned. The preview wait returns as soon as the preview is ready and is capped at approximately 9–11 seconds total. It falls back to the stable scanId without a preview when that bounded window expires. The preview is not final and contains no canonical findings or score. If a newly accepted scan is queued, running, or finalizing, retain the unchanged scanId, wait at least the returned retryAfterSeconds of 15 seconds, and call certscore_get_scan_status once; do not resubmit certscore_scan_site for that scan. Subsequent active status responses use 10 seconds while queued and 5 seconds while running or finalizing. Stop polling at completed, completed_limited, failed, expired, or rate_limited. At completed or completed_limited, call certscore_get_scan_bundle before reporting full scan results; that bundle provides the completed scan's final returned tally, canonical findings, and coverage limitations. No-go and limited coverage are observations, never proof of compliance.",
     inputSchema: mcpScanSiteInputSchema,
     outputSchema: mcpScanSiteOutputSchema,
-    annotations: scanCreationAnnotations
+    annotations: { title: "Scan site", ...scanCreationAnnotations }
   },
   {
     name: "certscore_get_scan",
@@ -514,7 +514,7 @@ export const certScoreMcpToolContracts = [
     description: "Retrieve the API v2 public-safe scan resource, including completed-limited no-go disposition, reason-specific guidance, and timing when available.",
     inputSchema: mcpGetScanInputSchema,
     outputSchema: apiV2ScanResourceSchema,
-    annotations: readOnlyOpenWorldAnnotations
+    annotations: { title: "Get CertScore scan", ...readOnlyOpenWorldAnnotations }
   },
   {
     name: "certscore_get_scan_status",
@@ -522,7 +522,7 @@ export const certScoreMcpToolContracts = [
     description: "Poll an accepted scan using only the unchanged scanId returned by certscore_scan_site. After certscore_scan_site, wait at least its returned retryAfterSeconds of 15 seconds before the first status call. For subsequent active status responses, wait at least the returned retryAfterSeconds: 10 seconds while queued and 5 seconds while running or finalizing. Never poll in parallel, and never resubmit certscore_scan_site while the scan is active. Active responses may include preConsentPreview, which is only a partial preview of passive observations and never a finding, score, or final result. Distinguish captured totals from bounded returned identities. trackingVendorCount excludes infrastructure, security, and consent-management vendors, which appear separately in operationalVendors; the compatibility preview trackerCount is not comparable to the completed inventory's broader trackerCount. Never present preview counts as final totals; continue polling after receiving the preview. Active responses also include phase, heartbeat, estimated progress, stalled state, retry delay, and canonical scan provenance when available. Terminal responses include the CertScore score, risk, coverage, execution region (scanFrom), timestamps, report URL, and an explicit next action. For a reused or retrieved existing scan, use only persisted scanFrom and timestamps; never infer its original region from the current request, the user's location, or a default. Report unavailable provenance as unavailable. Stop polling at any terminal status; at completed or completed_limited, call certscore_get_scan_bundle before reporting full scan results so the completed scan's final returned tally, canonical findings, and limitations are used.",
     inputSchema: mcpGetScanStatusInputSchema,
     outputSchema: mcpScanStatusOutputSchema,
-    annotations: readOnlyInternalAnnotations
+    annotations: { title: "Get scan status", ...readOnlyInternalAnnotations }
   },
   {
     name: "certscore_get_report",
@@ -530,7 +530,7 @@ export const certScoreMcpToolContracts = [
     description: "Focused follow-up: retrieve a bounded Pulse report with high-signal TextContent and typed structuredContent, including customer-safe no-go messaging. For broad privacy questions, use certscore_get_scan_bundle first because it combines canonical findings, limitations, and pre-consent rows without redundant calls.",
     inputSchema: mcpGetReportInputSchema,
     outputSchema: mcpReportOutputSchema,
-    annotations: readOnlyOpenWorldAnnotations
+    annotations: { title: "Get CertScore Pulse report", ...readOnlyOpenWorldAnnotations }
   },
   {
     name: "certscore_get_evidence",
@@ -538,7 +538,7 @@ export const certScoreMcpToolContracts = [
     description: "Focused follow-up: retrieve a bounded public-safe evidence packet with a concise TextContent digest and typed structuredContent. For broad privacy questions, use certscore_get_scan_bundle first. Excludes raw cookie values, raw bodies, sensitive payloads, full DOM, and unredacted query values.",
     inputSchema: mcpGetEvidenceInputSchema,
     outputSchema: mcpEvidenceOutputSchema,
-    annotations: readOnlyOpenWorldAnnotations
+    annotations: { title: "Get CertScore Pulse evidence", ...readOnlyOpenWorldAnnotations }
   },
   {
     name: "certscore_get_scan_bundle",
@@ -546,7 +546,7 @@ export const certScoreMcpToolContracts = [
     description: "Call after completed or completed_limited status. Every usable completed bundle returns a self-contained concise TextContent digest plus matching structuredContent, including canonical execution region (scanFrom) and timestamps when available. For a reused or retrieved existing scan, use only persisted scanFrom and timestamps; never infer its original region from the current request, the user's location, or a default, and report unavailable provenance as unavailable. The default summary includes the canonical report overview, up to five compact public-safe projected findings across the scan's observed domains, and bounded row-level pre-consent cookie/tracker evidence; detail=findings increases the default finding allowance, evidence adds bounded evidence digests and references, and full adds all available bounded sections. MCP Light applies a 25000-byte response ceiling so full results remain transport-safe; use returned content URLs when the complete requested tier exceeds it. At the 5000-byte floor, core finding rows take priority over optional inventory and duplicate envelope fields; evidenceUrlTemplate may replace repeated per-finding URLs while preserving their canonical derivation from contentUrls.findings and findingId. Every response declares finding and evidence total/returned/truncated counts, canonicalFindingsComplete, requested and effective byte budgets, the response ceiling, omittedSections, retrieval URLs, and nextRecommendedMaxBytes when the complete tier fits the ceiling. When canonicalFindingsComplete is true, retry only if omitted envelope detail is needed. Enumerate only returned observations and projected findings. Post-refusal observation may intentionally stop as soon as qualifying non-essential activity or a retained consent-signal contradiction is observed. A confirmed observation with termination.kind=evidence_satisfied is positive evidence for the returned observation, not an inconclusive Reject Path result; keep any coverageLimitations scoped to additional behavior or persistence that was not measured. Treat criticality, priority, and confidence as CertScore metadata; regulatory review lenses are non-determinative CertScore review context, not legal severity, legal exposure, or a compliance determination. Missing consent-action evidence does not establish Accept, Reject, or Decline behavior. Do not extrapolate observed embeds, vendors, or requests into unobserved cookies, fingerprinting, tracking, or processing. The CertScore score covers observable scan signals only; do not infer unobserved technologies or legal compliance status, and never interpret no-go, not-observed, or limited coverage as proof of compliance.",
     inputSchema: mcpGetScanBundleInputSchema,
     outputSchema: mcpScanBundleOutputSchema,
-    annotations: accountedInternalReadAnnotations
+    annotations: { title: "Get scan bundle", ...accountedInternalReadAnnotations }
   },
   {
     name: "certscore_export_findings",
@@ -554,7 +554,7 @@ export const certScoreMcpToolContracts = [
     description: "Return structured findings plus completed-limited no-go disposition and guidance for downstream review or ticketing workflows.",
     inputSchema: mcpExportFindingsInputSchema,
     outputSchema: mcpFindingsExportOutputSchema,
-    annotations: readOnlyOpenWorldAnnotations
+    annotations: { title: "Export CertScore findings", ...readOnlyOpenWorldAnnotations }
   },
   {
     name: "certscore_list_findings",
@@ -562,7 +562,7 @@ export const certScoreMcpToolContracts = [
     description: "Focused follow-up: list bounded API v2 public-safe findings already projected by the canonical pipeline, with matching high-signal TextContent and typed structuredContent. For broad privacy questions, use certscore_get_scan_bundle first.",
     inputSchema: mcpListFindingsInputSchema,
     outputSchema: mcpFindingListOutputSchema,
-    annotations: readOnlyOpenWorldAnnotations
+    annotations: { title: "List CertScore findings", ...readOnlyOpenWorldAnnotations }
   },
   {
     name: "certscore_get_pre_consent_cookies_trackers",
@@ -570,7 +570,7 @@ export const certScoreMcpToolContracts = [
     description: "Focused follow-up: retrieve bounded row-level public-safe pre-consent cookie/tracker evidence with matching TextContent and typed structuredContent. For a new broad request such as checking a site for pre-consent tracking, use certscore_scan_site then certscore_get_scan_bundle first.",
     inputSchema: mcpGetPreConsentCookiesTrackersInputSchema,
     outputSchema: mcpPreConsentCookiesTrackersOutputSchema,
-    annotations: readOnlyOpenWorldAnnotations
+    annotations: { title: "Get pre-consent cookies and trackers", ...readOnlyOpenWorldAnnotations }
   },
   {
     name: "certscore_explain_finding",
@@ -578,7 +578,7 @@ export const certScoreMcpToolContracts = [
     description: "Explain one projected finding with public evidence, caveats, reviewer next steps, and reason-specific no-go context when applicable.",
     inputSchema: mcpExplainFindingInputSchema,
     outputSchema: apiV2FindingDetailSchema,
-    annotations: readOnlyOpenWorldAnnotations
+    annotations: { title: "Explain CertScore finding", ...readOnlyOpenWorldAnnotations }
   },
   {
     name: "certscore_get_latest_domain_scan",
@@ -586,7 +586,7 @@ export const certScoreMcpToolContracts = [
     description: "Retrieve the latest eligible API v2 public-safe scan for a domain.",
     inputSchema: mcpGetLatestDomainScanInputSchema,
     outputSchema: apiV2DomainLatestScanSchema,
-    annotations: readOnlyOpenWorldAnnotations
+    annotations: { title: "Get latest domain scan", ...readOnlyOpenWorldAnnotations }
   },
   {
     name: "certscore_get_latest_domain_pre_consent_cookies_trackers",
@@ -594,6 +594,6 @@ export const certScoreMcpToolContracts = [
     description: "Focused follow-up: retrieve bounded row-level public-safe pre-consent cookie/tracker evidence from the latest eligible scan for a domain, with matching TextContent and typed structuredContent. For a broad current-site review, use certscore_scan_site then certscore_get_scan_bundle first.",
     inputSchema: mcpGetLatestDomainPreConsentCookiesTrackersInputSchema,
     outputSchema: mcpPreConsentCookiesTrackersOutputSchema,
-    annotations: readOnlyOpenWorldAnnotations
+    annotations: { title: "Get latest domain pre-consent cookies and trackers", ...readOnlyOpenWorldAnnotations }
   }
 ] as const;

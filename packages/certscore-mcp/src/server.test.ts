@@ -224,6 +224,7 @@ test("CertScore Light exposes only the focused no-account workflow", async () =>
     );
     const scanSiteTool = tools.tools.find((tool) => tool.name === "certscore_scan_site");
     assert.deepEqual(scanSiteTool?.annotations, {
+      title: "Scan site",
       readOnlyHint: false,
       destructiveHint: false,
       idempotentHint: false,
@@ -256,6 +257,7 @@ test("CertScore Light exposes only the focused no-account workflow", async () =>
     );
     const statusTool = tools.tools.find((tool) => tool.name === "certscore_get_scan_status");
     assert.deepEqual(statusTool?.annotations, {
+      title: "Get scan status",
       readOnlyHint: true,
       destructiveHint: false,
       idempotentHint: true,
@@ -271,6 +273,7 @@ test("CertScore Light exposes only the focused no-account workflow", async () =>
     assert.match(statusTool?.description ?? "", /never poll in parallel/i);
     const bundleTool = tools.tools.find((tool) => tool.name === "certscore_get_scan_bundle");
     assert.deepEqual(bundleTool?.annotations, {
+      title: "Get scan bundle",
       readOnlyHint: true,
       destructiveHint: false,
       idempotentHint: false,

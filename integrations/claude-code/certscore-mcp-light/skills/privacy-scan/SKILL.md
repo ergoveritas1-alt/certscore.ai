@@ -1,10 +1,12 @@
 ---
 name: privacy-scan
-description: Run an evidence-backed privacy preflight on a public website before launch, vendor review, audit triage, or human compliance review.
+description: Scan a public website for evidence-backed cookie, tracker, consent, policy, Reject Path, and HTTPS/TLS privacy signals.
 argument-hint: "[public URL]"
 ---
 
 Use CertScore.ai MCP Light to review the public HTTP or HTTPS URL supplied by the user.
+
+CertScore.ai MCP Light is a free website privacy scanner and cookie checker for public websites. It detects pre-consent cookies and trackers, third-party tracking technologies, cookie banners, CMP and consent-management signals, privacy-policy and transparency findings, GDPR/ePrivacy and CCPA/CPRA review signals, and HTTPS/TLS transport observations. On eligible scans, describe Reject Path only when the returned result contains confirmed post-refusal evidence after a confirmed Reject action. Treat all results as automated public-web observations for review, not legal advice, certification, or a compliance determination.
 
 1. Call `certscore_scan_site` for the URL. Prefer the default recent-result reuse unless the user explicitly requests a fresh or repeated scan.
 2. Retain the returned `scanId` and report whether the result is new or reused.
