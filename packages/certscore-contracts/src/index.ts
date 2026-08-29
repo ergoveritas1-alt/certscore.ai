@@ -2301,6 +2301,91 @@ export const runtimeCoverageSummarySchema = z.object({
   notes: z.array(z.string()).default([]),
 });
 
+export const VERIFIED_PRE_CONSENT_RUNTIME_PREVIEW_PACKET_VERSION =
+  "certscore.verified-pre-consent-runtime-preview.v1" as const;
+
+const preConsentRuntimePreviewPurposeSchema = z.enum([
+  "analytics",
+  "advertising",
+  "marketing",
+  "personalization",
+  "session_replay",
+  "consent_management",
+  "tag_management",
+  "infrastructure",
+  "security",
+  "performance_monitoring",
+  "customer_support",
+  "unknown",
+]);
+
+/**
+ * Bounded, display-safe observations from the passive runtime-evidence lane.
+ * This is an explicitly preliminary retrieval artifact, never a concern,
+ * finding, score input, compliance conclusion, or terminal scan result.
+ */
+export const preConsentRuntimePreviewSchema = z.object({
+  type: z.literal("certscore_pre_consent_preview"),
+  resultStage: z.literal("preliminary"),
+  final: z.literal(false),
+  sourceLane: z.literal("runtime_evidence"),
+  generatedAt: z.string().datetime(),
+  runtimeCoverage: z.object({
+    status: z.enum(["usable", "limited_partial", "limited_none", "not_applicable"]),
+    limitationKeys: z.array(z.string().min(1).max(120)).max(16),
+  }).strict(),
+  summary: z.object({
+    cookieCount: z.number().int().nonnegative(),
+    returnedCookieCount: z.number().int().nonnegative().optional(),
+    trackerCount: z.number().int().nonnegative(),
+    trackingVendorCount: z.number().int().nonnegative().optional(),
+    returnedTrackingVendorCount: z.number().int().nonnegative().optional(),
+    operationalVendorCount: z.number().int().nonnegative().optional(),
+    returnedOperationalVendorCount: z.number().int().nonnegative().optional(),
+    thirdPartyRequestCount: z.number().int().nonnegative(),
+    vendorCount: z.number().int().nonnegative(),
+  }).strict(),
+  cookies: z.array(z.object({
+    name: z.string().min(1).max(256),
+    domain: z.string().min(1).max(253).nullable(),
+    party: z.enum(["first_party", "third_party", "unknown"]),
+    purpose: preConsentRuntimePreviewPurposeSchema,
+    essentiality: z.enum(["essential", "non_essential", "unknown"]),
+    observedAtMs: z.number().int().nonnegative().nullable(),
+  }).strict()).max(20),
+  trackers: z.array(z.object({
+    vendor: z.string().min(1).max(160),
+    product: z.string().min(1).max(160).nullable(),
+    purpose: preConsentRuntimePreviewPurposeSchema,
+    confidence: z.number().min(0).max(1),
+    domains: z.array(z.string().min(1).max(253)).max(8),
+  }).strict()).max(20),
+  operationalVendors: z.array(z.object({
+    vendor: z.string().min(1).max(160),
+    product: z.string().min(1).max(160).nullable(),
+    purpose: preConsentRuntimePreviewPurposeSchema,
+    confidence: z.number().min(0).max(1),
+    domains: z.array(z.string().min(1).max(253)).max(8),
+  }).strict()).max(20).optional(),
+  truncated: z.object({
+    cookies: z.boolean(),
+    trackers: z.boolean(),
+    operationalVendors: z.boolean().optional(),
+  }).strict(),
+  mustContinuePolling: z.literal(true),
+  observationOnlyDisclaimer: z.string().min(1).max(500),
+}).strict();
+
+export const verifiedPreConsentRuntimePreviewPacketSchema = z.object({
+  artifactOnly: z.literal(true),
+  contractVersion: z.literal(VERIFIED_PRE_CONSENT_RUNTIME_PREVIEW_PACKET_VERSION),
+  normalizedUrl: z.string().url().max(500),
+  preview: preConsentRuntimePreviewSchema,
+  productionFindingIntegration: z.literal(false),
+  scanId: z.string().min(1).max(160),
+  sourceHash: z.string().regex(/^[a-f0-9]{64}$/),
+}).strict();
+
 export const policySurfaceInspectionOutcomeSchema = z.object({
   outcome: z.enum([
     "privacy_policy_observed",
@@ -3320,6 +3405,8 @@ export type CmpRuntimeObservation = z.infer<typeof cmpRuntimeObservationSchema>;
 export type TransportSecurityObservation = z.infer<typeof transportSecurityObservationSchema>;
 export type DerivedRuntimeSignals = z.infer<typeof derivedRuntimeSignalsSchema>;
 export type RuntimeCoverageSummary = z.infer<typeof runtimeCoverageSummarySchema>;
+export type PreConsentRuntimePreview = z.infer<typeof preConsentRuntimePreviewSchema>;
+export type VerifiedPreConsentRuntimePreviewPacket = z.infer<typeof verifiedPreConsentRuntimePreviewPacketSchema>;
 export type ConsentSurfaceInspectionOutcome = z.infer<typeof consentSurfaceInspectionOutcomeSchema>;
 export type PolicySurfaceInspectionOutcome = z.infer<typeof policySurfaceInspectionOutcomeSchema>;
 export type VerifiedPolicyEvidencePacket = z.infer<typeof verifiedPolicyEvidencePacketSchema>;

@@ -28,8 +28,8 @@ For Cursor, Cline, Kilo, GitHub, and other MCP clients, select Streamable HTTP (
 
 Light intentionally exposes exactly three tools:
 
-- `certscore_scan_site`: request a scan of a public URL or reuse an eligible recent completed scan. Retain the returned `scanId`. Prefer the default `freshness=latest`; use `refresh` only when the user explicitly asks for a fresh or repeated scan.
-- `certscore_get_scan_status`: poll an active scan using only its stable `scanId`. Honor the returned retry delay and stop at a terminal state.
+- `certscore_scan_site`: request a scan of a public URL or reuse an eligible recent completed scan. Retain the returned `scanId`. A new scan may also return `preConsentPreview`, a bounded partial preview of checkpoint cookie/tracker observations. Its counts are partial, not the full scan tally, and must never be reported as final totals. Prefer the default `freshness=latest`; use `refresh` only when the user explicitly asks for a fresh or repeated scan.
+- `certscore_get_scan_status`: poll an active scan using only its stable `scanId`. Honor the returned retry delay and stop at a terminal state. A preview may also appear here, but it does not stop polling.
 - `certscore_get_scan_bundle`: after a usable terminal completion, retrieve a bounded, public-safe bundle of canonical findings, evidence summaries and references, coverage, limitations, score metadata, and report links.
 
 MCP Light applies a 25,000-byte response ceiling. Larger requested bundle budgets are explicitly clamped in response metadata; when the complete tier exceeds the ceiling, use the returned canonical report or evidence URL rather than repeatedly increasing `maxBytes`.
@@ -40,9 +40,10 @@ The bundle can include observations about pre-consent cookies and browser storag
 
 1. Call `certscore_scan_site` with the public URL.
 2. Retain `scanId` whenever one is returned.
-3. If the status is `queued`, `running`, or `finalizing`, poll `certscore_get_scan_status` with that ID only.
-4. Stop at `completed`, `completed_limited`, `failed`, `expired`, or `rate_limited`.
-5. For `completed` or `completed_limited`, call `certscore_get_scan_bundle` and interpret the returned evidence and limitations.
+3. If `preConsentPreview` is present, treat it only as a partial preview of checkpoint observations. Its counts are partial, not the full scan tally. It contains no canonical findings or score, is not completion, and must not be reported as final totals.
+4. If the status is `queued`, `running`, or `finalizing`, poll `certscore_get_scan_status` with that ID only.
+5. Stop at `completed`, `completed_limited`, `failed`, `expired`, or `rate_limited`.
+6. For `completed` or `completed_limited`, call `certscore_get_scan_bundle` before reporting full scan results. Use the bundle for the completed scan's final returned tally, canonical findings, evidence, and limitations.
 
 If a retryable error is returned without a `scanId`, wait for `retryAfterSeconds` and retry `certscore_scan_site`; there is no scan to poll yet. A `completed_limited` result is usable but explicitly limited. Do not request a bundle after `failed`, `expired`, or `rate_limited` unless a later tool response directs otherwise.
 

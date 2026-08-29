@@ -10,7 +10,7 @@ import { createPageMetadata } from "../../../lib/seo";
 const endpoint = "https://mcp.certscore.ai/mcp/light";
 const openAiMcpDemoPath = "/videos/openai-mcp-certscore-demo.mp4";
 const codexSetupCommand = "codex mcp add certscore --url https://mcp.certscore.ai/mcp/light";
-const firstRunPrompt = "Scan https://ergoveritas.com/.well-known/certscore-canary/sentinels/broad-baseline.html. If certscore_scan_site returns a queued, running, or finalizing result, retain the returned scanId and poll certscore_get_scan_status using scanId only. If certscore_scan_site returns a retryable error without a scanId, wait for retryAfterSeconds and retry certscore_scan_site; do not call certscore_get_scan_status until a scanId exists. Once the scan reaches a terminal status, call certscore_get_scan_bundle with detail=findings and maxBytes=8000. Summarize whether the result was new or reused, the score, risk level, findings, evidence links, coverage limitations, and report URL. Explain truncation or omitted sections when present. Treat results as automated public-web observations, not legal conclusions, certifications, or compliance determinations.";
+const firstRunPrompt = "Scan https://ergoveritas.com/.well-known/certscore-canary/sentinels/broad-baseline.html. If certscore_scan_site includes preConsentPreview, treat it as a partial preview and continue the workflow. Distinguish captured totals from bounded returned identities; use trackingVendorCount for non-operational tracking vendors and keep operationalVendors separate. Do not compare the compatibility preview trackerCount with the completed inventory's broader trackerCount. Never report preview counts as final totals. If certscore_scan_site returns a queued, running, or finalizing result, retain the returned scanId and poll certscore_get_scan_status using scanId only. If certscore_scan_site returns a retryable error without a scanId, wait for retryAfterSeconds and retry certscore_scan_site; do not call certscore_get_scan_status until a scanId exists. Once the scan reaches a terminal status, call certscore_get_scan_bundle with detail=findings and maxBytes=8000. Summarize whether the result was new or reused, the score, risk level, findings, evidence links, coverage limitations, and report URL. Explain truncation or omitted sections when present. Treat results as automated public-web observations, not legal conclusions, certifications, or compliance determinations.";
 const verificationPrompt = "List the available CertScore tools and confirm that certscore_scan_site, certscore_get_scan_status, and certscore_get_scan_bundle are available. Then scan https://ergoveritas.com/.well-known/certscore-canary/sentinels/broad-baseline.html and report whether the result was new or reused.";
 const agentDisclaimer = "CertScore results are automated observations from a public-web scan. No-go, not-observed, and limited-coverage results are not proof of compliance, absence of risk, or legal status. Review the retained evidence and applicable context before relying on a finding.";
 
@@ -32,6 +32,7 @@ const clients = [
 const workflow = [
   "Call certscore_scan_site with a public URL.",
   "If a retryable error has no scanId, wait retryAfterSeconds and retry certscore_scan_site.",
+  "If preConsentPreview is present, summarize it only as preliminary passive observations and continue the workflow.",
   "If the result is queued, running, or finalizing, retain scanId.",
   "Poll certscore_get_scan_status using scanId only. Never poll until scanId exists.",
   "Stop polling when the scan reaches a terminal status, then call certscore_get_scan_bundle.",
@@ -135,6 +136,7 @@ export default function McpLightPage() {
           <h2 className="mt-2 text-2xl font-semibold text-slate-950">Exactly what the agent should do</h2>
           <CodeBlock>{`certscore_scan_site
 → retry certscore_scan_site if a retryable error has no scanId
+→ summarize preConsentPreview only as preliminary context when present
 → certscore_get_scan_status with scanId if still running
 → certscore_get_scan_bundle after terminal status`}</CodeBlock>
           <ol className="mt-5 grid gap-3 md:grid-cols-2">
@@ -162,6 +164,7 @@ export default function McpLightPage() {
                 <tr><td className="px-4 py-3 font-mono">completed</td><td className="px-4 py-3">Call <code>certscore_get_scan_bundle</code> and summarize the result.</td></tr>
                 <tr><td className="px-4 py-3 font-mono">reused_scan</td><td className="px-4 py-3">Report that an eligible prior scan was reused and quota was not consumed. Keep this original creation decision separate from a later <code>scan_id_lookup</code>.</td></tr>
                 <tr><td className="px-4 py-3 font-mono">queued / running / finalizing</td><td className="px-4 py-3">Retain <code>scanId</code> and poll <code>certscore_get_scan_status</code> using <code>scanId</code> only.</td></tr>
+                <tr><td className="px-4 py-3 font-mono">preConsentPreview</td><td className="px-4 py-3">Summarize only as preliminary passive cookie/tracker observations. It is not a finding, score, or final result; continue status polling.</td></tr>
                 <tr><td className="px-4 py-3 font-mono">completed_limited / no-go</td><td className="px-4 py-3">Explain the limitation and never treat it as proof of compliance or absence of risk.</td></tr>
                 <tr><td className="px-4 py-3 font-mono">retryable error without scanId</td><td className="px-4 py-3">Wait <code>retryAfterSeconds</code> and retry <code>certscore_scan_site</code>; do not poll status.</td></tr>
                 <tr><td className="px-4 py-3 font-mono">invalid URL</td><td className="px-4 py-3">Correct the public HTTP or HTTPS URL, then retry <code>certscore_scan_site</code>.</td></tr>

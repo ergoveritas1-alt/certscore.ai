@@ -231,7 +231,14 @@ test("CertScore Light exposes only the focused no-account workflow", async () =>
     });
     assert.ok(scanSiteTool?.outputSchema?.required?.includes("error"));
     assert.ok(scanSiteTool?.outputSchema?.required?.includes("recommendedNextAction"));
-    assert.match(scanSiteTool?.description ?? "", /never waits for a new scan to finish/);
+    assert.match(scanSiteTool?.description ?? "", /runtime lane completes or reaches its six-second checkpoint/);
+    assert.match(scanSiteTool?.description ?? "", /capped at approximately 9–11 seconds total/);
+    assert.match(scanSiteTool?.description ?? "", /falls back to the stable scanId without a preview/);
+    assert.match(scanSiteTool?.description ?? "", /preConsentPreview/);
+    assert.match(scanSiteTool?.description ?? "", /MCP text lists returned cookies/i);
+    assert.match(scanSiteTool?.description ?? "", /per-vendor first-seen timing is not available/i);
+    assert.match(scanSiteTool?.description ?? "", /checkpoint-only and not the full scan tally/i);
+    assert.match(scanSiteTool?.description ?? "", /before reporting full scan results/i);
     assert.match(scanSiteTool?.description ?? "", /do not resubmit certscore_scan_site/);
     assert.match((scanSiteTool?.inputSchema.properties?.waitForCompletion as { description?: string })?.description ?? "", /Deprecated compatibility field; accepted but ignored/);
     assert.match((scanSiteTool?.inputSchema.properties?.maxWaitSeconds as { description?: string })?.description ?? "", /Deprecated compatibility field; accepted but ignored/);
@@ -671,6 +678,144 @@ test("certscore_scan_site returns a newly accepted scan immediately by default",
       assert.match(String(result.recommendedNextAction), /Do not poll in parallel or resubmit certscore_scan_site/);
       assert.match(mock.calls[0] ?? "", /\/api\/v2\/scans$/);
       assert.equal(mock.calls.length, 1);
+    });
+  } finally {
+    mock.restore();
+  }
+});
+
+test("MCP Light certscore_scan_site returns a verified preliminary preview within its bounded initial wait", async () => {
+  const scanId = "00000000-0000-4000-8000-000000000223";
+  const mock = installFetch([
+    {
+      status: 202,
+      body: {
+        type: "certscore_scan_job",
+        status: "queued",
+        jobId: scanId,
+        scanId,
+        executionMode: "new_scan",
+        reused: false,
+        freshnessDecision: "no_eligible_recent_scan_queued",
+      },
+    },
+    {
+      status: 200,
+      body: {
+        type: "certscore_scan_job",
+        status: "running",
+        jobId: scanId,
+        scanId,
+        retryAfterSeconds: 1,
+        preConsentPreview: {
+          type: "certscore_pre_consent_preview",
+          resultStage: "preliminary",
+          final: false,
+          sourceLane: "runtime_evidence",
+          generatedAt: "2026-08-29T04:00:03.000Z",
+          runtimeCoverage: { status: "usable", limitationKeys: [] },
+          summary: {
+            cookieCount: 1,
+            returnedCookieCount: 1,
+            trackerCount: 1,
+            trackingVendorCount: 1,
+            returnedTrackingVendorCount: 1,
+            operationalVendorCount: 0,
+            returnedOperationalVendorCount: 0,
+            thirdPartyRequestCount: 3,
+            vendorCount: 1,
+          },
+          cookies: [{
+            name: "_ga",
+            domain: "example.com",
+            party: "first_party",
+            purpose: "analytics",
+            essentiality: "non_essential",
+            observedAtMs: 1200,
+          }],
+          trackers: [{
+            vendor: "Example Analytics",
+            product: "Example Analytics Pixel",
+            purpose: "analytics",
+            confidence: 0.95,
+            domains: ["analytics.example.test"],
+          }],
+          operationalVendors: [],
+          truncated: { cookies: false, trackers: false, operationalVendors: false },
+          mustContinuePolling: true,
+          observationOnlyDisclaimer: "Preliminary passive runtime observations only. Continue polling.",
+        },
+      },
+    },
+  ]);
+  try {
+    await withMcpClient(async (client) => {
+      const raw = await client.callTool({
+        name: "certscore_scan_site",
+        arguments: { url: "https://example.com" },
+      });
+      const result = parseToolJson(raw);
+      const preview = result.preConsentPreview as Record<string, any>;
+      assert.equal(result.scanId, scanId);
+      assert.equal(result.status, "running");
+      assert.equal(preview.final, false);
+      assert.equal(preview.summary.cookieCount, 1);
+      assert.equal(preview.summary.trackerCount, 1);
+      assert.equal(preview.summary.trackingVendorCount, 1);
+      assert.equal(preview.summary.returnedTrackingVendorCount, 1);
+      assert.equal(preview.mustContinuePolling, true);
+      assert.equal(result.recommendedNextTool, "certscore_get_scan_status");
+      assert.match(String(result.recommendedNextAction), /preConsentPreview is a partial preview of passive evidence/i);
+      const text = raw.content[0]?.type === "text" ? raw.content[0].text : "";
+      assert.match(text, /partial pre-consent runtime preview/i);
+      assert.match(text, /PARTIAL PREVIEW: These are checkpoint-only partial counts, not the full scan tally/i);
+      assert.match(text, /do not present them as final totals or stop the workflow/i);
+      assert.match(text, /Cookie _ga; domain=example\.com; party=first_party; category\/purpose=analytics; essentiality=non_essential; observedAtMs=1200ms \(t\+1\.200s\)/);
+      assert.match(text, /Tracking vendor Example Analytics; product=Example Analytics Pixel; category\/purpose=analytics; confidence=0\.95; domains=analytics\.example\.test/);
+      assert.match(text, /call certscore_get_scan_status once/i);
+      assert.match(text, /certscore_get_scan_bundle for the completed scan's final returned tally/i);
+      assert.equal(mock.calls.length, 2);
+      assert.equal(mock.requestHeaders[1]?.get("x-certscore-mcp-internal-operation"), "scan_site_wait");
+      assertToolOutputSchema("certscore_scan_site", result);
+    }, {
+      anonymousRequesterSecret: "test-secret-at-least-16-characters",
+      initialPreConsentPreviewWaitMs: 1_000,
+      toolProfile: "light",
+    });
+  } finally {
+    mock.restore();
+  }
+});
+
+test("MCP Light certscore_scan_site falls back to the unchanged scanId when the preview window expires", async () => {
+  const scanId = "00000000-0000-4000-8000-000000000224";
+  const mock = installFetch([{
+    status: 202,
+    body: {
+      type: "certscore_scan_job",
+      status: "queued",
+      jobId: scanId,
+      scanId,
+      executionMode: "new_scan",
+      reused: false,
+      freshnessDecision: "no_eligible_recent_scan_queued",
+    },
+  }]);
+  try {
+    await withMcpClient(async (client) => {
+      const result = parseToolJson(await client.callTool({
+        name: "certscore_scan_site",
+        arguments: { url: "https://example.com" },
+      }));
+
+      assert.equal(result.scanId, scanId);
+      assert.equal(result.status, "queued");
+      assert.equal(result.preConsentPreview, undefined);
+      assert.equal(result.recommendedNextTool, "certscore_get_scan_status");
+      assert.equal(mock.calls.length, 1);
+    }, {
+      initialPreConsentPreviewWaitMs: 20,
+      toolProfile: "light",
     });
   } finally {
     mock.restore();

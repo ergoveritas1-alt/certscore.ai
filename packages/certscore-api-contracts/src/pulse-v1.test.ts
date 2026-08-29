@@ -6,6 +6,7 @@ import {
   apiV2FindingDetailSchema,
   apiV2FindingListSchema,
   apiV2PreConsentCookiesTrackersSchema,
+  apiV2PreConsentRuntimePreviewSchema,
   apiV2ScanResourceSchema,
   buildCertScoreApiV2OpenApiDocument,
   buildPulseChatGptOpenApiDocument,
@@ -184,7 +185,21 @@ test("Light workflow descriptions preserve scan guidance and ground canonical pr
   const status = certScoreMcpToolContracts.find((tool) => tool.name === "certscore_get_scan_status");
   const bundle = certScoreMcpToolContracts.find((tool) => tool.name === "certscore_get_scan_bundle");
   assert.ok(scanSite);
-  assert.match(scanSite.description, /Returns promptly after reuse or scan creation and never waits for a new scan to finish/);
+  assert.match(scanSite.description, /runtime lane completes or reaches its six-second checkpoint/i);
+  assert.match(scanSite.description, /capped at approximately 9–11 seconds total/i);
+  assert.match(scanSite.description, /falls back to the stable scanId without a preview/i);
+  assert.match(scanSite.description, /preConsentPreview/);
+  assert.match(scanSite.description, /MCP text lists returned cookies/i);
+  assert.match(scanSite.description, /per-vendor first-seen timing is not available/i);
+  assert.match(scanSite.description, /captured counts from returned identity counts/i);
+  assert.match(scanSite.description, /trackingVendorCount excludes infrastructure, security, and consent-management vendors/i);
+  assert.match(scanSite.description, /must not be compared directly with the completed inventory's broader trackerCount/i);
+  assert.match(scanSite.description, /checkpoint-only and not the full scan tally/i);
+  assert.match(scanSite.description, /before reporting full scan results/i);
+  assert.match(status.description, /Distinguish captured totals from bounded returned identities/i);
+  assert.match(status.description, /compatibility preview trackerCount is not comparable/i);
+  assert.match(status.description, /before reporting full scan results/i);
+  assert.match(scanSite.description, /preview is not final/i);
   assert.match(scanSite.description, /wait at least retryAfterSeconds, and call certscore_get_scan_status/);
   assert.match(scanSite.description, /do not resubmit certscore_scan_site/);
   assert.match(scanSite.description, /At completed or completed_limited, call certscore_get_scan_bundle/);
@@ -203,6 +218,7 @@ test("Light workflow descriptions preserve scan guidance and ground canonical pr
   assert.match(status?.description ?? "", /Wait at least retryAfterSeconds between calls/);
   assert.match(status?.description ?? "", /never poll in parallel/);
   assert.match(status?.description ?? "", /never resubmit certscore_scan_site/);
+  assert.match(status?.description ?? "", /continue polling after receiving the preview/);
   assert.match(status?.description ?? "", /at completed or completed_limited, call certscore_get_scan_bundle/);
   assert.match(bundle?.description ?? "", /Post-refusal observation may intentionally stop as soon as qualifying non-essential activity/i);
   assert.match(bundle?.description ?? "", /termination\.kind=evidence_satisfied is positive evidence/i);
@@ -293,6 +309,55 @@ test("MCP output contracts reuse stable API shapes with bounded MCP metadata", (
       rows: []
     })
   );
+});
+
+test("preliminary runtime previews remain bounded, passive, and explicitly non-terminal", () => {
+  const preview = {
+    type: "certscore_pre_consent_preview" as const,
+    resultStage: "preliminary" as const,
+    final: false as const,
+    sourceLane: "runtime_evidence" as const,
+    generatedAt: "2026-08-28T18:00:03.000Z",
+    runtimeCoverage: { status: "usable" as const, limitationKeys: [] },
+    summary: {
+      cookieCount: 1,
+      returnedCookieCount: 1,
+      trackerCount: 1,
+      trackingVendorCount: 1,
+      returnedTrackingVendorCount: 1,
+      operationalVendorCount: 0,
+      returnedOperationalVendorCount: 0,
+      thirdPartyRequestCount: 1,
+      vendorCount: 1,
+    },
+    cookies: [{
+      name: "_ga",
+      domain: "example.com",
+      party: "first_party" as const,
+      purpose: "analytics" as const,
+      essentiality: "non_essential" as const,
+      observedAtMs: 1_200,
+    }],
+    trackers: [{
+      vendor: "Google",
+      product: "Google Analytics",
+      purpose: "analytics" as const,
+      confidence: 0.96,
+      domains: ["www.google-analytics.com"],
+    }],
+    operationalVendors: [],
+    truncated: { cookies: false, trackers: false, operationalVendors: false },
+    mustContinuePolling: true as const,
+    observationOnlyDisclaimer: "Preliminary passive observations only; continue polling for the canonical result.",
+  };
+
+  assert.deepEqual(apiV2PreConsentRuntimePreviewSchema.parse(preview), preview);
+  assert.throws(() => apiV2PreConsentRuntimePreviewSchema.parse({
+    ...preview,
+    cookies: Array.from({ length: 21 }, () => preview.cookies[0]),
+  }));
+  assert.throws(() => apiV2PreConsentRuntimePreviewSchema.parse({ ...preview, final: true }));
+  assert.throws(() => apiV2PreConsentRuntimePreviewSchema.parse({ ...preview, mustContinuePolling: false }));
 });
 
 test("Pulse v1 schemas accept status and auth error envelopes", () => {
@@ -464,7 +529,7 @@ test("API v2 draft OpenAPI locks resource path and operation names", () => {
   };
   walk(document.paths);
 
-  assert.equal(document.info.version, "0.1.8");
+  assert.equal(document.info.version, "0.1.9");
   assert.ok(document.paths["/api/v2/keys/request"]);
   assert.ok(document.paths["/api/v2/auth/check"]);
   assert.ok(document.paths["/api/v2/scans"]);
@@ -480,6 +545,13 @@ test("API v2 draft OpenAPI locks resource path and operation names", () => {
     document.components.schemas.PostRefusalObservation.properties.termination.properties.kind.enum,
     ["evidence_satisfied", "window_elapsed", "unavailable"],
   );
+  assert.equal(
+    document.components.schemas.ScanJob.properties.preConsentPreview.$ref,
+    "#/components/schemas/PreConsentRuntimePreview",
+  );
+  assert.equal(document.components.schemas.PreConsentRuntimePreview.properties.cookies.maxItems, 20);
+  assert.equal(document.components.schemas.PreConsentRuntimePreview.properties.trackers.maxItems, 20);
+  assert.equal(document.components.schemas.PreConsentRuntimePreview.properties.mustContinuePolling.const, true);
   assert.ok(document.paths["/api/v2/scans/{scanId}/findings/{findingId}"]);
   assert.ok(document.paths["/api/v2/domains/{domain}/latest"]);
   assert.ok(document.paths["/api/v2/scans/{scanId}/pulse"]);

@@ -8,7 +8,7 @@ const description =
 const lightEndpoint = "https://mcp.certscore.ai/mcp/light";
 const openAiMcpDemoPath = "/videos/openai-mcp-certscore-demo.mp4";
 const codexSetupCommand = "codex mcp add certscore --url https://mcp.certscore.ai/mcp/light";
-const firstRunPrompt = "Scan https://ergoveritas.com/.well-known/certscore-canary/sentinels/broad-baseline.html. If certscore_scan_site returns a queued, running, or finalizing result, retain the returned scanId and poll certscore_get_scan_status using scanId only. If certscore_scan_site returns a retryable error without a scanId, wait for retryAfterSeconds and retry certscore_scan_site; do not call certscore_get_scan_status until a scanId exists. Once the scan reaches a terminal status, call certscore_get_scan_bundle with detail=findings and maxBytes=8000. Summarize whether the result was new or reused, the score, risk level, findings, evidence links, coverage limitations, and report URL. Explain truncation or omitted sections when present. Treat results as automated public-web observations, not legal conclusions, certifications, or compliance determinations.";
+const firstRunPrompt = "Scan https://ergoveritas.com/.well-known/certscore-canary/sentinels/broad-baseline.html. If certscore_scan_site includes preConsentPreview, treat it as a partial preview and continue the workflow. Distinguish captured totals from bounded returned identities; use trackingVendorCount for non-operational tracking vendors and keep operationalVendors separate. Do not compare the compatibility preview trackerCount with the completed inventory's broader trackerCount. Never report preview counts as final totals. If certscore_scan_site returns a queued, running, or finalizing result, retain the returned scanId and poll certscore_get_scan_status using scanId only. If certscore_scan_site returns a retryable error without a scanId, wait for retryAfterSeconds and retry certscore_scan_site; do not call certscore_get_scan_status until a scanId exists. Once the scan reaches a terminal status, call certscore_get_scan_bundle with detail=findings and maxBytes=8000. Summarize whether the result was new or reused, the score, risk level, findings, evidence links, coverage limitations, and report URL. Explain truncation or omitted sections when present. Treat results as automated public-web observations, not legal conclusions, certifications, or compliance determinations.";
 const verificationPrompt = "List the available CertScore tools and confirm that certscore_scan_site, certscore_get_scan_status, and certscore_get_scan_bundle are available. Then scan https://ergoveritas.com/.well-known/certscore-canary/sentinels/broad-baseline.html and report whether the result was new or reused.";
 const agentDisclaimer = "CertScore results are automated observations from a public-web scan. No-go, not-observed, and limited-coverage results are not proof of compliance, absence of risk, or legal status. Review the retained evidence and applicable context before relying on a finding.";
 
@@ -153,6 +153,7 @@ Tools: certscore_scan_site, certscore_get_scan_status, certscore_get_scan_bundle
           <ol className="max-w-3xl list-decimal space-y-2 pl-5 text-sm leading-7 text-slate-600">
             <li>Call <code>certscore_scan_site</code> with a public URL.</li>
             <li>If a retryable error has no <code>scanId</code>, wait <code>retryAfterSeconds</code> and retry <code>certscore_scan_site</code>.</li>
+            <li>If <code>preConsentPreview</code> is present, summarize it only as preliminary passive observations. It is not a finding, score, or final result.</li>
             <li>If the result is queued, running, or finalizing, retain <code>scanId</code>.</li>
             <li>Poll <code>certscore_get_scan_status</code> using <code>scanId</code> only. Never poll until <code>scanId</code> exists.</li>
             <li>Stop polling at a terminal status, then call <code>certscore_get_scan_bundle</code>.</li>
@@ -163,6 +164,7 @@ Tools: certscore_scan_site, certscore_get_scan_status, certscore_get_scan_bundle
           </ol>
           <CodeBlock>{`certscore_scan_site
 → retry certscore_scan_site if a retryable error has no scanId
+→ summarize preConsentPreview only as preliminary context when present
 → certscore_get_scan_status with scanId if still running
 → certscore_get_scan_bundle after terminal status`}</CodeBlock>
           <CodeBlock>{`Recommended bundle budgets:
@@ -428,12 +430,13 @@ const status = await certscore_get_scan_status({ scanId });
         </Section>
 
         <Section eyebrow="Workflow" title="Recommended agent sequence">
-          <CodeBlock>{`1. certscore_scan_site with a public URL; it uses a 25-second total tool-call budget by default, including scan creation.
-2. certscore_get_scan_status only when certscore_scan_site returns a non-terminal result containing scanId; poll with scanId only.
-3. certscore_get_scan_bundle for canonical status, findings, bounded evidence, and pre-consent inventory.
-4. certscore_get_report, certscore_get_evidence, certscore_list_findings, or cookie inventory only when a dedicated view is needed.
-5. certscore_explain_finding for evidence summaries and caveats.
-6. certscore_get_latest_domain_scan or certscore_get_latest_domain_pre_consent_cookies_trackers when the user asks for latest-domain data.`}</CodeBlock>
+          <CodeBlock>{`1. certscore_scan_site with a public URL; a new scan returns its stable scanId and may include a partial preConsentPreview when the runtime lane completes or reaches its six-second checkpoint; otherwise it falls back to the stable scanId alone.
+2. Treat preConsentPreview only as partial passive context. Distinguish captured totals from bounded returned identities; use trackingVendorCount for non-operational vendors and keep operationalVendors separate. Never treat it as a finding, score, or final result.
+3. certscore_get_scan_status only when certscore_scan_site returns a non-terminal result containing scanId; poll with scanId only.
+4. certscore_get_scan_bundle for canonical status, findings, bounded evidence, and pre-consent inventory.
+5. certscore_get_report, certscore_get_evidence, certscore_list_findings, or cookie inventory only when a dedicated view is needed.
+6. certscore_explain_finding for evidence summaries and caveats.
+7. certscore_get_latest_domain_scan or certscore_get_latest_domain_pre_consent_cookies_trackers when the user asks for latest-domain data.`}</CodeBlock>
           <p className="max-w-3xl text-sm leading-7 text-slate-600">
             <code className="rounded bg-white px-1">certscore_scan_site</code> reports whether it reused a result, the freshness decision,
             whether anonymous quota was consumed, the remaining daily allowance, its UTC reset time, and the recommended next tool.

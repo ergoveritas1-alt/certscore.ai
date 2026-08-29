@@ -25,6 +25,7 @@ import {
   consentUiObservationFromConfirmedGeometryControls,
   consentControlsFromAccessibilityTree,
   finalizeBoundedSameSessionConsentPacket,
+  PRE_CONSENT_RUNTIME_PREVIEW_CHECKPOINT_MS,
   preConsentRuntimeScanner,
   readRapidFirstLayerConsentUiObservation,
   shouldRunImmediateStructuredConsentRecovery,
@@ -669,6 +670,44 @@ test("pre-consent runtime scanner retains canonical rendered policy links from t
       true,
       `the successful pre-consent browser should retain the exact rendered privacy-policy href; retained=${JSON.stringify(result.renderedPolicyLinks)} timing=${JSON.stringify(result.moduleRun.timingBreakdown)}`,
     );
+  } finally {
+    await server.close();
+    await rm(tempRoot, { recursive: true, force: true });
+  }
+});
+
+test("runtime-evidence scanner emits one metadata-only passive preview checkpoint without ending capture", async () => {
+  const server = await startStaticFixtureServer();
+  const tempRoot = await mkdtemp(path.join(tmpdir(), "certscore-v2-runtime-preview-checkpoint-"));
+  try {
+    const url = server.urlFor("post-refusal-reject-honored");
+    const artifactWriter = await createArtifactWriter(path.join(tempRoot, "out"));
+    const checkpoints: Parameters<NonNullable<Parameters<typeof preConsentRuntimeScanner>[0]["onPassiveRuntimeCheckpoint"]>>[0][] = [];
+    const result = await preConsentRuntimeScanner({
+      url,
+      normalizedUrl: url,
+      scanStartedAtMs: Date.now(),
+      internalBudgetMs: 3_000,
+      artifactWriter,
+      captureScope: "runtime_evidence",
+      onPassiveRuntimeCheckpoint: (checkpoint) => checkpoints.push(checkpoint),
+      passiveRuntimeCheckpointMs: 750,
+      routeFulfillers,
+      screenshotMode: "never",
+      waitMode: "fast",
+    });
+
+    assert.equal(PRE_CONSENT_RUNTIME_PREVIEW_CHECKPOINT_MS, 6_000);
+    assert.equal(checkpoints.length, 1);
+    assert.ok(checkpoints[0]!.observedAtMs >= 700);
+    assert.equal(
+      checkpoints[0]!.cookieSnapshots.some((snapshot) =>
+        snapshot.cookies.some((cookie) => cookie.name === "_ga")
+      ),
+      true,
+    );
+    assert.equal(JSON.stringify(checkpoints).includes("GA1.1.LOCALFIXTURE"), false);
+    assert.ok(result.moduleRun.durationMs >= checkpoints[0]!.observedAtMs);
   } finally {
     await server.close();
     await rm(tempRoot, { recursive: true, force: true });
@@ -2930,11 +2969,15 @@ test("runtime-evidence lane excludes consent waits and policy recovery", async (
   const server = await startStaticFixtureServer();
   const tempRoot = await mkdtemp(path.join(tmpdir(), "certscore-v2-runtime-lane-ownership-"));
   try {
+    let preview: Parameters<NonNullable<Parameters<typeof runScan>[0]["onPreConsentRuntimePreview"]>>[0] | undefined;
     const bundle = await runScan({
       url: server.urlFor("policy-footer-privacy"),
       outDir: path.join(tempRoot, "runtime-out"),
       profile: "standard",
       evidenceLane: "runtime_evidence",
+      onPreConsentRuntimePreview: (value) => {
+        preview = value;
+      },
       preConsentModuleDeadlineMs: 10_000,
       // Intentionally request screenshots to prove that lane ownership, not
       // caller tuning, keeps consent visuals out of runtime evidence.
@@ -2962,6 +3005,13 @@ test("runtime-evidence lane excludes consent waits and policy recovery", async (
     assert.equal(bundle.cmpRuntimeObservations.length, 0);
     assert.equal(bundle.screenshots.length, 0);
     assert.equal(bundle.policySurfaceObservations.length, 0);
+    assert.equal(preview?.final, false);
+    assert.equal(preview?.mustContinuePolling, true);
+    assert.equal(preview?.runtimeCoverage.status, "limited_partial");
+    assert.equal(
+      preview?.runtimeCoverage.limitationKeys.includes("runtime_lane_completed_before_six_second_checkpoint"),
+      true,
+    );
     assert.equal(
       bundle.modulesRun.some((moduleRun) => moduleRun.moduleName === "policySurfaceScanner"),
       false,

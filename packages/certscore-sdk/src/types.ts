@@ -457,6 +457,14 @@ export interface PreConsentCookiesTrackers {
   summary: {
     rowCount: number;
     trackerCount: number;
+    trackerCountScope?: "canonical_inventory_rows_including_operational";
+    trackerCategoryCounts?: {
+      advertising: number;
+      analytics: number;
+      essential: number;
+      functional: number;
+      review: number;
+    };
     cookieCount: number;
     requestCount: number;
     vendorCount?: number;

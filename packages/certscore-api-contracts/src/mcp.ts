@@ -5,6 +5,7 @@ import {
   apiV2FindingListSchema,
   apiV2PreConsentCookiesTrackersSchema,
   apiV2PreConsentCookiesTrackersSummarySchema,
+  apiV2PreConsentRuntimePreviewSchema,
   apiV2ScanFromSchema,
   apiV2ScanResourceSchema,
   apiV2ScanStatusSchema
@@ -32,8 +33,8 @@ export const mcpScanSiteInputSchema = {
   url: mcpCreateScanInputSchema.url,
   freshness: mcpCreateScanInputSchema.freshness,
   scanFrom: mcpCreateScanInputSchema.scanFrom,
-  waitForCompletion: z.boolean().optional().describe("Deprecated compatibility field; accepted but ignored. certscore_scan_site always returns promptly after completed-result reuse or scan creation and never waits for a new scan to finish."),
-  maxWaitSeconds: z.number().int().min(1).max(45).optional().describe("Deprecated compatibility field; accepted but ignored because certscore_scan_site does not wait for scan completion.")
+  waitForCompletion: z.boolean().optional().describe("Deprecated compatibility field; accepted but ignored. certscore_scan_site never waits for a new scan to finish, though MCP Light may briefly wait within a bounded preview window for preliminary pre-consent observations."),
+  maxWaitSeconds: z.number().int().min(1).max(45).optional().describe("Deprecated compatibility field; accepted but ignored. The bounded preliminary-preview wait is controlled by CertScore and never waits for scan completion.")
 } as const;
 
 export const mcpGetScanStatusInputSchema = {
@@ -274,6 +275,7 @@ export const mcpScanSiteOutputSchema = z
     scoreUpdatedAt: z.string().nullable().optional(),
     riskLevel: z.string().nullable().optional(),
     coverage: apiV2ScanResourceSchema.shape.coverage.nullable().optional(),
+    preConsentPreview: apiV2PreConsentRuntimePreviewSchema.optional(),
     error: mcpActionableErrorSchema.nullable(),
     provenance: mcpScanProvenanceSchema,
     interpretationGuidance: mcpInterpretationGuidanceSchema,
@@ -314,6 +316,7 @@ export const mcpScanStatusOutputSchema = z
     scoreUpdatedAt: z.string().nullable().optional(),
     riskLevel: z.string().nullable().optional(),
     coverage: apiV2ScanResourceSchema.shape.coverage.nullable().optional(),
+    preConsentPreview: apiV2PreConsentRuntimePreviewSchema.optional(),
     phase: z.string().optional(),
     phaseStartedAt: z.string().nullable().optional(),
     lastUpdatedAt: z.string().optional(),
@@ -500,7 +503,7 @@ export const certScoreMcpToolContracts = [
   {
     name: "certscore_scan_site",
     title: "Scan site",
-    description: "Validate a public website URL and either reuse an eligible completed CertScore scan or create a new public-web scan for observable privacy and consent signals, including pre-consent storage, trackers, consent/CMP behavior, transport security, policy disclosures, and GDPR/ePrivacy or CCPA/CPRA review signals. Returns promptly after reuse or scan creation and never waits for a new scan to finish. If status is queued, running, or finalizing, retain the unchanged scanId, wait at least retryAfterSeconds, and call certscore_get_scan_status; do not resubmit certscore_scan_site for that scan. Stop polling at completed, completed_limited, failed, expired, or rate_limited. At completed or completed_limited, call certscore_get_scan_bundle. No-go and limited coverage are observations, never proof of compliance.",
+    description: "Validate a public website URL and either reuse an eligible completed CertScore scan or create a new public-web scan for observable privacy and consent signals, including pre-consent storage, trackers, consent/CMP behavior, transport security, policy disclosures, and GDPR/ePrivacy or CCPA/CPRA review signals. A newly accepted scan returns its stable scanId and may also include preConsentPreview: a bounded partial preview of passive cookie/tracker observations captured when the runtime lane completes or reaches its six-second checkpoint. The preview separates captured counts from returned identity counts, which may be lower because identity arrays are bounded. trackingVendorCount excludes infrastructure, security, and consent-management vendors; those appear separately in operationalVendors. The compatibility trackerCount in the preview aliases trackingVendorCount and must not be compared directly with the completed inventory's broader trackerCount, which includes operational categories. The MCP text lists returned cookies with name, domain, party, purpose/category, essentiality, and observedAtMs, plus tracking and operational vendors with product, purpose/category, confidence, and domains; per-vendor first-seen timing is not available in this preliminary contract. Every preview count is checkpoint-only and not the full scan tally: never present it as a final total and never stop the workflow because a preview was returned. The preview wait returns as soon as the preview is ready and is capped at approximately 9–11 seconds total. It falls back to the stable scanId without a preview when that bounded window expires. The preview is not final and contains no canonical findings or score. If status is queued, running, or finalizing, retain the unchanged scanId, wait at least retryAfterSeconds, and call certscore_get_scan_status; do not resubmit certscore_scan_site for that scan. Stop polling at completed, completed_limited, failed, expired, or rate_limited. At completed or completed_limited, call certscore_get_scan_bundle before reporting full scan results; that bundle provides the completed scan's final returned tally, canonical findings, and coverage limitations. No-go and limited coverage are observations, never proof of compliance.",
     inputSchema: mcpScanSiteInputSchema,
     outputSchema: mcpScanSiteOutputSchema,
     annotations: scanCreationAnnotations
@@ -516,7 +519,7 @@ export const certScoreMcpToolContracts = [
   {
     name: "certscore_get_scan_status",
     title: "Get scan status",
-    description: "Poll an accepted scan using only the unchanged scanId returned by certscore_scan_site. Wait at least retryAfterSeconds between calls, never poll in parallel, and never resubmit certscore_scan_site while the scan is active. Active responses include phase, heartbeat, estimated progress, stalled state, retry delay, and canonical scan provenance when available. Terminal responses include the CertScore score, risk, coverage, execution region (scanFrom), timestamps, report URL, and an explicit next action. For a reused or retrieved existing scan, use only persisted scanFrom and timestamps; never infer its original region from the current request, the user's location, or a default. Report unavailable provenance as unavailable. Stop polling at any terminal status; at completed or completed_limited, call certscore_get_scan_bundle.",
+    description: "Poll an accepted scan using only the unchanged scanId returned by certscore_scan_site. Wait at least retryAfterSeconds between calls, never poll in parallel, and never resubmit certscore_scan_site while the scan is active. Active responses may include preConsentPreview, which is only a partial preview of passive observations and never a finding, score, or final result. Distinguish captured totals from bounded returned identities. trackingVendorCount excludes infrastructure, security, and consent-management vendors, which appear separately in operationalVendors; the compatibility preview trackerCount is not comparable to the completed inventory's broader trackerCount. Never present preview counts as final totals; continue polling after receiving the preview. Active responses also include phase, heartbeat, estimated progress, stalled state, retry delay, and canonical scan provenance when available. Terminal responses include the CertScore score, risk, coverage, execution region (scanFrom), timestamps, report URL, and an explicit next action. For a reused or retrieved existing scan, use only persisted scanFrom and timestamps; never infer its original region from the current request, the user's location, or a default. Report unavailable provenance as unavailable. Stop polling at any terminal status; at completed or completed_limited, call certscore_get_scan_bundle before reporting full scan results so the completed scan's final returned tally, canonical findings, and limitations are used.",
     inputSchema: mcpGetScanStatusInputSchema,
     outputSchema: mcpScanStatusOutputSchema,
     annotations: readOnlyInternalAnnotations

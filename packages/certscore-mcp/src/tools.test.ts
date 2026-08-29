@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { CertScoreError, type PulseResult } from "@certscore/sdk";
 import { mcpScanBundleOutputSchema, mcpScanStatusOutputSchema } from "@certscore/api-contracts";
-import { boundEvidencePacket, buildScanBundle, explainFinding, exportFindings, limitPreConsentRows, paginateFindingList, scanBundleText, scanStatusText, toToolError, toToolResult, withMcpAgentGuidance, withMcpScanProvenanceGuidance } from "./tools.js";
+import { boundEvidencePacket, buildScanBundle, explainFinding, exportFindings, limitPreConsentRows, paginateFindingList, scanBundleText, scanSiteText, scanStatusText, toToolError, toToolResult, withMcpAgentGuidance, withMcpScanProvenanceGuidance } from "./tools.js";
 
 const report = {
   type: "certscore_pulse",
@@ -159,6 +159,79 @@ test("guided active scan status withholds the report URL until the canonical rep
 
   assert.equal((result.structuredContent as Record<string, unknown>).reportUrl, null);
   assert.doesNotMatch(result.content[0]?.type === "text" ? result.content[0].text : "", /full report=/);
+});
+
+test("scanSiteText lists bounded partial-preview cookie, tracker, category, and timing observations", () => {
+  const guided = withMcpAgentGuidance({
+    type: "certscore_scan_job",
+    scanId: "scan_preview_123",
+    status: "running",
+    retryAfterSeconds: 2,
+    recommendedNextAction: "Poll status after the returned delay.",
+    preConsentPreview: {
+      type: "certscore_pre_consent_preview",
+      resultStage: "preliminary",
+      final: false,
+      sourceLane: "runtime_evidence",
+      generatedAt: "2026-08-29T04:00:03.000Z",
+      runtimeCoverage: { status: "limited_partial", limitationKeys: ["six_second_checkpoint"] },
+      summary: {
+        cookieCount: 1,
+        returnedCookieCount: 1,
+        trackerCount: 1,
+        trackingVendorCount: 1,
+        returnedTrackingVendorCount: 1,
+        operationalVendorCount: 1,
+        returnedOperationalVendorCount: 1,
+        thirdPartyRequestCount: 3,
+        vendorCount: 2,
+      },
+      cookies: [{
+        name: "_ga",
+        domain: "example.com",
+        party: "first_party",
+        purpose: "analytics",
+        essentiality: "non_essential",
+        observedAtMs: 1200,
+      }],
+      trackers: [{
+        vendor: "Example Analytics",
+        product: "Example Analytics Pixel",
+        purpose: "analytics",
+        confidence: 0.95,
+        domains: ["analytics.example.test"],
+      }],
+      operationalVendors: [{
+        vendor: "Cloudflare",
+        product: "Cloudflare Bot Management",
+        purpose: "security",
+        confidence: 0.98,
+        domains: ["example.com"],
+      }],
+      truncated: { cookies: false, trackers: false, operationalVendors: false },
+      mustContinuePolling: true,
+      observationOnlyDisclaimer: "Preliminary passive runtime observations only.",
+    },
+  });
+  const text = scanSiteText(guided);
+
+  assert.match(guided.recommendedNextAction, /partial preview of passive evidence/i);
+  assert.match(guided.recommendedNextAction, /not the full scan tally/i);
+  assert.match(guided.recommendedNextAction, /Poll status after the returned delay/);
+  assert.match(guided.recommendedNextAction, /certscore_get_scan_bundle for the completed scan's final returned tally/i);
+  assert.match(text, /scanId=scan_preview_123; status=running/);
+  assert.match(text, /cookies captured=1; cookie identities returned=1; tracking vendors captured=1; tracking vendor identities returned=1/);
+  assert.match(text, /operational\/security\/consent vendors captured=1; operational identities returned=1/);
+  assert.match(text, /PARTIAL PREVIEW: These are checkpoint-only partial counts, not the full scan tally/i);
+  assert.match(text, /do not present them as final totals or stop the workflow/i);
+  assert.match(text, /Cookie _ga; domain=example\.com; party=first_party; category\/purpose=analytics; essentiality=non_essential; observedAtMs=1200ms \(t\+1\.200s\)/);
+  assert.match(text, /Tracking vendor Example Analytics; product=Example Analytics Pixel; category\/purpose=analytics; confidence=0\.95; domains=analytics\.example\.test/);
+  assert.match(text, /Operational vendor Cloudflare; product=Cloudflare Bot Management; category\/purpose=security; confidence=0\.98; domains=example\.com/);
+  assert.match(text, /broader trackerCount may include those categories/i);
+  assert.match(text, /per-tracker first-seen milliseconds are not part of the preliminary preview contract/i);
+  assert.match(text, /Continue with certscore_get_scan_status using the unchanged scanId scan_preview_123/i);
+  assert.match(text, /certscore_get_scan_bundle for the completed scan's final returned tally/i);
+  assert.ok(text.length <= 8_000);
 });
 
 test("buildScanBundle honors the caller's byte budget", () => {

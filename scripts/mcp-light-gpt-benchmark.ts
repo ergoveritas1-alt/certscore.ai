@@ -62,6 +62,11 @@ export type BenchmarkCaseResult = {
   initialResponseLatencyMs: number | null;
   initialClassification: string;
   initialStatus: string | null;
+  initialPreConsentPreviewReturned: boolean;
+  initialPreviewCoverageStatus: string | null;
+  initialPreviewCookieCount: number | null;
+  initialPreviewTrackerCount: number | null;
+  initialTextContent: string | null;
   scanId: string | null;
   retryAfterSeconds: number | null;
   legacyWaitParametersSent: boolean;
@@ -217,6 +222,12 @@ function toolPayload(value: Record<string, any>) {
   }
 }
 
+function toolTextContent(value: Record<string, any>) {
+  if (!Array.isArray(value.content)) return null;
+  const block = value.content.find((item: unknown) => record(item).type === "text" && typeof record(item).text === "string");
+  return block ? text(record(block).text) : null;
+}
+
 function text(value: unknown): string | null {
   return typeof value === "string" && value.trim() ? value.trim() : null;
 }
@@ -301,7 +312,10 @@ function guidanceChecks(tools: Array<Record<string, any>>) {
   const bundle = text(byName.get("certscore_get_scan_bundle")?.description) ?? "";
   return {
     toolSet: ["certscore_scan_site", "certscore_get_scan_status", "certscore_get_scan_bundle"].every((name) => byName.has(name)),
-    scanReturnsPromptly: /returns promptly/i.test(scan) && /never waits/i.test(scan),
+    scanReturnsBoundedPreview: /runtime lane completes or reaches its six-second checkpoint/i.test(scan) &&
+      /trackingVendorCount excludes infrastructure, security, and consent-management vendors/i.test(scan) &&
+      /capped at approximately 9–11 seconds total/i.test(scan) &&
+      /falls back to the stable scanId without a preview/i.test(scan),
     scanDirectsStatus: /retryAfterSeconds/.test(scan) && /certscore_get_scan_status/.test(scan),
     noResubmit: /do not resubmit certscore_scan_site/i.test(scan) && /never resubmit certscore_scan_site/i.test(status),
     noParallelPolling: /never poll in parallel/i.test(status),
@@ -375,6 +389,11 @@ async function runCase(input: {
   let initialResponseLatencyMs: number | null = null;
   let initialClassification = "not_attempted";
   let initialStatus: string | null = null;
+  let initialPreConsentPreviewReturned = false;
+  let initialPreviewCoverageStatus: string | null = null;
+  let initialPreviewCookieCount: number | null = null;
+  let initialPreviewTrackerCount: number | null = null;
+  let initialTextContent: string | null = null;
   let scanId: string | null = null;
   let retryAfterSeconds: number | null = null;
   const statusPolls: PollObservation[] = [];
@@ -426,6 +445,7 @@ async function runCase(input: {
       ));
       initialResponseLatencyMs = Date.now() - scanStarted;
       initial = toolPayload(initialRaw);
+      initialTextContent = toolTextContent(initialRaw);
       initialClassification = classifyInitial(initial, initialRaw.isError === true);
       if (initialRaw.isError === true) mcpErrorCount += 1;
     } catch (error) {
@@ -436,6 +456,12 @@ async function runCase(input: {
     }
 
     initialStatus = text(initial.status);
+    const initialPreview = record(initial.preConsentPreview);
+    const initialPreviewSummary = record(initialPreview.summary);
+    initialPreConsentPreviewReturned = Object.keys(initialPreview).length > 0;
+    initialPreviewCoverageStatus = text(record(initialPreview.runtimeCoverage).status);
+    initialPreviewCookieCount = numeric(initialPreviewSummary.cookieCount);
+    initialPreviewTrackerCount = numeric(initialPreviewSummary.trackerCount);
     scanId = text(initial.scanId) ?? text(initial.scan_id);
     retryAfterSeconds = numeric(initial.retryAfterSeconds) ?? numeric(record(initial.error).retryAfterSeconds);
 
@@ -549,6 +575,11 @@ async function runCase(input: {
     initialResponseLatencyMs,
     initialClassification,
     initialStatus,
+    initialPreConsentPreviewReturned,
+    initialPreviewCoverageStatus,
+    initialPreviewCookieCount,
+    initialPreviewTrackerCount,
+    initialTextContent,
     scanId,
     retryAfterSeconds,
     legacyWaitParametersSent: input.target.legacyWait === true,
@@ -664,6 +695,7 @@ export function buildReport(input: {
       problematicInputAcceptedCount: acceptedProblematicInputs.length,
       immediateReuseCount: count(input.results, (result) => result.initialClassification === "immediate_completed_reuse"),
       pendingScanCount: count(input.results, (result) => result.initialClassification === "new_pending_scan"),
+      initialPreConsentPreviewCount: count(input.results, (result) => result.initialPreConsentPreviewReturned),
       timeoutCount: count(input.results, (result) => result.timeout),
       disconnectCount: count(input.results, (result) => result.disconnect),
       accidentalDuplicateScanCount: input.results.reduce((sum, result) => sum + result.accidentalDuplicateScanCount, 0),
@@ -704,7 +736,7 @@ export function renderMarkdown(report: BenchmarkReport) {
   const latencyRows = Object.entries(report.latencyMs).map(([name, values]) =>
     `| ${name} | ${values.count} | ${ms(values.min)} | ${ms(values.p50)} | ${ms(values.p90)} | ${ms(values.p95)} | ${ms(values.p99)} | ${ms(values.max)} |`
   );
-  const caseRows = report.cases.map((row) => `| ${markdownCell(row.id)} | ${markdownCell(row.category)} | ${markdownCell(row.target)} | ${markdownCell(row.initialClassification)} | ${ms(row.initialResponseLatencyMs)} | ${markdownCell(row.scanId)} | ${row.statusPolls.length} | ${ms(row.scanCompletionTimeMs)} | ${ms(row.bundleLatencyMs)} | ${markdownCell(row.finalResult)} |`);
+  const caseRows = report.cases.map((row) => `| ${markdownCell(row.id)} | ${markdownCell(row.category)} | ${markdownCell(row.target)} | ${markdownCell(row.initialClassification)} | ${ms(row.initialResponseLatencyMs)} | ${row.initialPreConsentPreviewReturned ? `yes (${row.initialPreviewCookieCount ?? 0} cookies; ${row.initialPreviewTrackerCount ?? 0} trackers)` : "no"} | ${markdownCell(row.scanId)} | ${row.statusPolls.length} | ${ms(row.scanCompletionTimeMs)} | ${ms(row.bundleLatencyMs)} | ${markdownCell(row.finalResult)} |`);
   return [
     "# CertScore MCP Light GPT compatibility benchmark",
     "",
@@ -737,9 +769,22 @@ export function renderMarkdown(report: BenchmarkReport) {
     "",
     "## Cases",
     "",
-    "| Case | Category | Target | Initial result | Initial ms | Scan ID | Polls | Completion ms | Bundle ms | Final |",
-    "| --- | --- | --- | --- | ---: | --- | ---: | ---: | ---: | --- |",
+    "| Case | Category | Target | Initial result | Initial ms | Preview | Scan ID | Polls | Completion ms | Bundle ms | Final |",
+    "| --- | --- | --- | --- | ---: | --- | --- | ---: | ---: | ---: | --- |",
     ...caseRows,
+    "",
+    "## Exact initial MCP TextContent",
+    "",
+    ...report.cases.flatMap((row) => [
+      `### ${row.id}`,
+      "",
+      `Target: ${row.target ?? "not supplied"}`,
+      "",
+      "```text",
+      row.initialTextContent ?? "No initial TextContent returned.",
+      "```",
+      "",
+    ]),
     "",
     "## Issues",
     "",

@@ -842,7 +842,10 @@ test("Streamable HTTP runtime initializes, lists tools, enforces auth, CORS, and
     assert.deepEqual(lightTools.tools.map((tool) => tool.name).sort(), ["certscore_get_scan_bundle", "certscore_get_scan_status", "certscore_scan_site"]);
     const lightScanTool = lightTools.tools.find((tool) => tool.name === "certscore_scan_site");
     assert.match(lightScanTool?.description ?? "", /Validate a public website URL/);
-    assert.match(lightScanTool?.description ?? "", /never waits for a new scan to finish/);
+    assert.match(lightScanTool?.description ?? "", /six-second checkpoint/);
+    assert.match(lightScanTool?.description ?? "", /9–11 seconds total/);
+    assert.match(lightScanTool?.description ?? "", /falls back to the stable scanId without a preview/);
+    assert.match(lightScanTool?.description ?? "", /preConsentPreview/);
     assert.match(lightScanTool?.description ?? "", /do not resubmit certscore_scan_site/);
     assert.match(lightScanTool?.description ?? "", /pre-consent storage, trackers/);
     assert.match(lightScanTool?.description ?? "", /consent\/CMP behavior/);

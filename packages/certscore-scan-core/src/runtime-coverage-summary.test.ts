@@ -1,8 +1,85 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { deriveRuntimeCoverageSummary, withLocalRegionalEgressLimitation } from "./index";
+import { buildPreConsentRuntimePreview, deriveRuntimeCoverageSummary, withLocalRegionalEgressLimitation } from "./index";
 
 const startedAt = "2026-01-01T00:00:00.000Z";
+
+test("pre-consent preview separates captured and returned identities from operational vendors", () => {
+  const preview = buildPreConsentRuntimePreview({
+    completedAt: "2026-01-01T00:00:06.000Z",
+    cookieEvents: [],
+    cookieSnapshots: [{
+      artifactId: "cookie_snapshot_preview",
+      capturedAtMs: 6_000,
+      consentStateAtTime: "pre_consent",
+      cookieNames: Array.from({ length: 21 }, (_, index) => `cookie_${index}`),
+      cookies: Array.from({ length: 21 }, (_, index) => ({
+        name: `cookie_${index}`,
+        domain: ".example.com",
+        path: "/",
+        httpOnly: false,
+        secure: true,
+        sameSite: "Lax" as const,
+      })),
+      evidenceRefs: [],
+    }],
+    networkEvents: [],
+    normalizedVendorObservations: [
+      {
+        observationId: "vendor_tracking",
+        entity: "Example Analytics",
+        vendor: "Example Analytics",
+        product: "Example Analytics Pixel",
+        purpose: "analytics",
+        confidence: 0.95,
+        basis: ["fixture"],
+        regulatoryRelevance: [],
+        matchedEvidenceIds: [],
+        matchedEvidenceRefs: [],
+        matchSources: [],
+        matchedHostnames: ["analytics.example.com"],
+      },
+      {
+        observationId: "vendor_security",
+        entity: "Cloudflare",
+        vendor: "Cloudflare",
+        product: "Cloudflare Bot Management",
+        purpose: "security",
+        confidence: 0.98,
+        basis: ["fixture"],
+        regulatoryRelevance: [],
+        matchedEvidenceIds: [],
+        matchedEvidenceRefs: [],
+        matchSources: [],
+        matchedHostnames: ["example.com"],
+      },
+    ],
+    runtimeCoverage: {
+      coverageStatus: "limited_partial",
+      limitationKeys: ["six_second_passive_checkpoint"],
+      fallbackModesUsed: [],
+      observationCounts: {
+        networkEvents: 0,
+        thirdPartyRequests: 0,
+        cookieEvents: 0,
+        cookiesBeforeConsent: 21,
+        normalizedVendors: 2,
+        observedJourneys: 0,
+      },
+      silentEmpty: false,
+      notes: [],
+    },
+  });
+
+  assert.equal(preview.summary.cookieCount, 21);
+  assert.equal(preview.summary.returnedCookieCount, 20);
+  assert.equal(preview.summary.trackerCount, 1);
+  assert.equal(preview.summary.trackingVendorCount, 1);
+  assert.equal(preview.summary.operationalVendorCount, 1);
+  assert.equal(preview.trackers[0]?.vendor, "Example Analytics");
+  assert.equal(preview.operationalVendors?.[0]?.vendor, "Cloudflare");
+  assert.deepEqual(preview.truncated, { cookies: true, trackers: false, operationalVendors: false });
+});
 
 test("runtime coverage marks completed empty runtime as limited none", () => {
   const summary = deriveRuntimeCoverageSummary({

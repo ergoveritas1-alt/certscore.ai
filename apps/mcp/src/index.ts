@@ -433,6 +433,7 @@ async function handleMcp(req: IncomingMessage, res: ServerResponse, anonymous: b
         : undefined,
       anonymousSurface: anonymous ? (light ? "mcp_light" : "mcp_anonymous") : null,
       timeout: env.CERTSCORE_REQUEST_TIMEOUT_MS,
+      initialPreConsentPreviewWaitMs: env.CERTSCORE_MCP_INITIAL_PRECONSENT_PREVIEW_WAIT_MS,
       toolProfile: light ? "light" : "full",
       exampleDomainDemoUrl: anonymous
         ? "https://ergoveritas.com/.well-known/certscore-canary/sentinels/broad-baseline.html"
