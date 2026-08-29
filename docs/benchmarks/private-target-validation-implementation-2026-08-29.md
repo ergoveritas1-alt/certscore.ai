@@ -1,6 +1,6 @@
 # Private-target validation implementation — 2026-08-29
 
-Status: implemented and verified in the working tree. Not deployed to production.
+Status: deployed to AWS, verified in production, and released. The MCP rollout hold was lifted on 2026-08-29.
 
 ## Outcome
 
@@ -48,17 +48,29 @@ Tests cover the required literal classes, alternate IPv4 spellings, IPv4-mapped 
 - Shell syntax checks for all modified AWS scripts: passed.
 - MCP benchmark harness unit tests: passed.
 
-## Production benchmark and rollout hold
+## Production release verification
 
-The 25-case live benchmark has not been rerun because the implementation has not been deployed, in accordance with the instruction not to modify production before review. The rollout hold should remain in place until a controlled AWS scanner/web/MCP deployment applies both code and proxy/network changes, followed by the exact 25-case benchmark and regional private-target canaries.
+The controlled AWS rollout completed on 2026-08-29. Web admission, hosted MCP, validation, three regional scanner Lambdas, and the three canonical regional proxies were verified before the unchanged benchmark ran.
 
-Acceptance after deployment remains:
+- The exact fixture SHA-256 remained `393ae6fe1a55a180df2575539ab1105f395c0b77815a5d84fd45c4eafe94236e`.
+- Loopback, RFC1918, link-local metadata, carrier-grade NAT, unspecified, alternate IPv4 spellings, mapped IPv6, local aliases, private-only DNS, and an owned mixed public/private DNS name all returned no scan ID.
+- Public errors use stable code `invalid_url`, reason `non_public_target`, and `retryable: false`.
+- A temporary owned S3 website redirect to AWS metadata was followed only as far as the regional proxy. Retained evidence recorded the public 301 and a Squid-generated 403 for the metadata destination; no metadata response was retrieved. The temporary bucket was deleted immediately afterward.
+- Direct synthetic invocations of the deployed Lambda in EU-DE, EU-IE, and California each rejected the metadata target before browser work.
+- CloudWatch recorded sanitized `scan_target_rejected` events with no raw URL, hostname, or IP leakage.
+- Regional parity passed after deployment and again after superseded proxy cleanup.
 
-- unsafe targets fail with no scan ID and no scan quota consumption;
-- all 21 intended valid cases complete;
-- initial `certscore_scan_site` p95 does not materially regress from 4.896 seconds and remains below 20 seconds;
-- no HTTP failures, disconnects, duplicate scans, parallel polling, delay violations, or bundle-binding failures;
-- regional checks confirm the proxy deny policy and narrow Lambda egress in all three regions.
+The unchanged 25-case MCP Light benchmark passed:
+
+- 21/21 legitimate cases completed with correctly bound bundles;
+- all four invalid/problematic cases were rejected;
+- one forced-refresh case exercised pending scan creation and sequential polling;
+- zero HTTP failures, unexpected MCP failures, disconnects, timeouts, duplicate scans, parallel polls, or early polls;
+- `certscore_scan_site` p95 was 2.145 seconds, versus the prior 4.896-second comparison point;
+- all 25 benchmark client identifiers correlated to 25 unique server sessions;
+- all 58 handler-level telemetry deliveries were accepted with zero delivery failures.
+
+All release gates passed. The MCP rollout hold is lifted.
 
 ## Compatibility and cost
 
