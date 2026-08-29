@@ -117,7 +117,9 @@ claude plugin update certscore-mcp-light@certscore-ai --scope user
 claude plugin list --json
 ```
 
-External owner action for Anthropic's official marketplace: open `https://claude.ai/settings/plugins/submit` or `https://platform.claude.com/plugins/submit`, submit `https://github.com/ergoveritas1-alt/certscore.ai`, and identify `integrations/claude-code/certscore-mcp-light` if the form asks for the plugin directory. Use publisher `CertScore.ai, LLC`, plugin version `0.2.16`, and the shared listing fields above. The plugin requires no key, hook, local executable, OAuth flow, or autonomous background action.
+Anthropic directory status verified August 29, 2026: the existing `certscore-ai` listing is **Published — Pending review**. Its reviewer instructions request an in-place replacement of the authenticated OAuth `/mcp` connection with the no-auth `https://mcp.certscore.ai/mcp/light` endpoint. Do not create a duplicate listing. Anthropic controls the reviewed endpoint and authentication fields, so the replacement remains reviewer-dependent.
+
+The submitted package uses publisher `CertScore.ai, LLC`, plugin version `0.2.16`, and the shared listing fields above. It requires no key, hook, local executable, OAuth flow, or autonomous background action. The production endpoint and directory-safe tool metadata were independently verified after deployment.
 
 ## OpenAI / ChatGPT and Codex
 
