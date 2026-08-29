@@ -232,28 +232,23 @@ test("CertScore Light exposes only the focused no-account workflow", async () =>
     });
     assert.ok(scanSiteTool?.outputSchema?.required?.includes("error"));
     assert.ok(scanSiteTool?.outputSchema?.required?.includes("recommendedNextAction"));
-    assert.match(scanSiteTool?.description ?? "", /runtime lane completes or reaches its six-second checkpoint/);
-    assert.match(scanSiteTool?.description ?? "", /capped at approximately 9–11 seconds total/);
-    assert.match(scanSiteTool?.description ?? "", /falls back to the stable scanId without a preview/);
+    assert.match(scanSiteTool?.description ?? "", /Creates a public-website privacy scan or reuses an eligible recent completed scan/);
     assert.match(scanSiteTool?.description ?? "", /preConsentPreview/);
-    assert.match(scanSiteTool?.description ?? "", /MCP text lists returned cookies/i);
-    assert.match(scanSiteTool?.description ?? "", /per-vendor first-seen timing is not available/i);
-    assert.match(scanSiteTool?.description ?? "", /checkpoint-only and not the full scan tally/i);
-    assert.match(scanSiteTool?.description ?? "", /before reporting full scan results/i);
-    assert.match(scanSiteTool?.description ?? "", /do not resubmit certscore_scan_site/);
+    assert.match(scanSiteTool?.description ?? "", /preliminary data contains no final findings or score/i);
+    assert.match(scanSiteTool?.description ?? "", /https:\/\/certscore\.ai\/developers\/mcp/);
     assert.match((scanSiteTool?.inputSchema.properties?.waitForCompletion as { description?: string })?.description ?? "", /Deprecated compatibility field; accepted but ignored/);
     assert.match((scanSiteTool?.inputSchema.properties?.maxWaitSeconds as { description?: string })?.description ?? "", /Deprecated compatibility field; accepted but ignored/);
     const freshnessSchema = scanSiteTool?.inputSchema.properties?.freshness as { description?: string; enum?: string[] } | undefined;
     assert.deepEqual(freshnessSchema?.enum, ["latest", "refresh"]);
     assert.equal(
       freshnessSchema?.description,
-      "Prefer latest for ordinary website checks so an eligible recent completed scan can be reused and new-scan allowance is not consumed unnecessarily; CertScore may still start a scan when no suitable result exists. Use refresh only when the user explicitly requests a fresh, new, or repeated scan; ordinary check, scan, audit, inspect, review, or assess wording alone does not request refresh."
+      "Scan freshness policy. latest allows eligible recent completed-result reuse when available; refresh requests a new scan. Defaults to latest."
     );
     const scanFromSchema = scanSiteTool?.inputSchema.properties?.scanFrom as { description?: string; enum?: string[] } | undefined;
     assert.deepEqual(scanFromSchema?.enum, ["eu_de", "eu_ie", "california"]);
     assert.equal(
       scanFromSchema?.description,
-      "Optional execution region for a newly queued scan. Omit when the user did not request a jurisdiction or regional perspective; use eu_de or eu_ie for explicit EU/GDPR/ePrivacy requests and california for explicit California/CCPA/CPRA requests. Do not use multiple regions unless comparison is requested, and do not infer EU from consent or California from a U.S. user location."
+      "Optional execution region for a newly queued scan: eu_de, eu_ie, california, or the service default when omitted."
     );
     const statusTool = tools.tools.find((tool) => tool.name === "certscore_get_scan_status");
     assert.deepEqual(statusTool?.annotations, {
@@ -267,10 +262,9 @@ test("CertScore Light exposes only the focused no-account workflow", async () =>
     assert.equal(statusTool?.inputSchema.additionalProperties, false);
     assert.ok(statusTool?.outputSchema?.required?.includes("error"));
     assert.ok(statusTool?.outputSchema?.required?.includes("recommendedNextAction"));
-    assert.match(statusTool?.description ?? "", /execution region \(scanFrom\), timestamps/);
-    assert.match(statusTool?.description ?? "", /never infer its original region from the current request, the user's location, or a default/i);
-    assert.match(statusTool?.description ?? "", /Report unavailable provenance as unavailable/);
-    assert.match(statusTool?.description ?? "", /never poll in parallel/i);
+    assert.match(statusTool?.description ?? "", /Returns lifecycle status for a stable CertScore scanId/);
+    assert.match(statusTool?.description ?? "", /persisted execution region and timestamps/);
+    assert.match(statusTool?.description ?? "", /Preliminary observations are distinct from completed findings/);
     const bundleTool = tools.tools.find((tool) => tool.name === "certscore_get_scan_bundle");
     assert.deepEqual(bundleTool?.annotations, {
       title: "Get scan bundle",
@@ -289,12 +283,14 @@ test("CertScore Light exposes only the focused no-account workflow", async () =>
     assert.ok(bundleTool?.outputSchema?.required?.includes("scoreLabel"));
     assert.ok(bundleTool?.outputSchema?.required?.includes("interpretationGuidance"));
     assert.ok(bundleTool?.outputSchema?.required?.includes("scanFrom"));
-    assert.match(bundleTool?.description ?? "", /canonical execution region \(scanFrom\) and timestamps when available/i);
-    assert.match(bundleTool?.description ?? "", /never infer its original region from the current request, the user's location, or a default/i);
-    assert.match(bundleTool?.description ?? "", /criticality, priority, and confidence as CertScore metadata/i);
-    assert.match(bundleTool?.description ?? "", /regulatory review lenses are non-determinative CertScore review context, not legal severity, legal exposure, or a compliance determination/i);
-    assert.match(bundleTool?.description ?? "", /Missing consent-action evidence does not establish Accept, Reject, or Decline behavior/i);
-    assert.match(bundleTool?.description ?? "", /Do not extrapolate observed embeds, vendors, or requests into unobserved cookies, fingerprinting, tracking, or processing/i);
+    assert.match(bundleTool?.description ?? "", /Returns the completed or completed-limited CertScore evidence bundle/);
+    assert.match(bundleTool?.description ?? "", /persisted execution provenance/);
+    assert.match(bundleTool?.description ?? "", /Reject Path content is present only for confirmed, evidence-qualified post-refusal observations/i);
+    assert.match(bundleTool?.description ?? "", /not legal advice, certification, or a compliance determination/i);
+    for (const tool of [scanSiteTool, statusTool, bundleTool]) {
+      assert.doesNotMatch(tool?.description ?? "", /\b(?:never|must|should|do not|call|wait|continue polling|stop polling)\b/i);
+      assert.doesNotMatch(tool?.description ?? "", /certscore_(?:scan_site|get_scan_status|get_scan_bundle)/);
+    }
     const inventorySchema = bundleTool?.outputSchema?.properties?.preConsentCookiesTrackers as {
       properties?: { rows?: { items?: { properties?: Record<string, unknown> } }; returned?: unknown; total?: unknown; truncated?: unknown };
     } | undefined;

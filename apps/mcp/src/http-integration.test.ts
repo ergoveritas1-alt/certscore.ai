@@ -841,19 +841,15 @@ test("Streamable HTTP runtime initializes, lists tools, enforces auth, CORS, and
     assert.deepEqual(microsoftTools.tools.map(parityProjection), lightTools.tools.map(parityProjection));
     assert.deepEqual(lightTools.tools.map((tool) => tool.name).sort(), ["certscore_get_scan_bundle", "certscore_get_scan_status", "certscore_scan_site"]);
     const lightScanTool = lightTools.tools.find((tool) => tool.name === "certscore_scan_site");
-    assert.match(lightScanTool?.description ?? "", /Validate a public website URL/);
-    assert.match(lightScanTool?.description ?? "", /six-second checkpoint/);
-    assert.match(lightScanTool?.description ?? "", /9–11 seconds total/);
-    assert.match(lightScanTool?.description ?? "", /falls back to the stable scanId without a preview/);
+    assert.match(lightScanTool?.description ?? "", /Creates a public-website privacy scan or reuses an eligible recent completed scan/);
     assert.match(lightScanTool?.description ?? "", /preConsentPreview/);
-    assert.match(lightScanTool?.description ?? "", /do not resubmit certscore_scan_site/);
+    assert.match(lightScanTool?.description ?? "", /preliminary data contains no final findings or score/i);
     assert.match(lightScanTool?.description ?? "", /pre-consent storage, trackers/);
-    assert.match(lightScanTool?.description ?? "", /consent\/CMP behavior/);
+    assert.match(lightScanTool?.description ?? "", /consent and CMP signals/);
     assert.match(lightScanTool?.description ?? "", /transport security/);
-    assert.match(lightScanTool?.description ?? "", /policy disclosures/);
+    assert.match(lightScanTool?.description ?? "", /privacy-policy disclosures/);
     assert.match(lightScanTool?.description ?? "", /GDPR\/ePrivacy or CCPA\/CPRA review signals/);
-    assert.match(lightScanTool?.description ?? "", /call certscore_get_scan_status/);
-    assert.match(lightScanTool?.description ?? "", /call certscore_get_scan_bundle/);
+    assert.match(lightScanTool?.description ?? "", /https:\/\/certscore\.ai\/developers\/mcp/);
     const waitForCompletionSchema = lightScanTool?.inputSchema.properties?.waitForCompletion as { description?: string } | undefined;
     assert.match(waitForCompletionSchema?.description ?? "", /Deprecated compatibility field/);
     assert.match(waitForCompletionSchema?.description ?? "", /ignored/);
@@ -864,13 +860,13 @@ test("Streamable HTTP runtime initializes, lists tools, enforces auth, CORS, and
     assert.deepEqual(freshnessSchema?.enum, ["latest", "refresh"]);
     assert.equal(
       freshnessSchema?.description,
-      "Prefer latest for ordinary website checks so an eligible recent completed scan can be reused and new-scan allowance is not consumed unnecessarily; CertScore may still start a scan when no suitable result exists. Use refresh only when the user explicitly requests a fresh, new, or repeated scan; ordinary check, scan, audit, inspect, review, or assess wording alone does not request refresh."
+      "Scan freshness policy. latest allows eligible recent completed-result reuse when available; refresh requests a new scan. Defaults to latest."
     );
     const scanFromSchema = lightScanTool?.inputSchema.properties?.scanFrom as { description?: string; enum?: string[] } | undefined;
     assert.deepEqual(scanFromSchema?.enum, ["eu_de", "eu_ie", "california"]);
     assert.equal(
       scanFromSchema?.description,
-      "Optional execution region for a newly queued scan. Omit when the user did not request a jurisdiction or regional perspective; use eu_de or eu_ie for explicit EU/GDPR/ePrivacy requests and california for explicit California/CCPA/CPRA requests. Do not use multiple regions unless comparison is requested, and do not infer EU from consent or California from a U.S. user location."
+      "Optional execution region for a newly queued scan: eu_de, eu_ie, california, or the service default when omitted."
     );
     assert.deepEqual(lightScanTool?.annotations, {
       title: "Scan site",
@@ -894,10 +890,13 @@ test("Streamable HTTP runtime initializes, lists tools, enforces auth, CORS, and
       openWorldHint: false
     });
     const lightBundleTool = lightTools.tools.find((tool) => tool.name === "certscore_get_scan_bundle");
-    assert.match(lightBundleTool?.description ?? "", /criticality, priority, and confidence as CertScore metadata/i);
-    assert.match(lightBundleTool?.description ?? "", /regulatory review lenses are non-determinative CertScore review context, not legal severity, legal exposure, or a compliance determination/i);
-    assert.match(lightBundleTool?.description ?? "", /Missing consent-action evidence does not establish Accept, Reject, or Decline behavior/i);
-    assert.match(lightBundleTool?.description ?? "", /Do not extrapolate observed embeds, vendors, or requests into unobserved cookies, fingerprinting, tracking, or processing/i);
+    assert.match(lightBundleTool?.description ?? "", /Returns the completed or completed-limited CertScore evidence bundle/i);
+    assert.match(lightBundleTool?.description ?? "", /Reject Path content is present only for confirmed, evidence-qualified post-refusal observations/i);
+    assert.match(lightBundleTool?.description ?? "", /not legal advice, certification, or a compliance determination/i);
+    for (const tool of lightTools.tools) {
+      assert.doesNotMatch(tool.description ?? "", /\b(?:never|must|should|do not|call|wait|continue polling|stop polling)\b/i);
+      assert.doesNotMatch(tool.description ?? "", /certscore_(?:scan_site|get_scan_status|get_scan_bundle)/);
+    }
     const invalidLightScan = await lightClient.callTool({ name: "certscore_scan_site", arguments: {} });
     assert.equal(invalidLightScan.isError, true);
     assert.equal((invalidLightScan.structuredContent as { type?: string } | undefined)?.type, "certscore_tool_error");

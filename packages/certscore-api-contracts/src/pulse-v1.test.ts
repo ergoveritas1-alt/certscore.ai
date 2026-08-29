@@ -184,52 +184,38 @@ test("MCP contracts expose the current scoped tool surface", () => {
   assert.ok(certScoreMcpToolContracts.find((tool) => tool.name === "certscore_get_pre_consent_cookies_trackers")?.inputSchema.maxRows);
 });
 
-test("Light workflow descriptions preserve scan guidance and ground canonical provenance", () => {
+test("Light tool descriptions are factual, bounded, and free of model-behavior instructions", () => {
   const scanSite = certScoreMcpToolContracts.find((tool) => tool.name === "certscore_scan_site");
   const status = certScoreMcpToolContracts.find((tool) => tool.name === "certscore_get_scan_status");
   const bundle = certScoreMcpToolContracts.find((tool) => tool.name === "certscore_get_scan_bundle");
   assert.ok(scanSite);
-  assert.match(scanSite.description, /runtime lane completes or reaches its six-second checkpoint/i);
-  assert.match(scanSite.description, /capped at approximately 9–11 seconds total/i);
-  assert.match(scanSite.description, /falls back to the stable scanId without a preview/i);
+  assert.ok(status);
+  assert.ok(bundle);
+  assert.match(scanSite.description, /Creates a public-website privacy scan or reuses an eligible recent completed scan/i);
   assert.match(scanSite.description, /preConsentPreview/);
-  assert.match(scanSite.description, /MCP text lists returned cookies/i);
-  assert.match(scanSite.description, /per-vendor first-seen timing is not available/i);
-  assert.match(scanSite.description, /captured counts from returned identity counts/i);
-  assert.match(scanSite.description, /trackingVendorCount excludes infrastructure, security, and consent-management vendors/i);
-  assert.match(scanSite.description, /must not be compared directly with the completed inventory's broader trackerCount/i);
-  assert.match(scanSite.description, /checkpoint-only and not the full scan tally/i);
-  assert.match(scanSite.description, /before reporting full scan results/i);
-  assert.match(status.description, /Distinguish captured totals from bounded returned identities/i);
-  assert.match(status.description, /compatibility preview trackerCount is not comparable/i);
-  assert.match(status.description, /before reporting full scan results/i);
-  assert.match(scanSite.description, /preview is not final/i);
-  assert.match(scanSite.description, /retryAfterSeconds of 15 seconds, and call certscore_get_scan_status/);
-  assert.match(scanSite.description, /10 seconds while queued and 5 seconds while running or finalizing/);
-  assert.match(scanSite.description, /do not resubmit certscore_scan_site/);
-  assert.match(scanSite.description, /At completed or completed_limited, call certscore_get_scan_bundle/);
+  assert.match(scanSite.description, /preliminary data contains no final findings or score/i);
+  assert.match(scanSite.description, /https:\/\/certscore\.ai\/developers\/mcp/);
+  assert.match(status.description, /Returns lifecycle status for a stable CertScore scanId/i);
+  assert.match(status.description, /retryAfterSeconds/);
+  assert.match(status.description, /Preliminary observations are distinct from completed findings/i);
+  assert.match(bundle.description, /Returns the completed or completed-limited CertScore evidence bundle/i);
+  assert.match(bundle.description, /Reject Path content is present only for confirmed, evidence-qualified post-refusal observations/i);
+  assert.match(bundle.description, /unsupported or inconclusive outcomes remain neutral coverage limitations/i);
   for (const concept of [
-    /public website URL/,
-    /observable privacy and consent signals/,
     /pre-consent storage/,
     /trackers/,
-    /consent\/CMP behavior/,
+    /consent and CMP signals/,
     /transport security/,
-    /policy disclosures/,
+    /privacy-policy disclosures/,
     /GDPR\/ePrivacy or CCPA\/CPRA review signals/
   ]) {
     assert.match(scanSite.description, concept);
   }
-  assert.match(status?.description ?? "", /wait at least its returned retryAfterSeconds of 15 seconds before the first status call/i);
-  assert.match(status?.description ?? "", /10 seconds while queued and 5 seconds while running or finalizing/);
-  assert.match(status?.description ?? "", /never poll in parallel/i);
-  assert.match(status?.description ?? "", /never resubmit certscore_scan_site/i);
-  assert.match(status?.description ?? "", /continue polling after receiving the preview/);
-  assert.match(status?.description ?? "", /at completed or completed_limited, call certscore_get_scan_bundle/);
-  assert.match(bundle?.description ?? "", /Post-refusal observation may intentionally stop as soon as qualifying non-essential activity/i);
-  assert.match(bundle?.description ?? "", /termination\.kind=evidence_satisfied is positive evidence/i);
-  assert.match(bundle?.description ?? "", /coverageLimitations scoped to additional behavior or persistence that was not measured/i);
-  assert.match(bundle?.description ?? "", /Missing consent-action evidence does not establish Accept, Reject, or Decline behavior/i);
+  for (const tool of [scanSite, status, bundle]) {
+    assert.doesNotMatch(tool.description, /\b(?:never|must|should|do not|call|wait|continue polling|stop polling)\b/i);
+    assert.doesNotMatch(tool.description, /certscore_(?:scan_site|get_scan_status|get_scan_bundle)/);
+    assert.doesNotMatch(tool.description, /ignore (?:all |any )?(?:previous|prior) instructions/i);
+  }
 });
 
 test("certscore_scan_site parameter guidance preserves economical intent-aligned selection", () => {
@@ -237,11 +223,11 @@ test("certscore_scan_site parameter guidance preserves economical intent-aligned
   assert.ok(scanSite);
   assert.equal(
     scanSite.inputSchema.freshness.description,
-    "Prefer latest for ordinary website checks so an eligible recent completed scan can be reused and new-scan allowance is not consumed unnecessarily; CertScore may still start a scan when no suitable result exists. Use refresh only when the user explicitly requests a fresh, new, or repeated scan; ordinary check, scan, audit, inspect, review, or assess wording alone does not request refresh."
+    "Scan freshness policy. latest allows eligible recent completed-result reuse when available; refresh requests a new scan. Defaults to latest."
   );
   assert.equal(
     scanSite.inputSchema.scanFrom.description,
-    "Optional execution region for a newly queued scan. Omit when the user did not request a jurisdiction or regional perspective; use eu_de or eu_ie for explicit EU/GDPR/ePrivacy requests and california for explicit California/CCPA/CPRA requests. Do not use multiple regions unless comparison is requested, and do not infer EU from consent or California from a U.S. user location."
+    "Optional execution region for a newly queued scan: eu_de, eu_ie, california, or the service default when omitted."
   );
   assert.deepEqual(mcpPulseFreshnessSchema.options, ["latest", "refresh"]);
   assert.deepEqual(mcpScanFromSchema.options, ["eu_de", "eu_ie", "california"]);
