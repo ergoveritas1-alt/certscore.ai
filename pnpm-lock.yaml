@@ -106,6 +106,9 @@ importers:
       '@axe-core/playwright':
         specifier: 4.11.2
         version: 4.11.2(playwright-core@1.58.2)
+      '@certscore/api-contracts':
+        specifier: workspace:*
+        version: link:../../packages/certscore-api-contracts
       '@certscore/contracts':
         specifier: workspace:*
         version: link:../../packages/certscore-contracts

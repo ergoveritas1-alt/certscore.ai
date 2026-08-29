@@ -48,6 +48,7 @@
     "@axe-core/playwright": "4.11.2",
     "@aws-sdk/client-s3": "3.1069.0",
     "@aws-sdk/client-sqs": "3.1069.0",
+    "@certscore/api-contracts": "workspace:*",
     "@certscore/contracts": "workspace:*",
     "@certscore/scan-core": "workspace:*",
     "@certscore/vendor-resolver": "workspace:*",
