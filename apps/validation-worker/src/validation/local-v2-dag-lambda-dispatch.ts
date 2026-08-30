@@ -133,7 +133,7 @@ function postRefusalObservationFromIntent(input: {
     dispatchDelayMs: 500,
     observationWindowMs: 8_000,
     confirmationTimeoutMs: 1_500,
-    actionSearchTimeoutMs: 1_500,
+    actionSearchTimeoutMs: 2_500,
     resolver: {
       kind: "canonical_cmp_registry",
       recipeSetId: "canonical-consent-control-reject-v9",

@@ -56,6 +56,17 @@ test("reject honored confirms registration without post-refusal activity", async
   });
 });
 
+test("does not click a deterministic Reject control before its document handler is ready", async () => {
+  await withFixture("post-refusal-reject-handler-after-dom-ready", async (url) => {
+    const packet = await observe(url, { actionSearchTimeoutMs: 1_000 });
+
+    assert.equal(packet.resolver.found, true);
+    assert.equal(packet.refusalRegistration.status, "confirmed");
+    assert.equal(packet.refusalRegistration.refusalExercised, true);
+    assert.equal(packet.interactionDiagnostics.click.outcome, "completed");
+  });
+});
+
 test("retained packets redact target query values and bind the exact target by hash", async () => {
   await withFixture("post-refusal-reject-honored", async (url) => {
     const exactTargetUrl = `${url}?session_token=sensitive-value#fragment`;

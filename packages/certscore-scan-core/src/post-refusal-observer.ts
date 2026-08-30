@@ -1636,6 +1636,18 @@ async function waitForDeterministicRecipe(
   let stableSinceMs = 0;
   do {
     if (signal?.aborted) return { status: "aborted" };
+    const documentInteractive = await page.evaluate(() => document.readyState !== "loading")
+      .catch(() => false);
+    if (!documentInteractive) {
+      stableRecipeId = undefined;
+      stableSinceMs = 0;
+      if (Date.now() >= deadlineAtMs) break;
+      await waitForDelay(
+        Math.min(25, Math.max(0, deadlineAtMs - Date.now())),
+        signal,
+      ).catch(() => undefined);
+      continue;
+    }
     const actionable: Array<{ recipe: PostRefusalActionRecipe; control: Locator }> = [];
     for (const recipe of recipes) {
       const controls = page.locator(recipe.controlSelector);

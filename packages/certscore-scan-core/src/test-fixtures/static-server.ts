@@ -70,6 +70,7 @@ export type StaticFixturePage =
   | "consent-sits-style-preferences"
   | "consent-tracking-persists-after-reject"
   | "post-refusal-reject-honored"
+  | "post-refusal-reject-handler-after-dom-ready"
   | "post-refusal-certscore-owned-analytics"
   | "post-refusal-reject-observation-long-task"
   | "post-refusal-reject-action-phase-nonessential"
@@ -302,6 +303,7 @@ const fixtureSlugs: Record<StaticFixturePage, string> = {
   "consent-sits-style-preferences": "consent-sits-style-preferences",
   "consent-tracking-persists-after-reject": "consent-persists",
   "post-refusal-reject-honored": "post-refusal-reject-honored",
+  "post-refusal-reject-handler-after-dom-ready": "post-refusal-reject-handler-after-dom-ready",
   "post-refusal-certscore-owned-analytics": "post-refusal-certscore-owned-analytics",
   "post-refusal-reject-observation-long-task": "post-refusal-reject-observation-long-task",
   "post-refusal-reject-action-phase-nonessential": "post-refusal-reject-action-phase-nonessential",
@@ -530,6 +532,21 @@ function handleRequest(request: IncomingMessage, response: ServerResponse): void
   if (url.pathname === "/post-refusal/navigation-settled") {
     response.writeHead(200, { "Content-Type": "text/html; charset=utf-8" });
     response.end("<!doctype html><html><body><main>Refusal navigation settled.</main></body></html>");
+    return;
+  }
+
+  if (url.pathname === "/post-refusal/delayed-reject-handler.js") {
+    const timer = setTimeout(() => {
+      if (response.destroyed) return;
+      response.writeHead(200, { "Content-Type": "application/javascript; charset=utf-8" });
+      response.end(`
+        document.querySelector('[data-certscore-consent-action="reject"]')?.addEventListener("click", () => {
+          localStorage.setItem("certscore_fixture_consent", "rejected");
+          document.querySelector("#certscore-fixture-consent-banner")?.remove();
+        });
+      `);
+    }, 350);
+    response.on("close", () => clearTimeout(timer));
     return;
   }
 
@@ -1512,6 +1529,15 @@ function bodyMarkup(caseName: StaticFixturePage): string {
 }
 
 function postRefusalFixtureMarkup(caseName: StaticFixturePage): string {
+  if (caseName === "post-refusal-reject-handler-after-dom-ready") {
+    return `
+      <section id="certscore-fixture-consent-banner" aria-label="Cookie choices">
+        <p>Choose whether optional analytics cookies may be used.</p>
+        <button data-certscore-consent-action="reject" type="button">Reject all</button>
+      </section>
+      <script src="/post-refusal/delayed-reject-handler.js"></script>
+    `;
+  }
   if (caseName === "post-refusal-certscore-owned-analytics") {
     return `
       <section aria-label="Cookie and analytics preferences">

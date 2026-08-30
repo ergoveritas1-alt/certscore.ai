@@ -71,6 +71,7 @@ test("durable publisher forwards the owned-canary Reject observation contract", 
     assert.equal(payload.postRefusalObservation?.enabled, true);
     assert.equal(payload.postRefusalObservation?.rolloutMode, "all_eligible");
     assert.equal(payload.postRefusalObservation?.dispatchDelayMs, 500);
+    assert.equal(payload.postRefusalObservation?.actionSearchTimeoutMs, 2_500);
     assert.equal(payload.postRefusalObservation?.interactionAuthorization.kind, "owned_canary");
   }
 });
