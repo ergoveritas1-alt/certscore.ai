@@ -23,6 +23,13 @@ export type KnownCmpDefinition = {
   evidenceTreatment: KnownCmpEvidenceTreatment;
   globalNames?: string[];
   iframePatterns?: RegExp[];
+  necessaryOnlyControlTargets?: Array<{
+    bannerSelector: string;
+    controlSelector: string;
+    disallowedCheckedSelector: string;
+    expectedNormalizedLabel: string;
+    requiredCheckedSelector: string;
+  }>;
   reopenControlHints?: string[];
   refusalCookieValues?: Array<{
     expectedValue: string;
@@ -260,6 +267,14 @@ export const KNOWN_CMP_REGISTRY: KnownCmpDefinition[] = [
     ],
     evidenceTreatment: "cmp_infrastructure",
     globalNames: ["tarteaucitron", "dsgvoaio"],
+    necessaryOnlyControlTargets: [{
+      bannerSelector: "#tarteaucitronAlertBig",
+      controlSelector: "#tarteaucitronCloseAlert",
+      disallowedCheckedSelector:
+        "#tarteaucitronRoot input:checked:not(#dsgvoaio-checkbox-essentials)",
+      expectedNormalizedLabel: "auswahl speichern",
+      requiredCheckedSelector: "#dsgvoaio-checkbox-essentials:checked",
+    }],
     reopenControlHints: ["tarteaucitron", "dsgvoaio", "datenschutzeinstellungen", "cookie-einstellungen"],
     role: "consent management platform",
     standards: [],

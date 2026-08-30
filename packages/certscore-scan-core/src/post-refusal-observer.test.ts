@@ -715,6 +715,7 @@ test("canonical reject recipe set selects the one actionable deterministic contr
       "OneTrust",
       "Usercentrics",
       "Cookiebot",
+      "DSGVO All in One / tarteaucitron",
       "Seznam CMP",
       "Google Funding Choices",
     ],
@@ -730,6 +731,45 @@ test("canonical reject recipe set selects the one actionable deterministic contr
     assert.equal(packet.resolver.cmpId, "OneTrust");
     assert.equal(packet.resolver.recipeId, "canonical-cmp:OneTrust:reject:v3");
     assert.equal(packet.refusalRegistration.status, "confirmed");
+  });
+});
+
+test("tarteaucitron necessary-only Save runs as a confirmed Reject equivalent", async () => {
+  const recipeCandidates = buildCanonicalPostRefusalActionRecipes();
+  await withFixture("post-refusal-tarteaucitron-necessary-only-save", async (url) => {
+    const packet = await observe(url, {
+      recipe: recipeCandidates[0],
+      recipeCandidates,
+      recipeSetId: CANONICAL_POST_REFUSAL_RECIPE_SET_ID,
+      productionProjectable: true,
+    });
+
+    assert.equal(packet.resolver.found, true);
+    assert.equal(packet.resolver.cmpId, "DSGVO All in One / tarteaucitron");
+    assert.equal(
+      packet.resolver.recipeId,
+      "canonical-cmp:DSGVO All in One / tarteaucitron:necessary-only-save:v1",
+    );
+    assert.equal(packet.refusalRegistration.status, "confirmed");
+    assert.equal(packet.refusalRegistration.refusalExercised, true);
+    assert.equal(packet.productionProjectable, true);
+  });
+});
+
+test("tarteaucitron necessary-only recipe fails closed when an optional purpose is selected", async () => {
+  const recipeCandidates = buildCanonicalPostRefusalActionRecipes();
+  await withFixture("post-refusal-tarteaucitron-optional-selected", async (url) => {
+    const packet = await observe(url, {
+      recipe: recipeCandidates[0],
+      recipeCandidates,
+      recipeSetId: CANONICAL_POST_REFUSAL_RECIPE_SET_ID,
+    });
+
+    assert.equal(packet.resolver.found, false);
+    assert.equal(packet.resolver.reason, "deterministic_reject_control_not_found");
+    assert.equal(packet.refusalRegistration.status, "not_attempted");
+    assert.equal(packet.refusalRegistration.refusalExercised, false);
+    assert.equal(packet.productionProjectable, false);
   });
 });
 

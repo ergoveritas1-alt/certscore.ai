@@ -5777,6 +5777,29 @@ test("deriveGdprEprivacyCoveragePolicyOutcomes consumes WS01 post-reject reducti
   assert.match(retainedSessionReplayPersistence.session_replay_after_refusal?.limitation ?? "", /deferred from the current production core scanner/i);
 });
 
+test("a complete accept-only first layer makes post-Reject activity not applicable", () => {
+  const assessment = makeCanonicalConsentAssessment({
+    controls: [{
+      actionType: "accept_all",
+      intent: "accept",
+      label: "VERSTANDEN",
+    }],
+  });
+  const outcomes = deriveGdprEprivacyCoveragePolicyOutcomes({
+    ...completedInputBase,
+    ...makeCanonicalConsentPolicyInput(assessment),
+    snapshot: { cookie_banner_present: true },
+  });
+
+  assert.equal(outcomes.reject_all_path_availability?.status, "Review signal");
+  assert.equal(outcomes.post_reject_tracking_reduction?.status, "Not testable");
+  assert.match(outcomes.post_reject_tracking_reduction?.limitation ?? "", /not applicable/i);
+  assert.equal(
+    outcomes.post_reject_tracking_reduction?.criticalEvidence.retainedEvidence.productionPosture,
+    "not_applicable_no_reject_control",
+  );
+});
+
 test("deriveGdprEprivacyCoveragePolicyOutcomes keeps general page accessibility issues as consent-control review", () => {
   const outcomes = deriveGdprEprivacyCoveragePolicyOutcomes({
     ...completedInputBase,

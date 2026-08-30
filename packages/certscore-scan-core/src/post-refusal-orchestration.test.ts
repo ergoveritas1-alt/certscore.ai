@@ -100,6 +100,18 @@ test("complete consent inventory without reject requests cooperative pre-action 
   });
 });
 
+test("necessary-only Save keeps the reject observer eligible", () => {
+  assert.deepEqual(decidePostRefusalCooperativeAbort({
+    consentInventoryComplete: true,
+    necessaryOnlyRejectEquivalentObserved: true,
+    rejectControlObserved: false,
+    rejectActionDispatched: false,
+  }), {
+    abortRequested: false,
+    reason: "necessary_only_reject_equivalent_observed",
+  });
+});
+
 test("cooperative abort never interrupts a dispatched reject action", () => {
   assert.deepEqual(decidePostRefusalCooperativeAbort({
     consentInventoryComplete: true,

@@ -405,6 +405,7 @@ type LocalV2DagLambdaShardResult = {
   postRefusalEvidence?: PostRefusalLambdaEvidenceDescriptor;
   consentRejectAvailability?: {
     inventoryComplete: boolean;
+    necessaryOnlyRejectEquivalentObserved: boolean;
     rejectControlObserved: boolean;
   };
   scanId: string;
@@ -2098,6 +2099,8 @@ export async function runLocalV2DagLambdaShardedArtifactChain(
           returnedRejectStatus !== "unsupported";
         const cancellation = decidePostRefusalCooperativeAbort({
           consentInventoryComplete: result.consentRejectAvailability.inventoryComplete,
+          necessaryOnlyRejectEquivalentObserved:
+            result.consentRejectAvailability.necessaryOnlyRejectEquivalentObserved,
           rejectControlObserved: result.consentRejectAvailability.rejectControlObserved,
           rejectActionDispatched: rejectActionMayHaveDispatched,
         });
@@ -2748,6 +2751,8 @@ function parseLocalV2DagLambdaShardResult(
     typeof consentRejectAvailabilityRecord.rejectControlObserved === "boolean"
       ? {
           inventoryComplete: consentRejectAvailabilityRecord.inventoryComplete,
+          necessaryOnlyRejectEquivalentObserved:
+            consentRejectAvailabilityRecord.necessaryOnlyRejectEquivalentObserved === true,
           rejectControlObserved: consentRejectAvailabilityRecord.rejectControlObserved,
         }
       : undefined;
@@ -2977,16 +2982,33 @@ async function readConsentRejectAvailabilityFromArtifactRoot(artifactRoot: strin
     const bundle = canonicalEvidenceBundleSchema.parse(JSON.parse(
       await readFile(path.join(artifactRoot, "CanonicalEvidenceBundle.json"), "utf8"),
     ));
-    return {
-      inventoryComplete: bundle.consentSurfaceInspection?.inspectionCompleted === true,
-      rejectControlObserved: bundle.consentUiObservations.some((observation) =>
-        observation.rejectControlObserved ||
-        observation.controls.some((control) => control.actionType === "reject_all")
-      ),
-    };
+    return deriveConsentRejectAvailability(bundle);
   } catch {
     return undefined;
   }
+}
+
+export function deriveConsentRejectAvailability(bundle: CanonicalEvidenceBundle) {
+  return {
+    inventoryComplete: bundle.consentSurfaceInspection?.inspectionCompleted === true,
+    necessaryOnlyRejectEquivalentObserved: bundle.consentUiObservations.some((observation) =>
+      (
+        (
+          observation.defaultToggleStatesObserved === true &&
+          observation.nonEssentialDefaultsOff === true
+        ) ||
+        observation.necessaryPreferenceSelectionObserved === true
+      ) &&
+      (observation.precheckedOptionalPurposeCount ?? 0) === 0 &&
+      observation.controls.some((control) =>
+        control.visible === true && control.actionType === "save_preferences"
+      )
+    ),
+    rejectControlObserved: bundle.consentUiObservations.some((observation) =>
+      observation.rejectControlObserved ||
+      observation.controls.some((control) => control.actionType === "reject_all")
+    ),
+  };
 }
 
 async function readPostRefusalPacketFromArtifactResult(

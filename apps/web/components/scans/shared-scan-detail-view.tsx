@@ -1375,6 +1375,9 @@ export function buildExecutiveRejectPathProjection(
     return null;
   }
   const retained = getRecord(item.criticalEvidence.retainedEvidence) ?? {};
+  if (retained.productionPosture === "not_applicable_no_reject_control") {
+    return null;
+  }
   const activityRows = Array.isArray(retained.postRejectNonEssentialRequests)
     ? retained.postRejectNonEssentialRequests.map(getRecord).filter((row): row is Record<string, unknown> => Boolean(row))
     : [];

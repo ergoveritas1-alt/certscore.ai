@@ -115,6 +115,8 @@ export type StaticFixturePage =
   | "post-refusal-usercentrics-delayed"
   | "post-refusal-usercentrics-legacy-deny"
   | "post-refusal-usercentrics-storage-stale"
+  | "post-refusal-tarteaucitron-necessary-only-save"
+  | "post-refusal-tarteaucitron-optional-selected"
   | "post-refusal-canonical-cmp-ambiguous"
   | "ga-collection"
   | "ga-first-party-vendor-associated-cookie"
@@ -355,6 +357,8 @@ const fixtureSlugs: Record<StaticFixturePage, string> = {
   "post-refusal-usercentrics-delayed": "post-refusal-usercentrics-delayed",
   "post-refusal-usercentrics-legacy-deny": "post-refusal-usercentrics-legacy-deny",
   "post-refusal-usercentrics-storage-stale": "post-refusal-usercentrics-storage-stale",
+  "post-refusal-tarteaucitron-necessary-only-save": "post-refusal-tarteaucitron-necessary-only-save",
+  "post-refusal-tarteaucitron-optional-selected": "post-refusal-tarteaucitron-optional-selected",
   "post-refusal-canonical-cmp-ambiguous": "post-refusal-canonical-cmp-ambiguous",
   "ga-collection": "ga-page",
   "ga-first-party-vendor-associated-cookie": "ga-first-party-cookie",
@@ -1688,7 +1692,9 @@ function postRefusalFixtureMarkup(caseName: StaticFixturePage): string {
     caseName === "post-refusal-cookiebot-cookie-stale" ||
     caseName === "post-refusal-usercentrics-delayed" ||
     caseName === "post-refusal-usercentrics-legacy-deny" ||
-    caseName === "post-refusal-usercentrics-storage-stale"
+    caseName === "post-refusal-usercentrics-storage-stale" ||
+    caseName === "post-refusal-tarteaucitron-necessary-only-save" ||
+    caseName === "post-refusal-tarteaucitron-optional-selected"
   ) {
     return namedCmpPostRefusalFixtureMarkup(caseName);
   }
@@ -1832,6 +1838,32 @@ function postRefusalFixtureMarkup(caseName: StaticFixturePage): string {
 }
 
 function namedCmpPostRefusalFixtureMarkup(caseName: StaticFixturePage): string {
+  if (
+    caseName === "post-refusal-tarteaucitron-necessary-only-save" ||
+    caseName === "post-refusal-tarteaucitron-optional-selected"
+  ) {
+    const optionalSelected = caseName === "post-refusal-tarteaucitron-optional-selected";
+    return `
+      <section><h1>DSGVO All in One / tarteaucitron fixture</h1></section>
+      <div id="tarteaucitronRoot" role="dialog" aria-label="Cookie-Einstellungen">
+        <div id="tarteaucitronAlertBig">
+        <p>Sie können Ihre Cookie-Auswahl speichern.</p>
+        <label><input id="dsgvoaio-checkbox-essentials" type="checkbox" checked disabled> Essenziell</label>
+        <label><input id="dsgvoaio-checkbox-analytics" type="checkbox"${optionalSelected ? " checked" : ""}> Statistik</label>
+        <span id="tarteaucitronPersonalize">Alle akzeptieren</span>
+        <span id="tarteaucitronCloseAlert" tabindex="0">Auswahl speichern</span>
+        <span id="tarteaucitronCustomize">Personalisieren</span>
+        </div>
+      </div>
+      <script>
+        window.tarteaucitron = { fixture: true };
+        document.getElementById("tarteaucitronCloseAlert")?.addEventListener("click", () => {
+          localStorage.setItem("tarteaucitron", "necessary-only");
+          document.getElementById("tarteaucitronAlertBig")?.remove();
+        });
+      </script>
+    `;
+  }
   const oneTrust = caseName === "post-refusal-onetrust-tcf-honored" ||
     caseName === "post-refusal-onetrust-tcf-ignored" ||
     caseName === "post-refusal-onetrust-no-reject" ||

@@ -185,6 +185,19 @@ test("executive Reject projection distinguishes score-neutral persistence, clean
   assert.match(incomplete?.note ?? "", /does not affect the score/);
 });
 
+test("executive Reject projection omits an explicitly not-applicable post-Reject row", async () => {
+  const { buildExecutiveRejectPathProjection } = await import("./shared-scan-detail-view");
+  const projected = buildExecutiveRejectPathProjection(makePostRejectChecklistItem({
+    explanation: "No actionable Reject control was retained.",
+    status: "Not testable",
+    retainedEvidence: {
+      productionPosture: "not_applicable_no_reject_control",
+    },
+  }));
+
+  assert.equal(projected, null);
+});
+
 test("shared report passes the canonical Reject checklist projection into the executive card", () => {
   const source = readFileSync("apps/web/components/scans/shared-scan-detail-view.tsx", "utf8");
 

@@ -76,6 +76,11 @@ export interface PostRefusalActionRecipe {
   bannerSelector?: string;
   /** Exact child-frame URL retained only for same-document selector scoping. */
   bannerFrameUrl?: string;
+  preActionRequirement?: {
+    kind: "necessary_only_preferences_selected";
+    requiredCheckedSelector: string;
+    disallowedCheckedSelector: string;
+  };
   confirmation:
     | {
         kind: "local_storage_equals";
@@ -846,6 +851,24 @@ export async function runPostRefusalObserver(
         resolverFound: true,
         resolverReason: "abort_requested_before_action",
         registration: unconfirmedRegistration("aborted", "abort_requested_before_action"),
+        preActionCapturedAtMs,
+        preActionStorage,
+        requests: classifyRequests(retainedRequests(), parentScanStartedAtMs),
+      });
+    }
+    const preActionScope = exactSelectorScope(page, selectedRecipe.controlFrameUrl);
+    if (
+      preActionScope.status !== "found" ||
+      !await preActionRequirementSatisfied(preActionScope.scope, selectedRecipe)
+    ) {
+      limitations.push("necessary_only_pre_action_requirement_not_satisfied");
+      return await finalize({
+        resolverFound: true,
+        resolverReason: "necessary_only_pre_action_requirement_not_satisfied",
+        registration: unconfirmedRegistration(
+          "not_attempted",
+          "necessary_only_pre_action_requirement_not_satisfied",
+        ),
         preActionCapturedAtMs,
         preActionStorage,
         requests: classifyRequests(retainedRequests(), parentScanStartedAtMs),
@@ -1869,6 +1892,7 @@ async function waitForDeterministicRecipe(
       const scopeResolution = exactSelectorScope(page, recipe.controlFrameUrl);
       if (scopeResolution.status === "ambiguous") return { status: "ambiguous" };
       if (scopeResolution.status === "not_found") continue;
+      if (!await preActionRequirementSatisfied(scopeResolution.scope, recipe)) continue;
       const controls = scopeResolution.scope.locator(recipe.controlSelector);
       const count = Math.min(await controls.count().catch(() => 0), 8);
       for (let index = 0; index < count; index += 1) {
@@ -1903,6 +1927,19 @@ async function waitForDeterministicRecipe(
     await waitForDelay(Math.min(25, Math.max(0, deadlineAtMs - Date.now())), signal).catch(() => undefined);
   } while (Date.now() <= deadlineAtMs);
   return { status: "not_found" };
+}
+
+async function preActionRequirementSatisfied(
+  scope: Page | Frame,
+  recipe: PostRefusalActionRecipe,
+): Promise<boolean> {
+  const requirement = recipe.preActionRequirement;
+  if (!requirement) return true;
+  if (requirement.kind !== "necessary_only_preferences_selected") return false;
+  const required = scope.locator(requirement.requiredCheckedSelector);
+  const requiredCount = await required.count().catch(() => 0);
+  if (requiredCount !== 1 || !await required.first().isChecked().catch(() => false)) return false;
+  return await scope.locator(requirement.disallowedCheckedSelector).count().catch(() => 1) === 0;
 }
 
 async function waitForDeterministicOrCanonicalRecipe(
@@ -2114,6 +2151,18 @@ function validatedActionRecipes(input: PostRefusalObserverInput): PostRefusalAct
         new Set(keys).size !== keys.length
       ) {
         throw new Error("Post-refusal recipe candidate has invalid canonical CMP storage keys.");
+      }
+    }
+    if (recipe.preActionRequirement) {
+      const selectors = [
+        recipe.preActionRequirement.requiredCheckedSelector,
+        recipe.preActionRequirement.disallowedCheckedSelector,
+      ];
+      if (
+        recipe.preActionRequirement.kind !== "necessary_only_preferences_selected" ||
+        selectors.some((selector) => !selector.trim() || selector.length > 500)
+      ) {
+        throw new Error("Post-refusal recipe candidate has an invalid pre-action requirement.");
       }
     }
     if (recipe.confirmation.kind === "cmp_cookie_values_equal") {

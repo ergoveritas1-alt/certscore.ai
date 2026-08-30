@@ -49,6 +49,7 @@ import {
   buildLocalV2DagLambdaRuntimeDiagnostics,
   buildScannerRuntimeProvenance,
   buildLocalV2DagLambdaScanTuning,
+  deriveConsentRejectAvailability,
   egressIpMatchesExpected,
   egressRegionMatchesExpected,
   fetchEgressProbeThroughProxy,
@@ -71,6 +72,102 @@ import {
   uploadArtifactFiles,
   writeEgressPreflightArtifact,
 } from "./handler";
+
+test("necessary-only Save remains eligible for the reject observation lane", () => {
+  const availability = deriveConsentRejectAvailability(canonicalBundleFixture(
+    "scan-necessary-only-reject-equivalent",
+    {
+      consentSurfaceInspection: {
+        outcome: "actionable_surface_observed",
+        coverageStatus: "complete",
+        inspectionCompleted: true,
+        inspectedPreInteraction: true,
+        consentSurfaceObserved: true,
+        actionableControlObserved: true,
+        observedAtMs: 100,
+        evidenceSources: ["control_inventory"],
+        evidenceChannels: [],
+        limitationKeys: [],
+      },
+      consentUiObservations: [{
+        observationId: "necessary-only-save",
+        observedAtMs: 100,
+        likelyPresent: true,
+        basis: ["fixture"],
+        visibleChoiceLabels: ["Auswahl speichern"],
+        defaultTogglePurposeLabels: ["Essenziell"],
+        necessaryPreferenceSelectionObserved: true,
+        necessaryPreferenceLabels: ["Essenziell"],
+        precheckedOptionalPurposeCount: 0,
+        precheckedOptionalPurposeLabels: [],
+        acceptControlObserved: true,
+        rejectControlObserved: false,
+        managePreferencesControlObserved: true,
+        controls: [{
+          label: "Auswahl speichern",
+          actionType: "save_preferences",
+          selectorHint: "#tarteaucitronCloseAlert",
+          visible: true,
+          classifierReasonCodes: ["matched_options", "variant_save_preferences"],
+        }],
+      }],
+    },
+  ));
+
+  assert.deepEqual(availability, {
+    inventoryComplete: true,
+    necessaryOnlyRejectEquivalentObserved: true,
+    rejectControlObserved: false,
+  });
+});
+
+test("BST external browser-setting instructions do not make a reject action applicable", () => {
+  const availability = deriveConsentRejectAvailability(canonicalBundleFixture(
+    "scan-bst-no-reject",
+    {
+      consentSurfaceInspection: {
+        outcome: "actionable_surface_observed",
+        coverageStatus: "complete",
+        inspectionCompleted: true,
+        inspectedPreInteraction: true,
+        consentSurfaceObserved: true,
+        actionableControlObserved: true,
+        observedAtMs: 100,
+        evidenceSources: ["control_inventory"],
+        evidenceChannels: [],
+        limitationKeys: [],
+      },
+      consentUiObservations: [{
+        observationId: "bst-accept-only",
+        observedAtMs: 100,
+        likelyPresent: true,
+        basis: ["fixture"],
+        visibleChoiceLabels: ["VERSTANDEN"],
+        defaultTogglePurposeLabels: [],
+        necessaryPreferenceSelectionObserved: null,
+        necessaryPreferenceLabels: [],
+        precheckedOptionalPurposeCount: 0,
+        precheckedOptionalPurposeLabels: [],
+        acceptControlObserved: true,
+        rejectControlObserved: false,
+        managePreferencesControlObserved: false,
+        controls: [{
+          label: "VERSTANDEN",
+          actionType: "accept_all",
+          selectorHint: "button.bst-accept-btn",
+          visible: true,
+          classifierReasonCodes: ["matched_accept"],
+        }],
+      }],
+    },
+  ));
+
+  assert.deepEqual(availability, {
+    inventoryComplete: true,
+    necessaryOnlyRejectEquivalentObserved: false,
+    rejectControlObserved: false,
+  });
+});
 
 test("canonical evidence bundle transport is compact without changing evidence", () => {
   const bundle = {

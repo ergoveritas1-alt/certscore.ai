@@ -6142,6 +6142,7 @@ function hasConcretePostRejectNonEssentialDetail(row: Record<string, unknown>) {
 
 function derivePostRejectOutcome(input: GdprEprivacyCoveragePolicyInput) {
   const consentLifecycleLimitation = getConsentLifecycleAuditLimitation(input.runtimeArtifacts);
+  const firstLayerChoiceEvidence = getFirstLayerConsentChoiceEvidence(input);
   const rejectDiagnostic = getEventMetadata(input.events, "reject_persistence_diagnostic");
   const consentOutcomeSummary = getHybridConsentOutcomeSummary(input.runtimeArtifacts);
   const reductionEvidence = getPostRejectTrackingReductionEvidence(input.runtimeArtifacts);
@@ -6252,6 +6253,28 @@ function derivePostRejectOutcome(input: GdprEprivacyCoveragePolicyInput) {
     rejectInteractionFailureReason,
     rejectInteractionConfirmed: rejectInteractionSucceeded
   };
+
+  const completeFirstLayerInventoryWithoutReject =
+    firstLayerChoiceEvidence.assessment?.assessmentStatus === "complete" &&
+    firstLayerChoiceEvidence.bannerLikeSurfaceObserved &&
+    firstLayerChoiceEvidence.rejectControlObserved === false;
+  if (completeFirstLayerInventoryWithoutReject) {
+    return makeOutcome(
+      "post_reject_tracking_reduction",
+      "Not testable",
+      "The completed first-layer consent inventory retained no actionable Reject or necessary-only control, so a post-Reject activity window was not applicable. Missing refusal-control availability is assessed separately.",
+      [
+        "Evidence: complete first-layer consent-control assessment",
+        "Reason: no_actionable_reject_control"
+      ],
+      {
+        retainedEvidence: {
+          ...postRejectRetainedEvidence,
+          productionPosture: "not_applicable_no_reject_control"
+        }
+      }
+    );
+  }
 
   if (
     POST_CHOICE_FLOW_DEFERRED_FROM_PRODUCTION_CORE ||

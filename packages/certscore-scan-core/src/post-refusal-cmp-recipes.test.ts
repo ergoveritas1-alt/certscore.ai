@@ -64,6 +64,31 @@ test("canonical Usercentrics confirmation requires an exact uc_settings transiti
   });
 });
 
+test("canonical tarteaucitron recipe requires the exact necessary-only state before Save", () => {
+  const tarteaucitron = buildCanonicalPostRefusalActionRecipes().find((recipe) =>
+    recipe.cmpId === "DSGVO All in One / tarteaucitron"
+  );
+
+  assert.ok(tarteaucitron);
+  assert.equal(
+    tarteaucitron.recipeId,
+    "canonical-cmp:DSGVO All in One / tarteaucitron:necessary-only-save:v1",
+  );
+  assert.equal(tarteaucitron.controlSelector, "#tarteaucitronCloseAlert");
+  assert.equal(tarteaucitron.controlExpectedNormalizedLabel, "auswahl speichern");
+  assert.deepEqual(tarteaucitron.preActionRequirement, {
+    kind: "necessary_only_preferences_selected",
+    requiredCheckedSelector: "#dsgvoaio-checkbox-essentials:checked",
+    disallowedCheckedSelector:
+      "#tarteaucitronRoot input:checked:not(#dsgvoaio-checkbox-essentials)",
+  });
+  assert.deepEqual(tarteaucitron.confirmation, {
+    kind: "canonical_reject_transition",
+    controlSelector: "#tarteaucitronCloseAlert",
+    bannerSelector: "#tarteaucitronAlertBig",
+  });
+});
+
 test("canonical OpenAI confirmation requires the complete exact refusal cookie bundle", () => {
   const openAi = buildCanonicalPostRefusalActionRecipes().find((recipe) =>
     recipe.cmpId === "OpenAI first-party consent controls"

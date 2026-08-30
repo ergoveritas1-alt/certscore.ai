@@ -162,6 +162,20 @@ test("canonical CMP registry owns deterministic reject-control selectors", () =>
   ]);
 });
 
+test("canonical CMP registry owns the fail-closed tarteaucitron necessary-only target", () => {
+  const tarteaucitron = KNOWN_CMP_REGISTRY.find((entry) =>
+    entry.canonicalName === "DSGVO All in One / tarteaucitron"
+  );
+  assert.deepEqual(tarteaucitron?.necessaryOnlyControlTargets, [{
+    bannerSelector: "#tarteaucitronAlertBig",
+    controlSelector: "#tarteaucitronCloseAlert",
+    disallowedCheckedSelector:
+      "#tarteaucitronRoot input:checked:not(#dsgvoaio-checkbox-essentials)",
+    expectedNormalizedLabel: "auswahl speichern",
+    requiredCheckedSelector: "#dsgvoaio-checkbox-essentials:checked",
+  }]);
+});
+
 test("detects Usercentrics service domains", () => {
   assert.equal(getKnownCmpVendorForHost("app.usercentrics.eu"), "Usercentrics");
   assert.equal(getKnownCmpVendorForHost("api.usercentrics.eu"), "Usercentrics");

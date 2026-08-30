@@ -90,12 +90,14 @@ export type PostRefusalCooperativeAbortDecision = {
   reason:
     | "consent_inventory_incomplete"
     | "reject_control_observed"
+    | "necessary_only_reject_equivalent_observed"
     | "complete_inventory_without_reject"
     | "reject_action_already_dispatched";
 };
 
 export function decidePostRefusalCooperativeAbort(input: {
   consentInventoryComplete: boolean;
+  necessaryOnlyRejectEquivalentObserved?: boolean;
   rejectControlObserved: boolean;
   rejectActionDispatched: boolean;
 }): PostRefusalCooperativeAbortDecision {
@@ -107,6 +109,9 @@ export function decidePostRefusalCooperativeAbort(input: {
   }
   if (input.rejectControlObserved) {
     return { abortRequested: false, reason: "reject_control_observed" };
+  }
+  if (input.necessaryOnlyRejectEquivalentObserved) {
+    return { abortRequested: false, reason: "necessary_only_reject_equivalent_observed" };
   }
   return { abortRequested: true, reason: "complete_inventory_without_reject" };
 }

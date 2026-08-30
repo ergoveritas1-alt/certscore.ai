@@ -147,7 +147,14 @@ test("retains BST DSGVO Cookie identity and contextual VERSTANDEN accept evidenc
     <section id="bst-cookie-notice">
       <p>Diese Seite verwendet Cookies, um die Nutzerfreundlichkeit zu verbessern. Mit der weiteren Verwendung stimmst du dem zu.</p>
       <button type="button">VERSTANDEN</button>
-      <a class="bst-popup-link" href="#cookie-information">Weitere Informationen</a>
+      <div style="display:none">
+        <a
+          class="bst-popup-link"
+          title="Cookies blockieren, deaktivieren und löschen"
+          href="https://www.bst-systemtechnik.de/cookies-blockieren-deaktivieren-und-loeschen-browser-einstellungen/"
+          target="_blank"
+        >hier.</a>
+      </div>
     </section>
   `);
 
@@ -161,6 +168,12 @@ test("retains BST DSGVO Cookie identity and contextual VERSTANDEN accept evidenc
   assert.equal(accept?.decisionStatus, "confirmed_visible");
   assert.equal(accept?.matchStrength, "contextual");
   assert.ok(accept?.classifierReasonCodes.includes("variant_approval_acknowledgment"));
+  const externalInstructions = findCandidate(artifact, "hier.");
+  assert.equal(externalInstructions?.actionType, "reject_all");
+  assert.equal(externalInstructions?.decisionStatus, "hidden");
+  assert.equal(artifact.summary.limitations.some((limitation) =>
+    limitation.startsWith("reject_all:hier.:hidden")
+  ), true);
 });
 
 test("classifies sibling-wrapped inline preferences as one retained consent action cluster", async () => {

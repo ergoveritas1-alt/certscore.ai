@@ -2,7 +2,7 @@ import { KNOWN_CMP_REGISTRY } from "@website-signal-risk-scanner/shared";
 import type { PostRefusalActionRecipe } from "./post-refusal-observer.js";
 
 export const CANONICAL_POST_REFUSAL_RECIPE_SET_ID =
-  "canonical-consent-control-reject-v15";
+  "canonical-consent-control-reject-v16";
 
 export const CERTSCORE_OWNED_ANALYTICS_REJECT_RECIPE: PostRefusalActionRecipe = {
   artifactVersion: "certscore.post_refusal_action_recipe.v1",
@@ -68,41 +68,66 @@ export function buildPostRefusalCmpActionRecipe(input: {
  */
 export function buildCanonicalPostRefusalActionRecipes(): PostRefusalActionRecipe[] {
   return [CERTSCORE_OWNED_ANALYTICS_REJECT_RECIPE, ...KNOWN_CMP_REGISTRY.flatMap((definition) => {
-    if (!definition.rejectControlSelectors?.length) return [];
-    const refusalCookieValues = definition.refusalCookieValues ?? [];
-    if (!definition.standards?.includes("tcf") && refusalCookieValues.length === 0) return [];
-    const recipe = buildPostRefusalCmpActionRecipe({
-      cmpCanonicalName: definition.canonicalName,
-      bannerSelector: definition.domSelectors?.[0],
-      confirmation: refusalCookieValues.length > 0
-        ? {
-            kind: "cmp_cookie_values_equal",
-            cookies: refusalCookieValues,
-          }
-        : definition.canonicalName === "Google Funding Choices" ||
-          definition.canonicalName === "Seznam CMP"
-        ? {
-            kind: "tcf_purposes_denied_or_cmp_cookie_changed",
-            cookieName: definition.canonicalName === "Google Funding Choices"
-              ? "FCCDCF"
-              : "sznlbr",
-          }
-        : definition.canonicalName === "OneTrust" ||
-          definition.canonicalName === "Cookiebot"
-        ? {
-            kind: "tcf_purposes_denied_or_cmp_cookie_changed",
-            cookieName: definition.canonicalName === "OneTrust"
-              ? "OptanonConsent"
-              : "CookieConsent",
-          }
-        : definition.canonicalName === "Usercentrics"
-          ? {
-              kind: "tcf_purposes_denied_or_cmp_storage_keys_changed",
-              storageType: "local_storage",
-              keys: ["uc_settings", "ucString"],
-            }
-          : { kind: "tcf_purposes_denied" },
-    });
-    return recipe ? [recipe] : [];
+    const recipes: PostRefusalActionRecipe[] = [];
+    if (definition.rejectControlSelectors?.length) {
+      const refusalCookieValues = definition.refusalCookieValues ?? [];
+      if (definition.standards?.includes("tcf") || refusalCookieValues.length > 0) {
+        const recipe = buildPostRefusalCmpActionRecipe({
+          cmpCanonicalName: definition.canonicalName,
+          bannerSelector: definition.domSelectors?.[0],
+          confirmation: refusalCookieValues.length > 0
+            ? {
+                kind: "cmp_cookie_values_equal",
+                cookies: refusalCookieValues,
+              }
+            : definition.canonicalName === "Google Funding Choices" ||
+              definition.canonicalName === "Seznam CMP"
+            ? {
+                kind: "tcf_purposes_denied_or_cmp_cookie_changed",
+                cookieName: definition.canonicalName === "Google Funding Choices"
+                  ? "FCCDCF"
+                  : "sznlbr",
+              }
+            : definition.canonicalName === "OneTrust" ||
+              definition.canonicalName === "Cookiebot"
+            ? {
+                kind: "tcf_purposes_denied_or_cmp_cookie_changed",
+                cookieName: definition.canonicalName === "OneTrust"
+                  ? "OptanonConsent"
+                  : "CookieConsent",
+              }
+            : definition.canonicalName === "Usercentrics"
+              ? {
+                  kind: "tcf_purposes_denied_or_cmp_storage_keys_changed",
+                  storageType: "local_storage",
+                  keys: ["uc_settings", "ucString"],
+                }
+              : { kind: "tcf_purposes_denied" },
+        });
+        if (recipe) recipes.push(recipe);
+      }
+    }
+    for (const target of definition.necessaryOnlyControlTargets ?? []) {
+      recipes.push({
+        artifactVersion: "certscore.post_refusal_action_recipe.v1",
+        recipeId: `canonical-cmp:${definition.canonicalName}:necessary-only-save:v1`,
+        cmpId: definition.canonicalName,
+        resolverMethod: "cmp_registry_recipe",
+        controlSelector: target.controlSelector,
+        controlExpectedNormalizedLabel: target.expectedNormalizedLabel,
+        bannerSelector: target.bannerSelector,
+        preActionRequirement: {
+          kind: "necessary_only_preferences_selected",
+          requiredCheckedSelector: target.requiredCheckedSelector,
+          disallowedCheckedSelector: target.disallowedCheckedSelector,
+        },
+        confirmation: {
+          kind: "canonical_reject_transition",
+          controlSelector: target.controlSelector,
+          bannerSelector: target.bannerSelector,
+        },
+      });
+    }
+    return recipes;
   })];
 }
