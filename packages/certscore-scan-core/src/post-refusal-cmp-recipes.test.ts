@@ -63,3 +63,19 @@ test("canonical Usercentrics confirmation requires an exact uc_settings transiti
     keys: ["uc_settings", "ucString"],
   });
 });
+
+test("canonical OpenAI confirmation requires the complete exact refusal cookie bundle", () => {
+  const openAi = buildCanonicalPostRefusalActionRecipes().find((recipe) =>
+    recipe.cmpId === "OpenAI first-party consent controls"
+  );
+
+  assert.ok(openAi);
+  assert.equal(openAi.resolverMethod, "cmp_registry_recipe");
+  assert.equal(openAi.confirmation.kind, "cmp_cookie_values_equal");
+  assert.equal(
+    openAi.confirmation.kind === "cmp_cookie_values_equal"
+      ? openAi.confirmation.cookies.length
+      : 0,
+    5,
+  );
+});

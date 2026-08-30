@@ -71,6 +71,9 @@ export type StaticFixturePage =
   | "consent-tracking-persists-after-reject"
   | "post-refusal-reject-honored"
   | "post-refusal-reject-handler-after-dom-ready"
+  | "post-refusal-openai-cookie-confirmed"
+  | "post-refusal-openai-cookie-partial"
+  | "post-refusal-openai-cookie-stale"
   | "post-refusal-certscore-owned-analytics"
   | "post-refusal-reject-observation-long-task"
   | "post-refusal-reject-action-phase-nonessential"
@@ -304,6 +307,9 @@ const fixtureSlugs: Record<StaticFixturePage, string> = {
   "consent-tracking-persists-after-reject": "consent-persists",
   "post-refusal-reject-honored": "post-refusal-reject-honored",
   "post-refusal-reject-handler-after-dom-ready": "post-refusal-reject-handler-after-dom-ready",
+  "post-refusal-openai-cookie-confirmed": "post-refusal-openai-cookie-confirmed",
+  "post-refusal-openai-cookie-partial": "post-refusal-openai-cookie-partial",
+  "post-refusal-openai-cookie-stale": "post-refusal-openai-cookie-stale",
   "post-refusal-certscore-owned-analytics": "post-refusal-certscore-owned-analytics",
   "post-refusal-reject-observation-long-task": "post-refusal-reject-observation-long-task",
   "post-refusal-reject-action-phase-nonessential": "post-refusal-reject-action-phase-nonessential",
@@ -1529,6 +1535,59 @@ function bodyMarkup(caseName: StaticFixturePage): string {
 }
 
 function postRefusalFixtureMarkup(caseName: StaticFixturePage): string {
+  if (caseName === "post-refusal-openai-cookie-stale") {
+    return `
+      <div class="fixture_bannerActions">
+        <p>We use cookies for analytics and marketing.</p>
+        <button class="wm-button wm-button--secondary wm-button--radius-full" type="button">Reject non-essential</button>
+      </div>
+      <script>
+        document.cookie = "oai-allow-ne=false; Path=/; SameSite=Lax";
+        document.cookie = "oai-logged-out-consent-chosen=true; Path=/; SameSite=Lax";
+        document.cookie = "oai_consent_analytics=false; Path=/; SameSite=Lax";
+        document.cookie = "oai_consent_marketing=false; Path=/; SameSite=Lax";
+        document.cookie = "oai_consent_personalization=false; Path=/; SameSite=Lax";
+        document.querySelector("button.wm-button--secondary")?.addEventListener("click", () => {
+          document.querySelector("div.fixture_bannerActions")?.remove();
+        });
+      </script>
+    `;
+  }
+  if (caseName === "post-refusal-openai-cookie-confirmed") {
+    return `
+      <div class="fixture_bannerActions">
+        <p>We use cookies for analytics and marketing.</p>
+        <button class="wm-button wm-button--secondary wm-button--radius-full" type="button">Reject non-essential</button>
+      </div>
+      <script>
+        document.querySelector("button.wm-button--secondary")?.addEventListener("click", () => {
+          document.cookie = "oai-allow-ne=false; Path=/; SameSite=Lax";
+          document.cookie = "oai-logged-out-consent-chosen=true; Path=/; SameSite=Lax";
+          document.cookie = "oai_consent_analytics=false; Path=/; SameSite=Lax";
+          document.cookie = "oai_consent_marketing=false; Path=/; SameSite=Lax";
+          document.cookie = "oai_consent_personalization=false; Path=/; SameSite=Lax";
+          document.querySelector("div.fixture_bannerActions")?.remove();
+        });
+      </script>
+    `;
+  }
+  if (caseName === "post-refusal-openai-cookie-partial") {
+    return `
+      <div class="fixture_bannerActions">
+        <p>We use cookies for analytics and marketing.</p>
+        <button class="wm-button wm-button--secondary wm-button--radius-full" type="button">Reject non-essential</button>
+      </div>
+      <script>
+        document.querySelector("button.wm-button--secondary")?.addEventListener("click", () => {
+          document.cookie = "oai-allow-ne=false; Path=/; SameSite=Lax";
+          document.cookie = "oai-logged-out-consent-chosen=true; Path=/; SameSite=Lax";
+          document.cookie = "oai_consent_analytics=false; Path=/; SameSite=Lax";
+          document.cookie = "oai_consent_marketing=false; Path=/; SameSite=Lax";
+          document.querySelector("div.fixture_bannerActions")?.remove();
+        });
+      </script>
+    `;
+  }
   if (caseName === "post-refusal-reject-handler-after-dom-ready") {
     return `
       <section id="certscore-fixture-consent-banner" aria-label="Cookie choices">

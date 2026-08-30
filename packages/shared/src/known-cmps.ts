@@ -24,6 +24,11 @@ export type KnownCmpDefinition = {
   globalNames?: string[];
   iframePatterns?: RegExp[];
   reopenControlHints?: string[];
+  refusalCookieValues?: Array<{
+    expectedValue: string;
+    name: string;
+    path: string;
+  }>;
   rejectControlSelectors?: string[];
   role: "consent management platform";
   standards?: KnownCmpStandard[];
@@ -58,6 +63,37 @@ export type KnownCmpDetectionInput = {
 };
 
 export const KNOWN_CMP_REGISTRY: KnownCmpDefinition[] = [
+  {
+    aliases: [
+      "OpenAI first-party consent controls",
+      "OpenAI cookie preferences",
+    ],
+    canonicalName: "OpenAI first-party consent controls",
+    cookieNames: [
+      "oai-allow-ne",
+      "oai-logged-out-consent-chosen",
+      "oai_consent_analytics",
+      "oai_consent_marketing",
+      "oai_consent_personalization",
+    ],
+    domains: [],
+    domSelectors: ["div[class*='_bannerActions']"],
+    evidenceTreatment: "cmp_infrastructure",
+    reopenControlHints: ["cookie preferences"],
+    refusalCookieValues: [
+      { expectedValue: "false", name: "oai-allow-ne", path: "/" },
+      { expectedValue: "true", name: "oai-logged-out-consent-chosen", path: "/" },
+      { expectedValue: "false", name: "oai_consent_analytics", path: "/" },
+      { expectedValue: "false", name: "oai_consent_marketing", path: "/" },
+      { expectedValue: "false", name: "oai_consent_personalization", path: "/" },
+    ],
+    rejectControlSelectors: [
+      "button.wm-button.wm-button--secondary.wm-button--radius-full",
+    ],
+    role: "consent management platform",
+    standards: [],
+    storageKeys: [],
+  },
   {
     aliases: [
       "Amazon Privacy Preferences",

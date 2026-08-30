@@ -2,7 +2,7 @@ import { KNOWN_CMP_REGISTRY } from "@website-signal-risk-scanner/shared";
 import type { PostRefusalActionRecipe } from "./post-refusal-observer.js";
 
 export const CANONICAL_POST_REFUSAL_RECIPE_SET_ID =
-  "canonical-consent-control-reject-v9";
+  "canonical-consent-control-reject-v10";
 
 export const CERTSCORE_OWNED_ANALYTICS_REJECT_RECIPE: PostRefusalActionRecipe = {
   artifactVersion: "certscore.post_refusal_action_recipe.v1",
@@ -62,16 +62,24 @@ export function buildPostRefusalCmpActionRecipe(input: {
 
 /**
  * Returns only canonical CMPs that expose both a versioned Reject selector and
- * TCF confirmation. Registry order is retained so artifacts are deterministic;
- * the observer still requires exactly one actionable selector before clicking.
+ * an exact semantic confirmation recipe. Registry order is retained so artifacts
+ * are deterministic; the observer still requires exactly one actionable selector
+ * before clicking.
  */
 export function buildCanonicalPostRefusalActionRecipes(): PostRefusalActionRecipe[] {
   return [CERTSCORE_OWNED_ANALYTICS_REJECT_RECIPE, ...KNOWN_CMP_REGISTRY.flatMap((definition) => {
-    if (!definition.rejectControlSelectors?.length || !definition.standards?.includes("tcf")) return [];
+    if (!definition.rejectControlSelectors?.length) return [];
+    const refusalCookieValues = definition.refusalCookieValues ?? [];
+    if (!definition.standards?.includes("tcf") && refusalCookieValues.length === 0) return [];
     const recipe = buildPostRefusalCmpActionRecipe({
       cmpCanonicalName: definition.canonicalName,
       bannerSelector: definition.domSelectors?.[0],
-      confirmation: definition.canonicalName === "OneTrust" ||
+      confirmation: refusalCookieValues.length > 0
+        ? {
+            kind: "cmp_cookie_values_equal",
+            cookies: refusalCookieValues,
+          }
+        : definition.canonicalName === "OneTrust" ||
           definition.canonicalName === "Cookiebot"
         ? {
             kind: "tcf_purposes_denied_or_cmp_cookie_changed",

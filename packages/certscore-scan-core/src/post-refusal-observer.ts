@@ -94,6 +94,14 @@ export interface PostRefusalActionRecipe {
         keys: string[];
       }
     | {
+        kind: "cmp_cookie_values_equal";
+        cookies: Array<{
+          expectedValue: string;
+          name: string;
+          path: string;
+        }>;
+      }
+    | {
         kind: "canonical_reject_transition";
         controlSelector: string;
         bannerSelector: string;
@@ -193,6 +201,10 @@ type RefusalConfirmationBaseline =
       snapshot?: TcfDataSnapshot;
       storageStateHashes: Record<string, string | undefined>;
       lastSequence: number;
+    }
+  | {
+      kind: "cmp_cookie_values_equal";
+      stateHashes: Record<string, string | undefined>;
     }
   | {
       kind: "canonical_reject_transition";
@@ -1817,6 +1829,22 @@ function validatedActionRecipes(input: PostRefusalObserverInput): PostRefusalAct
         throw new Error("Post-refusal recipe candidate has invalid canonical CMP storage keys.");
       }
     }
+    if (recipe.confirmation.kind === "cmp_cookie_values_equal") {
+      const cookies = recipe.confirmation.cookies;
+      const identities = cookies.map(cookieExpectationKey);
+      if (
+        cookies.length === 0 ||
+        cookies.length > 8 ||
+        cookies.some((cookie) =>
+          !cookie.name.trim() || cookie.name.length > 160 ||
+          !cookie.path.startsWith("/") || cookie.path.length > 500 ||
+          cookie.expectedValue.length > 240
+        ) ||
+        new Set(identities).size !== identities.length
+      ) {
+        throw new Error("Post-refusal recipe candidate has invalid canonical CMP refusal cookies.");
+      }
+    }
     if (recipeIds.has(recipe.recipeId) || selectors.has(recipe.controlSelector)) {
       throw new Error("Post-refusal recipe candidates must have unique IDs and selectors.");
     }
@@ -1843,7 +1871,52 @@ function candidateSetResolverMethod(
       ? "cmp_registry_recipe"
       : recipes.every((recipe) => recipe.resolverMethod === "local_fixture_recipe")
         ? "local_fixture_recipe"
-        : "canonical_consent_control_registry_recipe";
+      : "canonical_consent_control_registry_recipe";
+}
+
+type CmpCookieValueExpectation = Extract<
+  PostRefusalActionRecipe["confirmation"],
+  { kind: "cmp_cookie_values_equal" }
+>["cookies"][number];
+
+function cookieExpectationKey(expectation: CmpCookieValueExpectation): string {
+  return `${expectation.name}\n${expectation.path}`;
+}
+
+async function exactCmpCookieStates(
+  context: BrowserContext,
+  pageUrl: string,
+  expectations: CmpCookieValueExpectation[],
+) {
+  const targetHostname = new URL(pageUrl).hostname.toLowerCase();
+  const cookies = await context.cookies(pageUrl);
+  return Object.fromEntries(expectations.map((expectation) => {
+    const candidates = cookies.filter((cookie) =>
+      cookie.name === expectation.name &&
+      cookie.path === expectation.path &&
+      cookie.domain.toLowerCase().replace(/^\./, "") === targetHostname
+    );
+    const cookie = candidates.length === 1 ? candidates[0] : undefined;
+    if (!cookie) return [cookieExpectationKey(expectation), undefined];
+    const identityHash = hashValue(JSON.stringify([
+      cookie.name,
+      cookie.domain,
+      cookie.path,
+      cookie.partitionKey ?? "",
+    ]));
+    const valueHash = hashValue(cookie.value);
+    return [cookieExpectationKey(expectation), {
+      identityHash,
+      stateHash: hashValue(`${identityHash}\n${valueHash}`),
+      value: cookie.value,
+      valueHash,
+    }];
+  })) as Record<string, {
+    identityHash: string;
+    stateHash: string;
+    value: string;
+    valueHash: string;
+  } | undefined>;
 }
 
 async function waitForRefusalConfirmation(
@@ -1885,6 +1958,35 @@ async function waitForRefusalConfirmation(
           witnessType: "canonical_refusal_state",
           key: refusalState.key,
           expectedState: "canonical_consent_refusal_state_written_after_action",
+        };
+      }
+      await waitForDelay(25, signal).catch(() => undefined);
+    }
+    return undefined;
+  }
+
+  if (confirmation.kind === "cmp_cookie_values_equal") {
+    const deadlineAtMs = Date.now() + timeoutMs;
+    while (Date.now() <= deadlineAtMs) {
+      if (signal?.aborted || baseline.kind !== "cmp_cookie_values_equal") return undefined;
+      const states = await exactCmpCookieStates(context, page.url(), confirmation.cookies);
+      const complete = confirmation.cookies.every((expectation) => {
+        const state = states[cookieExpectationKey(expectation)];
+        return state?.value === expectation.expectedValue;
+      });
+      const changedAfterAction = confirmation.cookies.some((expectation) => {
+        const key = cookieExpectationKey(expectation);
+        return states[key]?.stateHash !== baseline.stateHashes[key];
+      });
+      if (complete && changedAfterAction) {
+        return {
+          stateHash: hashValue(JSON.stringify(confirmation.cookies.map((expectation) => {
+            const state = states[cookieExpectationKey(expectation)]!;
+            return [expectation.name, expectation.path, state.identityHash, state.valueHash];
+          }))),
+          witnessType: "cmp_cookie_state",
+          key: confirmation.cookies.map((expectation) => expectation.name).join(",").slice(0, 180),
+          expectedState: "canonical_cmp_refusal_cookie_values_written_after_reject",
         };
       }
       await waitForDelay(25, signal).catch(() => undefined);
@@ -2043,6 +2145,16 @@ async function captureRefusalConfirmationBaseline(
       bannerVisible,
       lastSequence: writes.at(-1)?.sequence ?? 0,
       pageUrl: page.url(),
+    };
+  }
+  if (confirmation.kind === "cmp_cookie_values_equal") {
+    const states = await exactCmpCookieStates(context, page.url(), confirmation.cookies);
+    return {
+      kind: "cmp_cookie_values_equal",
+      stateHashes: Object.fromEntries(confirmation.cookies.map((expectation) => {
+        const key = cookieExpectationKey(expectation);
+        return [key, states[key]?.stateHash];
+      })),
     };
   }
   if (confirmation.kind === "local_storage_equals") {

@@ -36,6 +36,19 @@ test("registry includes first-wave CMP vendors", () => {
   }
   assert.ok(names.includes("Drupal EU Cookie Compliance module, non-TCF"));
   assert.ok(names.includes("Amazon Privacy Preferences"));
+  assert.ok(names.includes("OpenAI first-party consent controls"));
+});
+
+test("detects OpenAI first-party consent controls only from retained consent markers", () => {
+  assert.equal(getKnownCmpVendorName({ urls: ["https://chatgpt.com/"] }), null);
+  assert.equal(
+    getKnownCmpVendorName({ domSelectors: ["div[class*='_bannerActions']"] }),
+    "OpenAI first-party consent controls",
+  );
+  assert.equal(
+    getKnownCmpVendorName({ cookieNames: ["oai_consent_analytics"] }),
+    "OpenAI first-party consent controls",
+  );
 });
 
 test("detects Amazon Privacy Preferences from first-party consent evidence", () => {

@@ -67,6 +67,56 @@ test("does not click a deterministic Reject control before its document handler 
   });
 });
 
+test("confirms the canonical OpenAI refusal cookie bundle only after a fresh Reject action", async () => {
+  const openAiRecipe = buildCanonicalPostRefusalActionRecipes().find((candidate) =>
+    candidate.cmpId === "OpenAI first-party consent controls"
+  );
+  assert.ok(openAiRecipe);
+  await withFixture("post-refusal-openai-cookie-confirmed", async (url) => {
+    const packet = await observe(url, { recipe: openAiRecipe });
+
+    assert.equal(packet.resolver.found, true);
+    assert.equal(packet.refusalRegistration.status, "confirmed");
+    assert.equal(packet.refusalRegistration.refusalExercised, true);
+    assert.equal(
+      packet.refusalRegistration.witnesses.some((witness) =>
+        witness.witnessType === "cmp_cookie_state" && witness.corroboratingOnly === false
+      ),
+      true,
+    );
+  });
+});
+
+test("does not confirm an unchanged pre-existing OpenAI refusal cookie bundle", async () => {
+  const openAiRecipe = buildCanonicalPostRefusalActionRecipes().find((candidate) =>
+    candidate.cmpId === "OpenAI first-party consent controls"
+  );
+  assert.ok(openAiRecipe);
+  await withFixture("post-refusal-openai-cookie-stale", async (url) => {
+    const packet = await observe(url, { recipe: openAiRecipe });
+
+    assert.equal(packet.resolver.found, true);
+    assert.equal(packet.refusalRegistration.status, "unconfirmed");
+    assert.equal(packet.refusalRegistration.refusalExercised, false);
+    assert.deepEqual(packet.refusalRegistration.witnesses, []);
+  });
+});
+
+test("does not confirm a partial OpenAI refusal cookie bundle", async () => {
+  const openAiRecipe = buildCanonicalPostRefusalActionRecipes().find((candidate) =>
+    candidate.cmpId === "OpenAI first-party consent controls"
+  );
+  assert.ok(openAiRecipe);
+  await withFixture("post-refusal-openai-cookie-partial", async (url) => {
+    const packet = await observe(url, { recipe: openAiRecipe });
+
+    assert.equal(packet.resolver.found, true);
+    assert.equal(packet.refusalRegistration.status, "unconfirmed");
+    assert.equal(packet.refusalRegistration.refusalExercised, false);
+    assert.deepEqual(packet.refusalRegistration.witnesses, []);
+  });
+});
+
 test("retained packets redact target query values and bind the exact target by hash", async () => {
   await withFixture("post-refusal-reject-honored", async (url) => {
     const exactTargetUrl = `${url}?session_token=sensitive-value#fragment`;
@@ -569,7 +619,13 @@ test("canonical reject recipe set selects the one actionable deterministic contr
   const recipeCandidates = buildCanonicalPostRefusalActionRecipes();
   assert.deepEqual(
     recipeCandidates.map((candidate) => candidate.cmpId),
-    ["certscore_owned_analytics_consent", "OneTrust", "Usercentrics", "Cookiebot"],
+    [
+      "certscore_owned_analytics_consent",
+      "OpenAI first-party consent controls",
+      "OneTrust",
+      "Usercentrics",
+      "Cookiebot",
+    ],
   );
   await withFixture("post-refusal-onetrust-tcf-honored", async (url) => {
     const packet = await observe(url, {
