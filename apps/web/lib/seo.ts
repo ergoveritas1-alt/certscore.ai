@@ -119,6 +119,7 @@ export function createPublicArticleSchema({
     publisher: {
       "@type": "Organization",
       name: SITE_NAME,
+      legalName: "CertScore.ai, LLC",
       url: SITE_URL
     },
     about
@@ -175,6 +176,7 @@ export function createSoftwareApplicationSchema({
     publisher: {
       "@type": "Organization",
       name: SITE_NAME,
+      legalName: "CertScore.ai, LLC",
       url: SITE_URL
     }
   };

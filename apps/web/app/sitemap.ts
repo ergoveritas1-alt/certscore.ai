@@ -12,6 +12,7 @@ const staticPaths = [
   "/pricing",
   "/monitor-site",
   "/guides",
+  "/guides/mcp-website-privacy-scanner",
   "/regulatory",
   "/gdpr",
   "/benchmarks",

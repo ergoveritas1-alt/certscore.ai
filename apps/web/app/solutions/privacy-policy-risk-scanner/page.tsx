@@ -63,6 +63,7 @@ const config: SolutionPageConfig = {
     "CertScore.ai is designed for evidence-backed review workflows and does not provide legal advice or compliance determinations."
   ],
   relatedLinks: [
+    { href: "/mcp/light", label: "Run a privacy-policy review with MCP Light" },
     { href: "/guides/website-privacy-policy-requirements", label: "Privacy policy requirements" },
     { href: "/guides/privacy-policy-examples", label: "Privacy policy examples" },
     { href: "/guides/disclosure-signals", label: "Disclosure signals" },

@@ -12,6 +12,7 @@ const publicAllowPaths = [
   "/releases/",
   "/guides",
   "/guides/",
+  "/mcp/light",
   "/benchmarks",
   "/benchmarks/",
   "/compare",

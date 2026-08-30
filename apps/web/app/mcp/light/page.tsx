@@ -39,6 +39,11 @@ const schemas = [
       title: "CertScore.ai MCP Light"
     }),
     applicationSubCategory: "Model Context Protocol server",
+    applicationSuite: "Model Context Protocol",
+    identifier: "ai.certscore/mcp-light",
+    isAccessibleForFree: true,
+    keywords: ["MCP", "privacy scanner", "cookie checker", "consent", "CMP", "GDPR", "ePrivacy", "CCPA", "Reject Path"],
+    softwareRequirements: "MCP client with Streamable HTTP support",
     softwareVersion: mcpLightVersion,
     featureList: [
       "Public website privacy-risk scans",

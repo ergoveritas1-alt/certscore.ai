@@ -63,6 +63,7 @@ const config: SolutionPageConfig = {
     "CertScore.ai helps teams review consent implementation drift after CMP, tag-manager, and vendor changes."
   ],
   relatedLinks: [
+    { href: "/mcp/light", label: "Run a cookie and consent scan with MCP Light" },
     { href: "/guides/cookie-consent-enforcement-checker", label: "Cookie consent enforcement checker" },
     { href: "/guides/third-party-cookies-before-consent", label: "Third-party cookies before consent" },
     { href: "/guides/cmp-verification", label: "CMP verification" },

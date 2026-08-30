@@ -25,6 +25,12 @@ type GuideCard = {
 
 const guides: GuideCard[] = [
   {
+    title: "How to run a website privacy scan through MCP",
+    description: "Technical guide to the MCP Light lifecycle, evidence boundaries, telemetry, and tested async behavior.",
+    category: "Scanning Basics",
+    href: "/guides/mcp-website-privacy-scanner"
+  },
+  {
     title: "Website Scanning Basics",
     description: "How automated scans turn public website behavior into reviewable evidence.",
     category: "Scanning Basics",

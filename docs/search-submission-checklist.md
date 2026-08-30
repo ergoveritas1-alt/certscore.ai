@@ -32,6 +32,10 @@ curl -I https://certscore.ai/guides/check-third-party-cookies-before-consent
 curl -I https://certscore.ai/guides/pre-consent-tracking
 curl -I https://certscore.ai/compare/privacy-scanner-vs-cookie-scanner
 curl -I https://certscore.ai/press
+curl -I https://certscore.ai/mcp/light
+curl -I https://certscore.ai/developers/mcp
+curl -I https://certscore.ai/releases/mcp-light
+curl -I https://certscore.ai/guides/mcp-website-privacy-scanner
 ```
 
 Expected:
@@ -59,6 +63,10 @@ Expected:
    - https://certscore.ai/benchmarks/website-consent-tracking-2026
    - https://certscore.ai/compare/privacy-scanner-vs-cookie-scanner
    - https://certscore.ai/press
+   - https://certscore.ai/mcp/light
+   - https://certscore.ai/developers/mcp
+   - https://certscore.ai/releases/mcp-light
+   - https://certscore.ai/guides/mcp-website-privacy-scanner
 5. Do not request indexing for:
    - private scans
    - failed scans
