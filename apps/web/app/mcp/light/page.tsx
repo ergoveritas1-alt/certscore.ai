@@ -339,11 +339,20 @@ export default function McpLightPage() {
           <p className="text-xs font-semibold uppercase tracking-[0.16em] text-sky-700">Copy and run</p>
           <h2 className="mt-2 text-2xl font-semibold text-slate-950">Prompts for three common reviews</h2>
           <div className="mt-5 grid gap-4 lg:grid-cols-3">
-            {MCP_LIGHT_ROLE_PROMPTS.map(({ label, prompt }) => (
+            {MCP_LIGHT_ROLE_PROMPTS.map(({ cursorUrl, label, prompt }) => (
               <article className="flex flex-col rounded-lg border border-slate-200 bg-white p-5" key={label}>
                 <h3 className="font-semibold text-slate-950">{label}</h3>
                 <p className="mt-3 flex-1 text-sm leading-6 text-slate-700">{prompt}</p>
-                <div className="mt-5"><CopyMcpValue label={`${label} prompt`} value={prompt} /></div>
+                <div className="mt-5 flex flex-wrap gap-2">
+                  <McpLightTrackedLink
+                    className="rounded-md bg-slate-950 px-3 py-2 text-sm font-semibold text-white hover:bg-slate-800"
+                    href={cursorUrl}
+                    trackingTarget={`cursor_prompt_${label.toLowerCase().replace(/[^a-z0-9]+/g, "_")}`}
+                  >
+                    Try in Cursor
+                  </McpLightTrackedLink>
+                  <CopyMcpValue label={`${label} prompt`} value={prompt} />
+                </div>
               </article>
             ))}
           </div>

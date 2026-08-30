@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Prepare Cursor integration `1.0.2` with the `CertScore.ai` MCP component name, expanded evidence-confirmed Reject Path discovery metadata, and three official Cursor prompt deeplinks on the MCP Light landing page.
+
 ## 0.2.16
 
 - Make confirmed Reject Path outcomes explicit with typed verdict, observation strategy, intentional termination metadata, direct agent interpretation, and separately scoped coverage limitations.

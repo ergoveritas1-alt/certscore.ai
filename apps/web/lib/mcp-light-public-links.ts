@@ -3,7 +3,9 @@ export const MCP_LIGHT_CURSOR_INSTALL_URL =
 
 export const MCP_LIGHT_CURSOR_DIRECTORY_URL = "https://cursor.directory/plugins/certscoreai-mcp-light";
 
-export const MCP_LIGHT_ROLE_PROMPTS = [
+const cursorPromptUrl = (prompt: string) => `https://cursor.com/link/prompt?text=${encodeURIComponent(prompt)}`;
+
+const rolePrompts = [
   {
     label: "Launch review",
     prompt:
@@ -20,3 +22,8 @@ export const MCP_LIGHT_ROLE_PROMPTS = [
       "Use CertScore.ai to scan [PUBLIC URL] for audit diagnostics. Follow the scan through a terminal status, retrieve the findings bundle, and prioritize evidence-backed privacy, cookie, tracker, consent, Reject Path, policy, GDPR/ePrivacy, CCPA/CPRA, and transport observations. Explain what was observed, what remains unknown or limited, and which evidence a human reviewer should inspect next."
   }
 ] as const;
+
+export const MCP_LIGHT_ROLE_PROMPTS = rolePrompts.map((entry) => ({
+  ...entry,
+  cursorUrl: cursorPromptUrl(entry.prompt)
+}));

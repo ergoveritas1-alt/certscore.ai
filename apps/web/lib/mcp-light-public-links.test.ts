@@ -22,9 +22,13 @@ test("MCP Light public links expose the Cursor install and directory paths", () 
 
 test("MCP Light role prompts cover the three acquisition workflows and evidence boundaries", () => {
   assert.deepEqual(MCP_LIGHT_ROLE_PROMPTS.map(({ label }) => label), ["Launch review", "Vendor review", "Audit diagnostics"]);
-  for (const { prompt } of MCP_LIGHT_ROLE_PROMPTS) {
+  for (const { cursorUrl, prompt } of MCP_LIGHT_ROLE_PROMPTS) {
     assert.match(prompt, /CertScore\.ai/);
     assert.match(prompt, /evidence/i);
     assert.match(prompt, /Reject Path/);
+    const cursorPrompt = new URL(cursorUrl);
+    assert.equal(cursorPrompt.origin, "https://cursor.com");
+    assert.equal(cursorPrompt.pathname, "/link/prompt");
+    assert.equal(cursorPrompt.searchParams.get("text"), prompt);
   }
 });

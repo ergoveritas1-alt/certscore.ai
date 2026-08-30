@@ -63,14 +63,14 @@ Prepared plugin: `integrations/cursor/certscore-website-privacy-preflight`.
 
 Prepared monorepo catalog: `.cursor-plugin/marketplace.json`.
 
-Cursor plugin version: `1.0.1`. This is intentionally independent from hosted MCP version `0.2.16`.
+Cursor plugin version: `1.0.2`. This is intentionally independent from hosted MCP version `0.2.16`.
 
 Direct server configuration:
 
 ```json
 {
   "mcpServers": {
-    "certscore-light": {
+    "CertScore.ai": {
       "url": "https://mcp.certscore.ai/mcp/light"
     }
   }
@@ -85,7 +85,7 @@ Verification prompt:
 
 Verified August 29, 2026: the community Cursor Directory listing is live at `https://cursor.directory/plugins/certscoreai-mcp-light` with the intended description, one skill, one Streamable HTTP server, and the correct no-auth Light endpoint. The official Cursor Marketplace does not yet return a CertScore listing, so its review remains pending.
 
-Status: **paused by product-owner request on August 29, 2026**. Take no further Cursor submission, monitoring, install, or marketplace action until the owner resumes it. When resumed after approval, verify the publisher, source repository, `1.0.1` integration version, skill, no-auth connection, and all three Light tools in a clean Cursor installation. Do not create a duplicate submission while the current review is pending.
+Status: **resumed by product-owner request on August 30, 2026**. Repository integration version `1.0.2` aligns the MCP component name to `CertScore.ai`, adds the evidence-confirmed Reject Path description boundary, and adds three official Cursor prompt deeplinks. Verify the publisher, source repository, `1.0.2` integration version, skill, no-auth connection, and all three Light tools in a clean Cursor installation. Do not create a duplicate submission while the current review is pending.
 
 ## Claude Code
 
@@ -290,7 +290,7 @@ Product-owner decision required: either keep Docker out of scope, or separately 
 - Confirm the public icon returns an image response and is exactly 400 × 400.
 - Confirm `https://mcp.certscore.ai/healthz` reports hosted version `0.2.16`.
 - Confirm the Light endpoint requires no authentication and lists exactly `certscore_scan_site`, `certscore_get_scan_status`, and `certscore_get_scan_bundle`.
-- Confirm the Claude package is `0.2.16`, the Cursor package is `1.0.1`, and the OpenAI package is `2.0.0`.
+- Confirm the Claude package is `0.2.16`, the Cursor package is `1.0.2`, and the OpenAI package is `2.0.0`.
 - Re-run the relevant official validator immediately before each submission.
 - Use the exact Light endpoint; do not substitute the authenticated or anonymous legacy endpoint.
 - Do not claim legal advice, certification, compliance determination, unlimited use, or a Docker image.
