@@ -266,6 +266,23 @@ export const postRefusalInteractionDiagnosticsSchema = z.object({
     recoveryMethod: z.enum(["committed_document", "headed_local_retry"]).optional(),
     documentCommitted: z.boolean(),
     finalUrlAuthorized: z.boolean(),
+    redirectResolution: z.object({
+      durationMs: z.number().int().nonnegative(),
+      failureReason: z.enum([
+        "abort_requested",
+        "invalid_requested_target",
+        "redirect_limit_exceeded",
+        "redirect_location_invalid",
+        "request_failed",
+        "resolution_timeout",
+        "scan_identity_mismatch",
+        "unsafe_redirect_target",
+      ]).optional(),
+      finalExactTargetSha256: z.string().regex(/^[a-f0-9]{64}$/).optional(),
+      redirectCount: z.number().int().min(0).max(8),
+      requestedTargetSha256: z.string().regex(/^[a-f0-9]{64}$/),
+      status: z.enum(["resolved", "failed"]),
+    }).optional(),
   }),
   click: z.object({
     outcome: z.enum([
@@ -297,6 +314,33 @@ export const postRefusalInteractionDiagnosticsSchema = z.object({
     }).optional(),
   }),
 }).superRefine((diagnostics, context) => {
+  if (
+    diagnostics.navigation.redirectResolution?.status === "resolved" &&
+    (
+      diagnostics.navigation.redirectResolution.failureReason !== undefined ||
+      diagnostics.navigation.redirectResolution.finalExactTargetSha256 === undefined
+    )
+  ) {
+    context.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: "Resolved redirect authorization requires the final exact-target hash and no failure reason.",
+      path: ["navigation", "redirectResolution"],
+    });
+  }
+  if (
+    diagnostics.navigation.redirectResolution?.status === "failed" &&
+    (
+      diagnostics.navigation.redirectResolution.failureReason === undefined ||
+      diagnostics.navigation.redirectResolution.finalExactTargetSha256 !== undefined ||
+      diagnostics.navigation.finalUrlAuthorized
+    )
+  ) {
+    context.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: "Failed redirect authorization requires a typed failure and cannot authorize a final URL.",
+      path: ["navigation", "redirectResolution"],
+    });
+  }
   if (
     diagnostics.navigation.outcome === "recovered_after_error" &&
     (
@@ -763,6 +807,14 @@ export const postRefusalInteractionAuthorizationSchema = z.discriminatedUnion("k
     normalizedUrl: z.string().url().max(500),
     scanId: z.string().min(1).max(160),
   }),
+  z.object({
+    authorizationId: z.literal("sharded_scan_resolved_exact_target.v2"),
+    kind: z.literal("scan_target_resolution"),
+    maxRedirects: z.number().int().min(0).max(8).default(5),
+    requestedUrl: z.string().url().max(500),
+    resolutionTimeoutMs: z.number().int().min(250).max(5_000).default(1_500),
+    scanId: z.string().min(1).max(160),
+  }),
 ]);
 
 const postRefusalConfirmationSchema = z.discriminatedUnion("kind", [
@@ -797,7 +849,10 @@ const postRefusalConfirmationSchema = z.discriminatedUnion("kind", [
 const postRefusalResolverConfigSchema = z.discriminatedUnion("kind", [
   z.object({
     kind: z.literal("canonical_cmp_registry"),
-    recipeSetId: z.literal("canonical-consent-control-reject-v8"),
+    recipeSetId: z.enum([
+      "canonical-consent-control-reject-v8",
+      "canonical-consent-control-reject-v9",
+    ]),
   }),
   z.object({
     kind: z.literal("named_cmp"),
@@ -816,7 +871,11 @@ export const postRefusalLambdaDispatchConfigSchema = z.object({
   resolver: postRefusalResolverConfigSchema,
   interactionAuthorization: postRefusalInteractionAuthorizationSchema,
 }).superRefine((config, context) => {
-  if (config.interactionAuthorization.kind === "scan_target" && config.rolloutMode !== "all_eligible") {
+  if (
+    (config.interactionAuthorization.kind === "scan_target" ||
+      config.interactionAuthorization.kind === "scan_target_resolution") &&
+    config.rolloutMode !== "all_eligible"
+  ) {
     context.addIssue({
       code: z.ZodIssueCode.custom,
       message: "Ordinary exact-target authorization requires all_eligible Reject rollout mode.",

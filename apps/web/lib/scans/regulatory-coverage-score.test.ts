@@ -222,7 +222,7 @@ test("contextual browser capability access does not incur a fingerprinting score
   assert.equal(result.score, 100);
 });
 
-test("storage classification limitations do not incur a substantive concern penalty", () => {
+test("storage review signals receive the full twelve-point deduction", () => {
   for (const preConsentStorageAssessmentStatus of [
     "partially_classified",
     "snapshot_presence_only"
@@ -240,8 +240,26 @@ test("storage classification limitations do not incur a substantive concern pena
       }]
     });
 
-    assert.equal(result.score, 100, preConsentStorageAssessmentStatus);
+    assert.equal(result.score, 88, preConsentStorageAssessmentStatus);
   }
+});
+
+test("storage review signals remain neutral when source evidence is incomplete", () => {
+  const result = deriveRegulatoryCoverageScore({
+    framework: "gdpr_eprivacy",
+    rows: [{
+      assessmentStatus: "review_signal",
+      criticalEvidence: {
+        missingOrIncompleteSourceSignals: [{ field: "preConsentStorageAssessment" }],
+        retainedEvidence: { preConsentStorageAssessmentStatus: "partially_classified" }
+      },
+      evidenceState: "observed",
+      id: "pre_consent_cookies_storage",
+      status: "Review signal"
+    }]
+  });
+
+  assert.equal(result.score, 100);
 });
 
 test("confirmed non-essential storage deducts two points for each identity after the first two", () => {

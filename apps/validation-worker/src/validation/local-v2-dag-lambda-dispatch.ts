@@ -136,7 +136,7 @@ function postRefusalObservationFromIntent(input: {
     actionSearchTimeoutMs: 1_500,
     resolver: {
       kind: "canonical_cmp_registry",
-      recipeSetId: "canonical-consent-control-reject-v8",
+      recipeSetId: "canonical-consent-control-reject-v9",
     },
     interactionAuthorization: loopback
       ? { authorizationId: "loopback_local_lab", kind: "loopback" }
@@ -144,9 +144,11 @@ function postRefusalObservationFromIntent(input: {
           authorizationId: "ergoveritas_owned_post_refusal_canary.v1",
           kind: "owned_canary",
         } : {
-          authorizationId: "sharded_scan_exact_target.v1",
-          kind: "scan_target",
-          normalizedUrl: target.toString(),
+          authorizationId: "sharded_scan_resolved_exact_target.v2",
+          kind: "scan_target_resolution",
+          maxRedirects: 5,
+          requestedUrl: target.toString(),
+          resolutionTimeoutMs: 1_500,
           scanId: input.scanId,
         },
   };

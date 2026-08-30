@@ -183,15 +183,15 @@ test("adds the default-off reject worker to eligible sharded scans with target-s
     scanConfig: ordinaryConfig,
     scanId: "scan-ordinary",
   });
-  assert.equal(ordinaryPayload.postRefusalObservation?.interactionAuthorization.kind, "scan_target");
+  assert.equal(ordinaryPayload.postRefusalObservation?.interactionAuthorization.kind, "scan_target_resolution");
   assert.equal(
-    ordinaryPayload.postRefusalObservation?.interactionAuthorization.kind === "scan_target"
-      ? ordinaryPayload.postRefusalObservation.interactionAuthorization.normalizedUrl
+    ordinaryPayload.postRefusalObservation?.interactionAuthorization.kind === "scan_target_resolution"
+      ? ordinaryPayload.postRefusalObservation.interactionAuthorization.requestedUrl
       : undefined,
     ordinaryPayload.targetUrl,
   );
   assert.equal(
-    ordinaryPayload.postRefusalObservation?.interactionAuthorization.kind === "scan_target"
+    ordinaryPayload.postRefusalObservation?.interactionAuthorization.kind === "scan_target_resolution"
       ? ordinaryPayload.postRefusalObservation.interactionAuthorization.scanId
       : undefined,
     ordinaryPayload.scanId,

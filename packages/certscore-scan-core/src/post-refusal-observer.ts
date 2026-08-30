@@ -25,12 +25,16 @@ import {
   chromiumContextOptions,
   chromiumLaunchOptions,
   isLocalHeadedFallbackEnabled,
+  US_WEST_LAMBDA_CHROMIUM_CONTEXT_ENV,
 } from "./playwright-runtime.js";
 import {
   authorizePostRefusalTarget,
+  resolvePostRefusalExactTarget,
   type PostRefusalInteractionAuthorization,
+  type ResolvedPostRefusalScanTargetAuthorization,
 } from "./post-refusal-target-authorization.js";
 import { captureConsentControlGeometry } from "./consent-control-geometry.js";
+import { installPublicNetworkGuardRoute } from "./public-network-guard.js";
 
 const POST_REFUSAL_SOURCE = "post_refusal_observer";
 const DEFAULT_OBSERVATION_WINDOW_MS = 8_000;
@@ -215,13 +219,22 @@ export async function runPostRefusalObserver(
     ? actionRecipes[0]!.recipeId
     : validatedRecipeSetId(input.recipeSetId);
   const authorizationScanId = input.parentScanId ?? input.scanId;
-  const targetAuthorization = authorizePostRefusalTarget(
-    input.url,
-    input.interactionAuthorization,
-    authorizationScanId,
-  );
-  if (!targetAuthorization.authorized) {
-    throw new Error(`Post-refusal target authorization failed closed: ${targetAuthorization.reason}.`);
+  let effectiveInteractionAuthorization:
+    | PostRefusalInteractionAuthorization
+    | ResolvedPostRefusalScanTargetAuthorization = input.interactionAuthorization;
+  let observationTargetUrl = input.url;
+  let authorizedExactTargetUrl: string | undefined;
+  const browserContextConfiguration = chromiumContextOptions();
+  if (input.interactionAuthorization.kind !== "scan_target_resolution") {
+    const targetAuthorization = authorizePostRefusalTarget(
+      input.url,
+      input.interactionAuthorization,
+      authorizationScanId,
+    );
+    if (!targetAuthorization.authorized) {
+      throw new Error(`Post-refusal target authorization failed closed: ${targetAuthorization.reason}.`);
+    }
+    authorizedExactTargetUrl = normalizeTargetUrl(input.url);
   }
 
   const branchStartedAtMs = Date.now();
@@ -251,7 +264,7 @@ export async function runPostRefusalObserver(
   };
   const productionProjectable = input.productionProjectable === true;
   const limitations: string[] = [
-    `interaction_authorization:${targetAuthorization.mode}:${targetAuthorization.authorizationId}`,
+    `interaction_authorization:${input.interactionAuthorization.kind}:${input.interactionAuthorization.authorizationId}`,
     ...(productionProjectable ? [] : ["artifact_only_not_production_projectable"]),
   ];
   const preRegistrationRequests: CapturedRequest[] = [];
@@ -316,8 +329,7 @@ export async function runPostRefusalObserver(
       fields.registration.refusalRegisteredAtMs !== undefined;
     const resolverRecipe = selectedRecipe ?? (actionRecipes.length === 1 ? actionRecipes[0] : undefined);
     const resolverMethod = resolverRecipe?.resolverMethod ?? candidateSetResolverMethod(actionRecipes);
-    const exactTargetUrl = normalizeTargetUrl(input.url);
-    const retainedTargetUrl = sanitizeUrl(exactTargetUrl);
+    const retainedTargetUrl = sanitizeUrl(observationTargetUrl);
     const retainedNormalizedUrl = sanitizeUrl(normalizedUrl);
     const packet = postRefusalEvidencePacketSchema.parse({
       artifactVersion: "certscore.post_refusal_evidence.v1",
@@ -325,7 +337,9 @@ export async function runPostRefusalObserver(
       productionProjectable: productionProjectable && confirmedRefusal,
       scanId: input.scanId,
       ...(input.parentScanId ? { parentScanId: input.parentScanId } : {}),
-      exactTargetSha256: hashValue(exactTargetUrl),
+      ...(authorizedExactTargetUrl
+        ? { exactTargetSha256: hashValue(normalizeTargetUrl(authorizedExactTargetUrl)) }
+        : {}),
       targetUrl: retainedTargetUrl,
       normalizedUrl: retainedNormalizedUrl,
       observationBranch: "reject_only",
@@ -404,18 +418,68 @@ export async function runPostRefusalObserver(
       });
     }
 
+    if (input.interactionAuthorization.kind === "scan_target_resolution") {
+      const resolution = await resolvePostRefusalExactTarget(
+        input.url,
+        input.interactionAuthorization,
+        authorizationScanId,
+        {
+          requestHeaders: {
+            "accept-language": String(
+              browserContextConfiguration.extraHTTPHeaders?.["Accept-Language"] ??
+              browserContextConfiguration.extraHTTPHeaders?.["accept-language"] ??
+              "en-US,en;q=0.8",
+            ),
+            "user-agent": browserContextConfiguration.userAgent ??
+              US_WEST_LAMBDA_CHROMIUM_CONTEXT_ENV.CERTSCORE_V2_DAG_LAMBDA_CHROMIUM_USER_AGENT,
+          },
+          signal: input.signal,
+        },
+      );
+      interactionDiagnostics.navigation.redirectResolution = resolution.status === "resolved"
+        ? {
+            durationMs: resolution.durationMs,
+            finalExactTargetSha256: resolution.finalExactTargetSha256,
+            redirectCount: resolution.redirectCount,
+            requestedTargetSha256: resolution.requestedTargetSha256,
+            status: "resolved",
+          }
+        : {
+            durationMs: resolution.durationMs,
+            failureReason: resolution.failureReason,
+            redirectCount: resolution.redirectCount,
+            requestedTargetSha256: resolution.requestedTargetSha256,
+            status: "failed",
+          };
+      if (resolution.status === "failed") {
+        limitations.push(`target_redirect_resolution_failed:${resolution.failureReason}`);
+        return await finalize({
+          resolverFound: false,
+          resolverReason: "target_redirect_resolution_failed",
+          registration: unconfirmedRegistration("not_attempted", "target_redirect_resolution_failed"),
+        });
+      }
+      effectiveInteractionAuthorization = resolution.authorization;
+      observationTargetUrl = resolution.targetUrl;
+      authorizedExactTargetUrl = resolution.targetUrl;
+      limitations.push(`redirect_target_resolved_exact:${resolution.redirectCount}`);
+    }
+
     if (!browser) {
       browser = await chromium.launch(chromiumLaunchOptions({
         headless: input.browserMode !== "headed",
       }));
       ownsBrowser = true;
     }
-    context = await browser.newContext(chromiumContextOptions());
+    context = await browser.newContext(browserContextConfiguration);
+    if (effectiveInteractionAuthorization.kind === "resolved_scan_target") {
+      await installPublicNetworkGuardRoute(context);
+    }
     page = await context.newPage();
     await installStorageWriteProbe(page);
 
     if (input.fulfillThirdPartyRequestsLocally) {
-      const loopbackHostname = new URL(input.url).hostname;
+      const loopbackHostname = new URL(observationTargetUrl).hostname;
       await page.route("**/*", async (route) => {
         const requestUrl = new URL(route.request().url());
         if (requestUrl.hostname !== loopbackHostname) {
@@ -515,26 +579,30 @@ export async function runPostRefusalObserver(
 
     const navigationStartedAtMs = Date.now();
     try {
-      await page.goto(input.url, { waitUntil: "domcontentloaded", timeout: 15_000 });
+      await page.goto(observationTargetUrl, { waitUntil: "commit", timeout: 15_000 });
+      const redirectResolution = interactionDiagnostics.navigation.redirectResolution;
       interactionDiagnostics.navigation = {
         outcome: "completed",
         documentCommitted: true,
         finalUrlAuthorized: false,
+        ...(redirectResolution ? { redirectResolution } : {}),
       };
     } catch (error) {
       const failureClass = classifyNavigationFailure(error);
       const recovery = await inspectRecoverableCommittedDocument(
         page,
-        input.interactionAuthorization,
+        effectiveInteractionAuthorization,
         failureClass,
         authorizationScanId,
       );
+      const redirectResolution = interactionDiagnostics.navigation.redirectResolution;
       interactionDiagnostics.navigation = {
         outcome: recovery.recovered ? "recovered_after_error" : "failed",
         failureClass,
         documentCommitted: recovery.documentCommitted,
         finalUrlAuthorized: recovery.finalUrlAuthorized,
         ...(recovery.recovered ? { recoveryMethod: "committed_document" as const } : {}),
+        ...(redirectResolution ? { redirectResolution } : {}),
       };
       if (!recovery.recovered) {
         if (
@@ -585,6 +653,9 @@ export async function runPostRefusalObserver(
                       recoveryMethod: "headed_local_retry",
                       documentCommitted: true,
                       finalUrlAuthorized: true,
+                      ...(headedNavigation?.redirectResolution
+                        ? { redirectResolution: headedNavigation.redirectResolution }
+                        : {}),
                     }
                   : headedNavigation ?? interactionDiagnostics.navigation,
                 click: headedPacket.interactionDiagnostics?.click ?? interactionDiagnostics.click,
@@ -617,7 +688,7 @@ export async function runPostRefusalObserver(
 
     const finalTargetAuthorization = authorizePostRefusalTarget(
       page.url(),
-      input.interactionAuthorization,
+      effectiveInteractionAuthorization,
       authorizationScanId,
     );
     if (!finalTargetAuthorization.authorized) {
@@ -643,21 +714,19 @@ export async function runPostRefusalObserver(
     }
 
     const resolverStartedAtMs = Date.now();
-    let resolution = await waitForDeterministicRecipe(
-      page,
-      actionRecipes,
-      input.allowCanonicalRejectDiscovery
-        ? Math.min(500, actionSearchTimeoutMs)
-        : actionSearchTimeoutMs,
-      input.signal,
-    );
-    if (resolution.status === "not_found" && input.allowCanonicalRejectDiscovery) {
-      resolution = await waitForCanonicalRejectControlRecipe(
-        page,
-        Math.max(0, actionSearchTimeoutMs - Math.min(500, actionSearchTimeoutMs)),
-        input.signal,
-      );
-    }
+    const resolution = input.allowCanonicalRejectDiscovery
+      ? await waitForDeterministicOrCanonicalRecipe(
+          page,
+          actionRecipes,
+          actionSearchTimeoutMs,
+          input.signal,
+        )
+      : await waitForDeterministicRecipe(
+          page,
+          actionRecipes,
+          actionSearchTimeoutMs,
+          input.signal,
+        );
     timing.resolverMs = Math.max(0, Date.now() - resolverStartedAtMs);
     if (resolution.status !== "found") {
       const resolverReason = resolution.status === "ambiguous"
@@ -678,7 +747,7 @@ export async function runPostRefusalObserver(
     selectedRecipe = resolution.recipe;
     let control = resolution.control;
 
-    let preActionStorage = await captureStorage(context, page, input.url, limitations);
+    let preActionStorage = await captureStorage(context, page, observationTargetUrl, limitations);
     let preActionCapturedAtEpochMs = Date.now();
     let preActionCapturedAtMs = elapsed(parentScanStartedAtMs, preActionCapturedAtEpochMs);
     if (cancellation()) {
@@ -758,7 +827,7 @@ export async function runPostRefusalObserver(
         },
         preActionCapturedAtMs,
         preActionStorage,
-        postActionStorage: await captureStorage(context, page, input.url, limitations).catch(() => []),
+        postActionStorage: await captureStorage(context, page, observationTargetUrl, limitations).catch(() => []),
         requests: classifyRequests(retainedRequests(), parentScanStartedAtMs),
       });
     }
@@ -769,7 +838,7 @@ export async function runPostRefusalObserver(
       const refreshedPreActionStorage = await captureStorage(
         context,
         page,
-        input.url,
+        observationTargetUrl,
         limitations,
       ).catch(() => undefined);
       if (refreshedPreActionStorage) {
@@ -838,7 +907,7 @@ export async function runPostRefusalObserver(
         },
         preActionCapturedAtMs,
         preActionStorage,
-        postActionStorage: await captureStorage(context, page, input.url, limitations).catch(() => []),
+        postActionStorage: await captureStorage(context, page, observationTargetUrl, limitations).catch(() => []),
         requests: classifyRequests(retainedRequests(), parentScanStartedAtMs),
       });
     }
@@ -895,7 +964,7 @@ export async function runPostRefusalObserver(
           getCapturedRequests: retainedRequests,
           parentScanStartedAtMs,
           refusalRegisteredAtEpochMs: confirmedRefusalRegisteredAtEpochMs,
-          targetUrl: input.url,
+          targetUrl: observationTargetUrl,
           observationWindowMs,
         });
     timing.observationExitReason = observationResult.reason;
@@ -922,7 +991,7 @@ export async function runPostRefusalObserver(
           elapsed(parentScanStartedAtMs, tcfDataObservedAtEpochMs),
         )
       : undefined;
-    const postActionStorage = await captureStorage(context, page, input.url, limitations);
+    const postActionStorage = await captureStorage(context, page, observationTargetUrl, limitations);
     const postActionStorageObservedAtEpochMs = Date.now();
     const postActionCapturedAtMs = elapsed(
       parentScanStartedAtMs,
@@ -957,14 +1026,14 @@ export async function runPostRefusalObserver(
         write,
         parentScanStartedAtMs,
         confirmedRefusalRegisteredAtEpochMs,
-        input.url,
+        observationTargetUrl,
       ))
       .filter((write): write is PostRefusalStorageWrite => Boolean(write))
       .map((write) => ({ ...write, evidenceSource: "instrumented_write" as const }));
     const snapshotDeltaWrites = storageSnapshotDeltaWrites({
       before: preActionStorage,
       after: postActionStorage,
-      instrumentedHostname: new URL(input.url).hostname,
+      instrumentedHostname: new URL(observationTargetUrl).hostname,
       instrumentedWritesSinceAction: instrumentedWrites.filter((write) =>
         write.observedAtEpochMs >= actionDispatchedAtEpochMs
       ),
@@ -1597,10 +1666,42 @@ async function waitForDeterministicRecipe(
   return { status: "not_found" };
 }
 
+async function waitForDeterministicOrCanonicalRecipe(
+  page: Page,
+  recipes: PostRefusalActionRecipe[],
+  timeoutMs: number,
+  signal?: AbortSignal,
+): Promise<DeterministicRecipeResolution> {
+  const deadlineAtMs = Date.now() + timeoutMs;
+  do {
+    if (signal?.aborted) return { status: "aborted" };
+    const namedBudgetMs = Math.min(250, Math.max(0, deadlineAtMs - Date.now()));
+    const namedResolution = await waitForDeterministicRecipe(
+      page,
+      recipes,
+      namedBudgetMs,
+      signal,
+    );
+    if (namedResolution.status !== "not_found") return namedResolution;
+
+    const canonicalBudgetMs = Math.min(300, Math.max(0, deadlineAtMs - Date.now()));
+    if (canonicalBudgetMs <= 0) break;
+    const canonicalResolution = await waitForCanonicalRejectControlRecipe(
+      page,
+      canonicalBudgetMs,
+      signal,
+      recipes,
+    );
+    if (canonicalResolution.status !== "not_found") return canonicalResolution;
+  } while (Date.now() < deadlineAtMs);
+  return { status: "not_found" };
+}
+
 async function waitForCanonicalRejectControlRecipe(
   page: Page,
   timeoutMs: number,
   signal?: AbortSignal,
+  registeredRecipes: PostRefusalActionRecipe[] = [],
 ): Promise<DeterministicRecipeResolution> {
   const deadlineAtMs = Date.now() + timeoutMs;
   do {
@@ -1610,6 +1711,11 @@ async function waitForCanonicalRejectControlRecipe(
       containerLimit: 16,
       timeoutMs: Math.max(250, Math.min(750, timeoutMs || 250)),
     }).catch(() => undefined);
+    const geometryRegisteredCmpRecipe = geometry?.cmp.name
+      ? registeredRecipes.find((recipe) =>
+          recipe.cmpId?.toLowerCase() === geometry.cmp.name?.toLowerCase()
+        )
+      : undefined;
     const candidates = geometry?.candidates.filter((candidate) =>
       candidate.actionType === "reject_all" &&
       candidate.decisionStatus === "confirmed_visible" &&
@@ -1618,29 +1724,45 @@ async function waitForCanonicalRejectControlRecipe(
       candidate.enabled &&
       candidate.intersectsViewport &&
       candidate.classifierConfidence >= 0.8 &&
-      candidate.consentContextConfirmed &&
+      (candidate.consentContextConfirmed || geometryRegisteredCmpRecipe !== undefined) &&
       Boolean(candidate.selectorHint)
     ) ?? [];
     if (candidates.length > 1) return { status: "ambiguous" };
     const candidate = candidates[0];
     if (candidate) {
-      const transitionSurfaceSelector = candidate.containerSelectorHint ?? candidate.selectorHint;
+      const controlCount = await page.locator(candidate.selectorHint).count().catch(() => 0);
+      if (controlCount > 1) return { status: "ambiguous" };
+      if (controlCount !== 1) continue;
+      const containerSelector = candidate.containerSelectorHint;
+      const containerCount = containerSelector
+        ? await page.locator(containerSelector).count().catch(() => 0)
+        : 0;
+      const transitionSurfaceSelector = containerSelector && containerCount === 1
+        ? containerSelector
+        : candidate.selectorHint;
+      const registeredCmpRecipe = geometryRegisteredCmpRecipe;
       const recipe: PostRefusalActionRecipe = {
         artifactVersion: "certscore.post_refusal_action_recipe.v1",
-        recipeId: `canonical-control:reject:v1:${hashValue([
+        recipeId: `canonical-control:reject:v2:${hashValue([
           candidate.normalizedLabel,
           candidate.selectorHint,
           transitionSurfaceSelector,
+          registeredCmpRecipe?.recipeId ?? "generic_confirmation",
         ].join("\n")).slice(0, 24)}`,
-        ...(geometry?.cmp.name ? { cmpId: geometry.cmp.name } : {}),
-        resolverMethod: "canonical_consent_control_registry_recipe",
+        ...(registeredCmpRecipe?.cmpId
+          ? { cmpId: registeredCmpRecipe.cmpId }
+          : geometry?.cmp.name
+            ? { cmpId: geometry.cmp.name }
+            : {}),
+        resolverMethod: registeredCmpRecipe?.resolverMethod ??
+          "canonical_consent_control_registry_recipe",
         controlSelector: candidate.selectorHint,
         bannerSelector: transitionSurfaceSelector,
-        confirmation: {
-          kind: "canonical_reject_transition",
-          controlSelector: candidate.selectorHint,
-          bannerSelector: transitionSurfaceSelector,
-        },
+        confirmation: registeredCmpRecipe?.confirmation ?? {
+            kind: "canonical_reject_transition",
+            controlSelector: candidate.selectorHint,
+            bannerSelector: transitionSurfaceSelector,
+          },
       };
       const resolved = await waitForDeterministicRecipe(page, [recipe], 100, signal);
       if (resolved.status !== "not_found") return resolved;
@@ -2384,7 +2506,9 @@ function shouldRetryNavigationWithHeaded(error: unknown): boolean {
 
 export async function inspectRecoverableCommittedDocument(
   page: Page,
-  interactionAuthorization: PostRefusalInteractionAuthorization,
+  interactionAuthorization:
+    | PostRefusalInteractionAuthorization
+    | ResolvedPostRefusalScanTargetAuthorization,
   failureClass: NonNullable<PostRefusalInteractionDiagnostics["navigation"]["failureClass"]>,
   scanId?: string,
 ): Promise<{

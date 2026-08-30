@@ -195,25 +195,27 @@ test("Lambda reject dispatch is bounded and requires explicit interaction author
   }).success, false);
 });
 
-test("normal sharded reject dispatch binds the canonical resolver to an exact scan target", () => {
+test("normal sharded reject dispatch requires bounded resolution before exact scan-target authorization", () => {
   const valid = postRefusalLambdaDispatchConfigSchema.parse({
     enabled: true,
     rolloutMode: "all_eligible",
     resolver: {
       kind: "canonical_cmp_registry",
-      recipeSetId: "canonical-consent-control-reject-v8",
+      recipeSetId: "canonical-consent-control-reject-v9",
     },
     interactionAuthorization: {
-      authorizationId: "sharded_scan_exact_target.v1",
-      kind: "scan_target",
-      normalizedUrl: "https://example.com/privacy?region=ca",
+      authorizationId: "sharded_scan_resolved_exact_target.v2",
+      kind: "scan_target_resolution",
+      maxRedirects: 5,
+      requestedUrl: "https://example.com/privacy?region=ca",
+      resolutionTimeoutMs: 1_500,
       scanId: "scan-123",
     },
   });
 
   assert.equal(valid.resolver.kind, "canonical_cmp_registry");
   assert.equal(valid.rolloutMode, "all_eligible");
-  assert.equal(valid.interactionAuthorization.kind, "scan_target");
+  assert.equal(valid.interactionAuthorization.kind, "scan_target_resolution");
   assert.equal(postRefusalLambdaDispatchConfigSchema.safeParse({
     ...valid,
     interactionAuthorization: {

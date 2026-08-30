@@ -81,7 +81,11 @@ const GDPR_EPRIVACY_POSTURE_POLICIES: Partial<Record<string, GdprEprivacyPosture
     family: "post_refusal_enforcement",
     gapDeduction: 12
   },
-  pre_consent_cookies_storage: { family: "pre_consent_enforcement", gapDeduction: 12 },
+  pre_consent_cookies_storage: {
+    family: "pre_consent_enforcement",
+    gapDeduction: 12,
+    reviewDeduction: 12
+  },
   pre_consent_third_party_tracking: { family: "pre_consent_enforcement", gapDeduction: 12, reviewDeduction: 4 },
   preference_withdrawal_control: { family: "consent_controls", gapDeduction: 7, reviewDeduction: 2 },
   privacy_notice_availability: { family: "policy_transparency", gapDeduction: 12 },

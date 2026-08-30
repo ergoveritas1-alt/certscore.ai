@@ -90,7 +90,7 @@ test("the exact CertScore owned canary recipe confirms its semantic denial state
   });
 });
 
-test("canonical control discovery exercises one visible non-CMP Reject control and confirms its refusal state", async () => {
+test("canonical control discovery uniquely resolves Reject among controls sharing generic button classes", async () => {
   await withFixture("post-refusal-certscore-owned-analytics", async (url) => {
     const packet = await observe(url, {
       allowCanonicalRejectDiscovery: true,
@@ -104,12 +104,39 @@ test("canonical control discovery exercises one visible non-CMP Reject control a
 
     assert.equal(packet.resolver.found, true);
     assert.equal(packet.resolver.method, "canonical_consent_control_registry_recipe");
-    assert.match(packet.resolver.recipeId, /^canonical-control:reject:v1:/);
+    assert.match(packet.resolver.recipeId, /^canonical-control:reject:v2:/);
     assert.equal(packet.refusalRegistration.status, "confirmed");
     assert.equal(packet.refusalRegistration.refusalExercised, true);
     assert.equal(packet.refusalRegistration.witnesses.some((witness) =>
       witness.witnessType === "canonical_refusal_state" &&
       witness.corroboratingOnly === false
+    ), true);
+  });
+});
+
+test("geometry-resolved OneTrust controls inherit canonical semantic confirmation", async () => {
+  const registeredOneTrustRecipe = buildCanonicalPostRefusalActionRecipes().find((candidate) =>
+    candidate.cmpId === "OneTrust"
+  );
+  assert.ok(registeredOneTrustRecipe);
+  await withFixture("post-refusal-onetrust-cookie-confirmed", async (url) => {
+    const packet = await observe(url, {
+      actionSearchTimeoutMs: 1_000,
+      allowCanonicalRejectDiscovery: true,
+      recipe: {
+        ...registeredOneTrustRecipe,
+        controlSelector: "#registered-selector-intentionally-absent",
+        recipeId: "canonical-cmp:OneTrust:reject:geometry-confirmation-fixture",
+      },
+    });
+
+    assert.equal(packet.resolver.found, true);
+    assert.equal(packet.resolver.cmpId, "OneTrust");
+    assert.equal(packet.resolver.method, "tcf_api_cmp_registry_recipe");
+    assert.match(packet.resolver.recipeId, /^canonical-control:reject:v2:/);
+    assert.equal(packet.refusalRegistration.status, "confirmed");
+    assert.equal(packet.refusalRegistration.witnesses.some((witness) =>
+      witness.witnessType === "cmp_cookie_state" && witness.key === "OptanonConsent"
     ), true);
   });
 });

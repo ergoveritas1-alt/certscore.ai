@@ -2,7 +2,7 @@ import { KNOWN_CMP_REGISTRY } from "@website-signal-risk-scanner/shared";
 import type { PostRefusalActionRecipe } from "./post-refusal-observer.js";
 
 export const CANONICAL_POST_REFUSAL_RECIPE_SET_ID =
-  "canonical-consent-control-reject-v8";
+  "canonical-consent-control-reject-v9";
 
 export const CERTSCORE_OWNED_ANALYTICS_REJECT_RECIPE: PostRefusalActionRecipe = {
   artifactVersion: "certscore.post_refusal_action_recipe.v1",

@@ -1,7 +1,7 @@
 # Post-refusal observation: default-off MVP
 
-Status: implemented and locally verified, default-off, undeployed, and restricted
-to explicit target authorization.
+Status: implemented and locally verified, default-off, and restricted to
+explicit target authorization.
 
 ## Purpose
 
@@ -33,8 +33,10 @@ cannot reopen the terminal result.
 The reject observer:
 
 - requires loopback, an owned canary, a calibration allowlist, or an ordinary
-  sharded-scan authorization bound to both the exact normalized HTTPS URL and
-  that scan's identity;
+  sharded-scan authorization bound to a requested HTTPS URL and that scan's
+  identity; ordinary sharded scans then use a bounded passive redirect
+  preflight to mint an internal authorization for only the final exact public
+  HTTPS URL and the same scan identity;
 - uses TCF or a named recipe from the canonical CMP registry;
 - never guesses a control from DOM text;
 - performs at most one deterministic first-layer Reject or necessary-only
@@ -60,12 +62,15 @@ CMPs and unresolved controls fail closed without a click.
 
 The enable flag defaults to the `owned_canary` rollout mode, which permits only
 loopback fixtures and the owned ErgoVeritas canary. Ordinary eligible sharded
-scans receive exact-target authorization only when
+scans receive target-resolution authorization only when
 `CERTSCORE_POST_REFUSAL_REJECT_WORKER_ROLLOUT_MODE=all_eligible` is also set.
-The authorization does
-not grant interaction with a host generally and cannot be reused by another
-scan. Non-sharded scans, non-HTTPS public targets, redirects away from the exact
-authorized URL, ambiguous recipe matches, and unsupported CMPs remain neutral.
+The observer follows at most five passive redirects within 1.5 seconds and
+checks every hop with the public-network guard. Only the final exact public
+HTTPS URL is authorized for interaction, and only for the same scan. The
+authorization does not grant interaction with a host generally and cannot be
+reused by another scan. Non-sharded scans, unsafe or unverifiable redirect
+chains, non-HTTPS public targets, ambiguous recipe matches, and unsupported
+CMPs remain neutral.
 
 ## Canonical result and scoring
 
@@ -86,8 +91,9 @@ The canonical finding classes are:
 - `pre_consent_storage_not_cleared`; and
 - `refusal_signal_contradicts_action`.
 
-Confirmed post-refusal activity or a contradictory TCF signal can deduct up to
-six points. Exact unchanged storage persistence by itself is a factual review
+Confirmed post-refusal activity or a contradictory TCF signal receives the
+canonical post-refusal family deduction. Exact unchanged storage persistence
+by itself is a factual review
 signal and is score-neutral because stored presence does not establish active
 post-refusal use. Coverage status, worker failure, timeout, no Reject, and
 unconfirmed refusal never affect score.

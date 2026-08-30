@@ -1517,13 +1517,13 @@ function postRefusalFixtureMarkup(caseName: StaticFixturePage): string {
       <section aria-label="Cookie and analytics preferences">
         <p>Optional analytics help improve CertScore.</p>
         <div>
-          <button type="button">Cookie settings</button>
-          <button id="certscore-owned-reject" data-certscore-consent-action="reject" type="button">Reject analytics</button>
-          <button type="button">Allow analytics</button>
+          <button class="wm-button wm-button--medium wm-button--ghost" type="button">Cookie settings</button>
+          <button class="wm-button wm-button--medium wm-button--secondary" data-certscore-consent-action="reject" type="button">Reject analytics</button>
+          <button class="wm-button wm-button--medium wm-button--primary" type="button">Allow analytics</button>
         </div>
       </section>
       <script>
-        document.getElementById("certscore-owned-reject")?.addEventListener("click", () => {
+        document.querySelector('[data-certscore-consent-action="reject"]')?.addEventListener("click", () => {
           localStorage.setItem("certscore:analytics-consent:v1", "denied");
           document.querySelector('section[aria-label="Cookie and analytics preferences"]')?.remove();
         });

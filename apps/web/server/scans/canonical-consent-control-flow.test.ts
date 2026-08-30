@@ -1126,7 +1126,7 @@ function projectStorageStory(runtimeArtifacts: Record<string, unknown>) {
   };
 }
 
-test("canonical pre-consent storage flow uses one non-essential predicate for metric, checklist, and score", () => {
+test("canonical pre-consent storage flow preserves classification and applies the configured review deduction", () => {
   const cases = [
     {
       name: "essential storage only",
@@ -1162,7 +1162,7 @@ test("canonical pre-consent storage flow uses one non-essential predicate for me
       expectedGapFinding: false,
       expectedMetric: null,
       expectedRowStatus: "Review signal",
-      expectedScore: 100
+      expectedScore: 88
     },
     {
       name: "confirmed non-essential write",

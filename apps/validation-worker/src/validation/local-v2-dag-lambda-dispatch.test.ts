@@ -75,7 +75,7 @@ test("durable publisher forwards the owned-canary Reject observation contract", 
   }
 });
 
-test("durable publisher forwards exact-target authorization for eligible public scans", () => {
+test("durable publisher forwards bounded resolved exact-target authorization for eligible public scans", () => {
   const scanId = "4f75b34a-9755-468d-b8f9-bec6042e94d7";
   const targetUrl = "https://example.com/privacy-review";
   const payload = buildDurableLocalV2DagLambdaDispatchPayload({
@@ -103,9 +103,11 @@ test("durable publisher forwards exact-target authorization for eligible public 
   });
 
   assert.deepEqual(payload.postRefusalObservation?.interactionAuthorization, {
-    authorizationId: "sharded_scan_exact_target.v1",
-    kind: "scan_target",
-    normalizedUrl: targetUrl,
+    authorizationId: "sharded_scan_resolved_exact_target.v2",
+    kind: "scan_target_resolution",
+    maxRedirects: 5,
+    requestedUrl: targetUrl,
+    resolutionTimeoutMs: 1_500,
     scanId,
   });
 });

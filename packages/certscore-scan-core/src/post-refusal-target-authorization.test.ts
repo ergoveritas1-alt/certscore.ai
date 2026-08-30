@@ -4,6 +4,8 @@ import {
   authorizePostRefusalTarget,
   ERGOVERITAS_POST_REFUSAL_CANARY_AUTHORIZATION_ID,
   getOwnedPostRefusalCanaryRecipeCase,
+  RESOLVED_SCAN_TARGET_AUTHORIZATION_ID,
+  resolvePostRefusalExactTarget,
 } from "./post-refusal-target-authorization.js";
 
 test("loopback authorization cannot be reused for public targets", () => {
@@ -131,4 +133,95 @@ test("normal sharded-scan authorization is bound to one exact normalized HTTPS U
     authorization,
     "scan-456",
   ).reason, "scan_target_scan_identity_mismatch");
+});
+
+test("resolved exact-target authorization v2 follows bounded passive redirects then binds only the final URL", async () => {
+  const opened: string[] = [];
+  const authorization = {
+    authorizationId: RESOLVED_SCAN_TARGET_AUTHORIZATION_ID,
+    kind: "scan_target_resolution" as const,
+    maxRedirects: 5,
+    requestedUrl: "https://example.com/privacy?region=ca",
+    resolutionTimeoutMs: 1_500,
+    scanId: "scan-123",
+  };
+  const result = await resolvePostRefusalExactTarget(
+    authorization.requestedUrl,
+    authorization,
+    authorization.scanId,
+    {
+      fetchImpl: async (input) => {
+        const url = String(input);
+        opened.push(url);
+        return url === authorization.requestedUrl
+          ? new Response(null, {
+              status: 301,
+              headers: { location: "https://www.example.com/privacy?region=ca" },
+            })
+          : new Response("ok", { status: 200 });
+      },
+      urlGuard: async (input) => new URL(input),
+    },
+  );
+
+  assert.equal(result.status, "resolved");
+  if (result.status !== "resolved") return;
+  assert.equal(result.redirectCount, 1);
+  assert.deepEqual(opened, [
+    "https://example.com/privacy?region=ca",
+    "https://www.example.com/privacy?region=ca",
+  ]);
+  assert.equal(authorizePostRefusalTarget(
+    "https://www.example.com/privacy?region=ca",
+    result.authorization,
+    "scan-123",
+  ).reason, "authorized_resolved_scan_target");
+  assert.equal(authorizePostRefusalTarget(
+    "https://example.com/privacy?region=ca",
+    result.authorization,
+    "scan-123",
+  ).authorized, false);
+  assert.equal(authorizePostRefusalTarget(
+    "https://www.example.com/privacy?region=ca",
+    result.authorization,
+    "scan-456",
+  ).reason, "scan_target_scan_identity_mismatch");
+});
+
+test("resolved exact-target authorization v2 fails closed for unsafe or excessive redirects", async () => {
+  const authorization = {
+    authorizationId: RESOLVED_SCAN_TARGET_AUTHORIZATION_ID,
+    kind: "scan_target_resolution" as const,
+    maxRedirects: 0,
+    requestedUrl: "https://example.com/",
+    resolutionTimeoutMs: 1_500,
+    scanId: "scan-123",
+  };
+  const excessive = await resolvePostRefusalExactTarget(
+    authorization.requestedUrl,
+    authorization,
+    authorization.scanId,
+    {
+      fetchImpl: async () => new Response(null, {
+        status: 302,
+        headers: { location: "https://www.example.com/" },
+      }),
+      urlGuard: async (input) => new URL(input),
+    },
+  );
+  assert.equal(excessive.status === "failed" ? excessive.failureReason : undefined, "redirect_limit_exceeded");
+
+  const unsafe = await resolvePostRefusalExactTarget(
+    authorization.requestedUrl,
+    { ...authorization, maxRedirects: 5 },
+    authorization.scanId,
+    {
+      fetchImpl: async () => new Response(null, {
+        status: 302,
+        headers: { location: "http://127.0.0.1/admin" },
+      }),
+      urlGuard: async (input) => new URL(input),
+    },
+  );
+  assert.equal(unsafe.status === "failed" ? unsafe.failureReason : undefined, "unsafe_redirect_target");
 });

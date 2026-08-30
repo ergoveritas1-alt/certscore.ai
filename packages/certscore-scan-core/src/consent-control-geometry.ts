@@ -1654,11 +1654,41 @@ function collectConsentGeometryInPage(input: {
     const id = element.getAttribute("id");
     const testId = element.getAttribute("data-testid");
     const aria = element.getAttribute("aria-label");
-    if (id) return `#${cssEscape(id)}`;
-    if (testId) return `[data-testid="${testId.slice(0, 80).replace(/"/g, '\\"')}"]`;
-    if (aria) return `${element.tagName.toLowerCase()}[aria-label="${aria.slice(0, 80).replace(/"/g, '\\"')}"]`;
-    const classes = (element.getAttribute("class") || "").split(/\s+/).filter(Boolean).slice(0, 2);
-    return `${element.tagName.toLowerCase()}${classes.map((item) => `.${cssEscape(item)}`).join("")}`;
+    const tagName = element.tagName.toLowerCase();
+    const stableCandidates = [
+      id ? `#${cssEscape(id)}` : undefined,
+      testId ? `[data-testid="${testId.slice(0, 80).replace(/"/g, '\\"')}"]` : undefined,
+      aria ? `${tagName}[aria-label="${aria.slice(0, 80).replace(/"/g, '\\"')}"]` : undefined,
+    ].filter((candidate): candidate is string => Boolean(candidate));
+    for (const candidate of stableCandidates) {
+      if (selectorUniquelyTargetsElement(candidate, element)) return candidate;
+    }
+
+    const classes = (element.getAttribute("class") || "")
+      .split(/\s+/)
+      .filter(Boolean)
+      .slice(0, 8);
+    for (let classCount = 1; classCount <= classes.length; classCount += 1) {
+      const candidate = `${tagName}${classes
+        .slice(0, classCount)
+        .map((item) => `.${cssEscape(item)}`)
+        .join("")}`;
+      if (selectorUniquelyTargetsElement(candidate, element)) return candidate;
+    }
+
+    // A non-unique hint remains useful for retained diagnostics. Consumers
+    // that may interact with the control must re-resolve it and fail closed.
+    return stableCandidates[0] ??
+      `${tagName}${classes.slice(0, 2).map((item) => `.${cssEscape(item)}`).join("")}`;
+  }
+
+  function selectorUniquelyTargetsElement(selector: string, element: Element): boolean {
+    try {
+      const matches = deepQuerySelectorAll(selector).slice(0, 2);
+      return matches.length === 1 && matches[0] === element;
+    } catch {
+      return false;
+    }
   }
 
   function layerFor(element: Element, box: ConsentControlRect): ConsentControlGeometryLayer {
