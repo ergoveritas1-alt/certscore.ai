@@ -21,6 +21,11 @@ test("MCP operations page makes the request ledger the primary navigable workspa
   assert.match(page, /Self-declared headers and client names are useful routing signals/);
   assert.match(page, /MCP request activity/);
   assert.match(page, /<AdminOperationalSnapshot/);
+  assert.match(page, /<CardTitle>MCP growth funnel<\/CardTitle>/);
+  assert.match(page, /Landing-page visits and setup clicks remain aggregate first-party analytics/);
+  for (const stage of ["Initialized", "Tools listed", "First tool", "Scan requested", "Completed scans", "Bundle retrieved", "Repeat use"]) {
+    assert.match(page, new RegExp(stage));
+  }
   assert.match(snapshotComponent, /<CardTitle>Operational snapshot<\/CardTitle>/);
   assert.match(snapshotContract, /\["1h", "24h", "7d", "30d", "1y"\]/);
   assert.match(page, /\?\? "24h"/);
@@ -96,6 +101,11 @@ test("MCP telemetry dashboard queries bounded periods and never reads request pa
   assert.match(repository, /limit 20/);
   assert.doesNotMatch(repository, /limit 40/);
   assert.match(repository, /MCP_TELEMETRY_RETENTION_DAYS/);
+  assert.match(repository, /from public\.mcp_activation_events activation/);
+  assert.match(repository, /repeat_actor_7d_count/);
+  assert.match(repository, /repeat_actor_30d_count/);
+  assert.match(repository, /count\(distinct date_trunc\('day'/);
+  assert.match(repository, /events\.scan_status in \('completed', 'completed_limited'\)/);
   assert.match(repository, /min\(occurred_at\) as oldest_event_at/);
   assert.match(repository, /expired_event_count/);
   assert.match(repository, /listAdminMcpTelemetryEventsPage/);

@@ -276,18 +276,29 @@ export function createHostedMcpTelemetry(input: CreateHostedMcpTelemetryInput) {
   };
 
   const reportActivation = (stage: McpActivationStage) => {
-    if (!client.actorId) return;
+    const sessionId = observationContext().sessionCorrelationId;
+    if (!client.actorId && !sessionId) return;
     if (sentActivationStages.has(stage)) return;
     const parsed = mcpActivationEventSchema.safeParse({
       actorId: client.actorId,
+      authClass: client.authClass,
+      attributionConfidence: client.attributionConfidence,
+      attributionRulesetVersion: client.attributionRulesetVersion,
+      attributionSignals: client.attributionSignals,
       callerProduct: client.callerProduct,
+      clientFamily: client.clientFamily,
       clientName: client.clientName,
       eventId: randomUUID(),
       eventType: "activation",
+      executionChannel: client.executionChannel,
+      installationOrigin: client.installationOrigin,
       occurredAt: new Date().toISOString(),
       organizationId: input.authenticatedOrganizationId ?? null,
+      sessionId,
       source: client.source,
+      sourceAttribution: client.sourceAttribution,
       stage,
+      surface: input.surface,
       userId: input.authenticatedUserId ?? null,
     });
     if (!parsed.success) {
@@ -361,11 +372,9 @@ export function createHostedMcpTelemetry(input: CreateHostedMcpTelemetryInput) {
       return;
     }
     deliver(parsed.data, { toolName: parsed.data.toolName });
-    if (input.surface === "mcp_authenticated") {
-      reportActivation("mcp_first_tool_invoked");
-      if (observation.toolName === "certscore_scan_site") {
-        reportActivation("mcp_scan_requested");
-      }
+    reportActivation("mcp_first_tool_invoked");
+    if (observation.toolName === "certscore_scan_site") {
+      reportActivation("mcp_scan_requested");
     }
   };
 

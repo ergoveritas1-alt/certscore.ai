@@ -460,7 +460,7 @@ async function handleMcp(req: IncomingMessage, res: ServerResponse, anonymous: b
     }
     installSseKeepalive(res);
     await transport.handleRequest(req, res, parsedBody);
-    if (!anonymous && !microsoft && res.statusCode < 400 && transport.sessionId) {
+    if (!microsoft && res.statusCode < 400 && transport.sessionId) {
       telemetry.observeActivation("mcp_initialized");
     }
     if (transport.sessionId) {
@@ -643,7 +643,7 @@ async function handleMcp(req: IncomingMessage, res: ServerResponse, anonymous: b
   }
   installSseKeepalive(res);
   await session.transport.handleRequest(req, res, parsedBody);
-  if (!anonymous && !microsoft && res.statusCode < 400 && jsonRpcMethod(parsedBody) === "tools/list") {
+  if (!microsoft && res.statusCode < 400 && jsonRpcMethod(parsedBody) === "tools/list") {
     session.telemetry?.observeActivation("mcp_tools_listed");
   }
   if (req.method === "DELETE" && sessionId) {

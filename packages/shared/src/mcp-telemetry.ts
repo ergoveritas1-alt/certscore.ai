@@ -68,17 +68,49 @@ export const mcpActivationStageSchema = z.enum([
 ]);
 
 export const mcpActivationEventSchema = z.object({
-  actorId: z.string().regex(/^[a-f0-9]{24}$/),
+  actorId: z.string().regex(/^[a-f0-9]{24}$/).nullable(),
+  authClass: z.enum(["anonymous", "authenticated"]),
+  attributionConfidence: mcpCallerConfidenceSchema,
+  attributionRulesetVersion: z.literal(MCP_CALLER_ATTRIBUTION_RULESET_VERSION),
+  attributionSignals: z.array(mcpAttributionSignalSchema).max(8),
   callerProduct: mcpCallerProductSchema,
+  clientFamily: z.enum([
+    "openai_chatgpt",
+    "openai_codex",
+    "anthropic_claude",
+    "anthropic_claude_code",
+    "google_gemini_cli",
+    "xai_grok",
+    "other",
+    "unknown",
+  ]),
   clientName: z.string().min(1).max(100).regex(/^[a-zA-Z0-9][a-zA-Z0-9 ._:/+@()-]*$/).nullable(),
   eventId: z.string().uuid(),
   eventType: z.literal("activation"),
+  executionChannel: mcpCallerExecutionChannelSchema,
+  installationOrigin: mcpInstallationOriginSchema,
   occurredAt: z.string().datetime(),
   organizationId: z.string().uuid().nullable(),
+  sessionId: z.string().regex(/^[a-f0-9]{24}$/).nullable(),
   source: mcpCallerProviderSchema,
+  sourceAttribution: z.enum([
+    "verified_network",
+    "self_declared_header",
+    "self_declared_client",
+    "unknown",
+  ]),
   stage: mcpActivationStageSchema,
+  surface: mcpTelemetrySurfaceSchema,
   userId: z.string().uuid().nullable(),
-}).strict();
+}).strict().refine(
+  (event) => Boolean(event.actorId || event.sessionId),
+  { message: "Activation requires an opaque actor or session identity.", path: ["actorId"] },
+).refine(
+  (event) => event.surface === "mcp_authenticated"
+    ? event.authClass === "authenticated"
+    : event.authClass === "anonymous" && event.organizationId === null && event.userId === null,
+  { message: "Activation identity must match the hosted MCP surface.", path: ["authClass"] },
+);
 
 export const mcpTelemetryEventSchema = z.object({
   actorId: z.string().regex(/^[a-f0-9]{24}$/).nullable(),

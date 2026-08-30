@@ -329,6 +329,33 @@ export default async function AdminMcpTelemetryPage({ searchParams }: AdminMcpPa
         trendTotal={dashboard.snapshot.label}
       />
 
+      <Card className="border-slate-200 bg-white">
+        <CardHeader className="pb-2">
+          <CardTitle>MCP growth funnel</CardTitle>
+          <p className="mt-1 text-sm text-slate-500">Privacy-separated hosted activation stages for {dashboard.snapshot.label.toLowerCase()}. Landing-page visits and setup clicks remain aggregate first-party analytics and are not joined to opaque MCP identities.</p>
+        </CardHeader>
+        <CardContent className="space-y-3 pt-0">
+          <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-7">
+            {[
+              { label: "Initialized", value: dashboard.activation.initialized, detail: "opaque sessions" },
+              { label: "Tools listed", value: dashboard.activation.toolsListed, detail: "opaque sessions" },
+              { label: "First tool", value: dashboard.activation.firstTool, detail: "opaque sessions" },
+              { label: "Scan requested", value: dashboard.activation.scanRequested, detail: "opaque sessions" },
+              { label: "Completed scans", value: dashboard.growth.completedScans, detail: "distinct scans" },
+              { label: "Bundle retrieved", value: dashboard.growth.bundleRetrievals, detail: "activated identities" },
+              { label: "Repeat use", value: dashboard.growth.repeatActors7d, detail: `7d actors · ${number(dashboard.growth.repeatActors30d)} in 30d` },
+            ].map((stage) => (
+              <div className="rounded-xl border border-slate-200 px-3 py-3" key={stage.label}>
+                <p className="text-xs font-semibold uppercase tracking-[0.1em] text-slate-500">{stage.label}</p>
+                <p className="mt-1 text-2xl font-semibold text-slate-950">{number(stage.value)}</p>
+                <p className="mt-1 text-xs text-slate-500">{stage.detail}</p>
+              </div>
+            ))}
+          </div>
+          <p className="text-xs leading-5 text-slate-500">Repeat use counts measurable opaque actors active on at least two distinct UTC days. It excludes known internal QA, canary, and Mac mini scan-bot traffic; it is not an installation count. Marketplace impressions and installs remain unavailable unless a provider supplies aggregate reporting.</p>
+        </CardContent>
+      </Card>
+
       <Card className="min-w-0 overflow-hidden border-slate-200 bg-white">
         <CardHeader className="pb-2">
           <div className="flex flex-col gap-1 sm:flex-row sm:items-end sm:justify-between">

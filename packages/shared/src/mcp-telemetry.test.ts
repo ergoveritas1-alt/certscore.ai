@@ -5,19 +5,33 @@ import { mcpActivationEventSchema, mcpTelemetryEndpoint, mcpTelemetryEventSchema
 test("MCP activation telemetry accepts only bounded authenticated funnel stages", () => {
   const event = mcpActivationEventSchema.parse({
     actorId: "a".repeat(24),
+    authClass: "authenticated",
+    attributionConfidence: "corroborated",
+    attributionRulesetVersion: "2026-08-20.1",
+    attributionSignals: ["anthropic_connector_network", "declared_client_info"],
     callerProduct: "claude",
+    clientFamily: "anthropic_claude",
     clientName: "claude",
     eventId: "00000000-0000-4000-8000-000000000001",
     eventType: "activation",
+    executionChannel: "hosted_connector",
+    installationOrigin: "unknown",
     occurredAt: "2026-08-27T12:00:00.000Z",
     organizationId: "00000000-0000-4000-8000-000000000002",
+    sessionId: "b".repeat(24),
     source: "anthropic",
+    sourceAttribution: "verified_network",
     stage: "mcp_initialized",
+    surface: "mcp_authenticated",
     userId: "00000000-0000-4000-8000-000000000003"
   });
   assert.equal(event.stage, "mcp_initialized");
   assert.equal(mcpActivationEventSchema.safeParse({ ...event, authorization: "Bearer secret" }).success, false);
   assert.equal(mcpActivationEventSchema.safeParse({ ...event, userId: null }).success, true);
+  assert.equal(mcpActivationEventSchema.safeParse({ ...event, actorId: null }).success, true);
+  assert.equal(mcpActivationEventSchema.safeParse({ ...event, actorId: null, sessionId: null }).success, false);
+  assert.equal(mcpActivationEventSchema.safeParse({ ...event, surface: "mcp_light" }).success, false);
+  assert.equal(mcpActivationEventSchema.safeParse({ ...event, surface: "mcp_light", authClass: "anonymous", organizationId: null, userId: null }).success, true);
   assert.equal(mcpActivationEventSchema.safeParse({ ...event, userId: "non-database-subject" }).success, false);
 });
 

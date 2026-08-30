@@ -109,9 +109,9 @@ test("lifecycle correlation exposes only bounded client metadata and records acc
 
   telemetry.observeToolInvocation(observation());
   await new Promise((resolve) => setImmediate(resolve));
-  assert.equal(deliveries.length, 1);
-  assert.match(deliveries[0] ?? "", /"event":"mcp\.telemetry_delivery"/);
-  assert.match(deliveries[0] ?? "", /"outcome":"accepted"/);
+  assert.equal(deliveries.length, 2);
+  assert.ok(deliveries.every((delivery) => /"event":"mcp\.telemetry_delivery"/.test(delivery)));
+  assert.ok(deliveries.every((delivery) => /"outcome":"accepted"/.test(delivery)));
 });
 
 test("authenticated telemetry signs bounded MCP activation stages", async () => {
@@ -167,16 +167,17 @@ test("authenticated activation telemetry keeps non-database subjects actor-only"
   assert.equal(JSON.parse(requests[0] ?? "{}").userId, null);
 });
 
-test("authenticated MCP runtime records initialization and tool discovery", () => {
+test("all hosted MCP surfaces record initialization and tool discovery", () => {
   const source = readFileSync(new URL("./index.ts", import.meta.url), "utf8");
   assert.match(source, /telemetry\.observeActivation\("mcp_initialized"\)/);
   assert.match(source, /session\.telemetry\?\.observeActivation\("mcp_tools_listed"\)/);
   assert.match(source, /jsonRpcMethod\(parsedBody\) === "tools\/list"/);
+  assert.doesNotMatch(source, /!anonymous && !microsoft && res\.statusCode < 400 && transport\.sessionId/);
   assert.match(source, /authenticatedUserId = auth\.claims\.certscore\.userId \?\? null/);
   assert.doesNotMatch(source, /authenticatedUserId = auth\.claims\.certscore\.userId \?\? auth\.claims\.sub/);
 });
 
-test("authenticated tool telemetry records first-tool and attempted scan-request activation once per session", async () => {
+test("hosted tool telemetry records first-tool and attempted scan-request activation once per session", async () => {
   const requests: string[] = [];
   const telemetry = createHostedMcpTelemetry({
     authenticatedActorId: "0123456789abcdef01234567",
@@ -285,8 +286,9 @@ test("telemetry differentiates all hosted MCP entrypoints and signs minimized ev
     .filter((event) => event.eventType === "activation");
   const toolRequests = requests.filter((request) => JSON.parse(request.body).eventType !== "activation");
   assert.equal(toolRequests.length, 3);
-  assert.equal(activationEvents.length, 1);
-  assert.equal(activationEvents[0]?.userId, null);
+  assert.equal(activationEvents.length, 3);
+  assert.deepEqual(activationEvents.map((event) => event.surface), ["mcp_light", "mcp_anonymous", "mcp_authenticated"]);
+  assert.ok(activationEvents.every((event) => event.userId === null));
   const events = toolRequests.map((request) => JSON.parse(request.body) as Record<string, unknown>);
   assert.deepEqual(events.map((event) => event.endpoint), ["/mcp/light", "/mcp/anonymous", "/mcp"]);
   assert.deepEqual(events.map((event) => event.surface), ["mcp_light", "mcp_anonymous", "mcp_authenticated"]);
@@ -329,8 +331,10 @@ test("tool-call request context overrides session initialization IP attribution"
   });
   await new Promise((resolve) => setImmediate(resolve));
 
-  assert.equal(requests.length, 1);
-  const event = JSON.parse(requests[0] ?? "{}") as Record<string, unknown>;
+  assert.equal(requests.length, 2);
+  const event = requests
+    .map((body) => JSON.parse(body) as Record<string, unknown>)
+    .find((candidate) => candidate.eventType !== "activation") ?? {};
   assert.equal(event.requesterIp, "203.0.113.44");
   assert.equal(event.requesterNetwork, "anthropic");
   assert.notEqual(event.requesterIpHash, requesterIpHashForTest("198.51.100.10"));
@@ -358,11 +362,11 @@ test("telemetry delivery failure is contained and transport quota events are rec
     toolName: "certscore_get_scan_bundle",
   }));
   await new Promise((resolve) => setImmediate(resolve));
-  assert.equal(attempts, 2);
-  assert.equal(failures.length, 1);
-  assert.match(failures[0] ?? "", /mcp\.telemetry_write_failed/);
-  assert.match(failures[0] ?? "", /"attempts":2/);
-  assert.equal(failures[0]?.includes("database unavailable"), false);
+  assert.equal(attempts, 4);
+  assert.equal(failures.length, 2);
+  assert.ok(failures.every((failure) => /mcp\.telemetry_write_failed/.test(failure)));
+  assert.ok(failures.every((failure) => /"attempts":2/.test(failure)));
+  assert.ok(failures.every((failure) => !failure.includes("database unavailable")));
 });
 
 test("telemetry retries the same idempotent event before reporting a delivery failure", async () => {
@@ -389,8 +393,9 @@ test("telemetry retries the same idempotent event before reporting a delivery fa
   telemetry.observeToolInvocation(observation());
   await new Promise((resolve) => setImmediate(resolve));
 
-  assert.equal(bodies.length, 2);
-  assert.equal(bodies[0], bodies[1]);
+  assert.equal(bodies.length, 3);
+  assert.equal(bodies[0], bodies[2]);
+  assert.equal(JSON.parse(bodies[1] ?? "{}").eventType, "activation");
   assert.equal(failures.length, 0);
 });
 

@@ -71,6 +71,11 @@ test("signed MCP activation stages enter the operational event ledger", async ()
   assert.match(route, /persistMcpActivationEvent/);
   assert.match(repository, /eventName: event\.stage/);
   assert.match(repository, /consentState: "operational"/);
+  assert.match(repository, /insert into public\.mcp_activation_events/);
+  assert.match(repository, /event\.surface !== "mcp_authenticated"/);
+  const activationTelemetryMigration = await readFile(new URL("packages/db/migrations/0193_mcp_activation_telemetry.sql", root), "utf8");
+  assert.match(activationTelemetryMigration, /90-day retention target/);
+  assert.doesNotMatch(activationTelemetryMigration, /^\s+(?:prompt|request_body|response_body|auth_token|raw_ip)\s+/im);
 });
 
 test("event trend rows use the timestamp bucket as their React identity", async () => {

@@ -35,7 +35,7 @@ Each completed hosted tool invocation produces one best-effort event with:
 - bounded error code
 - bounded requested resource: scan/job ID, normalized domain, or HTTP(S) origin
 
-The canonical event schema is `packages/shared/src/mcp-telemetry.ts`. Events are stored in `mcp_tool_invocation_events` with a 90-day retention target. The ingestion query deletes up to 500 expired rows on each accepted write, avoiding a separate scheduler or paid retention service. If traffic stops entirely, expired rows remain until the next accepted event triggers pruning.
+The canonical event schema is `packages/shared/src/mcp-telemetry.ts`. Tool events are stored in `mcp_tool_invocation_events`; initialization and tool-discovery stages are stored separately in `mcp_activation_events`. Both use a 90-day retention target. Each ingestion path deletes up to 500 expired rows on an accepted write, avoiding a separate scheduler or paid retention service. If traffic stops entirely, expired rows remain until the next accepted event of the same class triggers pruning.
 
 ## Source attribution
 
@@ -125,6 +125,8 @@ The weekly growth view should exclude internal QA, canaries, and the Mac mini sc
 - error, rate-limit, and p50/p95 duration rates
 
 A completed or limited scan is not the same as a successful user outcome; completed-bundle retrieval is the stronger activation signal. Request counts must not be described as installs or marketplace conversion.
+
+An opaque repeat actor is counted only when the same HMAC-derived actor is active on at least two distinct UTC days inside the stated window. Provider-wide network identities are not converted into actors. Initialization, tool discovery, and tool use may still be counted by an opaque MCP session when no safe actor binding exists.
 
 ## Production canary and operational checks
 

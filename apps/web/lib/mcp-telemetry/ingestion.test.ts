@@ -52,14 +52,24 @@ function event() {
 function activationEvent() {
   return {
     actorId: "a".repeat(24),
+    authClass: "authenticated",
+    attributionConfidence: "corroborated",
+    attributionRulesetVersion: "2026-08-20.1",
+    attributionSignals: ["anthropic_connector_network", "declared_client_info"],
     callerProduct: "claude",
+    clientFamily: "anthropic_claude",
     clientName: "claude",
     eventId: "00000000-0000-4000-8000-000000000004",
     eventType: "activation",
+    executionChannel: "hosted_connector",
+    installationOrigin: "unknown",
     occurredAt: "2026-08-19T12:00:00.000Z",
     organizationId: "00000000-0000-4000-8000-000000000005",
+    sessionId: "b".repeat(24),
     source: "anthropic",
+    sourceAttribution: "verified_network",
     stage: "mcp_tools_listed",
+    surface: "mcp_authenticated",
     userId: "00000000-0000-4000-8000-000000000006"
   };
 }

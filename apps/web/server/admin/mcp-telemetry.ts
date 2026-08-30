@@ -184,6 +184,20 @@ type RetentionRow = {
   total_event_count: CountValue;
 };
 
+type ActivationFunnelRow = {
+  first_tool_count: CountValue;
+  initialized_count: CountValue;
+  scan_requested_count: CountValue;
+  tools_listed_count: CountValue;
+};
+
+type GrowthRow = {
+  bundle_retrieval_count: CountValue;
+  completed_scan_count: CountValue;
+  repeat_actor_30d_count: CountValue;
+  repeat_actor_7d_count: CountValue;
+};
+
 function count(value: CountValue) {
   const parsed = Number(value ?? 0);
   return Number.isFinite(parsed) ? parsed : 0;
@@ -264,7 +278,17 @@ async function loadAdminMcpTelemetryDashboardUncached(
     );
   }
   const retentionDaysParameter = `$${dashboardFilterValues.length + 1}`;
-  const [summaryResult, trendResult, toolResult, surfaceResult, sourceResult, hostnameResult, retentionResult, comparisonResult] = await Promise.all([
+  const activationFilter = includeCanary
+    ? ""
+    : `and lower(coalesce(activation.client_name, '')) <> all($1::text[])
+       and not exists (
+         select 1
+           from public.mcp_tool_invocation_events linked
+          where linked.is_canary
+            and ((activation.session_id is not null and linked.session_id = activation.session_id)
+              or (activation.actor_id is not null and linked.actor_id = activation.actor_id))
+       )`;
+  const [summaryResult, trendResult, toolResult, surfaceResult, sourceResult, hostnameResult, retentionResult, comparisonResult, activationResult, growthResult] = await Promise.all([
     queryOne<SummaryRow>(
       `select count(*) as invocation_count,
               count(distinct session_id) filter (where session_id is not null) as session_count,
@@ -401,6 +425,56 @@ async function loadAdminMcpTelemetryDashboardUncached(
       dashboardFilterValues,
       { readOnly: true },
     ),
+    queryOne<ActivationFunnelRow>(
+      `select count(distinct coalesce(session_id, actor_id)) filter (where stage = 'mcp_initialized') as initialized_count,
+              count(distinct coalesce(session_id, actor_id)) filter (where stage = 'mcp_tools_listed') as tools_listed_count,
+              count(distinct coalesce(session_id, actor_id)) filter (where stage = 'mcp_first_tool_invoked') as first_tool_count,
+              count(distinct coalesce(session_id, actor_id)) filter (where stage = 'mcp_scan_requested') as scan_requested_count
+         from public.mcp_activation_events activation
+        where occurred_at >= ${snapshotConfig.bucketStart}
+          and occurred_at < ${snapshotConfig.bucketEnd} + interval '${snapshotConfig.step}'
+          ${activationFilter}`,
+      includeCanary ? [] : [INTERNAL_QA_MCP_CLIENT_NAMES],
+      { readOnly: true },
+    ),
+    queryOne<GrowthRow>(
+      `select count(distinct coalesce(events.session_id, events.actor_id)) filter (
+                where events.tool_name = 'certscore_get_scan_bundle'
+                  and events.outcome = 'success'
+              ) as bundle_retrieval_count,
+              count(distinct events.scan_id) filter (
+                where events.tool_name = 'certscore_get_scan_bundle'
+                  and events.outcome = 'success'
+                  and events.scan_status in ('completed', 'completed_limited')
+              ) as completed_scan_count,
+              (select count(*) from (
+                 select repeat_7.actor_id
+                   from public.mcp_tool_invocation_events repeat_7
+                  where repeat_7.occurred_at >= now() - interval '7 days'
+                    and repeat_7.actor_id is not null
+                    ${includeCanary ? "" : internalQaMcpTrafficFilter("repeat_7", "$3", "$4", "$5")}
+                    ${macMiniMcpTrafficFilter("repeat_7", "$1", "$2")}
+                  group by repeat_7.actor_id
+                 having count(distinct date_trunc('day', repeat_7.occurred_at at time zone 'UTC')) >= 2
+              ) repeat_actors_7d) as repeat_actor_7d_count,
+              (select count(*) from (
+                 select repeat_30.actor_id
+                   from public.mcp_tool_invocation_events repeat_30
+                  where repeat_30.occurred_at >= now() - interval '30 days'
+                    and repeat_30.actor_id is not null
+                    ${includeCanary ? "" : internalQaMcpTrafficFilter("repeat_30", "$3", "$4", "$5")}
+                    ${macMiniMcpTrafficFilter("repeat_30", "$1", "$2")}
+                  group by repeat_30.actor_id
+                 having count(distinct date_trunc('day', repeat_30.occurred_at at time zone 'UTC')) >= 2
+              ) repeat_actors_30d) as repeat_actor_30d_count
+         from public.mcp_tool_invocation_events events
+        where events.occurred_at >= ${snapshotConfig.bucketStart}
+          and events.occurred_at < ${snapshotConfig.bucketEnd} + interval '${snapshotConfig.step}'
+          ${internalQaFilter}
+          ${macMiniFilter}`,
+      dashboardFilterValues,
+      { readOnly: true },
+    ),
   ]);
 
   const summary = summaryResult ?? {
@@ -431,6 +505,18 @@ async function loadAdminMcpTelemetryDashboardUncached(
       errors: count(comparisonResult?.error_count ?? 0),
       invocations: count(comparisonResult?.invocation_count ?? 0),
       p95DurationMs: nullableNumber(comparisonResult?.p95_duration_ms ?? null),
+    },
+    activation: {
+      firstTool: count(activationResult?.first_tool_count ?? 0),
+      initialized: count(activationResult?.initialized_count ?? 0),
+      scanRequested: count(activationResult?.scan_requested_count ?? 0),
+      toolsListed: count(activationResult?.tools_listed_count ?? 0),
+    },
+    growth: {
+      bundleRetrievals: count(growthResult?.bundle_retrieval_count ?? 0),
+      completedScans: count(growthResult?.completed_scan_count ?? 0),
+      repeatActors30d: count(growthResult?.repeat_actor_30d_count ?? 0),
+      repeatActors7d: count(growthResult?.repeat_actor_7d_count ?? 0),
     },
     snapshot: {
       label: snapshotConfig.label,
