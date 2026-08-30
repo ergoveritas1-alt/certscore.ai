@@ -35,6 +35,8 @@ import {
 } from "./post-refusal-target-authorization.js";
 import { captureConsentControlGeometry } from "./consent-control-geometry.js";
 import { installPublicNetworkGuardRoute } from "./public-network-guard.js";
+import { proxyFetch } from "./proxy-fetch.js";
+import { installWebBotAuthRoute } from "./web-bot-auth-routing.js";
 
 const POST_REFUSAL_SOURCE = "post_refusal_observer";
 const DEFAULT_OBSERVATION_WINDOW_MS = 8_000;
@@ -424,6 +426,7 @@ export async function runPostRefusalObserver(
         input.interactionAuthorization,
         authorizationScanId,
         {
+          fetchImpl: proxyFetch,
           requestHeaders: {
             "accept-language": String(
               browserContextConfiguration.extraHTTPHeaders?.["Accept-Language"] ??
@@ -472,6 +475,7 @@ export async function runPostRefusalObserver(
       ownsBrowser = true;
     }
     context = await browser.newContext(browserContextConfiguration);
+    await installWebBotAuthRoute(context);
     if (effectiveInteractionAuthorization.kind === "resolved_scan_target") {
       await installPublicNetworkGuardRoute(context);
     }
