@@ -2,7 +2,7 @@ import { KNOWN_CMP_REGISTRY } from "@website-signal-risk-scanner/shared";
 import type { PostRefusalActionRecipe } from "./post-refusal-observer.js";
 
 export const CANONICAL_POST_REFUSAL_RECIPE_SET_ID =
-  "canonical-consent-control-reject-v10";
+  "canonical-consent-control-reject-v15";
 
 export const CERTSCORE_OWNED_ANALYTICS_REJECT_RECIPE: PostRefusalActionRecipe = {
   artifactVersion: "certscore.post_refusal_action_recipe.v1",
@@ -78,6 +78,14 @@ export function buildCanonicalPostRefusalActionRecipes(): PostRefusalActionRecip
         ? {
             kind: "cmp_cookie_values_equal",
             cookies: refusalCookieValues,
+          }
+        : definition.canonicalName === "Google Funding Choices" ||
+          definition.canonicalName === "Seznam CMP"
+        ? {
+            kind: "tcf_purposes_denied_or_cmp_cookie_changed",
+            cookieName: definition.canonicalName === "Google Funding Choices"
+              ? "FCCDCF"
+              : "sznlbr",
           }
         : definition.canonicalName === "OneTrust" ||
           definition.canonicalName === "Cookiebot"

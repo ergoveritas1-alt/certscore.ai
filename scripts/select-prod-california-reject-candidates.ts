@@ -5,7 +5,7 @@ import {
   getKnownCmpVendorName,
 } from "../packages/shared/src/known-cmps.js";
 import { publicTestContactHoldForUrl } from "../packages/certscore-scan-core/src/public-test-contact-holds.js";
-import { parseSingleJsonOutput, runProdDbSqlOneoff } from "./lib/prod-db-psql-oneoff.js";
+import { runProdDbSqlOneoff } from "./lib/prod-db-psql-oneoff.js";
 
 const ARTIFACT_VERSION = "certscore.california_known_reject_candidate_selection.1" as const;
 const CALIFORNIA_SCANNER_REGION = "us-west-1";
@@ -237,7 +237,7 @@ export function selectCaliforniaRejectCandidates(
 }
 
 function candidateQuery(days: number) {
-  return `select coalesce(jsonb_agg(to_jsonb(q) order by q.completed_at desc), '[]'::jsonb)::text
+  return `select row_to_json(q)::text
 from (
   select distinct on (public.normalize_scan_contact_domain(d.hostname))
          s.id::text as scan_id,
@@ -321,6 +321,13 @@ from (
 ) q`;
 }
 
+function parseJsonLineRows<T>(output: string) {
+  return output.split(/\r?\n/)
+    .map((value) => value.trim())
+    .filter((value) => value.startsWith("{"))
+    .map((value) => JSON.parse(value) as T);
+}
+
 function parseArgs(argv: string[]): Args {
   const parsed: Args = {
     days: 240,
@@ -344,8 +351,8 @@ function parseArgs(argv: string[]): Args {
   if (!Number.isInteger(parsed.days) || parsed.days < 1 || parsed.days > 365) {
     throw new Error("--days must be an integer from 1 through 365");
   }
-  if (!Number.isInteger(parsed.limit) || parsed.limit < 1 || parsed.limit > 50) {
-    throw new Error("--limit must be an integer from 1 through 50");
+  if (!Number.isInteger(parsed.limit) || parsed.limit < 1 || parsed.limit > 100) {
+    throw new Error("--limit must be an integer from 1 through 100");
   }
   if (!parsed.egressLabel.trim()) throw new Error("--egress-label is required");
   return parsed;
@@ -362,7 +369,7 @@ async function main() {
     readOnly: true,
     sql: candidateQuery(args.days),
   });
-  const rows = parseSingleJsonOutput<CaliforniaRejectSourceRow[]>(output);
+  const rows = parseJsonLineRows<CaliforniaRejectSourceRow>(output);
   const excludedDomains = args.excludeSelection
     ? await readExcludedDomains(path.resolve(args.excludeSelection))
     : new Set<string>();

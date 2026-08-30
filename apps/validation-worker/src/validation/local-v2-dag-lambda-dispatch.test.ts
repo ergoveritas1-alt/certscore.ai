@@ -71,7 +71,7 @@ test("durable publisher forwards the owned-canary Reject observation contract", 
     assert.equal(payload.postRefusalObservation?.enabled, true);
     assert.equal(payload.postRefusalObservation?.rolloutMode, "all_eligible");
     assert.equal(payload.postRefusalObservation?.dispatchDelayMs, 500);
-    assert.equal(payload.postRefusalObservation?.actionSearchTimeoutMs, 2_500);
+    assert.equal(payload.postRefusalObservation?.actionSearchTimeoutMs, 10_000);
     assert.equal(payload.postRefusalObservation?.interactionAuthorization.kind, "owned_canary");
   }
 });
@@ -106,9 +106,9 @@ test("durable publisher forwards bounded resolved exact-target authorization for
   assert.deepEqual(payload.postRefusalObservation?.interactionAuthorization, {
     authorizationId: "sharded_scan_resolved_exact_target.v2",
     kind: "scan_target_resolution",
-    maxRedirects: 5,
+    maxRedirects: 8,
     requestedUrl: targetUrl,
-    resolutionTimeoutMs: 1_500,
+    resolutionTimeoutMs: 5_000,
     scanId,
   });
 });

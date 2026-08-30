@@ -340,6 +340,7 @@ export const KNOWN_CMP_REGISTRY: KnownCmpDefinition[] = [
     evidenceTreatment: "cmp_infrastructure",
     globalNames: ["__tcfapi"],
     reopenControlHints: ["nastavit souhlas", "nastavit cookies", "seznam cmp"],
+    rejectControlSelectors: ['[data-testid="button-reject"]'],
     role: "consent management platform",
     standards: ["tcf"],
     storageKeys: ["sznlbr", "euconsent-v2"],
@@ -354,6 +355,10 @@ export const KNOWN_CMP_REGISTRY: KnownCmpDefinition[] = [
     evidenceTreatment: "cmp_infrastructure",
     globalNames: ["googlefc"],
     reopenControlHints: ["privacy and messaging", "funding choices"],
+    rejectControlSelectors: [
+      "button.fc-cta-do-not-consent",
+      'button[aria-label="Do not consent"]:has(.fc-button-label)',
+    ],
     role: "consent management platform",
     standards: ["tcf", "google_consent_mode"],
     urlPatterns: [/fundingchoicesmessages\.google\.com/i, /googlefc/i]

@@ -240,7 +240,7 @@ test("canonical control discovery does not click generic page choices without co
   });
 });
 
-test("canonical control discovery does not confirm banner removal without a fresh refusal state", async () => {
+test("canonical control discovery confirms the completed Reject action from its direct first-layer UI transition", async () => {
   await withFixture("post-refusal-reject-unconfirmed", async (url) => {
     const packet = await observe(url, {
       allowCanonicalRejectDiscovery: true,
@@ -254,8 +254,74 @@ test("canonical control discovery does not confirm banner removal without a fres
     });
 
     assert.equal(packet.resolver.found, true);
-    assert.equal(packet.refusalRegistration.status, "unconfirmed");
-    assert.equal(packet.refusalRegistration.refusalExercised, false);
+    assert.equal(packet.refusalRegistration.status, "confirmed");
+    assert.equal(packet.refusalRegistration.refusalExercised, true);
+    assert.equal(packet.refusalRegistration.witnesses.some((witness) =>
+      witness.witnessType === "canonical_refusal_state" &&
+      witness.expectedState === "canonical_first_layer_reject_control_and_consent_surface_hidden_after_completed_action"
+    ), true);
+  });
+});
+
+test("canonical control discovery confirms an exact Reject action when the consent surface becomes an acknowledgement", async () => {
+  await withFixture("post-refusal-reject-acknowledgement-transition", async (url) => {
+    const packet = await observe(url, {
+      allowCanonicalRejectDiscovery: true,
+      recipe: {
+        ...recipe,
+        recipeId: "missing-registered-recipe",
+        controlSelector: "#registered-reject-not-present",
+      },
+      actionSearchTimeoutMs: 1_000,
+      confirmationTimeoutMs: 100,
+    });
+
+    assert.equal(packet.resolver.found, true);
+    assert.equal(packet.refusalRegistration.status, "confirmed");
+    assert.equal(packet.refusalRegistration.refusalExercised, true);
+    assert.equal(packet.refusalRegistration.witnesses.some((witness) =>
+      witness.witnessType === "canonical_refusal_state" &&
+      witness.expectedState === "canonical_first_layer_reject_control_hidden_and_consent_surface_replaced_after_completed_action"
+    ), true);
+  });
+});
+
+test("canonical control discovery collapses a nested label into its unique interactive Reject ancestor", async () => {
+  await withFixture("post-refusal-reject-nested-label", async (url) => {
+    const packet = await observe(url, {
+      allowCanonicalRejectDiscovery: true,
+      recipe: {
+        ...recipe,
+        recipeId: "missing-registered-recipe",
+        controlSelector: "#registered-reject-not-present",
+      },
+      actionSearchTimeoutMs: 1_000,
+    });
+
+    assert.equal(packet.resolver.found, true);
+    assert.match(packet.resolver.recipeId, /^canonical-control:reject:v2:/);
+    assert.equal(packet.refusalRegistration.status, "confirmed");
+    assert.equal(packet.interactionDiagnostics.click.outcome, "completed");
+  });
+});
+
+test("canonical control discovery resolves and clicks one exact Reject control inside a child CMP frame", async () => {
+  await withFixture("consent-iframe-reject", async (url) => {
+    const packet = await observe(url, {
+      allowCanonicalRejectDiscovery: true,
+      recipe: {
+        ...recipe,
+        recipeId: "missing-registered-recipe",
+        controlSelector: "#registered-reject-not-present",
+      },
+      actionSearchTimeoutMs: 1_000,
+    });
+
+    assert.equal(packet.resolver.found, true);
+    assert.match(packet.resolver.recipeId, /^canonical-control:reject:v2:/);
+    assert.equal(packet.refusalRegistration.status, "confirmed");
+    assert.equal(packet.refusalRegistration.refusalExercised, true);
+    assert.equal(packet.interactionDiagnostics.click.outcome, "completed");
   });
 });
 
@@ -570,6 +636,10 @@ test("navigation recovery requires a recoverable error, committed document, and 
     await inspectRecoverableCommittedDocument(page, authorization, "timeout"),
     { recovered: false, documentCommitted: true, finalUrlAuthorized: true },
   );
+  assert.deepEqual(
+    await inspectRecoverableCommittedDocument(page, authorization, "http2_protocol"),
+    { recovered: true, documentCommitted: true, finalUrlAuthorized: true },
+  );
 });
 
 test("a stale pre-action storage state cannot confirm the reject click", async () => {
@@ -645,6 +715,8 @@ test("canonical reject recipe set selects the one actionable deterministic contr
       "OneTrust",
       "Usercentrics",
       "Cookiebot",
+      "Seznam CMP",
+      "Google Funding Choices",
     ],
   );
   await withFixture("post-refusal-onetrust-tcf-honored", async (url) => {
@@ -910,6 +982,21 @@ test("named CMP recipes resolve fast and delayed deterministic controls", async 
     assert.equal(packet.refusalRegistration.witnesses.some((witness) =>
       witness.witnessType === "banner_transition" && witness.corroboratingOnly
     ), true);
+  });
+});
+
+test("recognized CMP evidence unlocks only the bounded late-control search extension", async () => {
+  await withFixture("post-refusal-onetrust-very-late", async (url) => {
+    const packet = await observe(url, {
+      actionSearchTimeoutMs: 10_000,
+      recipe: cmpRecipe("OneTrust", recipe.confirmation, "#onetrust-banner-sdk"),
+    });
+
+    assert.equal(packet.resolver.found, true);
+    assert.equal(packet.refusalRegistration.status, "confirmed");
+    assert.equal(packet.timing.resolverMs >= 8_000, true);
+    assert.equal(packet.timing.resolverMs < 10_250, true);
+    assert.equal(packet.limitations.includes("adaptive_late_control_extension_applied:2000"), true);
   });
 });
 

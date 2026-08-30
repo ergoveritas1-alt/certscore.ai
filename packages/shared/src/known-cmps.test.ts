@@ -153,6 +153,13 @@ test("canonical CMP registry owns deterministic reject-control selectors", () =>
     'button[data-testid="uc-deny-all-button"]',
     "#uc-cmp-footer #deny",
   ]);
+  assert.deepEqual(selectors.get("Google Funding Choices"), [
+    "button.fc-cta-do-not-consent",
+    'button[aria-label="Do not consent"]:has(.fc-button-label)',
+  ]);
+  assert.deepEqual(selectors.get("Seznam CMP"), [
+    '[data-testid="button-reject"]',
+  ]);
 });
 
 test("detects Usercentrics service domains", () => {

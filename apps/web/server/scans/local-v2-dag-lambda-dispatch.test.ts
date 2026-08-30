@@ -165,7 +165,7 @@ test("adds the default-off reject worker to eligible sharded scans with target-s
       scanId: `scan-canary-reject-${number}`,
     });
     assert.equal(canaryPayload.postRefusalObservation?.dispatchDelayMs, 500);
-    assert.equal(canaryPayload.postRefusalObservation?.actionSearchTimeoutMs, 2_500);
+    assert.equal(canaryPayload.postRefusalObservation?.actionSearchTimeoutMs, 10_000);
     assert.equal(canaryPayload.postRefusalObservation?.interactionAuthorization.kind, "owned_canary");
     assert.equal(canaryPayload.postRefusalObservation?.resolver.kind, "canonical_cmp_registry");
   }

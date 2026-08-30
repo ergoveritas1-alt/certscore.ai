@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import {
   authorizePostRefusalTarget,
+  bindPostRefusalBrowserResolvedExactTarget,
   ERGOVERITAS_POST_REFUSAL_CANARY_AUTHORIZATION_ID,
   getOwnedPostRefusalCanaryRecipeCase,
   RESOLVED_SCAN_TARGET_AUTHORIZATION_ID,
@@ -186,6 +187,97 @@ test("resolved exact-target authorization v2 follows bounded passive redirects t
     result.authorization,
     "scan-456",
   ).reason, "scan_target_scan_identity_mismatch");
+});
+
+test("browser-resolved exact-target authorization binds only the observed final HTTPS URL and scan ID", async () => {
+  const authorization = {
+    authorizationId: RESOLVED_SCAN_TARGET_AUTHORIZATION_ID,
+    kind: "scan_target_resolution" as const,
+    maxRedirects: 3,
+    requestedUrl: "https://example.com/",
+    resolutionTimeoutMs: 5_000,
+    scanId: "browser-scan-1",
+  };
+  const result = await bindPostRefusalBrowserResolvedExactTarget({
+    durationMs: 900,
+    finalUrl: "https://www.example.com/en/?region=ie",
+    redirectCount: 2,
+    requestedUrl: authorization.requestedUrl,
+  }, authorization, authorization.scanId, {
+    urlGuard: async (input) => new URL(input),
+  });
+
+  assert.equal(result.status, "resolved");
+  if (result.status !== "resolved") return;
+  assert.equal(result.targetUrl, "https://www.example.com/en/?region=ie");
+  assert.equal(authorizePostRefusalTarget(
+    result.targetUrl,
+    result.authorization,
+    authorization.scanId,
+  ).reason, "authorized_resolved_scan_target");
+  assert.equal(authorizePostRefusalTarget(
+    "https://www.example.com/en/",
+    result.authorization,
+    authorization.scanId,
+  ).authorized, false);
+
+  const wrongScan = await bindPostRefusalBrowserResolvedExactTarget({
+    durationMs: 900,
+    finalUrl: "https://www.example.com/en/?region=ie",
+    redirectCount: 2,
+    requestedUrl: authorization.requestedUrl,
+  }, authorization, "browser-scan-2", {
+    urlGuard: async (input) => new URL(input),
+  });
+  assert.equal(wrongScan.status === "failed" ? wrongScan.failureReason : undefined, "scan_identity_mismatch");
+
+  const excessive = await bindPostRefusalBrowserResolvedExactTarget({
+    durationMs: 900,
+    finalUrl: "https://www.example.com/en/?region=ie",
+    redirectCount: 4,
+    requestedUrl: authorization.requestedUrl,
+  }, authorization, authorization.scanId, {
+    urlGuard: async (input) => new URL(input),
+  });
+  assert.equal(excessive.status === "failed" ? excessive.failureReason : undefined, "redirect_limit_exceeded");
+});
+
+test("resolved exact-target authorization v2 carries only bounded redirect cookies in its passive resolution jar", async () => {
+  const requestedUrl = "https://www.example.com/gb/en/";
+  const authorization = {
+    authorizationId: RESOLVED_SCAN_TARGET_AUTHORIZATION_ID,
+    kind: "scan_target_resolution" as const,
+    maxRedirects: 3,
+    requestedUrl,
+    resolutionTimeoutMs: 1_500,
+    scanId: "scan-cookie-redirect",
+  };
+  const cookieHeaders: string[] = [];
+  const result = await resolvePostRefusalExactTarget(
+    requestedUrl,
+    authorization,
+    authorization.scanId,
+    {
+      fetchImpl: async (_input, init) => {
+        const headers = new Headers(init?.headers);
+        cookieHeaders.push(headers.get("cookie") ?? "");
+        if (cookieHeaders.length === 1) {
+          return new Response(null, {
+            status: 302,
+            headers: {
+              location: requestedUrl,
+              "set-cookie": "permanentLocaleCookie=gb; Domain=.example.com; Path=/; Secure; HttpOnly",
+            },
+          });
+        }
+        return new Response("ok", { status: 200 });
+      },
+      urlGuard: async (input) => new URL(input),
+    },
+  );
+
+  assert.equal(result.status, "resolved");
+  assert.deepEqual(cookieHeaders, ["", "permanentLocaleCookie=gb"]);
 });
 
 test("resolved exact-target authorization v2 fails closed for unsafe or excessive redirects", async () => {

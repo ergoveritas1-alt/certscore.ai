@@ -852,7 +852,7 @@ const postRefusalResolverConfigSchema = z.discriminatedUnion("kind", [
     recipeSetId: z.enum([
       "canonical-consent-control-reject-v8",
       "canonical-consent-control-reject-v9",
-      "canonical-consent-control-reject-v10",
+      "canonical-consent-control-reject-v15",
     ]),
   }),
   z.object({

@@ -132,11 +132,11 @@ function postRefusalObservationFromIntent(input: {
     rolloutMode,
     dispatchDelayMs: 500,
     observationWindowMs: 8_000,
-    confirmationTimeoutMs: 1_500,
-    actionSearchTimeoutMs: 2_500,
+    confirmationTimeoutMs: 2_000,
+    actionSearchTimeoutMs: 10_000,
     resolver: {
       kind: "canonical_cmp_registry",
-      recipeSetId: "canonical-consent-control-reject-v10",
+      recipeSetId: "canonical-consent-control-reject-v15",
     },
     interactionAuthorization: loopback
       ? { authorizationId: "loopback_local_lab", kind: "loopback" }
@@ -146,9 +146,9 @@ function postRefusalObservationFromIntent(input: {
         } : {
           authorizationId: "sharded_scan_resolved_exact_target.v2",
           kind: "scan_target_resolution",
-          maxRedirects: 5,
+          maxRedirects: 8,
           requestedUrl: target.toString(),
-          resolutionTimeoutMs: 1_500,
+          resolutionTimeoutMs: 5_000,
           scanId: input.scanId,
         },
   };

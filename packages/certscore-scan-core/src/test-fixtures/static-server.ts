@@ -81,6 +81,8 @@ export type StaticFixturePage =
   | "post-refusal-reject-ignored"
   | "post-refusal-reject-missing"
   | "post-refusal-reject-persistence-only"
+  | "post-refusal-reject-nested-label"
+  | "post-refusal-reject-acknowledgement-transition"
   | "post-refusal-reject-unconfirmed"
   | "post-refusal-reject-inflight"
   | "post-refusal-reject-inflight-redirect-flood"
@@ -101,6 +103,7 @@ export type StaticFixturePage =
   | "post-refusal-onetrust-tcf-contradiction"
   | "post-refusal-onetrust-tcf-stale"
   | "post-refusal-onetrust-tcf-delayed-contradiction"
+  | "post-refusal-onetrust-very-late"
   | "post-refusal-onetrust-tcf-storage-unavailable"
   | "post-refusal-onetrust-cookie-confirmed"
   | "post-refusal-onetrust-continue-without-accepting"
@@ -318,6 +321,8 @@ const fixtureSlugs: Record<StaticFixturePage, string> = {
   "post-refusal-reject-ignored": "post-refusal-reject-ignored",
   "post-refusal-reject-missing": "post-refusal-reject-missing",
   "post-refusal-reject-persistence-only": "post-refusal-reject-persistence-only",
+  "post-refusal-reject-nested-label": "post-refusal-reject-nested-label",
+  "post-refusal-reject-acknowledgement-transition": "post-refusal-reject-acknowledgement-transition",
   "post-refusal-reject-unconfirmed": "post-refusal-reject-unconfirmed",
   "post-refusal-reject-inflight": "post-refusal-reject-inflight",
   "post-refusal-reject-inflight-redirect-flood": "post-refusal-reject-inflight-redirect-flood",
@@ -338,6 +343,7 @@ const fixtureSlugs: Record<StaticFixturePage, string> = {
   "post-refusal-onetrust-tcf-contradiction": "post-refusal-onetrust-tcf-contradiction",
   "post-refusal-onetrust-tcf-stale": "post-refusal-onetrust-tcf-stale",
   "post-refusal-onetrust-tcf-delayed-contradiction": "post-refusal-onetrust-tcf-delayed-contradiction",
+  "post-refusal-onetrust-very-late": "post-refusal-onetrust-very-late",
   "post-refusal-onetrust-tcf-storage-unavailable": "post-refusal-onetrust-tcf-storage-unavailable",
   "post-refusal-onetrust-cookie-confirmed": "post-refusal-onetrust-cookie-confirmed",
   "post-refusal-onetrust-continue-without-accepting": "post-refusal-onetrust-continue-without-accepting",
@@ -566,6 +572,12 @@ function handleRequest(request: IncomingMessage, response: ServerResponse): void
         <button id="reject-all" type="button">Reject All</button>
         <button id="accept-all" type="button">Accept All</button>
       </div>
+      <script>
+        document.getElementById("reject-all")?.addEventListener("click", () => {
+          localStorage.setItem("cmp_consent", "rejected");
+          document.getElementById("banner")?.remove();
+        });
+      </script>
     </body></html>`);
     return;
   }
@@ -1665,6 +1677,7 @@ function postRefusalFixtureMarkup(caseName: StaticFixturePage): string {
     caseName === "post-refusal-onetrust-tcf-contradiction" ||
     caseName === "post-refusal-onetrust-tcf-stale" ||
     caseName === "post-refusal-onetrust-tcf-delayed-contradiction" ||
+    caseName === "post-refusal-onetrust-very-late" ||
     caseName === "post-refusal-onetrust-tcf-storage-unavailable" ||
     caseName === "post-refusal-onetrust-cookie-confirmed" ||
     caseName === "post-refusal-onetrust-continue-without-accepting" ||
@@ -1681,6 +1694,8 @@ function postRefusalFixtureMarkup(caseName: StaticFixturePage): string {
   }
   const rejectMissing = caseName === "post-refusal-reject-missing";
   const rejectUnconfirmed = caseName === "post-refusal-reject-unconfirmed";
+  const rejectNestedLabel = caseName === "post-refusal-reject-nested-label";
+  const rejectAcknowledgementTransition = caseName === "post-refusal-reject-acknowledgement-transition";
   const rejectIgnored = caseName === "post-refusal-reject-ignored";
   const rejectObservationLongTask = caseName === "post-refusal-reject-observation-long-task";
   const rejectInflight = caseName === "post-refusal-reject-inflight";
@@ -1708,7 +1723,7 @@ function postRefusalFixtureMarkup(caseName: StaticFixturePage): string {
       <button type="button" data-certscore-consent-action="accept">Accept all</button>
       ${rejectMissing
         ? ""
-        : `<button id="certscore-fixture-reject" type="button" data-certscore-consent-action="reject"${rejectClickFails ? ' style="pointer-events:none"' : ""}>Reject all</button>`}
+        : `<button id="certscore-fixture-reject" type="button" data-certscore-consent-action="reject"${rejectNestedLabel ? ' aria-label="Reject all"' : ""}${rejectClickFails ? ' style="pointer-events:none"' : ""}>${rejectNestedLabel ? '<p class="nested-reject-label">Reject all</p>' : "Reject all"}</button>`}
       ${rejectReresolvedBeforeClick
         ? '<div id="certscore-fixture-click-overlay" style="position:fixed;inset:0;z-index:1000"></div>'
         : ""}
@@ -1754,8 +1769,13 @@ function postRefusalFixtureMarkup(caseName: StaticFixturePage): string {
         setTimeout(() => document.getElementById("certscore-fixture-click-overlay")?.remove(), 1300);
       }
       document.getElementById("certscore-fixture-reject")?.addEventListener("click", () => {
-        document.getElementById("certscore-fixture-consent-banner")?.remove();
-        if (${JSON.stringify(rejectUnconfirmed || rejectStaleStorage)}) return;
+        const consentBanner = document.getElementById("certscore-fixture-consent-banner");
+        if (${JSON.stringify(rejectAcknowledgementTransition)}) {
+          if (consentBanner) consentBanner.innerHTML = '<p>Your cookie preferences have been saved.</p><a href="/cookie-settings">Change cookie settings</a>';
+        } else {
+          consentBanner?.remove();
+        }
+        if (${JSON.stringify(rejectUnconfirmed || rejectStaleStorage || rejectAcknowledgementTransition)}) return;
 
         if (${JSON.stringify(rejectActionPhaseNonessential)}) {
           document.cookie = "mp_action_phase_mixpanel=ACTION_PHASE; Path=/; SameSite=Lax";
@@ -1818,6 +1838,7 @@ function namedCmpPostRefusalFixtureMarkup(caseName: StaticFixturePage): string {
     caseName === "post-refusal-onetrust-tcf-contradiction" ||
     caseName === "post-refusal-onetrust-tcf-stale" ||
     caseName === "post-refusal-onetrust-tcf-delayed-contradiction" ||
+    caseName === "post-refusal-onetrust-very-late" ||
     caseName === "post-refusal-onetrust-tcf-storage-unavailable" ||
     caseName === "post-refusal-onetrust-cookie-confirmed" ||
     caseName === "post-refusal-onetrust-continue-without-accepting" ||
@@ -1828,6 +1849,7 @@ function namedCmpPostRefusalFixtureMarkup(caseName: StaticFixturePage): string {
   const noReject = caseName === "post-refusal-onetrust-no-reject";
   const staleTcf = caseName === "post-refusal-onetrust-tcf-stale";
   const delayedContradiction = caseName === "post-refusal-onetrust-tcf-delayed-contradiction";
+  const oneTrustVeryLate = caseName === "post-refusal-onetrust-very-late";
   const storageUnavailable = caseName === "post-refusal-onetrust-tcf-storage-unavailable";
   const cookieConfirmed = caseName === "post-refusal-onetrust-cookie-confirmed";
   const continueWithoutAccepting = caseName === "post-refusal-onetrust-continue-without-accepting";
@@ -1871,7 +1893,7 @@ function namedCmpPostRefusalFixtureMarkup(caseName: StaticFixturePage): string {
       ${rejectButton}
       ${separateOneTrustCloseButton}
     </div>`;
-  const renderDelayMs = usercentrics ? 1_200 : 0;
+  const renderDelayMs = oneTrustVeryLate ? 8_500 : usercentrics ? 1_200 : 0;
   return `
     <section>
       <h1>Named CMP post-refusal localhost fixture</h1>
@@ -1896,7 +1918,7 @@ function namedCmpPostRefusalFixtureMarkup(caseName: StaticFixturePage): string {
         tcString: ${JSON.stringify(tcfV2CoreString(staleTcf ? [] : [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]))},
         purpose: { consents: Object.fromEntries(Array.from({ length: 10 }, (_, index) => [String(index + 1), ${JSON.stringify(!staleTcf)}])) }
       };
-      if (${JSON.stringify(cookieConfirmation)}) {
+      if (${JSON.stringify(cookieConfirmation || oneTrustVeryLate)}) {
         document.cookie = "OptanonConsent=baseline; Path=/; SameSite=Lax";
       }
       if (${JSON.stringify(cookiebotCookieStale)}) {
