@@ -73,6 +73,7 @@ export type StaticFixturePage =
   | "post-refusal-reject-handler-after-dom-ready"
   | "post-refusal-openai-cookie-confirmed"
   | "post-refusal-openai-cookie-partial"
+  | "post-refusal-openai-rerendered-control"
   | "post-refusal-openai-cookie-stale"
   | "post-refusal-certscore-owned-analytics"
   | "post-refusal-reject-observation-long-task"
@@ -309,6 +310,7 @@ const fixtureSlugs: Record<StaticFixturePage, string> = {
   "post-refusal-reject-handler-after-dom-ready": "post-refusal-reject-handler-after-dom-ready",
   "post-refusal-openai-cookie-confirmed": "post-refusal-openai-cookie-confirmed",
   "post-refusal-openai-cookie-partial": "post-refusal-openai-cookie-partial",
+  "post-refusal-openai-rerendered-control": "post-refusal-openai-rerendered-control",
   "post-refusal-openai-cookie-stale": "post-refusal-openai-cookie-stale",
   "post-refusal-certscore-owned-analytics": "post-refusal-certscore-owned-analytics",
   "post-refusal-reject-observation-long-task": "post-refusal-reject-observation-long-task",
@@ -1585,6 +1587,33 @@ function postRefusalFixtureMarkup(caseName: StaticFixturePage): string {
           document.cookie = "oai_consent_marketing=false; Path=/; SameSite=Lax";
           document.querySelector("div.fixture_bannerActions")?.remove();
         });
+      </script>
+    `;
+  }
+  if (caseName === "post-refusal-openai-rerendered-control") {
+    return `
+      <div class="fixture_bannerActions">
+        <p>We use cookies for analytics and marketing.</p>
+        <button id="openai-initial-reject" class="wm-button wm-button--secondary wm-button--radius-full" style="pointer-events:none" type="button">Reject non-essential</button>
+      </div>
+      <script>
+        setTimeout(() => {
+          document.getElementById("openai-initial-reject")?.remove();
+          const replacement = document.createElement("button");
+          replacement.id = "openai-replacement-reject";
+          replacement.className = "wm-button wm-button--medium";
+          replacement.type = "button";
+          replacement.textContent = "Reject non-essential";
+          replacement.addEventListener("click", () => {
+            document.cookie = "oai-allow-ne=false; Path=/; SameSite=Lax";
+            document.cookie = "oai-logged-out-consent-chosen=true; Path=/; SameSite=Lax";
+            document.cookie = "oai_consent_analytics=false; Path=/; SameSite=Lax";
+            document.cookie = "oai_consent_marketing=false; Path=/; SameSite=Lax";
+            document.cookie = "oai_consent_personalization=false; Path=/; SameSite=Lax";
+            document.querySelector("div.fixture_bannerActions")?.remove();
+          });
+          document.querySelector("div.fixture_bannerActions")?.appendChild(replacement);
+        }, 400);
       </script>
     `;
   }

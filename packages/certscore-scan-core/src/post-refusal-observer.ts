@@ -777,25 +777,6 @@ export async function runPostRefusalObserver(
       });
     }
 
-    const confirmationBaseline = await captureRefusalConfirmationBaseline(
-      context,
-      page,
-      selectedRecipe.confirmation,
-    ).catch(() => undefined);
-    if (!confirmationBaseline) {
-      limitations.push("refusal_confirmation_baseline_unavailable");
-      return await finalize({
-        resolverFound: true,
-        resolverReason: "refusal_confirmation_baseline_unavailable",
-        registration: unconfirmedRegistration(
-          "not_attempted",
-          "refusal_confirmation_baseline_unavailable",
-        ),
-        preActionCapturedAtMs,
-        preActionStorage,
-        requests: classifyRequests(retainedRequests(), parentScanStartedAtMs),
-      });
-    }
     let actionabilityError: unknown;
     try {
       await control.click({ trial: true, timeout: 1_000 });
@@ -803,13 +784,21 @@ export async function runPostRefusalObserver(
       actionabilityError = error;
     }
     if (actionabilityError) {
-      const reResolution = await waitForDeterministicRecipe(
-        page,
-        [selectedRecipe],
-        1_000,
-        input.signal,
-      );
+      const reResolution = input.allowCanonicalRejectDiscovery
+        ? await waitForDeterministicOrCanonicalRecipe(
+            page,
+            actionRecipes,
+            1_000,
+            input.signal,
+          )
+        : await waitForDeterministicRecipe(
+            page,
+            [selectedRecipe],
+            1_000,
+            input.signal,
+          );
       if (reResolution.status === "found") {
+        selectedRecipe = reResolution.recipe;
         control = reResolution.control;
         interactionDiagnostics.click.reResolvedBeforeDispatch = true;
         try {
@@ -844,6 +833,25 @@ export async function runPostRefusalObserver(
         preActionCapturedAtMs,
         preActionStorage,
         postActionStorage: await captureStorage(context, page, observationTargetUrl, limitations).catch(() => []),
+        requests: classifyRequests(retainedRequests(), parentScanStartedAtMs),
+      });
+    }
+    const confirmationBaseline = await captureRefusalConfirmationBaseline(
+      context,
+      page,
+      selectedRecipe.confirmation,
+    ).catch(() => undefined);
+    if (!confirmationBaseline) {
+      limitations.push("refusal_confirmation_baseline_unavailable");
+      return await finalize({
+        resolverFound: true,
+        resolverReason: "refusal_confirmation_baseline_unavailable",
+        registration: unconfirmedRegistration(
+          "not_attempted",
+          "refusal_confirmation_baseline_unavailable",
+        ),
+        preActionCapturedAtMs,
+        preActionStorage,
         requests: classifyRequests(retainedRequests(), parentScanStartedAtMs),
       });
     }

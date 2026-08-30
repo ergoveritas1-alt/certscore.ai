@@ -117,6 +117,26 @@ test("does not confirm a partial OpenAI refusal cookie bundle", async () => {
   });
 });
 
+test("re-resolves a rerendered OpenAI Reject control through canonical geometry", async () => {
+  const recipeCandidates = buildCanonicalPostRefusalActionRecipes();
+  await withFixture("post-refusal-openai-rerendered-control", async (url) => {
+    const packet = await observe(url, {
+      actionSearchTimeoutMs: 1_000,
+      allowCanonicalRejectDiscovery: true,
+      recipe: recipeCandidates[0],
+      recipeCandidates,
+      recipeSetId: CANONICAL_POST_REFUSAL_RECIPE_SET_ID,
+    });
+
+    assert.equal(packet.resolver.found, true);
+    assert.match(packet.resolver.recipeId ?? "", /^canonical-control:reject:v2:/);
+    assert.equal(packet.refusalRegistration.status, "confirmed");
+    assert.equal(packet.refusalRegistration.refusalExercised, true);
+    assert.equal(packet.interactionDiagnostics?.click.outcome, "completed");
+    assert.equal(packet.interactionDiagnostics?.click.reResolvedBeforeDispatch, true);
+  });
+});
+
 test("retained packets redact target query values and bind the exact target by hash", async () => {
   await withFixture("post-refusal-reject-honored", async (url) => {
     const exactTargetUrl = `${url}?session_token=sensitive-value#fragment`;
