@@ -5,7 +5,7 @@ import { join } from "node:path";
 const repoRoot = process.cwd();
 const EXPECTED = {
   claudeVersion: "0.2.16",
-  cursorVersion: "1.0.1",
+  cursorVersion: "1.0.2",
   endpoint: "https://mcp.certscore.ai/mcp/light",
   openAiVersion: "2.0.0",
   owner: "CertScore.ai, LLC",

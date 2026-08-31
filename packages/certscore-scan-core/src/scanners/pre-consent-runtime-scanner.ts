@@ -11977,6 +11977,106 @@ export function reconcileConsentUiObservationWithCompletedGeometry(input: {
     }, "geometry:visible_accessible_intent_conflict");
   }
 
+  const confirmedGeometryControlKeys = new Set(
+    input.geometry.candidates
+      .filter((candidate) =>
+        isAroGeometryAction(candidate.actionType) &&
+        candidate.layer === "first_layer" &&
+        candidate.decisionStatus === "confirmed_visible"
+      )
+      .flatMap((candidate) => [candidate.label, candidate.ariaLabel]
+        .filter((label): label is string => Boolean(label))
+        .map((label) =>
+          `${candidate.actionType}:${normalizeConsentControlIdentityLabel(label)}`
+        )),
+  );
+  const explicitlyHiddenStructuredControlKeys = new Set(
+    input.geometry.candidates
+      .filter((candidate) =>
+        isAroGeometryAction(candidate.actionType) &&
+        candidate.layer === "first_layer" &&
+        candidate.decisionStatus === "hidden" &&
+        (
+          candidate.boundingBox.width <= 0 ||
+          candidate.boundingBox.height <= 0 ||
+          !candidate.intersectsViewport ||
+          candidate.computedStyle.display === "none" ||
+          candidate.computedStyle.visibility === "hidden" ||
+          candidate.computedStyle.visibility === "collapse" ||
+          candidate.computedStyle.pointerEvents === "none"
+        )
+      )
+      .flatMap((candidate) => [candidate.label, candidate.ariaLabel]
+        .filter((label): label is string => Boolean(label))
+        .map((label) =>
+          `${candidate.actionType}:${normalizeConsentControlIdentityLabel(label)}`
+        ))
+      .filter((key) => !confirmedGeometryControlKeys.has(key)),
+  );
+  const explicitlyHiddenStructuredControls = input.current.controls.filter((control) =>
+    explicitlyHiddenStructuredControlKeys.has(
+      `${control.actionType}:${normalizeConsentControlIdentityLabel(control.label)}`,
+    )
+  );
+  if (explicitlyHiddenStructuredControls.length > 0) {
+    const retainedControls = input.current.controls.filter((control) =>
+      !explicitlyHiddenStructuredControlKeys.has(
+        `${control.actionType}:${normalizeConsentControlIdentityLabel(control.label)}`,
+      )
+    );
+    const geometryObservation = consentUiObservationFromConfirmedGeometryControls({
+      artifactPath: input.artifactPath,
+      geometry: input.geometry,
+      scanStartedAtMs: input.scanStartedAtMs,
+      text: input.text,
+    });
+    const reconciled = geometryObservation
+      ? mergeConsentUiObservations(
+          { ...input.current, controls: retainedControls },
+          geometryObservation,
+          "geometry:confirmed_first_layer_controls",
+        )
+      : { ...input.current, controls: retainedControls };
+    const controls = reconciled.controls;
+    return annotateConsentUiObservation({
+      ...reconciled,
+      acceptControlObserved: controls.some((control) => control.actionType === "accept_all"),
+      rejectControlObserved: controls.some((control) => control.actionType === "reject_all"),
+      managePreferencesControlObserved: controls.some((control) => control.actionType === "manage_preferences"),
+      captureStatus: "incomplete",
+      inventoryOutcome: "partial",
+      controls,
+      visibleChoiceLabels: unique(controls.map((control) => control.label)).slice(0, 24),
+      captureDiagnostics: {
+        completedChannels: unique([
+          ...(reconciled.captureDiagnostics?.completedChannels ?? []),
+          "geometry",
+        ]) as NonNullable<ConsentUiObservation["captureDiagnostics"]>["completedChannels"],
+        timedOutChannels: reconciled.captureDiagnostics?.timedOutChannels ?? [],
+        failedChannels: reconciled.captureDiagnostics?.failedChannels ?? [],
+      },
+      inventoryDiagnostics: {
+        candidateContainerCount: input.current.inventoryDiagnostics?.candidateContainerCount ?? 0,
+        candidateControlCount: input.current.inventoryDiagnostics?.candidateControlCount ?? 0,
+        retainedControlCount: controls.length,
+        inventorySources: input.current.inventoryDiagnostics?.inventorySources ?? [],
+        candidateLabels: input.current.inventoryDiagnostics?.candidateLabels ?? [],
+        rejectionReasons: [
+          ...(input.current.inventoryDiagnostics?.rejectionReasons ?? []),
+          ...((input.current.inventoryDiagnostics?.rejectionReasons ?? []).includes("hidden")
+            ? []
+            : ["hidden" as const]),
+        ].slice(0, 24),
+        timingMarkers: unique([
+          ...(input.current.inventoryDiagnostics?.timingMarkers ?? []),
+          ...explicitlyHiddenStructuredControls.map((control) =>
+            `geometry_explicitly_hidden:${control.actionType}:${control.label}`
+          ),
+        ]).slice(0, 24),
+      },
+    }, "geometry:structured_control_explicitly_hidden");
+  }
+
   const geometryObservation = consentUiObservationFromConfirmedGeometryControls({
     artifactPath: input.artifactPath,
     geometry: input.geometry,

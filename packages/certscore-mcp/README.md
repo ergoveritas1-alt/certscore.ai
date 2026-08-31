@@ -1,24 +1,36 @@
-# CertScore MCP
+# CertScore.ai MCP Light
 
-CertScore MCP exposes a focused Model Context Protocol server for CertScore Pulse workflows.
+**No-auth website privacy scans for MCP clients.** Give an agent a public URL and retrieve evidence-backed observations about cookies and storage, trackers and vendors, consent controls, privacy-policy surfaces, and HTTPS/TLS signals.
 
-Status: public developer preview. Version 0.2.16 makes confirmed Reject Path outcomes explicit through typed verdict and intentional-termination metadata, direct MCP TextContent, and separately scoped coverage limitations. Local WC01 development uses `pnpm mcp:certscore`.
+CertScore.ai MCP Light is live in the [GitHub MCP Registry](https://github.com/mcp/ai.certscore/mcp-light) as `ai.certscore/mcp-light`. It exposes exactly three tools and requires no signup, API key, bearer token, browser login, or OAuth.
 
-Public docs:
+| | |
+| --- | --- |
+| Endpoint | `https://mcp.certscore.ai/mcp/light` |
+| Transport | Streamable HTTP |
+| Authentication | None |
+| Tools | `certscore_scan_site` → `certscore_get_scan_status` → `certscore_get_scan_bundle` |
+| Current hosted version | `0.2.16` |
 
-- [Add CertScore to Cursor](https://cursor.com/link/mcp/install?name=CertScore.ai&config=eyJ1cmwiOiJodHRwczovL21jcC5jZXJ0c2NvcmUuYWkvbWNwL2xpZ2h0In0%3D)
-- [MCP Light landing page](https://certscore.ai/mcp/light?utm_source=github&utm_medium=package_readme&utm_campaign=mcp_light)
-- [Cursor Directory listing](https://cursor.directory/plugins/certscoreai-mcp-light)
-- https://certscore.ai/developers/mcp
-- https://certscore.ai/developers/quickstart
-- https://certscore.ai/developers/reference
-- https://certscore.ai/api-pulse
-- [MCP Light installation and agent reference](../../docs/mcp-light-install.md)
-- [MCP Light marketplace workflow assets](../../docs/mcp-light-marketplace-assets.md)
+[Start with MCP Light](https://certscore.ai/mcp/light?utm_source=github&utm_medium=mcp_registry&utm_campaign=github_mcp_registry_launch) · [Install in Cursor](https://cursor.com/link/mcp/install?name=CertScore.ai&config=eyJ1cmwiOiJodHRwczovL21jcC5jZXJ0c2NvcmUuYWkvbWNwL2xpZ2h0In0%3D) · [Read the installation reference](../../docs/mcp-light-install.md)
+
+## Try it in about a minute
+
+Add the public endpoint to Codex:
+
+```bash
+codex mcp add certscore --url https://mcp.certscore.ai/mcp/light
+```
+
+Then ask:
+
+> Scan https://ergoveritas.com/.well-known/certscore-canary/sentinels/broad-baseline.html. Continue through the returned scan lifecycle, retrieve the completed findings bundle, and summarize the score, risk level, findings, evidence links, coverage limitations, and report URL. State whether the result was new or reused. Treat the results as automated public-web observations, not legal advice or certification.
+
+ErgoVeritas is a stable, owned canary with intentional test signals. For an ordinary review, substitute any public HTTP or HTTPS URL you are authorized to assess.
 
 ## Light MCP — no authentication: start here
 
-Light is the anonymous, no-auth Streamable HTTP endpoint for first-time and low-volume agent workflows:
+Light is the anonymous Streamable HTTP endpoint for first-time and low-volume agent workflows:
 
 ```text
 Light:
@@ -28,21 +40,13 @@ Authentication: None
 Tools: certscore_scan_site, certscore_get_scan_status, certscore_get_scan_bundle
 ```
 
-No signup, API key, bearer token, browser login, or OAuth is required. Light allows up to 50 genuinely new scans per UTC day across the public Light surface and up to 5 per rolling 10 minutes, with additional IP/provider safeguards. Reused eligible results do not consume quota.
+Light allows up to 50 genuinely new scans per UTC day across the public Light surface and up to 5 per rolling 10 minutes, with additional IP/provider safeguards. Reused eligible results do not consume quota.
 
 Light is a free website privacy scanner and cookie checker for public websites. It can return canonical evidence and findings for pre-consent cookies and storage, trackers and vendors, cookie banners, CMP and consent controls, eligible Reject Path post-refusal observations, privacy-policy and transparency surfaces, GDPR/ePrivacy and CCPA/CPRA review signals, and HTTPS/TLS transport observations. Typical uses include release privacy preflight, public vendor-domain review, landing-page tracker inspection, audit triage, and evidence collection before human privacy review.
 
-Codex setup:
-
-```bash
-codex mcp add certscore --url https://mcp.certscore.ai/mcp/light
-```
-
-First-run Codex prompt:
+Detailed first-run prompt:
 
 > Scan https://ergoveritas.com/.well-known/certscore-canary/sentinels/broad-baseline.html. If certscore_scan_site includes preConsentPreview, treat it as a partial preview and continue the workflow. Distinguish captured totals from bounded returned identities; use trackingVendorCount for non-operational tracking vendors and keep operationalVendors separate. Do not compare the compatibility preview trackerCount with the completed inventory's broader trackerCount. Never report preview counts as final totals. If certscore_scan_site returns a queued, running, or finalizing result, retain the returned scanId and poll certscore_get_scan_status using scanId only. If certscore_scan_site returns a retryable error without a scanId, wait for retryAfterSeconds and retry certscore_scan_site; do not call certscore_get_scan_status until a scanId exists. Once the scan reaches a terminal status, call certscore_get_scan_bundle with detail=findings and maxBytes=8000. Summarize whether the result was new or reused, the score, risk level, findings, evidence links, coverage limitations, and report URL. Explain truncation or omitted sections when present. Treat results as automated public-web observations, not legal conclusions, certifications, or compliance determinations.
-
-ErgoVeritas is a stable, owned canary site suited to demonstrating the complete scan, status, and bundle flow. Its pages intentionally contain test signals; users may substitute their own public HTTP or HTTPS URL for production-like testing.
 
 Canonical Light workflow:
 
@@ -83,7 +87,9 @@ The full/authenticated Streamable HTTP endpoint is `https://mcp.certscore.ai/mcp
 
 MCP scan-resource reads use the same weighted, rolling policy as the direct CertScore API. Hosted MCP rejects an over-limit composite call before internal fan-out; local MCP receives the same protection from the underlying API. Poll only active status resources, stop at a terminal status, do not repeatedly retrieve terminal scan resources, and honor `Retry-After` before retrying. The current limits and weights are published at https://certscore.ai/developers/reference#read-rate-limits and in the `x-certscore-read-rate-policy` extension of the public OpenAPI documents.
 
-## Tools
+## Authenticated and local MCP tool reference
+
+The sections below document the broader authenticated and local package surfaces. They do not change the GitHub-listed Light contract, which exposes only `certscore_scan_site`, `certscore_get_scan_status`, and `certscore_get_scan_bundle`.
 
 - `certscore_scan_site` - Creates a public-website privacy scan or reuses an eligible recent completed scan. Coverage includes pre-consent storage, trackers, consent and CMP signals, privacy-policy disclosures, transport security, and GDPR/ePrivacy or CCPA/CPRA review signals. The response contains a stable scanId, lifecycle status, retry timing, and sometimes a bounded preliminary preConsentPreview; preliminary data contains no final findings or score. Results are automated public-web observations, not legal advice, certification, or a compliance determination. Tool and workflow documentation: https://certscore.ai/developers/mcp.
 

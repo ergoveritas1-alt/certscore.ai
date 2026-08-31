@@ -205,6 +205,123 @@ test("completed geometry cannot erase stronger structured A/R/O evidence", () =>
   assert.ok(reconciled.basis.includes("geometry:did_not_corroborate_structured_controls"));
 });
 
+test("same-document geometry removes an exact structured Reject that is explicitly hidden", () => {
+  const current = {
+    ...rapidOxfamStyleObservation,
+    documentUrl: "https://fixture.certscore.ai/consent-stress.html",
+    inventoryOutcome: "complete_with_controls" as const,
+    captureDiagnostics: {
+      completedChannels: ["dom_inventory" as const, "accessibility_tree" as const],
+      timedOutChannels: [],
+      failedChannels: [],
+    },
+    controls: rapidOxfamStyleObservation.controls.map((control) =>
+      control.actionType === "reject_all"
+        ? { ...control, label: "Reject optional cookies" }
+        : control
+    ),
+    visibleChoiceLabels: [
+      "Cookie Settings",
+      "Accept all cookies",
+      "Reject optional cookies",
+      "Learn More",
+    ],
+  };
+  const geometry = oxfamStyleGeometry();
+  geometry.pageUrl = current.documentUrl;
+  geometry.candidates = [{
+    ...geometry.candidates[0]!,
+    candidateId: "candidate_hidden_reject",
+    label: "Reject optional cookies",
+    normalizedLabel: "reject optional cookies",
+    actionType: "reject_all",
+    tagName: "div",
+    selectorHint: "div[aria-label=\"Reject optional cookies\"]",
+    ariaLabel: "Reject optional cookies",
+    boundingBox: {
+      x: 0,
+      y: 0,
+      width: 220,
+      height: 0,
+      top: 0,
+      right: 220,
+      bottom: 0,
+      left: 0,
+    },
+    intersectsViewport: false,
+    classifierReasonCodes: ["matched_reject"],
+    classifierConfidence: 0.96,
+    decisionStatus: "hidden",
+    reasons: ["hidden_or_zero_area"],
+  }, {
+    ...geometry.candidates[0]!,
+    candidateId: "candidate_confirmed_accept",
+    label: "Accept all cookies",
+    normalizedLabel: "accept all cookies",
+    actionType: "accept_all",
+    tagName: "button",
+    selectorHint: "button[aria-label=\"Accept all cookies\"]",
+    ariaLabel: "Accept all cookies",
+    computedStyle: {
+      display: "block",
+      visibility: "visible",
+      opacity: "1",
+      pointerEvents: "auto",
+      position: "relative",
+      zIndex: "auto",
+    },
+    boundingBox: {
+      x: 30,
+      y: 600,
+      width: 220,
+      height: 44,
+      top: 600,
+      right: 250,
+      bottom: 644,
+      left: 30,
+    },
+    intersectsViewport: true,
+    classifierReasonCodes: ["matched_accept"],
+    classifierConfidence: 0.96,
+    decisionStatus: "confirmed_visible",
+    reasons: [],
+  }];
+  geometry.summary.firstLayerAccept = true;
+
+  const reconciled = reconcileConsentUiObservationWithCompletedGeometry({
+    artifactPath: "/tmp/ConsentControlGeometryEvidence.json",
+    current,
+    geometry,
+    geometryAccessLoaded: true,
+    pageUrl: current.documentUrl,
+    scanStartedAtMs: Date.now() - 10_000,
+  });
+
+  assert.equal(reconciled.captureStatus, "incomplete");
+  assert.equal(reconciled.inventoryOutcome, "partial");
+  assert.equal(reconciled.acceptControlObserved, true);
+  assert.equal(reconciled.rejectControlObserved, false);
+  assert.equal(reconciled.managePreferencesControlObserved, true);
+  assert.equal(
+    reconciled.controls.some((control) => control.label === "Reject optional cookies"),
+    false,
+  );
+  assert.equal(
+    reconciled.visibleChoiceLabels.includes("Reject optional cookies"),
+    false,
+  );
+  assert.equal(
+    reconciled.basis.includes("geometry:structured_control_explicitly_hidden"),
+    true,
+  );
+  assert.equal(
+    reconciled.inventoryDiagnostics?.timingMarkers.includes(
+      "geometry_explicitly_hidden:reject_all:Reject optional cookies",
+    ),
+    true,
+  );
+});
+
 test("visible and accessible intent conflicts keep the affected control unknown", () => {
   const current = {
     ...rapidOxfamStyleObservation,

@@ -10,7 +10,10 @@ import {
   type PostRefusalTcfState,
 } from "@certscore/contracts";
 import { resolveVendorObservations } from "@certscore/vendor-resolver";
-import { detectKnownCmps } from "@website-signal-risk-scanner/shared";
+import {
+  detectKnownCmps,
+  KNOWN_CMP_REGISTRY,
+} from "@website-signal-risk-scanner/shared";
 import { createHash } from "node:crypto";
 import { mkdir, writeFile } from "node:fs/promises";
 import path from "node:path";
@@ -227,6 +230,7 @@ type RefusalConfirmationBaseline =
     }
   | {
       kind: "canonical_reject_transition";
+      canonicalStorageStateHashes: Record<string, string>;
       controlVisible: boolean;
       bannerVisible: boolean;
       bannerStateHash?: string;
@@ -319,6 +323,10 @@ export async function runPostRefusalObserver(
   let refusalRegisteredAtEpochMs: number | undefined;
   let selectedRecipe: PostRefusalActionRecipe | undefined;
   const interactionDiagnostics: PostRefusalInteractionDiagnostics = {
+    resolver: {
+      snapshots: [],
+      truncated: false,
+    },
     navigation: {
       outcome: "failed",
       documentCommitted: false,
@@ -757,6 +765,27 @@ export async function runPostRefusalObserver(
     }
 
     const resolverStartedAtMs = Date.now();
+    let resolverSnapshotAttempt = 0;
+    let previousResolverSnapshotSignature: string | undefined;
+    const recordResolverSnapshot: ResolverDiagnosticReporter = (snapshot) => {
+      const resolverDiagnostics = interactionDiagnostics.resolver;
+      if (!resolverDiagnostics) return;
+      const signature = JSON.stringify(snapshot);
+      if (signature === previousResolverSnapshotSignature) return;
+      previousResolverSnapshotSignature = signature;
+      resolverSnapshotAttempt += 1;
+      const retained = {
+        ...snapshot,
+        attempt: resolverSnapshotAttempt,
+        elapsedMs: Math.max(0, Date.now() - resolverStartedAtMs),
+      };
+      if (resolverDiagnostics.snapshots.length < 12) {
+        resolverDiagnostics.snapshots.push(retained);
+      } else {
+        resolverDiagnostics.truncated = true;
+        resolverDiagnostics.snapshots[11] = retained;
+      }
+    };
     const adaptiveExtensionMs = actionSearchTimeoutMs > 8_000
       ? Math.min(2_000, actionSearchTimeoutMs - 8_000)
       : 0;
@@ -767,12 +796,14 @@ export async function runPostRefusalObserver(
           actionRecipes,
           initialActionSearchTimeoutMs,
           input.signal,
+          recordResolverSnapshot,
         )
       : await waitForDeterministicRecipe(
           page,
           actionRecipes,
           initialActionSearchTimeoutMs,
           input.signal,
+          recordResolverSnapshot,
         );
     if (
       resolution.status === "not_found" &&
@@ -791,12 +822,14 @@ export async function runPostRefusalObserver(
             actionRecipes,
             adaptiveExtensionMs,
             input.signal,
+            recordResolverSnapshot,
           )
         : await waitForDeterministicRecipe(
             page,
             actionRecipes,
             adaptiveExtensionMs,
             input.signal,
+            recordResolverSnapshot,
           );
     }
     timing.resolverMs = Math.max(0, Date.now() - resolverStartedAtMs);
@@ -882,19 +915,20 @@ export async function runPostRefusalObserver(
       actionabilityError = error;
     }
     if (actionabilityError) {
-      const reResolution = input.allowCanonicalRejectDiscovery
-        ? await waitForDeterministicOrCanonicalRecipe(
-            page,
-            actionRecipes,
-            1_000,
-            input.signal,
-          )
-        : await waitForDeterministicRecipe(
-            page,
-            [selectedRecipe],
-            1_000,
-            input.signal,
-          );
+      let reResolution = await waitForDeterministicRecipe(
+        page,
+        [selectedRecipe],
+        500,
+        input.signal,
+      );
+      if (reResolution.status === "not_found" && input.allowCanonicalRejectDiscovery) {
+        reResolution = await waitForCanonicalRejectControlRecipe(
+          page,
+          500,
+          input.signal,
+          [selectedRecipe],
+        );
+      }
       if (reResolution.status === "found") {
         selectedRecipe = reResolution.recipe;
         control = reResolution.control;
@@ -1765,6 +1799,48 @@ type DeterministicRecipeResolution =
       diagnosticGeometry?: ConsentControlGeometryArtifact;
     };
 
+type ResolverDiagnosticSnapshot = {
+  source: "named_recipe" | "canonical_geometry";
+  state:
+    | "document_loading"
+    | "scope_ambiguous"
+    | "selector_absent"
+    | "precondition_unsatisfied"
+    | "control_hidden"
+    | "control_disabled"
+    | "label_mismatch"
+    | "single_actionable"
+    | "multiple_actionable"
+    | "geometry_unavailable"
+    | "canonical_reject_absent";
+  selectorMatchCount: number;
+  visibleCount: number;
+  enabledCount: number;
+  labelMatchCount: number;
+  actionableCount: number;
+  cmpIds: string[];
+  controlLabels: string[];
+};
+
+type ResolverDiagnosticReporter = (snapshot: ResolverDiagnosticSnapshot) => void;
+
+function emptyResolverSnapshot(
+  source: ResolverDiagnosticSnapshot["source"],
+  state: ResolverDiagnosticSnapshot["state"],
+): ResolverDiagnosticSnapshot {
+  return {
+    source,
+    state,
+    selectorMatchCount: 0,
+    visibleCount: 0,
+    enabledCount: 0,
+    labelMatchCount: 0,
+    actionableCount: 0,
+    cmpIds: [],
+    controlLabels: [],
+  };
+}
+
 type SelectorScopeResolution =
   | { status: "found"; scope: Page | Frame }
   | { status: "not_found" }
@@ -1785,6 +1861,38 @@ function exactSelectorScope(
 
 function normalizeControlLabel(value: string) {
   return value.replace(/\s+/g, " ").trim().toLowerCase();
+}
+
+export function scopedAncestorSelector(selector: string): string | undefined {
+  let bracketDepth = 0;
+  let quote: "\"" | "'" | undefined;
+  let escaped = false;
+  let lastDescendantBoundary = -1;
+  for (let index = 0; index < selector.length; index += 1) {
+    const character = selector[index]!;
+    if (escaped) {
+      escaped = false;
+      continue;
+    }
+    if (character === "\\") {
+      escaped = true;
+      continue;
+    }
+    if (quote) {
+      if (character === quote) quote = undefined;
+      continue;
+    }
+    if (character === "\"" || character === "'") {
+      quote = character;
+      continue;
+    }
+    if (character === "[") bracketDepth += 1;
+    else if (character === "]") bracketDepth = Math.max(0, bracketDepth - 1);
+    else if (/\s/.test(character) && bracketDepth === 0) lastDescendantBoundary = index;
+  }
+  if (lastDescendantBoundary <= 0) return undefined;
+  const ancestor = selector.slice(0, lastDescendantBoundary).trim();
+  return ancestor || undefined;
 }
 
 async function normalizedLocatorLabels(locator: Locator) {
@@ -1835,12 +1943,13 @@ function collapseEquivalentCanonicalRejectCandidates(
   });
 }
 
-async function waitForPassiveRedirectSettle(
+export async function waitForPassiveRedirectSettle(
   page: Page,
   timeoutMs: number,
   signal?: AbortSignal,
 ) {
   const boundedTimeoutMs = Math.max(250, Math.min(timeoutMs, 5_000));
+  const stableWindowMs = Math.min(1_500, Math.max(500, boundedTimeoutMs - 250));
   const deadlineAtMs = Date.now() + boundedTimeoutMs;
   let stableUrl = page.url();
   let stableSinceMs = Date.now();
@@ -1853,7 +1962,7 @@ async function waitForPassiveRedirectSettle(
     }
     if (
       /^https:\/\//i.test(currentUrl) &&
-      Date.now() - stableSinceMs >= 500
+      Date.now() - stableSinceMs >= stableWindowMs
     ) return true;
     if (Date.now() >= deadlineAtMs) break;
     await waitForDelay(
@@ -1869,15 +1978,18 @@ async function waitForDeterministicRecipe(
   recipes: PostRefusalActionRecipe[],
   timeoutMs: number,
   signal?: AbortSignal,
+  reportDiagnostic?: ResolverDiagnosticReporter,
 ): Promise<DeterministicRecipeResolution> {
   const deadlineAtMs = Date.now() + timeoutMs;
   let stableRecipeId: string | undefined;
   let stableSinceMs = 0;
+  let sawAmbiguousActionableSet = false;
   do {
     if (signal?.aborted) return { status: "aborted" };
     const documentInteractive = await page.evaluate(() => document.readyState !== "loading")
       .catch(() => false);
     if (!documentInteractive) {
+      reportDiagnostic?.(emptyResolverSnapshot("named_recipe", "document_loading"));
       stableRecipeId = undefined;
       stableSinceMs = 0;
       if (Date.now() >= deadlineAtMs) break;
@@ -1888,28 +2000,88 @@ async function waitForDeterministicRecipe(
       continue;
     }
     const actionable: Array<{ recipe: PostRefusalActionRecipe; control: Locator }> = [];
+    let selectorMatchCount = 0;
+    let visibleCount = 0;
+    let enabledCount = 0;
+    let labelMatchCount = 0;
+    let preconditionUnsatisfied = false;
+    let scopeAmbiguous = false;
+    const matchedCmpIds = new Set<string>();
+    const matchedControlLabels = new Set<string>();
     for (const recipe of recipes) {
       const scopeResolution = exactSelectorScope(page, recipe.controlFrameUrl);
-      if (scopeResolution.status === "ambiguous") return { status: "ambiguous" };
+      if (scopeResolution.status === "ambiguous") {
+        scopeAmbiguous = true;
+        continue;
+      }
       if (scopeResolution.status === "not_found") continue;
-      if (!await preActionRequirementSatisfied(scopeResolution.scope, recipe)) continue;
       const controls = scopeResolution.scope.locator(recipe.controlSelector);
       const count = Math.min(await controls.count().catch(() => 0), 8);
+      selectorMatchCount += count;
+      if (count > 0) {
+        if (recipe.cmpId) matchedCmpIds.add(recipe.cmpId);
+        if (recipe.controlExpectedNormalizedLabel) {
+          matchedControlLabels.add(recipe.controlExpectedNormalizedLabel);
+        }
+      }
+      if (!await preActionRequirementSatisfied(scopeResolution.scope, recipe)) {
+        if (count > 0) preconditionUnsatisfied = true;
+        continue;
+      }
       for (let index = 0; index < count; index += 1) {
         const control = controls.nth(index);
-        if (
-          await control.isVisible().catch(() => false) &&
-          await control.isEnabled().catch(() => false) &&
-          (
-            !recipe.controlExpectedNormalizedLabel ||
-            (await normalizedLocatorLabels(control)).includes(recipe.controlExpectedNormalizedLabel)
-          )
-        ) {
+        const visible = await control.isVisible().catch(() => false);
+        const enabled = await control.isEnabled().catch(() => false);
+        const labelMatches = !recipe.controlExpectedNormalizedLabel ||
+          (await normalizedLocatorLabels(control)).includes(recipe.controlExpectedNormalizedLabel);
+        if (visible) visibleCount += 1;
+        if (enabled) enabledCount += 1;
+        if (labelMatches) labelMatchCount += 1;
+        if (visible && enabled && labelMatches) {
           actionable.push({ recipe, control });
         }
       }
     }
-    if (actionable.length > 1) return { status: "ambiguous" };
+    const diagnosticState: ResolverDiagnosticSnapshot["state"] = scopeAmbiguous
+      ? "scope_ambiguous"
+      : actionable.length > 1
+        ? "multiple_actionable"
+        : actionable.length === 1
+          ? "single_actionable"
+          : selectorMatchCount === 0
+            ? "selector_absent"
+            : preconditionUnsatisfied
+              ? "precondition_unsatisfied"
+              : visibleCount === 0
+                ? "control_hidden"
+                : enabledCount === 0
+                  ? "control_disabled"
+                  : labelMatchCount === 0
+                    ? "label_mismatch"
+                    : "selector_absent";
+    reportDiagnostic?.({
+      source: "named_recipe",
+      state: diagnosticState,
+      selectorMatchCount,
+      visibleCount,
+      enabledCount,
+      labelMatchCount,
+      actionableCount: actionable.length,
+      cmpIds: [...matchedCmpIds].slice(0, 8),
+      controlLabels: [...matchedControlLabels].slice(0, 4),
+    });
+    if (scopeAmbiguous) return { status: "ambiguous" };
+    if (actionable.length > 1) {
+      sawAmbiguousActionableSet = true;
+      stableRecipeId = undefined;
+      stableSinceMs = 0;
+      if (Date.now() >= deadlineAtMs) return { status: "ambiguous" };
+      await waitForDelay(
+        Math.min(25, Math.max(0, deadlineAtMs - Date.now())),
+        signal,
+      ).catch(() => undefined);
+      continue;
+    }
     const match = actionable[0];
     if (match) {
       if (stableRecipeId !== match.recipe.recipeId) {
@@ -1926,7 +2098,7 @@ async function waitForDeterministicRecipe(
     if (Date.now() >= deadlineAtMs) break;
     await waitForDelay(Math.min(25, Math.max(0, deadlineAtMs - Date.now())), signal).catch(() => undefined);
   } while (Date.now() <= deadlineAtMs);
-  return { status: "not_found" };
+  return sawAmbiguousActionableSet ? { status: "ambiguous" } : { status: "not_found" };
 }
 
 async function preActionRequirementSatisfied(
@@ -1947,9 +2119,11 @@ async function waitForDeterministicOrCanonicalRecipe(
   recipes: PostRefusalActionRecipe[],
   timeoutMs: number,
   signal?: AbortSignal,
+  reportDiagnostic?: ResolverDiagnosticReporter,
 ): Promise<DeterministicRecipeResolution> {
   const deadlineAtMs = Date.now() + timeoutMs;
   let diagnosticGeometry: ConsentControlGeometryArtifact | undefined;
+  let sawAmbiguousResolution = false;
   do {
     if (signal?.aborted) return { status: "aborted" };
     const namedBudgetMs = Math.min(250, Math.max(0, deadlineAtMs - Date.now()));
@@ -1958,8 +2132,12 @@ async function waitForDeterministicOrCanonicalRecipe(
       recipes,
       namedBudgetMs,
       signal,
+      reportDiagnostic,
     );
-    if (namedResolution.status !== "not_found") return namedResolution;
+    if (namedResolution.status === "found" || namedResolution.status === "aborted") {
+      return namedResolution;
+    }
+    if (namedResolution.status === "ambiguous") sawAmbiguousResolution = true;
 
     const canonicalBudgetMs = Math.min(300, Math.max(0, deadlineAtMs - Date.now()));
     if (canonicalBudgetMs <= 0) break;
@@ -1968,9 +2146,13 @@ async function waitForDeterministicOrCanonicalRecipe(
       canonicalBudgetMs,
       signal,
       recipes,
+      reportDiagnostic,
     );
     diagnosticGeometry = canonicalResolution.diagnosticGeometry ?? diagnosticGeometry;
-    if (canonicalResolution.status !== "not_found") return canonicalResolution;
+    if (canonicalResolution.status === "found" || canonicalResolution.status === "aborted") {
+      return canonicalResolution;
+    }
+    if (canonicalResolution.status === "ambiguous") sawAmbiguousResolution = true;
   } while (Date.now() < deadlineAtMs);
   // Canonical geometry capture can consume the final slice of the bounded
   // search window. Re-check the named CMP selectors once without waiting so a
@@ -1980,14 +2162,19 @@ async function waitForDeterministicOrCanonicalRecipe(
     recipes,
     0,
     signal,
+    reportDiagnostic,
   );
-  if (finalNamedResolution.status !== "not_found") {
+  if (finalNamedResolution.status === "found" || finalNamedResolution.status === "aborted") {
     return {
       ...finalNamedResolution,
       ...(diagnosticGeometry ? { diagnosticGeometry } : {}),
     };
   }
-  return { status: "not_found", ...(diagnosticGeometry ? { diagnosticGeometry } : {}) };
+  if (finalNamedResolution.status === "ambiguous") sawAmbiguousResolution = true;
+  return {
+    status: sawAmbiguousResolution ? "ambiguous" : "not_found",
+    ...(diagnosticGeometry ? { diagnosticGeometry } : {}),
+  };
 }
 
 async function waitForCanonicalRejectControlRecipe(
@@ -1995,9 +2182,11 @@ async function waitForCanonicalRejectControlRecipe(
   timeoutMs: number,
   signal?: AbortSignal,
   registeredRecipes: PostRefusalActionRecipe[] = [],
+  reportDiagnostic?: ResolverDiagnosticReporter,
 ): Promise<DeterministicRecipeResolution> {
   const deadlineAtMs = Date.now() + timeoutMs;
   let diagnosticGeometry: ConsentControlGeometryArtifact | undefined;
+  let sawAmbiguousCanonicalControl = false;
   do {
     if (signal?.aborted) return { status: "aborted" };
     const geometry = await captureConsentControlGeometry(page, {
@@ -2011,7 +2200,12 @@ async function waitForCanonicalRejectControlRecipe(
           recipe.cmpId?.toLowerCase() === geometry.cmp.name?.toLowerCase()
         )
       : undefined;
-    const candidates = collapseEquivalentCanonicalRejectCandidates(geometry?.candidates.filter((candidate) =>
+    const geometryCmpDefinition = geometry?.cmp.name
+      ? KNOWN_CMP_REGISTRY.find((definition) =>
+          definition.canonicalName.toLowerCase() === geometry.cmp.name?.toLowerCase()
+        )
+      : undefined;
+    const retainedCandidates = collapseEquivalentCanonicalRejectCandidates(geometry?.candidates.filter((candidate) =>
       candidate.actionType === "reject_all" &&
       candidate.decisionStatus === "confirmed_visible" &&
       candidate.layer === "first_layer" &&
@@ -2021,22 +2215,67 @@ async function waitForCanonicalRejectControlRecipe(
       (candidate.consentContextConfirmed || geometryRegisteredCmpRecipe !== undefined) &&
       Boolean(candidate.selectorHint)
     ) ?? []);
-    if (candidates.length > 1) return {
-      status: "ambiguous",
-      ...(diagnosticGeometry ? { diagnosticGeometry } : {}),
-    };
+    const containerBoundCandidates = retainedCandidates.filter((candidate) =>
+      Boolean(candidate.containerSelectorHint)
+    );
+    // Prefer an explicitly retained first-layer consent container when the
+    // only competing candidates are unscoped page controls. Multiple scoped
+    // Reject candidates remain ambiguous and fail closed.
+    const candidates = containerBoundCandidates.length > 0
+      ? containerBoundCandidates
+      : retainedCandidates;
+    reportDiagnostic?.({
+      source: "canonical_geometry",
+      state: !geometry
+        ? "geometry_unavailable"
+        : candidates.length > 1
+          ? "multiple_actionable"
+          : candidates.length === 1
+            ? "single_actionable"
+            : "canonical_reject_absent",
+      selectorMatchCount: Math.min(geometry?.candidates.length ?? 0, 64),
+      visibleCount: Math.min(geometry?.candidates.filter((candidate) =>
+        candidate.decisionStatus === "confirmed_visible"
+      ).length ?? 0, 64),
+      enabledCount: Math.min(geometry?.candidates.filter((candidate) => candidate.enabled).length ?? 0, 64),
+      labelMatchCount: Math.min(retainedCandidates.length, 64),
+      actionableCount: Math.min(candidates.length, 64),
+      cmpIds: geometry?.cmp.name ? [geometry.cmp.name] : [],
+      controlLabels: [...new Set(candidates.map((candidate) => candidate.normalizedLabel))].slice(0, 4),
+    });
+    if (candidates.length > 1) {
+      sawAmbiguousCanonicalControl = true;
+      if (Date.now() >= deadlineAtMs) break;
+      await waitForDelay(Math.min(50, Math.max(0, deadlineAtMs - Date.now())), signal).catch(() => undefined);
+      continue;
+    }
     const candidate = candidates[0];
     if (candidate) {
       const controlFrameUrl = candidate.frameContext.frameKind === "child_frame"
         ? candidate.frameContext.frameUrl
         : undefined;
       const scopeResolution = exactSelectorScope(page, controlFrameUrl);
-      if (scopeResolution.status === "ambiguous") return {
-        status: "ambiguous",
-        ...(diagnosticGeometry ? { diagnosticGeometry } : {}),
-      };
+      if (scopeResolution.status === "ambiguous") {
+        sawAmbiguousCanonicalControl = true;
+        if (Date.now() >= deadlineAtMs) break;
+        await waitForDelay(Math.min(50, Math.max(0, deadlineAtMs - Date.now())), signal).catch(() => undefined);
+        continue;
+      }
       if (scopeResolution.status === "not_found") continue;
-      const controls = scopeResolution.scope.locator(candidate.selectorHint);
+      const containerSelector = candidate.containerSelectorHint;
+      const containers = containerSelector
+        ? scopeResolution.scope.locator(containerSelector)
+        : undefined;
+      const containerCount = containers
+        ? await containers.count().catch(() => 0)
+        : 0;
+      const scopedControlSelector = containerSelector && containerCount === 1
+        ? candidate.selectorHint === containerSelector ||
+          candidate.selectorHint.startsWith(`${containerSelector} `)
+          ? candidate.selectorHint
+          : `${containerSelector} ${candidate.selectorHint}`
+        : candidate.selectorHint;
+      const controls = scopeResolution.scope.locator(scopedControlSelector);
       const controlCount = await controls.count().catch(() => 0);
       if (controlCount > 8) return {
         status: "ambiguous",
@@ -2051,28 +2290,39 @@ async function waitForCanonicalRejectControlRecipe(
           (await normalizedLocatorLabels(control)).includes(candidate.normalizedLabel)
         ) actionableControlCount += 1;
       }
-      if (actionableControlCount > 1) return {
-        status: "ambiguous",
-        ...(diagnosticGeometry ? { diagnosticGeometry } : {}),
-      };
+      if (actionableControlCount > 1) {
+        sawAmbiguousCanonicalControl = true;
+        if (Date.now() >= deadlineAtMs) break;
+        await waitForDelay(Math.min(50, Math.max(0, deadlineAtMs - Date.now())), signal).catch(() => undefined);
+        continue;
+      }
       if (actionableControlCount !== 1) continue;
-      const containerSelector = candidate.containerSelectorHint;
-      const containers = containerSelector
-        ? scopeResolution.scope.locator(containerSelector)
-        : undefined;
-      const containerCount = containers
-        ? await containers.count().catch(() => 0)
-        : 0;
       let visibleContainerCount = 0;
       for (let index = 0; index < Math.min(containerCount, 8); index += 1) {
         if (await containers!.nth(index).isVisible().catch(() => false)) visibleContainerCount += 1;
       }
-      const transitionSurfaceSelector = containerSelector &&
+      let candidateTransitionSurfaceSelector = candidate.selectorHint;
+      if (
+        containerSelector &&
         containerCount <= 8 &&
-        visibleContainerCount === 1
-        ? containerSelector
-        : candidate.selectorHint;
-      const bannerFrameUrl = controlFrameUrl;
+        (visibleContainerCount === 1 || containerCount === 1)
+      ) {
+        candidateTransitionSurfaceSelector = containerSelector;
+      } else if (!containerSelector) {
+        const scopedAncestor = scopedAncestorSelector(candidate.selectorHint);
+        if (
+          scopedAncestor &&
+          await scopeResolution.scope.locator(scopedAncestor).count().catch(() => 0) === 1
+        ) {
+          candidateTransitionSurfaceSelector = scopedAncestor;
+        }
+      }
+      const useMainFrameCmpSurface = !containerSelector &&
+        Boolean(geometryCmpDefinition?.domSelectors?.length);
+      const transitionSurfaceSelector = useMainFrameCmpSurface
+        ? geometryCmpDefinition!.domSelectors!.join(", ")
+        : candidateTransitionSurfaceSelector;
+      const bannerFrameUrl = useMainFrameCmpSurface ? undefined : controlFrameUrl;
       const registeredCmpRecipe = geometryRegisteredCmpRecipe;
       const recipe: PostRefusalActionRecipe = {
         artifactVersion: "certscore.post_refusal_action_recipe.v1",
@@ -2090,29 +2340,34 @@ async function waitForCanonicalRejectControlRecipe(
             : {}),
         resolverMethod: registeredCmpRecipe?.resolverMethod ??
           "canonical_consent_control_registry_recipe",
-        controlSelector: candidate.selectorHint,
+        controlSelector: scopedControlSelector,
         controlExpectedNormalizedLabel: candidate.normalizedLabel,
         ...(controlFrameUrl ? { controlFrameUrl } : {}),
         bannerSelector: transitionSurfaceSelector,
         ...(bannerFrameUrl ? { bannerFrameUrl } : {}),
         confirmation: registeredCmpRecipe?.confirmation ?? {
             kind: "canonical_reject_transition",
-            controlSelector: candidate.selectorHint,
+            controlSelector: scopedControlSelector,
             ...(controlFrameUrl ? { controlFrameUrl } : {}),
             bannerSelector: transitionSurfaceSelector,
             ...(bannerFrameUrl ? { bannerFrameUrl } : {}),
           },
       };
-      const resolved = await waitForDeterministicRecipe(page, [recipe], 100, signal);
-      if (resolved.status !== "not_found") return {
-        ...resolved,
-        ...(diagnosticGeometry ? { diagnosticGeometry } : {}),
-      };
+      const resolved = await waitForDeterministicRecipe(page, [recipe], 100, signal, reportDiagnostic);
+      if (resolved.status === "ambiguous") {
+        sawAmbiguousCanonicalControl = true;
+      } else if (resolved.status !== "not_found") return {
+          ...resolved,
+          ...(diagnosticGeometry ? { diagnosticGeometry } : {}),
+        };
     }
     if (Date.now() >= deadlineAtMs) break;
     await waitForDelay(Math.min(50, Math.max(0, deadlineAtMs - Date.now())), signal).catch(() => undefined);
   } while (Date.now() <= deadlineAtMs);
-  return { status: "not_found", ...(diagnosticGeometry ? { diagnosticGeometry } : {}) };
+  return {
+    status: sawAmbiguousCanonicalControl ? "ambiguous" : "not_found",
+    ...(diagnosticGeometry ? { diagnosticGeometry } : {}),
+  };
 }
 
 function validatedActionRecipes(input: PostRefusalObserverInput): PostRefusalActionRecipe[] {
@@ -2276,7 +2531,7 @@ async function waitForRefusalConfirmation(
       if (signal?.aborted) return undefined;
       const [controlVisible, bannerVisible, bannerStateHash] = await Promise.all([
         locatorIsVisible(page, confirmation.controlSelector, confirmation.controlFrameUrl),
-        locatorIsVisible(page, confirmation.bannerSelector, confirmation.bannerFrameUrl),
+        canonicalTransitionSurfacePresent(page, confirmation),
         visibleLocatorStateHash(page, confirmation.bannerSelector, confirmation.bannerFrameUrl),
       ]);
       const refusalState = await findCanonicalRefusalStateWrite(
@@ -2284,8 +2539,12 @@ async function waitForRefusalConfirmation(
         page,
         baseline.lastSequence,
         actionDispatchedAtEpochMs,
+        baseline.canonicalStorageStateHashes,
       );
-      if (!controlVisible && page.url() === baseline.pageUrl) {
+      if (
+        !controlVisible &&
+        normalizeTargetUrl(page.url()) === normalizeTargetUrl(baseline.pageUrl)
+      ) {
         if (refusalState) {
           return {
             stateHash: refusalState.stateHash,
@@ -2411,15 +2670,15 @@ async function waitForRefusalConfirmation(
       confirmation.kind === "tcf_purposes_denied_or_cmp_cookie_changed" &&
       baseline.kind === "tcf_purposes_denied_or_cmp_cookie_changed"
     ) {
-      const currentCookieStateHash = await cmpCookieStateHash(context, confirmation.cookieName);
+      const currentCookieState = await cmpCookieState(context, confirmation.cookieName);
       if (
-        currentCookieStateHash !== undefined &&
-        currentCookieStateHash !== baseline.cookieStateHash
+        currentCookieState !== undefined &&
+        currentCookieState.stateHash !== baseline.cookieStateHash
       ) {
         return {
-          stateHash: currentCookieStateHash,
+          stateHash: currentCookieState.stateHash,
           witnessType: "cmp_cookie_state",
-          key: confirmation.cookieName,
+          key: currentCookieState.cookieNames.join(",").slice(0, 180),
           expectedState: "canonical_cmp_consent_state_changed_after_reject",
         };
       }
@@ -2499,14 +2758,16 @@ async function captureRefusalConfirmationBaseline(
   confirmation: PostRefusalActionRecipe["confirmation"],
 ): Promise<RefusalConfirmationBaseline> {
   if (confirmation.kind === "canonical_reject_transition") {
-    const [controlVisible, bannerVisible, bannerStateHash, writes] = await Promise.all([
+    const [controlVisible, bannerVisible, bannerStateHash, writes, canonicalStorageStateHashes] = await Promise.all([
       locatorIsVisible(page, confirmation.controlSelector, confirmation.controlFrameUrl),
-      locatorIsVisible(page, confirmation.bannerSelector, confirmation.bannerFrameUrl),
+      canonicalTransitionSurfacePresent(page, confirmation),
       visibleLocatorStateHash(page, confirmation.bannerSelector, confirmation.bannerFrameUrl),
       readStorageWrites(page),
+      canonicalConsentStorageStateHashes(page),
     ]);
     return {
       kind: "canonical_reject_transition",
+      canonicalStorageStateHashes,
       controlVisible,
       bannerVisible,
       ...(bannerStateHash ? { bannerStateHash } : {}),
@@ -2533,7 +2794,7 @@ async function captureRefusalConfirmationBaseline(
   if (confirmation.kind === "tcf_purposes_denied_or_cmp_cookie_changed") {
     const [snapshot, cookieStateHash] = await Promise.all([
       readTcfData(page).catch(() => undefined),
-      cmpCookieStateHash(context, confirmation.cookieName),
+      cmpCookieState(context, confirmation.cookieName).then((state) => state?.stateHash),
     ]);
     return {
       kind: "tcf_purposes_denied_or_cmp_cookie_changed",
@@ -2588,6 +2849,36 @@ async function locatorIsVisible(
   const count = Math.min(await locator.count().catch(() => 0), 2);
   for (let index = 0; index < count; index += 1) {
     if (await locator.nth(index).isVisible().catch(() => false)) return true;
+  }
+  return false;
+}
+
+async function canonicalTransitionSurfacePresent(
+  page: Page,
+  confirmation: Extract<
+    PostRefusalActionRecipe["confirmation"],
+    { kind: "canonical_reject_transition" }
+  >,
+): Promise<boolean> {
+  if (await locatorIsVisible(page, confirmation.bannerSelector, confirmation.bannerFrameUrl)) {
+    return true;
+  }
+  if (confirmation.bannerFrameUrl !== confirmation.controlFrameUrl) return false;
+  const scopeResolution = exactSelectorScope(page, confirmation.controlFrameUrl);
+  if (scopeResolution.status !== "found") return false;
+  const controls = scopeResolution.scope.locator(confirmation.controlSelector);
+  const count = Math.min(await controls.count().catch(() => 0), 2);
+  for (let index = 0; index < count; index += 1) {
+    const control = controls.nth(index);
+    if (!await control.isVisible().catch(() => false)) continue;
+    const contained = await control.evaluate((element, bannerSelector) => {
+      try {
+        return element.matches(bannerSelector) || element.closest(bannerSelector) !== null;
+      } catch {
+        return false;
+      }
+    }, confirmation.bannerSelector).catch(() => false);
+    if (contained) return true;
   }
   return false;
 }
@@ -2656,12 +2947,77 @@ const CANONICAL_REFUSAL_STATE_PATTERN =
   /(?:^|[^a-z])(?:denied|rejected|reject(?:ed)?[_ -]?all|essential[_ -]?only|necessary[_ -]?only|opted[_ -]?out)(?:$|[^a-z])/i;
 const CANONICAL_DISABLED_PURPOSE_PATTERN =
   /["']?(?:analytics|marketing|advertising|tracking)["']?\s*[:=]\s*(?:false|0|["']denied["'])/i;
+const CANONICAL_OPTIONAL_PURPOSE_KEY_PATTERN =
+  /^(?:analytics|marketing|advertising|tracking|targeting|personalization|preferences|functionality|performance|social)$/i;
+
+function canonicalConsentStorageIdentity(storageType: "local_storage" | "session_storage", name: string) {
+  return `${storageType}\n${name}`;
+}
+
+function canonicalJsonRefusalState(value: string) {
+  if (value.length > 2_048) return false;
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(value);
+  } catch {
+    return false;
+  }
+  let denied = 0;
+  let granted = 0;
+  let visited = 0;
+  const visit = (node: unknown, depth: number) => {
+    if (depth > 5 || visited >= 96 || !node || typeof node !== "object") return;
+    visited += 1;
+    for (const [key, nested] of Object.entries(node)) {
+      if (CANONICAL_OPTIONAL_PURPOSE_KEY_PATTERN.test(key)) {
+        const normalized = typeof nested === "string" ? nested.trim().toLowerCase() : nested;
+        if (normalized === false || normalized === 0 || normalized === "false" || normalized === "denied") denied += 1;
+        else if (normalized === true || normalized === 1 || normalized === "true" || normalized === "granted") granted += 1;
+      }
+      visit(nested, depth + 1);
+    }
+  };
+  visit(parsed, 0);
+  return denied > 0 && granted === 0;
+}
+
+async function canonicalConsentStorageStates(page: Page) {
+  return await page.evaluate((keyPatternSource) => {
+    const keyPattern = new RegExp(keyPatternSource, "i");
+    const retained: Array<{ storageType: "local_storage" | "session_storage"; name: string; value: string }> = [];
+    for (const [storageType, storage] of [
+      ["local_storage", window.localStorage],
+      ["session_storage", window.sessionStorage],
+    ] as const) {
+      for (let index = 0; index < Math.min(storage.length, 64); index += 1) {
+        const name = storage.key(index);
+        if (!name || name.length > 160 || !keyPattern.test(name)) continue;
+        const value = storage.getItem(name);
+        if (value) retained.push({ storageType, name, value: value.slice(0, 2_048) });
+        if (retained.length >= 32) return retained;
+      }
+    }
+    return retained;
+  }, CANONICAL_CONSENT_STATE_KEY_PATTERN.source).catch(() => [] as Array<{
+    storageType: "local_storage" | "session_storage";
+    name: string;
+    value: string;
+  }>);
+}
+
+async function canonicalConsentStorageStateHashes(page: Page) {
+  return Object.fromEntries((await canonicalConsentStorageStates(page)).map((state) => [
+    canonicalConsentStorageIdentity(state.storageType, state.name),
+    hashValue(state.value),
+  ]));
+}
 
 async function findCanonicalRefusalStateWrite(
   context: BrowserContext,
   page: Page,
   baselineSequence: number,
   actionDispatchedAtEpochMs: number,
+  baselineStorageStateHashes: Record<string, string>,
 ): Promise<{ key: string; stateHash: string } | undefined> {
   const writes = (await readStorageWrites(page)).filter((write) =>
     write.sequence > baselineSequence &&
@@ -2695,12 +3051,27 @@ async function findCanonicalRefusalStateWrite(
     if (
       !explicitBooleanDenial &&
       !CANONICAL_REFUSAL_STATE_PATTERN.test(normalized) &&
-      !CANONICAL_DISABLED_PURPOSE_PATTERN.test(normalized)
+      !CANONICAL_DISABLED_PURPOSE_PATTERN.test(normalized) &&
+      !canonicalJsonRefusalState(decodedValue)
     ) continue;
     return {
       key: write.name.slice(0, 160),
       stateHash: hashValue(value),
     };
+  }
+  for (const state of await canonicalConsentStorageStates(page)) {
+    const identity = canonicalConsentStorageIdentity(state.storageType, state.name);
+    const stateHash = hashValue(state.value);
+    if (
+      baselineStorageStateHashes[identity] !== stateHash &&
+      (
+        CANONICAL_REFUSAL_STATE_PATTERN.test(state.value) ||
+        CANONICAL_DISABLED_PURPOSE_PATTERN.test(state.value) ||
+        canonicalJsonRefusalState(state.value)
+      )
+    ) {
+      return { key: state.name.slice(0, 160), stateHash };
+    }
   }
   return undefined;
 }
@@ -2725,23 +3096,37 @@ async function cmpStorageStateHash(
   return value === undefined ? undefined : hashValue(value);
 }
 
-async function cmpCookieStateHash(
+async function cmpCookieState(
   context: BrowserContext,
   cookieName: string,
-): Promise<string | undefined> {
+): Promise<{ cookieNames: string[]; stateHash: string } | undefined> {
   const boundedName = cookieName.trim().slice(0, 180);
   if (!boundedName) return undefined;
+  const wildcardPatterns = KNOWN_CMP_REGISTRY
+    .filter((definition) => definition.cookieNames?.some((knownName) => knownName === boundedName))
+    .flatMap((definition) => definition.cookieNames ?? [])
+    .filter((knownName) => knownName.endsWith("*") && knownName.startsWith(boundedName));
+  const matchesCanonicalName = (actualName: string) =>
+    actualName === boundedName || wildcardPatterns.some((pattern) =>
+      actualName.startsWith(pattern.slice(0, -1))
+    );
   const states = (await context.cookies())
-    .filter((cookie) => cookie.name === boundedName)
+    .filter((cookie) => matchesCanonicalName(cookie.name))
     .map((cookie) => ({
       domain: cookie.domain.toLowerCase().replace(/^\./, ""),
+      name: cookie.name,
       path: cookie.path,
       valueHash: hashValue(cookie.value),
     }))
     .sort((left, right) =>
-      `${left.domain}:${left.path}`.localeCompare(`${right.domain}:${right.path}`)
+      `${left.name}:${left.domain}:${left.path}`.localeCompare(`${right.name}:${right.domain}:${right.path}`)
     );
-  return states.length > 0 ? hashValue(JSON.stringify(states)) : undefined;
+  return states.length > 0
+    ? {
+        cookieNames: [...new Set(states.map((state) => state.name))].sort(),
+        stateHash: hashValue(JSON.stringify(states)),
+      }
+    : undefined;
 }
 
 async function readTcfData(page: Page): Promise<TcfDataSnapshot | undefined> {

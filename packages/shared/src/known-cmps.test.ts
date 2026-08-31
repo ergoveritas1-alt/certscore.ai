@@ -19,6 +19,7 @@ test("registry includes first-wave CMP vendors", () => {
     "Consentmanager",
     "Cookiebot",
     "CookieYes",
+    "Orejime",
     "DSGVO All in One / tarteaucitron",
     "BST DSGVO Cookie notice plugin, non-TCF",
     "Sourcepoint",
@@ -102,6 +103,18 @@ test("detects CookieYes by domains and consent cookie", () => {
 test("does not infer CookieYes from an unrelated generic cky-prefixed class", () => {
   assert.equal(getKnownCmpVendorName({ domSelectors: [".cky-layout-shell"] }), null);
   assert.equal(getKnownCmpVendorName({ urls: ["https://example.test/assets/cky-layout.js"] }), null);
+});
+
+test("detects Orejime only from canonical runtime markers", () => {
+  assert.equal(getKnownCmpVendorName({ cookieNames: ["orejime"] }), "Orejime");
+  assert.equal(getKnownCmpVendorName({ domSelectors: ["div.orejime-Notice"] }), "Orejime");
+  assert.equal(getKnownCmpVendorName({ jsGlobals: ["orejimeConfig"] }), "Orejime");
+  assert.equal(
+    getKnownCmpVendorName({ urls: ["https://example.test/eprivacy/orejime/configuration.js"] }),
+    "Orejime",
+  );
+  assert.equal(getKnownCmpVendorName({ domSelectors: ["#cookie-notice"] }), null);
+  assert.equal(getKnownCmpVendorName({ domSelectors: ["div.unrelated-consent-shell"] }), null);
 });
 
 test("detects DSGVO All in One and tarteaucitron from exact runtime markers", () => {
@@ -229,6 +242,17 @@ test("classifies CMP infrastructure while preserving attribution signals", () =>
   assert.equal(detection?.evidenceTreatment, "cmp_infrastructure");
   assert.ok(detection?.matchedSignals.some((signal) => signal.source === "cookie" && signal.value === "OptanonConsent"));
   assert.equal(isKnownCmpInfrastructureUrl("https://cdn.cookielaw.org/scripttemplates/otSDKStub.js"), true);
+});
+
+test("detects OneTrust tenant-suffixed canonical consent cookies", () => {
+  const detection = detectKnownCmps({
+    cookieNames: ["OptanonConsent_mUOxXq", "OptanonAlertBoxClosed_mUOxXq"],
+  }).find((candidate) => candidate.canonicalName === "OneTrust");
+
+  assert.equal(detection?.canonicalName, "OneTrust");
+  assert.ok(detection?.matchedSignals.some((signal) =>
+    signal.source === "cookie" && signal.value === "OptanonConsent_mUOxXq"
+  ));
 });
 
 test("does not treat generic TCF protocol globals as vendor identity", () => {

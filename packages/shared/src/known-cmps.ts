@@ -146,7 +146,12 @@ export const KNOWN_CMP_REGISTRY: KnownCmpDefinition[] = [
   {
     aliases: ["CookiePro", "Optanon", "OptanonConsent", "OptanonAlertBoxClosed"],
     canonicalName: "OneTrust",
-    cookieNames: ["OptanonConsent", "OptanonAlertBoxClosed"],
+    cookieNames: [
+      "OptanonConsent",
+      "OptanonConsent_*",
+      "OptanonAlertBoxClosed",
+      "OptanonAlertBoxClosed_*",
+    ],
     domains: ["onetrust.com", "onetrust.io", "cookielaw.org", "cdn.cookielaw.org", "cookiepro.com", "cookie-cdn.cookiepro.com", "geolocation.onetrust.com", "optanon.blob.core.windows.net", "cookies-data.onetrust.io"],
     domSelectors: ["#onetrust-banner-sdk", "#onetrust-consent-sdk", "#ot-sdk-btn", ".ot-sdk-container"],
     evidenceTreatment: "cmp_infrastructure",
@@ -250,6 +255,20 @@ export const KNOWN_CMP_REGISTRY: KnownCmpDefinition[] = [
       /cookielawinfo/i,
       /cookieyes(?:-banner|\.min)?\.js/i,
     ]
+  },
+  {
+    aliases: ["Orejime", "Orejime consent manager"],
+    canonicalName: "Orejime",
+    cookieNames: ["orejime"],
+    domains: [],
+    domSelectors: ["#orejime", ".orejime-Notice", ".orejime-Env"],
+    evidenceTreatment: "cmp_infrastructure",
+    globalNames: ["orejime", "orejimeConfig", "loadOrejime"],
+    reopenControlHints: ["cookie settings", "privacy settings", "gestion des cookies"],
+    role: "consent management platform",
+    standards: [],
+    storageKeys: ["orejime"],
+    urlPatterns: [/(?:^|\/)orejime(?:\/|[-_.][^/?#]*)/i],
   },
   {
     aliases: ["DSGVO All in One for WP", "DSGVO AIO", "dsgvoaio", "tarteaucitron"],
@@ -504,7 +523,26 @@ function textMatches(value: string, pattern: RegExp) {
   return pattern.test(value);
 }
 
-const GENERIC_SELECTOR_TOKENS = new Set(["aria", "class", "data", "dialog", "iframe", "role", "testid"]);
+const GENERIC_SELECTOR_TOKENS = new Set([
+  "a",
+  "aria",
+  "aside",
+  "button",
+  "class",
+  "data",
+  "dialog",
+  "div",
+  "footer",
+  "form",
+  "header",
+  "iframe",
+  "input",
+  "main",
+  "role",
+  "section",
+  "span",
+  "testid",
+]);
 const GENERIC_CMP_PROTOCOL_GLOBALS = new Set(["__tcfapi", "__gpp", "__uspapi", "__cmp"]);
 
 function selectorTokens(value: string) {

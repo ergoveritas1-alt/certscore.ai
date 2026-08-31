@@ -15,6 +15,7 @@ import {
 const DEFAULT_SELECTION = path.resolve(
   "artifacts/scan-quality-calibration/2026-08-30-reject-path-50/RejectPath50Selection.json",
 );
+const REJECT_LANE_PASSIVE_STAGGER_MS = 500;
 
 type SelectedTarget = {
   exactTargetUrl: string;
@@ -197,9 +198,12 @@ async function main() {
     ? selection.selected.filter((target) => args.domains.has(target.normalizedDomain.toLowerCase()))
     : selection.selected.slice(args.offset, args.offset + args.limit);
   if (filtered.length === 0) throw new Error("No selected targets matched the requested local run.");
-  if (args.domains.size > 0 && filtered.length !== args.domains.size) {
+  if (args.domains.size > 0) {
     const found = new Set(filtered.map((target) => target.normalizedDomain.toLowerCase()));
-    throw new Error(`Selection is missing requested domains: ${[...args.domains].filter((domain) => !found.has(domain)).join(", ")}`);
+    const missing = [...args.domains].filter((domain) => !found.has(domain));
+    if (missing.length > 0) {
+      throw new Error(`Selection is missing requested domains: ${missing.join(", ")}`);
+    }
   }
 
   const runDir = path.join(args.outDir, args.runKey);
@@ -237,6 +241,9 @@ async function main() {
         const passiveCheck = args.withPassiveCheck
           ? capturePassiveRejectState(browser, target.exactTargetUrl, args.passiveWaitMs, targetDir)
           : Promise.resolve(undefined);
+        if (args.withPassiveCheck) {
+          await new Promise<void>((resolve) => setTimeout(resolve, REJECT_LANE_PASSIVE_STAGGER_MS));
+        }
         const packet = await runPostRefusalObserver({
           actionSearchTimeoutMs: args.actionSearchTimeoutMs,
           allowCanonicalRejectDiscovery: true,

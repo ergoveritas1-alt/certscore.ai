@@ -3,11 +3,12 @@
 ## Execution snapshot — August 30, 2026
 
 - Priority 0 is complete: the canonical identity, publisher, version, links, three-tool contract, structured metadata, social card, discovery manifests, and tracked CTAs are verified and live.
+- GitHub MCP Registry publication is complete at `https://github.com/mcp/ai.certscore/mcp-light`. The GitHub-rendered package README now leads with the no-auth Light identity, exact three-tool workflow, tracked landing-page CTA, and copy-ready owned-canary prompt.
 - The privacy-separated growth funnel is deployed. It measures MCP initialization, tool discovery, first tool, scan request, completed-bundle retrieval, and seven-day/30-day repeat use without retaining prompts, target URLs, raw IPs, tokens, or scan evidence.
 - `/mcp/light`, `/developers/mcp`, `/releases/mcp-light`, and the homepage are discoverable in current web search results. Live canonical, index/follow, social metadata, sitemap, robots, `llms.txt`, and production MCP checks pass.
 - The Official MCP Registry latest record is active at `0.2.16`. Its API also retains older immutable versions, including the stale `0.2.12` 20-scan description; downstream indexes must select the registry record marked `isLatest: true`.
 - This execution batch adds the technical article at `/guides/mcp-website-privacy-scanner` plus contextual links from the cookie-consent and privacy-policy solution pages.
-- Remaining account actions: Claude/OpenAI/Cline/Kilo submission buttons, brand-channel publication, search-console URL inspection, and any free third-party maintainer recrawl requests. Cursor remains paused.
+- Remaining account actions: brand-channel publication of the GitHub launch and demo, Claude/OpenAI/Cline/Kilo submission buttons, search-console URL inspection, and any free third-party maintainer recrawl requests. Cursor remains paused.
 
 ## Outcome and measurement boundary
 

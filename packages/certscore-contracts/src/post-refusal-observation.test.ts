@@ -114,6 +114,22 @@ test("interaction diagnostics are typed and retain no raw browser error text", (
   const parsed = postRefusalEvidencePacketSchema.parse({
     ...basePacket(),
     interactionDiagnostics: {
+      resolver: {
+        snapshots: [{
+          attempt: 1,
+          elapsedMs: 25,
+          source: "named_recipe",
+          state: "control_hidden",
+          selectorMatchCount: 1,
+          visibleCount: 0,
+          enabledCount: 1,
+          labelMatchCount: 1,
+          actionableCount: 0,
+          cmpIds: ["OneTrust"],
+          controlLabels: ["reject all"],
+        }],
+        truncated: false,
+      },
       navigation: {
         outcome: "recovered_after_error",
         failureClass: "navigation_replaced",
@@ -131,6 +147,38 @@ test("interaction diagnostics are typed and retain no raw browser error text", (
   });
 
   assert.equal(parsed.interactionDiagnostics?.navigation.failureClass, "navigation_replaced");
+  assert.equal(parsed.interactionDiagnostics?.resolver?.snapshots[0]?.state, "control_hidden");
+  assert.equal(postRefusalEvidencePacketSchema.safeParse({
+    ...basePacket(),
+    interactionDiagnostics: {
+      navigation: {
+        outcome: "failed",
+        documentCommitted: false,
+        finalUrlAuthorized: false,
+      },
+      click: {
+        outcome: "not_attempted",
+        reResolvedBeforeDispatch: false,
+        confirmationCheckedAfterError: false,
+      },
+      resolver: {
+        snapshots: Array.from({ length: 13 }, (_, index) => ({
+          attempt: index + 1,
+          elapsedMs: index,
+          source: "named_recipe",
+          state: "selector_absent",
+          selectorMatchCount: 0,
+          visibleCount: 0,
+          enabledCount: 0,
+          labelMatchCount: 0,
+          actionableCount: 0,
+          cmpIds: [],
+          controlLabels: [],
+        })),
+        truncated: true,
+      },
+    },
+  }).success, false);
   assert.equal(postRefusalEvidencePacketSchema.safeParse({
     ...basePacket(),
     interactionDiagnostics: {

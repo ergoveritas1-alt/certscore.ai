@@ -250,6 +250,34 @@ export const postRefusalObservationSchema = z.object({
 });
 
 export const postRefusalInteractionDiagnosticsSchema = z.object({
+  resolver: z.object({
+    snapshots: z.array(z.object({
+      attempt: z.number().int().positive().max(10_000),
+      elapsedMs: z.number().int().nonnegative().max(30_000),
+      source: z.enum(["named_recipe", "canonical_geometry"]),
+      state: z.enum([
+        "document_loading",
+        "scope_ambiguous",
+        "selector_absent",
+        "precondition_unsatisfied",
+        "control_hidden",
+        "control_disabled",
+        "label_mismatch",
+        "single_actionable",
+        "multiple_actionable",
+        "geometry_unavailable",
+        "canonical_reject_absent",
+      ]),
+      selectorMatchCount: z.number().int().nonnegative().max(64),
+      visibleCount: z.number().int().nonnegative().max(64),
+      enabledCount: z.number().int().nonnegative().max(64),
+      labelMatchCount: z.number().int().nonnegative().max(64),
+      actionableCount: z.number().int().nonnegative().max(64),
+      cmpIds: z.array(z.string().min(1).max(120)).max(8).default([]),
+      controlLabels: z.array(z.string().min(1).max(120)).max(4).default([]),
+    })).max(12),
+    truncated: z.boolean(),
+  }).optional(),
   navigation: z.object({
     outcome: z.enum(["completed", "recovered_after_error", "failed"]),
     failureClass: z.enum([
@@ -854,6 +882,8 @@ const postRefusalResolverConfigSchema = z.discriminatedUnion("kind", [
       "canonical-consent-control-reject-v9",
       "canonical-consent-control-reject-v15",
       "canonical-consent-control-reject-v16",
+      "canonical-consent-control-reject-v17",
+      "canonical-consent-control-reject-v18",
     ]),
   }),
   z.object({

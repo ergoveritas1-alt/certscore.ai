@@ -30,17 +30,26 @@ async function main() {
 
   if (contacts.length === 0) throw new Error("Cohort summary contains no attempted calibration contacts");
 
-  const contactJson = JSON.stringify(contacts.map((contact) => ({
-    contact_at: contact.contactAt,
-    no_go: contact.noGo,
-    no_go_reason_codes: contact.noGoReasonCodes,
-    normalized_domain: contact.normalizedDomain,
-    scan_status: contact.scanStatus,
-  })));
+  const occurrencesByDomain = new Map<string, number>();
+  const contactJson = JSON.stringify(contacts.map((contact) => {
+    const occurrence = (occurrencesByDomain.get(contact.normalizedDomain) ?? 0) + 1;
+    occurrencesByDomain.set(contact.normalizedDomain, occurrence);
+    return {
+      calibration_run_key: occurrence === 1
+        ? args.runKey
+        : `${args.runKey}.${occurrence}`,
+      contact_at: contact.contactAt,
+      no_go: contact.noGo,
+      no_go_reason_codes: contact.noGoReasonCodes,
+      normalized_domain: contact.normalizedDomain,
+      scan_status: contact.scanStatus,
+    };
+  }));
   const persistSql = `with input as (
        select *
        from jsonb_to_recordset(${args.ecsOneoff ? `${sqlLiteral(contactJson)}::jsonb` : "$2::jsonb"}) as row(
          normalized_domain text,
+         calibration_run_key text,
          contact_at timestamptz,
          scan_status text,
          no_go boolean,
@@ -56,7 +65,7 @@ async function main() {
          no_go,
          no_go_reason_codes
        )
-       select ${args.ecsOneoff ? sqlLiteral(args.runKey) : "$1"}, normalized_domain, contact_at, 'scan_quality_calibration', scan_status, no_go, no_go_reason_codes
+       select calibration_run_key, normalized_domain, contact_at, 'scan_quality_calibration', scan_status, no_go, no_go_reason_codes
        from input
        on conflict (calibration_run_key, normalized_domain) where calibration_run_key is not null
        do update set

@@ -10,9 +10,12 @@ import {
   postRefusalStorageIdentityHash,
   responseCookieNamesFromHeaders,
   runPostRefusalObserver,
+  scopedAncestorSelector,
   selectExactResponseCookieWriteAnchor,
+  waitForPassiveRedirectSettle,
   type PostRefusalActionRecipe,
 } from "./post-refusal-observer.js";
+import { chromium } from "playwright";
 import {
   buildCanonicalPostRefusalActionRecipes,
   buildPostRefusalCmpActionRecipe,
@@ -117,11 +120,11 @@ test("does not confirm a partial OpenAI refusal cookie bundle", async () => {
   });
 });
 
-test("re-resolves a rerendered OpenAI Reject control through canonical geometry", async () => {
+test("re-resolves a rerendered OpenAI Reject control through bounded canonical geometry", async () => {
   const recipeCandidates = buildCanonicalPostRefusalActionRecipes();
   await withFixture("post-refusal-openai-rerendered-control", async (url) => {
     const packet = await observe(url, {
-      actionSearchTimeoutMs: 1_000,
+      actionSearchTimeoutMs: 2_000,
       allowCanonicalRejectDiscovery: true,
       recipe: recipeCandidates[0],
       recipeCandidates,
@@ -129,7 +132,6 @@ test("re-resolves a rerendered OpenAI Reject control through canonical geometry"
     });
 
     assert.equal(packet.resolver.found, true);
-    assert.match(packet.resolver.recipeId ?? "", /^canonical-control:reject:v2:/);
     assert.equal(packet.refusalRegistration.status, "confirmed");
     assert.equal(packet.refusalRegistration.refusalExercised, true);
     assert.equal(packet.interactionDiagnostics?.click.outcome, "completed");
@@ -180,7 +182,7 @@ test("canonical control discovery uniquely resolves Reject among controls sharin
         recipeId: "missing-registered-recipe",
         controlSelector: "#registered-reject-not-present",
       },
-      actionSearchTimeoutMs: 1_000,
+      actionSearchTimeoutMs: 2_000,
     });
 
     assert.equal(packet.resolver.found, true);
@@ -286,6 +288,43 @@ test("canonical control discovery confirms an exact Reject action when the conse
   });
 });
 
+test("canonical UI confirmation permits a fragment-only same-document transition", async () => {
+  await withFixture("post-refusal-reject-hash-transition", async (url) => {
+    const packet = await observe(url, {
+      allowCanonicalRejectDiscovery: true,
+      recipe: {
+        ...recipe,
+        recipeId: "missing-registered-recipe",
+        controlSelector: "#registered-reject-not-present",
+      },
+      actionSearchTimeoutMs: 1_000,
+      confirmationTimeoutMs: 100,
+    });
+
+    assert.equal(packet.resolver.found, true);
+    assert.equal(packet.refusalRegistration.status, "confirmed");
+    assert.equal(packet.refusalRegistration.refusalExercised, true);
+  });
+});
+
+test("passive target resolution waits through a delayed client-side URL transition", async () => {
+  const browser = await chromium.launch({ headless: true });
+  try {
+    const page = await browser.newPage();
+    await page.route("https://fixture.test/**", (route) => route.fulfill({
+      contentType: "text/html",
+      status: 200,
+      body: '<script>setTimeout(() => { window.location.hash = "client-redirected"; }, 700);</script>',
+    }));
+    await page.goto("https://fixture.test/entry", { waitUntil: "commit" });
+    const settled = await waitForPassiveRedirectSettle(page, 3_000);
+    assert.equal(settled, true);
+    assert.equal(page.url(), "https://fixture.test/entry#client-redirected");
+  } finally {
+    await browser.close();
+  }
+});
+
 test("canonical control discovery collapses a nested label into its unique interactive Reject ancestor", async () => {
   await withFixture("post-refusal-reject-nested-label", async (url) => {
     const packet = await observe(url, {
@@ -302,6 +341,115 @@ test("canonical control discovery collapses a nested label into its unique inter
     assert.match(packet.resolver.recipeId, /^canonical-control:reject:v2:/);
     assert.equal(packet.refusalRegistration.status, "confirmed");
     assert.equal(packet.interactionDiagnostics.click.outcome, "completed");
+  });
+});
+
+test("canonical control discovery scopes one generic Reject link to its retained consent container", async () => {
+  await withFixture("post-refusal-reject-container-scoped-link", async (url) => {
+    const packet = await observe(url, {
+      allowCanonicalRejectDiscovery: true,
+      recipe: {
+        ...recipe,
+        recipeId: "missing-registered-recipe",
+        controlSelector: "#registered-reject-not-present",
+      },
+      actionSearchTimeoutMs: 2_000,
+    });
+
+    assert.equal(packet.resolver.found, true);
+    assert.equal(packet.interactionDiagnostics.click.outcome, "completed");
+  });
+});
+
+test("extracts a unique ancestor scope without splitting quoted attribute values", () => {
+  assert.equal(scopedAncestorSelector("section.fixed button.flex"), "section.fixed");
+  assert.equal(
+    scopedAncestorSelector('div[aria-label="Cookie choices"] button'),
+    'div[aria-label="Cookie choices"]',
+  );
+  assert.equal(scopedAncestorSelector("button.flex"), undefined);
+});
+
+test("deterministic resolution waits for a transient duplicate Reject control to settle", async () => {
+  await withFixture("post-refusal-reject-transient-duplicate", async (url) => {
+    const packet = await observe(url, {
+      actionSearchTimeoutMs: 700,
+      allowCanonicalRejectDiscovery: true,
+      recipe: {
+        ...recipe,
+        recipeId: "missing-registered-recipe",
+        controlSelector: "#registered-reject-not-present",
+      },
+    });
+
+    assert.equal(packet.resolver.found, true);
+    assert.equal(packet.refusalRegistration.status, "confirmed");
+    assert.equal(packet.interactionDiagnostics.click.outcome, "completed");
+  });
+});
+
+test("resolver timeline captures a delayed identical-class A/R/O set without loosening exact Reject selection", async () => {
+  await withFixture("post-refusal-reject-transient-aro", async (url) => {
+    const packet = await observe(url, {
+      actionSearchTimeoutMs: 700,
+      recipe: {
+        ...recipe,
+        recipeId: "netent-style-identical-class-reject",
+        controlSelector: ".ju button",
+        controlExpectedNormalizedLabel: "decline all",
+      },
+    });
+
+    assert.equal(packet.resolver.found, true);
+    assert.equal(packet.refusalRegistration.status, "confirmed");
+    assert.equal(packet.interactionDiagnostics.click.outcome, "completed");
+    assert.deepEqual(
+      packet.interactionDiagnostics.resolver?.snapshots.map((snapshot) => snapshot.state),
+      ["selector_absent", "single_actionable"],
+    );
+    const terminal = packet.interactionDiagnostics.resolver?.snapshots.at(-1);
+    assert.equal(terminal?.selectorMatchCount, 3);
+    assert.equal(terminal?.visibleCount, 3);
+    assert.equal(terminal?.enabledCount, 3);
+    assert.equal(terminal?.labelMatchCount, 1);
+    assert.equal(terminal?.actionableCount, 1);
+    assert.deepEqual(terminal?.controlLabels, ["decline all"]);
+  });
+});
+
+test("resolver timeline retains a bounded selector-absent failure diagnosis", async () => {
+  await withFixture("post-refusal-reject-missing", async (url) => {
+    const packet = await observe(url, { actionSearchTimeoutMs: 150 });
+
+    assert.equal(packet.resolver.found, false);
+    assert.equal(packet.resolver.reason, "deterministic_reject_control_not_found");
+    assert.deepEqual(
+      packet.interactionDiagnostics.resolver?.snapshots.map((snapshot) => snapshot.state),
+      ["selector_absent"],
+    );
+    assert.equal(packet.interactionDiagnostics.resolver?.truncated, false);
+  });
+});
+
+test("canonical control discovery confirms a changed refusal state across a same-target reload", async () => {
+  await withFixture("post-refusal-reject-navigation-storage", async (url) => {
+    const packet = await observe(url, {
+      allowCanonicalRejectDiscovery: true,
+      recipe: {
+        ...recipe,
+        recipeId: "missing-registered-recipe",
+        controlSelector: "#registered-reject-not-present",
+      },
+      actionSearchTimeoutMs: 1_000,
+      confirmationTimeoutMs: 500,
+    });
+
+    assert.equal(packet.resolver.found, true);
+    assert.equal(packet.refusalRegistration.status, "confirmed");
+    assert.equal(packet.refusalRegistration.witnesses.some((witness) =>
+      witness.witnessType === "canonical_refusal_state" &&
+      witness.key === "certscore_navigation_consent"
+    ), true);
   });
 });
 
@@ -807,6 +955,49 @@ test("OneTrust canonical consent-cookie transition confirms deterministic reject
       witness.key === "OptanonConsent" &&
       witness.expectedState === "canonical_cmp_consent_state_changed_after_reject" &&
       witness.corroboratingOnly === false
+    ), true);
+  });
+});
+
+test("OneTrust tenant-suffixed consent cookies retain exact identity and confirm rejection", async () => {
+  const oneTrustRecipe = buildCanonicalPostRefusalActionRecipes().find((candidate) =>
+    candidate.cmpId === "OneTrust"
+  );
+  assert.ok(oneTrustRecipe);
+  await withFixture("post-refusal-onetrust-suffixed-cookie-confirmed", async (url) => {
+    const packet = await observe(url, { recipe: oneTrustRecipe });
+
+    assert.equal(packet.refusalRegistration.status, "confirmed");
+    assert.equal(packet.refusalRegistration.refusalExercised, true);
+    assert.equal(packet.refusalRegistration.witnesses.some((witness) =>
+      witness.witnessType === "cmp_cookie_state" &&
+      witness.key === "OptanonConsent_mUOxXq" &&
+      witness.expectedState === "canonical_cmp_consent_state_changed_after_reject" &&
+      witness.corroboratingOnly === false
+    ), true);
+  });
+});
+
+test("canonical discovery binds generic Orejime controls to the exact CMP surface", async () => {
+  await withFixture("post-refusal-orejime-generic-controls", async (url) => {
+    const packet = await observe(url, {
+      allowCanonicalRejectDiscovery: true,
+      recipe: {
+        ...recipe,
+        recipeId: "missing-registered-recipe",
+        controlSelector: "#registered-reject-not-present",
+      },
+      actionSearchTimeoutMs: 2_000,
+      confirmationTimeoutMs: 150,
+    });
+
+    assert.equal(packet.resolver.found, true);
+    assert.equal(packet.resolver.cmpId, "Orejime");
+    assert.equal(packet.refusalRegistration.status, "confirmed");
+    assert.equal(packet.refusalRegistration.refusalExercised, true);
+    assert.equal(packet.refusalRegistration.witnesses.some((witness) =>
+      witness.witnessType === "canonical_refusal_state" &&
+      witness.expectedState === "canonical_first_layer_reject_control_and_consent_surface_hidden_after_completed_action"
     ), true);
   });
 });

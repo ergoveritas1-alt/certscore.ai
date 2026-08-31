@@ -71,6 +71,38 @@ test("captures inline Cookie Consent Tool anchors with reduced prominence", asyn
   assert.equal(artifact.summary.firstLayerOptions, true);
 });
 
+test("retains a stable ancestor-scoped selector when utility classes are duplicated outside consent", async () => {
+  const artifact = await captureFixture(`
+    <section id="cookie-banner" role="dialog" aria-label="Cookie consent">
+      <p>Choose whether to accept or reject optional cookies.</p>
+      <button class="flex items-center accept">Accept All</button>
+      <button class="flex items-center decline">Decline All</button>
+    </section>
+    <section id="account-actions">
+      <button class="flex items-center decline" title="Decline All">Account action</button>
+    </section>
+  `);
+
+  const reject = findCandidate(artifact, "Decline All");
+  assert.equal(reject?.selectorHint, "#cookie-banner button");
+});
+
+test("retains a unique class-only ancestor scope for a generic consent control", async () => {
+  const artifact = await captureFixture(`
+    <section class="fixed bottom-16 cookie-surface" role="dialog">
+      <p>Choose whether to accept or reject optional cookies.</p>
+      <button class="flex items-center">Accept All</button>
+      <button class="flex items-center">Decline All</button>
+    </section>
+    <section class="account-actions">
+      <button class="flex items-center" title="Decline All">Account action</button>
+    </section>
+  `);
+
+  const reject = findCandidate(artifact, "Decline All");
+  assert.equal(reject?.selectorHint, "section.fixed button");
+});
+
 test("classifies an inline preferences link beside accept and reject as part of the action cluster", async () => {
   const artifact = await captureFixture(`
     <section id="cookie-banner" role="dialog" aria-label="Cookies und Werbeoptionen" style="position: fixed; left: 0; top: 0; width: 1000px; padding: 24px; background: white;">
