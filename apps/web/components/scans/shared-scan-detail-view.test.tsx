@@ -146,7 +146,7 @@ test("executive Reject projection identifies an independently retained TCF contr
 test("executive Reject projection distinguishes persistence, clean, and incomplete outcomes without scoring copy", async () => {
   const { buildExecutiveRejectPathProjection } = await import("./shared-scan-detail-view");
   const persistence = buildExecutiveRejectPathProjection(makePostRejectChecklistItem({
-    explanation: "Stored presence alone does not establish active post-refusal use.",
+    explanation: "Stored presence alone does not establish active post-refusal use. This review signal does not affect score.",
     label: "Same non-essential identifier remained stored after refusal",
     status: "Review signal",
     retainedEvidence: {
@@ -170,6 +170,8 @@ test("executive Reject projection distinguishes persistence, clean, and incomple
 
   assert.equal(persistence?.state, "review_signal");
   assert.equal(persistence?.scoreEffect, "none");
+  assert.equal(persistence?.note, "Stored presence alone does not establish active post-refusal use.");
+  assert.doesNotMatch(persistence?.note ?? "", /score|deduct|points?/i);
   assert.deepEqual(persistence?.evidenceRows, [{
     detail: "Example Analytics · cookie",
     label: "_analytics",

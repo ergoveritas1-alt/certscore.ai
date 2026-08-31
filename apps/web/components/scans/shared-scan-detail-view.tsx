@@ -1364,6 +1364,16 @@ function formatRejectTimelineEvent(row: Record<string, unknown>) {
   };
 }
 
+function omitScoreMechanicsFromCustomerCopy(value: string) {
+  const sanitized = value
+    .split(/(?<=[.!?])\s+/)
+    .filter((sentence) => !/\b(?:score|scored|scoring|deduct|deducted|deduction|points?)\b/i.test(sentence))
+    .join(" ")
+    .trim();
+
+  return sanitized || "Review the retained Reject-path evidence for this result.";
+}
+
 /**
  * Formats the canonical checklist result for the executive report. It does not
  * inspect scanner artifacts or determine finding eligibility.
@@ -1387,6 +1397,7 @@ export function buildExecutiveRejectPathProjection(
   const contradictionObserved = retained.refusalSignalContradictsAction === true;
   const observationWindowMs = getOptionalFiniteNumber(retained, "observationWindowMs");
   const resolverMethod = getOptionalString(retained, "resolverMethod");
+  const customerFacingNote = omitScoreMechanicsFromCustomerCopy(item.note);
   const timelineEvents = activityRows
     .map(formatRejectTimelineEvent)
     .filter((event): event is NonNullable<typeof event> => Boolean(event))
@@ -1401,7 +1412,7 @@ export function buildExecutiveRejectPathProjection(
         ...activityRows.map(formatRejectEvidenceActivity),
       ].slice(0, 3),
       label: contradictionObserved ? "Consent signal contradicted Reject" : "Activity observed after Reject",
-      note: item.note,
+      note: customerFacingNote,
       observationWindowMs,
       resolverMethod,
       scoreEffect: "deduction",
@@ -1414,7 +1425,7 @@ export function buildExecutiveRejectPathProjection(
     return {
       evidenceRows: persistenceRows.map(formatRejectPersistenceEvidence).slice(0, 3),
       label: item.label,
-      note: item.note,
+      note: customerFacingNote,
       observationWindowMs,
       resolverMethod,
       scoreEffect: "none",
@@ -1439,7 +1450,7 @@ export function buildExecutiveRejectPathProjection(
   return {
     evidenceRows: [],
     label: "Reject path incomplete",
-    note: item.note,
+    note: customerFacingNote,
     observationWindowMs,
     resolverMethod,
     scoreEffect: "none",
