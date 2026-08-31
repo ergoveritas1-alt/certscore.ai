@@ -5479,7 +5479,7 @@ test("materializeLocalV2DagScanDetail records stable GDPR Transparency profile m
       mode: "gdpr_transparency_observed_only",
       pipeline: "normalized_concern_policy_unified_finding",
       scannerExecutionMode: "artifact_capture_only",
-      scope: ["gdpr_transparency_observed_topics"],
+      scope: ["gdpr_transparency_observed_topics", "post_refusal_enforcement"],
       source: "verified_canonical_evidence_bundle",
       version: "wc01.normalized-concern-policy.v3",
     });
@@ -5829,6 +5829,41 @@ test("materializeLocalV2DagScanDetail projects row-specific runtime signal summa
           timestampMs: 980,
           topLevelUrl: "https://example.test/",
           url: "https://connect.facebook.net/en_US/fbevents.js"
+        },
+        {
+          consentStateAtTime: "pre_consent",
+          eventId: "net_sourcebuster_library",
+          eventType: "network_request",
+          evidenceRefs: [],
+          hostname: "example.test",
+          requestId: "request_sourcebuster_library",
+          method: "GET",
+          resourceType: "script",
+          requestUrl: "https://example.test/wp-content/plugins/woocommerce/assets/js/sourcebuster/sourcebuster.min.js",
+          sourceScanner: "pre_consent_runtime",
+          thirdParty: false,
+          timestampMs: 700,
+          topLevelUrl: "https://example.test/",
+          url: "https://example.test/wp-content/plugins/woocommerce/assets/js/sourcebuster/sourcebuster.min.js"
+        },
+        {
+          collectionEndpointObserved: true,
+          consentStateAtTime: "pre_consent",
+          eventId: "net_sourcebuster_collect",
+          eventType: "network_request",
+          evidenceRefs: [],
+          hasIdentifierLikeParameters: true,
+          hostname: "example.test",
+          identifierParamNames: ["visitor_id"],
+          requestId: "request_sourcebuster_collect",
+          method: "POST",
+          resourceType: "fetch",
+          requestUrl: "https://example.test/analytics/collect?visitor_id=fixture",
+          sourceScanner: "pre_consent_runtime",
+          thirdParty: false,
+          timestampMs: 760,
+          topLevelUrl: "https://example.test/",
+          url: "https://example.test/analytics/collect?visitor_id=fixture"
         }
       ],
       networkResponseEvents: [
@@ -5859,6 +5894,24 @@ test("materializeLocalV2DagScanDetail projects row-specific runtime signal summa
           product: "Microsoft Clarity",
           purpose: "session_replay",
           vendor: "Microsoft"
+        },
+        {
+          confidence: 0.98,
+          entity: "Sourcebuster.js",
+          matchedEvidenceRefs: [
+            {
+              refId: "net_sourcebuster_library",
+              url: "https://example.test/wp-content/plugins/woocommerce/assets/js/sourcebuster/sourcebuster.min.js"
+            },
+            {
+              refId: "net_sourcebuster_collect",
+              url: "https://example.test/analytics/collect?visitor_id=fixture"
+            }
+          ],
+          observationId: "vendor_sourcebuster",
+          product: "Sourcebuster first-party attribution",
+          purpose: "analytics",
+          vendor: "Sourcebuster.js"
         }
       ],
       policySurfaceObservations: [],
@@ -5966,6 +6019,26 @@ test("materializeLocalV2DagScanDetail projects row-specific runtime signal summa
     assert.equal(clarityRequest?.responseObserved, true);
     assert.equal(clarityRequest?.responseStorageAttempted, true);
     assert.deepEqual(clarityRequest?.responseCookieNamesSet, ["clarity-id"]);
+    const sourcebusterLibraryRequest = requestPurposeRows.find((row) =>
+      row.requestUrl === "https://example.test/wp-content/plugins/woocommerce/assets/js/sourcebuster/sourcebuster.min.js"
+    );
+    const sourcebusterCollectionRequest = requestPurposeRows.find((row) =>
+      row.requestUrl === "https://example.test/analytics/collect?visitor_id=[redacted]"
+    );
+    assert.equal(sourcebusterLibraryRequest?.classification, "library");
+    assert.equal(sourcebusterLibraryRequest?.essentiality, "unknown");
+    assert.equal(sourcebusterLibraryRequest?.firstPartyOrThirdParty, "first_party");
+    assert.equal(sourcebusterCollectionRequest?.classification, "tracker_beacon");
+    assert.equal(sourcebusterCollectionRequest?.essentiality, "non_essential");
+    assert.equal(sourcebusterCollectionRequest?.firstPartyOrThirdParty, "first_party");
+    assert.deepEqual(sourcebusterCollectionRequest?.identifierParameterNames, ["visitor_id"]);
+    assert.ok(
+      (detail.runtimeArtifacts.consent_baseline_tracker_evidence_urls as string[]).includes(
+        "https://example.test/analytics/collect?visitor_id=[redacted]"
+      ),
+      "a concrete same-site analytics collection event must enter the canonical pre-consent tracking evidence"
+    );
+    assert.equal(detail.snapshot?.preconsent_tracking_detected, true);
     const cookieWriteRows = hybrid.cookieWriteObservations as unknown as Array<Record<string, unknown>>;
     const unknownCookie = cookieWriteRows.find((row) => row.cookieName === "unclassified-session-cookie");
     assert.ok(unknownCookie, JSON.stringify(cookieWriteRows));

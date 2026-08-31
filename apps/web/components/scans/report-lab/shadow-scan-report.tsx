@@ -16,6 +16,7 @@ import {
 import { getGdprEprivacyPostureTone } from "../../../lib/scans/regulatory-coverage-score";
 import { ShadowReportShareMenu } from "./shadow-report-actions";
 import { buildRuntimeInventoryCopyPayload } from "./inventory-table-copy";
+import { countNonNotObservedRows } from "./evidence-directory-summary";
 import { ShadowPolicyEvidenceViewer } from "./shadow-policy-evidence-viewer";
 import {
   RegulatoryChecklistCorrectionSteps,
@@ -963,7 +964,8 @@ function RuntimeInventoryTable({ report }: { report: ShadowReportData }) {
           payload={copyPayload}
         />
       )}
-      detailsLabel="View full inventory table"
+      detailsHint={`${report.inventory.length} retained observations · names, purposes, timing, domains, and evidence`}
+      detailsLabel="Open full cookie and tracker details"
       eyebrow="Cookie and tracker inventory"
       heading="Every retained cookie and tracker observation"
       inventory={report.inventory}
@@ -1362,6 +1364,8 @@ function MinimalVariant({ report }: { report: ShadowReportData }) {
 function EvidenceDirectory({ report }: { report: ShadowReportData }) {
   const consentVendor = report.consentVendor ?? "Consent platform not identified";
   const observedGdprTransparencyRows = report.gdprTransparencyRows.filter((row) => row.status === "Observed").length;
+  const trackingExternalFindingCount = countNonNotObservedRows(report.trackingExternalRows);
+  const preConsentRuntimeFindingCount = countNonNotObservedRows(report.preConsentRuntimeRows);
   return (
     <section className="border-t border-zinc-950 bg-white" id="evidence">
       <div className="mx-auto max-w-[90rem] px-5 py-12 lg:px-10 lg:py-16">
@@ -1390,7 +1394,7 @@ function EvidenceDirectory({ report }: { report: ShadowReportData }) {
             </details>
             <details className="group/tracking border-b border-r border-zinc-200 p-5">
               <summary className="flex cursor-pointer list-none items-center justify-between gap-4 [&::-webkit-details-marker]:hidden">
-                <div><p className="text-xs font-semibold uppercase text-zinc-500">Tracking &amp; external services</p><h3 className="mt-1 text-lg font-semibold text-zinc-950">{report.trackingExternalRows.length} findings</h3></div>
+                <div><p className="text-xs font-semibold uppercase text-zinc-500">Tracking &amp; external services</p><h3 className="mt-1 text-lg font-semibold text-zinc-950">{trackingExternalFindingCount} of {report.trackingExternalRows.length} findings</h3></div>
                 <span aria-hidden="true" className="text-zinc-400 transition group-open/tracking:rotate-45">+</span>
               </summary>
               <EvidenceIndexRows rows={report.trackingExternalRows} />
@@ -1428,7 +1432,7 @@ function EvidenceDirectory({ report }: { report: ShadowReportData }) {
           <div className="border-l border-t border-zinc-200">
             <details className="group/runtime border-b border-r border-zinc-200 p-5">
               <summary className="flex cursor-pointer list-none items-center justify-between gap-4 [&::-webkit-details-marker]:hidden">
-                <div><p className="text-xs font-semibold uppercase text-zinc-500">Pre-consent runtime</p><h3 className="mt-1 text-lg font-semibold text-zinc-950">{report.preConsentRuntimeRows.length} findings</h3></div>
+                <div><p className="text-xs font-semibold uppercase text-zinc-500">Pre-consent runtime</p><h3 className="mt-1 text-lg font-semibold text-zinc-950">{preConsentRuntimeFindingCount} of {report.preConsentRuntimeRows.length} findings</h3></div>
                 <span aria-hidden="true" className="text-zinc-400 transition group-open/runtime:rotate-45">+</span>
               </summary>
               <EvidenceIndexRows rows={report.preConsentRuntimeRows} stackedTools />

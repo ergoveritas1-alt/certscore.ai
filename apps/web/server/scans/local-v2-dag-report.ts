@@ -5150,12 +5150,14 @@ function buildMaterializedLocalV2Detail(
   );
   const allVendorRows = buildVendorEvidence(bundle);
   const vendorRows = allVendorRows.filter((vendor) => vendor.vendorCategory !== "cmp");
+  const preconsentRuntimeRequests = networkEvents.filter((event) =>
+    event.consentStateAtTime === "pre_consent"
+  );
   const thirdPartyRequests = networkEvents.filter((event) =>
     isThirdPartyRuntimeEventForDocument(event, canonicalDocumentUrl)
   );
   const thirdPartyDomains = uniqueStrings(thirdPartyRequests.map((event) => event.hostname ?? hostnameFromUrl(event.url)));
   const preconsentRequests = thirdPartyRequests.filter((event) => event.consentStateAtTime === "pre_consent");
-  const preconsentRequestUrls = uniqueStrings(preconsentRequests.map((event) => requestUrl(event)));
   const preconsentCookies = cookieEvents.filter((event) => event.consentStateAtTime === "pre_consent");
   const cookieNames = uniqueStrings(cookieEvents.map((event) => cookieName(event)));
   const preconsentCookieNames = uniqueStrings(preconsentCookies.map((event) => cookieName(event)));
@@ -5441,7 +5443,11 @@ function buildMaterializedLocalV2Detail(
     existing.push(responseEvent);
     responseEventsByRequestId.set(responseEvent.requestId, existing);
   }
-  const requestPurposeRows = (preconsentRequests
+  // Tracking eligibility is purpose- and evidence-based, not party-based. Keep
+  // third-party request metrics separate, but classify concrete same-site
+  // analytics collection events as well. A same-site library/bootstrap request
+  // remains `library` and therefore cannot pass the promotion-grade contract.
+  const requestPurposeRows = (preconsentRuntimeRequests
     .map((event) => {
       const matchedVendor = findObservedVendor(event);
       const url = requestUrl(event);
@@ -6246,7 +6252,9 @@ function buildMaterializedLocalV2Detail(
     collectionEndpointType: vendor.collectionEndpointType,
     confidence: vendor.confidence,
     detectionSource: vendor.detectionSource,
-    evidenceUrls: preconsentRequestUrls.filter((url) => vendor.scriptHost && url.includes(vendor.scriptHost)).slice(0, 5),
+    evidenceUrls: promotionGradePreconsentRequestUrls
+      .filter((url) => vendor.scriptHost && url.includes(vendor.scriptHost))
+      .slice(0, 5),
     firstPartyOrThirdParty: vendor.firstPartyOrThirdParty,
     matchedSignatureId: vendor.matchedSignatureId,
     observedVia: vendor.observedVia,

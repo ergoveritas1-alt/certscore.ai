@@ -1029,7 +1029,7 @@ export function deriveInventoryMacroCategory(input: {
 
 export function classifyInventoryEvidence(
   row: Pick<InventoryGroupRow, "macroCategory" | "priority" | "purpose" | "purposes"> &
-    Partial<Pick<InventoryGroupRow, "cookieDetails">>
+    Partial<Pick<InventoryGroupRow, "cookieDetails" | "requestCount" | "requestDetails" | "type">>
 ): InventoryEvidenceClassification {
   const cookieEssentiality = new Set(
     (row.cookieDetails ?? []).map((cookie) => cookie.essentiality ?? "unknown")
@@ -1041,6 +1041,16 @@ export function classifyInventoryEvidence(
     if (cookieEssentiality.size === 1 && cookieEssentiality.has("essential")) {
       return "Essential";
     }
+    return "Review";
+  }
+  if (
+    row.type === "tracker" &&
+    (row.requestCount ?? 0) <= 0 &&
+    (row.requestDetails?.length ?? 0) === 0
+  ) {
+    // A retained product/library signature establishes context, not a concrete
+    // analytics collection event. Do not let purpose priority overstate the
+    // evidence as observed non-essential activity.
     return "Review";
   }
   if (row.priority === "high" || row.priority === "medium") {

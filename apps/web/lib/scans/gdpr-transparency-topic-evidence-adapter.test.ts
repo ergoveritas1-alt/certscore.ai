@@ -906,3 +906,48 @@ test("retained Article 4 and Article 6 variants pass the canonical production ev
   );
   assert.deepEqual(result.discardedArticle13DisclosureSignals, []);
 });
+
+test("retained German clinic wording passes the canonical production evidence adapter", () => {
+  const text = [
+    "Datenschutzerklärung. Personenbezogene Daten werden nur im Rahmen der Erforderlichkeit sowie zum Zwecke der Bereitstellung eines funktionsfähigen und nutzerfreundlichen Internetauftritts verarbeitet.",
+    "Mit der nachfolgenden Datenschutzerklärung informieren wir Sie über Art, Umfang, Zweck, Dauer und Rechtsgrundlage der Verarbeitung personenbezogener Daten.",
+    "Verantwortlicher Anbieter ist die Pferdeklinik Beispiel. Telefon: 05266 94940. E-Mail: datenschutz@example.test. Datenschutzbeauftragte/r beim Anbieter ist Dr. Beispiel.",
+    "II. Rechte der Nutzer und Betroffenen. Nutzer und Betroffene haben das Recht auf Bestätigung, auf Auskunft über die verarbeiteten Daten, auf Berichtigung, Löschung, Einschränkung der Verarbeitung und Übermittlung der Daten.",
+    "Sie haben das Recht auf Beschwerde gegenüber der Aufsichtsbehörde gemäß Art. 77 DSGVO.",
+    "Serverdaten werden an uns beziehungsweise an unseren Webspace-Provider übermittelt. Diese Speicherung erfolgt auf der Rechtsgrundlage von Art. 6 Abs. 1 lit. f DSGVO.",
+    "Unser berechtigtes Interesse liegt in der Verbesserung, Stabilität, Funktionalität und Sicherheit des Internetauftritts.",
+    "Alle Empfänger, denen gegenüber Daten offengelegt wurden, werden über Berichtigung oder Löschung von Daten unterrichtet.",
+  ].join(" ");
+  const classified = classifyGdprTransparencyTopics({ text, localeHints: ["de"] });
+  const candidates = classified.matches.map((match) => candidate({
+    classifierReasonCodes: match.reasonCodes,
+    confidence: match.confidence,
+    evidenceText: match.evidenceExcerpt,
+    matchStrength: match.matchStrength,
+    matchedLocale: match.matchedLocale,
+    matchedTerm: match.matchedTerm,
+    topic: match.topic,
+  }));
+  const result = adaptGdprTransparencyTopicCandidatesForProduction({
+    isTargetRelevantPrivacyPolicy: true,
+    policyTextQuality: { usable: true },
+    profile: GDPR_TRANSPARENCY_MULTILINGUAL_ARTICLE13_PROFILE,
+    surface: surface(candidates, { textExcerpt: text }),
+  });
+
+  assert.deepEqual(
+    result.acceptedProductionSignals.map((signal) => signal.disclosureType).sort(),
+    [
+      "controller_contact",
+      "data_retention",
+      "data_subject_rights",
+      "dpo_contact",
+      "legal_basis",
+      "processing_purposes",
+      "recipients_or_vendor_categories",
+      "supervisory_authority",
+    ],
+    JSON.stringify(result.dispositions),
+  );
+  assert.deepEqual(result.discardedArticle13DisclosureSignals, []);
+});

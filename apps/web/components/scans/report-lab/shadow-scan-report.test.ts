@@ -1,7 +1,32 @@
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import test from "node:test";
+import { countNonNotObservedRows } from "./evidence-directory-summary";
 import { buildRuntimeInventoryCopyPayload } from "./inventory-table-copy";
+
+test("evidence directory summaries exclude only Not observed rows", () => {
+  assert.equal(countNonNotObservedRows([
+    { status: "Not observed" },
+    { status: "Potential gap" },
+    { status: "Partial concern" },
+    { status: "Not confirmed" },
+  ]), 3);
+  assert.equal(countNonNotObservedRows([
+    { status: "Not observed" },
+    { status: "Not observed" },
+    { status: "Observed" },
+  ]), 1);
+});
+
+test("tracking and runtime section headings show non-Not-observed counts over totals", async () => {
+  const source = await readFile(
+    "apps/web/components/scans/report-lab/shadow-scan-report.tsx",
+    "utf8"
+  );
+
+  assert.match(source, /\{trackingExternalFindingCount\} of \{report\.trackingExternalRows\.length\} findings/);
+  assert.match(source, /\{preConsentRuntimeFindingCount\} of \{report\.preConsentRuntimeRows\.length\} findings/);
+});
 
 test("full runtime inventory shows six rows before becoming vertically scrollable", async () => {
   const source = await readFile(
@@ -12,12 +37,20 @@ test("full runtime inventory shows six rows before becoming vertically scrollabl
     "apps/web/components/scans/report-lab/timeline-report-model.ts",
     "utf8"
   );
+  const runtimeSectionSource = await readFile(
+    "apps/web/components/scans/runtime-observation-sections.tsx",
+    "utf8"
+  );
 
   assert.match(source, /const INVENTORY_VISIBLE_ROW_LIMIT = 6/);
   assert.match(source, /report\.inventory\.length > INVENTORY_VISIBLE_ROW_LIMIT/);
   assert.match(source, /max-h-\[22rem\] overflow-auto/);
   assert.doesNotMatch(source, /max-h-\[48rem\]/);
   assert.match(source, /data-inventory-scroll=/);
+  assert.match(source, /detailsLabel="Open full cookie and tracker details"/);
+  assert.match(source, /names, purposes, timing, domains, and evidence/);
+  assert.match(runtimeSectionSource, /Click to expand/);
+  assert.match(runtimeSectionSource, /Hide details/);
   assert.doesNotMatch(source, /Every retained cookie, storage, tracker, and request group from the canonical runtime inventory is available below/);
   assert.match(source, /heading="Every retained cookie and tracker observation"/);
   assert.doesNotMatch(source, /heading="Every retained vendor and request group"/);

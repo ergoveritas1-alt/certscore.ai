@@ -798,10 +798,42 @@ test("row-level inventory does not merge cookie records into a tracker row and e
   assert.equal(rows.length, 9);
   assert.equal(sourcebusterTracker?.observedRecordCount, 1);
   assert.deepEqual(sourcebusterTracker?.cookieNames, cookieNames);
+  assert.equal(classifyInventoryEvidence(sourcebusterTracker!), "Review");
   assert.equal(sourcebusterCookies.length, 7);
   assert.ok(sourcebusterCookies.every((row) => row.priority === "review_needed"));
   assert.ok(sourcebusterCookies.every((row) => classifyInventoryEvidence(row) === "Non-essential"));
   assert.equal(rows.reduce((total, row) => total + row.observedRecordCount, 0), 9);
+});
+
+test("inventory marks a tracker non-essential only when concrete request evidence is retained", () => {
+  const base = {
+    cookieDetails: [],
+    macroCategory: "Analytics" as const,
+    priority: "medium" as const,
+    purpose: "Analytics",
+    purposes: ["Analytics"],
+    requestCount: null,
+    requestDetails: [],
+    type: "tracker" as const,
+  };
+
+  assert.equal(classifyInventoryEvidence(base), "Review");
+  assert.equal(classifyInventoryEvidence({
+    ...base,
+    requestDetails: [{
+      cookieNamesSent: [],
+      essentiality: "non_essential",
+      hostname: "analytics.example.test",
+      identifierParameterNames: ["visitor_id"],
+      initiatorUrl: null,
+      method: "POST",
+      path: "/collect",
+      responseCookieNamesSet: [],
+      responseObserved: true,
+      responseStorageAttempted: false,
+      vendor: "Example Analytics",
+    }],
+  }), "Non-essential");
 });
 
 test("consolidates common runtime aliases and suppresses unsupported CMP identities", () => {

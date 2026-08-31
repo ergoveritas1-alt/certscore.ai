@@ -2144,6 +2144,46 @@ test("classifies retained Article 4 and Article 6 policy wording without semanti
   }
 });
 
+test("classifies retained German clinic policy wording without exact-grammar gaps", () => {
+  const classification = classifyGdprTransparencyTopics({
+    localeHints: ["de"],
+    text: [
+      "Datenschutzerklärung. Personenbezogene Daten werden nur im Rahmen der Erforderlichkeit sowie zum Zwecke der Bereitstellung eines funktionsfähigen und nutzerfreundlichen Internetauftritts verarbeitet.",
+      "Mit der nachfolgenden Datenschutzerklärung informieren wir Sie über Art, Umfang, Zweck, Dauer und Rechtsgrundlage der Verarbeitung personenbezogener Daten.",
+      "Verantwortlicher Anbieter ist die Pferdeklinik Beispiel. Telefon: 05266 94940. E-Mail: datenschutz@example.test. Datenschutzbeauftragte/r beim Anbieter ist Dr. Beispiel.",
+      "II. Rechte der Nutzer und Betroffenen. Nutzer und Betroffene haben das Recht auf Bestätigung, auf Auskunft über die verarbeiteten Daten, auf Berichtigung, Löschung, Einschränkung der Verarbeitung und Übermittlung der Daten.",
+      "Sie haben das Recht auf Beschwerde gegenüber der Aufsichtsbehörde gemäß Art. 77 DSGVO.",
+      "Serverdaten werden an uns beziehungsweise an unseren Webspace-Provider übermittelt. Diese Speicherung erfolgt auf der Rechtsgrundlage von Art. 6 Abs. 1 lit. f DSGVO.",
+      "Unser berechtigtes Interesse liegt in der Verbesserung, Stabilität, Funktionalität und Sicherheit des Internetauftritts.",
+      "Alle Empfänger, denen gegenüber Daten offengelegt wurden, werden über Berichtigung oder Löschung von Daten unterrichtet.",
+    ].join(" "),
+  });
+  const topics = new Set(classification.matches.map((match) => match.topic));
+
+  for (const topic of [
+    "controller_contact",
+    "dpo_contact",
+    "processing_purposes",
+    "legal_basis",
+    "recipients_or_vendor_categories",
+    "data_retention",
+    "data_subject_rights",
+    "supervisory_authority",
+  ] satisfies GdprTransparencyTopic[]) {
+    assert.equal(topics.has(topic), true, topic);
+  }
+  assert.equal(topics.has("international_transfers"), false);
+  assert.equal(topics.has("automated_decision_making_or_profiling"), false);
+  assert.equal(
+    classification.matches.every((match) =>
+      match.classifierProvenance === "gdpr_transparency_topic_classifier.v1" &&
+      match.matchedLocale === "de" &&
+      match.evidenceExcerpt.length <= 360
+    ),
+    true,
+  );
+});
+
 test("SITS-shaped broad English variants remain unknown in operational copy", () => {
   const classification = classifyGdprTransparencyTopics({
     localeHints: ["en"],

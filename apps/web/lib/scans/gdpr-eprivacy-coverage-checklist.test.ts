@@ -349,6 +349,101 @@ test("CertScore privacy policy evidence projects every GDPR Transparency row thr
   }
 });
 
+test("retained German clinic policy evidence projects nine of eleven transparency rows", () => {
+  const policyText = [
+    "Datenschutzerklärung. Personenbezogene Daten werden nur im Rahmen der Erforderlichkeit sowie zum Zwecke der Bereitstellung eines funktionsfähigen und nutzerfreundlichen Internetauftritts verarbeitet.",
+    "Mit der nachfolgenden Datenschutzerklärung informieren wir Sie über Art, Umfang, Zweck, Dauer und Rechtsgrundlage der Verarbeitung personenbezogener Daten.",
+    "Verantwortlicher Anbieter ist die Pferdeklinik Beispiel. Telefon: 05266 94940. E-Mail: datenschutz@example.test. Datenschutzbeauftragte/r beim Anbieter ist Dr. Beispiel.",
+    "II. Rechte der Nutzer und Betroffenen. Nutzer und Betroffene haben das Recht auf Bestätigung, auf Auskunft über die verarbeiteten Daten, auf Berichtigung, Löschung, Einschränkung der Verarbeitung und Übermittlung der Daten.",
+    "Sie haben das Recht auf Beschwerde gegenüber der Aufsichtsbehörde gemäß Art. 77 DSGVO.",
+    "Serverdaten werden an uns beziehungsweise an unseren Webspace-Provider übermittelt. Diese Speicherung erfolgt auf der Rechtsgrundlage von Art. 6 Abs. 1 lit. f DSGVO.",
+    "Unser berechtigtes Interesse liegt in der Verbesserung, Stabilität, Funktionalität und Sicherheit des Internetauftritts.",
+    "Alle Empfänger, denen gegenüber Daten offengelegt wurden, werden über Berichtigung oder Löschung von Daten unterrichtet.",
+  ].join(" ");
+  const classification = classifyGdprTransparencyTopics({
+    localeHints: ["de"],
+    text: policyText,
+  });
+  const candidates: PolicySurfaceObservation["gdprTransparencyTopicCandidates"] =
+    classification.matches.map((match) => ({
+      classifierProvenance: match.classifierProvenance,
+      classifierReasonCodes: match.reasonCodes,
+      confidence: match.confidence,
+      evidenceText: match.evidenceExcerpt,
+      matchStrength: match.matchStrength,
+      matchedLocale: match.matchedLocale,
+      matchedTerm: match.matchedTerm,
+      productionCredit: false,
+      status: "diagnostic_only",
+      topic: match.topic,
+    }));
+  const adaptation = adaptGdprTransparencyTopicCandidatesForProduction({
+    isTargetRelevantPrivacyPolicy: true,
+    pageUrl: "https://clinic.example/datenschutz",
+    policyTextQuality: { usable: true },
+    profile: GDPR_TRANSPARENCY_MULTILINGUAL_ARTICLE13_PROFILE,
+    surface: {
+      gdprTransparencyTopicCandidates: candidates,
+      normalizedUrl: "https://clinic.example/datenschutz",
+      status: "fetched",
+      surfaceType: "privacy_policy",
+      textExcerpt: policyText,
+      url: "https://clinic.example/datenschutz",
+    },
+  });
+  const runtimeArtifacts = {
+    policyDisclosureSummary: {
+      article13DisclosureSignals: adaptation.acceptedProductionSignals,
+      gdprTransparencyEvidenceProfile: adaptation.profile,
+      gdprTransparencyProductionEvidenceEnabled: adaptation.productionEvidenceEnabled,
+      privacyPolicyPresent: true,
+      privacyPolicyUrls: ["https://clinic.example/datenschutz"],
+    },
+  };
+  const normalizedConcerns = buildNormalizedConcerns({
+    reviewFindingCandidates: [],
+    runtimeArtifacts,
+    validationFindings: [],
+  });
+  const coverageOutcomes = deriveGdprEprivacyCoveragePolicyOutcomes({
+    coverageLimited: false,
+    events: [],
+    normalizedConcerns,
+    runtimeArtifacts,
+    scanCompleted: true,
+    snapshot: { privacy_policy_present: true },
+  });
+  const items = deriveGdprEprivacyCoverageChecklist({
+    coverageLimited: false,
+    coverageOutcomes,
+    projectedFindings: [],
+    scanCompleted: true,
+    unifiedFindings: [],
+  });
+  const transparencyRows = items.filter((item) =>
+    GDPR_TRANSPARENCY_REPORT_ROW_ID_SET.has(item.id)
+  );
+  const observedRows = transparencyRows.filter((item) => item.status === "Observed");
+
+  assert.equal(transparencyRows.length, 11);
+  assert.deepEqual(
+    observedRows.map((item) => item.id).sort(),
+    [
+      "controller_contact_disclosure",
+      "data_subject_rights_disclosure",
+      "dpo_contact_point_disclosure",
+      "legal_basis_disclosure_observed",
+      "privacy_notice_availability",
+      "processing_purposes_disclosure",
+      "recipients_vendor_categories_disclosure",
+      "retention_disclosure_observed",
+      "supervisory_authority_complaint_disclosure",
+    ],
+  );
+  assert.equal(byId(transparencyRows, "international_transfers_disclosure").status, "Not confirmed");
+  assert.equal(byId(transparencyRows, "automated_decision_making_profiling_disclosure").status, "Not confirmed");
+});
+
 test("GDPR Transparency policy fails closed when normalized concerns are unavailable", () => {
   const evidenceText = "We share personal data with service providers and professional advisers.";
   const runtimeArtifacts = {
