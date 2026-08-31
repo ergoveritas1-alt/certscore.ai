@@ -11,10 +11,7 @@ import {
 import type { CertScoreFinding } from "../../../lib/scans/finding-registry";
 import { getHybridRuntimeEvidence } from "../../../lib/scans/hybrid-runtime-evidence";
 import {
-  buildPreConsentStorageAssessment,
-  projectPreConsentStorageMetric,
-} from "../../../lib/scans/runtime-cookie-evidence";
-import {
+  buildNonEssentialInventoryTallies,
   buildRuntimeInventoryProjectionFromScan,
   classifyInventoryEvidence,
   getInventoryObservationNames,
@@ -507,11 +504,9 @@ export function buildTimelineReportModel(scanRecord: ScanDetailResponse): Shadow
   }));
   const visualEvidence = getVisualEvidenceArtifacts(scanRecord.runtimeArtifacts)
     .find((artifact) => artifact.status === "available" && artifact.key);
-  const preConsentStorageMetric = projectPreConsentStorageMetric(buildPreConsentStorageAssessment({
-    hybridRuntimeEvidence: getHybridRuntimeEvidence(scanRecord.runtimeArtifacts),
-    runtimeArtifacts: scanRecord.runtimeArtifacts,
-    runtimeCookieRows: inventoryProjection.cookieRows,
-  }));
+  const nonEssentialInventoryTallies = buildNonEssentialInventoryTallies(
+    inventoryProjection.ungroupedRows,
+  );
   const vendorSurface = inventoryProjection.vendorSurfaceProjection.execSummary;
 
   return {
@@ -542,8 +537,8 @@ export function buildTimelineReportModel(scanRecord: ScanDetailResponse): Shadow
       domains: vendorSurface.thirdPartyDomains.length,
       fields: countFormFields(forms),
       forms: forms.length,
-      nonEssentialStorage: preConsentStorageMetric.available ? preConsentStorageMetric.value : null,
-      thirdPartyRequests: recordNumber(snapshot, ["third_party_request_count", "third_party_requests_count"]) ?? inventoryProjection.trackerRows.reduce((total, row) => total + (row.requestCount ?? 1), 0),
+      nonEssentialCookiesStorage: nonEssentialInventoryTallies.cookiesStorage,
+      nonEssentialRequests: nonEssentialInventoryTallies.requests,
       vendors: vendorSurface.resolvedVendorNames.length + vendorSurface.unresolvedVendorHosts.length,
     },
     nextStep,

@@ -1079,6 +1079,20 @@ export function classifyInventoryEvidence(
   return "Contextual";
 }
 
+export function buildNonEssentialInventoryTallies(rows: InventoryGroupRow[]) {
+  return rows.reduce((tallies, row) => {
+    if (classifyInventoryEvidence(row) !== "Non-essential") {
+      return tallies;
+    }
+    if (row.type === "tracker") {
+      tallies.requests += 1;
+    } else {
+      tallies.cookiesStorage += 1;
+    }
+    return tallies;
+  }, { cookiesStorage: 0, requests: 0 });
+}
+
 export function getTrackerConsentReviewPriority(row: TrackerInventoryRow): ConsentReviewPriority {
   const purposeLabels = [
     getInventoryCategoryLabel(row.label, row.vendorDisplayCategory ?? row.category, row.regulatoryRelevance),

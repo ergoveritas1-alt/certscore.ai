@@ -28,6 +28,22 @@ test("tracking and runtime section headings show non-Not-observed counts over to
   assert.match(source, /\{preConsentRuntimeFindingCount\} of \{report\.preConsentRuntimeRows\.length\} findings/);
 });
 
+test("benchmark labels and values come from canonical non-essential inventory tallies", async () => {
+  const source = await readFile(
+    "apps/web/components/scans/report-lab/shadow-scan-report.tsx",
+    "utf8"
+  );
+  const modelSource = await readFile(
+    "apps/web/components/scans/report-lab/timeline-report-model.ts",
+    "utf8"
+  );
+
+  assert.match(source, /label: "Non-essential requests", site: report\.metrics\.nonEssentialRequests/);
+  assert.match(source, /label: "Non-essential cookies\/storage", site: report\.metrics\.nonEssentialCookiesStorage/);
+  assert.match(modelSource, /buildNonEssentialInventoryTallies\([\s\S]*inventoryProjection\.ungroupedRows/);
+  assert.doesNotMatch(modelSource, /third_party_request_count/);
+});
+
 test("full runtime inventory shows six rows before becoming vertically scrollable", async () => {
   const source = await readFile(
     "apps/web/components/scans/report-lab/shadow-scan-report.tsx",

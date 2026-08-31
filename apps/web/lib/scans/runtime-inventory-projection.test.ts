@@ -10,6 +10,7 @@ import {
   suppressUnsupportedCmpAliasRows,
   buildTrackerInventoryRows,
   classifyInventoryEvidence,
+  buildNonEssentialInventoryTallies,
   deriveInventoryMacroCategory,
   deriveRuntimeInventoryPresentationState,
   getInventoryGroupRowRenderKey,
@@ -834,6 +835,45 @@ test("inventory marks a tracker non-essential only when concrete request evidenc
       vendor: "Example Analytics",
     }],
   }), "Non-essential");
+});
+
+test("benchmark tallies use the same ungrouped non-essential rows as the inventory table", () => {
+  const base = {
+    attributionSignatures: [],
+    canonicalEntity: null,
+    confidence: "high" as const,
+    cookieDetails: [],
+    cookieNames: [],
+    dataFlows: [],
+    domains: ["example.test"],
+    entityRelationship: "unknown" as const,
+    firstSeenMs: 100,
+    macroCategory: "Analytics" as const,
+    observedRecordCount: 1,
+    party: "first_party" as const,
+    preConsent: true,
+    priority: "medium" as const,
+    purpose: "Analytics",
+    purposes: ["Analytics"],
+    rawProducts: [],
+    regulatoryRelevance: [],
+    requestCount: 1,
+    setByThirdPartyScript: false,
+    siteRelationship: "same_site" as const,
+    vendor: "Example Analytics",
+  };
+  const tallies = buildNonEssentialInventoryTallies([
+    { ...base, requestDetails: [], type: "tracker" },
+    {
+      ...base,
+      cookieDetails: [{ essentiality: "non_essential" } as never],
+      requestCount: null,
+      type: "cookie",
+    },
+    { ...base, priority: "contextual", requestCount: null, type: "tracker" },
+  ]);
+
+  assert.deepEqual(tallies, { cookiesStorage: 1, requests: 1 });
 });
 
 test("consolidates common runtime aliases and suppresses unsupported CMP identities", () => {

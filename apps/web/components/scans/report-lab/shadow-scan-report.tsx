@@ -272,8 +272,8 @@ function RatingMix({ report }: { report: ShadowReportData }) {
 
 function CompactMetrics({ report }: { report: ShadowReportData }) {
   const metrics = [
-    { label: "Third-party requests", value: report.metrics.thirdPartyRequests, note: "Retained" },
-    { label: "Non-essential storage", value: report.metrics.nonEssentialStorage ?? "—", note: report.metrics.nonEssentialStorage === null ? "Not classified" : "Pre-consent" },
+    { label: "Non-essential requests", value: report.metrics.nonEssentialRequests, note: "Pre-consent" },
+    { label: "Non-essential cookies/storage", value: report.metrics.nonEssentialCookiesStorage, note: "Pre-consent" },
     { label: "Tracker footprint", value: report.metrics.vendors, note: `${report.metrics.domains} domains` },
     { label: "Usable evidence", value: report.coverage.usableEvidence, note: `of ${report.coverage.rows} rows` }
   ];
@@ -410,8 +410,8 @@ function SignalSnapshot({ report }: { report: ShadowReportData }) {
 function BenchmarkComparison({ report }: { report: ShadowReportData }) {
   const benchmarkLabel = report.scan.benchmark.replace(/\s+\(likely [^)]+\)\s*$/i, "");
   const rows = [
-    { label: "Third-party requests", site: report.metrics.thirdPartyRequests },
-    { label: "Non-essential storage", site: report.metrics.nonEssentialStorage }
+    { label: "Non-essential requests", site: report.metrics.nonEssentialRequests },
+    { label: "Non-essential cookies/storage", site: report.metrics.nonEssentialCookiesStorage }
   ];
 
   return (
@@ -1126,7 +1126,7 @@ function TriageVariant({ report }: { report: ShadowReportData }) {
           <dl className="grid grid-cols-2 gap-x-4 gap-y-5">
             {[
               ["Concerns", report.coverage.concern], ["Partial", report.coverage.partial], ["Positive", report.coverage.positive], ["Limited", report.coverage.limited],
-              ["3P requests", report.metrics.thirdPartyRequests], ["Storage", report.metrics.nonEssentialStorage ?? "—"]
+              ["Non-essential requests", report.metrics.nonEssentialRequests], ["Non-essential cookies/storage", report.metrics.nonEssentialCookiesStorage]
             ].map(([label, value]) => (
               <div className="border-t border-zinc-200 pt-3" key={label}>
                 <dt className="text-xs text-zinc-500">{label}</dt>
