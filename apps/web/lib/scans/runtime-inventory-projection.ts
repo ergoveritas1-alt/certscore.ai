@@ -221,6 +221,13 @@ export function getInventoryGroupRowRenderKey(
   ]);
 }
 
+export function getInventoryObservationNames(
+  row: Pick<InventoryGroupRow, "cookieNames" | "rawProducts" | "type">
+) {
+  const retainedNames = row.type === "cookie" ? row.cookieNames : row.rawProducts;
+  return uniqueStrings(retainedNames.map((name) => name.trim()));
+}
+
 type ReportVendorSurfaceProjectionInput = {
   rawThirdPartyDomains: string[];
   resolvedVendorNames: string[];
@@ -702,7 +709,12 @@ export function buildTrackerInventoryRows(input: {
     return "third_party";
   };
   const addRow = (row: TrackerInventoryRow) => {
-    const key = `${row.label.toLowerCase()}\u0000${row.category.toLowerCase()}\u0000${row.domains.join("|") || "no-domain"}`;
+    const key = [
+      row.label.toLowerCase(),
+      row.category.toLowerCase(),
+      row.domains.join("|") || "no-domain",
+      row.attributionEvidence?.signatureId ?? "no-retained-signature",
+    ].join("\u0000");
     const existing = rows.get(key);
     if (!existing) {
       rows.set(key, row);
@@ -778,8 +790,16 @@ export function buildTrackerInventoryRows(input: {
       "cookie_names"
     ]);
     const identity = resolveTrackerIdentity({ category: tracker.vendorCategory || "tracker", domains: matchedDomains, source: tracker.detectionSource, vendorName: tracker.vendorName });
+    const matchedSignatureId = getOptionalString(record, "matchedSignatureId") ??
+      getOptionalString(record, "matched_signature_id");
     addRow({
-      attributionEvidence: identity.attributionEvidence,
+      attributionEvidence: matchedSignatureId
+        ? {
+            matchedOn: "retained_signature",
+            matchedValue: matchedSignatureId,
+            signatureId: matchedSignatureId,
+          }
+        : identity.attributionEvidence,
       category: identity.category,
       confidence: identity.confidence ?? (typeof tracker.confidence === "number" && Number.isFinite(tracker.confidence) ? tracker.confidence : null),
       cookieNames: matchedCookieNames,
@@ -1008,8 +1028,21 @@ export function deriveInventoryMacroCategory(input: {
 }
 
 export function classifyInventoryEvidence(
-  row: Pick<InventoryGroupRow, "macroCategory" | "priority" | "purpose" | "purposes">
+  row: Pick<InventoryGroupRow, "macroCategory" | "priority" | "purpose" | "purposes"> &
+    Partial<Pick<InventoryGroupRow, "cookieDetails">>
 ): InventoryEvidenceClassification {
+  const cookieEssentiality = new Set(
+    (row.cookieDetails ?? []).map((cookie) => cookie.essentiality ?? "unknown")
+  );
+  if (cookieEssentiality.size > 0) {
+    if (cookieEssentiality.size === 1 && cookieEssentiality.has("non_essential")) {
+      return "Non-essential";
+    }
+    if (cookieEssentiality.size === 1 && cookieEssentiality.has("essential")) {
+      return "Essential";
+    }
+    return "Review";
+  }
   if (row.priority === "high" || row.priority === "medium") {
     return "Non-essential";
   }

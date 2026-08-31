@@ -43,6 +43,7 @@ import {
   type PersistedNanoSignalRow
 } from "../../lib/scans/nano-policy-signals";
 import { deriveRuntimeVendorDisclosureEvidenceFromRetainedSources } from "../../lib/scans/runtime-vendor-disclosure";
+import { buildTrackerVendorObservationIdentityKey } from "../../lib/scans/tracker-vendor-observation-identity";
 import { getPrimaryPolicyEnrichmentRow, getPolicyPageType } from "../../lib/scans/policy-enrichment-row";
 import { buildMergedSignalRecords } from "../../lib/scans/merged-signals";
 import { isPlatformAdminEmail } from "../admin/platform-admin";
@@ -1022,7 +1023,7 @@ async function loadScanDetailRecord(input: {
   const normalizedTrackerVendors = [
     ...new Map(
       [...persistedTrackerVendors, ...runtimeDerivedTrackerVendors].map((tracker) => [
-        `${tracker.vendorName}|${tracker.detectionSource}|${tracker.scriptHost ?? ""}`,
+        buildTrackerVendorObservationIdentityKey(tracker),
         tracker
       ])
     ).values()

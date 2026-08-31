@@ -656,6 +656,51 @@ test("deduplicates product aliases while retaining their raw domains and cookies
   assert.deepEqual(groupedRows[0]?.cookieNames, ["personalization_id", "guest_id_ads"]);
 });
 
+test("ungrouped inventory preserves distinct retained tracker signatures as individual rows", () => {
+  const trackerRows = buildTrackerInventoryRows({
+    domains: [],
+    firstPartyDomain: "example.test",
+    preConsentVendors: ["Example Analytics"],
+    resolvedVendors: [],
+    sessionReplayVendors: [],
+    topObservedEntities: [],
+    trackerVendors: [
+      {
+        beforeConsent: true,
+        confidence: 0.96,
+        detectionSource: "vendor resolver",
+        matchedSignatureId: "example_request_signature",
+        scriptHost: "analytics.vendor.test",
+        vendorCategory: "analytics",
+        vendorName: "Example Analytics",
+      },
+      {
+        beforeConsent: true,
+        confidence: 0.94,
+        detectionSource: "vendor resolver",
+        matchedSignatureId: "example_script_signature",
+        scriptHost: "analytics.vendor.test",
+        vendorCategory: "analytics",
+        vendorName: "Example Analytics",
+      },
+    ] as never,
+    unresolvedHosts: [],
+  });
+  const rows = buildRuntimeInventoryUngroupedRows({
+    cookieRows: [],
+    firstPartyDomain: "example.test",
+    trackerRows,
+  });
+
+  assert.equal(trackerRows.length, 2);
+  assert.equal(rows.length, 2);
+  assert.ok(rows.every((row) => row.type === "tracker"));
+  assert.deepEqual(
+    rows.map((row) => row.attributionSignatures[0]).sort(),
+    ["example_request_signature", "example_script_signature"],
+  );
+});
+
 test("grouped tracker request counts sum disjoint domains without double-counting overlap", () => {
   const makeRow = (input: {
     domain: string;
@@ -704,15 +749,18 @@ test("row-level inventory does not merge cookie records into a tracker row and e
       category: "analytics",
       cookieName,
       domain: ".pferdeklinik-muehlen.de",
+      essentiality: "non_essential",
+      essentialitySource: "canonical_registry",
       evidenceGrade: "high",
       firstObservedAtMs: 5_420,
       initiatorDomain: "pferdeklinik-muehlen.de",
       initiatorVendor: "Sourcebuster.js",
-      nonEssential: false,
+      nonEssential: true,
+      observedBeforeConsent: true,
       party: "first_party",
-      setAtMs: 5_420,
-      setMethod: "document_cookie",
-      timingEvidence: "cookie_write_observed",
+      setAtMs: null,
+      setMethod: "periodic_cookie_snapshot",
+      timingEvidence: "periodic_cookie_snapshot",
     })) as never,
     firstPartyDomain: "pferdeklinik-muehlen.de",
     trackerRows: [
@@ -751,6 +799,8 @@ test("row-level inventory does not merge cookie records into a tracker row and e
   assert.equal(sourcebusterTracker?.observedRecordCount, 1);
   assert.deepEqual(sourcebusterTracker?.cookieNames, cookieNames);
   assert.equal(sourcebusterCookies.length, 7);
+  assert.ok(sourcebusterCookies.every((row) => row.priority === "review_needed"));
+  assert.ok(sourcebusterCookies.every((row) => classifyInventoryEvidence(row) === "Non-essential"));
   assert.equal(rows.reduce((total, row) => total + row.observedRecordCount, 0), 9);
 });
 

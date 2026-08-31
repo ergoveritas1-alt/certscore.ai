@@ -33,7 +33,7 @@ export type RegulatoryCoverageScore = {
 
 export const REGULATORY_COVERAGE_SCORE_SOURCE = "wc01.regulatory-coverage-score";
 export const CALIFORNIA_EVIDENCE_SCORE_VERSION = "california-evidence.legacy-v1";
-export const GDPR_EPRIVACY_EVIDENCE_SCORE_VERSION = "gdpr-eprivacy-posture.v8";
+export const GDPR_EPRIVACY_EVIDENCE_SCORE_VERSION = "gdpr-eprivacy-posture.v11";
 
 type GdprEprivacyRiskFamily =
   | "consent_controls"
@@ -41,7 +41,8 @@ type GdprEprivacyRiskFamily =
   | "embedded_third_party"
   | "policy_transparency"
   | "post_refusal_enforcement"
-  | "pre_consent_enforcement"
+  | "pre_consent_storage"
+  | "pre_consent_tracking"
   | "sensitive_runtime"
   | "tracking_technology"
   | "transport_security";
@@ -50,14 +51,13 @@ type GdprEprivacyPosturePolicy = {
   confirmedContradictionDeduction?: number;
   family: GdprEprivacyRiskFamily;
   gapDeduction: number;
-  reviewDeduction?: number;
 };
 
 /**
- * GDPR/ePrivacy posture v4 scores verified outcomes rather than the presence
- * of particular banner controls. Confirmed behavioral failures carry more
- * weight than interface proxies, while review and coverage limitations cannot
- * activate confirmed-failure score ceilings.
+ * GDPR/ePrivacy posture scores evidence-qualified outcomes rather than the
+ * presence of particular banner controls. Eligible review signals use the
+ * same deduction as confirmed gaps, while coverage limitations cannot affect
+ * the score.
  *
  * The score continues to aggregate by concern family so repeated vendors,
  * requests, or checklist descriptions cannot deduct the same concern without
@@ -66,14 +66,14 @@ type GdprEprivacyPosturePolicy = {
 const GDPR_EPRIVACY_POSTURE_POLICIES: Partial<Record<string, GdprEprivacyPosturePolicy>> = {
   accessibility_consent_controls: { family: "consent_controls", gapDeduction: 4 },
   automated_decision_making_profiling_disclosure: { family: "policy_transparency", gapDeduction: 0 },
-  consent_choice_quality: { family: "consent_controls", gapDeduction: 6, reviewDeduction: 2 },
+  consent_choice_quality: { family: "consent_controls", gapDeduction: 6 },
   controller_contact_disclosure: { family: "policy_transparency", gapDeduction: 0 },
   cookie_notice_policy_availability: { family: "policy_transparency", gapDeduction: 0 },
   cross_border_endpoint_review: { family: "cross_border", gapDeduction: 6 },
   data_subject_rights_disclosure: { family: "policy_transparency", gapDeduction: 0 },
-  device_identification_fingerprinting_signal_observed: { family: "tracking_technology", gapDeduction: 10, reviewDeduction: 4 },
+  device_identification_fingerprinting_signal_observed: { family: "tracking_technology", gapDeduction: 10 },
   dpo_contact_point_disclosure: { family: "policy_transparency", gapDeduction: 0 },
-  embedded_content_pre_consent: { family: "embedded_third_party", gapDeduction: 5, reviewDeduction: 2 },
+  embedded_content_pre_consent: { family: "embedded_third_party", gapDeduction: 5 },
   international_transfers_disclosure: { family: "policy_transparency", gapDeduction: 0 },
   legal_basis_disclosure_observed: { family: "policy_transparency", gapDeduction: 0 },
   post_reject_tracking_reduction: {
@@ -82,20 +82,19 @@ const GDPR_EPRIVACY_POSTURE_POLICIES: Partial<Record<string, GdprEprivacyPosture
     gapDeduction: 12
   },
   pre_consent_cookies_storage: {
-    family: "pre_consent_enforcement",
-    gapDeduction: 12,
-    reviewDeduction: 12
+    family: "pre_consent_storage",
+    gapDeduction: 12
   },
-  pre_consent_third_party_tracking: { family: "pre_consent_enforcement", gapDeduction: 12, reviewDeduction: 4 },
-  preference_withdrawal_control: { family: "consent_controls", gapDeduction: 7, reviewDeduction: 2 },
+  pre_consent_third_party_tracking: { family: "pre_consent_tracking", gapDeduction: 12 },
+  preference_withdrawal_control: { family: "consent_controls", gapDeduction: 7 },
   privacy_notice_availability: { family: "policy_transparency", gapDeduction: 12 },
   processing_purposes_disclosure: { family: "policy_transparency", gapDeduction: 0 },
   recipients_vendor_categories_disclosure: { family: "policy_transparency", gapDeduction: 0 },
-  reject_all_path_availability: { family: "consent_controls", gapDeduction: 10, reviewDeduction: 8 },
+  reject_all_path_availability: { family: "consent_controls", gapDeduction: 10 },
   retention_disclosure_observed: { family: "policy_transparency", gapDeduction: 0 },
-  sensitive_surfaces_third_party_tracking: { family: "sensitive_runtime", gapDeduction: 12, reviewDeduction: 6 },
-  session_replay_fingerprinting_review: { family: "sensitive_runtime", gapDeduction: 12, reviewDeduction: 5 },
-  social_media_embed_pre_consent: { family: "embedded_third_party", gapDeduction: 5, reviewDeduction: 5 },
+  sensitive_surfaces_third_party_tracking: { family: "sensitive_runtime", gapDeduction: 12 },
+  session_replay_fingerprinting_review: { family: "sensitive_runtime", gapDeduction: 12 },
+  social_media_embed_pre_consent: { family: "embedded_third_party", gapDeduction: 5 },
   supervisory_authority_complaint_disclosure: { family: "policy_transparency", gapDeduction: 0 },
   third_party_iframe_pre_consent: { family: "embedded_third_party", gapDeduction: 5 },
   transport_security_form_transport: { family: "transport_security", gapDeduction: 10 },
@@ -111,7 +110,8 @@ const GDPR_EPRIVACY_FAMILY_DEDUCTION_CAPS: Record<GdprEprivacyRiskFamily, number
   embedded_third_party: 10,
   policy_transparency: 12,
   post_refusal_enforcement: 15,
-  pre_consent_enforcement: 48,
+  pre_consent_storage: 30,
+  pre_consent_tracking: 30,
   sensitive_runtime: 20,
   tracking_technology: 18,
   transport_security: 20
@@ -394,12 +394,23 @@ function getGdprEprivacyRowDeduction(row: RegulatoryCoverageRow) {
   if (!policy) return 0;
 
   const retained = getRetainedEvidence(row);
-  if (row.id === "pre_consent_cookies_storage" && row.assessmentStatus === "gap_observed") {
+  if (
+    row.id === "pre_consent_cookies_storage" &&
+    (row.assessmentStatus === "gap_observed" || row.assessmentStatus === "review_signal")
+  ) {
+    const missingSignals = row.criticalEvidence?.missingOrIncompleteSourceSignals;
+    if (
+      row.assessmentStatus === "review_signal" &&
+      Array.isArray(missingSignals) &&
+      missingSignals.length > 0
+    ) {
+      return 0;
+    }
     return getPerIdentityDiminishingDeduction({
       count: Math.max(1, getPreConsentStorageIdentityCount(retained)),
       first: 6,
       second: 4,
-      subsequentEach: 2
+      subsequentEach: 1
     });
   }
   if (
@@ -411,19 +422,18 @@ function getGdprEprivacyRowDeduction(row: RegulatoryCoverageRow) {
       getPreConsentTrackerGroupCount(retained)
     );
     if (count <= 0) return 0;
-    return getPerIdentityDiminishingDeduction({ count, first: 6, second: 4, subsequentEach: 2 });
+    return getPerIdentityDiminishingDeduction({ count, first: 6, second: 4, subsequentEach: 1 });
   }
   if (row.id === "session_replay_fingerprinting_review") {
-    if (row.assessmentStatus === "review_signal") {
-      return getSessionReplayVendorCount(retained) > 0 ? 5 : 0;
-    }
-    if (row.assessmentStatus === "gap_observed") {
+    if (row.assessmentStatus === "gap_observed" || row.assessmentStatus === "review_signal") {
       const sensitiveSurfaceGap = row.subchecks?.some((subcheck) =>
         subcheck.id === "session_replay_sensitive_surface" && subcheck.status === "Gap observed"
       ) === true;
       if (sensitiveSurfaceGap) return 20;
+      const vendorCount = getSessionReplayVendorCount(retained);
+      if (row.assessmentStatus === "review_signal" && vendorCount <= 0) return 0;
       return getDiminishingDeduction({
-        count: Math.max(1, getSessionReplayVendorCount(retained)),
+        count: Math.max(1, vendorCount),
         first: 12,
         second: 6,
         subsequentCombined: 2
@@ -433,8 +443,7 @@ function getGdprEprivacyRowDeduction(row: RegulatoryCoverageRow) {
   }
   if (row.id === "device_identification_fingerprinting_signal_observed") {
     if (retained.promotionEligible === false) return 0;
-    if (row.assessmentStatus === "review_signal") return 4;
-    if (row.assessmentStatus === "gap_observed") {
+    if (row.assessmentStatus === "gap_observed" || row.assessmentStatus === "review_signal") {
       return getDiminishingDeduction({
         count: Math.max(1, getFingerprintingHostCount(retained)),
         first: 10,
@@ -456,22 +465,20 @@ function getGdprEprivacyRowDeduction(row: RegulatoryCoverageRow) {
   if (row.assessmentStatus === "gap_observed") {
     return policy.gapDeduction;
   }
-  if (row.assessmentStatus !== "review_signal" || policy.reviewDeduction === undefined) {
+  if (row.assessmentStatus !== "review_signal") {
     return 0;
   }
 
   const missingSignals = row.criticalEvidence?.missingOrIncompleteSourceSignals;
   return Array.isArray(missingSignals) && missingSignals.length > 0
     ? 0
-    : policy.reviewDeduction;
+    : policy.gapDeduction;
 }
 
 function deriveGdprEprivacyPostureScore(rows: RegulatoryCoverageRow[]): RegulatoryCoverageScore {
   let possibleCoverageWeight = 0;
   let coveredWeight = 0;
   const familyDeductions = new Map<GdprEprivacyRiskFamily, number>();
-  const confirmedFamilyDeductions = new Map<GdprEprivacyRiskFamily, number>();
-  const rowDeductions = new Map<string, number>();
   const confirmedPrivacyNoticeGap = rows.some((row) => (
     row.id === "privacy_notice_availability" &&
     isConfirmedGdprEprivacyGap(row) &&
@@ -499,7 +506,6 @@ function deriveGdprEprivacyPostureScore(rows: RegulatoryCoverageRow[]): Regulato
     ) {
       continue;
     }
-    rowDeductions.set(row.id, deduction);
     familyDeductions.set(
       policy.family,
       Math.min(
@@ -507,15 +513,6 @@ function deriveGdprEprivacyPostureScore(rows: RegulatoryCoverageRow[]): Regulato
         (familyDeductions.get(policy.family) ?? 0) + deduction
       )
     );
-    if (isConfirmedGdprEprivacyGap(row)) {
-      confirmedFamilyDeductions.set(
-        policy.family,
-        Math.min(
-          GDPR_EPRIVACY_FAMILY_DEDUCTION_CAPS[policy.family],
-          (confirmedFamilyDeductions.get(policy.family) ?? 0) + deduction
-        )
-      );
-    }
   }
 
   const coverageRatio = possibleCoverageWeight > 0
@@ -534,30 +531,7 @@ function deriveGdprEprivacyPostureScore(rows: RegulatoryCoverageRow[]): Regulato
   }
 
   const totalDeduction = [...familyDeductions.values()].reduce((total, value) => total + value, 0);
-  let score = clampScore(100 - totalDeduction);
-  const preConsentFailure = (confirmedFamilyDeductions.get("pre_consent_enforcement") ?? 0) > 0;
-  const refusalPathFailure = rows.some((row) => (
-    row.id === "reject_all_path_availability" &&
-    row.assessmentStatus === "gap_observed" &&
-    (rowDeductions.get(row.id) ?? 0) > 0
-  ));
-  const postRefusalFailure =
-    (rowDeductions.get("post_reject_tracking_reduction") ?? 0) >=
-    (GDPR_EPRIVACY_POSTURE_POLICIES.post_reject_tracking_reduction?.gapDeduction ?? 12);
-  const sensitiveRuntimeFailure = (confirmedFamilyDeductions.get("sensitive_runtime") ?? 0) > 0;
-  const highImpactFamilyCount = [...confirmedFamilyDeductions.values()]
-    .filter((deduction) => deduction >= 6)
-    .length;
-
-  if (preConsentFailure && refusalPathFailure) score = Math.min(score, 60);
-  if (preConsentFailure && postRefusalFailure) score = Math.min(score, 35);
-  if (preConsentFailure && refusalPathFailure && postRefusalFailure) score = Math.min(score, 25);
-  if (sensitiveRuntimeFailure && (preConsentFailure || refusalPathFailure || postRefusalFailure)) {
-    score = Math.min(score, 20);
-  }
-  if (highImpactFamilyCount >= 3) score = Math.min(score, 30);
-  if (highImpactFamilyCount >= 4) score = Math.min(score, 20);
-  if (highImpactFamilyCount >= 5) score = Math.min(score, 15);
+  const score = clampScore(100 - totalDeduction);
 
   const tone = getGdprEprivacyPostureTone(score);
   return {

@@ -2385,7 +2385,9 @@ export function CompactRejectPathCard(input: {
         </span>
       </div>
       <p className="mt-1 text-xs font-semibold leading-4 text-slate-950">{input.projection.label}</p>
-      <p className="mt-1 text-[11px] leading-4 text-slate-600">{input.projection.note}</p>
+      {input.projection.note && input.projection.state !== "review_signal" ? (
+        <p className="mt-1 text-[11px] leading-4 text-slate-600">{input.projection.note}</p>
+      ) : null}
       {context.length > 0 ? (
         <p className="mt-1 text-[10px] font-medium leading-4 text-slate-500">{context.join(" · ")}</p>
       ) : null}

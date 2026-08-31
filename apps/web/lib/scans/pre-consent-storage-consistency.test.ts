@@ -90,7 +90,7 @@ test("unreconciled aggregate storage cannot coexist with a conclusive zero or a 
   assert.doesNotMatch(story.metric.explanation, /none detected/i);
   assert.equal(story.row.status, "Review signal");
   assert.doesNotMatch(story.rationale, /writes? (?:were|was) observed/i);
-  assert.equal(story.score.score, 88);
+  assert.equal(story.score.score, 94);
 });
 
 test("classified non-essential writes use the same evidence in the metric and checklist", () => {
@@ -116,4 +116,41 @@ test("classified non-essential writes use the same evidence in the metric and ch
   assert.equal(story.row.criticalEvidence.retainedEvidence.preConsentStorageAssessmentStatus, "classified_nonessential_observed");
   assert.match(story.row.evidenceRefs.join(" "), /_ga/);
   assert.match(story.rationale, /write-level timing was captured/i);
+});
+
+test("Sourcebuster snapshot storage stays semantically non-essential and timing-limited through the canonical projection", () => {
+  const cookieNames = [
+    "sbjs_migrations",
+    "sbjs_current_add",
+    "sbjs_first_add",
+    "sbjs_current",
+    "sbjs_first",
+    "sbjs_udata",
+    "sbjs_session",
+  ];
+  const story = projectStorageStory({
+    hybridRuntimeEvidence: {
+      cookieWriteObservations: cookieNames.map((cookieName) => ({
+        beforeConsent: true,
+        category: "analytics",
+        cookieName,
+        domain: "example.test",
+        essentiality: "unknown",
+        firstObservedAtMs: 5_590,
+        party: "first_party",
+        setMethod: "periodic_cookie_snapshot",
+      })),
+      storageSummary: { cookiesBeforeConsentCount: cookieNames.length },
+    },
+  });
+
+  assert.equal(story.assessment.status, "snapshot_presence_only");
+  assert.equal(story.assessment.classifiedNonEssentialCount, cookieNames.length);
+  assert.equal(story.assessment.provenWriteCount, 0);
+  assert.equal(story.metric.status, "partially_classified");
+  assert.equal(story.metric.value, null);
+  assert.equal(story.row.status, "Review signal");
+  assert.equal(story.row.label, "Non-essential storage timing review");
+  assert.match(story.row.explanation, /did not confirm that they were written during the scan/i);
+  assert.equal(story.score.score, 85);
 });

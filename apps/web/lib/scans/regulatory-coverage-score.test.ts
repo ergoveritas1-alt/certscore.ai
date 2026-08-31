@@ -146,7 +146,7 @@ test("contextual inline and persistent settings links do not incur a material sc
   }
 });
 
-test("banner control proxies remain neutral while a qualified Reject review deducts eight points", () => {
+test("banner control proxies remain neutral while a qualified Reject review uses the ten-point gap deduction", () => {
   const rows = [
     "consent_surface_observed",
     "cmp_framework_signal_observed",
@@ -175,7 +175,7 @@ test("banner control proxies remain neutral while a qualified Reject review dedu
     ]
   });
 
-  assert.equal(result.score, 92);
+  assert.equal(result.score, 90);
   assert.equal(result.coverageRatio, 1);
 });
 
@@ -223,7 +223,7 @@ test("contextual browser capability access does not incur a fingerprinting score
   assert.equal(result.score, 100);
 });
 
-test("storage review signals receive the full twelve-point deduction", () => {
+test("storage review signals use the confirmed-gap identity deduction", () => {
   for (const preConsentStorageAssessmentStatus of [
     "partially_classified",
     "snapshot_presence_only"
@@ -241,7 +241,7 @@ test("storage review signals receive the full twelve-point deduction", () => {
       }]
     });
 
-    assert.equal(result.score, 88, preConsentStorageAssessmentStatus);
+    assert.equal(result.score, 94, preConsentStorageAssessmentStatus);
   }
 });
 
@@ -263,8 +263,8 @@ test("storage review signals remain neutral when source evidence is incomplete",
   assert.equal(result.score, 100);
 });
 
-test("confirmed non-essential storage deducts two points for each identity after the first two", () => {
-  for (const [count, expectedScore] of [[1, 94], [2, 90], [3, 88], [9, 76]] as const) {
+test("confirmed non-essential storage deducts one point for each identity after the first two", () => {
+  for (const [count, expectedScore] of [[1, 94], [2, 90], [3, 89], [9, 83]] as const) {
     const result = deriveRegulatoryCoverageScore({
       framework: "gdpr_eprivacy",
       rows: [{
@@ -285,8 +285,8 @@ test("confirmed non-essential storage deducts two points for each identity after
   }
 });
 
-test("pre-consent tracker groups deduct two points for each unique vendor after the first two", () => {
-  for (const [count, expectedScore] of [[1, 94], [2, 90], [3, 88], [9, 76]] as const) {
+test("pre-consent tracker groups deduct one point for each unique vendor after the first two", () => {
+  for (const [count, expectedScore] of [[1, 94], [2, 90], [3, 89], [9, 83]] as const) {
     const groups = Array.from({ length: count }, (_, index) => ({
       party: "third_party",
       purpose: "analytics",
@@ -310,14 +310,14 @@ test("pre-consent tracker groups deduct two points for each unique vendor after 
   }
 });
 
-test("combined pre-consent storage and tracker deductions are capped at forty-eight points", () => {
-  const identities = Array.from({ length: 20 }, (_, index) => ({
+test("pre-consent storage and tracker deductions are independently capped at thirty points", () => {
+  const identities = Array.from({ length: 25 }, (_, index) => ({
     domain: `cookie-${index + 1}.example`,
     name: `cookie-${index + 1}`,
     path: "/",
     storageType: "cookie"
   }));
-  const trackerGroups = Array.from({ length: 20 }, (_, index) => ({
+  const trackerGroups = Array.from({ length: 25 }, (_, index) => ({
     vendor: `Vendor ${index + 1}`
   }));
   const result = deriveRegulatoryCoverageScore({
@@ -344,7 +344,7 @@ test("combined pre-consent storage and tracker deductions are capped at forty-ei
     ]
   });
 
-  assert.equal(result.score, 52);
+  assert.equal(result.score, 40);
 });
 
 test("California score is derived from evidence-gated checklist rows", () => {
@@ -577,7 +577,7 @@ test("unconfirmed post-refusal review remains score-neutral", () => {
   assert.equal(result.score, 100);
 });
 
-test("Reject review does not activate a confirmed-failure systemic ceiling", () => {
+test("Reject review and pre-consent tracking combine through ordinary deductions", () => {
   const result = deriveRegulatoryCoverageScore({
     framework: "gdpr_eprivacy",
     rows: [
@@ -596,10 +596,10 @@ test("Reject review does not activate a confirmed-failure systemic ceiling", () 
     ]
   });
 
-  assert.equal(result.score, 86);
+  assert.equal(result.score, 84);
 });
 
-test("systemic confirmed pre-consent, refusal-path, and post-refusal failures cap poor posture at twenty-five", () => {
+test("pre-consent, refusal-path, and post-refusal failures combine without a systemic ceiling", () => {
   const result = deriveRegulatoryCoverageScore({
     framework: "gdpr_eprivacy",
     rows: [
@@ -625,11 +625,11 @@ test("systemic confirmed pre-consent, refusal-path, and post-refusal failures ca
     ]
   });
 
-  assert.equal(result.score, 25);
-  assert.equal(result.ratingLabel, "High-priority remediation");
+  assert.equal(result.score, 72);
+  assert.equal(result.ratingLabel, "Review");
 });
 
-test("confirmed pre-consent and refusal-path failures cap posture at sixty", () => {
+test("confirmed pre-consent and refusal-path failures use ordinary deductions", () => {
   const result = deriveRegulatoryCoverageScore({
     framework: "gdpr_eprivacy",
     rows: [
@@ -648,7 +648,7 @@ test("confirmed pre-consent and refusal-path failures cap posture at sixty", () 
     ]
   });
 
-  assert.equal(result.score, 60);
+  assert.equal(result.score, 84);
 });
 
 test("a missing privacy notice is scored once instead of stacking every content omission", () => {
@@ -713,7 +713,7 @@ test("captured privacy policy transparency omissions are currently score-neutral
   assert.equal(result.score, 100);
 });
 
-test("cross-border review remains neutral while a distinct confirmed embed retains its deduction", () => {
+test("cross-border review uses the confirmed-gap deduction while a distinct embed retains its deduction", () => {
   const crossBorderReview = deriveRegulatoryCoverageScore({
     framework: "gdpr_eprivacy",
     rows: [{
@@ -741,11 +741,11 @@ test("cross-border review remains neutral while a distinct confirmed embed retai
     ]
   });
 
-  assert.equal(crossBorderReview.score, 100);
+  assert.equal(crossBorderReview.score, 94);
   assert.equal(trackingWithEmbed.score, 89);
 });
 
-test("Caltech-style review evidence applies storage, tracker, decline, social, and embedded deductions", () => {
+test("Caltech-style review evidence uses the same deductions as confirmed gaps", () => {
   const result = deriveRegulatoryCoverageScore({
     framework: "gdpr_eprivacy",
     rows: [
@@ -796,11 +796,11 @@ test("Caltech-style review evidence applies storage, tracker, decline, social, a
     ]
   });
 
-  assert.equal(result.score, 65);
-  assert.equal(result.ratingLabel, "Review");
+  assert.equal(result.score, 60);
+  assert.equal(result.ratingLabel, "Needs work");
 });
 
-test("fingerprinting and session replay use their evidence-qualified review and diminishing gap schedules", () => {
+test("fingerprinting and session replay reviews use their confirmed-gap schedules", () => {
   const fingerprintReview = deriveRegulatoryCoverageScore({
     framework: "gdpr_eprivacy",
     rows: [{
@@ -864,14 +864,14 @@ test("fingerprinting and session replay use their evidence-qualified review and 
     }]
   });
 
-  assert.equal(fingerprintReview.score, 96);
+  assert.equal(fingerprintReview.score, 90);
   assert.equal(fingerprintGap.score, 84);
-  assert.equal(replayReview.score, 95);
+  assert.equal(replayReview.score, 88);
   assert.equal(replayGap.score, 82);
   assert.equal(sensitiveReplayGap.score, 80);
 });
 
-test("sensitive runtime plus consent enforcement caps poor posture at twenty", () => {
+test("sensitive runtime and pre-consent findings combine without a systemic ceiling", () => {
   const result = deriveRegulatoryCoverageScore({
     framework: "gdpr_eprivacy",
     rows: [
@@ -890,7 +890,7 @@ test("sensitive runtime plus consent enforcement caps poor posture at twenty", (
     ]
   });
 
-  assert.equal(result.score, 20);
+  assert.equal(result.score, 82);
 });
 
 test("technical policy extraction limitations do not affect the GDPR/ePrivacy score", () => {

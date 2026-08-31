@@ -219,6 +219,7 @@ export function RuntimeInventoryMix({ compact = false, inventory }: { compact?: 
 }
 
 export function RuntimeInventorySummaryCard({
+  action,
   children,
   compact = false,
   description,
@@ -230,6 +231,7 @@ export function RuntimeInventorySummaryCard({
   note,
   summary,
 }: {
+  action?: ReactNode;
   children: ReactNode;
   compact?: boolean;
   description?: string;
@@ -251,6 +253,7 @@ export function RuntimeInventorySummaryCard({
           </div>
           <span className="flex shrink-0 items-center gap-3 text-xs font-semibold text-zinc-700">
             <span className={monoClass}>{summary}</span>
+            {action}
           </span>
         </div>
         <RuntimeInventoryMix compact={compact} inventory={inventory} />

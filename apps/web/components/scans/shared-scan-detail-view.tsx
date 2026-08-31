@@ -51,6 +51,7 @@ import { RegulatoryChecklistSection } from "./regulatory-checklist-section";
 import { ScanReportDisclosureIcon } from "./scan-report-disclosure-icon";
 import { ScanPageHeader } from "./scan-page-header";
 import { InventorySortButton, InventorySortRuntime } from "./inventory-table-sort";
+import { InventoryNameDisclosure } from "./inventory-name-disclosure";
 import { VendorBrandChip } from "./vendor-brand-chip";
 import { NoGoBrowserExtensionRecovery } from "./no-go-browser-extension-recovery";
 import {
@@ -145,6 +146,7 @@ import {
   deriveRuntimeInventoryPresentationState,
   deriveInventoryMacroCategory,
   getInventoryGroupRowRenderKey,
+  getInventoryObservationNames,
   getTrackerConsentReviewPriority,
   isCmpOrFunctionalVendorDomain,
   type ConsentReviewPriority,
@@ -652,6 +654,15 @@ function formatInventoryCellForCopy(value: string | number | null | undefined) {
   return String(value ?? "—").replace(/[\t\r\n]+/g, " ").trim() || "—";
 }
 
+function InventoryNameCell({ row }: { row: InventoryGroupRow }) {
+  const retainedNames = getInventoryObservationNames(row);
+  const fullName = retainedNames.join(", ");
+  if (!fullName) {
+    return <span className="text-slate-400">—</span>;
+  }
+  return <InventoryNameDisclosure fullName={fullName} />;
+}
+
 export function buildInventoryPartyAttributionSegments(
   rows: Array<Pick<InventoryGroupRow, "siteRelationship"> & Partial<Pick<InventoryGroupRow, "observedRecordCount">>>
 ) {
@@ -834,15 +845,15 @@ function InventoryPurposeCard({ rows }: { rows: InventoryGroupRow[] }) {
 
 function buildRuntimeInventoryCopyPayload(rows: InventoryGroupRow[]) {
   const copyRows = [
-    ["Type", "Vendor", "Purpose", "Evidence", "First seen", "Requests", "Cookie name(s)", "Domain", "Destination", "Confidence", "Relationship", "Category", "Priority"],
+    ["Type", "Vendor", "Name", "Purpose", "Evidence", "First seen", "Requests", "Domain", "Destination", "Confidence", "Relationship", "Category", "Priority"],
     ...rows.map((row) => [
       row.type === "cookie" ? "Cookie" : "Tracker",
       row.vendor,
+      getInventoryObservationNames(row).join(", ") || "—",
       getInventoryPurposeLabel(row),
       classifyInventoryEvidence(row),
       formatFirstSeenMs(row.firstSeenMs),
       row.requestCount ?? "—",
-      row.cookieNames.join(", ") || "—",
       row.domains.join(", ") || "—",
       row.dataFlows.map((flow) => [
         flow.networkDestination.countryCode ?? "unknown edge",
@@ -955,7 +966,8 @@ function InventoryEvidenceCell({ row }: { row: InventoryGroupRow }) {
 }
 
 export function buildInventoryEvidenceCounts(
-  rows: Array<Pick<InventoryGroupRow, "macroCategory" | "observedRecordCount" | "priority" | "purpose" | "purposes">>
+  rows: Array<Pick<InventoryGroupRow, "macroCategory" | "observedRecordCount" | "priority" | "purpose" | "purposes"> &
+    Partial<Pick<InventoryGroupRow, "cookieDetails">>>
 ) {
   const countEvidence = (classification: ReturnType<typeof classifyInventoryEvidence>) => rows.reduce(
     (total, row) => total + (classifyInventoryEvidence(row) === classification ? row.observedRecordCount : 0),
@@ -1083,6 +1095,10 @@ function RuntimeInventoryTable({
                   </div>
                   <InventoryPriorityCell priority={row.priority} />
                 </div>
+                <div className="mt-2 grid grid-cols-[4rem_minmax(0,1fr)] items-start gap-2 text-[11px] text-slate-500">
+                  <span>Name</span>
+                  <div className="min-w-0 text-right text-slate-700"><InventoryNameCell row={row} /></div>
+                </div>
                 <div className="mt-2 grid grid-cols-2 gap-x-3 gap-y-1 text-[11px] text-slate-500">
                   <span>{row.type === "cookie" ? "Cookie" : "Tracker"}</span>
                   <span className="text-right"><InventoryEvidenceCell row={row} /></span>
@@ -1103,16 +1119,16 @@ function RuntimeInventoryTable({
                 <tr>
                   <th title="Cookie or tracker evidence type" className="sticky left-0 top-0 z-30 w-[90px] whitespace-nowrap border-b border-slate-200 bg-slate-50 px-2 py-2 font-semibold"><InventorySortButton tableId="preconsent-inventory-table" sortKey="type" label="Type" /></th>
                   <th title="Resolved vendor or first-party entity" className="sticky left-[90px] top-0 z-30 w-[150px] whitespace-nowrap border-b border-slate-200 bg-slate-50 px-2 py-2 font-semibold"><InventorySortButton tableId="preconsent-inventory-table" sortKey="vendor" label="Vendor" /></th>
+                  <th title="Retained cookie identifier or tracker/product name" className="sticky top-0 z-20 w-[132px] max-w-[132px] whitespace-nowrap border-b border-slate-200 bg-slate-50 px-2 py-2 font-semibold">
+                    <span className="inline-flex items-center gap-1">
+                      Name
+                      <InfoTip align="start" placement="top" text="Cookie rows show retained cookie identifiers; tracker rows show retained tracker or product names. Open a shortened name to see its full value." />
+                    </span>
+                  </th>
                   <th title="Observed purpose classification for this cookie or tracker" className="sticky top-0 z-20 w-[165px] whitespace-nowrap border-b border-slate-200 bg-slate-50 px-2 py-2 font-semibold"><InventorySortButton tableId="preconsent-inventory-table" sortKey="purpose" label="Purpose" /></th>
                   <th title="Consent evidence classification" className="sticky top-0 z-20 w-[105px] whitespace-nowrap border-b border-slate-200 bg-slate-50 px-2 py-2 font-semibold">Evidence</th>
                   <th title="Elapsed time from scan start to observation" className="sticky top-0 z-20 w-[80px] whitespace-nowrap border-b border-slate-200 bg-slate-50 px-2 py-2 font-semibold"><InventorySortButton tableId="preconsent-inventory-table" sortKey="firstSeen" label="Observed" /></th>
                   <th title="Retained third-party request events represented by this row" className="sticky top-0 z-20 w-[60px] whitespace-nowrap border-b border-slate-200 bg-slate-50 px-2 py-2 text-center font-semibold">Req.</th>
-                  <th title="Cookie or tracker names retained in this observation." className="sticky top-0 z-20 w-[132px] max-w-[132px] whitespace-nowrap border-b border-slate-200 bg-slate-50 px-2 py-2 font-semibold">
-                    <span className="inline-flex items-center gap-1">
-                      Name(s)
-                      <InfoTip align="start" placement="top" text="Cookie or tracker names retained for this row; a dash means no name was retained." />
-                    </span>
-                  </th>
                   <th className="sticky top-0 z-20 w-[150px] max-w-[150px] whitespace-nowrap border-b border-slate-200 bg-slate-50 px-2 py-2 font-semibold">Domain</th>
                   <th className="sticky top-0 z-20 w-[120px] whitespace-nowrap border-b border-slate-200 bg-slate-50 px-2 py-2 font-semibold">Server location</th>
                   <th className="sticky top-0 z-20 w-[80px] whitespace-nowrap border-b border-slate-200 bg-slate-50 px-2 py-2 font-semibold">Confidence</th>
@@ -1134,13 +1150,16 @@ function RuntimeInventoryTable({
                     data-pre-consent={row.preConsent ? "true" : "false"}
                     data-first-seen={row.firstSeenMs ?? ""}
                     data-priority={row.priority}
-                    data-search={`${row.vendor} ${getInventoryPurposeLabel(row)} ${row.cookieNames.join(" ")} ${row.domains.join(" ")}`.toLowerCase()}
+                    data-search={`${row.vendor} ${getInventoryObservationNames(row).join(" ")} ${getInventoryPurposeLabel(row)} ${row.cookieNames.join(" ")} ${row.domains.join(" ")}`.toLowerCase()}
                   >
                     <td className="sticky left-0 z-10 whitespace-nowrap bg-white px-2 py-1.5 align-top group-hover:bg-sky-50/55 has-[details[open]]:z-40">
                       <InventoryTypeDisclosure row={row} />
                     </td>
                     <td className="sticky left-[90px] z-10 truncate whitespace-nowrap bg-white px-2 py-1.5 align-middle group-hover:bg-sky-50/55">
                       <InventoryVendorCell label={row.vendor} />
+                    </td>
+                    <td className="max-w-[132px] px-2 py-1.5 align-top">
+                      <InventoryNameCell row={row} />
                     </td>
                     <td className="whitespace-nowrap px-2 py-1.5 align-middle" title={getInventoryPurposeLabel(row)}>
                       <span className="flex min-w-0 items-center">
@@ -1150,7 +1169,6 @@ function RuntimeInventoryTable({
                     <td className="whitespace-nowrap px-2 py-1.5 align-middle"><InventoryEvidenceCell row={row} /></td>
                     <td className="truncate whitespace-nowrap px-2 py-1.5 align-middle" title={row.type === "cookie" && row.firstSeenMs === null && /snapshot/.test(row.timingEvidence ?? "") ? "Present before recorded consent — write timing unconfirmed" : undefined}>{formatInventoryTiming(row)}</td>
                     <td className="whitespace-nowrap px-2 py-1.5 text-center tabular-nums align-middle" title={row.requestCount === null ? "Request count was not retained for this row" : `${row.requestCount} retained request event${row.requestCount === 1 ? "" : "s"}`}>{row.requestCount ?? "—"}</td>
-                    <td className="max-w-[132px] truncate whitespace-nowrap px-2 py-1.5 align-middle" title={row.cookieNames.join(", ") || undefined}>{row.cookieNames.join(", ") || "—"}</td>
                     <td className="max-w-[150px] truncate whitespace-nowrap px-2 py-1.5 align-middle" title={row.domains.join(", ") || undefined}>{row.domains.join(", ") || "—"}</td>
                     <td className="px-2 py-1.5 align-top"><InventoryDataFlowCell row={row} /></td>
                     <td className="truncate whitespace-nowrap px-2 py-1.5 align-middle">
@@ -1365,6 +1383,9 @@ function formatRejectTimelineEvent(row: Record<string, unknown>) {
 }
 
 function omitScoreMechanicsFromCustomerCopy(value: string) {
+  if (!value.trim()) {
+    return "";
+  }
   const sanitized = value
     .split(/(?<=[.!?])\s+/)
     .filter((sentence) => !/\b(?:score|scored|scoring|deduct|deducted|deduction|points?)\b/i.test(sentence))

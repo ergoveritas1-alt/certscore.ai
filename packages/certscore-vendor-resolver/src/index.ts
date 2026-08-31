@@ -17,7 +17,7 @@ export {
   type TransferMechanism,
 } from "./cookie-knowledge-base";
 
-export const CANONICAL_VENDOR_RESOLVER_VERSION = "certscore-vendor-resolver-2026-08-27-sourcebuster-dsgvoaio-bst-dsgvo-cookie-matomo-facebook-page-plugin-vwo-consent-state-bing-uet-storage-adobe-consent-fullstory-case-liveperson-storage-sitecore-analytics-uid-owner-braze-snowplow-storage";
+export const CANONICAL_VENDOR_RESOLVER_VERSION = "certscore-vendor-resolver-2026-08-31-sourcebuster-cookie-essentiality-dsgvoaio-bst-dsgvo-cookie-matomo-facebook-page-plugin-vwo-consent-state-bing-uet-storage-adobe-consent-fullstory-case-liveperson-storage-sitecore-analytics-uid-owner-braze-snowplow-storage";
 
 export type VendorResolverEvidenceType =
   | "request"

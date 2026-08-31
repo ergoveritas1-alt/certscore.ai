@@ -17,6 +17,7 @@ import {
 import {
   buildRuntimeInventoryProjectionFromScan,
   classifyInventoryEvidence,
+  getInventoryObservationNames,
 } from "../../../lib/scans/runtime-inventory-projection";
 import type { ScanDetailResponse } from "../../../server/scans/get-scan-by-id";
 import { deriveCanonicalOverallScoreForReport } from "../../../server/scans/canonical-overall-score";
@@ -418,6 +419,7 @@ export function buildTimelineReportModel(scanRecord: ScanDetailResponse): Shadow
       vendor: row.vendor,
     },
     entityRelationship: entityRelationshipLabel(row.entityRelationship),
+    name: getInventoryObservationNames(row).join(", ") || "Not retained",
     observed: row.firstSeenMs === null ? "Timing unavailable" : formatTimelineTime(row.firstSeenMs),
     priority: row.priority.replace(/_/g, " "),
     purpose: row.purpose,

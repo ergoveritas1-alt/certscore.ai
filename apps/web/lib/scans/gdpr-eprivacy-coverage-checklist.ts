@@ -2309,12 +2309,18 @@ function specializeChecklistRow(input: {
   }
 
   if (input.definition.id === "pre_consent_cookies_storage" && input.status === "Review signal") {
+    const assessmentStatus = input.coverageOutcome?.criticalEvidence.retainedEvidence.preConsentStorageAssessmentStatus;
+    const snapshotOnly = assessmentStatus === "snapshot_presence_only";
     return {
       evidenceRefs: input.evidenceRefs,
       explanation:
         input.coverageOutcome?.limitation ??
-        "Pre-consent storage was retained, but the evidence did not classify every item as essential or non-essential. This is a classification review, not a confirmed non-essential-storage finding.",
-      label: "Pre-consent storage classification review",
+        (snapshotOnly
+          ? "Classified non-essential storage was present in a pre-consent snapshot, but write-level timing was not retained."
+          : "Pre-consent storage was retained, but the evidence did not classify every item as essential or non-essential. This is a classification review, not a confirmed non-essential-storage finding."),
+      label: snapshotOnly
+        ? "Non-essential storage timing review"
+        : "Pre-consent storage classification review",
       status: "Review signal" as const
     };
   }

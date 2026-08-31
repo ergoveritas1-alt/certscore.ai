@@ -462,7 +462,7 @@ test("proven write count excludes essential writes and snapshot-only non-essenti
   assert.equal(assessment.provenWriteCount, 0);
 });
 
-test("canonical cookie knowledge classifies common Google Analytics and Meta snapshot cookies as non-essential", () => {
+test("canonical cookie knowledge classifies Google Analytics and Meta snapshot cookies without promoting snapshot timing", () => {
   const assessment = buildPreConsentStorageAssessment({
     runtimeArtifacts: {
       hybridRuntimeEvidence: {
@@ -495,10 +495,11 @@ test("canonical cookie knowledge classifies common Google Analytics and Meta sna
     }
   });
 
-  assert.equal(assessment.status, "classified_nonessential_observed");
+  assert.equal(assessment.status, "snapshot_presence_only");
   assert.equal(assessment.classifiedNonEssentialCount, 2);
+  assert.equal(assessment.provenWriteCount, 0);
   assert.equal(assessment.unclassifiedCount, 0);
-  assert.equal(projectPreConsentStorageMetric(assessment).value, 2);
+  assert.equal(projectPreConsentStorageMetric(assessment).value, null);
   assert.deepEqual(
     assessment.evidenceRows.map((row) => [row.name, row.essentiality, row.essentialitySource]),
     [
@@ -508,7 +509,7 @@ test("canonical cookie knowledge classifies common Google Analytics and Meta sna
   );
 });
 
-test("canonical cookie knowledge classifies retained Microsoft Clarity and identity cookies without display inference", () => {
+test("canonical cookie knowledge classifies retained Microsoft Clarity and identity cookies without promoting snapshot timing", () => {
   const assessment = buildPreConsentStorageAssessment({
     runtimeArtifacts: {
       hybridRuntimeEvidence: {
@@ -535,8 +536,9 @@ test("canonical cookie knowledge classifies retained Microsoft Clarity and ident
     },
   });
 
-  assert.equal(assessment.status, "classified_nonessential_observed");
+  assert.equal(assessment.status, "partially_classified");
   assert.equal(assessment.classifiedNonEssentialCount, 4);
+  assert.equal(assessment.provenWriteCount, 0);
   assert.equal(assessment.unclassifiedCount, 1);
   assert.deepEqual(
     assessment.evidenceRows.map((row) => [row.name, row.category, row.essentiality, row.firstObservedMs]),
@@ -548,6 +550,42 @@ test("canonical cookie knowledge classifies retained Microsoft Clarity and ident
       ["SRM_B", "unknown", "unknown", 2_150],
     ],
   );
+});
+
+test("canonical Sourcebuster snapshot storage retains non-essential semantics but remains a timing review", () => {
+  const cookieNames = [
+    "sbjs_migrations",
+    "sbjs_current_add",
+    "sbjs_first_add",
+    "sbjs_current",
+    "sbjs_first",
+    "sbjs_udata",
+    "sbjs_session",
+  ];
+  const assessment = buildPreConsentStorageAssessment({
+    runtimeArtifacts: {
+      hybridRuntimeEvidence: {
+        cookieWriteObservations: cookieNames.map((cookieName) => ({
+          beforeConsent: true,
+          category: "analytics",
+          cookieName,
+          domain: "example.test",
+          essentiality: "unknown",
+          firstObservedAtMs: 5_590,
+          party: "first_party",
+          setMethod: "periodic_cookie_snapshot",
+        })),
+        storageSummary: { cookiesBeforeConsentCount: cookieNames.length },
+      },
+    },
+  });
+
+  assert.equal(assessment.status, "snapshot_presence_only");
+  assert.equal(assessment.classifiedNonEssentialCount, cookieNames.length);
+  assert.equal(assessment.provenWriteCount, 0);
+  assert.ok(assessment.evidenceRows.every((row) => row.essentiality === "non_essential"));
+  assert.ok(assessment.evidenceRows.every((row) => row.essentialitySource === "canonical_registry"));
+  assert.ok(assessment.evidenceRows.every((row) => row.timingEvidence === "periodic_preconsent_snapshot"));
 });
 
 test("preserves a snapshot timestamp as first-observed time without treating it as an exact cookie set time", () => {

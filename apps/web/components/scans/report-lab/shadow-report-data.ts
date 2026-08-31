@@ -162,6 +162,7 @@ export type ShadowReportData = {
     evidence: string;
     evidenceJson?: Record<string, unknown>;
     entityRelationship: string;
+    name: string;
     observed: string;
     priority: string;
     purpose: string;
@@ -711,6 +712,7 @@ export const SHADOW_REPORT: ShadowReportData = {
       purpose: "Embedded media",
       evidence: "Non-essential",
       entityRelationship: "External entity",
+      name: "Facebook Page Plugin",
       observed: "6.21s",
       domains: "facebook.com",
       relationship: "Cross-site",
@@ -730,6 +732,7 @@ export const SHADOW_REPORT: ShadowReportData = {
       purpose: "Cookie compliance",
       evidence: "Contextual",
       entityRelationship: "Unknown",
+      name: "BST DSGVO Cookie",
       observed: "5.57s",
       domains: "pferdeklinik-roentorf.de",
       relationship: "Same-site",
@@ -749,6 +752,7 @@ export const SHADOW_REPORT: ShadowReportData = {
       purpose: "CDN",
       evidence: "Contextual",
       entityRelationship: "External entity",
+      name: "Google Fonts",
       observed: "5.71s",
       domains: "fonts.googleapis.com, fonts.gstatic.com",
       relationship: "Cross-site",

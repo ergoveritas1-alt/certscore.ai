@@ -1105,6 +1105,9 @@ export function buildPreConsentStorageAssessment(input: {
   const classifiedNonEssentialRows = preConsentRows.filter((row) =>
     isEligibleNonEssentialPreconsentStorageMetricRow(row)
   );
+  const provenNonEssentialWriteRows = preConsentRows.filter(
+    isEligibleNonEssentialPreconsentStorageRow
+  );
   const classifiedEssentialRows = preConsentRows.filter((row) => row.essentiality === "essential");
   const unclassifiedRows = preConsentRows.filter((row) => row.essentiality === "unknown");
   const excludedRows = preConsentRows.filter((row) =>
@@ -1133,7 +1136,7 @@ export function buildPreConsentStorageAssessment(input: {
   const status: PreConsentStorageAssessmentStatus =
     !captureRetained
       ? "insufficient_evidence"
-      : classifiedNonEssentialRows.length > 0
+      : provenNonEssentialWriteRows.length > 0
         ? "classified_nonessential_observed"
         : unclassifiedRows.length > 0 ||
             reconciliationStatus === "aggregate_exceeds_attributed_rows" ||
@@ -1170,7 +1173,7 @@ export function buildPreConsentStorageAssessment(input: {
     classifiedNonEssentialCount: classifiedNonEssentialRows.length,
     excludedFunctionalOrConsentCount: excludedRows.length,
     evidenceRows,
-    provenWriteCount: preConsentRows.filter(isEligibleNonEssentialPreconsentStorageRow).length,
+    provenWriteCount: provenNonEssentialWriteRows.length,
     reconciliationStatus,
     snapshotPresenceCount: snapshotRows.length,
     status,
@@ -1231,7 +1234,7 @@ export function projectPreConsentStorageMetric(
   if (assessment.status === "snapshot_presence_only") {
     return {
       available: false,
-      explanation: "Non-essential storage candidates were present in a pre-consent snapshot, but write timing was not confirmed.",
+      explanation: "Classified non-essential storage identities were present in a pre-consent snapshot, but write timing was not confirmed.",
       label: "Pre-consent storage",
       scope: "nonessential_only",
       status: "partially_classified",

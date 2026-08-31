@@ -152,7 +152,7 @@ test("compact Reject-path card presents persistence evidence without scoring tre
   }));
 
   assert.match(persistenceHtml, /Review signal/);
-  assert.match(persistenceHtml, /Stored presence alone does not establish active use/);
+  assert.doesNotMatch(persistenceHtml, /Stored presence alone does not establish active use/);
   assert.doesNotMatch(persistenceHtml, /score effect|included in score|deduct/i);
   assert.equal(incompleteHtml, "");
 });

@@ -954,7 +954,7 @@ test("canonical consent-control flow projects UniConsent accept/options evidence
   assert.equal(story.rejectRow.status, "Review signal");
   assert.equal(story.rejectRow.assessmentStatus, "review_signal");
   assert.equal(getEvidenceLabel(story.rejectRow), "Partial concern");
-  assert.equal(story.rejectScore.score, 92);
+  assert.equal(story.rejectScore.score, 90);
   assert.match(story.rejectRow.limitation ?? "", /no same-layer reject/i);
 });
 
@@ -1026,7 +1026,7 @@ test("canonical consent-control flow projects reject-and-subscribe as a partial 
   assert.equal(story.rejectRow.assessmentStatus, "review_signal");
   assert.match(story.rejectRow.limitation ?? "", /consent or pay/i);
   assert.match(story.rejectRow.limitation ?? "", /cannot be determined from the consent interface alone/i);
-  assert.equal(story.rejectScore.score, 92);
+  assert.equal(story.rejectScore.score, 90);
   assert.equal(story.gapFindingObserved, false);
 });
 
@@ -1126,7 +1126,7 @@ function projectStorageStory(runtimeArtifacts: Record<string, unknown>) {
   };
 }
 
-test("canonical pre-consent storage flow preserves classification and applies the configured review deduction", () => {
+test("canonical pre-consent storage flow preserves classification and applies the unified deduction schedule", () => {
   const cases = [
     {
       name: "essential storage only",
@@ -1162,7 +1162,7 @@ test("canonical pre-consent storage flow preserves classification and applies th
       expectedGapFinding: false,
       expectedMetric: null,
       expectedRowStatus: "Review signal",
-      expectedScore: 88
+      expectedScore: 94
     },
     {
       name: "confirmed non-essential write",

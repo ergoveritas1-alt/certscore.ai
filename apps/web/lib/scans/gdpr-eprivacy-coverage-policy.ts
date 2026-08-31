@@ -2592,7 +2592,7 @@ function derivePreConsentCookieStorageOutcome(input: GdprEprivacyCoveragePolicyI
     return makeOutcome(
       "pre_consent_cookies_storage",
       "Review signal",
-      "Non-essential storage candidates were present in a pre-consent snapshot, but retained evidence did not confirm that they were written during the scan.",
+      "Classified non-essential storage identities were present in a pre-consent snapshot, but retained evidence did not confirm that they were written during the scan.",
       evidenceRefs,
       { retainedEvidence }
     );

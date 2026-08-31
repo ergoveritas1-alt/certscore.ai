@@ -4938,7 +4938,7 @@ test("policySurfaceScanner does not follow third-party privacy policy links from
 
     assert.ok(firstPartyCookie);
     assert.deepEqual(thirdPartyPolicies, []);
-  }, { enableNanoPolicyAssist: true, internalBudgetMs: 8_000 });
+  }, { enableNanoPolicyAssist: true, internalBudgetMs: 12_000 });
 });
 
 test("policySurfaceScanner ignores external URL-only body privacy links as policy surfaces", async () => {

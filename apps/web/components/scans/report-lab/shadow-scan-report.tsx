@@ -6,6 +6,8 @@ import { AgentSummaryActions, ShareReportActions } from "../share-report-actions
 import { getScanFromMarkerInput, ScanFromMarker } from "../scan-from-icons";
 import type { ServerScanFrom } from "../scan-from-select";
 import { VendorBrandChip } from "../vendor-brand-chip";
+import { CopyJsonButton } from "../copy-json-button";
+import { InventoryNameDisclosure } from "../inventory-name-disclosure";
 import { CompactRejectPathCard } from "../executive-summary-card";
 import {
   RuntimeInventorySummaryCard,
@@ -13,6 +15,7 @@ import {
 } from "../runtime-observation-sections";
 import { getGdprEprivacyPostureTone } from "../../../lib/scans/regulatory-coverage-score";
 import { ShadowReportShareMenu } from "./shadow-report-actions";
+import { buildRuntimeInventoryCopyPayload } from "./inventory-table-copy";
 import { ShadowPolicyEvidenceViewer } from "./shadow-policy-evidence-viewer";
 import {
   RegulatoryChecklistCorrectionSteps,
@@ -572,6 +575,21 @@ function formatRejectTimelineOffset(milliseconds: number) {
   return `${seconds}s`;
 }
 
+function ExpandableTimelineDetail({ text }: { text: string }) {
+  return (
+    <details className="group/timeline-detail max-w-[14rem] text-xs leading-5 text-zinc-500">
+      <summary
+        aria-label="Show full post-Reject outcome detail"
+        className="relative cursor-pointer list-none marker:hidden focus-visible:rounded-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-500 [&::-webkit-details-marker]:hidden"
+      >
+        <span className="line-clamp-2 pr-4 group-open/timeline-detail:hidden">{text}</span>
+        <span aria-hidden="true" className="absolute bottom-0 right-0 bg-white pl-0.5 font-semibold text-sky-700 group-open/timeline-detail:hidden">...</span>
+        <span className="hidden group-open/timeline-detail:block">{text}</span>
+      </summary>
+    </details>
+  );
+}
+
 function RejectPathTimeline({ report }: { report: ShadowReportData }) {
   const projection = report.rejectPath;
   if (!projection || projection.state === "incomplete" || projection.observationWindowMs === null) {
@@ -630,9 +648,6 @@ function RejectPathTimeline({ report }: { report: ShadowReportData }) {
         </div>
         <span className={`rounded-md border px-2.5 py-1 text-[0.68rem] font-semibold uppercase ${toneClasses}`}>{outcome.badge}</span>
       </div>
-      <div className="mt-4 rounded-md border border-sky-200 bg-sky-50 px-3 py-2 text-xs leading-5 text-sky-950">
-        <span className="font-semibold">Expected after Reject:</span> optional trackers should stop sending requests and creating or updating browser storage during the observed window.
-      </div>
       <div className="mt-6 overflow-x-auto pb-2">
         <div className="relative min-w-[48rem] pt-10">
           <div className="absolute left-0 right-0 top-[3.7rem] h-px bg-zinc-300" />
@@ -642,7 +657,9 @@ function RejectPathTimeline({ report }: { report: ShadowReportData }) {
                 <span className={`absolute top-[0.72rem] h-3 w-3 rounded-full border-2 border-white ring-1 ${event.tone === "concern" ? "bg-rose-500 ring-rose-500" : event.tone === "review" ? "bg-amber-500 ring-amber-500" : "bg-emerald-600 ring-emerald-600"}`} />
                 <p className={`${monoClass} text-xs font-semibold ${event.tone === "concern" ? "text-rose-700" : event.tone === "review" ? "text-amber-800" : "text-emerald-700"}`}>{formatRejectTimelineOffset(event.atMs)}</p>
                 <p className="mt-9 text-sm font-semibold text-zinc-950">{event.label}</p>
-                <p className="mt-1 max-w-[14rem] text-xs leading-5 text-zinc-500">{event.detail}</p>
+                {event.detail ? (
+                  <div className="mt-1"><ExpandableTimelineDetail text={event.detail} /></div>
+                ) : null}
               </div>
             ))}
           </div>
@@ -898,7 +915,8 @@ function InventoryRowDetails({ row }: { row: InventoryRow }) {
     ? row.evidenceJson.regulatoryRelevance.filter((item): item is string => typeof item === "string").join(", ") || "Not retained"
     : "Not retained";
   const values = [
-    ["Request / name", row.requestNames],
+    ["Name", row.name],
+    ["Requests / paths", row.requestNames],
     ["Evidence", row.evidence],
     ["Purpose", row.purpose],
     ["Category", row.category],
@@ -927,29 +945,39 @@ function InventoryRowDetails({ row }: { row: InventoryRow }) {
   );
 }
 
+const INVENTORY_VISIBLE_ROW_LIMIT = 6;
+
 function RuntimeInventoryTable({ report }: { report: ShadowReportData }) {
-  const inventoryScrollClasses = report.inventory.length > 8
-    ? "max-h-[48rem] overflow-auto"
+  const inventoryIsScrollable = report.inventory.length > INVENTORY_VISIBLE_ROW_LIMIT;
+  const inventoryScrollClasses = inventoryIsScrollable
+    ? "max-h-[22rem] overflow-auto"
     : "overflow-x-auto";
+  const copyPayload = buildRuntimeInventoryCopyPayload(report.inventory);
 
   return (
     <RuntimeInventorySummaryCard
-      description="Every retained cookie, storage, tracker, and request group from the canonical runtime inventory is available below."
+      action={(
+        <CopyJsonButton
+          className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-zinc-200 bg-white text-zinc-500 shadow-sm transition hover:border-zinc-300 hover:text-zinc-950"
+          label="Copy entire cookies and trackers table"
+          payload={copyPayload}
+        />
+      )}
       detailsLabel="View full inventory table"
       eyebrow="Cookie and tracker inventory"
-      heading="Every retained vendor and request group"
+      heading="Every retained cookie and tracker observation"
       inventory={report.inventory}
       summary={`${report.metrics.vendors} vendors · ${report.metrics.domains} domains`}
     >
         <div
           className={`${inventoryScrollClasses} border border-zinc-200 bg-white`}
-          data-inventory-scroll={report.inventory.length > 8 ? "bounded" : "unbounded"}
+          data-inventory-scroll={inventoryIsScrollable ? "bounded" : "unbounded"}
         >
-        <table className="w-full min-w-[86rem] table-fixed border-collapse text-left text-xs">
+        <table className="w-full min-w-[95rem] table-fixed border-collapse text-left text-xs">
           <thead className="sticky top-0 z-20 bg-zinc-50 text-zinc-500 shadow-[0_2px_8px_-6px_rgba(24,24,27,0.55)]">
             <tr>
               {[
-                ["More", "w-[5.5rem]"], ["Vendor", "w-[10rem]"], ["Type", "w-[4rem]"], ["Purpose", "w-[11rem]"],
+                ["More", "w-[5.5rem]"], ["Type", "w-[4rem]"], ["Vendor", "w-[10rem]"], ["Name", "w-[9rem]"], ["Purpose", "w-[11rem]"],
                 ["Evidence mix", "w-[8rem]"], ["First seen", "w-[7rem]"], ["Domains", "w-[14rem]"],
                 ["Relationship", "w-[12rem]"], ["Confidence", "w-[6rem]"], ["Priority", "w-[8rem]"],
               ].map(([label, width], index) => (
@@ -968,8 +996,9 @@ function RuntimeInventoryTable({ report }: { report: ShadowReportData }) {
                     <InventoryRowDetails row={row} />
                   </details>
                 </td>
-                <td className="px-3 py-3"><VendorBrandChip label={row.vendor} showMeta={false} /></td>
                 <td className="px-3 py-3 text-zinc-600"><InventoryTypeIcon type={row.type} /></td>
+                <td className="px-3 py-3"><VendorBrandChip label={row.vendor} showMeta={false} /></td>
+                <td className="px-3 py-3 text-zinc-600"><InventoryNameDisclosure fullName={row.name} /></td>
                 <td className="px-3 py-3 text-zinc-600"><span className={`inline-flex max-w-full rounded-md px-2 py-1 text-[0.68rem] font-semibold ${inventoryPurposeClasses(row.purpose)}`}><TwoLineCell title={row.purpose}>{row.purpose}</TwoLineCell></span></td>
                 <td className="px-3 py-3 text-zinc-600"><span className={`inline-flex max-w-full rounded-md px-2 py-1 text-[0.68rem] font-semibold ${inventoryEvidenceClasses(row.evidence)}`}><TwoLineCell title={row.evidence}>{row.evidence}</TwoLineCell></span></td>
                 <td className={`${monoClass} px-3 py-3 text-zinc-600`}><TwoLineCell title={row.observed}>{row.observed}</TwoLineCell></td>
