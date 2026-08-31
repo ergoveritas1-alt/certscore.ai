@@ -90,7 +90,7 @@ test("unreconciled aggregate storage cannot coexist with a conclusive zero or a 
   assert.doesNotMatch(story.metric.explanation, /none detected/i);
   assert.equal(story.row.status, "Review signal");
   assert.doesNotMatch(story.rationale, /writes? (?:were|was) observed/i);
-  assert.equal(story.score.score, 100);
+  assert.equal(story.score.score, 88);
 });
 
 test("classified non-essential writes use the same evidence in the metric and checklist", () => {
@@ -115,5 +115,5 @@ test("classified non-essential writes use the same evidence in the metric and ch
   assert.equal(story.metric.value, 1);
   assert.equal(story.row.criticalEvidence.retainedEvidence.preConsentStorageAssessmentStatus, "classified_nonessential_observed");
   assert.match(story.row.evidenceRefs.join(" "), /_ga/);
-  assert.match(story.rationale, /write-level timing evidence/i);
+  assert.match(story.rationale, /write-level timing was captured/i);
 });

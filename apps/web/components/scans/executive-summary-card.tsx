@@ -1930,6 +1930,7 @@ function BenchmarkMetricCard(input: {
   actualValue: number | null;
   benchmarkValue: number | null;
   benchmarkIndustry?: string | null;
+  displayValue?: string | null;
   label: string;
   maxValue?: number;
   note?: string | null;
@@ -1970,7 +1971,7 @@ function BenchmarkMetricCard(input: {
           deltaPositive: "text-sky-700",
           deltaNegative: "text-cyan-700"
         }
-      : input.label === "Third-party requests"
+      : input.label === "All 3rd-party requests"
         ? {
             card: "bg-white",
             rail: "bg-amber-100/90",
@@ -1980,7 +1981,7 @@ function BenchmarkMetricCard(input: {
             deltaPositive: "text-amber-700",
             deltaNegative: "text-orange-700"
           }
-        : input.label === "Non-essential storage"
+        : input.label === "Pre-consent storage" || input.label === "Classified non-essential storage"
           ? {
               card: "bg-white",
               rail: "bg-rose-100/90",
@@ -2006,24 +2007,18 @@ function BenchmarkMetricCard(input: {
     : benchmarkValue !== null
       ? `Expected ${benchmarkValue}.`
       : null;
-  const metricNote = input.label === "Non-essential storage"
-    ? [
-        "Counts non-essential storage found before consent. Essential storage is excluded.",
-        input.note
-      ].filter(Boolean).join(" ")
-    : input.label === "Pre-consent storage"
+  const metricNote = input.label === "Pre-consent storage" || input.label === "Classified non-essential storage"
       ? [
-        "Cookie/storage observations before a recorded consent action, deduped by name and domain. This total can include essential security and consent storage; it is not a count of confirmed nonessential trackers.",
+        input.label === "Classified non-essential storage"
+          ? "Counts storage identities classified as non-essential and observed before consent. This is separate from the narrower subset with direct write-level timing."
+          : "Cookie/storage observations before a recorded consent action require classification review; this is not a count of confirmed non-essential trackers.",
         input.note
       ].filter(Boolean).join(" ")
       : input.note;
   const benchmarkTooltip = [benchmarkTooltipBase, metricNote].filter(Boolean).join(" ");
-  const isStorageMetric = input.label === "Non-essential storage" || input.label === "Pre-consent storage";
-  const displayLabel =
-    input.label === "Third-party requests"
-      ? "3rd-party requests"
-      : input.label;
-  const displayValue = actualValue === null && isScoreMetric ? "Not scored" : actualValue ?? "—";
+  const isStorageMetric = input.label === "Pre-consent storage" || input.label === "Classified non-essential storage";
+  const displayLabel = input.label;
+  const displayValue = input.displayValue ?? (actualValue === null && isScoreMetric ? "Not scored" : actualValue ?? "—");
   return (
     <div className={`relative overflow-visible rounded-[1.1rem] border border-slate-200 px-3.5 py-2 ${tone.card}`}>
       <div className="flex items-start justify-between gap-3">
@@ -2148,7 +2143,7 @@ function NotScoredHeroMetrics() {
       <NotScoredMetricCard
         label="Automated runtime signal"
         value="Unavailable"
-        helper="Substantive automated scoring was withheld."
+        helper="The retained run did not support a representative assessment."
       />
       <NotScoredMetricCard
         label="Report status"
@@ -2165,14 +2160,14 @@ function NotScoredSnapshotPane() {
       <div className="space-y-1">
         <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">Scan quality snapshot</p>
         <p className="text-sm leading-6 text-slate-600">
-          The scan retained evidence explaining why the report was not scored.
+          The scan retained evidence explaining why the public page was not representative.
         </p>
       </div>
       <div className="rounded-[1.2rem] border border-slate-200 bg-white px-4 py-3.5">
         <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-500">Report status</p>
         <p className="mt-2 text-sm font-semibold text-slate-950">Not scored</p>
         <p className="mt-1 text-sm leading-6 text-slate-600">
-          CertScore.ai did not issue privacy, consent, accessibility, or regulatory scores from this run.
+          Re-run when the normal public site is available.
         </p>
       </div>
     </div>
@@ -2404,9 +2399,6 @@ export function CompactRejectPathCard(input: {
           ))}
         </ul>
       ) : null}
-      <p className="mt-1.5 text-[9px] font-semibold uppercase tracking-[0.12em] text-slate-500">
-        {input.projection.scoreEffect === "deduction" ? "Included in score" : "No score effect"}
-      </p>
     </div>
   );
 }
@@ -2439,7 +2431,7 @@ function ExecutiveSignalSnapshotPane(input: {
     : "Runtime not retained";
   const cookieOnlyRuntimeNote =
     runtimeMetricsReliable && input.trackerFootprintRichDetails.length === 0 && input.beforeConsentCookieCount > 0
-      ? `${input.beforeConsentCookieCount} ${input.beforeConsentCookieCount === 1 ? "cookie was" : "cookies were"} observed before consent; no third-party tracker vendor or domain was resolved for this scan.`
+      ? `${input.beforeConsentCookieCount} classified non-essential storage ${input.beforeConsentCookieCount === 1 ? "identity was" : "identities were"} observed before consent; no tracking-classified third-party vendor or domain was resolved for this scan.`
       : null;
   const consentSurfaceStatus = input.consentSurfaceStatus ?? "Not determined";
   const cmpDetectedLabel = input.cmpVendorName
@@ -3986,7 +3978,7 @@ function getCookieCountMismatchNote(input: {
 
   const notes: string[] = [];
   if (typeof findingCount === "number" && findingCount !== input.beforeConsentCookieCount) {
-    notes.push("Executive metric includes non-essential cookies explicitly observed in the pre-consent runtime; this finding shows the subset with promotion-grade write timing.");
+    notes.push("Executive metric includes classified non-essential storage identities observed in the pre-consent runtime; this finding shows the narrower subset with direct write-level timing.");
   }
   return notes.length > 0 ? notes.join(" ") : null;
 }
@@ -4422,6 +4414,8 @@ export function ExecutiveSummaryCard(input: {
   beforeConsentCookieCount: number;
   beforeConsentStorageLimitation?: string | null;
   beforeConsentStorageMetricAvailable?: boolean;
+  beforeConsentStorageMetricLabel?: "Classified non-essential storage" | "Pre-consent storage";
+  beforeConsentStorageMetricStatus?: "measured_positive" | "measured_zero" | "partially_classified" | "unavailable";
   beforeConsentStorageScope?: "all_observed" | "nonessential_only";
   unclassifiedPreConsentStorageCount?: number;
   coverageMicrocards?: Array<{
@@ -4754,22 +4748,29 @@ export function ExecutiveSummaryCard(input: {
                       actualValue={input.score}
                       benchmarkValue={null}
                       maxValue={100}
-                      note={input.score === null
-                        ? "Insufficient evidence to calculate a GDPR/ePrivacy posture score for this scan."
-                        : "Higher scores indicate stronger observed GDPR/ePrivacy posture. Lower scores indicate more issues requiring attention."}
+                      note={null}
                     />
                     <BenchmarkMetricCard
-                      label="Third-party requests"
+                      label="All 3rd-party requests"
                       actualValue={runtimeMetricsReliable ? input.thirdPartyRequestCount : null}
                       benchmarkValue={input.domainBenchmark?.expectedThirdPartyRequests ?? null}
                       benchmarkIndustry={input.domainBenchmark?.industry ?? null}
+                      note="Counts retained third-party requests across all purposes, including embedded services. This is broader than the separate tracking-classified checklist row."
                     />
                     <BenchmarkMetricCard
-                      label={input.beforeConsentStorageScope === "nonessential_only"
-                        ? "Non-essential storage"
-                        : "Pre-consent storage"}
+                      label={input.beforeConsentStorageMetricLabel ?? (
+                        input.beforeConsentStorageMetricStatus === "partially_classified" ||
+                        input.beforeConsentStorageMetricStatus === "unavailable"
+                          ? "Pre-consent storage"
+                          : input.beforeConsentStorageScope === "nonessential_only"
+                            ? "Classified non-essential storage"
+                            : "Pre-consent storage"
+                      )}
                       actualValue={runtimeMetricsReliable && input.beforeConsentStorageMetricAvailable !== false
                         ? input.beforeConsentCookieCount
+                        : null}
+                      displayValue={runtimeMetricsReliable && input.beforeConsentStorageMetricStatus === "partially_classified"
+                        ? "Review"
                         : null}
                       benchmarkValue={input.domainBenchmark?.expectedCookiesBeforeConsent ?? null}
                       benchmarkIndustry={input.domainBenchmark?.industry ?? null}

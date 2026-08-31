@@ -4109,7 +4109,7 @@ function deriveThirdPartyIframePreConsentOutcome(input: GdprEprivacyCoveragePoli
     return makeOutcome(
       "third_party_iframe_pre_consent",
       "Gap observed",
-      "Known 3rd party iframe embeds were retained before a recorded consent action on the scanned page.",
+      "Known 3rd party iframe embeds were retained before a recorded consent action on the scanned page. This establishes pre-consent embedded-service activity, not tracking classification by itself.",
       [
         `3rd party iframe observations: ${observedCount}`,
         ...evidence.embeddedHosts.map((host) => `Iframe host: ${host}`).slice(0, 5),

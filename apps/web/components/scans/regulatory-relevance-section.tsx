@@ -67,10 +67,7 @@ function RegulatoryRelevanceContent({ mappings }: { mappings: AgencyMapping[] })
               </div>
               {mapping.contributingSubscores.length > 0 ? (
                 <div>
-                  <div className="flex items-center gap-1.5">
-                    <p className="font-medium text-slate-800">Contributing subscores</p>
-                    <InfoTip text="These are 0 to 100 risk-oriented subscores. Lower is better; higher values mean more regulator-relevant concerns surfaced in that category." />
-                  </div>
+                  <p className="font-medium text-slate-800">Contributing subscores</p>
                   <div className="mt-2 flex flex-wrap gap-2">
                     {mapping.contributingSubscores.map((subscore) => (
                       <span key={`${mapping.agencyKey}-${subscore.key}`} className="rounded-full bg-white px-3 py-1 text-xs text-slate-700 ring-1 ring-slate-200">

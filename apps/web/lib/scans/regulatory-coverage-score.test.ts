@@ -50,7 +50,8 @@ test("unknown checklist rows withhold scoring instead of receiving a silent fall
 
   assert.equal(result.score, null);
   assert.equal(result.coverageConfidence, "insufficient");
-  assert.match(result.summary, /configuration is missing/i);
+  assert.match(result.summary, /could not be assessed/i);
+  assert.doesNotMatch(result.summary, /scor|weight|deduct|credit/i);
 });
 
 test("registered contextual collection inventory does not withhold or affect scoring", () => {
@@ -388,7 +389,8 @@ test("California score is derived from evidence-gated checklist rows", () => {
 
   assert.equal(score.ratingLabel, "Watch");
   assert.equal(score.score, 71);
-  assert.match(score.summary, /evidence-gated checklist rows/i);
+  assert.match(score.summary, /applicable findings supported by retained evidence/i);
+  assert.doesNotMatch(score.summary, /weighted|deduct|credit|score effect/i);
   assert.doesNotMatch(score.summary, /\d+ checked|\d+ review|\d+ gap/i);
 });
 
@@ -437,7 +439,8 @@ test("GDPR/ePrivacy score uses the same row-led scoring mechanics", () => {
   assert.equal(strongScore.scoreVersion, GDPR_EPRIVACY_EVIDENCE_SCORE_VERSION);
   assert.equal(strongScore.scoreSource, REGULATORY_COVERAGE_SCORE_SOURCE);
   assert.equal(strongScore.ratingLabel, "Watch");
-  assert.match(strongScore.summary, /confirmed concern families/i);
+  assert.match(strongScore.summary, /applicable findings supported by retained evidence/i);
+  assert.doesNotMatch(strongScore.summary, /weighted|deduct|credit|score effect/i);
   assert.doesNotMatch(strongScore.summary, /\d+ checked|\d+ review|\d+ gap/i);
   assert.equal(gapScore.score, 94);
   assert.equal(gapScore.coverageConfidence, "low");
@@ -466,7 +469,8 @@ test("coverage limitations reduce confidence without changing posture", () => {
 
   assert.equal(result.score, 100);
   assert.equal(result.coverageConfidence, "low");
-  assert.match(result.summary, /coverage affects confidence, not the score/i);
+  assert.match(result.summary, /applicable findings supported by retained evidence/i);
+  assert.doesNotMatch(result.summary, /affect(?:s|ed)? (?:the )?score|weighted|deduct|credit/i);
 });
 
 test("confirmed post-refusal enforcement failure has a twelve-point family effect", () => {

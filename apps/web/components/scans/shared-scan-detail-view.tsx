@@ -1439,7 +1439,7 @@ export function buildExecutiveRejectPathProjection(
   return {
     evidenceRows: [],
     label: "Reject path incomplete",
-    note: `${item.note} This limitation does not affect the score.`,
+    note: item.note,
     observationWindowMs,
     resolverMethod,
     scoreEffect: "none",
@@ -1570,7 +1570,7 @@ function getHybridRuntimeSummaryRows(runtimeArtifacts: Record<string, unknown> |
 
   return [
     { label: "Requests observed", value: networkSummary?.totalRequestCount },
-    { label: "Third-party requests", value: networkSummary?.thirdPartyRequestCount },
+    { label: "All third-party requests", value: networkSummary?.thirdPartyRequestCount },
     { label: "Third-party domains", value: rawThirdPartyDomains },
     { label: "Consent banner", value: consentSummary?.bannerPresent },
     { label: "Reject option present", value: consentSummary?.rejectPresent },
@@ -7148,7 +7148,7 @@ function ResultHeroPanel(input: {
               <p className="text-[11px] uppercase tracking-[0.18em] text-slate-500">Network posture</p>
               <p className="mt-2 text-lg font-semibold tracking-tight text-slate-950">
                 {(getFiniteNumber(networkSummary?.thirdPartyRequestCount) ?? 0) > 0
-                  ? `${getFiniteNumber(networkSummary?.thirdPartyRequestCount) ?? 0} third-party requests`
+                  ? `${getFiniteNumber(networkSummary?.thirdPartyRequestCount) ?? 0} all-purpose third-party requests`
                   : "No third-party traffic observed"}
               </p>
             </div>
@@ -7633,6 +7633,8 @@ export async function SharedScanDetailView({
   const promotionGradePreConsentStorageCount = cookieInventoryRows.filter(isEligibleNonEssentialPreconsentStorageRow).length;
   const cookiesBeforeConsentCount = preConsentStorageMetric.value ?? 0;
   const beforeConsentStorageMetricAvailable = preConsentStorageMetric.available;
+  const beforeConsentStorageMetricLabel = preConsentStorageMetric.label;
+  const beforeConsentStorageMetricStatus = preConsentStorageMetric.status;
   const beforeConsentStorageLimitation = preConsentStorageMetric.available
     ? null
     : preConsentStorageMetric.explanation;
@@ -8075,6 +8077,8 @@ export async function SharedScanDetailView({
             beforeConsentCookieCount={cookiesBeforeConsentCount}
             beforeConsentStorageLimitation={beforeConsentStorageLimitation}
             beforeConsentStorageMetricAvailable={beforeConsentStorageMetricAvailable}
+            beforeConsentStorageMetricLabel={beforeConsentStorageMetricLabel}
+            beforeConsentStorageMetricStatus={beforeConsentStorageMetricStatus}
             unclassifiedPreConsentStorageCount={unclassifiedPreConsentStorageCount}
             beforeConsentStorageScope={beforeConsentStorageScope}
             coverageDiagnosticIndicators={scanCalibrationSummary.coverage.diagnosticIndicators}

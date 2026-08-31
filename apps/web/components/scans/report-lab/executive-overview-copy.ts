@@ -72,13 +72,13 @@ export function buildExecutiveOverview(input: ExecutiveOverviewInput) {
   const rejectOutcome = input.rejectPath?.state === "issue_observed"
     ? `The confirmed Reject path did not stop qualifying non-essential activity during the retained ${rejectWindow} post-Reject window.`
     : input.rejectPath?.state === "review_signal"
-      ? "The Reject test completed, but retained storage persistence remains a score-neutral review signal rather than proof of active post-Refusal use."
+      ? "The Reject test completed, but retained storage persistence remains a review signal rather than proof of active post-Refusal use."
       : input.rejectPath?.state === "no_issue_observed"
         ? `The confirmed Reject path completed without a qualifying issue in the retained ${rejectWindow} post-Reject window.`
         : input.rejectPath?.state === "incomplete"
           ? rejectIncompleteReason
-            ? `Reject-path testing did not complete and did not affect the score. ${rejectIncompleteReason}`
-            : "Reject-path testing did not complete and did not affect the score."
+            ? `Reject-path testing did not complete. ${rejectIncompleteReason}`
+            : "Reject-path testing did not complete."
           : null;
   const limitation = (() => {
     if (input.limitedCount === 0) return "No checklist items were technically limited in this retained scan.";

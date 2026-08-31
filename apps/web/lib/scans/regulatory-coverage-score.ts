@@ -527,7 +527,7 @@ function deriveGdprEprivacyPostureScore(rows: RegulatoryCoverageRow[]): Regulato
       coverageConfidence: "insufficient",
       coverageRatio,
       score: null,
-      summary: "GDPR/ePrivacy posture score was withheld because no applicable checklist rows were testable.",
+      summary: "GDPR/ePrivacy posture could not be assessed from the retained evidence.",
       ...scoreMetadata,
       ...getGdprEprivacyPostureTone(null)
     };
@@ -564,7 +564,7 @@ function deriveGdprEprivacyPostureScore(rows: RegulatoryCoverageRow[]): Regulato
     coverageConfidence: getCoverageConfidence(coverageRatio),
     coverageRatio,
     score,
-    summary: "GDPR/ePrivacy posture is reduced by confirmed concern families and systemic combinations. Missing or incomplete scanner coverage affects confidence, not the score.",
+    summary: "GDPR/ePrivacy posture summarizes the applicable findings supported by retained evidence.",
     ...scoreMetadata,
     ...tone
   };
@@ -752,7 +752,7 @@ export function deriveRegulatoryCoverageScore(input: {
       coverageConfidence: "insufficient",
       coverageRatio: 0,
       score: null,
-      summary: `${getFrameworkLabel(input.framework)} score was withheld because scoring configuration is missing for: ${missingConfigIds.join(", ")}.`,
+      summary: `${getFrameworkLabel(input.framework)} posture could not be assessed for this retained scan.`,
       ...scoreMetadata,
       ...tone
     };
@@ -790,7 +790,7 @@ export function deriveRegulatoryCoverageScore(input: {
       coverageConfidence: "insufficient",
       coverageRatio: 0,
       score: null,
-      summary: `${getFrameworkLabel(input.framework)} score was withheld because no applicable checklist rows were testable.`,
+      summary: `${getFrameworkLabel(input.framework)} posture could not be assessed from the retained evidence.`,
       ...scoreMetadata,
       ...tone
     };
@@ -801,7 +801,7 @@ export function deriveRegulatoryCoverageScore(input: {
   const rawScore = (earned / possible) * 100;
   const score = clampScore(Math.min(rawScore, coverageCap));
   const tone = getTone(score);
-  const summary = `${getFrameworkLabel(input.framework)} score is weighted from evidence-gated checklist rows. Weak negative checks, coverage limits, and vendor/request mismatches receive partial credit.`;
+  const summary = `${getFrameworkLabel(input.framework)} posture summarizes the applicable findings supported by retained evidence.`;
 
   return {
     coverageConfidence: getCoverageConfidence(coverageRatio),

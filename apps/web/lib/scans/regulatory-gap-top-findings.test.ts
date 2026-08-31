@@ -371,6 +371,35 @@ test("buildRegulatoryGapTopFindings does not name embedded services when no embe
   assert.doesNotMatch(findings[0]?.label ?? "", /embedded/i);
 });
 
+test("buildRegulatoryGapTopFindings groups duplicate iframe and embedded-service rows without calling them tracking", () => {
+  const findings = buildRegulatoryGapTopFindings({
+    gdprEprivacyArea: {
+      id: "gdpr_eprivacy",
+      title: "GDPR / ePrivacy",
+      rows: [
+        {
+          assessmentStatus: "gap_observed",
+          id: "third_party_iframe_pre_consent",
+          label: "3rd party iframes before consent",
+          note: "An OpenStreetMap iframe loaded before consent."
+        },
+        {
+          assessmentDirection: "potential_concern",
+          assessmentStatus: "review_signal",
+          evidenceLabel: "Partial concern",
+          id: "embedded_content_pre_consent",
+          label: "Embedded third-party services before consent",
+          note: "OpenStreetMap embed evidence was retained."
+        }
+      ]
+    }
+  });
+
+  assert.equal(findings.length, 1);
+  assert.equal(findings[0]?.label, "Third-party embedded services before consent");
+  assert.doesNotMatch(findings[0]?.label ?? "", /tracking/i);
+});
+
 test("buildRegulatoryGapTopFindings keeps consent-control review rows when CMP expectation is retained", () => {
   const findings = buildRegulatoryGapTopFindings({
     gdprEprivacyArea: {

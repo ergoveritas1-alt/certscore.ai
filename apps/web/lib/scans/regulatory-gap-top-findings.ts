@@ -113,13 +113,15 @@ export function buildRegulatoryGapTopFindings(input: RegulatoryGapTopFindingInpu
   ]);
 }
 
-// Keep the distinct cookie/storage checklist concern visible. Other overlapping
-// tracker-category rows are supporting evidence for the primary tracking card.
+// Keep the distinct cookie/storage checklist concern visible. Overlapping
+// tracker-category rows and duplicate iframe/embed rows become supporting
+// evidence for one primary runtime card.
 const PRECONSENT_TRACKING_CLUSTER_ROW_IDS = new Set([
   "pre_consent_third_party_tracking",
   "advertising_retargeting_vendor_signal_observed",
   "retargeting_behavioral_advertising_signal_observed",
   "analytics_vendor_observed",
+  "third_party_iframe_pre_consent",
   "embedded_content_pre_consent"
 ]);
 
@@ -148,9 +150,15 @@ function clusterRelatedRuntimeTopFindings(findings: CertScoreFinding[]) {
     shortSummary: finding.shortSummary
   }));
   const clusteredRowIds = new Set(clustered.map(regulatoryRowId));
-  const groupedLabel = clusteredRowIds.has("embedded_content_pre_consent")
+  const hasTrackingRow = clusteredRowIds.has("pre_consent_third_party_tracking");
+  const hasEmbeddedRow =
+    clusteredRowIds.has("third_party_iframe_pre_consent") ||
+    clusteredRowIds.has("embedded_content_pre_consent");
+  const groupedLabel = hasTrackingRow && hasEmbeddedRow
     ? "Pre-consent tracking and embedded services"
-    : "Pre-consent non-essential tracking";
+    : hasEmbeddedRow
+      ? "Third-party embedded services before consent"
+      : "Pre-consent non-essential tracking";
   const groupedPrimary: CertScoreFinding = {
     ...primary,
     label: groupedLabel,

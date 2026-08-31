@@ -1200,6 +1200,30 @@ test("deriveGdprEprivacyCoverageChecklist keeps medium 3rd party cookie storage 
   assert.match(row.criticalEvidence.statusBasis, /Medium priority.*Analytics/);
 });
 
+test("snapshot-only storage review is labeled as classification review, not confirmed non-essential storage", () => {
+  const items = deriveGdprEprivacyCoverageChecklist({
+    coverageLimited: false,
+    coverageOutcomes: {
+      pre_consent_cookies_storage: makeCoverageOutcome({
+        evidenceRefs: ["Evidence: pre-consent storage snapshot"],
+        limitation: "Storage candidates were retained, but write timing and essentiality were not fully confirmed.",
+        retainedEvidence: {
+          preConsentStorageAssessmentStatus: "snapshot_presence_only"
+        },
+        rowId: "pre_consent_cookies_storage",
+        status: "Review signal"
+      })
+    },
+    scanCompleted: true,
+    unifiedFindings: []
+  });
+
+  const row = byId(items, "pre_consent_cookies_storage");
+  assert.equal(row.status, "Review signal");
+  assert.equal(row.label, "Pre-consent storage classification review");
+  assert.doesNotMatch(row.label, /^Non-essential/);
+});
+
 test("deriveGdprEprivacyCoverageChecklist does not let unknown review cookies outrank classified medium storage", () => {
   const items = deriveGdprEprivacyCoverageChecklist({
     coverageLimited: false,

@@ -143,7 +143,7 @@ test("executive Reject projection identifies an independently retained TCF contr
   }]);
 });
 
-test("executive Reject projection distinguishes score-neutral persistence, clean, and incomplete outcomes", async () => {
+test("executive Reject projection distinguishes persistence, clean, and incomplete outcomes without scoring copy", async () => {
   const { buildExecutiveRejectPathProjection } = await import("./shared-scan-detail-view");
   const persistence = buildExecutiveRejectPathProjection(makePostRejectChecklistItem({
     explanation: "Stored presence alone does not establish active post-refusal use.",
@@ -182,7 +182,8 @@ test("executive Reject projection distinguishes score-neutral persistence, clean
   assert.equal(incomplete?.state, "incomplete");
   assert.equal(incomplete?.scoreEffect, "none");
   assert.deepEqual(incomplete?.timelineEvents, []);
-  assert.match(incomplete?.note ?? "", /does not affect the score/);
+  assert.equal(incomplete?.note, "Reject click did not register.");
+  assert.doesNotMatch(incomplete?.note ?? "", /score|deduct|credit/i);
 });
 
 test("executive Reject projection omits an explicitly not-applicable post-Reject row", async () => {

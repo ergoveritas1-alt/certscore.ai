@@ -401,7 +401,7 @@ const CHECKLIST_ROWS: ChecklistRowDefinition[] = [
   {
     id: "public_collection_surfaces",
     label: "Public data collection surfaces",
-    explanation: "Whether bounded visible form and field metadata was retained from the tested main document. Form presence alone is contextual and non-scoring.",
+    explanation: "Whether bounded visible form and field metadata was retained from the tested main document. Form presence alone is contextual.",
     findingIds: [],
     defaultFindingStatus: "Observed",
     notObservedText: "No visible data-entry forms were observed in the tested main document.",
@@ -2308,6 +2308,17 @@ function specializeChecklistRow(input: {
     };
   }
 
+  if (input.definition.id === "pre_consent_cookies_storage" && input.status === "Review signal") {
+    return {
+      evidenceRefs: input.evidenceRefs,
+      explanation:
+        input.coverageOutcome?.limitation ??
+        "Pre-consent storage was retained, but the evidence did not classify every item as essential or non-essential. This is a classification review, not a confirmed non-essential-storage finding.",
+      label: "Pre-consent storage classification review",
+      status: "Review signal" as const
+    };
+  }
+
   if (input.definition.id === "pre_consent_cookies_storage" && input.status === "Gap observed") {
     const storage = getPreconsentStorageSummary(input.findings);
     const vendorPhrase = formatVendorPhrase(storage.vendors.slice(0, 4));
@@ -2316,7 +2327,7 @@ function specializeChecklistRow(input: {
       evidenceRefs: input.evidenceRefs,
       explanation:
         `Storage or cookie evidence was observed before a recorded consent choice${vendorPhrase ? ` for ${vendorPhrase}` : ""}${domainPhrase ? ` on ${domainPhrase}` : ""}. This row is limited to concrete storage/cookie evidence and does not imply every observed runtime vendor wrote storage.`,
-      label: input.definition.label,
+      label: "Classified non-essential pre-consent storage",
       status: "Gap observed" as const
     };
   }
@@ -2427,7 +2438,7 @@ function specializeChecklistRow(input: {
   ) {
     return {
       evidenceRefs: input.evidenceRefs,
-      explanation: "The exact same classified non-essential storage identity and value were present before the reject action and in the settled snapshot after confirmed refusal. Stored presence alone does not establish active post-refusal use, so this review signal does not affect score.",
+      explanation: "The exact same classified non-essential storage identity and value were present before the reject action and in the settled snapshot after confirmed refusal. Stored presence alone does not establish active post-refusal use.",
       label: "Same non-essential identifier remained stored after refusal",
       status: "Review signal" as const
     };

@@ -16,13 +16,58 @@ import type { CertScoreFinding } from "../../lib/scans/finding-registry";
 import { buildRegulatoryGapTopFindings } from "../../lib/scans/regulatory-gap-top-findings";
 import { EXECUTIVE_SUMMARY_TOP_FINDING_IDS } from "../../lib/scans/rank-findings";
 
-test("Executive storage metric uses the concise non-essential label", () => {
+test("Executive storage metric distinguishes classified results from review-state storage", () => {
   const source = readFileSync(new URL("./executive-summary-card.tsx", import.meta.url), "utf8");
-  assert.match(source, /Non-essential storage/);
-  assert.doesNotMatch(source, new RegExp(["Non-essential", "pre-consent storage"].join(" ")));
-  assert.match(source, /Counts non-essential storage found before consent\. Essential storage is excluded/);
+  assert.match(source, /Classified non-essential storage/);
+  assert.match(source, /Cookie\/storage observations before a recorded consent action require classification review/);
+  assert.match(source, /separate from the narrower subset with direct write-level timing/);
   assert.match(source, /beforeConsentStorageScope === "nonessential_only"/);
-  assert.match(source, /const isStorageMetric = input\.label === "Non-essential storage"/);
+  assert.match(source, /const isStorageMetric = input\.label === "Pre-consent storage"/);
+  assert.match(source, /beforeConsentStorageMetricStatus === "partially_classified"/);
+  assert.match(source, /\? "Review"/);
+});
+
+test("Executive third-party metric distinguishes all requests from tracking classification", () => {
+  const source = readFileSync(new URL("./executive-summary-card.tsx", import.meta.url), "utf8");
+  assert.match(source, /label="All 3rd-party requests"/);
+  assert.match(source, /broader than the separate tracking-classified checklist row/);
+});
+
+test("Executive benchmark renders review instead of unavailable for partially classified storage", () => {
+  const html = renderToStaticMarkup(createElement(ExecutiveSummaryCard, {
+    accessLimitationNotice: null,
+    beforeConsentCookieCount: 0,
+    beforeConsentStorageLimitation: "One retained storage record remains unclassified.",
+    beforeConsentStorageMetricAvailable: false,
+    beforeConsentStorageMetricStatus: "partially_classified",
+    beforeConsentStorageScope: "nonessential_only",
+    domainBenchmark: null,
+    finalHost: "example.test",
+    fingerprintReasons: [],
+    fingerprintLabel: "None detected",
+    fingerprintNarrative: "No fingerprinting evidence detected.",
+    landedOnDifferentHost: false,
+    lastScannedAt: "2026-08-30T00:00:00.000Z",
+    posture: "Watch",
+    preConsentVendorNames: [],
+    requestedHost: "example.test",
+    resolvedVendorNames: [],
+    score: 81,
+    sessionReplayVendorNames: [],
+    thirdPartyRequestCount: 1,
+    thirdPartyDomains: ["www.openstreetmap.org"],
+    topFindings: [],
+    topObservedEntities: [],
+    trackerSummary: "One third-party embed request retained",
+    unresolvedVendorHosts: [],
+    vendorCategoryCounts: {}
+  }));
+
+  assert.match(html, /All 3rd-party requests/);
+  assert.match(html, />1</);
+  assert.match(html, /Pre-consent storage/);
+  assert.match(html, />Review</);
+  assert.doesNotMatch(html, />N\/A</);
 });
 
 test("compact A/R/O card renders persisted tri-state control projections without findings", () => {
@@ -55,7 +100,7 @@ test("compact A/R/O card appears immediately below policy surfaces", () => {
   assert.ok(consentControlsCardIndex > policyCardIndex);
 });
 
-test("compact Reject-path card renders canonical outcome, bounded evidence, timing, and score treatment", () => {
+test("compact Reject-path card renders canonical outcome, bounded evidence, and timing without scoring treatment", () => {
   const html = renderToStaticMarkup(createElement(CompactRejectPathCard, {
     projection: {
       evidenceRows: [{
@@ -78,11 +123,11 @@ test("compact Reject-path card renders canonical outcome, bounded evidence, timi
   assert.match(html, /120ms after Reject/);
   assert.match(html, /8s observation/);
   assert.match(html, /CMP registry resolver/);
-  assert.match(html, /Included in score/);
+  assert.doesNotMatch(html, /score effect|included in score|deduct/i);
   assert.match(html, /data-reject-path-state="issue_observed"/);
 });
 
-test("compact Reject-path card keeps persistence review score-neutral and hides incomplete coverage", () => {
+test("compact Reject-path card presents persistence evidence without scoring treatment and hides incomplete coverage", () => {
   const persistenceHtml = renderToStaticMarkup(createElement(CompactRejectPathCard, {
     projection: {
       evidenceRows: [{ detail: "Example Analytics · cookie", label: "_analytics" }],
@@ -98,7 +143,7 @@ test("compact Reject-path card keeps persistence review score-neutral and hides 
     projection: {
       evidenceRows: [],
       label: "Reject path incomplete",
-      note: "No confirmed Reject was retained. This limitation does not affect the score.",
+      note: "No confirmed Reject was retained.",
       observationWindowMs: null,
       resolverMethod: null,
       scoreEffect: "none",
@@ -108,7 +153,7 @@ test("compact Reject-path card keeps persistence review score-neutral and hides 
 
   assert.match(persistenceHtml, /Review signal/);
   assert.match(persistenceHtml, /Stored presence alone does not establish active use/);
-  assert.match(persistenceHtml, /No score effect/);
+  assert.doesNotMatch(persistenceHtml, /score effect|included in score|deduct/i);
   assert.equal(incompleteHtml, "");
 });
 
@@ -162,9 +207,8 @@ test("GDPR/ePrivacy lens consumes only the supplied canonical posture score", ()
 test("withheld GDPR/ePrivacy posture score is labeled as not scored instead of a dash", () => {
   const source = readFileSync("apps/web/components/scans/executive-summary-card.tsx", "utf8");
 
-  assert.ok(source.includes('const displayValue = actualValue === null && isScoreMetric ? "Not scored" : actualValue ?? "—";'));
-  assert.ok(source.includes("Insufficient evidence to calculate a GDPR/ePrivacy posture score for this scan."));
-  assert.ok(source.includes("Higher scores indicate stronger observed GDPR/ePrivacy posture."));
+  assert.ok(source.includes('input.displayValue ?? (actualValue === null && isScoreMetric ? "Not scored" : actualValue ?? "—")'));
+  assert.doesNotMatch(source, /Higher scores indicate|Lower scores indicate|calculate a GDPR\/ePrivacy posture score/);
   assert.ok(source.includes('{input.maxValue && actualValue !== null ? <span className="pb-0.5 text-[1.35rem] leading-none text-slate-500">/100</span> : null}'));
 });
 
@@ -1177,7 +1221,7 @@ test("ExecutiveSummaryCard distinguishes cookie-only runtime observations from t
 
   assert.match(html, /Tracker footprint/);
   assert.match(html, /0 vendors · 0 domains/);
-  assert.match(html, /4 cookies were observed before consent/);
+  assert.match(html, /4 classified non-essential storage identities were observed before consent/);
   assert.match(html, /No third-party tracker vendors or domains were resolved/);
 });
 
@@ -2886,12 +2930,12 @@ test("ExecutiveSummaryCard explains executive and finding cookie count differenc
     })
   );
 
-  assert.match(html, /Non-essential storage/);
-  assert.match(html, /Counts non-essential storage found before consent\. Essential storage is excluded\./);
-  assert.doesNotMatch(html, /not a count of confirmed nonessential trackers/i);
+  assert.match(html, /Classified non-essential storage/);
+  assert.match(html, /Counts storage identities classified as non-essential and observed before consent\./);
+  assert.doesNotMatch(html, /not a count of confirmed non-essential trackers/i);
   assert.doesNotMatch(html, /Cookies before consent/);
   assert.doesNotMatch(html, /15 cookies before consent/);
-  assert.match(html, /Executive metric includes non-essential cookies explicitly observed in the pre-consent runtime; this finding shows the subset with promotion-grade write timing\./);
+  assert.match(html, /Executive metric includes classified non-essential storage identities observed in the pre-consent runtime; this finding shows the narrower subset with direct write-level timing\./);
   assert.match(html, /trackingCookieWritesBeforeConsent/);
   assert.match(html, /totalUniqueCookiesObserved/);
   assert.match(html, /Retained counts: 13 preConsentTrackingCookies; 10 total cookie count\./);

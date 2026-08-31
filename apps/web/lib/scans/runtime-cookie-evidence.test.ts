@@ -369,7 +369,7 @@ test("canonical pre-consent storage assessment reconciles essential-only storage
   assert.deepEqual(metric, {
     available: true,
     explanation: "Storage was scanned and no non-essential storage was detected in the reported scope.",
-    label: "Non-essential storage",
+    label: "Classified non-essential storage",
     scope: "nonessential_only",
     status: "measured_zero",
     value: 0
@@ -423,6 +423,43 @@ test("canonical pre-consent storage assessment counts a classified non-essential
   assert.equal(assessment.evidenceRows[0]?.firstObservedMs, 612);
   assert.equal(metric.status, "measured_positive");
   assert.equal(metric.value, 1);
+});
+
+test("proven write count excludes essential writes and snapshot-only non-essential observations", () => {
+  const assessment = buildPreConsentStorageAssessment({
+    runtimeArtifacts: {
+      hybridRuntimeEvidence: {
+        cookieWriteObservations: [
+          {
+            beforeConsent: true,
+            category: "necessary",
+            cookieName: "OptanonConsent",
+            domain: "example.test",
+            nonEssential: false,
+            party: "first_party",
+            setAtMs: 300
+          },
+          {
+            beforeConsent: true,
+            category: "analytics",
+            cookieName: "_ga",
+            domain: "example.test",
+            firstObservedAtMs: 500,
+            nonEssential: true,
+            party: "first_party",
+            setMethod: "browser_snapshot"
+          }
+        ],
+        storageSummary: {
+          cookiesBeforeConsentCount: 2
+        }
+      }
+    }
+  });
+
+  assert.equal(assessment.classifiedEssentialCount, 1);
+  assert.equal(assessment.classifiedNonEssentialCount, 1);
+  assert.equal(assessment.provenWriteCount, 0);
 });
 
 test("canonical cookie knowledge classifies common Google Analytics and Meta snapshot cookies as non-essential", () => {

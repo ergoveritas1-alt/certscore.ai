@@ -59,6 +59,30 @@ test("executive overview names a confirmed Reject-path failure", () => {
   assert.match(copy, /8-second post-Reject window/i);
 });
 
+test("executive overview describes Reject outcomes without disclosing scoring treatment", () => {
+  const reviewCopy = buildExecutiveOverview({
+    ...baseInput,
+    findings: [{ summary: "Storage remained after Reject.", title: "Post-choice storage review" }],
+    rejectPath: {
+      observationWindowMs: 8_000,
+      state: "review_signal",
+    },
+  });
+  const incompleteCopy = buildExecutiveOverview({
+    ...baseInput,
+    findings: [{ summary: "Reject testing was incomplete.", title: "Post-choice review" }],
+    rejectPath: {
+      note: "The deterministic control could not be verified.",
+      observationWindowMs: null,
+      state: "incomplete",
+    },
+  });
+
+  assert.match(reviewCopy, /retained storage persistence remains a review signal/i);
+  assert.match(incompleteCopy, /Reject-path testing did not complete/i);
+  assert.doesNotMatch(`${reviewCopy} ${incompleteCopy}`, /score-neutral|affect(?:s|ed)? (?:the )?score|score effect|deduct|partial credit/i);
+});
+
 test("executive overview summarizes a focused mixed review without creating new findings", () => {
   const copy = buildExecutiveOverview({
     ...baseInput,
