@@ -62,7 +62,7 @@ test("timeline model is projection-backed for findings, checklist rows, inventor
   assert.doesNotMatch(report, /Requests \/ records/);
   assert.match(report, /InventoryConfidenceDots/);
   assert.match(report, /InventoryTypeIcon/);
-  assert.match(report, /report\.coverage\.review/);
+  assert.match(report, /coverage\.review/);
   assert.match(report, />Policy surfaces</);
   assert.match(report, /\{privacyUrls\.length\} found/);
   assert.doesNotMatch(report, />Privacy surfaces</);
@@ -73,11 +73,12 @@ test("timeline model is projection-backed for findings, checklist rows, inventor
   assert.match(report, /data-testid="timeline-reject-path-card"/);
   assert.match(report, /data-testid="post-reject-timeline"/);
   assert.match(report, /<RejectPathTimeline report=\{report\} \/>/);
-  assert.match(report, /data-testid="post-reject-activity-inventory"/);
-  assert.match(report, /<PostRejectActivityInventory report=\{report\} \/>/);
-  assert.match(report, /After optional cookies and tracking were rejected/);
-  assert.match(report, /Optional request suppressed/);
-  assert.match(report, /unchanged stored presence remains a separate review-only signal/);
+  assert.doesNotMatch(report, /data-testid="post-reject-activity-inventory"/);
+  assert.doesNotMatch(report, /<PostRejectActivityInventory report=\{report\} \/>/);
+  assert.match(report, /After Reject Path Timeline/);
+  assert.doesNotMatch(report, /After optional cookies and tracking were rejected/);
+  assert.doesNotMatch(report, /Optional request suppressed/);
+  assert.doesNotMatch(report, /unchanged stored presence remains a separate review-only signal/);
   assert.match(source, /item\.id === "post_reject_tracking_reduction"[\s\S]*Non-essential activity after confirmed Reject/);
   assert.match(report, /mode === "authenticated"/);
   assert.match(report, /-mx-5[^"\n]*lg:-mx-10/);

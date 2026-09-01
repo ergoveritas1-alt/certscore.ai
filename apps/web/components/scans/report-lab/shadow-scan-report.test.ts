@@ -3,6 +3,7 @@ import { readFile } from "node:fs/promises";
 import test from "node:test";
 import { countNonNotObservedRows } from "./evidence-directory-summary";
 import { buildRuntimeInventoryCopyPayload } from "./inventory-table-copy";
+import { buildRuntimeInventoryPurposeCounts } from "../runtime-observation-sections";
 
 test("evidence directory summaries exclude only Not observed rows", () => {
   assert.equal(countNonNotObservedRows([
@@ -16,6 +17,20 @@ test("evidence directory summaries exclude only Not observed rows", () => {
     { status: "Not observed" },
     { status: "Observed" },
   ]), 1);
+});
+
+test("purpose mix merges case-only labels without double-counting retained records", () => {
+  const counts = buildRuntimeInventoryPurposeCounts([
+    { purpose: "Session replay", recordCount: 2 },
+    { purpose: "Session Replay", recordCount: 1 },
+    { purpose: "  Analytics  ", recordCount: 4 },
+  ]);
+
+  assert.deepEqual(counts, [
+    { label: "Analytics", value: 4 },
+    { label: "Session replay", value: 3 },
+  ]);
+  assert.equal(counts.reduce((total, row) => total + row.value, 0), 7);
 });
 
 test("tracking and runtime section headings show non-Not-observed counts over totals", async () => {
@@ -38,8 +53,28 @@ test("benchmark labels and values come from canonical non-essential inventory ta
     "utf8"
   );
 
-  assert.match(source, /label: "Non-essential requests", site: report\.metrics\.nonEssentialRequests/);
-  assert.match(source, /label: "Non-essential cookies\/storage", site: report\.metrics\.nonEssentialCookiesStorage/);
+  assert.match(source, /label: "Non-essential requests",[\s\S]*site: report\.metrics\.nonEssentialRequests/);
+  assert.match(source, /label: "Non-essential cookies\/storage",[\s\S]*site: report\.metrics\.nonEssentialCookiesStorage/);
+  assert.match(source, /getIndustryBenchmark\(report\.scan\.benchmark\)/);
+  assert.doesNotMatch(source, /Compared with/);
+  assert.doesNotMatch(source, /evidence-corpus average/);
+  assert.match(source, /Industry avg/);
+  assert.match(source, /describeIndustryBenchmarkDifference\(row\.site, row\.average\)/);
+  assert.doesNotMatch(source, /row\.site \* 5/);
+  assert.match(source, /items-baseline gap-x-3 gap-y-0\.5/);
+  assert.match(source, /mt-2 grid gap-2\.5 sm:grid-cols-2/);
+  assert.match(source, /rounded-md border border-zinc-200 bg-white p-2/);
+  assert.match(source, /relative mt-1\.5 h-2 rounded-full/);
+  assert.match(source, /data-testid="executive-score-column"/);
+  assert.match(source, /data-testid="executive-overview-column"/);
+  assert.match(source, /mt-4 lg:mt-auto lg:pt-6/);
+  assert.match(source, /mt-8 lg:mt-auto lg:pt-6/);
+  assert.match(source, /data-testid="executive-signal-snapshot"/);
+  assert.match(source, /signalRowClass = "group\/signal border-b border-zinc-200 py-2"/);
+  assert.match(source, /signalSummaryClass = "flex cursor-pointer list-none items-center justify-between gap-3 text-xs leading-4/);
+  assert.match(source, /data-testid="executive-signal-snapshot">[\s\S]*?<div className="border-t border-zinc-200">[\s\S]*?<details className=\{signalRowClass\}>/);
+  assert.match(source, /priorityIssueCountLabel\(report\.findings\.length\)/);
+  assert.doesNotMatch(source, /report\.coverage\.review > 0 \? `\$\{report\.coverage\.review\} review`/);
   assert.match(modelSource, /buildNonEssentialInventoryTallies\([\s\S]*inventoryProjection\.ungroupedRows/);
   assert.doesNotMatch(modelSource, /third_party_request_count/);
 });
@@ -60,7 +95,7 @@ test("full runtime inventory shows six rows before becoming vertically scrollabl
 
   assert.match(source, /const INVENTORY_VISIBLE_ROW_LIMIT = 6/);
   assert.match(source, /report\.inventory\.length > INVENTORY_VISIBLE_ROW_LIMIT/);
-  assert.match(source, /max-h-\[22rem\] overflow-auto/);
+  assert.match(source, /max-h-\[20rem\] overflow-auto/);
   assert.doesNotMatch(source, /max-h-\[48rem\]/);
   assert.match(source, /data-inventory-scroll=/);
   assert.match(source, /detailsLabel="Open full cookie and tracker details"/);
@@ -73,9 +108,17 @@ test("full runtime inventory shows six rows before becoming vertically scrollabl
   assert.match(source, /label="Copy entire cookies and trackers table"/);
   assert.match(source, /payload=\{copyPayload\}/);
   assert.match(source, /<thead className="sticky top-0/);
-  assert.match(source, /min-w-\[95rem\]/);
+  assert.match(source, /min-w-\[98rem\]/);
   assert.match(source, /\["More", "w-\[5\.5rem\]"\], \["Type", "w-\[4rem\]"\], \["Vendor", "w-\[10rem\]"\], \["Name", "w-\[9rem\]"\]/);
-  assert.match(source, /<InventoryTypeIcon type=\{row\.type\} \/>[\s\S]*<VendorBrandChip label=\{row\.vendor\}[\s\S]*<InventoryNameDisclosure fullName=\{row\.name\} \/>/);
+  assert.match(source, /\["Purpose", "w-\[14rem\]"\]/);
+  assert.match(source, /<InventoryTypeIcon type=\{row\.type\} \/>[\s\S]*<VendorBrandChip label=\{row\.vendor\}[\s\S]*<InventoryNameDisclosure className="leading-5" fullName=\{row\.name\} \/>/);
+  assert.match(source, /function InventoryPurposeChip/);
+  assert.match(source, /h-6 max-w-full min-w-0 items-center rounded-md/);
+  assert.match(source, /truncate whitespace-nowrap leading-4/);
+  assert.match(source, /<InventoryPurposeChip purpose=\{row\.purpose\} \/>/);
+  assert.match(source, /group\/inventory-row border-b border-zinc-100 align-middle/);
+  assert.match(source, /function SingleLineCell/);
+  assert.match(source, /<SingleLineCell title=\{row\.domains\}>\{row\.domains\}<\/SingleLineCell>/);
   assert.match(modelSource, /name: getInventoryObservationNames\(row\)\.join\(", "\) \|\| "Not retained"/);
 });
 

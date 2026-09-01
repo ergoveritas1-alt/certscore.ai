@@ -10,6 +10,7 @@ import { CopyJsonButton } from "../copy-json-button";
 import { InventoryNameDisclosure } from "../inventory-name-disclosure";
 import { CompactRejectPathCard } from "../executive-summary-card";
 import {
+  buildRuntimeInventoryPurposeCounts,
   RuntimeInventorySummaryCard,
   RuntimeObservationTimeline,
 } from "../runtime-observation-sections";
@@ -17,6 +18,10 @@ import { getGdprEprivacyPostureTone } from "../../../lib/scans/regulatory-covera
 import { ShadowReportShareMenu } from "./shadow-report-actions";
 import { buildRuntimeInventoryCopyPayload } from "./inventory-table-copy";
 import { countNonNotObservedRows } from "./evidence-directory-summary";
+import {
+  describeIndustryBenchmarkDifference,
+  getIndustryBenchmark,
+} from "./industry-benchmark-data";
 import { ShadowPolicyEvidenceViewer } from "./shadow-policy-evidence-viewer";
 import {
   RegulatoryChecklistCorrectionSteps,
@@ -326,12 +331,14 @@ function SignalSnapshot({ report }: { report: ShadowReportData }) {
   const privacyUrls = [...new Set(report.gdprTransparencyRows.flatMap((row) => row.policyEvidence?.sourceUrl ? [row.policyEvidence.sourceUrl] : []))];
   const observedTransportRows = report.transportRows.filter((row) => row.status === "Observed").length;
   const observedControls = Object.values(report.controls).filter((value) => value === "Observed").length;
+  const signalRowClass = "group/signal border-b border-zinc-200 py-2";
+  const signalSummaryClass = "flex cursor-pointer list-none items-center justify-between gap-3 text-xs leading-4 [&::-webkit-details-marker]:hidden";
   return (
-    <div className="mt-4 border-t border-zinc-950">
+    <div className="border-t border-zinc-950" data-testid="executive-signal-snapshot">
       <p className="py-2 text-xs font-semibold uppercase text-zinc-500">Signal snapshot</p>
-      <div className="divide-y divide-zinc-200 border-y border-zinc-200">
-        <details className="group/signal py-2">
-          <summary className="flex cursor-pointer list-none items-center justify-between gap-3 [&::-webkit-details-marker]:hidden">
+      <div className="border-t border-zinc-200">
+        <details className={signalRowClass}>
+          <summary className={signalSummaryClass}>
             <span className="text-xs font-medium text-zinc-500">Consent platform</span>
             <span className="flex min-w-0 items-center gap-2 text-xs font-semibold text-zinc-800">
               <span>{consentVendor}</span>
@@ -343,8 +350,8 @@ function SignalSnapshot({ report }: { report: ShadowReportData }) {
             <p className="text-xs leading-5 text-zinc-600">Consent-platform identity retained in the canonical runtime and consent projection.</p>
           </div>
         </details>
-        <details className="group/signal py-2">
-          <summary className="flex cursor-pointer list-none items-center justify-between gap-3 [&::-webkit-details-marker]:hidden">
+        <details className={signalRowClass}>
+          <summary className={signalSummaryClass}>
             <span className="text-xs font-medium text-zinc-500">Tracker footprint</span>
             <span className="flex items-center gap-2">
               <span className={`${monoClass} text-xs font-semibold text-zinc-800`}>{report.metrics.vendors} vendors · {report.metrics.domains} domains</span>
@@ -358,8 +365,8 @@ function SignalSnapshot({ report }: { report: ShadowReportData }) {
             })}
           </div>
         </details>
-        <details className="group/signal py-2">
-          <summary className="flex cursor-pointer list-none items-center justify-between gap-3 [&::-webkit-details-marker]:hidden">
+        <details className={signalRowClass}>
+          <summary className={signalSummaryClass}>
             <span className="text-xs font-medium text-zinc-500">Policy surfaces</span>
             <span className="flex items-center gap-2 text-xs font-semibold text-zinc-800"><span className={monoClass}>{privacyUrls.length} found</span><span aria-hidden="true" className="text-zinc-400 transition group-open/signal:rotate-45">+</span></span>
           </summary>
@@ -367,8 +374,8 @@ function SignalSnapshot({ report }: { report: ShadowReportData }) {
             {privacyUrls.length > 0 ? privacyUrls.map((url) => <li key={url}>{url}</li>) : <li>No public policy URL was retained in the display projection.</li>}
           </ul>
         </details>
-        <details className="group/signal py-2">
-          <summary className="flex cursor-pointer list-none items-center justify-between gap-3 [&::-webkit-details-marker]:hidden">
+        <details className={signalRowClass}>
+          <summary className={signalSummaryClass}>
             <span className="text-xs font-medium text-zinc-500">HTTPS / TLS</span>
             <span className="flex items-center gap-2 text-xs font-semibold text-zinc-800"><span className={monoClass}>{observedTransportRows} of {report.transportRows.length} observed</span><span aria-hidden="true" className="text-zinc-400 transition group-open/signal:rotate-45">+</span></span>
           </summary>
@@ -381,8 +388,8 @@ function SignalSnapshot({ report }: { report: ShadowReportData }) {
             ))}
           </ul>
         </details>
-        <details className="group/signal py-2">
-          <summary className="flex cursor-pointer list-none items-center justify-between gap-3 [&::-webkit-details-marker]:hidden">
+        <details className={signalRowClass}>
+          <summary className={signalSummaryClass}>
             <span className="text-xs font-medium text-zinc-500">Consent controls</span>
             <span className="flex items-center gap-2 text-xs font-semibold text-zinc-800">{observedControls} of 3 observed <span aria-hidden="true" className="text-zinc-400 transition group-open/signal:rotate-45">+</span></span>
           </summary>
@@ -394,8 +401,8 @@ function SignalSnapshot({ report }: { report: ShadowReportData }) {
           ) : null}
         </details>
         {report.metrics.forms > 0 ? (
-          <details className="group/signal py-2">
-            <summary className="flex cursor-pointer list-none items-center justify-between gap-3 [&::-webkit-details-marker]:hidden">
+          <details className={signalRowClass}>
+            <summary className={signalSummaryClass}>
               <span className="text-xs font-medium text-zinc-500">Form surface</span>
               <span className="flex items-center gap-2 text-xs font-semibold text-zinc-800"><span className={monoClass}>{report.metrics.forms} {report.metrics.forms === 1 ? "form" : "forms"} · {report.metrics.fields} {report.metrics.fields === 1 ? "field" : "fields"}</span><span aria-hidden="true" className="text-zinc-400 transition group-open/signal:rotate-45">+</span></span>
             </summary>
@@ -409,27 +416,56 @@ function SignalSnapshot({ report }: { report: ShadowReportData }) {
 
 function BenchmarkComparison({ report }: { report: ShadowReportData }) {
   const benchmarkLabel = report.scan.benchmark.replace(/\s+\(likely [^)]+\)\s*$/i, "");
+  const benchmark = getIndustryBenchmark(report.scan.benchmark);
   const rows = [
-    { label: "Non-essential requests", site: report.metrics.nonEssentialRequests },
-    { label: "Non-essential cookies/storage", site: report.metrics.nonEssentialCookiesStorage }
+    {
+      average: benchmark?.averageNonEssentialRequests ?? null,
+      label: "Non-essential requests",
+      site: report.metrics.nonEssentialRequests,
+    },
+    {
+      average: benchmark?.averageNonEssentialCookiesStorage ?? null,
+      label: "Non-essential cookies/storage",
+      site: report.metrics.nonEssentialCookiesStorage,
+    },
   ];
 
   return (
-    <div className="mt-10 border-l-4 border-sky-500 pl-4">
-      <p className="text-xs font-semibold uppercase text-zinc-500">Industry benchmark</p>
-      <p className="mt-1 text-sm font-semibold leading-5 text-zinc-800">{benchmarkLabel}</p>
-      <div className="mt-4 grid gap-4 sm:grid-cols-2">
-        {rows.map((row) => (
-          <div key={row.label}>
-            <div className="flex items-center justify-between gap-3 text-xs">
-              <span className="font-medium text-zinc-600">{row.label}</span>
-              <span className={monoClass}><strong className="text-zinc-950">{row.site ?? "N/A"}</strong>{row.site === null ? null : <span className="text-zinc-400"> retained</span>}</span>
+    <div className="border-l-4 border-sky-500 pl-4" data-testid="industry-benchmark-comparison">
+      <div className="flex flex-wrap items-baseline gap-x-3 gap-y-0.5">
+        <p className="text-xs font-semibold uppercase leading-4 text-zinc-500">Industry benchmark</p>
+        <p className="text-sm font-semibold leading-4 text-zinc-800">{benchmarkLabel}</p>
+      </div>
+      <div className="mt-2 grid gap-2.5 sm:grid-cols-2">
+        {rows.map((row) => {
+          const scaleMax = Math.max(row.site, row.average ?? 0, 1) * 1.1;
+          const siteWidth = row.site === 0 ? 0 : Math.max(6, Math.min(100, (row.site / scaleMax) * 100));
+          const averageLeft = row.average === null ? null : Math.max(0, Math.min(100, (row.average / scaleMax) * 100));
+          return (
+            <div className="rounded-md border border-zinc-200 bg-white p-2" key={row.label}>
+              <p className="text-xs font-medium leading-4 text-zinc-700">{row.label}</p>
+              <div className="mt-1 flex items-end justify-between gap-3 text-[0.68rem] leading-4 text-zinc-500">
+                <span>Site <strong className={`${monoClass} ml-1 text-sm text-zinc-950`}>{row.site}</strong></span>
+                <span>Industry avg <strong className={`${monoClass} ml-1 text-sm text-zinc-800`}>{row.average?.toFixed(1) ?? "N/A"}</strong></span>
+              </div>
+              <div
+                aria-label={`${row.label}: site ${row.site}; industry average ${row.average?.toFixed(1) ?? "unavailable"}`}
+                className="relative mt-1.5 h-2 rounded-full bg-zinc-200"
+                role="img"
+              >
+                <span className="absolute inset-y-0 left-0 rounded-full bg-sky-500" style={{ width: `${siteWidth}%` }} />
+                {averageLeft === null ? null : (
+                  <span className="absolute -inset-y-1 w-0.5 rounded-full bg-zinc-800" style={{ left: `${averageLeft}%` }} title={`Industry average ${row.average?.toFixed(1)}`} />
+                )}
+              </div>
+              <div className="mt-1.5 flex flex-wrap items-center justify-between gap-1.5 text-[0.65rem] leading-4">
+                <span className="inline-flex items-center gap-1 text-zinc-500"><span aria-hidden="true" className="h-2 w-2 rounded-full bg-sky-500" />Site</span>
+                <span className="inline-flex items-center gap-1 text-zinc-500"><span aria-hidden="true" className="h-3 w-0.5 bg-zinc-800" />Industry avg</span>
+                <span className="font-semibold text-zinc-700">{row.average === null ? "Benchmark unavailable" : describeIndustryBenchmarkDifference(row.site, row.average)}</span>
+              </div>
             </div>
-            <div className="relative mt-2 h-2 rounded-full bg-zinc-200">
-              <span className="absolute inset-y-0 left-0 rounded-full bg-sky-500" style={{ width: `${row.site === null ? 0 : Math.min(100, row.site === 0 ? 0 : Math.max(8, row.site * 5))}%` }} />
-            </div>
-          </div>
-        ))}
+          );
+        })}
       </div>
     </div>
   );
@@ -599,7 +635,6 @@ function RejectPathTimeline({ report }: { report: ShadowReportData }) {
   const outcome = projection.state === "issue_observed"
     ? {
         badge: "Issue observed",
-        detail: projection.note,
         label: (projection.timelineEvents?.length ?? 0) > 0
           ? "Reject did not suppress all qualifying activity"
           : projection.label,
@@ -608,13 +643,11 @@ function RejectPathTimeline({ report }: { report: ShadowReportData }) {
     : projection.state === "review_signal"
       ? {
           badge: "Review signal",
-          detail: projection.note,
           label: "Post-Reject outcome needs review",
           tone: "review" as const,
         }
       : {
           badge: "No issue observed",
-          detail: projection.note,
           label: "No qualifying post-Reject issue observed",
           tone: "positive" as const,
         };
@@ -628,7 +661,7 @@ function RejectPathTimeline({ report }: { report: ShadowReportData }) {
     ...(projection.timelineEvents ?? []).map((event) => ({ ...event, tone: "concern" as const })),
     {
       atMs: projection.observationWindowMs,
-      detail: outcome.detail,
+      detail: undefined,
       label: outcome.label,
       tone: outcome.tone,
     },
@@ -640,24 +673,23 @@ function RejectPathTimeline({ report }: { report: ShadowReportData }) {
       : "border-emerald-300 bg-emerald-50 text-emerald-800";
 
   return (
-    <div className="mt-10 border-t border-zinc-300 pt-8" data-reject-path-state={projection.state} data-testid="post-reject-timeline">
+    <div className="mt-5 border-t border-zinc-300 pt-4" data-reject-path-state={projection.state} data-testid="post-reject-timeline">
       <div className="flex flex-wrap items-start justify-between gap-3">
-        <div>
-          <p className="text-xs font-semibold uppercase text-sky-700">After Reject</p>
-          <h3 className="mt-1 text-xl font-semibold text-zinc-950">After optional cookies and tracking were rejected</h3>
-          <p className="mt-1 text-xs leading-5 text-zinc-500">Offsets begin when the cookie banner’s Reject control was confirmed.</p>
+        <div className="max-w-4xl">
+          <h3 className="text-xs font-semibold uppercase text-sky-700">After Reject Path Timeline</h3>
+          <p className="mt-1 text-xs leading-5 text-zinc-500">{projection.note}</p>
         </div>
         <span className={`rounded-md border px-2.5 py-1 text-[0.68rem] font-semibold uppercase ${toneClasses}`}>{outcome.badge}</span>
       </div>
-      <div className="mt-6 overflow-x-auto pb-2">
-        <div className="relative min-w-[48rem] pt-10">
-          <div className="absolute left-0 right-0 top-[3.7rem] h-px bg-zinc-300" />
+      <div className="mt-3 overflow-x-auto pb-1">
+        <div className="relative min-w-[48rem] pt-6">
+          <div className="absolute left-0 right-0 top-[2.6rem] h-px bg-zinc-300" />
           <div className="relative grid gap-4" style={{ gridTemplateColumns: `repeat(${Math.max(events.length, 2)}, minmax(0, 1fr))` }}>
             {events.map((event, index) => (
               <div className="relative min-w-0" key={`${event.atMs}:${event.label}:${index}`}>
                 <span className={`absolute top-[0.72rem] h-3 w-3 rounded-full border-2 border-white ring-1 ${event.tone === "concern" ? "bg-rose-500 ring-rose-500" : event.tone === "review" ? "bg-amber-500 ring-amber-500" : "bg-emerald-600 ring-emerald-600"}`} />
                 <p className={`${monoClass} text-xs font-semibold ${event.tone === "concern" ? "text-rose-700" : event.tone === "review" ? "text-amber-800" : "text-emerald-700"}`}>{formatRejectTimelineOffset(event.atMs)}</p>
-                <p className="mt-9 text-sm font-semibold text-zinc-950">{event.label}</p>
+                <p className="mt-6 text-sm font-semibold text-zinc-950">{event.label}</p>
                 {event.detail ? (
                   <div className="mt-1"><ExpandableTimelineDetail text={event.detail} /></div>
                 ) : null}
@@ -666,62 +698,6 @@ function RejectPathTimeline({ report }: { report: ShadowReportData }) {
           </div>
         </div>
       </div>
-    </div>
-  );
-}
-
-function PostRejectActivityInventory({ report }: { report: ShadowReportData }) {
-  const projection = report.rejectPath;
-  if (!projection || projection.state === "incomplete" || projection.observationWindowMs === null) {
-    return null;
-  }
-  const events = projection.timelineEvents ?? [];
-  const clean = projection.state === "no_issue_observed" && events.length === 0;
-  const contradictionOnly = projection.state === "issue_observed" && events.length === 0;
-
-  return (
-    <div className="mt-10 border-t border-zinc-300 pt-8" data-testid="post-reject-activity-inventory">
-      <div className="flex flex-wrap items-end justify-between gap-3">
-        <div>
-          <p className="text-xs font-semibold uppercase text-sky-700">Post-Reject activity</p>
-          <h3 className="mt-1 text-xl font-semibold text-zinc-950">Requests and storage writes after Reject</h3>
-          <p className="mt-1 max-w-4xl text-xs leading-5 text-zinc-500">Reject should suppress new optional activity. It does not necessarily require every previously stored cookie to be deleted; unchanged stored presence remains a separate review-only signal.</p>
-        </div>
-        <span className={`${monoClass} rounded-md border px-2 py-1 text-xs font-semibold ${clean ? "border-emerald-200 bg-emerald-50 text-emerald-800" : events.length > 0 || contradictionOnly ? "border-rose-200 bg-rose-50 text-rose-800" : "border-amber-200 bg-amber-50 text-amber-900"}`}>
-          {events.length} active {events.length === 1 ? "event" : "events"}
-        </span>
-      </div>
-      {events.length > 0 ? (
-        <div className="mt-5 overflow-x-auto border border-zinc-200 bg-white">
-          <table className="w-full min-w-[52rem] border-collapse text-left text-xs">
-            <thead className="bg-zinc-50 text-zinc-500">
-              <tr>{["Activity", "Retained evidence", "After Reject", "Expected", "Result"].map((label) => <th className="border-b border-zinc-200 px-3 py-2 font-medium" key={label}>{label}</th>)}</tr>
-            </thead>
-            <tbody>
-              {events.map((event, index) => {
-                const storageWrite = /storage/i.test(event.label);
-                return (
-                  <tr className="border-b border-zinc-100 last:border-0" key={`${event.atMs}:${event.label}:${index}`}>
-                    <td className="px-3 py-3 font-semibold text-zinc-900">{event.label}</td>
-                    <td className="px-3 py-3 text-zinc-600">{event.detail ?? "Retained event detail unavailable"}</td>
-                    <td className={`${monoClass} px-3 py-3 text-zinc-700`}>{formatRejectTimelineOffset(event.atMs)}</td>
-                    <td className="px-3 py-3 text-zinc-600">{storageWrite ? "No new optional write" : "Optional request suppressed"}</td>
-                    <td className="px-3 py-3"><span className="rounded-md border border-rose-200 bg-rose-50 px-2 py-1 font-semibold text-rose-800">Observed after Reject</span></td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        </div>
-      ) : (
-        <p className={`mt-5 rounded-md border px-3 py-3 text-sm ${clean ? "border-emerald-200 bg-emerald-50 text-emerald-900" : contradictionOnly ? "border-rose-200 bg-rose-50 text-rose-900" : "border-amber-200 bg-amber-50 text-amber-950"}`}>
-          {clean
-            ? "No qualifying non-essential request or storage write was retained after confirmed Reject."
-            : contradictionOnly
-              ? "No qualifying request or storage-write row was retained. The reported issue is the separate consent-state contradiction shown in the Reject result."
-              : projection.note}
-        </p>
-      )}
     </div>
   );
 }
@@ -811,9 +787,7 @@ function CompactInventoryMix({ report }: { report: ShadowReportData }) {
     report.inventory.reduce((total, row) =>
       total + (row[key].toLowerCase() === value.toLowerCase() ? row.recordCount : 0), 0
     );
-  const purposeCounts = [...new Set(report.inventory.map((row) => row.purpose))]
-    .map((purpose) => ({ label: purpose, value: countBy("purpose", purpose) }))
-    .sort((left, right) => right.value - left.value || left.label.localeCompare(right.label));
+  const purposeCounts = buildRuntimeInventoryPurposeCounts(report.inventory);
   return (
     <div className="mt-4 grid grid-cols-3 divide-x divide-zinc-200 border-t border-zinc-200 pt-3">
       <CompactInventoryMixPanel
@@ -855,16 +829,16 @@ function InventoryTypeIcon({ type }: { type: string }) {
   return (
     <span
       aria-label={isCookie ? "Cookie or storage" : "Tracker or request"}
-      className={`inline-flex h-7 w-7 items-center justify-center rounded-md border ${isCookie ? "border-sky-200 bg-sky-50 text-sky-700" : "border-violet-200 bg-violet-50 text-violet-700"}`}
+      className={`inline-flex h-6 w-6 items-center justify-center rounded-md border ${isCookie ? "border-sky-200 bg-sky-50 text-sky-700" : "border-violet-200 bg-violet-50 text-violet-700"}`}
       title={isCookie ? "Cookie or storage" : "Tracker or request"}
     >
       {isCookie ? (
-        <svg aria-hidden="true" className="h-4 w-4" fill="none" viewBox="0 0 24 24">
+        <svg aria-hidden="true" className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24">
           <path d="M20 13.2A8 8 0 1 1 10.8 4a3.1 3.1 0 0 0 3 4 3.2 3.2 0 0 0 4.1 4.1c.6.2 1.2.5 2.1 1.1Z" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" />
           <path d="M8.5 9.5h.01M7.5 15h.01M12.5 14h.01" stroke="currentColor" strokeLinecap="round" strokeWidth="3" />
         </svg>
       ) : (
-        <svg aria-hidden="true" className="h-4 w-4" fill="none" viewBox="0 0 24 24">
+        <svg aria-hidden="true" className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24">
           <path d="M17.6 7.3A7 7 0 0 0 5.3 10M15.2 7.4h2.7V4.7M6.4 16.7A7 7 0 0 0 18.7 14M8.8 16.6H6.1v2.7" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" />
         </svg>
       )}
@@ -879,7 +853,7 @@ function InventoryConfidenceDots({ confidence }: { confidence: string }) {
   return (
     <span aria-label={`Confidence: ${label}`} className="inline-flex items-center gap-1" title={`Confidence: ${label}`}>
       {[1, 2, 3].map((dot) => (
-        <span className={`h-2.5 w-2.5 rounded-full border border-slate-300 ${dot <= level ? "bg-slate-500" : "bg-white"}`} key={dot} />
+        <span className={`h-2 w-2 rounded-full border border-slate-300 ${dot <= level ? "bg-slate-500" : "bg-white"}`} key={dot} />
       ))}
     </span>
   );
@@ -904,8 +878,19 @@ function inventoryPurposeClasses(purpose: string) {
   return "bg-zinc-100 text-zinc-700";
 }
 
-function TwoLineCell({ children, title }: { children: ReactNode; title?: string }) {
-  return <span className="overflow-hidden leading-5 [display:-webkit-box] [-webkit-box-orient:vertical] [-webkit-line-clamp:2]" title={title}>{children}</span>;
+function SingleLineCell({ children, title }: { children: ReactNode; title?: string }) {
+  return <span className="block min-w-0 truncate whitespace-nowrap leading-5" title={title}>{children}</span>;
+}
+
+function InventoryPurposeChip({ purpose }: { purpose: string }) {
+  return (
+    <span
+      className={`inline-flex h-6 max-w-full min-w-0 items-center rounded-md px-2 text-[0.67rem] font-semibold ${inventoryPurposeClasses(purpose)}`}
+      title={purpose}
+    >
+      <span className="min-w-0 truncate whitespace-nowrap leading-4">{purpose}</span>
+    </span>
+  );
 }
 
 function InventoryRowDetails({ row }: { row: InventoryRow }) {
@@ -951,7 +936,7 @@ const INVENTORY_VISIBLE_ROW_LIMIT = 6;
 function RuntimeInventoryTable({ report }: { report: ShadowReportData }) {
   const inventoryIsScrollable = report.inventory.length > INVENTORY_VISIBLE_ROW_LIMIT;
   const inventoryScrollClasses = inventoryIsScrollable
-    ? "max-h-[22rem] overflow-auto"
+    ? "max-h-[20rem] overflow-auto"
     : "overflow-x-auto";
   const copyPayload = buildRuntimeInventoryCopyPayload(report.inventory);
 
@@ -975,22 +960,22 @@ function RuntimeInventoryTable({ report }: { report: ShadowReportData }) {
           className={`${inventoryScrollClasses} border border-zinc-200 bg-white`}
           data-inventory-scroll={inventoryIsScrollable ? "bounded" : "unbounded"}
         >
-        <table className="w-full min-w-[95rem] table-fixed border-collapse text-left text-xs">
-          <thead className="sticky top-0 z-20 bg-zinc-50 text-zinc-500 shadow-[0_2px_8px_-6px_rgba(24,24,27,0.55)]">
+        <table className="w-full min-w-[98rem] table-fixed border-collapse text-left text-xs">
+          <thead className="sticky top-0 z-20 bg-zinc-50 text-[0.65rem] font-semibold uppercase tracking-[0.06em] text-zinc-500 shadow-[0_2px_8px_-6px_rgba(24,24,27,0.55)]">
             <tr>
               {[
-                ["More", "w-[5.5rem]"], ["Type", "w-[4rem]"], ["Vendor", "w-[10rem]"], ["Name", "w-[9rem]"], ["Purpose", "w-[11rem]"],
+                ["More", "w-[5.5rem]"], ["Type", "w-[4rem]"], ["Vendor", "w-[10rem]"], ["Name", "w-[9rem]"], ["Purpose", "w-[14rem]"],
                 ["Evidence mix", "w-[8rem]"], ["First seen", "w-[7rem]"], ["Domains", "w-[14rem]"],
                 ["Relationship", "w-[12rem]"], ["Confidence", "w-[6rem]"], ["Priority", "w-[8rem]"],
               ].map(([label, width], index) => (
-                <th className={`border-b border-zinc-200 px-3 py-2.5 font-medium ${width} ${index === 0 ? "sticky left-0 z-10 bg-zinc-50" : ""}`} key={label}>{label}</th>
+                <th className={`border-b border-zinc-200 px-3 py-2 ${width} ${index === 0 ? "sticky left-0 z-10 bg-zinc-50" : ""}`} key={label}>{label}</th>
               ))}
             </tr>
           </thead>
           <tbody>
             {report.inventory.map((row, index) => (
-              <tr className="border-b border-zinc-100 align-top last:border-0" key={`${row.vendor}:${row.purpose}:${index}`}>
-                <td className="sticky left-0 z-10 bg-white px-3 py-3">
+              <tr className="group/inventory-row border-b border-zinc-100 align-middle transition-colors hover:bg-zinc-50/80 last:border-0" key={`${row.vendor}:${row.purpose}:${index}`}>
+                <td className="sticky left-0 z-10 bg-white px-3 py-2 transition-colors group-hover/inventory-row:bg-zinc-50">
                   <details className="group/vendor relative">
                     <summary className="cursor-pointer list-none whitespace-nowrap font-semibold text-sky-700 hover:text-sky-900 [&::-webkit-details-marker]:hidden">
                       Inspect <span aria-hidden="true">+</span>
@@ -998,16 +983,16 @@ function RuntimeInventoryTable({ report }: { report: ShadowReportData }) {
                     <InventoryRowDetails row={row} />
                   </details>
                 </td>
-                <td className="px-3 py-3 text-zinc-600"><InventoryTypeIcon type={row.type} /></td>
-                <td className="px-3 py-3"><VendorBrandChip label={row.vendor} showMeta={false} /></td>
-                <td className="px-3 py-3 text-zinc-600"><InventoryNameDisclosure fullName={row.name} /></td>
-                <td className="px-3 py-3 text-zinc-600"><span className={`inline-flex max-w-full rounded-md px-2 py-1 text-[0.68rem] font-semibold ${inventoryPurposeClasses(row.purpose)}`}><TwoLineCell title={row.purpose}>{row.purpose}</TwoLineCell></span></td>
-                <td className="px-3 py-3 text-zinc-600"><span className={`inline-flex max-w-full rounded-md px-2 py-1 text-[0.68rem] font-semibold ${inventoryEvidenceClasses(row.evidence)}`}><TwoLineCell title={row.evidence}>{row.evidence}</TwoLineCell></span></td>
-                <td className={`${monoClass} px-3 py-3 text-zinc-600`}><TwoLineCell title={row.observed}>{row.observed}</TwoLineCell></td>
-                <td className={`${monoClass} px-3 py-3 text-zinc-600`}><TwoLineCell title={row.domains}>{row.domains}</TwoLineCell></td>
-                <td className="px-3 py-3 text-zinc-600"><TwoLineCell title={`${row.relationship} · entity ${row.entityRelationship.toLowerCase()}`}>{row.relationship} · entity {row.entityRelationship.toLowerCase()}</TwoLineCell></td>
-                <td className="px-3 py-3 text-zinc-600"><InventoryConfidenceDots confidence={row.confidence} /></td>
-                <td className="px-3 py-3 text-zinc-600"><TwoLineCell title={row.priority}>{row.priority}</TwoLineCell></td>
+                <td className="px-3 py-2 text-zinc-600"><InventoryTypeIcon type={row.type} /></td>
+                <td className="px-3 py-2"><VendorBrandChip label={row.vendor} showMeta={false} /></td>
+                <td className="px-3 py-2 text-zinc-600"><InventoryNameDisclosure className="leading-5" fullName={row.name} /></td>
+                <td className="px-3 py-2 text-zinc-600"><InventoryPurposeChip purpose={row.purpose} /></td>
+                <td className="px-3 py-2 text-zinc-600"><span className={`inline-flex h-6 max-w-full items-center rounded-md px-2 text-[0.67rem] font-semibold ${inventoryEvidenceClasses(row.evidence)}`}><SingleLineCell title={row.evidence}>{row.evidence}</SingleLineCell></span></td>
+                <td className={`${monoClass} px-3 py-2 text-zinc-600`}><SingleLineCell title={row.observed}>{row.observed}</SingleLineCell></td>
+                <td className={`${monoClass} px-3 py-2 text-zinc-600`}><SingleLineCell title={row.domains}>{row.domains}</SingleLineCell></td>
+                <td className="px-3 py-2 text-zinc-600"><SingleLineCell title={`${row.relationship} · entity ${row.entityRelationship.toLowerCase()}`}>{row.relationship} · entity {row.entityRelationship.toLowerCase()}</SingleLineCell></td>
+                <td className="px-3 py-2 text-zinc-600"><InventoryConfidenceDots confidence={row.confidence} /></td>
+                <td className="px-3 py-2 text-zinc-600"><SingleLineCell title={row.priority}>{row.priority}</SingleLineCell></td>
               </tr>
             ))}
           </tbody>
@@ -1017,17 +1002,16 @@ function RuntimeInventoryTable({ report }: { report: ShadowReportData }) {
   );
 }
 
+function priorityIssueCountLabel(count: number) {
+  return `${count} priority ${count === 1 ? "issue" : "issues"}`;
+}
+
 function VerdictBlock({ compact = false, report, showNextStep = true }: { compact?: boolean; report: ShadowReportData; showNextStep?: boolean }) {
-  const reviewCounts = [
-    report.coverage.concern > 0 ? `${report.coverage.concern} concern${report.coverage.concern === 1 ? "" : "s"}` : null,
-    report.coverage.partial > 0 ? `${report.coverage.partial} partial` : null,
-    report.coverage.review > 0 ? `${report.coverage.review} review` : null,
-  ].filter(Boolean).join(" · ");
   return (
     <div>
       <div className="flex flex-wrap items-center gap-2">
         <span className="text-[0.68rem] font-semibold uppercase text-sky-700">Scan assessment</span>
-        <span className="text-xs font-medium text-zinc-500">{reviewCounts}</span>
+        <span className="text-xs font-medium text-zinc-500">{priorityIssueCountLabel(report.findings.length)}</span>
       </div>
       <h2 className={`${compact ? "mt-4 text-2xl" : "mt-5 text-3xl"} max-w-4xl font-semibold leading-tight text-zinc-950`}>
         Executive overview
@@ -1044,16 +1028,11 @@ function VerdictBlock({ compact = false, report, showNextStep = true }: { compac
 }
 
 function MobileVerdict({ report }: { report: ShadowReportData }) {
-  const reviewCounts = [
-    report.coverage.concern > 0 ? `${report.coverage.concern} concern${report.coverage.concern === 1 ? "" : "s"}` : null,
-    report.coverage.partial > 0 ? `${report.coverage.partial} partial` : null,
-    report.coverage.review > 0 ? `${report.coverage.review} review` : null,
-  ].filter(Boolean).join(" · ");
   return (
     <div>
       <div className="flex flex-wrap items-center gap-2">
         <span className="text-[0.68rem] font-semibold uppercase text-sky-700">Scan assessment</span>
-        <span className="text-xs font-medium text-zinc-500">{reviewCounts}</span>
+        <span className="text-xs font-medium text-zinc-500">{priorityIssueCountLabel(report.findings.length)}</span>
       </div>
       <h2 className="mt-4 text-2xl font-semibold leading-tight text-zinc-950">Executive overview</h2>
       <p className="mt-3 text-[0.95rem] leading-7 text-zinc-600">{report.verdict}</p>
@@ -1196,15 +1175,19 @@ function TimelineVariant({
           mode={mode}
           report={report}
         />
-        <div className="mt-9 grid gap-8 border-t border-zinc-200 pt-8 lg:grid-cols-[minmax(20rem,0.95fr)_minmax(0,1.65fr)] lg:gap-10">
-          <div>
+        <div className="mt-9 grid gap-8 border-t border-zinc-200 pt-8 lg:grid-cols-[minmax(20rem,0.95fr)_minmax(0,1.65fr)] lg:items-stretch lg:gap-10">
+          <div className="lg:flex lg:h-full lg:flex-col" data-testid="executive-score-column">
             <ScoreScale compact report={report} />
-            <SignalSnapshot report={report} />
+            <div className="mt-4 lg:mt-auto lg:pt-6">
+              <SignalSnapshot report={report} />
+            </div>
           </div>
-          <div>
+          <div className="lg:flex lg:h-full lg:flex-col" data-testid="executive-overview-column">
             <div className="lg:hidden"><MobileVerdict report={report} /></div>
             <div className="hidden lg:block"><VerdictBlock compact report={report} showNextStep={false} /></div>
-            <BenchmarkComparison report={report} />
+            <div className="mt-8 lg:mt-auto lg:pt-6">
+              <BenchmarkComparison report={report} />
+            </div>
           </div>
         </div>
       </section>
@@ -1224,12 +1207,10 @@ function TimelineVariant({
         <div className="mt-4"><FindingsList priority report={report} /></div>
       </section>
       <section className="border-y border-zinc-950 bg-[#fffdf8]">
-        <div className="mx-auto max-w-[90rem] px-5 py-10 lg:px-10 lg:py-12">
+        <div className="mx-auto max-w-[90rem] px-5 py-6 lg:px-10 lg:py-7">
           <p className="text-xs font-semibold uppercase text-rose-700">Cookies and trackers timeline</p>
-          <p className="mt-1 text-xs leading-5 text-zinc-500">First-seen timestamps place retained third-party requests and embeds relative to the first observed consent banner.</p>
-          <div className="mt-6"><HorizontalTimeline dominant report={report} /></div>
+          <div className="mt-3"><HorizontalTimeline dominant report={report} /></div>
           <RejectPathTimeline report={report} />
-          <PostRejectActivityInventory report={report} />
           <RuntimeInventoryTable report={report} />
         </div>
       </section>
@@ -1439,7 +1420,7 @@ function EvidenceDirectory({ report }: { report: ShadowReportData }) {
             </details>
             <details className="group/transport border-b border-r border-zinc-200 p-5">
               <summary className="flex cursor-pointer list-none items-center justify-between gap-4 [&::-webkit-details-marker]:hidden">
-                <div><p className="text-xs font-semibold uppercase text-zinc-500">Transport security</p><h3 className="mt-1 text-lg font-semibold text-zinc-950">{report.transportRows.filter((row) => row.status === "Observed").length} positive observations</h3></div>
+                <div><p className="text-xs font-semibold uppercase text-zinc-500">Transport security</p><h3 className="mt-1 text-lg font-semibold text-zinc-950">{report.transportRows.filter((row) => row.status === "Observed").length} of {report.transportRows.length} positive observations</h3></div>
                 <span aria-hidden="true" className="text-zinc-400 transition group-open/transport:rotate-45">+</span>
               </summary>
               <div className="mt-5 divide-y divide-zinc-200 border-t border-zinc-200">

@@ -19,6 +19,24 @@ export type RuntimeInventoryMixRow = {
   relationship: string;
 };
 
+export function buildRuntimeInventoryPurposeCounts(
+  inventory: Array<Pick<RuntimeInventoryMixRow, "purpose" | "recordCount">>,
+) {
+  const counts = new Map<string, { label: string; value: number }>();
+  for (const row of inventory) {
+    const label = row.purpose.trim().replace(/\s+/g, " ") || "Unknown";
+    const key = label.toLocaleLowerCase("en-US");
+    const current = counts.get(key);
+    counts.set(key, {
+      label: current?.label ?? label,
+      value: (current?.value ?? 0) + row.recordCount,
+    });
+  }
+  return [...counts.values()].sort(
+    (left, right) => right.value - left.value || left.label.localeCompare(right.label),
+  );
+}
+
 export function RuntimeObservationTimeline({
   dominant = false,
   events,
@@ -177,9 +195,7 @@ export function RuntimeInventoryMix({ compact = false, inventory }: { compact?: 
       (total, row) => total + (row[key].toLowerCase() === value.toLowerCase() ? row.recordCount : 0),
       0,
     );
-  const purposeCounts = [...new Set(inventory.map((row) => row.purpose))]
-    .map((purpose) => ({ label: purpose, value: countBy("purpose", purpose) }))
-    .sort((left, right) => right.value - left.value || left.label.localeCompare(right.label));
+  const purposeCounts = buildRuntimeInventoryPurposeCounts(inventory);
 
   return (
     <div className={`${compact ? "mt-2 pt-2" : "mt-4 pt-3"} grid grid-cols-3 divide-x divide-zinc-200 border-t border-zinc-200`}>
