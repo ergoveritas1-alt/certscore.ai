@@ -4933,6 +4933,32 @@ test("deriveGdprEprivacyCoveragePolicyOutcomes does not emit policy/vendor align
   assert.equal(outcomes.runtime_vendor_disclosure_alignment, undefined);
 });
 
+test("privacy-notice availability consumes the typed inspection handoff even when substantive policy text is unavailable", () => {
+  const outcomes = deriveGdprEprivacyCoveragePolicyOutcomes({
+    ...completedInputBase,
+    runtimeArtifacts: {
+      policyDisclosureSummary: {
+        privacyNoticeAvailabilityObserved: true,
+        privacyPolicyPresent: false,
+        privacyPolicyEvaluationState: "discovered_fetch_failed",
+        discoveredPrivacyPolicyUrls: ["https://example.test/privacy"],
+      },
+      policySurfaceInspection: {
+        inspectionCompleted: true,
+        privacyPolicyObserved: true,
+      },
+    },
+    snapshot: { privacy_policy_present: false },
+  });
+
+  assert.equal(outcomes.privacy_notice_availability?.status, "Observed");
+  assert.match(
+    outcomes.privacy_notice_availability?.limitation ?? "",
+    /privacy-notice link or page surface was reachable/i,
+  );
+  assert.equal(outcomes.legal_basis_disclosure_observed?.status, "Not confirmed");
+});
+
 test("deriveGdprEprivacyCoveragePolicyOutcomes does not gap vendor alignment when no runtime vendors were retained", () => {
   const outcomes = deriveGdprEprivacyCoveragePolicyOutcomes({
     ...completedInputBase,

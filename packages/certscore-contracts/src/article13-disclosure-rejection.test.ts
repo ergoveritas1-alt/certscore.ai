@@ -4,6 +4,7 @@ import test from "node:test";
 import {
   article13DisclosureRejectReason,
   assessArticle13PolicyTextQuality,
+  hasSubstantiveAutomatedDecisionOrProfilingEvidence,
   hasSubstantiveLegalBasisEvidence,
   hasSubstantiveProcessingPurposesEvidence,
   isArticle13DisclosureEvidenceUsable,
@@ -58,6 +59,50 @@ const rejectionModes: Article13DisclosureRejectionMode[] = [
   "retained_report",
   "multilingual_classifier",
 ];
+
+test("explicit automated-processing and profiling clauses remain substantive across grammatical forms", () => {
+  const disclosures = [
+    "Automated decision-making and profiling. This fixture does not use solely automated decision-making or profiling that produces legal effects or similarly significant effects for an individual.",
+    "The personal data collected via the Website is subject to automatic processing through profiling if the data subject has consented to such processing. As a result of profiling, a profile is built.",
+    "You may opt out from processing of your Personal Information for profiling in furtherance of decisions that produce legal or similarly significant effects. We do not conduct such processing activities.",
+  ];
+
+  for (const disclosure of disclosures) {
+    assert.equal(hasSubstantiveAutomatedDecisionOrProfilingEvidence(disclosure), true, disclosure);
+    for (const mode of rejectionModes) {
+      assert.equal(
+        article13DisclosureRejectReason(
+          disclosure,
+          "automated_decision_making_or_profiling",
+          { mode },
+        ),
+        null,
+        `${mode}: ${disclosure}`,
+      );
+    }
+  }
+});
+
+test("generic automation and personalization remain insufficient profiling evidence", () => {
+  const nonDisclosures = [
+    "This website does not use automated deployment decisions that affect build availability.",
+    "This service uses automated scanner classification only to evaluate synthetic website signals.",
+    "We personalize the homepage and recommend popular articles based on the current page.",
+  ];
+
+  for (const text of nonDisclosures) {
+    assert.equal(hasSubstantiveAutomatedDecisionOrProfilingEvidence(text), false, text);
+    assert.equal(
+      article13DisclosureRejectReason(
+        text,
+        "automated_decision_making_or_profiling",
+        { mode: "multilingual_classifier" },
+      ),
+      "insufficient_row_specific_terms",
+      text,
+    );
+  }
+});
 
 test("Privacy Shield transfer wording does not qualify as processing-purposes evidence", () => {
   const text = "Our payment provider is certified under the EU-US Privacy Shield.";
@@ -618,5 +663,15 @@ test("Article 13 rejection contract accepts a substantive privacy contact point 
       true,
       `${mode} should retain the observed privacy contact point`,
     );
+  }
+});
+
+test("Article 13 rejection contract accepts bounded multi-action rights and negated retention limits", () => {
+  const rights = "Exporting and deleting your information. You can export a copy of content in your account, delete your information, remove content, and request that we correct information.";
+  const retention = "We do not keep personal data longer than is necessary and follow the retention schedule.";
+
+  for (const mode of rejectionModes) {
+    assert.equal(isArticle13DisclosureEvidenceUsable(rights, "data_subject_rights", { mode }), true);
+    assert.equal(isArticle13DisclosureEvidenceUsable(retention, "data_retention", { mode }), true);
   }
 });

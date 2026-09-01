@@ -29,6 +29,10 @@ export type GdprTransparencyTopicPhrase = {
 
 export type GdprTransparencyTopicClassifierInput = {
   text?: string | null;
+  section?: {
+    body?: string | null;
+    heading?: string | null;
+  } | null;
   localeHints?: SupportedGdprTransparencyLocale[];
   maxMatches?: number;
   retainLocaleAlternatives?: boolean;
@@ -54,8 +58,135 @@ export type GdprTransparencyTopicClassification = {
 
 type PhraseInput = Omit<GdprTransparencyTopicPhrase, "locale">;
 
+type GdprTransparencySemanticRule = {
+  bodyPattern?: RegExp;
+  confidence?: number;
+  headingPattern?: RegExp;
+  locale: SupportedGdprTransparencyLocale;
+  matchedTerm: string;
+  pattern?: RegExp;
+  sectionOnly?: boolean;
+  topic: GdprTransparencyTopic;
+  variant?: "semantic_clause" | "section_semantic_clause";
+};
+
 const MAX_EXCERPT_CHARS = 360;
 const DEFAULT_MAX_MATCHES = 24;
+
+/** Canonical precision-first clause rules for wording too variable to list as literal headings. */
+const GDPR_TRANSPARENCY_SEMANTIC_RULES: readonly GdprTransparencySemanticRule[] = [
+  {
+    locale: "en",
+    matchedTerm: "automated decision-making or profiling disclosure",
+    pattern: /\bwe\b.{0,80}\b(?:do not|will not|use|perform|carry out)\b.{0,180}\b(?:profiling|profiled|automated decision(?:-making| making|s)?|solely automated)\b.{0,180}\b(?:personal (?:data|information)|user data|data about you|your data|your information|legal effects?|significantly affects?|similarly significant effects?)\b|\bwe\b.{0,80}\b(?:use|process)\b.{0,180}\b(?:personal (?:data|information)|user data|data about you|your data|your information)\b.{0,180}\b(?:profiling|profiled|automated decision(?:-making| making|s)?|solely automated)\b|\b(?:profiling|profiled|automated decision(?:-making| making|s)?|solely automated)\b.{0,180}\b(?:we|the company)\b.{0,120}\b(?:do not|does not|will not|use|perform|carry out|make decisions?)\b.{0,180}\b(?:personal (?:data|information)|user data|data about you|your data|your information|legal effects?|significantly affects?|similarly significant effects?|login|account)\b/i,
+    topic: "automated_decision_making_or_profiling",
+  },
+  {
+    locale: "en",
+    matchedTerm: "explicit automated processing or profiling disclosure",
+    pattern: /\b(?:this (?:site|website|service|platform|application|app|fixture)|the (?:site|website|service|platform|application|app))\b.{0,100}\b(?:do(?:es)? not|will not)\b.{0,100}\b(?:use|conduct|perform|carry out|engage in)\b.{0,180}\b(?:profiling|automated decision(?:-making| making|s)?|solely automated (?:processing|decision))\b.{0,220}\b(?:legal effects?|significantly affects?|similarly significant effects?|eligibility|credit|insurance|employment|access to (?:a )?service)\b|\b(?:personal data|personal information|user data|your data|your information)\b.{0,140}\b(?:is|are) subject to\b.{0,100}\b(?:automatic|automated) processing\b.{0,100}\bprofiling\b|\b(?:personal data|personal information|your data|your information)\b.{0,220}\bprofiling\b.{0,220}\bdecisions?\b.{0,140}\b(?:legal effects?|significantly affects?|similarly significant effects?)\b.{0,220}\bwe\b.{0,60}\b(?:do not|will not)\b.{0,80}\b(?:conduct|perform|carry out|engage in) such processing\b/i,
+    topic: "automated_decision_making_or_profiling",
+  },
+  {
+    locale: "en",
+    matchedTerm: "international or cross-border transfer disclosure",
+    pattern: /\b(?:personal (?:data|information)|your data|your information|data|information)\b.{0,180}\b(?:transferred|processed|stored|hosted|accessed)\b.{0,180}\b(?:outside (?:the )?(?:eu|eea|european union|european economic area|uk|united kingdom)|third countr(?:y|ies)|foreign countr(?:y|ies)|united states|other countries|other jurisdictions)\b|\b(?:standard contractual clauses?|\bsccs?\b|adequacy decision|data privacy framework|cross-border transfers?|international transfers?)\b.{0,260}\b(?:personal (?:data|information)|your data|your information|data|information|transfer|safeguards?)\b/i,
+    topic: "international_transfers",
+  },
+  {
+    locale: "en",
+    matchedTerm: "processing legal-basis clause",
+    pattern: /\b(?:process|processing|use|using|collect|collecting|hold|holding)\b.{0,160}\b(?:personal data|personal information|your data|your information|data|information)\b.{0,180}\b(?:consent|performance of (?:a|the) contract|contractual necessity|legal obligation|legitimate interests?|public task|public interest|vital interests?)\b|\b(?:consent|performance of (?:a|the) contract|contractual necessity|legal obligation|legitimate interests?|public task|public interest|vital interests?)\b.{0,180}\b(?:basis|process|processing|use|using|collect|collecting|hold|holding)\b.{0,160}\b(?:personal data|personal information|your data|your information|data|information)\b|\b(?:personal data|personal information)\b.{0,180}\b(?:obtain|obtains|rely|relies|based)\b.{0,80}\bconsent\b/i,
+    topic: "legal_basis",
+  },
+  {
+    locale: "en",
+    matchedTerm: "personal-data retention period or criterion",
+    pattern: /\b(?:personal data|personal information|your data|your information|account (?:data|information)|records?)\b.{0,160}\b(?:retain(?:ed)?|keep|kept|store(?:d)?|delete(?:d)?|erase(?:d)?|anonymi[sz](?:e|ed))\b.{0,180}\b(?:for \d+|for (?:one|two|three|four|five|six|seven|eight|nine|ten) (?:days?|weeks?|months?|years?)|as long as (?:necessary|required|you (?:use|maintain)|the account)|until (?:the account|you|closure|termination)|account (?:lifetime|closure|termination)|no longer (?:necessary|required)|purpose(?:s)?|legal obligation|applicable law)\b|\b(?:retain(?:ed)?|keep|kept|store(?:d)?)\b.{0,120}\b(?:personal data|personal information|your data|your information|account (?:data|information)|records?)\b.{0,180}\b(?:for \d+|as long as|until|account (?:lifetime|closure|termination)|no longer than necessary|required by law)\b/i,
+    topic: "data_retention",
+  },
+  {
+    locale: "en",
+    matchedTerm: "named recipient or meaningful recipient category",
+    pattern: /\b(?:share|disclose|provide|transfer|send|make available)\b.{0,140}\b(?:personal data|personal information|your data|your information|information|data)\b.{0,180}\b(?:service providers?|processors?|subprocessors?|suppliers?|payment processors?|payment (?:and )?delivery service providers?|hosting providers?|cloud providers?|analytics providers?|analytics partners?|advertising partners?|advertising networks?|social media providers?|delivery providers?|professional advisers?|affiliates?|group companies|law enforcement|regulators?)\b|\b(?:service providers?|processors?|subprocessors?|suppliers?|payment processors?|hosting providers?|cloud providers?|analytics providers?|analytics partners?|advertising partners?|advertising networks?|social media providers?|delivery providers?|professional advisers?|affiliates?|group companies)\b.{0,180}\b(?:receive|access|process|handle|share|disclose|provide)\b.{0,140}\b(?:personal data|personal information|your data|your information|information|data)\b/i,
+    topic: "recipients_or_vendor_categories",
+  },
+  {
+    locale: "en",
+    matchedTerm: "specific personal-data processing purpose",
+    pattern: /\b(?:personal data|personal information|your data|your information|contact details|account data|technical data|information we collect|data we collect)\b.{0,120}\b(?:is|are|may be|will be)?\s*(?:used|processed|collected)\b.{0,100}\b(?:to|for)\b.{0,140}\b(?:provide|deliver|operate|maintain|improve|develop|communicate|respond|process payments?|fulfil|fulfill|protect|secure|prevent|detect|measure|analy[sz]e|support|administer|manage|authenticate)\b|\b(?:we|the company)\s+(?:use|process|collect)\b.{0,100}\b(?:personal data|personal information|your data|your information|information|data)\b.{0,100}\b(?:to|for)\b.{0,140}\b(?:provide|deliver|operate|maintain|improve|develop|communicate|respond|process payments?|fulfil|fulfill|protect|secure|prevent|detect|measure|analy[sz]e|support|administer|manage|authenticate)\b/i,
+    topic: "processing_purposes",
+  },
+  {
+    locale: "en",
+    matchedTerm: "enumerated data-subject rights disclosure",
+    pattern: /\bright to (?:access|know|obtain|delete|erasure|correct|rectification|restrict|object|portability)\b.{0,240}\bright to (?:access|know|obtain|delete|erasure|correct|rectification|restrict|object|portability)\b|\b(?:access|correct|delete|erase|restrict|object to|portability of)\b.{0,120}\b(?:personal data|personal information|your data|your information)\b.{0,180}\b(?:right|request)\b/i,
+    topic: "data_subject_rights",
+  },
+  {
+    locale: "en",
+    matchedTerm: "supervisory-authority complaint disclosure",
+    pattern: /\b(?:right to )?(?:complain|file|make|lodge|submit)\b.{0,100}\b(?:data protection|supervisory|privacy|regulatory) (?:authority|regulator|commission)\b|\b(?:information commissioner(?:'s office)?|data protection authority|supervisory authority)\b.{0,100}\b(?:complain|complaint|file|lodge|submit)\b/i,
+    topic: "supervisory_authority",
+  },
+  {
+    locale: "en",
+    matchedTerm: "controller identity and contact disclosure",
+    pattern: /\b(?:acts as|is|are) (?:a |the )?(?:data )?controller\b.{0,260}\b(?:email|e-mail|mailing address|postal address|contact us|@[a-z0-9.-]+\.[a-z]{2,})\b|\b(?:email|e-mail|mailing address|postal address|contact us|@[a-z0-9.-]+\.[a-z]{2,})\b.{0,260}\b(?:acts as|is|are) (?:a |the )?(?:data )?controller\b/i,
+    topic: "controller_contact",
+  },
+  {
+    locale: "en",
+    matchedTerm: "data-protection officer contact disclosure",
+    pattern: /\b(?:data protection officer|data privacy officer|office of the data privacy officer|\bdpo\b)\b.{0,180}\b(?:email|e-mail|phone|telephone|contact|write|@[a-z0-9.-]+\.[a-z]{2,})\b|\b(?:email|e-mail|phone|telephone|contact|write|@[a-z0-9.-]+\.[a-z]{2,})\b.{0,180}\b(?:data protection officer|data privacy officer|\bdpo\b)\b/i,
+    topic: "dpo_contact",
+  },
+  {
+    locale: "en",
+    matchedTerm: "section-bound processing purposes",
+    headingPattern: /\b(?:how|why|purposes? for which|purposes? of)\b.{0,80}\b(?:use|process|collect|processing|information|data)\b|\bdata we process\b/i,
+    bodyPattern: /\b(?:use|process|collect|provide|operate|maintain|improve|respond|support|deliver|prevent|detect|secure|analy[sz]e|market|advertis|payment|newsletter|survey)\b/i,
+    sectionOnly: true,
+    topic: "processing_purposes",
+    variant: "section_semantic_clause",
+  },
+  {
+    locale: "en",
+    matchedTerm: "section-bound legal basis",
+    headingPattern: /\b(?:legal|lawful) bas(?:is|es)\b|\bpurposes? and (?:legal|lawful) bas(?:is|es)\b/i,
+    bodyPattern: /\b(?:consent|contract|legal obligation|legitimate interests?|public task|public interest|vital interests?|art(?:icle)?\.? 6)\b/i,
+    sectionOnly: true,
+    topic: "legal_basis",
+    variant: "section_semantic_clause",
+  },
+  {
+    locale: "en",
+    matchedTerm: "section-bound recipient categories",
+    headingPattern: /\b(?:sharing|disclos(?:ure|ing)|recipients?|suppliers?|service providers?|third parties)\b/i,
+    bodyPattern: /\b(?:service providers?|processors?|subprocessors?|suppliers?|payment processors?|hosting providers?|analytics partners?|advertising networks?|delivery providers?|professional advisers?|affiliates?|regulators?|authorities)\b/i,
+    sectionOnly: true,
+    topic: "recipients_or_vendor_categories",
+    variant: "section_semantic_clause",
+  },
+  {
+    locale: "en",
+    matchedTerm: "section-bound retention period or criterion",
+    headingPattern: /\b(?:retention|how long|storage period|keeping your (?:data|information))\b/i,
+    bodyPattern: /\b(?:indefinitely|\d+\s*(?:days?|weeks?|months?|years?)|one|two|three|four|five|six|seven|eight|nine|ten)\b.{0,60}\b(?:days?|weeks?|months?|years?|after|until|necessary|required)\b|\b(?:as long as|no longer than|until|after account closure|account lifetime|required by law)\b/i,
+    sectionOnly: true,
+    topic: "data_retention",
+    variant: "section_semantic_clause",
+  },
+  {
+    locale: "en",
+    matchedTerm: "section-bound automated decision-making disclosure",
+    headingPattern: /\b(?:automated decision(?:-making| making)?|profiling)\b/i,
+    bodyPattern: /\b(?:we|the company|personal data|personal information|user data)\b.{0,220}\b(?:do not|does not|will not|use|perform|carry out|automatic decision|profiling|legal effects?|significantly affects?)\b/i,
+    sectionOnly: true,
+    topic: "automated_decision_making_or_profiling",
+    variant: "section_semantic_clause",
+  },
+] as const;
 
 const en = (terms: PhraseInput[]) => terms.map((term): GdprTransparencyTopicPhrase => ({ locale: "en", ...term }));
 const de = (terms: PhraseInput[]) => terms.map((term): GdprTransparencyTopicPhrase => ({ locale: "de", ...term }));
@@ -122,6 +253,8 @@ export const GDPR_TRANSPARENCY_TOPIC_PHRASE_REGISTRY: GdprTransparencyTopicPhras
     direct("dpo_contact", "data protection officer"),
     equivalent("dpo_contact", "dpo contact"),
     equivalent("dpo_contact", "contact our dpo"),
+    equivalent("dpo_contact", "data privacy officer"),
+    equivalent("dpo_contact", "office of the data privacy officer"),
     equivalent("dpo_contact", "privacy counsel"),
     equivalent("dpo_contact", "privacy manager", "requires_privacy_context"),
     equivalent("dpo_contact", "privacy contact point", "privacy_contact_point"),
@@ -137,6 +270,7 @@ export const GDPR_TRANSPARENCY_TOPIC_PHRASE_REGISTRY: GdprTransparencyTopicPhras
     equivalent("processing_purposes", "use the information for the purposes for which it was collected"),
     equivalent("processing_purposes", "use the information for the purposes for which it is provided"),
     equivalent("processing_purposes", "how we use your personal information"),
+    equivalent("processing_purposes", "information will be used only to complete the activity for which it was provided", "requires_privacy_context"),
     equivalent("processing_purposes", "we use this information to"),
     equivalent("processing_purposes", "purposes and legal basis", "requires_topic_context"),
     equivalent("processing_purposes", "purposes and legal-basis", "requires_topic_context"),
@@ -180,6 +314,9 @@ export const GDPR_TRANSPARENCY_TOPIC_PHRASE_REGISTRY: GdprTransparencyTopicPhras
     equivalent("recipients_or_vendor_categories", "our affiliates service providers and third parties"),
     equivalent("recipients_or_vendor_categories", "push subscription endpoint is shared"),
     equivalent("recipients_or_vendor_categories", "business partners who help us facilitate the services"),
+    equivalent("recipients_or_vendor_categories", "supporting suppliers", "requires_privacy_context"),
+    equivalent("recipients_or_vendor_categories", "payment and delivery service providers", "requires_privacy_context"),
+    equivalent("recipients_or_vendor_categories", "advertising networks and analytics partners", "requires_privacy_context"),
     equivalent("recipients_or_vendor_categories", "named vendors include", "requires_topic_context"),
     equivalent("recipients_or_vendor_categories", "vendors include", "requires_topic_context"),
     direct("data_retention", "retention period for personal data"),
@@ -192,6 +329,8 @@ export const GDPR_TRANSPARENCY_TOPIC_PHRASE_REGISTRY: GdprTransparencyTopicPhras
     equivalent("data_retention", "retain account data", "requires_privacy_context"),
     equivalent("data_retention", "we only keep information for as long as we need", "requires_privacy_context"),
     equivalent("data_retention", "data is stored for as long as its processing is necessary", "requires_privacy_context"),
+    equivalent("data_retention", "comment and its metadata are retained indefinitely", "requires_privacy_context"),
+    equivalent("data_retention", "recordings are kept for", "requires_topic_context"),
     direct("data_subject_rights", "right to access your personal data"),
     direct("data_subject_rights", "right to erasure of personal data"),
     direct("data_subject_rights", "right to object to processing"),
@@ -201,12 +340,16 @@ export const GDPR_TRANSPARENCY_TOPIC_PHRASE_REGISTRY: GdprTransparencyTopicPhras
     direct("data_subject_rights", "request access correction deletion restriction portability or objection"),
     equivalent("data_subject_rights", "rights to request access to personal data deletion correction portability restriction or objection", "requires_privacy_context"),
     equivalent("data_subject_rights", "right to access and rectification", "requires_privacy_context"),
+    equivalent("data_subject_rights", "right to access and delete", "requires_privacy_context"),
+    equivalent("data_subject_rights", "right to access or delete", "requires_privacy_context"),
     direct("data_subject_rights", "right to data portability"),
     direct("data_subject_rights", "right to request the restriction of the processing of your personal data"),
     direct("international_transfers", "international transfers of personal data"),
     direct("international_transfers", "international transfers of data"),
     equivalent("international_transfers", "data transfer to processors"),
     equivalent("international_transfers", "transfer your personal data outside your jurisdiction"),
+    equivalent("international_transfers", "transfer your data outside the eea", "requires_privacy_context"),
+    equivalent("international_transfers", "transferring personal information outside the eea", "requires_privacy_context"),
     equivalent("international_transfers", "transfers of your data outside the eea"),
     equivalent("international_transfers", "transfers outside the eea", "requires_topic_context"),
     equivalent("international_transfers", "transfer data to processors located outside"),
@@ -219,6 +362,11 @@ export const GDPR_TRANSPARENCY_TOPIC_PHRASE_REGISTRY: GdprTransparencyTopicPhras
     equivalent("international_transfers", "personal data will be transferred from your country of origin to the united states", "requires_privacy_context"),
     equivalent("international_transfers", "transferred to and stored at a destination outside the eu or the eea", "requires_privacy_context"),
     equivalent("international_transfers", "standard contractual clauses for personal data transfers"),
+    equivalent("international_transfers", "standard contractual clauses issued by the european commission", "requires_privacy_context"),
+    equivalent("international_transfers", "countries that have been deemed to provide an adequate level of protection for personal data"),
+    equivalent("international_transfers", "international transfer of data", "requires_privacy_context"),
+    equivalent("international_transfers", "overseas transfers of data", "requires_privacy_context"),
+    equivalent("international_transfers", "pii is transferred outside the european economic area", "requires_privacy_context"),
     equivalent("international_transfers", "cross-border transfer", "requires_privacy_context"),
     equivalent("international_transfers", "personal information is transferred across borders", "requires_privacy_context"),
     direct("international_transfers", "data transfers to third countries"),
@@ -264,6 +412,9 @@ export const GDPR_TRANSPARENCY_TOPIC_PHRASE_REGISTRY: GdprTransparencyTopicPhras
     equivalent("automated_decision_making_or_profiling", "do not use your data for profiling"),
     equivalent("automated_decision_making_or_profiling", "do not use personal data for profiling"),
     equivalent("automated_decision_making_or_profiling", "does not use personal data for profiling"),
+    equivalent("automated_decision_making_or_profiling", "do not perform any automated profiling", "requires_privacy_context"),
+    equivalent("automated_decision_making_or_profiling", "do not make decisions of this kind", "requires_topic_context"),
+    equivalent("automated_decision_making_or_profiling", "will not be used for automated decision-making", "requires_privacy_context"),
     equivalent("automated_decision_making_or_profiling", "solely by automated means", "requires_topic_context"),
   ]),
   ...de([
@@ -322,6 +473,10 @@ export const GDPR_TRANSPARENCY_TOPIC_PHRASE_REGISTRY: GdprTransparencyTopicPhras
     direct("data_subject_rights", "recht auf einschränkung der verarbeitung"),
     direct("international_transfers", "übermittlung personenbezogener daten in ein drittland"),
     equivalent("international_transfers", "übermittlungen in drittländer", "requires_privacy_context"),
+    equivalent("international_transfers", "übermittlungen an ein drittland", "requires_privacy_context"),
+    equivalent("international_transfers", "zertifizierung zum data privacy framework", "requires_privacy_context"),
+    equivalent("international_transfers", "unter dem privacy shield zertifiziert", "requires_privacy_context"),
+    equivalent("international_transfers", "eu-us data privacy framework", "requires_privacy_context"),
     equivalent("international_transfers", "voraussetzungen der art 44", "requires_privacy_context"),
     equivalent("international_transfers", "standardvertragsklauseln für die übermittlung personenbezogener daten"),
     direct("international_transfers", "übermittlung personenbezogener daten in drittländer"),
@@ -372,6 +527,8 @@ export const GDPR_TRANSPARENCY_TOPIC_PHRASE_REGISTRY: GdprTransparencyTopicPhras
     direct("international_transfers", "transferts internationaux de données personnelles"),
     equivalent("international_transfers", "données personnelles hors de l'espace économique européen"),
     equivalent("international_transfers", "transfert des données hors de l'union européenne", "requires_privacy_context"),
+    equivalent("international_transfers", "absence de décision d'adéquation", "requires_privacy_context"),
+    equivalent("international_transfers", "clauses contractuelles types", "requires_privacy_context"),
     direct("international_transfers", "transfert de données personnelles vers des pays tiers"),
     direct("supervisory_authority", "droit d'introduire une réclamation auprès d'une autorité de contrôle"),
     equivalent("supervisory_authority", "introduire une réclamation auprès d'une autorité de contrôle"),
@@ -413,6 +570,7 @@ export const GDPR_TRANSPARENCY_TOPIC_PHRASE_REGISTRY: GdprTransparencyTopicPhras
     direct("international_transfers", "transferencias internacionales de datos personales"),
     equivalent("international_transfers", "datos personales fuera del espacio económico europeo"),
     direct("international_transfers", "transferencia de datos personales a terceros países"),
+    equivalent("international_transfers", "cláusulas tipo de la comisión europea", "requires_privacy_context"),
     direct("supervisory_authority", "derecho a presentar una reclamación ante una autoridad de control"),
     direct("supervisory_authority", "presentar una reclamación ante la agencia española de protección de datos"),
     equivalent("supervisory_authority", "presentar una reclamación ante una autoridad de control"),
@@ -482,6 +640,8 @@ export const GDPR_TRANSPARENCY_TOPIC_PHRASE_REGISTRY: GdprTransparencyTopicPhras
     direct("recipients_or_vendor_categories", "ontvanger van persoonsgegevens"),
     equivalent("recipients_or_vendor_categories", "categorieën van ontvangers van persoonsgegevens"),
     equivalent("recipients_or_vendor_categories", "dienstverleners die persoonsgegevens verwerken"),
+    equivalent("recipients_or_vendor_categories", "externe beheerders van software platformen"),
+    equivalent("recipients_or_vendor_categories", "betalingssystemen"),
     equivalent("recipients_or_vendor_categories", "uw persoonsgegevens niet delen met derden"),
     direct("data_retention", "bewaartermijn van persoonsgegevens"),
     equivalent("data_retention", "bewaren persoonsgegevens"),
@@ -538,6 +698,8 @@ export const GDPR_TRANSPARENCY_TOPIC_PHRASE_REGISTRY: GdprTransparencyTopicPhras
     direct("data_subject_rights", "prawo do ograniczenia przetwarzania"),
     direct("international_transfers", "transfery międzynarodowe danych osobowych"),
     equivalent("international_transfers", "dane osobowe poza europejski obszar gospodarczy"),
+    equivalent("international_transfers", "przekazywanie danych osobowych poza eog"),
+    equivalent("international_transfers", "standardowych klauzul umownych", "requires_privacy_context"),
     equivalent("international_transfers", "dane osobowe użytkownika mogą być przekazywane do państw"),
     direct("international_transfers", "przekazywanie danych osobowych do państw trzecich"),
     direct("supervisory_authority", "prawo do wniesienia skargi do organu nadzorczego"),
@@ -642,6 +804,8 @@ export const GDPR_TRANSPARENCY_TOPIC_PHRASE_REGISTRY: GdprTransparencyTopicPhras
     equivalent("international_transfers", "трансграничную передачу персональных данных"),
     equivalent("international_transfers", "передача персональных данных за пределы европейской экономической зоны"),
     equivalent("international_transfers", "стандартные договорные положения для передачи персональных данных"),
+    equivalent("international_transfers", "стандартных договорных условий"),
+    equivalent("international_transfers", "решения европейской комиссии об адекватности"),
     direct("international_transfers", "передача персональных данных в третьи страны"),
     direct("supervisory_authority", "право подать жалобу в надзорный орган"),
     equivalent("supervisory_authority", "жалоба в орган по защите данных"),
@@ -737,6 +901,7 @@ export const GDPR_TRANSPARENCY_TOPIC_PHRASE_REGISTRY: GdprTransparencyTopicPhras
     equivalent("controller_contact", "個人資料處理者的聯絡方式", "zh_hant"),
     equivalent("dpo_contact", "資料保護長", "zh_hant"),
     equivalent("dpo_contact", "資料保護長的聯絡方式", "zh_hant"),
+    equivalent("dpo_contact", "個人資料保護員", "zh_hant"),
     equivalent("processing_purposes", "處理個人資料的目的", "zh_hant"),
     equivalent("processing_purposes", "我們為何使用您的個人資料", "zh_hant"),
     equivalent("legal_basis", "處理個人資料的法律依據", "zh_hant"),
@@ -847,6 +1012,8 @@ export const GDPR_TRANSPARENCY_TOPIC_PHRASE_REGISTRY: GdprTransparencyTopicPhras
     direct("international_transfers", "transferuri internaționale de date cu caracter personal"),
     equivalent("international_transfers", "transferurile internaționale de date cu caracter personal", "definite_form"),
     equivalent("international_transfers", "transferul datelor cu caracter personal către o țară terță"),
+    equivalent("international_transfers", "clauze contractuale standard", "requires_privacy_context"),
+    equivalent("international_transfers", "din afara spațiului economic european", "requires_privacy_context"),
     direct("supervisory_authority", "dreptul de a depune o plângere la o autoritate de supraveghere"),
     equivalent("supervisory_authority", "plângere în fața unei autorități de supraveghere"),
     direct("automated_decision_making_or_profiling", "proces decizional automatizat privind datele cu caracter personal"),
@@ -1417,7 +1584,8 @@ export const GDPR_TRANSPARENCY_TOPIC_PHRASE_REGISTRY: GdprTransparencyTopicPhras
 export function classifyGdprTransparencyTopics(
   input: GdprTransparencyTopicClassifierInput,
 ): GdprTransparencyTopicClassification {
-  const normalizedText = normalizeGdprTransparencyText(input.text);
+  const sourceText = classifierSourceText(input);
+  const normalizedText = normalizeGdprTransparencyText(sourceText);
   if (!normalizedText) {
     return {
       classifierProvenance: "gdpr_transparency_topic_classifier.v1",
@@ -1452,7 +1620,32 @@ export function classifyGdprTransparencyTopics(
       strengthRank(right.term.strength) - strengthRank(left.term.strength) ||
       right.term.phrase.length - left.term.phrase.length
     );
-  const evidenceSourceText = matches.length > 0 ? decodedEvidenceText(input.text ?? "") : "";
+  const normalizedSectionHeading = normalizeGdprTransparencyText(input.section?.heading);
+  const normalizedSectionBody = normalizeGdprTransparencyText(input.section?.body);
+  const semanticMatches = GDPR_TRANSPARENCY_SEMANTIC_RULES
+    .filter((rule) => localeHints.size === 0 || localeHints.has(rule.locale))
+    .filter(() =>
+      input.section != null ||
+      privacyDisclosureContext ||
+      /\b(?:personal data|personal information|user data|data about you|account (?:data|information)|legal effects?|significantly affects?|similarly significant effects?)\b/i.test(normalizedText)
+    )
+    .filter((rule) => {
+      if (rule.sectionOnly) {
+        if (!normalizedSectionHeading || !normalizedSectionBody) return false;
+        if (rule.headingPattern) rule.headingPattern.lastIndex = 0;
+        if (rule.bodyPattern) rule.bodyPattern.lastIndex = 0;
+        return Boolean(
+          rule.headingPattern?.test(normalizedSectionHeading) &&
+          rule.bodyPattern?.test(normalizedSectionBody)
+        );
+      }
+      if (!rule.pattern) return false;
+      rule.pattern.lastIndex = 0;
+      return rule.pattern.test(normalizedText);
+    });
+  const evidenceSourceText = matches.length > 0 || semanticMatches.length > 0
+    ? decodedEvidenceText(sourceText)
+    : "";
   const evidenceSearchIndex = evidenceSourceText ? buildEvidenceSearchIndex(evidenceSourceText) : undefined;
 
   const selected = new Map<string, GdprTransparencyTopicMatch>();
@@ -1483,11 +1676,76 @@ export function classifyGdprTransparencyTopics(
     }
   }
 
+  for (const rule of semanticMatches) {
+    const selectionKey = input.retainLocaleAlternatives
+      ? `${rule.topic}:${rule.locale}`
+      : rule.topic;
+    if (selected.has(selectionKey)) continue;
+    selected.set(selectionKey, {
+      classifierProvenance: "gdpr_transparency_topic_classifier.v1",
+      confidence: rule.confidence ?? (rule.sectionOnly ? 0.88 : 0.86),
+      evidenceExcerpt: rule.sectionOnly && input.section
+        ? boundedSectionSemanticEvidenceExcerpt(input.section, rule)
+        : boundedEvidenceExcerptFromIndex(
+          evidenceSourceText,
+          evidenceSearchIndex,
+          semanticRuleAnchor(normalizedText, rule),
+        ),
+      matchedLocale: rule.locale,
+      matchedTerm: rule.matchedTerm,
+      matchStrength: "equivalent",
+      reasonCodes: [
+        `matched_${rule.topic}`,
+        "match_strength_equivalent",
+        `variant_${rule.variant ?? "semantic_clause"}`,
+      ],
+      topic: rule.topic,
+      variant: rule.variant ?? "semantic_clause",
+    });
+    if (selected.size >= Math.max(1, input.maxMatches ?? DEFAULT_MAX_MATCHES)) break;
+  }
+
   return {
     classifierProvenance: "gdpr_transparency_topic_classifier.v1",
     matches: [...selected.values()],
     reasonCodes: selected.size > 0 ? ["topic_match_observed"] : ["no_topic_match"],
   };
+}
+
+function classifierSourceText(input: GdprTransparencyTopicClassifierInput) {
+  const heading = decodedEvidenceText(input.section?.heading ?? "").trim();
+  const body = decodedEvidenceText(input.section?.body ?? "").trim();
+  if (heading || body) {
+    return [heading, body].filter(Boolean).join("\n");
+  }
+  return input.text ?? "";
+}
+
+function semanticRuleAnchor(normalizedText: string, rule: GdprTransparencySemanticRule) {
+  const pattern = rule.sectionOnly
+    ? rule.bodyPattern ?? rule.headingPattern
+    : rule.pattern ?? rule.headingPattern ?? rule.bodyPattern;
+  if (!pattern) return rule.matchedTerm;
+  pattern.lastIndex = 0;
+  return pattern.exec(normalizedText)?.[0]?.slice(0, 180) ?? rule.matchedTerm;
+}
+
+function boundedSectionSemanticEvidenceExcerpt(
+  section: NonNullable<GdprTransparencyTopicClassifierInput["section"]>,
+  rule: GdprTransparencySemanticRule,
+) {
+  const heading = decodedEvidenceText(section.heading ?? "").trim();
+  const body = decodedEvidenceText(section.body ?? "").trim();
+  const prefix = heading ? `${heading}. ` : "";
+  const bodyBudget = Math.max(80, MAX_EXCERPT_CHARS - prefix.length);
+  const bodyIndex = body ? buildEvidenceSearchIndex(body) : undefined;
+  const bodyExcerpt = boundedEvidenceExcerptFromIndex(
+    body,
+    bodyIndex,
+    semanticRuleAnchor(normalizeGdprTransparencyText(body), rule),
+    bodyBudget,
+  );
+  return `${prefix}${bodyExcerpt}`.slice(0, MAX_EXCERPT_CHARS).trim();
 }
 
 export function normalizeGdprTransparencyText(value: string | null | undefined): string {
@@ -1678,15 +1936,17 @@ function hasRequiredTopicContext(
         /\brecipient of (?:the )?data\b.{0,180}\b(?:gmbh|ag|ltd|limited|inc|llc|corp|company|service provider|processor|hoster|authority)\b/i.test(normalizedText) ||
         /\bshare (?:your |the )?(?:personal data|personal information|your data|your information) with third parties\b/i.test(normalizedText) ||
         /\bshare information with third parties\b.{0,180}\b(?:personal data|personal information|your data|your information|service providers?|processors?|recipients?|vendors?)\b/i.test(normalizedText) ||
-        /\b(?:personal data|personal information|your data|your information|service providers?|processors?|recipients?|vendors?)\b.{0,180}\bshare information with third parties\b/i.test(normalizedText);
+        /\b(?:personal data|personal information|your data|your information|service providers?|processors?|recipients?|vendors?)\b.{0,180}\bshare information with third parties\b/i.test(normalizedText) ||
+        /\b(?:share|provide|disclose)\b.{0,160}\b(?:information|data)\b.{0,180}\b(?:supporting suppliers?|payment and delivery service providers?|advertising networks? and analytics partners?)\b/i.test(normalizedText);
     case "data_retention":
-      return /\brecords are retained for\b.{0,100}(?:\b\d+\s*(?:days?|weeks?|months?|years?)\b|\bas long as\b|\buntil\b|\bafter\b)/i.test(normalizedText);
+      return /\b(?:records?|recordings?) (?:are )?(?:retained|kept) for\b.{0,100}(?:\b\d+\s*(?:days?|weeks?|months?|years?)\b|\b(?:one|two|three|four|five|six|seven|eight|nine|ten)\s+(?:days?|weeks?|months?|years?)\b|\bas long as\b|\buntil\b|\bafter\b)/i.test(normalizedText);
     case "international_transfers":
       return /\btransfers outside the eea\b.{0,220}\b(?:personal data|data|standard contractual clauses|safeguards?|adequacy|third countr)/i.test(normalizedText);
     case "supervisory_authority":
       return /\b(?:complain|complaint|lodge|file|submit)\b.{0,140}\bdata protection commission\b|\bdata protection commission\b.{0,140}\b(?:complain|complaint|lodge|file|submit)\b/i.test(normalizedText);
     case "automated_decision_making_or_profiling":
-      return /\b(?:decision(?:s| making)?|profiling)\b.{0,180}\bsolely by automated means\b/i.test(normalizedText);
+      return /\b(?:decision(?:s| making)?|profiling)\b.{0,180}\bsolely by automated means\b/i.test(normalizedText) ||
+        /\b(?:automated decision(?: making)?|profiling)\b.{0,220}\b(?:do not make decisions of this kind|do not perform any automated profiling)\b|\b(?:do not make decisions of this kind|do not perform any automated profiling)\b.{0,220}\b(?:automated decision(?: making)?|profiling)\b/i.test(normalizedText);
     default:
       return true;
   }
@@ -1838,6 +2098,7 @@ function boundedEvidenceExcerptFromIndex(
   sourceText: string,
   searchIndex: ReturnType<typeof buildEvidenceSearchIndex> | undefined,
   phrase: string,
+  maximumChars = MAX_EXCERPT_CHARS,
 ): string {
   const normalizedPhrase = normalizeGdprTransparencyText(phrase);
   if (!sourceText || !searchIndex) {
@@ -1847,13 +2108,22 @@ function boundedEvidenceExcerptFromIndex(
     ? paddedIndexesOf(searchIndex.normalized, normalizedPhrase)
     : [];
   if (matchIndexes.length === 0) {
-    return sourceText.slice(0, MAX_EXCERPT_CHARS);
+    return sourceText.slice(0, maximumChars);
   }
   return matchIndexes
     .map((matchIndex, occurrenceIndex) => {
       const sourceMatchStart = searchIndex.sourceIndexes[matchIndex] ?? 0;
-      const start = Math.max(0, sourceMatchStart - Math.floor(MAX_EXCERPT_CHARS / 3));
-      const excerpt = sourceText.slice(start, start + MAX_EXCERPT_CHARS).trim();
+      const normalizedMatchEnd = Math.min(
+        searchIndex.sourceIndexes.length - 1,
+        matchIndex + Math.max(1, normalizedPhrase.length) - 1,
+      );
+      const sourceMatchEnd = (searchIndex.sourceIndexes[normalizedMatchEnd] ?? sourceMatchStart) + 1;
+      const excerpt = boundedCompleteEvidenceWindow(
+        sourceText,
+        sourceMatchStart,
+        sourceMatchEnd,
+        maximumChars,
+      );
       return {
         excerpt,
         occurrenceIndex,
@@ -1862,7 +2132,63 @@ function boundedEvidenceExcerptFromIndex(
     })
     .sort((left, right) =>
       right.score - left.score || left.occurrenceIndex - right.occurrenceIndex
-    )[0]?.excerpt ?? sourceText.slice(0, MAX_EXCERPT_CHARS);
+    )[0]?.excerpt ?? sourceText.slice(0, maximumChars);
+}
+
+function boundedCompleteEvidenceWindow(
+  sourceText: string,
+  anchorStart: number,
+  anchorEnd: number,
+  maximumChars = MAX_EXCERPT_CHARS,
+) {
+  const hardStart = Math.max(0, anchorEnd - maximumChars);
+  const preferredStartFloor = Math.max(hardStart, anchorStart - Math.floor(maximumChars / 3));
+  const precedingBoundaries = evidenceBoundaryIndexesBefore(sourceText, anchorStart)
+    .filter((index) => index >= preferredStartFloor);
+  let start = precedingBoundaries.length > 0
+    ? Math.min(...precedingBoundaries)
+    : preferredStartFloor;
+  if (start > 0 && !isEvidenceBoundary(sourceText[start - 1] ?? "")) {
+    const nextWhitespace = sourceText.slice(start, anchorStart).search(/\s/u);
+    if (nextWhitespace >= 0) start += nextWhitespace + 1;
+  }
+
+  const maximumEnd = Math.min(sourceText.length, start + maximumChars);
+  const followingBoundaries = evidenceBoundaryIndexesAfter(sourceText, anchorEnd)
+    .filter((index) => index <= maximumEnd);
+  let end = followingBoundaries.length > 0
+    ? Math.max(...followingBoundaries)
+    : maximumEnd;
+  if (end < sourceText.length && !isEvidenceBoundary(sourceText[end] ?? "")) {
+    const lastWhitespace = sourceText.slice(anchorEnd, end).search(/\s+\S*$/u);
+    if (lastWhitespace >= 0) end = anchorEnd + lastWhitespace;
+  }
+  if (end <= anchorEnd) end = maximumEnd;
+  return sourceText.slice(start, end).trim();
+}
+
+function evidenceBoundaryIndexesBefore(value: string, offset: number) {
+  const prefix = value.slice(0, offset);
+  const indexes = [0, prefix.lastIndexOf("\n")];
+  for (const match of prefix.matchAll(/[.!?。！？؟]\s+/gu)) {
+    indexes.push((match.index ?? 0) + match[0].length);
+  }
+  return indexes.filter((index) => index >= 0);
+}
+
+function evidenceBoundaryIndexesAfter(value: string, offset: number) {
+  const suffix = value.slice(offset);
+  const indexes: number[] = [];
+  const newline = suffix.indexOf("\n");
+  if (newline >= 0) indexes.push(offset + newline);
+  for (const match of suffix.matchAll(/[.!?。！？؟](?:\s+|$)/gu)) {
+    indexes.push(offset + (match.index ?? 0) + match[0].length);
+  }
+  return indexes;
+}
+
+function isEvidenceBoundary(value: string) {
+  return /[\s.!?。！？؟]/u.test(value);
 }
 
 function substantiveEvidenceOccurrenceScore(excerpt: string, normalizedPhrase: string) {

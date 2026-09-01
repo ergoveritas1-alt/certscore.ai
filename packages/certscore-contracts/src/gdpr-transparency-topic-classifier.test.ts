@@ -2209,3 +2209,149 @@ test("Article 4 controller heading alone does not establish controller contact",
     false,
   );
 });
+
+test("canonical semantic clauses recover retained EU-IR topic evidence without generic personalization", () => {
+  const cases = [
+    ["automated_decision_making_or_profiling", "We do not carry out automated decision-making using personal information which produces legal effects or otherwise significantly affects individuals."],
+    ["international_transfers", "Personal data may be transferred to and processed in the United States or other countries using Standard Contractual Clauses and appropriate safeguards."],
+    ["legal_basis", "We process your personal data to perform our contract, comply with legal obligations, or pursue our legitimate interests."],
+    ["data_retention", "Account information is retained for five years after account closure to resolve disputes and comply with legal obligations."],
+    ["recipients_or_vendor_categories", "We share personal information with payment processors, hosting providers, and professional advisers that support the service."],
+    ["processing_purposes", "We use personal data to provide the service, process payments, prevent fraud, and respond to support requests."],
+  ] as const;
+
+  for (const [topic, text] of cases) {
+    const match = classifyGdprTransparencyTopics({ text }).matches.find((row) => row.topic === topic);
+    assert.equal(match?.matchStrength, "equivalent", topic);
+    assert.equal(match?.reasonCodes.includes("variant_semantic_clause"), true, topic);
+  }
+
+  assert.equal(classifyGdprTransparencyTopics({
+    text: "We personalize the homepage and recommend popular articles based on the current page.",
+  }).matches.some((row) => row.topic === "automated_decision_making_or_profiling"), false);
+  assert.equal(classifyGdprTransparencyTopics({
+    text: "We may share information with undefined third parties.",
+  }).matches.some((row) => row.topic === "recipients_or_vendor_categories"), false);
+});
+
+test("retained automated-decision misses classify across explicit negative and passive profiling forms", () => {
+  const disclosures = [
+    "Automated decision-making and profiling. This fixture does not use solely automated decision-making or profiling that produces legal effects or similarly significant effects for an individual.",
+    "The personal data collected via the Website is subject to automatic processing through profiling if the data subject has consented to such processing. As a result of profiling, a profile is built.",
+    "You may opt out from processing of your Personal Information for profiling in furtherance of decisions that produce legal or similarly significant effects. We do not conduct such processing activities.",
+  ];
+
+  for (const text of disclosures) {
+    const match = classifyGdprTransparencyTopics({ text }).matches.find(
+      (row) => row.topic === "automated_decision_making_or_profiling",
+    );
+    assert.ok(match, text);
+    assert.equal(match.reasonCodes.includes("variant_semantic_clause"), true, text);
+  }
+
+  for (const text of [
+    "This website does not use automated deployment decisions that affect build availability.",
+    "This service uses automated scanner classification only to evaluate synthetic website signals.",
+    "We personalize the homepage and recommend popular articles based on the current page.",
+  ]) {
+    assert.equal(
+      classifyGdprTransparencyTopics({ text }).matches.some(
+        (row) => row.topic === "automated_decision_making_or_profiling",
+      ),
+      false,
+      text,
+    );
+  }
+});
+
+test("section-aware classification binds verified headings to substantive bodies", () => {
+  const cases = [
+    ["processing_purposes", "How we use the information we collect", "We operate the service, answer support requests, prevent fraud, and improve account security."],
+    ["legal_basis", "Purposes and legal bases", "Account delivery depends on our contract; fraud prevention relies on legitimate interests; tax records satisfy legal obligations."],
+    ["recipients_or_vendor_categories", "Sharing and recipients", "Payment processors, hosting providers, analytics partners, and professional advisers support delivery of the service."],
+    ["data_retention", "How long we retain your data", "Call recordings are kept for two months, while account records are retained until account closure."],
+    ["automated_decision_making_or_profiling", "Automated decision-making and profiling", "We do not perform profiling or make decisions that produce legal effects for an individual."],
+  ] as const;
+
+  for (const [topic, heading, body] of cases) {
+    const match = classifyGdprTransparencyTopics({
+      section: { body, heading },
+    }).matches.find((row) => row.topic === topic);
+    assert.ok(match, topic);
+    assert.equal(match.reasonCodes.includes(`matched_${topic}`), true, topic);
+    assert.match(match.evidenceExcerpt, new RegExp(heading.split(" ")[0] ?? "", "i"));
+  }
+
+  assert.equal(classifyGdprTransparencyTopics({
+    section: {
+      heading: "Automated tools",
+      body: "A scanner classifies synthetic website signals for internal test reporting.",
+    },
+  }).matches.some((row) => row.topic === "automated_decision_making_or_profiling"), false);
+  assert.equal(classifyGdprTransparencyTopics({
+    section: {
+      heading: "Sharing",
+      body: "Information may be shared with undefined third parties.",
+    },
+  }).matches.some((row) => row.topic === "recipients_or_vendor_categories"), false);
+});
+
+test("canonical retained miss variants cover transfer and contact wording across locales", () => {
+  const cases = [
+    ["international_transfers", "fr", "En cas d’absence de décision d’adéquation, les transferts sont encadrés par des clauses contractuelles types pour protéger les Données Personnelles."],
+    ["international_transfers", "de", "Übermittlungen an ein Drittland erfolgen mit geeigneten Garantien und einer Zertifizierung zum Data Privacy Framework für personenbezogene Daten."],
+    ["international_transfers", "ru", "Передача персональных данных осуществляется на основании решения Европейской комиссии об адекватности или стандартных договорных условий."],
+    ["recipients_or_vendor_categories", "nl", "Persoonsgegevens worden verstrekt aan externe beheerders van software platformen en betalingssystemen die onze diensten ondersteunen."],
+    ["dpo_contact", "zh", "本公司個人資料保護員資訊如下：電子信箱 DPO@example.tw。"],
+  ] as const;
+
+  for (const [topic, locale, text] of cases) {
+    const match = classifyGdprTransparencyTopics({
+      localeHints: [locale],
+      text,
+    }).matches.find((row) => row.topic === topic);
+    assert.ok(match, `${locale}:${topic}`);
+  }
+});
+
+test("canonical multilingual transfer clauses recover retained safeguard wording", () => {
+  const cases = [
+    ["en", "Whenever we transfer your personal data outside the EEA, we use Standard Contractual Clauses issued by the European Commission."],
+    ["es", "Los datos personales se transfieren con cláusulas tipo de la Comisión Europea para mantener las garantías adecuadas."],
+    ["de", "Für personenbezogene Daten ist der Anbieter unter dem Privacy Shield zertifiziert und verpflichtet sich zur Einhaltung europäischer Datenschutzstandards."],
+    ["pl", "Przekazywanie danych osobowych poza EOG odbywa się przy zastosowaniu standardowych klauzul umownych wydanych przez Komisję Europejską."],
+    ["ro", "Datele cu caracter personal pot fi transferate în state din afara Spațiului Economic European pe baza unor Clauze Contractuale Standard."],
+  ] as const;
+
+  for (const [locale, text] of cases) {
+    const match = classifyGdprTransparencyTopics({
+      localeHints: [locale],
+      text,
+    }).matches.find((row) => row.topic === "international_transfers");
+    assert.ok(match, `${locale}: ${text}`);
+  }
+
+  for (const text of [
+    "The legal team reviews standard contractual clauses issued by the European Commission for procurement templates.",
+    "International transfer of data between internal build systems is described in the engineering runbook.",
+    "Das Unternehmen ist für seinen internationalen Handel nach einer allgemeinen Qualitätsnorm zertifiziert.",
+  ]) {
+    assert.equal(
+      classifyGdprTransparencyTopics({ text }).matches.some(
+        (row) => row.topic === "international_transfers",
+      ),
+      false,
+      text,
+    );
+  }
+});
+
+test("canonical evidence excerpts retain complete bounded sentence edges", () => {
+  const text = `${"Background context without a topic. ".repeat(7)}Data controller. Example Services Ltd acts as the data controller. Contact us at privacy@example.test for privacy questions. A final unrelated sentence follows.`;
+  const match = classifyGdprTransparencyTopics({ text }).matches.find((row) => row.topic === "controller_contact");
+  assert.ok(match);
+  assert.ok(match.evidenceExcerpt.length <= 360);
+  assert.doesNotMatch(match.evidenceExcerpt, /^ground\b/i);
+  assert.match(match.evidenceExcerpt, /acts as the data controller\./);
+  assert.match(match.evidenceExcerpt, /privacy@example\.test/);
+});

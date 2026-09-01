@@ -2708,6 +2708,7 @@ export function summarizePolicySurfaces(
     policyTextEvidenceContext?: PolicyTextEvidenceContext;
     policyEvidenceLaneStatus?: "complete" | "degraded" | null;
     primaryLanguage?: string | null;
+    privacyPolicyObserved?: boolean | null;
     scanStartedAt?: string | null;
   } = {}
 ) {
@@ -3279,6 +3280,8 @@ export function summarizePolicySurfaces(
     policyTextEvidenceProjection,
     policy_text_evidence_projection: policyTextEvidenceProjection,
     privacyPolicyPresent: article13Surfaces.length > 0,
+    privacyNoticeAvailabilityObserved:
+      options.privacyPolicyObserved === true || article13Surfaces.length > 0,
     privacyPolicyDiscovered: targetRelevantDiscoveredPrivacySurfaces.length > 0 || article13Surfaces.length > 0,
     privacyPolicyEvaluationState,
     privacyPolicyEvidencePaths,
@@ -5359,6 +5362,10 @@ function buildMaterializedLocalV2Detail(
   const gdprTransparencyEvidenceProfile = normalizeGdprTransparencyProductionEvidenceProfile(
     options.gdprTransparencyEvidenceProfile
   );
+  const policySurfaceInspection = bundle.policySurfaceInspection ?? derivePolicySurfaceInspectionOutcome({
+    modulesRun: bundle.modulesRun,
+    policySurfaceObservations: bundle.policySurfaceObservations,
+  });
   const policySurfaceSummary = summarizePolicySurfaces(policySurfaces, rootDomain, {
     discoveredPolicySurfaces: bundle.policySurfaceObservations ?? [],
     gdprTransparencyEvidenceProfile,
@@ -5370,6 +5377,7 @@ function buildMaterializedLocalV2Detail(
         ? "degraded"
         : "complete",
     primaryLanguage: getLocalV2PrimaryLanguage(bundle),
+    privacyPolicyObserved: policySurfaceInspection.privacyPolicyObserved,
     scanStartedAt: bundle.startedAt,
   });
   const policyTextProjection = policySurfaceSummary.policyTextEvidenceProjection;
@@ -5583,10 +5591,6 @@ function buildMaterializedLocalV2Detail(
       surface.status !== "fetched" &&
       surface.status !== "observed"
     );
-  const policySurfaceInspection = bundle.policySurfaceInspection ?? derivePolicySurfaceInspectionOutcome({
-    modulesRun: bundle.modulesRun,
-    policySurfaceObservations: bundle.policySurfaceObservations,
-  });
   const consentCoverageComplete = consentSurfaceInspection.inspectionCompleted === true &&
     consentSurfaceInspection.coverageStatus === "complete";
   const assessedConsentSurfaceObserved = consentSurfaceInspection.consentSurfaceObserved === true
@@ -6147,7 +6151,7 @@ function buildMaterializedLocalV2Detail(
     pages_scanned: localV2NoGo ? 0 : Math.max(scanRecord.scan.pagesScanned, 1),
     partial_scan: true,
     preconsent_tracking_detected: runtimeEvidenceReportable ? hasPromotionGradePreconsentTracking : false,
-    privacy_policy_present: Boolean(privacySurface),
+    privacy_policy_present: policySurfaceSummary.privacyNoticeAvailabilityObserved === true,
     privacy_score: localV2NoGo ? null : score,
     score_confidence: scoreConfidence,
     site_language_primary: getLocalV2PrimaryLanguage(bundle),

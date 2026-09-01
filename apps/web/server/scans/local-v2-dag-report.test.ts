@@ -1400,10 +1400,12 @@ test("observed rendered privacy links remain reportable when document fetch fail
   const surfaces = dedupePolicySurfaces([discoveredSurface], "https://example.test/");
   const summary = summarizePolicySurfaces(surfaces, "example.test", {
     discoveredPolicySurfaces: [discoveredSurface],
+    privacyPolicyObserved: true,
   });
 
   assert.equal(surfaces.length, 1);
   assert.equal(summary.privacyPolicyPresent, false);
+  assert.equal(summary.privacyNoticeAvailabilityObserved, true);
   assert.equal(summary.privacyPolicyDiscovered, true);
   assert.equal(summary.privacyPolicyEvaluationState, "discovered_fetch_failed");
   assert.deepEqual(summary.privacyPolicyUrls, []);

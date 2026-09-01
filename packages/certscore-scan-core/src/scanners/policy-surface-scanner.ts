@@ -6559,11 +6559,33 @@ function gdprTransparencyTopicCandidatesFromText(text: string): PolicySurfaceObs
 export function gdprTransparencyTopicCandidatesFromRetainedPolicySections(
   sections: Pick<RetainedPolicySection, "heading" | "textExcerpt">[],
 ): PolicySurfaceObservation["gdprTransparencyTopicCandidates"] {
-  const text = sections
+  const sectionCandidates = sections
     .filter((section) => section.textExcerpt.length >= 80)
-    .map((section) => `${section.heading}\n${section.textExcerpt}`)
-    .join("\n\n");
-  return gdprTransparencyTopicCandidatesFromText(text);
+    .flatMap((section) => classifyGdprTransparencyTopics({
+      section: {
+        body: section.textExcerpt,
+        heading: section.heading,
+      },
+    }).matches)
+    .map(gdprTransparencyTopicCandidateFromMatch);
+  return mergeGdprTransparencyTopicCandidates([], sectionCandidates);
+}
+
+function gdprTransparencyTopicCandidateFromMatch(
+  match: GdprTransparencyTopicMatch,
+): PolicySurfaceObservation["gdprTransparencyTopicCandidates"][number] {
+  return {
+    topic: match.topic,
+    status: "diagnostic_only" as const,
+    evidenceText: match.evidenceExcerpt.slice(0, 640),
+    confidence: match.confidence,
+    classifierProvenance: match.classifierProvenance,
+    matchedLocale: match.matchedLocale,
+    matchedTerm: match.matchedTerm,
+    matchStrength: match.matchStrength,
+    classifierReasonCodes: match.reasonCodes,
+    productionCredit: false as const,
+  };
 }
 
 const GDPR_TRANSPARENCY_MATCH_STRENGTH_RANK = {
@@ -8467,7 +8489,12 @@ export function extractPolicySections(input: {
   const unstructuredBodySections = htmlSections.length < 3
     ? extractBoundedUnstructuredPolicyBodySections(input.visibleText, input.sourceUrl)
     : [];
-  const baseSections = htmlSections.length >= 3 ? htmlSections : fallbackSections;
+  // A short policy with one or two real headings is still structurally useful.
+  // Preserve those heading/body/list sections and supplement them with the
+  // visible-text fallback instead of discarding the semantic HTML entirely.
+  const baseSections = htmlSections.length >= 3
+    ? htmlSections
+    : [...htmlSections, ...fallbackSections];
   const sections = [
     ...tableSections,
     ...definitionSections,
@@ -8922,7 +8949,9 @@ function extractPolicyDefinitionSectionsFromHtml(
       const bodyStart = (termMatch.index ?? 0) + (termMatch[0]?.length ?? 0);
       const bodyEnd = terms[termIndex + 1]?.index ?? listHtml.length;
       const body = htmlToVisibleText(listHtml.slice(bodyStart, bodyEnd));
-      const topicMatches = classifyGdprTransparencyTopics({ text: `${heading}\n${body}` }).matches;
+      const topicMatches = classifyGdprTransparencyTopics({
+        section: { body, heading },
+      }).matches;
       if (heading.length === 0 || body.length < 80 || topicMatches.length === 0) {
         return [];
       }
@@ -8951,7 +8980,9 @@ function extractPolicyLabeledBlockSectionsFromHtml(
   ).flatMap((match) => {
     const heading = htmlToVisibleText(match[3] ?? "");
     const body = htmlToVisibleText(match[4] ?? "");
-    const topicMatches = classifyGdprTransparencyTopics({ text: `${heading}\n${body}` }).matches;
+    const topicMatches = classifyGdprTransparencyTopics({
+      section: { body, heading },
+    }).matches;
     if (heading.length === 0 || body.length < 80 || topicMatches.length === 0) {
       return [];
     }
@@ -9051,7 +9082,10 @@ function retainedPolicySectionsForObservation(sections: RetainedPolicySection[])
       section,
       sourceIndex,
       topicMatchCount: classifyGdprTransparencyTopics({
-        text: `${section.heading}\n${section.textExcerpt}`,
+        section: {
+          body: section.textExcerpt,
+          heading: section.heading,
+        },
       }).matches.length,
     }))
     .filter(({ section }) => section.quality !== "limited")
@@ -9074,7 +9108,7 @@ export function retainedArticle13SectionEvidenceFromSections(
   const canonicalMatchesBySection = new Map(
     sections.map((section) => [
       section,
-      canonicalSectionTopicMatches(`${section.heading}\n${section.textExcerpt}`),
+      canonicalSectionTopicMatches(section),
     ]),
   );
   return ARTICLE13_SECTION_PROFILES.flatMap((profile) => {
@@ -9324,11 +9358,23 @@ function canonicalTopicMatchForDisclosure(
   return topicMatches.find((match) => match.matchedLocale !== "en") ?? topicMatches[0] ?? null;
 }
 
-function canonicalSectionTopicMatches(text: string) {
+function canonicalSectionTopicMatches(
+  section: Pick<RetainedPolicySection, "heading" | "textExcerpt"> | string,
+) {
+  if (typeof section === "string") {
+    return classifyGdprTransparencyTopics({
+      maxMatches: 80,
+      retainLocaleAlternatives: true,
+      text: section,
+    }).matches;
+  }
   return classifyGdprTransparencyTopics({
     maxMatches: 80,
     retainLocaleAlternatives: true,
-    text,
+    section: {
+      body: section.textExcerpt,
+      heading: section.heading,
+    },
   }).matches;
 }
 

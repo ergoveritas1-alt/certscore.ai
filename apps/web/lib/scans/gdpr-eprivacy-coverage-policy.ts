@@ -6887,7 +6887,12 @@ const POLICY_DISCLOSURE_ROWS: PolicyDisclosureRowConfig[] = [
   {
     rowId: "privacy_notice_availability",
     label: "Privacy notice",
-    signalKeys: ["privacyPolicyPresent", "privacy_policy_present"],
+    signalKeys: [
+      "privacyNoticeAvailabilityObserved",
+      "privacy_notice_availability_observed",
+      "privacyPolicyPresent",
+      "privacy_policy_present",
+    ],
     textPattern: /privacy policy|privacy notice|privacy center/i
   },
   {
@@ -8549,6 +8554,10 @@ function derivePolicyDisclosureOutcome(input: GdprEprivacyCoveragePolicyInput, c
   }
 
   const privacyPolicyPresent =
+    getBoolean(summary, [
+      "privacyNoticeAvailabilityObserved",
+      "privacy_notice_availability_observed",
+    ]) === true ||
     getBoolean(summary, ["privacyPolicyPresent", "privacy_policy_present"]) === true ||
     getBoolean(input.snapshot, ["privacy_policy_present", "privacyPolicyPresent"]) === true;
   const text = getPolicyDisclosureText(summary);
