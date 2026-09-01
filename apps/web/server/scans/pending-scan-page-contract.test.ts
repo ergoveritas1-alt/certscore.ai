@@ -120,15 +120,19 @@ test("pending scan pages return a minimal projection before full report construc
   }
 });
 
-test("lightweight status API resolves public shared-link access before selecting status", async () => {
+test("lightweight status API resolves public shared-link access and retries canonical publication after inputs are ready", async () => {
   const source = await readFile("apps/web/app/api/scan-status/[scanId]/route.ts", "utf8");
   const lightweightBranch = source.indexOf("if (!includeFindings)");
+  const guardedPublication = source.indexOf("publishCanonicalScanReportProjection({", lightweightBranch);
   const publicFindingsLoad = source.indexOf("getPublicOpsScanStatus(", lightweightBranch);
 
   assert.ok(lightweightBranch >= 0);
+  assert.ok(guardedPublication > lightweightBranch);
   assert.ok(publicFindingsLoad > lightweightBranch);
   assert.match(source, /getPublicScanStatusProjection/);
-  assert.doesNotMatch(source, /publishCanonicalScanReportProjection/);
+  assert.match(source, /projection\.reportProjectionRequired/);
+  assert.match(source, /projection\.reportInputsReady/);
+  assert.match(source, /!projection\.reportReady/);
   assert.doesNotMatch(source, /materializeAdminScanSummary/);
   assert.doesNotMatch(source, /bootstrapAppUserSession/);
 });

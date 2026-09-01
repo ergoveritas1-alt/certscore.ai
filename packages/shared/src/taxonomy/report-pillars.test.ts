@@ -65,11 +65,35 @@ test("defines a source-aware signal registry", () => {
 });
 
 test("defines the unified-finding registry with one owner alignment", () => {
-  assert.equal(REPORT_UNIFIED_FINDINGS.length, 155);
+  assert.equal(REPORT_UNIFIED_FINDINGS.length, 161);
   assert.ok(
     REPORT_UNIFIED_FINDINGS.every(
       (finding) => finding.categoryAlignments.filter((alignment) => alignment.relation === "owner").length === 1
     )
+  );
+});
+
+test("maps score-neutral post-Accept signals through the unified finding registry", () => {
+  assert.equal(
+    getReportUnifiedFindingForSignal(
+      "runtime_artifact_signal",
+      "privacy.post_accept_consent_dependent_activity",
+    )?.id,
+    "post_accept_consent_dependent_activity",
+  );
+  assert.equal(
+    getReportUnifiedFindingForSignal(
+      "runtime_artifact_signal",
+      "privacy.accept_reject_outcomes_indistinguishable",
+    )?.id,
+    "accept_reject_outcomes_indistinguishable",
+  );
+  assert.equal(
+    getReportUnifiedFindingForSignal(
+      "runtime_artifact_signal",
+      "privacy.acceptance_signal_contradicts_action",
+    )?.id,
+    "acceptance_signal_contradicts_action",
   );
 });
 

@@ -1643,6 +1643,30 @@ test("direct session replay observation surfaces as standalone review finding", 
   assert.ok(decision?.appliedRules.includes("evidence.consent_behavior.review_runtime_without_effect_evidence"));
 });
 
+test("verified post-Accept findings surface through the canonical report policy", () => {
+  const findingIds = [
+    "post_accept_consent_dependent_activity",
+    "accept_reject_outcomes_indistinguishable",
+    "acceptance_signal_contradicts_action",
+  ] as const satisfies readonly ReportUnifiedFindingId[];
+  const evaluation = evaluateUnifiedFindingSurfacing({
+    packets: findingIds.map((findingId) => makePacket(findingId, {
+      confidenceInputs: {
+        ...makePacket(findingId).confidenceInputs,
+        hasDirectRuntimeEvidence: true,
+        hasPacketBackedEvidence: true,
+      },
+    })),
+  });
+
+  for (const findingId of findingIds) {
+    const decision = evaluation.debugDecisions.find((row) => row.unifiedFindingId === findingId);
+    assert.ok(["review", "confirmed"].includes(decision?.decisionState ?? ""), findingId);
+    assert.equal(decision?.reportLane, "main", findingId);
+    assert.equal(decision?.reportable, true, findingId);
+  }
+});
+
 test("consent interface findings stay review-level even when related evidence exists", () => {
   const evaluation = evaluateUnifiedFindingSurfacing({
     packets: [

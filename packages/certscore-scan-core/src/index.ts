@@ -123,6 +123,19 @@ export {
 } from "./post-refusal-observer.js";
 
 export {
+  runPostAcceptObserver,
+  type PostAcceptActionRecipe,
+  type PostAcceptObserverInput,
+} from "./post-accept-observer.js";
+
+export {
+  buildCanonicalPostAcceptActionRecipes,
+  buildPostAcceptCmpActionRecipe,
+  CANONICAL_POST_ACCEPT_RECIPE_SET_ID,
+  CERTSCORE_OWNED_ANALYTICS_ACCEPT_RECIPE,
+} from "./post-accept-cmp-recipes.js";
+
+export {
   authorizePostRefusalTarget,
   ERGOVERITAS_POST_REFUSAL_CANARY_AUTHORIZATION_ID,
   isLoopbackPostRefusalTarget,

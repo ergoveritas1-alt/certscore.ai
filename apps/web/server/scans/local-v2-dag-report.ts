@@ -23,6 +23,7 @@ import {
   MIN_GDPR_TRANSPARENCY_POLICY_TEXT_CHARS,
   canonicalPolicyDocumentBrandRelationship,
   policyTextEvidenceProjectionSchema,
+  projectPostAcceptEvidenceForReport,
   postRefusalReportProjectionSchema,
   projectPostRefusalEvidenceForReport,
   SUPPORTED_GDPR_TRANSPARENCY_LOCALES,
@@ -50,6 +51,7 @@ import {
 } from "../../lib/scans/gdpr-transparency-production-profile";
 import { getProductionPolicyModelReviewRevision } from "../../lib/scans/policy-model-review-revision";
 import { buildPostRefusalRuntimeProjection } from "../../lib/scans/post-refusal-runtime-projection";
+import { buildPostAcceptRuntimeProjection } from "../../lib/scans/post-accept-runtime-projection";
 import {
   findRuntimeCanonicalEntityOwner,
 } from "../../lib/scans/runtime-vendor-ownership";
@@ -220,7 +222,7 @@ type LocalV2DagLambdaArtifactPointer = {
 
 function getLocalV2DagLambdaArtifactPointer(
   scanRecord: ScanDetailResponse,
-  field: "manifestUri" | "scanArtifactUri" | "postRefusalPacketUri"
+  field: "manifestUri" | "scanArtifactUri" | "postAcceptPacketUri" | "postRefusalPacketUri"
 ): LocalV2DagLambdaArtifactPointer | null {
   return scanRecord.events
     .filter((event) => event.eventType === "v2_lambda_result.received")
@@ -5878,6 +5880,22 @@ function buildMaterializedLocalV2Detail(
     postRefusalReportProjection,
     bundle.postRefusalLaneOutcome,
   );
+  const postAcceptPacketPointer = getLocalV2DagLambdaArtifactPointer(
+    scanRecord,
+    "postAcceptPacketUri",
+  );
+  const postAcceptReportProjection = bundle.postAcceptEvidence
+    ? projectPostAcceptEvidenceForReport({
+        packet: bundle.postAcceptEvidence,
+        ...(postAcceptPacketPointer?.sha256
+          ? { packetSha256: postAcceptPacketPointer.sha256 }
+          : {}),
+      })
+    : null;
+  const postAcceptRuntimeProjection = buildPostAcceptRuntimeProjection(
+    postAcceptReportProjection,
+    bundle.postAcceptLaneOutcome,
+  );
   const inheritedRuntimeArtifacts = providedScanNoGoAssessment || localV2NoGo
     ? { ...(scanRecord.runtimeArtifacts ?? {}) }
     : withoutStaleLocalV2NoGoArtifacts(scanRecord.runtimeArtifacts);
@@ -5885,6 +5903,7 @@ function buildMaterializedLocalV2Detail(
     ...inheritedRuntimeArtifacts,
     ...timingArtifacts,
     ...postRefusalRuntimeProjection,
+    ...postAcceptRuntimeProjection,
     scanLaneRuns: bundle.scanLaneRuns,
     local_v2_dag_scan_core_duration_ms: durationMsFromTimestamps(bundle.startedAt, bundle.completedAt),
     wc01ProductionProjection: {
@@ -5893,7 +5912,11 @@ function buildMaterializedLocalV2Detail(
       mode: LOCAL_V2_DAG_WC01_PROJECTION_MODE,
       pipeline: "normalized_concern_policy_unified_finding",
       scannerExecutionMode: LOCAL_V2_DAG_SCANNER_EXECUTION_MODE,
-      scope: ["gdpr_transparency_observed_topics", "post_refusal_enforcement"],
+      scope: [
+        "gdpr_transparency_observed_topics",
+        "post_accept_review",
+        "post_refusal_enforcement",
+      ],
       source: "verified_canonical_evidence_bundle",
       version: LOCAL_V2_DAG_WC01_PROJECTION_VERSION
     },

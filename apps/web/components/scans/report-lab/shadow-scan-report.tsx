@@ -16,6 +16,7 @@ import {
 } from "../runtime-observation-sections";
 import { getGdprEprivacyPostureTone } from "../../../lib/scans/regulatory-coverage-score";
 import { ShadowReportShareMenu } from "./shadow-report-actions";
+import { ExpandableExecutiveGrid } from "./expandable-executive-grid";
 import { buildRuntimeInventoryCopyPayload } from "./inventory-table-copy";
 import { countNonNotObservedRows } from "./evidence-directory-summary";
 import {
@@ -394,6 +395,11 @@ function SignalSnapshot({ report }: { report: ShadowReportData }) {
             <span className="flex items-center gap-2 text-xs font-semibold text-zinc-800">{observedControls} of 3 observed <span aria-hidden="true" className="text-zinc-400 transition group-open/signal:rotate-45">+</span></span>
           </summary>
           <div className="mt-3"><ControlStatusGrid compact report={report} /></div>
+          {report.acceptPath ? (
+            <div className="mt-3" data-testid="timeline-accept-path-card">
+              <CompactAcceptPathCard projection={report.acceptPath} />
+            </div>
+          ) : null}
           {report.rejectPath ? (
             <div className="mt-3" data-testid="timeline-reject-path-card">
               <CompactRejectPathCard projection={report.rejectPath} />
@@ -606,97 +612,171 @@ function HorizontalTimeline({ dominant = false, report }: { dominant?: boolean; 
   return <RuntimeObservationTimeline dominant={dominant} events={report.timeline} />;
 }
 
-function formatRejectTimelineOffset(milliseconds: number) {
+function formatChoicePathOffset(milliseconds: number) {
   if (milliseconds < 1_000) return `${Math.round(milliseconds)}ms`;
   const seconds = Math.round(milliseconds / 100) / 10;
   return `${seconds}s`;
 }
 
-function ExpandableTimelineDetail({ text }: { text: string }) {
+function CompactAcceptPathCard({ projection }: { projection: NonNullable<ShadowReportData["acceptPath"]> }) {
+  const presentation = projection.state === "review_signal"
+    ? {
+        badge: "Review signal",
+        badgeTone: "border-amber-300 bg-amber-50 text-amber-900",
+        cardTone: "border-amber-200 bg-gradient-to-b from-white to-amber-50/70",
+      }
+    : projection.state === "activity_observed"
+      ? {
+          badge: "Activity observed",
+          badgeTone: "border-sky-300 bg-sky-50 text-sky-800",
+          cardTone: "border-sky-200 bg-gradient-to-b from-white to-sky-50/70",
+        }
+      : projection.state === "no_activity_observed"
+        ? {
+            badge: "No activity observed",
+            badgeTone: "border-zinc-300 bg-zinc-50 text-zinc-700",
+            cardTone: "border-zinc-200 bg-gradient-to-b from-white to-zinc-50/90",
+          }
+        : {
+            badge: "Limited",
+            badgeTone: "border-zinc-300 bg-zinc-100 text-zinc-700",
+            cardTone: "border-zinc-200 bg-gradient-to-b from-white to-zinc-50/90",
+          };
+  const context = [
+    projection.observationWindowMs !== null ? `${formatChoicePathOffset(projection.observationWindowMs)} observation` : null,
+    projection.resolverMethod === "tcf_api_cmp_registry_recipe"
+      ? "TCF + CMP registry resolver"
+      : projection.resolverMethod
+        ? "Deterministic resolver"
+        : null,
+  ].filter((value): value is string => Boolean(value));
+
   return (
-    <details className="group/timeline-detail max-w-[14rem] text-xs leading-5 text-zinc-500">
-      <summary
-        aria-label="Show full post-Reject outcome detail"
-        className="relative cursor-pointer list-none marker:hidden focus-visible:rounded-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-500 [&::-webkit-details-marker]:hidden"
-      >
-        <span className="line-clamp-2 pr-4 group-open/timeline-detail:hidden">{text}</span>
-        <span aria-hidden="true" className="absolute bottom-0 right-0 bg-white pl-0.5 font-semibold text-sky-700 group-open/timeline-detail:hidden">...</span>
-        <span className="hidden group-open/timeline-detail:block">{text}</span>
-      </summary>
-    </details>
+    <div
+      className={`rounded-[1rem] border px-3 py-2 shadow-[inset_0_1px_0_rgba(255,255,255,0.95),0_2px_7px_rgba(15,23,42,0.06)] ${presentation.cardTone}`}
+      data-accept-path-state={projection.state}
+      data-testid="executive-accept-path-card"
+    >
+      <div className="flex items-center justify-between gap-2">
+        <p className="text-[10px] font-semibold uppercase leading-[10px] tracking-[0.16em] text-slate-500">After Accept</p>
+        <span className={`rounded-full border px-2 py-0.5 text-[9px] font-semibold uppercase tracking-[0.12em] ${presentation.badgeTone}`}>{presentation.badge}</span>
+      </div>
+      <p className="mt-1 text-xs font-semibold leading-4 text-slate-950">{projection.label}</p>
+      {projection.note ? <p className="mt-1 text-[11px] leading-4 text-slate-600">{projection.note}</p> : null}
+      {context.length > 0 ? <p className="mt-1 text-[10px] font-medium leading-4 text-slate-500">{context.join(" · ")}</p> : null}
+      {projection.evidenceRows.length > 0 ? (
+        <ul className="mt-1.5 space-y-1" aria-label="Retained Accept-path evidence">
+          {projection.evidenceRows.map((row, index) => (
+            <li className="rounded-lg border border-white/80 bg-white/75 px-2 py-1 text-[10px] leading-4 text-slate-700" key={`${row.label}:${index}`}>
+              <span className="font-semibold text-slate-900">{row.label}</span>{row.detail ? <span> · {row.detail}</span> : null}
+            </li>
+          ))}
+        </ul>
+      ) : null}
+    </div>
   );
 }
 
-function RejectPathTimeline({ report }: { report: ShadowReportData }) {
-  const projection = report.rejectPath;
-  if (!projection || projection.state === "incomplete" || projection.observationWindowMs === null) {
-    return null;
-  }
-  const outcome = projection.state === "issue_observed"
-    ? {
-        badge: "Issue observed",
-        label: (projection.timelineEvents?.length ?? 0) > 0
-          ? "Reject did not suppress all qualifying activity"
-          : projection.label,
-        tone: "concern" as const,
-      }
-    : projection.state === "review_signal"
-      ? {
-          badge: "Review signal",
-          label: "Post-Reject outcome needs review",
-          tone: "review" as const,
-        }
-      : {
-          badge: "No issue observed",
-          label: "No qualifying post-Reject issue observed",
-          tone: "positive" as const,
-        };
-  const events = [
-    {
-      atMs: 0,
-      detail: "A deterministic resolver registered a confirmed refusal state.",
-      label: "Reject confirmed",
-      tone: "positive" as const,
-    },
-    ...(projection.timelineEvents ?? []).map((event) => ({ ...event, tone: "concern" as const })),
-    {
-      atMs: projection.observationWindowMs,
-      detail: undefined,
-      label: outcome.label,
-      tone: outcome.tone,
-    },
-  ];
+function ChoicePathCard({ path, report }: { path: "accept" | "reject"; report: ShadowReportData }) {
+  const projection = path === "accept" ? report.acceptPath : report.rejectPath;
+  if (!projection) return null;
+
+  const isAccept = path === "accept";
+  const badge = isAccept
+    ? projection.state === "activity_observed"
+      ? "Activity observed"
+      : projection.state === "review_signal"
+        ? "Review signal"
+        : projection.state === "no_activity_observed"
+          ? "No activity observed"
+          : "Limited"
+    : projection.state === "issue_observed"
+      ? "Issue observed"
+      : projection.state === "review_signal"
+        ? "Review signal"
+        : projection.state === "no_issue_observed"
+          ? "No issue observed"
+          : "Limited";
   const toneClasses = projection.state === "issue_observed"
     ? "border-rose-300 bg-rose-50 text-rose-800"
     : projection.state === "review_signal"
       ? "border-amber-300 bg-amber-50 text-amber-900"
-      : "border-emerald-300 bg-emerald-50 text-emerald-800";
+      : isAccept && projection.state === "activity_observed"
+        ? "border-sky-300 bg-sky-50 text-sky-800"
+        : projection.state === "incomplete"
+          ? "border-zinc-300 bg-zinc-100 text-zinc-700"
+          : "border-emerald-300 bg-emerald-50 text-emerald-800";
+  const events = projection.timelineEvents ?? [];
+  const retainedEvidence = events.length > 0
+    ? events.slice(0, 3).map((event) => ({ ...event }))
+    : projection.evidenceRows.slice(0, 3).map((row) => ({ atMs: null, ...row }));
+  const evidence = retainedEvidence.length > 0
+    ? retainedEvidence
+    : !isAccept && projection.state === "no_issue_observed" && projection.observationWindowMs !== null
+      ? [
+          { atMs: 0, detail: "A deterministic resolver registered a confirmed refusal state.", label: "Reject confirmed" },
+          { atMs: projection.observationWindowMs, detail: "No qualifying post-Reject request or storage write was retained.", label: "Observation window complete" },
+        ]
+      : [];
 
   return (
-    <div className="mt-5 border-t border-zinc-300 pt-4" data-reject-path-state={projection.state} data-testid="post-reject-timeline">
-      <div className="flex flex-wrap items-start justify-between gap-3">
-        <div className="max-w-4xl">
-          <h3 className="text-xs font-semibold uppercase text-sky-700">After Reject Path Timeline</h3>
-          <p className="mt-1 text-xs leading-5 text-zinc-500">{projection.note}</p>
+    <article
+      className="min-w-0 rounded-xl border border-zinc-300 bg-white p-4 shadow-[0_1px_0_rgba(24,24,27,0.04)]"
+      data-accept-path-state={isAccept ? projection.state : undefined}
+      data-reject-path-state={isAccept ? undefined : projection.state}
+      data-testid={isAccept ? "post-accept-path-result" : "post-reject-timeline"}
+    >
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0">
+          <p className="text-[0.68rem] font-semibold uppercase tracking-wide text-sky-700">{isAccept ? "Accept path" : "Reject path"}</p>
+          <h4 className="mt-1 text-sm font-semibold leading-5 text-zinc-950">{projection.label}</h4>
         </div>
-        <span className={`rounded-md border px-2.5 py-1 text-[0.68rem] font-semibold uppercase ${toneClasses}`}>{outcome.badge}</span>
+        <span className={`shrink-0 rounded-md border px-2 py-1 text-[0.64rem] font-semibold uppercase ${toneClasses}`}>{badge}</span>
       </div>
-      <div className="mt-3 overflow-x-auto pb-1">
-        <div className="relative min-w-[48rem] pt-6">
-          <div className="absolute left-0 right-0 top-[2.6rem] h-px bg-zinc-300" />
-          <div className="relative grid gap-4" style={{ gridTemplateColumns: `repeat(${Math.max(events.length, 2)}, minmax(0, 1fr))` }}>
-            {events.map((event, index) => (
-              <div className="relative min-w-0" key={`${event.atMs}:${event.label}:${index}`}>
-                <span className={`absolute top-[0.72rem] h-3 w-3 rounded-full border-2 border-white ring-1 ${event.tone === "concern" ? "bg-rose-500 ring-rose-500" : event.tone === "review" ? "bg-amber-500 ring-amber-500" : "bg-emerald-600 ring-emerald-600"}`} />
-                <p className={`${monoClass} text-xs font-semibold ${event.tone === "concern" ? "text-rose-700" : event.tone === "review" ? "text-amber-800" : "text-emerald-700"}`}>{formatRejectTimelineOffset(event.atMs)}</p>
-                <p className="mt-6 text-sm font-semibold text-zinc-950">{event.label}</p>
-                {event.detail ? (
-                  <div className="mt-1"><ExpandableTimelineDetail text={event.detail} /></div>
-                ) : null}
-              </div>
+      <p className="mt-2 line-clamp-2 text-xs leading-5 text-zinc-600">{projection.note}</p>
+      <div className="mt-3 flex flex-wrap gap-1.5 text-[0.68rem] text-zinc-600">
+        <span className="rounded-md bg-zinc-100 px-2 py-1">{projection.state === "incomplete" ? "Not confirmed" : `${isAccept ? "Accept" : "Reject"} confirmed`}</span>
+        {projection.observationWindowMs !== null ? <span className="rounded-md bg-zinc-100 px-2 py-1">{formatChoicePathOffset(projection.observationWindowMs)} window</span> : null}
+        {events.length > 0 ? <span className="rounded-md bg-zinc-100 px-2 py-1">{events.length} retained event{events.length === 1 ? "" : "s"}</span> : null}
+      </div>
+      {evidence.length > 0 ? (
+        <details className="group mt-3 border-t border-zinc-200 pt-2">
+          <summary className="cursor-pointer list-none text-xs font-semibold text-sky-700 marker:hidden focus-visible:rounded-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-500 [&::-webkit-details-marker]:hidden">
+            Evidence <span aria-hidden="true" className="ml-1 text-zinc-400 group-open:hidden">+</span><span aria-hidden="true" className="ml-1 hidden text-zinc-400 group-open:inline">−</span>
+          </summary>
+          <ul className="mt-2 space-y-2 text-xs leading-5 text-zinc-600">
+            {evidence.map((event, index) => (
+              <li className="flex gap-2" key={`${event.label}:${index}`}>
+                <span className={`${monoClass} min-w-10 text-zinc-500`}>{event.atMs === null ? "—" : formatChoicePathOffset(event.atMs)}</span>
+                <span><strong className="font-semibold text-zinc-800">{event.label}</strong>{event.detail ? ` · ${event.detail}` : ""}</span>
+              </li>
             ))}
-          </div>
+          </ul>
+        </details>
+      ) : null}
+    </article>
+  );
+}
+
+function ChoicePathResults({ report }: { report: ShadowReportData }) {
+  if (!report.acceptPath && !report.rejectPath) return null;
+  const comparison = report.choicePathComparison;
+  const comparisonClasses = comparison?.state === "indistinguishable"
+    ? "border-amber-300 bg-amber-50 text-amber-900"
+    : "border-sky-300 bg-sky-50 text-sky-800";
+
+  return (
+    <div className="mt-5 border-t border-zinc-300 pt-4" data-testid="choice-path-results">
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <h3 className="text-xs font-semibold uppercase text-sky-700">Choice path results</h3>
+          <p className="mt-1 text-xs leading-5 text-zinc-500">Confirmed outcomes retained after first-layer consent choices.</p>
         </div>
+        {comparison ? <span className={`rounded-md border px-2.5 py-1 text-[0.68rem] font-semibold ${comparisonClasses}`} title={comparison.note}>{comparison.label}</span> : null}
+      </div>
+      <div className="mt-3 grid gap-3 sm:grid-cols-2">
+        <ChoicePathCard path="accept" report={report} />
+        <ChoicePathCard path="reject" report={report} />
       </div>
     </div>
   );
@@ -1175,21 +1255,21 @@ function TimelineVariant({
           mode={mode}
           report={report}
         />
-        <div className="mt-9 grid gap-8 border-t border-zinc-200 pt-8 lg:grid-cols-[minmax(20rem,0.95fr)_minmax(0,1.65fr)] lg:items-stretch lg:gap-10">
-          <div className="lg:flex lg:h-full lg:flex-col" data-testid="executive-score-column">
+        <ExpandableExecutiveGrid>
+          <div className="lg:flex lg:flex-col" data-testid="executive-score-column">
             <ScoreScale compact report={report} />
             <div className="mt-4 lg:mt-auto lg:pt-6">
               <SignalSnapshot report={report} />
             </div>
           </div>
-          <div className="lg:flex lg:h-full lg:flex-col" data-testid="executive-overview-column">
+          <div className="lg:flex lg:flex-col" data-testid="executive-overview-column">
             <div className="lg:hidden"><MobileVerdict report={report} /></div>
             <div className="hidden lg:block"><VerdictBlock compact report={report} showNextStep={false} /></div>
-            <div className="mt-8 lg:mt-auto lg:pt-6">
+            <div className="mt-8 lg:mt-auto lg:pt-6" data-testid="executive-industry-benchmark">
               <BenchmarkComparison report={report} />
             </div>
           </div>
-        </div>
+        </ExpandableExecutiveGrid>
       </section>
       <section className="mx-auto max-w-[90rem] px-5 py-8 lg:px-10 lg:py-9">
         <div className="flex items-start justify-between gap-3 sm:items-center">
@@ -1210,7 +1290,7 @@ function TimelineVariant({
         <div className="mx-auto max-w-[90rem] px-5 py-6 lg:px-10 lg:py-7">
           <p className="text-xs font-semibold uppercase text-rose-700">Cookies and trackers timeline</p>
           <div className="mt-3"><HorizontalTimeline dominant report={report} /></div>
-          <RejectPathTimeline report={report} />
+          <ChoicePathResults report={report} />
           <RuntimeInventoryTable report={report} />
         </div>
       </section>
@@ -1370,7 +1450,12 @@ function EvidenceDirectory({ report }: { report: ShadowReportData }) {
                 <VendorBrandChip label={consentVendor} showMeta={false} />
                 <p className="text-sm leading-6 text-zinc-600">CMP identity and control context are retained in the canonical consent projection.</p>
               </div>
-              {report.rejectPath ? <div className="mt-5"><CompactRejectPathCard projection={report.rejectPath} /></div> : null}
+              {report.acceptPath || report.rejectPath ? (
+                <div className="mt-5 grid gap-3 sm:grid-cols-2">
+                  {report.acceptPath ? <CompactAcceptPathCard projection={report.acceptPath} /> : null}
+                  {report.rejectPath ? <CompactRejectPathCard projection={report.rejectPath} /> : null}
+                </div>
+              ) : null}
               <EvidenceIndexRows rows={report.consentRows} />
             </details>
             <details className="group/tracking border-b border-r border-zinc-200 p-5">

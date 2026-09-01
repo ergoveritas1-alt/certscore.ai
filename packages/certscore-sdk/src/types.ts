@@ -157,6 +157,44 @@ export interface PostRefusalObservation {
   limitations: string[];
 }
 
+export interface PostAcceptObservation {
+  status:
+    | "confirmed_observation"
+    | "confirmed_clean"
+    | "unconfirmed"
+    | "not_attempted"
+    | "unsupported"
+    | "aborted";
+  acceptanceExercised: boolean;
+  observationCount: number;
+  productionProjectable: boolean;
+  verdict:
+    | "eligible_nonessential_activity_observed_after_confirmed_acceptance"
+    | "retained_consent_signal_contradiction_observed_after_confirmed_acceptance"
+    | "no_eligible_nonessential_activity_observed_during_completed_window"
+    | "no_confirmed_post_accept_verdict";
+  interpretation: string;
+  observationStrategy: "stop_on_first_eligible_activity" | "not_applicable";
+  termination: {
+    kind: "evidence_satisfied" | "window_elapsed" | "unavailable";
+    intentional: boolean;
+    trigger:
+      | "non_essential_request_observed"
+      | "non_essential_storage_write_observed"
+      | "acceptance_signal_contradiction_observed"
+      | "window_elapsed"
+      | "accept_control_not_observed"
+      | "accept_path_timeout"
+      | "accept_observation_window_truncated"
+      | "worker_failed"
+      | "unavailable";
+  };
+  completedAt: string | null;
+  coverageLimitations: string[];
+  /** @deprecated Use coverageLimitations. */
+  limitations: string[];
+}
+
 export interface ScanResource extends ScanCreationMetadata {
   type: "certscore_scan";
   scanId: string;
@@ -175,6 +213,7 @@ export interface ScanResource extends ScanCreationMetadata {
   scoreVersion?: string | null;
   scoreUpdatedAt?: string | null;
   riskLevel?: string | null;
+  postAcceptObservation?: PostAcceptObservation | null;
   postRefusalObservation?: PostRefusalObservation | null;
   coverage?: {
     status?: string;
@@ -208,6 +247,7 @@ export interface ScanJob extends ScanCreationMetadata {
   scoreVersion?: string | null;
   scoreUpdatedAt?: string | null;
   riskLevel?: string | null;
+  postAcceptObservation?: PostAcceptObservation | null;
   postRefusalObservation?: PostRefusalObservation | null;
   coverage?: ScanResource["coverage"] | null;
   lastUpdatedAt?: string;

@@ -249,6 +249,99 @@ test("API v2 and status expose joined canonical post-refusal observation metadat
   assert.deepEqual(status.postRefusalObservation, resource.postRefusalObservation);
 });
 
+test("API v2 and status expose joined canonical post-Accept observation metadata", () => {
+  const retained = {
+    ...fixture(),
+    runtimeArtifacts: {
+      postAcceptEvidenceProjection: {
+        status: "confirmed_observation",
+        acceptanceExercised: true,
+        observationCount: 3,
+        productionProjectable: true,
+        completedAt: "2026-09-01T12:00:09.000Z",
+        contradictionObserved: true,
+        postAcceptActivity: [
+          { activityType: "network_request" },
+          { activityType: "storage_write" },
+        ],
+        limitations: [
+          "observation_early_exit:acceptance_signal_contradiction_observed",
+        ],
+      },
+    },
+  } as unknown as ScanDetailResponse;
+
+  const resource = buildApiV2ScanResource(retained);
+  const status = buildApiV2ScanStatus(retained, { canonicalScan: resource });
+  assert.deepEqual(resource.postAcceptObservation, {
+    status: "confirmed_observation",
+    acceptanceExercised: true,
+    observationCount: 3,
+    productionProjectable: true,
+    verdict: "eligible_nonessential_activity_observed_after_confirmed_acceptance",
+    interpretation: "Accept was confirmed, and eligible non-essential network and storage activity was observed afterward.",
+    observationStrategy: "stop_on_first_eligible_activity",
+    termination: {
+      kind: "evidence_satisfied",
+      intentional: true,
+      trigger: "acceptance_signal_contradiction_observed",
+    },
+    completedAt: "2026-09-01T12:00:09.000Z",
+    coverageLimitations: [],
+    limitations: [],
+  });
+  assert.deepEqual(status.postAcceptObservation, resource.postAcceptObservation);
+});
+
+test("API v2 fails closed when a joined Accept observation window was truncated", () => {
+  const retained = {
+    ...fixture(),
+    runtimeArtifacts: {
+      postAcceptEvidenceProjection: {
+        status: "confirmed_observation",
+        acceptanceExercised: true,
+        observationCount: 1,
+        productionProjectable: false,
+        completedAt: "2026-09-01T12:00:05.000Z",
+        contradictionObserved: false,
+        postAcceptActivity: [{ activityType: "network_request" }],
+        limitations: ["observer_result_budget_exhausted_after_confirmed_acceptance"],
+      },
+      postAcceptObservationCoverage: {
+        completedAt: "2026-09-01T12:00:05.000Z",
+        evidenceJoined: true,
+        limitationCode: "accept_observation_window_truncated",
+        maxTailWaitMs: 6_000,
+        status: "limited",
+      },
+    },
+  } as unknown as ScanDetailResponse;
+
+  const resource = buildApiV2ScanResource(retained);
+  const status = buildApiV2ScanStatus(retained, { canonicalScan: resource });
+  assert.deepEqual(resource.postAcceptObservation, {
+    status: "aborted",
+    acceptanceExercised: false,
+    observationCount: 0,
+    productionProjectable: false,
+    verdict: "no_confirmed_post_accept_verdict",
+    interpretation: "Accept was confirmed, but the bounded post-accept observation window was truncated, so no production post-accept verdict was established.",
+    observationStrategy: "not_applicable",
+    termination: {
+      kind: "unavailable",
+      intentional: false,
+      trigger: "accept_observation_window_truncated",
+    },
+    completedAt: "2026-09-01T12:00:05.000Z",
+    coverageLimitations: ["Accept was confirmed, but the bounded post-accept observation window was truncated, so no production post-accept verdict was established."],
+    limitations: ["Accept was confirmed, but the bounded post-accept observation window was truncated, so no production post-accept verdict was established."],
+  });
+  assert.deepEqual(status.postAcceptObservation, resource.postAcceptObservation);
+  assert.ok(resource.coverage?.limitations?.includes(
+    "Accept was confirmed, but the bounded post-accept observation window was truncated.",
+  ));
+});
+
 test("API v2 and status expose a six-second Reject Path timeout as a neutral limitation", () => {
   const retained = {
     ...fixture(),
@@ -959,6 +1052,45 @@ test("buildApiV2FindingList maps public Pulse findings into compact v2 summaries
   assert.match(finding?.evidence.excerpt?.evidenceUrl ?? "", /findings\/pre_consent_tracking_detected$/);
   assert.equal("rawRequestBody" in (finding?.evidence.examples?.[0] ?? {}), false);
   assert.equal(finding?.links?.self, "https://certscore.ai/api/v2/scans/00000000-0000-4000-8000-000000000123/findings/pre_consent_tracking_detected");
+});
+
+test("API v2 finding lists preserve canonical post-Accept finding IDs", () => {
+  const list = buildApiV2FindingList({
+    scanId: "00000000-0000-4000-8000-000000000123",
+    findings: [{
+      id: "post_accept_consent_dependent_activity",
+      label: "Consent-dependent activity observed after acceptance",
+      criticality: "low",
+      confidence: "strong",
+      plainEnglish: "Confirmed acceptance was followed by eligible non-essential analytics activity.",
+      evidence: {
+        summary: "A bounded post-Accept request observation was retained.",
+        observedPhase: "post_accept",
+        exampleEvents: [{
+          type: "request",
+          urlHost: "analytics.example.test",
+          timestampMs: 670,
+        }],
+      },
+      evidenceDigest: {
+        basis: "runtime_observation",
+        phase: "post_accept",
+        exampleCount: 1,
+        examplesShown: 1,
+        examplesAvailable: 1,
+        authRequiredForExamples: false,
+        hasTimingAnchor: true,
+        hasVendorAnchor: false,
+        hasConsentContext: true,
+      },
+      reviewLenses: ["GDPR / ePrivacy"],
+      nextStep: "Compare the retained baseline with pre-consent and post-Reject behavior.",
+    }],
+  });
+
+  assert.equal(list.findings[0]?.id, "post_accept_consent_dependent_activity");
+  assert.equal(list.findings[0]?.evidence.phase, "post_accept");
+  assert.equal(list.findings[0]?.criticality, "low");
 });
 
 test("buildApiV2FindingList makes retained excerpt truncation machine-readable", () => {

@@ -99,6 +99,30 @@ export type ShadowEvidenceRow = {
   title: string;
 };
 
+export type ExecutiveAcceptPathProjection = {
+  evidenceRows: Array<{
+    detail: string | null;
+    label: string;
+  }>;
+  label: string;
+  note: string;
+  observationWindowMs: number | null;
+  resolverMethod: string | null;
+  scoreEffect: "none";
+  state: "activity_observed" | "review_signal" | "no_activity_observed" | "incomplete";
+  timelineEvents?: Array<{
+    atMs: number;
+    detail: string | null;
+    label: string;
+  }>;
+};
+
+export type ChoicePathComparison = {
+  label: string;
+  note: string;
+  state: "different" | "indistinguishable";
+};
+
 export type ShadowReportData = {
   scan: {
     benchmark: string;
@@ -124,6 +148,8 @@ export type ShadowReportData = {
   };
   controls: { accept: string; options: string; reject: string };
   consentVendor: string | null;
+  acceptPath?: ExecutiveAcceptPathProjection | null;
+  choicePathComparison?: ChoicePathComparison | null;
   rejectPath?: ExecutiveRejectPathProjection | null;
   coverage: {
     concern: number;

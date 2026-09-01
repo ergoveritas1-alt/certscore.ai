@@ -733,6 +733,20 @@ function deriveCoverage(scanRecord: ScanDetailResponse) {
       ? "Reject Path did not complete within the six-second post-primary allowance."
       : "Reject Path worker failed before verified evidence could be joined."
     : null;
+  const postAcceptCoverage = asRecord(
+    runtimeArtifacts?.postAcceptObservationCoverage ??
+    runtimeArtifacts?.post_accept_observation_coverage,
+  );
+  const postAcceptLimitationCode = typeof postAcceptCoverage?.limitationCode === "string"
+    ? postAcceptCoverage.limitationCode
+    : null;
+  const postAcceptLimitation = postAcceptCoverage?.status === "limited"
+    ? postAcceptLimitationCode === "accept_path_timeout"
+      ? "Accept Path did not complete within the six-second post-primary allowance."
+      : postAcceptLimitationCode === "accept_observation_window_truncated"
+        ? "Accept was confirmed, but the bounded post-accept observation window was truncated."
+        : "Accept Path worker failed before verified evidence could be joined."
+    : null;
   const accessInterruptions =
     posture.interruptionLabel || posture.interruptionReason || posture.stopOutcomeTitle || posture.stopReviewTitle || posture.stopReason
       ? [
@@ -749,6 +763,9 @@ function deriveCoverage(scanRecord: ScanDetailResponse) {
       : [];
   const interruptions = [
     ...accessInterruptions,
+    ...(postAcceptLimitation
+      ? [{ label: "Accept Path unavailable", reason: postAcceptLimitation }]
+      : []),
     ...(postRefusalLimitation
       ? [{ label: "Reject Path unavailable", reason: postRefusalLimitation }]
       : []),
@@ -778,6 +795,7 @@ function deriveCoverage(scanRecord: ScanDetailResponse) {
     limitations: [
       "Automated public-web scan only.",
       PULSE_COVERAGE_LIMITATION_COPY,
+      ...(postAcceptLimitation ? [postAcceptLimitation] : []),
       ...(postRefusalLimitation ? [postRefusalLimitation] : []),
     ],
     interruptions: interruptions.slice(0, 10)

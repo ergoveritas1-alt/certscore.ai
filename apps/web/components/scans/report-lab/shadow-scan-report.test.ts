@@ -52,6 +52,10 @@ test("benchmark labels and values come from canonical non-essential inventory ta
     "apps/web/components/scans/report-lab/timeline-report-model.ts",
     "utf8"
   );
+  const gridSource = await readFile(
+    "apps/web/components/scans/report-lab/expandable-executive-grid.tsx",
+    "utf8"
+  );
 
   assert.match(source, /label: "Non-essential requests",[\s\S]*site: report\.metrics\.nonEssentialRequests/);
   assert.match(source, /label: "Non-essential cookies\/storage",[\s\S]*site: report\.metrics\.nonEssentialCookiesStorage/);
@@ -67,9 +71,18 @@ test("benchmark labels and values come from canonical non-essential inventory ta
   assert.match(source, /relative mt-1\.5 h-2 rounded-full/);
   assert.match(source, /data-testid="executive-score-column"/);
   assert.match(source, /data-testid="executive-overview-column"/);
+  assert.match(source, /data-testid="executive-industry-benchmark"/);
   assert.match(source, /mt-4 lg:mt-auto lg:pt-6/);
   assert.match(source, /mt-8 lg:mt-auto lg:pt-6/);
   assert.match(source, /data-testid="executive-signal-snapshot"/);
+  assert.match(source, /<ExpandableExecutiveGrid>/);
+  assert.match(gridSource, /details\[open\]/);
+  assert.match(gridSource, /baselineHeightRef/);
+  assert.match(gridSource, /overview\.style\.height/);
+  assert.match(gridSource, /retainHeightBeforeSignalToggle/);
+  assert.match(gridSource, /expandedRef\.current = true/);
+  assert.match(gridSource, /addEventListener\("click", retainHeightBeforeSignalToggle, true\)/);
+  assert.match(gridSource, /alignItems: expanded \? "start" : "stretch"/);
   assert.match(source, /signalRowClass = "group\/signal border-b border-zinc-200 py-2"/);
   assert.match(source, /signalSummaryClass = "flex cursor-pointer list-none items-center justify-between gap-3 text-xs leading-4/);
   assert.match(source, /data-testid="executive-signal-snapshot">[\s\S]*?<div className="border-t border-zinc-200">[\s\S]*?<details className=\{signalRowClass\}>/);
@@ -77,6 +90,32 @@ test("benchmark labels and values come from canonical non-essential inventory ta
   assert.doesNotMatch(source, /report\.coverage\.review > 0 \? `\$\{report\.coverage\.review\} review`/);
   assert.match(modelSource, /buildNonEssentialInventoryTallies\([\s\S]*inventoryProjection\.ungroupedRows/);
   assert.doesNotMatch(modelSource, /third_party_request_count/);
+});
+
+test("Accept and Reject cards appear together in expandable consent surfaces", async () => {
+  const source = await readFile(
+    "apps/web/components/scans/report-lab/shadow-scan-report.tsx",
+    "utf8"
+  );
+  const modelSource = await readFile(
+    "apps/web/components/scans/report-lab/timeline-report-model.ts",
+    "utf8"
+  );
+
+  assert.match(source, /data-testid="timeline-accept-path-card"/);
+  assert.match(source, /data-testid="timeline-reject-path-card"/);
+  assert.match(source, /data-testid="executive-accept-path-card"/);
+  assert.match(source, /After Accept/);
+  assert.match(source, /Retained Accept-path evidence/);
+  assert.match(source, /report\.acceptPath \|\| report\.rejectPath[\s\S]*sm:grid-cols-2/);
+  assert.match(source, /No qualifying post-Reject request or storage write was retained/);
+  assert.match(source, /Observation window complete/);
+  assert.match(modelSource, /Saved consent did not match Accept/);
+  assert.match(modelSource, /consent record saved afterward still said analytics and advertising were not allowed/);
+  assert.match(modelSource, /projectExecutiveFindingsFromUnifiedPackets/);
+  assert.match(modelSource, /finding\.unifiedFindingId === "acceptance_signal_contradicts_action"/);
+  assert.match(modelSource, /acceptContradictionRow \? \[acceptContradictionRow\] : \[\]/);
+  assert.doesNotMatch(modelSource, /score-neutral|does not affect score|second score effect/);
 });
 
 test("full runtime inventory shows six rows before becoming vertically scrollable", async () => {

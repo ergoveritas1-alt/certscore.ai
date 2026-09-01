@@ -1060,6 +1060,30 @@ function isRejectTrackingPersistenceConcern(
   return /reject_did_not_reduce_tracking|reject_did_not_reduce_third_party_cookies|post_refusal_non_essential_activity|pre_consent_storage_not_cleared|refusal_signal_contradicts_action|reject_tracking_persists_after_reject|reject.*tracking|reject.*third[-_ ]party.*cookies/.test(haystack);
 }
 
+function isPostAcceptObservationConcern(
+  concern: Pick<NormalizedConcern, "canonicalConcernKey" | "suggestedUnifiedFindingId" | "originKey" | "title">
+) {
+  return [
+    concern.canonicalConcernKey,
+    concern.suggestedUnifiedFindingId,
+    concern.originKey,
+    concern.title
+  ]
+    .filter(Boolean)
+    .join(" ")
+    .toLowerCase()
+    .match(/post_accept_consent_dependent_activity|accept_reject_outcomes_indistinguishable|acceptance_signal_contradicts_action/) !== null;
+}
+
+function hasProductionProjectablePostAcceptEvidence(
+  rawEvidence: Record<string, unknown> | null | undefined
+) {
+  return getBooleanEvidence(rawEvidence, ["postAcceptProductionProjectable"]) === true &&
+    getBooleanEvidence(rawEvidence, ["acceptanceExercised"]) === true &&
+    getFirstString(rawEvidence, ["acceptanceRegistrationStatus"]) === "confirmed" &&
+    getFirstString(rawEvidence, ["scoreEffect"]) === "none";
+}
+
 function isStoredIdentifierPersistenceConcern(
   concern: Pick<NormalizedConcern, "canonicalConcernKey" | "suggestedUnifiedFindingId" | "originKey" | "title">
 ) {
@@ -2829,6 +2853,24 @@ export function deriveConcernPolicy(input: {
         promotionEligibility: "blocked"
       };
     }
+  }
+
+  if (isPostAcceptObservationConcern(input.concern)) {
+    if (hasProductionProjectablePostAcceptEvidence(input.rawEvidence)) {
+      return {
+        allowedNarrativeTier: "strong",
+        externalSurfacingEligibility: "eligible",
+        negativeEvidenceFlags: [...negativeEvidenceFlags],
+        promotionEligibility: "eligible",
+        regulatoryChecklistEligibility: "review_signal"
+      };
+    }
+    return {
+      allowedNarrativeTier: "weak",
+      externalSurfacingEligibility: "audit_only",
+      negativeEvidenceFlags: [...negativeEvidenceFlags, "post_choice_flow_deferred_from_core"],
+      promotionEligibility: "internal_only"
+    };
   }
 
   if (isRejectTrackingPersistenceConcern(input.concern)) {

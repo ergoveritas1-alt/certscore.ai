@@ -233,25 +233,36 @@ test("shared report passes the canonical Reject checklist projection into the ex
   assert.doesNotMatch(source, /buildExecutiveRejectPathProjection\(runtimeArtifacts/);
 });
 
-test("active timeline report passes the same canonical Reject checklist projection into its signal snapshot", () => {
+test("active timeline report surfaces canonical Accept and Reject projections in one compact result", () => {
   const model = readFileSync("apps/web/components/scans/report-lab/timeline-report-model.ts", "utf8");
   const report = readFileSync("apps/web/components/scans/report-lab/shadow-scan-report.tsx", "utf8");
 
   assert.match(model, /buildExecutiveRejectPathProjection\([\s\S]*item\.id === "post_reject_tracking_reduction"[\s\S]*\)/);
+  assert.match(model, /buildAcceptPathProjection\(runtimeArtifacts, canonical\.ownerUnifiedFindings\)/);
+  assert.match(model, /"acceptance_signal_contradicts_action"/);
+  assert.match(model, /"post_accept_consent_dependent_activity"/);
+  assert.match(model, /"accept_reject_outcomes_indistinguishable"/);
+  assert.match(model, /acceptPath,/);
+  assert.match(model, /choicePathComparison,/);
   assert.match(model, /rejectPath,/);
   assert.match(report, /<CompactRejectPathCard projection=\{report\.rejectPath\} \/>/);
-  assert.match(report, /data-testid="post-reject-timeline"/);
-  assert.match(report, /<RejectPathTimeline report=\{report\} \/>/);
+  assert.match(report, /<CompactAcceptPathCard projection=\{report\.acceptPath\} \/>/);
+  assert.match(report, /data-testid="timeline-accept-path-card"/);
+  assert.match(report, /data-testid="executive-accept-path-card"/);
+  assert.match(report, /data-testid=\{isAccept \? "post-accept-path-result" : "post-reject-timeline"\}/);
+  assert.match(report, /data-testid="choice-path-results"/);
+  assert.match(report, /<ChoicePathResults report=\{report\} \/>/);
+  assert.match(report, /sm:grid-cols-2/);
   assert.doesNotMatch(report, /data-testid="post-reject-activity-inventory"/);
   assert.doesNotMatch(report, /<PostRejectActivityInventory report=\{report\} \/>/);
-  assert.match(report, /After Reject Path Timeline/);
-  assert.match(report, /<p className="mt-1 text-xs leading-5 text-zinc-500">\{projection\.note\}<\/p>/);
+  assert.match(report, /Choice path results/);
+  assert.match(report, /line-clamp-2 text-xs leading-5 text-zinc-600/);
   assert.doesNotMatch(report, /After optional cookies and tracking were rejected/);
   assert.doesNotMatch(report, /Offsets begin when the cookie banner/);
   assert.doesNotMatch(report, /First-seen timestamps place retained third-party requests/);
   assert.doesNotMatch(report, /Expected after Reject:/);
-  assert.match(report, /<ExpandableTimelineDetail text=\{event\.detail\} \/>/);
   assert.match(report, /line-clamp-2/);
+  assert.doesNotMatch(report, /min-w-\[48rem\]/);
   assert.doesNotMatch(report, /Requests and storage writes after Reject/);
   assert.match(report, /report\.transportRows\.filter\(\(row\) => row\.status === "Observed"\)\.length\} of \{report\.transportRows\.length\} positive observations/);
   assert.match(model, /Non-essential activity after confirmed Reject/);

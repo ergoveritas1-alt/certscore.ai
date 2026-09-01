@@ -93,6 +93,10 @@ const FINDING_CRITICALITY_BADGES = {
     badge: "high",
     rationale: "Can materially impair user choice or access."
   },
+  acceptance_signal_contradicts_action: {
+    badge: "medium",
+    rationale: "A confirmed choice and the saved consent record disagree, so the consent implementation needs correction."
+  },
   probable_fingerprinting: {
     badge: "high",
     rationale: "Important privacy risk, but probable should stay below critical."

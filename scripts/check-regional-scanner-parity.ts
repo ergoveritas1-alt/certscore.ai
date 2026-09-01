@@ -125,6 +125,10 @@ const observed = REGIONS.map((region) => {
   ]);
   const config = fn.Configuration ?? {};
   const env = config.Environment?.Variables ?? {};
+  const postAcceptWorkerEnabled = env.CERTSCORE_POST_ACCEPT_WORKER_ENABLED ?? "0";
+  if (postAcceptWorkerEnabled !== "1") {
+    errors.push(`${region}: Accept worker enable flag expected 1 for the owned-canary rollout, received ${postAcceptWorkerEnabled}.`);
+  }
   const postRefusalRejectWorkerEnabled = env.CERTSCORE_POST_REFUSAL_REJECT_WORKER_ENABLED ?? "0";
   if (postRefusalRejectWorkerEnabled !== "1") {
     errors.push(`${region}: Reject worker enable flag expected 1, received ${postRefusalRejectWorkerEnabled}.`);

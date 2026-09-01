@@ -1072,7 +1072,7 @@ test("scan bundle text exposes compact row evidence, neutral score terminology, 
   assert.match(text, /Do not infer unobserved technologies, legal compliance, or a legal violation from scores or findings/i);
   assert.match(text, /CertScore priority=high/i);
   assert.doesNotMatch(text, /compliance score|compliant baseline|criticality=/i);
-  assert.match(bundle.interpretationGuidance.statement, /When postRefusalObservation is confirmed and termination\.kind is evidence_satisfied/i);
+  assert.match(bundle.interpretationGuidance.statement, /When postAcceptObservation or postRefusalObservation is confirmed and termination\.kind is evidence_satisfied/i);
   assert.match(bundle.interpretationGuidance.statement, /observation stopped intentionally after qualifying evidence was retained/i);
   assert.match(bundle.interpretationGuidance.statement, /mention unmeasured longer-term persistence only when relevant/i);
   assert.ok(text.length <= 8_000);
@@ -1115,6 +1115,64 @@ test("scan bundle makes intentional post-refusal evidence termination explicit",
   assert.match(text, /observation then stopped intentionally because qualifying evidence had been captured/i);
   assert.match(text, /Reject Path coverage limitation: The remainder of the persistence window was not measured\./);
   assert.doesNotMatch(text, /observation_early_exit|persistence_observation_not_settled_due_to_early_exit/);
+  assert.doesNotThrow(() => mcpScanBundleOutputSchema.parse(bundle));
+});
+
+test("scan bundle surfaces canonical post-Accept findings and observation metadata", () => {
+  const finding = publicFinding(
+    "post_accept_consent_dependent_activity",
+    "Confirmed acceptance was followed by eligible non-essential analytics activity.",
+  );
+  const bundle = buildScanBundle({
+    detail: "summary",
+    findings: {
+      type: "certscore_finding_list",
+      scanId: "scan_accept",
+      findings: [finding],
+    },
+    preConsentCookiesTrackers: null,
+    report: {
+      ...report,
+      scanId: "scan_accept",
+      topFindings: [{
+        ...report.topFindings[0],
+        id: "post_accept_consent_dependent_activity",
+        label: "Activity observed after confirmed acceptance",
+        plainEnglish: "Confirmed acceptance was followed by eligible non-essential analytics activity.",
+      }],
+    },
+    scan: {
+      type: "certscore_scan",
+      scanId: "scan_accept",
+      domain: "example.com",
+      status: "completed",
+      score: 42,
+      postAcceptObservation: {
+        status: "confirmed_observation",
+        acceptanceExercised: true,
+        observationCount: 3,
+        productionProjectable: true,
+        verdict: "eligible_nonessential_activity_observed_after_confirmed_acceptance",
+        interpretation: "Accept was confirmed, and eligible non-essential network and storage activity was observed afterward.",
+        observationStrategy: "stop_on_first_eligible_activity",
+        termination: {
+          kind: "evidence_satisfied",
+          intentional: true,
+          trigger: "acceptance_signal_contradiction_observed",
+        },
+        completedAt: "2026-09-01T12:00:09.000Z",
+        coverageLimitations: [],
+        limitations: [],
+      },
+    },
+  } as any);
+
+  const text = scanBundleText(bundle);
+  assert.equal(bundle.findings[0]?.id, "post_accept_consent_dependent_activity");
+  assert.equal(bundle.postAcceptObservation?.productionProjectable, true);
+  assert.match(text, /Accept Path: Accept was confirmed, and eligible non-essential network and storage activity was observed afterward\./);
+  assert.match(text, /observation then stopped intentionally because qualifying evidence had been captured/i);
+  assert.match(text, /post_accept_consent_dependent_activity/);
   assert.doesNotThrow(() => mcpScanBundleOutputSchema.parse(bundle));
 });
 

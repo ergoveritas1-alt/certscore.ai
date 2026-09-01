@@ -2028,6 +2028,30 @@ export const REPORT_SIGNALS: ReportSignalDefinition[] = [
   ),
   defineReportSignal(
     "runtime_artifact_signal",
+    "privacy.post_accept_consent_dependent_activity",
+    "Consent-dependent activity after acceptance",
+    "enforcement_outcomes_after_user_choice",
+    ["third_party_network_cookie_surface"],
+    ["consent_lawful_basis_user_choice", "tracking_profiling_sensitive_data_risk"]
+  ),
+  defineReportSignal(
+    "runtime_artifact_signal",
+    "privacy.accept_reject_outcomes_indistinguishable",
+    "Accept and Reject outcomes were indistinguishable",
+    "enforcement_outcomes_after_user_choice",
+    ["third_party_network_cookie_surface"],
+    ["consent_lawful_basis_user_choice", "tracking_profiling_sensitive_data_risk"]
+  ),
+  defineReportSignal(
+    "runtime_artifact_signal",
+    "privacy.acceptance_signal_contradicts_action",
+    "Acceptance signal contradicted action",
+    "enforcement_outcomes_after_user_choice",
+    [],
+    ["consent_lawful_basis_user_choice"]
+  ),
+  defineReportSignal(
+    "runtime_artifact_signal",
     "privacy.pre_consent_storage_not_cleared",
     "Same non-essential identifier remained stored after refusal",
     "enforcement_outcomes_after_user_choice",
@@ -2917,6 +2941,32 @@ export const REPORT_UNIFIED_FINDINGS = [
     overlays: ["consent_lawful_basis_user_choice", "tracking_profiling_sensitive_data_risk"],
     signalMappings: [{ source: "runtime_artifact_signal", key: "privacy.post_refusal_non_essential_activity" }],
     aliases: ["Post-refusal non-essential activity", "Non-essential activity after reject"]
+  }),
+  defineReportUnifiedFinding({
+    id: "post_accept_consent_dependent_activity",
+    label: "Consent-dependent activity observed after acceptance",
+    owner: "enforcement_outcomes_after_user_choice",
+    mirrors: ["third_party_network_cookie_surface"],
+    overlays: ["consent_lawful_basis_user_choice", "tracking_profiling_sensitive_data_risk"],
+    signalMappings: [{ source: "runtime_artifact_signal", key: "privacy.post_accept_consent_dependent_activity" }],
+    aliases: ["Post-accept consent-dependent activity", "Non-essential activity after accept"]
+  }),
+  defineReportUnifiedFinding({
+    id: "accept_reject_outcomes_indistinguishable",
+    label: "Accept and Reject produced indistinguishable retained activity",
+    owner: "enforcement_outcomes_after_user_choice",
+    mirrors: ["third_party_network_cookie_surface"],
+    overlays: ["consent_lawful_basis_user_choice", "tracking_profiling_sensitive_data_risk"],
+    signalMappings: [{ source: "runtime_artifact_signal", key: "privacy.accept_reject_outcomes_indistinguishable" }],
+    aliases: ["Accept and Reject outcomes indistinguishable", "Consent choice outcomes matched"]
+  }),
+  defineReportUnifiedFinding({
+    id: "acceptance_signal_contradicts_action",
+    label: "Saved consent did not match Accept",
+    owner: "enforcement_outcomes_after_user_choice",
+    overlays: ["consent_lawful_basis_user_choice"],
+    signalMappings: [{ source: "runtime_artifact_signal", key: "privacy.acceptance_signal_contradicts_action" }],
+    aliases: ["Acceptance signal contradicts action", "TCF signal contradicted accept", "Consent signal contradicted confirmed acceptance"]
   }),
   defineReportUnifiedFinding({
     id: "pre_consent_storage_not_cleared",

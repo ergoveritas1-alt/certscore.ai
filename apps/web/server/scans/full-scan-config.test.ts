@@ -619,6 +619,51 @@ test("reject worker enable flag defaults to owned-canary rollout", () => {
   assert.equal(v2DagLambda?.postRefusalRejectWorkerRolloutMode, "owned_canary");
 });
 
+test("Accept worker is default off and an explicit enable defaults to owned-canary rollout", () => {
+  const disabled = buildQueuedFullScanConfig({
+    env: {
+      CERTSCORE_V2_DAG_LAMBDA_ENABLED: "true",
+      CERTSCORE_V2_DAG_LAMBDA_FUNCTION_NAME: "certscore-v2-dag-prod",
+      CERTSCORE_V2_DAG_LAMBDA_ORCHESTRATION_MODE: "sharded",
+      CERTSCORE_V2_DAG_LAMBDA_RESULT_QUEUE_URL: "https://sqs.eu-west-1.amazonaws.com/123/certscore-v2-dag-prod-results",
+      CERTSCORE_V2_DAG_LAMBDA_TARGET_ENV: "production",
+      NEXT_PUBLIC_APP_URL: "https://certscore.ai",
+      NODE_ENV: "production",
+    },
+    hostname: "example.com",
+    localV2DagRunViaLambda: true,
+    maxPages: 3,
+    normalizedUrl: "https://example.com/",
+    profile: "homepage",
+    source: "manual-dashboard",
+  });
+  const enabled = buildQueuedFullScanConfig({
+    env: {
+      CERTSCORE_POST_ACCEPT_WORKER_ENABLED: "1",
+      CERTSCORE_V2_DAG_LAMBDA_ENABLED: "true",
+      CERTSCORE_V2_DAG_LAMBDA_FUNCTION_NAME: "certscore-v2-dag-prod",
+      CERTSCORE_V2_DAG_LAMBDA_ORCHESTRATION_MODE: "sharded",
+      CERTSCORE_V2_DAG_LAMBDA_RESULT_QUEUE_URL: "https://sqs.eu-west-1.amazonaws.com/123/certscore-v2-dag-prod-results",
+      CERTSCORE_V2_DAG_LAMBDA_TARGET_ENV: "production",
+      NEXT_PUBLIC_APP_URL: "https://certscore.ai",
+      NODE_ENV: "production",
+    },
+    hostname: "example.com",
+    localV2DagRunViaLambda: true,
+    maxPages: 3,
+    normalizedUrl: "https://example.com/",
+    profile: "homepage",
+    source: "manual-dashboard",
+  });
+  const disabledLambda = disabled.execution?.v2DagLambda as Record<string, unknown> | undefined;
+  const enabledLambda = enabled.execution?.v2DagLambda as Record<string, unknown> | undefined;
+
+  assert.equal(disabledLambda?.postAcceptWorkerEnabled, undefined);
+  assert.equal(disabledLambda?.postAcceptWorkerRolloutMode, undefined);
+  assert.equal(enabledLambda?.postAcceptWorkerEnabled, true);
+  assert.equal(enabledLambda?.postAcceptWorkerRolloutMode, "owned_canary");
+});
+
 test("production full-scan config ignores Lambda-off requests", () => {
   const config = buildQueuedFullScanConfig({
     env: {

@@ -7,7 +7,16 @@
     "action": "reject_only",
     "authorizationId": "ergoveritas_owned_post_refusal_canary.v1",
     "authorizedHostname": "ergoveritas.com",
-    "authorizedPathPrefix": "/.well-known/certscore-canary/post-refusal/",
+    "authorizedExactPaths": [
+      "/.well-known/certscore-canary/post-refusal/reject-honored.html",
+      "/.well-known/certscore-canary/post-refusal/reject-ignored.html",
+      "/testar1.html",
+      "/testar2.html"
+    ],
+    "authorizedAlternateExactTargets": [
+      "https://www.ergoveritas.com/testar1.html",
+      "https://www.ergoveritas.com/testar2.html"
+    ],
     "maximumActionsPerBrowserContext": 1,
     "deterministicResolverRequired": true,
     "domGuessingAllowed": false
@@ -27,6 +36,24 @@
       "cmpRecipe": "OneTrust",
       "expectedRefusalRegistration": "confirmed",
       "expectedPostRefusalActivity": true
+    },
+    {
+      "key": "ergoveritas-post-action-divergent",
+      "url": "https://ergoveritas.com/testar1.html",
+      "cmpRecipe": "OneTrust",
+      "expectedRefusalRegistration": "confirmed",
+      "expectedPostRefusalActivity": false,
+      "expectedPreRegistrationActivityTreatment": "excluded",
+      "expectedActionComparison": "distinguishable"
+    },
+    {
+      "key": "ergoveritas-post-action-indistinguishable",
+      "url": "https://ergoveritas.com/testar2.html",
+      "cmpRecipe": "OneTrust",
+      "expectedRefusalRegistration": "confirmed",
+      "expectedPostRefusalActivity": true,
+      "expectedPreRegistrationActivityTreatment": "excluded",
+      "expectedActionComparison": "indistinguishable"
     }
   ]
 }

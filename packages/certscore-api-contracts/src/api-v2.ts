@@ -9,7 +9,7 @@ export function isCanonicalScanId(value: unknown): value is string {
 }
 
 export const CERTSCORE_API_V2_VERSION = "v2";
-export const CERTSCORE_API_V2_SCHEMA_VERSION = "0.1.9";
+export const CERTSCORE_API_V2_SCHEMA_VERSION = "0.1.10";
 
 export const apiV2Disclaimer =
   "CertScore outputs are automated public-web observations for human and agentic review. They are not legal advice, certification, or a compliance determination.";
@@ -47,6 +47,49 @@ export const apiV2PostRefusalObservationSchema = z.object({
       "refusal_signal_contradiction_observed",
       "window_elapsed",
       "reject_path_timeout",
+      "worker_failed",
+      "unavailable",
+    ]),
+  }).strict(),
+  completedAt: z.string().nullable(),
+  coverageLimitations: z.array(z.string()).max(24),
+  /** @deprecated Use coverageLimitations. Retained for API compatibility. */
+  limitations: z.array(z.string()).max(24),
+}).strict();
+export const apiV2PostAcceptObservationSchema = z.object({
+  status: z.enum([
+    "confirmed_observation",
+    "confirmed_clean",
+    "unconfirmed",
+    "not_attempted",
+    "unsupported",
+    "aborted",
+  ]),
+  acceptanceExercised: z.boolean(),
+  observationCount: z.number().int().min(0),
+  productionProjectable: z.boolean(),
+  verdict: z.enum([
+    "eligible_nonessential_activity_observed_after_confirmed_acceptance",
+    "retained_consent_signal_contradiction_observed_after_confirmed_acceptance",
+    "no_eligible_nonessential_activity_observed_during_completed_window",
+    "no_confirmed_post_accept_verdict",
+  ]),
+  interpretation: z.string().min(1).max(500),
+  observationStrategy: z.enum([
+    "stop_on_first_eligible_activity",
+    "not_applicable",
+  ]),
+  termination: z.object({
+    kind: z.enum(["evidence_satisfied", "window_elapsed", "unavailable"]),
+    intentional: z.boolean(),
+    trigger: z.enum([
+      "non_essential_request_observed",
+      "non_essential_storage_write_observed",
+      "acceptance_signal_contradiction_observed",
+      "window_elapsed",
+      "accept_control_not_observed",
+      "accept_path_timeout",
+      "accept_observation_window_truncated",
       "worker_failed",
       "unavailable",
     ]),
@@ -256,6 +299,7 @@ export const apiV2ScanJobSchema = z
     scoreVersion: z.string().nullable().optional(),
     scoreUpdatedAt: z.string().nullable().optional(),
     riskLevel: z.string().nullable().optional(),
+    postAcceptObservation: apiV2PostAcceptObservationSchema.nullable().optional(),
     postRefusalObservation: apiV2PostRefusalObservationSchema.nullable().optional(),
     preConsentPreview: apiV2PreConsentRuntimePreviewSchema.optional(),
     coverage: z
@@ -312,6 +356,7 @@ export const apiV2ScanResourceSchema = z
     scoreVersion: z.string().nullable().optional(),
     scoreUpdatedAt: z.string().nullable().optional(),
     riskLevel: z.string().nullable().optional(),
+    postAcceptObservation: apiV2PostAcceptObservationSchema.nullable().optional(),
     postRefusalObservation: apiV2PostRefusalObservationSchema.nullable().optional(),
     coverage: z
       .object({

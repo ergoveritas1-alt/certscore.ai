@@ -5723,6 +5723,18 @@ const UNIFIED_FINDING_PRESENTATION_COPY_OVERRIDES: Record<
     suggestedFix: "Update the reject path so confirmed refusal suppresses non-essential network requests and storage writes, then re-test the same post-refusal window.",
     whyThisMatters: "Non-essential activity after a confirmed refusal can show that the consent control is not enforcing the visitor's recorded choice."
   },
+  post_accept_consent_dependent_activity: {
+    suggestedFix: "Use this informational baseline to verify that consent-dependent vendors activate only after a confirmed Accept action and remain suppressed before consent or after Reject.",
+    whyThisMatters: "The post-Accept baseline helps distinguish expected consent-dependent activity from behavior that appears regardless of the visitor's choice. It does not affect score."
+  },
+  accept_reject_outcomes_indistinguishable: {
+    suggestedFix: "Compare the matched retained requests and storage writes, then correct the Reject path if the same consent-dependent activity runs after both choices.",
+    whyThisMatters: "Matching behavior after Accept and Reject corroborates review of the existing post-refusal result, but does not add a duplicate score effect."
+  },
+  acceptance_signal_contradicts_action: {
+    suggestedFix: "Correct the consent-platform state transition so the saved consent record matches the visitor’s confirmed Accept choice.",
+    whyThisMatters: "The visitor clicked Accept, but the saved consent record still showed optional purposes as denied. That mismatch can cause the site and its vendors to act on the wrong choice."
+  },
   pre_consent_storage_not_cleared: {
     suggestedFix: "Review the retained identifier and either clear it after confirmed refusal or document and verify that it remains inactive and is not transmitted or used.",
     whyThisMatters: "The exact same classified non-essential identifier remained stored after refusal. Stored presence alone does not establish active post-refusal use."

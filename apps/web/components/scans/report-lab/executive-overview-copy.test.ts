@@ -59,6 +59,36 @@ test("executive overview names a confirmed Reject-path failure", () => {
   assert.match(copy, /8-second post-Reject window/i);
 });
 
+test("executive overview includes the confirmed Accept-path comparison result", () => {
+  const copy = buildExecutiveOverview({
+    ...baseInput,
+    acceptPath: {
+      observationWindowMs: 3_000,
+      state: "activity_observed",
+    },
+    findings: [{ summary: "Consent-dependent activity followed Accept.", title: "Post-Accept activity" }],
+  });
+
+  assertBounded(copy);
+  assert.match(copy, /confirmed Accept path retained consent-dependent activity/i);
+  assert.match(copy, /post-Accept comparison baseline/i);
+  assert.doesNotMatch(copy, /score-neutral|affect(?:s|ed)? (?:the )?score/i);
+});
+
+test("executive overview names a contradictory retained Accept state", () => {
+  const copy = buildExecutiveOverview({
+    ...baseInput,
+    acceptPath: {
+      observationWindowMs: 3_000,
+      state: "review_signal",
+    },
+    findings: [{ summary: "The retained state contradicted Accept.", title: "Consent-state review" }],
+  });
+
+  assertBounded(copy);
+  assert.match(copy, /consent record saved afterward still showed analytics and advertising as denied/i);
+});
+
 test("executive overview describes Reject outcomes without disclosing scoring treatment", () => {
   const reviewCopy = buildExecutiveOverview({
     ...baseInput,

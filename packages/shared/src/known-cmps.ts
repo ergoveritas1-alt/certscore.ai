@@ -15,6 +15,12 @@ export type KnownCmpSignalSource =
 export type KnownCmpEvidenceTreatment = "cmp_infrastructure";
 
 export type KnownCmpDefinition = {
+  acceptControlSelectors?: string[];
+  acceptanceCookieValues?: Array<{
+    expectedValue: string;
+    name: string;
+    path: string;
+  }>;
   aliases: string[];
   canonicalName: string;
   cookieNames?: string[];
@@ -145,6 +151,7 @@ export const KNOWN_CMP_REGISTRY: KnownCmpDefinition[] = [
   },
   {
     aliases: ["CookiePro", "Optanon", "OptanonConsent", "OptanonAlertBoxClosed"],
+    acceptControlSelectors: ["#onetrust-accept-btn-handler"],
     canonicalName: "OneTrust",
     cookieNames: [
       "OptanonConsent",
@@ -181,6 +188,10 @@ export const KNOWN_CMP_REGISTRY: KnownCmpDefinition[] = [
   },
   {
     aliases: ["Usercentrics CMP", "Usercentrics Consent Management"],
+    acceptControlSelectors: [
+      'button[data-testid="uc-accept-all-button"]',
+      "#uc-cmp-footer #accept",
+    ],
     canonicalName: "Usercentrics",
     cookieNames: ["uc_settings", "ucString", "usercentrics"],
     domains: ["usercentrics.com", "usercentrics.eu", "app.usercentrics.eu", "api.usercentrics.eu", "aggregator.service.usercentrics.eu", "consent-api.service.consent.usercentrics.eu"],
@@ -213,6 +224,10 @@ export const KNOWN_CMP_REGISTRY: KnownCmpDefinition[] = [
   },
   {
     aliases: ["Cybot", "Cookiebot by Usercentrics"],
+    acceptControlSelectors: [
+      "#CybotCookiebotDialogBodyLevelButtonLevelOptinAllowAll",
+      "#CybotCookiebotDialogBodyButtonAccept",
+    ],
     canonicalName: "Cookiebot",
     cookieNames: ["CookieConsent", "CookieConsentBulkTicket"],
     domains: ["cookiebot.com", "consent.cookiebot.com", "cookiebot.eu", "consent.cookiebot.eu", "consentcdn.cookiebot.eu"],
@@ -367,6 +382,7 @@ export const KNOWN_CMP_REGISTRY: KnownCmpDefinition[] = [
   },
   {
     aliases: ["Seznam CMP", "Seznam Consent", "Seznam TCF CMP"],
+    acceptControlSelectors: ['[data-testid="button-accept"]'],
     canonicalName: "Seznam CMP",
     cookieNames: ["sznlbr", "euconsent-v2"],
     domains: ["cmp.seznam.cz", "cmp.seznamzpravy.cz"],
@@ -382,6 +398,10 @@ export const KNOWN_CMP_REGISTRY: KnownCmpDefinition[] = [
   },
   {
     aliases: ["Funding Choices", "Google Consent Management Solutions"],
+    acceptControlSelectors: [
+      "button.fc-cta-consent",
+      'button[aria-label="Consent"]:has(.fc-button-label)',
+    ],
     canonicalName: "Google Funding Choices",
     cookieNames: ["FCCDCF", "FCNEC"],
     domains: ["fundingchoicesmessages.google.com"],

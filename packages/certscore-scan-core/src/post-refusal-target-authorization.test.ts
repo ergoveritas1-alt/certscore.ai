@@ -33,6 +33,14 @@ test("owned-canary authorization is exact-host and path scoped", () => {
     "https://ergoveritas.com/.well-known/certscore-canary/post-refusal/reject-ignored.html",
     authorization,
   ).authorized, true);
+  assert.equal(authorizePostRefusalTarget(
+    "https://ergoveritas.com/.well-known/certscore-canary/post-accept/accept-honored.html",
+    authorization,
+  ).authorized, true);
+  assert.equal(authorizePostRefusalTarget(
+    "https://ergoveritas.com/.well-known/certscore-canary/post-accept/accept-inconsistent.html",
+    authorization,
+  ).authorized, true);
   for (let number = 1; number <= 4; number += 1) {
     assert.equal(authorizePostRefusalTarget(
       `https://ergoveritas.com/test${number}.html`,
@@ -41,6 +49,15 @@ test("owned-canary authorization is exact-host and path scoped", () => {
     assert.equal(getOwnedPostRefusalCanaryRecipeCase(
       `https://ergoveritas.com/test${number}.html`,
     ), "tcf");
+  }
+  for (const pathname of ["testar1.html", "testar2.html"]) {
+    for (const hostname of ["ergoveritas.com", "www.ergoveritas.com"]) {
+      const target = `https://${hostname}/${pathname}`;
+      assert.equal(authorizePostRefusalTarget(target, authorization).authorized, true);
+      assert.equal(getOwnedPostRefusalCanaryRecipeCase(target), "tcf");
+      assert.equal(authorizePostRefusalTarget(`${target}?variant=other`, authorization).authorized, false);
+      assert.equal(authorizePostRefusalTarget(`${target}#other`, authorization).authorized, false);
+    }
   }
   assert.equal(authorizePostRefusalTarget(
     "https://www.ergoveritas.com/.well-known/certscore-canary/post-refusal/reject-honored.html",
@@ -52,6 +69,10 @@ test("owned-canary authorization is exact-host and path scoped", () => {
   ).authorized, false);
   assert.equal(authorizePostRefusalTarget(
     "https://ergoveritas.com/.well-known/certscore-canary/post-refusal/post-refusal-runtime.js",
+    authorization,
+  ).authorized, false);
+  assert.equal(authorizePostRefusalTarget(
+    "https://ergoveritas.com/.well-known/certscore-canary/post-accept/post-accept-runtime.js",
     authorization,
   ).authorized, false);
   assert.equal(authorizePostRefusalTarget(

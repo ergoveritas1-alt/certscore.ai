@@ -214,6 +214,32 @@ test("adds the default-off reject worker to eligible sharded scans with target-s
   }).postRefusalObservation, undefined);
 });
 
+test("dispatches both owned canary lanes for exact www ErgoVeritas testar URLs", () => {
+  for (const pathname of ["/testar1.html", "/testar2.html"]) {
+    const canaryConfig = buildLambdaScanConfig();
+    canaryConfig.hostname = "www.ergoveritas.com";
+    canaryConfig.normalizedUrl = `https://www.ergoveritas.com${pathname}`;
+    canaryConfig.execution = {
+      ...canaryConfig.execution,
+      v2DagLambda: {
+        ...(canaryConfig.execution?.v2DagLambda as Record<string, unknown>),
+        orchestrationMode: "sharded",
+        postAcceptWorkerEnabled: true,
+        postAcceptWorkerRolloutMode: "owned_canary",
+        postRefusalRejectWorkerEnabled: true,
+        postRefusalRejectWorkerRolloutMode: "owned_canary",
+      },
+    };
+
+    const payload = buildLocalV2DagLambdaDispatchPayload({
+      scanConfig: canaryConfig,
+      scanId: `scan-www-${pathname}`,
+    });
+    assert.equal(payload.postAcceptObservation?.interactionAuthorization.kind, "owned_canary");
+    assert.equal(payload.postRefusalObservation?.interactionAuthorization.kind, "owned_canary");
+  }
+});
+
 test("builds local Lambda dispatch payload with bounded debug overrides", () => {
   const payload = buildLocalV2DagLambdaDispatchPayload({
     localCallbackUrl: null,
@@ -378,11 +404,21 @@ test("parses SQS-style v2 DAG Lambda result messages as internal artifacts only"
         failureDiagnosticUri: {
           sha256: "a".repeat(64),
           sizeBytes: 512
+        },
+        postAcceptPacketUri: {
+          sha256: "d".repeat(64),
+          sizeBytes: 768
+        },
+        postRefusalPacketUri: {
+          sha256: "e".repeat(64),
+          sizeBytes: 896
         }
       },
       artifactPointers: {
         failureDiagnosticUri: "s3://certscore-dev-artifacts/v2/scan-local-1/failure/FailureDiagnostic.json",
         manifestUri: "s3://certscore-dev-artifacts/v2/scan-local-1/manifest.json",
+        postAcceptPacketUri: "s3://certscore-dev-artifacts/v2/scan-local-1/PostAcceptEvidencePacket.json",
+        postRefusalPacketUri: "s3://certscore-dev-artifacts/v2/scan-local-1/PostRefusalEvidencePacket.json",
         reviewArtifactUri: "s3://certscore-dev-artifacts/v2/scan-local-1/review.json"
       },
       completedAt: "2026-06-15T18:00:00.000Z",
@@ -439,7 +475,11 @@ test("parses SQS-style v2 DAG Lambda result messages as internal artifacts only"
   assert.equal(parsed.parentDispatchSha256, "c".repeat(64));
   assert.equal(parsed.artifactPointers?.manifestUri, "s3://certscore-dev-artifacts/v2/scan-local-1/manifest.json");
   assert.equal(parsed.artifactPointers?.failureDiagnosticUri, "s3://certscore-dev-artifacts/v2/scan-local-1/failure/FailureDiagnostic.json");
+  assert.equal(parsed.artifactPointers?.postAcceptPacketUri, "s3://certscore-dev-artifacts/v2/scan-local-1/PostAcceptEvidencePacket.json");
+  assert.equal(parsed.artifactPointers?.postRefusalPacketUri, "s3://certscore-dev-artifacts/v2/scan-local-1/PostRefusalEvidencePacket.json");
   assert.deepEqual(parsed.artifactMetadata?.failureDiagnosticUri, { sha256: "a".repeat(64), sizeBytes: 512 });
+  assert.deepEqual(parsed.artifactMetadata?.postAcceptPacketUri, { sha256: "d".repeat(64), sizeBytes: 768 });
+  assert.deepEqual(parsed.artifactMetadata?.postRefusalPacketUri, { sha256: "e".repeat(64), sizeBytes: 896 });
   assert.equal(parsed.scannerGitSha, "abc123scanner");
   assert.equal(parsed.scannerImageTag, "scanner-image:abc123scanner");
   assert.equal(parsed.scannerRuntimeVersion, "v2-dag-runtime.1");

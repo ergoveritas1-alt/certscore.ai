@@ -3993,6 +3993,155 @@ function buildPostRefusalObservationConcerns(
   ];
 }
 
+function postActionActivityIdentity(row: Record<string, unknown>) {
+  const activityType = getStringValue(row.activityType);
+  const category = getStringValue(row.category) ?? "unknown";
+  const hostname = getStringValue(row.hostname) ?? "";
+  const vendor = getStringValue(row.vendor) ?? "";
+  if (activityType === "network_request") {
+    const url = getStringValue(row.url);
+    return url ? `request:${url}|${hostname}|${vendor}|${category}` : null;
+  }
+  if (activityType === "storage_write") {
+    const storageType = getStringValue(row.storageType);
+    const storageIdentityHash = getStringValue(row.storageIdentityHash);
+    return storageType && storageIdentityHash
+      ? `storage:${storageType}|${storageIdentityHash}|${hostname}|${vendor}|${category}`
+      : null;
+  }
+  return null;
+}
+
+function buildPostAcceptObservationConcerns(
+  runtimeArtifacts: Record<string, unknown> | null | undefined,
+  domainContext?: ScanDomainContext
+) {
+  const projection = getRuntimeRecord(runtimeArtifacts, [
+    "postAcceptEvidenceProjection",
+    "post_accept_evidence_projection"
+  ]);
+  if (
+    !projection ||
+    getRuntimeBoolean(projection, ["productionProjectable"]) !== true ||
+    getRuntimeBoolean(projection, ["acceptanceExercised"]) !== true ||
+    getRuntimeString(projection, ["registrationStatus"]) !== "confirmed"
+  ) {
+    return [];
+  }
+
+  const activityRows = getRuntimeObjectArray(projection, ["postAcceptActivity"]);
+  const contradictionObserved = getRuntimeBoolean(projection, ["contradictionObserved"]) === true;
+  const packetSha256 = getRuntimeString(projection, ["packetSha256"]);
+  const requestUrls = activityRows.flatMap((row) => {
+    const url = getStringValue(row.url);
+    return url ? [url] : [];
+  });
+  const commonEvidence = {
+    acceptanceExercised: true,
+    acceptanceRegistrationStatus: "confirmed",
+    postAcceptPacketSha256: packetSha256,
+    postAcceptProductionProjectable: true,
+    runtimeEvidenceArtifacts: [
+      ...(packetSha256 ? [`post-accept-packet:sha256:${packetSha256}`] : []),
+      ...requestUrls,
+    ],
+    runtimeRequestUrls: requestUrls,
+    scoreEffect: "none",
+  };
+
+  const rejectProjection = getRuntimeRecord(runtimeArtifacts, [
+    "postRefusalEvidenceProjection",
+    "post_refusal_evidence_projection"
+  ]);
+  const rejectRows = rejectProjection &&
+    getRuntimeBoolean(rejectProjection, ["productionProjectable"]) === true &&
+    getRuntimeBoolean(rejectProjection, ["refusalExercised"]) === true &&
+    getRuntimeString(rejectProjection, ["registrationStatus"]) === "confirmed"
+    ? getRuntimeObjectArray(rejectProjection, ["postRefusalActivity"])
+    : [];
+  const rejectIdentities = new Set(rejectRows.flatMap((row) => {
+    const identity = postActionActivityIdentity(row);
+    return identity ? [identity] : [];
+  }));
+  const indistinguishableRows = activityRows.filter((row) => {
+    const identity = postActionActivityIdentity(row);
+    return identity !== null && rejectIdentities.has(identity);
+  });
+
+  return [
+    ...(activityRows.length > 0
+      ? [buildConcernFromSharedInput({
+          categoryId: "enforcement_outcomes_after_user_choice",
+          description:
+            "A confirmed Accept action was followed by classified non-essential activity in the retained post-accept window. This is an informational behavior record and does not affect score.",
+          domainContext,
+          evidence: requestUrls,
+          observedValue: `${activityRows.length} post-accept non-essential event(s)`,
+          originKey: "privacy.post_accept_consent_dependent_activity",
+          originType: "runtime_artifact",
+          rawEvidence: {
+            ...commonEvidence,
+            postAcceptConsentDependentActivity: activityRows,
+            post_accept_consent_dependent_activity: activityRows,
+          },
+          severity: "low",
+          signalKey: "privacy.post_accept_consent_dependent_activity",
+          signalLabel: "Consent-dependent activity after acceptance",
+          signalSource: "runtime_artifact_signal",
+          sourceType: "signal",
+          title: "Consent-dependent activity observed after acceptance"
+        })]
+      : []),
+    ...(indistinguishableRows.length > 0
+      ? [buildConcernFromSharedInput({
+          categoryId: "enforcement_outcomes_after_user_choice",
+          description:
+            "Exact retained activity identities appeared after both confirmed Accept and Reject actions. This corroborates review of the existing Reject outcome and never adds a second score effect.",
+          domainContext,
+          evidence: requestUrls,
+          observedValue: `${indistinguishableRows.length} exact activity identity match(es)`,
+          originKey: "privacy.accept_reject_outcomes_indistinguishable",
+          originType: "runtime_artifact",
+          rawEvidence: {
+            ...commonEvidence,
+            acceptRejectOutcomeMatches: indistinguishableRows,
+            accept_reject_outcomes_indistinguishable: true,
+            corroboratesPostRefusalFinding: true,
+          },
+          severity: "low",
+          signalKey: "privacy.accept_reject_outcomes_indistinguishable",
+          signalLabel: "Accept and Reject outcomes were indistinguishable",
+          signalSource: "runtime_artifact_signal",
+          sourceType: "signal",
+          title: "Accept and Reject produced indistinguishable retained activity"
+        })]
+      : []),
+    ...(contradictionObserved
+      ? [buildConcernFromSharedInput({
+          categoryId: "enforcement_outcomes_after_user_choice",
+          description:
+            "The visitor clicked Accept, but the consent record saved afterward still showed the relevant optional purposes as denied.",
+          domainContext,
+          evidence: packetSha256 ? [`post-accept-packet:sha256:${packetSha256}`] : [],
+          observedValue: "acceptance signal contradicted confirmed action",
+          originKey: "privacy.acceptance_signal_contradicts_action",
+          originType: "runtime_artifact",
+          rawEvidence: {
+            ...commonEvidence,
+            acceptanceSignalContradictsAction: true,
+            acceptance_signal_contradicts_action: true,
+          },
+          severity: "low",
+          signalKey: "privacy.acceptance_signal_contradicts_action",
+          signalLabel: "Saved consent did not match Accept",
+          signalSource: "runtime_artifact_signal",
+          sourceType: "signal",
+          title: "Saved consent did not match the confirmed Accept choice"
+        })]
+      : [])
+  ];
+}
+
 function getGdprTransparencyConcernState(concern: NormalizedConcern) {
   const rawEvidence = concern.evidenceBundle.rawEvidence;
   const value = rawEvidence?.gdprTransparencyArticle13ConcernState ??
@@ -4136,6 +4285,7 @@ export function buildNormalizedConcerns(input: {
     ...buildConsentPaidDeclinePathConcerns(input.runtimeArtifacts, input.domainContext),
     ...buildPreConsentStorageAssessmentConcerns(input.runtimeArtifacts, input.domainContext),
     ...buildPostRefusalObservationConcerns(input.runtimeArtifacts, input.domainContext),
+    ...buildPostAcceptObservationConcerns(input.runtimeArtifacts, input.domainContext),
     ...buildCmpLoadOrderConcerns(input.runtimeArtifacts, input.domainContext),
     ...buildRtbCookieSyncConcerns(input.runtimeArtifacts, input.domainContext),
     ...buildGdprTransparencyArticle13Concerns(input.runtimeArtifacts, input.domainContext),

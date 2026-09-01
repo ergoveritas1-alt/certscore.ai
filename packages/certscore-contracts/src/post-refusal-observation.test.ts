@@ -438,6 +438,67 @@ test("storage persistence and writes must bind to retained snapshots and the ref
   assert.equal(result.success, false);
 });
 
+test("exact post-refusal storage-write identity survives canonical report projection", () => {
+  const storageIdentityHash = "e".repeat(64);
+  const postActionItem = {
+    storageType: "cookie" as const,
+    name: "_ga",
+    hostname: "example.test",
+    identityBasis: "cookie_name_domain_path_partition" as const,
+    identityHash: storageIdentityHash,
+    valueHash: "b".repeat(64),
+    vendor: "Google",
+    purpose: "analytics" as const,
+    nonEssential: true,
+  };
+  const write = {
+    storageType: "cookie" as const,
+    name: "_ga",
+    hostname: "example.test",
+    storageIdentityHash,
+    observedAtMs: 25,
+    msOffsetFromRefusal: 10,
+    evidenceSource: "instrumented_write" as const,
+    vendor: "Google",
+    purpose: "analytics" as const,
+    nonEssential: true,
+  };
+  const packet = postRefusalEvidencePacketSchema.parse({
+    ...confirmedPacket(),
+    storage: {
+      preActionCapturedAtMs: 5,
+      postActionCapturedAtMs: 30,
+      preAction: [],
+      postAction: [postActionItem],
+      writesAfterRefusal: [write],
+      nonEssentialItemsPersistingAfterRefusal: [],
+    },
+    observations: [{
+      observationType: "post_refusal_non_essential_activity",
+      observedAtMs: 25,
+      hostname: "example.test",
+      storageType: "cookie",
+      storageName: "_ga",
+      storageIdentityHash,
+      msOffsetFromRefusal: 10,
+      vendor: "Google",
+      evidenceKeys: ["confirmed_refusal_registration", "storage_write_after_refusal"],
+    }],
+  });
+
+  assert.equal(
+    projectPostRefusalEvidenceForReport({ packet }).postRefusalActivity[0]?.storageIdentityHash,
+    storageIdentityHash,
+  );
+  assert.equal(postRefusalEvidencePacketSchema.safeParse({
+    ...packet,
+    storage: {
+      ...packet.storage,
+      postAction: [{ ...postActionItem, identityHash: "f".repeat(64) }],
+    },
+  }).success, false);
+});
+
 test("persisted-storage observations bind to the exact post-action snapshot row", () => {
   const identityHash = "d".repeat(64);
   const item = {

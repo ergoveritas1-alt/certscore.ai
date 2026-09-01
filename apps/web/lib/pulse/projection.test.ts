@@ -362,6 +362,133 @@ test("Pulse reports a Reject Path barrier timeout without changing completed sca
   ));
 });
 
+test("Pulse surfaces canonical score-neutral post-Accept findings", () => {
+  const pulse = buildPulseProjection({
+    detail: "full",
+    format: "json",
+    freshnessMode: "latest",
+    pulseRequestId: "accept-finding-fixture",
+    requestedUrl: "https://example.com/",
+    resolutionMode: "test",
+    scanRecord: pulseScanRecord({
+      accessPostureSummary: {
+        homepageFetchStatus: "ok",
+        interruptionLabel: null,
+        interruptionReason: null,
+        stopOutcomeTitle: null,
+        stopReason: null,
+        stopReviewTitle: null,
+      },
+      runtimeArtifacts: {
+        postAcceptEvidenceProjection: {
+          contractVersion: "certscore.post_accept_report_projection.v1",
+          completedAt: "2026-09-01T12:00:09.000Z",
+          contradictionObserved: true,
+          limitations: ["observation_early_exit:acceptance_signal_contradiction_observed"],
+          observationCount: 2,
+          observationWindowMs: 3_000,
+          packetSha256: "b".repeat(64),
+          postAcceptActivity: [{
+            activityType: "network_request",
+            category: "analytics",
+            consentState: "post_accept",
+            hostname: "analytics.example.net",
+            msAfterAccept: 170,
+            nonEssential: true,
+            requestId: "request-1",
+            url: "https://analytics.example.net/collect",
+            vendor: "Example Analytics",
+          }],
+          productionProjectable: true,
+          acceptanceExercised: true,
+          acceptanceRegisteredAtMs: 500,
+          registrationStatus: "confirmed",
+          resolverMethod: "cmp_registry_recipe",
+          status: "confirmed_observation",
+        },
+      },
+      scan: {
+        completedAt: "2026-09-01T12:00:10.000Z",
+        createdAt: "2026-09-01T12:00:00.000Z",
+        domainHostname: "example.com",
+        id: "00000000-0000-4000-8000-000000000123",
+        pagesRequested: 1,
+        pagesScanned: 1,
+        startedAt: "2026-09-01T12:00:01.000Z",
+        status: "completed",
+      },
+      snapshot: {
+        certscore_overall: 80,
+        report_projection_status: "ready",
+      },
+    }),
+    waitSeconds: 0,
+  }) as Record<string, any>;
+
+  assert.equal(pulse.summary.score, 80);
+  assert.ok(pulse.findings.some((finding: Record<string, unknown>) =>
+    finding.id === "post_accept_consent_dependent_activity"
+  ));
+  assert.ok(pulse.findings.some((finding: Record<string, unknown>) =>
+    finding.id === "acceptance_signal_contradicts_action"
+  ));
+  assert.doesNotThrow(() => pulseResponseSchema.parse(pulse));
+});
+
+test("Pulse reports a truncated Accept observation as a neutral coverage limitation", () => {
+  const pulse = buildPulseProjection({
+    detail: "summary",
+    format: "json",
+    freshnessMode: "latest",
+    pulseRequestId: "accept-truncated-fixture",
+    requestedUrl: "https://example.com/",
+    resolutionMode: "test",
+    scanRecord: pulseScanRecord({
+      accessPostureSummary: {
+        homepageFetchStatus: "ok",
+        interruptionLabel: null,
+        interruptionReason: null,
+        stopOutcomeTitle: null,
+        stopReason: null,
+        stopReviewTitle: null,
+      },
+      runtimeArtifacts: {
+        postAcceptObservationCoverage: {
+          completedAt: "2026-09-01T12:00:06.000Z",
+          evidenceJoined: true,
+          limitationCode: "accept_observation_window_truncated",
+          maxTailWaitMs: 6_000,
+          status: "limited",
+        },
+      },
+      scan: {
+        completedAt: "2026-09-01T12:00:10.000Z",
+        createdAt: "2026-09-01T12:00:00.000Z",
+        domainHostname: "example.com",
+        id: "00000000-0000-4000-8000-000000000123",
+        pagesRequested: 1,
+        pagesScanned: 1,
+        startedAt: "2026-09-01T12:00:01.000Z",
+        status: "completed",
+      },
+      snapshot: {
+        certscore_overall: 80,
+        report_projection_status: "ready",
+      },
+    }),
+    waitSeconds: 0,
+  }) as Record<string, any>;
+
+  assert.equal(pulse.scanStatus, "completed");
+  assert.equal(pulse.summary.score, 80);
+  assert.ok(pulse.coverage.limitations.includes(
+    "Accept was confirmed, but the bounded post-accept observation window was truncated.",
+  ));
+  assert.ok(pulse.coverage.interruptions.some((row: Record<string, unknown>) =>
+    row.label === "Accept Path unavailable"
+  ));
+});
+
 test("Pulse projection does not cap top findings by detail level", () => {
   const source = readFileSync(new URL("./projection.ts", import.meta.url), "utf8");
 

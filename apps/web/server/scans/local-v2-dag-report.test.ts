@@ -5481,7 +5481,7 @@ test("materializeLocalV2DagScanDetail records stable GDPR Transparency profile m
       mode: "gdpr_transparency_observed_only",
       pipeline: "normalized_concern_policy_unified_finding",
       scannerExecutionMode: "artifact_capture_only",
-      scope: ["gdpr_transparency_observed_topics", "post_refusal_enforcement"],
+      scope: ["gdpr_transparency_observed_topics", "post_accept_review", "post_refusal_enforcement"],
       source: "verified_canonical_evidence_bundle",
       version: "wc01.normalized-concern-policy.v3",
     });

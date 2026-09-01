@@ -7,6 +7,10 @@ import {
   postRefusalEvidencePacketSchema,
   postRefusalLaneOutcomeSchema,
 } from "./post-refusal-observation";
+import {
+  postAcceptEvidencePacketSchema,
+  postAcceptLaneOutcomeSchema,
+} from "./post-accept-observation";
 export * from "./consent-control-label-classifier";
 export * from "./consent-preference-category-classifier";
 export * from "./consent-language-classifier";
@@ -25,6 +29,8 @@ export * from "./consent-control-calibration";
 export * from "./lambda-result-disposition";
 export * from "./pre-consent-browser-storage-projection";
 export * from "./post-refusal-observation";
+export * from "./post-accept-observation";
+export * from "./post-action-dispatch";
 
 export const directVsInferredSchema = z.enum([
   "direct",
@@ -3177,6 +3183,8 @@ export const canonicalEvidenceBundleSchema = z.object({
   scanProfile: scanProfileSchema,
   modulesRun: z.array(scanModuleRunSchema),
   scanLaneRuns: z.array(scanLaneRunSchema).max(8).default([]),
+  postAcceptEvidence: postAcceptEvidencePacketSchema.optional(),
+  postAcceptLaneOutcome: postAcceptLaneOutcomeSchema.optional(),
   postRefusalEvidence: postRefusalEvidencePacketSchema.optional(),
   postRefusalLaneOutcome: postRefusalLaneOutcomeSchema.optional(),
   runtimeTimeline: z.array(runtimeEvidenceEventSchema),

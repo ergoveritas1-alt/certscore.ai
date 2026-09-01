@@ -119,6 +119,16 @@ type RedirectResolutionCookie = {
 const OWNED_POST_REFUSAL_CANARY_TARGETS = [
   {
     hostname: "ergoveritas.com",
+    pathname: "/.well-known/certscore-canary/post-accept/accept-honored.html",
+    recipeCase: "tcf",
+  },
+  {
+    hostname: "ergoveritas.com",
+    pathname: "/.well-known/certscore-canary/post-accept/accept-inconsistent.html",
+    recipeCase: "tcf",
+  },
+  {
+    hostname: "ergoveritas.com",
     pathname: "/.well-known/certscore-canary/post-refusal/reject-honored.html",
     recipeCase: "tcf",
   },
@@ -145,6 +155,26 @@ const OWNED_POST_REFUSAL_CANARY_TARGETS = [
   {
     hostname: "ergoveritas.com",
     pathname: "/test4.html",
+    recipeCase: "tcf",
+  },
+  {
+    hostname: "ergoveritas.com",
+    pathname: "/testar1.html",
+    recipeCase: "tcf",
+  },
+  {
+    hostname: "ergoveritas.com",
+    pathname: "/testar2.html",
+    recipeCase: "tcf",
+  },
+  {
+    hostname: "www.ergoveritas.com",
+    pathname: "/testar1.html",
+    recipeCase: "tcf",
+  },
+  {
+    hostname: "www.ergoveritas.com",
+    pathname: "/testar2.html",
     recipeCase: "tcf",
   },
 ] as const;

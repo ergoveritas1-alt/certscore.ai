@@ -176,6 +176,7 @@ export const postRefusalStorageWriteSchema = z.object({
   storageType: z.enum(["cookie", "local_storage", "session_storage"]),
   name: z.string().min(1).max(180),
   hostname: z.string().max(255).optional(),
+  storageIdentityHash: z.string().regex(/^[a-f0-9]{64}$/).optional(),
   observedAtMs: z.number().int().nonnegative(),
   msOffsetFromRefusal: z.number().int().nonnegative(),
   evidenceSource: z.enum(["instrumented_write", "post_action_snapshot_delta"]).optional(),
@@ -619,6 +620,22 @@ export const postRefusalEvidencePacketSchema = z.object({
       });
       break;
     }
+    if (
+      write.storageIdentityHash !== undefined &&
+      !packet.storage.postAction.some((item) =>
+        item.storageType === write.storageType &&
+        item.name === write.name &&
+        item.hostname === write.hostname &&
+        item.identityHash === write.storageIdentityHash
+      )
+    ) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "Exact post-refusal storage-write identity must reference the retained post-action snapshot.",
+        path: ["storage", "writesAfterRefusal"],
+      });
+      break;
+    }
   }
   for (const item of packet.storage.nonEssentialItemsPersistingAfterRefusal) {
     const existedBefore = packet.storage.preAction.some((candidate) =>
@@ -672,6 +689,7 @@ export const postRefusalEvidencePacketSchema = z.object({
           write.name === observation.storageName &&
           write.storageType === observation.storageType &&
           write.hostname === observation.hostname &&
+          write.storageIdentityHash === observation.storageIdentityHash &&
           write.observedAtMs === observation.observedAtMs &&
           write.vendor === observation.vendor
         );
@@ -994,6 +1012,7 @@ const postRefusalReportActivityRowSchema = z.object({
   msAfterReject: z.number().int().nonnegative(),
   nonEssential: z.literal(true),
   requestId: z.string().max(120).optional(),
+  storageIdentityHash: z.string().regex(/^[a-f0-9]{64}$/).optional(),
   storageName: z.string().max(180).optional(),
   storageType: z.enum(["cookie", "local_storage", "session_storage"]).optional(),
   url: z.string().max(500).optional(),
@@ -1076,6 +1095,9 @@ export function projectPostRefusalEvidenceForReport(input: {
             ...(write.hostname ? { hostname: write.hostname } : {}),
             msAfterReject: write.msOffsetFromRefusal,
             nonEssential: true as const,
+            ...(write.storageIdentityHash
+              ? { storageIdentityHash: write.storageIdentityHash }
+              : {}),
             storageName: write.name,
             storageType: write.storageType,
             ...(write.vendor ? { vendor: write.vendor } : {}),

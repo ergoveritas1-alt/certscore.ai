@@ -327,6 +327,30 @@ export const CERT_SCORE_FINDING_REGISTRY: Record<string, CertScoreFindingDefinit
     whyItMatters: "Tracking that still fires after an explicit reject interaction suggests the site's consent outcome is not being enforced as presented.",
     remediation: "Compare baseline and post-reject vendor activity, suppress non-essential requests after reject, and verify the live reject path with concrete request-level evidence."
   },
+  post_accept_consent_dependent_activity: {
+    id: "post_accept_consent_dependent_activity",
+    label: "Consent-dependent activity observed after acceptance",
+    section: "Consent Experience",
+    defaultSurfacePriority: 58,
+    whyItMatters: "A verified post-Accept baseline shows which non-essential behavior is activated by an affirmative choice and supports comparison with pre-consent and post-Reject behavior without affecting score.",
+    remediation: "Use the retained baseline to verify these vendors remain suppressed before consent and after Reject."
+  },
+  accept_reject_outcomes_indistinguishable: {
+    id: "accept_reject_outcomes_indistinguishable",
+    label: "Accept and Reject produced indistinguishable retained activity",
+    section: "Consent Experience",
+    defaultSurfacePriority: 62,
+    whyItMatters: "Exact retained activity identities after both choices indicate that the consent outcomes warrant implementation review, while avoiding a duplicate score effect.",
+    remediation: "Compare the matched requests and storage writes, then correct the Reject path if consent-dependent activity runs after both choices."
+  },
+  acceptance_signal_contradicts_action: {
+    id: "acceptance_signal_contradicts_action",
+    label: "Saved consent did not match Accept",
+    section: "Consent Experience",
+    defaultSurfacePriority: 64,
+    whyItMatters: "The visitor clicked Accept, but the consent record saved afterward still showed optional purposes as denied. That mismatch can cause the site and its vendors to act on the wrong choice.",
+    remediation: "Correct the consent-platform state transition so the saved consent record matches the visitor’s confirmed Accept choice."
+  },
   third_party_tracking_pre_consent: {
     id: "third_party_tracking_pre_consent",
     label: "Non-essential tracking before consent",

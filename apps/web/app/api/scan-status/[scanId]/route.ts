@@ -6,6 +6,7 @@ import {
   buildLightweightScanStatusResponse,
   getPublicScanStatusProjection
 } from "../../../../server/scans/scan-status-projection";
+import { publishCanonicalScanReportProjection } from "../../../../server/scans/canonical-scan-report-publisher";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -33,7 +34,7 @@ export async function GET(request: Request, context: ScanStatusRouteContext) {
     );
   }
 
-  const projection = await getPublicScanStatusProjection(scanId);
+  let projection = await getPublicScanStatusProjection(scanId);
   if (!projection) {
     return NextResponse.json(
       { code: "scan_not_found", error: "Scan not found." },
@@ -42,6 +43,20 @@ export async function GET(request: Request, context: ScanStatusRouteContext) {
   }
 
   if (!includeFindings) {
+    if (
+      (projection.status === "completed" || projection.status === "completed_limited") &&
+      projection.reportProjectionRequired &&
+      projection.reportInputsReady &&
+      !projection.reportReady
+    ) {
+      const publication = await publishCanonicalScanReportProjection({
+        organizationId: projection.organizationId,
+        scanId
+      });
+      if (publication.status === "ready") {
+        projection = await getPublicScanStatusProjection(scanId) ?? projection;
+      }
+    }
     console.info(JSON.stringify({
       event: "scan.progress_status_request",
       scanId,

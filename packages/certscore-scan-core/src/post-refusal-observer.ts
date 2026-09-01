@@ -1203,6 +1203,7 @@ export async function runPostRefusalObserver(
         parentScanStartedAtMs,
         confirmedRefusalRegisteredAtEpochMs,
         observationTargetUrl,
+        postActionStorage,
       ))
       .filter((write): write is PostRefusalStorageWrite => Boolean(write))
       .map((write) => ({ ...write, evidenceSource: "instrumented_write" as const }));
@@ -1478,16 +1479,32 @@ function classifyStorageWrite(
   scanStartedAtMs: number,
   refusalRegisteredAtEpochMs: number,
   targetUrl: string,
+  postActionStorage: PostRefusalStorageItem[],
 ): PostRefusalStorageWrite | undefined {
   if (!write.name) return undefined;
   const hostname = new URL(targetUrl).hostname;
   const vendor = write.storageType === "cookie"
     ? vendorFor({ type: "cookie", cookieName: write.name, hostname })
     : vendorFor({ type: "cmp_runtime", storageKey: write.name, hostname });
+  const exactIdentityHashes = [...new Set(postActionStorage.flatMap((item) =>
+    item.storageType === write.storageType &&
+      item.name === write.name &&
+      item.identityHash &&
+      (
+        write.storageType !== "cookie" ||
+        !item.hostname ||
+        sameSiteHostname(hostname, item.hostname)
+      )
+      ? [item.identityHash]
+      : []
+  ))];
   return {
     storageType: write.storageType,
     name: write.name.slice(0, 180),
     hostname,
+    ...(exactIdentityHashes.length === 1
+      ? { storageIdentityHash: exactIdentityHashes[0] }
+      : {}),
     observedAtMs: elapsed(scanStartedAtMs, write.observedAtEpochMs),
     msOffsetFromRefusal: Math.max(0, Math.round(write.observedAtEpochMs - refusalRegisteredAtEpochMs)),
     ...(vendor ? { vendor: vendor.vendor, purpose: vendor.purpose } : {}),
@@ -1538,6 +1555,7 @@ function storageSnapshotDeltaWrites(input: {
       observedAtMs: eligibleResponseRequest.completedAtMs,
       msOffsetFromRefusal: eligibleResponseRequest.completedAtMs - refusalRegisteredAtMs,
       evidenceSource: "post_action_snapshot_delta" as const,
+      ...(item.identityHash ? { storageIdentityHash: item.identityHash } : {}),
       ...(item.vendor ? { vendor: item.vendor } : {}),
       ...(item.purpose ? { purpose: item.purpose } : {}),
       nonEssential: item.nonEssential,
@@ -1687,6 +1705,9 @@ function buildObservations(input: {
       ...(write.hostname ? { hostname: write.hostname } : {}),
       storageType: write.storageType,
       storageName: write.name,
+      ...(write.storageIdentityHash
+        ? { storageIdentityHash: write.storageIdentityHash }
+        : {}),
       msOffsetFromRefusal: write.msOffsetFromRefusal,
       evidenceKeys: ["confirmed_refusal_registration", "storage_write_after_refusal"],
     });
@@ -3317,6 +3338,7 @@ async function waitForPostRefusalObservation(input: {
         input.parentScanStartedAtMs,
         input.refusalRegisteredAtEpochMs,
         input.targetUrl,
+        [],
       ))
       .some((write) => write?.nonEssential)
     ) {

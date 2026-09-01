@@ -25,7 +25,7 @@ test("owned post-refusal canaries retain one deterministic reject control and TC
   assert.match(runtime, /www\.google-analytics\.com\/g\/collect/);
 });
 
-test("owned post-refusal manifest is reject-only and exact-host scoped", async () => {
+test("owned post-refusal manifest is reject-only and exact-target scoped", async () => {
   const manifest = JSON.parse(await readFile(
     path.join(workspaceRoot, "docs/certscore-v2/post-refusal-owned-live-canaries.json"),
     "utf8",
@@ -37,8 +37,16 @@ test("owned post-refusal manifest is reject-only and exact-host scoped", async (
   assert.equal(manifest.consentInteractionAllowed, true);
   assert.equal(manifest.interactionPolicy?.action, "reject_only");
   assert.equal(manifest.interactionPolicy?.authorizedHostname, "ergoveritas.com");
-  assert.equal(manifest.interactionPolicy?.authorizedPathPrefix, "/.well-known/certscore-canary/post-refusal/");
-  assert.equal(manifest.targets?.every((target) =>
-    target.url?.startsWith("https://ergoveritas.com/.well-known/certscore-canary/post-refusal/")
-  ), true);
+  assert.deepEqual(manifest.interactionPolicy?.authorizedAlternateExactTargets, [
+    "https://www.ergoveritas.com/testar1.html",
+    "https://www.ergoveritas.com/testar2.html",
+  ]);
+  assert.equal(manifest.targets?.every((target) => {
+    if (!target.url) return false;
+    const url = new URL(target.url);
+    return url.protocol === "https:" &&
+      url.hostname === "ergoveritas.com" &&
+      !url.search &&
+      !url.hash;
+  }), true);
 });

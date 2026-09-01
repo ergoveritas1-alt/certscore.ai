@@ -76,6 +76,40 @@ test("durable publisher forwards the owned-canary Reject observation contract", 
   }
 });
 
+test("durable publisher forwards the independently enabled owned-canary Accept contract", () => {
+  const scanId = "4f75b34a-9755-468d-b8f9-bec6042e94a0";
+  const payload = buildDurableLocalV2DagLambdaDispatchPayload({
+    scanId,
+    scanConfig: {
+      hostname: "ergoveritas.com",
+      normalizedUrl: "https://ergoveritas.com/.well-known/certscore-canary/post-accept/accept-honored.html",
+      execution: {
+        v2DagLambda: {
+          awsRegion: "eu-west-1",
+          contractVersion: "certscore.v2.lambda-dag-dispatch.v1",
+          functionName: "certscore-v2-dag-local-lambda",
+          orchestrationMode: "sharded",
+          postAcceptWorkerEnabled: true,
+          postAcceptWorkerRolloutMode: "owned_canary",
+          processor: "local-certscore-v2-dag-parallel-v1",
+          resultHandoff: "sqs",
+          resultQueueUrl: "https://sqs.eu-west-1.amazonaws.com/123/results",
+          scannerRuntime: "certscore-v2-dag-parallel-path",
+          targetEnvironment: "production",
+          vpcMode: "vpc",
+        },
+      },
+    },
+  });
+
+  assert.equal(payload.postAcceptObservation?.enabled, true);
+  assert.equal(payload.postAcceptObservation?.rolloutMode, "owned_canary");
+  assert.equal(payload.postAcceptObservation?.dispatchDelayMs, 1_000);
+  assert.equal(payload.postAcceptObservation?.resolver.kind, "canonical_cmp_registry");
+  assert.equal(payload.postAcceptObservation?.interactionAuthorization.kind, "owned_canary");
+  assert.equal(payload.postRefusalObservation, undefined);
+});
+
 test("durable publisher forwards bounded resolved exact-target authorization for eligible public scans", () => {
   const scanId = "4f75b34a-9755-468d-b8f9-bec6042e94d7";
   const targetUrl = "https://example.com/privacy-review";
