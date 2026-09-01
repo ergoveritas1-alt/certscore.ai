@@ -157,6 +157,16 @@ export const scanMetadataSchema = z.object({
   schemaVersion: z.string(),
 });
 
+export const scannerBuildProvenanceSchema = z.object({
+  contractVersion: z.literal("scanner_build_provenance.v1"),
+  gitSha: z.string().min(1).max(80).optional(),
+  imageTag: z.string().min(1).max(160).optional(),
+  runtimeVersion: z.string().min(1).max(80).optional(),
+}).strict().refine(
+  (value) => Boolean(value.gitSha || value.imageTag || value.runtimeVersion),
+  { message: "Scanner build provenance must retain at least one build identifier." },
+);
+
 export const siteFacingNavigationDiagnosticsSchema = z.object({
   requestedUrl: z.string().max(500),
   firstResponseAt: z.string().datetime().nullable(),
@@ -1779,6 +1789,15 @@ export const policySurfaceObservationSchema = z.object({
   documentEvaluationState: z.enum(["not_attempted", "usable", "insufficient", "blocked"]).optional(),
   documentRole: z.enum(["policy_document", "policy_index", "unknown"]).optional(),
   documentRoleReasonCodes: z.array(z.string().max(120)).max(12).optional(),
+  governingPolicyBodyAssessment: z.object({
+    contractVersion: z.literal("governing_policy_body_assessment.v1"),
+    state: z.enum(["substantive", "index_like", "insufficient"]),
+    canonicalContextTermCount: z.number().int().nonnegative().max(32),
+    documentTextChars: z.number().int().nonnegative(),
+    evidenceBoundObservedTopicCount: z.number().int().nonnegative().max(32),
+    substantiveDisclosureSignalCount: z.number().int().nonnegative().max(32),
+    reasonCodes: z.array(z.string().max(120)).max(16),
+  }).strict().optional(),
   governingPolicySelection: governingPolicySelectionSchema.optional(),
   documentFormat: z.enum(["html", "pdf", "text", "unknown"]).optional(),
   contentType: z.string().max(160).optional(),
@@ -3198,6 +3217,7 @@ export const canonicalEvidenceBundleSchema = z.object({
   visualAccessReview: visualAccessReviewSchema.optional(),
   visual_access_review: visualAccessReviewSchema.optional(),
   artifactRefs: z.array(artifactRefSchema),
+  scannerBuildProvenance: scannerBuildProvenanceSchema.optional(),
   scannerVersion: z.string(),
   schemaVersion: z.string(),
 }).superRefine((bundle, context) => {
@@ -3351,6 +3371,7 @@ export type DisplaySafeEvidenceExcerpt = z.infer<typeof displaySafeEvidenceExcer
 export type VendorMatchSourceType = z.infer<typeof vendorMatchSourceTypeSchema>;
 export type ScanProfile = z.infer<typeof scanProfileSchema>;
 export type ScanMetadata = z.infer<typeof scanMetadataSchema>;
+export type ScannerBuildProvenance = z.infer<typeof scannerBuildProvenanceSchema>;
 export type ScanModuleRun = z.infer<typeof scanModuleRunSchema>;
 export type RuntimeEvidenceEvent = z.infer<typeof runtimeEvidenceEventSchema>;
 export type NetworkEvent = z.infer<typeof networkEventSchema>;

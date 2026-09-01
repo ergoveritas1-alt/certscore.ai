@@ -179,6 +179,101 @@ test("does not treat an arbitrary customer query parameter as policy ownership",
   assert.notEqual(result.targetRelationship, "first_party_brand");
 });
 
+test("attributes exact hosted privacy-center brand routes only when directly linked by the target", () => {
+  const result = classifyPolicyDocumentOwnership({
+    directlyLinkedFromScannedPage: true,
+    documentTitle: "Privacy Center",
+    documentUrl: "https://bn.clarip.com/privacycenter/?brand=barnesandnoble",
+    targetUrl: "https://www.barnesandnoble.com/",
+    text: "This privacy center describes collection, use, disclosure, retention, and privacy rights for customers.",
+  });
+  assert.equal(result.targetRelationship, "first_party_brand");
+  assert.deepEqual(result.ownershipReasonCodes, [
+    "cross_site_document",
+    "target_brand_exact_policy_route_binding",
+    "direct_target_link_to_brand_bound_policy_route",
+  ]);
+
+  const unlinked = classifyPolicyDocumentOwnership({
+    directlyLinkedFromScannedPage: false,
+    documentTitle: "Privacy Center",
+    documentUrl: "https://bn.clarip.com/privacycenter/?brand=barnesandnoble",
+    targetUrl: "https://www.barnesandnoble.com/",
+    text: "This privacy center describes collection and use.",
+  });
+  assert.notEqual(unlinked.targetRelationship, "first_party_brand");
+});
+
+test("attributes directly linked cross-domain policies when the target brand is bound in title and body", () => {
+  const result = classifyPolicyDocumentOwnership({
+    directlyLinkedFromScannedPage: true,
+    documentTitle: "Honey Privacy Policy",
+    documentUrl: "https://www.joinhoney.com/privacy/eu",
+    targetUrl: "https://honey.io/",
+    text: "Honey explains in this privacy policy how it processes personal data and how members exercise their rights.",
+  });
+  assert.equal(result.targetRelationship, "first_party_brand");
+  assert.deepEqual(result.ownershipReasonCodes, [
+    "cross_site_document",
+    "direct_target_link",
+    "target_brand_named_in_policy_title_and_body",
+  ]);
+});
+
+test("applies time-bound canonical ownership for the MSNBC to MS NOW transition", () => {
+  const afterTransition = classifyPolicyDocumentOwnership({
+    documentTitle: "Privacy Policy | VERSANT MEDIA",
+    documentUrl: "https://www.versantprivacy.com/privacy?intake=MSNOW",
+    observedAt: "2026-08-31T00:00:00.000Z",
+    targetUrl: "https://www.msnbc.com/",
+    text: "This privacy policy explains how Versant Media processes personal information.",
+  });
+  assert.equal(afterTransition.targetRelationship, "first_party_brand");
+  assert.equal(afterTransition.ownershipReasonCodes?.includes(
+    "canonical_relationship_msnbc_ms_now_versant",
+  ), true);
+
+  const beforeTransition = classifyPolicyDocumentOwnership({
+    documentTitle: "Privacy Policy | VERSANT MEDIA",
+    documentUrl: "https://www.versantprivacy.com/privacy?intake=MSNOW",
+    observedAt: "2025-11-14T23:59:59.999Z",
+    targetUrl: "https://www.msnbc.com/",
+    text: "This privacy policy explains how Versant Media processes personal information.",
+  });
+  assert.notEqual(beforeTransition.targetRelationship, "first_party_brand");
+});
+
+test("attributes retained India Today Group and WP Guardian cross-domain policies", () => {
+  const cases = [
+    {
+      targetUrl: "https://aajtak.in/",
+      documentUrl: "https://www.indiatodaygroup.com/privacy-policy.html",
+      reasonCode: "canonical_relationship_aajtak_india_today_group",
+    },
+    {
+      targetUrl: "https://indiatoday.in/",
+      documentUrl: "https://www.indiatodaygroup.com/privacy-policy.html",
+      reasonCode: "canonical_relationship_india_today_group",
+    },
+    {
+      targetUrl: "https://wpguardian.com/",
+      documentUrl: "https://app.wpguardian.io/legal/privacy-policy",
+      reasonCode: "canonical_relationship_wpguardian_cross_tld",
+    },
+  ];
+  for (const entry of cases) {
+    const result = classifyPolicyDocumentOwnership({
+      documentTitle: "Privacy Policy",
+      documentUrl: entry.documentUrl,
+      observedAt: "2026-08-31T00:00:00.000Z",
+      targetUrl: entry.targetUrl,
+      text: "This privacy policy describes how the controller processes personal data.",
+    });
+    assert.equal(result.targetRelationship, "first_party_brand", entry.targetUrl);
+    assert.equal(result.ownershipReasonCodes?.includes(entry.reasonCode), true, entry.targetUrl);
+  }
+});
+
 test("rejects marketing/navigation copy misrouted as a privacy policy", () => {
   assert.equal(policyDocumentMatchesExpectedSurface({
     surfaceType: "privacy_policy",

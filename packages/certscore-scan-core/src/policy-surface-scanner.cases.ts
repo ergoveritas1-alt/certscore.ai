@@ -17,6 +17,7 @@ import {
 import { createArtifactWriter } from "./artifact-writer.js";
 import {
   applyGoverningPolicySelection,
+  assessGoverningPolicyBodyEvidence,
   assessPolicyDocumentRoleForChildSelection,
   assessPolicyDocumentSubstance,
   assessPolicyTextQuality,
@@ -1569,6 +1570,110 @@ test("evidence-bound substantive policies stay documents unless an authoritative
 
   assert.equal(editorialAssessment.role, "policy_index");
   assert.deepEqual(editorialAssessment.reasonCodes, ["scan_region_privacy_document_child_selected"]);
+});
+
+test("complete substantive policy bodies outrank supplemental child counts without promoting navigation indexes", () => {
+  const candidate = {
+    deterministicSurfaceType: "privacy_policy",
+    deterministicClassifierReasonCodes: ["matched_privacy_policy"],
+    fetchable: true,
+    linkText: "Privacy Policy",
+    normalizedUrl: "https://example.test/privacy-policy",
+    observationOnly: false,
+  } as never;
+  const substantiveText = Array.from({ length: 18 }, () =>
+    "This Privacy Policy explains how we collect and use personal information, why we process it, how long we retain it, and how you may exercise your privacy rights."
+  ).join(" ");
+  const substantiveAssessment = assessGoverningPolicyBodyEvidence({
+    candidate,
+    documentSubstance: assessPolicyDocumentSubstance({
+      surfaceType: "privacy_policy",
+      text: substantiveText,
+      title: "Privacy Policy",
+    }),
+    documentTextChars: substantiveText.length,
+    documentTextCoverageStatus: "complete",
+    evidenceBoundObservedTopicCount: 1,
+    substantiveDisclosureSignalCount: 1,
+    targetRelationship: "target_controller",
+    text: substantiveText,
+    title: "Privacy Policy",
+  });
+  assert.equal(substantiveAssessment.state, "substantive");
+
+  const childSelection = {
+    fetchCandidates: [{
+      deterministicSurfaceType: "privacy_policy",
+      normalizedUrl: "https://example.test/privacy-policy/applicants",
+    }, {
+      deterministicSurfaceType: "privacy_policy",
+      normalizedUrl: "https://example.test/privacy-policy/california",
+    }] as never,
+    observedChildCandidates: [],
+  };
+  const role = assessPolicyDocumentRoleForChildSelection(candidate, childSelection, {
+    contentCoverageStatus: "truncated",
+    evidenceBoundObservedTopicCount: 1,
+    governingPolicyBodyAssessment: substantiveAssessment,
+    substantiveDisclosureSignalCount: 1,
+  });
+  assert.equal(role.role, "policy_document");
+  assert.deepEqual(role.reasonCodes, [
+    "governing_policy_body_evidence_retained",
+    "substantive_policy_retains_supplemental_privacy_links",
+  ]);
+
+  const navigationText = Array.from({ length: 30 }, () =>
+    "Customers Solutions Platform Resources Partners Login Demo Customer Stories Blog Reports Search Legal documents Website Privacy Notice See all resources."
+  ).join(" ");
+  const navigationAssessment = assessGoverningPolicyBodyEvidence({
+    candidate,
+    documentSubstance: assessPolicyDocumentSubstance({
+      surfaceType: "privacy_policy",
+      text: navigationText,
+      title: "Website Privacy Notice",
+    }),
+    documentTextChars: navigationText.length,
+    documentTextCoverageStatus: "complete",
+    evidenceBoundObservedTopicCount: 0,
+    substantiveDisclosureSignalCount: 0,
+    targetRelationship: "target_controller",
+    text: navigationText,
+    title: "Website Privacy Notice",
+  });
+  assert.equal(navigationAssessment.state, "index_like");
+  assert.equal(
+    assessPolicyDocumentRoleForChildSelection(candidate, childSelection, {
+      governingPolicyBodyAssessment: navigationAssessment,
+    }).role,
+    "policy_index",
+  );
+
+  const explicitWebsiteNoticeCandidate = {
+    ...candidate,
+    normalizedUrl: "https://example.test/legal-and-compliance/website-privacy-notice/",
+    linkText: "Website Privacy Notice",
+  } as never;
+  const explicitWebsiteNoticeAssessment = assessGoverningPolicyBodyEvidence({
+    candidate: explicitWebsiteNoticeCandidate,
+    documentSubstance: assessPolicyDocumentSubstance({
+      surfaceType: "privacy_policy",
+      text: navigationText,
+      title: "Website Privacy Notice - Example",
+    }),
+    documentTextChars: navigationText.length,
+    documentTextCoverageStatus: "complete",
+    evidenceBoundObservedTopicCount: 0,
+    substantiveDisclosureSignalCount: 0,
+    targetRelationship: "target_controller",
+    text: navigationText,
+    title: "Website Privacy Notice - Example",
+  });
+  assert.equal(explicitWebsiteNoticeAssessment.state, "substantive");
+  assert.equal(
+    explicitWebsiteNoticeAssessment.reasonCodes.includes("explicit_website_privacy_notice_identity"),
+    true,
+  );
 });
 
 test("English and German section evidence produce the same typed topic-coverage diagnostics", () => {

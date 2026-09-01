@@ -1219,6 +1219,7 @@ async function runLocalV2DagLambdaScanBundle(
         region: payload.awsRegion,
         scenarioPlanningMode: "planned_parallel",
         scenarioResourceMode: effectiveScenarioResourceMode(payload, options.scanTuning),
+        scannerBuildProvenance: buildCanonicalBundleScannerBuildProvenance(),
         signal: options.signal,
         url: payload.targetUrl
       });
@@ -4310,6 +4311,19 @@ function buildScannerBuildProvenance() {
     ...(scannerGitSha ? { scannerGitSha } : {}),
     ...(scannerImageTag ? { scannerImageTag } : {}),
     ...(scannerRuntimeVersion ? { scannerRuntimeVersion } : {})
+  };
+}
+
+export function buildCanonicalBundleScannerBuildProvenance() {
+  const provenance = buildScannerBuildProvenance();
+  if (!provenance.scannerGitSha && !provenance.scannerImageTag && !provenance.scannerRuntimeVersion) {
+    return undefined;
+  }
+  return {
+    contractVersion: "scanner_build_provenance.v1" as const,
+    ...(provenance.scannerGitSha ? { gitSha: provenance.scannerGitSha } : {}),
+    ...(provenance.scannerImageTag ? { imageTag: provenance.scannerImageTag } : {}),
+    ...(provenance.scannerRuntimeVersion ? { runtimeVersion: provenance.scannerRuntimeVersion } : {}),
   };
 }
 

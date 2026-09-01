@@ -44,6 +44,7 @@ import {
   buildLocalV2DagLambdaLaneRun,
   buildLocalV2DagLambdaLaneTimingSummary,
   buildLocalV2DagLambdaResultMessage,
+  buildCanonicalBundleScannerBuildProvenance,
   buildVerifiedPreConsentRuntimePreviewPacket,
   buildVerifiedPolicyEvidencePacket,
   buildLocalV2DagLambdaRuntimeDiagnostics,
@@ -1630,6 +1631,30 @@ test("handler accepts truthful VPC dispatch and emits bounded scanner runtime pr
     publicIpHash: `sha256:${"b".repeat(64)}`,
     runtimeVpcMode: "vpc",
   });
+});
+
+test("handler projects bounded build identifiers into canonical bundle provenance", () => {
+  const previousBuildGitSha = process.env.BUILD_GIT_SHA;
+  const previousBuildImageTag = process.env.BUILD_IMAGE_TAG;
+  const previousScannerRuntimeVersion = process.env.SCANNER_RUNTIME_VERSION;
+  process.env.BUILD_GIT_SHA = "abc123scanner";
+  process.env.BUILD_IMAGE_TAG = "scanner-image:abc123scanner";
+  process.env.SCANNER_RUNTIME_VERSION = "v2-dag-runtime.1";
+  try {
+    assert.deepEqual(buildCanonicalBundleScannerBuildProvenance(), {
+      contractVersion: "scanner_build_provenance.v1",
+      gitSha: "abc123scanner",
+      imageTag: "scanner-image:abc123scanner",
+      runtimeVersion: "v2-dag-runtime.1",
+    });
+  } finally {
+    if (previousBuildGitSha === undefined) delete process.env.BUILD_GIT_SHA;
+    else process.env.BUILD_GIT_SHA = previousBuildGitSha;
+    if (previousBuildImageTag === undefined) delete process.env.BUILD_IMAGE_TAG;
+    else process.env.BUILD_IMAGE_TAG = previousBuildImageTag;
+    if (previousScannerRuntimeVersion === undefined) delete process.env.SCANNER_RUNTIME_VERSION;
+    else process.env.SCANNER_RUNTIME_VERSION = previousScannerRuntimeVersion;
+  }
 });
 
 test("handler emits a validated completed SQS result without production findings", async () => {

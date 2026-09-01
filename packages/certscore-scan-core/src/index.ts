@@ -18,6 +18,7 @@ import {
   type RuntimeCoverageSummary,
   type RuntimeEvidenceEvent,
   type ScanProfile,
+  type ScannerBuildProvenance,
   type ScanNoGoAssessment,
   type ScanEvidenceLaneAssessment,
   type ScreenshotArtifact,
@@ -184,6 +185,7 @@ export interface RunScanInput {
   profile?: ScanProfile["profileId"];
   outDir?: string;
   region?: string;
+  scannerBuildProvenance?: ScannerBuildProvenance;
   captureReplay?: boolean;
   captureReplayAuxiliaryProbes?: "all" | "none" | "form" | "accessibility";
   captureReplayTrace?: boolean;
@@ -1333,6 +1335,9 @@ export async function runScan(input: RunScanInput): Promise<CanonicalEvidenceBun
       ...(policySurfaceResult?.artifactRefs ?? []),
       ...(consentFlowResult?.artifactRefs ?? []),
     ],
+    ...(input.scannerBuildProvenance
+      ? { scannerBuildProvenance: input.scannerBuildProvenance }
+      : {}),
     scannerVersion: "certscore-scan-core-v2-alpha",
     schemaVersion: SCHEMA_VERSION,
   }));

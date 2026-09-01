@@ -2368,6 +2368,7 @@ async function processPolicyCandidate({
       }),
     );
   if (urlOnlyStubResolution) {
+    fetchedFinalUrl = urlOnlyStubResolution.url;
     effectiveCandidate = {
       ...candidate,
       url: urlOnlyStubResolution.url,
@@ -2546,8 +2547,10 @@ async function processPolicyCandidate({
     : [];
   const retainedPolicySections = retainedPolicySectionsForObservation(policySections);
   const ownership = classifyPolicyDocumentOwnership({
+    directlyLinkedFromScannedPage: isDirectlyLinkedPolicyCandidate(effectiveCandidate),
     documentTitle: title,
     documentUrl: effectiveCandidate.normalizedUrl,
+    observedAt: new Date(input.scanStartedAtMs).toISOString(),
     targetUrl: input.normalizedUrl,
     text: analysisVisibleText,
   });
@@ -2675,15 +2678,28 @@ async function processPolicyCandidate({
       /^[a-f0-9]{64}$/.test(evidence.sourceDocumentTextSha256 ?? "")
     )
     .map((evidence) => evidence.coverageArea)).size;
+  const substantiveDisclosureSignalCount = merged.article13DisclosureSignals.filter((signal) =>
+    signal.status === "observed"
+  ).length;
+  const governingPolicyBodyAssessment = assessGoverningPolicyBodyEvidence({
+    candidate: effectiveCandidate,
+    documentSubstance,
+    documentTextChars: policySurfaceTextArtifact.documentTextCoverage.retainedTextChars,
+    documentTextCoverageStatus: policySurfaceTextArtifact.documentTextCoverage.status,
+    evidenceBoundObservedTopicCount,
+    substantiveDisclosureSignalCount,
+    targetRelationship: ownership.targetRelationship,
+    text: analysisVisibleText,
+    title,
+  });
   const documentRoleAssessment = assessPolicyDocumentRoleForChildSelection(
     effectiveCandidate,
     childSelection,
     {
-      substantiveDisclosureSignalCount: merged.article13DisclosureSignals.filter((signal) =>
-        signal.status === "observed"
-      ).length,
+      substantiveDisclosureSignalCount,
       evidenceBoundObservedTopicCount,
       contentCoverageStatus: contentCoverage.status,
+      governingPolicyBodyAssessment,
     },
   );
   const gdprTransparencyTopicCoverageDiagnostics =
@@ -2701,6 +2717,7 @@ async function processPolicyCandidate({
       status: "fetched",
       documentRole: documentRoleAssessment.role,
       documentRoleReasonCodes: documentRoleAssessment.reasonCodes,
+      governingPolicyBodyAssessment,
       httpStatus: fetched.status,
       finalUrl: fetchedFinalUrl,
       redirectChain: policyFetchRedirectChain(fetched),
@@ -5472,6 +5489,104 @@ function observationsForUnselectedPrivacyIndexChildren(
   );
 }
 
+export function assessGoverningPolicyBodyEvidence(input: {
+  candidate: PolicySurfaceCandidate;
+  documentSubstance: PolicyDocumentSubstanceAssessment;
+  documentTextChars: number;
+  documentTextCoverageStatus?: "complete" | "partial" | "truncated" | "unavailable";
+  evidenceBoundObservedTopicCount: number;
+  substantiveDisclosureSignalCount: number;
+  targetRelationship?: PolicySurfaceObservation["targetRelationship"];
+  text: string;
+  title?: string;
+}): NonNullable<PolicySurfaceObservation["governingPolicyBodyAssessment"]> {
+  const canonicalContextTermCount = canonicalPolicyBodyContextTermCount(input.title, input.text);
+  const targetOwned = input.targetRelationship === "target_controller" ||
+    input.targetRelationship === "first_party_brand";
+  const classifierConfirmedStandalonePolicyCandidate =
+    input.candidate.deterministicSurfaceType === "privacy_policy" &&
+    (
+      input.candidate.deterministicMatchStrength === "direct" ||
+      input.candidate.deterministicClassifierReasonCodes.includes("match_strength_direct") ||
+      input.candidate.deterministicClassifierReasonCodes.includes("match_strength_equivalent")
+    ) &&
+    input.candidate.deterministicClassifierReasonCodes.includes("matched_privacy_policy") &&
+    input.candidate.deterministicClassifierReasonCodes.includes("context_satisfied") &&
+    !input.candidate.deterministicClassifierReasonCodes.includes(
+      "variant_combined_privacy_terms_surface",
+    );
+  const exactPolicyCandidate = isExactPolicyDocumentCandidate(input.candidate) ||
+    classifierConfirmedStandalonePolicyCandidate;
+  const textCoverageComplete = input.documentTextCoverageStatus === "complete";
+  const substantiveAssessment = input.documentSubstance.reasonCode === "substantive_topic_match" ||
+    input.documentSubstance.reasonCode === "substantive_privacy_signals";
+  const explicitWebsitePrivacyNoticeIdentity =
+    /(?:^|[\/_-])website[-_ ]privacy[-_ ](?:policy|notice)(?:[\/_.-]|$)/i
+      .test(input.candidate.normalizedUrl) &&
+    /\bwebsite\s+privacy\s+(?:policy|notice)\b/i.test(input.title ?? "");
+  const substantiveEvidence = substantiveAssessment ||
+    classifierConfirmedStandalonePolicyCandidate ||
+    explicitWebsitePrivacyNoticeIdentity ||
+    canonicalContextTermCount >= 2 ||
+    input.substantiveDisclosureSignalCount >= 1 ||
+    input.evidenceBoundObservedTopicCount >= 1;
+  const minimumBodyRetained = input.documentTextChars >= MIN_SUBSTANTIVE_POLICY_TEXT_CHARS;
+  const state = targetOwned &&
+      exactPolicyCandidate &&
+      textCoverageComplete &&
+      minimumBodyRetained &&
+      input.documentSubstance.matchesExpectedSurface &&
+      substantiveEvidence
+    ? "substantive" as const
+    : exactPolicyCandidate &&
+        textCoverageComplete &&
+        minimumBodyRetained &&
+        input.documentSubstance.reasonCode === "multilingual_policy_reviewable" &&
+        canonicalContextTermCount < 2 &&
+        input.substantiveDisclosureSignalCount === 0 &&
+        input.evidenceBoundObservedTopicCount === 0
+      ? "index_like" as const
+      : "insufficient" as const;
+
+  return {
+    contractVersion: "governing_policy_body_assessment.v1",
+    state,
+    canonicalContextTermCount,
+    documentTextChars: input.documentTextChars,
+    evidenceBoundObservedTopicCount: input.evidenceBoundObservedTopicCount,
+    substantiveDisclosureSignalCount: input.substantiveDisclosureSignalCount,
+    reasonCodes: uniqueStrings([
+      targetOwned ? "policy_body_target_owned" : "policy_body_target_ownership_unverified",
+      exactPolicyCandidate ? "exact_privacy_policy_candidate" : "privacy_candidate_not_exact",
+      textCoverageComplete ? "complete_policy_text_retention" : "policy_text_retention_incomplete",
+      minimumBodyRetained ? "minimum_substantive_policy_text_retained" : "policy_text_below_substantive_minimum",
+      substantiveAssessment ? input.documentSubstance.reasonCode : null,
+      classifierConfirmedStandalonePolicyCandidate
+        ? "canonical_classifier_confirmed_standalone_policy_body"
+        : null,
+      explicitWebsitePrivacyNoticeIdentity ? "explicit_website_privacy_notice_identity" : null,
+      canonicalContextTermCount >= 2 ? "canonical_multilingual_policy_context_retained" : null,
+      input.substantiveDisclosureSignalCount >= 1 ? "substantive_disclosure_signal_retained" : null,
+      input.evidenceBoundObservedTopicCount >= 1 ? "evidence_bound_policy_topic_retained" : null,
+      state === "index_like" ? "navigation_or_index_body_not_overridden" : null,
+    ].filter((value): value is string => value !== null)).slice(0, 16),
+  };
+}
+
+function canonicalPolicyBodyContextTermCount(title: string | undefined, text: string): number {
+  const normalizedTitleAndOpening = normalizeWhitespace(`${title ?? ""} ${text.slice(0, 1_200)}`)
+    .normalize("NFKC")
+    .toLowerCase();
+  const normalizedText = normalizeWhitespace(text).normalize("NFKC").toLowerCase();
+  return PRIVACY_EVIDENCE_LOCALE_REGISTRY.reduce((best, entry) => {
+    const labels = entry.privacyPolicyLabels.map((term) => term.normalize("NFKC").toLowerCase());
+    if (!labels.some((term) => normalizedTitleAndOpening.includes(term))) return best;
+    const contextTerms = uniqueStrings(entry.contextHints
+      .map((term) => term.normalize("NFKC").toLowerCase()));
+    return Math.max(best, contextTerms.filter((term) => normalizedText.includes(term)).length);
+  }, 0);
+}
+
 export function policyDocumentRoleForChildSelection(
   candidate: PolicySurfaceCandidate,
   selection: { fetchCandidates: PolicySurfaceCandidate[]; observedChildCandidates: PolicySurfaceCandidate[] },
@@ -5479,6 +5594,7 @@ export function policyDocumentRoleForChildSelection(
     substantiveDisclosureSignalCount?: number;
     evidenceBoundObservedTopicCount?: number;
     contentCoverageStatus?: "complete" | "partial" | "truncated" | "malformed";
+    governingPolicyBodyAssessment?: PolicySurfaceObservation["governingPolicyBodyAssessment"];
   } = {},
 ): "policy_document" | "policy_index" | "unknown" {
   return assessPolicyDocumentRoleForChildSelection(candidate, selection, options).role;
@@ -5491,6 +5607,7 @@ export function assessPolicyDocumentRoleForChildSelection(
     substantiveDisclosureSignalCount?: number;
     evidenceBoundObservedTopicCount?: number;
     contentCoverageStatus?: "complete" | "partial" | "truncated" | "malformed";
+    governingPolicyBodyAssessment?: PolicySurfaceObservation["governingPolicyBodyAssessment"];
   } = {},
 ): {
   role: "policy_document" | "policy_index" | "unknown";
@@ -5539,6 +5656,17 @@ export function assessPolicyDocumentRoleForChildSelection(
   // transparency disclosures.
   if ((options.substantiveDisclosureSignalCount ?? 0) >= 2) {
     return { role: "policy_document", reasonCodes: ["multiple_substantive_disclosure_signals_retained"] };
+  }
+  if (options.governingPolicyBodyAssessment?.state === "substantive") {
+    return {
+      role: "policy_document",
+      reasonCodes: [
+        "governing_policy_body_evidence_retained",
+        ...(privacyChildren.length > 0
+          ? ["substantive_policy_retains_supplemental_privacy_links"]
+          : []),
+      ],
+    };
   }
   if (privacyChildren.some((child) =>
     child.selectionReasonCodes?.includes("website_privacy_notice_for_scanned_site")
@@ -5863,6 +5991,7 @@ function observationFromCandidate(
     documentTextCoverage: input.documentTextCoverage,
     documentRole: input.documentRole,
     documentRoleReasonCodes: input.documentRoleReasonCodes ?? [],
+    governingPolicyBodyAssessment: input.governingPolicyBodyAssessment,
     governingPolicySelection: input.governingPolicySelection,
     httpStatus: input.httpStatus,
     finalUrl: input.finalUrl,
@@ -5908,6 +6037,12 @@ function observationFromCandidate(
   };
 }
 
+function isDirectlyLinkedPolicyCandidate(candidate: PolicySurfaceCandidate): boolean {
+  return (candidate.traversalDepth ?? 0) === 0 &&
+    ["footer_link", "header_link", "page_text_link"].includes(candidate.discoveryMethod) &&
+    (candidate.clickable || candidate.observationOnly);
+}
+
 function normalizedEntityToken(value: string | undefined): string | undefined {
   const normalized = normalizeWhitespace(value ?? "")
     .replace(/\b(?:privacy|data protection|cookie)\s+(?:policy|notice|statement)\b/gi, " ")
@@ -5921,8 +6056,10 @@ function normalizedEntityToken(value: string | undefined): string | undefined {
 }
 
 export function classifyPolicyDocumentOwnership(input: {
+  directlyLinkedFromScannedPage?: boolean;
   documentTitle?: string;
   documentUrl: string;
+  observedAt?: string;
   targetUrl: string;
   text: string;
 }): Pick<
@@ -5953,6 +6090,7 @@ export function classifyPolicyDocumentOwnership(input: {
   const canonicalBrandRelationship = canonicalPolicyDocumentBrandRelationship({
     targetUrl: input.targetUrl,
     documentUrl: input.documentUrl,
+    observedAt: input.observedAt,
   });
   if (canonicalBrandRelationship) {
     return {
@@ -5968,18 +6106,23 @@ export function classifyPolicyDocumentOwnership(input: {
 
   const targetBrand = targetSite?.split(".")[0]?.replace(/[-_]+/g, " ");
   const documentBrand = documentSite?.split(".")[0]?.replace(/[-_]+/g, " ");
-  const ownershipExcerpt = normalizeWhitespace(
-    `${input.documentTitle ?? ""} ${input.text.slice(0, 4_000)}`,
-  );
-  const targetNamed = targetBrand
-    ? new RegExp(`\\b${escapeRegExp(targetBrand)}\\b`, "i").test(ownershipExcerpt)
-    : false;
-  const documentNamed = documentBrand
-    ? new RegExp(`\\b${escapeRegExp(documentBrand)}\\b`, "i").test(ownershipExcerpt)
+  const ownershipExcerpt = boundedOwnershipEvidenceText({
+    documentTitle: input.documentTitle,
+    documentBrand,
+    targetBrand,
+    text: input.text,
+  });
+  const targetNamed = targetBrand ? brandNamedInText(targetBrand, ownershipExcerpt) : false;
+  const documentNamed = documentBrand ? brandNamedInText(documentBrand, ownershipExcerpt) : false;
+  const targetNamedInTitle = targetBrand
+    ? brandNamedInText(targetBrand, input.documentTitle ?? "")
     : false;
   const controllerLanguage =
     /\b(?:data controller|controller of (?:your|the) (?:personal )?data|responsible for (?:processing|this (?:policy|notice))|this (?:privacy )?(?:policy|notice) applies to|(?:members?|companies|entities)\b.{0,120}\bcontrol(?:s|led|ling)?\b.{0,80}\b(?:information|personal data)|which\b.{0,80}\b(?:entity|member|company)\b.{0,80}\bcontrol(?:s|led|ling)?\b)\b/i
-      .test(ownershipExcerpt);
+      .test(ownershipExcerpt) ||
+    classifyGdprTransparencyTopics({ text: ownershipExcerpt }).matches.some((match) =>
+      match.topic === "controller_contact"
+    );
   const targetNamedInCorporateFamily = targetBrand
     ? new RegExp(
       `(?:\\b(?:its|our|the)\\s+(?:subsidiaries|affiliates)\\b.{0,240}\\b${escapeRegExp(targetBrand)}\\b|` +
@@ -6001,11 +6144,14 @@ export function classifyPolicyDocumentOwnership(input: {
     }
     try {
       const documentUrl = new URL(input.documentUrl);
-      return ["brand", "intake", "product", "service", "site"].some((key) =>
-        documentUrl.searchParams.getAll(key).some((value) =>
-          value.replace(/[^a-z0-9]+/gi, "").toLowerCase() === targetToken
-        )
-      );
+      return [...documentUrl.searchParams.entries()].some(([key, value]) => {
+        if (!/^(?:brand[a-z0-9_-]*|intake|product|service|site)$/i.test(key)) return false;
+        const valueToken = value.replace(/[^a-z0-9]+/gi, "").toLowerCase();
+        if (valueToken === targetToken) return true;
+        const suffix = valueToken.slice(targetToken.length);
+        return valueToken.startsWith(targetToken) &&
+          ["app", "apps", "digital", "network", "networks", "service", "services"].includes(suffix);
+      });
     } catch {
       return false;
     }
@@ -6036,7 +6182,7 @@ export function classifyPolicyDocumentOwnership(input: {
     };
   }
 
-  if (targetBrandRouteBound && controllerLanguage) {
+  if (targetBrandRouteBound && (controllerLanguage || input.directlyLinkedFromScannedPage === true)) {
     return {
       documentOwnerEntity: documentEntity ?? documentSite ?? undefined,
       targetRelationship: "first_party_brand",
@@ -6044,7 +6190,29 @@ export function classifyPolicyDocumentOwnership(input: {
       ownershipReasonCodes: [
         "cross_site_document",
         "target_brand_exact_policy_route_binding",
-        "corporate_policy_controller_language",
+        ...(controllerLanguage ? ["corporate_policy_controller_language"] : []),
+        ...(input.directlyLinkedFromScannedPage
+          ? ["direct_target_link_to_brand_bound_policy_route"]
+          : []),
+      ],
+    };
+  }
+
+  if (
+    input.directlyLinkedFromScannedPage === true &&
+    targetNamed &&
+    targetNamedInTitle &&
+    /(?:privacy|privacypolicy|data-protection|datenschutz|privacidad|confidentialit|polityka-prywatnosci)/i
+      .test(`${input.documentTitle ?? ""} ${input.documentUrl}`)
+  ) {
+    return {
+      documentOwnerEntity: documentEntity ?? targetBrand,
+      targetRelationship: "first_party_brand",
+      ownershipConfidence: 0.84,
+      ownershipReasonCodes: [
+        "cross_site_document",
+        "direct_target_link",
+        "target_brand_named_in_policy_title_and_body",
       ],
     };
   }
@@ -6068,6 +6236,34 @@ export function classifyPolicyDocumentOwnership(input: {
     ownershipConfidence: 0.45,
     ownershipReasonCodes: ["document_ownership_not_deterministically_attributed"],
   };
+}
+
+function brandNamedInText(brand: string, text: string): boolean {
+  const brandToken = brand.normalize("NFKC").replace(/[^\p{L}\p{N}]+/gu, "").toLowerCase();
+  if (brandToken.length < 4) return false;
+  const textToken = text.normalize("NFKC").replace(/[^\p{L}\p{N}]+/gu, "").toLowerCase();
+  return textToken.includes(brandToken);
+}
+
+function boundedOwnershipEvidenceText(input: {
+  documentTitle?: string;
+  documentBrand?: string;
+  targetBrand?: string;
+  text: string;
+}): string {
+  const normalized = normalizeWhitespace(input.text);
+  const windows = [
+    normalized.slice(0, 6_000),
+    normalized.slice(-3_000),
+  ];
+  for (const brand of [input.targetBrand, input.documentBrand]) {
+    if (!brand) continue;
+    const index = normalized.toLocaleLowerCase().indexOf(brand.toLocaleLowerCase());
+    if (index < 0) continue;
+    windows.push(normalized.slice(Math.max(0, index - 1_500), index + brand.length + 2_500));
+  }
+  return normalizeWhitespace(`${input.documentTitle ?? ""} ${uniqueStrings(windows).join(" ")}`)
+    .slice(0, 16_000);
 }
 
 function policyContentCoverage(input: {
