@@ -73,6 +73,8 @@ ENV BUILD_GIT_SHA="${BUILD_GIT_SHA}"
 ENV BUILD_IMAGE_TAG="${BUILD_IMAGE_TAG}"
 ENV BUILD_RUNTIME_TARGET="${BUILD_RUNTIME_TARGET}"
 
+RUN apk upgrade --no-cache
+
 WORKDIR /app
 
 COPY --from=prod-deps /app/deploy/mcp/node_modules ./node_modules
