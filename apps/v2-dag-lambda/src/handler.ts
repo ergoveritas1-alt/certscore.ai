@@ -5738,6 +5738,7 @@ export async function handler(event: unknown, options: HandlerOptions = {}) {
           ? { postAcceptEvidence: artifactResult.postAcceptEvidence }
           : {}),
         ...(consentRejectAvailability ? { consentRejectAvailability } : {}),
+        ...(payload.parentDispatchSha256 ? { parentDispatchSha256: payload.parentDispatchSha256 } : {}),
         scanId: payload.scanId,
         status: "completed" as const,
         workerLane: payload.workerLane ?? "coordinator",

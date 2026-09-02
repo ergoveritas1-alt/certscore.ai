@@ -2587,6 +2587,39 @@ test("handler evidence worker returns verified artifact pointers without publish
   assert.equal(sentMessages, 0);
 });
 
+test("handler GPC worker returns the exact parent dispatch checksum", async () => {
+  const parent = parseLocalV2DagLambdaDispatchPayload(validPayload({
+    gpcObservation: {
+      contractVersion: "certscore.gpc-observation-dispatch.v1",
+      enabled: true,
+      pairWithLane: "runtime_evidence",
+      protocol: "passive_baseline_with_sec_gpc",
+    },
+    orchestrationMode: "sharded",
+  }));
+  const parentDispatchSha256 = postRefusalParentDispatchSha256(parent);
+  const result = await handler(validPayload({
+    gpcObservation: parent.gpcObservation,
+    orchestrationMode: "worker",
+    parentDispatchSha256,
+    workerLane: "gpc_observation",
+  }), {
+    runArtifactChain: async () => ({
+      artifactMetadata: {
+        scanArtifactUri: { sha256: "a".repeat(64), sizeBytes: 123 },
+      },
+      artifactPointers: {
+        scanArtifactUri: "s3://certscore-v2-local-artifacts/v2/scan-local-1/lanes/gpc_observation/CanonicalEvidenceBundle.json",
+      },
+      phaseTimings: [],
+    }),
+  });
+
+  assert.equal(result.status, "completed");
+  assert.equal(result.workerLane, "gpc_observation");
+  assert.equal(result.parentDispatchSha256, parentDispatchSha256);
+});
+
 test("policy evidence worker completes the verified early handoff without publishing a terminal result", async () => {
   const previousBucket = process.env.CERTSCORE_V2_DAG_LAMBDA_ARTIFACT_BUCKET;
   process.env.CERTSCORE_V2_DAG_LAMBDA_ARTIFACT_BUCKET = "certscore-test-artifacts";
