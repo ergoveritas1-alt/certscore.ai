@@ -96,7 +96,7 @@ const discoveryDocument = {
     distribution: "homebrew",
     binary: "certscore-mcp",
     packageStatus: "homebrew_developer_preview",
-    currentVersion: "0.2.12",
+    currentVersion: "0.2.17",
     docs: "https://certscore.ai/developers/mcp",
     repositoryPath: "packages/certscore-mcp",
     install: "brew tap ergoveritas1-alt/certscore https://github.com/ergoveritas1-alt/certscore.ai && brew install --cask certscore-mcp",
@@ -113,7 +113,7 @@ const discoveryDocument = {
       protectedResourceMetadata: "https://mcp.certscore.ai/.well-known/oauth-protected-resource",
       authorizationServerMetadata: "https://certscore.ai/.well-known/oauth-authorization-server",
       authentication: "OAuth 2.0 authorization code with PKCE",
-      currentVersion: "0.2.16",
+      currentVersion: "0.2.17",
       claudeTrialScanCreation: {
         automatic: true,
         eligiblePlan: "free",
@@ -148,7 +148,7 @@ const discoveryDocument = {
       iconUrl: "https://certscore.ai/certscore-mark-dark.png",
       darkBackgroundIconUrl: "https://certscore.ai/certscore-mark-light.png",
       clineMarketplaceIconUrl: "https://certscore.ai/images/mcp-directory/certscore-mcp-light-cline-400.png",
-      version: "0.2.16",
+      version: "0.2.17",
       tools: ["certscore_scan_site", "certscore_get_scan_status", "certscore_get_scan_bundle"],
       intendedUse: "Frictionless no-account public website scans for new and low-volume agents."
     },
