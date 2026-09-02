@@ -274,7 +274,7 @@ test("normalizes consent options prominence before concern policy assigns checkl
   }
 });
 
-test("normalizes a retained paid decline variant as a checklist-only review signal", () => {
+test("normalizes a retained paid decline variant as an externally eligible review finding", () => {
   const assessment = deriveConsentControlAssessment({
     scan: {
       scanId: "scan-paid-decline",
@@ -338,9 +338,23 @@ test("normalizes a retained paid decline variant as a checklist-only review sign
   assert.ok(concern);
   assert.equal(assessment.controls.reject.state, "not_observed");
   assert.equal(concern.regulatoryChecklistEligibility, "review_signal");
-  assert.equal(concern.promotionEligibility, "internal_only");
-  assert.equal(concern.externalSurfacingEligibility, "audit_only");
+  assert.equal(concern.promotionEligibility, "eligible");
+  assert.equal(concern.externalSurfacingEligibility, "eligible");
+  assert.equal(concern.suggestedUnifiedFindingId, "paid_alternative_required_to_decline_tracking");
   assert.equal(concern.evidenceBundle.rawEvidence?.consentPaidDeclinePathEvidence, true);
+  assert.equal(concern.evidenceBundle.rawEvidence?.scoreEffect, "none");
+  const packets = buildUnifiedFindingDisplayPackets({
+    reviewFindingCandidates: [],
+    runtimeArtifacts: { consentControlAssessment: assessment },
+    validationFindingLookup: new Map(),
+    validationFindings: []
+  });
+  const paidFinding = packets.find((packet) =>
+    packet.unifiedFindingId === "paid_alternative_required_to_decline_tracking"
+  );
+  assert.ok(paidFinding);
+  assert.equal(paidFinding.presentationDecision.status, "surface");
+  assert.equal(paidFinding.severity, "medium");
 });
 
 test("normalizes complete no-surface evidence and classified activity into a reject review signal", () => {

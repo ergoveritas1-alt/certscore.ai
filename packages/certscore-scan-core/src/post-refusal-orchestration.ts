@@ -1,4 +1,4 @@
-export const POST_REFUSAL_CANONICAL_BARRIER_MAX_TAIL_WAIT_MS = 6_000;
+export const POST_REFUSAL_CANONICAL_BARRIER_MAX_TAIL_WAIT_MS = 8_000;
 
 export type PostRefusalReportPublicationDecision = {
   mode: "single_reconciliation" | "single_reconciliation_limited";

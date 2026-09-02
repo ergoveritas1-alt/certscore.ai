@@ -64,6 +64,21 @@ test("canonical Usercentrics confirmation requires an exact uc_settings transiti
   });
 });
 
+test("canonical Fides Reject uses its first-layer control and retained consent transition", () => {
+  const fides = buildCanonicalPostRefusalActionRecipes().find((recipe) =>
+    recipe.cmpId === "Fides"
+  );
+
+  assert.ok(fides);
+  assert.equal(fides.controlSelector, "#fides-banner button.fides-reject-all-button");
+  assert.equal(fides.bannerSelector, "#fides-banner");
+  assert.equal(fides.recipeId, "canonical-cmp:Fides:reject:v2");
+  assert.deepEqual(fides.confirmation, {
+    kind: "tcf_purposes_denied_or_cmp_cookie_changed",
+    cookieName: "fides_consent",
+  });
+});
+
 test("canonical tarteaucitron recipe requires the exact necessary-only state before Save", () => {
   const tarteaucitron = buildCanonicalPostRefusalActionRecipes().find((recipe) =>
     recipe.cmpId === "DSGVO All in One / tarteaucitron"
@@ -103,4 +118,45 @@ test("canonical OpenAI confirmation requires the complete exact refusal cookie b
       : 0,
     5,
   );
+});
+
+test("high-exposure CMP Reject recipes require stable controls and retained state transitions", () => {
+  const recipes = buildCanonicalPostRefusalActionRecipes();
+  const expected = [
+    ["CookieYes", ".cky-consent-container .cky-btn-reject", "cookieyes-consent"],
+    ["TrustArc", ".trustarc-declineall-btn", "notice_gdpr_prefs"],
+    ["Sourcepoint", ".sp_choice_type_REJECT_ALL", "_sp_user_consent"],
+    ["Didomi", "#didomi-notice-disagree-button", "didomi_token"],
+    ["Osano", ".osano-cm-deny-all", "osano_consentmanager"],
+    ["Consentmanager", "a.cmpboxbtnno", "__cmpconsent"],
+    ["HubSpot Consent Banner", "#hs-eu-decline-button", "__hs_cookie_cat_pref"],
+    ["Ketch", "#ketch-banner-button-secondary", "ketch_consent"],
+    ["Cookie Information", ".coi-banner__decline", "CookieInformationConsent"],
+  ] as const;
+
+  for (const [cmpId, selector, cookieName] of expected) {
+    const recipe = recipes.find((candidate) => candidate.cmpId === cmpId);
+    assert.ok(recipe, `${cmpId} Reject recipe should be registered`);
+    assert.equal(recipe.controlSelector, selector);
+    if (cmpId === "HubSpot Consent Banner") {
+      assert.equal(
+        recipe.runtimeUrlPatternSources?.some((source) => source.includes("hs-banner")),
+        true,
+      );
+    }
+    if (recipe.confirmation.kind === "cmp_cookie_names_changed") {
+      assert.ok(recipe.confirmation.cookieNames.includes(cookieName));
+    } else {
+      assert.ok(
+        recipe.confirmation.kind === "cmp_cookie_changed" ||
+        recipe.confirmation.kind === "tcf_purposes_denied_or_cmp_cookie_changed",
+      );
+      assert.equal(recipe.confirmation.cookieName, cookieName);
+    }
+  }
+
+  const iubenda = recipes.find((candidate) => candidate.cmpId === "Iubenda");
+  assert.ok(iubenda);
+  assert.equal(iubenda.accessibleControl?.kind, "scoped_accessible_control");
+  assert.equal(iubenda.accessibleControl?.scopeSelector, ".iubenda-cs-opt-group-consent");
 });

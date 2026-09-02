@@ -5735,6 +5735,10 @@ const UNIFIED_FINDING_PRESENTATION_COPY_OVERRIDES: Record<
     suggestedFix: "Correct the consent-platform state transition so the saved consent record matches the visitor’s confirmed Accept choice.",
     whyThisMatters: "The visitor clicked Accept, but the saved consent record still showed optional purposes as denied. That mismatch can cause the site and its vendors to act on the wrong choice."
   },
+  paid_alternative_required_to_decline_tracking: {
+    suggestedFix: "Offer a clear free Reject or necessary-only choice on the first layer, or review and document whether the paid alternative is genuinely equivalent, accessible, and appropriately priced.",
+    whyThisMatters: "The first consent layer offered acceptance, but avoiding optional tracking required payment or a subscription. That can affect whether the visitor had a genuinely free choice and warrants a case-specific review."
+  },
   pre_consent_storage_not_cleared: {
     suggestedFix: "Review the retained identifier and either clear it after confirmed refusal or document and verify that it remains inactive and is not transmitted or used.",
     whyThisMatters: "The exact same classified non-essential identifier remained stored after refusal. Stored presence alone does not establish active post-refusal use."

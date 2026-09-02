@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
+import { createServer, type Server } from "node:http";
 import test from "node:test";
 import {
   decodeTcfV2PurposeConsents,
@@ -9,6 +10,7 @@ import {
   POST_REFUSAL_PRE_ACTION_BASELINE_MAX_AGE_MS,
   postRefusalStorageIdentityHash,
   responseCookieNamesFromHeaders,
+  resolveInstrumentedWriteStorageIdentity,
   runPostRefusalObserver,
   scopedAncestorSelector,
   selectExactResponseCookieWriteAnchor,
@@ -46,6 +48,13 @@ test("reject honored confirms registration without post-refusal activity", async
 
     assert.equal(packet.refusalRegistration.status, "confirmed");
     assert.equal(packet.refusalRegistration.refusalExercised, true);
+    assert.equal(packet.actionControlProof?.action, "reject");
+    assert.equal(packet.actionControlProof?.accessibleLabel, "Reject all");
+    assert.equal(packet.actionControlProof?.actionSemantics, "direct_label");
+    assert.equal(packet.actionControlProof?.classifierIntent, "reject");
+    assert.equal(packet.actionControlProof?.visible, true);
+    assert.equal(packet.actionControlProof?.enabled, true);
+    assert.equal(packet.actionControlProof?.uniquelyActionable, true);
     assert.equal(packet.network.postRefusalNonEssentialRequests.length, 0);
     assert.equal(packet.storage.writesAfterRefusal.filter((write) => write.nonEssential).length, 0);
     assert.equal(packet.storage.nonEssentialItemsPersistingAfterRefusal.length, 0);
@@ -59,11 +68,34 @@ test("reject honored confirms registration without post-refusal activity", async
   });
 });
 
+test("post-refusal observer does not click when the recipe resolves the Accept control", async () => {
+  await withFixture("post-refusal-reject-honored", async (url) => {
+    const packet = await observe(url, {
+      recipe: {
+        ...recipe,
+        recipeId: "certscore-local-fixture-wrong-control-v1",
+        controlSelector: '[data-certscore-consent-action="accept"]',
+      },
+    });
+
+    assert.equal(packet.resolver.found, false);
+    assert.equal(packet.resolver.reason, "label_mismatch");
+    assert.equal(packet.refusalRegistration.status, "not_attempted");
+    assert.equal(packet.refusalRegistration.refusalExercised, false);
+    assert.equal(packet.actionControlProof, undefined);
+    assert.ok(packet.limitations.includes("label_mismatch"));
+    assert.ok(packet.limitations.includes("resolved_control_intent_accept"));
+  });
+});
+
 test("does not click a deterministic Reject control before its document handler is ready", async () => {
   await withFixture("post-refusal-reject-handler-after-dom-ready", async (url) => {
     const packet = await observe(url, { actionSearchTimeoutMs: 1_000 });
 
-    assert.equal(packet.resolver.found, true);
+    assert.equal(packet.resolver.found, true, JSON.stringify({
+      limitations: packet.limitations,
+      resolver: packet.resolver,
+    }));
     assert.equal(packet.refusalRegistration.status, "confirmed");
     assert.equal(packet.refusalRegistration.refusalExercised, true);
     assert.equal(packet.interactionDiagnostics.click.outcome, "completed");
@@ -78,7 +110,10 @@ test("confirms the canonical OpenAI refusal cookie bundle only after a fresh Rej
   await withFixture("post-refusal-openai-cookie-confirmed", async (url) => {
     const packet = await observe(url, { recipe: openAiRecipe });
 
-    assert.equal(packet.resolver.found, true);
+    assert.equal(packet.resolver.found, true, JSON.stringify({
+      limitations: packet.limitations,
+      resolver: packet.resolver,
+    }));
     assert.equal(packet.refusalRegistration.status, "confirmed");
     assert.equal(packet.refusalRegistration.refusalExercised, true);
     assert.equal(
@@ -120,7 +155,7 @@ test("does not confirm a partial OpenAI refusal cookie bundle", async () => {
   });
 });
 
-test("re-resolves a rerendered OpenAI Reject control through bounded canonical geometry", async () => {
+test("waits for a safely actionable rerendered OpenAI Reject control through bounded canonical geometry", async () => {
   const recipeCandidates = buildCanonicalPostRefusalActionRecipes();
   await withFixture("post-refusal-openai-rerendered-control", async (url) => {
     const packet = await observe(url, {
@@ -135,7 +170,8 @@ test("re-resolves a rerendered OpenAI Reject control through bounded canonical g
     assert.equal(packet.refusalRegistration.status, "confirmed");
     assert.equal(packet.refusalRegistration.refusalExercised, true);
     assert.equal(packet.interactionDiagnostics?.click.outcome, "completed");
-    assert.equal(packet.interactionDiagnostics?.click.reResolvedBeforeDispatch, true);
+    assert.equal(packet.interactionDiagnostics?.click.reResolvedBeforeDispatch, false);
+    assert.match(packet.resolver.recipeId, /^canonical-control:reject:v2:/);
   });
 });
 
@@ -185,7 +221,15 @@ test("canonical control discovery uniquely resolves Reject among controls sharin
       actionSearchTimeoutMs: 2_000,
     });
 
-    assert.equal(packet.resolver.found, true);
+    assert.equal(
+      packet.resolver.found,
+      true,
+      JSON.stringify({
+        resolver: packet.resolver,
+        limitations: packet.limitations,
+        interactionDiagnostics: packet.interactionDiagnostics,
+      }),
+    );
     assert.equal(packet.resolver.method, "canonical_consent_control_registry_recipe");
     assert.match(packet.resolver.recipeId, /^canonical-control:reject:v2:/);
     assert.equal(packet.refusalRegistration.status, "confirmed");
@@ -221,6 +265,34 @@ test("geometry-resolved OneTrust controls inherit canonical semantic confirmatio
     assert.equal(packet.refusalRegistration.witnesses.some((witness) =>
       witness.witnessType === "cmp_cookie_state" && witness.key === "OptanonConsent"
     ), true);
+  });
+});
+
+test("runtime-identified CMP resolves its canonical live Reject control before a stale selector", async () => {
+  await withFixture("post-refusal-onetrust-cookie-confirmed", async (url) => {
+    const packet = await observe(url, {
+      actionSearchTimeoutMs: 1_500,
+      allowCanonicalRejectDiscovery: true,
+      recipe: {
+        artifactVersion: "certscore.post_refusal_action_recipe.v1",
+        recipeId: "canonical-cmp:Runtime Fixture CMP:reject:stale-selector",
+        cmpId: "Runtime Fixture CMP",
+        resolverMethod: "cmp_registry_recipe",
+        controlSelector: "#stale-registered-reject-selector",
+        runtimeUrlPatternSources: ["127\\.0\\.0\\.1"],
+        bannerSelector: "#onetrust-banner-sdk",
+        confirmation: {
+          kind: "cmp_cookie_changed",
+          cookieName: "OptanonConsent",
+        },
+      },
+    });
+
+    assert.equal(packet.resolver.found, true);
+    assert.equal(packet.resolver.cmpId, "Runtime Fixture CMP");
+    assert.equal(packet.resolver.method, "cmp_registry_recipe");
+    assert.match(packet.resolver.recipeId, /^canonical-control:reject:v2:/);
+    assert.equal(packet.refusalRegistration.status, "confirmed");
   });
 });
 
@@ -705,41 +777,66 @@ test("banner removal alone does not confirm refusal registration", async () => {
   });
 });
 
-test("a deterministic control click failure returns a neutral unconfirmed packet", async () => {
+test("a covered deterministic control remains neutral and is not attempted", async () => {
   await withFixture("post-refusal-reject-click-fails", async (url) => {
     const packet = await observe(url, { confirmationTimeoutMs: 100 });
 
-    assert.equal(packet.resolver.found, true);
-    assert.equal(packet.refusalRegistration.status, "unconfirmed");
+    assert.equal(packet.resolver.found, false);
+    assert.equal(packet.refusalRegistration.status, "not_attempted");
     assert.equal(packet.refusalRegistration.refusalExercised, false);
-    assert.equal(packet.refusalRegistration.reason, "deterministic_reject_control_click_failed");
+    assert.equal(packet.refusalRegistration.reason, "deterministic_reject_control_not_found");
     assert.equal(packet.refusalRegistration.actionDispatchedAtMs, undefined);
-    assert.equal(packet.interactionDiagnostics?.click.outcome, "failed_before_dispatch");
+    assert.equal(packet.interactionDiagnostics?.click.outcome, "not_attempted");
     assert.equal(packet.interactionDiagnostics?.click.confirmationCheckedAfterError, false);
-    assert.equal(packet.interactionDiagnostics?.click.actionability?.controlVisible, true);
-    assert.equal(packet.interactionDiagnostics?.click.actionability?.controlEnabled, true);
-    assert.equal(
-      packet.interactionDiagnostics?.click.actionability?.centerHitTargetRelation,
-      "other_element",
-    );
+    assert.equal(packet.interactionDiagnostics?.click.actionability, undefined);
     assert.deepEqual(packet.observations, []);
   });
 });
 
-test("a pre-dispatch actionability failure is deterministically re-resolved once", async () => {
+test("the resolver waits for a covered control to become safely actionable before selecting it", async () => {
   await withFixture("post-refusal-reject-reresolved-before-click", async (url) => {
     const packet = await observe(url, { confirmationTimeoutMs: 300 });
 
     assert.equal(packet.refusalRegistration.status, "confirmed");
     assert.equal(packet.refusalRegistration.refusalExercised, true);
     assert.equal(packet.interactionDiagnostics?.click.outcome, "completed");
-    assert.equal(packet.interactionDiagnostics?.click.reResolvedBeforeDispatch, true);
+    assert.equal(packet.interactionDiagnostics?.click.reResolvedBeforeDispatch, false);
+    assert.ok(packet.timing.resolverMs >= 1_200);
     assert.ok(packet.storage.preActionCapturedAtMs !== undefined);
     assert.ok(packet.refusalRegistration.actionDispatchedAtMs !== undefined);
     assert.ok(
       packet.refusalRegistration.actionDispatchedAtMs - packet.storage.preActionCapturedAtMs <=
         POST_REFUSAL_PRE_ACTION_BASELINE_MAX_AGE_MS,
     );
+  });
+});
+
+test("post-refusal observer waits for a late-identified animated HubSpot control to enter the viewport", async () => {
+  await withAnimatedHubspotRejectFixture(async ({ url, actionCount }) => {
+    const packet = await observe(url, {
+      actionSearchTimeoutMs: 1_500,
+      allowCanonicalRejectDiscovery: true,
+      confirmationTimeoutMs: 500,
+      observationWindowMs: 50,
+      recipe: {
+        artifactVersion: "certscore.post_refusal_action_recipe.v1",
+        recipeId: "canonical-cmp:HubSpot Consent Banner:reject:animated-fixture",
+        cmpId: "HubSpot Consent Banner",
+        controlSelector: "#hs-eu-decline-button",
+        runtimeUrlPatternSources: ["hs-banner-runtime"],
+        bannerSelector: "#hs-eu-cookie-confirmation",
+        confirmation: {
+          kind: "local_storage_equals",
+          key: "hubspot-fixture-choice",
+          expectedValue: "rejected",
+        },
+      },
+    });
+
+    assert.equal(actionCount(), 1);
+    assert.equal(packet.refusalRegistration.status, "confirmed");
+    assert.equal(packet.interactionDiagnostics.click.outcome, "completed");
+    assert.equal(packet.timing.resolverMs >= 500, true);
   });
 });
 
@@ -861,11 +958,26 @@ test("canonical reject recipe set selects the one actionable deterministic contr
       "certscore_owned_analytics_consent",
       "OpenAI first-party consent controls",
       "OneTrust",
+      "Fides",
+      "TrustArc",
       "Usercentrics",
+      "Consentmanager",
       "Cookiebot",
+      "CookieYes",
       "DSGVO All in One / tarteaucitron",
+      "Sourcepoint",
+      "Didomi",
+      "Quantcast Choice",
       "Seznam CMP",
       "Google Funding Choices",
+      "HubSpot Consent Banner",
+      "Termly",
+      "Osano",
+      "Iubenda",
+      "Cookie Information",
+      "InMobi Choice",
+      "Ketch",
+      "Transcend",
     ],
   );
   await withFixture("post-refusal-onetrust-tcf-honored", async (url) => {
@@ -892,7 +1004,10 @@ test("tarteaucitron necessary-only Save runs as a confirmed Reject equivalent", 
       productionProjectable: true,
     });
 
-    assert.equal(packet.resolver.found, true);
+    assert.equal(packet.resolver.found, true, JSON.stringify({
+      limitations: packet.limitations,
+      resolver: packet.resolver,
+    }));
     assert.equal(packet.resolver.cmpId, "DSGVO All in One / tarteaucitron");
     assert.equal(
       packet.resolver.recipeId,
@@ -901,6 +1016,12 @@ test("tarteaucitron necessary-only Save runs as a confirmed Reject equivalent", 
     assert.equal(packet.refusalRegistration.status, "confirmed");
     assert.equal(packet.refusalRegistration.refusalExercised, true);
     assert.equal(packet.productionProjectable, true);
+    assert.equal(packet.actionControlProof?.accessibleLabel, "Auswahl speichern");
+    assert.equal(packet.actionControlProof?.actionSemantics, "canonical_necessary_only_recipe");
+    assert.equal(packet.actionControlProof?.classifierIntent, "unknown");
+    assert.ok(packet.actionControlProof?.classifierReasonCodes.includes(
+      "canonical_necessary_only_recipe_verified",
+    ));
   });
 });
 
@@ -987,11 +1108,14 @@ test("canonical discovery binds generic Orejime controls to the exact CMP surfac
         recipeId: "missing-registered-recipe",
         controlSelector: "#registered-reject-not-present",
       },
-      actionSearchTimeoutMs: 2_000,
+      actionSearchTimeoutMs: 3_000,
       confirmationTimeoutMs: 150,
     });
 
-    assert.equal(packet.resolver.found, true);
+    assert.equal(packet.resolver.found, true, JSON.stringify({
+      limitations: packet.limitations,
+      resolver: packet.resolver,
+    }));
     assert.equal(packet.resolver.cmpId, "Orejime");
     assert.equal(packet.refusalRegistration.status, "confirmed");
     assert.equal(packet.refusalRegistration.refusalExercised, true);
@@ -1216,6 +1340,56 @@ test("named CMP recipes resolve fast and delayed deterministic controls", async 
   });
 });
 
+test("canonical Fides Reject resolves a late first-layer control and confirms its cookie transition", async () => {
+  const fidesRecipe = buildCanonicalPostRefusalActionRecipes().find((candidate) =>
+    candidate.cmpId === "Fides"
+  );
+  assert.ok(fidesRecipe);
+
+  await withFidesRejectFixture(async ({ url, actionCount }) => {
+    const packet = await observe(url, {
+      actionSearchTimeoutMs: 1_500,
+      confirmationTimeoutMs: 500,
+      observationWindowMs: 50,
+      recipe: fidesRecipe,
+    });
+
+    assert.equal(actionCount(), 1);
+    assert.equal(packet.resolver.cmpId, "Fides");
+    assert.equal(packet.resolver.recipeId, "canonical-cmp:Fides:reject:v2");
+    assert.equal(packet.timing.resolverMs >= 500, true);
+    assert.equal(packet.refusalRegistration.status, "confirmed");
+    assert.equal(packet.refusalRegistration.refusalExercised, true);
+    assert.equal(packet.refusalRegistration.witnesses.some((witness) =>
+      witness.witnessType === "cmp_cookie_state" &&
+      witness.key === "fides_consent" &&
+      witness.corroboratingOnly === false
+    ), true);
+  });
+});
+
+test("post-refusal observer confirms a CookieYes cookie-state transition", async () => {
+  const recipe = buildCanonicalPostRefusalActionRecipes().find((candidate) =>
+    candidate.cmpId === "CookieYes"
+  );
+  assert.ok(recipe);
+
+  await withCookieYesRejectFixture(async ({ url, actionCount }) => {
+    const packet = await observe(url, {
+      actionSearchTimeoutMs: 500,
+      confirmationTimeoutMs: 500,
+      observationWindowMs: 100,
+      recipe,
+    });
+
+    assert.equal(actionCount(), 1);
+    assert.equal(packet.refusalRegistration.status, "confirmed");
+    assert.equal(packet.refusalRegistration.witnesses.some((witness) =>
+      witness.witnessType === "cmp_cookie_state" && witness.key === "cookieyes-consent"
+    ), true);
+  });
+});
+
 test("recognized CMP evidence unlocks only the bounded late-control search extension", async () => {
   await withFixture("post-refusal-onetrust-very-late", async (url) => {
     const packet = await observe(url, {
@@ -1343,6 +1517,32 @@ test("third-party snapshot cookies without an exact response anchor fail closed"
   });
 });
 
+test("instrumented cookie writes inherit the exact retained parent-domain identity", () => {
+  const identityHash = postRefusalStorageIdentityHash({
+    storageType: "cookie",
+    hostname: "example.com",
+    cookiePath: "/",
+    name: "_ga",
+  });
+  assert.deepEqual(resolveInstrumentedWriteStorageIdentity({
+    hostname: "www.example.com",
+    name: "_ga",
+    storageType: "cookie",
+    postActionStorage: [{
+      storageType: "cookie",
+      name: "_ga",
+      hostname: "example.com",
+      identityBasis: "cookie_name_domain_path_partition",
+      identityHash,
+      valueHash: "a".repeat(64),
+      nonEssential: true,
+    }],
+  }), {
+    hostname: "example.com",
+    identityHash,
+  });
+});
+
 test("TCF v2 decoder rejects malformed strings and retains purpose grants", () => {
   assert.equal(decodeTcfV2PurposeConsents("not-a-tcf-string").status, "invalid");
   const bytes = Buffer.alloc(22);
@@ -1427,4 +1627,132 @@ function cmpRecipe(
   });
   assert.ok(cmpRecipe);
   return cmpRecipe;
+}
+
+async function withFidesRejectFixture(
+  run: (fixture: { actionCount: () => number; url: string }) => Promise<void>,
+) {
+  let rejectActions = 0;
+  const server = createServer((request, response) => {
+    if (request.url === "/reject-action") {
+      rejectActions += 1;
+      response.writeHead(204).end();
+      return;
+    }
+    response.setHeader("content-type", "text/html; charset=utf-8");
+    response.end(`<!doctype html>
+      <html><body>
+        <div id="fixture-root"></div>
+        <script>
+          setTimeout(() => {
+            document.querySelector("#fixture-root").innerHTML =
+              '<div id="fides-banner"><div id="fides-banner-inner"><button class="fides-reject-all-button">Reject all</button><button class="fides-accept-all-button">Accept all</button></div></div>';
+            document.querySelector("button.fides-reject-all-button").addEventListener("click", () => {
+              fetch("/reject-action", { method: "POST" });
+              document.cookie = "fides_consent=rejected; Path=/; SameSite=Lax";
+              document.querySelector("#fides-banner").hidden = true;
+            });
+          }, 600);
+        </script>
+      </body></html>`);
+  });
+  const url = await listenHttpServer(server);
+  try {
+    await run({ actionCount: () => rejectActions, url });
+  } finally {
+    await new Promise<void>((resolve, reject) => server.close((error) => error ? reject(error) : resolve()));
+  }
+}
+
+async function withAnimatedHubspotRejectFixture(
+  run: (fixture: { actionCount: () => number; url: string }) => Promise<void>,
+) {
+  let rejectActions = 0;
+  const server = createServer((request, response) => {
+    if (request.url === "/reject-action") {
+      rejectActions += 1;
+      response.writeHead(204).end();
+      return;
+    }
+    if (request.url === "/hs-banner-runtime.js") {
+      response.setHeader("content-type", "application/javascript; charset=utf-8");
+      response.end("window.__hubspotFixtureLoaded = true;");
+      return;
+    }
+    response.setHeader("content-type", "text/html; charset=utf-8");
+    response.end(`<!doctype html><html><head><script>
+      setTimeout(() => {
+        const runtime = document.createElement('script');
+        runtime.src = '/hs-banner-runtime.js';
+        document.head.appendChild(runtime);
+      }, 150);
+      </script></head><body>
+      <div id="hs-eu-cookie-confirmation"
+        style="position:fixed;left:20px;top:20px;transform:translateY(1200px)"
+        role="dialog" aria-label="Cookie banner">
+        <p>Choose whether this site may use optional cookies.</p>
+        <button id="hs-eu-confirmation-button">Accept</button>
+        <button id="hs-eu-decline-button">Decline</button>
+      </div>
+      <script>
+        setTimeout(() => document.querySelector('#hs-eu-cookie-confirmation').style.transform = 'none', 700);
+        document.querySelector('#hs-eu-decline-button').addEventListener('click', () => {
+          fetch('/reject-action', { method: 'POST' });
+          localStorage.setItem('hubspot-fixture-choice', 'rejected');
+          document.querySelector('#hs-eu-cookie-confirmation').hidden = true;
+        });
+      </script>
+    </body></html>`);
+  });
+  const url = await listenHttpServer(server);
+  try {
+    await run({ actionCount: () => rejectActions, url });
+  } finally {
+    await new Promise<void>((resolve, reject) => server.close((error) => error ? reject(error) : resolve()));
+  }
+}
+
+async function withCookieYesRejectFixture(
+  run: (fixture: { actionCount: () => number; url: string }) => Promise<void>,
+) {
+  let actions = 0;
+  const server = createServer((request, response) => {
+    if (request.url === "/reject-action") {
+      actions += 1;
+      response.writeHead(204).end();
+      return;
+    }
+    response.setHeader("content-type", "text/html; charset=utf-8");
+    response.end(`<!doctype html><html><body>
+      <div class="cky-consent-container">
+        <button class="cky-btn-reject">Reject all</button>
+        <button class="cky-btn-accept">Accept all</button>
+      </div>
+      <script>
+        document.querySelector('.cky-btn-reject').addEventListener('click', () => {
+          fetch('/reject-action', { method: 'POST' });
+          document.cookie = 'cookieyes-consent=consentid:test,action:reject; Path=/; SameSite=Lax';
+          document.querySelector('.cky-consent-container').hidden = true;
+        });
+      </script>
+    </body></html>`);
+  });
+  const url = await listenHttpServer(server);
+  try {
+    await run({ actionCount: () => actions, url });
+  } finally {
+    await new Promise<void>((resolve, reject) => server.close((error) => error ? reject(error) : resolve()));
+  }
+}
+
+async function listenHttpServer(server: Server) {
+  await new Promise<void>((resolve, reject) => {
+    server.once("error", reject);
+    server.listen(0, "127.0.0.1", resolve);
+  });
+  const address = server.address();
+  if (!address || typeof address === "string") {
+    throw new Error("Fixture server did not bind a TCP port.");
+  }
+  return `http://127.0.0.1:${address.port}/`;
 }

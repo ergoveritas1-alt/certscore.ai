@@ -266,6 +266,8 @@ test("active timeline report surfaces canonical Accept and Reject projections in
   assert.doesNotMatch(report, /Requests and storage writes after Reject/);
   assert.match(report, /report\.transportRows\.filter\(\(row\) => row\.status === "Observed"\)\.length\} of \{report\.transportRows\.length\} positive observations/);
   assert.match(model, /Non-essential activity after confirmed Reject/);
+  assert.match(model, /Same non-essential identifier remained stored after Reject/);
+  assert.match(model, /isPersistenceOnlyRejectEvidence/);
   assert.match(model, /replace\(\/Post-choice tracking reduction\/gi, postRejectCopy\.title\)/);
   assert.doesNotMatch(model, /buildExecutiveRejectPathProjection\(scanRecord\.runtimeArtifacts/);
 });

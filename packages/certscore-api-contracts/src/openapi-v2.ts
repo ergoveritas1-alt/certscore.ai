@@ -745,6 +745,8 @@ export function buildCertScoreApiV2OpenApiDocument() {
             "refusalExercised",
             "observationCount",
             "productionProjectable",
+            "evidenceDisposition",
+            "indeterminateReason",
             "verdict",
             "interpretation",
             "observationStrategy",
@@ -758,6 +760,8 @@ export function buildCertScoreApiV2OpenApiDocument() {
             refusalExercised: { type: "boolean" },
             observationCount: { type: "integer", minimum: 0 },
             productionProjectable: { type: "boolean" },
+            evidenceDisposition: { type: "string", enum: ["confirmed", "indeterminate"] },
+            indeterminateReason: { type: ["string", "null"], maxLength: 160 },
             verdict: {
               type: "string",
               enum: [
@@ -792,6 +796,8 @@ export function buildCertScoreApiV2OpenApiDocument() {
             "acceptanceExercised",
             "observationCount",
             "productionProjectable",
+            "evidenceDisposition",
+            "indeterminateReason",
             "verdict",
             "interpretation",
             "observationStrategy",
@@ -805,6 +811,8 @@ export function buildCertScoreApiV2OpenApiDocument() {
             acceptanceExercised: { type: "boolean" },
             observationCount: { type: "integer", minimum: 0 },
             productionProjectable: { type: "boolean" },
+            evidenceDisposition: { type: "string", enum: ["confirmed", "indeterminate"] },
+            indeterminateReason: { type: ["string", "null"], maxLength: 160 },
             verdict: {
               type: "string",
               enum: [

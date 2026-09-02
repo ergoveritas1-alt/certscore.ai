@@ -2864,6 +2864,28 @@ function consentFlowHomeMarkup(caseName: StaticFixturePage): string {
       if (mode === "consent-cmp-cookie-persists") document.cookie = "OptanonConsent=fixture; Path=/; SameSite=Lax";
       if (mode === "consent-analytics-cookie-persists") document.cookie = "_ga=fixture; Path=/; SameSite=Lax";
       if (mode === "consent-preference-center-reject-success") localStorage.setItem("OptanonConsentState", "visible");
+      function openOwnedPaidAlternativeSandbox() {
+        if (mode !== "consent-reject-subscribe" && mode !== "consent-reject-pay") return false;
+        if (document.getElementById("paid-alternative-sandbox")) return true;
+        const panel = document.createElement("section");
+        panel.id = "paid-alternative-sandbox";
+        panel.setAttribute("role", "dialog");
+        panel.setAttribute("aria-label", "Owned non-transactional paid alternative sandbox");
+        panel.setAttribute("data-certscore-owned-nontransactional-sandbox", "true");
+        panel.innerHTML = '<h2>Test paid alternative</h2><p>This is an owned, non-transactional sandbox. No account, subscription, payment method, charge, or external request is created.</p><p data-testid="paid-alternative-terms">Optional tracking-free access: EUR 1 for one day. Content and privacy controls remain otherwise equivalent for this fixture.</p><button id="sandbox-complete-paid-alternative" type="button">Complete test alternative</button><button id="sandbox-cancel-paid-alternative" type="button">Cancel</button>';
+        document.body.appendChild(panel);
+        document.getElementById("sandbox-complete-paid-alternative")?.addEventListener("click", () => {
+          localStorage.setItem("certscore_paid_alternative_state", "optional_purposes_denied");
+          localStorage.setItem("certscore_paid_alternative_completion", "sandbox_confirmed");
+          panel.remove();
+          hideBanner();
+        });
+        document.getElementById("sandbox-cancel-paid-alternative")?.addEventListener("click", () => {
+          localStorage.setItem("certscore_paid_alternative_completion", "sandbox_cancelled");
+          panel.remove();
+        });
+        return true;
+      }
       document.getElementById("accept-all")?.addEventListener("click", () => {
         document.cookie = "_ga=fixture; Path=/; SameSite=Lax";
         track("accept");
@@ -2874,6 +2896,7 @@ function consentFlowHomeMarkup(caseName: StaticFixturePage): string {
         hideBanner();
       });
       document.getElementById("reject-all")?.addEventListener("click", () => {
+        if (openOwnedPaidAlternativeSandbox()) return;
         if (mode === "consent-tracking-persists-after-reject") track("reject");
         if (mode === "consent-lean-guarded-image-cookie") {
           const consentPixel = new Image();

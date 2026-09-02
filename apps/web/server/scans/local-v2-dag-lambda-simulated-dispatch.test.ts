@@ -142,7 +142,7 @@ test("simulated Lambda carries the exact typed Accept observation configuration 
     rolloutMode: "owned_canary" as const,
     resolver: {
       kind: "canonical_cmp_registry" as const,
-      recipeSetId: "canonical-consent-control-accept-v1" as const,
+      recipeSetId: "canonical-consent-control-accept-v2" as const,
     },
   };
   const args = buildLocalV2DagSimulatedLambdaArgs({

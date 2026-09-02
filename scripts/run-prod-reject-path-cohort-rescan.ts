@@ -259,7 +259,7 @@ function parentPayload(scanId: string, targetUrl: string) {
       observationWindowMs: 8_000,
       confirmationTimeoutMs: 2_000,
       actionSearchTimeoutMs: 2_500,
-      resolver: { kind: "canonical_cmp_registry" as const, recipeSetId: "canonical-consent-control-reject-v18" },
+      resolver: { kind: "canonical_cmp_registry" as const, recipeSetId: "canonical-consent-control-reject-v20" },
       interactionAuthorization: {
         authorizationId: "sharded_scan_resolved_exact_target.v2" as const,
         kind: "scan_target_resolution" as const,

@@ -2437,9 +2437,16 @@ function getConsentPaidDeclinePathChecklistEligibility(input: {
     "consentPaidDeclinePathState",
     "consent_paid_decline_path_state"
   ]);
-  return paidDeclineState === "reject_with_subscription" || paidDeclineState === "reject_with_payment"
-    ? "review_signal"
-    : "none";
+  const paidVariantObserved =
+    paidDeclineState === "reject_with_subscription" || paidDeclineState === "reject_with_payment";
+  const fullyQualified =
+    input.rawEvidence?.consentControlAssessmentStatus === "complete" &&
+    input.rawEvidence?.consentControlCoverageStatus === "complete" &&
+    input.rawEvidence?.consentControlDocumentIdentityStatus === "matched" &&
+    input.rawEvidence?.consentControlNoGo === false &&
+    input.rawEvidence?.consentControlSurfaceStatus === "observed_actionable" &&
+    input.rawEvidence?.freeRejectControlState === "not_observed";
+  return paidVariantObserved && fullyQualified ? "review_signal" : "none";
 }
 
 function getConsentDismissWithoutRejectChecklistEligibility(input: {
@@ -2628,11 +2635,12 @@ export function deriveConcernPolicy(input: {
     rawEvidence: input.rawEvidence
   });
   if (consentPaidDeclinePathChecklistEligibility !== null) {
+    const eligible = consentPaidDeclinePathChecklistEligibility === "review_signal";
     return {
-      allowedNarrativeTier: "weak",
-      externalSurfacingEligibility: "audit_only",
+      allowedNarrativeTier: eligible ? "moderate" : "weak",
+      externalSurfacingEligibility: eligible ? "eligible" : "audit_only",
       negativeEvidenceFlags: [...negativeEvidenceFlags],
-      promotionEligibility: "internal_only",
+      promotionEligibility: eligible ? "eligible" : "internal_only",
       regulatoryChecklistEligibility: consentPaidDeclinePathChecklistEligibility
     };
   }

@@ -351,6 +351,14 @@ export const CERT_SCORE_FINDING_REGISTRY: Record<string, CertScoreFindingDefinit
     whyItMatters: "The visitor clicked Accept, but the consent record saved afterward still showed optional purposes as denied. That mismatch can cause the site and its vendors to act on the wrong choice.",
     remediation: "Correct the consent-platform state transition so the saved consent record matches the visitor’s confirmed Accept choice."
   },
+  paid_alternative_required_to_decline_tracking: {
+    id: "paid_alternative_required_to_decline_tracking",
+    label: "Paid alternative required to decline non-essential tracking",
+    section: "Consent Experience",
+    defaultSurfacePriority: 86,
+    whyItMatters: "The first consent layer offered acceptance, but avoiding optional tracking required payment or a subscription instead of a free Reject choice. Whether that design supports freely given consent depends on the full circumstances and warrants review.",
+    remediation: "Offer a clear free Reject or necessary-only choice on the first layer, or document and review the paid alternative’s fee, equivalence, accessibility, and effect on consent freedom."
+  },
   third_party_tracking_pre_consent: {
     id: "third_party_tracking_pre_consent",
     label: "Non-essential tracking before consent",

@@ -86,10 +86,10 @@ export function buildPostActionObservationDispatchConfigs(input: {
         dispatchDelayMs: 500,
         observationWindowMs: 8_000,
         confirmationTimeoutMs: 2_000,
-        actionSearchTimeoutMs: 10_000,
+        actionSearchTimeoutMs: 14_000,
         resolver: {
           kind: "canonical_cmp_registry",
-          recipeSetId: "canonical-consent-control-reject-v18",
+          recipeSetId: "canonical-consent-control-reject-v20",
         },
         interactionAuthorization: interactionAuthorization(ownedRejectCanary),
       };
@@ -108,10 +108,10 @@ export function buildPostActionObservationDispatchConfigs(input: {
         dispatchDelayMs: 1_000,
         observationWindowMs: POST_ACCEPT_DEFAULT_OBSERVATION_WINDOW_MS,
         confirmationTimeoutMs: 2_000,
-        actionSearchTimeoutMs: 10_000,
+        actionSearchTimeoutMs: 14_000,
         resolver: {
           kind: "canonical_cmp_registry",
-          recipeSetId: "canonical-consent-control-accept-v1",
+          recipeSetId: "canonical-consent-control-accept-v3",
         },
         interactionAuthorization: interactionAuthorization(ownedAcceptCanary),
       };

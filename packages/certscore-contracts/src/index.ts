@@ -12,6 +12,8 @@ import {
   postAcceptLaneOutcomeSchema,
 } from "./post-accept-observation";
 export * from "./consent-control-label-classifier";
+export * from "./consent-action-control-proof";
+export * from "./choice-path-evidence-disposition";
 export * from "./consent-preference-category-classifier";
 export * from "./consent-language-classifier";
 export * from "./gdpr-transparency-topic-classifier";

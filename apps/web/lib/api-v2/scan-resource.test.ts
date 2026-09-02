@@ -210,6 +210,7 @@ test("API v2 and status expose joined canonical post-refusal observation metadat
     runtimeArtifacts: {
       postRefusalEvidenceProjection: {
         status: "confirmed_observation",
+        actionControlProof: { action: "reject" },
         refusalExercised: true,
         observationCount: 2,
         productionProjectable: true,
@@ -234,6 +235,8 @@ test("API v2 and status expose joined canonical post-refusal observation metadat
     refusalExercised: true,
     observationCount: 2,
     productionProjectable: true,
+    evidenceDisposition: "confirmed",
+    indeterminateReason: null,
     verdict: "eligible_nonessential_activity_observed_after_confirmed_refusal",
     interpretation: "Reject was confirmed, and eligible non-essential storage activity was observed afterward.",
     observationStrategy: "stop_on_first_eligible_activity",
@@ -249,12 +252,56 @@ test("API v2 and status expose joined canonical post-refusal observation metadat
   assert.deepEqual(status.postRefusalObservation, resource.postRefusalObservation);
 });
 
+test("API v2 keeps unchanged post-refusal storage persistence review-only", () => {
+  const retained = {
+    ...fixture(),
+    runtimeArtifacts: {
+      postRefusalEvidenceProjection: {
+        status: "confirmed_observation",
+        actionControlProof: { action: "reject" },
+        refusalExercised: true,
+        observationCount: 3,
+        productionProjectable: true,
+        completedAt: "2026-09-02T02:36:02.321Z",
+        contradictionObserved: false,
+        postRefusalActivity: [],
+        preConsentStorageNotCleared: [
+          { name: "_ga", storageType: "cookie", exactIdentityVerified: true, sameValueHashVerified: true },
+          { name: "_ga_A", storageType: "cookie", exactIdentityVerified: true, sameValueHashVerified: true },
+          { name: "_ga_B", storageType: "cookie", exactIdentityVerified: true, sameValueHashVerified: true },
+        ],
+        limitations: [],
+      },
+    },
+  } as unknown as ScanDetailResponse;
+
+  const resource = buildApiV2ScanResource(retained);
+  const status = buildApiV2ScanStatus(retained, { canonicalScan: resource });
+
+  assert.equal(resource.postRefusalObservation?.status, "confirmed_observation");
+  assert.equal(
+    resource.postRefusalObservation?.verdict,
+    "no_eligible_nonessential_activity_observed_during_completed_window",
+  );
+  assert.equal(
+    resource.postRefusalObservation?.interpretation,
+    "Reject was confirmed. No eligible post-refusal request or storage write was observed; unchanged non-essential storage remained as a score-neutral review signal.",
+  );
+  assert.deepEqual(resource.postRefusalObservation?.termination, {
+    kind: "window_elapsed",
+    intentional: true,
+    trigger: "window_elapsed",
+  });
+  assert.deepEqual(status.postRefusalObservation, resource.postRefusalObservation);
+});
+
 test("API v2 and status expose joined canonical post-Accept observation metadata", () => {
   const retained = {
     ...fixture(),
     runtimeArtifacts: {
       postAcceptEvidenceProjection: {
         status: "confirmed_observation",
+        actionControlProof: { action: "accept" },
         acceptanceExercised: true,
         observationCount: 3,
         productionProjectable: true,
@@ -278,6 +325,8 @@ test("API v2 and status expose joined canonical post-Accept observation metadata
     acceptanceExercised: true,
     observationCount: 3,
     productionProjectable: true,
+    evidenceDisposition: "confirmed",
+    indeterminateReason: null,
     verdict: "eligible_nonessential_activity_observed_after_confirmed_acceptance",
     interpretation: "Accept was confirmed, and eligible non-essential network and storage activity was observed afterward.",
     observationStrategy: "stop_on_first_eligible_activity",
@@ -291,6 +340,40 @@ test("API v2 and status expose joined canonical post-Accept observation metadata
     limitations: [],
   });
   assert.deepEqual(status.postAcceptObservation, resource.postAcceptObservation);
+});
+
+test("API v2 returns indeterminate when confirmed Accept evidence lacks verified control proof", () => {
+  const retained = {
+    ...fixture(),
+    runtimeArtifacts: {
+      postAcceptEvidenceProjection: {
+        status: "confirmed_observation",
+        acceptanceExercised: true,
+        observationCount: 1,
+        productionProjectable: false,
+        evidenceDisposition: "indeterminate",
+        indeterminateReason: "verified_action_control_proof_missing",
+        completedAt: "2026-09-01T12:00:09.000Z",
+        contradictionObserved: false,
+        postAcceptActivity: [{ activityType: "network_request" }],
+        limitations: [],
+      },
+    },
+  } as unknown as ScanDetailResponse;
+
+  const resource = buildApiV2ScanResource(retained);
+  assert.equal(resource.postAcceptObservation?.evidenceDisposition, "indeterminate");
+  assert.equal(
+    resource.postAcceptObservation?.indeterminateReason,
+    "verified_action_control_proof_missing",
+  );
+  assert.equal(resource.postAcceptObservation?.productionProjectable, false);
+  assert.equal(resource.postAcceptObservation?.observationCount, 0);
+  assert.equal(resource.postAcceptObservation?.verdict, "no_confirmed_post_accept_verdict");
+  assert.match(
+    resource.postAcceptObservation?.interpretation ?? "",
+    /not tied to a verified Accept control/,
+  );
 });
 
 test("API v2 fails closed when a joined Accept observation window was truncated", () => {
@@ -324,6 +407,8 @@ test("API v2 fails closed when a joined Accept observation window was truncated"
     acceptanceExercised: false,
     observationCount: 0,
     productionProjectable: false,
+    evidenceDisposition: "indeterminate",
+    indeterminateReason: "accept_observation_window_truncated",
     verdict: "no_confirmed_post_accept_verdict",
     interpretation: "Accept was confirmed, but the bounded post-accept observation window was truncated, so no production post-accept verdict was established.",
     observationStrategy: "not_applicable",
@@ -363,6 +448,8 @@ test("API v2 and status expose a six-second Reject Path timeout as a neutral lim
     refusalExercised: false,
     observationCount: 0,
     productionProjectable: false,
+    evidenceDisposition: "indeterminate",
+    indeterminateReason: "reject_path_timeout",
     verdict: "no_confirmed_post_refusal_verdict",
     interpretation: "Reject Path did not complete within the six-second post-primary allowance, so no post-refusal verdict was established.",
     observationStrategy: "not_applicable",

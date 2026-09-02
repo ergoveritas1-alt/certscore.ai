@@ -25,6 +25,7 @@ import {
   type ScanNoGoResult
 } from "@certscore/api-contracts";
 import type { PulseResponse } from "@certscore/api-contracts";
+import { deriveChoicePathEvidenceDisposition } from "@certscore/contracts";
 import type { ScanDetailResponse } from "../../server/scans/get-scan-by-id";
 import { projectExternalScanNoGo } from "@website-signal-risk-scanner/shared";
 import { derivePulseReportScore } from "../pulse/projection";
@@ -569,6 +570,8 @@ function deriveApiV2PostRefusalObservation(scanRecord: ScanDetailResponse) {
       refusalExercised: false,
       observationCount: 0,
       productionProjectable: false,
+      evidenceDisposition: "indeterminate" as const,
+      indeterminateReason: limitationCode,
       verdict: "no_confirmed_post_refusal_verdict" as const,
       interpretation,
       observationStrategy: "not_applicable" as const,
@@ -607,16 +610,28 @@ function deriveApiV2PostRefusalObservation(scanRecord: ScanDetailResponse) {
   const storageObserved = activityRows.some((row) => row.activityType === "storage_write");
   const networkObserved = activityRows.some((row) => row.activityType === "network_request");
   const contradictionObserved = projection?.contradictionObserved === true;
-  const verdict = status === "confirmed_observation"
+  const persistedStorageRows = Array.isArray(projection?.preConsentStorageNotCleared)
+    ? projection.preConsentStorageNotCleared.filter((value) =>
+        value && typeof value === "object" && !Array.isArray(value)
+      ) as Record<string, unknown>[]
+    : [];
+  const persistenceOnly = persistedStorageRows.length > 0 &&
+    activityRows.length === 0 &&
+    !contradictionObserved;
+  const confirmed = (status === "confirmed_observation" || status === "confirmed_clean") &&
+    projection?.refusalExercised === true &&
+    projection?.productionProjectable === true &&
+    plainRecord(projection?.actionControlProof)?.action === "reject";
+  const verdict = confirmed && status === "confirmed_observation"
     ? activityRows.length > 0
       ? "eligible_nonessential_activity_observed_after_confirmed_refusal" as const
       : contradictionObserved
         ? "retained_consent_signal_contradiction_observed_after_confirmed_refusal" as const
-        : "eligible_nonessential_activity_observed_after_confirmed_refusal" as const
-    : status === "confirmed_clean"
+        : "no_eligible_nonessential_activity_observed_during_completed_window" as const
+    : confirmed && status === "confirmed_clean"
       ? "no_eligible_nonessential_activity_observed_during_completed_window" as const
       : "no_confirmed_post_refusal_verdict" as const;
-  const interpretation = status === "confirmed_observation"
+  const interpretation = confirmed && status === "confirmed_observation"
     ? storageObserved && networkObserved
       ? "Reject was confirmed, and eligible non-essential network and storage activity was observed afterward."
       : storageObserved
@@ -625,11 +640,25 @@ function deriveApiV2PostRefusalObservation(scanRecord: ScanDetailResponse) {
           ? "Reject was confirmed, and eligible non-essential network activity was observed afterward."
           : contradictionObserved
             ? "Reject was confirmed, and a retained consent signal contradicted the refusal afterward."
-            : "Reject was confirmed, and an eligible post-refusal observation was retained afterward."
-    : status === "confirmed_clean"
+            : persistenceOnly
+              ? "Reject was confirmed. No eligible post-refusal request or storage write was observed; unchanged non-essential storage remained as a score-neutral review signal."
+              : "Reject was confirmed. No eligible non-essential activity was observed during the completed bounded window."
+    : confirmed && status === "confirmed_clean"
       ? "Reject was confirmed. No eligible non-essential activity was observed during the completed bounded window."
       : "No confirmed post-refusal verdict was established.";
-  const confirmed = status === "confirmed_observation" || status === "confirmed_clean";
+  const evidenceDisposition = deriveChoicePathEvidenceDisposition({
+    status: status as
+      | "confirmed_observation"
+      | "confirmed_clean"
+      | "unconfirmed"
+      | "not_attempted"
+      | "unsupported"
+      | "aborted",
+    actionExercised: projection?.refusalExercised === true,
+    controlProofVerified: plainRecord(projection?.actionControlProof)?.action === "reject",
+    productionProjectable: projection?.productionProjectable === true,
+    limitations: rawLimitations,
+  });
   return {
     status: status as
       | "confirmed_observation"
@@ -639,8 +668,10 @@ function deriveApiV2PostRefusalObservation(scanRecord: ScanDetailResponse) {
       | "unsupported"
       | "aborted",
     refusalExercised: projection?.refusalExercised === true,
-    observationCount: Math.max(0, finiteInt(projection?.observationCount) ?? 0),
-    productionProjectable: projection?.productionProjectable === true,
+    observationCount: confirmed ? Math.max(0, finiteInt(projection?.observationCount) ?? 0) : 0,
+    productionProjectable: confirmed,
+    evidenceDisposition: evidenceDisposition.disposition,
+    indeterminateReason: evidenceDisposition.reasonCode,
     verdict,
     interpretation,
     observationStrategy: confirmed ? "stop_on_first_eligible_activity" as const : "not_applicable" as const,
@@ -696,34 +727,40 @@ function deriveApiV2PostAcceptObservation(scanRecord: ScanDetailResponse) {
   );
   const status = stringOrNull(projection?.status);
   const limitationCode = stringOrNull(coverage?.limitationCode);
+  const projectionIndeterminateReason = stringOrNull(projection?.indeterminateReason);
+  const indeterminateReason = limitationCode ?? projectionIndeterminateReason ?? "unavailable";
   const coverageUnavailable = coverage?.status === "limited" || coverage?.status === "not_applicable";
   const projectionUnavailable = Boolean(projection) && projection?.productionProjectable !== true;
   if (!status || !supportedStatuses.has(status) || coverageUnavailable || projectionUnavailable) {
     if (!coverage && !projection) return null;
-    const interpretation = limitationCode === "accept_control_not_observed"
+    const interpretation = indeterminateReason === "accept_control_not_observed"
       ? "Accept Path was not applicable because a first-layer Accept control was not observed in the complete consent inventory."
-      : limitationCode === "accept_path_timeout"
+      : indeterminateReason === "accept_path_timeout"
         ? "Accept Path did not complete within the six-second post-primary allowance, so no post-accept verdict was established."
-        : limitationCode === "accept_observation_window_truncated"
+        : indeterminateReason === "accept_observation_window_truncated"
           ? "Accept was confirmed, but the bounded post-accept observation window was truncated, so no production post-accept verdict was established."
-          : limitationCode === "accept_path_worker_failed"
+          : indeterminateReason === "accept_path_worker_failed"
             ? "Accept Path worker failed before verified evidence could be joined, so no post-accept verdict was established."
+            : indeterminateReason === "verified_action_control_proof_missing"
+              ? "The Accept interaction was not tied to a verified Accept control, so no post-accept verdict was established."
             : "Post-Accept evidence did not satisfy the production projection invariants, so no post-accept verdict was established.";
-    const trigger = limitationCode === "accept_control_not_observed"
+    const trigger = indeterminateReason === "accept_control_not_observed"
       ? "accept_control_not_observed" as const
-      : limitationCode === "accept_path_timeout"
+      : indeterminateReason === "accept_path_timeout"
         ? "accept_path_timeout" as const
-        : limitationCode === "accept_observation_window_truncated"
+        : indeterminateReason === "accept_observation_window_truncated"
           ? "accept_observation_window_truncated" as const
-          : limitationCode === "accept_path_worker_failed"
+          : indeterminateReason === "accept_path_worker_failed"
             ? "worker_failed" as const
             : "unavailable" as const;
     const coverageLimitations = [interpretation];
     return {
-      status: limitationCode === "accept_control_not_observed" ? "not_attempted" as const : "aborted" as const,
+      status: indeterminateReason === "accept_control_not_observed" ? "not_attempted" as const : "aborted" as const,
       acceptanceExercised: false,
       observationCount: 0,
       productionProjectable: false,
+      evidenceDisposition: "indeterminate" as const,
+      indeterminateReason,
       verdict: "no_confirmed_post_accept_verdict" as const,
       interpretation,
       observationStrategy: "not_applicable" as const,
@@ -758,16 +795,20 @@ function deriveApiV2PostAcceptObservation(scanRecord: ScanDetailResponse) {
   const storageObserved = activityRows.some((row) => row.activityType === "storage_write");
   const networkObserved = activityRows.some((row) => row.activityType === "network_request");
   const contradictionObserved = projection?.contradictionObserved === true;
-  const verdict = status === "confirmed_observation"
+  const confirmed = (status === "confirmed_observation" || status === "confirmed_clean") &&
+    projection?.acceptanceExercised === true &&
+    projection?.productionProjectable === true &&
+    plainRecord(projection?.actionControlProof)?.action === "accept";
+  const verdict = confirmed && status === "confirmed_observation"
     ? activityRows.length > 0
       ? "eligible_nonessential_activity_observed_after_confirmed_acceptance" as const
       : contradictionObserved
         ? "retained_consent_signal_contradiction_observed_after_confirmed_acceptance" as const
         : "eligible_nonessential_activity_observed_after_confirmed_acceptance" as const
-    : status === "confirmed_clean"
+    : confirmed && status === "confirmed_clean"
       ? "no_eligible_nonessential_activity_observed_during_completed_window" as const
       : "no_confirmed_post_accept_verdict" as const;
-  const interpretation = status === "confirmed_observation"
+  const interpretation = confirmed && status === "confirmed_observation"
     ? storageObserved && networkObserved
       ? "Accept was confirmed, and eligible non-essential network and storage activity was observed afterward."
       : storageObserved
@@ -777,10 +818,22 @@ function deriveApiV2PostAcceptObservation(scanRecord: ScanDetailResponse) {
           : contradictionObserved
             ? "Accept was confirmed, and a retained consent signal contradicted the acceptance afterward."
             : "Accept was confirmed, and an eligible post-accept observation was retained afterward."
-    : status === "confirmed_clean"
+    : confirmed && status === "confirmed_clean"
       ? "Accept was confirmed. No eligible non-essential activity was observed during the completed bounded window."
       : "No confirmed post-accept verdict was established.";
-  const confirmed = status === "confirmed_observation" || status === "confirmed_clean";
+  const evidenceDisposition = deriveChoicePathEvidenceDisposition({
+    status: status as
+      | "confirmed_observation"
+      | "confirmed_clean"
+      | "unconfirmed"
+      | "not_attempted"
+      | "unsupported"
+      | "aborted",
+    actionExercised: projection?.acceptanceExercised === true,
+    controlProofVerified: plainRecord(projection?.actionControlProof)?.action === "accept",
+    productionProjectable: projection?.productionProjectable === true,
+    limitations: rawLimitations,
+  });
   return {
     status: status as
       | "confirmed_observation"
@@ -790,8 +843,10 @@ function deriveApiV2PostAcceptObservation(scanRecord: ScanDetailResponse) {
       | "unsupported"
       | "aborted",
     acceptanceExercised: projection?.acceptanceExercised === true,
-    observationCount: Math.max(0, finiteInt(projection?.observationCount) ?? 0),
-    productionProjectable: projection?.productionProjectable === true,
+    observationCount: confirmed ? Math.max(0, finiteInt(projection?.observationCount) ?? 0) : 0,
+    productionProjectable: confirmed,
+    evidenceDisposition: evidenceDisposition.disposition,
+    indeterminateReason: evidenceDisposition.reasonCode,
     verdict,
     interpretation,
     observationStrategy: confirmed ? "stop_on_first_eligible_activity" as const : "not_applicable" as const,

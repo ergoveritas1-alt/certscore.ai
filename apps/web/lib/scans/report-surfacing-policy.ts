@@ -269,6 +269,7 @@ const CONSENT_TRACKING_IDS = [
   "pre_consent_storage_not_cleared",
   "post_accept_consent_dependent_activity",
   "accept_reject_outcomes_indistinguishable",
+  "paid_alternative_required_to_decline_tracking",
   "gpc_signal_not_honored",
   "weak_cookie_security_attributes",
   "cookie_retention_lifetime_review_signal",
@@ -307,6 +308,7 @@ const REVIEW_ONLY_CONSENT_INTERFACE_IDS = [
   "forced_consent_wall",
   "accept_only_banner",
   "dismiss_without_reject",
+  "paid_alternative_required_to_decline_tracking",
   "consent_control_not_reopenable",
   "consent_governance_disclosure_gap"
 ] as const satisfies ReportUnifiedFindingId[];

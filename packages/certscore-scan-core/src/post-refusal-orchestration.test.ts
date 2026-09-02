@@ -77,14 +77,14 @@ test("legacy join-window input does not reintroduce a second publication branch"
   });
 });
 
-test("single reconciliation caps the reject tail at six seconds and remains one publication", () => {
+test("single reconciliation caps the reject tail at eight seconds and remains one publication", () => {
   assert.deepEqual(decidePostRefusalReportPublication({
     primaryReadyAtMs: 10_000,
     rejectReadyAtMs: 18_500,
   }), {
     mode: "single_reconciliation_limited",
     rejectReadyDeltaMs: 8_500,
-    addedInitialReportWaitMs: 6_000,
+    addedInitialReportWaitMs: 8_000,
     reason: "reject_path_exceeded_canonical_barrier",
   });
 });

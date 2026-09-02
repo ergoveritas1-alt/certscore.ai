@@ -1,8 +1,12 @@
-import { KNOWN_CMP_REGISTRY } from "@website-signal-risk-scanner/shared";
+import {
+  KNOWN_CMP_REGISTRY,
+  type KnownCmpActionConfirmation,
+} from "@website-signal-risk-scanner/shared";
+import { cmpActionRecipeEnabled } from "./cmp-action-recipe-policy.js";
 import type { PostAcceptActionRecipe } from "./post-accept-observer.js";
 
 export const CANONICAL_POST_ACCEPT_RECIPE_SET_ID =
-  "canonical-consent-control-accept-v1" as const;
+  "canonical-consent-control-accept-v4" as const;
 
 const DEFAULT_TCF_ACCEPT_PURPOSE_IDS = [1, 3, 4, 7, 9, 10];
 
@@ -19,6 +23,28 @@ export const CERTSCORE_OWNED_ANALYTICS_ACCEPT_RECIPE: PostAcceptActionRecipe = {
     expectedValue: "granted",
   },
 };
+
+function mapAcceptConfirmation(
+  confirmation: KnownCmpActionConfirmation,
+): PostAcceptActionRecipe["confirmation"] {
+  switch (confirmation.kind) {
+    case "tcf_purposes_or_cmp_cookie_changed":
+      return {
+        kind: "tcf_purposes_granted_or_cmp_cookie_changed",
+        purposeIds: confirmation.purposeIds ?? DEFAULT_TCF_ACCEPT_PURPOSE_IDS,
+        cookieName: confirmation.cookieName,
+      };
+    case "tcf_purposes_or_cmp_storage_keys_changed":
+      return {
+        kind: "tcf_purposes_granted_or_cmp_storage_keys_changed",
+        purposeIds: confirmation.purposeIds ?? DEFAULT_TCF_ACCEPT_PURPOSE_IDS,
+        storageType: confirmation.storageType,
+        keys: confirmation.keys,
+      };
+    default:
+      return confirmation;
+  }
+}
 
 export function buildPostAcceptCmpActionRecipe(input: {
   cmpCanonicalName: string;
@@ -38,6 +64,9 @@ export function buildPostAcceptCmpActionRecipe(input: {
       ? "tcf_api_cmp_registry_recipe"
       : "cmp_registry_recipe",
     controlSelector,
+    ...(definition.urlPatterns?.length
+      ? { runtimeUrlPatternSources: definition.urlPatterns.map((pattern) => pattern.source) }
+      : {}),
     ...(input.bannerSelector ? { bannerSelector: input.bannerSelector } : {}),
     confirmation: input.confirmation,
   };
@@ -50,48 +79,61 @@ export function buildPostAcceptCmpActionRecipe(input: {
  */
 export function buildCanonicalPostAcceptActionRecipes(): PostAcceptActionRecipe[] {
   return [
-    CERTSCORE_OWNED_ANALYTICS_ACCEPT_RECIPE,
+    ...(cmpActionRecipeEnabled({
+      canonicalName: "certscore_owned_analytics_consent",
+      action: "accept",
+    })
+      ? [CERTSCORE_OWNED_ANALYTICS_ACCEPT_RECIPE]
+      : []),
     ...KNOWN_CMP_REGISTRY.flatMap((definition) => {
-      if (!definition.acceptControlSelectors?.length) return [];
-      const acceptanceCookieValues = definition.acceptanceCookieValues ?? [];
-      let confirmation: PostAcceptActionRecipe["confirmation"] | undefined;
-      if (acceptanceCookieValues.length > 0) {
-        confirmation = {
-          kind: "cmp_cookie_values_equal",
-          cookies: acceptanceCookieValues,
-        };
-      } else if (definition.canonicalName === "Usercentrics") {
-        confirmation = {
-          kind: "tcf_purposes_granted_or_cmp_storage_keys_changed",
-          purposeIds: DEFAULT_TCF_ACCEPT_PURPOSE_IDS,
-          storageType: "local_storage",
-          keys: ["uc_settings", "ucString"],
-        };
-      } else if (definition.standards?.includes("tcf")) {
-        const cookieName = definition.canonicalName === "OneTrust"
-          ? "OptanonConsent"
-          : definition.canonicalName === "Cookiebot"
-            ? "CookieConsent"
-            : definition.canonicalName === "Google Funding Choices"
-              ? "FCCDCF"
-              : definition.canonicalName === "Seznam CMP"
-                ? "sznlbr"
-                : undefined;
-        if (cookieName) {
-          confirmation = {
-            kind: "tcf_purposes_granted_or_cmp_cookie_changed",
-            purposeIds: DEFAULT_TCF_ACCEPT_PURPOSE_IDS,
-            cookieName,
-          };
-        }
-      }
+      if (
+        !definition.acceptControlSelectors?.length &&
+        !definition.acceptControlTargets?.length
+      ) return [];
+      if (!cmpActionRecipeEnabled({
+        canonicalName: definition.canonicalName,
+        action: "accept",
+      })) return [];
+      const confirmation = definition.acceptConfirmation
+        ? mapAcceptConfirmation(definition.acceptConfirmation)
+        : definition.acceptanceCookieValues?.length
+          ? {
+              kind: "cmp_cookie_values_equal",
+              cookies: definition.acceptanceCookieValues,
+            } satisfies PostAcceptActionRecipe["confirmation"]
+          : undefined;
       if (!confirmation) return [];
-      const recipe = buildPostAcceptCmpActionRecipe({
-        cmpCanonicalName: definition.canonicalName,
-        bannerSelector: definition.domSelectors?.[0],
-        confirmation,
-      });
-      return recipe ? [recipe] : [];
+      const recipes: PostAcceptActionRecipe[] = [];
+      if (definition.acceptControlSelectors?.length) {
+        const recipe = buildPostAcceptCmpActionRecipe({
+          cmpCanonicalName: definition.canonicalName,
+          bannerSelector: definition.domSelectors?.[0],
+          confirmation,
+        });
+        if (recipe) recipes.push(recipe);
+      }
+      for (const [index, target] of (definition.acceptControlTargets ?? []).entries()) {
+        recipes.push({
+          artifactVersion: "certscore.post_accept_action_recipe.v1",
+          recipeId: `canonical-cmp:${definition.canonicalName}:accept:accessible-v${index + 1}`,
+          cmpId: definition.canonicalName,
+          resolverMethod: definition.standards?.includes("tcf")
+            ? "tcf_api_cmp_registry_recipe"
+            : "cmp_registry_recipe",
+          controlSelector: target.scopeSelector,
+          accessibleControl: {
+            kind: target.resolution,
+            scopeSelector: target.scopeSelector,
+            intent: "accept",
+          },
+          ...(target.runtimeUrlPatterns?.length
+            ? { runtimeUrlPatternSources: target.runtimeUrlPatterns.map((pattern) => pattern.source) }
+            : {}),
+          bannerSelector: definition.domSelectors?.[0] ?? target.scopeSelector,
+          confirmation,
+        });
+      }
+      return recipes;
     }),
   ];
 }

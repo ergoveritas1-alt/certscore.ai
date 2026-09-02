@@ -133,27 +133,33 @@ test("deriveConcernPolicy keeps Article 13 evidence and deterministic no-match r
   assert.equal(noMatch.externalSurfacingEligibility, "audit_only");
 });
 
-test("deriveConcernPolicy projects paid decline evidence as a checklist-only review signal", () => {
+test("deriveConcernPolicy promotes a fully qualified paid decline path as a review finding", () => {
   const policy = deriveConcernPolicy({
     concern: makeConcern({
       originKey: "consent.paid_decline_path.reject_with_subscription",
       originType: "runtime_artifact",
-      title: "Paid decline path observed"
+      title: "Paid alternative required to decline tracking"
     }),
     evidenceStrengthFlags: ["direct_runtime"],
     rawEvidence: {
       consentPaidDeclinePathEvidence: true,
-      consentPaidDeclinePathState: "reject_with_subscription"
+      consentPaidDeclinePathState: "reject_with_subscription",
+      consentControlAssessmentStatus: "complete",
+      consentControlCoverageStatus: "complete",
+      consentControlDocumentIdentityStatus: "matched",
+      consentControlNoGo: false,
+      consentControlSurfaceStatus: "observed_actionable",
+      freeRejectControlState: "not_observed"
     }
   });
 
-  assert.equal(policy.allowedNarrativeTier, "weak");
-  assert.equal(policy.promotionEligibility, "internal_only");
-  assert.equal(policy.externalSurfacingEligibility, "audit_only");
+  assert.equal(policy.allowedNarrativeTier, "moderate");
+  assert.equal(policy.promotionEligibility, "eligible");
+  assert.equal(policy.externalSurfacingEligibility, "eligible");
   assert.equal(policy.regulatoryChecklistEligibility, "review_signal");
 });
 
-test("deriveConcernPolicy projects payment-conditioned decline evidence as a checklist-only review signal", () => {
+test("deriveConcernPolicy keeps an incomplete payment-conditioned decline path audit-only", () => {
   const policy = deriveConcernPolicy({
     concern: makeConcern({
       originKey: "consent.paid_decline_path.reject_with_payment",
@@ -170,7 +176,7 @@ test("deriveConcernPolicy projects payment-conditioned decline evidence as a che
   assert.equal(policy.allowedNarrativeTier, "weak");
   assert.equal(policy.promotionEligibility, "internal_only");
   assert.equal(policy.externalSurfacingEligibility, "audit_only");
-  assert.equal(policy.regulatoryChecklistEligibility, "review_signal");
+  assert.equal(policy.regulatoryChecklistEligibility, "none");
 });
 
 test("deriveConcernPolicy blocks high-risk product projection for retail and bookstore context without explicit financial offer evidence", () => {

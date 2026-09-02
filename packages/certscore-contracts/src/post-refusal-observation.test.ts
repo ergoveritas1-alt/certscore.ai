@@ -73,6 +73,25 @@ function confirmedPacket() {
       confidence: 1,
       recipeId: "fixture-direct-reject-v1",
     },
+    actionControlProof: {
+      contractVersion: "certscore.consent_action_control_proof.v1" as const,
+      action: "reject" as const,
+      observedAtMs: 8,
+      accessibleLabel: "Reject all",
+      labelSource: "visible_text" as const,
+      actionSemantics: "direct_label" as const,
+      classifierIntent: "reject" as const,
+      classifierConfidence: 1,
+      matchedLocale: "en" as const,
+      matchStrength: "direct" as const,
+      classifierReasonCodes: ["exact_reject_label"],
+      cmpId: "fixture",
+      recipeId: "fixture-direct-reject-v1",
+      selectorHint: "#reject-all",
+      visible: true as const,
+      enabled: true as const,
+      uniquelyActionable: true as const,
+    },
     refusalRegistration: {
       status: "confirmed" as const,
       refusalExercised: true,
@@ -95,6 +114,17 @@ function confirmedPacket() {
     },
   };
 }
+
+test("legacy confirmed Reject evidence without verified control proof projects as indeterminate", () => {
+  const { actionControlProof: _omitted, ...legacyPacket } = confirmedPacket();
+  const projection = projectPostRefusalEvidenceForReport({
+    packet: postRefusalEvidencePacketSchema.parse(legacyPacket),
+  });
+
+  assert.equal(projection.evidenceDisposition, "indeterminate");
+  assert.equal(projection.indeterminateReason, "verified_action_control_proof_missing");
+  assert.equal(projection.productionProjectable, false);
+});
 
 test("post-refusal evidence stays score-ineligible when refusal is unconfirmed", () => {
   const result = postRefusalEvidencePacketSchema.safeParse({

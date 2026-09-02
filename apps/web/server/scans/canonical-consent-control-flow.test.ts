@@ -1026,7 +1026,11 @@ test("canonical consent-control flow projects reject-and-subscribe as a partial 
   assert.equal(story.rejectRow.assessmentStatus, "review_signal");
   assert.match(story.rejectRow.limitation ?? "", /consent or pay/i);
   assert.match(story.rejectRow.limitation ?? "", /cannot be determined from the consent interface alone/i);
-  assert.equal(story.rejectScore.score, 90);
+  assert.equal(story.rejectScore.score, null);
+  const paidFinding = buildUnifiedFindingCandidatesFromConcerns(story.normalizedConcerns).find((candidate) =>
+    candidate.normalizedConcern.suggestedUnifiedFindingId === "paid_alternative_required_to_decline_tracking"
+  );
+  assert.ok(paidFinding);
   assert.equal(story.gapFindingObserved, false);
 });
 
@@ -1067,6 +1071,11 @@ test("canonical consent-control flow projects Reject and Pay as paid decline wit
   assert.equal(story.rejectRow.status, "Review signal");
   assert.match(story.rejectRow.limitation ?? "", /required payment/i);
   assert.match(story.rejectRow.limitation ?? "", /consent or pay/i);
+  assert.equal(story.rejectScore.score, null);
+  assert.equal(
+    paidDeclineConcern.suggestedUnifiedFindingId,
+    "paid_alternative_required_to_decline_tracking"
+  );
   assert.equal(story.gapFindingObserved, false);
 });
 

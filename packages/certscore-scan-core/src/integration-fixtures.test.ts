@@ -816,6 +816,36 @@ test("pre-consent runtime scanner retains Reject and Pay as typed paid-decline e
   }
 });
 
+test("owned paid-alternative fixture can verify denial without a transaction", async () => {
+  const server = await startStaticFixtureServer();
+  const browser = await chromium.launch({ headless: true });
+  try {
+    for (const fixture of ["consent-reject-subscribe", "consent-reject-pay"] as const) {
+      const context = await browser.newContext();
+      const page = await context.newPage();
+      await page.goto(server.urlFor(fixture));
+      await page.getByRole("button", { name: /reject/i }).click();
+      const sandbox = page.locator('[data-certscore-owned-nontransactional-sandbox="true"]');
+      await sandbox.waitFor({ state: "visible" });
+      assert.match(await sandbox.innerText(), /No account, subscription, payment method, charge, or external request is created/i);
+      await page.getByRole("button", { name: "Complete test alternative" }).click();
+      assert.equal(
+        await page.evaluate(() => localStorage.getItem("certscore_paid_alternative_state")),
+        "optional_purposes_denied",
+      );
+      assert.equal(
+        await page.evaluate(() => localStorage.getItem("certscore_paid_alternative_completion")),
+        "sandbox_confirmed",
+      );
+      assert.equal(await page.locator("#banner").count(), 0);
+      await context.close();
+    }
+  } finally {
+    await browser.close();
+    await server.close();
+  }
+});
+
 test("pre-consent runtime scanner can retain confirmed first-layer geometry controls without interaction", () => {
   const optionsCandidate = {
     ...geometryCandidate("Cookie settings", "manage_preferences", "confirmed_visible", "first_layer"),

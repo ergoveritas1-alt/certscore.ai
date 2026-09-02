@@ -62,6 +62,26 @@ test("generation selects the latest event deterministically even when input is u
   });
 });
 
+test("generation preserves repository order when database timestamp precision collapses in JavaScript", () => {
+  const collapsedAt = "2026-09-02T02:36:05.803Z";
+  const earlierDatabaseRow = {
+    ...event(1, collapsedAt),
+    id: "aac9b57a-8b19-404d-85b4-6154930df75c"
+  };
+  const laterDatabaseRow = {
+    ...event(2, collapsedAt),
+    id: "725fc262-2bf1-44c6-b2bd-ef3f54ae71d3"
+  };
+
+  assert.deepEqual(
+    getScanReportProjectionGeneration({ events: [earlierDatabaseRow, laterDatabaseRow] }),
+    {
+      eventCount: 2,
+      latestEventId: laterDatabaseRow.id
+    }
+  );
+});
+
 test("artifact-only policy handoff events do not invalidate report generation", () => {
   const canonicalEvents = [event(1, "2026-07-31T16:36:21.000Z")];
   const withInternalPolicyHandoff = [

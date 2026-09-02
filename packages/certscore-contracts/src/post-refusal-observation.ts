@@ -1,4 +1,9 @@
 import { z } from "zod";
+import { consentActionControlProofSchema } from "./consent-action-control-proof";
+import {
+  choicePathEvidenceDispositionSchema,
+  deriveChoicePathEvidenceDisposition,
+} from "./choice-path-evidence-disposition";
 
 export const postRefusalRegistrationStatusSchema = z.enum([
   "confirmed",
@@ -26,6 +31,7 @@ export const postRefusalResolverSchema = z.object({
 export const postRefusalRegistrationWitnessSchema = z.object({
   witnessType: z.enum([
     "cmp_storage_state",
+    "cmp_api_state",
     "tcf_user_action_complete",
     "cmp_cookie_state",
     "banner_transition",
@@ -419,6 +425,7 @@ export const postRefusalEvidencePacketSchema = z.object({
   observationBranch: z.literal("reject_only"),
   phase: z.literal("post_action"),
   consentAction: z.literal("reject"),
+  actionControlProof: consentActionControlProofSchema.optional(),
   startedAt: z.string().datetime(),
   completedAt: z.string().datetime(),
   resolver: postRefusalResolverSchema,
@@ -509,6 +516,13 @@ export const postRefusalEvidencePacketSchema = z.object({
       code: z.ZodIssueCode.custom,
       message: "Only confirmed refusal evidence may be production-projectable.",
       path: ["productionProjectable"],
+    });
+  }
+  if (packet.actionControlProof && packet.actionControlProof.action !== "reject") {
+    context.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: "Post-refusal evidence may retain only a Reject control proof.",
+      path: ["actionControlProof", "action"],
     });
   }
   if (confirmed) {
@@ -865,6 +879,18 @@ export const postRefusalInteractionAuthorizationSchema = z.discriminatedUnion("k
 
 const postRefusalConfirmationSchema = z.discriminatedUnion("kind", [
   z.object({
+    kind: z.literal("cmp_cookie_changed"),
+    cookieName: z.string().min(1).max(160),
+  }),
+  z.object({
+    kind: z.literal("cmp_cookie_names_changed"),
+    cookieNames: z.array(z.string().min(1).max(160)).min(1).max(8),
+  }),
+  z.object({
+    kind: z.literal("cmp_api_consent_state_changed"),
+    provider: z.enum(["termly", "transcend"]),
+  }),
+  z.object({
     kind: z.literal("local_storage_equals"),
     key: z.string().min(1).max(160),
     expectedValue: z.string().max(240),
@@ -901,7 +927,8 @@ const postRefusalResolverConfigSchema = z.discriminatedUnion("kind", [
       "canonical-consent-control-reject-v15",
       "canonical-consent-control-reject-v16",
       "canonical-consent-control-reject-v17",
-      "canonical-consent-control-reject-v18",
+      "canonical-consent-control-reject-v19",
+      "canonical-consent-control-reject-v20",
     ]),
   }),
   z.object({
@@ -917,7 +944,7 @@ export const postRefusalLambdaDispatchConfigSchema = z.object({
   dispatchDelayMs: z.number().int().min(0).max(10_000).default(500),
   observationWindowMs: z.number().int().min(0).max(30_000).default(8_000),
   confirmationTimeoutMs: z.number().int().min(50).max(5_000).default(1_500),
-  actionSearchTimeoutMs: z.number().int().min(0).max(10_000).default(1_500),
+  actionSearchTimeoutMs: z.number().int().min(0).max(15_000).default(1_500),
   resolver: postRefusalResolverConfigSchema,
   interactionAuthorization: postRefusalInteractionAuthorizationSchema,
 }).superRefine((config, context) => {
@@ -1033,6 +1060,9 @@ const postRefusalReportPersistedStorageRowSchema = z.object({
 export const postRefusalReportProjectionSchema = z.object({
   contractVersion: z.literal(POST_REFUSAL_REPORT_PROJECTION_VERSION),
   completedAt: z.string().datetime(),
+  actionControlProof: consentActionControlProofSchema.optional(),
+  evidenceDisposition: choicePathEvidenceDispositionSchema.shape.disposition,
+  indeterminateReason: choicePathEvidenceDispositionSchema.shape.reasonCode,
   contradictionObserved: z.boolean(),
   limitations: z.array(z.string().max(240)).max(24).default([]),
   observationCount: z.number().int().nonnegative(),
@@ -1066,6 +1096,13 @@ export function projectPostRefusalEvidenceForReport(input: {
   const status = packet.refusalRegistration.status === "confirmed"
     ? packet.observations.length > 0 ? "confirmed_observation" : "confirmed_clean"
     : packet.refusalRegistration.status;
+  const evidenceDisposition = deriveChoicePathEvidenceDisposition({
+    status,
+    actionExercised: packet.refusalRegistration.refusalExercised,
+    controlProofVerified: packet.actionControlProof?.action === "reject",
+    productionProjectable: packet.productionProjectable,
+    limitations: packet.limitations,
+  });
   const postRefusalActivity = confirmed
     ? [
         ...packet.network.postRefusalNonEssentialRequests
@@ -1134,6 +1171,9 @@ export function projectPostRefusalEvidenceForReport(input: {
   return postRefusalReportProjectionSchema.parse({
     contractVersion: POST_REFUSAL_REPORT_PROJECTION_VERSION,
     completedAt: packet.completedAt,
+    ...(packet.actionControlProof ? { actionControlProof: packet.actionControlProof } : {}),
+    evidenceDisposition: evidenceDisposition.disposition,
+    indeterminateReason: evidenceDisposition.reasonCode,
     contradictionObserved: confirmed && packet.observations.some((observation) =>
       observation.observationType === "refusal_signal_contradicts_action"
     ),
@@ -1143,7 +1183,7 @@ export function projectPostRefusalEvidenceForReport(input: {
     ...(input.packetSha256 ? { packetSha256: input.packetSha256 } : {}),
     postRefusalActivity,
     preConsentStorageNotCleared,
-    productionProjectable: packet.productionProjectable && confirmed,
+    productionProjectable: packet.productionProjectable && confirmed && Boolean(packet.actionControlProof),
     refusalExercised: confirmed,
     ...(confirmed ? { refusalRegisteredAtMs: packet.refusalRegistration.refusalRegisteredAtMs } : {}),
     registrationStatus: packet.refusalRegistration.status,

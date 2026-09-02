@@ -3796,23 +3796,29 @@ function buildConsentPaidDeclinePathConcerns(
       originKey: `consent.paid_decline_path.${paidDeclineState}`,
       originType: "runtime_artifact",
       rawEvidence: {
+        consentControlAssessmentContractVersion: assessment.artifactVersion,
+        consentControlAssessmentSourceHash: assessment.provenance.sourceHash,
         consentControlAssessmentStatus: assessment.assessmentStatus,
         consentControlCoverageStatus: assessment.coverage.status,
+        consentControlDocumentIdentityStatus: assessment.document.identityStatus,
+        consentControlNoGo: assessment.scan.noGo,
+        consentControlSurfaceStatus: assessment.surface.status,
         consentPaidDeclinePathEvidence: true,
         consentPaidDeclinePathState: paidDeclineState,
         freeRejectControlState: assessment.controls.reject.state,
+        scoreEffect: "none",
         retainedConsentPaidDeclineControls: retainedControls,
         runtimeEvidenceArtifacts: uniqueStrings([
           ...retainedControls.flatMap((control) => control.artifactRefs),
           "scan_runtime_artifacts.consent_control_assessment"
         ])
       },
-      severity: "low",
+      severity: "medium",
       signalKey: "privacy.consent_paid_decline_path",
       signalLabel: "Paid decline path",
       signalSource: "runtime_artifact_signal",
       sourceType: "signal",
-      title: "Paid decline path observed"
+      title: "Paid alternative required to decline tracking"
     })
   ];
 }

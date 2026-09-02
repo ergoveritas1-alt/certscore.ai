@@ -65,7 +65,7 @@ test("defines a source-aware signal registry", () => {
 });
 
 test("defines the unified-finding registry with one owner alignment", () => {
-  assert.equal(REPORT_UNIFIED_FINDINGS.length, 161);
+  assert.equal(REPORT_UNIFIED_FINDINGS.length, 162);
   assert.ok(
     REPORT_UNIFIED_FINDINGS.every(
       (finding) => finding.categoryAlignments.filter((alignment) => alignment.relation === "owner").length === 1
@@ -94,6 +94,16 @@ test("maps score-neutral post-Accept signals through the unified finding registr
       "privacy.acceptance_signal_contradicts_action",
     )?.id,
     "acceptance_signal_contradicts_action",
+  );
+});
+
+test("maps the paid decline path through the unified finding registry", () => {
+  assert.equal(
+    getReportUnifiedFindingForSignal(
+      "runtime_artifact_signal",
+      "privacy.consent_paid_decline_path",
+    )?.id,
+    "paid_alternative_required_to_decline_tracking",
   );
 });
 
@@ -667,6 +677,7 @@ test("returns category-, section-, and pillar-scoped unified findings from deriv
       ({ finding }) => finding.id
     ),
     [
+      "paid_alternative_required_to_decline_tracking",
       "reject_button_missing",
       "accept_more_prominent_than_reject",
       "forced_consent_wall",

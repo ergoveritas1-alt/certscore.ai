@@ -33,7 +33,12 @@ export function getScanReportProjectionGeneration(
     (latest, event) => {
       if (!latest) return event;
       if (event.createdAt > latest.createdAt) return event;
-      if (event.createdAt === latest.createdAt && event.id > latest.id) return event;
+      // PostgreSQL retains sub-millisecond timestamp precision that is lost when
+      // event rows are normalized to JavaScript ISO strings. Repository order is
+      // therefore authoritative when two normalized timestamps compare equal.
+      // The event query orders by created_at and id ascending, so the later row
+      // is also the row selected by the persistence guard's descending query.
+      if (event.createdAt === latest.createdAt) return event;
       return latest;
     },
     null

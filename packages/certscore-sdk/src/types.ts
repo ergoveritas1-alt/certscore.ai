@@ -132,6 +132,8 @@ export interface PostRefusalObservation {
   refusalExercised: boolean;
   observationCount: number;
   productionProjectable: boolean;
+  evidenceDisposition: "confirmed" | "indeterminate";
+  indeterminateReason: string | null;
   verdict:
     | "eligible_nonessential_activity_observed_after_confirmed_refusal"
     | "retained_consent_signal_contradiction_observed_after_confirmed_refusal"
@@ -168,6 +170,8 @@ export interface PostAcceptObservation {
   acceptanceExercised: boolean;
   observationCount: number;
   productionProjectable: boolean;
+  evidenceDisposition: "confirmed" | "indeterminate";
+  indeterminateReason: string | null;
   verdict:
     | "eligible_nonessential_activity_observed_after_confirmed_acceptance"
     | "retained_consent_signal_contradiction_observed_after_confirmed_acceptance"

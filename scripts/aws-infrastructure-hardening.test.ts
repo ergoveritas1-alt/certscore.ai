@@ -278,7 +278,7 @@ test("routine scanner deploys promote immutable digests without recreating infra
   assert.doesNotMatch(verifyFunction, /endsWith\(`:\$\{expectedSha\}`\)/);
 });
 
-test("checked-in AWS deployment paths keep the owned-canary Accept worker enabled", async () => {
+test("checked-in AWS deployment paths keep the all-eligible Accept worker enabled", async () => {
   const [scannerTerraform, webTerraform, webWorkflow, deployFast, parityCheck] = await Promise.all([
     readFile(scannerTerraformPath, "utf8"),
     readFile(webTerraformPath, "utf8"),
@@ -289,10 +289,10 @@ test("checked-in AWS deployment paths keep the owned-canary Accept worker enable
 
   assert.match(scannerTerraform, /CERTSCORE_POST_ACCEPT_WORKER_ENABLED\s+=\s+"1"/);
   assert.match(webTerraform, /name\s+=\s+"CERTSCORE_POST_ACCEPT_WORKER_ENABLED", value\s+=\s+"1"/);
-  assert.match(webTerraform, /name\s+=\s+"CERTSCORE_POST_ACCEPT_WORKER_ROLLOUT_MODE", value\s+=\s+"owned_canary"/);
+  assert.match(webTerraform, /name\s+=\s+"CERTSCORE_POST_ACCEPT_WORKER_ROLLOUT_MODE", value\s+=\s+"all_eligible"/);
   assert.match(deployFast, /CERTSCORE_POST_ACCEPT_WORKER_ENABLED:\s*"1"/);
   assert.match(webWorkflow, /name:"CERTSCORE_POST_ACCEPT_WORKER_ENABLED",value:"1"/);
-  assert.match(webWorkflow, /name:"CERTSCORE_POST_ACCEPT_WORKER_ROLLOUT_MODE",value:"owned_canary"/);
+  assert.match(webWorkflow, /name:"CERTSCORE_POST_ACCEPT_WORKER_ROLLOUT_MODE",value:"all_eligible"/);
   assert.match(parityCheck, /postAcceptWorkerEnabled !== "1"/);
 });
 

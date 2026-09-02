@@ -27,6 +27,15 @@ export async function checkDomainDns(hostname: string): Promise<DomainDnsStatus>
     resolve4,
     resolve6
   });
+  if (!status.exists && status.retryable) {
+    console.warn("[scan-target] DNS verification unavailable", {
+      addressFamilyCounts: status.addressFamilyCounts,
+      event: "scan_target_dns_unavailable",
+      policyVersion: status.policyVersion,
+      reason: status.reasonCode,
+      stage: "admission"
+    });
+  }
   if (!status.exists && status.reasonCode === "non_public_target") {
     console.warn("[scan-target] rejected", {
       addressFamilyCounts: status.addressFamilyCounts,

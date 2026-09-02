@@ -111,7 +111,7 @@ score, persist, and publish exactly once. A neutral, unsupported, unconfirmed,
 failed, stale, or unverifiable reject outcome must not create a finding or
 affect score. There must be no late refresh or report-regeneration path for
 Reject Path evidence.
-The coordinator may wait at most six seconds beyond the slowest passive lane;
+The coordinator may wait at most eight seconds beyond the slowest passive lane;
 after that it must terminate its reject-lane wait and retain an explicit,
 score-neutral coverage limitation in the single result.
 
@@ -136,7 +136,7 @@ invocation start, terminal-outcome time, elapsed duration, worker-reported
 completion/duration when available, and each outcome's delta from the passive
 lane barrier. Persist the typed timing summary with the terminal scan event so
 cohort analysis can measure how often `reject_observation` adds latency, finishes
-before the passive barrier, fails, or reaches the six-second cap. Timing
+before the passive barrier, fails, or reaches the eight-second cap. Timing
 telemetry must not create evidence, findings, or score effects.
 
 The consent-proof lane must capture typed A/R/O, geometry, and the representative pre-consent screenshot from the same browser session. It may use bounded same-session settling and recapture, but it must not click consent controls. The runtime lane must not spend its budget on consent screenshots or screenshot recovery. The policy lane owns policy-surface work and must not depend on spare time left by consent or runtime capture.
@@ -251,25 +251,46 @@ quality gate and the Mini invocation-rate goal.
 
 Sensitive-context labels in v2 are review routing metadata only. They must not create stronger findings, customer-facing language, legal conclusions, or production eligibility.
 
-General post-consent consent-flow runtime remains disabled for WC01 scanner
-runs. A narrow reject-only observation path is authorized for deterministic
-fixtures, explicitly owned canaries such as ErgoVeritas, per-run public
-calibration targets selected through the canonical scan-quality and
+General unbounded post-consent consent-flow runtime remains disabled for WC01
+scanner runs. Bounded Accept and Reject observation lanes are authorized for
+deterministic fixtures, explicitly owned canaries such as ErgoVeritas, per-run
+public calibration targets selected through the canonical scan-quality and
 contact/cooldown controls, and ordinary customer scans that use the sharded
-production Lambda topology. Every eligible sharded scan with the explicit
-reject-observation feature flag receives a non-reusable authorization bound to
-that scan's exact normalized HTTPS target URL. That authorization may not be
-broadened to a host, origin, path prefix, redirect destination, or later scan;
-the observer must fail closed when the loaded document does not retain the
-authorized exact target. Do not infer authorization from the presence of a
-banner, CMP signal, or Reject label. Non-sharded scans and ineligible targets
-must not launch the reject-observation lane.
+production Lambda topology. Every eligible sharded scan with the corresponding
+explicit observation feature flag and `all_eligible` rollout receives a
+non-reusable authorization bound to that scan's exact normalized HTTPS target
+URL. That authorization may not be broadened to a host, origin, path prefix,
+redirect destination, or later scan; each observer must fail closed when the
+loaded document does not retain the authorized exact target. Do not infer
+authorization from the presence of a banner, CMP signal, or Accept/Reject
+label. Non-sharded scans and ineligible targets must not launch either action
+lane.
+
+The Accept observer may perform at most one deterministic first-layer `accept`
+action in a fresh isolated browser context. Named CMPs must use the bounded
+canonical CMP registry and a versioned Accept recipe. A non-CMP first layer may
+use the canonical consent-control classifier only when it yields one uniquely
+actionable, visible, enabled, correctly labelled control and an independently
+verifiable consent-state transition. Improvised strings, feature-local regexes,
+and guessed DOM/text fallbacks are prohibited. Multiple matches, unresolved
+controls, and unconfirmed consent registration fail closed without projectable
+evidence. It must not click Reject, Options/Manage, privacy opt-out, Save,
+forms, authentication, purchases, or unrelated controls; follow deeper
+preference-center paths; reuse visitor state; or interact where the action
+could affect an account or transaction. Ordinary post-Accept activity remains
+a score-neutral comparison baseline. Any retained consent-state contradiction
+must enter production only through the canonical typed evidence, normalized
+concern, concern policy, and unified finding/checklist path.
 
 The reject observer may perform at most one deterministic first-layer `reject`
 or necessary-only-equivalent action in a fresh isolated browser context. It
-must resolve from the bounded canonical CMP registry and use a versioned
-named-CMP Reject recipe; no guessed DOM/text fallback is permitted. Multiple
-matches, unsupported CMPs, and unresolved controls fail closed without a click.
+must use the bounded canonical CMP registry and a versioned Reject recipe for
+named CMPs. A non-CMP first layer may use the same canonical consent-control
+classifier only when it yields one uniquely actionable, visible, enabled,
+correctly labelled control and an independently verifiable refusal-state
+transition. Improvised strings, feature-local regexes, and guessed DOM/text
+fallbacks are prohibited. Multiple matches and unresolved controls fail closed
+without a click.
 It must not click Accept, Options/Manage, privacy
 opt-out, Save, forms, authentication, purchases, or unrelated controls; follow
 deeper preference-center paths; reuse visitor state; or interact where the
@@ -282,10 +303,11 @@ Retain bounded, display-safe reject evidence and provenance; do not retain raw
 TC strings, raw cookie values, sensitive query values, or unbounded bodies.
 Consent-flow-dependent review rows remain evidence aids and must enter
 production only through the typed retained-evidence contract, normalized
-concern, concern policy, and unified finding/checklist path. Reject interaction
-must remain separately disableable. When it is enabled, its terminal outcome is
-part of the single canonical report-readiness barrier; when it is disabled, the
-existing three passive lanes remain the complete barrier.
+concern, concern policy, and unified finding/checklist path. Accept and Reject
+interactions must remain separately disableable. When either is enabled, its
+terminal outcome is part of the single canonical report-readiness barrier;
+when both are disabled, the existing three passive lanes remain the complete
+barrier.
 
 ### WC01 responsibility boundary
 

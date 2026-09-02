@@ -2052,6 +2052,14 @@ export const REPORT_SIGNALS: ReportSignalDefinition[] = [
   ),
   defineReportSignal(
     "runtime_artifact_signal",
+    "privacy.consent_paid_decline_path",
+    "Paid alternative required to decline non-essential tracking",
+    "choice_symmetry_dark_pattern_indicators",
+    ["consent_interface_control_availability"],
+    ["consent_lawful_basis_user_choice", "opt_out_choice_design_dark_pattern_risk"]
+  ),
+  defineReportSignal(
+    "runtime_artifact_signal",
     "privacy.pre_consent_storage_not_cleared",
     "Same non-essential identifier remained stored after refusal",
     "enforcement_outcomes_after_user_choice",
@@ -2967,6 +2975,19 @@ export const REPORT_UNIFIED_FINDINGS = [
     overlays: ["consent_lawful_basis_user_choice"],
     signalMappings: [{ source: "runtime_artifact_signal", key: "privacy.acceptance_signal_contradicts_action" }],
     aliases: ["Acceptance signal contradicts action", "TCF signal contradicted accept", "Consent signal contradicted confirmed acceptance"]
+  }),
+  defineReportUnifiedFinding({
+    id: "paid_alternative_required_to_decline_tracking",
+    label: "Paid alternative required to decline non-essential tracking",
+    owner: "choice_symmetry_dark_pattern_indicators",
+    mirrors: ["consent_interface_control_availability"],
+    overlays: ["consent_lawful_basis_user_choice", "opt_out_choice_design_dark_pattern_risk"],
+    signalMappings: [{ source: "runtime_artifact_signal", key: "privacy.consent_paid_decline_path" }],
+    aliases: [
+      "Reject and subscribe path observed",
+      "Reject and pay path observed",
+      "No free reject path with paid alternative"
+    ]
   }),
   defineReportUnifiedFinding({
     id: "pre_consent_storage_not_cleared",

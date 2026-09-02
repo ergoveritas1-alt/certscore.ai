@@ -27,6 +27,25 @@ function confirmedPacket() {
       recipeId: "canonical-cmp:fixture:accept:v1",
       cmpId: "fixture",
     },
+    actionControlProof: {
+      contractVersion: "certscore.consent_action_control_proof.v1" as const,
+      action: "accept" as const,
+      observedAtMs: 95,
+      accessibleLabel: "Accept all",
+      labelSource: "visible_text" as const,
+      actionSemantics: "direct_label" as const,
+      classifierIntent: "accept" as const,
+      classifierConfidence: 1,
+      matchedLocale: "en" as const,
+      matchStrength: "direct" as const,
+      classifierReasonCodes: ["exact_accept_label"],
+      cmpId: "fixture",
+      recipeId: "canonical-cmp:fixture:accept:v1",
+      selectorHint: "#accept-all",
+      visible: true as const,
+      enabled: true as const,
+      uniquelyActionable: true as const,
+    },
     acceptanceRegistration: {
       status: "confirmed" as const,
       acceptanceExercised: true,
@@ -156,11 +175,24 @@ test("report projection excludes in-flight requests and retains exact storage id
     packetSha256: "c".repeat(64),
   });
   assert.equal(projection.postAcceptActivity.length, 2);
+  assert.equal(projection.evidenceDisposition, "confirmed");
+  assert.equal(projection.indeterminateReason, null);
   assert.equal(projection.postAcceptActivity.some((row) => row.requestId === "request-in-flight"), false);
   assert.equal(
     projection.postAcceptActivity.find((row) => row.activityType === "storage_write")?.storageIdentityHash,
     "b".repeat(64),
   );
+});
+
+test("legacy confirmed Accept evidence without verified control proof projects as indeterminate", () => {
+  const { actionControlProof: _omitted, ...legacyPacket } = confirmedPacket();
+  const projection = projectPostAcceptEvidenceForReport({
+    packet: postAcceptEvidencePacketSchema.parse(legacyPacket),
+  });
+
+  assert.equal(projection.evidenceDisposition, "indeterminate");
+  assert.equal(projection.indeterminateReason, "verified_action_control_proof_missing");
+  assert.equal(projection.productionProjectable, false);
 });
 
 test("limited Accept lane outcomes remain explicit and score-neutral", () => {

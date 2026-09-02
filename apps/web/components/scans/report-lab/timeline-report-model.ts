@@ -180,6 +180,22 @@ function checklistEvidenceJson(item: GdprEprivacyCoverageChecklistItem) {
   };
 }
 
+function isPersistenceOnlyRejectEvidence(value: unknown) {
+  const evidence = record(value);
+  if (!evidence) return false;
+  const count = recordNumber(evidence, [
+    "preConsentStorageNotClearedCount",
+    "pre_consent_storage_not_cleared_count",
+  ]) ?? 0;
+  return count > 0 &&
+    evidence.storagePresenceDoesNotEstablishActiveUse === true &&
+    evidence.scoreEffect === "none" &&
+    evidence.postRejectNonEssentialActivityRetained !== true &&
+    evidence.post_reject_non_essential_activity_retained !== true &&
+    evidence.refusalSignalContradictsAction !== true &&
+    evidence.refusal_signal_contradicts_action !== true;
+}
+
 function collectKeyedStrings(
   value: unknown,
   keyPattern: RegExp,
@@ -227,8 +243,13 @@ function policyEvidenceForRow(item: GdprEprivacyCoverageChecklistItem, capturedA
 
 function mapChecklistRow(item: GdprEprivacyCoverageChecklistItem, capturedAt: string): ShadowEvidenceRow {
   const evidenceJson = checklistEvidenceJson(item);
+  const retainedEvidence = record(evidenceJson.retainedEvidence);
+  const persistenceOnly = item.id === "post_reject_tracking_reduction" &&
+    isPersistenceOnlyRejectEvidence(retainedEvidence);
   const title = item.id === "post_reject_tracking_reduction"
-    ? "Non-essential activity after confirmed Reject"
+    ? persistenceOnly
+      ? "Same non-essential identifier remained stored after Reject"
+      : "Non-essential activity after confirmed Reject"
     : item.label;
   return {
     canonicalEvidenceJson: JSON.stringify(evidenceJson, (_key, value) => typeof value === "bigint" ? value.toString() : value, 2),
@@ -308,6 +329,12 @@ function mapChecklistFinding(
   const postRejectCopy = (() => {
     if (row?.id !== "post_reject_tracking_reduction") return null;
     const retainedEvidence = record(row.evidenceJson.retainedEvidence);
+    if (isPersistenceOnlyRejectEvidence(retainedEvidence)) {
+      return {
+        summary: "The same classified non-essential identifier remained stored after confirmed Reject. No qualifying post-Reject request or storage write was retained; stored presence alone does not show active use.",
+        title: "Same non-essential identifier remained stored after Reject",
+      };
+    }
     if (retainedEvidence?.refusalSignalContradictsAction === true) {
       return {
         summary: "The cookie banner’s Reject control was confirmed, but the retained consent state still encoded granted purposes afterward.",

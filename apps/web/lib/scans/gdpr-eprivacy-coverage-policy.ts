@@ -1425,8 +1425,8 @@ function getConsentPaidDeclinePathConcern(
     const rawEvidence = concern.evidenceBundle.rawEvidence;
     return concern.originKey.startsWith("consent.paid_decline_path.") &&
       concern.originType === "runtime_artifact" &&
-      concern.promotionEligibility === "internal_only" &&
-      concern.externalSurfacingEligibility === "audit_only" &&
+      concern.promotionEligibility === "eligible" &&
+      concern.externalSurfacingEligibility === "eligible" &&
       concern.regulatoryChecklistEligibility === "review_signal" &&
       rawEvidence?.consentPaidDeclinePathEvidence === true;
   }) ?? null;
@@ -4255,13 +4255,15 @@ function deriveRejectPathOutcome(input: GdprEprivacyCoveragePolicyInput) {
       ]).slice(0, 12),
       {
         retainedEvidence: {
+          scoreEffect: "none",
           consentPaidDeclinePathConcern: {
             canonicalConcernKey: paidDeclinePathConcern.canonicalConcernKey,
             originKey: paidDeclinePathConcern.originKey,
             regulatoryChecklistEligibility: paidDeclinePathConcern.regulatoryChecklistEligibility
           },
           freeRejectControlObserved: false,
-          paidSubscriptionDeclinePathObserved: true,
+          paidSubscriptionDeclinePathObserved: !paymentRequired,
+          paymentRequiredDeclinePathObserved: paymentRequired,
           retainedConsentPaidDeclineControls: retainedControls
         }
       }

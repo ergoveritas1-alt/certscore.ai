@@ -32,13 +32,14 @@ function row(overrides: Partial<CaliforniaRejectSourceRow> = {}): CaliforniaReje
   };
 }
 
-test("canonical recipe lookup accepts only TCF CMPs with a deterministic Reject selector", () => {
+test("canonical recipe lookup accepts registered CMPs with a deterministic Reject contract", () => {
   assert.equal(canonicalRejectRecipeCmpName("OneTrust"), "OneTrust");
   assert.equal(canonicalRejectRecipeCmpName("OneTrust CMP"), "OneTrust");
   assert.equal(canonicalRejectRecipeCmpName("CookiePro"), "OneTrust");
   assert.equal(canonicalRejectRecipeCmpName("Cookiebot"), "Cookiebot");
   assert.equal(canonicalRejectRecipeCmpName("Cookiebot CMP"), "Cookiebot");
-  assert.equal(canonicalRejectRecipeCmpName("TrustArc"), null);
+  assert.equal(canonicalRejectRecipeCmpName("TrustArc"), "TrustArc");
+  assert.equal(canonicalRejectRecipeCmpName("Unknown CMP"), null);
   assert.equal(canonicalRejectRecipeCmpName(null), null);
 });
 

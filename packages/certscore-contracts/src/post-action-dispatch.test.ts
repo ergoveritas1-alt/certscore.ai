@@ -31,6 +31,7 @@ test("owned Accept and Reject canaries use independent recipes and staggered sta
   });
 
   assert.equal(reject.postRefusalObservation?.dispatchDelayMs, 500);
+  assert.equal(reject.postRefusalObservation?.actionSearchTimeoutMs, 14_000);
   assert.equal(reject.postRefusalObservation?.resolver.kind, "canonical_cmp_registry");
   assert.equal(accept.postAcceptObservation?.dispatchDelayMs, 1_000);
   assert.equal(accept.postAcceptObservation?.observationWindowMs, 3_000);
@@ -69,6 +70,11 @@ test("ordinary public Accept dispatch requires all-eligible exact HTTPS authoriz
 
   assert.equal(ownedOnly.postAcceptObservation, undefined);
   assert.equal(allEligible.postAcceptObservation?.interactionAuthorization.kind, "scan_target_resolution");
+  assert.equal(allEligible.postAcceptObservation?.actionSearchTimeoutMs, 14_000);
+  assert.deepEqual(allEligible.postAcceptObservation?.resolver, {
+    kind: "canonical_cmp_registry",
+    recipeSetId: "canonical-consent-control-accept-v3",
+  });
   assert.equal(
     allEligible.postAcceptObservation?.interactionAuthorization.kind === "scan_target_resolution"
       ? allEligible.postAcceptObservation.interactionAuthorization.scanId

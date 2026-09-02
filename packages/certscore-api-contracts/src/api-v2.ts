@@ -9,7 +9,7 @@ export function isCanonicalScanId(value: unknown): value is string {
 }
 
 export const CERTSCORE_API_V2_VERSION = "v2";
-export const CERTSCORE_API_V2_SCHEMA_VERSION = "0.1.10";
+export const CERTSCORE_API_V2_SCHEMA_VERSION = "0.1.11";
 
 export const apiV2Disclaimer =
   "CertScore outputs are automated public-web observations for human and agentic review. They are not legal advice, certification, or a compliance determination.";
@@ -27,6 +27,8 @@ export const apiV2PostRefusalObservationSchema = z.object({
   refusalExercised: z.boolean(),
   observationCount: z.number().int().min(0),
   productionProjectable: z.boolean(),
+  evidenceDisposition: z.enum(["confirmed", "indeterminate"]),
+  indeterminateReason: z.string().min(1).max(160).nullable(),
   verdict: z.enum([
     "eligible_nonessential_activity_observed_after_confirmed_refusal",
     "retained_consent_signal_contradiction_observed_after_confirmed_refusal",
@@ -68,6 +70,8 @@ export const apiV2PostAcceptObservationSchema = z.object({
   acceptanceExercised: z.boolean(),
   observationCount: z.number().int().min(0),
   productionProjectable: z.boolean(),
+  evidenceDisposition: z.enum(["confirmed", "indeterminate"]),
+  indeterminateReason: z.string().min(1).max(160).nullable(),
   verdict: z.enum([
     "eligible_nonessential_activity_observed_after_confirmed_acceptance",
     "retained_consent_signal_contradiction_observed_after_confirmed_acceptance",

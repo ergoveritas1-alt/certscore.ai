@@ -19,7 +19,7 @@ reject-observation ──┘
 The three passive lanes start immediately. `reject_observation` starts 500 ms
 later in a fresh isolated Chromium context. The coordinator waits for one
 terminal outcome from every enabled lane, but the Reject lane may add at most
-six seconds beyond the slowest passive lane. Failure, timeout, unsupported CMP,
+eight seconds beyond the slowest passive lane. Failure, timeout, unsupported CMP,
 missing control, and unconfirmed refusal are explicit and score-neutral.
 
 When consent-proof returns a complete first-layer inventory with no Reject, the
@@ -37,8 +37,10 @@ The reject observer:
   identity; ordinary sharded scans then use a bounded passive redirect
   preflight to mint an internal authorization for only the final exact public
   HTTPS URL and the same scan identity;
-- uses TCF or a named recipe from the canonical CMP registry;
-- never guesses a control from DOM text;
+- uses a versioned canonical registry recipe for named CMPs, or the canonical
+  consent-control classifier for one uniquely actionable non-CMP first-layer
+  control with an independently verifiable refusal transition;
+- never uses improvised text, feature-local regexes, or guessed DOM selectors;
 - performs at most one deterministic first-layer Reject or necessary-only
   action;
 - treats banner removal as corroboration only;
@@ -57,8 +59,10 @@ The reject observer:
 - exits early after a disqualifying non-essential request or write; and
 - consumes the canonical vendor resolver rather than a feature-local list.
 
-The initial named-CMP coverage is OneTrust, Cookiebot, and Usercentrics. Unknown
-CMPs and unresolved controls fail closed without a click.
+Named-CMP capability and current recipe coverage are generated from the
+canonical registry by `pnpm ops:cmp-action-coverage`; the implementation must
+not maintain a competing list here. Unresolved or ambiguous controls fail
+closed without a click.
 
 The enable flag defaults to the `owned_canary` rollout mode, which permits only
 loopback fixtures and the owned ErgoVeritas canary. Ordinary eligible sharded
@@ -122,7 +126,7 @@ four-lane timing summary with:
 - the terminal join outcome (`joined`, `not_applicable`, `failed`, or
   `timed_out`).
 
-Timeout telemetry is anchored to the absolute six-second deadline. Operational
+Timeout telemetry is anchored to the absolute eight-second deadline. Operational
 timing never creates evidence or affects score.
 
 ## Local commands

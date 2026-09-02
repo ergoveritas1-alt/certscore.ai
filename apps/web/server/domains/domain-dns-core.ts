@@ -97,6 +97,29 @@ export async function checkDomainDnsWithResolvers(
       };
     }
     if ([ipv4, ipv6, lookup].some((resolution) => resolution.status === "unavailable")) {
+      const lookupClassifications = lookup.addresses.map(classifyPublicTargetAddress);
+      const platformLookupIsCompleteDualStack =
+        lookup.status === "found" &&
+        lookupClassifications.some((entry) => entry.family === 4) &&
+        lookupClassifications.some((entry) => entry.family === 6);
+      if (platformLookupIsCompleteDualStack) {
+        return {
+          exists: true,
+          addressFamilyCounts,
+          policyVersion: PUBLIC_TARGET_POLICY_VERSION,
+          reason: null,
+          reasonCode: null,
+          retryable: false
+        };
+      }
+      console.warn("[scan-target] DNS resolver coverage incomplete", {
+        event: "scan_target_dns_resolver_coverage_incomplete",
+        resolutionStatuses: {
+          ipv4: ipv4.status,
+          ipv6: ipv6.status,
+          lookup: lookup.status
+        }
+      });
       return {
         exists: false,
         addressFamilyCounts,

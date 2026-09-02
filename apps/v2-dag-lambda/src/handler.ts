@@ -89,9 +89,10 @@ export const POST_ACCEPT_WORKER_FEATURE_FLAG =
   "CERTSCORE_POST_ACCEPT_WORKER_ENABLED" as const;
 export const POST_REFUSAL_REJECT_WORKER_DEFAULT_DISPATCH_DELAY_MS = 500;
 export const POST_ACCEPT_WORKER_DEFAULT_DISPATCH_DELAY_MS = 1_000;
+export const POST_ACCEPT_WORKER_MAX_TAIL_WAIT_MS = 6_000;
 export const POST_REFUSAL_REJECT_WORKER_MAX_TAIL_WAIT_MS =
   POST_REFUSAL_CANONICAL_BARRIER_MAX_TAIL_WAIT_MS;
-export const POST_ACCEPT_WORKER_OBSERVER_RESULT_BUDGET_MS = 4_000;
+export const POST_ACCEPT_WORKER_OBSERVER_RESULT_BUDGET_MS = 20_000;
 export const LOCAL_V2_DAG_LAMBDA_LANE_TIMING_CONTRACT_VERSION =
   "certscore.v2.lambda-lane-timing.v1" as const;
 export const LOCAL_V2_DAG_LAMBDA_DEFAULT_PRECONSENT_SCREENSHOT_TIMEOUT_MS = 15_000;
@@ -2202,6 +2203,7 @@ export async function runLocalV2DagLambdaPostAcceptArtifactChain(
       });
     }
     return runPostAcceptObserver({
+      allowCanonicalAcceptDiscovery: config.resolver.kind === "canonical_cmp_registry",
       actionSearchTimeoutMs: config.actionSearchTimeoutMs,
       confirmationTimeoutMs: config.confirmationTimeoutMs,
       dispatchDelayMs: 0,
@@ -2498,37 +2500,33 @@ export async function runLocalV2DagLambdaShardedArtifactChain(
       scanId: payload.scanId,
     })
   );
-  if (postRefusalWorkerPromise) {
-    const completedInsideBarrier = await timeLambdaPhase(
-      phaseTimings,
-      "post_refusal_barrier_join",
-      () => awaitPostRefusalWorkerWithinTailBudget({
-        abortController: postRefusalAbortController,
-        maxTailWaitMs: POST_REFUSAL_REJECT_WORKER_MAX_TAIL_WAIT_MS,
-        passiveLaneBarrierCompletedAtMs,
-        workerPromise: postRefusalWorkerPromise!,
-      }),
-    );
-    if (!completedInsideBarrier && !postRefusalState.cancelledNoReject) {
-      postRefusalState.error = "reject_path_exceeded_post_primary_join_budget";
-      postRefusalState.outcomeObservedAtMs = passiveLaneBarrierCompletedAtMs +
-        POST_REFUSAL_REJECT_WORKER_MAX_TAIL_WAIT_MS;
-      postRefusalState.settled = true;
-      postRefusalState.timedOut = true;
-    }
-  }
-  let postRefusalJoin: "disabled" | "joined" | "failed" | "not_applicable" | "timed_out" =
-    postRefusalState.started ? "failed" : "disabled";
+  // Accept and Reject have independent absolute post-passive deadlines and
+  // are joined concurrently, including packet verification. This prevents
+  // either lane from consuming the other's bounded chance to retain an
+  // already-terminal result. Accept retains its six-second tail; Reject has
+  // an eight-second tail for slower, independently confirmed refusal flows.
   let joinedPostRefusalPacket: PostRefusalEvidencePacket | undefined;
-  if (postRefusalState.cancelledNoReject) {
-    postRefusalJoin = "not_applicable";
-  } else if (postRefusalState.timedOut) {
-    postRefusalJoin = "timed_out";
-  }
-  if (!postRefusalState.cancelledNoReject && !postRefusalState.timedOut && postRefusalState.result) {
+  let joinedPostAcceptPacket: PostAcceptEvidencePacket | undefined;
+  const joinPostRefusalWithinBarrier = async (): Promise<boolean | null> => {
+    if (!postRefusalWorkerPromise) return null;
     try {
+      if (!postRefusalState.settled) {
+        const workerCompleted = await timeLambdaPhase(
+          phaseTimings,
+          "post_refusal_barrier_join",
+          () => awaitPostRefusalWorkerWithinTailBudget({
+            abortController: postRefusalAbortController,
+            maxTailWaitMs: POST_REFUSAL_REJECT_WORKER_MAX_TAIL_WAIT_MS,
+            passiveLaneBarrierCompletedAtMs,
+            workerAlreadySettled: postRefusalState.settled,
+            workerPromise: postRefusalWorkerPromise!,
+          }),
+        );
+        if (!workerCompleted) return false;
+      }
+      if (postRefusalState.cancelledNoReject || !postRefusalState.result) return true;
       let packet: PostRefusalEvidencePacket | undefined;
-      const packetJoinedInsideBarrier = await timeLambdaPhase(
+      const packetCompleted = await timeLambdaPhase(
         phaseTimings,
         "post_refusal_packet_join",
         () => awaitPostRefusalWorkerWithinTailBudget({
@@ -2544,20 +2542,85 @@ export async function runLocalV2DagLambdaShardedArtifactChain(
           }),
         }),
       );
-      if (packetJoinedInsideBarrier && packet) {
-        joinedPostRefusalPacket = packet;
-        postRefusalJoin = "joined";
-      } else {
-        postRefusalJoin = "timed_out";
-      }
+      if (packetCompleted && packet) joinedPostRefusalPacket = packet;
+      return packetCompleted && Boolean(packet);
     } catch (error) {
-      if (postRefusalState.timedOut) {
-        postRefusalJoin = "timed_out";
-      } else {
-        postRefusalJoin = "failed";
+      if (!postRefusalState.timedOut) {
         postRefusalState.error = error instanceof Error ? error.message : String(error);
       }
+      return true;
     }
+  };
+  const joinPostAcceptWithinBarrier = async (): Promise<boolean | null> => {
+    if (!postAcceptWorkerPromise) return null;
+    try {
+      if (!postAcceptState.settled) {
+        const workerCompleted = await timeLambdaPhase(
+          phaseTimings,
+          "post_accept_barrier_join",
+          () => awaitPostRefusalWorkerWithinTailBudget({
+            abortController: postAcceptAbortController,
+            maxTailWaitMs: POST_ACCEPT_WORKER_MAX_TAIL_WAIT_MS,
+            passiveLaneBarrierCompletedAtMs,
+            workerAlreadySettled: postAcceptState.settled,
+            workerPromise: postAcceptWorkerPromise!,
+          }),
+        );
+        if (!workerCompleted) return false;
+      }
+      if (postAcceptState.cancelledNoAccept || !postAcceptState.result) return true;
+      let packet: PostAcceptEvidencePacket | undefined;
+      const packetCompleted = await timeLambdaPhase(
+        phaseTimings,
+        "post_accept_packet_join",
+        () => awaitPostRefusalWorkerWithinTailBudget({
+          abortController: postAcceptAbortController,
+          maxTailWaitMs: POST_ACCEPT_WORKER_MAX_TAIL_WAIT_MS,
+          passiveLaneBarrierCompletedAtMs,
+          workerPromise: readPostAcceptPacketFromArtifactResult(postAcceptState.result!, {
+            awsRegion: payload.awsRegion,
+            s3GetClient: options.s3GetClient,
+            signal: postAcceptAbortController.signal,
+          }).then((verifiedPacket) => {
+            packet = verifiedPacket;
+          }),
+        }),
+      );
+      if (packetCompleted && packet) joinedPostAcceptPacket = packet;
+      return packetCompleted && Boolean(packet);
+    } catch (error) {
+      if (!postAcceptState.timedOut) {
+        postAcceptState.error = error instanceof Error ? error.message : String(error);
+      }
+      return true;
+    }
+  };
+  const [postRefusalCompletedInsideBarrier, postAcceptCompletedInsideBarrier] = await Promise.all([
+    joinPostRefusalWithinBarrier(),
+    joinPostAcceptWithinBarrier(),
+  ]);
+  if (postRefusalCompletedInsideBarrier === false && !postRefusalState.cancelledNoReject) {
+    postRefusalState.error = "reject_path_exceeded_post_primary_join_budget";
+    postRefusalState.outcomeObservedAtMs = passiveLaneBarrierCompletedAtMs +
+      POST_REFUSAL_REJECT_WORKER_MAX_TAIL_WAIT_MS;
+    postRefusalState.settled = true;
+    postRefusalState.timedOut = true;
+  }
+  if (postAcceptCompletedInsideBarrier === false && !postAcceptState.cancelledNoAccept) {
+    postAcceptState.error = "accept_path_exceeded_post_primary_join_budget";
+    postAcceptState.outcomeObservedAtMs = passiveLaneBarrierCompletedAtMs +
+      POST_ACCEPT_WORKER_MAX_TAIL_WAIT_MS;
+    postAcceptState.settled = true;
+    postAcceptState.timedOut = true;
+  }
+  let postRefusalJoin: "disabled" | "joined" | "failed" | "not_applicable" | "timed_out" =
+    postRefusalState.started ? "failed" : "disabled";
+  if (postRefusalState.cancelledNoReject) {
+    postRefusalJoin = "not_applicable";
+  } else if (postRefusalState.timedOut) {
+    postRefusalJoin = "timed_out";
+  } else if (joinedPostRefusalPacket) {
+    postRefusalJoin = "joined";
   }
   if (postRefusalState.started) {
     const outcomeCompletedAt = joinedPostRefusalPacket?.completedAt ?? new Date().toISOString();
@@ -2581,66 +2644,14 @@ export async function runLocalV2DagLambdaShardedArtifactChain(
       },
     });
   }
-  if (postAcceptWorkerPromise) {
-    const completedInsideBarrier = await timeLambdaPhase(
-      phaseTimings,
-      "post_accept_barrier_join",
-      () => awaitPostRefusalWorkerWithinTailBudget({
-        abortController: postAcceptAbortController,
-        maxTailWaitMs: POST_REFUSAL_REJECT_WORKER_MAX_TAIL_WAIT_MS,
-        passiveLaneBarrierCompletedAtMs,
-        workerPromise: postAcceptWorkerPromise!,
-      }),
-    );
-    if (!completedInsideBarrier && !postAcceptState.cancelledNoAccept) {
-      postAcceptState.error = "accept_path_exceeded_post_primary_join_budget";
-      postAcceptState.outcomeObservedAtMs = passiveLaneBarrierCompletedAtMs +
-        POST_REFUSAL_REJECT_WORKER_MAX_TAIL_WAIT_MS;
-      postAcceptState.settled = true;
-      postAcceptState.timedOut = true;
-    }
-  }
   let postAcceptJoin: "disabled" | "joined" | "failed" | "not_applicable" | "timed_out" =
     postAcceptState.started ? "failed" : "disabled";
-  let joinedPostAcceptPacket: PostAcceptEvidencePacket | undefined;
   if (postAcceptState.cancelledNoAccept) {
     postAcceptJoin = "not_applicable";
   } else if (postAcceptState.timedOut) {
     postAcceptJoin = "timed_out";
-  }
-  if (!postAcceptState.cancelledNoAccept && !postAcceptState.timedOut && postAcceptState.result) {
-    try {
-      let packet: PostAcceptEvidencePacket | undefined;
-      const packetJoinedInsideBarrier = await timeLambdaPhase(
-        phaseTimings,
-        "post_accept_packet_join",
-        () => awaitPostRefusalWorkerWithinTailBudget({
-          abortController: postAcceptAbortController,
-          maxTailWaitMs: POST_REFUSAL_REJECT_WORKER_MAX_TAIL_WAIT_MS,
-          passiveLaneBarrierCompletedAtMs,
-          workerPromise: readPostAcceptPacketFromArtifactResult(postAcceptState.result!, {
-            awsRegion: payload.awsRegion,
-            s3GetClient: options.s3GetClient,
-            signal: postAcceptAbortController.signal,
-          }).then((verifiedPacket) => {
-            packet = verifiedPacket;
-          }),
-        }),
-      );
-      if (packetJoinedInsideBarrier && packet) {
-        joinedPostAcceptPacket = packet;
-        postAcceptJoin = "joined";
-      } else {
-        postAcceptJoin = "timed_out";
-      }
-    } catch (error) {
-      if (postAcceptState.timedOut) {
-        postAcceptJoin = "timed_out";
-      } else {
-        postAcceptJoin = "failed";
-        postAcceptState.error = error instanceof Error ? error.message : String(error);
-      }
-    }
+  } else if (joinedPostAcceptPacket) {
+    postAcceptJoin = "joined";
   }
   if (postAcceptState.started) {
     const outcomeCompletedAt = joinedPostAcceptPacket?.completedAt ?? new Date().toISOString();
@@ -2652,7 +2663,7 @@ export async function runLocalV2DagLambdaShardedArtifactChain(
         contractVersion: "certscore.post_accept_lane_outcome.v1",
         completedAt: outcomeCompletedAt,
         evidenceJoined: postAcceptJoin === "joined",
-        maxTailWaitMs: POST_REFUSAL_REJECT_WORKER_MAX_TAIL_WAIT_MS,
+        maxTailWaitMs: POST_ACCEPT_WORKER_MAX_TAIL_WAIT_MS,
         status: postAcceptJoin,
         ...(postAcceptJoin === "timed_out"
           ? { limitationCode: "accept_path_timeout" }
@@ -2704,7 +2715,7 @@ export async function runLocalV2DagLambdaShardedArtifactChain(
       addedInitialBarrierWaitMs: laneTimingSummary.acceptLaneAddedWaitMs ?? 0,
       featureEnabled: postAcceptState.started,
       join: postAcceptJoin,
-      maxTailWaitMs: POST_REFUSAL_REJECT_WORKER_MAX_TAIL_WAIT_MS,
+      maxTailWaitMs: POST_ACCEPT_WORKER_MAX_TAIL_WAIT_MS,
       productionProjectable: joinedPostAcceptPacket?.productionProjectable === true,
       workerError: postAcceptState.error ?? null,
     },
@@ -3022,6 +3033,7 @@ export async function awaitPostRefusalWorkerWithinTailBudget(input: {
   abortController: AbortController;
   maxTailWaitMs?: number;
   passiveLaneBarrierCompletedAtMs: number;
+  workerAlreadySettled?: boolean;
   workerPromise: Promise<void>;
 }): Promise<boolean> {
   if (input.abortController.signal.aborted) return false;
@@ -3030,6 +3042,11 @@ export async function awaitPostRefusalWorkerWithinTailBudget(input: {
   ));
   const remainingMs = input.passiveLaneBarrierCompletedAtMs + maxTailWaitMs - Date.now();
   if (remainingMs <= 0) {
+    // A join that reaches its own absolute deadline must still consume a
+    // worker result that was already terminal before that deadline. This
+    // zero-wait check inspects only already-settled work and never extends the
+    // lane's barrier.
+    if (input.workerAlreadySettled) return true;
     input.abortController.abort(new Error("Reject Path exceeded its post-primary join budget."));
     return false;
   }
@@ -3208,7 +3225,7 @@ export function buildLocalV2DagLambdaLaneTimingSummary(input: {
     ...(input.postAccept ? {
       acceptCompletedBeforeOrAtPassiveBarrier: acceptTailDeltaMs === null ? null : acceptTailDeltaMs <= 0,
       acceptLaneAddedWaitMs: Math.min(
-        POST_REFUSAL_REJECT_WORKER_MAX_TAIL_WAIT_MS,
+        POST_ACCEPT_WORKER_MAX_TAIL_WAIT_MS,
         Math.max(0, Math.round(acceptTailDeltaMs ?? 0)),
       ),
       acceptLaneJoin: input.postAccept.join,
@@ -3218,7 +3235,7 @@ export function buildLocalV2DagLambdaLaneTimingSummary(input: {
     coordinatorStartedAt: new Date(input.coordinatorStartedAtMs).toISOString(),
     generatedAt: new Date(input.generatedAtMs).toISOString(),
     lanes,
-    ...(input.postAccept ? { maxAcceptTailWaitMs: POST_REFUSAL_REJECT_WORKER_MAX_TAIL_WAIT_MS } : {}),
+    ...(input.postAccept ? { maxAcceptTailWaitMs: POST_ACCEPT_WORKER_MAX_TAIL_WAIT_MS } : {}),
     maxRejectTailWaitMs: POST_REFUSAL_REJECT_WORKER_MAX_TAIL_WAIT_MS,
     passiveLaneBarrierCompletedAt: new Date(passiveLaneBarrierCompletedAtMs).toISOString(),
     rejectCompletedBeforeOrAtPassiveBarrier: rejectTailDeltaMs === null ? null : rejectTailDeltaMs <= 0,

@@ -112,6 +112,30 @@ test("checkDomainDns fails closed when one address family is temporarily unavail
   assert.equal(status.reasonCode, "dns_unavailable");
 });
 
+test("checkDomainDns accepts a complete public dual-stack platform lookup when auxiliary resolvers are unavailable", async () => {
+  const status = await checkDomainDnsWithResolvers("example.com", {
+    lookup: async () => [
+      { address: "93.184.216.34", family: 4 },
+      { address: "2606:2800:220:1:248:1893:25c8:1946", family: 6 }
+    ],
+    resolve4: async () => {
+      throw dnsError("ETIMEOUT");
+    },
+    resolve6: async () => {
+      throw dnsError("ESERVFAIL");
+    }
+  });
+
+  assert.deepEqual(status, {
+    addressFamilyCounts: { ipv4: 1, ipv6: 1 },
+    exists: true,
+    policyVersion: "certscore.public-target.v1",
+    reason: null,
+    reasonCode: null,
+    retryable: false
+  });
+});
+
 test("checkDomainDns rejects private-only and mixed public/private answers", async () => {
   for (const addresses of [["127.0.0.1"], ["93.184.216.34", "10.0.0.1"]]) {
     const status = await checkDomainDnsWithResolvers("fixture.example", {

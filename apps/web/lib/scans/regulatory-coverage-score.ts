@@ -394,6 +394,7 @@ function getGdprEprivacyRowDeduction(row: RegulatoryCoverageRow) {
   if (!policy) return 0;
 
   const retained = getRetainedEvidence(row);
+  if (retained.scoreEffect === "none" && !hasConfirmedPostRefusalContradiction(row)) return 0;
   if (
     row.id === "pre_consent_cookies_storage" &&
     (row.assessmentStatus === "gap_observed" || row.assessmentStatus === "review_signal")

@@ -1,6 +1,7 @@
 import {
   POST_ACCEPT_DEFAULT_OBSERVATION_WINDOW_MS,
   postAcceptEvidencePacketSchema,
+  type ConsentActionControlProof,
   type PostAcceptEvidencePacket,
   type PostAcceptNetworkRequest,
   type PostAcceptObservation,
@@ -39,6 +40,32 @@ import {
 } from "./post-refusal-observer.js";
 import { installPublicNetworkGuardRoute } from "./public-network-guard.js";
 import { installWebBotAuthRoute } from "./web-bot-auth-routing.js";
+import { diagnoseCmpActionCoverage } from "./cmp-action-coverage.js";
+import {
+  closedShadowAccessibleControlAvailable,
+  dispatchClosedShadowAccessibleControl,
+  resolveScopedAccessibleControl,
+  type CmpAccessibleActionResolution,
+} from "./cmp-accessible-action.js";
+import { readCmpApiConsentSnapshot } from "./cmp-api-consent-state.js";
+import { buildConsentActionControlProof } from "./cmp-action-control-proof.js";
+import {
+  captureConsentControlGeometry,
+  type ConsentControlCandidateEvidence,
+} from "./consent-control-geometry.js";
+import { matchesCanonicalCmpCookieName } from "./cmp-cookie-name.js";
+import {
+  cmpRecipeRequiresViewportHitTarget,
+  dispatchLocatorClickWithVerifiedGeometry,
+  inspectLocatorActionability,
+  locatorActionabilitySupportsVerifiedDispatch,
+  locatorHasViewportHitTarget,
+  waitForLocatorVerifiedGeometry,
+} from "./cmp-control-actionability.js";
+import {
+  installConsentActionDiscovery,
+  type ConsentActionDiscovery,
+} from "./consent-action-discovery.js";
 
 const POST_ACCEPT_SOURCE = "post_accept_observer";
 const MAX_REQUESTS = 96;
@@ -60,8 +87,13 @@ export interface PostAcceptActionRecipe {
     | "local_fixture_recipe"
     | "cmp_registry_recipe"
     | "tcf_api_cmp_registry_recipe"
-    | "owned_site_recipe";
+    | "owned_site_recipe"
+    | "canonical_consent_control_registry_recipe";
   controlSelector: string;
+  /** Exact canonical label used only to disambiguate one geometry-derived selector. */
+  controlExpectedNormalizedLabel?: string;
+  accessibleControl?: CmpAccessibleActionResolution;
+  runtimeUrlPatternSources?: string[];
   controlFrameUrl?: string;
   bannerSelector?: string;
   bannerFrameUrl?: string;
@@ -89,6 +121,25 @@ export interface PostAcceptActionRecipe {
           name: string;
           path: string;
         }>;
+      }
+    | {
+        kind: "cmp_cookie_changed";
+        cookieName: string;
+      }
+    | {
+        kind: "cmp_cookie_names_changed";
+        cookieNames: string[];
+      }
+    | {
+        kind: "cmp_api_consent_state_changed";
+        provider: "termly" | "transcend";
+      }
+    | {
+        kind: "canonical_accept_transition";
+        controlSelector: string;
+        controlFrameUrl?: string;
+        bannerSelector: string;
+        bannerFrameUrl?: string;
       };
 }
 
@@ -100,6 +151,14 @@ export interface PostAcceptObserverInput {
   recipe: PostAcceptActionRecipe;
   recipeCandidates?: PostAcceptActionRecipe[];
   recipeSetId?: string;
+  /**
+   * For a runtime-identified CMP, use the canonical consent-control inventory
+   * before its registered selector. For a non-CMP first layer, the same
+   * canonical inventory may provide the bounded best attempt. Confirmation
+   * still requires retained post-action evidence; classification alone never
+   * confirms acceptance.
+   */
+  allowCanonicalAcceptDiscovery?: boolean;
   scanStartedAtMs?: number;
   dispatchDelayMs?: number;
   observationWindowMs?: number;
@@ -139,7 +198,21 @@ type TcfDataSnapshot = {
 };
 
 type ConfirmationBaseline =
+  | {
+      kind: "canonical_accept_transition";
+      controlVisible: boolean;
+      bannerVisible: boolean;
+      bannerStateHash?: string;
+      pageUrl: string;
+    }
   | { kind: "local_storage_equals"; lastSequence: number }
+  | { kind: "cmp_cookie_changed"; cookieStateHash?: string }
+  | { kind: "cmp_cookie_names_changed"; cookieStateHashes: Record<string, string | undefined> }
+  | {
+      kind: "cmp_api_consent_state_changed";
+      canonicalState?: string;
+      eventSequence: number;
+    }
   | {
       kind: "tcf_purposes_granted_or_cmp_cookie_changed";
       snapshot?: TcfDataSnapshot;
@@ -155,7 +228,12 @@ type ConfirmationBaseline =
 
 type ConfirmationState = {
   stateHash: string;
-  witnessType: "cmp_storage_state" | "tcf_user_action_complete" | "cmp_cookie_state";
+  witnessType:
+    | "cmp_storage_state"
+    | "cmp_api_state"
+    | "tcf_user_action_complete"
+    | "cmp_cookie_state"
+    | "canonical_acceptance_state";
   key?: string;
   expectedState: string;
 };
@@ -212,7 +290,7 @@ export async function runPostAcceptObserver(
     30_000,
   );
   const confirmationTimeoutMs = boundedMs(input.confirmationTimeoutMs, 2_000, 50, 5_000);
-  const actionSearchTimeoutMs = boundedMs(input.actionSearchTimeoutMs, 10_000, 0, 10_000);
+  const actionSearchTimeoutMs = boundedMs(input.actionSearchTimeoutMs, 13_000, 0, 15_000);
   const limitations = [
     `interaction_authorization:${input.interactionAuthorization.kind}:${input.interactionAuthorization.authorizationId}`,
     ...(input.productionProjectable === true ? [] : ["artifact_only_not_production_projectable"]),
@@ -247,10 +325,12 @@ export async function runPostAcceptObserver(
   let cancellationObservedAtMs: number | undefined;
   let observationCoverageSufficient = false;
   let selectedRecipe: PostAcceptActionRecipe | undefined;
+  let actionControlProof: ConsentActionControlProof | undefined;
   let browser = input.browser;
   let ownsBrowser = false;
   let context: BrowserContext | undefined;
   let page: Page | undefined;
+  let actionDiscovery: ConsentActionDiscovery | undefined;
 
   const cancellation = () => {
     if (!effectiveSignal?.aborted) return false;
@@ -294,7 +374,8 @@ export async function runPostAcceptObserver(
       artifactVersion: "certscore.post_accept_evidence.v1",
       artifactOnly: true,
       productionProjectable:
-        input.productionProjectable === true && confirmed && observationCoverageSufficient,
+        input.productionProjectable === true && confirmed && observationCoverageSufficient &&
+        Boolean(actionControlProof),
       scanId: input.scanId,
       ...(input.parentScanId ? { parentScanId: input.parentScanId } : {}),
       ...(authorizedExactTargetUrl
@@ -305,6 +386,7 @@ export async function runPostAcceptObserver(
       observationBranch: "accept_only",
       phase: "post_action",
       consentAction: "accept",
+      ...(actionControlProof ? { actionControlProof } : {}),
       startedAt: new Date(branchStartedAtMs).toISOString(),
       completedAt: new Date(completedAtMs).toISOString(),
       resolver: {
@@ -394,6 +476,7 @@ export async function runPostAcceptObserver(
       await installPublicNetworkGuardRoute(context);
     }
     page = await context.newPage();
+    actionDiscovery = await installConsentActionDiscovery(page);
     await installStorageWriteProbe(page);
     let mainNavigationRequestCount = 0;
     page.on("request", (request) => {
@@ -507,14 +590,33 @@ export async function runPostAcceptObserver(
     diagnostics.navigation.finalUrlAuthorized = true;
 
     const resolverStartedAtMs = Date.now();
-    let resolution = await waitForDeterministicRecipe(
-      page,
-      recipes,
-      remainingResultBudgetMs(actionSearchTimeoutMs),
-      effectiveSignal,
-    );
+    let resolution = input.allowCanonicalAcceptDiscovery
+      ? await waitForDeterministicOrCanonicalAcceptRecipe(
+          page,
+          recipes,
+          remainingResultBudgetMs(actionSearchTimeoutMs),
+          effectiveSignal,
+          actionDiscovery,
+        )
+      : await waitForDeterministicRecipe(
+          page,
+          recipes,
+          remainingResultBudgetMs(actionSearchTimeoutMs),
+          effectiveSignal,
+          actionDiscovery,
+        );
     timing.resolverMs = Math.max(0, Date.now() - resolverStartedAtMs);
     if (resolution.status !== "found") {
+      if (resolution.status !== "aborted") {
+        const coverage = await diagnoseCmpActionCoverage({
+          action: "accept",
+          context,
+          page,
+        }).catch(() => undefined);
+        if (coverage && !limitations.includes(coverage.limitation)) {
+          limitations.push(coverage.limitation);
+        }
+      }
       const reason = resolution.status === "ambiguous"
         ? "multiple_deterministic_accept_controls_found"
         : resolution.status === "aborted"
@@ -547,10 +649,23 @@ export async function runPostAcceptObserver(
     }
 
     let actionabilityError: unknown;
+    let useVerifiedGeometryDispatch = false;
     try {
-      await control.click({ trial: true, timeout: 1_000 });
+      await trialAcceptControl(page, control, selectedRecipe);
     } catch (error) {
       actionabilityError = error;
+    }
+    if (
+      actionabilityError &&
+      classifyClickFailure(actionabilityError) === "actionability_timeout"
+    ) {
+      const actionability = await inspectLocatorActionability(control);
+      if (locatorActionabilitySupportsVerifiedDispatch(actionability)) {
+        actionabilityError = undefined;
+        useVerifiedGeometryDispatch = true;
+        diagnostics.click.actionability = actionability;
+        limitations.push("action_dispatch_verified_geometry_fallback");
+      }
     }
     if (actionabilityError) {
       resolution = await waitForDeterministicRecipe(
@@ -558,26 +673,53 @@ export async function runPostAcceptObserver(
         [selectedRecipe],
         remainingResultBudgetMs(500),
         effectiveSignal,
+        actionDiscovery,
       );
+      if (resolution.status === "not_found" && input.allowCanonicalAcceptDiscovery) {
+        resolution = await waitForCanonicalAcceptControlRecipe(
+          page,
+          remainingResultBudgetMs(500),
+          effectiveSignal,
+          recipes,
+        );
+      }
       if (resolution.status === "found") {
         selectedRecipe = resolution.recipe;
         control = resolution.control;
         confirmationScope = resolution.scope;
         diagnostics.click.reResolvedBeforeDispatch = true;
         try {
-          await control.click({ trial: true, timeout: 1_000 });
-          actionabilityError = undefined;
+          if (selectedRecipe.accessibleControl?.kind === "closed_shadow_accessible_control") {
+            await trialAcceptControl(page, control, selectedRecipe);
+            actionabilityError = undefined;
+          } else {
+            const actionability = await waitForLocatorVerifiedGeometry(
+              control,
+              remainingResultBudgetMs(1_000),
+            );
+            if (!actionability) throw new Error("Verified Accept geometry actionability timeout.");
+            actionabilityError = undefined;
+            useVerifiedGeometryDispatch = true;
+            diagnostics.click.actionability = actionability;
+            if (!limitations.includes("action_dispatch_verified_geometry_fallback")) {
+              limitations.push("action_dispatch_verified_geometry_fallback");
+            }
+          }
         } catch (error) {
           actionabilityError = error;
         }
       }
     }
     if (actionabilityError) {
+      const actionability = await inspectLocatorActionability(control);
       diagnostics.click = {
         outcome: "failed_before_dispatch",
-        failureClass: classifyClickFailure(actionabilityError),
+        failureClass: actionability.centerHitTargetRelation === "other_element"
+          ? "intercepted"
+          : classifyClickFailure(actionabilityError),
         reResolvedBeforeDispatch: diagnostics.click.reResolvedBeforeDispatch,
         confirmationCheckedAfterError: false,
+        actionability,
       };
       limitations.push("deterministic_accept_control_not_actionable");
       return finalize({
@@ -600,13 +742,48 @@ export async function runPostAcceptObserver(
       confirmationScope,
       selectedRecipe.confirmation,
     );
+    const proofResolution = await buildConsentActionControlProof({
+      action: "accept",
+      ...(authorizedExactTargetUrl
+        ? { authorizedTargetSha256: hashValue(normalizeTargetUrl(authorizedExactTargetUrl)) }
+        : {}),
+      ...(selectedRecipe.cmpId ? { cmpId: selectedRecipe.cmpId } : {}),
+      control,
+      ...(selectedRecipe.controlFrameUrl
+        ? { controlFrameUrl: selectedRecipe.controlFrameUrl }
+        : {}),
+      ...(selectedRecipe.accessibleControl
+        ? { expectedAccessibleControl: selectedRecipe.accessibleControl }
+        : {}),
+      observedAtMs: elapsed(parentScanStartedAtMs),
+      page,
+      recipeId: selectedRecipe.recipeId,
+      selectorHint: selectedRecipe.controlSelector,
+    });
+    if (proofResolution.status !== "verified") {
+      limitations.push(proofResolution.status, proofResolution.reason);
+      return finalize({
+        resolverFound: false,
+        resolverReason: proofResolution.status,
+        registration: unconfirmedRegistration("not_attempted", proofResolution.status),
+        preActionCapturedAtMs,
+        preActionStorage,
+        requests: classifyRequests(capturedRequests, parentScanStartedAtMs),
+      });
+    }
+    actionControlProof = proofResolution.proof;
     const actionDispatchedAtEpochMs = Date.now();
     const actionDispatchedAtMs = elapsed(parentScanStartedAtMs, actionDispatchedAtEpochMs);
     actionDispatched = true;
     input.onLifecycleEvent?.({ type: "action_dispatched", atMs: actionDispatchedAtMs });
     let clickError: unknown;
     try {
-      await control.click({ timeout: 2_000 });
+      await dispatchAcceptControl(
+        page,
+        control,
+        selectedRecipe,
+        useVerifiedGeometryDispatch,
+      );
     } catch (error) {
       clickError = error;
     }
@@ -730,6 +907,7 @@ export async function runPostAcceptObserver(
         postActionStorage,
       ))
       .filter((write): write is PostAcceptStorageWrite => Boolean(write))
+      .filter((write) => write.nonEssential)
       .slice(0, 48);
     const preActionByIdentity = new Map(preActionStorage.map((item) => [storageKey(item), item]));
     const itemsCreatedOrChangedAfterAccept = postActionStorage.filter((item) => {
@@ -778,6 +956,7 @@ export async function runPostAcceptObserver(
     });
   } finally {
     if (resultBudgetTimer) clearTimeout(resultBudgetTimer);
+    actionDiscovery?.dispose();
     await context?.close().catch(() => undefined);
     if (ownsBrowser) await browser?.close().catch(() => undefined);
   }
@@ -789,6 +968,16 @@ function validatedRecipes(input: PostAcceptObserverInput) {
   for (const recipe of selected.slice(0, 24)) {
     if (recipe.artifactVersion !== "certscore.post_accept_action_recipe.v1") continue;
     if (!recipe.controlSelector.trim() || !recipe.recipeId.trim()) continue;
+    if (
+      recipe.controlExpectedNormalizedLabel !== undefined &&
+      (
+        !recipe.controlExpectedNormalizedLabel.trim() ||
+        recipe.controlExpectedNormalizedLabel.length > 240 ||
+        recipe.controlExpectedNormalizedLabel !== normalizeAcceptControlLabel(
+          recipe.controlExpectedNormalizedLabel,
+        )
+      )
+    ) continue;
     deduped.set(recipe.recipeId, recipe);
   }
   if (deduped.size === 0) throw new Error("Post-Accept observer requires a deterministic action recipe.");
@@ -807,6 +996,7 @@ async function waitForDeterministicRecipe(
   recipes: PostAcceptActionRecipe[],
   timeoutMs: number,
   signal?: AbortSignal,
+  discovery?: ConsentActionDiscovery,
 ): Promise<
   | {
       status: "found";
@@ -817,15 +1007,45 @@ async function waitForDeterministicRecipe(
   | { status: "not_found" | "ambiguous" | "aborted" }
 > {
   const deadlineAtMs = Date.now() + timeoutMs;
+  let prioritizedRecipeId: string | undefined;
   do {
     if (signal?.aborted) return { status: "aborted" };
+    const attemptRevision = discovery?.revision ?? 0;
     const matches: Array<{
       recipe: PostAcceptActionRecipe;
       control: Locator;
       scope: Page | Frame;
     }> = [];
-    for (const recipe of recipes) {
+    const viewportPendingRecipeIds: string[] = [];
+    const recipesForAttempt = prioritizedRecipeId
+      ? recipes.filter((recipe) => recipe.recipeId === prioritizedRecipeId)
+      : recipes;
+    for (const recipe of recipesForAttempt) {
       for (const scope of selectorScopes(page, recipe.controlFrameUrl)) {
+        if (recipe.accessibleControl?.kind === "scoped_accessible_control") {
+          const control = await resolveScopedAccessibleControl(scope, recipe.accessibleControl);
+          if (control) {
+            if (
+              !cmpRecipeRequiresViewportHitTarget(recipe.cmpId) ||
+              await locatorHasViewportHitTarget(control)
+            ) {
+              matches.push({ recipe, control, scope });
+            } else {
+              viewportPendingRecipeIds.push(recipe.recipeId);
+            }
+          }
+          continue;
+        }
+        if (recipe.accessibleControl?.kind === "closed_shadow_accessible_control") {
+          if (scope !== page) continue;
+          const host = scope.locator(recipe.accessibleControl.scopeSelector);
+          if (
+            await host.count().catch(() => 0) === 1 &&
+            await host.first().isVisible().catch(() => false) &&
+            await closedShadowAccessibleControlAvailable(page, recipe.accessibleControl)
+          ) matches.push({ recipe, control: host.first(), scope });
+          continue;
+        }
         const locator = scope.locator(recipe.controlSelector);
         const count = Math.min(await locator.count().catch(() => 0), 8);
         for (let index = 0; index < count; index += 1) {
@@ -834,16 +1054,439 @@ async function waitForDeterministicRecipe(
             control.isVisible().catch(() => false),
             control.isEnabled().catch(() => false),
           ]);
-          if (visible && enabled) matches.push({ recipe, control, scope });
+          const expectedLabelPresent = recipe.controlExpectedNormalizedLabel === undefined ||
+            (await normalizedAcceptLocatorLabels(control)).includes(
+              recipe.controlExpectedNormalizedLabel,
+            );
+          if (visible && enabled && expectedLabelPresent) {
+            if (
+              !cmpRecipeRequiresViewportHitTarget(recipe.cmpId) ||
+              await locatorHasViewportHitTarget(control)
+            ) {
+              matches.push({ recipe, control, scope });
+            } else {
+              viewportPendingRecipeIds.push(recipe.recipeId);
+            }
+          }
         }
       }
     }
     if (matches.length === 1) return { status: "found", ...matches[0]! };
     if (matches.length > 1) return { status: "ambiguous" };
+    // Some exact named controls (notably HubSpot's animated first layer) are
+    // initially visible and enabled while still outside the viewport. Once a
+    // single exact recipe/selector/label candidate reaches that state, poll
+    // only that registered recipe until it becomes a real hit target. If the
+    // candidate disappears or becomes non-unique, return to the full registry
+    // on the next attempt; no selector, label, or geometry rule is relaxed.
+    prioritizedRecipeId = viewportPendingRecipeIds.length === 1
+      ? viewportPendingRecipeIds[0]
+      : undefined;
     if (Date.now() >= deadlineAtMs) break;
-    await waitForDelay(50, signal).catch(() => undefined);
+    const remainingMs = Math.max(0, deadlineAtMs - Date.now());
+    const wakeAfterMs = Math.min(prioritizedRecipeId ? 25 : 150, remainingMs);
+    if (discovery) {
+      await discovery.waitForSignal(attemptRevision, wakeAfterMs, signal);
+    } else {
+      await waitForDelay(Math.min(50, wakeAfterMs), signal).catch(() => undefined);
+    }
   } while (Date.now() <= deadlineAtMs);
   return { status: "not_found" };
+}
+
+type AcceptRecipeResolution = Awaited<ReturnType<typeof waitForDeterministicRecipe>>;
+
+async function waitForDeterministicOrCanonicalAcceptRecipe(
+  page: Page,
+  recipes: PostAcceptActionRecipe[],
+  timeoutMs: number,
+  signal?: AbortSignal,
+  discovery?: ConsentActionDiscovery,
+): Promise<AcceptRecipeResolution> {
+  const deadlineAtMs = Date.now() + timeoutMs;
+  // Network events identify one canonical CMP before selector resolution when
+  // possible. Resolve its live, canonically classified first-layer control
+  // before consulting the registered selector. The named recipe still owns
+  // semantic confirmation; its selector is now a bounded fallback for pages
+  // whose live geometry cannot be retained.
+  const activeRuntimeRecipes = await resolveActiveRuntimeRecipes(page, recipes, discovery);
+  if (activeRuntimeRecipes.length > 0) {
+    const canonicalBudgetMs = Math.min(1_000, Math.max(0, deadlineAtMs - Date.now()));
+    if (canonicalBudgetMs > 0 && activeRuntimeRecipes.length === 1) {
+      const canonicalResolution = await waitForCanonicalAcceptControlRecipe(
+        page,
+        canonicalBudgetMs,
+        signal,
+        activeRuntimeRecipes,
+        discovery,
+        activeRuntimeRecipes.length === 1 ? activeRuntimeRecipes[0] : undefined,
+      );
+      if (
+        canonicalResolution.status === "found" ||
+        canonicalResolution.status === "aborted" ||
+        canonicalResolution.status === "ambiguous"
+      ) return canonicalResolution;
+    }
+    return waitForDeterministicRecipe(
+      page,
+      activeRuntimeRecipes,
+      Math.max(0, deadlineAtMs - Date.now()),
+      signal,
+      discovery,
+    );
+  }
+
+  let sawAmbiguousResolution = false;
+  // A production worker receives the bounded canonical registry, not one
+  // site-specific recipe. Give the canonical classifier one geometry pass
+  // before an all-registry selector sweep can consume the short search slice.
+  // This is also the authorized best-attempt path for non-CMP first layers.
+  // It reuses the existing deadline and adds no navigation or observer time.
+  if (recipes.length > 1) {
+    const initialCanonicalBudgetMs = Math.min(1_000, Math.max(0, deadlineAtMs - Date.now()));
+    if (initialCanonicalBudgetMs > 0) {
+      const initialCanonicalResolution = await waitForCanonicalAcceptControlRecipe(
+        page,
+        initialCanonicalBudgetMs,
+        signal,
+        recipes,
+        discovery,
+      );
+      if (
+        initialCanonicalResolution.status === "found" ||
+        initialCanonicalResolution.status === "aborted"
+      ) return initialCanonicalResolution;
+      if (initialCanonicalResolution.status === "ambiguous") sawAmbiguousResolution = true;
+    }
+  }
+  do {
+    if (signal?.aborted) return { status: "aborted" };
+    const newlyActiveRuntimeRecipes = await resolveActiveRuntimeRecipes(page, recipes, discovery);
+    if (newlyActiveRuntimeRecipes.length > 0) {
+      return waitForDeterministicRecipe(
+        page,
+        newlyActiveRuntimeRecipes,
+        Math.max(0, deadlineAtMs - Date.now()),
+        signal,
+        discovery,
+      );
+    }
+    const namedResolution = await waitForDeterministicRecipe(
+      page,
+      recipes,
+      // The canonical path is the primary live-control resolver. Probe legacy
+      // selectors briefly so absent selectors do not consume short budgets.
+      Math.min(50, Math.max(0, deadlineAtMs - Date.now())),
+      signal,
+      discovery,
+    );
+    if (namedResolution.status === "found" || namedResolution.status === "aborted") {
+      return namedResolution;
+    }
+    if (namedResolution.status === "ambiguous") sawAmbiguousResolution = true;
+
+    // Use the existing resolver budget. This does not add a navigation, lane,
+    // reload, screenshot, or extension to the observer deadline.
+    const canonicalBudgetMs = Math.min(750, Math.max(0, deadlineAtMs - Date.now()));
+    if (canonicalBudgetMs <= 0) break;
+    const canonicalResolution = await waitForCanonicalAcceptControlRecipe(
+      page,
+      canonicalBudgetMs,
+      signal,
+      recipes,
+      discovery,
+    );
+    if (canonicalResolution.status === "found" || canonicalResolution.status === "aborted") {
+      return canonicalResolution;
+    }
+    if (canonicalResolution.status === "ambiguous") sawAmbiguousResolution = true;
+  } while (Date.now() < deadlineAtMs);
+
+  const finalNamedResolution = await waitForDeterministicRecipe(
+    page,
+    recipes,
+    0,
+    signal,
+    discovery,
+  );
+  if (finalNamedResolution.status === "found" || finalNamedResolution.status === "aborted") {
+    return finalNamedResolution;
+  }
+  if (finalNamedResolution.status === "ambiguous") sawAmbiguousResolution = true;
+  return { status: sawAmbiguousResolution ? "ambiguous" : "not_found" };
+}
+
+async function waitForCanonicalAcceptControlRecipe(
+  page: Page,
+  timeoutMs: number,
+  signal?: AbortSignal,
+  registeredRecipes: PostAcceptActionRecipe[] = [],
+  discovery?: ConsentActionDiscovery,
+  runtimeBoundRecipe?: PostAcceptActionRecipe,
+): Promise<AcceptRecipeResolution> {
+  const deadlineAtMs = Date.now() + timeoutMs;
+  let sawAmbiguousCanonicalControl = false;
+  do {
+    if (signal?.aborted) return { status: "aborted" };
+    const attemptRevision = discovery?.revision ?? 0;
+    const geometry = await captureConsentControlGeometry(page, {
+      candidateLimit: 48,
+      containerLimit: 16,
+      timeoutMs: Math.max(250, Math.min(750, timeoutMs || 250)),
+    }).catch(() => undefined);
+    const registeredCmpRecipe = selectCanonicalAcceptConfirmationRecipe(
+      registeredRecipes,
+      geometry?.cmp.name,
+    ) ?? runtimeBoundRecipe;
+    const candidates = collapseEquivalentCanonicalAcceptCandidates(
+      geometry?.candidates.filter((candidate) =>
+        candidate.actionType === "accept_all" &&
+        candidate.decisionStatus === "confirmed_visible" &&
+        candidate.layer === "first_layer" &&
+        candidate.enabled &&
+        candidate.intersectsViewport &&
+        candidate.classifierConfidence >= 0.8 &&
+        (candidate.consentContextConfirmed || registeredCmpRecipe !== undefined) &&
+        Boolean(candidate.selectorHint) &&
+        Boolean(candidate.containerSelectorHint)
+      ) ?? [],
+    );
+    if (candidates.length > 1) {
+      sawAmbiguousCanonicalControl = true;
+      if (Date.now() >= deadlineAtMs) break;
+      const waitMs = Math.min(150, Math.max(0, deadlineAtMs - Date.now()));
+      if (discovery) await discovery.waitForSignal(attemptRevision, waitMs, signal);
+      else await waitForDelay(Math.min(50, waitMs), signal).catch(() => undefined);
+      continue;
+    }
+    const candidate = candidates[0];
+    if (candidate) {
+      const controlFrameUrl = candidate.frameContext.frameKind === "child_frame"
+        ? candidate.frameContext.frameUrl
+        : undefined;
+      const scope = exactAcceptSelectorScope(page, controlFrameUrl);
+      if (scope.status === "ambiguous") {
+        sawAmbiguousCanonicalControl = true;
+        continue;
+      }
+      if (scope.status !== "found") continue;
+      const containerSelector = candidate.containerSelectorHint!;
+      const containers = scope.scope.locator(containerSelector);
+      if (await containers.count().catch(() => 0) !== 1) {
+        sawAmbiguousCanonicalControl = true;
+        continue;
+      }
+      if (!await containers.first().isVisible().catch(() => false)) continue;
+      const controlSelector = candidate.selectorHint === containerSelector ||
+          candidate.selectorHint.startsWith(`${containerSelector} `)
+        ? candidate.selectorHint
+        : `${containerSelector} ${candidate.selectorHint}`;
+      const controls = scope.scope.locator(controlSelector);
+      const controlCount = Math.min(await controls.count().catch(() => 0), 9);
+      if (controlCount > 8) return { status: "ambiguous" };
+      const actionableControls: Locator[] = [];
+      for (let index = 0; index < controlCount; index += 1) {
+        const control = controls.nth(index);
+        if (
+          await control.isVisible().catch(() => false) &&
+          await control.isEnabled().catch(() => false) &&
+          (await normalizedAcceptLocatorLabels(control)).includes(candidate.normalizedLabel) &&
+          await locatorHasViewportHitTarget(control)
+        ) actionableControls.push(control);
+      }
+      if (actionableControls.length > 1) {
+        sawAmbiguousCanonicalControl = true;
+        continue;
+      }
+      if (actionableControls.length !== 1) continue;
+      const recipe: PostAcceptActionRecipe = {
+        artifactVersion: "certscore.post_accept_action_recipe.v1",
+        recipeId: `canonical-control:accept:v1:${hashValue([
+          candidate.normalizedLabel,
+          candidate.selectorHint,
+          containerSelector,
+          controlFrameUrl ?? "main_frame",
+          registeredCmpRecipe?.recipeId ?? "generic_confirmation",
+        ].join("\n")).slice(0, 24)}`,
+        ...(registeredCmpRecipe?.cmpId
+          ? { cmpId: registeredCmpRecipe.cmpId }
+          : geometry?.cmp.name
+            ? { cmpId: geometry.cmp.name }
+            : {}),
+        resolverMethod: registeredCmpRecipe?.resolverMethod ??
+          "canonical_consent_control_registry_recipe",
+        controlSelector,
+        controlExpectedNormalizedLabel: candidate.normalizedLabel,
+        ...(controlFrameUrl ? { controlFrameUrl } : {}),
+        bannerSelector: containerSelector,
+        ...(controlFrameUrl ? { bannerFrameUrl: controlFrameUrl } : {}),
+        confirmation: registeredCmpRecipe?.confirmation ?? {
+          kind: "canonical_accept_transition",
+          controlSelector,
+          ...(controlFrameUrl ? { controlFrameUrl } : {}),
+          bannerSelector: containerSelector,
+          ...(controlFrameUrl ? { bannerFrameUrl: controlFrameUrl } : {}),
+        },
+      };
+      const resolved = await waitForDeterministicRecipe(
+        page,
+        [recipe],
+        100,
+        signal,
+        discovery,
+      );
+      if (resolved.status === "ambiguous") sawAmbiguousCanonicalControl = true;
+      else if (resolved.status !== "not_found") return resolved;
+    }
+    if (Date.now() >= deadlineAtMs) break;
+    const waitMs = Math.min(150, Math.max(0, deadlineAtMs - Date.now()));
+    if (discovery) await discovery.waitForSignal(attemptRevision, waitMs, signal);
+    else await waitForDelay(Math.min(50, waitMs), signal).catch(() => undefined);
+  } while (Date.now() <= deadlineAtMs);
+  return { status: sawAmbiguousCanonicalControl ? "ambiguous" : "not_found" };
+}
+
+function selectCanonicalAcceptConfirmationRecipe(
+  registeredRecipes: PostAcceptActionRecipe[],
+  detectedCmpName?: string,
+): PostAcceptActionRecipe | undefined {
+  if (detectedCmpName) {
+    const detectedMatches = registeredRecipes.filter((recipe) =>
+      recipe.cmpId?.toLowerCase() === detectedCmpName.toLowerCase()
+    );
+    if (detectedMatches.length === 1) return detectedMatches[0];
+  }
+  return undefined;
+}
+
+function exactAcceptSelectorScope(
+  page: Page,
+  childFrameUrl?: string,
+): { status: "found"; scope: Page | Frame } | { status: "not_found" | "ambiguous" } {
+  if (!childFrameUrl) return { status: "found", scope: page };
+  const matches = page.frames().filter((frame) =>
+    frame !== page.mainFrame() && frame.url() === childFrameUrl
+  );
+  if (matches.length === 0) return { status: "not_found" };
+  if (matches.length > 1) return { status: "ambiguous" };
+  return { status: "found", scope: matches[0]! };
+}
+
+function normalizeAcceptControlLabel(value: string) {
+  return value.replace(/\s+/g, " ").trim().toLowerCase();
+}
+
+async function normalizedAcceptLocatorLabels(locator: Locator) {
+  const handle = await locator.elementHandle({ timeout: 100 }).catch(() => undefined);
+  if (!handle) return [];
+  try {
+    const labels = await handle.evaluate((element) => {
+      const htmlElement = element as HTMLElement;
+      return [
+        element.getAttribute("aria-label"),
+        "value" in htmlElement && typeof (htmlElement as HTMLInputElement).value === "string"
+          ? (htmlElement as HTMLInputElement).value
+          : undefined,
+        htmlElement.innerText,
+        element.textContent,
+        element.getAttribute("title"),
+      ].filter((value): value is string => Boolean(value?.trim()));
+    }).catch(() => [] as string[]);
+    return [...new Set(labels.map(normalizeAcceptControlLabel).filter(Boolean))];
+  } finally {
+    await handle.dispose().catch(() => undefined);
+  }
+}
+
+function collapseEquivalentCanonicalAcceptCandidates(
+  input: ConsentControlCandidateEvidence[],
+): ConsentControlCandidateEvidence[] {
+  const exactCandidates = [...new Map(input.map((candidate) => [
+    [candidate.frameContext.frameUrl, candidate.selectorHint].join("\n"),
+    candidate,
+  ])).values()];
+  const groups = new Map<string, ConsentControlCandidateEvidence[]>();
+  for (const candidate of exactCandidates) {
+    const key = [
+      candidate.frameContext.frameUrl,
+      candidate.normalizedLabel,
+      candidate.containerSelectorHint ?? "",
+    ].join("\n");
+    groups.set(key, [...(groups.get(key) ?? []), candidate]);
+  }
+  return [...groups.values()].flatMap((group) => {
+    if (group.length < 2 || !group[0]?.containerSelectorHint) return group;
+    const interactive = group.filter((candidate) =>
+      candidate.tagName.toLowerCase() === "button" ||
+      candidate.tagName.toLowerCase() === "input" ||
+      candidate.role?.toLowerCase() === "button"
+    );
+    return interactive.length === 1 ? interactive : group;
+  });
+}
+
+async function captureRecipeRuntimeUrls(
+  page: Page,
+  discovery?: ConsentActionDiscovery,
+) {
+  if (discovery) return discovery.runtimeUrls();
+  return page.evaluate(() => [
+    ...Array.from(document.scripts, (script) => script.src).filter(Boolean),
+    ...performance.getEntriesByType("resource").map((entry) => entry.name),
+  ]).catch(() => [] as string[]);
+}
+
+async function resolveActiveRuntimeRecipes(
+  page: Page,
+  recipes: PostAcceptActionRecipe[],
+  discovery?: ConsentActionDiscovery,
+) {
+  const runtimeUrls = await captureRecipeRuntimeUrls(page, discovery);
+  const matches = recipes.filter((recipe) => {
+    const sources = recipe.runtimeUrlPatternSources;
+    if (!sources?.length) return false;
+    return sources.some((source) => {
+      try {
+        const pattern = new RegExp(source, "i");
+        return runtimeUrls.some((url) => pattern.test(url));
+      } catch {
+        return false;
+      }
+    });
+  });
+  const cmpIds = new Set(matches.map((recipe) => recipe.cmpId).filter(Boolean));
+  return cmpIds.size === 1 ? matches : [];
+}
+
+async function trialAcceptControl(
+  page: Page,
+  control: Locator,
+  recipe: PostAcceptActionRecipe,
+) {
+  if (recipe.accessibleControl?.kind === "closed_shadow_accessible_control") {
+    if (!await closedShadowAccessibleControlAvailable(page, recipe.accessibleControl)) {
+      throw new Error("Closed-shadow Accept control is not uniquely actionable.");
+    }
+    return;
+  }
+  await control.click({ trial: true, timeout: 1_000 });
+}
+
+async function dispatchAcceptControl(
+  page: Page,
+  control: Locator,
+  recipe: PostAcceptActionRecipe,
+  useVerifiedGeometryDispatch = false,
+) {
+  if (recipe.accessibleControl?.kind === "closed_shadow_accessible_control") {
+    await dispatchClosedShadowAccessibleControl(page, recipe.accessibleControl);
+    return;
+  }
+  if (useVerifiedGeometryDispatch) {
+    await dispatchLocatorClickWithVerifiedGeometry(control);
+    return;
+  }
+  await control.click({ timeout: 2_000 });
 }
 
 function selectorScope(page: Page, childFrameUrl?: string): Page | Frame | undefined {
@@ -866,6 +1509,24 @@ async function captureConfirmationBaseline(
   confirmationScope: Page | Frame,
   confirmation: PostAcceptActionRecipe["confirmation"],
 ): Promise<ConfirmationBaseline> {
+  if (confirmation.kind === "canonical_accept_transition") {
+    const [controlVisible, bannerVisible, bannerStateHash] = await Promise.all([
+      locatorIsVisible(page, confirmation.controlSelector, confirmation.controlFrameUrl),
+      locatorIsVisible(page, confirmation.bannerSelector, confirmation.bannerFrameUrl),
+      visibleAcceptLocatorStateHash(
+        page,
+        confirmation.bannerSelector,
+        confirmation.bannerFrameUrl,
+      ),
+    ]);
+    return {
+      kind: confirmation.kind,
+      controlVisible,
+      bannerVisible,
+      ...(bannerStateHash ? { bannerStateHash } : {}),
+      pageUrl: page.url(),
+    };
+  }
   if (confirmation.kind === "local_storage_equals") {
     return {
       kind: confirmation.kind,
@@ -880,6 +1541,30 @@ async function captureConfirmationBaseline(
         cookieKey(cookie),
         states[cookieKey(cookie)]?.stateHash,
       ])),
+    };
+  }
+  if (confirmation.kind === "cmp_cookie_changed") {
+    return {
+      kind: confirmation.kind,
+      cookieStateHash: await cookieState(context, confirmation.cookieName),
+    };
+  }
+  if (confirmation.kind === "cmp_cookie_names_changed") {
+    const cookieNames = confirmation.cookieNames.slice(0, 8);
+    return {
+      kind: confirmation.kind,
+      cookieStateHashes: Object.fromEntries(await Promise.all(cookieNames.map(async (cookieName) => [
+        cookieName,
+        await cookieState(context, cookieName),
+      ] as const))),
+    };
+  }
+  if (confirmation.kind === "cmp_api_consent_state_changed") {
+    const snapshot = await readCmpApiConsentSnapshot(confirmationScope, confirmation.provider);
+    return {
+      kind: confirmation.kind,
+      canonicalState: snapshot?.canonicalState,
+      eventSequence: snapshot?.eventSequence ?? 0,
     };
   }
   if (confirmation.kind === "tcf_purposes_granted_or_cmp_cookie_changed") {
@@ -916,6 +1601,54 @@ async function waitForAcceptanceConfirmation(
   timeoutMs: number,
   signal?: AbortSignal,
 ): Promise<ConfirmationState | undefined> {
+  if (confirmation.kind === "canonical_accept_transition") {
+    if (
+      baseline.kind !== "canonical_accept_transition" ||
+      !baseline.controlVisible ||
+      !baseline.bannerVisible ||
+      confirmation.bannerSelector === confirmation.controlSelector
+    ) return undefined;
+    const deadlineAtMs = Date.now() + timeoutMs;
+    while (Date.now() <= deadlineAtMs) {
+      if (signal?.aborted) return undefined;
+      const [controlVisible, bannerVisible, bannerStateHash] = await Promise.all([
+        locatorIsVisible(page, confirmation.controlSelector, confirmation.controlFrameUrl),
+        locatorIsVisible(page, confirmation.bannerSelector, confirmation.bannerFrameUrl),
+        visibleAcceptLocatorStateHash(
+          page,
+          confirmation.bannerSelector,
+          confirmation.bannerFrameUrl,
+        ),
+      ]);
+      const sameDocument = normalizeTargetUrl(page.url()) === normalizeTargetUrl(baseline.pageUrl);
+      const transitionKind = !bannerVisible
+        ? "consent_surface_hidden"
+        : baseline.bannerStateHash && bannerStateHash && baseline.bannerStateHash !== bannerStateHash
+          ? "consent_surface_replaced_with_acknowledgement"
+          : undefined;
+      if (!controlVisible && sameDocument && transitionKind) {
+        return {
+          stateHash: hashValue(JSON.stringify([
+            "canonical_first_layer_accept_ui_transition.v1",
+            transitionKind,
+            baseline.pageUrl,
+            confirmation.controlSelector,
+            confirmation.controlFrameUrl ?? "main_frame",
+            confirmation.bannerSelector,
+            confirmation.bannerFrameUrl ?? "main_frame",
+            baseline.bannerStateHash ?? "",
+            bannerStateHash ?? "",
+          ])),
+          witnessType: "canonical_acceptance_state",
+          expectedState: transitionKind === "consent_surface_hidden"
+            ? "canonical_first_layer_accept_control_and_consent_surface_hidden_after_completed_action"
+            : "canonical_first_layer_accept_control_hidden_and_consent_surface_replaced_after_completed_action",
+        };
+      }
+      await waitForDelay(25, signal).catch(() => undefined);
+    }
+    return undefined;
+  }
   const deadlineAtMs = Date.now() + timeoutMs;
   while (Date.now() <= deadlineAtMs) {
     if (signal?.aborted) return undefined;
@@ -954,6 +1687,45 @@ async function waitForAcceptanceConfirmation(
           witnessType: "cmp_cookie_state",
           key: confirmation.cookies.map((cookie) => cookie.name).join(",").slice(0, 160),
           expectedState: "canonical_cmp_acceptance_cookie_values_written_after_accept",
+        };
+      }
+    } else if (confirmation.kind === "cmp_cookie_changed" && baseline.kind === confirmation.kind) {
+      const currentCookieState = await cookieState(context, confirmation.cookieName);
+      if (currentCookieState && currentCookieState !== baseline.cookieStateHash) {
+        return {
+          stateHash: currentCookieState,
+          witnessType: "cmp_cookie_state",
+          key: confirmation.cookieName,
+          expectedState: "canonical_cmp_consent_state_changed_after_accept",
+        };
+      }
+    } else if (confirmation.kind === "cmp_cookie_names_changed" && baseline.kind === confirmation.kind) {
+      for (const cookieName of confirmation.cookieNames.slice(0, 8)) {
+        const currentCookieState = await cookieState(context, cookieName);
+        if (currentCookieState && currentCookieState !== baseline.cookieStateHashes[cookieName]) {
+          return {
+            stateHash: currentCookieState,
+            witnessType: "cmp_cookie_state",
+            key: cookieName,
+            expectedState: "canonical_cmp_consent_state_changed_after_accept",
+          };
+        }
+      }
+    } else if (
+      confirmation.kind === "cmp_api_consent_state_changed" &&
+      baseline.kind === confirmation.kind
+    ) {
+      const snapshot = await readCmpApiConsentSnapshot(confirmationScope, confirmation.provider);
+      const changed = Boolean(
+        snapshot?.canonicalState && snapshot.canonicalState !== baseline.canonicalState
+      );
+      const freshEvent = (snapshot?.eventSequence ?? 0) > baseline.eventSequence;
+      if (snapshot?.decision === "granted" && (changed || freshEvent)) {
+        return {
+          stateHash: hashValue(snapshot.canonicalState),
+          witnessType: "cmp_api_state",
+          key: confirmation.provider,
+          expectedState: "all_configurable_purposes_granted_after_accept",
         };
       }
     } else if (
@@ -1536,7 +2308,9 @@ function cookieKey(input: { name: string; path: string }) {
 }
 
 async function cookieState(context: BrowserContext, cookieName: string) {
-  const states = (await context.cookies()).filter((cookie) => cookie.name === cookieName).map((cookie) => [
+  const states = (await context.cookies()).filter((cookie) =>
+    matchesCanonicalCmpCookieName(cookie.name, cookieName)
+  ).map((cookie) => [
     cookie.name,
     cookie.domain.toLowerCase().replace(/^\./, ""),
     cookie.path,
@@ -1566,6 +2340,36 @@ function storageKey(item: Pick<PostRefusalStorageItem, "storageType" | "name" | 
 async function locatorIsVisible(page: Page, selector: string, childFrameUrl?: string) {
   const scope = selectorScope(page, childFrameUrl);
   return scope ? scope.locator(selector).first().isVisible().catch(() => false) : false;
+}
+
+async function visibleAcceptLocatorStateHash(
+  page: Page,
+  selector: string,
+  childFrameUrl?: string,
+): Promise<string | undefined> {
+  const scope = selectorScope(page, childFrameUrl);
+  if (!scope) return undefined;
+  const locator = scope.locator(selector);
+  const count = Math.min(await locator.count().catch(() => 0), 2);
+  const visible: Locator[] = [];
+  for (let index = 0; index < count; index += 1) {
+    const candidate = locator.nth(index);
+    if (await candidate.isVisible().catch(() => false)) visible.push(candidate);
+  }
+  if (visible.length !== 1) return undefined;
+  const state = await visible[0]!.evaluate((element) => {
+    const htmlElement = element as HTMLElement;
+    const normalizedText = (htmlElement.innerText || element.textContent || "")
+      .replace(/\s+/g, " ")
+      .trim()
+      .slice(0, 2_000);
+    return JSON.stringify([
+      normalizedText,
+      element.getAttribute("aria-label")?.slice(0, 240) ?? "",
+      element.childElementCount,
+    ]);
+  }).catch(() => undefined);
+  return state ? hashValue(state) : undefined;
 }
 
 async function waitForPassiveRedirectSettle(page: Page, timeoutMs: number, signal?: AbortSignal) {

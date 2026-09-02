@@ -21,8 +21,9 @@ expected_egress_region_by_region = {
 # credentials; place real values in an ignored .auto.tfvars file or a secrets-aware runner.
 environment_variables_by_region = {
   eu-central-1 = {
-    SCAN_PROXY_ENABLED = "true"
-    SCAN_EGRESS_LABEL  = "eu-de-production"
+    SCAN_PROXY_ENABLED                   = "true"
+    SCAN_EGRESS_LABEL                    = "eu-de-production"
+    CERTSCORE_CMP_ACTION_RECIPE_DISABLED = ""
   }
 }
 

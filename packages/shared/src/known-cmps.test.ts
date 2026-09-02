@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import {
   KNOWN_CMP_REGISTRY,
   detectKnownCmps,
+  getKnownCmpActionCapability,
   getKnownCmpVendorForHost,
   getKnownCmpVendorName,
   isKnownCmpCookieName,
@@ -14,6 +15,7 @@ test("registry includes first-wave CMP vendors", () => {
   const names = KNOWN_CMP_REGISTRY.map((entry) => entry.canonicalName);
   for (const name of [
     "OneTrust",
+    "Fides",
     "TrustArc",
     "Usercentrics",
     "Consentmanager",
@@ -50,6 +52,14 @@ test("detects OpenAI first-party consent controls only from retained consent mar
     getKnownCmpVendorName({ cookieNames: ["oai_consent_analytics"] }),
     "OpenAI first-party consent controls",
   );
+});
+
+test("detects Fides from canonical runtime markers without host inference", () => {
+  assert.equal(getKnownCmpVendorName({ urls: ["https://www.nytimes.com/"] }), null);
+  assert.equal(getKnownCmpVendorName({ domSelectors: ["#fides-banner"] }), "Fides");
+  assert.equal(getKnownCmpVendorName({ cookieNames: ["fides_consent"] }), "Fides");
+  assert.equal(getKnownCmpVendorName({ jsGlobals: ["Fides"] }), "Fides");
+  assert.equal(isKnownCmpCookieName("fides_consent_tenant_a"), true);
 });
 
 test("detects Amazon Privacy Preferences from first-party consent evidence", () => {
@@ -157,6 +167,9 @@ test("canonical CMP registry owns deterministic reject-control selectors", () =>
   assert.deepEqual(selectors.get("OneTrust"), [
     "#onetrust-reject-all-handler",
     "#onetrust-banner-sdk.ot-close-btn-link button.onetrust-close-btn-handler.banner-close-button",
+  ]);
+  assert.deepEqual(selectors.get("Fides"), [
+    "#fides-banner button.fides-reject-all-button",
   ]);
   assert.deepEqual(selectors.get("Cookiebot"), [
     "#CybotCookiebotDialogBodyButtonDecline",
@@ -320,4 +333,21 @@ test("attributes cookielawinfo plugin cookies to CookieYes rather than OneTrust"
   assert.equal(getKnownCmpVendorName({ cookieNames: ["cookielawinfo-checkbox-analytics"] }), "CookieYes");
   assert.equal(getKnownCmpVendorName({ cookieNames: ["cookielawinfo-checkbox-necessary"] }), "CookieYes");
   assert.equal(getKnownCmpVendorName({ labels: ["cookielawinfo-checkbox-analytics"] }), null);
+});
+
+test("action capability matrix qualifies every target CMP for bounded Accept and Reject", () => {
+  for (const canonicalName of [
+    "Consentmanager",
+    "HubSpot Consent Banner",
+    "Ketch",
+    "Cookie Information",
+    "Iubenda",
+    "InMobi Choice",
+    "Quantcast Choice",
+    "Termly",
+    "Transcend",
+  ]) {
+    assert.equal(getKnownCmpActionCapability(canonicalName, "accept")?.recipeAvailable, true);
+    assert.equal(getKnownCmpActionCapability(canonicalName, "reject")?.recipeAvailable, true);
+  }
 });
