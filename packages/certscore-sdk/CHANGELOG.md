@@ -1,5 +1,10 @@
 # @certscore/sdk
 
+## 0.2.9
+
+- Expose the jurisdiction-neutral GPC response, retained enablement proof, and baseline-versus-GPC comparison deltas on scan and scan-job resources.
+- Expose post-Accept and post-Refusal observation outcomes alongside the GPC comparison.
+
 ## 0.2.8
 
 - Accept `eu_de`, `eu_ie`, and `california` consistently across API v2 scan creation and latest-domain resource types.
