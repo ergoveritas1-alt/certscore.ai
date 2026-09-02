@@ -91,6 +91,42 @@ function recordString(source: Record<string, unknown> | null, keys: string[]) {
   return null;
 }
 
+export function getPolicySurfaceCoverageStatus(
+  runtimeArtifacts: Record<string, unknown> | null | undefined,
+): ShadowReportData["policySurfaceCoverage"] {
+  const hybrid = getHybridRuntimeEvidence(runtimeArtifacts);
+  const inspection = record(
+    runtimeArtifacts?.policySurfaceInspection ??
+    runtimeArtifacts?.policy_surface_inspection ??
+    hybrid?.policySurfaceInspection ??
+    hybrid?.policy_surface_inspection,
+  );
+  if (!inspection) return "unavailable";
+
+  const coverageStatus = recordString(inspection, ["coverageStatus", "coverage_status"]);
+  const linkCoverageStatus = recordString(inspection, [
+    "linkDiscoveryCoverageStatus",
+    "link_discovery_coverage_status",
+  ]);
+  const retrievalCoverageStatus = recordString(inspection, [
+    "documentRetrievalCoverageStatus",
+    "document_retrieval_coverage_status",
+  ]);
+  const outcome = recordString(inspection, ["outcome"]);
+  const limitationKeys = inspection.limitationKeys ?? inspection.limitation_keys;
+
+  if (
+    coverageStatus === "limited" ||
+    linkCoverageStatus === "limited" ||
+    retrievalCoverageStatus === "limited" ||
+    outcome?.includes("limited") ||
+    (Array.isArray(limitationKeys) && limitationKeys.length > 0)
+  ) {
+    return "limited";
+  }
+  return coverageStatus === "complete" ? "complete" : "unavailable";
+}
+
 function formatDuration(milliseconds: number | null | undefined) {
   if (typeof milliseconds !== "number" || !Number.isFinite(milliseconds)) return "Duration unavailable";
   if (milliseconds < 1_000) return `${Math.round(milliseconds)} ms`;
@@ -626,6 +662,7 @@ export function buildTimelineReportModel(scanRecord: ScanDetailResponse): Shadow
   const durationMs = retainedDurationMs ?? 0;
   const consentVendor = retainedConsentVendor(scanRecord);
   const runtimeArtifacts = record(scanRecord.runtimeArtifacts);
+  const policySurfaceCoverage = getPolicySurfaceCoverageStatus(runtimeArtifacts);
   const acceptPath = buildAcceptPathProjection(runtimeArtifacts, canonical.ownerUnifiedFindings);
   const acceptContradictionRow = mapAcceptContradictionFinding(
     surfacedFinding(canonical.ownerUnifiedFindings, "acceptance_signal_contradicts_action"),
@@ -730,6 +767,7 @@ export function buildTimelineReportModel(scanRecord: ScanDetailResponse): Shadow
       : "Unavailable",
     collectionSurfaces,
     consentVendor,
+    policySurfaceCoverage,
     gpcResponse,
     gpcLaneStatus,
     acceptPath,

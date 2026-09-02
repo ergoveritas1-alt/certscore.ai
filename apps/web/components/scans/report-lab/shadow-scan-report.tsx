@@ -5,7 +5,7 @@ import { DomainScanForm } from "../../marketing/domain-scan-form";
 import { AgentSummaryActions, ShareReportActions } from "../share-report-actions";
 import { getScanFromMarkerInput, ScanFromMarker } from "../scan-from-icons";
 import type { ServerScanFrom } from "../scan-from-select";
-import { VendorBrandChip } from "../vendor-brand-chip";
+import { VendorBrandChip, VendorBrandLogo } from "../vendor-brand-chip";
 import { CopyJsonButton } from "../copy-json-button";
 import { InventoryNameDisclosure } from "../inventory-name-disclosure";
 import { CompactRejectPathCard } from "../executive-summary-card";
@@ -384,6 +384,13 @@ function ControlStatusGrid({ compact = false, report }: { compact?: boolean; rep
 function SignalSnapshot({ report }: { report: ShadowReportData }) {
   const consentVendor = report.consentVendor ?? "Not identified";
   const privacyUrls = [...new Set(report.gdprTransparencyRows.flatMap((row) => row.policyEvidence?.sourceUrl ? [row.policyEvidence.sourceUrl] : []))];
+  const policySurfaceSummary = privacyUrls.length > 0
+    ? `${privacyUrls.length} found`
+    : report.policySurfaceCoverage === "limited"
+      ? "Coverage limited"
+      : report.policySurfaceCoverage === "complete"
+        ? "0 found"
+        : "Unavailable";
   const observedTransportRows = report.transportRows.filter((row) => row.status === "Observed").length;
   const observedControls = Object.values(report.controls).filter((value) => value === "Observed").length;
   const signalRowClass = "group/signal border-b border-zinc-200 py-2";
@@ -396,6 +403,7 @@ function SignalSnapshot({ report }: { report: ShadowReportData }) {
           <summary className={signalSummaryClass}>
             <span className="text-xs font-medium text-zinc-500">Consent platform</span>
             <span className="flex min-w-0 items-center gap-2 text-xs font-semibold text-zinc-800">
+              <VendorBrandLogo label={consentVendor} />
               <span>{consentVendor}</span>
               <span aria-hidden="true" className="text-zinc-400 transition group-open/signal:rotate-45">+</span>
             </span>
@@ -404,6 +412,23 @@ function SignalSnapshot({ report }: { report: ShadowReportData }) {
             <VendorBrandChip className="max-w-[13rem]" label={consentVendor} showMeta={false} />
             <p className="text-xs leading-5 text-zinc-600">Consent-platform identity retained in the canonical runtime and consent projection.</p>
           </div>
+        </details>
+        <details className={signalRowClass}>
+          <summary className={signalSummaryClass}>
+            <span className="text-xs font-medium text-zinc-500">Consent controls</span>
+            <span className="flex items-center gap-2 text-xs font-semibold text-zinc-800">{observedControls} of 3 observed <span aria-hidden="true" className="text-zinc-400 transition group-open/signal:rotate-45">+</span></span>
+          </summary>
+          <div className="mt-3"><ControlStatusGrid compact report={report} /></div>
+          {report.acceptPath ? (
+            <div className="mt-3" data-testid="timeline-accept-path-card">
+              <CompactAcceptPathCard projection={report.acceptPath} />
+            </div>
+          ) : null}
+          {report.rejectPath ? (
+            <div className="mt-3" data-testid="timeline-reject-path-card">
+              <CompactRejectPathCard projection={report.rejectPath} />
+            </div>
+          ) : null}
         </details>
         <details className={signalRowClass}>
           <summary className={signalSummaryClass}>
@@ -420,12 +445,45 @@ function SignalSnapshot({ report }: { report: ShadowReportData }) {
             })}
           </div>
         </details>
+        <details className={signalRowClass}>
+          <summary className={signalSummaryClass}>
+            <span className="text-xs font-medium text-zinc-500">Policy surfaces</span>
+            <span className="flex items-center gap-2 text-xs font-semibold text-zinc-800"><span className={monoClass}>{policySurfaceSummary}</span><span aria-hidden="true" className="text-zinc-400 transition group-open/signal:rotate-45">+</span></span>
+          </summary>
+          <ul className={`${monoClass} mt-3 space-y-2 break-all text-[0.68rem] leading-5 text-zinc-600`}>
+            {privacyUrls.length > 0 ? privacyUrls.map((url) => <li key={url}>{url}</li>) : (
+              <li>
+                {report.policySurfaceCoverage === "limited"
+                  ? "Policy discovery or document retrieval was incomplete; no verified policy URL was retained."
+                  : report.policySurfaceCoverage === "complete"
+                    ? "No public policy URL was observed with complete policy-surface coverage."
+                    : "Policy-surface coverage was unavailable for this scan."}
+              </li>
+            )}
+          </ul>
+        </details>
+        <details className={signalRowClass}>
+          <summary className={signalSummaryClass}>
+            <span className="text-xs font-medium text-zinc-500">HTTPS / TLS</span>
+            <span className="flex items-center gap-2 text-xs font-semibold text-zinc-800"><span className={monoClass}>{observedTransportRows} of {report.transportRows.length} observed</span><span aria-hidden="true" className="text-zinc-400 transition group-open/signal:rotate-45">+</span></span>
+          </summary>
+          <ul className="mt-3 space-y-2 text-xs leading-5 text-zinc-600">
+            {report.transportRows.map((row) => (
+              <li className="flex items-center gap-2" key={row.id}>
+                <span aria-hidden="true" className={`inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-full text-[0.65rem] font-bold ring-1 ring-inset ${row.status === "Observed" ? "bg-emerald-600 text-white ring-emerald-600" : "bg-zinc-100 text-zinc-500 ring-zinc-200"}`}>{row.status === "Observed" ? "✓" : "—"}</span>
+                <span>{row.title}</span>
+              </li>
+            ))}
+          </ul>
+        </details>
         {report.gpcResponse ? (
           <details className={signalRowClass} data-testid="executive-gpc-snapshot">
             <summary className={signalSummaryClass}>
-              <span className="text-xs font-medium text-zinc-500">Global Privacy Control</span>
+              <span className="text-xs font-medium text-zinc-500">Global Privacy Control (GPC)</span>
               <span className="flex min-w-0 items-center gap-2">
-                <GpcStatusBadge projection={report.gpcResponse} />
+                <span className="text-xs font-semibold text-zinc-800">
+                  {getGpcStatusPresentation(report.gpcResponse.assessment.status).label}
+                </span>
                 {report.gpcResponse.californiaDeductionPoints > 0 ? (
                   <span className={`${monoClass} text-[0.68rem] font-semibold text-rose-700`}>
                     CA −{report.gpcResponse.californiaDeductionPoints}
@@ -452,7 +510,7 @@ function SignalSnapshot({ report }: { report: ShadowReportData }) {
         ) : (
           <details className={signalRowClass} data-testid="executive-gpc-snapshot">
             <summary className={signalSummaryClass}>
-              <span className="text-xs font-medium text-zinc-500">Global Privacy Control</span>
+              <span className="text-xs font-medium text-zinc-500">Global Privacy Control (GPC)</span>
               <span className="flex min-w-0 items-center gap-2 text-xs font-semibold text-zinc-500">
                 <span>{report.gpcLaneStatus === "unavailable" ? "Result unavailable" : "Not run"}</span>
                 <span aria-hidden="true" className="text-zinc-400 transition group-open/signal:rotate-45">+</span>
@@ -465,46 +523,6 @@ function SignalSnapshot({ report }: { report: ShadowReportData }) {
             </p>
           </details>
         )}
-        <details className={signalRowClass}>
-          <summary className={signalSummaryClass}>
-            <span className="text-xs font-medium text-zinc-500">Policy surfaces</span>
-            <span className="flex items-center gap-2 text-xs font-semibold text-zinc-800"><span className={monoClass}>{privacyUrls.length} found</span><span aria-hidden="true" className="text-zinc-400 transition group-open/signal:rotate-45">+</span></span>
-          </summary>
-          <ul className={`${monoClass} mt-3 space-y-2 break-all text-[0.68rem] leading-5 text-zinc-600`}>
-            {privacyUrls.length > 0 ? privacyUrls.map((url) => <li key={url}>{url}</li>) : <li>No public policy URL was retained in the display projection.</li>}
-          </ul>
-        </details>
-        <details className={signalRowClass}>
-          <summary className={signalSummaryClass}>
-            <span className="text-xs font-medium text-zinc-500">HTTPS / TLS</span>
-            <span className="flex items-center gap-2 text-xs font-semibold text-zinc-800"><span className={monoClass}>{observedTransportRows} of {report.transportRows.length} observed</span><span aria-hidden="true" className="text-zinc-400 transition group-open/signal:rotate-45">+</span></span>
-          </summary>
-          <ul className="mt-3 space-y-2 text-xs leading-5 text-zinc-600">
-            {report.transportRows.map((row) => (
-              <li className="flex items-center gap-2" key={row.id}>
-                <span aria-hidden="true" className={`inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-full text-[0.65rem] font-bold ring-1 ring-inset ${row.status === "Observed" ? "bg-emerald-600 text-white ring-emerald-600" : "bg-zinc-100 text-zinc-500 ring-zinc-200"}`}>{row.status === "Observed" ? "✓" : "—"}</span>
-                <span>{row.title}</span>
-              </li>
-            ))}
-          </ul>
-        </details>
-        <details className={signalRowClass}>
-          <summary className={signalSummaryClass}>
-            <span className="text-xs font-medium text-zinc-500">Consent controls</span>
-            <span className="flex items-center gap-2 text-xs font-semibold text-zinc-800">{observedControls} of 3 observed <span aria-hidden="true" className="text-zinc-400 transition group-open/signal:rotate-45">+</span></span>
-          </summary>
-          <div className="mt-3"><ControlStatusGrid compact report={report} /></div>
-          {report.acceptPath ? (
-            <div className="mt-3" data-testid="timeline-accept-path-card">
-              <CompactAcceptPathCard projection={report.acceptPath} />
-            </div>
-          ) : null}
-          {report.rejectPath ? (
-            <div className="mt-3" data-testid="timeline-reject-path-card">
-              <CompactRejectPathCard projection={report.rejectPath} />
-            </div>
-          ) : null}
-        </details>
         {report.metrics.forms > 0 ? (
           <details className={signalRowClass}>
             <summary className={signalSummaryClass}>
@@ -819,41 +837,44 @@ function ChoicePathCard({ path, report }: { path: "accept" | "reject"; report: S
       : [];
 
   return (
-    <article
-      className="min-w-0 rounded-xl border border-zinc-300 bg-white p-4 shadow-[0_1px_0_rgba(24,24,27,0.04)]"
+    <details
+      className="group/path min-w-0 rounded-xl border border-zinc-300 bg-white px-3 py-2.5 shadow-[0_1px_0_rgba(24,24,27,0.04)]"
       data-accept-path-state={isAccept ? projection.state : undefined}
       data-reject-path-state={isAccept ? undefined : projection.state}
       data-testid={isAccept ? "post-accept-path-result" : "post-reject-timeline"}
     >
-      <div className="flex items-start justify-between gap-3">
-        <div className="min-w-0">
+      <summary className="cursor-pointer list-none [&::-webkit-details-marker]:hidden">
+        <div className="flex items-center justify-between gap-3">
           <p className="text-[0.68rem] font-semibold uppercase tracking-wide text-sky-700">{isAccept ? "Accept path" : "Reject path"}</p>
-          <h4 className="mt-1 text-sm font-semibold leading-5 text-zinc-950">{projection.label}</h4>
+          <span className="flex shrink-0 items-center gap-2">
+            <span className={`rounded-md border px-2 py-1 text-[0.64rem] font-semibold uppercase ${toneClasses}`}>{badge}</span>
+            <span aria-hidden="true" className="text-zinc-400 transition group-open/path:rotate-45">+</span>
+          </span>
         </div>
-        <span className={`shrink-0 rounded-md border px-2 py-1 text-[0.64rem] font-semibold uppercase ${toneClasses}`}>{badge}</span>
+      </summary>
+      <div className="mt-2.5 border-t border-zinc-200 pt-2.5">
+        <h4 className="text-sm font-semibold leading-5 text-zinc-950">{projection.label}</h4>
+        <p className="text-xs leading-5 text-zinc-600">{projection.note}</p>
+        <div className="mt-3 flex flex-wrap gap-1.5 text-[0.68rem] text-zinc-600">
+          <span className="rounded-md bg-zinc-100 px-2 py-1">{projection.state === "incomplete" ? "Not confirmed" : `${isAccept ? "Accept" : "Reject"} confirmed`}</span>
+          {projection.observationWindowMs !== null ? <span className="rounded-md bg-zinc-100 px-2 py-1">{formatChoicePathOffset(projection.observationWindowMs)} window</span> : null}
+          {events.length > 0 ? <span className="rounded-md bg-zinc-100 px-2 py-1">{events.length} retained event{events.length === 1 ? "" : "s"}</span> : null}
+        </div>
+        {evidence.length > 0 ? (
+          <div className="mt-3 border-t border-zinc-200 pt-2">
+            <p className="text-xs font-semibold text-sky-700">Retained evidence</p>
+            <ul className="mt-2 space-y-2 text-xs leading-5 text-zinc-600">
+              {evidence.map((event, index) => (
+                <li className="flex gap-2" key={`${event.label}:${index}`}>
+                  <span className={`${monoClass} min-w-10 text-zinc-500`}>{event.atMs === null ? "—" : formatChoicePathOffset(event.atMs)}</span>
+                  <span><strong className="font-semibold text-zinc-800">{event.label}</strong>{event.detail ? ` · ${event.detail}` : ""}</span>
+                </li>
+              ))}
+            </ul>
+          </div>
+        ) : null}
       </div>
-      <p className="mt-2 line-clamp-2 text-xs leading-5 text-zinc-600">{projection.note}</p>
-      <div className="mt-3 flex flex-wrap gap-1.5 text-[0.68rem] text-zinc-600">
-        <span className="rounded-md bg-zinc-100 px-2 py-1">{projection.state === "incomplete" ? "Not confirmed" : `${isAccept ? "Accept" : "Reject"} confirmed`}</span>
-        {projection.observationWindowMs !== null ? <span className="rounded-md bg-zinc-100 px-2 py-1">{formatChoicePathOffset(projection.observationWindowMs)} window</span> : null}
-        {events.length > 0 ? <span className="rounded-md bg-zinc-100 px-2 py-1">{events.length} retained event{events.length === 1 ? "" : "s"}</span> : null}
-      </div>
-      {evidence.length > 0 ? (
-        <details className="group mt-3 border-t border-zinc-200 pt-2">
-          <summary className="cursor-pointer list-none text-xs font-semibold text-sky-700 marker:hidden focus-visible:rounded-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-500 [&::-webkit-details-marker]:hidden">
-            Evidence <span aria-hidden="true" className="ml-1 text-zinc-400 group-open:hidden">+</span><span aria-hidden="true" className="ml-1 hidden text-zinc-400 group-open:inline">−</span>
-          </summary>
-          <ul className="mt-2 space-y-2 text-xs leading-5 text-zinc-600">
-            {evidence.map((event, index) => (
-              <li className="flex gap-2" key={`${event.label}:${index}`}>
-                <span className={`${monoClass} min-w-10 text-zinc-500`}>{event.atMs === null ? "—" : formatChoicePathOffset(event.atMs)}</span>
-                <span><strong className="font-semibold text-zinc-800">{event.label}</strong>{event.detail ? ` · ${event.detail}` : ""}</span>
-              </li>
-            ))}
-          </ul>
-        </details>
-      ) : null}
-    </article>
+    </details>
   );
 }
 
@@ -865,7 +886,7 @@ function ChoicePathResults({ report }: { report: ShadowReportData }) {
     : "border-sky-300 bg-sky-50 text-sky-800";
 
   return (
-    <div className="mt-5 border-t border-zinc-300 pt-4" data-testid="choice-path-results">
+    <div className="mt-4 border-t border-zinc-300 pt-3" data-testid="choice-path-results">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
           <h3 className="text-xs font-semibold uppercase text-sky-700">Choice path results</h3>
@@ -873,7 +894,7 @@ function ChoicePathResults({ report }: { report: ShadowReportData }) {
         </div>
         {comparison ? <span className={`rounded-md border px-2.5 py-1 text-[0.68rem] font-semibold ${comparisonClasses}`} title={comparison.note}>{comparison.label}</span> : null}
       </div>
-      <div className="mt-3 grid gap-3 sm:grid-cols-2">
+      <div className="mt-2 grid gap-2 sm:grid-cols-2">
         <ChoicePathCard path="accept" report={report} />
         <ChoicePathCard path="reject" report={report} />
       </div>
@@ -1617,14 +1638,13 @@ function EvidenceDirectory({ report }: { report: ShadowReportData }) {
             <p className="text-xs font-semibold uppercase text-sky-700">Evidence index</p>
             <h2 className="mt-2 text-2xl font-semibold text-zinc-950">Every layer, one step away</h2>
             <p className="mt-2 max-w-2xl text-sm leading-6 text-zinc-600">
-              {report.gpcResponse ? "GPC comparison, " : ""}Consent, tracking &amp; external services, pre-consent runtime, GDPR Transparency, transport security and collection details.
+              Consent, tracking &amp; external services, pre-consent runtime{report.gpcResponse ? ", GPC comparison" : ""}, GDPR Transparency, transport security and collection details.
             </p>
           </div>
           <RatingMix report={report} />
         </div>
         <div className="mt-9 grid items-start gap-6 lg:grid-cols-[minmax(0,1.08fr)_minmax(22rem,0.92fr)]">
           <div className="border-l border-t border-zinc-200">
-            {report.gpcResponse ? <GpcEvidenceIndexCard projection={report.gpcResponse} /> : null}
             <details className="group/consent border-b border-r border-zinc-200 p-5">
               <summary className="flex cursor-pointer list-none items-center justify-between gap-4 [&::-webkit-details-marker]:hidden">
                 <div><p className="text-xs font-semibold uppercase text-zinc-500">Consent surface</p><h3 className="mt-1 text-lg font-semibold text-zinc-950">Controls and CMP context</h3></div>
@@ -1688,6 +1708,7 @@ function EvidenceDirectory({ report }: { report: ShadowReportData }) {
               </summary>
               <EvidenceIndexRows rows={report.preConsentRuntimeRows} stackedTools />
             </details>
+            {report.gpcResponse ? <GpcEvidenceIndexCard projection={report.gpcResponse} /> : null}
             <details className="group/transport border-b border-r border-zinc-200 p-5">
               <summary className="flex cursor-pointer list-none items-center justify-between gap-4 [&::-webkit-details-marker]:hidden">
                 <div><p className="text-xs font-semibold uppercase text-zinc-500">Transport security</p><h3 className="mt-1 text-lg font-semibold text-zinc-950">{report.transportRows.filter((row) => row.status === "Observed").length} of {report.transportRows.length} positive observations</h3></div>

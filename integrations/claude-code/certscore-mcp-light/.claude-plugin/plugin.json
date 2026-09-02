@@ -1,6 +1,6 @@
 {
   "name": "certscore-mcp-light",
-  "version": "0.2.16",
+  "version": "0.2.17",
   "description": "Free website privacy scanner to detect pre-consent cookies and trackers, CMP and consent controls, privacy policy, GDPR/ePrivacy and CCPA, and HTTPS/TLS signals.",
   "author": {
     "name": "CertScore.ai, LLC",

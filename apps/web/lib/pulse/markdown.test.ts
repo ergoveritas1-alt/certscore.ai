@@ -104,6 +104,46 @@ test("Pulse markdown uses canonical counts and renders withheld scores without a
   assert.match(markdown, /Executive report: Not available; 1 issue to review/);
 });
 
+test("Pulse markdown surfaces GPC, Accept Path, and Reject Path results", () => {
+  const markdown = renderPulseMarkdown({
+    domain: "example.com",
+    scanId: "scan_lane_results",
+    scanStatus: "completed",
+    summary: { score: 85, riskLevel: "review" },
+    topFindings: [],
+    reviewContext: { lenses: [] },
+    evidenceHighlights: {
+      trackerFootprint: {},
+      policySurfaces: {},
+      fingerprinting: {},
+      vendorMix: {},
+    },
+    coverage: { summary: "Scan completed.", limitations: [] },
+    feedback: {},
+    links: {},
+    gpcResponse: {
+      status: "no_observable_response",
+      findingTitle: "No observable GPC response",
+      evidenceUrl: "https://certscore.ai/api/v2/scans/scan_lane_results/findings/gpc_response",
+      comparison: { enabledProof: { requestsWithSecGpc: 2 } },
+      californiaPolicy: { applied: true, deductionPoints: 15 },
+    },
+    postAcceptObservation: {
+      interpretation: "Accept was confirmed, and eligible non-essential network activity was observed afterward.",
+    },
+    postRefusalObservation: {
+      interpretation: "Reject was confirmed. No eligible non-essential activity was observed during the completed bounded window.",
+    },
+  });
+
+  assert.match(markdown, /GPC response: No observable GPC response; status: No Observable Response/);
+  assert.match(markdown, /Sec-GPC: 1 proof retained on 2 request\(s\)/);
+  assert.match(markdown, /California scoring path: 15-point GPC deduction applied/);
+  assert.match(markdown, /Accept Path: Accept was confirmed/);
+  assert.match(markdown, /Reject Path: Reject was confirmed/);
+  assert.doesNotMatch(markdown, /GPC violation|GPC not honored/i);
+});
+
 test("Pulse markdown explains Cerebras-style site-not-ready no-go without raw codes", () => {
   const markdown = renderPulseMarkdown({
     domain: "cerebras.com",

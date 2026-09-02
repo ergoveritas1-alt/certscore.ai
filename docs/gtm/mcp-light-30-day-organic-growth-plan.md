@@ -6,7 +6,7 @@
 - GitHub MCP Registry publication is complete at `https://github.com/mcp/ai.certscore/mcp-light`. The GitHub-rendered package README now leads with the no-auth Light identity, exact three-tool workflow, tracked landing-page CTA, and copy-ready owned-canary prompt.
 - The privacy-separated growth funnel is deployed. It measures MCP initialization, tool discovery, first tool, scan request, completed-bundle retrieval, and seven-day/30-day repeat use without retaining prompts, target URLs, raw IPs, tokens, or scan evidence.
 - `/mcp/light`, `/developers/mcp`, `/releases/mcp-light`, and the homepage are discoverable in current web search results. Live canonical, index/follow, social metadata, sitemap, robots, `llms.txt`, and production MCP checks pass.
-- The Official MCP Registry latest record is active at `0.2.16`. Its API also retains older immutable versions, including the stale `0.2.12` 20-scan description; downstream indexes must select the registry record marked `isLatest: true`.
+- The Official MCP Registry release target is `0.2.17`. Its API also retains older immutable versions, including the stale `0.2.12` 20-scan description; downstream indexes must select the registry record marked `isLatest: true`.
 - This execution batch adds the technical article at `/guides/mcp-website-privacy-scanner` plus contextual links from the cookie-consent and privacy-policy solution pages.
 - Remaining account actions: brand-channel publication of the GitHub launch and demo, Claude/OpenAI/Cline/Kilo submission buttons, search-console URL inspection, and any free third-party maintainer recrawl requests. Cursor remains paused.
 
@@ -40,7 +40,7 @@ Use days 1–7 as the baseline. For days 8–30, aim for a 25% increase in weekl
 
 ## Priority 0: correctness and conversion readiness (days 1–3)
 
-1. Keep one canonical identity everywhere: `CertScore.ai MCP Light`, `ai.certscore/mcp-light`, hosted MCP `0.2.16`, publisher `CertScore.ai, LLC`.
+1. Keep one canonical identity everywhere: `CertScore.ai MCP Light`, `ai.certscore/mcp-light`, hosted MCP `0.2.17`, publisher `CertScore.ai, LLC`.
 2. Verify the Official MCP Registry record, Cursor Directory page, endpoint, icons, privacy/terms/support URLs, and exact three-tool contract.
 3. Correct stale owner/version copy in submission packets and manifests.
 4. Add structured SoftwareApplication, FAQ, and breadcrumb metadata plus the 1200 × 630 social card to the landing page.
@@ -52,7 +52,7 @@ Exit condition: the automated distribution check and focused web/MCP tests pass;
 ## Priority 1: finish high-intent distribution (days 3–7)
 
 1. Cursor action is paused at the product owner's request as of August 29, 2026. Preserve the verified Directory and pending Marketplace status, but do not monitor, resubmit, or install until the owner resumes it.
-2. Submit the prepared Claude package using publisher `CertScore.ai, LLC` and version `0.2.16`.
+2. Submit the prepared Claude package using publisher `CertScore.ai, LLC` and version `0.2.17`.
 3. Create the OpenAI **With MCP** draft using the Universal no-auth endpoint and bundled provider-neutral skill. Re-run Scan Tools immediately before submission and after any schema change.
 4. Submit Cline using the prepared repository URL, agent install guide, 400 × 400 PNG, and evidence-bounded description.
 5. Submit the prepared Kilo `MCP.yaml` through the current Kilo marketplace repository and checks.

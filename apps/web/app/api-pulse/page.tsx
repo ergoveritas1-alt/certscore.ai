@@ -115,9 +115,9 @@ const mcpTools = certScoreMcpToolContracts.map(({ description, name }) => [name,
 
 const exampleMeta = {
   apiVersion: "v1",
-  schemaVersion: "0.5.4",
+  schemaVersion: "0.5.5",
   pulseVersion: "2026-05-18",
-  projectionVersion: "pulse-public-v3",
+  projectionVersion: "pulse-public-v4",
   generatedAt: "2026-05-18T23:15:32Z",
   source: "certscore.ai"
 };

@@ -119,6 +119,29 @@ function compactFindings(findings: any[], options: { gptAction?: boolean } = {})
     : `${NO_TOP_FINDINGS_COPY} ${ABSENCE_OF_FINDINGS_CAVEAT}`;
 }
 
+function compactConsentLaneResults(pulse: PulseMarkdownInput) {
+  const results: string[] = [];
+  const gpc = pulse.gpcResponse;
+  if (gpc && typeof gpc === "object") {
+    const proofCount = gpc.comparison?.enabledProof?.requestsWithSecGpc;
+    const summary = `${line(gpc.findingTitle)}; status: ${formatLabel(gpc.status)}` +
+      (typeof proofCount === "number" ? `; Sec-GPC: 1 proof retained on ${proofCount} request(s)` : "");
+    results.push(`- ${gpc.evidenceUrl ? markdownLink(`GPC response: ${summary}`, gpc.evidenceUrl) : `GPC response: ${summary}`}`);
+    if (gpc.californiaPolicy?.applied === true && gpc.californiaPolicy?.deductionPoints === 15) {
+      results.push("- California scoring path: 15-point GPC deduction applied.");
+    }
+  }
+
+  for (const [field, label] of [["postAcceptObservation", "Accept Path"], ["postRefusalObservation", "Reject Path"]] as const) {
+    const observation = pulse[field];
+    if (observation && typeof observation === "object") {
+      results.push(`- ${label}: ${line(observation.interpretation)}`);
+    }
+  }
+
+  return results;
+}
+
 function compactSurfacedResults(pulse: PulseMarkdownInput) {
   const results = pulse.surfacedResults ?? {};
   const gdprFindings = Array.isArray(results.gdprEprivacyFindings) ? results.gdprEprivacyFindings : [];
@@ -320,6 +343,7 @@ export function renderPulseMarkdown(pulse: PulseMarkdownInput, options: { gptAct
     `- ${markdownLink(`Tracker footprint: ${metricValue(highlights.trackerFootprint?.thirdPartyDomainsObserved)} third-party domains observed`, trackerFootprintUrl)}`,
     `- ${markdownLink(`Classified tracker vendors: ${metricValue(highlights.trackerFootprint?.classifiedTrackerVendors)}`, trackerFootprintUrl)}`,
     `- ${markdownLink(`Consent-related findings: ${findings.filter((finding) => /consent|tracking|cookie|vendor/i.test(`${finding.id ?? ""} ${finding.label ?? ""}`)).length}`, consentFindingsUrl)}`,
+    ...compactConsentLaneResults(pulse),
     "",
     "## Cookie and third-party request activity",
     "",

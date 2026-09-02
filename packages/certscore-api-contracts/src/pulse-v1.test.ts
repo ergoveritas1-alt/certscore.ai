@@ -126,6 +126,9 @@ test("Pulse ChatGPT OpenAPI stays compact and action-compatible", () => {
   assert.equal(serialized.includes("\"evidence\""), true);
   assert.equal(serialized.includes("\"text/markdown\""), false);
   assert.equal(serialized.includes("\"const\""), false);
+  assert.ok(document.components.schemas.PulseResponse.properties.gpcResponse);
+  assert.ok(document.components.schemas.PulseResponse.properties.postAcceptObservation);
+  assert.ok(document.components.schemas.PulseResponse.properties.postRefusalObservation);
 });
 
 test("MCP contracts expose the current scoped tool surface", () => {
@@ -376,6 +379,9 @@ test("Pulse v1 OpenAPI has stable agent-facing operations", () => {
   assert.equal(document.paths["/api/v1/pulse/status/{jobId}"].get.operationId, "getPulseJobStatus");
   assert.ok(document.components.securitySchemes.bearerAuth);
   assert.ok(document.components.schemas.PulseResponse);
+  assert.ok(document.components.schemas.PulseResponse.properties.gpcResponse);
+  assert.ok(document.components.schemas.PulseResponse.properties.postAcceptObservation);
+  assert.ok(document.components.schemas.PulseResponse.properties.postRefusalObservation);
   assert.ok(document.components.schemas.PulseStatus);
   assert.ok(document.components.schemas.PulseError);
 });

@@ -388,7 +388,7 @@ export const mcpScanBundleOutputSchema: z.ZodType<Record<string, unknown>> = z
     scoreVersion: z.string().nullable(),
     scoreUpdatedAt: z.string().nullable(),
     riskLevel: z.string().nullable(),
-    gpcResponse: apiV2ScanResourceSchema.shape.gpcResponse.nullable(),
+    gpcResponse: apiV2ScanResourceSchema.shape.gpcResponse.nullable().optional(),
     postAcceptObservation: apiV2ScanResourceSchema.shape.postAcceptObservation.nullable(),
     postRefusalObservation: apiV2ScanResourceSchema.shape.postRefusalObservation.nullable(),
     provenance: mcpScanProvenanceSchema,

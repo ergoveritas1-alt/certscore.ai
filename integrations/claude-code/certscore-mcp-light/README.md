@@ -4,7 +4,7 @@ CertScore.ai MCP Light is a free website privacy scanner and cookie checker for 
 
 This plugin connects Claude Code to the existing no-auth CertScore.ai MCP Light endpoint and adds the `/certscore-mcp-light:privacy-scan` workflow. It contains no hooks, autonomous actions, local executables, credentials, or write tools.
 
-Plugin package version: `0.2.16`. The hosted MCP runtime is also `0.2.16`.
+Plugin package version: `0.2.17`. The hosted MCP runtime is also `0.2.17`.
 
 Connection:
 

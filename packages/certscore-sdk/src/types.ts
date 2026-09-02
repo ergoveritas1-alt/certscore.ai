@@ -801,6 +801,9 @@ export interface PulseResultBase {
   scanStatus?: string;
   resultDisposition?: ScanResultDisposition;
   noGo?: ScanNoGoResult;
+  gpcResponse?: GpcResponse | null;
+  postAcceptObservation?: PostAcceptObservation | null;
+  postRefusalObservation?: PostRefusalObservation | null;
   summary?: PulseSummary;
   topFindings?: TopFinding[];
   transportSecurity?: TransportSecurityProjection;

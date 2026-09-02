@@ -3113,7 +3113,10 @@ async function fetchRenderedPolicyDocumentText(input: {
     const response = clickNavigation?.clicked
       ? clickNavigation.response
       : await page.goto(input.url, {
-          waitUntil: "domcontentloaded",
+          // A committed main-document response is sufficient provenance for
+          // the bounded text and substance checks below. Waiting for every
+          // parser-blocking resource can discard an otherwise usable policy.
+          waitUntil: "commit",
           timeout: targetNavigationTimeoutMs,
         });
     await page.waitForLoadState("networkidle", {
@@ -4035,7 +4038,11 @@ async function extractRenderedCandidates(
     const page = await context.newPage();
     const navigationTimeoutMs = input.discoveryMode === "fast" ? 4_000 : 8_000;
     await page.goto(input.normalizedUrl, {
-      waitUntil: "domcontentloaded",
+      // Retain the committed document promptly, then let the bounded waits
+      // below look for policy controls. Large publisher pages can keep
+      // DOMContentLoaded blocked on non-policy resources even after their
+      // footer and legal links are already present in the live DOM.
+      waitUntil: "commit",
       timeout: Math.min(navigationTimeoutMs, Math.max(1_000, remainingMs(input, moduleStartedAtMs))),
     });
     await page.waitForLoadState("networkidle", {

@@ -158,6 +158,7 @@ export type ShadowReportData = {
   consentVendor: string | null;
   gpcResponse?: GpcResponseReportProjection | null;
   gpcLaneStatus?: "completed" | "not_requested" | "unavailable";
+  policySurfaceCoverage: "complete" | "limited" | "unavailable";
   acceptPath?: ExecutiveAcceptPathProjection | null;
   choicePathComparison?: ChoicePathComparison | null;
   rejectPath?: ExecutiveRejectPathProjection | null;
@@ -266,6 +267,7 @@ export const SHADOW_REPORT: ShadowReportData = {
     options: "Not observed"
   },
   consentVendor: "BST DSGVO Cookie",
+  policySurfaceCoverage: "complete",
   coverage: {
     rows: 29,
     usableEvidence: 19,

@@ -1075,6 +1075,10 @@ test("scan bundle text exposes compact row evidence, neutral score terminology, 
   assert.match(bundle.interpretationGuidance.statement, /When postAcceptObservation or postRefusalObservation is confirmed and termination\.kind is evidence_satisfied/i);
   assert.match(bundle.interpretationGuidance.statement, /observation stopped intentionally after qualifying evidence was retained/i);
   assert.match(bundle.interpretationGuidance.statement, /mention unmeasured longer-term persistence only when relevant/i);
+  assert.equal(bundle.gpcResponse, undefined);
+  assert.equal(bundle.postAcceptObservation, null);
+  assert.equal(bundle.postRefusalObservation, null);
+  assert.doesNotThrow(() => mcpScanBundleOutputSchema.parse(bundle));
   assert.ok(text.length <= 8_000);
 });
 

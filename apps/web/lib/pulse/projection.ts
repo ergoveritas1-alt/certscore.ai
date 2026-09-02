@@ -79,6 +79,11 @@ import { buildPulseAgentInterpretation } from "./agent-interpretation";
 import { projectGdprTransparencyTopicCandidateSummary, projectPulseCalibrationContext } from "./calibration-context";
 export { projectPulseCalibrationContext } from "./calibration-context";
 import type { PulseDetail, PulseFormat, PulseFreshnessMode } from "./types";
+import {
+  deriveApiV2GpcResponse,
+  deriveApiV2PostAcceptObservation,
+  deriveApiV2PostRefusalObservation,
+} from "../api-v2/scan-resource";
 
 type PulseProjectionInput = {
   detail: PulseDetail;
@@ -1714,6 +1719,9 @@ function buildSummaryArtifact(input: {
     scanStatus: input.base.scanStatus,
     resultDisposition: input.base.resultDisposition,
     noGo: input.base.noGo,
+    gpcResponse: input.base.gpcResponse,
+    postAcceptObservation: input.base.postAcceptObservation,
+    postRefusalObservation: input.base.postRefusalObservation,
     timestamps: input.timestamps,
     summary: input.base.summary,
     executiveSummary: input.base.executiveSummary,
@@ -1911,6 +1919,9 @@ function buildEvidenceArtifact(input: {
     scanId: input.base.scanId,
     scan_id: input.base.scan_id,
     scanStatus: input.base.scanStatus,
+    gpcResponse: input.base.gpcResponse,
+    postAcceptObservation: input.base.postAcceptObservation,
+    postRefusalObservation: input.base.postRefusalObservation,
     resultDisposition: input.base.resultDisposition,
     noGo: input.base.noGo,
     timestamps: input.timestamps,
@@ -2229,6 +2240,9 @@ export function buildPulseProjection(input: PulseProjectionInput) {
   const effectiveScanStatus = pulseNoGoState?.scanStatus ?? scan.status;
   const coverage = deriveCoverage(hydratedScanRecord);
   const quality = assessPulseScanRecordQuality(hydratedScanRecord);
+  const gpcResponse = deriveApiV2GpcResponse(hydratedScanRecord) ?? null;
+  const postAcceptObservation = deriveApiV2PostAcceptObservation(hydratedScanRecord) ?? null;
+  const postRefusalObservation = deriveApiV2PostRefusalObservation(hydratedScanRecord) ?? null;
   const persistedCanonicalProjection = getPersistedCanonicalReportProjection(hydratedScanRecord);
   const packets = (persistedCanonicalProjection
     ? filterContradictoryPositiveSurfaceFindings(persistedCanonicalProjection.ownerUnifiedFindings)
@@ -2436,6 +2450,9 @@ export function buildPulseProjection(input: PulseProjectionInput) {
     scan_id: scan.id,
     scanStatus: effectiveScanStatus,
     ...(noGoProjection ?? {}),
+    gpcResponse,
+    postAcceptObservation,
+    postRefusalObservation,
     summary,
     executiveSummary,
     surfacedResults,

@@ -532,7 +532,7 @@ export function projectedFindingsFromPulse(pulse: PulseResponse): PulseFindingLi
   return [...byId.values()];
 }
 
-function deriveApiV2PostRefusalObservation(scanRecord: ScanDetailResponse) {
+export function deriveApiV2PostRefusalObservation(scanRecord: ScanDetailResponse) {
   const supportedStatuses = new Set([
     "confirmed_observation",
     "confirmed_clean",
@@ -710,7 +710,7 @@ function deriveApiV2PostRefusalObservation(scanRecord: ScanDetailResponse) {
   };
 }
 
-function deriveApiV2PostAcceptObservation(scanRecord: ScanDetailResponse) {
+export function deriveApiV2PostAcceptObservation(scanRecord: ScanDetailResponse) {
   const supportedStatuses = new Set([
     "confirmed_observation",
     "confirmed_clean",
@@ -943,7 +943,7 @@ function deriveCoverage(scanRecord: ScanDetailResponse) {
   };
 }
 
-function deriveApiV2GpcResponse(scanRecord: ScanDetailResponse): ApiV2ScanResource["gpcResponse"] {
+export function deriveApiV2GpcResponse(scanRecord: ScanDetailResponse): ApiV2ScanResource["gpcResponse"] {
   const canonical = getPersistedCanonicalReportProjection(scanRecord);
   if (!canonical) {
     return null;

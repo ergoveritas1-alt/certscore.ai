@@ -38,7 +38,7 @@ test("ScanFromSelect defaults Lambda on and fresh re-scan off", () => {
   assert.doesNotMatch(html, /name="gpcObservation"/);
 });
 
-test("ScanFromSelect presents GPC as automatically included without a request toggle", () => {
+test("ScanFromSelect omits redundant always-on GPC controls and status", () => {
   const html = renderToStaticMarkup(
     createElement(ScanFromSelect, {
       allowRestrictedScanOptions: true,
@@ -50,7 +50,8 @@ test("ScanFromSelect presents GPC as automatically included without a request to
   const source = readFileSync(join(process.cwd(), "apps/web/components/scans/scan-from-select.tsx"), "utf8");
 
   assert.doesNotMatch(html, /name="gpcObservation"/);
-  assert.match(source, /Included automatically · isolated Lambda lane/);
+  assert.doesNotMatch(html, /GPC comparison/);
+  assert.doesNotMatch(source, /Included automatically · isolated Lambda lane/);
   assert.doesNotMatch(source, /onGpcObservationChange/);
 });
 

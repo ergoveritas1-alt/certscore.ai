@@ -1,5 +1,9 @@
 # @certscore/sdk
 
+## 0.2.10
+
+- Surface GPC, post-Accept, and post-Refusal observation results on Pulse responses returned by the default `scan()` and `getScan()` SDK methods, in addition to API v2 scan and scan-job resources.
+
 ## 0.2.9
 
 - Expose the jurisdiction-neutral GPC response, retained enablement proof, and baseline-versus-GPC comparison deltas on scan and scan-job resources.

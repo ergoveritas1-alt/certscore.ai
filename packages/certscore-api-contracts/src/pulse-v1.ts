@@ -1,8 +1,13 @@
 import { z } from "zod";
+import {
+  apiV2GpcResponseSchema,
+  apiV2PostAcceptObservationSchema,
+  apiV2PostRefusalObservationSchema,
+} from "./scan-observation-results.js";
 import { scanNoGoResultSchema, scanResultDispositionSchema } from "./scan-no-go.js";
 
 export const PULSE_API_VERSION = "v1";
-export const PULSE_SCHEMA_VERSION = "0.5.4";
+export const PULSE_SCHEMA_VERSION = "0.5.5";
 export const PULSE_SOURCE = "certscore.ai";
 
 export const PULSE_PURPOSE_STATEMENT =
@@ -206,6 +211,9 @@ export const pulseResponseSchema = z
     scanStatus: z.string().optional(),
     resultDisposition: scanResultDispositionSchema.optional(),
     noGo: scanNoGoResultSchema.optional(),
+    gpcResponse: apiV2GpcResponseSchema.nullable().optional(),
+    postAcceptObservation: apiV2PostAcceptObservationSchema.nullable().optional(),
+    postRefusalObservation: apiV2PostRefusalObservationSchema.nullable().optional(),
     summary: pulseSummarySchema.optional(),
     topFindings: z.array(pulseFindingSchema).optional(),
     transportSecurity: pulseTransportSecuritySchema.optional(),

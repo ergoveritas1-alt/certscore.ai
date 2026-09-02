@@ -4,6 +4,7 @@ import test from "node:test";
 import { countNonNotObservedRows } from "./evidence-directory-summary";
 import { buildRuntimeInventoryCopyPayload } from "./inventory-table-copy";
 import { buildRuntimeInventoryPurposeCounts } from "../runtime-observation-sections";
+import { getPolicySurfaceCoverageStatus } from "./timeline-report-model";
 
 test("evidence directory summaries exclude only Not observed rows", () => {
   assert.equal(countNonNotObservedRows([
@@ -17,6 +18,26 @@ test("evidence directory summaries exclude only Not observed rows", () => {
     { status: "Not observed" },
     { status: "Observed" },
   ]), 1);
+});
+
+test("policy surface coverage preserves limited and unavailable states", () => {
+  assert.equal(getPolicySurfaceCoverageStatus({
+    policySurfaceInspection: {
+      coverageStatus: "limited",
+      inspectionCompleted: false,
+      limitationKeys: ["policy_surface_inspection_runtime_partial"],
+    },
+  }), "limited");
+  assert.equal(getPolicySurfaceCoverageStatus({
+    hybrid_runtime_evidence: {
+      policy_surface_inspection: {
+        coverage_status: "complete",
+        inspection_completed: true,
+        limitation_keys: [],
+      },
+    },
+  }), "complete");
+  assert.equal(getPolicySurfaceCoverageStatus(null), "unavailable");
 });
 
 test("purpose mix merges case-only labels without double-counting retained records", () => {
@@ -101,6 +122,10 @@ test("Accept and Reject cards appear together in expandable consent surfaces", a
     "apps/web/components/scans/report-lab/timeline-report-model.ts",
     "utf8"
   );
+  const choicePathCardSource = source.slice(
+    source.indexOf("function ChoicePathCard"),
+    source.indexOf("function ChoicePathResults"),
+  );
 
   assert.match(source, /data-testid="timeline-accept-path-card"/);
   assert.match(source, /data-testid="timeline-reject-path-card"/);
@@ -110,6 +135,13 @@ test("Accept and Reject cards appear together in expandable consent surfaces", a
   assert.match(source, /report\.acceptPath \|\| report\.rejectPath[\s\S]*sm:grid-cols-2/);
   assert.match(source, /No qualifying post-Reject request or storage write was retained/);
   assert.match(source, /Observation window complete/);
+  assert.match(choicePathCardSource, /<details/);
+  assert.match(choicePathCardSource, /<summary/);
+  assert.match(choicePathCardSource, /group-open\/path:rotate-45/);
+  assert.doesNotMatch(choicePathCardSource, /<details[^>]*\sopen(?:\s|>)/);
+  assert.match(choicePathCardSource, /px-3 py-2\.5/);
+  assert.match(choicePathCardSource, /<\/summary>\s*<div[^>]*>\s*<h4/);
+  assert.match(choicePathCardSource, /<div className="mt-2\.5 border-t border-zinc-200 pt-2\.5">/);
   assert.match(modelSource, /Saved consent did not match Accept/);
   assert.match(modelSource, /consent record saved afterward still said analytics and advertising were not allowed/);
   assert.match(modelSource, /projectExecutiveFindingsFromUnifiedPackets/);
@@ -131,16 +163,42 @@ test("GPC appears as a quiet snapshot signal and a dedicated evidence-index comp
   assert.match(source, /data-testid="executive-gpc-snapshot"/);
   assert.match(source, /predates always-on GPC coverage/);
   assert.match(source, /no verified canonical GPC response reached this report/);
-  assert.match(source, />Global Privacy Control</);
+  const snapshotSource = source.slice(
+    source.indexOf("function SignalSnapshot"),
+    source.indexOf("function BenchmarkComparison")
+  );
+  const evidenceDirectorySource = source.slice(source.indexOf("function EvidenceDirectory"));
+  const consentPlatformIndex = snapshotSource.indexOf(">Consent platform<");
+  const consentControlsIndex = snapshotSource.indexOf(">Consent controls<");
+  const gpcIndex = snapshotSource.indexOf(">Global Privacy Control (GPC)<");
+  const trackerFootprintIndex = snapshotSource.indexOf(">Tracker footprint<");
+  const transportSecurityIndex = snapshotSource.indexOf(">HTTPS / TLS<");
+  const runtimeIndex = evidenceDirectorySource.indexOf(">Pre-consent runtime<");
+  const gpcCardIndex = evidenceDirectorySource.indexOf("<GpcEvidenceIndexCard");
+  const transportIndex = evidenceDirectorySource.indexOf(">Transport security<");
+
+  assert.ok(consentPlatformIndex >= 0);
+  assert.ok(consentPlatformIndex < consentControlsIndex);
+  assert.ok(consentControlsIndex < trackerFootprintIndex);
+  assert.ok(trackerFootprintIndex < transportSecurityIndex);
+  assert.ok(transportSecurityIndex < gpcIndex);
+  assert.match(snapshotSource, /<VendorBrandLogo label=\{consentVendor\} \/>/);
+  assert.match(snapshotSource, /getGpcStatusPresentation\(report\.gpcResponse\.assessment\.status\)\.label/);
+  assert.doesNotMatch(snapshotSource, /<GpcStatusBadge/);
   assert.match(source, /CA −\{report\.gpcResponse\.californiaDeductionPoints\}/);
   assert.match(source, /href="#gpc-evidence"/);
   assert.match(source, /data-testid="gpc-evidence-index-card"/);
+  assert.ok(runtimeIndex >= 0);
+  assert.ok(runtimeIndex < gpcCardIndex);
+  assert.ok(gpcCardIndex < transportIndex);
   assert.match(source, />GPC comparison</);
   assert.match(source, /Typed comparison evidence/);
   assert.match(source, /"Advertising \/ measurement"/);
   assert.match(source, /"Consent \/ CMP"/);
   assert.match(modelSource, /buildGpcResponseReportProjection\(canonical\.ownerUnifiedFindings\)/);
   assert.doesNotMatch(source, /GPC violation|GPC not honored/i);
+  assert.match(source, /report\.policySurfaceCoverage === "limited"/);
+  assert.match(source, /Policy discovery or document retrieval was incomplete/);
 });
 
 test("full runtime inventory shows six rows before becoming vertically scrollable", async () => {

@@ -122,8 +122,7 @@ export function ScanFromSelect({
     : true;
   const showLocalV2RunViaLambdaOption =
     process.env.NODE_ENV !== "production" && includeLocalV2ScanProfileOption && allowRestrictedScanOptions;
-  const showGpcObservationStatus = includeLocalV2ScanProfileOption && selectedValue !== "local_extension";
-  const hasVisibleMenuContent = includeScanFromOptions || includeFreshRescanOption || showGpcObservationStatus || showLocalV2RunViaLambdaOption;
+  const hasVisibleMenuContent = includeScanFromOptions || includeFreshRescanOption || showLocalV2RunViaLambdaOption;
 
   useEffect(() => {
     setIsMounted(true);
@@ -193,7 +192,7 @@ export function ScanFromSelect({
       window.removeEventListener("resize", updateMenuPosition);
       window.removeEventListener("scroll", updateMenuPosition, true);
     };
-  }, [includeFreshRescanOption, includeScanFromOptions, isOpen, showGpcObservationStatus, showLocalV2RunViaLambdaOption, variant]);
+  }, [includeFreshRescanOption, includeScanFromOptions, isOpen, showLocalV2RunViaLambdaOption, variant]);
 
   function selectScanFrom(nextValue: ScanFrom) {
     onChange?.(nextValue);
@@ -302,7 +301,7 @@ export function ScanFromSelect({
                   </div>
                 </div>
               ) : null}
-              {includeFreshRescanOption || showGpcObservationStatus || showLocalV2RunViaLambdaOption ? (
+              {includeFreshRescanOption || showLocalV2RunViaLambdaOption ? (
                 <div className={includeScanFromOptions ? "border-t border-slate-200/70 pt-1" : "pb-1"}>
                   <div className="px-3 pb-1.5 pt-1 text-[0.65rem] font-semibold uppercase tracking-[0.18em] text-slate-400">Options</div>
                   {showLocalV2RunViaLambdaOption ? (
@@ -335,21 +334,6 @@ export function ScanFromSelect({
                         />
                       </span>
                     </label>
-                  ) : null}
-                  {showGpcObservationStatus ? (
-                    <div
-                      className="flex w-full items-center justify-between gap-4 px-3 py-2.5 text-left"
-                      title="Every regional Lambda scan includes a separate passive GPC lane with Sec-GPC: 1, paired with the equivalent baseline lane."
-                    >
-                      <span className="min-w-0">
-                        <span className="block text-sm font-semibold text-slate-700">GPC comparison</span>
-                        <span className="block text-[0.68rem] leading-4 text-slate-500">Included automatically · isolated Lambda lane</span>
-                      </span>
-                      <span className="inline-flex shrink-0 items-center gap-1.5 text-[0.68rem] font-semibold uppercase tracking-[0.12em] text-emerald-700">
-                        <span aria-hidden="true" className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
-                        On
-                      </span>
-                    </div>
                   ) : null}
                   {includeFreshRescanOption ? (
                     <label

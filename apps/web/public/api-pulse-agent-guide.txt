@@ -4,7 +4,7 @@ Last updated: 2026-05-19
 
 CertScore.ai Pulse provides automated public-web observations for human and agentic review. Outputs are not legal advice, certification, or a compliance determination.
 
-This is beta software. The current Pulse API beta version is 0.5.4.
+This is beta software. The current Pulse API beta version is 0.5.5.
 
 CertScore.ai Pulse uses automated runtime analysis of public websites to detect review signals around pre-consent tracking, third-party requests, consent enforcement gaps, cookie activity, accessibility issues, and disclosure inconsistencies.
 

@@ -5035,6 +5035,85 @@ test("policySurfaceScanner uses rendered footer links before common-path fallbac
   }
 });
 
+test("policySurfaceScanner retains committed policy evidence when unrelated resources delay DOMContentLoaded", async () => {
+  const policyText = Array.from({ length: 18 }, () => [
+    "Example Media is the data controller and can be contacted at privacy@example.test.",
+    "We process personal data for service delivery, analytics, security, and advertising using consent, contract, legal obligation, and legitimate interests.",
+    "Recipients include service providers and affiliates, records are retained only as necessary, and international transfers use approved safeguards.",
+    "You may request access, correction, deletion, restriction, portability, or objection and may complain to a supervisory authority.",
+  ].join(" ")).join(" ");
+  const server = createServer((request, response) => {
+    const requestUrl = new URL(request.url ?? "/", "http://127.0.0.1");
+    const isDirectScannerRequest = /^ConsentCheckBot\//.test(request.headers["user-agent"] ?? "");
+    if (isDirectScannerRequest) {
+      response.writeHead(403, { "content-type": "text/plain; charset=utf-8" });
+      response.end("direct request blocked");
+      return;
+    }
+    if (requestUrl.pathname === "/slow-policy-resource.js") {
+      const timer = setTimeout(() => {
+        if (response.destroyed) return;
+        response.writeHead(200, { "content-type": "application/javascript; charset=utf-8" });
+        response.end("window.__slowPolicyResourceLoaded = true;");
+      }, 10_000);
+      response.on("close", () => clearTimeout(timer));
+      return;
+    }
+    if (requestUrl.pathname === "/committed-policy-homepage/privacy") {
+      response.writeHead(200, { "content-type": "text/html; charset=utf-8" });
+      response.end(`<!doctype html><html><head><title>Privacy Policy</title></head><body>
+        <main><h1>Privacy Policy</h1><p>${policyText}</p></main>
+        <script src="/slow-policy-resource.js"></script>
+      </body></html>`);
+      return;
+    }
+    if (requestUrl.pathname === "/committed-policy-homepage") {
+      response.writeHead(200, { "content-type": "text/html; charset=utf-8" });
+      response.end(`<!doctype html><html><head><title>News</title></head><body>
+        <main>Rendered publisher homepage.</main>
+        <footer><a href="/committed-policy-homepage/privacy">Privacy Policy</a></footer>
+        <script src="/slow-policy-resource.js"></script>
+      </body></html>`);
+      return;
+    }
+    response.writeHead(404, { "content-type": "text/plain; charset=utf-8" });
+    response.end("not found");
+  });
+  server.listen(0, "127.0.0.1");
+  await once(server, "listening");
+  const address = server.address();
+  assert.ok(address && typeof address === "object");
+  const targetUrl = `http://127.0.0.1:${address.port}/committed-policy-homepage`;
+  const tempRoot = await mkdtemp(path.join(tmpdir(), "certscore-policy-committed-document-"));
+
+  try {
+    const startedAt = Date.now();
+    const result = await policySurfaceScanner({
+      url: targetUrl,
+      normalizedUrl: targetUrl,
+      scanStartedAtMs: startedAt,
+      internalBudgetMs: 12_000,
+      discoveryMode: "fast",
+      artifactWriter: await createArtifactWriter(tempRoot),
+      nanoAssistProvider: createDefaultMockNanoPolicyAssistProvider(),
+    });
+    const privacy = result.policySurfaceObservations.find((observation) =>
+      observation.status === "fetched" &&
+      observation.normalizedUrl === `${targetUrl}/privacy`
+    );
+
+    assert.ok(privacy, JSON.stringify(result.policySurfaceObservations, null, 2));
+    assert.equal(privacy.httpStatus, 200);
+    assert.equal(privacy.documentEvaluationState, "usable");
+    assert.match(privacy.textExcerpt ?? "", /data controller/i);
+    assert.ok(Date.now() - startedAt < 10_000, "policy recovery must remain inside the existing bounded lane budget");
+  } finally {
+    server.close();
+    await once(server, "close");
+    await rm(tempRoot, { recursive: true, force: true });
+  }
+});
+
 test("policySurfaceScanner uses rendered policy document fallback when direct policy fetch times out", async () => {
   const server = await startStaticFixtureServer();
   const tempRoot = await mkdtemp(path.join(tmpdir(), "certscore-policy-scan-"));
