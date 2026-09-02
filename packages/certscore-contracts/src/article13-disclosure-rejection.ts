@@ -602,7 +602,13 @@ function hasLocalizedArticle13EvidenceContext(
   disclosureType: Article13DisclosureType | string | undefined,
 ) {
   const normalized = normalizeArticle13Whitespace(value);
-  const canonicalMatch = classifyGdprTransparencyTopics({ text: normalized }).matches
+  // This validator receives already-retained section evidence. Preserve that
+  // scope when rechecking the canonical classifier so substantive semantic
+  // clauses do not lose their match merely because the bounded excerpt omits
+  // the policy's broader privacy preamble.
+  const canonicalMatch = classifyGdprTransparencyTopics({
+    section: { body: normalized },
+  }).matches
     .find((match) => match.topic === disclosureType);
   if (
     canonicalMatch?.matchedLocale === "en" &&

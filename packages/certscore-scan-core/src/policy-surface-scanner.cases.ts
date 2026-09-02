@@ -2806,6 +2806,108 @@ test("policySurfaceScanner derives diagnostic GDPR Transparency candidates from 
   );
 });
 
+test("policySurfaceScanner retains German clinic natural-clause candidates at the observation boundary", () => {
+  const candidates = gdprTransparencyTopicCandidatesFromRetainedPolicySections([
+    {
+      heading: "Erhebung und Verarbeitung von Daten",
+      textExcerpt: "Wir verarbeiten jene Daten, die Sie uns als Kunde zur Durchführung vorvertraglicher Maßnahmen und bei Abschluss des Vertrages zur Verfügung stellen. Die Datenverarbeitung erfolgt zu folgenden Zwecken: Die von Ihnen angegebenen Daten werden verarbeitet, um vorvertragliche Maßnahmen durchzuführen und Verträge abzuwickeln.",
+    },
+    {
+      heading: "Plugins eines sozialen Netzwerks",
+      textExcerpt: "Der Anbieter des sozialen Netzwerks hat seinen Sitz in Palo Alto, CA 94304, USA. Über das Plugin wird eine direkte Verbindung zwischen Ihrem Browser und dem Server des sozialen Netzwerks hergestellt. Das soziale Netzwerk erhält dadurch die Information, dass Sie mit Ihrer IP-Adresse unsere Seite besucht haben.",
+    },
+    {
+      heading: "Speicherdauer und Ihre Rechte",
+      textExcerpt: "Wir speichern Ihre personenbezogenen Daten solange dies erforderlich ist und gesetzliche Aufbewahrungsfristen bestehen. Sie können sich bei einer Datenschutzaufsichtsbehörde beschweren, wenn Sie die Verarbeitung für rechtswidrig halten.",
+    },
+    {
+      heading: "Automatisierte Entscheidungen",
+      textExcerpt: "Eine automatisierte Entscheidungsfindung einschließlich Profiling findet nicht statt.",
+    },
+  ]);
+  const topics = new Set(candidates.map((candidate) => candidate.topic));
+
+  assert.deepEqual(
+    topics,
+    new Set([
+      "processing_purposes",
+      "legal_basis",
+      "recipients_or_vendor_categories",
+      "international_transfers",
+      "data_retention",
+      "supervisory_authority",
+      "automated_decision_making_or_profiling",
+    ]),
+  );
+  assert.equal(candidates.every((candidate) =>
+    candidate.status === "diagnostic_only" &&
+    candidate.productionCredit === false &&
+    candidate.classifierReasonCodes.includes("variant_semantic_clause")
+  ), true);
+});
+
+test("policySurfaceScanner retains calibrated Romanian natural clauses at the observation boundary", () => {
+  const candidates = gdprTransparencyTopicCandidatesFromRetainedPolicySections([
+    {
+      heading: "Politică de confidențialitate",
+      textExcerpt: "Datele cu caracter personal sunt utilizate pentru a gestiona contul. Prelucrarea se bazează pe consimțământ și pe o obligație legală. Datele personale sunt transmise unei persoane împuternicite.",
+    },
+    {
+      heading: "Păstrare și drepturi",
+      textExcerpt: "Păstrăm datele personale atât timp cât este necesar. Puteți depune o plângere la autoritatea de supraveghere. Nu folosim un proces decizional automatizat sau profilare.",
+    },
+  ]);
+  const topics = new Set(candidates.map((candidate) => candidate.topic));
+
+  assert.deepEqual(
+    topics,
+    new Set([
+      "processing_purposes",
+      "legal_basis",
+      "recipients_or_vendor_categories",
+      "data_retention",
+      "supervisory_authority",
+      "automated_decision_making_or_profiling",
+    ]),
+  );
+  assert.equal(candidates.every((candidate) =>
+    candidate.status === "diagnostic_only" &&
+    candidate.productionCredit === false &&
+    candidate.classifierReasonCodes.includes("variant_semantic_clause")
+  ), true);
+});
+
+test("policySurfaceScanner retains calibrated Finnish natural clauses at the observation boundary", () => {
+  const candidates = gdprTransparencyTopicCandidatesFromRetainedPolicySections([
+    {
+      heading: "Tietosuojakäytäntö",
+      textExcerpt: "Henkilötietoja käytetään tilin hallintaan. Käsittely perustuu suostumukseen ja lakisääteiseen velvoitteeseen. Henkilötietoja luovutetaan palveluntarjoajille.",
+    },
+    {
+      heading: "Säilytys ja valitusoikeus",
+      textExcerpt: "Säilytämme henkilötietoja niin kauan kuin tarpeen. Voit tehdä valituksen tietosuojaviranomaiselle. Emme käytä automatisoitua päätöksentekoa tai profilointia.",
+    },
+  ]);
+  const topics = new Set(candidates.map((candidate) => candidate.topic));
+
+  assert.deepEqual(
+    topics,
+    new Set([
+      "processing_purposes",
+      "legal_basis",
+      "recipients_or_vendor_categories",
+      "data_retention",
+      "supervisory_authority",
+      "automated_decision_making_or_profiling",
+    ]),
+  );
+  assert.equal(candidates.every((candidate) =>
+    candidate.status === "diagnostic_only" &&
+    candidate.productionCredit === false &&
+    candidate.classifierReasonCodes.includes("variant_semantic_clause")
+  ), true);
+});
+
 test("GDPR Transparency candidate merge retains the strongest evidence for each topic", () => {
   const candidate = (
     matchStrength: "weak" | "contextual" | "equivalent" | "direct",

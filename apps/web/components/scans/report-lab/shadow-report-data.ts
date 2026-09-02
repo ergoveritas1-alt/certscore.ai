@@ -664,10 +664,10 @@ export const SHADOW_REPORT: ShadowReportData = {
     },
     {
       id: "privacy-contact-point",
-      title: "Privacy contact point",
+      title: "DPO contact point (where applicable)",
       status: "Not confirmed",
       summary: "Not confirmed by scan evidence; No production-approved topic match was established. This neutral result does not establish that the disclosure is absent.",
-      correctionSteps: ["Review whether a usable privacy contact channel is explicit and attributable in the retained policy surface."],
+      correctionSteps: ["Review whether a designated DPO and attributable contact channel are explicit in the retained policy surface, where a DPO is applicable."],
       evidenceJson: { status: "not_confirmed", reason: "no_production_approved_topic_match", absenceEstablished: false }
     },
     {

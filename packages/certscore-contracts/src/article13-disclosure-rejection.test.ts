@@ -263,6 +263,16 @@ test("abbreviated Article 6 framing remains substantive legal-basis evidence", (
   }
 });
 
+test("bounded German section clauses retain multilingual legal-basis evidence", () => {
+  const text =
+    "Maßgebliche Rechtsgrundlagen. Die Verarbeitung erfolgt auf Grundlage einer Einwilligung, zur Vertragserfüllung, zur Erfüllung rechtlicher Verpflichtungen oder aufgrund berechtigter Interessen.";
+
+  assert.equal(
+    article13DisclosureRejectReason(text, "legal_basis", { mode: "multilingual_classifier" }),
+    null,
+  );
+});
+
 test("named-controller purpose statements qualify as processing-purposes evidence", () => {
   assert.equal(
     hasSubstantiveProcessingPurposesEvidence(

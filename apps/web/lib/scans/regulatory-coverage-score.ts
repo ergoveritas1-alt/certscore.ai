@@ -33,7 +33,7 @@ export type RegulatoryCoverageScore = {
 
 export const REGULATORY_COVERAGE_SCORE_SOURCE = "wc01.regulatory-coverage-score";
 export const CALIFORNIA_EVIDENCE_SCORE_VERSION = "california-evidence.legacy-v1";
-export const GDPR_EPRIVACY_EVIDENCE_SCORE_VERSION = "gdpr-eprivacy-posture.v11";
+export const GDPR_EPRIVACY_EVIDENCE_SCORE_VERSION = "gdpr-eprivacy-posture.v12";
 
 type GdprEprivacyRiskFamily =
   | "consent_controls"
@@ -98,7 +98,7 @@ const GDPR_EPRIVACY_POSTURE_POLICIES: Partial<Record<string, GdprEprivacyPosture
   supervisory_authority_complaint_disclosure: { family: "policy_transparency", gapDeduction: 0 },
   third_party_iframe_pre_consent: { family: "embedded_third_party", gapDeduction: 5 },
   transport_security_form_transport: { family: "transport_security", gapDeduction: 10 },
-  transport_security_http_redirect: { family: "transport_security", gapDeduction: 4 },
+  transport_security_http_redirect: { family: "transport_security", gapDeduction: 2 },
   transport_security_https_delivery: { family: "transport_security", gapDeduction: 12 },
   transport_security_mixed_content: { family: "transport_security", gapDeduction: 8 },
   transport_security_tls_certificate: { family: "transport_security", gapDeduction: 12 }

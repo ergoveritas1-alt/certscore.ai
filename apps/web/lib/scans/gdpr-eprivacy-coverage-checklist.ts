@@ -496,11 +496,11 @@ const CHECKLIST_ROWS: ChecklistRowDefinition[] = [
   },
   {
     id: "dpo_contact_point_disclosure",
-    label: "Privacy contact point",
-    explanation: "Whether retained privacy-policy evidence identified a privacy officer, privacy office, privacy contact, DPO, or data-protection contact point.",
+    label: "DPO contact point (where applicable)",
+    explanation: "Whether retained privacy-policy evidence identified a designated data protection officer or equivalent statutory DPO contact. A generic privacy mailbox is credited under controller/contact disclosure and does not by itself establish a DPO designation.",
     findingIds: ["privacy_contact_path_present"],
     defaultFindingStatus: "Observed",
-    notObservedText: "No canonical privacy or data-protection contact point evidence was retained for this scan context.",
+    notObservedText: "No canonical designated-DPO contact evidence was retained for this scan context.",
     requiresPublicWebCoverage: true
   },
   {

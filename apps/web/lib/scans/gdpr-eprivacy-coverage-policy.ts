@@ -1804,7 +1804,13 @@ function deriveTransportSecurityOutcomes(input: GdprEprivacyCoveragePolicyInput)
     finalUrl: getString(summary, ["finalUrl", "final_url"]),
     formTransportCount: getNumber(summary, ["formTransportCount", "form_transport_count"]),
     httpProbeAttempted: getBoolean(summary, ["httpProbeAttempted", "http_probe_attempted"]),
+    httpProbeErrorCategory: getString(summary, ["httpProbeErrorCategory", "http_probe_error_category"]),
+    httpProbeErrorMessage: getString(summary, ["httpProbeErrorMessage", "http_probe_error_message"]),
+    httpProbeFinalScheme: getString(summary, ["httpProbeFinalScheme", "http_probe_final_scheme"]),
     httpProbeFinalUrl: getString(summary, ["httpProbeFinalUrl", "http_probe_final_url"]),
+    httpProbeOutcome: getString(summary, ["httpProbeOutcome", "http_probe_outcome"]),
+    httpProbeRedirectChain: getStringArray(summary, ["httpProbeRedirectChain", "http_probe_redirect_chain"]).slice(0, 12),
+    httpProbeStatus: getNumber(summary, ["httpProbeStatus", "http_probe_status"]),
     httpRedirectsToHttps: getBoolean(summary, ["httpRedirectsToHttps", "http_redirects_to_https"]),
     insecureFormTransportObserved: getBoolean(summary, ["insecureFormTransportObserved", "insecure_form_transport_observed"]),
     insecureFormTransports: getObjectArray(summary, ["insecureFormTransports", "insecure_form_transports"]).slice(0, 12),
@@ -1908,16 +1914,65 @@ function deriveTransportSecurityOutcomes(input: GdprEprivacyCoveragePolicyInput)
         value: validTlsCertificate,
       });
     })(),
-    transportOutcomeFromBoolean({
-      falseStatus: "Gap observed",
-      falseText: "The explicit HTTP-origin probe did not redirect to HTTPS.",
-      nullText: "The explicit HTTP-origin redirect probe was not retained or did not complete.",
-      retainedEvidence,
-      rowId: "transport_security_http_redirect",
-      trueStatus: "Observed",
-      trueText: "The explicit HTTP-origin probe redirected to HTTPS.",
-      value: getBoolean(summary, ["httpRedirectsToHttps", "http_redirects_to_https"]),
-    }),
+    (() => {
+      const rowId = "transport_security_http_redirect";
+      const outcome = getString(summary, ["httpProbeOutcome", "http_probe_outcome"]);
+      const status = getNumber(summary, ["httpProbeStatus", "http_probe_status"]);
+      const errorCategory = getString(summary, ["httpProbeErrorCategory", "http_probe_error_category"]);
+      const redirected = getBoolean(summary, ["httpRedirectsToHttps", "http_redirects_to_https"]);
+      if (outcome === "redirected_to_https" || (outcome === null && redirected === true)) {
+        return makeOutcome(
+          rowId,
+          "Observed",
+          "The explicit HTTP-origin probe redirected to HTTPS.",
+          transportEvidenceRef(summary),
+          { retainedEvidence },
+        );
+      }
+      if (outcome === "plaintext_response_served") {
+        return makeOutcome(
+          rowId,
+          "Gap observed",
+          `The explicit HTTP-origin probe served a terminal${status === null ? "" : ` HTTP ${status}`} response over plaintext HTTP instead of redirecting to HTTPS.`,
+          transportEvidenceRef(summary),
+          { retainedEvidence },
+        );
+      }
+      if (outcome === "http_request_rejected") {
+        return makeOutcome(
+          rowId,
+          "Not testable",
+          `The HTTP origin returned${status === null ? "" : ` HTTP ${status}`} without serving normal page content or redirecting to HTTPS. This is retained as transport-hardening context, not proof of plaintext content exposure.`,
+          transportEvidenceRef(summary),
+          { retainedEvidence },
+        );
+      }
+      if (outcome === "probe_failed") {
+        return makeOutcome(
+          rowId,
+          "Not testable",
+          `The explicit HTTP-origin probe did not complete${errorCategory ? ` (${errorCategory})` : ""}; an operational failure does not establish plaintext content exposure.`,
+          transportEvidenceRef(summary),
+          { retainedEvidence },
+        );
+      }
+      if (redirected === false) {
+        return makeOutcome(
+          rowId,
+          "Not testable",
+          "The retained legacy redirect flag was negative, but no typed terminal HTTP outcome was retained. The evidence is insufficient to distinguish plaintext content from a rejected or failed probe.",
+          transportEvidenceRef(summary),
+          { retainedEvidence },
+        );
+      }
+      return makeOutcome(
+        rowId,
+        "Not testable",
+        "The explicit HTTP-origin redirect probe was not retained or did not complete.",
+        transportEvidenceRef(summary),
+        { retainedEvidence },
+      );
+    })(),
     transportOutcomeFromBoolean({
       falseStatus: "Observed",
       falseText: "No mixed-content HTTP subresources were retained for the scanned HTTPS page.",
@@ -6258,7 +6313,6 @@ function derivePostRejectOutcome(input: GdprEprivacyCoveragePolicyInput) {
 
   const completeFirstLayerInventoryWithoutReject =
     firstLayerChoiceEvidence.assessment?.assessmentStatus === "complete" &&
-    firstLayerChoiceEvidence.bannerLikeSurfaceObserved &&
     firstLayerChoiceEvidence.rejectControlObserved === false;
   if (completeFirstLayerInventoryWithoutReject) {
     return makeOutcome(
@@ -6948,7 +7002,7 @@ const POLICY_DISCLOSURE_ROWS: PolicyDisclosureRowConfig[] = [
   },
   {
     rowId: "dpo_contact_point_disclosure",
-    label: "Privacy contact point",
+    label: "DPO contact point (where applicable)",
     disclosureType: "dpo_contact",
     signalKeys: ["dpoContactPointDisclosureObserved", "dpo_contact_point_disclosure_observed"],
     textPattern: /data protection officer|dpo|chief privacy officer|privacy officer|privacy office|privacy contact|privacy team|data protection contact/i

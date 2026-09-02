@@ -865,6 +865,12 @@ const transportProbeErrorCategorySchema = z.enum([
   "unsupported_url",
   "unknown",
 ]);
+export const transportHttpProbeOutcomeSchema = z.enum([
+  "redirected_to_https",
+  "plaintext_response_served",
+  "http_request_rejected",
+  "probe_failed",
+]);
 
 export const transportSecuritySubresourceSchema = z.object({
   url: transportUrlSchema,
@@ -920,6 +926,7 @@ export const transportSecurityObservationSchema = z.object({
     finalScheme: transportSchemeSchema.optional(),
     redirectChain: z.array(transportUrlSchema).max(12).default([]),
     redirectedToHttps: z.boolean().optional(),
+    outcome: transportHttpProbeOutcomeSchema.optional(),
     errorCategory: transportProbeErrorCategorySchema.optional(),
     errorMessage: z.string().max(240).optional(),
   }),
@@ -947,6 +954,7 @@ export const transportSecurityObservationSchema = z.object({
     scannedPagesUseHttps: z.boolean().optional(),
     validTlsCertificate: z.boolean().optional(),
     httpRedirectsToHttps: z.boolean().optional(),
+    httpProbeOutcome: transportHttpProbeOutcomeSchema.optional(),
     mixedContentObserved: z.boolean(),
     insecureFormTransportObserved: z.boolean(),
   }),
@@ -954,6 +962,33 @@ export const transportSecurityObservationSchema = z.object({
   confidence: confidenceSchema,
   directVsInferred: directVsInferredSchema,
 });
+
+export function classifyTransportHttpProbeOutcome(input: {
+  attempted: boolean;
+  errorCategory?: z.infer<typeof transportProbeErrorCategorySchema>;
+  finalScheme?: z.infer<typeof transportSchemeSchema>;
+  redirectedToHttps?: boolean;
+  status?: number;
+}): z.infer<typeof transportHttpProbeOutcomeSchema> {
+  if (!input.attempted || input.errorCategory) {
+    return "probe_failed";
+  }
+  if (input.redirectedToHttps === true || input.finalScheme === "https") {
+    return "redirected_to_https";
+  }
+  if (
+    input.finalScheme === "http" &&
+    typeof input.status === "number" &&
+    input.status >= 200 &&
+    input.status < 300
+  ) {
+    return "plaintext_response_served";
+  }
+  if (typeof input.status === "number") {
+    return "http_request_rejected";
+  }
+  return "probe_failed";
+}
 
 export const consentInteractionEventSchema = runtimeEvidenceEventSchema.extend({
   eventType: z.literal("consent_interaction"),

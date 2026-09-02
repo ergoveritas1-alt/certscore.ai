@@ -37,6 +37,24 @@ test("GDPR/ePrivacy scoring configuration explicitly covers the canonical checkl
   assert.deepEqual(audit, { missingConfigIds: [], staleConfigIds: [] });
 });
 
+test("confirmed plaintext HTTP delivery receives the calibrated two-point transport deduction", () => {
+  const result = deriveRegulatoryCoverageScore({
+    framework: "gdpr_eprivacy",
+    rows: [{
+      assessmentStatus: "gap_observed",
+      criticalEvidence: {
+        retainedEvidence: { httpProbeOutcome: "plaintext_response_served", httpProbeStatus: 200 },
+      },
+      evidenceState: "observed",
+      id: "transport_security_http_redirect",
+      status: "Gap observed",
+    }],
+  });
+
+  assert.equal(result.score, 98);
+  assert.equal(result.scoreVersion, GDPR_EPRIVACY_EVIDENCE_SCORE_VERSION);
+});
+
 test("unknown checklist rows withhold scoring instead of receiving a silent fallback weight", () => {
   const result = deriveRegulatoryCoverageScore({
     framework: "gdpr_eprivacy",

@@ -22,6 +22,7 @@ import {
   type ConsentUiObservation,
   type VisualCaptureSummary,
   classifyConsentControlLabel,
+  classifyTransportHttpProbeOutcome,
   CONSENT_PREFERENCE_CATEGORY_REGISTRY,
   classifyConsentSurfaceText,
   classifyPrivacySurface,
@@ -9621,6 +9622,7 @@ async function captureTransportSecurityObservation(input: {
       scannedPagesUseHttps: schemeOf(pageUrl) === "https",
       validTlsCertificate: tlsProbe.validCertificate,
       httpRedirectsToHttps: httpProbe.redirectedToHttps,
+      httpProbeOutcome: httpProbe.outcome,
       mixedContentObserved: loadedHttpSubresources.length + blockedHttpSubresources.length > 0,
       insecureFormTransportObserved: formTransports.some((form) => form.insecureTransportObserved),
     },
@@ -9687,6 +9689,7 @@ function availableTransportSecurityObservation(input: {
       scannedPagesUseHttps: pageScheme === "https",
       validTlsCertificate: input.networkProbes.tlsProbe.validCertificate,
       httpRedirectsToHttps: input.networkProbes.httpProbe.redirectedToHttps,
+      httpProbeOutcome: input.networkProbes.httpProbe.outcome,
       mixedContentObserved: false,
       insecureFormTransportObserved: false,
     },
@@ -9741,6 +9744,7 @@ function emptyTransportSecurityObservation(input: {
       attempted: false,
       errorCategory: "unknown",
       errorMessage: input.reason,
+      outcome: "probe_failed",
       redirectChain: [],
     },
     tlsProbe: {
@@ -9756,6 +9760,7 @@ function emptyTransportSecurityObservation(input: {
     },
     formTransports: [],
     summary: {
+      httpProbeOutcome: "probe_failed",
       mixedContentObserved: false,
       insecureFormTransportObserved: false,
     },
@@ -9772,7 +9777,12 @@ async function probeHttpRedirect(
 ): Promise<TransportSecurityObservation["httpProbe"]> {
   const inputUrl = originProbeUrl(normalizedUrl, "http");
   if (!inputUrl) {
-    return { attempted: false, errorCategory: "unsupported_url", redirectChain: [] };
+    return {
+      attempted: false,
+      errorCategory: "unsupported_url",
+      outcome: "probe_failed",
+      redirectChain: [],
+    };
   }
 
   const redirectChain = [inputUrl];
@@ -9786,14 +9796,22 @@ async function probeHttpRedirect(
       const location = response.headers.get("location");
       const isRedirect = response.status >= 300 && response.status < 400 && Boolean(location);
       if (!isRedirect || !location) {
+        const finalScheme = schemeOf(currentUrl);
+        const redirectedToHttps = redirectChain.some((url) => schemeOf(url) === "https") && redirectChain.length > 1;
         return {
           attempted: true,
           inputUrl: sanitizeTransportUrl(inputUrl),
           status: response.status,
           finalUrl: sanitizeTransportUrl(currentUrl),
-          finalScheme: schemeOf(currentUrl),
+          finalScheme,
           redirectChain: redirectChain.map((url) => sanitizeTransportUrl(url)).slice(0, 12),
-          redirectedToHttps: redirectChain.some((url) => schemeOf(url) === "https") && redirectChain.length > 1,
+          redirectedToHttps,
+          outcome: classifyTransportHttpProbeOutcome({
+            attempted: true,
+            finalScheme,
+            redirectedToHttps,
+            status: response.status,
+          }),
         };
       }
 
@@ -9811,6 +9829,7 @@ async function probeHttpRedirect(
       redirectedToHttps: redirectChain.some((url) => schemeOf(url) === "https") && redirectChain.length > 1,
       errorCategory: "http_error",
       errorMessage: "redirect_chain_limit_reached",
+      outcome: "probe_failed",
     };
   } catch (error) {
     return {
@@ -9820,6 +9839,7 @@ async function probeHttpRedirect(
       errorMessage: boundedProbeError(error),
       finalUrl: sanitizeTransportUrl(currentUrl),
       finalScheme: schemeOf(currentUrl),
+      outcome: "probe_failed",
       redirectChain: redirectChain.map((url) => sanitizeTransportUrl(url)).slice(0, 12),
     };
   }

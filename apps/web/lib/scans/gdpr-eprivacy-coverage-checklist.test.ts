@@ -863,7 +863,7 @@ test("checklist presents the privacy contact row and ignores retired formal DPO 
   });
 
   const privacyContact = byId(items, "dpo_contact_point_disclosure");
-  assert.equal(privacyContact.label, "Privacy contact point");
+  assert.equal(privacyContact.label, "DPO contact point (where applicable)");
   assert.equal(privacyContact.status, "Observed");
   assert.equal(
     items.some((item) => item.id === "formal_dpo_designation_disclosure"),
