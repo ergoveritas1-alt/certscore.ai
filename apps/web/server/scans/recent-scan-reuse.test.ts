@@ -41,6 +41,7 @@ function candidate(overrides: Partial<RecentScanReuseCandidate> = {}): RecentSca
     accessPostureClass: "tolerant",
     completedAt: "2026-07-11T11:00:00.000Z",
     coverageLevel: "full",
+    gpcObservationEnabled: true,
     hostname: "example.com",
     id: "scan-default",
     normalizedUrl: "https://example.com/",
@@ -118,6 +119,12 @@ test("signed-in callers reuse anonymous and own-organization scans", () => {
 
 test("signed-in callers never reuse another customer organization scan", () => {
   assert.equal(eligibility({ organizationId: OWN_ORG }, [candidate({ organizationId: OTHER_ORG })]).eligible, false);
+});
+
+test("recent scan reuse requires an always-on GPC-capable scan configuration", () => {
+  assert.equal(eligibility({}, [candidate({ gpcObservationEnabled: true })]).eligible, true);
+  assert.equal(eligibility({}, [candidate({ gpcObservationEnabled: false })]).eligible, false);
+  assert.equal(eligibility({}, [candidate({ gpcObservationEnabled: null })]).eligible, false);
 });
 
 test("canonical target matching tolerates scheme, case, www, and root-slash differences", () => {

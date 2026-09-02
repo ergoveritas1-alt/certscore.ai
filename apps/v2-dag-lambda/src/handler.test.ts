@@ -196,9 +196,7 @@ test("sharded orchestration fans out exactly one consent, runtime, and policy ev
   ]);
 });
 
-test("GPC observation remains opt-in and binds its worker to the exact parent dispatch", async () => {
-  const ordinary = parseLocalV2DagLambdaDispatchPayload(validPayload({ orchestrationMode: "sharded" }));
-  assert.equal(ordinary.gpcObservation, undefined);
+test("GPC observation binds its worker to the exact parent dispatch", async () => {
   const parent = parseLocalV2DagLambdaDispatchPayload(validPayload({
     gpcObservation: {
       contractVersion: "certscore.gpc-observation-dispatch.v1",
@@ -263,11 +261,11 @@ test("GPC observation remains opt-in and binds its worker to the exact parent di
   assert.doesNotThrow(() => parseLocalV2DagLambdaDispatchPayload(passiveDispatch));
 });
 
-test("GPC worker parsing fails closed without an explicit request and parent checksum", () => {
+test("GPC worker parsing fails closed without enabled configuration and parent checksum", () => {
   assert.throws(() => parseLocalV2DagLambdaDispatchPayload(validPayload({
     orchestrationMode: "worker",
     workerLane: "gpc_observation",
-  })), /explicit enabled GPC request/);
+  })), /enabled GPC configuration/);
   assert.throws(() => parseLocalV2DagLambdaDispatchPayload(validPayload({
     gpcObservation: {
       contractVersion: "certscore.gpc-observation-dispatch.v1",

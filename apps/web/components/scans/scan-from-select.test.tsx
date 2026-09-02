@@ -38,8 +38,8 @@ test("ScanFromSelect defaults Lambda on and fresh re-scan off", () => {
   assert.doesNotMatch(html, /name="gpcObservation"/);
 });
 
-test("ScanFromSelect exposes an admin-only GPC lane toggle that defaults off", () => {
-  const defaultHtml = renderToStaticMarkup(
+test("ScanFromSelect presents GPC as automatically included without a request toggle", () => {
+  const html = renderToStaticMarkup(
     createElement(ScanFromSelect, {
       allowRestrictedScanOptions: true,
       includeLocalV2ScanProfileOption: true,
@@ -47,18 +47,11 @@ test("ScanFromSelect exposes an admin-only GPC lane toggle that defaults off", (
       variant: "icon"
     })
   );
-  const enabledHtml = renderToStaticMarkup(
-    createElement(ScanFromSelect, {
-      allowRestrictedScanOptions: true,
-      gpcObservationValue: true,
-      includeLocalV2ScanProfileOption: true,
-      includeScanFromOptions: false,
-      variant: "icon"
-    })
-  );
+  const source = readFileSync(join(process.cwd(), "apps/web/components/scans/scan-from-select.tsx"), "utf8");
 
-  assert.match(defaultHtml, /<input[^>]*name="gpcObservation"[^>]*value="false"/);
-  assert.match(enabledHtml, /<input[^>]*name="gpcObservation"[^>]*value="true"/);
+  assert.doesNotMatch(html, /name="gpcObservation"/);
+  assert.match(source, /Included automatically · isolated Lambda lane/);
+  assert.doesNotMatch(source, /onGpcObservationChange/);
 });
 
 test("ScanFromSelect renders scan-from choices before option toggles", () => {

@@ -32,7 +32,6 @@ export type BuildQueuedFullScanConfigInput = {
   campaignAttribution?: CampaignAttribution | null;
   env?: LocalV2DagScanEnv;
   hostname: string;
-  gpcObservationRequested?: boolean;
   localV2DagScanProfile?: LocalV2DagScanProfile | null;
   localV2DagLambdaDebugOverrides?: LocalV2DagLambdaDebugOverrides | null;
   localV2DagRunViaLambda?: boolean | null;
@@ -122,7 +121,6 @@ export function buildQueuedFullScanConfig(input: BuildQueuedFullScanConfigInput)
       : {}),
     source: input.source
   }), env, {
-    gpcObservationRequested: input.gpcObservationRequested,
     lambdaDebugOverrides: input.localV2DagLambdaDebugOverrides,
     profile: input.localV2DagScanProfile,
     runViaLambda: env.NODE_ENV === "production" ? true : input.localV2DagRunViaLambda,

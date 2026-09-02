@@ -461,7 +461,7 @@ function SignalSnapshot({ report }: { report: ShadowReportData }) {
             <p className="mt-3 text-xs leading-5 text-zinc-600">
               {report.gpcLaneStatus === "unavailable"
                 ? "The GPC lane was requested, but no verified canonical GPC response reached this report. This is a coverage limitation, not a finding."
-                : "The dedicated GPC lane was not requested for this scan. It is opt-in and remains off by default."}
+                : "This result predates always-on GPC coverage or did not run through eligible sharded Lambda orchestration."}
             </p>
           </details>
         )}

@@ -264,7 +264,6 @@ export function applyLocalV2DagScanConfig(
   config: SharedScanConfig,
   env?: LocalV2DagScanEnv,
   options: {
-    gpcObservationRequested?: boolean | null;
     lambdaDebugOverrides?: LocalV2DagLambdaDebugOverrides | null;
     profile?: LocalV2DagScanProfile | null;
     runViaLambda?: boolean | null;
@@ -288,10 +287,6 @@ export function applyLocalV2DagScanConfig(
           forceSimulatedLocalLambda: shouldForceSimulatedLocalLambda
         })
       : null;
-  if (options.gpcObservationRequested === true && lambdaConfig?.orchestrationMode !== "sharded") {
-    throw new Error("GPC observation requires explicitly requested sharded Lambda orchestration.");
-  }
-
   return {
     ...config,
     execution: {
@@ -331,8 +326,8 @@ export function applyLocalV2DagScanConfig(
               debugOverrides: lambdaDebugOverridesForDispatch(options.lambdaDebugOverrides),
               localOnly: lambdaConfig.targetEnvironment === "local",
               orchestrationMode: lambdaConfig.orchestrationMode,
-              ...(options.gpcObservationRequested === true
-                ? { gpcObservationRequested: true }
+              ...(lambdaConfig.orchestrationMode === "sharded"
+                ? { gpcObservationEnabled: true }
                 : {}),
               ...(lambdaConfig.postAcceptWorkerEnabled
                 ? {

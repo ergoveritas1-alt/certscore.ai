@@ -14,21 +14,20 @@ import {
 import { LOCAL_V2_DAG_SCAN_PROCESSOR } from "./local-v2-dag-scan-config";
 
 function buildLambdaScanConfig(options: {
-  gpcObservationRequested?: boolean;
+  orchestrationMode?: "single" | "sharded";
   localV2DagLambdaDebugOverrides?: Parameters<typeof buildQueuedFullScanConfig>[0]["localV2DagLambdaDebugOverrides"];
 } = {}) {
   return buildQueuedFullScanConfig({
     env: {
       CERTSCORE_V2_DAG_LAMBDA_ENABLED: "true",
       CERTSCORE_V2_DAG_LAMBDA_FUNCTION_NAME: "certscore-v2-dag-dev",
-      ...(options.gpcObservationRequested ? { CERTSCORE_V2_DAG_LAMBDA_ORCHESTRATION_MODE: "sharded" } : {}),
+      ...(options.orchestrationMode ? { CERTSCORE_V2_DAG_LAMBDA_ORCHESTRATION_MODE: options.orchestrationMode } : {}),
       CERTSCORE_V2_DAG_LAMBDA_RESULT_QUEUE_URL: "https://sqs.eu-west-1.amazonaws.com/123/certscore-v2-dag-local-results",
       CERTSCORE_V2_DAG_LAMBDA_TARGET_ENV: "local",
       NEXT_PUBLIC_APP_URL: "http://localhost:3000",
       NODE_ENV: "development"
     },
     hostname: "example.com",
-    gpcObservationRequested: options.gpcObservationRequested,
     localV2DagLambdaDebugOverrides: options.localV2DagLambdaDebugOverrides,
     localV2DagRunViaLambda: true,
     localV2DagScanProfile: "tiny",
@@ -87,23 +86,23 @@ test("builds a local-only v2 DAG Lambda dispatch payload for EU-IR SQS handoff",
   });
 });
 
-test("dispatch includes GPC only after an explicit sharded request", () => {
+test("dispatch always includes GPC for sharded orchestration", () => {
   const ordinary = buildLocalV2DagLambdaDispatchPayload({
     scanConfig: buildLambdaScanConfig(),
     scanId: "scan-ordinary",
   });
-  const requested = buildLocalV2DagLambdaDispatchPayload({
-    scanConfig: buildLambdaScanConfig({ gpcObservationRequested: true }),
+  const sharded = buildLocalV2DagLambdaDispatchPayload({
+    scanConfig: buildLambdaScanConfig({ orchestrationMode: "sharded" }),
     scanId: "scan-gpc",
   });
   assert.equal(ordinary.gpcObservation, undefined);
-  assert.deepEqual(requested.gpcObservation, {
+  assert.deepEqual(sharded.gpcObservation, {
     contractVersion: "certscore.gpc-observation-dispatch.v1",
     enabled: true,
     pairWithLane: "runtime_evidence",
     protocol: "passive_baseline_with_sec_gpc",
   });
-  assert.equal(requested.orchestrationMode, "sharded");
+  assert.equal(sharded.orchestrationMode, "sharded");
 });
 
 test("carries bounded prior policy URLs into Lambda as acceleration hints", () => {

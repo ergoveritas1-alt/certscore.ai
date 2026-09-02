@@ -116,7 +116,7 @@ export function buildDurableLocalV2DagLambdaDispatchPayload(input: {
     scanId: input.scanId,
     targetUrl,
   });
-  const gpcObservation = intent.gpcObservationRequested === true
+  const gpcObservation = intent.orchestrationMode === "sharded"
     ? {
         contractVersion: GPC_OBSERVATION_DISPATCH_CONTRACT_VERSION,
         enabled: true as const,
@@ -124,9 +124,6 @@ export function buildDurableLocalV2DagLambdaDispatchPayload(input: {
         protocol: "passive_baseline_with_sec_gpc" as const,
       }
     : undefined;
-  if (gpcObservation && intent.orchestrationMode !== "sharded") {
-    throw new Error("Durable GPC observation dispatch requires sharded Lambda orchestration.");
-  }
   if (intent.contractVersion !== DISPATCH_CONTRACT_VERSION || intent.processor !== PROCESSOR) {
     throw new Error("Durable Lambda dispatch intent has an unsupported contract or processor.");
   }

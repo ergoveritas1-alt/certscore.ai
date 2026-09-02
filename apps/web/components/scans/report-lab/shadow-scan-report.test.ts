@@ -129,7 +129,7 @@ test("GPC appears as a quiet snapshot signal and a dedicated evidence-index comp
   );
 
   assert.match(source, /data-testid="executive-gpc-snapshot"/);
-  assert.match(source, /The dedicated GPC lane was not requested for this scan/);
+  assert.match(source, /predates always-on GPC coverage/);
   assert.match(source, /no verified canonical GPC response reached this report/);
   assert.match(source, />Global Privacy Control</);
   assert.match(source, /CA −\{report\.gpcResponse\.californiaDeductionPoints\}/);

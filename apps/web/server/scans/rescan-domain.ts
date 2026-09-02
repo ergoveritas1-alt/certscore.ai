@@ -43,7 +43,6 @@ export async function rescanDomainAction(
     membershipRole: dashboardContext.membership.role,
     userEmail: dashboardContext.user.email
   });
-  const gpcObservationRequested = allowRestrictedScanOptions && formData.get("gpcObservation") === "true";
   const scanFrom = restrictScanFromForUser({
     canUseRestrictedScanOptions: allowRestrictedScanOptions,
     scanFrom: normalizeScanFrom(formData.get("scanFrom"))
@@ -66,7 +65,6 @@ export async function rescanDomainAction(
     submittedByUserId: dashboardContext.user.id,
     enforceCooldown: true,
     enforceMonthlyUsageLimit: true,
-    gpcObservationRequested,
     localV2DagScanProfile,
     localV2DagRunViaLambda,
     requesterIpContext,

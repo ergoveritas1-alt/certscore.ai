@@ -640,10 +640,12 @@ export function buildTimelineReportModel(scanRecord: ScanDetailResponse): Shadow
   );
   const gpcResponse = buildGpcResponseReportProjection(canonical.ownerUnifiedFindings);
   const executionConfig = record(scanRecord.scan.scanConfigJson)?.execution;
-  const gpcObservationRequested = record(record(executionConfig)?.v2DagLambda)?.gpcObservationRequested === true;
+  const gpcLambdaConfig = record(record(executionConfig)?.v2DagLambda);
+  const gpcObservationEnabled = gpcLambdaConfig?.gpcObservationEnabled === true ||
+    gpcLambdaConfig?.gpcObservationRequested === true;
   const gpcLaneStatus = gpcResponse
     ? "completed" as const
-    : gpcObservationRequested
+    : gpcObservationEnabled
       ? "unavailable" as const
       : "not_requested" as const;
   const timeline: ShadowReportData["timeline"] = [

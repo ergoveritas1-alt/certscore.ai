@@ -364,9 +364,10 @@ test("queued full-scan config marks local v2 DAG Lambda dispatch when configured
       scenarioConcurrency: 1,
       scenarioResourceMode: "cmp_safe"
     },
-    dispatchState: "pending_dispatch",
-    functionName: "certscore-v2-dag-dev",
-    localOnly: true,
+      dispatchState: "pending_dispatch",
+      functionName: "certscore-v2-dag-dev",
+      gpcObservationEnabled: true,
+      localOnly: true,
     orchestrationMode: "sharded",
     processor: LOCAL_V2_DAG_SCAN_PROCESSOR,
     productionFindingIntegration: false,
@@ -664,7 +665,7 @@ test("Accept worker is default off and an explicit enable defaults to owned-cana
   assert.equal(enabledLambda?.postAcceptWorkerRolloutMode, "owned_canary");
 });
 
-test("GPC observation is default off and requires an explicit sharded request", () => {
+test("GPC observation is always enabled for sharded Lambda scans", () => {
   const env = {
     CERTSCORE_V2_DAG_LAMBDA_ENABLED: "true",
     CERTSCORE_V2_DAG_LAMBDA_FUNCTION_NAME: "certscore-v2-dag-prod",
@@ -684,14 +685,12 @@ test("GPC observation is default off and requires an explicit sharded request", 
     source: "manual-dashboard",
   };
   const ordinary = buildQueuedFullScanConfig(base);
-  const requested = buildQueuedFullScanConfig({ ...base, gpcObservationRequested: true });
-  assert.equal((ordinary.execution?.v2DagLambda as Record<string, unknown>)?.gpcObservationRequested, undefined);
-  assert.equal((requested.execution?.v2DagLambda as Record<string, unknown>)?.gpcObservationRequested, true);
-  assert.throws(() => buildQueuedFullScanConfig({
+  const single = buildQueuedFullScanConfig({
     ...base,
     env: { ...env, CERTSCORE_V2_DAG_LAMBDA_ORCHESTRATION_MODE: "single" },
-    gpcObservationRequested: true,
-  }), /requires explicitly requested sharded Lambda orchestration/);
+  });
+  assert.equal((ordinary.execution?.v2DagLambda as Record<string, unknown>)?.gpcObservationEnabled, true);
+  assert.equal((single.execution?.v2DagLambda as Record<string, unknown>)?.gpcObservationEnabled, undefined);
 });
 
 test("production full-scan config ignores Lambda-off requests", () => {

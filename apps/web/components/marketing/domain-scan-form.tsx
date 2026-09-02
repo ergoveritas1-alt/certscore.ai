@@ -148,7 +148,6 @@ export function buildScanSubmitBody(input: {
   campaignAttribution: unknown;
   domain: string;
   forceNewScan: boolean;
-  gpcObservation: boolean;
   localV2ScanProfile: LocalV2ScanProfile;
   localV2RunViaLambda: boolean;
   mode: ScanMode;
@@ -159,9 +158,6 @@ export function buildScanSubmitBody(input: {
     domain: input.domain,
     campaignAttribution: input.campaignAttribution,
     forceNewScan: input.forceNewScan,
-    ...(input.mode === "full" && input.allowRestrictedScanOptions
-      ? { gpcObservation: input.gpcObservation }
-      : {}),
     localV2ScanProfile: input.localV2ScanProfile,
     localV2RunViaLambda: input.allowRestrictedScanOptions || LOCALHOST_FULL_SCAN_QUEUE_ENABLED
       ? input.localV2RunViaLambda
@@ -444,7 +440,6 @@ export function DomainScanForm({
   const [showExtensionInstructions, setShowExtensionInstructions] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [freshRescan, setFreshRescan] = useState(false);
-  const [gpcObservation, setGpcObservation] = useState(false);
   const [hasRecentReusableScan, setHasRecentReusableScan] = useState(false);
   const [localV2ScanProfile, setLocalV2ScanProfile] = useState<LocalV2ScanProfile>("standard");
   const [localV2RunViaLambda, setLocalV2RunViaLambda] = useState(true);
@@ -811,7 +806,6 @@ export function DomainScanForm({
         campaignAttribution,
         domain: submittedDomain,
         forceNewScan: showFreshRescanOption ? freshRescan : false,
-        gpcObservation,
         localV2ScanProfile,
         localV2RunViaLambda,
         mode,
@@ -984,7 +978,6 @@ export function DomainScanForm({
                 allowRestrictedScanOptions={allowRestrictedScanOptions}
                 compact={compact}
                 freshRescanValue={freshRescan}
-                gpcObservationValue={gpcObservation}
                 includeLocalV2ScanProfileOption
                 includeFreshRescanOption={showFreshRescanOption}
                 includeLocalExtension={canUseLocalExtensionScan}
@@ -992,7 +985,6 @@ export function DomainScanForm({
                 localV2RunViaLambdaValue={localV2RunViaLambda}
                 onChange={setScanFrom}
                 onFreshRescanChange={setFreshRescan}
-                onGpcObservationChange={setGpcObservation}
                 onLocalV2ScanProfileChange={(value) => setLocalV2ScanProfile(normalizeLocalV2ScanProfile(value))}
                 onLocalV2RunViaLambdaChange={setLocalV2RunViaLambda}
                 value={scanFrom}
@@ -1006,12 +998,10 @@ export function DomainScanForm({
                 compact={compact}
                 includeLocalV2ScanProfileOption
                 includeScanFromOptions={false}
-                gpcObservationValue={gpcObservation}
                 localV2ScanProfileValue={localV2ScanProfile}
                 localV2RunViaLambdaValue={localV2RunViaLambda}
                 onLocalV2ScanProfileChange={(value) => setLocalV2ScanProfile(normalizeLocalV2ScanProfile(value))}
                 onLocalV2RunViaLambdaChange={setLocalV2RunViaLambda}
-                onGpcObservationChange={setGpcObservation}
                 variant="icon"
               />
             </div>

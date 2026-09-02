@@ -824,7 +824,7 @@ export function parseLocalV2DagLambdaDispatchPayload(event: unknown): LocalV2Dag
     throw new Error("GPC observation requires sharded Lambda orchestration.");
   }
   if (payload.workerLane === "gpc_observation" && payload.gpcObservation?.enabled !== true) {
-    throw new Error("GPC observation worker dispatch requires an explicit enabled GPC request.");
+    throw new Error("GPC observation worker dispatch requires enabled GPC configuration.");
   }
   if (
     (payload.workerLane === "reject_observation" ||

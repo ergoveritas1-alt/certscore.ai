@@ -52,7 +52,6 @@ export async function createOrQueueDomainScan(input: {
   campaignAttribution?: CampaignAttribution | null;
   clientRequestId?: string | null;
   domain: string;
-  gpcObservationRequested?: boolean;
   localV2DagLambdaDebugOverrides?: import("../scans/local-v2-dag-scan-config").LocalV2DagLambdaDebugOverrides | null;
   localV2DagScanProfile?: LocalV2DagScanProfile | null;
   localV2DagRunViaLambda?: boolean | null;
@@ -99,7 +98,6 @@ export async function createOrQueueDomainScan(input: {
     canUseRestrictedScanOptions: allowRestrictedScanOptions,
     localV2DagRunViaLambda: input.localV2DagRunViaLambda
   });
-  const gpcObservationRequested = allowRestrictedScanOptions && input.gpcObservationRequested === true;
 
   const { hostname, normalizedUrl } = parsedInput.data;
   const dnsStatus = await checkDomainDns(hostname);
@@ -133,7 +131,6 @@ export async function createOrQueueDomainScan(input: {
       submittedByUserId: dashboardContext.user.id,
       enforceCooldown: true,
       enforceMonthlyUsageLimit: true,
-      gpcObservationRequested,
       provenance: input.provenance,
       requesterIpContext: input.requesterIpContext,
       scheduleBackgroundTask: input.scheduleBackgroundTask,
@@ -206,7 +203,6 @@ export async function createOrQueueDomainScan(input: {
     planLimitsOverride: planLimits,
     submittedByUserId: dashboardContext.user.id,
     enforceMonthlyUsageLimit: true,
-    gpcObservationRequested,
     bypassRecentScanReuse: input.bypassRecentScanReuse,
     localV2DagLambdaDebugOverrides: input.localV2DagLambdaDebugOverrides,
     localV2DagScanProfile: input.localV2DagScanProfile,
@@ -233,7 +229,6 @@ export async function createDomainAction(
 ): Promise<CreateDomainActionState> {
   const domainInput = String(formData.get("domain") ?? "");
   const forceNewScan = formData.get("forceNewScan") === "true";
-  const gpcObservationRequested = formData.get("gpcObservation") === "true";
   const localV2DagScanProfile = normalizeLocalV2DagScanProfile(formData.get("localV2ScanProfile"));
   const scanFrom = normalizeScanFrom(formData.get("scanFrom"));
   const localV2DagRunViaLambda = normalizeLocalV2DagRunViaLambda(formData.get("localV2RunViaLambda"), process.env, scanFrom);
@@ -261,7 +256,6 @@ export async function createDomainAction(
         domain: item.domain,
         allowExistingDomainRescan: true,
         bypassRecentScanReuse: forceNewScan,
-        gpcObservationRequested,
         localV2DagScanProfile,
         localV2DagRunViaLambda,
         provenance,

@@ -16,6 +16,7 @@ export type RecentScanReuseCandidate = {
   accessPostureClass: string | null;
   completedAt: string | null;
   coverageLevel: string | null;
+  gpcObservationEnabled?: boolean | null;
   hostname: string;
   id: string;
   normalizedUrl: string;
@@ -74,6 +75,7 @@ type ScanHistoryCandidate = {
   accessPostureClass?: string | null;
   completedAt: string | null;
   coverageLevel?: string | null;
+  gpcObservationEnabled?: boolean | null;
   id?: string | null;
   pagesScanned?: number | null;
   noGoDecision?: string | null;
@@ -93,6 +95,7 @@ const NON_REUSABLE_SCAN_OUTCOMES = new Set([
 function hasReusableCoverage(scan: {
   accessPostureClass?: string | null;
   coverageLevel?: string | null;
+  gpcObservationEnabled?: boolean | null;
   noGoDecision?: string | null;
   pagesScanned?: number | null;
   scanOutcome?: string | null;
@@ -102,6 +105,9 @@ function hasReusableCoverage(scan: {
   v2ParallelLocalOnly?: boolean | null;
   v2ReportProcessor?: string | null;
 }) {
+  if (scan.gpcObservationEnabled !== true) {
+    return false;
+  }
   if (scan.noGoDecision === "no_go") {
     return true;
   }
@@ -364,6 +370,11 @@ async function loadRecentScanReuseCandidates(input: RecentScanReuseInput) {
             d.hostname,
             coalesce(s.scan_config_json->>'normalizedUrl', d.normalized_url) as "normalizedUrl",
             s.scan_config_json->>'processor' as "v2ReportProcessor",
+            coalesce(
+              (s.scan_config_json #>> '{execution,v2DagLambda,gpcObservationEnabled}') = 'true',
+              (s.scan_config_json #>> '{execution,v2DagLambda,gpcObservationRequested}') = 'true',
+              false
+            ) as "gpcObservationEnabled",
             (s.scan_config_json #>> '{execution,v2DagParallel,artifactOnly}') = 'true' as "v2ParallelArtifactOnly",
             (s.scan_config_json #>> '{execution,v2DagParallel,localOnly}') = 'true' as "v2ParallelLocalOnly",
             coalesce(

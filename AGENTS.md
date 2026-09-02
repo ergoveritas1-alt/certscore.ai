@@ -86,25 +86,43 @@ Missing, malformed, stale, or unverifiable evidence must fail closed to an unkno
 
 If a downstream result is incorrect, trace the first broken stage in this sequence and fix it there. Do not add surface-specific fallbacks.
 
-### Four-lane production Lambda evidence capture with reject observation
+### Six-lane production Lambda evidence capture
 
-Production v2 DAG Lambda scans with reject observation enabled fan out into
-four independent, bounded browser-session lanes. The coordinator must await a
-terminal outcome from all four lanes before it verifies and merges one
+Production sharded v2 DAG Lambda scans use four independent passive
+browser-session lanes and up to two independently controlled action lanes, for
+a six-lane topology. The GPC lane is always enabled for sharded scans; Accept
+and Reject remain separately gated. The coordinator must await a terminal
+outcome from every required enabled lane before it verifies and merges one
 canonical evidence bundle for WC01 assessment or projection:
 
 ```text
 consent-proof lane: typed first-layer A/R/O inventory + geometry + representative screenshot
 runtime-evidence lane: network, cookies/storage, scripts/iframes/forms, vendors, journeys, and transport
 policy-evidence lane: policy discovery, ownership, retrieval, retained text/excerpts, and policy diagnostics
+gpc-observation lane: passive Sec-GPC: 1 execution paired with runtime-evidence baseline and retained comparison deltas
+accept-observation lane: one authorized deterministic accept action + confirmed post-accept comparison evidence
 reject-observation lane: one authorized deterministic reject action + confirmed post-refusal evidence
 → coordinator verifies and merges lane-owned evidence
 → CanonicalEvidenceBundle
 → ConsentControlAssessment v2 and the canonical downstream flow
 ```
 
-Start `reject_observation` 500 milliseconds after the three passive lanes to
-avoid an immediate four-browser burst. Do not publish a primary result before
+The GPC lane must remain separate from baseline and Accept/Reject flows. It
+uses the same passive protocol as runtime-evidence, retains proof that
+`Sec-GPC: 1` and `navigator.globalPrivacyControl` were enabled, and compares
+cookies/storage, trackers, advertising/measurement activity, and relevant
+consent/CMP behavior. It produces exactly one jurisdiction-neutral
+`responsive`, `no_observable_response`, or `indeterminate` assessment and uses
+the labels “GPC response” or “No observable GPC response.” Legal interpretation
+and the approved 15-point California-only scoring policy remain downstream in
+WC01 concern policy; the GPC lane itself must not produce a legal conclusion or
+score effect. The passive evidence quiet-window gate begins at 250 milliseconds
+and may restart for newly observed qualifying activity without discarding raw
+evidence.
+
+Start `reject_observation` 500 milliseconds after the four passive lanes to
+avoid an immediate six-browser burst when both action lanes are enabled. Do
+not publish a primary result before
 that branch reaches a terminal outcome, and do not publish an independent
 post-refusal artifact that triggers a later report generation. Reconcile,
 score, persist, and publish exactly once. A neutral, unsupported, unconfirmed,

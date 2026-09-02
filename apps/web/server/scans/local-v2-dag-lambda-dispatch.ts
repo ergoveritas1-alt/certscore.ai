@@ -427,7 +427,7 @@ export function buildLocalV2DagLambdaDispatchPayload(input: {
     scanId: input.scanId,
     targetUrl,
   });
-  const gpcObservation = intent.gpcObservationRequested === true
+  const gpcObservation = intent.orchestrationMode === "sharded"
     ? {
         contractVersion: GPC_OBSERVATION_DISPATCH_CONTRACT_VERSION,
         enabled: true,
@@ -435,10 +435,6 @@ export function buildLocalV2DagLambdaDispatchPayload(input: {
         protocol: "passive_baseline_with_sec_gpc",
       } satisfies GpcObservationDispatchConfig
     : undefined;
-  if (gpcObservation && intent.orchestrationMode !== "sharded") {
-    throw new Error("GPC observation dispatch requires sharded Lambda orchestration.");
-  }
-
   return {
     artifactOnly: true,
     awsRegion,

@@ -32,6 +32,12 @@ test("durable publisher reconstructs the typed regional dispatch from the commit
   assert.equal(payload.profile, "tiny");
   assert.equal(payload.orchestrationMode, "sharded");
   assert.equal(payload.productionFindingIntegration, false);
+  assert.deepEqual(payload.gpcObservation, {
+    contractVersion: "certscore.gpc-observation-dispatch.v1",
+    enabled: true,
+    pairWithLane: "runtime_evidence",
+    protocol: "passive_baseline_with_sec_gpc",
+  });
 });
 
 test("durable publisher fails closed for malformed committed dispatch intent", () => {
