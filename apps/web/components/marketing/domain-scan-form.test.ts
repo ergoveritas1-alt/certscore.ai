@@ -3,6 +3,7 @@ import test from "node:test";
 
 import {
   buildRecentScanAvailabilityUrl,
+  buildScanSubmitBody,
   buildScanSubmissionStatusUrl,
   getScanSubmitDestination,
   parseScanSubmitPayload,
@@ -11,6 +12,39 @@ import {
   shouldExpectRecentScanReuse,
   shouldUseFullPageScanSubmissionTransition
 } from "./domain-scan-form";
+
+test("full scan submission carries the admin-selected GPC lane request and defaults it off", () => {
+  const base = {
+    allowRestrictedScanOptions: true,
+    campaignAttribution: null,
+    domain: "https://example.com/",
+    forceNewScan: false,
+    localV2ScanProfile: "standard" as const,
+    localV2RunViaLambda: true,
+    mode: "full" as const,
+    requestId: "request-123",
+    scanFrom: "california" as const
+  };
+
+  assert.equal(JSON.parse(buildScanSubmitBody({ ...base, gpcObservation: false })).gpcObservation, false);
+  assert.equal(JSON.parse(buildScanSubmitBody({ ...base, gpcObservation: true })).gpcObservation, true);
+});
+
+test("GPC lane request is omitted from non-full or unrestricted submissions", () => {
+  const base = {
+    campaignAttribution: null,
+    domain: "https://example.com/",
+    forceNewScan: false,
+    gpcObservation: true,
+    localV2ScanProfile: "standard" as const,
+    localV2RunViaLambda: true,
+    requestId: "request-123",
+    scanFrom: "eu_ie" as const
+  };
+
+  assert.equal("gpcObservation" in JSON.parse(buildScanSubmitBody({ ...base, allowRestrictedScanOptions: false, mode: "full" })), false);
+  assert.equal("gpcObservation" in JSON.parse(buildScanSubmitBody({ ...base, allowRestrictedScanOptions: true, mode: "preview" })), false);
+});
 
 test("getScanSubmitDestination prefers public scanUrl for anonymous full scans", () => {
   assert.equal(
