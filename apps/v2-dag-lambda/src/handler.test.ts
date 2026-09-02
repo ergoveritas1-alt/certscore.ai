@@ -238,6 +238,29 @@ test("GPC observation remains opt-in and binds its worker to the exact parent di
     status: "completed",
   });
   assert.equal(terminal.parentDispatchSha256, postRefusalParentDispatchSha256(parent));
+
+  let passiveDispatch: Record<string, unknown> | null = null;
+  await invokeLocalV2DagLambdaWorker({
+    parentPayload: parent,
+    parentScanId: parent.scanId,
+    workerLane: "runtime_evidence",
+    lambdaClient: {
+      async send(command) {
+        passiveDispatch = JSON.parse(Buffer.from(command.input.Payload ?? []).toString("utf8"));
+        return {
+          StatusCode: 200,
+          Payload: Buffer.from(JSON.stringify({
+            artifactPointers: { scanArtifactUri: "s3://test/runtime/CanonicalEvidenceBundle.json" },
+            scanId: parent.scanId,
+            status: "completed",
+            workerLane: "runtime_evidence",
+          })),
+        };
+      },
+    },
+  });
+  assert.equal(passiveDispatch?.gpcObservation, undefined);
+  assert.doesNotThrow(() => parseLocalV2DagLambdaDispatchPayload(passiveDispatch));
 });
 
 test("GPC worker parsing fails closed without an explicit request and parent checksum", () => {

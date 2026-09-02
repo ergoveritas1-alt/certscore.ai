@@ -3035,8 +3035,9 @@ export async function invokeLocalV2DagLambdaWorker(input: {
 }): Promise<LocalV2DagLambdaShardResult> {
   const lambdaClient = input.lambdaClient ?? new LambdaClient({ region: input.parentPayload.awsRegion });
   const workerLane = input.workerLane;
+  const { gpcObservation: parentGpcObservation, ...parentPayloadWithoutGpcObservation } = input.parentPayload;
   const workerPayload: LocalV2DagLambdaDispatchPayload = {
-    ...input.parentPayload,
+    ...parentPayloadWithoutGpcObservation,
     callbackCorrelationId: input.parentScanId,
     ...(input.coordinatorPlanSummary ? { coordinatorPlanSummary: input.coordinatorPlanSummary } : {}),
     ...(workerLane === "reject_observation" && input.parentPayload.postRefusalObservation
@@ -3057,10 +3058,10 @@ export async function invokeLocalV2DagLambdaWorker(input: {
           },
         }
       : {}),
-    ...(workerLane === "gpc_observation" && input.parentPayload.gpcObservation
+    ...(workerLane === "gpc_observation" && parentGpcObservation
       ? {
           parentDispatchSha256: postRefusalParentDispatchSha256(input.parentPayload),
-          gpcObservation: input.parentPayload.gpcObservation,
+          gpcObservation: parentGpcObservation,
         }
       : {}),
     orchestrationMode: "worker",
