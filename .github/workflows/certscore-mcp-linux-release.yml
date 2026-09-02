@@ -17,6 +17,7 @@ jobs:
     timeout-minutes: 20
     permissions:
       contents: write
+      id-token: write
       pull-requests: write
     steps:
       - name: Resolve tag
@@ -97,6 +98,19 @@ jobs:
             gh release create "$TAG" --title "$TAG" --notes "CertScore MCP $VERSION Linux-built Homebrew artifact."
           fi
           gh release upload "$TAG" "$TARBALL" "$SHA256SUMS" --clobber
+
+      - name: Install MCP Registry publisher
+        run: |
+          set -euo pipefail
+          curl -L "https://github.com/modelcontextprotocol/registry/releases/latest/download/mcp-publisher_$(uname -s | tr '[:upper:]' '[:lower:]')_$(uname -m | sed 's/x86_64/amd64/;s/aarch64/arm64/').tar.gz" \
+            | tar xz mcp-publisher
+
+      - name: Publish MCP Light metadata to the official registry
+        run: |
+          set -euo pipefail
+          ./mcp-publisher validate packages/certscore-mcp/server-light.json
+          ./mcp-publisher login github-oidc
+          ./mcp-publisher publish packages/certscore-mcp/server-light.json
 
       - name: Copy generated Homebrew metadata
         run: |
