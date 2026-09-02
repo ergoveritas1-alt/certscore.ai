@@ -18,6 +18,7 @@ import {
   canonicalEvidenceBundleSchema,
   classifyV2DagLambdaResultDisposition,
   derivePolicySurfaceInspectionOutcome,
+  gpcObservationDispatchConfigSchema,
   postAcceptEvidencePacketSchema,
   postAcceptLambdaDispatchConfigSchema,
   postAcceptLambdaEvidenceDescriptorSchema,
@@ -28,6 +29,7 @@ import {
   verifiedPreConsentRuntimePreviewPacketSchema,
   type CanonicalEvidenceBundle,
   type ConsentFlowScenario,
+  type GpcObservationDispatchConfig,
   type ScanLaneRun,
   type ScanNoGoAssessment,
   type ScreenshotArtifact,
@@ -48,6 +50,7 @@ import {
   chromiumLaunchArgs,
   chromiumLaunchOptions,
   buildScanEvidenceLaneAssessment,
+  buildGpcResponseAssessment,
   buildCanonicalPostAcceptActionRecipes,
   buildPostAcceptCmpActionRecipe,
   buildCanonicalPostRefusalActionRecipes,
@@ -145,6 +148,7 @@ export type LocalV2DagLambdaDispatchPayload = {
   parentDispatchSha256?: string;
   postAcceptObservation?: PostAcceptLambdaDispatchConfig;
   postRefusalObservation?: PostRefusalLambdaDispatchConfig;
+  gpcObservation?: GpcObservationDispatchConfig;
   coordinatorPlanSummary?: LocalV2DagLambdaCoordinatorPlanSummary;
   debugOverrides?: LocalV2DagLambdaDebugOverrides;
   resultHandoff: "sqs";
@@ -216,8 +220,8 @@ export type LocalV2DagLambdaResultMessage = {
    */
   policyEvidence?: LocalV2DagLambdaPolicyEvidenceMessage;
   /**
-   * Cryptographically binds the optional reject-observation lane evidence to
-   * the exact parent dispatch reconciled into this terminal result.
+   * Cryptographically binds optional conditional-lane evidence to the exact
+   * parent dispatch reconciled into this terminal result.
    */
   parentDispatchSha256?: string;
   processor: typeof LOCAL_V2_DAG_SCAN_PROCESSOR;
@@ -384,6 +388,7 @@ type LocalV2DagLambdaWorkerLane =
   | "consent_proof"
   | "runtime_evidence"
   | "policy_evidence"
+  | "gpc_observation"
   | "consent_flows"
   | "accept_gpc"
   | "accept_only"
@@ -397,6 +402,7 @@ export const LOCAL_V2_DAG_LAMBDA_EVIDENCE_WORKER_LANES = [
 ] as const satisfies readonly LocalV2DagLambdaWorkerLane[];
 type LocalV2DagLambdaEvidenceLane =
   | (typeof LOCAL_V2_DAG_LAMBDA_EVIDENCE_WORKER_LANES)[number]
+  | "gpc_observation"
   | "reject_observation"
   | "accept_observation";
 type LocalV2DagLambdaDebugOverrides = {
@@ -452,6 +458,7 @@ type LocalV2DagLambdaShardResult = {
     durationMs: number;
   };
   handlerTiming?: LocalV2DagLambdaHandlerTiming;
+  parentDispatchSha256?: string;
   phaseTimings?: LocalV2DagLambdaPhaseTiming[];
   postRefusalEvidence?: PostRefusalLambdaEvidenceDescriptor;
   postAcceptEvidence?: PostAcceptLambdaEvidenceDescriptor;
@@ -752,6 +759,9 @@ export function parseLocalV2DagLambdaDispatchPayload(event: unknown): LocalV2Dag
   const postRefusalObservation = record.postRefusalObservation === undefined
     ? undefined
     : postRefusalLambdaDispatchConfigSchema.parse(record.postRefusalObservation);
+  const gpcObservation = record.gpcObservation === undefined
+    ? undefined
+    : gpcObservationDispatchConfigSchema.parse(record.gpcObservation);
   const parentDispatchSha256 = compactString(record.parentDispatchSha256);
   if (parentDispatchSha256 && !/^[a-f0-9]{64}$/.test(parentDispatchSha256)) {
     throw new Error("Local v2 DAG Lambda parent dispatch checksum is invalid.");
@@ -774,6 +784,7 @@ export function parseLocalV2DagLambdaDispatchPayload(event: unknown): LocalV2Dag
     ...(parentDispatchSha256 ? { parentDispatchSha256 } : {}),
     ...(postAcceptObservation ? { postAcceptObservation } : {}),
     ...(postRefusalObservation ? { postRefusalObservation } : {}),
+    ...(gpcObservation ? { gpcObservation } : {}),
     ...(coordinatorPlanSummary ? { coordinatorPlanSummary } : {}),
     ...(debugOverrides ? { debugOverrides } : {}),
     resultHandoff: "sqs",
@@ -809,11 +820,19 @@ export function parseLocalV2DagLambdaDispatchPayload(event: unknown): LocalV2Dag
   if (payload.orchestrationMode === "worker" && !payload.workerLane) {
     throw new Error("Local v2 DAG Lambda worker dispatch requires a workerLane.");
   }
+  if (payload.gpcObservation && payload.orchestrationMode !== "sharded" && payload.workerLane !== "gpc_observation") {
+    throw new Error("GPC observation requires sharded Lambda orchestration.");
+  }
+  if (payload.workerLane === "gpc_observation" && payload.gpcObservation?.enabled !== true) {
+    throw new Error("GPC observation worker dispatch requires an explicit enabled GPC request.");
+  }
   if (
-    (payload.workerLane === "reject_observation" || payload.workerLane === "accept_observation") &&
+    (payload.workerLane === "reject_observation" ||
+      payload.workerLane === "accept_observation" ||
+      payload.workerLane === "gpc_observation") &&
     !payload.parentDispatchSha256
   ) {
-    throw new Error("Post-action observation worker dispatch requires the exact parent dispatch checksum.");
+    throw new Error("Conditional observation worker dispatch requires the exact parent dispatch checksum.");
   }
 
   return payload;
@@ -886,6 +905,7 @@ function isWorkerLane(value: unknown): value is LocalV2DagLambdaWorkerLane {
     value === "consent_proof" ||
     value === "runtime_evidence" ||
     value === "policy_evidence" ||
+    value === "gpc_observation" ||
     value === "consent_flows" ||
     value === "accept_gpc" ||
     value === "accept_only" ||
@@ -1046,7 +1066,8 @@ export function buildLocalV2DagLambdaLaneRun(input: {
 }): ScanLaneRun | null {
   const laneId = input.workerLane === "consent_proof" ||
       input.workerLane === "runtime_evidence" ||
-      input.workerLane === "policy_evidence"
+      input.workerLane === "policy_evidence" ||
+      input.workerLane === "gpc_observation"
     ? input.workerLane
     : null;
   if (!laneId) return null;
@@ -1257,6 +1278,8 @@ async function runLocalV2DagLambdaScanBundle(
         ? "consent_proof"
         : payload.workerLane === "runtime_evidence"
           ? "runtime_evidence"
+          : payload.workerLane === "gpc_observation"
+            ? "gpc_observation"
           : payload.workerLane === "policy_evidence"
             ? "policy_evidence"
             : "combined";
@@ -1275,7 +1298,9 @@ async function runLocalV2DagLambdaScanBundle(
         policySurfaceSeeds: payload.policySurfaceSeeds,
         postConsentFlowsEnabled: false,
         preConsentModuleDeadlineMs: options.preConsentModuleDeadlineMs,
-        preConsentScreenshotMode: evidenceLane === "runtime_evidence" || evidenceLane === "policy_evidence"
+        preConsentScreenshotMode: evidenceLane === "runtime_evidence" ||
+          evidenceLane === "gpc_observation" ||
+          evidenceLane === "policy_evidence"
           ? "never"
           : options.preConsentScreenshotMode,
         preConsentScreenshotTimeoutMs: options.scanTuning.preConsentScreenshotTimeoutMs,
@@ -1888,6 +1913,9 @@ export function postRefusalParentDispatchSha256(
     ...(payload.postAcceptObservation
       ? { postAcceptObservation: payload.postAcceptObservation }
       : {}),
+    ...(payload.gpcObservation
+      ? { gpcObservation: payload.gpcObservation }
+      : {}),
     processor: payload.processor,
     productionFindingIntegration: payload.productionFindingIntegration,
     profile: payload.profile,
@@ -2294,7 +2322,10 @@ export async function runLocalV2DagLambdaShardedArtifactChain(
   const phaseTimings: LocalV2DagLambdaPhaseTiming[] = [];
   const scanTuning = buildLocalV2DagLambdaScanTuning();
   await mkdir(artifactRoot, { recursive: true });
-  const evidenceWorkerLanes = LOCAL_V2_DAG_LAMBDA_EVIDENCE_WORKER_LANES;
+  const evidenceWorkerLanes: readonly LocalV2DagLambdaWorkerLane[] = [
+    ...LOCAL_V2_DAG_LAMBDA_EVIDENCE_WORKER_LANES,
+    ...(payload.gpcObservation?.enabled === true ? ["gpc_observation" as const] : []),
+  ];
   const postRefusalState: {
     cancelledNoReject: boolean;
     dispatchStartedAtMs?: number;
@@ -2473,13 +2504,21 @@ export async function runLocalV2DagLambdaShardedArtifactChain(
       readWorkerBundleFromArtifactResult(result, { awsRegion: payload.awsRegion, s3GetClient: options.s3GetClient })
     ))
   );
-  await timeLambdaPhase(phaseTimings, "worker_auxiliary_mirror", () =>
+  // Worker artifacts are already durable and checksum-addressed in S3. Mirror
+  // their bounded auxiliary files into the final retained root concurrently
+  // with typed bundle verification/merge, then join before the single final
+  // artifact publication. This removes copy latency from the serial critical
+  // path without omitting or weakening retained evidence.
+  const workerAuxiliaryMirrorOutcomePromise = timeLambdaPhase(phaseTimings, "worker_auxiliary_mirror", () =>
     mirrorWorkerArtifactsIntoFinalArtifactRoot({
       artifactRoot,
       awsRegion: payload.awsRegion,
       s3GetClient: options.s3GetClient,
       workerResults
     })
+  ).then(
+    () => ({ status: "fulfilled" as const }),
+    (error: unknown) => ({ error, status: "rejected" as const }),
   );
   const bundlesByLane = new Map(workerResults.map((result, index) => [
     result.workerLane,
@@ -2488,6 +2527,7 @@ export async function runLocalV2DagLambdaShardedArtifactChain(
   const consentProofBundle = bundlesByLane.get("consent_proof");
   const runtimeEvidenceBundle = bundlesByLane.get("runtime_evidence");
   const policyEvidenceBundle = bundlesByLane.get("policy_evidence");
+  const gpcObservationBundle = bundlesByLane.get("gpc_observation");
   if (!consentProofBundle || !runtimeEvidenceBundle || !policyEvidenceBundle) {
     throw new Error("Three-lane Lambda evidence merge requires consent, runtime, and policy worker bundles.");
   }
@@ -2500,6 +2540,37 @@ export async function runLocalV2DagLambdaShardedArtifactChain(
       scanId: payload.scanId,
     })
   );
+  if (payload.gpcObservation?.enabled === true) {
+    const baselineResult = workerResults.find((result) => result.workerLane === "runtime_evidence");
+    const gpcResult = workerResults.find((result) => result.workerLane === "gpc_observation");
+    if (!gpcObservationBundle || !baselineResult || !gpcResult) {
+      throw new Error("GPC observation requires paired runtime_evidence and gpc_observation worker bundles.");
+    }
+    const verifiedWorkerArtifact = (
+      result: LocalV2DagLambdaShardResult,
+      lane: "runtime_evidence" | "gpc_observation",
+    ) => {
+      const uri = result.artifactPointers?.scanArtifactUri;
+      const metadata = result.artifactMetadata?.scanArtifactUri;
+      if (!uri || !metadata?.sha256 || !Number.isFinite(metadata.sizeBytes)) {
+        throw new Error(`GPC comparison requires a verified ${lane} CanonicalEvidenceBundle pointer.`);
+      }
+      return { uri, sha256: metadata.sha256, sizeBytes: metadata.sizeBytes };
+    };
+    bundle = canonicalEvidenceBundleSchema.parse({
+      ...bundle,
+      gpcResponseAssessment: buildGpcResponseAssessment({
+        baseline: runtimeEvidenceBundle,
+        baselineArtifact: verifiedWorkerArtifact(baselineResult, "runtime_evidence"),
+        gpc: gpcObservationBundle,
+        gpcArtifact: verifiedWorkerArtifact(gpcResult, "gpc_observation"),
+      }),
+    });
+  }
+  const workerAuxiliaryMirrorOutcome = await workerAuxiliaryMirrorOutcomePromise;
+  if (workerAuxiliaryMirrorOutcome.status === "rejected") {
+    throw workerAuxiliaryMirrorOutcome.error;
+  }
   // Accept and Reject have independent absolute post-passive deadlines and
   // are joined concurrently, including packet verification. This prevents
   // either lane from consuming the other's bounded chance to retain an
@@ -2986,6 +3057,12 @@ export async function invokeLocalV2DagLambdaWorker(input: {
           },
         }
       : {}),
+    ...(workerLane === "gpc_observation" && input.parentPayload.gpcObservation
+      ? {
+          parentDispatchSha256: postRefusalParentDispatchSha256(input.parentPayload),
+          gpcObservation: input.parentPayload.gpcObservation,
+        }
+      : {}),
     orchestrationMode: "worker",
     scanId: input.parentScanId,
     workerLane
@@ -3003,7 +3080,7 @@ export async function invokeLocalV2DagLambdaWorker(input: {
   if (response.FunctionError) {
     throw new Error(`Local v2 DAG Lambda worker ${workerLane} failed: ${response.FunctionError}.`);
   }
-  return {
+  const result = {
     ...parseLocalV2DagLambdaShardResult(response.Payload, workerLane),
     coordinatorTiming: {
       durationMs: Math.max(0, responseReceivedAtMs - invocationStartedAtMs),
@@ -3011,6 +3088,13 @@ export async function invokeLocalV2DagLambdaWorker(input: {
       responseReceivedAt: new Date(responseReceivedAtMs).toISOString(),
     },
   };
+  if (
+    workerLane === "gpc_observation" &&
+    result.parentDispatchSha256 !== postRefusalParentDispatchSha256(input.parentPayload)
+  ) {
+    throw new Error("GPC observation worker result is not bound to the exact parent dispatch.");
+  }
+  return result;
 }
 
 async function waitForPostActionDispatchDelay(delayMs: number, signal?: AbortSignal) {
@@ -3125,7 +3209,11 @@ export function buildLocalV2DagLambdaLaneTimingSummary(input: {
   };
 
   const passiveResultsByLane = new Map(input.passiveWorkerResults.map((result) => [result.workerLane, result]));
-  const lanes: LocalV2DagLambdaLaneTiming[] = LOCAL_V2_DAG_LAMBDA_EVIDENCE_WORKER_LANES.map((lane) => {
+  const passiveLanes: LocalV2DagLambdaEvidenceLane[] = [
+    ...LOCAL_V2_DAG_LAMBDA_EVIDENCE_WORKER_LANES,
+    ...(passiveResultsByLane.has("gpc_observation") ? ["gpc_observation" as const] : []),
+  ];
+  const lanes: LocalV2DagLambdaLaneTiming[] = passiveLanes.map((lane) => {
     const result = passiveResultsByLane.get(lane);
     if (!result) {
       return {
@@ -3272,6 +3360,7 @@ function parseLocalV2DagLambdaShardResult(
   }
   const artifactPointers = parseArtifactPointersRecord(parsed.artifactPointers);
   const completedAt = compactString(parsed.completedAt) ?? undefined;
+  const parentDispatchSha256 = compactString(parsed.parentDispatchSha256) ?? undefined;
   const handlerTiming = parseLocalV2DagLambdaHandlerTimingRecord(parsed.handlerTiming);
   const postRefusalEvidence = parsed.postRefusalEvidence === undefined
     ? undefined
@@ -3309,6 +3398,7 @@ function parseLocalV2DagLambdaShardResult(
     artifactPointers,
     ...(completedAt ? { completedAt } : {}),
     ...(handlerTiming ? { handlerTiming } : {}),
+    ...(parentDispatchSha256 ? { parentDispatchSha256 } : {}),
     phaseTimings: parsePhaseTimings(parsed.phaseTimings),
     ...(postRefusalEvidence ? { postRefusalEvidence } : {}),
     ...(postAcceptEvidence ? { postAcceptEvidence } : {}),
@@ -3416,6 +3506,7 @@ function parseLaneTimingSummaryRecord(value: unknown): LocalV2DagLambdaLaneTimin
     "consent_proof",
     "runtime_evidence",
     "policy_evidence",
+    "gpc_observation",
     "accept_observation",
     "reject_observation",
   ]);
@@ -3544,6 +3635,9 @@ async function readWorkerBundleFromArtifactResult(
   const sha256 = createHash("sha256").update(body).digest("hex");
   if (expected?.sha256 && expected.sha256 !== sha256) {
     throw new Error(`Local v2 DAG Lambda worker ${result.workerLane} scan artifact checksum mismatch.`);
+  }
+  if (expected?.sizeBytes !== undefined && expected.sizeBytes !== body.byteLength) {
+    throw new Error(`Local v2 DAG Lambda worker ${result.workerLane} scan artifact size mismatch.`);
   }
   return canonicalEvidenceBundleSchema.parse(JSON.parse(body.toString("utf8")));
 }
@@ -4896,8 +4990,11 @@ export function buildLocalV2DagLambdaResultMessage(input: {
     ...(input.laneTimingSummary ? { laneTimingSummary: input.laneTimingSummary } : {}),
     ...(input.phaseTimings ? { phaseTimings: input.phaseTimings } : {}),
     ...(input.policyEvidence ? { policyEvidence: input.policyEvidence } : {}),
-    ...(input.payload.postRefusalObservation
-      ? { parentDispatchSha256: postRefusalParentDispatchSha256(input.payload) }
+    ...(input.payload.postRefusalObservation || input.payload.postAcceptObservation || input.payload.gpcObservation
+      ? {
+          parentDispatchSha256:
+            input.payload.parentDispatchSha256 ?? postRefusalParentDispatchSha256(input.payload),
+        }
       : {}),
     processor: LOCAL_V2_DAG_SCAN_PROCESSOR,
     productionFindingIntegration: false,
@@ -5451,6 +5548,7 @@ export async function handler(event: unknown, options: HandlerOptions = {}) {
       payload.workerLane === "consent_proof" ||
       payload.workerLane === "runtime_evidence" ||
       payload.workerLane === "policy_evidence" ||
+      payload.workerLane === "gpc_observation" ||
       payload.workerLane === "reject_observation" ||
       payload.workerLane === "accept_observation"
     );
@@ -5506,7 +5604,7 @@ export async function handler(event: unknown, options: HandlerOptions = {}) {
     const artifactResult = await withHandlerSafetyTimeout(
       runArtifactChain(payload, {
         allowRuntimeEvidenceFinalizationAfterAbort:
-          payload.workerLane === "runtime_evidence",
+          payload.workerLane === "runtime_evidence" || payload.workerLane === "gpc_observation",
         artifactSignal: artifactAbortController.signal,
         artifactRoot,
         onScanCoreComplete: () => {
@@ -5580,7 +5678,7 @@ export async function handler(event: unknown, options: HandlerOptions = {}) {
               LOCAL_V2_DAG_LAMBDA_POST_FALLBACK_RESERVE_MS -
               LOCAL_V2_DAG_LAMBDA_CONSENT_PROOF_FALLBACK_BUDGET_MS
             : scannerWorkTimeoutMs - (
-              payload.workerLane === "runtime_evidence"
+              payload.workerLane === "runtime_evidence" || payload.workerLane === "gpc_observation"
                 ? LOCAL_V2_DAG_LAMBDA_POLICY_SHUTDOWN_RESERVE_MS
                 : LOCAL_V2_DAG_LAMBDA_PRECONSENT_SHUTDOWN_RESERVE_MS
             ),
@@ -5831,6 +5929,7 @@ function consentScenariosForWorkerLane(workerLane: LocalV2DagLambdaWorkerLane): 
     case "consent_proof":
     case "runtime_evidence":
     case "policy_evidence":
+    case "gpc_observation":
     case "accept_observation":
     case "reject_observation":
       return [];

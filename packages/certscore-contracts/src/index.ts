@@ -11,6 +11,10 @@ import {
   postAcceptEvidencePacketSchema,
   postAcceptLaneOutcomeSchema,
 } from "./post-accept-observation";
+import {
+  gpcResponseAssessmentSchema,
+  type GpcResponseAssessment,
+} from "./gpc-observation";
 export * from "./consent-control-label-classifier";
 export * from "./consent-action-control-proof";
 export * from "./choice-path-evidence-disposition";
@@ -33,6 +37,10 @@ export * from "./pre-consent-browser-storage-projection";
 export * from "./post-refusal-observation";
 export * from "./post-accept-observation";
 export * from "./post-action-dispatch";
+export * from "./gpc-observation";
+
+const canonicalBundleGpcResponseAssessmentSchema: z.ZodType<GpcResponseAssessment> =
+  gpcResponseAssessmentSchema;
 
 export const directVsInferredSchema = z.enum([
   "direct",
@@ -187,7 +195,7 @@ export const siteFacingNavigationDiagnosticsSchema = z.object({
 }).strict();
 
 export const scanLaneRunSchema = z.object({
-  laneId: z.enum(["consent_proof", "runtime_evidence", "policy_evidence"]),
+  laneId: z.enum(["consent_proof", "runtime_evidence", "policy_evidence", "gpc_observation"]),
   physicalInvocationId: z.string().min(1).max(160),
   region: z.string().min(1).max(80),
   phaseName: z.enum(["preConsentRuntimeScanner", "policySurfaceScanner"]),
@@ -3224,6 +3232,7 @@ export const canonicalEvidenceBundleSchema = z.object({
   postAcceptLaneOutcome: postAcceptLaneOutcomeSchema.optional(),
   postRefusalEvidence: postRefusalEvidencePacketSchema.optional(),
   postRefusalLaneOutcome: postRefusalLaneOutcomeSchema.optional(),
+  gpcResponseAssessment: canonicalBundleGpcResponseAssessmentSchema.optional(),
   runtimeTimeline: z.array(runtimeEvidenceEventSchema),
   networkEvents: z.array(networkEventSchema),
   networkResponseEvents: z.array(networkResponseEventSchema).default([]),

@@ -117,6 +117,7 @@ export async function POST(request: Request) {
     const payload = await request.json();
     const campaignAttribution = normalizeCampaignAttribution(payload?.campaignAttribution);
     const forceNewScan = parseForceNewScan(payload?.forceNewScan);
+    const gpcObservationRequested = payload?.gpcObservation === true;
     const localV2DagScanProfile = normalizeLocalV2DagScanProfile(payload?.localV2ScanProfile ?? payload?.v2ScanProfile);
     const scanFrom = normalizePublicScanFrom(payload?.scanFrom ?? payload?.geo);
     const requestedLocalV2DagRunViaLambda = normalizeLocalV2DagRunViaLambda(
@@ -313,6 +314,7 @@ export async function POST(request: Request) {
         createOrQueueDomainScan({
           allowExistingDomainRescan: true,
           bypassRecentScanReuse: forceNewScan,
+          gpcObservationRequested,
           clientRequestId,
           domain: item.normalizedUrl,
           localV2DagScanProfile,

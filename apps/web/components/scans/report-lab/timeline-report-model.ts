@@ -33,6 +33,7 @@ import type {
   ShadowReportData,
 } from "./shadow-report-data";
 import { buildExecutiveOverview } from "./executive-overview-copy";
+import { buildGpcResponseReportProjection } from "./gpc-report-projection";
 
 const CHECKLIST_GROUPS = {
   consent: new Set([
@@ -637,6 +638,14 @@ export function buildTimelineReportModel(scanRecord: ScanDetailResponse): Shadow
     rejectPath,
     canonical.ownerUnifiedFindings,
   );
+  const gpcResponse = buildGpcResponseReportProjection(canonical.ownerUnifiedFindings);
+  const executionConfig = record(scanRecord.scan.scanConfigJson)?.execution;
+  const gpcObservationRequested = record(record(executionConfig)?.v2DagLambda)?.gpcObservationRequested === true;
+  const gpcLaneStatus = gpcResponse
+    ? "completed" as const
+    : gpcObservationRequested
+      ? "unavailable" as const
+      : "not_requested" as const;
   const timeline: ShadowReportData["timeline"] = [
     { at: "0s", atMs: 0, detail: "Public page observation began", label: "Scan start", tone: "neutral" },
     ...buildExecutiveTimelineEvents(scanRecord.runtimeArtifacts, reportableChecklistRows).map((event) => ({
@@ -719,6 +728,8 @@ export function buildTimelineReportModel(scanRecord: ScanDetailResponse): Shadow
       : "Unavailable",
     collectionSurfaces,
     consentVendor,
+    gpcResponse,
+    gpcLaneStatus,
     acceptPath,
     choicePathComparison,
     consentRows: [

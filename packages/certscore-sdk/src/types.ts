@@ -199,6 +199,55 @@ export interface PostAcceptObservation {
   limitations: string[];
 }
 
+export interface GpcComparisonDelta {
+  baselineCount: number;
+  gpcCount: number;
+  countDelta: number;
+  baselineOnly: string[];
+  gpcOnly: string[];
+  shared: string[];
+}
+
+export interface GpcResponse {
+  status: "responsive" | "no_observable_response" | "indeterminate";
+  findingTitle: "GPC response" | "No observable GPC response";
+  summary: string;
+  scoreEffect: "none";
+  legalInterpretation: "not_assessed";
+  comparison: {
+    comparable: boolean;
+    protocol: "passive_baseline_with_sec_gpc";
+    baselineArtifact: {
+      lane: "runtime_evidence";
+      sha256: string;
+      sizeBytes: number;
+    };
+    gpcArtifact: {
+      lane: "gpc_observation";
+      sha256: string;
+      sizeBytes: number;
+    };
+    enabledProof: {
+      secGpcHeaderValue: "1";
+      requestsWithSecGpc: number;
+      requestEventIds: string[];
+      navigatorGlobalPrivacyControl: true;
+    };
+    deltas: {
+      cookies: GpcComparisonDelta;
+      trackers: GpcComparisonDelta;
+      advertisingOrMeasurementActivity: GpcComparisonDelta;
+      consentOrCmpBehavior: GpcComparisonDelta;
+    };
+    limitationKeys: string[];
+  };
+  californiaPolicy: {
+    applied: boolean;
+    deductionPoints: 0 | 15;
+  };
+  evidenceUrl: string;
+}
+
 export interface ScanResource extends ScanCreationMetadata {
   type: "certscore_scan";
   scanId: string;
@@ -217,6 +266,7 @@ export interface ScanResource extends ScanCreationMetadata {
   scoreVersion?: string | null;
   scoreUpdatedAt?: string | null;
   riskLevel?: string | null;
+  gpcResponse?: GpcResponse | null;
   postAcceptObservation?: PostAcceptObservation | null;
   postRefusalObservation?: PostRefusalObservation | null;
   coverage?: {
@@ -251,6 +301,7 @@ export interface ScanJob extends ScanCreationMetadata {
   scoreVersion?: string | null;
   scoreUpdatedAt?: string | null;
   riskLevel?: string | null;
+  gpcResponse?: GpcResponse | null;
   postAcceptObservation?: PostAcceptObservation | null;
   postRefusalObservation?: PostRefusalObservation | null;
   coverage?: ScanResource["coverage"] | null;

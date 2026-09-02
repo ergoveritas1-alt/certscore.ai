@@ -839,6 +839,88 @@ export function buildCertScoreApiV2OpenApiDocument() {
             limitations: { type: "array", maxItems: 24, deprecated: true, description: "Deprecated compatibility alias for coverageLimitations.", items: { type: "string" } }
           }
         },
+        GpcResponse: {
+          type: "object",
+          additionalProperties: false,
+          required: ["status", "findingTitle", "summary", "scoreEffect", "legalInterpretation", "comparison", "californiaPolicy", "evidenceUrl"],
+          properties: {
+            status: { type: "string", enum: ["responsive", "no_observable_response", "indeterminate"] },
+            findingTitle: { type: "string", enum: ["GPC response", "No observable GPC response"] },
+            summary: { type: "string", minLength: 1, maxLength: 2000 },
+            scoreEffect: { type: "string", const: "none", description: "The jurisdiction-neutral GPC comparison itself is score-neutral." },
+            legalInterpretation: { type: "string", const: "not_assessed" },
+            comparison: {
+              type: "object",
+              additionalProperties: false,
+              required: ["comparable", "protocol", "baselineArtifact", "gpcArtifact", "enabledProof", "deltas", "limitationKeys"],
+              properties: {
+                comparable: { type: "boolean" },
+                protocol: { type: "string", const: "passive_baseline_with_sec_gpc" },
+                baselineArtifact: {
+                  type: "object",
+                  additionalProperties: false,
+                  required: ["lane", "sha256", "sizeBytes"],
+                  properties: {
+                    lane: { type: "string", const: "runtime_evidence" },
+                    sha256: { type: "string", pattern: "^[a-f0-9]{64}$" },
+                    sizeBytes: { type: "integer", minimum: 0 }
+                  }
+                },
+                gpcArtifact: {
+                  type: "object",
+                  additionalProperties: false,
+                  required: ["lane", "sha256", "sizeBytes"],
+                  properties: {
+                    lane: { type: "string", const: "gpc_observation" },
+                    sha256: { type: "string", pattern: "^[a-f0-9]{64}$" },
+                    sizeBytes: { type: "integer", minimum: 0 }
+                  }
+                },
+                enabledProof: {
+                  type: "object",
+                  additionalProperties: false,
+                  required: ["secGpcHeaderValue", "requestsWithSecGpc", "requestEventIds", "navigatorGlobalPrivacyControl"],
+                  properties: {
+                    secGpcHeaderValue: { type: "string", const: "1" },
+                    requestsWithSecGpc: { type: "integer", minimum: 0 },
+                    requestEventIds: { type: "array", maxItems: 100, items: { type: "string", minLength: 1, maxLength: 160 } },
+                    navigatorGlobalPrivacyControl: { type: "boolean", const: true }
+                  }
+                },
+                deltas: {
+                  type: "object",
+                  additionalProperties: false,
+                  required: ["cookies", "trackers", "advertisingOrMeasurementActivity", "consentOrCmpBehavior"],
+                  properties: Object.fromEntries(
+                    ["cookies", "trackers", "advertisingOrMeasurementActivity", "consentOrCmpBehavior"].map((key) => [key, {
+                      type: "object",
+                      additionalProperties: false,
+                      required: ["baselineCount", "gpcCount", "countDelta", "baselineOnly", "gpcOnly", "shared"],
+                      properties: {
+                        baselineCount: { type: "integer", minimum: 0 },
+                        gpcCount: { type: "integer", minimum: 0 },
+                        countDelta: { type: "integer" },
+                        baselineOnly: { type: "array", maxItems: 100, items: { type: "string", minLength: 1, maxLength: 500 } },
+                        gpcOnly: { type: "array", maxItems: 100, items: { type: "string", minLength: 1, maxLength: 500 } },
+                        shared: { type: "array", maxItems: 100, items: { type: "string", minLength: 1, maxLength: 500 } }
+                      }
+                    }]))
+                },
+                limitationKeys: { type: "array", maxItems: 24, items: { type: "string", minLength: 1, maxLength: 160 } }
+              }
+            },
+            californiaPolicy: {
+              type: "object",
+              additionalProperties: false,
+              required: ["applied", "deductionPoints"],
+              properties: {
+                applied: { type: "boolean" },
+                deductionPoints: { type: "integer", enum: [0, 15] }
+              }
+            },
+            evidenceUrl: { type: "string", format: "uri" }
+          }
+        },
         PreConsentRuntimePreview: {
           type: "object",
           additionalProperties: false,
@@ -957,6 +1039,7 @@ export function buildCertScoreApiV2OpenApiDocument() {
             scoreVersion: { type: ["string", "null"] },
             scoreUpdatedAt: { type: ["string", "null"], format: "date-time" },
             riskLevel: { type: ["string", "null"] },
+            gpcResponse: { $ref: "#/components/schemas/GpcResponse" },
             postAcceptObservation: { $ref: "#/components/schemas/PostAcceptObservation" },
             postRefusalObservation: { $ref: "#/components/schemas/PostRefusalObservation" },
             preConsentPreview: { $ref: "#/components/schemas/PreConsentRuntimePreview" },
@@ -1020,6 +1103,7 @@ export function buildCertScoreApiV2OpenApiDocument() {
             scoreVersion: { type: ["string", "null"] },
             scoreUpdatedAt: { type: ["string", "null"], format: "date-time" },
             riskLevel: { type: ["string", "null"] },
+            gpcResponse: { $ref: "#/components/schemas/GpcResponse" },
             postAcceptObservation: { $ref: "#/components/schemas/PostAcceptObservation" },
             postRefusalObservation: { $ref: "#/components/schemas/PostRefusalObservation" },
             coverage: { type: "object", additionalProperties: true },

@@ -6,6 +6,7 @@ import {
   hasStaleLegalFrameworkReference,
   hasSubstantiveProcessingPurposesEvidence,
   policyModelReviewArtifactSchema,
+  gpcResponseAssessmentSchema,
 } from "@certscore/contracts";
 import {
   getReportUnifiedFinding,
@@ -153,6 +154,17 @@ export type NormalizedConcernRegulatoryChecklistEligibility =
   | "review_signal"
   | "none";
 
+export type NormalizedConcernScoreEffect = {
+  appliesTo: "certscore_overall";
+  deductionPoints: number;
+  evidenceRefs: string[];
+  framework: "california";
+  observedActivity: string[];
+  policyKey: string;
+  policyVersion: string;
+  reasonCode: string;
+};
+
 export type ConsentOptionsControlProminenceState =
   | "dedicated_button"
   | "first_layer_control"
@@ -274,6 +286,7 @@ export type NormalizedConcern = {
   policyPageType: NormalizedConcernPolicyPageType;
   promotionEligibility: NormalizedConcernPromotionEligibility;
   regulatoryChecklistEligibility?: NormalizedConcernRegulatoryChecklistEligibility;
+  scoreEffects?: NormalizedConcernScoreEffect[];
   severity: ReviewFindingSeverity;
   signalKey?: string;
   signalLabel?: string;
@@ -1922,6 +1935,9 @@ function buildConcernFromSharedInput(input: {
     policyPageType: evidenceBundle.policyPageType,
     promotionEligibility: eligibility.promotionEligibility,
     regulatoryChecklistEligibility: eligibility.regulatoryChecklistEligibility,
+    ...(eligibility.scoreEffects && eligibility.scoreEffects.length > 0
+      ? { scoreEffects: eligibility.scoreEffects }
+      : {}),
     severity: input.severity,
     signalKey: input.signalKey,
     signalLabel: input.signalLabel,
@@ -3657,6 +3673,55 @@ function buildConsentControlInventoryConcerns(
   ];
 }
 
+function buildGpcResponseConcerns(
+  runtimeArtifacts: Record<string, unknown> | null | undefined,
+  domainContext?: ScanDomainContext,
+) {
+  const parsed = gpcResponseAssessmentSchema.safeParse(
+    runtimeArtifacts?.gpcResponseAssessment ?? runtimeArtifacts?.gpc_response_assessment,
+  );
+  if (!parsed.success) return [];
+  const assessment = parsed.data;
+  const title = assessment.status === "no_observable_response"
+    ? "No observable GPC response"
+    : "GPC response";
+  const evidenceArtifacts = uniqueStrings([
+    assessment.comparison.baselineArtifact.uri,
+    assessment.comparison.gpcArtifact.uri,
+    ...assessment.comparison.evidenceRefs,
+  ]).slice(0, 32);
+  return [buildConcernFromSharedInput({
+    categoryId: "privacy",
+    description: assessment.status === "responsive"
+      ? "The passive GPC condition produced observable baseline deltas in cookies, trackers, advertising or measurement activity, or consent/CMP behavior. This is an operational observation, not a legal conclusion."
+      : assessment.status === "no_observable_response"
+        ? "No observable baseline delta was retained under the otherwise equivalent passive GPC condition. This does not determine whether any law was satisfied."
+        : "The paired passive baseline and GPC evidence was not sufficiently comparable to determine an observable response.",
+    domainContext,
+    evidence: evidenceArtifacts,
+    observedValue: assessment.status,
+    originKey: `privacy.gpc_response.${assessment.status}`,
+    originType: "runtime_artifact",
+    rawEvidence: {
+      gpcResponseAssessment: assessment,
+      gpcResponseAssessmentContractVersion: assessment.contractVersion,
+      gpcResponseStatus: assessment.status,
+      gpcComparisonComparable: assessment.comparison.comparable,
+      gpcEnabledProof: assessment.comparison.enabledProof,
+      gpcBaselineDeltas: assessment.comparison.deltas,
+      legalInterpretation: "not_assessed",
+      runtimeEvidenceArtifacts: evidenceArtifacts,
+      scoreEffect: "none",
+    },
+    severity: "low",
+    signalKey: "privacy.gpc_response",
+    signalLabel: title,
+    signalSource: "runtime_artifact_signal",
+    sourceType: "signal",
+    title,
+  })];
+}
+
 function buildConsentDismissWithoutRejectConcerns(
   runtimeArtifacts: Record<string, unknown> | null | undefined,
   domainContext?: ScanDomainContext
@@ -4286,6 +4351,7 @@ export function buildNormalizedConcerns(input: {
     ...buildConsentSurfaceAssessmentConcerns(input.runtimeArtifacts, input.domainContext),
     ...buildConsentNoSurfaceConcerns(input.runtimeArtifacts, input.domainContext),
     ...buildConsentControlInventoryConcerns(input.runtimeArtifacts, input.domainContext),
+    ...buildGpcResponseConcerns(input.runtimeArtifacts, input.domainContext),
     ...buildConsentDismissWithoutRejectConcerns(input.runtimeArtifacts, input.domainContext),
     ...buildConsentOptionsControlProminenceConcerns(input.runtimeArtifacts, input.domainContext),
     ...buildConsentPaidDeclinePathConcerns(input.runtimeArtifacts, input.domainContext),

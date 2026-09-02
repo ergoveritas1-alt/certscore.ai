@@ -252,7 +252,7 @@ test("normalizes live-audit consent titles into canonical names", () => {
   assert.equal(normalizeFindingName("Possible pre-consent tracking signals on first load"), "Trackers observed before consent");
   assert.equal(normalizeFindingName("Reject path may not fully suppress non-essential activity"), "Trackers persisted after reject");
   assert.equal(normalizeFindingName("Reject path appears less direct than accept path"), "Reject-all control missing");
-  assert.equal(normalizeFindingName("Browser-level privacy signal effect not evident"), "GPC signal not honored");
+  assert.equal(normalizeFindingName("Browser-level privacy signal effect not evident"), "GPC response");
 });
 
 test("uses count-based copy for pre-consent tracker violations", () => {

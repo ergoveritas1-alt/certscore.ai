@@ -160,7 +160,7 @@ type LambdaLaneTimingSummary = {
     coordinatorElapsedMs: number | null;
     evidenceJoined: boolean;
     invocationStartedAt: string | null;
-    lane: "consent_proof" | "runtime_evidence" | "policy_evidence" | "accept_observation" | "reject_observation";
+    lane: "consent_proof" | "runtime_evidence" | "policy_evidence" | "gpc_observation" | "accept_observation" | "reject_observation";
     outcome: "completed" | "disabled" | "failed" | "not_applicable" | "timed_out";
     terminalOutcomeDeltaFromPassiveBarrierMs: number | null;
     terminalOutcomeObservedAt: string | null;
@@ -1207,7 +1207,7 @@ function parseLambdaLaneTimingSummary(value: unknown): LambdaLaneTimingSummary |
       rejectLaneJoin !== "timed_out") ||
     !Array.isArray(record.lanes)
   ) return undefined;
-  const validLanes = new Set(["consent_proof", "runtime_evidence", "policy_evidence", "accept_observation", "reject_observation"]);
+  const validLanes = new Set(["consent_proof", "runtime_evidence", "policy_evidence", "gpc_observation", "accept_observation", "reject_observation"]);
   const validOutcomes = new Set(["completed", "disabled", "failed", "not_applicable", "timed_out"]);
   const lanes = record.lanes.flatMap((value) => {
     const laneRecord = asRecord(value);

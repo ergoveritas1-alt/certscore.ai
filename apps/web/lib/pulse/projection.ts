@@ -39,13 +39,16 @@ import {
   suppressUnsupportedCmpAliasRows
 } from "../scans/runtime-inventory-projection";
 import {
-  deriveRegulatoryCoverageScore,
-  GDPR_EPRIVACY_EVIDENCE_SCORE_VERSION
+  deriveRegulatoryCoverageScore
 } from "../scans/regulatory-coverage-score";
 import { meaningfulPolicySurfaceTitle, prioritizePublicPolicySurfaces } from "../scans/policy-enrichment-row";
 import type { ScanDetailResponse } from "../../server/scans/get-scan-by-id";
 import { getPersistedCanonicalReportProjection } from "../../server/scans/persisted-canonical-report-projection";
-import { deriveCanonicalOverallScoreForReport } from "../../server/scans/canonical-overall-score";
+import {
+  CANONICAL_OVERALL_SCORE_SOURCE,
+  CANONICAL_OVERALL_SCORE_VERSION,
+  deriveCanonicalOverallScoreForReport,
+} from "../../server/scans/canonical-overall-score";
 import { withPersistedFirstLayerConsentEvidence } from "../../server/scans/scan-report-consent-projection";
 import {
   getKnownCmpVendorForHost,
@@ -438,10 +441,10 @@ function buildPulseReportSurface(input: {
     coverageConfidence: gdprEprivacyScoreAssessment.coverageConfidence,
     coverageRatio: gdprEprivacyScoreAssessment.coverageRatio,
     scoreKind: "overall" as const,
-    scoreSource: stringValue(scanRecord.snapshot?.score_source) ?? "canonical.gdpr_eprivacy",
+    scoreSource: stringValue(scanRecord.snapshot?.score_source) ?? CANONICAL_OVERALL_SCORE_SOURCE,
     scoreStatus: score === null ? "withheld" as const : "scored" as const,
     scoreValue: score,
-    scoreVersion: stringValue(scanRecord.snapshot?.score_version) ?? GDPR_EPRIVACY_EVIDENCE_SCORE_VERSION,
+    scoreVersion: stringValue(scanRecord.snapshot?.score_version) ?? CANONICAL_OVERALL_SCORE_VERSION,
     withholdingReason: score === null ? "canonical_overall_score_unavailable" : null
   };
   const groupedTrackerRows = buildTrackerInventoryGroupRows(trackerInventoryRows);

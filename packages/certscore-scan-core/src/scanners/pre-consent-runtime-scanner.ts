@@ -89,6 +89,11 @@ import {
   MAX_COLLECTION_SURFACE_INSPECTED_FIELDS,
   type CollectionSurfaceCaptureSnapshot,
 } from "../collection-surface-inventory.js";
+import {
+  createPassiveEvidenceActivityTracker,
+  PASSIVE_EVIDENCE_INITIAL_QUIET_WINDOW_MS,
+  waitForPassiveEvidenceQuietWindow,
+} from "../passive-evidence-quiet-window.js";
 
 const SOURCE_SCANNER = "pre_consent_runtime";
 const SCENARIO = "fresh_pre_consent";
@@ -178,6 +183,8 @@ export interface PreConsentRuntimeScannerInput {
   artifactWriter: ArtifactWriter;
   /** Selects the evidence domain retained by a dedicated Lambda lane. */
   captureScope?: "combined" | "consent_proof" | "runtime_evidence";
+  /** Enables the dedicated passive GPC condition without changing any other capture behavior. */
+  globalPrivacyControlEnabled?: boolean;
   browser?: Browser;
   browserMode?: "headless" | "headed";
   stubHeavyResources?: boolean;
@@ -218,6 +225,37 @@ export interface PreConsentRuntimeScannerInput {
    * returned as an explicitly partial result.
    */
   softDeadlineSignal?: AbortSignal;
+}
+
+async function createPassiveBrowserContext(
+  browser: Browser,
+  globalPrivacyControlEnabled: boolean,
+): Promise<BrowserContext> {
+  const baseOptions = chromiumContextOptions();
+  const context = await browser.newContext({
+    ...baseOptions,
+    ...(globalPrivacyControlEnabled
+      ? {
+          extraHTTPHeaders: {
+            ...(baseOptions.extraHTTPHeaders ?? {}),
+            "Sec-GPC": "1",
+          },
+        }
+      : {}),
+  });
+  if (globalPrivacyControlEnabled) {
+    await context.addInitScript({
+      content: `(() => {
+        try {
+          Object.defineProperty(Navigator.prototype, "globalPrivacyControl", {
+            configurable: true,
+            get: () => true
+          });
+        } catch {}
+      })();`,
+    });
+  }
+  return context;
 }
 
 export interface PreConsentRuntimeCheckpoint {
@@ -552,6 +590,7 @@ export async function preConsentRuntimeScanner(
   const runtimeErrors: string[] = [];
   const screenshotErrors: string[] = [];
   const navigationNotes: string[] = [];
+  const passiveEvidenceActivity = createPassiveEvidenceActivityTracker();
   const requestIds = new WeakMap<Request, string>();
   const requestEvents = new WeakMap<Request, NetworkEvent>();
   const cdpInitiatorsByUrl = new Map<string, string[][]>();
@@ -582,7 +621,10 @@ export async function preConsentRuntimeScanner(
   lifecycleCheckpoint("browser_launch", "completed");
   lifecycleCheckpoint("browser_context", "started");
   const context = await recordTiming(timingBreakdown, "browser context", "New isolated browser context and page.", async () => {
-    const newContext = await browser.newContext(chromiumContextOptions());
+    const newContext = await createPassiveBrowserContext(
+      browser,
+      input.globalPrivacyControlEnabled === true,
+    );
     const newPage = await newContext.newPage();
     return { newContext, newPage };
   });
@@ -667,6 +709,7 @@ export async function preConsentRuntimeScanner(
     if (!isHttpUrl(requestUrl)) {
       return;
     }
+    passiveEvidenceActivity.markRequestStarted(request);
 
     const requestId = nextId("req");
     requestIds.set(request, requestId);
@@ -794,13 +837,18 @@ export async function preConsentRuntimeScanner(
   });
 
   page.on("response", (response) => {
+    if (isHttpUrl(response.url())) passiveEvidenceActivity.noteActivity();
     void captureResponse(response);
+  });
+  page.on("requestfinished", (request) => {
+    if (isHttpUrl(request.url())) passiveEvidenceActivity.markRequestFinished(request);
   });
   page.on("requestfailed", (request) => {
     const requestUrl = request.url();
     if (!isHttpUrl(requestUrl)) {
       return;
     }
+    passiveEvidenceActivity.markRequestFinished(request);
     failedHttpRequests.push({
       failureText: request.failure()?.errorText,
       pageUrl: request.frame().url() === "about:blank" ? page.url() : request.frame().url(),
@@ -1025,10 +1073,16 @@ export async function preConsentRuntimeScanner(
   try {
     const navigationStartedAtMs = Date.now();
     lifecycleCheckpoint("page_navigation", "started");
-    let navigationResponse = await recordTiming(timingBreakdown, "page navigation", "Initial navigation with bounded same-site transport recovery until DOMContentLoaded.", async () => {
-      const candidates = [input.normalizedUrl, ...navigationTransportRecoveryUrls(input.normalizedUrl)];
-      let lastError: unknown;
-      for (const [index, candidateUrl] of candidates.entries()) {
+    let navigationResponse = await recordTiming(
+      timingBreakdown,
+      "page navigation",
+      captureConsentEvidence
+        ? "Initial navigation with bounded same-site transport recovery until DOMContentLoaded."
+        : "Initial passive-runtime navigation with bounded same-site transport recovery until commit plus DOM readiness or substantive document evidence.",
+      async () => {
+        const candidates = [input.normalizedUrl, ...navigationTransportRecoveryUrls(input.normalizedUrl)];
+        let lastError: unknown;
+        for (const [index, candidateUrl] of candidates.entries()) {
         const attemptStartedAtMs = Date.now();
         const attemptMode = index === 0
           ? "initial_https_navigation"
@@ -1046,23 +1100,41 @@ export async function preConsentRuntimeScanner(
           await page.waitForTimeout(50);
         }
         try {
+          const navigationTimeoutMs = Math.max(
+            1_000,
+            Math.min(index === 0 ? 15_000 : 7_500, input.internalBudgetMs - (Date.now() - navigationStartedAtMs)),
+          );
           const response = index === 0
             ? await page.goto(candidateUrl, {
-              waitUntil: "domcontentloaded",
-              timeout: Math.max(1_000, Math.min(15_000, input.internalBudgetMs - (Date.now() - navigationStartedAtMs))),
+              waitUntil: captureConsentEvidence ? "domcontentloaded" : "commit",
+              timeout: navigationTimeoutMs,
             })
             : await measureRecovery("transport_alternate_navigation", () => page.goto(candidateUrl, {
-              waitUntil: "domcontentloaded",
-              timeout: Math.max(1_000, Math.min(7_500, input.internalBudgetMs - (Date.now() - navigationStartedAtMs))),
+              waitUntil: captureConsentEvidence ? "domcontentloaded" : "commit",
+              timeout: navigationTimeoutMs,
             }));
           effectiveNavigationUrl = page.url() === "about:blank" ? candidateUrl : page.url();
+          const passiveDocumentReady = captureConsentEvidence || await waitForPassiveRuntimeDocumentReadiness(
+            page,
+            Math.max(1, Math.min(navigationTimeoutMs, remainingModuleBudgetMs())),
+          );
+          if (!passiveDocumentReady) {
+            noteRecovery("committed_navigation_timeout");
+            navigationNotes.push(
+              "Entry navigation committed but did not expose DOM readiness or substantive document evidence within the bounded wait; retained the current page and failed closed through ordinary runtime coverage checks.",
+            );
+          }
           if (index > 0) {
             navigationNotes.push(`Entry navigation recovered through ${candidateUrl}`);
           }
           navigationAttempts.push({
             url: candidateUrl,
             mode: attemptMode,
-            outcome: response && response.status() >= 400 ? "http_error" : "success",
+            outcome: !passiveDocumentReady
+              ? "committed_timeout"
+              : response && response.status() >= 400
+                ? "http_error"
+                : "success",
             ...(response ? { httpStatus: response.status() } : {}),
             durationMs: Date.now() - attemptStartedAtMs,
           });
@@ -1092,9 +1164,10 @@ export async function preConsentRuntimeScanner(
           });
           lastError = error;
         }
-      }
-      throw lastError;
-    });
+        }
+        throw lastError;
+      },
+    );
     lifecycleCheckpoint("page_navigation", "completed");
 
     let transientStatusRetried = false;
@@ -1220,7 +1293,6 @@ export async function preConsentRuntimeScanner(
     firstPartyDomain = finalDocumentParty.firstPartyDomain ?? firstPartyDomain;
     const fastWait = input.waitMode === "fast";
     const networkIdleTimeoutMs = fastWait ? 1_500 : 5_000;
-    const settleWaitMs = fastWait ? 350 : 1_000;
     const postSettleInventoryMaxMs = fastWait ? 1_000 : 1_500;
     const postSettleInventoryReserveMs = 500;
     const settledVisualCheckpointScreenshotMaxMs = fastWait ? 1_500 : 2_000;
@@ -1369,15 +1441,18 @@ export async function preConsentRuntimeScanner(
         "Dedicated consent-proof lane does not duplicate runtime transport capture.",
       );
     }
-    const networkIdlePromise = recordTiming(
+    const evidenceQuietPromise = recordTiming(
       timingBreakdown,
-      "network idle wait",
+      "passive evidence quiet wait",
       fastWait
-        ? "Fast planned-DAG post-navigation network quiet wait overlapped with early visual capture; timeout is non-fatal."
-        : "Post-navigation network-idle wait overlapped with early visual capture; timeout is non-fatal.",
-      () => page.waitForLoadState("networkidle", {
-        timeout: Math.min(networkIdleTimeoutMs, input.internalBudgetMs),
-      }).catch(() => undefined),
+        ? `Fast planned-DAG evidence-aware quiet gate starts at ${PASSIVE_EVIDENCE_INITIAL_QUIET_WINDOW_MS}ms, restarts on browser request activity, and preserves the existing ${networkIdleTimeoutMs}ms non-fatal cap.`
+        : `Evidence-aware quiet gate starts at ${PASSIVE_EVIDENCE_INITIAL_QUIET_WINDOW_MS}ms, restarts on browser request activity, and preserves the existing ${networkIdleTimeoutMs}ms non-fatal cap.`,
+      () => waitForPassiveEvidenceQuietWindow({
+        quietWindowMs: PASSIVE_EVIDENCE_INITIAL_QUIET_WINDOW_MS,
+        timeoutMs: Math.min(networkIdleTimeoutMs, input.internalBudgetMs),
+        tracker: passiveEvidenceActivity,
+      }),
+      (result) => result.status === "timed_out" ? "timed_out" : "completed",
     );
     let preScreenshotConsentObservation: ConsentUiObservation | undefined;
     if (screenshotMode === "always") {
@@ -1404,7 +1479,7 @@ export async function preConsentRuntimeScanner(
       // recovery work so neither visual nor structured evidence is discarded.
       [preScreenshotConsentObservation] = await Promise.all([
         consentUiObservationPromise,
-        networkIdlePromise,
+        evidenceQuietPromise,
       ]);
       const earlyConsentGeometry = await earlyConsentGeometryPromise;
       if (
@@ -1550,26 +1625,12 @@ export async function preConsentRuntimeScanner(
       }
     }
     if (screenshotMode !== "always") {
-      await networkIdlePromise;
+      await evidenceQuietPromise;
     }
-    await recordTiming(
-      timingBreakdown,
-      "observation settle wait",
-      fastWait
-        ? "Fast planned-DAG observation settle window after bounded network quiet."
-        : "Fixed pre-consent observation window after network quiet.",
-      () => page.waitForTimeout(settleWaitMs).catch((error) => {
-        if (isContextClosedError(error)) {
-          runtimeErrors.push(`Observation settle ended early because the page/context closed: ${errorMessage(error)}`);
-          return;
-        }
-        throw error;
-      })
-    );
     recordInstantTiming(
       timingBreakdown,
       "network capture",
-      `Captured ${networkEvents.length} request events and ${networkResponseEvents.length} response events during navigation, network-idle, and settle windows.`,
+      `Captured ${networkEvents.length} request events and ${networkResponseEvents.length} response events during navigation and the bounded evidence-aware quiet window.`,
     );
 
     // Retain one cheap, explicitly post-settle inventory before the atomic
@@ -3587,6 +3648,7 @@ export async function preConsentRuntimeScanner(
       scriptEvents,
       iframeEvents,
     });
+    await emitPassiveRuntimeCheckpoint();
     const retainPolicyRecoverySession = input.retainRenderedPolicyRecoverySession === true &&
       retainedRenderedPolicyLinkEvidence.length > 0;
     retainOwnedBrowserForPolicyRecovery = ownsBrowser && retainPolicyRecoverySession;
@@ -3712,6 +3774,7 @@ export async function preConsentRuntimeScanner(
       scriptEvents,
       iframeEvents,
     });
+    await emitPassiveRuntimeCheckpoint();
     return {
       moduleRun: {
         moduleName: "preConsentRuntimeScanner",
@@ -3941,6 +4004,27 @@ async function hasStrongUnresolvedSecurityChallenge(page: import("playwright").P
   return /checking (?:your )?browser|verify (?:you are|that you(?:'|’)re) human|performing security verification|cloudflare ray id|press and hold.{0,100}verif|security (?:check|challenge)|just a moment/i.test(normalized);
 }
 
+async function waitForPassiveRuntimeDocumentReadiness(
+  page: Page,
+  timeoutMs: number,
+): Promise<boolean> {
+  if (timeoutMs <= 0) return false;
+  const handle = await page.waitForFunction(() => {
+    if (document.readyState === "interactive" || document.readyState === "complete") return true;
+    const body = document.body;
+    if (!body) return false;
+    const text = (body.innerText || body.textContent || "").replace(/\s+/g, " ").trim();
+    const wordCount = text.split(/\s+/).filter(Boolean).length;
+    return text.length >= 120 || wordCount >= 24 || body.querySelectorAll("*").length >= 8;
+  }, undefined, {
+    polling: 50,
+    timeout: timeoutMs,
+  }).catch(() => null);
+  if (!handle) return false;
+  await handle.dispose().catch(() => undefined);
+  return true;
+}
+
 function boundedPreConsentTimingBreakdown(
   entries: NonNullable<ScanModuleRun["timingBreakdown"]>,
 ): NonNullable<ScanModuleRun["timingBreakdown"]> {
@@ -3959,7 +4043,7 @@ function boundedPreConsentTimingBreakdown(
   const requiredIndexes = new Set<number>();
   compacted.forEach((entry, index) => {
     if (
-      /^(?:browser launch|browser context|page navigation|network idle wait|page evidence: consent UI|early screenshot capture|early consent control geometry|page evidence: consent UI CMP recapture|consent gate|bounded same-session consent packet recovery total|late consent control screenshot|DOM artifact write)/.test(entry.label)
+      /^(?:browser launch|browser context|page navigation|passive evidence quiet wait|network idle wait|page evidence: consent UI|early screenshot capture|early consent control geometry|page evidence: consent UI CMP recapture|consent gate|bounded same-session consent packet recovery total|late consent control screenshot|DOM artifact write)/.test(entry.label)
     ) {
       requiredIndexes.add(index);
     }
@@ -12646,7 +12730,10 @@ async function retryPreConsentScreenshotInFreshContext(input: {
     "fresh-context screenshot retry",
     "One bounded screenshot-only retry in a fresh browser context after the primary page/context closed.",
     async () => {
-      const retryContext = await input.browser.newContext(chromiumContextOptions());
+      const retryContext = await createPassiveBrowserContext(
+        input.browser,
+        input.input.globalPrivacyControlEnabled === true,
+      );
       try {
         await installConsentInventoryProbe(retryContext);
         for (const fulfiller of input.input.routeFulfillers ?? []) {

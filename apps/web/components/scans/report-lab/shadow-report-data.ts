@@ -1,3 +1,4 @@
+import type { GpcResponseAssessment } from "@certscore/contracts";
 import type { ExecutiveRejectPathProjection } from "../executive-summary-card";
 
 export const SHADOW_REPORT_SCAN_ID = "333757ef-ddc0-4d68-aef8-f220859706c9";
@@ -123,6 +124,13 @@ export type ChoicePathComparison = {
   state: "different" | "indistinguishable";
 };
 
+export type GpcResponseReportProjection = {
+  assessment: GpcResponseAssessment;
+  californiaDeductionPoints: 0 | 15;
+  evidenceRefs: string[];
+  summary: string;
+};
+
 export type ShadowReportData = {
   scan: {
     benchmark: string;
@@ -148,6 +156,8 @@ export type ShadowReportData = {
   };
   controls: { accept: string; options: string; reject: string };
   consentVendor: string | null;
+  gpcResponse?: GpcResponseReportProjection | null;
+  gpcLaneStatus?: "completed" | "not_requested" | "unavailable";
   acceptPath?: ExecutiveAcceptPathProjection | null;
   choicePathComparison?: ChoicePathComparison | null;
   rejectPath?: ExecutiveRejectPathProjection | null;

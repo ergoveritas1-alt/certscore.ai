@@ -521,13 +521,25 @@ test("API v2 draft OpenAPI locks resource path and operation names", () => {
   };
   walk(document.paths);
 
-  assert.equal(document.info.version, "0.1.11");
+  assert.equal(document.info.version, "0.1.12");
   assert.ok(document.paths["/api/v2/keys/request"]);
   assert.ok(document.paths["/api/v2/auth/check"]);
   assert.ok(document.paths["/api/v2/scans"]);
   assert.deepEqual(
     document.components.schemas.CreateScanRequest.properties.scanFrom.enum,
     ["eu_de", "eu_ie", "california"]
+  );
+  assert.equal(
+    document.components.schemas.Scan.properties.gpcResponse.$ref,
+    "#/components/schemas/GpcResponse",
+  );
+  assert.deepEqual(
+    document.components.schemas.GpcResponse.properties.status.enum,
+    ["responsive", "no_observable_response", "indeterminate"],
+  );
+  assert.equal(
+    document.components.schemas.GpcResponse.properties.comparison.properties.enabledProof.properties.secGpcHeaderValue.const,
+    "1",
   );
   assert.equal(
     document.components.schemas.Scan.properties.postAcceptObservation.$ref,

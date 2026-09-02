@@ -118,6 +118,31 @@ test("Accept and Reject cards appear together in expandable consent surfaces", a
   assert.doesNotMatch(modelSource, /score-neutral|does not affect score|second score effect/);
 });
 
+test("GPC appears as a quiet snapshot signal and a dedicated evidence-index comparison", async () => {
+  const source = await readFile(
+    "apps/web/components/scans/report-lab/shadow-scan-report.tsx",
+    "utf8"
+  );
+  const modelSource = await readFile(
+    "apps/web/components/scans/report-lab/timeline-report-model.ts",
+    "utf8"
+  );
+
+  assert.match(source, /data-testid="executive-gpc-snapshot"/);
+  assert.match(source, /The dedicated GPC lane was not requested for this scan/);
+  assert.match(source, /no verified canonical GPC response reached this report/);
+  assert.match(source, />Global Privacy Control</);
+  assert.match(source, /CA −\{report\.gpcResponse\.californiaDeductionPoints\}/);
+  assert.match(source, /href="#gpc-evidence"/);
+  assert.match(source, /data-testid="gpc-evidence-index-card"/);
+  assert.match(source, />GPC comparison</);
+  assert.match(source, /Typed comparison evidence/);
+  assert.match(source, /"Advertising \/ measurement"/);
+  assert.match(source, /"Consent \/ CMP"/);
+  assert.match(modelSource, /buildGpcResponseReportProjection\(canonical\.ownerUnifiedFindings\)/);
+  assert.doesNotMatch(source, /GPC violation|GPC not honored/i);
+});
+
 test("full runtime inventory shows six rows before becoming vertically scrollable", async () => {
   const source = await readFile(
     "apps/web/components/scans/report-lab/shadow-scan-report.tsx",

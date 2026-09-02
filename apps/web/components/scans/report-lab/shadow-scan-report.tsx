@@ -32,6 +32,7 @@ import {
   SHADOW_PRIVACY_NOTICE_EVIDENCE,
   SHADOW_REPORT,
   SHADOW_REPORT_SOURCE_URL,
+  type GpcResponseReportProjection,
   type ShadowEvidenceRow,
   type ShadowEvidenceStatus,
   type ShadowFinding,
@@ -65,6 +66,59 @@ function StatusBadge({ status }: { status: ShadowEvidenceStatus }) {
       <span aria-hidden="true">{symbol}</span>
       {status}
     </span>
+  );
+}
+
+const GPC_DELTA_ROWS = [
+  ["cookies", "Cookies / storage"],
+  ["trackers", "Trackers"],
+  ["advertisingOrMeasurementActivity", "Advertising / measurement"],
+  ["consentOrCmpBehavior", "Consent / CMP"],
+] as const;
+
+function getGpcStatusPresentation(status: GpcResponseReportProjection["assessment"]["status"]) {
+  if (status === "responsive") {
+    return {
+      label: "Response observed",
+      tone: "border-sky-200 bg-sky-50 text-sky-800",
+    };
+  }
+  if (status === "no_observable_response") {
+    return {
+      label: "No observable response",
+      tone: "border-amber-200 bg-amber-50 text-amber-900",
+    };
+  }
+  return {
+    label: "Indeterminate",
+    tone: "border-zinc-300 bg-zinc-100 text-zinc-700",
+  };
+}
+
+function GpcStatusBadge({ projection }: { projection: GpcResponseReportProjection }) {
+  const presentation = getGpcStatusPresentation(projection.assessment.status);
+  return (
+    <span className={`inline-flex items-center rounded-md border px-2 py-1 text-[0.68rem] font-semibold uppercase ${presentation.tone}`}>
+      {presentation.label}
+    </span>
+  );
+}
+
+function GpcComparisonGrid({ projection }: { projection: GpcResponseReportProjection }) {
+  return (
+    <div className="grid grid-cols-2 gap-px overflow-hidden rounded-md border border-zinc-200 bg-zinc-200 sm:grid-cols-4">
+      {GPC_DELTA_ROWS.map(([key, label]) => {
+        const delta = projection.assessment.comparison.deltas[key];
+        return (
+          <div className="bg-white px-2.5 py-2" key={key}>
+            <p className="truncate text-[0.62rem] font-semibold uppercase tracking-[0.06em] text-zinc-500" title={label}>{label}</p>
+            <p className={`${monoClass} mt-1 text-xs font-semibold text-zinc-900`}>
+              {delta.baselineCount} <span aria-hidden="true" className="text-zinc-400">→</span> {delta.gpcCount}
+            </p>
+          </div>
+        );
+      })}
+    </div>
   );
 }
 
@@ -366,6 +420,51 @@ function SignalSnapshot({ report }: { report: ShadowReportData }) {
             })}
           </div>
         </details>
+        {report.gpcResponse ? (
+          <details className={signalRowClass} data-testid="executive-gpc-snapshot">
+            <summary className={signalSummaryClass}>
+              <span className="text-xs font-medium text-zinc-500">Global Privacy Control</span>
+              <span className="flex min-w-0 items-center gap-2">
+                <GpcStatusBadge projection={report.gpcResponse} />
+                {report.gpcResponse.californiaDeductionPoints > 0 ? (
+                  <span className={`${monoClass} text-[0.68rem] font-semibold text-rose-700`}>
+                    CA −{report.gpcResponse.californiaDeductionPoints}
+                  </span>
+                ) : null}
+                <span aria-hidden="true" className="text-zinc-400 transition group-open/signal:rotate-45">+</span>
+              </span>
+            </summary>
+            <div className="mt-3 space-y-2.5">
+              <p className="text-xs leading-5 text-zinc-600">
+                <span className="font-semibold text-zinc-800">Sec-GPC: 1</span> was retained on {report.gpcResponse.assessment.comparison.enabledProof.requestsWithSecGpc} request{report.gpcResponse.assessment.comparison.enabledProof.requestsWithSecGpc === 1 ? "" : "s"}; the browser GPC property was enabled.
+              </p>
+              <GpcComparisonGrid projection={report.gpcResponse} />
+              <div className="flex flex-wrap items-center justify-between gap-2 text-[0.68rem] leading-4 text-zinc-500">
+                <span>
+                  {report.gpcResponse.californiaDeductionPoints > 0
+                    ? `California policy applied −${report.gpcResponse.californiaDeductionPoints} points to the overall score.`
+                    : "Jurisdiction-neutral comparison; no score effect was attached here."}
+                </span>
+                <a className="font-semibold text-sky-700 hover:text-sky-900" href="#gpc-evidence">Evidence index ↓</a>
+              </div>
+            </div>
+          </details>
+        ) : (
+          <details className={signalRowClass} data-testid="executive-gpc-snapshot">
+            <summary className={signalSummaryClass}>
+              <span className="text-xs font-medium text-zinc-500">Global Privacy Control</span>
+              <span className="flex min-w-0 items-center gap-2 text-xs font-semibold text-zinc-500">
+                <span>{report.gpcLaneStatus === "unavailable" ? "Result unavailable" : "Not run"}</span>
+                <span aria-hidden="true" className="text-zinc-400 transition group-open/signal:rotate-45">+</span>
+              </span>
+            </summary>
+            <p className="mt-3 text-xs leading-5 text-zinc-600">
+              {report.gpcLaneStatus === "unavailable"
+                ? "The GPC lane was requested, but no verified canonical GPC response reached this report. This is a coverage limitation, not a finding."
+                : "The dedicated GPC lane was not requested for this scan. It is opt-in and remains off by default."}
+            </p>
+          </details>
+        )}
         <details className={signalRowClass}>
           <summary className={signalSummaryClass}>
             <span className="text-xs font-medium text-zinc-500">Policy surfaces</span>
@@ -1422,6 +1521,89 @@ function MinimalVariant({ report }: { report: ShadowReportData }) {
   );
 }
 
+function GpcEvidenceIndexCard({ projection }: { projection: GpcResponseReportProjection }) {
+  const proof = projection.assessment.comparison.enabledProof;
+  const evidenceJson: Record<string, unknown> = {
+    assessment: projection.assessment,
+    californiaPolicy: {
+      deductionPoints: projection.californiaDeductionPoints,
+      framework: "california",
+    },
+    evidenceRefs: projection.evidenceRefs,
+  };
+
+  return (
+    <details className="group/gpc border-b border-r border-zinc-200 p-5" id="gpc-evidence" data-testid="gpc-evidence-index-card">
+      <summary className="flex cursor-pointer list-none items-start justify-between gap-4 [&::-webkit-details-marker]:hidden">
+        <div>
+          <p className="text-xs font-semibold uppercase text-zinc-500">GPC comparison</p>
+          <h3 className="mt-1 text-lg font-semibold text-zinc-950">{projection.assessment.findingTitle}</h3>
+        </div>
+        <span className="flex shrink-0 items-center gap-2">
+          <GpcStatusBadge projection={projection} />
+          <span aria-hidden="true" className="text-zinc-400 transition group-open/gpc:rotate-45">+</span>
+        </span>
+      </summary>
+      <div className="mt-5 space-y-5">
+        <p className="max-w-3xl text-sm leading-6 text-zinc-600">{projection.summary}</p>
+        <div className="flex flex-wrap gap-2 text-[0.68rem] font-semibold text-zinc-700">
+          <span className="rounded-md border border-sky-200 bg-sky-50 px-2 py-1">Sec-GPC: {proof.secGpcHeaderValue}</span>
+          <span className="rounded-md border border-sky-200 bg-sky-50 px-2 py-1">navigator.globalPrivacyControl: true</span>
+          <span className="rounded-md border border-zinc-200 bg-zinc-50 px-2 py-1">{proof.requestsWithSecGpc} retained request proof{proof.requestsWithSecGpc === 1 ? "" : "s"}</span>
+          {projection.californiaDeductionPoints > 0 ? (
+            <span className="rounded-md border border-rose-200 bg-rose-50 px-2 py-1 text-rose-800">CA policy · −{projection.californiaDeductionPoints} points</span>
+          ) : null}
+        </div>
+        <div className="overflow-x-auto border border-zinc-200">
+          <table className="w-full min-w-[44rem] border-collapse text-left text-xs">
+            <thead className="bg-zinc-50 text-[0.65rem] font-semibold uppercase tracking-[0.06em] text-zinc-500">
+              <tr>
+                {[
+                  "Signal",
+                  "Baseline",
+                  "GPC",
+                  "Delta",
+                  "Baseline only",
+                  "Shared",
+                  "GPC only",
+                ].map((label) => <th className="border-b border-zinc-200 px-3 py-2" key={label}>{label}</th>)}
+              </tr>
+            </thead>
+            <tbody>
+              {GPC_DELTA_ROWS.map(([key, label]) => {
+                const delta = projection.assessment.comparison.deltas[key];
+                return (
+                  <tr className="border-b border-zinc-100 last:border-0" key={key}>
+                    <td className="px-3 py-2 font-semibold text-zinc-900">{label}</td>
+                    <td className={`${monoClass} px-3 py-2 text-zinc-700`}>{delta.baselineCount}</td>
+                    <td className={`${monoClass} px-3 py-2 text-zinc-700`}>{delta.gpcCount}</td>
+                    <td className={`${monoClass} px-3 py-2 text-zinc-700`}>{delta.countDelta > 0 ? `+${delta.countDelta}` : delta.countDelta}</td>
+                    <td className={`${monoClass} px-3 py-2 text-zinc-700`}>{delta.baselineOnly.length}</td>
+                    <td className={`${monoClass} px-3 py-2 text-zinc-700`}>{delta.shared.length}</td>
+                    <td className={`${monoClass} px-3 py-2 text-zinc-700`}>{delta.gpcOnly.length}</td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+        {projection.assessment.comparison.limitationKeys.length > 0 ? (
+          <p className="text-xs leading-5 text-amber-800">
+            Coverage limits: {projection.assessment.comparison.limitationKeys.join(", ")}.
+          </p>
+        ) : null}
+        <details className="group/gpc-json border border-zinc-200 p-4">
+          <summary className="flex cursor-pointer list-none items-center justify-between gap-3 text-sm font-semibold text-zinc-900 [&::-webkit-details-marker]:hidden">
+            Typed comparison evidence
+            <span aria-hidden="true" className="text-zinc-400 transition group-open/gpc-json:rotate-45">+</span>
+          </summary>
+          <div className="mt-4"><JsonEvidence value={evidenceJson} /></div>
+        </details>
+      </div>
+    </details>
+  );
+}
+
 function EvidenceDirectory({ report }: { report: ShadowReportData }) {
   const consentVendor = report.consentVendor ?? "Consent platform not identified";
   const observedGdprTransparencyRows = report.gdprTransparencyRows.filter((row) => row.status === "Observed").length;
@@ -1434,12 +1616,15 @@ function EvidenceDirectory({ report }: { report: ShadowReportData }) {
           <div>
             <p className="text-xs font-semibold uppercase text-sky-700">Evidence index</p>
             <h2 className="mt-2 text-2xl font-semibold text-zinc-950">Every layer, one step away</h2>
-            <p className="mt-2 max-w-2xl text-sm leading-6 text-zinc-600">Consent, tracking &amp; external services, pre-consent runtime, GDPR Transparency, transport security and collection details.</p>
+            <p className="mt-2 max-w-2xl text-sm leading-6 text-zinc-600">
+              {report.gpcResponse ? "GPC comparison, " : ""}Consent, tracking &amp; external services, pre-consent runtime, GDPR Transparency, transport security and collection details.
+            </p>
           </div>
           <RatingMix report={report} />
         </div>
         <div className="mt-9 grid items-start gap-6 lg:grid-cols-[minmax(0,1.08fr)_minmax(22rem,0.92fr)]">
           <div className="border-l border-t border-zinc-200">
+            {report.gpcResponse ? <GpcEvidenceIndexCard projection={report.gpcResponse} /> : null}
             <details className="group/consent border-b border-r border-zinc-200 p-5">
               <summary className="flex cursor-pointer list-none items-center justify-between gap-4 [&::-webkit-details-marker]:hidden">
                 <div><p className="text-xs font-semibold uppercase text-zinc-500">Consent surface</p><h3 className="mt-1 text-lg font-semibold text-zinc-950">Controls and CMP context</h3></div>

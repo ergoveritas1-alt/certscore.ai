@@ -654,7 +654,7 @@ function buildScannerSignalPopulationRecords(input: {
         }
       ],
       reportSignalSource:
-        signal.key.startsWith("privacy.") && /reject_reduced|weak_cookie_security|gpc_signal_not_honored/i.test(signal.key)
+        signal.key.startsWith("privacy.") && /reject_reduced|weak_cookie_security|gpc_response/i.test(signal.key)
           ? "runtime_artifact_signal"
           : signal.key.startsWith("privacy.") ||
               signal.key.startsWith("commerce.") ||

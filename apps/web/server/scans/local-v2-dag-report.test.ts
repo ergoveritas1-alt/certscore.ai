@@ -2172,6 +2172,47 @@ function makeScanRecord(overrides: Partial<ScanDetailResponse> = {}): ScanDetail
   } as ScanDetailResponse;
 }
 
+test("GPC response projection preserves the typed assessment without legal reinterpretation", async () => {
+  const { buildGpcResponseRuntimeProjection } = await loadLocalV2DagReport();
+  const unchangedDelta = {
+    baselineCount: 1,
+    gpcCount: 1,
+    countDelta: 0,
+    baselineOnly: [],
+    gpcOnly: [],
+    shared: ["retained_identity"],
+  };
+  const assessment = {
+    contractVersion: "certscore.gpc-response-assessment.v1" as const,
+    generatedAt: "2026-08-20T12:00:00.000Z",
+    status: "no_observable_response" as const,
+    findingTitle: "No observable GPC response" as const,
+    scoreEffect: "none" as const,
+    legalInterpretation: "not_assessed" as const,
+    comparison: {
+      comparable: true,
+      protocol: "passive_baseline_with_sec_gpc" as const,
+      baselineArtifact: { lane: "runtime_evidence" as const, sha256: "a".repeat(64), sizeBytes: 100, uri: "s3://evidence/baseline.json" },
+      gpcArtifact: { lane: "gpc_observation" as const, sha256: "b".repeat(64), sizeBytes: 100, uri: "s3://evidence/gpc.json" },
+      enabledProof: { secGpcHeaderValue: "1" as const, requestsWithSecGpc: 2, requestEventIds: ["gpc-1", "gpc-2"], navigatorGlobalPrivacyControl: true as const },
+      deltas: {
+        cookies: unchangedDelta,
+        trackers: unchangedDelta,
+        advertisingOrMeasurementActivity: unchangedDelta,
+        consentOrCmpBehavior: unchangedDelta,
+      },
+      evidenceRefs: ["s3://evidence/baseline.json", "s3://evidence/gpc.json"],
+      limitationKeys: [],
+    },
+  } as CanonicalEvidenceBundle["gpcResponseAssessment"];
+
+  assert.deepEqual(buildGpcResponseRuntimeProjection({}), {});
+  assert.deepEqual(buildGpcResponseRuntimeProjection({ gpcResponseAssessment: assessment }), {
+    gpcResponseAssessment: assessment,
+    gpc_response_assessment: assessment,
+  });
+});
+
 function completedConsentGeometryFixture(input: {
   cmpName?: string;
   controls: Array<{

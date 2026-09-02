@@ -1220,7 +1220,6 @@ function isConcerningSignal(key: string, value: unknown) {
     /dark_pattern/,
     /preconsent/,
     /fingerprinting/,
-    /gpc_signal_not_honored/,
     /weak_cookie_security_attributes_detected/,
     /conflict/,
     /mismatch/,
@@ -1291,9 +1290,6 @@ function getSignalConcernReason(key: string, value: unknown) {
   }
   if (/fingerprinting/i.test(key)) {
     return "Observed coordinated browser or device attribute collection consistent with fingerprinting review risk.";
-  }
-  if (/gpc_signal_not_honored/i.test(key)) {
-    return "A browser-level opt-out preference signal appears not to have been honored during the scan.";
   }
   if (/popup_behavior|autoplay_media|overlay_blocking/i.test(key)) {
     return "Observed intrusive or blocking runtime behavior that may interfere with normal page use.";
@@ -2445,23 +2441,7 @@ export function buildReviewFindings(input: {
                 signalLabel: item.label,
                 signalValue: item.value
               })
-          : /privacy\.gpc_signal_not_honored/i.test(item.key)
-            ? {
-                gpcVerification:
-                  input.runtimeArtifacts?.gpc_verification && typeof input.runtimeArtifacts.gpc_verification === "object"
-                    ? input.runtimeArtifacts.gpc_verification
-                    : null,
-                signalKey: item.key,
-                signalLabel: item.label,
-                signalValue: item.value,
-                sourceUrls:
-                  input.runtimeArtifacts?.gpc_verification &&
-                  typeof input.runtimeArtifacts.gpc_verification === "object" &&
-                  Array.isArray((input.runtimeArtifacts.gpc_verification as { evidenceUrls?: unknown }).evidenceUrls)
-                    ? ((input.runtimeArtifacts.gpc_verification as { evidenceUrls: string[] }).evidenceUrls)
-                    : []
-              }
-            : /privacy\.weak_cookie_security_attributes_detected/i.test(item.key)
+          : /privacy\.weak_cookie_security_attributes_detected/i.test(item.key)
               ? {
                   cookieAttributeSummary:
                     input.runtimeArtifacts?.cookie_attribute_summary && typeof input.runtimeArtifacts.cookie_attribute_summary === "object"
@@ -2644,9 +2624,6 @@ function getSignalFindingSeverity(key: string, value: unknown): CanonicalReviewF
   }
   if (/popup_behavior|autoplay_media|overlay_blocking/i.test(key)) {
     return "medium";
-  }
-  if (/gpc_signal_not_honored/i.test(key)) {
-    return "high";
   }
   if (/privacy_policy_(surface_missing|fetch_failed)/i.test(key)) {
     return "high";

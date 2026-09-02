@@ -1,5 +1,8 @@
 import { SendMessageCommand, SQSClient } from "@aws-sdk/client-sqs";
-import { buildPostActionObservationDispatchConfigs } from "@certscore/contracts";
+import {
+  GPC_OBSERVATION_DISPATCH_CONTRACT_VERSION,
+  buildPostActionObservationDispatchConfigs,
+} from "@certscore/contracts";
 import { query, withWriteTransaction } from "@website-signal-risk-scanner/db";
 import { isFreshPriorScanAccelerationSource } from "@website-signal-risk-scanner/shared";
 import { randomUUID } from "node:crypto";
@@ -113,6 +116,17 @@ export function buildDurableLocalV2DagLambdaDispatchPayload(input: {
     scanId: input.scanId,
     targetUrl,
   });
+  const gpcObservation = intent.gpcObservationRequested === true
+    ? {
+        contractVersion: GPC_OBSERVATION_DISPATCH_CONTRACT_VERSION,
+        enabled: true as const,
+        pairWithLane: "runtime_evidence" as const,
+        protocol: "passive_baseline_with_sec_gpc" as const,
+      }
+    : undefined;
+  if (gpcObservation && intent.orchestrationMode !== "sharded") {
+    throw new Error("Durable GPC observation dispatch requires sharded Lambda orchestration.");
+  }
   if (intent.contractVersion !== DISPATCH_CONTRACT_VERSION || intent.processor !== PROCESSOR) {
     throw new Error("Durable Lambda dispatch intent has an unsupported contract or processor.");
   }
@@ -137,6 +151,7 @@ export function buildDurableLocalV2DagLambdaDispatchPayload(input: {
     processor: PROCESSOR,
     ...(seeds.length > 0 ? { policySurfaceSeeds: seeds } : {}),
     ...postActionObservation,
+    ...(gpcObservation ? { gpcObservation } : {}),
     productionFindingIntegration: false as const,
     profile: parallel.profile === "tiny" || input.scanConfig.profile === "tiny" ? "tiny" as const : "standard" as const,
     resultHandoff: "sqs" as const,

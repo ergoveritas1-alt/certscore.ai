@@ -11,7 +11,7 @@ const LEGAL_REVIEW_DISCLAIMER = "CertScore results are automated public-web obse
 const SCAN_PROVENANCE_GROUNDING = "retrievalMode describes how the current tool response obtained the scan; creationDecision describes whether the original scan request created or reused a scan only when that decision is retained. Never infer an unknown creationDecision from scan_id_lookup. For a reused or retrieved existing scan, use only persisted scanFrom and timestamps. Never infer its original scan region from the current request, the user's location, or a default execution region. If persisted region or timestamps are unavailable, report them as unavailable.";
 const INTERPRETATION_STATEMENT = "The CertScore score covers observable public-web scan signals only. Do not infer technologies that are not listed in the returned evidence or any legal compliance status.";
 const SCAN_BUNDLE_RESPONSE_CONTRACT = `Response contract: Report only observed CertScore evidence and CertScore classifications. criticality, priority, and confidence are CertScore metadata; regulatory review lenses are non-determinative CertScore review context—not legal severity, legal exposure, or a compliance determination. Absence of captured consent-action evidence does not establish what happens after Accept, Reject, or Decline. A confirmed post-action observation with termination.kind=evidence_satisfied means the observer intentionally stopped after retaining qualifying evidence; do not treat that termination as uncertainty about the returned observation. Keep any separately returned coverage limitation scoped to what was not measured. Do not extrapolate an observed embed, vendor, or request into unobserved cookies, fingerprinting, tracking, or processing, and do not infer violations or compliance beyond what CertScore observed. ${SCAN_PROVENANCE_GROUNDING}`;
-const SCAN_BUNDLE_INTERPRETATION_STATEMENT = "Report only observed CertScore evidence and persisted CertScore classifications. Without corresponding captured post-action evidence, do not infer what Accept, Reject, Decline, or another consent action would do; say the scan does not establish what happens after that action. When postAcceptObservation or postRefusalObservation is confirmed and termination.kind is evidence_satisfied, state the returned observation directly and explain that observation stopped intentionally after qualifying evidence was retained. Do not characterize that termination as uncertainty about the observation; mention unmeasured longer-term persistence only when relevant. Treat post-Accept activity as a score-neutral behavior baseline unless a separately projected finding says otherwise. Do not speculate that an observed embed, vendor, or request may cause additional cookies, fingerprinting, tracking, or processing unless CertScore observed that behavior. Treat returned priority or severity as a CertScore classification, not regulatory criticality or legal exposure; prefer ‘observed privacy risk signal’ or ‘CertScore finding’. Do not infer unobserved technologies, legal compliance, or a legal violation from scores or findings.";
+const SCAN_BUNDLE_INTERPRETATION_STATEMENT = "Report only observed CertScore evidence and persisted CertScore classifications. For gpcResponse, use only GPC response, No observable GPC response, or indeterminate; do not call the result a GPC violation or say GPC was not honored. Keep its jurisdiction-neutral comparison separate from any explicitly returned California scoring policy. Without corresponding captured post-action evidence, do not infer what Accept, Reject, Decline, or another consent action would do; say the scan does not establish what happens after that action. When postAcceptObservation or postRefusalObservation is confirmed and termination.kind is evidence_satisfied, state the returned observation directly and explain that observation stopped intentionally after qualifying evidence was retained. Do not characterize that termination as uncertainty about the observation; mention unmeasured longer-term persistence only when relevant. Treat post-Accept activity as a score-neutral behavior baseline unless a separately projected finding says otherwise. Do not speculate that an observed embed, vendor, or request may cause additional cookies, fingerprinting, tracking, or processing unless CertScore observed that behavior. Treat returned priority or severity as a CertScore classification, not regulatory criticality or legal exposure; prefer ‘observed privacy risk signal’ or ‘CertScore finding’. Do not infer unobserved technologies, legal compliance, or a legal violation from scores or findings.";
 const COMPACT_SCAN_BUNDLE_INTERPRETATION_STATEMENT = "Use only returned CertScore observations and classifications. Do not infer unobserved technologies, post-consent behavior, legal compliance, or violations. Treat priority and severity as CertScore metadata.";
 const OBSERVATION_ONLY_DISCLAIMER = `${LEGAL_REVIEW_DISCLAIMER} No-go, not-observed, and limited-coverage results are not proof of compliance.`;
 const COMPACT_OBSERVATION_ONLY_DISCLAIMER = "Automated public-web observation, not legal advice or a compliance determination; missing or limited evidence is not proof of compliance.";
@@ -1100,7 +1100,7 @@ export function scanStatusText(value: Record<string, any>) {
     : "Review the returned status and retained limitations.";
   return boundedPreviewResultText([
     `CertScore scan status: status=${value.status ?? "unknown"}.`,
-  ], preConsentPreviewTextLines(value), [
+  ], [...preConsentPreviewTextLines(value), ...terminalLaneResultTextLines(value)], [
     `Next: ${nextAction}`,
     canonicalScanProvenanceText(value),
     `Full report: ${reportUrl ?? "not available"}.`,
@@ -1120,13 +1120,32 @@ export function scanSiteText(value: Record<string, any>, leadingLines: string[] 
       : "Review the returned result and retained limitations.";
   return boundedPreviewResultText([...leadingLines,
     `CertScore scan accepted: scanId=${scanId}; status=${value.status ?? "unknown"}.`,
-  ], preConsentPreviewTextLines(value), [
+  ], [...preConsentPreviewTextLines(value), ...terminalLaneResultTextLines(value)], [
     `Next: ${nextAction}`,
     `Provenance: retrieval=${value.provenance?.retrievalMode ?? "unknown"}; creation=${value.provenance?.creationDecision ?? "unknown"}.`,
     canonicalScanProvenanceText(value),
     OBSERVATION_ONLY_DISCLAIMER,
     INTERPRETATION_STATEMENT,
   ]);
+}
+
+function terminalLaneResultTextLines(value: Record<string, any>) {
+  const lines: string[] = [];
+  const gpcResponse = value.gpcResponse && typeof value.gpcResponse === "object" && !Array.isArray(value.gpcResponse)
+    ? value.gpcResponse as Record<string, any>
+    : null;
+  if (gpcResponse) {
+    lines.push(`GPC response: ${gpcResponse.findingTitle ?? "GPC response"}; status=${gpcResponse.status ?? "indeterminate"}; Sec-GPC: 1 proof retained on ${gpcResponse.comparison?.enabledProof?.requestsWithSecGpc ?? 0} request(s).`);
+  }
+  for (const [field, label] of [["postAcceptObservation", "Accept Path"], ["postRefusalObservation", "Reject Path"]] as const) {
+    const observation = value[field] && typeof value[field] === "object" && !Array.isArray(value[field])
+      ? value[field] as Record<string, unknown>
+      : null;
+    if (observation && typeof observation.interpretation === "string") {
+      lines.push(`${label}: ${observation.interpretation}`);
+    }
+  }
+  return lines;
 }
 
 function compactPreviewValue(value: unknown, fallback = "unknown", maxChars = 280) {
@@ -1349,6 +1368,17 @@ export function scanBundleText(bundle: Record<string, any>) {
     : null;
   if (coverage) {
     append(`Coverage: status=${coverage.status ?? "unknown"}; ${coverage.summary ?? "Review limitations before interpreting absence."}`);
+  }
+  const gpcResponse = bundle.gpcResponse && typeof bundle.gpcResponse === "object" && !Array.isArray(bundle.gpcResponse)
+    ? bundle.gpcResponse as Record<string, any>
+    : null;
+  if (gpcResponse) {
+    const proof = gpcResponse.comparison?.enabledProof;
+    const californiaPolicy = gpcResponse.californiaPolicy;
+    append(`GPC response: ${gpcResponse.findingTitle ?? "GPC response"}; status=${gpcResponse.status ?? "indeterminate"}; Sec-GPC: 1 proof retained on ${proof?.requestsWithSecGpc ?? 0} request(s).`);
+    if (californiaPolicy?.applied === true && californiaPolicy.deductionPoints === 15) {
+      append("California scoring policy: −15 points. This score effect is separate from the jurisdiction-neutral GPC comparison.");
+    }
   }
   const postAccept = bundle.postAcceptObservation && typeof bundle.postAcceptObservation === "object" && !Array.isArray(bundle.postAcceptObservation)
     ? bundle.postAcceptObservation as Record<string, any>
@@ -1584,6 +1614,7 @@ export function buildScanBundle(input: {
     scoreVersion: input.scan.scoreVersion ?? null,
     scoreUpdatedAt: input.scan.scoreUpdatedAt ?? null,
     riskLevel: input.scan.riskLevel ?? null,
+    ...(input.scan.gpcResponse ? { gpcResponse: input.scan.gpcResponse } : {}),
     postAcceptObservation: input.scan.postAcceptObservation ?? null,
     postRefusalObservation: input.scan.postRefusalObservation ?? null,
     provenance: scanProvenance(input.scan as unknown as Record<string, any>, "existing_scan_retrieved"),
@@ -1845,6 +1876,7 @@ export function buildScanBundle(input: {
       scoreVersion: bundle.scoreVersion,
       scoreUpdatedAt: bundle.scoreUpdatedAt,
       riskLevel: bundle.riskLevel,
+      ...(bundle.gpcResponse ? { gpcResponse: bundle.gpcResponse } : {}),
       postAcceptObservation: bundle.postAcceptObservation,
       postRefusalObservation: bundle.postRefusalObservation,
       provenance: bundle.provenance,

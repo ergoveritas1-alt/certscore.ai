@@ -41,6 +41,8 @@ type ScanFromSelectProps = {
   compact?: boolean;
   freshRescanName?: string;
   freshRescanValue?: boolean;
+  gpcObservationName?: string;
+  gpcObservationValue?: boolean;
   id?: string;
   includeLocalV2ScanProfileOption?: boolean;
   name?: string;
@@ -53,6 +55,7 @@ type ScanFromSelectProps = {
   includeScanFromOptions?: boolean;
   onChange?: (value: ScanFrom) => void;
   onFreshRescanChange?: (value: boolean) => void;
+  onGpcObservationChange?: (value: boolean) => void;
   onLocalV2ScanProfileChange?: (value: LocalV2ScanProfile) => void;
   onLocalV2RunViaLambdaChange?: (value: boolean) => void;
   variant?: "field" | "icon";
@@ -81,6 +84,8 @@ export function ScanFromSelect({
   compact = false,
   freshRescanName = "forceNewScan",
   freshRescanValue,
+  gpcObservationName = "gpcObservation",
+  gpcObservationValue,
   id = "scanFrom",
   includeLocalV2ScanProfileOption = false,
   includeFreshRescanOption = false,
@@ -92,6 +97,7 @@ export function ScanFromSelect({
   name = "scanFrom",
   onChange,
   onFreshRescanChange,
+  onGpcObservationChange,
   onLocalV2RunViaLambdaChange,
   variant = "field",
   value = "eu_ie"
@@ -100,6 +106,7 @@ export function ScanFromSelect({
   const [isMounted, setIsMounted] = useState(false);
   const [menuPosition, setMenuPosition] = useState<MenuPosition | null>(null);
   const [uncontrolledFreshRescan, setUncontrolledFreshRescan] = useState(false);
+  const [uncontrolledGpcObservation, setUncontrolledGpcObservation] = useState(false);
   const [uncontrolledLocalV2RunViaLambda, setUncontrolledLocalV2RunViaLambda] = useState(true);
   const buttonRef = useRef<HTMLButtonElement>(null);
   const menuRef = useRef<HTMLDivElement>(null);
@@ -117,12 +124,16 @@ export function ScanFromSelect({
     SCAN_FROM_OPTIONS[0];
   const selectedValue = selectedOption.value;
   const freshRescan = freshRescanValue ?? uncontrolledFreshRescan;
+  const gpcObservation = allowRestrictedScanOptions
+    ? (gpcObservationValue ?? uncontrolledGpcObservation)
+    : false;
   const localV2RunViaLambda = allowRestrictedScanOptions
     ? (localV2RunViaLambdaValue ?? uncontrolledLocalV2RunViaLambda)
     : true;
   const showLocalV2RunViaLambdaOption =
     process.env.NODE_ENV !== "production" && includeLocalV2ScanProfileOption && allowRestrictedScanOptions;
-  const hasVisibleMenuContent = includeScanFromOptions || includeFreshRescanOption || showLocalV2RunViaLambdaOption;
+  const showGpcObservationOption = includeLocalV2ScanProfileOption && allowRestrictedScanOptions;
+  const hasVisibleMenuContent = includeScanFromOptions || includeFreshRescanOption || showGpcObservationOption || showLocalV2RunViaLambdaOption;
 
   useEffect(() => {
     setIsMounted(true);
@@ -192,7 +203,7 @@ export function ScanFromSelect({
       window.removeEventListener("resize", updateMenuPosition);
       window.removeEventListener("scroll", updateMenuPosition, true);
     };
-  }, [includeFreshRescanOption, includeScanFromOptions, isOpen, showLocalV2RunViaLambdaOption, variant]);
+  }, [includeFreshRescanOption, includeScanFromOptions, isOpen, showGpcObservationOption, showLocalV2RunViaLambdaOption, variant]);
 
   function selectScanFrom(nextValue: ScanFrom) {
     onChange?.(nextValue);
@@ -204,6 +215,13 @@ export function ScanFromSelect({
       setUncontrolledFreshRescan(nextValue);
     }
     onFreshRescanChange?.(nextValue);
+  }
+
+  function setGpcObservation(nextValue: boolean) {
+    if (gpcObservationValue === undefined) {
+      setUncontrolledGpcObservation(nextValue);
+    }
+    onGpcObservationChange?.(nextValue);
   }
 
   function setLocalV2RunViaLambda(nextValue: boolean) {
@@ -232,6 +250,7 @@ export function ScanFromSelect({
         <input name={localV2RunViaLambdaName} type="hidden" value={localV2RunViaLambda ? "true" : "false"} />
       ) : null}
       {includeFreshRescanOption && freshRescan ? <input name={freshRescanName} type="hidden" value="true" /> : null}
+      {showGpcObservationOption ? <input name={gpcObservationName} type="hidden" value={gpcObservation ? "true" : "false"} /> : null}
       {variant === "field" ? (
         <span className={compact ? "shrink-0" : "block text-xs font-semibold uppercase tracking-[0.18em] text-slate-500"}>
           {includeScanFromOptions ? "Scan from" : "Scan options"}
@@ -301,7 +320,7 @@ export function ScanFromSelect({
                   </div>
                 </div>
               ) : null}
-              {includeFreshRescanOption || showLocalV2RunViaLambdaOption ? (
+              {includeFreshRescanOption || showGpcObservationOption || showLocalV2RunViaLambdaOption ? (
                 <div className={includeScanFromOptions ? "border-t border-slate-200/70 pt-1" : "pb-1"}>
                   <div className="px-3 pb-1.5 pt-1 text-[0.65rem] font-semibold uppercase tracking-[0.18em] text-slate-400">Options</div>
                   {showLocalV2RunViaLambdaOption ? (
@@ -328,6 +347,38 @@ export function ScanFromSelect({
                         <span
                           className={
                             localV2RunViaLambda
+                              ? "h-4 w-4 translate-x-4 rounded-full bg-white shadow-sm transition"
+                              : "h-4 w-4 translate-x-0.5 rounded-full bg-white shadow-sm transition"
+                          }
+                        />
+                      </span>
+                    </label>
+                  ) : null}
+                  {showGpcObservationOption ? (
+                    <label
+                      className="flex w-full cursor-pointer items-center justify-between gap-4 px-3 py-2.5 text-left transition hover:bg-slate-50"
+                      title="Run the separate passive GPC lane with Sec-GPC: 1 and compare it with the equivalent baseline lane."
+                    >
+                      <span className="min-w-0">
+                        <span className="block text-sm font-semibold text-slate-700">GPC comparison</span>
+                        <span className="block text-[0.68rem] leading-4 text-slate-500">Opt-in · adds one isolated Lambda lane</span>
+                      </span>
+                      <input
+                        checked={gpcObservation}
+                        className="sr-only"
+                        onChange={(event) => setGpcObservation(event.target.checked)}
+                        type="checkbox"
+                      />
+                      <span
+                        className={
+                          gpcObservation
+                            ? "relative inline-flex h-5 w-9 shrink-0 items-center rounded-full bg-sky-500 transition"
+                            : "relative inline-flex h-5 w-9 shrink-0 items-center rounded-full bg-slate-200 transition"
+                        }
+                      >
+                        <span
+                          className={
+                            gpcObservation
                               ? "h-4 w-4 translate-x-4 rounded-full bg-white shadow-sm transition"
                               : "h-4 w-4 translate-x-0.5 rounded-full bg-white shadow-sm transition"
                           }

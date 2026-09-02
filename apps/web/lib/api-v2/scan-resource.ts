@@ -27,6 +27,7 @@ import {
 import type { PulseResponse } from "@certscore/api-contracts";
 import { deriveChoicePathEvidenceDisposition } from "@certscore/contracts";
 import type { ScanDetailResponse } from "../../server/scans/get-scan-by-id";
+import { getPersistedCanonicalReportProjection } from "../../server/scans/persisted-canonical-report-projection";
 import { projectExternalScanNoGo } from "@website-signal-risk-scanner/shared";
 import { derivePulseReportScore } from "../pulse/projection";
 import {
@@ -35,7 +36,8 @@ import {
   isInventoryDisplayHostname,
   type InventoryGroupRow
 } from "../scans/runtime-inventory-projection";
-import { GDPR_EPRIVACY_EVIDENCE_SCORE_VERSION } from "../scans/regulatory-coverage-score";
+import { CANONICAL_OVERALL_SCORE_VERSION } from "../scans/california-gpc-response-policy";
+import { buildCanonicalGpcResponseProjection } from "../scans/gpc-response-projection";
 import { SITE_URL } from "../seo";
 
 function absoluteUrl(path: string) {
@@ -108,6 +110,7 @@ type PulseStatusLike = {
   noGo?: ScanNoGoResult;
   postAcceptObservation?: ApiV2ScanResource["postAcceptObservation"];
   postRefusalObservation?: ApiV2ScanResource["postRefusalObservation"];
+  gpcResponse?: ApiV2ScanResource["gpcResponse"];
   preConsentPreview?: ApiV2ScanJob["preConsentPreview"];
   error?: {
     code: string;
@@ -940,6 +943,47 @@ function deriveCoverage(scanRecord: ScanDetailResponse) {
   };
 }
 
+function deriveApiV2GpcResponse(scanRecord: ScanDetailResponse): ApiV2ScanResource["gpcResponse"] {
+  const canonical = getPersistedCanonicalReportProjection(scanRecord);
+  if (!canonical) {
+    return null;
+  }
+  const projection = buildCanonicalGpcResponseProjection(canonical.ownerUnifiedFindings);
+  if (!projection) {
+    return null;
+  }
+  const assessment = projection.assessment;
+  return {
+    status: assessment.status,
+    findingTitle: assessment.findingTitle,
+    summary: projection.summary,
+    scoreEffect: "none",
+    legalInterpretation: "not_assessed",
+    comparison: {
+      comparable: assessment.comparison.comparable,
+      protocol: assessment.comparison.protocol,
+      baselineArtifact: {
+        lane: assessment.comparison.baselineArtifact.lane,
+        sha256: assessment.comparison.baselineArtifact.sha256,
+        sizeBytes: assessment.comparison.baselineArtifact.sizeBytes,
+      },
+      gpcArtifact: {
+        lane: assessment.comparison.gpcArtifact.lane,
+        sha256: assessment.comparison.gpcArtifact.sha256,
+        sizeBytes: assessment.comparison.gpcArtifact.sizeBytes,
+      },
+      enabledProof: assessment.comparison.enabledProof,
+      deltas: assessment.comparison.deltas,
+      limitationKeys: assessment.comparison.limitationKeys,
+    },
+    californiaPolicy: {
+      applied: projection.californiaDeductionPoints === 15,
+      deductionPoints: projection.californiaDeductionPoints,
+    },
+    evidenceUrl: absoluteUrl(`/api/v2/scans/${scanRecord.scan.id}/findings/gpc_response`),
+  };
+}
+
 export function buildApiV2ScanResource(
   scanRecord: ScanDetailResponse,
   options: { requestedUrl?: string | null } = {}
@@ -951,8 +995,9 @@ export function buildApiV2ScanResource(
   const noGoProjection = projectExternalScanNoGo(scanRecord.runtimeArtifacts);
   const canonicalResultState = apiV2CanonicalResultState(scanRecord);
   const scoreStatus = canonicalResultState === "final" ? "final" : "provisional";
-  const scoreVersion = stringOrNull(scanRecord.snapshot?.score_version) ?? GDPR_EPRIVACY_EVIDENCE_SCORE_VERSION;
+  const scoreVersion = stringOrNull(scanRecord.snapshot?.score_version) ?? CANONICAL_OVERALL_SCORE_VERSION;
   const scoreUpdatedAt = dateStringOrNull(scanRecord.snapshot?.score_scored_at ?? scan.completedAt);
+  const gpcResponse = deriveApiV2GpcResponse(scanRecord);
   const postAcceptObservation = deriveApiV2PostAcceptObservation(scanRecord);
   const postRefusalObservation = deriveApiV2PostRefusalObservation(scanRecord);
   const configuredUrl = typeof scan.scanConfigJson?.normalizedUrl === "string"
@@ -984,6 +1029,7 @@ export function buildApiV2ScanResource(
     scoreVersion,
     scoreUpdatedAt,
     riskLevel: noGoProjection ? null : riskLevelFromScore(score),
+    gpcResponse,
     postAcceptObservation,
     postRefusalObservation,
     coverage: deriveCoverage(scanRecord),
@@ -1190,6 +1236,7 @@ export function buildApiV2ScanStatus(
     scoreVersion: canonicalScan.scoreVersion ?? null,
     scoreUpdatedAt: canonicalScan.scoreUpdatedAt ?? null,
     riskLevel: canonicalScan.riskLevel ?? null,
+    gpcResponse: canonicalScan.gpcResponse ?? null,
     postAcceptObservation: canonicalScan.postAcceptObservation ?? null,
     postRefusalObservation: canonicalScan.postRefusalObservation ?? null,
     coverage: canonicalScan.coverage ?? null,
@@ -1291,6 +1338,7 @@ export function buildApiV2ScanJobFromPulseStatus(
     scoreVersion: status.scoreVersion ?? null,
     scoreUpdatedAt: dateStringOrNull(status.scoreUpdatedAt),
     riskLevel: status.riskLevel ?? null,
+    gpcResponse: status.gpcResponse ?? null,
     postAcceptObservation: status.postAcceptObservation ?? null,
     postRefusalObservation: status.postRefusalObservation ?? null,
     coverage: status.coverage ?? null,

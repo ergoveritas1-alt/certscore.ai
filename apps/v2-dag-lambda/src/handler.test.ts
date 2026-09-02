@@ -196,6 +196,67 @@ test("sharded orchestration fans out exactly one consent, runtime, and policy ev
   ]);
 });
 
+test("GPC observation remains opt-in and binds its worker to the exact parent dispatch", async () => {
+  const ordinary = parseLocalV2DagLambdaDispatchPayload(validPayload({ orchestrationMode: "sharded" }));
+  assert.equal(ordinary.gpcObservation, undefined);
+  const parent = parseLocalV2DagLambdaDispatchPayload(validPayload({
+    gpcObservation: {
+      contractVersion: "certscore.gpc-observation-dispatch.v1",
+      enabled: true,
+      pairWithLane: "runtime_evidence",
+      protocol: "passive_baseline_with_sec_gpc",
+    },
+    orchestrationMode: "sharded",
+  }));
+  let dispatched: Record<string, unknown> | null = null;
+  await invokeLocalV2DagLambdaWorker({
+    parentPayload: parent,
+    parentScanId: parent.scanId,
+    workerLane: "gpc_observation",
+    lambdaClient: {
+      async send(command) {
+        dispatched = JSON.parse(Buffer.from(command.input.Payload ?? []).toString("utf8"));
+        return {
+          StatusCode: 200,
+          Payload: Buffer.from(JSON.stringify({
+            artifactPointers: { scanArtifactUri: "s3://test/gpc/CanonicalEvidenceBundle.json" },
+            parentDispatchSha256: postRefusalParentDispatchSha256(parent),
+            scanId: parent.scanId,
+            status: "completed",
+            workerLane: "gpc_observation",
+          })),
+        };
+      },
+    },
+  });
+  assert.equal(dispatched?.workerLane, "gpc_observation");
+  assert.equal(dispatched?.parentDispatchSha256, postRefusalParentDispatchSha256(parent));
+  assert.deepEqual(dispatched?.gpcObservation, parent.gpcObservation);
+  const terminal = buildLocalV2DagLambdaResultMessage({
+    completedAt: new Date("2026-08-20T12:00:00.000Z"),
+    payload: parseLocalV2DagLambdaDispatchPayload(dispatched),
+    status: "completed",
+  });
+  assert.equal(terminal.parentDispatchSha256, postRefusalParentDispatchSha256(parent));
+});
+
+test("GPC worker parsing fails closed without an explicit request and parent checksum", () => {
+  assert.throws(() => parseLocalV2DagLambdaDispatchPayload(validPayload({
+    orchestrationMode: "worker",
+    workerLane: "gpc_observation",
+  })), /explicit enabled GPC request/);
+  assert.throws(() => parseLocalV2DagLambdaDispatchPayload(validPayload({
+    gpcObservation: {
+      contractVersion: "certscore.gpc-observation-dispatch.v1",
+      enabled: true,
+      pairWithLane: "runtime_evidence",
+      protocol: "passive_baseline_with_sec_gpc",
+    },
+    orchestrationMode: "worker",
+    workerLane: "gpc_observation",
+  })), /exact parent dispatch checksum/);
+});
+
 test("post-refusal dispatch is typed, exact-target authorized, and default off", () => {
   const payload = parseLocalV2DagLambdaDispatchPayload(validPayload({
     postRefusalObservation: {

@@ -2084,11 +2084,11 @@ export const REPORT_SIGNALS: ReportSignalDefinition[] = [
   ),
   defineReportSignal(
     "runtime_artifact_signal",
-    "privacy.gpc_signal_not_honored",
-    "GPC signal not honored",
-    "enforcement_outcomes_after_user_choice",
-    ["third_party_network_cookie_surface"],
-    ["consent_lawful_basis_user_choice", "sale_sharing_targeted_advertising_controls"]
+    "privacy.gpc_response",
+    "GPC response",
+    "third_party_network_cookie_surface",
+    [],
+    []
   ),
   defineReportSignal(
     "runtime_artifact_signal",
@@ -3016,13 +3016,11 @@ export const REPORT_UNIFIED_FINDINGS = [
     aliases: ["Reject interaction did not reduce third-party cookies"]
   }),
   defineReportUnifiedFinding({
-    id: "gpc_signal_not_honored",
-    label: "GPC signal not honored",
-    owner: "enforcement_outcomes_after_user_choice",
-    mirrors: ["third_party_network_cookie_surface"],
-    overlays: ["consent_lawful_basis_user_choice", "sale_sharing_targeted_advertising_controls"],
-    signalMappings: [{ source: "runtime_artifact_signal", key: "privacy.gpc_signal_not_honored" }],
-    aliases: ["Global Privacy Control signal not honored", "GPC signal ignored"]
+    id: "gpc_response",
+    label: "GPC response",
+    owner: "third_party_network_cookie_surface",
+    signalMappings: [{ source: "runtime_artifact_signal", key: "privacy.gpc_response" }],
+    aliases: ["No observable GPC response"]
   }),
   defineReportUnifiedFinding({
     id: "gpc_disclosure_present",

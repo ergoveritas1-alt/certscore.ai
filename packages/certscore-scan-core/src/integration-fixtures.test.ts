@@ -676,7 +676,7 @@ test("pre-consent runtime scanner retains canonical rendered policy links from t
   }
 });
 
-test("runtime-evidence scanner emits one metadata-only passive preview checkpoint without ending capture", async () => {
+test("runtime-evidence scanner emits one metadata-only preview even when capture finishes before the scheduled checkpoint", async () => {
   const server = await startStaticFixtureServer();
   const tempRoot = await mkdtemp(path.join(tmpdir(), "certscore-v2-runtime-preview-checkpoint-"));
   try {
@@ -699,7 +699,7 @@ test("runtime-evidence scanner emits one metadata-only passive preview checkpoin
 
     assert.equal(PRE_CONSENT_RUNTIME_PREVIEW_CHECKPOINT_MS, 6_000);
     assert.equal(checkpoints.length, 1);
-    assert.ok(checkpoints[0]!.observedAtMs >= 700);
+    assert.ok(checkpoints[0]!.observedAtMs > 0);
     assert.equal(
       checkpoints[0]!.cookieSnapshots.some((snapshot) =>
         snapshot.cookies.some((cookie) => cookie.name === "_ga")

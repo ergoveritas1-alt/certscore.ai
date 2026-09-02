@@ -17,7 +17,11 @@ import {
   buildScanReportUnifiedFindings as buildScanReportUnifiedFindingsFromState,
   debugBuildScanReportUnifiedFindingStateForScan
 } from "../../lib/scans/scan-report-unified-findings";
-import { deriveCanonicalOverallScoreForReport } from "./canonical-overall-score";
+import {
+  CANONICAL_OVERALL_SCORE_SOURCE,
+  CANONICAL_OVERALL_SCORE_VERSION,
+  deriveCanonicalOverallScoreForReport,
+} from "./canonical-overall-score";
 import { deriveSharedScanDetailGdprEprivacyCoverageChecklist } from "./scan-detail-checklist";
 import { buildRuntimeCookieInventory } from "../../lib/scans/runtime-cookie-evidence";
 import { deriveCertScoreFindings } from "../../lib/scans/derive-findings";
@@ -733,8 +737,8 @@ async function deriveScanReportProjection(
     egressId,
     egressProvider,
     durationMs: numberValue(scanRecord.scan.durationMs),
-    scoreSource: canonicalScore === null ? (score === null ? null : "legacy.scan_snapshot") : "canonical.gdpr_eprivacy",
-    scoreVersion: canonicalScore === null ? null : GDPR_EPRIVACY_EVIDENCE_SCORE_VERSION,
+    scoreSource: canonicalScore === null ? (score === null ? null : "legacy.scan_snapshot") : CANONICAL_OVERALL_SCORE_SOURCE,
+    scoreVersion: canonicalScore === null ? null : CANONICAL_OVERALL_SCORE_VERSION,
     scoreScoredAt: scanRecord.scan.completedAt
   };
   if (!scanRecord.scan.completedAt) {

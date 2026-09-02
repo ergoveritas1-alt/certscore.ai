@@ -88,6 +88,7 @@ type QueueFullScanInput = {
     };
   };
   domainId: string;
+  gpcObservationRequested?: boolean;
   bypassRecentScanReuse?: boolean;
   localV2DagLambdaDebugOverrides?: import("./local-v2-dag-scan-config").LocalV2DagLambdaDebugOverrides | null;
   localV2DagScanProfile?: LocalV2DagScanProfile | null;
@@ -205,7 +206,7 @@ export async function queueFullScanForDomain(input: QueueFullScanInput): Promise
   }
 
   const pagesRequested = domainRecord.domain.maxPagesOverride ?? planLimits.maxPagesPerScan;
-  const bypassRecentScanReuse = Boolean(input.bypassRecentScanReuse);
+  const bypassRecentScanReuse = Boolean(input.bypassRecentScanReuse) || input.gpcObservationRequested === true;
   const requesterIpContext = normalizeScanRequesterIpContext(input.requesterIpContext);
 
   const logRequest = (details: {
@@ -236,6 +237,7 @@ export async function queueFullScanForDomain(input: QueueFullScanInput): Promise
         bypassRecentScanReuse,
         enforceCooldown: Boolean(input.enforceCooldown),
         enforceMonthlyUsageLimit: Boolean(input.enforceMonthlyUsageLimit),
+        gpcObservationRequested: input.gpcObservationRequested === true,
         ipHash: requesterIpContext.ipHash,
         planCode: input.planCode,
         provenance: input.provenance ?? null,
@@ -507,6 +509,7 @@ export async function queueFullScanForDomain(input: QueueFullScanInput): Promise
     return null;
   })]);
   const baseScanConfig = buildQueuedFullScanConfig({
+    gpcObservationRequested: input.gpcObservationRequested,
     hostname: domainRecord.domain.hostname,
     localV2DagLambdaDebugOverrides: input.localV2DagLambdaDebugOverrides,
     localV2DagScanProfile: input.localV2DagScanProfile,
@@ -731,6 +734,7 @@ export async function createFullScanAction(
     membershipRole: dashboardContext.membership.role,
     userEmail: dashboardContext.user.email
   });
+  const gpcObservationRequested = formData.get("gpcObservation") === "true" && allowRestrictedScanOptions;
   const scanFrom = restrictScanFromForUser({
     canUseRestrictedScanOptions: allowRestrictedScanOptions,
     scanFrom: normalizeScanFrom(formData.get("scanFrom"))
@@ -761,6 +765,7 @@ export async function createFullScanAction(
     submittedByUserId: dashboardContext.user.id,
     bypassRecentScanReuse: forceNewScan,
     enforceMonthlyUsageLimit: true,
+    gpcObservationRequested,
     localV2DagScanProfile,
     localV2DagRunViaLambda,
     requesterIpContext,

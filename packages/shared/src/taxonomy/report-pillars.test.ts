@@ -402,8 +402,8 @@ test("maps signals and validation rules into unified findings", () => {
     "cookie_policy_unavailable"
   );
   assert.equal(
-    getReportUnifiedFindingForSignal("runtime_artifact_signal", "privacy.gpc_signal_not_honored")?.id,
-    "gpc_signal_not_honored"
+    getReportUnifiedFindingForSignal("runtime_artifact_signal", "privacy.gpc_response")?.id,
+    "gpc_response"
   );
   assert.equal(
     getReportUnifiedFindingForSignal("runtime_artifact_signal", "privacy.cpra_cba_opt_out_missing")?.id,
@@ -617,7 +617,6 @@ test("maps CCPA/CPRA/CIPA-relevant privacy findings into the California regulato
     "children_privacy_disclosure_present",
     "fingerprinting_observed",
     "blocking_overlay_observed",
-    "gpc_signal_not_honored",
     "cpra_cba_opt_out_missing"
   ];
 

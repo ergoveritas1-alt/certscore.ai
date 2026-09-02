@@ -5,7 +5,9 @@ import {
   type SharedScanConfig,
 } from "@website-signal-risk-scanner/shared";
 import {
+  GPC_OBSERVATION_DISPATCH_CONTRACT_VERSION,
   buildPostActionObservationDispatchConfigs,
+  type GpcObservationDispatchConfig,
   type PostAcceptLambdaDispatchConfig,
   type PostRefusalLambdaDispatchConfig,
 } from "@certscore/contracts";
@@ -56,6 +58,7 @@ export type LocalV2DagLambdaDispatchPayload = {
   >>;
   postAcceptObservation?: PostAcceptLambdaDispatchConfig;
   postRefusalObservation?: PostRefusalLambdaDispatchConfig;
+  gpcObservation?: GpcObservationDispatchConfig;
 };
 
 const MAX_POLICY_SURFACE_SEEDS = 12;
@@ -157,7 +160,7 @@ export type LocalV2DagLambdaLaneTimingSummary = {
     coordinatorElapsedMs: number | null;
     evidenceJoined: boolean;
     invocationStartedAt: string | null;
-    lane: "consent_proof" | "runtime_evidence" | "policy_evidence" | "accept_observation" | "reject_observation";
+    lane: "consent_proof" | "runtime_evidence" | "policy_evidence" | "gpc_observation" | "accept_observation" | "reject_observation";
     outcome: "completed" | "disabled" | "failed" | "not_applicable" | "timed_out";
     terminalOutcomeDeltaFromPassiveBarrierMs: number | null;
     terminalOutcomeObservedAt: string | null;
@@ -424,6 +427,17 @@ export function buildLocalV2DagLambdaDispatchPayload(input: {
     scanId: input.scanId,
     targetUrl,
   });
+  const gpcObservation = intent.gpcObservationRequested === true
+    ? {
+        contractVersion: GPC_OBSERVATION_DISPATCH_CONTRACT_VERSION,
+        enabled: true,
+        pairWithLane: "runtime_evidence",
+        protocol: "passive_baseline_with_sec_gpc",
+      } satisfies GpcObservationDispatchConfig
+    : undefined;
+  if (gpcObservation && intent.orchestrationMode !== "sharded") {
+    throw new Error("GPC observation dispatch requires sharded Lambda orchestration.");
+  }
 
   return {
     artifactOnly: true,
@@ -440,6 +454,7 @@ export function buildLocalV2DagLambdaDispatchPayload(input: {
     processor: LOCAL_V2_DAG_SCAN_PROCESSOR,
     ...(policySurfaceSeeds.length > 0 ? { policySurfaceSeeds } : {}),
     ...postActionObservation,
+    ...(gpcObservation ? { gpcObservation } : {}),
     productionFindingIntegration: false,
     profile: getProfile(config),
     resultHandoff: "sqs",
@@ -741,7 +756,7 @@ function parseLaneTimingSummary(value: unknown): LocalV2DagLambdaLaneTimingSumma
       rejectLaneJoin !== "timed_out") ||
     !Array.isArray(record.lanes)
   ) return undefined;
-  const validLanes = new Set(["consent_proof", "runtime_evidence", "policy_evidence", "accept_observation", "reject_observation"]);
+  const validLanes = new Set(["consent_proof", "runtime_evidence", "policy_evidence", "gpc_observation", "accept_observation", "reject_observation"]);
   const validOutcomes = new Set(["completed", "disabled", "failed", "not_applicable", "timed_out"]);
   const lanes = record.lanes.flatMap((value) => {
     const laneRecord = asRecord(value);

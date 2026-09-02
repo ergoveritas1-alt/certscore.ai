@@ -40,6 +40,80 @@ function makeValidationFinding(
   };
 }
 
+function gpcAssessment(status: "responsive" | "no_observable_response" | "indeterminate") {
+  const delta = {
+    baselineCount: 1,
+    gpcCount: status === "responsive" ? 0 : 1,
+    countDelta: status === "responsive" ? -1 : 0,
+    baselineOnly: status === "responsive" ? ["Example Ads|pixel|advertising"] : [],
+    gpcOnly: [],
+    shared: status === "responsive" ? [] : ["Example Ads|pixel|advertising"],
+  };
+  return {
+    contractVersion: "certscore.gpc-response-assessment.v1",
+    generatedAt: "2026-08-20T12:00:00.000Z",
+    status,
+    findingTitle: status === "no_observable_response" ? "No observable GPC response" : "GPC response",
+    scoreEffect: "none",
+    legalInterpretation: "not_assessed",
+    comparison: {
+      comparable: status !== "indeterminate",
+      protocol: "passive_baseline_with_sec_gpc",
+      baselineArtifact: { lane: "runtime_evidence", sha256: "a".repeat(64), sizeBytes: 100, uri: "s3://evidence/baseline.json" },
+      gpcArtifact: { lane: "gpc_observation", sha256: "b".repeat(64), sizeBytes: 100, uri: "s3://evidence/gpc.json" },
+      enabledProof: {
+        secGpcHeaderValue: "1",
+        requestsWithSecGpc: status === "indeterminate" ? 0 : 2,
+        requestEventIds: status === "indeterminate" ? [] : ["gpc-request-1", "gpc-request-2"],
+        navigatorGlobalPrivacyControl: true,
+      },
+      deltas: {
+        cookies: { ...delta, baselineOnly: [], shared: ["session@example.com@/"] },
+        trackers: { ...delta, baselineOnly: [], shared: ["Example Analytics|Example Analytics|analytics"] },
+        advertisingOrMeasurementActivity: delta,
+        consentOrCmpBehavior: { ...delta, baselineOnly: [], shared: ["vendor:Example CMP|cmp"] },
+      },
+      evidenceRefs: ["s3://evidence/baseline.json", "s3://evidence/gpc.json"],
+      limitationKeys: status === "indeterminate" ? ["sec_gpc_header_not_retained"] : [],
+    },
+  };
+}
+
+test("projects one neutral GPC finding and attaches only the qualified California deduction", () => {
+  for (const status of ["responsive", "no_observable_response", "indeterminate"] as const) {
+    const packets = buildUnifiedFindingPackets({
+      reviewFindingCandidates: [],
+      runtimeArtifacts: { gpcResponseAssessment: gpcAssessment(status) },
+      validationFindings: [],
+    });
+    const gpcPackets = packets.filter((packet) => packet.unifiedFindingId === "gpc_response");
+    assert.equal(gpcPackets.length, 1, status);
+    const packet = gpcPackets[0];
+    assert.ok(packet);
+    assert.equal(
+      packet.title,
+      status === "no_observable_response" ? "No observable GPC response" : "GPC response",
+    );
+    assert.equal(packet.evidence?.flags?.includes("score_effect:none") ?? false, false);
+    assert.equal(packet.scoreEffects?.[0]?.deductionPoints ?? 0, status === "no_observable_response" ? 15 : 0);
+    assert.equal(packet.scoreEffects?.[0]?.framework ?? null, status === "no_observable_response" ? "california" : null);
+    assert.equal(packet.details?.family, "privacy_signal");
+    assert.equal(
+      packet.details?.family === "privacy_signal"
+        ? packet.details.assessment.comparison.enabledProof.secGpcHeaderValue
+        : null,
+      "1",
+    );
+    assert.deepEqual(
+      packet.details?.family === "privacy_signal"
+        ? packet.details.assessment.comparison.deltas.advertisingOrMeasurementActivity
+        : null,
+      gpcAssessment(status).comparison.deltas.advertisingOrMeasurementActivity,
+    );
+    assert.doesNotMatch(JSON.stringify(packet), /violation|not honored|ignored/i);
+  }
+});
+
 test("collapses signal, issue, and validation sources into one unified finding packet", () => {
   const linkedValidation = makeValidationFinding({
     id: "val-1",
@@ -1039,8 +1113,8 @@ test("surfaces children-privacy unified findings from finding-family packets", (
   assert.ok(packet?.evidence?.snippets?.includes("We do not knowingly collect personal information from children under 13."));
 });
 
-test("surfaces GPC failures from runtime privacy family packets", () => {
-  const [packet] = buildUnifiedFindingDisplayPackets({
+test("does not promote legacy GPC ignored family packets around the typed assessment path", () => {
+  const packets = buildUnifiedFindingDisplayPackets({
     reviewFindingCandidates: [],
     scanEvents: [
       {
@@ -1081,12 +1155,7 @@ test("surfaces GPC failures from runtime privacy family packets", () => {
     validationFindingLookup: new Map()
   });
 
-  assert.equal(packet?.unifiedFindingId, "gpc_signal_not_honored");
-  assert.equal(packet?.confidenceInputs.hasDirectRuntimeEvidence, true);
-  assert.equal(packet?.presentationDecision.status, "audit_only");
-  assert.deepEqual(packet?.evidence?.sourceUrls, []);
-  assert.deepEqual(packet?.evidence?.entities?.runtimeRequestUrls, ["https://example.com/collect"]);
-  assert.equal(packet?.evidence?.counts?.gpcTrackerCount, 3);
+  assert.equal(packets.some((packet) => /gpc/i.test(packet.unifiedFindingId)), false);
 });
 
 test("surfaces support-access unified findings from finding-family packets", () => {
@@ -3194,8 +3263,8 @@ test("keeps page-specific findings in audit only when page attribution is still 
   assert.match(packet?.presentationDecision.rationale ?? "", /contradiction findings are main-narrative candidates/i);
 });
 
-test("surfaces GPC failures as runtime-backed unified findings", () => {
-  const [packet] = buildUnifiedFindingDisplayPackets({
+test("does not promote legacy GPC ignored signals around the typed assessment path", () => {
+  const packets = buildUnifiedFindingDisplayPackets({
     reviewFindingCandidates: [
       {
         description: "A browser-level opt-out preference signal appears not to have been honored during the scan.",
@@ -3228,10 +3297,7 @@ test("surfaces GPC failures as runtime-backed unified findings", () => {
     validationFindingLookup: new Map()
   });
 
-  assert.equal(packet?.unifiedFindingId, "gpc_signal_not_honored");
-  assert.equal(packet?.confidenceInputs.hasDirectRuntimeEvidence, true);
-  assert.equal(packet?.presentationDecision.status, "audit_only");
-  assert.match(packet?.presentation.suggestedFix ?? "", /browser-level opt-out/i);
+  assert.equal(packets.some((packet) => /gpc/i.test(packet.unifiedFindingId)), false);
 });
 
 test("surfaces accept-only consent UI when retained DOM labels satisfy the evidence contract", () => {

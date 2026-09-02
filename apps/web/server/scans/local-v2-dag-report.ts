@@ -5923,6 +5923,7 @@ function buildMaterializedLocalV2Detail(
     ...timingArtifacts,
     ...postRefusalRuntimeProjection,
     ...postAcceptRuntimeProjection,
+    ...buildGpcResponseRuntimeProjection(bundle),
     scanLaneRuns: bundle.scanLaneRuns,
     local_v2_dag_scan_core_duration_ms: durationMsFromTimestamps(bundle.startedAt, bundle.completedAt),
     wc01ProductionProjection: {
@@ -5935,6 +5936,7 @@ function buildMaterializedLocalV2Detail(
         "gdpr_transparency_observed_topics",
         "post_accept_review",
         "post_refusal_enforcement",
+        ...(bundle.gpcResponseAssessment ? ["gpc_response"] : []),
       ],
       source: "verified_canonical_evidence_bundle",
       version: LOCAL_V2_DAG_WC01_PROJECTION_VERSION
@@ -6352,11 +6354,22 @@ function buildMaterializedLocalV2Detail(
   };
 }
 
+export function buildGpcResponseRuntimeProjection(
+  bundle: Pick<CanonicalEvidenceBundle, "gpcResponseAssessment">,
+) {
+  return bundle.gpcResponseAssessment
+    ? {
+        gpcResponseAssessment: bundle.gpcResponseAssessment,
+        gpc_response_assessment: bundle.gpcResponseAssessment,
+      }
+    : {};
+}
+
 // Bump whenever materialization semantics change. This cache contains the
 // fully derived report detail, so retaining an older entry can cause a
 // projection repair to persist stale evidence even after the projector is
 // deployed.
-const LOCAL_V2_DAG_REPORT_MATERIALIZATION_CACHE_VERSION = "local-v2-report-materialization-v11";
+const LOCAL_V2_DAG_REPORT_MATERIALIZATION_CACHE_VERSION = "local-v2-report-materialization-v12";
 const LOCAL_V2_DAG_REPORT_MATERIALIZATION_CACHE_TTL_MS = 60 * 60 * 1_000;
 const LOCAL_V2_DAG_REPORT_MATERIALIZATION_CACHE_MAX_ENTRIES = 6;
 const localV2DagReportMaterializationCache = new BoundedPromiseCache<string, ScanDetailResponse>({

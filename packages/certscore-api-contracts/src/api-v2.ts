@@ -9,7 +9,7 @@ export function isCanonicalScanId(value: unknown): value is string {
 }
 
 export const CERTSCORE_API_V2_VERSION = "v2";
-export const CERTSCORE_API_V2_SCHEMA_VERSION = "0.1.11";
+export const CERTSCORE_API_V2_SCHEMA_VERSION = "0.1.12";
 
 export const apiV2Disclaimer =
   "CertScore outputs are automated public-web observations for human and agentic review. They are not legal advice, certification, or a compliance determination.";
@@ -103,6 +103,61 @@ export const apiV2PostAcceptObservationSchema = z.object({
   /** @deprecated Use coverageLimitations. Retained for API compatibility. */
   limitations: z.array(z.string()).max(24),
 }).strict();
+export const apiV2GpcComparisonDeltaSchema = z.object({
+  baselineCount: z.number().int().nonnegative(),
+  gpcCount: z.number().int().nonnegative(),
+  countDelta: z.number().int(),
+  baselineOnly: z.array(z.string().min(1).max(500)).max(100),
+  gpcOnly: z.array(z.string().min(1).max(500)).max(100),
+  shared: z.array(z.string().min(1).max(500)).max(100),
+}).strict();
+export const apiV2GpcResponseSchema = z.object({
+  status: z.enum(["responsive", "no_observable_response", "indeterminate"]),
+  findingTitle: z.enum(["GPC response", "No observable GPC response"]),
+  summary: z.string().min(1).max(2_000),
+  scoreEffect: z.literal("none"),
+  legalInterpretation: z.literal("not_assessed"),
+  comparison: z.object({
+    comparable: z.boolean(),
+    protocol: z.literal("passive_baseline_with_sec_gpc"),
+    baselineArtifact: z.object({
+      lane: z.literal("runtime_evidence"),
+      sha256: z.string().regex(/^[a-f0-9]{64}$/),
+      sizeBytes: z.number().int().nonnegative(),
+    }).strict(),
+    gpcArtifact: z.object({
+      lane: z.literal("gpc_observation"),
+      sha256: z.string().regex(/^[a-f0-9]{64}$/),
+      sizeBytes: z.number().int().nonnegative(),
+    }).strict(),
+    enabledProof: z.object({
+      secGpcHeaderValue: z.literal("1"),
+      requestsWithSecGpc: z.number().int().nonnegative(),
+      requestEventIds: z.array(z.string().min(1).max(160)).max(100),
+      navigatorGlobalPrivacyControl: z.literal(true),
+    }).strict(),
+    deltas: z.object({
+      cookies: apiV2GpcComparisonDeltaSchema,
+      trackers: apiV2GpcComparisonDeltaSchema,
+      advertisingOrMeasurementActivity: apiV2GpcComparisonDeltaSchema,
+      consentOrCmpBehavior: apiV2GpcComparisonDeltaSchema,
+    }).strict(),
+    limitationKeys: z.array(z.string().min(1).max(160)).max(24),
+  }).strict(),
+  californiaPolicy: z.object({
+    applied: z.boolean(),
+    deductionPoints: z.union([z.literal(0), z.literal(15)]),
+  }).strict(),
+  evidenceUrl: z.string().url(),
+}).strict().superRefine((response, context) => {
+  if (response.californiaPolicy.applied !== (response.californiaPolicy.deductionPoints === 15)) {
+    context.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: "California GPC policy application must match its deduction.",
+      path: ["californiaPolicy"],
+    });
+  }
+});
 export const apiV2ScanFreshnessSchema = z.enum(["latest", "refresh"]);
 export const apiV2ScanFromSchema = z.enum(["eu_de", "eu_ie", "california"]);
 export const apiV2FindingCriticalitySchema = z.enum(["critical", "high", "medium", "low", "info", "unknown"]);
@@ -303,6 +358,7 @@ export const apiV2ScanJobSchema = z
     scoreVersion: z.string().nullable().optional(),
     scoreUpdatedAt: z.string().nullable().optional(),
     riskLevel: z.string().nullable().optional(),
+    gpcResponse: apiV2GpcResponseSchema.nullable().optional(),
     postAcceptObservation: apiV2PostAcceptObservationSchema.nullable().optional(),
     postRefusalObservation: apiV2PostRefusalObservationSchema.nullable().optional(),
     preConsentPreview: apiV2PreConsentRuntimePreviewSchema.optional(),
@@ -360,6 +416,7 @@ export const apiV2ScanResourceSchema = z
     scoreVersion: z.string().nullable().optional(),
     scoreUpdatedAt: z.string().nullable().optional(),
     riskLevel: z.string().nullable().optional(),
+    gpcResponse: apiV2GpcResponseSchema.nullable().optional(),
     postAcceptObservation: apiV2PostAcceptObservationSchema.nullable().optional(),
     postRefusalObservation: apiV2PostRefusalObservationSchema.nullable().optional(),
     coverage: z
@@ -676,6 +733,7 @@ export const apiV2PreConsentCookiesTrackersSchema = z
   .passthrough();
 
 export type ApiV2CreateScanRequest = z.infer<typeof apiV2CreateScanRequestSchema>;
+export type ApiV2GpcResponse = z.infer<typeof apiV2GpcResponseSchema>;
 export type ApiV2ScanJob = z.infer<typeof apiV2ScanJobSchema>;
 export type ApiV2ScanResource = z.infer<typeof apiV2ScanResourceSchema>;
 export type ApiV2FindingSummary = z.infer<typeof apiV2FindingSummarySchema>;

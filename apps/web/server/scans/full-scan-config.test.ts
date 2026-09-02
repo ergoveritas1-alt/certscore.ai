@@ -664,6 +664,36 @@ test("Accept worker is default off and an explicit enable defaults to owned-cana
   assert.equal(enabledLambda?.postAcceptWorkerRolloutMode, "owned_canary");
 });
 
+test("GPC observation is default off and requires an explicit sharded request", () => {
+  const env = {
+    CERTSCORE_V2_DAG_LAMBDA_ENABLED: "true",
+    CERTSCORE_V2_DAG_LAMBDA_FUNCTION_NAME: "certscore-v2-dag-prod",
+    CERTSCORE_V2_DAG_LAMBDA_ORCHESTRATION_MODE: "sharded",
+    CERTSCORE_V2_DAG_LAMBDA_RESULT_QUEUE_URL: "https://sqs.eu-west-1.amazonaws.com/123/certscore-v2-dag-prod-results",
+    CERTSCORE_V2_DAG_LAMBDA_TARGET_ENV: "production",
+    NEXT_PUBLIC_APP_URL: "https://certscore.ai",
+    NODE_ENV: "production",
+  };
+  const base = {
+    env,
+    hostname: "example.com",
+    localV2DagRunViaLambda: true,
+    maxPages: 3,
+    normalizedUrl: "https://example.com/",
+    profile: "homepage",
+    source: "manual-dashboard",
+  };
+  const ordinary = buildQueuedFullScanConfig(base);
+  const requested = buildQueuedFullScanConfig({ ...base, gpcObservationRequested: true });
+  assert.equal((ordinary.execution?.v2DagLambda as Record<string, unknown>)?.gpcObservationRequested, undefined);
+  assert.equal((requested.execution?.v2DagLambda as Record<string, unknown>)?.gpcObservationRequested, true);
+  assert.throws(() => buildQueuedFullScanConfig({
+    ...base,
+    env: { ...env, CERTSCORE_V2_DAG_LAMBDA_ORCHESTRATION_MODE: "single" },
+    gpcObservationRequested: true,
+  }), /requires explicitly requested sharded Lambda orchestration/);
+});
+
 test("production full-scan config ignores Lambda-off requests", () => {
   const config = buildQueuedFullScanConfig({
     env: {
