@@ -109,13 +109,13 @@ jobs:
       - name: Run production monitor
         run: pnpm ops:monitor:prod
 
-      - name: Audit CMP Accept/Reject recipe coverage (daily)
+      - name: Audit CMP registry and IAB coverage (daily)
         if: ${{ github.event_name == 'schedule' }}
-        run: pnpm ops:cmp-action-coverage -- --scheduled
+        run: pnpm ops:cmp-action-coverage -- --scheduled --registry-only
 
-      - name: Audit CMP Accept/Reject recipe coverage (manual)
+      - name: Audit CMP registry and IAB coverage (manual)
         if: ${{ github.event_name == 'workflow_dispatch' }}
-        run: pnpm ops:cmp-action-coverage
+        run: pnpm ops:cmp-action-coverage -- --registry-only
 
       - name: Run scheduled monitoring sweep
         if: ${{ env.OPS_SCHEDULED_MONITORING_SWEEP_ENABLED == 'true' }}
