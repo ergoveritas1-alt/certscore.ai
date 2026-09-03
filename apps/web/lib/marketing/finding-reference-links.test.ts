@@ -16,7 +16,7 @@ test("getFindingReferenceHrefForReportFindingId maps report aliases to public fi
   );
   assert.equal(
     getFindingReferenceHrefForReportFindingId("reject_did_not_reduce_tracking"),
-    null
+    "/findings/reject_tracking_persists_after_reject"
   );
   assert.equal(
     getFindingReferenceHrefForReportFindingId("tracking_cookies_set_before_consent"),

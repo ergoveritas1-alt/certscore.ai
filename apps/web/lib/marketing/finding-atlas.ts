@@ -88,7 +88,10 @@ export type DetectionMethodologySection = {
   evidenceExamples: FindingReferenceExample[];
 };
 
-const TOP_FINDING_IDS = EXECUTIVE_SUMMARY_TOP_FINDING_IDS;
+const PUBLIC_FINDING_REFERENCE_IDS = [
+  ...EXECUTIVE_SUMMARY_TOP_FINDING_IDS,
+  "reject_tracking_persists_after_reject"
+] as const;
 const PUBLIC_DEFERRED_FINDING_IDS = new Set<string>([
   "cpra_cba_opt_out_missing",
   "consent_dark_patterns_detected"
@@ -2593,7 +2596,7 @@ export const DETECTION_METHODOLOGY_SECTIONS: DetectionMethodologySection[] = [
 ];
 
 export function getFindingReferenceItems(): FindingReferenceItem[] {
-  return TOP_FINDING_IDS.flatMap((findingId) => {
+  return PUBLIC_FINDING_REFERENCE_IDS.flatMap((findingId) => {
     if (PUBLIC_DEFERRED_FINDING_IDS.has(findingId)) {
       return [];
     }
