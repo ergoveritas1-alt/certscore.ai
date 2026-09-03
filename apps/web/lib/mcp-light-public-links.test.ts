@@ -25,6 +25,8 @@ test("MCP Light role prompts cover the three acquisition workflows and evidence 
   for (const { cursorUrl, prompt } of MCP_LIGHT_ROLE_PROMPTS) {
     assert.match(prompt, /CertScore\.ai/);
     assert.match(prompt, /evidence/i);
+    assert.match(prompt, /GPC response/);
+    assert.match(prompt, /Accept/);
     assert.match(prompt, /Reject Path/);
     const cursorPrompt = new URL(cursorUrl);
     assert.equal(cursorPrompt.origin, "https://cursor.com");

@@ -518,6 +518,7 @@ test("Cursor and OpenAI plugin packages preserve independent release versions an
   };
   const cursorLicense = readFileSync(new URL("../../../integrations/cursor/certscore-website-privacy-preflight/LICENSE", import.meta.url), "utf8");
   const cursorReadme = readFileSync(new URL("../../../integrations/cursor/certscore-website-privacy-preflight/README.md", import.meta.url), "utf8");
+  const cursorSkill = readFileSync(new URL("../../../integrations/cursor/certscore-website-privacy-preflight/skills/website-privacy-preflight/SKILL.md", import.meta.url), "utf8");
   const openAiPlugin = JSON.parse(readFileSync(new URL("../../../integrations/openai/certscore-website-privacy-preflight/.codex-plugin/plugin.json", import.meta.url), "utf8")) as {
     description?: string;
     interface?: {
@@ -538,7 +539,9 @@ test("Cursor and OpenAI plugin packages preserve independent release versions an
   const openAiSubmissionPacket = readFileSync(new URL("../../../docs/mcp-light-submission-packets.md", import.meta.url), "utf8");
 
   assert.equal(cursorPlugin.name, "certscore-website-privacy-preflight");
-  assert.equal(cursorPlugin.version, "1.0.2");
+  assert.equal(cursorPlugin.version, "1.0.3");
+  assert.match(JSON.stringify(cursorPlugin), /GPC/i);
+  assert.match(JSON.stringify(cursorPlugin), /Accept Path/i);
   assert.match(JSON.stringify(cursorPlugin), /Reject Path/i);
   assert.equal(cursorPlugin.license, "Apache-2.0");
   assert.equal(cursorMarketplace.plugins?.[0]?.license, "Apache-2.0");
@@ -549,13 +552,18 @@ test("Cursor and OpenAI plugin packages preserve independent release versions an
   assert.match(cursorLicense, /Copyright 2026 CertScore\.ai, LLC/);
   assert.match(cursorReadme, /license applies only to the files in `integrations\/cursor\/certscore-website-privacy-preflight`/);
   assert.match(cursorReadme, /trademarks.*other repository components remain governed by their respective licenses and terms/is);
+  assert.match(cursorSkill, /gpcResponse/);
+  assert.match(cursorSkill, /postAcceptObservation/);
+  assert.match(cursorSkill, /postRefusalObservation/);
+  assert.match(cursorSkill, /score-neutral behavior baseline/);
+  assert.match(cursorSkill, /limited coverage rather than a pass/);
   assert.deepEqual(cursorMcp.mcpServers, {
     "CertScore.ai": { type: "streamable-http", url: "https://mcp.certscore.ai/mcp/light" }
   });
   assert.deepEqual(cursorMarketplace.plugins?.map(({ name, source, version }) => ({ name, source, version })), [{
     name: "certscore-website-privacy-preflight",
     source: "integrations/cursor/certscore-website-privacy-preflight",
-    version: "1.0.2"
+    version: "1.0.3"
   }]);
 
   assert.equal(openAiPlugin.name, "certscore-website-privacy-preflight");

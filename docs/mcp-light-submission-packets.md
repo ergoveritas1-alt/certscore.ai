@@ -25,11 +25,11 @@ Light permits 50 genuinely new scans per UTC day across requester and shared pub
 
 Short description:
 
-> Review public-site privacy signals, including eligible bounded post-refusal cookie and tracker observations.
+> Review public-site privacy signals, including jurisdiction-neutral GPC comparisons and eligible bounded Accept and Reject Path observations.
 
 Long description:
 
-> CertScore.ai scans public websites and summarizes persisted privacy evidence covering cookies and trackers, consent controls, privacy-policy signals, GDPR/ePrivacy and CCPA/CPRA context, and HTTPS/TLS. On eligible sites, it also performs a bounded post-refusal review of non-essential cookie or tracker activity after a confirmed Reject action.
+> CertScore.ai scans public websites and summarizes persisted privacy evidence covering cookies and trackers, consent controls, jurisdiction-neutral GPC response comparisons, privacy-policy signals, GDPR/ePrivacy and CCPA/CPRA context, and HTTPS/TLS. On eligible sites, it can also observe Accept and Reject in separate browser sessions. Accept is a score-neutral behavior baseline. Reject can support a finding only after a confirmed refusal and qualifying retained post-refusal evidence; non-confirmed outcomes remain limited coverage.
 >
 > Give CertScore.ai a public website to collect structured, evidence-backed privacy findings for launch review, vendor review, audit triage, or human compliance review. Results include a CertScore score and supporting evidence for human and agentic review; they are not legal advice, certification, or a compliance determination.
 
@@ -63,7 +63,7 @@ Prepared plugin: `integrations/cursor/certscore-website-privacy-preflight`.
 
 Prepared monorepo catalog: `.cursor-plugin/marketplace.json`.
 
-Cursor plugin version: `1.0.2`. This is intentionally independent from hosted MCP version `0.2.17`.
+Cursor plugin version: `1.0.3`. This is intentionally independent from hosted MCP version `0.2.17`.
 
 Direct server configuration:
 
@@ -85,7 +85,7 @@ Verification prompt:
 
 Verified August 29, 2026: the community Cursor Directory listing is live at `https://cursor.directory/plugins/certscoreai-mcp-light` with the intended description, one skill, one Streamable HTTP server, and the correct no-auth Light endpoint. The official Cursor Marketplace does not yet return a CertScore listing, so its review remains pending.
 
-Status: **resumed by product-owner request on August 30, 2026**. Repository integration version `1.0.2` aligns the MCP component name to `CertScore.ai`, adds the evidence-confirmed Reject Path description boundary, and adds three official Cursor prompt deeplinks. Verify the publisher, source repository, `1.0.2` integration version, skill, no-auth connection, and all three Light tools in a clean Cursor installation. Do not create a duplicate submission while the current review is pending.
+Status: **verification requested; official Marketplace review pending**. Repository integration version `1.0.3` aligns the MCP component name to `CertScore.ai`, adds typed GPC and evidence-qualified Accept and Reject Path guidance, and preserves three official Cursor prompt deeplinks. Verify the publisher, source repository, `1.0.3` integration version, skill, no-auth connection, and all three Light tools in a clean Cursor installation. Do not create a duplicate submission while the current review is pending.
 
 ## Claude Code
 
@@ -290,7 +290,7 @@ Product-owner decision required: either keep Docker out of scope, or separately 
 - Confirm the public icon returns an image response and is exactly 400 × 400.
 - Confirm `https://mcp.certscore.ai/healthz` reports hosted version `0.2.17`.
 - Confirm the Light endpoint requires no authentication and lists exactly `certscore_scan_site`, `certscore_get_scan_status`, and `certscore_get_scan_bundle`.
-- Confirm the Claude package is `0.2.17`, the Cursor package is `1.0.2`, and the OpenAI package is `2.0.0`.
+- Confirm the Claude package is `0.2.17`, the Cursor package is `1.0.3`, and the OpenAI package is `2.0.0`.
 - Re-run the relevant official validator immediately before each submission.
 - Use the exact Light endpoint; do not substitute the authenticated or anonymous legacy endpoint.
 - Do not claim legal advice, certification, compliance determination, unlimited use, or a Docker image.

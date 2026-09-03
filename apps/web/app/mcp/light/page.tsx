@@ -17,7 +17,7 @@ const verificationPrompt = "List the available CertScore tools and confirm that 
 const agentDisclaimer = "CertScore results are automated observations from a public-web scan. No-go, not-observed, and limited-coverage results are not proof of compliance, absence of risk, or legal status. Review the retained evidence and applicable context before relying on a finding.";
 const registryUrl = "https://registry.modelcontextprotocol.io/?q=ai.certscore%2Fmcp-light";
 const mcpLightVersion = PUBLIC_CERTSCORE_MCP_VERSION;
-const pageDescription = "Free website privacy scanner and cookie checker for public websites. Detect pre-consent cookies and trackers, consent signals, eligible Accept and Reject Path post-action observations, policy findings, regulatory review signals, and HTTPS/TLS observations.";
+const pageDescription = "Free website privacy scanner and cookie checker for public websites. Detect pre-consent cookies and trackers, consent signals, jurisdiction-neutral GPC responses, eligible Accept and Reject Path observations, policy findings, regulatory review signals, and HTTPS/TLS observations.";
 
 export const metadata: Metadata = createPageMetadata({
   description: pageDescription,
@@ -43,14 +43,15 @@ const schemas = [
     applicationSuite: "Model Context Protocol",
     identifier: "ai.certscore/mcp-light",
     isAccessibleForFree: true,
-    keywords: ["MCP", "privacy scanner", "cookie checker", "consent", "CMP", "GDPR", "ePrivacy", "CCPA", "Accept Path", "Reject Path"],
+    keywords: ["MCP", "privacy scanner", "cookie checker", "consent", "CMP", "GPC", "Global Privacy Control", "GDPR", "ePrivacy", "CCPA", "Accept Path", "Reject Path"],
     softwareRequirements: "MCP client with Streamable HTTP support",
     softwareVersion: mcpLightVersion,
     featureList: [
       "Public website privacy-risk scans",
       "Pre-consent cookie and tracker observations",
       "Consent-control and policy signals",
-      "Eligible bounded post-action observations",
+      "Jurisdiction-neutral GPC response comparisons",
+      "Eligible bounded Accept and Reject Path observations",
       "HTTPS and TLS observations"
     ],
     sameAs: [registryUrl, MCP_LIGHT_CURSOR_DIRECTORY_URL, "https://github.com/ergoveritas1-alt/certscore.ai"]
@@ -121,7 +122,7 @@ export default function McpLightPage() {
           <div className="space-y-6">
             <Badge tone="neutral">Light MCP — no authentication</Badge>
             <h1 className="text-4xl font-semibold tracking-tight text-slate-950 sm:text-5xl">Give your agent a URL. Get a website privacy-risk scan.</h1>
-            <p className="max-w-3xl text-lg leading-8 text-slate-600">No signup, API key, bearer token, browser login, or OAuth. Connect once and let an MCP-capable agent scan public websites for cookies, trackers, third-party technologies, CMP and consent signals, eligible Accept and Reject Path post-action observations, policy and transparency findings, regulatory review signals, and HTTPS/TLS observations.</p>
+            <p className="max-w-3xl text-lg leading-8 text-slate-600">No signup, API key, bearer token, browser login, or OAuth. Connect once and let an MCP-capable agent scan public websites for cookies, trackers, third-party technologies, CMP and consent signals, jurisdiction-neutral GPC response comparisons, eligible Accept and Reject Path observations, policy and transparency findings, regulatory review signals, and HTTPS/TLS observations.</p>
             <div className="flex flex-wrap gap-3">
               <McpLightTrackedLink
                 className="rounded-md bg-sky-700 px-4 py-2 text-sm font-semibold text-white hover:bg-sky-800"

@@ -11,7 +11,7 @@ Website Privacy Preflight connects Cursor to the existing no-auth CertScore.ai M
 
 ## Connection
 
-- Cursor plugin version: `1.0.2`
+- Cursor plugin version: `1.0.3`
 - Canonical MCP identity: `ai.certscore/mcp-light`
 - Hosted MCP version: `0.2.17`
 - Endpoint: `https://mcp.certscore.ai/mcp/light`
@@ -22,7 +22,7 @@ MCP Light allows up to 50 new scans per day. The separate anonymous REST API all
 
 Ask Cursor to run a Website Privacy Preflight for a public URL. The skill retains the scan ID, polls only while the scan is active, stops at a documented terminal state, retrieves a bounded findings bundle when usable, and reports evidence as observations rather than legal conclusions.
 
-The installed MCP component is displayed as `CertScore.ai`. Reject Path output is described only when an eligible scan contains a confirmed Reject action and qualifying retained post-refusal evidence; unsupported or inconclusive outcomes remain neutral.
+The installed MCP component is displayed as `CertScore.ai`. The GPC result is a jurisdiction-neutral, score-neutral comparison and must not be described as a legal conclusion. Accept Path is a score-neutral behavior baseline. Reject Path can support a finding only when an eligible scan contains a confirmed Reject action and qualifying retained post-refusal evidence. Unsupported, unavailable, or inconclusive outcomes remain explicit limitations rather than clean results.
 
 Documentation: https://certscore.ai/developers/mcp
 

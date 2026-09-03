@@ -31,6 +31,8 @@ test("MCP Light guide and contextual links preserve evidence and legal boundarie
   assert.match(guide, /only when an eligible scan confirms a deterministic refusal action/);
   assert.match(guide, /not legal advice, certification, or a compliance determination/);
   assert.match(lightPage, /identifier: "ai\.certscore\/mcp-light"/);
+  assert.match(lightPage, /GPC/);
+  assert.match(lightPage, /"Accept Path"/);
   assert.match(lightPage, /"Reject Path"/);
   assert.match(cookieSolution, /href: "\/mcp\/light"/);
   assert.match(policySolution, /href: "\/mcp\/light"/);

@@ -2,7 +2,7 @@
 
 ## Unreleased
 
-- Prepare Cursor integration `1.0.2` with the `CertScore.ai` MCP component name, expanded evidence-confirmed Reject Path discovery metadata, and three official Cursor prompt deeplinks on the MCP Light landing page.
+- Prepare Cursor integration `1.0.3` with the `CertScore.ai` MCP component name, jurisdiction-neutral GPC and evidence-qualified Accept and Reject Path discovery metadata, and three updated Cursor prompt deeplinks on the MCP Light landing page.
 
 ## 0.2.17
 
