@@ -236,6 +236,13 @@ Agents and SDKs should honor `Retry-After` on pending or throttled responses. Th
 
 Status: published. Install `@certscore/sdk@0.2.10` or newer for typed GPC, Accept Path, and Reject Path results on Pulse and API v2 scan resources, plus API v2 scan creation in EU-Germany, EU-Ireland, and California.
 
+Choice-path interpretation:
+
+- Read `status` before `verdict` for `postAcceptObservation` and `postRefusalObservation`; a non-confirmed status is limited coverage, not a clean result.
+- `postAcceptObservation` is a score-neutral comparison baseline.
+- `postRefusalObservation` can support a finding only after a confirmed refusal-state transition and retained qualifying activity after confirmation.
+- The public methodology is https://certscore.ai/guides/consent-enforcement-testing and an authentic owned-sample report is https://certscore.ai/scan/f4362840-376e-4d8c-897a-34a220136ad4.
+
 Docs:
 
 - https://certscore.ai/developers/sdk

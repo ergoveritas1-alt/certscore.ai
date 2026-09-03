@@ -8,15 +8,15 @@ import {
 const config: SolutionPageConfig = {
   badge: "Cookie consent scanner",
   description:
-    "Review public websites for cookie consent timing, third-party cookies before consent, CMP behavior, and reject-path tracking signals. Evidence-backed observations for human and agentic review.",
+    "Review cookie consent timing, third-party cookies before consent, CMP behavior, and what a site does after a confirmed Accept or Reject. Evidence-backed observations for review.",
   intro:
-    "CertScore.ai scans how public websites behave around cookie consent, including what loads before consent, what writes cookies or storage, and whether reject-style choices appear to reduce non-essential activity.",
+    "CertScore establishes a pre-consent baseline and, where an eligible consent control can be actioned safely, observes Accept and Reject in separate browser sessions. Reports show what begins after a confirmed acceptance and whether qualifying non-essential activity appears after a confirmed refusal. Unconfirmed choices remain limited coverage rather than a result.",
   path: "/solutions/cookie-consent-scanner",
   primarySignals: [
     "Cookie and storage timing",
     "Third-party cookies before consent",
     "CMP banner and choice signals",
-    "Reject-path tracking persistence",
+    "Accept and Reject Path observations",
     "Vendor and purpose review context"
   ],
   sections: [
@@ -28,7 +28,7 @@ const config: SolutionPageConfig = {
     {
       title: "What CertScore.ai checks",
       body:
-        "CertScore.ai reviews cookie timing, third-party domains, storage writes, consent surface presence, available choices, reject-path behavior, and retained runtime evidence that helps reviewers understand what happened in the browser."
+        "CertScore.ai reviews cookie timing, third-party domains, storage writes, consent surface presence, available choices, and separate Accept and Reject observations. Accept is a score-neutral comparison baseline; Reject can support a finding only after the refusal-state transition is confirmed and qualifying activity follows."
     },
     {
       title: "When to run it",
@@ -55,7 +55,7 @@ const config: SolutionPageConfig = {
     {
       question: "Does CertScore.ai test reject behavior?",
       answer:
-        "CertScore.ai can surface reject-path review signals where the workflow has retained evidence. Findings remain automated review signals, not legal determinations."
+        "On eligible sites, CertScore can observe Accept and Reject in separate sessions. Reject findings require a confirmed refusal-state transition and qualifying retained activity afterward. Limited coverage is not a pass. Findings remain automated review signals, not legal determinations."
     }
   ],
   aiSummary: [

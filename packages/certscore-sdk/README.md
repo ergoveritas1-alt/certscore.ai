@@ -75,6 +75,24 @@ const latestPreConsentTable = await certscore.domains.latestPreConsentCookiesTra
 console.log(status.status, diagnostics.totalWallMs, diagnostics.policyDiscovery.phaseWallMs, preConsentTable.summary.rowCount, explanation?.title, pulseProjection.disclaimer, pulseEvidence.type, latestDomainScan.scan?.scanId, latestPreConsentTable.rows.length);
 ```
 
+Read choice-path coverage before reading the outcome:
+
+```ts
+const reject = completed.postRefusalObservation;
+const accept = completed.postAcceptObservation; // score-neutral baseline
+const confirmed = ["confirmed_observation", "confirmed_clean"];
+
+if (!reject || !confirmed.includes(reject.status)) {
+  review.unknown(reject?.coverageLimitations ?? ["not_available"]); // not a pass
+} else {
+  review.fromVerdict(reject.verdict, reject.interpretation);
+}
+
+if (accept && confirmed.includes(accept.status)) {
+  review.baseline(accept.interpretation); // never a negative finding
+}
+```
+
 `certscore.scans.get()`, `certscore.scans.status()`, and `certscore.scans.wait()` expose scan timing where the API has enough evidence:
 
 - `startedAt`

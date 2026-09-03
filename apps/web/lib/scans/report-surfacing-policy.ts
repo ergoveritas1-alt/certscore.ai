@@ -2015,8 +2015,8 @@ function applyFindingSpecificRules(context: PolicyEvaluationContext) {
           tier: "headline",
           reason:
             evidenceFlags.has("reject_evidence_confirmed")
-              ? `The reject interaction succeeded and classified non-essential tracking requests were retained at least ${REJECT_TRACKING_CONFIRMATION_MIN_MS_LABEL} after reject, so the finding can stand as a confirmed consent-control failure.`
-              : "The reject interaction succeeded and retained named post-reject tracker vendors with multiple runtime evidence URLs, so this can surface as a main consent-control review finding while attribution caveats remain visible.",
+              ? `The refusal-state transition was confirmed and classified non-essential tracking requests were retained at least ${REJECT_TRACKING_CONFIRMATION_MIN_MS_LABEL} after confirmation, so the finding can stand as a confirmed consent-control failure.`
+              : "The refusal-state transition was confirmed and named post-refusal tracker vendors were retained with multiple runtime evidence URLs, so this can surface as a main consent-control review finding while attribution caveats remain visible.",
           ruleId: evidenceFlags.has("reject_evidence_confirmed")
             ? "evidence.consent_behavior.confirmed_specific_runtime_failure"
             : "evidence.consent_behavior.review_runtime_without_effect_evidence"
@@ -2453,7 +2453,7 @@ function applyFindingSpecificRules(context: PolicyEvaluationContext) {
           lane: "main",
           tier: "headline",
           reason:
-            `The reject interaction succeeded and classified non-essential tracking requests were retained at least ${REJECT_TRACKING_CONFIRMATION_MIN_MS_LABEL} after reject, so the finding can stand as a confirmed consent-control failure.`,
+            `The refusal-state transition was confirmed and classified non-essential tracking requests were retained at least ${REJECT_TRACKING_CONFIRMATION_MIN_MS_LABEL} after confirmation, so the finding can stand as a confirmed consent-control failure.`,
           ruleId: "evidence.consent_behavior.confirmed_specific_runtime_failure"
         });
       } else {

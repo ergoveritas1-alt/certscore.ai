@@ -6,16 +6,16 @@ expected_account="199536052647"
 aws_region="us-west-1"
 bucket="ergoveritas-com-static-199536052647"
 distribution_id="E3334DYFHSC1PR"
-files=("testar1.html" "testar2.html")
+files=("testar1.html" "testar2.html" "sample_09_03_26_01.html")
 
 if [[ "${1:-}" != "--apply" ]]; then
-  echo "Dry run: this publisher is scoped to the two ErgoVeritas post-action canaries."
+  echo "Dry run: this publisher is scoped to the ErgoVeritas post-action canaries and owned sample."
   for name in "${files[@]}"; do
     source_path="${repo_root}/infra/aws/ergoveritas-canary/${name}"
     [[ -f "${source_path}" ]] || { echo "Missing source file: ${source_path}" >&2; exit 1; }
     echo "Would upload ${source_path} to s3://${bucket}/${name}"
   done
-  echo "Would invalidate /testar1.html and /testar2.html on CloudFront ${distribution_id}."
+  echo "Would invalidate the configured post-action paths on CloudFront ${distribution_id}."
   exit 0
 fi
 
@@ -73,7 +73,7 @@ done
 
 invalidation_id="$(aws cloudfront create-invalidation \
   --distribution-id "${distribution_id}" \
-  --paths "/testar1.html" "/testar2.html" \
+  --paths "/testar1.html" "/testar2.html" "/sample_09_03_26_01.html" \
   --query 'Invalidation.Id' \
   --output text)"
 aws cloudfront wait invalidation-completed \

@@ -118,6 +118,31 @@ test("testar2 confirms the Accept contradiction and gives both choices one exact
   });
 });
 
+test("launch sample confirms both choices and retains post-refusal activity", async () => {
+  await withCanaryServer(async (origin) => {
+    const url = `${origin}/sample_09_03_26_01.html`;
+    const accepted = await observeAccept(url, "launch-sample-accept");
+    const rejected = await observeReject(url, "launch-sample-reject");
+
+    assert.equal(accepted.acceptanceRegistration.status, "confirmed");
+    assert.equal(rejected.refusalRegistration.status, "confirmed");
+    assert.equal(accepted.observations.some((row) =>
+      row.observationType === "acceptance_signal_contradicts_action"
+    ), false);
+    assert.equal(accepted.storage.preAction.some((item) => item.name === "_ga"), true);
+    assert.equal(rejected.storage.preAction.some((item) => item.name === "_ga"), true);
+    assert.equal(accepted.network.postAcceptNonEssentialRequests.some((request) =>
+      request.hostname === "googleads.g.doubleclick.net"
+    ), true);
+    assert.equal(rejected.network.postRefusalNonEssentialRequests.some((request) =>
+      request.hostname === "googleads.g.doubleclick.net"
+    ), true);
+    assert.equal(rejected.storage.writesAfterRefusal.some((write) =>
+      write.name === "_ga" && write.nonEssential
+    ), true);
+  });
+});
+
 test("testar canaries expose working first-layer Accept, Reject, and Options controls", async () => {
   await withCanaryServer(async (origin) => {
     const browser = await chromium.launch(chromiumLaunchOptions({ headless: true }));
@@ -128,7 +153,7 @@ test("testar canaries expose working first-layer Accept, Reject, and Options con
     );
 
     try {
-      for (const pathname of ["testar1.html", "testar2.html"]) {
+      for (const pathname of ["testar1.html", "testar2.html", "sample_09_03_26_01.html"]) {
         await page.goto(`${origin}/${pathname}`);
         await assert.doesNotReject(page.getByRole("button", { name: "Accept all", exact: true }).waitFor());
         await assert.doesNotReject(page.getByRole("button", { name: "Reject all", exact: true }).waitFor());
@@ -202,7 +227,7 @@ async function observeReject(url: string, scanId: string) {
 
 async function withCanaryServer(run: (origin: string) => Promise<void>) {
   const pages = new Map<string, string>();
-  for (const name of ["testar1.html", "testar2.html"]) {
+  for (const name of ["testar1.html", "testar2.html", "sample_09_03_26_01.html"]) {
     const source = await readFile(
       new URL(`../../../infra/aws/ergoveritas-canary/${name}`, import.meta.url),
       "utf8",

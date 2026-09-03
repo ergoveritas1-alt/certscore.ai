@@ -103,9 +103,9 @@ const runtimeCards = [
       "CertScore.ai records whether non-essential requests, cookies, storage, or identifier-bearing activity appear before a recorded consent choice."
   },
   {
-    title: "After reject",
+    title: "After a confirmed choice",
     body:
-      "Reject-path scans can surface whether classified non-essential activity appears to continue after a refusal-style interaction."
+      "On eligible sites, separate Accept and Reject observations retain what follows a confirmed choice. Accept is a score-neutral baseline; qualifying activity after a confirmed refusal can support a Reject Path finding."
   },
   {
     title: "Disclosure alignment",
@@ -404,6 +404,9 @@ export default function GdprPage() {
           <h2 className="text-3xl font-semibold tracking-tight text-slate-950">A cookie banner is not the same as consent enforcement</h2>
           <p className="text-base leading-7 text-slate-600">
             CMPs and privacy policies are only part of GDPR/ePrivacy review. Reviewers need evidence of what loads, writes cookies or storage, transmits identifiers, or continues after reject. CertScore.ai compares live browser behavior with consent controls, cookies, trackers, and disclosures.
+          </p>
+          <p className="text-sm leading-7 text-slate-600">
+            Where an eligible consent control can be actioned safely, CertScore confirms the choice transition and retains what follows. That can support review of whether a refusal is reflected in observed runtime behavior and whether the presented choice is consistent with retained technical evidence. It does not establish consent validity or a legal violation. <Link className="font-semibold text-sky-700 hover:text-sky-900" href="/findings/reject_tracking_persists_after_reject">Review the finding method.</Link>
           </p>
         </div>
         <div className="mt-8 grid gap-5 md:grid-cols-3">

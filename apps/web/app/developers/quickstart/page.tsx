@@ -23,6 +23,12 @@ export default function DeveloperQuickstartPage() {
         <LightMcpCallout />
         <AgentQuickPath />
 
+        <Section eyebrow="Choice-path results" title="Treat coverage before outcome">
+          <p className="max-w-3xl text-sm leading-7 text-slate-600">
+            Completed resources can include <code>postAcceptObservation</code>, <code>postRefusalObservation</code>, and <code>gpcResponse</code>. Read each observation&apos;s status before its verdict: a non-confirmed status is limited coverage and must not be reported as clean. Post-Accept activity is a score-neutral baseline.
+          </p>
+        </Section>
+
         <section className="rounded-xl border border-slate-200 bg-white p-6 sm:p-8">
           <p className="text-xs font-semibold uppercase tracking-[0.16em] text-sky-700">Already know you want an MCP connection?</p>
           <h2 className="mt-2 text-2xl font-semibold tracking-tight text-slate-950">Skip the API key setup</h2>

@@ -5,6 +5,7 @@ import { SiteHeader } from "../../components/layout/site-header";
 import { ApiReadRatePolicyNotice } from "../../components/api-read-rate-policy-notice";
 import { PendingButtonLink } from "../../components/ui/pending-link";
 import { createPageMetadata } from "../../lib/seo";
+import { AUTHENTIC_SAMPLE_REPORT_URL } from "../../lib/marketing/sample-report";
 
 export const metadata: Metadata = createPageMetadata({
   title: "Sample Website Risk Signal Report",
@@ -16,11 +17,17 @@ export const metadata: Metadata = createPageMetadata({
 const summaryStats = [
   { label: "Consent timing", value: "Pre-choice activity observed" },
   { label: "Vendor footprint", value: "12 third-party hosts" },
-  { label: "Reject path", value: "Changed some behavior" },
+  { label: "Reject path", value: "Activity observed after confirmed refusal" },
+  { label: "Accept path", value: "Score-neutral comparison baseline" },
   { label: "Review priority", value: "Needs follow-up" }
 ];
 
 const evidenceRows = [
+  {
+    signal: "Accept behavior",
+    observation: "Post-Accept activity provides a comparison baseline and is not scored as a negative finding.",
+    evidence: "A confirmed Accept observation can show which requests and storage writes are genuinely consent-dependent."
+  },
   {
     signal: "Tracking before consent",
     observation: "Marketing and analytics requests appeared before a consent choice interaction.",
@@ -91,6 +98,9 @@ export default function SampleReportPage() {
             <p className="text-sm leading-6 text-slate-500">
               Sample content is illustrative. CertScore.ai surfaces observations for human and agentic review and does not provide legal advice, certification, or compliance determinations.
             </p>
+            <p className="text-sm leading-6 text-slate-600">
+              Prefer production evidence? <a className="font-semibold text-sky-700 hover:text-sky-900" href={AUTHENTIC_SAMPLE_REPORT_URL}>Open the authentic report generated from our owned consent-path fixture.</a>
+            </p>
           </div>
 
           <Card className="border-slate-200 bg-slate-50 shadow-none">
@@ -112,7 +122,7 @@ export default function SampleReportPage() {
       <section className="mx-auto max-w-6xl px-6 py-16">
         <div className="max-w-3xl space-y-3">
           <Badge tone="neutral">Evidence table</Badge>
-          <h2 className="text-3xl font-semibold tracking-tight text-slate-950">Signals a buyer can review without rerunning a manual audit.</h2>
+          <h2 className="text-3xl font-semibold tracking-tight text-slate-950">Signals a buyer can review before commissioning a manual audit.</h2>
           <p className="text-sm leading-6 text-slate-600">
             CertScore.ai reports are designed to make the observed browser behavior easy to triage, reproduce, and discuss with implementation owners.
           </p>

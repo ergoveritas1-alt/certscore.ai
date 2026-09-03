@@ -23,6 +23,7 @@ export default function RejectConsentTrackingTestGuidePage() {
       intro={guide.intro}
       path={guide.path}
       relatedLinks={[
+        { href: "/guides/consent-enforcement-testing", label: "how Accept and Reject Path confirmation works" },
         { href: "/findings/reject_tracking_persists_after_reject", label: "reject tracking persists finding" },
         { href: "/findings/pre_consent_tracking_detected", label: "tracking started before consent finding" },
         { href: "/guides/website-consent-audit-checklist", label: "website consent audit checklist" },

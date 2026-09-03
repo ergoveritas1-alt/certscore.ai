@@ -6,7 +6,7 @@ import {
 } from "../../../components/marketing/solution-page";
 
 const config: SolutionPageConfig = {
-  badge: "GDPR website scanner",
+  badge: "GDPR & ePrivacy website scanner",
   description:
     "Scan public websites for GDPR-relevant consent, cookie, tracking, policy, and disclosure review signals. CertScore.ai provides evidence-backed observations for human and agentic review, not legal advice.",
   intro:
@@ -15,7 +15,7 @@ const config: SolutionPageConfig = {
   primarySignals: [
     "Pre-consent tracking",
     "Third-party cookies before consent",
-    "Consent UX and reject-path behavior",
+    "Consent UX and Accept/Reject behavior",
       "Policy/runtime disclosure gaps",
       "Session replay and fingerprinting-related signals"
   ],
@@ -29,6 +29,11 @@ const config: SolutionPageConfig = {
       title: "What CertScore.ai checks",
       body:
         "CertScore.ai checks request timing, cookies and storage, consent-state evidence, vendor behavior, session replay indicators, fingerprinting-related activity, and whether public disclosures appear aligned with observed behavior."
+    },
+    {
+      title: "What follows a confirmed choice",
+      body:
+        "Consent review often stops at the banner. Where an eligible control can be actioned safely, CertScore confirms a first-layer choice and observes whether non-essential activity changes afterward—evidence for GDPR/ePrivacy review, not a determination of compliance or violation."
     },
     {
       title: "How teams use it",
@@ -68,7 +73,7 @@ const config: SolutionPageConfig = {
     { href: "/guides/rtb-cookie-syncing", label: "RTB cookie syncing" },
     { href: "/sample-report", label: "Sample report" }
   ],
-  title: "GDPR website compliance scanner"
+  title: "GDPR & ePrivacy website scanner"
 };
 
 export const metadata: Metadata = createSolutionPageMetadata(config);

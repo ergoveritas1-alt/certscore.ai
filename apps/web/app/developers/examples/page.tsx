@@ -97,6 +97,30 @@ if (latest.scan) {
 }`}</CodeBlock>
         </Section>
 
+        <Section eyebrow="SDK" title="Read choice-path results safely">
+          <CodeBlock>{`const scan = await certscore.scans.wait(created);
+
+const reject = scan.postRefusalObservation;
+const accept = scan.postAcceptObservation; // score-neutral baseline
+const CONFIRMED = ["confirmed_observation", "confirmed_clean"];
+
+if (!reject || !CONFIRMED.includes(reject.status)) {
+  // Limited coverage: the question was not answered. This is not a pass.
+  review.unknown(reject?.coverageLimitations ?? ["not_available"]);
+} else {
+  // verdict is the only field carrying an outcome
+  review.fromVerdict(reject.verdict, reject.interpretation);
+}
+
+if (accept && CONFIRMED.includes(accept.status)) {
+  review.baseline(accept.interpretation); // never a negative finding
+}
+
+if (scan.gpcResponse) {
+  review.gpcComparison(scan.gpcResponse); // scoreEffect: none
+}`}</CodeBlock>
+        </Section>
+
         <Section eyebrow="SDK" title="Read the pre-consent cookie and tracker table">
           <CodeBlock>{`const created = await certscore.scans.create("https://ergoveritas.com/.well-known/certscore-canary/sentinels/broad-baseline.html", {
   freshness: "latest",

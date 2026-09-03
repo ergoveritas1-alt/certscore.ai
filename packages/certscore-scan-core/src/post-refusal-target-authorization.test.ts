@@ -50,7 +50,7 @@ test("owned-canary authorization is exact-host and path scoped", () => {
       `https://ergoveritas.com/test${number}.html`,
     ), "tcf");
   }
-  for (const pathname of ["testar1.html", "testar2.html"]) {
+  for (const pathname of ["testar1.html", "testar2.html", "sample_09_03_26_01.html"]) {
     for (const hostname of ["ergoveritas.com", "www.ergoveritas.com"]) {
       const target = `https://${hostname}/${pathname}`;
       assert.equal(authorizePostRefusalTarget(target, authorization).authorized, true);

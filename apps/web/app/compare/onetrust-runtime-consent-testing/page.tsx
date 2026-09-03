@@ -30,7 +30,8 @@ const config: GrowthContentPageConfig = {
       title: "Complementary roles",
       paragraphs: [
         "The CMP helps manage consent categories, notices, choice records, and preference-center behavior.",
-        "Runtime testing checks public-web observations such as initial-load tracking, cookie timing, and whether reject behavior appears to affect non-essential services."
+        "On eligible scans, CertScore.ai tests Accept and Reject in separate fresh sessions and requires a confirmed consent-state transition before interpreting post-choice activity. Accept remains a score-neutral comparison baseline; non-confirmed paths are limited coverage, not a pass.",
+        "Runtime testing checks public-web observations such as initial-load tracking, cookie timing, and whether qualifying activity continues after confirmed refusal."
       ]
     },
     {

@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { absoluteUrl, createPageMetadata, SITE_NAME, SITE_URL } from "./seo";
+import { AUTHENTIC_SAMPLE_REPORT_URL } from "./marketing/sample-report";
 
 export type ReleaseLink = {
   href: string;
@@ -44,6 +45,85 @@ export type ProductRelease = {
 };
 
 const releases: readonly ProductRelease[] = [
+  {
+    slug: "accept-and-reject-path-testing",
+    headline: "CertScore now tests what happens after a visitor accepts or refuses",
+    shortDescription: "On eligible sites, CertScore confirms a first-layer consent choice in a separate browser session and retains the requests, cookies, storage, and consent signals that follow.",
+    publicationDate: "2026-09-03",
+    category: "Scanner capability",
+    ctaHeading: "See choice-path evidence in a real report",
+    ctaDescription: "Run a scan, review the method, or inspect an authentic report from our owned deterministic sample page.",
+    seoTitle: "Accept and Reject Path testing: consent behavior after a confirmed choice",
+    metaDescription: "CertScore observes what follows a confirmed Accept or Reject on eligible sites, with retained evidence and explicit coverage for GDPR/ePrivacy review.",
+    body: [
+      "A cookie banner shows a visitor a choice. Whether that choice changes anything is decided somewhere else—in the tags that fire afterward, the cookies and storage that get written, and the consent state the site keeps.",
+      "CertScore now observes that directly. Where a site presents an eligible consent control that can be actioned safely, Reject and Accept Path observers each perform one bounded, deterministic interaction in a clean browser session and retain the activity that follows.",
+      "Reports show which activity is consent-dependent, whether qualifying non-essential activity followed a confirmed refusal-state transition, and whether retained consent state contradicts the choice. Unavailable, unsupported, unsuccessful, stale, or unverifiable observations remain explicit and score-neutral; they are never presented as clean results."
+    ],
+    sections: [
+      {
+        id: "whats-new",
+        heading: "What’s new",
+        bullets: [
+          "Confirmed refusal, not just a click: a Reject Path finding requires a verified refusal-state transition plus qualifying retained activity afterward.",
+          "Separate sessions: Accept and Reject cannot contaminate one another and are each compared with the pre-consent baseline.",
+          "Accept is a score-neutral comparison baseline; ordinary activity after acceptance is expected and does not create a negative finding.",
+          "Unavailable, unsupported, unsuccessful, stale, timed-out, and unverifiable outcomes remain explicit, score-neutral coverage limitations.",
+          "Typed results are available through API v2, Pulse, the TypeScript SDK, and hosted, local, and Light MCP."
+        ]
+      },
+      {
+        id: "how-it-works",
+        heading: "How it works",
+        paragraphs: [
+          "Each path runs in a fresh browser session. CertScore locates the first-layer consent surface and performs one bounded Accept, Reject, or necessary-only-equivalent interaction only when the control can be identified and actioned safely.",
+          "On the Reject Path, observation is anchored to a confirmed refusal-state transition. Activity already in flight at confirmation is excluded, and the bounded observer may stop deliberately after retaining qualifying evidence. A completed clean observation is distinct from a path that could not be observed."
+        ]
+      },
+      {
+        id: "evidence-and-coverage",
+        heading: "Evidence and coverage",
+        paragraphs: [
+          "These are automated observations from one tested region, session, and point in time. A clean Reject observation means no qualifying activity was retained during that completed window; it does not prove that a site always honors refusal. Unchanged stored values alone are review signals, not proof of active use. Limited coverage is not a pass.",
+          "CertScore is not a legal certification or compliance-determination product and does not establish compliance, noncompliance, illegality, or a legal violation."
+        ]
+      },
+      {
+        id: "regulatory-relevance",
+        heading: "GDPR/ePrivacy and California relevance",
+        paragraphs: [
+          "Choice-path evidence can support GDPR/ePrivacy review of whether a visitor can make a practical choice, whether non-essential activity appears before an affirmative choice, and whether a confirmed refusal is reflected in observed runtime behavior. It remains evidence for a reviewer to weigh, not a legal conclusion.",
+          "Where retained interface and policy evidence show that the tested mechanism also manages advertising or sale/sharing preferences, the observations may be relevant to California privacy-choice review. An ordinary cookie-banner Reject is not automatically a CCPA/CPRA opt-out, and CertScore does not determine applicability or whether a statutory opt-out was fulfilled."
+        ]
+      },
+      {
+        id: "developer-availability",
+        heading: "Developer availability",
+        paragraphs: [
+          "Typed choice-path results are available on API v2 scan resources and Pulse projections as postAcceptObservation, postRefusalObservation, and gpcResponse. Install @certscore/sdk@0.2.10 or newer. Hosted MCP, local MCP, and MCP Light are at 0.2.17. Read the verdict rather than reconstructing an outcome from evidence rows, and treat non-confirmed statuses as limited coverage rather than a pass."
+        ]
+      }
+    ],
+    primaryCta: { href: "/", label: "Run a free scan" },
+    resourceLinks: [
+      { href: AUTHENTIC_SAMPLE_REPORT_URL, label: "See the completed choice-path example" },
+      { href: "/guides/consent-enforcement-testing", label: "Learn how choice-path testing works" },
+      { href: "/developers/reference", label: "Read the typed result contract" },
+      { href: "/findings/reject_tracking_persists_after_reject", label: "Review the Reject Path finding method" }
+    ],
+    socialImage: {
+      alt: "CertScore choice-path report showing consent observations",
+      height: 1190,
+      path: "/marketing/hero/scan-report-dashboard-with-privacy-details.jpg",
+      width: 1438
+    },
+    cardImage: {
+      alt: "CertScore choice-path report showing consent observations",
+      height: 1190,
+      path: "/marketing/hero/scan-report-dashboard-with-privacy-details.jpg",
+      width: 1438
+    }
+  },
   {
     slug: "mcp-light",
     headline: "CertScore.ai MCP Light is now available",

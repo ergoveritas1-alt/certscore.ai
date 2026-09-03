@@ -186,6 +186,16 @@ export default function PulseAgentFallbackPage() {
           </div>
         </section>
 
+        <section className="mt-10 rounded-lg border border-sky-200 bg-sky-50 p-4 text-sm leading-7 text-slate-700">
+          <h2 className="text-xl font-semibold text-slate-950">Choice-path result interpretation</h2>
+          <ul className="mt-3 list-disc space-y-2 pl-5">
+            <li><code className="rounded bg-white px-1">postAcceptObservation</code> is a score-neutral comparison baseline; do not report post-acceptance activity as a concern.</li>
+            <li><code className="rounded bg-white px-1">postRefusalObservation</code> can support a projected choice-path finding only when its status is confirmed and the verdict reports qualifying retained activity.</li>
+            <li><code className="rounded bg-white px-1">gpcResponse</code> has <code className="rounded bg-white px-1">scoreEffect: none</code> and <code className="rounded bg-white px-1">legalInterpretation: not_assessed</code>. Report the comparison, not a legal conclusion.</li>
+            <li>Every non-confirmed choice-path status is limited coverage. Report it as unknown, never as clean or passing.</li>
+          </ul>
+        </section>
+
         <section className="mt-10 rounded-lg border border-slate-200 p-4">
           <h2 className="text-xl font-semibold text-slate-950">Expected public contract</h2>
           <ul className="mt-3 list-disc space-y-2 pl-5 text-sm leading-7 text-slate-700">

@@ -36,7 +36,8 @@ const config: GrowthContentPageConfig = {
     {
       title: "Where runtime scanning helps",
       paragraphs: [
-        "Runtime scanning can surface request timing, cookie timing, vendor domains, and whether observed behavior appears to change after consent interactions.",
+        "On eligible scans, CertScore.ai opens separate fresh browser sessions for baseline, Accept, and Reject. It acts only when the selected first-layer choice and the resulting consent-state transition can be confirmed; otherwise the path remains limited coverage rather than being reported as clean.",
+        "Runtime scanning can then compare request timing, cookie timing, and vendor domains after confirmed acceptance or refusal. Accept is a score-neutral comparison baseline; qualifying activity retained after confirmed refusal can support a review finding.",
         "This evidence helps teams investigate implementation drift without making legal conclusions."
       ]
     }

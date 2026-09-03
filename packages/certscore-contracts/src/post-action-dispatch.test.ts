@@ -85,7 +85,7 @@ test("ordinary public Accept dispatch requires all-eligible exact HTTPS authoriz
 
 test("joint ErgoVeritas canaries dispatch both lanes only for exact root URLs", () => {
   for (const hostname of ["ergoveritas.com", "www.ergoveritas.com"]) {
-    for (const pathname of ["/testar1.html", "/testar2.html"]) {
+    for (const pathname of ["/testar1.html", "/testar2.html", "/sample_09_03_26_01.html"]) {
       const result = buildPostActionObservationDispatchConfigs({
         intent: {
           orchestrationMode: "sharded",

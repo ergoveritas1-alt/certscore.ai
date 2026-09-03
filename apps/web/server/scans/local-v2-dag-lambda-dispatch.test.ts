@@ -235,8 +235,8 @@ test("adds the default-off reject worker to eligible sharded scans with target-s
   }).postRefusalObservation, undefined);
 });
 
-test("dispatches both owned canary lanes for exact www ErgoVeritas testar URLs", () => {
-  for (const pathname of ["/testar1.html", "/testar2.html"]) {
+test("dispatches both owned canary lanes for exact www ErgoVeritas post-action URLs", () => {
+  for (const pathname of ["/testar1.html", "/testar2.html", "/sample_09_03_26_01.html"]) {
     const canaryConfig = buildLambdaScanConfig();
     canaryConfig.hostname = "www.ergoveritas.com";
     canaryConfig.normalizedUrl = `https://www.ergoveritas.com${pathname}`;

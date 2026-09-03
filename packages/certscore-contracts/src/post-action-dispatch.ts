@@ -42,7 +42,7 @@ export function buildPostActionObservationDispatchConfigs(input: {
     !target.hash &&
     (target.pathname.startsWith("/.well-known/certscore-canary/post-refusal/") ||
       /^\/test[1-4]\.html$/.test(target.pathname) ||
-      ["/testar1.html", "/testar2.html"].includes(target.pathname));
+      ["/testar1.html", "/testar2.html", "/sample_09_03_26_01.html"].includes(target.pathname));
   const ownedAcceptCanary = target.protocol === "https:" &&
     ownedErgoVeritasHostname &&
     !target.search &&
@@ -52,6 +52,7 @@ export function buildPostActionObservationDispatchConfigs(input: {
       "/.well-known/certscore-canary/post-accept/accept-inconsistent.html",
       "/testar1.html",
       "/testar2.html",
+      "/sample_09_03_26_01.html",
     ].includes(target.pathname);
   const exactProductionTarget = target.protocol === "https:" &&
     !target.username &&

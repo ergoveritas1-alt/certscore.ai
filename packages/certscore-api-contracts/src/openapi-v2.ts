@@ -756,14 +756,15 @@ export function buildCertScoreApiV2OpenApiDocument() {
             "limitations"
           ],
           properties: {
-            status: { type: "string", enum: ["confirmed_observation", "confirmed_clean", "unconfirmed", "not_attempted", "unsupported", "aborted"] },
+            status: { type: "string", description: "confirmed_observation and confirmed_clean are results. Every other value is limited coverage and must not be interpreted as a pass.", enum: ["confirmed_observation", "confirmed_clean", "unconfirmed", "not_attempted", "unsupported", "aborted"] },
             refusalExercised: { type: "boolean" },
             observationCount: { type: "integer", minimum: 0 },
-            productionProjectable: { type: "boolean" },
+            productionProjectable: { type: "boolean", description: "Whether the observation is eligible to project a public finding. Non-projectable evidence may still be valid for review." },
             evidenceDisposition: { type: "string", enum: ["confirmed", "indeterminate"] },
             indeterminateReason: { type: ["string", "null"], maxLength: 160 },
             verdict: {
               type: "string",
+              description: "The only field carrying an outcome. Do not derive a verdict by counting evidence rows.",
               enum: [
                 "eligible_nonessential_activity_observed_after_confirmed_refusal",
                 "retained_consent_signal_contradiction_observed_after_confirmed_refusal",
@@ -775,6 +776,7 @@ export function buildCertScoreApiV2OpenApiDocument() {
             observationStrategy: { type: "string", enum: ["stop_on_first_eligible_activity", "not_applicable"] },
             termination: {
               type: "object",
+              description: "evidence_satisfied with intentional=true means the bounded observer deliberately stopped after retaining qualifying evidence; observationCount is not a cross-scan volume measure.",
               additionalProperties: false,
               required: ["kind", "intentional", "trigger"],
               properties: {
@@ -784,7 +786,7 @@ export function buildCertScoreApiV2OpenApiDocument() {
               }
             },
             completedAt: { type: ["string", "null"], format: "date-time" },
-            coverageLimitations: { type: "array", maxItems: 24, items: { type: "string" } },
+            coverageLimitations: { type: "array", description: "Behavior or persistence that was not measured. This bounds the observation and does not describe the site.", maxItems: 24, items: { type: "string" } },
             limitations: { type: "array", maxItems: 24, deprecated: true, description: "Deprecated compatibility alias for coverageLimitations.", items: { type: "string" } }
           }
         },
@@ -807,14 +809,15 @@ export function buildCertScoreApiV2OpenApiDocument() {
             "limitations"
           ],
           properties: {
-            status: { type: "string", enum: ["confirmed_observation", "confirmed_clean", "unconfirmed", "not_attempted", "unsupported", "aborted"] },
+            status: { type: "string", description: "confirmed_observation and confirmed_clean are results. Every other value is limited coverage and must not be interpreted as a pass.", enum: ["confirmed_observation", "confirmed_clean", "unconfirmed", "not_attempted", "unsupported", "aborted"] },
             acceptanceExercised: { type: "boolean" },
             observationCount: { type: "integer", minimum: 0 },
-            productionProjectable: { type: "boolean" },
+            productionProjectable: { type: "boolean", description: "Whether the observation is eligible to project publicly. Accept remains a score-neutral comparison baseline." },
             evidenceDisposition: { type: "string", enum: ["confirmed", "indeterminate"] },
             indeterminateReason: { type: ["string", "null"], maxLength: 160 },
             verdict: {
               type: "string",
+              description: "The only field carrying an outcome. Post-acceptance activity is a score-neutral comparison baseline, not a negative finding.",
               enum: [
                 "eligible_nonessential_activity_observed_after_confirmed_acceptance",
                 "retained_consent_signal_contradiction_observed_after_confirmed_acceptance",
@@ -826,6 +829,7 @@ export function buildCertScoreApiV2OpenApiDocument() {
             observationStrategy: { type: "string", enum: ["stop_on_first_eligible_activity", "not_applicable"] },
             termination: {
               type: "object",
+              description: "evidence_satisfied with intentional=true means the bounded observer deliberately stopped after retaining qualifying comparison evidence.",
               additionalProperties: false,
               required: ["kind", "intentional", "trigger"],
               properties: {
@@ -835,7 +839,7 @@ export function buildCertScoreApiV2OpenApiDocument() {
               }
             },
             completedAt: { type: ["string", "null"], format: "date-time" },
-            coverageLimitations: { type: "array", maxItems: 24, items: { type: "string" } },
+            coverageLimitations: { type: "array", description: "Behavior or persistence that was not measured. This bounds the observation and does not describe the site.", maxItems: 24, items: { type: "string" } },
             limitations: { type: "array", maxItems: 24, deprecated: true, description: "Deprecated compatibility alias for coverageLimitations.", items: { type: "string" } }
           }
         },

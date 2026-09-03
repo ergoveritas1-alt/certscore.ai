@@ -454,10 +454,10 @@ export const FINDING_TOP_FINDING_RULES: Record<string, FindingTopFindingRule> = 
     demoteOrSuppressWhen: ["Generic query key.", "Destination unknown.", "Unredacted identifiers."]
   },
   reject_tracking_persists_after_reject: {
-    minimumToSurface: ["Reject interaction plus post-reject classified non-essential request or storage."],
-    highConfidenceRequires: ["Reject success, pre/post sequence, and artifact classification."],
+    minimumToSurface: ["Confirmed refusal-state transition plus classified non-essential request or storage activity anchored after confirmation."],
+    highConfidenceRequires: ["Verified refusal state, pre/post sequence, temporal anchor, and artifact classification."],
     criticalOrTopRankingRequires: ["Post-reject advertising, replay, identifier sync, or repeated post-reject artifacts."],
-    demoteOrSuppressWhen: ["Reject button present but not clicked.", "Unknown essentiality.", "Queued pre-reject beacon likely."]
+    demoteOrSuppressWhen: ["Reject button present but not clicked.", "Refusal-state transition unconfirmed.", "Unknown essentiality.", "Activity already in flight when refusal was confirmed."]
   },
   possible_session_replay_on_sensitive_input_surface: {
     minimumToSurface: ["Replay signal plus sensitive surface in same observed scope."],
@@ -526,7 +526,7 @@ const OBSERVED: Record<string, string> = {
   cross_domain_identifier_sharing_observed:
     "Retained outbound request evidence showed identifier-like keys or values moving to a different domain or third-party context within the observed scan scope.",
   reject_tracking_persists_after_reject:
-    "Retained runtime evidence showed a reject-style consent interaction followed by classified non-essential request or storage activity in the observed scan scope.",
+    "Retained evidence showed a confirmed refusal-state transition followed by classified non-essential request or storage activity that began after confirmation, within the observed scan scope.",
   possible_session_replay_on_sensitive_input_surface:
     "Retained runtime and page-surface evidence showed session-replay-related signals on or near a form, flow, or page surface that may collect sensitive information.",
   session_replay_present_with_sensitive_surfaces_observed:
@@ -579,7 +579,7 @@ const METHODOLOGY: Record<string, string> = {
   cross_domain_identifier_sharing_observed:
     "CertScore.ai inspects retained outbound request evidence for identifier-like keys, redacted values, destination domains, request origin/path, third-party context, vendor/category classification, timing, and consent context where available. This finding is surfaced when retained evidence shows identifier-like data in an outbound request to a different domain or third-party context within the observed scan scope. CertScore.ai treats cross-domain identifier-sharing evidence as a review signal. The scanner does not determine personal identity, identity resolution, legal status, consent validity, sale/share status, or compliance status. Reviewers should consider whether the value is pseudonymous, hashed, scoped, session-only, security-related, analytics-related, advertising-related, or otherwise necessary, and whether the retained evidence is sufficient for the intended review.",
   reject_tracking_persists_after_reject:
-    "CertScore.ai records consent interaction events, consent-state observations, runtime requests, cookie/storage activity, vendor classification, and coverage context where available. This finding is surfaced when retained evidence shows a reject-style interaction followed by a classified non-essential request or storage artifact after that interaction within the observed scan scope. CertScore.ai treats post-reject tracking evidence as a review signal. The scanner does not determine legal status, consent validity, vendor responsibility, or compliance status. Reviewers should confirm the reject interaction succeeded, whether the activity began before or after the reject action, whether the post-reject artifact was non-essential, whether queued or delayed beacons explain the timing, and whether CMP, consent-mode, tag-manager, or vendor configuration affected the result.",
+    "CertScore.ai records consent interaction events, verified consent-state transitions, runtime requests, cookie/storage activity, vendor classification, and coverage context. This finding is surfaced only when retained evidence confirms a refusal-state transition and anchors classified non-essential request or storage activity after that confirmation. Activity already in flight at confirmation is excluded. CertScore.ai treats post-refusal activity as a review signal and does not determine legal status, consent validity, vendor responsibility, or compliance status. Reviewers should consider necessity, purpose, timing, CMP propagation, consent mode, tag-manager rules, vendor configuration, and the bounded scan context.",
   possible_session_replay_on_sensitive_input_surface:
     "CertScore.ai correlates retained session-replay-related runtime evidence with retained page-surface evidence for sensitive input fields, sensitive form context, or sensitive page purpose. The finding is surfaced when replay-style tooling appears on or near a surface that may collect health, financial, identity, location, contact, or other sensitive information in the observed scan scope. CertScore.ai treats the co-occurrence as a review signal. The scanner does not determine that sensitive values, keystrokes, form contents, screenshots, recordings, or intercepted communications were captured, or that GDPR Article 9 applies. Financial, identity, contact, location, employment, children, protected-class, or other high-risk context signals require manual review and are not automatically GDPR Article 9 special-category data. Reviewers should confirm masking, sampling, page exclusions, payload contents, event capture, consent state, vendor configuration, and whether the retained evidence reflects the affected user-visible state.",
   probable_fingerprinting:
@@ -941,8 +941,8 @@ const REVIEW_QUESTIONS: Record<string, string[]> = {
     "Are query strings, identifiers, cookie values, and payloads redacted while preserving stable anchors?"
   ],
   reject_tracking_persists_after_reject: [
-    "Was a reject-style interaction actually observed and timestamped?",
-    "Did the reject interaction appear successful, or is success ambiguous?",
+    "Which retained witness confirmed the refusal-state transition, and when?",
+    "Was confirmation independently verifiable rather than inferred from a click or hidden banner?",
     "Which request, cookie, or storage artifact appeared after reject?",
     "Was the post-reject artifact classified as non-essential, and what classification basis was retained?",
     "Could the post-reject artifact have been queued or initiated before reject?",
@@ -1383,19 +1383,19 @@ const EVIDENCE_STANDARDS: Record<string, FindingEvidenceStandard> = {
   },
   reject_tracking_persists_after_reject: {
     strong: [
-      "Retained evidence includes a reject-style interaction event with timestamp or interaction-state context.",
-      "Retained evidence includes a classified non-essential request or storage artifact after the reject interaction.",
+      "Retained evidence includes an independently confirmed refusal-state transition with timestamp and interaction-state context.",
+      "Retained evidence includes a classified non-essential request or storage artifact anchored after confirmation.",
       "Evidence includes stable runtime anchors such as URL origin and path with query redacted, cookie or storage key with value redacted, resource type, vendor or category, and timestamp.",
-      "Evidence distinguishes post-reject activity from activity that began or was queued before the reject action where available.",
+      "Evidence excludes activity already in flight when the refusal was confirmed.",
       "Coverage context indicates the interaction and post-reject observation were not materially blocked or unreliable."
     ],
     good: [
-      "Retained evidence shows a reject-style interaction and post-reject non-essential artifact, but interaction-success confirmation or pre/post comparison is less complete.",
+      "Retained evidence confirms the refusal and retains a post-refusal non-essential artifact, but the wider pre/post comparison is less complete.",
       "The retained example is enough for a reviewer to inspect timing, vendor or category, and artifact details manually.",
       "The evidence is likely relevant to reject-enforcement review, but queued beacons, strictly necessary activity, purpose, and CMP propagation require manual review."
     ],
     auditOnly: [
-      "Reject control was present but not clicked or no reject-style interaction was retained.",
+      "Reject control was present but not clicked, or no confirmed refusal-state transition was retained.",
       "Post-reject request exists but essentiality, purpose, or timing relative to reject is unclear.",
       "Vendor name, CMP configuration, or policy text suggests possible persistence, but no retained post-reject runtime artifact supports it."
     ],
@@ -1765,7 +1765,7 @@ const LIMITATIONS: Record<string, string[]> = {
   ],
   reject_tracking_persists_after_reject: [
     "This finding is an automated reject-enforcement review signal, not a legal conclusion, certification, compliance determination, or determination of consent validity.",
-    "Automated evidence may not fully determine whether the reject interaction succeeded, whether a beacon was queued before reject, or whether a vendor was responsible for post-reject activity.",
+    "A confirmed refusal-state transition establishes the observation anchor, but automated evidence may not determine vendor responsibility or every purpose and exemption.",
     "Some post-reject activity may be strictly necessary, security-related, fraud-prevention, load-balancing, or otherwise context-dependent.",
     "Consent state can vary by region, browser state, prior choices, A/B tests, CMP configuration, login state, and page path.",
     "Automated evidence may miss server-side behavior, later user-triggered behavior, blocked resources, or vendor behavior outside the scan scope.",
@@ -1887,7 +1887,7 @@ function confidenceSemanticsFor(id: string, benchmark: FindingDensityBenchmark) 
   }
 
   if (id === "reject_tracking_persists_after_reject") {
-    return "Good when retained runtime evidence includes a reject-style interaction, post-reject timing, classified non-essential request or storage artifact, stable runtime anchor, and usable coverage; stronger when retained evidence also includes interaction success, consent-state transition, pre/post comparison, vendor attribution, repeated examples, and enough detail for manual verification. Manual review is still needed for reject success, queued beacons, purpose, necessity, CMP configuration, and remediation quality.";
+    return "Good when retained runtime evidence includes a confirmed refusal-state transition, post-confirmation timing, a classified non-essential request or storage artifact, a stable runtime anchor, and usable coverage; stronger when retained evidence also includes a pre/post comparison, vendor attribution, repeated examples, and enough detail for manual verification. Manual review is still needed for queued beacons, purpose, necessity, CMP configuration, and remediation quality.";
   }
 
   if (id === "rtb_cookie_sync_observed") {
