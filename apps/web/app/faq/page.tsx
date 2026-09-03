@@ -55,9 +55,9 @@ const faqs = [
       "No. CertScore.ai surfaces observable signals and supported findings. Review and remediation still need to be handled by your team."
   },
   {
-    question: "Does CertScore test what happens after I click Reject?",
+    question: "Does CertScore.ai test what happens after I click Reject?",
     answer:
-      "On eligible sites, yes. CertScore performs one bounded refusal in its own browser session, confirms a refusal-state transition, and retains the requests, cookies, storage, and consent signals that follow. Only activity anchored after confirmation counts, so an already in-flight request is not attributed to the refusal. This is evidence relevant to GDPR/ePrivacy review, not a compliance determination."
+      "On eligible sites, yes. CertScore.ai performs one bounded refusal in its own browser session, confirms a refusal-state transition, and retains the requests, cookies, storage, and consent signals that follow. Only activity anchored after confirmation counts, so an already in-flight request is not attributed to the refusal. This is evidence relevant to GDPR/ePrivacy review, not a compliance determination."
   },
   {
     question: "What does a limited or unknown choice-path result mean?",

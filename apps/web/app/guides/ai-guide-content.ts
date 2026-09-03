@@ -11,6 +11,10 @@ export type AiGuideContent = {
   sections: Array<{
     title: string;
     paragraphs: string[];
+    sourceLinks?: Array<{
+      href: string;
+      label: string;
+    }>;
   }>;
   title: string;
 };

@@ -15,6 +15,7 @@ export const STANDARD_AUTOMATED_FINDINGS_DISCLAIMER =
 type ContentSection = {
   title: string;
   paragraphs: string[];
+  sourceLinks?: RelatedLink[];
 };
 
 type RelatedLink = {
@@ -122,6 +123,16 @@ export function AiVisibilityContent({
               {section.paragraphs.map((paragraph) => (
                 <p key={paragraph}>{paragraph}</p>
               ))}
+              {section.sourceLinks?.length ? (
+                <p className="flex flex-wrap gap-x-4 gap-y-2 pt-1 text-sm leading-6 text-slate-600">
+                  <span className="font-semibold text-slate-700">Primary sources:</span>
+                  {section.sourceLinks.map((link) => (
+                    <a className="font-medium text-sky-700 underline decoration-sky-300 underline-offset-4 hover:text-sky-900" href={link.href} key={link.href}>
+                      {link.label}
+                    </a>
+                  ))}
+                </p>
+              ) : null}
             </CardContent>
           </Card>
         ))}

@@ -33,9 +33,29 @@ test("published releases include choice-path testing and MCP Light", () => {
   const choicePathCopy = JSON.stringify(choicePathRelease);
   assert.match(choicePathCopy, /score-neutral comparison baseline/i);
   assert.match(choicePathCopy, /limited coverage is not a pass/i);
-  assert.match(choicePathCopy, /GDPR\/ePrivacy/);
-  assert.match(choicePathCopy, /CCPA\/CPRA/);
+  assert.match(choicePathCopy, /GDPR and ePrivacy/);
+  assert.match(choicePathCopy, /CCPA and CPRA/);
+  assert.match(choicePathRelease.shortDescription, /eligible sites/);
+  assert.match(choicePathRelease.shortDescription, /confirmed Accept/);
+  assert.match(choicePathRelease.shortDescription, /confirmed Reject/);
+  assert.equal(choicePathRelease.seoTitle, "Cookie consent testing after Accept and Reject");
+  assert.ok(choicePathRelease.metaDescription.length <= 160);
+  assert.doesNotMatch(choicePathRelease.metaDescription, /CCPA|CPRA|California/);
+  assert.match(choicePathCopy, /CELEX%3A02002L0058-20091219/);
+  assert.match(choicePathCopy, /California Attorney General CCPA guidance/);
+  assert.doesNotMatch(choicePathCopy, /CertScore(?!\.ai)/);
   assert.doesNotMatch(choicePathRelease.headline, /GPC/i);
+});
+
+test("the evergreen consent guide carries AEO answers without FAQPage schema", () => {
+  const guide = readFileSync("apps/web/app/guides/consent-enforcement-testing/page.tsx", "utf8");
+
+  assert.match(guide, /What is Accept and Reject Path testing\?/);
+  assert.match(guide, /Does Accept and Reject Path testing determine GDPR or CCPA compliance\?/);
+  assert.match(guide, /No\. CertScore\.ai records evidence about website behavior/);
+  assert.match(guide, /CELEX%3A02002L0058-20091219/);
+  assert.doesNotMatch(guide, /FAQPage/);
+  assert.doesNotMatch(guide, /CertScore(?!\.ai)/);
 });
 
 test("release metadata provides canonical, Open Graph, and X card fields", () => {

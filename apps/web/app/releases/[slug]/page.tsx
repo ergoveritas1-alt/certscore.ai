@@ -80,6 +80,16 @@ export default async function ReleaseDetailPage({ params }: ReleasePageProps) {
                 {section.paragraphs.map((paragraph) => <p key={paragraph}>{paragraph}</p>)}
               </div>
             ) : null}
+            {section.sourceLinks?.length ? (
+              <p className="mt-4 flex flex-wrap gap-x-4 gap-y-2 text-sm leading-6 text-slate-600">
+                <span className="font-semibold text-slate-700">Primary sources:</span>
+                {section.sourceLinks.map((link) => (
+                  <a className="font-medium text-sky-700 underline decoration-sky-300 underline-offset-4 hover:text-sky-900" href={link.href} key={link.href}>
+                    {link.label}
+                  </a>
+                ))}
+              </p>
+            ) : null}
             {section.bullets?.length ? (
               <ul className="mt-5 grid gap-3 text-base leading-7 text-slate-700">
                 {section.bullets.map((item) => (

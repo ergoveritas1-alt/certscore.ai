@@ -12,6 +12,7 @@ export type ReleaseSection = {
   heading: string;
   id: string;
   paragraphs?: readonly string[];
+  sourceLinks?: readonly ReleaseLink[];
   steps?: readonly string[];
 };
 
@@ -47,17 +48,17 @@ export type ProductRelease = {
 const releases: readonly ProductRelease[] = [
   {
     slug: "accept-and-reject-path-testing",
-    headline: "CertScore now tests what happens after a visitor accepts or refuses",
-    shortDescription: "On eligible sites, CertScore confirms a first-layer consent choice in a separate browser session and retains the requests, cookies, storage, and consent signals that follow.",
+    headline: "CertScore.ai now tests what happens after a visitor accepts or refuses",
+    shortDescription: "Evidence-based cookie consent testing: on eligible sites, CertScore.ai compares website behavior before a choice, after a confirmed Accept, and after a confirmed Reject.",
     publicationDate: "2026-09-03",
     category: "Scanner capability",
     ctaHeading: "See choice-path evidence in a real report",
     ctaDescription: "Run a scan, review the method, or inspect an authentic report from our owned deterministic sample page.",
-    seoTitle: "Accept and Reject Path testing: consent behavior after a confirmed choice",
-    metaDescription: "CertScore observes what follows a confirmed Accept or Reject on eligible sites, with retained evidence and explicit coverage for GDPR/ePrivacy review.",
+    seoTitle: "Cookie consent testing after Accept and Reject",
+    metaDescription: "CertScore.ai tests a site after confirmed Accept or Reject—cookies, storage, trackers, and network activity. Evidence for GDPR and ePrivacy consent review.",
     body: [
       "A cookie banner shows a visitor a choice. Whether that choice changes anything is decided somewhere else—in the tags that fire afterward, the cookies and storage that get written, and the consent state the site keeps.",
-      "CertScore now observes that directly. Where a site presents an eligible consent control that can be actioned safely, Reject and Accept Path observers each perform one bounded, deterministic interaction in a clean browser session and retain the activity that follows.",
+      "CertScore.ai now observes that directly. Where a site presents an eligible consent control that can be actioned safely, Reject and Accept Path observers each perform one bounded, deterministic interaction in a clean browser session and retain the activity that follows.",
       "Reports show which activity is consent-dependent, whether qualifying non-essential activity followed a confirmed refusal-state transition, and whether retained consent state contradicts the choice. Unavailable, unsupported, unsuccessful, stale, or unverifiable observations remain explicit and score-neutral; they are never presented as clean results."
     ],
     sections: [
@@ -76,7 +77,7 @@ const releases: readonly ProductRelease[] = [
         id: "how-it-works",
         heading: "How it works",
         paragraphs: [
-          "Each path runs in a fresh browser session. CertScore locates the first-layer consent surface and performs one bounded Accept, Reject, or necessary-only-equivalent interaction only when the control can be identified and actioned safely.",
+          "Each path runs in a fresh browser session. CertScore.ai locates the first-layer consent surface and performs one bounded Accept, Reject, or necessary-only-equivalent interaction only when the control can be identified and actioned safely.",
           "On the Reject Path, observation is anchored to a confirmed refusal-state transition. Activity already in flight at confirmation is excluded, and the bounded observer may stop deliberately after retaining qualifying evidence. A completed clean observation is distinct from a path that could not be observed."
         ]
       },
@@ -85,15 +86,22 @@ const releases: readonly ProductRelease[] = [
         heading: "Evidence and coverage",
         paragraphs: [
           "These are automated observations from one tested region, session, and point in time. A clean Reject observation means no qualifying activity was retained during that completed window; it does not prove that a site always honors refusal. Unchanged stored values alone are review signals, not proof of active use. Limited coverage is not a pass.",
-          "CertScore is not a legal certification or compliance-determination product and does not establish compliance, noncompliance, illegality, or a legal violation."
+          "CertScore.ai is not a legal certification or compliance-determination product and does not establish compliance, noncompliance, illegality, or a legal violation."
         ]
       },
       {
         id: "regulatory-relevance",
-        heading: "GDPR/ePrivacy and California relevance",
+        heading: "Why this matters for privacy review",
         paragraphs: [
-          "Choice-path evidence can support GDPR/ePrivacy review of whether a visitor can make a practical choice, whether non-essential activity appears before an affirmative choice, and whether a confirmed refusal is reflected in observed runtime behavior. It remains evidence for a reviewer to weigh, not a legal conclusion.",
-          "Where retained interface and policy evidence show that the tested mechanism also manages advertising or sale/sharing preferences, the observations may be relevant to California privacy-choice review. An ordinary cookie-banner Reject is not automatically a CCPA/CPRA opt-out, and CertScore does not determine applicability or whether a statutory opt-out was fulfilled."
+          "A cookie banner’s appearance does not establish what a website actually does after someone makes a choice. On eligible sites, CertScore.ai tests the resulting browser behavior—cookies, storage, trackers, and relevant network activity—after a confirmed Accept and after a confirmed Reject.",
+          "For GDPR and ePrivacy review, this evidence can help teams investigate whether consent-dependent activity reflects the visitor’s choice and whether non-essential storage or access continues after a confirmed refusal. The ePrivacy Directive specifically addresses storing information on, or gaining access to information stored in, a user’s terminal equipment, subject to limited exceptions; GDPR requirements govern consent and its withdrawal. The two ask different questions of the same evidence.",
+          "For CCPA and CPRA review, the evidence may be relevant where the tested control governs the sale or sharing of personal information, including sharing for cross-context behavioral advertising. An ordinary cookie-banner Reject action is not automatically a statutory CCPA/CPRA opt-out, so CertScore.ai reports the observed behavior without making that legal conclusion. This relevance depends on the specific mechanism observed, not on the presence of a Reject control.",
+          "Where a choice cannot be confirmed, the report records limited coverage rather than a result."
+        ],
+        sourceLinks: [
+          { href: "https://eur-lex.europa.eu/legal-content/EN/TXT/?uri=CELEX%3A32016R0679", label: "GDPR (Regulation 2016/679)" },
+          { href: "https://eur-lex.europa.eu/legal-content/EN/TXT/?uri=CELEX%3A02002L0058-20091219", label: "Consolidated ePrivacy Directive" },
+          { href: "https://oag.ca.gov/privacy/ccpa", label: "California Attorney General CCPA guidance" }
         ]
       },
       {
@@ -112,13 +120,13 @@ const releases: readonly ProductRelease[] = [
       { href: "/findings/reject_tracking_persists_after_reject", label: "Review the Reject Path finding method" }
     ],
     socialImage: {
-      alt: "CertScore choice-path report showing consent observations",
+      alt: "CertScore.ai choice-path report showing consent observations",
       height: 1190,
       path: "/marketing/hero/scan-report-dashboard-with-privacy-details.jpg",
       width: 1438
     },
     cardImage: {
-      alt: "CertScore choice-path report showing consent observations",
+      alt: "CertScore.ai choice-path report showing consent observations",
       height: 1190,
       path: "/marketing/hero/scan-report-dashboard-with-privacy-details.jpg",
       width: 1438
@@ -139,7 +147,7 @@ const releases: readonly ProductRelease[] = [
       "CertScore.ai MCP Light gives MCP-capable agents a simple, no-account interface for evidence-backed public website privacy scans.",
     body: [
       "MCP Light is a deliberately simple public MCP interface for low-volume website privacy scanning. It makes CertScore.ai’s evidence-backed public website observations available inside agent workflows without requiring credential setup.",
-      "The launch keeps the workflow focused: start or reuse a scan, check its status when work is still active, then retrieve a bounded result bundle with findings, evidence references, limitations, and the full CertScore report URL where available."
+      "The launch keeps the workflow focused: start or reuse a scan, check its status when work is still active, then retrieve a bounded result bundle with findings, evidence references, limitations, and the full CertScore.ai report URL where available."
     ],
     sections: [
       {
@@ -150,7 +158,7 @@ const releases: readonly ProductRelease[] = [
           "A public Streamable HTTP MCP endpoint works with MCP-capable agents and clients.",
           "Three focused tools cover scan creation, active-status checks, and result retrieval.",
           "Eligible recent scans can be reused instead of starting unnecessary new work.",
-          "Results link back to the full CertScore report when a report is available."
+          "Results link back to the full CertScore.ai report when a report is available."
         ]
       },
       {
