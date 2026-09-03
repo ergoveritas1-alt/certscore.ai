@@ -6,6 +6,7 @@ import { SiteHeader } from "../../../components/layout/site-header";
 import { CopyMcpValue, McpLightScanDemo, McpLightTrackedLink } from "../../../components/developers/mcp-light-actions";
 import { CodeBlock } from "../../developers/developer-pages";
 import { MCP_LIGHT_CURSOR_DIRECTORY_URL, MCP_LIGHT_CURSOR_INSTALL_URL, MCP_LIGHT_ROLE_PROMPTS } from "../../../lib/mcp-light-public-links";
+import { PUBLIC_CERTSCORE_MCP_VERSION } from "../../../lib/public-integration-versions";
 import { createBreadcrumbSchema, createFaqPageSchema, createPageMetadata, createSoftwareApplicationSchema } from "../../../lib/seo";
 
 const endpoint = "https://mcp.certscore.ai/mcp/light";
@@ -15,7 +16,7 @@ const firstRunPrompt = "Scan https://ergoveritas.com/.well-known/certscore-canar
 const verificationPrompt = "List the available CertScore tools and confirm that certscore_scan_site, certscore_get_scan_status, and certscore_get_scan_bundle are available. Then scan https://ergoveritas.com/.well-known/certscore-canary/sentinels/broad-baseline.html and report whether the result was new or reused.";
 const agentDisclaimer = "CertScore results are automated observations from a public-web scan. No-go, not-observed, and limited-coverage results are not proof of compliance, absence of risk, or legal status. Review the retained evidence and applicable context before relying on a finding.";
 const registryUrl = "https://registry.modelcontextprotocol.io/?q=ai.certscore%2Fmcp-light";
-const mcpLightVersion = "0.2.16";
+const mcpLightVersion = PUBLIC_CERTSCORE_MCP_VERSION;
 const pageDescription = "Free website privacy scanner and cookie checker for public websites. Detect pre-consent cookies and trackers, consent signals, eligible Accept and Reject Path post-action observations, policy findings, regulatory review signals, and HTTPS/TLS observations.";
 
 export const metadata: Metadata = createPageMetadata({

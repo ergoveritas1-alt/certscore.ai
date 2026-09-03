@@ -234,7 +234,7 @@ Agents and SDKs should honor `Retry-After` on pending or throttled responses. Th
 
 ## TypeScript SDK
 
-Status: published. Install `@certscore/sdk@0.2.8` or newer for API v2 scan creation in EU-Germany, EU-Ireland, and California, typed no-account allowance, completed-limited no-go results, API v2 scan timing fields, and client attribution headers.
+Status: published. Install `@certscore/sdk@0.2.10` or newer for typed GPC, Accept Path, and Reject Path results on Pulse and API v2 scan resources, plus API v2 scan creation in EU-Germany, EU-Ireland, and California.
 
 Docs:
 
