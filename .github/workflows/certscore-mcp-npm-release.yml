@@ -1,0 +1,91 @@
+name: CertScore MCP npm Release
+
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Release tag, for example certscore-mcp-npm-v0.2.17"
+        required: true
+        type: string
+  push:
+    tags:
+      - "certscore-mcp-npm-v*"
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Resolve release tag
+        id: release
+        env:
+          RELEASE_TAG: ${{ inputs.tag || github.ref_name }}
+        run: |
+          set -euo pipefail
+          if [[ ! "${RELEASE_TAG}" =~ ^certscore-mcp-npm-v[0-9]+\.[0-9]+\.[0-9]+([-.][0-9A-Za-z.-]+)?$ ]]; then
+            echo "Expected tag shaped certscore-mcp-npm-vX.Y.Z, got ${RELEASE_TAG}" >&2
+            exit 1
+          fi
+          echo "tag=${RELEASE_TAG}" >> "${GITHUB_OUTPUT}"
+          echo "version=${RELEASE_TAG#certscore-mcp-npm-v}" >> "${GITHUB_OUTPUT}"
+
+      - uses: actions/checkout@v6
+        with:
+          ref: ${{ steps.release.outputs.tag }}
+
+      - uses: pnpm/action-setup@v6
+        with:
+          version: 10.6.3
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 22
+          registry-url: https://registry.npmjs.org
+          package-manager-cache: false
+
+      - name: Install npm CLI
+        run: npm install --global npm@11.4.2
+
+      - run: pnpm install --frozen-lockfile
+
+      - name: Verify release metadata
+        env:
+          RELEASE_VERSION: ${{ steps.release.outputs.version }}
+        run: |
+          node <<'NODE'
+          const pkg = require("./packages/certscore-mcp/package.json");
+
+          const fail = (message) => {
+            console.error(message);
+            process.exit(1);
+          };
+
+          if (pkg.name !== "@certscore/mcp") fail(`Expected package name @certscore/mcp, got ${pkg.name}`);
+          if (pkg.private === true) fail("@certscore/mcp must not be private");
+          if (pkg.publishConfig?.access !== "public") fail("@certscore/mcp publishConfig.access must be public");
+          if (pkg.version !== process.env.RELEASE_VERSION) {
+            fail(`Package version ${pkg.version} does not match release tag version ${process.env.RELEASE_VERSION}`);
+          }
+          NODE
+
+      - name: Build dependencies
+        run: |
+          pnpm --filter @certscore/api-contracts build
+          pnpm --filter @certscore/sdk build
+
+      - run: pnpm --filter @certscore/mcp typecheck
+      - run: pnpm --filter @certscore/mcp test
+      - run: pnpm --filter @certscore/mcp build
+
+      - name: Verify package contents
+        working-directory: packages/certscore-mcp
+        run: npm pack --dry-run
+
+      - name: Publish to npm
+        working-directory: packages/certscore-mcp
+        run: npm publish --provenance --access public
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
