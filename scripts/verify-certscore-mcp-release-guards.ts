@@ -6,6 +6,7 @@ import { pathToFileURL } from "node:url";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
 import { certScoreMcpToolContracts } from "../packages/certscore-api-contracts/src/mcp.js";
+import { PUBLIC_CERTSCORE_MCP_VERSION } from "../apps/web/lib/public-integration-versions.js";
 
 type ManifestTool = {
   name: string;
@@ -47,15 +48,14 @@ function extractStringArrayFromSource(sourcePath: string, marker: string) {
   return [...source.slice(start, end).matchAll(/"([^"]+)"/g)].map((match) => match[1] ?? "");
 }
 
-function extractQuotedStringAfterMarker(sourcePath: string, marker: string, sectionMarker?: string) {
+function assertIdentifierAfterMarker(sourcePath: string, marker: string, identifier: string, sectionMarker?: string) {
   const source = readFileSync(join(repoRoot, sourcePath), "utf8");
   const sectionIndex = sectionMarker ? source.indexOf(sectionMarker) : 0;
   assert.notEqual(sectionIndex, -1, `${sourcePath} should contain ${sectionMarker}`);
   const markerIndex = source.indexOf(marker, sectionIndex);
   assert.notEqual(markerIndex, -1, `${sourcePath} should contain ${marker}`);
-  const value = source.slice(markerIndex).match(/:\s*"([^"]+)"/)?.[1];
-  assert.ok(value, `${sourcePath} should contain a quoted string for ${marker}`);
-  return value;
+  const value = source.slice(markerIndex + marker.length).match(/^\s*([A-Za-z_$][\w$]*)/)?.[1];
+  assert.equal(value, identifier, `${sourcePath} should source ${marker} from ${identifier}`);
 }
 
 function parseCertScoreMcpCask() {
@@ -177,7 +177,13 @@ function npxPackagesFromDocs(paths: string[]) {
 async function main() {
   assert.equal(manifest.length, 12, "CertScore MCP manifest should expose exactly 12 tools");
   const cask = parseCertScoreMcpCask();
-  const discoveryVersion = extractQuotedStringAfterMarker(discoveryRoutePath, "currentVersion:", "mcp: {");
+  assertIdentifierAfterMarker(
+    discoveryRoutePath,
+    "currentVersion:",
+    "PUBLIC_CERTSCORE_MCP_VERSION",
+    "mcp: {"
+  );
+  const discoveryVersion = PUBLIC_CERTSCORE_MCP_VERSION;
 
   assert.deepEqual(
     sortedTools(certScoreMcpToolContracts.map((tool) => ({ name: tool.name, description: tool.description }))),

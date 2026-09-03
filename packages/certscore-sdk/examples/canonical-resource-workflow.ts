@@ -12,6 +12,12 @@ const created = await certscore.scans.create("https://ergoveritas.com/.well-know
 const completed = await certscore.scans.wait(created);
 const scanId = completed.scanId;
 
+console.log(
+  completed.gpcResponse?.status,
+  completed.postAcceptObservation?.verdict,
+  completed.postRefusalObservation?.verdict
+);
+
 const status = await certscore.scans.status(scanId);
 const findings = await certscore.findings.list(scanId);
 const preConsentTable = await certscore.scans.preConsentCookiesTrackers(scanId);
