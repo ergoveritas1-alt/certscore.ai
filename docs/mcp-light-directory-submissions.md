@@ -41,7 +41,7 @@ Privacy; Developer Tools; Website Analysis; Security; Compliance Review; Agent T
 ## Canonical technical fields
 
 - Registry name: `ai.certscore/mcp-light`
-- Version: `0.2.16`
+- Version: `0.2.17`
 - Transport: Streamable HTTP
 - Authentication: none
 - Tools: `certscore_scan_site`, `certscore_get_scan_status`, `certscore_get_scan_bundle`
@@ -51,7 +51,7 @@ The separate `ai.certscore/mcp` manifest and `https://mcp.certscore.ai/mcp` endp
 
 ## Submission notes
 
-- GitHub MCP Registry: publication is complete. Version `0.2.16` was published to the Official MCP Registry on August 28, 2026 and is the active latest version of `ai.certscore/mcp-light`; verify it at https://registry.modelcontextprotocol.io/?q=ai.certscore%2Fmcp-light and use `packages/certscore-mcp/server-light.json` for future releases after validation and existing namespace authentication.
+- Official MCP Registry: version `0.2.17` is the prepared active release of `ai.certscore/mcp-light`; verify the published latest record at https://registry.modelcontextprotocol.io/?q=ai.certscore%2Fmcp-light and use `packages/certscore-mcp/server-light.json` for future releases after validation and existing namespace authentication.
 - Claude Code: the validated plugin package is in `integrations/claude-code/certscore-mcp-light`, with the repository marketplace catalog at `.claude-plugin/marketplace.json`.
 - Anthropic directory: the existing `certscore-ai` listing is Published — Pending review. Reviewer instructions request an in-place replacement of the authenticated OAuth connection with the no-auth Light endpoint. Do not create a duplicate listing; endpoint and authentication changes remain reviewer-dependent.
 - Cursor: the marketplace-ready Agent Plugin package is in `integrations/cursor/certscore-website-privacy-preflight` at integration version `1.0.2`. Its MCP component is named `CertScore.ai`, its description includes the evidence-confirmed Reject Path boundary, and the landing page provides three official Cursor prompt deeplinks.

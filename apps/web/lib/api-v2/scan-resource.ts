@@ -25,7 +25,9 @@ import {
   type ScanNoGoResult
 } from "@certscore/api-contracts";
 import type { PulseResponse } from "@certscore/api-contracts";
+import { deriveChoicePathEvidenceDisposition } from "@certscore/contracts";
 import type { ScanDetailResponse } from "../../server/scans/get-scan-by-id";
+import { getPersistedCanonicalReportProjection } from "../../server/scans/persisted-canonical-report-projection";
 import { projectExternalScanNoGo } from "@website-signal-risk-scanner/shared";
 import { derivePulseReportScore } from "../pulse/projection";
 import {
@@ -34,7 +36,8 @@ import {
   isInventoryDisplayHostname,
   type InventoryGroupRow
 } from "../scans/runtime-inventory-projection";
-import { GDPR_EPRIVACY_EVIDENCE_SCORE_VERSION } from "../scans/regulatory-coverage-score";
+import { CANONICAL_OVERALL_SCORE_VERSION } from "../scans/california-gpc-response-policy";
+import { buildCanonicalGpcResponseProjection } from "../scans/gpc-response-projection";
 import { SITE_URL } from "../seo";
 
 function absoluteUrl(path: string) {
@@ -105,7 +108,9 @@ type PulseStatusLike = {
   coverage?: ApiV2ScanJob["coverage"];
   resultDisposition?: "no_go";
   noGo?: ScanNoGoResult;
+  postAcceptObservation?: ApiV2ScanResource["postAcceptObservation"];
   postRefusalObservation?: ApiV2ScanResource["postRefusalObservation"];
+  gpcResponse?: ApiV2ScanResource["gpcResponse"];
   preConsentPreview?: ApiV2ScanJob["preConsentPreview"];
   error?: {
     code: string;
@@ -527,7 +532,7 @@ export function projectedFindingsFromPulse(pulse: PulseResponse): PulseFindingLi
   return [...byId.values()];
 }
 
-function deriveApiV2PostRefusalObservation(scanRecord: ScanDetailResponse) {
+export function deriveApiV2PostRefusalObservation(scanRecord: ScanDetailResponse) {
   const supportedStatuses = new Set([
     "confirmed_observation",
     "confirmed_clean",
@@ -568,6 +573,8 @@ function deriveApiV2PostRefusalObservation(scanRecord: ScanDetailResponse) {
       refusalExercised: false,
       observationCount: 0,
       productionProjectable: false,
+      evidenceDisposition: "indeterminate" as const,
+      indeterminateReason: limitationCode,
       verdict: "no_confirmed_post_refusal_verdict" as const,
       interpretation,
       observationStrategy: "not_applicable" as const,
@@ -606,16 +613,28 @@ function deriveApiV2PostRefusalObservation(scanRecord: ScanDetailResponse) {
   const storageObserved = activityRows.some((row) => row.activityType === "storage_write");
   const networkObserved = activityRows.some((row) => row.activityType === "network_request");
   const contradictionObserved = projection?.contradictionObserved === true;
-  const verdict = status === "confirmed_observation"
+  const persistedStorageRows = Array.isArray(projection?.preConsentStorageNotCleared)
+    ? projection.preConsentStorageNotCleared.filter((value) =>
+        value && typeof value === "object" && !Array.isArray(value)
+      ) as Record<string, unknown>[]
+    : [];
+  const persistenceOnly = persistedStorageRows.length > 0 &&
+    activityRows.length === 0 &&
+    !contradictionObserved;
+  const confirmed = (status === "confirmed_observation" || status === "confirmed_clean") &&
+    projection?.refusalExercised === true &&
+    projection?.productionProjectable === true &&
+    plainRecord(projection?.actionControlProof)?.action === "reject";
+  const verdict = confirmed && status === "confirmed_observation"
     ? activityRows.length > 0
       ? "eligible_nonessential_activity_observed_after_confirmed_refusal" as const
       : contradictionObserved
         ? "retained_consent_signal_contradiction_observed_after_confirmed_refusal" as const
-        : "eligible_nonessential_activity_observed_after_confirmed_refusal" as const
-    : status === "confirmed_clean"
+        : "no_eligible_nonessential_activity_observed_during_completed_window" as const
+    : confirmed && status === "confirmed_clean"
       ? "no_eligible_nonessential_activity_observed_during_completed_window" as const
       : "no_confirmed_post_refusal_verdict" as const;
-  const interpretation = status === "confirmed_observation"
+  const interpretation = confirmed && status === "confirmed_observation"
     ? storageObserved && networkObserved
       ? "Reject was confirmed, and eligible non-essential network and storage activity was observed afterward."
       : storageObserved
@@ -624,11 +643,25 @@ function deriveApiV2PostRefusalObservation(scanRecord: ScanDetailResponse) {
           ? "Reject was confirmed, and eligible non-essential network activity was observed afterward."
           : contradictionObserved
             ? "Reject was confirmed, and a retained consent signal contradicted the refusal afterward."
-            : "Reject was confirmed, and an eligible post-refusal observation was retained afterward."
-    : status === "confirmed_clean"
+            : persistenceOnly
+              ? "Reject was confirmed. No eligible post-refusal request or storage write was observed; unchanged non-essential storage remained as a score-neutral review signal."
+              : "Reject was confirmed. No eligible non-essential activity was observed during the completed bounded window."
+    : confirmed && status === "confirmed_clean"
       ? "Reject was confirmed. No eligible non-essential activity was observed during the completed bounded window."
       : "No confirmed post-refusal verdict was established.";
-  const confirmed = status === "confirmed_observation" || status === "confirmed_clean";
+  const evidenceDisposition = deriveChoicePathEvidenceDisposition({
+    status: status as
+      | "confirmed_observation"
+      | "confirmed_clean"
+      | "unconfirmed"
+      | "not_attempted"
+      | "unsupported"
+      | "aborted",
+    actionExercised: projection?.refusalExercised === true,
+    controlProofVerified: plainRecord(projection?.actionControlProof)?.action === "reject",
+    productionProjectable: projection?.productionProjectable === true,
+    limitations: rawLimitations,
+  });
   return {
     status: status as
       | "confirmed_observation"
@@ -638,8 +671,10 @@ function deriveApiV2PostRefusalObservation(scanRecord: ScanDetailResponse) {
       | "unsupported"
       | "aborted",
     refusalExercised: projection?.refusalExercised === true,
-    observationCount: Math.max(0, finiteInt(projection?.observationCount) ?? 0),
-    productionProjectable: projection?.productionProjectable === true,
+    observationCount: confirmed ? Math.max(0, finiteInt(projection?.observationCount) ?? 0) : 0,
+    productionProjectable: confirmed,
+    evidenceDisposition: evidenceDisposition.disposition,
+    indeterminateReason: evidenceDisposition.reasonCode,
     verdict,
     interpretation,
     observationStrategy: confirmed ? "stop_on_first_eligible_activity" as const : "not_applicable" as const,
@@ -675,6 +710,181 @@ function deriveApiV2PostRefusalObservation(scanRecord: ScanDetailResponse) {
   };
 }
 
+export function deriveApiV2PostAcceptObservation(scanRecord: ScanDetailResponse) {
+  const supportedStatuses = new Set([
+    "confirmed_observation",
+    "confirmed_clean",
+    "unconfirmed",
+    "not_attempted",
+    "unsupported",
+    "aborted",
+  ]);
+  const runtimeArtifacts = plainRecord(scanRecord.runtimeArtifacts);
+  const projection = plainRecord(
+    runtimeArtifacts?.postAcceptEvidenceProjection ??
+    runtimeArtifacts?.post_accept_evidence_projection,
+  );
+  const coverage = plainRecord(
+    runtimeArtifacts?.postAcceptObservationCoverage ??
+    runtimeArtifacts?.post_accept_observation_coverage,
+  );
+  const status = stringOrNull(projection?.status);
+  const limitationCode = stringOrNull(coverage?.limitationCode);
+  const projectionIndeterminateReason = stringOrNull(projection?.indeterminateReason);
+  const indeterminateReason = limitationCode ?? projectionIndeterminateReason ?? "unavailable";
+  const coverageUnavailable = coverage?.status === "limited" || coverage?.status === "not_applicable";
+  const projectionUnavailable = Boolean(projection) && projection?.productionProjectable !== true;
+  if (!status || !supportedStatuses.has(status) || coverageUnavailable || projectionUnavailable) {
+    if (!coverage && !projection) return null;
+    const interpretation = indeterminateReason === "accept_control_not_observed"
+      ? "Accept Path was not applicable because a first-layer Accept control was not observed in the complete consent inventory."
+      : indeterminateReason === "accept_path_timeout"
+        ? "Accept Path did not complete within the six-second post-primary allowance, so no post-accept verdict was established."
+        : indeterminateReason === "accept_observation_window_truncated"
+          ? "Accept was confirmed, but the bounded post-accept observation window was truncated, so no production post-accept verdict was established."
+          : indeterminateReason === "accept_path_worker_failed"
+            ? "Accept Path worker failed before verified evidence could be joined, so no post-accept verdict was established."
+            : indeterminateReason === "verified_action_control_proof_missing"
+              ? "The Accept interaction was not tied to a verified Accept control, so no post-accept verdict was established."
+            : "Post-Accept evidence did not satisfy the production projection invariants, so no post-accept verdict was established.";
+    const trigger = indeterminateReason === "accept_control_not_observed"
+      ? "accept_control_not_observed" as const
+      : indeterminateReason === "accept_path_timeout"
+        ? "accept_path_timeout" as const
+        : indeterminateReason === "accept_observation_window_truncated"
+          ? "accept_observation_window_truncated" as const
+          : indeterminateReason === "accept_path_worker_failed"
+            ? "worker_failed" as const
+            : "unavailable" as const;
+    const coverageLimitations = [interpretation];
+    return {
+      status: indeterminateReason === "accept_control_not_observed" ? "not_attempted" as const : "aborted" as const,
+      acceptanceExercised: false,
+      observationCount: 0,
+      productionProjectable: false,
+      evidenceDisposition: "indeterminate" as const,
+      indeterminateReason,
+      verdict: "no_confirmed_post_accept_verdict" as const,
+      interpretation,
+      observationStrategy: "not_applicable" as const,
+      termination: {
+        kind: "unavailable" as const,
+        intentional: false,
+        trigger,
+      },
+      completedAt: dateStringOrNull(coverage?.completedAt ?? projection?.completedAt),
+      coverageLimitations,
+      limitations: coverageLimitations,
+    };
+  }
+  const rawLimitations = Array.isArray(projection?.limitations)
+    ? projection.limitations.filter((value): value is string => typeof value === "string").slice(0, 24)
+    : [];
+  const earlyExit = rawLimitations
+    .find((value) => value.startsWith("observation_early_exit:"))
+    ?.slice("observation_early_exit:".length);
+  const supportedEarlyExitTriggers = new Set([
+    "non_essential_request_observed",
+    "non_essential_storage_write_observed",
+    "acceptance_signal_contradiction_observed",
+  ]);
+  const evidenceSatisfied = Boolean(earlyExit && supportedEarlyExitTriggers.has(earlyExit));
+  const coverageLimitations = [...new Set(rawLimitations
+    .filter((value) => !value.startsWith("observation_early_exit:") || !evidenceSatisfied))]
+    .slice(0, 24);
+  const activityRows = Array.isArray(projection?.postAcceptActivity)
+    ? projection.postAcceptActivity.filter((value) => value && typeof value === "object" && !Array.isArray(value)) as Record<string, unknown>[]
+    : [];
+  const storageObserved = activityRows.some((row) => row.activityType === "storage_write");
+  const networkObserved = activityRows.some((row) => row.activityType === "network_request");
+  const contradictionObserved = projection?.contradictionObserved === true;
+  const confirmed = (status === "confirmed_observation" || status === "confirmed_clean") &&
+    projection?.acceptanceExercised === true &&
+    projection?.productionProjectable === true &&
+    plainRecord(projection?.actionControlProof)?.action === "accept";
+  const verdict = confirmed && status === "confirmed_observation"
+    ? activityRows.length > 0
+      ? "eligible_nonessential_activity_observed_after_confirmed_acceptance" as const
+      : contradictionObserved
+        ? "retained_consent_signal_contradiction_observed_after_confirmed_acceptance" as const
+        : "eligible_nonessential_activity_observed_after_confirmed_acceptance" as const
+    : confirmed && status === "confirmed_clean"
+      ? "no_eligible_nonessential_activity_observed_during_completed_window" as const
+      : "no_confirmed_post_accept_verdict" as const;
+  const interpretation = confirmed && status === "confirmed_observation"
+    ? storageObserved && networkObserved
+      ? "Accept was confirmed, and eligible non-essential network and storage activity was observed afterward."
+      : storageObserved
+        ? "Accept was confirmed, and eligible non-essential storage activity was observed afterward."
+        : networkObserved
+          ? "Accept was confirmed, and eligible non-essential network activity was observed afterward."
+          : contradictionObserved
+            ? "Accept was confirmed, and a retained consent signal contradicted the acceptance afterward."
+            : "Accept was confirmed, and an eligible post-accept observation was retained afterward."
+    : confirmed && status === "confirmed_clean"
+      ? "Accept was confirmed. No eligible non-essential activity was observed during the completed bounded window."
+      : "No confirmed post-accept verdict was established.";
+  const evidenceDisposition = deriveChoicePathEvidenceDisposition({
+    status: status as
+      | "confirmed_observation"
+      | "confirmed_clean"
+      | "unconfirmed"
+      | "not_attempted"
+      | "unsupported"
+      | "aborted",
+    actionExercised: projection?.acceptanceExercised === true,
+    controlProofVerified: plainRecord(projection?.actionControlProof)?.action === "accept",
+    productionProjectable: projection?.productionProjectable === true,
+    limitations: rawLimitations,
+  });
+  return {
+    status: status as
+      | "confirmed_observation"
+      | "confirmed_clean"
+      | "unconfirmed"
+      | "not_attempted"
+      | "unsupported"
+      | "aborted",
+    acceptanceExercised: projection?.acceptanceExercised === true,
+    observationCount: confirmed ? Math.max(0, finiteInt(projection?.observationCount) ?? 0) : 0,
+    productionProjectable: confirmed,
+    evidenceDisposition: evidenceDisposition.disposition,
+    indeterminateReason: evidenceDisposition.reasonCode,
+    verdict,
+    interpretation,
+    observationStrategy: confirmed ? "stop_on_first_eligible_activity" as const : "not_applicable" as const,
+    termination: confirmed
+      ? evidenceSatisfied
+        ? {
+            kind: "evidence_satisfied" as const,
+            intentional: true,
+            trigger: earlyExit as
+              | "non_essential_request_observed"
+              | "non_essential_storage_write_observed"
+              | "acceptance_signal_contradiction_observed",
+          }
+        : earlyExit
+          ? {
+              kind: "unavailable" as const,
+              intentional: false,
+              trigger: "unavailable" as const,
+            }
+          : {
+              kind: "window_elapsed" as const,
+              intentional: true,
+              trigger: "window_elapsed" as const,
+            }
+      : {
+          kind: "unavailable" as const,
+          intentional: false,
+          trigger: "unavailable" as const,
+        },
+    completedAt: dateStringOrNull(projection?.completedAt),
+    coverageLimitations,
+    limitations: coverageLimitations,
+  };
+}
+
 function deriveCoverage(scanRecord: ScanDetailResponse) {
   const noGoProjection = projectExternalScanNoGo(scanRecord.runtimeArtifacts);
   if (noGoProjection) {
@@ -696,6 +906,18 @@ function deriveCoverage(scanRecord: ScanDetailResponse) {
       ? "Reject Path did not complete within the six-second post-primary allowance."
       : "Reject Path worker failed before verified evidence could be joined."
     : null;
+  const postAcceptCoverage = plainRecord(
+    runtimeArtifacts?.postAcceptObservationCoverage ??
+    runtimeArtifacts?.post_accept_observation_coverage,
+  );
+  const postAcceptLimitationCode = stringOrNull(postAcceptCoverage?.limitationCode);
+  const postAcceptLimitation = postAcceptCoverage?.status === "limited"
+    ? postAcceptLimitationCode === "accept_path_timeout"
+      ? "Accept Path did not complete within the six-second post-primary allowance."
+      : postAcceptLimitationCode === "accept_observation_window_truncated"
+        ? "Accept was confirmed, but the bounded post-accept observation window was truncated."
+        : "Accept Path worker failed before verified evidence could be joined."
+    : null;
   const homepageObserved = scanRecord.scan.pagesScanned > 0 || posture.homepageFetchStatus === "ok";
   const limited =
     scanRecord.scan.status !== "completed" ||
@@ -715,8 +937,50 @@ function deriveCoverage(scanRecord: ScanDetailResponse) {
     summary,
     limitations: [
       "Automated public-web scan only.",
+      ...(postAcceptLimitation ? [postAcceptLimitation] : []),
       ...(postRefusalLimitation ? [postRefusalLimitation] : []),
     ]
+  };
+}
+
+export function deriveApiV2GpcResponse(scanRecord: ScanDetailResponse): ApiV2ScanResource["gpcResponse"] {
+  const canonical = getPersistedCanonicalReportProjection(scanRecord);
+  if (!canonical) {
+    return null;
+  }
+  const projection = buildCanonicalGpcResponseProjection(canonical.ownerUnifiedFindings);
+  if (!projection) {
+    return null;
+  }
+  const assessment = projection.assessment;
+  return {
+    status: assessment.status,
+    findingTitle: assessment.findingTitle,
+    summary: projection.summary,
+    scoreEffect: "none",
+    legalInterpretation: "not_assessed",
+    comparison: {
+      comparable: assessment.comparison.comparable,
+      protocol: assessment.comparison.protocol,
+      baselineArtifact: {
+        lane: assessment.comparison.baselineArtifact.lane,
+        sha256: assessment.comparison.baselineArtifact.sha256,
+        sizeBytes: assessment.comparison.baselineArtifact.sizeBytes,
+      },
+      gpcArtifact: {
+        lane: assessment.comparison.gpcArtifact.lane,
+        sha256: assessment.comparison.gpcArtifact.sha256,
+        sizeBytes: assessment.comparison.gpcArtifact.sizeBytes,
+      },
+      enabledProof: assessment.comparison.enabledProof,
+      deltas: assessment.comparison.deltas,
+      limitationKeys: assessment.comparison.limitationKeys,
+    },
+    californiaPolicy: {
+      applied: projection.californiaDeductionPoints === 15,
+      deductionPoints: projection.californiaDeductionPoints,
+    },
+    evidenceUrl: absoluteUrl(`/api/v2/scans/${scanRecord.scan.id}/findings/gpc_response`),
   };
 }
 
@@ -731,8 +995,10 @@ export function buildApiV2ScanResource(
   const noGoProjection = projectExternalScanNoGo(scanRecord.runtimeArtifacts);
   const canonicalResultState = apiV2CanonicalResultState(scanRecord);
   const scoreStatus = canonicalResultState === "final" ? "final" : "provisional";
-  const scoreVersion = stringOrNull(scanRecord.snapshot?.score_version) ?? GDPR_EPRIVACY_EVIDENCE_SCORE_VERSION;
+  const scoreVersion = stringOrNull(scanRecord.snapshot?.score_version) ?? CANONICAL_OVERALL_SCORE_VERSION;
   const scoreUpdatedAt = dateStringOrNull(scanRecord.snapshot?.score_scored_at ?? scan.completedAt);
+  const gpcResponse = deriveApiV2GpcResponse(scanRecord);
+  const postAcceptObservation = deriveApiV2PostAcceptObservation(scanRecord);
   const postRefusalObservation = deriveApiV2PostRefusalObservation(scanRecord);
   const configuredUrl = typeof scan.scanConfigJson?.normalizedUrl === "string"
     ? scan.scanConfigJson.normalizedUrl
@@ -763,6 +1029,8 @@ export function buildApiV2ScanResource(
     scoreVersion,
     scoreUpdatedAt,
     riskLevel: noGoProjection ? null : riskLevelFromScore(score),
+    gpcResponse,
+    postAcceptObservation,
     postRefusalObservation,
     coverage: deriveCoverage(scanRecord),
     links: {
@@ -968,6 +1236,8 @@ export function buildApiV2ScanStatus(
     scoreVersion: canonicalScan.scoreVersion ?? null,
     scoreUpdatedAt: canonicalScan.scoreUpdatedAt ?? null,
     riskLevel: canonicalScan.riskLevel ?? null,
+    gpcResponse: canonicalScan.gpcResponse ?? null,
+    postAcceptObservation: canonicalScan.postAcceptObservation ?? null,
     postRefusalObservation: canonicalScan.postRefusalObservation ?? null,
     coverage: canonicalScan.coverage ?? null,
     lastUpdatedAt: lastHeartbeatAt ?? undefined,
@@ -1068,6 +1338,9 @@ export function buildApiV2ScanJobFromPulseStatus(
     scoreVersion: status.scoreVersion ?? null,
     scoreUpdatedAt: dateStringOrNull(status.scoreUpdatedAt),
     riskLevel: status.riskLevel ?? null,
+    gpcResponse: status.gpcResponse ?? null,
+    postAcceptObservation: status.postAcceptObservation ?? null,
+    postRefusalObservation: status.postRefusalObservation ?? null,
     coverage: status.coverage ?? null,
     lastUpdatedAt: dateStringOrNull(status.lastUpdatedAt ?? status.completedAt ?? status.createdAt) ?? undefined,
     phaseStartedAt: dateStringOrNull(status.phaseStartedAt ?? status.startedAt ?? status.createdAt),

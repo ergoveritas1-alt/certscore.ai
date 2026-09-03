@@ -181,6 +181,9 @@ Tools: certscore_scan_site, certscore_get_scan_status, certscore_get_scan_bundle
           <p className="max-w-3xl text-sm leading-7 text-slate-600">
             Reject Path observations are reported only when the scan has eligible, confirmed post-refusal evidence. Unsupported, unavailable, or limited Reject Path coverage remains explicit and score-neutral.
           </p>
+          <p className="max-w-3xl text-sm leading-7 text-slate-600">
+            Scan bundles may include three typed results: <code>postAcceptObservation</code> is a score-neutral comparison baseline, <code>postRefusalObservation</code> is the only one that can support a choice-path finding, and <code>gpcResponse</code> is a jurisdiction-neutral comparison with <code>scoreEffect: none</code>. A terminal scan status describes lifecycle only; the observation verdict carries the outcome, and every non-confirmed observation status is limited coverage rather than a pass.
+          </p>
         </Section>
 
         <Section eyebrow="Light workflow" title="The canonical three-tool sequence">

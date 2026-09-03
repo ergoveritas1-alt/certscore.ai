@@ -2,7 +2,7 @@ import { API_READ_RATE_POLICY_OPENAPI_EXTENSION } from "@website-signal-risk-sca
 
 const discoveryDocument = {
   name: "CertScore Pulse beta",
-  version: "0.5.4",
+  version: "0.5.5",
   description:
     "CertScore Pulse uses automated runtime analysis of public websites to detect review signals around pre-consent tracking, third-party requests, consent enforcement gaps, cookie activity, accessibility issues, and disclosure inconsistencies.",
   capabilities: {

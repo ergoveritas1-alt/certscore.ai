@@ -50,7 +50,7 @@ const guides: GuideCard[] = [
   },
   {
     title: "Cookie consent scanner",
-    description: "Scanner page for cookie consent timing, third-party cookies, CMP behavior, and reject-path signals.",
+    description: "Scanner page for cookie consent timing, third-party cookies, CMP behavior, and confirmed Accept/Reject observations.",
     category: "Solutions",
     href: "/solutions/cookie-consent-scanner"
   },

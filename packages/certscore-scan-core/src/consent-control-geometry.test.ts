@@ -71,6 +71,38 @@ test("captures inline Cookie Consent Tool anchors with reduced prominence", asyn
   assert.equal(artifact.summary.firstLayerOptions, true);
 });
 
+test("retains a stable ancestor-scoped selector when utility classes are duplicated outside consent", async () => {
+  const artifact = await captureFixture(`
+    <section id="cookie-banner" role="dialog" aria-label="Cookie consent">
+      <p>Choose whether to accept or reject optional cookies.</p>
+      <button class="flex items-center accept">Accept All</button>
+      <button class="flex items-center decline">Decline All</button>
+    </section>
+    <section id="account-actions">
+      <button class="flex items-center decline" title="Decline All">Account action</button>
+    </section>
+  `);
+
+  const reject = findCandidate(artifact, "Decline All");
+  assert.equal(reject?.selectorHint, "#cookie-banner button");
+});
+
+test("retains a unique class-only ancestor scope for a generic consent control", async () => {
+  const artifact = await captureFixture(`
+    <section class="fixed bottom-16 cookie-surface" role="dialog">
+      <p>Choose whether to accept or reject optional cookies.</p>
+      <button class="flex items-center">Accept All</button>
+      <button class="flex items-center">Decline All</button>
+    </section>
+    <section class="account-actions">
+      <button class="flex items-center" title="Decline All">Account action</button>
+    </section>
+  `);
+
+  const reject = findCandidate(artifact, "Decline All");
+  assert.equal(reject?.selectorHint, "section.fixed button");
+});
+
 test("classifies an inline preferences link beside accept and reject as part of the action cluster", async () => {
   const artifact = await captureFixture(`
     <section id="cookie-banner" role="dialog" aria-label="Cookies und Werbeoptionen" style="position: fixed; left: 0; top: 0; width: 1000px; padding: 24px; background: white;">
@@ -147,7 +179,14 @@ test("retains BST DSGVO Cookie identity and contextual VERSTANDEN accept evidenc
     <section id="bst-cookie-notice">
       <p>Diese Seite verwendet Cookies, um die Nutzerfreundlichkeit zu verbessern. Mit der weiteren Verwendung stimmst du dem zu.</p>
       <button type="button">VERSTANDEN</button>
-      <a class="bst-popup-link" href="#cookie-information">Weitere Informationen</a>
+      <div style="display:none">
+        <a
+          class="bst-popup-link"
+          title="Cookies blockieren, deaktivieren und löschen"
+          href="https://www.bst-systemtechnik.de/cookies-blockieren-deaktivieren-und-loeschen-browser-einstellungen/"
+          target="_blank"
+        >hier.</a>
+      </div>
     </section>
   `);
 
@@ -161,6 +200,12 @@ test("retains BST DSGVO Cookie identity and contextual VERSTANDEN accept evidenc
   assert.equal(accept?.decisionStatus, "confirmed_visible");
   assert.equal(accept?.matchStrength, "contextual");
   assert.ok(accept?.classifierReasonCodes.includes("variant_approval_acknowledgment"));
+  const externalInstructions = findCandidate(artifact, "hier.");
+  assert.equal(externalInstructions?.actionType, "reject_all");
+  assert.equal(externalInstructions?.decisionStatus, "hidden");
+  assert.equal(artifact.summary.limitations.some((limitation) =>
+    limitation.startsWith("reject_all:hier.:hidden")
+  ), true);
 });
 
 test("classifies sibling-wrapped inline preferences as one retained consent action cluster", async () => {

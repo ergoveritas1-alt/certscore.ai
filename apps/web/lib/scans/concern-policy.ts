@@ -6,9 +6,13 @@ import type {
   NormalizedConcernNegativeEvidenceFlag,
   NormalizedConcernPolicyPageType,
   NormalizedConcernPromotionEligibility,
-  NormalizedConcernRegulatoryChecklistEligibility
+  NormalizedConcernRegulatoryChecklistEligibility,
+  NormalizedConcernScoreEffect
 } from "./normalized-concerns";
-import { classifyConsentControlLabel } from "@certscore/contracts";
+import { classifyConsentControlLabel, gpcResponseAssessmentSchema } from "@certscore/contracts";
+import {
+  deriveCaliforniaGpcResponsePolicy
+} from "./california-gpc-response-policy";
 import { evaluateCookieRetentionReview } from "./cookie-retention-review";
 import { evaluateConsentControlLifecycleEvidence } from "./consent-control-lifecycle";
 import { evaluateConsentGovernanceDisclosureEvidence } from "./consent-governance-disclosure";
@@ -1060,6 +1064,30 @@ function isRejectTrackingPersistenceConcern(
   return /reject_did_not_reduce_tracking|reject_did_not_reduce_third_party_cookies|post_refusal_non_essential_activity|pre_consent_storage_not_cleared|refusal_signal_contradicts_action|reject_tracking_persists_after_reject|reject.*tracking|reject.*third[-_ ]party.*cookies/.test(haystack);
 }
 
+function isPostAcceptObservationConcern(
+  concern: Pick<NormalizedConcern, "canonicalConcernKey" | "suggestedUnifiedFindingId" | "originKey" | "title">
+) {
+  return [
+    concern.canonicalConcernKey,
+    concern.suggestedUnifiedFindingId,
+    concern.originKey,
+    concern.title
+  ]
+    .filter(Boolean)
+    .join(" ")
+    .toLowerCase()
+    .match(/post_accept_consent_dependent_activity|accept_reject_outcomes_indistinguishable|acceptance_signal_contradicts_action/) !== null;
+}
+
+function hasProductionProjectablePostAcceptEvidence(
+  rawEvidence: Record<string, unknown> | null | undefined
+) {
+  return getBooleanEvidence(rawEvidence, ["postAcceptProductionProjectable"]) === true &&
+    getBooleanEvidence(rawEvidence, ["acceptanceExercised"]) === true &&
+    getFirstString(rawEvidence, ["acceptanceRegistrationStatus"]) === "confirmed" &&
+    getFirstString(rawEvidence, ["scoreEffect"]) === "none";
+}
+
 function isStoredIdentifierPersistenceConcern(
   concern: Pick<NormalizedConcern, "canonicalConcernKey" | "suggestedUnifiedFindingId" | "originKey" | "title">
 ) {
@@ -1573,6 +1601,7 @@ function isCcpaCpraDeferredConcern(
   concern: Pick<NormalizedConcern, "suggestedUnifiedFindingId">
 ) {
   return concern.suggestedUnifiedFindingId === "sale_sharing_controls_missing" ||
+    concern.suggestedUnifiedFindingId === "cpra_cba_opt_out_missing" ||
     concern.suggestedUnifiedFindingId === "do_not_sell_sharing_disclosure_conflict";
 }
 
@@ -1794,30 +1823,6 @@ function hasPromotableWeakCookieAttributeEvidence(rawEvidence: Record<string, un
   }
 
   return false;
-}
-
-function hasMeaningfulGpcIgnoredEvidence(rawEvidence: Record<string, unknown> | null | undefined) {
-  if (!rawEvidence) {
-    return false;
-  }
-
-  const trackerCountDelta = getNumberEvidence(rawEvidence, ["trackerCountDelta", "tracker_count_delta"]) ?? 0;
-  const thirdPartyCookieCountDelta =
-    getNumberEvidence(rawEvidence, ["thirdPartyCookieCountDelta", "third_party_cookie_count_delta"]) ?? 0;
-  const hasMeaningfulDelta = trackerCountDelta !== 0 || thirdPartyCookieCountDelta !== 0;
-
-  if (!hasMeaningfulDelta) {
-    return false;
-  }
-
-  const hasReviewerVisibleSupport =
-    hasSubstantivePageOrSnippetEvidence(rawEvidence) ||
-    getBooleanEvidence(rawEvidence, ["gpcDisclosurePresent", "gpc_disclosure_present"]) === true ||
-    getStringArrayValues(rawEvidence, ["policyMentions", "policy_mentions"]).some((value) =>
-      /gpc|global privacy control|opt-?out preference/i.test(value)
-    );
-
-  return hasReviewerVisibleSupport;
 }
 
 function hasSubstantivePageOrSnippetEvidence(rawEvidence: Record<string, unknown> | null | undefined) {
@@ -2413,9 +2418,16 @@ function getConsentPaidDeclinePathChecklistEligibility(input: {
     "consentPaidDeclinePathState",
     "consent_paid_decline_path_state"
   ]);
-  return paidDeclineState === "reject_with_subscription" || paidDeclineState === "reject_with_payment"
-    ? "review_signal"
-    : "none";
+  const paidVariantObserved =
+    paidDeclineState === "reject_with_subscription" || paidDeclineState === "reject_with_payment";
+  const fullyQualified =
+    input.rawEvidence?.consentControlAssessmentStatus === "complete" &&
+    input.rawEvidence?.consentControlCoverageStatus === "complete" &&
+    input.rawEvidence?.consentControlDocumentIdentityStatus === "matched" &&
+    input.rawEvidence?.consentControlNoGo === false &&
+    input.rawEvidence?.consentControlSurfaceStatus === "observed_actionable" &&
+    input.rawEvidence?.freeRejectControlState === "not_observed";
+  return paidVariantObserved && fullyQualified ? "review_signal" : "none";
 }
 
 function getConsentDismissWithoutRejectChecklistEligibility(input: {
@@ -2539,7 +2551,7 @@ export function packetNeedsPageAttribution(input: {
 }) {
   return (
     (input.family === "consent_tracking" &&
-      !["gpc_signal_not_honored", "weak_cookie_security_attributes", "consent_mechanism_absent", "consent_surface_missing"].includes(input.unifiedFindingId)) ||
+      !["gpc_response", "weak_cookie_security_attributes", "consent_mechanism_absent", "consent_surface_missing"].includes(input.unifiedFindingId)) ||
     input.family === "contradiction" ||
     (input.family === "sensitive_data" &&
       !isDomainLevelSensitiveContextFinding(input.unifiedFindingId) &&
@@ -2566,6 +2578,7 @@ export function deriveConcernPolicy(input: {
   negativeEvidenceFlags: NormalizedConcernNegativeEvidenceFlag[];
   promotionEligibility: NormalizedConcernPromotionEligibility;
   regulatoryChecklistEligibility?: NormalizedConcernRegulatoryChecklistEligibility;
+  scoreEffects?: NormalizedConcernScoreEffect[];
 } {
   const hasDirectRuntime = input.evidenceStrengthFlags.includes("direct_runtime");
   const hasPageAttribution = input.evidenceStrengthFlags.includes("page_attributed");
@@ -2573,6 +2586,44 @@ export function deriveConcernPolicy(input: {
   const negativeEvidenceFlags = new Set<NormalizedConcernNegativeEvidenceFlag>();
 
   const suggestedUnifiedFindingId = input.concern.suggestedUnifiedFindingId;
+  if (suggestedUnifiedFindingId === "gpc_response") {
+    const status = getFirstString(input.rawEvidence, ["gpcResponseStatus"]);
+    const parsedAssessment = gpcResponseAssessmentSchema.safeParse(
+      input.rawEvidence?.gpcResponseAssessment ?? input.rawEvidence?.gpc_response_assessment,
+    );
+    const typedAssessment = parsedAssessment.success ? parsedAssessment.data : null;
+    const californiaPolicy = typedAssessment
+      ? deriveCaliforniaGpcResponsePolicy(typedAssessment)
+      : null;
+    const scoreEffects: NormalizedConcernScoreEffect[] = californiaPolicy?.scoreEffect === "deduction" && typedAssessment
+      ? [{
+          appliesTo: "certscore_overall",
+          deductionPoints: californiaPolicy.deductionPoints,
+          evidenceRefs: [
+            typedAssessment.comparison.baselineArtifact.uri,
+            typedAssessment.comparison.gpcArtifact.uri,
+            ...typedAssessment.comparison.evidenceRefs,
+          ].filter((value, index, values) => values.indexOf(value) === index).slice(0, 32),
+          framework: "california",
+          observedActivity: californiaPolicy.eligibleActivity.persistedUnderGpc.slice(0, 100),
+          policyKey: californiaPolicy.policyKey,
+          policyVersion: californiaPolicy.policyVersion,
+          reasonCode: californiaPolicy.reasonCode,
+        }]
+      : [];
+    const validAssessment =
+      (status === "responsive" || status === "no_observable_response" || status === "indeterminate") &&
+      getFirstString(input.rawEvidence, ["scoreEffect"]) === "none" &&
+      getFirstString(input.rawEvidence, ["legalInterpretation"]) === "not_assessed";
+    return {
+      allowedNarrativeTier: validAssessment && status !== "indeterminate" ? "moderate" : "weak",
+      externalSurfacingEligibility: validAssessment ? "eligible" : "suppress",
+      negativeEvidenceFlags: [],
+      promotionEligibility: validAssessment ? "eligible" : "blocked",
+      regulatoryChecklistEligibility: "none",
+      ...(validAssessment && scoreEffects.length > 0 ? { scoreEffects } : {}),
+    };
+  }
   const consentControlInventoryChecklistEligibility = getConsentControlInventoryChecklistEligibility({
     originKey: input.concern.originKey,
     rawEvidence: input.rawEvidence
@@ -2604,11 +2655,12 @@ export function deriveConcernPolicy(input: {
     rawEvidence: input.rawEvidence
   });
   if (consentPaidDeclinePathChecklistEligibility !== null) {
+    const eligible = consentPaidDeclinePathChecklistEligibility === "review_signal";
     return {
-      allowedNarrativeTier: "weak",
-      externalSurfacingEligibility: "audit_only",
+      allowedNarrativeTier: eligible ? "moderate" : "weak",
+      externalSurfacingEligibility: eligible ? "eligible" : "audit_only",
       negativeEvidenceFlags: [...negativeEvidenceFlags],
-      promotionEligibility: "internal_only",
+      promotionEligibility: eligible ? "eligible" : "internal_only",
       regulatoryChecklistEligibility: consentPaidDeclinePathChecklistEligibility
     };
   }
@@ -2829,6 +2881,24 @@ export function deriveConcernPolicy(input: {
         promotionEligibility: "blocked"
       };
     }
+  }
+
+  if (isPostAcceptObservationConcern(input.concern)) {
+    if (hasProductionProjectablePostAcceptEvidence(input.rawEvidence)) {
+      return {
+        allowedNarrativeTier: "strong",
+        externalSurfacingEligibility: "eligible",
+        negativeEvidenceFlags: [...negativeEvidenceFlags],
+        promotionEligibility: "eligible",
+        regulatoryChecklistEligibility: "review_signal"
+      };
+    }
+    return {
+      allowedNarrativeTier: "weak",
+      externalSurfacingEligibility: "audit_only",
+      negativeEvidenceFlags: [...negativeEvidenceFlags, "post_choice_flow_deferred_from_core"],
+      promotionEligibility: "internal_only"
+    };
   }
 
   if (isRejectTrackingPersistenceConcern(input.concern)) {
@@ -3398,18 +3468,6 @@ export function deriveConcernPolicy(input: {
       allowedNarrativeTier: "weak",
       externalSurfacingEligibility: "audit_only",
       negativeEvidenceFlags: [...negativeEvidenceFlags, "missing_policy_side_evidence"],
-      promotionEligibility: "internal_only"
-    };
-  }
-
-  if (
-    input.concern.suggestedUnifiedFindingId === "gpc_signal_not_honored" &&
-    !hasMeaningfulGpcIgnoredEvidence(input.rawEvidence)
-  ) {
-    return {
-      allowedNarrativeTier: "weak",
-      externalSurfacingEligibility: "audit_only",
-      negativeEvidenceFlags: [...negativeEvidenceFlags],
       promotionEligibility: "internal_only"
     };
   }

@@ -356,9 +356,268 @@ test("Pulse reports a Reject Path barrier timeout without changing completed sca
   const coverage = pulse.coverage as { limitations?: string[]; status?: string };
 
   assert.equal(pulse.scanStatus, "completed");
+  assert.equal((pulse.postRefusalObservation as Record<string, unknown>).status, "aborted");
+  assert.equal((pulse.postRefusalObservation as Record<string, unknown>).productionProjectable, false);
   assert.equal(coverage.status, "complete");
   assert.ok(coverage.limitations?.includes(
     "Reject Path did not complete within the six-second post-primary allowance.",
+  ));
+});
+
+test("Pulse surfaces canonical score-neutral post-Accept findings", () => {
+  const pulse = buildPulseProjection({
+    detail: "full",
+    format: "json",
+    freshnessMode: "latest",
+    pulseRequestId: "accept-finding-fixture",
+    requestedUrl: "https://example.com/",
+    resolutionMode: "test",
+    scanRecord: pulseScanRecord({
+      accessPostureSummary: {
+        homepageFetchStatus: "ok",
+        interruptionLabel: null,
+        interruptionReason: null,
+        stopOutcomeTitle: null,
+        stopReason: null,
+        stopReviewTitle: null,
+      },
+      runtimeArtifacts: {
+        postAcceptEvidenceProjection: {
+          actionControlProof: { action: "accept" },
+          contractVersion: "certscore.post_accept_report_projection.v1",
+          completedAt: "2026-09-01T12:00:09.000Z",
+          contradictionObserved: true,
+          limitations: ["observation_early_exit:acceptance_signal_contradiction_observed"],
+          observationCount: 2,
+          observationWindowMs: 3_000,
+          packetSha256: "b".repeat(64),
+          postAcceptActivity: [{
+            activityType: "network_request",
+            category: "analytics",
+            consentState: "post_accept",
+            hostname: "analytics.example.net",
+            msAfterAccept: 170,
+            nonEssential: true,
+            requestId: "request-1",
+            url: "https://analytics.example.net/collect",
+            vendor: "Example Analytics",
+          }],
+          productionProjectable: true,
+          acceptanceExercised: true,
+          acceptanceRegisteredAtMs: 500,
+          registrationStatus: "confirmed",
+          resolverMethod: "cmp_registry_recipe",
+          status: "confirmed_observation",
+        },
+      },
+      scan: {
+        completedAt: "2026-09-01T12:00:10.000Z",
+        createdAt: "2026-09-01T12:00:00.000Z",
+        domainHostname: "example.com",
+        id: "00000000-0000-4000-8000-000000000123",
+        pagesRequested: 1,
+        pagesScanned: 1,
+        startedAt: "2026-09-01T12:00:01.000Z",
+        status: "completed",
+      },
+      snapshot: {
+        certscore_overall: 80,
+        report_projection_status: "ready",
+      },
+    }),
+    waitSeconds: 0,
+  }) as Record<string, any>;
+
+  assert.equal(pulse.summary.score, 80);
+  assert.equal(pulse.postAcceptObservation.status, "confirmed_observation");
+  assert.equal(pulse.postAcceptObservation.acceptanceExercised, true);
+  assert.equal(pulse.postAcceptObservation.productionProjectable, true);
+  assert.ok(pulse.findings.some((finding: Record<string, unknown>) =>
+    finding.id === "post_accept_consent_dependent_activity"
+  ));
+  assert.ok(pulse.findings.some((finding: Record<string, unknown>) =>
+    finding.id === "acceptance_signal_contradicts_action"
+  ));
+  assert.doesNotThrow(() => pulseResponseSchema.parse(pulse));
+});
+
+test("Pulse JSON surfaces GPC with retained proof alongside Accept and Reject results", () => {
+  const delta = {
+    baselineCount: 1,
+    gpcCount: 1,
+    countDelta: 0,
+    baselineOnly: [],
+    gpcOnly: [],
+    shared: ["Example Ads|pixel|advertising"],
+  };
+  const assessment = {
+    contractVersion: "certscore.gpc-response-assessment.v1",
+    generatedAt: "2026-09-02T12:00:00.000Z",
+    status: "no_observable_response",
+    findingTitle: "No observable GPC response",
+    scoreEffect: "none",
+    legalInterpretation: "not_assessed",
+    comparison: {
+      comparable: true,
+      protocol: "passive_baseline_with_sec_gpc",
+      baselineArtifact: { lane: "runtime_evidence", sha256: "a".repeat(64), sizeBytes: 100, uri: "s3://private/baseline.json" },
+      gpcArtifact: { lane: "gpc_observation", sha256: "b".repeat(64), sizeBytes: 110, uri: "s3://private/gpc.json" },
+      enabledProof: {
+        secGpcHeaderValue: "1",
+        requestsWithSecGpc: 2,
+        requestEventIds: ["gpc-request-1", "gpc-request-2"],
+        navigatorGlobalPrivacyControl: true,
+      },
+      deltas: {
+        cookies: delta,
+        trackers: delta,
+        advertisingOrMeasurementActivity: delta,
+        consentOrCmpBehavior: delta,
+      },
+      evidenceRefs: ["s3://private/baseline.json", "s3://private/gpc.json"],
+      limitationKeys: [],
+    },
+  } as const;
+  const gpcFinding = {
+    unifiedFindingId: "gpc_response",
+    title: "No observable GPC response",
+    summary: "No observable baseline delta was retained under the equivalent passive GPC condition.",
+    details: { family: "privacy_signal", kind: "gpc_response", assessment },
+    presentationDecision: { status: "surface" },
+    sourceRefs: [],
+    surfacingDecision: {
+      decisionState: "confirmed",
+      reportLane: "confidence_and_coverage",
+      reportable: true,
+    },
+    scoreEffects: [],
+  };
+  const pulse = buildPulseProjection({
+    detail: "full",
+    format: "json",
+    freshnessMode: "latest",
+    pulseRequestId: "all-observation-results-fixture",
+    requestedUrl: "https://example.com/",
+    resolutionMode: "test",
+    scanRecord: pulseScanRecord({
+      accessPostureSummary: {
+        homepageFetchStatus: "ok",
+        interruptionLabel: null,
+        interruptionReason: null,
+        stopOutcomeTitle: null,
+        stopReason: null,
+        stopReviewTitle: null,
+      },
+      canonicalReportProjection: {
+        artifactVersion: "persisted-canonical-report-projection-v2",
+        checklistRows: [],
+        collectionSurfaceAssessment: null,
+        derivedContext: {},
+        globalUnifiedFindings: [gpcFinding],
+        legacyScoreAssessmentInput: { scanId: "00000000-0000-4000-8000-000000000123" },
+        normalizedConcerns: [],
+        ownerUnifiedFindings: [gpcFinding],
+        topFindingIds: [],
+      },
+      runtimeArtifacts: {
+        postAcceptEvidenceProjection: {
+          actionControlProof: { action: "accept" },
+          acceptanceExercised: true,
+          completedAt: "2026-09-02T12:00:08.000Z",
+          contradictionObserved: false,
+          limitations: ["observation_early_exit:non_essential_request_observed"],
+          observationCount: 1,
+          postAcceptActivity: [{ activityType: "network_request" }],
+          productionProjectable: true,
+          status: "confirmed_observation",
+        },
+        postRefusalEvidenceProjection: {
+          actionControlProof: { action: "reject" },
+          completedAt: "2026-09-02T12:00:09.000Z",
+          contradictionObserved: false,
+          limitations: [],
+          observationCount: 0,
+          postRefusalActivity: [],
+          productionProjectable: true,
+          refusalExercised: true,
+          status: "confirmed_clean",
+        },
+      },
+      scan: {
+        completedAt: "2026-09-02T12:00:10.000Z",
+        createdAt: "2026-09-02T12:00:00.000Z",
+        domainHostname: "example.com",
+        id: "00000000-0000-4000-8000-000000000123",
+        pagesRequested: 1,
+        pagesScanned: 1,
+        startedAt: "2026-09-02T12:00:01.000Z",
+        status: "completed",
+      },
+      snapshot: { certscore_overall: 80, report_projection_status: "ready" },
+    }),
+    waitSeconds: 0,
+  }) as Record<string, any>;
+
+  assert.equal(pulse.gpcResponse.status, "no_observable_response");
+  assert.equal(pulse.gpcResponse.comparison.enabledProof.secGpcHeaderValue, "1");
+  assert.equal(pulse.gpcResponse.comparison.deltas.trackers.shared.length, 1);
+  assert.equal(pulse.postAcceptObservation.status, "confirmed_observation");
+  assert.equal(pulse.postRefusalObservation.status, "confirmed_clean");
+  assert.doesNotMatch(JSON.stringify(pulse.gpcResponse), /s3:\/\//);
+  assert.doesNotThrow(() => pulseResponseSchema.parse(pulse));
+});
+
+test("Pulse reports a truncated Accept observation as a neutral coverage limitation", () => {
+  const pulse = buildPulseProjection({
+    detail: "summary",
+    format: "json",
+    freshnessMode: "latest",
+    pulseRequestId: "accept-truncated-fixture",
+    requestedUrl: "https://example.com/",
+    resolutionMode: "test",
+    scanRecord: pulseScanRecord({
+      accessPostureSummary: {
+        homepageFetchStatus: "ok",
+        interruptionLabel: null,
+        interruptionReason: null,
+        stopOutcomeTitle: null,
+        stopReason: null,
+        stopReviewTitle: null,
+      },
+      runtimeArtifacts: {
+        postAcceptObservationCoverage: {
+          completedAt: "2026-09-01T12:00:06.000Z",
+          evidenceJoined: true,
+          limitationCode: "accept_observation_window_truncated",
+          maxTailWaitMs: 6_000,
+          status: "limited",
+        },
+      },
+      scan: {
+        completedAt: "2026-09-01T12:00:10.000Z",
+        createdAt: "2026-09-01T12:00:00.000Z",
+        domainHostname: "example.com",
+        id: "00000000-0000-4000-8000-000000000123",
+        pagesRequested: 1,
+        pagesScanned: 1,
+        startedAt: "2026-09-01T12:00:01.000Z",
+        status: "completed",
+      },
+      snapshot: {
+        certscore_overall: 80,
+        report_projection_status: "ready",
+      },
+    }),
+    waitSeconds: 0,
+  }) as Record<string, any>;
+
+  assert.equal(pulse.scanStatus, "completed");
+  assert.equal(pulse.summary.score, 80);
+  assert.ok(pulse.coverage.limitations.includes(
+    "Accept was confirmed, but the bounded post-accept observation window was truncated.",
+  ));
+  assert.ok(pulse.coverage.interruptions.some((row: Record<string, unknown>) =>
+    row.label === "Accept Path unavailable"
   ));
 });
 

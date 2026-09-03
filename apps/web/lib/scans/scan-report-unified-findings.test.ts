@@ -70,13 +70,13 @@ test("buildScanReportUnifiedFindings dedupes owner packets across section drafts
   );
 });
 
-test("projection-scoped review indexes preserve finding output", () => {
+test("projection-scoped review indexes preserve GPC response finding output", () => {
   const input = {
-    allSignals: [{ key: "privacy.gpc_signal_not_honored", value: true }],
+    allSignals: [{ key: "privacy.gpc_response", value: true }],
     categoryId: "privacy_choices_controls",
     issues: [],
     macroEnrichment: { industryPrimary: "media" },
-    mergedSignals: [{ key: "privacy.gpc_signal_not_honored", value: true }],
+    mergedSignals: [{ key: "privacy.gpc_response", value: true }],
     policyEnrichment: [],
     prioritizedAccessibilityRuleRows: [],
     runtimeArtifacts: {
@@ -84,13 +84,13 @@ test("projection-scoped review indexes preserve finding output", () => {
     },
     signalHitRows: [{
       matched_text: "Global Privacy Control",
-      signal_key: "privacy.gpc_signal_not_honored"
+      signal_key: "privacy.gpc_response"
     }],
     snapshot: {},
     sectionId: "privacy_choices_controls",
     sectionItems: [{
-      key: "privacy.gpc_signal_not_honored",
-      label: "GPC signal not honored",
+      key: "privacy.gpc_response",
+      label: "GPC response",
       relation: "primary" as const,
       source: "snapshot_signal" as const,
       value: true

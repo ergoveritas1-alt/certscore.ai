@@ -330,6 +330,89 @@ test("topic-context variants preserve retained evidence through production adapt
   assert.deepEqual(result.discardedArticle13DisclosureSignals, []);
 });
 
+test("German natural-clause evidence crosses the canonical production adapter", () => {
+  const text = [
+    "Datenschutzerklärung.",
+    "Wir verarbeiten jene Daten, die Sie uns als Kunde zur Durchführung vorvertraglicher Maßnahmen und bei Abschluss des Vertrages zur Verfügung stellen.",
+    "Die Datenverarbeitung erfolgt zu folgenden Zwecken: Die von Ihnen angegebenen Daten werden verarbeitet, um vorvertragliche Maßnahmen durchzuführen und Verträge abzuwickeln.",
+    "Auf unseren Seiten sind Plugins eines sozialen Netzwerks mit Sitz in Palo Alto, CA 94304, USA integriert.",
+    "Über das Plugin wird eine direkte Verbindung zwischen Ihrem Browser und dem Server des sozialen Netzwerks hergestellt.",
+    "Das soziale Netzwerk erhält dadurch die Information, dass Sie mit Ihrer IP-Adresse unsere Seite besucht haben.",
+  ].join(" ");
+  const candidates = classifyGdprTransparencyTopics({ localeHints: ["de"], text }).matches
+    .map((match) => candidate({
+      classifierReasonCodes: match.reasonCodes,
+      confidence: match.confidence,
+      evidenceText: match.evidenceExcerpt,
+      matchStrength: match.matchStrength,
+      matchedLocale: match.matchedLocale,
+      matchedTerm: match.matchedTerm,
+      topic: match.topic,
+    }));
+
+  const result = adaptGdprTransparencyTopicCandidatesForProduction({
+    isTargetRelevantPrivacyPolicy: true,
+    policyTextQuality: { usable: true },
+    profile: GDPR_TRANSPARENCY_MULTILINGUAL_ARTICLE13_PROFILE,
+    surface: surface(candidates, { textExcerpt: text }),
+  });
+
+  assert.deepEqual(
+    new Set(result.acceptedProductionSignals.map((signal) => signal.disclosureType)),
+    new Set([
+      "processing_purposes",
+      "legal_basis",
+      "recipients_or_vendor_categories",
+      "international_transfers",
+    ]),
+  );
+  assert.equal(result.dispositions.every((item) => item.disposition === "accepted"), true);
+  assert.deepEqual(result.discardedArticle13DisclosureSignals, []);
+});
+
+test("natural Article 13 clauses remain production-projectable across calibrated European locales", () => {
+  const cases = [
+    ["fr", "Politique de confidentialité. Nous traitons vos données personnelles pour fournir le service. Le traitement est nécessaire à l’exécution du contrat. Un prestataire reçoit vos données personnelles. Le transfert des données personnelles vers les États-Unis est encadré par des garanties."],
+    ["es", "Política de privacidad. Tratamos sus datos personales para prestar el servicio. El tratamiento es necesario para la ejecución del contrato. Un proveedor recibe sus datos personales. La transferencia de datos personales a Estados Unidos utiliza garantías adecuadas."],
+    ["it", "Informativa sulla privacy. Trattiamo i suoi dati personali per fornire il servizio. Il trattamento è necessario per l’esecuzione del contratto. Un fornitore riceve i dati personali. Il trasferimento dei dati personali negli Stati Uniti usa garanzie adeguate."],
+    ["nl", "Privacyverklaring. Wij verwerken uw persoonsgegevens om de dienst te leveren. De verwerking is nodig voor de uitvoering van de overeenkomst. Een dienstverlener ontvangt uw persoonsgegevens. De overdracht van persoonsgegevens naar de Verenigde Staten gebruikt passende waarborgen."],
+    ["pl", "Polityka prywatności. Przetwarzamy dane osobowe w celu świadczenia usługi. Przetwarzanie jest niezbędne do wykonania umowy. Usługodawca otrzymuje dane osobowe. Przekazywanie danych osobowych do Stanów Zjednoczonych odbywa się z odpowiednimi zabezpieczeniami."],
+    ["pt", "Política de privacidade. Tratamos os seus dados pessoais para prestar o serviço. O tratamento é necessário para a execução do contrato. Um prestador de serviços recebe dados pessoais. A transferência de dados pessoais para os Estados Unidos utiliza garantias adequadas."],
+  ] as const;
+  const expectedTopics = new Set<Topic>([
+    "processing_purposes",
+    "legal_basis",
+    "recipients_or_vendor_categories",
+    "international_transfers",
+  ]);
+
+  for (const [locale, text] of cases) {
+    const candidates = classifyGdprTransparencyTopics({ localeHints: [locale], text }).matches
+      .map((match) => candidate({
+        classifierReasonCodes: match.reasonCodes,
+        confidence: match.confidence,
+        evidenceText: match.evidenceExcerpt,
+        matchStrength: match.matchStrength,
+        matchedLocale: match.matchedLocale,
+        matchedTerm: match.matchedTerm,
+        topic: match.topic,
+      }));
+    const result = adaptGdprTransparencyTopicCandidatesForProduction({
+      isTargetRelevantPrivacyPolicy: true,
+      policyTextQuality: { usable: true },
+      profile: GDPR_TRANSPARENCY_MULTILINGUAL_ARTICLE13_PROFILE,
+      surface: surface(candidates, { textExcerpt: text }),
+    });
+
+    assert.deepEqual(
+      new Set(result.acceptedProductionSignals.map((signal) => signal.disclosureType)),
+      expectedTopics,
+      locale,
+    );
+    assert.equal(result.dispositions.every((item) => item.disposition === "accepted"), true, locale);
+  }
+});
+
 test("substantive corporate policy observations traverse the canonical production adapter", () => {
   const text = [
     "Privacy Policy.",
@@ -897,6 +980,51 @@ test("retained Article 4 and Article 6 variants pass the canonical production ev
       "data_subject_rights",
       "dpo_contact",
       "international_transfers",
+      "legal_basis",
+      "processing_purposes",
+      "recipients_or_vendor_categories",
+      "supervisory_authority",
+    ],
+    JSON.stringify(result.dispositions),
+  );
+  assert.deepEqual(result.discardedArticle13DisclosureSignals, []);
+});
+
+test("retained German clinic wording passes the canonical production evidence adapter", () => {
+  const text = [
+    "Datenschutzerklärung. Personenbezogene Daten werden nur im Rahmen der Erforderlichkeit sowie zum Zwecke der Bereitstellung eines funktionsfähigen und nutzerfreundlichen Internetauftritts verarbeitet.",
+    "Mit der nachfolgenden Datenschutzerklärung informieren wir Sie über Art, Umfang, Zweck, Dauer und Rechtsgrundlage der Verarbeitung personenbezogener Daten.",
+    "Verantwortlicher Anbieter ist die Pferdeklinik Beispiel. Telefon: 05266 94940. E-Mail: datenschutz@example.test. Datenschutzbeauftragte/r beim Anbieter ist Dr. Beispiel.",
+    "II. Rechte der Nutzer und Betroffenen. Nutzer und Betroffene haben das Recht auf Bestätigung, auf Auskunft über die verarbeiteten Daten, auf Berichtigung, Löschung, Einschränkung der Verarbeitung und Übermittlung der Daten.",
+    "Sie haben das Recht auf Beschwerde gegenüber der Aufsichtsbehörde gemäß Art. 77 DSGVO.",
+    "Serverdaten werden an uns beziehungsweise an unseren Webspace-Provider übermittelt. Diese Speicherung erfolgt auf der Rechtsgrundlage von Art. 6 Abs. 1 lit. f DSGVO.",
+    "Unser berechtigtes Interesse liegt in der Verbesserung, Stabilität, Funktionalität und Sicherheit des Internetauftritts.",
+    "Alle Empfänger, denen gegenüber Daten offengelegt wurden, werden über Berichtigung oder Löschung von Daten unterrichtet.",
+  ].join(" ");
+  const classified = classifyGdprTransparencyTopics({ text, localeHints: ["de"] });
+  const candidates = classified.matches.map((match) => candidate({
+    classifierReasonCodes: match.reasonCodes,
+    confidence: match.confidence,
+    evidenceText: match.evidenceExcerpt,
+    matchStrength: match.matchStrength,
+    matchedLocale: match.matchedLocale,
+    matchedTerm: match.matchedTerm,
+    topic: match.topic,
+  }));
+  const result = adaptGdprTransparencyTopicCandidatesForProduction({
+    isTargetRelevantPrivacyPolicy: true,
+    policyTextQuality: { usable: true },
+    profile: GDPR_TRANSPARENCY_MULTILINGUAL_ARTICLE13_PROFILE,
+    surface: surface(candidates, { textExcerpt: text }),
+  });
+
+  assert.deepEqual(
+    result.acceptedProductionSignals.map((signal) => signal.disclosureType).sort(),
+    [
+      "controller_contact",
+      "data_retention",
+      "data_subject_rights",
+      "dpo_contact",
       "legal_basis",
       "processing_purposes",
       "recipients_or_vendor_categories",

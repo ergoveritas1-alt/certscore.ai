@@ -48,6 +48,22 @@ const definitions = [
   {
     term: "Policy surface",
     definition: "A public page or document that presents privacy, cookie, consent, or related disclosure information."
+  },
+  {
+    term: "Confirmed interaction",
+    definition: "Evidence that a consent action produced a verified state transition, established independently of the click itself. Required before activity qualifies on the Reject Path."
+  },
+  {
+    term: "Confirmed clean",
+    definition: "No qualifying activity was retained during a completed observation window. A bounded statement about one observation, not a general claim about the site."
+  },
+  {
+    term: "Limited coverage",
+    definition: "An observation that was unavailable, unsupported, unsuccessful, stale, timed out, or unverifiable. It is explicit, score-neutral, and never equivalent to a clean result."
+  },
+  {
+    term: "Score-neutral comparison",
+    definition: "Evidence retained for interpretation rather than scoring, including the Accept Path baseline, unchanged stored values on their own, and every limited-coverage state."
   }
 ];
 
@@ -67,6 +83,16 @@ export default function MethodologyPage() {
               CertScore.ai observes how public websites behave in a real browser, preserves supporting evidence, and reports structured
               privacy-related measurements for review. It does not rely only on policy text or static page inspection.
             </p>
+          </div>
+        </div>
+      </section>
+
+      <section className="border-y border-slate-200 bg-white">
+        <div className="mx-auto max-w-5xl px-6 py-14">
+          <h2 className="text-2xl font-semibold tracking-tight text-slate-950">Separate Accept and Reject observations</h2>
+          <div className="mt-3 max-w-4xl space-y-3 text-sm leading-7 text-slate-600">
+            <p>Eligible Accept and Reject controls are observed in separate clean browser sessions. The Accept Path provides a score-neutral baseline for consent-dependent activity. The Reject Path can support a finding only after a refusal-state transition is independently confirmed and qualifying activity is temporally anchored after that confirmation.</p>
+            <p>Requests already in flight at confirmation are excluded. Unsupported, ambiguous, incomplete, stale, timed-out, or unverifiable interactions remain limited coverage and cannot become a clean result or a finding.</p>
           </div>
         </div>
       </section>

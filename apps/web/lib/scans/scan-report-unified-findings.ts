@@ -1928,7 +1928,7 @@ function buildRuntimeDerivedReviewFindingCandidates(input: {
 
     candidates.push({
       categoryId: "enforcement_outcomes_after_user_choice",
-      description: "A retained reject interaction succeeded, and non-essential request activity was retained after reject.",
+      description: "A refusal-state transition was confirmed, and non-essential request activity was retained after confirmation.",
       fallbackEvidence: {
         consentBaselineTrackerEvidenceUrls: baselineTrackerEvidenceUrls,
         consentOptOutEvidenceLog: getRuntimeObjectArray(input.runtimeArtifacts, [

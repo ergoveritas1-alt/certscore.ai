@@ -43,6 +43,8 @@ test("MCP operations page makes the request ledger the primary navigable workspa
   assert.ok(page.indexOf("Source and access signals") < page.indexOf("{hasActivity ? ("));
   assert.ok(page.indexOf("<AdminOperationalSnapshot") < page.indexOf("MCP request activity"));
   assert.ok(page.indexOf("<AdminOperationalSnapshot") < page.indexOf("Tool distribution and latency"));
+  assert.ok(page.indexOf("Frequently requested hostnames") < page.indexOf("<CardTitle>MCP growth funnel</CardTitle>"));
+  assert.ok(page.indexOf("Source and access signals") < page.indexOf("<CardTitle>MCP growth funnel</CardTitle>"));
   assert.doesNotMatch(page, /Tool activity and latency/);
   assert.doesNotMatch(page, /Provider and access signals/);
   assert.match(page, /<AdminScansFilterForm[^>]+submitFirst>/);

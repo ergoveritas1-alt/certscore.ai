@@ -11,6 +11,7 @@ import {
   article13DisclosureRejectReason as sharedArticle13DisclosureRejectReason,
   assessArticle13PolicyTextQuality,
   classifyConsentControlLabel,
+  classifyTransportHttpProbeOutcome,
   COLLECTION_SURFACE_ASSESSMENT_VERSION,
   collectionSurfaceAssessmentSchema,
   type CollectionSurfaceAssessment,
@@ -23,6 +24,7 @@ import {
   MIN_GDPR_TRANSPARENCY_POLICY_TEXT_CHARS,
   canonicalPolicyDocumentBrandRelationship,
   policyTextEvidenceProjectionSchema,
+  projectPostAcceptEvidenceForReport,
   postRefusalReportProjectionSchema,
   projectPostRefusalEvidenceForReport,
   SUPPORTED_GDPR_TRANSPARENCY_LOCALES,
@@ -50,6 +52,7 @@ import {
 } from "../../lib/scans/gdpr-transparency-production-profile";
 import { getProductionPolicyModelReviewRevision } from "../../lib/scans/policy-model-review-revision";
 import { buildPostRefusalRuntimeProjection } from "../../lib/scans/post-refusal-runtime-projection";
+import { buildPostAcceptRuntimeProjection } from "../../lib/scans/post-accept-runtime-projection";
 import {
   findRuntimeCanonicalEntityOwner,
 } from "../../lib/scans/runtime-vendor-ownership";
@@ -220,7 +223,7 @@ type LocalV2DagLambdaArtifactPointer = {
 
 function getLocalV2DagLambdaArtifactPointer(
   scanRecord: ScanDetailResponse,
-  field: "manifestUri" | "scanArtifactUri" | "postRefusalPacketUri"
+  field: "manifestUri" | "scanArtifactUri" | "postAcceptPacketUri" | "postRefusalPacketUri"
 ): LocalV2DagLambdaArtifactPointer | null {
   return scanRecord.events
     .filter((event) => event.eventType === "v2_lambda_result.received")
@@ -2708,6 +2711,7 @@ export function summarizePolicySurfaces(
     policyTextEvidenceContext?: PolicyTextEvidenceContext;
     policyEvidenceLaneStatus?: "complete" | "degraded" | null;
     primaryLanguage?: string | null;
+    privacyPolicyObserved?: boolean | null;
     scanStartedAt?: string | null;
   } = {}
 ) {
@@ -3279,6 +3283,8 @@ export function summarizePolicySurfaces(
     policyTextEvidenceProjection,
     policy_text_evidence_projection: policyTextEvidenceProjection,
     privacyPolicyPresent: article13Surfaces.length > 0,
+    privacyNoticeAvailabilityObserved:
+      options.privacyPolicyObserved === true || article13Surfaces.length > 0,
     privacyPolicyDiscovered: targetRelevantDiscoveredPrivacySurfaces.length > 0 || article13Surfaces.length > 0,
     privacyPolicyEvaluationState,
     privacyPolicyEvidencePaths,
@@ -3997,6 +4003,12 @@ function summarizeTransportSecurity(bundle: CanonicalEvidenceBundle) {
       evidenceRetained: false,
       evidenceRefs: [],
       formTransportCount: 0,
+      httpProbeErrorCategory: null,
+      httpProbeErrorMessage: null,
+      httpProbeFinalScheme: null,
+      httpProbeOutcome: null,
+      httpProbeRedirectChain: [],
+      httpProbeStatus: null,
       insecureFormTransportObserved: null,
       mixedContentObserved: null,
       observedCount: 0,
@@ -4028,7 +4040,19 @@ function summarizeTransportSecurity(bundle: CanonicalEvidenceBundle) {
     finalUrl: observation.finalUrl,
     formTransportCount: formTransports.length,
     httpProbeAttempted: observation.httpProbe?.attempted === true,
+    httpProbeErrorCategory: observation.httpProbe?.errorCategory,
+    httpProbeErrorMessage: observation.httpProbe?.errorMessage,
+    httpProbeFinalScheme: observation.httpProbe?.finalScheme,
     httpProbeFinalUrl: observation.httpProbe?.finalUrl,
+    httpProbeOutcome: observation.httpProbe?.outcome ?? observation.summary?.httpProbeOutcome ?? classifyTransportHttpProbeOutcome({
+      attempted: observation.httpProbe?.attempted === true,
+      errorCategory: observation.httpProbe?.errorCategory,
+      finalScheme: observation.httpProbe?.finalScheme,
+      redirectedToHttps: observation.httpProbe?.redirectedToHttps,
+      status: observation.httpProbe?.status,
+    }),
+    httpProbeRedirectChain: (observation.httpProbe?.redirectChain ?? []).slice(0, 12),
+    httpProbeStatus: observation.httpProbe?.status,
     httpRedirectsToHttps: observation.summary?.httpRedirectsToHttps ?? null,
     insecureFormTransportObserved: observation.summary?.insecureFormTransportObserved ?? false,
     insecureFormTransports: formTransports
@@ -5150,12 +5174,14 @@ function buildMaterializedLocalV2Detail(
   );
   const allVendorRows = buildVendorEvidence(bundle);
   const vendorRows = allVendorRows.filter((vendor) => vendor.vendorCategory !== "cmp");
+  const preconsentRuntimeRequests = networkEvents.filter((event) =>
+    event.consentStateAtTime === "pre_consent"
+  );
   const thirdPartyRequests = networkEvents.filter((event) =>
     isThirdPartyRuntimeEventForDocument(event, canonicalDocumentUrl)
   );
   const thirdPartyDomains = uniqueStrings(thirdPartyRequests.map((event) => event.hostname ?? hostnameFromUrl(event.url)));
   const preconsentRequests = thirdPartyRequests.filter((event) => event.consentStateAtTime === "pre_consent");
-  const preconsentRequestUrls = uniqueStrings(preconsentRequests.map((event) => requestUrl(event)));
   const preconsentCookies = cookieEvents.filter((event) => event.consentStateAtTime === "pre_consent");
   const cookieNames = uniqueStrings(cookieEvents.map((event) => cookieName(event)));
   const preconsentCookieNames = uniqueStrings(preconsentCookies.map((event) => cookieName(event)));
@@ -5357,6 +5383,10 @@ function buildMaterializedLocalV2Detail(
   const gdprTransparencyEvidenceProfile = normalizeGdprTransparencyProductionEvidenceProfile(
     options.gdprTransparencyEvidenceProfile
   );
+  const policySurfaceInspection = bundle.policySurfaceInspection ?? derivePolicySurfaceInspectionOutcome({
+    modulesRun: bundle.modulesRun,
+    policySurfaceObservations: bundle.policySurfaceObservations,
+  });
   const policySurfaceSummary = summarizePolicySurfaces(policySurfaces, rootDomain, {
     discoveredPolicySurfaces: bundle.policySurfaceObservations ?? [],
     gdprTransparencyEvidenceProfile,
@@ -5368,6 +5398,7 @@ function buildMaterializedLocalV2Detail(
         ? "degraded"
         : "complete",
     primaryLanguage: getLocalV2PrimaryLanguage(bundle),
+    privacyPolicyObserved: policySurfaceInspection.privacyPolicyObserved,
     scanStartedAt: bundle.startedAt,
   });
   const policyTextProjection = policySurfaceSummary.policyTextEvidenceProjection;
@@ -5441,7 +5472,11 @@ function buildMaterializedLocalV2Detail(
     existing.push(responseEvent);
     responseEventsByRequestId.set(responseEvent.requestId, existing);
   }
-  const requestPurposeRows = (preconsentRequests
+  // Tracking eligibility is purpose- and evidence-based, not party-based. Keep
+  // third-party request metrics separate, but classify concrete same-site
+  // analytics collection events as well. A same-site library/bootstrap request
+  // remains `library` and therefore cannot pass the promotion-grade contract.
+  const requestPurposeRows = (preconsentRuntimeRequests
     .map((event) => {
       const matchedVendor = findObservedVendor(event);
       const url = requestUrl(event);
@@ -5577,10 +5612,6 @@ function buildMaterializedLocalV2Detail(
       surface.status !== "fetched" &&
       surface.status !== "observed"
     );
-  const policySurfaceInspection = bundle.policySurfaceInspection ?? derivePolicySurfaceInspectionOutcome({
-    modulesRun: bundle.modulesRun,
-    policySurfaceObservations: bundle.policySurfaceObservations,
-  });
   const consentCoverageComplete = consentSurfaceInspection.inspectionCompleted === true &&
     consentSurfaceInspection.coverageStatus === "complete";
   const assessedConsentSurfaceObserved = consentSurfaceInspection.consentSurfaceObserved === true
@@ -5868,6 +5899,22 @@ function buildMaterializedLocalV2Detail(
     postRefusalReportProjection,
     bundle.postRefusalLaneOutcome,
   );
+  const postAcceptPacketPointer = getLocalV2DagLambdaArtifactPointer(
+    scanRecord,
+    "postAcceptPacketUri",
+  );
+  const postAcceptReportProjection = bundle.postAcceptEvidence
+    ? projectPostAcceptEvidenceForReport({
+        packet: bundle.postAcceptEvidence,
+        ...(postAcceptPacketPointer?.sha256
+          ? { packetSha256: postAcceptPacketPointer.sha256 }
+          : {}),
+      })
+    : null;
+  const postAcceptRuntimeProjection = buildPostAcceptRuntimeProjection(
+    postAcceptReportProjection,
+    bundle.postAcceptLaneOutcome,
+  );
   const inheritedRuntimeArtifacts = providedScanNoGoAssessment || localV2NoGo
     ? { ...(scanRecord.runtimeArtifacts ?? {}) }
     : withoutStaleLocalV2NoGoArtifacts(scanRecord.runtimeArtifacts);
@@ -5875,6 +5922,8 @@ function buildMaterializedLocalV2Detail(
     ...inheritedRuntimeArtifacts,
     ...timingArtifacts,
     ...postRefusalRuntimeProjection,
+    ...postAcceptRuntimeProjection,
+    ...buildGpcResponseRuntimeProjection(bundle),
     scanLaneRuns: bundle.scanLaneRuns,
     local_v2_dag_scan_core_duration_ms: durationMsFromTimestamps(bundle.startedAt, bundle.completedAt),
     wc01ProductionProjection: {
@@ -5883,7 +5932,12 @@ function buildMaterializedLocalV2Detail(
       mode: LOCAL_V2_DAG_WC01_PROJECTION_MODE,
       pipeline: "normalized_concern_policy_unified_finding",
       scannerExecutionMode: LOCAL_V2_DAG_SCANNER_EXECUTION_MODE,
-      scope: ["gdpr_transparency_observed_topics", "post_refusal_enforcement"],
+      scope: [
+        "gdpr_transparency_observed_topics",
+        "post_accept_review",
+        "post_refusal_enforcement",
+        ...(bundle.gpcResponseAssessment ? ["gpc_response"] : []),
+      ],
       source: "verified_canonical_evidence_bundle",
       version: LOCAL_V2_DAG_WC01_PROJECTION_VERSION
     },
@@ -6141,7 +6195,7 @@ function buildMaterializedLocalV2Detail(
     pages_scanned: localV2NoGo ? 0 : Math.max(scanRecord.scan.pagesScanned, 1),
     partial_scan: true,
     preconsent_tracking_detected: runtimeEvidenceReportable ? hasPromotionGradePreconsentTracking : false,
-    privacy_policy_present: Boolean(privacySurface),
+    privacy_policy_present: policySurfaceSummary.privacyNoticeAvailabilityObserved === true,
     privacy_score: localV2NoGo ? null : score,
     score_confidence: scoreConfidence,
     site_language_primary: getLocalV2PrimaryLanguage(bundle),
@@ -6246,7 +6300,9 @@ function buildMaterializedLocalV2Detail(
     collectionEndpointType: vendor.collectionEndpointType,
     confidence: vendor.confidence,
     detectionSource: vendor.detectionSource,
-    evidenceUrls: preconsentRequestUrls.filter((url) => vendor.scriptHost && url.includes(vendor.scriptHost)).slice(0, 5),
+    evidenceUrls: promotionGradePreconsentRequestUrls
+      .filter((url) => vendor.scriptHost && url.includes(vendor.scriptHost))
+      .slice(0, 5),
     firstPartyOrThirdParty: vendor.firstPartyOrThirdParty,
     matchedSignatureId: vendor.matchedSignatureId,
     observedVia: vendor.observedVia,
@@ -6298,11 +6354,22 @@ function buildMaterializedLocalV2Detail(
   };
 }
 
+export function buildGpcResponseRuntimeProjection(
+  bundle: Pick<CanonicalEvidenceBundle, "gpcResponseAssessment">,
+) {
+  return bundle.gpcResponseAssessment
+    ? {
+        gpcResponseAssessment: bundle.gpcResponseAssessment,
+        gpc_response_assessment: bundle.gpcResponseAssessment,
+      }
+    : {};
+}
+
 // Bump whenever materialization semantics change. This cache contains the
 // fully derived report detail, so retaining an older entry can cause a
 // projection repair to persist stale evidence even after the projector is
 // deployed.
-const LOCAL_V2_DAG_REPORT_MATERIALIZATION_CACHE_VERSION = "local-v2-report-materialization-v11";
+const LOCAL_V2_DAG_REPORT_MATERIALIZATION_CACHE_VERSION = "local-v2-report-materialization-v12";
 const LOCAL_V2_DAG_REPORT_MATERIALIZATION_CACHE_TTL_MS = 60 * 60 * 1_000;
 const LOCAL_V2_DAG_REPORT_MATERIALIZATION_CACHE_MAX_ENTRIES = 6;
 const localV2DagReportMaterializationCache = new BoundedPromiseCache<string, ScanDetailResponse>({

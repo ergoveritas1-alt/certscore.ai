@@ -9,7 +9,7 @@ CertScore.ai MCP Light is the no-account, low-friction remote MCP for evidence-b
 | Endpoint | `https://mcp.certscore.ai/mcp/light` |
 | Transport | Streamable HTTP |
 | Authentication | None; do not send an API key, bearer token, or OAuth configuration |
-| Version | `0.2.16` |
+| Version | `0.2.17` |
 
 Configure an MCP client as a remote HTTP server with the endpoint above. Product configuration formats differ, so use the client's current remote-MCP UI or documentation rather than adapting a local stdio example.
 

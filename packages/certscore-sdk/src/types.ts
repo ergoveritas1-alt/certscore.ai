@@ -132,6 +132,8 @@ export interface PostRefusalObservation {
   refusalExercised: boolean;
   observationCount: number;
   productionProjectable: boolean;
+  evidenceDisposition: "confirmed" | "indeterminate";
+  indeterminateReason: string | null;
   verdict:
     | "eligible_nonessential_activity_observed_after_confirmed_refusal"
     | "retained_consent_signal_contradiction_observed_after_confirmed_refusal"
@@ -157,6 +159,95 @@ export interface PostRefusalObservation {
   limitations: string[];
 }
 
+export interface PostAcceptObservation {
+  status:
+    | "confirmed_observation"
+    | "confirmed_clean"
+    | "unconfirmed"
+    | "not_attempted"
+    | "unsupported"
+    | "aborted";
+  acceptanceExercised: boolean;
+  observationCount: number;
+  productionProjectable: boolean;
+  evidenceDisposition: "confirmed" | "indeterminate";
+  indeterminateReason: string | null;
+  verdict:
+    | "eligible_nonessential_activity_observed_after_confirmed_acceptance"
+    | "retained_consent_signal_contradiction_observed_after_confirmed_acceptance"
+    | "no_eligible_nonessential_activity_observed_during_completed_window"
+    | "no_confirmed_post_accept_verdict";
+  interpretation: string;
+  observationStrategy: "stop_on_first_eligible_activity" | "not_applicable";
+  termination: {
+    kind: "evidence_satisfied" | "window_elapsed" | "unavailable";
+    intentional: boolean;
+    trigger:
+      | "non_essential_request_observed"
+      | "non_essential_storage_write_observed"
+      | "acceptance_signal_contradiction_observed"
+      | "window_elapsed"
+      | "accept_control_not_observed"
+      | "accept_path_timeout"
+      | "accept_observation_window_truncated"
+      | "worker_failed"
+      | "unavailable";
+  };
+  completedAt: string | null;
+  coverageLimitations: string[];
+  /** @deprecated Use coverageLimitations. */
+  limitations: string[];
+}
+
+export interface GpcComparisonDelta {
+  baselineCount: number;
+  gpcCount: number;
+  countDelta: number;
+  baselineOnly: string[];
+  gpcOnly: string[];
+  shared: string[];
+}
+
+export interface GpcResponse {
+  status: "responsive" | "no_observable_response" | "indeterminate";
+  findingTitle: "GPC response" | "No observable GPC response";
+  summary: string;
+  scoreEffect: "none";
+  legalInterpretation: "not_assessed";
+  comparison: {
+    comparable: boolean;
+    protocol: "passive_baseline_with_sec_gpc";
+    baselineArtifact: {
+      lane: "runtime_evidence";
+      sha256: string;
+      sizeBytes: number;
+    };
+    gpcArtifact: {
+      lane: "gpc_observation";
+      sha256: string;
+      sizeBytes: number;
+    };
+    enabledProof: {
+      secGpcHeaderValue: "1";
+      requestsWithSecGpc: number;
+      requestEventIds: string[];
+      navigatorGlobalPrivacyControl: true;
+    };
+    deltas: {
+      cookies: GpcComparisonDelta;
+      trackers: GpcComparisonDelta;
+      advertisingOrMeasurementActivity: GpcComparisonDelta;
+      consentOrCmpBehavior: GpcComparisonDelta;
+    };
+    limitationKeys: string[];
+  };
+  californiaPolicy: {
+    applied: boolean;
+    deductionPoints: 0 | 15;
+  };
+  evidenceUrl: string;
+}
+
 export interface ScanResource extends ScanCreationMetadata {
   type: "certscore_scan";
   scanId: string;
@@ -175,6 +266,8 @@ export interface ScanResource extends ScanCreationMetadata {
   scoreVersion?: string | null;
   scoreUpdatedAt?: string | null;
   riskLevel?: string | null;
+  gpcResponse?: GpcResponse | null;
+  postAcceptObservation?: PostAcceptObservation | null;
   postRefusalObservation?: PostRefusalObservation | null;
   coverage?: {
     status?: string;
@@ -208,6 +301,8 @@ export interface ScanJob extends ScanCreationMetadata {
   scoreVersion?: string | null;
   scoreUpdatedAt?: string | null;
   riskLevel?: string | null;
+  gpcResponse?: GpcResponse | null;
+  postAcceptObservation?: PostAcceptObservation | null;
   postRefusalObservation?: PostRefusalObservation | null;
   coverage?: ScanResource["coverage"] | null;
   lastUpdatedAt?: string;
@@ -706,6 +801,9 @@ export interface PulseResultBase {
   scanStatus?: string;
   resultDisposition?: ScanResultDisposition;
   noGo?: ScanNoGoResult;
+  gpcResponse?: GpcResponse | null;
+  postAcceptObservation?: PostAcceptObservation | null;
+  postRefusalObservation?: PostRefusalObservation | null;
   summary?: PulseSummary;
   topFindings?: TopFinding[];
   transportSecurity?: TransportSecurityProjection;

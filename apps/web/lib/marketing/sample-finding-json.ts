@@ -1273,10 +1273,10 @@ const illustrativeRejectTrackingPersistsAfterReject = {
   evidenceConfidence: "good",
   directVsInferred: "direct_observation",
   observed:
-    "Retained runtime evidence showed a reject-style consent interaction followed by classified non-essential request or storage activity in the observed scan scope.",
+    "Retained runtime evidence confirmed a refusal-state transition followed by classified non-essential request or storage activity in the observed scan scope.",
   evidence: {
     summary:
-      "Retained runtime evidence showed a reject-style consent interaction followed by classified non-essential request or storage activity in the observed scan scope.",
+      "Retained runtime evidence confirmed a refusal-state transition followed by classified non-essential request or storage activity in the observed scan scope.",
     examples: [
       {
         title: "Post-reject runtime artifact",

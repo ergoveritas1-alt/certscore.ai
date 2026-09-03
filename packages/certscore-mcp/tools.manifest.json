@@ -21,7 +21,7 @@
   },
   {
     "name": "certscore_get_scan_bundle",
-    "description": "Returns the completed or completed-limited CertScore evidence bundle for a stable scanId as concise TextContent and matching structuredContent. Available sections include the canonical report overview, bounded projected findings, pre-consent cookie and tracker evidence, coverage limitations, persisted execution provenance, and retrieval URLs. Detail tiers and byte budgets control the bounded response, with explicit returned, total, truncated, and omitted-section metadata. Reject Path content is present only for confirmed, evidence-qualified post-refusal observations; unsupported or inconclusive outcomes remain neutral coverage limitations. Results are automated public-web observations, not legal advice, certification, or a compliance determination."
+    "description": "Returns the completed or completed-limited CertScore evidence bundle for a stable scanId as concise TextContent and matching structuredContent. Available sections include the canonical report overview, bounded projected findings, pre-consent cookie and tracker evidence, coverage limitations, persisted execution provenance, and retrieval URLs. Detail tiers and byte budgets control the bounded response, with explicit returned, total, truncated, and omitted-section metadata. Accept and Reject Path content is present only for confirmed, evidence-qualified post-action observations; unsupported or inconclusive outcomes remain neutral coverage limitations. Results are automated public-web observations, not legal advice, certification, or a compliance determination."
   },
   {
     "name": "certscore_export_findings",

@@ -745,6 +745,8 @@ export function buildCertScoreApiV2OpenApiDocument() {
             "refusalExercised",
             "observationCount",
             "productionProjectable",
+            "evidenceDisposition",
+            "indeterminateReason",
             "verdict",
             "interpretation",
             "observationStrategy",
@@ -754,12 +756,15 @@ export function buildCertScoreApiV2OpenApiDocument() {
             "limitations"
           ],
           properties: {
-            status: { type: "string", enum: ["confirmed_observation", "confirmed_clean", "unconfirmed", "not_attempted", "unsupported", "aborted"] },
+            status: { type: "string", description: "confirmed_observation and confirmed_clean are results. Every other value is limited coverage and must not be interpreted as a pass.", enum: ["confirmed_observation", "confirmed_clean", "unconfirmed", "not_attempted", "unsupported", "aborted"] },
             refusalExercised: { type: "boolean" },
             observationCount: { type: "integer", minimum: 0 },
-            productionProjectable: { type: "boolean" },
+            productionProjectable: { type: "boolean", description: "Whether the observation is eligible to project a public finding. Non-projectable evidence may still be valid for review." },
+            evidenceDisposition: { type: "string", enum: ["confirmed", "indeterminate"] },
+            indeterminateReason: { type: ["string", "null"], maxLength: 160 },
             verdict: {
               type: "string",
+              description: "The only field carrying an outcome. Do not derive a verdict by counting evidence rows.",
               enum: [
                 "eligible_nonessential_activity_observed_after_confirmed_refusal",
                 "retained_consent_signal_contradiction_observed_after_confirmed_refusal",
@@ -771,6 +776,7 @@ export function buildCertScoreApiV2OpenApiDocument() {
             observationStrategy: { type: "string", enum: ["stop_on_first_eligible_activity", "not_applicable"] },
             termination: {
               type: "object",
+              description: "evidence_satisfied with intentional=true means the bounded observer deliberately stopped after retaining qualifying evidence; observationCount is not a cross-scan volume measure.",
               additionalProperties: false,
               required: ["kind", "intentional", "trigger"],
               properties: {
@@ -780,8 +786,143 @@ export function buildCertScoreApiV2OpenApiDocument() {
               }
             },
             completedAt: { type: ["string", "null"], format: "date-time" },
-            coverageLimitations: { type: "array", maxItems: 24, items: { type: "string" } },
+            coverageLimitations: { type: "array", description: "Behavior or persistence that was not measured. This bounds the observation and does not describe the site.", maxItems: 24, items: { type: "string" } },
             limitations: { type: "array", maxItems: 24, deprecated: true, description: "Deprecated compatibility alias for coverageLimitations.", items: { type: "string" } }
+          }
+        },
+        PostAcceptObservation: {
+          type: "object",
+          additionalProperties: false,
+          required: [
+            "status",
+            "acceptanceExercised",
+            "observationCount",
+            "productionProjectable",
+            "evidenceDisposition",
+            "indeterminateReason",
+            "verdict",
+            "interpretation",
+            "observationStrategy",
+            "termination",
+            "completedAt",
+            "coverageLimitations",
+            "limitations"
+          ],
+          properties: {
+            status: { type: "string", description: "confirmed_observation and confirmed_clean are results. Every other value is limited coverage and must not be interpreted as a pass.", enum: ["confirmed_observation", "confirmed_clean", "unconfirmed", "not_attempted", "unsupported", "aborted"] },
+            acceptanceExercised: { type: "boolean" },
+            observationCount: { type: "integer", minimum: 0 },
+            productionProjectable: { type: "boolean", description: "Whether the observation is eligible to project publicly. Accept remains a score-neutral comparison baseline." },
+            evidenceDisposition: { type: "string", enum: ["confirmed", "indeterminate"] },
+            indeterminateReason: { type: ["string", "null"], maxLength: 160 },
+            verdict: {
+              type: "string",
+              description: "The only field carrying an outcome. Post-acceptance activity is a score-neutral comparison baseline, not a negative finding.",
+              enum: [
+                "eligible_nonessential_activity_observed_after_confirmed_acceptance",
+                "retained_consent_signal_contradiction_observed_after_confirmed_acceptance",
+                "no_eligible_nonessential_activity_observed_during_completed_window",
+                "no_confirmed_post_accept_verdict"
+              ]
+            },
+            interpretation: { type: "string", maxLength: 500 },
+            observationStrategy: { type: "string", enum: ["stop_on_first_eligible_activity", "not_applicable"] },
+            termination: {
+              type: "object",
+              description: "evidence_satisfied with intentional=true means the bounded observer deliberately stopped after retaining qualifying comparison evidence.",
+              additionalProperties: false,
+              required: ["kind", "intentional", "trigger"],
+              properties: {
+                kind: { type: "string", enum: ["evidence_satisfied", "window_elapsed", "unavailable"] },
+                intentional: { type: "boolean" },
+                trigger: { type: "string", enum: ["non_essential_request_observed", "non_essential_storage_write_observed", "acceptance_signal_contradiction_observed", "window_elapsed", "accept_control_not_observed", "accept_path_timeout", "accept_observation_window_truncated", "worker_failed", "unavailable"] }
+              }
+            },
+            completedAt: { type: ["string", "null"], format: "date-time" },
+            coverageLimitations: { type: "array", description: "Behavior or persistence that was not measured. This bounds the observation and does not describe the site.", maxItems: 24, items: { type: "string" } },
+            limitations: { type: "array", maxItems: 24, deprecated: true, description: "Deprecated compatibility alias for coverageLimitations.", items: { type: "string" } }
+          }
+        },
+        GpcResponse: {
+          type: "object",
+          additionalProperties: false,
+          required: ["status", "findingTitle", "summary", "scoreEffect", "legalInterpretation", "comparison", "californiaPolicy", "evidenceUrl"],
+          properties: {
+            status: { type: "string", enum: ["responsive", "no_observable_response", "indeterminate"] },
+            findingTitle: { type: "string", enum: ["GPC response", "No observable GPC response"] },
+            summary: { type: "string", minLength: 1, maxLength: 2000 },
+            scoreEffect: { type: "string", const: "none", description: "The jurisdiction-neutral GPC comparison itself is score-neutral." },
+            legalInterpretation: { type: "string", const: "not_assessed" },
+            comparison: {
+              type: "object",
+              additionalProperties: false,
+              required: ["comparable", "protocol", "baselineArtifact", "gpcArtifact", "enabledProof", "deltas", "limitationKeys"],
+              properties: {
+                comparable: { type: "boolean" },
+                protocol: { type: "string", const: "passive_baseline_with_sec_gpc" },
+                baselineArtifact: {
+                  type: "object",
+                  additionalProperties: false,
+                  required: ["lane", "sha256", "sizeBytes"],
+                  properties: {
+                    lane: { type: "string", const: "runtime_evidence" },
+                    sha256: { type: "string", pattern: "^[a-f0-9]{64}$" },
+                    sizeBytes: { type: "integer", minimum: 0 }
+                  }
+                },
+                gpcArtifact: {
+                  type: "object",
+                  additionalProperties: false,
+                  required: ["lane", "sha256", "sizeBytes"],
+                  properties: {
+                    lane: { type: "string", const: "gpc_observation" },
+                    sha256: { type: "string", pattern: "^[a-f0-9]{64}$" },
+                    sizeBytes: { type: "integer", minimum: 0 }
+                  }
+                },
+                enabledProof: {
+                  type: "object",
+                  additionalProperties: false,
+                  required: ["secGpcHeaderValue", "requestsWithSecGpc", "requestEventIds", "navigatorGlobalPrivacyControl"],
+                  properties: {
+                    secGpcHeaderValue: { type: "string", const: "1" },
+                    requestsWithSecGpc: { type: "integer", minimum: 0 },
+                    requestEventIds: { type: "array", maxItems: 100, items: { type: "string", minLength: 1, maxLength: 160 } },
+                    navigatorGlobalPrivacyControl: { type: "boolean", const: true }
+                  }
+                },
+                deltas: {
+                  type: "object",
+                  additionalProperties: false,
+                  required: ["cookies", "trackers", "advertisingOrMeasurementActivity", "consentOrCmpBehavior"],
+                  properties: Object.fromEntries(
+                    ["cookies", "trackers", "advertisingOrMeasurementActivity", "consentOrCmpBehavior"].map((key) => [key, {
+                      type: "object",
+                      additionalProperties: false,
+                      required: ["baselineCount", "gpcCount", "countDelta", "baselineOnly", "gpcOnly", "shared"],
+                      properties: {
+                        baselineCount: { type: "integer", minimum: 0 },
+                        gpcCount: { type: "integer", minimum: 0 },
+                        countDelta: { type: "integer" },
+                        baselineOnly: { type: "array", maxItems: 100, items: { type: "string", minLength: 1, maxLength: 500 } },
+                        gpcOnly: { type: "array", maxItems: 100, items: { type: "string", minLength: 1, maxLength: 500 } },
+                        shared: { type: "array", maxItems: 100, items: { type: "string", minLength: 1, maxLength: 500 } }
+                      }
+                    }]))
+                },
+                limitationKeys: { type: "array", maxItems: 24, items: { type: "string", minLength: 1, maxLength: 160 } }
+              }
+            },
+            californiaPolicy: {
+              type: "object",
+              additionalProperties: false,
+              required: ["applied", "deductionPoints"],
+              properties: {
+                applied: { type: "boolean" },
+                deductionPoints: { type: "integer", enum: [0, 15] }
+              }
+            },
+            evidenceUrl: { type: "string", format: "uri" }
           }
         },
         PreConsentRuntimePreview: {
@@ -902,6 +1043,8 @@ export function buildCertScoreApiV2OpenApiDocument() {
             scoreVersion: { type: ["string", "null"] },
             scoreUpdatedAt: { type: ["string", "null"], format: "date-time" },
             riskLevel: { type: ["string", "null"] },
+            gpcResponse: { $ref: "#/components/schemas/GpcResponse" },
+            postAcceptObservation: { $ref: "#/components/schemas/PostAcceptObservation" },
             postRefusalObservation: { $ref: "#/components/schemas/PostRefusalObservation" },
             preConsentPreview: { $ref: "#/components/schemas/PreConsentRuntimePreview" },
             coverage: { type: ["object", "null"], additionalProperties: true },
@@ -964,6 +1107,8 @@ export function buildCertScoreApiV2OpenApiDocument() {
             scoreVersion: { type: ["string", "null"] },
             scoreUpdatedAt: { type: ["string", "null"], format: "date-time" },
             riskLevel: { type: ["string", "null"] },
+            gpcResponse: { $ref: "#/components/schemas/GpcResponse" },
+            postAcceptObservation: { $ref: "#/components/schemas/PostAcceptObservation" },
             postRefusalObservation: { $ref: "#/components/schemas/PostRefusalObservation" },
             coverage: { type: "object", additionalProperties: true },
             executionMode: { type: "string", enum: ["new_scan", "reused_scan"] },

@@ -4,7 +4,7 @@ Last updated: 2026-05-19
 
 CertScore.ai Pulse provides automated public-web observations for human and agentic review. Outputs are not legal advice, certification, or a compliance determination.
 
-This is beta software. The current Pulse API beta version is 0.5.4.
+This is beta software. The current Pulse API beta version is 0.5.5.
 
 CertScore.ai Pulse uses automated runtime analysis of public websites to detect review signals around pre-consent tracking, third-party requests, consent enforcement gaps, cookie activity, accessibility issues, and disclosure inconsistencies.
 
@@ -188,6 +188,10 @@ Expected public response contracts:
 - X-RateLimit-* headers are not emitted unless a route has accurate enforced bucket state.
 
 Use guidance:
+- postAcceptObservation is a score-neutral comparison baseline; do not report post-acceptance activity as a concern.
+- postRefusalObservation can support a projected choice-path finding only when its status is confirmed and the verdict reports qualifying retained activity.
+- gpcResponse carries scoreEffect: none and legalInterpretation: not_assessed. Report the comparison, not a conclusion about whether the signal was honored.
+- For any choice-path result, a non-confirmed status is limited coverage. Report it as unknown, never as clean or passing.
 - Use detail=tiny for compact badges, CLI summaries, or simple agents.
 - Use detail=summary for default agent summaries.
 - Use detail=evidence when structured finding, evidence, review lens, coverage, and benchmark context are needed.

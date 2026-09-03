@@ -1,9 +1,13 @@
 import { API_READ_RATE_POLICY_OPENAPI_EXTENSION } from "@website-signal-risk-scanner/shared";
 import { CORE_MARKETING_POSITIONING } from "../../../lib/marketing/core-positioning";
+import {
+  PUBLIC_CERTSCORE_MCP_VERSION,
+  PUBLIC_CERTSCORE_SDK_VERSION
+} from "../../../lib/public-integration-versions";
 
 const discoveryDocument = {
   name: "CertScore AI and API discovery",
-  version: "2026-08-29",
+  version: "2026-09-03",
   type: "certscore_ai_discovery",
   description:
     "Vendor-neutral discovery document for CertScore public API, SDK, MCP, OpenAPI, and agent-readable documentation.",
@@ -25,6 +29,11 @@ const discoveryDocument = {
       "Use public API and documentation outputs as evidence-backed review signals with human and agentic review. Do not represent CertScore output as a legal conclusion.",
     canonicalFlow:
       "WS01 observed evidence -> WC01 normalized concern -> WC01 concern policy -> WC01 unified finding/checklist projection -> executive/regulatory display."
+  },
+  capabilities: {
+    choicePathResults: ["postAcceptObservation", "postRefusalObservation", "gpcResponse"],
+    interpretation:
+      "Accept is a score-neutral comparison baseline. Reject can support a finding only after a confirmed refusal-state transition and qualifying retained activity. Non-confirmed statuses are limited coverage, not a pass. GPC is a jurisdiction-neutral comparison with no score effect."
   },
   aiDiscovery: {
     conciseGuide: "https://certscore.ai/llms.txt",
@@ -89,14 +98,14 @@ const discoveryDocument = {
     distribution: "npm",
     status: "published",
     package: "@certscore/sdk",
-    currentVersion: "0.2.8",
-    install: "npm install @certscore/sdk@0.2.6"
+    currentVersion: PUBLIC_CERTSCORE_SDK_VERSION,
+    install: `npm install @certscore/sdk@${PUBLIC_CERTSCORE_SDK_VERSION}`
   },
   mcp: {
     distribution: "homebrew",
     binary: "certscore-mcp",
     packageStatus: "homebrew_developer_preview",
-    currentVersion: "0.2.12",
+    currentVersion: PUBLIC_CERTSCORE_MCP_VERSION,
     docs: "https://certscore.ai/developers/mcp",
     repositoryPath: "packages/certscore-mcp",
     install: "brew tap ergoveritas1-alt/certscore https://github.com/ergoveritas1-alt/certscore.ai && brew install --cask certscore-mcp",
@@ -113,7 +122,7 @@ const discoveryDocument = {
       protectedResourceMetadata: "https://mcp.certscore.ai/.well-known/oauth-protected-resource",
       authorizationServerMetadata: "https://certscore.ai/.well-known/oauth-authorization-server",
       authentication: "OAuth 2.0 authorization code with PKCE",
-      currentVersion: "0.2.16",
+      currentVersion: PUBLIC_CERTSCORE_MCP_VERSION,
       claudeTrialScanCreation: {
         automatic: true,
         eligiblePlan: "free",
@@ -127,7 +136,7 @@ const discoveryDocument = {
       name: "CertScore.ai MCP Light",
       registryName: "ai.certscore/mcp-light",
       shortDescription: "Free website privacy scanner to detect pre-consent cookies and trackers, CMP and consent controls, privacy policy, GDPR/ePrivacy and CCPA, and HTTPS/TLS signals.",
-      longDescription: "Free website privacy scanner and cookie checker for public websites. Detect pre-consent cookies and trackers, third-party tracking technologies, cookie banners, CMP and consent-management signals, privacy-policy and transparency findings, GDPR/ePrivacy and CCPA/CPRA review signals, and HTTPS/TLS transport observations. On eligible sites, CertScore reports bounded post-refusal observations only after a Reject action is confirmed and qualifying evidence is retained. Give CertScore.ai a public website to collect structured, evidence-backed privacy findings for launch review, vendor review, audit triage, or human compliance review. Results include a CertScore score and supporting evidence for human and agentic review; they are not legal advice, certification, or a compliance determination.",
+      longDescription: "Free website privacy scanner and cookie checker for public websites. Detect pre-consent cookies and trackers, third-party tracking technologies, cookie banners, CMP and consent-management signals, eligible Accept and Reject Path observations with their coverage state, privacy-policy and transparency findings, GDPR/ePrivacy and CCPA/CPRA review signals, and HTTPS/TLS transport observations. Accept is a score-neutral comparison baseline; Reject can support a finding only after a confirmed refusal-state transition and qualifying retained evidence. Give CertScore.ai a public website to collect structured, evidence-backed privacy findings for launch review, vendor review, audit triage, or human compliance review. Results include a CertScore score and supporting evidence for human and agentic review; they are not legal advice, certification, or a compliance determination.",
       landingPage: "https://certscore.ai/mcp/light",
       registryListing: "https://registry.modelcontextprotocol.io/?q=ai.certscore%2Fmcp-light",
       registryApiLookup: "https://registry.modelcontextprotocol.io/v0.1/servers?search=ai.certscore%2Fmcp-light",
@@ -148,7 +157,7 @@ const discoveryDocument = {
       iconUrl: "https://certscore.ai/certscore-mark-dark.png",
       darkBackgroundIconUrl: "https://certscore.ai/certscore-mark-light.png",
       clineMarketplaceIconUrl: "https://certscore.ai/images/mcp-directory/certscore-mcp-light-cline-400.png",
-      version: "0.2.16",
+      version: PUBLIC_CERTSCORE_MCP_VERSION,
       tools: ["certscore_scan_site", "certscore_get_scan_status", "certscore_get_scan_bundle"],
       intendedUse: "Frictionless no-account public website scans for new and low-volume agents."
     },

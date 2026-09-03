@@ -14,12 +14,14 @@ import {
 import { CERTSCORE_LINKEDIN_URL, CERTSCORE_X_URL, getCertScoreSocialProfiles } from "./social";
 
 const release = getPublishedRelease("mcp-light");
+const choicePathRelease = getPublishedRelease("accept-and-reject-path-testing");
 
-test("MCP Light is the only published release and future reject-path work is not exposed", () => {
+test("published releases include choice-path testing and MCP Light", () => {
   assert.ok(release);
+  assert.ok(choicePathRelease);
   assert.equal(release.headline, "CertScore.ai MCP Light is now available");
   assert.equal(release.primaryCta.href, "/mcp/light");
-  assert.deepEqual(getPublishedReleases().map((item) => item.slug), ["mcp-light"]);
+  assert.deepEqual(getPublishedReleases().map((item) => item.slug), ["accept-and-reject-path-testing", "mcp-light"]);
   assert.equal(getPublishedRelease("mcp-light-reject-path"), null);
 
   const copy = JSON.stringify(release);
@@ -27,6 +29,13 @@ test("MCP Light is the only published release and future reject-path work is not
     assert.match(copy, new RegExp(tool));
   }
   assert.doesNotMatch(copy, /tests what happens after a user rejects cookies/i);
+
+  const choicePathCopy = JSON.stringify(choicePathRelease);
+  assert.match(choicePathCopy, /score-neutral comparison baseline/i);
+  assert.match(choicePathCopy, /limited coverage is not a pass/i);
+  assert.match(choicePathCopy, /GDPR\/ePrivacy/);
+  assert.match(choicePathCopy, /CCPA\/CPRA/);
+  assert.doesNotMatch(choicePathRelease.headline, /GPC/i);
 });
 
 test("release metadata provides canonical, Open Graph, and X card fields", () => {
@@ -62,6 +71,8 @@ test("release discovery is data-driven across sitemap, robots, feed, and llms.tx
   const sitemapUrls = sitemap().map((entry) => entry.url);
   assert.ok(sitemapUrls.includes("https://certscore.ai/releases"));
   assert.ok(sitemapUrls.includes(`https://certscore.ai${releasePath(release)}`));
+  assert.ok(choicePathRelease);
+  assert.ok(sitemapUrls.includes(`https://certscore.ai${releasePath(choicePathRelease)}`));
   assert.ok(!sitemapUrls.includes("https://certscore.ai/releases/mcp-light-reject-path"));
 
   const robotsRules = robots().rules;
@@ -79,6 +90,7 @@ test("release discovery is data-driven across sitemap, robots, feed, and llms.tx
   const feed = await feedResponse.text();
   assert.match(feed, /<title>CertScore\.ai Releases<\/title>/);
   assert.match(feed, /https:\/\/certscore\.ai\/releases\/mcp-light/);
+  assert.match(feed, /https:\/\/certscore\.ai\/releases\/accept-and-reject-path-testing/);
   assert.doesNotMatch(feed, /mcp-light-reject-path/);
 
   const llms = readFileSync("apps/web/public/llms.txt", "utf8");

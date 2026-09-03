@@ -15,6 +15,7 @@ export type LocalV2DagLambdaAwsRegion = (typeof LOCAL_V2_DAG_LAMBDA_AWS_REGIONS)
 export type LocalV2DagLambdaTargetEnvironment = "local" | "production";
 export type LocalV2DagLambdaVpcMode = "none" | "vpc";
 export type PostRefusalRejectWorkerRolloutMode = "off" | "owned_canary" | "all_eligible";
+export type PostAcceptWorkerRolloutMode = "off" | "owned_canary" | "all_eligible";
 export type LocalV2DagLambdaDebugOverrides = {
   actionFinalSettleMs?: number;
   actionSearchDeadlineMs?: number;
@@ -33,6 +34,8 @@ export const LOCAL_V2_DAG_LAMBDA_CONSERVATIVE_PRECONSENT_DEFAULTS = {
 
 export type LocalV2DagScanEnv = {
   CERTSCORE_LOCALHOST_FULL_SCAN_QUEUE_ENABLED?: string;
+  CERTSCORE_POST_ACCEPT_WORKER_ENABLED?: string;
+  CERTSCORE_POST_ACCEPT_WORKER_ROLLOUT_MODE?: string;
   CERTSCORE_POST_REFUSAL_REJECT_WORKER_ENABLED?: string;
   CERTSCORE_POST_REFUSAL_REJECT_WORKER_ROLLOUT_MODE?: string;
   CERTSCORE_V2_DAG_LAMBDA_ENABLED?: string;
@@ -212,6 +215,12 @@ export function getLocalV2DagLambdaConfiguration(
       : env.CERTSCORE_POST_REFUSAL_REJECT_WORKER_ROLLOUT_MODE === "all_eligible"
         ? "all_eligible"
         : "owned_canary";
+  const postAcceptWorkerRolloutMode: PostAcceptWorkerRolloutMode =
+    env.CERTSCORE_POST_ACCEPT_WORKER_ENABLED !== "1"
+      ? "off"
+      : env.CERTSCORE_POST_ACCEPT_WORKER_ROLLOUT_MODE === "all_eligible"
+        ? "all_eligible"
+        : "owned_canary";
 
   return {
     awsRegion: region,
@@ -220,6 +229,8 @@ export function getLocalV2DagLambdaConfiguration(
     functionName,
     missing,
     orchestrationMode: env.CERTSCORE_V2_DAG_LAMBDA_ORCHESTRATION_MODE === "sharded" ? "sharded" as const : "single" as const,
+    postAcceptWorkerEnabled: postAcceptWorkerRolloutMode !== "off",
+    postAcceptWorkerRolloutMode,
     postRefusalRejectWorkerEnabled: postRefusalRejectWorkerRolloutMode !== "off",
     postRefusalRejectWorkerRolloutMode,
     resultQueueUrl: resultQueueUrl ?? (simulatedLocalLambda ? "local://certscore-v2-dag-lambda-simulated-results" : null),
@@ -276,7 +287,6 @@ export function applyLocalV2DagScanConfig(
           forceSimulatedLocalLambda: shouldForceSimulatedLocalLambda
         })
       : null;
-
   return {
     ...config,
     execution: {
@@ -316,6 +326,15 @@ export function applyLocalV2DagScanConfig(
               debugOverrides: lambdaDebugOverridesForDispatch(options.lambdaDebugOverrides),
               localOnly: lambdaConfig.targetEnvironment === "local",
               orchestrationMode: lambdaConfig.orchestrationMode,
+              ...(lambdaConfig.orchestrationMode === "sharded"
+                ? { gpcObservationEnabled: true }
+                : {}),
+              ...(lambdaConfig.postAcceptWorkerEnabled
+                ? {
+                    postAcceptWorkerEnabled: true,
+                    postAcceptWorkerRolloutMode: lambdaConfig.postAcceptWorkerRolloutMode,
+                  }
+                : {}),
               ...(lambdaConfig.postRefusalRejectWorkerEnabled
                 ? {
                     postRefusalRejectWorkerEnabled: true,

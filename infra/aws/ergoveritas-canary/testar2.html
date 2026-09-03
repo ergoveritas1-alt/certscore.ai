@@ -1,0 +1,178 @@
+<!-- OWNED CANARY TEST PAGE — deterministic Accept/Reject interaction authorized for scanner validation -->
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="robots" content="noindex, nofollow, noarchive">
+  <title>CertScore Accept/Reject canary — indistinguishable outcomes</title>
+  <style>
+    body { background:#f8fafc; color:#0f172a; font:16px/1.5 system-ui,sans-serif; margin:0; }
+    main { margin:48px auto; max-width:780px; padding:0 20px; }
+    .banner { background:#fff; border:1px solid #94a3b8; border-radius:12px; box-shadow:0 12px 30px #0f172a20; padding:24px; }
+    .controls { display:flex; flex-wrap:wrap; gap:12px; }
+    .preferences { background:#f1f5f9; border-radius:8px; margin-top:16px; padding:16px; }
+    button { background:#0f172a; border:0; border-radius:8px; color:#fff; cursor:pointer; font:inherit; padding:12px 18px; }
+    button.secondary { background:#e2e8f0; color:#0f172a; }
+    code { background:#e2e8f0; border-radius:4px; padding:2px 5px; }
+    [hidden] { display:none !important; }
+  </style>
+</head>
+<body>
+  <main data-certscore-canary="post-action-indistinguishable"
+        data-regulatory-audit-scenario="balanced-looking-controls-with-ineffective-rejection"
+        data-accept-path-scenario="contradictory-receipt-and-indistinguishable-outcomes"
+        data-expected-acceptance-registration="confirmed"
+        data-expected-post-accept-activity="true"
+        data-expected-acceptance-contradiction="true"
+        data-expected-refusal-registration="confirmed"
+        data-expected-post-refusal-activity="true"
+        data-expected-pre-registration-activity="excluded"
+        data-expected-action-comparison="indistinguishable">
+    <p>Owned synthetic scanner-validation canary. No consumer service, account, or transaction state is involved.</p>
+    <section class="banner" id="onetrust-banner-sdk" aria-label="Cookie choices">
+      <h1>Cookie choices</h1>
+      <p>Choose whether this site may use optional analytics and advertising technologies. The interface presents balanced choices, but this audit fixture deliberately fails to honor them consistently.</p>
+      <div class="controls">
+        <button id="onetrust-accept-btn-handler" type="button">Accept all</button>
+        <button id="onetrust-reject-all-handler" type="button">Reject all</button>
+        <button class="secondary" id="onetrust-pc-btn-handler" type="button">Manage options</button>
+      </div>
+      <div class="preferences" id="canary-preference-center" hidden>
+        <h2>Cookie options</h2>
+        <p>Necessary cookies are always active. Analytics and advertising are presented as separate optional purposes and are off by default.</p>
+        <label><input type="checkbox" checked disabled> Necessary</label>
+        <label><input type="checkbox" id="canary-analytics-option"> Analytics</label>
+        <label><input type="checkbox" id="canary-advertising-option"> Advertising</label>
+        <button class="secondary" id="canary-close-options" type="button">Close options</button>
+      </div>
+      <p id="canary-consent-status" role="status" aria-live="polite"></p>
+    </section>
+    <section aria-labelledby="audit-scenario-heading">
+      <h2 id="audit-scenario-heading">Regulatory audit scenario</h2>
+      <p><strong>Findings of interest:</strong> non-essential analytics operates before any choice, the CMP records Accept while its retained TCF purpose state still says no, and Reject is followed by the same analytics and advertising identities as Accept.</p>
+      <p>This demonstrates why an auditor must test behavior and retained consent state rather than treating the presence of Accept, Reject, and Manage options as proof that choices are effective.</p>
+    </section>
+    <section>
+      <h2>Expected boundaries</h2>
+      <ul>
+        <li>Accept confirms through the changed canonical CMP cookie, not through the contradictory TCF state.</li>
+        <li>Passive capture sees a pre-choice <code>_ga</code> cookie and Google Analytics request.</li>
+        <li>The retained post-Accept TCF state denies every configured purpose and should create a consent-state contradiction review signal.</li>
+        <li>Reject confirms through the denied TCF state.</li>
+        <li>Both actions directly write the same exact <code>_ga</code> and <code>_gid</code> identities and request the same analytics and advertising endpoints after registration.</li>
+        <li>The comparison should highlight indistinguishable outcomes and preserve the post-Reject activity issue as the actionable failure.</li>
+      </ul>
+    </section>
+  </main>
+  <script>
+    (function () {
+      "use strict";
+
+      var retainedImages = [];
+      var mixedPurposes = {};
+      for (var purposeId = 1; purposeId <= 10; purposeId += 1) {
+        mixedPurposes[String(purposeId)] = purposeId % 2 === 0;
+      }
+      var tcfState = {
+        eventStatus: "tcloaded",
+        purpose: { consents: mixedPurposes },
+        tcString: "invalid:testar2:pre-action"
+      };
+
+      document.cookie = "_ga=GA1.1.TESTAR2_BASELINE; Path=/; SameSite=Lax; Secure";
+
+      window.__tcfapi = function (command, version, callback) {
+        if (command === "getTCData" && version === 2 && typeof callback === "function") {
+          callback(JSON.parse(JSON.stringify(tcfState)), true);
+          return;
+        }
+        if (typeof callback === "function") callback(null, false);
+      };
+
+      function deniedPurposes() {
+        var state = {};
+        for (var id = 1; id <= 10; id += 1) state[String(id)] = false;
+        return state;
+      }
+
+      function analyticsRequest(eventName) {
+        var request = new Image();
+        request.alt = "";
+        request.src = "https://www.google-analytics.com/g/collect?v=2&tid=G-CERTSCORE&cid=TESTAR2&en=" + encodeURIComponent(eventName);
+        retainedImages.push(request);
+      }
+
+      function advertisingRequest(eventName) {
+        var request = new Image();
+        request.alt = "";
+        request.src = "https://googleads.g.doubleclick.net/pagead/viewthroughconversion/123?label=" + encodeURIComponent(eventName);
+        retainedImages.push(request);
+      }
+
+      function beginChoice(action) {
+        analyticsRequest("pre_registration_" + action);
+      }
+
+      // Establish a deterministic passive-lane baseline before either action.
+      analyticsRequest("testar2_pre_consent_baseline");
+
+      function completeChoice(message) {
+        var banner = document.getElementById("onetrust-banner-sdk");
+        var status = document.getElementById("canary-consent-status");
+        if (banner) banner.hidden = true;
+        if (status) status.textContent = message;
+      }
+
+      function scheduleSharedPostActionActivity() {
+        window.setTimeout(function () {
+          document.cookie = "_ga=GA1.1.TESTAR2_SHARED; Path=/; SameSite=Lax; Secure";
+          document.cookie = "_gid=TESTAR2_SHARED_ANALYTICS; Path=/; SameSite=Lax; Secure";
+          analyticsRequest("testar2_shared_post_action");
+          advertisingRequest("testar2_advertising_shared_post_action");
+        }, 175);
+      }
+
+      document.getElementById("onetrust-accept-btn-handler").addEventListener("click", function () {
+        beginChoice("accept");
+        // The changed OptanonConsent cookie confirms the action. The denied TCF
+        // state is intentional and should remain a separate contradiction aid.
+        document.cookie = "OptanonConsent=testar2_accept_registered; Path=/; SameSite=Lax; Secure";
+        tcfState = {
+          eventStatus: "useractioncomplete",
+          purpose: { consents: deniedPurposes() },
+          tcString: "invalid:testar2:accept-contradiction"
+        };
+        completeChoice("Accept was recorded with a deliberately contradictory TCF state.");
+        scheduleSharedPostActionActivity();
+      });
+
+      document.getElementById("onetrust-reject-all-handler").addEventListener("click", function () {
+        beginChoice("reject");
+        document.cookie = "OptanonConsent=testar2_reject_registered; Path=/; SameSite=Lax; Secure";
+        tcfState = {
+          eventStatus: "useractioncomplete",
+          purpose: { consents: deniedPurposes() },
+          tcString: "invalid:testar2:rejected"
+        };
+        completeChoice("Optional purposes rejected, but the fixture deliberately continues identical activity.");
+        scheduleSharedPostActionActivity();
+      });
+
+      document.getElementById("onetrust-pc-btn-handler").addEventListener("click", function () {
+        var preferences = document.getElementById("canary-preference-center");
+        var status = document.getElementById("canary-consent-status");
+        if (preferences) preferences.hidden = false;
+        if (status) status.textContent = "Cookie options opened without recording a consent choice.";
+      });
+
+      document.getElementById("canary-close-options").addEventListener("click", function () {
+        var preferences = document.getElementById("canary-preference-center");
+        var status = document.getElementById("canary-consent-status");
+        if (preferences) preferences.hidden = true;
+        if (status) status.textContent = "Cookie options closed without recording a consent choice.";
+      });
+    }());
+  </script>
+</body>
+</html>

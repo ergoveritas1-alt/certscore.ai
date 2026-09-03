@@ -245,3 +245,48 @@ test("final document party classification applies domain-aware canonical cookie 
     ["i", "unknown", "unknown"],
   ]);
 });
+
+test("final document party classification retains Sourcebuster purpose and essentiality on typed cookie observations", () => {
+  const cookieEvents = ["sbjs_current", "sbjs_session"].map((cookieName, index) => ({
+    eventId: `cookie-sourcebuster-${index}`,
+    eventType: "cookie",
+    timestampMs: index + 1,
+    sourceScanner: "fixture",
+    scenario: "fresh_pre_consent",
+    consentStateAtTime: "pre_consent",
+    pagePhase: "network_idle",
+    cookieName,
+    cookieDomain: ".shop.example.com",
+    cookieParty: "unknown",
+    cookieClassificationBasis: ["browser_snapshot"],
+    operation: "browser_snapshot",
+    vendorAssociated: false,
+    cookiePurpose: "unknown",
+    cookieEssentiality: "unknown",
+    cookieEssentialityReasonCodes: [],
+    valueRedacted: true,
+    evidenceRefs: [],
+    confidence: 1,
+    directVsInferred: "direct",
+  })) as CookieEvent[];
+
+  applyFinalDocumentPartyClassification({
+    finalDocumentUrl: "https://shop.example.com/",
+    networkEvents: [],
+    networkResponseEvents: [],
+    cookieEvents,
+    scriptEvents: [],
+    iframeEvents: [],
+  });
+
+  assert.deepEqual(cookieEvents.map((event) => [
+    event.cookieName,
+    event.cookiePurpose,
+    event.cookieEssentiality,
+    event.cookieEssentialityReasonCodes,
+    event.cookieParty,
+  ]), [
+    ["sbjs_current", "analytics", "non_essential", ["canonical_cookie_kb:analytics"], "first_party"],
+    ["sbjs_session", "analytics", "non_essential", ["canonical_cookie_kb:analytics"], "first_party"],
+  ]);
+});

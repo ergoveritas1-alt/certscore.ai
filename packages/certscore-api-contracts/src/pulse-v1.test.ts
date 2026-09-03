@@ -126,6 +126,9 @@ test("Pulse ChatGPT OpenAPI stays compact and action-compatible", () => {
   assert.equal(serialized.includes("\"evidence\""), true);
   assert.equal(serialized.includes("\"text/markdown\""), false);
   assert.equal(serialized.includes("\"const\""), false);
+  assert.ok(document.components.schemas.PulseResponse.properties.gpcResponse);
+  assert.ok(document.components.schemas.PulseResponse.properties.postAcceptObservation);
+  assert.ok(document.components.schemas.PulseResponse.properties.postRefusalObservation);
 });
 
 test("MCP contracts expose the current scoped tool surface", () => {
@@ -199,7 +202,7 @@ test("Light tool descriptions are factual, bounded, and free of model-behavior i
   assert.match(status.description, /retryAfterSeconds/);
   assert.match(status.description, /Preliminary observations are distinct from completed findings/i);
   assert.match(bundle.description, /Returns the completed or completed-limited CertScore evidence bundle/i);
-  assert.match(bundle.description, /Reject Path content is present only for confirmed, evidence-qualified post-refusal observations/i);
+  assert.match(bundle.description, /Accept and Reject Path content is present only for confirmed, evidence-qualified post-action observations/i);
   assert.match(bundle.description, /unsupported or inconclusive outcomes remain neutral coverage limitations/i);
   for (const concept of [
     /pre-consent storage/,
@@ -376,6 +379,9 @@ test("Pulse v1 OpenAPI has stable agent-facing operations", () => {
   assert.equal(document.paths["/api/v1/pulse/status/{jobId}"].get.operationId, "getPulseJobStatus");
   assert.ok(document.components.securitySchemes.bearerAuth);
   assert.ok(document.components.schemas.PulseResponse);
+  assert.ok(document.components.schemas.PulseResponse.properties.gpcResponse);
+  assert.ok(document.components.schemas.PulseResponse.properties.postAcceptObservation);
+  assert.ok(document.components.schemas.PulseResponse.properties.postRefusalObservation);
   assert.ok(document.components.schemas.PulseStatus);
   assert.ok(document.components.schemas.PulseError);
 });
@@ -521,13 +527,33 @@ test("API v2 draft OpenAPI locks resource path and operation names", () => {
   };
   walk(document.paths);
 
-  assert.equal(document.info.version, "0.1.9");
+  assert.equal(document.info.version, "0.1.12");
   assert.ok(document.paths["/api/v2/keys/request"]);
   assert.ok(document.paths["/api/v2/auth/check"]);
   assert.ok(document.paths["/api/v2/scans"]);
   assert.deepEqual(
     document.components.schemas.CreateScanRequest.properties.scanFrom.enum,
     ["eu_de", "eu_ie", "california"]
+  );
+  assert.equal(
+    document.components.schemas.Scan.properties.gpcResponse.$ref,
+    "#/components/schemas/GpcResponse",
+  );
+  assert.deepEqual(
+    document.components.schemas.GpcResponse.properties.status.enum,
+    ["responsive", "no_observable_response", "indeterminate"],
+  );
+  assert.equal(
+    document.components.schemas.GpcResponse.properties.comparison.properties.enabledProof.properties.secGpcHeaderValue.const,
+    "1",
+  );
+  assert.equal(
+    document.components.schemas.Scan.properties.postAcceptObservation.$ref,
+    "#/components/schemas/PostAcceptObservation",
+  );
+  assert.deepEqual(
+    document.components.schemas.PostAcceptObservation.properties.termination.properties.kind.enum,
+    ["evidence_satisfied", "window_elapsed", "unavailable"],
   );
   assert.equal(
     document.components.schemas.Scan.properties.postRefusalObservation.$ref,

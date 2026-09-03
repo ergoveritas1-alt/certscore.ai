@@ -56,7 +56,7 @@ export default function PulseAgentFallbackPage() {
         <h1 className="mt-3 text-4xl font-semibold tracking-tight text-slate-950">Agent-readable beta fallback</h1>
         <p className="mt-4 max-w-3xl text-base leading-7 text-slate-600">
           This page is a plain browser-readable fallback for agents or review tools whose JSON fetch layer cannot retrieve API
-          endpoints. This is beta software. The current Pulse API beta version is 0.5.4. The canonical Pulse API remains{" "}
+          endpoints. This is beta software. The current Pulse API beta version is 0.5.5. The canonical Pulse API remains{" "}
           <code className="rounded bg-slate-100 px-1">/api/v1/pulse</code>.
         </p>
         <p className="mt-3 max-w-3xl text-base leading-7 text-slate-700">{PULSE_PURPOSE_STATEMENT}</p>
@@ -184,6 +184,16 @@ export default function PulseAgentFallbackPage() {
               </div>
             ))}
           </div>
+        </section>
+
+        <section className="mt-10 rounded-lg border border-sky-200 bg-sky-50 p-4 text-sm leading-7 text-slate-700">
+          <h2 className="text-xl font-semibold text-slate-950">Choice-path result interpretation</h2>
+          <ul className="mt-3 list-disc space-y-2 pl-5">
+            <li><code className="rounded bg-white px-1">postAcceptObservation</code> is a score-neutral comparison baseline; do not report post-acceptance activity as a concern.</li>
+            <li><code className="rounded bg-white px-1">postRefusalObservation</code> can support a projected choice-path finding only when its status is confirmed and the verdict reports qualifying retained activity.</li>
+            <li><code className="rounded bg-white px-1">gpcResponse</code> has <code className="rounded bg-white px-1">scoreEffect: none</code> and <code className="rounded bg-white px-1">legalInterpretation: not_assessed</code>. Report the comparison, not a legal conclusion.</li>
+            <li>Every non-confirmed choice-path status is limited coverage. Report it as unknown, never as clean or passing.</li>
+          </ul>
         </section>
 
         <section className="mt-10 rounded-lg border border-slate-200 p-4">

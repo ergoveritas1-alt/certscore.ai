@@ -1072,9 +1072,13 @@ test("scan bundle text exposes compact row evidence, neutral score terminology, 
   assert.match(text, /Do not infer unobserved technologies, legal compliance, or a legal violation from scores or findings/i);
   assert.match(text, /CertScore priority=high/i);
   assert.doesNotMatch(text, /compliance score|compliant baseline|criticality=/i);
-  assert.match(bundle.interpretationGuidance.statement, /When postRefusalObservation is confirmed and termination\.kind is evidence_satisfied/i);
+  assert.match(bundle.interpretationGuidance.statement, /When postAcceptObservation or postRefusalObservation is confirmed and termination\.kind is evidence_satisfied/i);
   assert.match(bundle.interpretationGuidance.statement, /observation stopped intentionally after qualifying evidence was retained/i);
   assert.match(bundle.interpretationGuidance.statement, /mention unmeasured longer-term persistence only when relevant/i);
+  assert.equal(bundle.gpcResponse, undefined);
+  assert.equal(bundle.postAcceptObservation, null);
+  assert.equal(bundle.postRefusalObservation, null);
+  assert.doesNotThrow(() => mcpScanBundleOutputSchema.parse(bundle));
   assert.ok(text.length <= 8_000);
 });
 
@@ -1095,6 +1099,8 @@ test("scan bundle makes intentional post-refusal evidence termination explicit",
         refusalExercised: true,
         observationCount: 2,
         productionProjectable: true,
+        evidenceDisposition: "confirmed",
+        indeterminateReason: null,
         verdict: "eligible_nonessential_activity_observed_after_confirmed_refusal",
         interpretation: "Reject was confirmed, and eligible non-essential storage activity was observed afterward.",
         observationStrategy: "stop_on_first_eligible_activity",
@@ -1115,6 +1121,144 @@ test("scan bundle makes intentional post-refusal evidence termination explicit",
   assert.match(text, /observation then stopped intentionally because qualifying evidence had been captured/i);
   assert.match(text, /Reject Path coverage limitation: The remainder of the persistence window was not measured\./);
   assert.doesNotMatch(text, /observation_early_exit|persistence_observation_not_settled_due_to_early_exit/);
+  assert.doesNotThrow(() => mcpScanBundleOutputSchema.parse(bundle));
+});
+
+test("scan bundle surfaces the typed GPC response and keeps California scoring separate", () => {
+  const delta = {
+    baselineCount: 1,
+    gpcCount: 1,
+    countDelta: 0,
+    baselineOnly: [],
+    gpcOnly: [],
+    shared: ["Example Ads|pixel|advertising"],
+  };
+  const bundle = buildScanBundle({
+    detail: "summary",
+    findings: { type: "certscore_finding_list", scanId: "scan_gpc", findings: [] },
+    preConsentCookiesTrackers: null,
+    report,
+    scan: {
+      type: "certscore_scan",
+      scanId: "scan_gpc",
+      domain: "example.com",
+      status: "completed",
+      score: 42,
+      gpcResponse: {
+        status: "no_observable_response",
+        findingTitle: "No observable GPC response",
+        summary: "No observable baseline delta was retained under the equivalent passive GPC condition.",
+        scoreEffect: "none",
+        legalInterpretation: "not_assessed",
+        comparison: {
+          comparable: true,
+          protocol: "passive_baseline_with_sec_gpc",
+          baselineArtifact: { lane: "runtime_evidence", sha256: "a".repeat(64), sizeBytes: 100 },
+          gpcArtifact: { lane: "gpc_observation", sha256: "b".repeat(64), sizeBytes: 110 },
+          enabledProof: {
+            secGpcHeaderValue: "1",
+            requestsWithSecGpc: 2,
+            requestEventIds: ["gpc-request-1", "gpc-request-2"],
+            navigatorGlobalPrivacyControl: true,
+          },
+          deltas: {
+            cookies: delta,
+            trackers: delta,
+            advertisingOrMeasurementActivity: delta,
+            consentOrCmpBehavior: delta,
+          },
+          limitationKeys: [],
+        },
+        californiaPolicy: { applied: true, deductionPoints: 15 },
+        evidenceUrl: "https://certscore.ai/api/v2/scans/scan_gpc/findings/gpc_response",
+      },
+    },
+  } as any);
+
+  const text = scanBundleText(bundle);
+  assert.equal(bundle.gpcResponse?.status, "no_observable_response");
+  assert.match(text, /GPC response: No observable GPC response; status=no_observable_response/);
+  assert.match(text, /Sec-GPC: 1 proof retained on 2 request\(s\)/);
+  assert.match(text, /California scoring policy: −15 points/);
+  assert.match(bundle.interpretationGuidance.statement, /do not call the result a GPC violation or say GPC was not honored/i);
+  assert.doesNotThrow(() => mcpScanBundleOutputSchema.parse(bundle));
+});
+
+test("terminal MCP status text surfaces GPC, Accept, and Reject lane results", () => {
+  const text = scanStatusText({
+    status: "completed",
+    scanId: "scan_lane_results",
+    gpcResponse: {
+      status: "responsive",
+      findingTitle: "GPC response",
+      comparison: { enabledProof: { requestsWithSecGpc: 3 } },
+    },
+    postAcceptObservation: { interpretation: "Accept was confirmed and eligible activity was observed afterward." },
+    postRefusalObservation: { interpretation: "Reject was confirmed and no eligible activity was observed during the completed window." },
+  });
+
+  assert.match(text, /GPC response: GPC response; status=responsive; Sec-GPC: 1 proof retained on 3 request\(s\)/);
+  assert.match(text, /Accept Path: Accept was confirmed/);
+  assert.match(text, /Reject Path: Reject was confirmed/);
+});
+
+test("scan bundle surfaces canonical post-Accept findings and observation metadata", () => {
+  const finding = publicFinding(
+    "post_accept_consent_dependent_activity",
+    "Confirmed acceptance was followed by eligible non-essential analytics activity.",
+  );
+  const bundle = buildScanBundle({
+    detail: "summary",
+    findings: {
+      type: "certscore_finding_list",
+      scanId: "scan_accept",
+      findings: [finding],
+    },
+    preConsentCookiesTrackers: null,
+    report: {
+      ...report,
+      scanId: "scan_accept",
+      topFindings: [{
+        ...report.topFindings[0],
+        id: "post_accept_consent_dependent_activity",
+        label: "Activity observed after confirmed acceptance",
+        plainEnglish: "Confirmed acceptance was followed by eligible non-essential analytics activity.",
+      }],
+    },
+    scan: {
+      type: "certscore_scan",
+      scanId: "scan_accept",
+      domain: "example.com",
+      status: "completed",
+      score: 42,
+      postAcceptObservation: {
+        status: "confirmed_observation",
+        acceptanceExercised: true,
+        observationCount: 3,
+        productionProjectable: true,
+        evidenceDisposition: "confirmed",
+        indeterminateReason: null,
+        verdict: "eligible_nonessential_activity_observed_after_confirmed_acceptance",
+        interpretation: "Accept was confirmed, and eligible non-essential network and storage activity was observed afterward.",
+        observationStrategy: "stop_on_first_eligible_activity",
+        termination: {
+          kind: "evidence_satisfied",
+          intentional: true,
+          trigger: "acceptance_signal_contradiction_observed",
+        },
+        completedAt: "2026-09-01T12:00:09.000Z",
+        coverageLimitations: [],
+        limitations: [],
+      },
+    },
+  } as any);
+
+  const text = scanBundleText(bundle);
+  assert.equal(bundle.findings[0]?.id, "post_accept_consent_dependent_activity");
+  assert.equal(bundle.postAcceptObservation?.productionProjectable, true);
+  assert.match(text, /Accept Path: Accept was confirmed, and eligible non-essential network and storage activity was observed afterward\./);
+  assert.match(text, /observation then stopped intentionally because qualifying evidence had been captured/i);
+  assert.match(text, /post_accept_consent_dependent_activity/);
   assert.doesNotThrow(() => mcpScanBundleOutputSchema.parse(bundle));
 });
 

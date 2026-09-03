@@ -143,6 +143,30 @@ export function shouldUseFullPageScanSubmissionTransition(input: {
     input.scanFrom !== "local_extension" && !input.expectsRecentScanReuse;
 }
 
+export function buildScanSubmitBody(input: {
+  allowRestrictedScanOptions: boolean;
+  campaignAttribution: unknown;
+  domain: string;
+  forceNewScan: boolean;
+  localV2ScanProfile: LocalV2ScanProfile;
+  localV2RunViaLambda: boolean;
+  mode: ScanMode;
+  requestId: string;
+  scanFrom: ServerScanFrom;
+}) {
+  return JSON.stringify({
+    domain: input.domain,
+    campaignAttribution: input.campaignAttribution,
+    forceNewScan: input.forceNewScan,
+    localV2ScanProfile: input.localV2ScanProfile,
+    localV2RunViaLambda: input.allowRestrictedScanOptions || LOCALHOST_FULL_SCAN_QUEUE_ENABLED
+      ? input.localV2RunViaLambda
+      : true,
+    scanFrom: input.scanFrom,
+    requestId: input.requestId
+  });
+}
+
 type ScanSubmitFailure = {
   code?: string | null;
   destination?: string | null;
@@ -777,18 +801,17 @@ export function DomainScanForm({
       });
 
       const submitUrl = mode === "preview" ? "/api/preview-scan" : "/api/full-scan";
-      const submitBody = JSON.stringify({
-          domain: submittedDomain,
-          campaignAttribution,
-          forceNewScan: showFreshRescanOption ? freshRescan : false,
-          localV2ScanProfile,
-          localV2RunViaLambda:
-            allowRestrictedScanOptions || LOCALHOST_FULL_SCAN_QUEUE_ENABLED
-              ? localV2RunViaLambda
-              : true,
-          scanFrom: scanFrom as ServerScanFrom,
-          requestId
-        });
+      const submitBody = buildScanSubmitBody({
+        allowRestrictedScanOptions,
+        campaignAttribution,
+        domain: submittedDomain,
+        forceNewScan: showFreshRescanOption ? freshRescan : false,
+        localV2ScanProfile,
+        localV2RunViaLambda,
+        mode,
+        scanFrom: scanFrom as ServerScanFrom,
+        requestId
+      });
       const submitHeaders = {
           "Content-Type": "application/json",
           ...(requestSource ? { "x-certscore-scan-source": requestSource } : {})

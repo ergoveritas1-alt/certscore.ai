@@ -133,27 +133,104 @@ test("deriveConcernPolicy keeps Article 13 evidence and deterministic no-match r
   assert.equal(noMatch.externalSurfacingEligibility, "audit_only");
 });
 
-test("deriveConcernPolicy projects paid decline evidence as a checklist-only review signal", () => {
+test("deriveConcernPolicy applies the exact California GPC deduction without changing the neutral lane fields", () => {
+  const delta = {
+    baselineCount: 1,
+    gpcCount: 1,
+    countDelta: 0,
+    baselineOnly: [],
+    gpcOnly: [],
+    shared: ["Example Ads|pixel|advertising"]
+  };
+  const gpcResponseAssessment = {
+    contractVersion: "certscore.gpc-response-assessment.v1",
+    generatedAt: "2026-09-02T12:00:00.000Z",
+    status: "no_observable_response",
+    findingTitle: "No observable GPC response",
+    scoreEffect: "none",
+    legalInterpretation: "not_assessed",
+    comparison: {
+      comparable: true,
+      protocol: "passive_baseline_with_sec_gpc",
+      baselineArtifact: {
+        lane: "runtime_evidence",
+        sha256: "a".repeat(64),
+        sizeBytes: 100,
+        uri: "s3://evidence/baseline.json"
+      },
+      gpcArtifact: {
+        lane: "gpc_observation",
+        sha256: "b".repeat(64),
+        sizeBytes: 100,
+        uri: "s3://evidence/gpc.json"
+      },
+      enabledProof: {
+        secGpcHeaderValue: "1",
+        requestsWithSecGpc: 2,
+        requestEventIds: ["gpc-request-1"],
+        navigatorGlobalPrivacyControl: true
+      },
+      deltas: {
+        cookies: { ...delta, baselineCount: 0, gpcCount: 0, shared: [] },
+        trackers: { ...delta, baselineCount: 0, gpcCount: 0, shared: [] },
+        advertisingOrMeasurementActivity: delta,
+        consentOrCmpBehavior: { ...delta, baselineCount: 0, gpcCount: 0, shared: [] }
+      },
+      evidenceRefs: ["gpc-request-1"],
+      limitationKeys: []
+    }
+  };
+  const policy = deriveConcernPolicy({
+    concern: makeConcern({
+      originKey: "privacy.gpc_response.no_observable_response",
+      originType: "runtime_artifact",
+      suggestedUnifiedFindingId: "gpc_response",
+      title: "No observable GPC response"
+    }),
+    evidenceStrengthFlags: ["direct_runtime"],
+    rawEvidence: {
+      gpcResponseAssessment,
+      gpcResponseStatus: "no_observable_response",
+      legalInterpretation: "not_assessed",
+      scoreEffect: "none"
+    }
+  });
+
+  assert.equal(policy.promotionEligibility, "eligible");
+  assert.equal(policy.scoreEffects?.length, 1);
+  assert.equal(policy.scoreEffects?.[0]?.framework, "california");
+  assert.equal(policy.scoreEffects?.[0]?.deductionPoints, 15);
+  assert.equal(gpcResponseAssessment.scoreEffect, "none");
+  assert.equal(gpcResponseAssessment.legalInterpretation, "not_assessed");
+});
+
+test("deriveConcernPolicy promotes a fully qualified paid decline path as a review finding", () => {
   const policy = deriveConcernPolicy({
     concern: makeConcern({
       originKey: "consent.paid_decline_path.reject_with_subscription",
       originType: "runtime_artifact",
-      title: "Paid decline path observed"
+      title: "Paid alternative required to decline tracking"
     }),
     evidenceStrengthFlags: ["direct_runtime"],
     rawEvidence: {
       consentPaidDeclinePathEvidence: true,
-      consentPaidDeclinePathState: "reject_with_subscription"
+      consentPaidDeclinePathState: "reject_with_subscription",
+      consentControlAssessmentStatus: "complete",
+      consentControlCoverageStatus: "complete",
+      consentControlDocumentIdentityStatus: "matched",
+      consentControlNoGo: false,
+      consentControlSurfaceStatus: "observed_actionable",
+      freeRejectControlState: "not_observed"
     }
   });
 
-  assert.equal(policy.allowedNarrativeTier, "weak");
-  assert.equal(policy.promotionEligibility, "internal_only");
-  assert.equal(policy.externalSurfacingEligibility, "audit_only");
+  assert.equal(policy.allowedNarrativeTier, "moderate");
+  assert.equal(policy.promotionEligibility, "eligible");
+  assert.equal(policy.externalSurfacingEligibility, "eligible");
   assert.equal(policy.regulatoryChecklistEligibility, "review_signal");
 });
 
-test("deriveConcernPolicy projects payment-conditioned decline evidence as a checklist-only review signal", () => {
+test("deriveConcernPolicy keeps an incomplete payment-conditioned decline path audit-only", () => {
   const policy = deriveConcernPolicy({
     concern: makeConcern({
       originKey: "consent.paid_decline_path.reject_with_payment",
@@ -170,7 +247,7 @@ test("deriveConcernPolicy projects payment-conditioned decline evidence as a che
   assert.equal(policy.allowedNarrativeTier, "weak");
   assert.equal(policy.promotionEligibility, "internal_only");
   assert.equal(policy.externalSurfacingEligibility, "audit_only");
-  assert.equal(policy.regulatoryChecklistEligibility, "review_signal");
+  assert.equal(policy.regulatoryChecklistEligibility, "none");
 });
 
 test("deriveConcernPolicy blocks high-risk product projection for retail and bookstore context without explicit financial offer evidence", () => {
@@ -387,70 +464,27 @@ test("deriveConcernPolicy handles the main concern families consistently", () =>
         negativeEvidenceFlags: ["policy_rights_language_observed", "policy_target_retrievable"]
       }
     },
-    {
-      name: "gpc ignored with zero retained delta stays internal",
+    ...(["responsive", "no_observable_response", "indeterminate"] as const).map((status) => ({
+      name: `typed GPC ${status} assessment is jurisdiction-neutral and score-neutral`,
       concern: makeConcern({
-        originKey: "privacy.gpc_signal_not_honored",
-        suggestedUnifiedFindingId: "gpc_signal_not_honored",
-        title: "GPC signal not honored"
+        originKey: "privacy.gpc_response",
+        suggestedUnifiedFindingId: "gpc_response",
+        title: status === "no_observable_response" ? "No observable GPC response" : "GPC response"
       }),
-      evidenceStrengthFlags: ["fallback_only"] as const,
+      evidenceStrengthFlags: ["direct_runtime"] as const,
       rawEvidence: {
-        baselineThirdPartyCookieCount: 24,
-        gpcThirdPartyCookieCount: 24,
-        thirdPartyCookieCountDelta: 0,
-        trackerCountDelta: 0
+        gpcResponseStatus: status,
+        legalInterpretation: "not_assessed",
+        scoreEffect: "none"
       },
       expected: {
-        allowedNarrativeTier: "weak",
-        promotionEligibility: "internal_only",
-        externalSurfacingEligibility: "audit_only",
-        negativeEvidenceFlags: []
+        allowedNarrativeTier: status === "indeterminate" ? "weak" as const : "moderate" as const,
+        promotionEligibility: "eligible" as const,
+        externalSurfacingEligibility: "eligible" as const,
+        negativeEvidenceFlags: [],
+        regulatoryChecklistEligibility: "none" as const
       }
-    },
-    {
-      name: "gpc ignored with delta but no reviewer-visible support stays audit-only",
-      concern: makeConcern({
-        originKey: "privacy.gpc_signal_not_honored",
-        suggestedUnifiedFindingId: "gpc_signal_not_honored",
-        title: "GPC signal not honored"
-      }),
-      evidenceStrengthFlags: ["fallback_only"] as const,
-      rawEvidence: {
-        baselineThirdPartyCookieCount: 6,
-        gpcThirdPartyCookieCount: 8,
-        thirdPartyCookieCountDelta: 2,
-        trackerCountDelta: 0
-      },
-      expected: {
-        allowedNarrativeTier: "weak",
-        promotionEligibility: "internal_only",
-        externalSurfacingEligibility: "audit_only",
-        negativeEvidenceFlags: []
-      }
-    },
-    {
-      name: "gpc ignored with delta and gpc disclosure support stays eligible",
-      concern: makeConcern({
-        originKey: "privacy.gpc_signal_not_honored",
-        suggestedUnifiedFindingId: "gpc_signal_not_honored",
-        title: "GPC signal not honored"
-      }),
-      evidenceStrengthFlags: ["fallback_only"] as const,
-      rawEvidence: {
-        baselineThirdPartyCookieCount: 6,
-        gpcThirdPartyCookieCount: 8,
-        thirdPartyCookieCountDelta: 2,
-        trackerCountDelta: 0,
-        gpcDisclosurePresent: true
-      },
-      expected: {
-        allowedNarrativeTier: "strong",
-        promotionEligibility: "eligible",
-        externalSurfacingEligibility: "eligible",
-        negativeEvidenceFlags: []
-      }
-    },
+    })),
     {
       name: "consent surface missing without concrete absence evidence stays audit-only",
       concern: makeConcern({

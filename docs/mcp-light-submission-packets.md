@@ -9,7 +9,7 @@ These packets are the canonical copy and status reference for external directory
 | Name | CertScore.ai MCP Light |
 | Legal owner / publisher | CertScore.ai, LLC |
 | Registry name | `ai.certscore/mcp-light` |
-| Version | `0.2.16` |
+| Version | `0.2.17` |
 | Endpoint | `https://mcp.certscore.ai/mcp/light` |
 | Transport | Streamable HTTP |
 | Authentication | None |
@@ -37,7 +37,7 @@ Long description:
 
 Submission artifact: `packages/certscore-mcp/server-light.json`.
 
-Publication status: **complete**. Version `0.2.16` was published to the Official MCP Registry on August 28, 2026 and is the active latest version of `ai.certscore/mcp-light`.
+Publication target: version `0.2.17` is the prepared active release of `ai.certscore/mcp-light`; verify the registry record after publication.
 
 - Registry listing: https://registry.modelcontextprotocol.io/?q=ai.certscore%2Fmcp-light
 - Registry API lookup: https://registry.modelcontextprotocol.io/v0.1/servers?search=ai.certscore%2Fmcp-light
@@ -63,7 +63,7 @@ Prepared plugin: `integrations/cursor/certscore-website-privacy-preflight`.
 
 Prepared monorepo catalog: `.cursor-plugin/marketplace.json`.
 
-Cursor plugin version: `1.0.2`. This is intentionally independent from hosted MCP version `0.2.16`.
+Cursor plugin version: `1.0.2`. This is intentionally independent from hosted MCP version `0.2.17`.
 
 Direct server configuration:
 
@@ -119,7 +119,7 @@ claude plugin list --json
 
 Anthropic directory status verified August 29, 2026: the existing `certscore-ai` listing is **Published — Pending review**. Its reviewer instructions request an in-place replacement of the authenticated OAuth `/mcp` connection with the no-auth `https://mcp.certscore.ai/mcp/light` endpoint. Do not create a duplicate listing. Anthropic controls the reviewed endpoint and authentication fields, so the replacement remains reviewer-dependent.
 
-The submitted package uses publisher `CertScore.ai, LLC`, plugin version `0.2.16`, and the shared listing fields above. It requires no key, hook, local executable, OAuth flow, or autonomous background action. The production endpoint and directory-safe tool metadata were independently verified after deployment.
+The submitted package uses publisher `CertScore.ai, LLC`, plugin version `0.2.17`, and the shared listing fields above. It requires no key, hook, local executable, OAuth flow, or autonomous background action. The production endpoint and directory-safe tool metadata are verified after deployment.
 
 ## OpenAI / ChatGPT and Codex
 
@@ -288,9 +288,9 @@ Product-owner decision required: either keep Docker out of scope, or separately 
 
 - Deploy the discovery update and 400 × 400 icon through the repository-controlled AWS workflow.
 - Confirm the public icon returns an image response and is exactly 400 × 400.
-- Confirm `https://mcp.certscore.ai/healthz` reports hosted version `0.2.16`.
+- Confirm `https://mcp.certscore.ai/healthz` reports hosted version `0.2.17`.
 - Confirm the Light endpoint requires no authentication and lists exactly `certscore_scan_site`, `certscore_get_scan_status`, and `certscore_get_scan_bundle`.
-- Confirm the Claude package is `0.2.16`, the Cursor package is `1.0.2`, and the OpenAI package is `2.0.0`.
+- Confirm the Claude package is `0.2.17`, the Cursor package is `1.0.2`, and the OpenAI package is `2.0.0`.
 - Re-run the relevant official validator immediately before each submission.
 - Use the exact Light endpoint; do not substitute the authenticated or anonymous legacy endpoint.
 - Do not claim legal advice, certification, compliance determination, unlimited use, or a Docker image.

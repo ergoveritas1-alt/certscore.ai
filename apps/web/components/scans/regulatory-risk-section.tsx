@@ -13,26 +13,6 @@ function scoreTone(level: RegulatoryRiskAssessment["riskLevel"]) {
   return "bg-emerald-100 text-emerald-800";
 }
 
-function getSubscoreHelpText(label: string) {
-  if (label === "Privacy") {
-    return "A 0 to 100 privacy-risk subscore for privacy-rights, notice, and data-handling concerns. Lower is better; higher means more privacy-related risk indicators surfaced in the scan.";
-  }
-
-  if (label === "Consent") {
-    return "A 0 to 100 consent-risk subscore for consent controls, cookie handling, and pre-consent tracking behavior. Lower is better; higher means more consent-related gaps surfaced in the scan.";
-  }
-
-  if (label === "Consumer Protection") {
-    return "A 0 to 100 consumer-protection risk subscore for disclosures, marketing practices, refund or cancellation clarity, and policy-to-behavior consistency. Lower is better; higher means more consumer-protection concerns surfaced in the scan.";
-  }
-
-  if (label === "Accessibility") {
-    return "A 0 to 100 accessibility-risk subscore for automated accessibility issues and related public-facing accessibility signals. Lower is better; higher means more accessibility-related barriers surfaced in the scan.";
-  }
-
-  return "A 0 to 100 data-exposure risk subscore for tracker footprint and related third-party data-flow indicators. Lower is better; higher means more data-exposure concerns surfaced in the scan.";
-}
-
 export function RegulatoryRiskSection(input: {
   risk: RegulatoryRiskAssessment | null;
   agencyMappings: AgencyMapping[];
@@ -60,10 +40,7 @@ export function RegulatoryRiskSection(input: {
     >
         <div className="grid gap-2 lg:grid-cols-[0.8fr_1.2fr]">
           <div className="rounded-lg border border-slate-200 bg-slate-50 px-2.5 py-2.5">
-            <div className="flex items-center gap-1.5">
-              <p className="text-[10px] uppercase tracking-[0.14em] text-slate-500">Overall risk</p>
-              <InfoTip text="A weighted regulatory risk score from 0 to 100. Lower is better; higher means more regulator-relevant risk indicators surfaced overall." />
-            </div>
+            <p className="text-[10px] uppercase tracking-[0.14em] text-slate-500">Overall risk</p>
             <div className="mt-1 flex items-center justify-between gap-3">
               <p className="text-sm font-semibold text-slate-950">{input.risk.overallScore}</p>
               <span className={`rounded-full px-2 py-0.5 text-[11px] font-medium uppercase tracking-[0.14em] ${scoreTone(input.risk.riskLevel)}`}>
@@ -76,17 +53,7 @@ export function RegulatoryRiskSection(input: {
           <div className="grid gap-2 sm:grid-cols-2 md:grid-cols-3 xl:grid-cols-5">
             {subscores.map(([label, score]) => (
               <div key={label} className="rounded-lg border border-slate-200 bg-slate-50 px-2.5 py-2.5">
-                <div className="flex items-center gap-1.5">
-                  <p className="text-[10px] uppercase tracking-[0.14em] text-slate-500">{label}</p>
-                  <span className="group/tooltip relative inline-flex">
-                    <span className="inline-flex h-[11px] w-[11px] items-center justify-center rounded-full border border-slate-300 text-[7px] font-semibold leading-none text-slate-500">
-                      i
-                    </span>
-                    <span className="pointer-events-none absolute left-1/2 top-full z-20 mt-2 hidden w-56 -translate-x-1/2 rounded-lg border border-slate-200 bg-white px-3 py-2 text-[11px] normal-case tracking-normal text-slate-600 shadow-lg group-hover/tooltip:block">
-                      {getSubscoreHelpText(label)}
-                    </span>
-                  </span>
-                </div>
+                <p className="text-[10px] uppercase tracking-[0.14em] text-slate-500">{label}</p>
                 <p className="mt-1 text-sm font-semibold text-slate-950">{score}</p>
               </div>
             ))}

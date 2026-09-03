@@ -54,6 +54,7 @@ const SCANNER_MEMORY_SIZE = 3008;
 const SCANNER_FUNCTION_NAME = "certscore-v2-dag-local-lambda";
 const SCANNER_WEB_BOT_AUTH_SECRET_ID = "consentcheck/web-bot-auth-private-key-pem";
 const SCANNER_IDENTITY_ENVIRONMENT = {
+  CERTSCORE_POST_ACCEPT_WORKER_ENABLED: "1",
   CERTSCORE_POST_REFUSAL_REJECT_WORKER_ENABLED: "1",
   CERTSCORE_V2_DAG_LAMBDA_CHROMIUM_USER_AGENT:
     "Mozilla/5.0 (compatible; ConsentCheckBot/1.0; +https://consentcheck.site/bot)",

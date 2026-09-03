@@ -62,22 +62,26 @@ test("timeline model is projection-backed for findings, checklist rows, inventor
   assert.doesNotMatch(report, /Requests \/ records/);
   assert.match(report, /InventoryConfidenceDots/);
   assert.match(report, /InventoryTypeIcon/);
-  assert.match(report, /report\.coverage\.review/);
+  assert.match(report, /coverage\.review/);
   assert.match(report, />Policy surfaces</);
-  assert.match(report, /\{privacyUrls\.length\} found/);
+  assert.match(report, /\{policySurfaceSummary\}/);
+  assert.match(report, /Policy discovery or document retrieval was incomplete/);
   assert.doesNotMatch(report, />Privacy surfaces</);
   assert.doesNotMatch(report, /observedPrivacyRows/);
   assert.match(report, /observedGdprTransparencyRows/);
   assert.match(report, /\{observedGdprTransparencyRows\} of \{report\.gdprTransparencyRows\.length\} observed/);
   assert.match(report, /<CompactRejectPathCard projection=\{report\.rejectPath\} \/>/);
   assert.match(report, /data-testid="timeline-reject-path-card"/);
-  assert.match(report, /data-testid="post-reject-timeline"/);
-  assert.match(report, /<RejectPathTimeline report=\{report\} \/>/);
-  assert.match(report, /data-testid="post-reject-activity-inventory"/);
-  assert.match(report, /<PostRejectActivityInventory report=\{report\} \/>/);
-  assert.match(report, /After optional cookies and tracking were rejected/);
-  assert.match(report, /Optional request suppressed/);
-  assert.match(report, /unchanged stored presence remains a separate review-only signal/);
+  assert.match(report, /data-testid=\{isAccept \? "post-accept-path-result" : "post-reject-timeline"\}/);
+  assert.match(report, /<ChoicePathResults report=\{report\} \/>/);
+  assert.match(report, /<ChoicePathCard path="accept" report=\{report\} \/>/);
+  assert.match(report, /<ChoicePathCard path="reject" report=\{report\} \/>/);
+  assert.doesNotMatch(report, /data-testid="post-reject-activity-inventory"/);
+  assert.doesNotMatch(report, /<PostRejectActivityInventory report=\{report\} \/>/);
+  assert.match(report, /Choice path results/);
+  assert.doesNotMatch(report, /After optional cookies and tracking were rejected/);
+  assert.doesNotMatch(report, /Optional request suppressed/);
+  assert.doesNotMatch(report, /unchanged stored presence remains a separate review-only signal/);
   assert.match(source, /item\.id === "post_reject_tracking_reduction"[\s\S]*Non-essential activity after confirmed Reject/);
   assert.match(report, /mode === "authenticated"/);
   assert.match(report, /-mx-5[^"\n]*lg:-mx-10/);
@@ -119,15 +123,19 @@ test("pending scan pages return a minimal projection before full report construc
   }
 });
 
-test("lightweight status API resolves public shared-link access before selecting status", async () => {
+test("lightweight status API resolves public shared-link access and retries canonical publication after inputs are ready", async () => {
   const source = await readFile("apps/web/app/api/scan-status/[scanId]/route.ts", "utf8");
   const lightweightBranch = source.indexOf("if (!includeFindings)");
+  const guardedPublication = source.indexOf("publishCanonicalScanReportProjection({", lightweightBranch);
   const publicFindingsLoad = source.indexOf("getPublicOpsScanStatus(", lightweightBranch);
 
   assert.ok(lightweightBranch >= 0);
+  assert.ok(guardedPublication > lightweightBranch);
   assert.ok(publicFindingsLoad > lightweightBranch);
   assert.match(source, /getPublicScanStatusProjection/);
-  assert.doesNotMatch(source, /publishCanonicalScanReportProjection/);
+  assert.match(source, /projection\.reportProjectionRequired/);
+  assert.match(source, /projection\.reportInputsReady/);
+  assert.match(source, /!projection\.reportReady/);
   assert.doesNotMatch(source, /materializeAdminScanSummary/);
   assert.doesNotMatch(source, /bootstrapAppUserSession/);
 });

@@ -1291,7 +1291,7 @@ export async function loadScanDetailArtifacts(scanId: string): Promise<{
       `select id, event_type, message, metadata_json, created_at
          from scan_events
         where scan_id = $1
-        order by created_at asc`,
+        order by created_at asc, id asc`,
       [scanId],
       { readOnly: true }
     ).then((result) => result.rows),

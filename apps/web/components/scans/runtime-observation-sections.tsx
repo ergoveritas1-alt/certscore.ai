@@ -19,6 +19,24 @@ export type RuntimeInventoryMixRow = {
   relationship: string;
 };
 
+export function buildRuntimeInventoryPurposeCounts(
+  inventory: Array<Pick<RuntimeInventoryMixRow, "purpose" | "recordCount">>,
+) {
+  const counts = new Map<string, { label: string; value: number }>();
+  for (const row of inventory) {
+    const label = row.purpose.trim().replace(/\s+/g, " ") || "Unknown";
+    const key = label.toLocaleLowerCase("en-US");
+    const current = counts.get(key);
+    counts.set(key, {
+      label: current?.label ?? label,
+      value: (current?.value ?? 0) + row.recordCount,
+    });
+  }
+  return [...counts.values()].sort(
+    (left, right) => right.value - left.value || left.label.localeCompare(right.label),
+  );
+}
+
 export function RuntimeObservationTimeline({
   dominant = false,
   events,
@@ -177,9 +195,7 @@ export function RuntimeInventoryMix({ compact = false, inventory }: { compact?: 
       (total, row) => total + (row[key].toLowerCase() === value.toLowerCase() ? row.recordCount : 0),
       0,
     );
-  const purposeCounts = [...new Set(inventory.map((row) => row.purpose))]
-    .map((purpose) => ({ label: purpose, value: countBy("purpose", purpose) }))
-    .sort((left, right) => right.value - left.value || left.label.localeCompare(right.label));
+  const purposeCounts = buildRuntimeInventoryPurposeCounts(inventory);
 
   return (
     <div className={`${compact ? "mt-2 pt-2" : "mt-4 pt-3"} grid grid-cols-3 divide-x divide-zinc-200 border-t border-zinc-200`}>
@@ -219,9 +235,11 @@ export function RuntimeInventoryMix({ compact = false, inventory }: { compact?: 
 }
 
 export function RuntimeInventorySummaryCard({
+  action,
   children,
   compact = false,
   description,
+  detailsHint,
   detailsLabel,
   eyebrow,
   heading,
@@ -230,9 +248,11 @@ export function RuntimeInventorySummaryCard({
   note,
   summary,
 }: {
+  action?: ReactNode;
   children: ReactNode;
   compact?: boolean;
   description?: string;
+  detailsHint?: string;
   detailsLabel?: string;
   eyebrow: string;
   heading: string;
@@ -251,19 +271,27 @@ export function RuntimeInventorySummaryCard({
           </div>
           <span className="flex shrink-0 items-center gap-3 text-xs font-semibold text-zinc-700">
             <span className={monoClass}>{summary}</span>
+            {action}
           </span>
         </div>
         <RuntimeInventoryMix compact={compact} inventory={inventory} />
       </div>
       {detailsLabel ? (
         <details className="group/runtime border-t border-zinc-200" open={initiallyOpen}>
-          <summary className="flex cursor-pointer list-none items-center justify-between gap-4 px-4 py-3 text-sm font-semibold text-zinc-800 transition hover:bg-zinc-50 [&::-webkit-details-marker]:hidden">
-            <span>{detailsLabel}</span>
-            <span
-              aria-hidden="true"
-              className="inline-flex h-7 w-7 items-center justify-center rounded-full border border-zinc-300 bg-white text-lg text-zinc-500 transition group-open/runtime:rotate-45"
-            >
-              +
+          <summary className="flex cursor-pointer list-none items-center justify-between gap-4 bg-sky-50/60 px-4 py-4 text-zinc-900 transition hover:bg-sky-100/70 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-sky-500 [&::-webkit-details-marker]:hidden">
+            <span className="min-w-0">
+              <span className="block text-sm font-bold text-sky-950 sm:text-base">{detailsLabel}</span>
+              {detailsHint ? <span className="mt-1 block text-xs font-medium leading-5 text-sky-800">{detailsHint}</span> : null}
+            </span>
+            <span className="flex shrink-0 items-center gap-2">
+              <span className="hidden rounded-full bg-sky-700 px-3 py-1.5 text-xs font-bold text-white sm:inline group-open/runtime:hidden">Click to expand</span>
+              <span className="hidden rounded-full bg-zinc-700 px-3 py-1.5 text-xs font-bold text-white sm:group-open/runtime:inline">Hide details</span>
+              <span
+                aria-hidden="true"
+                className="inline-flex h-9 w-9 items-center justify-center rounded-full border-2 border-sky-600 bg-white text-2xl font-medium leading-none text-sky-700 shadow-sm transition group-open/runtime:rotate-45"
+              >
+                +
+              </span>
             </span>
           </summary>
           {description ? (

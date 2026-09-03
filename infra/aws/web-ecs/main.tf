@@ -86,6 +86,8 @@ locals {
       { name = "CERTSCORE_SELF_SERVE_PURCHASING_ENABLED", value = "true" },
       { name = "CERTSCORE_V2_DAG_LAMBDA_ENABLED", value = "true" },
       { name = "CERTSCORE_V2_DAG_LAMBDA_ORCHESTRATION_MODE", value = "sharded" },
+      { name = "CERTSCORE_POST_ACCEPT_WORKER_ENABLED", value = "1" },
+      { name = "CERTSCORE_POST_ACCEPT_WORKER_ROLLOUT_MODE", value = "all_eligible" },
       { name = "CERTSCORE_POST_REFUSAL_REJECT_WORKER_ENABLED", value = "1" },
       { name = "CERTSCORE_POST_REFUSAL_REJECT_WORKER_ROLLOUT_MODE", value = "all_eligible" },
       { name = "CERTSCORE_V2_DAG_LAMBDA_TARGET_ENV", value = "production" },

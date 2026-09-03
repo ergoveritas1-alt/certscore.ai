@@ -7,7 +7,17 @@ import {
   postRefusalEvidencePacketSchema,
   postRefusalLaneOutcomeSchema,
 } from "./post-refusal-observation";
+import {
+  postAcceptEvidencePacketSchema,
+  postAcceptLaneOutcomeSchema,
+} from "./post-accept-observation";
+import {
+  gpcResponseAssessmentSchema,
+  type GpcResponseAssessment,
+} from "./gpc-observation";
 export * from "./consent-control-label-classifier";
+export * from "./consent-action-control-proof";
+export * from "./choice-path-evidence-disposition";
 export * from "./consent-preference-category-classifier";
 export * from "./consent-language-classifier";
 export * from "./gdpr-transparency-topic-classifier";
@@ -25,6 +35,12 @@ export * from "./consent-control-calibration";
 export * from "./lambda-result-disposition";
 export * from "./pre-consent-browser-storage-projection";
 export * from "./post-refusal-observation";
+export * from "./post-accept-observation";
+export * from "./post-action-dispatch";
+export * from "./gpc-observation";
+
+const canonicalBundleGpcResponseAssessmentSchema: z.ZodType<GpcResponseAssessment> =
+  gpcResponseAssessmentSchema;
 
 export const directVsInferredSchema = z.enum([
   "direct",
@@ -157,6 +173,16 @@ export const scanMetadataSchema = z.object({
   schemaVersion: z.string(),
 });
 
+export const scannerBuildProvenanceSchema = z.object({
+  contractVersion: z.literal("scanner_build_provenance.v1"),
+  gitSha: z.string().min(1).max(80).optional(),
+  imageTag: z.string().min(1).max(160).optional(),
+  runtimeVersion: z.string().min(1).max(80).optional(),
+}).strict().refine(
+  (value) => Boolean(value.gitSha || value.imageTag || value.runtimeVersion),
+  { message: "Scanner build provenance must retain at least one build identifier." },
+);
+
 export const siteFacingNavigationDiagnosticsSchema = z.object({
   requestedUrl: z.string().max(500),
   firstResponseAt: z.string().datetime().nullable(),
@@ -169,7 +195,7 @@ export const siteFacingNavigationDiagnosticsSchema = z.object({
 }).strict();
 
 export const scanLaneRunSchema = z.object({
-  laneId: z.enum(["consent_proof", "runtime_evidence", "policy_evidence"]),
+  laneId: z.enum(["consent_proof", "runtime_evidence", "policy_evidence", "gpc_observation"]),
   physicalInvocationId: z.string().min(1).max(160),
   region: z.string().min(1).max(80),
   phaseName: z.enum(["preConsentRuntimeScanner", "policySurfaceScanner"]),
@@ -847,6 +873,12 @@ const transportProbeErrorCategorySchema = z.enum([
   "unsupported_url",
   "unknown",
 ]);
+export const transportHttpProbeOutcomeSchema = z.enum([
+  "redirected_to_https",
+  "plaintext_response_served",
+  "http_request_rejected",
+  "probe_failed",
+]);
 
 export const transportSecuritySubresourceSchema = z.object({
   url: transportUrlSchema,
@@ -902,6 +934,7 @@ export const transportSecurityObservationSchema = z.object({
     finalScheme: transportSchemeSchema.optional(),
     redirectChain: z.array(transportUrlSchema).max(12).default([]),
     redirectedToHttps: z.boolean().optional(),
+    outcome: transportHttpProbeOutcomeSchema.optional(),
     errorCategory: transportProbeErrorCategorySchema.optional(),
     errorMessage: z.string().max(240).optional(),
   }),
@@ -929,6 +962,7 @@ export const transportSecurityObservationSchema = z.object({
     scannedPagesUseHttps: z.boolean().optional(),
     validTlsCertificate: z.boolean().optional(),
     httpRedirectsToHttps: z.boolean().optional(),
+    httpProbeOutcome: transportHttpProbeOutcomeSchema.optional(),
     mixedContentObserved: z.boolean(),
     insecureFormTransportObserved: z.boolean(),
   }),
@@ -936,6 +970,33 @@ export const transportSecurityObservationSchema = z.object({
   confidence: confidenceSchema,
   directVsInferred: directVsInferredSchema,
 });
+
+export function classifyTransportHttpProbeOutcome(input: {
+  attempted: boolean;
+  errorCategory?: z.infer<typeof transportProbeErrorCategorySchema>;
+  finalScheme?: z.infer<typeof transportSchemeSchema>;
+  redirectedToHttps?: boolean;
+  status?: number;
+}): z.infer<typeof transportHttpProbeOutcomeSchema> {
+  if (!input.attempted || input.errorCategory) {
+    return "probe_failed";
+  }
+  if (input.redirectedToHttps === true || input.finalScheme === "https") {
+    return "redirected_to_https";
+  }
+  if (
+    input.finalScheme === "http" &&
+    typeof input.status === "number" &&
+    input.status >= 200 &&
+    input.status < 300
+  ) {
+    return "plaintext_response_served";
+  }
+  if (typeof input.status === "number") {
+    return "http_request_rejected";
+  }
+  return "probe_failed";
+}
 
 export const consentInteractionEventSchema = runtimeEvidenceEventSchema.extend({
   eventType: z.literal("consent_interaction"),
@@ -1779,6 +1840,15 @@ export const policySurfaceObservationSchema = z.object({
   documentEvaluationState: z.enum(["not_attempted", "usable", "insufficient", "blocked"]).optional(),
   documentRole: z.enum(["policy_document", "policy_index", "unknown"]).optional(),
   documentRoleReasonCodes: z.array(z.string().max(120)).max(12).optional(),
+  governingPolicyBodyAssessment: z.object({
+    contractVersion: z.literal("governing_policy_body_assessment.v1"),
+    state: z.enum(["substantive", "index_like", "insufficient"]),
+    canonicalContextTermCount: z.number().int().nonnegative().max(32),
+    documentTextChars: z.number().int().nonnegative(),
+    evidenceBoundObservedTopicCount: z.number().int().nonnegative().max(32),
+    substantiveDisclosureSignalCount: z.number().int().nonnegative().max(32),
+    reasonCodes: z.array(z.string().max(120)).max(16),
+  }).strict().optional(),
   governingPolicySelection: governingPolicySelectionSchema.optional(),
   documentFormat: z.enum(["html", "pdf", "text", "unknown"]).optional(),
   contentType: z.string().max(160).optional(),
@@ -3158,8 +3228,11 @@ export const canonicalEvidenceBundleSchema = z.object({
   scanProfile: scanProfileSchema,
   modulesRun: z.array(scanModuleRunSchema),
   scanLaneRuns: z.array(scanLaneRunSchema).max(8).default([]),
+  postAcceptEvidence: postAcceptEvidencePacketSchema.optional(),
+  postAcceptLaneOutcome: postAcceptLaneOutcomeSchema.optional(),
   postRefusalEvidence: postRefusalEvidencePacketSchema.optional(),
   postRefusalLaneOutcome: postRefusalLaneOutcomeSchema.optional(),
+  gpcResponseAssessment: canonicalBundleGpcResponseAssessmentSchema.optional(),
   runtimeTimeline: z.array(runtimeEvidenceEventSchema),
   networkEvents: z.array(networkEventSchema),
   networkResponseEvents: z.array(networkResponseEventSchema).default([]),
@@ -3198,6 +3271,7 @@ export const canonicalEvidenceBundleSchema = z.object({
   visualAccessReview: visualAccessReviewSchema.optional(),
   visual_access_review: visualAccessReviewSchema.optional(),
   artifactRefs: z.array(artifactRefSchema),
+  scannerBuildProvenance: scannerBuildProvenanceSchema.optional(),
   scannerVersion: z.string(),
   schemaVersion: z.string(),
 }).superRefine((bundle, context) => {
@@ -3351,6 +3425,7 @@ export type DisplaySafeEvidenceExcerpt = z.infer<typeof displaySafeEvidenceExcer
 export type VendorMatchSourceType = z.infer<typeof vendorMatchSourceTypeSchema>;
 export type ScanProfile = z.infer<typeof scanProfileSchema>;
 export type ScanMetadata = z.infer<typeof scanMetadataSchema>;
+export type ScannerBuildProvenance = z.infer<typeof scannerBuildProvenanceSchema>;
 export type ScanModuleRun = z.infer<typeof scanModuleRunSchema>;
 export type RuntimeEvidenceEvent = z.infer<typeof runtimeEvidenceEventSchema>;
 export type NetworkEvent = z.infer<typeof networkEventSchema>;

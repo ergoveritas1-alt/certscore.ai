@@ -34,6 +34,10 @@ import {
   LOCAL_V2_DAG_LAMBDA_POLICY_SHUTDOWN_RESERVE_MS,
   LOCAL_V2_DAG_LAMBDA_SHARDED_HANDLER_SAFETY_TIMEOUT_MS,
   LOCAL_V2_DAG_SCAN_PROCESSOR,
+  POST_ACCEPT_WORKER_DEFAULT_DISPATCH_DELAY_MS,
+  POST_ACCEPT_WORKER_FEATURE_FLAG,
+  POST_ACCEPT_WORKER_MAX_TAIL_WAIT_MS,
+  POST_ACCEPT_WORKER_OBSERVER_RESULT_BUDGET_MS,
   POST_REFUSAL_REJECT_WORKER_DEFAULT_DISPATCH_DELAY_MS,
   POST_REFUSAL_REJECT_WORKER_MAX_TAIL_WAIT_MS,
   POST_REFUSAL_REJECT_WORKER_FEATURE_FLAG,
@@ -44,11 +48,14 @@ import {
   buildLocalV2DagLambdaLaneRun,
   buildLocalV2DagLambdaLaneTimingSummary,
   buildLocalV2DagLambdaResultMessage,
+  buildCanonicalBundleScannerBuildProvenance,
   buildVerifiedPreConsentRuntimePreviewPacket,
   buildVerifiedPolicyEvidencePacket,
   buildLocalV2DagLambdaRuntimeDiagnostics,
   buildScannerRuntimeProvenance,
   buildLocalV2DagLambdaScanTuning,
+  deriveConsentRejectAvailability,
+  deriveConsentActionAvailability,
   egressIpMatchesExpected,
   egressRegionMatchesExpected,
   fetchEgressProbeThroughProxy,
@@ -56,6 +63,7 @@ import {
   invokeLocalV2DagLambdaWorker,
   invokeLocalV2DagLambdaWorkers,
   isPostRefusalRejectWorkerEnabled,
+  isPostAcceptWorkerEnabled,
   mergeLocalV2DagLambdaEvidenceLaneBundles,
   mergeLocalV2DagLambdaShardBundles,
   mirrorWorkerArtifactsIntoFinalArtifactRoot,
@@ -64,6 +72,7 @@ import {
   postRefusalParentDispatchSha256,
   publishVerifiedPreConsentRuntimePreview,
   runLocalV2DagLambdaPostRefusalArtifactChain,
+  runLocalV2DagLambdaPostAcceptArtifactChain,
   sendLocalV2DagLambdaResultMessage,
   serializeCanonicalEvidenceBundle,
   unwrapLocalV2DagLambdaDispatchEvent,
@@ -71,6 +80,102 @@ import {
   uploadArtifactFiles,
   writeEgressPreflightArtifact,
 } from "./handler";
+
+test("necessary-only Save remains eligible for the reject observation lane", () => {
+  const availability = deriveConsentRejectAvailability(canonicalBundleFixture(
+    "scan-necessary-only-reject-equivalent",
+    {
+      consentSurfaceInspection: {
+        outcome: "actionable_surface_observed",
+        coverageStatus: "complete",
+        inspectionCompleted: true,
+        inspectedPreInteraction: true,
+        consentSurfaceObserved: true,
+        actionableControlObserved: true,
+        observedAtMs: 100,
+        evidenceSources: ["control_inventory"],
+        evidenceChannels: [],
+        limitationKeys: [],
+      },
+      consentUiObservations: [{
+        observationId: "necessary-only-save",
+        observedAtMs: 100,
+        likelyPresent: true,
+        basis: ["fixture"],
+        visibleChoiceLabels: ["Auswahl speichern"],
+        defaultTogglePurposeLabels: ["Essenziell"],
+        necessaryPreferenceSelectionObserved: true,
+        necessaryPreferenceLabels: ["Essenziell"],
+        precheckedOptionalPurposeCount: 0,
+        precheckedOptionalPurposeLabels: [],
+        acceptControlObserved: true,
+        rejectControlObserved: false,
+        managePreferencesControlObserved: true,
+        controls: [{
+          label: "Auswahl speichern",
+          actionType: "save_preferences",
+          selectorHint: "#tarteaucitronCloseAlert",
+          visible: true,
+          classifierReasonCodes: ["matched_options", "variant_save_preferences"],
+        }],
+      }],
+    },
+  ));
+
+  assert.deepEqual(availability, {
+    inventoryComplete: true,
+    necessaryOnlyRejectEquivalentObserved: true,
+    rejectControlObserved: false,
+  });
+});
+
+test("BST external browser-setting instructions do not make a reject action applicable", () => {
+  const availability = deriveConsentRejectAvailability(canonicalBundleFixture(
+    "scan-bst-no-reject",
+    {
+      consentSurfaceInspection: {
+        outcome: "actionable_surface_observed",
+        coverageStatus: "complete",
+        inspectionCompleted: true,
+        inspectedPreInteraction: true,
+        consentSurfaceObserved: true,
+        actionableControlObserved: true,
+        observedAtMs: 100,
+        evidenceSources: ["control_inventory"],
+        evidenceChannels: [],
+        limitationKeys: [],
+      },
+      consentUiObservations: [{
+        observationId: "bst-accept-only",
+        observedAtMs: 100,
+        likelyPresent: true,
+        basis: ["fixture"],
+        visibleChoiceLabels: ["VERSTANDEN"],
+        defaultTogglePurposeLabels: [],
+        necessaryPreferenceSelectionObserved: null,
+        necessaryPreferenceLabels: [],
+        precheckedOptionalPurposeCount: 0,
+        precheckedOptionalPurposeLabels: [],
+        acceptControlObserved: true,
+        rejectControlObserved: false,
+        managePreferencesControlObserved: false,
+        controls: [{
+          label: "VERSTANDEN",
+          actionType: "accept_all",
+          selectorHint: "button.bst-accept-btn",
+          visible: true,
+          classifierReasonCodes: ["matched_accept"],
+        }],
+      }],
+    },
+  ));
+
+  assert.deepEqual(availability, {
+    inventoryComplete: true,
+    necessaryOnlyRejectEquivalentObserved: false,
+    rejectControlObserved: false,
+  });
+});
 
 test("canonical evidence bundle transport is compact without changing evidence", () => {
   const bundle = {
@@ -89,6 +194,88 @@ test("sharded orchestration fans out exactly one consent, runtime, and policy ev
     "runtime_evidence",
     "policy_evidence",
   ]);
+});
+
+test("GPC observation binds its worker to the exact parent dispatch", async () => {
+  const parent = parseLocalV2DagLambdaDispatchPayload(validPayload({
+    gpcObservation: {
+      contractVersion: "certscore.gpc-observation-dispatch.v1",
+      enabled: true,
+      pairWithLane: "runtime_evidence",
+      protocol: "passive_baseline_with_sec_gpc",
+    },
+    orchestrationMode: "sharded",
+  }));
+  let dispatched: Record<string, unknown> | null = null;
+  await invokeLocalV2DagLambdaWorker({
+    parentPayload: parent,
+    parentScanId: parent.scanId,
+    workerLane: "gpc_observation",
+    lambdaClient: {
+      async send(command) {
+        dispatched = JSON.parse(Buffer.from(command.input.Payload ?? []).toString("utf8"));
+        return {
+          StatusCode: 200,
+          Payload: Buffer.from(JSON.stringify({
+            artifactPointers: { scanArtifactUri: "s3://test/gpc/CanonicalEvidenceBundle.json" },
+            parentDispatchSha256: postRefusalParentDispatchSha256(parent),
+            scanId: parent.scanId,
+            status: "completed",
+            workerLane: "gpc_observation",
+          })),
+        };
+      },
+    },
+  });
+  assert.equal(dispatched?.workerLane, "gpc_observation");
+  assert.equal(dispatched?.parentDispatchSha256, postRefusalParentDispatchSha256(parent));
+  assert.deepEqual(dispatched?.gpcObservation, parent.gpcObservation);
+  const terminal = buildLocalV2DagLambdaResultMessage({
+    completedAt: new Date("2026-08-20T12:00:00.000Z"),
+    payload: parseLocalV2DagLambdaDispatchPayload(dispatched),
+    status: "completed",
+  });
+  assert.equal(terminal.parentDispatchSha256, postRefusalParentDispatchSha256(parent));
+
+  let passiveDispatch: Record<string, unknown> | null = null;
+  await invokeLocalV2DagLambdaWorker({
+    parentPayload: parent,
+    parentScanId: parent.scanId,
+    workerLane: "runtime_evidence",
+    lambdaClient: {
+      async send(command) {
+        passiveDispatch = JSON.parse(Buffer.from(command.input.Payload ?? []).toString("utf8"));
+        return {
+          StatusCode: 200,
+          Payload: Buffer.from(JSON.stringify({
+            artifactPointers: { scanArtifactUri: "s3://test/runtime/CanonicalEvidenceBundle.json" },
+            scanId: parent.scanId,
+            status: "completed",
+            workerLane: "runtime_evidence",
+          })),
+        };
+      },
+    },
+  });
+  assert.equal(passiveDispatch?.gpcObservation, undefined);
+  assert.doesNotThrow(() => parseLocalV2DagLambdaDispatchPayload(passiveDispatch));
+});
+
+test("GPC worker parsing fails closed without enabled configuration and parent checksum", () => {
+  assert.throws(() => parseLocalV2DagLambdaDispatchPayload(validPayload({
+    orchestrationMode: "worker",
+    workerLane: "gpc_observation",
+  })), /enabled GPC configuration/);
+  assert.throws(() => parseLocalV2DagLambdaDispatchPayload(validPayload({
+    gpcObservation: {
+      contractVersion: "certscore.gpc-observation-dispatch.v1",
+      enabled: true,
+      pairWithLane: "runtime_evidence",
+      protocol: "passive_baseline_with_sec_gpc",
+    },
+    orchestrationMode: "worker",
+    workerLane: "gpc_observation",
+  })), /exact parent dispatch checksum/);
 });
 
 test("post-refusal dispatch is typed, exact-target authorized, and default off", () => {
@@ -120,6 +307,81 @@ test("post-refusal dispatch is typed, exact-target authorized, and default off",
     [POST_REFUSAL_REJECT_WORKER_FEATURE_FLAG]: "1",
   }), true);
   assert.match(postRefusalParentDispatchSha256(payload), /^[a-f0-9]{64}$/);
+});
+
+test("post-Accept dispatch is independently typed, delayed, and default off", () => {
+  const payload = parseLocalV2DagLambdaDispatchPayload(validPayload({
+    orchestrationMode: "sharded",
+    postAcceptObservation: {
+      enabled: true,
+      dispatchDelayMs: 1_000,
+      observationWindowMs: 8_000,
+      confirmationTimeoutMs: 1_500,
+      actionSearchTimeoutMs: 1_500,
+      resolver: {
+        kind: "named_cmp",
+        cmpCanonicalName: "OneTrust",
+        confirmation: {
+          kind: "tcf_purposes_granted_or_cmp_cookie_changed",
+          purposeIds: [1, 3, 4],
+          cookieName: "OptanonConsent",
+        },
+      },
+      interactionAuthorization: {
+        kind: "owned_canary",
+        authorizationId: "ergoveritas_owned_post_refusal_canary.v1",
+      },
+    },
+  }));
+
+  assert.equal(payload.postAcceptObservation?.dispatchDelayMs, POST_ACCEPT_WORKER_DEFAULT_DISPATCH_DELAY_MS);
+  assert.equal(isPostAcceptWorkerEnabled(payload, {}), false);
+  assert.equal(isPostAcceptWorkerEnabled(payload, { [POST_ACCEPT_WORKER_FEATURE_FLAG]: "1" }), true);
+  assert.match(postRefusalParentDispatchSha256(payload), /^[a-f0-9]{64}$/);
+});
+
+test("Accept worker late-banner budget remains bounded while the coordinator tail stays authoritative", () => {
+  assert.ok(POST_ACCEPT_WORKER_OBSERVER_RESULT_BUDGET_MS >= 20_000);
+  assert.ok(POST_ACCEPT_WORKER_OBSERVER_RESULT_BUDGET_MS < 30_000);
+  assert.equal(POST_ACCEPT_WORKER_MAX_TAIL_WAIT_MS, 6_000);
+  assert.ok(POST_ACCEPT_WORKER_MAX_TAIL_WAIT_MS < POST_ACCEPT_WORKER_OBSERVER_RESULT_BUDGET_MS);
+});
+
+test("complete consent inventory exposes Accept availability without changing Reject v1", () => {
+  const bundle = canonicalBundleFixture("scan-action-availability", {
+    consentSurfaceInspection: {
+      artifactVersion: "certscore.consent_surface_inspection.v1",
+      coverageStatus: "complete",
+      inspectedAt: "2026-09-01T00:00:00.000Z",
+      inspectionCompleted: true,
+      limitationKeys: [],
+      sourceObservationIds: ["consent-ui-1"],
+    },
+    consentUiObservations: [{
+      observationId: "consent-ui-1",
+      url: "https://example.com/",
+      observedAt: "2026-09-01T00:00:00.000Z",
+      bannerDetected: true,
+      confidence: "high",
+      firstLayer: true,
+      acceptControlObserved: true,
+      rejectControlObserved: false,
+      optionsControlObserved: false,
+      controls: [{
+        controlId: "accept-1",
+        actionType: "accept_all",
+        labelText: "Accept all",
+        visible: true,
+      }],
+      supportingArtifactIds: [],
+    }],
+  });
+  assert.deepEqual(deriveConsentRejectAvailability(bundle), {
+    inventoryComplete: true,
+    necessaryOnlyRejectEquivalentObserved: false,
+    rejectControlObserved: false,
+  });
+  assert.equal(deriveConsentActionAvailability(bundle).acceptControlObserved, true);
 });
 
 test("reject worker invocation clears the coordinator launch delay without changing parent identity", async () => {
@@ -206,9 +468,9 @@ test("reject worker invocation clears the coordinator launch delay without chang
   );
 });
 
-test("Reject Path uses a 500 ms launch offset and a six-second post-primary tail cap", async () => {
+test("Reject Path uses a 500 ms launch offset and an eight-second post-primary tail cap", async () => {
   assert.equal(POST_REFUSAL_REJECT_WORKER_DEFAULT_DISPATCH_DELAY_MS, 500);
-  assert.equal(POST_REFUSAL_REJECT_WORKER_MAX_TAIL_WAIT_MS, 6_000);
+  assert.equal(POST_REFUSAL_REJECT_WORKER_MAX_TAIL_WAIT_MS, 8_000);
 
   const completedController = new AbortController();
   assert.equal(await awaitPostRefusalWorkerWithinTailBudget({
@@ -253,6 +515,70 @@ test("Reject Path worker return and packet verification share one absolute tail 
   assert.ok(Date.now() - passiveLaneBarrierCompletedAtMs < 500);
 });
 
+test("concurrent action joins do not stack equal absolute tail deadlines", async () => {
+  const passiveLaneBarrierCompletedAtMs = Date.now();
+  const rejectController = new AbortController();
+  const acceptController = new AbortController();
+  const [rejectCompleted, acceptCompleted] = await Promise.all([
+    awaitPostRefusalWorkerWithinTailBudget({
+      abortController: rejectController,
+      maxTailWaitMs: 100,
+      passiveLaneBarrierCompletedAtMs,
+      workerPromise: new Promise<void>((resolve) => setTimeout(resolve, 35)),
+    }),
+    awaitPostRefusalWorkerWithinTailBudget({
+      abortController: acceptController,
+      maxTailWaitMs: 100,
+      passiveLaneBarrierCompletedAtMs,
+      workerPromise: new Promise<void>(() => undefined),
+    }),
+  ]);
+
+  assert.equal(rejectCompleted, true);
+  assert.equal(acceptCompleted, false);
+  assert.equal(acceptController.signal.aborted, true);
+  assert.ok(Date.now() - passiveLaneBarrierCompletedAtMs < 300);
+});
+
+test("a terminal Accept join is retained while Reject uses its remaining tail budget", async () => {
+  const passiveLaneBarrierCompletedAtMs = Date.now();
+  const rejectController = new AbortController();
+  const acceptController = new AbortController();
+  const [rejectCompleted, acceptCompleted] = await Promise.all([
+    awaitPostRefusalWorkerWithinTailBudget({
+      abortController: rejectController,
+      maxTailWaitMs: 100,
+      passiveLaneBarrierCompletedAtMs,
+      workerPromise: new Promise<void>(() => undefined),
+    }),
+    awaitPostRefusalWorkerWithinTailBudget({
+      abortController: acceptController,
+      maxTailWaitMs: 100,
+      passiveLaneBarrierCompletedAtMs,
+      workerPromise: new Promise<void>((resolve) => setTimeout(resolve, 35)),
+    }),
+  ]);
+
+  assert.equal(rejectCompleted, false);
+  assert.equal(acceptCompleted, true);
+  assert.equal(rejectController.signal.aborted, true);
+  assert.equal(acceptController.signal.aborted, false);
+});
+
+test("an already-terminal action worker is retained when its sequential join runs after the shared deadline", async () => {
+  const controller = new AbortController();
+  const completed = await awaitPostRefusalWorkerWithinTailBudget({
+    abortController: controller,
+    maxTailWaitMs: 25,
+    passiveLaneBarrierCompletedAtMs: Date.now() - 50,
+    workerAlreadySettled: true,
+    workerPromise: Promise.resolve(),
+  });
+
+  assert.equal(completed, true);
+  assert.equal(controller.signal.aborted, false);
+});
+
 test("lane timing summary makes all four completion times and the reject barrier delta queryable", () => {
   const coordinatorStartedAtMs = Date.parse("2026-08-26T20:00:00.000Z");
   const passiveLaneBarrierCompletedAtMs = coordinatorStartedAtMs + 5_000;
@@ -277,7 +603,6 @@ test("lane timing summary makes all four completion times and the reject barrier
   });
   const reject = result("reject_observation", 6_200);
   const summary = buildLocalV2DagLambdaLaneTimingSummary({
-    addedRejectWaitMs: 1_200,
     coordinatorStartedAtMs,
     generatedAtMs: coordinatorStartedAtMs + 6_250,
     passiveLaneBarrierCompletedAtMs,
@@ -310,9 +635,8 @@ test("lane timing summary makes all four completion times and the reject barrier
   );
 
   const timedOut = buildLocalV2DagLambdaLaneTimingSummary({
-    addedRejectWaitMs: 6_000,
     coordinatorStartedAtMs,
-    generatedAtMs: coordinatorStartedAtMs + 11_000,
+    generatedAtMs: coordinatorStartedAtMs + 13_000,
     passiveLaneBarrierCompletedAtMs,
     passiveWorkerResults: [
       result("consent_proof", 4_000),
@@ -322,19 +646,18 @@ test("lane timing summary makes all four completion times and the reject barrier
     postRefusal: {
       dispatchStartedAtMs: coordinatorStartedAtMs + 500,
       join: "timed_out",
-      outcomeObservedAtMs: coordinatorStartedAtMs + 11_000,
+      outcomeObservedAtMs: coordinatorStartedAtMs + 13_000,
     },
   });
   const timedOutReject = timedOut.lanes.find((lane) => lane.lane === "reject_observation");
   assert.equal(timedOut.rejectLaneJoin, "timed_out");
-  assert.equal(timedOut.rejectLaneAddedWaitMs, 6_000);
-  assert.equal(timedOut.rejectTailDeltaMs, 6_000);
+  assert.equal(timedOut.rejectLaneAddedWaitMs, 8_000);
+  assert.equal(timedOut.rejectTailDeltaMs, 8_000);
   assert.equal(timedOutReject?.outcome, "timed_out");
-  assert.equal(timedOutReject?.terminalOutcomeDeltaFromPassiveBarrierMs, 6_000);
+  assert.equal(timedOutReject?.terminalOutcomeDeltaFromPassiveBarrierMs, 8_000);
 
   const noRejectObservedAtMs = passiveLaneBarrierCompletedAtMs - 200;
   const notApplicable = buildLocalV2DagLambdaLaneTimingSummary({
-    addedRejectWaitMs: 0,
     coordinatorStartedAtMs,
     generatedAtMs: coordinatorStartedAtMs + 5_050,
     passiveLaneBarrierCompletedAtMs,
@@ -353,6 +676,7 @@ test("lane timing summary makes all four completion times and the reject barrier
   const notApplicableReject = notApplicable.lanes.find((lane) => lane.lane === "reject_observation");
   assert.equal(notApplicable.rejectLaneJoin, "not_applicable");
   assert.equal(notApplicable.rejectTailDeltaMs, -200);
+  assert.equal(notApplicable.rejectLaneAddedWaitMs, 0);
   assert.equal(notApplicable.rejectCompletedBeforeOrAtPassiveBarrier, true);
   assert.equal(notApplicableReject?.outcome, "not_applicable");
   assert.equal(notApplicableReject?.evidenceJoined, false);
@@ -369,6 +693,75 @@ test("lane timing summary makes all four completion times and the reject barrier
   });
   assert.equal(parsedTerminal.laneTimingSummary?.rejectTailDeltaMs, 1_200);
   assert.equal(parsedTerminal.laneTimingSummary?.lanes.length, 4);
+});
+
+test("five-lane timing retains independent Accept telemetry without changing Reject telemetry", () => {
+  const coordinatorStartedAtMs = Date.parse("2026-09-01T20:00:00.000Z");
+  const passiveLaneBarrierCompletedAtMs = coordinatorStartedAtMs + 5_000;
+  const result = (
+    workerLane: "consent_proof" | "runtime_evidence" | "policy_evidence" | "reject_observation" | "accept_observation",
+    responseOffsetMs: number,
+  ) => ({
+    completedAt: new Date(coordinatorStartedAtMs + responseOffsetMs - 25).toISOString(),
+    coordinatorTiming: {
+      durationMs: responseOffsetMs,
+      invocationStartedAt: new Date(coordinatorStartedAtMs).toISOString(),
+      responseReceivedAt: new Date(coordinatorStartedAtMs + responseOffsetMs).toISOString(),
+    },
+    scanId: "scan-five-lane-timing",
+    status: "completed" as const,
+    workerLane,
+  });
+  const summary = buildLocalV2DagLambdaLaneTimingSummary({
+    coordinatorStartedAtMs,
+    generatedAtMs: coordinatorStartedAtMs + 6_100,
+    passiveLaneBarrierCompletedAtMs,
+    passiveWorkerResults: [
+      result("consent_proof", 4_500),
+      result("runtime_evidence", 5_000),
+      result("policy_evidence", 3_500),
+    ],
+    postAccept: {
+      dispatchStartedAtMs: coordinatorStartedAtMs + 1_000,
+      join: "joined",
+      result: result("accept_observation", 5_900),
+    },
+    postRefusal: {
+      dispatchStartedAtMs: coordinatorStartedAtMs + 500,
+      join: "joined",
+      result: result("reject_observation", 4_100),
+    },
+  });
+
+  assert.equal(summary.lanes.length, 5);
+  assert.equal(summary.acceptLaneJoin, "joined");
+  assert.equal(summary.maxAcceptTailWaitMs, 6_000);
+  assert.equal(summary.acceptLaneAddedWaitMs, 900);
+  assert.equal(summary.acceptTailDeltaMs, 900);
+  assert.equal(summary.rejectLaneJoin, "joined");
+  assert.equal(summary.maxRejectTailWaitMs, 8_000);
+  assert.equal(summary.rejectLaneAddedWaitMs, 0);
+  assert.equal(summary.rejectTailDeltaMs, -900);
+  assert.deepEqual(summary.lanes.map((lane) => lane.lane), [
+    "consent_proof",
+    "runtime_evidence",
+    "policy_evidence",
+    "reject_observation",
+    "accept_observation",
+  ]);
+
+  const terminal = buildLocalV2DagLambdaResultMessage({
+    completedAt: new Date(coordinatorStartedAtMs + 6_100),
+    laneTimingSummary: summary,
+    payload: parseLocalV2DagLambdaDispatchPayload(validPayload()),
+    status: "completed",
+  });
+  const parsed = parseLocalV2DagLambdaResultMessage(JSON.stringify(terminal), {
+    expectedTargetEnvironment: "local",
+  });
+  assert.equal(parsed.laneTimingSummary?.lanes.length, 5);
+  assert.equal(parsed.laneTimingSummary?.acceptTailDeltaMs, 900);
+  assert.equal(parsed.laneTimingSummary?.rejectTailDeltaMs, -900);
 });
 
 test("reject worker retains a neutral unsupported packet for the coordinator without publishing independently", async () => {
@@ -417,6 +810,149 @@ test("reject worker retains a neutral unsupported packet for the coordinator wit
     else process.env[POST_REFUSAL_REJECT_WORKER_FEATURE_FLAG] = priorFlag;
     if (priorBucket === undefined) delete process.env.CERTSCORE_V2_DAG_LAMBDA_ARTIFACT_BUCKET;
     else process.env.CERTSCORE_V2_DAG_LAMBDA_ARTIFACT_BUCKET = priorBucket;
+    await rm(outDir, { recursive: true, force: true });
+  }
+});
+
+test("Accept worker retains a neutral unsupported packet and never enables production projection", async () => {
+  const priorFlag = process.env[POST_ACCEPT_WORKER_FEATURE_FLAG];
+  const priorBucket = process.env.CERTSCORE_V2_DAG_LAMBDA_ARTIFACT_BUCKET;
+  const outDir = await mkdtemp(path.join(os.tmpdir(), "certscore-accept-worker-"));
+  const puts: PutObjectCommand[] = [];
+  process.env[POST_ACCEPT_WORKER_FEATURE_FLAG] = "1";
+  process.env.CERTSCORE_V2_DAG_LAMBDA_ARTIFACT_BUCKET = "test-artifact-bucket";
+  try {
+    const payload = parseLocalV2DagLambdaDispatchPayload(validPayload({
+      orchestrationMode: "worker",
+      parentDispatchSha256: "e".repeat(64),
+      targetEnvironment: "production",
+      targetUrl: "https://ergoveritas.com/.well-known/certscore-canary/post-accept/accept-honored.html",
+      workerLane: "accept_observation",
+      postAcceptObservation: {
+        enabled: true,
+        dispatchDelayMs: 0,
+        observationWindowMs: 8_000,
+        confirmationTimeoutMs: 1_500,
+        actionSearchTimeoutMs: 1_500,
+        resolver: {
+          kind: "named_cmp",
+          cmpCanonicalName: "Unknown CMP",
+          confirmation: {
+            kind: "local_storage_equals",
+            key: "consent",
+            expectedValue: "granted",
+          },
+        },
+        interactionAuthorization: {
+          kind: "owned_canary",
+          authorizationId: "ergoveritas_owned_post_refusal_canary.v1",
+        },
+      },
+    }));
+    const result = await runLocalV2DagLambdaPostAcceptArtifactChain(payload, {
+      artifactRoot: outDir,
+      s3Client: { async send(command) { puts.push(command as PutObjectCommand); return {}; } },
+    });
+
+    assert.equal(puts.length, 1);
+    assert.equal(result.postAcceptEvidence?.status, "unsupported");
+    assert.equal(result.postAcceptEvidence?.acceptanceExercised, false);
+    assert.equal(result.postAcceptEvidence?.productionFindingIntegration, false);
+    assert.match(result.artifactPointers?.postAcceptPacketUri ?? "", /PostAcceptEvidencePacket\.json$/);
+  } finally {
+    if (priorFlag === undefined) delete process.env[POST_ACCEPT_WORKER_FEATURE_FLAG];
+    else process.env[POST_ACCEPT_WORKER_FEATURE_FLAG] = priorFlag;
+    if (priorBucket === undefined) delete process.env.CERTSCORE_V2_DAG_LAMBDA_ARTIFACT_BUCKET;
+    else process.env.CERTSCORE_V2_DAG_LAMBDA_ARTIFACT_BUCKET = priorBucket;
+    await rm(outDir, { recursive: true, force: true });
+  }
+});
+
+test("Accept worker runs the canonical non-CMP control path for an exact loopback target", async () => {
+  const priorFlag = process.env[POST_ACCEPT_WORKER_FEATURE_FLAG];
+  const priorBucket = process.env.CERTSCORE_V2_DAG_LAMBDA_ARTIFACT_BUCKET;
+  const outDir = await mkdtemp(path.join(os.tmpdir(), "certscore-accept-canonical-non-cmp-"));
+  const puts: PutObjectCommand[] = [];
+  let acceptActions = 0;
+  const server = createHttpServer((request, response) => {
+    if (request.url === "/accept-action") {
+      acceptActions += 1;
+      response.writeHead(204).end();
+      return;
+    }
+    response.setHeader("content-type", "text/html; charset=utf-8");
+    response.end(`<!doctype html><html><body>
+      <section id="privacy-consent" role="dialog" aria-label="Cookie consent choices">
+        <p>Choose whether this site may use analytics and advertising cookies.</p>
+        <button class="choice">Reject all</button>
+        <button class="choice">Manage choices</button>
+        <button class="choice accept-choice">Accept all</button>
+      </section>
+      <script>
+        document.querySelector('.accept-choice').addEventListener('click', () => {
+          fetch('/accept-action', { method: 'POST' });
+          document.querySelector('#privacy-consent').hidden = true;
+        });
+      </script>
+    </body></html>`);
+  });
+  server.listen(0, "127.0.0.1");
+  await once(server, "listening");
+  const address = server.address();
+  assert.ok(address && typeof address !== "string");
+  const targetUrl = `http://127.0.0.1:${address.port}/`;
+  process.env[POST_ACCEPT_WORKER_FEATURE_FLAG] = "1";
+  process.env.CERTSCORE_V2_DAG_LAMBDA_ARTIFACT_BUCKET = "test-artifact-bucket";
+  try {
+    const payload = parseLocalV2DagLambdaDispatchPayload(validPayload({
+      orchestrationMode: "worker",
+      parentDispatchSha256: "f".repeat(64),
+      targetEnvironment: "local",
+      targetUrl,
+      workerLane: "accept_observation",
+      postAcceptObservation: {
+        enabled: true,
+        rolloutMode: "all_eligible",
+        dispatchDelayMs: 0,
+        observationWindowMs: 50,
+        confirmationTimeoutMs: 500,
+        actionSearchTimeoutMs: 2_000,
+        resolver: {
+          kind: "canonical_cmp_registry",
+          recipeSetId: "canonical-consent-control-accept-v3",
+        },
+        interactionAuthorization: {
+          authorizationId: "loopback_local_lab",
+          kind: "loopback",
+        },
+      },
+    }));
+    const result = await runLocalV2DagLambdaPostAcceptArtifactChain(payload, {
+      artifactRoot: outDir,
+      s3Client: { async send(command) { puts.push(command as PutObjectCommand); return {}; } },
+    });
+
+    const retainedPacket = JSON.parse(
+      await readFile(path.join(outDir, "PostAcceptEvidencePacket.json"), "utf8"),
+    ) as {
+      acceptanceRegistration?: { reason?: string; status?: string };
+      limitations?: string[];
+      resolver?: { reason?: string };
+      timing?: { resolverMs?: number; totalMs?: number };
+    };
+    assert.equal(acceptActions, 1, JSON.stringify(retainedPacket));
+    assert.equal(puts.length, 1);
+    assert.equal(result.postAcceptEvidence?.status, "confirmed_clean");
+    assert.equal(result.postAcceptEvidence?.acceptanceExercised, true);
+    assert.equal(result.postAcceptEvidence?.productionFindingIntegration, true);
+  } finally {
+    if (priorFlag === undefined) delete process.env[POST_ACCEPT_WORKER_FEATURE_FLAG];
+    else process.env[POST_ACCEPT_WORKER_FEATURE_FLAG] = priorFlag;
+    if (priorBucket === undefined) delete process.env.CERTSCORE_V2_DAG_LAMBDA_ARTIFACT_BUCKET;
+    else process.env.CERTSCORE_V2_DAG_LAMBDA_ARTIFACT_BUCKET = priorBucket;
+    await new Promise<void>((resolve, reject) =>
+      server.close((error) => error ? reject(error) : resolve())
+    );
     await rm(outDir, { recursive: true, force: true });
   }
 });
@@ -1535,6 +2071,30 @@ test("handler accepts truthful VPC dispatch and emits bounded scanner runtime pr
   });
 });
 
+test("handler projects bounded build identifiers into canonical bundle provenance", () => {
+  const previousBuildGitSha = process.env.BUILD_GIT_SHA;
+  const previousBuildImageTag = process.env.BUILD_IMAGE_TAG;
+  const previousScannerRuntimeVersion = process.env.SCANNER_RUNTIME_VERSION;
+  process.env.BUILD_GIT_SHA = "abc123scanner";
+  process.env.BUILD_IMAGE_TAG = "scanner-image:abc123scanner";
+  process.env.SCANNER_RUNTIME_VERSION = "v2-dag-runtime.1";
+  try {
+    assert.deepEqual(buildCanonicalBundleScannerBuildProvenance(), {
+      contractVersion: "scanner_build_provenance.v1",
+      gitSha: "abc123scanner",
+      imageTag: "scanner-image:abc123scanner",
+      runtimeVersion: "v2-dag-runtime.1",
+    });
+  } finally {
+    if (previousBuildGitSha === undefined) delete process.env.BUILD_GIT_SHA;
+    else process.env.BUILD_GIT_SHA = previousBuildGitSha;
+    if (previousBuildImageTag === undefined) delete process.env.BUILD_IMAGE_TAG;
+    else process.env.BUILD_IMAGE_TAG = previousBuildImageTag;
+    if (previousScannerRuntimeVersion === undefined) delete process.env.SCANNER_RUNTIME_VERSION;
+    else process.env.SCANNER_RUNTIME_VERSION = previousScannerRuntimeVersion;
+  }
+});
+
 test("handler emits a validated completed SQS result without production findings", async () => {
   const sentBodies: string[] = [];
   const previousBuildGitSha = process.env.BUILD_GIT_SHA;
@@ -2023,6 +2583,39 @@ test("handler evidence worker returns verified artifact pointers without publish
   assert.equal(result.workerLane, "consent_proof");
   assert.equal(result.artifactPointers?.scanArtifactUri?.includes("consent_proof"), true);
   assert.equal(sentMessages, 0);
+});
+
+test("handler GPC worker returns the exact parent dispatch checksum", async () => {
+  const parent = parseLocalV2DagLambdaDispatchPayload(validPayload({
+    gpcObservation: {
+      contractVersion: "certscore.gpc-observation-dispatch.v1",
+      enabled: true,
+      pairWithLane: "runtime_evidence",
+      protocol: "passive_baseline_with_sec_gpc",
+    },
+    orchestrationMode: "sharded",
+  }));
+  const parentDispatchSha256 = postRefusalParentDispatchSha256(parent);
+  const result = await handler(validPayload({
+    gpcObservation: parent.gpcObservation,
+    orchestrationMode: "worker",
+    parentDispatchSha256,
+    workerLane: "gpc_observation",
+  }), {
+    runArtifactChain: async () => ({
+      artifactMetadata: {
+        scanArtifactUri: { sha256: "a".repeat(64), sizeBytes: 123 },
+      },
+      artifactPointers: {
+        scanArtifactUri: "s3://certscore-v2-local-artifacts/v2/scan-local-1/lanes/gpc_observation/CanonicalEvidenceBundle.json",
+      },
+      phaseTimings: [],
+    }),
+  });
+
+  assert.equal(result.status, "completed");
+  assert.equal(result.workerLane, "gpc_observation");
+  assert.equal(result.parentDispatchSha256, parentDispatchSha256);
 });
 
 test("policy evidence worker completes the verified early handoff without publishing a terminal result", async () => {

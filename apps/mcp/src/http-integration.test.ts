@@ -891,7 +891,7 @@ test("Streamable HTTP runtime initializes, lists tools, enforces auth, CORS, and
     });
     const lightBundleTool = lightTools.tools.find((tool) => tool.name === "certscore_get_scan_bundle");
     assert.match(lightBundleTool?.description ?? "", /Returns the completed or completed-limited CertScore evidence bundle/i);
-    assert.match(lightBundleTool?.description ?? "", /Reject Path content is present only for confirmed, evidence-qualified post-refusal observations/i);
+    assert.match(lightBundleTool?.description ?? "", /Accept and Reject Path content is present only for confirmed, evidence-qualified post-action observations/i);
     assert.match(lightBundleTool?.description ?? "", /not legal advice, certification, or a compliance determination/i);
     for (const tool of lightTools.tools) {
       assert.doesNotMatch(tool.description ?? "", /\b(?:never|must|should|do not|call|wait|continue polling|stop polling)\b/i);

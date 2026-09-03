@@ -65,11 +65,45 @@ test("defines a source-aware signal registry", () => {
 });
 
 test("defines the unified-finding registry with one owner alignment", () => {
-  assert.equal(REPORT_UNIFIED_FINDINGS.length, 155);
+  assert.equal(REPORT_UNIFIED_FINDINGS.length, 162);
   assert.ok(
     REPORT_UNIFIED_FINDINGS.every(
       (finding) => finding.categoryAlignments.filter((alignment) => alignment.relation === "owner").length === 1
     )
+  );
+});
+
+test("maps score-neutral post-Accept signals through the unified finding registry", () => {
+  assert.equal(
+    getReportUnifiedFindingForSignal(
+      "runtime_artifact_signal",
+      "privacy.post_accept_consent_dependent_activity",
+    )?.id,
+    "post_accept_consent_dependent_activity",
+  );
+  assert.equal(
+    getReportUnifiedFindingForSignal(
+      "runtime_artifact_signal",
+      "privacy.accept_reject_outcomes_indistinguishable",
+    )?.id,
+    "accept_reject_outcomes_indistinguishable",
+  );
+  assert.equal(
+    getReportUnifiedFindingForSignal(
+      "runtime_artifact_signal",
+      "privacy.acceptance_signal_contradicts_action",
+    )?.id,
+    "acceptance_signal_contradicts_action",
+  );
+});
+
+test("maps the paid decline path through the unified finding registry", () => {
+  assert.equal(
+    getReportUnifiedFindingForSignal(
+      "runtime_artifact_signal",
+      "privacy.consent_paid_decline_path",
+    )?.id,
+    "paid_alternative_required_to_decline_tracking",
   );
 });
 
@@ -368,8 +402,8 @@ test("maps signals and validation rules into unified findings", () => {
     "cookie_policy_unavailable"
   );
   assert.equal(
-    getReportUnifiedFindingForSignal("runtime_artifact_signal", "privacy.gpc_signal_not_honored")?.id,
-    "gpc_signal_not_honored"
+    getReportUnifiedFindingForSignal("runtime_artifact_signal", "privacy.gpc_response")?.id,
+    "gpc_response"
   );
   assert.equal(
     getReportUnifiedFindingForSignal("runtime_artifact_signal", "privacy.cpra_cba_opt_out_missing")?.id,
@@ -583,7 +617,6 @@ test("maps CCPA/CPRA/CIPA-relevant privacy findings into the California regulato
     "children_privacy_disclosure_present",
     "fingerprinting_observed",
     "blocking_overlay_observed",
-    "gpc_signal_not_honored",
     "cpra_cba_opt_out_missing"
   ];
 
@@ -643,6 +676,7 @@ test("returns category-, section-, and pillar-scoped unified findings from deriv
       ({ finding }) => finding.id
     ),
     [
+      "paid_alternative_required_to_decline_tracking",
       "reject_button_missing",
       "accept_more_prominent_than_reject",
       "forced_consent_wall",

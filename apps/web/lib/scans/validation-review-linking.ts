@@ -126,7 +126,7 @@ const TITLE_TO_VALIDATION_RULE_KEYS: Record<string, string[]> = {
   "possible pre-consent tracking signals on first load": ["privacy.trackers_before_consent_detected"],
   "pre-consent tracking incidents detected": ["privacy.trackers_before_consent_detected"],
   "privacy policy coverage limited": ["disclosure.privacy_policy_limited"],
-  "browser-level privacy signal effect not evident": ["privacy.gpc_signal_not_honored"],
+  "browser-level privacy signal effect not evident": ["privacy.gpc_response"],
   "reject path appears less direct than accept path": ["privacy.reject_control_missing_detected"],
   "reject path may not fully suppress non-essential activity": ["privacy.trackers_persist_after_reject_detected"],
   "reject-all control missing": ["privacy.reject_control_missing_detected"],

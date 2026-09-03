@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { PUBLIC_CERTSCORE_SDK_VERSION } from "../../../lib/public-integration-versions";
 import { createPageMetadata } from "../../../lib/seo";
 import { CodeBlock, DeveloperShell, Section } from "../developer-pages";
 
@@ -25,7 +26,7 @@ export default function DeveloperSdkPage() {
             <a className="font-semibold text-sky-700 hover:text-sky-900" href="https://www.npmjs.com/package/@certscore/sdk">
               @certscore/sdk
             </a>
-            . Use version <code className="rounded bg-slate-100 px-1.5 py-0.5 text-xs text-slate-800">0.2.8</code> or newer for API v2 scan creation in EU-Germany, EU-Ireland, and California, typed no-account allowance, completed-limited no-go results, API v2 scan timing fields, and client attribution headers. Source and examples live in{" "}
+            . Use version <code className="rounded bg-slate-100 px-1.5 py-0.5 text-xs text-slate-800">{PUBLIC_CERTSCORE_SDK_VERSION}</code> or newer for typed GPC, Accept Path, and Reject Path results on Pulse and API v2 scan resources, plus API v2 scan creation in EU-Germany, EU-Ireland, and California. Source and examples live in{" "}
             <a className="font-semibold text-sky-700 hover:text-sky-900" href="https://github.com/ergoveritas1-alt/certscore.ai/tree/main/packages/certscore-sdk">
               packages/certscore-sdk
             </a>
@@ -68,6 +69,12 @@ const created = await certscore.scans.create("https://ergoveritas.com/.well-know
 
 const completed = await certscore.scans.wait(created);
 const scanId = completed.scanId;
+
+console.log(
+  completed.gpcResponse?.status,
+  completed.postAcceptObservation?.verdict,
+  completed.postRefusalObservation?.verdict
+);
 
 const status = await certscore.scans.status(scanId);
 const findings = await certscore.findings.list(scanId);

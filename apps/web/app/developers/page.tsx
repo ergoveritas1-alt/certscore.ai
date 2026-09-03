@@ -41,6 +41,12 @@ export default function DevelopersPage() {
         <LightMcpCallout />
         <AgentQuickPath />
 
+        <Section eyebrow="Typed scan results" title="Choice paths in every integration">
+          <p className="max-w-3xl text-sm leading-7 text-slate-600">
+            Eligible completed scans can include <code>postAcceptObservation</code>, <code>postRefusalObservation</code>, and <code>gpcResponse</code>. Accept is a score-neutral comparison baseline; Reject can support a finding only after confirmation and qualifying retained activity. Any non-confirmed choice-path status is limited coverage, not a pass. <Link className="font-semibold text-sky-700 hover:text-sky-900" href="/developers/reference#choice-path-results">Read the field semantics.</Link>
+          </p>
+        </Section>
+
         <Section eyebrow="Explore the platform" title="Choose the next step that fits your workflow.">
           <div className="grid gap-5 md:grid-cols-2">
             {developerPages.map((page) => (

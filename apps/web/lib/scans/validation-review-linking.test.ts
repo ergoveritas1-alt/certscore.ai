@@ -130,6 +130,6 @@ test("getValidationMatchKeysForTitle maps current scan-signal and snapshot findi
     "privacy.reject_control_missing_detected"
   ]);
   assert.deepEqual(getValidationMatchKeysForTitle("Browser-level privacy signal effect not evident"), [
-    "privacy.gpc_signal_not_honored"
+    "privacy.gpc_response"
   ]);
 });

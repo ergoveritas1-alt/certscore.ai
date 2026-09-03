@@ -23,7 +23,7 @@ const steps = [
   {
     title: "Collect runtime and disclosure evidence",
     description:
-      "The scanner reviews runtime behavior, consent interactions, accessibility signals, and relevant public policy and disclosure surfaces in one pass."
+      "The scanner reviews runtime behavior, consent interactions, accessibility signals, and relevant public policy and disclosure surfaces in one scan. Where an eligible consent control can be actioned safely, Accept and Reject observations run in separate, clean browser sessions."
   },
   {
     title: "Surface supported findings",
@@ -68,6 +68,18 @@ export default function HowItWorksPage() {
       </section>
 
       <HowItWorksCarousel />
+
+      <section id="choice-paths" className="border-b border-slate-200 bg-white">
+        <div className="mx-auto max-w-5xl px-6 py-14">
+          <Badge tone="neutral">Choice paths</Badge>
+          <h2 className="mt-4 text-3xl font-semibold tracking-tight text-slate-950">After the choice is confirmed</h2>
+          <div className="mt-4 space-y-4 text-sm leading-7 text-slate-600">
+            <p>Where CertScore can identify an eligible consent control unambiguously, it makes one deliberate choice. Accept and Reject each receive a fresh browser session, so neither result is contaminated by the other.</p>
+            <p>On the Reject side, a refusal-state transition must be confirmed before post-choice activity qualifies. From that point, CertScore retains relevant requests, cookie and storage writes, and consent state; activity already in flight at confirmation is excluded.</p>
+            <p>If a consent surface cannot be actioned safely—because the interface is unsupported, a control is ambiguous, or confirmation fails—CertScore does not guess. The report records limited coverage. That is not a clean result and never counts as a pass.</p>
+          </div>
+        </div>
+      </section>
 
       <section className="mx-auto max-w-6xl px-6 py-16">
         <div className="grid gap-5 lg:grid-cols-2">

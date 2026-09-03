@@ -676,7 +676,7 @@ test("pre-consent runtime scanner retains canonical rendered policy links from t
   }
 });
 
-test("runtime-evidence scanner emits one metadata-only passive preview checkpoint without ending capture", async () => {
+test("runtime-evidence scanner emits one metadata-only preview even when capture finishes before the scheduled checkpoint", async () => {
   const server = await startStaticFixtureServer();
   const tempRoot = await mkdtemp(path.join(tmpdir(), "certscore-v2-runtime-preview-checkpoint-"));
   try {
@@ -699,7 +699,7 @@ test("runtime-evidence scanner emits one metadata-only passive preview checkpoin
 
     assert.equal(PRE_CONSENT_RUNTIME_PREVIEW_CHECKPOINT_MS, 6_000);
     assert.equal(checkpoints.length, 1);
-    assert.ok(checkpoints[0]!.observedAtMs >= 700);
+    assert.ok(checkpoints[0]!.observedAtMs > 0);
     assert.equal(
       checkpoints[0]!.cookieSnapshots.some((snapshot) =>
         snapshot.cookies.some((cookie) => cookie.name === "_ga")
@@ -813,6 +813,36 @@ test("pre-consent runtime scanner retains Reject and Pay as typed paid-decline e
   } finally {
     await server.close();
     await rm(tempRoot, { recursive: true, force: true });
+  }
+});
+
+test("owned paid-alternative fixture can verify denial without a transaction", async () => {
+  const server = await startStaticFixtureServer();
+  const browser = await chromium.launch({ headless: true });
+  try {
+    for (const fixture of ["consent-reject-subscribe", "consent-reject-pay"] as const) {
+      const context = await browser.newContext();
+      const page = await context.newPage();
+      await page.goto(server.urlFor(fixture));
+      await page.getByRole("button", { name: /reject/i }).click();
+      const sandbox = page.locator('[data-certscore-owned-nontransactional-sandbox="true"]');
+      await sandbox.waitFor({ state: "visible" });
+      assert.match(await sandbox.innerText(), /No account, subscription, payment method, charge, or external request is created/i);
+      await page.getByRole("button", { name: "Complete test alternative" }).click();
+      assert.equal(
+        await page.evaluate(() => localStorage.getItem("certscore_paid_alternative_state")),
+        "optional_purposes_denied",
+      );
+      assert.equal(
+        await page.evaluate(() => localStorage.getItem("certscore_paid_alternative_completion")),
+        "sandbox_confirmed",
+      );
+      assert.equal(await page.locator("#banner").count(), 0);
+      await context.close();
+    }
+  } finally {
+    await browser.close();
+    await server.close();
   }
 });
 

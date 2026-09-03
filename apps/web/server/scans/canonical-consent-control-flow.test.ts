@@ -954,7 +954,7 @@ test("canonical consent-control flow projects UniConsent accept/options evidence
   assert.equal(story.rejectRow.status, "Review signal");
   assert.equal(story.rejectRow.assessmentStatus, "review_signal");
   assert.equal(getEvidenceLabel(story.rejectRow), "Partial concern");
-  assert.equal(story.rejectScore.score, 92);
+  assert.equal(story.rejectScore.score, 90);
   assert.match(story.rejectRow.limitation ?? "", /no same-layer reject/i);
 });
 
@@ -1026,7 +1026,11 @@ test("canonical consent-control flow projects reject-and-subscribe as a partial 
   assert.equal(story.rejectRow.assessmentStatus, "review_signal");
   assert.match(story.rejectRow.limitation ?? "", /consent or pay/i);
   assert.match(story.rejectRow.limitation ?? "", /cannot be determined from the consent interface alone/i);
-  assert.equal(story.rejectScore.score, 92);
+  assert.equal(story.rejectScore.score, null);
+  const paidFinding = buildUnifiedFindingCandidatesFromConcerns(story.normalizedConcerns).find((candidate) =>
+    candidate.normalizedConcern.suggestedUnifiedFindingId === "paid_alternative_required_to_decline_tracking"
+  );
+  assert.ok(paidFinding);
   assert.equal(story.gapFindingObserved, false);
 });
 
@@ -1067,6 +1071,11 @@ test("canonical consent-control flow projects Reject and Pay as paid decline wit
   assert.equal(story.rejectRow.status, "Review signal");
   assert.match(story.rejectRow.limitation ?? "", /required payment/i);
   assert.match(story.rejectRow.limitation ?? "", /consent or pay/i);
+  assert.equal(story.rejectScore.score, null);
+  assert.equal(
+    paidDeclineConcern.suggestedUnifiedFindingId,
+    "paid_alternative_required_to_decline_tracking"
+  );
   assert.equal(story.gapFindingObserved, false);
 });
 
@@ -1126,7 +1135,7 @@ function projectStorageStory(runtimeArtifacts: Record<string, unknown>) {
   };
 }
 
-test("canonical pre-consent storage flow uses one non-essential predicate for metric, checklist, and score", () => {
+test("canonical pre-consent storage flow preserves classification and applies the unified deduction schedule", () => {
   const cases = [
     {
       name: "essential storage only",
@@ -1162,7 +1171,7 @@ test("canonical pre-consent storage flow uses one non-essential predicate for me
       expectedGapFinding: false,
       expectedMetric: null,
       expectedRowStatus: "Review signal",
-      expectedScore: 100
+      expectedScore: 94
     },
     {
       name: "confirmed non-essential write",

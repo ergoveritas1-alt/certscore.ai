@@ -86,32 +86,50 @@ Missing, malformed, stale, or unverifiable evidence must fail closed to an unkno
 
 If a downstream result is incorrect, trace the first broken stage in this sequence and fix it there. Do not add surface-specific fallbacks.
 
-### Four-lane production Lambda evidence capture with reject observation
+### Six-lane production Lambda evidence capture
 
-Production v2 DAG Lambda scans with reject observation enabled fan out into
-four independent, bounded browser-session lanes. The coordinator must await a
-terminal outcome from all four lanes before it verifies and merges one
+Production sharded v2 DAG Lambda scans use four independent passive
+browser-session lanes and up to two independently controlled action lanes, for
+a six-lane topology. The GPC lane is always enabled for sharded scans; Accept
+and Reject remain separately gated. The coordinator must await a terminal
+outcome from every required enabled lane before it verifies and merges one
 canonical evidence bundle for WC01 assessment or projection:
 
 ```text
 consent-proof lane: typed first-layer A/R/O inventory + geometry + representative screenshot
 runtime-evidence lane: network, cookies/storage, scripts/iframes/forms, vendors, journeys, and transport
 policy-evidence lane: policy discovery, ownership, retrieval, retained text/excerpts, and policy diagnostics
+gpc-observation lane: passive Sec-GPC: 1 execution paired with runtime-evidence baseline and retained comparison deltas
+accept-observation lane: one authorized deterministic accept action + confirmed post-accept comparison evidence
 reject-observation lane: one authorized deterministic reject action + confirmed post-refusal evidence
 → coordinator verifies and merges lane-owned evidence
 → CanonicalEvidenceBundle
 → ConsentControlAssessment v2 and the canonical downstream flow
 ```
 
-Start `reject_observation` 500 milliseconds after the three passive lanes to
-avoid an immediate four-browser burst. Do not publish a primary result before
+The GPC lane must remain separate from baseline and Accept/Reject flows. It
+uses the same passive protocol as runtime-evidence, retains proof that
+`Sec-GPC: 1` and `navigator.globalPrivacyControl` were enabled, and compares
+cookies/storage, trackers, advertising/measurement activity, and relevant
+consent/CMP behavior. It produces exactly one jurisdiction-neutral
+`responsive`, `no_observable_response`, or `indeterminate` assessment and uses
+the labels “GPC response” or “No observable GPC response.” Legal interpretation
+and the approved 15-point California-only scoring policy remain downstream in
+WC01 concern policy; the GPC lane itself must not produce a legal conclusion or
+score effect. The passive evidence quiet-window gate begins at 250 milliseconds
+and may restart for newly observed qualifying activity without discarding raw
+evidence.
+
+Start `reject_observation` 500 milliseconds after the four passive lanes to
+avoid an immediate six-browser burst when both action lanes are enabled. Do
+not publish a primary result before
 that branch reaches a terminal outcome, and do not publish an independent
 post-refusal artifact that triggers a later report generation. Reconcile,
 score, persist, and publish exactly once. A neutral, unsupported, unconfirmed,
 failed, stale, or unverifiable reject outcome must not create a finding or
 affect score. There must be no late refresh or report-regeneration path for
 Reject Path evidence.
-The coordinator may wait at most six seconds beyond the slowest passive lane;
+The coordinator may wait at most eight seconds beyond the slowest passive lane;
 after that it must terminate its reject-lane wait and retain an explicit,
 score-neutral coverage limitation in the single result.
 
@@ -136,7 +154,7 @@ invocation start, terminal-outcome time, elapsed duration, worker-reported
 completion/duration when available, and each outcome's delta from the passive
 lane barrier. Persist the typed timing summary with the terminal scan event so
 cohort analysis can measure how often `reject_observation` adds latency, finishes
-before the passive barrier, fails, or reaches the six-second cap. Timing
+before the passive barrier, fails, or reaches the eight-second cap. Timing
 telemetry must not create evidence, findings, or score effects.
 
 The consent-proof lane must capture typed A/R/O, geometry, and the representative pre-consent screenshot from the same browser session. It may use bounded same-session settling and recapture, but it must not click consent controls. The runtime lane must not spend its budget on consent screenshots or screenshot recovery. The policy lane owns policy-surface work and must not depend on spare time left by consent or runtime capture.
@@ -251,25 +269,46 @@ quality gate and the Mini invocation-rate goal.
 
 Sensitive-context labels in v2 are review routing metadata only. They must not create stronger findings, customer-facing language, legal conclusions, or production eligibility.
 
-General post-consent consent-flow runtime remains disabled for WC01 scanner
-runs. A narrow reject-only observation path is authorized for deterministic
-fixtures, explicitly owned canaries such as ErgoVeritas, per-run public
-calibration targets selected through the canonical scan-quality and
+General unbounded post-consent consent-flow runtime remains disabled for WC01
+scanner runs. Bounded Accept and Reject observation lanes are authorized for
+deterministic fixtures, explicitly owned canaries such as ErgoVeritas, per-run
+public calibration targets selected through the canonical scan-quality and
 contact/cooldown controls, and ordinary customer scans that use the sharded
-production Lambda topology. Every eligible sharded scan with the explicit
-reject-observation feature flag receives a non-reusable authorization bound to
-that scan's exact normalized HTTPS target URL. That authorization may not be
-broadened to a host, origin, path prefix, redirect destination, or later scan;
-the observer must fail closed when the loaded document does not retain the
-authorized exact target. Do not infer authorization from the presence of a
-banner, CMP signal, or Reject label. Non-sharded scans and ineligible targets
-must not launch the reject-observation lane.
+production Lambda topology. Every eligible sharded scan with the corresponding
+explicit observation feature flag and `all_eligible` rollout receives a
+non-reusable authorization bound to that scan's exact normalized HTTPS target
+URL. That authorization may not be broadened to a host, origin, path prefix,
+redirect destination, or later scan; each observer must fail closed when the
+loaded document does not retain the authorized exact target. Do not infer
+authorization from the presence of a banner, CMP signal, or Accept/Reject
+label. Non-sharded scans and ineligible targets must not launch either action
+lane.
+
+The Accept observer may perform at most one deterministic first-layer `accept`
+action in a fresh isolated browser context. Named CMPs must use the bounded
+canonical CMP registry and a versioned Accept recipe. A non-CMP first layer may
+use the canonical consent-control classifier only when it yields one uniquely
+actionable, visible, enabled, correctly labelled control and an independently
+verifiable consent-state transition. Improvised strings, feature-local regexes,
+and guessed DOM/text fallbacks are prohibited. Multiple matches, unresolved
+controls, and unconfirmed consent registration fail closed without projectable
+evidence. It must not click Reject, Options/Manage, privacy opt-out, Save,
+forms, authentication, purchases, or unrelated controls; follow deeper
+preference-center paths; reuse visitor state; or interact where the action
+could affect an account or transaction. Ordinary post-Accept activity remains
+a score-neutral comparison baseline. Any retained consent-state contradiction
+must enter production only through the canonical typed evidence, normalized
+concern, concern policy, and unified finding/checklist path.
 
 The reject observer may perform at most one deterministic first-layer `reject`
 or necessary-only-equivalent action in a fresh isolated browser context. It
-must resolve from the bounded canonical CMP registry and use a versioned
-named-CMP Reject recipe; no guessed DOM/text fallback is permitted. Multiple
-matches, unsupported CMPs, and unresolved controls fail closed without a click.
+must use the bounded canonical CMP registry and a versioned Reject recipe for
+named CMPs. A non-CMP first layer may use the same canonical consent-control
+classifier only when it yields one uniquely actionable, visible, enabled,
+correctly labelled control and an independently verifiable refusal-state
+transition. Improvised strings, feature-local regexes, and guessed DOM/text
+fallbacks are prohibited. Multiple matches and unresolved controls fail closed
+without a click.
 It must not click Accept, Options/Manage, privacy
 opt-out, Save, forms, authentication, purchases, or unrelated controls; follow
 deeper preference-center paths; reuse visitor state; or interact where the
@@ -282,10 +321,11 @@ Retain bounded, display-safe reject evidence and provenance; do not retain raw
 TC strings, raw cookie values, sensitive query values, or unbounded bodies.
 Consent-flow-dependent review rows remain evidence aids and must enter
 production only through the typed retained-evidence contract, normalized
-concern, concern policy, and unified finding/checklist path. Reject interaction
-must remain separately disableable. When it is enabled, its terminal outcome is
-part of the single canonical report-readiness barrier; when it is disabled, the
-existing three passive lanes remain the complete barrier.
+concern, concern policy, and unified finding/checklist path. Accept and Reject
+interactions must remain separately disableable. When either is enabled, its
+terminal outcome is part of the single canonical report-readiness barrier;
+when both are disabled, the existing three passive lanes remain the complete
+barrier.
 
 ### WC01 responsibility boundary
 

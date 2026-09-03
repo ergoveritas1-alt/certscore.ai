@@ -36,7 +36,8 @@ const config: GrowthContentPageConfig = {
     {
       title: "What to review in CertScore.ai",
       paragraphs: [
-        "Review pre-consent tracking signals, third-party cookie timing, vendor domains, and whether reject interactions appear to reduce non-essential tracking.",
+        "Review pre-consent tracking signals, third-party cookie timing, vendor domains, and the separately observed Accept and Reject paths. CertScore.ai requires a confirmed consent-state transition before interpreting post-choice activity; Accept is a score-neutral baseline and limited coverage is not reported as clean.",
+        "For Reject, review whether qualifying non-essential activity was retained after confirmed refusal, along with temporal and attribution limitations.",
         "Use the retained evidence as a practical checklist for engineering, marketing operations, and privacy review."
       ]
     }

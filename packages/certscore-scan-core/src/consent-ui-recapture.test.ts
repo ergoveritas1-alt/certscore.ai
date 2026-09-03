@@ -406,7 +406,15 @@ function rapidInventorySnapshot(withControls: boolean) {
     contextText: withControls
       ? "We use cookies and advertising technologies. Accept, Decline, or Customise your preferences."
       : "",
+    defaultTogglePurposeLabels: [],
+    defaultToggleStatesObserved: null,
     hasPotentialToggle: false,
+    nonEssentialDefaultsOff: null,
+    necessaryPreferenceLabels: [],
+    necessaryPreferenceSelectionObserved: null,
+    precheckedOptionalPurposeCount: 0,
+    precheckedOptionalPurposeLabels: [],
+    rejectedNoContextLabels: [],
   };
 }
 

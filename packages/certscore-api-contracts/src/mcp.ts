@@ -274,6 +274,9 @@ export const mcpScanSiteOutputSchema = z
     scoreVersion: z.string().nullable().optional(),
     scoreUpdatedAt: z.string().nullable().optional(),
     riskLevel: z.string().nullable().optional(),
+    gpcResponse: apiV2ScanResourceSchema.shape.gpcResponse.nullable(),
+    postAcceptObservation: apiV2ScanResourceSchema.shape.postAcceptObservation.nullable(),
+    postRefusalObservation: apiV2ScanResourceSchema.shape.postRefusalObservation.nullable(),
     coverage: apiV2ScanResourceSchema.shape.coverage.nullable().optional(),
     preConsentPreview: apiV2PreConsentRuntimePreviewSchema.optional(),
     error: mcpActionableErrorSchema.nullable(),
@@ -315,6 +318,9 @@ export const mcpScanStatusOutputSchema = z
     scoreVersion: z.string().nullable().optional(),
     scoreUpdatedAt: z.string().nullable().optional(),
     riskLevel: z.string().nullable().optional(),
+    gpcResponse: apiV2ScanResourceSchema.shape.gpcResponse.nullable(),
+    postAcceptObservation: apiV2ScanResourceSchema.shape.postAcceptObservation.nullable(),
+    postRefusalObservation: apiV2ScanResourceSchema.shape.postRefusalObservation.nullable(),
     coverage: apiV2ScanResourceSchema.shape.coverage.nullable().optional(),
     preConsentPreview: apiV2PreConsentRuntimePreviewSchema.optional(),
     phase: z.string().optional(),
@@ -364,7 +370,10 @@ export const mcpEvidenceOutputSchema = z
   })
   .passthrough();
 
-export const mcpScanBundleOutputSchema = z
+// Keep the exported declaration bounded. This schema composes the full API v2
+// scan resource plus MCP-specific evidence shapes, and inferring every nested
+// generic exceeds TypeScript's declaration-serialization limit.
+export const mcpScanBundleOutputSchema: z.ZodType<Record<string, unknown>> = z
   .object({
     type: z.literal("certscore_scan_bundle"),
     detail: z.enum(["summary", "findings", "evidence", "full"]),
@@ -379,6 +388,8 @@ export const mcpScanBundleOutputSchema = z
     scoreVersion: z.string().nullable(),
     scoreUpdatedAt: z.string().nullable(),
     riskLevel: z.string().nullable(),
+    gpcResponse: apiV2ScanResourceSchema.shape.gpcResponse.nullable().optional(),
+    postAcceptObservation: apiV2ScanResourceSchema.shape.postAcceptObservation.nullable(),
     postRefusalObservation: apiV2ScanResourceSchema.shape.postRefusalObservation.nullable(),
     provenance: mcpScanProvenanceSchema,
     interpretationGuidance: mcpInterpretationGuidanceSchema,
@@ -543,7 +554,7 @@ export const certScoreMcpToolContracts = [
   {
     name: "certscore_get_scan_bundle",
     title: "Get scan bundle",
-    description: "Returns the completed or completed-limited CertScore evidence bundle for a stable scanId as concise TextContent and matching structuredContent. Available sections include the canonical report overview, bounded projected findings, pre-consent cookie and tracker evidence, coverage limitations, persisted execution provenance, and retrieval URLs. Detail tiers and byte budgets control the bounded response, with explicit returned, total, truncated, and omitted-section metadata. Reject Path content is present only for confirmed, evidence-qualified post-refusal observations; unsupported or inconclusive outcomes remain neutral coverage limitations. Results are automated public-web observations, not legal advice, certification, or a compliance determination.",
+    description: "Returns the completed or completed-limited CertScore evidence bundle for a stable scanId as concise TextContent and matching structuredContent. Available sections include the canonical report overview, bounded projected findings, pre-consent cookie and tracker evidence, coverage limitations, persisted execution provenance, and retrieval URLs. Detail tiers and byte budgets control the bounded response, with explicit returned, total, truncated, and omitted-section metadata. Accept and Reject Path content is present only for confirmed, evidence-qualified post-action observations; unsupported or inconclusive outcomes remain neutral coverage limitations. Results are automated public-web observations, not legal advice, certification, or a compliance determination.",
     inputSchema: mcpGetScanBundleInputSchema,
     outputSchema: mcpScanBundleOutputSchema,
     annotations: { title: "Get scan bundle", ...accountedInternalReadAnnotations }

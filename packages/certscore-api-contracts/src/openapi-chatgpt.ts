@@ -205,6 +205,21 @@ export function buildPulseChatGptOpenApiDocument() {
             type: { type: "string", enum: ["certscore_pulse", "certscore_pulse_summary", "certscore_pulse_evidence"] },
             scanStatus: { type: "string" },
             target: { type: "object", additionalProperties: true },
+            gpcResponse: {
+              type: ["object", "null"],
+              additionalProperties: true,
+              description: "Jurisdiction-neutral GPC result with retained enablement proof and baseline-versus-GPC deltas when available."
+            },
+            postAcceptObservation: {
+              type: ["object", "null"],
+              additionalProperties: true,
+              description: "Typed result or explicit limitation from the isolated Accept observation path."
+            },
+            postRefusalObservation: {
+              type: ["object", "null"],
+              additionalProperties: true,
+              description: "Typed result or explicit limitation from the isolated Reject observation path."
+            },
             summary: {
               type: "object",
               additionalProperties: true,

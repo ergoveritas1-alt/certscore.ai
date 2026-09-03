@@ -9,7 +9,7 @@ import { getDomain as getTldtsDomain, getHostname as getTldtsHostname } from "tl
 
 export type RuntimeVendorAttributionEvidence = {
   signatureId: string;
-  matchedOn: "cookie_name" | "domain" | "request_pattern" | "id_sync" | "vendor_label";
+  matchedOn: "cookie_name" | "domain" | "request_pattern" | "id_sync" | "retained_signature" | "vendor_label";
   matchedValue: string;
 };
 

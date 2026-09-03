@@ -11,6 +11,7 @@ import {
   LOCAL_V2_DAG_LAMBDA_DEFAULT_PRECONSENT_VISUAL_FALLBACK_DEADLINE_MS,
   type LocalV2DagLambdaAwsRegion,
   LOCAL_V2_DAG_SCAN_PROCESSOR,
+  POST_ACCEPT_WORKER_FEATURE_FLAG,
   POST_REFUSAL_REJECT_WORKER_FEATURE_FLAG,
   handler
 } from "../apps/v2-dag-lambda/src/handler";
@@ -25,6 +26,8 @@ type Args = {
   messageStreamPath: string | null;
   outPath: string;
   profile: "full" | "standard" | "tiny";
+  postAcceptConfig: Record<string, unknown> | null;
+  postAcceptEnabled: boolean;
   postRefusalConfig: Record<string, unknown> | null;
   postRefusalEnabled: boolean;
   postRefusalWorkerMode: PostRefusalWorkerMode;
@@ -227,6 +230,7 @@ async function main() {
     "CERTSCORE_V2_DAG_LAMBDA_PROXY_PASSWORD",
     "CERTSCORE_V2_DAG_LAMBDA_PROXY_SERVER",
     "CERTSCORE_V2_DAG_LAMBDA_PROXY_USERNAME",
+    POST_ACCEPT_WORKER_FEATURE_FLAG,
     POST_REFUSAL_REJECT_WORKER_FEATURE_FLAG,
     "CERTSCORE_V2_DAG_LAMBDA_SCENARIO_CONCURRENCY",
     "CERTSCORE_V2_DAG_LAMBDA_SCENARIO_RESOURCE_MODE",
@@ -272,6 +276,11 @@ async function main() {
     } else {
       delete process.env[POST_REFUSAL_REJECT_WORKER_FEATURE_FLAG];
     }
+    if (args.postAcceptEnabled) {
+      process.env[POST_ACCEPT_WORKER_FEATURE_FLAG] = "1";
+    } else {
+      delete process.env[POST_ACCEPT_WORKER_FEATURE_FLAG];
+    }
 
     const payload = {
       artifactOnly: true,
@@ -305,6 +314,9 @@ async function main() {
               observationWindowMs: 8_000,
             },
           }
+        : {}),
+      ...(args.postAcceptEnabled && args.postAcceptConfig
+        ? { postAcceptObservation: args.postAcceptConfig }
         : {}),
       resultHandoff: "sqs",
       resultPurpose: "synthetic_verification",
@@ -401,6 +413,7 @@ async function buildSummary(input: {
       screenshots: arrayLength(bundleRecord.screenshots)
     },
     postRefusal: summarizePostRefusal(bundleRecord),
+    postAccept: summarizePostAccept(bundleRecord),
     manifest: {
       auxiliaryArtifactCount: arrayLength(asRecord(manifest).auxiliaryArtifacts),
       hasCoordinatorPlanSummary: Boolean(asRecord(manifest).coordinatorPlanSummary),
@@ -503,6 +516,8 @@ function parseArgs(argv: string[]): Args {
     messageStreamPath: null,
     outPath: "artifacts/local-v2-dag-lambda-parity/latest.json",
     profile: "full",
+    postAcceptConfig: null,
+    postAcceptEnabled: false,
     postRefusalConfig: null,
     postRefusalEnabled: false,
     postRefusalWorkerMode: "normal",
@@ -538,6 +553,9 @@ function parseArgs(argv: string[]): Args {
     } else if (arg === "--post-refusal-worker-mode") {
       args.postRefusalEnabled = true;
       args.postRefusalWorkerMode = normalizePostRefusalWorkerMode(requiredValue(argv, ++index, arg));
+    } else if (arg === "--post-accept-config") {
+      args.postAcceptConfig = parseJsonObjectArg(requiredValue(argv, ++index, arg), arg);
+      args.postAcceptEnabled = true;
     } else if (arg === "--scan-id") {
       args.scanId = requiredValue(argv, ++index, arg);
     } else if (arg === "--target-url") {
@@ -565,6 +583,7 @@ function printUsage() {
     "  --post-refusal           Enable the local four-lane Reject Path barrier.",
     "  --post-refusal-config <json> Enable Reject Path with the typed WC01 dispatch configuration.",
     "  --post-refusal-worker-mode <mode> normal, failure, or timeout. Implies --post-refusal.",
+    "  --post-accept-config <json> Enable Accept Path with the typed WC01 dispatch configuration.",
     "  --scan-id <id>           Stable scan ID. Default: local-lambda-parity-<uuid>",
     "  --artifact-dir <path>    Artifact base directory. Default: artifacts/local-v2-dag-lambda-parity",
     "  --message-stream <path>  Optional NDJSON stream of fake SQS messages, constrained to artifact-dir.",
@@ -636,6 +655,21 @@ function summarizePostRefusal(bundleRecord: Record<string, unknown>) {
     observationTypes: observations.map((observation) => asRecord(observation).observationType ?? null),
     productionProjectable: packet.productionProjectable ?? null,
     refusalExercised: registration.refusalExercised ?? null,
+    registrationStatus: registration.status ?? null,
+  };
+}
+
+function summarizePostAccept(bundleRecord: Record<string, unknown>) {
+  const laneOutcome = asRecord(bundleRecord.postAcceptLaneOutcome);
+  const packet = asRecord(bundleRecord.postAcceptEvidence);
+  const registration = asRecord(packet.acceptanceRegistration);
+  const observations = Array.isArray(packet.observations) ? packet.observations : [];
+  return {
+    acceptanceExercised: registration.acceptanceExercised ?? null,
+    laneOutcome: Object.keys(laneOutcome).length > 0 ? laneOutcome : null,
+    observationCount: observations.length,
+    observationTypes: observations.map((observation) => asRecord(observation).observationType ?? null),
+    productionProjectable: packet.productionProjectable ?? null,
     registrationStatus: registration.status ?? null,
   };
 }

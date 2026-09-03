@@ -98,6 +98,21 @@ export default function DeveloperReferencePage() {
   "domain": "ergoveritas.com",
   "status": "completed",
   "score": 72,
+  "postAcceptObservation": {
+    "status": "confirmed_observation",
+    "verdict": "eligible_nonessential_activity_observed_after_confirmed_acceptance",
+    "productionProjectable": true
+  },
+  "postRefusalObservation": {
+    "status": "confirmed_observation",
+    "verdict": "eligible_nonessential_activity_observed_after_confirmed_refusal",
+    "productionProjectable": true
+  },
+  "gpcResponse": {
+    "status": "indeterminate",
+    "scoreEffect": "none",
+    "legalInterpretation": "not_assessed"
+  },
   "links": {
     "findings": "https://certscore.ai/api/v2/scans/00000000-0000-4000-8000-000000000123/findings",
     "preConsentCookiesTrackers": "https://certscore.ai/api/v2/scans/00000000-0000-4000-8000-000000000123/pre-consent-cookies-trackers",
@@ -158,6 +173,27 @@ export default function DeveloperReferencePage() {
 }`}</CodeBlock>
             </div>
           </div>
+        </Section>
+
+        <Section id="choice-path-results" eyebrow="Typed observations" title="Accept, Reject, and GPC result fields">
+          <div className="max-w-4xl space-y-4 text-sm leading-7 text-slate-600">
+            <p><code className="rounded bg-white px-1">postAcceptObservation</code> is present on eligible completed scans where acceptance was attempted. It is a score-neutral comparison baseline: ordinary activity after confirmed acceptance is expected and never projects a negative finding.</p>
+            <p><code className="rounded bg-white px-1">postRefusalObservation</code> describes an eligible refusal or necessary-only-equivalent attempt. It can support a projected finding only when the refusal-state transition was confirmed and qualifying activity was retained after that confirmation.</p>
+            <p><code className="rounded bg-white px-1">gpcResponse</code> is a jurisdiction-neutral comparison with and without a Global Privacy Control signal. Its <code className="rounded bg-white px-1">scoreEffect</code> is <code className="rounded bg-white px-1">none</code> and <code className="rounded bg-white px-1">legalInterpretation</code> is <code className="rounded bg-white px-1">not_assessed</code>.</p>
+          </div>
+          <div className="mt-5 overflow-x-auto rounded-lg border border-slate-200 bg-white">
+            <table className="min-w-[760px] w-full text-left text-sm">
+              <thead className="bg-slate-100 text-xs uppercase tracking-[0.12em] text-slate-600"><tr><th className="px-4 py-3">Field</th><th className="px-4 py-3">How to interpret it</th></tr></thead>
+              <tbody className="divide-y divide-slate-200">
+                <tr><td className="px-4 py-3 font-mono text-xs">status</td><td className="px-4 py-3 leading-6 text-slate-600"><code>confirmed_observation</code> and <code>confirmed_clean</code> are results. <code>unconfirmed</code>, <code>not_attempted</code>, <code>unsupported</code>, and <code>aborted</code> are limited coverage—not a pass.</td></tr>
+                <tr><td className="px-4 py-3 font-mono text-xs">verdict</td><td className="px-4 py-3 leading-6 text-slate-600">The only field carrying the outcome. Do not reconstruct a verdict by counting evidence rows; confirmation, temporal anchoring, and in-flight exclusion are applied server-side.</td></tr>
+                <tr><td className="px-4 py-3 font-mono text-xs">coverageLimitations</td><td className="px-4 py-3 leading-6 text-slate-600">Names behavior or persistence that was not measured. It bounds the observation; it does not describe the site.</td></tr>
+                <tr><td className="px-4 py-3 font-mono text-xs">termination</td><td className="px-4 py-3 leading-6 text-slate-600"><code>kind=evidence_satisfied</code> with <code>intentional=true</code> means the observer stopped after retaining qualifying evidence. Counts are not comparable as volume across scans.</td></tr>
+                <tr><td className="px-4 py-3 font-mono text-xs">productionProjectable</td><td className="px-4 py-3 leading-6 text-slate-600">Whether an observation may project a public finding. Non-projectable evidence can still be valid for review.</td></tr>
+              </tbody>
+            </table>
+          </div>
+          <p className="mt-4 max-w-4xl text-sm leading-7 text-slate-600">None of these fields expresses a legal conclusion. They are automated observations with retained evidence for human and agentic review.</p>
         </Section>
 
         <Section eyebrow="Runtime inventory" title="Pre-consent Cookies & Trackers JSON">

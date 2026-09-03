@@ -18,6 +18,7 @@ import {
   type RuntimeCoverageSummary,
   type RuntimeEvidenceEvent,
   type ScanProfile,
+  type ScannerBuildProvenance,
   type ScanNoGoAssessment,
   type ScanEvidenceLaneAssessment,
   type ScreenshotArtifact,
@@ -122,6 +123,19 @@ export {
 } from "./post-refusal-observer.js";
 
 export {
+  runPostAcceptObserver,
+  type PostAcceptActionRecipe,
+  type PostAcceptObserverInput,
+} from "./post-accept-observer.js";
+
+export {
+  buildCanonicalPostAcceptActionRecipes,
+  buildPostAcceptCmpActionRecipe,
+  CANONICAL_POST_ACCEPT_RECIPE_SET_ID,
+  CERTSCORE_OWNED_ANALYTICS_ACCEPT_RECIPE,
+} from "./post-accept-cmp-recipes.js";
+
+export {
   authorizePostRefusalTarget,
   ERGOVERITAS_POST_REFUSAL_CANARY_AUTHORIZATION_ID,
   isLoopbackPostRefusalTarget,
@@ -141,6 +155,11 @@ export {
   buildPostRefusalReconciliationEnvelope,
   canonicalSha256,
 } from "./post-refusal-reconciliation.js";
+
+export {
+  buildGpcResponseAssessment,
+  type GpcVerifiedArtifactPointer,
+} from "./gpc-response-assessment.js";
 
 export {
   buildCanonicalPostRefusalActionRecipes,
@@ -184,6 +203,7 @@ export interface RunScanInput {
   profile?: ScanProfile["profileId"];
   outDir?: string;
   region?: string;
+  scannerBuildProvenance?: ScannerBuildProvenance;
   captureReplay?: boolean;
   captureReplayAuxiliaryProbes?: "all" | "none" | "form" | "accessibility";
   captureReplayTrace?: boolean;
@@ -231,7 +251,7 @@ export interface RunScanInput {
    * Isolates independently mergeable evidence work for Lambda fan-out. The
    * default preserves the existing single-process scan behavior.
    */
-  evidenceLane?: "combined" | "consent_proof" | "runtime_evidence" | "policy_evidence";
+  evidenceLane?: "combined" | "consent_proof" | "runtime_evidence" | "policy_evidence" | "gpc_observation";
   /**
    * Allows a dedicated runtime-evidence worker to finish only the deterministic
    * canonical projection after its parent capture deadline is observed. This
@@ -357,6 +377,7 @@ export async function runScan(input: RunScanInput): Promise<CanonicalEvidenceBun
 
   const preConsentEnabled = evidenceLane === "consent_proof" ||
     evidenceLane === "runtime_evidence" ||
+    evidenceLane === "gpc_observation" ||
     (evidenceLane === "combined" && scanProfile.enabledModules.includes("preConsentRuntimeScanner"));
   const policySurfaceEnabled = evidenceLane === "policy_evidence" ||
     (evidenceLane === "combined" && scanProfile.enabledModules.includes("policySurfaceScanner"));
@@ -376,7 +397,9 @@ export async function runScan(input: RunScanInput): Promise<CanonicalEvidenceBun
   const leanPreConsent = input.scenarioResourceMode === "lean" ||
     input.scenarioResourceMode === "cmp_safe" ||
     input.captureReplay === true;
-  const effectivePreConsentScreenshotMode = evidenceLane === "runtime_evidence" || evidenceLane === "policy_evidence"
+  const effectivePreConsentScreenshotMode = evidenceLane === "runtime_evidence" ||
+    evidenceLane === "gpc_observation" ||
+    evidenceLane === "policy_evidence"
     ? "never"
     : input.preConsentScreenshotMode ?? (leanPreConsent ? "selective" : "always");
   if (input.localPolicyNanoAssistProvider && !isLoopbackPostRefusalTarget(input.url)) {
@@ -498,16 +521,19 @@ export async function runScan(input: RunScanInput): Promise<CanonicalEvidenceBun
         artifactWriter,
         captureScope: evidenceLane === "consent_proof"
           ? "consent_proof"
-          : evidenceLane === "runtime_evidence"
+          : evidenceLane === "runtime_evidence" || evidenceLane === "gpc_observation"
             ? "runtime_evidence"
             : "combined",
+        globalPrivacyControlEnabled: evidenceLane === "gpc_observation",
         browser: sharedBrowser,
         stubHeavyResources: input.captureReplay,
         screenshotCaptureMode: "viewport_first",
         screenshotMode: effectivePreConsentScreenshotMode,
         screenshotTimeoutMs: input.preConsentScreenshotTimeoutMs,
         onScreenshotCaptured: input.onPreConsentScreenshotCaptured,
-        onPassiveRuntimeCheckpoint: notifyPreConsentRuntimePreview,
+        onPassiveRuntimeCheckpoint: evidenceLane === "runtime_evidence"
+          ? notifyPreConsentRuntimePreview
+          : undefined,
         lateConsentGateMs: input.lateConsentGateMs,
         consentGateAuditHoldout: input.consentGateAuditHoldout,
         lateConsentGeometryShadowEnabled,
@@ -599,9 +625,10 @@ export async function runScan(input: RunScanInput): Promise<CanonicalEvidenceBun
         artifactWriter,
         captureScope: evidenceLane === "consent_proof"
           ? "consent_proof"
-          : evidenceLane === "runtime_evidence"
+          : evidenceLane === "runtime_evidence" || evidenceLane === "gpc_observation"
             ? "runtime_evidence"
             : "combined",
+        globalPrivacyControlEnabled: evidenceLane === "gpc_observation",
         browserMode: "headed",
         stubHeavyResources: input.captureReplay,
         screenshotCaptureMode: "viewport_first",
@@ -1333,6 +1360,9 @@ export async function runScan(input: RunScanInput): Promise<CanonicalEvidenceBun
       ...(policySurfaceResult?.artifactRefs ?? []),
       ...(consentFlowResult?.artifactRefs ?? []),
     ],
+    ...(input.scannerBuildProvenance
+      ? { scannerBuildProvenance: input.scannerBuildProvenance }
+      : {}),
     scannerVersion: "certscore-scan-core-v2-alpha",
     schemaVersion: SCHEMA_VERSION,
   }));
@@ -1382,7 +1412,7 @@ export function isRuntimeEvidenceFinalizationOnly(input: {
 }): boolean {
   return input.signal?.aborted === true &&
     input.allowRuntimeEvidenceFinalizationAfterAbort === true &&
-    input.evidenceLane === "runtime_evidence";
+    (input.evidenceLane === "runtime_evidence" || input.evidenceLane === "gpc_observation");
 }
 
 export function compactCanonicalEvidenceBundleForRetention(

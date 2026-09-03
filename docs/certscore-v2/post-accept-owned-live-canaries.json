@@ -1,0 +1,67 @@
+{
+  "contractVersion": "certscore.post_accept_owned_canary.1",
+  "owner": "ErgoVeritas",
+  "artifactOnly": true,
+  "consentInteractionAllowed": true,
+  "interactionPolicy": {
+    "action": "accept_or_reject_in_isolated_lane",
+    "authorizationId": "ergoveritas_owned_post_refusal_canary.v1",
+    "authorizedHostname": "ergoveritas.com",
+    "authorizedExactPaths": [
+      "/.well-known/certscore-canary/post-accept/accept-honored.html",
+      "/.well-known/certscore-canary/post-accept/accept-inconsistent.html",
+      "/testar1.html",
+      "/testar2.html"
+    ],
+    "authorizedAlternateExactTargets": [
+      "https://www.ergoveritas.com/testar1.html",
+      "https://www.ergoveritas.com/testar2.html"
+    ],
+    "maximumActionsPerBrowserContext": 1,
+    "deterministicResolverRequired": true,
+    "domGuessingAllowed": false
+  },
+  "indexingAllowed": false,
+  "targets": [
+    {
+      "key": "ergoveritas-post-accept-honored",
+      "url": "https://ergoveritas.com/.well-known/certscore-canary/post-accept/accept-honored.html",
+      "cmpRecipe": "OneTrust",
+      "expectedAcceptanceRegistration": "confirmed",
+      "expectedPostAcceptActivity": true,
+      "expectedAcceptanceContradiction": false
+    },
+    {
+      "key": "ergoveritas-post-accept-inconsistent",
+      "url": "https://ergoveritas.com/.well-known/certscore-canary/post-accept/accept-inconsistent.html",
+      "cmpRecipe": "OneTrust",
+      "expectedAcceptanceRegistration": "confirmed",
+      "expectedPostAcceptActivity": false,
+      "expectedAcceptanceContradiction": true
+    },
+    {
+      "key": "ergoveritas-post-action-divergent",
+      "url": "https://ergoveritas.com/testar1.html",
+      "cmpRecipe": "OneTrust",
+      "expectedAcceptanceRegistration": "confirmed",
+      "expectedPostAcceptActivity": true,
+      "expectedAcceptanceContradiction": false,
+      "expectedRefusalRegistration": "confirmed",
+      "expectedPostRefusalActivity": false,
+      "expectedPreRegistrationActivityTreatment": "excluded",
+      "expectedActionComparison": "distinguishable"
+    },
+    {
+      "key": "ergoveritas-post-action-indistinguishable",
+      "url": "https://ergoveritas.com/testar2.html",
+      "cmpRecipe": "OneTrust",
+      "expectedAcceptanceRegistration": "confirmed",
+      "expectedPostAcceptActivity": true,
+      "expectedAcceptanceContradiction": true,
+      "expectedRefusalRegistration": "confirmed",
+      "expectedPostRefusalActivity": true,
+      "expectedPreRegistrationActivityTreatment": "excluded",
+      "expectedActionComparison": "indistinguishable"
+    }
+  ]
+}

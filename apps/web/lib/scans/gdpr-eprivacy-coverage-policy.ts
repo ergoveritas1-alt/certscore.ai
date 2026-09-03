@@ -1425,8 +1425,8 @@ function getConsentPaidDeclinePathConcern(
     const rawEvidence = concern.evidenceBundle.rawEvidence;
     return concern.originKey.startsWith("consent.paid_decline_path.") &&
       concern.originType === "runtime_artifact" &&
-      concern.promotionEligibility === "internal_only" &&
-      concern.externalSurfacingEligibility === "audit_only" &&
+      concern.promotionEligibility === "eligible" &&
+      concern.externalSurfacingEligibility === "eligible" &&
       concern.regulatoryChecklistEligibility === "review_signal" &&
       rawEvidence?.consentPaidDeclinePathEvidence === true;
   }) ?? null;
@@ -1804,7 +1804,13 @@ function deriveTransportSecurityOutcomes(input: GdprEprivacyCoveragePolicyInput)
     finalUrl: getString(summary, ["finalUrl", "final_url"]),
     formTransportCount: getNumber(summary, ["formTransportCount", "form_transport_count"]),
     httpProbeAttempted: getBoolean(summary, ["httpProbeAttempted", "http_probe_attempted"]),
+    httpProbeErrorCategory: getString(summary, ["httpProbeErrorCategory", "http_probe_error_category"]),
+    httpProbeErrorMessage: getString(summary, ["httpProbeErrorMessage", "http_probe_error_message"]),
+    httpProbeFinalScheme: getString(summary, ["httpProbeFinalScheme", "http_probe_final_scheme"]),
     httpProbeFinalUrl: getString(summary, ["httpProbeFinalUrl", "http_probe_final_url"]),
+    httpProbeOutcome: getString(summary, ["httpProbeOutcome", "http_probe_outcome"]),
+    httpProbeRedirectChain: getStringArray(summary, ["httpProbeRedirectChain", "http_probe_redirect_chain"]).slice(0, 12),
+    httpProbeStatus: getNumber(summary, ["httpProbeStatus", "http_probe_status"]),
     httpRedirectsToHttps: getBoolean(summary, ["httpRedirectsToHttps", "http_redirects_to_https"]),
     insecureFormTransportObserved: getBoolean(summary, ["insecureFormTransportObserved", "insecure_form_transport_observed"]),
     insecureFormTransports: getObjectArray(summary, ["insecureFormTransports", "insecure_form_transports"]).slice(0, 12),
@@ -1908,16 +1914,65 @@ function deriveTransportSecurityOutcomes(input: GdprEprivacyCoveragePolicyInput)
         value: validTlsCertificate,
       });
     })(),
-    transportOutcomeFromBoolean({
-      falseStatus: "Gap observed",
-      falseText: "The explicit HTTP-origin probe did not redirect to HTTPS.",
-      nullText: "The explicit HTTP-origin redirect probe was not retained or did not complete.",
-      retainedEvidence,
-      rowId: "transport_security_http_redirect",
-      trueStatus: "Observed",
-      trueText: "The explicit HTTP-origin probe redirected to HTTPS.",
-      value: getBoolean(summary, ["httpRedirectsToHttps", "http_redirects_to_https"]),
-    }),
+    (() => {
+      const rowId = "transport_security_http_redirect";
+      const outcome = getString(summary, ["httpProbeOutcome", "http_probe_outcome"]);
+      const status = getNumber(summary, ["httpProbeStatus", "http_probe_status"]);
+      const errorCategory = getString(summary, ["httpProbeErrorCategory", "http_probe_error_category"]);
+      const redirected = getBoolean(summary, ["httpRedirectsToHttps", "http_redirects_to_https"]);
+      if (outcome === "redirected_to_https" || (outcome === null && redirected === true)) {
+        return makeOutcome(
+          rowId,
+          "Observed",
+          "The explicit HTTP-origin probe redirected to HTTPS.",
+          transportEvidenceRef(summary),
+          { retainedEvidence },
+        );
+      }
+      if (outcome === "plaintext_response_served") {
+        return makeOutcome(
+          rowId,
+          "Gap observed",
+          `The explicit HTTP-origin probe served a terminal${status === null ? "" : ` HTTP ${status}`} response over plaintext HTTP instead of redirecting to HTTPS.`,
+          transportEvidenceRef(summary),
+          { retainedEvidence },
+        );
+      }
+      if (outcome === "http_request_rejected") {
+        return makeOutcome(
+          rowId,
+          "Not testable",
+          `The HTTP origin returned${status === null ? "" : ` HTTP ${status}`} without serving normal page content or redirecting to HTTPS. This is retained as transport-hardening context, not proof of plaintext content exposure.`,
+          transportEvidenceRef(summary),
+          { retainedEvidence },
+        );
+      }
+      if (outcome === "probe_failed") {
+        return makeOutcome(
+          rowId,
+          "Not testable",
+          `The explicit HTTP-origin probe did not complete${errorCategory ? ` (${errorCategory})` : ""}; an operational failure does not establish plaintext content exposure.`,
+          transportEvidenceRef(summary),
+          { retainedEvidence },
+        );
+      }
+      if (redirected === false) {
+        return makeOutcome(
+          rowId,
+          "Not testable",
+          "The retained legacy redirect flag was negative, but no typed terminal HTTP outcome was retained. The evidence is insufficient to distinguish plaintext content from a rejected or failed probe.",
+          transportEvidenceRef(summary),
+          { retainedEvidence },
+        );
+      }
+      return makeOutcome(
+        rowId,
+        "Not testable",
+        "The explicit HTTP-origin redirect probe was not retained or did not complete.",
+        transportEvidenceRef(summary),
+        { retainedEvidence },
+      );
+    })(),
     transportOutcomeFromBoolean({
       falseStatus: "Observed",
       falseText: "No mixed-content HTTP subresources were retained for the scanned HTTPS page.",
@@ -2592,7 +2647,7 @@ function derivePreConsentCookieStorageOutcome(input: GdprEprivacyCoveragePolicyI
     return makeOutcome(
       "pre_consent_cookies_storage",
       "Review signal",
-      "Non-essential storage candidates were present in a pre-consent snapshot, but retained evidence did not confirm that they were written during the scan.",
+      "Classified non-essential storage identities were present in a pre-consent snapshot, but retained evidence did not confirm that they were written during the scan.",
       evidenceRefs,
       { retainedEvidence }
     );
@@ -4109,7 +4164,7 @@ function deriveThirdPartyIframePreConsentOutcome(input: GdprEprivacyCoveragePoli
     return makeOutcome(
       "third_party_iframe_pre_consent",
       "Gap observed",
-      "Known 3rd party iframe embeds were retained before a recorded consent action on the scanned page.",
+      "Known 3rd party iframe embeds were retained before a recorded consent action on the scanned page. This establishes pre-consent embedded-service activity, not tracking classification by itself.",
       [
         `3rd party iframe observations: ${observedCount}`,
         ...evidence.embeddedHosts.map((host) => `Iframe host: ${host}`).slice(0, 5),
@@ -4255,13 +4310,15 @@ function deriveRejectPathOutcome(input: GdprEprivacyCoveragePolicyInput) {
       ]).slice(0, 12),
       {
         retainedEvidence: {
+          scoreEffect: "none",
           consentPaidDeclinePathConcern: {
             canonicalConcernKey: paidDeclinePathConcern.canonicalConcernKey,
             originKey: paidDeclinePathConcern.originKey,
             regulatoryChecklistEligibility: paidDeclinePathConcern.regulatoryChecklistEligibility
           },
           freeRejectControlObserved: false,
-          paidSubscriptionDeclinePathObserved: true,
+          paidSubscriptionDeclinePathObserved: !paymentRequired,
+          paymentRequiredDeclinePathObserved: paymentRequired,
           retainedConsentPaidDeclineControls: retainedControls
         }
       }
@@ -6142,6 +6199,7 @@ function hasConcretePostRejectNonEssentialDetail(row: Record<string, unknown>) {
 
 function derivePostRejectOutcome(input: GdprEprivacyCoveragePolicyInput) {
   const consentLifecycleLimitation = getConsentLifecycleAuditLimitation(input.runtimeArtifacts);
+  const firstLayerChoiceEvidence = getFirstLayerConsentChoiceEvidence(input);
   const rejectDiagnostic = getEventMetadata(input.events, "reject_persistence_diagnostic");
   const consentOutcomeSummary = getHybridConsentOutcomeSummary(input.runtimeArtifacts);
   const reductionEvidence = getPostRejectTrackingReductionEvidence(input.runtimeArtifacts);
@@ -6252,6 +6310,27 @@ function derivePostRejectOutcome(input: GdprEprivacyCoveragePolicyInput) {
     rejectInteractionFailureReason,
     rejectInteractionConfirmed: rejectInteractionSucceeded
   };
+
+  const completeFirstLayerInventoryWithoutReject =
+    firstLayerChoiceEvidence.assessment?.assessmentStatus === "complete" &&
+    firstLayerChoiceEvidence.rejectControlObserved === false;
+  if (completeFirstLayerInventoryWithoutReject) {
+    return makeOutcome(
+      "post_reject_tracking_reduction",
+      "Not testable",
+      "The completed first-layer consent inventory retained no actionable Reject or necessary-only control, so a post-Reject activity window was not applicable. Missing refusal-control availability is assessed separately.",
+      [
+        "Evidence: complete first-layer consent-control assessment",
+        "Reason: no_actionable_reject_control"
+      ],
+      {
+        retainedEvidence: {
+          ...postRejectRetainedEvidence,
+          productionPosture: "not_applicable_no_reject_control"
+        }
+      }
+    );
+  }
 
   if (
     POST_CHOICE_FLOW_DEFERRED_FROM_PRODUCTION_CORE ||
@@ -6864,7 +6943,12 @@ const POLICY_DISCLOSURE_ROWS: PolicyDisclosureRowConfig[] = [
   {
     rowId: "privacy_notice_availability",
     label: "Privacy notice",
-    signalKeys: ["privacyPolicyPresent", "privacy_policy_present"],
+    signalKeys: [
+      "privacyNoticeAvailabilityObserved",
+      "privacy_notice_availability_observed",
+      "privacyPolicyPresent",
+      "privacy_policy_present",
+    ],
     textPattern: /privacy policy|privacy notice|privacy center/i
   },
   {
@@ -6918,7 +7002,7 @@ const POLICY_DISCLOSURE_ROWS: PolicyDisclosureRowConfig[] = [
   },
   {
     rowId: "dpo_contact_point_disclosure",
-    label: "Privacy contact point",
+    label: "DPO contact point (where applicable)",
     disclosureType: "dpo_contact",
     signalKeys: ["dpoContactPointDisclosureObserved", "dpo_contact_point_disclosure_observed"],
     textPattern: /data protection officer|dpo|chief privacy officer|privacy officer|privacy office|privacy contact|privacy team|data protection contact/i
@@ -8526,6 +8610,10 @@ function derivePolicyDisclosureOutcome(input: GdprEprivacyCoveragePolicyInput, c
   }
 
   const privacyPolicyPresent =
+    getBoolean(summary, [
+      "privacyNoticeAvailabilityObserved",
+      "privacy_notice_availability_observed",
+    ]) === true ||
     getBoolean(summary, ["privacyPolicyPresent", "privacy_policy_present"]) === true ||
     getBoolean(input.snapshot, ["privacy_policy_present", "privacyPolicyPresent"]) === true;
   const text = getPolicyDisclosureText(summary);

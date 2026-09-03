@@ -6,7 +6,7 @@ import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/
 const DISCOVERY_URL = "https://certscore.ai/.well-known/certscore-ai.json";
 const MCP_ORIGIN = "https://mcp.certscore.ai";
 const LIGHT_ENDPOINT = `${MCP_ORIGIN}/mcp/light`;
-const EXPECTED_VERSION = "0.2.16";
+const EXPECTED_VERSION = "0.2.17";
 const EXPECTED_TOOLS = [
   "certscore_get_scan_bundle",
   "certscore_get_scan_status",

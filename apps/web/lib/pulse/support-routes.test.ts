@@ -77,7 +77,7 @@ test("ChatGPT Action OpenAPI route returns compact action-safe JSON", async () =
   const body = await response.json();
   assert.equal(body.openapi, "3.1.1");
   assert.equal(body.info.title, "CertScore Pulse GPT Action API beta");
-  assert.equal(body.info.version, "0.5.4");
+  assert.equal(body.info.version, "0.5.5");
   assert.equal(body.paths["/api/v1/pulse/gpt"].get.operationId, "getPulseForUrl");
   assert.equal(body.paths["/api/v1/pulse/status/{jobId}"].get.operationId, "getPulseJobStatus");
   assert.equal(body.paths["/api/v1/pulse/gpt/scan/{scanId}"].get.operationId, "getPulseByScanId");
@@ -206,7 +206,7 @@ test("Pulse OpenAPI smoke: /api/v1/openapi.json is JSON OpenAPI 3.1, not an app 
   const body = JSON.parse(rawBody);
   assert.equal(body.openapi, "3.1.0");
   assert.equal(body.info.title, "CertScore Pulse API beta");
-  assert.equal(body.info.version, "0.5.4");
+  assert.equal(body.info.version, "0.5.5");
   assert.ok(body.paths["/api/v1/pulse"]);
   assert.match(rawBody, /forceNewScan/);
   assert.equal(body.paths["/api/v1/pulse/status/{jobId}"].get.responses["429"].content["application/json"].schema.$ref, "#/components/schemas/PulseError");
@@ -229,7 +229,7 @@ test("Pulse discovery route returns compact machine-readable metadata", async ()
 
   const body = await response.json();
   assert.equal(body.name, "CertScore Pulse beta");
-  assert.equal(body.version, "0.5.4");
+  assert.equal(body.version, "0.5.5");
   assert.equal(body.api, "https://certscore.ai/api/v1/pulse");
   assert.equal(body.openapi, "https://certscore.ai/api/v1/openapi.json");
   assert.equal(body.chatgptOpenapi, "https://certscore.ai/api/v1/openapi.chatgpt.json");
@@ -265,7 +265,7 @@ test("Pulse health canary route is dependency-free JSON", async () => {
   assert.equal(body.ok, true);
   assert.equal(body.service, "certscore-pulse");
   assert.equal(body.version, "v1");
-  assert.equal(body.betaVersion, "0.5.4");
+  assert.equal(body.betaVersion, "0.5.5");
   assert.match(body.generatedAt, /^\d{4}-\d{2}-\d{2}T/);
 
   const source = readFileSync("apps/web/app/api/v1/pulse-health/route.ts", "utf8");
@@ -287,7 +287,7 @@ test("Pulse self-test route is dependency-free JSON with capabilities", async ()
   assert.equal(body.type, "certscore_pulse_self_test");
   assert.equal(body.service, "certscore_pulse");
   assert.equal(body.version, "v1");
-  assert.equal(body.betaVersion, "0.5.4");
+  assert.equal(body.betaVersion, "0.5.5");
   assert.equal(body.routes.health, "/api/v1/pulse-health");
   assert.equal(body.routes.openapi, "/api/v1/openapi.json");
   assert.equal(body.routes.chatgptOpenapi, "/api/v1/openapi.chatgpt.json");
@@ -304,7 +304,7 @@ test("Pulse docs page source includes integration-critical guidance", () => {
   const source = readFileSync("apps/web/app/api-pulse/page.tsx", "utf8");
 
   assert.match(source, /CertScore\.ai Pulse API beta/);
-  assert.match(source, /0\.5\.4/);
+  assert.match(source, /0\.5\.5/);
   assert.match(source, /forceNewScan/);
   assert.match(source, /24-hour reuse/);
   assert.match(source, /scanFrom/);
@@ -358,7 +358,7 @@ test("Pulse agent fallback page documents the fetch failure diagnostic contract"
   const source = readFileSync("apps/web/app/api-pulse/agent/page.tsx", "utf8");
 
   assert.match(source, /Agent-readable beta fallback/);
-  assert.match(source, /0\.5\.4/);
+  assert.match(source, /0\.5\.5/);
   assert.match(source, /forceNewScan=true/);
   assert.match(source, /24 hours/);
   assert.match(source, /scanFrom/);
@@ -388,7 +388,7 @@ test("Pulse plain text agent guide is retrievable and covers fetch failures", ()
   const source = readFileSync("apps/web/public/api-pulse-agent-guide.txt", "utf8");
 
   assert.match(source, /CertScore\.ai Pulse beta agent guide/);
-  assert.match(source, /0\.5\.4/);
+  assert.match(source, /0\.5\.5/);
   assert.match(source, /forceNewScan=true/);
   assert.match(source, /24-hour reuse/);
   assert.match(source, /scanFrom or geo/);
@@ -723,14 +723,15 @@ test("Developer API docs are discoverable by crawlers and agent manifests", asyn
   assert.equal(aiDiscovery.sdk.docs, "https://certscore.ai/developers/sdk");
   assert.equal(aiDiscovery.sdk.distribution, "npm");
   assert.equal(aiDiscovery.sdk.status, "published");
-  assert.equal(aiDiscovery.sdk.currentVersion, "0.2.8");
+  assert.equal(aiDiscovery.sdk.currentVersion, "0.2.10");
+  assert.equal(aiDiscovery.sdk.install, "npm install @certscore/sdk@0.2.10");
   assert.equal(aiDiscovery.mcp.docs, "https://certscore.ai/developers/mcp");
   assert.equal(aiDiscovery.mcp.distribution, "homebrew");
   assert.equal(aiDiscovery.mcp.binary, "certscore-mcp");
   assert.equal(aiDiscovery.mcp.packageStatus, "homebrew_developer_preview");
-  assert.equal(aiDiscovery.mcp.currentVersion, "0.2.12");
+  assert.equal(aiDiscovery.mcp.currentVersion, "0.2.17");
   assert.equal(aiDiscovery.mcp.hosted.endpoint, "https://mcp.certscore.ai/mcp");
-  assert.equal(aiDiscovery.mcp.hosted.currentVersion, "0.2.16");
+  assert.equal(aiDiscovery.mcp.hosted.currentVersion, "0.2.17");
   assert.match(aiDiscovery.mcp.hosted.authentication, /PKCE/);
   assert.equal(aiDiscovery.mcp.anonymous.endpoint, "https://mcp.certscore.ai/mcp/anonymous");
   assert.equal(aiDiscovery.mcp.anonymous.authentication, "none");
@@ -749,14 +750,16 @@ test("Developer API docs are discoverable by crawlers and agent manifests", asyn
   assert.equal(aiDiscovery.mcp.light.rollingNewScanLimit, 5);
   assert.equal(aiDiscovery.mcp.light.rollingWindowSeconds, 600);
   assert.equal(aiDiscovery.mcp.light.recentReuseDoesNotConsumeQuota, true);
-  assert.equal(aiDiscovery.mcp.light.version, "0.2.16");
+  assert.equal(aiDiscovery.mcp.light.version, "0.2.17");
   assert.equal(aiDiscovery.mcp.light.privacyUrl, "https://certscore.ai/privacy");
   assert.equal(aiDiscovery.mcp.light.termsUrl, "https://certscore.ai/terms");
   assert.equal(aiDiscovery.mcp.light.iconUrl, "https://certscore.ai/certscore-mark-dark.png");
   assert.equal(aiDiscovery.mcp.light.darkBackgroundIconUrl, "https://certscore.ai/certscore-mark-light.png");
   assert.equal(aiDiscovery.mcp.light.clineMarketplaceIconUrl, "https://certscore.ai/images/mcp-directory/certscore-mcp-light-cline-400.png");
   assert.match(aiDiscovery.mcp.light.shortDescription, /^Free website privacy scanner/);
-  assert.match(aiDiscovery.mcp.light.longDescription, /only after a Reject action is confirmed and qualifying evidence is retained/);
+  assert.match(aiDiscovery.mcp.light.longDescription, /Accept is a score-neutral comparison baseline/);
+  assert.match(aiDiscovery.mcp.light.longDescription, /confirmed refusal-state transition and qualifying retained evidence/);
+  assert.deepEqual(aiDiscovery.capabilities.choicePathResults, ["postAcceptObservation", "postRefusalObservation", "gpcResponse"]);
   assert.match(aiDiscovery.mcp.light.longDescription, /not legal advice, certification, or a compliance determination/);
   assert.deepEqual(aiDiscovery.mcp.light.tools, ["certscore_scan_site", "certscore_get_scan_status", "certscore_get_scan_bundle"]);
   assert.equal(

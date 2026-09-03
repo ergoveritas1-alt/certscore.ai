@@ -131,6 +131,7 @@ export async function createAnonymousFullScan(input: {
           requestContext: {
             bypassRecentScanReuse,
             coveragePlanCode,
+            gpcObservationEnabled: true,
             ipHash: requesterIpContext.ipHash,
             localV2DagRunViaLambda: Boolean(input.localV2DagRunViaLambda),
             minimumReusablePagesRequested: minimumReusablePagesRequested ?? null,
@@ -171,6 +172,7 @@ export async function createAnonymousFullScan(input: {
       requestContext: {
         bypassRecentScanReuse,
         coveragePlanCode,
+        gpcObservationEnabled: true,
         ipHash: requesterIpContext.ipHash,
         localV2DagRunViaLambda: Boolean(input.localV2DagRunViaLambda),
         minimumReusablePagesRequested: minimumReusablePagesRequested ?? null,
@@ -211,6 +213,7 @@ export async function createAnonymousFullScan(input: {
         requestedUrl: input.normalizedUrl,
         requestContext: {
           coveragePlanCode,
+          gpcObservationEnabled: true,
           ipHash: requesterIpContext.ipHash,
           provenance: input.provenance ?? null,
           quota: "scope" in quota ? {
@@ -323,6 +326,7 @@ export async function createAnonymousFullScan(input: {
     requestContext: {
       bypassRecentScanReuse,
       coveragePlanCode,
+      gpcObservationEnabled: true,
       ipHash: requesterIpContext.ipHash,
       localV2DagRunViaLambda: Boolean(input.localV2DagRunViaLambda),
       minimumReusablePagesRequested: minimumReusablePagesRequested ?? null,

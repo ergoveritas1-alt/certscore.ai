@@ -668,6 +668,102 @@ test("classifies Jonneke-shaped German policy sections without relying on Englis
   }
 });
 
+test("classifies natural German transparency clauses without requiring formal headings", () => {
+  const examples = [
+    ["processing_purposes", "Datenschutzerklärung. Ihre personenbezogenen Daten werden verwendet, um Termine zu verwalten und Anfragen zu beantworten."],
+    ["legal_basis", "Datenschutzerklärung. Wir verarbeiten Ihre personenbezogenen Daten auf Grundlage Ihrer Einwilligung und zur Erfüllung gesetzlicher Verpflichtungen."],
+    ["recipients_or_vendor_categories", "Datenschutzerklärung. Personenbezogene Daten werden an unseren Hosting-Dienstleister übermittelt, der sie in unserem Auftrag verarbeitet."],
+    ["data_retention", "Datenschutzerklärung. Wir speichern Ihre personenbezogenen Daten solange dies erforderlich ist und gesetzliche Aufbewahrungsfristen bestehen."],
+    ["supervisory_authority", "Datenschutzerklärung. Sie können sich bei einer Datenschutzaufsichtsbehörde beschweren, wenn Sie die Verarbeitung für rechtswidrig halten."],
+    ["automated_decision_making_or_profiling", "Datenschutzerklärung. Eine automatisierte Entscheidungsfindung einschließlich Profiling findet nicht statt."],
+  ] as const satisfies ReadonlyArray<readonly [GdprTransparencyTopic, string]>;
+
+  for (const [topic, text] of examples) {
+    const match = classifyGdprTransparencyTopics({ localeHints: ["de"], text }).matches.find(
+      (candidate) => candidate.topic === topic,
+    );
+    assert.ok(match, `German natural clause should classify ${topic}`);
+    assert.equal(match.matchedLocale, "de");
+    assert.equal(match.matchStrength, "equivalent");
+    assert.ok(match.evidenceExcerpt.length > 0 && match.evidenceExcerpt.length <= 360);
+  }
+});
+
+test("classifies calibrated natural transparency clauses across high-coverage European locales", () => {
+  const examples = [
+    {
+      locale: "fr",
+      text: "Politique de confidentialité. Vos données personnelles sont utilisées afin de gérer votre compte. Le traitement repose sur votre consentement et une obligation légale. Vos données personnelles sont transmises à un sous-traitant. Les données personnelles sont conservées aussi longtemps que nécessaire. Vous avez le droit de déposer une réclamation auprès de la CNIL. La prise de décision automatisée n'a pas lieu.",
+    },
+    {
+      locale: "es",
+      text: "Política de privacidad. Sus datos personales se utilizan para gestionar su cuenta. El tratamiento se basa en su consentimiento y una obligación legal. Sus datos personales se comunican a un encargado del tratamiento. Los datos personales se conservan mientras sea necesario. Tiene derecho a presentar una reclamación ante la autoridad de control. La toma de decisiones automatizada no se utiliza.",
+    },
+    {
+      locale: "it",
+      text: "Informativa sulla privacy. I suoi dati personali sono utilizzati per gestire il conto. Il trattamento si basa sul suo consenso e su un obbligo legale. I suoi dati personali sono comunicati a un responsabile del trattamento. I dati personali sono conservati finché necessario. Ha il diritto di presentare un reclamo all'autorità di controllo. Il processo decisionale automatizzato non viene utilizzato.",
+    },
+    {
+      locale: "nl",
+      text: "Privacyverklaring. Uw persoonsgegevens worden gebruikt om uw account te beheren. De verwerking berust op uw toestemming en een wettelijke verplichting. Uw persoonsgegevens worden doorgegeven aan een verwerker. Persoonsgegevens worden bewaard zolang dat nodig is. U heeft het recht een klacht in te dienen bij de Autoriteit Persoonsgegevens. Geautomatiseerde besluitvorming vindt niet plaats.",
+    },
+    {
+      locale: "pl",
+      text: "Polityka prywatności. Państwa dane osobowe są wykorzystywane w celu zarządzania kontem. Przetwarzanie odbywa się na podstawie Państwa zgody i obowiązku prawnego. Państwa dane osobowe są przekazywane podmiotowi przetwarzającemu. Dane osobowe są przechowywane tak długo jak jest to niezbędne. Mają Państwo prawo wniesienia skargi do organu nadzorczego. Zautomatyzowane podejmowanie decyzji nie jest stosowane.",
+    },
+    {
+      locale: "pt",
+      text: "Política de privacidade. Os seus dados pessoais são utilizados para gerir a conta. O tratamento baseia-se no seu consentimento e numa obrigação legal. Os seus dados pessoais são transmitidos a um subcontratante. Os dados pessoais são conservados enquanto necessário. Tem o direito de apresentar uma reclamação à autoridade de controlo. A tomada de decisões automatizada não é utilizada.",
+    },
+  ] as const;
+  const expectedTopics = [
+    "processing_purposes",
+    "legal_basis",
+    "recipients_or_vendor_categories",
+    "data_retention",
+    "supervisory_authority",
+    "automated_decision_making_or_profiling",
+  ] as const satisfies readonly GdprTransparencyTopic[];
+
+  for (const example of examples) {
+    const topics = new Set(classifyGdprTransparencyTopics({
+      localeHints: [example.locale],
+      text: example.text,
+    }).matches.map((match) => match.topic));
+    for (const topic of expectedTopics) {
+      assert.equal(topics.has(topic), true, `${example.locale} natural clause should classify ${topic}`);
+    }
+  }
+});
+
+test("keeps localized operational retention, complaints, and automation out of transparency topics", () => {
+  const examples = [
+    ["de", "Der Versand wird solange wie nötig gespeichert. Kundenbeschwerden werden automatisch an den Vertrieb weitergeleitet."],
+    ["fr", "Les colis sont conservés aussi longtemps que nécessaire. Les réclamations clients sont triées automatiquement par le support."],
+    ["es", "Los paquetes se conservan mientras sea necesario. Las reclamaciones de clientes se clasifican automáticamente para ventas."],
+    ["it", "Le spedizioni sono conservate finché necessario. I reclami dei clienti vengono ordinati automaticamente dal supporto."],
+    ["nl", "Pakketten worden bewaard zolang dat nodig is. Klachten van klanten worden automatisch naar verkoop gestuurd."],
+    ["pl", "Przesyłki są przechowywane tak długo jak potrzeba. Skargi klientów są automatycznie kierowane do sprzedaży."],
+    ["pt", "As encomendas são conservadas enquanto necessário. As reclamações de clientes são encaminhadas automaticamente para vendas."],
+  ] as const;
+  const guardedTopics: GdprTransparencyTopic[] = [
+    "data_retention",
+    "supervisory_authority",
+    "automated_decision_making_or_profiling",
+  ];
+
+  for (const [locale, text] of examples) {
+    const classification = classifyGdprTransparencyTopics({ localeHints: [locale], text });
+    for (const topic of guardedTopics) {
+      assert.equal(
+        classification.matches.some((match) => match.topic === topic),
+        false,
+        `${locale} operational text should not classify ${topic}`,
+      );
+    }
+  }
+});
+
 test("classifies Polish Article 13 policy wording with explicit processing context", () => {
   const classification = classifyGdprTransparencyTopics({
     localeHints: ["pl"],
@@ -1623,6 +1719,76 @@ test("classifies reviewed inflection and official-vocabulary variants for the fi
   }
 });
 
+test("classifies natural transparency clauses in the five calibrated EU expansion locales", () => {
+  const cases = [
+    {
+      locale: "ro",
+      text: "Politică de confidențialitate. Datele cu caracter personal sunt utilizate pentru a gestiona contul. Prelucrarea se bazează pe consimțământ și pe o obligație legală. Datele personale sunt transmise unei persoane împuternicite. Păstrăm datele personale atât timp cât este necesar. Puteți depune o plângere la autoritatea de supraveghere. Nu folosim un proces decizional automatizat sau profilare.",
+    },
+    {
+      locale: "cs",
+      text: "Zásady ochrany osobních údajů. Osobní údaje používáme k vyřízení vašeho účtu. Zpracování je založeno na souhlasu a právní povinnosti. Osobní údaje předáváme poskytovatelům služeb. Uchováváme osobní údaje po dobu nezbytně nutnou. Můžete podat stížnost u dozorového úřadu. Neprovádíme automatizované rozhodování ani profilování.",
+    },
+    {
+      locale: "el",
+      text: "Πολιτική απορρήτου. Τα προσωπικά δεδομένα χρησιμοποιούνται για τη διαχείριση του λογαριασμού σας. Η επεξεργασία βασίζεται στη συγκατάθεσή σας και σε νομική υποχρέωση. Τα προσωπικά δεδομένα διαβιβάζονται σε εκτελούντα την επεξεργασία. Διατηρούμε τα προσωπικά δεδομένα για όσο διάστημα είναι αναγκαίο. Μπορείτε να υποβάλετε καταγγελία στην εποπτική αρχή. Δεν χρησιμοποιούμε αυτοματοποιημένη λήψη αποφάσεων ή κατάρτιση προφίλ.",
+    },
+    {
+      locale: "hu",
+      text: "Adatvédelmi tájékoztató. Személyes adatait a fiók kezelése céljából használjuk. Az adatkezelés alapja az Ön hozzájárulása és jogi kötelezettség. Személyes adatait adatfeldolgozóknak továbbítjuk. Személyes adatait addig őrizzük meg, ameddig szükséges. Panaszt nyújthat be a felügyeleti hatóságnál. Nem alkalmazunk automatizált döntéshozatalt vagy profilalkotást.",
+    },
+    {
+      locale: "da",
+      text: "Privatlivspolitik. Dine personoplysninger bruges til at administrere din konto. Behandlingen er baseret på samtykke og en retlig forpligtelse. Dine personoplysninger videregives til databehandlere. Vi opbevarer personoplysninger så længe som nødvendigt. Du kan indgive en klage til Datatilsynet. Vi anvender ikke automatiserede afgørelser eller profilering.",
+    },
+  ] as const;
+  const expectedTopics = [
+    "processing_purposes",
+    "legal_basis",
+    "recipients_or_vendor_categories",
+    "data_retention",
+    "supervisory_authority",
+    "automated_decision_making_or_profiling",
+  ] as const satisfies readonly GdprTransparencyTopic[];
+
+  for (const entry of cases) {
+    const classification = classifyGdprTransparencyTopics({
+      text: entry.text,
+      localeHints: [entry.locale],
+    });
+    const topics = new Set(classification.matches.map((match) => match.topic));
+    for (const topic of expectedTopics) {
+      assert.equal(topics.has(topic), true, `${entry.locale} natural clause should classify ${topic}`);
+    }
+  }
+});
+
+test("keeps operational copy out of the new EU natural-clause semantic rules", () => {
+  const cases = [
+    ["ro", "Păstrăm coletele atât timp cât este necesar. Plângerile clienților sunt procesate automat de echipa de vânzări."],
+    ["cs", "Uchováváme zásilky po dobu nezbytně nutnou. Stížnosti zákazníků automaticky vyřizuje prodejní tým."],
+    ["el", "Διατηρούμε τα δέματα για όσο διάστημα είναι αναγκαίο. Οι καταγγελίες πελατών ταξινομούνται αυτόματα για τις πωλήσεις."],
+    ["hu", "A csomagokat addig őrizzük meg, ameddig szükséges. Az ügyfélpanaszokat automatikusan az értékesítéshez irányítjuk."],
+    ["da", "Vi opbevarer pakker så længe som nødvendigt. Kundeklager sendes automatisk til salgsteamet."],
+  ] as const;
+  const guardedTopics: GdprTransparencyTopic[] = [
+    "data_retention",
+    "supervisory_authority",
+    "automated_decision_making_or_profiling",
+  ];
+
+  for (const [locale, text] of cases) {
+    const classification = classifyGdprTransparencyTopics({ text, localeHints: [locale] });
+    for (const topic of guardedTopics) {
+      assert.equal(
+        classification.matches.some((match) => match.topic === topic),
+        false,
+        `${locale} operational copy should not classify ${topic}`,
+      );
+    }
+  }
+});
+
 test("does not classify generic operational copy in the five EU expansion locales", () => {
   const cases = [
     ["ro", "Perioada de păstrare a coletelor depinde de curier, iar scopul paginii este prezentarea produselor."],
@@ -1685,6 +1851,70 @@ test("does not classify generic operational copy in the Nordic, Central European
 
   for (const [locale, text] of cases) {
     assert.deepEqual(classifyGdprTransparencyTopics({ text, localeHints: [locale] }).matches, [], locale);
+  }
+});
+
+test("classifies natural transparency clauses across the Nordic Central European Baltic Ukrainian and Turkish wave", () => {
+  const cases = [
+    ["fi", "Tietosuojakäytäntö. Henkilötietoja käytetään tilin hallintaan. Käsittely perustuu suostumukseen ja lakisääteiseen velvoitteeseen. Henkilötietoja luovutetaan palveluntarjoajille. Säilytämme henkilötietoja niin kauan kuin tarpeen. Voit tehdä valituksen tietosuojaviranomaiselle. Emme käytä automatisoitua päätöksentekoa tai profilointia."],
+    ["sk", "Zásady ochrany osobných údajov. Osobné údaje používame na správu účtu. Spracúvanie je založené na súhlase a zákonnej povinnosti. Osobné údaje poskytujeme sprostredkovateľom. Uchovávame osobné údaje, kým je to potrebné. Môžete podať sťažnosť dozornému orgánu. Nepoužívame automatizované rozhodovanie ani profilovanie."],
+    ["bg", "Политика за поверителност. Личните данни се използват за управление на профила. Обработването се основава на съгласие и законово задължение. Личните данни се предоставят на обработващи лични данни. Съхраняваме личните данни, докато е необходимо. Можете да подадете жалба до надзорен орган. Не използваме автоматизирано вземане на решения или профилиране."],
+    ["hr", "Pravila privatnosti. Osobne podatke koristimo za upravljanje računom. Obrada se temelji na privoli i zakonskoj obvezi. Osobne podatke prosljeđujemo izvršiteljima obrade. Čuvamo osobne podatke dok god je potrebno. Možete podnijeti pritužbu nadzornom tijelu. Ne koristimo automatizirano donošenje odluka ili profiliranje."],
+    ["nb", "Personvernerklæring. Personopplysninger brukes til å administrere kontoen. Behandlingen er basert på samtykke og rettslig forpliktelse. Personopplysninger utleveres til databehandlere. Vi lagrer personopplysninger så lenge som nødvendig. Du kan sende inn en klage til Datatilsynet. Vi bruker ikke automatiserte avgjørelser eller profilering."],
+    ["sl", "Pravilnik o zasebnosti. Osebne podatke uporabljamo za upravljanje računa. Obdelava temelji na privolitvi in zakonski obveznosti. Osebne podatke posredujemo obdelovalcem. Hranimo osebne podatke, dokler je potrebno. Lahko vložite pritožbo pri nadzornem organu. Ne uporabljamo avtomatiziranega sprejemanja odločitev ali profiliranja."],
+    ["lt", "Privatumo politika. Asmens duomenis naudojame paskyrai tvarkyti. Duomenų tvarkymas grindžiamas sutikimu ir teisine prievole. Asmens duomenis perduodame duomenų tvarkytojams. Saugome asmens duomenis tol, kol tai būtina. Galite pateikti skundą priežiūros institucijai. Nenaudojame automatizuoto sprendimų priėmimo ar profiliavimo."],
+    ["lv", "Privātuma politika. Personas datus izmantojam konta pārvaldīšanai. Datu apstrāde balstās uz piekrišanu un juridisku pienākumu. Personas datus nododam apstrādātājiem. Glabājam personas datus tik ilgi, cik nepieciešams. Varat iesniegt sūdzību uzraudzības iestādei. Neizmantojam automatizētu lēmumu pieņemšanu vai profilēšanu."],
+    ["et", "Privaatsuspoliitika. Isikuandmeid kasutame konto haldamiseks. Andmetöötlus põhineb nõusolekul ja seaduslikul kohustusel. Isikuandmeid edastame volitatud töötlejatele. Säilitame isikuandmeid nii kaua, kui vajalik. Võite esitada kaebuse järelevalveasutusele. Me ei kasuta automatiseeritud otsuseid ega profiilianalüüsi."],
+    ["uk", "Політика конфіденційності. Персональні дані використовуються для керування обліковим записом. Обробка ґрунтується на згоді та юридичному обов'язку. Персональні дані передаються обробникам. Зберігаємо персональні дані, доки це необхідно. Можете подати скаргу наглядовому органу. Ми не використовуємо автоматизоване прийняття рішень або профілювання."],
+    ["tr", "Gizlilik politikası. Kişisel verileri işliyoruz hizmet sunmak için. Veri işleme temelinde gerçekleşir açık rıza ve yasal yükümlülük. Kişisel verileri aktarırız veri işleyenlere. Kişisel verileri muhafaza ederiz gerektiği sürece. Şikayette bulunabilirsiniz denetim makamına. Otomatik karar vermeyi veya profillemeyi gerçekleştirmiyoruz."],
+  ] as const;
+  const expectedTopics = [
+    "processing_purposes",
+    "legal_basis",
+    "recipients_or_vendor_categories",
+    "data_retention",
+    "supervisory_authority",
+    "automated_decision_making_or_profiling",
+  ] as const satisfies readonly GdprTransparencyTopic[];
+
+  for (const [locale, text] of cases) {
+    const classification = classifyGdprTransparencyTopics({ text, localeHints: [locale] });
+    const topics = new Set(classification.matches.map((match) => match.topic));
+    for (const topic of expectedTopics) {
+      assert.equal(topics.has(topic), true, `${locale} natural clause should classify ${topic}`);
+    }
+  }
+});
+
+test("new Nordic Central European Baltic Ukrainian and Turkish clauses reject operational lookalikes", () => {
+  const cases = [
+    ["fi", "Säilytämme tuotteita niin kauan kuin tarpeen. Asiakasvalitukset ohjataan automaattisesti myyntiin."],
+    ["sk", "Uchovávame zásielky, kým je to potrebné. Sťažnosti zákazníkov sa automaticky posielajú predaju."],
+    ["bg", "Съхраняваме пратките, докато е необходимо. Жалбите на клиентите се изпращат автоматично към продажбите."],
+    ["hr", "Čuvamo pošiljke dok god je potrebno. Pritužbe kupaca automatski se šalju prodaji."],
+    ["nb", "Vi lagrer pakker så lenge som nødvendig. Kundeklager sendes automatisk til salg."],
+    ["sl", "Hranimo pakete, dokler je potrebno. Pritožbe strank se samodejno pošljejo prodaji."],
+    ["lt", "Saugome siuntas tol, kol būtina. Klientų skundai automatiškai siunčiami pardavimui."],
+    ["lv", "Glabājam sūtījumus tik ilgi, cik nepieciešams. Klientu sūdzības automātiski nosūta pārdošanai."],
+    ["et", "Säilitame pakke nii kaua, kui vajalik. Klientide kaebused saadetakse automaatselt müüki."],
+    ["uk", "Зберігаємо посилки, доки це необхідно. Скарги клієнтів автоматично надсилаються до відділу продажів."],
+    ["tr", "Paketleri gerektiği sürece saklarız. Müşteri şikayetleri otomatik olarak satışa yönlendirilir."],
+  ] as const;
+  const guardedTopics: GdprTransparencyTopic[] = [
+    "data_retention",
+    "supervisory_authority",
+    "automated_decision_making_or_profiling",
+  ];
+
+  for (const [locale, text] of cases) {
+    const classification = classifyGdprTransparencyTopics({ text, localeHints: [locale] });
+    for (const topic of guardedTopics) {
+      assert.equal(
+        classification.matches.some((match) => match.topic === topic),
+        false,
+        `${locale} operational copy should not classify ${topic}`,
+      );
+    }
   }
 });
 
@@ -2144,6 +2374,46 @@ test("classifies retained Article 4 and Article 6 policy wording without semanti
   }
 });
 
+test("classifies retained German clinic policy wording without exact-grammar gaps", () => {
+  const classification = classifyGdprTransparencyTopics({
+    localeHints: ["de"],
+    text: [
+      "Datenschutzerklärung. Personenbezogene Daten werden nur im Rahmen der Erforderlichkeit sowie zum Zwecke der Bereitstellung eines funktionsfähigen und nutzerfreundlichen Internetauftritts verarbeitet.",
+      "Mit der nachfolgenden Datenschutzerklärung informieren wir Sie über Art, Umfang, Zweck, Dauer und Rechtsgrundlage der Verarbeitung personenbezogener Daten.",
+      "Verantwortlicher Anbieter ist die Pferdeklinik Beispiel. Telefon: 05266 94940. E-Mail: datenschutz@example.test. Datenschutzbeauftragte/r beim Anbieter ist Dr. Beispiel.",
+      "II. Rechte der Nutzer und Betroffenen. Nutzer und Betroffene haben das Recht auf Bestätigung, auf Auskunft über die verarbeiteten Daten, auf Berichtigung, Löschung, Einschränkung der Verarbeitung und Übermittlung der Daten.",
+      "Sie haben das Recht auf Beschwerde gegenüber der Aufsichtsbehörde gemäß Art. 77 DSGVO.",
+      "Serverdaten werden an uns beziehungsweise an unseren Webspace-Provider übermittelt. Diese Speicherung erfolgt auf der Rechtsgrundlage von Art. 6 Abs. 1 lit. f DSGVO.",
+      "Unser berechtigtes Interesse liegt in der Verbesserung, Stabilität, Funktionalität und Sicherheit des Internetauftritts.",
+      "Alle Empfänger, denen gegenüber Daten offengelegt wurden, werden über Berichtigung oder Löschung von Daten unterrichtet.",
+    ].join(" "),
+  });
+  const topics = new Set(classification.matches.map((match) => match.topic));
+
+  for (const topic of [
+    "controller_contact",
+    "dpo_contact",
+    "processing_purposes",
+    "legal_basis",
+    "recipients_or_vendor_categories",
+    "data_retention",
+    "data_subject_rights",
+    "supervisory_authority",
+  ] satisfies GdprTransparencyTopic[]) {
+    assert.equal(topics.has(topic), true, topic);
+  }
+  assert.equal(topics.has("international_transfers"), false);
+  assert.equal(topics.has("automated_decision_making_or_profiling"), false);
+  assert.equal(
+    classification.matches.every((match) =>
+      match.classifierProvenance === "gdpr_transparency_topic_classifier.v1" &&
+      match.matchedLocale === "de" &&
+      match.evidenceExcerpt.length <= 360
+    ),
+    true,
+  );
+});
+
 test("SITS-shaped broad English variants remain unknown in operational copy", () => {
   const classification = classifyGdprTransparencyTopics({
     localeHints: ["en"],
@@ -2168,4 +2438,217 @@ test("Article 4 controller heading alone does not establish controller contact",
     classification.matches.some((match) => match.topic === "controller_contact"),
     false,
   );
+});
+
+test("canonical semantic clauses recover retained EU-IR topic evidence without generic personalization", () => {
+  const cases = [
+    ["automated_decision_making_or_profiling", "We do not carry out automated decision-making using personal information which produces legal effects or otherwise significantly affects individuals."],
+    ["international_transfers", "Personal data may be transferred to and processed in the United States or other countries using Standard Contractual Clauses and appropriate safeguards."],
+    ["legal_basis", "We process your personal data to perform our contract, comply with legal obligations, or pursue our legitimate interests."],
+    ["data_retention", "Account information is retained for five years after account closure to resolve disputes and comply with legal obligations."],
+    ["recipients_or_vendor_categories", "We share personal information with payment processors, hosting providers, and professional advisers that support the service."],
+    ["processing_purposes", "We use personal data to provide the service, process payments, prevent fraud, and respond to support requests."],
+  ] as const;
+
+  for (const [topic, text] of cases) {
+    const match = classifyGdprTransparencyTopics({ text }).matches.find((row) => row.topic === topic);
+    assert.equal(match?.matchStrength, "equivalent", topic);
+    assert.equal(match?.reasonCodes.includes("variant_semantic_clause"), true, topic);
+  }
+
+  assert.equal(classifyGdprTransparencyTopics({
+    text: "We personalize the homepage and recommend popular articles based on the current page.",
+  }).matches.some((row) => row.topic === "automated_decision_making_or_profiling"), false);
+  assert.equal(classifyGdprTransparencyTopics({
+    text: "We may share information with undefined third parties.",
+  }).matches.some((row) => row.topic === "recipients_or_vendor_categories"), false);
+});
+
+test("retained automated-decision misses classify across explicit negative and passive profiling forms", () => {
+  const disclosures = [
+    "Automated decision-making and profiling. This fixture does not use solely automated decision-making or profiling that produces legal effects or similarly significant effects for an individual.",
+    "The personal data collected via the Website is subject to automatic processing through profiling if the data subject has consented to such processing. As a result of profiling, a profile is built.",
+    "You may opt out from processing of your Personal Information for profiling in furtherance of decisions that produce legal or similarly significant effects. We do not conduct such processing activities.",
+  ];
+
+  for (const text of disclosures) {
+    const match = classifyGdprTransparencyTopics({ text }).matches.find(
+      (row) => row.topic === "automated_decision_making_or_profiling",
+    );
+    assert.ok(match, text);
+    assert.equal(match.reasonCodes.includes("variant_semantic_clause"), true, text);
+  }
+
+  for (const text of [
+    "This website does not use automated deployment decisions that affect build availability.",
+    "This service uses automated scanner classification only to evaluate synthetic website signals.",
+    "We personalize the homepage and recommend popular articles based on the current page.",
+  ]) {
+    assert.equal(
+      classifyGdprTransparencyTopics({ text }).matches.some(
+        (row) => row.topic === "automated_decision_making_or_profiling",
+      ),
+      false,
+      text,
+    );
+  }
+});
+
+test("section-aware classification binds verified headings to substantive bodies", () => {
+  const cases = [
+    ["processing_purposes", "How we use the information we collect", "We operate the service, answer support requests, prevent fraud, and improve account security."],
+    ["legal_basis", "Purposes and legal bases", "Account delivery depends on our contract; fraud prevention relies on legitimate interests; tax records satisfy legal obligations."],
+    ["recipients_or_vendor_categories", "Sharing and recipients", "Payment processors, hosting providers, analytics partners, and professional advisers support delivery of the service."],
+    ["data_retention", "How long we retain your data", "Call recordings are kept for two months, while account records are retained until account closure."],
+    ["automated_decision_making_or_profiling", "Automated decision-making and profiling", "We do not perform profiling or make decisions that produce legal effects for an individual."],
+  ] as const;
+
+  for (const [topic, heading, body] of cases) {
+    const match = classifyGdprTransparencyTopics({
+      section: { body, heading },
+    }).matches.find((row) => row.topic === topic);
+    assert.ok(match, topic);
+    assert.equal(match.reasonCodes.includes(`matched_${topic}`), true, topic);
+    assert.match(match.evidenceExcerpt, new RegExp(heading.split(" ")[0] ?? "", "i"));
+  }
+
+  assert.equal(classifyGdprTransparencyTopics({
+    section: {
+      heading: "Automated tools",
+      body: "A scanner classifies synthetic website signals for internal test reporting.",
+    },
+  }).matches.some((row) => row.topic === "automated_decision_making_or_profiling"), false);
+  assert.equal(classifyGdprTransparencyTopics({
+    section: {
+      heading: "Sharing",
+      body: "Information may be shared with undefined third parties.",
+    },
+  }).matches.some((row) => row.topic === "recipients_or_vendor_categories"), false);
+});
+
+test("canonical retained miss variants cover transfer and contact wording across locales", () => {
+  const cases = [
+    ["international_transfers", "fr", "En cas d’absence de décision d’adéquation, les transferts sont encadrés par des clauses contractuelles types pour protéger les Données Personnelles."],
+    ["international_transfers", "de", "Übermittlungen an ein Drittland erfolgen mit geeigneten Garantien und einer Zertifizierung zum Data Privacy Framework für personenbezogene Daten."],
+    ["international_transfers", "ru", "Передача персональных данных осуществляется на основании решения Европейской комиссии об адекватности или стандартных договорных условий."],
+    ["recipients_or_vendor_categories", "nl", "Persoonsgegevens worden verstrekt aan externe beheerders van software platformen en betalingssystemen die onze diensten ondersteunen."],
+    ["dpo_contact", "zh", "本公司個人資料保護員資訊如下：電子信箱 DPO@example.tw。"],
+  ] as const;
+
+  for (const [topic, locale, text] of cases) {
+    const match = classifyGdprTransparencyTopics({
+      localeHints: [locale],
+      text,
+    }).matches.find((row) => row.topic === topic);
+    assert.ok(match, `${locale}:${topic}`);
+  }
+});
+
+test("canonical multilingual transfer clauses recover retained safeguard wording", () => {
+  const cases = [
+    ["en", "Whenever we transfer your personal data outside the EEA, we use Standard Contractual Clauses issued by the European Commission."],
+    ["es", "Los datos personales se transfieren con cláusulas tipo de la Comisión Europea para mantener las garantías adecuadas."],
+    ["de", "Für personenbezogene Daten ist der Anbieter unter dem Privacy Shield zertifiziert und verpflichtet sich zur Einhaltung europäischer Datenschutzstandards."],
+    ["pl", "Przekazywanie danych osobowych poza EOG odbywa się przy zastosowaniu standardowych klauzul umownych wydanych przez Komisję Europejską."],
+    ["ro", "Datele cu caracter personal pot fi transferate în state din afara Spațiului Economic European pe baza unor Clauze Contractuale Standard."],
+  ] as const;
+
+  for (const [locale, text] of cases) {
+    const match = classifyGdprTransparencyTopics({
+      localeHints: [locale],
+      text,
+    }).matches.find((row) => row.topic === "international_transfers");
+    assert.ok(match, `${locale}: ${text}`);
+  }
+
+  for (const text of [
+    "The legal team reviews standard contractual clauses issued by the European Commission for procurement templates.",
+    "International transfer of data between internal build systems is described in the engineering runbook.",
+    "Das Unternehmen ist für seinen internationalen Handel nach einer allgemeinen Qualitätsnorm zertifiziert.",
+  ]) {
+    assert.equal(
+      classifyGdprTransparencyTopics({ text }).matches.some(
+        (row) => row.topic === "international_transfers",
+      ),
+      false,
+      text,
+    );
+  }
+});
+
+test("classifies retained German clinic purpose, contract, recipient, and US-transfer clauses", () => {
+  const text = [
+    "Datenschutzerklärung.",
+    "Wir verarbeiten jene Daten, die Sie uns als Kunde zur Durchführung vorvertraglicher Maßnahmen und bei Abschluss des Vertrages zur Verfügung stellen.",
+    "Die Datenverarbeitung erfolgt zu folgenden Zwecken: Im Rahmen unserer Geschäftsbeziehung werden die von Ihnen angegebenen Daten verarbeitet, um vorvertragliche Maßnahmen durchzuführen und Verträge abzuwickeln.",
+    "Auf unseren Seiten sind Plugins eines sozialen Netzwerks mit Sitz in Palo Alto, CA 94304, USA integriert.",
+    "Wenn Sie unsere Seiten besuchen, wird über das Plugin eine direkte Verbindung zwischen Ihrem Browser und dem Server des sozialen Netzwerks hergestellt.",
+    "Das soziale Netzwerk erhält dadurch die Information, dass Sie mit Ihrer IP-Adresse unsere Seite besucht haben.",
+  ].join(" ");
+  const matches = classifyGdprTransparencyTopics({ localeHints: ["de"], text }).matches;
+  const topics = new Set(matches.map((match) => match.topic));
+
+  for (const topic of [
+    "processing_purposes",
+    "legal_basis",
+    "recipients_or_vendor_categories",
+    "international_transfers",
+  ] satisfies GdprTransparencyTopic[]) {
+    assert.equal(topics.has(topic), true, topic);
+    const match = matches.find((candidate) => candidate.topic === topic);
+    assert.equal(match?.matchStrength, "equivalent", topic);
+    assert.equal(match?.reasonCodes.includes("variant_semantic_clause"), true, topic);
+  }
+});
+
+test("recovers natural Article 13 clauses across calibrated European languages", () => {
+  const cases = [
+    ["fr", "Politique de confidentialité. Nous traitons vos données personnelles pour fournir le service. Le traitement est nécessaire à l’exécution du contrat. Un prestataire reçoit vos données personnelles. Le transfert des données personnelles vers les États-Unis est encadré par des garanties."],
+    ["es", "Política de privacidad. Tratamos sus datos personales para prestar el servicio. El tratamiento es necesario para la ejecución del contrato. Un proveedor recibe sus datos personales. La transferencia de datos personales a Estados Unidos utiliza garantías adecuadas."],
+    ["it", "Informativa sulla privacy. Trattiamo i suoi dati personali per fornire il servizio. Il trattamento è necessario per l’esecuzione del contratto. Un fornitore riceve i dati personali. Il trasferimento dei dati personali negli Stati Uniti usa garanzie adeguate."],
+    ["nl", "Privacyverklaring. Wij verwerken uw persoonsgegevens om de dienst te leveren. De verwerking is nodig voor de uitvoering van de overeenkomst. Een dienstverlener ontvangt uw persoonsgegevens. De overdracht van persoonsgegevens naar de Verenigde Staten gebruikt passende waarborgen."],
+    ["pl", "Polityka prywatności. Przetwarzamy dane osobowe w celu świadczenia usługi. Przetwarzanie jest niezbędne do wykonania umowy. Usługodawca otrzymuje dane osobowe. Przekazywanie danych osobowych do Stanów Zjednoczonych odbywa się z odpowiednimi zabezpieczeniami."],
+    ["pt", "Política de privacidade. Tratamos os seus dados pessoais para prestar o serviço. O tratamento é necessário para a execução do contrato. Um prestador de serviços recebe dados pessoais. A transferência de dados pessoais para os Estados Unidos utiliza garantias adequadas."],
+  ] as const;
+
+  for (const [locale, text] of cases) {
+    const topics = new Set(classifyGdprTransparencyTopics({
+      localeHints: [locale],
+      text,
+    }).matches.map((match) => match.topic));
+    for (const topic of [
+      "processing_purposes",
+      "legal_basis",
+      "recipients_or_vendor_categories",
+      "international_transfers",
+    ] satisfies GdprTransparencyTopic[]) {
+      assert.equal(topics.has(topic), true, `${locale}:${topic}; got ${[...topics].join(", ")}`);
+    }
+  }
+});
+
+test("natural-clause expansion does not promote operational contract, vendor, or hosting copy", () => {
+  const cases = [
+    ["de", "Der Vertrag mit dem Lieferanten wurde in den USA unterzeichnet. Der Server verarbeitet nur synthetische Testdaten."],
+    ["fr", "Le prestataire exécute le contrat de maintenance du serveur aux États-Unis."],
+    ["es", "El proveedor ejecuta el contrato de mantenimiento del servidor en Estados Unidos."],
+    ["it", "Il fornitore esegue il contratto di manutenzione del server negli Stati Uniti."],
+    ["nl", "De dienstverlener voert de onderhoudsovereenkomst voor de server in de Verenigde Staten uit."],
+    ["pl", "Usługodawca wykonuje umowę dotyczącą utrzymania serwera w Stanach Zjednoczonych."],
+    ["pt", "O prestador executa o contrato de manutenção do servidor nos Estados Unidos."],
+  ] as const;
+
+  for (const [locale, text] of cases) {
+    assert.deepEqual(classifyGdprTransparencyTopics({ localeHints: [locale], text }).matches, [], locale);
+  }
+});
+
+test("canonical evidence excerpts retain complete bounded sentence edges", () => {
+  const text = `${"Background context without a topic. ".repeat(7)}Data controller. Example Services Ltd acts as the data controller. Contact us at privacy@example.test for privacy questions. A final unrelated sentence follows.`;
+  const match = classifyGdprTransparencyTopics({ text }).matches.find((row) => row.topic === "controller_contact");
+  assert.ok(match);
+  assert.ok(match.evidenceExcerpt.length <= 360);
+  assert.doesNotMatch(match.evidenceExcerpt, /^ground\b/i);
+  assert.match(match.evidenceExcerpt, /acts as the data controller\./);
+  assert.match(match.evidenceExcerpt, /privacy@example\.test/);
 });

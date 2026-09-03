@@ -1,7 +1,7 @@
 # Post-refusal observation: default-off MVP
 
-Status: implemented and locally verified, default-off, undeployed, and restricted
-to explicit target authorization.
+Status: implemented and locally verified, default-off, and restricted to
+explicit target authorization.
 
 ## Purpose
 
@@ -19,7 +19,7 @@ reject-observation ──┘
 The three passive lanes start immediately. `reject_observation` starts 500 ms
 later in a fresh isolated Chromium context. The coordinator waits for one
 terminal outcome from every enabled lane, but the Reject lane may add at most
-six seconds beyond the slowest passive lane. Failure, timeout, unsupported CMP,
+eight seconds beyond the slowest passive lane. Failure, timeout, unsupported CMP,
 missing control, and unconfirmed refusal are explicit and score-neutral.
 
 When consent-proof returns a complete first-layer inventory with no Reject, the
@@ -33,10 +33,14 @@ cannot reopen the terminal result.
 The reject observer:
 
 - requires loopback, an owned canary, a calibration allowlist, or an ordinary
-  sharded-scan authorization bound to both the exact normalized HTTPS URL and
-  that scan's identity;
-- uses TCF or a named recipe from the canonical CMP registry;
-- never guesses a control from DOM text;
+  sharded-scan authorization bound to a requested HTTPS URL and that scan's
+  identity; ordinary sharded scans then use a bounded passive redirect
+  preflight to mint an internal authorization for only the final exact public
+  HTTPS URL and the same scan identity;
+- uses a versioned canonical registry recipe for named CMPs, or the canonical
+  consent-control classifier for one uniquely actionable non-CMP first-layer
+  control with an independently verifiable refusal transition;
+- never uses improvised text, feature-local regexes, or guessed DOM selectors;
 - performs at most one deterministic first-layer Reject or necessary-only
   action;
 - treats banner removal as corroboration only;
@@ -55,17 +59,22 @@ The reject observer:
 - exits early after a disqualifying non-essential request or write; and
 - consumes the canonical vendor resolver rather than a feature-local list.
 
-The initial named-CMP coverage is OneTrust, Cookiebot, and Usercentrics. Unknown
-CMPs and unresolved controls fail closed without a click.
+Named-CMP capability and current recipe coverage are generated from the
+canonical registry by `pnpm ops:cmp-action-coverage`; the implementation must
+not maintain a competing list here. Unresolved or ambiguous controls fail
+closed without a click.
 
 The enable flag defaults to the `owned_canary` rollout mode, which permits only
 loopback fixtures and the owned ErgoVeritas canary. Ordinary eligible sharded
-scans receive exact-target authorization only when
+scans receive target-resolution authorization only when
 `CERTSCORE_POST_REFUSAL_REJECT_WORKER_ROLLOUT_MODE=all_eligible` is also set.
-The authorization does
-not grant interaction with a host generally and cannot be reused by another
-scan. Non-sharded scans, non-HTTPS public targets, redirects away from the exact
-authorized URL, ambiguous recipe matches, and unsupported CMPs remain neutral.
+The observer follows at most five passive redirects within 1.5 seconds and
+checks every hop with the public-network guard. Only the final exact public
+HTTPS URL is authorized for interaction, and only for the same scan. The
+authorization does not grant interaction with a host generally and cannot be
+reused by another scan. Non-sharded scans, unsafe or unverifiable redirect
+chains, non-HTTPS public targets, ambiguous recipe matches, and unsupported
+CMPs remain neutral.
 
 ## Canonical result and scoring
 
@@ -86,8 +95,9 @@ The canonical finding classes are:
 - `pre_consent_storage_not_cleared`; and
 - `refusal_signal_contradicts_action`.
 
-Confirmed post-refusal activity or a contradictory TCF signal can deduct up to
-six points. Exact unchanged storage persistence by itself is a factual review
+Confirmed post-refusal activity or a contradictory TCF signal receives the
+canonical post-refusal family deduction. Exact unchanged storage persistence
+by itself is a factual review
 signal and is score-neutral because stored presence does not establish active
 post-refusal use. Coverage status, worker failure, timeout, no Reject, and
 unconfirmed refusal never affect score.
@@ -116,7 +126,7 @@ four-lane timing summary with:
 - the terminal join outcome (`joined`, `not_applicable`, `failed`, or
   `timed_out`).
 
-Timeout telemetry is anchored to the absolute six-second deadline. Operational
+Timeout telemetry is anchored to the absolute eight-second deadline. Operational
 timing never creates evidence or affects score.
 
 ## Local commands

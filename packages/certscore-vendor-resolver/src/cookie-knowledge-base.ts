@@ -33,6 +33,14 @@ type CookieKnowledgeRule = Omit<CanonicalCookieKnowledge, "name"> & {
 
 const COOKIE_KNOWLEDGE_RULES: readonly CookieKnowledgeRule[] = [
   {
+    pattern: /^sbjs_(?:migrations|current_add|first_add|current|first|udata|session)$/i,
+    category: "analytics",
+    dataTypes: ["traffic-source attribution", "session attribution"],
+    description: "Sourcebuster.js first-party attribution storage used to retain traffic-source, campaign, and session attribution context.",
+    essentiality: "non_essential",
+    vendor: "Sourcebuster.js",
+  },
+  {
     pattern: /^_pk_(?:id|ses|ref|cvar|hm)(?:[._-].*)?$/i,
     category: "analytics",
     dataTypes: ["analytics identifier", "visit and session measurement"],

@@ -77,14 +77,14 @@ test("legacy join-window input does not reintroduce a second publication branch"
   });
 });
 
-test("single reconciliation caps the reject tail at six seconds and remains one publication", () => {
+test("single reconciliation caps the reject tail at eight seconds and remains one publication", () => {
   assert.deepEqual(decidePostRefusalReportPublication({
     primaryReadyAtMs: 10_000,
     rejectReadyAtMs: 18_500,
   }), {
     mode: "single_reconciliation_limited",
     rejectReadyDeltaMs: 8_500,
-    addedInitialReportWaitMs: 6_000,
+    addedInitialReportWaitMs: 8_000,
     reason: "reject_path_exceeded_canonical_barrier",
   });
 });
@@ -97,6 +97,18 @@ test("complete consent inventory without reject requests cooperative pre-action 
   }), {
     abortRequested: true,
     reason: "complete_inventory_without_reject",
+  });
+});
+
+test("necessary-only Save keeps the reject observer eligible", () => {
+  assert.deepEqual(decidePostRefusalCooperativeAbort({
+    consentInventoryComplete: true,
+    necessaryOnlyRejectEquivalentObserved: true,
+    rejectControlObserved: false,
+    rejectActionDispatched: false,
+  }), {
+    abortRequested: false,
+    reason: "necessary_only_reject_equivalent_observed",
   });
 });
 

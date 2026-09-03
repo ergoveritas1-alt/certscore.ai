@@ -125,6 +125,11 @@ const observed = REGIONS.map((region) => {
   ]);
   const config = fn.Configuration ?? {};
   const env = config.Environment?.Variables ?? {};
+  const cmpActionRecipeDisabled = env.CERTSCORE_CMP_ACTION_RECIPE_DISABLED ?? "";
+  const postAcceptWorkerEnabled = env.CERTSCORE_POST_ACCEPT_WORKER_ENABLED ?? "0";
+  if (postAcceptWorkerEnabled !== "1") {
+    errors.push(`${region}: Accept worker enable flag expected 1 for the all-eligible rollout, received ${postAcceptWorkerEnabled}.`);
+  }
   const postRefusalRejectWorkerEnabled = env.CERTSCORE_POST_REFUSAL_REJECT_WORKER_ENABLED ?? "0";
   if (postRefusalRejectWorkerEnabled !== "1") {
     errors.push(`${region}: Reject worker enable flag expected 1, received ${postRefusalRejectWorkerEnabled}.`);
@@ -209,6 +214,7 @@ const observed = REGIONS.map((region) => {
     errors.push(`${region}: proxy user data differs from the canonical regional configuration.`);
   }
   return {
+    cmpActionRecipeDisabled,
     imageDigest: fn.Code?.ResolvedImageUri?.split("@")[1],
     postRefusalRejectWorkerEnabled,
     region,
@@ -222,6 +228,9 @@ for (const entry of observed) {
   }
   if (entry.postRefusalRejectWorkerEnabled !== observed[0]?.postRefusalRejectWorkerEnabled) {
     errors.push(`${entry.region}: Reject worker enable flag does not match the Ireland baseline.`);
+  }
+  if (entry.cmpActionRecipeDisabled !== observed[0]?.cmpActionRecipeDisabled) {
+    errors.push(`${entry.region}: CMP action recipe kill switch does not match the Ireland baseline.`);
   }
 }
 

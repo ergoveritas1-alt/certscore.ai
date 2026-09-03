@@ -4,6 +4,7 @@ import test from "node:test";
 
 import { getFindingReferenceItems } from "./finding-atlas";
 import { CERT_SCORE_FINDING_REGISTRY } from "../scans/finding-registry";
+import { FINDING_DENSITY_BENCHMARKS } from "../scans/finding-density-benchmarks";
 import { EXECUTIVE_SUMMARY_TOP_FINDING_IDS } from "../scans/rank-findings";
 import {
   getFindingReferencePageCopy,
@@ -91,8 +92,10 @@ const PUBLIC_FINDING_REFERENCE_IDS = EXECUTIVE_SUMMARY_TOP_FINDING_ID_STRINGS.fi
   (findingId) =>
     findingId !== "scan_quality_visual_no_go" &&
     findingId !== "cpra_cba_opt_out_missing" &&
-    findingId !== "consent_dark_patterns_detected"
-);
+    findingId !== "consent_dark_patterns_detected" &&
+    Boolean(CERT_SCORE_FINDING_REGISTRY[findingId]) &&
+    Boolean(FINDING_DENSITY_BENCHMARKS[findingId])
+).concat("reject_tracking_persists_after_reject");
 
 function makePublicHiddenSampleJson(finding: ReturnType<typeof getFindingReferenceItems>[number]) {
   const payload = finding.sample.payload as Record<string, unknown>;
@@ -146,7 +149,7 @@ test("homepage finding examples align with each finding subtype", () => {
   assert.match(findings.get("policy_behavior_contradiction_detected")?.exampleEvidence[0]?.code ?? "", /runtime_vendor_not_disclosed/);
 });
 
-test("finding reference index is exactly the official executive top findings", () => {
+test("finding reference index includes official executive findings and the Reject Path reference", () => {
   assert.deepEqual(
     getFindingReferenceItems().map((finding) => finding.id),
     [...PUBLIC_FINDING_REFERENCE_IDS]

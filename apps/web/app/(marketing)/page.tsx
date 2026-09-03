@@ -16,10 +16,11 @@ import {
   CORE_MARKETING_SUPPORT_EMAIL
 } from "../../lib/marketing/core-positioning";
 import { getFindingReferenceItems } from "../../lib/marketing/finding-atlas";
+import { AUTHENTIC_SAMPLE_REPORT_URL } from "../../lib/marketing/sample-report";
 import { getPublishedReleases } from "../../lib/releases";
 import { createPageMetadata, SITE_URL } from "../../lib/seo";
 
-const SAMPLE_REPORT_URL = "https://certscore.ai/scan/f20f885d-10d4-4a07-899f-f7ea5a1825d8";
+const SAMPLE_REPORT_URL = AUTHENTIC_SAMPLE_REPORT_URL;
 const BOOK_DEMO_URL = "/contact-sales";
 export const metadata: Metadata = {
   ...createPageMetadata({
@@ -46,7 +47,7 @@ const personas = [
   {
     title: "Digital policy analysts reviewing public privacy surfaces",
     detail:
-      "Review pre-consent cookies, storage, tracking, public disclosures, collection surfaces, and consent-control accessibility without depending on brittle post-choice automation."
+      "Review pre-consent cookies, storage, tracking, public disclosures, collection surfaces, and consent-control accessibility—plus what a site does after an eligible Accept or Reject interaction is confirmed."
   },
   {
     title: "Teams reviewing third-party websites",
@@ -68,7 +69,7 @@ const scannerSolutions = [
     href: "/solutions/cookie-consent-scanner",
     title: "Cookie consent scanner",
     description:
-      "Check cookie timing, CMP behavior, third-party cookies before consent, and reject-path review signals.",
+      "Check cookie timing, CMP behavior, third-party cookies before consent, and what happens after a confirmed Accept or Reject.",
     animation: "waterfall" as const,
     meta: "Consent controls"
   },
@@ -193,7 +194,7 @@ export default async function MarketingHomePage() {
             </h1>
             <div className="max-w-[650px]">
               <p className="text-base leading-8 text-slate-300 sm:text-xl">
-                Scan cookies, trackers, CMPs, consent, privacy policy, GDPR, CCPA, and TLS—with evidence retained behind every finding.
+                Scan cookies, trackers, CMPs, consent, and TLS—then see what a site does after a visitor&apos;s consent choice is confirmed. Evidence retained behind every observation.
               </p>
               <p className="mt-2 text-sm font-semibold text-sky-400">
                 Built for developers and agencies reviewing client websites for GDPR and ePrivacy concerns.
@@ -222,7 +223,7 @@ export default async function MarketingHomePage() {
                 <svg viewBox="0 0 24 24" className="h-[19px] w-[19px] shrink-0 text-sky-500" aria-hidden="true" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round">
                   <circle cx="12" cy="12" r="9.25" /><path d="M12 6.8V12l3.4 2.1" />
                 </svg>
-                Results in seconds
+                Preview in seconds
               </span>
               <span className="flex shrink-0 items-center gap-2.5 whitespace-nowrap text-[13px]">
                 <svg viewBox="0 0 24 24" className="h-[19px] w-[19px] shrink-0 text-sky-500" aria-hidden="true" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round">
@@ -231,6 +232,9 @@ export default async function MarketingHomePage() {
                 API/SDK/MCP ready
               </span>
             </div>
+            <p className="text-xs leading-5 text-slate-300">
+              Pre-consent preview in seconds; the completed scan, including confirmed choice-path observations, finishes afterward.
+            </p>
             <div className="relative flex flex-col gap-3 sm:flex-row">
               <PendingButtonLink
                 className="w-full border border-sky-400/50 bg-sky-500 text-white shadow-[0_12px_30px_rgba(14,165,233,0.22)] hover:bg-sky-400 focus-visible:ring-sky-300 sm:w-auto"
@@ -253,6 +257,30 @@ export default async function MarketingHomePage() {
 
           <div className="relative z-10 hidden items-center justify-center lg:-mr-24 lg:-translate-y-3 lg:flex lg:justify-end" aria-hidden="true">
             <Image alt="" className="h-auto w-full max-w-[476px] -translate-x-[15px] blur-[0.85px] opacity-[0.51] mix-blend-screen drop-shadow-[0_32px_45px_rgba(0,0,0,0.35)]" height={1190} sizes="(min-width: 1024px) 36vw, 92vw" src="/marketing/hero/scan-report-dashboard-with-privacy-details.jpg" width={1438} />
+          </div>
+        </div>
+      </section>
+
+      <section className="border-b border-slate-200 bg-slate-50">
+        <div className="mx-auto max-w-6xl px-4 py-12 sm:px-6 sm:py-16">
+          <div className="rounded-3xl border border-sky-100 bg-white p-6 shadow-sm sm:p-9">
+            <Badge tone="neutral">Choice-path observations</Badge>
+            <h2 className="mt-4 text-3xl font-semibold tracking-tight text-slate-950">What happens after the visitor chooses</h2>
+            <div className="mt-4 max-w-4xl space-y-4 text-sm leading-7 text-slate-600">
+              <p>
+                A consent interface can present a choice while a site&apos;s tags, cookies, storage, and consent records behave the same either way. Where a site presents an eligible consent control that can be actioned safely, CertScore performs one bounded, deterministic Accept or Reject interaction in its own clean browser session and retains what happens afterward.
+              </p>
+              <p>
+                A Reject Path finding requires evidence that the refusal-state transition was confirmed, plus qualifying retained activity after it. The Accept Path is a score-neutral comparison baseline: activity after acceptance is expected and is not scored. If an interaction is unavailable, unsupported, unsuccessful, or unverifiable, the report records limited coverage rather than implying a clean result. Not every site can be tested this way.
+              </p>
+              <p>
+                This evidence can support GDPR/ePrivacy review of whether a confirmed refusal is reflected in observed runtime behavior. It is an automated observation, not a legal conclusion.
+              </p>
+            </div>
+            <div className="mt-5 flex flex-wrap gap-4 text-sm font-semibold text-sky-700">
+              <Link href="/guides/consent-enforcement-testing">How choice-path testing works</Link>
+              <Link href="/findings/reject_tracking_persists_after_reject">Read the Reject Path finding method</Link>
+            </div>
           </div>
         </div>
       </section>

@@ -1,8 +1,12 @@
-import { KNOWN_CMP_REGISTRY } from "@website-signal-risk-scanner/shared";
+import {
+  KNOWN_CMP_REGISTRY,
+  type KnownCmpActionConfirmation,
+} from "@website-signal-risk-scanner/shared";
+import { cmpActionRecipeEnabled } from "./cmp-action-recipe-policy.js";
 import type { PostRefusalActionRecipe } from "./post-refusal-observer.js";
 
 export const CANONICAL_POST_REFUSAL_RECIPE_SET_ID =
-  "canonical-consent-control-reject-v8";
+  "canonical-consent-control-reject-v21";
 
 export const CERTSCORE_OWNED_ANALYTICS_REJECT_RECIPE: PostRefusalActionRecipe = {
   artifactVersion: "certscore.post_refusal_action_recipe.v1",
@@ -17,6 +21,28 @@ export const CERTSCORE_OWNED_ANALYTICS_REJECT_RECIPE: PostRefusalActionRecipe = 
     expectedValue: "denied",
   },
 };
+
+function mapRejectConfirmation(
+  confirmation: KnownCmpActionConfirmation,
+): PostRefusalActionRecipe["confirmation"] {
+  switch (confirmation.kind) {
+    case "tcf_purposes_or_cmp_cookie_changed":
+      return {
+        kind: "tcf_purposes_denied_or_cmp_cookie_changed",
+        ...(confirmation.purposeIds ? { purposeIds: confirmation.purposeIds } : {}),
+        cookieName: confirmation.cookieName,
+      };
+    case "tcf_purposes_or_cmp_storage_keys_changed":
+      return {
+        kind: "tcf_purposes_denied_or_cmp_storage_keys_changed",
+        ...(confirmation.purposeIds ? { purposeIds: confirmation.purposeIds } : {}),
+        storageType: confirmation.storageType,
+        keys: confirmation.keys,
+      };
+    default:
+      return confirmation;
+  }
+}
 
 export function buildPostRefusalCmpActionRecipe(input: {
   cmpCanonicalName: string;
@@ -55,6 +81,9 @@ export function buildPostRefusalCmpActionRecipe(input: {
       ? "tcf_api_cmp_registry_recipe"
       : "cmp_registry_recipe",
     controlSelector,
+    ...(definition.urlPatterns?.length
+      ? { runtimeUrlPatternSources: definition.urlPatterns.map((pattern) => pattern.source) }
+      : {}),
     ...(input.bannerSelector ? { bannerSelector: input.bannerSelector } : {}),
     confirmation: input.confirmation,
   };
@@ -62,31 +91,96 @@ export function buildPostRefusalCmpActionRecipe(input: {
 
 /**
  * Returns only canonical CMPs that expose both a versioned Reject selector and
- * TCF confirmation. Registry order is retained so artifacts are deterministic;
- * the observer still requires exactly one actionable selector before clicking.
+ * an exact semantic confirmation recipe. Registry order is retained so artifacts
+ * are deterministic; the observer still requires exactly one actionable selector
+ * before clicking.
  */
 export function buildCanonicalPostRefusalActionRecipes(): PostRefusalActionRecipe[] {
-  return [CERTSCORE_OWNED_ANALYTICS_REJECT_RECIPE, ...KNOWN_CMP_REGISTRY.flatMap((definition) => {
-    if (!definition.rejectControlSelectors?.length || !definition.standards?.includes("tcf")) return [];
-    const recipe = buildPostRefusalCmpActionRecipe({
-      cmpCanonicalName: definition.canonicalName,
-      bannerSelector: definition.domSelectors?.[0],
-      confirmation: definition.canonicalName === "OneTrust" ||
-          definition.canonicalName === "Cookiebot"
-        ? {
-            kind: "tcf_purposes_denied_or_cmp_cookie_changed",
-            cookieName: definition.canonicalName === "OneTrust"
-              ? "OptanonConsent"
-              : "CookieConsent",
-          }
-        : definition.canonicalName === "Usercentrics"
-          ? {
-              kind: "tcf_purposes_denied_or_cmp_storage_keys_changed",
-              storageType: "local_storage",
-              keys: ["uc_settings", "ucString"],
-            }
-          : { kind: "tcf_purposes_denied" },
-    });
-    return recipe ? [recipe] : [];
-  })];
+  return [
+    ...(cmpActionRecipeEnabled({
+      canonicalName: "certscore_owned_analytics_consent",
+      action: "reject",
+    })
+      ? [CERTSCORE_OWNED_ANALYTICS_REJECT_RECIPE]
+      : []),
+    ...KNOWN_CMP_REGISTRY.flatMap((definition) => {
+      if (!cmpActionRecipeEnabled({
+        canonicalName: definition.canonicalName,
+        action: "reject",
+      })) return [];
+      const recipes: PostRefusalActionRecipe[] = [];
+      if (definition.rejectControlSelectors?.length) {
+        const refusalCookieValues = definition.refusalCookieValues ?? [];
+        const confirmation = definition.rejectConfirmation
+          ? mapRejectConfirmation(definition.rejectConfirmation)
+          : refusalCookieValues.length > 0
+            ? {
+                kind: "cmp_cookie_values_equal",
+                cookies: refusalCookieValues,
+              } satisfies PostRefusalActionRecipe["confirmation"]
+            : undefined;
+        if (confirmation) {
+          const recipe = buildPostRefusalCmpActionRecipe({
+            cmpCanonicalName: definition.canonicalName,
+            bannerSelector: definition.domSelectors?.[0],
+            confirmation,
+          });
+          if (recipe) recipes.push(recipe);
+        }
+      }
+      for (const [index, target] of (definition.rejectControlTargets ?? []).entries()) {
+        const refusalCookieValues = definition.refusalCookieValues ?? [];
+        const confirmation = definition.rejectConfirmation
+          ? mapRejectConfirmation(definition.rejectConfirmation)
+          : refusalCookieValues.length > 0
+            ? {
+                kind: "cmp_cookie_values_equal",
+                cookies: refusalCookieValues,
+              } satisfies PostRefusalActionRecipe["confirmation"]
+            : undefined;
+        if (!confirmation) continue;
+        recipes.push({
+          artifactVersion: "certscore.post_refusal_action_recipe.v1",
+          recipeId: `canonical-cmp:${definition.canonicalName}:reject:accessible-v${index + 1}`,
+          cmpId: definition.canonicalName,
+          resolverMethod: definition.standards?.includes("tcf")
+            ? "tcf_api_cmp_registry_recipe"
+            : "cmp_registry_recipe",
+          controlSelector: target.scopeSelector,
+          accessibleControl: {
+            kind: target.resolution,
+            scopeSelector: target.scopeSelector,
+            intent: "reject",
+          },
+          ...(target.runtimeUrlPatterns?.length
+            ? { runtimeUrlPatternSources: target.runtimeUrlPatterns.map((pattern) => pattern.source) }
+            : {}),
+          bannerSelector: definition.domSelectors?.[0] ?? target.scopeSelector,
+          confirmation,
+        });
+      }
+      for (const target of definition.necessaryOnlyControlTargets ?? []) {
+        recipes.push({
+          artifactVersion: "certscore.post_refusal_action_recipe.v1",
+          recipeId: `canonical-cmp:${definition.canonicalName}:necessary-only-save:v1`,
+          cmpId: definition.canonicalName,
+          resolverMethod: "cmp_registry_recipe",
+          controlSelector: target.controlSelector,
+          bannerSelector: target.bannerSelector,
+          controlExpectedNormalizedLabel: target.expectedNormalizedLabel,
+          preActionRequirement: {
+            kind: "necessary_only_preferences_selected",
+            requiredCheckedSelector: target.requiredCheckedSelector,
+            disallowedCheckedSelector: target.disallowedCheckedSelector,
+          },
+          confirmation: {
+            kind: "canonical_reject_transition",
+            controlSelector: target.controlSelector,
+            bannerSelector: target.bannerSelector,
+          },
+        });
+      }
+      return recipes;
+    }),
+  ];
 }

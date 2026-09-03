@@ -81,6 +81,24 @@ test("scan returns immediate 200 JSON", async () => {
   }
 });
 
+test("scan preserves GPC, Accept Path, and Reject Path results from Pulse", async () => {
+  const mock = installFetch([{ status: 200, body: {
+    ...pulse,
+    gpcResponse: { status: "responsive" },
+    postAcceptObservation: { status: "confirmed_observation" },
+    postRefusalObservation: { status: "confirmed_clean" },
+  } }]);
+  try {
+    const client = new CertScoreClient();
+    const result = await client.scan("https://example.com");
+    assert.equal(result.gpcResponse?.status, "responsive");
+    assert.equal(result.postAcceptObservation?.status, "confirmed_observation");
+    assert.equal(result.postRefusalObservation?.status, "confirmed_clean");
+  } finally {
+    mock.restore();
+  }
+});
+
 test("SDK identifies requests with the configured client name", async () => {
   const mock = installFetch([{ status: 200, body: pulse }]);
   try {
@@ -175,6 +193,14 @@ test("packaged declarations expose API v2 scan timing fields", () => {
   assert.match(declarations, /completedAt\?: string \| null;/);
   assert.match(declarations, /scanTimeSeconds\?: number \| null;/);
   assert.match(declarations, /evidenceExcerpt\?: string;/);
+  assert.match(declarations, /export interface GpcResponse/);
+  assert.match(declarations, /gpcResponse\?: GpcResponse \| null;/);
+  assert.match(declarations, /export interface PostAcceptObservation/);
+  assert.match(declarations, /export interface PostRefusalObservation/);
+  assert.match(
+    declarations,
+    /export interface PulseResultBase[\s\S]*gpcResponse\?: GpcResponse \| null;[\s\S]*postAcceptObservation\?: PostAcceptObservation \| null;[\s\S]*postRefusalObservation\?: PostRefusalObservation \| null;/,
+  );
 });
 
 test("pulse.evidence retrieves the bounded Evidence JSON artifact", async () => {

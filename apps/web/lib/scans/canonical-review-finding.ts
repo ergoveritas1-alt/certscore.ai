@@ -56,7 +56,7 @@ export function normalizeFindingName(title: string | null | undefined | unknown)
   }
 
   if (/^(gpc signal ignored|global privacy control signal not honored|browser-level privacy signal effect not evident)$/i.test(normalized)) {
-    return "GPC signal not honored";
+    return "GPC response";
   }
 
   if (/^bounded key-page discovery unresolved$/i.test(normalized)) {

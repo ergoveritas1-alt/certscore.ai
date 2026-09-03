@@ -1,0 +1,178 @@
+<!-- OWNED CANARY TEST PAGE — deterministic Accept/Reject interaction authorized for scanner validation -->
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="robots" content="noindex, nofollow, noarchive">
+  <title>CertScore Accept/Reject canary — divergent outcomes</title>
+  <style>
+    body { background:#f8fafc; color:#0f172a; font:16px/1.5 system-ui,sans-serif; margin:0; }
+    main { margin:48px auto; max-width:780px; padding:0 20px; }
+    .banner { background:#fff; border:1px solid #94a3b8; border-radius:12px; box-shadow:0 12px 30px #0f172a20; padding:24px; }
+    .controls { display:flex; flex-wrap:wrap; gap:12px; }
+    .preferences { background:#f1f5f9; border-radius:8px; margin-top:16px; padding:16px; }
+    button { background:#0f172a; border:0; border-radius:8px; color:#fff; cursor:pointer; font:inherit; padding:12px 18px; }
+    button.secondary { background:#e2e8f0; color:#0f172a; }
+    code { background:#e2e8f0; border-radius:4px; padding:2px 5px; }
+    [hidden] { display:none !important; }
+  </style>
+</head>
+<body>
+  <main data-certscore-canary="post-action-divergent"
+        data-regulatory-audit-scenario="pre-consent-leakage-with-effective-choice-enforcement"
+        data-accept-path-scenario="affirmative-consent-dependent-activation"
+        data-expected-acceptance-registration="confirmed"
+        data-expected-post-accept-activity="true"
+        data-expected-acceptance-contradiction="false"
+        data-expected-refusal-registration="confirmed"
+        data-expected-post-refusal-activity="false"
+        data-expected-pre-registration-activity="excluded"
+        data-expected-action-comparison="distinguishable">
+    <p>Owned synthetic scanner-validation canary. No consumer service, account, or transaction state is involved.</p>
+    <section class="banner" id="onetrust-banner-sdk" aria-label="Cookie choices">
+      <h1>Cookie choices</h1>
+      <p>Choose whether this site may use optional analytics and advertising technologies. Rejecting is as easy as accepting, and optional activity should stop unless you accept.</p>
+      <div class="controls">
+        <button id="onetrust-accept-btn-handler" type="button">Accept all</button>
+        <button id="onetrust-reject-all-handler" type="button">Reject all</button>
+        <button class="secondary" id="onetrust-pc-btn-handler" type="button">Manage options</button>
+      </div>
+      <div class="preferences" id="canary-preference-center" hidden>
+        <h2>Cookie options</h2>
+        <p>Necessary cookies are always active. Analytics and advertising are separate optional purposes and are off by default.</p>
+        <label><input type="checkbox" checked disabled> Necessary</label>
+        <label><input type="checkbox" id="canary-analytics-option"> Analytics</label>
+        <label><input type="checkbox" id="canary-advertising-option"> Advertising</label>
+        <button class="secondary" id="canary-close-options" type="button">Close options</button>
+      </div>
+      <p id="canary-consent-status" role="status" aria-live="polite"></p>
+    </section>
+    <section aria-labelledby="audit-scenario-heading">
+      <h2 id="audit-scenario-heading">Regulatory audit scenario</h2>
+      <p><strong>Finding of interest:</strong> the first-layer controls are balanced and Reject is honored after the choice, but Google Analytics already accessed storage and made a request before the visitor could choose.</p>
+      <p>This separates two questions auditors test independently: whether the interface offers a genuine choice, and whether non-essential technologies waited for that choice. A later clean Reject does not cure earlier pre-consent activity.</p>
+    </section>
+    <section>
+      <h2>Expected boundaries</h2>
+      <ul>
+        <li>Both named OneTrust actions resolve uniquely and confirm through a changed TCF/CMP state.</li>
+        <li>Accept and Reject are equally prominent first-layer actions, with separate optional purposes available under Manage options.</li>
+        <li>Passive capture sees a pre-choice <code>_ga</code> cookie and Google Analytics request that should remain a pre-consent timing concern.</li>
+        <li>A request initiated before semantic registration must be retained as in-flight and excluded from post-action findings.</li>
+        <li>Accept produces delayed analytics and advertising requests plus <code>_ga</code> and <code>_gid</code> analytics writes only after semantic registration.</li>
+        <li>Reject clears the baseline analytics cookie before refusal registration and produces no direct post-refusal activity.</li>
+        <li>The two fresh-context outcomes are therefore distinguishable.</li>
+      </ul>
+    </section>
+  </main>
+  <script>
+    (function () {
+      "use strict";
+
+      var retainedImages = [];
+      var mixedPurposes = {};
+      for (var purposeId = 1; purposeId <= 10; purposeId += 1) {
+        mixedPurposes[String(purposeId)] = purposeId % 2 === 0;
+      }
+      var tcfState = {
+        eventStatus: "tcloaded",
+        purpose: { consents: mixedPurposes },
+        tcString: "CERTSCORE_TESTAR1_PRE_ACTION"
+      };
+
+      document.cookie = "_ga=GA1.1.TESTAR1_BASELINE; Path=/; SameSite=Lax; Secure";
+
+      window.__tcfapi = function (command, version, callback) {
+        if (command === "getTCData" && version === 2 && typeof callback === "function") {
+          callback(JSON.parse(JSON.stringify(tcfState)), true);
+          return;
+        }
+        if (typeof callback === "function") callback(null, false);
+      };
+
+      function purposeState(granted) {
+        var state = {};
+        for (var id = 1; id <= 10; id += 1) state[String(id)] = granted;
+        return state;
+      }
+
+      function analyticsRequest(eventName) {
+        var request = new Image();
+        request.alt = "";
+        request.src = "https://www.google-analytics.com/g/collect?v=2&tid=G-CERTSCORE&cid=TESTAR1&en=" + encodeURIComponent(eventName);
+        retainedImages.push(request);
+      }
+
+      function advertisingRequest(eventName) {
+        var request = new Image();
+        request.alt = "";
+        request.src = "https://googleads.g.doubleclick.net/pagead/viewthroughconversion/123?label=" + encodeURIComponent(eventName);
+        retainedImages.push(request);
+      }
+
+      function beginChoice(action) {
+        // This request begins before the CMP state transition. It exercises the
+        // registration anchor and must never be promoted as post-action use.
+        analyticsRequest("pre_registration_" + action);
+      }
+
+      // Give the passive runtime lane a deterministic before-choice tracker
+      // and cookie baseline. Action-lane requests below use distinct event
+      // names so pre-registration and post-registration activity stay separable.
+      analyticsRequest("testar1_pre_consent_baseline");
+
+      function completeChoice(message) {
+        var banner = document.getElementById("onetrust-banner-sdk");
+        var status = document.getElementById("canary-consent-status");
+        if (banner) banner.hidden = true;
+        if (status) status.textContent = message;
+      }
+
+      document.getElementById("onetrust-accept-btn-handler").addEventListener("click", function () {
+        beginChoice("accept");
+        tcfState = {
+          eventStatus: "useractioncomplete",
+          purpose: { consents: purposeState(true) },
+          tcString: "CERTSCORE_TESTAR1_ACCEPTED"
+        };
+        document.cookie = "OptanonConsent=testar1_accept_registered; Path=/; SameSite=Lax; Secure";
+        completeChoice("Optional purposes accepted.");
+
+        window.setTimeout(function () {
+          document.cookie = "_ga=GA1.1.TESTAR1_POST_ACCEPT; Path=/; SameSite=Lax; Secure";
+          document.cookie = "_gid=TESTAR1_POST_ACCEPT_ANALYTICS; Path=/; SameSite=Lax; Secure";
+          analyticsRequest("testar1_direct_post_action");
+          advertisingRequest("testar1_advertising_post_action");
+        }, 175);
+      });
+
+      document.getElementById("onetrust-reject-all-handler").addEventListener("click", function () {
+        beginChoice("reject");
+        tcfState = {
+          eventStatus: "useractioncomplete",
+          purpose: { consents: purposeState(false) },
+          tcString: "CERTSCORE_TESTAR1_REJECTED"
+        };
+        document.cookie = "OptanonConsent=testar1_reject_registered; Path=/; SameSite=Lax; Secure";
+        document.cookie = "_ga=; Max-Age=0; Path=/; SameSite=Lax; Secure";
+        completeChoice("Optional purposes rejected.");
+      });
+
+      document.getElementById("onetrust-pc-btn-handler").addEventListener("click", function () {
+        var preferences = document.getElementById("canary-preference-center");
+        var status = document.getElementById("canary-consent-status");
+        if (preferences) preferences.hidden = false;
+        if (status) status.textContent = "Cookie options opened without recording a consent choice.";
+      });
+
+      document.getElementById("canary-close-options").addEventListener("click", function () {
+        var preferences = document.getElementById("canary-preference-center");
+        var status = document.getElementById("canary-consent-status");
+        if (preferences) preferences.hidden = true;
+        if (status) status.textContent = "Cookie options closed without recording a consent choice.";
+      });
+    }());
+  </script>
+</body>
+</html>

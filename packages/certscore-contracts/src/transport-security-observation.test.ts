@@ -1,6 +1,35 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { transportSecurityObservationSchema } from "./index.js";
+import {
+  classifyTransportHttpProbeOutcome,
+  transportSecurityObservationSchema,
+} from "./index.js";
+
+test("classifyTransportHttpProbeOutcome distinguishes exposure from neutral terminal outcomes", () => {
+  assert.equal(classifyTransportHttpProbeOutcome({
+    attempted: true,
+    finalScheme: "https",
+    redirectedToHttps: true,
+    status: 200,
+  }), "redirected_to_https");
+  assert.equal(classifyTransportHttpProbeOutcome({
+    attempted: true,
+    finalScheme: "http",
+    redirectedToHttps: false,
+    status: 200,
+  }), "plaintext_response_served");
+  assert.equal(classifyTransportHttpProbeOutcome({
+    attempted: true,
+    finalScheme: "http",
+    redirectedToHttps: false,
+    status: 403,
+  }), "http_request_rejected");
+  assert.equal(classifyTransportHttpProbeOutcome({
+    attempted: true,
+    errorCategory: "timeout",
+    finalScheme: "http",
+  }), "probe_failed");
+});
 
 test("transportSecurityObservationSchema accepts bounded redacted transport evidence", () => {
   const parsed = transportSecurityObservationSchema.parse({
@@ -23,6 +52,7 @@ test("transportSecurityObservationSchema accepts bounded redacted transport evid
       finalScheme: "https",
       redirectChain: ["http://example.com/", "https://example.com/"],
       redirectedToHttps: true,
+      outcome: "redirected_to_https",
     },
     tlsProbe: {
       attempted: true,
@@ -60,6 +90,7 @@ test("transportSecurityObservationSchema accepts bounded redacted transport evid
       scannedPagesUseHttps: true,
       validTlsCertificate: true,
       httpRedirectsToHttps: true,
+      httpProbeOutcome: "redirected_to_https",
       mixedContentObserved: true,
       insecureFormTransportObserved: true,
     },
@@ -69,6 +100,8 @@ test("transportSecurityObservationSchema accepts bounded redacted transport evid
   });
 
   assert.equal(parsed.summary.httpRedirectsToHttps, true);
+  assert.equal(parsed.httpProbe.outcome, "redirected_to_https");
+  assert.equal(parsed.summary.httpProbeOutcome, "redirected_to_https");
   assert.equal(parsed.mixedContent.observedCount, 1);
   assert.equal(parsed.formTransports[0]?.insecureTransportObserved, true);
 });

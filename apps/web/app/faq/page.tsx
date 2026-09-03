@@ -55,6 +55,16 @@ const faqs = [
       "No. CertScore.ai surfaces observable signals and supported findings. Review and remediation still need to be handled by your team."
   },
   {
+    question: "Does CertScore test what happens after I click Reject?",
+    answer:
+      "On eligible sites, yes. CertScore performs one bounded refusal in its own browser session, confirms a refusal-state transition, and retains the requests, cookies, storage, and consent signals that follow. Only activity anchored after confirmation counts, so an already in-flight request is not attributed to the refusal. This is evidence relevant to GDPR/ePrivacy review, not a compliance determination."
+  },
+  {
+    question: "What does a limited or unknown choice-path result mean?",
+    answer:
+      "It means the interaction could not be completed or confirmed—for example, there was no identifiable control, the interface was unsupported, the action was unverifiable, or the observation timed out or went stale. Limited coverage is explicit, score-neutral, and not a pass. It means the question was not answered."
+  },
+  {
     question: "How often can my site be rescanned?",
     answer:
       `Scan requests are paced at one request every ${formatScanThrottleIntervalLabel()}. Manual re-scans and scheduled monitoring consume scan credits; high-frequency monitoring and batch scanning are handled as custom higher-volume setups.`

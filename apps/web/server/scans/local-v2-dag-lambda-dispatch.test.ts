@@ -14,12 +14,14 @@ import {
 import { LOCAL_V2_DAG_SCAN_PROCESSOR } from "./local-v2-dag-scan-config";
 
 function buildLambdaScanConfig(options: {
+  orchestrationMode?: "single" | "sharded";
   localV2DagLambdaDebugOverrides?: Parameters<typeof buildQueuedFullScanConfig>[0]["localV2DagLambdaDebugOverrides"];
 } = {}) {
   return buildQueuedFullScanConfig({
     env: {
       CERTSCORE_V2_DAG_LAMBDA_ENABLED: "true",
       CERTSCORE_V2_DAG_LAMBDA_FUNCTION_NAME: "certscore-v2-dag-dev",
+      ...(options.orchestrationMode ? { CERTSCORE_V2_DAG_LAMBDA_ORCHESTRATION_MODE: options.orchestrationMode } : {}),
       CERTSCORE_V2_DAG_LAMBDA_RESULT_QUEUE_URL: "https://sqs.eu-west-1.amazonaws.com/123/certscore-v2-dag-local-results",
       CERTSCORE_V2_DAG_LAMBDA_TARGET_ENV: "local",
       NEXT_PUBLIC_APP_URL: "http://localhost:3000",
@@ -82,6 +84,25 @@ test("builds a local-only v2 DAG Lambda dispatch payload for EU-IR SQS handoff",
     targetUrl: "https://example.com/",
     vpcMode: "none"
   });
+});
+
+test("dispatch always includes GPC for sharded orchestration", () => {
+  const ordinary = buildLocalV2DagLambdaDispatchPayload({
+    scanConfig: buildLambdaScanConfig(),
+    scanId: "scan-ordinary",
+  });
+  const sharded = buildLocalV2DagLambdaDispatchPayload({
+    scanConfig: buildLambdaScanConfig({ orchestrationMode: "sharded" }),
+    scanId: "scan-gpc",
+  });
+  assert.equal(ordinary.gpcObservation, undefined);
+  assert.deepEqual(sharded.gpcObservation, {
+    contractVersion: "certscore.gpc-observation-dispatch.v1",
+    enabled: true,
+    pairWithLane: "runtime_evidence",
+    protocol: "passive_baseline_with_sec_gpc",
+  });
+  assert.equal(sharded.orchestrationMode, "sharded");
 });
 
 test("carries bounded prior policy URLs into Lambda as acceleration hints", () => {
@@ -165,6 +186,7 @@ test("adds the default-off reject worker to eligible sharded scans with target-s
       scanId: `scan-canary-reject-${number}`,
     });
     assert.equal(canaryPayload.postRefusalObservation?.dispatchDelayMs, 500);
+    assert.equal(canaryPayload.postRefusalObservation?.actionSearchTimeoutMs, 14_000);
     assert.equal(canaryPayload.postRefusalObservation?.interactionAuthorization.kind, "owned_canary");
     assert.equal(canaryPayload.postRefusalObservation?.resolver.kind, "canonical_cmp_registry");
   }
@@ -183,15 +205,15 @@ test("adds the default-off reject worker to eligible sharded scans with target-s
     scanConfig: ordinaryConfig,
     scanId: "scan-ordinary",
   });
-  assert.equal(ordinaryPayload.postRefusalObservation?.interactionAuthorization.kind, "scan_target");
+  assert.equal(ordinaryPayload.postRefusalObservation?.interactionAuthorization.kind, "scan_target_resolution");
   assert.equal(
-    ordinaryPayload.postRefusalObservation?.interactionAuthorization.kind === "scan_target"
-      ? ordinaryPayload.postRefusalObservation.interactionAuthorization.normalizedUrl
+    ordinaryPayload.postRefusalObservation?.interactionAuthorization.kind === "scan_target_resolution"
+      ? ordinaryPayload.postRefusalObservation.interactionAuthorization.requestedUrl
       : undefined,
     ordinaryPayload.targetUrl,
   );
   assert.equal(
-    ordinaryPayload.postRefusalObservation?.interactionAuthorization.kind === "scan_target"
+    ordinaryPayload.postRefusalObservation?.interactionAuthorization.kind === "scan_target_resolution"
       ? ordinaryPayload.postRefusalObservation.interactionAuthorization.scanId
       : undefined,
     ordinaryPayload.scanId,
@@ -211,6 +233,32 @@ test("adds the default-off reject worker to eligible sharded scans with target-s
     scanConfig: canaryOnlyOrdinaryConfig,
     scanId: "scan-ordinary-canary-only",
   }).postRefusalObservation, undefined);
+});
+
+test("dispatches both owned canary lanes for exact www ErgoVeritas post-action URLs", () => {
+  for (const pathname of ["/testar1.html", "/testar2.html", "/sample_09_03_26_01.html"]) {
+    const canaryConfig = buildLambdaScanConfig();
+    canaryConfig.hostname = "www.ergoveritas.com";
+    canaryConfig.normalizedUrl = `https://www.ergoveritas.com${pathname}`;
+    canaryConfig.execution = {
+      ...canaryConfig.execution,
+      v2DagLambda: {
+        ...(canaryConfig.execution?.v2DagLambda as Record<string, unknown>),
+        orchestrationMode: "sharded",
+        postAcceptWorkerEnabled: true,
+        postAcceptWorkerRolloutMode: "owned_canary",
+        postRefusalRejectWorkerEnabled: true,
+        postRefusalRejectWorkerRolloutMode: "owned_canary",
+      },
+    };
+
+    const payload = buildLocalV2DagLambdaDispatchPayload({
+      scanConfig: canaryConfig,
+      scanId: `scan-www-${pathname}`,
+    });
+    assert.equal(payload.postAcceptObservation?.interactionAuthorization.kind, "owned_canary");
+    assert.equal(payload.postRefusalObservation?.interactionAuthorization.kind, "owned_canary");
+  }
 });
 
 test("builds local Lambda dispatch payload with bounded debug overrides", () => {
@@ -377,11 +425,21 @@ test("parses SQS-style v2 DAG Lambda result messages as internal artifacts only"
         failureDiagnosticUri: {
           sha256: "a".repeat(64),
           sizeBytes: 512
+        },
+        postAcceptPacketUri: {
+          sha256: "d".repeat(64),
+          sizeBytes: 768
+        },
+        postRefusalPacketUri: {
+          sha256: "e".repeat(64),
+          sizeBytes: 896
         }
       },
       artifactPointers: {
         failureDiagnosticUri: "s3://certscore-dev-artifacts/v2/scan-local-1/failure/FailureDiagnostic.json",
         manifestUri: "s3://certscore-dev-artifacts/v2/scan-local-1/manifest.json",
+        postAcceptPacketUri: "s3://certscore-dev-artifacts/v2/scan-local-1/PostAcceptEvidencePacket.json",
+        postRefusalPacketUri: "s3://certscore-dev-artifacts/v2/scan-local-1/PostRefusalEvidencePacket.json",
         reviewArtifactUri: "s3://certscore-dev-artifacts/v2/scan-local-1/review.json"
       },
       completedAt: "2026-06-15T18:00:00.000Z",
@@ -438,7 +496,11 @@ test("parses SQS-style v2 DAG Lambda result messages as internal artifacts only"
   assert.equal(parsed.parentDispatchSha256, "c".repeat(64));
   assert.equal(parsed.artifactPointers?.manifestUri, "s3://certscore-dev-artifacts/v2/scan-local-1/manifest.json");
   assert.equal(parsed.artifactPointers?.failureDiagnosticUri, "s3://certscore-dev-artifacts/v2/scan-local-1/failure/FailureDiagnostic.json");
+  assert.equal(parsed.artifactPointers?.postAcceptPacketUri, "s3://certscore-dev-artifacts/v2/scan-local-1/PostAcceptEvidencePacket.json");
+  assert.equal(parsed.artifactPointers?.postRefusalPacketUri, "s3://certscore-dev-artifacts/v2/scan-local-1/PostRefusalEvidencePacket.json");
   assert.deepEqual(parsed.artifactMetadata?.failureDiagnosticUri, { sha256: "a".repeat(64), sizeBytes: 512 });
+  assert.deepEqual(parsed.artifactMetadata?.postAcceptPacketUri, { sha256: "d".repeat(64), sizeBytes: 768 });
+  assert.deepEqual(parsed.artifactMetadata?.postRefusalPacketUri, { sha256: "e".repeat(64), sizeBytes: 896 });
   assert.equal(parsed.scannerGitSha, "abc123scanner");
   assert.equal(parsed.scannerImageTag, "scanner-image:abc123scanner");
   assert.equal(parsed.scannerRuntimeVersion, "v2-dag-runtime.1");

@@ -30,7 +30,7 @@ Start here for API, SDK, MCP, and agent workflows:
 
 Canonical MCP Light identity:
 - Official MCP Registry name: ai.certscore/mcp-light
-- Current hosted MCP version: 0.2.16
+- Current hosted MCP version: 0.2.17
 - Registry listing: https://registry.modelcontextprotocol.io/?q=ai.certscore%2Fmcp-light
 - Cursor Directory: https://cursor.directory/plugins/certscoreai-mcp-light
 - Publisher and legal owner: CertScore.ai, LLC
@@ -63,6 +63,7 @@ Search aliases: CertScore.ai, CertScore API, CertScore MCP, website risk API, pr
 - https://certscore.ai/
 - https://certscore.ai/llms-full.txt
 - https://certscore.ai/releases
+- https://certscore.ai/releases/accept-and-reject-path-testing
 - https://certscore.ai/releases/mcp-light
 - https://certscore.ai/releases/feed.xml
 - https://certscore.ai/how-it-works
@@ -84,9 +85,9 @@ Search aliases: CertScore.ai, CertScore API, CertScore MCP, website risk API, pr
 - https://certscore.ai/guides/website-consent-audit
 - https://certscore.ai/guides/detect-tracking-before-consent
 - https://certscore.ai/guides/reject-consent-tracking-test
+- https://certscore.ai/guides/consent-enforcement-testing
 - https://certscore.ai/guides/website-consent-audit-checklist
 - https://certscore.ai/guides/privacy-scanner-vs-cookie-scanner
-- https://certscore.ai/guides/mcp-website-privacy-scanner
 - https://certscore.ai/benchmarks
 - https://certscore.ai/benchmarks/website-consent-tracking-2026
 - https://certscore.ai/benchmarks/pre-consent-tracking-2026
@@ -94,6 +95,7 @@ Search aliases: CertScore.ai, CertScore API, CertScore MCP, website risk API, pr
 - https://certscore.ai/compare
 - https://certscore.ai/compare/privacy-scanner-vs-cookie-scanner
 - https://certscore.ai/compare/website-consent-audit-tools
+- https://certscore.ai/scan/f4362840-376e-4d8c-897a-34a220136ad4
 - https://certscore.ai/press
 
 ## Scanner solution pages

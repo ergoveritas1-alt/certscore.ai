@@ -236,6 +236,7 @@ export async function queueFullScanForDomain(input: QueueFullScanInput): Promise
         bypassRecentScanReuse,
         enforceCooldown: Boolean(input.enforceCooldown),
         enforceMonthlyUsageLimit: Boolean(input.enforceMonthlyUsageLimit),
+        gpcObservationEnabled: true,
         ipHash: requesterIpContext.ipHash,
         planCode: input.planCode,
         provenance: input.provenance ?? null,

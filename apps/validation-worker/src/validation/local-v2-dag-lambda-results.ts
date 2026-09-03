@@ -160,13 +160,18 @@ type LambdaLaneTimingSummary = {
     coordinatorElapsedMs: number | null;
     evidenceJoined: boolean;
     invocationStartedAt: string | null;
-    lane: "consent_proof" | "runtime_evidence" | "policy_evidence" | "reject_observation";
+    lane: "consent_proof" | "runtime_evidence" | "policy_evidence" | "gpc_observation" | "accept_observation" | "reject_observation";
     outcome: "completed" | "disabled" | "failed" | "not_applicable" | "timed_out";
     terminalOutcomeDeltaFromPassiveBarrierMs: number | null;
     terminalOutcomeObservedAt: string | null;
     workerReportedCompletedAt: string | null;
     workerReportedHandlerDurationMs: number | null;
   }>;
+  acceptCompletedBeforeOrAtPassiveBarrier?: boolean | null;
+  acceptLaneAddedWaitMs?: number;
+  acceptLaneJoin?: "disabled" | "failed" | "joined" | "not_applicable" | "timed_out";
+  acceptTailDeltaMs?: number | null;
+  maxAcceptTailWaitMs?: number;
   maxRejectTailWaitMs: number;
   passiveLaneBarrierCompletedAt: string;
   rejectCompletedBeforeOrAtPassiveBarrier: boolean | null;
@@ -1185,7 +1190,10 @@ function parseLambdaLaneTimingSummary(value: unknown): LambdaLaneTimingSummary |
   const coordinatorStartedAt = stringValue(record.coordinatorStartedAt);
   const generatedAt = stringValue(record.generatedAt);
   const passiveLaneBarrierCompletedAt = stringValue(record.passiveLaneBarrierCompletedAt);
+  const acceptLaneJoin = record.acceptLaneJoin;
   const rejectLaneJoin = record.rejectLaneJoin;
+  const maxAcceptTailWaitMs = finiteInteger(record.maxAcceptTailWaitMs, true);
+  const acceptLaneAddedWaitMs = finiteInteger(record.acceptLaneAddedWaitMs, true);
   const maxRejectTailWaitMs = finiteInteger(record.maxRejectTailWaitMs, true);
   const rejectLaneAddedWaitMs = finiteInteger(record.rejectLaneAddedWaitMs, true);
   if (
@@ -1199,7 +1207,7 @@ function parseLambdaLaneTimingSummary(value: unknown): LambdaLaneTimingSummary |
       rejectLaneJoin !== "timed_out") ||
     !Array.isArray(record.lanes)
   ) return undefined;
-  const validLanes = new Set(["consent_proof", "runtime_evidence", "policy_evidence", "reject_observation"]);
+  const validLanes = new Set(["consent_proof", "runtime_evidence", "policy_evidence", "gpc_observation", "accept_observation", "reject_observation"]);
   const validOutcomes = new Set(["completed", "disabled", "failed", "not_applicable", "timed_out"]);
   const lanes = record.lanes.flatMap((value) => {
     const laneRecord = asRecord(value);
@@ -1224,13 +1232,35 @@ function parseLambdaLaneTimingSummary(value: unknown): LambdaLaneTimingSummary |
       workerReportedHandlerDurationMs: nullableInteger(laneRecord.workerReportedHandlerDurationMs, true),
     }];
   });
-  if (lanes.length !== 4 || new Set(lanes.map((lane) => lane.lane)).size !== 4) return undefined;
+  const hasAcceptLane = lanes.some((lane) => lane.lane === "accept_observation");
+  const expectedLaneCount = hasAcceptLane ? 5 : 4;
+  if (lanes.length !== expectedLaneCount || new Set(lanes.map((lane) => lane.lane)).size !== expectedLaneCount) {
+    return undefined;
+  }
+  if (
+    hasAcceptLane &&
+    (
+      maxAcceptTailWaitMs === null ||
+      acceptLaneAddedWaitMs === null ||
+      (acceptLaneJoin !== "disabled" && acceptLaneJoin !== "failed" &&
+        acceptLaneJoin !== "joined" && acceptLaneJoin !== "not_applicable" &&
+        acceptLaneJoin !== "timed_out")
+    )
+  ) return undefined;
+  const acceptCompleted = record.acceptCompletedBeforeOrAtPassiveBarrier;
   const rejectCompleted = record.rejectCompletedBeforeOrAtPassiveBarrier;
   return {
+    ...(hasAcceptLane ? {
+      acceptCompletedBeforeOrAtPassiveBarrier: typeof acceptCompleted === "boolean" ? acceptCompleted : null,
+      acceptLaneAddedWaitMs: acceptLaneAddedWaitMs!,
+      acceptLaneJoin: acceptLaneJoin as NonNullable<LambdaLaneTimingSummary["acceptLaneJoin"]>,
+      acceptTailDeltaMs: nullableInteger(record.acceptTailDeltaMs),
+    } : {}),
     contractVersion: "certscore.v2.lambda-lane-timing.v1",
     coordinatorStartedAt,
     generatedAt,
     lanes,
+    ...(hasAcceptLane ? { maxAcceptTailWaitMs: maxAcceptTailWaitMs! } : {}),
     maxRejectTailWaitMs,
     passiveLaneBarrierCompletedAt,
     rejectCompletedBeforeOrAtPassiveBarrier: typeof rejectCompleted === "boolean" ? rejectCompleted : null,

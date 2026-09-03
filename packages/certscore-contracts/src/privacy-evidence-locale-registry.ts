@@ -141,7 +141,7 @@ const BASE_PRIVACY_EVIDENCE_LOCALE_REGISTRY: readonly PrivacyEvidenceLocaleRegis
     consentControls: { accept: ["összes elfogadása", "mindent elfogadok"], reject: ["összes elutasítása", "mindent elutasítok", "nem kötelező sütik elutasítása"], options: ["süti beállítások", "beállítások kezelése"], necessaryOnly: ["csak a szükséges", "csak szükséges sütik"] },
   }),
   locale("ro", {
-    privacyPolicyLabels: ["politică de confidențialitate", "politica de confidențialitate", "protecția datelor"], privacyPolicyPathSlugs: ["politica-de-confidentialitate", "protectia-datelor"], cookiePolicyLabels: ["politica de cookie-uri"], cookiePolicyPathSlugs: ["politica-de-cookie-uri"], cookieSettingsLabels: ["setări cookie"], termsLabels: ["termeni și condiții"], termsPathSlugs: ["termeni-si-conditii"], contextHints: ["confidențialitate", "date personale", "cookie", "consimțământ"], tldHints: [".ro"],
+    privacyPolicyLabels: ["politică de confidențialitate", "politica de confidențialitate", "protecția datelor"], privacyPolicyPathSlugs: ["politica-de-confidentialitate", "protectia-datelor"], cookiePolicyLabels: ["politica de cookie-uri"], cookiePolicyPathSlugs: ["politica-de-cookie-uri"], cookieSettingsLabels: ["setări cookie"], termsLabels: ["termeni și condiții"], termsPathSlugs: ["termeni-si-conditii"], contextHints: ["confidențialitate", "datele cu caracter personal", "date personale", "date cu caracter personal", "cookie", "consimțământ"], tldHints: [".ro"],
     consentControls: { accept: ["acceptă toate", "permite toate"], reject: ["respinge toate", "refuză toate"], options: ["setări cookie", "gestionează preferințele"], necessaryOnly: ["doar cele necesare", "doar cookie-urile necesare"] },
   }),
   locale("th", {

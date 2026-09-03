@@ -70,12 +70,24 @@ export type StaticFixturePage =
   | "consent-sits-style-preferences"
   | "consent-tracking-persists-after-reject"
   | "post-refusal-reject-honored"
+  | "post-refusal-reject-handler-after-dom-ready"
+  | "post-refusal-openai-cookie-confirmed"
+  | "post-refusal-openai-cookie-partial"
+  | "post-refusal-openai-rerendered-control"
+  | "post-refusal-openai-cookie-stale"
   | "post-refusal-certscore-owned-analytics"
   | "post-refusal-reject-observation-long-task"
   | "post-refusal-reject-action-phase-nonessential"
   | "post-refusal-reject-ignored"
   | "post-refusal-reject-missing"
   | "post-refusal-reject-persistence-only"
+  | "post-refusal-reject-nested-label"
+  | "post-refusal-reject-container-scoped-link"
+  | "post-refusal-reject-navigation-storage"
+  | "post-refusal-reject-transient-duplicate"
+  | "post-refusal-reject-transient-aro"
+  | "post-refusal-reject-acknowledgement-transition"
+  | "post-refusal-reject-hash-transition"
   | "post-refusal-reject-unconfirmed"
   | "post-refusal-reject-inflight"
   | "post-refusal-reject-inflight-redirect-flood"
@@ -96,8 +108,11 @@ export type StaticFixturePage =
   | "post-refusal-onetrust-tcf-contradiction"
   | "post-refusal-onetrust-tcf-stale"
   | "post-refusal-onetrust-tcf-delayed-contradiction"
+  | "post-refusal-onetrust-very-late"
   | "post-refusal-onetrust-tcf-storage-unavailable"
   | "post-refusal-onetrust-cookie-confirmed"
+  | "post-refusal-onetrust-suffixed-cookie-confirmed"
+  | "post-refusal-orejime-generic-controls"
   | "post-refusal-onetrust-continue-without-accepting"
   | "post-refusal-onetrust-cookie-navigation"
   | "post-refusal-onetrust-cookie-stale"
@@ -107,6 +122,8 @@ export type StaticFixturePage =
   | "post-refusal-usercentrics-delayed"
   | "post-refusal-usercentrics-legacy-deny"
   | "post-refusal-usercentrics-storage-stale"
+  | "post-refusal-tarteaucitron-necessary-only-save"
+  | "post-refusal-tarteaucitron-optional-selected"
   | "post-refusal-canonical-cmp-ambiguous"
   | "ga-collection"
   | "ga-first-party-vendor-associated-cookie"
@@ -302,12 +319,24 @@ const fixtureSlugs: Record<StaticFixturePage, string> = {
   "consent-sits-style-preferences": "consent-sits-style-preferences",
   "consent-tracking-persists-after-reject": "consent-persists",
   "post-refusal-reject-honored": "post-refusal-reject-honored",
+  "post-refusal-reject-handler-after-dom-ready": "post-refusal-reject-handler-after-dom-ready",
+  "post-refusal-openai-cookie-confirmed": "post-refusal-openai-cookie-confirmed",
+  "post-refusal-openai-cookie-partial": "post-refusal-openai-cookie-partial",
+  "post-refusal-openai-rerendered-control": "post-refusal-openai-rerendered-control",
+  "post-refusal-openai-cookie-stale": "post-refusal-openai-cookie-stale",
   "post-refusal-certscore-owned-analytics": "post-refusal-certscore-owned-analytics",
   "post-refusal-reject-observation-long-task": "post-refusal-reject-observation-long-task",
   "post-refusal-reject-action-phase-nonessential": "post-refusal-reject-action-phase-nonessential",
   "post-refusal-reject-ignored": "post-refusal-reject-ignored",
   "post-refusal-reject-missing": "post-refusal-reject-missing",
   "post-refusal-reject-persistence-only": "post-refusal-reject-persistence-only",
+  "post-refusal-reject-nested-label": "post-refusal-reject-nested-label",
+  "post-refusal-reject-container-scoped-link": "post-refusal-reject-container-scoped-link",
+  "post-refusal-reject-navigation-storage": "post-refusal-reject-navigation-storage",
+  "post-refusal-reject-transient-duplicate": "post-refusal-reject-transient-duplicate",
+  "post-refusal-reject-transient-aro": "post-refusal-reject-transient-aro",
+  "post-refusal-reject-acknowledgement-transition": "post-refusal-reject-acknowledgement-transition",
+  "post-refusal-reject-hash-transition": "post-refusal-reject-hash-transition",
   "post-refusal-reject-unconfirmed": "post-refusal-reject-unconfirmed",
   "post-refusal-reject-inflight": "post-refusal-reject-inflight",
   "post-refusal-reject-inflight-redirect-flood": "post-refusal-reject-inflight-redirect-flood",
@@ -328,8 +357,11 @@ const fixtureSlugs: Record<StaticFixturePage, string> = {
   "post-refusal-onetrust-tcf-contradiction": "post-refusal-onetrust-tcf-contradiction",
   "post-refusal-onetrust-tcf-stale": "post-refusal-onetrust-tcf-stale",
   "post-refusal-onetrust-tcf-delayed-contradiction": "post-refusal-onetrust-tcf-delayed-contradiction",
+  "post-refusal-onetrust-very-late": "post-refusal-onetrust-very-late",
   "post-refusal-onetrust-tcf-storage-unavailable": "post-refusal-onetrust-tcf-storage-unavailable",
   "post-refusal-onetrust-cookie-confirmed": "post-refusal-onetrust-cookie-confirmed",
+  "post-refusal-onetrust-suffixed-cookie-confirmed": "post-refusal-onetrust-suffixed-cookie-confirmed",
+  "post-refusal-orejime-generic-controls": "post-refusal-orejime-generic-controls",
   "post-refusal-onetrust-continue-without-accepting": "post-refusal-onetrust-continue-without-accepting",
   "post-refusal-onetrust-cookie-navigation": "post-refusal-onetrust-cookie-navigation",
   "post-refusal-onetrust-cookie-stale": "post-refusal-onetrust-cookie-stale",
@@ -339,6 +371,8 @@ const fixtureSlugs: Record<StaticFixturePage, string> = {
   "post-refusal-usercentrics-delayed": "post-refusal-usercentrics-delayed",
   "post-refusal-usercentrics-legacy-deny": "post-refusal-usercentrics-legacy-deny",
   "post-refusal-usercentrics-storage-stale": "post-refusal-usercentrics-storage-stale",
+  "post-refusal-tarteaucitron-necessary-only-save": "post-refusal-tarteaucitron-necessary-only-save",
+  "post-refusal-tarteaucitron-optional-selected": "post-refusal-tarteaucitron-optional-selected",
   "post-refusal-canonical-cmp-ambiguous": "post-refusal-canonical-cmp-ambiguous",
   "ga-collection": "ga-page",
   "ga-first-party-vendor-associated-cookie": "ga-first-party-cookie",
@@ -533,6 +567,21 @@ function handleRequest(request: IncomingMessage, response: ServerResponse): void
     return;
   }
 
+  if (url.pathname === "/post-refusal/delayed-reject-handler.js") {
+    const timer = setTimeout(() => {
+      if (response.destroyed) return;
+      response.writeHead(200, { "Content-Type": "application/javascript; charset=utf-8" });
+      response.end(`
+        document.querySelector('[data-certscore-consent-action="reject"]')?.addEventListener("click", () => {
+          localStorage.setItem("certscore_fixture_consent", "rejected");
+          document.querySelector("#certscore-fixture-consent-banner")?.remove();
+        });
+      `);
+    }, 350);
+    response.on("close", () => clearTimeout(timer));
+    return;
+  }
+
   if (url.pathname === "/frames/consent-reject") {
     response.writeHead(200, { "Content-Type": "text/html; charset=utf-8" });
     response.end(`<!doctype html><html><body>
@@ -541,6 +590,12 @@ function handleRequest(request: IncomingMessage, response: ServerResponse): void
         <button id="reject-all" type="button">Reject All</button>
         <button id="accept-all" type="button">Accept All</button>
       </div>
+      <script>
+        document.getElementById("reject-all")?.addEventListener("click", () => {
+          localStorage.setItem("cmp_consent", "rejected");
+          document.getElementById("banner")?.remove();
+        });
+      </script>
     </body></html>`);
     return;
   }
@@ -1512,18 +1567,107 @@ function bodyMarkup(caseName: StaticFixturePage): string {
 }
 
 function postRefusalFixtureMarkup(caseName: StaticFixturePage): string {
+  if (caseName === "post-refusal-openai-cookie-stale") {
+    return `
+      <div class="fixture_bannerActions">
+        <p>We use cookies for analytics and marketing.</p>
+        <button class="wm-button wm-button--secondary wm-button--radius-full" type="button">Reject non-essential</button>
+      </div>
+      <script>
+        document.cookie = "oai-allow-ne=false; Path=/; SameSite=Lax";
+        document.cookie = "oai-logged-out-consent-chosen=true; Path=/; SameSite=Lax";
+        document.cookie = "oai_consent_analytics=false; Path=/; SameSite=Lax";
+        document.cookie = "oai_consent_marketing=false; Path=/; SameSite=Lax";
+        document.cookie = "oai_consent_personalization=false; Path=/; SameSite=Lax";
+        document.querySelector("button.wm-button--secondary")?.addEventListener("click", () => {
+          document.querySelector("div.fixture_bannerActions")?.remove();
+        });
+      </script>
+    `;
+  }
+  if (caseName === "post-refusal-openai-cookie-confirmed") {
+    return `
+      <div class="fixture_bannerActions">
+        <p>We use cookies for analytics and marketing.</p>
+        <button class="wm-button wm-button--secondary wm-button--radius-full" type="button">Reject non-essential</button>
+      </div>
+      <script>
+        document.querySelector("button.wm-button--secondary")?.addEventListener("click", () => {
+          document.cookie = "oai-allow-ne=false; Path=/; SameSite=Lax";
+          document.cookie = "oai-logged-out-consent-chosen=true; Path=/; SameSite=Lax";
+          document.cookie = "oai_consent_analytics=false; Path=/; SameSite=Lax";
+          document.cookie = "oai_consent_marketing=false; Path=/; SameSite=Lax";
+          document.cookie = "oai_consent_personalization=false; Path=/; SameSite=Lax";
+          document.querySelector("div.fixture_bannerActions")?.remove();
+        });
+      </script>
+    `;
+  }
+  if (caseName === "post-refusal-openai-cookie-partial") {
+    return `
+      <div class="fixture_bannerActions">
+        <p>We use cookies for analytics and marketing.</p>
+        <button class="wm-button wm-button--secondary wm-button--radius-full" type="button">Reject non-essential</button>
+      </div>
+      <script>
+        document.querySelector("button.wm-button--secondary")?.addEventListener("click", () => {
+          document.cookie = "oai-allow-ne=false; Path=/; SameSite=Lax";
+          document.cookie = "oai-logged-out-consent-chosen=true; Path=/; SameSite=Lax";
+          document.cookie = "oai_consent_analytics=false; Path=/; SameSite=Lax";
+          document.cookie = "oai_consent_marketing=false; Path=/; SameSite=Lax";
+          document.querySelector("div.fixture_bannerActions")?.remove();
+        });
+      </script>
+    `;
+  }
+  if (caseName === "post-refusal-openai-rerendered-control") {
+    return `
+      <div class="fixture_bannerActions">
+        <p>We use cookies for analytics and marketing.</p>
+        <button id="openai-initial-reject" class="wm-button wm-button--secondary wm-button--radius-full" style="pointer-events:none" type="button">Reject non-essential</button>
+      </div>
+      <script>
+        setTimeout(() => {
+          document.getElementById("openai-initial-reject")?.remove();
+          const replacement = document.createElement("button");
+          replacement.id = "openai-replacement-reject";
+          replacement.className = "wm-button wm-button--medium";
+          replacement.type = "button";
+          replacement.textContent = "Reject non-essential";
+          replacement.addEventListener("click", () => {
+            document.cookie = "oai-allow-ne=false; Path=/; SameSite=Lax";
+            document.cookie = "oai-logged-out-consent-chosen=true; Path=/; SameSite=Lax";
+            document.cookie = "oai_consent_analytics=false; Path=/; SameSite=Lax";
+            document.cookie = "oai_consent_marketing=false; Path=/; SameSite=Lax";
+            document.cookie = "oai_consent_personalization=false; Path=/; SameSite=Lax";
+            document.querySelector("div.fixture_bannerActions")?.remove();
+          });
+          document.querySelector("div.fixture_bannerActions")?.appendChild(replacement);
+        }, 400);
+      </script>
+    `;
+  }
+  if (caseName === "post-refusal-reject-handler-after-dom-ready") {
+    return `
+      <section id="certscore-fixture-consent-banner" aria-label="Cookie choices">
+        <p>Choose whether optional analytics cookies may be used.</p>
+        <button data-certscore-consent-action="reject" type="button">Reject all</button>
+      </section>
+      <script src="/post-refusal/delayed-reject-handler.js"></script>
+    `;
+  }
   if (caseName === "post-refusal-certscore-owned-analytics") {
     return `
       <section aria-label="Cookie and analytics preferences">
         <p>Optional analytics help improve CertScore.</p>
         <div>
-          <button type="button">Cookie settings</button>
-          <button id="certscore-owned-reject" data-certscore-consent-action="reject" type="button">Reject analytics</button>
-          <button type="button">Allow analytics</button>
+          <button class="wm-button wm-button--medium wm-button--ghost" type="button">Cookie settings</button>
+          <button class="wm-button wm-button--medium wm-button--secondary" data-certscore-consent-action="reject" type="button">Reject analytics</button>
+          <button class="wm-button wm-button--medium wm-button--primary" type="button">Allow analytics</button>
         </div>
       </section>
       <script>
-        document.getElementById("certscore-owned-reject")?.addEventListener("click", () => {
+        document.querySelector('[data-certscore-consent-action="reject"]')?.addEventListener("click", () => {
           localStorage.setItem("certscore:analytics-consent:v1", "denied");
           document.querySelector('section[aria-label="Cookie and analytics preferences"]')?.remove();
         });
@@ -1551,8 +1695,11 @@ function postRefusalFixtureMarkup(caseName: StaticFixturePage): string {
     caseName === "post-refusal-onetrust-tcf-contradiction" ||
     caseName === "post-refusal-onetrust-tcf-stale" ||
     caseName === "post-refusal-onetrust-tcf-delayed-contradiction" ||
+    caseName === "post-refusal-onetrust-very-late" ||
     caseName === "post-refusal-onetrust-tcf-storage-unavailable" ||
     caseName === "post-refusal-onetrust-cookie-confirmed" ||
+    caseName === "post-refusal-onetrust-suffixed-cookie-confirmed" ||
+    caseName === "post-refusal-orejime-generic-controls" ||
     caseName === "post-refusal-onetrust-continue-without-accepting" ||
     caseName === "post-refusal-onetrust-cookie-navigation" ||
     caseName === "post-refusal-onetrust-cookie-stale" ||
@@ -1561,12 +1708,21 @@ function postRefusalFixtureMarkup(caseName: StaticFixturePage): string {
     caseName === "post-refusal-cookiebot-cookie-stale" ||
     caseName === "post-refusal-usercentrics-delayed" ||
     caseName === "post-refusal-usercentrics-legacy-deny" ||
-    caseName === "post-refusal-usercentrics-storage-stale"
+    caseName === "post-refusal-usercentrics-storage-stale" ||
+    caseName === "post-refusal-tarteaucitron-necessary-only-save" ||
+    caseName === "post-refusal-tarteaucitron-optional-selected"
   ) {
     return namedCmpPostRefusalFixtureMarkup(caseName);
   }
   const rejectMissing = caseName === "post-refusal-reject-missing";
   const rejectUnconfirmed = caseName === "post-refusal-reject-unconfirmed";
+  const rejectNestedLabel = caseName === "post-refusal-reject-nested-label";
+  const rejectContainerScopedLink = caseName === "post-refusal-reject-container-scoped-link";
+  const rejectNavigationStorage = caseName === "post-refusal-reject-navigation-storage";
+  const rejectTransientDuplicate = caseName === "post-refusal-reject-transient-duplicate";
+  const rejectTransientAro = caseName === "post-refusal-reject-transient-aro";
+  const rejectAcknowledgementTransition = caseName === "post-refusal-reject-acknowledgement-transition";
+  const rejectHashTransition = caseName === "post-refusal-reject-hash-transition";
   const rejectIgnored = caseName === "post-refusal-reject-ignored";
   const rejectObservationLongTask = caseName === "post-refusal-reject-observation-long-task";
   const rejectInflight = caseName === "post-refusal-reject-inflight";
@@ -1589,18 +1745,35 @@ function postRefusalFixtureMarkup(caseName: StaticFixturePage): string {
       <h1>Post-refusal localhost fixture</h1>
       <p>This deterministic fixture is restricted to local scanner development.</p>
     </section>
-    <div id="certscore-fixture-consent-banner" role="dialog" aria-label="Cookie consent">
+    <div id="certscore-fixture-consent-banner" role="dialog" aria-label="Cookie consent"${rejectHashTransition ? ' style="display:contents"' : ""}>
       <p>We use optional analytics cookies. Choose whether to accept or reject them.</p>
-      <button type="button" data-certscore-consent-action="accept">Accept all</button>
-      ${rejectMissing
+      ${rejectTransientAro
+        ? '<div class="ju" id="certscore-transient-aro"></div>'
+        : '<button type="button" data-certscore-consent-action="accept">Accept all</button>'}
+      ${rejectMissing || rejectTransientAro
         ? ""
-        : `<button id="certscore-fixture-reject" type="button" data-certscore-consent-action="reject"${rejectClickFails ? ' style="pointer-events:none"' : ""}>Reject all</button>`}
+        : rejectContainerScopedLink
+          ? '<span id="certscore-fixture-reject-container" class="consent-button"><a data-ref-origin="COOKIE-REJECT" href="javascript:void(0)" title="Reject optional cookies">Reject all</a></span>'
+          : `<button id="certscore-fixture-reject" type="button" data-certscore-consent-action="reject"${rejectNestedLabel ? ' aria-label="Reject all"' : ""}${rejectClickFails ? ' style="pointer-events:none"' : ""}>${rejectNestedLabel ? '<p class="nested-reject-label">Reject all</p>' : "Reject all"}</button>`}
       ${rejectReresolvedBeforeClick
         ? '<div id="certscore-fixture-click-overlay" style="position:fixed;inset:0;z-index:1000"></div>'
+        : ""}
+      ${rejectTransientDuplicate
+        ? '<button id="certscore-fixture-reject-duplicate" type="button" data-certscore-consent-action="reject">Reject all</button>'
         : ""}
     </div>
     <script>
       const fixtureMode = ${JSON.stringify(caseName)};
+      if (${JSON.stringify(rejectContainerScopedLink)}) {
+        const unrelated = document.createElement("a");
+        unrelated.href = "#article-rejection";
+        unrelated.setAttribute("title", "Reject all");
+        unrelated.textContent = "Article rejection";
+        document.body.appendChild(unrelated);
+      }
+      if (${JSON.stringify(rejectNavigationStorage)} && localStorage.getItem("certscore_navigation_consent")) {
+        document.getElementById("certscore-fixture-consent-banner")?.remove();
+      }
       document.cookie = "_ga=GA1.1.LOCALFIXTURE; Path=/; SameSite=Lax";
       if (${JSON.stringify(rejectLowercaseFsSiteState)}) {
         localStorage.setItem("fs_closing_native_notifications_toast_session_count", "1");
@@ -1639,9 +1812,40 @@ function postRefusalFixtureMarkup(caseName: StaticFixturePage): string {
       if (${JSON.stringify(rejectReresolvedBeforeClick)}) {
         setTimeout(() => document.getElementById("certscore-fixture-click-overlay")?.remove(), 1300);
       }
-      document.getElementById("certscore-fixture-reject")?.addEventListener("click", () => {
-        document.getElementById("certscore-fixture-consent-banner")?.remove();
-        if (${JSON.stringify(rejectUnconfirmed || rejectStaleStorage)}) return;
+      if (${JSON.stringify(rejectTransientDuplicate)}) {
+        setTimeout(() => document.getElementById("certscore-fixture-reject-duplicate")?.remove(), 150);
+      }
+      if (${JSON.stringify(rejectTransientAro)}) {
+        const controls = document.getElementById("certscore-transient-aro");
+        controls?.addEventListener("click", (event) => {
+          const control = event.target;
+          if (!(control instanceof HTMLButtonElement) || control.textContent?.trim() !== "Decline All") return;
+          localStorage.setItem("certscore_fixture_consent", "rejected");
+          document.getElementById("certscore-fixture-consent-banner")?.remove();
+        });
+        setTimeout(() => {
+          if (controls) controls.innerHTML = '<button type="button">Manage Preferences</button><button type="button">Decline All</button><button type="button">Allow All</button>';
+        }, 180);
+      }
+      ${rejectContainerScopedLink
+        ? 'document.querySelector("#certscore-fixture-reject-container a")'
+        : 'document.getElementById("certscore-fixture-reject")'}?.addEventListener("click", () => {
+        const consentBanner = document.getElementById("certscore-fixture-consent-banner");
+        if (${JSON.stringify(rejectAcknowledgementTransition)}) {
+          if (consentBanner) consentBanner.innerHTML = '<p>Your cookie preferences have been saved.</p><a href="/cookie-settings">Change cookie settings</a>';
+        } else {
+          consentBanner?.remove();
+        }
+        if (${JSON.stringify(rejectHashTransition)}) {
+          window.location.hash = "preferences-saved";
+          return;
+        }
+        if (${JSON.stringify(rejectNavigationStorage)}) {
+          localStorage.setItem("certscore_navigation_consent", JSON.stringify({ analytics: false, marketing: false, preferences: false }));
+          window.location.reload();
+          return;
+        }
+        if (${JSON.stringify(rejectUnconfirmed || rejectStaleStorage || rejectAcknowledgementTransition)}) return;
 
         if (${JSON.stringify(rejectActionPhaseNonessential)}) {
           document.cookie = "mp_action_phase_mixpanel=ACTION_PHASE; Path=/; SameSite=Lax";
@@ -1698,14 +1902,64 @@ function postRefusalFixtureMarkup(caseName: StaticFixturePage): string {
 }
 
 function namedCmpPostRefusalFixtureMarkup(caseName: StaticFixturePage): string {
+  if (caseName === "post-refusal-orejime-generic-controls") {
+    return `
+      <section><h1>Orejime post-refusal fixture</h1></section>
+      <div id="orejime" class="orejime-Env">
+        <div class="orejime-Notice" role="dialog" aria-label="Gestion des cookies">
+          <p>Le site utilise des cookies. Choisissez vos préférences.</p>
+          <button class="consent-action" type="button">Accepter les cookies</button>
+          <button class="consent-action" type="button">Tout refuser</button>
+          <button class="consent-action" type="button">Personnaliser</button>
+        </div>
+      </div>
+      <script>
+        window.orejimeConfig = { fixture: true };
+        const reject = Array.from(document.querySelectorAll("button.consent-action"))
+          .find((button) => button.textContent?.trim() === "Tout refuser");
+        reject?.addEventListener("click", () => {
+          document.cookie = "orejime=%7B%22analytics%22%3Afalse%7D; Path=/; SameSite=Lax";
+          document.getElementById("orejime")?.remove();
+        });
+      </script>
+    `;
+  }
+  if (
+    caseName === "post-refusal-tarteaucitron-necessary-only-save" ||
+    caseName === "post-refusal-tarteaucitron-optional-selected"
+  ) {
+    const optionalSelected = caseName === "post-refusal-tarteaucitron-optional-selected";
+    return `
+      <section><h1>DSGVO All in One / tarteaucitron fixture</h1></section>
+      <div id="tarteaucitronRoot" role="dialog" aria-label="Cookie-Einstellungen">
+        <div id="tarteaucitronAlertBig">
+        <p>Sie können Ihre Cookie-Auswahl speichern.</p>
+        <label><input id="dsgvoaio-checkbox-essentials" type="checkbox" checked disabled> Essenziell</label>
+        <label><input id="dsgvoaio-checkbox-analytics" type="checkbox"${optionalSelected ? " checked" : ""}> Statistik</label>
+        <span id="tarteaucitronPersonalize">Alle akzeptieren</span>
+        <span id="tarteaucitronCloseAlert" tabindex="0">Auswahl speichern</span>
+        <span id="tarteaucitronCustomize">Personalisieren</span>
+        </div>
+      </div>
+      <script>
+        window.tarteaucitron = { fixture: true };
+        document.getElementById("tarteaucitronCloseAlert")?.addEventListener("click", () => {
+          localStorage.setItem("tarteaucitron", "necessary-only");
+          document.getElementById("tarteaucitronAlertBig")?.remove();
+        });
+      </script>
+    `;
+  }
   const oneTrust = caseName === "post-refusal-onetrust-tcf-honored" ||
     caseName === "post-refusal-onetrust-tcf-ignored" ||
     caseName === "post-refusal-onetrust-no-reject" ||
     caseName === "post-refusal-onetrust-tcf-contradiction" ||
     caseName === "post-refusal-onetrust-tcf-stale" ||
     caseName === "post-refusal-onetrust-tcf-delayed-contradiction" ||
+    caseName === "post-refusal-onetrust-very-late" ||
     caseName === "post-refusal-onetrust-tcf-storage-unavailable" ||
     caseName === "post-refusal-onetrust-cookie-confirmed" ||
+    caseName === "post-refusal-onetrust-suffixed-cookie-confirmed" ||
     caseName === "post-refusal-onetrust-continue-without-accepting" ||
     caseName === "post-refusal-onetrust-cookie-navigation" ||
     caseName === "post-refusal-onetrust-cookie-stale";
@@ -1714,8 +1968,13 @@ function namedCmpPostRefusalFixtureMarkup(caseName: StaticFixturePage): string {
   const noReject = caseName === "post-refusal-onetrust-no-reject";
   const staleTcf = caseName === "post-refusal-onetrust-tcf-stale";
   const delayedContradiction = caseName === "post-refusal-onetrust-tcf-delayed-contradiction";
+  const oneTrustVeryLate = caseName === "post-refusal-onetrust-very-late";
   const storageUnavailable = caseName === "post-refusal-onetrust-tcf-storage-unavailable";
-  const cookieConfirmed = caseName === "post-refusal-onetrust-cookie-confirmed";
+  const cookieConfirmed = caseName === "post-refusal-onetrust-cookie-confirmed" ||
+    caseName === "post-refusal-onetrust-suffixed-cookie-confirmed";
+  const oneTrustConsentCookieName = caseName === "post-refusal-onetrust-suffixed-cookie-confirmed"
+    ? "OptanonConsent_mUOxXq"
+    : "OptanonConsent";
   const continueWithoutAccepting = caseName === "post-refusal-onetrust-continue-without-accepting";
   const cookieNavigation = caseName === "post-refusal-onetrust-cookie-navigation";
   const staleCookie = caseName === "post-refusal-onetrust-cookie-stale";
@@ -1757,7 +2016,7 @@ function namedCmpPostRefusalFixtureMarkup(caseName: StaticFixturePage): string {
       ${rejectButton}
       ${separateOneTrustCloseButton}
     </div>`;
-  const renderDelayMs = usercentrics ? 1_200 : 0;
+  const renderDelayMs = oneTrustVeryLate ? 8_500 : usercentrics ? 1_200 : 0;
   return `
     <section>
       <h1>Named CMP post-refusal localhost fixture</h1>
@@ -1782,8 +2041,8 @@ function namedCmpPostRefusalFixtureMarkup(caseName: StaticFixturePage): string {
         tcString: ${JSON.stringify(tcfV2CoreString(staleTcf ? [] : [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]))},
         purpose: { consents: Object.fromEntries(Array.from({ length: 10 }, (_, index) => [String(index + 1), ${JSON.stringify(!staleTcf)}])) }
       };
-      if (${JSON.stringify(cookieConfirmation)}) {
-        document.cookie = "OptanonConsent=baseline; Path=/; SameSite=Lax";
+      if (${JSON.stringify(cookieConfirmation || oneTrustVeryLate)}) {
+        document.cookie = ${JSON.stringify(`${oneTrustConsentCookieName}=baseline; Path=/; SameSite=Lax`)};
       }
       if (${JSON.stringify(cookiebotCookieStale)}) {
         document.cookie = "CookieConsent=baseline; Path=/; SameSite=Lax";
@@ -1826,7 +2085,7 @@ function namedCmpPostRefusalFixtureMarkup(caseName: StaticFixturePage): string {
           }
           if (${JSON.stringify(oneTrust)}) {
             if (${JSON.stringify(cookieConfirmation)}) {
-              document.cookie = "OptanonConsent=${staleCookie ? "baseline" : "rejected"}; Path=/; SameSite=Lax";
+              document.cookie = ${JSON.stringify(`${oneTrustConsentCookieName}=${staleCookie ? "baseline" : "rejected"}; Path=/; SameSite=Lax`)};
               if (${JSON.stringify(cookieNavigation)}) {
                 setTimeout(() => window.location.assign("/post-refusal/navigation-settled"), 25);
               }
@@ -2605,6 +2864,28 @@ function consentFlowHomeMarkup(caseName: StaticFixturePage): string {
       if (mode === "consent-cmp-cookie-persists") document.cookie = "OptanonConsent=fixture; Path=/; SameSite=Lax";
       if (mode === "consent-analytics-cookie-persists") document.cookie = "_ga=fixture; Path=/; SameSite=Lax";
       if (mode === "consent-preference-center-reject-success") localStorage.setItem("OptanonConsentState", "visible");
+      function openOwnedPaidAlternativeSandbox() {
+        if (mode !== "consent-reject-subscribe" && mode !== "consent-reject-pay") return false;
+        if (document.getElementById("paid-alternative-sandbox")) return true;
+        const panel = document.createElement("section");
+        panel.id = "paid-alternative-sandbox";
+        panel.setAttribute("role", "dialog");
+        panel.setAttribute("aria-label", "Owned non-transactional paid alternative sandbox");
+        panel.setAttribute("data-certscore-owned-nontransactional-sandbox", "true");
+        panel.innerHTML = '<h2>Test paid alternative</h2><p>This is an owned, non-transactional sandbox. No account, subscription, payment method, charge, or external request is created.</p><p data-testid="paid-alternative-terms">Optional tracking-free access: EUR 1 for one day. Content and privacy controls remain otherwise equivalent for this fixture.</p><button id="sandbox-complete-paid-alternative" type="button">Complete test alternative</button><button id="sandbox-cancel-paid-alternative" type="button">Cancel</button>';
+        document.body.appendChild(panel);
+        document.getElementById("sandbox-complete-paid-alternative")?.addEventListener("click", () => {
+          localStorage.setItem("certscore_paid_alternative_state", "optional_purposes_denied");
+          localStorage.setItem("certscore_paid_alternative_completion", "sandbox_confirmed");
+          panel.remove();
+          hideBanner();
+        });
+        document.getElementById("sandbox-cancel-paid-alternative")?.addEventListener("click", () => {
+          localStorage.setItem("certscore_paid_alternative_completion", "sandbox_cancelled");
+          panel.remove();
+        });
+        return true;
+      }
       document.getElementById("accept-all")?.addEventListener("click", () => {
         document.cookie = "_ga=fixture; Path=/; SameSite=Lax";
         track("accept");
@@ -2615,6 +2896,7 @@ function consentFlowHomeMarkup(caseName: StaticFixturePage): string {
         hideBanner();
       });
       document.getElementById("reject-all")?.addEventListener("click", () => {
+        if (openOwnedPaidAlternativeSandbox()) return;
         if (mode === "consent-tracking-persists-after-reject") track("reject");
         if (mode === "consent-lean-guarded-image-cookie") {
           const consentPixel = new Image();

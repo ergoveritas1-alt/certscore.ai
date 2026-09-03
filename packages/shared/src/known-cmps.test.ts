@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import {
   KNOWN_CMP_REGISTRY,
   detectKnownCmps,
+  getKnownCmpActionCapability,
   getKnownCmpVendorForHost,
   getKnownCmpVendorName,
   isKnownCmpCookieName,
@@ -14,11 +15,13 @@ test("registry includes first-wave CMP vendors", () => {
   const names = KNOWN_CMP_REGISTRY.map((entry) => entry.canonicalName);
   for (const name of [
     "OneTrust",
+    "Fides",
     "TrustArc",
     "Usercentrics",
     "Consentmanager",
     "Cookiebot",
     "CookieYes",
+    "Orejime",
     "DSGVO All in One / tarteaucitron",
     "BST DSGVO Cookie notice plugin, non-TCF",
     "Sourcepoint",
@@ -36,6 +39,27 @@ test("registry includes first-wave CMP vendors", () => {
   }
   assert.ok(names.includes("Drupal EU Cookie Compliance module, non-TCF"));
   assert.ok(names.includes("Amazon Privacy Preferences"));
+  assert.ok(names.includes("OpenAI first-party consent controls"));
+});
+
+test("detects OpenAI first-party consent controls only from retained consent markers", () => {
+  assert.equal(getKnownCmpVendorName({ urls: ["https://chatgpt.com/"] }), null);
+  assert.equal(
+    getKnownCmpVendorName({ domSelectors: ["div[class*='_bannerActions']"] }),
+    "OpenAI first-party consent controls",
+  );
+  assert.equal(
+    getKnownCmpVendorName({ cookieNames: ["oai_consent_analytics"] }),
+    "OpenAI first-party consent controls",
+  );
+});
+
+test("detects Fides from canonical runtime markers without host inference", () => {
+  assert.equal(getKnownCmpVendorName({ urls: ["https://www.nytimes.com/"] }), null);
+  assert.equal(getKnownCmpVendorName({ domSelectors: ["#fides-banner"] }), "Fides");
+  assert.equal(getKnownCmpVendorName({ cookieNames: ["fides_consent"] }), "Fides");
+  assert.equal(getKnownCmpVendorName({ jsGlobals: ["Fides"] }), "Fides");
+  assert.equal(isKnownCmpCookieName("fides_consent_tenant_a"), true);
 });
 
 test("detects Amazon Privacy Preferences from first-party consent evidence", () => {
@@ -91,6 +115,18 @@ test("does not infer CookieYes from an unrelated generic cky-prefixed class", ()
   assert.equal(getKnownCmpVendorName({ urls: ["https://example.test/assets/cky-layout.js"] }), null);
 });
 
+test("detects Orejime only from canonical runtime markers", () => {
+  assert.equal(getKnownCmpVendorName({ cookieNames: ["orejime"] }), "Orejime");
+  assert.equal(getKnownCmpVendorName({ domSelectors: ["div.orejime-Notice"] }), "Orejime");
+  assert.equal(getKnownCmpVendorName({ jsGlobals: ["orejimeConfig"] }), "Orejime");
+  assert.equal(
+    getKnownCmpVendorName({ urls: ["https://example.test/eprivacy/orejime/configuration.js"] }),
+    "Orejime",
+  );
+  assert.equal(getKnownCmpVendorName({ domSelectors: ["#cookie-notice"] }), null);
+  assert.equal(getKnownCmpVendorName({ domSelectors: ["div.unrelated-consent-shell"] }), null);
+});
+
 test("detects DSGVO All in One and tarteaucitron from exact runtime markers", () => {
   assert.equal(
     getKnownCmpVendorName({
@@ -132,6 +168,9 @@ test("canonical CMP registry owns deterministic reject-control selectors", () =>
     "#onetrust-reject-all-handler",
     "#onetrust-banner-sdk.ot-close-btn-link button.onetrust-close-btn-handler.banner-close-button",
   ]);
+  assert.deepEqual(selectors.get("Fides"), [
+    "#fides-banner button.fides-reject-all-button",
+  ]);
   assert.deepEqual(selectors.get("Cookiebot"), [
     "#CybotCookiebotDialogBodyButtonDecline",
     "#CybotCookiebotDialogBodyLevelButtonLevelOptinDeclineAll",
@@ -140,6 +179,27 @@ test("canonical CMP registry owns deterministic reject-control selectors", () =>
     'button[data-testid="uc-deny-all-button"]',
     "#uc-cmp-footer #deny",
   ]);
+  assert.deepEqual(selectors.get("Google Funding Choices"), [
+    "button.fc-cta-do-not-consent",
+    'button[aria-label="Do not consent"]:has(.fc-button-label)',
+  ]);
+  assert.deepEqual(selectors.get("Seznam CMP"), [
+    '[data-testid="button-reject"]',
+  ]);
+});
+
+test("canonical CMP registry owns the fail-closed tarteaucitron necessary-only target", () => {
+  const tarteaucitron = KNOWN_CMP_REGISTRY.find((entry) =>
+    entry.canonicalName === "DSGVO All in One / tarteaucitron"
+  );
+  assert.deepEqual(tarteaucitron?.necessaryOnlyControlTargets, [{
+    bannerSelector: "#tarteaucitronAlertBig",
+    controlSelector: "#tarteaucitronCloseAlert",
+    disallowedCheckedSelector:
+      "#tarteaucitronRoot input:checked:not(#dsgvoaio-checkbox-essentials)",
+    expectedNormalizedLabel: "auswahl speichern",
+    requiredCheckedSelector: "#dsgvoaio-checkbox-essentials:checked",
+  }]);
 });
 
 test("detects Usercentrics service domains", () => {
@@ -195,6 +255,17 @@ test("classifies CMP infrastructure while preserving attribution signals", () =>
   assert.equal(detection?.evidenceTreatment, "cmp_infrastructure");
   assert.ok(detection?.matchedSignals.some((signal) => signal.source === "cookie" && signal.value === "OptanonConsent"));
   assert.equal(isKnownCmpInfrastructureUrl("https://cdn.cookielaw.org/scripttemplates/otSDKStub.js"), true);
+});
+
+test("detects OneTrust tenant-suffixed canonical consent cookies", () => {
+  const detection = detectKnownCmps({
+    cookieNames: ["OptanonConsent_mUOxXq", "OptanonAlertBoxClosed_mUOxXq"],
+  }).find((candidate) => candidate.canonicalName === "OneTrust");
+
+  assert.equal(detection?.canonicalName, "OneTrust");
+  assert.ok(detection?.matchedSignals.some((signal) =>
+    signal.source === "cookie" && signal.value === "OptanonConsent_mUOxXq"
+  ));
 });
 
 test("does not treat generic TCF protocol globals as vendor identity", () => {
@@ -262,4 +333,21 @@ test("attributes cookielawinfo plugin cookies to CookieYes rather than OneTrust"
   assert.equal(getKnownCmpVendorName({ cookieNames: ["cookielawinfo-checkbox-analytics"] }), "CookieYes");
   assert.equal(getKnownCmpVendorName({ cookieNames: ["cookielawinfo-checkbox-necessary"] }), "CookieYes");
   assert.equal(getKnownCmpVendorName({ labels: ["cookielawinfo-checkbox-analytics"] }), null);
+});
+
+test("action capability matrix qualifies every target CMP for bounded Accept and Reject", () => {
+  for (const canonicalName of [
+    "Consentmanager",
+    "HubSpot Consent Banner",
+    "Ketch",
+    "Cookie Information",
+    "Iubenda",
+    "InMobi Choice",
+    "Quantcast Choice",
+    "Termly",
+    "Transcend",
+  ]) {
+    assert.equal(getKnownCmpActionCapability(canonicalName, "accept")?.recipeAvailable, true);
+    assert.equal(getKnownCmpActionCapability(canonicalName, "reject")?.recipeAvailable, true);
+  }
 });

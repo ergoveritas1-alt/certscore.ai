@@ -39,13 +39,16 @@ import {
   suppressUnsupportedCmpAliasRows
 } from "../scans/runtime-inventory-projection";
 import {
-  deriveRegulatoryCoverageScore,
-  GDPR_EPRIVACY_EVIDENCE_SCORE_VERSION
+  deriveRegulatoryCoverageScore
 } from "../scans/regulatory-coverage-score";
 import { meaningfulPolicySurfaceTitle, prioritizePublicPolicySurfaces } from "../scans/policy-enrichment-row";
 import type { ScanDetailResponse } from "../../server/scans/get-scan-by-id";
 import { getPersistedCanonicalReportProjection } from "../../server/scans/persisted-canonical-report-projection";
-import { deriveCanonicalOverallScoreForReport } from "../../server/scans/canonical-overall-score";
+import {
+  CANONICAL_OVERALL_SCORE_SOURCE,
+  CANONICAL_OVERALL_SCORE_VERSION,
+  deriveCanonicalOverallScoreForReport,
+} from "../../server/scans/canonical-overall-score";
 import { withPersistedFirstLayerConsentEvidence } from "../../server/scans/scan-report-consent-projection";
 import {
   getKnownCmpVendorForHost,
@@ -76,6 +79,11 @@ import { buildPulseAgentInterpretation } from "./agent-interpretation";
 import { projectGdprTransparencyTopicCandidateSummary, projectPulseCalibrationContext } from "./calibration-context";
 export { projectPulseCalibrationContext } from "./calibration-context";
 import type { PulseDetail, PulseFormat, PulseFreshnessMode } from "./types";
+import {
+  deriveApiV2GpcResponse,
+  deriveApiV2PostAcceptObservation,
+  deriveApiV2PostRefusalObservation,
+} from "../api-v2/scan-resource";
 
 type PulseProjectionInput = {
   detail: PulseDetail;
@@ -438,10 +446,10 @@ function buildPulseReportSurface(input: {
     coverageConfidence: gdprEprivacyScoreAssessment.coverageConfidence,
     coverageRatio: gdprEprivacyScoreAssessment.coverageRatio,
     scoreKind: "overall" as const,
-    scoreSource: stringValue(scanRecord.snapshot?.score_source) ?? "canonical.gdpr_eprivacy",
+    scoreSource: stringValue(scanRecord.snapshot?.score_source) ?? CANONICAL_OVERALL_SCORE_SOURCE,
     scoreStatus: score === null ? "withheld" as const : "scored" as const,
     scoreValue: score,
-    scoreVersion: stringValue(scanRecord.snapshot?.score_version) ?? GDPR_EPRIVACY_EVIDENCE_SCORE_VERSION,
+    scoreVersion: stringValue(scanRecord.snapshot?.score_version) ?? CANONICAL_OVERALL_SCORE_VERSION,
     withholdingReason: score === null ? "canonical_overall_score_unavailable" : null
   };
   const groupedTrackerRows = buildTrackerInventoryGroupRows(trackerInventoryRows);
@@ -733,6 +741,20 @@ function deriveCoverage(scanRecord: ScanDetailResponse) {
       ? "Reject Path did not complete within the six-second post-primary allowance."
       : "Reject Path worker failed before verified evidence could be joined."
     : null;
+  const postAcceptCoverage = asRecord(
+    runtimeArtifacts?.postAcceptObservationCoverage ??
+    runtimeArtifacts?.post_accept_observation_coverage,
+  );
+  const postAcceptLimitationCode = typeof postAcceptCoverage?.limitationCode === "string"
+    ? postAcceptCoverage.limitationCode
+    : null;
+  const postAcceptLimitation = postAcceptCoverage?.status === "limited"
+    ? postAcceptLimitationCode === "accept_path_timeout"
+      ? "Accept Path did not complete within the six-second post-primary allowance."
+      : postAcceptLimitationCode === "accept_observation_window_truncated"
+        ? "Accept was confirmed, but the bounded post-accept observation window was truncated."
+        : "Accept Path worker failed before verified evidence could be joined."
+    : null;
   const accessInterruptions =
     posture.interruptionLabel || posture.interruptionReason || posture.stopOutcomeTitle || posture.stopReviewTitle || posture.stopReason
       ? [
@@ -749,6 +771,9 @@ function deriveCoverage(scanRecord: ScanDetailResponse) {
       : [];
   const interruptions = [
     ...accessInterruptions,
+    ...(postAcceptLimitation
+      ? [{ label: "Accept Path unavailable", reason: postAcceptLimitation }]
+      : []),
     ...(postRefusalLimitation
       ? [{ label: "Reject Path unavailable", reason: postRefusalLimitation }]
       : []),
@@ -778,6 +803,7 @@ function deriveCoverage(scanRecord: ScanDetailResponse) {
     limitations: [
       "Automated public-web scan only.",
       PULSE_COVERAGE_LIMITATION_COPY,
+      ...(postAcceptLimitation ? [postAcceptLimitation] : []),
       ...(postRefusalLimitation ? [postRefusalLimitation] : []),
     ],
     interruptions: interruptions.slice(0, 10)
@@ -1693,6 +1719,9 @@ function buildSummaryArtifact(input: {
     scanStatus: input.base.scanStatus,
     resultDisposition: input.base.resultDisposition,
     noGo: input.base.noGo,
+    gpcResponse: input.base.gpcResponse,
+    postAcceptObservation: input.base.postAcceptObservation,
+    postRefusalObservation: input.base.postRefusalObservation,
     timestamps: input.timestamps,
     summary: input.base.summary,
     executiveSummary: input.base.executiveSummary,
@@ -1890,6 +1919,9 @@ function buildEvidenceArtifact(input: {
     scanId: input.base.scanId,
     scan_id: input.base.scan_id,
     scanStatus: input.base.scanStatus,
+    gpcResponse: input.base.gpcResponse,
+    postAcceptObservation: input.base.postAcceptObservation,
+    postRefusalObservation: input.base.postRefusalObservation,
     resultDisposition: input.base.resultDisposition,
     noGo: input.base.noGo,
     timestamps: input.timestamps,
@@ -2208,6 +2240,9 @@ export function buildPulseProjection(input: PulseProjectionInput) {
   const effectiveScanStatus = pulseNoGoState?.scanStatus ?? scan.status;
   const coverage = deriveCoverage(hydratedScanRecord);
   const quality = assessPulseScanRecordQuality(hydratedScanRecord);
+  const gpcResponse = deriveApiV2GpcResponse(hydratedScanRecord) ?? null;
+  const postAcceptObservation = deriveApiV2PostAcceptObservation(hydratedScanRecord) ?? null;
+  const postRefusalObservation = deriveApiV2PostRefusalObservation(hydratedScanRecord) ?? null;
   const persistedCanonicalProjection = getPersistedCanonicalReportProjection(hydratedScanRecord);
   const packets = (persistedCanonicalProjection
     ? filterContradictoryPositiveSurfaceFindings(persistedCanonicalProjection.ownerUnifiedFindings)
@@ -2415,6 +2450,9 @@ export function buildPulseProjection(input: PulseProjectionInput) {
     scan_id: scan.id,
     scanStatus: effectiveScanStatus,
     ...(noGoProjection ?? {}),
+    gpcResponse,
+    postAcceptObservation,
+    postRefusalObservation,
     summary,
     executiveSummary,
     surfacedResults,

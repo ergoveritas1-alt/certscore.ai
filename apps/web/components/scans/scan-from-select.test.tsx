@@ -35,6 +35,24 @@ test("ScanFromSelect defaults Lambda on and fresh re-scan off", () => {
 
   assert.match(html, /<input[^>]*name="localV2RunViaLambda"[^>]*value="true"/);
   assert.doesNotMatch(html, /<input[^>]*name="forceNewScan"[^>]*value="true"/);
+  assert.doesNotMatch(html, /name="gpcObservation"/);
+});
+
+test("ScanFromSelect omits redundant always-on GPC controls and status", () => {
+  const html = renderToStaticMarkup(
+    createElement(ScanFromSelect, {
+      allowRestrictedScanOptions: true,
+      includeLocalV2ScanProfileOption: true,
+      includeScanFromOptions: false,
+      variant: "icon"
+    })
+  );
+  const source = readFileSync(join(process.cwd(), "apps/web/components/scans/scan-from-select.tsx"), "utf8");
+
+  assert.doesNotMatch(html, /name="gpcObservation"/);
+  assert.doesNotMatch(html, /GPC comparison/);
+  assert.doesNotMatch(source, /Included automatically · isolated Lambda lane/);
+  assert.doesNotMatch(source, /onGpcObservationChange/);
 });
 
 test("ScanFromSelect renders scan-from choices before option toggles", () => {

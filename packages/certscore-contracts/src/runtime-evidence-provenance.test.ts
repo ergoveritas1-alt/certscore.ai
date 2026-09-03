@@ -1,6 +1,10 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { cookieEventSchema, policySurfaceObservationSchema } from "./index.js";
+import {
+  cookieEventSchema,
+  policySurfaceObservationSchema,
+  scannerBuildProvenanceSchema,
+} from "./index.js";
 
 test("cookie evidence retains typed purpose, necessity, confidence, and reason codes", () => {
   const parsed = cookieEventSchema.parse({
@@ -46,6 +50,19 @@ test("policy evidence retains retrieval and regional provenance without inferrin
     translationApplied: false,
     documentRole: "policy_document",
     documentRoleReasonCodes: ["evidence_bound_substantive_policy_document"],
+    governingPolicyBodyAssessment: {
+      contractVersion: "governing_policy_body_assessment.v1",
+      state: "substantive",
+      canonicalContextTermCount: 3,
+      documentTextChars: 8_420,
+      evidenceBoundObservedTopicCount: 1,
+      substantiveDisclosureSignalCount: 1,
+      reasonCodes: [
+        "policy_body_target_owned",
+        "complete_policy_text_retention",
+        "evidence_bound_policy_topic_retained",
+      ],
+    },
     governingPolicySelection: {
       contractVersion: "governing_policy_selection.v1",
       state: "primary",
@@ -96,6 +113,7 @@ test("policy evidence retains retrieval and regional provenance without inferrin
   assert.equal(parsed.directlyLinkedFromScannedPage, true);
   assert.equal(parsed.translationApplied, false);
   assert.deepEqual(parsed.documentRoleReasonCodes, ["evidence_bound_substantive_policy_document"]);
+  assert.equal(parsed.governingPolicyBodyAssessment?.state, "substantive");
   assert.equal(parsed.governingPolicySelection?.state, "primary");
   assert.equal(parsed.retainedPolicySections[0]?.extractionMethod, "html_heading_hierarchy");
   assert.equal(parsed.retainedPolicySections[0]?.sourceOffsetBasis, "sanitized_html");
@@ -105,4 +123,18 @@ test("policy evidence retains retrieval and regional provenance without inferrin
   assert.equal(parsed.retainedArticle13SectionEvidence[0]?.evidenceTextSha256, evidenceTextSha256);
   assert.equal(parsed.gdprTransparencyTopicCoverageDiagnostics?.[0]?.evaluationState, "observed");
   assert.equal(parsed.gdprTransparencyTopicCoverageDiagnostics?.[0]?.sourceDocumentSha256, documentTextSha256);
+});
+
+test("scanner build provenance retains a bounded build identity and fails closed when empty", () => {
+  const parsed = scannerBuildProvenanceSchema.parse({
+    contractVersion: "scanner_build_provenance.v1",
+    gitSha: "abcdef1234567890",
+    imageTag: "scanner-eu-ir-2026-08-31",
+    runtimeVersion: "nodejs22.x",
+  });
+
+  assert.equal(parsed.gitSha, "abcdef1234567890");
+  assert.throws(() => scannerBuildProvenanceSchema.parse({
+    contractVersion: "scanner_build_provenance.v1",
+  }));
 });

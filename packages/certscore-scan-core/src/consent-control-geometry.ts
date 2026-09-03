@@ -1654,11 +1654,103 @@ function collectConsentGeometryInPage(input: {
     const id = element.getAttribute("id");
     const testId = element.getAttribute("data-testid");
     const aria = element.getAttribute("aria-label");
-    if (id) return `#${cssEscape(id)}`;
-    if (testId) return `[data-testid="${testId.slice(0, 80).replace(/"/g, '\\"')}"]`;
-    if (aria) return `${element.tagName.toLowerCase()}[aria-label="${aria.slice(0, 80).replace(/"/g, '\\"')}"]`;
-    const classes = (element.getAttribute("class") || "").split(/\s+/).filter(Boolean).slice(0, 2);
-    return `${element.tagName.toLowerCase()}${classes.map((item) => `.${cssEscape(item)}`).join("")}`;
+    const tagName = element.tagName.toLowerCase();
+    const stableCandidates = [
+      id ? `#${cssEscape(id)}` : undefined,
+      testId ? `[data-testid="${testId.slice(0, 80).replace(/"/g, '\\"')}"]` : undefined,
+      aria ? `${tagName}[aria-label="${aria.slice(0, 80).replace(/"/g, '\\"')}"]` : undefined,
+    ].filter((candidate): candidate is string => Boolean(candidate));
+    for (const candidate of stableCandidates) {
+      if (selectorUniquelyTargetsElement(candidate, element)) return candidate;
+    }
+
+    const classes = (element.getAttribute("class") || "")
+      .split(/\s+/)
+      .filter(Boolean)
+      .slice(0, 8);
+    const descendantCandidates = Array.from({ length: classes.length + 1 }, (_, classCount) =>
+      `${tagName}${classes
+        .slice(0, classCount)
+        .map((item) => `.${cssEscape(item)}`)
+        .join("")}`
+    );
+    const ancestors: Element[] = [];
+    let ancestor = element.parentElement;
+    while (ancestor && ancestors.length < 4) {
+      ancestors.push(ancestor);
+      ancestor = ancestor.parentElement;
+    }
+    const stableAncestorSelectors = ancestors.flatMap((candidateAncestor) => {
+      const ancestorTag = candidateAncestor.tagName.toLowerCase();
+      const ancestorId = candidateAncestor.getAttribute("id");
+      const ancestorTestId = candidateAncestor.getAttribute("data-testid");
+      const ancestorAria = candidateAncestor.getAttribute("aria-label");
+      const ancestorClasses = (candidateAncestor.getAttribute("class") || "")
+        .split(/\s+/)
+        .filter(Boolean)
+        .slice(0, 8);
+      const classCandidates = Array.from(
+        { length: ancestorClasses.length },
+        (_, index) => `${ancestorTag}${ancestorClasses
+          .slice(0, index + 1)
+          .map((item) => `.${cssEscape(item)}`)
+          .join("")}`,
+      );
+      return [
+        ancestorId ? `#${cssEscape(ancestorId)}` : undefined,
+        ancestorTestId
+          ? `[data-testid="${ancestorTestId.slice(0, 80).replace(/"/g, '\\"')}"]`
+          : undefined,
+        ancestorAria
+          ? `${ancestorTag}[aria-label="${ancestorAria.slice(0, 80).replace(/"/g, '\\"')}"]`
+          : undefined,
+        ...classCandidates,
+      ].filter((candidate): candidate is string => Boolean(candidate) &&
+        selectorUniquelyTargetsElement(candidate!, candidateAncestor));
+    });
+    for (const ancestorSelector of stableAncestorSelectors) {
+      for (const descendantSelector of descendantCandidates) {
+        const candidate = `${ancestorSelector} ${descendantSelector}`;
+        if (
+          selectorUniquelyTargetsElement(candidate, element) ||
+          selectorUniquelyTargetsElementByLabel(candidate, element)
+        ) return candidate;
+      }
+    }
+    for (let classCount = 1; classCount <= classes.length; classCount += 1) {
+      const candidate = `${tagName}${classes
+        .slice(0, classCount)
+        .map((item) => `.${cssEscape(item)}`)
+        .join("")}`;
+      if (selectorUniquelyTargetsElement(candidate, element)) return candidate;
+    }
+
+    // A non-unique hint remains useful for retained diagnostics. Consumers
+    // that may interact with the control must re-resolve it and fail closed.
+    return stableCandidates[0] ??
+      `${tagName}${classes.slice(0, 2).map((item) => `.${cssEscape(item)}`).join("")}`;
+  }
+
+  function selectorUniquelyTargetsElement(selector: string, element: Element): boolean {
+    try {
+      const matches = deepQuerySelectorAll(selector).slice(0, 2);
+      return matches.length === 1 && matches[0] === element;
+    } catch {
+      return false;
+    }
+  }
+
+  function selectorUniquelyTargetsElementByLabel(selector: string, element: Element): boolean {
+    try {
+      const expectedLabel = compactText(labelFor(element)).toLowerCase();
+      if (!expectedLabel) return false;
+      const labelMatches = deepQuerySelectorAll(selector)
+        .filter((candidate) => compactText(labelFor(candidate)).toLowerCase() === expectedLabel)
+        .slice(0, 2);
+      return labelMatches.length === 1 && labelMatches[0] === element;
+    } catch {
+      return false;
+    }
   }
 
   function layerFor(element: Element, box: ConsentControlRect): ConsentControlGeometryLayer {

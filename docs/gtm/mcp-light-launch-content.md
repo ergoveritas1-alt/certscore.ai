@@ -2,7 +2,8 @@
 
 Use this copy only while the following facts remain current:
 
-- Official MCP Registry: `ai.certscore/mcp-light`, hosted version `0.2.16`
+- Official MCP Registry: `ai.certscore/mcp-light`, hosted version `0.2.17`
+- GitHub MCP Registry: live at `https://github.com/mcp/ai.certscore/mcp-light`
 - Endpoint: `https://mcp.certscore.ai/mcp/light`
 - Authentication: none
 - Tools: `certscore_scan_site`, `certscore_get_scan_status`, `certscore_get_scan_bundle`
@@ -14,9 +15,9 @@ Every post should link to `https://certscore.ai/mcp/light` with a channel-specif
 
 ## LinkedIn launch post
 
-We published CertScore.ai MCP Light for agents that need a fast, evidence-backed first look at a public website’s privacy risk signals.
+CertScore.ai MCP Light is now live in GitHub’s MCP Registry for agents that need a fast, evidence-backed first look at a public website’s privacy risk signals.
 
-It is live in the Official MCP Registry as `ai.certscore/mcp-light` and requires no account, API key, or OAuth. Connect the Streamable HTTP endpoint, give your agent a public URL, and follow a three-tool workflow from scan request to completed findings bundle.
+Find it on GitHub as `ai.certscore/mcp-light`. It requires no account, API key, or OAuth: install it, give your agent a public URL, and follow a three-tool workflow from scan request to completed findings bundle.
 
 The scan can surface observed cookies and trackers, CMP and consent controls, privacy-policy and transparency signals, GDPR/ePrivacy and CCPA/CPRA review context, and HTTPS/TLS observations. On eligible scans, CertScore may also report bounded post-refusal evidence—but only when a deterministic Reject action was confirmed and eligible activity was actually retained.
 
@@ -24,15 +25,17 @@ CertScore results are automated public-web observations for human and agentic re
 
 Try MCP Light: https://certscore.ai/mcp/light?utm_source=linkedin&utm_medium=organic_social&utm_campaign=mcp_light_launch
 
+GitHub MCP Registry: https://github.com/mcp/ai.certscore/mcp-light
+
 #MCP #PrivacyEngineering #AIEngineering #DeveloperTools
 
 ## X launch thread
 
-1. CertScore.ai MCP Light is live in the Official MCP Registry: `ai.certscore/mcp-light`.
+1. CertScore.ai MCP Light is now live in GitHub’s MCP Registry: `ai.certscore/mcp-light`.
 
    No account. No API key. No OAuth. Give an MCP-capable agent a public URL and get an evidence-backed website privacy-risk scan.
 
-   https://certscore.ai/mcp/light?utm_source=x&utm_medium=organic_social&utm_campaign=mcp_light_launch
+   https://github.com/mcp/ai.certscore/mcp-light
 
 2. The Light surface is deliberately small:
 
@@ -46,7 +49,7 @@ Try MCP Light: https://certscore.ai/mcp/light?utm_source=linkedin&utm_medium=org
 
 5. These are automated public-web observations for review—not legal advice, certification, or a compliance determination.
 
-6. Cursor Directory is live, direct Cursor installation is available, and the official Cursor Marketplace submission remains under review.
+6. GitHub Registry and Cursor Directory are live, direct Cursor installation is available, and the official Cursor Marketplace submission remains under review.
 
    Setup, prompts, and troubleshooting: https://certscore.ai/mcp/light?utm_source=x&utm_medium=organic_social&utm_campaign=mcp_light_launch
 
@@ -54,7 +57,9 @@ Try MCP Light: https://certscore.ai/mcp/light?utm_source=linkedin&utm_medium=org
 
 ### CertScore.ai MCP Light: no-auth website privacy scans for MCP clients
 
-CertScore.ai MCP Light is published in the Official MCP Registry as `ai.certscore/mcp-light`.
+CertScore.ai MCP Light is now live in GitHub’s MCP Registry as `ai.certscore/mcp-light`:
+
+https://github.com/mcp/ai.certscore/mcp-light
 
 Connect any Streamable HTTP-capable MCP client to:
 
@@ -82,13 +87,15 @@ Results are automated public-web observations for human and agentic review, not 
 
 **Title:** CertScore.ai MCP Light — no-auth public website privacy scans with a three-tool workflow
 
-We have published CertScore.ai MCP Light in the Official MCP Registry as `ai.certscore/mcp-light`.
+CertScore.ai MCP Light is now live in GitHub’s MCP Registry as `ai.certscore/mcp-light`.
 
 It is a hosted Streamable HTTP server for low-volume public website privacy-risk scans. There is no signup or authentication step. The integration intentionally exposes three read-oriented workflow tools: start or reuse a scan, poll status while active, and retrieve a bounded completed findings bundle.
 
 The useful implementation detail is the evidence boundary: results preserve observed evidence, provenance, and limitations. Missing or inconclusive evidence is not converted into a compliance claim. Reject Path output is included only for eligible scans with a confirmed bounded Reject action and retained qualifying post-refusal evidence.
 
 Endpoint and copy-ready prompts: https://certscore.ai/mcp/light?utm_source=mcp_community&utm_medium=community&utm_campaign=mcp_light_launch
+
+GitHub listing: https://github.com/mcp/ai.certscore/mcp-light
 
 Source: https://github.com/ergoveritas1-alt/certscore.ai
 

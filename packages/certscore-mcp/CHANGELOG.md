@@ -4,6 +4,12 @@
 
 - Prepare Cursor integration `1.0.2` with the `CertScore.ai` MCP component name, expanded evidence-confirmed Reject Path discovery metadata, and three official Cursor prompt deeplinks on the MCP Light landing page.
 
+## 0.2.17
+
+- Surface typed GPC, Accept Path, and Reject Path outcomes consistently in terminal status and completed scan bundles.
+- Preserve jurisdiction-neutral GPC wording, retained `Sec-GPC: 1` proof, baseline-versus-GPC deltas, and separately identified California scoring.
+- Keep unavailable GPC data optional under bounded MCP response budgets so canonical findings are not displaced by an empty result.
+
 ## 0.2.16
 
 - Make confirmed Reject Path outcomes explicit with typed verdict, observation strategy, intentional termination metadata, direct agent interpretation, and separately scoped coverage limitations.

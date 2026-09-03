@@ -1787,7 +1787,18 @@ function canonicalRetainedTopicEvidence(
     ...row.evidenceExcerpts,
     ...row.conflictingExcerpts,
   ].join("\n");
+  const referencedDocument = row.sourceDocumentIds
+    .map((sourceDocumentId) => packet.documents.find((candidate) =>
+      candidate.documentId === sourceDocumentId
+    ))
+    .find((document) =>
+      document &&
+      isTargetPolicyDocument(document) &&
+      document.documentFetchState === "fetched" &&
+      document.documentEvaluationState === "usable"
+    );
   if (
+    referencedDocument &&
     classifyGdprTransparencyTopics({ text: retainedEvidenceText }).matches.some(
       (match) => match.topic === topic,
     )
@@ -1795,8 +1806,8 @@ function canonicalRetainedTopicEvidence(
     return {
       excerpt: row.evidenceExcerpts[0] ?? row.conflictingExcerpts[0] ?? "",
       provenance: "review_excerpt",
-      sourceDocumentId: row.sourceDocumentIds[0] ?? "",
-      sourceUrl: row.sourceUrls[0] ?? "",
+      sourceDocumentId: referencedDocument.documentId,
+      sourceUrl: referencedDocument.canonicalUrl,
     };
   }
   return null;

@@ -59,6 +59,60 @@ test("executive overview names a confirmed Reject-path failure", () => {
   assert.match(copy, /8-second post-Reject window/i);
 });
 
+test("executive overview includes the confirmed Accept-path comparison result", () => {
+  const copy = buildExecutiveOverview({
+    ...baseInput,
+    acceptPath: {
+      observationWindowMs: 3_000,
+      state: "activity_observed",
+    },
+    findings: [{ summary: "Consent-dependent activity followed Accept.", title: "Post-Accept activity" }],
+  });
+
+  assertBounded(copy);
+  assert.match(copy, /confirmed Accept path retained consent-dependent activity/i);
+  assert.match(copy, /post-Accept comparison baseline/i);
+  assert.doesNotMatch(copy, /score-neutral|affect(?:s|ed)? (?:the )?score/i);
+});
+
+test("executive overview names a contradictory retained Accept state", () => {
+  const copy = buildExecutiveOverview({
+    ...baseInput,
+    acceptPath: {
+      observationWindowMs: 3_000,
+      state: "review_signal",
+    },
+    findings: [{ summary: "The retained state contradicted Accept.", title: "Consent-state review" }],
+  });
+
+  assertBounded(copy);
+  assert.match(copy, /consent record saved afterward still showed analytics and advertising as denied/i);
+});
+
+test("executive overview describes Reject outcomes without disclosing scoring treatment", () => {
+  const reviewCopy = buildExecutiveOverview({
+    ...baseInput,
+    findings: [{ summary: "Storage remained after Reject.", title: "Post-choice storage review" }],
+    rejectPath: {
+      observationWindowMs: 8_000,
+      state: "review_signal",
+    },
+  });
+  const incompleteCopy = buildExecutiveOverview({
+    ...baseInput,
+    findings: [{ summary: "Reject testing was incomplete.", title: "Post-choice review" }],
+    rejectPath: {
+      note: "The deterministic control could not be verified.",
+      observationWindowMs: null,
+      state: "incomplete",
+    },
+  });
+
+  assert.match(reviewCopy, /retained storage persistence remains a review signal/i);
+  assert.match(incompleteCopy, /Reject-path testing did not complete/i);
+  assert.doesNotMatch(`${reviewCopy} ${incompleteCopy}`, /score-neutral|affect(?:s|ed)? (?:the )?score|score effect|deduct|partial credit/i);
+});
+
 test("executive overview summarizes a focused mixed review without creating new findings", () => {
   const copy = buildExecutiveOverview({
     ...baseInput,

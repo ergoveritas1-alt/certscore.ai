@@ -278,6 +278,24 @@ test("routine scanner deploys promote immutable digests without recreating infra
   assert.doesNotMatch(verifyFunction, /endsWith\(`:\$\{expectedSha\}`\)/);
 });
 
+test("checked-in AWS deployment paths keep the all-eligible Accept worker enabled", async () => {
+  const [scannerTerraform, webTerraform, webWorkflow, deployFast, parityCheck] = await Promise.all([
+    readFile(scannerTerraformPath, "utf8"),
+    readFile(webTerraformPath, "utf8"),
+    readFile(".github/workflows/web-aws-ecs-deploy.yml", "utf8"),
+    readFile("scripts/deploy-fast.ts", "utf8"),
+    readFile("scripts/check-regional-scanner-parity.ts", "utf8"),
+  ]);
+
+  assert.match(scannerTerraform, /CERTSCORE_POST_ACCEPT_WORKER_ENABLED\s+=\s+"1"/);
+  assert.match(webTerraform, /name\s+=\s+"CERTSCORE_POST_ACCEPT_WORKER_ENABLED", value\s+=\s+"1"/);
+  assert.match(webTerraform, /name\s+=\s+"CERTSCORE_POST_ACCEPT_WORKER_ROLLOUT_MODE", value\s+=\s+"all_eligible"/);
+  assert.match(deployFast, /CERTSCORE_POST_ACCEPT_WORKER_ENABLED:\s*"1"/);
+  assert.match(webWorkflow, /name:"CERTSCORE_POST_ACCEPT_WORKER_ENABLED",value:"1"/);
+  assert.match(webWorkflow, /name:"CERTSCORE_POST_ACCEPT_WORKER_ROLLOUT_MODE",value:"all_eligible"/);
+  assert.match(parityCheck, /postAcceptWorkerEnabled !== "1"/);
+});
+
 test("regional scanner parity follows the bounded Lambda and region-specific proxy contracts", async () => {
   const source = await readFile("scripts/check-regional-scanner-parity.ts", "utf8");
   assert.match(source, /\["timeout", config\.Timeout, 75\]/);

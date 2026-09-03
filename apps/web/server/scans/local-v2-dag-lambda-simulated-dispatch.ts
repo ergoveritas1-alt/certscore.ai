@@ -90,7 +90,7 @@ class LocalDiskS3ReadClient {
 
 type LocalParityArgsPayload = Pick<
   LocalV2DagLambdaDispatchPayload,
-  "awsRegion" | "debugOverrides" | "postRefusalObservation" | "profile" | "scanId" | "targetUrl"
+  "awsRegion" | "debugOverrides" | "postAcceptObservation" | "postRefusalObservation" | "profile" | "scanId" | "targetUrl"
 >;
 
 export function buildLocalV2DagSimulatedLambdaArgs(input: {
@@ -130,6 +130,9 @@ export function buildLocalV2DagSimulatedLambdaArgs(input: {
   }
   if (input.payload.postRefusalObservation?.enabled === true) {
     args.push("--post-refusal-config", JSON.stringify(input.payload.postRefusalObservation));
+  }
+  if (input.payload.postAcceptObservation?.enabled === true) {
+    args.push("--post-accept-config", JSON.stringify(input.payload.postAcceptObservation));
   }
   return args;
 }

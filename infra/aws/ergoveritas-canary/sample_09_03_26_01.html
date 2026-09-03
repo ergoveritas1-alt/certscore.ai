@@ -1,0 +1,161 @@
+<!-- OWNED CERTSCORE SAMPLE — deterministic Accept/Reject interaction authorized for scanner validation -->
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="robots" content="noindex, nofollow, noarchive">
+  <title>ErgoVeritas — CertScore consent-path sample</title>
+  <style>
+    :root { color-scheme: light; font-family:Inter,ui-sans-serif,system-ui,sans-serif; }
+    * { box-sizing:border-box; }
+    body { background:#f8fafc; color:#0f172a; line-height:1.55; margin:0; }
+    header { background:#07172d; color:#fff; }
+    header div, main, footer div { margin:0 auto; max-width:980px; padding:22px 24px; }
+    header a { color:#bae6fd; font-weight:700; text-decoration:none; }
+    main { padding-bottom:220px; padding-top:54px; }
+    .eyebrow { color:#0369a1; font-size:.75rem; font-weight:800; letter-spacing:.12em; text-transform:uppercase; }
+    h1 { font-size:clamp(2rem,5vw,3.5rem); line-height:1.05; margin:.3em 0; max-width:760px; }
+    h2 { font-size:1.25rem; }
+    .lede { color:#334155; font-size:1.15rem; max-width:760px; }
+    .grid { display:grid; gap:18px; grid-template-columns:repeat(auto-fit,minmax(230px,1fr)); margin-top:34px; }
+    .card { background:#fff; border:1px solid #cbd5e1; border-radius:14px; padding:20px; }
+    .card p { color:#475569; margin-bottom:0; }
+    footer { background:#e2e8f0; color:#334155; }
+    footer a { color:#075985; }
+    .banner { background:#fff; border:1px solid #64748b; border-radius:16px 16px 0 0; bottom:0; box-shadow:0 -14px 45px #0f172a26; left:50%; max-width:980px; padding:22px 24px; position:fixed; transform:translateX(-50%); width:min(100% - 24px,980px); z-index:5; }
+    .banner h2 { margin:0 0 6px; }
+    .banner p { color:#475569; margin:0 0 16px; }
+    .controls { display:flex; flex-wrap:wrap; gap:10px; }
+    button { background:#075985; border:2px solid #075985; border-radius:9px; color:#fff; cursor:pointer; font:inherit; font-weight:750; padding:11px 17px; }
+    button.secondary { background:#fff; color:#075985; }
+    .preferences { background:#f1f5f9; border-radius:9px; margin-top:16px; padding:14px; }
+    .preferences label { display:block; margin:8px 0; }
+    #canary-consent-status { color:#0f172a; font-weight:700; margin-top:12px; }
+    [hidden] { display:none !important; }
+  </style>
+</head>
+<body>
+  <header><div><a href="https://ergoveritas.com/">ErgoVeritas</a></div></header>
+  <main data-certscore-canary="launch-consent-path-sample"
+        data-regulatory-audit-scenario="pre-choice-and-post-refusal-tracking"
+        data-accept-path-scenario="affirmative-consent-baseline"
+        data-expected-acceptance-registration="confirmed"
+        data-expected-post-accept-activity="true"
+        data-expected-refusal-registration="confirmed"
+        data-expected-post-refusal-activity="true"
+        data-expected-pre-registration-activity="true"
+        data-expected-action-comparison="indistinguishable">
+    <p class="eyebrow">Owned validation sample · 03 September 2026</p>
+    <h1>A transparent consent-path test page</h1>
+    <p class="lede">ErgoVeritas owns this synthetic page for CertScore scanner validation. It intentionally creates analytics activity before a choice and after both Accept and Reject so a real scan can demonstrate evidence capture and choice-path comparison. It is not a consumer service and does not involve an account or transaction.</p>
+    <div class="grid">
+      <section class="card">
+        <h2>Before a choice</h2>
+        <p>A synthetic analytics cookie and request are created before the visitor chooses.</p>
+      </section>
+      <section class="card">
+        <h2>After Accept</h2>
+        <p>The page records an affirmative choice and starts a bounded analytics and advertising comparison baseline.</p>
+      </section>
+      <section class="card">
+        <h2>After Reject</h2>
+        <p>The page records a refusal but intentionally repeats the same non-essential activity, creating a Reject Path finding of interest.</p>
+      </section>
+    </div>
+    <section class="card" style="margin-top:18px">
+      <h2>What this sample is designed to show</h2>
+      <p>Visible controls alone do not establish that a choice is honored. CertScore compares retained pre-choice evidence with separately isolated post-Accept and post-Refusal observations. Coverage limitations remain explicit, and the resulting report is an automated review aid—not legal advice, certification, or a compliance determination under GDPR/ePrivacy, CCPA/CPRA, or other law.</p>
+    </section>
+  </main>
+  <footer><div>Read the <a href="/.well-known/certscore-canary/broad-baseline-policy.html">synthetic privacy notice</a> for this owned validation fixture.</div></footer>
+
+  <section class="banner" id="onetrust-banner-sdk" aria-label="Cookie choices">
+    <h2>Cookie choices</h2>
+    <p>Choose whether this sample may use optional analytics and advertising technologies.</p>
+    <div class="controls">
+      <button id="onetrust-accept-btn-handler" type="button">Accept all</button>
+      <button id="onetrust-reject-all-handler" type="button">Reject all</button>
+      <button class="secondary" id="onetrust-pc-btn-handler" type="button">Manage options</button>
+    </div>
+    <div class="preferences" id="canary-preference-center" hidden>
+      <h2>Cookie options</h2>
+      <label><input type="checkbox" checked disabled> Necessary</label>
+      <label><input type="checkbox" id="canary-analytics-option"> Analytics</label>
+      <label><input type="checkbox" id="canary-advertising-option"> Advertising</label>
+      <button class="secondary" id="canary-close-options" type="button">Close options</button>
+    </div>
+    <p id="canary-consent-status" role="status" aria-live="polite"></p>
+  </section>
+
+  <script>
+    (function () {
+      "use strict";
+      var retainedImages = [];
+      var purposeState = {};
+      for (var purposeId = 1; purposeId <= 10; purposeId += 1) purposeState[String(purposeId)] = false;
+      var tcfState = { eventStatus:"tcloaded", purpose:{ consents:purposeState }, tcString:"invalid:sample:pre-action" };
+
+      document.cookie = "_ga=GA1.1.CERTSCORE_SAMPLE_BASELINE; Path=/; SameSite=Lax; Secure";
+      window.__tcfapi = function (command, version, callback) {
+        if (command === "getTCData" && version === 2 && typeof callback === "function") {
+          callback(JSON.parse(JSON.stringify(tcfState)), true);
+          return;
+        }
+        if (typeof callback === "function") callback(null, false);
+      };
+      function purposes(value) {
+        var state = {};
+        for (var id = 1; id <= 10; id += 1) state[String(id)] = value;
+        return state;
+      }
+      function request(host, path) {
+        var image = new Image();
+        image.alt = "";
+        image.src = "https://" + host + path;
+        retainedImages.push(image);
+      }
+      function analytics(eventName) {
+        request("www.google-analytics.com", "/g/collect?v=2&tid=G-CERTSCORE&cid=SAMPLE09032601&en=" + encodeURIComponent(eventName));
+      }
+      function advertising(eventName) {
+        request("googleads.g.doubleclick.net", "/pagead/viewthroughconversion/9032601?label=" + encodeURIComponent(eventName));
+      }
+      function completeChoice(message) {
+        document.getElementById("onetrust-banner-sdk").hidden = true;
+        document.getElementById("canary-consent-status").textContent = message;
+      }
+      function schedulePostChoiceActivity(action) {
+        window.setTimeout(function () {
+          document.cookie = "_ga=GA1.1.CERTSCORE_SAMPLE_SHARED; Path=/; SameSite=Lax; Secure";
+          document.cookie = "_gid=CERTSCORE_SAMPLE_SHARED; Path=/; SameSite=Lax; Secure";
+          analytics("sample_post_" + action);
+          advertising("sample_post_" + action);
+        }, 175);
+      }
+
+      analytics("sample_pre_choice_baseline");
+      document.getElementById("onetrust-accept-btn-handler").addEventListener("click", function () {
+        document.cookie = "OptanonConsent=sample_accept_registered; Path=/; SameSite=Lax; Secure";
+        tcfState = { eventStatus:"useractioncomplete", purpose:{ consents:purposes(true) }, tcString:"invalid:sample:accepted" };
+        completeChoice("Accept was recorded for this synthetic sample.");
+        schedulePostChoiceActivity("accept");
+      });
+      document.getElementById("onetrust-reject-all-handler").addEventListener("click", function () {
+        document.cookie = "OptanonConsent=sample_reject_registered; Path=/; SameSite=Lax; Secure";
+        tcfState = { eventStatus:"useractioncomplete", purpose:{ consents:purposes(false) }, tcString:"invalid:sample:rejected" };
+        completeChoice("Reject was recorded, but this synthetic sample intentionally continues optional activity.");
+        schedulePostChoiceActivity("reject");
+      });
+      document.getElementById("onetrust-pc-btn-handler").addEventListener("click", function () {
+        document.getElementById("canary-preference-center").hidden = false;
+        document.getElementById("canary-consent-status").textContent = "Cookie options opened without recording a consent choice.";
+      });
+      document.getElementById("canary-close-options").addEventListener("click", function () {
+        document.getElementById("canary-preference-center").hidden = true;
+        document.getElementById("canary-consent-status").textContent = "Cookie options closed without recording a choice.";
+      });
+    }());
+  </script>
+</body>
+</html>

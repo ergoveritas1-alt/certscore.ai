@@ -79,3 +79,16 @@ test("pre-consent storage rationale includes the retained first-observed time", 
   assert.match(rationale, /First observed at 2\.63s after scan start/i);
   assert.doesNotMatch(rationale, /First-seen times reflect the pre-consent check/i);
 });
+
+test("not-observed tracking rationale distinguishes broader third-party embeds", () => {
+  const row = gapRow("pre_consent_third_party_tracking");
+  row.assessmentStatus = "checked";
+  row.evidenceState = "not_observed";
+  row.status = "Not observed";
+  row.label = "Pre-consent non-essential tracking";
+
+  const rationale = deriveGdprEprivacyCoverageChecklistRowRationale(row);
+  assert.match(rationale, /tracking-classified threshold/i);
+  assert.match(rationale, /third-party requests or embedded services/i);
+  assert.match(rationale, /do not by themselves establish tracking/i);
+});

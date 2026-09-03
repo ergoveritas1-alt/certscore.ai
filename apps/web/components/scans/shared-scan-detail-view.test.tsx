@@ -29,8 +29,8 @@ test("pre-consent inventory exposes retained request counts with a compact consi
   assert.match(source, /projection=\{scanReportRenderProjection\.runtimeInventory\}/);
   assert.doesNotMatch(source, /<td[^>]*>No retained cookies or trackers were detected for this scan\.<\/td>/);
   assert.doesNotMatch(source, /No retained cookie or tracker rows for this scan\./);
-  assert.match(source, /\["Type", "Vendor", "Purpose", "Evidence", "First seen", "Requests", "Cookie name\(s\)", "Domain", "Destination", "Confidence", "Relationship", "Category", "Priority"\]/);
-  assert.match(source, /label="Vendor"[\s\S]*label="Purpose"[\s\S]*>Evidence<\/[a-z]+>[\s\S]*>Relationship<\/[a-z]+>[\s\S]*>Category<\/[a-z]+>/);
+  assert.match(source, /\["Type", "Vendor", "Name", "Purpose", "Evidence", "First seen", "Requests", "Domain", "Destination", "Confidence", "Relationship", "Category", "Priority"\]/);
+  assert.match(source, /label="Vendor"[\s\S]*>\s*Name\s*[\s\S]*label="Purpose"[\s\S]*>Evidence<\/[a-z]+>[\s\S]*>Relationship<\/[a-z]+>[\s\S]*>Category<\/[a-z]+>/);
   assert.doesNotMatch(source, /label="Count"/);
   assert.match(source, /w-\[165px\]/);
   assert.match(source, />Req\.<\/th>/);
@@ -48,6 +48,30 @@ test("pre-consent inventory exposes retained request counts with a compact consi
     /assessment=\{persistedCanonicalProjection\?\.collectionSurfaceAssessment \?\? null\}/
   );
   assert.doesNotMatch(source, /public_collection_surfaces/);
+});
+
+test("inventory name projection distinguishes cookie identifiers from tracker names and bounds previews", async () => {
+  const { formatInventoryNamePreview } = await import("./inventory-name-disclosure");
+  const { getInventoryObservationNames } = await import("../../lib/scans/runtime-inventory-projection");
+
+  assert.deepEqual(getInventoryObservationNames({
+    cookieNames: ["sbjs_session"],
+    rawProducts: ["Sourcebuster.js"],
+    type: "cookie",
+  }), ["sbjs_session"]);
+  assert.deepEqual(getInventoryObservationNames({
+    cookieNames: ["_ga"],
+    rawProducts: ["Google Analytics"],
+    type: "tracker",
+  }), ["Google Analytics"]);
+  assert.equal(formatInventoryNamePreview("sbjs_session"), "sbjs_sessi...");
+  assert.equal(formatInventoryNamePreview("short_name"), "short_name");
+
+  const source = readFileSync("apps/web/components/scans/shared-scan-detail-view.tsx", "utf8");
+  const disclosureSource = readFileSync("apps/web/components/scans/inventory-name-disclosure.tsx", "utf8");
+  assert.match(source, /<InventoryNameCell row=\{row\} \/>/);
+  assert.match(disclosureSource, /Show full retained name:/);
+  assert.match(source, /Open a shortened name to see its full value/);
 });
 
 function makePostRejectChecklistItem(input: {
@@ -143,10 +167,10 @@ test("executive Reject projection identifies an independently retained TCF contr
   }]);
 });
 
-test("executive Reject projection distinguishes score-neutral persistence, clean, and incomplete outcomes", async () => {
+test("executive Reject projection distinguishes persistence, clean, and incomplete outcomes without scoring copy", async () => {
   const { buildExecutiveRejectPathProjection } = await import("./shared-scan-detail-view");
   const persistence = buildExecutiveRejectPathProjection(makePostRejectChecklistItem({
-    explanation: "Stored presence alone does not establish active post-refusal use.",
+    explanation: "The exact same classified non-essential storage identity and value were present before the reject action and in the settled snapshot after confirmed refusal. Stored presence alone does not establish active post-refusal use.",
     label: "Same non-essential identifier remained stored after refusal",
     status: "Review signal",
     retainedEvidence: {
@@ -170,6 +194,8 @@ test("executive Reject projection distinguishes score-neutral persistence, clean
 
   assert.equal(persistence?.state, "review_signal");
   assert.equal(persistence?.scoreEffect, "none");
+  assert.match(persistence?.note ?? "", /exact same classified non-essential storage identity/);
+  assert.doesNotMatch(persistence?.note ?? "", /score|deduct|points?/i);
   assert.deepEqual(persistence?.evidenceRows, [{
     detail: "Example Analytics · cookie",
     label: "_analytics",
@@ -182,7 +208,21 @@ test("executive Reject projection distinguishes score-neutral persistence, clean
   assert.equal(incomplete?.state, "incomplete");
   assert.equal(incomplete?.scoreEffect, "none");
   assert.deepEqual(incomplete?.timelineEvents, []);
-  assert.match(incomplete?.note ?? "", /does not affect the score/);
+  assert.equal(incomplete?.note, "Reject click did not register.");
+  assert.doesNotMatch(incomplete?.note ?? "", /score|deduct|credit/i);
+});
+
+test("executive Reject projection omits an explicitly not-applicable post-Reject row", async () => {
+  const { buildExecutiveRejectPathProjection } = await import("./shared-scan-detail-view");
+  const projected = buildExecutiveRejectPathProjection(makePostRejectChecklistItem({
+    explanation: "No actionable Reject control was retained.",
+    status: "Not testable",
+    retainedEvidence: {
+      productionPosture: "not_applicable_no_reject_control",
+    },
+  }));
+
+  assert.equal(projected, null);
 });
 
 test("shared report passes the canonical Reject checklist projection into the executive card", () => {
@@ -193,21 +233,41 @@ test("shared report passes the canonical Reject checklist projection into the ex
   assert.doesNotMatch(source, /buildExecutiveRejectPathProjection\(runtimeArtifacts/);
 });
 
-test("active timeline report passes the same canonical Reject checklist projection into its signal snapshot", () => {
+test("active timeline report surfaces canonical Accept and Reject projections in one compact result", () => {
   const model = readFileSync("apps/web/components/scans/report-lab/timeline-report-model.ts", "utf8");
   const report = readFileSync("apps/web/components/scans/report-lab/shadow-scan-report.tsx", "utf8");
 
   assert.match(model, /buildExecutiveRejectPathProjection\([\s\S]*item\.id === "post_reject_tracking_reduction"[\s\S]*\)/);
+  assert.match(model, /buildAcceptPathProjection\(runtimeArtifacts, canonical\.ownerUnifiedFindings\)/);
+  assert.match(model, /"acceptance_signal_contradicts_action"/);
+  assert.match(model, /"post_accept_consent_dependent_activity"/);
+  assert.match(model, /"accept_reject_outcomes_indistinguishable"/);
+  assert.match(model, /acceptPath,/);
+  assert.match(model, /choicePathComparison,/);
   assert.match(model, /rejectPath,/);
   assert.match(report, /<CompactRejectPathCard projection=\{report\.rejectPath\} \/>/);
-  assert.match(report, /data-testid="post-reject-timeline"/);
-  assert.match(report, /<RejectPathTimeline report=\{report\} \/>/);
-  assert.match(report, /data-testid="post-reject-activity-inventory"/);
-  assert.match(report, /<PostRejectActivityInventory report=\{report\} \/>/);
-  assert.match(report, /After optional cookies and tracking were rejected/);
-  assert.match(report, /Expected after Reject:/);
-  assert.match(report, /does not necessarily require every previously stored cookie to be deleted/);
+  assert.match(report, /<CompactAcceptPathCard projection=\{report\.acceptPath\} \/>/);
+  assert.match(report, /data-testid="timeline-accept-path-card"/);
+  assert.match(report, /data-testid="executive-accept-path-card"/);
+  assert.match(report, /data-testid=\{isAccept \? "post-accept-path-result" : "post-reject-timeline"\}/);
+  assert.match(report, /data-testid="choice-path-results"/);
+  assert.match(report, /<ChoicePathResults report=\{report\} \/>/);
+  assert.match(report, /sm:grid-cols-2/);
+  assert.doesNotMatch(report, /data-testid="post-reject-activity-inventory"/);
+  assert.doesNotMatch(report, /<PostRejectActivityInventory report=\{report\} \/>/);
+  assert.match(report, /Choice path results/);
+  assert.match(report, /line-clamp-2 text-xs leading-5 text-zinc-600/);
+  assert.doesNotMatch(report, /After optional cookies and tracking were rejected/);
+  assert.doesNotMatch(report, /Offsets begin when the cookie banner/);
+  assert.doesNotMatch(report, /First-seen timestamps place retained third-party requests/);
+  assert.doesNotMatch(report, /Expected after Reject:/);
+  assert.match(report, /line-clamp-2/);
+  assert.doesNotMatch(report, /min-w-\[48rem\]/);
+  assert.doesNotMatch(report, /Requests and storage writes after Reject/);
+  assert.match(report, /report\.transportRows\.filter\(\(row\) => row\.status === "Observed"\)\.length\} of \{report\.transportRows\.length\} positive observations/);
   assert.match(model, /Non-essential activity after confirmed Reject/);
+  assert.match(model, /Same non-essential identifier remained stored after Reject/);
+  assert.match(model, /isPersistenceOnlyRejectEvidence/);
   assert.match(model, /replace\(\/Post-choice tracking reduction\/gi, postRejectCopy\.title\)/);
   assert.doesNotMatch(model, /buildExecutiveRejectPathProjection\(scanRecord\.runtimeArtifacts/);
 });

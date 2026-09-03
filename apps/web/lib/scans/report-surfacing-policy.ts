@@ -249,6 +249,8 @@ const RIGHTS_GAP_IDS = [
 const CONTRADICTION_IDS = [
   "policy_behavior_conflict",
   "consent_gated_tracking_claim_conflict",
+  "acceptance_signal_contradicts_action",
+  "refusal_signal_contradicts_action",
   "do_not_sell_sharing_disclosure_conflict",
   "privacy_terms_conflict",
   "privacy_cookie_policy_conflict",
@@ -263,7 +265,12 @@ const CONSENT_TRACKING_IDS = [
   "consent_surface_missing",
   "reject_did_not_reduce_tracking",
   "reject_did_not_reduce_third_party_cookies",
-  "gpc_signal_not_honored",
+  "post_refusal_non_essential_activity",
+  "pre_consent_storage_not_cleared",
+  "post_accept_consent_dependent_activity",
+  "accept_reject_outcomes_indistinguishable",
+  "paid_alternative_required_to_decline_tracking",
+  "gpc_response",
   "weak_cookie_security_attributes",
   "cookie_retention_lifetime_review_signal",
   "consent_surface_required_deeper_sweep",
@@ -288,7 +295,6 @@ const CONSENT_TRACKING_IDS = [
 const CONFIRMED_CONSENT_RUNTIME_FAILURE_IDS = [
   "reject_did_not_reduce_tracking",
   "reject_did_not_reduce_third_party_cookies",
-  "gpc_signal_not_honored"
 ] as const satisfies ReportUnifiedFindingId[];
 
 const REVIEW_ONLY_CONSENT_INTERFACE_IDS = [
@@ -301,6 +307,7 @@ const REVIEW_ONLY_CONSENT_INTERFACE_IDS = [
   "forced_consent_wall",
   "accept_only_banner",
   "dismiss_without_reject",
+  "paid_alternative_required_to_decline_tracking",
   "consent_control_not_reopenable",
   "consent_governance_disclosure_gap"
 ] as const satisfies ReportUnifiedFindingId[];
@@ -2008,8 +2015,8 @@ function applyFindingSpecificRules(context: PolicyEvaluationContext) {
           tier: "headline",
           reason:
             evidenceFlags.has("reject_evidence_confirmed")
-              ? `The reject interaction succeeded and classified non-essential tracking requests were retained at least ${REJECT_TRACKING_CONFIRMATION_MIN_MS_LABEL} after reject, so the finding can stand as a confirmed consent-control failure.`
-              : "The reject interaction succeeded and retained named post-reject tracker vendors with multiple runtime evidence URLs, so this can surface as a main consent-control review finding while attribution caveats remain visible.",
+              ? `The refusal-state transition was confirmed and classified non-essential tracking requests were retained at least ${REJECT_TRACKING_CONFIRMATION_MIN_MS_LABEL} after confirmation, so the finding can stand as a confirmed consent-control failure.`
+              : "The refusal-state transition was confirmed and named post-refusal tracker vendors were retained with multiple runtime evidence URLs, so this can surface as a main consent-control review finding while attribution caveats remain visible.",
           ruleId: evidenceFlags.has("reject_evidence_confirmed")
             ? "evidence.consent_behavior.confirmed_specific_runtime_failure"
             : "evidence.consent_behavior.review_runtime_without_effect_evidence"
@@ -2446,7 +2453,7 @@ function applyFindingSpecificRules(context: PolicyEvaluationContext) {
           lane: "main",
           tier: "headline",
           reason:
-            `The reject interaction succeeded and classified non-essential tracking requests were retained at least ${REJECT_TRACKING_CONFIRMATION_MIN_MS_LABEL} after reject, so the finding can stand as a confirmed consent-control failure.`,
+            `The refusal-state transition was confirmed and classified non-essential tracking requests were retained at least ${REJECT_TRACKING_CONFIRMATION_MIN_MS_LABEL} after confirmation, so the finding can stand as a confirmed consent-control failure.`,
           ruleId: "evidence.consent_behavior.confirmed_specific_runtime_failure"
         });
       } else {

@@ -116,6 +116,33 @@ function getVendorLogoUrl(mark: VendorBrandMark, label: string) {
   return domain ? `https://www.google.com/s2/favicons?domain=${encodeURIComponent(domain)}&sz=64` : null;
 }
 
+export function VendorBrandLogo(input: {
+  className?: string;
+  label: string;
+}) {
+  const mark = getVendorBrandMark(input.label);
+  const logoUrl = getVendorLogoUrl(mark, input.label);
+
+  if (!logoUrl) {
+    return null;
+  }
+
+  return (
+    <span
+      aria-hidden="true"
+      className={`inline-flex h-5 w-5 shrink-0 items-center justify-center overflow-hidden rounded-full border border-slate-200 bg-white ${input.className ?? ""}`}
+    >
+      <img
+        alt=""
+        className="h-full w-full rounded-full object-contain"
+        loading="lazy"
+        referrerPolicy="no-referrer"
+        src={logoUrl}
+      />
+    </span>
+  );
+}
+
 const VENDOR_CHIP_LABEL_MAX_LENGTH = 22;
 
 function formatVendorChipLabel(label: string) {

@@ -53,6 +53,7 @@ test("strict TLS probe completes through the configured HTTP CONNECT proxy", asy
 
   try {
     const result = await probeStrictTls(httpsServer.url, undefined, Date.now() + 2_000, {
+      CERTSCORE_PUBLIC_NETWORK_GUARD_DISABLED: "true",
       SCAN_PROXY_ENABLED: "true",
       SCAN_PROXY_SERVER: proxyUrl,
     });
@@ -83,6 +84,7 @@ test("strict TLS probe bounds a stalled proxy CONNECT as an unknown timeout", as
 
   try {
     const result = await probeStrictTls("https://example.test/", undefined, Date.now() + 25, {
+      CERTSCORE_PUBLIC_NETWORK_GUARD_DISABLED: "true",
       SCAN_PROXY_ENABLED: "true",
       SCAN_PROXY_SERVER: serverUrl(proxy, "http"),
     });
@@ -201,6 +203,8 @@ test("pre-consent scanner retains early transport evidence when later runtime wo
     assert.equal(observation.finalScheme, "http");
     assert.equal(observation.pageHttpsObserved, false);
     assert.equal(observation.httpProbe.attempted, true);
+    assert.equal(observation.httpProbe.outcome, "plaintext_response_served");
+    assert.equal(observation.summary.httpProbeOutcome, "plaintext_response_served");
     assert.equal(observation.tlsProbe.attempted, true);
   } finally {
     server.closeAllConnections();
