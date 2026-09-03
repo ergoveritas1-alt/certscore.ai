@@ -10,7 +10,7 @@ CertScore.ai MCP Light is live in the [GitHub MCP Registry](https://github.com/m
 | Transport | Streamable HTTP |
 | Authentication | None |
 | Tools | `certscore_scan_site` → `certscore_get_scan_status` → `certscore_get_scan_bundle` |
-| Current hosted version | `0.2.17` |
+| Current hosted version | `0.2.18` |
 
 [Start with MCP Light](https://certscore.ai/mcp/light?utm_source=github&utm_medium=mcp_registry&utm_campaign=github_mcp_registry_launch) · [Install in Cursor](https://cursor.com/link/mcp/install?name=CertScore.ai&config=eyJ1cmwiOiJodHRwczovL21jcC5jZXJ0c2NvcmUuYWkvbWNwL2xpZ2h0In0%3D) · [Read the installation reference](../../docs/mcp-light-install.md)
 

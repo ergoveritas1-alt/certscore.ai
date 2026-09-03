@@ -4,6 +4,11 @@
 
 - Prepare Cursor integration `1.0.3` with the `CertScore.ai` MCP component name, jurisdiction-neutral GPC and evidence-qualified Accept and Reject Path discovery metadata, and three updated Cursor prompt deeplinks on the MCP Light landing page.
 
+## 0.2.18
+
+- Restore successful completed-bundle retrieval on the hosted MCP by deploying the current projection that always returns the required `scanFrom` field, using `null` when persisted execution-region provenance is unavailable.
+- Preserve fail-closed provenance semantics: an existing scan's region is never inferred from the current requester or a default region.
+
 ## 0.2.17
 
 - Surface typed GPC, Accept Path, and Reject Path outcomes consistently in terminal status and completed scan bundles.

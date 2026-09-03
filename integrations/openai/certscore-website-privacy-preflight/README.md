@@ -1,6 +1,6 @@
 # Website Privacy Preflight for ChatGPT and Codex
 
-This package contains the provider-neutral skill and remote MCP wiring for an OpenAI **With MCP** plugin submission. It covers fast preliminary cookie/tracker evidence from active scans, persisted public-website privacy evidence, and eligible bounded post-refusal observation of non-essential cookie or tracker activity after a confirmed Reject action.
+This package contains the provider-neutral skill and remote MCP wiring for an OpenAI **With MCP** plugin submission. It covers fast preliminary cookie/tracker evidence from active scans, persisted public-website privacy evidence, jurisdiction-neutral GPC response comparisons, and eligible bounded Accept and Reject observations in separate scanner sessions.
 
 ## Included components
 
@@ -12,7 +12,7 @@ This package contains the provider-neutral skill and remote MCP wiring for an Op
 ## Release identities
 
 - OpenAI plugin version: `2.0.0`
-- Hosted MCP version: `0.2.17`
+- Hosted MCP version: `0.2.18`
 - Production Streamable HTTP endpoint: `https://mcp.certscore.ai/mcp/light`
 - Authentication: none
 - Tools: `certscore_scan_site`, `certscore_get_scan_status`, `certscore_get_scan_bundle`
@@ -21,7 +21,9 @@ The package version and hosted MCP version are intentionally independent. A host
 
 For a newly accepted scan, `certscore_scan_site` returns the stable `scanId` and may include a bounded `preConsentPreview` as soon as the runtime lane completes or reaches its six-second checkpoint. ChatGPT and Codex should surface this preview promptly as preliminary evidence rather than withholding it until the scan completes. Captured counts and returned identity counts are separate because returned lists are bounded. `trackingVendorCount` excludes infrastructure, security, and consent-management vendors, which appear separately in `operationalVendors`; the compatibility preview `trackerCount` must not be compared directly with the completed inventory's broader `trackerCount`. The workflow must continue with `certscore_get_scan_status`, then retrieve `certscore_get_scan_bundle` after completed or completed_limited before reporting the full scan results and final returned tally.
 
-Submission prompts and review cases use multiple owned ErgoVeritas canary pages rather than only the domain root. The selected internal URLs cover broad baseline evidence, runtime storage, shadow-DOM consent controls, policy transparency, and deterministic post-refusal behavior.
+Completed bundles can include `gpcResponse`, `postAcceptObservation`, and `postRefusalObservation`. Report the GPC result only with its returned jurisdiction-neutral label. Treat Accept Path activity as a score-neutral behavior baseline. Treat a non-confirmed Accept or Reject outcome as limited coverage, and let Reject support a finding only when the canonical bundle returns confirmed qualifying evidence. The plugin must not independently browse the target or click consent controls; any action occurs only inside CertScore's separately authorized bounded scanner lanes.
+
+Submission prompts and review cases use multiple owned ErgoVeritas canary pages rather than only the domain root. The selected internal URLs cover broad baseline evidence, runtime storage, typed GPC comparison, shadow-DOM consent controls, policy transparency, and deterministic Accept and Reject behavior.
 
 ## Public submission
 

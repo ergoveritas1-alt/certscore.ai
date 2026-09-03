@@ -9,7 +9,7 @@ CertScore.ai MCP Light is a hosted Streamable HTTP MCP server for scanning publi
 - Endpoint: `https://mcp.certscore.ai/mcp/light`
 - Transport: Streamable HTTP
 - Authentication: none
-- Version: `0.2.17`
+- Version: `0.2.18`
 - Tools: `certscore_scan_site`, `certscore_get_scan_status`, `certscore_get_scan_bundle`
 
 Do not substitute `https://mcp.certscore.ai/mcp`, which is the authenticated CertScore MCP service.

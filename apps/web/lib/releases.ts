@@ -108,7 +108,7 @@ const releases: readonly ProductRelease[] = [
         id: "developer-availability",
         heading: "Developer availability",
         paragraphs: [
-          "Typed choice-path results are available on API v2 scan resources and Pulse projections as postAcceptObservation, postRefusalObservation, and gpcResponse. Install @certscore/sdk@0.2.10 or newer. Hosted MCP, local MCP, and MCP Light are at 0.2.17. Read the verdict rather than reconstructing an outcome from evidence rows, and treat non-confirmed statuses as limited coverage rather than a pass."
+          "Typed choice-path results are available on API v2 scan resources and Pulse projections as postAcceptObservation, postRefusalObservation, and gpcResponse. Install @certscore/sdk@0.2.10 or newer. Hosted MCP, local MCP, and MCP Light are at 0.2.18. Read the verdict rather than reconstructing an outcome from evidence rows, and treat non-confirmed statuses as limited coverage rather than a pass."
         ]
       }
     ],

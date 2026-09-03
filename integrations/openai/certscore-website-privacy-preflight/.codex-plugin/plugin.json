@@ -1,7 +1,7 @@
 {
   "name": "certscore-website-privacy-preflight",
   "version": "2.0.0",
-  "description": "Evidence-backed public-website privacy preflight with fast preliminary cookie/tracker evidence and bounded post-refusal review.",
+  "description": "Evidence-backed public-website privacy preflight with fast cookie/tracker previews, typed GPC comparisons, and bounded Accept and Reject observations.",
   "author": {
     "name": "CertScore.ai, LLC",
     "email": "ben@certscore.ai",
@@ -10,12 +10,12 @@
   "homepage": "https://certscore.ai/mcp/light",
   "repository": "https://github.com/ergoveritas1-alt/certscore.ai",
   "license": "LicenseRef-CertScore-Developer-Preview",
-  "keywords": ["certscore", "mcp", "privacy", "website-analysis", "preflight"],
+  "keywords": ["certscore", "mcp", "privacy", "consent", "gpc", "accept-path", "reject-path", "website-analysis", "preflight"],
   "skills": "./skills/",
   "interface": {
     "displayName": "Website Privacy Preflight",
-    "shortDescription": "Preview cookies and trackers, then report.",
-    "longDescription": "Use CertScore.ai MCP Light to run or reuse a bounded public-website scan. New scans may quickly return a clearly labeled preliminary cookie/tracker preview while the canonical report is still being prepared. Continue through completion for final returned totals, findings, provenance, coverage limitations, consent controls, policy signals, HTTPS/TLS, and—on eligible sites—non-essential activity observed after a confirmed Reject action.",
+    "shortDescription": "Preview privacy evidence, then report.",
+    "longDescription": "Use CertScore.ai MCP Light to run or reuse a bounded public-website scan. New scans may quickly return a clearly labeled preliminary cookie/tracker preview while the canonical report is still being prepared. Continue through completion for final returned totals, findings, provenance, coverage limitations, consent controls, a jurisdiction-neutral GPC response comparison, policy signals, HTTPS/TLS, and—on eligible sites—typed results from separately authorized bounded Accept and Reject observations. Accept is a score-neutral behavior baseline; Reject can support a finding only from confirmed qualifying evidence.",
     "developerName": "CertScore.ai, LLC",
     "category": "Developer Tools",
     "capabilities": ["Interactive", "Read"],
@@ -24,8 +24,8 @@
     "termsOfServiceURL": "https://certscore.ai/terms",
     "defaultPrompt": [
       "Scan https://ergoveritas.com/test1.html. Show the preliminary cookie/tracker preview, then continue to the final report.",
-      "Review https://ergoveritas.com/test2.html and provide cookie, CMP, and consent control evidence from the completed scan results.",
-      "Check https://ergoveritas.com/test3.html for eligible activity after a confirmed Reject action."
+      "Review https://ergoveritas.com/test2.html for its typed GPC response and pre-consent cookie evidence.",
+      "Compare the bounded Accept and Reject Path observations for https://ergoveritas.com/test3.html."
     ],
     "brandColor": "#0B5CAB"
   },

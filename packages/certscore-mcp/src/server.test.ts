@@ -432,7 +432,7 @@ test("Light registry metadata and distribution copy stay aligned", () => {
 
   for (const source of [submissions, packets]) {
     assert.match(source, /Official MCP Registry/);
-    assert.match(source, /version `0\.2\.17` is the prepared active release/i);
+    assert.match(source, /version `0\.2\.18` is the prepared active release/i);
     assert.match(source, /ai\.certscore\/mcp-light/i);
     assert.match(source, /https:\/\/registry\.modelcontextprotocol\.io\/\?q=ai\.certscore%2Fmcp-light/);
   }
@@ -575,9 +575,18 @@ test("Cursor and OpenAI plugin packages preserve independent release versions an
   });
   assert.match(openAiMetadata, /transport: "streamable_http"/);
   assert.match(openAiMetadata, /url: "https:\/\/mcp\.certscore\.ai\/mcp\/light"/);
-  assert.match(JSON.stringify(openAiPlugin), /post-refusal/i);
-  assert.match(openAiMetadata, /post-refusal/i);
-  assert.match(openAiSkill, /post-refusal/i);
+  assert.match(JSON.stringify(openAiPlugin), /GPC/i);
+  assert.match(JSON.stringify(openAiPlugin), /Accept/i);
+  assert.match(JSON.stringify(openAiPlugin), /Reject/i);
+  assert.match(openAiMetadata, /GPC/i);
+  assert.match(openAiMetadata, /Accept/i);
+  assert.match(openAiMetadata, /Reject/i);
+  assert.match(openAiSkill, /gpcResponse/);
+  assert.match(openAiSkill, /postAcceptObservation/);
+  assert.match(openAiSkill, /postRefusalObservation/);
+  assert.match(openAiSkill, /score-neutral behavior baseline/i);
+  assert.match(openAiSkill, /non-confirmed observation status as limited coverage rather than a pass/i);
+  assert.match(openAiSkill, /Do not independently browse the target or click its consent controls/i);
   assert.match(JSON.stringify(openAiPlugin), /preliminary cookie\/tracker/i);
   assert.match(openAiMetadata, /preliminary cookie and tracker evidence/i);
   assert.match(openAiSkill, /preConsentPreview/);
@@ -592,6 +601,11 @@ test("Cursor and OpenAI plugin packages preserve independent release versions an
   for (const path of ["test1.html", "test2.html", "test3.html", "test4.html"]) {
     assert.match(openAiSubmissionPacket, new RegExp(`https://ergoveritas\\.com/${path.replaceAll(".", "\\.")}`));
   }
+  assert.match(openAiSubmissionPacket, /Tool annotation justifications/);
+  assert.match(openAiSubmissionPacket, /at most one bounded deterministic Accept action and one bounded deterministic Reject/i);
+  assert.match(openAiSubmissionPacket, /passive `Sec-GPC: 1` comparison/i);
+  assert.match(openAiSubmissionPacket, /OpenAI review correction completed September 3, 2026/i);
+  assert.doesNotMatch(openAiSubmissionPacket, /cannot accept consent/i);
   assert.doesNotMatch(openAiSkill, /Claude|Cursor/);
   for (const tool of ["certscore_scan_site", "certscore_get_scan_status", "certscore_get_scan_bundle"]) {
     assert.match(openAiSkill, new RegExp(tool));
