@@ -4,13 +4,13 @@ import { join } from "node:path";
 
 const repoRoot = process.cwd();
 const EXPECTED = {
-  claudeVersion: "0.2.18",
+  claudeVersion: "0.2.19",
   cursorVersion: "1.0.3",
   endpoint: "https://mcp.certscore.ai/mcp/light",
   openAiVersion: "2.0.0",
   owner: "CertScore.ai, LLC",
   registryName: "ai.certscore/mcp-light",
-  serverVersion: "0.2.18",
+  serverVersion: "0.2.19",
 } as const;
 
 function read(path: string) {
@@ -82,7 +82,7 @@ assert.match(JSON.stringify(openAiPlugin), /Reject/i);
 assert.doesNotMatch(submissionPacket, /cannot accept consent/i);
 assert.match(read("integrations/kilo-code/certscore-mcp-light/MCP.yaml"), /^author: CertScore\.ai, LLC$/m);
 assert.match(read("apps/web/public/llms.txt"), /Official MCP Registry name: ai\.certscore\/mcp-light/);
-assert.match(read("apps/web/public/llms-full.txt"), /current hosted MCP version is `0\.2\.18`/);
+assert.match(read("apps/web/public/llms-full.txt"), /current hosted MCP version is `0\.2\.19`/);
 
 assert.deepEqual(pngDimensions("apps/web/public/certscore-mark-dark.png"), { width: 512, height: 512 });
 assert.deepEqual(pngDimensions("apps/web/public/certscore-mark-light.png"), { width: 512, height: 512 });

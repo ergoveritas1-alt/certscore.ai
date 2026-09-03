@@ -432,7 +432,7 @@ test("Light registry metadata and distribution copy stay aligned", () => {
 
   for (const source of [submissions, packets]) {
     assert.match(source, /Official MCP Registry/);
-    assert.match(source, /version `0\.2\.18` is the prepared active release/i);
+    assert.match(source, /version `0\.2\.19` is the prepared active release/i);
     assert.match(source, /ai\.certscore\/mcp-light/i);
     assert.match(source, /https:\/\/registry\.modelcontextprotocol\.io\/\?q=ai\.certscore%2Fmcp-light/);
   }

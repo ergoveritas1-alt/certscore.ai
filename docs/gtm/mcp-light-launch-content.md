@@ -2,7 +2,7 @@
 
 Use this copy only while the following facts remain current:
 
-- Official MCP Registry: `ai.certscore/mcp-light`, hosted version `0.2.18`
+- Official MCP Registry: `ai.certscore/mcp-light`, hosted version `0.2.19`
 - GitHub MCP Registry: live at `https://github.com/mcp/ai.certscore/mcp-light`
 - Endpoint: `https://mcp.certscore.ai/mcp/light`
 - Authentication: none

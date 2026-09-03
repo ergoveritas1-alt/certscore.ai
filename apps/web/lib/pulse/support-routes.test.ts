@@ -729,9 +729,9 @@ test("Developer API docs are discoverable by crawlers and agent manifests", asyn
   assert.equal(aiDiscovery.mcp.distribution, "homebrew");
   assert.equal(aiDiscovery.mcp.binary, "certscore-mcp");
   assert.equal(aiDiscovery.mcp.packageStatus, "homebrew_developer_preview");
-  assert.equal(aiDiscovery.mcp.currentVersion, "0.2.18");
+  assert.equal(aiDiscovery.mcp.currentVersion, "0.2.19");
   assert.equal(aiDiscovery.mcp.hosted.endpoint, "https://mcp.certscore.ai/mcp");
-  assert.equal(aiDiscovery.mcp.hosted.currentVersion, "0.2.18");
+  assert.equal(aiDiscovery.mcp.hosted.currentVersion, "0.2.19");
   assert.match(aiDiscovery.mcp.hosted.authentication, /PKCE/);
   assert.equal(aiDiscovery.mcp.anonymous.endpoint, "https://mcp.certscore.ai/mcp/anonymous");
   assert.equal(aiDiscovery.mcp.anonymous.authentication, "none");
@@ -750,7 +750,7 @@ test("Developer API docs are discoverable by crawlers and agent manifests", asyn
   assert.equal(aiDiscovery.mcp.light.rollingNewScanLimit, 5);
   assert.equal(aiDiscovery.mcp.light.rollingWindowSeconds, 600);
   assert.equal(aiDiscovery.mcp.light.recentReuseDoesNotConsumeQuota, true);
-  assert.equal(aiDiscovery.mcp.light.version, "0.2.18");
+  assert.equal(aiDiscovery.mcp.light.version, "0.2.19");
   assert.equal(aiDiscovery.mcp.light.privacyUrl, "https://certscore.ai/privacy");
   assert.equal(aiDiscovery.mcp.light.termsUrl, "https://certscore.ai/terms");
   assert.equal(aiDiscovery.mcp.light.iconUrl, "https://certscore.ai/certscore-mark-dark.png");

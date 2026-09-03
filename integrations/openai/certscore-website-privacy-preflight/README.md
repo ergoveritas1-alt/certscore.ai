@@ -12,7 +12,7 @@ This package contains the provider-neutral skill and remote MCP wiring for an Op
 ## Release identities
 
 - OpenAI plugin version: `2.0.0`
-- Hosted MCP version: `0.2.18`
+- Hosted MCP version: `0.2.19`
 - Production Streamable HTTP endpoint: `https://mcp.certscore.ai/mcp/light`
 - Authentication: none
 - Tools: `certscore_scan_site`, `certscore_get_scan_status`, `certscore_get_scan_bundle`

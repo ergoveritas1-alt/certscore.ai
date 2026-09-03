@@ -290,11 +290,13 @@ test("buildScanBundle honors the caller's byte budget", () => {
       scanId: "scan_123",
       domain: "example.com",
       status: "completed",
+      scanFrom: "eu_ie",
       score: 72
     }
   } as any);
 
   assert.ok(new TextEncoder().encode(JSON.stringify(bundle)).byteLength <= 8_000);
+  assert.equal(bundle.scanFrom, "eu_ie");
   assert.equal((bundle.mcpMetadata as Record<string, unknown>).requestedMaxBytes, 8_000);
   assert.equal((bundle.mcpMetadata as Record<string, unknown>).effectiveMaxBytes, 8_000);
   assert.equal((bundle.mcpMetadata as Record<string, unknown>).responseCeilingBytes, 200_000);
@@ -387,6 +389,7 @@ test("documented 8 KB findings budget preserves compact row-level pre-consent ev
       domain: "example.com",
       url: "https://example.com",
       status: "completed",
+      scanFrom: "eu_ie",
       score: 72,
       scoreStatus: "final",
       links: {
@@ -718,6 +721,7 @@ test("findings and evidence modes preserve useful content at the 5000-byte minim
       domain: "example.com",
       url: "https://example.com",
       status: "completed",
+      scanFrom: "eu_ie",
       score: 72,
       scoreStatus: "final",
       links: {
@@ -747,6 +751,7 @@ test("findings and evidence modes preserve useful content at the 5000-byte minim
   const evidence = buildScanBundle({ ...common, detail: "evidence" });
 
   assert.equal(findings.findings.length, 1);
+  assert.equal(findings.scanFrom, "eu_ie");
   assert.equal(findings.findings[0]?.id, "finding_1");
   assert.equal(
     findings.findings[0]?.links?.self ?? findings.findings[0]?.evidenceUrl,
@@ -754,6 +759,7 @@ test("findings and evidence modes preserve useful content at the 5000-byte minim
   );
   assert.ok(findings.mcpMetadata.actualBytes <= 5_000);
   assert.equal(evidence.findings.length, 1);
+  assert.equal(evidence.scanFrom, "eu_ie");
   assert.equal(evidence.evidenceSummary.digests[0]?.findingId, "finding_1");
   assert.equal(typeof evidence.evidenceSummary.digests[0]?.evidenceUrl, "string");
   assert.ok(evidence.mcpMetadata.actualBytes <= 5_000);

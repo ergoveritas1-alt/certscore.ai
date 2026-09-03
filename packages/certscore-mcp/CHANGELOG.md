@@ -4,6 +4,11 @@
 
 - Prepare Cursor integration `1.0.3` with the `CertScore.ai` MCP component name, jurisdiction-neutral GPC and evidence-qualified Accept and Reject Path discovery metadata, and three updated Cursor prompt deeplinks on the MCP Light landing page.
 
+## 0.2.19
+
+- Keep the required `scanFrom` field in the minimal byte-budget bundle so schema validation succeeds when large completed findings are compacted for MCP Light transports.
+- Add regression coverage for the documented 8 KB findings request used by Cursor, Claude, and OpenAI integration packages.
+
 ## 0.2.18
 
 - Restore successful completed-bundle retrieval on the hosted MCP by deploying the current projection that always returns the required `scanFrom` field, using `null` when persisted execution-region provenance is unavailable.

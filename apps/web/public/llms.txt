@@ -30,7 +30,7 @@ Start here for API, SDK, MCP, and agent workflows:
 
 Canonical MCP Light identity:
 - Official MCP Registry name: ai.certscore/mcp-light
-- Current hosted MCP version: 0.2.18
+- Current hosted MCP version: 0.2.19
 - Registry listing: https://registry.modelcontextprotocol.io/?q=ai.certscore%2Fmcp-light
 - Cursor Directory: https://cursor.directory/plugins/certscoreai-mcp-light
 - Publisher and legal owner: CertScore.ai, LLC

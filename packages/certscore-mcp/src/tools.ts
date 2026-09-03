@@ -1869,6 +1869,7 @@ export function buildScanBundle(input: {
       scanId: bundle.scanId,
       domain: bundle.domain,
       url: bundle.url,
+      scanFrom: bundle.scanFrom,
       status: bundle.status,
       score: bundle.score,
       scoreLabel: bundle.scoreLabel,
