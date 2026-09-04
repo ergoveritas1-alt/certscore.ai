@@ -2530,7 +2530,21 @@ function getCanonicalPreConsentStorageAssessment(
 }
 
 function getPreConsentStorageEvidenceRefs(assessment: PreConsentStorageAssessment) {
-  const rowRefs = assessment.evidenceRows.slice(0, 6).map((row) => {
+  const essentialityRank = (row: PreConsentStorageAssessment["evidenceRows"][number]) =>
+    row.essentiality === "non_essential" && row.exclusionReason === null
+      ? 0
+      : row.essentiality === "unknown"
+        ? 1
+        : 2;
+  const selectedRows = [...assessment.evidenceRows]
+    .sort((left, right) =>
+      essentialityRank(left) - essentialityRank(right) ||
+      (left.firstObservedMs ?? Number.POSITIVE_INFINITY) -
+        (right.firstObservedMs ?? Number.POSITIVE_INFINITY) ||
+      left.name.localeCompare(right.name)
+    )
+    .slice(0, 6);
+  const rowRefs = selectedRows.map((row) => {
     const owner = row.initiatorVendor ?? row.domain;
     const timing = row.timingEvidence === "before_consent_write"
       ? row.firstObservedMs === null

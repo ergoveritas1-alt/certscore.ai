@@ -23,6 +23,8 @@ type Args = {
   awsRegion: LocalV2DagLambdaAwsRegion;
   debugOverrides: Record<string, unknown> | null;
   functionName: string;
+  gpcConfig: Record<string, unknown> | null;
+  gpcEnabled: boolean;
   messageStreamPath: string | null;
   outPath: string;
   profile: "full" | "standard" | "tiny";
@@ -295,6 +297,9 @@ async function main() {
       productionFindingIntegration: false,
       profile: args.profile,
       ...(args.debugOverrides ? { debugOverrides: args.debugOverrides } : {}),
+      ...(args.gpcEnabled && args.gpcConfig
+        ? { gpcObservation: args.gpcConfig }
+        : {}),
       ...(args.postRefusalEnabled
         ? {
             postRefusalObservation: args.postRefusalConfig ?? {
@@ -513,6 +518,8 @@ function parseArgs(argv: string[]): Args {
       strongEvidenceMode: "webmd"
     },
     functionName: "certscore-v2-dag-local-lambda",
+    gpcConfig: null,
+    gpcEnabled: false,
     messageStreamPath: null,
     outPath: "artifacts/local-v2-dag-lambda-parity/latest.json",
     profile: "full",
@@ -537,6 +544,9 @@ function parseArgs(argv: string[]): Args {
       args.debugOverrides = parseJsonObjectArg(requiredValue(argv, ++index, arg), arg);
     } else if (arg === "--function-name") {
       args.functionName = requiredValue(argv, ++index, arg);
+    } else if (arg === "--gpc-config") {
+      args.gpcConfig = parseJsonObjectArg(requiredValue(argv, ++index, arg), arg);
+      args.gpcEnabled = true;
     } else if (arg === "--message-stream") {
       args.messageStreamPath = requiredValue(argv, ++index, arg);
     } else if (arg === "--no-debug-overrides") {
@@ -580,6 +590,7 @@ function printUsage() {
     "  --target-url <url>       Site to scan. Default: https://www.webmd.com/",
     "  --aws-region <region>    eu-central-1, eu-west-1, or us-west-1. Default: eu-central-1",
     "  --profile <profile>      full, standard, or tiny. Default: full",
+    "  --gpc-config <json>       Enable the passive GPC lane with the typed WC01 dispatch configuration.",
     "  --post-refusal           Enable the local four-lane Reject Path barrier.",
     "  --post-refusal-config <json> Enable Reject Path with the typed WC01 dispatch configuration.",
     "  --post-refusal-worker-mode <mode> normal, failure, or timeout. Implies --post-refusal.",

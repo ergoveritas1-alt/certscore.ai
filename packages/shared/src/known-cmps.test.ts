@@ -74,6 +74,21 @@ test("detects Amazon Privacy Preferences from first-party consent evidence", () 
   assert.ok(detection?.matchedSignals.some((signal) => signal.source === "alias" || signal.source === "text"));
 });
 
+test("Amazon Privacy Preferences exposes canonical first-layer action capabilities", () => {
+  assert.equal(
+    getKnownCmpVendorName({ domSelectors: ["#cos-banner"] }),
+    "Amazon Privacy Preferences",
+  );
+  for (const action of ["accept", "reject"] as const) {
+    const capability = getKnownCmpActionCapability("Amazon Privacy Preferences", action);
+    assert.ok(capability);
+    assert.equal(capability.recipeAvailable, true);
+    assert.equal(capability.selectorRegistered, true);
+    assert.equal(capability.semanticConfirmationRegistered, true);
+    assert.equal(capability.recipeVersion, "v1");
+  }
+});
+
 test("detects Drupal EU Cookie Compliance from first-party runtime markers", () => {
   const [detection] = detectKnownCmps({
     cookieNames: ["cookie-agreed"],

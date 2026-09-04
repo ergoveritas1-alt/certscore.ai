@@ -1,10 +1,10 @@
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import test from "node:test";
-import { countNonNotObservedRows } from "./evidence-directory-summary";
+import { countNonNotObservedRows, countRowsRequiringReview } from "./evidence-directory-summary";
 import { buildRuntimeInventoryCopyPayload } from "./inventory-table-copy";
 import { buildRuntimeInventoryPurposeCounts } from "../runtime-observation-sections";
-import { getPolicySurfaceCoverageStatus } from "./timeline-report-model";
+import { getConsentControlSummaryLabel, getPolicySurfaceCoverageStatus } from "./timeline-report-model";
 
 test("evidence directory summaries exclude only Not observed rows", () => {
   assert.equal(countNonNotObservedRows([
@@ -18,6 +18,18 @@ test("evidence directory summaries exclude only Not observed rows", () => {
     { status: "Not observed" },
     { status: "Observed" },
   ]), 1);
+});
+
+test("evidence directory review counts exclude positive and contextual rows", () => {
+  assert.equal(countRowsRequiringReview([
+    { status: "Potential gap" },
+    { status: "Partial concern" },
+    { status: "Not confirmed" },
+    { status: "Limited" },
+    { status: "Observed" },
+    { status: "Context" },
+    { status: "Not observed" },
+  ]), 4);
 });
 
 test("policy surface coverage preserves limited and unavailable states", () => {
@@ -40,6 +52,24 @@ test("policy surface coverage preserves limited and unavailable states", () => {
   assert.equal(getPolicySurfaceCoverageStatus(null), "unavailable");
 });
 
+test("consent control summary distinguishes unknown coverage from verified absence", () => {
+  assert.equal(getConsentControlSummaryLabel({
+    accept: "Unknown",
+    options: "Unknown",
+    reject: "Unknown",
+  }), "Coverage limited");
+  assert.equal(getConsentControlSummaryLabel({
+    accept: "Observed",
+    options: "Unknown",
+    reject: "Not observed",
+  }), "1 observed · 1 not observed · 1 unknown");
+  assert.equal(getConsentControlSummaryLabel({
+    accept: "Not observed",
+    options: "Not observed",
+    reject: "Not observed",
+  }), "0 of 3 observed");
+});
+
 test("purpose mix merges case-only labels without double-counting retained records", () => {
   const counts = buildRuntimeInventoryPurposeCounts([
     { purpose: "Session replay", recordCount: 2 },
@@ -54,14 +84,16 @@ test("purpose mix merges case-only labels without double-counting retained recor
   assert.equal(counts.reduce((total, row) => total + row.value, 0), 7);
 });
 
-test("tracking and runtime section headings show non-Not-observed counts over totals", async () => {
+test("evidence section headings distinguish review, observed, and total check counts", async () => {
   const source = await readFile(
     "apps/web/components/scans/report-lab/shadow-scan-report.tsx",
     "utf8"
   );
 
-  assert.match(source, /\{trackingExternalFindingCount\} of \{report\.trackingExternalRows\.length\} findings/);
-  assert.match(source, /\{preConsentRuntimeFindingCount\} of \{report\.preConsentRuntimeRows\.length\} findings/);
+  assert.match(source, /\{trackingExternalReviewCount\} requiring review · \{report\.trackingExternalRows\.length\} checks/);
+  assert.match(source, /\{preConsentRuntimeReviewCount\} requiring review · \{report\.preConsentRuntimeRows\.length\} checks/);
+  assert.match(source, /\{observedGdprTransparencyRows\} observed · \{report\.gdprTransparencyRows\.length\} checks/);
+  assert.match(source, /positive · \{report\.transportRows\.length\} checks/);
 });
 
 test("benchmark labels and values come from canonical non-essential inventory tallies", async () => {
@@ -137,7 +169,7 @@ test("Accept and Reject cards appear together in expandable consent surfaces", a
   assert.match(source, /Observation window complete/);
   assert.match(choicePathCardSource, /<details/);
   assert.match(choicePathCardSource, /<summary/);
-  assert.match(choicePathCardSource, /group-open\/path:rotate-45/);
+  assert.match(choicePathCardSource, /group-open\/path:rotate-180/);
   assert.doesNotMatch(choicePathCardSource, /<details[^>]*\sopen(?:\s|>)/);
   assert.match(choicePathCardSource, /px-3 py-2\.5/);
   assert.match(choicePathCardSource, /<\/summary>\s*<div[^>]*>\s*<h4/);
@@ -148,6 +180,57 @@ test("Accept and Reject cards appear together in expandable consent surfaces", a
   assert.match(modelSource, /finding\.unifiedFindingId === "acceptance_signal_contradicts_action"/);
   assert.match(modelSource, /acceptContradictionRow \? \[acceptContradictionRow\] : \[\]/);
   assert.doesNotMatch(modelSource, /score-neutral|does not affect score|second score effect/);
+});
+
+test("report header actions and section spacing match the compact report treatment", async () => {
+  const source = await readFile(
+    "apps/web/components/scans/report-lab/shadow-scan-report.tsx",
+    "utf8"
+  );
+  const actionsSource = await readFile(
+    "apps/web/components/scans/report-lab/shadow-report-actions.tsx",
+    "utf8"
+  );
+  const captureActionsSource = await readFile(
+    "apps/web/components/scans/share-report-actions.tsx",
+    "utf8"
+  );
+  const executiveGridSource = await readFile(
+    "apps/web/components/scans/report-lab/expandable-executive-grid.tsx",
+    "utf8"
+  );
+  const identitySource = source.slice(
+    source.indexOf("function ReportIdentity"),
+    source.indexOf("function ScoreScale"),
+  );
+  const choicePathSource = source.slice(
+    source.indexOf("function ChoicePathResults"),
+    source.indexOf("type InventoryMixItem"),
+  );
+  const evidenceDirectorySource = source.slice(source.indexOf("function EvidenceDirectory"));
+
+  assert.match(identitySource, /className="!h-7 !w-7 translate-y-0\.5 !rounded-md !border-zinc-200 !bg-zinc-50 !p-1 !shadow-sm"/);
+  assert.match(identitySource, /label=\{report\.scan\.host\}/);
+  assert.match(identitySource, /flex items-center justify-between gap-3/);
+  assert.match(identitySource, /flex shrink-0 flex-wrap items-center gap-2/);
+  assert.doesNotMatch(identitySource, /href="#evidence"/);
+  assert.match(actionsSource, /aria-label="Share report"/);
+  assert.match(actionsSource, /bg-white[^"]*text-zinc-950/);
+  assert.match(actionsSource, /<svg aria-hidden="true"/);
+  assert.match(actionsSource, />\s*Share\s*<\/summary>/);
+  assert.doesNotMatch(actionsSource, /Share \/ export|⌄/);
+  assert.match(captureActionsSource, /aria-label="View captured image"/);
+  assert.doesNotMatch(captureActionsSource, />View capture<\/span>/);
+  assert.match(executiveGridSource, /mt-6 grid gap-8 border-t border-zinc-200 pt-6/);
+  assert.doesNotMatch(source.slice(source.indexOf("function ScoreScale"), source.indexOf("function CoverageBar")), /line-clamp/);
+  assert.match(source, /Indeterminate · limited comparison coverage/);
+  assert.match(source, /function DisclosureChevron/);
+  assert.doesNotMatch(source, /rotate-45|>\+<\/span>/);
+  assert.doesNotMatch(choicePathSource, /Confirmed outcomes retained after first-layer consent choices/);
+  assert.match(choicePathSource, /mt-3 border-t border-zinc-300 pt-2\.5/);
+  assert.match(choicePathSource, /mt-1\.5 grid items-start gap-2 sm:grid-cols-2/);
+  assert.match(evidenceDirectorySource, /px-5 py-8 lg:px-10 lg:py-10/);
+  assert.match(evidenceDirectorySource, /mt-6 grid items-start/);
 });
 
 test("GPC appears as a quiet snapshot signal and a dedicated evidence-index comparison", async () => {
@@ -166,6 +249,10 @@ test("GPC appears as a quiet snapshot signal and a dedicated evidence-index comp
   const snapshotSource = source.slice(
     source.indexOf("function SignalSnapshot"),
     source.indexOf("function BenchmarkComparison")
+  );
+  const gpcEvidenceCardSource = source.slice(
+    source.indexOf("function GpcEvidenceIndexCard"),
+    source.indexOf("function EvidenceDirectory")
   );
   const evidenceDirectorySource = source.slice(source.indexOf("function EvidenceDirectory"));
   const consentPlatformIndex = snapshotSource.indexOf(">Consent platform<");
@@ -188,6 +275,8 @@ test("GPC appears as a quiet snapshot signal and a dedicated evidence-index comp
   assert.match(source, /CA −\{report\.gpcResponse\.californiaDeductionPoints\}/);
   assert.match(source, /href="#gpc-evidence"/);
   assert.match(source, /data-testid="gpc-evidence-index-card"/);
+  assert.match(gpcEvidenceCardSource, /whitespace-nowrap text-lg/);
+  assert.doesNotMatch(gpcEvidenceCardSource, /<GpcStatusBadge/);
   assert.ok(runtimeIndex >= 0);
   assert.ok(runtimeIndex < gpcCardIndex);
   assert.ok(gpcCardIndex < transportIndex);
@@ -230,6 +319,9 @@ test("full runtime inventory shows six rows before becoming vertically scrollabl
   assert.match(source, /label="Copy entire cookies and trackers table"/);
   assert.match(source, /payload=\{copyPayload\}/);
   assert.match(source, /<thead className="sticky top-0/);
+  assert.match(source, /md:left-\[5\.5rem\]/);
+  assert.match(source, /md:left-\[9\.5rem\]/);
+  assert.match(source, /md:left-\[19\.5rem\]/);
   assert.match(source, /min-w-\[98rem\]/);
   assert.match(source, /\["More", "w-\[5\.5rem\]"\], \["Type", "w-\[4rem\]"\], \["Vendor", "w-\[10rem\]"\], \["Name", "w-\[9rem\]"\]/);
   assert.match(source, /\["Purpose", "w-\[14rem\]"\]/);

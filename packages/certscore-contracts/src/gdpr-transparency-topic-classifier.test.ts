@@ -2414,6 +2414,54 @@ test("classifies retained German clinic policy wording without exact-grammar gap
   );
 });
 
+test("classifies deletion criteria, active recipient disclosures, and complaint routes in natural German policy prose", () => {
+  const classification = classifyGdprTransparencyTopics({
+    localeHints: ["de"],
+    text: [
+      "Datenschutzerklärung.",
+      "Die Löschung Ihrer Daten erfolgt, wenn Ihre Daten zur Erfüllung des mit der Speicherung verfolgten Zweckes nicht mehr erforderlich sind.",
+      "Eine Löschung kann nicht erfolgen, wenn rechtliche Bestimmungen zur Aufbewahrung oder Speicherung verpflichten.",
+      "Die Tierklinik wird Ihre personenbezogenen Daten nur unter den beschriebenen Voraussetzungen an Dritte weitergeben.",
+      "Sie können sich mit einer Beschwerde auch an die Aufsichtsbehörde wenden.",
+    ].join(" "),
+  });
+  const byTopic = new Map(classification.matches.map((match) => [match.topic, match]));
+
+  for (const topic of [
+    "data_retention",
+    "recipients_or_vendor_categories",
+    "supervisory_authority",
+  ] satisfies GdprTransparencyTopic[]) {
+    assert.equal(byTopic.get(topic)?.matchStrength, "equivalent", topic);
+    assert.equal(byTopic.get(topic)?.reasonCodes.includes("variant_semantic_clause"), true, topic);
+  }
+});
+
+test("natural deletion, recipient, and complaint clauses receive the same canonical treatment across European languages", () => {
+  const cases = [
+    ["fr", "Politique de confidentialité. Les données personnelles sont supprimées lorsqu'elles ne sont plus nécessaires. Les données personnelles sont communiquées à des prestataires. Vous pouvez déposer une réclamation auprès de la CNIL."],
+    ["es", "Política de privacidad. Los datos personales se eliminan cuando ya no sean necesarios. Los datos personales se comunican a encargados del tratamiento. Puede presentar una reclamación ante la autoridad de control."],
+    ["it", "Informativa sulla privacy. I dati personali sono cancellati quando non sono più necessari. I dati personali sono comunicati a responsabili del trattamento. Può presentare un reclamo all'autorità di controllo."],
+    ["nl", "Privacyverklaring. Persoonsgegevens worden verwijderd wanneer zij niet langer nodig zijn. Persoonsgegevens worden verstrekt aan verwerkers. U kunt een klacht indienen bij de Autoriteit Persoonsgegevens."],
+    ["pl", "Polityka prywatności. Dane osobowe są usuwane gdy nie są już niezbędne. Dane osobowe są przekazywane podmiotom przetwarzającym. Mają Państwo prawo wnieść skargę do organu nadzorczego."],
+    ["pt", "Política de privacidade. Os dados pessoais são eliminados quando deixarem de ser necessários. Os dados pessoais são transmitidos a subcontratantes. Pode apresentar uma reclamação junto da autoridade de controlo."],
+  ] as const;
+
+  for (const [locale, text] of cases) {
+    const topics = new Set(classifyGdprTransparencyTopics({
+      localeHints: [locale],
+      text,
+    }).matches.map((match) => match.topic));
+    for (const topic of [
+      "data_retention",
+      "recipients_or_vendor_categories",
+      "supervisory_authority",
+    ] satisfies GdprTransparencyTopic[]) {
+      assert.equal(topics.has(topic), true, `${locale}:${topic}`);
+    }
+  }
+});
+
 test("SITS-shaped broad English variants remain unknown in operational copy", () => {
   const classification = classifyGdprTransparencyTopics({
     localeHints: ["en"],

@@ -50,6 +50,22 @@ test("unknown CMPs fail closed without a recipe", () => {
   }), undefined);
 });
 
+test("Amazon Reject uses its canonical action proxy and retained first-layer transition", () => {
+  const amazon = buildCanonicalPostRefusalActionRecipes().find((recipe) =>
+    recipe.cmpId === "Amazon Privacy Preferences"
+  );
+
+  assert.ok(amazon);
+  assert.equal(amazon.resolverMethod, "cmp_registry_recipe");
+  assert.equal(amazon.controlSelector, "#cos-banner span.a-button:has(#sp-cc-rejectall-link)");
+  assert.equal(amazon.bannerSelector, "#cos-banner");
+  assert.deepEqual(amazon.confirmation, {
+    kind: "canonical_reject_transition",
+    bannerSelector: "#cos-banner",
+    controlSelector: "#cos-banner span.a-button:has(#sp-cc-rejectall-link)",
+  });
+});
+
 test("canonical Usercentrics confirmation requires an exact uc_settings transition", () => {
   const usercentrics = buildCanonicalPostRefusalActionRecipes().find((recipe) =>
     recipe.cmpId === "Usercentrics"

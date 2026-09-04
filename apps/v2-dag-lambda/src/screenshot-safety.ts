@@ -10,7 +10,8 @@ import { proxyFetch } from "@certscore/scan-core";
 
 export const DEFAULT_SCREENSHOT_SAFETY_MODEL = "omni-moderation-latest";
 export const DEFAULT_SCREENSHOT_SAFETY_TIMEOUT_MS = 8_000;
-export const SCREENSHOT_SAFETY_MAX_ADDED_LATENCY_MS = 100;
+export const CONSENT_SCREENSHOT_SAFETY_FINALIZATION_BUDGET_MS = 2_000;
+export const SCREENSHOT_SAFETY_MAX_ADDED_LATENCY_MS = 2_100;
 // Reserve 25 ms inside the hard latency ceiling for fail-closed file cleanup
 // and canonical bundle projection after the network review wait ends.
 export const SCREENSHOT_SAFETY_FINALIZATION_BUDGET_MS = 75;
@@ -284,6 +285,24 @@ function isPlaceholderScreenshot(
     screenshot.captureMethod === "fresh_context_placeholder";
 }
 
+function hasCompletedFirstLayerConsentInventory(bundle: CanonicalEvidenceBundle) {
+  return bundle.consentUiObservations.some((observation) =>
+    observation.captureStatus === "observed" &&
+    observation.inventoryOutcome === "complete_with_controls" &&
+    observation.layerInspected === "first_layer" &&
+    observation.controls.length > 0
+  );
+}
+
+function isRepresentativeConsentScreenshot(
+  screenshot: ScreenshotArtifact,
+  completedFirstLayerInventory: boolean,
+) {
+  return completedFirstLayerInventory &&
+    screenshot.consentStateAtTime === "pre_consent" &&
+    screenshot.pagePhase === "network_idle";
+}
+
 async function deleteUnretainedScreenshotFiles(
   artifactRoot: string,
   screenshots: ScreenshotArtifact[],
@@ -442,13 +461,23 @@ export async function applyHomepageScreenshotSafetyGate(input: {
       classifier: input.classifier,
       signal: input.signal,
     });
-  const deadlineAtMs = Date.now() + SCREENSHOT_SAFETY_FINALIZATION_BUDGET_MS;
+  const finalizationStartedAtMs = Date.now();
+  const completedFirstLayerInventory = hasCompletedFirstLayerConsentInventory(input.bundle);
   const reviews = pendingScreenshots.map((screenshot) => {
     const review = reviewCoordinator.reviewFor(screenshot);
+    const finalizationBudgetMs = isRepresentativeConsentScreenshot(
+      screenshot,
+      completedFirstLayerInventory,
+    )
+      ? CONSENT_SCREENSHOT_SAFETY_FINALIZATION_BUDGET_MS
+      : SCREENSHOT_SAFETY_FINALIZATION_BUDGET_MS;
     return {
       screenshot,
       outcome: review
-        ? reviewWithinFinalizationBudget(review, deadlineAtMs)
+        ? reviewWithinFinalizationBudget(
+            review,
+            finalizationStartedAtMs + finalizationBudgetMs,
+          )
         : Promise.resolve<ScreenshotSafetyReviewOutcome>({
             failureCode: "temporary_file_unavailable",
             status: "unavailable",

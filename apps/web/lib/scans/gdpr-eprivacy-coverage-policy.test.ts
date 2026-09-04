@@ -3181,6 +3181,37 @@ test("deriveGdprEprivacyCoveragePolicyOutcomes retains non-essential analytics c
   assert.equal(outcomes.pre_consent_cookies_storage?.criticalEvidence.retainedEvidence.eligibleNonEssentialCookieStorageFindingProjected, true);
 });
 
+test("pre-consent storage evidence references lead with the eligible non-essential row", () => {
+  const outcomes = deriveGdprEprivacyCoveragePolicyOutcomes({
+    ...completedInputBase,
+    runtimeArtifacts: {
+      hybridRuntimeEvidence: {
+        cookieWriteObservations: [{
+          beforeConsent: true,
+          category: "unknown",
+          cookieName: "mystery-id",
+          domain: "example.test",
+          party: "first_party",
+          setAtMs: 1_872,
+        }, {
+          beforeConsent: true,
+          category: "analytics",
+          cookieName: "analytics-id",
+          domain: "example.test",
+          nonEssential: true,
+          party: "first_party",
+          setAtMs: 1_872,
+        }],
+        storageSummary: { cookiesBeforeConsentCount: 2, cookiesSeenCount: 2 },
+      },
+    },
+  });
+
+  assert.equal(outcomes.pre_consent_cookies_storage?.status, "Gap observed");
+  assert.match(outcomes.pre_consent_cookies_storage?.evidenceRefs[0] ?? "", /^analytics-id .*non_essential/);
+  assert.match(outcomes.pre_consent_cookies_storage?.evidenceRefs[1] ?? "", /^mystery-id .*unknown/);
+});
+
 test("deriveGdprEprivacyCoveragePolicyOutcomes treats banner-only cookie notice evidence as partial review", () => {
   const outcomes = deriveGdprEprivacyCoveragePolicyOutcomes({
     ...completedInputBase,

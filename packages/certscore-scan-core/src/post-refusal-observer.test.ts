@@ -957,6 +957,7 @@ test("canonical reject recipe set selects the one actionable deterministic contr
     [
       "certscore_owned_analytics_consent",
       "OpenAI first-party consent controls",
+      "Amazon Privacy Preferences",
       "OneTrust",
       "Fides",
       "TrustArc",

@@ -6,7 +6,7 @@ import { cmpActionRecipeEnabled } from "./cmp-action-recipe-policy.js";
 import type { PostRefusalActionRecipe } from "./post-refusal-observer.js";
 
 export const CANONICAL_POST_REFUSAL_RECIPE_SET_ID =
-  "canonical-consent-control-reject-v21";
+  "canonical-consent-control-reject-v22";
 
 export const CERTSCORE_OWNED_ANALYTICS_REJECT_RECIPE: PostRefusalActionRecipe = {
   artifactVersion: "certscore.post_refusal_action_recipe.v1",
@@ -26,6 +26,12 @@ function mapRejectConfirmation(
   confirmation: KnownCmpActionConfirmation,
 ): PostRefusalActionRecipe["confirmation"] {
   switch (confirmation.kind) {
+    case "canonical_first_layer_ui_transition":
+      return {
+        kind: "canonical_reject_transition",
+        bannerSelector: confirmation.bannerSelector,
+        controlSelector: confirmation.controlSelector,
+      };
     case "tcf_purposes_or_cmp_cookie_changed":
       return {
         kind: "tcf_purposes_denied_or_cmp_cookie_changed",

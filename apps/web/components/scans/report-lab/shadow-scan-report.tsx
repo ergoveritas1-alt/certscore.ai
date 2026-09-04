@@ -18,12 +18,13 @@ import { getGdprEprivacyPostureTone } from "../../../lib/scans/regulatory-covera
 import { ShadowReportShareMenu } from "./shadow-report-actions";
 import { ExpandableExecutiveGrid } from "./expandable-executive-grid";
 import { buildRuntimeInventoryCopyPayload } from "./inventory-table-copy";
-import { countNonNotObservedRows } from "./evidence-directory-summary";
+import { countRowsRequiringReview } from "./evidence-directory-summary";
 import {
   describeIndustryBenchmarkDifference,
   getIndustryBenchmark,
 } from "./industry-benchmark-data";
 import { ShadowPolicyEvidenceViewer } from "./shadow-policy-evidence-viewer";
+import { getConsentControlSummaryLabel } from "./timeline-report-model";
 import {
   RegulatoryChecklistCorrectionSteps,
   RegulatoryChecklistEvidenceDetails,
@@ -49,6 +50,20 @@ type ShadowScanReportProps = {
 };
 
 const monoClass = "font-mono tabular-nums";
+
+function DisclosureChevron({ className = "" }: { className?: string }) {
+  return (
+    <svg
+      aria-hidden="true"
+      className={`h-4 w-4 shrink-0 transition-transform ${className}`}
+      fill="none"
+      viewBox="0 0 20 20"
+    >
+      <path d="m6 8 4 4 4-4" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.75" />
+    </svg>
+  );
+}
+
 function statusClasses(status: ShadowEvidenceStatus) {
   if (status === "Potential gap") return "border-rose-200 bg-rose-50 text-rose-800";
   if (status === "Partial concern") return "border-amber-200 bg-amber-50 text-amber-900";
@@ -90,7 +105,7 @@ function getGpcStatusPresentation(status: GpcResponseReportProjection["assessmen
     };
   }
   return {
-    label: "Indeterminate",
+    label: "Indeterminate · limited comparison coverage",
     tone: "border-zinc-300 bg-zinc-100 text-zinc-700",
   };
 }
@@ -147,7 +162,7 @@ function ReportIdentity({
       <div className={`flex flex-col gap-3 ${enhancedActions ? "lg:flex-row lg:items-center lg:justify-between" : ""}`}>
         <div className="flex flex-wrap items-center gap-x-3 gap-y-2 text-xs font-medium text-zinc-500">
           {enhancedActions ? (
-            <div className="[&_.app-raised-button]:!h-[1.625rem] [&_.app-raised-button]:!w-[1.625rem] [&_.app-raised-button]:!rounded-md [&_.app-raised-button]:!border [&_.app-raised-button]:!border-zinc-300 [&_.app-raised-button]:!bg-white [&_.app-raised-button]:!text-zinc-600 [&_.app-raised-button]:!shadow-none [&_.app-raised-button]:hover:!border-zinc-500 [&_.app-raised-button]:hover:!text-zinc-950">
+            <div className="[&_.app-raised-button]:!h-[1.625rem] [&_.app-raised-button]:!rounded-md [&_.app-raised-button]:!border [&_.app-raised-button]:!border-zinc-300 [&_.app-raised-button]:!bg-white [&_.app-raised-button]:!text-zinc-600 [&_.app-raised-button]:!shadow-none [&_.app-raised-button]:hover:!border-zinc-500 [&_.app-raised-button]:hover:!text-zinc-950">
               <ShareReportActions
                 domainLabel={report.scan.host}
                 scanId={report.scan.id}
@@ -178,15 +193,19 @@ function ReportIdentity({
           </div>
         ) : null}
       </div>
-      <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
-        <div className="min-w-0">
-          <p className="text-xs font-medium text-zinc-500">{report.scan.createdAt}</p>
-          <h1 className={`${compact ? "mt-1 text-2xl" : "mt-2 text-3xl"} max-w-5xl break-words font-semibold text-zinc-950`}>
-            {report.scan.host}
-          </h1>
-          <p className={`${monoClass} mt-2 hidden break-all text-xs text-zinc-500 sm:block`}>{report.scan.url}</p>
-        </div>
-        <div className="flex flex-wrap gap-2">
+      <div className="min-w-0">
+        <p className="text-xs font-medium text-zinc-500">{report.scan.createdAt}</p>
+        <div className={`${compact ? "mt-1" : "mt-2"} flex items-center justify-between gap-3`}>
+          <div className="flex min-w-0 items-center gap-2">
+            <VendorBrandLogo
+              className="!h-7 !w-7 translate-y-0.5 !rounded-md !border-zinc-200 !bg-zinc-50 !p-1 !shadow-sm"
+              label={report.scan.host}
+            />
+            <h1 className={`${compact ? "text-2xl" : "text-3xl"} max-w-5xl break-words font-semibold text-zinc-950`}>
+              {report.scan.host}
+            </h1>
+          </div>
+          <div className="flex shrink-0 flex-wrap items-center gap-2">
           {enhancedActions ? (
             <ShadowReportShareMenu
               reportUrl={report.scan.reportUrl ?? SHADOW_REPORT_SOURCE_URL}
@@ -203,13 +222,9 @@ function ReportIdentity({
               Exact report <span aria-hidden="true">↗</span>
             </a>
           )}
-          <a
-            className="inline-flex h-8 items-center gap-1.5 rounded-md border border-zinc-300 bg-white px-2.5 text-xs font-semibold text-zinc-800 hover:border-zinc-500 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-500"
-            href="#evidence"
-          >
-            Evidence index <span aria-hidden="true">↓</span>
-          </a>
+          </div>
         </div>
+        <p className={`${monoClass} mt-2 hidden break-all text-xs text-zinc-500 sm:block`}>{report.scan.url}</p>
       </div>
     </header>
   );
@@ -246,7 +261,7 @@ function ScoreScale({ compact = false, report }: { compact?: boolean; report: Sh
       <div className="min-w-0 flex-1 border-l border-zinc-200 pl-4">
         <p className="text-[0.68rem] font-semibold uppercase text-zinc-500">Overall score</p>
         <p className="mt-1 text-lg font-semibold leading-tight text-zinc-950">{assessment}</p>
-        <p className="mt-2 overflow-hidden text-xs leading-5 text-zinc-500 [display:-webkit-box] [-webkit-box-orient:vertical] [-webkit-line-clamp:2]">{focus}</p>
+        <p className="mt-2 text-xs leading-5 text-zinc-500">{focus}</p>
       </div>
     </div>
   );
@@ -382,7 +397,14 @@ function ControlStatusGrid({ compact = false, report }: { compact?: boolean; rep
 }
 
 function SignalSnapshot({ report }: { report: ShadowReportData }) {
-  const consentVendor = report.consentVendor ?? "Not identified";
+  const consentControlSummary = getConsentControlSummaryLabel(report.controls);
+  const consentCoverageLimited = Object.values(report.controls).some((value) => value === "Unknown");
+  const consentVendor = report.consentVendor ?? (consentCoverageLimited ? "Not determined" : "Not identified");
+  const consentPlatformDetail = report.consentVendor
+    ? "Consent-platform identity retained in the canonical runtime and consent projection."
+    : consentCoverageLimited
+      ? "Consent inspection was incomplete or not representative, so platform identity was not determined."
+      : "No consent-platform identity was retained in the completed scan context.";
   const privacyUrls = [...new Set(report.gdprTransparencyRows.flatMap((row) => row.policyEvidence?.sourceUrl ? [row.policyEvidence.sourceUrl] : []))];
   const policySurfaceSummary = privacyUrls.length > 0
     ? `${privacyUrls.length} found`
@@ -392,7 +414,6 @@ function SignalSnapshot({ report }: { report: ShadowReportData }) {
         ? "0 found"
         : "Unavailable";
   const observedTransportRows = report.transportRows.filter((row) => row.status === "Observed").length;
-  const observedControls = Object.values(report.controls).filter((value) => value === "Observed").length;
   const signalRowClass = "group/signal border-b border-zinc-200 py-2";
   const signalSummaryClass = "flex cursor-pointer list-none items-center justify-between gap-3 text-xs leading-4 [&::-webkit-details-marker]:hidden";
   return (
@@ -405,18 +426,18 @@ function SignalSnapshot({ report }: { report: ShadowReportData }) {
             <span className="flex min-w-0 items-center gap-2 text-xs font-semibold text-zinc-800">
               <VendorBrandLogo label={consentVendor} />
               <span>{consentVendor}</span>
-              <span aria-hidden="true" className="text-zinc-400 transition group-open/signal:rotate-45">+</span>
+              <DisclosureChevron className="text-zinc-400 group-open/signal:rotate-180" />
             </span>
           </summary>
           <div className="mt-3 flex flex-wrap items-center gap-2">
             <VendorBrandChip className="max-w-[13rem]" label={consentVendor} showMeta={false} />
-            <p className="text-xs leading-5 text-zinc-600">Consent-platform identity retained in the canonical runtime and consent projection.</p>
+            <p className="text-xs leading-5 text-zinc-600">{consentPlatformDetail}</p>
           </div>
         </details>
         <details className={signalRowClass}>
           <summary className={signalSummaryClass}>
             <span className="text-xs font-medium text-zinc-500">Consent controls</span>
-            <span className="flex items-center gap-2 text-xs font-semibold text-zinc-800">{observedControls} of 3 observed <span aria-hidden="true" className="text-zinc-400 transition group-open/signal:rotate-45">+</span></span>
+            <span className="flex items-center gap-2 text-xs font-semibold text-zinc-800">{consentControlSummary} <DisclosureChevron className="text-zinc-400 group-open/signal:rotate-180" /></span>
           </summary>
           <div className="mt-3"><ControlStatusGrid compact report={report} /></div>
           {report.acceptPath ? (
@@ -435,7 +456,7 @@ function SignalSnapshot({ report }: { report: ShadowReportData }) {
             <span className="text-xs font-medium text-zinc-500">Tracker footprint</span>
             <span className="flex items-center gap-2">
               <span className={`${monoClass} text-xs font-semibold text-zinc-800`}>{report.metrics.vendors} vendors · {report.metrics.domains} domains</span>
-              <span aria-hidden="true" className="text-zinc-400 transition group-open/signal:rotate-45">+</span>
+              <DisclosureChevron className="text-zinc-400 group-open/signal:rotate-180" />
             </span>
           </summary>
           <div className="mt-3 flex flex-wrap gap-2">
@@ -448,7 +469,7 @@ function SignalSnapshot({ report }: { report: ShadowReportData }) {
         <details className={signalRowClass}>
           <summary className={signalSummaryClass}>
             <span className="text-xs font-medium text-zinc-500">Policy surfaces</span>
-            <span className="flex items-center gap-2 text-xs font-semibold text-zinc-800"><span className={monoClass}>{policySurfaceSummary}</span><span aria-hidden="true" className="text-zinc-400 transition group-open/signal:rotate-45">+</span></span>
+            <span className="flex items-center gap-2 text-xs font-semibold text-zinc-800"><span className={monoClass}>{policySurfaceSummary}</span><DisclosureChevron className="text-zinc-400 group-open/signal:rotate-180" /></span>
           </summary>
           <ul className={`${monoClass} mt-3 space-y-2 break-all text-[0.68rem] leading-5 text-zinc-600`}>
             {privacyUrls.length > 0 ? privacyUrls.map((url) => <li key={url}>{url}</li>) : (
@@ -465,7 +486,7 @@ function SignalSnapshot({ report }: { report: ShadowReportData }) {
         <details className={signalRowClass}>
           <summary className={signalSummaryClass}>
             <span className="text-xs font-medium text-zinc-500">HTTPS / TLS</span>
-            <span className="flex items-center gap-2 text-xs font-semibold text-zinc-800"><span className={monoClass}>{observedTransportRows} of {report.transportRows.length} observed</span><span aria-hidden="true" className="text-zinc-400 transition group-open/signal:rotate-45">+</span></span>
+            <span className="flex items-center gap-2 text-xs font-semibold text-zinc-800"><span className={monoClass}>{observedTransportRows} observed · {report.transportRows.length} checks</span><DisclosureChevron className="text-zinc-400 group-open/signal:rotate-180" /></span>
           </summary>
           <ul className="mt-3 space-y-2 text-xs leading-5 text-zinc-600">
             {report.transportRows.map((row) => (
@@ -489,7 +510,7 @@ function SignalSnapshot({ report }: { report: ShadowReportData }) {
                     CA −{report.gpcResponse.californiaDeductionPoints}
                   </span>
                 ) : null}
-                <span aria-hidden="true" className="text-zinc-400 transition group-open/signal:rotate-45">+</span>
+                <DisclosureChevron className="text-zinc-400 group-open/signal:rotate-180" />
               </span>
             </summary>
             <div className="mt-3 space-y-2.5">
@@ -513,7 +534,7 @@ function SignalSnapshot({ report }: { report: ShadowReportData }) {
               <span className="text-xs font-medium text-zinc-500">Global Privacy Control (GPC)</span>
               <span className="flex min-w-0 items-center gap-2 text-xs font-semibold text-zinc-500">
                 <span>{report.gpcLaneStatus === "unavailable" ? "Result unavailable" : "Not run"}</span>
-                <span aria-hidden="true" className="text-zinc-400 transition group-open/signal:rotate-45">+</span>
+                <DisclosureChevron className="text-zinc-400 group-open/signal:rotate-180" />
               </span>
             </summary>
             <p className="mt-3 text-xs leading-5 text-zinc-600">
@@ -527,7 +548,7 @@ function SignalSnapshot({ report }: { report: ShadowReportData }) {
           <details className={signalRowClass}>
             <summary className={signalSummaryClass}>
               <span className="text-xs font-medium text-zinc-500">Form surface</span>
-              <span className="flex items-center gap-2 text-xs font-semibold text-zinc-800"><span className={monoClass}>{report.metrics.forms} {report.metrics.forms === 1 ? "form" : "forms"} · {report.metrics.fields} {report.metrics.fields === 1 ? "field" : "fields"}</span><span aria-hidden="true" className="text-zinc-400 transition group-open/signal:rotate-45">+</span></span>
+              <span className="flex items-center gap-2 text-xs font-semibold text-zinc-800"><span className={monoClass}>{report.metrics.forms} {report.metrics.forms === 1 ? "form" : "forms"} · {report.metrics.fields} {report.metrics.fields === 1 ? "field" : "fields"}</span><DisclosureChevron className="text-zinc-400 group-open/signal:rotate-180" /></span>
             </summary>
             <p className="mt-3 text-xs leading-5 text-zinc-600">Read-only main-document inventory. Field values were not retained.</p>
           </details>
@@ -619,7 +640,7 @@ function EvidenceTools({
       <details className="group/tool border-b border-r border-zinc-200 p-4">
         <summary className="flex cursor-pointer list-none items-center justify-between gap-3 text-sm font-semibold text-zinc-900 [&::-webkit-details-marker]:hidden">
           JSON evidence
-          <span aria-hidden="true" className="text-zinc-400 transition group-open/tool:rotate-45">+</span>
+          <DisclosureChevron className="text-zinc-400 group-open/tool:rotate-180" />
         </summary>
         <div className="mt-4">
           {canonicalEvidenceJson ? (
@@ -633,7 +654,7 @@ function EvidenceTools({
         <details className="group/correction border-b border-r border-zinc-200 p-4">
           <summary className="flex cursor-pointer list-none items-center justify-between gap-3 text-sm font-semibold text-zinc-900 [&::-webkit-details-marker]:hidden">
             Correction steps
-            <span aria-hidden="true" className="text-zinc-400 transition group-open/correction:rotate-45">+</span>
+            <DisclosureChevron className="text-zinc-400 group-open/correction:rotate-180" />
           </summary>
           <div className="mt-4 [&>details]:!mt-0 [&>details]:!border-0 [&>details]:!bg-transparent [&>details>summary]:hidden">
             <RegulatoryChecklistCorrectionSteps defaultOpen jsonPayload={canonicalEvidenceJson} />
@@ -643,7 +664,7 @@ function EvidenceTools({
         <details className="group/tool border-b border-r border-zinc-200 p-4">
           <summary className="flex cursor-pointer list-none items-center justify-between gap-3 text-sm font-semibold text-zinc-900 [&::-webkit-details-marker]:hidden">
             Correction steps
-            <span aria-hidden="true" className="text-zinc-400 transition group-open/tool:rotate-45">+</span>
+            <DisclosureChevron className="text-zinc-400 group-open/tool:rotate-180" />
           </summary>
           <ol className="mt-4 space-y-2 text-sm leading-6 text-zinc-600">
             {correctionSteps.map((step, index) => (
@@ -671,7 +692,7 @@ function EvidenceIndexRows({ rows, stackedTools = false }: { rows: readonly Shad
             </span>
             <span className="flex shrink-0 items-center gap-2">
               <StatusBadge status={row.status} />
-              <span aria-hidden="true" className="text-zinc-400 transition group-open/evidence-row:rotate-45">+</span>
+              <DisclosureChevron className="text-zinc-400 group-open/evidence-row:rotate-180" />
             </span>
           </summary>
           <div className="mt-4">
@@ -696,7 +717,7 @@ function FindingRow({ finding, dense = false, priority = false }: { finding: Sha
         {!dense ? <span className={`${priority ? "hidden self-center rounded-md border border-zinc-200 bg-white px-2 py-1 text-[0.65rem] font-semibold uppercase text-zinc-500 lg:block" : "hidden self-start text-xs font-medium text-zinc-500 sm:block"}`}>{finding.focus}</span> : null}
         <span className={priority ? "absolute right-2 top-3 flex items-center gap-2 sm:static" : dense ? "flex items-start gap-2" : "hidden items-start gap-2 sm:flex"}>
           {!dense ? <span className={priority ? "hidden sm:inline-flex" : ""}><StatusBadge status={finding.status} /></span> : null}
-          <span aria-hidden="true" className="mt-1 text-zinc-400 transition group-open:rotate-45">+</span>
+          <DisclosureChevron className="mt-1 text-zinc-400 group-open:rotate-180" />
         </span>
       </summary>
       <div className={`${dense ? "pl-0 sm:pl-11" : priority ? "px-3 sm:pl-[4.75rem] sm:pr-4" : "pl-0 sm:pl-12"} pb-6`}>
@@ -848,7 +869,7 @@ function ChoicePathCard({ path, report }: { path: "accept" | "reject"; report: S
           <p className="text-[0.68rem] font-semibold uppercase tracking-wide text-sky-700">{isAccept ? "Accept path" : "Reject path"}</p>
           <span className="flex shrink-0 items-center gap-2">
             <span className={`rounded-md border px-2 py-1 text-[0.64rem] font-semibold uppercase ${toneClasses}`}>{badge}</span>
-            <span aria-hidden="true" className="text-zinc-400 transition group-open/path:rotate-45">+</span>
+            <DisclosureChevron className="text-zinc-400 group-open/path:rotate-180" />
           </span>
         </div>
       </summary>
@@ -886,15 +907,12 @@ function ChoicePathResults({ report }: { report: ShadowReportData }) {
     : "border-sky-300 bg-sky-50 text-sky-800";
 
   return (
-    <div className="mt-4 border-t border-zinc-300 pt-3" data-testid="choice-path-results">
+    <div className="mt-3 border-t border-zinc-300 pt-2.5" data-testid="choice-path-results">
       <div className="flex flex-wrap items-start justify-between gap-3">
-        <div>
-          <h3 className="text-xs font-semibold uppercase text-sky-700">Choice path results</h3>
-          <p className="mt-1 text-xs leading-5 text-zinc-500">Confirmed outcomes retained after first-layer consent choices.</p>
-        </div>
+        <h3 className="text-xs font-semibold uppercase text-sky-700">Choice path results</h3>
         {comparison ? <span className={`rounded-md border px-2.5 py-1 text-[0.68rem] font-semibold ${comparisonClasses}`} title={comparison.note}>{comparison.label}</span> : null}
       </div>
-      <div className="mt-2 grid gap-2 sm:grid-cols-2">
+      <div className="mt-1.5 grid items-start gap-2 sm:grid-cols-2">
         <ChoicePathCard path="accept" report={report} />
         <ChoicePathCard path="reject" report={report} />
       </div>
@@ -961,7 +979,7 @@ function CompactInventoryMixPanel({
             <details className="group/mix col-span-full text-[0.65rem] text-zinc-500">
               <summary className="flex cursor-pointer list-none items-center justify-between gap-2 font-medium [&::-webkit-details-marker]:hidden">
                 <span>More…</span>
-                <span aria-hidden="true" className="text-zinc-400 transition group-open/mix:rotate-45">+</span>
+                <DisclosureChevron className="text-zinc-400 group-open/mix:rotate-180" />
               </summary>
               <div className="mt-1 grid gap-1">
                 {overflowItems.map((item) => (
@@ -1168,24 +1186,39 @@ function RuntimeInventoryTable({ report }: { report: ShadowReportData }) {
                 ["Evidence mix", "w-[8rem]"], ["First seen", "w-[7rem]"], ["Domains", "w-[14rem]"],
                 ["Relationship", "w-[12rem]"], ["Confidence", "w-[6rem]"], ["Priority", "w-[8rem]"],
               ].map(([label, width], index) => (
-                <th className={`border-b border-zinc-200 px-3 py-2 ${width} ${index === 0 ? "sticky left-0 z-10 bg-zinc-50" : ""}`} key={label}>{label}</th>
+                <th
+                  className={`border-b border-zinc-200 px-3 py-2 ${width} ${
+                    index === 0
+                      ? "md:sticky md:left-0 md:z-30 md:bg-zinc-50"
+                      : index === 1
+                        ? "md:sticky md:left-[5.5rem] md:z-30 md:bg-zinc-50"
+                        : index === 2
+                          ? "md:sticky md:left-[9.5rem] md:z-30 md:bg-zinc-50"
+                          : index === 3
+                            ? "md:sticky md:left-[19.5rem] md:z-30 md:bg-zinc-50 md:shadow-[4px_0_8px_-7px_rgba(24,24,27,0.7)]"
+                            : ""
+                  }`}
+                  key={label}
+                >
+                  {label}
+                </th>
               ))}
             </tr>
           </thead>
           <tbody>
             {report.inventory.map((row, index) => (
               <tr className="group/inventory-row border-b border-zinc-100 align-middle transition-colors hover:bg-zinc-50/80 last:border-0" key={`${row.vendor}:${row.purpose}:${index}`}>
-                <td className="sticky left-0 z-10 bg-white px-3 py-2 transition-colors group-hover/inventory-row:bg-zinc-50">
+                <td className="bg-white px-3 py-2 transition-colors group-hover/inventory-row:bg-zinc-50 md:sticky md:left-0 md:z-10">
                   <details className="group/vendor relative">
                     <summary className="cursor-pointer list-none whitespace-nowrap font-semibold text-sky-700 hover:text-sky-900 [&::-webkit-details-marker]:hidden">
-                      Inspect <span aria-hidden="true">+</span>
+                      <span className="inline-flex items-center gap-1">Inspect <DisclosureChevron className="h-3 w-3 group-open/vendor:rotate-180" /></span>
                     </summary>
                     <InventoryRowDetails row={row} />
                   </details>
                 </td>
-                <td className="px-3 py-2 text-zinc-600"><InventoryTypeIcon type={row.type} /></td>
-                <td className="px-3 py-2"><VendorBrandChip label={row.vendor} showMeta={false} /></td>
-                <td className="px-3 py-2 text-zinc-600"><InventoryNameDisclosure className="leading-5" fullName={row.name} /></td>
+                <td className="bg-white px-3 py-2 text-zinc-600 transition-colors group-hover/inventory-row:bg-zinc-50 md:sticky md:left-[5.5rem] md:z-10"><InventoryTypeIcon type={row.type} /></td>
+                <td className="bg-white px-3 py-2 transition-colors group-hover/inventory-row:bg-zinc-50 md:sticky md:left-[9.5rem] md:z-10"><VendorBrandChip label={row.vendor} showMeta={false} /></td>
+                <td className="bg-white px-3 py-2 text-zinc-600 transition-colors group-hover/inventory-row:bg-zinc-50 md:sticky md:left-[19.5rem] md:z-10 md:shadow-[4px_0_8px_-7px_rgba(24,24,27,0.7)]"><InventoryNameDisclosure className="leading-5" fullName={row.name} /></td>
                 <td className="px-3 py-2 text-zinc-600"><InventoryPurposeChip purpose={row.purpose} /></td>
                 <td className="px-3 py-2 text-zinc-600"><span className={`inline-flex h-6 max-w-full items-center rounded-md px-2 text-[0.67rem] font-semibold ${inventoryEvidenceClasses(row.evidence)}`}><SingleLineCell title={row.evidence}>{row.evidence}</SingleLineCell></span></td>
                 <td className={`${monoClass} px-3 py-2 text-zinc-600`}><SingleLineCell title={row.observed}>{row.observed}</SingleLineCell></td>
@@ -1517,14 +1550,14 @@ function MinimalVariant({ report }: { report: ShadowReportData }) {
         <details className="group/minimal py-6" open>
           <summary className="flex cursor-pointer list-none items-center justify-between gap-4 [&::-webkit-details-marker]:hidden">
             <div><p className="text-xs font-semibold uppercase text-rose-700">01</p><h2 className="mt-2 text-xl font-semibold text-zinc-950">What needs attention?</h2></div>
-            <span aria-hidden="true" className="text-xl text-zinc-400 transition group-open/minimal:rotate-45">+</span>
+            <DisclosureChevron className="text-zinc-400 group-open/minimal:rotate-180" />
           </summary>
           <div className="mt-5"><FindingsList dense report={report} /></div>
         </details>
         <details className="group/minimal py-6">
           <summary className="flex cursor-pointer list-none items-center justify-between gap-4 [&::-webkit-details-marker]:hidden">
             <div><p className="text-xs font-semibold uppercase text-sky-700">02</p><h2 className="mt-2 text-xl font-semibold text-zinc-950">What did the scan observe?</h2></div>
-            <span aria-hidden="true" className="text-xl text-zinc-400 transition group-open/minimal:rotate-45">+</span>
+            <DisclosureChevron className="text-zinc-400 group-open/minimal:rotate-180" />
           </summary>
           <div className="mt-7"><HorizontalTimeline report={report} /></div>
           <div className="mt-8"><CompactMetrics report={report} /></div>
@@ -1532,7 +1565,7 @@ function MinimalVariant({ report }: { report: ShadowReportData }) {
         <details className="group/minimal py-6">
           <summary className="flex cursor-pointer list-none items-center justify-between gap-4 [&::-webkit-details-marker]:hidden">
             <div><p className="text-xs font-semibold uppercase text-zinc-500">03</p><h2 className="mt-2 text-xl font-semibold text-zinc-950">How complete is the evidence?</h2></div>
-            <span aria-hidden="true" className="text-xl text-zinc-400 transition group-open/minimal:rotate-45">+</span>
+            <DisclosureChevron className="text-zinc-400 group-open/minimal:rotate-180" />
           </summary>
           <div className="mt-7"><CoverageBar detailed report={report} /></div>
           <p className="mt-6 max-w-3xl text-sm leading-6 text-zinc-600">{report.coverage.usableEvidence} of {report.coverage.rows} in-scope rows had usable automated evidence. {report.coverage.limited} technical limits were recorded. Context and limitations remain distinct from positive evidence and observed concerns.</p>
@@ -1555,14 +1588,13 @@ function GpcEvidenceIndexCard({ projection }: { projection: GpcResponseReportPro
 
   return (
     <details className="group/gpc border-b border-r border-zinc-200 p-5" id="gpc-evidence" data-testid="gpc-evidence-index-card">
-      <summary className="flex cursor-pointer list-none items-start justify-between gap-4 [&::-webkit-details-marker]:hidden">
-        <div>
+      <summary className="flex cursor-pointer list-none items-center justify-between gap-4 [&::-webkit-details-marker]:hidden">
+        <div className="min-w-0">
           <p className="text-xs font-semibold uppercase text-zinc-500">GPC comparison</p>
-          <h3 className="mt-1 text-lg font-semibold text-zinc-950">{projection.assessment.findingTitle}</h3>
+          <h3 className="mt-1 whitespace-nowrap text-lg font-semibold text-zinc-950">{projection.assessment.findingTitle}</h3>
         </div>
-        <span className="flex shrink-0 items-center gap-2">
-          <GpcStatusBadge projection={projection} />
-          <span aria-hidden="true" className="text-zinc-400 transition group-open/gpc:rotate-45">+</span>
+        <span className="flex shrink-0 items-center">
+          <DisclosureChevron className="text-zinc-400 group-open/gpc:rotate-180" />
         </span>
       </summary>
       <div className="mt-5 space-y-5">
@@ -1616,7 +1648,7 @@ function GpcEvidenceIndexCard({ projection }: { projection: GpcResponseReportPro
         <details className="group/gpc-json border border-zinc-200 p-4">
           <summary className="flex cursor-pointer list-none items-center justify-between gap-3 text-sm font-semibold text-zinc-900 [&::-webkit-details-marker]:hidden">
             Typed comparison evidence
-            <span aria-hidden="true" className="text-zinc-400 transition group-open/gpc-json:rotate-45">+</span>
+            <DisclosureChevron className="text-zinc-400 group-open/gpc-json:rotate-180" />
           </summary>
           <div className="mt-4"><JsonEvidence value={evidenceJson} /></div>
         </details>
@@ -1628,12 +1660,12 @@ function GpcEvidenceIndexCard({ projection }: { projection: GpcResponseReportPro
 function EvidenceDirectory({ report }: { report: ShadowReportData }) {
   const consentVendor = report.consentVendor ?? "Consent platform not identified";
   const observedGdprTransparencyRows = report.gdprTransparencyRows.filter((row) => row.status === "Observed").length;
-  const trackingExternalFindingCount = countNonNotObservedRows(report.trackingExternalRows);
-  const preConsentRuntimeFindingCount = countNonNotObservedRows(report.preConsentRuntimeRows);
+  const trackingExternalReviewCount = countRowsRequiringReview(report.trackingExternalRows);
+  const preConsentRuntimeReviewCount = countRowsRequiringReview(report.preConsentRuntimeRows);
   return (
     <section className="border-t border-zinc-950 bg-white" id="evidence">
-      <div className="mx-auto max-w-[90rem] px-5 py-12 lg:px-10 lg:py-16">
-        <div className="grid gap-6 lg:grid-cols-[minmax(18rem,0.8fr)_minmax(32rem,1.2fr)] lg:items-end">
+      <div className="mx-auto max-w-[90rem] px-5 py-8 lg:px-10 lg:py-10">
+        <div className="grid gap-4 lg:grid-cols-[minmax(18rem,0.8fr)_minmax(32rem,1.2fr)] lg:items-end">
           <div>
             <p className="text-xs font-semibold uppercase text-sky-700">Evidence index</p>
             <h2 className="mt-2 text-2xl font-semibold text-zinc-950">Every layer, one step away</h2>
@@ -1643,12 +1675,12 @@ function EvidenceDirectory({ report }: { report: ShadowReportData }) {
           </div>
           <RatingMix report={report} />
         </div>
-        <div className="mt-9 grid items-start gap-6 lg:grid-cols-[minmax(0,1.08fr)_minmax(22rem,0.92fr)]">
+        <div className="mt-6 grid items-start gap-6 lg:grid-cols-[minmax(0,1.08fr)_minmax(22rem,0.92fr)]">
           <div className="border-l border-t border-zinc-200">
             <details className="group/consent border-b border-r border-zinc-200 p-5">
               <summary className="flex cursor-pointer list-none items-center justify-between gap-4 [&::-webkit-details-marker]:hidden">
                 <div><p className="text-xs font-semibold uppercase text-zinc-500">Consent surface</p><h3 className="mt-1 text-lg font-semibold text-zinc-950">Controls and CMP context</h3></div>
-                <span aria-hidden="true" className="text-zinc-400 transition group-open/consent:rotate-45">+</span>
+                <DisclosureChevron className="text-zinc-400 group-open/consent:rotate-180" />
               </summary>
               <div className="mt-5"><ControlStatusGrid report={report} /></div>
               <div className="mt-5 flex flex-wrap items-center gap-3 border-t border-zinc-200 pt-4">
@@ -1665,15 +1697,15 @@ function EvidenceDirectory({ report }: { report: ShadowReportData }) {
             </details>
             <details className="group/tracking border-b border-r border-zinc-200 p-5">
               <summary className="flex cursor-pointer list-none items-center justify-between gap-4 [&::-webkit-details-marker]:hidden">
-                <div><p className="text-xs font-semibold uppercase text-zinc-500">Tracking &amp; external services</p><h3 className="mt-1 text-lg font-semibold text-zinc-950">{trackingExternalFindingCount} of {report.trackingExternalRows.length} findings</h3></div>
-                <span aria-hidden="true" className="text-zinc-400 transition group-open/tracking:rotate-45">+</span>
+                <div><p className="text-xs font-semibold uppercase text-zinc-500">Tracking &amp; external services</p><h3 className="mt-1 text-lg font-semibold text-zinc-950">{trackingExternalReviewCount} requiring review · {report.trackingExternalRows.length} checks</h3></div>
+                <DisclosureChevron className="text-zinc-400 group-open/tracking:rotate-180" />
               </summary>
               <EvidenceIndexRows rows={report.trackingExternalRows} />
             </details>
             <details className="group/policy border-b border-r border-zinc-200 p-5">
               <summary className="flex cursor-pointer list-none items-center justify-between gap-4 [&::-webkit-details-marker]:hidden">
-                <div><p className="text-xs font-semibold uppercase text-zinc-500">Policy and transparency</p><h3 className="mt-1 text-lg font-semibold text-zinc-950">{observedGdprTransparencyRows} of {report.gdprTransparencyRows.length} observed</h3></div>
-                <span aria-hidden="true" className="text-zinc-400 transition group-open/policy:rotate-45">+</span>
+                <div><p className="text-xs font-semibold uppercase text-zinc-500">Policy and transparency</p><h3 className="mt-1 text-lg font-semibold text-zinc-950">{observedGdprTransparencyRows} observed · {report.gdprTransparencyRows.length} checks</h3></div>
+                <DisclosureChevron className="text-zinc-400 group-open/policy:rotate-180" />
               </summary>
               <div className="mt-5 divide-y divide-zinc-200 border-t border-zinc-200">
                 {report.gdprTransparencyRows.map((row) => (
@@ -1691,7 +1723,7 @@ function EvidenceDirectory({ report }: { report: ShadowReportData }) {
                           />
                         ) : null}
                         <StatusBadge status={row.status} />
-                        <span aria-hidden="true" className="text-zinc-400 transition group-open/policy-row:rotate-45">+</span>
+                        <DisclosureChevron className="text-zinc-400 group-open/policy-row:rotate-180" />
                       </span>
                     </summary>
                     <div className="mt-4"><EvidenceTools canonicalEvidenceJson={row.canonicalEvidenceJson} correctionSteps={row.correctionSteps} evidenceJson={row.evidenceJson} evidenceRefs={row.evidenceRefs} /></div>
@@ -1703,23 +1735,23 @@ function EvidenceDirectory({ report }: { report: ShadowReportData }) {
           <div className="border-l border-t border-zinc-200">
             <details className="group/runtime border-b border-r border-zinc-200 p-5">
               <summary className="flex cursor-pointer list-none items-center justify-between gap-4 [&::-webkit-details-marker]:hidden">
-                <div><p className="text-xs font-semibold uppercase text-zinc-500">Pre-consent runtime</p><h3 className="mt-1 text-lg font-semibold text-zinc-950">{preConsentRuntimeFindingCount} of {report.preConsentRuntimeRows.length} findings</h3></div>
-                <span aria-hidden="true" className="text-zinc-400 transition group-open/runtime:rotate-45">+</span>
+                <div><p className="text-xs font-semibold uppercase text-zinc-500">Pre-consent runtime</p><h3 className="mt-1 text-lg font-semibold text-zinc-950">{preConsentRuntimeReviewCount} requiring review · {report.preConsentRuntimeRows.length} checks</h3></div>
+                <DisclosureChevron className="text-zinc-400 group-open/runtime:rotate-180" />
               </summary>
               <EvidenceIndexRows rows={report.preConsentRuntimeRows} stackedTools />
             </details>
             {report.gpcResponse ? <GpcEvidenceIndexCard projection={report.gpcResponse} /> : null}
             <details className="group/transport border-b border-r border-zinc-200 p-5">
               <summary className="flex cursor-pointer list-none items-center justify-between gap-4 [&::-webkit-details-marker]:hidden">
-                <div><p className="text-xs font-semibold uppercase text-zinc-500">Transport security</p><h3 className="mt-1 text-lg font-semibold text-zinc-950">{report.transportRows.filter((row) => row.status === "Observed").length} of {report.transportRows.length} positive observations</h3></div>
-                <span aria-hidden="true" className="text-zinc-400 transition group-open/transport:rotate-45">+</span>
+                <div><p className="text-xs font-semibold uppercase text-zinc-500">Transport security</p><h3 className="mt-1 text-lg font-semibold text-zinc-950">{report.transportRows.filter((row) => row.status === "Observed").length} positive · {report.transportRows.length} checks</h3></div>
+                <DisclosureChevron className="text-zinc-400 group-open/transport:rotate-180" />
               </summary>
               <div className="mt-5 divide-y divide-zinc-200 border-t border-zinc-200">
                 {report.transportRows.map((row) => (
                   <details className="group/transport-row py-3" key={row.id}>
                     <summary className="flex cursor-pointer list-none items-start justify-between gap-3 [&::-webkit-details-marker]:hidden">
                       <span className="flex min-w-0 gap-3"><span aria-hidden="true" className={row.status === "Observed" ? "text-emerald-700" : "text-zinc-400"}>{row.status === "Observed" ? "✓" : "—"}</span><span><span className="block text-sm font-semibold text-zinc-950">{row.title}</span><span className="mt-1 overflow-hidden text-xs leading-5 text-zinc-600 [display:-webkit-box] [-webkit-box-orient:vertical] [-webkit-line-clamp:3] group-open/transport-row:[display:block] group-open/transport-row:[-webkit-line-clamp:unset]">{row.summary}</span></span></span>
-                      <span className="flex shrink-0 items-center gap-2"><StatusBadge status={row.status} /><span aria-hidden="true" className="text-zinc-400 transition group-open/transport-row:rotate-45">+</span></span>
+                      <span className="flex shrink-0 items-center gap-2"><StatusBadge status={row.status} /><DisclosureChevron className="text-zinc-400 group-open/transport-row:rotate-180" /></span>
                     </summary>
                     <div className="mt-4"><EvidenceTools canonicalEvidenceJson={row.canonicalEvidenceJson} correctionSteps={row.correctionSteps} evidenceJson={row.evidenceJson} evidenceRefs={row.evidenceRefs} stacked /></div>
                   </details>
@@ -1730,7 +1762,7 @@ function EvidenceDirectory({ report }: { report: ShadowReportData }) {
               <details className="group/collection border-b border-r border-zinc-200 p-5">
                 <summary className="flex cursor-pointer list-none items-center justify-between gap-4 [&::-webkit-details-marker]:hidden">
                   <div><p className="text-xs font-semibold uppercase text-zinc-500">Collection surfaces</p><h3 className="mt-1 text-lg font-semibold text-zinc-950">{report.metrics.forms} {report.metrics.forms === 1 ? "form" : "forms"} · {report.metrics.fields} {report.metrics.fields === 1 ? "field" : "fields"}</h3></div>
-                  <span aria-hidden="true" className="text-zinc-400 transition group-open/collection:rotate-45">+</span>
+                  <DisclosureChevron className="text-zinc-400 group-open/collection:rotate-180" />
                 </summary>
                 <p className="mt-5 text-sm leading-6 text-zinc-600">Read-only main-document inventory. Field values were not retained. Assessment: {report.collectionStatus ?? "Unavailable"}.</p>
                 {(report.collectionLimitations?.length ?? 0) > 0 ? (
@@ -1744,7 +1776,7 @@ function EvidenceDirectory({ report }: { report: ShadowReportData }) {
                           <span className="block text-sm font-semibold text-zinc-950">{surface.title}</span>
                           <span className={`${monoClass} mt-1 block break-all text-[0.68rem] leading-5 text-zinc-500`}>{surface.pageUrl}</span>
                         </span>
-                        <span className="shrink-0 text-xs text-zinc-500">{surface.method} · {surface.actionRelationship} · {surface.fields.length} {surface.fields.length === 1 ? "field" : "fields"} <span aria-hidden="true" className="ml-1 transition group-open/form:rotate-45">+</span></span>
+                        <span className="flex shrink-0 items-center gap-1 text-xs text-zinc-500">{surface.method} · {surface.actionRelationship} · {surface.fields.length} {surface.fields.length === 1 ? "field" : "fields"} <DisclosureChevron className="h-3 w-3 group-open/form:rotate-180" /></span>
                       </summary>
                       <dl className="mt-3 grid grid-cols-2 gap-3 text-xs text-zinc-600">
                         <div><dt className="uppercase text-zinc-400">Action host</dt><dd className="mt-1">{surface.actionHostname ?? "Current page action"}</dd></div>

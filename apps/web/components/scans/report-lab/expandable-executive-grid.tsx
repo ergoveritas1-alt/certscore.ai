@@ -62,7 +62,7 @@ export function ExpandableExecutiveGrid({ children }: { children: ReactNode }) {
 
   return (
     <div
-      className="mt-9 grid gap-8 border-t border-zinc-200 pt-8 lg:grid-cols-[minmax(20rem,0.95fr)_minmax(0,1.65fr)] lg:gap-10"
+      className="mt-6 grid gap-8 border-t border-zinc-200 pt-6 lg:grid-cols-[minmax(20rem,0.95fr)_minmax(0,1.65fr)] lg:gap-10"
       data-signal-snapshot-expanded={expanded ? "true" : "false"}
       ref={rootRef}
       style={{ alignItems: expanded ? "start" : "stretch" }}

@@ -127,6 +127,25 @@ export function getPolicySurfaceCoverageStatus(
   return coverageStatus === "complete" ? "complete" : "unavailable";
 }
 
+export function getConsentControlSummaryLabel(
+  controls: ShadowReportData["controls"],
+): string {
+  const values = Object.values(controls);
+  const observed = values.filter((value) => value === "Observed").length;
+  const notObserved = values.filter((value) => value === "Not observed").length;
+  const unknown = values.length - observed - notObserved;
+
+  if (unknown === values.length) return "Coverage limited";
+  if (unknown > 0) {
+    return [
+      observed > 0 ? `${observed} observed` : null,
+      notObserved > 0 ? `${notObserved} not observed` : null,
+      `${unknown} unknown`,
+    ].filter(Boolean).join(" · ");
+  }
+  return `${observed} of ${values.length} observed`;
+}
+
 function formatDuration(milliseconds: number | null | undefined) {
   if (typeof milliseconds !== "number" || !Number.isFinite(milliseconds)) return "Duration unavailable";
   if (milliseconds < 1_000) return `${Math.round(milliseconds)} ms`;

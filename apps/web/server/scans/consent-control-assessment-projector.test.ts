@@ -165,6 +165,115 @@ test("limited coordinator coverage preserves observed controls without certifyin
   assert.equal(assessment.controls.options.state, "observed");
 });
 
+test("withheld representative consent screenshots fail the bound inventory closed", () => {
+  const url = "https://shop.example/";
+  const token = "document-token-shop";
+  const source = bundle([
+    { actionType: "accept_all", label: "Accept", visible: true, layer: "first_layer" },
+    { actionType: "reject_all", label: "Decline", visible: true, layer: "first_layer" },
+    { actionType: "manage_preferences", label: "Customise", visible: true, layer: "first_layer" },
+  ], { url });
+  source.domSnapshots[0]!.documentIdentity = { source: "cdp_loader_id", token };
+  source.consentUiObservations[0]!.documentIdentity = { source: "cdp_loader_id", token };
+  source.consentUiObservations[0]!.documentUrl = url;
+  source.consentUiObservations[0]!.inventoryOutcome = "complete_with_controls";
+  source.consentUiObservations[0]!.basis = [
+    "recovery:bounded_same_session_consent_packet_completed",
+  ];
+  source.consentUiObservations[0]!.captureDiagnostics = {
+    completedChannels: ["dom_inventory", "accessibility_tree", "geometry"],
+    failedChannels: [],
+    timedOutChannels: [],
+  };
+  source.screenshots = [{
+    artifactId: "screenshot_pre_consent_geometry_proof",
+    capturedAtMs: 6_490,
+    captureMethod: "primary_viewport_fallback",
+    consentStateAtTime: "pre_consent",
+    displayStatus: "withheld",
+    displayWithheldReason: "safety_check_unavailable",
+    documentIdentity: { source: "cdp_loader_id", token },
+    pagePhase: "network_idle",
+    path: "/artifacts/screenshot-pre-consent-geometry-proof.png",
+    retentionStatus: "withheld",
+    safetyFailureCode: "finalization_deadline_exceeded",
+    url,
+    withheldReason: "safety_check_unavailable",
+  }];
+  const geometryEvidence = geometry([
+    {
+      candidateId: "accept",
+      actionType: "accept_all",
+      label: "Accept",
+      layer: "first_layer",
+      decisionStatus: "confirmed_visible",
+      screenshotArtifactRef: "/lane/screenshot-pre-consent-geometry-proof.png",
+    },
+    {
+      candidateId: "reject",
+      actionType: "reject_all",
+      label: "Decline",
+      layer: "first_layer",
+      decisionStatus: "confirmed_visible",
+      screenshotArtifactRef: "/lane/screenshot-pre-consent-geometry-proof.png",
+    },
+    {
+      candidateId: "options",
+      actionType: "manage_preferences",
+      label: "Customise",
+      layer: "first_layer",
+      decisionStatus: "confirmed_visible",
+      screenshotArtifactRef: "/lane/screenshot-pre-consent-geometry-proof.png",
+    },
+  ]) as Record<string, unknown>;
+  geometryEvidence.documentIdentity = { source: "cdp_loader_id", token };
+  geometryEvidence.screenshotArtifactRef = "/lane/screenshot-pre-consent-geometry-proof.png";
+
+  const assessment = deriveMaterializedConsentControlAssessment({
+    bundle: source,
+    consentControlGeometryEvidence: geometryEvidence,
+    consentSurfaceInspection: completeInspection("actionable_surface_observed", true),
+    finalUrl: url,
+    noGo: false,
+    requestedUrl: url,
+  });
+
+  assert.equal(assessment.assessmentStatus, "limited");
+  assert.equal(assessment.coverage.status, "limited");
+  assert.ok(assessment.coverage.requiredChannels.includes("screenshot"));
+  assert.ok(assessment.coverage.incompleteChannels.includes("screenshot"));
+  assert.equal(assessment.surface.status, "unknown");
+  assert.equal(assessment.controls.accept.state, "unknown");
+  assert.equal(assessment.controls.reject.state, "unknown");
+  assert.equal(assessment.controls.options.state, "unknown");
+  assert.ok(assessment.limitations.some(
+    (limitation) => limitation.code === "representative_consent_screenshot_unavailable",
+  ));
+
+  source.screenshots[0] = {
+    ...source.screenshots[0]!,
+    displayStatus: "available",
+    displayWithheldReason: undefined,
+    retentionStatus: "available",
+    safetyFailureCode: undefined,
+    withheldReason: undefined,
+  };
+  const retainedAssessment = deriveMaterializedConsentControlAssessment({
+    bundle: source,
+    consentControlGeometryEvidence: geometryEvidence,
+    consentSurfaceInspection: completeInspection("actionable_surface_observed", true),
+    finalUrl: url,
+    noGo: false,
+    requestedUrl: url,
+  });
+
+  assert.equal(retainedAssessment.assessmentStatus, "complete");
+  assert.equal(retainedAssessment.coverage.status, "complete");
+  assert.equal(retainedAssessment.controls.accept.state, "observed");
+  assert.equal(retainedAssessment.controls.reject.state, "observed");
+  assert.equal(retainedAssessment.controls.options.state, "observed");
+});
+
 test("limited coordinator coverage keeps an empty first-layer inventory unknown", () => {
   const url = "https://non-actionable.example/";
   const source = bundle([], { url });
@@ -597,6 +706,35 @@ test("geometry projection retains inline and persistent options presentation", (
     assessment.evidence.find((row) => row.evidenceId === "footer-options")?.layer,
     "deeper_layer",
   );
+});
+
+test("geometry projection derives retained timing from capturedAt when observedAtMs is absent", () => {
+  const source = bundle([
+    { actionType: "accept_all", label: "Accept", visible: true, layer: "first_layer" },
+  ]);
+  source.startedAt = "2026-07-27T18:04:00.000Z";
+  const geometryEvidence = geometry([{
+    candidateId: "captured-at-options",
+    actionType: "manage_preferences",
+    label: "Customise",
+    layer: "first_layer",
+    decisionStatus: "confirmed_visible",
+  }]) as Record<string, unknown>;
+  delete geometryEvidence.observedAtMs;
+  geometryEvidence.capturedAt = "2026-07-27T18:04:08.700Z";
+
+  const assessment = deriveMaterializedConsentControlAssessment({
+    bundle: source,
+    consentControlGeometryEvidence: geometryEvidence,
+    consentSurfaceInspection: completeInspection("actionable_surface_observed", true),
+    finalUrl: "https://oxfam.org/en",
+    noGo: false,
+    requestedUrl: "https://oxfam.org/en",
+  });
+
+  const options = assessment.evidence.find((row) => row.evidenceId === "captured-at-options");
+  assert.equal(options?.observedAtMs, 8_700);
+  assert.equal(assessment.controls.options.firstObservedAtMs, 8_700);
 });
 
 test("geometry projection carries a custom first-layer settings control into ConsentControlAssessment v2", () => {

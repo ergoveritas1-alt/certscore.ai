@@ -140,12 +140,18 @@ async function main() {
     }
 
     const queueUrl = await loadLambdaResultQueueUrl(scanId);
-    await pollLocalV2DagLambdaResultQueue({
-      expectedTargetEnvironment: "local",
-      maxMessages: 10,
-      queueUrl: queueUrl ?? undefined,
-      waitTimeSeconds: queueUrl ? Math.min(waitSeconds, 2) : Math.min(waitSeconds, 20)
-    });
+    if (queueUrl?.startsWith("local://")) {
+      // The simulator streams its fake SQS handoff through the web process.
+      // Its local:// queue name is an identity marker, not an AWS endpoint.
+      await sleep(Math.min(waitSeconds, 1) * 1_000);
+    } else {
+      await pollLocalV2DagLambdaResultQueue({
+        expectedTargetEnvironment: "local",
+        maxMessages: 10,
+        queueUrl: queueUrl ?? undefined,
+        waitTimeSeconds: queueUrl ? Math.min(waitSeconds, 2) : Math.min(waitSeconds, 20)
+      });
+    }
     latestEvents = await loadScanEvents(scanId);
     const localWorkerStarted = latestEvents.find((event) => event.event_type === "full_scan.started");
     if (localWorkerStarted) {

@@ -3,6 +3,14 @@ import { VendorBrandChip } from "./vendor-brand-chip";
 
 const monoClass = "font-mono tabular-nums";
 
+function DisclosureChevron({ className = "" }: { className?: string }) {
+  return (
+    <svg aria-hidden="true" className={`h-4 w-4 shrink-0 transition-transform ${className}`} fill="none" viewBox="0 0 20 20">
+      <path d="m6 8 4 4 4-4" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.75" />
+    </svg>
+  );
+}
+
 export type RuntimeObservationTimelineEvent = {
   at: string;
   atMs: number;
@@ -168,7 +176,7 @@ function CompactInventoryMixPanel({
             <details className="group/mix col-span-full text-[0.65rem] text-zinc-500">
               <summary className="flex cursor-pointer list-none items-center justify-between gap-2 font-medium [&::-webkit-details-marker]:hidden">
                 <span>More…</span>
-                <span aria-hidden="true" className="text-zinc-400 transition group-open/mix:rotate-45">+</span>
+                <DisclosureChevron className="text-zinc-400 group-open/mix:rotate-180" />
               </summary>
               <div className="mt-1 grid gap-1">
                 {overflowItems.map((item) => (
@@ -286,11 +294,8 @@ export function RuntimeInventorySummaryCard({
             <span className="flex shrink-0 items-center gap-2">
               <span className="hidden rounded-full bg-sky-700 px-3 py-1.5 text-xs font-bold text-white sm:inline group-open/runtime:hidden">Click to expand</span>
               <span className="hidden rounded-full bg-zinc-700 px-3 py-1.5 text-xs font-bold text-white sm:group-open/runtime:inline">Hide details</span>
-              <span
-                aria-hidden="true"
-                className="inline-flex h-9 w-9 items-center justify-center rounded-full border-2 border-sky-600 bg-white text-2xl font-medium leading-none text-sky-700 shadow-sm transition group-open/runtime:rotate-45"
-              >
-                +
+              <span className="inline-flex h-9 w-9 items-center justify-center rounded-full border-2 border-sky-600 bg-white text-sky-700 shadow-sm">
+                <DisclosureChevron className="h-5 w-5 group-open/runtime:rotate-180" />
               </span>
             </span>
           </summary>

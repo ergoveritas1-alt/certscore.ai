@@ -6,7 +6,7 @@ import { cmpActionRecipeEnabled } from "./cmp-action-recipe-policy.js";
 import type { PostAcceptActionRecipe } from "./post-accept-observer.js";
 
 export const CANONICAL_POST_ACCEPT_RECIPE_SET_ID =
-  "canonical-consent-control-accept-v4" as const;
+  "canonical-consent-control-accept-v5" as const;
 
 const DEFAULT_TCF_ACCEPT_PURPOSE_IDS = [1, 3, 4, 7, 9, 10];
 
@@ -28,6 +28,12 @@ function mapAcceptConfirmation(
   confirmation: KnownCmpActionConfirmation,
 ): PostAcceptActionRecipe["confirmation"] {
   switch (confirmation.kind) {
+    case "canonical_first_layer_ui_transition":
+      return {
+        kind: "canonical_accept_transition",
+        bannerSelector: confirmation.bannerSelector,
+        controlSelector: confirmation.controlSelector,
+      };
     case "tcf_purposes_or_cmp_cookie_changed":
       return {
         kind: "tcf_purposes_granted_or_cmp_cookie_changed",

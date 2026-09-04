@@ -396,7 +396,7 @@ export function ShareReportActions({
         {visualEvidenceHref ? (
           <button
             type="button"
-            aria-label="View screengrab"
+            aria-label="View captured image"
             className={visualEvidenceOnly ? "app-raised-button group relative inline-flex h-8 w-8 items-center justify-center rounded-full text-slate-700 hover:text-slate-950" : iconActionClassName()}
             data-analytics-cta-type="visual-evidence"
             data-analytics-event="report_cta_clicked"
@@ -407,7 +407,7 @@ export function ShareReportActions({
               setVisualEvidenceFitSize(null);
               setIsVisualEvidenceDialogOpen(true);
             }}
-            title="View screengrab"
+            title="View captured image"
           >
             <VisualEvidenceIcon />
             <IconTooltip label="View captured image" />

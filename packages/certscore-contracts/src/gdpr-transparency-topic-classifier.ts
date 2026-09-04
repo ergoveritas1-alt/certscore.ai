@@ -246,6 +246,59 @@ const GDPR_TRANSPARENCY_SEMANTIC_RULES: readonly GdprTransparencySemanticRule[] 
     pattern: /\b(?:automatisierte entscheidungsfindung|automatisierte entscheidungen|ausschließlich automatisierte entscheidungen|profiling)\b.{0,180}\b(?:findet nicht statt|finden nicht statt|wird nicht eingesetzt|werden nicht eingesetzt|setzen wir nicht ein|setzen wir ein|verwenden wir nicht|verwenden wir|rechtliche wirkung|erheblich beeintrachtigt)\b|\b(?:wir|der verantwortliche)\b.{0,80}\b(?:verwenden|nutzen|setzen)\b.{0,80}\b(?:kein|keine|nicht|automatisierte|profiling)\b.{0,100}\b(?:automatisierte entscheidungsfindung|automatisierte entscheidungen|profiling)\b/i,
     topic: "automated_decision_making_or_profiling",
   },
+  // Natural policy prose often expresses Article 13 disclosures as actions or
+  // consequences rather than using the canonical heading nouns. Keep these
+  // variants in the shared classifier so every scanner/report consumer gets
+  // the same multilingual behavior instead of adding site- or UI-specific
+  // fallbacks.
+  ...([
+    {
+      locale: "de",
+      recipient: /\b(?:personenbezogen(?:e|en|er|es) daten|ihre daten|daten)\b.{0,220}\b(?:an dritte|an dienstleister|an auftragsverarbeiter|gegenuber dritten)\b.{0,80}\b(?:weitergeben|weitergegeben|ubermitteln|ubermittelt|offenlegen|offengelegt|zuganglich machen|zuganglich gemacht)\b|\b(?:personenbezogen(?:e|en|er|es) daten|ihre daten|daten)\b.{0,160}\b(?:weitergegeben|ubermittelt|offengelegt|zuganglich gemacht)\b.{0,140}\b(?:an dritte|an dienstleister|an auftragsverarbeiter|gegenuber dritten)\b/i,
+      retention: /\b(?:loschung|entfernung)\b.{0,80}\b(?:personenbezogen(?:er|en|e|es) daten|ihrer daten|der daten|daten)\b.{0,220}\b(?:nicht mehr erforderlich|zweck.{0,50}(?:entfallt|erreicht)|gesetzlich(?:e|en|er|es)? aufbewahrungsfrist(?:en)?|rechtliche bestimmungen.{0,80}(?:aufbewahrung|speicherung))\b|\b(?:personenbezogen(?:e|en|er|es) daten|ihre daten|daten)\b.{0,180}\b(?:gesetzlich(?:e|en|er|es)? aufbewahrungsfrist(?:en)?|rechtliche bestimmungen.{0,80}(?:aufbewahrung|speicherung))\b.{0,100}\b(?:gespeichert|aufbewahrt|geloscht|loschung)\b/i,
+      complaint: /\b(?:sie konnen|betroffene konnen|betroffene haben das recht)\b.{0,100}\b(?:beschwerde|sich beschweren)\b.{0,140}\b(?:an|bei)\b.{0,80}\b(?:datenschutz)?aufsichtsbehorde\b|\b(?:beschwerde)\b.{0,100}\b(?:an|bei)\b.{0,100}\b(?:datenschutzbeauftragte[nsr]?|(?:datenschutz)?aufsichtsbehorde)\b.{0,60}\b(?:wenden|einreichen|einlegen)\b/i,
+    },
+    {
+      locale: "fr",
+      recipient: /\b(?:nous|le responsable du traitement)\b.{0,100}\b(?:donnees personnelles|vos donnees|les donnees)\b.{0,180}\b(?:a des tiers|a nos prestataires|a des sous-traitants)\b.{0,80}\b(?:transmettons|communiquons|divulguons|mettons a disposition)\b|\b(?:donnees personnelles|vos donnees|les donnees)\b.{0,140}\b(?:sont transmises|sont communiquees|sont divulguees)\b.{0,120}\b(?:a des tiers|a des prestataires|a des sous-traitants)\b/i,
+      retention: /\b(?:suppression|effacement)\b.{0,80}\b(?:des donnees personnelles|de vos donnees|des donnees)\b.{0,180}\b(?:ne sont plus necessaires|finalite.{0,50}(?:disparait|atteinte)|obligation legale de conservation|delai legal)\b|\b(?:donnees personnelles|vos donnees|les donnees)\b.{0,140}\b(?:sont supprimees|sont effacees)\b.{0,120}\b(?:lorsqu'elles ne sont plus necessaires|des qu'elles ne sont plus necessaires|a l'issue du delai legal)\b/i,
+      complaint: /\b(?:vous pouvez|vous avez le droit de)\b.{0,100}\b(?:reclamation|plainte)\b.{0,120}\b(?:aupres de|devant)\b.{0,80}\b(?:l'autorite de controle|la cnil)\b/i,
+    },
+    {
+      locale: "es",
+      recipient: /\b(?:nosotros|el responsable del tratamiento)\b.{0,100}\b(?:datos personales|sus datos|los datos)\b.{0,180}\b(?:a terceros|a proveedores|a encargados del tratamiento)\b.{0,80}\b(?:comunicamos|transmitimos|cedemos|facilitamos)\b|\b(?:datos personales|sus datos|los datos)\b.{0,140}\b(?:se comunican|se transmiten|se ceden|se facilitan)\b.{0,120}\b(?:a terceros|a proveedores|a encargados del tratamiento)\b/i,
+      retention: /\b(?:supresion|eliminacion)\b.{0,80}\b(?:de los datos personales|de sus datos|de los datos)\b.{0,180}\b(?:ya no sean necesarios|dejen de ser necesarios|finalidad.{0,50}(?:desaparezca|cumplida)|obligacion legal de conservacion|plazo legal)\b|\b(?:datos personales|sus datos|los datos)\b.{0,140}\b(?:se suprimen|se eliminan)\b.{0,120}\b(?:cuando ya no sean necesarios|cuando dejen de ser necesarios|al finalizar el plazo legal)\b/i,
+      complaint: /\b(?:puede|tiene derecho a)\b.{0,100}\b(?:reclamacion|queja)\b.{0,120}\b(?:ante|a)\b.{0,80}\b(?:la autoridad de control|la agencia de proteccion de datos)\b/i,
+    },
+    {
+      locale: "it",
+      recipient: /\b(?:noi|il titolare del trattamento)\b.{0,100}\b(?:dati personali|i suoi dati|i dati)\b.{0,180}\b(?:a terzi|a fornitori|a responsabili del trattamento)\b.{0,80}\b(?:comunichiamo|trasmettiamo|divulghiamo|forniamo)\b|\b(?:dati personali|i suoi dati|i dati)\b.{0,140}\b(?:sono comunicati|sono trasmessi|sono divulgati)\b.{0,120}\b(?:a terzi|a fornitori|a responsabili del trattamento)\b/i,
+      retention: /\b(?:cancellazione|eliminazione)\b.{0,80}\b(?:dei dati personali|dei suoi dati|dei dati)\b.{0,180}\b(?:non sono piu necessari|finalita.{0,50}(?:cessa|raggiunta)|obbligo legale di conservazione|termine legale)\b|\b(?:dati personali|i suoi dati|i dati)\b.{0,140}\b(?:sono cancellati|sono eliminati)\b.{0,120}\b(?:quando non sono piu necessari|al termine del periodo legale)\b/i,
+      complaint: /\b(?:puo|ha il diritto di)\b.{0,100}\b(?:reclamo|segnalazione)\b.{0,120}\b(?:all'|alla)\b.{0,80}\b(?:autorita di controllo|garante per la protezione dei dati)\b/i,
+    },
+    {
+      locale: "nl",
+      recipient: /\b(?:wij|de verwerkingsverantwoordelijke)\b.{0,100}\b(?:persoonsgegevens|uw gegevens|de gegevens)\b.{0,180}\b(?:aan derden|aan dienstverleners|aan verwerkers)\b.{0,80}\b(?:verstrekken|doorgeven|delen|bekendmaken)\b|\b(?:persoonsgegevens|uw gegevens|de gegevens)\b.{0,140}\b(?:worden verstrekt|worden doorgegeven|worden gedeeld)\b.{0,120}\b(?:aan derden|aan dienstverleners|aan verwerkers)\b/i,
+      retention: /\b(?:verwijdering|wissen)\b.{0,80}\b(?:van persoonsgegevens|van uw gegevens|van de gegevens)\b.{0,180}\b(?:niet langer noodzakelijk|doel.{0,50}(?:vervalt|bereikt)|wettelijke bewaartermijn)\b|\b(?:persoonsgegevens|uw gegevens|de gegevens)\b.{0,140}\b(?:worden verwijderd|worden gewist)\b.{0,120}\b(?:wanneer zij niet langer nodig zijn|zodra zij niet langer nodig zijn|na afloop van de wettelijke bewaartermijn)\b/i,
+      complaint: /\b(?:u kunt|u heeft het recht)\b.{0,100}\b(?:klacht)\b.{0,120}\b(?:bij)\b.{0,80}\b(?:de toezichthoudende autoriteit|de autoriteit persoonsgegevens)\b/i,
+    },
+    {
+      locale: "pl",
+      recipient: /\b(?:my|administrator danych)\b.{0,100}\b(?:dane osobowe|panstwa dane|dane)\b.{0,180}\b(?:osobom trzecim|uslugodawcom|podmiotom przetwarzajacym)\b.{0,80}\b(?:przekazujemy|udostepniamy|ujawniamy)\b|\b(?:dane osobowe|panstwa dane|dane)\b.{0,140}\b(?:sa przekazywane|sa udostepniane|sa ujawniane)\b.{0,120}\b(?:osobom trzecim|uslugodawcom|podmiotom przetwarzajacym)\b/i,
+      retention: /\b(?:usuniecie|kasowanie)\b.{0,80}\b(?:danych osobowych|panstwa danych|danych)\b.{0,180}\b(?:nie sa juz niezbedne|cel.{0,50}(?:ustal|zostal osiagniety)|ustawowy okres przechowywania)\b|\b(?:dane osobowe|panstwa dane|dane)\b.{0,140}\b(?:sa usuwane|zostana usuniete)\b.{0,120}\b(?:gdy nie sa juz niezbedne|po uplywie ustawowego okresu)\b/i,
+      complaint: /\b(?:moga panstwo|maja panstwo prawo|mozna)\b.{0,100}\b(?:skarge|skargi)\b.{0,120}\b(?:do)\b.{0,80}\b(?:organu nadzorczego|prezesa urzedu ochrony danych osobowych)\b/i,
+    },
+    {
+      locale: "pt",
+      recipient: /\b(?:nos|o responsavel pelo tratamento)\b.{0,100}\b(?:dados pessoais|os seus dados|os dados)\b.{0,180}\b(?:a terceiros|a prestadores de servicos|a subcontratantes)\b.{0,80}\b(?:transmitimos|comunicamos|partilhamos|divulgamos)\b|\b(?:dados pessoais|os seus dados|os dados)\b.{0,140}\b(?:sao transmitidos|sao comunicados|sao partilhados)\b.{0,120}\b(?:a terceiros|a prestadores de servicos|a subcontratantes)\b/i,
+      retention: /\b(?:eliminacao|apagamento)\b.{0,80}\b(?:dos dados pessoais|dos seus dados|dos dados)\b.{0,180}\b(?:deixem de ser necessarios|ja nao sejam necessarios|finalidade.{0,50}(?:cesse|atingida)|obrigacao legal de conservacao|prazo legal)\b|\b(?:dados pessoais|os seus dados|os dados)\b.{0,140}\b(?:sao eliminados|sao apagados)\b.{0,120}\b(?:quando deixarem de ser necessarios|quando ja nao forem necessarios|no termo do prazo legal)\b/i,
+      complaint: /\b(?:pode|tem o direito de)\b.{0,100}\b(?:reclamacao|queixa)\b.{0,120}\b(?:junto da|perante a)\b.{0,80}\b(?:autoridade de controlo|autoridade nacional de protecao de dados|cnpd)\b/i,
+    },
+  ] as const).flatMap(({ locale, recipient, retention, complaint }) => [
+    { locale, matchedTerm: "controller disclosure to a recipient or recipient category", pattern: recipient, topic: "recipients_or_vendor_categories" as const, variant: "semantic_clause" as const },
+    { locale, matchedTerm: "personal-data deletion criterion or statutory retention requirement", pattern: retention, topic: "data_retention" as const, variant: "semantic_clause" as const },
+    { locale, matchedTerm: "right or route to complain to a supervisory authority", pattern: complaint, topic: "supervisory_authority" as const, variant: "semantic_clause" as const },
+  ]),
   ...([
     {
       locale: "fr",

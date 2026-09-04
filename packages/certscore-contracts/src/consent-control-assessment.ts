@@ -427,6 +427,14 @@ export function deriveConsentControlAssessment(input: ConsentControlAssessmentIn
     detail: `The retained first-layer inventory did not complete: ${incompleteInventoryOutcomes.join(", ")}.`,
     affectedFields: ["surface", "accept", "reject", "options", "privacy_opt_out"],
   });
+  const representativeEvidenceUnavailable = reasons.includes(
+    "representative_consent_screenshot_unavailable",
+  );
+  if (representativeEvidenceUnavailable) limitations.push({
+    code: "representative_consent_screenshot_unavailable",
+    detail: "The retained first-layer inventory was not bound to an available representative consent screenshot.",
+    affectedFields: ["surface", "accept", "reject", "options", "privacy_opt_out"],
+  });
 
   const bundleEvidence = observations.flatMap((observation) => observation.controls
     .map((candidate) => eligibleCandidate(candidate, observation.observedAtMs, observation.documentId ?? canonicalId, "bundle"))
@@ -541,6 +549,8 @@ export function deriveConsentControlAssessment(input: ConsentControlAssessmentIn
   const assessmentBlocked = noGo || documentStatus !== "matched";
   const surfaceStatus = assessmentBlocked
     ? "unknown"
+    : representativeEvidenceUnavailable
+      ? "unknown"
     : actionable
       ? "observed_actionable"
       : surfaceObserved
@@ -573,6 +583,12 @@ export function deriveConsentControlAssessment(input: ConsentControlAssessmentIn
       result.state = "unknown";
       result.layer = "unknown";
       result.reasonCodes = ["assessment_blocked", ...reasons].slice(0, 16);
+    }
+  } else if (representativeEvidenceUnavailable) {
+    for (const result of Object.values(firstLayerResults)) {
+      result.state = "unknown";
+      result.layer = "unknown";
+      result.reasonCodes = ["representative_evidence_unverified", ...reasons].slice(0, 16);
     }
   }
   const containsUnknownControl = Object.values(firstLayerResults).some((result) => result.state === "unknown");

@@ -1085,6 +1085,13 @@ export function buildLocalV2DagLambdaLaneRun(input: {
   const firstTopLevelResponse = [...input.bundle.networkResponseEvents]
     .filter((event) => Boolean(event.requestId && mainDocumentRequestIds.has(event.requestId)))
     .sort((left, right) => left.timestampMs - right.timestampMs)[0];
+  const firstSuccessfulNavigationAttempt = moduleRun.recoveryDiagnostics?.attempts?.find((attempt) =>
+    attempt.outcome === "success" && attempt.httpStatus !== undefined
+  );
+  const retainedDocumentUrl = [...input.bundle.domSnapshots]
+    .reverse()
+    .map((snapshot) => sanitizedLaneUrl(snapshot.url))
+    .find((url): url is string => url !== null);
   const bundleStartedAtMs = Date.parse(input.bundle.startedAt);
   const derivedFirstResponseAt = firstTopLevelResponse && Number.isFinite(bundleStartedAtMs)
     ? new Date(bundleStartedAtMs + firstTopLevelResponse.timestampMs).toISOString()
@@ -1092,9 +1099,14 @@ export function buildLocalV2DagLambdaLaneRun(input: {
   const firstResponseAt = siteFacingNavigation?.firstResponseAt ?? derivedFirstResponseAt;
   const firstResponseOffsetMs = siteFacingNavigation?.firstResponseOffsetMs ??
     (firstTopLevelResponse ? Math.max(0, Math.round(firstTopLevelResponse.timestampMs)) : null);
-  const firstHttpStatus = siteFacingNavigation?.firstHttpStatus ?? firstTopLevelResponse?.status ?? null;
+  const firstHttpStatus = siteFacingNavigation?.firstHttpStatus ??
+    firstTopLevelResponse?.status ??
+    firstSuccessfulNavigationAttempt?.httpStatus ??
+    null;
   const firstEffectiveUrl = sanitizedLaneUrl(
-    siteFacingNavigation?.firstEffectiveUrl ?? firstTopLevelResponse?.responseUrl,
+    siteFacingNavigation?.firstEffectiveUrl ??
+      firstTopLevelResponse?.responseUrl ??
+      retainedDocumentUrl,
   );
   const navigationCount = siteFacingNavigation?.navigationCount ??
     moduleRun.recoveryDiagnostics?.attempts?.length ??

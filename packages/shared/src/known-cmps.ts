@@ -15,6 +15,11 @@ export type KnownCmpSignalSource =
 export type KnownCmpEvidenceTreatment = "cmp_infrastructure";
 
 export type KnownCmpActionConfirmation =
+  | {
+      kind: "canonical_first_layer_ui_transition";
+      bannerSelector: string;
+      controlSelector: string;
+    }
   | { kind: "cmp_cookie_changed"; cookieName: string }
   | { kind: "cmp_cookie_names_changed"; cookieNames: string[] }
   | {
@@ -175,6 +180,12 @@ export const KNOWN_CMP_REGISTRY: KnownCmpDefinition[] = [
     storageKeys: [],
   },
   {
+    acceptConfirmation: {
+      kind: "canonical_first_layer_ui_transition",
+      bannerSelector: "#cos-banner",
+      controlSelector: "#cos-banner span.a-button:has(#sp-cc-accept)",
+    },
+    acceptControlSelectors: ["#cos-banner span.a-button:has(#sp-cc-accept)"],
     aliases: [
       "Amazon Privacy Preferences",
       "Amazon Cookies and Advertising Choices",
@@ -182,9 +193,16 @@ export const KNOWN_CMP_REGISTRY: KnownCmpDefinition[] = [
     ],
     canonicalName: "Amazon Privacy Preferences",
     domains: [],
-    domSelectors: [],
+    domSelectors: ["#cos-banner"],
     evidenceTreatment: "cmp_infrastructure",
+    recipeVersion: "v1",
     reopenControlHints: ["amazon privacy preferences", "cookies and advertising choices", "cookie notice"],
+    rejectConfirmation: {
+      kind: "canonical_first_layer_ui_transition",
+      bannerSelector: "#cos-banner",
+      controlSelector: "#cos-banner span.a-button:has(#sp-cc-rejectall-link)",
+    },
+    rejectControlSelectors: ["#cos-banner span.a-button:has(#sp-cc-rejectall-link)"],
     role: "consent management platform",
     standards: [],
     urlPatterns: [/\/(?:privacyprefs)\/(?:retail|customize)(?:\/|[?#]|$)/i]

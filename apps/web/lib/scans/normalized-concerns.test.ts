@@ -94,6 +94,7 @@ function makeConsentOptionsAssessment(input: {
     placementType?: "action_cluster" | "first_layer_body" | "unknown";
   }>;
   persistentOptions?: boolean;
+  representativeScreenshotUnavailable?: boolean;
 }) {
   const finalUrl = "https://consent-options.example/";
   return deriveConsentControlAssessment({
@@ -148,10 +149,15 @@ function makeConsentOptionsAssessment(input: {
       evidenceRefs: ["CanonicalEvidenceBundle.json"]
     },
     coverage: {
-      status: "complete",
-      requiredChannels: ["dom_inventory", "geometry"],
+      status: input.representativeScreenshotUnavailable ? "limited" : "complete",
+      requiredChannels: input.representativeScreenshotUnavailable
+        ? ["dom_inventory", "geometry", "screenshot"]
+        : ["dom_inventory", "geometry"],
       completedChannels: ["dom_inventory", "geometry"],
-      incompleteChannels: []
+      incompleteChannels: input.representativeScreenshotUnavailable ? ["screenshot"] : [],
+      reasonCodes: input.representativeScreenshotUnavailable
+        ? ["representative_consent_screenshot_unavailable"]
+        : []
     }
   });
 }
@@ -272,6 +278,40 @@ test("normalizes consent options prominence before concern policy assigns checkl
     assert.equal(concern.promotionEligibility, "internal_only");
     assert.equal(concern.externalSurfacingEligibility, "audit_only");
   }
+});
+
+test("does not promote options prominence from audit evidence when the consent assessment is limited", () => {
+  const assessment = makeConsentOptionsAssessment({
+    firstLayer: [{
+      actionType: "manage_preferences",
+      intent: "options",
+      label: "Customise",
+      presentationType: "inline_link",
+      placementType: "action_cluster"
+    }],
+    representativeScreenshotUnavailable: true
+  });
+  assert.equal(assessment.assessmentStatus, "limited");
+  assert.equal(assessment.controls.options.state, "unknown");
+
+  const concerns = buildNormalizedConcerns({
+    reviewFindingCandidates: [],
+    runtimeArtifacts: { consentControlAssessment: assessment },
+    validationFindings: []
+  });
+  const concern = concerns.find((candidate) =>
+    candidate.originKey.startsWith("consent.options_control_prominence.")
+  );
+
+  assert.ok(concern);
+  assert.equal(concern.observedValue, "insufficient_retained_evidence");
+  assert.equal(
+    concern.evidenceBundle.rawEvidence?.consentOptionsControlProminenceState,
+    "insufficient_retained_evidence"
+  );
+  assert.equal(concern.regulatoryChecklistEligibility, "none");
+  assert.equal(concern.promotionEligibility, "internal_only");
+  assert.equal(concern.externalSurfacingEligibility, "audit_only");
 });
 
 test("normalizes a retained paid decline variant as an externally eligible review finding", () => {

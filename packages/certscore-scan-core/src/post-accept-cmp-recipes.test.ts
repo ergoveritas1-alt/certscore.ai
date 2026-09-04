@@ -48,6 +48,22 @@ test("unknown CMPs have no Accept recipe and cannot fall back to guessed text", 
   }), undefined);
 });
 
+test("Amazon Accept uses its canonical action proxy and retained first-layer transition", () => {
+  const amazon = buildCanonicalPostAcceptActionRecipes().find((recipe) =>
+    recipe.cmpId === "Amazon Privacy Preferences"
+  );
+
+  assert.ok(amazon);
+  assert.equal(amazon.resolverMethod, "cmp_registry_recipe");
+  assert.equal(amazon.controlSelector, "#cos-banner span.a-button:has(#sp-cc-accept)");
+  assert.equal(amazon.bannerSelector, "#cos-banner");
+  assert.deepEqual(amazon.confirmation, {
+    kind: "canonical_accept_transition",
+    bannerSelector: "#cos-banner",
+    controlSelector: "#cos-banner span.a-button:has(#sp-cc-accept)",
+  });
+});
+
 test("owned calibration recipe uses one exact control and state transition", () => {
   assert.equal(
     CERTSCORE_OWNED_ANALYTICS_ACCEPT_RECIPE.controlSelector,

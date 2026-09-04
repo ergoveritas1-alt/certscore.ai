@@ -15,6 +15,7 @@ import {
 } from "./handler.js";
 import {
   applyHomepageScreenshotSafetyGate,
+  CONSENT_SCREENSHOT_SAFETY_FINALIZATION_BUDGET_MS,
   createHomepageScreenshotSafetyReviewCoordinator,
   createOpenAiScreenshotSafetyClassifier,
   SCREENSHOT_SAFETY_FINALIZATION_BUDGET_MS,
@@ -229,6 +230,59 @@ test("unfinished screenshot review adds at most the bounded finalization wait an
     );
     assert.equal(result.screenshots[0]?.retentionStatus, "withheld");
     await assert.rejects(stat(screenshotPath), /ENOENT/);
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
+test("a completed first-layer inventory gives its representative screenshot time to finish safety review", async () => {
+  const directory = await testDirectory("consent-finalization");
+  try {
+    const screenshotPath = path.join(directory, "screenshot-pre-consent-settled.png");
+    await writeFile(screenshotPath, Buffer.from("safe representative consent screenshot bytes"));
+    const source = bundleFixture(screenshotPath);
+    source.screenshots[0] = {
+      ...source.screenshots[0]!,
+      artifactId: "screenshot_pre_consent_settled",
+      pagePhase: "network_idle",
+    };
+    source.consentUiObservations = [{
+      observationId: "consent-ui-pre-consent",
+      observedAtMs: 500,
+      likelyPresent: true,
+      layerInspected: "first_layer",
+      captureStatus: "observed",
+      inventoryOutcome: "complete_with_controls",
+      controls: [{
+        actionType: "accept_all",
+        label: "Accept",
+        layer: "first_layer",
+        visible: true,
+      }],
+      evidenceRefs: [],
+    }];
+    const coordinator = createHomepageScreenshotSafetyReviewCoordinator({
+      artifactRoot: directory,
+      classifier: async () => {
+        await new Promise((resolve) => setTimeout(resolve, 150));
+        return { safeForDisplay: true };
+      },
+    });
+    coordinator.schedule(source.screenshots[0]!);
+
+    const startedAt = Date.now();
+    const result = await applyHomepageScreenshotSafetyGate({
+      artifactRoot: directory,
+      bundle: source,
+      reviewCoordinator: coordinator,
+    });
+    const durationMs = Date.now() - startedAt;
+
+    assert.equal(result.screenshots[0]?.retentionStatus, "available");
+    assert.equal(result.screenshots[0]?.displayStatus, "available");
+    assert.ok(durationMs > SCREENSHOT_SAFETY_FINALIZATION_BUDGET_MS);
+    assert.ok(durationMs < CONSENT_SCREENSHOT_SAFETY_FINALIZATION_BUDGET_MS);
+    assert.equal((await stat(screenshotPath)).isFile(), true);
   } finally {
     await rm(directory, { recursive: true, force: true });
   }

@@ -3521,8 +3521,14 @@ function buildConsentOptionsControlProminenceConcerns(
       evidence.layer === "deeper_layer" &&
       evidence.presentationType === "persistent_link"
   );
+  const assessmentComplete =
+    assessment.assessmentStatus === "complete" &&
+    assessment.coverage.status === "complete" &&
+    assessment.surface.status === "observed_actionable";
   const state: ConsentOptionsControlProminenceState =
-    firstLayerOptions.some((evidence) => evidence.presentationType === "dedicated_button")
+    !assessmentComplete
+      ? "insufficient_retained_evidence"
+      : firstLayerOptions.some((evidence) => evidence.presentationType === "dedicated_button")
       ? "dedicated_button"
       : firstLayerOptions.some(
           (evidence) =>
@@ -3542,11 +3548,7 @@ function buildConsentOptionsControlProminenceConcerns(
               ? "first_layer_control"
               : persistentOptions.length > 0
                 ? "persistent_link"
-                : assessment.assessmentStatus !== "complete" ||
-                    assessment.coverage.status !== "complete" ||
-                    assessment.surface.status !== "observed_actionable"
-                  ? "insufficient_retained_evidence"
-                  : assessment.controls.accept.state === "observed" &&
+              : assessment.controls.accept.state === "observed" &&
                       assessment.controls.reject.state === "observed"
                     ? "balanced_accept_decline_no_first_layer_settings"
                     : assessment.controls.accept.state === "observed" &&

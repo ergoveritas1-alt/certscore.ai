@@ -1110,6 +1110,66 @@ test("lane instrumentation retains the first top-level response and distinguishe
   assert.notEqual(consent?.physicalInvocationId, runtime?.physicalInvocationId);
 });
 
+test("lane instrumentation retains representative navigation when the initial request event is unavailable", () => {
+  const bundle = canonicalBundleFixture("scan-navigation-fallback", {
+    domSnapshots: [{
+      url: "https://www.amazon.de/?token=secret",
+    } as CanonicalEvidenceBundle["domSnapshots"][number]],
+    modulesRun: [{
+      moduleName: "preConsentRuntimeScanner",
+      status: "completed",
+      startedAt: "2026-06-15T18:00:00.010Z",
+      completedAt: "2026-06-15T18:00:01.000Z",
+      durationMs: 990,
+      recoveryDiagnostics: {
+        attempted: false,
+        attemptCount: 0,
+        modes: [],
+        durationMs: 0,
+        attempts: [{
+          url: "https://amazon.de/",
+          mode: "initial_https_navigation",
+          outcome: "success",
+          httpStatus: 200,
+          durationMs: 800,
+        }],
+      },
+      evidenceRefs: [],
+      errors: [],
+    }],
+    normalizedUrl: "https://amazon.de/",
+    runtimeCoverage: {
+      coverageStatus: "usable",
+      limitationKeys: [],
+      fallbackModesUsed: [],
+      observationCounts: {
+        networkEvents: 1,
+        thirdPartyRequests: 0,
+        cookieEvents: 0,
+        cookiesBeforeConsent: 0,
+        normalizedVendors: 0,
+        observedJourneys: 0,
+      },
+      silentEmpty: false,
+      notes: [],
+    },
+    url: "https://amazon.de/",
+  });
+
+  const lane = buildLocalV2DagLambdaLaneRun({
+    bundle,
+    physicalInvocationId: "aws-request-runtime",
+    region: "eu-west-1",
+    workerLane: "runtime_evidence",
+  });
+
+  assert.equal(lane?.firstHttpStatus, 200);
+  assert.equal(lane?.firstResponseAt, null);
+  assert.equal(lane?.firstResponseOffsetMs, null);
+  assert.equal(lane?.firstEffectiveUrl, "https://www.amazon.de/");
+  assert.equal(lane?.accessOutcome, "representative_page");
+});
+
 test("technical browser success remains a bot-challenge access outcome", () => {
   const bundle = canonicalBundleFixture("scan-challenge", {
     modulesRun: [{

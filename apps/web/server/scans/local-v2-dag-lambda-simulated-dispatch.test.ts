@@ -162,6 +162,30 @@ test("simulated Lambda carries the exact typed Accept observation configuration 
   assert.deepEqual(JSON.parse(args[configIndex + 1] ?? "null"), postAcceptObservation);
 });
 
+test("simulated Lambda carries the exact typed GPC observation configuration into the parity process", () => {
+  const gpcObservation = {
+    contractVersion: "certscore.gpc-observation-dispatch.v1" as const,
+    enabled: true as const,
+    pairWithLane: "runtime_evidence" as const,
+    protocol: "passive_baseline_with_sec_gpc" as const,
+  };
+  const args = buildLocalV2DagSimulatedLambdaArgs({
+    artifactDir: "artifacts/local-v2-dag-lambda-simulated",
+    outPath: "artifacts/local-v2-dag-lambda-simulated/scan-gpc/summary.json",
+    payload: {
+      awsRegion: "eu-west-1",
+      gpcObservation,
+      profile: "standard",
+      scanId: "scan-gpc",
+      targetUrl: "https://example.com/",
+    },
+  });
+  const configIndex = args.indexOf("--gpc-config");
+
+  assert.ok(configIndex > 0);
+  assert.deepEqual(JSON.parse(args[configIndex + 1] ?? "null"), gpcObservation);
+});
+
 test("local Lambda executables exit after their durable handoffs are awaited", async () => {
   for (const path of [
     "scripts/run-local-v2-dag-lambda-parity.ts",

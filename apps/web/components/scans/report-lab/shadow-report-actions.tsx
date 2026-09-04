@@ -28,9 +28,14 @@ export function ShadowReportShareMenu({ reportUrl, scanId, siteLabel }: ShadowRe
 
   return (
     <details className="group/share relative">
-      <summary className="inline-flex h-8 cursor-pointer list-none items-center gap-1.5 rounded-md bg-zinc-950 px-2.5 text-xs font-semibold text-white hover:bg-zinc-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-500 [&::-webkit-details-marker]:hidden">
-        Share / export
-        <span aria-hidden="true" className="text-zinc-400 transition group-open/share:rotate-180">⌄</span>
+      <summary
+        aria-label="Share report"
+        className="inline-flex h-8 cursor-pointer list-none items-center gap-1.5 rounded-md border border-zinc-300 bg-white px-2.5 text-xs font-semibold text-zinc-950 hover:border-zinc-500 hover:bg-zinc-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-500 [&::-webkit-details-marker]:hidden"
+      >
+        <svg aria-hidden="true" className="h-4 w-4" fill="none" viewBox="0 0 24 24">
+          <path d="M12 3v12M7.5 7.5 12 3l4.5 4.5M5 10.5v7.75A1.75 1.75 0 0 0 6.75 20h10.5A1.75 1.75 0 0 0 19 18.25V10.5" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.8" />
+        </svg>
+        Share
       </summary>
       <div className="absolute right-0 top-full z-40 mt-2 w-64 rounded-lg border border-zinc-200 bg-white p-2 shadow-xl">
         <button className={menuItemClass} onClick={() => void copyReportLink()} type="button">

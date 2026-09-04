@@ -3123,7 +3123,19 @@ async function fetchRenderedPolicyDocumentText(input: {
       timeout: Math.min(1_000, Math.max(500, input.timeoutMs)),
     }).catch(() => undefined);
     await page.waitForFunction(
-      () => (document.body?.innerText ?? "").replace(/\s+/g, " ").trim().length >= 1_000,
+      () => {
+        const normalizedLength = (element: Element | null): number =>
+          ((element as HTMLElement | null)?.innerText ?? "").replace(/\s+/g, " ").trim().length;
+        const semanticPolicyBodyReady = [
+          ...document.querySelectorAll("article, main, [role='main']"),
+        ].some((element) => normalizedLength(element) >= 500);
+
+        // Header, navigation, and footer chrome can exceed the old whole-body
+        // threshold before a client-rendered policy article exists. Prefer a
+        // substantive semantic content region, while retaining the bounded
+        // timeout/fallback for documents without semantic containers.
+        return semanticPolicyBodyReady;
+      },
       undefined,
       { timeout: Math.min(1_500, Math.max(500, input.timeoutMs)) },
     ).catch(() => undefined);
@@ -9577,8 +9589,22 @@ function bestRenderedPolicyDocumentText(html: string, textCandidates: string[]):
   if (!html) {
     return bodyText;
   }
+  const semanticCandidateOffset = policyHtml === html ? 1 : 0;
+  const substantiveSemanticCandidates = sanitizedTextCandidates
+    .slice(semanticCandidateOffset)
+    .filter((text) => {
+      const normalized = normalizeWhitespace(text);
+      if (normalized.length < 500) return false;
+      const quality = assessPolicyTextQuality(normalized);
+      return quality.reason !== "low_quality_access_challenge";
+    });
   const candidates = [
-    ...sanitizedTextCandidates,
+    // A substantive article/main region is a stronger document boundary than
+    // whole-body text, which commonly includes large repeated site chrome.
+    // Fall back to body text only when no usable semantic region was retained.
+    ...(substantiveSemanticCandidates.length > 0
+      ? substantiveSemanticCandidates
+      : sanitizedTextCandidates),
     htmlToVisibleText(stripPageChromeHtml(policyHtml)),
   ].map(stripConsentSurfacePreambleFromPolicyText).map(normalizeWhitespace).filter((text) => text.length > 0);
   if (candidates.length === 0) {
@@ -9996,9 +10022,9 @@ function attr(attrs: string, name: string): string | undefined {
   return new RegExp(`${name}=["']([^"']+)["']`, "i").exec(attrs)?.[1];
 }
 
-function normalizeUrl(href: string, baseUrl: string): string | undefined {
+export function normalizePolicySurfaceUrl(href: string, baseUrl: string): string | undefined {
   try {
-    const parsed = new URL(href, baseUrl);
+    const parsed = new URL(decodeBasicHtmlEntities(href.trim()), baseUrl);
     if (parsed.toString().endsWith("#")) {
       parsed.hash = "";
     }
@@ -10012,6 +10038,10 @@ function normalizeUrl(href: string, baseUrl: string): string | undefined {
   } catch {
     return undefined;
   }
+}
+
+function normalizeUrl(href: string, baseUrl: string): string | undefined {
+  return normalizePolicySurfaceUrl(href, baseUrl);
 }
 
 function isPlaceholderHref(href: string): boolean {

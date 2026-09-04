@@ -38,6 +38,7 @@ import {
   isPolicySessionPrimerCompatible,
   mergeGdprTransparencyTopicCandidates,
   mergePolicySurfaceObservations,
+  normalizePolicySurfaceUrl,
   POLICY_HOMEPAGE_FETCH_TIMEOUT_MS,
   policyDocumentRoleForChildSelection,
   policySurfaceObservationsFromRetainedRenderedLinks,
@@ -136,6 +137,23 @@ test("does not repeat a canonical host retry already attempted by the bounded fe
     { requestedUrl: candidateUrl },
     { requestedUrl: "https://www.publisher.example/legal/privacy-policy" },
   ]), false);
+});
+
+test("policy URL normalization decodes HTML entities before parsing query parameters", () => {
+  assert.equal(
+    normalizePolicySurfaceUrl(
+      "/help/privacy?nodeId=201909010&amp;ref_=footer_privacy",
+      "https://www.amazon.de/-/en/",
+    ),
+    "https://www.amazon.de/help/privacy?nodeId=201909010&ref_=footer_privacy",
+  );
+  assert.equal(
+    normalizePolicySurfaceUrl(
+      "/help/cookies?nodeId=201890250&#38;ref_=footer_cookies_notice",
+      "https://www.amazon.de/-/en/",
+    ),
+    "https://www.amazon.de/help/cookies?nodeId=201890250&ref_=footer_cookies_notice",
+  );
 });
 
 test("homepage failure still derives common-path locale hints from the target TLD", () => {
@@ -3379,6 +3397,35 @@ test("German retained policy prose becomes strong topic-specific Article 13 obse
   }
 });
 
+test("natural German deletion, recipient, and complaint clauses become retained canonical observations", () => {
+  const sourceUrl = "https://www.tierklinik.example/datenschutz";
+  const visibleText = [
+    "Datenschutzerklärung.",
+    "Die Löschung Ihrer Daten erfolgt, wenn Ihre Daten zur Erfüllung des mit der Speicherung verfolgten Zweckes nicht mehr erforderlich sind.",
+    "Eine Löschung der Daten kann nicht erfolgen, wenn uns rechtliche Bestimmungen zur Aufbewahrung oder Speicherung verpflichten.",
+    "Die Tierklinik wird Ihre personenbezogenen Daten nur unter den beschriebenen Voraussetzungen an Dritte weitergeben.",
+    "Sie können sich mit einer Beschwerde auch an die Aufsichtsbehörde wenden.",
+  ].join(" ");
+  const sections = extractPolicySections({
+    html: `<main>${visibleText}</main>`,
+    sourceUrl,
+    visibleText,
+  });
+  const evidence = retainedArticle13SectionEvidenceFromSections(sections, sourceUrl);
+
+  for (const topic of [
+    "data_retention",
+    "recipients_or_vendor_categories",
+    "supervisory_authority",
+  ] as const) {
+    const row = evidence.find((candidate) => candidate.coverageArea === topic);
+    assert.equal(row?.signalObserved, "observed", `${topic}: ${JSON.stringify(row)}`);
+    assert.equal(row?.selectedEvidenceStrength, "strong", topic);
+    assert.match(row?.evidenceTextSha256 ?? "", /^[a-f0-9]{64}$/, topic);
+    assert.match(row?.sourceDocumentTextSha256 ?? "", /^[a-f0-9]{64}$/, topic);
+  }
+});
+
 test("cookie disclosure extraction retains Oxfam-style named-cookie tables", () => {
   const sourceUrl = "https://www.oxfam.org/en/cookies";
   const html = `
@@ -5151,6 +5198,83 @@ test("policySurfaceScanner uses rendered policy document fallback when direct po
     );
   } finally {
     await server.close();
+    await rm(tempRoot, { recursive: true, force: true });
+  }
+});
+
+test("rendered policy fallback retains a substantive semantic article instead of page chrome", async () => {
+  const policyText = [
+    "Cookies Notice",
+    "The data controller uses operational cookies to provide the service and advertising cookies only for the purposes described here.",
+    "We process device information and personal data based on consent, contract, legal obligations, and legitimate interests.",
+    "Recipients include service providers, analytics providers, advertising partners, and affiliated companies.",
+    "Advertising cookie choices can be changed at any time through the privacy preferences page.",
+    "Cookie identifiers are retained for defined periods and then deleted.",
+    "You may request access, correction, deletion, restriction, portability, or object to processing.",
+    "International transfers use adequacy decisions or standard contractual clauses.",
+    "Contact privacy@example.test or lodge a complaint with a supervisory authority.",
+  ].join(" ");
+  const pageChrome = "Products Orders Help Account Careers Locations Terms Support ".repeat(40);
+  const server = createServer((request, response) => {
+    const requestUrl = new URL(request.url ?? "/", "http://fixture.test");
+    if (requestUrl.pathname === "/delayed-rendered-cookie-homepage") {
+      response.writeHead(200, { "content-type": "text/html; charset=utf-8" });
+      response.end(`<!doctype html><html><body>
+        <main>Fixture homepage.</main>
+        <footer><a href="/delayed-rendered-cookie-homepage/cookies">Cookies Notice</a></footer>
+      </body></html>`);
+      return;
+    }
+    if (requestUrl.pathname === "/delayed-rendered-cookie-homepage/cookies") {
+      if (request.headers["sec-fetch-mode"] !== "navigate") {
+        response.writeHead(503, { "content-type": "text/html; charset=utf-8" });
+        response.end("<!doctype html><html><body><main>Cookies Notice temporarily unavailable.</main></body></html>");
+        return;
+      }
+      response.writeHead(200, { "content-type": "text/html; charset=utf-8" });
+      response.end(`<!doctype html><html><body>
+        <header>${pageChrome}</header>
+        <div id="article-root"></div>
+        <footer>${pageChrome}</footer>
+        <script>
+          setTimeout(() => {
+            document.getElementById("article-root").innerHTML = '<article><h1>Cookies Notice</h1><p>${policyText}</p></article>';
+          }, 1000);
+        </script>
+      </body></html>`);
+      return;
+    }
+    response.writeHead(404, { "content-type": "text/plain; charset=utf-8" });
+    response.end("not found");
+  });
+  server.listen(0, "127.0.0.1");
+  await once(server, "listening");
+  const address = server.address();
+  assert.ok(address && typeof address === "object");
+  const targetUrl = `http://127.0.0.1:${address.port}/delayed-rendered-cookie-homepage`;
+  const tempRoot = await mkdtemp(path.join(tmpdir(), "certscore-policy-delayed-article-"));
+
+  try {
+    const result = await policySurfaceScanner({
+      url: targetUrl,
+      normalizedUrl: targetUrl,
+      scanStartedAtMs: Date.now(),
+      internalBudgetMs: 12_000,
+      artifactWriter: await createArtifactWriter(tempRoot),
+      nanoAssistProvider: createDefaultMockNanoPolicyAssistProvider(),
+    });
+    const cookies = result.policySurfaceObservations.find((observation) =>
+      observation.status === "fetched" &&
+      observation.normalizedUrl === `${targetUrl}/cookies`
+    );
+
+    assert.ok(cookies, JSON.stringify(result.policySurfaceObservations, null, 2));
+    assert.equal(cookies.documentEvaluationState, "usable");
+    assert.match(cookies.textExcerpt ?? "", /advertising cookie choices can be changed/i);
+    assert.doesNotMatch(cookies.textExcerpt ?? "", /^Products Orders Help Account/);
+  } finally {
+    server.close();
+    await once(server, "close");
     await rm(tempRoot, { recursive: true, force: true });
   }
 });
