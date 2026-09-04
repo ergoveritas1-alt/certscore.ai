@@ -211,6 +211,8 @@ test("report header actions and section spacing match the compact report treatme
 
   assert.match(identitySource, /className="!h-7 !w-7 translate-y-0\.5 !rounded-md !border-zinc-200 !bg-zinc-50 !p-1 !shadow-sm"/);
   assert.match(identitySource, /label=\{report\.scan\.host\}/);
+  assert.match(identitySource, /Scanned from \{report\.scan\.origin\}/);
+  assert.doesNotMatch(identitySource, /Executed from/);
   assert.match(identitySource, /flex items-center justify-between gap-3/);
   assert.match(identitySource, /flex shrink-0 flex-wrap items-center gap-2/);
   assert.doesNotMatch(identitySource, /href="#evidence"/);

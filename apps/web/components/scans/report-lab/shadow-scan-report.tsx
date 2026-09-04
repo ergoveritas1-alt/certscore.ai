@@ -173,7 +173,7 @@ function ReportIdentity({
           ) : null}
           <span className="inline-flex items-center gap-2 rounded-md border border-zinc-300 bg-white px-2 py-1">
             <ScanFromMarker {...getScanFromMarkerInput(report.scan.originCode)} selected />
-            Executed from {report.scan.origin}
+            Scanned from {report.scan.origin}
           </span>
           <span className={monoClass}>{report.scan.duration}</span>
         </div>
