@@ -20,10 +20,10 @@ Execution authorized by product owner on 2026-09-04: implement the preceding pla
 
 - [x] Production topology, access, and initial cost gate checked.
 - [x] Contracts and deterministic graph tests.
-- [x] Browser capture and attribution corrections (focused gates passed; full release regression pending).
-- [x] Lane binding, persistence, API, and UI (local implementation; deployed round trip pending).
-- [ ] Fixture/replay/browser/performance gates.
-- [ ] Feature-off code deployment and regional verification.
+- [x] Browser capture and attribution corrections; full local regression passed.
+- [x] Lane binding, persistence, API, and UI (deployed enabled-graph round trip pending).
+- [x] Local fixture/replay/browser/performance gates (deployed performance remains pending).
+- [x] Feature-off code deployment and regional verification.
 - [ ] Canary and staged customer activation.
 - [ ] Post-deployment observation and handoff.
 
@@ -31,7 +31,7 @@ No implementation, live canary, deployment, or performance gate is recorded as p
 
 ## Local implementation and verification log
 
-Working branch: `codex/cookie-tracker-evidence-graph`. Changes remain uncommitted; production remains on the recorded baseline with graph activation off. No public or owned live scan has been created for this release yet.
+Working branch: `codex/cookie-tracker-evidence-graph`. Tested implementation commit `97f83b429097d78f84bf0608f23aecdde42b5560` is pushed and deployed to every affected AWS service. Graph activation remains off. No public or owned live scan has been created for this release yet. Entries below retain the chronological history of failed attempts and subsequent successful gates; earlier pending statements are superseded by the deployment section.
 
 - Implemented versioned bounded graph capture, protocol identities/redirect correlation, HTTP/JS cookie distinctions, storage/worker/frame metadata, passive streaming counters, scenario/action anchors, per-capture keyed value digests, verified lane merge, persisted public-safe projection, API schema/OpenAPI, and the inventory relationship explorer. Existing scoring policy is unchanged.
 - Re-ran the contracts suite: **317/317 passed**, including unsupported/malformed optional graph compatibility and action-packet isolation. Vendor resolver: **137/137 passed**. API contracts/OpenAPI: **16/16 passed**. SDK build passed.
@@ -78,9 +78,21 @@ Latest exact-source release check:
 - Scenario matching compares scoped identities only (including host/domain and partition distinctions), not values, persistence, absence, active use or consent effectiveness.
 - Policy matching is deterministic literal product/vendor/entity mention in verified retained owned documents, not a legal sufficiency conclusion. Inadequate policy coverage remains unknown.
 
+### Exact-source local gates and feature-off deployment completed
+
+- Complete scan-core suite, run sequentially after the passing fourth preflight: **949 tests, 914 passed, 35 intentionally skipped, zero failed/cancelled**, 1,389,362 ms. Log: `/tmp/certscore-graph-final-gates-6VQMEU/scan-core-final.log`. The skipped general research flow remains disabled; bounded action tests ran.
+- All deployment targets use implementation SHA `97f83b429097d78f84bf0608f23aecdde42b5560`. The branch was pushed without merging or changing the default branch. Readers deployed before scanner producers; no schema migration, capacity, IAM, retention, consent flag or browser dependency change was introduced.
+- Web/materializer AWS workflow [33940490595](https://github.com/ergoveritas1-alt/certscore.ai/actions/runs/33940490595) passed, including its unchanged CI heap/build configuration, target-image migration check and live audit. Web task `certscore-web-certscore:551` has two running tasks; materializer `certscore-web-certscore-materializer:114` has one. Both converged to one completed deployment, zero pending. Live `/api/version` matches the implementation SHA and `ecs-fargate` runtime. The expected single-host audit skips an unconfigured secondary host; this is not an additional-host verification.
+- Validation AWS workflow [33940490755](https://github.com/ergoveritas1-alt/certscore.ai/actions/runs/33940490755) passed. Task `certscore-validation-worker:456` is stable at one task with unchanged 256 CPU/512 MiB configuration.
+- MCP AWS workflow [33940489010](https://github.com/ergoveritas1-alt/certscore.ai/actions/runs/33940489010) passed, including source/tests/build/image-scan, stable deployment, public metadata and authenticated tools checks. Task `certscore-web-mcp:106` is stable at one task; health reports `ok`.
+- Canonical `pnpm deploy:scanners -- --base 97f83b429097d78f84bf0608f23aecdde42b5560 --no-predeploy --no-push` completed successfully. The helper built once in Frankfurt and replicated identical digest `sha256:a5b89c505180327003fb8b527d64d07376ef11c84da32e26f19a7bc35d94afd7` to all three regions. Every Lambda is Active/Successful; regional parity and Cloudflare Web Bot Auth passed in all three regions. Log: `/tmp/certscore-graph-final-gates-6VQMEU/deploy-scanners.log`.
+- Deployment detail: the repository helper selected its existing cached full-image fallback because a regional `runtime-base` tag was unavailable. It did not publish a runtime base. The Chromium installation layer was **CACHED**, and Dockerfile, lockfile and scanner package dependencies are unchanged from the baseline. No browser-runtime substitution or reduced Chromium build occurred. Runtime/protocol parity still needs confirmation from fresh regional scan artifacts.
+- Existing production report `70ddf8b2-b444-4ca1-ad47-f21c915f2db6` rendered after web deployment, and its three-row cookie/tracker inventory expanded successfully. No graph tile was present while disabled; browser error/warning log was empty. This verifies historical feature-off behavior, not a fresh enabled-graph round trip.
+- Release operations so far: deployments and their built-in verification plus the earlier read-only DB audit; **zero owned and zero public release scan creations**. Track deployment/transient-task/image charges against the $15 ceiling; no new provisioned capacity was added. The $19.35/month month-12 forecast remains provisional until enabled deployed measurements are collected.
+
 ### Open release gates
 
-Full regression/preflight, deployed performance gates, AWS deployments, regional canaries, ledger-selected public calibration, staged activation and 24-hour observation are **not yet complete**. The final local performance gate passed as recorded above. Existing canonical finding/score policy remains unchanged. No calibration labels or acceptance baselines have changed.
+Full local regression/preflight and feature-off AWS deployments **passed**. Enabled deployed performance/round-trip gates, regional canaries, ledger-selected public calibration, staged activation and 24-hour observation are **not yet complete**. Existing canonical finding/score policy remains unchanged. No calibration labels or acceptance baselines have changed.
 
 Two stale source assertions were verified against `git show HEAD` and corrected to check the existing behavior: explicit three-line collapsed/unclamped expanded report styles and current transport copy; Pulse status's parallel report/status lookup after quota denial handling (the previous assertion searched for a now-absent direct `await getPublicScanRecord`). No report behavior or rate limits were weakened. A new assertion checks graph endpoints explicitly request the canonical evidence weight.
 
