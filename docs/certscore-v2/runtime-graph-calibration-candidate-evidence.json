@@ -1,0 +1,1752 @@
+{
+  "packetVersion": "certscore.runtime_graph_calibration_candidate_evidence.1",
+  "internalOnly": true,
+  "preparedAt": "2026-09-05T05:39:08.755Z",
+  "reviewProvenance": {
+    "model": "gpt-6-astra",
+    "reasoningEffort": "medium",
+    "reviewType": "model_assisted_nomination",
+    "humanApproval": false
+  },
+  "scope": {
+    "publicContacts": 0,
+    "applicationModelCalls": 0,
+    "registryChanged": false,
+    "ledgerChanged": false,
+    "baselineChanged": false,
+    "graphActivationChanged": false
+  },
+  "nominationSourceManifest": {
+    "path": "docs/certscore-v2/gold-corpus-expansion-50/manifest.json",
+    "sha256": "7ccda08dba8ff2b83b3037ef7bfd1ba95a542d96b47a56017eb1ef8d81b0c9bb",
+    "note": "Historical candidate taxonomy only; no historical interaction workflow or expected labels reauthorized."
+  },
+  "selectionLimit": 10,
+  "ownerCooldownException": {
+    "status": "authorized_for_scoped_release_review",
+    "authority": "Product owner instruction in this task: dont worry about cooldown",
+    "scope": "One runtime-graph release calibration; only primary nominations P1 through P10 at their exactHttpsUrl values in this packet",
+    "primaryIds": ["P1", "P2", "P3", "P4", "P5", "P6", "P7", "P8", "P9", "P10"],
+    "maximumPublicScanCreations": 10,
+    "waives": ["elapsed-time cooldown requirement for this one cohort"],
+    "doesNotWaive": ["blocked states", "do_not_calibrate states", "repository contact holds", "human quality and operations review", "exact-target interaction authorization", "evidence integrity and privacy gates", "budget caps", "single scan per domain", "no automatic retries"],
+    "reservesIncluded": false,
+    "historicalContactRecordsUnchanged": true,
+    "globalCooldownPolicyUnchanged": true,
+    "appliedToLiveExecution": false
+  },
+  "primaryCount": 10,
+  "reserveCount": 2,
+  "compositionLimitations": [
+    "No dedicated education or behavioral_analytics role in the primary ten; Luna must assess coverage without weakening the existing lane baseline.",
+    "Two publisher and two nonprofit nominations; selector role-family diversification is not sufficient evidence coverage.",
+    "No central-history result or no-go re-enablement approval is fabricated by this packet."
+  ],
+  "candidates": [
+    {
+      "id": "P1",
+      "nominationClass": "primary",
+      "exactHttpsUrl": "https://www.wired.com/",
+      "normalizedDomain": "wired.com",
+      "proposedRole": "publisher",
+      "roleProvenance": "Model-assisted nomination for human review; not canonical baseline approval",
+      "reviewLanes": [
+        "consent_controls",
+        "gdpr_transparency",
+        "transport_evidence",
+        "third_party_attribution",
+        "no_go_resilience",
+        "language_inference"
+      ],
+      "admissionStatus": "pending_luna_and_so_review",
+      "operationalEligibility": "pending_review",
+      "source": {
+        "path": "artifacts/local-v2-dag-scans/9c932dae-9e29-44fe-9a85-a713a151218b/CanonicalEvidenceBundle.json",
+        "sha256": "fc0647f7cc5b54d75a33a96b9b08d2f173ef413ca48c9f0136838f91486e10b3",
+        "bytes": 7790698,
+        "scanId": "scan_1784054421527_www.wired.com",
+        "startedAt": "2026-07-14T18:40:21.527Z",
+        "completedAt": "2026-07-14T18:40:46.222Z",
+        "region": "local",
+        "scanProfile": {
+          "profileId": "standard",
+          "label": "Standard runtime and policy scan",
+          "targetDurationMs": 30000,
+          "internalBudgetMs": 35000,
+          "enabledModules": [
+            "preConsentRuntimeScanner",
+            "policySurfaceScanner"
+          ]
+        },
+        "scannerVersion": "certscore-scan-core-v2-alpha",
+        "schemaVersion": "certscore.v2.alpha.1",
+        "verification": "Local file bytes read and SHA-256 computed; remote retained pointers not re-fetched or independently verified"
+      },
+      "historicalEvidence": {
+        "moduleStatuses": [
+          {
+            "moduleName": "preConsentRuntimeScanner",
+            "status": "completed"
+          },
+          {
+            "moduleName": "vendorResolver",
+            "status": "completed"
+          },
+          {
+            "moduleName": "policySurfaceScanner",
+            "status": "completed"
+          }
+        ],
+        "retainedArrayCounts": {
+          "networkEvents": 80,
+          "networkResponseEvents": 60,
+          "cookieEvents": 506,
+          "cookieSnapshots": 1,
+          "storageSnapshots": 1,
+          "scriptEvents": 40,
+          "iframeEvents": 11,
+          "consentUiObservations": 1,
+          "policySurfaceObservations": 3,
+          "transportSecurityObservations": 1,
+          "normalizedVendorObservations": 51,
+          "screenshots": 2,
+          "domSnapshots": 1,
+          "consentActionAttempts": 0
+        },
+        "runtimeCoverageStatus": "limited_partial",
+        "runtimeSummaryCounts": {
+          "networkEvents": 681,
+          "thirdPartyRequests": 551,
+          "cookieEvents": 506,
+          "cookiesBeforeConsent": 111,
+          "normalizedVendors": 51,
+          "observedJourneys": 469
+        },
+        "runtimeLimitationKeys": [
+          "consent_ui_capture_timed_out",
+          "cmp_runtime_without_actionable_surface",
+          "scan_no_go_diagnostics"
+        ],
+        "consentInspection": {
+          "outcome": "non_actionable_surface_observed",
+          "coverageStatus": "limited",
+          "inspectionCompleted": false,
+          "limitationKeys": [
+            "consent_ui_capture_timed_out",
+            "cmp_runtime_without_actionable_surface",
+            "scan_no_go_diagnostics",
+            "consent_surface_inspection_observation_incomplete"
+          ]
+        },
+        "consentObservationFlags": [
+          {
+            "observationId": "consent_ui_pre_consent",
+            "layerInspected": "unknown",
+            "likelyPresent": true,
+            "acceptControlObserved": false,
+            "rejectControlObserved": false,
+            "managePreferencesControlObserved": false
+          }
+        ],
+        "policyStatuses": {
+          "fetched": 2,
+          "observed": 1
+        },
+        "policySurfaceTypes": {
+          "privacy_policy": 1,
+          "your_privacy_choices": 1,
+          "accessibility_statement": 1
+        },
+        "httpsTransportFlags": [
+          {
+            "pageHttpsObserved": true,
+            "finalScheme": "https"
+          }
+        ],
+        "languageInference": {
+          "status": "not_verified_in_packet",
+          "note": "Locale in a path or sector label is not a verified language observation."
+        },
+        "runtimeGraph": {
+          "status": "not_established_by_this_historical_packet",
+          "note": "Older retained evidence is nomination context, not final deployed graph acceptance."
+        }
+      },
+      "limitations": [
+        "Historical observation only; no current capability or legal conclusion.",
+        "Retained array lengths may be capped and differ from runtime summary totals; neither proves complete capture.",
+        "Consent flags are legacy observations, not a current ConsentControlAssessment v2 or interaction authorization.",
+        "Policy observation count is not usable owned-policy coverage; ownership and linked evidence require human review.",
+        "No-go contradictions, incomplete modules and coverage limitations require review before admission.",
+        "All sources in this nomination set report local region; regional production representativeness is unproven."
+      ],
+      "operationalEvidence": {
+        "canonicalState": "cooldown",
+        "lastCentralContactAt": "2026-07-16T23:46:41.321343+00:00",
+        "centralCooldownUntil": "2026-08-13T23:46:41.321343+00:00",
+        "lastCentralOutcome": "completed",
+        "centralNoGoReasons": [],
+        "selectionClock": "2026-09-05T05:38:57.567Z",
+        "derivedReviewStatus": "central_cooldown_elapsed_not_authorized",
+        "latestInspectedLocalBundleContactAt": "2026-07-14T18:40:21.527Z",
+        "localBundleImpliedEarliestContactAt": "2026-08-11T18:40:46.222Z",
+        "decision": "No admission or contact authorization; SO must reconcile history and attest exact target."
+      }
+    },
+    {
+      "id": "P2",
+      "nominationClass": "primary",
+      "exactHttpsUrl": "https://lowes.com/",
+      "normalizedDomain": "lowes.com",
+      "proposedRole": "ecommerce",
+      "roleProvenance": "Model-assisted nomination for human review; not canonical baseline approval",
+      "reviewLanes": [
+        "consent_controls",
+        "gdpr_transparency",
+        "transport_evidence",
+        "third_party_attribution",
+        "no_go_resilience",
+        "language_inference"
+      ],
+      "admissionStatus": "pending_luna_and_so_review",
+      "operationalEligibility": "pending_review",
+      "source": {
+        "path": "artifacts/local-v2-dag-scans/23932e16-d411-476e-92dc-a80b28b2b240/CanonicalEvidenceBundle.json",
+        "sha256": "879f6ae916f7ed6c9ede83049f9ae7ab85795e0cfaba914af4254bf8cb8a3518",
+        "bytes": 2786008,
+        "scanId": "scan_1783657636133_lowes.com",
+        "startedAt": "2026-07-10T04:27:16.133Z",
+        "completedAt": "2026-07-10T04:27:39.610Z",
+        "region": "local",
+        "scanProfile": {
+          "profileId": "standard",
+          "label": "Standard runtime and policy scan",
+          "targetDurationMs": 30000,
+          "internalBudgetMs": 35000,
+          "enabledModules": [
+            "preConsentRuntimeScanner",
+            "policySurfaceScanner"
+          ]
+        },
+        "scannerVersion": "certscore-scan-core-v2-alpha",
+        "schemaVersion": "certscore.v2.alpha.1",
+        "verification": "Local file bytes read and SHA-256 computed; remote retained pointers not re-fetched or independently verified"
+      },
+      "historicalEvidence": {
+        "moduleStatuses": [
+          {
+            "moduleName": "preConsentRuntimeScanner",
+            "status": "partial"
+          },
+          {
+            "moduleName": "vendorResolver",
+            "status": "completed"
+          },
+          {
+            "moduleName": "policySurfaceScanner",
+            "status": "completed"
+          }
+        ],
+        "retainedArrayCounts": {
+          "networkEvents": 80,
+          "networkResponseEvents": 60,
+          "cookieEvents": 310,
+          "cookieSnapshots": 1,
+          "storageSnapshots": 1,
+          "scriptEvents": 40,
+          "iframeEvents": 4,
+          "consentUiObservations": 1,
+          "policySurfaceObservations": 8,
+          "transportSecurityObservations": 1,
+          "normalizedVendorObservations": 22,
+          "screenshots": 1,
+          "domSnapshots": 1,
+          "consentActionAttempts": 0
+        },
+        "runtimeCoverageStatus": "limited_partial",
+        "runtimeSummaryCounts": {
+          "networkEvents": 341,
+          "thirdPartyRequests": 251,
+          "cookieEvents": 310,
+          "cookiesBeforeConsent": 28,
+          "normalizedVendors": 22,
+          "observedJourneys": 142
+        },
+        "runtimeLimitationKeys": [
+          "pre_consent_runtime_partial",
+          "cmp_runtime_without_actionable_surface"
+        ],
+        "consentInspection": null,
+        "consentObservationFlags": [
+          {
+            "observationId": "consent_ui_pre_consent",
+            "layerInspected": "unknown",
+            "likelyPresent": false,
+            "acceptControlObserved": false,
+            "rejectControlObserved": false,
+            "managePreferencesControlObserved": false
+          }
+        ],
+        "policyStatuses": {
+          "failed": 8
+        },
+        "policySurfaceTypes": {
+          "privacy_policy": 8
+        },
+        "httpsTransportFlags": [
+          {
+            "pageHttpsObserved": true,
+            "finalScheme": "https"
+          }
+        ],
+        "languageInference": {
+          "status": "not_verified_in_packet",
+          "note": "Locale in a path or sector label is not a verified language observation."
+        },
+        "runtimeGraph": {
+          "status": "not_established_by_this_historical_packet",
+          "note": "Older retained evidence is nomination context, not final deployed graph acceptance."
+        }
+      },
+      "limitations": [
+        "Historical observation only; no current capability or legal conclusion.",
+        "Retained array lengths may be capped and differ from runtime summary totals; neither proves complete capture.",
+        "Consent flags are legacy observations, not a current ConsentControlAssessment v2 or interaction authorization.",
+        "Policy observation count is not usable owned-policy coverage; ownership and linked evidence require human review.",
+        "No-go contradictions, incomplete modules and coverage limitations require review before admission.",
+        "All sources in this nomination set report local region; regional production representativeness is unproven."
+      ],
+      "operationalEvidence": {
+        "canonicalState": "cooldown",
+        "lastCentralContactAt": "2026-08-30T19:25:43.850589+00:00",
+        "centralCooldownUntil": "2026-09-27T19:25:43.850589+00:00",
+        "lastCentralOutcome": "completed",
+        "centralNoGoReasons": [],
+        "selectionClock": "2026-09-05T05:38:57.567Z",
+        "derivedReviewStatus": "active_cooldown",
+        "latestInspectedLocalBundleContactAt": "2026-07-10T04:27:16.133Z",
+        "localBundleImpliedEarliestContactAt": "2026-08-07T04:27:39.610Z",
+        "decision": "No admission or contact authorization; SO must reconcile history and attest exact target."
+      }
+    },
+    {
+      "id": "P3",
+      "nominationClass": "primary",
+      "exactHttpsUrl": "https://auth0.com/",
+      "normalizedDomain": "auth0.com",
+      "proposedRole": "saas",
+      "roleProvenance": "Model-assisted nomination for human review; not canonical baseline approval",
+      "reviewLanes": [
+        "consent_controls",
+        "gdpr_transparency",
+        "transport_evidence",
+        "third_party_attribution",
+        "no_go_resilience",
+        "language_inference"
+      ],
+      "admissionStatus": "pending_luna_and_so_review",
+      "operationalEligibility": "pending_review",
+      "source": {
+        "path": "artifacts/v2-calibration-lab-auth0-com-standard-20260719T192634/auth0.com/CanonicalEvidenceBundle.json",
+        "sha256": "6447ab6f16c3ffc4c80f7c04f782d6ef020f29071ae03ae3466cb1ed6439e16d",
+        "bytes": 711150,
+        "scanId": "scan_1784489194665_auth0.com",
+        "startedAt": "2026-07-19T19:26:34.665Z",
+        "completedAt": "2026-07-19T19:26:50.971Z",
+        "region": "local",
+        "scanProfile": {
+          "profileId": "standard",
+          "label": "Standard runtime and policy scan",
+          "targetDurationMs": 30000,
+          "internalBudgetMs": 35000,
+          "enabledModules": [
+            "preConsentRuntimeScanner",
+            "policySurfaceScanner"
+          ]
+        },
+        "scannerVersion": "certscore-scan-core-v2-alpha",
+        "schemaVersion": "certscore.v2.alpha.1",
+        "verification": "Local file bytes read and SHA-256 computed; remote retained pointers not re-fetched or independently verified"
+      },
+      "historicalEvidence": {
+        "moduleStatuses": [
+          {
+            "moduleName": "preConsentRuntimeScanner",
+            "status": "completed"
+          },
+          {
+            "moduleName": "vendorResolver",
+            "status": "completed"
+          },
+          {
+            "moduleName": "policySurfaceScanner",
+            "status": "completed"
+          }
+        ],
+        "retainedArrayCounts": {
+          "networkEvents": 80,
+          "networkResponseEvents": 60,
+          "cookieEvents": 20,
+          "cookieSnapshots": 1,
+          "storageSnapshots": 1,
+          "scriptEvents": 0,
+          "iframeEvents": 1,
+          "consentUiObservations": 1,
+          "policySurfaceObservations": 9,
+          "transportSecurityObservations": 1,
+          "normalizedVendorObservations": 8,
+          "screenshots": 3,
+          "domSnapshots": 1,
+          "consentActionAttempts": 0
+        },
+        "runtimeCoverageStatus": "usable",
+        "runtimeSummaryCounts": {
+          "networkEvents": 139,
+          "thirdPartyRequests": 40,
+          "cookieEvents": 20,
+          "cookiesBeforeConsent": 16,
+          "normalizedVendors": 8,
+          "observedJourneys": 22
+        },
+        "runtimeLimitationKeys": [],
+        "consentInspection": {
+          "outcome": "actionable_surface_observed",
+          "coverageStatus": "complete",
+          "inspectionCompleted": true,
+          "limitationKeys": []
+        },
+        "consentObservationFlags": [
+          {
+            "observationId": "consent_ui_pre_consent",
+            "layerInspected": "first_layer",
+            "likelyPresent": true,
+            "acceptControlObserved": true,
+            "rejectControlObserved": true,
+            "managePreferencesControlObserved": true
+          }
+        ],
+        "policyStatuses": {
+          "fetched": 5,
+          "failed": 1,
+          "observed": 3
+        },
+        "policySurfaceTypes": {
+          "privacy_policy": 5,
+          "your_privacy_choices": 2,
+          "terms": 2
+        },
+        "httpsTransportFlags": [
+          {
+            "pageHttpsObserved": true,
+            "finalScheme": "https"
+          }
+        ],
+        "languageInference": {
+          "status": "not_verified_in_packet",
+          "note": "Locale in a path or sector label is not a verified language observation."
+        },
+        "runtimeGraph": {
+          "status": "not_established_by_this_historical_packet",
+          "note": "Older retained evidence is nomination context, not final deployed graph acceptance."
+        }
+      },
+      "limitations": [
+        "Historical observation only; no current capability or legal conclusion.",
+        "Retained array lengths may be capped and differ from runtime summary totals; neither proves complete capture.",
+        "Consent flags are legacy observations, not a current ConsentControlAssessment v2 or interaction authorization.",
+        "Policy observation count is not usable owned-policy coverage; ownership and linked evidence require human review.",
+        "No-go contradictions, incomplete modules and coverage limitations require review before admission.",
+        "All sources in this nomination set report local region; regional production representativeness is unproven."
+      ],
+      "operationalEvidence": {
+        "canonicalState": "cooldown",
+        "lastCentralContactAt": "2026-08-30T22:01:36.087+00:00",
+        "centralCooldownUntil": "2026-09-27T22:01:36.087+00:00",
+        "lastCentralOutcome": "completed",
+        "centralNoGoReasons": [],
+        "selectionClock": "2026-09-05T05:38:57.567Z",
+        "derivedReviewStatus": "active_cooldown",
+        "latestInspectedLocalBundleContactAt": "2026-07-19T19:26:34.665Z",
+        "localBundleImpliedEarliestContactAt": "2026-08-16T19:26:50.971Z",
+        "decision": "No admission or contact authorization; SO must reconcile history and attest exact target."
+      }
+    },
+    {
+      "id": "P4",
+      "nominationClass": "primary",
+      "exactHttpsUrl": "https://hopkinsmedicine.org/",
+      "normalizedDomain": "hopkinsmedicine.org",
+      "proposedRole": "healthcare",
+      "roleProvenance": "Model-assisted nomination for human review; not canonical baseline approval",
+      "reviewLanes": [
+        "consent_controls",
+        "gdpr_transparency",
+        "transport_evidence",
+        "third_party_attribution",
+        "no_go_resilience",
+        "language_inference"
+      ],
+      "admissionStatus": "pending_luna_and_so_review",
+      "operationalEligibility": "pending_review",
+      "source": {
+        "path": "artifacts/gold-corpus/v2-current/consent-dag-shadow-train-validation/sites/hopkinsmedicine-org/planned_parallel/CanonicalEvidenceBundle.json",
+        "sha256": "7d12c337230cd48e4b61cc943315113bd590e0d3fdf6d9bc02efee641ba86052",
+        "bytes": 151165,
+        "scanId": "scan_1781472709202_hopkinsmedicine.org",
+        "startedAt": "2026-06-14T21:31:49.202Z",
+        "completedAt": "2026-06-14T21:31:53.887Z",
+        "region": "local",
+        "scanProfile": {
+          "profileId": "full",
+          "label": "Full scan placeholder",
+          "targetDurationMs": 90000,
+          "internalBudgetMs": 100000,
+          "enabledModules": [
+            "preConsentRuntimeScanner",
+            "consentFlowRuntimeScanner",
+            "policySurfaceScanner"
+          ]
+        },
+        "scannerVersion": "certscore-scan-core-v2-alpha",
+        "schemaVersion": "certscore.v2.alpha.1",
+        "verification": "Local file bytes read and SHA-256 computed; remote retained pointers not re-fetched or independently verified"
+      },
+      "historicalEvidence": {
+        "moduleStatuses": [
+          {
+            "moduleName": "preConsentRuntimeScanner",
+            "status": "completed"
+          },
+          {
+            "moduleName": "consentFlowRuntimeScanner",
+            "status": "completed"
+          },
+          {
+            "moduleName": "vendorResolver",
+            "status": "completed"
+          },
+          {
+            "moduleName": "policySurfaceScanner",
+            "status": "skipped_budget"
+          }
+        ],
+        "retainedArrayCounts": {
+          "networkEvents": 14,
+          "networkResponseEvents": 14,
+          "cookieEvents": 9,
+          "cookieSnapshots": 2,
+          "storageSnapshots": 1,
+          "scriptEvents": 4,
+          "iframeEvents": 1,
+          "consentUiObservations": 2,
+          "policySurfaceObservations": 0,
+          "transportSecurityObservations": null,
+          "normalizedVendorObservations": 0,
+          "screenshots": 0,
+          "domSnapshots": 2,
+          "consentActionAttempts": 0
+        },
+        "runtimeCoverageStatus": "usable",
+        "runtimeSummaryCounts": {
+          "networkEvents": 14,
+          "thirdPartyRequests": 0,
+          "cookieEvents": 9,
+          "cookiesBeforeConsent": 4,
+          "normalizedVendors": 0,
+          "observedJourneys": 0
+        },
+        "runtimeLimitationKeys": [],
+        "consentInspection": null,
+        "consentObservationFlags": [
+          {
+            "observationId": "consent_ui_pre_consent",
+            "layerInspected": null,
+            "likelyPresent": false,
+            "acceptControlObserved": null,
+            "rejectControlObserved": null,
+            "managePreferencesControlObserved": null
+          },
+          {
+            "observationId": "consent_ui_gpc_enabled",
+            "layerInspected": null,
+            "likelyPresent": false,
+            "acceptControlObserved": null,
+            "rejectControlObserved": null,
+            "managePreferencesControlObserved": null
+          }
+        ],
+        "policyStatuses": {},
+        "policySurfaceTypes": {},
+        "httpsTransportFlags": [],
+        "languageInference": {
+          "status": "not_verified_in_packet",
+          "note": "Locale in a path or sector label is not a verified language observation."
+        },
+        "runtimeGraph": {
+          "status": "not_established_by_this_historical_packet",
+          "note": "Older retained evidence is nomination context, not final deployed graph acceptance."
+        }
+      },
+      "limitations": [
+        "Historical observation only; no current capability or legal conclusion.",
+        "Retained array lengths may be capped and differ from runtime summary totals; neither proves complete capture.",
+        "Consent flags are legacy observations, not a current ConsentControlAssessment v2 or interaction authorization.",
+        "Policy observation count is not usable owned-policy coverage; ownership and linked evidence require human review.",
+        "No-go contradictions, incomplete modules and coverage limitations require review before admission.",
+        "All sources in this nomination set report local region; regional production representativeness is unproven."
+      ],
+      "operationalEvidence": {
+        "canonicalState": "cooldown",
+        "lastCentralContactAt": "2026-08-10T19:23:31.321295+00:00",
+        "centralCooldownUntil": "2026-09-07T19:23:31.321295+00:00",
+        "lastCentralOutcome": "completed",
+        "centralNoGoReasons": [],
+        "selectionClock": "2026-09-05T05:38:57.567Z",
+        "derivedReviewStatus": "active_cooldown",
+        "latestInspectedLocalBundleContactAt": "2026-06-14T21:31:49.202Z",
+        "localBundleImpliedEarliestContactAt": "2026-07-12T21:31:53.887Z",
+        "decision": "No admission or contact authorization; SO must reconcile history and attest exact target."
+      }
+    },
+    {
+      "id": "P5",
+      "nominationClass": "primary",
+      "exactHttpsUrl": "https://bankofamerica.com/",
+      "normalizedDomain": "bankofamerica.com",
+      "proposedRole": "finance",
+      "roleProvenance": "Model-assisted nomination for human review; not canonical baseline approval",
+      "reviewLanes": [
+        "consent_controls",
+        "gdpr_transparency",
+        "transport_evidence",
+        "third_party_attribution",
+        "no_go_resilience",
+        "language_inference"
+      ],
+      "admissionStatus": "pending_luna_and_so_review",
+      "operationalEligibility": "pending_review",
+      "source": {
+        "path": "artifacts/local-v2-dag-scans/7b07b01f-a862-49ef-a189-9cf20214b49f/CanonicalEvidenceBundle.json",
+        "sha256": "83f0573b14dc8580eae4772a528fe7e7bb174d15d26e16513a70dbb166ea7820",
+        "bytes": 587606,
+        "scanId": "scan_1784056351045_bankofamerica.com",
+        "startedAt": "2026-07-14T19:12:31.045Z",
+        "completedAt": "2026-07-14T19:12:41.653Z",
+        "region": "local",
+        "scanProfile": {
+          "profileId": "standard",
+          "label": "Standard runtime and policy scan",
+          "targetDurationMs": 30000,
+          "internalBudgetMs": 35000,
+          "enabledModules": [
+            "preConsentRuntimeScanner",
+            "policySurfaceScanner"
+          ]
+        },
+        "scannerVersion": "certscore-scan-core-v2-alpha",
+        "schemaVersion": "certscore.v2.alpha.1",
+        "verification": "Local file bytes read and SHA-256 computed; remote retained pointers not re-fetched or independently verified"
+      },
+      "historicalEvidence": {
+        "moduleStatuses": [
+          {
+            "moduleName": "preConsentRuntimeScanner",
+            "status": "partial"
+          },
+          {
+            "moduleName": "vendorResolver",
+            "status": "completed"
+          },
+          {
+            "moduleName": "policySurfaceScanner",
+            "status": "completed"
+          }
+        ],
+        "retainedArrayCounts": {
+          "networkEvents": 80,
+          "networkResponseEvents": 60,
+          "cookieEvents": 45,
+          "cookieSnapshots": 1,
+          "storageSnapshots": 1,
+          "scriptEvents": 0,
+          "iframeEvents": 0,
+          "consentUiObservations": 1,
+          "policySurfaceObservations": 9,
+          "transportSecurityObservations": 1,
+          "normalizedVendorObservations": 3,
+          "screenshots": 2,
+          "domSnapshots": 1,
+          "consentActionAttempts": 0
+        },
+        "runtimeCoverageStatus": "limited_partial",
+        "runtimeSummaryCounts": {
+          "networkEvents": 102,
+          "thirdPartyRequests": 77,
+          "cookieEvents": 45,
+          "cookiesBeforeConsent": 0,
+          "normalizedVendors": 3,
+          "observedJourneys": 10
+        },
+        "runtimeLimitationKeys": [
+          "pre_consent_runtime_partial",
+          "cmp_runtime_without_actionable_surface"
+        ],
+        "consentInspection": {
+          "outcome": "non_actionable_surface_observed",
+          "coverageStatus": "limited",
+          "inspectionCompleted": false,
+          "limitationKeys": [
+            "pre_consent_runtime_partial",
+            "cmp_runtime_without_actionable_surface",
+            "consent_surface_inspection_runtime_partial"
+          ]
+        },
+        "consentObservationFlags": [
+          {
+            "observationId": "consent_ui_pre_consent",
+            "layerInspected": "unknown",
+            "likelyPresent": false,
+            "acceptControlObserved": false,
+            "rejectControlObserved": false,
+            "managePreferencesControlObserved": false
+          }
+        ],
+        "policyStatuses": {
+          "failed": 8,
+          "fetched": 1
+        },
+        "policySurfaceTypes": {
+          "cookie_policy": 1,
+          "privacy_policy": 8
+        },
+        "httpsTransportFlags": [
+          {
+            "pageHttpsObserved": true,
+            "finalScheme": "https"
+          }
+        ],
+        "languageInference": {
+          "status": "not_verified_in_packet",
+          "note": "Locale in a path or sector label is not a verified language observation."
+        },
+        "runtimeGraph": {
+          "status": "not_established_by_this_historical_packet",
+          "note": "Older retained evidence is nomination context, not final deployed graph acceptance."
+        }
+      },
+      "limitations": [
+        "Historical observation only; no current capability or legal conclusion.",
+        "Retained array lengths may be capped and differ from runtime summary totals; neither proves complete capture.",
+        "Consent flags are legacy observations, not a current ConsentControlAssessment v2 or interaction authorization.",
+        "Policy observation count is not usable owned-policy coverage; ownership and linked evidence require human review.",
+        "No-go contradictions, incomplete modules and coverage limitations require review before admission.",
+        "All sources in this nomination set report local region; regional production representativeness is unproven."
+      ],
+      "operationalEvidence": {
+        "canonicalState": "cooldown",
+        "lastCentralContactAt": "2026-07-17T16:10:17.192689+00:00",
+        "centralCooldownUntil": "2026-08-14T16:10:17.192689+00:00",
+        "lastCentralOutcome": "completed",
+        "centralNoGoReasons": [],
+        "selectionClock": "2026-09-05T05:38:57.567Z",
+        "derivedReviewStatus": "central_cooldown_elapsed_not_authorized",
+        "latestInspectedLocalBundleContactAt": "2026-07-14T19:12:31.045Z",
+        "localBundleImpliedEarliestContactAt": "2026-08-11T19:12:41.653Z",
+        "decision": "No admission or contact authorization; SO must reconcile history and attest exact target."
+      }
+    },
+    {
+      "id": "P6",
+      "nominationClass": "primary",
+      "exactHttpsUrl": "https://digital.gov/",
+      "normalizedDomain": "digital.gov",
+      "proposedRole": "government",
+      "roleProvenance": "Model-assisted nomination for human review; not canonical baseline approval",
+      "reviewLanes": [
+        "consent_controls",
+        "gdpr_transparency",
+        "transport_evidence",
+        "third_party_attribution",
+        "no_go_resilience",
+        "language_inference"
+      ],
+      "admissionStatus": "pending_luna_and_so_review",
+      "operationalEligibility": "pending_review",
+      "source": {
+        "path": "artifacts/gold-corpus/v2-current/consent-dag-shadow-train-validation/sites/digital-gov/planned_parallel/CanonicalEvidenceBundle.json",
+        "sha256": "9c5d41a6c13c22ea701bb3d4b53c0a5fdf96be3e7ec999cf106c44ddbb32bf42",
+        "bytes": 789545,
+        "scanId": "scan_1781472551146_digital.gov",
+        "startedAt": "2026-06-14T21:29:11.146Z",
+        "completedAt": "2026-06-14T21:29:14.414Z",
+        "region": "local",
+        "scanProfile": {
+          "profileId": "full",
+          "label": "Full scan placeholder",
+          "targetDurationMs": 90000,
+          "internalBudgetMs": 100000,
+          "enabledModules": [
+            "preConsentRuntimeScanner",
+            "consentFlowRuntimeScanner",
+            "policySurfaceScanner"
+          ]
+        },
+        "scannerVersion": "certscore-scan-core-v2-alpha",
+        "schemaVersion": "certscore.v2.alpha.1",
+        "verification": "Local file bytes read and SHA-256 computed; remote retained pointers not re-fetched or independently verified"
+      },
+      "historicalEvidence": {
+        "moduleStatuses": [
+          {
+            "moduleName": "preConsentRuntimeScanner",
+            "status": "completed"
+          },
+          {
+            "moduleName": "consentFlowRuntimeScanner",
+            "status": "completed"
+          },
+          {
+            "moduleName": "vendorResolver",
+            "status": "completed"
+          },
+          {
+            "moduleName": "policySurfaceScanner",
+            "status": "completed"
+          }
+        ],
+        "retainedArrayCounts": {
+          "networkEvents": 70,
+          "networkResponseEvents": 69,
+          "cookieEvents": 10,
+          "cookieSnapshots": 2,
+          "storageSnapshots": 1,
+          "scriptEvents": 13,
+          "iframeEvents": 0,
+          "consentUiObservations": 2,
+          "policySurfaceObservations": 1,
+          "transportSecurityObservations": null,
+          "normalizedVendorObservations": 2,
+          "screenshots": 0,
+          "domSnapshots": 2,
+          "consentActionAttempts": 0
+        },
+        "runtimeCoverageStatus": "usable",
+        "runtimeSummaryCounts": {
+          "networkEvents": 70,
+          "thirdPartyRequests": 22,
+          "cookieEvents": 10,
+          "cookiesBeforeConsent": 10,
+          "normalizedVendors": 2,
+          "observedJourneys": 18
+        },
+        "runtimeLimitationKeys": [],
+        "consentInspection": null,
+        "consentObservationFlags": [
+          {
+            "observationId": "consent_ui_pre_consent",
+            "layerInspected": null,
+            "likelyPresent": false,
+            "acceptControlObserved": null,
+            "rejectControlObserved": null,
+            "managePreferencesControlObserved": null
+          },
+          {
+            "observationId": "consent_ui_gpc_enabled",
+            "layerInspected": null,
+            "likelyPresent": false,
+            "acceptControlObserved": null,
+            "rejectControlObserved": null,
+            "managePreferencesControlObserved": null
+          }
+        ],
+        "policyStatuses": {
+          "fetched": 1
+        },
+        "policySurfaceTypes": {
+          "privacy_policy": 1
+        },
+        "httpsTransportFlags": [],
+        "languageInference": {
+          "status": "not_verified_in_packet",
+          "note": "Locale in a path or sector label is not a verified language observation."
+        },
+        "runtimeGraph": {
+          "status": "not_established_by_this_historical_packet",
+          "note": "Older retained evidence is nomination context, not final deployed graph acceptance."
+        }
+      },
+      "limitations": [
+        "Historical observation only; no current capability or legal conclusion.",
+        "Retained array lengths may be capped and differ from runtime summary totals; neither proves complete capture.",
+        "Consent flags are legacy observations, not a current ConsentControlAssessment v2 or interaction authorization.",
+        "Policy observation count is not usable owned-policy coverage; ownership and linked evidence require human review.",
+        "No-go contradictions, incomplete modules and coverage limitations require review before admission.",
+        "All sources in this nomination set report local region; regional production representativeness is unproven."
+      ],
+      "operationalEvidence": {
+        "canonicalState": null,
+        "lastCentralContactAt": null,
+        "centralCooldownUntil": null,
+        "lastCentralOutcome": null,
+        "centralNoGoReasons": null,
+        "selectionClock": "2026-09-05T05:38:57.567Z",
+        "derivedReviewStatus": "central_record_missing_despite_known_local_contact",
+        "latestInspectedLocalBundleContactAt": "2026-06-14T21:29:11.146Z",
+        "localBundleImpliedEarliestContactAt": "2026-07-12T21:29:14.414Z",
+        "decision": "No admission or contact authorization; SO must reconcile history and attest exact target."
+      }
+    },
+    {
+      "id": "P7",
+      "nominationClass": "primary",
+      "exactHttpsUrl": "https://www.lemonde.fr",
+      "normalizedDomain": "lemonde.fr",
+      "proposedRole": "publisher_global",
+      "roleProvenance": "Model-assisted nomination for human review; not canonical baseline approval",
+      "reviewLanes": [
+        "consent_controls",
+        "gdpr_transparency",
+        "transport_evidence",
+        "third_party_attribution",
+        "no_go_resilience",
+        "language_inference"
+      ],
+      "admissionStatus": "pending_luna_and_so_review",
+      "operationalEligibility": "pending_review",
+      "source": {
+        "path": "artifacts/multilingual-live-pilot-20260710/localized/fr/fr-lemonde/CanonicalEvidenceBundle.json",
+        "sha256": "d2d9e0fdd783fdb1075d7cb6d645b08ab7c793d28959e397a83436ab0018a467",
+        "bytes": 614670,
+        "scanId": "scan_1783708990127_www.lemonde.fr",
+        "startedAt": "2026-07-10T18:43:10.127Z",
+        "completedAt": "2026-07-10T18:43:41.143Z",
+        "region": "local",
+        "scanProfile": {
+          "profileId": "standard",
+          "label": "Standard runtime and policy scan",
+          "targetDurationMs": 30000,
+          "internalBudgetMs": 35000,
+          "enabledModules": [
+            "preConsentRuntimeScanner",
+            "policySurfaceScanner"
+          ]
+        },
+        "scannerVersion": "certscore-scan-core-v2-alpha",
+        "schemaVersion": "certscore.v2.alpha.1",
+        "verification": "Local file bytes read and SHA-256 computed; remote retained pointers not re-fetched or independently verified"
+      },
+      "historicalEvidence": {
+        "moduleStatuses": [
+          {
+            "moduleName": "preConsentRuntimeScanner",
+            "status": "completed"
+          },
+          {
+            "moduleName": "vendorResolver",
+            "status": "completed"
+          },
+          {
+            "moduleName": "policySurfaceScanner",
+            "status": "completed"
+          }
+        ],
+        "retainedArrayCounts": {
+          "networkEvents": 56,
+          "networkResponseEvents": 56,
+          "cookieEvents": 14,
+          "cookieSnapshots": 1,
+          "storageSnapshots": 1,
+          "scriptEvents": 25,
+          "iframeEvents": 2,
+          "consentUiObservations": 1,
+          "policySurfaceObservations": 13,
+          "transportSecurityObservations": 1,
+          "normalizedVendorObservations": 3,
+          "screenshots": 2,
+          "domSnapshots": 1,
+          "consentActionAttempts": 0
+        },
+        "runtimeCoverageStatus": "usable",
+        "runtimeSummaryCounts": {
+          "networkEvents": 56,
+          "thirdPartyRequests": 30,
+          "cookieEvents": 14,
+          "cookiesBeforeConsent": 8,
+          "normalizedVendors": 3,
+          "observedJourneys": 10
+        },
+        "runtimeLimitationKeys": [],
+        "consentInspection": null,
+        "consentObservationFlags": [
+          {
+            "observationId": "consent_ui_pre_consent",
+            "layerInspected": "first_layer",
+            "likelyPresent": true,
+            "acceptControlObserved": true,
+            "rejectControlObserved": false,
+            "managePreferencesControlObserved": false
+          }
+        ],
+        "policyStatuses": {
+          "fetched": 11,
+          "observed": 2
+        },
+        "policySurfaceTypes": {
+          "privacy_policy": 5,
+          "cookie_settings": 2,
+          "terms": 3,
+          "ai_disclosure": 2,
+          "cookie_policy": 1
+        },
+        "httpsTransportFlags": [
+          {
+            "pageHttpsObserved": true,
+            "finalScheme": "https"
+          }
+        ],
+        "languageInference": {
+          "status": "not_verified_in_packet",
+          "note": "Locale in a path or sector label is not a verified language observation."
+        },
+        "runtimeGraph": {
+          "status": "not_established_by_this_historical_packet",
+          "note": "Older retained evidence is nomination context, not final deployed graph acceptance."
+        }
+      },
+      "limitations": [
+        "Historical observation only; no current capability or legal conclusion.",
+        "Retained array lengths may be capped and differ from runtime summary totals; neither proves complete capture.",
+        "Consent flags are legacy observations, not a current ConsentControlAssessment v2 or interaction authorization.",
+        "Policy observation count is not usable owned-policy coverage; ownership and linked evidence require human review.",
+        "No-go contradictions, incomplete modules and coverage limitations require review before admission.",
+        "All sources in this nomination set report local region; regional production representativeness is unproven."
+      ],
+      "operationalEvidence": {
+        "canonicalState": "cooldown",
+        "lastCentralContactAt": "2026-08-29T03:30:39.487678+00:00",
+        "centralCooldownUntil": "2026-09-26T03:30:39.487678+00:00",
+        "lastCentralOutcome": "completed",
+        "centralNoGoReasons": [],
+        "selectionClock": "2026-09-05T05:38:57.567Z",
+        "derivedReviewStatus": "active_cooldown",
+        "latestInspectedLocalBundleContactAt": "2026-07-10T18:43:10.127Z",
+        "localBundleImpliedEarliestContactAt": "2026-08-07T18:43:41.143Z",
+        "decision": "No admission or contact authorization; SO must reconcile history and attest exact target."
+      }
+    },
+    {
+      "id": "P8",
+      "nominationClass": "primary",
+      "exactHttpsUrl": "https://w3.org/",
+      "normalizedDomain": "w3.org",
+      "proposedRole": "nonprofit_standards",
+      "roleProvenance": "Model-assisted nomination for human review; not canonical baseline approval",
+      "reviewLanes": [
+        "consent_controls",
+        "gdpr_transparency",
+        "transport_evidence",
+        "third_party_attribution",
+        "no_go_resilience",
+        "language_inference"
+      ],
+      "admissionStatus": "pending_luna_and_so_review",
+      "operationalEligibility": "pending_review",
+      "source": {
+        "path": "artifacts/local-v2-dag-scans/70b30d67-212e-4327-9ae6-04c59b625cbf/CanonicalEvidenceBundle.json",
+        "sha256": "78213c823bf45ca634c553949dee5a14254897e10a3e431c07870078961b8ac5",
+        "bytes": 241505,
+        "scanId": "scan_1785616328941_w3.org",
+        "startedAt": "2026-08-01T20:32:08.941Z",
+        "completedAt": "2026-08-01T20:32:19.873Z",
+        "region": "local",
+        "scanProfile": {
+          "profileId": "standard",
+          "label": "Standard runtime and policy scan",
+          "targetDurationMs": 30000,
+          "internalBudgetMs": 35000,
+          "enabledModules": [
+            "preConsentRuntimeScanner",
+            "policySurfaceScanner"
+          ]
+        },
+        "scannerVersion": "certscore-scan-core-v2-alpha",
+        "schemaVersion": "certscore.v2.alpha.1",
+        "verification": "Local file bytes read and SHA-256 computed; remote retained pointers not re-fetched or independently verified"
+      },
+      "historicalEvidence": {
+        "moduleStatuses": [
+          {
+            "moduleName": "preConsentRuntimeScanner",
+            "status": "completed"
+          },
+          {
+            "moduleName": "vendorResolver",
+            "status": "completed"
+          },
+          {
+            "moduleName": "policySurfaceScanner",
+            "status": "completed"
+          }
+        ],
+        "retainedArrayCounts": {
+          "networkEvents": 28,
+          "networkResponseEvents": 28,
+          "cookieEvents": 2,
+          "cookieSnapshots": 1,
+          "storageSnapshots": 1,
+          "scriptEvents": 6,
+          "iframeEvents": 0,
+          "consentUiObservations": 1,
+          "policySurfaceObservations": 10,
+          "transportSecurityObservations": 1,
+          "normalizedVendorObservations": 1,
+          "screenshots": 3,
+          "domSnapshots": 1,
+          "consentActionAttempts": 0
+        },
+        "runtimeCoverageStatus": "usable",
+        "runtimeSummaryCounts": {
+          "networkEvents": 28,
+          "thirdPartyRequests": 0,
+          "cookieEvents": 2,
+          "cookiesBeforeConsent": 1,
+          "normalizedVendors": 1,
+          "observedJourneys": 3
+        },
+        "runtimeLimitationKeys": [],
+        "consentInspection": {
+          "outcome": "no_surface_observed_complete_coverage",
+          "coverageStatus": "complete",
+          "inspectionCompleted": true,
+          "limitationKeys": []
+        },
+        "consentObservationFlags": [
+          {
+            "observationId": "consent_ui_pre_consent",
+            "layerInspected": "unknown",
+            "likelyPresent": false,
+            "acceptControlObserved": false,
+            "rejectControlObserved": false,
+            "managePreferencesControlObserved": false
+          }
+        ],
+        "policyStatuses": {
+          "fetched": 3,
+          "observed": 7
+        },
+        "policySurfaceTypes": {
+          "privacy_policy": 8,
+          "accessibility_statement": 2
+        },
+        "httpsTransportFlags": [
+          {
+            "pageHttpsObserved": true,
+            "finalScheme": "https"
+          }
+        ],
+        "languageInference": {
+          "status": "not_verified_in_packet",
+          "note": "Locale in a path or sector label is not a verified language observation."
+        },
+        "runtimeGraph": {
+          "status": "not_established_by_this_historical_packet",
+          "note": "Older retained evidence is nomination context, not final deployed graph acceptance."
+        }
+      },
+      "limitations": [
+        "Historical observation only; no current capability or legal conclusion.",
+        "Retained array lengths may be capped and differ from runtime summary totals; neither proves complete capture.",
+        "Consent flags are legacy observations, not a current ConsentControlAssessment v2 or interaction authorization.",
+        "Policy observation count is not usable owned-policy coverage; ownership and linked evidence require human review.",
+        "No-go contradictions, incomplete modules and coverage limitations require review before admission.",
+        "All sources in this nomination set report local region; regional production representativeness is unproven."
+      ],
+      "operationalEvidence": {
+        "canonicalState": "cooldown",
+        "lastCentralContactAt": "2026-08-29T00:54:42.575344+00:00",
+        "centralCooldownUntil": "2026-09-26T00:54:42.575344+00:00",
+        "lastCentralOutcome": "completed",
+        "centralNoGoReasons": [],
+        "selectionClock": "2026-09-05T05:38:57.567Z",
+        "derivedReviewStatus": "active_cooldown",
+        "latestInspectedLocalBundleContactAt": "2026-08-01T20:32:08.941Z",
+        "localBundleImpliedEarliestContactAt": "2026-08-29T20:32:19.873Z",
+        "decision": "No admission or contact authorization; SO must reconcile history and attest exact target."
+      }
+    },
+    {
+      "id": "P9",
+      "nominationClass": "primary",
+      "exactHttpsUrl": "https://duckduckgo.com/",
+      "normalizedDomain": "duckduckgo.com",
+      "proposedRole": "headless_or_control",
+      "roleProvenance": "Model-assisted nomination for human review; not canonical baseline approval",
+      "reviewLanes": [
+        "consent_controls",
+        "gdpr_transparency",
+        "transport_evidence",
+        "third_party_attribution",
+        "no_go_resilience",
+        "language_inference"
+      ],
+      "admissionStatus": "pending_luna_and_so_review",
+      "operationalEligibility": "pending_review",
+      "source": {
+        "path": "artifacts/local-v2-dag-scans/0e31f70b-9b26-4913-b196-1e352e0044cd/CanonicalEvidenceBundle.json",
+        "sha256": "89e094ed5ee547abc05c8f40dcbd3bb8c22d2adfd1032bfe8b024cff0b4f0217",
+        "bytes": 563544,
+        "scanId": "scan_1783657529682_duckduckgo.com",
+        "startedAt": "2026-07-10T04:25:29.682Z",
+        "completedAt": "2026-07-10T04:25:39.893Z",
+        "region": "local",
+        "scanProfile": {
+          "profileId": "standard",
+          "label": "Standard runtime and policy scan",
+          "targetDurationMs": 30000,
+          "internalBudgetMs": 35000,
+          "enabledModules": [
+            "preConsentRuntimeScanner",
+            "policySurfaceScanner"
+          ]
+        },
+        "scannerVersion": "certscore-scan-core-v2-alpha",
+        "schemaVersion": "certscore.v2.alpha.1",
+        "verification": "Local file bytes read and SHA-256 computed; remote retained pointers not re-fetched or independently verified"
+      },
+      "historicalEvidence": {
+        "moduleStatuses": [
+          {
+            "moduleName": "preConsentRuntimeScanner",
+            "status": "partial"
+          },
+          {
+            "moduleName": "vendorResolver",
+            "status": "completed"
+          },
+          {
+            "moduleName": "policySurfaceScanner",
+            "status": "completed"
+          }
+        ],
+        "retainedArrayCounts": {
+          "networkEvents": 80,
+          "networkResponseEvents": 60,
+          "cookieEvents": 0,
+          "cookieSnapshots": 1,
+          "storageSnapshots": 1,
+          "scriptEvents": 40,
+          "iframeEvents": 0,
+          "consentUiObservations": 1,
+          "policySurfaceObservations": 6,
+          "transportSecurityObservations": 1,
+          "normalizedVendorObservations": 0,
+          "screenshots": 1,
+          "domSnapshots": 1,
+          "consentActionAttempts": 0
+        },
+        "runtimeCoverageStatus": "limited_partial",
+        "runtimeSummaryCounts": {
+          "networkEvents": 92,
+          "thirdPartyRequests": 0,
+          "cookieEvents": 0,
+          "cookiesBeforeConsent": 0,
+          "normalizedVendors": 0,
+          "observedJourneys": 0
+        },
+        "runtimeLimitationKeys": [
+          "pre_consent_runtime_partial"
+        ],
+        "consentInspection": null,
+        "consentObservationFlags": [
+          {
+            "observationId": "consent_ui_pre_consent",
+            "layerInspected": "first_layer",
+            "likelyPresent": true,
+            "acceptControlObserved": false,
+            "rejectControlObserved": false,
+            "managePreferencesControlObserved": true
+          }
+        ],
+        "policyStatuses": {
+          "fetched": 6
+        },
+        "policySurfaceTypes": {
+          "privacy_policy": 5,
+          "terms": 1
+        },
+        "httpsTransportFlags": [
+          {
+            "pageHttpsObserved": true,
+            "finalScheme": "https"
+          }
+        ],
+        "languageInference": {
+          "status": "not_verified_in_packet",
+          "note": "Locale in a path or sector label is not a verified language observation."
+        },
+        "runtimeGraph": {
+          "status": "not_established_by_this_historical_packet",
+          "note": "Older retained evidence is nomination context, not final deployed graph acceptance."
+        }
+      },
+      "limitations": [
+        "Historical observation only; no current capability or legal conclusion.",
+        "Retained array lengths may be capped and differ from runtime summary totals; neither proves complete capture.",
+        "Consent flags are legacy observations, not a current ConsentControlAssessment v2 or interaction authorization.",
+        "Policy observation count is not usable owned-policy coverage; ownership and linked evidence require human review.",
+        "No-go contradictions, incomplete modules and coverage limitations require review before admission.",
+        "All sources in this nomination set report local region; regional production representativeness is unproven."
+      ],
+      "operationalEvidence": {
+        "canonicalState": "cooldown",
+        "lastCentralContactAt": "2026-07-18T19:28:04.044197+00:00",
+        "centralCooldownUntil": "2026-08-15T19:28:04.044197+00:00",
+        "lastCentralOutcome": "completed",
+        "centralNoGoReasons": [],
+        "selectionClock": "2026-09-05T05:38:57.567Z",
+        "derivedReviewStatus": "central_cooldown_elapsed_not_authorized",
+        "latestInspectedLocalBundleContactAt": "2026-07-10T04:25:29.682Z",
+        "localBundleImpliedEarliestContactAt": "2026-08-07T04:25:39.893Z",
+        "decision": "No admission or contact authorization; SO must reconcile history and attest exact target."
+      }
+    },
+    {
+      "id": "P10",
+      "nominationClass": "primary",
+      "exactHttpsUrl": "https://www.wikipedia.org/",
+      "normalizedDomain": "wikipedia.org",
+      "proposedRole": "nonprofit_reference",
+      "roleProvenance": "Model-assisted nomination for human review; not canonical baseline approval",
+      "reviewLanes": [
+        "consent_controls",
+        "gdpr_transparency",
+        "transport_evidence",
+        "third_party_attribution",
+        "no_go_resilience",
+        "language_inference"
+      ],
+      "admissionStatus": "pending_luna_and_so_review",
+      "operationalEligibility": "pending_review",
+      "source": {
+        "path": "artifacts/transport-security-cohort/transport-wikipedia-20260628/CanonicalEvidenceBundle.json",
+        "sha256": "01f9848dadfb7acf63b3348b8ba686a11187b9b0f97270d64ba098764cf21cb1",
+        "bytes": 62458,
+        "scanId": "scan_1782687336953_www.wikipedia.org",
+        "startedAt": "2026-06-28T22:55:36.953Z",
+        "completedAt": "2026-06-28T22:55:39.445Z",
+        "region": "local",
+        "scanProfile": {
+          "profileId": "tiny",
+          "label": "Tiny pre-consent runtime scan",
+          "targetDurationMs": 12000,
+          "internalBudgetMs": 15000,
+          "enabledModules": [
+            "preConsentRuntimeScanner"
+          ]
+        },
+        "scannerVersion": "certscore-scan-core-v2-alpha",
+        "schemaVersion": "certscore.v2.alpha.1",
+        "verification": "Local file bytes read and SHA-256 computed; remote retained pointers not re-fetched or independently verified"
+      },
+      "historicalEvidence": {
+        "moduleStatuses": [
+          {
+            "moduleName": "preConsentRuntimeScanner",
+            "status": "completed"
+          },
+          {
+            "moduleName": "vendorResolver",
+            "status": "completed"
+          }
+        ],
+        "retainedArrayCounts": {
+          "networkEvents": 5,
+          "networkResponseEvents": 5,
+          "cookieEvents": 12,
+          "cookieSnapshots": 1,
+          "storageSnapshots": 1,
+          "scriptEvents": 4,
+          "iframeEvents": 0,
+          "consentUiObservations": 1,
+          "policySurfaceObservations": 0,
+          "transportSecurityObservations": 1,
+          "normalizedVendorObservations": 0,
+          "screenshots": 2,
+          "domSnapshots": 1,
+          "consentActionAttempts": 0
+        },
+        "runtimeCoverageStatus": "usable",
+        "runtimeSummaryCounts": {
+          "networkEvents": 5,
+          "thirdPartyRequests": 0,
+          "cookieEvents": 12,
+          "cookiesBeforeConsent": 5,
+          "normalizedVendors": 0,
+          "observedJourneys": 0
+        },
+        "runtimeLimitationKeys": [],
+        "consentInspection": null,
+        "consentObservationFlags": [
+          {
+            "observationId": "consent_ui_pre_consent",
+            "layerInspected": "unknown",
+            "likelyPresent": false,
+            "acceptControlObserved": false,
+            "rejectControlObserved": false,
+            "managePreferencesControlObserved": false
+          }
+        ],
+        "policyStatuses": {},
+        "policySurfaceTypes": {},
+        "httpsTransportFlags": [
+          {
+            "pageHttpsObserved": true,
+            "finalScheme": "https"
+          }
+        ],
+        "languageInference": {
+          "status": "not_verified_in_packet",
+          "note": "Locale in a path or sector label is not a verified language observation."
+        },
+        "runtimeGraph": {
+          "status": "not_established_by_this_historical_packet",
+          "note": "Older retained evidence is nomination context, not final deployed graph acceptance."
+        }
+      },
+      "limitations": [
+        "Historical observation only; no current capability or legal conclusion.",
+        "Retained array lengths may be capped and differ from runtime summary totals; neither proves complete capture.",
+        "Consent flags are legacy observations, not a current ConsentControlAssessment v2 or interaction authorization.",
+        "Policy observation count is not usable owned-policy coverage; ownership and linked evidence require human review.",
+        "No-go contradictions, incomplete modules and coverage limitations require review before admission.",
+        "All sources in this nomination set report local region; regional production representativeness is unproven."
+      ],
+      "operationalEvidence": {
+        "canonicalState": "cooldown",
+        "lastCentralContactAt": "2026-08-30T17:02:16.272919+00:00",
+        "centralCooldownUntil": "2026-09-27T17:02:16.272919+00:00",
+        "lastCentralOutcome": "completed",
+        "centralNoGoReasons": [],
+        "selectionClock": "2026-09-05T05:38:57.567Z",
+        "derivedReviewStatus": "active_cooldown",
+        "latestInspectedLocalBundleContactAt": "2026-06-28T22:55:36.953Z",
+        "localBundleImpliedEarliestContactAt": "2026-07-26T22:55:39.445Z",
+        "decision": "No admission or contact authorization; SO must reconcile history and attest exact target."
+      }
+    },
+    {
+      "id": "R1",
+      "nominationClass": "review_only_reserve",
+      "exactHttpsUrl": "https://clevelandclinic.org/",
+      "normalizedDomain": "clevelandclinic.org",
+      "proposedRole": "healthcare",
+      "roleProvenance": "Model-assisted nomination for human review; not canonical baseline approval",
+      "reviewLanes": [
+        "consent_controls",
+        "gdpr_transparency",
+        "transport_evidence",
+        "third_party_attribution",
+        "no_go_resilience",
+        "language_inference"
+      ],
+      "admissionStatus": "pending_luna_and_so_review",
+      "operationalEligibility": "pending_review",
+      "source": {
+        "path": "artifacts/gold-corpus/v2-current/consent-dag-shadow-train-validation/sites/clevelandclinic-org/planned_parallel/CanonicalEvidenceBundle.json",
+        "sha256": "7d44a7b8940cdccbaadb6663303324a15c0c7b2a2287428cd17c43e3a2bf1f70",
+        "bytes": 1204748,
+        "scanId": "scan_1781472492557_clevelandclinic.org",
+        "startedAt": "2026-06-14T21:28:12.557Z",
+        "completedAt": "2026-06-14T21:28:18.871Z",
+        "region": "local",
+        "scanProfile": {
+          "profileId": "full",
+          "label": "Full scan placeholder",
+          "targetDurationMs": 90000,
+          "internalBudgetMs": 100000,
+          "enabledModules": [
+            "preConsentRuntimeScanner",
+            "consentFlowRuntimeScanner",
+            "policySurfaceScanner"
+          ]
+        },
+        "scannerVersion": "certscore-scan-core-v2-alpha",
+        "schemaVersion": "certscore.v2.alpha.1",
+        "verification": "Local file bytes read and SHA-256 computed; remote retained pointers not re-fetched or independently verified"
+      },
+      "historicalEvidence": {
+        "moduleStatuses": [
+          {
+            "moduleName": "preConsentRuntimeScanner",
+            "status": "completed"
+          },
+          {
+            "moduleName": "consentFlowRuntimeScanner",
+            "status": "completed"
+          },
+          {
+            "moduleName": "vendorResolver",
+            "status": "completed"
+          },
+          {
+            "moduleName": "policySurfaceScanner",
+            "status": "completed"
+          }
+        ],
+        "retainedArrayCounts": {
+          "networkEvents": 140,
+          "networkResponseEvents": 138,
+          "cookieEvents": 57,
+          "cookieSnapshots": 2,
+          "storageSnapshots": 1,
+          "scriptEvents": 30,
+          "iframeEvents": 3,
+          "consentUiObservations": 2,
+          "policySurfaceObservations": 3,
+          "transportSecurityObservations": null,
+          "normalizedVendorObservations": 5,
+          "screenshots": 0,
+          "domSnapshots": 2,
+          "consentActionAttempts": 0
+        },
+        "runtimeCoverageStatus": "usable",
+        "runtimeSummaryCounts": {
+          "networkEvents": 140,
+          "thirdPartyRequests": 59,
+          "cookieEvents": 57,
+          "cookiesBeforeConsent": 42,
+          "normalizedVendors": 5,
+          "observedJourneys": 21
+        },
+        "runtimeLimitationKeys": [],
+        "consentInspection": null,
+        "consentObservationFlags": [
+          {
+            "observationId": "consent_ui_pre_consent",
+            "layerInspected": null,
+            "likelyPresent": false,
+            "acceptControlObserved": null,
+            "rejectControlObserved": null,
+            "managePreferencesControlObserved": null
+          },
+          {
+            "observationId": "consent_ui_gpc_enabled",
+            "layerInspected": null,
+            "likelyPresent": false,
+            "acceptControlObserved": null,
+            "rejectControlObserved": null,
+            "managePreferencesControlObserved": null
+          }
+        ],
+        "policyStatuses": {
+          "failed": 3
+        },
+        "policySurfaceTypes": {
+          "privacy_policy": 2,
+          "terms": 1
+        },
+        "httpsTransportFlags": [],
+        "languageInference": {
+          "status": "not_verified_in_packet",
+          "note": "Locale in a path or sector label is not a verified language observation."
+        },
+        "runtimeGraph": {
+          "status": "not_established_by_this_historical_packet",
+          "note": "Older retained evidence is nomination context, not final deployed graph acceptance."
+        }
+      },
+      "limitations": [
+        "Historical observation only; no current capability or legal conclusion.",
+        "Retained array lengths may be capped and differ from runtime summary totals; neither proves complete capture.",
+        "Consent flags are legacy observations, not a current ConsentControlAssessment v2 or interaction authorization.",
+        "Policy observation count is not usable owned-policy coverage; ownership and linked evidence require human review.",
+        "No-go contradictions, incomplete modules and coverage limitations require review before admission.",
+        "All sources in this nomination set report local region; regional production representativeness is unproven."
+      ],
+      "operationalEvidence": {
+        "canonicalState": "cooldown",
+        "lastCentralContactAt": "2026-08-16T00:50:21.722307+00:00",
+        "centralCooldownUntil": "2026-09-13T00:50:21.722307+00:00",
+        "lastCentralOutcome": "completed",
+        "centralNoGoReasons": [],
+        "selectionClock": "2026-09-05T05:38:57.567Z",
+        "derivedReviewStatus": "active_cooldown",
+        "latestInspectedLocalBundleContactAt": "2026-06-14T21:28:12.557Z",
+        "localBundleImpliedEarliestContactAt": "2026-07-12T21:28:18.871Z",
+        "decision": "No admission or contact authorization; SO must reconcile history and attest exact target."
+      }
+    },
+    {
+      "id": "R2",
+      "nominationClass": "review_only_reserve",
+      "exactHttpsUrl": "https://eff.org/",
+      "normalizedDomain": "eff.org",
+      "proposedRole": "nonprofit_advocacy",
+      "roleProvenance": "Model-assisted nomination for human review; not canonical baseline approval",
+      "reviewLanes": [
+        "consent_controls",
+        "gdpr_transparency",
+        "transport_evidence",
+        "third_party_attribution",
+        "no_go_resilience",
+        "language_inference"
+      ],
+      "admissionStatus": "pending_luna_and_so_review",
+      "operationalEligibility": "pending_review",
+      "source": {
+        "path": "artifacts/gold-corpus/v2-current/consent-dag-shadow-train-validation/sites/eff-org/planned_parallel/CanonicalEvidenceBundle.json",
+        "sha256": "24ba195af302776531d29f74ca8e9da7a0445eb73b83cbb85d49a8f2ae6fd88c",
+        "bytes": 632342,
+        "scanId": "scan_1781472584727_eff.org",
+        "startedAt": "2026-06-14T21:29:44.727Z",
+        "completedAt": "2026-06-14T21:29:47.770Z",
+        "region": "local",
+        "scanProfile": {
+          "profileId": "full",
+          "label": "Full scan placeholder",
+          "targetDurationMs": 90000,
+          "internalBudgetMs": 100000,
+          "enabledModules": [
+            "preConsentRuntimeScanner",
+            "consentFlowRuntimeScanner",
+            "policySurfaceScanner"
+          ]
+        },
+        "scannerVersion": "certscore-scan-core-v2-alpha",
+        "schemaVersion": "certscore.v2.alpha.1",
+        "verification": "Local file bytes read and SHA-256 computed; remote retained pointers not re-fetched or independently verified"
+      },
+      "historicalEvidence": {
+        "moduleStatuses": [
+          {
+            "moduleName": "preConsentRuntimeScanner",
+            "status": "completed"
+          },
+          {
+            "moduleName": "consentFlowRuntimeScanner",
+            "status": "completed"
+          },
+          {
+            "moduleName": "vendorResolver",
+            "status": "completed"
+          },
+          {
+            "moduleName": "policySurfaceScanner",
+            "status": "completed"
+          }
+        ],
+        "retainedArrayCounts": {
+          "networkEvents": 98,
+          "networkResponseEvents": 98,
+          "cookieEvents": 0,
+          "cookieSnapshots": 2,
+          "storageSnapshots": 1,
+          "scriptEvents": 8,
+          "iframeEvents": 0,
+          "consentUiObservations": 2,
+          "policySurfaceObservations": 4,
+          "transportSecurityObservations": null,
+          "normalizedVendorObservations": 0,
+          "screenshots": 0,
+          "domSnapshots": 2,
+          "consentActionAttempts": 0
+        },
+        "runtimeCoverageStatus": "usable",
+        "runtimeSummaryCounts": {
+          "networkEvents": 98,
+          "thirdPartyRequests": 0,
+          "cookieEvents": 0,
+          "cookiesBeforeConsent": 0,
+          "normalizedVendors": 0,
+          "observedJourneys": 0
+        },
+        "runtimeLimitationKeys": [],
+        "consentInspection": null,
+        "consentObservationFlags": [
+          {
+            "observationId": "consent_ui_pre_consent",
+            "layerInspected": null,
+            "likelyPresent": false,
+            "acceptControlObserved": null,
+            "rejectControlObserved": null,
+            "managePreferencesControlObserved": null
+          },
+          {
+            "observationId": "consent_ui_gpc_enabled",
+            "layerInspected": null,
+            "likelyPresent": false,
+            "acceptControlObserved": null,
+            "rejectControlObserved": null,
+            "managePreferencesControlObserved": null
+          }
+        ],
+        "policyStatuses": {
+          "fetched": 4
+        },
+        "policySurfaceTypes": {
+          "privacy_policy": 4
+        },
+        "httpsTransportFlags": [],
+        "languageInference": {
+          "status": "not_verified_in_packet",
+          "note": "Locale in a path or sector label is not a verified language observation."
+        },
+        "runtimeGraph": {
+          "status": "not_established_by_this_historical_packet",
+          "note": "Older retained evidence is nomination context, not final deployed graph acceptance."
+        }
+      },
+      "limitations": [
+        "Historical observation only; no current capability or legal conclusion.",
+        "Retained array lengths may be capped and differ from runtime summary totals; neither proves complete capture.",
+        "Consent flags are legacy observations, not a current ConsentControlAssessment v2 or interaction authorization.",
+        "Policy observation count is not usable owned-policy coverage; ownership and linked evidence require human review.",
+        "No-go contradictions, incomplete modules and coverage limitations require review before admission.",
+        "All sources in this nomination set report local region; regional production representativeness is unproven."
+      ],
+      "operationalEvidence": {
+        "canonicalState": "cooldown",
+        "lastCentralContactAt": "2026-08-21T14:52:21.663771+00:00",
+        "centralCooldownUntil": "2026-09-18T14:52:21.663771+00:00",
+        "lastCentralOutcome": "completed",
+        "centralNoGoReasons": [],
+        "selectionClock": "2026-09-05T05:38:57.567Z",
+        "derivedReviewStatus": "active_cooldown",
+        "latestInspectedLocalBundleContactAt": "2026-06-14T21:29:44.727Z",
+        "localBundleImpliedEarliestContactAt": "2026-07-12T21:29:47.770Z",
+        "decision": "No admission or contact authorization; SO must reconcile history and attest exact target."
+      }
+    }
+  ],
+  "operationalReview": {
+    "reviewedAt": "2026-09-05T05:38:57.567Z",
+    "centralExport": {
+      "path": "/tmp/certscore-graph-pool-review-4sFmVJ/effective-eligibility-ledger.json",
+      "sha256": "860b759a7095b508fb3db70bbe36f8fb49c6bdb5e83a1292565a370c26187f7e",
+      "scopeDomains": 65,
+      "centralRecordsReturned": 64,
+      "readOnly": true
+    },
+    "localLedgerReview": {
+      "path": "/tmp/certscore-graph-pool-review-4sFmVJ/local-contact-review.json",
+      "sha256": "b529337c30988f2772020979080d509244a313f6274cdb5224451d632011c53e",
+      "artifactFilesReviewed": 41,
+      "matchingCandidateDomains": 0,
+      "note": "No matching local ledger entries does not establish absence of local contacts. Retained bundle capture times are independently present."
+    },
+    "estimate": {
+      "incrementalAwsExportUsdLessThan": 0.02,
+      "recurringChangeUsdPerMonth": 0,
+      "approval": "Sub-dollar estimate disclosed by parent before read-only ECS export; charged to existing release ceiling."
+    }
+  },
+  "executionDisposition": {
+    "status": "pending_non_cooldown_review_and_scoped_execution_mechanism",
+    "primaryCounts": {
+      "centralCooldownElapsed": 3,
+      "activeCooldown": 6,
+      "missingCentralRecord": 1
+    },
+    "note": "The owner authorized a one-time cooldown exception for P1-P10 after the contact audit. Historical counts remain unchanged and are not eligibility decisions. Quality/composition review, missing-history reconciliation, operational attestation and an auditable execution mechanism remain pending. No public contacts or canonical policy/ledger changes were initiated."
+  }
+}

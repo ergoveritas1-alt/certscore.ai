@@ -18,6 +18,24 @@ Execution authorized by product owner on 2026-09-04: implement the preceding pla
 
 ## Progress
 
+### Subsequent owner-authorized immediate activation exception
+
+On September 4, 2026 Pacific, the owner explicitly confirmed immediate 100% activation after being told that the ten-site public calibration and customer-cohort checks would be deferred and broader evidence-quality/production-latency risks would remain unmeasured. This supersedes the staged 5/25/100 and fixed 24-hour pre-release hold for this release only. Those checks are **deferred, not passed**. The separate primary-target cooldown exception does not launch public scans or waive contact holds/blocked states.
+
+Use tested readers `97f83b429097d78f84bf0608f23aecdde42b5560` and scanners `61776db564068ec80c9475db8f1c75fbe5899c97`; enable project capture at 100% and presentation through the canonical AWS helper. No change to scanner evidence windows, lanes, action authority, finding/scoring policy, or persistent capacity. Retain the approved $25/month ceiling and $19.35/month month-12 planning forecast; bounded post-launch owned canaries/audits and transient task replacement are charged to the existing $15 release budget. A critical privacy, integrity or canonical-finding regression requires capture/presentation suppression. Activation and bounded post-launch verification are complete as recorded below.
+
+### Current state: 100% activated and bounded post-launch verification passed
+
+- The canonical AWS rollout helper applied `project/100/presentation-on` on September 5, 2026 UTC (September 4 Pacific). Web task `558` has two running tasks and materializer task `121` has one; both have one completed deployment and zero pending tasks. Canary overrides are empty. Existing tested images, capacity and scanner digests are unchanged. Web version and MCP health checks passed.
+- Capture selection covers **new eligible sharded scans**, not historical backfill or non-sharded scans. Presentation may expose previously retained verified graphs; missing or unverifiable evidence remains unavailable. Action-lane authorization remains separate and unchanged.
+- Fresh owned canaries: California `2b768117-c9d5-4639-ad62-7e02e4573dee`, Ireland `8cb7365d-0be6-48bc-a095-5c571fa6da71`, Frankfurt `e142e53c-3946-4ea4-8e4f-dc4fa0bf9a51`. All twelve scenario graphs passed retained bundle/manifest hashes and sizes, source/capture identity, raw/public node and edge parity, action anchors, redaction and single owned terminal publication/derivation checks. Expected fixture scores were 88, 88 and 76. All graphs honestly retain partial-coverage reasons; Ireland action graphs also retain incomplete capture-task limits.
+- Handler times were 10,859 / 11,316 / 11,563 ms; scanner-completion-to-WC01-recording times were 133 / 1,951 / 1,116 ms. Public projections were 48,654 / 46,784 / 54,118 bytes; database summary/reference size was 1,411 bytes each. These are three descriptive observations, **not production p95 or full report-readiness measurements**.
+- Signed-in Ireland report verification exercised all four scenario options, cookie search, inferred parent links, exact cookie scope, cross-scenario comparison and GPC switching. Existing finding/scoring policy is unchanged.
+- Read-only observation of two non-owned scans (`5e996cac-8b17-4eed-ba71-8039948f8203`, `857b42a0-6f98-4cee-b1a5-bf1388115ae3`) found normal persisted project selection and verified public graph references. One initially missing reference appeared on the later audit. Both retained two passive graphs; absent action packets match terminal `not_applicable/control_not_observed` outcomes. Public projections were 281,110 and 287,878 bytes. Coverage remains substantially partial, including up to 1,177 dropped-node events per scenario and explicit pairing/stack/byte limits; these are not complete inventories.
+- Astra medium independently reviewed the twelve owned graphs and both non-owned retained bundles/public projections: hashes, identities, parity, inferred instrumented edges, redaction and cancellation-as-unknown checks passed; no critical graph regression was found in this bounded sample. Each non-owned scan has one terminal Lambda result but two finding-derivation events around late policy processing. The cause remains unresolved: this is **not** a single-derivation pass or proof of a pre-existing issue.
+- Total owned release creations: **14**; public calibration creations: **0**. The ten-site calibration, representative customer cohort, staged activation and fixed 24-hour observation remain **deferred by the explicit owner exception**, not passed. No future monitoring job or automatic rollback has been installed.
+- Retained operational evidence: `/tmp/certscore-graph-final-gates-6VQMEU/owner-immediate-100-rollout.log`, `owner-immediate-three-region-audit.json`, `owner-immediate-three-region-verification.json` (`verified: true`), initial/cohort/Frankfurt audit JSON and per-scan retained bundle, manifest and public-projection files. These local paths are operational evidence, not a promise of permanent local retention.
+
 - [x] Production topology, access, and initial cost gate checked.
 - [x] Contracts and deterministic graph tests.
 - [x] Browser capture and attribution corrections; full local regression passed.
@@ -26,14 +44,15 @@ Execution authorized by product owner on 2026-09-04: implement the preceding pla
 - [x] Feature-off code deployment and regional verification.
 - [x] Final owned canaries in all three regions and Astra retained-evidence review.
 - [x] Stable feature-off hold, fresh signed-in suppression check, and release handoff.
-- [ ] Ten eligible public calibration targets (blocked: one currently eligible).
-- [ ] Staged customer activation and 24-hour post-activation observation.
+- [x] Owner-authorized immediate 100% activation and bounded post-launch verification.
+- [ ] Ten eligible public calibration targets (deferred by owner exception).
+- [ ] Staged customer activation and 24-hour observation (deferred by owner exception).
 
 No implementation, live canary, deployment, or performance gate is recorded as passing until its evidence is retained here.
 
 ## Local implementation and verification log
 
-Working branch: `codex/cookie-tracker-evidence-graph`. Tested reader/publisher implementation `97f83b429097d78f84bf0608f23aecdde42b5560` and final scanner correction `61776db564068ec80c9475db8f1c75fbe5899c97` are pushed and deployed. Graph activation remains off after eleven owned release scans and zero public release scans. Entries below retain the chronological history of failed attempts and subsequent successful gates; earlier pending statements are superseded by the final deployed verification and held rollout section.
+Working branch: `codex/cookie-tracker-evidence-graph`. Tested reader/publisher implementation `97f83b429097d78f84bf0608f23aecdde42b5560` and final scanner correction `61776db564068ec80c9475db8f1c75fbe5899c97` are pushed and deployed. Graph activation is now 100% for new eligible sharded scans after fourteen owned release scans and zero public calibration scans. Entries below retain chronological history; earlier pending and off-hold statements are superseded by the current-state section above.
 
 - Implemented versioned bounded graph capture, protocol identities/redirect correlation, HTTP/JS cookie distinctions, storage/worker/frame metadata, passive streaming counters, scenario/action anchors, per-capture keyed value digests, verified lane merge, persisted public-safe projection, API schema/OpenAPI, and the inventory relationship explorer. Existing scoring policy is unchanged.
 - Re-ran the contracts suite: **317/317 passed**, including unsupported/malformed optional graph compatibility and action-packet isolation. Vendor resolver: **137/137 passed**. API contracts/OpenAPI: **16/16 passed**. SDK build passed.
