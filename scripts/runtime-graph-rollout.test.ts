@@ -14,6 +14,11 @@ test("rollout changes only graph environment fields and keeps image, roles, secr
   assert.equal(result.containerDefinitions[0].environment.filter((row: any) => row.name === "CERTSCORE_RUNTIME_GRAPH_PERCENT").length, 1);
   assert.equal(result.taskDefinitionArn, undefined);
 });
+
+test("rollout omits empty tags and preserves non-reserved task tags for ECS registration", () => {
+  for (const tags of [[], [{key:"aws:managed",value:"reserved"}]]) assert.equal(Object.hasOwn(graphRolloutTaskDefinition(fixture(),rollout,tags),"tags"),false);
+  assert.deepEqual(graphRolloutTaskDefinition(fixture(),rollout,[{key:"owner",value:"certscore"},{key:"aws:managed",value:"reserved"}]).tags,[{key:"owner",value:"certscore"}]);
+});
 test("unapproved targets, stale source, invalid cohorts and broad canary identifiers fail closed", () => {
   for (const variant of [{ ...rollout, percent: 50 }, { ...rollout, expectedWebSha: "b".repeat(40) }, { ...rollout, canaryScanIds: ["https://site.test"] }, { ...rollout, mode: "off", percent: 5 }]) assert.throws(() => graphRolloutTaskDefinition(fixture(), variant as Rollout));
   const task = fixture(); task.containerDefinitions[0]!.name = "mcp-http";

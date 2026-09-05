@@ -15,7 +15,7 @@ const FLAGS = ["CERTSCORE_RUNTIME_GRAPH_MODE", "CERTSCORE_RUNTIME_GRAPH_PERCENT"
 const ownedTargets = new Set([...passiveCanaries.targets, ...acceptCanaries.targets, ...rejectCanaries.targets].map(row => row.url).concat(acceptCanaries.interactionPolicy.authorizedAlternateExactTargets, rejectCanaries.interactionPolicy.authorizedAlternateExactTargets));
 export type Rollout = { mode: "off" | "capture_only" | "project"; percent: 0 | 5 | 25 | 100; presentation: "on" | "off"; canaryScanIds: string[]; canaryTargetUrls?: string[]; expectedWebSha: string };
 
-export function graphRolloutTaskDefinition(task: Record<string, any>, rollout: Rollout) {
+export function graphRolloutTaskDefinition(task: Record<string, any>, rollout: Rollout, taskTags?: Array<{ key: string; value: string }>) {
   if (!["off", "capture_only", "project"].includes(rollout.mode) || ![0, 5, 25, 100].includes(rollout.percent) || !["on", "off"].includes(rollout.presentation)) throw new Error("Invalid bounded graph rollout.");
   if (!/^[a-f0-9]{40}$/.test(rollout.expectedWebSha)) throw new Error("An exact deployed web SHA is required.");
   const canaryTargets = rollout.canaryTargetUrls ?? [];
@@ -23,6 +23,9 @@ export function graphRolloutTaskDefinition(task: Record<string, any>, rollout: R
   if (canaryTargets.length > 20 || new Set(canaryTargets).size !== canaryTargets.length || canaryTargets.some(url => !ownedTargets.has(url))) throw new Error("Canary targets must exactly match the checked-in owned registries. Graph selection never authorizes consent actions.");
   if (rollout.canaryScanIds.length > 240 || new Set(rollout.canaryScanIds).size !== rollout.canaryScanIds.length || rollout.canaryScanIds.some(id => !/^[a-f0-9]{8}-[a-f0-9]{4}-[1-5][a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$/.test(id))) throw new Error("Canary IDs must be bounded unique scan UUIDs.");
   const copy = structuredClone(task);
+  const retainedTags = (taskTags ?? copy.tags ?? []).filter((tag: { key: string }) => !tag.key.startsWith("aws:"));
+  if (retainedTags.length) copy.tags = retainedTags;
+  else delete copy.tags; // ECS rejects an explicit empty tags array; omission preserves an untagged task.
   const containers = copy.containerDefinitions as Array<Record<string, any>>;
   if (!Array.isArray(containers) || containers.length !== 1 || containers[0]?.name !== "certscore-web" || containers[0]?.image !== `199536052647.dkr.ecr.${REGION}.amazonaws.com/certscore-web-web:${rollout.expectedWebSha}`) throw new Error("Unexpected web container or live image revision.");
   const container = containers[0]!;
@@ -89,8 +92,7 @@ async function main() {
   for (const service of live.services) {
     if (!SERVICES.includes(service.serviceName) || service.status !== "ACTIVE" || service.runningCount !== service.desiredCount || service.deployments?.length !== 1) throw new Error("Services must be stable before rollout.");
     const described = await aws(["ecs", "describe-task-definition", "--task-definition", service.taskDefinition, "--include", "TAGS"]);
-    const task = graphRolloutTaskDefinition(described.taskDefinition, rollout);
-    task.tags = (described.tags ?? []).filter((tag: { key: string }) => !tag.key.startsWith("aws:"));
+    const task = graphRolloutTaskDefinition(described.taskDefinition, rollout, described.tags ?? []);
     plans.push({ serviceName: service.serviceName, previousTaskDefinition: service.taskDefinition, task });
   }
   await verifyReleaseParticipants(rollout);
