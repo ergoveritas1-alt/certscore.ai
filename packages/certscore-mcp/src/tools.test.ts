@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { CertScoreError, type PulseResult } from "@certscore/sdk";
-import { mcpScanBundleOutputSchema, mcpScanStatusOutputSchema } from "@certscore/api-contracts";
+import { mcpScanBundleOutputSchema, mcpScanStatusOutputSchema, mcpPreConsentCookiesTrackersOutputSchema } from "@certscore/api-contracts";
 import { boundEvidencePacket, buildScanBundle, explainFinding, exportFindings, limitPreConsentRows, paginateFindingList, scanBundleText, scanSiteText, scanStatusText, toToolError, toToolResult, withMcpAgentGuidance, withMcpScanProvenanceGuidance } from "./tools.js";
 
 const report = {
@@ -1608,6 +1608,15 @@ test("limitPreConsentRows caps inventory rows and records truncation metadata", 
     totalRowCount: 3,
     truncated: true
   });
+});
+
+test("dedicated inventory MCP output preserves graph identities independently of row pagination", () => {
+  const graph = { contractVersion: "certscore.runtime-evidence-graph-projection.v1", scanId: "00000000-0000-4000-8000-000000000123", status: "limited", sourceBundle: { sha256: "a".repeat(64), sizeBytes: 1000, verified: true }, registryVersion: "fixture", graphs: [{ captureId: "fixture:runtime_evidence", scenario: "pre_consent", sourceHash: "b".repeat(64), startedAt: "2026-09-04T00:00:00.000Z", completedAt: "2026-09-04T00:00:01.000Z", nodes: [{ id: "request", kind: "request", label: "request", observedAtMs: 0 }, { id: "response", kind: "response", label: "response", observedAtMs: 1 }], edges: [{ id: "edge", from: "request", to: "response", relation: "response_to", basis: "cdp", directness: "direct" }], stacks: [], coverage: { status: "partial", capabilities: [], reasons: ["fixture"], droppedNodes: 0, droppedEdges: 0, unresolvedRequests: 0, pendingTasks: 0 } }], limitations: ["fixture"], findingOrScoreEffect: false };
+  const input = { type: "certscore_pre_consent_cookies_trackers", scanId: graph.scanId, domain: "example.com", rows: [], summary: { rowCount: 0, trackerCount: 0, cookieCount: 0, requestCount: 0 }, runtimeEvidenceGraph: graph, links: { self: "https://certscore.ai/api/v2/scans/fixture/pre-consent-cookies-trackers", report: "https://certscore.ai/scan/fixture" }, disclaimer: "Fixture only" };
+  const output = withMcpAgentGuidance(limitPreConsentRows(input, { maxRows: 1 }), "existing_scan_retrieved");
+  const parsed = mcpPreConsentCookiesTrackersOutputSchema.parse(output);
+  assert.deepEqual(parsed.runtimeEvidenceGraph, graph);
+  assert.deepEqual(toToolResult(output).structuredContent?.runtimeEvidenceGraph, graph);
 });
 
 test("boundEvidencePacket leaves small evidence packets unchanged", () => {

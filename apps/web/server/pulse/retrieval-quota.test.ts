@@ -227,12 +227,27 @@ test("API v2 scan resource routes share the retrieval throttle", async () => {
 test("Pulse v1 job status polling uses the shared status allowance and clear 429 contract", async () => {
   const route = await readFile("apps/web/app/api/v1/pulse/status/[jobId]/route.ts", "utf8");
   const claimAt = route.indexOf("await claimPulseReadQuota");
-  const projectionAt = route.indexOf("await getPublicScanRecord", claimAt);
+  const projectionAt = route.indexOf("getPublicScanRecord(pulseRequest.scan_id", claimAt);
+  const statusProjectionAt = route.indexOf("getPublicScanStatusProjection(pulseRequest.scan_id", claimAt);
   assert.ok(claimAt > 0);
   assert.ok(projectionAt > claimAt);
+  assert.ok(statusProjectionAt > claimAt);
   assert.match(route.slice(claimAt, projectionAt), /profile: "status"/);
   assert.match(route.slice(claimAt, projectionAt), /status: 429/);
   assert.match(route.slice(claimAt, projectionAt), /"Retry-After"/);
   assert.match(route.slice(claimAt, projectionAt), /logApiReadRateLimited/);
   assert.match(route.slice(claimAt, projectionAt), /recommendedNextAction/);
+});
+
+test("full relationship graph API reads claim canonical evidence quota before loading any report", async () => {
+  for (const path of [
+    "apps/web/app/api/v2/scans/[scanId]/pre-consent-cookies-trackers/route.ts",
+    "apps/web/app/api/v2/domains/[domain]/latest/pre-consent-cookies-trackers/route.ts",
+  ]) {
+    const source = await readFile(path, "utf8");
+    const claimAt = source.indexOf("await enforceApiV2ScanReadThrottle(");
+    const hydrationAt = source.indexOf("await hydrateRuntimeGraphForRead(");
+    assert.ok(claimAt > 0 && hydrationAt > claimAt, path);
+    assert.match(source.slice(claimAt, source.indexOf("if (throttled)", claimAt)), /detail: "evidence"/);
+  }
 });

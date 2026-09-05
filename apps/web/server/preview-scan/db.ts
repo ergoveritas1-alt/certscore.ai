@@ -20,6 +20,8 @@ import {
   withTrancoRankMetadata
 } from "../scans/tranco-rank-metadata";
 import type { CampaignAttribution } from "../../lib/attribution/campaign-attribution";
+import { randomUUID } from "node:crypto";
+import { bindRuntimeGraphDispatchToScan } from "../scans/runtime-evidence-graph-dispatch";
 
 export type PreviewDomainRow = {
   id: string;
@@ -298,14 +300,16 @@ export async function createPreviewScanRecord(input: {
     ? { ...initialConfig, clientRequestId: input.clientRequestId }
     : initialConfig;
   const queueMetadata = getPreviewScanQueueMetadata();
+  const scanId = randomUUID();
+  const persistedConfig = bindRuntimeGraphDispatchToScan({ scanId, scanConfig, environment: process.env });
 
   let scan: PreviewScanRow | null;
   try {
     scan = await queryOne<PreviewScanRow>(
-      `insert into scans (domain_id, scan_type, status, pages_requested, pages_scanned, scan_config_json, queue_priority, queue_origin)
-       values ($1, 'preview', 'queued', 1, 0, $2, $3, $4)
+      `insert into scans (domain_id, scan_type, status, pages_requested, pages_scanned, scan_config_json, queue_priority, queue_origin, id)
+       values ($1, 'preview', 'queued', 1, 0, $2, $3, $4, $5::uuid)
        returning *`,
-      [input.domainId, scanConfig, queueMetadata.queuePriority, queueMetadata.queueOrigin]
+      [input.domainId, persistedConfig, queueMetadata.queuePriority, queueMetadata.queueOrigin, scanId]
     );
   } catch (error) {
     throw buildDatabaseOperationError("Failed to create preview scan", error);

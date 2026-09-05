@@ -7,7 +7,9 @@ import {
   type NetworkResponseEvent,
   SCHEMA_VERSION,
   canonicalEvidenceBundleSchema,
+  postAcceptEvidencePacketSchema,
 } from "@certscore/contracts";
+import { RuntimeEvidenceGraphBuilder } from "./runtime-evidence-graph.js";
 import { compactCanonicalEvidenceBundleForRetention, summarizeSiteResourceSizes } from "./index.js";
 import { getScanProfile } from "./profiles.js";
 
@@ -106,6 +108,34 @@ test("canonical evidence rejects duplicate policy observation identities", () =>
     }),
     /Duplicate policy surface observationId/,
   );
+});
+
+test("root and action graph bytes never displace existing canonical evidence during compaction", () => {
+  const bundle = oversizedGoogleLikeBundle();
+  bundle.postAcceptEvidence = postAcceptEvidencePacketSchema.parse({
+    artifactVersion: "certscore.post_accept_evidence.v1", artifactOnly: true, productionProjectable: false,
+    scanId: "accept", parentScanId: bundle.scanId, targetUrl: "https://example.test/", normalizedUrl: "https://example.test/",
+    observationBranch: "accept_only", phase: "post_action", consentAction: "accept",
+    startedAt: bundle.startedAt, completedAt: bundle.completedAt,
+    resolver: { found: false, method: "local_fixture_recipe", confidence: 0, recipeId: "fixture" },
+    acceptanceRegistration: { status: "not_attempted", acceptanceExercised: false, reason: "fixture", witnesses: [] },
+    observationWindowMs: 0, timing: { dispatchDelayMs: 0, navigationMs: 0, resolverMs: 0, confirmationMs: 0, observationMs: 0, totalMs: 0, readyAtMs: 0 },
+    network: { requests: [], postAcceptNonEssentialRequests: [], activeRequestIdsAtAcceptanceRegistration: [] },
+    storage: { preAction: [], postAction: [], writesAfterAccept: [], itemsCreatedOrChangedAfterAccept: [] },
+    observations: [], cancellation: { requested: false, outcome: "not_requested" }, limitations: [],
+  });
+  const baseline = compactCanonicalEvidenceBundleForRetention(bundle);
+  const graph = (scenario: "pre_consent" | "post_accept") => {
+    const builder = new RuntimeEvidenceGraphBuilder({ scanId: bundle.scanId, captureId: `fixture:${scenario}`, scenario, mode: "project", startedAt: bundle.startedAt, browserVersion: "fixture" });
+    for (let index = 0; index < 500; index++) builder.handle("main", "Network.requestWillBeSent", { requestId: String(index), frameId: "frame", loaderId: "document", documentURL: "https://example.test/", request: { url: `https://example.test/${index}`, method: "GET" }, initiator: { type: "other" } });
+    return builder.finish();
+  };
+  const root = graph("pre_consent"); const action = graph("post_accept");
+  const retained = compactCanonicalEvidenceBundleForRetention({ ...bundle, runtimeEvidenceGraphs: [root], postAcceptEvidence: { ...bundle.postAcceptEvidence, runtimeEvidenceGraph: action } });
+  assert.deepEqual(retained.runtimeEvidenceGraphs, [root]);
+  assert.deepEqual(retained.postAcceptEvidence?.runtimeEvidenceGraph, action);
+  delete retained.runtimeEvidenceGraphs; delete retained.postAcceptEvidence!.runtimeEvidenceGraph;
+  assert.deepEqual(retained, baseline);
 });
 
 function oversizedGoogleLikeBundle(): CanonicalEvidenceBundle {

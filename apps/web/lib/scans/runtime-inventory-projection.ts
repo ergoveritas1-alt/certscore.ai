@@ -1,4 +1,5 @@
 import { getDomain as getTldtsDomain, getHostname as getTldtsHostname } from "tldts";
+import { apiRuntimeEvidenceGraphProjectionSchema } from "@certscore/api-contracts";
 import {
   isCanonicalIdSyncEndpoint,
   resolveCanonicalVendorLegalContext
@@ -1579,6 +1580,7 @@ export function buildRuntimeInventoryUngroupedRows(input: {
 
 export function buildRuntimeInventoryProjectionFromScan(scanRecord: ScanDetailResponse) {
   const runtimeArtifacts = scanRecord.runtimeArtifacts;
+  const graphProjection = apiRuntimeEvidenceGraphProjectionSchema.safeParse(runtimeArtifacts?.runtimeEvidenceGraphProjection);
   const hybridRuntimeEvidence = getHybridRuntimeEvidence(runtimeArtifacts);
   const hybridVendorSummary = getRecord(hybridRuntimeEvidence?.vendorSummary ?? hybridRuntimeEvidence?.vendor_summary);
   const certScoreSummary = deriveCertScoreFindings(scanRecord);
@@ -1610,6 +1612,7 @@ export function buildRuntimeInventoryProjectionFromScan(scanRecord: ScanDetailRe
   const requestRows = buildSanitizedRequestEvidenceRows(hybridRuntimeEvidence);
 
   return {
+    runtimeEvidenceGraph: graphProjection.success && graphProjection.data.scanId === scanRecord.scan.id ? graphProjection.data : undefined,
     cookieRows,
     dataFlows,
     requestRows,

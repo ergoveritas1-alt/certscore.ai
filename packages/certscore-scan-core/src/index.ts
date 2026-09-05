@@ -252,6 +252,8 @@ export interface RunScanInput {
    * default preserves the existing single-process scan behavior.
    */
   evidenceLane?: "combined" | "consent_proof" | "runtime_evidence" | "policy_evidence" | "gpc_observation";
+  /** Trusted immutable per-scan profile; never inferred from target content or public debug fields. */
+  runtimeGraph?: { scanId: string; mode: "capture_only" | "project" };
   /**
    * Allows a dedicated runtime-evidence worker to finish only the deterministic
    * canonical projection after its parent capture deadline is observed. This
@@ -525,6 +527,10 @@ export async function runScan(input: RunScanInput): Promise<CanonicalEvidenceBun
             ? "runtime_evidence"
             : "combined",
         globalPrivacyControlEnabled: evidenceLane === "gpc_observation",
+        runtimeGraph: input.runtimeGraph && evidenceLane !== "consent_proof" ? {
+          ...input.runtimeGraph, captureId: `${input.runtimeGraph.scanId}:${evidenceLane}`,
+          scenario: evidenceLane === "gpc_observation" ? "gpc" : "pre_consent", startedAt,
+        } : undefined,
         browser: sharedBrowser,
         stubHeavyResources: input.captureReplay,
         screenshotCaptureMode: "viewport_first",
@@ -542,7 +548,7 @@ export async function runScan(input: RunScanInput): Promise<CanonicalEvidenceBun
         },
         softDeadlineSignal,
         waitMode: leanPreConsent ? "fast" : "full",
-        retainRenderedPolicyRecoverySession: evidenceLane === "combined",
+        retainRenderedPolicyRecoverySession: evidenceLane === "combined" && policySurfaceEnabled,
         signal: input.signal,
       }),
     })
@@ -629,6 +635,10 @@ export async function runScan(input: RunScanInput): Promise<CanonicalEvidenceBun
             ? "runtime_evidence"
             : "combined",
         globalPrivacyControlEnabled: evidenceLane === "gpc_observation",
+        runtimeGraph: input.runtimeGraph && evidenceLane !== "consent_proof" ? {
+          ...input.runtimeGraph, captureId: `${input.runtimeGraph.scanId}:${evidenceLane}`,
+          scenario: evidenceLane === "gpc_observation" ? "gpc" : "pre_consent", startedAt,
+        } : undefined,
         browserMode: "headed",
         stubHeavyResources: input.captureReplay,
         screenshotCaptureMode: "viewport_first",
@@ -637,7 +647,7 @@ export async function runScan(input: RunScanInput): Promise<CanonicalEvidenceBun
         onScreenshotCaptured: input.onPreConsentScreenshotCaptured,
         consentGateAuditHoldout: input.consentGateAuditHoldout,
         waitMode: leanPreConsent ? "fast" : "full",
-        retainRenderedPolicyRecoverySession: evidenceLane === "combined",
+        retainRenderedPolicyRecoverySession: evidenceLane === "combined" && policySurfaceEnabled,
       });
       preConsentResult = {
         ...headedRetryResult,
@@ -1281,6 +1291,7 @@ export async function runScan(input: RunScanInput): Promise<CanonicalEvidenceBun
     policySurfaceObservations: policySurfaceResult?.policySurfaceObservations ?? [],
   });
   const bundle = compactCanonicalEvidenceBundleForRetention(canonicalEvidenceBundleSchema.parse({
+    runtimeEvidenceGraphs: preConsentResult.runtimeEvidenceGraph ? [preConsentResult.runtimeEvidenceGraph] : undefined,
     scanId,
     url: input.url,
     normalizedUrl,
@@ -1419,6 +1430,16 @@ export function compactCanonicalEvidenceBundleForRetention(
   bundle: CanonicalEvidenceBundle,
   maxSerializedBytes = 400 * 1024,
 ): CanonicalEvidenceBundle {
+  // The new graph has a separate hard cap; its bytes must never displace existing retained evidence.
+  const coreBytes = (value: CanonicalEvidenceBundle) => {
+    const { runtimeEvidenceGraphs: _graphs, runtimeEvidenceGraphDiagnostics: _diagnostics, ...core } = value;
+    const withoutGraph = <T extends { runtimeEvidenceGraph?: unknown; runtimeEvidenceGraphDiagnostics?: unknown }>(packet: T | undefined) => {
+      if (!packet) return packet;
+      const { runtimeEvidenceGraph: _graph, runtimeEvidenceGraphDiagnostics: _diagnostic, ...facts } = packet;
+      return facts;
+    };
+    return serializedBytes({ ...core, postAcceptEvidence: withoutGraph(core.postAcceptEvidence), postRefusalEvidence: withoutGraph(core.postRefusalEvidence) });
+  };
   const typedEventIds = new Set([
     ...bundle.networkEvents,
     ...bundle.networkResponseEvents,
@@ -1467,7 +1488,7 @@ export function compactCanonicalEvidenceBundleForRetention(
       : undefined,
   });
 
-  if (serializedBytes(compacted) <= maxSerializedBytes) {
+  if (coreBytes(compacted) <= maxSerializedBytes) {
     return compacted;
   }
 
@@ -1481,7 +1502,7 @@ export function compactCanonicalEvidenceBundleForRetention(
     runtimeTimeline: retainPriorityEvents(compacted.runtimeTimeline, referencedEventIds, 80),
   });
 
-  if (serializedBytes(compacted) <= maxSerializedBytes) {
+  if (coreBytes(compacted) <= maxSerializedBytes) {
     return compacted;
   }
 

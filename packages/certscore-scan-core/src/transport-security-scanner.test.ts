@@ -209,7 +209,10 @@ test("pre-consent scanner retains early transport evidence when later runtime wo
   } finally {
     server.closeAllConnections();
     await closeServer(server);
-    await rm(tempRoot, { recursive: true, force: true });
+    // The intentional soft-deadline path may still be finishing bounded artifact
+    // cleanup. Retry only removal of this test-owned directory; evidence and
+    // deadline assertions above remain unchanged.
+    await rm(tempRoot, { recursive: true, force: true, maxRetries: 3, retryDelay: 50 });
   }
 });
 

@@ -1,4 +1,5 @@
 import type { ReactNode } from "react";
+import { RuntimeEvidenceGraphExplorer } from "./runtime-evidence-graph-explorer";
 import Link from "next/link";
 import {
   REPORT_PRIMARY_PILLARS,
@@ -1075,6 +1076,7 @@ function RuntimeInventoryTable({
         ) : null}
         {hasRetainedInventory ? (
           <div className="grid gap-4 px-3.5 pb-5 pt-0 lg:px-5">
+          <RuntimeEvidenceGraphExplorer projection={projection.runtimeEvidenceGraph} />
           <div className="grid gap-3 lg:grid-cols-3 lg:items-stretch">
             <InventoryEvidenceSegmentation rows={inventoryRows} />
             <InventoryPurposeCard rows={inventoryRows} />

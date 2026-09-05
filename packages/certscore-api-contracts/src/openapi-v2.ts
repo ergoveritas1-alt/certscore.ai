@@ -1,4 +1,5 @@
 import { apiV2Disclaimer, CERTSCORE_API_V2_SCHEMA_VERSION } from "./api-v2.js";
+import { runtimeEvidenceGraphOpenApiSchemas } from "./runtime-evidence-graph-openapi.js";
 
 const diagnosticHeaders = {
   "x-certscore-api-version": { schema: { type: "string", const: "v2" }, description: "CertScore API version marker." },
@@ -1381,6 +1382,7 @@ export function buildCertScoreApiV2OpenApiDocument() {
             scanId: { type: "string" },
             domain: { type: "string" },
             generatedAt: { type: ["string", "null"] },
+            runtimeEvidenceGraph: { $ref: "#/components/schemas/RuntimeEvidenceGraphProjection" },
             summary: {
               type: "object",
               additionalProperties: false,
@@ -1413,6 +1415,7 @@ export function buildCertScoreApiV2OpenApiDocument() {
             disclaimer: { type: "string" }
           }
         },
+        ...runtimeEvidenceGraphOpenApiSchemas,
         PreConsentCookiesTrackersRow: {
           type: "object",
           additionalProperties: false,

@@ -6,6 +6,7 @@ import { normalizePulseUrl } from "../../../../../../../lib/pulse/request";
 import { findLatestCompletedAnonymousScanForDomain } from "../../../../../../../server/pulse/repository";
 import { getPublicScanRecord } from "../../../../../../../server/scans/get-public-scan-record";
 import { enforceApiV2ScanReadThrottle } from "../../../../../../../server/pulse/api-v2-read-throttle";
+import { hydrateRuntimeGraphForRead } from "../../../../../../../server/scans/runtime-evidence-graph-storage";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -37,7 +38,8 @@ export async function GET(request: Request, context: RouteContext) {
   try {
     const url = new URL(request.url);
     const scanFrom = normalizeScanFrom(url.searchParams.get("scanFrom"));
-    const throttled = await enforceApiV2ScanReadThrottle({
+  const throttled = await enforceApiV2ScanReadThrottle({
+    detail: "evidence",
       request,
       requestId: id,
       route: "api-v2-domain-latest-pre-consent-cookies-trackers",
@@ -62,7 +64,7 @@ export async function GET(request: Request, context: RouteContext) {
     }
 
     return apiV2JsonResponse({
-      body: apiV2PreConsentCookiesTrackersSchema.parse(buildApiV2PreConsentCookiesTrackers(scanRecord)),
+      body: apiV2PreConsentCookiesTrackersSchema.parse(buildApiV2PreConsentCookiesTrackers(await hydrateRuntimeGraphForRead(scanRecord))),
       requestId: id,
       route: "api-v2-domain-latest-pre-consent-cookies-trackers",
       status: 200

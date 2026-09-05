@@ -2286,11 +2286,19 @@ function consentFlowHomeMarkup(caseName: StaticFixturePage): string {
         <span id="late-controls"></span>
       </div>
       <script>
-        setTimeout(() => {
+        const revealLateControls = () => {
           const target = document.getElementById("late-controls");
           if (!target) return;
           target.innerHTML = '<button id="accept-all" type="button">Accept All</button><button id="reject-all" type="button">Reject All</button><button id="settings" type="button">Cookie settings</button>';
-        }, 1100);
+        };
+        // The recapture regression explicitly releases this fixture only after
+        // the scanner's initial empty inventory. Ordinary corpus behavior keeps
+        // its original timer; this opt-in affects test fixture HTML only.
+        if (new URL(location.href).searchParams.has("defer-late-controls")) {
+          window.addEventListener("certscore-fixture-release-late-controls", revealLateControls, { once: true });
+        } else {
+          setTimeout(revealLateControls, 1100);
+        }
       </script>
     `;
   }

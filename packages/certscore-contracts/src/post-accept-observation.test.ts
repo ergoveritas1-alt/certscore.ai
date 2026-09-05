@@ -107,6 +107,14 @@ test("post-Accept observations require a semantically confirmed Accept action", 
   assert.equal(result.success, false);
 });
 
+test("invalid optional graph cannot invalidate independently valid retained Accept proof", () => {
+  const base = postAcceptEvidencePacketSchema.parse(confirmedPacket());
+  const parsed = postAcceptEvidencePacketSchema.parse({ ...base, runtimeEvidenceGraph: { scenario: "post_accept", contractVersion: "future" } });
+  const { runtimeEvidenceGraphDiagnostics, ...legacy } = parsed;
+  assert.deepEqual(legacy, base);
+  assert.deepEqual(runtimeEvidenceGraphDiagnostics, [{ scenario: "post_accept", reason: "unsupported_version" }]);
+});
+
 test("truncated Post-Accept observation coverage cannot be production-projectable", () => {
   const result = postAcceptEvidencePacketSchema.safeParse({
     ...confirmedPacket(),

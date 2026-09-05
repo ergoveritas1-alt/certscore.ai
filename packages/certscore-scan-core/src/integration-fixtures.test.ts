@@ -3,7 +3,7 @@ import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import test from "node:test";
-import { chromium } from "playwright";
+import { chromium, type Browser } from "playwright";
 import {
   type CanonicalEvidenceBundle,
   type ReviewResult,
@@ -1631,19 +1631,48 @@ test("pre-consent runtime scanner inventories compact privacy settings and accep
   }
 });
 
-test("pre-consent runtime scanner recaptures late first-layer controls without interaction", async () => {
+test("pre-consent runtime scanner recaptures late first-layer controls without interaction", async (t) => {
   const server = await startStaticFixtureServer();
   const tempRoot = await mkdtemp(path.join(tmpdir(), "certscore-v2-preconsent-late-controls-"));
+  const browser = await chromium.launch({ headless: true });
+  let releaseCount = 0;
+  const newContext = browser.newContext.bind(browser);
+  t.mock.method(browser, "newContext", async (...args: Parameters<typeof browser.newContext>) => {
+    const context = await newContext(...args);
+    const newPage = context.newPage.bind(context);
+    t.mock.method(context, "newPage", async () => {
+      const page = await newPage();
+      const waitForFunction = page.waitForFunction.bind(page);
+      t.mock.method(page, "waitForFunction", (...waitArgs: Parameters<typeof page.waitForFunction>) => {
+        if (String(waitArgs[0]).includes("const visibleConsentControls =") && releaseCount === 0) {
+          releaseCount += 1;
+          return (async () => {
+            assert.equal(await page.locator("#late-controls button").count(), 0, "initial typed inventories must run before fixture controls exist");
+            await page.evaluate(() => {
+              setTimeout(() => window.dispatchEvent(new Event("certscore-fixture-release-late-controls")), 100);
+            });
+            // Delegate to the actual bounded production wait and inventory.
+            return waitForFunction(...waitArgs);
+          })();
+        }
+        return waitForFunction(...waitArgs);
+      });
+      return page;
+    });
+    return context;
+  });
   try {
     const bundle = await scanFixturePage(
-      server.urlFor("consent-late-first-layer-controls"),
+      `${server.urlFor("consent-late-first-layer-controls")}?defer-late-controls=1`,
       path.join(tempRoot, "consent-late-first-layer-controls"),
       "fast",
       "selective",
+      undefined, undefined, undefined, false, browser,
     );
     const observation = bundle.consentUiObservations[0];
     const timingLabels = bundle.modulesRun[0]?.timingBreakdown?.map((entry) => entry.label) ?? [];
 
+    assert.equal(releaseCount, 1, "the real text-backed recapture wait must be reached");
     assert.equal(observation?.likelyPresent, true);
     assert.equal(observation?.layerInspected, "first_layer");
     assert.equal(observation?.acceptControlObserved, true);
@@ -1694,6 +1723,8 @@ test("pre-consent runtime scanner recaptures late first-layer controls without i
       "scanner should record either a synchronized late capture or verified stable-proof reuse",
     );
   } finally {
+    t.mock.restoreAll();
+    await browser.close();
     await server.close();
     await rm(tempRoot, { recursive: true, force: true });
   }
@@ -3174,6 +3205,62 @@ test("consent-proof lane binds a completed generic negative inventory to a repre
   }
 });
 
+test("consent-proof lane retains same-document Playwright proof after the bounded CDP attempt stalls", async (t) => {
+  const server = await startStaticFixtureServer();
+  const tempRoot = await mkdtemp(path.join(tmpdir(), "certscore-v2-consent-proof-cdp-stall-"));
+  const browser = await chromium.launch({ headless: true });
+  let proofPhase = false;
+  let stalledAttempts = 0;
+  const newContext = browser.newContext.bind(browser);
+  t.mock.method(browser, "newContext", async (...args: Parameters<typeof browser.newContext>) => {
+    const context = await newContext(...args);
+    const newSession = context.newCDPSession.bind(context);
+    t.mock.method(context, "newCDPSession", async (...sessionArgs: Parameters<typeof context.newCDPSession>) => {
+      const session = await newSession(...sessionArgs);
+      const send = session.send.bind(session);
+      t.mock.method(session, "send", (...sendArgs: Parameters<typeof session.send>) => {
+        if (proofPhase && stalledAttempts === 0 && sendArgs[0] === "Page.captureScreenshot") {
+          stalledAttempts += 1;
+          return new Promise<never>(() => undefined);
+        }
+        return send(...sendArgs);
+      });
+      return session;
+    });
+    return context;
+  });
+  try {
+    const url = server.urlFor("generic-cdn-noise");
+    const artifactWriter = await createArtifactWriter(path.join(tempRoot, "out"));
+    const artifactPath = artifactWriter.artifactPath.bind(artifactWriter);
+    t.mock.method(artifactWriter, "artifactPath", (name: string) => {
+      if (name === "screenshot-pre-consent-geometry-proof.png") proofPhase = true;
+      return artifactPath(name);
+    });
+    const result = await preConsentRuntimeScanner({
+      url, normalizedUrl: url, scanStartedAtMs: Date.now(), internalBudgetMs: 25_000,
+      artifactWriter, browser, captureScope: "consent_proof", routeFulfillers,
+      screenshotCaptureMode: "viewport_first", screenshotMode: "selective", waitMode: "fast",
+    });
+    const proof = result.screenshots.find(screenshot => screenshot.artifactId === "screenshot_pre_consent_geometry_proof");
+    const geometry = JSON.parse(await readFile(path.join(tempRoot, "out", "ConsentControlGeometryEvidence.json"), "utf8")) as ConsentControlGeometryArtifact;
+    const timing = result.moduleRun.timingBreakdown?.find(entry => entry.label === "consent geometry representative screenshot");
+    assert.equal(stalledAttempts, 1, "the bounded first attempt must actually exhaust its reserved time");
+    assert.ok(proof, "the real Playwright fallback must still retain a representative viewport");
+    assert.equal(proof.captureMethod, "independent_visual_fallback_viewport");
+    assert.ok(proof.documentIdentity, "fallback must preserve same-document binding");
+    assert.equal(geometry.screenshotArtifactRef, proof.path);
+    assert.deepEqual((await readFile(proof.path)).subarray(0, 8), Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]));
+    assert.ok(typeof timing?.durationMs === "number" && timing.durationMs <= 950, `unchanged representative allowance: ${timing?.durationMs}`);
+    assert.ok(result.moduleRun.errors.some(error => error.includes("Consent geometry proof fast screenshot failed")), "do not erase the first-attempt coverage diagnostic");
+  } finally {
+    t.mock.restoreAll();
+    await browser.close();
+    await server.close();
+    await rm(tempRoot, { recursive: true, force: true });
+  }
+});
+
 test("bounded same-session recovery carries a real empty browser packet through canonical inspection", async () => {
   const server = await startStaticFixtureServer();
   const tempRoot = await mkdtemp(path.join(tmpdir(), "certscore-v2-bounded-empty-packet-"));
@@ -3791,6 +3878,7 @@ async function scanFixturePage(
   internalBudgetMs?: number,
   captureScope?: "combined" | "consent_proof" | "runtime_evidence",
   consentGateAuditHoldout = false,
+  browser?: Browser,
 ): Promise<CanonicalEvidenceBundle> {
   const startedAtMs = Date.now();
   const scanProfile = getScanProfile("quick");
@@ -3803,6 +3891,7 @@ async function scanFixturePage(
     artifactWriter,
     captureScope,
     consentGateAuditHoldout,
+    browser,
     routeFulfillers,
     screenshotCaptureMode,
     waitMode,

@@ -52,7 +52,7 @@ function readCallFromRequest(value: unknown): McpReadCall | null {
     const detail = stringValue(args?.detail);
     const costClass: ApiReadRateCostClass = tool === "certscore_get_scan_bundle"
       ? "bundle"
-      : tool === "certscore_get_evidence"
+      : tool === "certscore_get_evidence" || tool === "certscore_get_pre_consent_cookies_trackers"
         ? "evidence"
         : tool === "certscore_export_findings"
           ? "export"
@@ -73,7 +73,7 @@ function readCallFromRequest(value: unknown): McpReadCall | null {
   }
   const domain = stringValue(args?.domain)?.toLowerCase();
   if (domain && (tool === "certscore_get_latest_domain_scan" || tool === "certscore_get_latest_domain_pre_consent_cookies_trackers")) {
-    return { profile: "terminal", target: `domain:${domain}`, tool, units: units("ordinary") };
+    return { profile: "terminal", target: `domain:${domain}`, tool, units: units(tool === "certscore_get_latest_domain_pre_consent_cookies_trackers" ? "evidence" : "ordinary") };
   }
   return null;
 }

@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import test from "node:test";
+import sharedPolicy from "@website-signal-risk-scanner/shared";
 import { McpReadThrottle, mcpReadCallsFromJsonRpc, mcpReadRateLimitGuidance } from "./read-throttle.js";
 
 function toolCall(name: string, args: Record<string, unknown>) {
@@ -16,6 +17,13 @@ test("classifies composite and direct MCP scan reads", () => {
   }]);
   assert.deepEqual(mcpReadCallsFromJsonRpc(toolCall("certscore_scan_site", { url: "https://example.com" })), []);
   assert.equal(mcpReadCallsFromJsonRpc(toolCall("certscore_get_scan_status", { scanId: "scan_1" }))[0]?.profile, "status");
+});
+
+test("cookie/tracker graph reads use the canonical evidence weight on scan and domain paths", () => {
+  for (const [name, args] of [
+    ["certscore_get_pre_consent_cookies_trackers", { scanId: "scan_1" }],
+    ["certscore_get_latest_domain_pre_consent_cookies_trackers", { domain: "example.com" }],
+  ] as const) assert.equal(mcpReadCallsFromJsonRpc(toolCall(name, args))[0]?.units, sharedPolicy.apiReadRateUnits("evidence"));
 });
 
 test("allows thirty composite reads for one caller and scan, then cools down", () => {

@@ -8,6 +8,24 @@ import {
   CERTSCORE_OWNED_ANALYTICS_ACCEPT_RECIPE,
 } from "./post-accept-cmp-recipes.js";
 
+test("graph action capture preserves a single confirmed Accept and its registration anchor", async () => {
+  await withFixture({ ambiguous: false }, async ({ url, actionCount }) => {
+    const packet = await runPostAcceptObserver({
+      actionSearchTimeoutMs: 500, confirmationTimeoutMs: 500,
+      interactionAuthorization: { authorizationId: "loopback_local_lab", kind: "loopback" },
+      observationWindowMs: 500, productionProjectable: true, recipe: CERTSCORE_OWNED_ANALYTICS_ACCEPT_RECIPE,
+      scanId: "graph-parent:accept_observation", parentScanId: "graph-parent", url,
+      runtimeGraph: { scanId: "graph-parent", mode: "project" },
+    });
+    assert.equal(actionCount(), 1);
+    assert.equal(packet.acceptanceRegistration.status, "confirmed");
+    assert.equal(packet.runtimeEvidenceGraph?.scanId, "graph-parent");
+    assert.equal(packet.runtimeEvidenceGraph?.scenario, "post_accept");
+    assert.equal(packet.runtimeEvidenceGraph?.action?.status, "confirmed");
+    assert.ok(packet.runtimeEvidenceGraph!.nodes.some(node => node.observedAtMs < packet.runtimeEvidenceGraph!.action!.registeredAtMs!));
+  });
+});
+
 test("post-Accept observer confirms one deterministic action and retains bounded activity", async () => {
   await withFixture({ ambiguous: false }, async ({ url, actionCount }) => {
     const packet = await runPostAcceptObserver({

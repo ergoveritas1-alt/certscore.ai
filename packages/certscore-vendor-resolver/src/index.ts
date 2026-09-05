@@ -139,6 +139,23 @@ export type CanonicalVendorLabelResolution = {
 
 export type CanonicalEntityOwnerResolution = CanonicalVendorLabelResolution;
 
+/** Literal mention lookup over canonical identities; never a legal-disclosure sufficiency judgment. */
+export function findCanonicalVendorMention(text: string, identity: Pick<NormalizedVendorObservation, "vendor" | "product" | "entity">): { scope: "product" | "vendor" | "entity"; start: number; end: number } | undefined {
+  const matchingRules = rules.filter(rule => rule.vendor === identity.vendor && rule.product === identity.product && rule.entity === identity.entity);
+  if (!matchingRules.length || text.length > 1_000_000) return undefined;
+  const candidates = [
+    ...[identity.product, ...matchingRules.flatMap(rule => rule.aliases ?? [])].map(term => ({ term, scope: "product" as const })),
+    { term: identity.vendor, scope: "vendor" as const }, { term: identity.entity, scope: "entity" as const },
+  ];
+  for (const { term, scope } of candidates) {
+    if (!term || term.trim().length < 4) continue; // Short/ambiguous names do not establish a mention.
+    const escaped = term.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    const match = new RegExp(`(?<![\\p{L}\\p{N}])${escaped}(?![\\p{L}\\p{N}])`, "iu").exec(text);
+    if (match) return { scope, start: match.index, end: match.index + match[0].length };
+  }
+  return undefined;
+}
+
 interface VendorRule {
   entity: string;
   vendor: string;

@@ -1,4 +1,6 @@
 import { z } from "zod";
+import { apiRuntimeEvidenceGraphProjectionSchema, type ApiRuntimeEvidenceGraphProjection } from "./runtime-evidence-graph.js";
+const apiGraphProjectionSchema: z.ZodType<ApiRuntimeEvidenceGraphProjection> = apiRuntimeEvidenceGraphProjectionSchema;
 import { pulseResponseSchema } from "./pulse-v1.js";
 import { scanNoGoResultSchema, scanResultDispositionSchema } from "./scan-no-go.js";
 import {
@@ -590,6 +592,7 @@ export const apiV2PreConsentCookiesTrackersSummarySchema = z
 export const apiV2PreConsentCookiesTrackersSchema = z
   .object({
     type: z.literal("certscore_pre_consent_cookies_trackers"),
+    runtimeEvidenceGraph: apiGraphProjectionSchema.optional(),
     scanId: z.string(),
     domain: z.string(),
     generatedAt: z.string().nullable().optional(),

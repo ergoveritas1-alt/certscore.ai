@@ -1,3 +1,4 @@
+import { installRuntimeGraphCapture } from "./runtime-evidence-graph-capture.js";
 import {
   postRefusalEvidencePacketSchema,
   type ConsentActionControlProof,
@@ -166,6 +167,7 @@ export interface PostRefusalActionRecipe {
 }
 
 export interface PostRefusalObserverInput {
+  runtimeGraph?: { scanId: string; mode: "capture_only" | "project" };
   scanId: string;
   parentScanId?: string;
   url: string;
@@ -370,6 +372,7 @@ export async function runPostRefusalObserver(
   let ownsBrowser = false;
   let context: BrowserContext | undefined;
   let page: Page | undefined;
+  let graphCapture: Awaited<ReturnType<typeof installRuntimeGraphCapture>> | undefined;
   let actionDiscovery: ConsentActionDiscovery | undefined;
   let cancellationObservedAtMs: number | undefined;
   let actionDispatched = false;
@@ -428,6 +431,7 @@ export async function runPostRefusalObserver(
     const retainedTargetUrl = sanitizeUrl(observationTargetUrl);
     const retainedNormalizedUrl = sanitizeUrl(normalizedUrl);
     const packet = postRefusalEvidencePacketSchema.parse({
+      runtimeEvidenceGraph: graphCapture?.finish(confirmedRefusal ? undefined : "action_not_confirmed"),
       artifactVersion: "certscore.post_refusal_evidence.v1",
       artifactOnly: true,
       productionProjectable: productionProjectable && confirmedRefusal && Boolean(actionControlProof),
@@ -527,6 +531,9 @@ export async function runPostRefusalObserver(
       await installPublicNetworkGuardRoute(context);
     }
     page = await context.newPage();
+    if (input.runtimeGraph) graphCapture = await installRuntimeGraphCapture(page, {
+      ...input.runtimeGraph, captureId: input.scanId, scenario: "post_reject", startedAt: new Date(parentScanStartedAtMs).toISOString(),
+    });
     actionDiscovery = await installConsentActionDiscovery(page);
     await installStorageWriteProbe(page);
 
@@ -1227,6 +1234,8 @@ export async function runPostRefusalObserver(
 
     const confirmedRefusalRegisteredAtEpochMs = Date.now();
     refusalRegisteredAtEpochMs = confirmedRefusalRegisteredAtEpochMs;
+    graphCapture?.confirmAction(confirmedRefusalRegisteredAtEpochMs);
+    void graphCapture?.snapshotStorage();
     const refusalRegisteredAtMs = elapsed(parentScanStartedAtMs, confirmedRefusalRegisteredAtEpochMs);
     activeRequestIdsAtRegistration = [...activeRequestIds].slice(0, 48);
     for (const request of preRegistrationRequests) {
@@ -1307,7 +1316,8 @@ export async function runPostRefusalObserver(
           elapsed(parentScanStartedAtMs, tcfDataObservedAtEpochMs),
         )
       : undefined;
-    const postActionStorage = await captureStorage(context, page, observationTargetUrl, limitations);
+    const postActionStorage = await captureStorage(context, page, observationTargetUrl, limitations, graphCapture?.cookies);
+    void graphCapture?.snapshotStorage();
     const postActionStorageObservedAtEpochMs = Date.now();
     const postActionCapturedAtMs = elapsed(
       parentScanStartedAtMs,
@@ -1416,6 +1426,7 @@ export async function runPostRefusalObserver(
       observations,
     });
   } finally {
+    graphCapture?.finish("action_capture_closed");
     actionDiscovery?.dispose();
     await context?.close().catch(() => undefined);
     if (ownsBrowser) await browser?.close().catch(() => undefined);
@@ -1492,6 +1503,7 @@ async function captureStorage(
   page: Page,
   targetUrl: string,
   limitations?: string[],
+  onCookies?: (cookies: unknown[]) => void,
 ): Promise<PostRefusalStorageItem[]> {
   const pageStorage = await page.evaluate(() => {
     let localStorage: Array<[string, string]> = [];
@@ -1538,6 +1550,7 @@ async function captureStorage(
     }
     return [];
   });
+  onCookies?.(cookies);
   const items: PostRefusalStorageItem[] = [];
 
   for (const cookie of cookies.slice(0, MAX_STORAGE_ITEMS * 4)) {

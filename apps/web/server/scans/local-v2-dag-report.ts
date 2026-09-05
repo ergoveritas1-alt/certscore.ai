@@ -1,4 +1,5 @@
 import "server-only";
+import { projectRuntimeEvidenceGraphs } from "./runtime-evidence-graph-projection";
 
 import { GetObjectCommand, S3Client, type GetObjectCommandOutput } from "@aws-sdk/client-s3";
 import { createHash } from "node:crypto";
@@ -5920,6 +5921,18 @@ function buildMaterializedLocalV2Detail(
     : withoutStaleLocalV2NoGoArtifacts(scanRecord.runtimeArtifacts);
   const runtimeArtifacts = {
     ...inheritedRuntimeArtifacts,
+    runtimeEvidenceGraphProjection: projectRuntimeEvidenceGraphs({
+      bundle, scanId: scanRecord.scan.id, source: options.policyTextEvidenceContext?.sourceBundle,
+      policyDocuments: policyTextProjection.documents.flatMap(document => {
+        const retained = document.artifactId ? options.policyTextEvidenceContext?.artifactsById?.get(document.artifactId) : undefined;
+        if (!retained?.text || !document.retainedTextSha256 || !document.artifactSha256 || !policyTextProjection.sourceBundle.sha256) return [];
+        return [{ text: retained.text, evidenceRef: `policy-text:${document.artifactId}:${document.artifactSha256}`,
+          textSha256: document.retainedTextSha256, sourceBundleSha256: policyTextProjection.sourceBundle.sha256,
+          verified: retained.verificationStatus === "verified" && document.artifactVerificationStatus === "verified",
+          targetOwned: ["target_controller", "first_party_brand"].includes(document.targetRelationship) && document.documentRole === "policy_document",
+          coverage: document.extractionStatus === "complete" ? "complete" as const : "partial" as const }];
+      }),
+    }),
     ...timingArtifacts,
     ...postRefusalRuntimeProjection,
     ...postAcceptRuntimeProjection,

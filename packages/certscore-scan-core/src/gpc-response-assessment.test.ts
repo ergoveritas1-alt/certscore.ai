@@ -3,6 +3,8 @@ import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import test from "node:test";
+import { chromium } from "playwright";
+import { chromiumLaunchOptions } from "./playwright-runtime.js";
 import type { CanonicalEvidenceBundle } from "@certscore/contracts";
 import { createArtifactWriter } from "./artifact-writer.js";
 import { buildGpcResponseAssessment } from "./gpc-response-assessment.js";
@@ -129,9 +131,25 @@ test("dedicated passive browser condition sends Sec-GPC and exposes navigator.gl
 test("250ms quiet gate restarts for late GPC-condition activity and retains the request", async () => {
   const tempRoot = await mkdtemp(path.join(tmpdir(), "certscore-gpc-quiet-window-"));
   const pageUrl = "https://gpc-quiet-window.test/";
+  const browser = await chromium.launch(chromiumLaunchOptions({ headless: true }));
   try {
+    const writer = await createArtifactWriter(tempRoot);
+    let lateRequestScheduled = false;
     const result = await preConsentRuntimeScanner({
-      artifactWriter: await createArtifactWriter(tempRoot),
+      browser,
+      artifactWriter: { ...writer, async writeJsonArtifact(filename, content) {
+        const retained = await writer.writeJsonArtifact(filename, content);
+        if (filename === "TransportSecurityObservation.json" && !lateRequestScheduled) {
+          lateRequestScheduled = true;
+          const page = browser.contexts()[0]?.pages()[0];
+          assert.ok(page);
+          // Anchor the fixture timer to the checkpoint immediately before the
+          // quiet gate. A navigation-anchored timer can expire during transport
+          // capture and never exercise a restart at all on a slower machine.
+          await page.evaluate(() => { setTimeout(() => { void fetch("/late-gpc-request"); }, 175); });
+        }
+        return retained;
+      } },
       captureScope: "runtime_evidence",
       globalPrivacyControlEnabled: true,
       internalBudgetMs: 5_000,
@@ -139,7 +157,7 @@ test("250ms quiet gate restarts for late GPC-condition activity and retains the 
       routeFulfillers: [{
         urlPattern: /^https:\/\/gpc-quiet-window\.test\/$/,
         contentType: "text/html",
-        body: `<!doctype html><body>Passive evidence fixture<script>setTimeout(() => fetch('/late-gpc-request'), 175)</script></body>`,
+        body: `<!doctype html><body>Passive evidence fixture</body>`,
       }, {
         urlPattern: /^https:\/\/gpc-quiet-window\.test\/late-gpc-request$/,
         contentType: "text/plain",
@@ -153,6 +171,7 @@ test("250ms quiet gate restarts for late GPC-condition activity and retains the 
 
     const lateRequest = result.networkEvents.find((event) => event.path === "/late-gpc-request");
     assert.ok(lateRequest);
+    assert.equal(lateRequestScheduled, true);
     assert.equal(lateRequest?.requestHeaders?.secGpc, "1");
     const quietWait = result.moduleRun.timingBreakdown?.find((entry) =>
       entry.label === "passive evidence quiet wait"
@@ -160,6 +179,7 @@ test("250ms quiet gate restarts for late GPC-condition activity and retains the 
     assert.ok((quietWait?.durationMs ?? 0) >= 400);
     assert.notEqual(quietWait?.outcome, "timed_out");
   } finally {
+    await browser.close();
     await rm(tempRoot, { recursive: true, force: true });
   }
 });

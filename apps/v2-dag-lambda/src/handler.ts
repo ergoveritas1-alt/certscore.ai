@@ -16,6 +16,9 @@ import {
   POST_ACCEPT_LAMBDA_EVIDENCE_DESCRIPTOR_VERSION,
   POST_REFUSAL_LAMBDA_EVIDENCE_DESCRIPTOR_VERSION,
   canonicalEvidenceBundleSchema,
+  runtimeGraphDispatchSchema,
+  verifyRuntimeEvidenceGraph,
+  type RuntimeGraphDispatch,
   classifyV2DagLambdaResultDisposition,
   derivePolicySurfaceInspectionOutcome,
   gpcObservationDispatchConfigSchema,
@@ -149,6 +152,7 @@ export type LocalV2DagLambdaDispatchPayload = {
   postAcceptObservation?: PostAcceptLambdaDispatchConfig;
   postRefusalObservation?: PostRefusalLambdaDispatchConfig;
   gpcObservation?: GpcObservationDispatchConfig;
+  runtimeGraph?: RuntimeGraphDispatch;
   coordinatorPlanSummary?: LocalV2DagLambdaCoordinatorPlanSummary;
   debugOverrides?: LocalV2DagLambdaDebugOverrides;
   resultHandoff: "sqs";
@@ -762,6 +766,10 @@ export function parseLocalV2DagLambdaDispatchPayload(event: unknown): LocalV2Dag
   const gpcObservation = record.gpcObservation === undefined
     ? undefined
     : gpcObservationDispatchConfigSchema.parse(record.gpcObservation);
+  const runtimeGraph = record.runtimeGraph === undefined ? undefined : runtimeGraphDispatchSchema.parse(record.runtimeGraph);
+  if (runtimeGraph && (runtimeGraph.scanId !== scanId || !["sharded", "worker"].includes(String(record.orchestrationMode)))) {
+    throw new Error("Runtime graph dispatch must be bound to the exact sharded parent scan.");
+  }
   const parentDispatchSha256 = compactString(record.parentDispatchSha256);
   if (parentDispatchSha256 && !/^[a-f0-9]{64}$/.test(parentDispatchSha256)) {
     throw new Error("Local v2 DAG Lambda parent dispatch checksum is invalid.");
@@ -785,6 +793,7 @@ export function parseLocalV2DagLambdaDispatchPayload(event: unknown): LocalV2Dag
     ...(postAcceptObservation ? { postAcceptObservation } : {}),
     ...(postRefusalObservation ? { postRefusalObservation } : {}),
     ...(gpcObservation ? { gpcObservation } : {}),
+    ...(runtimeGraph ? { runtimeGraph } : {}),
     ...(coordinatorPlanSummary ? { coordinatorPlanSummary } : {}),
     ...(debugOverrides ? { debugOverrides } : {}),
     resultHandoff: "sqs",
@@ -1297,6 +1306,7 @@ async function runLocalV2DagLambdaScanBundle(
             : "combined";
     try {
       const bundle = await runScan({
+        runtimeGraph: payload.runtimeGraph,
         allowRuntimeEvidenceFinalizationAfterAbort: options.allowRuntimeEvidenceFinalizationAfterAbort,
         browserReuseMode: "per_module",
         evidenceLane,
@@ -1928,6 +1938,7 @@ export function postRefusalParentDispatchSha256(
     ...(payload.gpcObservation
       ? { gpcObservation: payload.gpcObservation }
       : {}),
+    ...(payload.runtimeGraph ? { runtimeGraph: payload.runtimeGraph } : {}),
     processor: payload.processor,
     productionFindingIntegration: payload.productionFindingIntegration,
     profile: payload.profile,
@@ -2144,6 +2155,7 @@ export async function runLocalV2DagLambdaPostRefusalArtifactChain(
       });
     }
     return runPostRefusalObserver({
+      runtimeGraph: payload.runtimeGraph,
       allowCanonicalRejectDiscovery: config.resolver.kind === "canonical_cmp_registry",
       actionSearchTimeoutMs: config.actionSearchTimeoutMs,
       confirmationTimeoutMs: config.confirmationTimeoutMs,
@@ -2243,6 +2255,7 @@ export async function runLocalV2DagLambdaPostAcceptArtifactChain(
       });
     }
     return runPostAcceptObserver({
+      runtimeGraph: payload.runtimeGraph,
       allowCanonicalAcceptDiscovery: config.resolver.kind === "canonical_cmp_registry",
       actionSearchTimeoutMs: config.actionSearchTimeoutMs,
       confirmationTimeoutMs: config.confirmationTimeoutMs,
@@ -2550,6 +2563,7 @@ export async function runLocalV2DagLambdaShardedArtifactChain(
       policyEvidence: policyEvidenceBundle,
       runtimeEvidence: runtimeEvidenceBundle,
       scanId: payload.scanId,
+      runtimeGraph: payload.runtimeGraph,
     })
   );
   if (payload.gpcObservation?.enabled === true) {
@@ -2569,8 +2583,14 @@ export async function runLocalV2DagLambdaShardedArtifactChain(
       }
       return { uri, sha256: metadata.sha256, sizeBytes: metadata.sizeBytes };
     };
+    const gpcGraphs = verifyLaneRuntimeGraph(gpcObservationBundle, payload.scanId, "gpc", payload.runtimeGraph);
     bundle = canonicalEvidenceBundleSchema.parse({
       ...bundle,
+      runtimeEvidenceGraphs: [
+        ...(bundle.runtimeEvidenceGraphs ?? []),
+        ...gpcGraphs.graphs,
+      ],
+      runtimeEvidenceGraphDiagnostics: [...(bundle.runtimeEvidenceGraphDiagnostics ?? []), ...gpcGraphs.diagnostics],
       gpcResponseAssessment: buildGpcResponseAssessment({
         baseline: runtimeEvidenceBundle,
         baselineArtifact: verifiedWorkerArtifact(baselineResult, "runtime_evidence"),
@@ -3984,9 +4004,11 @@ export function mergeLocalV2DagLambdaEvidenceLaneBundles(input: {
   policyEvidence: CanonicalEvidenceBundle;
   runtimeEvidence: CanonicalEvidenceBundle;
   scanId: string;
+  runtimeGraph?: RuntimeGraphDispatch;
 }): CanonicalEvidenceBundle {
   const consentProof = rewriteEvidenceLaneArtifactPaths(input.consentProof, "consent_proof", input.artifactRoot);
   const runtimeEvidence = rewriteEvidenceLaneArtifactPaths(input.runtimeEvidence, "runtime_evidence", input.artifactRoot);
+  const runtimeGraphs = verifyLaneRuntimeGraph(runtimeEvidence, input.scanId, "pre_consent", input.runtimeGraph);
   const policyEvidence = rewriteEvidenceLaneArtifactPaths(input.policyEvidence, "policy_evidence", input.artifactRoot);
   const runtimeCoverage = runtimeEvidence.runtimeCoverage;
   if (!runtimeCoverage) {
@@ -4072,6 +4094,8 @@ export function mergeLocalV2DagLambdaEvidenceLaneBundles(input: {
       ...policyEvidence.scanLaneRuns,
     ],
     runtimeTimeline: runtimeEvidence.runtimeTimeline,
+    runtimeEvidenceGraphs: runtimeGraphs.graphs,
+    runtimeEvidenceGraphDiagnostics: runtimeGraphs.diagnostics,
     networkEvents: runtimeEvidence.networkEvents,
     networkResponseEvents: runtimeEvidence.networkResponseEvents,
     automatedAccessObservation: runtimeEvidence.automatedAccessObservation,
@@ -4124,6 +4148,19 @@ export function mergeLocalV2DagLambdaEvidenceLaneBundles(input: {
     scan_evidence_lane_assessment: scanEvidenceLaneAssessment,
   };
   return canonicalEvidenceBundleSchema.parse(merged);
+}
+
+export function verifyLaneRuntimeGraph(bundle: CanonicalEvidenceBundle, scanId: string, scenario: "pre_consent" | "gpc", dispatch?: RuntimeGraphDispatch): { graphs: NonNullable<CanonicalEvidenceBundle["runtimeEvidenceGraphs"]>; diagnostics: NonNullable<CanonicalEvidenceBundle["runtimeEvidenceGraphDiagnostics"]> } {
+  const candidates = bundle.runtimeEvidenceGraphs ?? [];
+  if (!dispatch) return { graphs: [], diagnostics: candidates.length ? [{ scenario, reason: "unexpected_capture" }] : [] };
+  const rejected = bundle.runtimeEvidenceGraphDiagnostics?.find(row => row.scenario === scenario);
+  if (rejected) return { graphs: [], diagnostics: [rejected] };
+  if (candidates.length !== 1) return { graphs: [], diagnostics: [{ scenario, reason: candidates.length ? "ambiguous" : "unavailable" }] };
+  const verified = verifyRuntimeEvidenceGraph(candidates[0], { scanId, scenario, mode: dispatch.mode, sha256: value => createHash("sha256").update(value).digest("hex") });
+  if (!verified.graph) return { graphs: [], diagnostics: [{ scenario, reason: verified.reason ?? "malformed" }] };
+  const captureId = `${scanId}:${scenario === "pre_consent" ? "runtime_evidence" : "gpc_observation"}`;
+  if (dispatch.scanId !== scanId || verified.graph.captureId !== captureId) return { graphs: [], diagnostics: [{ scenario, reason: "capture_identity_mismatch" }] };
+  return { graphs: [verified.graph], diagnostics: [] };
 }
 
 function reconcileEvidenceLaneNoGoAssessment(input: {

@@ -1,4 +1,5 @@
 "use server";
+import { applyRuntimeGraphPresentationSwitch } from "./runtime-evidence-graph-projection";
 
 import { policyModelReviewArtifactSchema } from "@certscore/contracts";
 import {
@@ -1337,10 +1338,10 @@ async function loadScanDetailRecord(input: {
           runtimeVendorDisclosureEvidence: runtimeVendorDisclosureEvidence
         }
       : modelReviewBackedRuntimeArtifacts;
-  const reportRuntimeArtifacts = withPersistedFirstLayerConsentEvidence(
+  const reportRuntimeArtifacts = applyRuntimeGraphPresentationSwitch(withPersistedFirstLayerConsentEvidence(
     vendorDisclosureRuntimeArtifacts,
     normalizedSnapshot
-  );
+  ), process.env);
   const hybridRuntimeSignalPopulations = getHybridNanoSignalPopulations(reportRuntimeArtifacts).map((signal) => ({
     ...signal,
     observedAt: signal.observedAt ?? scanObservedAt,

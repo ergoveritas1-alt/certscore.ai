@@ -13,6 +13,7 @@ import {
   type NetworkDestination,
   type NetworkResponseEvent,
   type RuntimeEvidenceEvent,
+  type RuntimeEvidenceGraph,
   type ScanModuleRun,
   type ScreenshotArtifact,
   type SetCookieMetadata,
@@ -30,6 +31,7 @@ import {
   isVerifiedTerminalConsentPacket,
   PRIVACY_EVIDENCE_LOCALE_REGISTRY,
 } from "@certscore/contracts";
+import { installRuntimeGraphCapture, type RuntimeGraphCaptureInput } from "../runtime-evidence-graph-capture.js";
 import {
   isCanonicalIdSyncEndpoint,
   resolveCanonicalCookieKnowledge,
@@ -46,6 +48,7 @@ import { isIP } from "node:net";
 import { connect as tlsConnect } from "node:tls";
 import { chromium, type Browser, type BrowserContext, type CDPSession, type Frame, type Page, type Request, type Response, type Route } from "playwright";
 import type { ArtifactWriter } from "../artifact-writer.js";
+import { consentGeometryProofCdpBudget } from "../consent-geometry-proof-budget.js";
 import { connectTlsThroughConfiguredProxy, proxyFetch } from "../proxy-fetch.js";
 import {
   captureConsentControlGeometry,
@@ -183,6 +186,7 @@ export interface PreConsentRuntimeScannerInput {
   artifactWriter: ArtifactWriter;
   /** Selects the evidence domain retained by a dedicated Lambda lane. */
   captureScope?: "combined" | "consent_proof" | "runtime_evidence";
+  runtimeGraph?: RuntimeGraphCaptureInput;
   /** Enables the dedicated passive GPC condition without changing any other capture behavior. */
   globalPrivacyControlEnabled?: boolean;
   browser?: Browser;
@@ -503,6 +507,7 @@ export function applyFinalDocumentPartyClassification(input: {
 }
 
 export interface PreConsentRuntimeScannerResult {
+  runtimeEvidenceGraph?: RuntimeEvidenceGraph;
   moduleRun: ScanModuleRun;
   runtimeTimeline: RuntimeEvidenceEvent[];
   networkEvents: NetworkEvent[];
@@ -593,6 +598,8 @@ export async function preConsentRuntimeScanner(
   const passiveEvidenceActivity = createPassiveEvidenceActivityTracker();
   const requestIds = new WeakMap<Request, string>();
   const requestEvents = new WeakMap<Request, NetworkEvent>();
+  const pendingResponseCaptures = new Set<Promise<void>>();
+  let responseCaptureFinalized = false;
   const cdpInitiatorsByUrl = new Map<string, string[][]>();
   const cdpDestinationsByUrl = new Map<string, NetworkDestination[]>();
   const browserDocumentIdentityState: BrowserDocumentIdentityState = {};
@@ -631,6 +638,13 @@ export async function preConsentRuntimeScanner(
   lifecycleCheckpoint("browser_context", "completed");
   const page = context.newPage;
   const browserContext = context.newContext;
+  const graphCapture = captureRuntimeEvidence && input.runtimeGraph
+    ? await installRuntimeGraphCapture(page, input.runtimeGraph)
+    : undefined;
+  const finishGraph = (reason?: string) => {
+    if (graphCapture) responseCaptureFinalized = true;
+    try { return graphCapture?.finish(reason ?? (pendingResponseCaptures.size ? "legacy_response_enrichment_incomplete" : undefined)); } catch { return undefined; }
+  };
   let pageCrashObserved = false;
   const recordPageCrash = () => {
     if (pageCrashObserved) return;
@@ -679,7 +693,7 @@ export async function preConsentRuntimeScanner(
     timingBreakdown,
     "cookie write probe install",
     "Install a bounded metadata-only document.cookie write probe; cookie values are not retained.",
-    () => installCookieWriteProbe(browserContext),
+    () => graphCapture ? Promise.resolve() : installCookieWriteProbe(browserContext),
   );
   lifecycleCheckpoint("probe_install", "completed");
 
@@ -705,6 +719,7 @@ export async function preConsentRuntimeScanner(
   await installPublicNetworkGuardRoute(browserContext);
 
   page.on("request", (request) => {
+    if (responseCaptureFinalized) return;
     const requestUrl = request.url();
     if (!isHttpUrl(requestUrl)) {
       return;
@@ -837,8 +852,12 @@ export async function preConsentRuntimeScanner(
   });
 
   page.on("response", (response) => {
+    if (responseCaptureFinalized) return;
     if (isHttpUrl(response.url())) passiveEvidenceActivity.noteActivity();
-    void captureResponse(response);
+    const capture = captureResponse(response).catch(() => {
+      if (!responseCaptureFinalized) runtimeErrors.push("Response metadata capture incomplete.");
+    }).finally(() => pendingResponseCaptures.delete(capture));
+    pendingResponseCaptures.add(capture);
   });
   page.on("requestfinished", (request) => {
     if (isHttpUrl(request.url())) passiveEvidenceActivity.markRequestFinished(request);
@@ -1018,6 +1037,7 @@ export async function preConsentRuntimeScanner(
       retainedCmpRuntimeObservations.length > 0 ||
       retainedRenderedPolicyLinkEvidence.length > 0;
     return {
+      runtimeEvidenceGraph: finishGraph("runtime_capture_deadline"),
       moduleRun: {
         moduleName: "preConsentRuntimeScanner",
         status: retainedEvidence ? "partial" : "skipped_budget",
@@ -2075,7 +2095,10 @@ export async function preConsentRuntimeScanner(
         throw error;
       })
     );
-    const documentCookieWrites = await readCookieWriteProbe(page);
+    const documentCookieWrites = graphCapture ? [] : await readCookieWriteProbe(page);
+    graphCapture?.cookies(cookies);
+    // Concurrent metadata-only work remains inside this lane's existing absolute deadline.
+    void graphCapture?.snapshotStorage();
     const cookieSnapshot: CookieSnapshot = {
       artifactId: "cookie_snapshot_pre_consent",
       capturedAtMs: elapsed(input.scanStartedAtMs),
@@ -2094,7 +2117,9 @@ export async function preConsentRuntimeScanner(
     };
     retainedCookieSnapshot = cookieSnapshot;
     for (const cookie of cookies) {
-      const documentWrite = [...documentCookieWrites].reverse().find((write) => write.name === cookie.name);
+      // A same-name JS call cannot establish the writer of a scoped stored cookie. The graph retains
+      // the call and snapshot separately; legacy name-only attribution is disabled for graph captures.
+      const documentWrite = graphCapture ? undefined : [...documentCookieWrites].reverse().find((write) => write.name === cookie.name);
       const cookieHostname = getHostname(cookie.domain) ?? undefined;
       const cookieRegistrableDomain = getRegistrableDomain(cookieHostname) ?? undefined;
       const cookieParty = classifyCookieParty(cookie.domain, firstPartyHostname);
@@ -3640,6 +3665,9 @@ export async function preConsentRuntimeScanner(
         notes: unique([...visualCapture.notes, ...navigationNotes]),
       };
     }
+    if (graphCapture && pendingResponseCaptures.size && remainingModuleBudgetMs() > 0) {
+      await boundedCleanup(Promise.allSettled([...pendingResponseCaptures]), Math.min(100, remainingModuleBudgetMs()));
+    }
     applyFinalDocumentPartyClassification({
       finalDocumentUrl: page.url() === "about:blank" ? effectiveNavigationUrl : page.url(),
       networkEvents,
@@ -3653,6 +3681,7 @@ export async function preConsentRuntimeScanner(
       retainedRenderedPolicyLinkEvidence.length > 0;
     retainOwnedBrowserForPolicyRecovery = ownsBrowser && retainPolicyRecoverySession;
     return {
+      runtimeEvidenceGraph: finishGraph(),
       moduleRun: {
         moduleName: "preConsentRuntimeScanner",
         status: runtimeErrors.length > 0 || screenshotErrors.length > 0 ? "partial" : "completed",
@@ -3776,6 +3805,7 @@ export async function preConsentRuntimeScanner(
     });
     await emitPassiveRuntimeCheckpoint();
     return {
+      runtimeEvidenceGraph: finishGraph("runtime_capture_incomplete"),
       moduleRun: {
         moduleName: "preConsentRuntimeScanner",
         status: moduleBudgetEnded
@@ -3821,6 +3851,7 @@ export async function preConsentRuntimeScanner(
       renderedPolicyLinks: captureRenderedPolicyEvidence ? retainedRenderedPolicyLinkEvidence : [],
     };
   } finally {
+    finishGraph("runtime_capture_closed");
     if (passiveRuntimeCheckpointTimer) clearTimeout(passiveRuntimeCheckpointTimer);
     if (passiveRuntimeCheckpointPromise) await passiveRuntimeCheckpointPromise;
     input.signal?.removeEventListener("abort", abortRuntime);
@@ -3868,19 +3899,21 @@ export async function preConsentRuntimeScanner(
       .filter((fulfiller) => fulfiller.urlPattern.test(responseUrl))
       .flatMap((fulfiller) => fulfiller.setCookieHeaders ?? []);
     const effectiveSetCookieHeaders = [...setCookieHeaders, ...fixtureSetCookieHeaders];
+    if (responseCaptureFinalized) return;
     const setCookieMetadata = setCookieHeaders
       .concat(fixtureSetCookieHeaders)
       .map((header) => parseSetCookieMetadata(header, hostname, firstPartyHostname))
       .filter((metadata): metadata is SetCookieMetadata => Boolean(metadata))
       .filter((metadata) => isValidSetCookieDomainForResponse(metadata.domain, hostname));
     const safeHeaders = safeResponseHeaders(headers);
-    const sizes = normalizeResponseSizes(
-      await response.request().sizes().catch(() => undefined),
-    );
-    const timing = responseTiming(response);
-    const networkDestination = await enrichNetworkDestination(
+    const sizesPromise = response.request().sizes().then(normalizeResponseSizes).catch(() => undefined);
+    const destinationPromise = enrichNetworkDestination(
       requestEvent?.networkDestination ?? shiftQueuedValue(cdpDestinationsByUrl, responseUrl),
     );
+    const sizes = graphCapture ? undefined : await sizesPromise;
+    const timing = responseTiming(response);
+    const networkDestination = graphCapture ? requestEvent?.networkDestination : await destinationPromise;
+    if (responseCaptureFinalized) return;
     if (requestEvent && networkDestination) requestEvent.networkDestination = networkDestination;
     const responseEvent: NetworkResponseEvent = {
       eventId: nextId("resp"),
@@ -3897,7 +3930,7 @@ export async function preConsentRuntimeScanner(
       firstParty: party === "first_party",
       thirdParty: party === "third_party",
       topLevelUrl: page.url() === "about:blank" ? input.normalizedUrl : page.url(),
-      documentUrl: request.frame().url() === "about:blank" ? undefined : request.frame().url(),
+      documentUrl: requestEvent?.documentUrl,
       evidenceRefs: [],
       confidence: 0.95,
       directVsInferred: "direct",
@@ -3928,7 +3961,7 @@ export async function preConsentRuntimeScanner(
         ...(requestEvent?.initiatorStack ?? []),
         requestEvent?.responsibleScriptUrl,
       ]);
-      const setterScriptUrl = boundedInitiatorUrl(requestEvent?.responsibleScriptUrl) ??
+      const setterScriptUrl = graphCapture ? undefined : boundedInitiatorUrl(requestEvent?.responsibleScriptUrl) ??
         initiatorChain.find((value) => /^https?:\/\//i.test(value));
       const knowledge = resolveCanonicalCookieKnowledge(cookieMetadata.name, {
         cookieDomain: cookieMetadata.domain,
@@ -3993,6 +4026,13 @@ export async function preConsentRuntimeScanner(
         hostname: cookieMetadata.domain ?? hostname,
         matchSource: "set_cookie",
       });
+    }
+    if (graphCapture) {
+      const [resolvedSizes, resolvedDestination] = await Promise.all([sizesPromise, destinationPromise]);
+      if (responseCaptureFinalized) return;
+      responseEvent.sizes = resolvedSizes;
+      responseEvent.networkDestination = resolvedDestination;
+      if (requestEvent && resolvedDestination) requestEvent.networkDestination = resolvedDestination;
     }
   }
 }
@@ -12615,7 +12655,7 @@ async function captureConsentGeometryProofScreenshot(
   const deadlineAtMs = Date.now() + Math.max(2, options.timeoutMs);
   // Reserve time for both capture mechanisms. This preserves the CDP and
   // Playwright attempts while preventing their timeouts from stacking.
-  const cdpTimeoutMs = Math.max(1, Math.min(1_750, options.timeoutMs - 750));
+  const cdpTimeoutMs = consentGeometryProofCdpBudget(options.timeoutMs);
   const cdpDocumentIdentityBeforeCapture = currentBrowserDocumentIdentity(page);
   try {
     await captureViewportScreenshotWithCdp(page, screenshotPath, cdpTimeoutMs);

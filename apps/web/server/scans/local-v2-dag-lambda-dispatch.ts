@@ -7,6 +7,9 @@ import {
 import {
   GPC_OBSERVATION_DISPATCH_CONTRACT_VERSION,
   buildPostActionObservationDispatchConfigs,
+  selectRuntimeGraphDispatch,
+  readPersistedRuntimeGraphDispatch,
+  type RuntimeGraphDispatch,
   type GpcObservationDispatchConfig,
   type PostAcceptLambdaDispatchConfig,
   type PostRefusalLambdaDispatchConfig,
@@ -59,6 +62,7 @@ export type LocalV2DagLambdaDispatchPayload = {
   postAcceptObservation?: PostAcceptLambdaDispatchConfig;
   postRefusalObservation?: PostRefusalLambdaDispatchConfig;
   gpcObservation?: GpcObservationDispatchConfig;
+  runtimeGraph?: RuntimeGraphDispatch;
 };
 
 const MAX_POLICY_SURFACE_SEEDS = 12;
@@ -435,6 +439,9 @@ export function buildLocalV2DagLambdaDispatchPayload(input: {
         protocol: "passive_baseline_with_sec_gpc",
       } satisfies GpcObservationDispatchConfig
     : undefined;
+  const runtimeGraph = intent.runtimeGraphSelection !== undefined
+    ? readPersistedRuntimeGraphDispatch(input.scanId, intent)
+    : intent.orchestrationMode === "sharded" ? selectRuntimeGraphDispatch(input.scanId, process.env, targetUrl) : undefined;
   return {
     artifactOnly: true,
     awsRegion,
@@ -451,6 +458,7 @@ export function buildLocalV2DagLambdaDispatchPayload(input: {
     ...(policySurfaceSeeds.length > 0 ? { policySurfaceSeeds } : {}),
     ...postActionObservation,
     ...(gpcObservation ? { gpcObservation } : {}),
+    ...(runtimeGraph ? { runtimeGraph } : {}),
     productionFindingIntegration: false,
     profile: getProfile(config),
     resultHandoff: "sqs",

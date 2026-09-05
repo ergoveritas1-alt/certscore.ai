@@ -1767,6 +1767,7 @@ export function buildApiV2PreConsentCookiesTrackers(scanRecord: ScanDetailRespon
   };
   const resource = {
     type: "certscore_pre_consent_cookies_trackers",
+    runtimeEvidenceGraph: projection.runtimeEvidenceGraph,
     scanId: scan.id,
     domain,
     generatedAt: dateStringOrNull(scan.completedAt ?? scan.startedAt ?? scan.createdAt) ?? new Date(0).toISOString(),

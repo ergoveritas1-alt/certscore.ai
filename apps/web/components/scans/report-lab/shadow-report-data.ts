@@ -132,6 +132,7 @@ export type GpcResponseReportProjection = {
 };
 
 export type ShadowReportData = {
+  runtimeEvidenceGraph?: import("@certscore/api-contracts").ApiRuntimeEvidenceGraphProjection;
   scan: {
     benchmark: string;
     createdAt: string;

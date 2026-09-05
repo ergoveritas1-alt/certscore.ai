@@ -19,7 +19,46 @@ type Args = {
   mode: "fast" | "full";
 };
 
+const RUNTIME_GRAPH_RELEASE_CHECK: Check = {
+  key: "runtime-graph-release",
+  label: "runtime graph persistence, access, API and rollout contracts",
+  command: [
+    "pnpm", "exec", "tsx", "--tsconfig", "apps/web/tsconfig.json", "--test",
+    "apps/web/server/scans/runtime-evidence-graph-access.test.ts",
+    "apps/web/server/scans/runtime-evidence-graph-dispatch.test.ts",
+    "apps/web/server/scans/runtime-evidence-graph-projection.test.ts",
+    "apps/web/server/scans/runtime-evidence-graph-read.test.ts",
+    "apps/web/server/scans/runtime-evidence-graph-storage.test.ts",
+    "apps/web/lib/api-v2/scan-resource.test.ts",
+    "apps/web/server/pulse/retrieval-quota.test.ts",
+    "scripts/runtime-graph-rollout.test.ts",
+    "apps/validation-worker/src/validation/local-v2-dag-lambda-dispatch.test.ts",
+  ],
+};
+
+const RUNTIME_GRAPH_CAPTURE_CHECK: Check = {
+  key: "runtime-graph-capture",
+  label: "runtime graph browser, correlation, retention and deadline regressions",
+  command: ["pnpm", "exec", "tsx", "--tsconfig", "tsconfig.base.json", "--test", "--test-concurrency=1",
+    "packages/certscore-contracts/src/runtime-evidence-graph.test.ts",
+    "packages/certscore-scan-core/src/runtime-evidence-graph.test.ts",
+    "packages/certscore-scan-core/src/runtime-evidence-graph-browser.test.ts",
+    "packages/certscore-scan-core/src/canonical-bundle-retention.test.ts",
+    "packages/certscore-scan-core/src/browser-recovery-cleanup.test.ts",
+    "packages/certscore-scan-core/src/consent-geometry-proof-budget.test.ts",
+    "packages/certscore-scan-core/src/gpc-response-assessment.test.ts",
+    "packages/certscore-scan-core/src/transport-security-scanner.test.ts"],
+};
+const REPRESENTATIVE_PROOF_CHECK: Check = {
+  key: "consent-representative-proof",
+  label: "same-session representative viewport proof regression",
+  command: ["pnpm", "exec", "tsx", "--tsconfig", "tsconfig.base.json", "--test", "--test-name-pattern=^consent-proof lane (binds a completed generic negative|retains same-document Playwright proof)", "packages/certscore-scan-core/src/integration-fixtures.test.ts"],
+};
+
 const ROOT_FULL_CHECKS: Check[] = [
+  RUNTIME_GRAPH_RELEASE_CHECK,
+  RUNTIME_GRAPH_CAPTURE_CHECK,
+  REPRESENTATIVE_PROOF_CHECK,
   {
     key: "deploy-topology",
     label: "deployment topology check",
@@ -79,6 +118,12 @@ const ROOT_FULL_CHECKS: Check[] = [
 
 const TARGETS: Target[] = [
   {
+    key: "runtime-graph-operations",
+    label: "runtime graph rollout controls",
+    matches: file => file === "scripts/runtime-graph-rollout.ts" || file === "scripts/runtime-graph-rollout.test.ts",
+    checks: [RUNTIME_GRAPH_RELEASE_CHECK],
+  },
+  {
     key: "web",
     label: "public web",
     matches: (file) =>
@@ -94,6 +139,7 @@ const TARGETS: Target[] = [
       file.startsWith("packages/ui/") ||
       file.startsWith("packages/validation-shared/"),
     checks: [
+      RUNTIME_GRAPH_RELEASE_CHECK,
       {
         key: "web-typecheck",
         label: "public web typecheck",
@@ -139,6 +185,7 @@ const TARGETS: Target[] = [
       file.startsWith("packages/validation-shared/") ||
       file.startsWith("packages/web-bot-auth/"),
     checks: [
+      RUNTIME_GRAPH_RELEASE_CHECK,
       {
         key: "validation-worker-typecheck",
         label: "validation worker typecheck",
@@ -165,6 +212,8 @@ const TARGETS: Target[] = [
       file.startsWith("scripts/local-v2-dag-lambda/") ||
       file === ".github/workflows/v2-regulatory-gold-corpus.yml",
     checks: [
+      RUNTIME_GRAPH_CAPTURE_CHECK,
+      REPRESENTATIVE_PROOF_CHECK,
       {
         key: "scan-core-typecheck",
         label: "v2 scan-core typecheck",

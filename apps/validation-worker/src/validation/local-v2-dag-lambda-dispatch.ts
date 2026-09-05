@@ -2,6 +2,7 @@ import { SendMessageCommand, SQSClient } from "@aws-sdk/client-sqs";
 import {
   GPC_OBSERVATION_DISPATCH_CONTRACT_VERSION,
   buildPostActionObservationDispatchConfigs,
+  readPersistedRuntimeGraphDispatch,
 } from "@certscore/contracts";
 import { query, withWriteTransaction } from "@website-signal-risk-scanner/db";
 import { isFreshPriorScanAccelerationSource } from "@website-signal-risk-scanner/shared";
@@ -124,6 +125,7 @@ export function buildDurableLocalV2DagLambdaDispatchPayload(input: {
         protocol: "passive_baseline_with_sec_gpc" as const,
       }
     : undefined;
+  const runtimeGraph = readPersistedRuntimeGraphDispatch(input.scanId, intent);
   if (intent.contractVersion !== DISPATCH_CONTRACT_VERSION || intent.processor !== PROCESSOR) {
     throw new Error("Durable Lambda dispatch intent has an unsupported contract or processor.");
   }
@@ -149,6 +151,7 @@ export function buildDurableLocalV2DagLambdaDispatchPayload(input: {
     ...(seeds.length > 0 ? { policySurfaceSeeds: seeds } : {}),
     ...postActionObservation,
     ...(gpcObservation ? { gpcObservation } : {}),
+    ...(runtimeGraph ? { runtimeGraph } : {}),
     productionFindingIntegration: false as const,
     profile: parallel.profile === "tiny" || input.scanConfig.profile === "tiny" ? "tiny" as const : "standard" as const,
     resultHandoff: "sqs" as const,

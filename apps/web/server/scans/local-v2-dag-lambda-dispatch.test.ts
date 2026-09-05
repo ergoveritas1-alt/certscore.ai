@@ -86,6 +86,21 @@ test("builds a local-only v2 DAG Lambda dispatch payload for EU-IR SQS handoff",
   });
 });
 
+test("runtime graph activation is server owned and restricted to sharded scans", () => {
+  const oldMode = process.env.CERTSCORE_RUNTIME_GRAPH_MODE; const oldPercent = process.env.CERTSCORE_RUNTIME_GRAPH_PERCENT;
+  try {
+    delete process.env.CERTSCORE_RUNTIME_GRAPH_MODE; delete process.env.CERTSCORE_RUNTIME_GRAPH_PERCENT;
+    const config = { ...buildLambdaScanConfig({ orchestrationMode: "sharded" }), runtimeGraph: { mode: "project" }, CERTSCORE_RUNTIME_GRAPH_MODE: "project", CERTSCORE_RUNTIME_GRAPH_PERCENT: "100" };
+    assert.equal(buildLocalV2DagLambdaDispatchPayload({ scanId: "graph-test", scanConfig: config, localCallbackUrl: null }).runtimeGraph, undefined);
+    process.env.CERTSCORE_RUNTIME_GRAPH_MODE = "project"; process.env.CERTSCORE_RUNTIME_GRAPH_PERCENT = "100";
+    assert.equal(buildLocalV2DagLambdaDispatchPayload({ scanId: "graph-test", scanConfig: config, localCallbackUrl: null }).runtimeGraph?.scanId, "graph-test");
+    assert.equal(buildLocalV2DagLambdaDispatchPayload({ scanId: "graph-test", scanConfig: buildLambdaScanConfig(), localCallbackUrl: null }).runtimeGraph, undefined);
+  } finally {
+    if (oldMode === undefined) delete process.env.CERTSCORE_RUNTIME_GRAPH_MODE; else process.env.CERTSCORE_RUNTIME_GRAPH_MODE = oldMode;
+    if (oldPercent === undefined) delete process.env.CERTSCORE_RUNTIME_GRAPH_PERCENT; else process.env.CERTSCORE_RUNTIME_GRAPH_PERCENT = oldPercent;
+  }
+});
+
 test("dispatch always includes GPC for sharded orchestration", () => {
   const ordinary = buildLocalV2DagLambdaDispatchPayload({
     scanConfig: buildLambdaScanConfig(),

@@ -1,6 +1,8 @@
 import "server-only";
 
 import { createHash } from "node:crypto";
+import { presentRuntimeGraphForRead } from "./runtime-evidence-graph-projection";
+import { externalizeRuntimeGraphForPersistence } from "./runtime-evidence-graph-storage";
 import {
   collectionSurfaceAssessmentSchema,
   consentControlAssessmentSchema,
@@ -87,7 +89,7 @@ export function hasReadyScanReportProjection(scanRecord: Pick<ScanDetailResponse
 export function getPersistedScanReportProjection(
   scanRecord: Pick<ScanDetailResponse, "scan" | "snapshot">
 ) {
-  return readPersistedScanReportProjection(scanRecord);
+  return presentRuntimeGraphForRead(readPersistedScanReportProjection(scanRecord), process.env);
 }
 
 type PersistedScanReportProjectionRow = {
@@ -199,7 +201,7 @@ export async function loadPersistedScanReportProjection(input: {
 }) {
   const cached = getCachedCompletedReportProjection(input);
   if (cached) {
-    return cached;
+    return presentRuntimeGraphForRead(cached, process.env);
   }
   const row = await queryOne<PersistedScanReportProjectionRow>(
     `select s.id as scan_id,
@@ -231,7 +233,7 @@ export async function loadPersistedScanReportProjection(input: {
       value: projection,
     });
   }
-  return projection;
+  return presentRuntimeGraphForRead(projection, process.env);
 }
 
 /**
@@ -260,7 +262,7 @@ export async function loadAnonymousPersistedScanReportProjection(input: {
     [input.scanId],
     { readOnly: true }
   );
-  return row ? projectionFromPersistedRow(row) : null;
+  return presentRuntimeGraphForRead(row ? projectionFromPersistedRow(row) : null, process.env);
 }
 
 export type ScanReportProjectionRow = {
@@ -834,10 +836,10 @@ export async function persistScanReportProjection(
   const persistedProjection = await measureReportProjectionPhase(
     scanRecord.scan.id,
     "payload_normalize_and_serialize",
-    () => buildPersistedScanReportProjection({
+    async () => buildPersistedScanReportProjection(await externalizeRuntimeGraphForPersistence({
       ...scanRecord,
       snapshot: projectedSnapshot
-    }, { canonicalReportProjection })
+    }), { canonicalReportProjection })
   );
   const generation = getScanReportProjectionGeneration(scanRecord);
 

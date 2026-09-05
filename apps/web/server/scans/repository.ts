@@ -13,6 +13,8 @@ import type {
 } from "@website-signal-risk-scanner/shared";
 import { isMissingComplianceChangeEventsTable } from "../changes/legacy-change-events";
 import { parsePlatformAdminEmails } from "../admin/platform-admin-core";
+import { randomUUID } from "node:crypto";
+import { bindRuntimeGraphDispatchToScan } from "./runtime-evidence-graph-dispatch";
 
 export type ScanDetailQueryRow = {
   completed_at: string | null;
@@ -1064,6 +1066,8 @@ export async function upsertUsageCounter(input: {
 }
 
 export async function createQueuedFullScan(input: QueuedFullScanInsert): Promise<{ id: string }> {
+  const scanId = randomUUID();
+  const scanConfig = bindRuntimeGraphDispatchToScan({ scanId, scanConfig: input.scanConfigJson, environment: process.env });
   const data = await queryOne<{ id: string }>(
     `insert into scans (
        organization_id,
@@ -1076,9 +1080,10 @@ export async function createQueuedFullScan(input: QueuedFullScanInsert): Promise
        pages_scanned,
        scan_config_json,
        queue_priority,
-       queue_origin
+       queue_origin,
+       id
      )
-     values ($1, $2, $3, $4, $5, case when $5 = 'running' then now() else null end, $6, 0, $7, $8, $9)
+     values ($1, $2, $3, $4, $5, case when $5 = 'running' then now() else null end, $6, 0, $7, $8, $9, $10::uuid)
      returning id`,
     [
       input.organizationId,
@@ -1087,9 +1092,10 @@ export async function createQueuedFullScan(input: QueuedFullScanInsert): Promise
       input.scanType ?? "full",
       input.initialStatus ?? "queued",
       input.pagesRequested,
-      input.scanConfigJson,
+      scanConfig,
       input.queuePriority ?? 50,
-      input.queueOrigin ?? "user"
+      input.queueOrigin ?? "user",
+      scanId
     ]
   );
 

@@ -63,6 +63,14 @@ function basePacket() {
   };
 }
 
+test("invalid optional graph cannot invalidate independently valid retained Reject proof", () => {
+  const base = postRefusalEvidencePacketSchema.parse(basePacket());
+  const parsed = postRefusalEvidencePacketSchema.parse({ ...base, runtimeEvidenceGraph: { scenario: "post_reject", contractVersion: "future" } });
+  const { runtimeEvidenceGraphDiagnostics, ...legacy } = parsed;
+  assert.deepEqual(legacy, base);
+  assert.deepEqual(runtimeEvidenceGraphDiagnostics, [{ scenario: "post_reject", reason: "unsupported_version" }]);
+});
+
 function confirmedPacket() {
   return {
     ...basePacket(),

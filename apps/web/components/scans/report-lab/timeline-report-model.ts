@@ -780,6 +780,7 @@ export function buildTimelineReportModel(scanRecord: ScanDetailResponse): Shadow
 
   return {
     collectionFields,
+    runtimeEvidenceGraph: inventoryProjection.runtimeEvidenceGraph,
     collectionLimitations: canonical.collectionSurfaceAssessment?.limitationKeys.map(displayLabel) ?? [],
     collectionStatus: canonical.collectionSurfaceAssessment?.assessmentStatus
       ? displayLabel(canonical.collectionSurfaceAssessment.assessmentStatus)

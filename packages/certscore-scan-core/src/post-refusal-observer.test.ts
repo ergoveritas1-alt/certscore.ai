@@ -42,6 +42,24 @@ const recipe: PostRefusalActionRecipe = {
   },
 };
 
+test("graph action capture preserves a single confirmed Reject and its registration anchor", async () => {
+  await withFixture("post-refusal-reject-honored", async (url) => {
+    const packet = await runPostRefusalObserver({
+      actionSearchTimeoutMs: 500, confirmationTimeoutMs: 500, observationWindowMs: 500,
+      interactionAuthorization: { authorizationId: "loopback_local_lab", kind: "loopback" },
+      recipe, scanId: "graph-parent:reject_observation", parentScanId: "graph-parent", url,
+      runtimeGraph: { scanId: "graph-parent", mode: "project" },
+    });
+    assert.equal(packet.refusalRegistration.status, "confirmed");
+    assert.equal(packet.runtimeEvidenceGraph?.scanId, "graph-parent");
+    assert.equal(packet.runtimeEvidenceGraph?.scenario, "post_reject");
+    assert.equal(packet.runtimeEvidenceGraph?.action?.status, "confirmed");
+    assert.equal(packet.runtimeEvidenceGraph?.action?.registeredAtMs, packet.refusalRegistration.refusalRegisteredAtMs);
+    assert.equal(packet.network.postRefusalNonEssentialRequests.length, 0);
+    assert.equal(packet.observations.length, 0);
+  });
+});
+
 test("reject honored confirms registration without post-refusal activity", async () => {
   await withFixture("post-refusal-reject-honored", async (url) => {
     const packet = await observe(url);

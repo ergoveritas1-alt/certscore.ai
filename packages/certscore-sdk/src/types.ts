@@ -546,6 +546,7 @@ export interface PreConsentCookiesTrackersRow {
 }
 
 export interface PreConsentCookiesTrackers {
+  runtimeEvidenceGraph?: import("./runtime-evidence-graph.js").RuntimeEvidenceGraphProjection;
   type: "certscore_pre_consent_cookies_trackers";
   scanId: string;
   domain?: string | null;

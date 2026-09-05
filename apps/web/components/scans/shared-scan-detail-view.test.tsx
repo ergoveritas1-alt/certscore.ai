@@ -256,15 +256,16 @@ test("active timeline report surfaces canonical Accept and Reject projections in
   assert.doesNotMatch(report, /data-testid="post-reject-activity-inventory"/);
   assert.doesNotMatch(report, /<PostRejectActivityInventory report=\{report\} \/>/);
   assert.match(report, /Choice path results/);
-  assert.match(report, /line-clamp-2 text-xs leading-5 text-zinc-600/);
+  // Baseline UI uses a three-line collapsed summary that fully expands with its evidence row.
+  assert.match(report, /text-xs leading-5 text-zinc-600[^\n]*\[-webkit-line-clamp:3\][^\n]*group-open\/evidence-row:\[-webkit-line-clamp:unset\]/);
   assert.doesNotMatch(report, /After optional cookies and tracking were rejected/);
   assert.doesNotMatch(report, /Offsets begin when the cookie banner/);
   assert.doesNotMatch(report, /First-seen timestamps place retained third-party requests/);
   assert.doesNotMatch(report, /Expected after Reject:/);
-  assert.match(report, /line-clamp-2/);
+  assert.match(report, /group-open\/evidence-row:\[display:block\]/);
   assert.doesNotMatch(report, /min-w-\[48rem\]/);
   assert.doesNotMatch(report, /Requests and storage writes after Reject/);
-  assert.match(report, /report\.transportRows\.filter\(\(row\) => row\.status === "Observed"\)\.length\} of \{report\.transportRows\.length\} positive observations/);
+  assert.match(report, /report\.transportRows\.filter\(\(row\) => row\.status === "Observed"\)\.length\} positive · \{report\.transportRows\.length\} checks/);
   assert.match(model, /Non-essential activity after confirmed Reject/);
   assert.match(model, /Same non-essential identifier remained stored after Reject/);
   assert.match(model, /isPersistenceOnlyRejectEvidence/);

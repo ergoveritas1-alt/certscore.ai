@@ -1,4 +1,7 @@
 import { z } from "zod";
+import { runtimeEvidenceGraphSchema, runtimeGraphVerificationDiagnosticSchema, withRuntimeGraphCompatibility, RUNTIME_EVIDENCE_GRAPH_LIMITS, type RuntimeEvidenceGraph, type RuntimeGraphVerificationDiagnostic } from "./runtime-evidence-graph";
+const canonicalRuntimeEvidenceGraphSchema: z.ZodType<RuntimeEvidenceGraph> = runtimeEvidenceGraphSchema;
+export * from "./runtime-evidence-graph";
 import {
   SUPPORTED_GDPR_TRANSPARENCY_LOCALES,
   SUPPORTED_PRIVACY_EVIDENCE_LOCALES,
@@ -6,11 +9,17 @@ import {
 import {
   postRefusalEvidencePacketSchema,
   postRefusalLaneOutcomeSchema,
+  type PostRefusalEvidencePacket,
+  type PostRefusalEvidencePacketInput,
 } from "./post-refusal-observation";
 import {
   postAcceptEvidencePacketSchema,
   postAcceptLaneOutcomeSchema,
+  type PostAcceptEvidencePacket,
+  type PostAcceptEvidencePacketInput,
 } from "./post-accept-observation";
+const canonicalPostRefusalPacketSchema: z.ZodType<PostRefusalEvidencePacket, z.ZodTypeDef, PostRefusalEvidencePacketInput> = postRefusalEvidencePacketSchema;
+const canonicalPostAcceptPacketSchema: z.ZodType<PostAcceptEvidencePacket, z.ZodTypeDef, PostAcceptEvidencePacketInput> = postAcceptEvidencePacketSchema;
 import {
   gpcResponseAssessmentSchema,
   type GpcResponseAssessment,
@@ -3218,7 +3227,7 @@ export const displaySafeEvidenceExcerptSchema = z.object({
   directVsInferred: directVsInferredSchema,
 });
 
-export const canonicalEvidenceBundleSchema = z.object({
+const canonicalEvidenceBundleBaseSchema = z.object({
   scanId: z.string(),
   url: z.string(),
   normalizedUrl: z.string(),
@@ -3228,9 +3237,9 @@ export const canonicalEvidenceBundleSchema = z.object({
   scanProfile: scanProfileSchema,
   modulesRun: z.array(scanModuleRunSchema),
   scanLaneRuns: z.array(scanLaneRunSchema).max(8).default([]),
-  postAcceptEvidence: postAcceptEvidencePacketSchema.optional(),
+  postAcceptEvidence: canonicalPostAcceptPacketSchema.optional(),
   postAcceptLaneOutcome: postAcceptLaneOutcomeSchema.optional(),
-  postRefusalEvidence: postRefusalEvidencePacketSchema.optional(),
+  postRefusalEvidence: canonicalPostRefusalPacketSchema.optional(),
   postRefusalLaneOutcome: postRefusalLaneOutcomeSchema.optional(),
   gpcResponseAssessment: canonicalBundleGpcResponseAssessmentSchema.optional(),
   runtimeTimeline: z.array(runtimeEvidenceEventSchema),
@@ -3288,6 +3297,16 @@ export const canonicalEvidenceBundleSchema = z.object({
     policyObservationIds.add(observation.observationId);
   });
 });
+
+// Keep the large legacy contract named, preserving defaults and input types while adding a bounded extension.
+export const canonicalEvidenceBundleSchema: z.ZodType<
+  z.output<typeof canonicalEvidenceBundleBaseSchema> & { runtimeEvidenceGraphs?: RuntimeEvidenceGraph[]; runtimeEvidenceGraphDiagnostics?: RuntimeGraphVerificationDiagnostic[] },
+  z.ZodTypeDef,
+  z.input<typeof canonicalEvidenceBundleBaseSchema> & { runtimeEvidenceGraphs?: RuntimeEvidenceGraph[]; runtimeEvidenceGraphDiagnostics?: RuntimeGraphVerificationDiagnostic[] }
+> = withRuntimeGraphCompatibility(canonicalEvidenceBundleBaseSchema.and(z.object({
+  runtimeEvidenceGraphs: z.array(canonicalRuntimeEvidenceGraphSchema).max(RUNTIME_EVIDENCE_GRAPH_LIMITS.graphs).optional(),
+  runtimeEvidenceGraphDiagnostics: z.array(runtimeGraphVerificationDiagnosticSchema).max(4).optional(),
+})));
 
 export const endpointEnrichmentOverlayEntrySchema = z.object({
   basis: z.array(z.string().max(120)).default([]),

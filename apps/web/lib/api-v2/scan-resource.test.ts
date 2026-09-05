@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import { createRequire } from "node:module";
 import {
   apiV2ActiveScanRetryAfterSeconds,
   buildApiV2Error,
@@ -18,6 +19,15 @@ import {
 import { buildRuntimeInventoryProjectionFromScan } from "../scans/runtime-inventory-projection";
 import type { ScanDetailResponse } from "../../server/scans/get-scan-by-id";
 import { SCAN_NO_GO_REASON_CODES, SCAN_NO_GO_REASON_PRESENTATIONS } from "@website-signal-risk-scanner/shared";
+import { apiV2PreConsentCookiesTrackersSchema } from "@certscore/api-contracts";
+import type { CanonicalEvidenceBundle } from "@certscore/contracts";
+import { RuntimeEvidenceGraphBuilder } from "../../../../packages/certscore-scan-core/src/runtime-evidence-graph";
+import { projectRuntimeEvidenceGraphs, applyRuntimeGraphPresentationSwitch } from "../../server/scans/runtime-evidence-graph-projection";
+import { buildPersistedScanReportProjection, readPersistedScanReportProjection, SCAN_REPORT_PROJECTION_VERSION } from "../../server/scans/scan-report-projection-contract";
+const require = createRequire(import.meta.url);
+const serverOnlyPath = require.resolve("server-only");
+(require.cache as Record<string, unknown>)[serverOnlyPath] = { exports: {}, loaded: true };
+const { externalizeRuntimeGraphForPersistence, hydrateRuntimeGraphForRead } = require("../../server/scans/runtime-evidence-graph-storage") as typeof import("../../server/scans/runtime-evidence-graph-storage");
 
 function fixture(overrides: Partial<ScanDetailResponse["scan"]> = {}) {
   return {
@@ -69,6 +79,40 @@ function fixture(overrides: Partial<ScanDetailResponse["scan"]> = {}) {
     validationFindings: []
   } as unknown as ScanDetailResponse;
 }
+
+test("retained graph survives verified artifact/reference persistence through inventory/API without changing findings or score", async () => {
+  const record = fixture(); const baseline = buildApiV2ScanResource(record);
+  const builder = new RuntimeEvidenceGraphBuilder({ scanId: record.scan.id, captureId: `${record.scan.id}:runtime_evidence`, scenario: "pre_consent", mode: "project", startedAt: new Date().toISOString(), browserVersion: "fixture" });
+  builder.snapshot([{ name: "fixture", domain: "example.com", path: "/", value: "NOT_PUBLIC" }]);
+  const bundle = { scanId: record.scan.id, runtimeEvidenceGraphs: [builder.finish()] } as CanonicalEvidenceBundle;
+  const graph = projectRuntimeEvidenceGraphs({ bundle, scanId: record.scan.id, source: { verificationStatus: "verified", sha256: "a".repeat(64), sizeBytes: 1000 } });
+  record.runtimeArtifacts = { runtimeEvidenceGraphProjection: graph };
+  let artifact: Buffer = Buffer.alloc(0);
+  const compact = await externalizeRuntimeGraphForPersistence(record, { write: async (_reference, bytes) => { artifact = bytes; } });
+  const persisted = buildPersistedScanReportProjection(compact);
+  assert.ok(!persisted.serialized.includes('"nodes"'), "full graph bytes must not enter the database");
+  assert.ok(artifact.byteLength);
+  const hydrated = readPersistedScanReportProjection({ scan: record.scan, snapshot: {
+    report_projection_payload: JSON.parse(persisted.serialized), report_projection_payload_sha256: persisted.sha256,
+    report_projection_payload_size_bytes: persisted.sizeBytes, report_projection_status: "ready", report_projection_version: SCAN_REPORT_PROJECTION_VERSION,
+    report_projection_computed_at: new Date().toISOString(),
+  } });
+  assert.ok(hydrated);
+  const resolved = await hydrateRuntimeGraphForRead({ ...record, runtimeArtifacts: hydrated.runtimeArtifacts }, { read: async () => artifact, environment: { CERTSCORE_RUNTIME_GRAPH_PRESENTATION: "on" } });
+  record.runtimeArtifacts = resolved.runtimeArtifacts;
+  assert.deepEqual(record.runtimeArtifacts?.runtimeEvidenceGraphProjection, JSON.parse(JSON.stringify(graph)));
+  const inventory = buildRuntimeInventoryProjectionFromScan(record);
+  const api = buildApiV2PreConsentCookiesTrackers(record);
+  assert.deepEqual(api.runtimeEvidenceGraph, inventory.runtimeEvidenceGraph);
+  assert.deepEqual(apiV2PreConsentCookiesTrackersSchema.parse(api).runtimeEvidenceGraph, inventory.runtimeEvidenceGraph);
+  assert.ok(!JSON.stringify(api).includes("NOT_PUBLIC"));
+  assert.equal(buildApiV2ScanResource(record).score, baseline.score);
+  assert.deepEqual(record.validationFindings, fixture().validationFindings);
+  assert.deepEqual(record.signals, fixture().signals);
+  const disabled = { ...record, runtimeArtifacts: applyRuntimeGraphPresentationSwitch(record.runtimeArtifacts, { CERTSCORE_RUNTIME_GRAPH_PRESENTATION: "off" }) };
+  assert.equal(buildApiV2PreConsentCookiesTrackers(disabled).runtimeEvidenceGraph, undefined);
+  assert.ok(record.runtimeArtifacts?.runtimeEvidenceGraphProjection, "presentation kill switch must not mutate retained evidence");
+});
 
 function gpcCanonicalFixture() {
   const assessment = {

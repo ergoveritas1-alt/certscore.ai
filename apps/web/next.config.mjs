@@ -137,6 +137,8 @@ const nextConfig = {
         "../../packages/certscore-api-contracts/src/openapi-chatgpt.ts",
       "./openapi-v2.js": "../../packages/certscore-api-contracts/src/openapi-v2.ts",
       "./pulse-v1.js": "../../packages/certscore-api-contracts/src/pulse-v1.ts",
+      "./runtime-evidence-graph.js": "../../packages/certscore-api-contracts/src/runtime-evidence-graph.ts",
+      "./runtime-evidence-graph-openapi.js": "../../packages/certscore-api-contracts/src/runtime-evidence-graph-openapi.ts",
       "./scan-observation-results.js":
         "../../packages/certscore-api-contracts/src/scan-observation-results.ts",
       "./scan-no-go.js": "../../packages/certscore-api-contracts/src/scan-no-go.ts"

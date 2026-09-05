@@ -1,4 +1,6 @@
 import { z } from "zod";
+import { runtimeEvidenceGraphSchema, runtimeGraphVerificationDiagnosticSchema, withRuntimeGraphCompatibility, type RuntimeEvidenceGraph } from "./runtime-evidence-graph";
+const packetRuntimeGraphSchema: z.ZodType<RuntimeEvidenceGraph> = runtimeEvidenceGraphSchema;
 import {
   postRefusalInteractionAuthorizationSchema,
   postRefusalInteractionDiagnosticsSchema,
@@ -137,7 +139,9 @@ export const postAcceptStorageWriteSchema = postRefusalStorageWriteSchema.omit({
   msOffsetFromAccept: z.number().int().nonnegative(),
 });
 
-export const postAcceptEvidencePacketSchema = z.object({
+const postAcceptEvidencePacketBaseSchema = z.object({
+  runtimeEvidenceGraph: packetRuntimeGraphSchema.optional(),
+  runtimeEvidenceGraphDiagnostics: z.array(runtimeGraphVerificationDiagnosticSchema).max(1).optional(),
   artifactVersion: z.literal("certscore.post_accept_evidence.v1"),
   artifactOnly: z.literal(true),
   productionProjectable: z.boolean(),
@@ -263,6 +267,8 @@ export const postAcceptEvidencePacketSchema = z.object({
     });
   }
 });
+
+export const postAcceptEvidencePacketSchema = withRuntimeGraphCompatibility(postAcceptEvidencePacketBaseSchema, "post_accept");
 
 export const postAcceptLaneOutcomeSchema = z.object({
   contractVersion: z.literal("certscore.post_accept_lane_outcome.v1"),
@@ -542,6 +548,7 @@ export type PostAcceptObservation = z.infer<typeof postAcceptObservationSchema>;
 export type PostAcceptNetworkRequest = z.infer<typeof postAcceptNetworkRequestSchema>;
 export type PostAcceptStorageWrite = z.infer<typeof postAcceptStorageWriteSchema>;
 export type PostAcceptEvidencePacket = z.infer<typeof postAcceptEvidencePacketSchema>;
+export type PostAcceptEvidencePacketInput = z.input<typeof postAcceptEvidencePacketSchema>;
 export type PostAcceptLaneOutcome = z.infer<typeof postAcceptLaneOutcomeSchema>;
 export type PostAcceptLambdaDispatchConfig = z.infer<typeof postAcceptLambdaDispatchConfigSchema>;
 export type PostAcceptLambdaEvidenceDescriptor = z.infer<typeof postAcceptLambdaEvidenceDescriptorSchema>;

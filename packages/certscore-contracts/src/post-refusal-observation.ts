@@ -1,4 +1,6 @@
 import { z } from "zod";
+import { runtimeEvidenceGraphSchema, runtimeGraphVerificationDiagnosticSchema, withRuntimeGraphCompatibility, type RuntimeEvidenceGraph } from "./runtime-evidence-graph";
+const packetRuntimeGraphSchema: z.ZodType<RuntimeEvidenceGraph> = runtimeEvidenceGraphSchema;
 import { consentActionControlProofSchema } from "./consent-action-control-proof";
 import {
   choicePathEvidenceDispositionSchema,
@@ -413,7 +415,9 @@ export const postRefusalInteractionDiagnosticsSchema = z.object({
   }
 });
 
-export const postRefusalEvidencePacketSchema = z.object({
+const postRefusalEvidencePacketBaseSchema = z.object({
+  runtimeEvidenceGraph: packetRuntimeGraphSchema.optional(),
+  runtimeEvidenceGraphDiagnostics: z.array(runtimeGraphVerificationDiagnosticSchema).max(1).optional(),
   artifactVersion: z.literal("certscore.post_refusal_evidence.v1"),
   artifactOnly: z.literal(true),
   productionProjectable: z.boolean(),
@@ -783,6 +787,8 @@ export const postRefusalEvidencePacketSchema = z.object({
     });
   }
 });
+
+export const postRefusalEvidencePacketSchema = withRuntimeGraphCompatibility(postRefusalEvidencePacketBaseSchema, "post_reject");
 
 function sameRetainedStorageIdentity(
   left: z.infer<typeof postRefusalStorageItemSchema>,
@@ -1235,6 +1241,7 @@ export type PostRefusalTcfState = z.infer<typeof postRefusalTcfStateSchema>;
 export type PostRefusalObservation = z.infer<typeof postRefusalObservationSchema>;
 export type PostRefusalInteractionDiagnostics = z.infer<typeof postRefusalInteractionDiagnosticsSchema>;
 export type PostRefusalEvidencePacket = z.infer<typeof postRefusalEvidencePacketSchema>;
+export type PostRefusalEvidencePacketInput = z.input<typeof postRefusalEvidencePacketSchema>;
 export type PostRefusalLaneOutcome = z.infer<typeof postRefusalLaneOutcomeSchema>;
 export type PostRefusalReconciliationEnvelope = z.infer<typeof postRefusalReconciliationEnvelopeSchema>;
 export type PostRefusalInteractionAuthorization = z.infer<typeof postRefusalInteractionAuthorizationSchema>;

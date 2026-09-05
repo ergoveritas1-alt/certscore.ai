@@ -1,4 +1,5 @@
 import type { ReactNode } from "react";
+import { RuntimeEvidenceGraphExplorer } from "../runtime-evidence-graph-explorer";
 import { SiteFooter } from "../../layout/site-footer";
 import { SiteHeader } from "../../layout/site-header";
 import { DomainScanForm } from "../../marketing/domain-scan-form";
@@ -1174,6 +1175,7 @@ function RuntimeInventoryTable({ report }: { report: ShadowReportData }) {
       inventory={report.inventory}
       summary={`${report.metrics.vendors} vendors · ${report.metrics.domains} domains`}
     >
+        <RuntimeEvidenceGraphExplorer projection={report.runtimeEvidenceGraph} />
         <div
           className={`${inventoryScrollClasses} border border-zinc-200 bg-white`}
           data-inventory-scroll={inventoryIsScrollable ? "bounded" : "unbounded"}
