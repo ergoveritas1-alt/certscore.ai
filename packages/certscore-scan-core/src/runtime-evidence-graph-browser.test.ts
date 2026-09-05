@@ -5,8 +5,34 @@ import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { chromium } from "playwright";
-import { installRuntimeGraphCapture } from "./runtime-evidence-graph-capture.js";
+import { runtimeGraphDispatchSchema } from "@certscore/contracts";
+import { finishOptionalRuntimeGraph, installRuntimeGraphCapture } from "./runtime-evidence-graph-capture.js";
+import { RuntimeEvidenceGraphBuilder } from "./runtime-evidence-graph.js";
 import { runScan } from "./index.js";
+
+test("graph failure and throwing listener cleanup still detach once without closing the lane browser", async (t) => {
+  const browser = await chromium.launch({ headless: true });
+  try {
+    const context = await browser.newContext(); const page = await context.newPage();
+    const originalSession = context.newCDPSession.bind(context);
+    let detachCount = 0, finishCount = 0;
+    t.mock.method(context, "newCDPSession", async (...args: Parameters<typeof context.newCDPSession>) => {
+      const session = await originalSession(...args); const detach = session.detach.bind(session);
+      t.mock.method(session, "off", () => { throw new Error("injected listener cleanup failure"); });
+      t.mock.method(session, "detach", () => { detachCount++; return detach(); });
+      return session;
+    });
+    t.mock.method(RuntimeEvidenceGraphBuilder.prototype, "finish", () => { finishCount++; throw new Error("injected primary and fallback failure"); });
+    const capture = await installRuntimeGraphCapture(page, { scanId: "failure", captureId: "runtime", scenario: "pre_consent", mode: "project", startedAt: new Date().toISOString() });
+    assert.deepEqual(finishOptionalRuntimeGraph(capture, "pre_consent"), { runtimeEvidenceGraphDiagnostics: [{ scenario: "pre_consent", reason: "unavailable" }] });
+    assert.equal(capture.finish(), undefined);
+    assert.equal(finishCount, 2, "failed capture remains terminal on repeated finalization");
+    assert.equal(detachCount, 1);
+    assert.equal(page.isClosed(), false);
+    assert.equal(browser.isConnected(), true);
+    assert.deepEqual(finishOptionalRuntimeGraph({ finish() { throw new Error("unexpected implementation failure"); } }, "post_accept"), { runtimeEvidenceGraphDiagnostics: [{ scenario: "post_accept", reason: "unavailable" }] });
+  } finally { await browser.close(); }
+});
 
 test("real Chromium graph captures response setters, JS attempts, sibling frames, storage and worker requests without changing native behavior", { timeout: 20_000 }, async () => {
   const server = createServer((req, res) => {
@@ -38,6 +64,7 @@ test("real Chromium graph captures response setters, JS attempts, sibling frames
     assert.deepEqual(await page.evaluate("window.__nativeResult"), [true, "private-storage", true]);
     capture.cookies(await context.cookies()); await capture.snapshotStorage();
     const graph = capture.finish();
+    assert.ok(graph);
     assert.ok(graph.nodes.some(node => node.operation === "http_set" && node.cookie?.name === "server_cookie"), "HTTP response setter");
     assert.ok(graph.nodes.some(node => node.operation === "js_set" && node.cookie?.name === "js_cookie"), `JS setter: ${JSON.stringify(graph.coverage)}`);
     assert.ok(graph.nodes.some(node => node.operation === "setItem" && node.name === "local_key"), "storage write");
@@ -53,7 +80,7 @@ test("real Chromium graph captures response setters, JS attempts, sibling frames
     await context.close();
     const bundle = await runScan({
       url: `http://127.0.0.1:${address.port}/`, outDir: artifactRoot, profile: "tiny", evidenceLane: "runtime_evidence",
-      preConsentModuleDeadlineMs: 5000, preConsentScreenshotMode: "never", runtimeGraph: { scanId: "fixture", mode: "project" },
+      preConsentModuleDeadlineMs: 5000, preConsentScreenshotMode: "never", runtimeGraph: runtimeGraphDispatchSchema.parse({ contractVersion: "certscore.runtime-graph-dispatch.v1", scanId: "fixture", mode: "project", profile: "bounded_passive_v1" }),
     });
     const retained = bundle.runtimeEvidenceGraphs?.[0];
     assert.ok(retained, "runtime lane retains graph in canonical bundle");
@@ -115,7 +142,7 @@ test("probes preserve native behavior under page tampering, proxies, long identi
       const result = await page.evaluate<Awaited<ReturnType<typeof exercise>>>(`(() => { const __name = (fn) => fn; return (${exercise.toString()})(); })()`);
       results.push(result);
       if (capture) {
-        capture.cookies(await context.cookies()); await capture.snapshotStorage(); const graph = capture.finish();
+        capture.cookies(await context.cookies()); await capture.snapshotStorage(); const graph = capture.finish(); assert.ok(graph);
         assert.equal(result.nonceLeaked, false); assert.equal(result.callerThrew, false); assert.equal(result.customStackCalls, 0);
         assert.ok(!JSON.stringify(graph).includes("forged.invalid"));
         assert.ok(graph.coverage.reasons.includes("page_stack_formatter_untrusted"));

@@ -1,4 +1,4 @@
-import { installRuntimeGraphCapture } from "./runtime-evidence-graph-capture.js";
+import { finishOptionalRuntimeGraph, installRuntimeGraphCapture } from "./runtime-evidence-graph-capture.js";
 import {
   POST_ACCEPT_DEFAULT_OBSERVATION_WINDOW_MS,
   postAcceptEvidencePacketSchema,
@@ -374,7 +374,7 @@ export async function runPostAcceptObserver(
       fields.registration.acceptanceRegisteredAtMs !== undefined;
     const resolverRecipe = selectedRecipe ?? (recipes.length === 1 ? recipes[0] : undefined);
     const packet = postAcceptEvidencePacketSchema.parse({
-      runtimeEvidenceGraph: graphCapture?.finish(confirmed ? undefined : "action_not_confirmed"),
+      ...finishOptionalRuntimeGraph(graphCapture, "post_accept", confirmed ? undefined : "action_not_confirmed"),
       artifactVersion: "certscore.post_accept_evidence.v1",
       artifactOnly: true,
       productionProjectable:
@@ -966,7 +966,7 @@ export async function runPostAcceptObserver(
     });
   } finally {
     if (resultBudgetTimer) clearTimeout(resultBudgetTimer);
-    graphCapture?.finish("action_capture_closed");
+    finishOptionalRuntimeGraph(graphCapture, "post_accept", "action_capture_closed");
     actionDiscovery?.dispose();
     await context?.close().catch(() => undefined);
     if (ownsBrowser) await browser?.close().catch(() => undefined);

@@ -1,6 +1,6 @@
 import { randomBytes } from "node:crypto";
 import type { CDPSession, Page } from "playwright";
-import type { RuntimeEvidenceGraph } from "@certscore/contracts";
+import type { RuntimeEvidenceGraph, RuntimeGraphVerificationDiagnostic } from "@certscore/contracts";
 import { RuntimeEvidenceGraphBuilder } from "./runtime-evidence-graph.js";
 
 export type RuntimeGraphCaptureInput = {
@@ -14,10 +14,25 @@ const EVENTS = [
   "Network.loadingFailed", "Network.loadingFinished", "Network.webSocketCreated", "Network.webSocketFrameSent", "Network.webSocketFrameReceived", "Network.webTransportCreated",
 ] as const;
 
+/** Optional inventory evidence must never invalidate a lane's existing facts. */
+export function finishOptionalRuntimeGraph(
+  capture: { finish(reason?: string): RuntimeEvidenceGraph | undefined } | undefined,
+  scenario: RuntimeEvidenceGraph["scenario"], reason?: string,
+): { runtimeEvidenceGraph?: RuntimeEvidenceGraph; runtimeEvidenceGraphDiagnostics?: RuntimeGraphVerificationDiagnostic[] } {
+  if (!capture) return {};
+  try {
+    const graph = capture.finish(reason);
+    if (graph) return { runtimeEvidenceGraph: graph };
+  } catch { /* Retain only a typed diagnostic, never raw exceptions or invented evidence. */ }
+  return { runtimeEvidenceGraphDiagnostics: [{ scenario, reason: "unavailable" }] };
+}
+
 /** Additive passive capture only: no requests, interception, target pausing, cache changes or extended observation window. */
 export async function installRuntimeGraphCapture(page: Page, input: RuntimeGraphCaptureInput) {
   const started = performance.now();
-  const builder = new RuntimeEvidenceGraphBuilder({ ...input, browserVersion: page.context().browser()?.version().slice(0, 100) ?? "unknown" });
+  const builder = new RuntimeEvidenceGraphBuilder({ scanId: input.scanId, captureId: input.captureId,
+    scenario: input.scenario, mode: input.mode, startedAt: input.startedAt,
+    browserVersion: page.context().browser()?.version().slice(0, 100) ?? "unknown" });
   const nonce = randomBytes(24).toString("hex");
   const binding = `__certscore_graph_${randomBytes(8).toString("hex")}`;
   // tsx fixture runs preserve function names with this inert helper; tsc production output does not need it.
@@ -150,22 +165,26 @@ export async function installRuntimeGraphCapture(page: Page, input: RuntimeGraph
         for (const row of result.result.value.slice(0, 320)) guard(() => builder.probe(session, contextId, row));
       } catch { builder.limit("storage_snapshot_unavailable"); }
     }))),
-    finish: (reason?: string): RuntimeEvidenceGraph => {
-      if (final) return final;
-      if (reason) builder.limit(reason);
-      for (const cleanup of cleanups) cleanup();
-      try {
-        final = builder.finish({ setupMs, pendingTasks: tasks.size });
-      } catch {
-        const limited = new RuntimeEvidenceGraphBuilder(builder.input);
-        limited.capability("network_identity", "unavailable"); limited.limit("graph_integrity_validation_failed");
-        final = limited.finish({ setupMs });
-      }
+    finish: (reason?: string): RuntimeEvidenceGraph | undefined => {
+      if (frozen) return final;
       frozen = true;
-      for (const waiter of pending.values()) waiter.reject(new Error("graph_capture_finalized"));
-      pending.clear(); children.clear(); contexts.clear();
-      // Detach this observer only. Never close a lane's browser or another observer's session.
-      void root?.detach().catch(() => undefined);
+      try {
+        if (reason) builder.limit(reason);
+        try {
+          final = builder.finish({ setupMs, pendingTasks: tasks.size });
+        } catch {
+          const limited = new RuntimeEvidenceGraphBuilder(builder.input);
+          limited.capability("network_identity", "unavailable"); limited.limit("graph_integrity_validation_failed");
+          final = limited.finish({ setupMs });
+        }
+      } catch { /* Even fallback failure is isolated from canonical evidence and cleanup. */
+      } finally {
+        for (const cleanup of cleanups) { try { cleanup(); } catch { /* Continue releasing this observer. */ } }
+        for (const waiter of pending.values()) waiter.reject(new Error("graph_capture_finalized"));
+        pending.clear(); children.clear(); contexts.clear();
+        // Detach this observer only. Never close a lane's browser or another observer's session.
+        try { void root?.detach().catch(() => undefined); } catch { /* Lane still owns browser cleanup. */ }
+      }
       return final;
     },
   };

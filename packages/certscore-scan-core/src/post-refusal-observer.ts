@@ -1,4 +1,4 @@
-import { installRuntimeGraphCapture } from "./runtime-evidence-graph-capture.js";
+import { finishOptionalRuntimeGraph, installRuntimeGraphCapture } from "./runtime-evidence-graph-capture.js";
 import {
   postRefusalEvidencePacketSchema,
   type ConsentActionControlProof,
@@ -431,7 +431,7 @@ export async function runPostRefusalObserver(
     const retainedTargetUrl = sanitizeUrl(observationTargetUrl);
     const retainedNormalizedUrl = sanitizeUrl(normalizedUrl);
     const packet = postRefusalEvidencePacketSchema.parse({
-      runtimeEvidenceGraph: graphCapture?.finish(confirmedRefusal ? undefined : "action_not_confirmed"),
+      ...finishOptionalRuntimeGraph(graphCapture, "post_reject", confirmedRefusal ? undefined : "action_not_confirmed"),
       artifactVersion: "certscore.post_refusal_evidence.v1",
       artifactOnly: true,
       productionProjectable: productionProjectable && confirmedRefusal && Boolean(actionControlProof),
@@ -1426,7 +1426,7 @@ export async function runPostRefusalObserver(
       observations,
     });
   } finally {
-    graphCapture?.finish("action_capture_closed");
+    finishOptionalRuntimeGraph(graphCapture, "post_reject", "action_capture_closed");
     actionDiscovery?.dispose();
     await context?.close().catch(() => undefined);
     if (ownsBrowser) await browser?.close().catch(() => undefined);

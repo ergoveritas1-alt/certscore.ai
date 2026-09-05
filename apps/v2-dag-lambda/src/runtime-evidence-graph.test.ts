@@ -7,7 +7,8 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { build } from "esbuild";
 import { chromium } from "playwright";
-import type { CanonicalEvidenceBundle, RuntimeGraphDispatch } from "@certscore/contracts";
+import { runtimeGraphDispatchSchema, verifyRuntimeEvidenceGraph, type CanonicalEvidenceBundle, type RuntimeGraphDispatch } from "@certscore/contracts";
+import { createHash } from "node:crypto";
 import { RuntimeEvidenceGraphBuilder } from "../../../packages/certscore-scan-core/src/runtime-evidence-graph";
 import { verifyLaneRuntimeGraph } from "./handler";
 
@@ -42,16 +43,25 @@ test("production-minified capture retains browser probes, native behavior and bo
     const outfile = path.join(dir, "capture.cjs");
     await build({ entryPoints: [path.join(repo, "packages/certscore-scan-core/src/runtime-evidence-graph-capture.ts")], bundle: true, platform: "node", target: "node22", format: "cjs", minify: true, external: ["playwright", "pdf-parse"], tsconfig: path.join(repo, "tsconfig.base.json"), outfile });
     const bundled = createRequire(import.meta.url)(outfile) as typeof import("../../../packages/certscore-scan-core/src/runtime-evidence-graph-capture");
-    const page = await browser.newPage(); const errors: string[] = []; page.on("pageerror", error => errors.push(error.message));
-    const capture = await bundled.installRuntimeGraphCapture(page, { scanId: "fixture", captureId: "fixture:runtime_evidence", scenario: "pre_consent", mode: "project", startedAt: new Date().toISOString() });
+    const dispatch = runtimeGraphDispatchSchema.parse(JSON.parse(JSON.stringify({ contractVersion: "certscore.runtime-graph-dispatch.v1", scanId: "fixture", mode: "project", profile: "bounded_passive_v1" })));
+    for (const [scenario, lane] of [["pre_consent", "runtime_evidence"], ["gpc", "gpc_observation"], ["post_accept", "accept_observation"], ["post_reject", "reject_observation"]] as const) {
+    const context = await browser.newContext(); const page = await context.newPage(); const errors: string[] = []; page.on("pageerror", error => errors.push(error.message));
+    const capture = await bundled.installRuntimeGraphCapture(page, { ...dispatch, captureId: `fixture:${lane}`, scenario, startedAt: new Date().toISOString() });
     await page.goto(`http://127.0.0.1:${address.port}`);
     capture.cookies(await page.context().cookies()); await capture.snapshotStorage();
     const graph = capture.finish();
+    assert.ok(graph);
+    assert.equal(graph.contractVersion, "certscore.runtime-evidence-graph.v1");
+    assert.equal("profile" in graph, false);
+    assert.ok(verifyRuntimeEvidenceGraph(graph, { scanId: "fixture", scenario, mode: "project", sha256: value => createHash("sha256").update(value).digest("hex") }).graph);
+    if (scenario === "pre_consent" || scenario === "gpc") assert.equal(verifyLaneRuntimeGraph({ runtimeEvidenceGraphs: [graph] } as CanonicalEvidenceBundle, "fixture", scenario, dispatch).graphs.length, 1);
     assert.deepEqual(errors, []);
     assert.ok(graph.nodes.some(node => node.operation === "js_set" && node.cookie?.name === "bundled_cookie"));
     assert.ok(graph.nodes.some(node => node.operation === "setItem" && node.name === "bundled_key"));
     assert.ok(graph.nodes.some(node => node.captureBasis === "page_realm_snapshot" && node.name === "bundled_key"));
     assert.ok(!JSON.stringify(graph).includes("private_"));
     assert.equal(await page.evaluate(() => localStorage.getItem("bundled_key")), "private_storage");
+    await context.close();
+    }
   } finally { await browser.close(); await new Promise<void>(resolve => server.close(() => resolve())); await rm(dir, { recursive: true, force: true }); }
 });

@@ -1,9 +1,20 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { assertGraphReleaseScanner, assertGraphReleaseService, graphReleaseRequirements, graphRolloutTaskDefinition, type Rollout } from "./runtime-graph-rollout";
+import { assertGraphReleaseScanner, assertGraphReleaseService, graphReleaseRequirements, graphReleaseSourceRevisions, graphRolloutTaskDefinition, type Rollout } from "./runtime-graph-rollout";
 const sha = "a".repeat(40);
 const rollout: Rollout = { mode: "project", percent: 5, presentation: "on", canaryScanIds: [], expectedWebSha: sha };
 const fixture = () => ({ family: "certscore-web-certscore", cpu: "1024", memory: "2048", taskRoleArn: "retained-role", taskDefinitionArn: "old", revision: 1, status: "ACTIVE", containerDefinitions: [{ name: "certscore-web", image: `199536052647.dkr.ecr.us-west-1.amazonaws.com/certscore-web-web:${sha}`, secrets: [{ name: "SECRET", valueFrom: "retained-reference" }], environment: [{ name: "EXISTING", value: "unchanged" }, { name: "CERTSCORE_RUNTIME_GRAPH_PERCENT", value: "0" }] }] });
+test("scanner-only repair pins independent tested revisions without relaxing reader identity", () => {
+  const scanner = "b".repeat(40);
+  assert.deepEqual(graphReleaseSourceRevisions(rollout), { readers: sha, scanner: sha });
+  assert.deepEqual(graphReleaseSourceRevisions({ ...rollout, expectedScannerSha: scanner }), { readers: sha, scanner });
+  const task = graphRolloutTaskDefinition(fixture(), { ...rollout, expectedScannerSha: scanner });
+  assert.equal(task.containerDefinitions[0].image, fixture().containerDefinitions[0]!.image);
+  for (const invalid of ["", "latest", "b".repeat(39)]) assert.throws(() => graphReleaseSourceRevisions({ ...rollout, expectedScannerSha: invalid }));
+  assert.throws(() => graphRolloutTaskDefinition(fixture(), { ...rollout, expectedWebSha: scanner, expectedScannerSha: sha }));
+  const digest = `sha256:${"c".repeat(64)}`;
+  assert.throws(() => assertGraphReleaseScanner({ image: `199536052647.dkr.ecr.us-west-1.amazonaws.com/certscore-v2-dag-local-lambda@${digest}`, recordedDigest: digest, state: "Active", status: "Successful" }, "us-west-1", `sha256:${"d".repeat(64)}`));
+});
 test("rollout changes only graph environment fields and keeps image, roles, secrets and capacity", () => {
   const task = fixture(); const original = structuredClone(task); const result = graphRolloutTaskDefinition(task, rollout);
   assert.deepEqual(task, original);

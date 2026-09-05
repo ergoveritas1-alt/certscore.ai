@@ -6,7 +6,7 @@ import path from "node:path";
 import { createHash } from "node:crypto";
 import { execFileSync } from "node:child_process";
 import { runScan } from "../index.js";
-import type { CanonicalEvidenceBundle } from "@certscore/contracts";
+import { runtimeGraphDispatchSchema, type CanonicalEvidenceBundle } from "@certscore/contracts";
 
 // Local fixture benchmark only. No external target, credential, model call, or acceptance-baseline rewrite.
 async function main() {
@@ -53,7 +53,7 @@ try {
     const observations: ReturnType<typeof counts>[] = [];
     for (let index = 0; index < order.length; index++) {
       const enabled = order[index]!; const beforeRequests = requestCount; const cpu = process.cpuUsage(); const start = performance.now();
-      const bundle = await runScan({ url: `http://127.0.0.1:${address.port}/${workload}`, outDir: path.join(artifactRoot, `${pair}-${enabled ? "on" : "off"}`), profile: "tiny", evidenceLane: "runtime_evidence", preConsentModuleDeadlineMs: 5000, preConsentScreenshotMode: "never", ...(enabled ? { runtimeGraph: { scanId: `benchmark-${pair}`, mode: "project" as const } } : {}) });
+      const bundle = await runScan({ url: `http://127.0.0.1:${address.port}/${workload}`, outDir: path.join(artifactRoot, `${pair}-${enabled ? "on" : "off"}`), profile: "tiny", evidenceLane: "runtime_evidence", preConsentModuleDeadlineMs: 5000, preConsentScreenshotMode: "never", ...(enabled ? { runtimeGraph: runtimeGraphDispatchSchema.parse(JSON.parse(JSON.stringify({ contractVersion: "certscore.runtime-graph-dispatch.v1", scanId: `benchmark-${pair}`, mode: "project", profile: "bounded_passive_v1" }))) } : {}) });
       const wallMs = performance.now() - start; const usage = process.cpuUsage(cpu); const graph = bundle.runtimeEvidenceGraphs?.[0];
       assert.equal(Boolean(graph), enabled); assert.equal(bundle.screenshots.length, 0); assert.equal(bundle.policySurfaceObservations.length, 0);
       observations.push(counts(bundle));

@@ -19,6 +19,10 @@ type RequestState = {
 };
 type HeaderAttempt = { line: string; hash: string; valueHash?: string };
 type RequestChain = { hops: RequestState[]; requestExtras: RecordValue[]; responseExtras: RecordValue[] };
+type GraphCaptureIdentity = {
+  scanId: string; captureId: string; scenario: RuntimeEvidenceGraph["scenario"];
+  mode: RuntimeEvidenceGraph["mode"]; startedAt: string; browserVersion: string;
+};
 
 /** Pure bounded event correlator. Browser IDs are scoped to a protocol target/session. */
 export class RuntimeEvidenceGraphBuilder {
@@ -43,10 +47,13 @@ export class RuntimeEvidenceGraphBuilder {
   private final?: RuntimeEvidenceGraph;
   private action?: RuntimeEvidenceGraph["action"];
 
-  constructor(readonly input: {
-    scanId: string; captureId: string; scenario: RuntimeEvidenceGraph["scenario"];
-    mode: RuntimeEvidenceGraph["mode"]; startedAt: string; browserVersion: string;
-  }) {
+  readonly input: Readonly<GraphCaptureIdentity>;
+
+  constructor(input: GraphCaptureIdentity) {
+    // TypeScript structural types do not remove transport fields at runtime.
+    // Copy only graph-owned identity, never dispatch contractVersion/profile or caller extras.
+    this.input = Object.freeze({ scanId: input.scanId, captureId: input.captureId,
+      scenario: input.scenario, mode: input.mode, startedAt: input.startedAt, browserVersion: input.browserVersion });
     if (input.scenario === "post_accept" || input.scenario === "post_reject") this.action = { status: "unconfirmed" };
   }
 

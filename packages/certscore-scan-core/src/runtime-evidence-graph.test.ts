@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { createHash } from "node:crypto";
-import { runtimeEvidenceGraphSchema, runtimeGraphHashInput, RUNTIME_EVIDENCE_GRAPH_LIMITS } from "@certscore/contracts";
+import { runtimeEvidenceGraphSchema, runtimeGraphDispatchSchema, runtimeGraphHashInput, RUNTIME_EVIDENCE_GRAPH_LIMITS } from "@certscore/contracts";
 import { RuntimeEvidenceGraphBuilder, parseGraphSetCookie } from "./runtime-evidence-graph.js";
 
 const make = (scenario: "pre_consent" | "post_reject" = "pre_consent") => new RuntimeEvidenceGraphBuilder({ scanId: "scan", captureId: "runtime", scenario, mode: "project", startedAt: new Date(Date.now() - 1000).toISOString(), browserVersion: "fixture" });
@@ -10,6 +10,23 @@ const response = (id = "1", extra = true) => ({ requestId: id, timestamp: 2, has
 const cookie = (path = "/") => ({ name: "same", domain: "site.test", path, value: "private-value", secure: true, httpOnly: true, expires: -1, session: true });
 const reqExtra = (id = "1") => ({ requestId: id, associatedCookies: [{ cookie: cookie(), blockedReasons: [] }] });
 const resExtra = (id = "1", line = "same=private-value; Path=/; Secure; HttpOnly", blocked = false) => ({ requestId: id, statusCode: 200, headers: { "set-cookie": line, authorization: "private-secret" }, blockedCookies: blocked ? [{ cookieLine: line, blockedReasons: ["SameSiteNoneInsecure"] }] : [] });
+
+for (const scenario of ["pre_consent", "gpc", "post_accept", "post_reject"] as const) test(`full serialized production dispatch preserves ${scenario} graph identity`, () => {
+  const dispatch = runtimeGraphDispatchSchema.parse(JSON.parse(JSON.stringify({
+    contractVersion: "certscore.runtime-graph-dispatch.v1", scanId: "scan", mode: "project", profile: "bounded_passive_v1",
+  })));
+  const input = { ...dispatch, captureId: `scan:${scenario}`, scenario, startedAt: new Date().toISOString(), browserVersion: "fixture", unexpectedSecret: "must-not-be-retained" };
+  const builder = new RuntimeEvidenceGraphBuilder(input);
+  input.scanId = "mutated-after-construction";
+  const graph = builder.finish();
+  assert.equal(graph.contractVersion, "certscore.runtime-evidence-graph.v1");
+  assert.equal(graph.scanId, "scan");
+  assert.equal(graph.scenario, scenario);
+  assert.equal(graph.captureId, `scan:${scenario}`);
+  assert.equal("profile" in graph, false);
+  assert.equal(JSON.stringify(graph).includes("must-not-be-retained"), false);
+  assert.equal(graph.sourceHash, createHash("sha256").update(runtimeGraphHashInput(graph)).digest("hex"));
+});
 
 for (const order of [[0, 1, 2, 3], [2, 3, 0, 1], [0, 3, 1, 2], [3, 0, 2, 1]]) {
   test(`graph correlates independently ordered ExtraInfo ${order}`, () => {

@@ -13,11 +13,17 @@ const CLUSTER = "certscore-web-cluster";
 const SERVICES = ["certscore-web-certscore", "certscore-web-materializer"] as const;
 const FLAGS = ["CERTSCORE_RUNTIME_GRAPH_MODE", "CERTSCORE_RUNTIME_GRAPH_PERCENT", "CERTSCORE_RUNTIME_GRAPH_CANARY_SCAN_IDS", "CERTSCORE_RUNTIME_GRAPH_PRESENTATION", "CERTSCORE_RUNTIME_GRAPH_CANARY_TARGET_URLS"];
 const ownedTargets = new Set([...passiveCanaries.targets, ...acceptCanaries.targets, ...rejectCanaries.targets].map(row => row.url).concat(acceptCanaries.interactionPolicy.authorizedAlternateExactTargets, rejectCanaries.interactionPolicy.authorizedAlternateExactTargets));
-export type Rollout = { mode: "off" | "capture_only" | "project"; percent: 0 | 5 | 25 | 100; presentation: "on" | "off"; canaryScanIds: string[]; canaryTargetUrls?: string[]; expectedWebSha: string };
+export type Rollout = { mode: "off" | "capture_only" | "project"; percent: 0 | 5 | 25 | 100; presentation: "on" | "off"; canaryScanIds: string[]; canaryTargetUrls?: string[]; expectedWebSha: string; expectedScannerSha?: string };
+
+export function graphReleaseSourceRevisions(rollout: Pick<Rollout, "expectedWebSha" | "expectedScannerSha">) {
+  const scanner = rollout.expectedScannerSha ?? rollout.expectedWebSha;
+  if (![rollout.expectedWebSha, scanner].every(sha => /^[a-f0-9]{40}$/.test(sha))) throw new Error("Exact tested reader and scanner SHAs are required.");
+  return { readers: rollout.expectedWebSha, scanner };
+}
 
 export function graphRolloutTaskDefinition(task: Record<string, any>, rollout: Rollout, taskTags?: Array<{ key: string; value: string }>) {
   if (!["off", "capture_only", "project"].includes(rollout.mode) || ![0, 5, 25, 100].includes(rollout.percent) || !["on", "off"].includes(rollout.presentation)) throw new Error("Invalid bounded graph rollout.");
-  if (!/^[a-f0-9]{40}$/.test(rollout.expectedWebSha)) throw new Error("An exact deployed web SHA is required.");
+  graphReleaseSourceRevisions(rollout);
   const canaryTargets = rollout.canaryTargetUrls ?? [];
   if (rollout.mode === "off" && (rollout.percent !== 0 || rollout.canaryScanIds.length || canaryTargets.length)) throw new Error("Disabled capture must have no enabled cohort.");
   if (canaryTargets.length > 20 || new Set(canaryTargets).size !== canaryTargets.length || canaryTargets.some(url => !ownedTargets.has(url))) throw new Error("Canary targets must exactly match the checked-in owned registries. Graph selection never authorizes consent actions.");
@@ -61,6 +67,7 @@ async function verifyReleaseParticipants(rollout: Rollout) {
   // become readable even when new capture is off. Emergency suppression of
   // both remains available without healthy producer/reader participants.
   const required = graphReleaseRequirements(rollout);
+  const revisions = graphReleaseSourceRevisions(rollout);
   for (const target of [
     ...(required.producers ? [{ cluster: "certscore-validation-cluster", service: "certscore-validation-worker", container: "validation-worker", repository: "certscore-validation-worker" }] : []),
     ...(required.readers ? [{ cluster: CLUSTER, service: "certscore-web-mcp", container: "mcp-http", repository: "certscore-web-mcp" }] : []),
@@ -72,7 +79,7 @@ async function verifyReleaseParticipants(rollout: Rollout) {
     assertGraphReleaseService(service, containers, target.container, `199536052647.dkr.ecr.${REGION}.amazonaws.com/${target.repository}:${rollout.expectedWebSha}`);
   }
   for (const region of required.producers ? ["eu-central-1", "eu-west-1", "us-west-1"] : []) {
-    const digest = await aws(["ecr", "describe-images", "--repository-name", "certscore-v2-dag-local-lambda", "--image-ids", `imageTag=${rollout.expectedWebSha}`, "--query", "imageDetails[0].imageDigest"], region);
+    const digest = await aws(["ecr", "describe-images", "--repository-name", "certscore-v2-dag-local-lambda", "--image-ids", `imageTag=${revisions.scanner}`, "--query", "imageDetails[0].imageDigest"], region);
     const deployed = await aws(["lambda", "get-function", "--function-name", "certscore-v2-dag-local-lambda", "--query", "{image:Code.ResolvedImageUri,recordedDigest:Configuration.Environment.Variables.SCANNER_IMAGE_DIGEST,state:Configuration.State,status:Configuration.LastUpdateStatus}"], region);
     assertGraphReleaseScanner(deployed, region, digest);
   }
@@ -83,6 +90,7 @@ async function main() {
   const argument = (name: string) => { const index = args.indexOf(name); if (index < 0 || !args[index + 1] || args[index + 1]!.startsWith("--")) throw new Error(`Missing ${name}`); return args[index + 1]!; };
   const rollout: Rollout = { mode: argument("--mode") as Rollout["mode"], percent: Number(argument("--percent")) as Rollout["percent"], presentation: argument("--presentation") as Rollout["presentation"], expectedWebSha: argument("--expected-web-sha"), canaryScanIds: args.includes("--canary-scan-ids") ? argument("--canary-scan-ids").split(",") : [] };
   if (args.includes("--canary-target-urls")) rollout.canaryTargetUrls = argument("--canary-target-urls").split(",");
+  if (args.includes("--expected-scanner-sha")) rollout.expectedScannerSha = argument("--expected-scanner-sha");
   const apply = args.includes("--apply");
   if ((await aws(["sts", "get-caller-identity"])).Account !== "199536052647") throw new Error("Unexpected AWS account.");
   if (apply && (await exec("git", ["status", "--porcelain"])).stdout.trim()) throw new Error("Commit the tested worktree before a production rollout.");
@@ -96,7 +104,7 @@ async function main() {
     plans.push({ serviceName: service.serviceName, previousTaskDefinition: service.taskDefinition, task });
   }
   await verifyReleaseParticipants(rollout);
-  console.info(JSON.stringify({ action: apply ? "apply_requested" : "plan_only", region: REGION, cluster: CLUSTER, services: plans.map(plan => plan.serviceName), mode: rollout.mode, percent: rollout.percent, presentation: rollout.presentation, canaryScanCount: rollout.canaryScanIds.length, canaryTargetUrls: rollout.canaryTargetUrls ?? [], expectedWebSha: rollout.expectedWebSha, capacityChange: false, consentActionAuthorizationChange: false }));
+  console.info(JSON.stringify({ action: apply ? "apply_requested" : "plan_only", region: REGION, cluster: CLUSTER, services: plans.map(plan => plan.serviceName), mode: rollout.mode, percent: rollout.percent, presentation: rollout.presentation, canaryScanCount: rollout.canaryScanIds.length, canaryTargetUrls: rollout.canaryTargetUrls ?? [], expectedWebSha: rollout.expectedWebSha, expectedScannerSha: graphReleaseSourceRevisions(rollout).scanner, capacityChange: false, consentActionAuthorizationChange: false }));
   if (!apply) return;
   const directory = await mkdtemp(path.join(tmpdir(), "certscore-graph-rollout-"));
   try {

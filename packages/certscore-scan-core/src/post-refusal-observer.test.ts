@@ -2,6 +2,8 @@ import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import { createServer, type Server } from "node:http";
 import test from "node:test";
+import { runtimeGraphDispatchSchema } from "@certscore/contracts";
+import { RuntimeEvidenceGraphBuilder } from "./runtime-evidence-graph.js";
 import {
   decodeTcfV2PurposeConsents,
   classifyNavigationFailure,
@@ -48,7 +50,7 @@ test("graph action capture preserves a single confirmed Reject and its registrat
       actionSearchTimeoutMs: 500, confirmationTimeoutMs: 500, observationWindowMs: 500,
       interactionAuthorization: { authorizationId: "loopback_local_lab", kind: "loopback" },
       recipe, scanId: "graph-parent:reject_observation", parentScanId: "graph-parent", url,
-      runtimeGraph: { scanId: "graph-parent", mode: "project" },
+      runtimeGraph: runtimeGraphDispatchSchema.parse({ contractVersion: "certscore.runtime-graph-dispatch.v1", scanId: "graph-parent", mode: "project", profile: "bounded_passive_v1" }),
     });
     assert.equal(packet.refusalRegistration.status, "confirmed");
     assert.equal(packet.runtimeEvidenceGraph?.scanId, "graph-parent");
@@ -84,6 +86,29 @@ test("reject honored confirms registration without post-refusal activity", async
         POST_REFUSAL_PRE_ACTION_BASELINE_MAX_AGE_MS,
     );
   });
+});
+
+test("optional graph primary and fallback failure preserves Reject evidence and browser cleanup", async (t) => {
+  const browser = await chromium.launch({ headless: true });
+  t.mock.method(RuntimeEvidenceGraphBuilder.prototype, "finish", () => { throw new Error("injected graph finalization failure"); });
+  try {
+    await withFixture("post-refusal-reject-honored", async (url) => {
+      const packet = await runPostRefusalObserver({ browser,
+        actionSearchTimeoutMs: 500, confirmationTimeoutMs: 500, observationWindowMs: 500,
+        interactionAuthorization: { authorizationId: "loopback_local_lab", kind: "loopback" },
+        productionProjectable: true, recipe, scanId: "graph-parent:reject_observation", parentScanId: "graph-parent", url,
+        runtimeGraph: runtimeGraphDispatchSchema.parse({ contractVersion: "certscore.runtime-graph-dispatch.v1", scanId: "graph-parent", mode: "project", profile: "bounded_passive_v1" }),
+      });
+      assert.equal(packet.refusalRegistration.status, "confirmed");
+      assert.equal(packet.productionProjectable, true);
+      assert.equal(packet.network.postRefusalNonEssentialRequests.length, 0);
+      assert.equal(packet.observations.length, 0);
+      assert.equal(packet.runtimeEvidenceGraph, undefined);
+      assert.deepEqual(packet.runtimeEvidenceGraphDiagnostics, [{ scenario: "post_reject", reason: "unavailable" }]);
+      assert.equal(browser.contexts().length, 0);
+      assert.equal(browser.isConnected(), true, "supplied browser remains caller-owned");
+    });
+  } finally { await browser.close(); }
 });
 
 test("post-refusal observer does not click when the recipe resolves the Accept control", async () => {

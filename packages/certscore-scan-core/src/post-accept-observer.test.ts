@@ -1,8 +1,10 @@
 import assert from "node:assert/strict";
 import { createServer, type Server } from "node:http";
 import test from "node:test";
-import { projectPostAcceptEvidenceForReport } from "@certscore/contracts";
+import { projectPostAcceptEvidenceForReport, runtimeGraphDispatchSchema } from "@certscore/contracts";
 import { runPostAcceptObserver } from "./post-accept-observer.js";
+import { RuntimeEvidenceGraphBuilder } from "./runtime-evidence-graph.js";
+import { chromium } from "playwright";
 import {
   buildCanonicalPostAcceptActionRecipes,
   CERTSCORE_OWNED_ANALYTICS_ACCEPT_RECIPE,
@@ -15,7 +17,7 @@ test("graph action capture preserves a single confirmed Accept and its registrat
       interactionAuthorization: { authorizationId: "loopback_local_lab", kind: "loopback" },
       observationWindowMs: 500, productionProjectable: true, recipe: CERTSCORE_OWNED_ANALYTICS_ACCEPT_RECIPE,
       scanId: "graph-parent:accept_observation", parentScanId: "graph-parent", url,
-      runtimeGraph: { scanId: "graph-parent", mode: "project" },
+      runtimeGraph: runtimeGraphDispatchSchema.parse({ contractVersion: "certscore.runtime-graph-dispatch.v1", scanId: "graph-parent", mode: "project", profile: "bounded_passive_v1" }),
     });
     assert.equal(actionCount(), 1);
     assert.equal(packet.acceptanceRegistration.status, "confirmed");
@@ -68,6 +70,31 @@ test("post-Accept observer confirms one deterministic action and retains bounded
     const serialized = JSON.stringify(packet);
     assert.equal(serialized.includes("GA1.1.CERTSCORE_ACCEPT_RAW"), false);
   });
+});
+
+test("optional graph primary and fallback failure preserves Accept evidence and browser cleanup", async (t) => {
+  const browser = await chromium.launch({ headless: true });
+  t.mock.method(RuntimeEvidenceGraphBuilder.prototype, "finish", () => { throw new Error("injected graph finalization failure"); });
+  try {
+    await withFixture({ ambiguous: false }, async ({ url, actionCount }) => {
+      const packet = await runPostAcceptObserver({ browser,
+        actionSearchTimeoutMs: 500, confirmationTimeoutMs: 500, observationWindowMs: 500,
+        interactionAuthorization: { authorizationId: "loopback_local_lab", kind: "loopback" },
+        productionProjectable: true, recipe: CERTSCORE_OWNED_ANALYTICS_ACCEPT_RECIPE,
+        scanId: "graph-parent:accept_observation", parentScanId: "graph-parent", url,
+        runtimeGraph: runtimeGraphDispatchSchema.parse({ contractVersion: "certscore.runtime-graph-dispatch.v1", scanId: "graph-parent", mode: "project", profile: "bounded_passive_v1" }),
+      });
+      assert.equal(actionCount(), 1);
+      assert.equal(packet.acceptanceRegistration.status, "confirmed");
+      assert.equal(packet.productionProjectable, true);
+      assert.ok(packet.storage.writesAfterAccept.some(write => write.name === "_ga" && write.nonEssential));
+      assert.ok(packet.observations.some(row => row.observationType === "post_accept_non_essential_activity"));
+      assert.equal(packet.runtimeEvidenceGraph, undefined);
+      assert.deepEqual(packet.runtimeEvidenceGraphDiagnostics, [{ scenario: "post_accept", reason: "unavailable" }]);
+      assert.equal(browser.contexts().length, 0);
+      assert.equal(browser.isConnected(), true, "supplied browser remains caller-owned");
+    });
+  } finally { await browser.close(); }
 });
 
 test("post-Accept observer waits for a late-identified CSS-visible control to enter the viewport", async () => {
