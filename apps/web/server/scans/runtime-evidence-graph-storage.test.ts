@@ -27,8 +27,9 @@ test("publication retains one immutable bounded graph and only a small reference
   const { record, compact, body } = await stored();
   const projection = apiRuntimeEvidenceGraphProjectionSchema.parse(compact.runtimeArtifacts?.runtimeEvidenceGraphProjection);
   assert.equal(projection.graphs.length, 0);
-  assert.equal(projection.details?.nodeCount, 100);
-  assert.equal(projection.details?.edgeCount, 8);
+  const original = apiRuntimeEvidenceGraphProjectionSchema.parse(record.runtimeArtifacts?.runtimeEvidenceGraphProjection);
+  assert.equal(projection.details?.nodeCount, original.graphs.reduce((count, graph) => count + graph.nodes.length, 0));
+  assert.equal(projection.details?.edgeCount, original.graphs.reduce((count, graph) => count + graph.edges.length, 0));
   assert.equal(projection.details?.sha256, createHash("sha256").update(body).digest("hex"));
   assert.ok(JSON.stringify(compact).length < 3000);
   assert.ok(body.byteLength < 768 * 1024);
