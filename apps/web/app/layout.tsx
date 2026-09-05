@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import Script from "next/script";
 import type { ReactNode } from "react";
 import "./globals.css";
+import "../components/scans/runtime-evidence-graph.css";
 import { AnalyticsConsentBanner } from "../components/analytics/analytics-consent-banner";
 import { DataLayerClickTracker } from "../components/analytics/data-layer-events";
 import { ProductAnalyticsTracker } from "../components/analytics/product-analytics-tracker";

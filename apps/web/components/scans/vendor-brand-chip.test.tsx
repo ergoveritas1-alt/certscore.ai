@@ -2,7 +2,14 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
-import { VendorBrandChip, VendorBrandLogo } from "./vendor-brand-chip";
+import { VendorBrandChip, VendorBrandLogo, VendorBrandIcon } from "./vendor-brand-chip";
+
+test("compact vendor icon uses bundled logos or initials without remote favicon calls", () => {
+  const known = renderToStaticMarkup(createElement(VendorBrandIcon, { label: "Google" }));
+  const unknown = renderToStaticMarkup(createElement(VendorBrandIcon, { label: "unknown.example" }));
+  assert.match(known, /\/vendor-logos\/google.png/);
+  assert.doesNotMatch(unknown, /<img|https?:/);
+});
 
 test("VendorBrandChip renders cached logos for known vendors and host aliases", () => {
   const html = renderToStaticMarkup(

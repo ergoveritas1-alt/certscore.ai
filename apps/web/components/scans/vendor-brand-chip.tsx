@@ -1,5 +1,13 @@
 import React from "react";
 
+/** Compact evidence-card identity. Only bundled logos; no third-party favicon requests. */
+export function VendorBrandIcon({ label }: { label: string }) {
+  const mark = getVendorBrandMark(label);
+  return <span aria-hidden="true" className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-lg border border-slate-100 bg-white text-[10px] font-semibold text-slate-500">
+    {mark.logoPath ? <img src={mark.logoPath} alt="" width={18} height={18} className="h-[18px] w-[18px] object-contain" /> : mark.initials}
+  </span>;
+}
+
 type VendorBrandMark = {
   initials: string;
   logoPath?: string;

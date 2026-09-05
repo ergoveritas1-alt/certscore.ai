@@ -15,15 +15,19 @@ export function CopyJsonButton({
 }: CopyJsonButtonProps) {
   const [copied, setCopied] = useState(false);
   const [mounted, setMounted] = useState(false);
+  const [failed, setFailed] = useState(false);
 
   useEffect(() => {
     setMounted(true);
   }, []);
 
   async function handleCopy() {
-    await navigator.clipboard.writeText(payload);
-    setCopied(true);
-    window.setTimeout(() => setCopied(false), 1800);
+    try {
+      await navigator.clipboard.writeText(payload);
+      setFailed(false);
+      setCopied(true);
+      window.setTimeout(() => setCopied(false), 1800);
+    } catch { setFailed(true); setCopied(false); }
   }
 
   if (!mounted) {
@@ -35,8 +39,8 @@ export function CopyJsonButton({
       type="button"
       onClick={handleCopy}
       className={`scan-report-button ${className}`}
-      aria-label={label}
-      title={copied ? "Copied" : label}
+      aria-label={failed ? "Copy failed. Try again or select the text." : copied ? "Copied" : label}
+      title={failed ? "Copy failed. Try again or select the text." : copied ? "Copied" : label}
     >
       {copied ? (
         <svg

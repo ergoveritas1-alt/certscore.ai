@@ -1,5 +1,7 @@
 import type { ReactNode } from "react";
-import { RuntimeEvidenceGraphExplorer } from "../runtime-evidence-graph-explorer";
+import { InventoryEvidenceLegend } from "../inventory-evidence-icon";
+import { InventoryConfidenceDots, InventoryPurposeChip } from "../inventory-cell-formatting";
+import { InventoryResourceProvider, InventoryResourceRow } from "../inventory-resource-details";
 import { SiteFooter } from "../../layout/site-footer";
 import { SiteHeader } from "../../layout/site-header";
 import { DomainScanForm } from "../../marketing/domain-scan-form";
@@ -1048,7 +1050,7 @@ function InventoryTypeIcon({ type }: { type: string }) {
   return (
     <span
       aria-label={isCookie ? "Cookie or storage" : "Tracker or request"}
-      className={`inline-flex h-6 w-6 items-center justify-center rounded-md border ${isCookie ? "border-sky-200 bg-sky-50 text-sky-700" : "border-violet-200 bg-violet-50 text-violet-700"}`}
+      className={`inline-flex h-5 w-5 items-center justify-center ${isCookie ? "text-sky-600" : "text-violet-500"}`}
       title={isCookie ? "Cookie or storage" : "Tracker or request"}
     >
       {isCookie ? (
@@ -1058,59 +1060,19 @@ function InventoryTypeIcon({ type }: { type: string }) {
         </svg>
       ) : (
         <svg aria-hidden="true" className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24">
-          <path d="M17.6 7.3A7 7 0 0 0 5.3 10M15.2 7.4h2.7V4.7M6.4 16.7A7 7 0 0 0 18.7 14M8.8 16.6H6.1v2.7" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" />
+          <path d="M4 7h16m-4-4 4 4-4 4M20 17H4m4-4-4 4 4 4" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.7" />
         </svg>
       )}
     </span>
   );
 }
 
-function InventoryConfidenceDots({ confidence }: { confidence: string }) {
-  const normalized = confidence.toLowerCase();
-  const level = normalized.includes("high") ? 3 : normalized.includes("medium") ? 2 : normalized.includes("low") ? 1 : 0;
-  const label = level === 3 ? "High" : level === 2 ? "Medium" : level === 1 ? "Low" : "Not retained";
-  return (
-    <span aria-label={`Confidence: ${label}`} className="inline-flex items-center gap-1" title={`Confidence: ${label}`}>
-      {[1, 2, 3].map((dot) => (
-        <span className={`h-2 w-2 rounded-full border border-slate-300 ${dot <= level ? "bg-slate-500" : "bg-white"}`} key={dot} />
-      ))}
-    </span>
-  );
-}
 
-function inventoryEvidenceClasses(evidence: string) {
-  if (evidence === "Non-essential") return "bg-rose-100 text-rose-800";
-  if (evidence === "Review") return "bg-amber-100 text-amber-800";
-  if (evidence === "Essential") return "bg-blue-100 text-blue-800";
-  if (evidence === "Contextual") return "bg-sky-100 text-sky-800";
-  return "bg-zinc-100 text-zinc-700";
-}
-
-function inventoryPurposeClasses(purpose: string) {
-  const normalized = purpose.toLowerCase();
-  if (/advert|marketing|retarget/.test(normalized)) return "bg-rose-100 text-rose-800";
-  if (/analytic|audience|measurement|experiment/.test(normalized)) return "bg-amber-100 text-amber-800";
-  if (/auth|security|fraud|functional/.test(normalized)) return "bg-emerald-100 text-emerald-800";
-  if (/consent|privacy|compliance/.test(normalized)) return "bg-sky-100 text-sky-800";
-  if (/embed|media|social/.test(normalized)) return "bg-violet-100 text-violet-800";
-  if (/cdn|static|font|delivery/.test(normalized)) return "bg-blue-100 text-blue-800";
-  return "bg-zinc-100 text-zinc-700";
-}
 
 function SingleLineCell({ children, title }: { children: ReactNode; title?: string }) {
   return <span className="block min-w-0 truncate whitespace-nowrap leading-5" title={title}>{children}</span>;
 }
 
-function InventoryPurposeChip({ purpose }: { purpose: string }) {
-  return (
-    <span
-      className={`inline-flex h-6 max-w-full min-w-0 items-center rounded-md px-2 text-[0.67rem] font-semibold ${inventoryPurposeClasses(purpose)}`}
-      title={purpose}
-    >
-      <span className="min-w-0 truncate whitespace-nowrap leading-4">{purpose}</span>
-    </span>
-  );
-}
 
 function InventoryRowDetails({ row }: { row: InventoryRow }) {
   const preConsent = typeof row.evidenceJson?.preConsent === "boolean"
@@ -1152,15 +1114,25 @@ function InventoryRowDetails({ row }: { row: InventoryRow }) {
 
 const INVENTORY_VISIBLE_ROW_LIMIT = 6;
 
-function RuntimeInventoryTable({ report }: { report: ShadowReportData }) {
+function inventoryResourceIdentity(value: unknown) {
+  const record = value && typeof value === "object" ? value as Record<string, unknown> : {};
+  const cookieRefs = (Array.isArray(record.cookieDetails) ? record.cookieDetails : []).flatMap(item => item && typeof item === "object" && Array.isArray(item.evidenceRefs) ? item.evidenceRefs.filter((ref: unknown): ref is string => typeof ref === "string") : []);
+  const requests = (Array.isArray(record.requestDetails) ? record.requestDetails : []).filter(item => item && typeof item === "object").map(item => ({ hostname: typeof item.hostname === "string" ? item.hostname : null, path: typeof item.path === "string" ? item.path : null, method: typeof item.method === "string" ? item.method : null }));
+  const nodeRefs = Array.isArray(record.retainedGraphNodeIds) ? record.retainedGraphNodeIds.filter((id): id is string => typeof id === "string") : [];
+  return { cookieRefs, requests, nodeRefs };
+}
+
+export function RuntimeInventoryTable({ report, initiallyOpen = false }: { report: ShadowReportData; initiallyOpen?: boolean }) {
+  const hasRelationshipEvidence = Boolean(report.runtimeEvidenceGraph?.details || report.runtimeEvidenceGraph?.graphs.some(graph => graph.scenario === "pre_consent" && graph.edges.length > 0));
   const inventoryIsScrollable = report.inventory.length > INVENTORY_VISIBLE_ROW_LIMIT;
   const inventoryScrollClasses = inventoryIsScrollable
-    ? "max-h-[20rem] overflow-auto"
+    ? "max-h-[17rem] overflow-auto"
     : "overflow-x-auto";
   const copyPayload = buildRuntimeInventoryCopyPayload(report.inventory);
 
   return (
     <RuntimeInventorySummaryCard
+      initiallyOpen={initiallyOpen}
       action={(
         <CopyJsonButton
           className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-zinc-200 bg-white text-zinc-500 shadow-sm transition hover:border-zinc-300 hover:text-zinc-950"
@@ -1168,24 +1140,24 @@ function RuntimeInventoryTable({ report }: { report: ShadowReportData }) {
           payload={copyPayload}
         />
       )}
-      detailsHint={`${report.inventory.length} retained observations · names, purposes, timing, domains, and evidence`}
-      detailsLabel="Open full cookie and tracker details"
+      detailsHint={<InventoryEvidenceLegend />}
+      detailsLabel="Cookie and tracker details"
       eyebrow="Cookie and tracker inventory"
       heading="Every retained cookie and tracker observation"
       inventory={report.inventory}
       summary={`${report.metrics.vendors} vendors · ${report.metrics.domains} domains`}
     >
-        <RuntimeEvidenceGraphExplorer projection={report.runtimeEvidenceGraph} />
+        <InventoryResourceProvider projection={report.runtimeEvidenceGraph}>
         <div
           className={`${inventoryScrollClasses} border border-zinc-200 bg-white`}
           data-inventory-scroll={inventoryIsScrollable ? "bounded" : "unbounded"}
         >
-        <table className="w-full min-w-[98rem] table-fixed border-collapse text-left text-xs">
+        <table className={`compact-resource-inventory w-full ${hasRelationshipEvidence ? "min-w-[90rem]" : "min-w-[86rem]"} table-fixed border-collapse text-left text-xs`}>
           <thead className="sticky top-0 z-20 bg-zinc-50 text-[0.65rem] font-semibold uppercase tracking-[0.06em] text-zinc-500 shadow-[0_2px_8px_-6px_rgba(24,24,27,0.55)]">
             <tr>
               {[
-                ["More", "w-[5.5rem]"], ["Type", "w-[4rem]"], ["Vendor", "w-[10rem]"], ["Name", "w-[9rem]"], ["Purpose", "w-[14rem]"],
-                ["Evidence mix", "w-[8rem]"], ["First seen", "w-[7rem]"], ["Domains", "w-[14rem]"],
+                ["More", "w-[4.5rem]"], ["Type", "w-[3rem]"], ["Vendor", hasRelationshipEvidence ? "w-[14rem]" : "w-[10rem]"], ["Name", "w-[12rem]"], ["Purpose", "w-[10rem]"],
+                ["First seen", "w-[7rem]"], ["Domains", "w-[14rem]"],
                 ["Relationship", "w-[12rem]"], ["Confidence", "w-[6rem]"], ["Priority", "w-[8rem]"],
               ].map(([label, width], index) => (
                 <th
@@ -1193,22 +1165,23 @@ function RuntimeInventoryTable({ report }: { report: ShadowReportData }) {
                     index === 0
                       ? "md:sticky md:left-0 md:z-30 md:bg-zinc-50"
                       : index === 1
-                        ? "md:sticky md:left-[5.5rem] md:z-30 md:bg-zinc-50"
+                        ? "md:sticky md:left-[4.5rem] md:z-30 md:bg-zinc-50"
                         : index === 2
-                          ? "md:sticky md:left-[9.5rem] md:z-30 md:bg-zinc-50"
+                          ? "md:sticky md:left-[7.5rem] md:z-30 md:bg-zinc-50"
                           : index === 3
-                            ? "md:sticky md:left-[19.5rem] md:z-30 md:bg-zinc-50 md:shadow-[4px_0_8px_-7px_rgba(24,24,27,0.7)]"
+                            ? ""
                             : ""
                   }`}
                   key={label}
                 >
-                  {label}
+                  {index === 0 ? <span className="sr-only">Inspect resource</span> : label}
                 </th>
               ))}
             </tr>
           </thead>
           <tbody>
             {report.inventory.map((row, index) => (
+              <InventoryResourceRow inspect existingDetails={<InventoryRowDetails row={row} />} key={`${row.vendor}:${row.purpose}:${index}`} identity={inventoryResourceIdentity(row.evidenceJson)} facts={{ vendor: row.vendor, name: row.name, purpose: row.purpose, evidence: row.evidence, observed: row.observed, domains: row.domains, relationship: row.relationship, confidence: row.confidence, priority: row.priority }}>
               <tr className="group/inventory-row border-b border-zinc-100 align-middle transition-colors hover:bg-zinc-50/80 last:border-0" key={`${row.vendor}:${row.purpose}:${index}`}>
                 <td className="bg-white px-3 py-2 transition-colors group-hover/inventory-row:bg-zinc-50 md:sticky md:left-0 md:z-10">
                   <details className="group/vendor relative">
@@ -1218,21 +1191,22 @@ function RuntimeInventoryTable({ report }: { report: ShadowReportData }) {
                     <InventoryRowDetails row={row} />
                   </details>
                 </td>
-                <td className="bg-white px-3 py-2 text-zinc-600 transition-colors group-hover/inventory-row:bg-zinc-50 md:sticky md:left-[5.5rem] md:z-10"><InventoryTypeIcon type={row.type} /></td>
-                <td className="bg-white px-3 py-2 transition-colors group-hover/inventory-row:bg-zinc-50 md:sticky md:left-[9.5rem] md:z-10"><VendorBrandChip label={row.vendor} showMeta={false} /></td>
-                <td className="bg-white px-3 py-2 text-zinc-600 transition-colors group-hover/inventory-row:bg-zinc-50 md:sticky md:left-[19.5rem] md:z-10 md:shadow-[4px_0_8px_-7px_rgba(24,24,27,0.7)]"><InventoryNameDisclosure className="leading-5" fullName={row.name} /></td>
+                <td className="bg-white px-3 py-2 text-zinc-600 transition-colors group-hover/inventory-row:bg-zinc-50 md:sticky md:left-[4.5rem] md:z-10"><InventoryTypeIcon type={row.type} /></td>
+                <td className="bg-white px-3 py-2 transition-colors group-hover/inventory-row:bg-zinc-50 md:sticky md:left-[7.5rem] md:z-10"><VendorBrandChip label={row.vendor} showMeta={false} /></td>
+                <td className="bg-white px-3 py-2 text-zinc-600 transition-colors group-hover/inventory-row:bg-zinc-50"><InventoryNameDisclosure compact className="leading-5" fullName={row.name} /></td>
                 <td className="px-3 py-2 text-zinc-600"><InventoryPurposeChip purpose={row.purpose} /></td>
-                <td className="px-3 py-2 text-zinc-600"><span className={`inline-flex h-6 max-w-full items-center rounded-md px-2 text-[0.67rem] font-semibold ${inventoryEvidenceClasses(row.evidence)}`}><SingleLineCell title={row.evidence}>{row.evidence}</SingleLineCell></span></td>
                 <td className={`${monoClass} px-3 py-2 text-zinc-600`}><SingleLineCell title={row.observed}>{row.observed}</SingleLineCell></td>
                 <td className={`${monoClass} px-3 py-2 text-zinc-600`}><SingleLineCell title={row.domains}>{row.domains}</SingleLineCell></td>
                 <td className="px-3 py-2 text-zinc-600"><SingleLineCell title={`${row.relationship} · entity ${row.entityRelationship.toLowerCase()}`}>{row.relationship} · entity {row.entityRelationship.toLowerCase()}</SingleLineCell></td>
                 <td className="px-3 py-2 text-zinc-600"><InventoryConfidenceDots confidence={row.confidence} /></td>
                 <td className="px-3 py-2 text-zinc-600"><SingleLineCell title={row.priority}>{row.priority}</SingleLineCell></td>
               </tr>
+              </InventoryResourceRow>
             ))}
           </tbody>
         </table>
         </div>
+        </InventoryResourceProvider>
     </RuntimeInventorySummaryCard>
   );
 }

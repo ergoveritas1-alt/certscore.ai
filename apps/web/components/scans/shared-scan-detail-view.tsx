@@ -1,5 +1,5 @@
 import type { ReactNode } from "react";
-import { RuntimeEvidenceGraphExplorer } from "./runtime-evidence-graph-explorer";
+import { InventoryResourceProvider, InventoryResourceRow, InventoryResourceMobile } from "./inventory-resource-details";
 import Link from "next/link";
 import {
   REPORT_PRIMARY_PILLARS,
@@ -1041,12 +1041,19 @@ function InventoryEvidenceSegmentation({ rows }: { rows: InventoryGroupRow[] }) 
   );
 }
 
-function RuntimeInventoryTable({
+function inventoryResourceProps(row: InventoryGroupRow) {
+  return {
+    identity: { cookieRefs: row.cookieDetails.flatMap(cookie => cookie.evidenceRefs ?? []), requests: (row.requestDetails ?? []).map(request => ({ hostname: request.hostname, path: request.path, method: request.method })) },
+    facts: { vendor: row.vendor, names: row.cookieNames, products: row.rawProducts, domains: row.domains, purpose: row.purpose, classification: classifyInventoryEvidence(row), firstSeenMs: row.firstSeenMs, timingEvidence: row.timingEvidence, requestCount: row.requestCount, confidence: row.confidence, priority: row.priority, siteRelationship: row.siteRelationship, entityRelationship: row.entityRelationship, cookieDetails: row.cookieDetails, requestDetails: row.requestDetails, dataFlows: row.dataFlows },
+  };
+}
+
+export function RuntimeInventoryTable({
   presentationState,
   projection
 }: {
   presentationState: ReturnType<typeof deriveRuntimeInventoryPresentationState>;
-  projection: ReturnType<typeof buildRuntimeInventoryProjectionFromScan>;
+  projection: Pick<ReturnType<typeof buildRuntimeInventoryProjectionFromScan>, "runtimeEvidenceGraph" | "groupedRows" | "ungroupedRows">;
 }) {
   const groupedInventoryRows = projection.groupedRows;
   const inventoryRows = projection.ungroupedRows;
@@ -1059,7 +1066,7 @@ function RuntimeInventoryTable({
         <summary className="flex min-h-[4.75rem] cursor-pointer list-none flex-wrap items-center gap-3 px-3.5 py-4 pr-14 marker:hidden [&::-webkit-details-marker]:hidden lg:px-5 lg:pr-16">
           <ScanReportDisclosureIcon className="group-open/inventory:rotate-90" />
           <p className="inline-flex items-center gap-1.5 text-sm font-medium uppercase tracking-[0.18em] text-slate-500">
-            Pre-consent Cookies &amp; Trackers
+            Cookies &amp; Trackers
             <InfoTip
               align="start"
               placement="top"
@@ -1070,13 +1077,13 @@ function RuntimeInventoryTable({
         {hasRetainedInventory ? (
           <CopyJsonButton
             className="absolute right-3 top-4 z-20 inline-flex h-8 w-8 items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-500 shadow-sm transition-colors hover:border-slate-300 hover:text-slate-950 lg:right-5"
-            label="Copy table"
+            label="Copy pre-consent inventory table"
             payload={copyPayload}
           />
         ) : null}
         {hasRetainedInventory ? (
           <div className="grid gap-4 px-3.5 pb-5 pt-0 lg:px-5">
-          <RuntimeEvidenceGraphExplorer projection={projection.runtimeEvidenceGraph} />
+          <InventoryResourceProvider projection={projection.runtimeEvidenceGraph}>
           <div className="grid gap-3 lg:grid-cols-3 lg:items-stretch">
             <InventoryEvidenceSegmentation rows={inventoryRows} />
             <InventoryPurposeCard rows={inventoryRows} />
@@ -1085,7 +1092,7 @@ function RuntimeInventoryTable({
               <InventoryPartyAttributionDonut rows={inventoryRows} />
             </div>
           </div>
-          <div className="space-y-2 lg:hidden" aria-label="Cookies and trackers mobile list">
+          <div className="min-w-0 space-y-2 lg:hidden" aria-label="Cookies and trackers mobile list">
             {inventoryRows.map((row, index) => (
               <article key={`mobile-${getInventoryGroupRowRenderKey(row, index)}`} className="rounded-xl border border-slate-200 bg-white p-3 shadow-sm">
                 <div className="flex items-start justify-between gap-3">
@@ -1109,13 +1116,14 @@ function RuntimeInventoryTable({
                   <span className="truncate">{row.domains.join(", ") || "Domain not retained"}</span>
                   <span className="text-right">{formatInventoryRelationship(row)}</span>
                 </div>
+                <InventoryResourceMobile {...inventoryResourceProps(row)} />
               </article>
             ))}
           </div>
           <div className="hidden overflow-hidden rounded-xl border border-slate-200 lg:block">
-            <div className="max-h-[370px] overflow-auto">
+            <div className="max-h-[680px] overflow-auto">
             <InventorySortRuntime tableId="preconsent-inventory-table" />
-            <table id="preconsent-inventory-table" className="w-[1375px] min-w-[1375px] max-w-[1375px] table-fixed border-collapse text-left text-[13px]">
+            <table id="preconsent-inventory-table" className="w-[1485px] min-w-[1485px] table-fixed border-collapse text-left text-[13px]">
               <caption className="sr-only">Pre-consent cookies and trackers inventory</caption>
               <thead className="bg-slate-50 text-[10px] uppercase tracking-[0.08em] text-slate-500 shadow-[0_2px_8px_-6px_rgba(15,23,42,0.55)]">
                 <tr>
@@ -1137,10 +1145,12 @@ function RuntimeInventoryTable({
                   <th className="sticky top-0 z-20 w-[130px] whitespace-nowrap border-b border-slate-200 bg-slate-50 px-2 py-2 font-semibold">Relationship</th>
                   <th className="sticky top-0 z-20 w-[90px] whitespace-nowrap border-b border-slate-200 bg-slate-50 px-2 py-2 font-semibold">Category</th>
                   <th title="Review priority based on retained evidence" className="sticky top-0 z-20 w-[100px] whitespace-nowrap border-b border-slate-200 bg-slate-50 px-2 py-2 font-semibold"><InventorySortButton tableId="preconsent-inventory-table" sortKey="priority" label="Priority" /></th>
+                  <th className="sticky right-0 top-0 z-30 w-[110px] border-b border-l border-slate-200 bg-slate-50 px-2 py-2 font-semibold">Resource details</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100 bg-white text-slate-700">
                 {inventoryRows.map((row, index) => (
+                  <InventoryResourceRow key={getInventoryGroupRowRenderKey(row, index)} {...inventoryResourceProps(row)}>
                   <tr
                     key={getInventoryGroupRowRenderKey(row, index)}
                     className="group h-10 transition-colors odd:bg-slate-50/25 hover:bg-sky-50/55"
@@ -1184,20 +1194,25 @@ function RuntimeInventoryTable({
                       />
                     </td>
                   </tr>
+                  </InventoryResourceRow>
                 ))}
               </tbody>
             </table>
             </div>
           </div>
           <PreConsentDataFlowSummary rows={groupedInventoryRows} />
+          </InventoryResourceProvider>
           </div>
         ) : (
+          <InventoryResourceProvider projection={projection.runtimeEvidenceGraph}>
           <div
             className="mx-3.5 mb-5 rounded-2xl border border-slate-200 bg-slate-50/70 px-5 py-10 text-center lg:mx-5"
             data-runtime-inventory-state={presentationState.status}
           >
             <p className="text-sm font-medium text-slate-600">{presentationState.message}</p>
+            <InventoryResourceMobile identity={{ cookieRefs: [], requests: [] }} facts={{ inventoryStatus: presentationState.status }} />
           </div>
+          </InventoryResourceProvider>
         )}
       </details>
     </section>

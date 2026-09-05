@@ -48,7 +48,8 @@ export function InventorySortRuntime({ tableId }: { tableId: string }) {
       const table = document.getElementById(tableId);
       const body = table?.querySelector("tbody");
       if (!body) return;
-      const rows = Array.from(body.querySelectorAll<HTMLElement>("[data-inventory-row]"));
+      const rows = Array.from(body.querySelectorAll<HTMLElement>(":scope > [data-inventory-row]"));
+      const companions = Array.from(body.querySelectorAll<HTMLElement>(":scope > [data-resource-detail]"));
       const priorityRank: Record<string, number> = { high: 0, review_needed: 1, medium: 2, contextual: 3 };
       rows.sort((a, b) => {
         const aValue = detail.sortKey === "firstSeen" ? Number(a.dataset.firstSeen || Infinity)
@@ -64,7 +65,11 @@ export function InventorySortRuntime({ tableId }: { tableId: string }) {
         const compared = typeof aValue === "number" && typeof bValue === "number" ? aValue - bValue : String(aValue).localeCompare(String(bValue));
         return detail.direction === "asc" ? compared : -compared;
       });
-      rows.forEach((row) => body.appendChild(row));
+      rows.forEach((row) => {
+        body.appendChild(row);
+        const companion = companions.find(item => item.dataset.resourceDetail === row.dataset.resourceOwner);
+        if (companion) body.appendChild(companion);
+      });
     };
     window.addEventListener(SORT_EVENT, onSort);
     return () => window.removeEventListener(SORT_EVENT, onSort);

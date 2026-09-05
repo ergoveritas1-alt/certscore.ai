@@ -260,7 +260,7 @@ export function RuntimeInventorySummaryCard({
   children: ReactNode;
   compact?: boolean;
   description?: string;
-  detailsHint?: string;
+  detailsHint?: ReactNode;
   detailsLabel?: string;
   eyebrow: string;
   heading: string;
@@ -291,12 +291,10 @@ export function RuntimeInventorySummaryCard({
               <span className="block text-sm font-bold text-sky-950 sm:text-base">{detailsLabel}</span>
               {detailsHint ? <span className="mt-1 block text-xs font-medium leading-5 text-sky-800">{detailsHint}</span> : null}
             </span>
-            <span className="flex shrink-0 items-center gap-2">
-              <span className="hidden rounded-full bg-sky-700 px-3 py-1.5 text-xs font-bold text-white sm:inline group-open/runtime:hidden">Click to expand</span>
-              <span className="hidden rounded-full bg-zinc-700 px-3 py-1.5 text-xs font-bold text-white sm:group-open/runtime:inline">Hide details</span>
-              <span className="inline-flex h-9 w-9 items-center justify-center rounded-full border-2 border-sky-600 bg-white text-sky-700 shadow-sm">
-                <DisclosureChevron className="h-5 w-5 group-open/runtime:rotate-180" />
-              </span>
+            <span className="inline-flex shrink-0 items-center gap-2 rounded-md border border-sky-200 bg-white px-3 py-2 text-xs font-semibold text-sky-800">
+              <span className="group-open/runtime:hidden">Show details</span>
+              <span className="hidden group-open/runtime:inline">Hide details</span>
+              <DisclosureChevron className="h-4 w-4 group-open/runtime:rotate-180" />
             </span>
           </summary>
           {description ? (
