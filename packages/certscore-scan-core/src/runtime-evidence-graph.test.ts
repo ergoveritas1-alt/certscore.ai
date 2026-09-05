@@ -149,6 +149,17 @@ test("probe origin is bound to browser document and stale/forged contexts cannot
   assert.ok(g.coverage.reasons.includes("probe_context_unresolved"));
 });
 
+test("failed or cancelled requests do not establish browser blocking without explicit protocol evidence", () => {
+  for (const errorText of ["net::ERR_ABORTED", "net::ERR_NAME_NOT_RESOLVED", "net::ERR_TIMED_OUT", "net::ERR_CONNECTION_CLOSED"]) {
+    const builder = make(); builder.handle("main", "Network.requestWillBeSent", request());
+    builder.handle("main", "Network.loadingFailed", { requestId: "1", errorText, canceled: errorText === "net::ERR_ABORTED" });
+    const graph = builder.finish(); const node = graph.nodes.find(row => row.kind === "request");
+    assert.equal(node?.outcome, "unknown");
+    assert.deepEqual(node?.reasons, [errorText]);
+    assert.equal(graph.nodes.filter(row => row.kind === "request").length, 1);
+  }
+});
+
 test("cached/worker-served responses and blocked requests retain distinct network identity without message payloads", () => {
   const b = make();
   b.handle("main", "Network.requestWillBeSent", request("cached"));

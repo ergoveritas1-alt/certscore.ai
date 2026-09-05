@@ -258,7 +258,9 @@ export class RuntimeEvidenceGraphBuilder {
     if (method === "Network.loadingFailed") {
       // CORS failures can still have ExtraInfo without responseReceived. Do not guess redirect ownership.
       const node = this.nodes.get(state.id);
-      if (node) this.add({ ...node, outcome: "blocked", reasons: [safeName(event.blockedReason || event.errorText || "request_failed").slice(0, 100)] });
+      const blockedReason = string(event.blockedReason).trim();
+      // Cancellation, DNS and transport failure do not establish browser blocking.
+      if (node) this.add({ ...node, outcome: blockedReason ? "blocked" : "unknown", reasons: [safeName(blockedReason || event.errorText || "request_failed").slice(0, 100)] });
     }
   }
 
