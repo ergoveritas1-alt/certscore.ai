@@ -125,6 +125,8 @@ const observed = REGIONS.map((region) => {
   ]);
   const config = fn.Configuration ?? {};
   const env = config.Environment?.Variables ?? {};
+  const resolvedDigest = fn.Code?.ResolvedImageUri?.split("@")[1];
+  if (!resolvedDigest || env.SCANNER_IMAGE_DIGEST !== resolvedDigest) errors.push(`${region}: retained image digest does not match the deployed immutable image.`);
   const cmpActionRecipeDisabled = env.CERTSCORE_CMP_ACTION_RECIPE_DISABLED ?? "";
   const postAcceptWorkerEnabled = env.CERTSCORE_POST_ACCEPT_WORKER_ENABLED ?? "0";
   if (postAcceptWorkerEnabled !== "1") {

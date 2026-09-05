@@ -49,6 +49,10 @@ export function graphReleaseRequirements(rollout: Pick<Rollout, "mode" | "presen
   return { producers: rollout.mode !== "off", readers: rollout.presentation === "on" };
 }
 
+export function assertGraphReleaseScanner(deployed: any, region: string, digest: unknown) {
+  if (typeof digest !== "string" || !/^sha256:[a-f0-9]{64}$/.test(digest) || deployed?.image !== `199536052647.dkr.ecr.${region}.amazonaws.com/certscore-v2-dag-local-lambda@${digest}` || deployed.recordedDigest !== digest || deployed.state !== "Active" || deployed.status !== "Successful") throw new Error(`The ${region} scanner image or retained provenance has not converged on the tested graph release.`);
+}
+
 async function verifyReleaseParticipants(rollout: Rollout) {
   // Capture and presentation are independent: old/queued project graphs can
   // become readable even when new capture is off. Emergency suppression of
@@ -66,8 +70,8 @@ async function verifyReleaseParticipants(rollout: Rollout) {
   }
   for (const region of required.producers ? ["eu-central-1", "eu-west-1", "us-west-1"] : []) {
     const digest = await aws(["ecr", "describe-images", "--repository-name", "certscore-v2-dag-local-lambda", "--image-ids", `imageTag=${rollout.expectedWebSha}`, "--query", "imageDetails[0].imageDigest"], region);
-    const deployed = await aws(["lambda", "get-function", "--function-name", "certscore-v2-dag-local-lambda", "--query", "{image:Code.ImageUri,state:Configuration.State,status:Configuration.LastUpdateStatus}"], region);
-    if (typeof digest !== "string" || !/^sha256:[a-f0-9]{64}$/.test(digest) || deployed.image !== `199536052647.dkr.ecr.${region}.amazonaws.com/certscore-v2-dag-local-lambda@${digest}` || deployed.state !== "Active" || deployed.status !== "Successful") throw new Error(`The ${region} scanner has not converged on the tested graph release.`);
+    const deployed = await aws(["lambda", "get-function", "--function-name", "certscore-v2-dag-local-lambda", "--query", "{image:Code.ResolvedImageUri,recordedDigest:Configuration.Environment.Variables.SCANNER_IMAGE_DIGEST,state:Configuration.State,status:Configuration.LastUpdateStatus}"], region);
+    assertGraphReleaseScanner(deployed, region, digest);
   }
 }
 

@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { assertGraphReleaseService, graphReleaseRequirements, graphRolloutTaskDefinition, type Rollout } from "./runtime-graph-rollout";
+import { assertGraphReleaseScanner, assertGraphReleaseService, graphReleaseRequirements, graphRolloutTaskDefinition, type Rollout } from "./runtime-graph-rollout";
 const sha = "a".repeat(40);
 const rollout: Rollout = { mode: "project", percent: 5, presentation: "on", canaryScanIds: [], expectedWebSha: sha };
 const fixture = () => ({ family: "certscore-web-certscore", cpu: "1024", memory: "2048", taskRoleArn: "retained-role", taskDefinitionArn: "old", revision: 1, status: "ACTIVE", containerDefinitions: [{ name: "certscore-web", image: `199536052647.dkr.ecr.us-west-1.amazonaws.com/certscore-web-web:${sha}`, secrets: [{ name: "SECRET", valueFrom: "retained-reference" }], environment: [{ name: "EXISTING", value: "unchanged" }, { name: "CERTSCORE_RUNTIME_GRAPH_PERCENT", value: "0" }] }] });
@@ -48,4 +48,11 @@ test("presentation activation verifies readers even when new capture is off or i
     }
   }
   assert.deepEqual(graphReleaseRequirements({ mode: "off", presentation: "off" }), { producers: false, readers: false }, "emergency full suppression must not await healthy participants");
+});
+
+test("activation rejects stale or absent retained scanner image provenance", () => {
+  const digest = `sha256:${"a".repeat(64)}`;
+  const deployed = {image:`199536052647.dkr.ecr.eu-central-1.amazonaws.com/certscore-v2-dag-local-lambda@${digest}`,recordedDigest:digest,state:"Active",status:"Successful"};
+  assert.doesNotThrow(()=>assertGraphReleaseScanner(deployed,"eu-central-1",digest));
+  for (const variant of [{...deployed,recordedDigest:undefined},{...deployed,recordedDigest:`sha256:${"b".repeat(64)}`},{...deployed,state:"Pending"},{...deployed,image:"stale"}]) assert.throws(()=>assertGraphReleaseScanner(variant,"eu-central-1",digest));
 });

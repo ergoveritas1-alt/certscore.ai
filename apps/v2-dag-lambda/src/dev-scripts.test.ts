@@ -56,6 +56,11 @@ test("dev image scripts allow the approved Lambda scan regions", async () => {
   assert.match(deployScript, /SCANNER_BUILD_REGION = "eu-central-1"/);
   assert.match(deployScript, /scripts\/local-v2-dag-lambda\/replicate-dev-image\.sh/);
   assert.match(deployScript, /const sourceImageUri =/);
+  assert.match(deployScript, /synchronizeScannerImage\(awsScannerImageControl\(region\), digestImageUri, true\)/);
+  assert.match(deployScript, /payload\.RecordedImageDigest !== expectedDigest/);
+  assert.match(deployScript, /RevisionId:RevisionId,EnvironmentError:Environment\.Error/);
+  assert.match(deployScript, /!currentPayload\.RevisionId \|\| currentPayload\.EnvironmentError \|\| !currentPayload\.Variables/);
+  assert.match(deployScript, /"--revision-id", currentPayload\.RevisionId/);
   assert.match(setupScript, /region="\$\{AWS_REGION:-eu-central-1\}"/);
   assert.match(setupScript, /eu-central-1\) location_env_prefix="EU_DE"/);
   assert.match(setupScript, /eu-west-1\) location_env_prefix="EU_IE"/);
