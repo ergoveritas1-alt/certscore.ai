@@ -21,17 +21,19 @@ Execution authorized by product owner on 2026-09-04: implement the preceding pla
 - [x] Production topology, access, and initial cost gate checked.
 - [x] Contracts and deterministic graph tests.
 - [x] Browser capture and attribution corrections; full local regression passed.
-- [x] Lane binding, persistence, API, and UI (deployed enabled-graph round trip pending).
-- [x] Local fixture/replay/browser/performance gates (deployed performance remains pending).
+- [x] Lane binding, persistence, API, and UI; final deployed retained-graph/browser round trip verified.
+- [x] Local fixture/replay/browser/performance gates; regional canary timings retained, not a production p95 claim.
 - [x] Feature-off code deployment and regional verification.
-- [ ] Canary and staged customer activation.
-- [ ] Post-deployment observation and handoff.
+- [x] Final owned canaries in all three regions and Astra retained-evidence review.
+- [x] Stable feature-off hold, fresh signed-in suppression check, and release handoff.
+- [ ] Ten eligible public calibration targets (blocked: one currently eligible).
+- [ ] Staged customer activation and 24-hour post-activation observation.
 
 No implementation, live canary, deployment, or performance gate is recorded as passing until its evidence is retained here.
 
 ## Local implementation and verification log
 
-Working branch: `codex/cookie-tracker-evidence-graph`. Tested implementation commit `97f83b429097d78f84bf0608f23aecdde42b5560` is pushed and deployed to every affected AWS service. Graph activation remains off. No public or owned live scan has been created for this release yet. Entries below retain the chronological history of failed attempts and subsequent successful gates; earlier pending statements are superseded by the deployment section.
+Working branch: `codex/cookie-tracker-evidence-graph`. Tested reader/publisher implementation `97f83b429097d78f84bf0608f23aecdde42b5560` and final scanner correction `61776db564068ec80c9475db8f1c75fbe5899c97` are pushed and deployed. Graph activation remains off after eleven owned release scans and zero public release scans. Entries below retain the chronological history of failed attempts and subsequent successful gates; earlier pending statements are superseded by the final deployed verification and held rollout section.
 
 - Implemented versioned bounded graph capture, protocol identities/redirect correlation, HTTP/JS cookie distinctions, storage/worker/frame metadata, passive streaming counters, scenario/action anchors, per-capture keyed value digests, verified lane merge, persisted public-safe projection, API schema/OpenAPI, and the inventory relationship explorer. Existing scoring policy is unchanged.
 - Re-ran the contracts suite: **317/317 passed**, including unsupported/malformed optional graph compatibility and action-packet isolation. Vendor resolver: **137/137 passed**. API contracts/OpenAPI: **16/16 passed**. SDK build passed.
@@ -138,6 +140,24 @@ Two stale source assertions were verified against `git show HEAD` and corrected 
 - Astra's retained-evidence review confirmed action anchors, inferred attribution, redirect-response cookie ownership, browser-reported cookie blocking, deletion semantics, redaction and explicit partial coverage. It found one additional **evidence-label defect**: generic `Network.loadingFailed` (including `net::ERR_ABORTED`) was labelled `blocked`. Cancellation/DNS/transport failure alone does not establish blocking. The typed graph now reports `unknown` unless an explicit browser `blockedReason` exists, retaining the bounded reason; scoring and core evidence are unchanged.
 - Returned to stable **off/0/presentation-off**, web `555`, materializer `118`. Earlier retained artifacts are unchanged and are not marked as passing the final semantic-quality gate. Correction `61776db5…` is pushed; its new RED test reproduced the overclaim, and the corrected affected suite passed **119/119**, Lambda **109/109**, plus core typecheck. The independent retained verifier now rejects this overclaim. Final exact-source benchmark and scanner-only forward deployment remain pending. Public selection/staged activation remains blocked; a nonblocking owner question asks whether to prepare a reviewed pool expansion or wait for cooldowns.
 - Final label-corrected benchmark **passed** on exact runtime `61776db564068ec80c9475db8f1c75fbe5899c97`: 200 randomized off/on pairs with all checked core fact counts equal. Local all-workload p95 1,901.251 → 1,937.006 ms (**+35.755 ms / +1.881%**), bootstrap 95% ratio **1.01248–1.02237**. Light +0.870%, heavy +1.498%; all uncertainty gates passed. Max raw graph 120,675 bytes; setup p95 2.063 ms, finalization p95 1.702 ms. All ten recorded runtime source hashes verified. Artifact: `runtime-graph-final-label-benchmark-2026-09-04.json`. Scanner-only deployment started only after the affected/Lambda tests, typecheck and this benchmark passed. Capture/presentation remain disabled during deployment.
+
+### Final deployed verification and held rollout
+
+- Final scanner source `61776db564068ec80c9475db8f1c75fbe5899c97` deployed through the canonical helper in **2m01s**. All three regions are Active/Successful on digest `sha256:35ac9f88d97bcd95dcb03f4855de5e6f55408e0aaa672216da4c82b70dac9b1a`, with matching retained provenance, regional parity and Web Bot Auth. The first eight image layers remain unchanged, including Chromium. Reader/publisher services remain on tested source `97f83b42…`.
+- Canary-only tasks `556`/`119` reached stability before submissions. Final fresh retained checks:
+
+| Region / owned fixture | Scan ID | Handler ms | Handoff ms | Public graph bytes |
+| --- | --- | ---: | ---: | ---: |
+| Frankfurt / `testar2.html` | `1b25d9f1-7a1f-4081-a4aa-5986f6c1602a` | 11,268 | 1,191 | 52,291 |
+| California / `testar1.html` | `0915b5d9-cbd7-4b03-aca9-4022b01f2c6c` | 10,845 | 144 | 48,661 |
+| Ireland / `testar1.html` | `951efc48-99e8-46ff-b172-bd85e273ef7f` | 11,555 | 982 | 46,770 |
+
+- Each retained four graphs, exact source/scan/lane identities, verified canonical/manifest/public artifact hashes and sizes, matching raw/public node IDs and edges, confirmed action anchors, redacted public values, and exactly one terminal publication/derivation. Each DB graph summary/reference is **1,411 bytes**. Total graph nodes/edges are 62/60, 58/58 and 56/55 respectively. Ordinary versus deliberately contradictory/refusal-active fixture outcomes remained expected (scores 76 / 88 / 88), without graph-created findings or scoring changes. Logs and verified artifacts: `/tmp/certscore-graph-final-gates-6VQMEU/final-regional-verification.json` and per-scan bundle/manifest/public-graph files in that directory.
+- These are **descriptive canaries, not regional performance confidence intervals**. Handoff here is scanner completion to WC01 result recording, not complete report readiness. Accept added no barrier wait in these three scans. Reject added 1,237 ms in California and zero in the other two; this is the existing action-lane barrier, not an isolated graph-overhead measurement.
+- Astra reviewed all twelve final scenario graphs: cancellation is now unknown throughout, response-specific cookie block attempts remain distinct from stored outcomes, action anchors and public/raw identities match, instrumented links remain inferred, and no new clear redaction/relationship issue was found. **Coverage remains partial**, including standard worker/property-write/initiator limitations plus incomplete ExtraInfo pairing in Frankfurt Reject and pending capture tasks in some California/Ireland action graphs. These limits remain visible and must not be described as universal capture completeness.
+- Deployed explorer checks passed for four-scenario loading, GPC selection, cookie search, two-parent navigation context, scoped scenario comparison and retained evidence fields. Final Frankfurt cancellation nodes displayed unknown. No new graph browser error appeared; the earlier unrelated Cloudflare email-decode error remains recorded, not silently counted as a clean full-session console.
+- **Eleven owned release scan creations, zero public**. No model calls, browser lanes, persistent capacity, retention-policy change or historical backfill were added. Measured simple-canary artifacts are below the conservative budget ceiling but are not a representative public storage/compute forecast; retain the $19.35/month month-12 planning estimate and the approved $25/month/$15-release caps until broader calibration. Low-volume owned scans and scoped one-off audits remain within the previously disclosed sub-dollar release allowance; deployment/transient-task/image charges are also charged to the release cap, not treated as free.
+- Final hold **verified stable**: web `557` (two running), materializer `120` (one running), each with one completed deployment and zero pending tasks. Both task definitions retain **off/0/presentation-off**, empty canary selection, unchanged images and capacity. A fresh signed-in read of final Ireland scan `951efc48-99e8-46ff-b172-bd85e273ef7f` successfully loaded the report and expanded the existing two-row cookie/tracker inventory, with no graph explorer exposed. Previously loaded browser state is not retroactively erased; retained evidence is preserved. The ten-public-target gate, customer stages 5/25/100 and 24-hour observation **have not run**; only one public target is currently eligible. No cooldown/hold/sample baseline was weakened. Await owner direction on a reviewed pool expansion versus waiting; no future monitoring job has been created and no automatic completion is promised.
 
 ### Staged-review sample definition (before live outcomes)
 
