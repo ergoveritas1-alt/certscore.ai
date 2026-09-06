@@ -271,7 +271,7 @@ function ScoreScale({ compact = false, report }: { compact?: boolean; report: Sh
   return (
     <div className="flex items-center gap-4">
       <div
-        aria-label={`${report.fullSite ? "Homepage audit score" : "Overall score"} ${score} out of 100`}
+        aria-label={`${report.fullSite ? "Diagnostic score" : "Overall score"} ${score} out of 100`}
         className={`${compact ? "h-24 w-24" : "h-28 w-28"} relative flex shrink-0 items-center justify-center rounded-full p-2`}
         role="img"
         style={{ background: `conic-gradient(${scoreColor} 0 ${score}%, #e4e4e7 ${score}% 100%)` }}
@@ -282,7 +282,7 @@ function ScoreScale({ compact = false, report }: { compact?: boolean; report: Sh
         </div>
       </div>
       <div className="min-w-0 flex-1 border-l border-zinc-200 pl-4">
-        <p className="text-[0.68rem] font-semibold uppercase text-zinc-500">{report.fullSite ? "Homepage audit score" : "Overall score"}</p>
+        <p className="text-[0.68rem] font-semibold uppercase text-zinc-500">{report.fullSite ? "Diagnostic score" : "Overall score"}</p>
         <p className="mt-1 text-lg font-semibold leading-tight text-zinc-950">{assessment}</p>
         <p className="mt-2 text-xs leading-5 text-zinc-500">{focus}</p>
       </div>
@@ -1257,7 +1257,7 @@ function BriefingVariant({ report }: { report: ShadowReportData }) {
         <ReportIdentity report={report} />
         <div className="mt-10 grid gap-8 border-y border-zinc-200 py-8 lg:grid-cols-[15rem_minmax(0,1fr)_18rem] lg:gap-10">
           <div>
-            <p className="mb-4 text-xs font-semibold uppercase text-zinc-500">{report.fullSite ? "Homepage audit score" : "Overall score"}</p>
+            <p className="mb-4 text-xs font-semibold uppercase text-zinc-500">{report.fullSite ? "Diagnostic score" : "Overall score"}</p>
             <ScoreScale report={report} />
           </div>
           <div className="border-zinc-200 lg:border-x lg:px-10">
@@ -1641,6 +1641,14 @@ function GpcEvidenceIndexCard({ projection }: { projection: GpcResponseReportPro
 }
 
 function EvidenceDirectory({ report }: { report: ShadowReportData }) {
+  const technology = describeSiteTechnology(report.siteMetadata?.observation);
+  const metadataFields = [
+    ["Platform", technology.platform],
+    ["Version", technology.version],
+    ["Industry (estimated)", report.scan.benchmark],
+    ["Language", report.siteMetadata?.observation.language],
+    ["Page title", report.siteMetadata?.observation.title],
+  ].filter(([, value]) => value && !/^(unknown|not identified|not captured|not determined)$/i.test(value.trim()));
   const consentVendor = report.consentVendor ?? "Consent platform not identified";
   const observedGdprTransparencyRows = report.gdprTransparencyRows.filter((row) => row.status === "Observed").length;
   const trackingExternalReviewCount = countRowsRequiringReview(report.trackingExternalRows);
@@ -1713,19 +1721,15 @@ function EvidenceDirectory({ report }: { report: ShadowReportData }) {
                 ))}
               </div>
             </details>
-            <section aria-label="Site metadata" className="border-b border-r border-zinc-200 p-5">
-              <h3 className="text-xs font-semibold uppercase text-zinc-500">Site metadata</h3>
-              <dl className="mt-3 grid grid-cols-2 gap-x-4 gap-y-3 text-sm">
-                {[
-                  ["Platform", describeSiteTechnology(report.siteMetadata?.observation).platform],
-                  ["Version", describeSiteTechnology(report.siteMetadata?.observation).version],
-                  ["Industry (estimated)", report.scan.benchmark],
-                  ["Language", report.siteMetadata?.observation.language || "Not captured"],
-                  ["Page title", report.siteMetadata?.observation.title || "Not captured"],
-                ].map(([label, value]) => <div key={label}><dt className="text-xs text-zinc-500">{label}</dt><dd className="mt-0.5 break-words font-medium">{value}</dd></div>)}
+            <details aria-label="Site metadata" className="group/metadata border-b border-r border-zinc-200 p-5">
+              <summary className="flex cursor-pointer list-none items-center justify-between gap-4 [&::-webkit-details-marker]:hidden">
+                <div><p className="text-xs font-semibold uppercase text-zinc-500">Site metadata</p><h3 className={`mt-1 ${reportCardTitle}`}>{metadataFields.length} details</h3></div>
+                <DisclosureChevron className="text-zinc-400 group-open/metadata:rotate-180" />
+              </summary>
+              <dl className="mt-5 grid grid-cols-2 gap-x-4 gap-y-3 border-t border-zinc-200 pt-4 text-sm">
+                {metadataFields.map(([label, value]) => <div key={label}><dt className="text-xs text-zinc-500">{label}</dt><dd className="mt-0.5 break-words font-medium">{value}</dd></div>)}
               </dl>
-              <p className="mt-3 text-xs text-zinc-500">{report.siteMetadata ? "Technology is based on the page’s declarations and same-site asset paths. Versions are shown only when declared; this is not a software vulnerability check." : "Technology metadata was not retained for this scan. New homepage scans capture it automatically."}</p>
-            </section>
+            </details>
           </div>
           <div className="border-l border-t border-zinc-200">
             <details className="group/runtime border-b border-r border-zinc-200 p-5">

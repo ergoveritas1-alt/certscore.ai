@@ -228,6 +228,22 @@ export async function loadFullSiteReport(
       .map(([label, count]) => ({ label, count }))
       .sort((a, b) => b.count - a.count || a.label.localeCompare(b.label));
   };
+  // Use the complete aggregate, independent of table filters and pagination.
+  // Count each resource identity once; services group resources and scripts
+  // duplicate request evidence, so neither belongs in this denominator.
+  const inventoryRows = aggregate.resources.filter((row) =>
+    ["cookie", "storage", "request", "embed"].includes(row.occurrence.kind),
+  );
+  const inventoryBreakdown = (field: "assessments" | "purposes" | "relationships") => {
+    const counts = new Map<string, number>();
+    for (const row of inventoryRows) {
+      const values = row[field];
+      const label = values.length > 1 ? "mixed" : values[0] || (field === "assessments" ? "Not assessed" : "unknown");
+      counts.set(label, (counts.get(label) ?? 0) + 1);
+    }
+    return [...counts].map(([label, count]) => ({ label, count }))
+      .sort((a, b) => b.count - a.count || a.label.localeCompare(b.label));
+  };
   const detailId = params.get("detailPage"),
     resourceKey = params.get("resource");
   let evidence: null | {
@@ -333,6 +349,11 @@ export async function loadFullSiteReport(
             .map((r) => r.occurrence.resourceType),
         ),
       ].sort(),
+    },
+    inventoryMix: {
+      evidence: inventoryBreakdown("assessments"),
+      purpose: inventoryBreakdown("purposes"),
+      relationship: inventoryBreakdown("relationships"),
     },
     charts: {
       cookies: breakdown("cookie", "purposes"),

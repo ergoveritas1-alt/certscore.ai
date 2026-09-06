@@ -5,6 +5,7 @@ import {
   type CrawlOptions,
 } from "@website-signal-risk-scanner/shared/full-site-crawl";
 import { API_READ_RATE_POLICY } from "@website-signal-risk-scanner/shared/api-read-rate-policy";
+import { SitewideInventorySummary } from "./sitewide-inventory-summary";
 import { VendorBrandIcon } from "./vendor-brand-chip";
 
 import type { FullSiteReportResponse } from "../../server/scans/full-site-report";
@@ -45,7 +46,6 @@ const units = {
   request: "Requests",
   embed: "Embeds",
   storage: "Other storage",
-  script: "Scripts",
 };
 const duration = (ms: number | null | undefined) =>
   ms === null || ms === undefined
@@ -73,7 +73,7 @@ export function FullSiteWorkspace({
   children: ReactNode;
 }) {
   const [tab, setTab] = useState<"resources" | "pages" | "homepage">(
-    "homepage",
+    "resources",
   );
   const [filters, setFilters] = useState(initialFilters),
     [offset, setOffset] = useState(0);
@@ -82,12 +82,6 @@ export function FullSiteWorkspace({
   const [detailPage, setDetailPage] = useState(""),
     [resource, setResource] = useState(""),
     [detailOffset, setDetailOffset] = useState(0);
-  const [cookieView, setCookieView] = useState<
-    "cookies" | "cookieRelationship" | "cookiePersistence"
-  >("cookies");
-  const [requestView, setRequestView] = useState<"requests" | "requestPurpose">(
-    "requests",
-  );
   const terminal = useRef(false);
   const detailRef = useRef<HTMLDivElement>(null);
   useEffect(() => {
@@ -187,50 +181,6 @@ export function FullSiteWorkspace({
     !state ||
     ["waiting_homepage", "running"].includes(state.status) ||
     (counts?.active ?? 0) > 0;
-  function bars(
-    title: string,
-    rows: Array<{ label: string; count: number }>,
-    kind: string,
-    field: keyof Filters,
-    unit: string,
-  ) {
-    const maximum = Math.max(1, ...rows.map((r) => r.count));
-    return (
-      <section className="min-w-0 rounded-lg border border-zinc-200 bg-white p-3">
-        <h3 className="text-sm font-semibold">{title}</h3>
-        <p className="sr-only">{unit}; click a row to inspect evidence.</p>
-        <ul className="mt-2 max-h-28 space-y-1.5 overflow-auto">
-          {rows.map((row) => (
-            <li key={row.label}>
-              <button
-                className="w-full rounded text-left focus-visible:outline focus-visible:outline-sky-500"
-                onClick={() => filter({ kind, [field]: row.label }, true)}
-              >
-                <span className="flex justify-between gap-3 text-xs">
-                  <span className="truncate">{row.label}</span>
-                  <strong>{row.count.toLocaleString()}</strong>
-                </span>
-                <span
-                  aria-hidden="true"
-                  className="mt-1 block h-1.5 rounded bg-zinc-100"
-                >
-                  <span
-                    className="block h-1.5 rounded bg-sky-600"
-                    style={{ width: `${(100 * row.count) / maximum}%` }}
-                  />
-                </span>
-              </button>
-            </li>
-          ))}
-        </ul>
-        {!rows.length ? (
-          <p className="text-sm text-zinc-500">
-            None observed.
-          </p>
-        ) : null}
-      </section>
-    );
-  }
   const activeFilters = Object.entries(filters).filter(
     ([key, value]) => value && !["kind", "sort", "pageSort"].includes(key),
   );
@@ -253,7 +203,7 @@ export function FullSiteWorkspace({
       <header className="border-b border-zinc-200 pb-3">
         <div className="flex flex-wrap items-center justify-between gap-2">
           <div className="flex items-center gap-2">
-            <h1 className="text-xl font-semibold tracking-tight">Scan results</h1>
+            <h1 className="text-xl font-semibold tracking-tight">Site scan results</h1>
             <span className="rounded-full bg-sky-50 px-2 py-0.5 text-xs font-medium text-sky-800">{state?.status.replaceAll("_", " ") ?? "Loading"}</span>
           </div>
           <div className="flex gap-2">
@@ -355,38 +305,10 @@ export function FullSiteWorkspace({
           </p>
         ) : null}
       </header>
-      <nav
-        aria-label="Scan report workspace"
-        className="my-3 flex flex-wrap gap-2"
-      >
-        {(["homepage", "resources", "pages"] as const).map((value) => (
-          <button
-            key={value}
-            className={`${button} ${tab === value ? "!border-zinc-900 !bg-zinc-900 !text-white" : ""}`}
-            aria-pressed={tab === value}
-            onClick={() => {
-              setTab(value);
-              setOffset(0);
-            }}
-          >
-            {value === "homepage"
-              ? "Homepage audit"
-              : value === "pages"
-                ? "Pages"
-                : "Resources"}
-          </button>
-        ))}
-      </nav>
-      <div hidden={tab !== "homepage"} id="homepage-audit">
-        {children}
-      </div>
-      {tab !== "homepage" ? (
-        <>
-          <p className="mb-2 text-xs text-zinc-600">{tab === "resources" ? "Resources combines services, cookies, requests and embeds across independent page visits." : "Pages shows the resources and coverage retained for each URL."} Additional pages receive inventory checks only; scores and findings belong to the homepage.</p>
-          <div className="grid grid-cols-3 gap-px overflow-hidden rounded-lg border border-zinc-200 bg-zinc-200 sm:grid-cols-6">
+          <div className="mt-3 grid grid-cols-3 gap-px overflow-hidden rounded-lg border border-zinc-200 bg-zinc-200 sm:grid-cols-6">
             {[
               [
-                "Pages observed",
+                "Pages scanned",
                 counts ? counts.completed + counts.partial : null,
                 "pages",
                 "",
@@ -442,130 +364,35 @@ export function FullSiteWorkspace({
               </button>
             ))}
           </div>
-          {data ? (
-            <>
-              <div className="my-3 grid grid-cols-2 gap-2 md:grid-cols-4">
-                <div>
-                  <label className="mb-2 block text-xs">
-                    Cookie breakdown{" "}
-                    <select
-                      className="ml-1"
-                      value={cookieView}
-                      onChange={(e) =>
-                        setCookieView(e.target.value as typeof cookieView)
-                      }
-                    >
-                      <option value="cookies">Purpose</option>
-                      <option value="cookieRelationship">Relationship</option>
-                      <option value="cookiePersistence">Persistence</option>
-                    </select>
-                  </label>
-                  {bars(
-                    "Cookies",
-                    data.charts[cookieView],
-                    "cookie",
-                    cookieView === "cookies"
-                      ? "purpose"
-                      : cookieView === "cookieRelationship"
-                        ? "relationship"
-                        : "persistence",
-                    "Distinct cookie identities",
-                  )}
-                </div>
-                <div>
-                  <label className="mb-2 block text-xs">
-                    Request breakdown{" "}
-                    <select
-                      className="ml-1"
-                      value={requestView}
-                      onChange={(e) =>
-                        setRequestView(e.target.value as typeof requestView)
-                      }
-                    >
-                      <option value="requests">Resource type</option>
-                      <option value="requestPurpose">Purpose</option>
-                    </select>
-                  </label>
-                  {bars(
-                    "Requests",
-                    data.charts[requestView],
-                    "request",
-                    requestView === "requests" ? "resourceType" : "purpose",
-                    "Request events",
-                  )}
-                </div>
-                {bars(
-                  "Embeds",
-                  data.charts.embeds,
-                  "embed",
-                  "purpose",
-                  "Embed instances",
-                )}
-                {bars(
-                  "Services",
-                  data.charts.services,
-                  "service",
-                  "purpose",
-                  "Services",
-                )}
-              </div>
-              <div className="mb-3 grid min-w-0 gap-2 md:grid-cols-3 [&>section]:max-h-48 [&>section]:overflow-auto">
-                {[
-                  ["Observed on other pages", data.discovery.beyond],
-                  ["Most widespread", data.discovery.widespread],
-                ].map(([label, items]) => (
-                  <section
-                    className="min-w-0 rounded-lg border border-zinc-200 bg-white p-3"
-                    key={String(label)}
-                  >
-                    <h3 className="mb-2 text-sm font-semibold">{String(label)}</h3>
-                    {label === "Observed on other pages" ? <p className="mb-2 text-xs text-zinc-500">Seen on additional pages, not in the homepage visit. This does not prove absence.</p> : null}
-                    {label === "Observed on other pages" && !s?.baselineComplete ? (
-                      <p className="text-sm text-zinc-600">
-                        Comparison unavailable: the homepage baseline is
-                        incomplete or not comparable.
-                      </p>
-                    ) : (
-                      (
-                        items as FullSiteReportResponse["discovery"]["beyond"]
-                      ).map((row) => (
-                        <button
-                          key={row.key}
-                          className="mb-1 flex w-full items-center justify-between gap-2 text-left text-xs text-sky-800 hover:underline"
-                          onClick={() => openResource(row.key, row.pageIds[0])}
-                        >
-                          <span className="flex min-w-0 items-center gap-2"><VendorBrandIcon label={row.occurrence.label} /><span className="truncate">{row.occurrence.label}</span></span>
-                          <span>{row.pageIds.length} pages</span>
-                        </button>
-                      ))
-                    )}
-                  </section>
-                ))}
-                <section className="min-w-0 rounded-lg border border-zinc-200 bg-white p-3">
-                  <h3 className="mb-2 text-sm font-semibold">On-site pages to review</h3>
-                  {data.discovery.review.map((page) => (
-                    <button
-                      key={page.id}
-                      className="mb-3 block w-full text-left text-sm"
-                      onClick={() => openPage(page.id)}
-                    >
-                      <span className="block truncate text-sky-800">
-                        {page.url}
-                      </span>
-                      <span className="text-xs text-zinc-500">
-                        {(page.additionalServices ?? 0) > 0
-                          ? `${page.additionalServices} additional services. `
-                          : ""}
-                        {page.limitations.length
-                          ? `Coverage: ${page.limitations.join(", ")}`
-                          : ""}
-                      </span>
-                    </button>
-                  ))}
-                </section>
-              </div>
-            </>
-          ) : null}
+      <nav
+        aria-label="Scan report workspace"
+        className="my-3 flex flex-wrap gap-2"
+      >
+        {(["homepage", "resources", "pages"] as const).map((value) => (
+          <button
+            key={value}
+            className={`${button} ${tab === value ? "!border-zinc-900 !bg-zinc-900 !text-white" : ""}`}
+            aria-pressed={tab === value}
+            onClick={() => {
+              setTab(value);
+              setOffset(0);
+            }}
+          >
+            {value === "homepage"
+              ? "Homepage"
+              : value === "pages"
+                ? "Pages"
+                : "Full site report"}
+          </button>
+        ))}
+      </nav>
+      <div hidden={tab !== "homepage"} id="homepage-audit" className="[&_.mx-auto]:!max-w-none [&_.mx-auto]:!px-0">
+        {children}
+      </div>
+      {tab !== "homepage" ? (
+        <>
+          <p className="mb-2 text-xs text-zinc-600">{tab === "resources" ? "Inventory combines resources across all scanned pages." : "Pages shows the resources and coverage retained for each URL."} Additional pages receive inventory checks only; scores and findings belong to the homepage.</p>
+          {data && tab === "resources" ? <SitewideInventorySummary mix={data.inventoryMix} /> : null}
           <section className="min-w-0 rounded-xl border border-zinc-200 bg-white p-4 sm:p-5">
             <div className="mb-4 flex flex-wrap gap-2">
               {tab === "resources" ? (
