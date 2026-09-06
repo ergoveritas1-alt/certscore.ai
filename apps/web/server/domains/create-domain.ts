@@ -1,6 +1,6 @@
 "use server";
 
-import { createDomainRequestSchema, normalizeScanFrom, parseDomainBatchInput, type ScanFrom } from "@website-signal-risk-scanner/shared";
+import { validateFullSiteRequest, fullSitePolicy, canUseFullSite, createDomainRequestSchema, normalizeScanFrom, parseDomainBatchInput, type ScanFrom } from "@website-signal-risk-scanner/shared";
 import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { getQueueAvailability } from "../../lib/env";
@@ -47,6 +47,8 @@ function getLocalAwareScanThrottleMs(userEmail: string): number | undefined {
 }
 
 export async function createOrQueueDomainScan(input: {
+  fullSite?: unknown;
+  crawlOptions?: unknown;
   allowExistingDomainRescan?: boolean;
   bypassRecentScanReuse?: boolean;
   campaignAttribution?: CampaignAttribution | null;
@@ -70,6 +72,11 @@ export async function createOrQueueDomainScan(input: {
   scanFrom?: ScanFrom;
 }) {
   const dashboardContext = await getDashboardContext();
+  try {
+    validateFullSiteRequest(input,canUseFullSite(dashboardContext.membership.role),fullSitePolicy(process.env));
+  } catch(error) {
+    return {error:error instanceof Error?error.message:"Invalid crawl configuration.",scanId:null};
+  }
   const allowRestrictedScanOptions = canUseRestrictedScanOptions({
     membershipRole: dashboardContext.membership.role,
     userEmail: dashboardContext.user.email
@@ -124,6 +131,7 @@ export async function createOrQueueDomainScan(input: {
 
   if (existingDomain && input.allowExistingDomainRescan) {
     const queueResult = await queueFullScanForDomain({
+      fullSite: input.fullSite, crawlOptions: input.crawlOptions,
       domainId: existingDomain.id,
       clientRequestId: input.clientRequestId,
       organizationId: dashboardContext.organization.id,
@@ -186,6 +194,7 @@ export async function createOrQueueDomainScan(input: {
   }
 
   const queueResult = await queueFullScanForDomain({
+      fullSite: input.fullSite, crawlOptions: input.crawlOptions,
     domainContext: {
       activeScanExists: false,
       domain: {
@@ -250,9 +259,11 @@ export async function createDomainAction(
     };
   }
 
+  const { fullSiteFormInput } = await import("../scans/full-site-options");
   const results = await Promise.all(
     parsedBatch.valid.map((item) =>
       createOrQueueDomainScan({
+        ...fullSiteFormInput(formData),
         domain: item.domain,
         allowExistingDomainRescan: true,
         bypassRecentScanReuse: forceNewScan,

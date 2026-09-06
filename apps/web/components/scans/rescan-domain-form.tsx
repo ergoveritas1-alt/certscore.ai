@@ -1,5 +1,7 @@
 "use client";
 
+import { FullSiteControls } from "./full-site-controls";
+
 import { Button } from "@website-signal-risk-scanner/ui";
 import { useActionState, useState } from "react";
 import { rescanDomainAction } from "../../server/scans/rescan-domain";
@@ -34,6 +36,7 @@ export function RescanDomainForm({ allowRestrictedScanOptions = false, cooldownM
 
   return (
     <form action={action} className={compact ? "space-y-0" : "space-y-2"}>
+      <FullSiteControls />
       <input name="domainId" type="hidden" value={domainId} />
       {errorMessage ? <p className="max-w-sm text-sm text-red-600">{errorMessage}</p> : null}
       <div className="group relative inline-flex items-center gap-1.5">

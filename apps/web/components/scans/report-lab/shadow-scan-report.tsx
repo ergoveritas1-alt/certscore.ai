@@ -1,3 +1,4 @@
+import { FullSiteWorkspace } from "../full-site-workspace";
 import type { ReactNode } from "react";
 import { reportCardTitle, reportEyebrow, reportSectionTitle } from "../report-typography";
 import { InventorySortProvider, InventorySortHeader, InventorySortedBody } from "../inventory-sorting";
@@ -269,7 +270,7 @@ function ScoreScale({ compact = false, report }: { compact?: boolean; report: Sh
   return (
     <div className="flex items-center gap-4">
       <div
-        aria-label={`Overall score ${score} out of 100`}
+        aria-label={`${report.fullSite ? "Homepage audit score" : "Overall score"} ${score} out of 100`}
         className={`${compact ? "h-24 w-24" : "h-28 w-28"} relative flex shrink-0 items-center justify-center rounded-full p-2`}
         role="img"
         style={{ background: `conic-gradient(${scoreColor} 0 ${score}%, #e4e4e7 ${score}% 100%)` }}
@@ -280,7 +281,7 @@ function ScoreScale({ compact = false, report }: { compact?: boolean; report: Sh
         </div>
       </div>
       <div className="min-w-0 flex-1 border-l border-zinc-200 pl-4">
-        <p className="text-[0.68rem] font-semibold uppercase text-zinc-500">Overall score</p>
+        <p className="text-[0.68rem] font-semibold uppercase text-zinc-500">{report.fullSite ? "Homepage audit score" : "Overall score"}</p>
         <p className="mt-1 text-lg font-semibold leading-tight text-zinc-950">{assessment}</p>
         <p className="mt-2 text-xs leading-5 text-zinc-500">{focus}</p>
       </div>
@@ -1255,7 +1256,7 @@ function BriefingVariant({ report }: { report: ShadowReportData }) {
         <ReportIdentity report={report} />
         <div className="mt-10 grid gap-8 border-y border-zinc-200 py-8 lg:grid-cols-[15rem_minmax(0,1fr)_18rem] lg:gap-10">
           <div>
-            <p className="mb-4 text-xs font-semibold uppercase text-zinc-500">Overall score</p>
+            <p className="mb-4 text-xs font-semibold uppercase text-zinc-500">{report.fullSite ? "Homepage audit score" : "Overall score"}</p>
             <ScoreScale report={report} />
           </div>
           <div className="border-zinc-200 lg:border-x lg:px-10">
@@ -1826,7 +1827,7 @@ export function ShadowScanReport({
   report = SHADOW_REPORT,
   variant,
 }: ShadowScanReportProps) {
-  const reportContent = (
+  const homepageContent = (
     <>
       <VariantBody
         allowRestrictedScanOptions={allowRestrictedScanOptions}
@@ -1838,6 +1839,8 @@ export function ShadowScanReport({
       <EvidenceDirectory report={report} />
     </>
   );
+
+  const reportContent = report.fullSite ? <FullSiteWorkspace scanId={report.scan.id} requested={report.fullSite}>{homepageContent}</FullSiteWorkspace> : homepageContent;
 
   if (mode === "authenticated") {
     return (

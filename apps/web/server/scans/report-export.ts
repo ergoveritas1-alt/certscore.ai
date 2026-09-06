@@ -1,3 +1,4 @@
+import type { FullSiteReportExport } from "./full-site-report";
 import {
   consentControlAssessmentSchema,
   type CollectionSurfaceAssessment,
@@ -291,7 +292,7 @@ function buildDataCollectionSurfacesAppendix(
   };
 }
 
-export function buildCanonicalReportExport(scanRecord: ScanDetailResponse) {
+export function buildCanonicalReportExport(scanRecord: ScanDetailResponse, fullSite?: FullSiteReportExport) {
   const canonical = getPersistedCanonicalReportProjection(scanRecord);
   if (!canonical) return null;
   const assessment = consentAssessment(scanRecord);
@@ -299,6 +300,7 @@ export function buildCanonicalReportExport(scanRecord: ScanDetailResponse) {
   const normalizedConcerns = canonical.normalizedConcerns as Array<Record<string, unknown>>;
 
   return {
+    ...(fullSite ? { fullSite } : {}),
     artifactType: "certscore_canonical_report_export",
     artifactVersion: CANONICAL_REPORT_EXPORT_VERSION,
     generatedAt: new Date().toISOString(),

@@ -35,6 +35,8 @@ export const LOCAL_V2_DAG_LAMBDA_RESULT_FAILED_EVENT_TYPE = "v2_lambda_result.fa
 export const LOCAL_V2_DAG_LAMBDA_DISPATCH_TIMEOUT_MS = 5_000;
 
 export type LocalV2DagLambdaDispatchPayload = {
+  resourceInventoryCrawl?: boolean;
+  resourceInventoryDiscovery?: boolean;
   artifactOnly: true;
   awsRegion: LocalV2DagLambdaAwsRegion;
   callbackCorrelationId: string;
@@ -443,6 +445,7 @@ export function buildLocalV2DagLambdaDispatchPayload(input: {
     ? readPersistedRuntimeGraphDispatch(input.scanId, intent)
     : intent.orchestrationMode === "sharded" ? selectRuntimeGraphDispatch(input.scanId, process.env, targetUrl) : undefined;
   return {
+    ...(config.fullSite === true ? {resourceInventoryCrawl:true, resourceInventoryDiscovery:Number((config.crawlOptions as Record<string, unknown> | undefined)?.maxPages) > 1} : {}),
     artifactOnly: true,
     awsRegion,
     callbackCorrelationId: input.scanId,

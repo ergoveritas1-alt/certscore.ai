@@ -1,5 +1,6 @@
 "use server";
 
+import { fullSiteFormInput } from "./full-site-options";
 import { redirect } from "next/navigation";
 import { headers } from "next/headers";
 import { getQueueAvailability } from "../../lib/env";
@@ -59,6 +60,7 @@ export async function rescanDomainAction(
   }
 
   const queueResult = await queueFullScanForDomain({
+    ...fullSiteFormInput(formData),
     domainId,
     organizationId: dashboardContext.organization.id,
     planCode: dashboardContext.organization.plan,

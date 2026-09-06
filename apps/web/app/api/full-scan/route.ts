@@ -1,3 +1,5 @@
+import { authorizeFullSiteInput } from "../../../server/scans/full-site-options";
+import { FullSiteRequestError } from "@website-signal-risk-scanner/shared";
 import { after, NextResponse } from "next/server";
 import {
   createDomainRequestSchema,
@@ -115,6 +117,7 @@ function boundedDebugInteger(value: unknown, min: number, max: number): number |
 export async function POST(request: Request) {
   try {
     const payload = await request.json();
+    const crawl = await authorizeFullSiteInput(payload ?? {});
     const campaignAttribution = normalizeCampaignAttribution(payload?.campaignAttribution);
     const forceNewScan = parseForceNewScan(payload?.forceNewScan);
     const localV2DagScanProfile = normalizeLocalV2DagScanProfile(payload?.localV2ScanProfile ?? payload?.v2ScanProfile);
@@ -311,6 +314,7 @@ export async function POST(request: Request) {
     const scans = await Promise.all(
       intakeDomains.map((item) =>
         createOrQueueDomainScan({
+          ...(crawl.fullSite ? crawl : {}),
           allowExistingDomainRescan: true,
           bypassRecentScanReuse: forceNewScan,
           clientRequestId,
@@ -357,6 +361,7 @@ export async function POST(request: Request) {
       }
     );
   } catch (error) {
+    if (error instanceof FullSiteRequestError) return NextResponse.json({code:"invalid_crawl_request",error:error.message,field:error.field},{status:error.status});
     if (isDomainDnsPreflightError(error)) {
       return NextResponse.json(
         { code: error.code, error: error.message },

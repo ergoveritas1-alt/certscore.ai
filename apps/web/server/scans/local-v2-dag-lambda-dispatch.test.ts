@@ -610,3 +610,12 @@ test("local Lambda result ingestion never promotes artifacts into production fin
   assert.equal(Object.hasOwn(ingestion, "findings"), false);
   assert.equal(Object.hasOwn(ingestion, "signals"), false);
 });
+
+
+test("full-site opt-in alone adds inventory context; a one-target scan never discovers links",()=>{
+  const config=buildLambdaScanConfig({orchestrationMode:"sharded"});
+  const build=(maxPages:number)=>buildLocalV2DagLambdaDispatchPayload({scanId:"crawl-fixture",scanConfig:{...config,fullSite:true,crawlOptions:{maxPages,concurrency:1,waitSeconds:5}},localCallbackUrl:null});
+  assert.equal(build(1).resourceInventoryCrawl,true);assert.equal(build(1).resourceInventoryDiscovery,false);
+  assert.equal(build(200).resourceInventoryDiscovery,true);
+  assert.equal(buildLocalV2DagLambdaDispatchPayload({scanId:"normal",scanConfig:config,localCallbackUrl:null}).resourceInventoryCrawl,undefined);
+});

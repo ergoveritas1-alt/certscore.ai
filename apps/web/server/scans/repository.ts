@@ -1,7 +1,7 @@
 "use server";
 
-import { query, queryOne } from "@website-signal-risk-scanner/db";
-import { PRIOR_SCAN_ACCELERATION_MAX_AGE_DAYS } from "@website-signal-risk-scanner/shared";
+import { query, queryOne, withWriteTransaction, insertFullSiteCrawl } from "@website-signal-risk-scanner/db";
+import { PRIOR_SCAN_ACCELERATION_MAX_AGE_DAYS, validateFullSiteRequest, fullSitePolicy, canUseFullSite } from "@website-signal-risk-scanner/shared";
 import type {
   AccessPostureClass,
   RecoverableFindingClass,
@@ -13,6 +13,7 @@ import type {
 } from "@website-signal-risk-scanner/shared";
 import { isMissingComplianceChangeEventsTable } from "../changes/legacy-change-events";
 import { parsePlatformAdminEmails } from "../admin/platform-admin-core";
+import { getDomain } from "tldts";
 import { randomUUID } from "node:crypto";
 import { bindRuntimeGraphDispatchToScan } from "./runtime-evidence-graph-dispatch";
 
@@ -1066,9 +1067,19 @@ export async function upsertUsageCounter(input: {
 }
 
 export async function createQueuedFullScan(input: QueuedFullScanInsert): Promise<{ id: string }> {
+  let crawl: ReturnType<typeof validateFullSiteRequest> = { fullSite: false };
+  if ((input.scanConfigJson?.fullSite !== undefined && input.scanConfigJson.fullSite !== false) || input.scanConfigJson?.crawlOptions !== undefined) {
+    const { getDashboardContext } = await import("../auth");
+    const context = await getDashboardContext();
+    crawl = validateFullSiteRequest(input.scanConfigJson, canUseFullSite(context.membership?.role) &&
+      context.organization.id === input.organizationId && context.user.id === input.submittedByUserId, fullSitePolicy(process.env));
+  }
   const scanId = randomUUID();
-  const scanConfig = bindRuntimeGraphDispatchToScan({ scanId, scanConfig: input.scanConfigJson, environment: process.env });
-  const data = await queryOne<{ id: string }>(
+  const validatedConfig: Record<string, unknown> = crawl.fullSite ? {...input.scanConfigJson,...crawl} : {...input.scanConfigJson};
+  if (!crawl.fullSite) delete validatedConfig.crawlOptions;
+  else validatedConfig.hostname = new URL(String(validatedConfig.normalizedUrl)).hostname;
+  const scanConfig = bindRuntimeGraphDispatchToScan({ scanId, scanConfig: validatedConfig, environment: process.env });
+  const insert = async (run: typeof queryOne) => run<{ id: string }>(
     `insert into scans (
        organization_id,
        domain_id,
@@ -1099,9 +1110,18 @@ export async function createQueuedFullScan(input: QueuedFullScanInsert): Promise
     ]
   );
 
-  if (!data) {
-    throw new Error("Could not create full scan: Unknown error");
-  }
+  const data = crawl.fullSite ? await withWriteTransaction(async client => {
+    const inserted = await insert(async (sql: string, values: unknown[] = []) => (await client.query(sql,values)).rows[0] ?? null);
+    if (!inserted) throw new Error("Could not create full scan.");
+    const execution = scanConfig.execution as Record<string, unknown>;
+    const intent = execution?.v2DagLambda as Record<string, unknown>;
+    if (intent?.orchestrationMode !== "sharded") throw new Error("Full site requires the sharded Lambda runtime.");
+    await insertFullSiteCrawl(client,{ scanId, userId: input.submittedByUserId!, requested: crawl.crawlOptions,
+      policy: fullSitePolicy(process.env), region: String(intent.awsRegion), url: String(scanConfig.normalizedUrl),
+      siteKey: getDomain(String(scanConfig.hostname)) ?? String(scanConfig.hostname) });
+    return inserted;
+  }) : await insert(queryOne);
+  if (!data) throw new Error("Could not create full scan: Unknown error");
 
   return { id: data.id };
 }

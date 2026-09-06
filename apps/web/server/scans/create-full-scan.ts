@@ -1,6 +1,7 @@
 "use server";
 
 import {
+  fullSitePolicy, validateFullSiteRequest, canUseFullSite,
   FULL_SCAN_EVENT_TYPES,
   SCAN_EVENT_TYPES,
   USAGE_METRIC_KEYS,
@@ -75,6 +76,8 @@ const initialState: CreateFullScanActionState = {
 const LOCAL_INTERRUPTED_V2_DAG_CLEANUP_MS = 90_000;
 
 type QueueFullScanInput = {
+  fullSite?: unknown;
+  crawlOptions?: unknown;
   campaignAttribution?: CampaignAttribution | null;
   clientRequestId?: string | null;
   domainContext?: {
@@ -163,6 +166,14 @@ export async function queueFullScanForDomain(input: QueueFullScanInput): Promise
   reusedExistingScan?: boolean;
   scanId: string | null;
 }> {
+  let crawl: ReturnType<typeof validateFullSiteRequest> = { fullSite: false };
+  if ((input.fullSite !== undefined && input.fullSite !== false) || input.crawlOptions !== undefined) {
+    const { getDashboardContext } = await import("../auth");
+    const context = await getDashboardContext();
+    const authorized = canUseFullSite(context.membership?.role) && context.organization.id === input.organizationId && context.user.id === input.submittedByUserId;
+    try { crawl = validateFullSiteRequest(input, authorized, fullSitePolicy(process.env)); }
+    catch (error) { return { error: error instanceof Error ? error.message : "Invalid crawl configuration.", scanId: null }; }
+  }
   const scanFrom = normalizeScanFrom(input.scanFrom);
   const basePlanLimits = input.planLimitsOverride ?? (await getPlanLimits(input.planCode));
   const manualRescanLimitOverride = await getOrganizationManualRescanLimitOverride(input.organizationId).catch((error) => {
@@ -205,7 +216,7 @@ export async function queueFullScanForDomain(input: QueueFullScanInput): Promise
   }
 
   const pagesRequested = domainRecord.domain.maxPagesOverride ?? planLimits.maxPagesPerScan;
-  const bypassRecentScanReuse = Boolean(input.bypassRecentScanReuse);
+  const bypassRecentScanReuse = crawl.fullSite || Boolean(input.bypassRecentScanReuse);
   const requesterIpContext = normalizeScanRequesterIpContext(input.requesterIpContext);
 
   const logRequest = (details: {
@@ -521,9 +532,8 @@ export async function queueFullScanForDomain(input: QueueFullScanInput): Promise
     source: input.source ?? "manual-dashboard",
     trancoRankMetadata
   });
-  const scanConfig = input.clientRequestId
-    ? { ...baseScanConfig, clientRequestId: input.clientRequestId }
-    : baseScanConfig;
+  const scanConfig = { ...baseScanConfig, ...(crawl.fullSite ? crawl : {}),
+    ...(input.clientRequestId ? { clientRequestId: input.clientRequestId } : {}) };
   const localV2DagLambdaDispatch = summarizeLocalV2DagLambdaDispatchForEvent(scanConfig);
   const queueMetadata = getFullScanQueueMetadata({
     provenance: input.provenance,
@@ -755,7 +765,9 @@ export async function createFullScanAction(
     };
   }
 
+  const { fullSiteFormInput } = await import("./full-site-options");
   const result = await queueFullScanForDomain({
+    ...fullSiteFormInput(formData),
     domainId,
     organizationId: dashboardContext.organization.id,
     planCode: dashboardContext.organization.plan,

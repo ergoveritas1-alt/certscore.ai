@@ -1011,6 +1011,8 @@ export function buildApiV2ScanResource(
     : null;
   const resource = {
     type: "certscore_scan",
+    ...(scan.scanConfigJson?.fullSite === true ? { fullSite: {enabled:true as const,scoreScope:"homepage" as const,
+      inventoryUrl:absoluteUrl(`/api/scans/${scan.id}/full-site`),requested:scan.scanConfigJson.crawlOptions as {maxPages:number;concurrency:number;waitSeconds:number}} } : {}),
     scanId: scan.id,
     domain,
     // Preserve the caller's exact page URL when the resource is returned from

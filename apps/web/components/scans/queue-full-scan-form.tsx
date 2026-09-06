@@ -1,5 +1,7 @@
 "use client";
 
+import { FullSiteControls } from "./full-site-controls";
+
 import { Button } from "@website-signal-risk-scanner/ui";
 import { useActionState, useEffect, useState } from "react";
 import { clearPendingScanStarted, markPendingScanStarted } from "../analytics/data-layer-events";
@@ -42,6 +44,7 @@ export function QueueFullScanForm({
 
   return (
     <form action={action} className="space-y-3" onSubmit={() => markPendingScanStarted("dashboard")}>
+      <FullSiteControls />
       <input name="domainId" type="hidden" value={domainId} />
       <ScanFromSelect
         allowRestrictedScanOptions={allowRestrictedScanOptions}

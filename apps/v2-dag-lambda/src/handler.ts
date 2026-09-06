@@ -1,3 +1,4 @@
+import { FULL_SITE_PAGE_DISPATCH, runFullSitePage } from "./full-site-page";
 import { InvokeCommand, LambdaClient, type InvokeCommandOutput } from "@aws-sdk/client-lambda";
 import { GetObjectCommand, PutObjectCommand, S3Client, type GetObjectCommandOutput, type PutObjectCommandOutput } from "@aws-sdk/client-s3";
 import { SQSClient, SendMessageCommand, type SendMessageCommandOutput } from "@aws-sdk/client-sqs";
@@ -130,6 +131,8 @@ const LOCAL_V2_DAG_LAMBDA_DEFAULT_EGRESS_FALLBACK_URL =
   "https://certscore.ai/.well-known/certscore-egress";
 
 export type LocalV2DagLambdaDispatchPayload = {
+  resourceInventoryCrawl?: boolean;
+  resourceInventoryDiscovery?: boolean;
   artifactOnly: true;
   awsRegion: LocalV2DagLambdaAwsRegion;
   callbackCorrelationId: string;
@@ -778,6 +781,7 @@ export function parseLocalV2DagLambdaDispatchPayload(event: unknown): LocalV2Dag
     throw new Error("Local v2 DAG Lambda parent dispatch checksum is invalid.");
   }
   const payload: LocalV2DagLambdaDispatchPayload = {
+    ...(record.resourceInventoryCrawl === true ? {resourceInventoryCrawl:true,resourceInventoryDiscovery:record.resourceInventoryDiscovery === true} : {}),
     artifactOnly: true,
     awsRegion: parseAwsRegion(record.awsRegion),
     callbackCorrelationId: requireString(record, "callbackCorrelationId"),
@@ -1310,6 +1314,8 @@ async function runLocalV2DagLambdaScanBundle(
     try {
       const bundle = await runScan({
         scanId: payload.scanId,
+        resourceInventoryCrawl: payload.resourceInventoryCrawl,
+        resourceInventoryDiscovery: payload.resourceInventoryDiscovery,
         runtimeGraph: payload.runtimeGraph,
         allowRuntimeEvidenceFinalizationAfterAbort: options.allowRuntimeEvidenceFinalizationAfterAbort,
         browserReuseMode: "per_module",
@@ -4172,6 +4178,7 @@ export function mergeLocalV2DagLambdaEvidenceLaneBundles(input: {
       ...runtimeEvidence.scanLaneRuns,
       ...policyEvidence.scanLaneRuns,
     ],
+    resourceInventoryContext: runtimeEvidence.resourceInventoryContext,
     runtimeTimeline: runtimeEvidence.runtimeTimeline,
     runtimeEvidenceGraphs: runtimeGraphs.graphs,
     runtimeEvidenceGraphDiagnostics: runtimeGraphs.diagnostics,
@@ -5597,6 +5604,7 @@ export async function handler(event: unknown, options: HandlerOptions = {}) {
   let policyEvidenceHandoff: Promise<LocalV2DagLambdaPolicyEvidenceMessage | undefined> | undefined;
   let runtimePreviewHandoff: Promise<LocalV2DagLambdaRuntimePreviewMessage | undefined> | undefined;
   const dispatchEvent = unwrapLocalV2DagLambdaDispatchEvent(event);
+  if (asRecord(dispatchEvent.payload).contractVersion === FULL_SITE_PAGE_DISPATCH) return runFullSitePage(dispatchEvent.payload);
 
   const remainingResultPublishMs = () => Math.max(
     10,

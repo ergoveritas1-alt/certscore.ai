@@ -1,3 +1,4 @@
+import { inventoryConfiguration, inventoryHash } from "./full-site-inventory";
 import path from "node:path";
 import { closeSync, openSync, readSync, statSync } from "node:fs";
 import { mkdir, writeFile } from "node:fs/promises";
@@ -253,6 +254,8 @@ export interface RunScanInput {
    * Isolates independently mergeable evidence work for Lambda fan-out. The
    * default preserves the existing single-process scan behavior.
    */
+  resourceInventoryCrawl?: boolean;
+  resourceInventoryDiscovery?: boolean;
   evidenceLane?: "combined" | "consent_proof" | "runtime_evidence" | "policy_evidence" | "gpc_observation";
   /** Trusted immutable per-scan profile; never inferred from target content or public debug fields. */
   runtimeGraph?: { scanId: string; mode: "capture_only" | "project" };
@@ -362,6 +365,7 @@ export async function runScan(input: RunScanInput): Promise<CanonicalEvidenceBun
   const startedAtMs = Date.now();
   const startedAt = new Date(startedAtMs).toISOString();
   const scanProfile = getScanProfile(input.profile ?? "tiny");
+  let resourceInventoryContext: CanonicalEvidenceBundle["resourceInventoryContext"];
   const evidenceLane = input.evidenceLane ?? "combined";
   const normalizedUrl = normalizeUrl(input.url);
   const scanId = input.scanId ?? `scan_${startedAtMs}_${safeHostname(normalizedUrl)}`;
@@ -533,6 +537,11 @@ export async function runScan(input: RunScanInput): Promise<CanonicalEvidenceBun
             ? "runtime_evidence"
             : "combined",
         globalPrivacyControlEnabled: evidenceLane === "gpc_observation",
+        onInventoryPage: input.resourceInventoryCrawl && evidenceLane === "runtime_evidence" ? async page => {
+          const configuration = inventoryConfiguration(input.region ?? "local", input.profile === "tiny" ? "tiny" : "standard", leanPreConsent ? "fast" : "full");
+          resourceInventoryContext = { finalUrl: page.url(), configuration, configurationHash: inventoryHash(configuration),
+            links: input.resourceInventoryDiscovery ? (await page.locator("a[href]").evaluateAll(nodes => nodes.slice(0, 5000).map(node => (node as HTMLAnchorElement).href))).filter(url => url.length <= 2000) : [] };
+        } : undefined,
         runtimeGraph: input.runtimeGraph && evidenceLane !== "consent_proof" ? {
           ...input.runtimeGraph, captureId: `${input.runtimeGraph.scanId}:${evidenceLane}`,
           scenario: evidenceLane === "gpc_observation" ? "gpc" : "pre_consent", startedAt,
@@ -642,6 +651,11 @@ export async function runScan(input: RunScanInput): Promise<CanonicalEvidenceBun
             ? "runtime_evidence"
             : "combined",
         globalPrivacyControlEnabled: evidenceLane === "gpc_observation",
+        onInventoryPage: input.resourceInventoryCrawl && evidenceLane === "runtime_evidence" ? async page => {
+          const configuration = inventoryConfiguration(input.region ?? "local", input.profile === "tiny" ? "tiny" : "standard", leanPreConsent ? "fast" : "full");
+          resourceInventoryContext = { finalUrl: page.url(), configuration, configurationHash: inventoryHash(configuration),
+            links: input.resourceInventoryDiscovery ? (await page.locator("a[href]").evaluateAll(nodes => nodes.slice(0, 5000).map(node => (node as HTMLAnchorElement).href))).filter(url => url.length <= 2000) : [] };
+        } : undefined,
         runtimeGraph: input.runtimeGraph && evidenceLane !== "consent_proof" ? {
           ...input.runtimeGraph, captureId: `${input.runtimeGraph.scanId}:${evidenceLane}`,
           scenario: evidenceLane === "gpc_observation" ? "gpc" : "pre_consent", startedAt,
@@ -1298,6 +1312,7 @@ export async function runScan(input: RunScanInput): Promise<CanonicalEvidenceBun
     policySurfaceObservations: policySurfaceResult?.policySurfaceObservations ?? [],
   });
   const bundle = compactCanonicalEvidenceBundleForRetention(canonicalEvidenceBundleSchema.parse({
+    resourceInventoryContext,
     runtimeEvidenceGraphs: preConsentResult.runtimeEvidenceGraph ? [preConsentResult.runtimeEvidenceGraph] : undefined,
     scanId,
     url: input.url,
@@ -3865,3 +3880,5 @@ function emptyPreConsentResult(startedAt: string): PreConsentRuntimeScannerResul
     renderedPolicyLinks: [],
   };
 }
+
+export * from "./full-site-inventory";

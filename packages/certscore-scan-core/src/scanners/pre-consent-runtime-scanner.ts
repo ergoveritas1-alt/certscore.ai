@@ -188,6 +188,10 @@ export interface PreConsentRuntimeScannerInput {
   artifactWriter: ArtifactWriter;
   /** Selects the evidence domain retained by a dedicated Lambda lane. */
   captureScope?: "combined" | "consent_proof" | "runtime_evidence";
+  executionProfile?: "inventory_only";
+  onInventoryPage?: (page: Page) => Promise<void>;
+  navigationHosts?: string[];
+  navigationAllowed?: (url: string) => boolean;
   runtimeGraph?: RuntimeGraphCaptureInput;
   /** Enables the dedicated passive GPC condition without changing any other capture behavior. */
   globalPrivacyControlEnabled?: boolean;
@@ -603,7 +607,7 @@ export async function preConsentRuntimeScanner(
     artifactRefs: [],
     notes: screenshotMode === "never" ? ["Pre-consent screenshot capture disabled by scan mode."] : [],
   };
-  const transportNetworkProbesPromise = captureRuntimeEvidence
+  const transportNetworkProbesPromise = captureRuntimeEvidence && input.executionProfile !== "inventory_only"
     ? startTransportNetworkProbes(
       input.normalizedUrl,
       input.signal,
@@ -631,6 +635,17 @@ export async function preConsentRuntimeScanner(
   lifecycleCheckpoint("browser_context", "completed");
   const page = context.newPage;
   const browserContext = context.newContext;
+  if (input.navigationHosts) {
+    const hosts = new Set(input.navigationHosts);
+    await browserContext.route("**/*", async route => {
+      const request = route.request();
+      if (request.isNavigationRequest() && request.frame() === page.mainFrame() && (!hosts.has(new URL(request.url()).hostname) || input.navigationAllowed?.(request.url()) === false)) {
+        await route.abort("blockedbyclient");
+        return;
+      }
+      await route.fallback();
+    });
+  }
   const gpcSignalCapture = captureRuntimeEvidence ? createGpcSignalCapture({
     context: browserContext, page, enabled: input.globalPrivacyControlEnabled === true,
     scanStartedAtMs: input.scanStartedAtMs, waitMode: input.waitMode, internalBudgetMs: input.internalBudgetMs,
@@ -957,6 +972,7 @@ export async function preConsentRuntimeScanner(
             name: cookie.name,
             domain: cookie.domain,
             path: cookie.path,
+            ...(cookie.partitionKey !== undefined ? { partitionKey: cookie.partitionKey } : {}),
             expires: cookie.expires,
             httpOnly: cookie.httpOnly,
             secure: cookie.secure,
@@ -1069,7 +1085,7 @@ export async function preConsentRuntimeScanner(
         : {}),
       collectionSurfaceObservations: [...retainedCollectionSurfaceObservations],
       cmpRuntimeObservations: captureConsentEvidence ? [...retainedCmpRuntimeObservations] : [],
-      transportSecurityObservations: retainedTransportSecurityObservation
+      transportSecurityObservations: input.executionProfile !== "inventory_only" && retainedTransportSecurityObservation
         ? [retainedTransportSecurityObservation]
         : [],
       screenshots: [...screenshots],
@@ -1101,7 +1117,7 @@ export async function preConsentRuntimeScanner(
         ? "Initial navigation with bounded same-site transport recovery until DOMContentLoaded."
         : "Initial passive-runtime navigation with bounded same-site transport recovery until commit plus DOM readiness or substantive document evidence.",
       async () => {
-        const candidates = [input.normalizedUrl, ...navigationTransportRecoveryUrls(input.normalizedUrl)];
+        const candidates = input.executionProfile === "inventory_only" ? [input.normalizedUrl] : [input.normalizedUrl, ...navigationTransportRecoveryUrls(input.normalizedUrl)];
         let lastError: unknown;
         for (const [index, candidateUrl] of candidates.entries()) {
         const attemptStartedAtMs = Date.now();
@@ -1192,7 +1208,7 @@ export async function preConsentRuntimeScanner(
     lifecycleCheckpoint("page_navigation", "completed");
 
     let transientStatusRetried = false;
-    if (navigationResponse && isTransientMainDocumentStatus(navigationResponse.status()) && remainingModuleBudgetMs() >= 1_500) {
+    if (input.executionProfile !== "inventory_only" && navigationResponse && isTransientMainDocumentStatus(navigationResponse.status()) && remainingModuleBudgetMs() >= 1_500) {
       transientStatusRetried = true;
       const initialStatus = navigationResponse.status();
       const retryAfterMs = boundedRetryAfterMs(await navigationResponse.headerValue("retry-after").catch(() => null));
@@ -1210,6 +1226,7 @@ export async function preConsentRuntimeScanner(
     }
 
     if (
+      input.executionProfile !== "inventory_only" &&
       navigationResponse &&
       isPendingMainDocumentStatus(navigationResponse.status()) &&
       remainingModuleBudgetMs() >= 2_000
@@ -1250,6 +1267,7 @@ export async function preConsentRuntimeScanner(
     }
 
     if (
+      input.executionProfile !== "inventory_only" &&
       navigationResponse &&
       [403, 429, 503].includes(navigationResponse.status()) &&
       remainingModuleBudgetMs() >= 4_750 &&
@@ -1283,7 +1301,7 @@ export async function preConsentRuntimeScanner(
       );
     }
 
-    if (navigationResponse && [404, 410].includes(navigationResponse.status()) && remainingModuleBudgetMs() >= 1_500) {
+    if (input.executionProfile !== "inventory_only" && navigationResponse && [404, 410].includes(navigationResponse.status()) && remainingModuleBudgetMs() >= 1_500) {
       const alternateHostUrl = alternateWwwNavigationUrl(effectiveNavigationUrl);
       if (alternateHostUrl) {
         navigationNotes.push(`Main document returned HTTP ${navigationResponse.status()}; tried the bounded apex/www alternative: ${alternateHostUrl}`);
@@ -2113,6 +2131,7 @@ export async function preConsentRuntimeScanner(
         name: cookie.name,
         domain: cookie.domain,
         path: cookie.path,
+        ...(cookie.partitionKey !== undefined ? { partitionKey: cookie.partitionKey } : {}),
         expires: cookie.expires,
         httpOnly: cookie.httpOnly,
         secure: cookie.secure,
@@ -2158,6 +2177,7 @@ export async function preConsentRuntimeScanner(
         cookieName: cookie.name,
         cookieDomain: cookie.domain,
         cookiePath: cookie.path,
+        ...(cookie.partitionKey !== undefined ? { partitionKey: cookie.partitionKey } : {}),
         expires: Number.isFinite(cookie.expires) && cookie.expires > 0
           ? new Date(cookie.expires * 1000).toISOString()
           : undefined,
@@ -3683,6 +3703,13 @@ export async function preConsentRuntimeScanner(
       iframeEvents,
     });
     await emitPassiveRuntimeCheckpoint();
+    if (input.onInventoryPage) {
+      // Optional crawl metadata must never downgrade or delay the canonical homepage assessment.
+      let timer: ReturnType<typeof setTimeout> | undefined;
+      try { await Promise.race([input.onInventoryPage(page),new Promise<void>(resolve=>{timer=setTimeout(resolve,250);})]); }
+      catch { /* The crawl fails closed if its comparable context is unavailable. */ }
+      finally { if(timer)clearTimeout(timer); }
+    }
     const retainPolicyRecoverySession = input.retainRenderedPolicyRecoverySession === true &&
       retainedRenderedPolicyLinkEvidence.length > 0;
     retainOwnedBrowserForPolicyRecovery = ownsBrowser && retainPolicyRecoverySession;
@@ -3717,7 +3744,7 @@ export async function preConsentRuntimeScanner(
       ...(collectionSurfaceInventory ? { collectionSurfaceInventory } : {}),
       collectionSurfaceObservations,
       cmpRuntimeObservations: captureConsentEvidence ? cmpRuntimeObservations : [],
-      transportSecurityObservations: transportSecurityObservation ? [transportSecurityObservation] : [],
+      transportSecurityObservations: input.executionProfile !== "inventory_only" && transportSecurityObservation ? [transportSecurityObservation] : [],
       screenshots,
       visualCapture,
       domSnapshots: [domSnapshot],
@@ -3846,7 +3873,7 @@ export async function preConsentRuntimeScanner(
         : {}),
       collectionSurfaceObservations: retainedCollectionSurfaceObservations,
       cmpRuntimeObservations: captureConsentEvidence ? retainedCmpRuntimeObservations : [],
-      transportSecurityObservations: retainedTransportSecurityObservation
+      transportSecurityObservations: input.executionProfile !== "inventory_only" && retainedTransportSecurityObservation
         ? [retainedTransportSecurityObservation]
         : [],
       screenshots,
@@ -10527,6 +10554,7 @@ export function safeResponseHeaders(headers: Record<string, string>): NonNullabl
   return {
     contentType: headers["content-type"],
     cacheControl: headers["cache-control"],
+    retryAfter: headers["retry-after"]?.slice(0,120),
     expires: headers.expires,
     etagPresent: Boolean(headers.etag),
     location: headers.location,

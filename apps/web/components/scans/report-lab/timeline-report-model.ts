@@ -780,7 +780,10 @@ export function buildTimelineReportModel(scanRecord: ScanDetailResponse): Shadow
   );
   const vendorSurface = inventoryProjection.vendorSurfaceProjection.execSummary;
 
+  const scanConfig = record(scanRecord.scan.scanConfigJson);
+  const crawlOptions = record(scanConfig?.crawlOptions);
   return {
+    ...(scanConfig?.fullSite === true && crawlOptions ? { fullSite: { maxPages: Number(crawlOptions.maxPages), concurrency: Number(crawlOptions.concurrency), waitSeconds: Number(crawlOptions.waitSeconds) } } : {}),
     collectionFields,
     runtimeEvidenceGraph: inventoryProjection.runtimeEvidenceGraph,
     collectionLimitations: canonical.collectionSurfaceAssessment?.limitationKeys.map(displayLabel) ?? [],

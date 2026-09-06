@@ -1,0 +1,237 @@
+import assert from "node:assert/strict";
+import test from "node:test";
+import { randomUUID } from "node:crypto";
+import { readFile } from "node:fs/promises";
+import { fullSitePolicy } from "@website-signal-risk-scanner/shared";
+import { sitemapEntries } from "./scheduler";
+
+test("sitemap indexes and URL sets are bounded parse inputs without entity expansion", () => {
+  assert.deepEqual(
+    sitemapEntries(
+      "<sitemapindex><sitemap><loc>https://example.test/one.xml</loc></sitemap></sitemapindex>",
+    ),
+    { indexes: ["https://example.test/one.xml"], urls: [] },
+  );
+  assert.deepEqual(
+    sitemapEntries(
+      "<urlset><url><loc>https://example.test/contact?lang=de&amp;page=1</loc></url></urlset>",
+    ),
+    { indexes: [], urls: ["https://example.test/contact?lang=de&page=1"] },
+  );
+  assert.throws(() =>
+    sitemapEntries(
+      '<!DOCTYPE x [<!ENTITY y SYSTEM "file:///etc/passwd">]><urlset/>',
+    ),
+  );
+});
+
+const databaseUrl = process.env.FULL_SITE_TEST_DATABASE_URL;
+test(
+  "PostgreSQL admission, budgets, shared pacing, backoff, retries, revocation and recovery",
+  { skip: !databaseUrl, timeout: 60000 },
+  async () => {
+    const url = new URL(databaseUrl!);
+    assert.equal(url.hostname, "127.0.0.1");
+    assert.equal(
+      url.pathname,
+      "/full_site_test",
+      "Use a dedicated disposable local database.",
+    );
+    process.env.DATABASE_URL = databaseUrl;
+    process.env.DATABASE_READ_URL = databaseUrl;
+    process.env.DATABASE_SSL_MODE = "disable";
+    process.env.DB_QUERY_LOG_ENABLED = "false";
+    const db = await import("@website-signal-risk-scanner/db");
+    const { sweepFullSiteCrawls, addFullSiteCandidates } = await import(
+      "./scheduler"
+    );
+    try {
+      await db.query(`create table if not exists users(id uuid primary key);create table if not exists scans(id uuid primary key,organization_id uuid,status text,scan_config_json jsonb,duration_ms int);
+      create table if not exists organization_members(user_id uuid,organization_id uuid,role text);
+      create table if not exists scan_events(scan_id uuid,event_type text,metadata_json jsonb,created_at timestamptz default now())`);
+      await db.query(
+        await readFile(
+          require.resolve(
+            "../../../../packages/db/migrations/0194_full_site_resource_crawls.sql",
+          ),
+          "utf8",
+        ),
+      );
+      await db.query(
+        `truncate users,scans,organization_members,scan_events,full_site_crawls,full_site_pages,full_site_attempts,full_site_safety cascade`,
+      );
+      async function parent(
+        host: string,
+        maxPages = 10,
+        concurrency = 2,
+        region = "eu-west-1",
+      ) {
+        const id = randomUUID(),
+          userId = randomUUID(),
+          org = randomUUID();
+        await db.query(`insert into users values($1)`, [userId]);
+        await db.query(
+          `insert into organization_members values($1,$2,'advanced')`,
+          [userId, org],
+        );
+        await db.query(
+          `insert into scans(id,organization_id,status,scan_config_json) values($1,$2,'completed',$3)`,
+          [id, org, { fullSite: true, hostname: host }],
+        );
+        await db.withWriteTransaction((client) =>
+          db.insertFullSiteCrawl(client, {
+            scanId: id,
+            userId,
+            requested: { maxPages, concurrency, waitSeconds: 1 },
+            policy: fullSitePolicy({
+              CERTSCORE_FULL_SITE_MIN_WAIT_SECONDS: "1",
+            }),
+            region,
+            url: `https://${host}/`,
+            siteKey: host,
+          }),
+        );
+        await db.query(
+          `update full_site_crawls set status='running',discovery_complete=true,configuration_json='{}',configuration_hash=$2,bucket='fixture',artifact_prefix='fixture',hosts=$3 where scan_id=$1`,
+          [id, "a".repeat(64), [host]],
+        );
+        await db.query(
+          `update full_site_pages set status='completed' where scan_id=$1 and source='homepage'`,
+          [id],
+        );
+        await addFullSiteCandidates(
+          id,
+          Array.from({ length: 10 }, (_, n) => ({
+            url: `https://${host}/section-${n}/page`,
+            source: "fixture",
+          })),
+        );
+        return { id, userId };
+      }
+      const homeOnly = await parent("only.test", 1);
+      assert.deepEqual(await db.reserveFullSiteDispatches(), []);
+      assert.equal(
+        (await db.loadFullSitePages(homeOnly.id)).filter((p) => p.scheduled)
+          .length,
+        1,
+      );
+      await db.query(
+        `update full_site_crawls set status='completed' where scan_id=$1`,
+        [homeOnly.id],
+      );
+      const a = await parent("example.test", 3),
+        b = await parent("example.test", 3, 1, "us-west-1");
+      const jobs = (
+        await Promise.all(
+          Array.from({ length: 6 }, () => db.reserveFullSiteDispatches()),
+        )
+      ).flat();
+      assert.equal(
+        jobs.length,
+        1,
+        "Shared reserved invocation cap across regions and scheduler races",
+      );
+      const job = jobs[0]!;
+      const grant = await db.claimFullSitePage({ ...job, region: job.region });
+      assert.ok(grant);
+      assert.equal(
+        await db.claimFullSitePage({ ...job, region: job.region }),
+        null,
+        "Duplicate delivery is one-use",
+      );
+      assert.equal(
+        await db.homepageMayStartAlongsideFullSite("www.example.test"),
+        false,
+      );
+      await db.query(
+        `update full_site_safety set last_start_at=now()-interval '2 seconds',last_dispatch_at=now()-interval '2 seconds'`,
+      );
+      assert.deepEqual(
+        await db.reserveFullSiteDispatches(),
+        [],
+        "Most restrictive overlap stays at one active invocation",
+      );
+      const finish = {
+        ...job,
+        status: "blocked",
+        observation: { httpStatus: 429 },
+        compact: null,
+        finalUrl: null,
+        failureKind: "rate_limit",
+        retryAfterSeconds: 120,
+        artifact: {},
+      };
+      assert.equal(await db.completeFullSitePage(finish), true);
+      assert.equal(
+        await db.completeFullSitePage(finish),
+        false,
+        "Retry delivery cannot overwrite a pending representative attempt",
+      );
+      assert.deepEqual(
+        await db.reserveFullSiteDispatches(),
+        [],
+        "Retry-After overrides requested one-second pacing across crawls",
+      );
+      assert.equal(
+        await db.homepageMayStartAlongsideFullSite("example.test"),
+        true,
+      );
+      const used = (
+        await db.query<{ count: string }>(
+          `select count(*)::text from full_site_pages where scan_id=$1 and scheduled`,
+          [grant.scanId],
+        )
+      ).rows[0]!.count;
+      assert.equal(used, "2");
+      await db.query(
+        `update full_site_safety set backoff_until=null,last_start_at=null,last_dispatch_at=null;update full_site_crawls set backoff_until=null;update full_site_pages set next_attempt_at=now()-interval '1 second'`,
+      );
+      const [retry] = await db.reserveFullSiteDispatches();
+      assert.ok(retry);
+      assert.equal(
+        retry.pageId,
+        job.pageId,
+        "Retry retains target budget slot",
+      );
+      assert.ok(await db.claimFullSitePage({ ...retry, region: retry.region }));
+      await db.query(
+        `update full_site_pages set worker_lease_until=now()-interval '1 second' where id=$1`,
+        [retry.pageId],
+      );
+      await sweepFullSiteCrawls();
+      assert.equal(
+        (await db.loadFullSitePages(grant.scanId, retry.pageId))[0]?.status,
+        "failed",
+        "Expired worker terminates after bounded retries",
+      );
+      await db.query(
+        `update scans set status='cancelled' where id=any($1::uuid[])`,
+        [[a.id, b.id]],
+      );
+      await sweepFullSiteCrawls();
+      assert.equal((await db.loadFullSiteCrawl(a.id))?.status, "cancelled");
+      assert.equal(
+        (await db.loadFullSitePages(a.id)).some((p) => p.status === "queued"),
+        false,
+      );
+      const revoked = await parent("revoked.test");
+      const [denied] = await db.reserveFullSiteDispatches();
+      assert.ok(denied);
+      await db.query(
+        `update organization_members set role='member' where user_id=$1`,
+        [revoked.userId],
+      );
+      assert.equal(
+        await db.claimFullSitePage({ ...denied, region: denied.region }),
+        null,
+      );
+      const before = (await db.loadFullSitePages(revoked.id)).filter(
+        (p) => p.scheduled,
+      ).length;
+      assert.ok(before <= 3);
+    } finally {
+      await db.getWritePool().end();
+      await db.getReadPool().end();
+    }
+  },
+);

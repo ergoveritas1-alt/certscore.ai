@@ -50,6 +50,7 @@ function pendingReport(
       <SiteHeader mobilePrimaryAction="sign-in" />
       <section className="mx-auto max-w-6xl px-6 py-16">
         <PendingScanDetailView
+          fullSite={statusProjection.fullSite}
           createdAt={statusProjection.createdAt}
           domainHostname={statusProjection.domainHostname}
           initialPreConsentPreview={statusProjection.preConsentPreview ?? null}

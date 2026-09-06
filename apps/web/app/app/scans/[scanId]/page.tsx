@@ -47,6 +47,7 @@ export default async function ScanDetailPage({ params }: ScanDetailPageProps) {
       <>
         <PendingScanStartedEvent />
         <PendingScanDetailView
+          fullSite={statusProjection.fullSite}
           createdAt={statusProjection.createdAt}
           domainHostname={statusProjection.domainHostname}
           initialPreConsentPreview={statusProjection.preConsentPreview ?? null}
@@ -82,6 +83,7 @@ export default async function ScanDetailPage({ params }: ScanDetailPageProps) {
     if (!statusProjection.reportProjectionRequired) redirect(legacyScanHref(scanId));
     return (
       <PendingScanDetailView
+          fullSite={statusProjection.fullSite}
         createdAt={statusProjection.createdAt}
         domainHostname={statusProjection.domainHostname}
         initialPreConsentPreview={statusProjection.preConsentPreview ?? null}

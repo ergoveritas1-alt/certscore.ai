@@ -1,3 +1,4 @@
+import { startFullSiteScheduler } from "./full-site/scheduler";
 import { hostname as getHostname } from "node:os";
 import { createBrowserCleanupScheduler } from "./browser-cleanup";
 import { getWorkerEnv } from "./env";
@@ -58,6 +59,11 @@ function bootstrapValidationWorker() {
       "us-west-1": env.CERTSCORE_V2_DAG_LAMBDA_US_WEST_DISPATCH_QUEUE_URL,
     },
   });
+  startFullSiteScheduler({enabled:env.CERTSCORE_V2_DAG_LAMBDA_DISPATCH_PUBLISH_ENABLED,queueUrls:{
+    "eu-central-1":env.CERTSCORE_V2_DAG_LAMBDA_EU_DE_DISPATCH_QUEUE_URL,
+    "eu-west-1":env.CERTSCORE_V2_DAG_LAMBDA_EU_IE_DISPATCH_QUEUE_URL,
+    "us-west-1":env.CERTSCORE_V2_DAG_LAMBDA_US_WEST_DISPATCH_QUEUE_URL,
+  }});
   startLocalV2DagLambdaResultPoller({
     enabled: env.CERTSCORE_V2_DAG_LAMBDA_RESULT_POLL_ENABLED,
     pollMs: env.CERTSCORE_V2_DAG_LAMBDA_RESULT_POLL_SECONDS * 1000,

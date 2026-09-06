@@ -80,6 +80,9 @@ importers:
       '@certscore/scan-core':
         specifier: workspace:*
         version: link:../../packages/certscore-scan-core
+      '@website-signal-risk-scanner/shared':
+        specifier: workspace:*
+        version: link:../../packages/shared
       pdf-parse:
         specifier: ^2.4.5
         version: 2.4.5
@@ -130,6 +133,9 @@ importers:
       '@website-signal-risk-scanner/web-bot-auth':
         specifier: workspace:*
         version: link:../../packages/web-bot-auth
+      fast-xml-parser:
+        specifier: 5.7.3
+        version: 5.7.3
       playwright:
         specifier: 1.58.2
         version: 1.58.2

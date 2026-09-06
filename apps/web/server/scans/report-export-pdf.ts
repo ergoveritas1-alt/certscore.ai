@@ -312,7 +312,7 @@ function reportLines(report: CanonicalReportExport, image: PdfImage | null): Pdf
     !isGdprTransparencyReportRowId(row.id) && !isTransportSecurityRowId(row.id)
   ) ?? [];
   const lines: PdfLine[] = [
-    { text: "GDPR / ePrivacy evidence report", size: 21, bold: true, gapAfter: 5, kind: "coverTitle" },
+    { text: report.fullSite ? "Full site scan" : "GDPR / ePrivacy evidence report", size: 21, bold: true, gapAfter: 5, kind: "coverTitle" },
     { text: report.scan.domainHostname ?? "Website scan", size: 14, bold: true, gapAfter: 8, kind: "coverDomain" },
     { text: `Scan ID: ${report.scan.id}`, size: 8, kind: "coverMeta" },
     { text: `Completed: ${report.scan.completedAt ?? "Not available"}`, size: 8, gapAfter: 35, kind: "coverMeta" },
@@ -328,6 +328,23 @@ function reportLines(report: CanonicalReportExport, image: PdfImage | null): Pdf
     { text: `Evidence-based posture: ${titleCase(report.executiveSummary.posture)}`, size: 11, bold: true, gapAfter: 4, kind: "summary" },
     ...report.executiveSummary.sentences.flatMap((sentence) => wrappedLines(sentence, { size: 10, gapAfter: 4, kind: "summary" })),
   ];
+
+  if(report.fullSite) {
+    const f=report.fullSite, {state,counts,totals,timing}=f.summary;
+    lines.splice(0,0,...[
+      sectionHeading("Full site scope and resource inventory"),
+      ...wrappedLines(`${f.scope}. Additional pages: Not assessed for consent, CMP, policy, GDPR transparency or transport. ${f.scoreScope} remains unchanged.`),
+      ...wrappedLines(`${f.condition} ${f.countingScope}`),
+      ...wrappedLines(`Max pages including homepage: ${state.requested.maxPages}; requested concurrency: ${state.requested.concurrency}; wait between starts: ${state.requested.waitSeconds}s; region: ${state.region}.`),
+      ...wrappedLines(`Effective concurrency: ${state.effective.concurrency}; effective wait: ${state.effective.waitSeconds}s. Status: ${state.status}; stop reason: ${state.stopReason??"In progress"}.`),
+      ...wrappedLines(`Coverage: ${counts.completed} completed; ${counts.partial} partial; ${counts.blockedFailed} blocked/failed; ${counts.pending} pending; ${counts.excluded} excluded/unvisited.`),
+      ...wrappedLines(`Across observed pages: ${totals.services} distinct services; ${totals.cookies} distinct cookies; ${totals.requestEvents} request events; ${totals.embedInstances} embed instances. Additional services: ${totals.additionalServices??"Homepage comparison unavailable"}.`),
+      ...wrappedLines(`Started: ${state.startedAt}; ended: ${state.completedAt??"In progress"} (UTC). Homepage audit: ${formatDuration(state.homepageDurationMs)}. Median observation: ${formatDuration(timing.medianPageMs)} (${timing.sampleCount} samples); slowest: ${formatDuration(timing.slowestPageMs)}.`),
+      ...wrappedLines(`Evidence: https://certscore.ai${f.inventoryHref}`),
+      ...f.pages.flatMap(page=>wrappedLines(`${page.url}${page.finalUrl&&page.finalUrl!==page.url?` -> ${page.finalUrl}`:""} | ${page.status} | ${page.services??"Unavailable"} services; ${page.cookies??"Unavailable"} cookies; ${page.requestEvents??"Unavailable"} request events; ${page.embedInstances??"Unavailable"} embed instances. ${page.limitations.join(", ")} Evidence page ID: ${page.id}`)),
+      sectionHeading("Homepage audit"),
+    ]);
+  }
 
   lines.push(sectionHeading("GDPR / ePrivacy evidence overview"));
   if (review) {

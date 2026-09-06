@@ -1,5 +1,6 @@
 "use client";
 
+import { FullSiteControls, type FullSiteFormValue } from "../scans/full-site-controls";
 import { Button, Input } from "@website-signal-risk-scanner/ui";
 import { usePathname, useRouter } from "next/navigation";
 import { type FormEvent, useEffect, useRef, useState } from "react";
@@ -144,6 +145,7 @@ export function shouldUseFullPageScanSubmissionTransition(input: {
 }
 
 export function buildScanSubmitBody(input: {
+  crawl?: FullSiteFormValue;
   allowRestrictedScanOptions: boolean;
   campaignAttribution: unknown;
   domain: string;
@@ -155,6 +157,7 @@ export function buildScanSubmitBody(input: {
   scanFrom: ServerScanFrom;
 }) {
   return JSON.stringify({
+    ...(input.mode === "full" ? input.crawl : {}),
     domain: input.domain,
     campaignAttribution: input.campaignAttribution,
     forceNewScan: input.forceNewScan,
@@ -427,6 +430,7 @@ export function DomainScanForm({
   const router = useRouter();
   const pathname = usePathname();
   const reportRescanTransition = useScanReportRescanTransition();
+  const [crawlInput,setCrawlInput] = useState<FullSiteFormValue>();
   const canUseLocalExtensionScan = allowLocalExtensionScan && allowRestrictedScanOptions;
   const allowedDefaultScanFrom = restrictLocalExtensionScanFrom({
     allowLocalExtensionScan,
@@ -802,6 +806,7 @@ export function DomainScanForm({
 
       const submitUrl = mode === "preview" ? "/api/preview-scan" : "/api/full-scan";
       const submitBody = buildScanSubmitBody({
+        crawl: crawlInput,
         allowRestrictedScanOptions,
         campaignAttribution,
         domain: submittedDomain,
@@ -946,6 +951,7 @@ export function DomainScanForm({
 
   return (
     <form className={compact ? "space-y-2" : "space-y-4"} onSubmit={(event) => void handleSubmit(event)}>
+      {mode === "full" && scanFrom !== "local_extension" ? <FullSiteControls onChange={setCrawlInput} /> : null}
       <div className="space-y-2">
         <div className="relative z-30">
           <Input

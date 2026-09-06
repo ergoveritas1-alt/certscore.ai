@@ -18,6 +18,7 @@
     "@aws-sdk/client-sqs": "^3.1069.0",
     "@certscore/contracts": "workspace:*",
     "@certscore/scan-core": "workspace:*",
+    "@website-signal-risk-scanner/shared": "workspace:*",
     "pdf-parse": "^2.4.5"
   },
   "optionalDependencies": {

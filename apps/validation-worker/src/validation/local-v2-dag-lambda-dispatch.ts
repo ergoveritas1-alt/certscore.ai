@@ -4,7 +4,7 @@ import {
   buildPostActionObservationDispatchConfigs,
   readPersistedRuntimeGraphDispatch,
 } from "@certscore/contracts";
-import { query, withWriteTransaction } from "@website-signal-risk-scanner/db";
+import { query, withWriteTransaction, homepageMayStartAlongsideFullSite } from "@website-signal-risk-scanner/db";
 import { isFreshPriorScanAccelerationSource } from "@website-signal-risk-scanner/shared";
 import { randomUUID } from "node:crypto";
 
@@ -136,6 +136,7 @@ export function buildDurableLocalV2DagLambdaDispatchPayload(input: {
     throw new Error("Durable Lambda dispatch intent has an unsupported VPC mode.");
   }
   return {
+    ...(input.scanConfig.fullSite === true ? {resourceInventoryCrawl:true, resourceInventoryDiscovery:Number((input.scanConfig.crawlOptions as Record<string, unknown> | undefined)?.maxPages) > 1} : {}),
     artifactOnly: true as const,
     awsRegion: region,
     callbackCorrelationId: input.scanId,
@@ -313,6 +314,10 @@ export function startLocalV2DagLambdaDispatchPublisher(options: LocalV2DagLambda
               scanConfig: dispatch.scan_config_json,
               scanId: dispatch.scan_id,
             });
+            if (!await homepageMayStartAlongsideFullSite(new URL(payload.targetUrl).hostname)) {
+              await markRetry({ ...dispatch, leaseToken, error: new Error("Waiting for admitted full-site workers to finish.") });
+              continue;
+            }
             const queueUrl = options.queueUrls[payload.awsRegion];
             if (!queueUrl) throw new Error(`No durable dispatch queue is configured for ${payload.awsRegion}.`);
             let client = clients.get(payload.awsRegion);

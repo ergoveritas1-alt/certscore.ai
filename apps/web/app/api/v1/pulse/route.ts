@@ -379,6 +379,9 @@ async function handlePulseGET(request: Request, options: PulseRouteOptions = {})
   const url = new URL(request.url);
   const gptAction = isGptActionRequest(url, options);
   const routeName = options.routeName ?? (gptAction ? "pulse-gpt" : "pulse");
+  if ((url.searchParams.has("fullSite") && url.searchParams.get("fullSite")!=="false") || ["crawlOptions","maxPages","concurrency"].some(key=>url.searchParams.has(key))) {
+    return new Response(JSON.stringify({error:"Full site requires an authenticated admin or advanced session through the full-scan endpoint."}),{status:403,headers:{"Content-Type":"application/json"}});
+  }
   const format = gptAction ? parseGptPulseFormat(url) : parsePulseFormat(url.searchParams.get("format"));
   const requestedDetail = url.searchParams.get("detail");
   const detail = parsePulseDetail(

@@ -295,6 +295,7 @@ export const safeRequestHeadersSchema = z.object({
 });
 
 export const safeResponseHeadersSchema = z.object({
+  retryAfter: z.string().max(120).optional(),
   contentType: z.string().optional(),
   cacheControl: z.string().optional(),
   expires: z.string().optional(),
@@ -490,6 +491,7 @@ export const cookieEventSchema = runtimeEvidenceEventSchema.extend({
   cookieName: z.string(),
   cookieDomain: z.string().optional(),
   cookiePath: z.string().optional(),
+  partitionKey: z.string().optional(),
   expires: z.string().optional(),
   maxAge: z.string().optional(),
   sameSite: z.string().optional(),
@@ -538,6 +540,7 @@ export const cookieSnapshotSchema = z.object({
       name: z.string(),
       domain: z.string(),
       path: z.string().optional(),
+      partitionKey: z.string().optional(),
       expires: z.number().optional(),
       httpOnly: z.boolean().optional(),
       secure: z.boolean().optional(),
@@ -3279,6 +3282,10 @@ export const displaySafeEvidenceExcerptSchema = z.object({
 });
 
 const canonicalEvidenceBundleBaseSchema = z.object({
+  resourceInventoryContext: z.object({
+    finalUrl: z.string().max(2000), links: z.array(z.string().max(2000)).max(5000),
+    configuration: z.record(z.unknown()), configurationHash: z.string().regex(/^[a-f0-9]{64}$/),
+  }).optional(),
   scanId: z.string(),
   url: z.string(),
   normalizedUrl: z.string(),

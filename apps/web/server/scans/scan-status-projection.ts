@@ -11,6 +11,7 @@ import {
 } from "./scan-report-projection-contract";
 
 export type ScanStatusProjection = {
+  fullSite?: import("@website-signal-risk-scanner/shared").CrawlOptions;
   completedAt: string | null;
   createdAt: string;
   domainHostname: string | null;
@@ -58,6 +59,7 @@ export function deriveCanonicalScanProgressStage(
 }
 
 type ScanStatusProjectionRow = {
+  full_site?: import("@website-signal-risk-scanner/shared").CrawlOptions;
   completed_at: string | Date | null;
   created_at: string | Date;
   domain_hostname: string | null;
@@ -96,6 +98,7 @@ function project(row: ScanStatusProjectionRow | null): ScanStatusProjection | nu
   if (!row) return null;
   const preConsentPreview = apiV2PreConsentRuntimePreviewSchema.safeParse(row.pre_consent_preview);
   return {
+    ...(row.full_site ? {fullSite:row.full_site} : {}),
     completedAt: iso(row.completed_at),
     createdAt: iso(row.created_at) as string,
     domainHostname: row.domain_hostname,
@@ -136,6 +139,7 @@ const PROJECTION_SQL = `select s.id,
        s.pages_requested,
        s.pages_scanned,
        d.hostname as domain_hostname,
+       case when s.scan_config_json->>'fullSite'='true' then s.scan_config_json->'crawlOptions' end as full_site,
        nullif(s.scan_config_json #>> '{normalizedUrl}', '') as page_url,
        nullif(s.scan_config_json ->> 'scanFrom', '') as scan_from,
        snapshot.certscore_overall as score,
