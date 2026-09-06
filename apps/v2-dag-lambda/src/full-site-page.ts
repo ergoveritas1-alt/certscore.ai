@@ -49,7 +49,7 @@ export async function dispatchFullSitePage(event: unknown) {
   return { status: "dispatched" };
 }
 
-export async function runFullSitePage(event: unknown) {
+export async function runFullSitePage(event: unknown, options: { s3Client?: S3Client } = {}) {
   if (process.env.CERTSCORE_FULL_SITE_INVENTORY_WORKER !== "1")
     throw new Error("Inventory requires its dedicated worker.");
   const invocationDeadline = Date.now() + 24000;
@@ -189,7 +189,7 @@ export async function runFullSitePage(event: unknown) {
     // Cleanup must not consume the artifact/publication reserve.
     void rm(outDir, { recursive: true, force: true }).catch(() => {});
   }
-  const s3 = new S3Client({ region: grant.region });
+  const s3 = options.s3Client ?? new S3Client({ region: grant.region });
   const prefix = `${grant.artifactPrefix}/${grant.pageId}/${grant.attemptId}`;
   const body = JSON.stringify(packet);
   if (

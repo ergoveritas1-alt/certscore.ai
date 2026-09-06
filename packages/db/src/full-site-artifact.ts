@@ -1,5 +1,6 @@
 import { GetObjectCommand, S3Client } from "@aws-sdk/client-s3";
 import { createHash } from "node:crypto";
+import { getS3Client } from "./s3";
 export async function readFullSiteArtifact(input: {
   bucket: string;
   key: string;
@@ -16,7 +17,10 @@ export async function readFullSiteArtifact(input: {
   )
     throw new Error("Invalid artifact bounds.");
   const signal = AbortSignal.timeout(15000);
-  const result = await new S3Client({ region: input.region }).send(
+  const localStorage = process.env.NODE_ENV !== "production" && process.env.S3_ENDPOINT &&
+    ["localhost", "127.0.0.1", "[::1]"].includes(new URL(process.env.S3_ENDPOINT).hostname);
+  const client = localStorage ? getS3Client() : new S3Client({ region: input.region });
+  const result = await client.send(
     new GetObjectCommand({ Bucket: input.bucket, Key: input.key }),
     { abortSignal: signal },
   );

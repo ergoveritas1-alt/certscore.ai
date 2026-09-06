@@ -7,7 +7,8 @@ import {
   VERIFIED_PRE_CONSENT_RUNTIME_PREVIEW_PACKET_VERSION,
   verifiedPreConsentRuntimePreviewPacketSchema,
 } from "@certscore/contracts";
-import { query, queryOne } from "@website-signal-risk-scanner/db";
+import { getS3Client, query, queryOne } from "@website-signal-risk-scanner/db";
+import { CreateBucketCommand, PutObjectCommand } from "@aws-sdk/client-s3";
 import type { SharedScanConfig } from "@website-signal-risk-scanner/shared";
 import {
   LOCAL_V2_DAG_LAMBDA_RESULT_CONTRACT_VERSION,
@@ -90,7 +91,7 @@ class LocalDiskS3ReadClient {
 
 type LocalParityArgsPayload = Pick<
   LocalV2DagLambdaDispatchPayload,
-  "awsRegion" | "debugOverrides" | "gpcObservation" | "postAcceptObservation" | "postRefusalObservation" | "runtimeGraph" | "profile" | "scanId" | "targetUrl"
+  "resourceInventoryCrawl" | "resourceInventoryDiscovery" | "awsRegion" | "debugOverrides" | "gpcObservation" | "postAcceptObservation" | "postRefusalObservation" | "runtimeGraph" | "profile" | "scanId" | "targetUrl"
 >;
 
 export function buildLocalV2DagSimulatedLambdaArgs(input: {
@@ -120,6 +121,9 @@ export function buildLocalV2DagSimulatedLambdaArgs(input: {
     "--variant",
     "wc01-local-simulated-lambda"
   ];
+
+  if (input.payload.resourceInventoryCrawl) args.push("--resource-inventory-crawl");
+  if (input.payload.resourceInventoryDiscovery) args.push("--resource-inventory-discovery");
 
   if (input.messageStreamPath) {
     args.push("--message-stream", input.messageStreamPath);
@@ -224,6 +228,9 @@ export async function dispatchLocalV2DagSimulatedLambdaScan(input: {
 
   const terminalS3Client = new LocalDiskS3ReadClient(summary.fakeS3Root);
   for (const message of selectSimulatedLambdaTerminalResultMessages(messages)) {
+    if (payload.resourceInventoryCrawl) {
+      await retainSimulatedCrawlBaseline(message, terminalS3Client);
+    }
     await handleLocalV2DagLambdaResultMessage(message, {
       expectedTargetEnvironment: payload.targetEnvironment,
       s3Client: terminalS3Client as never,
@@ -245,6 +252,36 @@ export async function dispatchLocalV2DagSimulatedLambdaScan(input: {
       sdkImportMs: 0
     }
   };
+}
+
+/** Retain the same verified baseline where the local crawl scheduler reads it. */
+async function retainSimulatedCrawlBaseline(message: unknown, source: LocalDiskS3ReadClient) {
+  const endpoint = process.env.S3_ENDPOINT;
+  if (process.env.NODE_ENV === "production" || !endpoint ||
+      !["localhost", "127.0.0.1", "[::1]"].includes(new URL(endpoint).hostname)) {
+    throw new Error("Simulated crawl requires local artifact storage.");
+  }
+  const record = simulatedMessageRecord(message);
+  if (record?.status !== "completed") return;
+  const pointers = record.artifactPointers as Record<string, unknown> | undefined;
+  const metadata = record.artifactMetadata as Record<string, { sha256: string; sizeBytes: number }> | undefined;
+  const uri = pointers?.scanArtifactUri;
+  const expected = metadata?.scanArtifactUri;
+  if (typeof uri !== "string" || !expected) throw new Error("Missing simulated crawl baseline.");
+  const pointer = new URL(uri);
+  if (pointer.protocol !== "s3:") throw new Error("Invalid simulated crawl baseline pointer.");
+  const key = pointer.pathname.slice(1);
+  const { Body: body } = await source.send({ input: { Bucket: pointer.hostname, Key: key } });
+  if (body.byteLength !== expected.sizeBytes || createHash("sha256").update(body).digest("hex") !== expected.sha256) {
+    throw new Error("Simulated crawl baseline integrity mismatch.");
+  }
+  const client = getS3Client();
+  try {
+    await client.send(new CreateBucketCommand({ Bucket: pointer.hostname }));
+  } catch (error) {
+    if (!(error instanceof Error) || !["BucketAlreadyOwnedByYou", "BucketAlreadyExists"].includes(error.name)) throw error;
+  }
+  await client.send(new PutObjectCommand({ Bucket: pointer.hostname, Key: key, Body: body, ContentType: "application/json" }));
 }
 
 export async function consumeSimulatedLambdaMessageStream(input: {

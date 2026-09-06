@@ -52,3 +52,21 @@ test("parity coordinator payload forwards the parsed graph without selecting a n
   assert.match(source, /\.\.\.\(args\.runtimeGraph \? \{ runtimeGraph: args\.runtimeGraph \} : \{\}\)/);
   assert.doesNotMatch(source, /selectRuntimeGraphDispatch/);
 });
+
+
+test("local crawl options survive simulated dispatch without enabling discovery for a homepage-only run", () => {
+  for (const discovery of [undefined, false, true]) {
+    const args = buildLocalV2DagSimulatedLambdaArgs({
+      artifactDir: "artifacts/test", outPath: "artifacts/test/summary.json",
+      payload: { awsRegion: "eu-west-1", profile: "standard", scanId: "crawl-test",
+        targetUrl: "https://example.test/", resourceInventoryCrawl: true,
+        resourceInventoryDiscovery: discovery },
+    });
+    const parsed = parseArgs(args.slice(args.indexOf("--") + 1));
+    assert.equal(parsed.resourceInventoryCrawl, true);
+    assert.equal(parsed.resourceInventoryDiscovery, discovery === true);
+  }
+  const defaults = parseArgs([]);
+  assert.equal(defaults.resourceInventoryCrawl, false);
+  assert.equal(defaults.resourceInventoryDiscovery, false);
+});

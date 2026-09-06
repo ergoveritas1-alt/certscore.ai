@@ -21,6 +21,8 @@ import {
 type PostRefusalWorkerMode = "normal" | "failure" | "timeout";
 
 type Args = {
+  resourceInventoryCrawl: boolean;
+  resourceInventoryDiscovery: boolean;
   artifactDir: string;
   awsRegion: LocalV2DagLambdaAwsRegion;
   debugOverrides: Record<string, unknown> | null;
@@ -288,6 +290,8 @@ async function main() {
     }
 
     const payload = {
+      resourceInventoryCrawl: args.resourceInventoryCrawl,
+      resourceInventoryDiscovery: args.resourceInventoryDiscovery,
       artifactOnly: true,
       awsRegion: args.awsRegion,
       callbackCorrelationId: args.scanId,
@@ -509,6 +513,8 @@ function summarizeShardSummary(value: unknown) {
 
 export function parseArgs(argv: string[]): Args {
   const args: Args = {
+    resourceInventoryCrawl: false,
+    resourceInventoryDiscovery: false,
     artifactDir: "artifacts/local-v2-dag-lambda-parity",
     awsRegion: "eu-central-1",
     debugOverrides: {
@@ -541,6 +547,10 @@ export function parseArgs(argv: string[]): Args {
     const arg = argv[index];
     if (arg === "--") {
       continue;
+    } else if (arg === "--resource-inventory-crawl") {
+      args.resourceInventoryCrawl = true;
+    } else if (arg === "--resource-inventory-discovery") {
+      args.resourceInventoryDiscovery = true;
     } else if (arg === "--artifact-dir") {
       args.artifactDir = requiredValue(argv, ++index, arg);
     } else if (arg === "--aws-region") {
