@@ -18,6 +18,7 @@
   });
   document.body.append(section);
   }
-  if (document.readyState === 'complete') mount();
-  else window.addEventListener('load', mount, {once:true});
+  mount();
+  document.addEventListener('DOMContentLoaded', mount, {once:true});
+  window.addEventListener('load', mount, {once:true});
 })();
