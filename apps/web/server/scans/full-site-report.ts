@@ -270,7 +270,7 @@ export async function loadFullSiteReport(
     }
   }
   let filteredPages = pageRows.filter(
-    (p) => (!q || p.url.toLowerCase().includes(q)) && matchesStatus(p.status),
+    (p) => (exportAllPages || p.status !== "excluded") && (!q || p.url.toLowerCase().includes(q)) && matchesStatus(p.status),
   );
   const pageSort = params.get("pageSort");
   filteredPages.sort((a, b) =>
@@ -357,7 +357,7 @@ export async function loadFullSiteReport(
         .filter((r) => r.occurrence.kind === "service")
         .slice(0, 5),
       review: pageRows
-        .filter((p) => (p.additionalServices ?? 0) > 0 || p.limitations.length)
+        .filter((p) => p.status !== "excluded" && ((p.additionalServices ?? 0) > 0 || p.limitations.length))
         .slice(0, 8),
     },
     evidence,

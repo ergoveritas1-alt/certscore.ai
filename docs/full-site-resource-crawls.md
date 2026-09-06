@@ -259,3 +259,13 @@ Gmail secrets are reused; no worker mail credentials or new email provider are
 needed. At the approved 100-crawl/month volume, incremental persisted state and
 processing are estimated below $1/month; existing Gmail has no added per-message
 service charge. No real emails were sent during local verification.
+
+## Compact dashboard and homepage metadata (September 6, 2026)
+
+The report opens on Homepage audit. Eligible authenticated report links use `/app/scans/:id`; authenticated public links redirect there. Crawl controls appear only within the authenticated Scan from menu and remain guarded independently by the server's private flag and admin/advanced membership check. Public forms and MCP/API credentials cannot launch this option.
+
+Resources aggregates retained resource identities and events across independent visits. Pages attributes observations and coverage to individual URLs. “Observed on other pages” compares positive observations with the homepage visit; it is not proof of absence. Excluded links remain in export/scope accounting but are omitted from on-site page recommendations and the default page table. Inventory tables load bounded batches on scroll, show at most eight rows in the viewport, and do not expose search/filter forms or pagination buttons.
+
+Every new homepage runtime scan can retain bounded `certscore.site-metadata.v1` declarations and same-origin WordPress asset indicators in its existing document read. The coordinator retains these separately as `runtimeMetadataSnapshots`; they never replace consent-owned DOM evidence. Verified source-hash-bound observations persist as `certscore.site-metadata-projection.v1` in runtime artifacts and are rendered under Site metadata. Legacy/unverified/missing metadata remains unavailable. WordPress version is shown only when explicitly declared in generator metadata; asset query versions are not WordPress version evidence. Industry reuses the existing estimated benchmark and is labelled estimated. None of these descriptive fields creates findings or affects score.
+
+No new model calls, waits, network probes or browser invocations are added by metadata capture. Estimated incremental metadata storage is below $1/month at 100,000 scans/month and 30-day retention. The separate, owner-requested ErgoVeritas same-site embed canary is also estimated below $1/month at 100,000 visits.

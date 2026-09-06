@@ -132,6 +132,7 @@ export type GpcResponseReportProjection = {
 };
 
 export type ShadowReportData = {
+  siteMetadata?: import("@certscore/contracts").SiteMetadataProjection | null;
   fullSite?: import("@website-signal-risk-scanner/shared").CrawlOptions;
   runtimeEvidenceGraph?: import("@certscore/api-contracts").ApiRuntimeEvidenceGraphProjection;
   scan: {

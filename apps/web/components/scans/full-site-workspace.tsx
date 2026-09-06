@@ -5,6 +5,8 @@ import {
   type CrawlOptions,
 } from "@website-signal-risk-scanner/shared/full-site-crawl";
 import { API_READ_RATE_POLICY } from "@website-signal-risk-scanner/shared/api-read-rate-policy";
+import { VendorBrandIcon } from "./vendor-brand-chip";
+
 import type { FullSiteReportResponse } from "../../server/scans/full-site-report";
 
 type Filters = {
@@ -71,7 +73,7 @@ export function FullSiteWorkspace({
   children: ReactNode;
 }) {
   const [tab, setTab] = useState<"resources" | "pages" | "homepage">(
-    "resources",
+    "homepage",
   );
   const [filters, setFilters] = useState(initialFilters),
     [offset, setOffset] = useState(0);
@@ -128,7 +130,11 @@ export function FullSiteWorkspace({
           );
         }
         const next = (await response.json()) as FullSiteReportResponse;
-        setData(next);
+        setData(previous => offset && previous ? {
+          ...next,
+          resources: { ...next.resources, rows: [...new Map([...previous.resources.rows, ...next.resources.rows].map(row => [row.key, row])).values()] },
+          pages: { ...next.pages, rows: [...new Map([...previous.pages.rows, ...next.pages.rows].map(row => [row.id, row])).values()] },
+        } : next);
         setError(null);
         terminal.current =
           !["waiting_homepage", "running"].includes(
@@ -190,12 +196,10 @@ export function FullSiteWorkspace({
   ) {
     const maximum = Math.max(1, ...rows.map((r) => r.count));
     return (
-      <section className="min-w-0 rounded-xl border border-zinc-200 bg-white p-4">
+      <section className="min-w-0 rounded-lg border border-zinc-200 bg-white p-3">
         <h3 className="text-sm font-semibold">{title}</h3>
-        <p className="mb-3 text-xs text-zinc-500">
-          {unit}; click a row to inspect evidence.
-        </p>
-        <ul className="space-y-2">
+        <p className="sr-only">{unit}; click a row to inspect evidence.</p>
+        <ul className="mt-2 max-h-28 space-y-1.5 overflow-auto">
           {rows.map((row) => (
             <li key={row.label}>
               <button
@@ -221,7 +225,7 @@ export function FullSiteWorkspace({
         </ul>
         {!rows.length ? (
           <p className="text-sm text-zinc-500">
-            No positive observations retained yet.
+            None observed.
           </p>
         ) : null}
       </section>
@@ -243,73 +247,24 @@ export function FullSiteWorkspace({
     ].find((r) => r.key === resource);
   return (
     <div
-      className="mx-auto max-w-[1500px] px-4 py-8 text-zinc-900 sm:px-8"
+      className="mx-auto max-w-[1500px] px-4 py-4 text-zinc-900 sm:px-6"
       data-full-site-report
     >
-      <header className="space-y-4 border-b border-zinc-200 pb-6">
-        <div className="flex flex-wrap items-center gap-3">
-          <h1 className="text-3xl font-semibold tracking-tight">
-            Scan results
-          </h1>
-          <span className="rounded-full border border-sky-200 bg-sky-50 px-3 py-1 text-xs font-semibold">
-            {state?.status.replaceAll("_", " ") ?? "Loading coverage"}
-          </span>
+      <header className="border-b border-zinc-200 pb-3">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <div className="flex items-center gap-2">
+            <h1 className="text-xl font-semibold tracking-tight">Scan results</h1>
+            <span className="rounded-full bg-sky-50 px-2 py-0.5 text-xs font-medium text-sky-800">{state?.status.replaceAll("_", " ") ?? "Loading"}</span>
+          </div>
+          <div className="flex gap-2">
+            <a className={`${button} inline-flex items-center gap-1.5 !py-1.5`} href={`/api/scans/${scanId}/report-export?format=pdf`}><span aria-hidden="true">↓</span>PDF</a>
+            <a className={`${button} inline-flex items-center gap-1.5 !py-1.5`} href={`/api/scans/${scanId}/report-export?format=json`}><span aria-hidden="true">⇩</span>Export</a>
+          </div>
         </div>
-        <p className="max-w-4xl text-sm leading-6 text-zinc-600">
-          Full homepage audit plus resource inventories from additional public
-          pages. Additional pages were opened independently without a consent
-          action.
-        </p>
-        <div className="flex flex-wrap gap-3 text-sm">
-          <a
-            className="text-sky-800 underline"
-            href={`/api/scans/${scanId}/report-export?format=pdf`}
-          >
-            Download full report PDF
-          </a>
-          <a
-            className="text-sky-800 underline"
-            href={`/api/scans/${scanId}/report-export?format=json`}
-          >
-            Export scope, coverage and page attribution
-          </a>
-        </div>
-        <dl className="flex flex-wrap gap-x-7 gap-y-3 rounded-xl bg-zinc-100 p-4 text-sm">
-          {[
-            ["Max pages", `${requested.maxPages} (includes homepage)`],
-            ["Requested concurrency", requested.concurrency],
-            ["Wait between page starts", `${requested.waitSeconds}s`],
-            ["Region", state?.region ?? "Loading"],
-            ["Observation condition", FULL_SITE_CONDITION],
-          ].map(([label, value]) => (
-            <div key={label}>
-              <dt className="text-xs text-zinc-500">{label}</dt>
-              <dd className="font-medium">{value}</dd>
-            </div>
-          ))}
-        </dl>
-        <div
-          aria-live="polite"
-          className="flex flex-wrap gap-x-5 gap-y-2 text-sm"
-        >
-          <span>
-            Completed: <strong>{counts?.completed ?? "—"}</strong>
-          </span>
-          <span>
-            Partial: <strong>{counts?.partial ?? "—"}</strong>
-          </span>
-          <span>
-            Blocked/failed: <strong>{counts?.blockedFailed ?? "—"}</strong>
-          </span>
-          <span>
-            Pending: <strong>{counts?.pending ?? "—"}</strong>
-          </span>
-          {state?.stopReason ? (
-            <span>
-              Stop reason:{" "}
-              <strong>{state.stopReason.replaceAll("_", " ")}</strong>
-            </span>
-          ) : null}
+        <div aria-live="polite" className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-xs text-zinc-600">
+          <span><strong className="text-zinc-900">{counts?.completed ?? "—"}</strong> complete · {counts?.partial ?? 0} partial · {counts?.blockedFailed ?? 0} failed · {counts?.pending ?? 0} pending</span>
+          <span>Limit {requested.maxPages} pages</span><span>{state?.region}</span>
+          <span>{FULL_SITE_CONDITION}</span>
         </div>
         {state?.robotsRestriction ? (
           <p
@@ -328,9 +283,9 @@ export function FullSiteWorkspace({
             starts. Backoff and homepage audits may pause dispatch.
           </p>
         ) : null}
-        <details className="text-sm">
+        <details className="mt-2 text-xs text-zinc-600">
           <summary className="cursor-pointer font-medium">
-            Timing · total elapsed{" "}
+            Coverage & timing ·{" "}
             {duration(
               state
                 ? Date.parse(state.completedAt ?? new Date().toISOString()) -
@@ -338,8 +293,13 @@ export function FullSiteWorkspace({
                 : null,
             )}
           </summary>
-          <dl className="mt-3 grid gap-3 sm:grid-cols-3">
+          <dl className="mt-2 grid gap-2 sm:grid-cols-3">
             {[
+              ["Page limit", requested.maxPages],
+              ["Concurrency", state?.effective.concurrency ?? requested.concurrency],
+              ["Seconds between starts", state?.effective.waitSeconds ?? requested.waitSeconds],
+              ["Stopped because", state?.stopReason?.replaceAll("_", " ") ?? "In progress"],
+              ["Excluded links (not crawled)", counts?.excluded ?? 0],
               ["Started", timestamp(state?.startedAt)],
               ["Completed", timestamp(state?.completedAt)],
               ["Homepage audit", duration(state?.homepageDurationMs)],
@@ -397,9 +357,9 @@ export function FullSiteWorkspace({
       </header>
       <nav
         aria-label="Scan report workspace"
-        className="my-6 flex flex-wrap gap-2"
+        className="my-3 flex flex-wrap gap-2"
       >
-        {(["resources", "pages", "homepage"] as const).map((value) => (
+        {(["homepage", "resources", "pages"] as const).map((value) => (
           <button
             key={value}
             className={`${button} ${tab === value ? "!border-zinc-900 !bg-zinc-900 !text-white" : ""}`}
@@ -418,23 +378,12 @@ export function FullSiteWorkspace({
         ))}
       </nav>
       <div hidden={tab !== "homepage"} id="homepage-audit">
-        <h2 className="mb-2 text-xl font-semibold">Homepage audit</h2>
-        <p className="mb-4 text-sm text-zinc-600">
-          Homepage audit score and findings. Consent, CMP, privacy, GDPR
-          transparency, and transport assessments on additional pages: Not
-          assessed.
-        </p>
         {children}
       </div>
       {tab !== "homepage" ? (
         <>
-          <h2 className="text-lg font-semibold">Across observed pages</h2>
-          <p className="mb-4 max-w-4xl text-sm text-zinc-600">
-            Totals combine independent page visits, not one continuous visitor
-            session. Positive partial-page evidence contributes; incomplete and
-            unvisited pages are never negative observations.
-          </p>
-          <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-6">
+          <p className="mb-2 text-xs text-zinc-600">{tab === "resources" ? "Resources combines services, cookies, requests and embeds across independent page visits." : "Pages shows the resources and coverage retained for each URL."} Additional pages receive inventory checks only; scores and findings belong to the homepage.</p>
+          <div className="grid grid-cols-3 gap-px overflow-hidden rounded-lg border border-zinc-200 bg-zinc-200 sm:grid-cols-6">
             {[
               [
                 "Pages observed",
@@ -443,14 +392,14 @@ export function FullSiteWorkspace({
                 "",
               ],
               [
-                "Distinct identified services",
+                "Services",
                 s?.totals.services,
                 "resources",
                 "service",
               ],
-              ["Distinct cookies", s?.totals.cookies, "resources", "cookie"],
+              ["Cookies", s?.totals.cookies, "resources", "cookie"],
               [
-                "Request events",
+                "Requests",
                 s?.totals.requestEvents,
                 "resources",
                 "request",
@@ -462,7 +411,7 @@ export function FullSiteWorkspace({
                 "embed",
               ],
               [
-                "Not observed on homepage",
+                "Other-page services",
                 s?.totals.additionalServices,
                 "resources",
                 "additional",
@@ -470,7 +419,7 @@ export function FullSiteWorkspace({
             ].map(([label, value, target, kind]) => (
               <button
                 key={String(label)}
-                className="rounded-xl border border-zinc-200 bg-white p-4 text-left hover:border-sky-600 focus-visible:outline focus-visible:outline-sky-600"
+                className="min-w-0 bg-white px-3 py-2 text-left hover:bg-sky-50 focus-visible:outline focus-visible:outline-sky-600"
                 onClick={() =>
                   target === "pages"
                     ? (setTab("pages"),
@@ -487,22 +436,15 @@ export function FullSiteWorkspace({
                 }
               >
                 <span className="block text-xs text-zinc-500">{label}</span>
-                <strong className="my-2 block text-2xl tabular-nums">
+                <strong className="block text-lg leading-6 tabular-nums">
                   {typeof value === "number" ? value.toLocaleString() : "—"}
                 </strong>
-                <span className="text-xs text-zinc-500">
-                  {kind === "embed"
-                    ? `${s?.totals.embedServices ?? 0} distinct embed services · `
-                    : ""}
-                  {counts?.completed ?? 0} complete + {counts?.partial ?? 0}{" "}
-                  partial pages
-                </span>
               </button>
             ))}
           </div>
           {data ? (
             <>
-              <div className="my-6 grid gap-4 lg:grid-cols-4">
+              <div className="my-3 grid grid-cols-2 gap-2 md:grid-cols-4">
                 <div>
                   <label className="mb-2 block text-xs">
                     Cookie breakdown{" "}
@@ -564,20 +506,21 @@ export function FullSiteWorkspace({
                   data.charts.services,
                   "service",
                   "purpose",
-                  "Distinct identified services",
+                  "Services",
                 )}
               </div>
-              <div className="mb-6 grid min-w-0 gap-4 lg:grid-cols-3">
+              <div className="mb-3 grid min-w-0 gap-2 md:grid-cols-3 [&>section]:max-h-48 [&>section]:overflow-auto">
                 {[
-                  ["Beyond the homepage", data.discovery.beyond],
+                  ["Observed on other pages", data.discovery.beyond],
                   ["Most widespread", data.discovery.widespread],
                 ].map(([label, items]) => (
                   <section
-                    className="min-w-0 rounded-xl border border-zinc-200 bg-white p-4"
+                    className="min-w-0 rounded-lg border border-zinc-200 bg-white p-3"
                     key={String(label)}
                   >
-                    <h3 className="mb-3 font-semibold">{String(label)}</h3>
-                    {label === "Beyond the homepage" && !s?.baselineComplete ? (
+                    <h3 className="mb-2 text-sm font-semibold">{String(label)}</h3>
+                    {label === "Observed on other pages" ? <p className="mb-2 text-xs text-zinc-500">Seen on additional pages, not in the homepage visit. This does not prove absence.</p> : null}
+                    {label === "Observed on other pages" && !s?.baselineComplete ? (
                       <p className="text-sm text-zinc-600">
                         Comparison unavailable: the homepage baseline is
                         incomplete or not comparable.
@@ -588,18 +531,18 @@ export function FullSiteWorkspace({
                       ).map((row) => (
                         <button
                           key={row.key}
-                          className="mb-2 flex w-full justify-between gap-2 text-left text-sm text-sky-800 hover:underline"
+                          className="mb-1 flex w-full items-center justify-between gap-2 text-left text-xs text-sky-800 hover:underline"
                           onClick={() => openResource(row.key, row.pageIds[0])}
                         >
-                          <span>{row.occurrence.label}</span>
+                          <span className="flex min-w-0 items-center gap-2"><VendorBrandIcon label={row.occurrence.label} /><span className="truncate">{row.occurrence.label}</span></span>
                           <span>{row.pageIds.length} pages</span>
                         </button>
                       ))
                     )}
                   </section>
                 ))}
-                <section className="min-w-0 rounded-xl border border-zinc-200 bg-white p-4">
-                  <h3 className="mb-3 font-semibold">Pages to review</h3>
+                <section className="min-w-0 rounded-lg border border-zinc-200 bg-white p-3">
+                  <h3 className="mb-2 text-sm font-semibold">On-site pages to review</h3>
                   {data.discovery.review.map((page) => (
                     <button
                       key={page.id}
@@ -649,177 +592,21 @@ export function FullSiteWorkspace({
                 </h3>
               )}
             </div>
-            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-              <label className="text-xs text-zinc-600">
-                Search resources, vendors, domains or pages
-                <input
-                  type="search"
-                  className={`${button} mt-1 w-full`}
-                  value={filters.q}
-                  onChange={(e) => {
-                    setFilters({ ...filters, q: e.target.value });
-                    setOffset(0);
-                  }}
-                />
-              </label>
-              {tab === "resources"
-                ? (
-                    [
-                      ["purpose", "Purpose", data?.facets.purposes ?? []],
-                      [
-                        "relationship",
-                        "Relationship",
-                        data?.facets.relationships ?? [],
-                      ],
-                      [
-                        "assessment",
-                        "Assessment",
-                        data?.facets.assessments ?? [],
-                      ],
-                      [
-                        "confidence",
-                        "Confidence",
-                        data?.facets.confidences ?? [],
-                      ],
-                      [
-                        "resourceType",
-                        "Resource type",
-                        data?.facets.resourceTypes ?? [],
-                      ],
-                    ] as const
-                  ).map(([key, label, values]) => (
-                    <label className="text-xs text-zinc-600" key={key}>
-                      {label}
-                      <select
-                        className={`${button} mt-1 w-full`}
-                        value={filters[key]}
-                        onChange={(e) => filter({ [key]: e.target.value })}
-                      >
-                        <option value="">All</option>
-                        {values.map((v) => (
-                          <option key={v}>{v}</option>
-                        ))}
-                      </select>
-                    </label>
-                  ))
-                : null}
-              <label className="text-xs text-zinc-600">
-                Observation status
-                <select
-                  className={`${button} mt-1 w-full`}
-                  value={filters.status}
-                  onChange={(e) => {
-                    setFilters({ ...filters, status: e.target.value });
-                    setOffset(0);
-                  }}
-                >
-                  <option value="">All</option>
-                  {[
-                    "observed",
-                    "completed",
-                    "partial",
-                    "blocked",
-                    "failed",
-                    "queued",
-                    "active",
-                    "excluded",
-                    "cancelled",
-                  ].map((v) => (
-                    <option key={v}>{v}</option>
-                  ))}
-                </select>
-              </label>
-              {tab === "resources" ? (
-                <label className="text-xs text-zinc-600">
-                  Page
-                  <select
-                    className={`${button} mt-1 w-full`}
-                    value={filters.page}
-                    onChange={(e) => filter({ page: e.target.value })}
-                  >
-                    <option value="">All observed pages</option>
-                    {data?.pageChoices.map((p) => (
-                      <option key={p.id} value={p.id}>
-                        {p.url}
-                      </option>
-                    ))}
-                  </select>
-                </label>
-              ) : null}
-              <label className="text-xs text-zinc-600">
-                Sort
-                <select
-                  className={`${button} mt-1 w-full`}
-                  value={tab === "pages" ? filters.pageSort : filters.sort}
-                  onChange={(e) => {
-                    setFilters({
-                      ...filters,
-                      [tab === "pages" ? "pageSort" : "sort"]: e.target.value,
-                    });
-                    setOffset(0);
-                  }}
-                >
-                  {(tab === "pages"
-                    ? [
-                        ["url", "Page URL"],
-                        ["duration", "Longest observation"],
-                        ["services", "Most services"],
-                        ["status", "Status"],
-                      ]
-                    : [
-                        ["pages", "Most observed pages"],
-                        ["label", "Name"],
-                        ["events", "Most events"],
-                      ]
-                  ).map(([value, label]) => (
-                    <option key={value} value={value}>
-                      {label}
-                    </option>
-                  ))}
-                </select>
-              </label>
-            </div>
-            <div className="my-4 flex flex-wrap items-center gap-2">
-              <label className="mr-3 text-sm">
-                <input
-                  className="mr-2"
-                  type="checkbox"
-                  disabled={!s?.baselineComplete}
-                  checked={filters.additional === "true"}
-                  onChange={(e) =>
-                    filter({ additional: e.target.checked ? "true" : "" })
-                  }
-                />
-                Not observed on homepage
-              </label>
-              {activeFilters.map(([key, value]) => (
-                <button
-                  className="rounded-full bg-sky-50 px-3 py-1 text-xs text-sky-800"
-                  key={key}
-                  onClick={() => setFilters({ ...filters, [key]: "" })}
-                >
-                  {key}: {key === "page" ? pageName(value) : value} ×
-                </button>
-              ))}
-              <button
-                className="text-sm underline"
-                onClick={() => {
-                  setFilters(initialFilters);
-                  setOffset(0);
-                }}
-              >
-                Reset filters
-              </button>
-            </div>
-            <div className="overflow-x-auto">
-              <table className="w-full text-left text-sm">
+            {activeFilters.length ? <button className="mb-2 text-xs text-sky-800 underline" onClick={() => { setFilters(initialFilters); setOffset(0); }}>Show all {units[filters.kind as keyof typeof units]?.toLowerCase()}</button> : null}
+            <div className="max-h-[488px] overflow-auto" tabIndex={0} aria-label={tab === "pages" ? "Scrollable page observations" : "Scrollable resources"}
+              onScroll={event => {
+                const el = event.currentTarget;
+                const table = tab === "pages" ? data?.pages : data?.resources;
+                if (table && el.scrollTop + el.clientHeight >= el.scrollHeight - 40 && table.rows.length < table.total && table.offset === offset) setOffset(offset + table.limit);
+              }}>
+              <table className="w-full text-left text-xs">
                 <caption className="sr-only">
                   {tab === "pages" ? "Page observations" : "Resource evidence"};
                   additional-page assessments were not performed.
                 </caption>
                 {tab === "pages" ? (
                   <>
-                    <thead>
+                    <thead className="sticky top-0 z-10 bg-zinc-50">
                       <tr>
                         {[
                           "Page",
@@ -840,8 +627,8 @@ export function FullSiteWorkspace({
                     </thead>
                     <tbody>
                       {data?.pages.rows.map((page) => (
-                        <tr key={page.id} className="border-b border-zinc-100">
-                          <td className="max-w-sm p-3">
+                        <tr key={page.id} className="h-14 border-b border-zinc-100">
+                          <td className="max-w-[260px] px-3 py-2">
                             <button
                               className="block w-full truncate text-left text-sky-800 hover:underline"
                               onClick={() => openPage(page.id)}
@@ -855,10 +642,6 @@ export function FullSiteWorkspace({
                             ) : null}
                             <p className="text-xs text-zinc-500">
                               {page.limitations.join(", ")}
-                            </p>
-                            <p className="text-xs text-zinc-500">
-                              Discovered {page.discoveryCount ?? 1} time(s) ·{" "}
-                              {page.selectionReason}
                             </p>
                           </td>
                           <td className="p-3">{page.status}</td>
@@ -881,7 +664,7 @@ export function FullSiteWorkspace({
                   </>
                 ) : (
                   <>
-                    <thead>
+                    <thead className="sticky top-0 z-10 bg-zinc-50">
                       <tr>
                         {[
                           "Resource / vendor",
@@ -899,13 +682,13 @@ export function FullSiteWorkspace({
                     </thead>
                     <tbody>
                       {data?.resources.rows.map((row) => (
-                        <tr className="border-b border-zinc-100" key={row.key}>
-                          <td className="max-w-sm p-3">
+                        <tr className="h-14 border-b border-zinc-100" key={row.key}>
+                          <td className="max-w-[260px] px-3 py-2">
                             <button
                               className="block w-full truncate text-left font-medium text-sky-800 hover:underline"
                               onClick={() => openResource(row.key)}
                             >
-                              {row.occurrence.label}
+                              <span className="flex items-center gap-2"><VendorBrandIcon label={row.occurrence.label} /><span className="truncate">{row.occurrence.label}</span></span>
                             </button>
                             <span className="text-xs text-zinc-500">
                               {row.occurrence.vendor ?? "Unclassified vendor"}
@@ -950,45 +733,7 @@ export function FullSiteWorkspace({
                 )}
               </table>
             </div>
-            <div className="mt-4 flex items-center justify-between gap-3 text-sm">
-              <button
-                className={button}
-                disabled={offset === 0}
-                onClick={() => setOffset(Math.max(0, offset - 50))}
-              >
-                Previous
-              </button>
-              <span>
-                {((tab === "pages"
-                  ? data?.pages.total
-                  : data?.resources.total) ?? 0)
-                  ? offset + 1
-                  : 0}
-                –
-                {Math.min(
-                  offset + 50,
-                  (tab === "pages"
-                    ? data?.pages.total
-                    : data?.resources.total) ?? 0,
-                )}{" "}
-                of{" "}
-                {(tab === "pages"
-                  ? data?.pages.total
-                  : data?.resources.total) ?? 0}
-              </span>
-              <button
-                className={button}
-                disabled={
-                  offset + 50 >=
-                  ((tab === "pages"
-                    ? data?.pages.total
-                    : data?.resources.total) ?? 0)
-                }
-                onClick={() => setOffset(offset + 50)}
-              >
-                Next
-              </button>
-            </div>
+            <p className="mt-2 text-xs text-zinc-500">{tab === "pages" ? data?.pages.total : data?.resources.total} rows · Scroll to view all. Select a row for retained evidence.</p>
           </section>
           {detailPage ? (
             <section

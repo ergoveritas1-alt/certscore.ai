@@ -1,3 +1,5 @@
+import { siteMetadataSchema } from "./site-metadata";
+export * from "./site-metadata";
 import { z } from "zod";
 import { vendorServicePurposeSchema } from "./vendor-service-purpose";
 import { vendorRegistryAttributionSchema } from "./vendor-registry-attribution";
@@ -1738,6 +1740,7 @@ export const visualCaptureSummarySchema = z.object({
 });
 
 export const domSnapshotArtifactSchema = z.object({
+  siteMetadata: siteMetadataSchema.optional(),
   artifactId: z.string(),
   capturedAtMs: z.number().int().nonnegative(),
   path: z.string(),
@@ -3282,6 +3285,7 @@ export const displaySafeEvidenceExcerptSchema = z.object({
 });
 
 const canonicalEvidenceBundleBaseSchema = z.object({
+  runtimeMetadataSnapshots: z.array(domSnapshotArtifactSchema).max(1).optional(),
   resourceInventoryContext: z.object({
     finalUrl: z.string().max(2000), links: z.array(z.string().max(2000)).max(5000),
     configuration: z.record(z.unknown()), configurationHash: z.string().regex(/^[a-f0-9]{64}$/),

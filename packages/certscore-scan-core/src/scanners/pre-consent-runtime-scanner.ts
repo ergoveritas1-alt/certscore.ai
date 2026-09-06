@@ -361,6 +361,21 @@ export function buildLateConsentGeometryShadowArtifact(input: {
   };
 }
 
+export async function readDocumentSiteMetadata(page: Page) {
+  const url = page.url();
+  const identity = currentBrowserDocumentIdentity(page);
+  const metadata = await page.evaluate(() => ({
+    contractVersion: "certscore.site-metadata.v1" as const,
+    title: document.title.slice(0, 240),
+    language: (document.documentElement.lang.trim() || document.querySelector('meta[http-equiv="content-language" i]')?.getAttribute("content")?.split(",")[0]?.trim() || document.querySelector('meta[property="og:locale" i]')?.getAttribute("content")?.replaceAll("_", "-") || "").slice(0, 35),
+    generators: Array.from(document.querySelectorAll('meta[name="generator" i]')).slice(0, 8).map(el => (el.getAttribute("content") || "").trim().slice(0, 160)).filter(Boolean),
+    wordpressAssetObserved: Array.from(document.querySelectorAll('script[src],link[href]')).slice(0, 500).some(el => {
+      try { const url = new URL(el.getAttribute("src") || el.getAttribute("href") || "", document.baseURI); return url.origin === location.origin && /^\/(?:wp-content|wp-includes)\//.test(url.pathname); } catch { return false; }
+    }),
+  })).catch(() => null);
+  return page.url() === url && identity?.token === currentBrowserDocumentIdentity(page)?.token ? metadata : null;
+}
+
 export async function readDeclaredDocumentLanguage(page: Page): Promise<string | null> {
   return await page.evaluate(() => {
     const htmlLanguage = document.documentElement.lang.trim();
@@ -3593,8 +3608,10 @@ export async function preConsentRuntimeScanner(
         domText.slice(0, 100_000),
       ),
     );
-    const documentLanguage = await readDeclaredDocumentLanguage(page);
+    const siteMetadata = captureRuntimeEvidence ? await readDocumentSiteMetadata(page) : null;
+    const documentLanguage = captureRuntimeEvidence ? siteMetadata?.language : await readDeclaredDocumentLanguage(page);
     const domSnapshot: DomSnapshotArtifact = {
+      ...(siteMetadata ? { siteMetadata } : {}),
       artifactId: "dom_text_pre_consent",
       capturedAtMs: elapsed(input.scanStartedAtMs),
       path: domPath,

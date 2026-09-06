@@ -1,3 +1,4 @@
+import { projectSiteMetadata } from "./site-metadata-projection";
 import "server-only";
 import { projectRuntimeEvidenceGraphs } from "./runtime-evidence-graph-projection";
 
@@ -5931,6 +5932,7 @@ function buildMaterializedLocalV2Detail(
     : withoutStaleLocalV2NoGoArtifacts(scanRecord.runtimeArtifacts);
   const runtimeArtifacts = {
     ...inheritedRuntimeArtifacts,
+    siteMetadata: projectSiteMetadata(bundle, options.policyTextEvidenceContext?.sourceBundle, canonicalDocumentUrl),
     runtimeEvidenceGraphProjection: projectRuntimeEvidenceGraphs({
       bundle, scanId: scanRecord.scan.id, source: options.policyTextEvidenceContext?.sourceBundle,
       policyDocuments: policyTextProjection.documents.flatMap(document => {

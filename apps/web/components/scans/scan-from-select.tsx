@@ -1,6 +1,8 @@
 "use client";
 
 import React, { useEffect, useLayoutEffect, useRef, useState } from "react";
+import { usePathname } from "next/navigation";
+import { FullSiteControls, type FullSiteFormValue } from "./full-site-controls";
 import { createPortal } from "react-dom";
 import type { LocalV2ScanProfile } from "./scan-submit-progress";
 import { ScanFromMarker } from "./scan-from-icons";
@@ -37,6 +39,8 @@ export type ServerScanFrom = Exclude<ScanFrom, "local_extension">;
 const DEFAULT_SELECTABLE_SCAN_FROM = "eu_ie" satisfies ServerScanFrom;
 
 type ScanFromSelectProps = {
+  includeFullSiteOption?: boolean;
+  onFullSiteChange?: (value: FullSiteFormValue) => void;
   allowRestrictedScanOptions?: boolean;
   compact?: boolean;
   freshRescanName?: string;
@@ -78,6 +82,8 @@ function SelectedScanFromMarker({ option }: { option: (typeof SCAN_FROM_OPTIONS)
 
 export function ScanFromSelect({
   allowRestrictedScanOptions = false,
+  includeFullSiteOption = false,
+  onFullSiteChange,
   compact = false,
   freshRescanName = "forceNewScan",
   freshRescanValue,
@@ -96,6 +102,9 @@ export function ScanFromSelect({
   variant = "field",
   value = "eu_ie"
 }: ScanFromSelectProps) {
+  const pathname = usePathname();
+  const [crawl, setCrawl] = useState<FullSiteFormValue>();
+  const showCrawl = includeFullSiteOption && (pathname === "/app" || pathname?.startsWith("/app/")) && value !== "local_extension";
   const [isOpen, setIsOpen] = useState(false);
   const [isMounted, setIsMounted] = useState(false);
   const [menuPosition, setMenuPosition] = useState<MenuPosition | null>(null);
@@ -122,7 +131,14 @@ export function ScanFromSelect({
     : true;
   const showLocalV2RunViaLambdaOption =
     process.env.NODE_ENV !== "production" && includeLocalV2ScanProfileOption && allowRestrictedScanOptions;
-  const hasVisibleMenuContent = includeScanFromOptions || includeFreshRescanOption || showLocalV2RunViaLambdaOption;
+  const hasVisibleMenuContent = includeScanFromOptions || includeFreshRescanOption || showLocalV2RunViaLambdaOption || showCrawl;
+
+  useEffect(() => {
+    if (!showCrawl && crawl) {
+      setCrawl(undefined);
+      onFullSiteChange?.(undefined);
+    }
+  }, [showCrawl, crawl, onFullSiteChange]);
 
   useEffect(() => {
     setIsMounted(true);
@@ -252,12 +268,14 @@ export function ScanFromSelect({
           {variant === "field" ? <span>{selectedOption.label}</span> : null}
         </button>
       ) : null}
-      {isOpen && isMounted
+      {showCrawl && crawl ? <><input type="hidden" name="fullSite" value="true" />{Object.entries(crawl.crawlOptions).map(([key, val]) => <input key={key} type="hidden" name={key} value={String(val)} />)}</> : null}
+      {isMounted
         ? createPortal(
             <div
               className="fixed z-[1000] isolate overflow-y-auto rounded-2xl border border-slate-200 bg-white py-1.5 shadow-[0_18px_46px_rgba(15,23,42,0.16)]"
               ref={menuRef}
               style={{
+                display: isOpen ? undefined : "none",
                 left: menuPosition?.left ?? 16,
                 maxHeight: menuPosition?.maxHeight ?? 320,
                 top: menuPosition?.top ?? 16,
@@ -301,9 +319,10 @@ export function ScanFromSelect({
                   </div>
                 </div>
               ) : null}
-              {includeFreshRescanOption || showLocalV2RunViaLambdaOption ? (
+              {includeFreshRescanOption || showLocalV2RunViaLambdaOption || showCrawl ? (
                 <div className={includeScanFromOptions ? "border-t border-slate-200/70 pt-1" : "pb-1"}>
                   <div className="px-3 pb-1.5 pt-1 text-[0.65rem] font-semibold uppercase tracking-[0.18em] text-slate-400">Options</div>
+                  {showCrawl ? <FullSiteControls onChange={next => { setCrawl(next); onFullSiteChange?.(next); }} /> : null}
                   {showLocalV2RunViaLambdaOption ? (
                     <label
                       className="flex w-full cursor-pointer items-center justify-between gap-4 px-3 py-2.5 text-left transition hover:bg-slate-50"

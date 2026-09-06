@@ -22,7 +22,7 @@ const fields = [
   ],
   [
     "waitSeconds",
-    "Wait",
+    "Between page starts",
     "Minimum seconds between starting page scans. Running scans may overlap up to the concurrency limit.",
   ],
 ] as const;
@@ -80,6 +80,7 @@ export function FullSiteControls({
       setErrors({});
       if (valid.fullSite) onChange?.(valid);
     } catch (error) {
+      onChange?.({ fullSite: true, crawlOptions: options });
       setErrors({
         [(error as { field?: string }).field ?? "fullSite"]: (error as Error)
           .message,
@@ -88,7 +89,7 @@ export function FullSiteControls({
   }
   if (!policy) return null;
   return (
-    <fieldset className="rounded-xl border border-slate-200 bg-white p-4 text-left text-slate-900">
+    <fieldset className="border-b border-slate-100 bg-white px-3 py-2 text-left text-slate-900">
       <label
         className="flex items-center gap-2 font-semibold"
         htmlFor={`${id}-enabled`}
@@ -96,7 +97,7 @@ export function FullSiteControls({
         <input
           id={`${id}-enabled`}
           type="checkbox"
-          name="fullSite"
+          role="switch"
           value="true"
           checked={selected}
           onChange={(event) => update(event.target.checked)}
@@ -108,7 +109,7 @@ export function FullSiteControls({
         additional public pages.
       </p>
       {selected ? (
-        <div className="mt-4 grid gap-4 sm:grid-cols-3">
+        <div className="mt-3 grid gap-2">
           {fields.map(([key, label, helper]) => (
             <div key={key}>
               <label
@@ -119,9 +120,9 @@ export function FullSiteControls({
                 {key === "waitSeconds" ? " (seconds)" : ""}
               </label>
               <input
-                className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2"
+                className="mt-1 w-full rounded-lg border border-slate-300 px-2 py-1 text-sm"
                 id={`${id}-${key}`}
-                name={key}
+
                 type="number"
                 min={policy[key].min}
                 max={policy[key].max}

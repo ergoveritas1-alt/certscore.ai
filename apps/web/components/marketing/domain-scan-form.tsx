@@ -1,6 +1,6 @@
 "use client";
 
-import { FullSiteControls, type FullSiteFormValue } from "../scans/full-site-controls";
+import { type FullSiteFormValue } from "../scans/full-site-controls";
 import { Button, Input } from "@website-signal-risk-scanner/ui";
 import { usePathname, useRouter } from "next/navigation";
 import { type FormEvent, useEffect, useRef, useState } from "react";
@@ -951,7 +951,6 @@ export function DomainScanForm({
 
   return (
     <form className={compact ? "space-y-2" : "space-y-4"} onSubmit={(event) => void handleSubmit(event)}>
-      {mode === "full" && scanFrom !== "local_extension" ? <FullSiteControls onChange={setCrawlInput} /> : null}
       <div className="space-y-2">
         <div className="relative z-30">
           <Input
@@ -981,6 +980,8 @@ export function DomainScanForm({
               ? `absolute ${isSubmitting ? "right-[8.5rem]" : "right-[5.9rem]"} top-1/2 z-10 -translate-y-1/2`
               : `absolute ${isSubmitting ? "right-[10.25rem]" : "right-[8rem]"} top-1/2 -translate-y-1/2`}>
               <ScanFromSelect
+                includeFullSiteOption
+                onFullSiteChange={setCrawlInput}
                 allowRestrictedScanOptions={allowRestrictedScanOptions}
                 compact={compact}
                 freshRescanValue={freshRescan}

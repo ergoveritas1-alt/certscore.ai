@@ -1,3 +1,4 @@
+import { describeSiteTechnology } from "@certscore/contracts";
 import { FullSiteWorkspace } from "../full-site-workspace";
 import type { ReactNode } from "react";
 import { reportCardTitle, reportEyebrow, reportSectionTitle } from "../report-typography";
@@ -1712,6 +1713,19 @@ function EvidenceDirectory({ report }: { report: ShadowReportData }) {
                 ))}
               </div>
             </details>
+            <section aria-label="Site metadata" className="border-b border-r border-zinc-200 p-5">
+              <h3 className="text-xs font-semibold uppercase text-zinc-500">Site metadata</h3>
+              <dl className="mt-3 grid grid-cols-2 gap-x-4 gap-y-3 text-sm">
+                {[
+                  ["Platform", describeSiteTechnology(report.siteMetadata?.observation).platform],
+                  ["Version", describeSiteTechnology(report.siteMetadata?.observation).version],
+                  ["Industry (estimated)", report.scan.benchmark],
+                  ["Language", report.siteMetadata?.observation.language || "Not captured"],
+                  ["Page title", report.siteMetadata?.observation.title || "Not captured"],
+                ].map(([label, value]) => <div key={label}><dt className="text-xs text-zinc-500">{label}</dt><dd className="mt-0.5 break-words font-medium">{value}</dd></div>)}
+              </dl>
+              <p className="mt-3 text-xs text-zinc-500">{report.siteMetadata ? "Technology is based on the page’s declarations and same-site asset paths. Versions are shown only when declared; this is not a software vulnerability check." : "Technology metadata was not retained for this scan. New homepage scans capture it automatically."}</p>
+            </section>
           </div>
           <div className="border-l border-t border-zinc-200">
             <details className="group/runtime border-b border-r border-zinc-200 p-5">

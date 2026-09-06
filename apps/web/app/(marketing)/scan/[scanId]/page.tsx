@@ -118,7 +118,8 @@ export default async function PublicScanDetailPage({ params, searchParams }: Pub
       scanId,
       sourceHash: readyReport.snapshot?.report_projection_source_hash ?? null,
     });
-    return <ShadowScanReport report={(await readFullSiteOptions()).allowed ? report : { ...report, fullSite: undefined }} variant="timeline" />;
+    if (report.fullSite && (await readFullSiteOptions()).allowed) redirect(`/app/scans/${scanId}`);
+    return <ShadowScanReport report={{ ...report, fullSite: undefined }} variant="timeline" />;
   }
 
   const statusStartedAt = performance.now();
@@ -155,5 +156,6 @@ export default async function PublicScanDetailPage({ params, searchParams }: Pub
     scanId,
     statusLoadMs,
   });
-  return <ShadowScanReport report={(await readFullSiteOptions()).allowed ? report : { ...report, fullSite: undefined }} variant="timeline" />;
+  if (report.fullSite && (await readFullSiteOptions()).allowed) redirect(`/app/scans/${scanId}`);
+    return <ShadowScanReport report={{ ...report, fullSite: undefined }} variant="timeline" />;
 }

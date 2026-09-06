@@ -32,7 +32,7 @@ export async function sendScanCompletionEmail(
     const report = await dependencies.load(scanId);
     if (!report || report.summary.counts.pending)
       throw new Error("Terminal inventory unavailable.");
-    const reportUrl = new URL(`/scan/${scanId}`, config.appUrl);
+    const reportUrl = new URL(`/app/scans/${scanId}`, config.appUrl);
     if (
       process.env.NODE_ENV === "production" &&
       reportUrl.protocol !== "https:"

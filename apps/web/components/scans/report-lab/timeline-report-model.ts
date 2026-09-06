@@ -1,3 +1,4 @@
+import { siteMetadataProjectionSchema } from "@certscore/contracts";
 import { KNOWN_CMP_REGISTRY } from "@website-signal-risk-scanner/shared";
 import { acceptPathIncompleteReason } from "./accept-path-reason";
 import type { GdprEprivacyCoverageChecklistItem } from "../../../lib/scans/gdpr-eprivacy-coverage-checklist";
@@ -782,8 +783,10 @@ export function buildTimelineReportModel(scanRecord: ScanDetailResponse): Shadow
 
   const scanConfig = record(scanRecord.scan.scanConfigJson);
   const crawlOptions = record(scanConfig?.crawlOptions);
+  const metadata = siteMetadataProjectionSchema.safeParse(record(scanRecord.runtimeArtifacts)?.siteMetadata);
   return {
     ...(scanConfig?.fullSite === true && crawlOptions ? { fullSite: { maxPages: Number(crawlOptions.maxPages), concurrency: Number(crawlOptions.concurrency), waitSeconds: Number(crawlOptions.waitSeconds) } } : {}),
+    siteMetadata: metadata.success ? metadata.data : null,
     collectionFields,
     runtimeEvidenceGraph: inventoryProjection.runtimeEvidenceGraph,
     collectionLimitations: canonical.collectionSurfaceAssessment?.limitationKeys.map(displayLabel) ?? [],

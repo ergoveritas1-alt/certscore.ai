@@ -4032,3 +4032,25 @@ function consentObservation(scenario: ConsentFlowObservation["scenario"]): Conse
     sourceScanner: "consent_flow_runtime",
   };
 }
+
+test("runtime site metadata survives lane merge without entering consent DOM evidence", () => {
+  const id = "metadata-lane-test";
+  const snapshot = {
+    artifactId: "runtime-metadata", capturedAtMs: 100, path: "/tmp/runtime-dom.txt", url: "https://example.com/",
+    documentIdentity: { source: "cdp_loader_id" as const, token: "runtime-document" },
+    pagePhase: "network_idle" as const, consentStateAtTime: "pre_consent" as const,
+    siteMetadata: { contractVersion: "certscore.site-metadata.v1" as const, title: "Example", language: "en", generators: ["WordPress 6.8.2"], wordpressAssetObserved: true },
+  };
+  const merged = mergeLocalV2DagLambdaEvidenceLaneBundles({
+    artifactRoot: "/tmp/metadata-lanes", scanId: id,
+    consentProof: canonicalBundleFixture(id), policyEvidence: canonicalBundleFixture(id),
+    runtimeEvidence: canonicalBundleFixture(id, {
+      domSnapshots: [snapshot],
+      runtimeCoverage: { coverageStatus: "usable", fallbackModesUsed: [], limitationKeys: [], notes: [], silentEmpty: false,
+        observationCounts: { cookieEvents: 0, cookiesBeforeConsent: 0, networkEvents: 1, normalizedVendors: 0, observedJourneys: 0, thirdPartyRequests: 0 } },
+    }),
+  });
+  assert.equal(merged.runtimeMetadataSnapshots?.[0]?.siteMetadata?.generators[0], "WordPress 6.8.2");
+  assert.deepEqual(merged.domSnapshots, []);
+  assert.deepEqual(merged.consentUiObservations, []);
+});

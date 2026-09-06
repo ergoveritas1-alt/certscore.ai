@@ -4203,6 +4203,8 @@ export function mergeLocalV2DagLambdaEvidenceLaneBundles(input: {
     transportSecurityObservations,
     screenshots: consentProof.screenshots,
     domSnapshots: consentProof.domSnapshots,
+    // Runtime descriptive metadata must not replace consent-owned DOM evidence.
+    runtimeMetadataSnapshots: runtimeEvidence.domSnapshots.filter(row => row.siteMetadata).slice(0, 1),
     normalizedVendorObservations: runtimeEvidence.normalizedVendorObservations,
     observedJourneys: runtimeEvidence.observedJourneys,
     artifactRefs,
