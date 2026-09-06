@@ -1,4 +1,5 @@
 import "server-only";
+import { classifyCrawlInventoryResource } from "../../lib/scans/full-site-inventory-classification";
 import {
   aggregateFullSite,
   robotsRestrictionMessage,
@@ -74,6 +75,9 @@ export async function loadFullSiteReport(
       : null,
   }));
   const aggregate = aggregateFullSite(state, pages);
+  const additionalServiceIds = new Set(aggregate.resources.filter(row => row.occurrence.kind === "service" && row.homepage === "not_observed").map(row => row.occurrence.serviceId).filter(Boolean));
+  const inventoryClassification = (row: (typeof aggregate.resources)[number]) =>
+    row.occurrence.kind !== "embed" && row.purposes.length > 1 ? "Review" : classifyCrawlInventoryResource(row.occurrence);
   const kind = (params.get("kind") ?? "service") as CrawlOccurrence["kind"];
   const q = (params.get("q") ?? "").toLowerCase().slice(0, 200),
     pageFilter = params.get("page"),
@@ -98,7 +102,7 @@ export async function loadFullSiteReport(
       : values.length === 1 && values[0] === filter);
   let resources = aggregate.resources.filter(
     (row) =>
-      row.occurrence.kind === kind &&
+      (kind === "cookie" ? ["cookie", "storage"].includes(row.occurrence.kind) : row.occurrence.kind === kind) &&
       row.pageIds.some((id) => allowedPages.has(id)) &&
       (!additional || row.homepage === "not_observed") &&
       matchesCategory(row.purposes, params.get("purpose")) &&
@@ -238,11 +242,11 @@ export async function loadFullSiteReport(
     const counts = new Map<string, number>();
     for (const row of inventoryRows) {
       const values = row[field];
-      const label = values.length > 1 ? "mixed" : values[0] || (field === "assessments" ? "Not assessed" : "unknown");
+      const label = field === "assessments" ? inventoryClassification(row) : values.length > 1 ? "mixed" : values[0] || "unknown";
       counts.set(label, (counts.get(label) ?? 0) + 1);
     }
     return [...counts].map(([label, count]) => ({ label, count }))
-      .sort((a, b) => b.count - a.count || a.label.localeCompare(b.label));
+      .sort((a, b) => Number(a.label.toLowerCase() === "unknown") - Number(b.label.toLowerCase() === "unknown") || b.count - a.count || a.label.localeCompare(b.label));
   };
   const detailId = params.get("detailPage"),
     resourceKey = params.get("resource");
@@ -301,7 +305,7 @@ export async function loadFullSiteReport(
   return {
     summary: { ...aggregate, resources: undefined },
     resources: {
-      rows: resources.slice(offset, offset + limit),
+      rows: resources.slice(offset, offset + limit).map(row => ({ ...row, inventoryEvidence: inventoryClassification(row), serviceOnlyAdditional: !!row.occurrence.serviceId && additionalServiceIds.has(row.occurrence.serviceId) })),
       total: resources.length,
       offset,
       limit,
@@ -350,6 +354,13 @@ export async function loadFullSiteReport(
         ),
       ].sort(),
     },
+    resourceGroups: Object.fromEntries(["cookie", "request", "embed"].map(kind => {
+      const rows = aggregate.resources.filter(row => kind === "cookie" ? ["cookie", "storage"].includes(row.occurrence.kind) : row.occurrence.kind === kind);
+      return [kind, {
+        services: new Set(rows.map(row => row.occurrence.serviceId).filter(Boolean)).size,
+        additionalServices: new Set(rows.filter(row => !!row.occurrence.serviceId && additionalServiceIds.has(row.occurrence.serviceId)).map(row => row.occurrence.serviceId).filter(Boolean)).size,
+      }];
+    })),
     inventoryMix: {
       evidence: inventoryBreakdown("assessments"),
       purpose: inventoryBreakdown("purposes"),

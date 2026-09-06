@@ -26,7 +26,7 @@ type Filters = {
   pageSort: string;
 };
 const initialFilters: Filters = {
-  kind: "service",
+  kind: "cookie",
   q: "",
   purpose: "",
   relationship: "",
@@ -41,11 +41,9 @@ const initialFilters: Filters = {
   pageSort: "url",
 };
 const units = {
-  service: "Services",
-  cookie: "Cookies",
+  cookie: "Cookies / storage",
   request: "Requests",
   embed: "Embeds",
-  storage: "Other storage",
 };
 const duration = (ms: number | null | undefined) =>
   ms === null || ms === undefined
@@ -305,7 +303,7 @@ export function FullSiteWorkspace({
           </p>
         ) : null}
       </header>
-          <div className="mt-3 grid grid-cols-3 gap-px overflow-hidden rounded-lg border border-zinc-200 bg-zinc-200 sm:grid-cols-6">
+          <div className="mt-3 grid grid-cols-2 gap-px border-y border-zinc-200 bg-zinc-200 sm:grid-cols-4">
             {[
               [
                 "Pages scanned",
@@ -313,13 +311,7 @@ export function FullSiteWorkspace({
                 "pages",
                 "",
               ],
-              [
-                "Services",
-                s?.totals.services,
-                "resources",
-                "service",
-              ],
-              ["Cookies", s?.totals.cookies, "resources", "cookie"],
+              ["Cookies / storage", s ? s.totals.cookies + s.totals.storage : null, "resources", "cookie"],
               [
                 "Requests",
                 s?.totals.requestEvents,
@@ -332,16 +324,10 @@ export function FullSiteWorkspace({
                 "resources",
                 "embed",
               ],
-              [
-                "Other-page services",
-                s?.totals.additionalServices,
-                "resources",
-                "additional",
-              ],
             ].map(([label, value, target, kind]) => (
               <button
                 key={String(label)}
-                className="min-w-0 bg-white px-3 py-2 text-left hover:bg-sky-50 focus-visible:outline focus-visible:outline-sky-600"
+                className="min-w-0 bg-white py-2 pr-3 text-left hover:bg-sky-50 focus-visible:outline focus-visible:outline-sky-600"
                 onClick={() =>
                   target === "pages"
                     ? (setTab("pages"),
@@ -361,6 +347,7 @@ export function FullSiteWorkspace({
                 <strong className="block text-lg leading-6 tabular-nums">
                   {typeof value === "number" ? value.toLocaleString() : "—"}
                 </strong>
+                {data?.resourceGroups[String(kind)] ? <span className="block text-xs text-zinc-500">{data.resourceGroups[String(kind)]?.services} services · {data.resourceGroups[String(kind)]?.additionalServices} on additional pages</span> : null}
               </button>
             ))}
           </div>
@@ -386,14 +373,14 @@ export function FullSiteWorkspace({
           </button>
         ))}
       </nav>
-      <div hidden={tab !== "homepage"} id="homepage-audit" className="[&_.mx-auto]:!max-w-none [&_.mx-auto]:!px-0">
+      <div hidden={tab !== "homepage"} id="homepage-audit" className="[&_.mx-auto]:!max-w-none [&_.mx-auto]:!px-0 [&_.p-5]:!px-0">
         {children}
       </div>
       {tab !== "homepage" ? (
         <>
           <p className="mb-2 text-xs text-zinc-600">{tab === "resources" ? "Inventory combines resources across all scanned pages." : "Pages shows the resources and coverage retained for each URL."} Additional pages receive inventory checks only; scores and findings belong to the homepage.</p>
           {data && tab === "resources" ? <SitewideInventorySummary mix={data.inventoryMix} /> : null}
-          <section className="min-w-0 rounded-xl border border-zinc-200 bg-white p-4 sm:p-5">
+          <section className="min-w-0 border-y border-zinc-200 bg-white py-4">
             <div className="mb-4 flex flex-wrap gap-2">
               {tab === "resources" ? (
                 Object.entries(units).map(([kind, label]) => (
@@ -429,7 +416,7 @@ export function FullSiteWorkspace({
               <table className="w-full text-left text-xs">
                 <caption className="sr-only">
                   {tab === "pages" ? "Page observations" : "Resource evidence"};
-                  additional-page assessments were not performed.
+                  additional pages receive inventory classification, not full diagnostic audits.
                 </caption>
                 {tab === "pages" ? (
                   <>
@@ -455,7 +442,7 @@ export function FullSiteWorkspace({
                     <tbody>
                       {data?.pages.rows.map((page) => (
                         <tr key={page.id} className="h-14 border-b border-zinc-100">
-                          <td className="max-w-[260px] px-3 py-2">
+                          <td className="max-w-[260px] py-2 pr-3">
                             <button
                               className="block w-full truncate text-left text-sky-800 hover:underline"
                               onClick={() => openPage(page.id)}
@@ -501,7 +488,7 @@ export function FullSiteWorkspace({
                           "Counting unit",
                           "Homepage",
                         ].map((h) => (
-                          <th className="border-b p-3" key={h}>
+                          <th className="border-b p-3 first:pl-0" key={h}>
                             {h}
                           </th>
                         ))}
@@ -510,15 +497,15 @@ export function FullSiteWorkspace({
                     <tbody>
                       {data?.resources.rows.map((row) => (
                         <tr className="h-14 border-b border-zinc-100" key={row.key}>
-                          <td className="max-w-[260px] px-3 py-2">
+                          <td className="max-w-[260px] py-2 pr-3">
                             <button
                               className="block w-full truncate text-left font-medium text-sky-800 hover:underline"
                               onClick={() => openResource(row.key)}
                             >
-                              <span className="flex items-center gap-2"><VendorBrandIcon label={row.occurrence.label} /><span className="truncate">{row.occurrence.label}</span></span>
+                              <span className="flex items-center gap-2"><VendorBrandIcon label={row.occurrence.vendor ?? row.occurrence.label} /><span className="truncate">{row.occurrence.label}</span></span>
                             </button>
                             <span className="text-xs text-zinc-500">
-                              {row.occurrence.vendor ?? "Unclassified vendor"}
+                              {row.occurrence.vendor ?? "Unclassified vendor"}{row.serviceOnlyAdditional ? " · Service seen on additional pages" : ""}
                             </span>
                           </td>
                           <td className="p-3">
@@ -528,7 +515,7 @@ export function FullSiteWorkspace({
                             </span>
                           </td>
                           <td className="p-3 text-xs">
-                            {row.assessments.join(", ")}
+                            {row.inventoryEvidence}
                             <span className="block">
                               Confidence: {row.confidences.join(", ")}
                             </span>
@@ -566,7 +553,7 @@ export function FullSiteWorkspace({
             <section
               ref={detailRef}
               tabIndex={-1}
-              className="mt-6 rounded-xl border-2 border-sky-200 bg-white p-5"
+              className="mt-6 border-y-2 border-sky-200 bg-white py-5"
               aria-label="Page-specific inventory evidence"
             >
               <div className="flex justify-between gap-4">
