@@ -525,7 +525,8 @@ function InventoryConfidenceCell({ confidence }: { confidence: InventoryConfiden
   );
 }
 
-function InventoryTypeIcon({ emphasized = false, type }: { emphasized?: boolean; type: "cookie" | "tracker" }) {
+function InventoryTypeIcon({ emphasized = false, type }: { emphasized?: boolean; type: "cookie" | "tracker" | "embed" }) {
+  if (type === "embed") return <span aria-label="Embed or iframe" title="Embed or iframe" className="inline-flex h-5 w-5 items-center justify-center text-violet-700">▣</span>;
   if (type === "cookie") {
     return (
       <span
@@ -848,7 +849,7 @@ function buildRuntimeInventoryCopyPayload(rows: InventoryGroupRow[]) {
   const copyRows = [
     ["Type", "Vendor", "Name", "Purpose", "Evidence", "First seen", "Requests", "Domain", "Destination", "Confidence", "Relationship", "Category", "Priority"],
     ...rows.map((row) => [
-      row.type === "cookie" ? "Cookie" : "Tracker",
+      row.type === "embed" ? "Embed / iframe" : row.type === "cookie" ? "Cookie" : "Tracker",
       row.vendor,
       getInventoryObservationNames(row).join(", ") || "—",
       getInventoryPurposeLabel(row),
@@ -1109,7 +1110,7 @@ export function RuntimeInventoryTable({
                   <div className="min-w-0 text-right text-slate-700"><InventoryNameCell row={row} /></div>
                 </div>
                 <div className="mt-2 grid grid-cols-2 gap-x-3 gap-y-1 text-[11px] text-slate-500">
-                  <span>{row.type === "cookie" ? "Cookie" : "Tracker"}</span>
+                  <span>{row.type === "embed" ? "Embed / iframe" : row.type === "cookie" ? "Cookie" : "Tracker"}</span>
                   <span className="text-right"><InventoryEvidenceCell row={row} /></span>
                   <span>{formatInventoryTiming(row)}</span>
                   <span className="text-right">Req. {row.requestCount ?? "—"}</span>
@@ -1727,8 +1728,8 @@ export function buildExecutiveTimelineEvents(
   ];
   const embeddedSummary = getRecord(hybrid.embeddedContentSummary) ?? getRecord(hybrid.embedded_content_summary);
   const iframeSummary = getRecord(hybrid.iframeSummary) ?? getRecord(hybrid.iframe_summary);
-  const embeddedRows = [
-    ...getRecordObjectArray(embeddedSummary, "observations"),
+  const summarizedEmbeddedRows = getRecordObjectArray(embeddedSummary, "observations");
+  const embeddedRows = summarizedEmbeddedRows.length ? summarizedEmbeddedRows : [
     ...getRecordObjectArray(iframeSummary, "iframeEvents"),
     ...getRecordObjectArray(iframeSummary, "iframe_events")
   ];
@@ -1743,7 +1744,7 @@ export function buildExecutiveTimelineEvents(
   const firstCookieRow = firstTimelineRow(cookieRows, () => true);
   const firstAdRow = firstTimelineRow(requestRows, (row) => /advertising|adtech|retargeting|marketing/i.test(String(row.category ?? row.vendorCategory ?? row.vendor_category ?? row.classification ?? "")));
   const firstAnalyticsRow = firstTimelineRow(requestRows, (row) => /analytics|measurement/i.test(String(row.category ?? row.vendorCategory ?? row.vendor_category ?? "")));
-  const firstEmbeddedRow = firstTimelineRow(embeddedRows, (row) => row.preConsent !== false && row.pre_consent !== false);
+  const embeddedVendors = new Set(embeddedRows.map(getTimelineVendorLabel));
   const sessionReplaySummary =
     getRecord(hybrid.sessionReplayEvidenceSummary) ?? getRecord(hybrid.session_replay_evidence_summary);
   const fingerprintingChecklistRow = gdprEprivacyChecklist.find(
@@ -1775,7 +1776,7 @@ export function buildExecutiveTimelineEvents(
     if (!Number.isFinite(event.atMs) || event.atMs < 0) {
       return;
     }
-    if (events.some((existing) => existing.label === event.label)) {
+    if (events.some((existing) => existing.label === event.label && existing.vendorLabel === event.vendorLabel)) {
       return;
     }
     events.push(event);
@@ -1859,14 +1860,17 @@ export function buildExecutiveTimelineEvents(
       : "Device-signal review",
     tone: "rose"
   });
-  pushEvent({
-    atMs: embeddedEvidenceObserved
-      ? firstTimelineMsFromRows(embeddedRows, (row) => row.preConsent !== false && row.pre_consent !== false) ?? -1
-      : -1,
-    label: "Embedded content",
-    tone: "amber",
-    vendorLabel: getTimelineVendorLabel(firstEmbeddedRow)
-  });
+  for (const vendorLabel of embeddedVendors) {
+    const vendorRows = embeddedRows.filter(row => getTimelineVendorLabel(row) === vendorLabel);
+    pushEvent({
+      atMs: embeddedEvidenceObserved
+        ? firstTimelineMsFromRows(vendorRows, row => row.preConsent !== false && row.pre_consent !== false) ?? -1
+        : -1,
+      label: "Embedded content",
+      tone: "amber",
+      vendorLabel
+    });
+  }
 
   return events.sort((left, right) => left.atMs - right.atMs).slice(0, 8);
 }

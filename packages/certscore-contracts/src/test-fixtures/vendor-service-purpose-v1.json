@@ -1,0 +1,38 @@
+[
+  {
+    "url": "https://www.google.com/maps/embed?pb=redacted",
+    "resourceTypes": ["request", "iframe"],
+    "observation": {
+      "observationId": "maps-fixture", "entity": "Google LLC", "vendor": "Google",
+      "product": "Google Maps embed", "purpose": "infrastructure", "servicePurpose": "Embedded maps",
+      "confidence": 0.97, "basis": ["google_maps_embed_endpoint"], "matchedEvidenceIds": ["maps-evidence"]
+    }
+  },
+  {
+    "url": "https://www.facebook.com/plugins/page.php?href=redacted",
+    "resourceTypes": ["request", "iframe"],
+    "observation": {
+      "observationId": "facebook-fixture", "entity": "Meta Platforms, Inc.", "vendor": "Facebook",
+      "product": "Facebook Page Plugin", "purpose": "infrastructure", "servicePurpose": "Social media embed",
+      "confidence": 0.97, "basis": ["facebook_page_plugin_endpoint"], "matchedEvidenceIds": ["facebook-evidence"]
+    }
+  },
+  {
+    "url": "https://fonts.googleapis.com/css?family=Lato",
+    "resourceTypes": ["request"],
+    "observation": {
+      "observationId": "fonts-fixture", "entity": "Google LLC", "vendor": "Google",
+      "product": "Google Fonts", "purpose": "infrastructure", "servicePurpose": "Font delivery",
+      "confidence": 0.97, "basis": ["google_fonts_endpoint"], "matchedEvidenceIds": ["fonts-evidence"]
+    }
+  },
+  {
+    "url": "https://example.test/wp-content/plugins/bst-dsgvo-cookie/includes/js/scripts.js",
+    "resourceTypes": ["request"],
+    "observation": {
+      "observationId": "bst-fixture", "entity": "BST DSGVO Cookie", "vendor": "BST DSGVO Cookie",
+      "product": "BST DSGVO Cookie notice plugin, non-TCF", "purpose": "consent_management", "servicePurpose": "Consent management",
+      "confidence": 0.98, "basis": ["bst_dsgvo_cookie_notice_runtime"], "matchedEvidenceIds": ["bst-evidence"]
+    }
+  }
+]

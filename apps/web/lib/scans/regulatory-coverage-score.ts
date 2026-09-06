@@ -1,3 +1,5 @@
+import { readRejectClickTrackingAssessment } from "./reject-click-tracking-policy";
+
 type RegulatoryCoverageFramework = "california" | "gdpr_eprivacy";
 
 type RegulatoryCoverageRow = {
@@ -33,7 +35,7 @@ export type RegulatoryCoverageScore = {
 
 export const REGULATORY_COVERAGE_SCORE_SOURCE = "wc01.regulatory-coverage-score";
 export const CALIFORNIA_EVIDENCE_SCORE_VERSION = "california-evidence.legacy-v1";
-export const GDPR_EPRIVACY_EVIDENCE_SCORE_VERSION = "gdpr-eprivacy-posture.v12";
+export const GDPR_EPRIVACY_EVIDENCE_SCORE_VERSION = "gdpr-eprivacy-posture.v13";
 
 type GdprEprivacyRiskFamily =
   | "consent_controls"
@@ -459,6 +461,9 @@ function getGdprEprivacyRowDeduction(row: RegulatoryCoverageRow) {
       return policy.confirmedContradictionDeduction ?? policy.gapDeduction;
     }
     if (retained.scoreEffect === "none") return 0;
+    if (row.assessmentStatus === "review_signal" &&
+      retained.scoreEffect === "canonical_reject_click_tracking_policy" &&
+      readRejectClickTrackingAssessment(retained.rejectClickTrackingAssessment)) return policy.gapDeduction;
     if (row.assessmentStatus === "gap_observed") return policy.gapDeduction;
     return 0;
   }
@@ -511,7 +516,9 @@ function deriveGdprEprivacyPostureScore(rows: RegulatoryCoverageRow[]): Regulato
       policy.family,
       Math.min(
         GDPR_EPRIVACY_FAMILY_DEDUCTION_CAPS[policy.family],
-        (familyDeductions.get(policy.family) ?? 0) + deduction
+        policy.family === "post_refusal_enforcement"
+          ? Math.max(familyDeductions.get(policy.family) ?? 0, deduction)
+          : (familyDeductions.get(policy.family) ?? 0) + deduction
       )
     );
   }

@@ -1,4 +1,7 @@
 import { z } from "zod";
+import { actionStorageNameSchema, validateActionStorageName, validateLegacyActionStorageNames } from "./action-storage-name";
+import { afterActionCaptureSchema, validateAfterActionCapture, validateAfterActionProjection } from "./after-action-capture";
+import { actionCaptureCoverageSchema, consentDecisionEvidenceSchema, hasSemanticConsentWitness } from "./consent-action-evidence-policy";
 import { runtimeEvidenceGraphSchema, runtimeGraphVerificationDiagnosticSchema, withRuntimeGraphCompatibility, type RuntimeEvidenceGraph } from "./runtime-evidence-graph";
 const packetRuntimeGraphSchema: z.ZodType<RuntimeEvidenceGraph> = runtimeEvidenceGraphSchema;
 import { consentActionControlProofSchema } from "./consent-action-control-proof";
@@ -139,7 +142,7 @@ export const postRefusalNetworkRequestSchema = z.object({
 
 export const postRefusalStorageItemSchema = z.object({
   storageType: z.enum(["cookie", "local_storage", "session_storage"]),
-  name: z.string().min(1).max(180),
+  name: actionStorageNameSchema,
   hostname: z.string().max(255).optional(),
   identityBasis: z.enum([
     "cookie_name_domain_path_partition",
@@ -151,6 +154,7 @@ export const postRefusalStorageItemSchema = z.object({
   purpose: postRefusalNetworkRequestSchema.shape.purpose,
   nonEssential: z.boolean(),
 }).superRefine((item, context) => {
+  validateActionStorageName(item, context);
   if ((item.identityBasis === undefined) !== (item.identityHash === undefined)) {
     context.addIssue({
       code: z.ZodIssueCode.custom,
@@ -180,9 +184,9 @@ export const postRefusalStorageItemSchema = z.object({
   }
 });
 
-export const postRefusalStorageWriteSchema = z.object({
+export const postRefusalStorageWriteBaseSchema = z.object({
   storageType: z.enum(["cookie", "local_storage", "session_storage"]),
-  name: z.string().min(1).max(180),
+  name: actionStorageNameSchema,
   hostname: z.string().max(255).optional(),
   storageIdentityHash: z.string().regex(/^[a-f0-9]{64}$/).optional(),
   observedAtMs: z.number().int().nonnegative(),
@@ -192,6 +196,8 @@ export const postRefusalStorageWriteSchema = z.object({
   purpose: postRefusalNetworkRequestSchema.shape.purpose,
   nonEssential: z.boolean(),
 });
+
+export const postRefusalStorageWriteSchema = postRefusalStorageWriteBaseSchema.superRefine(validateActionStorageName);
 
 export const postRefusalTcfStateSchema = z.object({
   observedAtMs: z.number().int().nonnegative(),
@@ -418,7 +424,10 @@ export const postRefusalInteractionDiagnosticsSchema = z.object({
 const postRefusalEvidencePacketBaseSchema = z.object({
   runtimeEvidenceGraph: packetRuntimeGraphSchema.optional(),
   runtimeEvidenceGraphDiagnostics: z.array(runtimeGraphVerificationDiagnosticSchema).max(1).optional(),
-  artifactVersion: z.literal("certscore.post_refusal_evidence.v1"),
+  artifactVersion: z.enum(["certscore.post_refusal_evidence.v1", "certscore.post_refusal_evidence.v2"]),
+  afterActionCapture: afterActionCaptureSchema.optional(),
+  decisionEvidence: consentDecisionEvidenceSchema.optional(),
+  captureCoverage: actionCaptureCoverageSchema.optional(),
   artifactOnly: z.literal(true),
   productionProjectable: z.boolean(),
   scanId: z.string().min(1).max(160),
@@ -475,6 +484,32 @@ const postRefusalEvidencePacketBaseSchema = z.object({
   }),
   limitations: z.array(z.string().max(240)).max(24).default([]),
 }).superRefine((packet, context) => {
+  validateLegacyActionStorageNames(packet, context);
+  validateAfterActionCapture(packet.afterActionCapture, context, {
+    action: "reject", dispatchedAtMs: packet.refusalRegistration.actionDispatchedAtMs,
+    proof: packet.actionControlProof, clickOutcome: packet.interactionDiagnostics?.click.outcome,
+    navigationAuthorized: packet.interactionDiagnostics?.navigation.documentCommitted === true &&
+      packet.interactionDiagnostics.navigation.finalUrlAuthorized === true,
+    requests: packet.network.requests, requestsDropped: packet.captureCoverage?.requestsDroppedAfterAction,
+    postActionCapturedAtMs: packet.storage.postActionCapturedAtMs,
+    requestedWindowMs: packet.observationWindowMs, readyAtMs: packet.timing.readyAtMs,
+  });
+  if (packet.artifactVersion === "certscore.post_refusal_evidence.v2") {
+    const evidence = packet.decisionEvidence;
+    const registration = packet.refusalRegistration;
+    if (!evidence || !packet.captureCoverage || (registration.status === "confirmed" && (
+      evidence.decision !== "denied" || evidence.basis !== "verified_state" ||
+      evidence.observedAtMs !== registration.refusalRegisteredAtMs || !evidence.timestampBasis ||
+      !registration.witnesses.some((witness) => hasSemanticConsentWitness([witness]) &&
+        witness.observedStateHash === evidence.observedStateSha256 && witness.observedAtMs === evidence.observedAtMs)
+    ))) {
+      context.addIssue({ code: z.ZodIssueCode.custom, path: ["decisionEvidence"],
+        message: "V2 Reject evidence requires an independently verified, timestamp-bound denied decision and capture coverage." });
+    }
+    if (packet.productionProjectable && (packet.captureCoverage?.requestsDroppedAfterAction ?? 0) > 0) {
+      context.addIssue({ code: z.ZodIssueCode.custom, path: ["productionProjectable"], message: "Truncated post-action capture cannot be production-projectable." });
+    }
+  }
   const refusalRegisteredAtMs = packet.refusalRegistration.refusalRegisteredAtMs;
   const confirmed = packet.refusalRegistration.status === "confirmed" &&
     packet.refusalRegistration.refusalExercised &&
@@ -812,6 +847,7 @@ export const postRefusalLaneOutcomeSchema = z.object({
     "reject_control_not_observed",
     "reject_path_timeout",
     "reject_path_worker_failed",
+    "reject_path_incomplete_at_passive_barrier",
   ]).optional(),
 }).superRefine((outcome, context) => {
   if (outcome.status === "joined" && (!outcome.evidenceJoined || outcome.limitationCode)) {
@@ -928,6 +964,7 @@ const postRefusalResolverConfigSchema = z.discriminatedUnion("kind", [
   z.object({
     kind: z.literal("canonical_cmp_registry"),
     recipeSetId: z.enum([
+      "canonical-consent-control-reject-v23",
       "canonical-consent-control-reject-v8",
       "canonical-consent-control-reject-v9",
       "canonical-consent-control-reject-v15",
@@ -1056,14 +1093,20 @@ const postRefusalReportPersistedStorageRowSchema = z.object({
   category: postRefusalNetworkRequestSchema.shape.purpose,
   exactIdentityVerified: z.boolean(),
   hostname: z.string().max(255).optional(),
-  name: z.string().min(1).max(180),
+  name: actionStorageNameSchema,
+  storageIdentityHash: z.string().regex(/^[a-f0-9]{64}$/).optional(),
   nonEssential: z.literal(true),
   sameValueHashVerified: z.literal(true),
   storageType: z.enum(["cookie", "local_storage", "session_storage"]),
   vendor: z.string().max(160).optional(),
-});
+}).superRefine(validateActionStorageName);
 
 export const postRefusalReportProjectionSchema = z.object({
+  afterActionCapture: afterActionCaptureSchema.optional(),
+  afterActionRequests: z.array(postRefusalNetworkRequestSchema.omit({ inFlightAtRefusalRegistration: true, msOffsetFromRefusal: true })).max(96).optional(),
+  afterActionStorage: z.array(postRefusalStorageItemSchema).max(96).optional(),
+  decisionEvidence: consentDecisionEvidenceSchema.optional(),
+  captureCoverage: actionCaptureCoverageSchema.optional(),
   contractVersion: z.literal(POST_REFUSAL_REPORT_PROJECTION_VERSION),
   completedAt: z.string().datetime(),
   actionControlProof: consentActionControlProofSchema.optional(),
@@ -1089,6 +1132,20 @@ export const postRefusalReportProjectionSchema = z.object({
     "unsupported",
     "aborted",
   ]),
+}).superRefine((projection, context) => {
+  validateAfterActionProjection(projection.afterActionCapture, context, {
+    action: "reject", proof: projection.actionControlProof,
+    requests: projection.afterActionRequests, storage: projection.afterActionStorage,
+  });
+  const evidence = projection.decisionEvidence;
+  const coverage = projection.captureCoverage;
+  if (!evidence && !coverage) return; // Unchanged legacy projections stay readable.
+  if (!evidence || !coverage || (projection.refusalExercised && (
+    evidence.decision !== "denied" || evidence.basis !== "verified_state" ||
+    evidence.observedAtMs !== projection.refusalRegisteredAtMs
+  )) || (projection.productionProjectable && coverage.requestsDroppedAfterAction > 0)) {
+    context.addIssue({ code: z.ZodIssueCode.custom, message: "Action projection must preserve verified decision and capture-coverage invariants." });
+  }
 });
 
 export function projectPostRefusalEvidenceForReport(input: {
@@ -1096,6 +1153,15 @@ export function projectPostRefusalEvidenceForReport(input: {
   packetSha256?: string;
 }) {
   const packet = postRefusalEvidencePacketSchema.parse(input.packet);
+  if (packet.refusalRegistration.status === "confirmed" &&
+    !hasSemanticConsentWitness(packet.refusalRegistration.witnesses)) {
+    return projectPostRefusalEvidenceForReport({ ...input, packet: {
+      ...packet, productionProjectable: false, observations: [],
+      limitations: [...packet.limitations.slice(0, 23), "semantic_registration_unverified_legacy_packet"],
+      refusalRegistration: { ...packet.refusalRegistration, status: "unconfirmed",
+        refusalExercised: false, reason: "semantic_registration_unverified_legacy_packet" },
+    } });
+  }
   const confirmed = packet.refusalRegistration.status === "confirmed" &&
     packet.refusalRegistration.refusalExercised === true &&
     packet.refusalRegistration.refusalRegisteredAtMs !== undefined;
@@ -1166,6 +1232,7 @@ export function projectPostRefusalEvidenceForReport(input: {
           exactIdentityVerified: item.identityHash !== undefined,
           ...(item.hostname ? { hostname: item.hostname } : {}),
           name: item.name,
+          ...(item.name === "" ? { storageIdentityHash: item.identityHash } : {}),
           nonEssential: true as const,
           sameValueHashVerified: true as const,
           storageType: item.storageType,
@@ -1175,6 +1242,13 @@ export function projectPostRefusalEvidenceForReport(input: {
     : [];
 
   return postRefusalReportProjectionSchema.parse({
+    ...(packet.afterActionCapture ? {
+      afterActionCapture: packet.afterActionCapture,
+      afterActionRequests: packet.network.requests.filter((row) => packet.afterActionCapture!.requestIds.includes(row.requestId)),
+      afterActionStorage: packet.afterActionCapture.storageSnapshotRetained ? packet.storage.postAction : [],
+    } : {}),
+    ...(packet.decisionEvidence ? { decisionEvidence: packet.decisionEvidence } : {}),
+    ...(packet.captureCoverage ? { captureCoverage: packet.captureCoverage } : {}),
     contractVersion: POST_REFUSAL_REPORT_PROJECTION_VERSION,
     completedAt: packet.completedAt,
     ...(packet.actionControlProof ? { actionControlProof: packet.actionControlProof } : {}),

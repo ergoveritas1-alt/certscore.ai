@@ -1,4 +1,7 @@
 import { z } from "zod";
+import { validateActionStorageName, validateLegacyActionStorageNames } from "./action-storage-name";
+import { afterActionCaptureSchema, validateAfterActionCapture, validateAfterActionProjection } from "./after-action-capture";
+import { actionCaptureCoverageSchema, consentDecisionEvidenceSchema, hasSemanticConsentWitness } from "./consent-action-evidence-policy";
 import { runtimeEvidenceGraphSchema, runtimeGraphVerificationDiagnosticSchema, withRuntimeGraphCompatibility, type RuntimeEvidenceGraph } from "./runtime-evidence-graph";
 const packetRuntimeGraphSchema: z.ZodType<RuntimeEvidenceGraph> = runtimeEvidenceGraphSchema;
 import {
@@ -7,7 +10,7 @@ import {
   postRefusalNetworkRequestSchema,
   postRefusalResolverSchema,
   postRefusalStorageItemSchema,
-  postRefusalStorageWriteSchema,
+  postRefusalStorageWriteBaseSchema,
   postRefusalTcfStateSchema,
 } from "./post-refusal-observation";
 import { consentActionControlProofSchema } from "./consent-action-control-proof";
@@ -132,17 +135,20 @@ export const postAcceptNetworkRequestSchema = postRefusalNetworkRequestSchema.om
   msOffsetFromAccept: z.number().int().optional(),
 });
 
-export const postAcceptStorageWriteSchema = postRefusalStorageWriteSchema.omit({
+export const postAcceptStorageWriteSchema = postRefusalStorageWriteBaseSchema.omit({
   msOffsetFromRefusal: true,
 }).extend({
   identityHash: z.string().regex(/^[a-f0-9]{64}$/).optional(),
   msOffsetFromAccept: z.number().int().nonnegative(),
-});
+}).superRefine(validateActionStorageName);
 
 const postAcceptEvidencePacketBaseSchema = z.object({
+  afterActionCapture: afterActionCaptureSchema.optional(),
   runtimeEvidenceGraph: packetRuntimeGraphSchema.optional(),
   runtimeEvidenceGraphDiagnostics: z.array(runtimeGraphVerificationDiagnosticSchema).max(1).optional(),
-  artifactVersion: z.literal("certscore.post_accept_evidence.v1"),
+  artifactVersion: z.enum(["certscore.post_accept_evidence.v1", "certscore.post_accept_evidence.v2"]),
+  decisionEvidence: consentDecisionEvidenceSchema.optional(),
+  captureCoverage: actionCaptureCoverageSchema.optional(),
   artifactOnly: z.literal(true),
   productionProjectable: z.boolean(),
   scanId: z.string().min(1).max(160),
@@ -199,6 +205,32 @@ const postAcceptEvidencePacketBaseSchema = z.object({
   }),
   limitations: z.array(z.string().max(240)).max(24).default([]),
 }).superRefine((packet, context) => {
+  validateLegacyActionStorageNames(packet, context);
+  validateAfterActionCapture(packet.afterActionCapture, context, {
+    action: "accept", dispatchedAtMs: packet.acceptanceRegistration.actionDispatchedAtMs,
+    proof: packet.actionControlProof, clickOutcome: packet.interactionDiagnostics?.click.outcome,
+    navigationAuthorized: packet.interactionDiagnostics?.navigation.documentCommitted === true &&
+      packet.interactionDiagnostics.navigation.finalUrlAuthorized === true,
+    requests: packet.network.requests, requestsDropped: packet.captureCoverage?.requestsDroppedAfterAction,
+    postActionCapturedAtMs: packet.storage.postActionCapturedAtMs,
+    requestedWindowMs: packet.observationWindowMs, readyAtMs: packet.timing.readyAtMs,
+  });
+  if (packet.artifactVersion === "certscore.post_accept_evidence.v2") {
+    const evidence = packet.decisionEvidence;
+    const registration = packet.acceptanceRegistration;
+    if (!evidence || !packet.captureCoverage || (registration.status === "confirmed" && (
+      evidence.decision !== "granted" || evidence.basis !== "verified_state" ||
+      evidence.observedAtMs !== registration.acceptanceRegisteredAtMs || !evidence.timestampBasis ||
+      !registration.witnesses.some((witness) => hasSemanticConsentWitness([witness]) &&
+        witness.observedStateHash === evidence.observedStateSha256 && witness.observedAtMs === evidence.observedAtMs)
+    ))) {
+      context.addIssue({ code: z.ZodIssueCode.custom, path: ["decisionEvidence"],
+        message: "V2 Accept evidence requires an independently verified, timestamp-bound granted decision and capture coverage." });
+    }
+    if (packet.productionProjectable && (packet.captureCoverage?.requestsDroppedAfterAction ?? 0) > 0) {
+      context.addIssue({ code: z.ZodIssueCode.custom, path: ["productionProjectable"], message: "Truncated post-action capture cannot be production-projectable." });
+    }
+  }
   const acceptedAtMs = packet.acceptanceRegistration.acceptanceRegisteredAtMs;
   const confirmed = packet.acceptanceRegistration.status === "confirmed" &&
     packet.acceptanceRegistration.acceptanceExercised &&
@@ -280,6 +312,7 @@ export const postAcceptLaneOutcomeSchema = z.object({
     "accept_control_not_observed",
     "accept_path_timeout",
     "accept_path_worker_failed",
+    "accept_path_incomplete_at_passive_barrier",
   ]).optional(),
 }).superRefine((outcome, context) => {
   if (outcome.status === "joined" && (!outcome.evidenceJoined || outcome.limitationCode)) {
@@ -351,6 +384,7 @@ const postAcceptResolverConfigSchema = z.discriminatedUnion("kind", [
   z.object({
     kind: z.literal("canonical_cmp_registry"),
     recipeSetId: z.enum([
+      "canonical-consent-control-accept-v6",
       "canonical-consent-control-accept-v2",
       "canonical-consent-control-accept-v3",
     ]),
@@ -436,6 +470,11 @@ const postAcceptReportActivityRowSchema = z.object({
 });
 
 export const postAcceptReportProjectionSchema = z.object({
+  afterActionCapture: afterActionCaptureSchema.optional(),
+  afterActionRequests: z.array(postRefusalNetworkRequestSchema.omit({ inFlightAtRefusalRegistration: true, msOffsetFromRefusal: true })).max(96).optional(),
+  afterActionStorage: z.array(postRefusalStorageItemSchema).max(96).optional(),
+  decisionEvidence: consentDecisionEvidenceSchema.optional(),
+  captureCoverage: actionCaptureCoverageSchema.optional(),
   contractVersion: z.literal(POST_ACCEPT_REPORT_PROJECTION_VERSION),
   completedAt: z.string().datetime(),
   actionControlProof: consentActionControlProofSchema.optional(),
@@ -460,6 +499,20 @@ export const postAcceptReportProjectionSchema = z.object({
     "unsupported",
     "aborted",
   ]),
+}).superRefine((projection, context) => {
+  validateAfterActionProjection(projection.afterActionCapture, context, {
+    action: "accept", proof: projection.actionControlProof,
+    requests: projection.afterActionRequests, storage: projection.afterActionStorage,
+  });
+  const evidence = projection.decisionEvidence;
+  const coverage = projection.captureCoverage;
+  if (!evidence && !coverage) return; // Unchanged legacy projections stay readable.
+  if (!evidence || !coverage || (projection.acceptanceExercised && (
+    evidence.decision !== "granted" || evidence.basis !== "verified_state" ||
+    evidence.observedAtMs !== projection.acceptanceRegisteredAtMs
+  )) || (projection.productionProjectable && coverage.requestsDroppedAfterAction > 0)) {
+    context.addIssue({ code: z.ZodIssueCode.custom, message: "Action projection must preserve verified decision and capture-coverage invariants." });
+  }
 });
 
 export function projectPostAcceptEvidenceForReport(input: {
@@ -467,6 +520,16 @@ export function projectPostAcceptEvidenceForReport(input: {
   packetSha256?: string;
 }) {
   const packet = postAcceptEvidencePacketSchema.parse(input.packet);
+  if (packet.acceptanceRegistration.status === "confirmed" &&
+    !hasSemanticConsentWitness(packet.acceptanceRegistration.witnesses)) {
+    // Do not reinterpret or mutate stored legacy artifacts; project them neutrally.
+    return projectPostAcceptEvidenceForReport({ ...input, packet: {
+      ...packet, productionProjectable: false, observations: [],
+      limitations: [...packet.limitations.slice(0, 23), "semantic_registration_unverified_legacy_packet"],
+      acceptanceRegistration: { ...packet.acceptanceRegistration, status: "unconfirmed",
+        acceptanceExercised: false, reason: "semantic_registration_unverified_legacy_packet" },
+    } });
+  }
   const confirmed = packet.acceptanceRegistration.status === "confirmed" &&
     packet.acceptanceRegistration.acceptanceExercised === true &&
     packet.acceptanceRegistration.acceptanceRegisteredAtMs !== undefined;
@@ -518,6 +581,13 @@ export function projectPostAcceptEvidenceForReport(input: {
     : [];
 
   return postAcceptReportProjectionSchema.parse({
+    ...(packet.afterActionCapture ? {
+      afterActionCapture: packet.afterActionCapture,
+      afterActionRequests: packet.network.requests.filter((row) => packet.afterActionCapture!.requestIds.includes(row.requestId)),
+      afterActionStorage: packet.afterActionCapture.storageSnapshotRetained ? packet.storage.postAction : [],
+    } : {}),
+    ...(packet.decisionEvidence ? { decisionEvidence: packet.decisionEvidence } : {}),
+    ...(packet.captureCoverage ? { captureCoverage: packet.captureCoverage } : {}),
     contractVersion: POST_ACCEPT_REPORT_PROJECTION_VERSION,
     completedAt: packet.completedAt,
     ...(packet.actionControlProof ? { actionControlProof: packet.actionControlProof } : {}),

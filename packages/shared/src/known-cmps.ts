@@ -59,6 +59,13 @@ export type KnownCmpActionCapability = {
 };
 
 export type KnownCmpDefinition = {
+  /** Reviewed contextual approval labels may activate only this exact named
+   * first-layer scope. This is control proof, never semantic consent proof. */
+  acceptContextualApproval?: {
+    policyVersion: "registered_contextual_accept.v1";
+    bannerSelector: string;
+    expectedNormalizedLabel: string;
+  };
   acceptConfirmation?: KnownCmpActionConfirmation;
   acceptControlSelectors?: string[];
   acceptControlTargets?: KnownCmpControlTarget[];
@@ -509,11 +516,30 @@ export const KNOWN_CMP_REGISTRY: KnownCmpDefinition[] = [
     urlPatterns: [/dsgvo-all-in-one/i, /dsgvoaio/i, /tarteaucitron(?:\.min)?\.js/i]
   },
   {
+    acceptContextualApproval: {
+      policyVersion: "registered_contextual_accept.v1",
+      bannerSelector: ".bst-panel",
+      expectedNormalizedLabel: "verstanden",
+    },
+    // The plugin's receipt (bst_dsgvo_cookie=1) means acknowledgment, not
+    // consent granted. Only independently decoded state may confirm consent.
+    acceptConfirmation: {
+      kind: "canonical_first_layer_ui_transition",
+      bannerSelector: ".bst-panel",
+      controlSelector: ".bst-panel .bst-accept, .bst-panel .bst-accept-btn",
+    },
+    acceptControlSelectors: [".bst-panel .bst-accept", ".bst-panel .bst-accept-btn"],
     aliases: ["BST DSGVO Cookie", "bst-dsgvo-cookie"],
     canonicalName: "BST DSGVO Cookie notice plugin, non-TCF",
+    cookieNames: ["bst_dsgvo_cookie"],
     domains: [],
-    domSelectors: [".bst-popup-link"],
+    domSelectors: [".bst-panel", ".bst-popup-link"],
     evidenceTreatment: "cmp_infrastructure",
+    interactionDocumentationUrls: [
+      "https://plugins.svn.wordpress.org/bst-dsgvo-cookie/trunk/bst.php",
+      "https://plugins.svn.wordpress.org/bst-dsgvo-cookie/trunk/includes/js/scripts.js",
+    ],
+    recipeVersion: "v2",
     role: "consent management platform",
     standards: [],
     urlPatterns: [

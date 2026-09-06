@@ -1,4 +1,5 @@
 import { finishOptionalRuntimeGraph, installRuntimeGraphCapture } from "./runtime-evidence-graph-capture.js";
+import { finishAfterActionWindow } from "./after-action-capture.js";
 import {
   postRefusalEvidencePacketSchema,
   type ConsentActionControlProof,
@@ -11,7 +12,7 @@ import {
   type PostRefusalStorageWrite,
   type PostRefusalTcfState,
 } from "@certscore/contracts";
-import { resolveVendorObservations } from "@certscore/vendor-resolver";
+import { resolveCanonicalVendor } from "@certscore/vendor-resolver";
 import {
   detectKnownCmps,
   KNOWN_CMP_REGISTRY,
@@ -54,7 +55,8 @@ import {
   type CmpAccessibleActionResolution,
 } from "./cmp-accessible-action.js";
 import { readCmpApiConsentSnapshot } from "./cmp-api-consent-state.js";
-import { buildConsentActionControlProof } from "./cmp-action-control-proof.js";
+import { assertConsentActionDispatchAllowed, buildConsentActionControlProof } from "./cmp-action-control-proof.js";
+import { matchingStateWriteTime, readActionStateWrites, verifiedCanonicalStateWrite, verifiedCookieDecision, type SemanticState } from "./consent-action-semantic-state.js";
 import { matchesCanonicalCmpCookieName } from "./cmp-cookie-name.js";
 import {
   cmpRecipeRequiresViewportHitTarget,
@@ -73,6 +75,8 @@ const POST_REFUSAL_SOURCE = "post_refusal_observer";
 const DEFAULT_OBSERVATION_WINDOW_MS = 8_000;
 const DEFAULT_CONFIRMATION_TIMEOUT_MS = 1_500;
 export const POST_REFUSAL_PRE_ACTION_BASELINE_MAX_AGE_MS = 250;
+/** Product-owner approved: bounded response settling, inside the existing window. */
+export const POST_REFUSAL_RESPONSE_SETTLE_MS = 250;
 const MAX_REQUESTS = 96;
 const MAX_POST_REGISTRATION_REQUESTS = 96;
 const MAX_STORAGE_ITEMS = 96;
@@ -160,6 +164,7 @@ export interface PostRefusalActionRecipe {
     | {
       kind: "canonical_reject_transition";
       controlSelector: string;
+      registeredStateKeys?: string[];
       controlFrameUrl?: string;
       bannerSelector: string;
       bannerFrameUrl?: string;
@@ -223,6 +228,8 @@ type CapturedRequest = {
 };
 
 type InstrumentedStorageWrite = {
+  deletion?: boolean;
+  value?: string;
   storageType: "cookie" | "local_storage" | "session_storage";
   name: string;
   observedAtEpochMs: number;
@@ -292,6 +299,7 @@ type RefusalConfirmationBaseline =
     };
 
 type RefusalConfirmationState = {
+  observedAtEpochMs?: number;
   stateHash: string;
   witnessType:
     | "cmp_storage_state"
@@ -379,6 +387,11 @@ export async function runPostRefusalObserver(
   let refusalRegisteredAtEpochMs: number | undefined;
   let selectedRecipe: PostRefusalActionRecipe | undefined;
   let actionControlProof: ConsentActionControlProof | undefined;
+  let afterActionCapture: PostRefusalEvidencePacket["afterActionCapture"];
+  let decisionEvidence: PostRefusalEvidencePacket["decisionEvidence"] = {
+    policyVersion: "semantic_consent_registration.v2", decision: "unknown", basis: "unverified",
+  };
+  const captureCoverage = { requestsDroppedBeforeAction: 0, requestsDroppedAfterAction: 0 };
   const interactionDiagnostics: PostRefusalInteractionDiagnostics = {
     resolver: {
       snapshots: [],
@@ -430,11 +443,16 @@ export async function runPostRefusalObserver(
     const resolverMethod = resolverRecipe?.resolverMethod ?? candidateSetResolverMethod(actionRecipes);
     const retainedTargetUrl = sanitizeUrl(observationTargetUrl);
     const retainedNormalizedUrl = sanitizeUrl(normalizedUrl);
+    if (captureCoverage.requestsDroppedAfterAction > 0) limitations.push("post_action_network_capture_truncated");
+    captureCoverage.requestsDroppedBeforeAction += Math.max(0, preRegistrationRequests.length + postRegistrationRequests.length - retainedRequests().length);
     const packet = postRefusalEvidencePacketSchema.parse({
       ...finishOptionalRuntimeGraph(graphCapture, "post_reject", confirmedRefusal ? undefined : "action_not_confirmed"),
-      artifactVersion: "certscore.post_refusal_evidence.v1",
+      artifactVersion: "certscore.post_refusal_evidence.v2",
+      ...(afterActionCapture ? { afterActionCapture } : {}),
+      decisionEvidence,
+      captureCoverage,
       artifactOnly: true,
-      productionProjectable: productionProjectable && confirmedRefusal && Boolean(actionControlProof),
+      productionProjectable: productionProjectable && confirmedRefusal && Boolean(actionControlProof) && captureCoverage.requestsDroppedAfterAction === 0,
       scanId: input.scanId,
       ...(input.parentScanId ? { parentScanId: input.parentScanId } : {}),
       ...(authorizedExactTargetUrl
@@ -579,7 +597,7 @@ export async function runPostRefusalObserver(
       if (request.isNavigationRequest() && request.frame() === page?.mainFrame()) {
         mainNavigationRequestCount += 1;
       }
-      const startedAtEpochMs = Date.now();
+      const startedAtEpochMs = request.timing().startTime > 0 ? request.timing().startTime : Date.now();
       const redirectedFromRequest = request.redirectedFrom();
       const redirectedFromStartedAtEpochMs = redirectedFromRequest
         ? requestStartedAtEpochMs.get(redirectedFromRequest)
@@ -592,12 +610,16 @@ export async function runPostRefusalObserver(
           redirectedFromStartedAtEpochMs <= refusalRegisteredAtEpochMs
         )
       );
-      requestStartedAtEpochMs.set(request, startedAtEpochMs);
+      requestStartedAtEpochMs.set(request, Math.min(startedAtEpochMs, redirectedFromStartedAtEpochMs ?? startedAtEpochMs));
       requestInheritedInFlightAtRegistration.set(request, inheritedInFlightAtRegistration);
-      const afterRegistration = refusalRegisteredAtEpochMs !== undefined;
+      const afterRegistration = actionDispatched;
       const bucket = afterRegistration ? postRegistrationRequests : preRegistrationRequests;
       const bucketLimit = afterRegistration ? MAX_POST_REGISTRATION_REQUESTS : MAX_REQUESTS;
-      if (bucket.length >= bucketLimit) return;
+      if (bucket.length >= bucketLimit) {
+        if (actionDispatched) captureCoverage.requestsDroppedAfterAction += 1;
+        else captureCoverage.requestsDroppedBeforeAction += 1;
+        return;
+      }
       const requestId = `post_refusal_request_${++nextRequestNumber}`;
       const redirectedFromId = redirectedFromRequest
         ? requestIds.get(redirectedFromRequest)
@@ -1110,6 +1132,7 @@ export async function runPostRefusalObserver(
       }
     }
     const proofResolution = await buildConsentActionControlProof({
+      signal: input.signal,
       action: "reject",
       ...(authorizedExactTargetUrl
         ? { authorizedTargetSha256: hashValue(normalizeTargetUrl(authorizedExactTargetUrl)) }
@@ -1140,7 +1163,7 @@ export async function runPostRefusalObserver(
       return await finalize({
         resolverFound: false,
         resolverReason: proofResolution.status,
-        registration: unconfirmedRegistration("not_attempted", proofResolution.status),
+        registration: unconfirmedRegistration(cancellation() ? "aborted" : "not_attempted", proofResolution.reason),
         preActionCapturedAtMs,
         preActionStorage,
         requests: classifyRequests(retainedRequests(), parentScanStartedAtMs),
@@ -1162,6 +1185,7 @@ export async function runPostRefusalObserver(
         control,
         selectedRecipe,
         useVerifiedGeometryDispatch,
+        () => assertConsentActionDispatchAllowed(page!, input.signal, actionControlProof?.authorizedTargetSha256),
       );
     } catch (error) {
       clickError = error;
@@ -1175,7 +1199,10 @@ export async function runPostRefusalObserver(
       actionDispatchedAtEpochMs,
       confirmationTimeoutMs,
       input.signal,
-      clickError === undefined,
+      (state) => { decisionEvidence = { policyVersion: "semantic_consent_registration.v2",
+        decision: state.decision, basis: "verified_state", observedStateSha256: state.stateHash,
+        observedAtMs: elapsed(parentScanStartedAtMs, state.observedAtEpochMs ?? Date.now()),
+        timestampBasis: state.observedAtEpochMs === undefined ? "verified_state_observed" : "instrumented_state_write" }; },
     ).catch(() => undefined);
     timing.confirmationMs = Math.max(0, Date.now() - confirmationStartedAtMs);
     if (clickError) {
@@ -1195,7 +1222,19 @@ export async function runPostRefusalObserver(
     }
 
     if (!confirmedState) {
-      if (input.retainResolverDiagnostics && input.outDir) {
+      const captureStartedAtMs = Date.now();
+      const targetStillAuthorized = () => {
+        try { return !page!.isClosed() && normalizeTargetUrl(page!.url()) === normalizeTargetUrl(authorizedExactTargetUrl ?? observationTargetUrl); }
+        catch { return false; }
+      };
+      const stopReason = await finishAfterActionWindow({
+        dispatchedAtEpochMs: actionDispatchedAtEpochMs, observationWindowMs,
+        clickCompleted: interactionDiagnostics.click.outcome === "completed", signal: input.signal, targetStillAuthorized,
+      });
+      timing.observationMs = Math.max(0, Date.now() - captureStartedAtMs);
+      if (stopReason !== "window_elapsed") limitations.push(`after_action_capture:${stopReason}`);
+      cancellation();
+      if (input.retainResolverDiagnostics && input.outDir && !input.signal?.aborted && targetStillAuthorized()) {
         const postActionGeometry = await captureConsentControlGeometry(page, {
           candidateLimit: 48,
           containerLimit: 16,
@@ -1212,6 +1251,37 @@ export async function runPostRefusalObserver(
         }
       }
       limitations.push("refusal_registration_not_confirmed");
+      let postActionStorage: PostRefusalStorageItem[] | undefined;
+      if (!input.signal?.aborted && targetStillAuthorized()) {
+        postActionStorage = await captureStorage(context, page, observationTargetUrl, limitations).catch(() => undefined);
+      }
+      const capturedWrites = !input.signal?.aborted && targetStillAuthorized()
+        ? await readStorageWrites(page).catch(() => []) : [];
+      const captureEndedAtMs = elapsed(parentScanStartedAtMs);
+      const requests = classifyRequests(retainedRequests(), parentScanStartedAtMs);
+      afterActionCapture = {
+        policyVersion: "bounded_after_action_capture.v2", action: "reject",
+        activationStatus: interactionDiagnostics.click.outcome === "completed" ? "completed" : "uncertain",
+        actionDispatchedAtMs, captureEndedAtMs, requestedWindowMs: observationWindowMs,
+        stopReason: input.signal?.aborted ? "aborted" : !targetStillAuthorized() ? "target_changed" : stopReason,
+        requestsDropped: captureCoverage.requestsDroppedAfterAction,
+        storageSnapshotRetained: postActionStorage !== undefined,
+        storageWriteCoverage: "bounded_main_document_sample",
+        storageWrites: capturedWrites.filter((write) => write.observedAtEpochMs >= actionDispatchedAtEpochMs)
+          .flatMap((write) => {
+            const row = classifyStorageWrite(write, parentScanStartedAtMs, actionDispatchedAtEpochMs, observationTargetUrl, postActionStorage ?? []);
+            return row ? [{ storageType: row.storageType, name: row.name, hostname: row.hostname,
+              observedAtMs: row.observedAtMs, nonEssential: row.nonEssential, vendor: row.vendor }] : [];
+          }).slice(0, 48),
+        requestIds: requests.filter((row) => row.startedAtMs >= actionDispatchedAtMs && row.startedAtMs <= captureEndedAtMs).map((row) => row.requestId),
+        requestAncestry: retainedRequests().filter((row) => {
+          const startedAtMs = elapsed(parentScanStartedAtMs, row.startedAtEpochMs);
+          return startedAtMs >= actionDispatchedAtMs && startedAtMs <= captureEndedAtMs;
+        }).map((row) => ({
+          requestId: row.requestId,
+          rootStartedAtMs: elapsed(parentScanStartedAtMs, requestStartedAtEpochMs.get(row.request) ?? row.startedAtEpochMs),
+        })),
+      };
       return await finalize({
         resolverFound: true,
         registration: {
@@ -1227,19 +1297,29 @@ export async function runPostRefusalObserver(
         },
         preActionCapturedAtMs,
         preActionStorage,
-        postActionStorage: await captureStorage(context, page, observationTargetUrl, limitations).catch(() => []),
-        requests: classifyRequests(retainedRequests(), parentScanStartedAtMs),
+        ...(postActionStorage ? { postActionStorage, postActionCapturedAtMs: captureEndedAtMs } : {}),
+        requests,
       });
     }
 
-    const confirmedRefusalRegisteredAtEpochMs = Date.now();
+    const confirmedRefusalRegisteredAtEpochMs = confirmedState.observedAtEpochMs ?? Date.now();
+    if (confirmedState.observedAtEpochMs === undefined) limitations.push("registration_timestamp_is_observation_upper_bound");
     refusalRegisteredAtEpochMs = confirmedRefusalRegisteredAtEpochMs;
-    graphCapture?.confirmAction(confirmedRefusalRegisteredAtEpochMs);
+    graphCapture?.confirmAction(parentScanStartedAtMs + elapsed(parentScanStartedAtMs, confirmedRefusalRegisteredAtEpochMs));
     void graphCapture?.snapshotStorage();
     const refusalRegisteredAtMs = elapsed(parentScanStartedAtMs, confirmedRefusalRegisteredAtEpochMs);
+    decisionEvidence = { policyVersion: "semantic_consent_registration.v2", decision: "denied", basis: "verified_state",
+      observedStateSha256: confirmedState.stateHash,
+      observedAtMs: refusalRegisteredAtMs, timestampBasis: confirmedState.observedAtEpochMs === undefined
+        ? "verified_state_observed" : "instrumented_state_write" };
     activeRequestIdsAtRegistration = [...activeRequestIds].slice(0, 48);
-    for (const request of preRegistrationRequests) {
-      request.inFlightAtRefusalRegistration = activeRequestIds.has(request.requestId);
+    for (const request of [...preRegistrationRequests, ...postRegistrationRequests]) {
+      request.startedAtEpochMs = request.request.timing().startTime > 0
+        ? request.request.timing().startTime : request.startedAtEpochMs;
+      const ancestor = request.request.redirectedFrom();
+      const ancestorStart = ancestor ? requestStartedAtEpochMs.get(ancestor) : undefined;
+      request.inFlightAtRefusalRegistration ||= request.startedAtEpochMs < confirmedRefusalRegisteredAtEpochMs ||
+        (ancestorStart !== undefined && ancestorStart < confirmedRefusalRegisteredAtEpochMs);
       if (request.inFlightAtRefusalRegistration) {
         requestInheritedInFlightAtRegistration.set(request.request, true);
       }
@@ -1477,7 +1557,7 @@ function classifyRequests(
     const startedAtMs = elapsed(scanStartedAtMs, captured.startedAtEpochMs);
     const msOffsetFromRefusal = refusalRegisteredAtEpochMs === undefined
       ? undefined
-      : Math.round(captured.startedAtEpochMs - refusalRegisteredAtEpochMs);
+      : elapsed(scanStartedAtMs, captured.startedAtEpochMs) - elapsed(scanStartedAtMs, refusalRegisteredAtEpochMs);
     return {
       requestId: captured.requestId,
       sanitizedUrl: sanitizeUrl(requestUrl),
@@ -1636,6 +1716,7 @@ function classifyStorageWrite(
   postActionStorage: PostRefusalStorageItem[],
 ): PostRefusalStorageWrite | undefined {
   if (!write.name) return undefined;
+  if (write.storageType === "cookie" && (write.deletion || write.value === "")) return undefined;
   const hostname = new URL(targetUrl).hostname;
   const vendor = write.storageType === "cookie"
     ? vendorFor({ type: "cookie", cookieName: write.name, hostname })
@@ -1652,7 +1733,7 @@ function classifyStorageWrite(
     hostname: exactIdentity?.hostname ?? hostname,
     ...(exactIdentity ? { storageIdentityHash: exactIdentity.identityHash } : {}),
     observedAtMs: elapsed(scanStartedAtMs, write.observedAtEpochMs),
-    msOffsetFromRefusal: Math.max(0, Math.round(write.observedAtEpochMs - refusalRegisteredAtEpochMs)),
+    msOffsetFromRefusal: Math.max(0, elapsed(scanStartedAtMs, write.observedAtEpochMs) - elapsed(scanStartedAtMs, refusalRegisteredAtEpochMs)),
     ...(vendor ? { vendor: vendor.vendor, purpose: vendor.purpose } : {}),
     nonEssential: vendor ? NON_ESSENTIAL_PURPOSES.has(vendor.purpose) : false,
   };
@@ -1917,7 +1998,7 @@ function vendorFor(input: {
   cookieName?: string;
   storageKey?: string;
 }) {
-  return resolveVendorObservations([{
+  return resolveCanonicalVendor({
     ...input,
     sourceScanner: POST_REFUSAL_SOURCE,
     scenario: "reject_all_flow",
@@ -1927,7 +2008,7 @@ function vendorFor(input: {
       : input.cookieName
         ? "cookie_name"
         : "storage_key",
-  }]).sort((left, right) => right.confidence - left.confidence)[0];
+  }).observation;
 }
 
 async function installStorageWriteProbe(page: Page): Promise<void> {
@@ -1949,7 +2030,7 @@ async function installStorageWriteProbe(page: Page): Promise<void> {
       let storageType = "local_storage";
       try { storageType = this === window.sessionStorage ? "session_storage" : "local_storage"; } catch (_) {}
       const result = originalSetItem.call(this, key, value);
-      retain({ storageType, name: String(key).slice(0, 180), observedAtEpochMs: Date.now() });
+      retain({ storageType, name: String(key).slice(0, 180), value: String(value).length <= 2048 ? String(value) : undefined, observedAtEpochMs: performance.timeOrigin + performance.now() });
       return result;
     };
     const cookieDescriptor = Object.getOwnPropertyDescriptor(Document.prototype, "cookie");
@@ -1961,7 +2042,12 @@ async function installStorageWriteProbe(page: Page): Promise<void> {
         set: function(value) {
           const name = String(value).split("=", 1)[0].trim().slice(0, 180);
           const result = cookieDescriptor.set.call(this, value);
-          retain({ storageType: "cookie", name, observedAtEpochMs: Date.now() });
+          const cookieValue = String(value).slice(String(value).indexOf("=") + 1).split(";", 1)[0];
+          const attributes = String(value).split(";").slice(1).map((attribute) => attribute.trim());
+          const maxAge = attributes.find((attribute) => attribute.toLowerCase().startsWith("max-age="))?.slice(8);
+          const expires = attributes.find((attribute) => attribute.toLowerCase().startsWith("expires="))?.slice(8);
+          const deletion = maxAge !== undefined ? Number(maxAge) <= 0 : expires !== undefined && Date.parse(expires) <= Date.now();
+          retain({ storageType: "cookie", name, deletion, value: cookieValue.length <= 2048 ? cookieValue : undefined, observedAtEpochMs: performance.timeOrigin + performance.now() });
           return result;
         },
       });
@@ -1969,7 +2055,7 @@ async function installStorageWriteProbe(page: Page): Promise<void> {
   })();` });
 }
 
-async function readStorageWrites(page: Page): Promise<InstrumentedStorageWrite[]> {
+async function readStorageWrites(page: Page | Frame): Promise<InstrumentedStorageWrite[]> {
   return page.evaluate(() => {
     const read = (window as unknown as {
       __certscoreReadPostRefusalWrites?: () => InstrumentedStorageWrite[];
@@ -2069,13 +2155,15 @@ async function dispatchRejectControl(
   control: Locator,
   recipe: PostRefusalActionRecipe,
   useVerifiedGeometryDispatch = false,
+  assertDispatchAllowed?: () => void,
 ) {
+  assertDispatchAllowed?.();
   if (recipe.accessibleControl?.kind === "closed_shadow_accessible_control") {
-    await dispatchClosedShadowAccessibleControl(page, recipe.accessibleControl);
+    await dispatchClosedShadowAccessibleControl(page, recipe.accessibleControl, assertDispatchAllowed);
     return;
   }
   if (useVerifiedGeometryDispatch) {
-    await dispatchLocatorClickWithVerifiedGeometry(control);
+    await dispatchLocatorClickWithVerifiedGeometry(control, 2_000, assertDispatchAllowed);
     return;
   }
   await control.click({ timeout: 2_000 });
@@ -2975,77 +3063,32 @@ async function waitForRefusalConfirmation(
   actionDispatchedAtEpochMs: number,
   timeoutMs: number,
   signal?: AbortSignal,
-  allowCanonicalUiTransitionWitness = false,
+  onDecisionObserved?: (state: SemanticState) => void,
 ): Promise<RefusalConfirmationState | undefined> {
   if (confirmation.kind === "canonical_reject_transition") {
-    if (
-      baseline.kind !== "canonical_reject_transition" ||
-      !baseline.controlVisible ||
-      !baseline.bannerVisible
-    ) return undefined;
+    if (baseline.kind !== "canonical_reject_transition" || !baseline.controlVisible || !baseline.bannerVisible) return undefined;
+    const scope = exactSelectorScope(page, confirmation.controlFrameUrl);
+    if (scope.status !== "found") return undefined;
     const deadlineAtMs = Date.now() + timeoutMs;
     while (Date.now() <= deadlineAtMs) {
       if (signal?.aborted) return undefined;
-      const [controlVisible, bannerVisible, bannerStateHash] = await Promise.all([
-        locatorIsVisible(page, confirmation.controlSelector, confirmation.controlFrameUrl),
-        canonicalTransitionSurfacePresent(page, confirmation),
-        visibleLocatorStateHash(page, confirmation.bannerSelector, confirmation.bannerFrameUrl),
-      ]);
-      const refusalState = await findCanonicalRefusalStateWrite(
-        context,
-        page,
-        baseline.lastSequence,
-        actionDispatchedAtEpochMs,
-        baseline.canonicalStorageStateHashes,
-      );
-      if (
-        !controlVisible &&
-        normalizeTargetUrl(page.url()) === normalizeTargetUrl(baseline.pageUrl)
-      ) {
-        if (refusalState) {
-          return {
-            stateHash: refusalState.stateHash,
-            witnessType: "canonical_refusal_state",
-            key: refusalState.key,
-            expectedState: "canonical_consent_refusal_state_written_after_action",
-          };
-        }
-        if (
-          allowCanonicalUiTransitionWitness &&
-          confirmation.bannerSelector !== confirmation.controlSelector
-        ) {
-          const transitionKind = !bannerVisible
-            ? "consent_surface_hidden"
-            : baseline.bannerStateHash && bannerStateHash &&
-                baseline.bannerStateHash !== bannerStateHash
-              ? "consent_surface_replaced_with_acknowledgement"
-              : undefined;
-          if (transitionKind) {
-            return {
-              stateHash: hashValue(JSON.stringify([
-                "canonical_first_layer_reject_ui_transition.v2",
-                transitionKind,
-                baseline.pageUrl,
-                confirmation.controlSelector,
-                confirmation.controlFrameUrl ?? "main_frame",
-                confirmation.bannerSelector,
-                confirmation.bannerFrameUrl ?? "main_frame",
-                baseline.bannerStateHash ?? "",
-                bannerStateHash ?? "",
-              ])),
-              witnessType: "canonical_refusal_state",
-              expectedState: transitionKind === "consent_surface_hidden"
-                ? "canonical_first_layer_reject_control_and_consent_surface_hidden_after_completed_action"
-                : "canonical_first_layer_reject_control_hidden_and_consent_surface_replaced_after_completed_action",
-            };
-          }
-        }
+      const state = await verifiedCanonicalStateWrite({
+        context, scope: scope.scope, actionAt: actionDispatchedAtEpochMs,
+        afterSequence: baseline.lastSequence,
+        registeredKeys: confirmation.registeredStateKeys,
+        baselineStateHashes: baseline.canonicalStorageStateHashes,
+      });
+      if (state) onDecisionObserved?.(state);
+      if (state?.decision === "denied" &&
+        normalizeTargetUrl(page.url()) === normalizeTargetUrl(baseline.pageUrl)) {
+        return { stateHash: state.stateHash, key: state.key, observedAtEpochMs: state.observedAtEpochMs,
+          witnessType: "canonical_refusal_state",
+          expectedState: "canonical_denied_consent_decision_written_after_action" };
       }
       await waitForDelay(25, signal).catch(() => undefined);
     }
     return undefined;
   }
-
   if (confirmation.kind === "cmp_cookie_values_equal") {
     const deadlineAtMs = Date.now() + timeoutMs;
     while (Date.now() <= deadlineAtMs) {
@@ -3082,12 +3125,13 @@ async function waitForRefusalConfirmation(
       if (signal?.aborted) return undefined;
       const currentCookieState = await cmpCookieState(context, confirmation.cookieName);
       if (currentCookieState && currentCookieState.stateHash !== baseline.cookieStateHash) {
-        return {
-          stateHash: currentCookieState.stateHash,
-          witnessType: "cmp_cookie_state",
-          key: currentCookieState.cookieNames.join(",").slice(0, 180),
-          expectedState: "canonical_cmp_consent_state_changed_after_reject",
-        };
+        const semantic = await verifiedCookieDecision({ context, scope: page,
+            cookieName: confirmation.cookieName, actionAt: actionDispatchedAtEpochMs });
+          if (semantic) onDecisionObserved?.(semantic);
+          if (semantic?.decision === "denied") return {
+            stateHash: semantic.stateHash, key: semantic.key, observedAtEpochMs: semantic.observedAtEpochMs,
+            witnessType: "cmp_cookie_state", expectedState: "canonical_cmp_denied_decision_after_action",
+          };
       }
       await waitForDelay(25, signal).catch(() => undefined);
     }
@@ -3102,11 +3146,12 @@ async function waitForRefusalConfirmation(
       for (const cookieName of confirmation.cookieNames.slice(0, 8)) {
         const currentCookieState = await cmpCookieState(context, cookieName);
         if (currentCookieState && currentCookieState.stateHash !== baseline.cookieStateHashes[cookieName]) {
-          return {
-            stateHash: currentCookieState.stateHash,
-            witnessType: "cmp_cookie_state",
-            key: currentCookieState.cookieNames.join(",").slice(0, 180),
-            expectedState: "canonical_cmp_consent_state_changed_after_reject",
+          const semantic = await verifiedCookieDecision({ context, scope: page,
+            cookieName, actionAt: actionDispatchedAtEpochMs });
+          if (semantic) onDecisionObserved?.(semantic);
+          if (semantic?.decision === "denied") return {
+            stateHash: semantic.stateHash, key: semantic.key, observedAtEpochMs: semantic.observedAtEpochMs,
+            witnessType: "cmp_cookie_state", expectedState: "canonical_cmp_denied_decision_after_action",
           };
         }
       }
@@ -3152,6 +3197,7 @@ async function waitForRefusalConfirmation(
       ? undefined
       : {
           stateHash: hashValue(value),
+          observedAtEpochMs: matchingStateWriteTime(await readActionStateWrites(page), confirmation.key, value, actionDispatchedAtEpochMs, "local_storage"),
           witnessType: "cmp_storage_state",
           key: confirmation.key,
           expectedState: confirmation.expectedValue,
@@ -3195,12 +3241,13 @@ async function waitForRefusalConfirmation(
         currentCookieState !== undefined &&
         currentCookieState.stateHash !== baseline.cookieStateHash
       ) {
-        return {
-          stateHash: currentCookieState.stateHash,
-          witnessType: "cmp_cookie_state",
-          key: currentCookieState.cookieNames.join(",").slice(0, 180),
-          expectedState: "canonical_cmp_consent_state_changed_after_reject",
-        };
+        const semantic = await verifiedCookieDecision({ context, scope: page,
+            cookieName: confirmation.cookieName, actionAt: actionDispatchedAtEpochMs });
+          if (semantic) onDecisionObserved?.(semantic);
+          if (semantic?.decision === "denied") return {
+            stateHash: semantic.stateHash, key: semantic.key, observedAtEpochMs: semantic.observedAtEpochMs,
+            witnessType: "cmp_cookie_state", expectedState: "canonical_cmp_denied_decision_after_action",
+          };
       }
     }
     if (
@@ -3224,11 +3271,12 @@ async function waitForRefusalConfirmation(
           currentStorageStateHash !== undefined &&
           currentStorageStateHash !== baseline.storageStateHash
         ) {
-          return {
-            stateHash: currentStorageStateHash,
-            witnessType: "cmp_storage_state",
-            key: confirmation.key,
-            expectedState: "canonical_cmp_consent_state_changed_after_reject",
+          const semantic = await verifiedCanonicalStateWrite({ context, scope: page,
+            actionAt: actionDispatchedAtEpochMs, registeredKeys: [confirmation.key] });
+          if (semantic) onDecisionObserved?.(semantic);
+          if (semantic?.decision === "denied" && semantic.key === confirmation.key) return {
+            stateHash: semantic.stateHash, key: semantic.key, observedAtEpochMs: semantic.observedAtEpochMs,
+            witnessType: "cmp_storage_state", expectedState: "canonical_cmp_denied_decision_after_action",
           };
         }
       }
@@ -3258,11 +3306,12 @@ async function waitForRefusalConfirmation(
           currentStorageStateHash !== undefined &&
           currentStorageStateHash !== baseline.storageStateHashes[key]
         ) {
-          return {
-            stateHash: currentStorageStateHash,
-            witnessType: "cmp_storage_state",
-            key,
-            expectedState: "canonical_cmp_consent_state_changed_after_reject",
+          const semantic = await verifiedCanonicalStateWrite({ context, scope: page,
+            actionAt: actionDispatchedAtEpochMs, registeredKeys: confirmation.keys });
+          if (semantic) onDecisionObserved?.(semantic);
+          if (semantic?.decision === "denied" && semantic.key === key) return {
+            stateHash: semantic.stateHash, key: semantic.key, observedAtEpochMs: semantic.observedAtEpochMs,
+            witnessType: "cmp_storage_state", expectedState: "canonical_cmp_denied_decision_after_action",
           };
         }
       }
@@ -3278,12 +3327,14 @@ async function captureRefusalConfirmationBaseline(
   confirmation: PostRefusalActionRecipe["confirmation"],
 ): Promise<RefusalConfirmationBaseline> {
   if (confirmation.kind === "canonical_reject_transition") {
+    const resolvedScope = exactSelectorScope(page, confirmation.controlFrameUrl);
+    const scope = resolvedScope.status === "found" ? resolvedScope.scope : page;
     const [controlVisible, bannerVisible, bannerStateHash, writes, canonicalStorageStateHashes] = await Promise.all([
       locatorIsVisible(page, confirmation.controlSelector, confirmation.controlFrameUrl),
       canonicalTransitionSurfacePresent(page, confirmation),
       visibleLocatorStateHash(page, confirmation.bannerSelector, confirmation.bannerFrameUrl),
-      readStorageWrites(page),
-      canonicalConsentStorageStateHashes(page),
+      readStorageWrites(scope),
+      canonicalConsentStorageStateHashes(scope),
     ]);
     return {
       kind: "canonical_reject_transition",
@@ -3488,45 +3539,13 @@ async function hasCredibleLateConsentSignal(input: {
 
 const CANONICAL_CONSENT_STATE_KEY_PATTERN =
   /(?:consent|cookie|privacy|tracking|analytics|marketing|advertising|opt[-_]?out)/i;
-const CANONICAL_REFUSAL_STATE_PATTERN =
-  /(?:^|[^a-z])(?:denied|rejected|reject(?:ed)?[_ -]?all|essential[_ -]?only|necessary[_ -]?only|opted[_ -]?out)(?:$|[^a-z])/i;
-const CANONICAL_DISABLED_PURPOSE_PATTERN =
-  /["']?(?:analytics|marketing|advertising|tracking)["']?\s*[:=]\s*(?:false|0|["']denied["'])/i;
-const CANONICAL_OPTIONAL_PURPOSE_KEY_PATTERN =
-  /^(?:analytics|marketing|advertising|tracking|targeting|personalization|preferences|functionality|performance|social)$/i;
 
 function canonicalConsentStorageIdentity(storageType: "local_storage" | "session_storage", name: string) {
   return `${storageType}\n${name}`;
 }
 
-function canonicalJsonRefusalState(value: string) {
-  if (value.length > 2_048) return false;
-  let parsed: unknown;
-  try {
-    parsed = JSON.parse(value);
-  } catch {
-    return false;
-  }
-  let denied = 0;
-  let granted = 0;
-  let visited = 0;
-  const visit = (node: unknown, depth: number) => {
-    if (depth > 5 || visited >= 96 || !node || typeof node !== "object") return;
-    visited += 1;
-    for (const [key, nested] of Object.entries(node)) {
-      if (CANONICAL_OPTIONAL_PURPOSE_KEY_PATTERN.test(key)) {
-        const normalized = typeof nested === "string" ? nested.trim().toLowerCase() : nested;
-        if (normalized === false || normalized === 0 || normalized === "false" || normalized === "denied") denied += 1;
-        else if (normalized === true || normalized === 1 || normalized === "true" || normalized === "granted") granted += 1;
-      }
-      visit(nested, depth + 1);
-    }
-  };
-  visit(parsed, 0);
-  return denied > 0 && granted === 0;
-}
 
-async function canonicalConsentStorageStates(page: Page) {
+async function canonicalConsentStorageStates(page: Page | Frame) {
   return await page.evaluate((keyPatternSource) => {
     const keyPattern = new RegExp(keyPatternSource, "i");
     const retained: Array<{ storageType: "local_storage" | "session_storage"; name: string; value: string }> = [];
@@ -3550,76 +3569,13 @@ async function canonicalConsentStorageStates(page: Page) {
   }>);
 }
 
-async function canonicalConsentStorageStateHashes(page: Page) {
+async function canonicalConsentStorageStateHashes(page: Page | Frame) {
   return Object.fromEntries((await canonicalConsentStorageStates(page)).map((state) => [
     canonicalConsentStorageIdentity(state.storageType, state.name),
     hashValue(state.value),
   ]));
 }
 
-async function findCanonicalRefusalStateWrite(
-  context: BrowserContext,
-  page: Page,
-  baselineSequence: number,
-  actionDispatchedAtEpochMs: number,
-  baselineStorageStateHashes: Record<string, string>,
-): Promise<{ key: string; stateHash: string } | undefined> {
-  const writes = (await readStorageWrites(page)).filter((write) =>
-    write.sequence > baselineSequence &&
-    write.observedAtEpochMs >= actionDispatchedAtEpochMs &&
-    CANONICAL_CONSENT_STATE_KEY_PATTERN.test(write.name)
-  );
-  for (const write of writes) {
-    let value: string | undefined;
-    if (write.storageType === "cookie") {
-      const matches = (await context.cookies()).filter((cookie) => cookie.name === write.name);
-      if (matches.length === 1) value = matches[0]?.value;
-    } else {
-      value = await page.evaluate(({ key, storageType }) => {
-        try {
-          return (storageType === "local_storage" ? window.localStorage : window.sessionStorage).getItem(key) ?? undefined;
-        } catch {
-          return undefined;
-        }
-      }, { key: write.name, storageType: write.storageType }).catch(() => undefined);
-    }
-    if (!value) continue;
-    let decodedValue = value.slice(0, 2_048);
-    try {
-      decodedValue = decodeURIComponent(decodedValue);
-    } catch {
-      // Inspect the bounded original when the value is not valid URI encoding.
-    }
-    const normalized = decodedValue.trim().toLowerCase();
-    const explicitBooleanDenial = (normalized === "false" || normalized === "0") &&
-      CANONICAL_CONSENT_STATE_KEY_PATTERN.test(write.name);
-    if (
-      !explicitBooleanDenial &&
-      !CANONICAL_REFUSAL_STATE_PATTERN.test(normalized) &&
-      !CANONICAL_DISABLED_PURPOSE_PATTERN.test(normalized) &&
-      !canonicalJsonRefusalState(decodedValue)
-    ) continue;
-    return {
-      key: write.name.slice(0, 160),
-      stateHash: hashValue(value),
-    };
-  }
-  for (const state of await canonicalConsentStorageStates(page)) {
-    const identity = canonicalConsentStorageIdentity(state.storageType, state.name);
-    const stateHash = hashValue(state.value);
-    if (
-      baselineStorageStateHashes[identity] !== stateHash &&
-      (
-        CANONICAL_REFUSAL_STATE_PATTERN.test(state.value) ||
-        CANONICAL_DISABLED_PURPOSE_PATTERN.test(state.value) ||
-        canonicalJsonRefusalState(state.value)
-      )
-    ) {
-      return { key: state.name.slice(0, 160), stateHash };
-    }
-  }
-  return undefined;
-}
 
 async function cmpStorageStateHash(
   page: Page,
@@ -3834,6 +3790,9 @@ async function waitForPostRefusalObservation(input: {
       typeof request.msOffsetFromRefusal === "number" &&
       request.msOffsetFromRefusal > 0
     )) {
+      // Approved bounded response settle: retain response cookies and writes
+      // triggered by this first signal, without extending the original window.
+      await waitForDelay(Math.min(POST_REFUSAL_RESPONSE_SETTLE_MS, Math.max(0, deadlineAtMs - Date.now())));
       return {
         reason: "non_essential_request_observed",
         ...(lastTcfData
@@ -3858,6 +3817,7 @@ async function waitForPostRefusalObservation(input: {
       ))
       .some((write) => write?.nonEssential)
     ) {
+      await waitForDelay(Math.min(POST_REFUSAL_RESPONSE_SETTLE_MS, Math.max(0, deadlineAtMs - Date.now())));
       return {
         reason: "non_essential_storage_write_observed",
         ...(lastTcfData
@@ -3918,15 +3878,16 @@ async function waitForLocalStorageValue(
   const deadlineAtMs = Date.now() + timeoutMs;
   while (Date.now() <= deadlineAtMs) {
     if (signal?.aborted) return undefined;
+    const writes = await readStorageWrites(page);
     const value = await page.evaluate(
       (storageKey) => window.localStorage.getItem(storageKey),
       key,
     ).catch(() => undefined);
-    const writes = await readStorageWrites(page);
     const correlatedWrite = writes.some((write) =>
       write.sequence > baselineLastSequence &&
       write.storageType === "local_storage" &&
       write.name === key &&
+      write.value === value &&
       write.observedAtEpochMs >= actionDispatchedAtEpochMs
     );
     if (value === expectedValue && correlatedWrite) return value;

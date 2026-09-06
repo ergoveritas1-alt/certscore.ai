@@ -4,7 +4,7 @@ import {
   classifyConsentLanguage,
   classifyGdprTransparencyTopics
 } from "@certscore/contracts";
-import { resolveVendorObservations } from "@certscore/vendor-resolver";
+import { resolveCanonicalVendor, resolveVendorObservations } from "@certscore/vendor-resolver";
 import {
   BROWSER_SCAN_SIGNAL_POPULATION_SOURCE,
   BROWSER_SCAN_SOURCE_ID,
@@ -78,14 +78,14 @@ function buildCookieInventory(evidence: ReturnType<typeof summarizeBrowserEviden
 
   for (const event of evidence.cookies) {
     const key = [event.domain.toLowerCase(), event.path ?? "/", event.cookieName].join("|");
-    const observation = resolveVendorObservations([{
+    const observation = resolveCanonicalVendor({
       cookieName: event.cookieName,
       evidenceId: browserEvidenceRef("cookie", event.observedAtMs, event.cookieName) ?? undefined,
       hostname: event.domain,
       sourceEventType: event.eventType,
       sourceScanner: BROWSER_SCAN_SOURCE_ID,
       type: "cookie"
-    }])[0] ?? null;
+    }).observation;
     const candidate: CookieRow = {
       ...canonicalAttribution(observation),
       beforeConsent: event.consentInteractionObserved !== true,

@@ -596,8 +596,8 @@ function buildChoicePathComparison(
   const indistinguishable = surfacedFinding(ownerUnifiedFindings, "accept_reject_outcomes_indistinguishable");
   if (indistinguishable) {
     return {
-      label: "Same retained activity",
-      note: "The same retained activity identities appeared after both confirmed choices, so the Reject outcome warrants review.",
+      label: "Shared observed activity",
+      note: "Some retained activity identities appeared after both confirmed choices. This is shared observed activity, not proof that the overall outcomes were identical.",
       state: "indistinguishable",
     };
   }
@@ -648,6 +648,7 @@ export function buildTimelineReportModel(scanRecord: ScanDetailResponse): Shadow
       attributionSignatures: row.attributionSignatures,
       canonicalEntity: row.canonicalEntity,
       cookieDetails: row.cookieDetails,
+      embedDetails: row.embedDetails,
       cookieNames: row.cookieNames,
       dataFlows: row.dataFlows,
       domains: row.domains,
@@ -671,7 +672,7 @@ export function buildTimelineReportModel(scanRecord: ScanDetailResponse): Shadow
     requestNames: [...row.cookieNames, ...(row.requestDetails ?? []).flatMap((request) => request.path ? [request.path] : [])].slice(0, 8).join(", ") || "Not retained",
     serverLocation: row.dataFlows[0]?.networkDestination.country ?? row.dataFlows[0]?.networkDestination.label ?? "Location not retained",
     transferMechanism: row.dataFlows[0]?.transferMechanism.basis ?? "Unknown",
-    type: row.type === "cookie" ? "Cookie / storage" : "Tracker / request",
+    type: row.type === "embed" ? "Embed / iframe" : row.type === "cookie" ? "Cookie / storage" : "Tracker / request",
     vendor: row.vendor,
     recordCount: row.observedRecordCount,
     requestCount: row.requestCount,

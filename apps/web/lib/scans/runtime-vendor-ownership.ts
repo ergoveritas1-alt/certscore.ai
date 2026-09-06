@@ -3,7 +3,7 @@ import {
   resolveCanonicalCookieKnowledge,
   resolveCanonicalVendorLabel,
   resolveVendorDisplayCategory,
-  resolveVendorObservations
+  resolveCanonicalVendor
 } from "@certscore/vendor-resolver";
 import { getDomain as getTldtsDomain, getHostname as getTldtsHostname } from "tldts";
 
@@ -14,13 +14,13 @@ export type RuntimeVendorAttributionEvidence = {
 };
 
 function resolveCanonicalOwner(input: { hostname?: string; cookieName?: string; url?: string }) {
-  return resolveVendorObservations([{
+  return resolveCanonicalVendor({
     type: input.cookieName ? "cookie" : "request",
     hostname: input.hostname,
     cookieName: input.cookieName,
     url: input.url,
     matchSource: input.cookieName ? "cookie_name" : "network_request"
-  }])[0] ?? null;
+  }).observation;
 }
 
 export function normalizeRuntimeInventoryHost(value: string | null | undefined) {
@@ -68,6 +68,7 @@ export function findRuntimeVendorLabelOwner(value: string | null | undefined) {
   if (!resolution) return null;
   return {
     category: resolution.purpose,
+    servicePurpose: resolution.servicePurpose,
     confidence: resolution.confidence,
     entity: resolution.entity,
     product: resolution.product,
@@ -158,6 +159,7 @@ export function findRuntimeRequestOwner(url: string | null | undefined) {
   if (!observation) return null;
   return {
     category: observation.purpose,
+    servicePurpose: observation.servicePurpose,
     confidence: observation.confidence,
     entity: observation.entity,
     product: observation.product ?? observation.vendor,

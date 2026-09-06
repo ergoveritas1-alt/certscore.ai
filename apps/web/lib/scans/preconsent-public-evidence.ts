@@ -1,4 +1,4 @@
-import { resolveVendorObservations } from "@certscore/vendor-resolver";
+import { resolveCanonicalVendor } from "@certscore/vendor-resolver";
 
 export type PromotionGradePreconsentRequest = {
   scannedPageUrl?: string | null;
@@ -281,13 +281,13 @@ function inferCanonicalEndpointVendorFromUrl(url: string | null | undefined): Di
   if (!url || !hostname) {
     return null;
   }
-  const observation = resolveVendorObservations([{
+  const observation = resolveCanonicalVendor({
     type: "request",
     url,
     hostname,
     sourceEventType: "network_request",
     matchSource: "network_request"
-  }])[0];
+  }).observation;
   const vendorCategory = canonicalPurposeToEvidenceCategory(observation?.purpose);
   if (!observation || !vendorCategory) {
     return null;
@@ -300,33 +300,8 @@ function inferCanonicalEndpointVendorFromUrl(url: string | null | undefined): Di
 }
 
 export function inferDirectEndpointVendorFromUrl(url: string | null | undefined): DirectEndpointVendorMatch | null {
-  const hostname = getUrlHostname(url);
-  if (!hostname) {
-    return null;
-  }
-  const canonicalMatch = inferCanonicalEndpointVendorFromUrl(url);
-  if (canonicalMatch) {
-    return canonicalMatch;
-  }
-
-  const directHostMatches: Array<{ domain: string; vendorName: string; vendorCategory: string; basis: string }> = [
-    { domain: "googletagmanager.com", vendorName: "Google Tag Manager", vendorCategory: "tag_manager", basis: "hostname_signature:googletagmanager.com" },
-    { domain: "googleadservices.com", vendorName: "Google Ads", vendorCategory: "advertising_measurement", basis: "hostname_signature:googleadservices.com" },
-    { domain: "doubleclick.net", vendorName: "Google Ads", vendorCategory: "advertising_measurement", basis: "hostname_signature:doubleclick.net" },
-    { domain: "googlesyndication.com", vendorName: "Google Ads", vendorCategory: "advertising_measurement", basis: "hostname_signature:googlesyndication.com" },
-    { domain: "criteo.com", vendorName: "Criteo", vendorCategory: "advertising", basis: "hostname_signature:criteo.com" },
-    { domain: "amazon-adsystem.com", vendorName: "Amazon Ads", vendorCategory: "advertising", basis: "hostname_signature:amazon-adsystem.com" },
-    { domain: "rubiconproject.com", vendorName: "Rubicon Project", vendorCategory: "advertising", basis: "hostname_signature:rubiconproject.com" },
-    { domain: "doubleverify.com", vendorName: "DoubleVerify", vendorCategory: "advertising_measurement", basis: "hostname_signature:doubleverify.com" },
-    { domain: "adobedtm.com", vendorName: "Adobe Launch", vendorCategory: "tag_manager", basis: "hostname_signature:adobedtm.com" },
-    { domain: "clarity.ms", vendorName: "Microsoft Clarity", vendorCategory: "session_replay", basis: "hostname_signature:clarity.ms" },
-    { domain: "bing.com", vendorName: "Microsoft Advertising / Bing UET", vendorCategory: "advertising_measurement", basis: "hostname_signature:bing.com" },
-    { domain: "rlcdn.com", vendorName: "LiveRamp", vendorCategory: "advertising", basis: "hostname_signature:rlcdn.com" },
-    { domain: "adnxs.com", vendorName: "AppNexus / Xandr", vendorCategory: "advertising", basis: "hostname_signature:adnxs.com" },
-    { domain: "adsrvr.org", vendorName: "The Trade Desk", vendorCategory: "advertising", basis: "hostname_signature:adsrvr.org" }
-  ];
-
-  return directHostMatches.find((match) => hostMatches(hostname, match.domain)) ?? null;
+  // Do not turn ambiguous or unrecognized canonical matches into host-only guesses.
+  return inferCanonicalEndpointVendorFromUrl(url);
 }
 
 export function getUrlRegistrableDomain(value: string | null | undefined) {

@@ -3,7 +3,7 @@ import test from "node:test";
 import React from "react";
 import { readFile } from "node:fs/promises";
 import { renderToStaticMarkup } from "react-dom/server";
-import { InventoryResourceProvider, InventoryResourceRow, matchInventoryResources } from "./inventory-resource-details";
+import { InventoryResourceProvider, InventoryResourceRow, ResourceDetails, matchInventoryResources } from "./inventory-resource-details";
 import { runtimeGraphUiFixture } from "./runtime-evidence-graph-ui-fixture";
 import { InventoryNameDisclosure } from "./inventory-name-disclosure";
 
@@ -12,13 +12,34 @@ test("evidence details omit search controls and boilerplate but retain fields an
   const fields = await readFile(new URL("./retained-evidence-fields.tsx", import.meta.url), "utf8");
   assert.doesNotMatch(resources, /Find a resource|Inventory columns describe|<p>Coverage:/);
   assert.doesNotMatch(fields, /Find a field|Exact field names|Only authorized, display-safe|Search · inspect · copy/);
-  assert.match(resources, /All scenario evidence fields/);
+  assert.doesNotMatch(resources, /label="Inventory fields"|All scenario evidence fields/);
+  assert.match(resources, /Technical evidence/);
   assert.match(fields, /Next fields/);
   assert.match(fields, /Copy safe evidence JSON/);
   assert.match(fields, /title=\{field.path\}/);
   assert.equal((resources.match(/style=\{\{ paddingLeft: indent \}\}/g) ?? []).length, 2);
   assert.match(resources, /const indent = Math.min\(depth, 3\) \* 12/);
   assert.ok(resources.includes('<span className="sr-only">Site/entity relationship not supplied</span>'));
+});
+
+test("resource drawer defaults to summary with one collapsed technical payload and a brief graph limitation", () => {
+  const html = renderToStaticMarkup(<ResourceDetails identity={{ cookieRefs: [], requests: [] }} facts={{ name: "Google Maps embed", purpose: "Embedded maps" }} evidence={{ requestDetails: [{ path: "/maps/embed" }], supportingObservations: [{ type: "embed", observedAtMs: 10875 }] }} />);
+  assert.match(html, /Resource summary/);
+  assert.match(html, /Relationship coverage: no graph retained/);
+  assert.match(html, /<details[^>]*data-inventory-technical-evidence="true"/);
+  assert.doesNotMatch(html, /<details[^>]* open|Inventory fields|Safe JSON|Evidence scenario|Inventory summary &amp;/);
+  assert.equal((html.match(/<pre\b/g) ?? []).length, 1);
+  assert.match(html, /maps\/embed/);
+  assert.match(html, /10875/);
+});
+
+test("retained relationships stay available while full scenario exploration is technical detail", () => {
+  const html = renderToStaticMarkup(<InventoryResourceProvider projection={runtimeGraphUiFixture()}><ResourceDetails identity={{ cookieRefs: [], nodeRefs: ["request"], requests: [] }} facts={{ name: "Fixture" }} /></InventoryResourceProvider>);
+  assert.match(html, />Relationships</);
+  assert.match(html, /Resource evidence scenario/);
+  assert.match(html, /All captured resources in this scenario/);
+  assert.ok(html.indexOf("All captured resources in this scenario") > html.indexOf("Technical evidence"));
+  assert.doesNotMatch(html, /Inventory fields|Safe JSON/);
 });
 
 test("compact inventory places links before vendor and preserves full names in popovers", () => {

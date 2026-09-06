@@ -543,10 +543,17 @@ test("API v2 draft OpenAPI locks resource path and operation names", () => {
     document.components.schemas.GpcResponse.properties.status.enum,
     ["responsive", "no_observable_response", "indeterminate"],
   );
-  assert.equal(
-    document.components.schemas.GpcResponse.properties.comparison.properties.enabledProof.properties.secGpcHeaderValue.const,
-    "1",
+  assert.deepEqual(
+    document.components.schemas.GpcResponse.properties.comparison.properties.enabledProof.properties.secGpcHeaderValue.enum,
+    ["1", null],
   );
+  const gpc = document.components.schemas.GpcResponse;
+  assert.deepEqual(gpc.properties.contractVersion.enum, ["certscore.gpc-response-assessment.v1", "certscore.gpc-response-assessment.v2"]);
+  assert.deepEqual(gpc.properties.comparison.properties.delivery.properties.status.enum, ["verified", "limited", "unavailable"]);
+  assert.deepEqual(gpc.properties.comparison.properties.coverage.properties.status.enum, ["complete", "limited", "unavailable"]);
+  assert.ok(gpc.properties.comparison.properties.deltas.properties.webStorage);
+  assert.ok(gpc.properties.comparison.properties.deltas.properties.advertisingOrMarketingActivity.properties.sharedCount);
+  assert.equal(gpc.properties.comparison.properties.deltas.properties.trackers.properties.shared.maxItems, 100);
   assert.equal(
     document.components.schemas.Scan.properties.postAcceptObservation.$ref,
     "#/components/schemas/PostAcceptObservation",

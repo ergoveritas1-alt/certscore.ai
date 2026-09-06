@@ -1,12 +1,102 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import fixtures from "../../certscore-contracts/src/test-fixtures/vendor-service-purpose-v1.json";
 import {
   buildUnknownVendorCandidateQueue,
+  getCanonicalVendorPurposeDefinitions,
+  resolveCanonicalServicePurpose,
+  resolveCanonicalEntityOwner,
   resolveCanonicalVendorLabel,
   resolveEndpointGeography,
   resolveVendorDisplayCategory,
   resolveVendorObservations,
+  type VendorResolverEvidenceType,
 } from "./index.js";
+
+test("shared runtime fixtures retain consistent service purposes for requests and iframe evidence", () => {
+  for (const { url, resourceTypes, observation } of fixtures) {
+    for (const type of resourceTypes as VendorResolverEvidenceType[]) {
+      const resolved = resolveVendorObservations([{ url, type, evidenceId: observation.matchedEvidenceIds[0] }])
+        .find(row => row.product === observation.product);
+      assert.ok(resolved, `${type}: ${url}`);
+      assert.equal(resolved.purpose, observation.purpose);
+      assert.equal(resolved.servicePurpose, observation.servicePurpose);
+      assert.equal(resolved.entity, observation.entity);
+      assert.deepEqual(resolved.matchedEvidenceIds, observation.matchedEvidenceIds);
+    }
+  }
+});
+
+test("Google Maps iframe attribution requires the canonical embed endpoint", () => {
+  const rows = resolveVendorObservations([
+    { type: "request", hostname: "www.google.com", url: "https://www.google.com/maps/embed", matchSource: "network_request" },
+  ]);
+  assert.equal(rows[0]?.product, "Google Maps embed");
+  assert.equal(rows[0]?.purpose, "infrastructure");
+  assert.equal(rows[0]?.servicePurpose, "Embedded maps");
+  const unrelated = resolveVendorObservations([
+    { type: "request", hostname: "www.google.com", url: "https://www.google.com/search", matchSource: "network_request" },
+  ]);
+  assert.ok(unrelated.every(row => row.product !== "Google Maps embed"));
+});
+
+test("every canonical rule explicitly declares a service purpose, consistently across signatures", () => {
+  const definitions = getCanonicalVendorPurposeDefinitions();
+  assert.ok(definitions.length >= 334);
+  for (const definition of definitions) {
+    assert.equal(resolveCanonicalServicePurpose(definition), definition.servicePurpose, definition.ruleId);
+    const labelResolution = resolveCanonicalVendorLabel(definition.product);
+    if (labelResolution) assert.equal(labelResolution.servicePurpose, definition.servicePurpose, definition.product);
+    if (definition.purpose !== "unknown") assert.notEqual(definition.servicePurpose, "Unknown", definition.ruleId);
+  }
+});
+
+test("canonical service purposes cover the known infrastructure gaps without changing policy categories", () => {
+  const expected = {
+    "Google Maps embed": "Embedded maps",
+    "Google Maps JavaScript API": "Maps / location services",
+    "Facebook Page Plugin": "Social media embed",
+    "Google Fonts": "Font delivery",
+    "BST DSGVO Cookie notice plugin, non-TCF": "Consent management",
+    "Amazon Retail": "Commerce",
+    "Flowplayer Native": "Embedded media",
+    "UserWay Accessibility Widget": "Accessibility",
+    "Trustpilot TrustBox": "Reviews widget",
+    "Google Programmable Search Engine": "Site search",
+    "Statuspage": "Service status",
+    "Kentico Xperience CMS": "Content management",
+    "YouTube Player Runtime Library": "Media delivery",
+    "PolySpeak Web Runtime": "Content delivery",
+    "Washington University Web Assets": "Infrastructure",
+    "Axel Springer publisher infrastructure": "Infrastructure",
+    "Agora publisher infrastructure": "Infrastructure",
+    "Gremi Media publisher infrastructure": "Infrastructure",
+    "Microsoft browser identity support": "Unknown",
+  };
+  for (const [product, purpose] of Object.entries(expected)) {
+    assert.equal(resolveCanonicalServicePurpose({ product }), purpose, product);
+  }
+  const maps = resolveCanonicalVendorLabel("Google Maps embed")!;
+  assert.equal(maps.purpose, "infrastructure");
+  assert.equal(maps.displayCategory, "Unknown");
+  assert.equal(resolveCanonicalVendorLabel("Facebook Page Plugin")?.displayCategory, "Embedded media");
+  assert.equal(resolveCanonicalVendorLabel("Google Fonts")?.displayCategory, "CDN");
+  assert.equal(resolveCanonicalVendorLabel("BST DSGVO Cookie notice plugin, non-TCF")?.displayCategory, "Cookie compliance");
+});
+
+test("service purposes require precise identity, not vendor ownership or invented label matches", () => {
+  for (const product of ["Google", "Facebook", "google.com", "Unknown maps plugin", "", null]) {
+    assert.equal(resolveCanonicalServicePurpose({ product }), "Unknown");
+  }
+  assert.equal(resolveCanonicalServicePurpose({ product: "Google Maps embed", vendor: "Facebook" }), "Unknown");
+  assert.equal(resolveCanonicalServicePurpose({ product: "Google Maps embed", entity: "Another entity" }), "Unknown");
+  assert.equal(resolveCanonicalEntityOwner("google.com")?.servicePurpose, "Unknown");
+  const pixel = resolveVendorObservations([{ type: "request", url: "https://www.facebook.com/tr/?id=123" }]);
+  assert.ok(pixel.length > 0);
+  assert.ok(pixel.every(row => row.servicePurpose !== "Social media embed"));
+  const search = resolveVendorObservations([{ type: "iframe", url: "https://www.google.com/search?q=maps" }]);
+  assert.ok(search.every(row => row.servicePurpose !== "Embedded maps"));
+});
 
 test("builds a bounded review queue from repeated unresolved third-party endpoints", () => {
   const queue = buildUnknownVendorCandidateQueue([

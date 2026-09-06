@@ -327,6 +327,14 @@ export const CERT_SCORE_FINDING_REGISTRY: Record<string, CertScoreFindingDefinit
     whyItMatters: "Tracking that still fires after an explicit reject interaction suggests the site's consent outcome is not being enforced as presented.",
     remediation: "Compare baseline and post-reject vendor activity, suppress non-essential requests after reject, and verify the live reject path with concrete request-level evidence."
   },
+  post_reject_click_tracking: {
+    id: "post_reject_click_tracking",
+    label: "Tracking after Reject click; decision unverified",
+    section: "Consent Experience",
+    defaultSurfacePriority: 80,
+    whyItMatters: "Classified tracking began after a verified Reject click, but refusal registration remained unverified. This is a scored review signal, not a confirmed refusal failure or legal conclusion.",
+    remediation: "Verify the recorded decision and suppress the retained tracking requests after Reject."
+  },
   post_accept_consent_dependent_activity: {
     id: "post_accept_consent_dependent_activity",
     label: "Consent-dependent activity observed after acceptance",
@@ -337,7 +345,7 @@ export const CERT_SCORE_FINDING_REGISTRY: Record<string, CertScoreFindingDefinit
   },
   accept_reject_outcomes_indistinguishable: {
     id: "accept_reject_outcomes_indistinguishable",
-    label: "Accept and Reject produced indistinguishable retained activity",
+    label: "Shared observed activity after Accept and Reject",
     section: "Consent Experience",
     defaultSurfacePriority: 62,
     whyItMatters: "Exact retained activity identities after both choices indicate that the consent outcomes warrant implementation review, while avoiding a duplicate score effect.",

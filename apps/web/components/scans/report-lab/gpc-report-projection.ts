@@ -15,10 +15,10 @@ export function buildGpcResponseReportProjection(
     assessment,
     californiaDeductionPoints: projection.californiaDeductionPoints,
     evidenceRefs: [
-      assessment.comparison.baselineArtifact.uri,
-      assessment.comparison.gpcArtifact.uri,
+      assessment.comparison.baselineArtifact?.uri ?? "",
+      assessment.comparison.gpcArtifact?.uri ?? "",
       ...assessment.comparison.evidenceRefs,
-    ].filter((value, index, values) => values.indexOf(value) === index).slice(0, 32),
+    ].filter((value, index, values) => Boolean(value) && values.indexOf(value) === index).slice(0, 32),
     summary: projection.summary,
   };
 }

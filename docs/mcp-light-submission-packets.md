@@ -140,9 +140,11 @@ pnpm --filter @certscore/mcp test
 
 Immediately before submission, also run the current OpenAI plugin-package and skill validators available in the submission environment and resolve every portal scan result. Select **Scan Tools** again after every production tool-schema or bundled-skill change so the reviewed snapshot matches the live endpoint.
 
-OpenAI review correction completed September 3, 2026: the existing `2.0.0` review was cancelled and resubmitted in place with an updated, passing skill scan plus corrected tool justifications, release notes, prompts, five positive review cases, and localized directory descriptions for the production GPC, Accept Path, and Reject Path behavior. The MCP origin remains `https://mcp.certscore.ai/mcp/light`, version `2.0.0` is back in **Review**, and version `1.0.0` remains **Published**.
+OpenAI review correction completed September 3, 2026: the existing `2.0.0` review was cancelled and resubmitted in place with an updated, passing skill scan plus corrected tool justifications, release notes, prompts, five positive review cases, and localized directory descriptions for the production GPC, Accept Path, and Reject Path behavior. The MCP origin remains `https://mcp.certscore.ai/mcp/light`. OpenAI approved version `2.0.0` on September 4, 2026; it is ready for the final portal **Publish** action, while version `1.0.0` remains **Published** until the approved replacement is published.
 
 OpenAI acknowledged receipt by email on September 3, 2026 at 3:46 PM PT with submission reference `C-TBdiNT62SVe0` (`ChatGPT Plugin Submission Received`). Use this reference for any review follow-up.
+
+OpenAI acknowledged approval by email on September 4, 2026 at 6:02 PM PT under plugin ID `asdk_app_6a8359df23ac8191b557db3e6296b892` (`ChatGPT Plugin Submission Approved`). The approved version does not enter the universal plugin directory automatically; publish it from the plugin submission portal to replace the currently published version.
 
 OpenAI listing fields:
 

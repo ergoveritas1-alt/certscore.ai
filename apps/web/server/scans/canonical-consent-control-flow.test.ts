@@ -33,6 +33,7 @@ type FixtureControl = {
 };
 
 type ConsentFlowFixture = {
+  screenshotWithheld?: boolean;
   complete?: boolean;
   defaultToggleStatesObserved?: boolean;
   firstLayerControls: readonly FixtureControl[];
@@ -50,6 +51,13 @@ function retainedEvidencePacket(input: ConsentFlowFixture): CanonicalEvidenceBun
     completedAt: "2026-07-30T00:00:00.000Z",
     url: GENERIC_URL,
     normalizedUrl: GENERIC_URL,
+    screenshots: input.screenshotWithheld ? [{
+      artifactId: "consent-frame", path: "screenshot.png", capturedAtMs: 1_000,
+      captureMethod: "primary_viewport_fallback", consentStateAtTime: "pre_consent",
+      pagePhase: "network_idle", url: GENERIC_URL, retentionStatus: "withheld",
+      displayStatus: "withheld", withheldReason: "safety_check_unavailable",
+      safetyFailureCode: "finalization_deadline_exceeded",
+    }] : [],
     domSnapshots: [{
       artifactId: "dom-pre-consent",
       capturedAtMs: 1_000,
@@ -223,6 +231,25 @@ function projectConsentStory(input: ConsentFlowFixture) {
     score
   };
 }
+
+test("visual safety failure preserves the structured assessment through persistence, policy, checklist and score", () => {
+  const fixture: ConsentFlowFixture = { firstLayerControls: [
+    { actionType: "accept_all", label: "Accept all" },
+    { actionType: "reject_all", label: "Reject all" },
+    { actionType: "manage_preferences", label: "Settings", presentationType: "dedicated_button", placementType: "action_cluster" },
+  ] };
+  const reference = projectConsentStory(fixture);
+  const withheld = projectConsentStory({ ...fixture, screenshotWithheld: true });
+  assert.equal(withheld.assessment.artifactVersion, "2.1");
+  assert.equal(withheld.assessment.visualEvidence?.status, "withheld");
+  assert.deepEqual(withheld.assessment.controls, reference.assessment.controls);
+  assert.deepEqual(withheld.row, reference.row);
+  assert.deepEqual(withheld.rejectRow, reference.rejectRow);
+  assert.deepEqual(withheld.score, reference.score);
+  assert.deepEqual(withheld.rejectScore, reference.rejectScore);
+  assert.equal(withheld.gapFindingObserved, reference.gapFindingObserved);
+  assert.equal(withheld.concern.evidenceBundle.rawEvidence?.consentControlAssessmentContractVersion, "2.1");
+});
 
 test("limited empty first-layer inventory remains unknown through every canonical boundary", () => {
   const packet = retainedEvidencePacket({ firstLayerControls: [] });

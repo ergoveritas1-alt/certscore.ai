@@ -103,7 +103,7 @@ test("canonical tarteaucitron recipe requires the exact necessary-only state bef
   assert.ok(tarteaucitron);
   assert.equal(
     tarteaucitron.recipeId,
-    "canonical-cmp:DSGVO All in One / tarteaucitron:necessary-only-save:v1",
+    "canonical-cmp:DSGVO All in One / tarteaucitron:necessary-only-save:v2",
   );
   assert.equal(tarteaucitron.controlSelector, "#tarteaucitronCloseAlert");
   assert.equal(tarteaucitron.controlExpectedNormalizedLabel, "auswahl speichern");
@@ -115,6 +115,7 @@ test("canonical tarteaucitron recipe requires the exact necessary-only state bef
   });
   assert.deepEqual(tarteaucitron.confirmation, {
     kind: "canonical_reject_transition",
+    registeredStateKeys: ["dsgvoaio", "dsgvoaio_create", "tarteaucitron"],
     controlSelector: "#tarteaucitronCloseAlert",
     bannerSelector: "#tarteaucitronAlertBig",
   });

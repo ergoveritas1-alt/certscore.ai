@@ -1,7 +1,10 @@
 import { getDomain as getTldtsDomain, getHostname as getTldtsHostname } from "tldts";
 import { apiRuntimeEvidenceGraphProjectionSchema } from "@certscore/api-contracts";
+import { z } from "zod";
 import {
   isCanonicalIdSyncEndpoint,
+  resolveCanonicalServicePurpose,
+  resolveCanonicalVendorLabel,
   resolveCanonicalVendorLegalContext
 } from "@certscore/vendor-resolver";
 import {
@@ -163,7 +166,8 @@ export type InventoryGroupRow = {
   setByThirdPartyScript: boolean;
   syncedIdentifiers?: string[];
   timingEvidence?: RuntimeCookieEvidenceRow["timingEvidence"] | "mixed";
-  type: "cookie" | "tracker";
+  type: "cookie" | "tracker" | "embed";
+  embedDetails?: Array<{ frameUrl: string; firstSeenMs: number; source: string }>;
   vendor: string;
 };
 
@@ -931,56 +935,10 @@ export function getInventoryCategoryLabel(
     return "Unknown";
   }
 
-  const label = vendorLabel.toLowerCase();
-  if (/google sign.?in|accounts\.google|gsi\/client/.test(label)) {
-    return "Authentication";
-  }
-  if (/stripe/.test(label)) {
-    return "Payment processors";
-  }
-  if (/cloudflare bot management|cf_chl|cf_clearance|__cf_bm|cloudflare/.test(label)) {
-    return "Security";
-  }
-  if (/doubleclick floodlight|floodlight|fls\.doubleclick/.test(label)) {
-    return "Advertising";
-  }
-  if (/google adsense|adsbygoogle|pagead2/.test(label)) {
-    return "Advertising";
-  }
-  if (/google publisher tag|googletag|gpt\.js|securepubads/.test(label)) {
-    return "Advertising";
-  }
-  if (/integral ad science|ias/.test(label)) {
-    return "Advertising";
-  }
-  if (/assets\.adobedtm\.com|adobe experience platform launch|adobe launch|adobe dtm/.test(label)) {
-    return "Tag management";
-  }
-  if (/jsdelivr|cdn\.jsdelivr\.net/.test(label)) {
-    return "CDN";
-  }
-  if (/cookieyes|cookielawinfo|viewed_cookie_policy/.test(label)) {
-    return "Consent management";
-  }
-  if (/onetrust|(?:^|\.)cookielaw\.org|optanon/.test(label)) {
-    return "Cookie compliance";
-  }
-  if (/optimizely/.test(label)) {
-    return "A/B Testing";
-  }
-  if (/piano|tinypass/.test(label)) {
-    return "Personalisation";
-  }
-  if (/cxense/.test(label)) {
-    return "Personalisation";
-  }
-  if (/quantcast/.test(label)) {
-    return "Analytics";
-  }
-  if (/gemius/.test(label)) return "Audience measurement";
-  if (/ad alliance/.test(label)) return "Advertising";
-  if (/green.?video/.test(label)) return "Embedded content";
-  if (/sourcepoint|privacy-mgmt/.test(label)) return "Cookie compliance";
+  // Precise identity and aliases belong to the registry. Substring guesses such
+  // as "ias" also classified unrelated labels (e.g. "Bias") as advertising.
+  const canonical = resolveCanonicalVendorLabel(vendorLabel);
+  if (canonical && canonical.displayCategory !== "Unknown") return canonical.displayCategory;
   return normalizeInventoryLabel(fallbackCategory || "unknown");
 }
 
@@ -1003,7 +961,7 @@ export function deriveInventoryMacroCategory(input: {
   vendor?: string | null;
 }): InventoryMacroCategory {
   const purpose = normalizeInventoryPurpose(input.purpose);
-  const vendor = (input.vendor ?? "").toLowerCase();
+  const relevance = resolveCanonicalVendorLabel(input.vendor)?.regulatoryRelevance ?? [];
 
   if (/^(advertising|advertising_measurement|retargeting|fingerprinting|marketing_automation)$/.test(purpose)) {
     return "Advertising";
@@ -1018,7 +976,7 @@ export function deriveInventoryMacroCategory(input: {
     return "Functional";
   }
   if (/^(cdn|cdn_static)$/.test(purpose)) {
-    return /instagram|vimeo|maps|font|sportradar|trustmary|iterate|medallia|piano|usable|jw player/.test(vendor)
+    return relevance.some(value => ["font_delivery", "embedded_content", "social_media", "video_player", "maps", "customer_experience", "personalization"].includes(value))
       ? "Functional"
       : "Essential";
   }
@@ -1032,6 +990,8 @@ export function classifyInventoryEvidence(
   row: Pick<InventoryGroupRow, "macroCategory" | "priority" | "purpose" | "purposes"> &
     Partial<Pick<InventoryGroupRow, "cookieDetails" | "requestCount" | "requestDetails" | "type">>
 ): InventoryEvidenceClassification {
+  // An observed frame is not proof of tracking, storage, or necessity.
+  if (row.type === "embed") return "Contextual";
   const cookieEssentiality = new Set(
     (row.cookieDetails ?? []).map((cookie) => cookie.essentiality ?? "unknown")
   );
@@ -1103,10 +1063,9 @@ export function getTrackerConsentReviewPriority(row: TrackerInventoryRow): Conse
   ];
   const purposeTokens = getInventoryPurposeTokens(purposeLabels);
   const confidence = getTrackerInventoryConfidence(row);
-  const normalizedLabel = row.label.toLowerCase();
+  const canonicalProducts = [findRuntimeVendorLabelOwner(row.label), ...row.domains.map(findRuntimeEntityOwner)];
   const isLinkedInAdsPixel =
-    /linkedin ads pixel/.test(normalizedLabel) ||
-    row.domains.some((domain) => /^px\.ads\.linkedin\.com$/i.test(domain.trim()));
+    canonicalProducts.some(owner => owner?.product === "LinkedIn Ads Pixel");
 
   if (isLinkedInAdsPixel) {
     return row.preConsent ? "high" : "review_needed";
@@ -1410,6 +1369,45 @@ export function suppressUnsupportedCmpAliasRows(rows: TrackerInventoryRow[]) {
   });
 }
 
+function inventoryProductIdentity(label: string) {
+  const owner = findRuntimeVendorLabelOwner(label);
+  return owner ? JSON.stringify([owner.entity, owner.product]) : label.trim().toLowerCase();
+}
+
+/** Attach evidence to a service, never merely to its owning company. A shared
+ * hostname is insufficient when the retained request names another product. */
+function requestMatchesInventoryService(row: TrackerInventoryGroupRow, request: SanitizedRequestEvidenceRow) {
+  const products = new Set(row.rawProducts.map(inventoryProductIdentity));
+  if (request.vendor) {
+    const requestProduct = findRuntimeVendorLabelOwner(request.vendor);
+    if (requestProduct || row.rawProducts.some(product => product.trim().toLowerCase() === request.vendor!.trim().toLowerCase())) {
+      return products.has(inventoryProductIdentity(request.vendor));
+    }
+  }
+  // Generic vendor labels can be disambiguated by an already-retained endpoint.
+  // Do not attach an unresolved request using host/company ownership alone.
+  if (!request.hostname || !request.path?.startsWith("/") || request.path.startsWith("//")) return false;
+  const owner = findRuntimeRequestOwner(`https://${request.hostname}${request.path}`);
+  return Boolean(owner && products.has(inventoryProductIdentity(owner.product)));
+}
+
+function requestMatchesInventoryCookie(row: CookieInventoryGroupRow, request: SanitizedRequestEvidenceRow) {
+  const hostname = request.hostname?.trim().toLowerCase();
+  if (!hostname || !isInventoryDisplayHostname(hostname)) return false;
+  return row.cookieDetails.some(cookie => {
+    // Cookie Domain permits a leading dot. Do not collapse subdomains using a
+    // display-name normalizer when matching retained request context.
+    const domain = cookie.domain?.trim().replace(/^\./, "").toLowerCase();
+    return domain && isInventoryDisplayHostname(domain) && (hostname === domain || hostname.endsWith(`.${domain}`)) &&
+      (request.cookieNamesSent.includes(cookie.cookieName) || request.responseCookieNamesSet.includes(cookie.cookieName));
+  });
+}
+
+function inventoryEndpointFlows(flows: PreConsentDataFlow[], domains: string[]) {
+  const hosts = new Set(domains.map(normalizeInventoryHostname).filter(Boolean));
+  return flows.filter(flow => hosts.has(normalizeInventoryHostname(flow.endpoint)));
+}
+
 export function buildRuntimeInventoryGroupRows(input: {
   cookieRows: RuntimeCookieEvidenceRow[];
   dataFlows?: PreConsentDataFlow[];
@@ -1433,16 +1431,12 @@ export function buildRuntimeInventoryGroupRows(input: {
         ...row,
         attributionSignatures: row.attributionEvidence?.signatureId ? [row.attributionEvidence.signatureId] : [],
         canonicalEntity: owner?.entity ?? null,
-        dataFlows: (input.dataFlows ?? []).filter((flow) =>
-          flow.controllingEntity.legalEntity && flow.controllingEntity.legalEntity === owner?.entity
-        ),
+        dataFlows: inventoryEndpointFlows(input.dataFlows ?? [], row.domains),
         observedRecordCount: row.cookieDetails.length,
         preConsent: row.cookieDetails.some((detail) => detail.observedBeforeConsent === true),
         purposes: [row.purpose],
         rawProducts: [owner?.product ?? row.vendor],
-        requestDetails: (input.requestRows ?? []).filter((request) =>
-          request.vendor === row.vendor || Boolean(owner?.entity && findRuntimeVendorLabelOwner(request.vendor)?.entity === owner.entity)
-        ),
+        requestDetails: (input.requestRows ?? []).filter(request => requestMatchesInventoryCookie(row, request)),
         regulatoryRelevance: owner?.regulatoryRelevance ?? [],
         requestCount: null,
         type: "cookie",
@@ -1452,23 +1446,21 @@ export function buildRuntimeInventoryGroupRows(input: {
     ...groupedTrackerRows.map((row): InventoryGroupRow => {
       const owner = findRuntimeVendorLabelOwner(row.vendor) ??
         row.domains.map(findRuntimeEntityOwner).find((candidate) => candidate !== null);
+      const rawProducts = row.rawProducts.length
+        ? uniqueStrings(row.rawProducts.map(product => findRuntimeVendorLabelOwner(product)?.product ??
+          (product === owner?.vendor ? owner.product : product)))
+        : [owner?.product ?? row.vendor];
+      const requestDetails = (input.requestRows ?? []).filter(request => requestMatchesInventoryService({ ...row, rawProducts }, request));
       return {
         ...row,
         canonicalEntity: owner?.entity ?? null,
         cookieDetails: [],
         cookieNames: row.cookieNames.filter((name) => !canonicalCookieNames.has(name.trim().toLowerCase())),
-        dataFlows: (input.dataFlows ?? []).filter((flow) =>
-          flow.controllingEntity.legalEntity && flow.controllingEntity.legalEntity === owner?.entity ||
-          row.domains.includes(flow.endpoint)
-        ),
+        dataFlows: inventoryEndpointFlows(input.dataFlows ?? [], [...row.domains, ...requestDetails.flatMap(request => request.hostname ? [request.hostname] : [])]),
         observedRecordCount: row.requestCount ?? 1,
         purposes: [row.purpose],
-        rawProducts: [owner?.product ?? row.rawProducts[0] ?? row.vendor],
-        requestDetails: (input.requestRows ?? []).filter((request) =>
-          request.vendor === row.vendor ||
-          row.domains.includes(request.hostname ?? "") ||
-          Boolean(owner?.entity && findRuntimeVendorLabelOwner(request.vendor)?.entity === owner.entity)
-        ),
+        rawProducts,
+        requestDetails,
         setByThirdPartyScript: false,
         type: "tracker",
         vendor: owner?.vendor ?? row.vendor,
@@ -1541,7 +1533,21 @@ export function buildRuntimeInventoryGroupRows(input: {
       type: existing.type === "tracker" || candidate.type === "tracker" ? "tracker" : "cookie",
     });
   }
-  return [...compatibleRows.values()].sort(compareInventoryPriorityRows);
+  return [...compatibleRows.values()].map((row) => {
+    // Service descriptions are independent of resource type, policy category,
+    // priority and observed evidence. Resolve them only after those decisions;
+    // never replace a cookie's specific storage purpose with its vendor's role.
+    if (row.type !== "tracker" || row.cookieDetails.length > 0) return row;
+    const servicePurposes = uniqueStrings(row.rawProducts.map((product) =>
+      resolveCanonicalServicePurpose({ product, vendor: row.vendor, entity: row.canonicalEntity })
+    ));
+    if (servicePurposes.length === 0 || servicePurposes.includes("Unknown")) return row;
+    return {
+      ...row,
+      purpose: servicePurposes.length === 1 ? servicePurposes[0]! : "Multiple purposes",
+      purposes: servicePurposes,
+    };
+  }).sort(compareInventoryPriorityRows);
 }
 
 /**
@@ -1578,6 +1584,58 @@ export function buildRuntimeInventoryUngroupedRows(input: {
   return [...cookieRows, ...trackerRows].sort(compareInventoryPriorityRows);
 }
 
+const retainedIframeInventorySchema = z.object({
+  frameUrl: z.string().max(8192),
+  preConsent: z.literal(true),
+  timestampMs: z.number().finite().nonnegative(),
+});
+
+/** Consume the bounded iframeSummary projection already retained by materialization.
+ * Keep these observations separate from request/cookie findings and counts. */
+export function buildIframeInventoryRows(hybridRuntimeEvidence: unknown, firstPartyDomain?: string | null): InventoryGroupRow[] {
+  const summary = getRecord(getRecord(hybridRuntimeEvidence)?.iframeSummary);
+  const events = Array.isArray(summary?.iframeEvents) ? summary.iframeEvents.slice(0, 75) : [];
+  const rows = new Map<string, InventoryGroupRow>();
+  for (const event of events) {
+    const parsed = retainedIframeInventorySchema.safeParse(event);
+    if (!parsed.success) continue;
+    let url: URL;
+    try { url = new URL(parsed.data.frameUrl); } catch { continue; }
+    if (!['https:', 'http:'].includes(url.protocol) || url.username || url.password) continue;
+    // Query values and fragments are not needed for inventory attribution/display.
+    const frameUrl = `${url.origin}${url.pathname}`;
+    if (rows.has(frameUrl)) {
+      const previous = rows.get(frameUrl)!;
+      previous.firstSeenMs = Math.min(previous.firstSeenMs!, parsed.data.timestampMs);
+      previous.embedDetails![0]!.firstSeenMs = previous.firstSeenMs;
+      continue;
+    }
+    const owner = findRuntimeRequestOwner(frameUrl);
+    const purpose = owner?.servicePurpose && owner.servicePurpose !== "Unknown"
+      ? owner.servicePurpose : "Embedded content";
+    const domains = [url.hostname];
+    const siteRelationship = siteRelationshipForDomains(domains, firstPartyDomain);
+    rows.set(frameUrl, {
+      type: "embed", vendor: owner?.vendor ?? url.hostname,
+      canonicalEntity: owner?.entity ?? null,
+      attributionEvidence: owner?.attributionEvidence ?? null,
+      attributionSignatures: owner?.attributionEvidence ? [owner.attributionEvidence.signatureId] : [],
+      confidence: owner ? (owner.confidence >= 0.9 ? "high" : owner.confidence >= 0.7 ? "medium" : "low") : "low",
+      domains, siteRelationship,
+      entityRelationship: entityRelationshipForDomains(domains, firstPartyDomain),
+      party: legacyPartyFromSiteRelationship(siteRelationship),
+      firstSeenMs: parsed.data.timestampMs, preConsent: true,
+      rawProducts: [owner?.product ?? `${url.hostname}${url.pathname}`],
+      purpose, purposes: [purpose],
+      macroCategory: "Functional", priority: "contextual", observedRecordCount: 1,
+      cookieDetails: [], cookieNames: [], dataFlows: [], requestDetails: [],
+      regulatoryRelevance: owner?.regulatoryRelevance ?? [], requestCount: null, setByThirdPartyScript: false,
+      embedDetails: [{ frameUrl, firstSeenMs: parsed.data.timestampMs, source: "hybridRuntimeEvidence.iframeSummary.iframeEvents" }],
+    });
+  }
+  return [...rows.values()];
+}
+
 export function buildRuntimeInventoryProjectionFromScan(scanRecord: ScanDetailResponse) {
   const runtimeArtifacts = scanRecord.runtimeArtifacts;
   const graphProjection = apiRuntimeEvidenceGraphProjectionSchema.safeParse(runtimeArtifacts?.runtimeEvidenceGraphProjection);
@@ -1610,6 +1668,7 @@ export function buildRuntimeInventoryProjectionFromScan(scanRecord: ScanDetailRe
     .filter(isTimedPreConsentInventoryRow);
   const dataFlows = buildPreConsentDataFlows(hybridRuntimeEvidence);
   const requestRows = buildSanitizedRequestEvidenceRows(hybridRuntimeEvidence);
+  const embedRows = buildIframeInventoryRows(hybridRuntimeEvidence, scanRecord.scan.domainHostname ?? certScoreSummary.requestedHost);
 
   return {
     runtimeEvidenceGraph: graphProjection.success && graphProjection.data.scanId === scanRecord.scan.id ? graphProjection.data : undefined,
@@ -1618,19 +1677,20 @@ export function buildRuntimeInventoryProjectionFromScan(scanRecord: ScanDetailRe
     requestRows,
     trackerRows,
     vendorSurfaceProjection,
-    groupedRows: buildRuntimeInventoryGroupRows({
+    embedRows,
+    groupedRows: [...buildRuntimeInventoryGroupRows({
       cookieRows,
       dataFlows,
       firstPartyDomain: scanRecord.scan.domainHostname ?? certScoreSummary.requestedHost,
       requestRows,
       trackerRows
-    }),
-    ungroupedRows: buildRuntimeInventoryUngroupedRows({
+    }), ...embedRows],
+    ungroupedRows: [...buildRuntimeInventoryUngroupedRows({
       cookieRows,
       dataFlows,
       firstPartyDomain: scanRecord.scan.domainHostname ?? certScoreSummary.requestedHost,
       requestRows,
       trackerRows
-    })
+    }), ...embedRows]
   };
 }

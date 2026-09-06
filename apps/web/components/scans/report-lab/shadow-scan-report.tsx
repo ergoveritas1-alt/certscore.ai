@@ -1,7 +1,11 @@
 import type { ReactNode } from "react";
+import { reportCardTitle, reportEyebrow, reportSectionTitle } from "../report-typography";
+import { InventorySortProvider, InventorySortHeader, InventorySortedBody } from "../inventory-sorting";
+import { consolidateInventoryServices } from "./inventory-service-groups";
 import { InventoryEvidenceLegend } from "../inventory-evidence-icon";
 import { InventoryConfidenceDots, InventoryPurposeChip } from "../inventory-cell-formatting";
 import { InventoryResourceProvider, InventoryResourceRow } from "../inventory-resource-details";
+import { InventoryRowSummary as InventoryRowDetails } from "./inventory-row-summary";
 import { SiteFooter } from "../../layout/site-footer";
 import { SiteHeader } from "../../layout/site-header";
 import { DomainScanForm } from "../../marketing/domain-scan-form";
@@ -77,18 +81,23 @@ function statusClasses(status: ShadowEvidenceStatus) {
 }
 
 function StatusBadge({ status }: { status: ShadowEvidenceStatus }) {
-  const symbol = status === "Observed" ? "✓" : status === "Potential gap" ? "!" : status === "Partial concern" ? "±" : "—";
+  const symbol = status === "Observed" ? "✓" : status === "Partial concern" ? "±" : "—";
 
   return (
     <span className={`inline-flex items-center gap-1.5 rounded-md border px-2 py-1 text-[0.68rem] font-semibold uppercase ${statusClasses(status)}`}>
-      <span aria-hidden="true">{symbol}</span>
+      {status === "Potential gap" ? (
+        <svg aria-hidden="true" className="h-3 w-3 shrink-0 text-rose-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+          <path d="M12 3 2 21h20ZM12 9v5m0 3v1" />
+        </svg>
+      ) : <span aria-hidden="true">{symbol}</span>}
       {status}
     </span>
   );
 }
 
 const GPC_DELTA_ROWS = [
-  ["cookies", "Cookies / storage"],
+  ["cookies", "Cookies"],
+  ["webStorage", "Web storage"],
   ["trackers", "Trackers"],
   ["advertisingOrMeasurementActivity", "Advertising / measurement"],
   ["consentOrCmpBehavior", "Consent / CMP"],
@@ -123,10 +132,15 @@ function GpcStatusBadge({ projection }: { projection: GpcResponseReportProjectio
 }
 
 function GpcComparisonGrid({ projection }: { projection: GpcResponseReportProjection }) {
+  if (!projection.assessment.comparison.comparable) {
+    return <p className="text-xs leading-5 text-zinc-600">Paired comparison is unverified; missing evidence is not treated as suppressed activity.</p>;
+  }
   return (
     <div className="grid grid-cols-2 gap-px overflow-hidden rounded-md border border-zinc-200 bg-zinc-200 sm:grid-cols-4">
       {GPC_DELTA_ROWS.map(([key, label]) => {
-        const delta = projection.assessment.comparison.deltas[key];
+        const deltas = projection.assessment.comparison.deltas;
+        const delta = key === "webStorage" ? ("webStorage" in deltas ? deltas.webStorage : null) : deltas[key];
+        if (!delta) return null;
         return (
           <div className="bg-white px-2.5 py-2" key={key}>
             <p className="truncate text-[0.62rem] font-semibold uppercase tracking-[0.06em] text-zinc-500" title={label}>{label}</p>
@@ -518,8 +532,11 @@ function SignalSnapshot({ report }: { report: ShadowReportData }) {
             </summary>
             <div className="mt-3 space-y-2.5">
               <p className="text-xs leading-5 text-zinc-600">
-                <span className="font-semibold text-zinc-800">Sec-GPC: 1</span> was retained on {report.gpcResponse.assessment.comparison.enabledProof.requestsWithSecGpc} request{report.gpcResponse.assessment.comparison.enabledProof.requestsWithSecGpc === 1 ? "" : "s"}; the browser GPC property was enabled.
+                <span className="font-semibold text-zinc-800">Sec-GPC request evidence:</span> {report.gpcResponse.assessment.comparison.enabledProof.requestsWithSecGpc} retained request{report.gpcResponse.assessment.comparison.enabledProof.requestsWithSecGpc === 1 ? "" : "s"}; main-document browser property: {report.gpcResponse.assessment.comparison.enabledProof.navigatorGlobalPrivacyControl === null ? "unverified" : String(report.gpcResponse.assessment.comparison.enabledProof.navigatorGlobalPrivacyControl)}.
               </p>
+              {report.gpcResponse.assessment.contractVersion === "certscore.gpc-response-assessment.v2" ? (
+                <p className="text-xs leading-5 text-zinc-600">Signal delivery: {report.gpcResponse.assessment.comparison.delivery.status}. Comparison coverage: {report.gpcResponse.assessment.comparison.coverage.status}.</p>
+              ) : null}
               <GpcComparisonGrid projection={report.gpcResponse} />
               <div className="flex flex-wrap items-center justify-between gap-2 text-[0.68rem] leading-4 text-zinc-500">
                 <span>
@@ -553,7 +570,7 @@ function SignalSnapshot({ report }: { report: ShadowReportData }) {
               <span className="text-xs font-medium text-zinc-500">Form surface</span>
               <span className="flex items-center gap-2 text-xs font-semibold text-zinc-800"><span className={monoClass}>{report.metrics.forms} {report.metrics.forms === 1 ? "form" : "forms"} · {report.metrics.fields} {report.metrics.fields === 1 ? "field" : "fields"}</span><DisclosureChevron className="text-zinc-400 group-open/signal:rotate-180" /></span>
             </summary>
-            <p className="mt-3 text-xs leading-5 text-zinc-600">Read-only main-document inventory. Field values were not retained.</p>
+            <p className="mt-3 text-xs leading-5 text-zinc-600">Read-only main-document inventory. Field details in Collection surface evidence below.</p>
           </details>
         ) : null}
       </div>
@@ -903,8 +920,10 @@ function ChoicePathCard({ path, report }: { path: "accept" | "reject"; report: S
 }
 
 function ChoicePathResults({ report }: { report: ShadowReportData }) {
-  if (!report.acceptPath && !report.rejectPath) return null;
-  const comparison = report.choicePathComparison;
+  const acceptSucceeded = Boolean(report.acceptPath && report.acceptPath.state !== "incomplete");
+  const rejectSucceeded = Boolean(report.rejectPath && report.rejectPath.state !== "incomplete");
+  if (!acceptSucceeded && !rejectSucceeded) return null;
+  const comparison = acceptSucceeded && rejectSucceeded ? report.choicePathComparison : null;
   const comparisonClasses = comparison?.state === "indistinguishable"
     ? "border-amber-300 bg-amber-50 text-amber-900"
     : "border-sky-300 bg-sky-50 text-sky-800";
@@ -912,12 +931,12 @@ function ChoicePathResults({ report }: { report: ShadowReportData }) {
   return (
     <div className="mt-3 border-t border-zinc-300 pt-2.5" data-testid="choice-path-results">
       <div className="flex flex-wrap items-start justify-between gap-3">
-        <h3 className="text-xs font-semibold uppercase text-sky-700">Choice path results</h3>
+        <h2 className={reportSectionTitle}>Choice path results</h2>
         {comparison ? <span className={`rounded-md border px-2.5 py-1 text-[0.68rem] font-semibold ${comparisonClasses}`} title={comparison.note}>{comparison.label}</span> : null}
       </div>
       <div className="mt-1.5 grid items-start gap-2 sm:grid-cols-2">
-        <ChoicePathCard path="accept" report={report} />
-        <ChoicePathCard path="reject" report={report} />
+        {acceptSucceeded ? <ChoicePathCard path="accept" report={report} /> : null}
+        {rejectSucceeded ? <ChoicePathCard path="reject" report={report} /> : null}
       </div>
     </div>
   );
@@ -1046,6 +1065,13 @@ function CompactInventoryMix({ report }: { report: ShadowReportData }) {
 type InventoryRow = ShadowReportData["inventory"][number];
 
 function InventoryTypeIcon({ type }: { type: string }) {
+  if (type === "Embed / iframe") return (
+    <span aria-label="Embed or iframe" title="Embed or iframe" className="inline-flex h-5 w-5 items-center justify-center text-violet-500">
+      <svg aria-hidden="true" className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="1.7">
+        <rect x="3" y="4" width="18" height="16" rx="2" /><path d="m9 9-3 3 3 3m6-6 3 3-3 3" />
+      </svg>
+    </span>
+  );
   const isCookie = type.toLowerCase().includes("cookie") || type.toLowerCase().includes("storage");
   return (
     <span
@@ -1074,44 +1100,6 @@ function SingleLineCell({ children, title }: { children: ReactNode; title?: stri
 }
 
 
-function InventoryRowDetails({ row }: { row: InventoryRow }) {
-  const preConsent = typeof row.evidenceJson?.preConsent === "boolean"
-    ? row.evidenceJson.preConsent ? "Yes" : "No"
-    : "Not retained";
-  const relevance = Array.isArray(row.evidenceJson?.regulatoryRelevance)
-    ? row.evidenceJson.regulatoryRelevance.filter((item): item is string => typeof item === "string").join(", ") || "Not retained"
-    : "Not retained";
-  const values = [
-    ["Name", row.name],
-    ["Requests / paths", row.requestNames],
-    ["Evidence", row.evidence],
-    ["Purpose", row.purpose],
-    ["Category", row.category],
-    ["First observed", row.observed],
-    ["Pre-consent", preConsent],
-    ["Observed records", String(row.recordCount)],
-    ["Request events", row.requestCount === null ? "Not retained" : String(row.requestCount)],
-    ["Domains", row.domains],
-    ["Site relationship", `${row.relationship} · entity ${row.entityRelationship.toLowerCase()}`],
-    ["Server context", row.serverLocation],
-    ["Controlling entity", row.controllingEntity],
-    ["Transfer mechanism", row.transferMechanism],
-    ["Regulatory relevance", relevance],
-  ];
-
-  return (
-    <dl className="mt-3 grid w-[34rem] max-w-[75vw] grid-cols-2 gap-x-5 gap-y-3 border-l-2 border-sky-200 pl-3 text-zinc-600">
-      {values.map(([label, value]) => (
-        <div className="min-w-0" key={label}>
-          <dt className="text-[0.65rem] uppercase text-zinc-400">{label}</dt>
-          <dd className="mt-1 break-words">{value}</dd>
-        </div>
-      ))}
-      {row.evidenceJson ? <div className="col-span-full"><dt className="text-[0.65rem] uppercase text-zinc-400">Retained JSON</dt><dd className="mt-2"><JsonEvidence value={row.evidenceJson} /></dd></div> : null}
-    </dl>
-  );
-}
-
 const INVENTORY_VISIBLE_ROW_LIMIT = 6;
 
 function inventoryResourceIdentity(value: unknown) {
@@ -1122,7 +1110,8 @@ function inventoryResourceIdentity(value: unknown) {
   return { cookieRefs, requests, nodeRefs };
 }
 
-export function RuntimeInventoryTable({ report, initiallyOpen = false }: { report: ShadowReportData; initiallyOpen?: boolean }) {
+export function RuntimeInventoryTable({ report, initiallyOpen = true }: { report: ShadowReportData; initiallyOpen?: boolean }) {
+  const inventoryRows = consolidateInventoryServices(report.inventory);
   const hasRelationshipEvidence = Boolean(report.runtimeEvidenceGraph?.details || report.runtimeEvidenceGraph?.graphs.some(graph => graph.scenario === "pre_consent" && graph.edges.length > 0));
   const inventoryIsScrollable = report.inventory.length > INVENTORY_VISIBLE_ROW_LIMIT;
   const inventoryScrollClasses = inventoryIsScrollable
@@ -1141,13 +1130,13 @@ export function RuntimeInventoryTable({ report, initiallyOpen = false }: { repor
         />
       )}
       detailsHint={<InventoryEvidenceLegend />}
-      detailsLabel="Cookie and tracker details"
-      eyebrow="Cookie and tracker inventory"
-      heading="Every retained cookie and tracker observation"
+      detailsLabel="Resource details"
+      eyebrow="Resource inventory"
+      heading="Cookies, storage, requests, and embeds"
       inventory={report.inventory}
-      summary={`${report.metrics.vendors} vendors · ${report.metrics.domains} domains`}
     >
         <InventoryResourceProvider projection={report.runtimeEvidenceGraph}>
+        <InventorySortProvider>
         <div
           className={`${inventoryScrollClasses} border border-zinc-200 bg-white`}
           data-inventory-scroll={inventoryIsScrollable ? "bounded" : "unbounded"}
@@ -1156,11 +1145,11 @@ export function RuntimeInventoryTable({ report, initiallyOpen = false }: { repor
           <thead className="sticky top-0 z-20 bg-zinc-50 text-[0.65rem] font-semibold uppercase tracking-[0.06em] text-zinc-500 shadow-[0_2px_8px_-6px_rgba(24,24,27,0.55)]">
             <tr>
               {[
-                ["More", "w-[4.5rem]"], ["Type", "w-[3rem]"], ["Vendor", hasRelationshipEvidence ? "w-[14rem]" : "w-[10rem]"], ["Name", "w-[12rem]"], ["Purpose", "w-[10rem]"],
+                ["Priority", "w-[4.5rem]"], ["Type", "w-[3rem]"], ["Vendor", hasRelationshipEvidence ? "w-[14rem]" : "w-[10rem]"], ["Name", "w-[12rem]"], ["Purpose", "w-[10rem]"],
                 ["First seen", "w-[7rem]"], ["Domains", "w-[14rem]"],
-                ["Relationship", "w-[12rem]"], ["Confidence", "w-[6rem]"], ["Priority", "w-[8rem]"],
+                ["Relationship", "w-[12rem]"], ["Confidence", "w-[6rem]"], ["Review priority", "w-[8rem]"],
               ].map(([label, width], index) => (
-                <th
+                <InventorySortHeader label={label!}
                   className={`border-b border-zinc-200 px-3 py-2 ${width} ${
                     index === 0
                       ? "md:sticky md:left-0 md:z-30 md:bg-zinc-50"
@@ -1173,15 +1162,13 @@ export function RuntimeInventoryTable({ report, initiallyOpen = false }: { repor
                             : ""
                   }`}
                   key={label}
-                >
-                  {index === 0 ? <span className="sr-only">Inspect resource</span> : label}
-                </th>
+                />
               ))}
             </tr>
           </thead>
-          <tbody>
-            {report.inventory.map((row, index) => (
-              <InventoryResourceRow inspect existingDetails={<InventoryRowDetails row={row} />} key={`${row.vendor}:${row.purpose}:${index}`} identity={inventoryResourceIdentity(row.evidenceJson)} facts={{ vendor: row.vendor, name: row.name, purpose: row.purpose, evidence: row.evidence, observed: row.observed, domains: row.domains, relationship: row.relationship, confidence: row.confidence, priority: row.priority }}>
+          <InventorySortedBody rows={inventoryRows.map(row => ({ evidence: row.evidence, type: row.type, vendor: row.vendor, name: row.name, purpose: row.purpose, firstSeenMs: typeof row.evidenceJson?.firstSeenMs === "number" && Number.isFinite(row.evidenceJson.firstSeenMs) ? row.evidenceJson.firstSeenMs : null }))}>
+            {inventoryRows.map((row, index) => (
+              <InventoryResourceRow inspect existingDetails={<InventoryRowDetails row={row} />} evidence={row.evidenceJson} key={`${row.vendor}:${row.purpose}:${index}`} identity={inventoryResourceIdentity(row.evidenceJson)} facts={{ vendor: row.vendor, name: row.name, type: row.type, purpose: row.purpose, evidence: row.evidence, category: row.category, observed: row.observed, recordCount: row.recordCount, requestCount: row.requestCount, domains: row.domains, relationship: row.relationship, entityRelationship: row.entityRelationship, confidence: row.confidence, priority: row.priority, serverLocation: row.serverLocation, controllingEntity: row.controllingEntity, transferMechanism: row.transferMechanism }}>
               <tr className="group/inventory-row border-b border-zinc-100 align-middle transition-colors hover:bg-zinc-50/80 last:border-0" key={`${row.vendor}:${row.purpose}:${index}`}>
                 <td className="bg-white px-3 py-2 transition-colors group-hover/inventory-row:bg-zinc-50 md:sticky md:left-0 md:z-10">
                   <details className="group/vendor relative">
@@ -1203,9 +1190,10 @@ export function RuntimeInventoryTable({ report, initiallyOpen = false }: { repor
               </tr>
               </InventoryResourceRow>
             ))}
-          </tbody>
+          </InventorySortedBody>
         </table>
         </div>
+        </InventorySortProvider>
         </InventoryResourceProvider>
     </RuntimeInventorySummaryCard>
   );
@@ -1219,10 +1207,10 @@ function VerdictBlock({ compact = false, report, showNextStep = true }: { compac
   return (
     <div>
       <div className="flex flex-wrap items-center gap-2">
-        <span className="text-[0.68rem] font-semibold uppercase text-sky-700">Scan assessment</span>
+        <span className={reportEyebrow}>Scan assessment</span>
         <span className="text-xs font-medium text-zinc-500">{priorityIssueCountLabel(report.findings.length)}</span>
       </div>
-      <h2 className={`${compact ? "mt-4 text-2xl" : "mt-5 text-3xl"} max-w-4xl font-semibold leading-tight text-zinc-950`}>
+      <h2 className={`mt-2 max-w-4xl ${reportSectionTitle}`}>
         Executive overview
       </h2>
       <p className={`${compact ? "mt-3 text-[0.95rem] leading-7" : "mt-4 text-base leading-7"} max-w-4xl text-zinc-600`}>{report.verdict}</p>
@@ -1240,10 +1228,10 @@ function MobileVerdict({ report }: { report: ShadowReportData }) {
   return (
     <div>
       <div className="flex flex-wrap items-center gap-2">
-        <span className="text-[0.68rem] font-semibold uppercase text-sky-700">Scan assessment</span>
+        <span className={reportEyebrow}>Scan assessment</span>
         <span className="text-xs font-medium text-zinc-500">{priorityIssueCountLabel(report.findings.length)}</span>
       </div>
-      <h2 className="mt-4 text-2xl font-semibold leading-tight text-zinc-950">Executive overview</h2>
+      <h2 className={`mt-2 ${reportSectionTitle}`}>Executive overview</h2>
       <p className="mt-3 text-[0.95rem] leading-7 text-zinc-600">{report.verdict}</p>
     </div>
   );
@@ -1404,8 +1392,8 @@ function TimelineVariant({
         <div className="flex items-start justify-between gap-3 sm:items-center">
           <div className="flex min-w-0 items-center gap-3">
             <div className="min-w-0">
-              <p className="text-[0.68rem] font-semibold uppercase text-rose-700">Priority review</p>
-              <h2 className="mt-0.5 text-xl font-semibold text-zinc-950 sm:text-2xl">Top issues needing attention</h2>
+              <p className={reportEyebrow}>Priority review</p>
+              <h2 className={`mt-2 ${reportSectionTitle}`}>Top issues needing attention</h2>
             </div>
           </div>
           <div className="flex shrink-0 items-center gap-3">
@@ -1415,12 +1403,12 @@ function TimelineVariant({
         </div>
         <div className="mt-4"><FindingsList priority report={report} /></div>
       </section>
-      <section className="border-y border-zinc-950 bg-[#fffdf8]">
+      <section className="border-y border-zinc-200 bg-white">
         <div className="mx-auto max-w-[90rem] px-5 py-6 lg:px-10 lg:py-7">
-          <p className="text-xs font-semibold uppercase text-rose-700">Cookies and trackers timeline</p>
+          <h2 className={reportSectionTitle}>Cookies and trackers timeline</h2>
           <div className="mt-3"><HorizontalTimeline dominant report={report} /></div>
-          <ChoicePathResults report={report} />
           <RuntimeInventoryTable report={report} />
+          <ChoicePathResults report={report} />
         </div>
       </section>
     </>
@@ -1576,14 +1564,15 @@ function GpcEvidenceIndexCard({ projection }: { projection: GpcResponseReportPro
       <div className="mt-5 space-y-5">
         <p className="max-w-3xl text-sm leading-6 text-zinc-600">{projection.summary}</p>
         <div className="flex flex-wrap gap-2 text-[0.68rem] font-semibold text-zinc-700">
-          <span className="rounded-md border border-sky-200 bg-sky-50 px-2 py-1">Sec-GPC: {proof.secGpcHeaderValue}</span>
-          <span className="rounded-md border border-sky-200 bg-sky-50 px-2 py-1">navigator.globalPrivacyControl: true</span>
+          <span className="rounded-md border border-sky-200 bg-sky-50 px-2 py-1">Sec-GPC: {proof.secGpcHeaderValue ?? "unverified"}</span>
+          <span className="rounded-md border border-sky-200 bg-sky-50 px-2 py-1">Main-document navigator.globalPrivacyControl: {proof.navigatorGlobalPrivacyControl === null ? "unverified" : String(proof.navigatorGlobalPrivacyControl)}</span>
+          {projection.assessment.contractVersion === "certscore.gpc-response-assessment.v2" ? <span className="rounded-md border border-zinc-200 px-2 py-1">Delivery: {projection.assessment.comparison.delivery.status} · Coverage: {projection.assessment.comparison.coverage.status}</span> : null}
           <span className="rounded-md border border-zinc-200 bg-zinc-50 px-2 py-1">{proof.requestsWithSecGpc} retained request proof{proof.requestsWithSecGpc === 1 ? "" : "s"}</span>
           {projection.californiaDeductionPoints > 0 ? (
             <span className="rounded-md border border-rose-200 bg-rose-50 px-2 py-1 text-rose-800">CA policy · −{projection.californiaDeductionPoints} points</span>
           ) : null}
         </div>
-        <div className="overflow-x-auto border border-zinc-200">
+        {projection.assessment.comparison.comparable ? <div className="overflow-x-auto border border-zinc-200">
           <table className="w-full min-w-[44rem] border-collapse text-left text-xs">
             <thead className="bg-zinc-50 text-[0.65rem] font-semibold uppercase tracking-[0.06em] text-zinc-500">
               <tr>
@@ -1600,22 +1589,27 @@ function GpcEvidenceIndexCard({ projection }: { projection: GpcResponseReportPro
             </thead>
             <tbody>
               {GPC_DELTA_ROWS.map(([key, label]) => {
-                const delta = projection.assessment.comparison.deltas[key];
+                const deltas = projection.assessment.comparison.deltas;
+                const delta = key === "webStorage" ? ("webStorage" in deltas ? deltas.webStorage : null) : deltas[key];
+                if (!delta) return null;
                 return (
                   <tr className="border-b border-zinc-100 last:border-0" key={key}>
                     <td className="px-3 py-2 font-semibold text-zinc-900">{label}</td>
                     <td className={`${monoClass} px-3 py-2 text-zinc-700`}>{delta.baselineCount}</td>
                     <td className={`${monoClass} px-3 py-2 text-zinc-700`}>{delta.gpcCount}</td>
                     <td className={`${monoClass} px-3 py-2 text-zinc-700`}>{delta.countDelta > 0 ? `+${delta.countDelta}` : delta.countDelta}</td>
-                    <td className={`${monoClass} px-3 py-2 text-zinc-700`}>{delta.baselineOnly.length}</td>
-                    <td className={`${monoClass} px-3 py-2 text-zinc-700`}>{delta.shared.length}</td>
-                    <td className={`${monoClass} px-3 py-2 text-zinc-700`}>{delta.gpcOnly.length}</td>
+                    <td className={`${monoClass} px-3 py-2 text-zinc-700`}>{"baselineOnlyCount" in delta ? Number(delta.baselineOnlyCount) : delta.baselineOnly.length}</td>
+                    <td className={`${monoClass} px-3 py-2 text-zinc-700`}>{"sharedCount" in delta ? Number(delta.sharedCount) : delta.shared.length}</td>
+                    <td className={`${monoClass} px-3 py-2 text-zinc-700`}>{"gpcOnlyCount" in delta ? Number(delta.gpcOnlyCount) : delta.gpcOnly.length}</td>
                   </tr>
                 );
               })}
             </tbody>
           </table>
-        </div>
+        </div> : <GpcComparisonGrid projection={projection} />}
+        {projection.assessment.contractVersion === "certscore.gpc-response-assessment.v2" ? (
+          <p className="text-xs leading-5 text-zinc-600">Cookie/storage and CMP identity differences are descriptive snapshots. The response uses classified activity within the matched window, not an inferred consent decision.</p>
+        ) : null}
         {projection.assessment.comparison.limitationKeys.length > 0 ? (
           <p className="text-xs leading-5 text-amber-800">
             Coverage limits: {projection.assessment.comparison.limitationKeys.join(", ")}.
@@ -1639,12 +1633,11 @@ function EvidenceDirectory({ report }: { report: ShadowReportData }) {
   const trackingExternalReviewCount = countRowsRequiringReview(report.trackingExternalRows);
   const preConsentRuntimeReviewCount = countRowsRequiringReview(report.preConsentRuntimeRows);
   return (
-    <section className="border-t border-zinc-950 bg-white" id="evidence">
+    <section className="border-t border-zinc-200 bg-white" id="evidence">
       <div className="mx-auto max-w-[90rem] px-5 py-8 lg:px-10 lg:py-10">
         <div className="grid gap-4 lg:grid-cols-[minmax(18rem,0.8fr)_minmax(32rem,1.2fr)] lg:items-end">
           <div>
-            <p className="text-xs font-semibold uppercase text-sky-700">Evidence index</p>
-            <h2 className="mt-2 text-2xl font-semibold text-zinc-950">Every layer, one step away</h2>
+            <h2 className={reportSectionTitle}>Evidence index</h2>
             <p className="mt-2 max-w-2xl text-sm leading-6 text-zinc-600">
               Consent, tracking &amp; external services, pre-consent runtime{report.gpcResponse ? ", GPC comparison" : ""}, GDPR Transparency, transport security and collection details.
             </p>
@@ -1655,7 +1648,7 @@ function EvidenceDirectory({ report }: { report: ShadowReportData }) {
           <div className="border-l border-t border-zinc-200">
             <details className="group/consent border-b border-r border-zinc-200 p-5">
               <summary className="flex cursor-pointer list-none items-center justify-between gap-4 [&::-webkit-details-marker]:hidden">
-                <div><p className="text-xs font-semibold uppercase text-zinc-500">Consent surface</p><h3 className="mt-1 text-lg font-semibold text-zinc-950">Controls and CMP context</h3></div>
+                <div><p className="text-xs font-semibold uppercase text-zinc-500">Consent surface</p><h3 className={`mt-1 ${reportCardTitle}`}>Controls and CMP context</h3></div>
                 <DisclosureChevron className="text-zinc-400 group-open/consent:rotate-180" />
               </summary>
               <div className="mt-5"><ControlStatusGrid report={report} /></div>
@@ -1673,14 +1666,14 @@ function EvidenceDirectory({ report }: { report: ShadowReportData }) {
             </details>
             <details className="group/tracking border-b border-r border-zinc-200 p-5">
               <summary className="flex cursor-pointer list-none items-center justify-between gap-4 [&::-webkit-details-marker]:hidden">
-                <div><p className="text-xs font-semibold uppercase text-zinc-500">Tracking &amp; external services</p><h3 className="mt-1 text-lg font-semibold text-zinc-950">{trackingExternalReviewCount} requiring review · {report.trackingExternalRows.length} checks</h3></div>
+                <div><p className="text-xs font-semibold uppercase text-zinc-500">Tracking &amp; external services</p><h3 className={`mt-1 ${reportCardTitle}`}>{trackingExternalReviewCount} requiring review · {report.trackingExternalRows.length} checks</h3></div>
                 <DisclosureChevron className="text-zinc-400 group-open/tracking:rotate-180" />
               </summary>
               <EvidenceIndexRows rows={report.trackingExternalRows} />
             </details>
             <details className="group/policy border-b border-r border-zinc-200 p-5">
               <summary className="flex cursor-pointer list-none items-center justify-between gap-4 [&::-webkit-details-marker]:hidden">
-                <div><p className="text-xs font-semibold uppercase text-zinc-500">Policy and transparency</p><h3 className="mt-1 text-lg font-semibold text-zinc-950">{observedGdprTransparencyRows} observed · {report.gdprTransparencyRows.length} checks</h3></div>
+                <div><p className="text-xs font-semibold uppercase text-zinc-500">Policy and transparency</p><h3 className={`mt-1 ${reportCardTitle}`}>{observedGdprTransparencyRows} observed · {report.gdprTransparencyRows.length} checks</h3></div>
                 <DisclosureChevron className="text-zinc-400 group-open/policy:rotate-180" />
               </summary>
               <div className="mt-5 divide-y divide-zinc-200 border-t border-zinc-200">
@@ -1711,7 +1704,7 @@ function EvidenceDirectory({ report }: { report: ShadowReportData }) {
           <div className="border-l border-t border-zinc-200">
             <details className="group/runtime border-b border-r border-zinc-200 p-5">
               <summary className="flex cursor-pointer list-none items-center justify-between gap-4 [&::-webkit-details-marker]:hidden">
-                <div><p className="text-xs font-semibold uppercase text-zinc-500">Pre-consent runtime</p><h3 className="mt-1 text-lg font-semibold text-zinc-950">{preConsentRuntimeReviewCount} requiring review · {report.preConsentRuntimeRows.length} checks</h3></div>
+                <div><p className="text-xs font-semibold uppercase text-zinc-500">Pre-consent runtime</p><h3 className={`mt-1 ${reportCardTitle}`}>{preConsentRuntimeReviewCount} requiring review · {report.preConsentRuntimeRows.length} checks</h3></div>
                 <DisclosureChevron className="text-zinc-400 group-open/runtime:rotate-180" />
               </summary>
               <EvidenceIndexRows rows={report.preConsentRuntimeRows} stackedTools />
@@ -1719,7 +1712,7 @@ function EvidenceDirectory({ report }: { report: ShadowReportData }) {
             {report.gpcResponse ? <GpcEvidenceIndexCard projection={report.gpcResponse} /> : null}
             <details className="group/transport border-b border-r border-zinc-200 p-5">
               <summary className="flex cursor-pointer list-none items-center justify-between gap-4 [&::-webkit-details-marker]:hidden">
-                <div><p className="text-xs font-semibold uppercase text-zinc-500">Transport security</p><h3 className="mt-1 text-lg font-semibold text-zinc-950">{report.transportRows.filter((row) => row.status === "Observed").length} positive · {report.transportRows.length} checks</h3></div>
+                <div><p className="text-xs font-semibold uppercase text-zinc-500">Transport security</p><h3 className={`mt-1 ${reportCardTitle}`}>{report.transportRows.filter((row) => row.status === "Observed").length} positive · {report.transportRows.length} checks</h3></div>
                 <DisclosureChevron className="text-zinc-400 group-open/transport:rotate-180" />
               </summary>
               <div className="mt-5 divide-y divide-zinc-200 border-t border-zinc-200">
@@ -1737,7 +1730,7 @@ function EvidenceDirectory({ report }: { report: ShadowReportData }) {
             {report.metrics.forms > 0 ? (
               <details className="group/collection border-b border-r border-zinc-200 p-5">
                 <summary className="flex cursor-pointer list-none items-center justify-between gap-4 [&::-webkit-details-marker]:hidden">
-                  <div><p className="text-xs font-semibold uppercase text-zinc-500">Collection surfaces</p><h3 className="mt-1 text-lg font-semibold text-zinc-950">{report.metrics.forms} {report.metrics.forms === 1 ? "form" : "forms"} · {report.metrics.fields} {report.metrics.fields === 1 ? "field" : "fields"}</h3></div>
+                  <div><p className="text-xs font-semibold uppercase text-zinc-500">Collection surfaces</p><h3 className={`mt-1 ${reportCardTitle}`}>{report.metrics.forms} {report.metrics.forms === 1 ? "form" : "forms"} · {report.metrics.fields} {report.metrics.fields === 1 ? "field" : "fields"}</h3></div>
                   <DisclosureChevron className="text-zinc-400 group-open/collection:rotate-180" />
                 </summary>
                 <p className="mt-5 text-sm leading-6 text-zinc-600">Read-only main-document inventory. Field values were not retained. Assessment: {report.collectionStatus ?? "Unavailable"}.</p>

@@ -60,7 +60,14 @@ export async function inspectLocatorActionability(
         }
         const centerX = rectangle.left + rectangle.width / 2;
         const centerY = rectangle.top + rectangle.height / 2;
-        const hitTarget = document.elementFromPoint(centerX, centerY);
+        let hitTarget = document.elementFromPoint(centerX, centerY);
+        // elementFromPoint retargets a shadow descendant to its host. Descend
+        // through open roots so a genuine hit is not mistaken for an overlay.
+        for (let depth = 0; depth < 12 && hitTarget?.shadowRoot; depth++) {
+          const nested = hitTarget.shadowRoot.elementFromPoint(centerX, centerY);
+          if (!nested || nested === hitTarget) break;
+          hitTarget = nested;
+        }
         return {
           boundingBoxInViewport,
           centerHitTargetRelation: hitTarget === null
@@ -124,11 +131,13 @@ export async function waitForLocatorVerifiedGeometry(
 export async function dispatchLocatorClickWithVerifiedGeometry(
   control: Locator,
   timeoutMs = 2_000,
+  assertDispatchAllowed?: () => void,
 ): Promise<LocatorActionability> {
   const actionability = await inspectLocatorActionability(control);
   if (!locatorActionabilitySupportsVerifiedDispatch(actionability)) {
     throw new Error("Verified-geometry consent control is no longer safely actionable.");
   }
+  assertDispatchAllowed?.();
   await control.click({ force: true, timeout: timeoutMs });
   return actionability;
 }

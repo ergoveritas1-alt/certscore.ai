@@ -28,7 +28,7 @@ test("canonical NBCNews cookie knowledge separates non-essential categories from
     ["fw_vcid2", "advertising"]
   ]);
   for (const [name, category] of categories) {
-    const knowledge = resolveCanonicalCookieKnowledge(name);
+    const knowledge = resolveCanonicalCookieKnowledge(name, { cookieDomain: "c.bing.com" });
     assert.equal(knowledge.category, category);
     assert.equal(knowledge.essentiality, "non_essential");
     assert.ok(knowledge.description.length > 20);
@@ -86,8 +86,8 @@ test("canonical Microsoft cookie knowledge keeps documented Clarity and identity
     name: "CLID",
     vendor: "Microsoft Clarity",
   });
-  assert.equal(resolveCanonicalCookieKnowledge("MUID").vendor, "Microsoft Identity Synchronization");
-  assert.equal(resolveCanonicalCookieKnowledge("MR").essentiality, "non_essential");
+  assert.equal(resolveCanonicalCookieKnowledge("MUID", { cookieDomain: "c.bing.com" }).vendor, "Microsoft Identity Synchronization");
+  assert.equal(resolveCanonicalCookieKnowledge("MR", { cookieDomain: "c.bing.com" }).essentiality, "non_essential");
   assert.equal(resolveCanonicalCookieKnowledge("SRM_B").essentiality, "unknown");
 });
 
@@ -188,7 +188,7 @@ test("canonical context-bound advertising families require a matching vendor hos
   assert.equal(resolveCanonicalCookieKnowledge("audit", { cookieDomain: "example.com" }).category, "unknown");
 });
 
-test("canonical cookie context accepts bounded setter and initiator hosts", () => {
+test("canonical cookie context requires direct setter or host evidence, not an ancestor", () => {
   assert.equal(resolveCanonicalCookieKnowledge("sa-user-id", {
     cookieDomain: "example.com",
     setterScriptUrl: "https://tags.srv.stackadapt.com/events.js?site=example",
@@ -196,8 +196,24 @@ test("canonical cookie context accepts bounded setter and initiator hosts", () =
   assert.equal(resolveCanonicalCookieKnowledge("g_state", {
     cookieDomain: "example.com",
     initiatorChain: ["https://accounts.google.com/gsi/client"],
+  }).vendor, null);
+  assert.equal(resolveCanonicalCookieKnowledge("g_state", {
+    cookieDomain: "example.com",
+    setterScriptUrl: "https://accounts.google.com/gsi/client",
   }).vendor, "Google Identity Services");
   assert.equal(resolveCanonicalCookieKnowledge("g_state", { cookieDomain: "example.com" }).category, "unknown");
+});
+
+test("generic Microsoft cookie names cannot bypass the resolver's host guard", () => {
+  for (const name of ["MUID", "MR", "SM", "ANONCHK"]) {
+    for (const context of [{}, { cookieDomain: "example.com" }, {
+      cookieDomain: "example.com", initiatorChain: ["https://c.bing.com/c.gif"],
+    }, { cookieDomain: "bing.com.example.com" }]) {
+      assert.equal(resolveCanonicalCookieKnowledge(name, context).vendor, null, name);
+      assert.equal(resolveCanonicalCookieKnowledge(name, context).essentiality, "unknown", name);
+    }
+    assert.equal(resolveCanonicalCookieKnowledge(name, { cookieDomain: ".clarity.ms" }).essentiality, "non_essential");
+  }
 });
 
 test("canonical documented utility families preserve purpose and essentiality distinctions", () => {

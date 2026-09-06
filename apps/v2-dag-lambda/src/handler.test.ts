@@ -15,12 +15,14 @@ import {
   cookieEventSchema,
   networkEventSchema,
   normalizedVendorObservationSchema,
+  postAcceptEvidencePacketSchema,
+  projectPostAcceptEvidenceForReport,
   type CanonicalEvidenceBundle,
   type ConsentActionAttempt,
   type ConsentFlowObservation,
   type ScreenshotArtifact,
 } from "@certscore/contracts";
-import { buildPreConsentRuntimePreview } from "@certscore/scan-core";
+import { buildPreConsentRuntimePreview, buildGpcResponseAssessment } from "@certscore/scan-core";
 import { parseLocalV2DagLambdaResultMessage } from "../../web/server/scans/local-v2-dag-lambda-dispatch";
 import {
   LOCAL_V2_DAG_LAMBDA_DEFAULT_ARTIFACT_CHAIN_TIMEOUT_MS,
@@ -62,6 +64,7 @@ import {
   handler,
   invokeLocalV2DagLambdaWorker,
   invokeLocalV2DagLambdaWorkers,
+  readLocalV2DagLambdaWorkerBundle,
   isPostRefusalRejectWorkerEnabled,
   isPostAcceptWorkerEnabled,
   mergeLocalV2DagLambdaEvidenceLaneBundles,
@@ -73,6 +76,7 @@ import {
   publishVerifiedPreConsentRuntimePreview,
   runLocalV2DagLambdaPostRefusalArtifactChain,
   runLocalV2DagLambdaPostAcceptArtifactChain,
+  runLocalV2DagLambdaArtifactChain,
   sendLocalV2DagLambdaResultMessage,
   serializeCanonicalEvidenceBundle,
   unwrapLocalV2DagLambdaDispatchEvent,
@@ -277,6 +281,109 @@ test("GPC worker parsing fails closed without enabled configuration and parent c
     workerLane: "gpc_observation",
   })), /exact parent dispatch checksum/);
 });
+
+test("GPC invocation failure is terminal and neutral without losing the three verified passive outcomes", async () => {
+  const parent = parseLocalV2DagLambdaDispatchPayload(validPayload({ orchestrationMode: "sharded", gpcObservation: {
+    contractVersion: "certscore.gpc-observation-dispatch.v1", enabled: true,
+    pairWithLane: "runtime_evidence", protocol: "passive_baseline_with_sec_gpc",
+  } }));
+  const results = await invokeLocalV2DagLambdaWorkers({ parentPayload: parent, parentScanId: parent.scanId,
+    workerLanes: [...LOCAL_V2_DAG_LAMBDA_EVIDENCE_WORKER_LANES, "gpc_observation"], lambdaClient: {
+      async send(command) {
+        const p = JSON.parse(Buffer.from(command.input.Payload ?? []).toString());
+        if (p.workerLane === "gpc_observation") throw new Error("worker unavailable");
+        return { StatusCode: 200, Payload: Buffer.from(JSON.stringify({ scanId: p.scanId, workerLane: p.workerLane,
+          status: "completed", artifactPointers: { scanArtifactUri: `s3://fixture/${p.workerLane}/bundle.json` } })) };
+      },
+    },
+  });
+  assert.equal(results.filter((r) => r.status === "completed").length, 3);
+  const failed = results.find((r) => r.workerLane === "gpc_observation")!;
+  assert.equal(failed.failureReason, "gpc_worker_failed");
+  assert.equal(failed.artifactPointers, undefined);
+  const summary = buildLocalV2DagLambdaLaneTimingSummary({ coordinatorStartedAtMs: Date.now() - 100,
+    generatedAtMs: Date.now(), passiveLaneBarrierCompletedAtMs: Date.now(), passiveWorkerResults: results,
+    postRefusal: { join: "disabled" }, postAccept: { join: "disabled" } });
+  const gpc = summary.lanes.find((lane) => lane.lane === "gpc_observation")!;
+  assert.equal(gpc.outcome, "failed");
+  assert.equal(gpc.evidenceJoined, false);
+  assert.ok(gpc.terminalOutcomeObservedAt);
+  await assert.rejects(invokeLocalV2DagLambdaWorkers({ parentPayload: parent, parentScanId: parent.scanId,
+    workerLanes: ["runtime_evidence"], lambdaClient: { async send() { throw new Error("critical baseline unavailable"); } } }), /critical baseline/);
+});
+
+test("real passive workers retain one parent identity through upload, verification and GPC pairing", { timeout: 30_000 }, async () => {
+  const previousBucket = process.env.CERTSCORE_V2_DAG_LAMBDA_ARTIFACT_BUCKET;
+  process.env.CERTSCORE_V2_DAG_LAMBDA_ARTIFACT_BUCKET = "local-memory-only";
+  const root = await mkdtemp(path.join(os.tmpdir(), "certscore-worker-identity-"));
+  const server = createHttpServer((_request, response) => {
+    response.setHeader("Content-Type", "text/html");
+    response.end('<!doctype html><html><body><h1>Local public information fixture</h1><p>This substantive document is a deterministic browser fixture for independent baseline and privacy-signal captures, without outside requests or consent interactions.</p></body></html>');
+  });
+  server.listen(0, "127.0.0.1"); await once(server, "listening");
+  const address = server.address(); assert.ok(address && typeof address !== "string");
+  const targetUrl = `http://127.0.0.1:${address.port}/`;
+  const bodies = new Map<string, Buffer>();
+  const bundles: CanonicalEvidenceBundle[] = [];
+  const pointers: Array<{ uri: string; sha256: string; sizeBytes: number }> = [];
+  try {
+    for (const workerLane of ["runtime_evidence", "gpc_observation"] as const) {
+      const payload = parseLocalV2DagLambdaDispatchPayload(validPayload({
+        scanId: "paired-real-worker", targetUrl, hostname: "127.0.0.1", orchestrationMode: "worker", workerLane,
+        parentDispatchSha256: "a".repeat(64),
+        ...(workerLane === "gpc_observation" ? { gpcObservation: {
+          contractVersion: "certscore.gpc-observation-dispatch.v1", enabled: true,
+          pairWithLane: "runtime_evidence", protocol: "passive_baseline_with_sec_gpc",
+        } } : {}),
+      }));
+      const artifacts = await runLocalV2DagLambdaArtifactChain(payload, {
+        artifactRoot: path.join(root, workerLane), physicalInvocationId: `physical-${workerLane}`,
+        preConsentModuleDeadlineMs: 5_000, preConsentScreenshotMode: "never",
+        s3Client: { async send(command: PutObjectCommand) {
+          bodies.set(String(command.input.Key), Buffer.from(command.input.Body as Uint8Array)); return {};
+        } },
+      });
+      const result = { scanId: payload.scanId, workerLane, status: "completed" as const, ...artifacts };
+      const verified = await readLocalV2DagLambdaWorkerBundle(result, { s3GetClient: { async send(command: GetObjectCommand) {
+        const body = bodies.get(String(command.input.Key)); assert.ok(body); return { Body: body };
+      } } });
+      assert.ok(verified, "real captured bundle must verify, not only a hand-written fixture");
+      assert.equal(verified.scanId, payload.scanId);
+      assert.equal(verified.scanLaneRuns[0]?.physicalInvocationId, `physical-${workerLane}`);
+      bundles.push(verified);
+      pointers.push({ uri: artifacts.artifactPointers.scanArtifactUri!, ...artifacts.artifactMetadata.scanArtifactUri! });
+    }
+    const assessment = buildGpcResponseAssessment({ baseline: bundles[0]!, gpc: bundles[1]!, baselineArtifact: pointers[0]!, gpcArtifact: pointers[1]! });
+    assert.equal(assessment.comparison.delivery.status, "verified");
+    assert.equal(assessment.comparison.limitationKeys.includes("paired_scan_context_mismatch"), false);
+    assert.equal(assessment.status, "no_observable_response");
+  } finally {
+    if (previousBucket === undefined) delete process.env.CERTSCORE_V2_DAG_LAMBDA_ARTIFACT_BUCKET;
+    else process.env.CERTSCORE_V2_DAG_LAMBDA_ARTIFACT_BUCKET = previousBucket;
+    await new Promise<void>((resolve) => server.close(() => resolve()));
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+for (const failure of ["missing_metadata", "checksum", "size", "schema", "read", "parent_identity"] as const) {
+  test(`GPC artifact ${failure} failure stays isolated from canonical baseline`, async () => {
+    const body = Buffer.from(failure === "schema" ? '{}' : JSON.stringify(canonicalBundleFixture(failure === "parent_identity" ? "wrong-scan" : "gpc-verify")));
+    const result = { scanId: "gpc-verify", workerLane: "gpc_observation" as const, status: "completed" as "completed" | "failed",
+      artifactPointers: { scanArtifactUri: "s3://fixture/gpc/CanonicalEvidenceBundle.json" },
+      artifactMetadata: failure === "missing_metadata" ? undefined : { scanArtifactUri: {
+        sha256: failure === "checksum" ? "f".repeat(64) : createHash("sha256").update(body).digest("hex"),
+        sizeBytes: body.length + (failure === "size" ? 1 : 0),
+      } },
+    };
+    const bundle = await readLocalV2DagLambdaWorkerBundle(result, { s3GetClient: { async send() {
+      if (failure === "read") throw new Error("unavailable");
+      return { Body: body };
+    } } });
+    assert.equal(bundle, undefined);
+    assert.equal(result.status, "failed");
+    assert.equal((result as { failureReason?: string }).failureReason, "gpc_artifact_unverifiable");
+  });
+}
 
 test("post-refusal dispatch is typed, exact-target authorized, and default off", () => {
   const payload = parseLocalV2DagLambdaDispatchPayload(validPayload({
@@ -868,7 +975,7 @@ test("Accept worker retains a neutral unsupported packet and never enables produ
   }
 });
 
-test("Accept worker runs the canonical non-CMP control path for an exact loopback target", async () => {
+test("Accept worker completes a non-CMP click/capture without treating banner dismissal as verified consent", async () => {
   const priorFlag = process.env[POST_ACCEPT_WORKER_FEATURE_FLAG];
   const priorBucket = process.env.CERTSCORE_V2_DAG_LAMBDA_ARTIFACT_BUCKET;
   const outDir = await mkdtemp(path.join(os.tmpdir(), "certscore-accept-canonical-non-cmp-"));
@@ -881,6 +988,7 @@ test("Accept worker runs the canonical non-CMP control path for an exact loopbac
       return;
     }
     response.setHeader("content-type", "text/html; charset=utf-8");
+    response.setHeader("set-cookie", "=private-unnamed-cookie; Path=/; SameSite=Lax");
     response.end(`<!doctype html><html><body>
       <section id="privacy-consent" role="dialog" aria-label="Cookie consent choices">
         <p>Choose whether this site may use analytics and advertising cookies.</p>
@@ -889,6 +997,7 @@ test("Accept worker runs the canonical non-CMP control path for an exact loopbac
         <button class="choice accept-choice">Accept all</button>
       </section>
       <script>
+        localStorage.setItem('', 'private-unnamed-key');
         document.querySelector('.accept-choice').addEventListener('click', () => {
           fetch('/accept-action', { method: 'POST' });
           document.querySelector('#privacy-consent').hidden = true;
@@ -932,19 +1041,29 @@ test("Accept worker runs the canonical non-CMP control path for an exact loopbac
       s3Client: { async send(command) { puts.push(command as PutObjectCommand); return {}; } },
     });
 
-    const retainedPacket = JSON.parse(
+    const retainedPacket = postAcceptEvidencePacketSchema.parse(JSON.parse(
       await readFile(path.join(outDir, "PostAcceptEvidencePacket.json"), "utf8"),
-    ) as {
-      acceptanceRegistration?: { reason?: string; status?: string };
-      limitations?: string[];
-      resolver?: { reason?: string };
-      timing?: { resolverMs?: number; totalMs?: number };
-    };
+    ));
     assert.equal(acceptActions, 1, JSON.stringify(retainedPacket));
     assert.equal(puts.length, 1);
-    assert.equal(result.postAcceptEvidence?.status, "confirmed_clean");
-    assert.equal(result.postAcceptEvidence?.acceptanceExercised, true);
-    assert.equal(result.postAcceptEvidence?.productionFindingIntegration, true);
+    const uploadedBody = Buffer.from(puts[0]!.input.Body as Uint8Array);
+    const metadata = result.artifactMetadata?.postAcceptPacketUri;
+    assert.equal(metadata?.sha256, createHash("sha256").update(uploadedBody).digest("hex"));
+    assert.equal(metadata?.sizeBytes, uploadedBody.byteLength);
+    const uploadedPacket = postAcceptEvidencePacketSchema.parse(JSON.parse(uploadedBody.toString("utf8")));
+    assert.deepEqual(uploadedPacket, retainedPacket, "Shared validation must not discard evidence during handoff");
+    const projection = projectPostAcceptEvidenceForReport({ packet: uploadedPacket, packetSha256: metadata!.sha256 });
+    const unnamed = projection.afterActionStorage!.filter((item) => item.name === "");
+    assert.deepEqual(unnamed.map((item) => item.storageType).sort(), ["cookie", "local_storage"]);
+    assert.equal(new Set(unnamed.map((item) => item.identityHash)).size, 2);
+    assert.equal(projection.packetSha256, metadata!.sha256);
+    assert.equal(projection.registrationStatus, "unconfirmed");
+    assert.equal(uploadedBody.includes("private-unnamed"), false);
+    assert.equal(result.postAcceptEvidence?.status, "unconfirmed");
+    assert.equal(result.postAcceptEvidence?.acceptanceExercised, false);
+    assert.equal(result.postAcceptEvidence?.productionFindingIntegration, false);
+    assert.equal(retainedPacket.afterActionCapture?.activationStatus, "completed");
+    assert.equal(retainedPacket.afterActionCapture?.stopReason, "window_elapsed");
   } finally {
     if (priorFlag === undefined) delete process.env[POST_ACCEPT_WORKER_FEATURE_FLAG];
     else process.env[POST_ACCEPT_WORKER_FEATURE_FLAG] = priorFlag;
@@ -2484,6 +2603,42 @@ test("runtime worker retains a bounded failure diagnostic when no canonical part
     else process.env.CERTSCORE_V2_DAG_LAMBDA_ARTIFACT_BUCKET = previousBucket;
   }
 });
+
+for (const workerLane of ["accept_observation", "reject_observation"] as const) {
+  test(`${workerLane}: evidence validation failures return bounded terminal diagnostics without publishing a second report`, async () => {
+    const previousBucket = process.env.CERTSCORE_V2_DAG_LAMBDA_ARTIFACT_BUCKET;
+    process.env.CERTSCORE_V2_DAG_LAMBDA_ARTIFACT_BUCKET = "failure-diagnostic-test";
+    const uploads: string[] = [];
+    let publications = 0;
+    const failure = Object.assign(new Error("private-cookie-value in raw validation error"), {
+      name: "ZodError", issues: [{ code: "too_small", path: ["storage", "preAction", 10, "name"], message: "private-cookie-value" }],
+    });
+    try {
+      const result = await handler(validPayload({ orchestrationMode: "worker", workerLane, parentDispatchSha256: "e".repeat(64) }), {
+        runArtifactChain: async () => { throw failure; },
+        s3Client: { async send(command: PutObjectCommand) {
+          uploads.push(Buffer.from(command.input.Body as Uint8Array).toString("utf8"));
+          return { $metadata: {} };
+        } },
+        sqsClient: { async send() { publications++; return { $metadata: {} }; } },
+      });
+      assert.equal(result.status, "failed");
+      assert.equal(result.workerLane, workerLane);
+      assert.equal(result.error?.code, "v2_dag_lambda_evidence_invalid");
+      assert.match(result.error?.message ?? "", /storage\.preAction\.\[10\]\.name.*too_small/);
+      assert.ok((result.error?.message.length ?? 0) <= 500);
+      assert.equal(uploads.length, 1);
+      assert.equal(publications, 0, "Only the coordinator publishes the canonical report result");
+      assert.match(result.artifactPointers?.failureDiagnosticUri ?? "", new RegExp(`lanes/${workerLane}/failure/FailureDiagnostic\\.json$`));
+      assert.equal(JSON.stringify([result, uploads]).includes("private-cookie-value"), false);
+      assert.equal(result.postAcceptEvidence, undefined);
+      assert.equal(result.postRefusalEvidence, undefined);
+    } finally {
+      if (previousBucket === undefined) delete process.env.CERTSCORE_V2_DAG_LAMBDA_ARTIFACT_BUCKET;
+      else process.env.CERTSCORE_V2_DAG_LAMBDA_ARTIFACT_BUCKET = previousBucket;
+    }
+  });
+}
 
 test("failure diagnostic upload errors do not suppress terminal publication", async () => {
   const previousBucket = process.env.CERTSCORE_V2_DAG_LAMBDA_ARTIFACT_BUCKET;

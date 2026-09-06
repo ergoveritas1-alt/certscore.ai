@@ -83,3 +83,21 @@ test("verified geometry waits within the retry slice for a partially off-screen 
     await browser.close();
   }
 });
+test("open-shadow controls retain real hit-target geometry and respect the final dispatch guard", async () => {
+  const browser = await chromium.launch({ headless: true });
+  try {
+    const page = await browser.newPage();
+    await page.setContent('<div id="host"></div>');
+    await page.evaluate(() => {
+      const root = document.getElementById("host")!.attachShadow({ mode: "open" });
+      root.innerHTML = '<button id="accept">Accept all</button>';
+      root.querySelector("button")!.addEventListener("click", () => document.body.dataset.clicked = "yes");
+    });
+    const control = page.locator("#accept");
+    assert.equal(await locatorHasViewportHitTarget(control), true);
+    await assert.rejects(dispatchLocatorClickWithVerifiedGeometry(control, 200, () => { throw new Error("cancelled"); }), /cancelled/);
+    assert.equal(await page.evaluate(() => document.body.dataset.clicked), undefined);
+    await dispatchLocatorClickWithVerifiedGeometry(control, 200);
+    assert.equal(await page.evaluate(() => document.body.dataset.clicked), "yes");
+  } finally { await browser.close(); }
+});

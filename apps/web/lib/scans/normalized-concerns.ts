@@ -1,3 +1,4 @@
+import { assessRejectClickTracking, readRejectClickTrackingAssessment, REJECT_CLICK_TRACKING_SIGNAL } from "./reject-click-tracking-policy";
 import {
   classifyGdprTransparencyTopics,
   collectionSurfaceAssessmentSchema,
@@ -3583,6 +3584,8 @@ function buildConsentOptionsControlProminenceConcerns(
       originKey: `consent.options_control_prominence.${state}`,
       originType: "runtime_artifact",
       rawEvidence: {
+        consentControlAssessmentContractVersion: assessment.artifactVersion,
+        consentControlAssessmentSourceHash: assessment.provenance.sourceHash,
         consentControlAssessmentStatus: assessment.assessmentStatus,
         consentControlCoverageStatus: assessment.coverage.status,
         consentOptionsControlProminenceEvidence: true,
@@ -3688,13 +3691,19 @@ function buildGpcResponseConcerns(
     ? "No observable GPC response"
     : "GPC response";
   const evidenceArtifacts = uniqueStrings([
-    assessment.comparison.baselineArtifact.uri,
-    assessment.comparison.gpcArtifact.uri,
+    assessment.comparison.baselineArtifact?.uri ?? "",
+    assessment.comparison.gpcArtifact?.uri ?? "",
     ...assessment.comparison.evidenceRefs,
   ]).slice(0, 32);
   return [buildConcernFromSharedInput({
     categoryId: "privacy",
-    description: assessment.status === "responsive"
+    description: assessment.contractVersion === "certscore.gpc-response-assessment.v2"
+      ? assessment.status === "responsive"
+        ? "Less canonically classified tracking activity was observed within the matched passive GPC window, with verified signal delivery. This bounded comparison does not establish causation or legal compliance."
+        : assessment.status === "no_observable_response"
+          ? "Verified passive GPC delivery did not produce a qualifying activity reduction within the matched observation window. Unrelated cookie or CMP variation is not treated as a privacy response. This is not a legal conclusion."
+          : "GPC delivery or comparison coverage could not be fully verified. Other verified scan evidence remains available; this GPC limitation is not a successful response or an observed gap."
+      : assessment.status === "responsive"
       ? "The passive GPC condition produced observable baseline deltas in cookies, trackers, advertising or measurement activity, or consent/CMP behavior. This is an operational observation, not a legal conclusion."
       : assessment.status === "no_observable_response"
         ? "No observable baseline delta was retained under the otherwise equivalent passive GPC condition. This does not determine whether any law was satisfied."
@@ -3938,6 +3947,38 @@ function buildPreConsentStorageAssessmentConcerns(
   ];
 }
 
+function buildRejectClickTrackingConcerns(
+  runtimeArtifacts: Record<string, unknown> | null | undefined,
+  domainContext?: ScanDomainContext
+) {
+  const assessment = readRejectClickTrackingAssessment(runtimeArtifacts?.rejectClickTrackingAssessment);
+  if (!assessment) return [];
+  const retained = assessRejectClickTracking(runtimeArtifacts?.postRefusalEvidenceProjection);
+  if (!retained || JSON.stringify(retained) !== JSON.stringify(assessment)) return [];
+  const urls = assessment.requests.map((row) => row.url);
+  return [buildConcernFromSharedInput({
+    categoryId: "enforcement_outcomes_after_user_choice",
+    description: "Classified tracking requests began after a verified Reject click. Refusal registration remained unverified; this is a scored review signal, not proof of a registered refusal or a legal violation.",
+    domainContext,
+    evidence: urls,
+    observedValue: `${assessment.eligibleRequestCount} tracking request(s) after Reject click; decision unverified`,
+    originKey: REJECT_CLICK_TRACKING_SIGNAL,
+    originType: "runtime_artifact",
+    rawEvidence: {
+      rejectClickTrackingAssessment: assessment,
+      runtimeEvidenceArtifacts: [`post-refusal-packet:sha256:${assessment.sourcePacketSha256}`, ...urls],
+      runtimeRequestUrls: urls,
+      runtimeVendors: uniqueStrings(assessment.requests.map((row) => row.vendor)),
+    },
+    severity: "medium",
+    signalKey: REJECT_CLICK_TRACKING_SIGNAL,
+    signalLabel: "Tracking after Reject click; decision unverified",
+    signalSource: "runtime_artifact_signal",
+    sourceType: "signal",
+    title: "Tracking after Reject click; decision unverified",
+  })];
+}
+
 function buildPostRefusalObservationConcerns(
   runtimeArtifacts: Record<string, unknown> | null | undefined,
   domainContext?: ScanDomainContext
@@ -4136,7 +4177,7 @@ function buildPostAcceptObservationConcerns(
     const identity = postActionActivityIdentity(row);
     return identity ? [identity] : [];
   }));
-  const indistinguishableRows = activityRows.filter((row) => {
+  const sharedActivityRows = activityRows.filter((row) => {
     const identity = postActionActivityIdentity(row);
     return identity !== null && rejectIdentities.has(identity);
   });
@@ -4165,28 +4206,28 @@ function buildPostAcceptObservationConcerns(
           title: "Consent-dependent activity observed after acceptance"
         })]
       : []),
-    ...(indistinguishableRows.length > 0
+    ...(sharedActivityRows.length > 0
       ? [buildConcernFromSharedInput({
           categoryId: "enforcement_outcomes_after_user_choice",
           description:
-            "Exact retained activity identities appeared after both confirmed Accept and Reject actions. This corroborates review of the existing Reject outcome and never adds a second score effect.",
+            "Some sanitized request identities or exact storage identities appeared after both confirmed choices. This is partial overlap, not equivalent outcomes: observation windows can differ and request query values are redacted. It corroborates review without adding a second score effect.",
           domainContext,
           evidence: requestUrls,
-          observedValue: `${indistinguishableRows.length} exact activity identity match(es)`,
+          observedValue: `${sharedActivityRows.length} shared retained activity identity match(es)`,
           originKey: "privacy.accept_reject_outcomes_indistinguishable",
           originType: "runtime_artifact",
           rawEvidence: {
             ...commonEvidence,
-            acceptRejectOutcomeMatches: indistinguishableRows,
-            accept_reject_outcomes_indistinguishable: true,
+            acceptRejectOutcomeMatches: sharedActivityRows,
+            accept_reject_shared_observed_activity: true,
             corroboratesPostRefusalFinding: true,
           },
           severity: "low",
           signalKey: "privacy.accept_reject_outcomes_indistinguishable",
-          signalLabel: "Accept and Reject outcomes were indistinguishable",
+          signalLabel: "Shared observed activity after Accept and Reject",
           signalSource: "runtime_artifact_signal",
           sourceType: "signal",
-          title: "Accept and Reject produced indistinguishable retained activity"
+          title: "Shared observed activity after Accept and Reject"
         })]
       : []),
     ...(contradictionObserved
@@ -4359,6 +4400,7 @@ export function buildNormalizedConcerns(input: {
     ...buildConsentPaidDeclinePathConcerns(input.runtimeArtifacts, input.domainContext),
     ...buildPreConsentStorageAssessmentConcerns(input.runtimeArtifacts, input.domainContext),
     ...buildPostRefusalObservationConcerns(input.runtimeArtifacts, input.domainContext),
+    ...buildRejectClickTrackingConcerns(input.runtimeArtifacts, input.domainContext),
     ...buildPostAcceptObservationConcerns(input.runtimeArtifacts, input.domainContext),
     ...buildCmpLoadOrderConcerns(input.runtimeArtifacts, input.domainContext),
     ...buildRtbCookieSyncConcerns(input.runtimeArtifacts, input.domainContext),

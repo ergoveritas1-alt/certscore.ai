@@ -1,4 +1,5 @@
 import { getRuntimeVendorDisclosureEvidence } from "./runtime-vendor-disclosure";
+import { readRejectClickTrackingAssessment, REJECT_CLICK_TRACKING_SIGNAL } from "./reject-click-tracking-policy";
 import { derivePolicyCoverageContext, getWeakPolicyEvidenceLimitation } from "./policy-coverage-context";
 import {
   classifyConsentControlLabel,
@@ -6212,6 +6213,29 @@ function hasConcretePostRejectNonEssentialDetail(row: Record<string, unknown>) {
 }
 
 function derivePostRejectOutcome(input: GdprEprivacyCoveragePolicyInput) {
+  // A separately verified action session may differ from the passive inventory.
+  // Only the already eligible canonical concern can select this scored review.
+  const clickConcern = (input.normalizedConcerns ?? []).find((concern) =>
+    concern.originKey === REJECT_CLICK_TRACKING_SIGNAL && concern.originType === "runtime_artifact" &&
+    concern.promotionEligibility === "eligible" && concern.externalSurfacingEligibility === "eligible" &&
+    concern.regulatoryChecklistEligibility === "review_signal");
+  const clickAssessment = readRejectClickTrackingAssessment(clickConcern?.evidenceBundle.rawEvidence?.rejectClickTrackingAssessment);
+  const confirmedRefusal = getBoolean(getPostRejectTrackingReductionEvidence(input.runtimeArtifacts), ["rejectInteractionConfirmed"]) === true;
+  if (clickAssessment && !confirmedRefusal) {
+    const first = Math.min(...clickAssessment.requests.map((row) => row.startedAtMs));
+    const vendors = [...new Set(clickAssessment.requests.flatMap((row) => row.vendor ? [row.vendor] : []))];
+    return makeOutcome("post_reject_tracking_reduction", "Review signal",
+      `${clickAssessment.eligibleRequestCount} classified tracking request(s) began after a verified Reject click${vendors.length ? ` (including ${vendors.join(", ")})` : ""}; first observed ${((first - clickAssessment.actionDispatchedAtMs) / 1000).toFixed(2)}s after the click. Refusal registration remained unverified. This observed behavior receives the post-Reject risk deduction without claiming a confirmed refusal or legal violation.`,
+      [`Evidence: post-refusal-packet:sha256:${clickAssessment.sourcePacketSha256}`],
+      { retainedEvidence: {
+        rejectClickTrackingAssessment: clickAssessment,
+        normalizedConcernKey: clickConcern!.canonicalConcernKey,
+        rejectClickVerified: true,
+        rejectInteractionConfirmed: false,
+        refusalRegistrationStatus: "unconfirmed",
+        scoreEffect: "canonical_reject_click_tracking_policy",
+      } });
+  }
   const consentLifecycleLimitation = getConsentLifecycleAuditLimitation(input.runtimeArtifacts);
   const firstLayerChoiceEvidence = getFirstLayerConsentChoiceEvidence(input);
   const rejectDiagnostic = getEventMetadata(input.events, "reject_persistence_diagnostic");

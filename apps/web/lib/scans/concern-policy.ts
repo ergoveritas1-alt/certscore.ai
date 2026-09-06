@@ -1,3 +1,4 @@
+import { readRejectClickTrackingAssessment, REJECT_CLICK_TRACKING_FINDING, REJECT_CLICK_TRACKING_SIGNAL } from "./reject-click-tracking-policy";
 import type {
   NormalizedConcern,
   NormalizedConcernAssertionLevel,
@@ -2586,6 +2587,20 @@ export function deriveConcernPolicy(input: {
   const negativeEvidenceFlags = new Set<NormalizedConcernNegativeEvidenceFlag>();
 
   const suggestedUnifiedFindingId = input.concern.suggestedUnifiedFindingId;
+  if (suggestedUnifiedFindingId === REJECT_CLICK_TRACKING_FINDING || input.concern.originKey === REJECT_CLICK_TRACKING_SIGNAL) {
+    const assessment = readRejectClickTrackingAssessment(input.rawEvidence?.rejectClickTrackingAssessment);
+    if (assessment && input.concern.originType === "runtime_artifact") {
+      return {
+        allowedNarrativeTier: "strong",
+        externalSurfacingEligibility: "eligible",
+        negativeEvidenceFlags: [],
+        promotionEligibility: "eligible",
+        regulatoryChecklistEligibility: "review_signal",
+      };
+    }
+    return { allowedNarrativeTier: "weak", externalSurfacingEligibility: "audit_only",
+      negativeEvidenceFlags: ["missing_specific_runtime_anchor"], promotionEligibility: "internal_only" };
+  }
   if (suggestedUnifiedFindingId === "gpc_response") {
     const status = getFirstString(input.rawEvidence, ["gpcResponseStatus"]);
     const parsedAssessment = gpcResponseAssessmentSchema.safeParse(
@@ -2600,10 +2615,10 @@ export function deriveConcernPolicy(input: {
           appliesTo: "certscore_overall",
           deductionPoints: californiaPolicy.deductionPoints,
           evidenceRefs: [
-            typedAssessment.comparison.baselineArtifact.uri,
-            typedAssessment.comparison.gpcArtifact.uri,
+            typedAssessment.comparison.baselineArtifact?.uri ?? "",
+            typedAssessment.comparison.gpcArtifact?.uri ?? "",
             ...typedAssessment.comparison.evidenceRefs,
-          ].filter((value, index, values) => values.indexOf(value) === index).slice(0, 32),
+          ].filter((value, index, values) => Boolean(value) && values.indexOf(value) === index).slice(0, 32),
           framework: "california",
           observedActivity: californiaPolicy.eligibleActivity.persistedUnderGpc.slice(0, 100),
           policyKey: californiaPolicy.policyKey,

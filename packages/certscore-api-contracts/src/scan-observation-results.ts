@@ -77,9 +77,14 @@ export const apiV2GpcComparisonDeltaSchema = z.object({
   baselineOnly: z.array(z.string().min(1).max(500)).max(100),
   gpcOnly: z.array(z.string().min(1).max(500)).max(100),
   shared: z.array(z.string().min(1).max(500)).max(100),
+  baselineOnlyCount: z.number().int().nonnegative().optional(),
+  gpcOnlyCount: z.number().int().nonnegative().optional(),
+  sharedCount: z.number().int().nonnegative().optional(),
+  samplesTruncated: z.boolean().optional(),
 }).strict();
 
-export const apiV2GpcResponseSchema = z.object({
+const apiV2GpcResponseObjectSchema = z.object({
+  contractVersion: z.enum(["certscore.gpc-response-assessment.v1", "certscore.gpc-response-assessment.v2"]).optional(),
   status: z.enum(["responsive", "no_observable_response", "indeterminate"]),
   findingTitle: z.enum(["GPC response", "No observable GPC response"]),
   summary: z.string().min(1).max(2_000),
@@ -92,24 +97,29 @@ export const apiV2GpcResponseSchema = z.object({
       lane: z.literal("runtime_evidence"),
       sha256: z.string().regex(/^[a-f0-9]{64}$/),
       sizeBytes: z.number().int().nonnegative(),
-    }).strict(),
+    }).strict().nullable(),
     gpcArtifact: z.object({
       lane: z.literal("gpc_observation"),
       sha256: z.string().regex(/^[a-f0-9]{64}$/),
       sizeBytes: z.number().int().nonnegative(),
-    }).strict(),
+    }).strict().nullable(),
     enabledProof: z.object({
-      secGpcHeaderValue: z.literal("1"),
+      secGpcHeaderValue: z.literal("1").nullable(),
       requestsWithSecGpc: z.number().int().nonnegative(),
       requestEventIds: z.array(z.string().min(1).max(160)).max(100),
-      navigatorGlobalPrivacyControl: z.literal(true),
+      navigatorGlobalPrivacyControl: z.boolean().nullable(),
     }).strict(),
     deltas: z.object({
       cookies: apiV2GpcComparisonDeltaSchema,
       trackers: apiV2GpcComparisonDeltaSchema,
       advertisingOrMeasurementActivity: apiV2GpcComparisonDeltaSchema,
       consentOrCmpBehavior: apiV2GpcComparisonDeltaSchema,
+      webStorage: apiV2GpcComparisonDeltaSchema.optional(),
+      advertisingOrMarketingActivity: apiV2GpcComparisonDeltaSchema.optional(),
     }).strict(),
+    delivery: z.object({ status: z.enum(["verified", "limited", "unavailable"]) }).strict().optional(),
+    coverage: z.object({ status: z.enum(["complete", "limited", "unavailable"]), comparedThroughMs: z.number().int().nonnegative().nullable() }).strict().optional(),
+    responseBasis: z.enum(["qualified_activity_reduction", "no_qualified_reduction", "insufficient_evidence"]).optional(),
     limitationKeys: z.array(z.string().min(1).max(160)).max(24),
   }).strict(),
   californiaPolicy: z.object({
@@ -117,7 +127,42 @@ export const apiV2GpcResponseSchema = z.object({
     deductionPoints: z.union([z.literal(0), z.literal(15)]),
   }).strict(),
   evidenceUrl: z.string().url(),
-}).strict().superRefine((response, context) => {
+}).strict();
+
+// Keep the public type named: embedding this schema in API, Pulse and MCP
+// otherwise exceeds TypeScript's declaration-serialization limit.
+export type ApiV2GpcResponse = z.infer<typeof apiV2GpcResponseObjectSchema>;
+export const apiV2GpcResponseSchema: z.ZodType<ApiV2GpcResponse> = apiV2GpcResponseObjectSchema.superRefine((response, context) => {
+  if (response.contractVersion === "certscore.gpc-response-assessment.v2") {
+    const c = response.comparison;
+    const determinate = response.status !== "indeterminate";
+    if (!c.delivery || !c.coverage || !c.responseBasis || !c.deltas.webStorage || !c.deltas.advertisingOrMarketingActivity ||
+      c.comparable !== determinate ||
+      (determinate && (c.delivery.status !== "verified" || c.coverage.status !== "complete" ||
+        !c.baselineArtifact || !c.gpcArtifact || c.enabledProof.navigatorGlobalPrivacyControl !== true ||
+        c.enabledProof.secGpcHeaderValue !== "1" || c.enabledProof.requestsWithSecGpc < 1)) ||
+      (!determinate && (response.californiaPolicy.applied || c.responseBasis !== "insufficient_evidence"))) {
+      context.addIssue({ code: z.ZodIssueCode.custom, message: "GPC v2 delivery, coverage and outcome must agree." });
+    }
+    for (const delta of Object.values(c.deltas)) {
+      const { baselineOnlyCount: b, gpcOnlyCount: g, sharedCount: s } = delta;
+      const samples = [...delta.baselineOnly, ...delta.gpcOnly, ...delta.shared];
+      if (b === undefined || g === undefined || s === undefined ||
+        delta.baselineCount !== b + s || delta.gpcCount !== g + s || delta.countDelta !== g - b ||
+        delta.baselineOnly.length !== Math.min(100, b) || delta.gpcOnly.length !== Math.min(100, g) ||
+        delta.shared.length !== Math.min(100, s) || new Set(samples).size !== samples.length ||
+        delta.samplesTruncated !== (Math.max(b, g, s) > 100)) {
+        context.addIssue({ code: z.ZodIssueCode.custom, message: "GPC v2 deltas require consistent full counts and bounded samples." });
+      }
+    }
+    const reduced = (c.deltas.trackers.baselineOnlyCount ?? 0) > 0 && c.deltas.trackers.gpcOnlyCount === 0;
+    if ((determinate && (c.limitationKeys.length > 0 || (c.coverage?.comparedThroughMs ?? 0) < 250 ||
+        (response.status === "responsive") !== reduced ||
+        c.responseBasis !== (reduced ? "qualified_activity_reduction" : "no_qualified_reduction"))) ||
+      response.findingTitle !== (response.status === "no_observable_response" ? "No observable GPC response" : "GPC response")) {
+      context.addIssue({ code: z.ZodIssueCode.custom, message: "GPC v2 outcome must match its comparison evidence." });
+    }
+  }
   if (response.californiaPolicy.applied !== (response.californiaPolicy.deductionPoints === 15)) {
     context.addIssue({
       code: z.ZodIssueCode.custom,
@@ -127,6 +172,5 @@ export const apiV2GpcResponseSchema = z.object({
   }
 });
 
-export type ApiV2GpcResponse = z.infer<typeof apiV2GpcResponseSchema>;
 export type ApiV2PostAcceptObservation = z.infer<typeof apiV2PostAcceptObservationSchema>;
 export type ApiV2PostRefusalObservation = z.infer<typeof apiV2PostRefusalObservationSchema>;

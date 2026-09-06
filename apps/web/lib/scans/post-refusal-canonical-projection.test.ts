@@ -13,6 +13,8 @@ import {
 } from "./normalized-concerns";
 import { buildPostRefusalRuntimeProjection } from "./post-refusal-runtime-projection";
 import { deriveRegulatoryCoverageScore } from "./regulatory-coverage-score";
+import { assessRejectClickTracking } from "./reject-click-tracking-policy";
+import { buildUnifiedFindingDisplayPackets } from "./unified-findings";
 
 const VALUE_HASH = "a".repeat(64);
 const STORAGE_IDENTITY_HASH = "d".repeat(64);
@@ -458,6 +460,191 @@ test("unconfirmed refusal never projects a concern or finding", () => {
   assert.notEqual(result.postRejectRow.status, "Gap observed");
 });
 
+test("completed after-click capture survives canonical projection without inventing registered refusal", () => {
+  const request = { requestId: "after-click", sanitizedUrl: "https://analytics.example.test/collect",
+    resourceType: "fetch", startedAtMs: 650, inFlightAtRefusalRegistration: false,
+    nonEssential: true, purpose: "analytics" as const };
+  const result = projectCanonical(packet({
+    artifactVersion: "certscore.post_refusal_evidence.v2",
+    completedAt: "2026-08-26T00:00:09.000Z",
+    timing: { ...packet().timing, totalMs: 9000, readyAtMs: 9000, observationMs: 8000 },
+    storage: { ...packet().storage, postActionCapturedAtMs: 8500 },
+    productionProjectable: false,
+    decisionEvidence: { policyVersion: "semantic_consent_registration.v2", decision: "unknown", basis: "unverified" },
+    captureCoverage: { requestsDroppedBeforeAction: 0, requestsDroppedAfterAction: 0 },
+    refusalRegistration: { status: "unconfirmed", refusalExercised: false, actionDispatchedAtMs: 500,
+      reason: "cmp_rejection_state_not_observed", witnesses: [] },
+    interactionDiagnostics: {
+      navigation: { outcome: "completed", documentCommitted: true, finalUrlAuthorized: true },
+      click: { outcome: "completed", reResolvedBeforeDispatch: false, confirmationCheckedAfterError: false },
+    },
+    afterActionCapture: { policyVersion: "bounded_after_action_capture.v1", action: "reject", activationStatus: "completed",
+      actionDispatchedAtMs: 500, captureEndedAtMs: 8500, requestedWindowMs: 8000, stopReason: "window_elapsed",
+      requestsDropped: 0, requestIds: [request.requestId], storageSnapshotRetained: true,
+      storageWriteCoverage: "bounded_main_document_sample", storageWrites: [] },
+    network: { requests: [request], postRefusalNonEssentialRequests: [], activeRequestIdsAtRefusalRegistration: [] },
+  }));
+  assert.equal(result.reportProjection.afterActionCapture?.activationStatus, "completed");
+  assert.equal(result.reportProjection.afterActionRequests?.[0]?.requestId, request.requestId);
+  assert.equal(result.reportProjection.registrationStatus, "unconfirmed");
+  assert.equal(result.normalizedConcerns.length, 0);
+  assert.equal(result.candidates.length, 0);
+  assert.notEqual(result.postRejectRow.status, "Gap observed");
+  assert.equal(result.reportProjection.packetSha256, "b".repeat(64));
+  const existingDeduction = {
+    assessmentStatus: "gap_observed" as const, evidenceState: "observed" as const,
+    criticalEvidence: { retainedEvidence: { httpProbeOutcome: "plaintext_response_served", httpProbeStatus: 200 } },
+    id: "transport_security_http_redirect", status: "Gap observed" as const,
+  };
+  const before = deriveRegulatoryCoverageScore({ framework: "gdpr_eprivacy", rows: [existingDeduction] });
+  const after = deriveRegulatoryCoverageScore({ framework: "gdpr_eprivacy", rows: [existingDeduction, result.postRejectRow] });
+  assert.equal(before.score, 98);
+  assert.equal(after.score, before.score, "An unverified decision must not restore independently deducted points");
+});
+
+function unverifiedRejectClickPacket() {
+  const request = { requestId: "after-click-tracking", sanitizedUrl: "https://analytics.example.test/collect",
+    resourceType: "fetch", startedAtMs: 650, inFlightAtRefusalRegistration: false,
+    nonEssential: true, purpose: "analytics" as const, vendor: "Example Analytics" };
+  return packet({
+    artifactVersion: "certscore.post_refusal_evidence.v2",
+    completedAt: "2026-08-26T00:00:09.000Z",
+    timing: { ...packet().timing, totalMs: 9000, readyAtMs: 9000, observationMs: 8000 },
+    storage: { ...packet().storage, postActionCapturedAtMs: 8500 },
+    productionProjectable: false,
+    resolver: { found: true, method: "canonical_consent_control_registry_recipe", confidence: 1, recipeId: "canonical-reject-v1" },
+    actionControlProof: { ...packet().actionControlProof!, cmpId: undefined,
+      frameIdentitySha256: "c".repeat(64), authorizedTargetSha256: "e".repeat(64) },
+    decisionEvidence: { policyVersion: "semantic_consent_registration.v2", decision: "unknown", basis: "unverified" },
+    captureCoverage: { requestsDroppedBeforeAction: 0, requestsDroppedAfterAction: 0 },
+    refusalRegistration: { status: "unconfirmed", refusalExercised: false, actionDispatchedAtMs: 500,
+      reason: "cmp_rejection_state_not_observed", witnesses: [] },
+    interactionDiagnostics: {
+      navigation: { outcome: "completed", documentCommitted: true, finalUrlAuthorized: true },
+      click: { outcome: "completed", reResolvedBeforeDispatch: false, confirmationCheckedAfterError: false },
+    },
+    afterActionCapture: { policyVersion: "bounded_after_action_capture.v2", action: "reject", activationStatus: "completed",
+      actionDispatchedAtMs: 500, captureEndedAtMs: 8500, requestedWindowMs: 8000, stopReason: "window_elapsed",
+      requestsDropped: 0, requestIds: [request.requestId], requestAncestry: [{ requestId: request.requestId, rootStartedAtMs: 650 }],
+      storageSnapshotRetained: true, storageWriteCoverage: "bounded_main_document_sample", storageWrites: [] },
+    network: { requests: [request], postRefusalNonEssentialRequests: [], activeRequestIdsAtRefusalRegistration: [] },
+    observations: [],
+  });
+}
+
+test("verified generic Reject click plus tracking produces one scored review without claiming registered refusal", () => {
+  const result = projectCanonical(unverifiedRejectClickPacket());
+  assert.equal(result.reportProjection.registrationStatus, "unconfirmed");
+  assert.equal(result.reportProjection.refusalExercised, false);
+  assert.equal(result.reportProjection.productionProjectable, false);
+  assert.equal(result.normalizedConcerns.length, 1);
+  assert.equal(result.normalizedConcerns[0]?.regulatoryChecklistEligibility, "review_signal");
+  assert.equal(result.normalizedConcerns[0]?.suggestedUnifiedFindingId, "post_reject_click_tracking");
+  assert.equal(result.candidates.length, 1);
+  assert.equal(result.postRejectRow.assessmentStatus, "review_signal");
+  assert.match(JSON.stringify(result.postRejectRow), /Refusal registration remained unverified/);
+  const score = deriveRegulatoryCoverageScore({ framework: "gdpr_eprivacy", rows: [result.postRejectRow] });
+  assert.equal(score.score, 88);
+  assert.equal(score.scoreVersion, "gdpr-eprivacy-posture.v13");
+  const retained = result.postRejectRow.criticalEvidence?.retainedEvidence as Record<string, unknown>;
+  assert.equal(retained.rejectInteractionConfirmed, false);
+  assert.ok("rejectClickTrackingAssessment" in result.runtimeArtifacts);
+  assert.deepEqual(retained.rejectClickTrackingAssessment, result.runtimeArtifacts.rejectClickTrackingAssessment);
+  assert.equal(result.runtimeArtifacts.rejectClickTrackingAssessment?.sourcePacketSha256, "b".repeat(64));
+  const displays = buildUnifiedFindingDisplayPackets({ runtimeArtifacts: result.runtimeArtifacts,
+    reviewFindingCandidates: [], validationFindings: [], validationFindingLookup: new Map() });
+  const display = displays.find((row) => row.unifiedFindingId === "post_reject_click_tracking");
+  assert.equal(display?.presentationDecision.status, "surface", JSON.stringify(display?.presentationDecision));
+  assert.match(JSON.stringify(display), /decision unverified/);
+
+  const existing = { assessmentStatus: "gap_observed", evidenceState: "observed", id: "transport_security_http_redirect",
+    criticalEvidence: { retainedEvidence: { httpProbeOutcome: "plaintext_response_served", httpProbeStatus: 200 } }, status: "Gap observed" };
+  assert.equal(deriveRegulatoryCoverageScore({ framework: "gdpr_eprivacy", rows: [existing, result.postRejectRow] }).score, 86);
+  const confirmed = { ...result.postRejectRow, assessmentStatus: "gap_observed", status: "Gap observed",
+    criticalEvidence: { retainedEvidence: { rejectInteractionConfirmed: true, scoreEffect: "canonical_post_refusal_policy" } } };
+  assert.equal(deriveRegulatoryCoverageScore({ framework: "gdpr_eprivacy", rows: [confirmed, result.postRejectRow] }).score, 88);
+  const contradiction = { ...confirmed, criticalEvidence: { retainedEvidence: {
+    rejectInteractionConfirmed: true, refusalSignalContradictsAction: true,
+  } } };
+  assert.equal(deriveRegulatoryCoverageScore({ framework: "gdpr_eprivacy", rows: [contradiction, result.postRejectRow] }).score, 85);
+});
+
+test("new click policy fails closed for incomplete, unsupported, ambiguous or pre-click evidence", () => {
+  const projection = projectPostRefusalEvidenceForReport({ packet: unverifiedRejectClickPacket(), packetSha256: "b".repeat(64) });
+  const capture = projection.afterActionCapture!;
+  const request = projection.afterActionRequests![0]!;
+  const invalid = [
+    { ...projection, packetSha256: undefined },
+    { ...projection, actionControlProof: undefined },
+    { ...projection, actionControlProof: { ...projection.actionControlProof, authorizedTargetSha256: undefined } },
+    { ...projection, actionControlProof: { ...projection.actionControlProof, frameIdentitySha256: undefined } },
+    { ...projection, afterActionCapture: { ...capture, action: "accept" } },
+    { ...projection, afterActionCapture: { ...capture, policyVersion: "bounded_after_action_capture.v1" } },
+    { ...projection, afterActionCapture: { ...capture, stopReason: "aborted" } },
+    { ...projection, afterActionCapture: { ...capture, stopReason: "target_changed" } },
+    { ...projection, afterActionCapture: { ...capture, stopReason: "click_uncertain", activationStatus: "uncertain" } },
+    { ...projection, afterActionCapture: { ...capture, captureEndedAtMs: 8499 } },
+    { ...projection, captureCoverage: { requestsDroppedBeforeAction: 0, requestsDroppedAfterAction: 1 } },
+    { ...projection, afterActionCapture: { ...capture, requestsDropped: 1 } },
+    { ...projection, afterActionCapture: { ...capture, requestAncestry: undefined } },
+    ...[499, 500, 651].map((rootStartedAtMs) => ({ ...projection,
+      afterActionCapture: { ...capture, requestAncestry: [{ requestId: request.requestId, rootStartedAtMs }] } })),
+    ...["unknown", "consent_management", "security", "infrastructure"].map((purpose) => ({ ...projection,
+      afterActionRequests: [{ ...request, purpose }] })),
+    { ...projection, afterActionRequests: [{ ...request, nonEssential: false }] },
+    { ...projection, registrationStatus: "aborted", status: "aborted" },
+  ];
+  for (const value of invalid) assert.equal(assessRejectClickTracking(value), null, JSON.stringify(value));
+  const noRequests = { ...projection, afterActionRequests: [],
+    afterActionCapture: { ...capture, requestIds: [], requestAncestry: [], storageWrites: [
+      { storageType: "cookie", name: "receipt", nonEssential: true, observedAtMs: 700 },
+    ] } };
+  assert.equal(assessRejectClickTracking(noRequests), null, "Storage presence/writes alone do not establish this tracking-request finding");
+  for (const runtimeArtifacts of [
+    { ...buildPostRefusalRuntimeProjection(projection), postRefusalEvidenceProjection: undefined },
+    { ...buildPostRefusalRuntimeProjection(projection), postRefusalEvidenceProjection: { ...projection, packetSha256: "f".repeat(64) } },
+    { ...buildPostRefusalRuntimeProjection(projection), postRefusalEvidenceProjection: { ...projection, registrationStatus: "confirmed" } },
+  ]) {
+    assert.equal(buildNormalizedConcerns({ runtimeArtifacts, reviewFindingCandidates: [], validationFindings: [] }).length, 0,
+      "A stale/mismatched typed assessment cannot produce a concern");
+  }
+  const validPacket = unverifiedRejectClickPacket();
+  assert.equal(postRefusalEvidencePacketSchema.safeParse({ ...validPacket,
+    interactionDiagnostics: { ...validPacket.interactionDiagnostics,
+      navigation: { outcome: "completed", documentCommitted: true, finalUrlAuthorized: false } },
+  }).success, false);
+  const legacyOnly = deriveGdprEprivacyCoveragePolicyOutcomes({
+    coverageLimited: false, normalizedConcerns: [], runtimeArtifacts: buildPostRefusalRuntimeProjection(projection),
+    scanCompleted: true, snapshot: {},
+  });
+  assert.notEqual(legacyOnly.post_reject_tracking_reduction?.status, "Review signal",
+    "Display/checklist may not bypass normalized concern policy");
+});
+
+test("click assessment bounds repeated metadata without discarding retained requests", () => {
+  const projection = projectPostRefusalEvidenceForReport({ packet: unverifiedRejectClickPacket(), packetSha256: "b".repeat(64) });
+  const requests = Array.from({ length: 12 }, (_, index) => ({ ...projection.afterActionRequests![0]!,
+    requestId: `tracking-${index}`, startedAtMs: 650 + index }));
+  const source = { ...projection, afterActionRequests: requests, afterActionCapture: {
+    ...projection.afterActionCapture!, requestIds: requests.map((row) => row.requestId),
+    requestAncestry: requests.map((row) => ({ requestId: row.requestId, rootStartedAtMs: row.startedAtMs })),
+  } };
+  const assessment = assessRejectClickTracking(source);
+  assert.equal(assessment?.eligibleRequestCount, 12);
+  assert.equal(assessment?.requests.length, 8);
+  assert.equal(source.afterActionRequests.length, 12);
+});
+
+test("a review label or score marker without a verified typed click assessment is score-neutral", () => {
+  const valid = projectCanonical(unverifiedRejectClickPacket()).postRejectRow;
+  for (const assessment of [undefined, { policyVersion: "reject_click_tracking.v1" }]) {
+    const row = { ...valid, criticalEvidence: { retainedEvidence: {
+      scoreEffect: "canonical_reject_click_tracking_policy", rejectClickTrackingAssessment: assessment,
+    } } };
+    assert.equal(deriveRegulatoryCoverageScore({ framework: "gdpr_eprivacy", rows: [row] }).score, 100);
+  }
+});
+
 test("timed-out Reject Path is retained as a score-neutral coverage limitation", () => {
   const runtimeArtifacts = buildPostRefusalRuntimeProjection(null, {
     contractVersion: "certscore.post_refusal_lane_outcome.v1",
@@ -498,7 +685,7 @@ test("timed-out Reject Path is retained as a score-neutral coverage limitation",
   const postRejectRow = checklist.find((row) => row.id === "post_reject_tracking_reduction");
   assert.ok(postRejectRow);
   assert.notEqual(postRejectRow.status, "Gap observed");
-  assert.match(JSON.stringify(postRejectRow), /six-second post-primary allowance/);
+  assert.match(JSON.stringify(postRejectRow), /configured post-primary allowance/);
 });
 
 test("complete no-Reject inventory makes Reject Path non-applicable without a coverage warning", () => {
@@ -519,4 +706,12 @@ test("complete no-Reject inventory makes Reject Path non-applicable without a co
     status: "not_applicable",
   });
   assert.equal("postRejectTrackingReductionEvidence" in runtimeArtifacts, false);
+});
+test("legacy opaque refusal confirmation cannot survive canonical projection as a finding", () => {
+  const legacy = packet();
+  legacy.refusalRegistration.witnesses[0]!.expectedState = "canonical_cmp_consent_state_changed_after_reject";
+  const result = projectCanonical(legacy);
+  assert.equal(result.reportProjection.productionProjectable, false);
+  assert.deepEqual(result.normalizedConcerns, []);
+  assert.deepEqual(result.candidates, []);
 });

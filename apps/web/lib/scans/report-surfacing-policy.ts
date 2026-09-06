@@ -266,6 +266,7 @@ const CONSENT_TRACKING_IDS = [
   "reject_did_not_reduce_tracking",
   "reject_did_not_reduce_third_party_cookies",
   "post_refusal_non_essential_activity",
+  "post_reject_click_tracking",
   "pre_consent_storage_not_cleared",
   "post_accept_consent_dependent_activity",
   "accept_reject_outcomes_indistinguishable",

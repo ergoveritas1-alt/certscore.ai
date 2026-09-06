@@ -954,6 +954,7 @@ export function deriveApiV2GpcResponse(scanRecord: ScanDetailResponse): ApiV2Sca
   }
   const assessment = projection.assessment;
   return {
+    contractVersion: assessment.contractVersion,
     status: assessment.status,
     findingTitle: assessment.findingTitle,
     summary: projection.summary,
@@ -962,19 +963,24 @@ export function deriveApiV2GpcResponse(scanRecord: ScanDetailResponse): ApiV2Sca
     comparison: {
       comparable: assessment.comparison.comparable,
       protocol: assessment.comparison.protocol,
-      baselineArtifact: {
+      baselineArtifact: assessment.comparison.baselineArtifact ? {
         lane: assessment.comparison.baselineArtifact.lane,
         sha256: assessment.comparison.baselineArtifact.sha256,
         sizeBytes: assessment.comparison.baselineArtifact.sizeBytes,
-      },
-      gpcArtifact: {
+      } : null,
+      gpcArtifact: assessment.comparison.gpcArtifact ? {
         lane: assessment.comparison.gpcArtifact.lane,
         sha256: assessment.comparison.gpcArtifact.sha256,
         sizeBytes: assessment.comparison.gpcArtifact.sizeBytes,
-      },
+      } : null,
       enabledProof: assessment.comparison.enabledProof,
       deltas: assessment.comparison.deltas,
       limitationKeys: assessment.comparison.limitationKeys,
+      ...(assessment.contractVersion === "certscore.gpc-response-assessment.v2" ? {
+        delivery: { status: assessment.comparison.delivery.status },
+        coverage: assessment.comparison.coverage,
+        responseBasis: assessment.comparison.responseBasis,
+      } : {}),
     },
     californiaPolicy: {
       applied: projection.californiaDeductionPoints === 15,
@@ -1669,6 +1675,8 @@ function safeInventoryScriptUrl(value: string | null | undefined) {
 }
 
 function buildApiV2PreConsentRow(row: InventoryGroupRow, pageUrlHost: string | null) {
+  // This versioned endpoint is specifically cookies/trackers, not all resources.
+  if (row.type === "embed") return null;
   const host = row.domains.map((domain) => sanitizeHost(domain)).find(isInventoryDisplayHostname) ?? null;
   if (!host && isTokenOnlyPreConsentLabel(row.vendor)) {
     return null;

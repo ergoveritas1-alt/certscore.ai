@@ -376,7 +376,7 @@ const CHECKLIST_ROWS: ChecklistRowDefinition[] = [
   {
     id: "post_reject_tracking_reduction",
     label: "Post-choice tracking reduction",
-    explanation: "Whether a confirmed reject action was followed by retained non-essential activity, a contradictory consent signal, or the exact same classified non-essential storage value.",
+    explanation: "Whether retained activity followed Reject: confirmed refusal is assessed separately from classified tracking after a verified click whose decision registration remains unverified.",
     findingIds: [
       "reject_did_not_reduce_tracking",
       "reject_did_not_reduce_third_party_cookies",

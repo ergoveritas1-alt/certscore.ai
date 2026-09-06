@@ -90,6 +90,7 @@ const COOKIE_KNOWLEDGE_RULES: readonly CookieKnowledgeRule[] = [
   },
   {
     pattern: /^MUID$/i,
+    contextHostPatterns: [/(?:^|\.)bing\.com$/i, /(?:^|\.)clarity\.ms$/i],
     category: "advertising",
     dataTypes: ["cross-site browser identifier", "advertising identifier"],
     description: "Microsoft browser identifier used across Microsoft services for advertising, site analytics, and related operational purposes.",
@@ -98,6 +99,7 @@ const COOKIE_KNOWLEDGE_RULES: readonly CookieKnowledgeRule[] = [
   },
   {
     pattern: /^(?:ANONCHK|MR|SM)$/i,
+    contextHostPatterns: [/(?:^|\.)bing\.com$/i, /(?:^|\.)clarity\.ms$/i],
     category: "advertising",
     dataTypes: ["identifier synchronization signal", "advertising storage signal"],
     description: "Microsoft support cookie used to manage, refresh, or synchronize the MUID browser identifier across Microsoft domains.",
@@ -531,7 +533,8 @@ function canonicalCookieContextHosts(context: CanonicalCookieContext): string[] 
     context.cookieDomain,
     context.hostname,
     context.setterScriptUrl,
-    ...(context.initiatorChain ?? []),
+    // Ancestor presence is not proof that this vendor set this cookie. Retain
+    // chains as evidence elsewhere; attribution requires direct host/setter context.
   ];
   return [...new Set(values.map(canonicalCookieContextHostname).filter((value): value is string => Boolean(value)))];
 }

@@ -1,0 +1,351 @@
+[
+  {
+    "input": {
+      "type": "iframe",
+      "url": "https://www.google.com/maps/embed",
+      "evidenceId": "registry-fixture-0"
+    },
+    "observation": {
+      "observationId": "vendor_1b3576eb",
+      "entity": "Google LLC",
+      "vendor": "Google",
+      "product": "Google Maps embed",
+      "purpose": "infrastructure",
+      "servicePurpose": "Embedded maps",
+      "registryAttribution": {
+        "entityId": "ent_7509263a9ab6",
+        "vendorId": "ven_b460db2a4c04",
+        "serviceId": "svc_0dc085cde9c8",
+        "contractVersion": "vendor-registry-attribution-v1",
+        "resolverVersion": "certscore-vendor-resolver-2026-09-05-attribution-v1",
+        "ruleIds": [
+          "google_maps_iframe_embed"
+        ],
+        "matchKind": "endpoint"
+      },
+      "confidence": 0.97,
+      "basis": [
+        "google_maps_iframe_embed",
+        "iframe",
+        "hostname_match",
+        "url_pattern_match"
+      ],
+      "regulatoryRelevance": [
+        "maps",
+        "location_services",
+        "third_party_runtime"
+      ],
+      "matchedEvidenceIds": [
+        "registry-fixture-0"
+      ],
+      "matchedEvidenceRefs": [
+        {
+          "refId": "ref_registry-fixture-0",
+          "eventId": "registry-fixture-0",
+          "eventType": "iframe",
+          "label": "www.google.com",
+          "url": "https://www.google.com/maps/embed"
+        }
+      ],
+      "matchSources": [
+        {
+          "source": "iframe_url",
+          "sourceEventId": "registry-fixture-0",
+          "sourceEventType": "iframe",
+          "matchedField": "hostname",
+          "matchedValueRedacted": "www.google.com",
+          "resolverBasis": [
+            "google_maps_iframe_embed",
+            "iframe",
+            "hostname_match",
+            "url_pattern_match"
+          ],
+          "confidence": 0.97
+        },
+        {
+          "source": "iframe_url",
+          "sourceEventId": "registry-fixture-0",
+          "sourceEventType": "iframe",
+          "matchedField": "url_pattern",
+          "matchedValueRedacted": "https://www.google.com/maps/embed",
+          "resolverBasis": [
+            "google_maps_iframe_embed",
+            "iframe",
+            "hostname_match",
+            "url_pattern_match"
+          ],
+          "confidence": 0.97
+        }
+      ],
+      "matchedHostnames": [
+        "www.google.com"
+      ],
+      "matchedUrls": [
+        "https://www.google.com/maps/embed"
+      ],
+      "matchedCookieNames": []
+    }
+  },
+  {
+    "input": {
+      "type": "request",
+      "url": "https://www.facebook.com/plugins/page.php",
+      "evidenceId": "registry-fixture-1"
+    },
+    "observation": {
+      "observationId": "vendor_e536fcaa",
+      "entity": "Meta Platforms, Inc.",
+      "vendor": "Facebook",
+      "product": "Facebook Page Plugin",
+      "purpose": "infrastructure",
+      "servicePurpose": "Social media embed",
+      "registryAttribution": {
+        "entityId": "ent_f2a82736f68e",
+        "vendorId": "ven_6a03b1eeab38",
+        "serviceId": "svc_ac21cb004610",
+        "contractVersion": "vendor-registry-attribution-v1",
+        "resolverVersion": "certscore-vendor-resolver-2026-09-05-attribution-v1",
+        "ruleIds": [
+          "facebook_page_plugin_embed"
+        ],
+        "matchKind": "endpoint"
+      },
+      "confidence": 0.99,
+      "basis": [
+        "facebook_page_plugin_embed",
+        "request",
+        "hostname_match",
+        "url_pattern_match"
+      ],
+      "regulatoryRelevance": [
+        "embedded_content",
+        "social_embed",
+        "social_media",
+        "third_party_runtime"
+      ],
+      "matchedEvidenceIds": [
+        "registry-fixture-1"
+      ],
+      "matchedEvidenceRefs": [
+        {
+          "refId": "ref_registry-fixture-1",
+          "eventId": "registry-fixture-1",
+          "eventType": "request",
+          "label": "www.facebook.com",
+          "url": "https://www.facebook.com/plugins/page.php"
+        }
+      ],
+      "matchSources": [
+        {
+          "source": "network_request",
+          "sourceEventId": "registry-fixture-1",
+          "sourceEventType": "request",
+          "matchedField": "hostname",
+          "matchedValueRedacted": "www.facebook.com",
+          "resolverBasis": [
+            "facebook_page_plugin_embed",
+            "request",
+            "hostname_match",
+            "url_pattern_match"
+          ],
+          "confidence": 0.99
+        },
+        {
+          "source": "network_request",
+          "sourceEventId": "registry-fixture-1",
+          "sourceEventType": "request",
+          "matchedField": "url_pattern",
+          "matchedValueRedacted": "https://www.facebook.com/plugins/page.php",
+          "resolverBasis": [
+            "facebook_page_plugin_embed",
+            "request",
+            "hostname_match",
+            "url_pattern_match"
+          ],
+          "confidence": 0.99
+        }
+      ],
+      "matchedHostnames": [
+        "www.facebook.com"
+      ],
+      "matchedUrls": [
+        "https://www.facebook.com/plugins/page.php"
+      ],
+      "matchedCookieNames": []
+    }
+  },
+  {
+    "input": {
+      "type": "request",
+      "url": "https://fonts.googleapis.com/css2",
+      "evidenceId": "registry-fixture-2"
+    },
+    "observation": {
+      "observationId": "vendor_fcdaa1f1",
+      "entity": "Google LLC",
+      "vendor": "Google",
+      "product": "Google Fonts",
+      "purpose": "infrastructure",
+      "servicePurpose": "Font delivery",
+      "registryAttribution": {
+        "entityId": "ent_7509263a9ab6",
+        "vendorId": "ven_b460db2a4c04",
+        "serviceId": "svc_7dd5fa017f5c",
+        "contractVersion": "vendor-registry-attribution-v1",
+        "resolverVersion": "certscore-vendor-resolver-2026-09-05-attribution-v1",
+        "ruleIds": [
+          "google_fonts_cdn"
+        ],
+        "matchKind": "endpoint"
+      },
+      "confidence": 0.92,
+      "basis": [
+        "google_fonts_cdn",
+        "request",
+        "hostname_match",
+        "url_pattern_match"
+      ],
+      "regulatoryRelevance": [
+        "cdn",
+        "font_delivery",
+        "third_party_runtime"
+      ],
+      "matchedEvidenceIds": [
+        "registry-fixture-2"
+      ],
+      "matchedEvidenceRefs": [
+        {
+          "refId": "ref_registry-fixture-2",
+          "eventId": "registry-fixture-2",
+          "eventType": "request",
+          "label": "fonts.googleapis.com",
+          "url": "https://fonts.googleapis.com/css2"
+        }
+      ],
+      "matchSources": [
+        {
+          "source": "network_request",
+          "sourceEventId": "registry-fixture-2",
+          "sourceEventType": "request",
+          "matchedField": "hostname",
+          "matchedValueRedacted": "fonts.googleapis.com",
+          "resolverBasis": [
+            "google_fonts_cdn",
+            "request",
+            "hostname_match",
+            "url_pattern_match"
+          ],
+          "confidence": 0.92
+        },
+        {
+          "source": "network_request",
+          "sourceEventId": "registry-fixture-2",
+          "sourceEventType": "request",
+          "matchedField": "url_pattern",
+          "matchedValueRedacted": "https://fonts.googleapis.com/css2",
+          "resolverBasis": [
+            "google_fonts_cdn",
+            "request",
+            "hostname_match",
+            "url_pattern_match"
+          ],
+          "confidence": 0.92
+        }
+      ],
+      "matchedHostnames": [
+        "fonts.googleapis.com"
+      ],
+      "matchedUrls": [
+        "https://fonts.googleapis.com/css2"
+      ],
+      "matchedCookieNames": []
+    }
+  },
+  {
+    "input": {
+      "type": "request",
+      "url": "https://bat.bing.com/action/0",
+      "evidenceId": "registry-fixture-3"
+    },
+    "observation": {
+      "observationId": "vendor_19ddf768",
+      "entity": "Microsoft Corporation",
+      "vendor": "Microsoft",
+      "product": "Microsoft Advertising / Bing UET",
+      "purpose": "advertising",
+      "servicePurpose": "Advertising",
+      "registryAttribution": {
+        "entityId": "ent_02b1b951db45",
+        "vendorId": "ven_3e5a5b1911ca",
+        "serviceId": "svc_1dc03beaa9fd",
+        "contractVersion": "vendor-registry-attribution-v1",
+        "resolverVersion": "certscore-vendor-resolver-2026-09-05-attribution-v1",
+        "ruleIds": [
+          "microsoft_bing_uet_endpoint"
+        ],
+        "matchKind": "endpoint"
+      },
+      "confidence": 0.91,
+      "basis": [
+        "microsoft_bing_uet_endpoint",
+        "request",
+        "hostname_match",
+        "url_pattern_match"
+      ],
+      "regulatoryRelevance": [
+        "consent",
+        "advertising",
+        "conversion_tracking"
+      ],
+      "matchedEvidenceIds": [
+        "registry-fixture-3"
+      ],
+      "matchedEvidenceRefs": [
+        {
+          "refId": "ref_registry-fixture-3",
+          "eventId": "registry-fixture-3",
+          "eventType": "request",
+          "label": "bat.bing.com",
+          "url": "https://bat.bing.com/action/0"
+        }
+      ],
+      "matchSources": [
+        {
+          "source": "network_request",
+          "sourceEventId": "registry-fixture-3",
+          "sourceEventType": "request",
+          "matchedField": "hostname",
+          "matchedValueRedacted": "bat.bing.com",
+          "resolverBasis": [
+            "microsoft_bing_uet_endpoint",
+            "request",
+            "hostname_match",
+            "url_pattern_match"
+          ],
+          "confidence": 0.91
+        },
+        {
+          "source": "network_request",
+          "sourceEventId": "registry-fixture-3",
+          "sourceEventType": "request",
+          "matchedField": "url_pattern",
+          "matchedValueRedacted": "https://bat.bing.com/action/0",
+          "resolverBasis": [
+            "microsoft_bing_uet_endpoint",
+            "request",
+            "hostname_match",
+            "url_pattern_match"
+          ],
+          "confidence": 0.91
+        }
+      ],
+      "matchedHostnames": [
+        "bat.bing.com"
+      ],
+      "matchedUrls": [
+        "https://bat.bing.com/action/0"
+      ],
+      "matchedCookieNames": []
+    }
+  }
+]

@@ -29,6 +29,8 @@ for (const intent of ["accept", "reject"] as const) {
         scopeSelector: "test-consent",
       };
       assert.equal(await closedShadowAccessibleControlAvailable(page, resolution), true);
+      await assert.rejects(dispatchClosedShadowAccessibleControl(page, resolution, () => { throw new Error("cancelled"); }), /cancelled/);
+      assert.equal(await page.evaluate(() => (window as any).__choice), null);
       await dispatchClosedShadowAccessibleControl(page, resolution);
       await page.waitForFunction((expected) => (window as any).__choice === expected, intent);
       assert.equal(await page.evaluate(() => (window as any).__choice), intent);

@@ -849,6 +849,7 @@ export function buildCertScoreApiV2OpenApiDocument() {
           additionalProperties: false,
           required: ["status", "findingTitle", "summary", "scoreEffect", "legalInterpretation", "comparison", "californiaPolicy", "evidenceUrl"],
           properties: {
+            contractVersion: { type: "string", enum: ["certscore.gpc-response-assessment.v1", "certscore.gpc-response-assessment.v2"], description: "V2 separates verified signal delivery, comparison coverage and observed response. Legacy records are not upgraded on read." },
             status: { type: "string", enum: ["responsive", "no_observable_response", "indeterminate"] },
             findingTitle: { type: "string", enum: ["GPC response", "No observable GPC response"] },
             summary: { type: "string", minLength: 1, maxLength: 2000 },
@@ -862,7 +863,7 @@ export function buildCertScoreApiV2OpenApiDocument() {
                 comparable: { type: "boolean" },
                 protocol: { type: "string", const: "passive_baseline_with_sec_gpc" },
                 baselineArtifact: {
-                  type: "object",
+                  type: ["object", "null"],
                   additionalProperties: false,
                   required: ["lane", "sha256", "sizeBytes"],
                   properties: {
@@ -872,7 +873,7 @@ export function buildCertScoreApiV2OpenApiDocument() {
                   }
                 },
                 gpcArtifact: {
-                  type: "object",
+                  type: ["object", "null"],
                   additionalProperties: false,
                   required: ["lane", "sha256", "sizeBytes"],
                   properties: {
@@ -886,10 +887,10 @@ export function buildCertScoreApiV2OpenApiDocument() {
                   additionalProperties: false,
                   required: ["secGpcHeaderValue", "requestsWithSecGpc", "requestEventIds", "navigatorGlobalPrivacyControl"],
                   properties: {
-                    secGpcHeaderValue: { type: "string", const: "1" },
+                    secGpcHeaderValue: { type: ["string", "null"], enum: ["1", null] },
                     requestsWithSecGpc: { type: "integer", minimum: 0 },
                     requestEventIds: { type: "array", maxItems: 100, items: { type: "string", minLength: 1, maxLength: 160 } },
-                    navigatorGlobalPrivacyControl: { type: "boolean", const: true }
+                    navigatorGlobalPrivacyControl: { type: ["boolean", "null"], description: "Actual main-document readback; null means unverified, not enabled." }
                   }
                 },
                 deltas: {
@@ -897,7 +898,7 @@ export function buildCertScoreApiV2OpenApiDocument() {
                   additionalProperties: false,
                   required: ["cookies", "trackers", "advertisingOrMeasurementActivity", "consentOrCmpBehavior"],
                   properties: Object.fromEntries(
-                    ["cookies", "trackers", "advertisingOrMeasurementActivity", "consentOrCmpBehavior"].map((key) => [key, {
+                    ["cookies", "webStorage", "trackers", "advertisingOrMeasurementActivity", "advertisingOrMarketingActivity", "consentOrCmpBehavior"].map((key) => [key, {
                       type: "object",
                       additionalProperties: false,
                       required: ["baselineCount", "gpcCount", "countDelta", "baselineOnly", "gpcOnly", "shared"],
@@ -905,12 +906,19 @@ export function buildCertScoreApiV2OpenApiDocument() {
                         baselineCount: { type: "integer", minimum: 0 },
                         gpcCount: { type: "integer", minimum: 0 },
                         countDelta: { type: "integer" },
+                        baselineOnlyCount: { type: "integer", minimum: 0 },
+                        gpcOnlyCount: { type: "integer", minimum: 0 },
+                        sharedCount: { type: "integer", minimum: 0 },
+                        samplesTruncated: { type: "boolean", description: "V2 counts cover the complete retained sets; arrays are bounded samples." },
                         baselineOnly: { type: "array", maxItems: 100, items: { type: "string", minLength: 1, maxLength: 500 } },
                         gpcOnly: { type: "array", maxItems: 100, items: { type: "string", minLength: 1, maxLength: 500 } },
                         shared: { type: "array", maxItems: 100, items: { type: "string", minLength: 1, maxLength: 500 } }
                       }
                     }]))
                 },
+                delivery: { type: "object", additionalProperties: false, required: ["status"], properties: { status: { type: "string", enum: ["verified", "limited", "unavailable"] } } },
+                coverage: { type: "object", additionalProperties: false, required: ["status", "comparedThroughMs"], properties: { status: { type: "string", enum: ["complete", "limited", "unavailable"] }, comparedThroughMs: { type: ["integer", "null"], minimum: 0 } } },
+                responseBasis: { type: "string", enum: ["qualified_activity_reduction", "no_qualified_reduction", "insufficient_evidence"] },
                 limitationKeys: { type: "array", maxItems: 24, items: { type: "string", minLength: 1, maxLength: 160 } }
               }
             },

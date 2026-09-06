@@ -1,3 +1,5 @@
+import { createGpcSignalCapture, installGpcNavigatorSignal } from "../gpc-signal-capture.js";
+import type { GpcSignalObservation } from "@certscore/contracts";
 import {
   type ArtifactRef,
   type AutomatedAccessObservation,
@@ -247,18 +249,7 @@ async function createPassiveBrowserContext(
         }
       : {}),
   });
-  if (globalPrivacyControlEnabled) {
-    await context.addInitScript({
-      content: `(() => {
-        try {
-          Object.defineProperty(Navigator.prototype, "globalPrivacyControl", {
-            configurable: true,
-            get: () => true
-          });
-        } catch {}
-      })();`,
-    });
-  }
+  await installGpcNavigatorSignal(context, globalPrivacyControlEnabled);
   return context;
 }
 
@@ -507,6 +498,7 @@ export function applyFinalDocumentPartyClassification(input: {
 }
 
 export interface PreConsentRuntimeScannerResult {
+  gpcSignalObservation?: GpcSignalObservation;
   runtimeEvidenceGraph?: RuntimeEvidenceGraph;
   moduleRun: ScanModuleRun;
   runtimeTimeline: RuntimeEvidenceEvent[];
@@ -638,6 +630,10 @@ export async function preConsentRuntimeScanner(
   lifecycleCheckpoint("browser_context", "completed");
   const page = context.newPage;
   const browserContext = context.newContext;
+  const gpcSignalCapture = captureRuntimeEvidence ? createGpcSignalCapture({
+    context: browserContext, page, enabled: input.globalPrivacyControlEnabled === true,
+    scanStartedAtMs: input.scanStartedAtMs, waitMode: input.waitMode, internalBudgetMs: input.internalBudgetMs,
+  }) : undefined;
   const graphCapture = captureRuntimeEvidence && input.runtimeGraph
     ? await installRuntimeGraphCapture(page, input.runtimeGraph)
     : undefined;
@@ -917,6 +913,7 @@ export async function preConsentRuntimeScanner(
   const fallbackDomSnapshots: DomSnapshotArtifact[] = [];
   let retainedCookieSnapshot: CookieSnapshot | undefined;
   let retainedStorageSnapshot: StorageSnapshot | undefined;
+  let retainedGpcSignalObservation: GpcSignalObservation | undefined;
   let retainedConsentUiObservation: ConsentUiObservation | undefined;
   let consentUiInspectionAttempted = false;
   let retainedCollectionSurfaceInventory: CollectionSurfaceInventory | undefined;
@@ -1060,6 +1057,7 @@ export async function preConsentRuntimeScanner(
       cookieEvents: [...cookieEvents],
       cookieSnapshots: retainedCookieSnapshot ? [retainedCookieSnapshot] : [],
       storageSnapshots: retainedStorageSnapshot ? [retainedStorageSnapshot] : [],
+      gpcSignalObservation: retainedGpcSignalObservation,
       scriptEvents: [...scriptEvents],
       iframeEvents: [...iframeEvents],
       consentUiObservations: retainedConsentUiObservations,
@@ -1905,7 +1903,7 @@ export async function preConsentRuntimeScanner(
       })()
       : Promise.resolve(undefined);
 
-    const [pageEvidence, initialConsentObservation, lateAccessibilityObservation] = await recordTiming(
+    const [pageEvidence, initialConsentObservation, lateAccessibilityObservation, gpcSignalObservation] = await recordTiming(
       timingBreakdown,
       "page evidence capture",
       "Atomic read-only storage, scripts, iframes, browser API, collection surface, and DOM text snapshot after the first structured consent inventory is retained.",
@@ -1927,8 +1925,13 @@ export async function preConsentRuntimeScanner(
           }), preScreenshotConsentObservation
           ? Promise.resolve(preScreenshotConsentObservation)
           : consentUiObservationPromise,
-        lateAccessibilityObservationPromise]),
+        lateAccessibilityObservationPromise,
+        gpcSignalCapture ? recordBoundedTiming(timingBreakdown,
+          "GPC signal readback", "Read actual main/frame values alongside the existing bounded page snapshot; no extra settling.",
+          Math.min(2_500, Math.max(1, remainingModuleBudgetMs())), () => gpcSignalCapture.snapshot(), () => undefined)
+          : Promise.resolve(undefined)]),
     );
+    retainedGpcSignalObservation = gpcSignalObservation;
     const {
       apiAccesses,
       collectionSurfaceInventory,
@@ -3704,6 +3707,7 @@ export async function preConsentRuntimeScanner(
       cookieEvents,
       cookieSnapshots: [cookieSnapshot],
       storageSnapshots: [storageSnapshot],
+      gpcSignalObservation: retainedGpcSignalObservation,
       scriptEvents,
       iframeEvents,
       consentUiObservations: captureConsentEvidence ? [consentObservation] : [],
@@ -3830,6 +3834,7 @@ export async function preConsentRuntimeScanner(
       cookieEvents,
       cookieSnapshots: retainedCookieSnapshot ? [retainedCookieSnapshot] : [],
       storageSnapshots: retainedStorageSnapshot ? [retainedStorageSnapshot] : [],
+      gpcSignalObservation: retainedGpcSignalObservation,
       scriptEvents,
       iframeEvents,
       consentUiObservations: retainedConsentUiObservations,
@@ -6730,6 +6735,7 @@ async function readRapidFirstLayerConsentUiObservationUnbounded(
   phase: "initial" | "post_accessibility" | "post_settle" | "retry",
 ): Promise<ConsentUiObservation> {
   type RapidConsentInventory = {
+    documentReadyState: DocumentReadyState;
     controls: Array<{
       cmpScoped: boolean;
       label: string;
@@ -6988,6 +6994,7 @@ async function readRapidFirstLayerConsentUiObservationUnbounded(
     const precheckedOptionalPreferenceRows = optionalPreferenceRows.filter((row) => row.checked);
     return {
       controls,
+      documentReadyState: document.readyState,
       contextText: [...new Set(contexts)].join(" ").slice(0, 12_000),
       defaultTogglePurposeLabels: [...new Set(optionalPreferenceRows.map((row) => row.label))].slice(0, 12),
       defaultToggleStatesObserved: optionalPreferenceRows.length > 0 ? true : null,
@@ -7111,7 +7118,11 @@ async function readRapidFirstLayerConsentUiObservationUnbounded(
   });
   const mainFrameObservation: ConsentUiObservation = {
     ...observation,
-    inventoryOutcome: controls.length > 0 ? "complete_with_controls" : "complete_empty",
+    documentReadyState: snapshot.documentReadyState,
+    inventoryOutcome: controls.length > 0 ? "complete_with_controls"
+      : snapshot.documentReadyState === "loading" ? "partial" : "complete_empty",
+    captureStatus: controls.length === 0 && snapshot.documentReadyState === "loading"
+      ? "incomplete" : observation.captureStatus,
     captureDiagnostics: {
       completedChannels: ["dom_inventory"],
       timedOutChannels: [],
@@ -7297,6 +7308,7 @@ async function readConsentUiObservation(
     .then(() => true)
     .catch(() => false);
   const inventory = await page.evaluate<{
+    documentReadyState?: DocumentReadyState;
     controls: ConsentUiInventoryControl[];
     diagnostics?: ConsentInventoryProbeDiagnostics;
     frameInaccessibleCount: number;
@@ -7327,6 +7339,7 @@ async function readConsentUiObservation(
       ),
       frameInaccessibleCount: 0,
       probeSucceeded: true,
+      documentReadyState: document.readyState,
     };
   }, {
     allowFullDocumentCmpControls,
@@ -7334,6 +7347,7 @@ async function readConsentUiObservation(
     canonicalConsentContextHints: CANONICAL_CONSENT_CONTEXT_HINTS,
     canonicalCmpControlSelectors: CANONICAL_CMP_CONTAINER_SELECTORS,
   }).catch((): {
+    documentReadyState?: DocumentReadyState;
     controls: ConsentUiInventoryControl[];
     diagnostics?: ConsentInventoryProbeDiagnostics;
     frameInaccessibleCount: number;
@@ -7574,12 +7588,13 @@ async function readConsentUiObservation(
   ];
   return {
     ...observation,
+    documentReadyState: inventory.documentReadyState,
     inventoryOutcome:
       frameInaccessibleCount > 0
         ? "frame_inaccessible"
         : enrichedControls.length > 0
           ? "complete_with_controls"
-          : domInventoryCompleted
+          : domInventoryCompleted && inventory.documentReadyState !== "loading"
             ? "complete_empty"
             : accessibilityInventory.captureStatus === "timed_out"
               ? "timed_out"
@@ -9454,10 +9469,12 @@ export function mergeConsentUiObservations(
           : completedTypedInventoryRetained
             ? controls.length > 0
               ? "complete_with_controls"
-              : "complete_empty"
+              : (candidate.documentReadyState ?? current.documentReadyState) === "loading"
+                ? "partial" : "complete_empty"
             : candidate.inventoryOutcome ?? current.inventoryOutcome;
   return {
     ...candidate,
+    documentReadyState: candidate.documentReadyState ?? current.documentReadyState,
     boundedSameSessionRecoveryOutcome:
       candidate.boundedSameSessionRecoveryOutcome ?? current.boundedSameSessionRecoveryOutcome,
     inventoryOutcome,
@@ -12240,6 +12257,7 @@ export function reconcileConsentUiObservationWithCompletedGeometry(input: {
     "geometry",
   ]) as NonNullable<ConsentUiObservation["captureDiagnostics"]>["completedChannels"];
   const completedSettledEmptyInventory =
+    input.current.documentReadyState !== "loading" &&
     input.current.controls.length === 0 &&
     input.current.inventoryOutcome === "complete_empty" &&
     (input.current.captureDiagnostics?.completedChannels ?? []).some((channel) =>
@@ -12272,9 +12290,9 @@ export function reconcileConsentUiObservationWithCompletedGeometry(input: {
           ? "frame_inaccessible"
           : input.current.controls.length > 0
             ? "complete_with_controls"
-            : completedChannels.includes("dom_inventory")
+            : completedChannels.includes("dom_inventory") && input.current.documentReadyState !== "loading"
               ? "complete_empty"
-              : input.current.inventoryOutcome,
+              : input.current.documentReadyState === "loading" ? "partial" : input.current.inventoryOutcome,
       captureDiagnostics: {
         completedChannels,
         timedOutChannels: (input.current.captureDiagnostics?.timedOutChannels ?? [])

@@ -1841,7 +1841,7 @@ function postRefusalFixtureMarkup(caseName: StaticFixturePage): string {
           return;
         }
         if (${JSON.stringify(rejectNavigationStorage)}) {
-          localStorage.setItem("certscore_navigation_consent", JSON.stringify({ analytics: false, marketing: false, preferences: false }));
+          localStorage.setItem("certscore_navigation_consent", "rejected");
           window.location.reload();
           return;
         }

@@ -10,6 +10,8 @@ import path from "node:path";
 import { mkdir, readdir, readFile, writeFile } from "node:fs/promises";
 import { connect as tlsConnect, type TLSSocket } from "node:tls";
 import { chromium } from "playwright";
+import { actionLanePassiveAbsenceDisposition } from "./action-lane-passive-absence.js";
+import { evidenceValidationFailure } from "./evidence-validation-failure.js";
 import {
   VERIFIED_PRE_CONSENT_RUNTIME_PREVIEW_PACKET_VERSION,
   VERIFIED_POLICY_EVIDENCE_PACKET_VERSION,
@@ -453,6 +455,7 @@ type LocalV2DagLambdaConsentActionRecipe = {
   }>;
 };
 type LocalV2DagLambdaShardResult = {
+  failureReason?: "gpc_worker_failed" | "gpc_artifact_unverifiable";
   artifactMetadata?: LocalV2DagLambdaArtifactMetadata;
   artifactPointers?: LocalV2DagLambdaArtifactPointers;
   completedAt?: string;
@@ -1306,6 +1309,7 @@ async function runLocalV2DagLambdaScanBundle(
             : "combined";
     try {
       const bundle = await runScan({
+        scanId: payload.scanId,
         runtimeGraph: payload.runtimeGraph,
         allowRuntimeEvidenceFinalizationAfterAbort: options.allowRuntimeEvidenceFinalizationAfterAbort,
         browserReuseMode: "per_module",
@@ -1980,7 +1984,9 @@ function unsupportedPostAcceptPacket(input: {
     throw new Error("Unsupported post-Accept evidence requires a display-safe HTTP target URL.");
   }
   return postAcceptEvidencePacketSchema.parse({
-    artifactVersion: "certscore.post_accept_evidence.v1",
+    artifactVersion: "certscore.post_accept_evidence.v2",
+    decisionEvidence: { policyVersion: "semantic_consent_registration.v2", decision: "unknown", basis: "unverified" },
+    captureCoverage: { requestsDroppedBeforeAction: 0, requestsDroppedAfterAction: 0 },
     artifactOnly: true,
     productionProjectable: false,
     scanId: `${input.payload.scanId}:accept_observation`,
@@ -2059,7 +2065,9 @@ function unsupportedPostRefusalPacket(input: {
   const completedAt = new Date();
   const config = input.payload.postRefusalObservation!;
   return postRefusalEvidencePacketSchema.parse({
-    artifactVersion: "certscore.post_refusal_evidence.v1",
+    artifactVersion: "certscore.post_refusal_evidence.v2",
+    decisionEvidence: { policyVersion: "semantic_consent_registration.v2", decision: "unknown", basis: "unverified" },
+    captureCoverage: { requestsDroppedBeforeAction: 0, requestsDroppedAfterAction: 0 },
     artifactOnly: true,
     productionProjectable: false,
     scanId: `${input.payload.scanId}:reject_observation`,
@@ -2352,6 +2360,7 @@ export async function runLocalV2DagLambdaShardedArtifactChain(
     ...(payload.gpcObservation?.enabled === true ? ["gpc_observation" as const] : []),
   ];
   const postRefusalState: {
+    passiveAbsence: boolean;
     cancelledNoReject: boolean;
     dispatchStartedAtMs?: number;
     error?: string;
@@ -2360,12 +2369,12 @@ export async function runLocalV2DagLambdaShardedArtifactChain(
     settled: boolean;
     started: boolean;
     timedOut: boolean;
-  } = { cancelledNoReject: false, settled: false, started: false, timedOut: false };
+  } = { passiveAbsence: false, cancelledNoReject: false, settled: false, started: false, timedOut: false };
   let postRefusalWorkerPromise: Promise<void> | undefined;
   const postRefusalAbortController = new AbortController();
   postRefusalAbortController.signal.addEventListener("abort", () => {
     postRefusalState.error = postRefusalState.cancelledNoReject
-      ? "reject_control_not_observed"
+      ? postRefusalState.dispatchStartedAtMs === undefined ? "reject_control_not_observed" : "reject_path_incomplete_at_passive_barrier"
       : "reject_path_exceeded_post_primary_join_budget";
     postRefusalState.outcomeObservedAtMs = Date.now();
     postRefusalState.settled = true;
@@ -2382,6 +2391,7 @@ export async function runLocalV2DagLambdaShardedArtifactChain(
       postRefusalWorkerSignal,
     )
       .then(() => {
+        postRefusalWorkerSignal.throwIfAborted();
         postRefusalState.dispatchStartedAtMs = Date.now();
         return invokeLocalV2DagLambdaWorker({
           lambdaClient: options.lambdaClient,
@@ -2413,6 +2423,7 @@ export async function runLocalV2DagLambdaShardedArtifactChain(
       });
   }
   const postAcceptState: {
+    passiveAbsence: boolean;
     cancelledNoAccept: boolean;
     dispatchStartedAtMs?: number;
     error?: string;
@@ -2421,12 +2432,12 @@ export async function runLocalV2DagLambdaShardedArtifactChain(
     settled: boolean;
     started: boolean;
     timedOut: boolean;
-  } = { cancelledNoAccept: false, settled: false, started: false, timedOut: false };
+  } = { passiveAbsence: false, cancelledNoAccept: false, settled: false, started: false, timedOut: false };
   let postAcceptWorkerPromise: Promise<void> | undefined;
   const postAcceptAbortController = new AbortController();
   postAcceptAbortController.signal.addEventListener("abort", () => {
     postAcceptState.error = postAcceptState.cancelledNoAccept
-      ? "accept_control_not_observed"
+      ? postAcceptState.dispatchStartedAtMs === undefined ? "accept_control_not_observed" : "accept_path_incomplete_at_passive_barrier"
       : "accept_path_exceeded_post_primary_join_budget";
     postAcceptState.outcomeObservedAtMs = Date.now();
     postAcceptState.settled = true;
@@ -2442,6 +2453,7 @@ export async function runLocalV2DagLambdaShardedArtifactChain(
       postAcceptWorkerSignal,
     )
       .then(() => {
+        postAcceptWorkerSignal.throwIfAborted();
         postAcceptState.dispatchStartedAtMs = Date.now();
         return invokeLocalV2DagLambdaWorker({
           lambdaClient: options.lambdaClient,
@@ -2489,9 +2501,15 @@ export async function runLocalV2DagLambdaShardedArtifactChain(
             rejectActionDispatched: rejectActionMayHaveDispatched,
           });
           if (cancellation.abortRequested) {
-            postRefusalState.cancelledNoReject = true;
-            postRefusalAbortController.abort(new Error(cancellation.reason));
-            console.info("[v2-lambda-post-refusal] cooperative cancellation requested", {
+            postRefusalState.passiveAbsence = true;
+            // A launched worker is a separate browser session; its own result
+            // can still arrive while the required passive lanes are running.
+            if (actionLanePassiveAbsenceDisposition({ ...postRefusalState, passiveBarrierReached: false }) === "cancel_not_dispatched") {
+              postRefusalState.cancelledNoReject = true;
+              postRefusalAbortController.abort(new Error(cancellation.reason));
+            }
+            console.info("[v2-lambda-post-refusal] passive absence reconciled", {
+              disposition: actionLanePassiveAbsenceDisposition({ ...postRefusalState, passiveBarrierReached: false }),
               reason: cancellation.reason,
               scanId: payload.scanId,
             });
@@ -2509,9 +2527,13 @@ export async function runLocalV2DagLambdaShardedArtifactChain(
             returnedAcceptStatus !== "not_attempted" &&
             returnedAcceptStatus !== "unsupported";
           if (!acceptActionMayHaveDispatched) {
-            postAcceptState.cancelledNoAccept = true;
-            postAcceptAbortController.abort(new Error("accept_control_not_observed"));
-            console.info("[v2-lambda-post-accept] cooperative cancellation requested", {
+            postAcceptState.passiveAbsence = true;
+            if (actionLanePassiveAbsenceDisposition({ ...postAcceptState, passiveBarrierReached: false }) === "cancel_not_dispatched") {
+              postAcceptState.cancelledNoAccept = true;
+              postAcceptAbortController.abort(new Error("accept_control_not_observed"));
+            }
+            console.info("[v2-lambda-post-accept] passive absence reconciled", {
+              disposition: actionLanePassiveAbsenceDisposition({ ...postAcceptState, passiveBarrierReached: false }),
               reason: "accept_control_not_observed",
               scanId: payload.scanId,
             });
@@ -2521,13 +2543,25 @@ export async function runLocalV2DagLambdaShardedArtifactChain(
       parentPayload: payload,
       parentScanId: payload.scanId,
       workerLanes: evidenceWorkerLanes,
+      signal: options.signal,
     })
   );
   const passiveLaneBarrierCompletedAtMs = Date.now();
+  // Cost-neutral reconciliation: preserve action results already returned by
+  // the passive barrier, but add no tail wait solely to resolve passive absence.
+  // An unfinished independent session is limited, not evidence of no control.
+  if (postRefusalState.passiveAbsence && actionLanePassiveAbsenceDisposition({ ...postRefusalState, passiveBarrierReached: true }) === "cancel_incomplete") {
+    postRefusalState.cancelledNoReject = true;
+    postRefusalAbortController.abort(new Error("reject_path_incomplete_at_passive_barrier"));
+  }
+  if (postAcceptState.passiveAbsence && actionLanePassiveAbsenceDisposition({ ...postAcceptState, passiveBarrierReached: true }) === "cancel_incomplete") {
+    postAcceptState.cancelledNoAccept = true;
+    postAcceptAbortController.abort(new Error("accept_path_incomplete_at_passive_barrier"));
+  }
   const workerBundles = await timeLambdaPhase(phaseTimings, "worker_bundle_download", () =>
-    Promise.all(workerResults.map((result) =>
-      readWorkerBundleFromArtifactResult(result, { awsRegion: payload.awsRegion, s3GetClient: options.s3GetClient })
-    ))
+    Promise.all(workerResults.map((result) => readLocalV2DagLambdaWorkerBundle(result, {
+      awsRegion: payload.awsRegion, s3GetClient: options.s3GetClient,
+    })))
   );
   // Worker artifacts are already durable and checksum-addressed in S3. Mirror
   // their bounded auxiliary files into the final retained root concurrently
@@ -2566,12 +2600,12 @@ export async function runLocalV2DagLambdaShardedArtifactChain(
       runtimeGraph: payload.runtimeGraph,
     })
   );
+  const workerAuxiliaryMirrorOutcome = await workerAuxiliaryMirrorOutcomePromise;
+  if (workerAuxiliaryMirrorOutcome.status === "rejected") throw workerAuxiliaryMirrorOutcome.error;
   if (payload.gpcObservation?.enabled === true) {
     const baselineResult = workerResults.find((result) => result.workerLane === "runtime_evidence");
     const gpcResult = workerResults.find((result) => result.workerLane === "gpc_observation");
-    if (!gpcObservationBundle || !baselineResult || !gpcResult) {
-      throw new Error("GPC observation requires paired runtime_evidence and gpc_observation worker bundles.");
-    }
+    if (!baselineResult) throw new Error("GPC comparison requires a verified runtime baseline.");
     const verifiedWorkerArtifact = (
       result: LocalV2DagLambdaShardResult,
       lane: "runtime_evidence" | "gpc_observation",
@@ -2583,7 +2617,9 @@ export async function runLocalV2DagLambdaShardedArtifactChain(
       }
       return { uri, sha256: metadata.sha256, sizeBytes: metadata.sizeBytes };
     };
-    const gpcGraphs = verifyLaneRuntimeGraph(gpcObservationBundle, payload.scanId, "gpc", payload.runtimeGraph);
+    const verifiedGpc = gpcResult?.status === "completed" ? gpcObservationBundle : undefined;
+    const gpcGraphs = verifiedGpc ? verifyLaneRuntimeGraph(verifiedGpc, payload.scanId, "gpc", payload.runtimeGraph)
+      : { graphs: [], diagnostics: [] };
     bundle = canonicalEvidenceBundleSchema.parse({
       ...bundle,
       runtimeEvidenceGraphs: [
@@ -2594,14 +2630,11 @@ export async function runLocalV2DagLambdaShardedArtifactChain(
       gpcResponseAssessment: buildGpcResponseAssessment({
         baseline: runtimeEvidenceBundle,
         baselineArtifact: verifiedWorkerArtifact(baselineResult, "runtime_evidence"),
-        gpc: gpcObservationBundle,
-        gpcArtifact: verifiedWorkerArtifact(gpcResult, "gpc_observation"),
+        gpc: verifiedGpc,
+        gpcArtifact: verifiedGpc && gpcResult ? verifiedWorkerArtifact(gpcResult, "gpc_observation") : undefined,
+        failureReason: gpcResult?.failureReason ?? (!verifiedGpc ? "gpc_worker_failed" : undefined),
       }),
     });
-  }
-  const workerAuxiliaryMirrorOutcome = await workerAuxiliaryMirrorOutcomePromise;
-  if (workerAuxiliaryMirrorOutcome.status === "rejected") {
-    throw workerAuxiliaryMirrorOutcome.error;
   }
   // Accept and Reject have independent absolute post-passive deadlines and
   // are joined concurrently, including packet verification. This prevents
@@ -2719,7 +2752,7 @@ export async function runLocalV2DagLambdaShardedArtifactChain(
   let postRefusalJoin: "disabled" | "joined" | "failed" | "not_applicable" | "timed_out" =
     postRefusalState.started ? "failed" : "disabled";
   if (postRefusalState.cancelledNoReject) {
-    postRefusalJoin = "not_applicable";
+    postRefusalJoin = postRefusalState.dispatchStartedAtMs === undefined ? "not_applicable" : "failed";
   } else if (postRefusalState.timedOut) {
     postRefusalJoin = "timed_out";
   } else if (joinedPostRefusalPacket) {
@@ -2742,7 +2775,7 @@ export async function runLocalV2DagLambdaShardedArtifactChain(
           : postRefusalJoin === "not_applicable"
             ? { limitationCode: "reject_control_not_observed" }
           : postRefusalJoin === "failed"
-            ? { limitationCode: "reject_path_worker_failed" }
+            ? { limitationCode: postRefusalState.cancelledNoReject ? "reject_path_incomplete_at_passive_barrier" : "reject_path_worker_failed" }
             : {}),
       },
     });
@@ -2750,7 +2783,7 @@ export async function runLocalV2DagLambdaShardedArtifactChain(
   let postAcceptJoin: "disabled" | "joined" | "failed" | "not_applicable" | "timed_out" =
     postAcceptState.started ? "failed" : "disabled";
   if (postAcceptState.cancelledNoAccept) {
-    postAcceptJoin = "not_applicable";
+    postAcceptJoin = postAcceptState.dispatchStartedAtMs === undefined ? "not_applicable" : "failed";
   } else if (postAcceptState.timedOut) {
     postAcceptJoin = "timed_out";
   } else if (joinedPostAcceptPacket) {
@@ -2773,7 +2806,7 @@ export async function runLocalV2DagLambdaShardedArtifactChain(
           : postAcceptJoin === "not_applicable"
             ? { limitationCode: "accept_control_not_observed" }
           : postAcceptJoin === "failed"
-            ? { limitationCode: "accept_path_worker_failed" }
+            ? { limitationCode: postAcceptState.cancelledNoAccept ? "accept_path_incomplete_at_passive_barrier" : "accept_path_worker_failed" }
             : {}),
       },
     });
@@ -3042,18 +3075,34 @@ export async function invokeLocalV2DagLambdaWorkers(input: {
   parentScanId: string;
   onWorkerResult?: (result: LocalV2DagLambdaShardResult) => void;
   workerLanes: readonly LocalV2DagLambdaWorkerLane[];
+  signal?: AbortSignal;
 }): Promise<LocalV2DagLambdaShardResult[]> {
   const lambdaClient = input.lambdaClient ?? new LambdaClient({ region: input.parentPayload.awsRegion });
   return Promise.all(input.workerLanes.map(async (workerLane) => {
-    const result = await invokeLocalV2DagLambdaWorker({
-    coordinatorPlanSummary: input.coordinatorPlanSummary,
-    lambdaClient,
-    parentPayload: input.parentPayload,
-    parentScanId: input.parentScanId,
-    workerLane,
-    });
-    input.onWorkerResult?.(result);
-    return result;
+    const startedAtMs = Date.now();
+    try {
+      const result = await invokeLocalV2DagLambdaWorker({
+        coordinatorPlanSummary: input.coordinatorPlanSummary,
+        lambdaClient,
+        parentPayload: input.parentPayload,
+        parentScanId: input.parentScanId,
+        workerLane,
+        signal: input.signal,
+      });
+      input.onWorkerResult?.(result);
+      return result;
+    } catch (error) {
+      if (workerLane !== "gpc_observation") throw error;
+      const completedAtMs = Date.now();
+      // Coordinator-owned terminal failure, not a synthesized worker bundle.
+      const failed: LocalV2DagLambdaShardResult = {
+        scanId: input.parentScanId, workerLane, status: "failed", failureReason: "gpc_worker_failed",
+        coordinatorTiming: { invocationStartedAt: new Date(startedAtMs).toISOString(),
+          responseReceivedAt: new Date(completedAtMs).toISOString(), durationMs: completedAtMs - startedAtMs },
+      };
+      input.onWorkerResult?.(failed);
+      return failed;
+    }
   }));
 }
 
@@ -3261,7 +3310,7 @@ export function buildLocalV2DagLambdaLaneTimingSummary(input: {
         workerReportedHandlerDurationMs: null,
       };
     }
-    return timingFromResult(lane, result, true);
+    return timingFromResult(lane, result, result.status === "completed", result.status);
   });
 
   let rejectTiming: LocalV2DagLambdaLaneTiming;
@@ -3652,6 +3701,21 @@ function finiteNonNegativeNumber(value: unknown): number | undefined {
   return typeof value === "number" && Number.isFinite(value) && value >= 0 ? value : undefined;
 }
 
+export async function readLocalV2DagLambdaWorkerBundle(
+  result: LocalV2DagLambdaShardResult,
+  options: { awsRegion?: LocalV2DagLambdaAwsRegion; s3GetClient?: S3GetClient },
+) {
+  if (result.workerLane === "gpc_observation" && result.status === "failed") return undefined;
+  try {
+    return await readWorkerBundleFromArtifactResult(result, options);
+  } catch (error) {
+    if (result.workerLane !== "gpc_observation") throw error;
+    result.status = "failed";
+    result.failureReason = "gpc_artifact_unverifiable";
+    return undefined;
+  }
+}
+
 async function readWorkerBundleFromArtifactResult(
   result: LocalV2DagLambdaShardResult,
   options: { awsRegion?: LocalV2DagLambdaAwsRegion; s3GetClient?: S3GetClient }
@@ -3660,11 +3724,15 @@ async function readWorkerBundleFromArtifactResult(
   if (!uri) {
     throw new Error(`Local v2 DAG Lambda worker ${result.workerLane} did not include a scan artifact pointer.`);
   }
+  const expected = result.artifactMetadata?.scanArtifactUri;
+  if (result.workerLane === "gpc_observation" &&
+    (!expected || !/^[a-f0-9]{64}$/.test(expected.sha256) || !Number.isSafeInteger(expected.sizeBytes) || expected.sizeBytes <= 0)) {
+    throw new Error("GPC worker requires checksum- and size-bound retained evidence.");
+  }
   const { bucket, key } = parseS3Uri(uri);
   const s3Client = options.s3GetClient ?? localV2DagLambdaS3Client(options.awsRegion ?? LOCAL_V2_DAG_LAMBDA_AWS_REGION);
   const response = await s3Client.send(new GetObjectCommand({ Bucket: bucket, Key: key }));
   const body = await streamToBuffer(response.Body);
-  const expected = result.artifactMetadata?.scanArtifactUri;
   const sha256 = createHash("sha256").update(body).digest("hex");
   if (expected?.sha256 && expected.sha256 !== sha256) {
     throw new Error(`Local v2 DAG Lambda worker ${result.workerLane} scan artifact checksum mismatch.`);
@@ -3672,7 +3740,11 @@ async function readWorkerBundleFromArtifactResult(
   if (expected?.sizeBytes !== undefined && expected.sizeBytes !== body.byteLength) {
     throw new Error(`Local v2 DAG Lambda worker ${result.workerLane} scan artifact size mismatch.`);
   }
-  return canonicalEvidenceBundleSchema.parse(JSON.parse(body.toString("utf8")));
+  const bundle = canonicalEvidenceBundleSchema.parse(JSON.parse(body.toString("utf8")));
+  if (result.workerLane === "gpc_observation" && bundle.scanId !== result.scanId) {
+    throw new Error("GPC worker bundle does not retain its parent scan identity.");
+  }
+  return bundle;
 }
 
 async function readConsentRejectAvailabilityFromArtifactRoot(artifactRoot: string) {
@@ -3793,40 +3865,47 @@ export async function mirrorWorkerArtifactsIntoFinalArtifactRoot(input: {
 }) {
   const s3Client = input.s3GetClient ?? localV2DagLambdaS3Client(input.awsRegion ?? LOCAL_V2_DAG_LAMBDA_AWS_REGION);
   await Promise.all(input.workerResults.map(async (result) => {
-    const manifestUri = result.artifactPointers?.manifestUri;
-    if (!manifestUri) {
-      return;
-    }
-    const manifestBody = await readS3ObjectBody(manifestUri, s3Client);
-    const manifestFileName = safeAuxiliaryFileName(`worker-${result.workerLane}-LocalV2DagLambdaManifest.json`);
-    await writeFile(path.join(input.artifactRoot, manifestFileName), manifestBody);
-    const manifest = asRecord(JSON.parse(manifestBody.toString("utf8")));
-    const auxiliaryArtifacts = Array.isArray(manifest.auxiliaryArtifacts) ? manifest.auxiliaryArtifacts : [];
-    await Promise.all(auxiliaryArtifacts.flatMap((value) => {
-      const artifact = asRecord(value);
-      const fileName = compactString(artifact.fileName);
-      const uri = compactString(artifact.uri);
-      if (!fileName || !uri || !isSupportedAuxiliaryFileName(fileName)) {
-        return [];
+    if (result.workerLane === "gpc_observation" && result.status === "failed") return;
+    try {
+      const manifestUri = result.artifactPointers?.manifestUri;
+      if (!manifestUri) {
+        return;
       }
-      return [async () => {
-        const body = await readS3ObjectBody(uri, s3Client);
-        const expectedSha256 = compactString(artifact.sha256);
-        const sha256 = createHash("sha256").update(body).digest("hex");
-        if (expectedSha256 && expectedSha256 !== sha256) {
-          throw new Error(`Local v2 DAG Lambda worker ${result.workerLane} auxiliary artifact checksum mismatch for ${fileName}.`);
+      const manifestBody = await readS3ObjectBody(manifestUri, s3Client);
+      const manifestFileName = safeAuxiliaryFileName(`worker-${result.workerLane}-LocalV2DagLambdaManifest.json`);
+      await writeFile(path.join(input.artifactRoot, manifestFileName), manifestBody);
+      const manifest = asRecord(JSON.parse(manifestBody.toString("utf8")));
+      const auxiliaryArtifacts = Array.isArray(manifest.auxiliaryArtifacts) ? manifest.auxiliaryArtifacts : [];
+      await Promise.all(auxiliaryArtifacts.flatMap((value) => {
+        const artifact = asRecord(value);
+        const fileName = compactString(artifact.fileName);
+        const uri = compactString(artifact.uri);
+        if (!fileName || !uri || !isSupportedAuxiliaryFileName(fileName)) {
+          return [];
         }
-        const expectedSizeBytes = typeof artifact.sizeBytes === "number" ? artifact.sizeBytes : null;
-        if (expectedSizeBytes !== null && expectedSizeBytes !== body.byteLength) {
-          throw new Error(`Local v2 DAG Lambda worker ${result.workerLane} auxiliary artifact size mismatch for ${fileName}.`);
-        }
-        const workerFileName = safeAuxiliaryFileName(`worker-${result.workerLane}-${fileName}`);
-        await writeFile(path.join(input.artifactRoot, workerFileName), body);
-        if (shouldPromoteEvidenceLaneArtifact(result.workerLane, fileName)) {
-          await writeFile(path.join(input.artifactRoot, safeAuxiliaryFileName(fileName)), body);
-        }
-      }];
-    }).map((mirror) => mirror()));
+        return [async () => {
+          const body = await readS3ObjectBody(uri, s3Client);
+          const expectedSha256 = compactString(artifact.sha256);
+          const sha256 = createHash("sha256").update(body).digest("hex");
+          if (expectedSha256 && expectedSha256 !== sha256) {
+            throw new Error(`Local v2 DAG Lambda worker ${result.workerLane} auxiliary artifact checksum mismatch for ${fileName}.`);
+          }
+          const expectedSizeBytes = typeof artifact.sizeBytes === "number" ? artifact.sizeBytes : null;
+          if (expectedSizeBytes !== null && expectedSizeBytes !== body.byteLength) {
+            throw new Error(`Local v2 DAG Lambda worker ${result.workerLane} auxiliary artifact size mismatch for ${fileName}.`);
+          }
+          const workerFileName = safeAuxiliaryFileName(`worker-${result.workerLane}-${fileName}`);
+          await writeFile(path.join(input.artifactRoot, workerFileName), body);
+          if (shouldPromoteEvidenceLaneArtifact(result.workerLane, fileName)) {
+            await writeFile(path.join(input.artifactRoot, safeAuxiliaryFileName(fileName)), body);
+          }
+        }];
+      }).map((mirror) => mirror()));
+    } catch (error) {
+      if (result.workerLane !== "gpc_observation") throw error;
+      result.status = "failed";
+      result.failureReason = "gpc_artifact_unverifiable";
+    }
   }));
 }
 
@@ -5833,6 +5912,8 @@ export async function handler(event: unknown, options: HandlerOptions = {}) {
       throw error;
     }
     handlerOutcome = "failed";
+    const validationFailure = evidenceValidationFailure(error);
+    const failureMessage = validationFailure?.message ?? (error instanceof Error ? error.message : String(error));
     const handlerDeadlineAtMs = handlerStartedAtMs + handlerSafetyTimeoutMs;
     const terminalPublicationReserveMs = Math.max(10, resultPublishTimeoutMs);
     const diagnosticShutdownReserveMs = Math.min(
@@ -5850,6 +5931,7 @@ export async function handler(event: unknown, options: HandlerOptions = {}) {
       console.info("[v2-lambda-terminal] failure diagnostic upload started", {
         diagnosticUploadStartedAt: diagnosticUploadStartedAt.toISOString(),
         scanId: payload.scanId,
+        ...(validationFailure ? { failure: validationFailure, workerLane: payload.workerLane } : {}),
       });
       try {
         const diagnosticUploadTimeoutMs = Math.max(
@@ -5860,7 +5942,7 @@ export async function handler(event: unknown, options: HandlerOptions = {}) {
           writeAndUploadFailureDiagnostic({
             artifactRoot,
             artifactChainTimeoutMs,
-            cancellationReason: error instanceof Error ? error.message : String(error),
+            cancellationReason: failureMessage,
             cancellationObservedAt,
             cancellationRequestedAt: scannerCancellationRequestedAt,
             handlerStartedAt,
@@ -5891,8 +5973,8 @@ export async function handler(event: unknown, options: HandlerOptions = {}) {
         error: sanitizeError({
           code: scannerDeadlineAborted
             ? "v2_dag_lambda_safety_timeout"
-            : "v2_dag_lambda_worker_failed",
-          message: error instanceof Error ? error.message : String(error)
+            : validationFailure?.code ?? "v2_dag_lambda_worker_failed",
+          message: failureMessage
         }),
         scanId: payload.scanId,
         status: "failed" as const,
@@ -5909,8 +5991,8 @@ export async function handler(event: unknown, options: HandlerOptions = {}) {
           ? error.code
           : scannerDeadlineAborted
             ? "v2_dag_lambda_safety_timeout"
-          : "v2_dag_lambda_failed",
-        message: error instanceof Error ? error.message : String(error)
+          : validationFailure?.code ?? "v2_dag_lambda_failed",
+        message: failureMessage
       },
       handlerTiming: buildLocalV2DagLambdaHandlerTiming({
         artifactChainCompletedAt,

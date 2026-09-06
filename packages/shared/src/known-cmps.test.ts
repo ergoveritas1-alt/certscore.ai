@@ -168,6 +168,18 @@ test("detects the distinct BST DSGVO Cookie notice plugin from retained runtime 
   assert.ok(detection?.matchedSignals.some((signal) => signal.source === "dom"));
 });
 
+test("BST contextual activation is canonically scoped and never equates its receipt with consent", () => {
+  const definition = KNOWN_CMP_REGISTRY.find((entry) => entry.canonicalName === "BST DSGVO Cookie notice plugin, non-TCF")!;
+  assert.deepEqual(definition.acceptContextualApproval, { policyVersion: "registered_contextual_accept.v1",
+    bannerSelector: ".bst-panel", expectedNormalizedLabel: "verstanden" });
+  assert.deepEqual(definition.acceptControlSelectors, [".bst-panel .bst-accept", ".bst-panel .bst-accept-btn"]);
+  assert.equal(definition.domSelectors?.[0], ".bst-panel");
+  assert.equal(definition.acceptConfirmation?.kind, "canonical_first_layer_ui_transition");
+  assert.equal(definition.acceptanceCookieValues, undefined);
+  assert.equal(getKnownCmpActionCapability(definition.canonicalName, "accept")?.recipeAvailable, true);
+  assert.equal(getKnownCmpActionCapability(definition.canonicalName, "reject")?.recipeAvailable, false);
+});
+
 test("detects Cookiebot European consent infrastructure", () => {
   assert.equal(getKnownCmpVendorForHost("consent.cookiebot.eu"), "Cookiebot");
   assert.equal(getKnownCmpVendorForHost("consentcdn.cookiebot.eu"), "Cookiebot");

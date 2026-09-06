@@ -503,7 +503,7 @@ test("confirmed post-refusal enforcement failure has a twelve-point family effec
   const repeated = deriveRegulatoryCoverageScore({ framework: "gdpr_eprivacy", rows: [row, row, row] });
 
   assert.equal(single.score, 88);
-  assert.equal(repeated.score, 85);
+  assert.equal(repeated.score, 88, "Repeated evidence must not charge the same post-Reject family twice");
 });
 
 test("confirmed passive post-refusal storage persistence is score-neutral", () => {

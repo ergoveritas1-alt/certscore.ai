@@ -207,6 +207,9 @@ test("report header actions and section spacing match the compact report treatme
     source.indexOf("function ChoicePathResults"),
     source.indexOf("type InventoryMixItem"),
   );
+  assert.match(choicePathSource, /report\.acceptPath\.state !== "incomplete"/);
+  assert.match(choicePathSource, /report\.rejectPath\.state !== "incomplete"/);
+  assert.match(choicePathSource, /if \(!acceptSucceeded && !rejectSucceeded\) return null/);
   const evidenceDirectorySource = source.slice(source.indexOf("function EvidenceDirectory"));
 
   assert.match(identitySource, /className="!h-7 !w-7 translate-y-0\.5 !rounded-md !border-zinc-200 !bg-zinc-50 !p-1 !shadow-sm"/);
@@ -311,13 +314,16 @@ test("full runtime inventory shows six rows before becoming vertically scrollabl
   assert.match(source, /max-h-\[17rem\] overflow-auto/);
   assert.doesNotMatch(source, /max-h-\[48rem\]/);
   assert.match(source, /data-inventory-scroll=/);
-  assert.match(source, /detailsLabel="Cookie and tracker details"/);
+  assert.match(source, /detailsLabel="Resource details"/);
+  assert.ok(source.includes('eyebrow="Resource inventory"'));
+  assert.ok(source.includes("Field details in Collection surface evidence below."));
+  assert.ok(source.indexOf("<RuntimeInventoryTable report={report} />") < source.indexOf("<ChoicePathResults report={report} />"));
   assert.ok(source.includes("detailsHint={<InventoryEvidenceLegend />}"));
   assert.doesNotMatch(source, /names, purposes, timing, domains, and evidence/);
   assert.match(runtimeSectionSource, /Show details/);
   assert.match(runtimeSectionSource, /Hide details/);
   assert.doesNotMatch(source, /Every retained cookie, storage, tracker, and request group from the canonical runtime inventory is available below/);
-  assert.match(source, /heading="Every retained cookie and tracker observation"/);
+  assert.match(source, /heading="Cookies, storage, requests, and embeds"/);
   assert.doesNotMatch(source, /heading="Every retained vendor and request group"/);
   assert.match(source, /label="Copy entire cookies and trackers table"/);
   assert.match(source, /payload=\{copyPayload\}/);
@@ -327,7 +333,7 @@ test("full runtime inventory shows six rows before becoming vertically scrollabl
   assert.ok(source.includes('["Name", "w-[12rem]"]'));
   assert.ok(source.includes('hasRelationshipEvidence ? "min-w-[90rem]" : "min-w-[86rem]"'));
   assert.ok(source.includes('["Vendor", hasRelationshipEvidence ? "w-[14rem]" : "w-[10rem]"]'));
-  assert.ok(source.includes('["More", "w-[4.5rem]"]'));
+  assert.ok(source.includes('["Priority", "w-[4.5rem]"]'));
   assert.ok(source.includes("<InventoryEvidenceLegend />"));
   assert.ok(!source.includes('["Evidence mix", "w-[8rem]"]'));
   assert.match(source, /\["Purpose", "w-\[10rem\]"\]/);

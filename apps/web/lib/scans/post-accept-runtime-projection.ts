@@ -13,6 +13,7 @@ export function buildPostAcceptRuntimeProjection(
 ) {
   const observationTruncated = projection?.limitations.some((limitation) =>
     limitation === "observation_window_aborted_after_confirmed_acceptance" ||
+    limitation === "post_action_network_capture_truncated" ||
     limitation.startsWith("observer_result_budget_exhausted")
   ) === true;
   const coverageProjection = laneOutcome

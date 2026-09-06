@@ -120,14 +120,29 @@ score effect. The passive evidence quiet-window gate begins at 250 milliseconds
 and may restart for newly observed qualifying activity without discarding raw
 evidence.
 
+The September 5, 2026 owner-approved GPC reliability policy is versioned as
+`certscore.gpc-response-assessment.v2`; see
+`docs/certscore-v2/gpc-evidence-policy.md`. New assessments must separately
+retain actual signal delivery, paired comparison coverage, and observable
+response. Do not equate configured injection with verified navigator delivery,
+arbitrary storage/CMP variation with a privacy response, or bounded display
+samples with complete comparison sets. Unverified worker-navigator delivery,
+partial or mismatched captures, and failed/unverifiable GPC workers remain
+indeterminate and score-neutral while other verified lanes are preserved.
+The enabled GPC lane still reaches a terminal outcome before single-result
+publication; no retries, extended waits, late refresh, or extra browser runs
+are authorized by this policy. Preserve v1 records as v1, without silently
+upgrading their proof. The California-only 15-point policy is unchanged.
+
 Start `reject_observation` 500 milliseconds after the four passive lanes to
 avoid an immediate six-browser burst when both action lanes are enabled. Do
 not publish a primary result before
 that branch reaches a terminal outcome, and do not publish an independent
 post-refusal artifact that triggers a later report generation. Reconcile,
-score, persist, and publish exactly once. A neutral, unsupported, unconfirmed,
-failed, stale, or unverifiable reject outcome must not create a finding or
-affect score. There must be no late refresh or report-regeneration path for
+score, persist, and publish exactly once. A neutral, unsupported, failed, stale,
+or unverifiable reject outcome must not create a finding or affect score.
+Unconfirmed registration is neutral except for the owner-approved, separately
+verified `reject_click_tracking.v1` review policy described below. There must be no late refresh or report-regeneration path for
 Reject Path evidence.
 The coordinator may wait at most eight seconds beyond the slowest passive lane;
 after that it must terminate its reject-lane wait and retain an explicit,
@@ -142,12 +157,16 @@ signal, not proof of active use, and must not affect score; only direct eligible
 post-refusal requests/writes or a retained consent-signal contradiction receive
 the canonical post-refusal scoring effect.
 
-When consent-proof returns a complete first-layer inventory with no Reject,
-the coordinator must stop accepting `reject_observation` output and retain a
-score-neutral `not_applicable` outcome. Aborting an AWS synchronous invocation
-is best-effort and may not terminate already-running Lambda compute; any late
-worker output must remain isolated and must not reopen or independently publish
-the terminal result.
+September 5, 2026 owner-approved action-evidence policy supersedes unconditional
+cross-session absence cancellation: when consent-proof has a complete no-Accept
+or no-Reject inventory, cancel an action lane that has not yet been invoked as
+score-neutral `not_applicable`. An already-invoked independent action session may
+return its own verified evidence during the existing passive-lane window. Do not
+discard a returned verified action merely because another session saw no control.
+At the passive barrier, an unfinished such lane becomes explicitly limited, not
+`not_applicable`; add no tail wait solely to resolve passive absence. Aborting an
+AWS invocation is best-effort; late output must not reopen or independently
+publish a terminal result. See `docs/certscore-v2/consent-action-evidence-policy.md`.
 
 Retain bounded operational timing telemetry for every lane: coordinator-observed
 invocation start, terminal-outcome time, elapsed duration, worker-reported
@@ -170,6 +189,19 @@ explicitly limited; it must not be filled from display context or another
 lane's absence.
 
 A `complete` `ConsentControlAssessment v2` must contain binary A/R/O states (`observed` or `not_observed`). If any required first-layer inventory is incomplete, stale, document-mismatched, or unbound to the representative evidence, the assessment remains `limited` with the affected controls `unknown`. Unknown reduction must come from better upstream evidence capture, never from probabilistic or display-layer conversion to absence.
+
+On September 5, 2026, the product owner approved assessment contract 2.1's
+`structured_control_evidence.v1` policy: verified, document-bound structured
+inventory/geometry determines A/R/O; screenshot availability is recorded in a
+separate `visualEvidence` field and must not veto that structured evidence.
+Continue same-session screenshot capture and fail-closed visual safety review;
+withheld images must never be served or relabeled as available. Do not add
+capture/review latency or model calls for this change. Missing or mismatched
+structured evidence remains limited, and missing controls become `not_observed`
+only after complete structured inspection. Preserve stored 2.0 conclusions on
+read; new canonical materializations use 2.1 with policy and source provenance.
+Accept/Reject action authorization and semantic registration requirements are
+unchanged. See `docs/certscore-v2/structured-consent-evidence-policy.md`.
 
 ### Finding-domain classification
 
@@ -327,6 +359,84 @@ terminal outcome is part of the single canonical report-readiness barrier;
 when both are disabled, the existing three passive lanes remain the complete
 barrier.
 
+### Versioned Accept/Reject confirmation policy
+
+`registered_contextual_accept.v1` and action-control proof v2 allow a reviewed
+canonical named-CMP contextual approval control (currently BST's “VERSTANDEN”)
+to be exercised inside its exact registered first-layer scope. Require the
+registered recipe/selector/label, one visible enabled hit target, a unique live
+banner, exact-target authorization and a non-transactional native control. This
+does not lower the generic label threshold or turn an acknowledgment receipt
+into granted consent. Retain the contextual activation provenance and complete
+the existing bounded after-action capture; semantic registration remains separate.
+Legacy v1 proof remains readable. No timeout, lane, retry or screenshot is added.
+
+`bounded_after_action_capture.v1` separates a safely completed control click,
+bounded after-click capture, and semantic decision verification. Unknown CMP
+identity or an unreadable decision must not block a uniquely actionable canonical
+control. After an unconfirmed completed click, finish the remaining configured
+window measured from dispatch (confirmation time overlaps it); preserve bounded
+requests, main-document instrumented writes and hashed storage snapshots under
+the typed after-action capture/projection. These are after-click facts, not
+registered post-Accept/post-refusal observations. Cancellation, exact-target
+changes and existing lane/result deadlines still stop capture. Failed or
+uncertain clicks do not start an additional wait. No new invocation, rescan,
+model call or tail-cap increase is authorized by this policy.
+
+The owner approved the incremental full-window compute estimate of $30–$60 per
+100,000 scans affected on both unverified action paths. Existing evidence-backed
+deductions remain independent of action verification; unverified capture does not
+erase them or establish successful refusal. No new unverified-refusal deduction
+is enabled by this capture policy alone.
+
+The owner separately approved `reject_click_tracking.v1`: a completed authorized
+Reject click followed by directly observed, canonically classified analytics,
+advertising or session-replay requests may produce a scored review signal even
+when refusal registration is unverified. Require document/control provenance,
+the verified source packet hash, complete bounded capture, no post-action drops,
+and v2 request ancestry proving the request chain began strictly after the click.
+Persist the typed WC01 assessment before normalized concern -> concern policy ->
+unified finding/checklist -> score. Do not relabel registration as confirmed.
+Coverage failure, legacy capture without ancestry, pre-click redirect chains,
+essential/CMP traffic, and storage presence alone remain neutral. The versioned
+GDPR/ePrivacy posture policy uses the existing post-Reject activity deduction,
+with only the strongest effect in that family; confirmed refusal/contradiction
+must not be double-charged. Accept comparison and other independent deductions
+are unchanged. This adds no waiting or invocations; bounded ancestry/provenance
+metadata is estimated below $1/month at 100,000 scans/month and 30-day retention.
+
+The owner-approved `semantic_consent_registration.v2` policy requires a verified
+decision (granted for Accept, denied for Reject), fresh state-hash-bound semantic
+proof, and explicit timestamp provenance. A click, hidden banner, acknowledgment,
+changed receipt ID, opaque cookie mutation, or partial generic category map is
+not proof of registration. Preserve opposite/mixed/unknown decisions neutrally.
+Keep canonical named-CMP recipes and exact-target, unique-control, one-action
+guards. Recheck abort and authorization after asynchronous pre-click work.
+Protect post-action request retention from pre-action floods; post-action capture
+overflow must be explicit and non-projectable. Semantic confirmation alone does
+not broaden scoring; the separate approved click-tracking policy above does.
+
+Action-storage identity validation is canonical in
+`packages/certscore-contracts/src/action-storage-name.ts`, shared by Accept and
+Reject packet schemas and their retained projections. Action packet v2 preserves
+an observed empty cookie name or web-storage key exactly, requiring hostname and
+exact identity hash (and snapshot identity basis/value hash); missing or malformed
+identity evidence still fails closed. Do not filter unnamed snapshots, substitute
+synthetic names, loosen semantic consent proof, or add site/local-only exceptions.
+Legacy v1 keeps its original non-empty-name constraint. Every action observer must
+await packet finalization before asynchronous browser cleanup. The shared Lambda
+handler returns bounded schema-path/code diagnostics through the existing failed
+lane outcome; failure remains coverage-limited, not successful consent or a new
+score deduction. Preserve checksum verification, typed persistence, and the single
+canonical report-publication barrier. See
+`docs/certscore-v2/consent-action-evidence-policy.md` for the incident regression.
+
+Reject may settle responses for at most 250 ms after its first eligible activity,
+inside its existing observation window, without restarting or increasing action
+tail budgets. The owner explicitly approved this bounded cost increase (estimated
+$1–$2 per 100,000 affected scans). Screenshot availability remains independent
+from structured control evidence and does not verify action registration.
+
 ### WC01 responsibility boundary
 
 WC01 owns:
@@ -395,6 +505,24 @@ If a module needs different thresholds, severity, or status treatment, express t
 `packages/shared/src/known-cmps.ts` `KNOWN_CMP_REGISTRY` is the canonical CMP registry. Use it for CMP identity, aliases, domains, cookies, DOM selectors, globals, standards, and infrastructure treatment. CMPs may also appear in vendor resolution and vendor lists as consent-management vendors, but do not create a competing CMP list when the classification belongs in `KNOWN_CMP_REGISTRY`.
 
 For CertScore v2 endpoint/vendor attribution, use `packages/certscore-vendor-resolver` as the canonical resolver home. Do not add local endpoint or vendor lists inside scan modules, report adapters, dry-run bridges, or docs when the classification belongs in the resolver.
+
+When assigning one product to one resource, use `resolveCanonicalVendor`; do not
+select the first match or the highest numeric confidence from a multi-observation
+result. Preserve ambiguity and do not restore a guessed attribution through local
+host/name fallbacks. Keep frozen registry entity/vendor/service IDs stable across
+label changes and carry versioned `registryAttribution` when present; never invent
+historical provenance for legacy evidence. Registry maintenance and review-status
+requirements are documented in `docs/certscore-v2/vendor-registry-attribution-policy.md`.
+
+Each canonical vendor rule declares a bounded `servicePurpose` (service-purpose v1).
+This describes the identified product's role, independently of its technical
+`purpose`, observed resource type, evidence classification, attribution confidence,
+or scoring. Request and iframe inventory projections use this same registry
+metadata; cookies retain their cookie-specific purposes. Precise product identity
+is required: vendor or hostname ownership alone must not borrow another service's
+purpose. Legacy retained observations may omit the field and resolve it through
+the same canonical identity lookup. Do not use descriptive service-purpose labels
+to create findings or change risk, necessity, consent, or score decisions.
 
 `packages/certscore-contracts/src/legal-framework-validity.ts` `LEGAL_FRAMEWORK_VALIDITY_REGISTRY` is the canonical registry for named, time-sensitive legal or regulatory frameworks recognized in retained policy text. Use it for framework identity, aliases, subject area, effective dates, invalidation or supersession dates, successor relationships, authoritative source metadata, and safe review wording. Do not add checklist-specific or display-specific stale-framework lists. Framework status must be evaluated relative to the scan date and carried through typed evidence, normalized concern, concern policy, and checklist/finding projection.
 

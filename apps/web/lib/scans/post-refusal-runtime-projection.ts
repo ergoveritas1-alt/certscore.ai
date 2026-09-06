@@ -2,6 +2,7 @@ import type {
   PostRefusalLaneOutcome,
   PostRefusalReportProjection,
 } from "@certscore/contracts";
+import { assessRejectClickTracking } from "./reject-click-tracking-policy";
 
 /**
  * Maps the verified, bounded WS01 Reject observation into the canonical WC01
@@ -12,14 +13,15 @@ export function buildPostRefusalRuntimeProjection(
   projection: PostRefusalReportProjection | null,
   laneOutcome?: PostRefusalLaneOutcome | null,
 ) {
+  const observationTruncated = projection?.limitations.includes("post_action_network_capture_truncated") === true;
   const coverageProjection = laneOutcome
     ? {
         completedAt: laneOutcome.completedAt,
         evidenceJoined: laneOutcome.evidenceJoined,
-        limitationCode: laneOutcome.limitationCode ?? null,
+        limitationCode: laneOutcome.limitationCode ?? (observationTruncated ? "reject_observation_capture_truncated" : null),
         maxTailWaitMs: laneOutcome.maxTailWaitMs,
         status: laneOutcome.status === "joined"
-          ? "complete"
+          ? observationTruncated ? "limited" : "complete"
           : laneOutcome.status === "not_applicable"
             ? "not_applicable"
             : "limited",
@@ -34,7 +36,9 @@ export function buildPostRefusalRuntimeProjection(
       };
     }
     const limitationMessage = coverageProjection.limitationCode === "reject_path_timeout"
-      ? "Reject Path did not complete within the six-second post-primary allowance."
+      ? "Reject Path did not complete within the configured post-primary allowance."
+      : coverageProjection.limitationCode === "reject_path_incomplete_at_passive_barrier"
+        ? "The independent Reject Path did not complete by the passive-lane barrier; control absence is not established in that session."
       : "Reject Path worker failed before verified evidence could be joined.";
     const unavailableReductionEvidence = {
       concretePostRejectNonEssentialDetailsRetained: false,
@@ -130,6 +134,8 @@ export function buildPostRefusalRuntimeProjection(
         }
       : {}),
     postRefusalEvidenceProjection: projection,
+    rejectClickTrackingAssessment: !laneOutcome || (laneOutcome.status === "joined" && laneOutcome.evidenceJoined)
+      ? assessRejectClickTracking(projection) : null,
     post_refusal_evidence_projection: projection,
     postRejectTrackingReductionEvidence: reductionEvidence,
     post_reject_tracking_reduction_evidence: reductionEvidence,

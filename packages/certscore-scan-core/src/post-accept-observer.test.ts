@@ -599,7 +599,7 @@ async function withCanonicalAcceptFixture(
               : ""}
             ${options.confirm === false
               ? ""
-              : `document.querySelector('#${consentContext ? "privacy-consent" : "plan-picker"}').hidden = true;`}
+              : `localStorage.setItem('consent', 'granted'); document.querySelector('#${consentContext ? "privacy-consent" : "plan-picker"}').hidden = true;`}
           });
         }
       </script>
@@ -680,7 +680,7 @@ async function withCookieYesFixture(
       <script>
         document.querySelector('.cky-btn-${action}').addEventListener('click', () => {
           fetch('/choice-action', { method: 'POST' });
-          document.cookie = 'cookieyes-consent=consentid:test,action:${action}; Path=/; SameSite=Lax';
+          document.cookie = 'cookieyes-consent=consentid:test,action:${action},necessary:yes,analytics:${action === "accept" ? "yes" : "no"},advertisement:${action === "accept" ? "yes" : "no"}; Path=/; SameSite=Lax';
           document.querySelector('.cky-consent-container').hidden = true;
         });
       </script>

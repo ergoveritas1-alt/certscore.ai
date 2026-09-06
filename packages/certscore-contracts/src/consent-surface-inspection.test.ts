@@ -1,6 +1,10 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { deriveConsentSurfaceInspectionOutcome } from "./index";
+import {
+  deriveConsentSurfaceInspectionOutcome,
+  isVerifiedStablePartialConsentInventory,
+  isVerifiedTerminalConsentPacket,
+} from "./index";
 
 function baseInput(): Parameters<typeof deriveConsentSurfaceInspectionOutcome>[0] {
   return {
@@ -59,6 +63,67 @@ function baseInput(): Parameters<typeof deriveConsentSurfaceInspectionOutcome>[0
     visualCapture: undefined
   };
 }
+
+test("structured packet binding is independent of visual failure but requires complete same-document evidence", () => {
+  const observation = baseInput().consentUiObservations![0]!;
+  Object.assign(observation, {
+    documentUrl: "https://example.test/",
+    documentIdentity: { source: "cdp_loader_id", token: "current-document" },
+    layerInspected: "first_layer",
+    captureStatus: "observed",
+    inventoryOutcome: "complete_with_controls",
+    likelyPresent: true,
+    boundedSameSessionRecoveryOutcome: "screenshot_failed",
+    basis: [
+      "recovery:bounded_same_session_consent_packet_completed",
+      "settled_control_inventory_completed",
+      "inventory:paired_settled_frame_completed",
+    ],
+    controls: [{ actionType: "accept_all", label: "Accept all", visible: true }],
+    captureDiagnostics: {
+      completedChannels: ["dom_inventory", "geometry"],
+      timedOutChannels: ["screenshot"],
+      failedChannels: [],
+    },
+    inventoryDiagnostics: {
+      candidateContainerCount: 1, candidateControlCount: 1, retainedControlCount: 1,
+      inventorySources: ["cmp_container"], candidateLabels: ["Accept all"],
+      rejectionReasons: [], timingMarkers: ["gate_8s:calibrated_stable_partial_exit"],
+    },
+  });
+  const context = {
+    expectedDocumentUrl: observation.documentUrl,
+    expectedDocumentIdentity: observation.documentIdentity,
+    structuredGeometry: {
+      complete: true,
+      documentIdentity: observation.documentIdentity,
+      url: observation.documentUrl!,
+    },
+  };
+  for (const verify of [isVerifiedTerminalConsentPacket, isVerifiedStablePartialConsentInventory]) {
+    assert.equal(verify(observation, context), true);
+    assert.equal(verify(observation, {
+      ...context, structuredGeometry: { ...context.structuredGeometry, complete: false },
+    }), false);
+    assert.equal(verify(observation, {
+      ...context, structuredGeometry: {
+        ...context.structuredGeometry, documentIdentity: { source: "cdp_loader_id", token: "stale-document" },
+      },
+    }), false);
+    assert.equal(verify({ ...observation, inventoryOutcome: "partial" }, context), false);
+    assert.equal(verify({ ...observation, captureDiagnostics: {
+      ...observation.captureDiagnostics!, timedOutChannels: ["geometry"],
+    } }, context), false);
+    assert.equal(verify({ ...observation, inventoryDiagnostics: {
+      ...observation.inventoryDiagnostics!, blockingInaccessibleFrameCount: 1,
+    } }, context), false);
+    // Opt-in only: scanner callers still enforce the legacy screenshot binding.
+    assert.equal(verify(observation, {
+      expectedDocumentUrl: observation.documentUrl,
+      representativeScreenshots: [{ url: observation.documentUrl!, documentIdentity: observation.documentIdentity }],
+    }), false);
+  }
+});
 
 test("complete bounded inspection can retain that no consent surface was observed", () => {
   const outcome = deriveConsentSurfaceInspectionOutcome(baseInput());
@@ -345,6 +410,13 @@ test("bounded same-session empty packet completes canonical negative inspection"
   assert.equal(outcome.coverageStatus, "complete");
   assert.equal(outcome.inspectionCompleted, true);
   assert.deepEqual(outcome.limitationKeys, []);
+  input.consentUiObservations![0]!.documentReadyState = "loading";
+  const loading = deriveConsentSurfaceInspectionOutcome(input);
+  assert.equal(loading.coverageStatus, "limited");
+  assert.equal(isVerifiedTerminalConsentPacket(input.consentUiObservations![0]!), false);
+  assert.ok(loading.limitationKeys.includes("consent_surface_inspection_document_still_loading"));
+  input.consentUiObservations![0]!.documentReadyState = "interactive";
+  assert.equal(deriveConsentSurfaceInspectionOutcome(input).coverageStatus, "complete");
 });
 
 test("bounded same-session empty packet stays limited when its screenshot is document-mismatched", () => {

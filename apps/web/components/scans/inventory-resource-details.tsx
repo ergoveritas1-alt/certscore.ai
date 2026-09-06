@@ -8,6 +8,7 @@ import { VendorBrandIcon } from "./vendor-brand-chip";
 import { InventoryEvidenceIcon } from "./inventory-evidence-icon";
 import { InventoryNameDisclosure } from "./inventory-name-disclosure";
 import { InventoryConfidenceDots, InventoryPurposeChip } from "./inventory-cell-formatting";
+import { CopyJsonButton } from "./copy-json-button";
 
 function ResourceKindIcon({ kind }: { kind: string }) {
   const path = kind === "request" ? "M4 12h16m-6-6 6 6-6 6" : kind === "response" ? "M20 12H4m6-6-6 6 6 6" : kind === "script" ? "m8 7-5 5 5 5m8-10 5 5-5 5m-3-12-2 14" : kind === "cookie" ? "M20 13a8 8 0 1 1-9-9 4 4 0 0 0 5 5 4 4 0 0 0 4 4ZM8 9h.01M8 15h.01M13 14h.01" : "M5 3h9l5 5v13H5ZM14 3v6h5M8 13h8M8 17h5";
@@ -72,7 +73,7 @@ export function matchInventoryResources(graph: ApiRuntimeEvidenceGraph, identity
 }
 
 /** Companion row remains attached to its owner when the existing table is sorted. */
-export function InventoryResourceRow({ children, identity, facts, inspect = false, existingDetails }: { children: ReactElement<{ children?: ReactNode; "data-resource-owner"?: string }>; identity: InventoryResourceIdentity; facts: Record<string, unknown>; inspect?: boolean; existingDetails?: ReactNode }) {
+export function InventoryResourceRow({ children, identity, facts, inspect = false, existingDetails, evidence }: { children: ReactElement<{ children?: ReactNode; "data-resource-owner"?: string }>; identity: InventoryResourceIdentity; facts: Record<string, unknown>; inspect?: boolean; existingDetails?: ReactNode; evidence?: Record<string, unknown> }) {
   const [open, setOpen] = useState(false);
   const [treeOpen, setTreeOpen] = useState(false);
   const id = useId();
@@ -88,7 +89,7 @@ export function InventoryResourceRow({ children, identity, facts, inspect = fals
   const cells = Children.toArray(resolvedRow.props.children);
   const vendorCell = inspect && React.isValidElement<{ children?: ReactNode }>(cells[2]) ? cloneElement(cells[2], {}, <div className="flex min-w-0 items-center gap-1 whitespace-nowrap">{(projection?.details || graph?.edges.length) ? <span className="inline-flex w-16 shrink-0">{childEdges.length || projection?.details ? <RelationshipButton count={childEdges.length} open={treeOpen} deferred={Boolean(projection?.details)} onClick={() => { setTreeOpen(!treeOpen); load(); }} /> : null}</span> : null}<div className="min-w-0 truncate">{cells[2].props.children}</div></div>) : cells[2];
   const row = cloneElement(resolvedRow, { "data-resource-owner": id }, ...(inspect ? [control, cells[1], vendorCell, ...cells.slice(3)] : [...cells, control]));
-  return <>{row}<tr hidden={!open} data-resource-detail={id}><td colSpan={cells.length + (inspect ? 0 : 1)} className="bg-slate-50/60 px-5 py-4"><div id={id} className="max-w-5xl">{open ? <>{existingDetails ? <details className="mb-3"><summary className="cursor-pointer py-2 text-xs font-semibold text-sky-700">Inventory summary &amp; original evidence</summary>{existingDetails}</details> : null}<ResourceDetails identity={identity} facts={facts} /></> : null}</div></td></tr>{inspect && treeOpen && graph ? childEdges.slice(0, 30).map(edge => <MainRelationshipRow key={edge.id} graph={graph} edge={edge} path={[edge.from]} depth={1} />) : null}{inspect && treeOpen && childEdges.length > 30 ? <tr><td colSpan={cells.length} className="px-5 py-2 text-xs text-slate-500">Showing 30 connected resources. Inspect retains all links and searchable fields.</td></tr> : null}</>;
+  return <>{row}<tr hidden={!open} data-resource-detail={id}><td colSpan={cells.length + (inspect ? 0 : 1)} className="bg-slate-50/60 px-5 py-4"><div id={id} className="w-[calc(100vw-7rem)] max-w-5xl">{open ? <ResourceDetails identity={identity} facts={facts} summary={existingDetails} evidence={evidence} /> : null}</div></td></tr>{inspect && treeOpen && graph ? childEdges.slice(0, 30).map(edge => <MainRelationshipRow key={edge.id} graph={graph} edge={edge} path={[edge.from]} depth={1} />) : null}{inspect && treeOpen && childEdges.length > 30 ? <tr><td colSpan={cells.length} className="px-5 py-2 text-xs text-slate-500">Showing 30 connected resources. Inspect retains all links and searchable fields.</td></tr> : null}</>;
 }
 
 export function InventoryResourceMobile({ identity, facts }: { identity: InventoryResourceIdentity; facts: Record<string, unknown> }) {
@@ -119,20 +120,28 @@ function MainRelationshipRow({ graph, edge, path, depth }: { graph: ApiRuntimeEv
   {expanded && !cyclic ? children.slice(0, 30).map(child => <MainRelationshipRow key={child.id} graph={graph} edge={child} path={[...path, node.id]} depth={depth + 1} />) : null}{expanded && children.length > 30 ? <tr><td colSpan={10} className={cell}>Showing 30 children; all links remain available through Inspect.</td></tr> : null}</>;
 }
 
-function ResourceDetails({ identity, facts }: { identity: InventoryResourceIdentity; facts: Record<string, unknown> }) {
+export function ResourceDetails({ identity, facts, summary, evidence }: { identity: InventoryResourceIdentity; facts: Record<string, unknown>; summary?: ReactNode; evidence?: Record<string, unknown> }) {
   const { projection, error, load } = useContext(EvidenceContext);
   const [scenario, setScenario] = useState<ApiRuntimeEvidenceGraph["scenario"]>("pre_consent");
   const graph = projection?.graphs.find(item => item.scenario === scenario);
   // Cookie IDs belong to a capture. Do not reuse them to assert cross-session identity.
   const matches = useMemo(() => graph ? matchInventoryResources(graph, scenario === "pre_consent" ? identity : { ...identity, cookieRefs: [], nodeRefs: [] }) : [], [graph, identity, scenario]);
+  const hasGraphs = Boolean(projection?.graphs.length || projection?.details);
+  const exportEvidence = { inventory: facts, ...(evidence ? { observations: evidence } : {}), ...(projection ? { relationships: projection } : {}) };
+  const summaryFields = [["Service", facts.name ?? facts.products ?? facts.names ?? facts.vendor], ["Purpose", facts.purpose], ["Priority", facts.evidence ?? facts.classification], ["First observed", facts.observed ?? (typeof facts.firstSeenMs === "number" ? observationTime(facts.firstSeenMs) : undefined)], ["Domains", facts.domains], ["Site relationship", facts.relationship ?? facts.siteRelationship]];
   return <div className="min-w-0 max-w-full space-y-3 text-xs text-slate-600">
-    <div className="flex flex-wrap items-center justify-between gap-3"><h4 className="font-semibold text-slate-800">Relationships &amp; resource evidence</h4><label className="flex items-center gap-2">Evidence scenario<select aria-label="Resource evidence scenario" className="rounded-md border border-slate-200 bg-white px-2 py-1.5" value={scenario} onChange={event => setScenario(event.target.value as typeof scenario)}>{SCENARIOS.map(([key, label]) => <option key={key} value={key}>{label}</option>)}</select></label></div>
-    {error ? <p role="status">{error} <button className={button} onClick={load} type="button">Retry loading evidence</button></p> : projection?.details ? <p role="status">Loading verified resource evidence…</p> : !graph ? <p>No retained graph for this scenario. Missing evidence does not establish absence.</p> : <>
-      {matches.length ? <ResourceEvidenceTable graph={graph} nodes={matches} /> : <p>No unambiguous cookie reference or request endpoint match retained for this row. All captured resources remain accessible below.</p>}
-      <details><summary className="cursor-pointer py-2 font-medium">All captured resources in this scenario ({graph.nodes.length})</summary><ResourceEvidenceTable graph={graph} nodes={graph.nodes} /></details>
-    </>}
-    <RetainedEvidenceFields value={facts} label="Inventory fields" />
-    {graph ? <RetainedEvidenceFields value={{ graph, registryVersion: projection?.registryVersion, sourceBundle: projection?.sourceBundle }} label="All scenario evidence fields" /> : null}
+    {summary ?? <><h4 className="text-sm font-semibold text-slate-900">Resource summary</h4><dl className="grid grid-cols-1 gap-3 sm:grid-cols-2">{summaryFields.map(([label, value]) => typeof value === "string" || Array.isArray(value) ? <div key={String(label)}><dt className="text-slate-500">{String(label)}</dt><dd className="mt-1 break-words">{Array.isArray(value) ? value.join(", ") : value}</dd></div> : null)}</dl></>}
+    {hasGraphs ? <div className="space-y-3 border-t border-slate-200 pt-3"><div className="flex flex-wrap items-center justify-between gap-3"><h4 className="font-semibold text-slate-800">Relationships</h4><label className="flex items-center gap-2">Evidence scenario<select aria-label="Resource evidence scenario" className="rounded-md border border-slate-200 bg-white px-2 py-1.5" value={scenario} onChange={event => setScenario(event.target.value as typeof scenario)}>{SCENARIOS.map(([key, label]) => <option key={key} value={key}>{label}</option>)}</select></label></div>
+      {error ? <p role="status">{error} <button className={button} onClick={load} type="button">Retry loading evidence</button></p> : projection?.details ? <p role="status">Loading verified resource evidence…</p> : !graph ? <p>No relationship graph retained for this scenario; absence of relationships is not established.</p> : matches.length ? <ResourceEvidenceTable graph={graph} nodes={matches} /> : <p>No unambiguous resource match retained for this row.</p>}
+    </div> : <p className="text-slate-500">Relationship coverage: no graph retained; this does not establish that no relationships exist.</p>}
+    <details className="border-t border-slate-200 pt-1" data-inventory-technical-evidence>
+      <summary className="cursor-pointer py-2 font-medium text-sky-700">Technical evidence</summary>
+      <div className="space-y-3 pb-2">
+        <div className="flex items-center justify-between gap-3"><p>Retained request details, supporting observations, and provenance.</p><CopyJsonButton label="Copy resource evidence JSON" payload={JSON.stringify(exportEvidence, null, 2)} className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-md border border-slate-200 bg-white text-slate-600 hover:text-slate-950" /></div>
+        <pre className="max-h-64 overflow-auto rounded-md bg-zinc-950 p-3 text-[0.68rem] leading-5 text-zinc-100">{JSON.stringify(exportEvidence, null, 2)}</pre>
+        {graph ? <details><summary className="cursor-pointer py-2 font-medium">All captured resources in this scenario ({graph.nodes.length})</summary><ResourceEvidenceTable graph={graph} nodes={graph.nodes} /></details> : null}
+      </div>
+    </details>
   </div>;
 }
 

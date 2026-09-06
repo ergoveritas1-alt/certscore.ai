@@ -1,6 +1,8 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import type { GpcResponseAssessment } from "@certscore/contracts";
+import { gpcRuntimeFixture } from "../../../../packages/certscore-contracts/src/test-fixtures/gpc-runtime";
+import { buildGpcResponseAssessment } from "../../../../packages/certscore-scan-core/src/gpc-response-assessment";
 import {
   CALIFORNIA_GPC_NO_SUPPRESSION_DEDUCTION_POINTS,
   deriveCaliforniaGpcResponsePolicy,
@@ -111,4 +113,17 @@ test("California GPC policy keeps partial suppression score-neutral for review",
   assert.equal(result.assessmentStatus, "review_signal");
   assert.equal(result.deductionPoints, 0);
   assert.equal(result.scoreEffect, "none");
+});
+
+test("v2 all 150 advertising identities persist plus one new identity: deduction stays 15", () => {
+  const vendors = Array.from({ length: 150 }, (_, i) => ({ name: `z${String(i).padStart(3, "0")}` }));
+  const a = buildGpcResponseAssessment({ baseline: gpcRuntimeFixture({ enabled: false, vendors }),
+    gpc: gpcRuntimeFixture({ enabled: true, vendors: [{ name: "a_new" }, ...vendors] }),
+    baselineArtifact: { uri: "s3://fixture/baseline.json", sha256: "a".repeat(64), sizeBytes: 100 },
+    gpcArtifact: { uri: "s3://fixture/gpc.json", sha256: "b".repeat(64), sizeBytes: 100 } });
+  const result = deriveCaliforniaGpcResponsePolicy(a);
+  assert.equal(a.comparison.deltas.advertisingOrMarketingActivity.sharedCount, 150);
+  assert.equal(a.comparison.deltas.advertisingOrMarketingActivity.shared.length, 100);
+  assert.equal(result.deductionPoints, 15);
+  assert.deepEqual(result.eligibleActivity.suppressedUnderGpc, []);
 });

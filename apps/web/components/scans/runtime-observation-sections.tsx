@@ -1,5 +1,8 @@
-import React, { type ReactNode } from "react";
+"use client";
+
+import React, { useId, useState, type ReactNode } from "react";
 import { VendorBrandChip } from "./vendor-brand-chip";
+import { reportEyebrow, reportSectionTitle } from "./report-typography";
 
 const monoClass = "font-mono tabular-nums";
 
@@ -67,7 +70,7 @@ export function RuntimeObservationTimeline({
           style={{ gridTemplateColumns: `repeat(${Math.max(events.length, 2)}, minmax(0, 1fr))` }}
         >
           {events.map((event) => (
-            <div className="relative min-w-0" key={`${event.at}-${event.label}`}>
+            <div className="relative min-w-0" key={`${event.at}-${event.label}-${event.vendor ?? "unknown"}`}>
               <span
                 className={`absolute top-[0.72rem] h-3 w-3 rounded-full border-2 border-white ring-1 ${
                   event.tone === "concern"
@@ -86,7 +89,7 @@ export function RuntimeObservationTimeline({
               <p className={`${monoClass} text-[11px] font-semibold ${event.tone === "concern" ? "text-rose-700" : "text-zinc-600"}`}>
                 {event.at}
               </p>
-              <div className="mt-4 flex min-h-5 items-center gap-2">
+              <div className="mt-4 flex min-h-5 items-start gap-2">
                 <p className={`${dominant ? "text-base" : "text-sm"} font-semibold text-zinc-950`}>{event.label}</p>
                 {event.vendor ? (
                   <VendorBrandChip
@@ -267,43 +270,45 @@ export function RuntimeInventorySummaryCard({
   initiallyOpen?: boolean;
   inventory: RuntimeInventoryMixRow[];
   note?: string;
-  summary: string;
+  summary?: string;
 }) {
+  const [open, setOpen] = useState(initiallyOpen);
+  const detailsId = useId();
   return (
-    <div className={`${compact ? "mt-4" : "mt-9"} border-y border-zinc-300 bg-white`} data-density={compact ? "compact" : "comfortable"}>
-      <div className={`px-4 ${compact ? "py-3" : "py-4"}`}>
+    <div className={compact ? "mt-4" : "mt-6"} data-density={compact ? "compact" : "comfortable"}>
+      <section aria-label={eyebrow} className={`border-t border-zinc-200 bg-white ${compact ? "py-3" : "py-4"}`}>
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between sm:gap-4">
           <div>
-            <p className="text-xs font-semibold uppercase text-zinc-500">{eyebrow}</p>
-            <h3 className="mt-1 text-base font-semibold text-zinc-950 sm:text-lg">{heading}</h3>
+            <p className={reportEyebrow}>{eyebrow}</p>
+            <h2 className={`mt-2 ${reportSectionTitle}`}>{heading}</h2>
           </div>
-          <span className="flex shrink-0 items-center gap-3 text-xs font-semibold text-zinc-700">
-            <span className={monoClass}>{summary}</span>
-            {action}
+          <span className="flex shrink-0 flex-wrap items-center gap-3 text-xs font-semibold text-zinc-700">
+            {summary ? <span className={monoClass}>{summary}</span> : null}
+            {detailsLabel ? <button type="button" aria-expanded={open} aria-controls={detailsId} onClick={() => setOpen(!open)} className="inline-flex min-h-10 items-center gap-2 rounded-md border border-zinc-200 bg-white px-3 py-2 text-sm font-medium text-zinc-600 transition hover:border-zinc-300 hover:bg-zinc-50 hover:text-zinc-950 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-sky-600">
+              {open ? "Hide details" : "Show details"}
+              <DisclosureChevron className={`h-4 w-4 ${open ? "rotate-180" : ""}`} />
+            </button> : null}
+            {!detailsLabel ? action : null}
           </span>
         </div>
         <RuntimeInventoryMix compact={compact} inventory={inventory} />
-      </div>
+      </section>
       {detailsLabel ? (
-        <details className="group/runtime border-t border-zinc-200" open={initiallyOpen}>
-          <summary className="flex cursor-pointer list-none items-center justify-between gap-4 bg-sky-50/60 px-4 py-4 text-zinc-900 transition hover:bg-sky-100/70 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-sky-500 [&::-webkit-details-marker]:hidden">
-            <span className="min-w-0">
-              <span className="block text-sm font-bold text-sky-950 sm:text-base">{detailsLabel}</span>
-              {detailsHint ? <span className="mt-1 block text-xs font-medium leading-5 text-sky-800">{detailsHint}</span> : null}
-            </span>
-            <span className="inline-flex shrink-0 items-center gap-2 rounded-md border border-sky-200 bg-white px-3 py-2 text-xs font-semibold text-sky-800">
-              <span className="group-open/runtime:hidden">Show details</span>
-              <span className="hidden group-open/runtime:inline">Hide details</span>
-              <DisclosureChevron className="h-4 w-4 group-open/runtime:rotate-180" />
-            </span>
-          </summary>
+        <section id={detailsId} aria-label={detailsLabel} hidden={!open} className="border-t border-zinc-200 bg-white">
+          <div className="flex items-center justify-between gap-4 py-4">
+            <div className="min-w-0">
+              <h2 className={reportSectionTitle}>{detailsLabel}</h2>
+              {detailsHint ? <div className="mt-2 text-xs leading-5 text-zinc-600">{detailsHint}</div> : null}
+            </div>
+            {action ? <span className="shrink-0">{action}</span> : null}
+          </div>
           {description ? (
-            <p className="mx-4 mb-4 max-w-3xl border-t border-zinc-200 pt-4 text-xs leading-5 text-zinc-500">
+            <p className="mb-4 max-w-3xl border-t border-zinc-200 pt-4 text-xs leading-5 text-zinc-500">
               {description}
             </p>
           ) : null}
           {children}
-        </details>
+        </section>
       ) : (
         <div className="border-t border-zinc-200">{children}</div>
       )}

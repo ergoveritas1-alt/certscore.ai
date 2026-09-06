@@ -1,4 +1,4 @@
-import type { GpcResponseAssessment } from "@certscore/contracts";
+import { gpcResponseAssessmentSchema, type GpcResponseAssessment } from "@certscore/contracts";
 
 export const CALIFORNIA_GPC_RESPONSE_POLICY_VERSION = "california-gpc-response.v1" as const;
 export const CALIFORNIA_GPC_NO_SUPPRESSION_DEDUCTION_POINTS = 15 as const;
@@ -53,7 +53,7 @@ export function deriveCaliforniaGpcResponsePolicy(
     policyKey: CALIFORNIA_GPC_NO_SUPPRESSION_POLICY_KEY,
     policyVersion: CALIFORNIA_GPC_RESPONSE_POLICY_VERSION,
   } as const;
-  const comparable = assessment.status !== "indeterminate" &&
+  const comparable = gpcResponseAssessmentSchema.safeParse(assessment).success && assessment.status !== "indeterminate" &&
     assessment.comparison.comparable &&
     assessment.comparison.enabledProof.secGpcHeaderValue === "1" &&
     assessment.comparison.enabledProof.requestsWithSecGpc > 0 &&
@@ -72,17 +72,23 @@ export function deriveCaliforniaGpcResponsePolicy(
 
   const advertising = assessment.comparison.deltas.advertisingOrMeasurementActivity;
   const trackers = assessment.comparison.deltas.trackers;
-  const suppressedUnderGpc = qualifyingIdentities([
+  const completeActivity = assessment.contractVersion === "certscore.gpc-response-assessment.v2"
+    ? assessment.comparison.deltas.advertisingOrMarketingActivity : null;
+  const suppressedUnderGpc = completeActivity?.baselineOnly ?? qualifyingIdentities([
     ...advertising.baselineOnly,
     ...trackers.baselineOnly,
   ]);
-  const persistedUnderGpc = qualifyingIdentities([
+  const persistedUnderGpc = completeActivity?.shared ?? qualifyingIdentities([
     ...advertising.shared,
     ...trackers.shared,
   ]);
   const baseline = uniqueSorted([...suppressedUnderGpc, ...persistedUnderGpc]);
+  // V2 samples are bounded for display. Only full-set counts decide policy.
+  const baselineCount = completeActivity?.baselineCount ?? baseline.length;
+  const persistedCount = completeActivity?.sharedCount ?? persistedUnderGpc.length;
+  const suppressedCount = completeActivity?.baselineOnlyCount ?? suppressedUnderGpc.length;
 
-  if (baseline.length === 0) {
+  if (baselineCount === 0) {
     return {
       ...base,
       assessmentStatus: "not_applicable",
@@ -93,7 +99,7 @@ export function deriveCaliforniaGpcResponsePolicy(
     };
   }
 
-  if (persistedUnderGpc.length > 0 && suppressedUnderGpc.length === 0) {
+  if (persistedCount > 0 && suppressedCount === 0) {
     return {
       ...base,
       assessmentStatus: "gap_observed",
@@ -104,7 +110,7 @@ export function deriveCaliforniaGpcResponsePolicy(
     };
   }
 
-  if (persistedUnderGpc.length === 0 && suppressedUnderGpc.length > 0) {
+  if (persistedCount === 0 && suppressedCount > 0) {
     return {
       ...base,
       assessmentStatus: "checked",

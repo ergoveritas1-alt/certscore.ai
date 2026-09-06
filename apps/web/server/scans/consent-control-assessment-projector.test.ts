@@ -107,7 +107,7 @@ test("Oxfam A/R/O remains observed when a later same-document state is collapsed
     requestedUrl: "https://oxfam.org/en",
   });
 
-  assert.equal(assessment.artifactVersion, "2.0");
+  assert.equal(assessment.artifactVersion, "2.1");
   assert.equal(assessment.controls.accept.state, "observed");
   assert.equal(assessment.controls.reject.state, "observed");
   assert.equal(assessment.controls.options.state, "observed");
@@ -165,7 +165,7 @@ test("limited coordinator coverage preserves observed controls without certifyin
   assert.equal(assessment.controls.options.state, "observed");
 });
 
-test("withheld representative consent screenshots fail the bound inventory closed", () => {
+test("withheld screenshots do not erase verified same-document structured inventory", () => {
   const url = "https://shop.example/";
   const token = "document-token-shop";
   const source = bundle([
@@ -238,17 +238,17 @@ test("withheld representative consent screenshots fail the bound inventory close
     requestedUrl: url,
   });
 
-  assert.equal(assessment.assessmentStatus, "limited");
-  assert.equal(assessment.coverage.status, "limited");
-  assert.ok(assessment.coverage.requiredChannels.includes("screenshot"));
-  assert.ok(assessment.coverage.incompleteChannels.includes("screenshot"));
-  assert.equal(assessment.surface.status, "unknown");
-  assert.equal(assessment.controls.accept.state, "unknown");
-  assert.equal(assessment.controls.reject.state, "unknown");
-  assert.equal(assessment.controls.options.state, "unknown");
-  assert.ok(assessment.limitations.some(
-    (limitation) => limitation.code === "representative_consent_screenshot_unavailable",
-  ));
+  assert.equal(assessment.assessmentStatus, "complete");
+  assert.equal(assessment.coverage.status, "complete");
+  assert.equal(assessment.coverage.requiredChannels.includes("screenshot"), false);
+  assert.equal(assessment.coverage.incompleteChannels.includes("screenshot"), false);
+  assert.equal(assessment.surface.status, "observed_actionable");
+  assert.equal(assessment.controls.accept.state, "observed");
+  assert.equal(assessment.controls.reject.state, "observed");
+  assert.equal(assessment.controls.options.state, "observed");
+  assert.equal(assessment.visualEvidence?.status, "withheld");
+  assert.ok(assessment.visualEvidence?.reasonCodes.includes("finalization_deadline_exceeded"));
+  assert.equal(source.screenshots[0]?.retentionStatus, "withheld");
 
   source.screenshots[0] = {
     ...source.screenshots[0]!,
@@ -267,11 +267,50 @@ test("withheld representative consent screenshots fail the bound inventory close
     requestedUrl: url,
   });
 
+  assert.deepEqual(retainedAssessment.controls, assessment.controls);
+  assert.equal(retainedAssessment.visualEvidence?.status, "available");
+  assert.notEqual(retainedAssessment.provenance.sourceHash, assessment.provenance.sourceHash);
+
   assert.equal(retainedAssessment.assessmentStatus, "complete");
   assert.equal(retainedAssessment.coverage.status, "complete");
   assert.equal(retainedAssessment.controls.accept.state, "observed");
   assert.equal(retainedAssessment.controls.reject.state, "observed");
   assert.equal(retainedAssessment.controls.options.state, "observed");
+
+  source.screenshots[0]!.documentIdentity = { source: "cdp_loader_id", token: "unrelated-document" };
+  const wrongDocumentVisual = deriveMaterializedConsentControlAssessment({
+    bundle: source,
+    consentControlGeometryEvidence: geometryEvidence,
+    consentSurfaceInspection: completeInspection("actionable_surface_observed", true),
+    noGo: false,
+  });
+  assert.equal(wrongDocumentVisual.visualEvidence?.status, "unavailable");
+  assert.deepEqual(wrongDocumentVisual.visualEvidence?.artifactRefs, []);
+  assert.deepEqual(wrongDocumentVisual.controls, assessment.controls);
+
+  source.screenshots = [];
+  const missingVisual = deriveMaterializedConsentControlAssessment({
+    bundle: source,
+    consentControlGeometryEvidence: geometryEvidence,
+    consentSurfaceInspection: completeInspection("actionable_surface_observed", true),
+    noGo: false,
+  });
+  assert.equal(missingVisual.visualEvidence?.status, "unavailable");
+  assert.deepEqual(missingVisual.controls, assessment.controls);
+  assert.equal(missingVisual.assessmentStatus, "complete");
+
+  source.consentUiObservations[0]!.documentIdentity = { source: "cdp_loader_id", token: "stale-document" };
+  const mismatched = deriveMaterializedConsentControlAssessment({
+    bundle: source,
+    consentControlGeometryEvidence: geometryEvidence,
+    consentSurfaceInspection: completeInspection("actionable_surface_observed", true),
+    noGo: false,
+  });
+  assert.equal(mismatched.assessmentStatus, "limited");
+  assert.equal(mismatched.document.identityStatus, "mismatched");
+  assert.equal(mismatched.controls.accept.state, "unknown");
+  assert.equal(mismatched.controls.reject.state, "unknown");
+  assert.equal(mismatched.controls.options.state, "unknown");
 });
 
 test("limited coordinator coverage keeps an empty first-layer inventory unknown", () => {
@@ -1223,9 +1262,24 @@ test("complete same-document no-surface coverage produces factual not-observed v
   });
 
   assert.equal(assessment.surface.status, "not_observed");
+  assert.equal(assessment.surface.firstObservedAtMs, null, "inspection time is not a banner appearance");
+  assert.equal(assessment.surface.lastObservedAtMs, null);
   assert.equal(assessment.controls.accept.state, "not_observed");
   assert.equal(assessment.controls.reject.state, "not_observed");
   assert.equal(assessment.controls.options.state, "not_observed");
+});
+
+test("a retained loading empty inventory cannot be promoted by a stale complete inspection", () => {
+  const captured = bundle([], { captureStatus: "no_evidence", likelyPresent: false });
+  captured.consentUiObservations[0]!.documentReadyState = "loading";
+  const assessment = deriveMaterializedConsentControlAssessment({ bundle: captured,
+    consentControlGeometryEvidence: geometry([], { firstLayerAccept: false, firstLayerReject: false, firstLayerOptions: false }),
+    consentSurfaceInspection: completeInspection("no_surface_observed_complete_coverage", false),
+    finalUrl: "https://oxfam.org/en", noGo: false, requestedUrl: "https://oxfam.org/en",
+  });
+  assert.equal(assessment.assessmentStatus, "limited");
+  for (const control of ["accept", "reject", "options"] as const) assert.equal(assessment.controls[control].state, "unknown");
+  assert.equal(assessment.surface.firstObservedAtMs, null);
 });
 
 test("first-layer save with every observed optional default off is both options and necessary-only refusal", () => {

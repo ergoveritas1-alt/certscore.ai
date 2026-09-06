@@ -206,9 +206,15 @@ export interface GpcComparisonDelta {
   baselineOnly: string[];
   gpcOnly: string[];
   shared: string[];
+  /** V2 full-set counts; arrays above are bounded evidence samples. */
+  baselineOnlyCount?: number;
+  gpcOnlyCount?: number;
+  sharedCount?: number;
+  samplesTruncated?: boolean;
 }
 
 export interface GpcResponse {
+  contractVersion?: "certscore.gpc-response-assessment.v1" | "certscore.gpc-response-assessment.v2";
   status: "responsive" | "no_observable_response" | "indeterminate";
   findingTitle: "GPC response" | "No observable GPC response";
   summary: string;
@@ -221,24 +227,29 @@ export interface GpcResponse {
       lane: "runtime_evidence";
       sha256: string;
       sizeBytes: number;
-    };
+    } | null;
     gpcArtifact: {
       lane: "gpc_observation";
       sha256: string;
       sizeBytes: number;
-    };
+    } | null;
     enabledProof: {
-      secGpcHeaderValue: "1";
+      secGpcHeaderValue: "1" | null;
       requestsWithSecGpc: number;
       requestEventIds: string[];
-      navigatorGlobalPrivacyControl: true;
+      navigatorGlobalPrivacyControl: boolean | null;
     };
     deltas: {
       cookies: GpcComparisonDelta;
       trackers: GpcComparisonDelta;
       advertisingOrMeasurementActivity: GpcComparisonDelta;
       consentOrCmpBehavior: GpcComparisonDelta;
+      webStorage?: GpcComparisonDelta;
+      advertisingOrMarketingActivity?: GpcComparisonDelta;
     };
+    delivery?: { status: "verified" | "limited" | "unavailable" };
+    coverage?: { status: "complete" | "limited" | "unavailable"; comparedThroughMs: number | null };
+    responseBasis?: "qualified_activity_reduction" | "no_qualified_reduction" | "insufficient_evidence";
     limitationKeys: string[];
   };
   californiaPolicy: {

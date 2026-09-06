@@ -198,6 +198,8 @@ export {
 } from "./consent-geometry-visual-review.js";
 
 export interface RunScanInput {
+  /** Coordinator-owned identity shared by isolated evidence lanes. */
+  scanId?: string;
   signal?: AbortSignal;
   url: string;
   profile?: ScanProfile["profileId"];
@@ -362,7 +364,10 @@ export async function runScan(input: RunScanInput): Promise<CanonicalEvidenceBun
   const scanProfile = getScanProfile(input.profile ?? "tiny");
   const evidenceLane = input.evidenceLane ?? "combined";
   const normalizedUrl = normalizeUrl(input.url);
-  const scanId = `scan_${startedAtMs}_${safeHostname(normalizedUrl)}`;
+  const scanId = input.scanId ?? `scan_${startedAtMs}_${safeHostname(normalizedUrl)}`;
+  if (input.scanId !== undefined && !/^[A-Za-z0-9][A-Za-z0-9_.-]{0,199}$/.test(scanId)) {
+    throw new Error("Invalid canonical scan identity.");
+  }
   const outDir = input.outDir ?? path.join(process.cwd(), "artifacts", scanId);
   const phaseRecorder = createScanPhaseRecorder(outDir, startedAtMs);
   if (input.postConsentFlowsEnabled === true) {
@@ -1308,6 +1313,7 @@ export async function runScan(input: RunScanInput): Promise<CanonicalEvidenceBun
     networkResponseEvents,
     automatedAccessObservation: preConsentResult.automatedAccessObservation,
     siteResourceSizeSummary: summarizeSiteResourceSizes(networkResponseEvents),
+    gpcSignalObservation: preConsentResult.gpcSignalObservation,
     cookieEvents,
     cookieSnapshots,
     storageSnapshots: preConsentResult.storageSnapshots,

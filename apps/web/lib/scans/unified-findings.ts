@@ -5750,6 +5750,10 @@ const UNIFIED_FINDING_PRESENTATION_COPY_OVERRIDES: Record<
     suggestedFix: "Verify the reject path actually suppresses the non-essential vendors that were present at baseline, and re-test the post-reject runtime path with concrete request-level evidence.",
     whyThisMatters: "If non-essential tracking persists after reject, the site may be signaling a meaningful choice that is not actually enforced."
   },
+  post_reject_click_tracking: {
+    suggestedFix: "Verify that the Reject control records the visitor's choice and suppresses the retained tracking requests. Re-test both the saved decision and subsequent activity.",
+    whyThisMatters: "Tracking began after a verified Reject click, but refusal registration could not be verified. This is a scored review signal about the observed behavior, not proof that a registered refusal was ignored or a legal violation occurred."
+  },
   post_refusal_non_essential_activity: {
     suggestedFix: "Update the reject path so confirmed refusal suppresses non-essential network requests and storage writes, then re-test the same post-refusal window.",
     whyThisMatters: "Non-essential activity after a confirmed refusal can show that the consent control is not enforcing the visitor's recorded choice."
@@ -5760,7 +5764,7 @@ const UNIFIED_FINDING_PRESENTATION_COPY_OVERRIDES: Record<
   },
   accept_reject_outcomes_indistinguishable: {
     suggestedFix: "Compare the matched retained requests and storage writes, then correct the Reject path if the same consent-dependent activity runs after both choices.",
-    whyThisMatters: "Matching behavior after Accept and Reject corroborates review of the existing post-refusal result, but does not add a duplicate score effect."
+    whyThisMatters: "Some retained activity identities overlap after Accept and Reject. This supports review of the existing post-refusal result, not a conclusion that the overall outcomes were identical, and adds no duplicate score effect."
   },
   acceptance_signal_contradicts_action: {
     suggestedFix: "Correct the consent-platform state transition so the saved consent record matches the visitor’s confirmed Accept choice.",

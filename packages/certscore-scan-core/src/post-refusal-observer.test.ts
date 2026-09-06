@@ -252,7 +252,7 @@ test("the exact CertScore owned canary recipe confirms its semantic denial state
   });
 });
 
-test("canonical control discovery uniquely resolves Reject among controls sharing generic button classes", async () => {
+test("canonical discovery resolves a generic Reject control without promoting one category to complete refusal", async () => {
   await withFixture("post-refusal-certscore-owned-analytics", async (url) => {
     const packet = await observe(url, {
       allowCanonicalRejectDiscovery: true,
@@ -275,12 +275,10 @@ test("canonical control discovery uniquely resolves Reject among controls sharin
     );
     assert.equal(packet.resolver.method, "canonical_consent_control_registry_recipe");
     assert.match(packet.resolver.recipeId, /^canonical-control:reject:v2:/);
-    assert.equal(packet.refusalRegistration.status, "confirmed");
-    assert.equal(packet.refusalRegistration.refusalExercised, true);
-    assert.equal(packet.refusalRegistration.witnesses.some((witness) =>
-      witness.witnessType === "canonical_refusal_state" &&
-      witness.corroboratingOnly === false
-    ), true);
+    assert.equal(packet.refusalRegistration.status, "unconfirmed");
+    assert.equal(packet.refusalRegistration.refusalExercised, false);
+    assert.equal(packet.productionProjectable, false);
+    assert.deepEqual(packet.observations, []);
   });
 });
 
@@ -357,7 +355,7 @@ test("canonical control discovery does not click generic page choices without co
   });
 });
 
-test("canonical control discovery confirms the completed Reject action from its direct first-layer UI transition", async () => {
+test("canonical control discovery does not confirm Reject from a UI-only transition", async () => {
   await withFixture("post-refusal-reject-unconfirmed", async (url) => {
     const packet = await observe(url, {
       allowCanonicalRejectDiscovery: true,
@@ -371,16 +369,13 @@ test("canonical control discovery confirms the completed Reject action from its 
     });
 
     assert.equal(packet.resolver.found, true);
-    assert.equal(packet.refusalRegistration.status, "confirmed");
-    assert.equal(packet.refusalRegistration.refusalExercised, true);
-    assert.equal(packet.refusalRegistration.witnesses.some((witness) =>
-      witness.witnessType === "canonical_refusal_state" &&
-      witness.expectedState === "canonical_first_layer_reject_control_and_consent_surface_hidden_after_completed_action"
-    ), true);
+    assert.equal(packet.refusalRegistration.status, "unconfirmed");
+    assert.equal(packet.refusalRegistration.refusalExercised, false);
+    assert.equal(packet.productionProjectable, false);
   });
 });
 
-test("canonical control discovery confirms an exact Reject action when the consent surface becomes an acknowledgement", async () => {
+test("canonical control discovery does not treat an acknowledgement as registered refusal", async () => {
   await withFixture("post-refusal-reject-acknowledgement-transition", async (url) => {
     const packet = await observe(url, {
       allowCanonicalRejectDiscovery: true,
@@ -394,16 +389,13 @@ test("canonical control discovery confirms an exact Reject action when the conse
     });
 
     assert.equal(packet.resolver.found, true);
-    assert.equal(packet.refusalRegistration.status, "confirmed");
-    assert.equal(packet.refusalRegistration.refusalExercised, true);
-    assert.equal(packet.refusalRegistration.witnesses.some((witness) =>
-      witness.witnessType === "canonical_refusal_state" &&
-      witness.expectedState === "canonical_first_layer_reject_control_hidden_and_consent_surface_replaced_after_completed_action"
-    ), true);
+    assert.equal(packet.refusalRegistration.status, "unconfirmed");
+    assert.equal(packet.refusalRegistration.refusalExercised, false);
+    assert.equal(packet.productionProjectable, false);
   });
 });
 
-test("canonical UI confirmation permits a fragment-only same-document transition", async () => {
+test("a fragment-only transition without a semantic decision stays unconfirmed", async () => {
   await withFixture("post-refusal-reject-hash-transition", async (url) => {
     const packet = await observe(url, {
       allowCanonicalRejectDiscovery: true,
@@ -417,8 +409,8 @@ test("canonical UI confirmation permits a fragment-only same-document transition
     });
 
     assert.equal(packet.resolver.found, true);
-    assert.equal(packet.refusalRegistration.status, "confirmed");
-    assert.equal(packet.refusalRegistration.refusalExercised, true);
+    assert.equal(packet.refusalRegistration.status, "unconfirmed");
+    assert.equal(packet.refusalRegistration.refusalExercised, false);
   });
 });
 
@@ -683,7 +675,7 @@ test("web-storage identity is exact-origin scoped", () => {
 
 test("reject ignored retains post-refusal request, write, and persistence evidence", async () => {
   await withFixture("post-refusal-reject-ignored", async (url) => {
-    const packet = await observe(url);
+    const packet = await observe(url, { observationWindowMs: 600 });
 
     assert.equal(packet.refusalRegistration.status, "confirmed");
     assert.equal(packet.network.postRefusalNonEssentialRequests.some((request) =>
@@ -1055,7 +1047,7 @@ test("tarteaucitron necessary-only Save runs as a confirmed Reject equivalent", 
     assert.equal(packet.resolver.cmpId, "DSGVO All in One / tarteaucitron");
     assert.equal(
       packet.resolver.recipeId,
-      "canonical-cmp:DSGVO All in One / tarteaucitron:necessary-only-save:v1",
+      "canonical-cmp:DSGVO All in One / tarteaucitron:necessary-only-save:v2",
     );
     assert.equal(packet.refusalRegistration.status, "confirmed");
     assert.equal(packet.refusalRegistration.refusalExercised, true);
@@ -1118,7 +1110,7 @@ test("OneTrust canonical consent-cookie transition confirms deterministic reject
     assert.equal(packet.refusalRegistration.witnesses.some((witness) =>
       witness.witnessType === "cmp_cookie_state" &&
       witness.key === "OptanonConsent" &&
-      witness.expectedState === "canonical_cmp_consent_state_changed_after_reject" &&
+      witness.expectedState === "canonical_cmp_denied_decision_after_action" &&
       witness.corroboratingOnly === false
     ), true);
   });
@@ -1137,13 +1129,13 @@ test("OneTrust tenant-suffixed consent cookies retain exact identity and confirm
     assert.equal(packet.refusalRegistration.witnesses.some((witness) =>
       witness.witnessType === "cmp_cookie_state" &&
       witness.key === "OptanonConsent_mUOxXq" &&
-      witness.expectedState === "canonical_cmp_consent_state_changed_after_reject" &&
+      witness.expectedState === "canonical_cmp_denied_decision_after_action" &&
       witness.corroboratingOnly === false
     ), true);
   });
 });
 
-test("canonical discovery binds generic Orejime controls to the exact CMP surface", async () => {
+test("canonical discovery binds Orejime controls but does not infer full refusal from a partial state map", async () => {
   await withFixture("post-refusal-orejime-generic-controls", async (url) => {
     const packet = await observe(url, {
       allowCanonicalRejectDiscovery: true,
@@ -1161,12 +1153,9 @@ test("canonical discovery binds generic Orejime controls to the exact CMP surfac
       resolver: packet.resolver,
     }));
     assert.equal(packet.resolver.cmpId, "Orejime");
-    assert.equal(packet.refusalRegistration.status, "confirmed");
-    assert.equal(packet.refusalRegistration.refusalExercised, true);
-    assert.equal(packet.refusalRegistration.witnesses.some((witness) =>
-      witness.witnessType === "canonical_refusal_state" &&
-      witness.expectedState === "canonical_first_layer_reject_control_and_consent_surface_hidden_after_completed_action"
-    ), true);
+    assert.equal(packet.refusalRegistration.status, "unconfirmed");
+    assert.equal(packet.refusalRegistration.refusalExercised, false);
+    assert.equal(packet.productionProjectable, false);
   });
 });
 
@@ -1238,7 +1227,7 @@ test("Cookiebot canonical consent-cookie creation confirms deterministic rejecti
     assert.equal(packet.refusalRegistration.witnesses.some((witness) =>
       witness.witnessType === "cmp_cookie_state" &&
       witness.key === "CookieConsent" &&
-      witness.expectedState === "canonical_cmp_consent_state_changed_after_reject" &&
+      witness.expectedState === "canonical_cmp_denied_decision_after_action" &&
       witness.corroboratingOnly === false
     ), true);
   });
@@ -1374,7 +1363,7 @@ test("named CMP recipes resolve fast and delayed deterministic controls", async 
     assert.equal(semanticWitness?.key, "uc_settings");
     assert.equal(
       semanticWitness?.expectedState,
-      "canonical_cmp_consent_state_changed_after_reject",
+      "canonical_cmp_denied_decision_after_action",
     );
     assert.match(semanticWitness?.observedStateHash ?? "", /^[a-f0-9]{64}$/);
     assert.equal(semanticWitness?.corroboratingOnly, false);
@@ -1775,7 +1764,7 @@ async function withCookieYesRejectFixture(
       <script>
         document.querySelector('.cky-btn-reject').addEventListener('click', () => {
           fetch('/reject-action', { method: 'POST' });
-          document.cookie = 'cookieyes-consent=consentid:test,action:reject; Path=/; SameSite=Lax';
+          document.cookie = 'cookieyes-consent=consentid:test,action:reject,necessary:yes,analytics:no,advertisement:no; Path=/; SameSite=Lax';
           document.querySelector('.cky-consent-container').hidden = true;
         });
       </script>

@@ -175,7 +175,9 @@ function geometryInput(
           documentId: tokenBoundToCanonicalDocument ? canonicalDocumentId : pageUrl,
           documentToken,
           channels: ["geometry"],
-          artifactRefs: typeof row.screenshotArtifactRef === "string" ? [row.screenshotArtifactRef] : [],
+          // The geometry JSON is the retained proof; its optional screenshot
+          // can be unavailable without turning this into a dangling image ref.
+          artifactRefs: ["ConsentControlGeometryEvidence.json"],
         }];
       })
     : [];
@@ -241,6 +243,19 @@ export function deriveMaterializedConsentControlAssessment(input: {
     )
     .sort((left, right) => left.capturedAtMs - right.capturedAtMs);
   const screenshots = input.bundle.screenshots ?? [];
+  const canonicalDocumentToken = retainedDocumentSnapshots
+    .filter((snapshot) => snapshot.documentId === canonicalDocumentId && snapshot.documentToken)
+    .at(-1)?.documentToken ?? null;
+  const geometry = geometryInput(
+    input.consentControlGeometryEvidence, canonicalDocumentId, canonicalDocumentToken, input.bundle.startedAt,
+  );
+  const structuredGeometryBinding = {
+    complete: geometry?.assessmentStatus === "complete",
+    url: geometry?.documentId ?? "",
+    ...(geometry?.documentToken
+      ? { documentIdentity: { source: "cdp_loader_id" as const, token: geometry.documentToken } }
+      : {}),
+  };
   const retainedScreenshots = screenshots.filter(screenshotIsRetainedAndDisplayable);
   const retainedVisualDocumentArtifacts = retainedScreenshots
     .map((screenshot) => ({
@@ -264,25 +279,28 @@ export function deriveMaterializedConsentControlAssessment(input: {
         })
       : []),
   ].filter((value): value is string => Boolean(value)));
-  const retainedScreenshotNames = new Set(
-    retainedScreenshots
-      .map((screenshot) => artifactFileName(screenshot.path))
-      .filter((value): value is string => Boolean(value)),
-  );
-  const representativeConsentScreenshotRequired = screenshots.some((screenshot) =>
-    screenshot.retentionStatus !== undefined || screenshot.displayStatus !== undefined
-  );
-  const representativeConsentScreenshotAvailable = geometryScreenshotRefs.length > 0
-    ? geometryScreenshotRefs.some((reference) => {
-        const fileName = artifactFileName(reference);
-        return Boolean(fileName && retainedScreenshotNames.has(fileName));
-      })
-    : retainedScreenshots.some((screenshot) => screenshot.consentStateAtTime === "pre_consent");
-  const representativeConsentScreenshotUnavailable =
-    representativeConsentScreenshotRequired && !representativeConsentScreenshotAvailable;
-  const canonicalDocumentToken = retainedDocumentSnapshots
-    .filter((snapshot) => snapshot.documentId === canonicalDocumentId && snapshot.documentToken)
-    .at(-1)?.documentToken ?? null;
+  const representativeScreenshots = screenshots.filter((screenshot) => {
+    if (screenshot.consentStateAtTime !== "pre_consent") return false;
+    const screenshotToken = retainedDocumentToken(screenshot.documentIdentity);
+    const documentMatches = canonicalDocumentToken || screenshotToken
+      ? Boolean(canonicalDocumentToken && canonicalDocumentToken === screenshotToken)
+      : normalizedDocumentId(screenshot.url) === canonicalDocumentId;
+    return documentMatches && (geometryScreenshotRefs.length === 0 || geometryScreenshotRefs.some((reference) =>
+      artifactFileName(reference) === artifactFileName(screenshot.path)
+    ));
+  });
+  const availableRepresentativeScreenshots = representativeScreenshots.filter(screenshotIsRetainedAndDisplayable);
+  const representativeConsentScreenshotAvailable = availableRepresentativeScreenshots.length > 0;
+  const withheldScreenshots = representativeScreenshots.filter((screenshot) => !screenshotIsRetainedAndDisplayable(screenshot));
+  const visualEvidence: NonNullable<ConsentControlAssessmentInput["visualEvidence"]> = {
+    status: representativeConsentScreenshotAvailable ? "available" : withheldScreenshots.length > 0 ? "withheld" : "unavailable",
+    artifactRefs: availableRepresentativeScreenshots.map((screenshot) => screenshot.artifactId).slice(0, 24),
+    reasonCodes: representativeConsentScreenshotAvailable ? [] : unique([
+      "representative_consent_screenshot_unavailable",
+      ...withheldScreenshots.flatMap((screenshot) => [screenshot.safetyFailureCode, screenshot.withheldReason, screenshot.displayWithheldReason])
+        .filter((reason): reason is NonNullable<typeof reason> => Boolean(reason)),
+    ]).slice(0, 16),
+  };
   const isCompletedTypedFirstLayerInventory = (
     observation: CanonicalEvidenceBundle["consentUiObservations"][number],
   ) => {
@@ -295,15 +313,7 @@ export function deriveMaterializedConsentControlAssessment(input: {
       expectedDocumentIdentity: canonicalDocumentToken
         ? { source: "cdp_loader_id", token: canonicalDocumentToken }
         : undefined,
-      representativeScreenshotUrls: canonicalDocumentToken
-        ? undefined
-        : retainedVisualDocumentArtifacts.map((artifact) => artifact.documentId),
-      representativeScreenshots: retainedVisualDocumentArtifacts.map((artifact) => ({
-        documentIdentity: artifact.documentToken
-          ? { source: "cdp_loader_id" as const, token: artifact.documentToken }
-          : undefined,
-        url: artifact.documentId,
-      })),
+      structuredGeometry: structuredGeometryBinding,
     });
     const finalInventoryIncomplete = !terminalVerifiedPacket && (observation.basis ?? []).some((basis) =>
       basis === "recapture:paired_settled_frame_inventory_incomplete" ||
@@ -373,12 +383,6 @@ export function deriveMaterializedConsentControlAssessment(input: {
   const singleRetainedVisualDocumentId = retainedVisualDocumentIds.length === 1
     ? retainedVisualDocumentIds[0] ?? null
     : null;
-  const geometry = geometryInput(
-    input.consentControlGeometryEvidence,
-    canonicalDocumentId,
-    canonicalDocumentToken,
-    input.bundle.startedAt,
-  );
   const observations: ConsentControlAssessmentInput["observations"] = (input.bundle.consentUiObservations ?? []).map((observation) => {
     const explicitObservationDocumentUrlRetained = typeof observation.documentUrl === "string";
     const explicitObservationDocumentId = normalizedDocumentId(observation.documentUrl);
@@ -454,7 +458,7 @@ export function deriveMaterializedConsentControlAssessment(input: {
           documentId: observationDocumentId,
           documentToken: observationDocumentToken,
           channels: observation.captureDiagnostics?.completedChannels,
-          artifactRefs: control.artifactRef ? [control.artifactRef] : [],
+          artifactRefs: ["CanonicalEvidenceBundle.json", ...(control.artifactRef ? [control.artifactRef] : [])],
         };
         const savesAllOptionalDefaultsOff =
           layer === "first_layer" &&
@@ -509,16 +513,14 @@ export function deriveMaterializedConsentControlAssessment(input: {
       : observations;
   const inspection = input.consentSurfaceInspection ?? input.bundle.consentSurfaceInspection ?? null;
   const inspectionChannels = inspection?.evidenceChannels ?? [];
-  const completedChannels = unique([
+  const completedChannels: ConsentControlAssessmentChannel[] = unique([
     ...assessmentObservations.flatMap((observation) => observation.completedChannels ?? []),
     ...inspectionChannels
       .filter((channel) => channel.status === "observed")
       .map((channel) => inspectionChannel(channel.channel))
       .filter((channel): channel is ConsentControlAssessmentChannel => channel !== null),
     ...(geometry?.assessmentStatus === "complete" ? ["geometry" as const] : []),
-  ]).filter((channel) =>
-    channel !== "screenshot" || !representativeConsentScreenshotUnavailable
-  );
+  ]).filter((channel) => channel !== "screenshot");
   const incompleteChannels = unique([
     ...assessmentObservations.flatMap((observation) => observation.incompleteChannels ?? []),
     ...inspectionChannels
@@ -526,8 +528,7 @@ export function deriveMaterializedConsentControlAssessment(input: {
       .map((channel) => inspectionChannel(channel.channel))
       .filter((channel): channel is ConsentControlAssessmentChannel => channel !== null),
     ...(geometry?.assessmentStatus === "incomplete" ? ["geometry" as const] : []),
-    ...(representativeConsentScreenshotUnavailable ? ["screenshot" as const] : []),
-  ]);
+  ]).filter((channel) => channel !== "screenshot");
   const observedDocumentIds = unique([
     ...assessmentObservations
       .filter((observation) =>
@@ -576,27 +577,28 @@ export function deriveMaterializedConsentControlAssessment(input: {
   // observed controls even when another required channel is limited, but it
   // must not turn an explicitly limited inspection into a complete inventory
   // or convert missing controls to `not_observed`.
-  const coordinatorInspectionComplete = !inspection || (
+  const latestInventory = (input.bundle.consentUiObservations ?? []).slice()
+    .sort((left, right) => right.observedAtMs - left.observedAtMs)[0];
+  const loadingEmptyInventory = latestInventory?.documentReadyState === "loading" &&
+    latestInventory.controls.length === 0;
+  const coordinatorInspectionComplete = !loadingEmptyInventory && (!inspection || (
     inspection.inspectionCompleted === true &&
     inspection.coverageStatus === "complete"
-  );
+  ));
   const unresolvedAdaptivePartialInventory = hasUnresolvedAdaptivePartialConsentInventory(
     input.bundle.consentUiObservations ?? [],
     {
       expectedDocumentUrl: canonicalDocumentId,
-      representativeScreenshots: (input.bundle.screenshots ?? [])
-        .filter((screenshot) => screenshot.consentStateAtTime === "pre_consent")
-        .map((screenshot) => ({
-          documentIdentity: screenshot.documentIdentity,
-          url: screenshot.url,
-        })),
+      expectedDocumentIdentity: canonicalDocumentToken
+        ? { source: "cdp_loader_id", token: canonicalDocumentToken }
+        : undefined,
+      structuredGeometry: structuredGeometryBinding,
     },
   );
   const typedFirstLayerInventoryComplete =
     hasTypedFirstLayerInventory &&
     coordinatorInspectionComplete &&
-    !unresolvedAdaptivePartialInventory &&
-    !representativeConsentScreenshotUnavailable;
+    !unresolvedAdaptivePartialInventory;
   const explicitlyCompletedTypedInventoryChannels = (typedFirstLayerInventoryObservation?.captureDiagnostics?.completedChannels ?? [])
     .filter((channel): channel is "dom_inventory" | "accessibility_tree" =>
       channel === "dom_inventory" || channel === "accessibility_tree"
@@ -610,11 +612,10 @@ export function deriveMaterializedConsentControlAssessment(input: {
   const baseRequiredChannels = typedFirstLayerInventoryComplete
     ? retainedTypedInventoryChannels
     : REQUIRED_CHANNELS;
-  const requiredChannels = representativeConsentScreenshotRequired
-    ? unique([...baseRequiredChannels, "screenshot" as const])
-    : baseRequiredChannels;
+  const requiredChannels = baseRequiredChannels;
   const coverageComplete =
     !input.noGo &&
+    !loadingEmptyInventory &&
     !unresolvedAdaptivePartialInventory &&
     documentIdentityStatus === "matched" &&
     (
@@ -627,6 +628,7 @@ export function deriveMaterializedConsentControlAssessment(input: {
       )
     );
   const verifiedInspectionComplete =
+    !loadingEmptyInventory &&
     !unresolvedAdaptivePartialInventory &&
     inspection?.inspectionCompleted === true &&
     inspection.coverageStatus === "complete";
@@ -648,6 +650,7 @@ export function deriveMaterializedConsentControlAssessment(input: {
           : "unknown";
 
   return deriveConsentControlAssessment({
+    visualEvidence,
     scan: {
       scanId: input.scanId ?? input.bundle.scanId,
       requestedUrl,
@@ -667,8 +670,8 @@ export function deriveMaterializedConsentControlAssessment(input: {
     geometry,
     surface: {
       status: surfaceStatus,
-      firstObservedAtMs: inspection?.observedAtMs ?? null,
-      lastObservedAtMs: inspection?.observedAtMs ?? null,
+      firstObservedAtMs: surfaceStatus.startsWith("observed_") ? inspection?.observedAtMs ?? null : null,
+      lastObservedAtMs: surfaceStatus.startsWith("observed_") ? inspection?.observedAtMs ?? null : null,
       evidenceRefs: [],
     },
     coverage: {
@@ -678,9 +681,7 @@ export function deriveMaterializedConsentControlAssessment(input: {
       incompleteChannels,
       reasonCodes: unique([
         ...(inspection?.limitationKeys ?? []),
-        ...(representativeConsentScreenshotUnavailable
-          ? ["representative_consent_screenshot_unavailable"]
-          : []),
+        ...(loadingEmptyInventory ? ["consent_surface_inspection_document_still_loading"] : []),
         ...(!coverageComplete && !input.noGo ? ["canonical_consent_coverage_incomplete"] : []),
       ]),
     },
@@ -812,7 +813,7 @@ export function deriveWs01ConsentControlAssessment(input: {
     },
     source: {
       bundleVersion: "ws01.hybrid_runtime_evidence.v1",
-      projectorVersion: "2.0.0-ws01",
+      projectorVersion: "2.1.0-ws01",
       computedAt: input.completedAt ?? new Date(0).toISOString(),
     },
   });

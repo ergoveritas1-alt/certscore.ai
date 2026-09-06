@@ -1,7 +1,9 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import { getCanonicalVendorPurposeDefinitions, resolveCanonicalVendorLabel, resolveVendorDisplayCategory, resolveVendorObservations } from "@certscore/vendor-resolver";
 import {
   buildBrowserExtensionRequestInventoryRows,
+  buildIframeInventoryRows,
   buildReportSurfaceVendorProjection,
   buildRuntimeInventoryGroupRows,
   buildRuntimeInventoryUngroupedRows,
@@ -14,10 +16,182 @@ import {
   deriveInventoryMacroCategory,
   deriveRuntimeInventoryPresentationState,
   getInventoryGroupRowRenderKey,
+  getInventoryCategoryLabel,
   getTrackerConsentReviewPriority,
   isInventoryDisplayHostname,
   isTimedPreConsentInventoryRow,
+  type TrackerInventoryRow,
+  type SanitizedRequestEvidenceRow,
+  type PreConsentDataFlow,
 } from "./runtime-inventory-projection";
+
+test("inventory category lookup uses exact canonical identities, not vendor-name substrings", () => {
+  for (const label of ["Bias", "Custom stripe-shaped widget", "My cloudflare helper", "Not Google Maps"]) {
+    assert.equal(getInventoryCategoryLabel(label, "unknown"), "Unknown", label);
+  }
+  assert.equal(getInventoryCategoryLabel("Google Fonts", "unknown"), "CDN");
+  assert.equal(getInventoryCategoryLabel("Facebook Page Plugin", "unknown"), "Embedded media");
+  assert.equal(getInventoryCategoryLabel("Google", "unknown"), "Unknown");
+});
+
+test("retained iframe resources are neutral, bounded, and separate from cookies and requests", () => {
+  const event = { frameUrl: "https://www.google.com/maps/embed?pb=private#fragment", timestampMs: 10875, preConsent: true };
+  const rows = buildIframeInventoryRows({ iframeSummary: { iframeEvents: [
+    event, { ...event, timestampMs: 11000 },
+    { ...event, frameUrl: "https://www.facebook.com/plugins/page.php?href=private" },
+    { ...event, preConsent: false },
+    { ...event, timestampMs: null },
+    { ...event, frameUrl: "about:blank" },
+    { ...event, frameUrl: "https://user:secret@example.com/" },
+  ] } }, "pferdeklinik-roentorf.de");
+  assert.equal(rows.length, 2);
+  assert.equal(rows[0]?.type, "embed");
+  assert.equal(rows[0]?.vendor, "Google");
+  assert.equal(rows[0]?.rawProducts[0], "Google Maps embed");
+  assert.equal(rows[0]?.purpose, "Embedded maps");
+  assert.equal(rows[1]?.purpose, "Social media embed");
+  assert.equal(rows[0]?.firstSeenMs, 10875);
+  assert.equal(rows[0]?.siteRelationship, "cross_site");
+  assert.equal(rows[0]?.requestCount, null);
+  assert.deepEqual(rows[0]?.cookieDetails, []);
+  assert.deepEqual(rows[0]?.requestDetails, []);
+  assert.equal(classifyInventoryEvidence(rows[0]!), "Contextual");
+  assert.doesNotMatch(JSON.stringify(rows), /private|fragment|secret/);
+  assert.deepEqual(buildIframeInventoryRows({ iframeSummary: { preConsentIframeCount: 4 } }), []);
+  assert.deepEqual(buildIframeInventoryRows(undefined), []);
+});
+
+function serviceTracker(product: string): TrackerInventoryRow {
+  const owner = resolveCanonicalVendorLabel(product)!;
+  return {
+    label: product, category: owner.purpose, vendorDisplayCategory: owner.displayCategory,
+    regulatoryRelevance: owner.regulatoryRelevance, confidence: owner.confidence,
+    domains: [], firstSeenMs: 9330, observedVia: ["request"], party: "third_party",
+    preConsent: true, requestCount: 1, source: "retained_canonical_vendor",
+  };
+}
+
+test("resource details attach requests by service and endpoint context by host, not legal entity", () => {
+  const request = (vendor: string | null, hostname: string, path: string): SanitizedRequestEvidenceRow => ({
+    vendor, hostname, path, method: "GET", initiatorUrl: null, cookieNamesSent: [], responseCookieNamesSet: [],
+    essentiality: "unknown", identifierParameterNames: [], responseObserved: true, responseStorageAttempted: false,
+  });
+  const requestRows = [request("Google Maps embed", "google.com", "/maps/embed"),
+    request("Google Fonts", "fonts.googleapis.com", "/css"), request("Google Fonts", "fonts.gstatic.com", "/s/font.woff2"),
+    request("Google Ads", "google.com", "/pagead/1p-user-list/123"), request(null, "google.com", "/search"),
+    request("Google", "google.com", "/maps/embed")];
+  const dataFlows = ["google.com", "fonts.googleapis.com", "fonts.gstatic.com"].map(endpoint => ({
+    endpoint, controllingEntity: { legalEntity: "Google LLC", headquartersCountry: "US" }, idSync: false,
+    networkDestination: { ip: null, country: null, countryCode: null, asn: null, provider: null, label: "server location (may be CDN edge)" },
+    transferMechanism: { basis: "Not verified", mechanism: "unknown", verifiedAsOf: "2026-09-05" },
+  } as PreConsentDataFlow));
+  const trackerRows = [{ ...serviceTracker("Google Maps embed"), domains: ["google.com"], requestCount: null },
+    { ...serviceTracker("Google Fonts"), domains: ["fonts.googleapis.com", "fonts.gstatic.com"] }];
+  for (const build of [buildRuntimeInventoryGroupRows, buildRuntimeInventoryUngroupedRows]) {
+    const result = build({ cookieRows: [], trackerRows, requestRows, dataFlows });
+    const maps = result.find(row => row.rawProducts.includes("Google Maps embed"))!;
+    const fonts = result.find(row => row.rawProducts.includes("Google Fonts"))!;
+    assert.deepEqual(maps.requestDetails?.map(row => row.path), ["/maps/embed", "/maps/embed"]);
+    assert.deepEqual(maps.dataFlows.map(flow => flow.endpoint), ["google.com"]);
+    assert.deepEqual(fonts.requestDetails?.map(row => row.path), ["/css", "/s/font.woff2"]);
+    assert.deepEqual(fonts.dataFlows.map(flow => flow.endpoint), ["fonts.googleapis.com", "fonts.gstatic.com"]);
+    assert.equal(maps.requestCount, null, "Retained detail count cannot invent a total event count");
+    assert.equal(maps.priority, "review_needed");
+  }
+  assert.equal(requestRows.length, 6, "Do not discard source evidence");
+});
+
+test("cookie request context requires a retained matching name and compatible domain", () => {
+  const cookie: Parameters<typeof buildRuntimeInventoryGroupRows>[0]["cookieRows"][number] = {
+    category: "advertising", cookieName: "_fbp", domain: ".example.com",
+    firstObservedAtMs: 120, initiatorDomain: "connect.facebook.net", initiatorUrl: null,
+    initiatorVendor: "Meta Pixel", nonEssential: true, observedBeforeConsent: true,
+    party: "first_party", responseUrl: null, sourceRequestUrl: null, setAtMs: 120,
+    setMethod: "document_cookie", timingBasis: null, evidenceGrade: "high",
+    timingEvidence: "before_consent_cookie_write",
+  };
+  const request = (hostname: string, sent: string[], set: string[] = []): SanitizedRequestEvidenceRow => ({
+    vendor: "Meta", hostname, path: "/collect", method: "POST", initiatorUrl: null,
+    cookieNamesSent: sent, responseCookieNamesSet: set, essentiality: "non_essential",
+    identifierParameterNames: [], responseObserved: true, responseStorageAttempted: set.length > 0,
+  });
+  const requests = [
+    request("example.com", ["_fbp"]), request("sub.example.com", [], ["_fbp"]),
+    request("example.com", ["unrelated"]), request("connect.facebook.net", ["_fbp"]),
+    request("notexample.com", ["_fbp"]), request("example.com.evil.test", ["_fbp"]),
+  ];
+  for (const build of [buildRuntimeInventoryGroupRows, buildRuntimeInventoryUngroupedRows]) {
+    const [row] = build({ cookieRows: [cookie], trackerRows: [], requestRows: requests });
+    assert.deepEqual(row?.requestDetails, requests.slice(0, 2));
+    assert.equal(row?.requestCount, null, "Supporting context does not invent an event count");
+  }
+  assert.equal(requests.length, 6, "Unassociated request evidence remains retained");
+});
+
+test("request and iframe projections use the same canonical service purpose but retain distinct evidence", () => {
+  const trackers = buildRuntimeInventoryUngroupedRows({ cookieRows: [], trackerRows: [
+    serviceTracker("Google Maps embed"), serviceTracker("Facebook Page Plugin"),
+    serviceTracker("Google Fonts"), serviceTracker("BST DSGVO Cookie notice plugin, non-TCF"),
+  ] });
+  const iframes = buildIframeInventoryRows({ iframeSummary: { iframeEvents: [
+    { frameUrl: "https://www.google.com/maps/embed?pb=private", timestampMs: 10875, preConsent: true },
+    { frameUrl: "https://www.facebook.com/plugins/page.php?href=private", timestampMs: 10875, preConsent: true },
+    { frameUrl: "https://unrecognized.example/widget", timestampMs: 11000, preConsent: true },
+  ] } });
+  const expected = [
+    ["Google Maps embed", "Embedded maps", "Review"],
+    ["Facebook Page Plugin", "Social media embed", "Non-essential"],
+    ["Google Fonts", "Font delivery", "Contextual"],
+    ["BST DSGVO Cookie notice plugin, non-TCF", "Consent management", "Contextual"],
+  ];
+  for (const [product, purpose, evidence] of expected) {
+    const row = trackers.find(row => row.rawProducts.includes(product!))!;
+    assert.ok(row, product);
+    assert.equal(row.purpose, purpose, product);
+    assert.deepEqual(row.purposes, [purpose]);
+    assert.equal(classifyInventoryEvidence(row), evidence, product);
+    assert.equal(row.type, "tracker");
+    assert.equal(row.firstSeenMs, 9330);
+    const iframe = iframes.find(frame => frame.rawProducts.includes(product!));
+    if (iframe) {
+      assert.equal(iframe.purpose, row.purpose);
+      assert.equal(iframe.type, "embed");
+      assert.equal(iframe.firstSeenMs, 10875);
+      assert.equal(classifyInventoryEvidence(iframe), "Contextual");
+      assert.deepEqual(iframe.regulatoryRelevance, row.regulatoryRelevance);
+    }
+  }
+  assert.equal(iframes[2]?.purpose, "Embedded content");
+  assert.equal(iframes[2]?.confidence, "low");
+  assert.deepEqual(iframes[2]?.regulatoryRelevance, []);
+});
+
+test("service-purpose labels cannot change canonical inventory priority or evidence classification", () => {
+  for (const definition of getCanonicalVendorPurposeDefinitions()) {
+    for (const requestCount of [0, 1]) {
+      const input: TrackerInventoryRow = {
+        label: definition.product, category: definition.purpose, vendorDisplayCategory: resolveVendorDisplayCategory(definition),
+        regulatoryRelevance: definition.regulatoryRelevance, confidence: definition.confidence,
+        domains: [], firstSeenMs: 9330, observedVia: ["request"], party: "third_party",
+        preConsent: true, requestCount, source: "canonical_vendor",
+      };
+      const before = buildTrackerInventoryGroupRows([input])[0]!;
+      const after = buildRuntimeInventoryGroupRows({ cookieRows: [], trackerRows: [input] })[0]!;
+      assert.equal(after.priority, before.priority, definition.product);
+      assert.equal(after.macroCategory, before.macroCategory, definition.product);
+      assert.equal(classifyInventoryEvidence(after), classifyInventoryEvidence({ ...before, purposes: [before.purpose], type: "tracker" }), definition.product);
+    }
+  }
+});
+
+test("new purpose metadata does not change endpoint attribution or turn unknown hosts into known services", () => {
+  const input = serviceTracker("Google Maps embed");
+  const unknown = buildRuntimeInventoryGroupRows({ cookieRows: [], trackerRows: [{
+    ...input, label: "google.com", domains: ["google.com"], regulatoryRelevance: [], vendorDisplayCategory: "Unknown",
+  }] });
+  assert.ok(unknown.every(row => row.purpose !== "Embedded maps"));
+  assert.equal(resolveVendorObservations([{ type: "iframe", url: "https://www.google.com/maps/embed" }])[0]?.servicePurpose, "Embedded maps");
+});
 
 test("projects an empty inventory message only when canonical coverage is not limited", () => {
   assert.deepEqual(
@@ -121,7 +295,7 @@ test("projects bounded BX01 request inventory without treating unresolved hosts 
   const oneTrust = groupedRows.find((row) => row.canonicalEntity === "OneTrust, LLC");
   const priceSpider = groupedRows.find((row) => row.type === "tracker" && row.vendor === "cdn.pricespider.com");
 
-  assert.equal(oneTrust?.purpose, "Cookie compliance");
+  assert.equal(oneTrust?.purpose, "Consent management");
   assert.equal(oneTrust?.priority, "contextual");
   assert.equal(oneTrust?.type === "tracker" ? oneTrust.requestCount : null, 6);
   assert.equal(priceSpider?.purpose, "Unresolved Host");
@@ -247,7 +421,7 @@ test("keeps incompatible products from one legal entity in distinct inventory ro
   assert.deepEqual(
     googleRows.map((row) => [row.rawProducts[0], row.purpose]).sort(),
     [
-      ["Google Analytics", "Audience measurement"],
+      ["Google Analytics", "Analytics"],
       ["Google Sign-in", "Authentication"],
     ],
   );
@@ -375,7 +549,7 @@ test("projects Adobe Launch host as tag management instead of unknown tracker", 
   const groupedRows = buildRuntimeInventoryGroupRows({ cookieRows: [], trackerRows: rows });
   const adobeRow = groupedRows.find((row) => row.type === "tracker" && row.vendor === "Adobe");
 
-  assert.equal(adobeRow?.purpose, "Tag Management");
+  assert.equal(adobeRow?.purpose, "Tag management");
   assert.equal(adobeRow?.macroCategory, "Functional");
   assert.equal(adobeRow?.priority, "medium");
   assert.equal(adobeRow?.party, "third_party");
@@ -403,7 +577,7 @@ test("projects canonical hostless vendor labels with known purposes and categori
     [
       ["Advertising", "Advertising", "high", "high"],
       ["Performance monitoring", "Analytics", "contextual", "high"],
-      ["Advertising measurement", "Advertising", "high", "high"],
+      ["Advertising", "Advertising", "high", "high"],
     ],
   );
   assert.equal(adobe?.attributionEvidence?.matchedOn, "vendor_label");

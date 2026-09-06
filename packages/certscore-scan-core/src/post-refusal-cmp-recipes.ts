@@ -6,7 +6,7 @@ import { cmpActionRecipeEnabled } from "./cmp-action-recipe-policy.js";
 import type { PostRefusalActionRecipe } from "./post-refusal-observer.js";
 
 export const CANONICAL_POST_REFUSAL_RECIPE_SET_ID =
-  "canonical-consent-control-reject-v22";
+  "canonical-consent-control-reject-v23";
 
 export const CERTSCORE_OWNED_ANALYTICS_REJECT_RECIPE: PostRefusalActionRecipe = {
   artifactVersion: "certscore.post_refusal_action_recipe.v1",
@@ -168,7 +168,7 @@ export function buildCanonicalPostRefusalActionRecipes(): PostRefusalActionRecip
       for (const target of definition.necessaryOnlyControlTargets ?? []) {
         recipes.push({
           artifactVersion: "certscore.post_refusal_action_recipe.v1",
-          recipeId: `canonical-cmp:${definition.canonicalName}:necessary-only-save:v1`,
+          recipeId: `canonical-cmp:${definition.canonicalName}:necessary-only-save:v2`,
           cmpId: definition.canonicalName,
           resolverMethod: "cmp_registry_recipe",
           controlSelector: target.controlSelector,
@@ -181,6 +181,7 @@ export function buildCanonicalPostRefusalActionRecipes(): PostRefusalActionRecip
           },
           confirmation: {
             kind: "canonical_reject_transition",
+            registeredStateKeys: definition.storageKeys,
             controlSelector: target.controlSelector,
             bannerSelector: target.bannerSelector,
           },

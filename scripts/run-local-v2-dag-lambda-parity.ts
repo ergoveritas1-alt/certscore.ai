@@ -1,6 +1,8 @@
 import { createHash, randomUUID } from "node:crypto";
 import { appendFile, mkdir, readFile, readdir, writeFile } from "node:fs/promises";
 import path from "node:path";
+import { pathToFileURL } from "node:url";
+import { runtimeGraphDispatchSchema, type RuntimeGraphDispatch } from "../packages/certscore-contracts/src/runtime-evidence-graph";
 import { GetObjectCommand, PutObjectCommand } from "@aws-sdk/client-s3";
 import { SendMessageCommand } from "@aws-sdk/client-sqs";
 import { InvokeCommand } from "@aws-sdk/client-lambda";
@@ -25,6 +27,7 @@ type Args = {
   functionName: string;
   gpcConfig: Record<string, unknown> | null;
   gpcEnabled: boolean;
+  runtimeGraph: RuntimeGraphDispatch | null;
   messageStreamPath: string | null;
   outPath: string;
   profile: "full" | "standard" | "tiny";
@@ -297,6 +300,7 @@ async function main() {
       productionFindingIntegration: false,
       profile: args.profile,
       ...(args.debugOverrides ? { debugOverrides: args.debugOverrides } : {}),
+      ...(args.runtimeGraph ? { runtimeGraph: args.runtimeGraph } : {}),
       ...(args.gpcEnabled && args.gpcConfig
         ? { gpcObservation: args.gpcConfig }
         : {}),
@@ -503,7 +507,7 @@ function summarizeShardSummary(value: unknown) {
   };
 }
 
-function parseArgs(argv: string[]): Args {
+export function parseArgs(argv: string[]): Args {
   const args: Args = {
     artifactDir: "artifacts/local-v2-dag-lambda-parity",
     awsRegion: "eu-central-1",
@@ -520,6 +524,7 @@ function parseArgs(argv: string[]): Args {
     functionName: "certscore-v2-dag-local-lambda",
     gpcConfig: null,
     gpcEnabled: false,
+    runtimeGraph: null,
     messageStreamPath: null,
     outPath: "artifacts/local-v2-dag-lambda-parity/latest.json",
     profile: "full",
@@ -547,6 +552,10 @@ function parseArgs(argv: string[]): Args {
     } else if (arg === "--gpc-config") {
       args.gpcConfig = parseJsonObjectArg(requiredValue(argv, ++index, arg), arg);
       args.gpcEnabled = true;
+    } else if (arg === "--runtime-graph-config") {
+      args.runtimeGraph = runtimeGraphDispatchSchema.parse(
+        parseJsonObjectArg(requiredValue(argv, ++index, arg), arg),
+      );
     } else if (arg === "--message-stream") {
       args.messageStreamPath = requiredValue(argv, ++index, arg);
     } else if (arg === "--no-debug-overrides") {
@@ -576,6 +585,9 @@ function parseArgs(argv: string[]): Args {
       throw new Error(`Unknown argument: ${arg}`);
     }
   }
+  if (args.runtimeGraph && args.runtimeGraph.scanId !== args.scanId) {
+    throw new Error("Runtime graph configuration must match the local scan ID.");
+  }
   return args;
 }
 
@@ -591,6 +603,7 @@ function printUsage() {
     "  --aws-region <region>    eu-central-1, eu-west-1, or us-west-1. Default: eu-central-1",
     "  --profile <profile>      full, standard, or tiny. Default: full",
     "  --gpc-config <json>       Enable the passive GPC lane with the typed WC01 dispatch configuration.",
+    "  --runtime-graph-config <json> Preserve the typed WC01 relationship-capture configuration for this scan.",
     "  --post-refusal           Enable the local four-lane Reject Path barrier.",
     "  --post-refusal-config <json> Enable Reject Path with the typed WC01 dispatch configuration.",
     "  --post-refusal-worker-mode <mode> normal, failure, or timeout. Implies --post-refusal.",
@@ -832,7 +845,7 @@ function restoreEnv(values: Map<string, string | undefined>) {
   }
 }
 
-void main().then(
+if (process.argv[1] && import.meta.url === pathToFileURL(path.resolve(process.argv[1])).href) void main().then(
   () => {
     // This executable is the local simulated-Lambda boundary. All evidence,
     // manifests, and the captured terminal message have been synchronously

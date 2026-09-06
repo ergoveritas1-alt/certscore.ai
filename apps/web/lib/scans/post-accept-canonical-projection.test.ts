@@ -213,6 +213,32 @@ test("non-projectable or unconfirmed Accept evidence cannot create a concern", (
   assert.equal(result.candidates.length, 0);
 });
 
+test("an Accept worker failure stays explicit limited coverage and cannot create successful consent or scoring evidence", () => {
+  const runtimeArtifacts = buildPostAcceptRuntimeProjection(null, {
+    contractVersion: "certscore.post_accept_lane_outcome.v1",
+    completedAt: "2026-09-06T00:28:04.000Z",
+    evidenceJoined: false,
+    maxTailWaitMs: 6_000,
+    status: "failed",
+    limitationCode: "accept_path_worker_failed",
+  });
+  assert.equal(runtimeArtifacts.postAcceptObservationCoverage?.status, "limited");
+  assert.equal(runtimeArtifacts.postAcceptObservationCoverage?.evidenceJoined, false);
+  assert.equal(runtimeArtifacts.postAcceptObservationCoverage?.limitationCode, "accept_path_worker_failed");
+  assert.equal("postAcceptBehaviorEvidence" in runtimeArtifacts, false);
+  const concerns = buildNormalizedConcerns({ reviewFindingCandidates: [], runtimeArtifacts, validationFindings: [] });
+  assert.equal(concerns.length, 0);
+  assert.equal(buildUnifiedFindingCandidatesFromConcerns(concerns).length, 0);
+  const outcomes = deriveGdprEprivacyCoveragePolicyOutcomes({ coverageLimited: false, normalizedConcerns: concerns,
+    runtimeArtifacts, scanCompleted: true, snapshot: {} });
+  const baseline = deriveGdprEprivacyCoveragePolicyOutcomes({ coverageLimited: false, normalizedConcerns: [],
+    runtimeArtifacts: {}, scanCompleted: true, snapshot: {} });
+  const score = (coverageOutcomes: typeof outcomes) => deriveRegulatoryCoverageScore({ framework: "gdpr_eprivacy",
+    rows: deriveGdprEprivacyCoverageChecklist({ coverageLimited: false, coverageOutcomes,
+      projectedFindings: [], scanCompleted: true, unifiedFindings: [] }) });
+  assert.equal(score(outcomes).score, score(baseline).score);
+});
+
 test("a joined packet with a truncated Accept window retains limited coverage", () => {
   const projection = projectPostAcceptEvidenceForReport({
     packet: packet({
@@ -296,6 +322,9 @@ test("exact activity after both Accept and Reject creates one corroborating revi
   assert.equal(corroborating?.regulatoryChecklistEligibility, "review_signal");
   assert.equal(corroborating?.evidenceBundle.rawEvidence?.scoreEffect, "none");
   assert.equal(corroborating?.evidenceBundle.rawEvidence?.corroboratesPostRefusalFinding, true);
+  assert.equal(corroborating?.title, "Shared observed activity after Accept and Reject");
+  assert.equal(corroborating?.evidenceBundle.rawEvidence?.accept_reject_shared_observed_activity, true);
+  assert.equal(corroborating?.evidenceBundle.rawEvidence?.accept_reject_outcomes_indistinguishable, undefined);
 });
 
 test("a confirmed contradictory acceptance signal remains a score-neutral review signal", () => {
@@ -313,4 +342,45 @@ test("a confirmed contradictory acceptance signal remains a score-neutral review
   ]);
   assert.equal(result.concerns[0]?.regulatoryChecklistEligibility, "review_signal");
   assert.equal(result.concerns[0]?.evidenceBundle.rawEvidence?.scoreEffect, "none");
+});
+test("legacy opaque accept confirmation cannot survive canonical projection as a finding", () => {
+  const legacy = packet();
+  legacy.acceptanceRegistration.witnesses[0]!.expectedState = "canonical_cmp_consent_state_changed_after_accept";
+  const result = canonicalProjection(legacy);
+  assert.equal(result.projection.productionProjectable, false);
+  assert.deepEqual(result.concerns, []);
+  assert.deepEqual(result.candidates, []);
+});
+
+test("registered contextual activation preserves canonical proof without fabricating confirmed consent or findings", () => {
+  const source = packet();
+  const result = canonicalProjection(packet({
+    artifactVersion: "certscore.post_accept_evidence.v2",
+    productionProjectable: false,
+    decisionEvidence: { policyVersion: "semantic_consent_registration.v2", decision: "unknown", basis: "unverified" },
+    captureCoverage: { requestsDroppedBeforeAction: 0, requestsDroppedAfterAction: 0 },
+    acceptanceRegistration: { status: "unconfirmed", acceptanceExercised: false, actionDispatchedAtMs: 500,
+      reason: "acceptance_registration_not_confirmed", witnesses: [] },
+    actionControlProof: {
+      ...source.actionControlProof!, contractVersion: "certscore.consent_action_control_proof.v2",
+      actionSemantics: "registered_contextual_accept", accessibleLabel: "VERSTANDEN",
+      classifierConfidence: 0.78, matchStrength: "contextual", matchedLocale: "de",
+      cmpId: "BST DSGVO Cookie notice plugin, non-TCF", recipeId: "canonical-cmp:BST DSGVO Cookie notice plugin, non-TCF:accept:v2",
+      selectorHint: ".bst-panel .bst-accept, .bst-panel .bst-accept-btn",
+      frameIdentitySha256: "a".repeat(64), authorizedTargetSha256: "c".repeat(64),
+      contextualApproval: { policyVersion: "registered_contextual_accept.v1",
+        bannerSelector: ".bst-panel", expectedNormalizedLabel: "verstanden" },
+    },
+  }));
+  assert.equal(result.projection.registrationStatus, "unconfirmed");
+  assert.equal(result.projection.productionProjectable, false);
+  assert.equal(result.projection.packetSha256, "b".repeat(64));
+  assert.ok("postAcceptEvidenceProjection" in result.runtimeArtifacts);
+  assert.ok("postAcceptBehaviorEvidence" in result.runtimeArtifacts);
+  assert.equal(result.runtimeArtifacts.postAcceptEvidenceProjection?.actionControlProof?.contextualApproval?.policyVersion,
+    "registered_contextual_accept.v1");
+  assert.equal(result.runtimeArtifacts.postAcceptBehaviorEvidence?.acceptanceInteractionConfirmed, false);
+  assert.deepEqual(result.concerns, []);
+  assert.deepEqual(result.candidates, []);
+  assert.deepEqual(result.displayPackets, []);
 });

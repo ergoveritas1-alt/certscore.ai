@@ -36,11 +36,13 @@ import {
 } from "@certscore/contracts";
 import {
   isCanonicalIdSyncEndpoint,
+  resolveCanonicalServicePurpose,
   resolveVendorDisplayCategory,
   resolveVendorObservations,
   type VendorResolverInput
 } from "@certscore/vendor-resolver";
 import { isScanNoGoSnapshotOutcome, resolveScanNoGoPresentation } from "@website-signal-risk-scanner/shared";
+import { findRuntimeRequestOwner } from "../../lib/scans/runtime-vendor-ownership";
 import {
   adaptGdprTransparencyTopicCandidatesForProduction,
   type GdprTransparencyTopicEvidenceAdapterResult
@@ -2222,6 +2224,8 @@ function buildVendorEvidence(bundle: CanonicalEvidenceBundle) {
       regulatoryRelevance: vendor.regulatoryRelevance ?? [],
       scriptHost: evidenceHost,
       vendorDisplayCategory: displayCategory,
+      servicePurpose: resolveCanonicalServicePurpose(vendor),
+      registryAttribution: vendor.registryAttribution,
       vendorCategory: category,
       vendorName
     };
@@ -2382,6 +2386,7 @@ function buildEmbeddedContentPurposeBuckets(observations: Array<{ hostname: stri
 }
 
 function isKnownEmbeddedContentUrl(url: string | null | undefined, hostnameFallback?: string | null) {
+  if (classifyEmbeddedContentPurpose(hostnameFallback, url) === "fontStaticResource") return false;
   const hostname = hostnameFromUrl(url) ?? hostnameFallback ?? null;
   if (!hostname || !EMBEDDED_CONTENT_HOST_PATTERNS.some((pattern) => pattern.test(hostname))) {
     return false;
@@ -2389,7 +2394,7 @@ function isKnownEmbeddedContentUrl(url: string | null | undefined, hostnameFallb
   return EMBEDDED_CONTENT_PATH_PATTERN.test(url ?? "") || !/(^|\.)google\.[a-z.]+$/i.test(hostname);
 }
 
-function summarizeEmbeddedContentEvidence(
+export function summarizeEmbeddedContentEvidence(
   preconsentIframeEvents: ReturnType<typeof sanitizeIframeEvents>,
   preconsentRequests: CanonicalEvidenceBundle["networkEvents"],
 ) {
@@ -2397,6 +2402,7 @@ function summarizeEmbeddedContentEvidence(
     .filter((event) => event.thirdParty && isKnownEmbeddedContentUrl(event.frameUrl, event.hostname))
     .map((event) => ({
       evidenceType: "iframe",
+      vendorName: findRuntimeRequestOwner(event.frameUrl)?.vendor ?? null,
       frameUrl: event.frameUrl,
       hostname: event.hostname,
       initiatorType: "iframe",
@@ -2414,6 +2420,7 @@ function summarizeEmbeddedContentEvidence(
     })
     .map((event) => ({
       evidenceType: "network_request",
+      vendorName: findRuntimeRequestOwner(requestUrl(event))?.vendor ?? null,
       hostname: event.hostname ?? hostnameFromUrl(requestUrl(event)),
       initiatorType: event.initiatorType ?? event.resourceType,
       pageUrlSharedViaReferrer: typeof event.requestHeaders?.referer === "string" &&
@@ -5728,7 +5735,7 @@ function buildMaterializedLocalV2Detail(
     consentSummary: {
       bannerPresent: assessedConsentSurfaceObserved,
       consentSurfaceObserved: assessedConsentSurfaceObserved,
-      firstVisibleMs: firstNumber(cmp?.observedAtMs, firstConsentSurfaceVisibleMs),
+      firstVisibleMs: consentControlAssessment.surface.firstObservedAtMs,
       cmpFrameworkSignalObserved: Boolean(cmpVendorName),
       cmpDetected: Boolean(cmpVendorName),
       cmpName: cmpVendorName,
@@ -5785,6 +5792,8 @@ function buildMaterializedLocalV2Detail(
     requestPurposeClassificationConfidence: boundedRequestPurposeRows,
     requestToVendorObservations: reportableVendorRows.map((vendor) => ({
       category: vendor.vendorCategory,
+      servicePurpose: vendor.servicePurpose,
+      registryAttribution: vendor.registryAttribution,
       hostname: vendor.scriptHost,
       observedVia: vendor.observedVia,
       preConsent: true,
@@ -5847,8 +5856,9 @@ function buildMaterializedLocalV2Detail(
         .map((event) => cookieIdentity(event))).length
     },
     timelineMarkers: {
-      firstCmpVisibleMs: cmp?.observedAtMs ?? null,
-      firstConsentSurfaceVisibleMs,
+      // CMP technology detection is not proof that a banner appeared.
+      firstCmpVisibleMs: consentControlAssessment.surface.firstObservedAtMs,
+      firstConsentSurfaceVisibleMs: consentControlAssessment.surface.firstObservedAtMs,
       firstNonEssentialRequestMs: firstPromotionGradePreconsentRequestMs(requestPurposeRows),
       firstThirdPartyRequestMs: minimumNumber(...thirdPartyRequests.map((event) => event.timestampMs)),
       firstRequestMs: minimumNumber(...networkEvents.map((event) => event.timestampMs)),
@@ -6051,6 +6061,8 @@ function buildMaterializedLocalV2Detail(
     domainVendorRegistry: reportableVendorRows.map((vendor) => ({
       endpointHostname: vendor.scriptHost,
       observedVia: vendor.observedVia,
+      servicePurpose: vendor.servicePurpose,
+      registryAttribution: vendor.registryAttribution,
       vendorDisplayCategory: vendor.vendorDisplayCategory,
       vendorCategory: vendor.vendorCategory,
       vendorName: vendor.vendorName
@@ -6382,7 +6394,7 @@ export function buildGpcResponseRuntimeProjection(
 // fully derived report detail, so retaining an older entry can cause a
 // projection repair to persist stale evidence even after the projector is
 // deployed.
-const LOCAL_V2_DAG_REPORT_MATERIALIZATION_CACHE_VERSION = "local-v2-report-materialization-v12";
+const LOCAL_V2_DAG_REPORT_MATERIALIZATION_CACHE_VERSION = "local-v2-report-materialization-v16";
 const LOCAL_V2_DAG_REPORT_MATERIALIZATION_CACHE_TTL_MS = 60 * 60 * 1_000;
 const LOCAL_V2_DAG_REPORT_MATERIALIZATION_CACHE_MAX_ENTRIES = 6;
 const localV2DagReportMaterializationCache = new BoundedPromiseCache<string, ScanDetailResponse>({

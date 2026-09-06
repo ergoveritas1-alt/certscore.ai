@@ -19,7 +19,14 @@ import {
 import { buildRuntimeInventoryProjectionFromScan } from "../scans/runtime-inventory-projection";
 import type { ScanDetailResponse } from "../../server/scans/get-scan-by-id";
 import { SCAN_NO_GO_REASON_CODES, SCAN_NO_GO_REASON_PRESENTATIONS } from "@website-signal-risk-scanner/shared";
-import { apiV2PreConsentCookiesTrackersSchema } from "@certscore/api-contracts";
+import { apiV2GpcResponseSchema, apiV2PreConsentCookiesTrackersSchema } from "@certscore/api-contracts";
+import { gpcRuntimeFixture } from "../../../../packages/certscore-contracts/src/test-fixtures/gpc-runtime";
+import servicePurposeFixtures from "../../../../packages/certscore-contracts/src/test-fixtures/vendor-service-purpose-v1.json";
+import { resolveCanonicalVendorLabel } from "@certscore/vendor-resolver";
+import { buildGpcResponseAssessment } from "../../../../packages/certscore-scan-core/src/gpc-response-assessment";
+import { buildNormalizedConcerns } from "../scans/normalized-concerns";
+import { buildUnifiedFindingDisplayPackets } from "../scans/unified-findings";
+import { buildGpcResponseReportProjection } from "../../components/scans/report-lab/gpc-report-projection";
 import type { CanonicalEvidenceBundle } from "@certscore/contracts";
 import { RuntimeEvidenceGraphBuilder } from "../../../../packages/certscore-scan-core/src/runtime-evidence-graph";
 import { projectRuntimeEvidenceGraphs, applyRuntimeGraphPresentationSwitch } from "../../server/scans/runtime-evidence-graph-projection";
@@ -28,6 +35,7 @@ const require = createRequire(import.meta.url);
 const serverOnlyPath = require.resolve("server-only");
 (require.cache as Record<string, unknown>)[serverOnlyPath] = { exports: {}, loaded: true };
 const { externalizeRuntimeGraphForPersistence, hydrateRuntimeGraphForRead } = require("../../server/scans/runtime-evidence-graph-storage") as typeof import("../../server/scans/runtime-evidence-graph-storage");
+const { buildGpcResponseRuntimeProjection } = require("../../server/scans/local-v2-dag-report") as typeof import("../../server/scans/local-v2-dag-report");
 
 function fixture(overrides: Partial<ScanDetailResponse["scan"]> = {}) {
   return {
@@ -323,6 +331,62 @@ test("API v2 resource and status surface the canonical GPC response without priv
   assert.doesNotMatch(JSON.stringify(resource.gpcResponse), /s3:\/\//);
   assert.deepEqual(status.gpcResponse, resource.gpcResponse);
 });
+
+for (const outcome of ["no_observable_response", "responsive", "indeterminate"] as const) {
+  test(`GPC v2 ${outcome} survives canonical concern/policy, persistence, report and API boundaries`, () => {
+    const vendors = Array.from({ length: 150 }, (_, i) => ({ name: `Ad ${i}` }));
+    const baseline = gpcRuntimeFixture({ enabled: false, vendors });
+    const gpc = gpcRuntimeFixture({ enabled: true, vendors: outcome === "responsive" ? [] : vendors });
+    const assessment = buildGpcResponseAssessment({ baseline,
+      baselineArtifact: { sha256: "a".repeat(64), sizeBytes: 100, uri: "s3://private/baseline.json" },
+      ...(outcome === "indeterminate" ? { failureReason: "gpc_worker_failed" as const } : {
+        gpc, gpcArtifact: { sha256: "b".repeat(64), sizeBytes: 100, uri: "s3://private/gpc.json" },
+      }),
+    });
+    const runtimeArtifacts = buildGpcResponseRuntimeProjection({ gpcResponseAssessment: assessment });
+    const input = { reviewFindingCandidates: [], runtimeArtifacts, validationFindings: [] };
+    const concerns = buildNormalizedConcerns(input);
+    const findings = buildUnifiedFindingDisplayPackets({ ...input, validationFindingLookup: new Map() });
+    const finding = findings.find((row) => row.unifiedFindingId === "gpc_response");
+    assert.ok(finding, "canonical flow must produce the typed GPC result");
+    assert.equal(concerns.length, 1);
+    const expectedDeduction = outcome === "no_observable_response" ? 15 : 0;
+    const report = buildGpcResponseReportProjection(findings);
+    assert.deepEqual(report?.assessment, assessment);
+    assert.equal(report?.californiaDeductionPoints, expectedDeduction);
+    const record = gpcCanonicalFixture() as ScanDetailResponse & { canonicalReportProjection: Record<string, unknown> };
+    record.runtimeArtifacts = runtimeArtifacts;
+    record.canonicalReportProjection = { ...record.canonicalReportProjection!, normalizedConcerns: concerns,
+      globalUnifiedFindings: findings, ownerUnifiedFindings: findings };
+    const persisted = buildPersistedScanReportProjection(record);
+    const snapshot = { report_projection_payload: JSON.parse(persisted.serialized), report_projection_payload_sha256: persisted.sha256,
+      report_projection_payload_size_bytes: persisted.sizeBytes, report_projection_status: "ready", report_projection_version: SCAN_REPORT_PROJECTION_VERSION,
+      report_projection_computed_at: new Date().toISOString() };
+    const hydrated = readPersistedScanReportProjection({ scan: record.scan, snapshot });
+    assert.ok(hydrated);
+    const publicRecord = { ...record, ...hydrated, scan: record.scan };
+    const resource = buildApiV2ScanResource(publicRecord);
+    const status = buildApiV2ScanStatus(publicRecord, { canonicalScan: resource });
+    const response = apiV2GpcResponseSchema.parse(resource.gpcResponse);
+    assert.equal(response.contractVersion, "certscore.gpc-response-assessment.v2");
+    assert.equal(response.status, outcome);
+    assert.equal(response.californiaPolicy.deductionPoints, expectedDeduction);
+    assert.deepEqual(response, status.gpcResponse);
+    assert.doesNotMatch(JSON.stringify(response), /s3:\/\/|documentUrlSha256|contextConfigSha256/);
+    if (outcome === "no_observable_response") {
+      assert.equal(response.comparison.deltas.trackers.sharedCount, 150);
+      assert.equal(response.comparison.deltas.trackers.shared.length, 100);
+      assert.equal(apiV2GpcResponseSchema.safeParse({ ...response, comparison: { ...response.comparison,
+        deltas: { ...response.comparison.deltas, trackers: { ...response.comparison.deltas.trackers, sharedCount: 99 } } } }).success, false);
+    }
+    if (outcome === "indeterminate") {
+      assert.equal(response.comparison.gpcArtifact, null);
+      assert.equal(response.comparison.enabledProof.navigatorGlobalPrivacyControl, null);
+      assert.equal(response.comparison.delivery?.status, "unavailable");
+    }
+    assert.equal(readPersistedScanReportProjection({ scan: record.scan, snapshot: { ...snapshot, report_projection_payload_sha256: "0".repeat(64) } }), null);
+  });
+}
 
 test("API v2 and status expose joined canonical post-refusal observation metadata", () => {
   const retained = {
@@ -1384,6 +1448,41 @@ test("buildApiV2FindingDetail uses unknown enums conservatively", () => {
   assert.equal(detail.detail?.caveats?.[0], "Coverage was limited; absence of findings should not be interpreted as absence of risk.");
 });
 
+test("API and report use canonical service purposes for legacy requests without changing score or API resource scope", () => {
+  const baseline = fixture();
+  const record = {
+    ...baseline,
+    trackerVendors: servicePurposeFixtures.map(({ url, observation }) => ({
+      vendorName: observation.product, vendorCategory: observation.purpose,
+      vendorDisplayCategory: resolveCanonicalVendorLabel(observation.product)!.displayCategory,
+      regulatoryRelevance: resolveCanonicalVendorLabel(observation.product)!.regulatoryRelevance,
+      detectionSource: "retained_canonical_vendor", confidence: observation.confidence,
+      firstPartyOrThirdParty: "third_party", collectionEndpointType: "direct_third_party",
+      beforeConsent: true, scriptHost: new URL(url).hostname, matchedSignatureId: observation.observationId,
+      matchedUrls: [url],
+      firstSeenMs: 9330, requestCount: 1, observedVia: ["request"],
+    })),
+    runtimeArtifacts: { hybridRuntimeEvidence: { iframeSummary: { iframeEvents:
+      servicePurposeFixtures.filter(row => row.resourceTypes.includes("iframe")).map(({ url }) => ({
+        frameUrl: url, timestampMs: 10875, preConsent: true,
+      })),
+    } } },
+  };
+  const projection = buildRuntimeInventoryProjectionFromScan(record);
+  const api = buildApiV2PreConsentCookiesTrackers(record);
+  for (const { observation } of servicePurposeFixtures) {
+    const rows = projection.groupedRows.filter(row => row.rawProducts.includes(observation.product));
+    assert.ok(rows.length > 0, observation.product);
+    assert.ok(rows.every(row => row.purpose === observation.servicePurpose));
+    assert.equal(api.rows.find(row => row.products?.includes(observation.product))?.purpose, observation.servicePurpose);
+  }
+  assert.equal(api.rows.length, 4, "this versioned API remains cookies/trackers-only");
+  assert.equal(projection.embedRows.length, 2);
+  assert.equal(buildApiV2ScanResource(record).score, buildApiV2ScanResource(baseline).score);
+  assert.deepEqual(record.signals, baseline.signals);
+  assert.deepEqual(record.validationFindings, baseline.validationFindings);
+});
+
 test("buildApiV2PreConsentCookiesTrackers matches the shared public report table projection", () => {
   const scanRecord = retainedPreConsentInventoryFixture();
   const projection = buildRuntimeInventoryProjectionFromScan(scanRecord);
@@ -1429,7 +1528,8 @@ test("buildApiV2PreConsentCookiesTrackers matches the shared public report table
   assert.equal(metaCookie?.essentialitySource, "canonical_registry");
   assert.deepEqual(metaCookie?.initiatorChain, ["https://connect.facebook.net/fbevents.js"]);
   assert.deepEqual(metaRow?.dataFlows, []);
-  assert.deepEqual(metaRow?.requestDetails?.[0], {
+  assert.deepEqual(metaRow?.requestDetails, [], "A same-vendor request on another domain is not evidence for this first-party cookie");
+  assert.deepEqual(projection.requestRows[0], {
     cookieNamesSent: ["_fbp"],
     essentiality: "non_essential",
     hostname: "connect.facebook.net",

@@ -148,16 +148,17 @@ function makeConsentOptionsAssessment(input: {
       status: "observed_actionable",
       evidenceRefs: ["CanonicalEvidenceBundle.json"]
     },
+    visualEvidence: {
+      status: input.representativeScreenshotUnavailable ? "withheld" : "available",
+      artifactRefs: [],
+      reasonCodes: input.representativeScreenshotUnavailable ? ["finalization_deadline_exceeded"] : [],
+    },
     coverage: {
-      status: input.representativeScreenshotUnavailable ? "limited" : "complete",
-      requiredChannels: input.representativeScreenshotUnavailable
-        ? ["dom_inventory", "geometry", "screenshot"]
-        : ["dom_inventory", "geometry"],
+      status: "complete",
+      requiredChannels: ["dom_inventory", "geometry"],
       completedChannels: ["dom_inventory", "geometry"],
-      incompleteChannels: input.representativeScreenshotUnavailable ? ["screenshot"] : [],
-      reasonCodes: input.representativeScreenshotUnavailable
-        ? ["representative_consent_screenshot_unavailable"]
-        : []
+      incompleteChannels: [],
+      reasonCodes: []
     }
   });
 }
@@ -280,7 +281,7 @@ test("normalizes consent options prominence before concern policy assigns checkl
   }
 });
 
-test("does not promote options prominence from audit evidence when the consent assessment is limited", () => {
+test("withheld visual evidence does not suppress verified structured options prominence", () => {
   const assessment = makeConsentOptionsAssessment({
     firstLayer: [{
       actionType: "manage_preferences",
@@ -291,8 +292,9 @@ test("does not promote options prominence from audit evidence when the consent a
     }],
     representativeScreenshotUnavailable: true
   });
-  assert.equal(assessment.assessmentStatus, "limited");
-  assert.equal(assessment.controls.options.state, "unknown");
+  assert.equal(assessment.assessmentStatus, "complete");
+  assert.equal(assessment.controls.options.state, "observed");
+  assert.equal(assessment.visualEvidence?.status, "withheld");
 
   const concerns = buildNormalizedConcerns({
     reviewFindingCandidates: [],
@@ -304,14 +306,12 @@ test("does not promote options prominence from audit evidence when the consent a
   );
 
   assert.ok(concern);
-  assert.equal(concern.observedValue, "insufficient_retained_evidence");
+  assert.equal(concern.observedValue, "inline_link_action_cluster");
   assert.equal(
     concern.evidenceBundle.rawEvidence?.consentOptionsControlProminenceState,
-    "insufficient_retained_evidence"
+    "inline_link_action_cluster"
   );
-  assert.equal(concern.regulatoryChecklistEligibility, "none");
-  assert.equal(concern.promotionEligibility, "internal_only");
-  assert.equal(concern.externalSurfacingEligibility, "audit_only");
+  assert.equal(concern.evidenceBundle.rawEvidence?.consentControlAssessmentContractVersion, "2.1");
 });
 
 test("normalizes a retained paid decline variant as an externally eligible review finding", () => {

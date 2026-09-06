@@ -1,4 +1,8 @@
 import { z } from "zod";
+import { vendorServicePurposeSchema } from "./vendor-service-purpose";
+import { vendorRegistryAttributionSchema } from "./vendor-registry-attribution";
+export * from "./vendor-registry-attribution";
+export { vendorServicePurposeSchema, type VendorServicePurpose } from "./vendor-service-purpose";
 import { runtimeEvidenceGraphSchema, runtimeGraphVerificationDiagnosticSchema, withRuntimeGraphCompatibility, RUNTIME_EVIDENCE_GRAPH_LIMITS, type RuntimeEvidenceGraph, type RuntimeGraphVerificationDiagnostic } from "./runtime-evidence-graph";
 const canonicalRuntimeEvidenceGraphSchema: z.ZodType<RuntimeEvidenceGraph> = runtimeEvidenceGraphSchema;
 export * from "./runtime-evidence-graph";
@@ -22,6 +26,7 @@ const canonicalPostRefusalPacketSchema: z.ZodType<PostRefusalEvidencePacket, z.Z
 const canonicalPostAcceptPacketSchema: z.ZodType<PostAcceptEvidencePacket, z.ZodTypeDef, PostAcceptEvidencePacketInput> = postAcceptEvidencePacketSchema;
 import {
   gpcResponseAssessmentSchema,
+  gpcSignalObservationSchema,
   type GpcResponseAssessment,
 } from "./gpc-observation";
 export * from "./consent-control-label-classifier";
@@ -579,6 +584,10 @@ export const consentUiObservationSchema = z.object({
   // controls from the document on which they were actually observed.
   documentUrl: z.string().max(500).optional(),
   documentIdentity: browserDocumentIdentitySchema.optional(),
+  // Taken atomically with the DOM inventory, never inferred from a screenshot.
+  // Loading documents cannot establish absence; visible positive evidence is
+  // still eligible through the existing structured geometry proof.
+  documentReadyState: z.enum(["loading", "interactive", "complete"]).optional(),
   // Explicitly distinguishes a completed negative from an incomplete capture.
   // Older bundles may omit these fields and continue using basis/timing data.
   captureStatus: z.enum(["observed", "no_evidence", "incomplete"]).optional(),
@@ -2203,6 +2212,10 @@ export const normalizedVendorObservationSchema = z.object({
     "customer_support",
     "unknown",
   ]),
+  // Optional only for retained bundles written before service-purpose v1.
+  servicePurpose: vendorServicePurposeSchema.optional(),
+  // Absent on legacy evidence; never synthesize a historical registry version.
+  registryAttribution: vendorRegistryAttributionSchema.optional(),
   confidence: confidenceSchema,
   basis: z.array(z.string()),
   regulatoryRelevance: z.array(z.string()).default([]),
@@ -2640,6 +2653,14 @@ function consentPacketDocumentIdentity(value: string | null | undefined): string
 }
 
 type ConsentEvidenceBindingContext = {
+  // Assessment 2.1 may bind the retained inventory to structured geometry
+  // independently of screenshot display/retention. Legacy callers keep their
+  // existing screenshot-bound behavior unless they supply this typed binding.
+  structuredGeometry?: {
+    complete: boolean;
+    documentIdentity?: z.infer<typeof browserDocumentIdentitySchema>;
+    url: string;
+  };
   expectedDocumentIdentity?: z.infer<typeof browserDocumentIdentitySchema>;
   expectedDocumentUrl?: string | null;
   representativeScreenshots?: Array<{
@@ -2666,6 +2687,16 @@ function consentObservationMatchesBindingContext(
     return false;
   }
   if (!tokenBoundToExpectedDocument && expectedDocument && observationDocument !== expectedDocument) return false;
+  if (context?.structuredGeometry) {
+    const geometry = context.structuredGeometry;
+    const geometryToken = geometry.documentIdentity?.token;
+    if (!geometry.complete) return false;
+    if (observationDocumentToken || geometryToken) {
+      if (!observationDocumentToken || observationDocumentToken !== geometryToken) return false;
+    } else if (!observationDocument || consentPacketDocumentIdentity(geometry.url) !== observationDocument) {
+      return false;
+    }
+  }
   if (context?.representativeScreenshots) {
     const screenshotBoundToObservation = context.representativeScreenshots.some((screenshot) =>
       observationDocumentToken || screenshot.documentIdentity?.token
@@ -2693,8 +2724,9 @@ export function isVerifiedTerminalConsentPacket(
   context?: ConsentEvidenceBindingContext,
 ): boolean {
   const completedChannels = observation.captureDiagnostics?.completedChannels ?? [];
-  const timedOutChannels = observation.captureDiagnostics?.timedOutChannels ?? [];
-  const failedChannels = observation.captureDiagnostics?.failedChannels ?? [];
+  const isRequiredChannel = (channel: string) => channel !== "screenshot" || !context?.structuredGeometry;
+  const timedOutChannels = (observation.captureDiagnostics?.timedOutChannels ?? []).filter(isRequiredChannel);
+  const failedChannels = (observation.captureDiagnostics?.failedChannels ?? []).filter(isRequiredChannel);
   const controls = observation.controls ?? [];
   const terminalBasis = (observation.basis ?? []).some((basis) =>
     basis === "recovery:independent_consent_capture_completed" ||
@@ -2702,7 +2734,8 @@ export function isVerifiedTerminalConsentPacket(
   );
   const coherentInventory =
     observation.inventoryOutcome === "complete_empty"
-      ? observation.captureStatus === "no_evidence" &&
+      ? observation.documentReadyState !== "loading" &&
+        observation.captureStatus === "no_evidence" &&
         observation.likelyPresent === false &&
         controls.length === 0
       : observation.inventoryOutcome === "complete_with_controls" &&
@@ -2720,7 +2753,8 @@ export function isVerifiedTerminalConsentPacket(
     (observation.inventoryDiagnostics?.blockingInaccessibleFrameCount ?? 0) > 0 ||
     (
       observation.boundedSameSessionRecoveryOutcome !== undefined &&
-      observation.boundedSameSessionRecoveryOutcome !== "completed"
+      observation.boundedSameSessionRecoveryOutcome !== "completed" &&
+      !(context?.structuredGeometry && observation.boundedSameSessionRecoveryOutcome === "screenshot_failed")
     )
   ) {
     return false;
@@ -2741,12 +2775,13 @@ export function isVerifiedStablePartialConsentInventory(
   context?: ConsentEvidenceBindingContext,
 ): boolean {
   const completedChannels = observation.captureDiagnostics?.completedChannels ?? [];
+  const isRequiredChannel = (channel: string) => channel !== "screenshot" || !context?.structuredGeometry;
   const representativeEvidenceProvided = Boolean(
-    context?.representativeScreenshots || context?.representativeScreenshotUrls
+    context?.structuredGeometry || context?.representativeScreenshots || context?.representativeScreenshotUrls
   );
   const representativeEvidenceCount =
     (context?.representativeScreenshots?.length ?? 0) +
-    (context?.representativeScreenshotUrls?.length ?? 0);
+    (context?.representativeScreenshotUrls?.length ?? 0) + (context?.structuredGeometry ? 1 : 0);
   return (
     hasAdaptivePartialExitMarker(observation) &&
     observation.inventoryOutcome === "complete_with_controls" &&
@@ -2756,8 +2791,8 @@ export function isVerifiedStablePartialConsentInventory(
     observation.controls.some((control) => control.visible !== false) &&
     completedChannels.includes("dom_inventory") &&
     completedChannels.includes("geometry") &&
-    (observation.captureDiagnostics?.timedOutChannels.length ?? 0) === 0 &&
-    (observation.captureDiagnostics?.failedChannels.length ?? 0) === 0 &&
+    !(observation.captureDiagnostics?.timedOutChannels ?? []).some(isRequiredChannel) &&
+    !(observation.captureDiagnostics?.failedChannels ?? []).some(isRequiredChannel) &&
     (observation.inventoryDiagnostics?.blockingInaccessibleFrameCount ?? 0) === 0 &&
     observation.basis.includes("settled_control_inventory_completed") &&
     observation.basis.includes("inventory:paired_settled_frame_completed") &&
@@ -2813,6 +2848,7 @@ function hasVerifiedNegativeConsentCapture(
 ): boolean {
   return observations.some((observation) =>
     observation.inventoryOutcome === "complete_empty" &&
+    observation.documentReadyState !== "loading" &&
     observation.captureStatus === "no_evidence" &&
     observation.likelyPresent === false &&
     observation.layerInspected === "first_layer" &&
@@ -3062,6 +3098,9 @@ export function deriveConsentSurfaceInspectionOutcome(input: {
     (input.domSnapshots ?? []).some((artifact) => artifact.consentStateAtTime === "pre_consent");
   const inspectionLimitationKeys = [
     ...materialLimitationKeys,
+    !consentSurfaceObserved && latestObservation?.documentReadyState === "loading"
+      ? "consent_surface_inspection_document_still_loading"
+      : null,
     !preConsentRun ? "consent_surface_inspection_runtime_not_run" : null,
     preConsentRun && preConsentRun.status !== "completed" && !consentLaneCompleted
       ? `consent_surface_inspection_runtime_${preConsentRun.status}`
@@ -3242,6 +3281,7 @@ const canonicalEvidenceBundleBaseSchema = z.object({
   postRefusalEvidence: canonicalPostRefusalPacketSchema.optional(),
   postRefusalLaneOutcome: postRefusalLaneOutcomeSchema.optional(),
   gpcResponseAssessment: canonicalBundleGpcResponseAssessmentSchema.optional(),
+  gpcSignalObservation: gpcSignalObservationSchema.optional(),
   runtimeTimeline: z.array(runtimeEvidenceEventSchema),
   networkEvents: z.array(networkEventSchema),
   networkResponseEvents: z.array(networkResponseEventSchema).default([]),
@@ -3530,3 +3570,6 @@ export type RegulatoryReviewArea = z.infer<typeof regulatoryReviewAreaSchema>;
 export type RegulatoryReviewOutput = z.infer<typeof regulatoryReviewOutputSchema>;
 
 export const SCHEMA_VERSION = "certscore.v2.alpha.1";
+export * from "./consent-action-evidence-policy";
+export * from "./consent-state-decision";
+export * from "./after-action-capture";
