@@ -40,9 +40,10 @@ const initialFilters: Filters = {
   page: "",
   status: "",
   additional: "",
-  sort: "pages",
+  sort: "priority",
   pageSort: "url",
 };
+const sortKeys: Record<string, string> = { Priority: "priority", Vendor: "vendor", Name: "label", Purpose: "purpose", "First seen": "time", Page: "page" };
 const units = {
   cookie: "Cookies / storage",
   request: "Requests",
@@ -467,10 +468,10 @@ export function FullSiteWorkspace({
                     <thead className="sticky top-0 z-10 h-10 bg-zinc-50 text-[10px] uppercase tracking-wider text-zinc-500">
                       <tr>
                         {[
-                          "Priority", "Type", "Vendor", "Name", "Purpose", "First seen", "Domains", "Relationship", "Page",
+                          "Priority", "Type", "Vendor", "Name", "Purpose", "First seen", "Page", "Domains", "Relationship",
                         ].map((h) => (
-                          <th className="h-10 whitespace-nowrap border-b px-3 first:pl-0" key={h}>
-                            {h}
+                          <th className="h-10 whitespace-nowrap border-b px-3 first:pl-0" key={h} aria-sort={sortKeys[h] && filters.sort.replace(/_desc$/, "") === sortKeys[h] ? filters.sort.endsWith("_desc") ? "descending" : "ascending" : undefined}>
+                            {sortKeys[h] ? <button className="flex items-center gap-1 uppercase tracking-wider hover:text-sky-700" onClick={() => { setFilters(current => ({ ...current, sort: current.sort === sortKeys[h] ? `${sortKeys[h]}_desc` : sortKeys[h]! })); setOffset(0); }}>{h}<span aria-hidden="true">{filters.sort === sortKeys[h] ? "↑" : filters.sort === `${sortKeys[h]}_desc` ? "↓" : "↕"}</span></button> : h}
                           </th>
                         ))}
                       </tr>
@@ -478,7 +479,7 @@ export function FullSiteWorkspace({
                     <tbody>
                       {data?.resources.rows.map((row) => (
                         <CrawlResourceScope key={row.key} homepage={data.pages.rows.find(page => page.id === row.pageIds[0])?.source === "homepage"}>
-                        <InventoryResourceRow inspect relationships={Boolean(homepageGraph && data.pages.rows.find(page => page.id === row.pageIds[0])?.source === "homepage")} identity={{cookieRefs: [], nodeRefs: row.occurrence.evidenceRefs, requests: row.occurrence.kind === "request" ? (() => { try {const url = new URL(row.occurrence.label);return [{hostname: url.hostname, path: url.pathname, method: typeof row.occurrence.details.method === "string" ? row.occurrence.details.method : null}];} catch {return [];}})() : []}} facts={{ name: row.occurrence.label, type: row.occurrence.kind, vendor: row.occurrence.vendor, domains: row.occurrence.domain ? [row.occurrence.domain] : [], purpose: row.purposes.join(", "), evidence: row.inventoryEvidence, confidence: row.confidences.join(", "), pages: row.pageIds.map(pageName), firstSeenMs: row.occurrence.firstSeenMs, relationship: row.relationships.join(", "), eventCount: row.eventCount }} evidence={{ ...row.occurrence.details, evidenceRefs: row.occurrence.evidenceRefs, resourceIdentity: row.occurrence.identity }}>
+                        <InventoryResourceRow inspect positiveRelationshipsOnly relationships={Boolean(homepageGraph && data.pages.rows.find(page => page.id === row.pageIds[0])?.source === "homepage")} identity={{cookieRefs: [], nodeRefs: row.occurrence.evidenceRefs, requests: row.occurrence.kind === "request" ? (() => { try {const url = new URL(row.occurrence.label);return [{hostname: url.hostname, path: url.pathname, method: typeof row.occurrence.details.method === "string" ? row.occurrence.details.method : null}];} catch {return [];}})() : []}} facts={{ name: row.occurrence.label, type: row.occurrence.kind, vendor: row.occurrence.vendor, domains: row.occurrence.domain ? [row.occurrence.domain] : [], purpose: row.purposes.join(", "), evidence: row.inventoryEvidence, confidence: row.confidences.join(", "), pages: row.pageIds.map(pageName), firstSeenMs: row.occurrence.firstSeenMs, relationship: row.relationships.join(", "), eventCount: row.eventCount }} evidence={{ ...row.occurrence.details, evidenceRefs: row.occurrence.evidenceRefs, resourceIdentity: row.occurrence.identity }}>
                         <tr className="h-14 border-b border-zinc-100" key={row.key}>
                           <td className="h-14 pr-3"><button title={row.inventoryEvidence} aria-label={`${row.inventoryEvidence}: inspect ${row.occurrence.label}`} className={`text-lg ${evidenceStyle(row.inventoryEvidence)}`} onClick={() => openResource(row.key)}>{evidenceSymbol(row.inventoryEvidence)}</button></td>
                           <td className="px-3"><span className="text-sky-700" title={row.occurrence.kind}>{row.occurrence.kind === "request" ? "⇄" : row.occurrence.kind === "embed" ? "‹›" : row.occurrence.kind === "cookie" ? "◉" : "▤"}</span><span className="sr-only">{row.occurrence.kind}</span></td>
@@ -486,9 +487,10 @@ export function FullSiteWorkspace({
                           <td className="px-3"><button className="block max-w-56 truncate text-left text-sky-800 hover:underline" title={row.occurrence.label} onClick={() => openResource(row.key)}>{row.occurrence.label}</button></td>
                           <td className="px-3"><span className="inline-flex max-w-40"><InventoryPurposeChip purpose={row.purposes.join(", ").replaceAll("_", " ")} /></span></td>
                           <td className="whitespace-nowrap px-3" title="From the start of the retained page observation">{duration(row.occurrence.firstSeenMs)}</td>
+                          <td className="px-3"><button className="whitespace-nowrap text-left text-sky-800 hover:underline" title={row.pageIds.map(pageName).join("\n")} onClick={() => openResource(row.key)}>{shortPage(pageName(row.pageIds[0] ?? ""))}{row.pageIds.length > 1 ? <span className="ml-2 text-zinc-500">+{row.pageIds.length - 1}</span> : null}</button></td>
                           <td className="px-3"><span className="block max-w-44 truncate font-mono" title={row.occurrence.domain ?? undefined}>{row.occurrence.domain ?? "Unknown"}</span></td>
                           <td className="whitespace-nowrap px-3 capitalize">{row.relationships.join(", ").replaceAll("_", " ")}</td>
-                          <td className="px-3"><button className="whitespace-nowrap text-left text-sky-800 hover:underline" title={row.pageIds.map(pageName).join("\n")} onClick={() => openResource(row.key)}>{shortPage(pageName(row.pageIds[0] ?? ""))}{row.pageIds.length > 1 ? <span className="ml-2 text-zinc-500">+{row.pageIds.length - 1}</span> : null}</button></td>
+
                         </tr>
                         </InventoryResourceRow>
                         </CrawlResourceScope>

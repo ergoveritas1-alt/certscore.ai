@@ -16,7 +16,7 @@ function Mix({ title, rows }: { title: string; rows: Array<{ label: string; coun
   });
   return <section className="min-w-0 py-4 pr-4">
     <h3 className="text-xs font-semibold uppercase tracking-wide text-zinc-500">{title}</h3>
-    <div className="mt-4 flex items-center gap-4">
+    <div className="mt-4 flex items-start gap-4">
       <div aria-hidden="true" className="flex h-20 w-20 shrink-0 items-center justify-center rounded-full" style={{ background: total ? `conic-gradient(${stops.join(",")})` : "#e4e4e7" }}>
         <span className="flex h-14 w-14 items-center justify-center rounded-full bg-white text-lg font-semibold tabular-nums">{total}</span>
       </div>

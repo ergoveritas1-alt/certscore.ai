@@ -124,14 +124,29 @@ export async function loadFullSiteReport(
           ...pages.filter((p) => row.pageIds.includes(p.id)).map((p) => p.url),
         ].some((v) => v?.toLowerCase().includes(q))),
   );
-  if (params.get("sort") === "label")
-    resources = resources.sort((a, b) =>
-      a.occurrence.label.localeCompare(b.occurrence.label),
-    );
-  if (params.get("sort") === "events")
-    resources = resources.sort(
-      (a, b) => b.eventCount - a.eventCount || a.key.localeCompare(b.key),
-    );
+  const sort = params.get("sort") ?? "priority";
+  const field = sort.replace(/_desc$/, "");
+  const direction = sort.endsWith("_desc") ? -1 : 1;
+  const priorityRank: Record<string, number> = { "Non-essential": 0, Review: 1, Contextual: 2, Essential: 3 };
+  const sortValue = (row: (typeof resources)[number]): string | number | null => {
+    switch (field) {
+      case "priority": return priorityRank[inventoryClassification(row)] ?? 4;
+      case "vendor": return row.occurrence.vendor ?? row.occurrence.domain;
+      case "label": return row.occurrence.label;
+      case "purpose": return row.purposes.join(", ");
+      case "time": return row.occurrence.firstSeenMs;
+      case "page": return pages.find(page => page.id === row.pageIds[0])?.url ?? null;
+      case "events": return -row.eventCount;
+      default: return -row.pageIds.length;
+    }
+  };
+  // Sort the complete result before slicing, with stable ties across scroll batches.
+  resources.sort((a, b) => {
+    const left = sortValue(a), right = sortValue(b);
+    if (left === null || right === null) return left === right ? a.key.localeCompare(b.key) : left === null ? 1 : -1;
+    const comparison = typeof left === "number" && typeof right === "number" ? left - right : String(left).localeCompare(String(right));
+    return direction * comparison || a.key.localeCompare(b.key);
+  });
   const offset = Math.max(
       0,
       Math.min(100000, Number.parseInt(params.get("offset") ?? "0", 10) || 0),
