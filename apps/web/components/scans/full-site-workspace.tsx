@@ -26,7 +26,7 @@ type Filters = {
   pageSort: string;
 };
 const initialFilters: Filters = {
-  kind: "cookie",
+  kind: "all",
   q: "",
   purpose: "",
   relationship: "",
@@ -179,6 +179,9 @@ export function FullSiteWorkspace({
     !state ||
     ["waiting_homepage", "running"].includes(state.status) ||
     (counts?.active ?? 0) > 0;
+  const shortPage = (url: string) => url.length > 30 ? `${url.slice(0, 29)}…` : url;
+  const evidenceSymbol = (label: string) => ({ "Non-essential": "△", Essential: "◇", Review: "♢", Contextual: "ⓘ" }[label] ?? "ⓘ");
+  const evidenceStyle = (label: string) => ({ "Non-essential": "text-rose-500", Essential: "text-blue-500", Review: "text-amber-500", Contextual: "text-sky-500" }[label] ?? "text-zinc-500");
   const activeFilters = Object.entries(filters).filter(
     ([key, value]) => value && !["kind", "sort", "pageSort"].includes(key),
   );
@@ -335,8 +338,7 @@ export function FullSiteWorkspace({
                       setFilters({ ...initialFilters, status: "observed" }))
                     : filter(
                         {
-                          kind:
-                            kind === "additional" ? "service" : String(kind),
+                          kind: "all",
                           additional: kind === "additional" ? "true" : "",
                         },
                         true,
@@ -355,7 +357,7 @@ export function FullSiteWorkspace({
         aria-label="Scan report workspace"
         className="my-3 flex flex-wrap gap-2"
       >
-        {(["homepage", "resources", "pages"] as const).map((value) => (
+        {(["resources", "homepage"] as const).map((value) => (
           <button
             key={value}
             className={`${button} ${tab === value ? "!border-zinc-900 !bg-zinc-900 !text-white" : ""}`}
@@ -367,9 +369,7 @@ export function FullSiteWorkspace({
           >
             {value === "homepage"
               ? "Homepage"
-              : value === "pages"
-                ? "Pages"
-                : "Full site report"}
+              : "Full site report"}
           </button>
         ))}
       </nav>
@@ -381,31 +381,8 @@ export function FullSiteWorkspace({
           <p className="mb-2 text-xs text-zinc-600">{tab === "resources" ? "Inventory combines resources across all scanned pages." : "Pages shows the resources and coverage retained for each URL."} Additional pages receive inventory checks only; scores and findings belong to the homepage.</p>
           {data && tab === "resources" ? <SitewideInventorySummary mix={data.inventoryMix} /> : null}
           <section className="min-w-0 border-y border-zinc-200 bg-white py-4">
-            <div className="mb-4 flex flex-wrap gap-2">
-              {tab === "resources" ? (
-                Object.entries(units).map(([kind, label]) => (
-                  <button
-                    className={`${button} ${filters.kind === kind ? "!border-sky-600 bg-sky-50" : ""}`}
-                    aria-pressed={filters.kind === kind}
-                    key={kind}
-                    onClick={() =>
-                      filter({
-                        kind,
-                        purpose: "",
-                        resourceType: "",
-                        persistence: "",
-                      })
-                    }
-                  >
-                    {label}
-                  </button>
-                ))
-              ) : (
-                <h3 className="text-lg font-semibold">
-                  Page observations and coverage
-                </h3>
-              )}
-            </div>
+            <h2 className="mb-3 text-xl font-semibold">{tab === "pages" ? "Page observations and coverage" : "Resource details"}</h2>
+            {tab === "resources" ? <div className="mb-4 flex flex-wrap gap-5 text-xs text-zinc-600">{["Non-essential", "Essential", "Review", "Contextual"].map(label => <span key={label} className="flex items-center gap-2"><span className={evidenceStyle(label)} aria-hidden="true">{evidenceSymbol(label)}</span>{label}</span>)}</div> : null}
             {activeFilters.length ? <button className="mb-2 text-xs text-sky-800 underline" onClick={() => { setFilters(initialFilters); setOffset(0); }}>Show all {units[filters.kind as keyof typeof units]?.toLowerCase()}</button> : null}
             <div className="max-h-[488px] overflow-auto" tabIndex={0} aria-label={tab === "pages" ? "Scrollable page observations" : "Scrollable resources"}
               onScroll={event => {
@@ -420,7 +397,7 @@ export function FullSiteWorkspace({
                 </caption>
                 {tab === "pages" ? (
                   <>
-                    <thead className="sticky top-0 z-10 bg-zinc-50">
+                    <thead className="sticky top-0 z-10 h-10 bg-zinc-50 text-[10px] uppercase tracking-wider text-zinc-500">
                       <tr>
                         {[
                           "Page",
@@ -478,17 +455,12 @@ export function FullSiteWorkspace({
                   </>
                 ) : (
                   <>
-                    <thead className="sticky top-0 z-10 bg-zinc-50">
+                    <thead className="sticky top-0 z-10 h-10 bg-zinc-50 text-[10px] uppercase tracking-wider text-zinc-500">
                       <tr>
                         {[
-                          "Resource / vendor",
-                          "Type / purpose",
-                          "Evidence",
-                          "Observed pages",
-                          "Counting unit",
-                          "Homepage",
+                          "Priority", "Type", "Vendor", "Name", "Purpose", "First seen", "Domains", "Relationship", "Page",
                         ].map((h) => (
-                          <th className="border-b p-3 first:pl-0" key={h}>
+                          <th className="h-10 whitespace-nowrap border-b px-3 first:pl-0" key={h}>
                             {h}
                           </th>
                         ))}
@@ -497,49 +469,15 @@ export function FullSiteWorkspace({
                     <tbody>
                       {data?.resources.rows.map((row) => (
                         <tr className="h-14 border-b border-zinc-100" key={row.key}>
-                          <td className="max-w-[260px] py-2 pr-3">
-                            <button
-                              className="block w-full truncate text-left font-medium text-sky-800 hover:underline"
-                              onClick={() => openResource(row.key)}
-                            >
-                              <span className="flex items-center gap-2"><VendorBrandIcon label={row.occurrence.vendor ?? row.occurrence.label} /><span className="truncate">{row.occurrence.label}</span></span>
-                            </button>
-                            <span className="text-xs text-zinc-500">
-                              {row.occurrence.vendor ?? "Unclassified vendor"}{row.serviceOnlyAdditional ? " · Service seen on additional pages" : ""}
-                            </span>
-                          </td>
-                          <td className="p-3">
-                            {row.occurrence.resourceType}
-                            <span className="block text-xs text-zinc-500">
-                              {row.purposes.join(", ")}
-                            </span>
-                          </td>
-                          <td className="p-3 text-xs">
-                            {row.inventoryEvidence}
-                            <span className="block">
-                              Confidence: {row.confidences.join(", ")}
-                            </span>
-                          </td>
-                          <td className="p-3">
-                            <button
-                              className="text-sky-800"
-                              onClick={() => openResource(row.key)}
-                            >
-                              {row.pageIds.length} pages
-                            </button>
-                            <span className="block text-xs text-zinc-500">
-                              {row.partialPageIds.length} partial
-                            </span>
-                          </td>
-                          <td className="p-3">
-                            {row.occurrence.kind === "request" ||
-                            row.occurrence.kind === "embed"
-                              ? `${row.eventCount} ${row.occurrence.kind === "request" ? "events" : "instances"}`
-                              : "1 distinct identity"}
-                          </td>
-                          <td className="p-3 text-xs">
-                            {row.homepage.replaceAll("_", " ")}
-                          </td>
+                          <td className="h-14 pr-3"><button title={row.inventoryEvidence} aria-label={`${row.inventoryEvidence}: inspect ${row.occurrence.label}`} className={`text-lg ${evidenceStyle(row.inventoryEvidence)}`} onClick={() => openResource(row.key)}>{evidenceSymbol(row.inventoryEvidence)}</button></td>
+                          <td className="px-3"><span className="text-sky-700" title={row.occurrence.kind}>{row.occurrence.kind === "request" ? "⇄" : row.occurrence.kind === "embed" ? "‹›" : row.occurrence.kind === "cookie" ? "◉" : "▤"}</span><span className="sr-only">{row.occurrence.kind}</span></td>
+                          <td className="px-3"><span className="inline-flex max-w-40 items-center gap-2 rounded-full border border-zinc-200 px-2 py-1"><VendorBrandIcon label={row.occurrence.vendor ?? row.occurrence.domain ?? row.occurrence.label} /><span className="truncate" title={row.occurrence.vendor ?? undefined}>{row.occurrence.vendor ?? row.occurrence.domain ?? "Unknown"}</span></span></td>
+                          <td className="px-3"><button className="block max-w-56 truncate text-left text-sky-800 hover:underline" title={row.occurrence.label} onClick={() => openResource(row.key)}>{row.occurrence.label}</button></td>
+                          <td className="px-3"><span className="block max-w-40 truncate rounded bg-amber-50 px-2 py-1 capitalize text-amber-900" title={row.purposes.join(", ")}>{row.purposes.join(", ").replaceAll("_", " ")}</span></td>
+                          <td className="whitespace-nowrap px-3" title="From the start of the retained page observation">{duration(row.occurrence.firstSeenMs)}</td>
+                          <td className="px-3"><span className="block max-w-44 truncate font-mono" title={row.occurrence.domain ?? undefined}>{row.occurrence.domain ?? "Unknown"}</span></td>
+                          <td className="whitespace-nowrap px-3 capitalize">{row.relationships.join(", ").replaceAll("_", " ")}</td>
+                          <td className="px-3"><button className="whitespace-nowrap text-left text-sky-800 hover:underline" title={row.pageIds.map(pageName).join("\n")} onClick={() => openResource(row.key)}>{shortPage(pageName(row.pageIds[0] ?? ""))}{row.pageIds.length > 1 ? <span className="ml-2 text-zinc-500">+{row.pageIds.length - 1}</span> : null}</button></td>
                         </tr>
                       ))}
                     </tbody>

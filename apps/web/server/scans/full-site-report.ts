@@ -78,7 +78,7 @@ export async function loadFullSiteReport(
   const additionalServiceIds = new Set(aggregate.resources.filter(row => row.occurrence.kind === "service" && row.homepage === "not_observed").map(row => row.occurrence.serviceId).filter(Boolean));
   const inventoryClassification = (row: (typeof aggregate.resources)[number]) =>
     row.occurrence.kind !== "embed" && row.purposes.length > 1 ? "Review" : classifyCrawlInventoryResource(row.occurrence);
-  const kind = (params.get("kind") ?? "service") as CrawlOccurrence["kind"];
+  const kind = (params.get("kind") ?? "service") as CrawlOccurrence["kind"] | "all";
   const q = (params.get("q") ?? "").toLowerCase().slice(0, 200),
     pageFilter = params.get("page"),
     status = params.get("status"),
@@ -102,7 +102,7 @@ export async function loadFullSiteReport(
       : values.length === 1 && values[0] === filter);
   let resources = aggregate.resources.filter(
     (row) =>
-      (kind === "cookie" ? ["cookie", "storage"].includes(row.occurrence.kind) : row.occurrence.kind === kind) &&
+      (kind === "all" ? ["cookie", "storage", "request", "embed"].includes(row.occurrence.kind) : kind === "cookie" ? ["cookie", "storage"].includes(row.occurrence.kind) : row.occurrence.kind === kind) &&
       row.pageIds.some((id) => allowedPages.has(id)) &&
       (!additional || row.homepage === "not_observed") &&
       matchesCategory(row.purposes, params.get("purpose")) &&
