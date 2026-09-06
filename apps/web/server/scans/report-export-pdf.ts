@@ -312,7 +312,7 @@ function reportLines(report: CanonicalReportExport, image: PdfImage | null): Pdf
     !isGdprTransparencyReportRowId(row.id) && !isTransportSecurityRowId(row.id)
   ) ?? [];
   const lines: PdfLine[] = [
-    { text: report.fullSite ? "Full site scan" : "GDPR / ePrivacy evidence report", size: 21, bold: true, gapAfter: 5, kind: "coverTitle" },
+    { text: report.fullSite ? "Website scan report" : "GDPR / ePrivacy evidence report", size: 21, bold: true, gapAfter: 5, kind: "coverTitle" },
     { text: report.scan.domainHostname ?? "Website scan", size: 14, bold: true, gapAfter: 8, kind: "coverDomain" },
     { text: `Scan ID: ${report.scan.id}`, size: 8, kind: "coverMeta" },
     { text: `Completed: ${report.scan.completedAt ?? "Not available"}`, size: 8, gapAfter: 35, kind: "coverMeta" },
@@ -332,7 +332,7 @@ function reportLines(report: CanonicalReportExport, image: PdfImage | null): Pdf
   if(report.fullSite) {
     const f=report.fullSite, {state,counts,totals,timing}=f.summary;
     lines.splice(0,0,...[
-      sectionHeading("Full site scope and resource inventory"),
+      sectionHeading("Scan scope and resource inventory"),
       ...wrappedLines(`${f.scope}. Additional pages: Not assessed for consent, CMP, policy, GDPR transparency or transport. ${f.scoreScope} remains unchanged.`),
       ...wrappedLines(`${f.condition} ${f.countingScope}`),
       ...wrappedLines(`Max pages including homepage: ${state.requested.maxPages}; requested concurrency: ${state.requested.concurrency}; wait between starts: ${state.requested.waitSeconds}s; region: ${state.region}.`),

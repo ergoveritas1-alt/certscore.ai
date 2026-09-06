@@ -48,7 +48,7 @@ test("full-site JSON and PDF retain scope while homepage projection and score in
   assert.equal(baseline.fullSite,undefined);assert.equal(report.fullSite?.summary.state.requested.maxPages,200);
   const pdf=renderCanonicalReportPdf(report);
   assert.equal(pdf.subarray(0,5).toString(),"%PDF-");
-  assert.match(pdf.toString("latin1"),/Full site scan/);
+  assert.match(pdf.toString("latin1"),/Website scan report/);
   assert.match(pdf.toString("latin1"),/Homepage audit score/);
   assert.match(pdf.toString("latin1"),/robots.txt restricts crawl coverage/);
 });

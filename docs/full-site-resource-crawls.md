@@ -234,3 +234,5 @@ redirects. Disallowed URLs remain visible as excluded and the report explicitly
 states that coverage is restricted. Discovery redirects are not followed (fail
 closed), and unavailable/unverifiable robots policy or excessive crawl delay stops
 additional crawling with an explicit report limitation.
+
+September 6 visibility restriction: use “Full site” only on the private scan option for eligible admin/advanced sessions. Site pages, report headings, accessible labels, PDFs and errors use neutral scan/report wording. Do not add marketing, navigation, pricing, help, API or MCP promotion for this capability. Internal identifiers and crawl behavior are unchanged.

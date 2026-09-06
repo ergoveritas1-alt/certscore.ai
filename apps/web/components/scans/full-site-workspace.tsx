@@ -249,7 +249,7 @@ export function FullSiteWorkspace({
       <header className="space-y-4 border-b border-zinc-200 pb-6">
         <div className="flex flex-wrap items-center gap-3">
           <h1 className="text-3xl font-semibold tracking-tight">
-            Full site scan
+            Scan results
           </h1>
           <span className="rounded-full border border-sky-200 bg-sky-50 px-3 py-1 text-xs font-semibold">
             {state?.status.replaceAll("_", " ") ?? "Loading coverage"}
@@ -396,7 +396,7 @@ export function FullSiteWorkspace({
         ) : null}
       </header>
       <nav
-        aria-label="Full site report workspace"
+        aria-label="Scan report workspace"
         className="my-6 flex flex-wrap gap-2"
       >
         {(["resources", "pages", "homepage"] as const).map((value) => (

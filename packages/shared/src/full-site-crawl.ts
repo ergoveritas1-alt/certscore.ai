@@ -65,12 +65,12 @@ export function validateFullSiteRequest(
   ) {
     if (!authorized)
       throw new FullSiteRequestError(
-        "Full site is available to admin and advanced users only.",
+        "This scan option is unavailable.",
         403,
       );
   }
   if (input.fullSite !== undefined && typeof input.fullSite !== "boolean")
-    throw new FullSiteRequestError("Full site must be a boolean.", 400);
+    throw new FullSiteRequestError("Invalid scan option.", 400);
   if (input.fullSite !== true) return { fullSite: false };
   const record = input.crawlOptions === undefined ? {} : input.crawlOptions;
   if (!record || typeof record !== "object" || Array.isArray(record))

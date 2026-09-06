@@ -141,7 +141,7 @@ export function PendingScanDetailView({
 
   return (
     <div className="space-y-4" data-density="compact">
-      {fullSite ? <header className="rounded-xl border border-sky-200 bg-sky-50 p-5"><h2 className="text-2xl font-semibold">Full site scan · {status}</h2><p className="mt-2 text-sm">Full homepage audit plus resource inventories from additional public pages. Additional pages were opened independently without a consent action.</p><p className="mt-3 text-sm">Max pages: {fullSite.maxPages} (includes homepage) · Requested concurrency: {fullSite.concurrency} · Wait between page starts: {fullSite.waitSeconds}s</p><p className="mt-2 text-xs">Fresh visit, no consent action. Homepage audit in progress; resource crawl awaits retained homepage evidence.</p></header> : null}
+      {fullSite ? <header className="rounded-xl border border-sky-200 bg-sky-50 p-5"><h2 className="text-2xl font-semibold">Scan · {status}</h2><p className="mt-2 text-sm">Full homepage audit plus resource inventories from additional public pages. Additional pages were opened independently without a consent action.</p><p className="mt-3 text-sm">Max pages: {fullSite.maxPages} (includes homepage) · Requested concurrency: {fullSite.concurrency} · Wait between page starts: {fullSite.waitSeconds}s</p><p className="mt-2 text-xs">Fresh visit, no consent action. Homepage audit in progress; resource crawl awaits retained homepage evidence.</p></header> : null}
       <div>
         <p className="text-xs font-medium uppercase tracking-[0.18em] text-slate-500">CertScore.ai scan</p>
         <h1 className="mt-1 flex min-w-0 max-w-full items-baseline gap-2 text-2xl font-semibold leading-tight tracking-tight text-slate-950 sm:text-3xl">

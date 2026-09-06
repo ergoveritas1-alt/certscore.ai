@@ -1117,7 +1117,7 @@ export async function createQueuedFullScan(input: QueuedFullScanInsert): Promise
     if (!inserted) throw new Error("Could not create full scan.");
     const execution = scanConfig.execution as Record<string, unknown>;
     const intent = execution?.v2DagLambda as Record<string, unknown>;
-    if (intent?.orchestrationMode !== "sharded") throw new Error("Full site requires the sharded Lambda runtime.");
+    if (intent?.orchestrationMode !== "sharded") throw new Error("This scan option requires the sharded Lambda runtime.");
     await insertFullSiteCrawl(client,{ scanId, userId: input.submittedByUserId!, requested: crawl.crawlOptions,
       policy: fullSitePolicy(process.env), region: String(intent.awsRegion), url: String(scanConfig.normalizedUrl),
       siteKey: getDomain(String(scanConfig.hostname)) ?? String(scanConfig.hostname) });
