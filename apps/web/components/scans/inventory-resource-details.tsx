@@ -18,6 +18,7 @@ function ResourceKindIcon({ kind }: { kind: string }) {
 export type InventoryResourceIdentity = {
   nodeRefs?: string[];
   cookieRefs: string[];
+  products?: string[];
   requests: Array<{ hostname: string | null; path: string | null; method: string | null }>;
 };
 const EvidenceContext = createContext<{ projection?: ApiRuntimeEvidenceGraphProjection; load: () => void; error?: string }>({ load() {} });
@@ -28,9 +29,9 @@ function InspectButton({ open, onClick, controls, name = "resource" }: { open: b
   return <button type="button" aria-label={label} title={label} aria-expanded={open} aria-controls={controls} onClick={onClick} className={`inline-flex h-7 w-7 items-center justify-center rounded-md transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-sky-500 ${open ? "bg-sky-100 text-sky-800" : "text-sky-700 hover:bg-sky-100"}`}><svg aria-hidden="true" width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><circle cx="10.5" cy="10.5" r="6.5"/><path d="m16 16 4.5 4.5M8 10.5h5M10.5 8v5"/></svg></button>;
 }
 
-function RelationshipButton({ count, open, onClick, deferred = false }: { count: number; open: boolean; onClick: () => void; deferred?: boolean }) {
-  const label = deferred ? "Load retained relationship links" : `${open ? "Hide" : "Show"} ${count} immediate ${count === 1 ? "link" : "links"}; descendants expand separately`;
-  return <button type="button" aria-label={label} title={label} aria-expanded={open} onClick={onClick} className="inline-flex h-7 shrink-0 items-center gap-1 rounded px-1 text-[11px] tabular-nums text-sky-700 hover:bg-sky-100 focus-visible:outline focus-visible:outline-2 focus-visible:outline-sky-500"><svg aria-hidden="true" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7"><path d="M6 6v11h10M6 10h10"/><circle cx="6" cy="4" r="2"/><circle cx="18" cy="10" r="2"/><circle cx="18" cy="17" r="2"/></svg><span>{deferred ? "…" : count}</span><svg aria-hidden="true" width="10" height="10" viewBox="0 0 12 12" fill="none" stroke="currentColor" className={open ? "rotate-90" : ""}><path d="m4 2 4 4-4 4"/></svg></button>;
+function RelationshipButton({ count, open, onClick, deferred = false, unavailable = false }: { count: number; open: boolean; onClick: () => void; deferred?: boolean; unavailable?: boolean }) {
+  const label = unavailable ? "Explain unavailable relationship evidence" : deferred ? "Load retained relationship links" : `${open ? "Hide" : "Show"} ${count} immediate ${count === 1 ? "link" : "links"}; descendants expand separately`;
+  return <button type="button" aria-label={label} title={label} aria-expanded={open} onClick={onClick} className="inline-flex h-7 shrink-0 items-center gap-1 rounded px-1 text-[11px] tabular-nums text-sky-700 hover:bg-sky-100 focus-visible:outline focus-visible:outline-2 focus-visible:outline-sky-500"><svg aria-hidden="true" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7"><path d="M6 6v11h10M6 10h10"/><circle cx="6" cy="4" r="2"/><circle cx="18" cy="10" r="2"/><circle cx="18" cy="17" r="2"/></svg><span>{unavailable ? "—" : deferred ? "…" : count}</span><svg aria-hidden="true" width="10" height="10" viewBox="0 0 12 12" fill="none" stroke="currentColor" className={open ? "rotate-90" : ""}><path d="m4 2 4 4-4 4"/></svg></button>;
 }
 
 function resourceDisplayName(node: GraphNode) {
@@ -63,12 +64,21 @@ export function InventoryResourceProvider({ projection: initial, children }: { p
 }
 
 export function matchInventoryResources(graph: ApiRuntimeEvidenceGraph, identity: InventoryResourceIdentity) {
+  const products = new Set((identity.products ?? []).map(product => product.trim().replace(/\s+/g, " ").toLowerCase()).filter(Boolean));
   return graph.nodes.filter(node => {
     if (identity.nodeRefs?.includes(node.id)) return true;
     if (identity.cookieRefs.includes(node.id)) return true;
     if (node.kind !== "request" || !node.url) return false;
+    // When the inventory retained no endpoint rows, an exact canonical-registry
+    // product match can still bind product-owned request evidence. A vendor name
+    // alone remains insufficient because one company may own several products.
+    if (!identity.requests.length && node.classification?.basis === "canonical_registry" && typeof node.classification.product === "string" && products.has(node.classification.product.trim().replace(/\s+/g, " ").toLowerCase())) return true;
     const url = new URL(node.url);
-    return identity.requests.some(request => request.hostname === url.hostname && request.path === url.pathname && request.method === node.method);
+    // Public inventory request evidence intentionally removes a leading `www.`
+    // for display. Apply only that same canonical-host alias here; widening to
+    // arbitrary subdomains could attach a row to unrelated retained evidence.
+    const graphHostname = url.hostname.toLowerCase().replace(/^www\./, "");
+    return identity.requests.some(request => request.hostname?.trim().toLowerCase().replace(/^www\./, "") === graphHostname && request.path === url.pathname && request.method === node.method);
   });
 }
 
@@ -79,7 +89,7 @@ export function InventoryResourceRow({ children, identity, facts, inspect = fals
   const id = useId();
   // Server-rendered cells may arrive as a lazy RSC element on streamed real reports.
   const resolvedRow = Children.toArray(children)[0] as typeof children;
-  const { projection, load } = useContext(EvidenceContext);
+  const { projection, load, error } = useContext(EvidenceContext);
   const graph = projection?.graphs.find(item => item.scenario === "pre_consent");
   const matches = graph ? matchInventoryResources(graph, identity) : [];
   const sources = graph ? new Set(graph.edges.filter(edge => matches.some(node => node.id === edge.to)).map(edge => edge.from)).size : 0;
@@ -87,9 +97,11 @@ export function InventoryResourceRow({ children, identity, facts, inspect = fals
   const toggleDetails = () => { setOpen(!open); if (!open) load(); };
   const control = <td key="details" className={inspect ? "bg-white px-2 py-1 md:sticky md:left-0 md:z-10" : "sticky right-0 bg-white px-2 py-1.5 align-middle border-l border-slate-100"}>{inspect ? <span className="inline-flex items-center gap-1"><InspectButton open={open} controls={id} name={typeof facts.name === "string" ? facts.name : undefined} onClick={toggleDetails} /><InventoryEvidenceIcon evidence={typeof facts.evidence === "string" ? facts.evidence : undefined} /></span> : <button type="button" className={button} aria-expanded={open} aria-controls={id} onClick={toggleDetails}>{`${open ? "−" : "+"} ${sources ? `${sources} ${sources === 1 ? "source" : "sources"}` : "Details"}`}</button>}</td>;
   const cells = Children.toArray(resolvedRow.props.children);
-  const vendorCell = inspect && React.isValidElement<{ children?: ReactNode }>(cells[2]) ? cloneElement(cells[2], {}, <div className="flex min-w-0 items-center gap-1 whitespace-nowrap">{(projection?.details || graph?.edges.length) ? <span className="inline-flex w-16 shrink-0">{childEdges.length || projection?.details ? <RelationshipButton count={childEdges.length} open={treeOpen} deferred={Boolean(projection?.details)} onClick={() => { setTreeOpen(!treeOpen); load(); }} /> : null}</span> : null}<div className="min-w-0 truncate">{cells[2].props.children}</div></div>) : cells[2];
+  const vendorCell = inspect && React.isValidElement<{ children?: ReactNode }>(cells[2]) ? cloneElement(cells[2], {}, <div className="flex min-w-0 items-center gap-1 whitespace-nowrap"><span className="inline-flex w-16 shrink-0"><RelationshipButton count={childEdges.length} open={treeOpen} unavailable={!graph && !projection?.details} deferred={Boolean(projection?.details)} onClick={() => { setTreeOpen(!treeOpen); load(); }} /></span><div className="min-w-0 truncate">{cells[2].props.children}</div></div>) : cells[2];
   const row = cloneElement(resolvedRow, { "data-resource-owner": id }, ...(inspect ? [control, cells[1], vendorCell, ...cells.slice(3)] : [...cells, control]));
-  return <>{row}<tr hidden={!open} data-resource-detail={id}><td colSpan={cells.length + (inspect ? 0 : 1)} className="bg-slate-50/60 px-5 py-4"><div id={id} className="w-[calc(100vw-7rem)] max-w-5xl">{open ? <ResourceDetails identity={identity} facts={facts} summary={existingDetails} evidence={evidence} /> : null}</div></td></tr>{inspect && treeOpen && graph ? childEdges.slice(0, 30).map(edge => <MainRelationshipRow key={edge.id} graph={graph} edge={edge} path={[edge.from]} depth={1} />) : null}{inspect && treeOpen && childEdges.length > 30 ? <tr><td colSpan={cells.length} className="px-5 py-2 text-xs text-slate-500">Showing 30 connected resources. Inspect retains all links and searchable fields.</td></tr> : null}</>;
+  return <>{row}<tr hidden={!open} data-resource-detail={id}><td colSpan={cells.length + (inspect ? 0 : 1)} className="bg-slate-50/60 px-5 py-4"><div id={id} className="w-[calc(100vw-7rem)] max-w-5xl">{open ? <ResourceDetails identity={identity} facts={facts} summary={existingDetails} evidence={evidence} /> : null}</div></td></tr>
+    {inspect && treeOpen && (error || !childEdges.length) ? <tr data-relationship-status={id} data-resource-detail={id}><td colSpan={cells.length} className="bg-sky-50/40 px-5 py-3 text-xs text-slate-600"><p role="status">{error ?? (projection?.details ? "Loading retained relationship evidence…" : !graph ? "No relationship graph was retained for this scan’s pre-consent session. Resource identities alone cannot establish parent/child links." : !matches.length ? "No unambiguous graph resource match was retained for this row." : "No outgoing links were retained for this resource. This does not prove there were no children.")}</p>{error ? <button type="button" className={button} onClick={load}>Retry loading evidence</button> : null}</td></tr> : null}
+    {inspect && treeOpen && graph ? childEdges.slice(0, 30).map(edge => <MainRelationshipRow key={edge.id} graph={graph} edge={edge} path={[edge.from]} depth={1} />) : null}{inspect && treeOpen && childEdges.length > 30 ? <tr><td colSpan={cells.length} className="px-5 py-2 text-xs text-slate-500">Showing 30 connected resources. Inspect retains all links and searchable fields.</td></tr> : null}</>;
 }
 
 export function InventoryResourceMobile({ identity, facts }: { identity: InventoryResourceIdentity; facts: Record<string, unknown> }) {

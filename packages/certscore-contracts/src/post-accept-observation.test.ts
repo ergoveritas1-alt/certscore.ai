@@ -7,6 +7,23 @@ import {
   projectPostAcceptEvidenceForReport,
 } from "./post-accept-observation.js";
 
+test("Accept report projection preserves the observed discovery failure and search duration", () => {
+  const base = confirmedPacket();
+  const packet = postAcceptEvidencePacketSchema.parse({ ...base, productionProjectable: false,
+    actionControlProof: undefined,
+    resolver: { ...base.resolver, found: false, confidence: 0, reason: "deterministic_accept_control_not_found" },
+    timing: { ...base.timing, resolverMs: 14_310 },
+    acceptanceRegistration: { status: "not_attempted", acceptanceExercised: false,
+      reason: "deterministic_accept_control_not_found", witnesses: [] },
+  });
+  const projection = projectPostAcceptEvidenceForReport({ packet, packetSha256: "a".repeat(64) });
+  assert.equal(projection.resolver?.reason, "deterministic_accept_control_not_found");
+  assert.equal(projection.resolverDurationMs, 14_310);
+  assert.equal(projection.registrationStatus, "not_attempted");
+  assert.equal(projection.productionProjectable, false);
+  assert.deepEqual(projection.postAcceptActivity, []);
+});
+
 function confirmedPacket() {
   return {
     artifactVersion: "certscore.post_accept_evidence.v1" as const,

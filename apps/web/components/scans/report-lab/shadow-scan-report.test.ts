@@ -1,6 +1,14 @@
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import test from "node:test";
+import { getGpcSnapshotLabel } from "./shadow-scan-report";
+
+test("every GPC snapshot status stays below twenty characters", () => {
+  for (const status of ["responsive", "no_observable_response", "indeterminate"] as const) {
+    assert.ok(getGpcSnapshotLabel(status).length < 20);
+  }
+  assert.equal(getGpcSnapshotLabel("indeterminate"), "Indeterminate");
+});
 import { countNonNotObservedRows, countRowsRequiringReview } from "./evidence-directory-summary";
 import { buildRuntimeInventoryCopyPayload } from "./inventory-table-copy";
 import { buildRuntimeInventoryPurposeCounts } from "../runtime-observation-sections";
@@ -120,6 +128,7 @@ test("benchmark labels and values come from canonical non-essential inventory ta
   assert.doesNotMatch(source, /row\.site \* 5/);
   assert.match(source, /items-baseline gap-x-3 gap-y-0\.5/);
   assert.match(source, /mt-2 grid gap-2\.5 sm:grid-cols-2/);
+  assert.doesNotMatch(source, /label: "3rd party embeds"/);
   assert.match(source, /rounded-md border border-zinc-200 bg-white p-2/);
   assert.match(source, /relative mt-1\.5 h-2 rounded-full/);
   assert.match(source, /data-testid="executive-score-column"/);
@@ -275,7 +284,7 @@ test("GPC appears as a quiet snapshot signal and a dedicated evidence-index comp
   assert.ok(trackerFootprintIndex < transportSecurityIndex);
   assert.ok(transportSecurityIndex < gpcIndex);
   assert.match(snapshotSource, /<VendorBrandLogo label=\{consentVendor\} \/>/);
-  assert.match(snapshotSource, /getGpcStatusPresentation\(report\.gpcResponse\.assessment\.status\)\.label/);
+  assert.match(snapshotSource, /getGpcSnapshotLabel\(report\.gpcResponse\.assessment\.status\)/);
   assert.doesNotMatch(snapshotSource, /<GpcStatusBadge/);
   assert.match(source, /CA −\{report\.gpcResponse\.californiaDeductionPoints\}/);
   assert.match(source, /href="#gpc-evidence"/);

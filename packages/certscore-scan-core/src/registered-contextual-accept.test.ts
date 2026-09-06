@@ -15,7 +15,7 @@ const authorization = { kind: "loopback", authorizationId: "loopback_local_lab" 
 const button = '<button type="button" class="bst-accept"><a href="#">VERSTANDEN</a></button>';
 const banner = (control = button) => `<div class="bst-panel"><div class="bst-wrapper"><div class="bst-msg">Diese Webseite verwendet Cookies.</div><div class="bst-links">${control}</div></div></div>`;
 
-async function fixture(run: (url: string, clicks: () => number) => Promise<void>, control = button) {
+async function fixture(run: (url: string, clicks: () => number) => Promise<void>, control = button, frames = "") {
   let clicks = 0;
   const server = createServer((req, res) => {
     if (req.url === "/clicked") clicks++;
@@ -23,7 +23,7 @@ async function fixture(run: (url: string, clicks: () => number) => Promise<void>
     res.setHeader("content-type", "text/html");
     // Published BST structure/behavior: button or fragment link, no preference
     // decision, acknowledgment receipt only. All resources remain loopback.
-    res.end(`<!doctype html><html><body>${banner(control)}
+    res.end(`<!doctype html><html><body>${frames}${banner(control)}
       <script src="/wp-content/plugins/bst-dsgvo-cookie/includes/js/scripts.js"></script>
       <script>document.querySelector('.bst-accept, .bst-accept-btn').onclick = () => {
         document.cookie='bst_dsgvo_cookie=1; path=/'; document.querySelector('.bst-panel').hidden=true;
@@ -79,6 +79,39 @@ test("BST passive geometry retains the same canonical first-layer scope", async 
       assert.ok(candidate.containerSelectorHint, "canonical banner scope must be retained");
     } finally { await browser.close(); }
   });
+});
+
+test("BST resolution completes a named-selector sweep despite browser protocol latency", async (t) => {
+  await fixture(async (url, clicks) => {
+    const browser = await chromium.launch({ headless: true });
+    const newContext = browser.newContext.bind(browser);
+    t.mock.method(browser, "newContext", async (...args: Parameters<typeof browser.newContext>) => {
+      const context = await newContext(...args);
+      context.on("page", page => {
+        const locate = page.locator.bind(page);
+        t.mock.method(page, "locator", (...args: Parameters<typeof page.locator>) => {
+          const locator = locate(...args);
+          const count = locator.count.bind(locator);
+          t.mock.method(locator, "count", async () => {
+            await new Promise(resolve => setTimeout(resolve, 80));
+            return count();
+          });
+          return locator;
+        });
+      });
+      return context;
+    });
+    try {
+      const recipes = buildCanonicalPostAcceptActionRecipes();
+      const packet = await runPostAcceptObserver({ browser, url, scanId: "bst-latency-accept",
+        interactionAuthorization: authorization, recipe: recipes[0]!, recipeCandidates: recipes,
+        allowCanonicalAcceptDiscovery: true, actionSearchTimeoutMs: 4_000, resultBudgetMs: 10_000,
+        confirmationTimeoutMs: 100, observationWindowMs: 500, productionProjectable: true });
+      assert.equal(clicks(), 1, JSON.stringify({ resolver: packet.resolver, timing: packet.timing }));
+      assert.equal(packet.interactionDiagnostics?.click.outcome, "completed");
+      assert.equal(packet.acceptanceRegistration.status, "unconfirmed");
+    } finally { await browser.close(); }
+  }, button, '<iframe srcdoc="<p>Map frame</p>"></iframe><iframe srcdoc="<p>Social frame</p>"></iframe>');
 });
 
 test("contextual activation fails closed outside its exact non-transactional canonical scope", async () => {

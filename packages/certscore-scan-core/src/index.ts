@@ -32,7 +32,7 @@ import {
   derivePolicySurfaceInspectionOutcome,
   isVerifiedTerminalConsentPacket,
 } from "@certscore/contracts";
-import { resolveVendorObservations } from "@certscore/vendor-resolver";
+import { resolveCanonicalVendor, resolveVendorObservations } from "@certscore/vendor-resolver";
 import type { ScanNoGoReasonCode } from "@website-signal-risk-scanner/shared";
 import { chromium, type Browser } from "playwright";
 import { createArtifactWriter, type ArtifactWriter } from "./artifact-writer.js";
@@ -488,6 +488,7 @@ export async function runScan(input: RunScanInput): Promise<CanonicalEvidenceBun
         cookieEvents: checkpoint.cookieEvents,
         cookieSnapshots: checkpoint.cookieSnapshots,
         networkEvents: checkpoint.networkEvents,
+        iframeEvents: checkpoint.iframeEvents,
         normalizedVendorObservations,
         runtimeCoverage: {
           coverageStatus: "limited_partial",
@@ -593,6 +594,7 @@ export async function runScan(input: RunScanInput): Promise<CanonicalEvidenceBun
       cookieEvents: preConsentResult.cookieEvents,
       cookieSnapshots: preConsentResult.cookieSnapshots,
       networkEvents: preConsentResult.networkEvents,
+      iframeEvents: preConsentResult.iframeEvents,
       observedAtMs: Math.max(0, Date.now() - startedAtMs),
       vendorResolverInputs: preConsentResult.vendorResolverInputs,
     });
@@ -1997,7 +1999,7 @@ export function buildPreConsentRuntimePreview(
     "networkEvents" |
     "normalizedVendorObservations" |
     "runtimeCoverage"
-  >,
+  > & Partial<Pick<CanonicalEvidenceBundle, "iframeEvents">>,
 ): PreConsentRuntimePreview {
   const cookiesByIdentity = new Map<string, PreConsentRuntimePreview["cookies"][number]>();
   for (const event of bundle.cookieEvents) {
@@ -2051,6 +2053,33 @@ export function buildPreConsentRuntimePreview(
   const operationalPurposes = new Set(["consent_management", "infrastructure", "security"]);
   const trackers = uniqueVendorCandidates.filter((candidate) => !operationalPurposes.has(candidate.purpose));
   const operationalVendors = uniqueVendorCandidates.filter((candidate) => operationalPurposes.has(candidate.purpose));
+  // Resource identities are observational only. Resolve each endpoint independently;
+  // never borrow a product from a host-wide or multi-observation match.
+  const resourcesByIdentity = new Map<string, NonNullable<PreConsentRuntimePreview["resources"]>[number]>();
+  for (const event of [...bundle.networkEvents, ...(bundle.iframeEvents ?? [])]) {
+    if (event.consentStateAtTime !== "pre_consent" && event.consentStateAtTime !== "no_ui_observed") continue;
+    const domain = previewDomain(event.hostname);
+    if (!domain) continue;
+    const kind = event.eventType === "iframe" ? "embed" as const : "request" as const;
+    const vendor = resolveCanonicalVendor({ type: kind === "embed" ? "iframe" : "request", url: event.url, hostname: event.hostname, evidenceId: event.eventId }).observation;
+    // Keep unknown third-party resources; omit unrelated first-party assets.
+    if (!vendor && !event.thirdParty && kind !== "embed") continue;
+    const key = JSON.stringify([kind, vendor?.vendor ?? domain, vendor?.product ?? null]);
+    const party = event.thirdParty === true ? "third_party" : event.firstParty === true ? "first_party" : "unknown";
+    const retained = resourcesByIdentity.get(key);
+    if (retained) {
+      retained.domains = uniqueStrings([...retained.domains, domain]).slice(0, 8);
+      retained.observedAtMs = Math.min(retained.observedAtMs, event.timestampMs);
+      retained.requestCount += kind === "request" ? 1 : 0;
+      if (retained.party !== party) retained.party = retained.party === "unknown" || party === "unknown" ? "unknown" : "mixed";
+    } else {
+      resourcesByIdentity.set(key, { kind, vendor: vendor?.vendor.slice(0, 160) ?? null,
+        product: vendor?.product?.slice(0, 160) ?? null, purpose: vendor?.servicePurpose ?? "Unknown",
+        confidence: vendor?.confidence ?? null, domains: [domain], party,
+        observedAtMs: event.timestampMs, requestCount: kind === "request" ? 1 : 0 });
+    }
+  }
+  const resources = [...resourcesByIdentity.values()].sort((left, right) => left.observedAtMs - right.observedAtMs);
   const runtimeCoverage = bundle.runtimeCoverage ?? {
     coverageStatus: "limited_none" as const,
     limitationKeys: ["runtime_coverage_summary_unavailable"],
@@ -2083,10 +2112,12 @@ export function buildPreConsentRuntimePreview(
     cookies: cookies.slice(0, PRE_CONSENT_RUNTIME_PREVIEW_MAX_ROWS),
     trackers: trackers.slice(0, PRE_CONSENT_RUNTIME_PREVIEW_MAX_ROWS),
     operationalVendors: operationalVendors.slice(0, PRE_CONSENT_RUNTIME_PREVIEW_MAX_ROWS),
+    resources: resources.slice(0, PRE_CONSENT_RUNTIME_PREVIEW_MAX_ROWS),
     truncated: {
       cookies: cookies.length > PRE_CONSENT_RUNTIME_PREVIEW_MAX_ROWS,
       trackers: trackers.length > PRE_CONSENT_RUNTIME_PREVIEW_MAX_ROWS,
       operationalVendors: operationalVendors.length > PRE_CONSENT_RUNTIME_PREVIEW_MAX_ROWS,
+      resources: resources.length > PRE_CONSENT_RUNTIME_PREVIEW_MAX_ROWS,
     },
     mustContinuePolling: true,
     observationOnlyDisclaimer: PRE_CONSENT_RUNTIME_PREVIEW_DISCLAIMER,

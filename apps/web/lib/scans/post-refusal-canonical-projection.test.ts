@@ -487,6 +487,8 @@ test("completed after-click capture survives canonical projection without invent
   assert.equal(result.reportProjection.afterActionCapture?.activationStatus, "completed");
   assert.equal(result.reportProjection.afterActionRequests?.[0]?.requestId, request.requestId);
   assert.equal(result.reportProjection.registrationStatus, "unconfirmed");
+  assert.deepEqual(result.postRejectRow.criticalEvidence.retainedEvidence.afterActionCapture, result.reportProjection.afterActionCapture);
+  assert.equal(result.postRejectRow.criticalEvidence.retainedEvidence.sourcePacketSha256, result.reportProjection.packetSha256);
   assert.equal(result.normalizedConcerns.length, 0);
   assert.equal(result.candidates.length, 0);
   assert.notEqual(result.postRejectRow.status, "Gap observed");

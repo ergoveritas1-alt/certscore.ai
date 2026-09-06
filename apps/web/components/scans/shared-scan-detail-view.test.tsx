@@ -111,6 +111,28 @@ function makePostRejectChecklistItem(input: {
   };
 }
 
+test("limited Reject explains completed click and retained capture without claiming refusal", async () => {
+  const { buildExecutiveRejectPathProjection } = await import("./shared-scan-detail-view");
+  const item = makePostRejectChecklistItem({ status: "Not confirmed", retainedEvidence: {
+    afterActionCapture: {
+      policyVersion: "bounded_after_action_capture.v1", action: "reject", activationStatus: "completed",
+      actionDispatchedAtMs: 1000, captureEndedAtMs: 4000, requestedWindowMs: 3000,
+      stopReason: "window_elapsed", requestsDropped: 0, storageSnapshotRetained: true,
+      storageWriteCoverage: "bounded_main_document_sample", requestIds: ["r1", "r2"],
+      storageWrites: [{ name: "consent_choice", storageType: "cookie", observedAtMs: 1100, nonEssential: false }],
+    },
+  } });
+  const result = buildExecutiveRejectPathProjection(item)!;
+  assert.equal(result.label, "Reject path limited");
+  assert.match(result.note!, /Reject control was clicked, but refusal could not be verified/);
+  assert.match(result.note!, /During 3s.*2 requests.*1 main-document storage write.*consent_choice/);
+  assert.match(result.note!, /not proof of verified refusal/);
+  assert.equal(result.state, "incomplete");
+  assert.equal(result.scoreEffect, "none");
+  assert.deepEqual(result.evidenceRows, []);
+  assert.deepEqual(result.timelineEvents, []);
+});
+
 test("executive Reject projection formats only the canonical checklist outcome", async () => {
   const { buildExecutiveRejectPathProjection } = await import("./shared-scan-detail-view");
   const projected = buildExecutiveRejectPathProjection(makePostRejectChecklistItem({

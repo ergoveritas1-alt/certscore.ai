@@ -7,6 +7,7 @@ import {
   type RuntimeObservationTimelineEvent,
 } from "./runtime-observation-sections";
 import { VendorBrandChip } from "./vendor-brand-chip";
+import { resolveCanonicalServicePurpose } from "@certscore/vendor-resolver";
 
 type PreviewCookie = ApiV2PreConsentRuntimePreview["cookies"][number];
 type PreviewTracker = ApiV2PreConsentRuntimePreview["trackers"][number];
@@ -18,7 +19,9 @@ type PreviewInventoryRow = RuntimeInventoryMixRow & {
   domains: string;
   item: string;
   observed: string;
-  type: "Cookie / storage" | "Tracker / request";
+  vendor?: string;
+  requestCount?: number;
+  type: "Cookie / storage" | "Tracker / request" | "Embed";
 };
 
 function displayLabel(value: string) {
@@ -48,13 +51,13 @@ function cookieRelationship(cookie: PreviewCookie) {
   return "Unknown";
 }
 
-function trackerConfidence(tracker: PreviewTracker) {
+function trackerConfidence(tracker: Pick<PreviewTracker, "confidence">) {
   if (tracker.confidence >= 0.85) return "High";
   if (tracker.confidence >= 0.6) return "Medium";
   return "Low";
 }
 
-function previewInventory(preview: ApiV2PreConsentRuntimePreview): PreviewInventoryRow[] {
+export function previewInventory(preview: ApiV2PreConsentRuntimePreview): PreviewInventoryRow[] {
   const cookies = preview.cookies.map((cookie) => ({
     confidence: "Not retained",
     domains: cookie.domain ?? "Domain unavailable",
@@ -72,12 +75,31 @@ function previewInventory(preview: ApiV2PreConsentRuntimePreview): PreviewInvent
     evidence: "Review",
     item: tracker.product ?? tracker.vendor,
     observed: "Timing unavailable",
-    purpose: displayLabel(tracker.purpose),
+    purpose: resolveCanonicalServicePurpose(tracker),
     recordCount: 1,
     relationship: "Unknown",
     type: "Tracker / request" as const,
   }));
-  return [...cookies, ...trackers];
+  const operational = (preview.operationalVendors ?? []).map((vendor) => ({
+    confidence: trackerConfidence(vendor), domains: vendor.domains.join(", ") || "Domain unavailable",
+    evidence: "Contextual", item: vendor.product ?? vendor.vendor, vendor: vendor.vendor,
+    observed: "Timing unavailable", purpose: resolveCanonicalServicePurpose(vendor), recordCount: 1,
+    relationship: "Unknown", type: "Tracker / request" as const,
+  }));
+  const resources = preview.resources?.map((resource) => ({
+    confidence: resource.confidence === null ? "Not retained" : trackerConfidence({ confidence: resource.confidence }),
+    domains: resource.domains.join(", ") || "Domain unavailable",
+    // Checkpoint identity is context, not a final necessity or risk finding.
+    evidence: "Contextual", item: resource.product ?? resource.vendor ?? resource.domains[0] ?? "Unidentified resource",
+    vendor: resource.vendor ?? undefined, observed: formatElapsedTime(resource.observedAtMs),
+    purpose: resource.purpose, recordCount: 1, requestCount: resource.requestCount,
+    relationship: resource.party === "first_party" ? "Same-site" : resource.party === "third_party" ? "Cross-site" : resource.party === "mixed" ? "Mixed" : "Unknown",
+    type: resource.kind === "embed" ? "Embed" as const : "Tracker / request" as const,
+  }));
+  // Legacy packets still show every retained vendor. New resource rows replace
+  // matching vendor summaries without double counting them in the charts.
+  const vendors = [...trackers, ...operational].filter(vendor => !resources?.some(resource => resource.item === vendor.item));
+  return [...cookies, ...(resources ?? []), ...vendors];
 }
 
 function checkpointElapsedMs(preview: ApiV2PreConsentRuntimePreview, startedAt: string | null) {
@@ -120,6 +142,15 @@ function previewTimeline(
     });
   }
 
+  for (const kind of ["request", "embed"] as const) {
+    const first = preview.resources?.filter(resource => resource.kind === kind)
+      .sort((left, right) => left.observedAtMs - right.observedAtMs)[0];
+    if (!first) continue;
+    events.push({ at: formatElapsedTime(first.observedAtMs), atMs: first.observedAtMs,
+      label: kind === "embed" ? "Embedded content" : "Resource request",
+      detail: first.product ?? first.vendor ?? first.domains[0] ?? "Unidentified resource", tone: "neutral" });
+  }
+
   events.push({
     at: checkpointMs > 0 ? formatElapsedTime(checkpointMs) : "Checkpoint",
     atMs: checkpointMs,
@@ -127,10 +158,11 @@ function previewTimeline(
     label: "Early checkpoint",
     tone: "neutral",
   });
-  return events;
+  return events.sort((left, right) => left.atMs - right.atMs);
 }
 
 function evidenceClasses(evidence: string) {
+  if (evidence === "Contextual") return "bg-sky-100 text-sky-800";
   if (evidence === "Non-essential") return "bg-rose-100 text-rose-800";
   if (evidence === "Essential") return "bg-blue-100 text-blue-800";
   return "bg-amber-100 text-amber-800";
@@ -186,6 +218,7 @@ function ConfidenceDots({ confidence }: { confidence: string }) {
 }
 
 function returnedIdentityNote(preview: ApiV2PreConsentRuntimePreview) {
+  if (preview.resources) return `Mixes and rows include retained request, embed, cookie, and service identities from this checkpoint. ${preview.truncated.resources ? "Resource identities are capped; captured totals may be higher. " : ""}Contextual resource rows are observations, not final evidence classifications.`;
   const returnedCookies = preview.summary.returnedCookieCount ?? preview.cookies.length;
   const returnedTrackers = preview.summary.returnedTrackingVendorCount ?? preview.trackers.length;
   const capturedTrackingVendors = preview.summary.trackingVendorCount ?? preview.summary.trackerCount;
@@ -206,7 +239,6 @@ export function PreConsentRuntimePreviewCard({
   const inventory = previewInventory(preview);
   const trackingVendorCount = preview.summary.trackingVendorCount ?? preview.summary.trackerCount;
   const checkpointMs = checkpointElapsedMs(preview, startedAt);
-  const operationalVendors = preview.operationalVendors ?? [];
 
   return (
     <section aria-label="Preliminary runtime observations" aria-live="polite" className="border-y border-zinc-200 bg-[#f7faf9]">
@@ -224,15 +256,15 @@ export function PreConsentRuntimePreviewCard({
 
         <RuntimeInventorySummaryCard
           compact
-          eyebrow="Preliminary cookie and tracker inventory"
+          eyebrow="Preliminary resource inventory"
           heading="What we’ve observed so far"
           inventory={inventory}
           note={`${returnedIdentityNote(preview)} Checkpoint observations are not findings or final totals; the scan is still reviewing consent controls, policies, transport, retained evidence, and report results.`}
-          summary={`${preview.summary.cookieCount} cookies · ${trackingVendorCount} tracking vendors · ${preview.summary.thirdPartyRequestCount} 3P requests`}
+          summary={`${preview.summary.cookieCount} cookies · ${trackingVendorCount} tracking vendors · ${preview.summary.operationalVendorCount ?? preview.operationalVendors?.length ?? 0} operational services · ${preview.summary.thirdPartyRequestCount} 3P requests`}
         >
           {inventory.length > 0 ? (
             <div
-              aria-label="Preliminary cookies and trackers"
+              aria-label="Preliminary resource details"
               className={`overflow-x-auto border border-zinc-200 bg-white ${
                 inventory.length > PREVIEW_INVENTORY_VISIBLE_ROW_LIMIT
                   ? "max-h-[22rem] overflow-y-auto"
@@ -244,7 +276,7 @@ export function PreConsentRuntimePreviewCard({
                 <thead className="sticky top-0 z-20 bg-zinc-50 text-zinc-500 shadow-[0_2px_8px_-6px_rgba(24,24,27,0.55)]">
                   <tr>
                     {[
-                      ["Item", "w-[11rem]"],
+                      ["Vendor / resource", "w-[14rem]"],
                       ["Type", "w-[5rem]"],
                       ["Purpose", "w-[10rem]"],
                       ["Evidence mix", "w-[9rem]"],
@@ -252,6 +284,7 @@ export function PreConsentRuntimePreviewCard({
                       ["Domains", "w-[16rem]"],
                       ["Relationship", "w-[9rem]"],
                       ["Confidence", "w-[7rem]"],
+                      ["Requests", "w-[5rem]"],
                     ].map(([label, width]) => (
                       <th className={`border-b border-zinc-200 px-3 py-2.5 font-medium ${width}`} key={label}>{label}</th>
                     ))}
@@ -260,7 +293,7 @@ export function PreConsentRuntimePreviewCard({
                 <tbody>
                   {inventory.map((row, index) => (
                     <tr className="h-[3.25rem] border-b border-zinc-100 align-top last:border-0" key={`${row.item}:${row.domains}:${index}`}>
-                      <td className="px-3 py-3"><VendorBrandChip label={row.item} showMeta={false} /></td>
+                      <td className="px-3 py-3"><VendorBrandChip label={row.vendor ?? row.item} showMeta={false} />{row.vendor && row.vendor !== row.item ? <span className="mt-1 block text-zinc-600">{row.item}</span> : null}</td>
                       <td className="px-3 py-3 text-zinc-600"><PreviewTypeIcon type={row.type} /></td>
                       <td className="px-3 py-3 text-zinc-600"><span className={`inline-flex max-w-full rounded-md px-2 py-1 text-[0.68rem] font-semibold ${purposeClasses(row.purpose)}`}>{row.purpose}</span></td>
                       <td className="px-3 py-3 text-zinc-600"><span className={`inline-flex max-w-full rounded-md px-2 py-1 text-[0.68rem] font-semibold ${evidenceClasses(row.evidence)}`}>{row.evidence}</span></td>
@@ -268,6 +301,7 @@ export function PreConsentRuntimePreviewCard({
                       <td className="px-3 py-3 font-mono text-zinc-600"><span className="block truncate" title={row.domains}>{row.domains}</span></td>
                       <td className="whitespace-nowrap px-3 py-3 text-zinc-600">{row.relationship}</td>
                       <td className="px-3 py-3 text-zinc-600"><ConfidenceDots confidence={row.confidence} /></td>
+                      <td className="px-3 py-3 font-mono text-zinc-600">{row.requestCount ?? "—"}</td>
                     </tr>
                   ))}
                 </tbody>
@@ -275,19 +309,9 @@ export function PreConsentRuntimePreviewCard({
             </div>
           ) : (
             <p className="mx-4 mb-4 border border-zinc-200 bg-zinc-50 px-3 py-3 text-xs leading-5 text-zinc-600">
-              No cookie or tracking-vendor identities were returned by this early checkpoint. Continue to the completed report; this is not evidence that none were present.
+              No resource identities were returned by this early checkpoint. Continue to the completed report; this is not evidence that none were present.
             </p>
           )}
-          {operationalVendors.length > 0 ? (
-            <div className="border-t border-zinc-200 px-4 py-3">
-              <p className="text-[0.65rem] font-semibold uppercase text-zinc-500">Operational services observed separately</p>
-              <div className="mt-2 flex flex-wrap gap-2">
-                {operationalVendors.map((vendor, index) => (
-                  <VendorBrandChip key={`${vendor.vendor}:${index}`} label={vendor.product ?? vendor.vendor} showMeta={false} />
-                ))}
-              </div>
-            </div>
-          ) : null}
         </RuntimeInventorySummaryCard>
       </div>
     </section>

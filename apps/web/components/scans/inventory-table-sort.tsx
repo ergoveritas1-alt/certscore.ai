@@ -67,8 +67,8 @@ export function InventorySortRuntime({ tableId }: { tableId: string }) {
       });
       rows.forEach((row) => {
         body.appendChild(row);
-        const companion = companions.find(item => item.dataset.resourceDetail === row.dataset.resourceOwner);
-        if (companion) body.appendChild(companion);
+        companions.filter(item => item.dataset.resourceDetail === row.dataset.resourceOwner)
+          .forEach(companion => body.appendChild(companion));
       });
     };
     window.addEventListener(SORT_EVENT, onSort);

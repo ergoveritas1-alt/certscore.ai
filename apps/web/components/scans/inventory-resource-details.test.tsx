@@ -7,6 +7,12 @@ import { InventoryResourceProvider, InventoryResourceRow, ResourceDetails, match
 import { runtimeGraphUiFixture } from "./runtime-evidence-graph-ui-fixture";
 import { InventoryNameDisclosure } from "./inventory-name-disclosure";
 
+test("missing graphs keep a discoverable relationship explanation instead of removing the icon", () => {
+  const html = renderToStaticMarkup(<InventoryResourceProvider><table><tbody><InventoryResourceRow inspect identity={{ cookieRefs: [], requests: [] }} facts={{ name: "Google Fonts" }}><tr><td>Inspect</td><td>Type</td><td>Google</td><td>Google Fonts</td></tr></InventoryResourceRow></tbody></table></InventoryResourceProvider>);
+  assert.match(html, /Explain unavailable relationship evidence/);
+  assert.match(html, /<span>—<\/span>/);
+});
+
 test("evidence details omit search controls and boilerplate but retain fields and pagination", async () => {
   const resources = await readFile(new URL("./inventory-resource-details.tsx", import.meta.url), "utf8");
   const fields = await readFile(new URL("./retained-evidence-fields.tsx", import.meta.url), "utf8");
@@ -55,14 +61,41 @@ test("compact inventory places links before vendor and preserves full names in p
   assert.doesNotMatch(html, /connected resources|Old inspect|A complete\.\.\./);
 });
 
-test("inventory association requires retained cookie references or request endpoint and method, never vendor", () => {
+test("inventory association requires retained references, endpoint identity, or exact canonical product identity, never vendor", () => {
   const graph = runtimeGraphUiFixture().graphs[0]!;
   assert.deepEqual(matchInventoryResources(graph, { cookieRefs: [], nodeRefs: ["request"], requests: [] }).map(node => node.id), ["request"]);
   assert.equal(matchInventoryResources(graph, { cookieRefs: [], nodeRefs: ["missing-node"], requests: [] }).length, 0);
   assert.deepEqual(matchInventoryResources(graph, { cookieRefs: ["cookie"], requests: [] }).map(node => node.id), ["cookie"]);
   assert.deepEqual(matchInventoryResources(graph, { cookieRefs: [], requests: [{ hostname: "metrics.fixture.test", path: "/collect", method: "GET" }] }).map(node => node.id), ["request"]);
+  const wwwGraph = {
+    ...graph,
+    nodes: graph.nodes.map(node => node.id === "request" ? { ...node, url: "https://www.metrics.fixture.test/collect" } : node),
+  };
+  const wwwMatches = matchInventoryResources(wwwGraph, { cookieRefs: [], requests: [{ hostname: "metrics.fixture.test", path: "/collect", method: "GET" }] });
+  assert.deepEqual(wwwMatches.map(node => node.id), ["request"]);
+  assert.equal(wwwGraph.edges.filter(edge => wwwMatches.some(node => node.id === edge.from)).length, 1);
+  assert.equal(matchInventoryResources(wwwGraph, { cookieRefs: [], requests: [{ hostname: "cdn.metrics.fixture.test", path: "/collect", method: "GET" }] }).length, 0);
+  const productGraph = {
+    ...graph,
+    nodes: graph.nodes.map(node => node.id === "request" ? { ...node, classification: { vendor: "Example owner", product: "Example CMP", entity: "Example owner, Inc.", purpose: "consent_management", confidence: 1, basis: "canonical_registry" as const, disclosure: "unknown" as const, policyEvidenceRefs: [] } } : node),
+  };
+  const productMatches = matchInventoryResources(productGraph, { cookieRefs: [], products: ["Example CMP"], requests: [] });
+  assert.deepEqual(productMatches.map(node => node.id), ["request"]);
+  assert.equal(productGraph.edges.filter(edge => productMatches.some(node => node.id === edge.from)).length, 1);
+  assert.equal(matchInventoryResources(productGraph, { cookieRefs: [], products: ["Example owner"], requests: [] }).length, 0);
   assert.equal(matchInventoryResources(graph, { cookieRefs: [], requests: [{ hostname: "metrics.fixture.test", path: "/other", method: "GET" }] }).length, 0);
   assert.equal(matchInventoryResources(graph, { cookieRefs: [], requests: [{ hostname: "metrics.fixture.test", path: "/collect", method: "POST" }] }).length, 0);
+});
+
+test("compact relationship icon remains for a canonical product row without endpoint details", () => {
+  const projection = runtimeGraphUiFixture();
+  const graph = projection.graphs[0]!;
+  projection.graphs[0] = {
+    ...graph,
+    nodes: graph.nodes.map(node => node.id === "request" ? { ...node, classification: { vendor: "Example owner", product: "Example CMP", entity: "Example owner, Inc.", purpose: "consent_management", confidence: 1, basis: "canonical_registry" as const, disclosure: "unknown" as const, policyEvidenceRefs: [] } } : node),
+  };
+  const html = renderToStaticMarkup(<InventoryResourceProvider projection={projection}><table><tbody><InventoryResourceRow inspect identity={{ cookieRefs: [], products: ["Example CMP"], requests: [] }} facts={{ name: "Example CMP" }}><tr><td>Inspect</td><td>Type</td><td>Vendor</td><td>Name</td></tr></InventoryResourceRow></tbody></table></InventoryResourceProvider>);
+  assert.match(html, /aria-label="Show 1 immediate link; descendants expand separately"/);
 });
 
 test("original cells remain unchanged and companion detail rows are collapsed and bound for sorting", () => {

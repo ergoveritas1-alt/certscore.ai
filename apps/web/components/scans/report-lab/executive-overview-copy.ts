@@ -77,8 +77,8 @@ export function buildExecutiveOverview(input: ExecutiveOverviewInput) {
         ? "The confirmed Accept path retained no qualifying post-Accept activity in its bounded window."
         : input.acceptPath?.state === "incomplete"
           ? input.acceptPath.note?.trim()
-            ? `Accept-path testing did not complete. ${input.acceptPath.note.trim()}`
-            : "Accept-path testing did not complete."
+            ? `Accept-path testing was limited. ${input.acceptPath.note.trim()}`
+            : "Accept-path testing was limited."
           : null;
   const rejectObservationWindowMs = input.rejectPath?.observationWindowMs;
   const rejectIncompleteReason = input.rejectPath?.note?.trim();

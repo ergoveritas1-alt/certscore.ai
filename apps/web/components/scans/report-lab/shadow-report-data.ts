@@ -153,6 +153,7 @@ export type ShadowReportData = {
     forms: number;
     nonEssentialCookiesStorage: number;
     nonEssentialRequests: number;
+    thirdPartyEmbeds: number;
     vendors: number;
   };
   controls: { accept: string; options: string; reject: string };
@@ -256,6 +257,7 @@ export const SHADOW_REPORT: ShadowReportData = {
   },
   metrics: {
     nonEssentialRequests: 8,
+    thirdPartyEmbeds: 2,
     nonEssentialCookiesStorage: 0,
     vendors: 3,
     domains: 4,

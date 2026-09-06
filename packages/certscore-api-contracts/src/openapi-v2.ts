@@ -1019,11 +1019,30 @@ export function buildCertScoreApiV2OpenApiDocument() {
                 }
               }
             },
+            resources: {
+              type: "array", maxItems: 20,
+              description: "Bounded observed request and embed service identities, not final evidence classifications or findings.",
+              items: {
+                type: "object", additionalProperties: false,
+                required: ["kind", "vendor", "product", "purpose", "confidence", "domains", "party", "observedAtMs", "requestCount"],
+                properties: {
+                  kind: { type: "string", enum: ["request", "embed"] },
+                  vendor: { type: ["string", "null"], minLength: 1, maxLength: 160 },
+                  product: { type: ["string", "null"], minLength: 1, maxLength: 160 },
+                  purpose: { type: "string", minLength: 1, maxLength: 80 },
+                  confidence: { type: ["number", "null"], minimum: 0, maximum: 1 },
+                  domains: { type: "array", maxItems: 8, items: { type: "string", minLength: 1, maxLength: 253 } },
+                  party: { type: "string", enum: ["first_party", "third_party", "mixed", "unknown"] },
+                  observedAtMs: { type: "integer", minimum: 0 },
+                  requestCount: { type: "integer", minimum: 0 }
+                }
+              }
+            },
             truncated: {
               type: "object",
               additionalProperties: false,
               required: ["cookies", "trackers"],
-              properties: { cookies: { type: "boolean" }, trackers: { type: "boolean" }, operationalVendors: { type: "boolean" } }
+              properties: { cookies: { type: "boolean" }, trackers: { type: "boolean" }, operationalVendors: { type: "boolean" }, resources: { type: "boolean" } }
             },
             mustContinuePolling: { type: "boolean", const: true },
             observationOnlyDisclaimer: { type: "string", minLength: 1, maxLength: 500 }

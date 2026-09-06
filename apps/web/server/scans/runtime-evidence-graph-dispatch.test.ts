@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { readFileSync } from "node:fs";
+import { parseEnv } from "node:util";
 import { bindRuntimeGraphDispatchToScan } from "./runtime-evidence-graph-dispatch";
 import { buildDurableLocalV2DagLambdaDispatchPayload } from "../../../validation-worker/src/validation/local-v2-dag-lambda-dispatch";
 
@@ -12,6 +13,17 @@ const fixture = () => ({ hostname: "example.com", normalizedUrl: "https://exampl
   runtimeGraphSelection: { contractVersion: "certscore.runtime-graph-selection.v1", scanId, dispatch: { contractVersion: "certscore.runtime-graph-dispatch.v1", scanId, mode: "project", profile: "bounded_passive_v1" } },
 } } });
 const enabled = { CERTSCORE_RUNTIME_GRAPH_MODE: "project", CERTSCORE_RUNTIME_GRAPH_PERCENT: "100" };
+
+test("documented localhost environment enables persisted capture and presentation together", () => {
+  const environment = parseEnv(readFileSync(new URL("../../.env.example", import.meta.url), "utf8"));
+  const scanConfig = bindRuntimeGraphDispatchToScan({ scanId, scanConfig: fixture(), environment });
+  const payload = buildDurableLocalV2DagLambdaDispatchPayload({ scanId, scanConfig });
+  assert.equal(payload.runtimeGraph?.mode, "project");
+  assert.equal(payload.runtimeGraph?.scanId, scanId);
+  assert.equal(environment.CERTSCORE_RUNTIME_GRAPH_PRESENTATION, "on");
+  assert.equal(payload.postAcceptObservation, undefined);
+  assert.equal(payload.postRefusalObservation, undefined);
+});
 
 test("canonical scan creation overwrites client graph decisions and commits disabled decisions", () => {
   const input = fixture(); const before = structuredClone(input);

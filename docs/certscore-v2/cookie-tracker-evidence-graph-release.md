@@ -50,6 +50,13 @@ Use tested readers `97f83b429097d78f84bf0608f23aecdde42b5560` and scanners `6177
 
 No implementation, live canary, deployment, or performance gate is recorded as passing until its evidence is retained here.
 
+## September 6 localhost configuration correction (not a deployment)
+
+- Local scan `77b479b3-b9b5-44f4-87a3-9cd8b622bec1` retained no graph or graph diagnostics. The local web environment omitted all three runtime-graph settings, disabling capture selection and graph presentation.
+- Set local `CERTSCORE_RUNTIME_GRAPH_MODE=project`, `CERTSCORE_RUNTIME_GRAPH_PERCENT=100`, and `CERTSCORE_RUNTIME_GRAPH_PRESENTATION=on`; documented the same local settings in `.env.example`. The running Next dev server reloaded the environment. New eligible sharded scans use the existing persisted dispatch decision; historical selections/evidence are unchanged. No production configuration, scanner deployment, action authority, lane, wait, or scoring change.
+- Added a regression binding the documented local environment through scan creation into the durable publisher payload, with presentation enabled and action permissions unchanged. Focused dispatch, projection, storage, read/access, inventory, and real Chromium capture tests passed. A real local MinIO round trip preserved four synthetic fixture graphs and all 196 edges (84,862 bytes); no customer scan or database report was created. Browser verification expanded the fixture's request-to-response child relationship.
+- Estimated incremental overhead at 100 local scans/month: **under $0.10/month**, using the existing conservative month-twelve graph forecast and approved graph budget. Local MinIO storage adds no paid storage service; no additional public scan or paid model call was launched for verification.
+
 ## Local implementation and verification log
 
 Working branch: `codex/cookie-tracker-evidence-graph`. Tested reader/publisher implementation `97f83b429097d78f84bf0608f23aecdde42b5560` and final scanner correction `61776db564068ec80c9475db8f1c75fbe5899c97` are pushed and deployed. Graph activation is now 100% for new eligible sharded scans after fourteen owned release scans and zero public calibration scans. Entries below retain chronological history; earlier pending and off-hold statements are superseded by the current-state section above.

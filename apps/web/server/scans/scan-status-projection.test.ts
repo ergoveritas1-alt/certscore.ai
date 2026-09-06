@@ -170,6 +170,11 @@ test("API v2 lightweight status exposes a persisted preview without promoting th
         confidence: 0.96,
         domains: ["www.google-analytics.com"],
       }],
+      resources: [{
+        kind: "request", vendor: "Google", product: "Google Analytics",
+        purpose: "Analytics", confidence: 0.96, domains: ["www.google-analytics.com"],
+        party: "third_party", observedAtMs: 1_200, requestCount: 1,
+      }],
       truncated: { cookies: false, trackers: false },
       mustContinuePolling: true,
       observationOnlyDisclaimer: "Preliminary passive observations only; continue polling for the canonical result.",
@@ -183,6 +188,8 @@ test("API v2 lightweight status exposes a persisted preview without promoting th
   assert.equal(response.preConsentPreview?.final, false);
   assert.equal(response.preConsentPreview?.mustContinuePolling, true);
   assert.equal(response.preConsentPreview?.summary.cookieCount, 1);
+  assert.equal(response.preConsentPreview?.resources?.[0]?.observedAtMs, 1_200);
+  assert.equal(response.preConsentPreview?.resources?.[0]?.purpose, "Analytics");
 });
 
 test("API v2 lightweight status exposes only persisted terminal score metadata", async () => {

@@ -103,6 +103,10 @@ const GPC_DELTA_ROWS = [
   ["consentOrCmpBehavior", "Consent / CMP"],
 ] as const;
 
+export function getGpcSnapshotLabel(status: GpcResponseReportProjection["assessment"]["status"]) {
+  return status === "responsive" ? "Response observed" : status === "no_observable_response" ? "No response seen" : "Indeterminate";
+}
+
 function getGpcStatusPresentation(status: GpcResponseReportProjection["assessment"]["status"]) {
   if (status === "responsive") {
     return {
@@ -520,7 +524,7 @@ function SignalSnapshot({ report }: { report: ShadowReportData }) {
               <span className="text-xs font-medium text-zinc-500">Global Privacy Control (GPC)</span>
               <span className="flex min-w-0 items-center gap-2">
                 <span className="text-xs font-semibold text-zinc-800">
-                  {getGpcStatusPresentation(report.gpcResponse.assessment.status).label}
+                  {getGpcSnapshotLabel(report.gpcResponse.assessment.status)}
                 </span>
                 {report.gpcResponse.californiaDeductionPoints > 0 ? (
                   <span className={`${monoClass} text-[0.68rem] font-semibold text-rose-700`}>
@@ -602,12 +606,19 @@ function BenchmarkComparison({ report }: { report: ShadowReportData }) {
       </div>
       <div className="mt-2 grid gap-2.5 sm:grid-cols-2">
         {rows.map((row) => {
+          if (row.average === null) return (
+            <div className="rounded-md border border-zinc-200 bg-white p-2" key={row.label}>
+              <p className="min-h-8 text-xs font-medium leading-4 text-zinc-700">{row.label}</p>
+              <p className="mt-1 text-[0.68rem] leading-4 text-zinc-500">Site <strong className={`${monoClass} ml-1 text-sm text-zinc-950`}>{row.site}</strong></p>
+              <p className="mt-2 text-[0.65rem] leading-4 text-zinc-500">Benchmark unavailable</p>
+            </div>
+          );
           const scaleMax = Math.max(row.site, row.average ?? 0, 1) * 1.1;
           const siteWidth = row.site === 0 ? 0 : Math.max(6, Math.min(100, (row.site / scaleMax) * 100));
           const averageLeft = row.average === null ? null : Math.max(0, Math.min(100, (row.average / scaleMax) * 100));
           return (
             <div className="rounded-md border border-zinc-200 bg-white p-2" key={row.label}>
-              <p className="text-xs font-medium leading-4 text-zinc-700">{row.label}</p>
+              <p className="min-h-8 text-xs font-medium leading-4 text-zinc-700">{row.label}</p>
               <div className="mt-1 flex items-end justify-between gap-3 text-[0.68rem] leading-4 text-zinc-500">
                 <span>Site <strong className={`${monoClass} ml-1 text-sm text-zinc-950`}>{row.site}</strong></span>
                 <span>Industry avg <strong className={`${monoClass} ml-1 text-sm text-zinc-800`}>{row.average?.toFixed(1) ?? "N/A"}</strong></span>
@@ -981,11 +992,11 @@ function CompactInventoryMixPanel({
       <div className="mt-2 flex items-start justify-center gap-3 md:justify-start">
         <span
           aria-label={`${title}: ${items.map((item) => `${item.label} ${item.value}`).join(", ")}`}
-          className="relative inline-flex h-12 w-12 shrink-0 self-start items-center justify-center rounded-full"
+          className="relative inline-flex h-[60px] w-[60px] shrink-0 self-start items-center justify-center rounded-full"
           role="img"
           style={{ background: segments.length > 0 ? `conic-gradient(${segments.join(", ")})` : "#e4e4e7" }}
         >
-          <span className={`${monoClass} inline-flex h-7 w-7 items-center justify-center rounded-full bg-white text-xs font-semibold text-zinc-900`}>{total}</span>
+          <span className={`${monoClass} inline-flex h-[35px] w-[35px] items-center justify-center rounded-full bg-white text-xs font-semibold text-zinc-900`}>{total}</span>
         </span>
         <div className={`hidden min-w-0 flex-1 gap-x-3 gap-y-1 md:grid ${legendColumns === 1 ? "grid-cols-1" : "grid-cols-2"}`}>
           {visibleItems.map((item) => (
@@ -1102,12 +1113,12 @@ function SingleLineCell({ children, title }: { children: ReactNode; title?: stri
 
 const INVENTORY_VISIBLE_ROW_LIMIT = 6;
 
-function inventoryResourceIdentity(value: unknown) {
+function inventoryResourceIdentity(value: unknown, product: string) {
   const record = value && typeof value === "object" ? value as Record<string, unknown> : {};
   const cookieRefs = (Array.isArray(record.cookieDetails) ? record.cookieDetails : []).flatMap(item => item && typeof item === "object" && Array.isArray(item.evidenceRefs) ? item.evidenceRefs.filter((ref: unknown): ref is string => typeof ref === "string") : []);
   const requests = (Array.isArray(record.requestDetails) ? record.requestDetails : []).filter(item => item && typeof item === "object").map(item => ({ hostname: typeof item.hostname === "string" ? item.hostname : null, path: typeof item.path === "string" ? item.path : null, method: typeof item.method === "string" ? item.method : null }));
   const nodeRefs = Array.isArray(record.retainedGraphNodeIds) ? record.retainedGraphNodeIds.filter((id): id is string => typeof id === "string") : [];
-  return { cookieRefs, requests, nodeRefs };
+  return { cookieRefs, products: [product], requests, nodeRefs };
 }
 
 export function RuntimeInventoryTable({ report, initiallyOpen = true }: { report: ShadowReportData; initiallyOpen?: boolean }) {
@@ -1168,7 +1179,7 @@ export function RuntimeInventoryTable({ report, initiallyOpen = true }: { report
           </thead>
           <InventorySortedBody rows={inventoryRows.map(row => ({ evidence: row.evidence, type: row.type, vendor: row.vendor, name: row.name, purpose: row.purpose, firstSeenMs: typeof row.evidenceJson?.firstSeenMs === "number" && Number.isFinite(row.evidenceJson.firstSeenMs) ? row.evidenceJson.firstSeenMs : null }))}>
             {inventoryRows.map((row, index) => (
-              <InventoryResourceRow inspect existingDetails={<InventoryRowDetails row={row} />} evidence={row.evidenceJson} key={`${row.vendor}:${row.purpose}:${index}`} identity={inventoryResourceIdentity(row.evidenceJson)} facts={{ vendor: row.vendor, name: row.name, type: row.type, purpose: row.purpose, evidence: row.evidence, category: row.category, observed: row.observed, recordCount: row.recordCount, requestCount: row.requestCount, domains: row.domains, relationship: row.relationship, entityRelationship: row.entityRelationship, confidence: row.confidence, priority: row.priority, serverLocation: row.serverLocation, controllingEntity: row.controllingEntity, transferMechanism: row.transferMechanism }}>
+              <InventoryResourceRow inspect existingDetails={<InventoryRowDetails row={row} />} evidence={row.evidenceJson} key={`${row.vendor}:${row.purpose}:${index}`} identity={inventoryResourceIdentity(row.evidenceJson, row.name)} facts={{ vendor: row.vendor, name: row.name, type: row.type, purpose: row.purpose, evidence: row.evidence, category: row.category, observed: row.observed, recordCount: row.recordCount, requestCount: row.requestCount, domains: row.domains, relationship: row.relationship, entityRelationship: row.entityRelationship, confidence: row.confidence, priority: row.priority, serverLocation: row.serverLocation, controllingEntity: row.controllingEntity, transferMechanism: row.transferMechanism }}>
               <tr className="group/inventory-row border-b border-zinc-100 align-middle transition-colors hover:bg-zinc-50/80 last:border-0" key={`${row.vendor}:${row.purpose}:${index}`}>
                 <td className="bg-white px-3 py-2 transition-colors group-hover/inventory-row:bg-zinc-50 md:sticky md:left-0 md:z-10">
                   <details className="group/vendor relative">

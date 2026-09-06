@@ -1261,9 +1261,12 @@ async function waitForDeterministicOrCanonicalAcceptRecipe(
     const namedResolution = await waitForDeterministicRecipe(
       page,
       boundedRecipes,
-      // The canonical path is the primary live-control resolver. Probe legacy
-      // selectors briefly so absent selectors do not consume short budgets.
-      Math.min(50, Math.max(0, deadlineAtMs - Date.now())),
+      // A runtime-identified CMP needs time to finish one uniqueness sweep
+      // across frames. A 50 ms slice repeatedly discarded valid main-frame
+      // matches before child-frame checks, especially for contextual controls
+      // that intentionally do not meet the generic label threshold.
+      // Reallocate the existing search budget; the outer deadline is unchanged.
+      Math.min(activeRuntimeRecipes.length > 0 ? 750 : 50, Math.max(0, deadlineAtMs - Date.now())),
       signal,
       discovery,
     );

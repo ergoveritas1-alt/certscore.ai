@@ -258,6 +258,7 @@ export interface PreConsentRuntimeCheckpoint {
   cookieEvents: CookieEvent[];
   cookieSnapshots: CookieSnapshot[];
   networkEvents: NetworkEvent[];
+  iframeEvents: IframeEvent[];
   observedAtMs: number;
   vendorResolverInputs: VendorResolverInput[];
 }
@@ -937,6 +938,7 @@ export async function preConsentRuntimeScanner(
         const observedAtMs = elapsed(input.scanStartedAtMs);
         const checkpointCookieEvents = cookieEvents.map((event) => ({ ...event }));
         const checkpointNetworkEvents = networkEvents.map((event) => ({ ...event }));
+        const checkpointIframeEvents = iframeEvents.map((event) => ({ ...event }));
         const checkpointVendorResolverInputs = vendorResolverInputs.map((resolverInput) => ({ ...resolverInput }));
         const checkpointCookies = await browserContext.cookies().catch(() => []);
         applyFinalDocumentPartyClassification({
@@ -945,7 +947,7 @@ export async function preConsentRuntimeScanner(
           networkResponseEvents: [],
           cookieEvents: checkpointCookieEvents,
           scriptEvents: [],
-          iframeEvents: [],
+          iframeEvents: checkpointIframeEvents,
         });
         const checkpointCookieSnapshot: CookieSnapshot = {
           artifactId: "cookie_snapshot_pre_consent_preview_checkpoint",
@@ -968,6 +970,7 @@ export async function preConsentRuntimeScanner(
           cookieEvents: checkpointCookieEvents,
           cookieSnapshots: [checkpointCookieSnapshot],
           networkEvents: checkpointNetworkEvents,
+          iframeEvents: checkpointIframeEvents,
           observedAtMs,
           vendorResolverInputs: checkpointVendorResolverInputs,
         });

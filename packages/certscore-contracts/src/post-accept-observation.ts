@@ -470,6 +470,9 @@ const postAcceptReportActivityRowSchema = z.object({
 });
 
 export const postAcceptReportProjectionSchema = z.object({
+  resolver: postRefusalResolverSchema.optional(),
+  resolverDurationMs: z.number().int().nonnegative().optional(),
+  interactionDiagnostics: postRefusalInteractionDiagnosticsSchema.optional(),
   afterActionCapture: afterActionCaptureSchema.optional(),
   afterActionRequests: z.array(postRefusalNetworkRequestSchema.omit({ inFlightAtRefusalRegistration: true, msOffsetFromRefusal: true })).max(96).optional(),
   afterActionStorage: z.array(postRefusalStorageItemSchema).max(96).optional(),
@@ -590,6 +593,9 @@ export function projectPostAcceptEvidenceForReport(input: {
     ...(packet.captureCoverage ? { captureCoverage: packet.captureCoverage } : {}),
     contractVersion: POST_ACCEPT_REPORT_PROJECTION_VERSION,
     completedAt: packet.completedAt,
+    resolver: packet.resolver,
+    resolverDurationMs: packet.timing.resolverMs,
+    ...(packet.interactionDiagnostics ? { interactionDiagnostics: packet.interactionDiagnostics } : {}),
     ...(packet.actionControlProof ? { actionControlProof: packet.actionControlProof } : {}),
     evidenceDisposition: evidenceDisposition.disposition,
     indeterminateReason: evidenceDisposition.reasonCode,

@@ -1,8 +1,40 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import { preConsentRuntimePreviewSchema, type CanonicalEvidenceBundle } from "@certscore/contracts";
 import { buildPreConsentRuntimePreview, deriveRuntimeCoverageSummary, withLocalRegionalEgressLimitation } from "./index";
 
 const startedAt = "2026-01-01T00:00:00.000Z";
+
+test("preview projects endpoint-resolved resource identities, timing and embeds without raw URLs", () => {
+  const urls = [
+    "https://fonts.googleapis.com/css?family=PRIVATE",
+    "https://fonts.gstatic.com/font.woff2",
+    "https://www.google.com/maps/embed?secret=PRIVATE",
+    "https://www.facebook.com/plugins/page.php?href=PRIVATE",
+    "https://fixture.test/wp-content/plugins/bst-dsgvo-cookie/script.js",
+  ];
+  const networkEvents = urls.map((url, index) => ({
+    eventId: `request_${index}`, eventType: "network_request", url, hostname: new URL(url).hostname,
+    timestampMs: 1000 + index, consentStateAtTime: "pre_consent", firstParty: index === 4, thirdParty: index !== 4,
+  })) as CanonicalEvidenceBundle["networkEvents"];
+  const iframeEvents = networkEvents.slice(2, 4).map(event => ({ ...event, eventType: "iframe", eventId: `iframe_${event.eventId}` })) as CanonicalEvidenceBundle["iframeEvents"];
+  const preview = preConsentRuntimePreviewSchema.parse(buildPreConsentRuntimePreview({
+    completedAt: "2026-01-01T00:00:06.000Z", cookieEvents: [], cookieSnapshots: [],
+    networkEvents, iframeEvents, normalizedVendorObservations: [],
+  }));
+  assert.equal(preview.resources?.length, 6);
+  const fonts = preview.resources!.find(row => row.product === "Google Fonts")!;
+  assert.equal(fonts.requestCount, 2);
+  assert.equal(fonts.observedAtMs, 1000);
+  assert.equal(fonts.purpose, "Font delivery");
+  assert.equal(preview.resources!.filter(row => row.kind === "embed").length, 2);
+  assert.equal(preview.resources!.find(row => row.purpose === "Consent management")?.party, "first_party");
+  assert.doesNotMatch(JSON.stringify(preview), /PRIVATE|https:\/\//);
+  const bounded = buildPreConsentRuntimePreview({ completedAt: preview.generatedAt, cookieEvents: [], cookieSnapshots: [], normalizedVendorObservations: [],
+    networkEvents: Array.from({ length: 21 }, (_, index) => ({ ...networkEvents[0]!, hostname: `resource${index}.test`, url: `https://resource${index}.test/file` })) });
+  assert.equal(bounded.resources?.length, 20);
+  assert.equal(bounded.truncated.resources, true);
+});
 
 test("pre-consent preview separates captured and returned identities from operational vendors", () => {
   const preview = buildPreConsentRuntimePreview({
@@ -78,7 +110,7 @@ test("pre-consent preview separates captured and returned identities from operat
   assert.equal(preview.summary.operationalVendorCount, 1);
   assert.equal(preview.trackers[0]?.vendor, "Example Analytics");
   assert.equal(preview.operationalVendors?.[0]?.vendor, "Cloudflare");
-  assert.deepEqual(preview.truncated, { cookies: true, trackers: false, operationalVendors: false });
+  assert.deepEqual(preview.truncated, { cookies: true, trackers: false, operationalVendors: false, resources: false });
 });
 
 test("runtime coverage marks completed empty runtime as limited none", () => {

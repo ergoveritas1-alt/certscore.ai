@@ -1,4 +1,5 @@
 import type { ReactNode } from "react";
+import { afterClickSummary } from "./after-action-summary";
 import { InventoryResourceProvider, InventoryResourceRow, InventoryResourceMobile } from "./inventory-resource-details";
 import Link from "next/link";
 import {
@@ -1044,7 +1045,7 @@ function InventoryEvidenceSegmentation({ rows }: { rows: InventoryGroupRow[] }) 
 
 function inventoryResourceProps(row: InventoryGroupRow) {
   return {
-    identity: { cookieRefs: row.cookieDetails.flatMap(cookie => cookie.evidenceRefs ?? []), requests: (row.requestDetails ?? []).map(request => ({ hostname: request.hostname, path: request.path, method: request.method })) },
+    identity: { cookieRefs: row.cookieDetails.flatMap(cookie => cookie.evidenceRefs ?? []), products: row.rawProducts, requests: (row.requestDetails ?? []).map(request => ({ hostname: request.hostname, path: request.path, method: request.method })) },
     facts: { vendor: row.vendor, names: row.cookieNames, products: row.rawProducts, domains: row.domains, purpose: row.purpose, classification: classifyInventoryEvidence(row), firstSeenMs: row.firstSeenMs, timingEvidence: row.timingEvidence, requestCount: row.requestCount, confidence: row.confidence, priority: row.priority, siteRelationship: row.siteRelationship, entityRelationship: row.entityRelationship, cookieDetails: row.cookieDetails, requestDetails: row.requestDetails, dataFlows: row.dataFlows },
   };
 }
@@ -1436,7 +1437,8 @@ export function buildExecutiveRejectPathProjection(
   const contradictionObserved = retained.refusalSignalContradictsAction === true;
   const observationWindowMs = getOptionalFiniteNumber(retained, "observationWindowMs");
   const resolverMethod = getOptionalString(retained, "resolverMethod");
-  const customerFacingNote = omitScoreMechanicsFromCustomerCopy(item.note);
+  const afterClickNote = afterClickSummary(retained, "reject", retained.rejectInteractionConfirmed === true);
+  const customerFacingNote = omitScoreMechanicsFromCustomerCopy(item.note) + afterClickNote;
   const timelineEvents = activityRows
     .map(formatRejectTimelineEvent)
     .filter((event): event is NonNullable<typeof event> => Boolean(event))
@@ -1477,7 +1479,7 @@ export function buildExecutiveRejectPathProjection(
     return {
       evidenceRows: [],
       label: "No post-Reject issue observed",
-      note: "A confirmed Reject and bounded observation window were retained. No qualifying post-Reject issue was observed in that window.",
+      note: "A confirmed Reject and bounded observation window were retained. No qualifying post-Reject issue was observed in that window." + afterClickNote,
       observationWindowMs,
       resolverMethod,
       scoreEffect: "none",
@@ -1488,8 +1490,10 @@ export function buildExecutiveRejectPathProjection(
 
   return {
     evidenceRows: [],
-    label: "Reject path incomplete",
-    note: customerFacingNote,
+    label: "Reject path limited",
+    note: afterClickNote
+      ? "The Reject control was clicked, but refusal could not be verified." + afterClickNote
+      : customerFacingNote,
     observationWindowMs,
     resolverMethod,
     scoreEffect: "none",

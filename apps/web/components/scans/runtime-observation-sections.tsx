@@ -157,11 +157,11 @@ function CompactInventoryMixPanel({
       <div className={`${compact ? "mt-1" : "mt-2"} flex items-start justify-center gap-3 md:justify-start`}>
         <span
           aria-label={`${title}: ${items.map((item) => `${item.label} ${item.value}`).join(", ")}`}
-          className={`relative inline-flex shrink-0 self-start items-center justify-center rounded-full ${compact ? "h-10 w-10" : "h-12 w-12"}`}
+          className={`relative inline-flex shrink-0 self-start items-center justify-center rounded-full ${compact ? "h-[50px] w-[50px]" : "h-[60px] w-[60px]"}`}
           role="img"
           style={{ background: segments.length > 0 ? `conic-gradient(${segments.join(", ")})` : "#e4e4e7" }}
         >
-          <span className={`${monoClass} inline-flex items-center justify-center rounded-full bg-white text-xs font-semibold text-zinc-900 ${compact ? "h-6 w-6" : "h-7 w-7"}`}>
+          <span className={`${monoClass} inline-flex items-center justify-center rounded-full bg-white text-xs font-semibold text-zinc-900 ${compact ? "h-[30px] w-[30px]" : "h-[35px] w-[35px]"}`}>
             {total}
           </span>
         </span>

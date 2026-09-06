@@ -11,6 +11,7 @@ import {
   hasSubstantiveProcessingPurposesEvidence,
   MIN_GDPR_TRANSPARENCY_POLICY_TEXT_CHARS,
   policyTextEvidenceProjectionSchema,
+  postRefusalReportProjectionSchema,
 } from "@certscore/contracts";
 import type {
   ConsentOptionsControlProminenceState,
@@ -6325,7 +6326,14 @@ function derivePostRejectOutcome(input: GdprEprivacyCoveragePolicyInput) {
       ? getString(reductionEvidence, ["rejectInteractionFailureReason", "reject_interaction_failure_reason"]) ??
         getPostRejectFailureReason(rejectInteractionFailureClass)
       : getPostRejectFailureReason(rejectInteractionFailureClass);
+  // Preserve descriptive capture from the persisted typed packet without
+  // changing registration, checklist status, finding eligibility or score.
+  const actionProjection = postRefusalReportProjectionSchema.safeParse(input.runtimeArtifacts?.postRefusalEvidenceProjection);
+  const afterClickEvidence = actionProjection.success && actionProjection.data.packetSha256 && actionProjection.data.afterActionCapture
+    ? { afterActionCapture: actionProjection.data.afterActionCapture, sourcePacketSha256: actionProjection.data.packetSha256 }
+    : {};
   const postRejectRetainedEvidence = {
+    ...afterClickEvidence,
     baselineVendors: compactArray(baselineVendors, 5),
     concretePostRejectNonEssentialDetailsRetained: concretePostRejectNonEssentialRows.length > 0,
     persistedVendors: compactArray(persistedVendors, 5),

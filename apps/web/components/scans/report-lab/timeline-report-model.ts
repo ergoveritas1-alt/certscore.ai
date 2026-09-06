@@ -1,4 +1,5 @@
 import { KNOWN_CMP_REGISTRY } from "@website-signal-risk-scanner/shared";
+import { acceptPathIncompleteReason } from "./accept-path-reason";
 import type { GdprEprivacyCoverageChecklistItem } from "../../../lib/scans/gdpr-eprivacy-coverage-checklist";
 import { deriveGdprEprivacyCoverageChecklistRowRationale } from "../../../lib/scans/gdpr-eprivacy-checklist-rationale";
 import { getReportableGdprEprivacyCoverageItems } from "../../../lib/scans/gdpr-eprivacy-reportable-rows";
@@ -522,8 +523,8 @@ function buildAcceptPathProjection(
     if (coverage?.status !== "limited") return null;
     return {
       evidenceRows: [],
-      label: "Accept path incomplete",
-      note: "Accept-path observation did not retain a verified terminal evidence projection.",
+      label: "Accept path limited",
+      note: acceptPathIncompleteReason(coverage),
       observationWindowMs: null,
       resolverMethod: null,
       scoreEffect: "none",
@@ -564,14 +565,14 @@ function buildAcceptPathProjection(
       ? "Consent-dependent activity observed"
       : state === "no_activity_observed"
         ? "No qualifying post-Accept activity observed"
-        : "Accept path incomplete";
+        : "Accept path limited";
   const note = state === "review_signal"
     ? "The visitor clicked Accept, but the consent record saved afterward still said analytics and advertising were not allowed. The saved record should match the visitor’s choice."
     : state === "activity_observed"
       ? `A confirmed Accept was followed by ${countSummary || "qualifying non-essential activity"}, establishing the post-Accept comparison baseline.`
       : state === "no_activity_observed"
         ? "A confirmed Accept and bounded observation window were retained without qualifying post-Accept activity."
-        : "Accept-path observation did not retain a verified, production-projectable result.";
+        : acceptPathIncompleteReason(projection);
 
   return {
     evidenceRows: activityRows.map((row) => {
@@ -818,6 +819,7 @@ export function buildTimelineReportModel(scanRecord: ScanDetailResponse): Shadow
       forms: forms.length,
       nonEssentialCookiesStorage: nonEssentialInventoryTallies.cookiesStorage,
       nonEssentialRequests: nonEssentialInventoryTallies.requests,
+      thirdPartyEmbeds: inventoryProjection.embedRows.filter((row) => row.party === "third_party").length,
       vendors: vendorSurface.resolvedVendorNames.length + vendorSurface.unresolvedVendorHosts.length,
     },
     nextStep,
