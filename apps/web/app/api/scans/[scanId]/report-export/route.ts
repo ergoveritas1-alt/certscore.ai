@@ -1,3 +1,4 @@
+import { readFullSiteOptions } from "../../../../../server/scans/full-site-options";
 import { loadFullSiteExport } from "../../../../../server/scans/full-site-report";
 import { NextRequest, NextResponse } from "next/server";
 import { readFile } from "node:fs/promises";
@@ -49,7 +50,7 @@ export async function GET(request: NextRequest, context: RouteContext) {
     scanId,
   });
   if (!scanRecord) return error(404, "The persisted report projection is not available.");
-  const report = buildCanonicalReportExport(scanRecord, scanRecord.scan.scanConfigJson?.fullSite === true ? await loadFullSiteExport(scanId) : undefined);
+  const report = buildCanonicalReportExport(scanRecord, scanRecord.scan.scanConfigJson?.fullSite === true && (await readFullSiteOptions()).allowed ? await loadFullSiteExport(scanId) : undefined);
   if (!report) return error(409, "The canonical report projection is unavailable for this scan.");
 
   const safeHost = (report.scan.domainHostname ?? "scan-report").replace(/[^a-z0-9.-]+/gi, "-").slice(0, 80);

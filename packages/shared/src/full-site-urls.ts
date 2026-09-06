@@ -114,18 +114,14 @@ export function parseCrawlRobots(
         group = { agents: [], rules: [], delay: 0 };
         rulesStarted = false;
       }
-      group.agents.push(value.toLowerCase());
+      if (value) group.agents.push(value.toLowerCase());
     } else if (group.agents.length) {
       rulesStarted = true;
-      if (
-        (key === "allow" || key === "disallow") &&
-        value &&
-        group.rules.length < 10000
-      )
-        group.rules.push({
-          allow: key === "allow",
-          path: value.slice(0, 2000),
-        });
+      if ((key === "allow" || key === "disallow") && value) {
+        if (group.rules.length >= 10000 || value.length > 2000)
+          throw new Error("robots_policy_limit");
+        group.rules.push({ allow: key === "allow", path: value });
+      }
       if (
         key === "crawl-delay" &&
         Number.isFinite(Number(value)) &&
@@ -193,4 +189,32 @@ export function robotsAllows(url: string, policy: RobotsPolicy): boolean {
         Number(b.allow) - Number(a.allow),
     );
   return matches[0]?.allow ?? true;
+}
+
+/** Only claim a universal prohibition when no Allow exception can reopen a subset. */
+export function robotsDisallowAll(policy: RobotsPolicy): boolean {
+  if (policy.byHost)
+    return (
+      Object.keys(policy.byHost).length > 0 &&
+      Object.values(policy.byHost).every(robotsDisallowAll)
+    );
+  return (
+    !policy.rules.some((rule) => rule.allow) &&
+    policy.rules.some(
+      (rule) =>
+        !rule.allow && (rule.path === "/" || /^\/?\*+\$?$/.test(rule.path)),
+    )
+  );
+}
+export function robotsRestrictCrawl(policy: RobotsPolicy): boolean {
+  return policy.byHost
+    ? Object.values(policy.byHost).some(robotsRestrictCrawl)
+    : policy.rules.some((rule) => !rule.allow);
+}
+export function robotsRestrictionMessage(policy: RobotsPolicy): string | null {
+  if (robotsDisallowAll(policy))
+    return "robots.txt prohibits crawling this site. No additional pages were crawled; only the separate homepage audit is shown.";
+  if (robotsRestrictCrawl(policy))
+    return "robots.txt restricts crawl coverage. Only permitted URLs are eligible; disallowed paths are excluded. This inventory does not cover the whole site.";
+  return null;
 }

@@ -311,6 +311,14 @@ export function FullSiteWorkspace({
             </span>
           ) : null}
         </div>
+        {state?.robotsRestriction ? (
+          <p
+            role="status"
+            className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-950"
+          >
+            {state.robotsRestriction}
+          </p>
+        ) : null}
         {state &&
         (state.effective.concurrency !== requested.concurrency ||
           state.effective.waitSeconds !== requested.waitSeconds) ? (

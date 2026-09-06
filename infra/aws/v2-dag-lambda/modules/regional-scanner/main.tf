@@ -223,7 +223,10 @@ resource "aws_vpc_endpoint" "logs" {
       Effect    = "Allow"
       Principal = "*"
       Action    = ["logs:CreateLogGroup", "logs:CreateLogStream", "logs:PutLogEvents"]
-      Resource  = "arn:aws:logs:${var.region}:${var.account_id}:log-group:/aws/lambda/${var.function_name}:*"
+      Resource = [
+        "arn:aws:logs:${var.region}:${var.account_id}:log-group:/aws/lambda/${var.function_name}:*",
+        "arn:aws:logs:${var.region}:${var.account_id}:log-group:/aws/lambda/${var.function_name}-inventory:*"
+      ]
     }]
   })
 
@@ -446,6 +449,61 @@ resource "aws_lambda_function" "scanner" {
     # Routine deploys promote a verified digest directly. Terraform owns the
     # function configuration and uses image_uri only for bootstrap/import.
     ignore_changes = [image_uri]
+  }
+}
+
+# Inventory pages have no provisioned/reserved capacity and cannot run homepage audits.
+resource "aws_cloudwatch_log_group" "inventory" {
+  name              = "/aws/lambda/${var.function_name}-inventory"
+  retention_in_days = var.log_retention_days
+  tags              = var.tags
+}
+
+resource "aws_lambda_function" "inventory" {
+  function_name = "${var.function_name}-inventory"
+  role          = var.role_arn
+  package_type  = "Image"
+  image_uri     = var.image_uri
+  memory_size   = var.memory_size
+  timeout       = 25
+
+  ephemeral_storage { size = 512 }
+
+  environment {
+    variables = merge(
+      local.base_environment,
+      var.environment_variables,
+      { CERTSCORE_FULL_SITE_INVENTORY_WORKER = "1" },
+      var.expected_egress_region != "" ? {
+        CERTSCORE_V2_DAG_LAMBDA_EXPECTED_EGRESS_REGION = var.expected_egress_region
+      } : {}
+    )
+  }
+
+  dynamic "vpc_config" {
+    for_each = var.vpc_config == null ? [] : [var.vpc_config]
+    content {
+      security_group_ids = vpc_config.value.security_group_ids
+      subnet_ids         = vpc_config.value.subnet_ids
+    }
+  }
+
+  depends_on = [aws_cloudwatch_log_group.inventory]
+  tags       = var.tags
+
+  lifecycle {
+    # Routine deploys promote a verified digest directly. Terraform owns the
+    # function configuration and uses image_uri only for bootstrap/import.
+    ignore_changes = [image_uri]
+  }
+}
+
+resource "aws_lambda_function_event_invoke_config" "inventory" {
+  function_name                = aws_lambda_function.inventory.function_name
+  maximum_event_age_in_seconds = 60
+  maximum_retry_attempts       = 0
+  destination_config {
+    on_failure { destination = aws_sqs_queue.async_failures.arn }
   }
 }
 

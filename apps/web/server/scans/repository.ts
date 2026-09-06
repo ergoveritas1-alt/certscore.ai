@@ -1,5 +1,7 @@
 "use server";
 
+import { fullSiteInternalEnabled } from "@website-signal-risk-scanner/db";
+
 import { query, queryOne, withWriteTransaction, insertFullSiteCrawl } from "@website-signal-risk-scanner/db";
 import { PRIOR_SCAN_ACCELERATION_MAX_AGE_DAYS, validateFullSiteRequest, fullSitePolicy, canUseFullSite } from "@website-signal-risk-scanner/shared";
 import type {
@@ -1071,7 +1073,7 @@ export async function createQueuedFullScan(input: QueuedFullScanInsert): Promise
   if ((input.scanConfigJson?.fullSite !== undefined && input.scanConfigJson.fullSite !== false) || input.scanConfigJson?.crawlOptions !== undefined) {
     const { getDashboardContext } = await import("../auth");
     const context = await getDashboardContext();
-    crawl = validateFullSiteRequest(input.scanConfigJson, canUseFullSite(context.membership?.role) &&
+    crawl = validateFullSiteRequest(input.scanConfigJson, (fullSiteInternalEnabled() && canUseFullSite(context.membership?.role)) &&
       context.organization.id === input.organizationId && context.user.id === input.submittedByUserId, fullSitePolicy(process.env));
   }
   const scanId = randomUUID();

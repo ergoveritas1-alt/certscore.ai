@@ -516,6 +516,7 @@ async function deployScanners(input: { pushRuntimeBase: boolean; ref: string }):
         }
         const digestImageUri = `${imageUri.split(":")[0]}@${imageDigest}`;
         await synchronizeScannerImage(awsScannerImageControl(region), digestImageUri, true);
+        await synchronizeScannerImage(awsScannerImageControl(region, true), digestImageUri, true);
         return {
           durationMs: Date.now() - regionStart,
           imageUri: digestImageUri,
@@ -569,11 +570,11 @@ async function readScannerWebBotAuthPrivateKey() {
 async function applyScannerRuntimeConfiguration() {
   console.log(`Applying ${SCANNER_MEMORY_SIZE} MB memory and verified ConsentCheck identity before image promotion.`);
   const privateKeyPem = await readScannerWebBotAuthPrivateKey();
-  const results = await Promise.all(SCANNER_REGIONS.map(async (region) => {
+  const results = await Promise.all(SCANNER_REGIONS.flatMap(region => [SCANNER_FUNCTION_NAME, `${SCANNER_FUNCTION_NAME}-inventory`].map(async (functionName) => {
     const current = await run([
       "aws", "lambda", "get-function-configuration",
       "--region", region,
-      "--function-name", SCANNER_FUNCTION_NAME,
+      "--function-name", functionName,
       "--query", "{MemorySize:MemorySize,Variables:Environment.Variables,RevisionId:RevisionId,EnvironmentError:Environment.Error}",
       "--output", "json"
     ], { quiet: true });
@@ -602,14 +603,14 @@ async function applyScannerRuntimeConfiguration() {
     if (identityChanged || memoryChanged) {
       const environmentPath = path.join(
         tmpdir(),
-        `certscore-scanner-identity-${process.pid}-${region}.json`,
+        `certscore-scanner-identity-${process.pid}-${region}-${functionName}.json`,
       );
       await writeFile(environmentPath, `${environmentDocument}\n`, { encoding: "utf8", mode: 0o600 });
       try {
         await run([
           "aws", "lambda", "update-function-configuration",
           "--region", region,
-          "--function-name", SCANNER_FUNCTION_NAME,
+          "--function-name", functionName,
           "--memory-size", String(SCANNER_MEMORY_SIZE),
           "--revision-id", currentPayload.RevisionId,
           "--environment", `file://${environmentPath}`,
@@ -620,13 +621,13 @@ async function applyScannerRuntimeConfiguration() {
       await run([
         "aws", "lambda", "wait", "function-updated-v2",
         "--region", region,
-        "--function-name", SCANNER_FUNCTION_NAME
+        "--function-name", functionName
       ], { quiet: true });
     }
     const verified = await run([
       "aws", "lambda", "get-function-configuration",
       "--region", region,
-      "--function-name", SCANNER_FUNCTION_NAME,
+      "--function-name", functionName,
       "--query", "{MemorySize:MemorySize,LastUpdateStatus:LastUpdateStatus,State:State,Variables:Environment.Variables}",
       "--output", "json"
     ], { quiet: true });
@@ -648,10 +649,10 @@ async function applyScannerRuntimeConfiguration() {
     ) {
       throw new Error(`${region} scanner runtime configuration did not converge.`);
     }
-    return { changed: identityChanged || memoryChanged, region };
-  }));
+    return { changed: identityChanged || memoryChanged, region, functionName };
+  })));
   for (const result of results) {
-    console.log(`${result.region}: ${SCANNER_MEMORY_SIZE} MB and verified identity (${result.changed ? "updated" : "already configured"})`);
+    console.log(`${result.region} ${result.functionName}: ${SCANNER_MEMORY_SIZE} MB and verified identity (${result.changed ? "updated" : "already configured"})`);
   }
 }
 

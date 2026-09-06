@@ -14,7 +14,7 @@ export function fullSitePolicy(env: Record<string, string | undefined> = {}) {
     return value;
   }
   const maxPages = bounded("MAX_PAGES", 500, 10, 2000);
-  const maxConcurrency = bounded("MAX_CONCURRENCY", 3, 1, 6);
+  const maxConcurrency = bounded("MAX_CONCURRENCY", 12, 4, 12);
   const minWait = bounded("MIN_WAIT_SECONDS", 5, 1, 60);
   return {
     maxPages: {
@@ -22,12 +22,12 @@ export function fullSitePolicy(env: Record<string, string | undefined> = {}) {
       max: maxPages,
       default: bounded("DEFAULT_PAGES", 10, 1, maxPages),
     },
-    concurrency: { min: 1, max: maxConcurrency, default: 1 },
+    concurrency: { min: 1, max: maxConcurrency, default: 4 },
     waitSeconds: { min: minWait, max: 300, default: Math.max(5, minWait) },
     discoveredUrls: bounded("MAX_DISCOVERED_URLS", 5000, maxPages, 20000),
     wallClockSeconds: bounded("MAX_SECONDS", 14400, 300, 86400),
-    pageSeconds: 45,
-    leaseSeconds: 90, // exceeds the existing 75-second Lambda hard timeout
+    pageSeconds: 20,
+    leaseSeconds: 30, // exceeds the inventory-only 25-second Lambda hard timeout
     maxRetries: bounded("MAX_RETRIES", 1, 0, 2),
     sitemapDocuments: 25,
     discoveryBytes: 2 * 1024 * 1024,
@@ -214,6 +214,7 @@ export type CrawlState = {
   completedAt: string | null;
   homepageDurationMs: number | null;
   stopReason: string | null;
+  robotsRestriction?: string | null;
   discoveryExhausted: boolean;
   discovered: number;
   peakWorkers: number | null;

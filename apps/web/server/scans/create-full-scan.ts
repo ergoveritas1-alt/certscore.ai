@@ -1,5 +1,7 @@
 "use server";
 
+import { fullSiteInternalEnabled } from "@website-signal-risk-scanner/db";
+
 import {
   fullSitePolicy, validateFullSiteRequest, canUseFullSite,
   FULL_SCAN_EVENT_TYPES,
@@ -170,7 +172,7 @@ export async function queueFullScanForDomain(input: QueueFullScanInput): Promise
   if ((input.fullSite !== undefined && input.fullSite !== false) || input.crawlOptions !== undefined) {
     const { getDashboardContext } = await import("../auth");
     const context = await getDashboardContext();
-    const authorized = canUseFullSite(context.membership?.role) && context.organization.id === input.organizationId && context.user.id === input.submittedByUserId;
+    const authorized = (fullSiteInternalEnabled() && canUseFullSite(context.membership?.role)) && context.organization.id === input.organizationId && context.user.id === input.submittedByUserId;
     try { crawl = validateFullSiteRequest(input, authorized, fullSitePolicy(process.env)); }
     catch (error) { return { error: error instanceof Error ? error.message : "Invalid crawl configuration.", scanId: null }; }
   }

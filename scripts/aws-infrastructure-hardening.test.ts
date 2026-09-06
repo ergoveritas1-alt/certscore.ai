@@ -262,10 +262,13 @@ test("routine scanner deploys promote immutable digests without recreating infra
   const verifyFunction = source.match(/async function verifyScanners[\s\S]*?\n}\n\nasync function ensureWorkflowRun/)?.[0] ?? "";
   assert.match(deployFunction, /imageDetails\[0\]\.imageDigest/);
   assert.match(deployFunction, /await applyScannerRuntimeConfiguration\(\)/);
-  assert.match(deployFunction, /"lambda", "update-function-code"/);
+  assert.match(deployFunction, /synchronizeScannerImage\(awsScannerImageControl\(region\), digestImageUri, true\)/);
+  assert.match(deployFunction, /synchronizeScannerImage\(awsScannerImageControl\(region, true\), digestImageUri, true\)/);
+  const imageControl = await readFile("scripts/lib/scanner-image-provenance.ts", "utf8");
+  assert.match(imageControl, /"lambda", "update-function-code"/);
   assert.ok(
     deployFunction.indexOf("await applyScannerRuntimeConfiguration()") <
-      deployFunction.indexOf('"lambda", "update-function-code"'),
+      deployFunction.indexOf("await synchronizeScannerImage("),
     "scanner runtime configuration must converge before image promotion"
   );
   assert.doesNotMatch(deployFunction, /setup-dev-aws-image\.sh/);

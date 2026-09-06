@@ -380,7 +380,7 @@ async function handlePulseGET(request: Request, options: PulseRouteOptions = {})
   const gptAction = isGptActionRequest(url, options);
   const routeName = options.routeName ?? (gptAction ? "pulse-gpt" : "pulse");
   if ((url.searchParams.has("fullSite") && url.searchParams.get("fullSite")!=="false") || ["crawlOptions","maxPages","concurrency"].some(key=>url.searchParams.has(key))) {
-    return new Response(JSON.stringify({error:"Full site requires an authenticated admin or advanced session through the full-scan endpoint."}),{status:403,headers:{"Content-Type":"application/json"}});
+    return new Response(JSON.stringify({error:"Unsupported scan option."}),{status:403,headers:{"Content-Type":"application/json"}});
   }
   const format = gptAction ? parseGptPulseFormat(url) : parsePulseFormat(url.searchParams.get("format"));
   const requestedDetail = url.searchParams.get("detail");

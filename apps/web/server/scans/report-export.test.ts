@@ -40,7 +40,7 @@ function scanRecord(): ScanDetailResponse {
 
 test("full-site JSON and PDF retain scope while homepage projection and score inputs stay unchanged",()=>{
   const record=scanRecord(), baseline=buildCanonicalReportExport(record)!;
-  const aggregate=aggregateFullSite({scanId:record.scan.id,status:"completed",requested:{maxPages:200,concurrency:1,waitSeconds:5},effective:{concurrency:1,waitSeconds:5},region:"eu-west-1",configurationHash:"a".repeat(64),startedAt:"2026-09-06T00:00:00.000Z",completedAt:"2026-09-06T00:01:00.000Z",homepageDurationMs:20000,stopReason:"max_pages",discoveryExhausted:false,discovered:0,peakWorkers:1,pauseMs:null},[]);
+  const aggregate=aggregateFullSite({scanId:record.scan.id,status:"completed",requested:{maxPages:200,concurrency:1,waitSeconds:5},effective:{concurrency:1,waitSeconds:5},region:"eu-west-1",configurationHash:"a".repeat(64),startedAt:"2026-09-06T00:00:00.000Z",completedAt:"2026-09-06T00:01:00.000Z",homepageDurationMs:20000,stopReason:"max_pages",robotsRestriction:"robots.txt restricts crawl coverage.",discoveryExhausted:false,discovered:0,peakWorkers:1,pauseMs:null},[]);
   const fullSite={scope:"Full homepage audit plus additional-page resource inventories",scoreScope:"Homepage audit score",condition:"Fresh visit, no consent action.",countingScope:"Across observed pages; independent visits.",summary:{...aggregate,resources:undefined},timing:{crawlStartedAt:"2026-09-06T00:00:20.000Z"},pages:[],inventoryHref:`/api/scans/${record.scan.id}/full-site`,pageEvidenceHrefTemplate:"?detailPage={pageId}"};
   const report=buildCanonicalReportExport(record,fullSite)!;
   assert.deepEqual(report.projection,baseline.projection);
@@ -50,6 +50,7 @@ test("full-site JSON and PDF retain scope while homepage projection and score in
   assert.equal(pdf.subarray(0,5).toString(),"%PDF-");
   assert.match(pdf.toString("latin1"),/Full site scan/);
   assert.match(pdf.toString("latin1"),/Homepage audit score/);
+  assert.match(pdf.toString("latin1"),/robots.txt restricts crawl coverage/);
 });
 
 test("builds downloads from the persisted canonical projection only", () => {

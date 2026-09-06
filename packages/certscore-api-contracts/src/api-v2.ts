@@ -279,13 +279,9 @@ export const apiV2ScanJobSchema = z
   })
   .passthrough();
 
-export const apiV2FullSiteReferenceSchema = z.object({enabled:z.literal(true),scoreScope:z.literal("homepage"),inventoryUrl:z.string(),
-  requested:z.object({maxPages:z.number().int().positive(),concurrency:z.number().int().positive(),waitSeconds:z.number().finite().nonnegative()})}).strict();
-
 export const apiV2ScanResourceSchema = z
   .object({
     type: z.literal("certscore_scan"),
-    fullSite: apiV2FullSiteReferenceSchema.optional(),
     scanId: z.string(),
     domain: z.string(),
     url: z.string().nullable().optional(),

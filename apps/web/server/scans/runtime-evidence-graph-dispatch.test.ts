@@ -60,7 +60,11 @@ test("scan UUID and trusted graph decision are inserted in the same outbox write
   const start = source.indexOf("export async function createQueuedFullScan(");
   const body = source.slice(start, source.indexOf("export async function failInterrupted", start));
   assert.ok(body.indexOf("const scanId = randomUUID()") < body.indexOf("bindRuntimeGraphDispatchToScan("));
-  assert.ok(body.indexOf("bindRuntimeGraphDispatchToScan(") < body.indexOf("await queryOne"));
+  const bindAt = body.indexOf("bindRuntimeGraphDispatchToScan("), insertAt = body.indexOf("const insert = async");
+  assert.ok(bindAt >= 0 && insertAt > bindAt);
+  assert.match(body, /await withWriteTransaction/);
+  assert.match(body, /await insert\(async/);
+  assert.match(body, /await insert\(queryOne\)/);
   assert.match(body, /\$10::uuid/);
   assert.match(body, /scanConfig,\s+input.queuePriority/);
   assert.match(body, /input.queueOrigin \?\? "user",\s+scanId/);

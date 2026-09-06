@@ -20,6 +20,8 @@ import {
   normalizeCrawlUrl,
   parseCrawlRobots,
   robotsAllows,
+  robotsDisallowAll,
+  robotsRestrictionMessage,
 } from "./full-site-urls";
 
 export const state: CrawlState = {
@@ -126,7 +128,7 @@ test("trusted roles, explicit opt-in, defaults, inactive options and malformed b
     assert.throws(() => validateFullSiteRequest(input, false), { status: 403 });
   assert.deepEqual(validateFullSiteRequest({ fullSite: true }, true), {
     fullSite: true,
-    crawlOptions: { maxPages: 10, concurrency: 1, waitSeconds: 5 },
+    crawlOptions: { maxPages: 10, concurrency: 4, waitSeconds: 5 },
   });
   assert.equal(
     validateFullSiteRequest(
@@ -143,7 +145,7 @@ test("trusted roles, explicit opt-in, defaults, inactive options and malformed b
     { maxPages: 0 },
     { maxPages: 1.1 },
     { maxPages: 501 },
-    { concurrency: 4 },
+    { concurrency: 13 },
     { concurrency: 1.1 },
     { waitSeconds: Infinity },
     { waitSeconds: NaN },
@@ -299,4 +301,63 @@ test("200 independent pages aggregate to bounded identities with exact event cou
   assert.equal(result.resources.length, 11);
   assert.equal(result.totals.services, 1);
   assert.ok(performance.now() - started < 3000);
+});
+
+test("owner-approved crawl limits and robots subset boundaries", () => {
+  const policy = fullSitePolicy();
+  assert.deepEqual(policy.concurrency, { min: 1, max: 12, default: 4 });
+  assert.equal(policy.wallClockSeconds, 14400);
+  assert.equal(policy.pageSeconds, 20);
+  assert.equal(policy.leaseSeconds, 30);
+  assert.equal(
+    validateFullSiteRequest(
+      { fullSite: true, crawlOptions: { concurrency: 12 } },
+      true,
+    ).fullSite,
+    true,
+  );
+  const denied = parseCrawlRobots("User-agent: *\nDisallow: /", "CertScoreBot");
+  assert.equal(robotsDisallowAll(denied), true);
+  assert.equal(
+    robotsDisallowAll(
+      parseCrawlRobots("User-agent: *\nDisallow: /*$", "CertScoreBot"),
+    ),
+    true,
+  );
+  assert.equal(
+    robotsDisallowAll(
+      parseCrawlRobots("User-agent: *\nDisallow: /$", "CertScoreBot"),
+    ),
+    false,
+  );
+  assert.throws(
+    () =>
+      parseCrawlRobots(
+        "User-agent: *\nAllow: /" + "a".repeat(2001),
+        "CertScoreBot",
+      ),
+    /robots_policy_limit/,
+  );
+  assert.match(
+    robotsRestrictionMessage(denied)!,
+    /No additional pages were crawled/,
+  );
+  const subset = parseCrawlRobots(
+    "User-agent: *\nDisallow: /\nAllow: /public/",
+    "CertScoreBot",
+  );
+  assert.equal(robotsDisallowAll(subset), false);
+  assert.equal(robotsAllows("https://example.test/public/page", subset), true);
+  assert.equal(robotsAllows("https://example.test/private", subset), false);
+  assert.equal(robotsAllows("https://example.test/sitemap.xml", subset), false);
+  assert.match(robotsRestrictionMessage(subset)!, /Only permitted URLs/);
+  assert.equal(
+    robotsDisallowAll({
+      rules: [],
+      byHost: { "a.test": denied, "b.test": subset },
+      crawlDelaySeconds: 0,
+      sitemaps: [],
+    }),
+    false,
+  );
 });

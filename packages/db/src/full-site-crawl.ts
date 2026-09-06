@@ -2,6 +2,11 @@ import { createHash, randomBytes, randomUUID } from "node:crypto";
 import type { PoolClient } from "pg";
 import { query, queryOne, withWriteTransaction } from "./postgres";
 
+/** Private control-plane switch. Never read from request input or serialize to clients. */
+export function fullSiteInternalEnabled() {
+  return process.env.CERTSCORE_FULL_SITE_INTERNAL_ENABLED === "1";
+}
+
 export type FullSiteCrawlRow = {
   scan_id: string;
   authorized_user_id: string;
@@ -72,6 +77,7 @@ export async function insertFullSiteCrawl(
     siteKey: string;
   },
 ) {
+  if (!fullSiteInternalEnabled()) throw new Error("Scan option unavailable.");
   await client.query(
     `insert into full_site_crawls (scan_id,authorized_user_id,requested_json,policy_json,region,site_keys,effective_concurrency,effective_wait_seconds)
     values ($1,$2,$3,$4,$5,$6,$7,$8)`,
@@ -125,6 +131,7 @@ export async function claimFullSitePage(input: {
   token: string;
   region: string;
 }) {
+  if (!fullSiteInternalEnabled()) return null;
   return withWriteTransaction(async (client) => {
     const initial = (
       await client.query<FullSiteCrawlRow>(
@@ -392,7 +399,8 @@ export async function completeFullSitePage(input: {
     return true;
   });
 }
-export async function reserveFullSiteDispatches(limit = 10) {
+export async function reserveFullSiteDispatches(limit = 12) {
+  if (!fullSiteInternalEnabled()) return [];
   return withWriteTransaction(async (client) => {
     const rows = (
       await client.query<

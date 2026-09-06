@@ -64,10 +64,12 @@ resource "aws_iam_role_policy" "scanner" {
         Sid    = "WriteScannerLogs"
         Effect = "Allow"
         Action = ["logs:CreateLogStream", "logs:PutLogEvents"]
-        Resource = [
-          for region in values(local.regions) :
-          "arn:aws:logs:${region}:${data.aws_caller_identity.current.account_id}:log-group:/aws/lambda/${local.function_name}:*"
-        ]
+        Resource = flatten([
+          for region in values(local.regions) : [
+            "arn:aws:logs:${region}:${data.aws_caller_identity.current.account_id}:log-group:/aws/lambda/${local.function_name}:*",
+            "arn:aws:logs:${region}:${data.aws_caller_identity.current.account_id}:log-group:/aws/lambda/${local.function_name}-inventory:*"
+          ]
+        ])
       },
       {
         Sid      = "SendScannerResults"

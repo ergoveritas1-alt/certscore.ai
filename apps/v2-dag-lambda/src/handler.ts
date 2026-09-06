@@ -1,4 +1,4 @@
-import { FULL_SITE_PAGE_DISPATCH, runFullSitePage } from "./full-site-page";
+import { FULL_SITE_PAGE_DISPATCH, dispatchFullSitePage } from "./full-site-page";
 import { InvokeCommand, LambdaClient, type InvokeCommandOutput } from "@aws-sdk/client-lambda";
 import { GetObjectCommand, PutObjectCommand, S3Client, type GetObjectCommandOutput, type PutObjectCommandOutput } from "@aws-sdk/client-s3";
 import { SQSClient, SendMessageCommand, type SendMessageCommandOutput } from "@aws-sdk/client-sqs";
@@ -5604,7 +5604,8 @@ export async function handler(event: unknown, options: HandlerOptions = {}) {
   let policyEvidenceHandoff: Promise<LocalV2DagLambdaPolicyEvidenceMessage | undefined> | undefined;
   let runtimePreviewHandoff: Promise<LocalV2DagLambdaRuntimePreviewMessage | undefined> | undefined;
   const dispatchEvent = unwrapLocalV2DagLambdaDispatchEvent(event);
-  if (asRecord(dispatchEvent.payload).contractVersion === FULL_SITE_PAGE_DISPATCH) return runFullSitePage(dispatchEvent.payload);
+  if (asRecord(dispatchEvent.payload).contractVersion === FULL_SITE_PAGE_DISPATCH) return dispatchFullSitePage(dispatchEvent.payload);
+  if (process.env.CERTSCORE_FULL_SITE_INVENTORY_WORKER === "1") throw new Error("Inventory worker rejects homepage dispatches.");
 
   const remainingResultPublishMs = () => Math.max(
     10,

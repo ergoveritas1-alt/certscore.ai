@@ -1,3 +1,4 @@
+import { InvokeCommand, LambdaClient } from "@aws-sdk/client-lambda";
 import { PutObjectCommand, S3Client } from "@aws-sdk/client-s3";
 import { randomUUID } from "node:crypto";
 import { rm } from "node:fs/promises";
@@ -24,7 +25,39 @@ const messageSchema = z
     token: z.string().regex(/^[a-f0-9]{64}$/),
   })
   .strict();
+export async function dispatchFullSitePage(event: unknown) {
+  const message = messageSchema.parse(event);
+  if (process.env.CERTSCORE_FULL_SITE_INVENTORY_WORKER === "1")
+    return runFullSitePage(message);
+  const functionName = process.env.AWS_LAMBDA_FUNCTION_NAME;
+  if (!functionName || functionName.endsWith("-inventory"))
+    throw new Error("Inventory worker routing unavailable.");
+  // Reuse the durable dispatch queue, but do not run a browser or wait for a child here.
+  // Async retries are disabled in Terraform; the persisted attempt lease owns recovery.
+  const response = await new LambdaClient({
+    region: process.env.AWS_REGION,
+  }).send(
+    new InvokeCommand({
+      FunctionName: `${functionName}-inventory`,
+      InvocationType: "Event",
+      Payload: Buffer.from(JSON.stringify(message)),
+    }),
+    { abortSignal: AbortSignal.timeout(2000) },
+  );
+  if (response.StatusCode !== 202)
+    throw new Error("Inventory dispatch was not accepted.");
+  return { status: "dispatched" };
+}
+
 export async function runFullSitePage(event: unknown) {
+  if (process.env.CERTSCORE_FULL_SITE_INVENTORY_WORKER !== "1")
+    throw new Error("Inventory requires its dedicated worker.");
+  const invocationDeadline = Date.now() + 24000;
+  const remaining = (cap: number, reserve = 0) => {
+    const ms = Math.min(cap, invocationDeadline - Date.now() - reserve);
+    if (ms <= 0) throw new Error("Inventory publication deadline reached.");
+    return ms;
+  };
   const message = messageSchema.parse(event);
   if (!publicNetworkGuardEnabled())
     throw new Error("Inventory worker requires the public network guard.");
@@ -42,7 +75,9 @@ export async function runFullSitePage(event: unknown) {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ ...message, ...body }),
-      signal: AbortSignal.timeout(8000),
+      signal: AbortSignal.timeout(
+        remaining(body.operation === "claim" ? 1500 : 2000),
+      ),
       redirect: "error",
     });
     if (!response.ok)
@@ -78,7 +113,7 @@ export async function runFullSitePage(event: unknown) {
   const abort = new AbortController();
   const deadline = setTimeout(
     () => abort.abort(new Error("Inventory page deadline reached.")),
-    37000,
+    remaining(20000, 4000),
   );
   let packet;
   let evidenceBody: string;
@@ -110,12 +145,15 @@ export async function runFullSitePage(event: unknown) {
         ? "navigation_timeout"
         : "collection_failure",
       status:
-        visit.evidence.moduleRun.status === "completed" && visit.finalUrl
+        !abort.signal.aborted &&
+        visit.evidence.moduleRun.status === "completed" &&
+        visit.finalUrl
           ? "completed"
           : visit.evidence.moduleRun.status === "failed"
             ? "failed"
             : "partial",
       limitations: [
+        ...(abort.signal.aborted ? ["observation_deadline"] : []),
         ...visit.evidence.moduleRun.errors.map(
           () => "runtime_collection_limitation",
         ),
@@ -148,7 +186,8 @@ export async function runFullSitePage(event: unknown) {
     };
   } finally {
     clearTimeout(deadline);
-    await rm(outDir, { recursive: true, force: true });
+    // Cleanup must not consume the artifact/publication reserve.
+    void rm(outDir, { recursive: true, force: true }).catch(() => {});
   }
   const s3 = new S3Client({ region: grant.region });
   const prefix = `${grant.artifactPrefix}/${grant.pageId}/${grant.attemptId}`;
@@ -158,23 +197,21 @@ export async function runFullSitePage(event: unknown) {
     Buffer.byteLength(evidenceBody) > 64 * 1024 * 1024
   )
     throw new Error("Inventory artifact exceeds retained byte limit.");
-  await s3.send(
-    new PutObjectCommand({
-      Bucket: grant.bucket,
-      Key: `${prefix}/evidence.json`,
-      Body: evidenceBody,
-      ContentType: "application/json",
-    }),
-    { abortSignal: AbortSignal.timeout(5000) },
-  );
-  await s3.send(
-    new PutObjectCommand({
-      Bucket: grant.bucket,
-      Key: `${prefix}/inventory.json`,
-      Body: body,
-      ContentType: "application/json",
-    }),
-    { abortSignal: AbortSignal.timeout(5000) },
+  await Promise.all(
+    [
+      ["evidence.json", evidenceBody],
+      ["inventory.json", body],
+    ].map(([name, content]) =>
+      s3.send(
+        new PutObjectCommand({
+          Bucket: grant.bucket,
+          Key: `${prefix}/${name}`,
+          Body: content,
+          ContentType: "application/json",
+        }),
+        { abortSignal: AbortSignal.timeout(remaining(1800, 1500)) },
+      ),
+    ),
   );
   await control({
     operation: "finish",

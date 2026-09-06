@@ -1,3 +1,4 @@
+import { readFullSiteOptions } from "../../../../server/scans/full-site-options";
 import type { Metadata } from "next";
 import { notFound, redirect } from "next/navigation";
 import { cache } from "react";
@@ -41,7 +42,7 @@ function legacyReportHref(scanId: string, searchParams: Record<string, string | 
   return `/scano/${encodeURIComponent(scanId)}${suffix ? `?${suffix}` : ""}`;
 }
 
-function pendingReport(
+async function pendingReport(
   statusProjection: NonNullable<Awaited<ReturnType<typeof getPublicScanStatusProjection>>>,
   waitingForProjection: boolean,
 ) {
@@ -50,7 +51,7 @@ function pendingReport(
       <SiteHeader mobilePrimaryAction="sign-in" />
       <section className="mx-auto max-w-6xl px-6 py-16">
         <PendingScanDetailView
-          fullSite={statusProjection.fullSite}
+          fullSite={(await readFullSiteOptions()).allowed ? statusProjection.fullSite : undefined}
           createdAt={statusProjection.createdAt}
           domainHostname={statusProjection.domainHostname}
           initialPreConsentPreview={statusProjection.preConsentPreview ?? null}
@@ -117,7 +118,7 @@ export default async function PublicScanDetailPage({ params, searchParams }: Pub
       scanId,
       sourceHash: readyReport.snapshot?.report_projection_source_hash ?? null,
     });
-    return <ShadowScanReport report={report} variant="timeline" />;
+    return <ShadowScanReport report={(await readFullSiteOptions()).allowed ? report : { ...report, fullSite: undefined }} variant="timeline" />;
   }
 
   const statusStartedAt = performance.now();
@@ -154,5 +155,5 @@ export default async function PublicScanDetailPage({ params, searchParams }: Pub
     scanId,
     statusLoadMs,
   });
-  return <ShadowScanReport report={report} variant="timeline" />;
+  return <ShadowScanReport report={(await readFullSiteOptions()).allowed ? report : { ...report, fullSite: undefined }} variant="timeline" />;
 }

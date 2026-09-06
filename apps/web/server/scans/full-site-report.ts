@@ -1,6 +1,8 @@
 import "server-only";
 import {
   aggregateFullSite,
+  robotsRestrictionMessage,
+  type RobotsPolicy,
   crawlDisplayUrl,
   crawlObservationSchema,
   type CrawlPage,
@@ -37,6 +39,14 @@ export async function loadFullSiteReport(
       : null,
     homepageDurationMs: crawl.homepage_duration_ms,
     stopReason: crawl.stop_reason,
+    robotsRestriction:
+      crawl.stop_reason === "robots_unavailable_or_blocked"
+        ? "robots.txt could not be verified. Additional crawling was stopped."
+        : crawl.stop_reason === "robots_delay_exceeds_crawl_budget"
+          ? "robots.txt requires a crawl delay beyond this crawl’s budget. Additional crawling was stopped."
+          : crawl.robots_json
+            ? robotsRestrictionMessage(crawl.robots_json as RobotsPolicy)
+            : null,
     discoveryExhausted: crawl.discovery_exhausted,
     discovered: records.length,
     peakWorkers: crawl.crawl_started_at ? crawl.peak_workers : null,

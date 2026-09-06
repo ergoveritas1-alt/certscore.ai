@@ -14,6 +14,7 @@ import {
   normalizeCrawlUrl,
   parseCrawlRobots,
   robotsAllows,
+  robotsDisallowAll,
   getCrawlerProductToken,
   getCrawlerUserAgent,
   type FullSitePolicy,
@@ -24,16 +25,22 @@ import {
   withWriteTransaction,
   readFullSiteArtifact,
   reserveFullSiteDispatches,
+  fullSiteInternalEnabled,
   type FullSiteCrawlRow,
 } from "@website-signal-risk-scanner/db";
 
 export async function fetchDiscoveryDocument(url: string, maxBytes: number) {
-  const response = await guardedPublicFetch(url, {
-    headers: { "User-Agent": getCrawlerUserAgent() },
-    signal: AbortSignal.timeout(10000),
-  });
+  const response = await guardedPublicFetch(
+    url,
+    {
+      headers: { "User-Agent": getCrawlerUserAgent() },
+      signal: AbortSignal.timeout(10000),
+      redirect: "manual",
+    },
+    { maxRedirects: 0 },
+  );
   const status = response.status;
-  if (status >= 400) {
+  if (status >= 300) {
     await response.body?.cancel();
     return {
       status,
@@ -324,16 +331,22 @@ async function initializeHomepage(
     );
   }
 }
-async function discoverSitemaps(c: FullSiteCrawlRow) {
+export async function discoverSitemaps(
+  c: FullSiteCrawlRow,
+  fetchDocument = fetchDiscoveryDocument,
+) {
   const policy = c.policy_json as FullSitePolicy;
   const base = `https://${c.hosts[0]}/`;
   const byHost: Record<string, RobotsPolicy> = {};
   for (const host of c.hosts) {
-    const robots = await fetchDiscoveryDocument(
+    const robots = await fetchDocument(
       `https://${host}/robots.txt`,
       policy.discoveryBytes,
-    );
+    ).catch(() => {
+      throw new Error("robots_unavailable_or_blocked");
+    });
     if (
+      (robots.status >= 300 && robots.status < 400) ||
       robots.status >= 500 ||
       robots.status === 429 ||
       robots.status === 401 ||
@@ -343,7 +356,11 @@ async function discoverSitemaps(c: FullSiteCrawlRow) {
         await pauseDiscoveryRateLimit(c, robots.retryAfter);
       throw new Error("robots_unavailable_or_blocked");
     }
-    byHost[host] = parseCrawlRobots(robots.text, getCrawlerProductToken());
+    try {
+      byHost[host] = parseCrawlRobots(robots.text, getCrawlerProductToken());
+    } catch {
+      throw new Error("robots_unavailable_or_blocked");
+    }
   }
   const robotPolicy: RobotsPolicy = {
     rules: [],
@@ -373,6 +390,13 @@ async function discoverSitemaps(c: FullSiteCrawlRow) {
         `update full_site_pages set status='excluded',limitation='robots_disallowed' where id=$1`,
         [row.id],
       );
+  if (robotsDisallowAll(robotPolicy)) {
+    await query(
+      `update full_site_crawls set status='stopped',stop_reason='robots_disallowed_all',discovery_complete=true,completed_at=now() where scan_id=$1`,
+      [c.scan_id],
+    );
+    return;
+  }
   const queue = [
       ...robotPolicy.sitemaps,
       new URL("sitemap.xml", base).toString(),
@@ -380,7 +404,12 @@ async function discoverSitemaps(c: FullSiteCrawlRow) {
     seen = new Set<string>();
   while (queue.length && seen.size < policy.sitemapDocuments) {
     const url = normalizeCrawlUrl(queue.shift()!, base);
-    if (!url || seen.has(url) || !c.hosts.includes(new URL(url).hostname))
+    if (
+      !url ||
+      seen.has(url) ||
+      !c.hosts.includes(new URL(url).hostname) ||
+      !robotsAllows(url, robotPolicy)
+    )
       continue;
     seen.add(url);
     const active = await query(
@@ -388,12 +417,12 @@ async function discoverSitemaps(c: FullSiteCrawlRow) {
       [c.scan_id],
     );
     if (!active.rowCount) return;
-    const document = await fetchDiscoveryDocument(url, policy.discoveryBytes);
+    const document = await fetchDocument(url, policy.discoveryBytes);
     if (document.status === 429) {
       await pauseDiscoveryRateLimit(c, document.retryAfter);
       throw new Error("sitemap_rate_limited");
     }
-    if (document.status >= 400) continue;
+    if (document.status >= 300) continue;
     const parsed = sitemapEntries(document.text);
     queue.push(...parsed.indexes.slice(0, policy.sitemapDocuments));
     await addFullSiteCandidates(
@@ -423,6 +452,7 @@ async function pauseDiscoveryRateLimit(
   );
 }
 export async function sweepFullSiteCrawls() {
+  if (!fullSiteInternalEnabled()) return;
   await query(`update full_site_crawls c set status='stopped',stop_reason='wall_clock_limit',completed_at=now()
     where status in ('waiting_homepage','running') and started_at+((policy_json->>'wallClockSeconds')||' seconds')::interval<=now()`);
   await query(`update full_site_crawls c set status='cancelled',stop_reason='parent_cancelled_or_failed',completed_at=now() from scans s
@@ -466,10 +496,18 @@ export async function sweepFullSiteCrawls() {
   for (const c of discoveries)
     try {
       await discoverSitemaps(c);
-    } catch {
+    } catch (error) {
+      const reason =
+        error instanceof Error &&
+        [
+          "robots_unavailable_or_blocked",
+          "robots_delay_exceeds_crawl_budget",
+        ].includes(error.message)
+          ? error.message
+          : "discovery_unavailable_or_blocked";
       await query(
-        `update full_site_crawls set status='stopped',stop_reason='discovery_unavailable_or_blocked',completed_at=now() where scan_id=$1`,
-        [c.scan_id],
+        `update full_site_crawls set status='stopped',stop_reason=$2,completed_at=now() where scan_id=$1`,
+        [c.scan_id, reason],
       );
     }
   const linkPages = (
@@ -511,7 +549,8 @@ export function startFullSiteScheduler(options: {
   let running = false,
     nextIdleCheck = 0;
   const tick = async () => {
-    if (running || Date.now() < nextIdleCheck) return;
+    if (!fullSiteInternalEnabled() || running || Date.now() < nextIdleCheck)
+      return;
     running = true;
     try {
       const active = await query(

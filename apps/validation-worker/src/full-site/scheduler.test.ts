@@ -38,13 +38,13 @@ test(
       "Use a dedicated disposable local database.",
     );
     process.env.DATABASE_URL = databaseUrl;
+    process.env.CERTSCORE_FULL_SITE_INTERNAL_ENABLED = "1";
     process.env.DATABASE_READ_URL = databaseUrl;
     process.env.DATABASE_SSL_MODE = "disable";
     process.env.DB_QUERY_LOG_ENABLED = "false";
     const db = await import("@website-signal-risk-scanner/db");
-    const { sweepFullSiteCrawls, addFullSiteCandidates } = await import(
-      "./scheduler"
-    );
+    const { sweepFullSiteCrawls, addFullSiteCandidates, discoverSitemaps } =
+      await import("./scheduler");
     try {
       await db.query(`create table if not exists users(id uuid primary key);create table if not exists scans(id uuid primary key,organization_id uuid,status text,scan_config_json jsonb,duration_ms int);
       create table if not exists organization_members(user_id uuid,organization_id uuid,role text);
@@ -229,6 +229,74 @@ test(
         (p) => p.scheduled,
       ).length;
       assert.ok(before <= 3);
+      process.env.CERTSCORE_FULL_SITE_INTERNAL_ENABLED = "0";
+      assert.deepEqual(await db.reserveFullSiteDispatches(), []);
+      assert.equal(
+        await db.claimFullSitePage({ ...denied, region: denied.region }),
+        null,
+      );
+      process.env.CERTSCORE_FULL_SITE_INTERNAL_ENABLED = "1";
+      const blocked = await parent("robots-blocked.test");
+      const calls: string[] = [];
+      await discoverSitemaps(
+        (await db.loadFullSiteCrawl(blocked.id))!,
+        async (url) => {
+          calls.push(url);
+          return {
+            status: 200,
+            text: "User-agent: *\nDisallow: /\nSitemap: https://robots-blocked.test/sitemap.xml",
+            retryAfter: null,
+          };
+        },
+      );
+      assert.deepEqual(calls, ["https://robots-blocked.test/robots.txt"]);
+      assert.equal(
+        (await db.loadFullSiteCrawl(blocked.id))!.stop_reason,
+        "robots_disallowed_all",
+      );
+      assert.ok(
+        (await db.loadFullSitePages(blocked.id))
+          .filter((p) => p.source !== "homepage")
+          .every((p) => p.status === "excluded"),
+      );
+      const blockedIds = new Set(
+        (await db.loadFullSitePages(blocked.id)).map((p) => p.id),
+      );
+      assert.equal(
+        (await db.reserveFullSiteDispatches()).some((p) =>
+          blockedIds.has(p.pageId),
+        ),
+        false,
+      );
+      const subset = await parent("robots-subset.test");
+      const subsetCalls: string[] = [];
+      await discoverSitemaps(
+        (await db.loadFullSiteCrawl(subset.id))!,
+        async (url) => {
+          subsetCalls.push(url);
+          return {
+            status: 200,
+            text: url.endsWith("robots.txt")
+              ? "User-agent: *\nDisallow: /\nAllow: /public/\nSitemap: https://robots-subset.test/public/sitemap.xml"
+              : "<urlset><url><loc>https://robots-subset.test/public/page</loc></url><url><loc>https://robots-subset.test/private/page</loc></url></urlset>",
+            retryAfter: null,
+          };
+        },
+      );
+      assert.deepEqual(subsetCalls, [
+        "https://robots-subset.test/robots.txt",
+        "https://robots-subset.test/public/sitemap.xml",
+      ]);
+      const subsetPages = await db.loadFullSitePages(subset.id);
+      assert.equal(
+        subsetPages.find((p) => p.target_url.endsWith("/public/page"))!.status,
+        "queued",
+      );
+      assert.equal(
+        subsetPages.find((p) => p.target_url.endsWith("/private/page"))!
+          .limitation,
+        "robots_disallowed",
+      );
     } finally {
       await db.getWritePool().end();
       await db.getReadPool().end();

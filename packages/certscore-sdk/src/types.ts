@@ -260,7 +260,6 @@ export interface GpcResponse {
 }
 
 export interface ScanResource extends ScanCreationMetadata {
-  fullSite?: { enabled: true; scoreScope: "homepage"; inventoryUrl: string; requested: {maxPages:number; concurrency:number; waitSeconds:number} };
   type: "certscore_scan";
   scanId: string;
   domain: string;

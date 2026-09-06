@@ -73,12 +73,14 @@ export async function scannerAws(region: ScannerRegion, args: string[]) {
   catch { throw new Error(`Scanner AWS ${args.slice(0,2).join(" ")} failed in ${region}; sensitive configuration omitted.`); }
 }
 
-export function awsScannerImageControl(region: ScannerRegion): ScannerImageControl {
+export function awsScannerImageControl(region: ScannerRegion, inventory = false): ScannerImageControl {
+  const functionName = inventory ? `${FUNCTION}-inventory` : FUNCTION;
   return {
     async read() {
-      const value = await scannerAws(region, ["lambda", "get-function", "--function-name", FUNCTION, "--query", "{imageUri:Code.ResolvedImageUri,revisionId:Configuration.RevisionId,state:Configuration.State,updateStatus:Configuration.LastUpdateStatus,variables:Configuration.Environment.Variables,environmentError:Configuration.Environment.Error}"]);
+      const value = await scannerAws(region, ["lambda", "get-function", "--function-name", functionName, "--query", "{imageUri:Code.ResolvedImageUri,revisionId:Configuration.RevisionId,state:Configuration.State,updateStatus:Configuration.LastUpdateStatus,timeout:Configuration.Timeout,variables:Configuration.Environment.Variables,environmentError:Configuration.Environment.Error}"]);
       if (value?.environmentError || !value?.variables || Object.values(value.variables).some(item => typeof item !== "string")) throw new Error("Scanner environment is unavailable.");
       healthy(value);
+      if (inventory && (value.timeout !== 25 || value.variables.CERTSCORE_FULL_SITE_INVENTORY_WORKER !== "1")) throw new Error("Inventory worker must have its dedicated 25-second configuration before image promotion.");
       if (!value.imageUri.startsWith(`199536052647.dkr.ecr.${region}.amazonaws.com/`)) throw new Error("Scanner image region mismatch.");
       return value;
     },
@@ -89,13 +91,13 @@ export function awsScannerImageControl(region: ScannerRegion): ScannerImageContr
       try {
         const filename = path.join(directory, "environment.json");
         await writeFile(filename, body, {mode: 0o600});
-        await scannerAws(region, ["lambda", "update-function-configuration", "--function-name", FUNCTION, "--revision-id", revisionId, "--environment", `file://${filename}`, "--query", "RevisionId"]);
+        await scannerAws(region, ["lambda", "update-function-configuration", "--function-name", functionName, "--revision-id", revisionId, "--environment", `file://${filename}`, "--query", "RevisionId"]);
       } finally { await rm(directory, {recursive: true, force: true}); }
     },
     async code(imageUri, revisionId) {
       scannerImageDigest(imageUri);
-      await scannerAws(region, ["lambda", "update-function-code", "--function-name", FUNCTION, "--revision-id", revisionId, "--image-uri", imageUri, "--query", "RevisionId"]);
+      await scannerAws(region, ["lambda", "update-function-code", "--function-name", functionName, "--revision-id", revisionId, "--image-uri", imageUri, "--query", "RevisionId"]);
     },
-    async wait() { await scannerAws(region, ["lambda", "wait", "function-updated-v2", "--function-name", FUNCTION]); },
+    async wait() { await scannerAws(region, ["lambda", "wait", "function-updated-v2", "--function-name", functionName]); },
   };
 }

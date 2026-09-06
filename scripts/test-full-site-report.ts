@@ -1,3 +1,4 @@
+process.env.CERTSCORE_FULL_SITE_INTERNAL_ENABLED = "1";
 /** Local-only integration harness. Run after scheduler.test.ts against its disposable database. */
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
@@ -154,8 +155,10 @@ async function main() {
         [id, status, observation, compactCrawlObservation(observation)],
       );
     }
+    await db.query(`update full_site_crawls set robots_json=$2 where scan_id=$1`, [scanId, {rules:[{allow:false,path:"/private/"}],crawlDelaySeconds:0,sitemaps:[]}]);
     const report = await loadFullSiteReport(scanId);
     assert.ok(report);
+    assert.match(report.summary.state.robotsRestriction!, /Only permitted URLs/);
     assert.equal(report.summary.totals.services, 2);
     assert.equal(report.summary.totals.cookies, 1);
     assert.equal(report.summary.totals.requestEvents, 200);
@@ -273,6 +276,9 @@ async function main() {
       await page.getByLabel("Max pages", { exact: true }).inputValue(),
       "10",
     );
+    assert.equal(await page.getByLabel("Concurrency", { exact: true }).inputValue(), "4");
+    assert.equal(await page.getByLabel("Concurrency", { exact: true }).getAttribute("max"), "12");
+    await page.getByText(/robots.txt restricts crawl coverage/).waitFor();
     await page.getByLabel("Max pages", { exact: true }).fill("0");
     assert.equal(
       await page

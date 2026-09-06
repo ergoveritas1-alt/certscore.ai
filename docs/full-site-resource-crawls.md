@@ -18,7 +18,7 @@ off. An example session-authenticated `POST /api/full-scan` request is:
 {
   "domain": "https://example.com/",
   "fullSite": true,
-  "crawlOptions": { "maxPages": 200, "concurrency": 1, "waitSeconds": 5 }
+  "crawlOptions": { "maxPages": 200, "concurrency": 4, "waitSeconds": 5 }
 }
 ```
 
@@ -27,7 +27,11 @@ null, nonfinite, fractional integer fields, unknown fields and out-of-range valu
 are rejected. Authorized single-page requests ignore inactive crawl settings.
 Unauthorized callers cannot configure crawling, even while disabling it.
 API-key/Pulse/MCP creation cannot enable it; use the eligible authenticated web
-session endpoint. Existing sharing and report viewing permissions are unchanged.
+session endpoint. The private server-only `CERTSCORE_FULL_SITE_INTERNAL_ENABLED=1`
+switch must also be enabled on the web control plane and validation worker. It
+is disabled by default, cannot be supplied in a request, and is never returned
+to the browser, SDK, public API or MCP. Inventory viewing and exports require
+an eligible authenticated browser session; ordinary homepage reports remain shareable.
 
 The persisted parent configuration and current membership are checked again at
 page-worker admission. Queue messages carry only a contract version, page/attempt
@@ -45,10 +49,10 @@ serializes it to the UI and persists its validated snapshot with the parent.
 | Setting | Default | Allowed range / environment control |
 | --- | --- | --- |
 | Max pages | 10 | 1–500; `CERTSCORE_FULL_SITE_DEFAULT_PAGES`, `CERTSCORE_FULL_SITE_MAX_PAGES` (ceiling configurable 10–2000) |
-| Concurrency | 1 | 1–3; `CERTSCORE_FULL_SITE_MAX_CONCURRENCY` (ceiling configurable 1–6) |
+| Concurrency | 4 | 1–12; `CERTSCORE_FULL_SITE_MAX_CONCURRENCY` may lower the ceiling to 4–12 |
 | Wait between starts | 5 seconds | 5–300 seconds; `CERTSCORE_FULL_SITE_MIN_WAIT_SECONDS` (minimum configurable 1–60) |
 | Discovered candidates | 5000 | `CERTSCORE_FULL_SITE_MAX_DISCOVERED_URLS`, up to 20000 and at least the configured target ceiling |
-| Crawl wall clock | 4 hours | `CERTSCORE_FULL_SITE_MAX_SECONDS`, 300–86400 seconds |
+| Crawl wall clock | 14400 seconds (4 hours) | `CERTSCORE_FULL_SITE_MAX_SECONDS`, 300–86400 seconds |
 | Retries | 1 | `CERTSCORE_FULL_SITE_MAX_RETRIES`, 0–2 |
 | Sitemap documents | 25 | Bounded traversal, no external entity expansion |
 | Discovery response | 2 MiB | Bounded streaming read, 10-second request deadline |
@@ -57,12 +61,14 @@ serializes it to the UI and persists its validated snapshot with the parent.
 
 The inventory collector retains the existing 15-second tiny or 35-second standard
 module budget and the homepage's actual fast/full passive protocol. It has a
-37-second observation abort, bounded artifact/control calls, and the existing
-75-second Lambda hard timeout. A 90-second worker lease exceeds that hard timeout;
-it cannot be recycled while the crashed invocation may still run. `pageSeconds`
-in the persisted safety policy is a 45-second envelope, not a new observation
-window or an extra wait. No additional model calls, screenshots, consent actions,
-heavy-resource stubbing or provisioned capacity are introduced.
+20-second observation abort and a dedicated inventory Lambda with a **25-second
+hard timeout**. A **30-second worker lease** exceeds that hard timeout. The worker
+reserves four seconds for bounded parallel artifact writes and its completion
+callback; a slow admission call can reduce the observation window. Deadline-limited
+observations remain partial or failed. `pageSeconds` records the 20-second maximum.
+The existing homepage Lambda keeps its 75-second timeout and observation protocol.
+No additional model calls, screenshots, consent actions, heavy-resource stubbing
+or provisioned capacity are introduced.
 
 ## Execution and safety
 
@@ -71,7 +77,10 @@ site-safety records. Homepage readiness remains independent of crawl readiness.
 The validation worker consumes verified homepage canonical evidence, discovers
 targets and publishes page jobs to the existing three regional FIFO queues.
 Each page uses its own FIFO group, allowing requested concurrency above one.
-No new queues or scanner service are required.
+The existing handler asynchronously forwards the credential to the regional
+`-inventory` Lambda and returns without browser work or waiting. The dedicated
+worker uses the same image, network, role and artifact store, with async retries
+disabled; persisted leases control recovery. No new queue is required.
 
 The shared PostgreSQL admission transaction locks canonical registrable-site
 keys, reserves distinct target slots, applies the smallest active concurrency
@@ -143,8 +152,8 @@ category bars, Beyond the homepage, Most widespread and Pages to review panels.
 Resources and Pages provide search, typed filters, sorting, 50-row pagination and
 lazy page evidence. Homepage audit remains a separate tab, with its existing score
 labeled “Homepage audit score.” Live refresh preserves filters, selected evidence
-and scroll. API/MCP scan resources add a bounded full-site reference to the same
-inventory endpoint; they do not embed all raw events. Exports retain scope,
+and scroll. Public API/MCP scan resources and SDK contracts do not advertise
+Full site or link to inventory. Eligible browser-session exports retain scope,
 configuration, coverage, timing and page attribution.
 
 Instrumented metrics include crawl/homepage timestamps, total wall time, homepage
@@ -165,8 +174,11 @@ Actual spend depends on duration, retries and retained evidence volume. This use
 existing AWS Lambda/queue/storage infrastructure; no recurring provisioned
 capacity or model API usage is added. Pricing basis: [AWS Lambda pricing](https://aws.amazon.com/lambda/pricing/).
 
-Release requires the migration and coordinated web, validation worker and three
-regional Lambda code updates through the repository's AWS workflow. The existing
+Release requires the migration, the Terraform-managed 25-second inventory function
+in all three regions, and coordinated web, validation worker and Lambda code updates
+through the repository's AWS workflow. `deploy-fast.ts` promotes the same verified
+image digest to both homepage and inventory functions. Keep the private switch off
+until this rollout is complete. The existing
 dispatch publisher enablement/queue URLs are reused. Apply the migration first,
 update all three regional Lambda handlers, then the web control plane, and finally
 the validation publisher/scheduler. This prevents child jobs reaching an older
@@ -204,3 +216,21 @@ The last two commands require a disposable local PostgreSQL database named
 `full_site_test`; the scheduler test creates its minimal fixture schema. Run them
 sequentially. The remaining release verification is a deployed AWS queue/control
 plane round trip after the coordinated release is separately authorized.
+
+
+September 6 owner adjustments: concurrency defaults to 4 with a hard maximum of
+12; wall clock defaults to 14400 seconds; observation/Lambda/lease limits are
+20/25/30 seconds. The existing cost approval remains the planning envelope.
+Async forwarding adds one invocation per child (about $0.004 per 20,000 pages,
+excluding minimal routing compute); the shorter child timeout reduces the maximum
+compute envelope. No reserved or provisioned capacity is added. Dedicated log
+metadata is estimated below $1/month at the approved 100-crawl planning volume.
+
+Robots policy is retained per permitted host before any child dispatch. A universal
+Disallow with no Allow exception stops additional crawling without fetching any
+sitemap; the report explains that the separate homepage audit is still shown.
+Subset restrictions apply to discovered URLs, sitemap fetches and child main-document
+redirects. Disallowed URLs remain visible as excluded and the report explicitly
+states that coverage is restricted. Discovery redirects are not followed (fail
+closed), and unavailable/unverifiable robots policy or excessive crawl delay stops
+additional crawling with an explicit report limitation.

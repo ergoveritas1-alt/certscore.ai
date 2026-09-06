@@ -36,7 +36,7 @@ export function FullSiteControls({
   const [selected, setSelected] = useState(false);
   const [values, setValues] = useState({
     maxPages: "10",
-    concurrency: "1",
+    concurrency: "4",
     waitSeconds: "5",
   });
   const [errors, setErrors] = useState<Record<string, string>>({});

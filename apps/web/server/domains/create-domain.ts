@@ -1,5 +1,7 @@
 "use server";
 
+import { fullSiteInternalEnabled } from "@website-signal-risk-scanner/db";
+
 import { validateFullSiteRequest, fullSitePolicy, canUseFullSite, createDomainRequestSchema, normalizeScanFrom, parseDomainBatchInput, type ScanFrom } from "@website-signal-risk-scanner/shared";
 import { headers } from "next/headers";
 import { redirect } from "next/navigation";
@@ -73,7 +75,7 @@ export async function createOrQueueDomainScan(input: {
 }) {
   const dashboardContext = await getDashboardContext();
   try {
-    validateFullSiteRequest(input,canUseFullSite(dashboardContext.membership.role),fullSitePolicy(process.env));
+    validateFullSiteRequest(input,(fullSiteInternalEnabled() && canUseFullSite(dashboardContext.membership.role)),fullSitePolicy(process.env));
   } catch(error) {
     return {error:error instanceof Error?error.message:"Invalid crawl configuration.",scanId:null};
   }

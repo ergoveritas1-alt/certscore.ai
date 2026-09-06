@@ -103,7 +103,7 @@ export async function POST(request: Request) {
   const id = requestId(request);
   const body = await parseJson(request);
   if (body && typeof body === "object" && ((body.fullSite !== undefined && body.fullSite !== false) || body.crawlOptions !== undefined)) {
-    return apiV2JsonResponse({body:buildApiV2Error({code:"invalid_request",message:"Full site requires an authenticated admin or advanced session through the full-scan endpoint."}),requestId:id,route:"api-v2-create-scan",status:403});
+    return apiV2JsonResponse({body:buildApiV2Error({code:"invalid_request",message:"Unsupported scan option."}),requestId:id,route:"api-v2-create-scan",status:403});
   }
   const parsed = apiV2CreateScanRequestSchema.safeParse(body);
 

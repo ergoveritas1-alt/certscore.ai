@@ -1,3 +1,4 @@
+import { readFullSiteOptions } from "../../../../server/scans/full-site-options";
 import { notFound, redirect } from "next/navigation";
 import { PendingScanStartedEvent } from "../../../../components/analytics/data-layer-events";
 import { PendingScanDetailView } from "../../../../components/scans/pending-scan-detail-view";
@@ -47,7 +48,7 @@ export default async function ScanDetailPage({ params }: ScanDetailPageProps) {
       <>
         <PendingScanStartedEvent />
         <PendingScanDetailView
-          fullSite={statusProjection.fullSite}
+          fullSite={(await readFullSiteOptions()).allowed ? statusProjection.fullSite : undefined}
           createdAt={statusProjection.createdAt}
           domainHostname={statusProjection.domainHostname}
           initialPreConsentPreview={statusProjection.preConsentPreview ?? null}
@@ -83,7 +84,7 @@ export default async function ScanDetailPage({ params }: ScanDetailPageProps) {
     if (!statusProjection.reportProjectionRequired) redirect(legacyScanHref(scanId));
     return (
       <PendingScanDetailView
-          fullSite={statusProjection.fullSite}
+          fullSite={(await readFullSiteOptions()).allowed ? statusProjection.fullSite : undefined}
         createdAt={statusProjection.createdAt}
         domainHostname={statusProjection.domainHostname}
         initialPreConsentPreview={statusProjection.preConsentPreview ?? null}
@@ -115,7 +116,7 @@ export default async function ScanDetailPage({ params }: ScanDetailPageProps) {
         })}
         defaultScanFrom={organizationSettings?.defaultScanFrom ?? "eu_ie"}
         mode="authenticated"
-        report={report}
+        report={(await readFullSiteOptions()).allowed ? report : { ...report, fullSite: undefined }}
         variant="timeline"
       />
     </>

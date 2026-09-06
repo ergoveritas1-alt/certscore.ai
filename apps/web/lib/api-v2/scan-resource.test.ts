@@ -1647,11 +1647,11 @@ test("buildApiV2PreConsentCookiesTrackers returns a valid empty response", () =>
 });
 
 
-test("full-site resource keeps homepage score and adds only a bounded inventory reference",()=>{
+test("private full-site resource keeps homepage score without exposing inventory through API or MCP",()=>{
  const record=fixture(),baseline=buildApiV2ScanResource(record);
  record.scan.scanConfigJson={...record.scan.scanConfigJson,fullSite:true,crawlOptions:{maxPages:200,concurrency:1,waitSeconds:5}};
  const resource=buildApiV2ScanResource(record);
- assert.equal(resource.score,baseline.score);assert.equal(resource.fullSite?.scoreScope,"homepage");
- assert.equal(resource.fullSite?.requested.maxPages,200);assert.ok(resource.fullSite?.inventoryUrl.endsWith(`/api/scans/${record.scan.id}/full-site`));
- assert.equal(baseline.fullSite,undefined);
+ assert.equal(resource.score,baseline.score);
+ assert.equal("fullSite" in resource,false);
+ assert.equal("fullSite" in baseline,false);
 });

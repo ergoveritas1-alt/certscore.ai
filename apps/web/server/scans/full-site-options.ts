@@ -1,3 +1,4 @@
+import { fullSiteInternalEnabled } from "@website-signal-risk-scanner/db";
 import "server-only";
 import {
   canUseFullSite,
@@ -7,11 +8,14 @@ import {
 import { getCurrentUser, getDashboardContext } from "../auth";
 
 export async function readFullSiteOptions() {
+  if (!fullSiteInternalEnabled())
+    return { allowed: false, policy: fullSitePolicy() };
   const user = await getCurrentUser();
   if (!user) return { allowed: false, policy: fullSitePolicy(process.env) };
   const context = await getDashboardContext();
   return {
-    allowed: canUseFullSite(context.membership?.role),
+    allowed:
+      fullSiteInternalEnabled() && canUseFullSite(context.membership?.role),
     policy: fullSitePolicy(process.env),
   };
 }
