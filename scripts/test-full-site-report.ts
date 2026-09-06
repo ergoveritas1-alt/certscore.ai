@@ -62,7 +62,7 @@ async function main() {
   let browser: Awaited<ReturnType<typeof chromium.launch>> | undefined,
     server: ReturnType<typeof createServer> | undefined;
   try {
-    await db.query(`insert into users values($1)`, [userId]);
+    await db.query(`insert into users(id) values($1)`, [userId]);
     await db.query(
       `insert into organization_members values($1,$2,'advanced')`,
       [userId, organizationId],

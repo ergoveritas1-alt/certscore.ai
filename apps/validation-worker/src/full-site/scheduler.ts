@@ -1,3 +1,4 @@
+import { startFullSiteCompletionEmails } from "./completion-emails";
 import { SQSClient, SendMessageCommand } from "@aws-sdk/client-sqs";
 import { randomUUID } from "node:crypto";
 import { XMLParser } from "fast-xml-parser";
@@ -546,6 +547,7 @@ export function startFullSiteScheduler(options: {
   queueUrls: Record<string, string | undefined>;
 }) {
   if (!options.enabled) return;
+  startFullSiteCompletionEmails();
   let running = false,
     nextIdleCheck = 0;
   const tick = async () => {

@@ -57,6 +57,7 @@ test(
           "utf8",
         ),
       );
+      await db.query(await readFile(require.resolve("../../../../packages/db/migrations/0195_full_site_completion_emails.sql"), "utf8"));
       await db.query(
         `truncate users,scans,organization_members,scan_events,full_site_crawls,full_site_pages,full_site_attempts,full_site_safety cascade`,
       );
@@ -69,7 +70,7 @@ test(
         const id = randomUUID(),
           userId = randomUUID(),
           org = randomUUID();
-        await db.query(`insert into users values($1)`, [userId]);
+        await db.query(`insert into users(id) values($1)`, [userId]);
         await db.query(
           `insert into organization_members values($1,$2,'advanced')`,
           [userId, org],
@@ -297,6 +298,25 @@ test(
           .limitation,
         "robots_disallowed",
       );
+      await db.query(`alter table users add column if not exists email text`);
+      const mail = await parent("mail.test");
+      await db.query(`update users set email='owner@example.test' where id=$1`,[mail.userId]);
+      await db.query(`delete from full_site_completion_emails where scan_id<>$1`,[mail.id]);
+      assert.equal(await db.reserveFullSiteCompletionEmail(), null, "No email while crawl is running");
+      await db.query(`update full_site_crawls set status='completed',completed_at=now() where scan_id=$1`,[mail.id]);
+      assert.equal(await db.reserveFullSiteCompletionEmail(), null, "Wait for all page jobs to settle");
+      await db.query(`update full_site_pages set status='completed' where scan_id=$1`,[mail.id]);
+      const reservations = await Promise.all([db.reserveFullSiteCompletionEmail(),db.reserveFullSiteCompletionEmail()]);
+      assert.equal(reservations.filter(Boolean).length, 1);
+      const emailJob = reservations.find(Boolean)!;
+      assert.equal(await db.beginFullSiteCompletionEmail(emailJob.scanId,"f".repeat(64)),null);
+      assert.deepEqual(await db.beginFullSiteCompletionEmail(emailJob.scanId,emailJob.token),{email:"owner@example.test"});
+      assert.equal(await db.beginFullSiteCompletionEmail(emailJob.scanId,emailJob.token),null,"Duplicate dispatch cannot send again");
+      await db.finishFullSiteCompletionEmail(emailJob.scanId,emailJob.token,"sent","fixture-message");
+      assert.equal(await db.reserveFullSiteCompletionEmail(),null,"Sent emails remain terminal");
+      await db.query(`update full_site_completion_emails set status='sending',lease_until=now()-interval '1 second' where scan_id=$1`,[mail.id]);
+      assert.equal(await db.reserveFullSiteCompletionEmail(),null,"Ambiguous SMTP outcome must not resend");
+      assert.equal((await db.queryOne<{status:string}>(`select status from full_site_completion_emails where scan_id=$1`,[mail.id]))!.status,"uncertain");
     } finally {
       await db.getWritePool().end();
       await db.getReadPool().end();

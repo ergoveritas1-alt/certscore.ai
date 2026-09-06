@@ -236,3 +236,26 @@ closed), and unavailable/unverifiable robots policy or excessive crawl delay sto
 additional crawling with an explicit report limitation.
 
 September 6 visibility restriction: use “Full site” only on the private scan option for eligible admin/advanced sessions. Site pages, report headings, accessible labels, PDFs and errors use neutral scan/report wording. Do not add marketing, navigation, pricing, help, API or MCP promotion for this capability. Internal identifiers and crawl behavior are unchanged.
+
+
+Completion emails are owner-requested transactional notifications. Migration
+0195 creates a durable delivery row only when a new crawl is created; historical
+crawls are not backfilled. The validation scheduler dispatches notification work
+independently of crawling, after completed/stopped crawls have no remaining page
+jobs. Cancelled crawls do not send a completion email. A one-use hashed credential
+lets the existing web control plane resolve the requesting user's account email
+and canonical aggregate; callers cannot supply a recipient or summary.
+
+The existing Gmail configuration sends a neutral “Your scan is complete” summary
+of complete/partial/blocked page visits, distinct observed services/cookies,
+request events, elapsed time, robots restrictions and a report link. No model
+calls or new findings/scoring are introduced. Delivery has at most three dispatch
+attempts. Failures before SMTP delivery can retry; ambiguous delivery or a crashed
+sending process is retained as `uncertain` for operational review, without an
+automatic duplicate. SMTP itself cannot promise exactly-once delivery.
+
+Deploy migration 0195 before the updated web and validation worker. Existing web
+Gmail secrets are reused; no worker mail credentials or new email provider are
+needed. At the approved 100-crawl/month volume, incremental persisted state and
+processing are estimated below $1/month; existing Gmail has no added per-message
+service charge. No real emails were sent during local verification.

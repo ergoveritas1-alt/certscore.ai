@@ -97,6 +97,7 @@ export async function insertFullSiteCrawl(
     values ($1,$2,$3,'homepage','Homepage consumes the first target slot.','/','queued',true)`,
     [randomUUID(), input.scanId, input.url],
   );
+  await client.query(`insert into full_site_completion_emails(scan_id) values($1)`, [input.scanId]);
 }
 export async function loadFullSiteCrawl(scanId: string) {
   return queryOne<FullSiteCrawlRow>(
