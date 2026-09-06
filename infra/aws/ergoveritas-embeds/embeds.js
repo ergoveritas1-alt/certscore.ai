@@ -1,4 +1,5 @@
 (() => {
+  function mount() {
   const path = location.pathname.replace(/\/+$/, '') || '/';
   const count = ({'/':1,'/legal':2,'/privacy':3,'/terms':1})[path] || 0;
   if (!count || document.getElementById('ergoveritas-test-embeds')) return;
@@ -15,5 +16,8 @@
     frame.style.cssText = 'display:block;width:100%;height:190px;border:0;border-radius:12px;margin-top:12px';
     section.append(frame);
   });
-  (document.querySelector('main') || document.body).append(section);
+  document.body.append(section);
+  }
+  if (document.readyState === 'complete') mount();
+  else window.addEventListener('load', mount, {once:true});
 })();
