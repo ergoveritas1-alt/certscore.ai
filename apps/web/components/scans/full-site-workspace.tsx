@@ -6,6 +6,9 @@ import {
 } from "@website-signal-risk-scanner/shared/full-site-crawl";
 import { API_READ_RATE_POLICY } from "@website-signal-risk-scanner/shared/api-read-rate-policy";
 import { SitewideInventorySummary } from "./sitewide-inventory-summary";
+import { InventoryPurposeChip } from "./inventory-cell-formatting";
+import { InventoryResourceProvider, InventoryResourceRow } from "./inventory-resource-details";
+import type { ApiRuntimeEvidenceGraphProjection } from "@certscore/api-contracts";
 import { VendorBrandIcon } from "./vendor-brand-chip";
 
 import type { FullSiteReportResponse } from "../../server/scans/full-site-report";
@@ -61,13 +64,19 @@ const timestamp = (value: string | null | undefined) =>
 const button =
   "rounded-lg border border-zinc-200 bg-white px-3 py-2 text-sm text-zinc-800 hover:border-sky-500 focus-visible:outline focus-visible:outline-2 focus-visible:outline-sky-600";
 
+function CrawlResourceScope({ homepage, children }: { homepage: boolean; children: ReactNode }) {
+  return homepage ? children : <InventoryResourceProvider>{children}</InventoryResourceProvider>;
+}
+
 export function FullSiteWorkspace({
   scanId,
   requested,
+  homepageGraph,
   children,
 }: {
   scanId: string;
   requested: CrawlOptions;
+  homepageGraph?: ApiRuntimeEvidenceGraphProjection;
   children: ReactNode;
 }) {
   const [tab, setTab] = useState<"resources" | "pages" | "homepage">(
@@ -390,7 +399,7 @@ export function FullSiteWorkspace({
                 const table = tab === "pages" ? data?.pages : data?.resources;
                 if (table && el.scrollTop + el.clientHeight >= el.scrollHeight - 40 && table.rows.length < table.total && table.offset === offset) setOffset(offset + table.limit);
               }}>
-              <table className="w-full text-left text-xs">
+              <InventoryResourceProvider projection={homepageGraph}><table className="w-full text-left text-xs">
                 <caption className="sr-only">
                   {tab === "pages" ? "Page observations" : "Resource evidence"};
                   additional pages receive inventory classification, not full diagnostic audits.
@@ -468,22 +477,26 @@ export function FullSiteWorkspace({
                     </thead>
                     <tbody>
                       {data?.resources.rows.map((row) => (
+                        <CrawlResourceScope key={row.key} homepage={data.pages.rows.find(page => page.id === row.pageIds[0])?.source === "homepage"}>
+                        <InventoryResourceRow inspect relationships={Boolean(homepageGraph && data.pages.rows.find(page => page.id === row.pageIds[0])?.source === "homepage")} identity={{cookieRefs: [], nodeRefs: row.occurrence.evidenceRefs, requests: row.occurrence.kind === "request" ? (() => { try {const url = new URL(row.occurrence.label);return [{hostname: url.hostname, path: url.pathname, method: typeof row.occurrence.details.method === "string" ? row.occurrence.details.method : null}];} catch {return [];}})() : []}} facts={{ name: row.occurrence.label, type: row.occurrence.kind, vendor: row.occurrence.vendor, domains: row.occurrence.domain ? [row.occurrence.domain] : [], purpose: row.purposes.join(", "), evidence: row.inventoryEvidence, confidence: row.confidences.join(", "), pages: row.pageIds.map(pageName), firstSeenMs: row.occurrence.firstSeenMs, relationship: row.relationships.join(", "), eventCount: row.eventCount }} evidence={{ ...row.occurrence.details, evidenceRefs: row.occurrence.evidenceRefs, resourceIdentity: row.occurrence.identity }}>
                         <tr className="h-14 border-b border-zinc-100" key={row.key}>
                           <td className="h-14 pr-3"><button title={row.inventoryEvidence} aria-label={`${row.inventoryEvidence}: inspect ${row.occurrence.label}`} className={`text-lg ${evidenceStyle(row.inventoryEvidence)}`} onClick={() => openResource(row.key)}>{evidenceSymbol(row.inventoryEvidence)}</button></td>
                           <td className="px-3"><span className="text-sky-700" title={row.occurrence.kind}>{row.occurrence.kind === "request" ? "⇄" : row.occurrence.kind === "embed" ? "‹›" : row.occurrence.kind === "cookie" ? "◉" : "▤"}</span><span className="sr-only">{row.occurrence.kind}</span></td>
                           <td className="px-3"><span className="inline-flex max-w-40 items-center gap-2 rounded-full border border-zinc-200 px-2 py-1"><VendorBrandIcon label={row.occurrence.vendor ?? row.occurrence.domain ?? row.occurrence.label} /><span className="truncate" title={row.occurrence.vendor ?? undefined}>{row.occurrence.vendor ?? row.occurrence.domain ?? "Unknown"}</span></span></td>
                           <td className="px-3"><button className="block max-w-56 truncate text-left text-sky-800 hover:underline" title={row.occurrence.label} onClick={() => openResource(row.key)}>{row.occurrence.label}</button></td>
-                          <td className="px-3"><span className="block max-w-40 truncate rounded bg-amber-50 px-2 py-1 capitalize text-amber-900" title={row.purposes.join(", ")}>{row.purposes.join(", ").replaceAll("_", " ")}</span></td>
+                          <td className="px-3"><span className="inline-flex max-w-40"><InventoryPurposeChip purpose={row.purposes.join(", ").replaceAll("_", " ")} /></span></td>
                           <td className="whitespace-nowrap px-3" title="From the start of the retained page observation">{duration(row.occurrence.firstSeenMs)}</td>
                           <td className="px-3"><span className="block max-w-44 truncate font-mono" title={row.occurrence.domain ?? undefined}>{row.occurrence.domain ?? "Unknown"}</span></td>
                           <td className="whitespace-nowrap px-3 capitalize">{row.relationships.join(", ").replaceAll("_", " ")}</td>
                           <td className="px-3"><button className="whitespace-nowrap text-left text-sky-800 hover:underline" title={row.pageIds.map(pageName).join("\n")} onClick={() => openResource(row.key)}>{shortPage(pageName(row.pageIds[0] ?? ""))}{row.pageIds.length > 1 ? <span className="ml-2 text-zinc-500">+{row.pageIds.length - 1}</span> : null}</button></td>
                         </tr>
+                        </InventoryResourceRow>
+                        </CrawlResourceScope>
                       ))}
                     </tbody>
                   </>
                 )}
-              </table>
+              </table></InventoryResourceProvider>
             </div>
             <p className="mt-2 text-xs text-zinc-500">{tab === "pages" ? data?.pages.total : data?.resources.total} rows · Scroll to view all. Select a row for retained evidence.</p>
           </section>

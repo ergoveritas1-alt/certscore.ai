@@ -1858,7 +1858,7 @@ export function ShadowScanReport({
     </>
   );
 
-  const reportContent = report.fullSite ? <FullSiteWorkspace scanId={report.scan.id} requested={report.fullSite}>{homepageContent}</FullSiteWorkspace> : homepageContent;
+  const reportContent = report.fullSite ? <FullSiteWorkspace scanId={report.scan.id} requested={report.fullSite} homepageGraph={report.runtimeEvidenceGraph}>{homepageContent}</FullSiteWorkspace> : homepageContent;
 
   if (mode === "authenticated") {
     return (
