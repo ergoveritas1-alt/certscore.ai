@@ -23,7 +23,8 @@ const regions: Record<string, string> = {
   "eu-west-1": "🇮🇪 EU-IR · Ireland", "eu-central-1": "🇩🇪 EU-DE · Frankfurt", "us-west-1": "California", "us-west-2": "US West · Oregon",
 };
 
-export function FullSiteScanNotice({ scan, statusStale = false }: { scan: FullSiteScanNoticeData; statusStale?: boolean }) {
+export function FullSiteScanNotice({ scan, statusStale = false, reportPage = false }: { scan: FullSiteScanNoticeData; statusStale?: boolean; reportPage?: boolean }) {
+  const Heading = reportPage ? "h1" : "h2";
   const failed = scan.homepageStatus === "failed" || scan.status === "stopped";
   const failure = scanFailureExplanation(scan.errorMessage);
   const complete = !failed && scan.status === "completed";
@@ -35,15 +36,15 @@ export function FullSiteScanNotice({ scan, statusStale = false }: { scan: FullSi
       <div className="flex flex-wrap items-center justify-between gap-4 px-5 py-5">
         <div className="min-w-0">
           <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">Full-site scan</p>
-          <h2 className="mt-1 break-words text-xl font-semibold tracking-tight text-slate-950">{scan.hostname}</h2>
+          <Heading className="mt-1 break-words text-xl font-semibold tracking-tight text-slate-950">{scan.hostname}</Heading>
         </div>
         <div className="flex items-center gap-3">
           <span role="status" className={`inline-flex items-center gap-2 rounded-full px-3 py-1 text-xs font-medium ${failed ? "bg-amber-50 text-amber-800" : complete ? "bg-emerald-50 text-emerald-700" : "bg-sky-50 text-sky-700 motion-safe:animate-pulse"}`}>
             <span aria-hidden="true" className={`h-1.5 w-1.5 rounded-full bg-current ${running ? "motion-safe:animate-pulse" : ""}`} />
             {failed ? "Couldn’t finish" : complete ? "Complete" : "In progress"}
           </span>
-          <Link className="rounded-lg border border-slate-200 px-3 py-2 text-sm font-medium text-slate-700 hover:border-sky-300 hover:text-sky-700 focus-visible:outline focus-visible:outline-2 focus-visible:outline-sky-500" href={failed ? "#scan-a-site" : `/app/scans/${scan.scanId}`}>
-            {failed ? "Set up new scan" : complete ? "View report" : "View details"} <span aria-hidden="true">↗</span>
+          <Link className="rounded-lg border border-slate-200 px-3 py-2 text-sm font-medium text-slate-700 hover:border-sky-300 hover:text-sky-700 focus-visible:outline focus-visible:outline-2 focus-visible:outline-sky-500" href={reportPage ? `/app?fullSiteScan=${scan.scanId}` : failed ? "#scan-a-site" : `/app/scans/${scan.scanId}`}>
+            {reportPage ? "Overview" : failed ? "Set up new scan" : complete ? "View report" : "View details"} <span aria-hidden="true">↗</span>
           </Link>
         </div>
       </div>

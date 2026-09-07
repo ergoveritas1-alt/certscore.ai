@@ -1,3 +1,4 @@
+import { loadFullSiteNotice } from "../../../../server/scans/full-site-notice";
 import { readFullSiteOptions } from "../../../../server/scans/full-site-options";
 import { notFound, redirect } from "next/navigation";
 import { PendingScanStartedEvent } from "../../../../components/analytics/data-layer-events";
@@ -39,6 +40,8 @@ export default async function ScanDetailPage({ params }: ScanDetailPageProps) {
   );
   if (!statusProjection) notFound();
 
+  const fullSiteNotice = statusProjection.fullSite && (await readFullSiteOptions()).allowed
+    ? await loadFullSiteNotice(scanId, organization.id, user.id) : null;
   const waitingForReportProjection =
     isCompletedScanStatus(statusProjection.status) &&
     statusProjection.reportProjectionRequired &&
@@ -48,6 +51,7 @@ export default async function ScanDetailPage({ params }: ScanDetailPageProps) {
       <>
         <PendingScanStartedEvent />
         <PendingScanDetailView
+          fullSiteNotice={fullSiteNotice}
           fullSite={(await readFullSiteOptions()).allowed ? statusProjection.fullSite : undefined}
           createdAt={statusProjection.createdAt}
           domainHostname={statusProjection.domainHostname}
@@ -84,6 +88,7 @@ export default async function ScanDetailPage({ params }: ScanDetailPageProps) {
     if (!statusProjection.reportProjectionRequired) redirect(legacyScanHref(scanId));
     return (
       <PendingScanDetailView
+          fullSiteNotice={fullSiteNotice}
           fullSite={(await readFullSiteOptions()).allowed ? statusProjection.fullSite : undefined}
         createdAt={statusProjection.createdAt}
         domainHostname={statusProjection.domainHostname}

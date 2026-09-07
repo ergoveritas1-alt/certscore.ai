@@ -36,3 +36,10 @@ test("storage failure explains recovery inline without sending users to a dead e
  for (const text of ["Evidence storage was unavailable", "not a problem found on the website", "will not resume automatically", 'href="#scan-a-site"']) assert.ok(html.includes(text));
  assert.doesNotMatch(html, /View details|ECONNREFUSED/);
 });
+
+test("report header links back to Overview without a self-link", () => {
+ const html = renderToStaticMarkup(<FullSiteScanNotice scan={scan} reportPage />);
+ assert.ok(html.includes(`/app?fullSiteScan=${scan.scanId}`));
+ assert.match(html, /<h1/);
+ assert.doesNotMatch(html, /View details/);
+});

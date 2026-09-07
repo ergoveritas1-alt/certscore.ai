@@ -3,7 +3,7 @@ import { useEffect, useState } from "react";
 import { FullSiteScanNotice, type FullSiteScanNoticeData } from "./full-site-scan-notice";
 import { fullSiteIsRunning, fullSiteProgressResponseSchema } from "../../lib/scans/full-site-progress";
 
-export function LiveFullSiteScanNotice({ scan: initial }: { scan: FullSiteScanNoticeData }) {
+export function LiveFullSiteScanNotice({ scan: initial, reportPage = false }: { scan: FullSiteScanNoticeData; reportPage?: boolean }) {
   const [scan, setScan] = useState(initial);
   const [stale, setStale] = useState(false);
   useEffect(() => {
@@ -62,5 +62,5 @@ export function LiveFullSiteScanNotice({ scan: initial }: { scan: FullSiteScanNo
     schedule(15000);
     return () => { disposed = true; clearTimeout(timer); controller?.abort(); document.removeEventListener("visibilitychange", visibility); };
   }, [initial]);
-  return <FullSiteScanNotice scan={scan} statusStale={stale} />;
+  return <FullSiteScanNotice scan={scan} statusStale={stale} reportPage={reportPage} />;
 }

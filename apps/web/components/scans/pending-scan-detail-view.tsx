@@ -1,5 +1,7 @@
 "use client";
 
+import { LiveFullSiteScanNotice } from "../dashboard/live-full-site-scan-notice";
+import type { FullSiteScanNoticeData } from "../dashboard/full-site-scan-notice";
 import type { ApiV2PreConsentRuntimePreview } from "@certscore/api-contracts";
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
@@ -29,6 +31,7 @@ export function getProgressHandoffValue(input: { hasSubmissionHandoff: boolean; 
 
 export function PendingScanDetailView({
   fullSite,
+  fullSiteNotice,
   createdAt,
   domainHostname,
   initialPreConsentPreview = null,
@@ -39,6 +42,7 @@ export function PendingScanDetailView({
   startedAt,
   status,
 }: {
+  fullSiteNotice?: FullSiteScanNoticeData | null;
   fullSite?: import("@website-signal-risk-scanner/shared").CrawlOptions;
   createdAt: string;
   domainHostname: string | null;
@@ -141,7 +145,7 @@ export function PendingScanDetailView({
 
   return (
     <div className="space-y-4" data-density="compact">
-      {fullSite ? <header className="rounded-xl border border-sky-200 bg-sky-50 p-5"><h2 className="text-2xl font-semibold">Scan · {status}</h2><p className="mt-2 text-sm">Full homepage audit plus resource inventories from additional public pages. Additional pages were opened independently without a consent action.</p><p className="mt-3 text-sm">Max pages: {fullSite.maxPages} (includes homepage) · Requested concurrency: {fullSite.concurrency} · Wait between page starts: {fullSite.waitSeconds}s</p><p className="mt-2 text-xs">Fresh visit, no consent action. Homepage audit in progress; resource crawl awaits retained homepage evidence.</p></header> : null}
+      {fullSiteNotice ? <LiveFullSiteScanNotice scan={fullSiteNotice} reportPage /> : <>
       <div>
         <p className="text-xs font-medium uppercase tracking-[0.18em] text-slate-500">CertScore.ai scan</p>
         <h1 className="mt-1 flex min-w-0 max-w-full items-baseline gap-2 text-2xl font-semibold leading-tight tracking-tight text-slate-950 sm:text-3xl">
@@ -163,6 +167,7 @@ export function PendingScanDetailView({
         startedAtMs={progressHandoff.startedAtMs}
         targetLabel={domainHostname ?? pageUrl ?? ""}
       />
+      </>}
       {progress.preConsentPreview ? (
         <PreConsentRuntimePreviewCard preview={progress.preConsentPreview} startedAt={startedAt} />
       ) : null}
