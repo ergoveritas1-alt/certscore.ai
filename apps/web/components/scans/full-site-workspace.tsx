@@ -233,7 +233,7 @@ export function FullSiteWorkspace({
         {state?.status === "stopped" ? <div role="status" className="mt-3 flex flex-wrap items-center justify-between gap-3 rounded-lg border border-amber-200/70 bg-amber-50/50 px-4 py-3">
           <div className="min-w-0 text-sm">
             <p className="font-semibold text-zinc-900">Full-site scan couldn’t finish</p>
-            <p className="mt-1 max-w-2xl text-zinc-600">{state.stopReason === "dispatch_queue_unavailable" ? "Additional pages couldn’t start because the scanner wasn’t configured. Your homepage results are available below." : scanFailureExplanation(state.stopReason).detail}</p>
+            <p className="mt-1 max-w-2xl text-zinc-600">{state.stopReason === "dispatch_queue_unavailable" ? "Full site scan was unsuccessful. Partial results of the scan are shown below. Try to scan the site again. Contact support@certscore.ai if you encounter more issues." : scanFailureExplanation(state.stopReason).detail}</p>
           </div>
           <a className={`${button} shrink-0 bg-white text-sm`} href={state.stopReason === "dispatch_queue_unavailable" ? "https://certscore.ai/app" : "/app"}>{state.stopReason === "dispatch_queue_unavailable" ? "Scan on CertScore.ai" : "Start a new scan"} <span aria-hidden="true">→</span></a>
         </div> : null}
