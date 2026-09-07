@@ -324,6 +324,25 @@ test(
       await db.query(`update full_site_completion_emails set status='sending',lease_until=now()-interval '1 second' where scan_id=$1`,[mail.id]);
       assert.equal(await db.reserveFullSiteCompletionEmail(),null,"Ambiguous SMTP outcome must not resend");
       assert.equal((await db.queryOne<{status:string}>(`select status from full_site_completion_emails where scan_id=$1`,[mail.id]))!.status,"uncertain");
+      await db.query(`update scans set status='cancelled'`);
+      await sweepFullSiteCrawls();
+      const lost = await parent("lost-admission.test");
+      const [lostJob] = await db.reserveFullSiteDispatches();
+      assert.ok(lostJob);
+      await db.query(`update full_site_pages set dispatch_lease_until=now()-interval '1 second' where id=$1`, [lostJob.pageId]);
+      await sweepFullSiteCrawls();
+      assert.equal((await db.loadFullSiteCrawl(lost.id))?.stop_reason, "dispatch_admission_timeout");
+      assert.equal((await db.loadFullSitePages(lost.id, lostJob.pageId))[0]?.status, "failed");
+      assert.equal(await db.claimFullSitePage({ ...lostJob, region: lostJob.region }), null, "Late credentials cannot restart a stopped crawl");
+      await sweepFullSiteCrawls();
+      assert.deepEqual(await db.reserveFullSiteDispatches(), [], "Expired admission is terminal, never requeued");
+      const interrupted = await parent("interrupted.test");
+      const [interruptedJob] = await db.reserveFullSiteDispatches();
+      assert.ok(interruptedJob);
+      await db.query(`update scans set status='cancelled' where id=$1`, [interrupted.id]);
+      assert.equal(await db.claimFullSitePage({ ...interruptedJob, region: interruptedJob.region }), null, "Cancellation blocks admission even before the sweep");
+      await sweepFullSiteCrawls();
+      assert.deepEqual(await db.reserveFullSiteDispatches(), []);
     } finally {
       await db.getWritePool().end();
       await db.getReadPool().end();

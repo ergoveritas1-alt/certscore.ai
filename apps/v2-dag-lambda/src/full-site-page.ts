@@ -9,6 +9,7 @@ import {
   projectFullSiteInventory,
   runInventoryOnly,
   publicNetworkGuardEnabled,
+  proxyFetch,
 } from "@certscore/scan-core";
 import {
   crawlDisplayUrl,
@@ -73,7 +74,7 @@ export async function runFullSitePage(event: unknown, options: { s3Client?: S3Cl
   const controlUrl = new URL("/api/internal/full-site/page", origin);
   async function control(body: Record<string, unknown>) {
     if (options.control) return options.control(body);
-    const response = await fetch(controlUrl, {
+    const response = await proxyFetch(controlUrl, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ ...message, ...body }),

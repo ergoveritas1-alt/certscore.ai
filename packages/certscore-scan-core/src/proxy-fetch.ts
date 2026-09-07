@@ -212,14 +212,15 @@ async function requestThroughProxy(
       return;
     }
 
+    const connectAuthority = `${target.hostname}:${target.port || "443"}`;
     const connectHeaders = {
-      host: target.host,
+      host: connectAuthority,
       ...(requestHeaders["proxy-authorization"] ? { "proxy-authorization": requestHeaders["proxy-authorization"] } : {}),
     };
     const connectRequest = (proxy.protocol === "https:" ? https.request : http.request)({
       ...proxyRequestOptions,
       method: "CONNECT",
-      path: target.host,
+      path: connectAuthority,
       headers: connectHeaders,
     });
     request = connectRequest;

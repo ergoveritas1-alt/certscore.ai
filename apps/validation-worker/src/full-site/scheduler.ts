@@ -467,9 +467,15 @@ export async function sweepFullSiteCrawls() {
   await query(`update full_site_pages p set status=case when p.attempt_count<=(c.policy_json->>'maxRetries')::int and c.status='running' then 'queued' else 'failed' end,
     limitation='worker_lease_expired',completed_at=now(),token_hash=null,worker_lease_until=null,next_attempt_at=now()+interval '30 seconds'
     from full_site_crawls c where p.scan_id=c.scan_id and p.status='active' and p.worker_lease_until<=now()`);
-  await query(
-    `update full_site_pages set status='queued',token_hash=null,next_attempt_at=now()+interval '5 seconds' where status='dispatching' and dispatch_lease_until<=now()`,
-  );
+  // A worker that never claims its credential must not restart forever. Treat
+  // admission/dispatch loss as a terminal coverage limitation, not a scan result.
+  await query(`update full_site_crawls c set status='stopped',stop_reason='dispatch_admission_timeout',completed_at=now()
+    where c.status='running' and exists(select 1 from full_site_pages p where p.scan_id=c.scan_id
+      and p.status='dispatching' and p.dispatch_lease_until<=now())`);
+  await query(`update full_site_pages p set status=case when p.status='dispatching' and p.dispatch_lease_until<=now() then 'failed' else 'cancelled' end,
+    limitation=c.stop_reason,completed_at=now(),token_hash=null,dispatch_lease_until=null
+    from full_site_crawls c where p.scan_id=c.scan_id and c.status in ('stopped','cancelled')
+      and p.status in ('queued','dispatching') and p.source<>'homepage'`);
   const homes = (
     await query<
       FullSiteCrawlRow & {

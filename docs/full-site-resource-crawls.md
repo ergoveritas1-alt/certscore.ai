@@ -95,7 +95,11 @@ to drain before running the existing homepage/consent topology.
 Retries retain their original target slot; failures and blocked attempts consume
 their slot. Terminal duplicate deliveries do not add observations. Only the
 representative attempt is rolled up; attempt history remains separately retained.
-Expired dispatch leases requeue bounded work; expired worker leases consume the
+Expired dispatch leases stop the crawl with `dispatch_admission_timeout`, fail the
+unclaimed page, and cancel queued siblings. They never requeue indefinitely.
+Admission rechecks parent cancellation/failure before any browser starts. Control
+requests use the existing regional egress proxy and retain their current deadlines.
+Expired worker leases consume the
 configured retry budget. Cancellation and wall-clock limits stop pending work.
 Already admitted visits can finish inside their existing deadline; live reporting
 continues until those workers terminate.

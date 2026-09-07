@@ -161,6 +161,13 @@ export async function claimFullSitePage(input: {
       input.region !== c.region
     )
       return null;
+    const parent = (await client.query<{ status: string }>(
+      `select status from scans where id=$1 for share`, [c.scan_id],
+    )).rows[0];
+    if (!parent || ["failed", "cancelled"].includes(parent.status)) {
+      await stopCrawl(client, c.scan_id, "parent_cancelled_or_failed");
+      return null;
+    }
     const membership = (
       await client.query(
         `select 1 from scans s join organization_members m on m.organization_id=s.organization_id
