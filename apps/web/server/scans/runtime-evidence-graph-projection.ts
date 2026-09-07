@@ -117,3 +117,26 @@ function projectGraph(graph: RuntimeEvidenceGraph, documents: RuntimeGraphPolicy
 function label(node: RuntimeGraphNode) {
   return (node.cookie?.name || node.name || node.url || `${node.kind} ${node.id.slice(0, 8)}`).slice(0, 240);
 }
+
+/** Additional-page graph: verified raw inventory artifact, never a synthetic canonical bundle. */
+export function projectCrawlRuntimeGraph(input: {
+  graph: unknown; pageId: string; attemptId: string;
+  source: { sha256: string; sizeBytes: number; verificationStatus: string };
+}): ApiRuntimeEvidenceGraphProjection {
+  const result: ApiRuntimeEvidenceGraphProjection = {
+    contractVersion: "certscore.runtime-evidence-graph-projection.v1", scanId: input.pageId,
+    status: "unavailable", registryVersion: CANONICAL_VENDOR_RESOLVER_VERSION,
+    graphs: [], limitations: [], findingOrScoreEffect: false,
+  };
+  if (input.source.verificationStatus !== "verified" || !/^[a-f0-9]{64}$/.test(input.source.sha256) || input.source.sizeBytes <= 0) {
+    result.limitations.push("retained_inventory_not_verified"); return result;
+  }
+  result.sourceBundle = { sha256: input.source.sha256, sizeBytes: input.source.sizeBytes, verified: true };
+  const verified = verifyRuntimeEvidenceGraph(input.graph, { scanId: input.pageId, scenario: "pre_consent", sha256 });
+  if (!verified.graph || verified.graph.captureId !== `${input.pageId}:${input.attemptId}:runtime_evidence` || verified.graph.mode !== "project") {
+    result.limitations.push("page_graph_identity_or_integrity_unverified"); return result;
+  }
+  result.graphs = [projectGraph(verified.graph, [])];
+  result.status = verified.graph.coverage.status === "complete" ? "available" : "limited";
+  return apiRuntimeEvidenceGraphProjectionSchema.parse(result);
+}

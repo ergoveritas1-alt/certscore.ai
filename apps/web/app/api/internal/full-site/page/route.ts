@@ -10,6 +10,7 @@ import {
   crawlObservationSchema,
   compactCrawlObservation,
 } from "@website-signal-risk-scanner/shared";
+import { projectCrawlRuntimeGraph } from "../../../../../server/scans/runtime-evidence-graph-projection";
 const schema = z
   .object({
     operation: z.enum(["claim", "finish"]),
@@ -113,7 +114,7 @@ export async function POST(request: Request) {
     packet.executionProfile !== "inventory_only"
   )
     return new Response(null, { status: 409 });
-  await readFullSiteArtifact({
+  const rawEvidence = await readFullSiteArtifact({
     bucket: row.bucket,
     key: `${prefix}/evidence.json`,
     region: row.region,
@@ -121,6 +122,12 @@ export async function POST(request: Request) {
     sizeBytes: data.evidenceSizeBytes,
     maxBytes: 64 * 1024 * 1024,
   });
+  if (packet.runtimeGraph) {
+    const graph = projectCrawlRuntimeGraph({ graph: (rawEvidence as { runtimeEvidenceGraph?: unknown })?.runtimeEvidenceGraph, pageId: data.pageId, attemptId: data.attemptId,
+      source: { sha256: packet.sourceHash, sizeBytes: data.evidenceSizeBytes, verificationStatus: "verified" } });
+    const verified = graph.graphs[0];
+    if (!verified || packet.runtimeGraph.sourceSizeBytes !== data.evidenceSizeBytes || verified.sourceHash !== packet.runtimeGraph.sha256 || verified.nodes.length !== packet.runtimeGraph.nodeCount || verified.edges.length !== packet.runtimeGraph.edgeCount) delete packet.runtimeGraph;
+  }
   const accepted = await completeFullSitePage({
     pageId: data.pageId,
     attemptId: data.attemptId,

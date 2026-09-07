@@ -5,6 +5,7 @@ import { enforceApiV2ScanReadThrottle } from "../../../../../server/pulse/api-v2
 import { runtimeGraphQuotaRequest } from "../../../../../server/scans/runtime-evidence-graph-access";
 import { loadFullSiteReport } from "../../../../../server/scans/full-site-report";
 import { loadFullSiteCrawl } from "@website-signal-risk-scanner/db";
+import { loadFullSiteGraph } from "../../../../../server/scans/full-site-graph";
 export const dynamic = "force-dynamic";
 export async function GET(
   request: Request,
@@ -24,13 +25,13 @@ export async function GET(
     scanId,
     route: "full-site-inventory",
     profile: running ? "status" : "terminal",
-    detail: params.has("detailPage") ? "evidence" : "summary",
+    detail: (params.has("detailPage") || params.has("graphPage")) ? "evidence" : "summary",
   });
   if (throttled) return throttled;
   // Internal browser session and rollout gate are required; API credentials cannot enable inventory.
   if (!(await getPublicScanStatusProjection(scanId)))
     return new Response(null, { status: 404 });
-  const report = await loadFullSiteReport(scanId, params);
+  const report = params.has("graphPage") ? await loadFullSiteGraph(scanId, params.get("graphPage")!) : await loadFullSiteReport(scanId, params);
   return NextResponse.json(report, {
     status: report ? 200 : 404,
     headers: { "Cache-Control": "private, no-store" },

@@ -4,7 +4,7 @@ import { createHash } from "node:crypto";
 import type { CanonicalEvidenceBundle } from "@certscore/contracts";
 import { apiRuntimeEvidenceGraphProjectionSchema } from "@certscore/api-contracts";
 import { RuntimeEvidenceGraphBuilder } from "../../../../packages/certscore-scan-core/src/runtime-evidence-graph";
-import { projectRuntimeEvidenceGraphs, presentRuntimeGraphForRead } from "./runtime-evidence-graph-projection";
+import { projectCrawlRuntimeGraph, projectRuntimeEvidenceGraphs, presentRuntimeGraphForRead } from "./runtime-evidence-graph-projection";
 
 function fixture(mode: "capture_only" | "project" = "project") {
   const builder = new RuntimeEvidenceGraphBuilder({ scanId: "scan", captureId: "scan:runtime_evidence", scenario: "pre_consent", mode, startedAt: new Date(Date.now() - 1000).toISOString(), browserVersion: "fixture" });
@@ -93,4 +93,27 @@ test("policy mentions require matching retained text hash, ownership and source 
   const absent = { ...document, text: absentText, textSha256: digest(absentText) };
   assert.equal(classification([absent]).disclosure, "unknown");
   assert.equal(classification([{ ...absent, coverage: "complete" }]).disclosure, "not_found_in_reviewed_surfaces");
+});
+
+
+test("crawl graph binds retained relationships to the exact page and attempt", () => {
+  const builder = new RuntimeEvidenceGraphBuilder({ scanId: "page", captureId: "page:attempt:runtime_evidence", scenario: "pre_consent", mode: "project", startedAt: new Date().toISOString(), browserVersion: "fixture" });
+  builder.handle("main", "Network.requestWillBeSent", { requestId: "1", frameId: "frame", loaderId: "document", timestamp: 1, documentURL: "https://example.com/page", type: "Script", request: { url: "https://example.com/script.js", method: "GET" }, initiator: { type: "parser", url: "https://example.com/page" } });
+  const input = { graph: builder.finish(), pageId: "page", attemptId: "attempt", source: { verificationStatus: "verified", sha256: "a".repeat(64), sizeBytes: 4000 } };
+  const result = projectCrawlRuntimeGraph(input);
+  assert.equal(result.graphs.length, 1);
+  assert.deepEqual(result.graphs[0]!.edges, input.graph.edges);
+  assert.equal(result.findingOrScoreEffect, false);
+  for (const variant of [
+    { ...input, pageId: "another-page" },
+    { ...input, attemptId: "stale-attempt" },
+    { ...input, graph: undefined },
+    { ...input, source: { ...input.source, verificationStatus: "unverified" } },
+    { ...input, graph: { ...input.graph, sourceHash: "b".repeat(64) } },
+  ]) {
+    const rejected = projectCrawlRuntimeGraph(variant);
+    assert.equal(rejected.status, "unavailable");
+    assert.equal(rejected.graphs.length, 0);
+    assert.equal(rejected.findingOrScoreEffect, false);
+  }
 });

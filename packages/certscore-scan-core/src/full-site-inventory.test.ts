@@ -51,7 +51,9 @@ test(
     try {
       const config = inventoryConfiguration("eu-west-1", "tiny"),
         configurationHash = inventoryHash(config);
+      const pageId = randomUUID(), attemptId = randomUUID();
       const a = await runInventoryOnly({
+        runtimeGraph: { pageId, attemptId },
         url: origin + "/a",
         hosts: ["127.0.0.1"],
         region: "eu-west-1",
@@ -99,6 +101,15 @@ test(
         status: "completed",
         limitations: [],
       });
+      const graph = a.evidence.runtimeEvidenceGraph;
+      assert.ok(graph);
+      assert.equal(graph.scanId, pageId);
+      assert.equal(graph.captureId, `${pageId}:${attemptId}:runtime_evidence`);
+      assert.ok(graph.edges.length > 0);
+      assert.ok(Buffer.byteLength(JSON.stringify(graph)) <= 128 * 1024);
+      assert.ok(projected.occurrences.some(row => row.graphNodeRefs?.length));
+      assert.ok(projected.occurrences.every(row => row.graphNodeRefs?.every(id => graph.nodes.some(node => node.id === id)) ?? true));
+      console.log(JSON.stringify({ graphBytes: Buffer.byteLength(JSON.stringify(graph)), nodes: graph.nodes.length, edges: graph.edges.length }));
       const serialized = JSON.stringify(projected);
       assert.ok(!serialized.includes("private-cookie"));
       assert.ok(!serialized.includes("private-value"));

@@ -7,7 +7,7 @@ import {
 import { API_READ_RATE_POLICY } from "@website-signal-risk-scanner/shared/api-read-rate-policy";
 import { SitewideInventorySummary } from "./sitewide-inventory-summary";
 import { InventoryPurposeChip } from "./inventory-cell-formatting";
-import { InventoryResourceProvider, InventoryResourceRow } from "./inventory-resource-details";
+import { InventoryResourceProvider, InventoryResourceRow, InventoryResourceMobile, type InventoryGraphSource } from "./inventory-resource-details";
 import type { ApiRuntimeEvidenceGraphProjection } from "@certscore/api-contracts";
 import { VendorBrandIcon } from "./vendor-brand-chip";
 
@@ -65,19 +65,25 @@ const timestamp = (value: string | null | undefined) =>
 const button =
   "rounded-lg border border-zinc-200 bg-white px-3 py-2 text-sm text-zinc-800 hover:border-sky-500 focus-visible:outline focus-visible:outline-2 focus-visible:outline-sky-600";
 
-function CrawlResourceScope({ homepage, children }: { homepage: boolean; children: ReactNode }) {
-  return homepage ? children : <InventoryResourceProvider>{children}</InventoryResourceProvider>;
+function CrawlResourceScope({ homepage, source, children }: { homepage: boolean; source?: InventoryGraphSource; children: ReactNode }) {
+  return homepage ? children : <InventoryResourceProvider source={source}>{children}</InventoryResourceProvider>;
 }
 
 export function FullSiteWorkspace({
   scanId,
   requested,
   homepageGraph,
+  siteScore,
+  identity,
+  scanNext,
   children,
 }: {
   scanId: string;
   requested: CrawlOptions;
   homepageGraph?: ApiRuntimeEvidenceGraphProjection;
+  siteScore?: number | null;
+  identity?: ReactNode;
+  scanNext?: ReactNode;
   children: ReactNode;
 }) {
   const [tab, setTab] = useState<"resources" | "pages" | "homepage">(
@@ -212,16 +218,18 @@ export function FullSiteWorkspace({
       data-full-site-report
     >
       <header className="border-b border-zinc-200 pb-3">
-        <div className="flex flex-wrap items-center justify-between gap-2">
+        <div className="flex flex-wrap items-start justify-between gap-3">
           <div className="flex items-center gap-2">
             <h1 className="text-xl font-semibold tracking-tight">Site scan results</h1>
             <span className="rounded-full bg-sky-50 px-2 py-0.5 text-xs font-medium text-sky-800">{state?.status.replaceAll("_", " ") ?? "Loading"}</span>
           </div>
-          <div className="flex gap-2">
+          <div className="flex w-full flex-wrap items-start justify-end gap-2 lg:w-auto lg:flex-1">
+            {scanNext}
             <a className={`${button} inline-flex items-center gap-1.5 !py-1.5`} href={`/api/scans/${scanId}/report-export?format=pdf`}><span aria-hidden="true">↓</span>PDF</a>
             <a className={`${button} inline-flex items-center gap-1.5 !py-1.5`} href={`/api/scans/${scanId}/report-export?format=json`}><span aria-hidden="true">⇩</span>Export</a>
           </div>
         </div>
+        <div className="mt-3">{identity}</div>
         <div aria-live="polite" className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-xs text-zinc-600">
           <span><strong className="text-zinc-900">{counts?.completed ?? "—"}</strong> complete · {counts?.partial ?? 0} partial · {counts?.blockedFailed ?? 0} failed · {counts?.pending ?? 0} pending</span>
           <span>Limit {requested.maxPages} pages</span><span>{state?.region}</span>
@@ -316,53 +324,21 @@ export function FullSiteWorkspace({
           </p>
         ) : null}
       </header>
-          <div className="mt-3 grid grid-cols-2 gap-px border-y border-zinc-200 bg-zinc-200 sm:grid-cols-4">
-            {[
-              [
-                "Pages scanned",
-                counts ? counts.completed + counts.partial : null,
-                "pages",
-                "",
-              ],
-              ["Cookies / storage", s ? s.totals.cookies + s.totals.storage : null, "resources", "cookie"],
-              [
-                "Requests",
-                s?.totals.requestEvents,
-                "resources",
-                "request",
-              ],
-              [
-                "Embed instances",
-                s?.totals.embedInstances,
-                "resources",
-                "embed",
-              ],
-            ].map(([label, value, target, kind]) => (
-              <button
-                key={String(label)}
-                className="min-w-0 bg-white py-2 pr-3 text-left hover:bg-sky-50 focus-visible:outline focus-visible:outline-sky-600"
-                onClick={() =>
-                  target === "pages"
-                    ? (setTab("pages"),
-                      setOffset(0),
-                      setFilters({ ...initialFilters, status: "observed" }))
-                    : filter(
-                        {
-                          kind: "all",
-                          additional: kind === "additional" ? "true" : "",
-                        },
-                        true,
-                      )
-                }
-              >
-                <span className="block text-xs text-zinc-500">{label}</span>
-                <strong className="block text-lg leading-6 tabular-nums">
-                  {typeof value === "number" ? value.toLocaleString() : "—"}
-                </strong>
-                {data?.resourceGroups[String(kind)] ? <span className="block text-xs text-zinc-500">{data.resourceGroups[String(kind)]?.services} services · {data.resourceGroups[String(kind)]?.additionalServices} on additional pages</span> : null}
-              </button>
-            ))}
+      <div className="mt-3 grid grid-cols-2 gap-px border-y border-zinc-200 bg-zinc-200 sm:grid-cols-5" aria-label="Scan summary">
+        {[
+          ["Site score", siteScore],
+          ["Pages scanned", counts ? counts.completed + counts.partial : null],
+          ["Cookies / storage", s ? s.totals.cookies + s.totals.storage : null],
+          ["Requests", s?.totals.requestEvents],
+          ["Embed instances", s?.totals.embedInstances],
+        ].map(([label, value]) => (
+          <div key={String(label)} className="min-w-0 bg-white py-2 pr-3 text-left">
+            <span className="block text-xs text-zinc-500">{label}</span>
+            <strong className="block text-lg leading-6 tabular-nums">{typeof value === "number" ? value.toLocaleString() : "—"}</strong>
+            {label === "Site score" ? <span className="block text-xs text-zinc-500">Homepage audit / 100</span> : null}
           </div>
+        ))}
+      </div>
       <nav
         aria-label="Scan report workspace"
         className="my-3 flex flex-wrap gap-2"
@@ -378,7 +354,7 @@ export function FullSiteWorkspace({
             }}
           >
             {value === "homepage"
-              ? "Homepage"
+              ? "Homepage report"
               : "Full site report"}
           </button>
         ))}
@@ -478,8 +454,8 @@ export function FullSiteWorkspace({
                     </thead>
                     <tbody>
                       {data?.resources.rows.map((row) => (
-                        <CrawlResourceScope key={row.key} homepage={data.pages.rows.find(page => page.id === row.pageIds[0])?.source === "homepage"}>
-                        <InventoryResourceRow inspect positiveRelationshipsOnly relationships={Boolean(homepageGraph && data.pages.rows.find(page => page.id === row.pageIds[0])?.source === "homepage")} identity={{cookieRefs: [], nodeRefs: row.occurrence.evidenceRefs, requests: row.occurrence.kind === "request" ? (() => { try {const url = new URL(row.occurrence.label);return [{hostname: url.hostname, path: url.pathname, method: typeof row.occurrence.details.method === "string" ? row.occurrence.details.method : null}];} catch {return [];}})() : []}} facts={{ name: row.occurrence.label, type: row.occurrence.kind, vendor: row.occurrence.vendor, domains: row.occurrence.domain ? [row.occurrence.domain] : [], purpose: row.purposes.join(", "), evidence: row.inventoryEvidence, confidence: row.confidences.join(", "), pages: row.pageIds.map(pageName), firstSeenMs: row.occurrence.firstSeenMs, relationship: row.relationships.join(", "), eventCount: row.eventCount }} evidence={{ ...row.occurrence.details, evidenceRefs: row.occurrence.evidenceRefs, resourceIdentity: row.occurrence.identity }}>
+                        <CrawlResourceScope key={row.key} source={data.pageChoices.find(page => page.id === row.pageIds[0])?.graphSource} homepage={data.pages.rows.find(page => page.id === row.pageIds[0])?.source === "homepage"}>
+                        <InventoryResourceRow inspect positiveRelationshipsOnly relationships={Boolean(data.pageChoices.find(page => page.id === row.pageIds[0])?.graphSource || (homepageGraph && data.pages.rows.find(page => page.id === row.pageIds[0])?.source === "homepage"))} identity={{cookieRefs: [], nodeRefs: row.occurrence.graphNodeRefs ?? row.occurrence.evidenceRefs, requests: row.occurrence.kind === "request" ? (() => { try {const url = new URL(row.occurrence.label);return [{hostname: url.hostname, path: url.pathname, method: typeof row.occurrence.details.method === "string" ? row.occurrence.details.method : null}];} catch {return [];}})() : []}} facts={{ name: row.occurrence.label, type: row.occurrence.kind, vendor: row.occurrence.vendor, domains: row.occurrence.domain ? [row.occurrence.domain] : [], purpose: row.purposes.join(", "), evidence: row.inventoryEvidence, confidence: row.confidences.join(", "), pages: row.pageIds.map(pageName), evidencePage: pageName(row.pageIds[0] ?? ""), firstSeenMs: row.occurrence.firstSeenMs, relationship: row.relationships.join(", "), eventCount: row.eventCount }} evidence={{ ...row.occurrence.details, evidenceRefs: row.occurrence.evidenceRefs, resourceIdentity: row.occurrence.identity }}>
                         <tr className="h-14 border-b border-zinc-100" key={row.key}>
                           <td className="h-14 pr-3"><button title={row.inventoryEvidence} aria-label={`${row.inventoryEvidence}: inspect ${row.occurrence.label}`} className={`text-lg ${evidenceStyle(row.inventoryEvidence)}`} onClick={() => openResource(row.key)}>{evidenceSymbol(row.inventoryEvidence)}</button></td>
                           <td className="px-3"><span className="text-sky-700" title={row.occurrence.kind}>{row.occurrence.kind === "request" ? "⇄" : row.occurrence.kind === "embed" ? "‹›" : row.occurrence.kind === "cookie" ? "◉" : "▤"}</span><span className="sr-only">{row.occurrence.kind}</span></td>
@@ -608,6 +584,9 @@ export function FullSiteWorkspace({
                       {row.vendor ?? "Unknown vendor"} · {row.purpose} ·{" "}
                       {row.relationship} · confidence {row.confidence}
                     </p>
+                    <InventoryResourceProvider key={`${detailPage}:${row.id}`} projection={data?.evidence?.page?.source === "homepage" ? homepageGraph : undefined} source={data?.pageChoices.find(page => page.id === detailPage)?.graphSource}>
+                      <InventoryResourceMobile identity={{ nodeRefs: row.graphNodeRefs ?? row.evidenceRefs, cookieRefs: row.kind === "cookie" ? row.evidenceRefs : [], requests: [] }} facts={{ name: row.label, type: row.kind, purpose: row.purpose, evidencePage: pageName(detailPage), firstSeenMs: row.firstSeenMs, domains: row.domain ? [row.domain] : [], relationship: row.relationship }} />
+                    </InventoryResourceProvider>
                     <details className="mt-2 text-xs">
                       <summary className="cursor-pointer">
                         Retained evidence {row.id}

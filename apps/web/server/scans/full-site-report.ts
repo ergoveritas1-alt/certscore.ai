@@ -335,7 +335,7 @@ export async function loadFullSiteReport(
     },
     pageChoices: pageRows
       .filter((p) => !["excluded", "cancelled"].includes(p.status))
-      .map((p) => ({ id: p.id, url: p.url })),
+      .map((p) => { const observation = pages.find(page => page.id === p.id)?.observation; return { id: p.id, url: p.url, graphSource: observation?.runtimeGraph && observation.configurationHash === state.configurationHash ? { href: `/api/scans/${scanId}/full-site?graphPage=${p.id}`, scanId: p.id, sha256: observation.sourceHash } : undefined }; }),
     facets: {
       purposes: [
         ...new Set(

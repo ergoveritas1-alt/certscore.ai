@@ -169,6 +169,7 @@ function ReportIdentity({
   compact = false,
   defaultScanFrom,
   enhancedActions = false,
+  workspaceIdentity = false,
   mode = "public",
   report,
 }: {
@@ -176,9 +177,11 @@ function ReportIdentity({
   compact?: boolean;
   defaultScanFrom?: ServerScanFrom;
   enhancedActions?: boolean;
+  workspaceIdentity?: boolean;
   mode?: "authenticated" | "public";
   report: ShadowReportData;
 }) {
+  if (report.fullSite && !workspaceIdentity) return null;
   const visualEvidence = report.scan.visualEvidenceHref ?? null;
   return (
     <header className={compact ? "space-y-2" : "space-y-4"}>
@@ -200,20 +203,8 @@ function ReportIdentity({
           </span>
           <span className={monoClass}>{report.scan.duration}</span>
         </div>
-        {enhancedActions ? (
-          <div className="shadow-scan-next w-full lg:max-w-[31rem] [&_.scan-report-button]:!rounded-md [&_.scan-report-button]:!border-zinc-300 [&_.scan-report-button]:!bg-white [&_.scan-report-button]:!text-zinc-700 [&_.scan-report-button]:!shadow-none [&_.ui-button]:!rounded-md [&_.ui-button]:!border-sky-700 [&_.ui-button]:!bg-none [&_.ui-button]:!bg-sky-600 [&_.ui-button]:!text-white [&_.ui-button]:!shadow-[0_4px_12px_rgba(2,132,199,0.22)] [&_.ui-button]:disabled:!border-sky-300 [&_.ui-button]:disabled:!bg-sky-100 [&_.ui-button]:disabled:!text-sky-700 [&_.ui-button]:disabled:!opacity-100 [&_input]:!h-10 [&_input]:!rounded-md [&_input]:!border [&_input]:!border-zinc-300 [&_input]:!bg-white [&_input]:!pl-3 [&_input]:!text-sm [&_input]:!shadow-none [&_input]:focus:!border-zinc-500 [&_input]:focus:!ring-1 [&_input]:focus:!ring-zinc-200">
-            <DomainScanForm
-              allowLocalExtensionScan={mode === "authenticated"}
-              allowRestrictedScanOptions={allowRestrictedScanOptions}
-              buttonLabel="Scan"
-              compact
-              defaultScanFrom={defaultScanFrom ?? reportScanFrom(report.scan.originCode)}
-              inputLabel="Scan another website"
-              inputPlaceholder="Scan next website"
-              mode="full"
-              scanSource={mode === "authenticated" ? "dashboard" : "homepage"}
-            />
-          </div>
+        {enhancedActions && !workspaceIdentity ? (
+          <ReportScanNext allowRestrictedScanOptions={allowRestrictedScanOptions} defaultScanFrom={defaultScanFrom} mode={mode} report={report} />
         ) : null}
       </div>
       <div className="min-w-0">
@@ -250,6 +241,24 @@ function ReportIdentity({
         <p className={`${monoClass} mt-2 hidden break-all text-xs text-zinc-500 sm:block`}>{report.scan.url}</p>
       </div>
     </header>
+  );
+}
+
+function ReportScanNext({ allowRestrictedScanOptions = false, defaultScanFrom, mode = "public", report }: { allowRestrictedScanOptions?: boolean; defaultScanFrom?: ServerScanFrom; mode?: "authenticated" | "public"; report: ShadowReportData }) {
+  return (
+    <div className="shadow-scan-next w-full lg:max-w-[31rem] [&_.scan-report-button]:!rounded-md [&_.scan-report-button]:!border-zinc-300 [&_.scan-report-button]:!bg-white [&_.scan-report-button]:!text-zinc-700 [&_.scan-report-button]:!shadow-none [&_.ui-button]:!rounded-md [&_.ui-button]:!border-sky-700 [&_.ui-button]:!bg-none [&_.ui-button]:!bg-sky-600 [&_.ui-button]:!text-white [&_.ui-button]:!shadow-[0_4px_12px_rgba(2,132,199,0.22)] [&_.ui-button]:disabled:!border-sky-300 [&_.ui-button]:disabled:!bg-sky-100 [&_.ui-button]:disabled:!text-sky-700 [&_.ui-button]:disabled:!opacity-100 [&_input]:!h-10 [&_input]:!rounded-md [&_input]:!border [&_input]:!border-zinc-300 [&_input]:!bg-white [&_input]:!pl-3 [&_input]:!text-sm [&_input]:!shadow-none [&_input]:focus:!border-zinc-500 [&_input]:focus:!ring-1 [&_input]:focus:!ring-zinc-200">
+      <DomainScanForm
+        allowLocalExtensionScan={mode === "authenticated"}
+        allowRestrictedScanOptions={allowRestrictedScanOptions}
+        buttonLabel="Scan"
+        compact
+        defaultScanFrom={defaultScanFrom ?? reportScanFrom(report.scan.originCode)}
+        inputLabel="Scan another website"
+        inputPlaceholder="Scan next website"
+        mode="full"
+        scanSource={mode === "authenticated" ? "dashboard" : "homepage"}
+      />
+    </div>
   );
 }
 
@@ -1858,7 +1867,7 @@ export function ShadowScanReport({
     </>
   );
 
-  const reportContent = report.fullSite ? <FullSiteWorkspace scanId={report.scan.id} requested={report.fullSite} homepageGraph={report.runtimeEvidenceGraph}>{homepageContent}</FullSiteWorkspace> : homepageContent;
+  const reportContent = report.fullSite ? <FullSiteWorkspace scanId={report.scan.id} requested={report.fullSite} homepageGraph={report.runtimeEvidenceGraph} siteScore={report.score.value} identity={<ReportIdentity compact enhancedActions workspaceIdentity report={report} />} scanNext={<ReportScanNext allowRestrictedScanOptions={allowRestrictedScanOptions} defaultScanFrom={defaultScanFrom} mode={mode} report={report} />}>{homepageContent}</FullSiteWorkspace> : homepageContent;
 
   if (mode === "authenticated") {
     return (

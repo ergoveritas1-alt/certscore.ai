@@ -128,6 +128,7 @@ export async function runFullSitePage(event: unknown, options: { s3Client?: S3Cl
       configurationHash: grant.configurationHash,
       outDir,
       signal: abort.signal,
+      runtimeGraph: { pageId: grant.pageId, attemptId: grant.attemptId },
     });
     evidenceBody = JSON.stringify(visit.evidence);
     packet = projectFullSiteInventory({
@@ -160,6 +161,10 @@ export async function runFullSitePage(event: unknown, options: { s3Client?: S3Cl
         ...(!visit.finalUrl ? ["page_context_unavailable"] : []),
       ],
     });
+    if (visit.evidence.runtimeEvidenceGraph) {
+      const graph = visit.evidence.runtimeEvidenceGraph;
+      packet.runtimeGraph = { sourceSizeBytes: Buffer.byteLength(evidenceBody), sha256: graph.sourceHash, nodeCount: graph.nodes.length, edgeCount: graph.edges.length };
+    }
   } catch {
     evidenceBody = "{}";
     packet = {

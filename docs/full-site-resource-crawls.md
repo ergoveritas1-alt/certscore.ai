@@ -269,3 +269,34 @@ Resources aggregates retained resource identities and events across independent 
 Every new homepage runtime scan can retain bounded `certscore.site-metadata.v1` declarations and same-origin WordPress asset indicators in its existing document read. The coordinator retains these separately as `runtimeMetadataSnapshots`; they never replace consent-owned DOM evidence. Verified source-hash-bound observations persist as `certscore.site-metadata-projection.v1` in runtime artifacts and are rendered under Site metadata. Legacy/unverified/missing metadata remains unavailable. WordPress version is shown only when explicitly declared in generator metadata; asset query versions are not WordPress version evidence. Industry reuses the existing estimated benchmark and is labelled estimated. None of these descriptive fields creates findings or affects score.
 
 No new model calls, waits, network probes or browser invocations are added by metadata capture. Estimated incremental metadata storage is below $1/month at 100,000 scans/month and 30-day retention. The separate, owner-requested ErgoVeritas same-site embed canary is also estimated below $1/month at 100,000 visits.
+
+### Additional-page relationship evidence
+
+Owner approval on September 6, 2026 covers passive parent-child graph capture
+within the previously approved $5/month ceiling at 10,000 additional pages/month.
+Inventory visits now reuse the canonical runtime graph collector in the same
+browser session. The existing 1,000-node, 2,000-edge and 128 KiB graph limits
+apply; this adds no browser invocation, model call, capture window, or S3 object.
+The local browser regression retained 35 nodes and 39 edges in 19,696 bytes.
+Incremental monthly cost is expected to remain below the approved $5 ceiling:
+10,000 capped graphs add at most 1.22 GiB/month to the existing artifact stream
+(before inventory reference metadata). Storage accumulates according to the
+existing retention policy; this estimate assumes the previously reviewed first
+year and bounded on-demand graph reads. Production compute billing has not been
+measured by this local validation. Re-estimate before increasing volume,
+retention, graph limits, browser budgets, or read frequency.
+
+The raw graph is retained in the existing page evidence artifact. Completion
+verifies that artifact's hash/size, the graph's internal hash, and its exact
+page/attempt capture identity before recording graph availability. Authenticated
+reads repeat artifact and identity verification and use the canonical evidence
+read-rate policy. Resource node references remain page-specific. The details
+panel can load the graph for each selected page; graphs are never merged across
+page visits. Missing or invalid graphs remain unavailable and do not change
+inventory counts, findings, consent assessment, or scores. Legacy records are
+not backfilled.
+
+The report header uses non-interactive summary cells. “Site score” displays the
+existing homepage diagnostic score with an explicit homepage scope. Additional
+pages still receive inventory-only scans. Site identity and the next-scan form
+are shared above both report tabs; the scan options use a Full site switch.

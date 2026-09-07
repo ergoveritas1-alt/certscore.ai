@@ -137,6 +137,7 @@ export const crawlOccurrenceSchema = z
     eventCount: z.number().int().positive().default(1),
     firstSeenMs: z.number().finite().nonnegative().nullable(),
     evidenceRefs: z.array(text).max(20),
+    graphNodeRefs: z.array(text).max(20).optional(),
     details: z.record(
       z.union([text, z.number().finite(), z.boolean(), z.null()]),
     ),
@@ -159,6 +160,12 @@ export const crawlObservationSchema = z
     status: z.enum(["completed", "partial", "blocked", "failed"]),
     limitations: z.array(text).max(50),
     sourceHash: z.string().regex(/^[a-f0-9]{64}$/),
+    runtimeGraph: z.object({
+      sourceSizeBytes: z.number().int().positive().max(64 * 1024 * 1024),
+      sha256: z.string().regex(/^[a-f0-9]{64}$/),
+      nodeCount: z.number().int().nonnegative().max(1000),
+      edgeCount: z.number().int().nonnegative().max(2000),
+    }).strict().optional(),
     occurrences: z.array(crawlOccurrenceSchema).max(30000),
     links: z.array(text).max(5000),
     redirects: z.array(text).max(20),
@@ -388,7 +395,7 @@ export function compactCrawlObservation(
       row.confidence,
     ]);
     const existing = groups.get(key);
-    if (existing) existing.eventCount += row.eventCount;
+    if (existing) { existing.eventCount += row.eventCount; existing.graphNodeRefs = [...new Set([...(existing.graphNodeRefs ?? []), ...(row.graphNodeRefs ?? [])])].slice(0, 20); }
     else
       groups.set(key, {
         ...row,

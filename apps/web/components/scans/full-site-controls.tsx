@@ -91,23 +91,24 @@ export function FullSiteControls({
   return (
     <fieldset className="border-b border-slate-100 bg-white px-3 py-2 text-left text-slate-900">
       <label
-        className="flex items-center gap-2 font-semibold"
+        className="flex cursor-pointer items-center justify-between gap-3 font-semibold"
         htmlFor={`${id}-enabled`}
       >
-        <input
-          id={`${id}-enabled`}
-          type="checkbox"
-          role="switch"
-          value="true"
-          checked={selected}
-          onChange={(event) => update(event.target.checked)}
-        />{" "}
         Full site
+        <span className="relative inline-flex">
+          <input
+            id={`${id}-enabled`}
+            className="peer sr-only"
+            type="checkbox"
+            role="switch"
+            value="true"
+            checked={selected}
+            onChange={(event) => update(event.target.checked)}
+          />
+          <span aria-hidden="true" className={`h-5 w-9 rounded-full transition-colors peer-focus-visible:ring-2 peer-focus-visible:ring-sky-500 peer-focus-visible:ring-offset-2 ${selected ? "bg-sky-500" : "bg-slate-200"}`} />
+          <span aria-hidden="true" className={`absolute left-0.5 top-0.5 h-4 w-4 rounded-full bg-white shadow-sm transition-transform ${selected ? "translate-x-4" : "translate-x-0"}`} />
+        </span>
       </label>
-      <p className="mt-1 text-sm text-slate-600">
-        Run the full homepage audit and collect resource inventories from
-        additional public pages.
-      </p>
       {selected ? (
         <div className="mt-3 grid gap-2">
           {fields.map(([key, label, helper]) => (

@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import type { CanonicalEvidenceBundle } from "@certscore/contracts";
+import { sanitizeRuntimeGraphUrl, type CanonicalEvidenceBundle, type RuntimeEvidenceGraph } from "@certscore/contracts";
 import {
   resolveCanonicalVendor,
   type VendorResolverInput,
@@ -57,7 +57,7 @@ type Evidence = Pick<
   | "scriptEvents"
   | "iframeEvents"
   | "domSnapshots"
->;
+> & { runtimeEvidenceGraph?: RuntimeEvidenceGraph };
 
 /** This projection describes observed resources. It never executes concern policy or assessment/scoring. */
 export function projectFullSiteInventory(input: {
@@ -180,6 +180,7 @@ export function projectFullSiteInventory(input: {
     add(
       {
         id: event.eventId,
+        graphNodeRefs: evidence.runtimeEvidenceGraph?.nodes.filter(node => node.kind === "request" && node.method === event.method && node.url === sanitizeRuntimeGraphUrl(event.requestUrl)).map(node => node.id).slice(0, 20),
         identity: inventoryHash([event.method, event.requestUrl]),
         kind: "request",
         label: crawlDisplayUrl(event.requestUrl),
@@ -230,6 +231,7 @@ export function projectFullSiteInventory(input: {
           identity,
           kind: "cookie",
           label: cookie.name || "(empty cookie name)",
+          graphNodeRefs: evidence.runtimeEvidenceGraph?.nodes.filter(node => node.kind === "cookie" && node.cookie && !node.cookie.identityRedacted && !node.cookie.partitionOpaque && !node.cookie.partitionKey && !cookie.partitionKey && node.cookie.name === cookie.name && node.cookie.domain === cookie.domain && node.cookie.path === cookie.path).map(node => node.id).slice(0, 20),
           domain: cookie.domain,
           purpose: classified?.cookiePurpose ?? "unknown",
           relationship: classifyCookieParty(
@@ -262,6 +264,7 @@ export function projectFullSiteInventory(input: {
     add(
       {
         id: event.eventId,
+        graphNodeRefs: event.frameUrl ? evidence.runtimeEvidenceGraph?.nodes.filter(node => ["document", "frame", "resource"].includes(node.kind) && node.url === sanitizeRuntimeGraphUrl(event.frameUrl!)).map(node => node.id).slice(0, 20) : undefined,
         identity: inventoryHash(event.frameUrl ?? event.eventId),
         kind: "embed",
         label: event.frameUrl
@@ -308,6 +311,7 @@ export function projectFullSiteInventory(input: {
           identity,
           kind: "storage",
           label: key || "(empty storage key)",
+          graphNodeRefs: evidence.runtimeEvidenceGraph?.nodes.filter(node => node.kind === "storage" && node.name === key && node.url === origin && node.storageType === type).map(node => node.id).slice(0, 20),
           firstSeenMs: snapshot.capturedAtMs,
           domain: new URL(origin).hostname,
           resourceType: type,
@@ -370,6 +374,7 @@ export async function runInventoryOnly(input: {
   configurationHash: string;
   outDir: string;
   signal: AbortSignal;
+  runtimeGraph?: { pageId: string; attemptId: string };
 }) {
   if (publicNetworkGuardEnabled()) await assertPublicNetworkUrl(input.url);
   if (
@@ -390,6 +395,7 @@ export async function runInventoryOnly(input: {
       scanStartedAtMs: Date.parse(startedAt),
       internalBudgetMs: input.profile === "tiny" ? 15000 : 35000,
       artifactWriter: await createArtifactWriter(input.outDir),
+      runtimeGraph: input.runtimeGraph ? { scanId: input.runtimeGraph.pageId, captureId: `${input.runtimeGraph.pageId}:${input.runtimeGraph.attemptId}:runtime_evidence`, scenario: "pre_consent", mode: "project", startedAt } : undefined,
       executionProfile: "inventory_only",
       captureScope: "runtime_evidence",
       screenshotMode: "never",
