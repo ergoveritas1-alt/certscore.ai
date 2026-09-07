@@ -138,6 +138,7 @@ export function AddDomainForm({
           />
           <div className="absolute right-2 top-1/2 z-20 flex -translate-y-1/2 items-center gap-2">
             <ScanFromSelect
+              includeFullSiteOption
               allowRestrictedScanOptions={allowRestrictedScanOptions}
               freshRescanValue={freshRescan}
               includeFreshRescanOption={hasRecentReusableScan}
