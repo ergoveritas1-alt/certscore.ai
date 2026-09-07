@@ -170,6 +170,7 @@ function ReportIdentity({
   defaultScanFrom,
   enhancedActions = false,
   workspaceIdentity = false,
+  hideShare = false,
   mode = "public",
   report,
 }: {
@@ -178,6 +179,7 @@ function ReportIdentity({
   defaultScanFrom?: ServerScanFrom;
   enhancedActions?: boolean;
   workspaceIdentity?: boolean;
+  hideShare?: boolean;
   mode?: "authenticated" | "public";
   report: ShadowReportData;
 }) {
@@ -220,7 +222,7 @@ function ReportIdentity({
             </h1>
           </div>
           <div className="flex shrink-0 flex-wrap items-center gap-2">
-          {enhancedActions ? (
+          {!hideShare && (enhancedActions ? (
             <ShadowReportShareMenu
               reportUrl={report.scan.reportUrl ?? SHADOW_REPORT_SOURCE_URL}
               scanId={report.scan.id}
@@ -235,7 +237,7 @@ function ReportIdentity({
             >
               Exact report <span aria-hidden="true">↗</span>
             </a>
-          )}
+          ))}
           </div>
         </div>
         <p className={`${monoClass} mt-2 hidden break-all text-xs text-zinc-500 sm:block`}>{report.scan.url}</p>
@@ -1867,7 +1869,7 @@ export function ShadowScanReport({
     </>
   );
 
-  const reportContent = report.fullSite ? <FullSiteWorkspace scanId={report.scan.id} requested={report.fullSite} homepageGraph={report.runtimeEvidenceGraph} siteScore={report.score.value} identity={<ReportIdentity compact enhancedActions workspaceIdentity report={report} />} scanNext={<ReportScanNext allowRestrictedScanOptions={allowRestrictedScanOptions} defaultScanFrom={defaultScanFrom} mode={mode} report={report} />}>{homepageContent}</FullSiteWorkspace> : homepageContent;
+  const reportContent = report.fullSite ? <FullSiteWorkspace scanId={report.scan.id} requested={report.fullSite} homepageGraph={report.runtimeEvidenceGraph} siteScore={report.score.value} identity={<ReportIdentity compact enhancedActions workspaceIdentity report={report} />} identityWithoutSharing={<ReportIdentity compact enhancedActions workspaceIdentity hideShare report={report} />} scanNext={<ReportScanNext allowRestrictedScanOptions={allowRestrictedScanOptions} defaultScanFrom={defaultScanFrom} mode={mode} report={report} />}>{homepageContent}</FullSiteWorkspace> : homepageContent;
 
   if (mode === "authenticated") {
     return (

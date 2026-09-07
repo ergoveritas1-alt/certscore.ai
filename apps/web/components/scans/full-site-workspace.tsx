@@ -76,6 +76,7 @@ export function FullSiteWorkspace({
   homepageGraph,
   siteScore,
   identity,
+  identityWithoutSharing,
   scanNext,
   children,
 }: {
@@ -84,6 +85,7 @@ export function FullSiteWorkspace({
   homepageGraph?: ApiRuntimeEvidenceGraphProjection;
   siteScore?: number | null;
   identity?: ReactNode;
+  identityWithoutSharing?: ReactNode;
   scanNext?: ReactNode;
   children: ReactNode;
 }) {
@@ -237,9 +239,8 @@ export function FullSiteWorkspace({
             <p className="font-semibold text-zinc-900">Full-site scan couldn’t finish</p>
             <p className="mt-1 max-w-2xl text-zinc-600">{state.stopReason === "dispatch_queue_unavailable" ? "Full site scan was unsuccessful. Partial results of the scan are shown below. Try to scan the site again. Contact support@certscore.ai if you encounter more issues." : scanFailureExplanation(state.stopReason).detail}</p>
           </div>
-          <a className={`${button} shrink-0 bg-white text-sm`} href={state.stopReason === "dispatch_queue_unavailable" ? "https://certscore.ai/app" : "/app"}>{state.stopReason === "dispatch_queue_unavailable" ? "Scan on CertScore.ai" : "Start a new scan"} <span aria-hidden="true">→</span></a>
         </div> : null}
-        <div className="mt-3">{identity}</div>
+        <div className="mt-3">{state && !["stopped", "cancelled"].includes(state.status) ? identity : identityWithoutSharing ?? identity}</div>
         <div aria-live="polite" className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-xs text-zinc-600">
           <span><strong className="text-zinc-900">{counts?.completed ?? "—"}</strong> complete · {counts?.partial ?? 0} partial · {counts?.blockedFailed ?? 0} failed · {counts?.pending ?? 0} pending</span>
           <span>Limit {requested.maxPages} pages</span><span>{state?.region}</span>
