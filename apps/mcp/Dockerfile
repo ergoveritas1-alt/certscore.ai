@@ -34,6 +34,7 @@ RUN --mount=type=cache,id=wc01-mcp-pnpm-store,target=/pnpm/store \
   && pnpm install --frozen-lockfile --filter @certscore/mcp-http...
 
 COPY apps/mcp ./apps/mcp
+COPY packages/certscore-contracts ./packages/certscore-contracts
 COPY packages/certscore-api-contracts ./packages/certscore-api-contracts
 COPY packages/certscore-mcp-auth ./packages/certscore-mcp-auth
 COPY packages/certscore-mcp ./packages/certscore-mcp
@@ -42,6 +43,7 @@ COPY packages/shared ./packages/shared
 
 RUN rm -rf \
   ./apps/mcp/dist \
+  ./packages/certscore-contracts/dist \
   ./packages/certscore-api-contracts/dist \
   ./packages/certscore-mcp-auth/dist \
   ./packages/certscore-mcp/dist \
