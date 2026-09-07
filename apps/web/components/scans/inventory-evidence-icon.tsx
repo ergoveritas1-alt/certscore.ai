@@ -7,13 +7,13 @@ const statuses = {
   Contextual: { color: "text-sky-500", path: "M12 8v1m0 3v5M22 12a10 10 0 1 1-20 0 10 10 0 0 1 20 0" },
 } as const;
 
-export function InventoryEvidenceIcon({ evidence, legend = false }: { evidence?: string; legend?: boolean }) {
+export function InventoryEvidenceIcon({ evidence, legend = false, description: detail }: { evidence?: string; legend?: boolean; description?: string }) {
   if (!evidence || !Object.prototype.hasOwnProperty.call(statuses, evidence)) {
     return <span aria-hidden="true" className="inline-block h-4 w-4 shrink-0" />;
   }
   const label = evidence as keyof typeof statuses;
   const status = statuses[label];
-  const description = label;
+  const description = detail ?? label;
   return <span role="img" aria-label={description} title={description} tabIndex={legend ? undefined : 0} className={`inline-flex shrink-0 items-center justify-center rounded-sm focus-visible:outline focus-visible:outline-2 focus-visible:outline-sky-500 ${status.color}`}>
     <svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d={status.path}/></svg>
   </span>;

@@ -1,4 +1,5 @@
-import React from "react";
+"use client";
+import React, { useId } from "react";
 import { inventoryPurposeLabel, inventoryPurposeTitle } from "../../lib/scans/inventory-purpose-presentation";
 
 export function InventoryConfidenceDots({ confidence, description }: { confidence: string | number; description?: string }) {
@@ -38,3 +39,13 @@ export function InventoryPurposeChip({ purpose, relationships = [] }: { purpose:
 }
 
 
+
+export function InventoryPurposeList({ purposes, relationships = [] }: { purposes: string[]; relationships?: readonly string[] }) {
+  const id = useId();
+  const unique = [...new Set(purposes)];
+  return <div className="flex max-w-48 items-center gap-1">
+    {unique[0] ? <InventoryPurposeChip purpose={unique[0]} relationships={relationships}/> : <span>—</span>}
+    {unique.length > 1 ? <><button type="button" popoverTarget={id} aria-label={`Show all ${unique.length} purposes`} className="shrink-0 rounded border border-slate-200 px-1.5 py-1 text-[10px] text-sky-700 hover:bg-sky-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-sky-500">+{unique.length - 1}</button>
+      <div id={id} popover="auto" role="dialog" aria-label="Resource purposes" className="m-auto max-h-[70vh] w-72 overflow-auto rounded-xl border border-slate-200 bg-white p-4 shadow-xl"><div className="mb-3 flex justify-between gap-3"><strong>Purposes</strong><button type="button" popoverTarget={id} popoverTargetAction="hide">Close</button></div><ul className="space-y-2">{unique.map(purpose => <li key={purpose}><InventoryPurposeChip purpose={purpose} relationships={relationships}/></li>)}</ul></div></> : null}
+  </div>;
+}

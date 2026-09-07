@@ -8,8 +8,7 @@ import { useInventoryResourceEvidence } from "./inventory-resource-details";
 import { InventoryNameDisclosure } from "./inventory-name-disclosure";
 import { InventoryEvidenceIcon } from "./inventory-evidence-icon";
 import { InventoryTypeIcon } from "./inventory-type-icon";
-import { InventoryPurposeChip } from "./inventory-cell-formatting";
-import { ProviderHeadquarters } from "./full-site-resource-context";
+import { InventoryPurposeChip, InventoryPurposeList } from "./inventory-cell-formatting";
 import { VendorBrandIcon } from "./vendor-brand-chip";
 import { PolicyDisclosure, DataTransferDisclosure, PageUrlDisclosure } from "./full-site-resource-context";
 import { CopyJsonButton } from "./copy-json-button";
@@ -39,13 +38,15 @@ export function serviceResourceLinks(graph: ApiRuntimeEvidenceGraph, ids: string
 }
 
 export function ExpandRowsButton({ label, open, count, controls, countHint, onClick }: { label: string; open: boolean; count?: number; controls?: string; countHint?: string; onClick: () => void }) {
-  return <button type="button" className={control} onClick={onClick} aria-expanded={open} aria-controls={controls} aria-label={label} title={countHint ?? (count === undefined ? label : `${label}: ${count} linked resources`)}>
+  return <button type="button" className={`${control} shrink-0 cursor-pointer border shadow-sm ${open ? "border-sky-300 bg-sky-100" : "border-slate-200 bg-slate-50 hover:border-sky-300"}`} onClick={onClick} aria-expanded={open} aria-controls={controls} aria-label={label} title={countHint ?? (count === undefined ? label : `${label}: ${count} linked resources`)}>
     <svg aria-hidden="true" width="16" height="16" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.6" className={`transition-transform ${open ? "rotate-90" : ""}`}><path d="m7 4 6 6-6 6"/></svg>
-    {count !== undefined ? <span className="min-w-3 text-[10px] tabular-nums text-slate-500">{count}</span> : null}
   </button>;
 }
 function RelationshipControl({ name, open, count, countHint, onClick }: { name: string; open: boolean; count?: number; countHint?: string; onClick: () => void }) {
-  return <ExpandRowsButton label={`${open ? "Hide" : "Show"} relationships for ${name}`} open={open} count={count} countHint={countHint} onClick={onClick}/>;
+  return <button type="button" className={`${control} shrink-0 cursor-pointer gap-1.5 border !px-2 shadow-sm ${open ? "border-sky-300 bg-sky-100" : "border-slate-200 bg-slate-50 hover:border-sky-300"}`} aria-expanded={open} aria-label={`${open ? "Hide" : "Show"} related resources for ${name}`} title={countHint ?? `${open ? "Hide" : "Show"} related resources${count === undefined ? "" : ` (${count})`}`} onClick={onClick}>
+    <svg aria-hidden="true" width="16" height="16" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><path d="M5 6v8h8M5 10h8"/><circle cx="5" cy="4" r="2"/><circle cx="15" cy="10" r="2"/><circle cx="15" cy="15" r="2"/></svg>
+    <svg aria-hidden="true" width="10" height="10" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={`transition-transform motion-reduce:transition-none ${open ? "rotate-90" : ""}`}><path d="m7 4 6 6-6 6"/></svg>
+  </button>;
 }
 
 function JsonEvidence({ name, value, onOpen }: { name: string; value: unknown; onOpen?: () => void }) {
@@ -69,18 +70,17 @@ export function ServiceResourceRows({ row, pageName, scenario = "pre_consent", c
   const links = graph ? serviceResourceLinks(graph, matches.map(node => node.id)) : [];
   const pages = row.pageIds.map(pageName);
   const occurrence = row.occurrence;
-  const colSpan = 14;
+  const colSpan = 12;
   const pending = Boolean(projection?.details || (sourceAvailable && !projection));
   const status = error ?? (pending ? "Loading retained relationship evidence…" : !graph ? "No relationship graph was retained for this scenario." : !matches.length ? "No unambiguous graph resource match was retained for this row." : !links.length ? "No links were retained for this resource." : undefined);
   return <><tr className={`h-14 border-b border-zinc-100 ${open ? "bg-sky-50/40" : "hover:bg-zinc-50"}`}>
-    <td className={cell}><div className="flex items-center gap-1">{open || !graph || links.length ? <RelationshipControl name={row.name} open={open} count={graph && matches.length ? links.length : resourceContext?.relationshipCount} countHint={!graph && resourceContext?.relationshipCount !== undefined ? `${resourceContext.relationshipCount} retained children; expand to load parents and children` : undefined} onClick={() => { setOpenVersion(open ? undefined : collapseVersion); if (!open) load(); }}/> : <span className="inline-block w-8 text-center text-slate-400" title="No retained links">—</span>}</div></td>
-    <td className="w-14 px-1 text-xs tabular-nums text-slate-500" title="Retained events for this resource">{row.eventCount}</td>
+
+    <td className="w-14 px-2 text-center text-xs font-medium tabular-nums text-slate-600" title="Retained events for this resource">{row.eventCount}</td>
     <td className={`${cell} w-12 text-center`}><InventoryTypeIcon kind={row.kind}/></td>
-    <th scope="row" className={`${cell} font-normal`}><div className={`flex max-w-72 items-center gap-2 ${nested ? "ml-3 border-l border-slate-200 pl-3" : ""}`}><VendorBrandIcon label={occurrence.vendor ?? occurrence.domain ?? row.name}/><div className="min-w-0"><InventoryNameDisclosure compact fullName={row.name}/>{occurrence.vendor ? <span className="block text-[10px] text-slate-500">{occurrence.vendor}</span> : null}</div></div></th>
+    <th scope="row" className={`${cell} font-normal`}><div className={`flex max-w-72 items-center gap-2 ${nested ? "ml-3 border-l border-slate-200 pl-3" : ""}`}>{open || !graph || links.length ? <RelationshipControl name={row.name} open={open} count={graph && matches.length ? links.length : resourceContext?.relationshipCount} countHint={!graph && resourceContext?.relationshipCount !== undefined ? `${resourceContext.relationshipCount} retained children; expand to load parents and children` : undefined} onClick={() => { setOpenVersion(open ? undefined : collapseVersion); if (!open) load(); }}/> : <span className="w-[50px] shrink-0" aria-hidden="true"/>}<VendorBrandIcon label={occurrence.vendor ?? occurrence.domain ?? row.name}/><div className="min-w-0">{occurrence.vendor ? <span title={occurrence.vendor} className="block truncate text-xs font-medium text-slate-800">{occurrence.vendor}</span> : null}<InventoryNameDisclosure compact fullName={row.name} className={occurrence.vendor ? "text-[11px]" : ""}/></div></div></th>
     <td className={`${cell} w-12 text-center`}><InventoryEvidenceIcon evidence={row.inventoryEvidence}/></td>
-    <td className={cell}><div className="flex max-w-40 flex-wrap gap-1">{row.purposes.map(purpose => <InventoryPurposeChip key={purpose} purpose={purpose} relationships={row.relationships}/>)}</div></td>
-    {context ? <><td className={cell}><PolicyDisclosure context={context} label={row.name}/></td><td className={cell}><DataTransferDisclosure requestUrls={row.kind === "request" ? [row.name] : []} context={context} destinations={resourceContext?.destinations ?? row.destinations} resourceKind={row.kind} coverage={{ assessed: row.destinationAssessedCount, total: row.eventCount, missing: row.destinationMissingCount, truncated: row.destinationsTruncated }} label={row.name}/></td></> : <><td className={cell}>—</td><td className={cell}>—</td></>}
-    <td className={`${cell} whitespace-nowrap`}><ProviderHeadquarters context={context}/></td>
+    <td className={cell}><InventoryPurposeList purposes={row.purposes} relationships={row.relationships}/></td>
+    {context ? <><td className={cell}><PolicyDisclosure context={context} label={row.name}/></td><td className={cell}><DataTransferDisclosure location requestUrls={row.kind === "request" ? [row.name] : []} context={context} destinations={resourceContext?.destinations ?? row.destinations} resourceKind={row.kind} coverage={{ assessed: row.destinationAssessedCount, total: row.eventCount, missing: row.destinationMissingCount, truncated: row.destinationsTruncated }} label={row.name}/></td></> : <><td className={cell}>—</td><td className={cell}>—</td></>}
     <td className={`${cell} whitespace-nowrap`}>{occurrence.firstSeenMs == null ? "Unavailable" : observationTime(occurrence.firstSeenMs)}</td>
     <td className={cell}><span className="block max-w-40 truncate" title={occurrence.domain ?? undefined}>{occurrence.domain ?? "Unknown"}</span></td>
     <td className={`${cell} whitespace-nowrap capitalize`}>{row.relationships.map(value => value.replaceAll("_", " ")).join(", ") || "Unknown"}</td>
@@ -94,7 +94,7 @@ export function ServiceResourceRows({ row, pageName, scenario = "pre_consent", c
 
 function LinkedRows({ graph, links, path, depth, pages, indentBase }: { indentBase: number; graph: ApiRuntimeEvidenceGraph; links: Link[]; path: string[]; depth: number; pages: string[] }) {
   const [limit, setLimit] = useState(30);
-  return <>{links.slice(0, limit).map(link => <LinkedRow key={`${link.direction}:${link.node.id}`} graph={graph} link={link} path={path} depth={depth} indentBase={indentBase} pages={pages}/>)}{links.length > limit ? <tr><td colSpan={14} className={cell}><button type="button" className="text-sky-700 underline" onClick={() => setLimit(value => value + 30)}>Show more linked resources ({links.length - limit} remaining)</button></td></tr> : null}</>;
+  return <>{links.slice(0, limit).map(link => <LinkedRow key={`${link.direction}:${link.node.id}`} graph={graph} link={link} path={path} depth={depth} indentBase={indentBase} pages={pages}/>)}{links.length > limit ? <tr><td colSpan={12} className={cell}><button type="button" className="text-sky-700 underline" onClick={() => setLimit(value => value + 30)}>Show more linked resources ({links.length - limit} remaining)</button></td></tr> : null}</>;
 }
 
 function RelationshipDirectionIcon({ direction, edge }: { direction: Link["direction"]; edge: GraphEdge }) {
@@ -113,13 +113,13 @@ function LinkedRow({ graph, link, path, depth, pages, indentBase }: { indentBase
   const links = serviceResourceLinks(graph, [node.id]).filter(next => next.node.id !== path.at(-1));
   const name = node.url ?? node.cookie?.name ?? node.label;
   return <><tr data-service-relationship={node.id} className="h-11 border-t border-slate-100 bg-slate-50/50 hover:bg-sky-50/50">
-    <td className={cell}><div className="flex items-center gap-1">{links.length > 0 && !cyclic && depth < 8 ? <RelationshipControl name={name} open={open} count={links.length} onClick={() => setOpen(!open)}/> : null}</div></td>
-    <td className="w-14 px-1 text-xs text-slate-400" title="Linked occurrence; not an additional inventory count">—</td>
+
+    <td className="w-14 px-2 text-center text-xs text-slate-400" title="Linked occurrence; not an additional inventory count">—</td>
     <td className={`${cell} w-12 text-center`}><InventoryTypeIcon kind={node.kind}/></td>
-    <th scope="row" className={`${cell} font-normal`}><div className="max-w-64 border-l border-slate-200 pl-2" style={{ marginLeft: indentBase + Math.min(depth, 4) * 12 }}><div className="mb-0.5 flex items-center gap-1 whitespace-nowrap text-[10px] text-slate-500"><RelationshipDirectionIcon direction={direction} edge={edge}/>{edge.directness === "inferred" ? <span>Inferred</span> : null}{cyclic ? <span>· Cycle</span> : depth >= 8 ? <span>· Depth limit</span> : null}</div><InventoryNameDisclosure compact fullName={name}/></div></th>
+    <th scope="row" className={`${cell} font-normal`}><div className="max-w-64 border-l border-slate-200 pl-2" style={{ marginLeft: indentBase + Math.min(depth, 4) * 12 }}><div className="mb-0.5 flex items-center gap-1 whitespace-nowrap text-[10px] text-slate-500"><RelationshipDirectionIcon direction={direction} edge={edge}/>{edge.directness === "inferred" ? <span>Inferred</span> : null}{cyclic ? <span>· Cycle</span> : depth >= 8 ? <span>· Depth limit</span> : null}</div><div className="flex items-center gap-2">{links.length > 0 && !cyclic && depth < 8 ? <RelationshipControl name={name} open={open} count={links.length} onClick={() => setOpen(!open)}/> : null}<InventoryNameDisclosure compact fullName={name}/></div></div></th>
     <td className={`${cell} text-slate-500`} title="Linked evidence occurrence; no inventory finding classification supplied">—</td>
     <td className={cell}>{node.classification?.purpose ? <InventoryPurposeChip purpose={node.classification.purpose.replaceAll("_", " ")}/> : <span className="text-slate-400" title="Purpose not retained">—</span>}</td>
-    <><td className={cell} title="Policy disclosure is not supplied for this linked occurrence">—</td><td className={cell} title="Transfer context is not supplied for this linked occurrence">—</td><td className={cell} title="Provider headquarters not supplied">—</td></>
+    <><td className={cell} title="Policy disclosure is not supplied for this linked occurrence">—</td><td className={cell} title="Transfer context is not supplied for this linked occurrence">—</td></>
     <td className={`${cell} whitespace-nowrap`}>{observationTime(node.observedAtMs)}</td>
     <td className={cell}><span className="block max-w-40 truncate" title={nodeDomain(node)}>{nodeDomain(node)}</span></td>
     <td className={cell} title="Site relationship is not supplied for this linked evidence occurrence"><span className="text-slate-400">—</span></td>

@@ -18,10 +18,15 @@ import { getPersistedCanonicalReportProjection } from "./persisted-canonical-rep
 import type { ScanDetailResponse } from "./get-scan-by-id";
 
 import { FULL_SITE_SCORING_POLICY_VERSION, SCORING_RULE_BY_ID } from "../../lib/scans/scoring-policy";
+import { buildSitePriorityReview, sitePriorityFindingSchema, type SitePriorityFinding } from "../../lib/scans/full-site-priority-review";
+import { buildChecklistConcernTopFindings } from "../../lib/scans/checklist-concern-top-findings";
+import { projectExecutiveFindingsFromUnifiedPackets } from "../../lib/scans/executive-findings-projection";
 const VERSION = FULL_SITE_SCORING_POLICY_VERSION;
+const PRIORITY_VERSION = "site-priority-review.v3";
 const persistedScoreSchema = z.object({
   version: z.literal(VERSION), value: z.number().int().min(0).max(100).nullable(),
   scoredPages: z.number().int().min(1), limitedPages: z.number().int().nonnegative(), scope: z.string(),
+  priorityReview: z.array(sitePriorityFindingSchema),
   sources: z.array(z.object({pageId: z.string(), sourceHash: z.string().regex(/^[a-f0-9]{64}$/), findingIds: z.array(z.string())})),
 });
 const additionalRuntimeSchema = z.object({
@@ -37,6 +42,7 @@ export type FullSiteScore = {
   scoredPages: number;
   limitedPages: number;
   scope: string;
+  priorityReview: SitePriorityFinding[];
   sources: Array<{ pageId: string; sourceHash: string; findingIds: string[] }>;
 };
 
@@ -96,7 +102,7 @@ export async function loadFullSiteScore(crawl: FullSiteCrawlRow, pages: CrawlPag
   const home = readPersistedScanReportProjection({ scan: { id: crawl.scan_id, status: "completed" } as ScanDetailResponse["scan"], snapshot });
   const canonical = home && getPersistedCanonicalReportProjection(home);
   if (!canonical) return null;
-  const key = createHash("sha256").update(JSON.stringify([VERSION, GDPR_EPRIVACY_EVIDENCE_SCORE_VERSION, snapshot.report_projection_payload_sha256, crawl.configuration_hash, pages.map(p => [p.id, p.status, p.observation?.sourceHash])])).digest("hex");
+  const key = createHash("sha256").update(JSON.stringify([VERSION, PRIORITY_VERSION, GDPR_EPRIVACY_EVIDENCE_SCORE_VERSION, snapshot.report_projection_payload_sha256, crawl.configuration_hash, pages.map(p => [p.id, p.status, p.observation?.sourceHash])])).digest("hex");
   const saved = z.object({ fullSiteScore: z.object({sourceHash: z.string(), score: z.unknown()}) }).safeParse(crawl.policy_json);
   if (saved.success && saved.data.fullSiteScore.sourceHash === key) {
     const parsed = persistedScoreSchema.safeParse(saved.data.fullSiteScore.score);
@@ -125,7 +131,15 @@ export async function loadFullSiteScore(crawl: FullSiteCrawlRow, pages: CrawlPag
         scoredPages++;
       } catch { limitedPages++; }
     }
-    const result = { version: VERSION, value: deriveCanonicalOverallScoreForReport({ checklistRows: mergeSiteChecklistRows(canonical.checklistRows, projected), unifiedFindings: canonical.globalUnifiedFindings }), scoredPages, limitedPages, sources, scope: "Homepage audit plus eligible retained storage, tracking, session replay, fingerprinting, sensitive-surface and embed evidence across scanned pages; duplicate identities count once. Additional-page consent, policy and action checks remain unassessed." };
+    const checklistRows = mergeSiteChecklistRows(canonical.checklistRows, projected);
+    const executive = projectExecutiveFindingsFromUnifiedPackets(canonical.ownerUnifiedFindings.filter(finding => finding.unifiedFindingId === "acceptance_signal_contradicts_action")).topFindings;
+    const homePage = pages.find(page => page.source === "homepage");
+    const homeFindingIds = buildChecklistConcernTopFindings(canonical.checklistRows).map(finding => String(finding.evidenceDetails?.policyEvidenceDetails?.rowId ?? finding.id));
+    const priorityReview = buildSitePriorityReview(checklistRows, [
+      ...(homePage ? [{ id: homePage.id, url: homePage.finalUrl ?? homePage.url, homepage: true, findingIds: [...homeFindingIds, ...executive.map(finding => finding.id)] }] : []),
+      ...sources.map(source => { const page = pages.find(page => page.id === source.pageId)!; return { id: page.id, url: page.finalUrl ?? page.url, homepage: false, findingIds: source.findingIds }; }),
+    ], executive);
+    const result = { version: VERSION, priorityReview, value: deriveCanonicalOverallScoreForReport({ checklistRows, unifiedFindings: canonical.globalUnifiedFindings }), scoredPages, limitedPages, sources, scope: "Homepage audit plus eligible retained storage, tracking, session replay, fingerprinting, sensitive-surface and embed evidence across scanned pages; duplicate identities count once. Additional-page consent, policy and action checks remain unassessed." };
     // Persist the versioned, evidence-bound result once; table filtering and downloads reuse it.
     if (!limitedPages) await query("update full_site_crawls set policy_json=jsonb_set(policy_json,'{fullSiteScore}',$2::jsonb) where scan_id=$1 and status='completed'", [crawl.scan_id, JSON.stringify({sourceHash: key, score: result})]);
     return result;

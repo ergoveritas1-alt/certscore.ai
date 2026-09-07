@@ -1,3 +1,4 @@
+import { buildSitePriorityReview } from "../../lib/scans/full-site-priority-review";
 import assert from "node:assert/strict";
 import test from "node:test";
 import { mergeSiteChecklistRows, projectFullSiteScoringEvidence } from "./full-site-score";
@@ -123,4 +124,27 @@ test("additional-page social embeds and sensitive tracking retain their canonica
   for (const id of ["social_media_embed_pre_consent", "embedded_content_pre_consent", "sensitive_surfaces_third_party_tracking"]) {
     assert.ok(["review_signal", "gap_observed"].includes(rows.find(row => row.id === id)!.assessmentStatus), id);
   }
+});
+
+
+test("site priority groups repeated canonical issues and retains affected page provenance", () => {
+  const projected = (name: string) => projectFullSiteScoringEvidence({cookieEvents: [{eventId: name, eventType: "cookie", timestampMs: 1000, sourceScanner: "preConsentRuntimeScanner", scenario: "fresh_pre_consent", consentStateAtTime: "pre_consent", pagePhase: "network_idle", confidence: 1, directVsInferred: "direct", operation: "set_cookie_header", cookieName: name, cookieDomain: "example.test", cookiePath: "/", cookiePurpose: "analytics", cookieEssentiality: "non_essential"}], networkEvents: []}, name, "a".repeat(64))!;
+  const rows = mergeSiteChecklistRows(projected("_ga"), projected("_clck"));
+  const findings = buildSitePriorityReview(rows, [
+    {id: "home", url: "https://example.test/", homepage: true, findingIds: ["pre_consent_cookies_storage"]},
+    {id: "child", url: "https://example.test/about", homepage: false, findingIds: ["pre_consent_cookies_storage"]},
+  ]);
+  const issue = findings.find(finding => finding.id.endsWith("pre_consent_cookies_storage"))!;
+  assert.ok(issue);
+  assert.equal(findings.filter(finding => finding.id === issue.id).length, 1);
+  assert.deepEqual(issue.pages.map(page => page.id), ["home", "child"]);
+  assert.match(JSON.stringify(issue.evidenceJson), /_clck/);
+  assert.ok(issue.correctionSteps[0]);
+});
+
+test("site priority does not promote additional-page consent or unavailable evidence", () => {
+  const unassessed = baseline();
+  const inventedConsentGap = baseline().map(row => ({...row, assessmentStatus: "gap_observed" as const}));
+  const merged = mergeSiteChecklistRows(unassessed, inventedConsentGap.filter(row => row.id === "reject_all_path_availability"));
+  assert.deepEqual(buildSitePriorityReview(merged, []), buildSitePriorityReview(unassessed, []));
 });

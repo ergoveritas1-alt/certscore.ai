@@ -2,14 +2,14 @@
 export function inventoryPurposeLabel(purpose: string, relationships: readonly string[] = []): string {
   if (purpose.toLowerCase() !== "unknown") return purpose;
   const unique = [...new Set(relationships)];
-  if (unique.length === 1 && unique[0] === "first_party") return "Unknown – 1st";
-  if (unique.length === 1 && unique[0] === "third_party") return "Unknown – 3rd";
+  if (unique.length === 1 && unique[0] === "first_party") return "Unknown – 1st party";
+  if (unique.length === 1 && unique[0] === "third_party") return "Unknown – 3rd party";
   return "Unknown";
 }
 
 export function inventoryPurposeTitle(label: string): string {
-  if (label === "Unknown – 1st") return "Purpose unknown; first-party resource";
-  if (label === "Unknown – 3rd") return "Purpose unknown; third-party resource";
+  if (label === "Unknown – 1st party") return "Purpose unknown; first-party resource";
+  if (label === "Unknown – 3rd party") return "Purpose unknown; third-party resource";
   if (label.toLowerCase() === "unknown") return "Purpose unknown; site relationship unclear or mixed";
   return label;
 }

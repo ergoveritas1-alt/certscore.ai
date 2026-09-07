@@ -26,7 +26,7 @@ export function ProviderHeadquarters({ context }: { context?: Context }) {
 export function PageCountDisclosure({ pages, numberOnly = false }: { pages: string[]; numberOnly?: boolean }) {
   const id = useId(); const unique = [...new Set(pages)];
   return <><button type="button" popoverTarget={id} className="whitespace-nowrap text-sky-800 hover:underline" aria-label={`View ${unique.length} ${unique.length === 1 ? "page" : "pages"}`}>{numberOnly ? unique.length : `${unique.length} ${unique.length === 1 ? "page" : "pages"}`}</button>
-    <div id={id} popover="auto" className="m-auto w-[min(32rem,calc(100vw-2rem))] rounded-xl border border-slate-200 bg-white p-4 shadow-xl">
+    <div id={id} popover="auto" role="dialog" aria-label="Captured pages" className="m-auto w-[min(32rem,calc(100vw-2rem))] rounded-xl border border-slate-200 bg-white p-4 shadow-xl">
       <div className="mb-3 flex justify-between gap-3"><strong>Captured on {unique.length} {unique.length === 1 ? "page" : "pages"}</strong><button type="button" popoverTarget={id} popoverTargetAction="hide" aria-label="Close page list">Close</button></div>
       <ul className="max-h-[60vh] space-y-3 overflow-auto text-sm">{unique.map(page => <li key={page}><a className="break-all text-sky-800 hover:underline" href={safeHref(page)} target="_blank" rel="noopener noreferrer">{page}</a></li>)}</ul>
     </div></>;
@@ -34,7 +34,7 @@ export function PageCountDisclosure({ pages, numberOnly = false }: { pages: stri
 export function PageUrlDisclosure({ pages }: { pages: string[] }) {
   const unique = [...new Set(pages)];
   const link = (page: string) => <a className="block max-w-64 truncate text-sky-800 hover:underline" title={page} href={safeHref(page)} target="_blank" rel="noopener noreferrer">{page}</a>;
-  return unique.length ? <div className="space-y-1">{link(unique[0]!)}{unique.length > 1 ? <details><summary className="cursor-pointer text-sky-800">{unique.length - 1} more {unique.length === 2 ? "page" : "pages"}</summary><ul className="mt-2 max-h-48 space-y-2 overflow-auto">{unique.slice(1).map(page => <li key={page}>{link(page)}</li>)}</ul></details> : null}</div> : <span>Unavailable</span>;
+  return unique.length ? <div className="space-y-1">{link(unique[0]!)}{unique.length > 1 ? <PageCountDisclosure pages={unique}/> : null}</div> : <span>Unavailable</span>;
 }
 export function policyDisclosureLabel(status: Context["policy"]["status"]) {
   return status === "mentioned" ? "Mentioned" : status === "not_found" ? "Not found" : "Unknown";
@@ -108,21 +108,29 @@ function DataTransferDetails({ context, destinations = [], coverage, resourceKin
     </div>
   </section>;
 }
-export function DataTransferDisclosure({ label, mechanismOnly: _mechanismOnly = false, ...props }: TransferProps & { label: string; mechanismOnly?: boolean }) {
+export function DataTransferDisclosure({ label, mechanismOnly: _mechanismOnly = false, location = false, ...props }: TransferProps & { label: string; mechanismOnly?: boolean; location?: boolean }) {
   const id = useId();
   const destinations = uniqueDestinations(props.destinations ?? []);
   const regions = documentedServiceRegions(props.requestUrls ?? []);
   const countries = [...new Set(destinations.map(destination => destination.countryCode ?? destination.country).filter((country): country is string => Boolean(country)))].sort();
   const operators = [...new Set(destinations.map(destination => destination.provider).filter(Boolean))];
+  const headquarters = resolveCanonicalVendorHeadquarters(props.context.identity?.entity);
+  const distinctOperators = operators.filter(operator => ![props.context.provider, props.context.identity?.entity, props.context.identity?.vendor].some(entity => entity?.toLowerCase() === operator?.toLowerCase()));
+  const operatorName = distinctOperators.join(", ");
+  const operatorCharacters = Array.from(operatorName);
+  const operatorPreview = operatorCharacters.length > 12 ? `${operatorCharacters.slice(0, 12).join("")}…` : operatorName;
   const nonNetwork = props.resourceKind && ["cookie", "storage"].includes(props.resourceKind);
-  return <><button type="button" popoverTarget={id} aria-label={`Data transfer for ${label}`} className="max-w-64 rounded-md px-1 py-1 text-left text-xs text-sky-800 hover:bg-sky-50">
-      {countries.length ? <span className="flex flex-wrap items-center gap-x-2 gap-y-1">{countries.slice(0, 3).map(country => <CountryLabel key={country} value={countryNames.of(country)}/>)}{countries.length > 3 ? `+${countries.length - 3}` : null}</span> : <span>{nonNetwork && !destinations.length ? "See linked requests" : destinationLabel(destinations)}</span>}
-      {regions.length ? <span className="block text-[10px] text-slate-500">Service region: {regions.map(region => region.region).join(", ")} (documented)</span> : null}
-      {operators.length ? <span className="block max-w-48 truncate text-[10px] text-slate-500" title={operators.join(", ")}>{operators.join(", ")}</span> : null}
-      {countries.length && destinations.some(destination => !destination.countryCode && !destination.country) ? <span className="block text-[10px] text-slate-500">Some locations unavailable</span> : null}
+  return <><button type="button" popoverTarget={id} aria-label={`${location ? "Location" : "Data transfer"} for ${label}`} className="max-w-64 rounded-md px-1 py-1 text-left text-xs text-sky-800 hover:bg-sky-50">
+      {location ? <>
+        <span className="block max-w-64 truncate whitespace-nowrap"><span className="text-slate-500">HQ: </span><CountryLabel value={props.context.headquarters}/></span>
+        <span className="block max-w-64 truncate whitespace-nowrap" title={distinctOperators.join(", ")}><span role="img" aria-label="Observed destination" title="Observed destination" className="mr-1 inline-flex align-middle text-slate-500"><svg aria-hidden="true" width="14" height="14" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="3" width="14" height="6" rx="1.5"/><rect x="3" y="11" width="14" height="6" rx="1.5"/><path d="M6 6h.01M6 14h.01M10 6h4M10 14h4"/></svg></span>{countries.length ? <><CountryLabel value={countries[0]}/>{countries.length > 1 ? ` +${countries.length - 1}` : null}</> : nonNetwork ? "See requests" : "Unavailable"}{operatorName ? <> · <span title={`${operatorName} · Click for full details`} className="underline decoration-dotted underline-offset-2">{operatorPreview}</span></> : null}</span>
+      </> : <>
+      <span className="block max-w-48 truncate whitespace-nowrap">{countries.length ? <><CountryLabel value={countryNames.of(countries[0]!)}/>{countries.length > 1 ? ` +${countries.length - 1}` : null}{destinations.some(destination => !destination.countryCode && !destination.country) ? " · some unavailable" : null}</> : nonNetwork && !destinations.length ? "See linked requests" : destinationLabel(destinations)}</span>
+      {operators.length || regions.length ? <span className="block max-w-48 truncate text-[10px] text-slate-500">{operators.length ? operators.join(", ") : `Service region: ${regions.map(region => region.region).join(", ")} (documented)`}</span> : null}
+      </>}
     </button>
-    <div id={id} popover="auto" aria-label={`Data transfer for ${label}`} className="m-auto w-[min(36rem,calc(100vw-2rem))] max-h-[80vh] overflow-auto rounded-xl border border-slate-200 bg-white p-5 shadow-xl">
-      <div className="mb-3 flex items-start justify-between gap-4"><div><h3 className="font-semibold text-slate-900">Observed destinations</h3><p className="mt-1 break-all text-xs text-slate-600">{label}</p></div><button type="button" popoverTarget={id} popoverTargetAction="hide" aria-label="Close data transfer">Close</button></div>
-      <div className="space-y-3 text-xs text-slate-600"><DataTransferDetails {...props}/></div>
+    <div id={id} popover="auto" role="dialog" aria-label={`${location ? "Location" : "Data transfer"} for ${label}`} className="m-auto w-[min(36rem,calc(100vw-2rem))] max-h-[80vh] overflow-auto rounded-xl border border-slate-200 bg-white p-5 shadow-xl">
+      <div className="mb-3 flex items-start justify-between gap-4"><div><h3 className="font-semibold text-slate-900">{location ? "Location details" : "Observed destinations"}</h3><p className="mt-1 break-all text-xs text-slate-600">{label}</p></div><button type="button" popoverTarget={id} popoverTargetAction="hide" aria-label="Close data transfer">Close</button></div>
+      <div className="space-y-3 text-xs text-slate-600"><DataTransferDetails {...props}/>{location ? <section className="border-t pt-3"><h4 className="font-semibold">Corporate headquarters</h4><p>{props.context.provider ?? props.context.identity?.entity ?? "Provider unknown"}</p>{headquarters ? <><p>{headquarters.note}</p><p>Sources checked {headquarters.checkedAt}</p><ul>{headquarters.sources.map(source => <li key={source.url}><a className="text-sky-800 underline" href={safeHref(source.url)} target="_blank" rel="noopener noreferrer">{source.title}</a></li>)}</ul></> : <p>No verified headquarters reference available.</p>}<p>Headquarters and network operator are distinct; neither establishes this site's contracting entity or subsequent data processing locations.</p></section> : null}</div>
     </div></>;
 }

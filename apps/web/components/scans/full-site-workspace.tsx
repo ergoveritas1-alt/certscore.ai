@@ -1,7 +1,8 @@
 "use client";
+import { SitePriorityReview } from "./site-priority-review";
+import type { ShadowFinding } from "./report-lab/shadow-report-data";
 import { FullSiteServices } from "./full-site-services-table";
 import { ServiceResourceRows } from "./service-resource-rows";
-import { SCENARIOS } from "./runtime-evidence-graph-model";
 import { FullSiteResourceContext } from "./full-site-resource-context";
 import { CollectionSurfacesTable } from "./collection-surfaces-table";
 import { scanFailureExplanation } from "../../lib/scans/scan-failure-explanation";
@@ -13,9 +14,9 @@ import {
 import { API_READ_RATE_POLICY } from "@website-signal-risk-scanner/shared/api-read-rate-policy";
 import { ScanLiveValue } from "./scan-live-value";
 import { SitewideInventorySummary } from "./sitewide-inventory-summary";
-import { InventoryEvidenceLegend } from "./inventory-evidence-icon";
+import { InventoryPriorityHelp } from "./inventory-priority-help";
 import { InventoryResourceProvider, InventoryResourceMobile, type InventoryGraphSource } from "./inventory-resource-details";
-import type { ApiRuntimeEvidenceGraphProjection, ApiRuntimeEvidenceGraph } from "@certscore/api-contracts";
+import type { ApiRuntimeEvidenceGraphProjection } from "@certscore/api-contracts";
 
 import type { FullSiteReportResponse } from "../../server/scans/full-site-report";
 
@@ -49,7 +50,7 @@ const initialFilters: Filters = {
   sort: "priority",
   pageSort: "url",
 };
-const sortKeys: Record<string, string> = { Evidence: "priority", Vendor: "vendor", Name: "label", Purpose: "purpose", "Policy disclosure": "policy", "Data transfer": "transfer", "First seen": "time", Page: "page" };
+const sortKeys: Record<string, string> = { Priority: "priority", Vendor: "vendor", Name: "label", Purpose: "purpose", "Policy disclosure": "policy", Location: "transfer", "First seen": "time", Page: "page" };
 const units = {
   cookie: "Cookies / storage",
   request: "Requests",
@@ -90,6 +91,8 @@ export function FullSiteWorkspace({
   scanId,
   requested,
   homepageGraph,
+  homepageFindings = [],
+  homepageUrl,
   initialStartedAt,
   identity,
   identityWithoutSharing,
@@ -99,6 +102,8 @@ export function FullSiteWorkspace({
   scanId: string;
   requested: CrawlOptions;
   homepageGraph?: ApiRuntimeEvidenceGraphProjection;
+  homepageFindings?: ShadowFinding[];
+  homepageUrl?: string;
   initialStartedAt?: string;
   identity?: ReactNode;
   identityWithoutSharing?: ReactNode;
@@ -106,7 +111,6 @@ export function FullSiteWorkspace({
   children: ReactNode;
 }) {
   const [inventoryView, setInventoryView] = useState<"resources" | "services">("resources");
-  const [relationshipScenario, setRelationshipScenario] = useState<ApiRuntimeEvidenceGraph["scenario"]>("pre_consent");
   const [collapseVersion, setCollapseVersion] = useState(0);
   const [tab, setTab] = useState<"resources" | "pages" | "homepage">(
     "resources",
@@ -494,16 +498,15 @@ export function FullSiteWorkspace({
       </div>
       {tab !== "homepage" ? (
         <>
-          <p className="mb-2 text-xs text-zinc-600">{data?.score?.scope ?? "Inventory combines resources across all scanned pages. Scoring awaits eligible retained evidence."}</p>
+          <SitePriorityReview findings={data?.score?.priorityReview ?? homepageFindings.map(finding => ({ ...finding, pages: homepageUrl ? [{ id: scanId, url: homepageUrl, homepage: true }] : [] }))} pending={!data || valuesUpdating} sitewideAvailable={Boolean(data?.score)} />
           {data && tab === "resources" ? <SitewideInventorySummary mix={data.inventoryMix} updating={valuesUpdating} /> : null}
           <section className="min-w-0 border-y border-zinc-200 bg-white py-4">
             <h2 className="mb-3 text-xl font-semibold">{tab === "pages" ? "Page observations and coverage" : "Resources and Services Details"}</h2>
-            {tab === "resources" ? <div className="mb-4"><InventoryEvidenceLegend/></div> : null}
             {activeFilters.length ? <button className="mb-2 text-xs text-sky-800 underline" onClick={() => { setFilters(initialFilters); setOffset(0); }}>Show all {units[filters.kind as keyof typeof units]?.toLowerCase()}</button> : null}
               <div className="mb-3 flex gap-2" role="group" aria-label="Inventory view">{(["resources", "services"] as const).map(view => <button key={view} type="button" aria-pressed={inventoryView === view} className={`${button} capitalize ${inventoryView === view ? "!bg-slate-900 !text-white" : ""}`} onClick={() => setInventoryView(view)}>{view}</button>)}</div>
             <div className="my-3 flex flex-wrap items-center justify-between gap-3 text-xs text-slate-500">
-              <span><ScanLiveValue key={inventoryView} active={valuesUpdating} value={data ? `${inventoryView === "services" ? data.services.length : data.resources.total} ${inventoryView}` : "Loading inventory…"} /></span>
-              <div className="flex flex-wrap items-center gap-3"><label className="flex items-center gap-2">Relationships<select aria-label="Relationship scenario" value={relationshipScenario} onChange={event => setRelationshipScenario(event.target.value as typeof relationshipScenario)} className="rounded-md border border-slate-200 bg-white px-2 py-1.5 text-slate-700">{SCENARIOS.map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></label><button type="button" onClick={() => setCollapseVersion(value => value + 1)} className="rounded-md px-2 py-1.5 text-sky-700 hover:bg-sky-50">Collapse all</button></div>
+              <div className="flex flex-wrap items-baseline gap-x-2 gap-y-1"><span className="shrink-0"><ScanLiveValue key={inventoryView} active={valuesUpdating} value={data ? `${inventoryView === "services" ? data.services.length : data.resources.total} ${inventoryView}` : "Loading inventory…"} /></span><span className="text-slate-500">{inventoryView === "services" ? "· Grouped by service; expand to see member resources." : "· Distinct resources across scanned pages; expand to see parent/child links."}</span></div>
+              <div className="flex flex-wrap items-center gap-3"><button type="button" onClick={() => setCollapseVersion(value => value + 1)} className="rounded-md px-2 py-1.5 text-sky-700 hover:bg-sky-50">Collapse all</button></div>
             </div>
             <div className="max-h-[488px] overflow-auto rounded-lg border border-zinc-200" tabIndex={0} aria-busy={isFetching} aria-label={tab === "pages" ? "Scrollable page observations" : `Scrollable ${inventoryView}`}
               onScroll={event => {
@@ -512,7 +515,7 @@ export function FullSiteWorkspace({
                 if (inventoryView === "resources" && table && el.scrollTop + el.clientHeight >= el.scrollHeight - 40 && table.rows.length < table.total && table.offset === offset) setOffset(offset + table.limit);
               }}>
 
-              {inventoryView === "services" && data ? <FullSiteServices key={collapseVersion} scenario={relationshipScenario} services={data.services} pageName={pageName} pageChoices={data.pageChoices} homepageGraph={homepageGraph} /> : null}
+              {inventoryView === "services" && data ? <FullSiteServices key={collapseVersion} scenario="pre_consent" services={data.services} pageName={pageName} pageChoices={data.pageChoices} homepageGraph={homepageGraph} /> : null}
               <div hidden={inventoryView !== "resources"}>
               <InventoryResourceProvider projection={homepageGraph}><table className="w-full min-w-[1000px] text-left text-xs">
                 <caption className="sr-only">
@@ -582,10 +585,10 @@ export function FullSiteWorkspace({
                     <thead className="sticky top-0 z-10 h-10 bg-zinc-50 text-[10px] uppercase tracking-wider text-zinc-500">
                       <tr>
                         {[
-                          "", "Count", "Type", "Name", "Evidence", "Purpose", "Policy disclosure", "Data transfer", "Provider headquarters", "First seen", "Domain", "Site relationship", "Page", "JSON",
+                          "Count", "Type", "Name", "Priority", "Purpose", "Policy disclosure", "Location", "First seen", "Domain", "Site relationship", "Page", "JSON",
                         ].map((h) => (
-                          <th className={`h-10 whitespace-nowrap border-b px-3 ${h === "JSON" ? "sticky right-0 bg-zinc-50" : ""}`} key={h} aria-sort={sortKeys[h] && filters.sort.replace(/_desc$/, "") === sortKeys[h] ? filters.sort.endsWith("_desc") ? "descending" : "ascending" : undefined}>
-                            {sortKeys[h] ? <button className="flex items-center gap-1 uppercase tracking-wider hover:text-sky-700" onClick={() => { setFilters(current => ({ ...current, sort: current.sort === sortKeys[h] ? `${sortKeys[h]}_desc` : sortKeys[h]! })); setOffset(0); }}>{h}<span aria-hidden="true">{filters.sort === sortKeys[h] ? "↑" : filters.sort === `${sortKeys[h]}_desc` ? "↓" : "↕"}</span></button> : h === "JSON" || !h ? <span className="sr-only">{h === "JSON" ? "JSON evidence" : "Expand relationships"}</span> : h}
+                          <th className={`h-10 whitespace-nowrap border-b ${!h ? "w-10 px-1" : h === "Count" ? "w-14 px-2 text-center" : "px-3"} ${h === "JSON" ? "sticky right-0 bg-zinc-50" : ""}`} key={h} aria-sort={sortKeys[h] && filters.sort.replace(/_desc$/, "") === sortKeys[h] ? filters.sort.endsWith("_desc") ? "descending" : "ascending" : undefined}>
+                            <div className={`flex items-center gap-1 ${h === "Count" ? "justify-center" : ""}`}>{sortKeys[h] ? <button className="flex items-center gap-1 rounded uppercase tracking-wider hover:text-sky-700 focus-visible:outline focus-visible:outline-2 focus-visible:outline-sky-500" onClick={() => { setFilters(current => ({ ...current, sort: current.sort === sortKeys[h] ? `${sortKeys[h]}_desc` : sortKeys[h]! })); setOffset(0); }}>{h}<span aria-hidden="true">{filters.sort === sortKeys[h] ? "↑" : filters.sort === `${sortKeys[h]}_desc` ? "↓" : "↕"}</span></button> : h === "JSON" || !h ? <span className="sr-only">{h === "JSON" ? "JSON evidence" : "Expand relationships"}</span> : h}{h === "Priority" ? <InventoryPriorityHelp/> : null}</div>
                           </th>
                         ))}
                       </tr>
@@ -593,7 +596,7 @@ export function FullSiteWorkspace({
                     <tbody>
                       {data?.resources.rows.map((row) => (
                         <CrawlResourceScope key={row.key} source={data.pageChoices.find(page => page.id === row.pageIds[0])?.graphSource} homepage={data.pageChoices.find(page => page.id === row.pageIds[0])?.source === "homepage"}>
-                        <ServiceResourceRows row={{ ...row, name: row.occurrence.label, kind: row.occurrence.kind }} resourceContext={row} pageName={pageName} scenario={relationshipScenario} collapseVersion={collapseVersion}/>
+                        <ServiceResourceRows row={{ ...row, name: row.occurrence.label, kind: row.occurrence.kind }} resourceContext={row} pageName={pageName} scenario="pre_consent" collapseVersion={collapseVersion}/>
 
                         </CrawlResourceScope>
                       ))}
