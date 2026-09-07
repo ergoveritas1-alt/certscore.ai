@@ -76,3 +76,7 @@ test("validation repository keeps React-backed admin auth outside worker import 
     /async function requireAdmin\(\) \{\s+const \{ requireValidationAdminContext \} = await import\("\.\/auth"\);/
   );
 });
+
+ test("unsupported local full-site scans are not reported as temporary queue outages", () => {
+  assert.equal(getFullScanQueueErrorCode("Full-site scanning is unavailable in this local environment. The inventory workers require the production control plane."), "full_site_local_unavailable");
+});

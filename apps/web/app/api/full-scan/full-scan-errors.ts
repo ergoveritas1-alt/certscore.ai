@@ -1,6 +1,10 @@
 export function getFullScanQueueErrorCode(error: string | null | undefined) {
   const message = error ?? "";
 
+  if (message.startsWith("Full-site scanning is unavailable in this local environment.")) {
+    return "full_site_local_unavailable";
+  }
+
   if (/already queued|already running|active scan|queued or running/i.test(message)) {
     return "active_scan_exists";
   }
