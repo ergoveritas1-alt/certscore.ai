@@ -364,7 +364,7 @@ export function FullSiteWorkspace({
           </p>
         ) : null}
       </header>
-      <div className="mt-3 grid grid-cols-2 gap-px border-y border-zinc-200 bg-zinc-200 sm:grid-cols-5" aria-label="Scan summary">
+      <div className="mt-3 grid grid-cols-2 gap-px border-y border-zinc-200 bg-zinc-200 sm:grid-cols-[1.4fr_repeat(4,minmax(0,1fr))]" aria-label="Scan summary">
         {[
           ["Full site scan", null],
           ["Pages scanned", counts ? counts.completed + counts.partial : null],
@@ -372,10 +372,10 @@ export function FullSiteWorkspace({
           ["Requests", s?.totals.requestEvents],
           ["Embed instances", s?.totals.embedInstances],
         ].map(([label, value]) => (
-          <div key={String(label)} className="min-w-0 bg-white py-2 pr-3 text-left">
-            <span className="block text-xs text-zinc-500">{label}</span>
-            <strong className="block text-lg leading-6 tabular-nums">{label === "Full site scan" ? "Not scored" : typeof value === "number" ? value.toLocaleString() : "—"}</strong>
-            {label === "Full site scan" ? <span className="block text-xs text-zinc-500">Site-wide scoring not yet available</span> : null}
+          <div key={String(label)} className={`min-w-0 text-left ${label === "Full site scan" ? "relative rounded-lg border border-sky-300 bg-sky-50 px-4 py-3 shadow-sm ring-1 ring-sky-100" : "bg-white py-3 px-3"}`}>
+            <span className={`block text-xs ${label === "Full site scan" ? "font-semibold uppercase tracking-wide text-sky-800" : "text-zinc-500"}`}>{label}</span>
+            <strong className={`block tabular-nums ${label === "Full site scan" ? "my-1 whitespace-nowrap text-xl font-semibold leading-8 text-sky-950" : "text-lg leading-6"}`}>{label === "Full site scan" ? "Not scored" : typeof value === "number" ? value.toLocaleString() : "—"}</strong>
+            {label === "Full site scan" ? <span className="block text-xs leading-4 text-sky-800">Site-wide scoring not yet available</span> : null}
           </div>
         ))}
       </div>
