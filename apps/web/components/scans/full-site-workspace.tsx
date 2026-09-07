@@ -85,7 +85,6 @@ export function FullSiteWorkspace({
   scanId,
   requested,
   homepageGraph,
-  siteScore,
   identity,
   identityWithoutSharing,
   scanNext,
@@ -94,7 +93,6 @@ export function FullSiteWorkspace({
   scanId: string;
   requested: CrawlOptions;
   homepageGraph?: ApiRuntimeEvidenceGraphProjection;
-  siteScore?: number | null;
   identity?: ReactNode;
   identityWithoutSharing?: ReactNode;
   scanNext?: ReactNode;
@@ -368,7 +366,7 @@ export function FullSiteWorkspace({
       </header>
       <div className="mt-3 grid grid-cols-2 gap-px border-y border-zinc-200 bg-zinc-200 sm:grid-cols-5" aria-label="Scan summary">
         {[
-          ["Homepage score", siteScore],
+          ["Full site scan", null],
           ["Pages scanned", counts ? counts.completed + counts.partial : null],
           ["Cookies / storage", s ? s.totals.cookies + s.totals.storage : null],
           ["Requests", s?.totals.requestEvents],
@@ -376,8 +374,8 @@ export function FullSiteWorkspace({
         ].map(([label, value]) => (
           <div key={String(label)} className="min-w-0 bg-white py-2 pr-3 text-left">
             <span className="block text-xs text-zinc-500">{label}</span>
-            <strong className="block text-lg leading-6 tabular-nums">{typeof value === "number" ? value.toLocaleString() : "—"}</strong>
-            {label === "Homepage score" ? <span className="block text-xs text-zinc-500">Homepage audit / 100</span> : null}
+            <strong className="block text-lg leading-6 tabular-nums">{label === "Full site scan" ? "Not scored" : typeof value === "number" ? value.toLocaleString() : "—"}</strong>
+            {label === "Full site scan" ? <span className="block text-xs text-zinc-500">Site-wide scoring not yet available</span> : null}
           </div>
         ))}
       </div>
