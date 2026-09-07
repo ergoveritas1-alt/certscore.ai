@@ -94,11 +94,9 @@ export function ScanFromSelect({
   includeScanFromOptions = true,
   localV2ScanProfileName = "localV2ScanProfile",
   localV2RunViaLambdaName = "localV2RunViaLambda",
-  localV2RunViaLambdaValue,
   name = "scanFrom",
   onChange,
   onFreshRescanChange,
-  onLocalV2RunViaLambdaChange,
   variant = "field",
   value = "eu_ie"
 }: ScanFromSelectProps) {
@@ -109,7 +107,6 @@ export function ScanFromSelect({
   const [isMounted, setIsMounted] = useState(false);
   const [menuPosition, setMenuPosition] = useState<MenuPosition | null>(null);
   const [uncontrolledFreshRescan, setUncontrolledFreshRescan] = useState(false);
-  const [uncontrolledLocalV2RunViaLambda, setUncontrolledLocalV2RunViaLambda] = useState(true);
   const buttonRef = useRef<HTMLButtonElement>(null);
   const menuRef = useRef<HTMLDivElement>(null);
   const wrapperRef = useRef<HTMLDivElement>(null);
@@ -126,12 +123,7 @@ export function ScanFromSelect({
     SCAN_FROM_OPTIONS[0];
   const selectedValue = selectedOption.value;
   const freshRescan = freshRescanValue ?? uncontrolledFreshRescan;
-  const localV2RunViaLambda = allowRestrictedScanOptions
-    ? (localV2RunViaLambdaValue ?? uncontrolledLocalV2RunViaLambda)
-    : true;
-  const showLocalV2RunViaLambdaOption =
-    process.env.NODE_ENV !== "production" && includeLocalV2ScanProfileOption && allowRestrictedScanOptions;
-  const hasVisibleMenuContent = includeScanFromOptions || includeFreshRescanOption || showLocalV2RunViaLambdaOption || showCrawl;
+  const hasVisibleMenuContent = includeScanFromOptions || includeFreshRescanOption || showCrawl;
 
   useEffect(() => {
     if (!showCrawl && crawl) {
@@ -183,9 +175,7 @@ export function ScanFromSelect({
         ? measuredHeight
         : includeFreshRescanOption
           ? 440
-          : showLocalV2RunViaLambdaOption && !includeScanFromOptions
-            ? 190
-            : 260;
+          : 260;
       const spaceBelow = viewportHeight - anchorBottom - gap - viewportPadding;
       const spaceAbove = anchorTop - gap - viewportPadding;
       const opensAbove = spaceBelow < Math.min(targetHeight, 300) && spaceAbove > spaceBelow;
@@ -208,7 +198,7 @@ export function ScanFromSelect({
       window.removeEventListener("resize", updateMenuPosition);
       window.removeEventListener("scroll", updateMenuPosition, true);
     };
-  }, [includeFreshRescanOption, includeScanFromOptions, isOpen, showLocalV2RunViaLambdaOption, variant]);
+  }, [includeFreshRescanOption, includeScanFromOptions, isOpen, variant]);
 
   function selectScanFrom(nextValue: ScanFrom) {
     onChange?.(nextValue);
@@ -220,13 +210,6 @@ export function ScanFromSelect({
       setUncontrolledFreshRescan(nextValue);
     }
     onFreshRescanChange?.(nextValue);
-  }
-
-  function setLocalV2RunViaLambda(nextValue: boolean) {
-    if (localV2RunViaLambdaValue === undefined) {
-      setUncontrolledLocalV2RunViaLambda(nextValue);
-    }
-    onLocalV2RunViaLambdaChange?.(nextValue);
   }
 
   const menuOptions = options;
@@ -245,7 +228,7 @@ export function ScanFromSelect({
         <input name={localV2ScanProfileName} type="hidden" value="standard" />
       ) : null}
       {includeLocalV2ScanProfileOption ? (
-        <input name={localV2RunViaLambdaName} type="hidden" value={localV2RunViaLambda ? "true" : "false"} />
+        <input name={localV2RunViaLambdaName} type="hidden" value="true" />
       ) : null}
       {includeFreshRescanOption && freshRescan ? <input name={freshRescanName} type="hidden" value="true" /> : null}
       {variant === "field" ? (
@@ -319,41 +302,10 @@ export function ScanFromSelect({
                   </div>
                 </div>
               ) : null}
-              {includeFreshRescanOption || showLocalV2RunViaLambdaOption || showCrawl ? (
+              {includeFreshRescanOption || showCrawl ? (
                 <div className={includeScanFromOptions ? "border-t border-slate-200/70 pt-1" : "pb-1"}>
                   <div className="px-3 pb-1.5 pt-1 text-[0.65rem] font-semibold uppercase tracking-[0.18em] text-slate-400">Options</div>
                   {showCrawl ? <FullSiteControls onChange={next => { setCrawl(next); onFullSiteChange?.(next); }} /> : null}
-                  {showLocalV2RunViaLambdaOption ? (
-                    <label
-                      className="flex w-full cursor-pointer items-center justify-between gap-4 px-3 py-2.5 text-left transition hover:bg-slate-50"
-                      title="On uses the selected regional AWS Lambda scanner. Off uses the local Lambda simulator when running on localhost."
-                    >
-                      <span className="min-w-0">
-                        <span className="block text-sm font-semibold text-slate-700">Run via Lambda</span>
-                      </span>
-                      <input
-                        checked={localV2RunViaLambda}
-                        className="sr-only"
-                        onChange={(event) => setLocalV2RunViaLambda(event.target.checked)}
-                        type="checkbox"
-                      />
-                      <span
-                        className={
-                          localV2RunViaLambda
-                            ? "relative inline-flex h-5 w-9 shrink-0 items-center rounded-full bg-sky-500 transition"
-                            : "relative inline-flex h-5 w-9 shrink-0 items-center rounded-full bg-slate-200 transition"
-                        }
-                      >
-                        <span
-                          className={
-                            localV2RunViaLambda
-                              ? "h-4 w-4 translate-x-4 rounded-full bg-white shadow-sm transition"
-                              : "h-4 w-4 translate-x-0.5 rounded-full bg-white shadow-sm transition"
-                          }
-                        />
-                      </span>
-                    </label>
-                  ) : null}
                   {includeFreshRescanOption ? (
                     <label
                       className="flex w-full cursor-pointer items-center justify-between gap-4 px-3 py-2.5 text-left transition hover:bg-slate-50"

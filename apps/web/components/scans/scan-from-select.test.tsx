@@ -126,7 +126,7 @@ test("ScanFromSelect exposes every public region while hiding internal controls 
   assert.doesNotMatch(html, /Run via Lambda/);
 });
 
-test("ScanFromSelect exposes restricted scan controls to admin users", () => {
+test("ScanFromSelect keeps Lambda enabled even with a legacy false value for admins", () => {
   const html = renderToStaticMarkup(
     createElement(ScanFromSelect, {
       allowRestrictedScanOptions: true,
@@ -139,7 +139,7 @@ test("ScanFromSelect exposes restricted scan controls to admin users", () => {
   );
 
   assert.match(html, /<input[^>]*name="scanFrom"[^>]*value="local_extension"/);
-  assert.match(html, /<input[^>]*name="localV2RunViaLambda"[^>]*value="false"/);
+  assert.match(html, /<input[^>]*name="localV2RunViaLambda"[^>]*value="true"/);
   assert.match(html, /Chrome browser/);
 });
 
