@@ -3,7 +3,7 @@ import test from "node:test";
 import { randomUUID } from "node:crypto";
 import { readFile } from "node:fs/promises";
 import { fullSitePolicy } from "@website-signal-risk-scanner/shared";
-import { sitemapEntries } from "./scheduler";
+import { sitemapEntries, stopCrawlsWithoutDispatchQueues } from "./scheduler";
 
 test("sitemap indexes and URL sets are bounded parse inputs without entity expansion", () => {
   assert.deepEqual(
@@ -109,6 +109,13 @@ test(
         );
         return { id, userId };
       }
+      const unavailable = await parent("missing-queue.test", 3, 2, "eu-central-1");
+      await stopCrawlsWithoutDispatchQueues({ "eu-west-1": "https://queue.example.test" });
+      const stopped = await db.loadFullSiteCrawl(unavailable.id);
+      assert.equal(stopped?.status, "stopped");
+      assert.equal(stopped?.stop_reason, "dispatch_queue_unavailable");
+      assert.deepEqual(await db.reserveFullSiteDispatches(), [], "Missing-region jobs must never be dispatched");
+      assert.equal((await db.queryOne<{status:string}>(`select status from full_site_pages where scan_id=$1 and source='homepage'`, [unavailable.id]))?.status, "completed");
       const homeOnly = await parent("only.test", 1);
       assert.deepEqual(await db.reserveFullSiteDispatches(), []);
       assert.equal(

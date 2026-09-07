@@ -301,9 +301,9 @@ existing homepage diagnostic score with an explicit homepage scope. Additional
 pages still receive inventory-only scans. Site identity and the next-scan form
 are shared above both report tabs; the scan options use a Full site switch.
 
-### Overview progress checks
+### Scan detail progress checks
 
-The Overview scan card uses `/api/scans/:scanId/full-site/progress` for a small,
+The scan detail card uses `/api/scans/:scanId/full-site/progress` for a small,
 requester- and organization-scoped counters response. It checks every 15 seconds
 while visible, permits one request at a time, aborts on navigation/backgrounding,
 and stops when the crawl or homepage fails or reaches a terminal state. Failed
@@ -320,3 +320,17 @@ Estimated incremental cost: below $1/month on existing provisioned services for
 1,000 scans/month viewed for ten minutes each (at most 40,000 small status checks).
 No additional capacity, scan invocations, model calls, or retained evidence are
 introduced. Cost and request volume scale with concurrent viewers and viewing time.
+
+### Dispatch configuration failures
+
+The scheduler stops crawls with `dispatch_queue_unavailable` before reserving
+page work when their region has no configured dispatch queue. The normal sweep
+cancels queued/dispatching pages and preserves retained homepage evidence. The
+results page labels the attempt unsuccessful and explains the configuration
+failure. This guard does not add infrastructure or scan invocations.
+
+Local full-site creation is rejected before scan creation: the deployed inventory
+workers use the production HTTPS control plane, which cannot claim local database
+attempts. Do not point local jobs at production queues to bypass this guard.
+Homepage-only local scanning remains available. Full-site local support requires
+a separately configured, reachable control plane and matching worker deployment.

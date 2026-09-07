@@ -542,6 +542,21 @@ export async function sweepFullSiteCrawls() {
     `update full_site_pages p set status='cancelled',limitation='max_pages_unvisited' from full_site_crawls c where p.scan_id=c.scan_id and c.status='completed' and p.status='queued'`,
   );
 }
+export async function stopCrawlsWithoutDispatchQueues(queueUrls: Record<string, string | undefined>) {
+  // Do not reserve jobs that cannot be delivered. Preserve retained homepage evidence.
+  const configuredRegions = Object.entries(queueUrls)
+    .filter(([, url]) => Boolean(url?.trim()))
+    .map(([region]) => region);
+  const unavailable = await query(
+    `update full_site_crawls set status='stopped',stop_reason='dispatch_queue_unavailable',completed_at=now()
+     where status in ('waiting_homepage','running') and not (region=any($1::text[]))`,
+    [configuredRegions],
+  );
+  if (unavailable.rowCount) {
+    console.error("[full-site] stopped crawls: dispatch queue unavailable", { count: unavailable.rowCount });
+  }
+}
+
 export function startFullSiteScheduler(options: {
   enabled: boolean;
   queueUrls: Record<string, string | undefined>;
@@ -562,6 +577,7 @@ export function startFullSiteScheduler(options: {
         nextIdleCheck = Date.now() + 15000;
         return;
       }
+      await stopCrawlsWithoutDispatchQueues(options.queueUrls);
       await sweepFullSiteCrawls();
       for (const job of await reserveFullSiteDispatches()) {
         const url = options.queueUrls[job.region];

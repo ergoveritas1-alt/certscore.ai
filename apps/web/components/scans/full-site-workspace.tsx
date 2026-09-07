@@ -1,4 +1,5 @@
 "use client";
+import { scanFailureExplanation } from "../../lib/scans/scan-failure-explanation";
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import {
   FULL_SITE_CONDITION,
@@ -221,7 +222,7 @@ export function FullSiteWorkspace({
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div className="flex items-center gap-2">
             <h1 className="text-xl font-semibold tracking-tight">Site scan results</h1>
-            <span className="rounded-full bg-sky-50 px-2 py-0.5 text-xs font-medium text-sky-800">{state?.status.replaceAll("_", " ") ?? "Loading"}</span>
+            <span className="rounded-full bg-sky-50 px-2 py-0.5 text-xs font-medium text-sky-800">{state?.status === "stopped" ? "Unsuccessful" : state?.status.replaceAll("_", " ") ?? "Loading"}</span>
           </div>
           <div className="flex w-full flex-wrap items-start justify-end gap-2 lg:w-auto lg:flex-1">
             {scanNext}
@@ -229,6 +230,13 @@ export function FullSiteWorkspace({
             <a className={`${button} inline-flex items-center gap-1.5 !py-1.5`} href={`/api/scans/${scanId}/report-export?format=json`}><span aria-hidden="true">⇩</span>Export</a>
           </div>
         </div>
+        {state?.status === "stopped" ? <div role="status" className="mt-3 flex flex-wrap items-center justify-between gap-3 rounded-lg border border-amber-200/70 bg-amber-50/50 px-4 py-3">
+          <div className="min-w-0 text-sm">
+            <p className="font-semibold text-zinc-900">Full-site scan couldn’t finish</p>
+            <p className="mt-1 max-w-2xl text-zinc-600">{state.stopReason === "dispatch_queue_unavailable" ? "Additional pages couldn’t start because the scanner wasn’t configured. Your homepage results are available below." : scanFailureExplanation(state.stopReason).detail}</p>
+          </div>
+          <a className={`${button} shrink-0 bg-white text-sm`} href={state.stopReason === "dispatch_queue_unavailable" ? "https://certscore.ai/app" : "/app"}>{state.stopReason === "dispatch_queue_unavailable" ? "Scan on CertScore.ai" : "Start a new scan"} <span aria-hidden="true">→</span></a>
+        </div> : null}
         <div className="mt-3">{identity}</div>
         <div aria-live="polite" className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-xs text-zinc-600">
           <span><strong className="text-zinc-900">{counts?.completed ?? "—"}</strong> complete · {counts?.partial ?? 0} partial · {counts?.blockedFailed ?? 0} failed · {counts?.pending ?? 0} pending</span>

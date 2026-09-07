@@ -44,3 +44,11 @@ test("report header links back to Overview without a self-link", () => {
  assert.match(html, /<h1/);
  assert.doesNotMatch(html, /View details/);
 });
+
+test("missing dispatch configuration is terminal and preserves the homepage explanation", () => {
+  const html = renderToStaticMarkup(<FullSiteScanNotice scan={{ ...scan, status: "stopped", errorMessage: "dispatch_queue_unavailable" }} reportPage />);
+  assert.match(html, /Additional page scans could not start/);
+  assert.match(html, /homepage results below are retained/);
+  assert.match(html, /will not resume/);
+  assert.doesNotMatch(html, /In progress|email you when/);
+});
