@@ -425,7 +425,9 @@ export function compactCrawlObservation(
     else
       groups.set(key, {
         ...row,
-        details: row.kind === "cookie" ? row.details : {},
+        // Request method is part of the retained endpoint identity used to bind
+        // compact inventory rows to the graph. Never default missing proof to GET.
+        details: row.kind === "cookie" ? row.details : row.kind === "request" && typeof row.details.method === "string" ? { method: row.details.method } : {},
         evidenceRefs: row.evidenceRefs.slice(0, 1),
       });
   }

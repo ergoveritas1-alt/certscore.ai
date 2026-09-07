@@ -250,6 +250,15 @@ test("identities, page occurrences, repeated events, embed instances and retry d
   ]);
   assert.deepEqual(compact.totals, a.totals);
 });
+test("compact request rows retain graph-binding methods without retaining other raw details", () => {
+  const get = { ...occurrence("request", "get", "get-event"), label: "https://metrics.example.test/collect", details: { method: "GET", initiator: "not needed in summary" } };
+  const post = { ...occurrence("request", "post", "post-event"), label: get.label, details: { method: "POST" } };
+  const missing = occurrence("request", "missing");
+  const compact = compactCrawlObservation(page("homepage", [get, post, missing]).observation!);
+  assert.deepEqual(compact.occurrences.map(row => row.details), [{ method: "GET" }, { method: "POST" }, {}]);
+  assert.deepEqual(compact.occurrences.map(row => row.evidenceRefs), [["get-event"], ["post-event"], ["missing"]]);
+});
+
 test("incomplete/mismatched homepages never establish absence; partial positives and mixed classifications survive", () => {
   const home = page("homepage", [occurrence("service", "s")], "partial");
   const child = page(
