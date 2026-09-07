@@ -182,7 +182,7 @@ export default async function MarketingHomePage() {
 
       <section className="relative isolate overflow-hidden border-b border-sky-500/20 bg-[#020d20] text-white">
         <div className="absolute inset-x-0 -top-10 bottom-0 -z-20" aria-hidden="true">
-          <Image alt="" className="object-cover object-[62%_center]" fill priority sizes="100vw" src="/marketing/hero/futuristic-tech-shield-and-network-fast.jpg" />
+          <Image alt="" className="object-cover object-[62%_center]" fill priority unoptimized sizes="100vw" src="/marketing/hero/shield-report-compact.png" />
         </div>
         <div className="absolute inset-0 -z-10 bg-[linear-gradient(90deg,rgba(1,10,27,0.06)_0%,rgba(1,10,27,0.02)_48%,rgba(1,10,27,0.12)_100%)]" aria-hidden="true" />
         <div className="relative top-0 mx-auto grid min-h-0 max-w-6xl gap-8 px-4 py-10 sm:px-6 sm:py-20 lg:-top-5 lg:min-h-[595px] lg:grid-cols-[minmax(0,650px)_minmax(0,1fr)] lg:items-center lg:gap-8 lg:py-16">
@@ -253,10 +253,6 @@ export default async function MarketingHomePage() {
                 variant="secondary"
               />
             </div>
-          </div>
-
-          <div className="relative z-10 hidden items-center justify-center lg:-mr-24 lg:-translate-y-3 lg:flex lg:justify-end" aria-hidden="true">
-            <Image alt="" className="h-auto w-full max-w-[476px] -translate-x-[15px] blur-[0.85px] opacity-[0.51] mix-blend-screen drop-shadow-[0_32px_45px_rgba(0,0,0,0.35)]" height={1190} sizes="(min-width: 1024px) 36vw, 92vw" src="/marketing/hero/scan-report-dashboard-with-privacy-details.jpg" width={1438} />
           </div>
         </div>
       </section>
