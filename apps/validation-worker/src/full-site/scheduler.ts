@@ -1,3 +1,4 @@
+import { dispatchLocalInventory, localInventoryEnabled } from "./local-dispatch";
 import { startFullSiteCompletionEmails } from "./completion-emails";
 import { SQSClient, SendMessageCommand } from "@aws-sdk/client-sqs";
 import { randomUUID } from "node:crypto";
@@ -577,9 +578,19 @@ export function startFullSiteScheduler(options: {
         nextIdleCheck = Date.now() + 15000;
         return;
       }
-      await stopCrawlsWithoutDispatchQueues(options.queueUrls);
+      const routes = { ...options.queueUrls };
+      for (const region of ["eu-central-1", "eu-west-1", "us-west-1"]) {
+        if (localInventoryEnabled()) routes[region] ||= "local";
+      }
+      await stopCrawlsWithoutDispatchQueues(routes);
       await sweepFullSiteCrawls();
       for (const job of await reserveFullSiteDispatches()) {
+        const localFunction = localInventoryEnabled();
+        if (localFunction) {
+          // Persisted page leases own concurrency and recovery, independently of the UI.
+          void dispatchLocalInventory(job).catch(error => console.error("[full-site] local inventory dispatch failed", { pageId: job.pageId, message: error instanceof Error ? error.message : "unknown" }));
+          continue;
+        }
         const url = options.queueUrls[job.region];
         if (!url) continue;
         await new SQSClient({ region: job.region }).send(

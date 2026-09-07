@@ -49,7 +49,7 @@ export async function dispatchFullSitePage(event: unknown) {
   return { status: "dispatched" };
 }
 
-export async function runFullSitePage(event: unknown, options: { s3Client?: S3Client } = {}) {
+export async function runFullSitePage(event: unknown, options: { s3Client?: S3Client; control?: (body: Record<string, unknown>) => Promise<any> } = {}) {
   if (process.env.CERTSCORE_FULL_SITE_INVENTORY_WORKER !== "1")
     throw new Error("Inventory requires its dedicated worker.");
   const invocationDeadline = Date.now() + 24000;
@@ -71,6 +71,7 @@ export async function runFullSitePage(event: unknown, options: { s3Client?: S3Cl
     throw new Error("Full site control plane requires HTTPS.");
   const controlUrl = new URL("/api/internal/full-site/page", origin);
   async function control(body: Record<string, unknown>) {
+    if (options.control) return options.control(body);
     const response = await fetch(controlUrl, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -165,7 +166,8 @@ export async function runFullSitePage(event: unknown, options: { s3Client?: S3Cl
       const graph = visit.evidence.runtimeEvidenceGraph;
       packet.runtimeGraph = { sourceSizeBytes: Buffer.byteLength(evidenceBody), sha256: graph.sourceHash, nodeCount: graph.nodes.length, edgeCount: graph.edges.length };
     }
-  } catch {
+  } catch (error) {
+    if (options.control) console.error("[local-inventory] collection failed", error instanceof Error ? error.message : "Unknown error");
     evidenceBody = "{}";
     packet = {
       contractVersion: FULL_SITE_CONTRACT,

@@ -176,8 +176,8 @@ export async function queueFullScanForDomain(input: QueueFullScanInput): Promise
     try { crawl = validateFullSiteRequest(input, authorized, fullSitePolicy(process.env)); }
     catch (error) { return { error: error instanceof Error ? error.message : "Invalid crawl configuration.", scanId: null }; }
   }
-  if (crawl.fullSite && process.env.NODE_ENV !== "production") {
-    return { error: "Full-site scanning is unavailable in this local environment. The inventory workers require the production control plane. Use CertScore.ai to start a full-site scan; homepage scans remain available here.", scanId: null };
+  if (crawl.fullSite && process.env.NODE_ENV !== "production" && process.env.CERTSCORE_FULL_SITE_LOCAL_EXECUTION !== "1") {
+    return { error: "Full-site scanning is unavailable in this local environment. Start the local inventory worker before scanning.", scanId: null };
   }
   const scanFrom = normalizeScanFrom(input.scanFrom);
   const basePlanLimits = input.planLimitsOverride ?? (await getPlanLimits(input.planCode));

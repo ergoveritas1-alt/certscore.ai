@@ -32,7 +32,7 @@ export async function loadFullSiteReport(
       concurrency: crawl.effective_concurrency,
       waitSeconds: crawl.effective_wait_seconds,
     },
-    region: crawl.region,
+    region: (crawl.policy_json as { localExecution?: boolean }).localExecution ? "Local" : crawl.region,
     configurationHash: crawl.configuration_hash ?? "",
     startedAt: new Date(crawl.started_at).toISOString(),
     completedAt: crawl.completed_at

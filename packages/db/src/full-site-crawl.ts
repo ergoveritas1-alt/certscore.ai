@@ -85,7 +85,7 @@ export async function insertFullSiteCrawl(
       input.scanId,
       input.userId,
       input.requested,
-      input.policy,
+      process.env.NODE_ENV !== "production" && process.env.CERTSCORE_FULL_SITE_LOCAL_EXECUTION === "1" ? { ...(input.policy as object), localExecution: true } : input.policy,
       input.region,
       [input.siteKey],
       input.requested.concurrency,

@@ -9,7 +9,7 @@ export async function loadFullSiteNotice(scanId: unknown, organizationId: string
   return queryOne<FullSiteScanNoticeData>(
     `select c.scan_id as "scanId", d.hostname, c.status, s.status as "homepageStatus", coalesce(c.stop_reason,s.error_message) as "errorMessage",
        (select ${fullSiteProgressSql} from full_site_pages p where p.scan_id=c.scan_id) as progress,
-       c.region, c.started_at as "startedAt", c.requested_json as limits
+       case when c.policy_json->>'localExecution'='true' then 'Local' else c.region end as region, c.started_at as "startedAt", c.requested_json as limits
      from full_site_crawls c join scans s on s.id=c.scan_id join domains d on d.id=s.domain_id
      where c.scan_id=$1 and s.organization_id=$2 and c.authorized_user_id=$3`,
     [scanId, organizationId, userId],

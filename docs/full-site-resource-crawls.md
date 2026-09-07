@@ -329,8 +329,17 @@ cancels queued/dispatching pages and preserves retained homepage evidence. The
 results page labels the attempt unsuccessful and explains the configuration
 failure. This guard does not add infrastructure or scan invocations.
 
-Local full-site creation is rejected before scan creation: the deployed inventory
-workers use the production HTTPS control plane, which cannot claim local database
-attempts. Do not point local jobs at production queues to bypass this guard.
-Homepage-only local scanning remains available. Full-site local support requires
-a separately configured, reachable control plane and matching worker deployment.
+Local full-site testing is available with `CERTSCORE_FULL_SITE_LOCAL_EXECUTION=1`
+in `apps/web/.env.local`. Start the existing local scan stack, including its
+validation worker. The worker uses isolated child processes to run the same
+inventory handler and collector, then saves artifacts through local storage and
+the existing token-bound finish endpoint. Page limits, pacing, leases, checksum
+verification and report projection are shared with the production path. Leaving
+the browser does not affect these processes. The mode is ignored in production.
+
+The crawl is labeled Local and records `localExecution` in its policy metadata.
+The region remains part of the requested baseline configuration, but local page
+traffic originates from the development machine; this mode does not verify
+regional behavior or Lambda resource constraints. The homepage uses its existing
+configured execution path. No cloud inventory invocations or recurring capacity
+are added by local mode. The failed historical attempt remains stopped.

@@ -187,7 +187,7 @@ const GENERIC_SCAN_ERROR_MESSAGES: Record<ScanMode, string> = {
 const RECENT_SCAN_REUSED_MESSAGE = "Recently scanned. Select Fresh re-scan to run a new scan.";
 
 const FULL_SCAN_ERROR_MESSAGES: Record<string, string> = {
-  full_site_local_unavailable: "Full-site scans aren’t available in this local preview. Turn off Full site to scan the homepage, or run the full-site scan on certscore.ai.",
+  full_site_local_unavailable: "The local full-site worker isn’t ready. Start the local scan stack, then try again.",
   active_scan_exists: "A scan is already queued or running for this site. Open scan history or try again shortly.",
   domain_already_connected: "This site is already connected to your workspace. Sign in to open it from scan history.",
   full_scan_server_error: "The scan service hit an unexpected error. Try again in a minute.",
