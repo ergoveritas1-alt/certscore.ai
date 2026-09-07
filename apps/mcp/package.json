@@ -7,7 +7,7 @@
   "main": "./dist/index.js",
   "scripts": {
     "build": "pnpm run build:deps && tsc -p tsconfig.json",
-    "build:deps": "pnpm --filter @website-signal-risk-scanner/shared build && pnpm --filter @certscore/api-contracts build && pnpm --filter @certscore/sdk build && pnpm --filter @certscore/mcp-auth build && pnpm --filter @certscore/mcp build",
+    "build:deps": "pnpm --filter @certscore/contracts build && pnpm --filter @website-signal-risk-scanner/shared build && pnpm --filter @certscore/api-contracts build && pnpm --filter @certscore/sdk build && pnpm --filter @certscore/mcp-auth build && pnpm --filter @certscore/mcp build",
     "dev": "pnpm run build:deps && node --env-file=../web/.env.local --enable-source-maps --import tsx src/index.ts",
     "start": "node --enable-source-maps ./dist/index.js",
     "typecheck": "pnpm run build:deps && tsc --noEmit -p tsconfig.json",

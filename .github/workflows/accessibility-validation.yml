@@ -56,6 +56,7 @@ jobs:
 
       - name: Build web test dependencies
         run: |
+          pnpm --filter @certscore/contracts build
           pnpm --filter @website-signal-risk-scanner/shared build
           pnpm --filter @website-signal-risk-scanner/db build
           pnpm --filter @website-signal-risk-scanner/validation-shared build
