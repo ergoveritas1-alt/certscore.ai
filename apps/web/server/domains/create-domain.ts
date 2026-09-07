@@ -287,7 +287,9 @@ export async function createDomainAction(
   }
 
   if (queuedResults.length === 1 && queuedResults[0]?.scanId) {
-    redirect(`/app/scans/${queuedResults[0].scanId}`);
+    redirect(fullSiteFormInput(formData).fullSite === true
+      ? `/app?fullSiteScan=${queuedResults[0].scanId}`
+      : `/app/scans/${queuedResults[0].scanId}`);
   }
 
   redirect("/app/scans");

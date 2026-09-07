@@ -1,3 +1,5 @@
+import { FullSiteScanNotice } from "../../components/dashboard/full-site-scan-notice";
+import { loadFullSiteNotice } from "../../server/scans/full-site-notice";
 import { Card, CardContent, CardHeader, CardTitle } from "@website-signal-risk-scanner/ui";
 import Link from "next/link";
 import { OverviewScanHistoryCard } from "../../components/dashboard/overview-scan-history-card";
@@ -42,7 +44,7 @@ function isCompletedWithin24Hours(completedAt: string | null) {
   return Number.isFinite(completedAtMs) && Date.now() - completedAtMs >= 0 && Date.now() - completedAtMs <= 24 * 60 * 60 * 1000;
 }
 
-export default async function DashboardPage() {
+export default async function DashboardPage({ searchParams }: { searchParams: Promise<{ fullSiteScan?: string }> }) {
   const { membership, organization, profile, user } = await withServerTiming("app.dashboard.context", () => getDashboardContext());
   if (!organization || !membership) {
     return (
@@ -57,6 +59,7 @@ export default async function DashboardPage() {
       </div>
     );
   }
+  const notice = await loadFullSiteNotice((await searchParams).fullSiteScan, organization.id, user.id);
   const allowRestrictedScanOptions = canUseRestrictedScanOptions({
     membershipRole: membership.role,
     userEmail: user.email
@@ -112,6 +115,8 @@ export default async function DashboardPage() {
         <h1 className="text-[1.9rem] font-semibold tracking-tight">Overview</h1>
         <p className="mt-1 text-sm text-slate-500">Scan a website, review what needs attention, and track meaningful changes over time.</p>
       </div>
+
+      {notice ? <FullSiteScanNotice scan={notice} /> : null}
 
       <div className="grid gap-4 lg:grid-cols-2">
         <Card className="scroll-mt-6 border-sky-100 bg-[linear-gradient(145deg,#ffffff_0%,#f5fbff_100%)] shadow-sm" id="scan-a-site">

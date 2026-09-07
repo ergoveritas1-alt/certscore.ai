@@ -457,7 +457,7 @@ export function DomainScanForm({
   const scanButtonArmed = isValidScanTarget(effectiveSubmitDomain);
   const showFreshRescanOption = mode === "full" && scanFrom !== "local_extension" && hasRecentReusableScan;
   const expectsRecentScanReuse = shouldExpectRecentScanReuse({ freshRescan, hasRecentReusableScan, mode });
-  const useFullPageSubmissionProgress = shouldUseFullPageScanSubmissionTransition({
+  const useFullPageSubmissionProgress = !crawlInput?.fullSite && shouldUseFullPageScanSubmissionTransition({
     compact,
     expectsRecentScanReuse,
     hasTransitionHost: reportRescanTransition !== null,
@@ -889,6 +889,16 @@ export function DomainScanForm({
         scan_target_type: getScanTargetType(submittedDomain),
         scan_status: "queued"
       });
+      if (crawlInput?.fullSite && payload.scanId) {
+        clearPendingScanSession(requestId);
+        clearActiveScanSession();
+        reportRescanTransition?.cancel();
+        isSubmittingRef.current = false;
+        setIsSubmitting(false);
+        router.push(`/app?fullSiteScan=${payload.scanId}`);
+        router.refresh();
+        return;
+      }
       const nextDestination = appendRecentScanReuseParam(destination, payload.reusedExistingScan);
       clearPendingScanSession(requestId);
       if (payload.reusedExistingScan) {
