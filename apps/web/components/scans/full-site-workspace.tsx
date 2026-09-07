@@ -66,13 +66,19 @@ const timestamp = (value: string | null | undefined) =>
 const button =
   "rounded-lg border border-zinc-200 bg-white px-3 py-2 text-sm text-zinc-800 hover:border-sky-500 focus-visible:outline focus-visible:outline-2 focus-visible:outline-sky-600";
 
+const FullSiteRegionContext = createContext<string | undefined>(undefined);
+export function FullSiteRegion({ children }: { children: ReactNode }) {
+  const region = useContext(FullSiteRegionContext);
+  return region === "Local" ? <span className="rounded-md border border-zinc-300 bg-white px-2 py-1">Scanned locally</span> : children;
+}
+
 const FullSiteTimingContext = createContext<ReactNode>(null);
 export function FullSiteTiming() {
   return useContext(FullSiteTimingContext);
 }
 
 function CrawlResourceScope({ homepage, source, children }: { homepage: boolean; source?: InventoryGraphSource; children: ReactNode }) {
-  return homepage ? children : <InventoryResourceProvider source={source}>{children}</InventoryResourceProvider>;
+  return homepage ? children : <InventoryResourceProvider preload source={source}>{children}</InventoryResourceProvider>;
 }
 
 export function FullSiteWorkspace({
@@ -119,8 +125,12 @@ export function FullSiteWorkspace({
             : API_READ_RATE_POLICY.weights.ordinary)) /
           burst.limits.callerTarget,
       ) * 2;
+    let loading = false;
+    let failures = 0;
     const load = async () => {
-      let delay = pollMs;
+      if (loading || document.hidden || controller.signal.aborted) return;
+      loading = true;
+      let delay = Math.max(15000, pollMs);
       try {
         const params = new URLSearchParams({
           ...filters,
@@ -152,19 +162,31 @@ export function FullSiteWorkspace({
           pages: { ...next.pages, rows: [...new Map([...previous.pages.rows, ...next.pages.rows].map(row => [row.id, row])).values()] },
         } : next);
         setError(null);
+        failures = 0;
         terminal.current =
           !["waiting_homepage", "running"].includes(
             next.summary.state.status,
           ) && next.summary.counts.active === 0;
       } catch (e) {
+        failures += 1;
+        delay = Math.max(delay, Math.min(120000, 15000 * 2 ** failures));
         if (!controller.signal.aborted) setError((e as Error).message);
       }
-      if (!controller.signal.aborted && !terminal.current)
+      loading = false;
+      if (!controller.signal.aborted && !document.hidden && !terminal.current)
         timer = setTimeout(() => void load(), delay);
     };
+    const resume = () => {
+      if (timer) clearTimeout(timer);
+      if (!document.hidden) void load();
+    };
+    document.addEventListener("visibilitychange", resume);
+    window.addEventListener("focus", resume);
     timer = setTimeout(() => void load(), filters.q ? 300 : 0);
     return () => {
       controller.abort();
+      document.removeEventListener("visibilitychange", resume);
+      window.removeEventListener("focus", resume);
       if (timer) clearTimeout(timer);
     };
   }, [scanId, filters, offset, detailPage, resource, detailOffset]);
@@ -221,7 +243,7 @@ export function FullSiteWorkspace({
       ...(data?.discovery.widespread ?? []),
     ].find((r) => r.key === resource);
   const timing = (
-        <details className="relative text-xs text-zinc-600">
+        <details className="text-xs text-zinc-600 sm:relative">
           <summary className="cursor-pointer font-medium">
             Coverage & timing ·{" "}
             {duration(
@@ -231,7 +253,7 @@ export function FullSiteWorkspace({
                 : null,
             )}
           </summary>
-          <div className="absolute left-0 top-full z-20 mt-2 w-[min(36rem,80vw)] rounded-lg border border-zinc-200 bg-white p-4 shadow-lg">
+          <div className="absolute left-4 right-4 z-20 mt-2 sm:left-0 sm:right-auto sm:top-full sm:w-[min(36rem,70vw)] rounded-lg border border-zinc-200 bg-white p-4 shadow-lg">
           <dl className="mt-2 grid gap-2 sm:grid-cols-3">
             {[
               ["Page limit", requested.maxPages],
@@ -281,6 +303,7 @@ export function FullSiteWorkspace({
         </details>
   );
   return (
+    <FullSiteRegionContext.Provider value={state?.region}>
     <FullSiteTimingContext.Provider value={timing}>
     <div
       className="mx-auto max-w-[1500px] px-4 py-4 text-zinc-900 sm:px-6"
@@ -290,7 +313,7 @@ export function FullSiteWorkspace({
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div className="flex items-center gap-2">
             <h1 className="text-xl font-semibold tracking-tight">Site scan results</h1>
-            <span className="rounded-full bg-sky-50 px-2 py-0.5 text-xs font-medium text-sky-800">{state?.status === "stopped" ? "Unsuccessful" : state?.status.replaceAll("_", " ") ?? "Loading"}</span>
+            <span className="rounded-full bg-sky-50 px-2 py-0.5 text-xs font-medium text-sky-800">{state?.status === "stopped" ? "Unsuccessful" : state?.status === "completed" && (counts?.blockedFailed || counts?.partial) ? "Completed with limitations" : state?.status === "completed" ? "Completed" : state?.status.replaceAll("_", " ") ?? "Loading"}</span>
           </div>
           <div className="flex w-full flex-wrap items-start justify-end gap-2 lg:w-auto lg:flex-1">
             {scanNext}
@@ -345,7 +368,7 @@ export function FullSiteWorkspace({
       </header>
       <div className="mt-3 grid grid-cols-2 gap-px border-y border-zinc-200 bg-zinc-200 sm:grid-cols-5" aria-label="Scan summary">
         {[
-          ["Site score", siteScore],
+          ["Homepage score", siteScore],
           ["Pages scanned", counts ? counts.completed + counts.partial : null],
           ["Cookies / storage", s ? s.totals.cookies + s.totals.storage : null],
           ["Requests", s?.totals.requestEvents],
@@ -354,7 +377,7 @@ export function FullSiteWorkspace({
           <div key={String(label)} className="min-w-0 bg-white py-2 pr-3 text-left">
             <span className="block text-xs text-zinc-500">{label}</span>
             <strong className="block text-lg leading-6 tabular-nums">{typeof value === "number" ? value.toLocaleString() : "—"}</strong>
-            {label === "Site score" ? <span className="block text-xs text-zinc-500">Homepage audit / 100</span> : null}
+            {label === "Homepage score" ? <span className="block text-xs text-zinc-500">Homepage audit / 100</span> : null}
           </div>
         ))}
       </div>
@@ -395,7 +418,7 @@ export function FullSiteWorkspace({
                 const table = tab === "pages" ? data?.pages : data?.resources;
                 if (table && el.scrollTop + el.clientHeight >= el.scrollHeight - 40 && table.rows.length < table.total && table.offset === offset) setOffset(offset + table.limit);
               }}>
-              <InventoryResourceProvider projection={homepageGraph}><table className="w-full text-left text-xs">
+              <InventoryResourceProvider preload projection={homepageGraph}><table className="w-full text-left text-xs">
                 <caption className="sr-only">
                   {tab === "pages" ? "Page observations" : "Resource evidence"};
                   additional pages receive inventory classification, not full diagnostic audits.
@@ -473,8 +496,8 @@ export function FullSiteWorkspace({
                     </thead>
                     <tbody>
                       {data?.resources.rows.map((row) => (
-                        <CrawlResourceScope key={row.key} source={data.pageChoices.find(page => page.id === row.pageIds[0])?.graphSource} homepage={data.pages.rows.find(page => page.id === row.pageIds[0])?.source === "homepage"}>
-                        <InventoryResourceRow inspect relationships={Boolean(data.pageChoices.find(page => page.id === row.pageIds[0])?.graphSource || (homepageGraph && data.pages.rows.find(page => page.id === row.pageIds[0])?.source === "homepage"))} identity={{cookieRefs: [], nodeRefs: row.occurrence.graphNodeRefs ?? row.occurrence.evidenceRefs, requests: row.occurrence.kind === "request" ? (() => { try {const url = new URL(row.occurrence.label);return [{hostname: url.hostname, path: url.pathname, method: typeof row.occurrence.details.method === "string" ? row.occurrence.details.method : null}];} catch {return [];}})() : []}} facts={{ name: row.occurrence.label, type: row.occurrence.kind, vendor: row.occurrence.vendor, domains: row.occurrence.domain ? [row.occurrence.domain] : [], purpose: row.purposes.join(", "), evidence: row.inventoryEvidence, confidence: row.confidences.join(", "), pages: row.pageIds.map(pageName), evidencePage: pageName(row.pageIds[0] ?? ""), firstSeenMs: row.occurrence.firstSeenMs, relationship: row.relationships.join(", "), eventCount: row.eventCount }} evidence={{ ...row.occurrence.details, evidenceRefs: row.occurrence.evidenceRefs, resourceIdentity: row.occurrence.identity }}>
+                        <CrawlResourceScope key={row.key} source={data.pageChoices.find(page => page.id === row.pageIds[0])?.graphSource} homepage={data.pageChoices.find(page => page.id === row.pageIds[0])?.source === "homepage"}>
+                        <InventoryResourceRow inspect positiveRelationshipsOnly relationships={Boolean(data.pageChoices.find(page => page.id === row.pageIds[0])?.graphSource || (homepageGraph && data.pageChoices.find(page => page.id === row.pageIds[0])?.source === "homepage"))} identity={{cookieRefs: [], nodeRefs: row.occurrence.graphNodeRefs ?? row.occurrence.evidenceRefs, requests: row.occurrence.kind === "request" ? (() => { try {const url = new URL(row.occurrence.label);return [{hostname: url.hostname, path: url.pathname, method: typeof row.occurrence.details.method === "string" ? row.occurrence.details.method : null}];} catch {return [];}})() : []}} facts={{ name: row.occurrence.label, type: row.occurrence.kind, vendor: row.occurrence.vendor, domains: row.occurrence.domain ? [row.occurrence.domain] : [], purpose: row.purposes.join(", "), evidence: row.inventoryEvidence, confidence: row.confidences.join(", "), pages: row.pageIds.map(pageName), evidencePage: pageName(row.pageIds[0] ?? ""), firstSeenMs: row.occurrence.firstSeenMs, relationship: row.relationships.join(", "), eventCount: row.eventCount }} evidence={{ ...row.occurrence.details, evidenceRefs: row.occurrence.evidenceRefs, resourceIdentity: row.occurrence.identity }}>
                         <tr className="h-14 border-b border-zinc-100" key={row.key}>
                           <td className="h-14 pr-3"><button title={row.inventoryEvidence} aria-label={`${row.inventoryEvidence}: inspect ${row.occurrence.label}`} className={`text-lg ${evidenceStyle(row.inventoryEvidence)}`} onClick={() => openResource(row.key)}>{evidenceSymbol(row.inventoryEvidence)}</button></td>
                           <td className="px-3"><span className="text-sky-700" title={row.occurrence.kind}>{row.occurrence.kind === "request" ? "⇄" : row.occurrence.kind === "embed" ? "‹›" : row.occurrence.kind === "cookie" ? "◉" : "▤"}</span><span className="sr-only">{row.occurrence.kind}</span></td>
@@ -662,5 +685,6 @@ export function FullSiteWorkspace({
       ) : null}
     </div>
     </FullSiteTimingContext.Provider>
+    </FullSiteRegionContext.Provider>
   );
 }

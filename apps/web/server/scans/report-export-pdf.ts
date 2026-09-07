@@ -343,6 +343,10 @@ function reportLines(report: CanonicalReportExport, image: PdfImage | null): Pdf
       ...wrappedLines(`Started: ${state.startedAt}; ended: ${state.completedAt??"In progress"} (UTC). Homepage audit: ${formatDuration(state.homepageDurationMs)}. Median observation: ${formatDuration(timing.medianPageMs)} (${timing.sampleCount} samples); slowest: ${formatDuration(timing.slowestPageMs)}.`),
       ...wrappedLines(`Evidence: https://certscore.ai${f.inventoryHref}`),
       ...f.pages.flatMap(page=>wrappedLines(`${page.url}${page.finalUrl&&page.finalUrl!==page.url?` -> ${page.finalUrl}`:""} | ${page.status} | ${page.services??"Unavailable"} services; ${page.cookies??"Unavailable"} cookies; ${page.requestEvents??"Unavailable"} request events; ${page.embedInstances??"Unavailable"} embed instances. ${page.limitations.join(", ")} Evidence page ID: ${page.id}`)),
+      sectionHeading("Full-site resource inventory"),
+      ...wrappedLines(`${f.resources.length} distinct resources across observed pages. Page IDs map to the coverage list above. The JSON download contains every resource row.`),
+      ...f.resources.slice(0, 500).flatMap(row => wrappedLines(`${row.occurrence.kind}: ${row.occurrence.label} | ${row.occurrence.vendor ?? "Unknown vendor"} | ${row.purposes.join(", ")} | ${row.pageIds.length} page(s): ${row.pageIds.join(", ")}`)),
+      ...(f.resources.length > 500 ? wrappedLines("PDF shows the first 500 resources. Download the full-site JSON for the complete inventory.") : []),
       sectionHeading("Homepage audit"),
     ]);
   }

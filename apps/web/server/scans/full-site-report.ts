@@ -320,7 +320,7 @@ export async function loadFullSiteReport(
   return {
     summary: { ...aggregate, resources: undefined },
     resources: {
-      rows: resources.slice(offset, offset + limit).map(row => ({ ...row, inventoryEvidence: inventoryClassification(row), serviceOnlyAdditional: !!row.occurrence.serviceId && additionalServiceIds.has(row.occurrence.serviceId) })),
+      rows: (exportAllPages ? resources : resources.slice(offset, offset + limit)).map(row => ({ ...row, inventoryEvidence: inventoryClassification(row), serviceOnlyAdditional: !!row.occurrence.serviceId && additionalServiceIds.has(row.occurrence.serviceId) })),
       total: resources.length,
       offset,
       limit,
@@ -335,7 +335,7 @@ export async function loadFullSiteReport(
     },
     pageChoices: pageRows
       .filter((p) => !["excluded", "cancelled"].includes(p.status))
-      .map((p) => { const observation = pages.find(page => page.id === p.id)?.observation; return { id: p.id, url: p.url, graphSource: observation?.runtimeGraph && observation.configurationHash === state.configurationHash ? { href: `/api/scans/${scanId}/full-site?graphPage=${p.id}`, scanId: p.id, sha256: observation.sourceHash } : undefined }; }),
+      .map((p) => { const observation = pages.find(page => page.id === p.id)?.observation; return { id: p.id, url: p.url, source: p.source, graphSource: observation?.runtimeGraph && observation.configurationHash === state.configurationHash ? { href: `/api/scans/${scanId}/full-site?graphPage=${p.id}`, scanId: p.id, sha256: observation.sourceHash } : undefined }; }),
     facets: {
       purposes: [
         ...new Set(
@@ -422,7 +422,7 @@ export type FullSiteReportResponse = NonNullable<
 >;
 
 export async function loadFullSiteExport(scanId: string) {
-  const report = await loadFullSiteReport(scanId, new URLSearchParams(), true);
+  const report = await loadFullSiteReport(scanId, new URLSearchParams({ kind: "all" }), true);
   if (!report) return undefined;
   return {
     scope: "Full homepage audit plus additional-page resource inventories",
@@ -433,6 +433,7 @@ export async function loadFullSiteExport(scanId: string) {
     summary: report.summary,
     timing: report.timing,
     pages: report.pages.rows,
+    resources: report.resources.rows,
     inventoryHref: `/api/scans/${scanId}/full-site`,
     pageEvidenceHrefTemplate: `/api/scans/${scanId}/full-site?detailPage={pageId}`,
   };

@@ -113,3 +113,9 @@ test("deferred page graphs expose a load control before any graph nodes are fetc
   assert.match(html, /Load retained relationship links/);
   assert.doesNotMatch(html, /Explain unavailable relationship evidence/);
 });
+
+test("full-site relationship controls show verified positive child counts only", () => {
+  const render = (node: string) => renderToStaticMarkup(<InventoryResourceProvider projection={runtimeGraphUiFixture()}><table><tbody><InventoryResourceRow inspect positiveRelationshipsOnly identity={{ cookieRefs: [], nodeRefs: [node], requests: [] }} facts={{ name: node }}><tr><td>Inspect</td><td>Type</td><td>Vendor</td></tr></InventoryResourceRow></tbody></table></InventoryResourceProvider>);
+  assert.match(render("request"), /Show 1 immediate link/);
+  assert.doesNotMatch(render("missing"), /immediate link|Load retained relationship|Explain unavailable relationship/);
+});

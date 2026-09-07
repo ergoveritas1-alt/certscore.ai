@@ -1,5 +1,5 @@
 import { describeSiteTechnology } from "@certscore/contracts";
-import { FullSiteWorkspace, FullSiteTiming } from "../full-site-workspace";
+import { FullSiteWorkspace, FullSiteTiming, FullSiteRegion } from "../full-site-workspace";
 import type { ReactNode } from "react";
 import { reportCardTitle, reportEyebrow, reportSectionTitle } from "../report-typography";
 import { InventorySortProvider, InventorySortHeader, InventorySortedBody } from "../inventory-sorting";
@@ -199,10 +199,10 @@ function ReportIdentity({
               />
             </div>
           ) : null}
-          <span className="inline-flex items-center gap-2 rounded-md border border-zinc-300 bg-white px-2 py-1">
+          <FullSiteRegion><span className="inline-flex items-center gap-2 rounded-md border border-zinc-300 bg-white px-2 py-1">
             <ScanFromMarker {...getScanFromMarkerInput(report.scan.originCode)} selected />
             Scanned from {report.scan.origin}
-          </span>
+          </span></FullSiteRegion>
           {workspaceIdentity ? <FullSiteTiming /> : <span className={monoClass}>{report.scan.duration}</span>}
         </div>
         {enhancedActions && !workspaceIdentity ? (

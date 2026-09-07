@@ -343,3 +343,19 @@ traffic originates from the development machine; this mode does not verify
 regional behavior or Lambda resource constraints. The homepage uses its existing
 configured execution path. No cloud inventory invocations or recurring capacity
 are added by local mode. The failed historical attempt remains stopped.
+
+### Report QA follow-up
+
+Full-site exports include every inventory row in JSON. PDF includes up to 500
+resource rows with an explicit limit notice and directs larger inventories to
+JSON. Child controls preload the existing verified page graphs through shared
+reads, show positive distinct-child counts, and reserve vendor alignment space
+when absent. Estimated incremental read cost is below $1/month at 1,000 views
+of three-page reports; local testing adds no cloud cost. Larger cohorts need
+cost reassessment. No additional scans or model calls are introduced.
+
+The owner selected one deduction per distinct site finding, with affected pages
+attached rather than repeated deductions. That cumulative scoring change is not
+yet implemented: additional-page inventories have no scored assessments. The
+current number is explicitly labeled Homepage score until canonical page
+assessment and site-level scoring are implemented.

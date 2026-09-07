@@ -60,14 +60,14 @@ function readPageGraph(source: InventoryGraphSource) {
 }
 
 /** One deferred read for the whole inventory. Expanding rows never creates additional scans. */
-export function InventoryResourceProvider({ projection: initial, source, children }: { projection?: ApiRuntimeEvidenceGraphProjection; source?: InventoryGraphSource; children: ReactNode }) {
+export function InventoryResourceProvider({ projection: initial, source, preload = false, children }: { projection?: ApiRuntimeEvidenceGraphProjection; source?: InventoryGraphSource; preload?: boolean; children: ReactNode }) {
   const [requested, setRequested] = useState(false);
   const [attempt, setAttempt] = useState(0);
   const [error, setError] = useState<string>();
   const [loaded, setLoaded] = useState<{ key: string; projection: ApiRuntimeEvidenceGraphProjection }>();
   const key = source ? `${source.href}:${source.scanId}:${source.sha256}` : `${initial?.scanId}:${initial?.details?.sha256}:${initial?.sourceBundle?.sha256}`;
   useEffect(() => {
-    if (!requested || (!initial?.details && !source) || loaded?.key === key) return;
+    if ((!requested && !preload) || (!initial?.details && !source) || loaded?.key === key) return;
     const abort = new AbortController(); setError(undefined);
     void (async () => {
       try {
@@ -84,7 +84,7 @@ export function InventoryResourceProvider({ projection: initial, source, childre
       } catch (failure) { if (!abort.signal.aborted) setError(failure instanceof Error ? failure.message : "Evidence unavailable."); }
     })();
     return () => abort.abort();
-  }, [requested, key, initial, source, loaded?.key, attempt]);
+  }, [requested, preload, key, initial, source, loaded?.key, attempt]);
   return <EvidenceContext.Provider value={{ projection: loaded?.key === key ? loaded.projection : initial, sourceAvailable: Boolean(source), error, load: () => { setRequested(true); if (error) setAttempt(value => value + 1); } }}>{children}</EvidenceContext.Provider>;
 }
 
@@ -118,11 +118,12 @@ export function InventoryResourceRow({ children, identity, facts, inspect = fals
   const graph = projection?.graphs.find(item => item.scenario === "pre_consent");
   const matches = graph ? matchInventoryResources(graph, identity) : [];
   const sources = graph ? new Set(graph.edges.filter(edge => matches.some(node => node.id === edge.to)).map(edge => edge.from)).size : 0;
-  const childEdges = graph?.edges.filter(edge => matches.some(node => node.id === edge.from)) ?? [];
+  const childEdges = [...new Map((graph?.edges.filter(edge => matches.some(node => node.id === edge.from)) ?? []).map(edge => [edge.to, edge])).values()];
   const toggleDetails = () => { setOpen(!open); if (!open) load(); };
   const control = <td key="details" className={inspect ? "bg-white px-2 py-1 md:sticky md:left-0 md:z-10" : "sticky right-0 bg-white px-2 py-1.5 align-middle border-l border-slate-100"}>{inspect ? <span className="inline-flex items-center gap-1"><InspectButton open={open} controls={id} name={typeof facts.name === "string" ? facts.name : undefined} onClick={toggleDetails} /><InventoryEvidenceIcon evidence={typeof facts.evidence === "string" ? facts.evidence : undefined} /></span> : <button type="button" className={button} aria-expanded={open} aria-controls={id} onClick={toggleDetails}>{`${open ? "−" : "+"} ${sources ? `${sources} ${sources === 1 ? "source" : "sources"}` : "Details"}`}</button>}</td>;
   const cells = Children.toArray(resolvedRow.props.children);
-  const vendorCell = inspect && relationships && (!positiveRelationshipsOnly || childEdges.length > 0) && React.isValidElement<{ children?: ReactNode }>(cells[2]) ? cloneElement(cells[2], {}, <div className="flex min-w-0 items-center gap-1 whitespace-nowrap"><span className="inline-flex w-16 shrink-0"><RelationshipButton count={childEdges.length} open={treeOpen} unavailable={!graph && !projection?.details && !sourceAvailable} deferred={Boolean(projection?.details || (sourceAvailable && !graph))} onClick={() => { setTreeOpen(!treeOpen); load(); }} /></span><div className="min-w-0 truncate">{cells[2].props.children}</div></div>) : cells[2];
+  const showRelationships = relationships && (!positiveRelationshipsOnly || childEdges.length > 0);
+  const vendorCell = inspect && (relationships || positiveRelationshipsOnly) && React.isValidElement<{ children?: ReactNode }>(cells[2]) ? cloneElement(cells[2], {}, <div className="flex min-w-0 items-center gap-1 whitespace-nowrap"><span className="inline-flex w-16 shrink-0">{showRelationships ? <RelationshipButton count={childEdges.length} open={treeOpen} unavailable={!graph && !projection?.details && !sourceAvailable} deferred={Boolean(projection?.details || (sourceAvailable && !graph))} onClick={() => { setTreeOpen(!treeOpen); load(); }} /> : null}</span><div className="min-w-0 truncate">{cells[2].props.children}</div></div>) : cells[2];
   const row = cloneElement(resolvedRow, { "data-resource-owner": id }, ...(inspect ? [control, cells[1], vendorCell, ...cells.slice(3)] : [...cells, control]));
   return <>{row}<tr hidden={!open} data-resource-detail={id}><td colSpan={cells.length + (inspect ? 0 : 1)} className="bg-slate-50/60 px-5 py-4"><div id={id} className="w-[calc(100vw-7rem)] max-w-5xl">{open ? <ResourceDetails identity={identity} facts={facts} summary={existingDetails} evidence={evidence} /> : null}</div></td></tr>
     {inspect && treeOpen && (error || !childEdges.length) ? <tr data-relationship-status={id} data-resource-detail={id}><td colSpan={cells.length} className="bg-sky-50/40 px-5 py-3 text-xs text-slate-600"><p role="status">{error ?? (projection?.details || (sourceAvailable && !graph) ? "Loading retained relationship evidence…" : !graph ? "No relationship graph was retained for this scan’s pre-consent session. Resource identities alone cannot establish parent/child links." : !matches.length ? "No unambiguous graph resource match was retained for this row." : "No outgoing links were retained for this resource. This does not prove there were no children.")}</p>{error ? <button type="button" className={button} onClick={load}>Retry loading evidence</button> : null}</td></tr> : null}

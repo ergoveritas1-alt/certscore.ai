@@ -41,7 +41,7 @@ function scanRecord(): ScanDetailResponse {
 test("full-site JSON and PDF retain scope while homepage projection and score inputs stay unchanged",()=>{
   const record=scanRecord(), baseline=buildCanonicalReportExport(record)!;
   const aggregate=aggregateFullSite({scanId:record.scan.id,status:"completed",requested:{maxPages:200,concurrency:1,waitSeconds:5},effective:{concurrency:1,waitSeconds:5},region:"eu-west-1",configurationHash:"a".repeat(64),startedAt:"2026-09-06T00:00:00.000Z",completedAt:"2026-09-06T00:01:00.000Z",homepageDurationMs:20000,stopReason:"max_pages",robotsRestriction:"robots.txt restricts crawl coverage.",discoveryExhausted:false,discovered:0,peakWorkers:1,pauseMs:null},[]);
-  const fullSite={scope:"Full homepage audit plus additional-page resource inventories",scoreScope:"Homepage audit score",condition:"Fresh visit, no consent action.",countingScope:"Across observed pages; independent visits.",summary:{...aggregate,resources:undefined},timing:{crawlStartedAt:"2026-09-06T00:00:20.000Z"},pages:[],inventoryHref:`/api/scans/${record.scan.id}/full-site`,pageEvidenceHrefTemplate:"?detailPage={pageId}"};
+  const fullSite={scope:"Full homepage audit plus additional-page resource inventories",scoreScope:"Homepage audit score",condition:"Fresh visit, no consent action.",countingScope:"Across observed pages; independent visits.",summary:{...aggregate,resources:undefined},timing:{crawlStartedAt:"2026-09-06T00:00:20.000Z"},pages:[],resources:[{ occurrence: { kind: "request", label: "https://example.test/additional-page-resource", vendor: "Example" }, purposes: ["analytics"], pageIds: ["page-2"] }] as unknown as import("./full-site-report").FullSiteReportExport["resources"],inventoryHref:`/api/scans/${record.scan.id}/full-site`,pageEvidenceHrefTemplate:"?detailPage={pageId}"};
   const report=buildCanonicalReportExport(record,fullSite)!;
   assert.deepEqual(report.projection,baseline.projection);
   assert.deepEqual(report.gdprEprivacyReview,baseline.gdprEprivacyReview);
@@ -49,6 +49,8 @@ test("full-site JSON and PDF retain scope while homepage projection and score in
   const pdf=renderCanonicalReportPdf(report);
   assert.equal(pdf.subarray(0,5).toString(),"%PDF-");
   assert.match(pdf.toString("latin1"),/Website scan report/);
+  assert.match(pdf.toString("latin1"),/additional-page-resource/);
+  assert.equal(report.fullSite?.resources.length, 1);
   assert.match(pdf.toString("latin1"),/Homepage audit score/);
   assert.match(pdf.toString("latin1"),/robots.txt restricts crawl coverage/);
 });
