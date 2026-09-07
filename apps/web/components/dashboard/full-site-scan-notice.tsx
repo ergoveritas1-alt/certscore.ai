@@ -1,3 +1,4 @@
+import { scanFailureExplanation } from "../../lib/scans/scan-failure-explanation";
 import React from "react";
 import Link from "next/link";
 
@@ -6,6 +7,7 @@ export type FullSiteScanNoticeData = {
   hostname: string;
   status: string;
   homepageStatus: string;
+  errorMessage?: string | null;
   region: string;
   startedAt: string | Date;
   limits: { maxPages: number; concurrency: number; waitSeconds: number };
@@ -21,6 +23,7 @@ const regions: Record<string, string> = {
 
 export function FullSiteScanNotice({ scan }: { scan: FullSiteScanNoticeData }) {
   const failed = scan.homepageStatus === "failed" || scan.status === "stopped";
+  const failure = scanFailureExplanation(scan.errorMessage);
   const complete = !failed && scan.status === "completed";
   const running = !failed && ["waiting_homepage", "running"].includes(scan.status);
   if (!failed && !complete && !running) return null;
@@ -36,8 +39,8 @@ export function FullSiteScanNotice({ scan }: { scan: FullSiteScanNoticeData }) {
             <span aria-hidden="true" className={`h-1.5 w-1.5 rounded-full bg-current ${running ? "motion-safe:animate-pulse" : ""}`} />
             {failed ? "Couldn’t finish" : complete ? "Complete" : "In progress"}
           </span>
-          <Link className="rounded-lg border border-slate-200 px-3 py-2 text-sm font-medium text-slate-700 hover:border-sky-300 hover:text-sky-700 focus-visible:outline focus-visible:outline-2 focus-visible:outline-sky-500" href={`/app/scans/${scan.scanId}`}>
-            {complete ? "View report" : "View details"} <span aria-hidden="true">↗</span>
+          <Link className="rounded-lg border border-slate-200 px-3 py-2 text-sm font-medium text-slate-700 hover:border-sky-300 hover:text-sky-700 focus-visible:outline focus-visible:outline-2 focus-visible:outline-sky-500" href={failed ? "#scan-a-site" : `/app/scans/${scan.scanId}`}>
+            {failed ? "Set up new scan" : complete ? "View report" : "View details"} <span aria-hidden="true">↗</span>
           </Link>
         </div>
       </div>
@@ -51,7 +54,12 @@ export function FullSiteScanNotice({ scan }: { scan: FullSiteScanNoticeData }) {
         ].map(([label, value]) => <div key={label}><dt className="text-xs text-slate-500">{label}</dt><dd className="mt-1 text-sm font-medium text-slate-800">{value}</dd></div>)}
       </dl>
       <div className="px-5 py-3 text-sm text-slate-600">
-        {failed ? "This scan couldn’t finish. Open details to review what happened." : complete ? "Your full-site report is ready." : "We’ll email you when the full-site scan is complete. You can leave this page while it runs."}
+        {failed ? <div className="space-y-2">
+          <p className="font-medium text-slate-900">{failure.title}</p>
+          <p className="max-w-3xl leading-6">{failure.detail}</p>
+          <p className="max-w-3xl leading-6">{failure.nextStep}</p>
+          <p className="break-all text-xs text-slate-500">Scan reference: {scan.scanId}</p>
+        </div> : complete ? "Your full-site report is ready." : "We’ll email you when the full-site scan is complete. You can leave this page while it runs."}
       </div>
       <div className="border-t border-slate-100 px-5 py-3">
         <h3 className="text-xs font-medium text-slate-500">Earlier results</h3>

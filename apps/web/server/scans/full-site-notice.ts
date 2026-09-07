@@ -6,7 +6,7 @@ export async function loadFullSiteNotice(scanId: unknown, organizationId: string
   if (!fullSiteInternalEnabled() || typeof scanId !== "string" || !/^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i.test(scanId)) return null;
   // Only the requesting user in this workspace sees the email confirmation.
   return queryOne<FullSiteScanNoticeData>(
-    `select c.scan_id as "scanId", d.hostname, c.status, s.status as "homepageStatus",
+    `select c.scan_id as "scanId", d.hostname, c.status, s.status as "homepageStatus", s.error_message as "errorMessage",
        c.region, c.started_at as "startedAt", c.requested_json as limits,
        coalesce((select jsonb_agg(row_to_json(previous)) from (
          select older.id as "scanId", older.created_at as "startedAt",

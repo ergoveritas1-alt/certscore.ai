@@ -13,7 +13,7 @@ test("active full-site scan confirms email and leaves a report link", () => {
 });
 test("homepage failure cannot display a running confirmation", () => {
   const html = renderToStaticMarkup(<FullSiteScanNotice scan={{ ...scan, status: "waiting_homepage", homepageStatus: "failed" }} />);
-  assert.match(html, /couldn’t finish/i);
+  assert.match(html, /could not finish/i);
   assert.doesNotMatch(html, /email you|in progress/);
 });
 test("terminal crawl replaces progress with the report action", () => {
@@ -29,4 +29,10 @@ test("stopped and unknown crawls do not claim to be running", () => {
 test("scan summary shows recorded settings and earlier report links", () => {
  const html = renderToStaticMarkup(<FullSiteScanNotice scan={{...scan, earlierResults: [{scanId: "prior-scan", startedAt: "2026-09-06T10:00:00Z", label: "Homepage report"}]}} />);
  for (const text of ["Ireland", "10 pages", "4 pages", "5 sec", "5:50 PM PDT", "Homepage report", '/app/scans/prior-scan']) assert.ok(html.includes(text), text);
+});
+
+test("storage failure explains recovery inline without sending users to a dead end", () => {
+ const html = renderToStaticMarkup(<FullSiteScanNotice scan={{...scan, homepageStatus: "failed", errorMessage:"connect ECONNREFUSED 127.0.0.1:9000"}} />);
+ for (const text of ["Evidence storage was unavailable", "not a problem found on the website", "will not resume automatically", 'href="#scan-a-site"']) assert.ok(html.includes(text));
+ assert.doesNotMatch(html, /View details|ECONNREFUSED/);
 });

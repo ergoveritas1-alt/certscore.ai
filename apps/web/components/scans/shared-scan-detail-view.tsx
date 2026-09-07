@@ -1,3 +1,5 @@
+
+import { scanFailureExplanation } from "../../lib/scans/scan-failure-explanation";
 import type { ReactNode } from "react";
 import { afterClickSummary } from "./after-action-summary";
 import { InventoryResourceProvider, InventoryResourceRow, InventoryResourceMobile } from "./inventory-resource-details";
@@ -8117,10 +8119,12 @@ export async function SharedScanDetailView({
                   <path d="M8 8l8 8M16 8l-8 8" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
                 </svg>
                 <div className="space-y-1">
-                  <p className="text-sm font-semibold text-rose-900">Scan failed</p>
+                  <p className="text-sm font-semibold text-rose-900">{scanFailureExplanation(scanRecord.scan.errorMessage).title}</p>
                   <p className="text-sm leading-6 text-rose-800">
-                    {scanRecord.scan.errorMessage ?? "This scan could not be completed. No results are available."}
+                    {scanFailureExplanation(scanRecord.scan.errorMessage).detail}
                   </p>
+                  <p className="text-sm leading-6 text-slate-600">{scanFailureExplanation(scanRecord.scan.errorMessage).nextStep}</p>
+                  <a href="/app" className="inline-block pt-2 text-sm font-medium text-sky-700 underline">Back to Overview</a>
                 </div>
               </div>
             </section>
