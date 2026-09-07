@@ -94,6 +94,7 @@ jobs:
               "types": ["node"],
               "skipLibCheck": true,
               "strict": false,
+              "strictNullChecks": true,
               "noImplicitAny": false,
               "noUncheckedIndexedAccess": false
             },

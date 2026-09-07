@@ -194,7 +194,7 @@ async function main() {
   const baseline = args.baselinePath
     ? await readRequiredJson<LaneQualitySummary>(path.dirname(args.baselinePath), path.basename(args.baselinePath))
     : undefined;
-  const baselineComparison = baseline ? compareLaneQualityBaseline(args.baselinePath, baseline, laneSummary) : undefined;
+  const baselineComparison = baseline && args.baselinePath ? compareLaneQualityBaseline(args.baselinePath, baseline, laneSummary) : undefined;
   const report = buildReport(args, coverage, calibration, queue, fixtures, baselineComparison);
 
   if (args.writeSummary) {
