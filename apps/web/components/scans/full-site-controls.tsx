@@ -21,6 +21,8 @@ export function FullSiteControls({
 }) {
   const id = useId();
   const [policy, setPolicy] = useState<FullSitePolicy | null>(null);
+  const [availability, setAvailability] = useState<"loading" | "denied" | "error">("loading");
+  const [retry, setRetry] = useState(0);
   const [selected, setSelected] = useState(false);
   const [values, setValues] = useState({
     maxPages: "10",
@@ -30,11 +32,13 @@ export function FullSiteControls({
   const [errors, setErrors] = useState<Record<string, string>>({});
   useEffect(() => {
     const controller = new AbortController();
+    setAvailability("loading");
+    const timeout = setTimeout(() => controller.abort(), 10000);
     void fetch("/api/full-scan/options", {
       cache: "no-store",
       signal: controller.signal,
     })
-      .then((r) => (r.ok ? r.json() : null))
+      .then((r) => { if (!r.ok) throw new Error("Options unavailable"); return r.json(); })
       .then((data) => {
         if (data?.allowed) {
           setPolicy(data.policy);
@@ -43,11 +47,12 @@ export function FullSiteControls({
               fields.map(([key]) => [key, String(data.policy[key].default)]),
             ) as typeof values,
           );
-        }
+        } else { setAvailability("denied"); }
       })
-      .catch(() => {});
-    return () => controller.abort();
-  }, []);
+      .catch(() => setAvailability("error"))
+      .finally(() => clearTimeout(timeout));
+    return () => { clearTimeout(timeout); controller.abort(); };
+  }, [retry]);
   function update(enabled: boolean, next = values) {
     setSelected(enabled);
     setValues(next);
@@ -75,7 +80,12 @@ export function FullSiteControls({
       });
     }
   }
-  if (!policy) return null;
+  if (!policy) return availability === "denied" ? null : (
+    <div className="px-3 py-2 text-sm text-slate-600" role="status">
+      <span className="font-semibold">Full site</span>
+      {availability === "loading" ? <span className="ml-2">Loading…</span> : <><span className="ml-2">Could not load.</span><button type="button" className="ml-2 text-sky-700 underline" onClick={() => setRetry(value => value + 1)}>Retry</button></>}
+    </div>
+  );
   return (
     <fieldset className="border-b border-slate-100 bg-white px-3 py-2 text-left text-slate-900">
       <label
