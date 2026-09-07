@@ -10,21 +10,9 @@ export type FullSiteFormValue =
   | { fullSite: true; crawlOptions: CrawlOptions }
   | undefined;
 const fields = [
-  [
-    "maxPages",
-    "Max pages",
-    "Includes the homepage. Additional pages receive resource-inventory-only scans.",
-  ],
-  [
-    "concurrency",
-    "Concurrency",
-    "Maximum simultaneous page scans, subject to shared site safety limits.",
-  ],
-  [
-    "waitSeconds",
-    "Between page starts",
-    "Minimum seconds between starting page scans. Running scans may overlap up to the concurrency limit.",
-  ],
+  ["maxPages", "Max pages"],
+  ["concurrency", "Concurrency"],
+  ["waitSeconds", "Scan lag (sec)"],
 ] as const;
 export function FullSiteControls({
   onChange,
@@ -110,18 +98,17 @@ export function FullSiteControls({
         </span>
       </label>
       {selected ? (
-        <div className="mt-3 grid gap-2">
-          {fields.map(([key, label, helper]) => (
-            <div key={key} className={key !== "waitSeconds" ? "grid grid-cols-[1fr_5rem] items-center gap-x-3 gap-y-1" : undefined}>
+        <div className="mt-3 grid gap-2 pl-3">
+          {fields.map(([key, label]) => (
+            <div key={key} className="grid grid-cols-[1fr_5rem] items-center gap-x-3 gap-y-1">
               <label
                 className="block text-sm font-medium"
                 htmlFor={`${id}-${key}`}
               >
                 {label}
-                {key === "waitSeconds" ? " (seconds)" : ""}
               </label>
               <input
-                className={`${key === "waitSeconds" ? "mt-1 " : ""}w-full rounded-lg border border-slate-300 px-2 py-1 text-sm`}
+                className="w-full rounded-lg border border-slate-300 px-2 py-1 text-sm"
                 id={`${id}-${key}`}
 
                 type="number"
@@ -131,7 +118,7 @@ export function FullSiteControls({
                 required
                 value={values[key]}
                 aria-invalid={!!errors[key]}
-                aria-describedby={errors[key] ? `${id}-${key}-error` : key === "waitSeconds" ? `${id}-${key}-help` : undefined}
+                aria-describedby={errors[key] ? `${id}-${key}-error` : undefined}
                 onChange={(event) =>
                   update(true, { ...values, [key]: event.target.value })
                 }
@@ -142,12 +129,6 @@ export function FullSiteControls({
                   }))
                 }
               />
-              {key === "waitSeconds" ? <p
-                id={`${id}-${key}-help`}
-                className="mt-1 text-xs text-slate-600"
-              >
-                {helper} Allowed: {policy[key].min}–{policy[key].max}.
-              </p> : null}
               {errors[key] ? (
                 <p id={`${id}-${key}-error`} role="alert" className="col-span-full text-xs text-red-700">
                   {errors[key]}
