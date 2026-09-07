@@ -107,3 +107,9 @@ test("original cells remain unchanged and companion detail rows are collapsed an
   assert.match(html, /colSpan="3"/);
   assert.doesNotMatch(html, /Find a resource/);
 });
+
+test("deferred page graphs expose a load control before any graph nodes are fetched", () => {
+  const html = renderToStaticMarkup(<InventoryResourceProvider source={{ href: "/api/scans/example/full-site/graph", scanId: "example", sha256: "retained-hash" }}><table><tbody><InventoryResourceRow inspect identity={{ cookieRefs: [], requests: [] }} facts={{ name: "Resource" }}><tr><td>Inspect</td><td>Type</td><td>Vendor</td></tr></InventoryResourceRow></tbody></table></InventoryResourceProvider>);
+  assert.match(html, /Load retained relationship links/);
+  assert.doesNotMatch(html, /Explain unavailable relationship evidence/);
+});

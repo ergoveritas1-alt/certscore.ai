@@ -1,5 +1,5 @@
 import { describeSiteTechnology } from "@certscore/contracts";
-import { FullSiteWorkspace } from "../full-site-workspace";
+import { FullSiteWorkspace, FullSiteTiming } from "../full-site-workspace";
 import type { ReactNode } from "react";
 import { reportCardTitle, reportEyebrow, reportSectionTitle } from "../report-typography";
 import { InventorySortProvider, InventorySortHeader, InventorySortedBody } from "../inventory-sorting";
@@ -203,7 +203,7 @@ function ReportIdentity({
             <ScanFromMarker {...getScanFromMarkerInput(report.scan.originCode)} selected />
             Scanned from {report.scan.origin}
           </span>
-          <span className={monoClass}>{report.scan.duration}</span>
+          {workspaceIdentity ? <FullSiteTiming /> : <span className={monoClass}>{report.scan.duration}</span>}
         </div>
         {enhancedActions && !workspaceIdentity ? (
           <ReportScanNext allowRestrictedScanOptions={allowRestrictedScanOptions} defaultScanFrom={defaultScanFrom} mode={mode} report={report} />
@@ -224,6 +224,7 @@ function ReportIdentity({
           <div className="flex shrink-0 flex-wrap items-center gap-2">
           {!hideShare && (enhancedActions ? (
             <ShadowReportShareMenu
+              fullSite={Boolean(report.fullSite)}
               reportUrl={report.scan.reportUrl ?? SHADOW_REPORT_SOURCE_URL}
               scanId={report.scan.id}
               siteLabel={report.scan.host}

@@ -1,6 +1,6 @@
 "use client";
 import { scanFailureExplanation } from "../../lib/scans/scan-failure-explanation";
-import { useEffect, useRef, useState, type ReactNode } from "react";
+import { createContext, useContext, useEffect, useRef, useState, type ReactNode } from "react";
 import {
   FULL_SITE_CONDITION,
   type CrawlOptions,
@@ -65,6 +65,11 @@ const timestamp = (value: string | null | undefined) =>
     : "In progress";
 const button =
   "rounded-lg border border-zinc-200 bg-white px-3 py-2 text-sm text-zinc-800 hover:border-sky-500 focus-visible:outline focus-visible:outline-2 focus-visible:outline-sky-600";
+
+const FullSiteTimingContext = createContext<ReactNode>(null);
+export function FullSiteTiming() {
+  return useContext(FullSiteTimingContext);
+}
 
 function CrawlResourceScope({ homepage, source, children }: { homepage: boolean; source?: InventoryGraphSource; children: ReactNode }) {
   return homepage ? children : <InventoryResourceProvider source={source}>{children}</InventoryResourceProvider>;
@@ -215,55 +220,8 @@ export function FullSiteWorkspace({
       ...(data?.discovery.beyond ?? []),
       ...(data?.discovery.widespread ?? []),
     ].find((r) => r.key === resource);
-  return (
-    <div
-      className="mx-auto max-w-[1500px] px-4 py-4 text-zinc-900 sm:px-6"
-      data-full-site-report
-    >
-      <header className="border-b border-zinc-200 pb-3">
-        <div className="flex flex-wrap items-start justify-between gap-3">
-          <div className="flex items-center gap-2">
-            <h1 className="text-xl font-semibold tracking-tight">Site scan results</h1>
-            <span className="rounded-full bg-sky-50 px-2 py-0.5 text-xs font-medium text-sky-800">{state?.status === "stopped" ? "Unsuccessful" : state?.status.replaceAll("_", " ") ?? "Loading"}</span>
-          </div>
-          <div className="flex w-full flex-wrap items-start justify-end gap-2 lg:w-auto lg:flex-1">
-            {scanNext}
-            {state && !["stopped", "cancelled"].includes(state.status) ? <>
-            <a className={`${button} inline-flex items-center gap-1.5 !py-1.5`} href={`/api/scans/${scanId}/report-export?format=pdf`}><span aria-hidden="true">↓</span>PDF</a>
-            <a className={`${button} inline-flex items-center gap-1.5 !py-1.5`} href={`/api/scans/${scanId}/report-export?format=json`}><span aria-hidden="true">⇩</span>Export</a>
-            </> : null}
-          </div>
-        </div>
-        {state?.status === "stopped" ? <div role="status" className="mt-3 flex flex-wrap items-center justify-between gap-3 rounded-lg border border-amber-200/70 bg-amber-50/50 px-4 py-3">
-          <div className="min-w-0 text-sm">
-            <p className="font-semibold text-zinc-900">Full-site scan couldn’t finish</p>
-            <p className="mt-1 max-w-2xl text-zinc-600">{state.stopReason === "dispatch_queue_unavailable" ? "Full site scan was unsuccessful. Partial results of the scan are shown below. Try to scan the site again. Contact support@certscore.ai if you encounter more issues." : scanFailureExplanation(state.stopReason).detail}</p>
-          </div>
-        </div> : null}
-        <div className="mt-3">{state && !["stopped", "cancelled"].includes(state.status) ? identity : identityWithoutSharing ?? identity}</div>
-        <div aria-live="polite" className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-xs text-zinc-600">
-          <span><strong className="text-zinc-900">{counts?.completed ?? "—"}</strong> complete · {counts?.partial ?? 0} partial · {counts?.blockedFailed ?? 0} failed · {counts?.pending ?? 0} pending</span>
-          <span>Limit {requested.maxPages} pages</span><span>{state?.region}</span>
-          <span>{FULL_SITE_CONDITION}</span>
-        </div>
-        {state?.robotsRestriction ? (
-          <p
-            role="status"
-            className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-950"
-          >
-            {state.robotsRestriction}
-          </p>
-        ) : null}
-        {state &&
-        (state.effective.concurrency !== requested.concurrency ||
-          state.effective.waitSeconds !== requested.waitSeconds) ? (
-          <p className="text-sm text-sky-800">
-            Effective shared restrictions: at most {state.effective.concurrency}{" "}
-            active page workers; at least {state.effective.waitSeconds}s between
-            starts. Backoff and homepage audits may pause dispatch.
-          </p>
-        ) : null}
-        <details className="mt-2 text-xs text-zinc-600">
+  const timing = (
+        <details className="relative text-xs text-zinc-600">
           <summary className="cursor-pointer font-medium">
             Coverage & timing ·{" "}
             {duration(
@@ -273,12 +231,13 @@ export function FullSiteWorkspace({
                 : null,
             )}
           </summary>
+          <div className="absolute left-0 top-full z-20 mt-2 w-[min(36rem,80vw)] rounded-lg border border-zinc-200 bg-white p-4 shadow-lg">
           <dl className="mt-2 grid gap-2 sm:grid-cols-3">
             {[
               ["Page limit", requested.maxPages],
               ["Concurrency", state?.effective.concurrency ?? requested.concurrency],
               ["Seconds between starts", state?.effective.waitSeconds ?? requested.waitSeconds],
-              ["Stopped because", state?.stopReason?.replaceAll("_", " ") ?? "In progress"],
+              ["Stopped because", state?.stopReason?.replaceAll("_", " ") ?? (running ? "In progress" : "Not stopped")],
               ["Excluded links (not crawled)", counts?.excluded ?? 0],
               ["Started", timestamp(state?.startedAt)],
               ["Completed", timestamp(state?.completedAt)],
@@ -318,7 +277,56 @@ export function FullSiteWorkspace({
             total duration is wall-clock time. Overlapping durations are not
             added. Load latency is not reported.
           </p>
+          </div>
         </details>
+  );
+  return (
+    <FullSiteTimingContext.Provider value={timing}>
+    <div
+      className="mx-auto max-w-[1500px] px-4 py-4 text-zinc-900 sm:px-6"
+      data-full-site-report
+    >
+      <header className="border-b border-zinc-200 pb-3">
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div className="flex items-center gap-2">
+            <h1 className="text-xl font-semibold tracking-tight">Site scan results</h1>
+            <span className="rounded-full bg-sky-50 px-2 py-0.5 text-xs font-medium text-sky-800">{state?.status === "stopped" ? "Unsuccessful" : state?.status.replaceAll("_", " ") ?? "Loading"}</span>
+          </div>
+          <div className="flex w-full flex-wrap items-start justify-end gap-2 lg:w-auto lg:flex-1">
+            {scanNext}
+
+          </div>
+        </div>
+        {state?.status === "stopped" ? <div role="status" className="mt-3 flex flex-wrap items-center justify-between gap-3 rounded-lg border border-amber-200/70 bg-amber-50/50 px-4 py-3">
+          <div className="min-w-0 text-sm">
+            <p className="font-semibold text-zinc-900">Full-site scan couldn’t finish</p>
+            <p className="mt-1 max-w-2xl text-zinc-600">{state.stopReason === "dispatch_queue_unavailable" ? "Full site scan was unsuccessful. Partial results of the scan are shown below. Try to scan the site again. Contact support@certscore.ai if you encounter more issues." : scanFailureExplanation(state.stopReason).detail}</p>
+          </div>
+        </div> : null}
+        <div className="mt-3">{state && !["stopped", "cancelled"].includes(state.status) ? identity : identityWithoutSharing ?? identity}</div>
+        <div aria-live="polite" className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-xs text-zinc-600">
+          <span><strong className="text-zinc-900">{counts?.completed ?? "—"}</strong> complete · {counts?.partial ?? 0} partial · {counts?.blockedFailed ?? 0} failed · {counts?.pending ?? 0} pending</span>
+          <span>Limit {requested.maxPages} pages</span><span>{state?.region}</span>
+          <span>{FULL_SITE_CONDITION}</span>
+        </div>
+        {state?.robotsRestriction ? (
+          <p
+            role="status"
+            className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-950"
+          >
+            {state.robotsRestriction}
+          </p>
+        ) : null}
+        {state &&
+        (state.effective.concurrency !== requested.concurrency ||
+          state.effective.waitSeconds !== requested.waitSeconds) ? (
+          <p className="text-sm text-sky-800">
+            Effective shared restrictions: at most {state.effective.concurrency}{" "}
+            active page workers; at least {state.effective.waitSeconds}s between
+            starts. Backoff and homepage audits may pause dispatch.
+          </p>
+        ) : null}
+
         {running ? (
           <p className="text-sm text-sky-800">
             Results so far · {state?.discovered ?? 0} discovered ·{" "}
@@ -466,7 +474,7 @@ export function FullSiteWorkspace({
                     <tbody>
                       {data?.resources.rows.map((row) => (
                         <CrawlResourceScope key={row.key} source={data.pageChoices.find(page => page.id === row.pageIds[0])?.graphSource} homepage={data.pages.rows.find(page => page.id === row.pageIds[0])?.source === "homepage"}>
-                        <InventoryResourceRow inspect positiveRelationshipsOnly relationships={Boolean(data.pageChoices.find(page => page.id === row.pageIds[0])?.graphSource || (homepageGraph && data.pages.rows.find(page => page.id === row.pageIds[0])?.source === "homepage"))} identity={{cookieRefs: [], nodeRefs: row.occurrence.graphNodeRefs ?? row.occurrence.evidenceRefs, requests: row.occurrence.kind === "request" ? (() => { try {const url = new URL(row.occurrence.label);return [{hostname: url.hostname, path: url.pathname, method: typeof row.occurrence.details.method === "string" ? row.occurrence.details.method : null}];} catch {return [];}})() : []}} facts={{ name: row.occurrence.label, type: row.occurrence.kind, vendor: row.occurrence.vendor, domains: row.occurrence.domain ? [row.occurrence.domain] : [], purpose: row.purposes.join(", "), evidence: row.inventoryEvidence, confidence: row.confidences.join(", "), pages: row.pageIds.map(pageName), evidencePage: pageName(row.pageIds[0] ?? ""), firstSeenMs: row.occurrence.firstSeenMs, relationship: row.relationships.join(", "), eventCount: row.eventCount }} evidence={{ ...row.occurrence.details, evidenceRefs: row.occurrence.evidenceRefs, resourceIdentity: row.occurrence.identity }}>
+                        <InventoryResourceRow inspect relationships={Boolean(data.pageChoices.find(page => page.id === row.pageIds[0])?.graphSource || (homepageGraph && data.pages.rows.find(page => page.id === row.pageIds[0])?.source === "homepage"))} identity={{cookieRefs: [], nodeRefs: row.occurrence.graphNodeRefs ?? row.occurrence.evidenceRefs, requests: row.occurrence.kind === "request" ? (() => { try {const url = new URL(row.occurrence.label);return [{hostname: url.hostname, path: url.pathname, method: typeof row.occurrence.details.method === "string" ? row.occurrence.details.method : null}];} catch {return [];}})() : []}} facts={{ name: row.occurrence.label, type: row.occurrence.kind, vendor: row.occurrence.vendor, domains: row.occurrence.domain ? [row.occurrence.domain] : [], purpose: row.purposes.join(", "), evidence: row.inventoryEvidence, confidence: row.confidences.join(", "), pages: row.pageIds.map(pageName), evidencePage: pageName(row.pageIds[0] ?? ""), firstSeenMs: row.occurrence.firstSeenMs, relationship: row.relationships.join(", "), eventCount: row.eventCount }} evidence={{ ...row.occurrence.details, evidenceRefs: row.occurrence.evidenceRefs, resourceIdentity: row.occurrence.identity }}>
                         <tr className="h-14 border-b border-zinc-100" key={row.key}>
                           <td className="h-14 pr-3"><button title={row.inventoryEvidence} aria-label={`${row.inventoryEvidence}: inspect ${row.occurrence.label}`} className={`text-lg ${evidenceStyle(row.inventoryEvidence)}`} onClick={() => openResource(row.key)}>{evidenceSymbol(row.inventoryEvidence)}</button></td>
                           <td className="px-3"><span className="text-sky-700" title={row.occurrence.kind}>{row.occurrence.kind === "request" ? "⇄" : row.occurrence.kind === "embed" ? "‹›" : row.occurrence.kind === "cookie" ? "◉" : "▤"}</span><span className="sr-only">{row.occurrence.kind}</span></td>
@@ -653,5 +661,6 @@ export function FullSiteWorkspace({
         </>
       ) : null}
     </div>
+    </FullSiteTimingContext.Provider>
   );
 }

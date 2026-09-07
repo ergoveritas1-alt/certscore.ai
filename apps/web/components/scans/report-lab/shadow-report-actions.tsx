@@ -6,12 +6,13 @@ type ShadowReportActionsProps = {
   reportUrl: string;
   scanId: string;
   siteLabel: string;
+  fullSite?: boolean;
 };
 
 const menuItemClass =
   "flex w-full items-center justify-between gap-4 rounded-md px-3 py-2.5 text-left text-sm font-medium text-zinc-700 hover:bg-zinc-100 hover:text-zinc-950 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-500";
 
-export function ShadowReportShareMenu({ reportUrl, scanId, siteLabel }: ShadowReportActionsProps) {
+export function ShadowReportShareMenu({ reportUrl, scanId, siteLabel, fullSite = false }: ShadowReportActionsProps) {
   const [copyState, setCopyState] = useState<"idle" | "copied" | "failed">("idle");
   const emailSubject = `CertScore scan report for ${siteLabel}`;
   const emailBody = `Review the CertScore scan report for ${siteLabel}:\n\n${reportUrl}`;
@@ -52,17 +53,17 @@ export function ShadowReportShareMenu({ reportUrl, scanId, siteLabel }: ShadowRe
         <a
           className={menuItemClass}
           download
-          href={`/api/scans/${encodeURIComponent(scanId)}/report-export?format=pdf`}
+          href={`/api/scans/${encodeURIComponent(scanId)}/report-export?format=pdf${fullSite ? "&scope=full-site" : ""}`}
         >
-          <span>Download PDF report</span>
+          <span>{fullSite ? "Download full-site PDF" : "Download PDF report"}</span>
           <span aria-hidden="true" className="text-zinc-400">↓</span>
         </a>
         <a
           className={menuItemClass}
           download
-          href={`/api/scans/${encodeURIComponent(scanId)}/report-export?format=json`}
+          href={`/api/scans/${encodeURIComponent(scanId)}/report-export?format=json${fullSite ? "&scope=full-site" : ""}`}
         >
-          <span>Download JSON report</span>
+          <span>{fullSite ? "Download full-site JSON" : "Download JSON report"}</span>
           <span aria-hidden="true" className="font-mono text-xs text-zinc-400">{'{}'}</span>
         </a>
       </div>
