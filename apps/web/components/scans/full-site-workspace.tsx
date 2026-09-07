@@ -226,8 +226,10 @@ export function FullSiteWorkspace({
           </div>
           <div className="flex w-full flex-wrap items-start justify-end gap-2 lg:w-auto lg:flex-1">
             {scanNext}
+            {state && !["stopped", "cancelled"].includes(state.status) ? <>
             <a className={`${button} inline-flex items-center gap-1.5 !py-1.5`} href={`/api/scans/${scanId}/report-export?format=pdf`}><span aria-hidden="true">↓</span>PDF</a>
             <a className={`${button} inline-flex items-center gap-1.5 !py-1.5`} href={`/api/scans/${scanId}/report-export?format=json`}><span aria-hidden="true">⇩</span>Export</a>
+            </> : null}
           </div>
         </div>
         {state?.status === "stopped" ? <div role="status" className="mt-3 flex flex-wrap items-center justify-between gap-3 rounded-lg border border-amber-200/70 bg-amber-50/50 px-4 py-3">
