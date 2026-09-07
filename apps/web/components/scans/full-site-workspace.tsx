@@ -84,7 +84,7 @@ export function FullSiteTiming() {
 }
 
 function CrawlResourceScope({ homepage, source, children }: { homepage: boolean; source?: InventoryGraphSource; children: ReactNode }) {
-  return homepage ? children : <InventoryResourceProvider source={source}>{children}</InventoryResourceProvider>;
+  return homepage ? children : <InventoryResourceProvider source={source} preload>{children}</InventoryResourceProvider>;
 }
 
 export function FullSiteWorkspace({
@@ -517,7 +517,7 @@ export function FullSiteWorkspace({
 
               {inventoryView === "services" && data ? <FullSiteServices key={collapseVersion} scenario="pre_consent" services={data.services} pageName={pageName} pageChoices={data.pageChoices} homepageGraph={homepageGraph} /> : null}
               <div hidden={inventoryView !== "resources"}>
-              <InventoryResourceProvider projection={homepageGraph}><table className="w-full min-w-[1000px] text-left text-xs">
+              <InventoryResourceProvider projection={homepageGraph} preload><table className="w-full min-w-[1000px] text-left text-xs">
                 <caption className="sr-only">
                   {tab === "pages" ? "Page observations" : "Resource evidence"};
                   additional pages receive inventory classification, not full diagnostic audits.

@@ -72,11 +72,8 @@ export function InventoryResourceProvider({ projection: initial, source, preload
           if (!abort.signal.aborted) setLoaded({ key, projection });
           return;
         }
-        const response = await fetch(initial!.details!.href, { credentials: "same-origin", cache: "no-store", signal: abort.signal });
-        if (!response.ok) throw new Error(response.status === 429 ? `Read limit reached. Wait ${response.headers.get("Retry-After") ?? "the indicated number of"} seconds before retrying.` : "Resource evidence could not be loaded. Retry without rescanning.");
-        const parsed = apiRuntimeEvidenceGraphProjectionSchema.safeParse(await response.json());
-        if (!parsed.success || parsed.data.scanId !== initial!.scanId || parsed.data.sourceBundle?.sha256 !== initial!.sourceBundle?.sha256 || parsed.data.details) throw new Error("The retained relationship evidence did not verify.");
-        setLoaded({ key, projection: parsed.data });
+        const projection = await readPageGraph({ href: initial!.details!.href, scanId: initial!.scanId, sha256: initial!.sourceBundle?.sha256 ?? "" });
+        if (!abort.signal.aborted) setLoaded({ key, projection });
       } catch (failure) { if (!abort.signal.aborted) setError(failure instanceof Error ? failure.message : "Evidence unavailable."); }
     })();
     return () => abort.abort();

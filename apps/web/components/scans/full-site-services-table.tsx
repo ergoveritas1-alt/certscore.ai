@@ -90,7 +90,7 @@ export function FullSiteServices({ services, pageName, pageChoices, homepageGrap
             </tr>
             {open ? service.resources.map(row => {
               const page = pageChoices.find(page => page.id === row.pageIds[0]);
-              return <InventoryResourceProvider key={row.key} source={page?.source === "homepage" ? undefined : page?.graphSource} projection={page?.source === "homepage" ? homepageGraph : undefined}><ServiceResourceRows row={row} serviceContext={service.context} nested scenario={scenario} pageName={pageName}/></InventoryResourceProvider>;
+              return <InventoryResourceProvider preload key={row.key} source={page?.source === "homepage" ? undefined : page?.graphSource} projection={page?.source === "homepage" ? homepageGraph : undefined}><ServiceResourceRows row={row} serviceContext={service.context} nested scenario={scenario} pageName={pageName}/></InventoryResourceProvider>;
             }) : null}
           </Fragment>;
         })}</tbody>

@@ -62,12 +62,13 @@ function JsonEvidence({ name, value, onOpen }: { name: string; value: unknown; o
 
 export function ServiceResourceRows({ row, pageName, scenario = "pre_consent", collapseVersion = 0, resourceContext, serviceContext, nested = false }: { nested?: boolean; serviceContext?: ResourceContext["context"]; resourceContext?: ResourceContext; collapseVersion?: number; row: Resource; pageName: (id: string) => string; scenario?: ApiRuntimeEvidenceGraph["scenario"] }) {
   const [openVersion, setOpenVersion] = useState<number>();
-  const open = openVersion === collapseVersion;
+  const requestedOpen = openVersion === collapseVersion;
   const context = resourceContext?.context ?? serviceContext;
   const { projection, load, error, sourceAvailable } = useInventoryResourceEvidence();
   const graph = projection?.graphs.find(item => item.scenario === scenario);
   const matches = graph ? matchInventoryResources(graph, crawlOccurrenceGraphIdentity(row.occurrence)) : [];
   const links = graph ? serviceResourceLinks(graph, matches.map(node => node.id)) : [];
+  const open = requestedOpen && links.length > 0;
   const pages = row.pageIds.map(pageName);
   const occurrence = row.occurrence;
   const colSpan = 12;
@@ -77,7 +78,7 @@ export function ServiceResourceRows({ row, pageName, scenario = "pre_consent", c
 
     <td className="w-14 px-2 text-center text-xs font-medium tabular-nums text-slate-600" title="Retained events for this resource">{row.eventCount}</td>
     <td className={`${cell} w-12 text-center`}><InventoryTypeIcon kind={row.kind}/></td>
-    <th scope="row" className={`${cell} font-normal`}><div className={`flex max-w-72 items-center gap-2 ${nested ? "ml-3 border-l border-slate-200 pl-3" : ""}`}>{open || !graph || links.length ? <RelationshipControl name={row.name} open={open} count={graph && matches.length ? links.length : resourceContext?.relationshipCount} countHint={!graph && resourceContext?.relationshipCount !== undefined ? `${resourceContext.relationshipCount} retained children; expand to load parents and children` : undefined} onClick={() => { setOpenVersion(open ? undefined : collapseVersion); if (!open) load(); }}/> : <span className="w-[50px] shrink-0" aria-hidden="true"/>}<VendorBrandIcon label={occurrence.vendor ?? occurrence.domain ?? row.name}/><div className="min-w-0">{occurrence.vendor ? <span title={occurrence.vendor} className="block truncate text-xs font-medium text-slate-800">{occurrence.vendor}</span> : null}<InventoryNameDisclosure compact fullName={row.name} className={occurrence.vendor ? "text-[11px]" : ""}/></div></div></th>
+    <th scope="row" className={`${cell} font-normal`}><div className={`flex max-w-72 items-center gap-2 ${nested ? "ml-3 border-l border-slate-200 pl-3" : ""}`}>{links.length > 0 ? <RelationshipControl name={row.name} open={open} count={graph && matches.length ? links.length : resourceContext?.relationshipCount} countHint={!graph && resourceContext?.relationshipCount !== undefined ? `${resourceContext.relationshipCount} retained children; expand to load parents and children` : undefined} onClick={() => { setOpenVersion(open ? undefined : collapseVersion); if (!open) load(); }}/> : <span className="w-[50px] shrink-0" aria-hidden="true"/>}<VendorBrandIcon label={occurrence.vendor ?? occurrence.domain ?? row.name}/><div className="min-w-0">{occurrence.vendor ? <span title={occurrence.vendor} className="block truncate text-xs font-medium text-slate-800">{occurrence.vendor}</span> : null}<InventoryNameDisclosure compact fullName={row.name} className={occurrence.vendor ? "text-[11px]" : ""}/></div></div></th>
     <td className={`${cell} w-12 text-center`}><InventoryEvidenceIcon evidence={row.inventoryEvidence}/></td>
     <td className={cell}><InventoryPurposeList purposes={row.purposes} relationships={row.relationships}/></td>
     {context ? <><td className={cell}><PolicyDisclosure context={context} label={row.name}/></td><td className={cell}><DataTransferDisclosure location requestUrls={row.kind === "request" ? [row.name] : []} context={context} destinations={resourceContext?.destinations ?? row.destinations} resourceKind={row.kind} coverage={{ assessed: row.destinationAssessedCount, total: row.eventCount, missing: row.destinationMissingCount, truncated: row.destinationsTruncated }} label={row.name}/></td></> : <><td className={cell}>—</td><td className={cell}>—</td></>}
