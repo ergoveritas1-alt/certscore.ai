@@ -71,6 +71,17 @@ test("validation deployment classifiers include web server dependencies compiled
   assert.match(predeploySource, /file\.startsWith\("apps\/web\/server\/"\)/);
 });
 
+test("validation cached runtime refreshes every direct workspace dependency and checks installed behavior", async () => {
+  const dockerfile = await readFile("apps/validation-worker/Dockerfile", "utf8");
+  const runtime = dockerfile.split("FROM ${VALIDATION_WORKER_RUNTIME_BASE} AS runtime")[1]!;
+  const manifest = JSON.parse(await readFile("apps/validation-worker/package.json", "utf8"));
+  for (const [name, version] of Object.entries(manifest.dependencies)) {
+    if (!String(version).startsWith("workspace:")) continue;
+    assert.ok(runtime.includes(`./node_modules/${name}/dist`), `Current build must replace cached ${name}`);
+  }
+  assert.match(runtime, /RUN node \.\/verify-installed-compaction\.cjs/);
+});
+
 test("production ops monitor assumes the validation role for ECS probes", async () => {
   const source = await readFile(".github/workflows/prod-ops-monitor.yml", "utf8");
 
