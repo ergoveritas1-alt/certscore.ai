@@ -26,9 +26,10 @@ test("stopped and unknown crawls do not claim to be running", () => {
   assert.equal(renderToStaticMarkup(<FullSiteScanNotice scan={{ ...scan, status: "unknown" }} />), "");
 });
 
-test("scan summary shows recorded settings and earlier report links", () => {
- const html = renderToStaticMarkup(<FullSiteScanNotice scan={{...scan, earlierResults: [{scanId: "prior-scan", startedAt: "2026-09-06T10:00:00Z", label: "Homepage report"}]}} />);
- for (const text of ["Ireland", "10 pages", "4 pages", "5 sec", "5:50 PM PDT", "Homepage report", '/app/scans/prior-scan']) assert.ok(html.includes(text), text);
+test("scan summary shows recorded settings without earlier results", () => {
+ const html = renderToStaticMarkup(<FullSiteScanNotice scan={scan} />);
+ for (const text of ["Ireland", "10 pages", "4 pages", "5 sec", "5:50 PM PDT"]) assert.ok(html.includes(text), text);
+ assert.doesNotMatch(html, /Earlier results|Homepage report/);
 });
 
 test("storage failure explains recovery inline without sending users to a dead end", () => {
@@ -39,7 +40,7 @@ test("storage failure explains recovery inline without sending users to a dead e
 
 test("report header links back to Overview without a self-link", () => {
  const html = renderToStaticMarkup(<FullSiteScanNotice scan={scan} reportPage />);
- assert.ok(html.includes(`/app?fullSiteScan=${scan.scanId}`));
+ assert.ok(html.includes('href="/app"'));
  assert.match(html, /<h1/);
  assert.doesNotMatch(html, /View details/);
 });

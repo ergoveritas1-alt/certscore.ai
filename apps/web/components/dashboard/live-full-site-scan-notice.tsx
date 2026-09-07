@@ -56,10 +56,10 @@ export function LiveFullSiteScanNotice({ scan: initial, reportPage = false }: { 
     const visibility = () => {
       clearTimeout(timer);
       if (document.visibilityState === "hidden") controller?.abort();
-      else schedule(15000);
+      else schedule(0);
     };
     document.addEventListener("visibilitychange", visibility);
-    schedule(15000);
+    schedule(0);
     return () => { disposed = true; clearTimeout(timer); controller?.abort(); document.removeEventListener("visibilitychange", visibility); };
   }, [initial]);
   return <FullSiteScanNotice scan={scan} statusStale={stale} reportPage={reportPage} />;

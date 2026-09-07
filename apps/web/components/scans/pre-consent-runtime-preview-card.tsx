@@ -232,9 +232,11 @@ function returnedIdentityNote(preview: ApiV2PreConsentRuntimePreview) {
 export function PreConsentRuntimePreviewCard({
   preview,
   startedAt,
+  heading = "What happened by the runtime checkpoint",
 }: {
   preview: ApiV2PreConsentRuntimePreview;
   startedAt: string | null;
+  heading?: string;
 }) {
   const inventory = previewInventory(preview);
   const trackingVendorCount = preview.summary.trackingVendorCount ?? preview.summary.trackerCount;
@@ -246,7 +248,7 @@ export function PreConsentRuntimePreviewCard({
         <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
           <div>
             <p className="text-xs font-semibold uppercase text-sky-700">Early observed sequence</p>
-            <h2 className="mt-1 text-xl font-semibold text-zinc-950">What happened by the runtime checkpoint</h2>
+            <h2 className="mt-1 text-xl font-semibold text-zinc-950">{heading}</h2>
           </div>
           <p className="font-mono text-xs text-zinc-500">0s → {checkpointMs > 0 ? formatElapsedTime(checkpointMs) : "checkpoint"}</p>
         </div>

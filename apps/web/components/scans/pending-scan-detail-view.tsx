@@ -169,7 +169,7 @@ export function PendingScanDetailView({
       />
       </>}
       {progress.preConsentPreview ? (
-        <PreConsentRuntimePreviewCard preview={progress.preConsentPreview} startedAt={startedAt} />
+        <PreConsentRuntimePreviewCard heading={fullSite ? "Early preview results from home page" : undefined} preview={progress.preConsentPreview} startedAt={startedAt} />
       ) : null}
       <ScanStatusAutoRefresh
         onTerminalNavigation={handleTerminalNavigation}

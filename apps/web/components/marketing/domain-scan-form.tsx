@@ -895,7 +895,7 @@ export function DomainScanForm({
         reportRescanTransition?.cancel();
         isSubmittingRef.current = false;
         setIsSubmitting(false);
-        router.push(`/app?fullSiteScan=${payload.scanId}`);
+        router.push(`/app/scans/${payload.scanId}`);
         router.refresh();
         return;
       }
