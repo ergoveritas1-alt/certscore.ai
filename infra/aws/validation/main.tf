@@ -92,6 +92,7 @@ locals {
       { name = "WORKER_CONCURRENCY", value = var.worker_concurrency },
       { name = "LLM_ENRICHMENT_ENABLED", value = var.llm_enrichment_enabled },
       { name = "PLAYWRIGHT_BROWSERS_PATH", value = var.playwright_browsers_path },
+      { name = "CERTSCORE_FULL_SITE_INTERNAL_ENABLED", value = "1" },
       { name = "CERTSCORE_V2_DAG_LAMBDA_RESULT_POLL_ENABLED", value = "1" },
       { name = "CERTSCORE_V2_DAG_LAMBDA_RESULT_POLL_SECONDS", value = "2" },
       { name = "CERTSCORE_V2_DAG_LAMBDA_TARGET_ENV", value = "production" },

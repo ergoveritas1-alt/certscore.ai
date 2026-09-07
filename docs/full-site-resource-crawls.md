@@ -178,7 +178,10 @@ Release requires the migration, the Terraform-managed 25-second inventory functi
 in all three regions, and coordinated web, validation worker and Lambda code updates
 through the repository's AWS workflow. `deploy-fast.ts` promotes the same verified
 image digest to both homepage and inventory functions. Keep the private switch off
-until this rollout is complete. The existing
+until this rollout is complete. The September 7, 2026 owner-authorized production
+activation sets this switch in the checked-in web/materializer and validation
+deployment configuration after the coordinated release. Role eligibility and
+per-crawl opt-in remain enforced. The existing
 dispatch publisher enablement/queue URLs are reused. Apply the migration first,
 update all three regional Lambda handlers, then the web control plane, and finally
 the validation publisher/scheduler. This prevents child jobs reaching an older
