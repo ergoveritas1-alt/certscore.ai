@@ -300,3 +300,23 @@ The report header uses non-interactive summary cells. “Site score” displays 
 existing homepage diagnostic score with an explicit homepage scope. Additional
 pages still receive inventory-only scans. Site identity and the next-scan form
 are shared above both report tabs; the scan options use a Full site switch.
+
+### Overview progress checks
+
+The Overview scan card uses `/api/scans/:scanId/full-site/progress` for a small,
+requester- and organization-scoped counters response. It checks every 15 seconds
+while visible, permits one request at a time, aborts on navigation/backgrounding,
+and stops when the crawl or homepage fails or reaches a terminal state. Failed
+checks back off to 120 seconds and honor `Retry-After`. The route uses the canonical
+status read quota and does not load artifacts, rebuild reports, or query history.
+
+The bar counts processed pages and separately labels completed, partial, and
+unsuccessful outcomes. Until discovery finishes, the requested page limit is an
+upper bound. ETA is approximate, based on recorded page durations, effective
+concurrency, and effective spacing; it is unavailable before a timed page outcome.
+Active scans do not display 100% before terminal publication.
+
+Estimated incremental cost: below $1/month on existing provisioned services for
+1,000 scans/month viewed for ten minutes each (at most 40,000 small status checks).
+No additional capacity, scan invocations, model calls, or retained evidence are
+introduced. Cost and request volume scale with concurrent viewers and viewing time.

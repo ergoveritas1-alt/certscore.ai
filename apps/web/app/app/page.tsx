@@ -1,4 +1,4 @@
-import { FullSiteScanNotice } from "../../components/dashboard/full-site-scan-notice";
+import { LiveFullSiteScanNotice } from "../../components/dashboard/live-full-site-scan-notice";
 import { loadFullSiteNotice } from "../../server/scans/full-site-notice";
 import { Card, CardContent, CardHeader, CardTitle } from "@website-signal-risk-scanner/ui";
 import Link from "next/link";
@@ -116,7 +116,7 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
         <p className="mt-1 text-sm text-slate-500">Scan a website, review what needs attention, and track meaningful changes over time.</p>
       </div>
 
-      {notice ? <FullSiteScanNotice scan={notice} /> : null}
+      {notice ? <LiveFullSiteScanNotice scan={notice} /> : null}
 
       <div className="grid gap-4 lg:grid-cols-2">
         <Card className="scroll-mt-6 border-sky-100 bg-[linear-gradient(145deg,#ffffff_0%,#f5fbff_100%)] shadow-sm" id="scan-a-site">

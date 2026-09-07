@@ -1,3 +1,4 @@
+import { fullSiteProgressSql } from "./full-site-progress";
 import "server-only";
 import { fullSiteInternalEnabled, queryOne } from "@website-signal-risk-scanner/db";
 import type { FullSiteScanNoticeData } from "../../components/dashboard/full-site-scan-notice";
@@ -7,6 +8,7 @@ export async function loadFullSiteNotice(scanId: unknown, organizationId: string
   // Only the requesting user in this workspace sees the email confirmation.
   return queryOne<FullSiteScanNoticeData>(
     `select c.scan_id as "scanId", d.hostname, c.status, s.status as "homepageStatus", s.error_message as "errorMessage",
+       (select ${fullSiteProgressSql} from full_site_pages p where p.scan_id=c.scan_id) as progress,
        c.region, c.started_at as "startedAt", c.requested_json as limits,
        coalesce((select jsonb_agg(row_to_json(previous)) from (
          select older.id as "scanId", older.created_at as "startedAt",
