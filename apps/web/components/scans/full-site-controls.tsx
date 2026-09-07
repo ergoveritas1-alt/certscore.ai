@@ -112,7 +112,7 @@ export function FullSiteControls({
       {selected ? (
         <div className="mt-3 grid gap-2">
           {fields.map(([key, label, helper]) => (
-            <div key={key}>
+            <div key={key} className={key !== "waitSeconds" ? "grid grid-cols-[1fr_5rem] items-center gap-x-3 gap-y-1" : undefined}>
               <label
                 className="block text-sm font-medium"
                 htmlFor={`${id}-${key}`}
@@ -121,7 +121,7 @@ export function FullSiteControls({
                 {key === "waitSeconds" ? " (seconds)" : ""}
               </label>
               <input
-                className="mt-1 w-full rounded-lg border border-slate-300 px-2 py-1 text-sm"
+                className={`${key === "waitSeconds" ? "mt-1 " : ""}w-full rounded-lg border border-slate-300 px-2 py-1 text-sm`}
                 id={`${id}-${key}`}
 
                 type="number"
@@ -131,7 +131,7 @@ export function FullSiteControls({
                 required
                 value={values[key]}
                 aria-invalid={!!errors[key]}
-                aria-describedby={`${id}-${key}-help`}
+                aria-describedby={errors[key] ? `${id}-${key}-error` : key === "waitSeconds" ? `${id}-${key}-help` : undefined}
                 onChange={(event) =>
                   update(true, { ...values, [key]: event.target.value })
                 }
@@ -142,14 +142,14 @@ export function FullSiteControls({
                   }))
                 }
               />
-              <p
+              {key === "waitSeconds" ? <p
                 id={`${id}-${key}-help`}
                 className="mt-1 text-xs text-slate-600"
               >
                 {helper} Allowed: {policy[key].min}–{policy[key].max}.
-              </p>
+              </p> : null}
               {errors[key] ? (
-                <p role="alert" className="text-xs text-red-700">
+                <p id={`${id}-${key}-error`} role="alert" className="col-span-full text-xs text-red-700">
                   {errors[key]}
                 </p>
               ) : null}
