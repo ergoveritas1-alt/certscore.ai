@@ -107,6 +107,16 @@ export default function TermsPage() {
               <p className="text-sm leading-6 text-slate-600">{section.body}</p>
             </section>
           ))}
+          <section id="third-party-data" className="space-y-2">
+            <h2 className="text-2xl font-semibold tracking-tight text-slate-900">14. Third-party data</h2>
+            <p className="text-sm leading-6 text-slate-600">
+              IP geolocation and network data provided by <a href="https://www.iplocate.io/" className="underline underline-offset-4">IPLocate</a>,
+              licensed under <a href="https://creativecommons.org/licenses/by-sa/4.0/" className="underline underline-offset-4">CC BY-SA 4.0</a>.
+              Country and network fields are selected and reformatted for display. This data is provided as-is;
+              IP locations are approximate and may identify a CDN endpoint rather than a processing or storage location.
+              The applicable third-party license governs these data fields.
+            </p>
+          </section>
         </div>
       </section>
       <SiteFooter />

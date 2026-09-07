@@ -1,0 +1,7 @@
+User-agent: ConsentCheckBot
+Allow: /
+
+User-agent: *
+Disallow: /
+
+Sitemap: https://ergoveritas.com/sitemap.xml

@@ -1,5 +1,6 @@
 "use client";
 
+import { FullSiteWorkspace } from "./full-site-workspace";
 import { LiveFullSiteScanNotice } from "../dashboard/live-full-site-scan-notice";
 import type { FullSiteScanNoticeData } from "../dashboard/full-site-scan-notice";
 import type { ApiV2PreConsentRuntimePreview } from "@certscore/api-contracts";
@@ -142,6 +143,36 @@ export function PendingScanDetailView({
       value: handoffValue
     });
   }, [handleProgress, initialStage, scanId, status]);
+
+  if (fullSite) {
+    return (
+      <>
+        <FullSiteWorkspace
+          scanId={scanId}
+          requested={fullSite}
+          initialStartedAt={startedAt ?? createdAt}
+          identity={
+            <div>
+              <p className="text-xs text-zinc-500">{fullSiteNotice?.region === "Local" ? "Scanned locally" : "Full site scan"}</p>
+              <h2 className="mt-2 text-2xl font-semibold tracking-tight">{domainHostname ?? pageUrl ?? "Website"}</h2>
+              <p className="mt-1 break-all font-mono text-xs text-zinc-500">{pageUrl}</p>
+            </div>
+          }
+        >
+          <p role="status" className="py-6 text-sm text-zinc-600">The homepage report will appear here when its assessment is ready.</p>
+        </FullSiteWorkspace>
+        <ScanStatusAutoRefresh
+          onTerminalNavigation={handleTerminalNavigation}
+          onProgress={handleProgress}
+          pendingPostCompletionWork={pendingPostCompletionWork}
+          scanId={scanId}
+          silent
+          status={status}
+          terminalNavigationDelayMs={TERMINAL_NAVIGATION_DELAY_MS}
+        />
+      </>
+    );
+  }
 
   return (
     <div className="space-y-4" data-density="compact">

@@ -6,7 +6,8 @@
     "rootDir": "src",
     "outDir": "dist",
     "declaration": true,
-    "noEmit": false
+    "noEmit": false,
+    "paths": {}
   },
   "include": ["src/**/*.ts"],
   "exclude": ["dist", "node_modules"]

@@ -1,3 +1,4 @@
+import { collectionSurfaceInventorySchema, collectionSurfaceSnapshotSchema } from "@certscore/contracts";
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import {
@@ -122,6 +123,26 @@ export async function POST(request: Request) {
     sizeBytes: data.evidenceSizeBytes,
     maxBytes: 64 * 1024 * 1024,
   });
+  if (packet.collectionSurfaces) {
+    const raw = rawEvidence as { collectionSurfaceInventory?: unknown; collectionSurfaceSnapshots?: unknown[] };
+    const inventory = collectionSurfaceInventorySchema.safeParse(raw.collectionSurfaceInventory);
+    if (!inventory.success || JSON.stringify(inventory.data) !== JSON.stringify(packet.collectionSurfaces.inventory) || packet.collectionSurfaces.sourceSizeBytes !== data.evidenceSizeBytes) {
+      delete packet.collectionSurfaces;
+    } else {
+      const sourceInventoryHash = createHash("sha256").update(JSON.stringify(inventory.data)).digest("hex");
+      packet.collectionSurfaces.snapshots = (raw.collectionSurfaceSnapshots ?? []).flatMap(candidate => {
+        const parsed = collectionSurfaceSnapshotSchema.safeParse(candidate);
+        if (!parsed.success) return [];
+        const { data: encoded, ...snapshot } = parsed.data;
+        if (snapshot.sourceInventoryHash !== sourceInventoryHash || snapshot.pageUrl !== inventory.data.pageUrl || !inventory.data.forms.some(form => form.formRef === snapshot.formRef)) return [];
+        if (snapshot.status === "available") {
+          const bytes = Buffer.from(encoded!, "base64");
+          if (bytes.length !== snapshot.sizeBytes || createHash("sha256").update(bytes).digest("hex") !== snapshot.sha256) return [];
+        }
+        return [snapshot];
+      }).slice(0, 10);
+    }
+  }
   if (packet.runtimeGraph) {
     const graph = projectCrawlRuntimeGraph({ graph: (rawEvidence as { runtimeEvidenceGraph?: unknown })?.runtimeEvidenceGraph, pageId: data.pageId, attemptId: data.attemptId,
       source: { sha256: packet.sourceHash, sizeBytes: data.evidenceSizeBytes, verificationStatus: "verified" } });

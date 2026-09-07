@@ -30,14 +30,14 @@ const NON_PUBLIC_IPV4_RANGES = [
   ["240.0.0.0", 4],
 ] as const;
 
+// Parse constant CIDR bases once, rather than for every captured address.
+const NON_PUBLIC_IPV4_NUMERIC_RANGES = NON_PUBLIC_IPV4_RANGES.map(([base, prefix]) => [parseIpv4(base)!, prefix] as const);
+
 function isPublicIpv4(value: string) {
   const parsed = parseIpv4(value);
   if (parsed === null) return false;
   if (value === "192.0.0.9" || value === "192.0.0.10") return true;
-  return !NON_PUBLIC_IPV4_RANGES.some(([base, prefixLength]) => {
-    const parsedBase = parseIpv4(base);
-    return parsedBase !== null && ipv4InCidr(parsed, parsedBase, prefixLength);
-  });
+  return !NON_PUBLIC_IPV4_NUMERIC_RANGES.some(([base, prefixLength]) => ipv4InCidr(parsed, base, prefixLength));
 }
 
 function parseIpv6Hextets(value: string): number[] | null {

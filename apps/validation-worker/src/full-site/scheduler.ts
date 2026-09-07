@@ -281,6 +281,7 @@ async function initializeHomepage(
         ? []
         : ["homepage_baseline_coverage_limited"],
   });
+  if (observation.collectionSurfaces) observation.collectionSurfaces.sourceSizeBytes = metadata.sizeBytes;
   await withWriteTransaction(async (client) => {
     await client.query(
       `select scan_id from full_site_crawls where scan_id=$1 for update`,

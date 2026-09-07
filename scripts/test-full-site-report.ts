@@ -62,6 +62,13 @@ async function main() {
   let browser: Awaited<ReturnType<typeof chromium.launch>> | undefined,
     server: ReturnType<typeof createServer> | undefined;
   try {
+    // The report also reads the homepage policy projection; this fixture has none.
+    await db.query(`create table if not exists scan_snapshots (
+      scan_id uuid primary key references scans(id) on delete cascade,
+      report_projection_payload jsonb, report_projection_payload_sha256 text,
+      report_projection_payload_size_bytes bigint, report_projection_status text,
+      report_projection_version text, report_projection_computed_at timestamptz
+    )`);
     await db.query(`insert into users(id) values($1)`, [userId]);
     await db.query(
       `insert into organization_members values($1,$2,'advanced')`,
@@ -214,7 +221,7 @@ async function main() {
     });
     const css = await postcss([
       tailwindcss({
-        content: ["apps/web/components/scans/full-site-*.tsx"],
+        content: ["apps/web/components/scans/*.tsx"],
         theme: {},
         plugins: [],
       }),
@@ -258,20 +265,21 @@ async function main() {
     const page = await browser.newPage({
       viewport: { width: 1440, height: 1100 },
     });
+    page.setDefaultTimeout(10000);
     const errors: string[] = [];
     page.on("pageerror", (error) => errors.push(error.message));
     const fixtureUrl = `http://127.0.0.1:${address.port}`;
     await page.goto(fixtureUrl);
     await page
-      .getByRole("checkbox", { name: "Full site", exact: true })
+      .getByRole("switch", { name: "Full site", exact: true })
       .waitFor();
     assert.equal(
       await page.getByLabel("Max pages", { exact: true }).count(),
       0,
     );
     await page
-      .getByRole("checkbox", { name: "Full site", exact: true })
-      .check();
+      .getByRole("switch", { name: "Full site", exact: true })
+      .press("Space");
     assert.equal(
       await page.getByLabel("Max pages", { exact: true }).inputValue(),
       "10",
@@ -288,57 +296,32 @@ async function main() {
     );
     await page.getByLabel("Max pages", { exact: true }).fill("200");
     await page
-      .getByRole("checkbox", { name: "Full site", exact: true })
-      .uncheck();
+      .getByRole("switch", { name: "Full site", exact: true })
+      .press("Space");
     await page
       .getByRole("button", { name: "Submit fixture", exact: true })
       .click();
     assert.deepEqual(await page.evaluate("window.submitted"), {});
-    await page
-      .getByRole("button", { name: "Contact map 1 pages" })
-      .first()
-      .waitFor();
-    await page
-      .getByRole("button", { name: "Contact map 1 pages" })
-      .first()
-      .click();
-    await page
-      .getByRole("heading", { name: "Contact map", exact: true })
-      .waitFor();
-    await page.getByRole("button", { name: "Close", exact: true }).click();
-    await page.getByRole("button", { name: "Cookies", exact: true }).click();
-    await page
-      .getByLabel("Search resources, vendors, domains or pages")
-      .fill("scope-bound");
-    await page
-      .getByRole("button", { name: "scope-bound cookie", exact: true })
-      .waitFor();
+    await page.getByRole("button", { name: "services", exact: true }).click();
+    const expansion = page.getByRole("button", { name: /^Expand / }).first();
+    await expansion.click();
+    assert.equal(await page.getByRole("button", { name: /^Collapse (?!all$)/ }).first().getAttribute("aria-expanded"), "true");
+    await page.getByLabel("Relationship scenario").selectOption("post_accept");
     const before = calls;
-    await page.waitForFunction(
-      () =>
-        document
-          .querySelector('input[type="search"]')
-          ?.getAttribute("value") === "scope-bound",
-    );
-    await page.screenshot({
-      path: "/tmp/certscore-full-site-report-desktop.png",
-      fullPage: true,
-    });
-    // Live refresh preserves search and selected workspace; no route refresh is involved.
-    await page.waitForTimeout(11000);
+    await page.waitForFunction(() => document.querySelector('[aria-label="Relationship scenario"]')?.value === "post_accept");
+    await page.screenshot({ path: "/tmp/certscore-full-site-report-desktop.png", fullPage: true });
+    await page.waitForResponse(response => response.url().includes("/full-site?"), { timeout: 30000 });
     assert.ok(calls > before);
-    assert.equal(
-      await page
-        .getByLabel("Search resources, vendors, domains or pages")
-        .inputValue(),
-      "scope-bound",
-    );
-    await page
-      .getByRole("button", { name: "Homepage audit", exact: true })
-      .click();
+    assert.equal(await page.getByLabel("Relationship scenario").inputValue(), "post_accept");
+    await page.getByRole("button", { name: "resources", exact: true }).click();
+    await page.getByRole("button", { name: "View JSON evidence for scope-bound cookie", exact: true }).click();
+    await page.getByRole("dialog", { name: "JSON evidence for scope-bound cookie", exact: true }).waitFor();
+    await page.keyboard.press("Escape");
+    await page.getByRole("button", { name: "Homepage report", exact: true }).click();
     await page.getByText("Homepage audit fixture score: 87").waitFor();
+    await page.getByRole("button", { name: "Full site report", exact: true }).click();
     await page.setViewportSize({ width: 390, height: 844 });
-    await page.getByRole("button", { name: "Resources", exact: true }).click();
+    await page.getByRole("button", { name: "resources", exact: true }).click();
     await page.screenshot({
       path: "/tmp/certscore-full-site-report-mobile.png",
       fullPage: true,
@@ -358,14 +341,14 @@ async function main() {
       await page.waitForTimeout(100);
       assert.equal(
         await page
-          .getByRole("checkbox", { name: "Full site", exact: true })
+          .getByRole("switch", { name: "Full site", exact: true })
           .count(),
         role === "admin" ? 1 : 0,
       );
     }
     assert.deepEqual(errors, []);
     console.log(
-      "PASS: real PostgreSQL report aggregation, filters, export parity, lazy evidence, 201 pages, role visibility, form validation, live UI state, desktop/mobile layout.",
+      "PASS: real PostgreSQL report aggregation, filters, export parity, lazy evidence, 201 pages, role visibility, form validation, service expansion and live UI state, desktop/mobile layout.",
     );
   } finally {
     await browser?.close();

@@ -180,3 +180,18 @@ test("preliminary runtime inventory scrolls only after six rows", () => {
 
   assert.match(html, /aria-label="Preliminary cookies and trackers"[^>]*max-h-\[22rem\] overflow-y-auto[^>]*data-scrollable="true"/);
 });
+
+test("full-site scans open the results workspace before homepage readiness", () => {
+  const html = renderPendingScanDetailView({
+    ...baseProps,
+    fullSite: { maxPages: 14, concurrency: 2, waitSeconds: 1 },
+  });
+  assert.match(html, /data-full-site-report/);
+  assert.match(html, /Site scan results/);
+  assert.match(html, /data-full-site-progress/);
+  assert.match(html, /Full site scan page progress/);
+  assert.match(html, /s elapsed/);
+  assert.match(html, /up to <!-- -->14<!-- --> pages|up to 14 pages/);
+  assert.doesNotMatch(html, />Prepare</);
+  assert.doesNotMatch(html, /Scanning website/);
+});

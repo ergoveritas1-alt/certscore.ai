@@ -1,4 +1,9 @@
 import "server-only";
+import { inventoryPurposeGroups } from "../../lib/scans/inventory-purpose-presentation";
+import { identifyCrawlService, describeCrawlService } from "../../lib/scans/full-site-resource-context";
+import { loadFullSiteReviewedPolicies } from "./full-site-reviewed-policies";
+import { loadFullSiteRelationshipCounts } from "./full-site-relationship-counts";
+import { loadFullSiteScore } from "./full-site-score";
 import { classifyCrawlInventoryResource } from "../../lib/scans/full-site-inventory-classification";
 import {
   aggregateFullSite,
@@ -105,7 +110,7 @@ export async function loadFullSiteReport(
       (kind === "all" ? ["cookie", "storage", "request", "embed"].includes(row.occurrence.kind) : kind === "cookie" ? ["cookie", "storage"].includes(row.occurrence.kind) : row.occurrence.kind === kind) &&
       row.pageIds.some((id) => allowedPages.has(id)) &&
       (!additional || row.homepage === "not_observed") &&
-      matchesCategory(row.purposes, params.get("purpose")) &&
+      matchesCategory(inventoryPurposeGroups(row.purposes, row.relationships), params.get("purpose") ? inventoryPurposeGroups([params.get("purpose")!], [])[0]! : null) &&
       matchesCategory(row.relationships, params.get("relationship")) &&
       (!params.get("assessment") ||
         row.assessments.includes(params.get("assessment")!)) &&
@@ -124,6 +129,14 @@ export async function loadFullSiteReport(
           ...pages.filter((p) => row.pageIds.includes(p.id)).map((p) => p.url),
         ].some((v) => v?.toLowerCase().includes(q))),
   );
+  const reviewedPolicies = await loadFullSiteReviewedPolicies(scanId);
+  const serviceContexts = new Map<string, ReturnType<typeof describeCrawlService>>();
+  const resourceContext = (row: (typeof aggregate.resources)[number]) => {
+    const identity = identifyCrawlService(row.occurrence);
+    const key = identity ? JSON.stringify([identity.entity, identity.vendor, identity.product]) : "unclassified";
+    if (!serviceContexts.has(key)) serviceContexts.set(key, describeCrawlService(identity, reviewedPolicies));
+    return { key, context: serviceContexts.get(key)! };
+  };
   const sort = params.get("sort") ?? "priority";
   const field = sort.replace(/_desc$/, "");
   const direction = sort.endsWith("_desc") ? -1 : 1;
@@ -134,6 +147,10 @@ export async function loadFullSiteReport(
       case "vendor": return row.occurrence.vendor ?? row.occurrence.domain;
       case "label": return row.occurrence.label;
       case "purpose": return row.purposes.join(", ");
+      case "policy": return resourceContext(row).context.policy.status;
+      case "transfer": {
+        return row.destinations.map(destination => destination.countryCode ?? destination.country ?? "").filter(Boolean).sort().join(", ") || "Location unavailable";
+      }
       case "time": return row.occurrence.firstSeenMs;
       case "page": return pages.find(page => page.id === row.pageIds[0])?.url ?? null;
       case "events": return -row.eventCount;
@@ -253,15 +270,15 @@ export async function loadFullSiteReport(
   const inventoryRows = aggregate.resources.filter((row) =>
     ["cookie", "storage", "request", "embed"].includes(row.occurrence.kind),
   );
-  const inventoryBreakdown = (field: "assessments" | "purposes" | "relationships") => {
+  const inventoryBreakdown = (field: "kind" | "assessments" | "purposes" | "relationships") => {
     const counts = new Map<string, number>();
     for (const row of inventoryRows) {
-      const values = row[field];
+      const values = field === "kind" ? [row.occurrence.kind] : field === "purposes" ? inventoryPurposeGroups(row.purposes, row.relationships) : row[field];
       const label = field === "assessments" ? inventoryClassification(row) : values.length > 1 ? "mixed" : values[0] || "unknown";
       counts.set(label, (counts.get(label) ?? 0) + 1);
     }
     return [...counts].map(([label, count]) => ({ label, count }))
-      .sort((a, b) => Number(a.label.toLowerCase() === "unknown") - Number(b.label.toLowerCase() === "unknown") || b.count - a.count || a.label.localeCompare(b.label));
+      .sort((a, b) => Number(a.label.toLowerCase().startsWith("unknown")) - Number(b.label.toLowerCase().startsWith("unknown")) || b.count - a.count || a.label.localeCompare(b.label));
   };
   const detailId = params.get("detailPage"),
     resourceKey = params.get("resource");
@@ -305,7 +322,7 @@ export async function loadFullSiteReport(
     }
   }
   let filteredPages = pageRows.filter(
-    (p) => (exportAllPages || p.status !== "excluded") && (!q || p.url.toLowerCase().includes(q)) && matchesStatus(p.status),
+    (p) => (exportAllPages || !["excluded", "cancelled"].includes(p.status)) && (!q || p.url.toLowerCase().includes(q)) && matchesStatus(p.status),
   );
   const pageSort = params.get("pageSort");
   filteredPages.sort((a, b) =>
@@ -317,10 +334,64 @@ export async function loadFullSiteReport(
           ? a.status.localeCompare(b.status)
           : a.url.localeCompare(b.url),
   );
+  const inventoriedPages = pages.filter(page => ["completed", "partial"].includes(page.status));
+  const collectionSurfaces = {
+    pagesWithoutInventory: pages.filter(page => !["excluded", "cancelled", "queued", "active"].includes(page.status) && (!page.observation?.collectionSurfaces || page.observation.configurationHash !== state.configurationHash)).length,
+    limitedPages: inventoriedPages.filter(page => page.observation?.collectionSurfaces?.inventory.coverage.status !== "complete" && page.observation?.collectionSurfaces).length,
+    rows: inventoriedPages.flatMap(page => {
+      const retained = page.observation?.collectionSurfaces;
+      if (!retained || page.observation?.configurationHash !== state.configurationHash) return [];
+      return retained.inventory.forms.map(form => {
+        const snapshot = retained.snapshots.find(item => item.formRef === form.formRef);
+        return {
+          id: `${page.id}:${form.formRef}`,
+          form: { ...form, pageUrl: crawlDisplayUrl(form.pageUrl) },
+          capturedAt: snapshot?.capturedAt ?? page.observation!.completedAt,
+          snapshot: snapshot?.status === "available" && retained.sourceSizeBytes
+            ? { status: "available" as const, url: `/api/scans/${scanId}/full-site?formPage=${encodeURIComponent(page.id)}&formRef=${encodeURIComponent(form.formRef)}` }
+            : { status: snapshot?.status === "withheld" ? "withheld" as const : "unavailable" as const },
+        };
+      });
+    }),
+  };
+  const serviceGroups = new Map<string, { key: string; name: string; context: ReturnType<typeof describeCrawlService>; pageIds: string[]; purposes: string[]; resources: Array<{key: string; name: string; kind: string; pageIds: string[]; occurrence: (typeof resources)[number]["occurrence"]; purposes: string[]; relationships: string[]; eventCount: number; inventoryEvidence: string}> }>();
+  for (const row of resources) {
+    const { key, context } = resourceContext(row);
+    const group = serviceGroups.get(key) ?? { key, name: context.identity?.product ?? "Unclassified resources", context, pageIds: [], purposes: [], resources: [] };
+    group.pageIds = [...new Set([...group.pageIds, ...row.pageIds])];
+    group.purposes = [...new Set([...group.purposes, ...row.purposes])];
+    group.resources.push({ key: row.key, name: row.occurrence.label, kind: row.occurrence.kind, pageIds: row.pageIds, occurrence: row.occurrence, purposes: row.purposes, relationships: row.relationships, eventCount: row.eventCount, inventoryEvidence: inventoryClassification(row) });
+    serviceGroups.set(key, group);
+  }
+  const displayedResources = exportAllPages ? resources : resources.slice(offset, offset + limit);
+  const relationshipCounts = await loadFullSiteRelationshipCounts(scanId, pages, [...new Set([...displayedResources.map(row => row.pageIds[0]!), ...(detailId ? [detailId] : [])].filter(Boolean))], state.configurationHash);
+  const resourcesByKey = new Map(resources.map(row => [row.key, row]));
+  const destinationSummary = (row: (typeof resources)[number]) => ({
+    destinations: row.destinationAssessedCount > 0 ? row.destinations : relationshipCounts.get(row.pageIds[0] ?? "")?.get(row.occurrence.id)?.destinations ?? [],
+    destinationAssessedCount: row.destinationAssessedCount,
+    destinationMissingCount: row.destinationMissingCount,
+    destinationsTruncated: row.destinationsTruncated,
+  });
   return {
+    services: [...serviceGroups.values()].map(service => ({ ...service,
+      resources: service.resources.map(resource => {
+        const aggregateRow = resourcesByKey.get(resource.key)!;
+        return { ...resource, ...destinationSummary(aggregateRow) };
+      }),
+    })).sort((a,b) => a.name.localeCompare(b.name)),
+    collectionSurfaces,
+    score: await loadFullSiteScore(crawl, pages),
     summary: { ...aggregate, resources: undefined },
+    priorityTotals: Object.fromEntries((["cookies", "requests"] as const).map(group => {
+      const rows = aggregate.resources.filter(row => group === "cookies"
+        ? ["cookie", "storage"].includes(row.occurrence.kind)
+        : row.occurrence.kind === "request");
+      const count = (priority: string) => rows.reduce((total, row) => total +
+        (inventoryClassification(row) === priority ? group === "requests" ? row.eventCount : 1 : 0), 0);
+      return [group, { nonEssential: count("Non-essential"), review: count("Review") }];
+    })),
     resources: {
-      rows: (exportAllPages ? resources : resources.slice(offset, offset + limit)).map(row => ({ ...row, inventoryEvidence: inventoryClassification(row), serviceOnlyAdditional: !!row.occurrence.serviceId && additionalServiceIds.has(row.occurrence.serviceId) })),
+      rows: displayedResources.map(row => ({ ...row, relationshipCount: relationshipCounts.get(row.pageIds[0] ?? "")?.get(row.occurrence.id)?.count, context: resourceContext(row).context, ...destinationSummary(row), inventoryEvidence: inventoryClassification(row), serviceOnlyAdditional: !!row.occurrence.serviceId && additionalServiceIds.has(row.occurrence.serviceId) })),
       total: resources.length,
       offset,
       limit,
@@ -340,9 +411,9 @@ export async function loadFullSiteReport(
       purposes: [
         ...new Set(
           aggregate.resources
-            .filter((r) => r.occurrence.kind === kind)
+            .filter((r) => kind === "all" ? ["cookie", "storage", "request", "embed"].includes(r.occurrence.kind) : kind === "cookie" ? ["cookie", "storage"].includes(r.occurrence.kind) : r.occurrence.kind === kind)
             .flatMap((r) =>
-              r.purposes.length > 1 ? [...r.purposes, "mixed"] : r.purposes,
+              r.purposes.length > 1 ? [...inventoryPurposeGroups(r.purposes, r.relationships), "mixed"] : inventoryPurposeGroups(r.purposes, r.relationships),
             ),
         ),
       ].sort(),
@@ -364,7 +435,7 @@ export async function loadFullSiteReport(
       resourceTypes: [
         ...new Set(
           aggregate.resources
-            .filter((r) => r.occurrence.kind === kind)
+            .filter((r) => kind === "all" ? ["cookie", "storage", "request", "embed"].includes(r.occurrence.kind) : kind === "cookie" ? ["cookie", "storage"].includes(r.occurrence.kind) : r.occurrence.kind === kind)
             .map((r) => r.occurrence.resourceType),
         ),
       ].sort(),
@@ -377,6 +448,7 @@ export async function loadFullSiteReport(
       }];
     })),
     inventoryMix: {
+      type: inventoryBreakdown("kind"),
       evidence: inventoryBreakdown("assessments"),
       purpose: inventoryBreakdown("purposes"),
       relationship: inventoryBreakdown("relationships"),
@@ -408,6 +480,9 @@ export async function loadFullSiteReport(
         .slice(0, 8),
     },
     evidence,
+    selectedResourceDetails: resourceKey && evidence?.rows[0] ? { key: resourceKey, pageId: detailId,
+      context: describeCrawlService(identifyCrawlService(evidence.rows[0]), reviewedPolicies),
+      destinations: relationshipCounts.get(detailId ?? "")?.get(evidence.rows[0].id)?.destinations ?? [] } : null,
     selectedResource:
       aggregate.resources.find((r) => r.key === resourceKey) ?? null,
     timing: {
@@ -426,7 +501,8 @@ export async function loadFullSiteExport(scanId: string) {
   if (!report) return undefined;
   return {
     scope: "Full homepage audit plus additional-page resource inventories",
-    scoreScope: "Homepage audit score",
+    scoreScope: "Full-site score",
+    score: report.score,
     condition: "Fresh visit, no consent action.",
     countingScope:
       "Across observed pages; independent visits. Positive partial evidence included.",

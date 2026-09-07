@@ -361,3 +361,26 @@ test("owner-approved crawl limits and robots subset boundaries", () => {
     false,
   );
 });
+
+test("destination summaries survive compaction and aggregate across pages without changing inventory counts", () => {
+  const address = (ip: string) => ({ ip, source: "response_server_addr" as const, locationLabel: "server location (may be CDN edge)" as const });
+  const rows = Array.from({ length: 24 }, (_, i) => ({ ...occurrence("request", "same-url", `event-${i}`), networkDestinations: [address(`8.8.8.${i + 1}`)], networkDestinationMissingCount: 0 }));
+  rows.push({ ...occurrence("request", "same-url", "no-ip"), networkDestinations: [], networkDestinationMissingCount: 1 });
+  const first = page("homepage", rows);
+  first.observation = compactCrawlObservation(first.observation!);
+  assert.equal(first.observation.occurrences.length, 1);
+  assert.equal(first.observation.occurrences[0]?.networkDestinations?.length, 20);
+  assert.equal(first.observation.occurrences[0]?.networkDestinationsTruncated, true);
+  assert.equal(first.observation.occurrences[0]?.networkDestinationMissingCount, 1);
+  const second = page("second", [{ ...occurrence("request", "same-url", "other-page"), networkDestinations: [address("1.1.1.1")], networkDestinationMissingCount: 0 }]);
+  const row = aggregateFullSite(state, [first, second]).resources[0]!;
+  assert.equal(row.eventCount, 26);
+  assert.equal(row.destinationAssessedCount, 26);
+  assert.equal(row.destinationMissingCount, 1);
+  assert.equal(row.destinationsTruncated, true);
+  assert.equal(row.pageIds.length, 2);
+  assert.equal(row.destinations.length, 20);
+  const historical = aggregateFullSite(state, [page("homepage", [occurrence("request", "legacy")])]).resources[0]!;
+  assert.equal(historical.destinationAssessedCount, 0);
+  assert.deepEqual(historical.destinations, []);
+});

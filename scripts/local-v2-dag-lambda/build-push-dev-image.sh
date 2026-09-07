@@ -65,6 +65,8 @@ case "${auth_only}" in
     ;;
 esac
 
+(cd "$repo_root" && node scripts/verify-iplocate.mjs)
+
 runtime_base_action="not-used"
 case "${push_runtime_base}" in
   1|true|TRUE|yes|YES)

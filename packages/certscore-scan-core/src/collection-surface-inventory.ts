@@ -157,6 +157,7 @@ export function buildCollectionSurfaceInventory(
     );
     const fields = sortedFields.slice(0, MAX_COLLECTION_SURFACE_FIELDS_PER_FORM).map(({ row, semanticCategory }, fieldIndex) => ({
       fieldRef: `collection_form_${formIndex}_field_${fieldIndex}`,
+      controlIndex: row.domOrder,
       elementType: row.elementType,
       inputType: row.inputType.slice(0, 40) || row.elementType,
       semanticCategory,

@@ -1,5 +1,7 @@
 .git
 .gitignore
+.codex
+.codex-tmp
 .DS_Store
 node_modules
 apps/*/node_modules

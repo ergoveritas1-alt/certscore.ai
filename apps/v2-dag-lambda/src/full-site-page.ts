@@ -1,3 +1,4 @@
+import { createOpenAiScreenshotSafetyClassifier } from "./screenshot-safety";
 import { InvokeCommand, LambdaClient } from "@aws-sdk/client-lambda";
 import { PutObjectCommand, S3Client } from "@aws-sdk/client-s3";
 import { randomUUID } from "node:crypto";
@@ -130,6 +131,7 @@ export async function runFullSitePage(event: unknown, options: { s3Client?: S3Cl
       outDir,
       signal: abort.signal,
       runtimeGraph: { pageId: grant.pageId, attemptId: grant.attemptId },
+      formSnapshotReviewer: createOpenAiScreenshotSafetyClassifier(),
     });
     evidenceBody = JSON.stringify(visit.evidence);
     packet = projectFullSiteInventory({
@@ -162,6 +164,7 @@ export async function runFullSitePage(event: unknown, options: { s3Client?: S3Cl
         ...(!visit.finalUrl ? ["page_context_unavailable"] : []),
       ],
     });
+    if (packet.collectionSurfaces) packet.collectionSurfaces.sourceSizeBytes = Buffer.byteLength(evidenceBody);
     if (visit.evidence.runtimeEvidenceGraph) {
       const graph = visit.evidence.runtimeEvidenceGraph;
       packet.runtimeGraph = { sourceSizeBytes: Buffer.byteLength(evidenceBody), sha256: graph.sourceHash, nodeCount: graph.nodes.length, edgeCount: graph.edges.length };

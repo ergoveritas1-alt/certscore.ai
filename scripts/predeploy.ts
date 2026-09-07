@@ -151,7 +151,7 @@ const TARGETS: Target[] = [
         key: "web-scan-source-contracts",
         label: "scan-source and forward-deploy contracts",
         command: [
-          "node", "--import", "tsx", "--test",
+          "pnpm", "exec", "tsx", "--tsconfig", "apps/web/tsconfig.test.json", "--test",
           "apps/web/components/marketing/domain-scan-form.test.ts",
           "apps/web/components/scans/scan-from-select.test.tsx",
           "apps/web/server/scans/recent-scan-reuse.test.ts",

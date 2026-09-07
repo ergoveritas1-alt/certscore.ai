@@ -1,0 +1,229 @@
+<!-- CANARY TEST PAGE — intentional non-compliance for scanner validation — see /test-environment-notice -->
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="robots" content="noindex, follow, noarchive">
+  <title>CertScore owned calibration canaries</title>
+  <link rel="stylesheet" href="/.well-known/certscore-canary/styles.css">
+  <script src="/.well-known/certscore-canary/crawl-surface-runtime.js" defer></script>
+</head>
+<body><script src="runtime/notice.js"></script>
+  <main data-certscore-canary="index" data-certscore-crawl-surface="index">
+    <p>ErgoVeritas-owned CertScore calibration surface.</p>
+    <h1>Controlled scanner canaries</h1>
+    <div class="notice">
+      <p>These no-index pages contain synthetic evidence for authorized, read-only CertScore testing. They are not legal notices and do not establish production findings.</p>
+      <p>Scanner automation must not click consent controls on these pages.</p>
+    </div>
+    <h2>Consent A/R/O and geometry inventory</h2>
+    <ul>
+      <li><a href="consent/direct.html">C01 — all controls, bottom inline</a></li>
+      <li><a href="consent/missing-reject.html">C02 — accept/options, no reject</a></li>
+      <li><a href="consent/delayed.html">C03 — all controls, delayed render</a></li>
+      <li><a href="consent/shadow-dom.html">C04 — all controls, open Shadow DOM</a></li>
+      <li><a href="consent/stacked.html">C05 — all controls, bottom stacked</a></li>
+      <li><a href="consent/centered-modal.html">C06 — all controls, centered modal</a></li>
+      <li><a href="consent/split-actions.html">C07 — all controls, split action groups</a></li>
+      <li><a href="consent/accept-only.html">C08 — accept only</a></li>
+      <li><a href="consent/reject-only.html">C09 — reject only</a></li>
+      <li><a href="consent/options-only.html">C10 — options only</a></li>
+      <li><a href="consent/hidden-reject-text.html">C11 — false-positive hidden reject text</a></li>
+      <li><a href="consent/child-frame.html">C12 — child-frame placement</a></li>
+      <li><a href="consent/scroll-clipped.html">C13 — clipped internal scroll</a></li>
+      <li><a href="consent/partial-occlusion.html">C14 — partial occlusion</a></li>
+      <li><a href="consent/disabled-state.html">C15 — disabled/enabled state</a></li>
+      <li><a href="consent/composite-container.html">C16 — composite-container inflation guard</a></li>
+      <li><a href="consent/multiple-surfaces.html">C17 — multiple simultaneous surfaces</a></li>
+      <li><a href="consent/pay-or-consent.html">C18 — pay-or-consent semantic guard</a></li>
+      <li><a href="consent/localized-french.html">C19 — localized French labels</a></li>
+      <li><a href="consent/locales.html">C20 — all 40 supported locale labels</a></li>
+    </ul>
+    <h2>GDPR Transparency inventory</h2>
+    <p>The machine-readable <a href="manifest.json">manifest</a> is authoritative for expected topic presence, declared omissions, coverage quality, and fixture role.</p>
+    <ul>
+      <li><a href="policy/index.html">P00 — policy discovery landing page</a></li>
+      <li><a href="policy/privacy.html">P01 — complete transparency topics</a></li>
+      <li><a href="policy/missing-controller.html">P02 — controller missing</a></li>
+      <li><a href="policy/missing-purposes.html">P03 — purposes/legal basis missing</a></li>
+      <li><a href="policy/missing-retention.html">P04 — retention missing</a></li>
+      <li><a href="policy/missing-transfers.html">P05 — international transfers missing</a></li>
+      <li><a href="policy/missing-vendors.html">P06 — vendors/recipients missing</a></li>
+      <li><a href="policy/missing-rights.html">P07 — privacy rights missing</a></li>
+      <li><a href="policy/missing-cookies.html">P08 — cookies/storage missing</a></li>
+      <li><a href="policy/missing-combination.html">P09 — combined omissions</a></li>
+      <li><a href="policy/keyword-decoy.html">P10 — keyword-only false positive</a></li>
+      <li><a href="policy/unrelated-owner.html">P11 — unrelated-owner false-negative guard</a></li>
+      <li><a href="policy/runtime-mismatch.html">P12 — policy/runtime comparison conflict</a></li>
+      <li><a href="policy/locales.html">P13 — complete and issue fixtures for all supported GDPR locales</a></li>
+    </ul>
+    <h2>Runtime control</h2>
+    <ul><li><a href="runtime/storage.html">R01 — first-party cookie and storage evidence</a></li></ul>
+
+    <h2>Complete crawl inventory</h2>
+    <p>Every manifest-declared fixture is linked below so a crawler can reach the full owned calibration surface from this page.</p>
+    <ul>
+      <li><a href="post-refusal/reject-honored.html">reject-honored.html</a></li>
+      <li><a href="post-refusal/reject-ignored.html">reject-ignored.html</a></li>
+      <li><a href="consent/locale-en.html">locale-en.html</a></li>
+      <li><a href="consent/locale-es.html">locale-es.html</a></li>
+      <li><a href="consent/locale-de.html">locale-de.html</a></li>
+      <li><a href="consent/locale-ja.html">locale-ja.html</a></li>
+      <li><a href="consent/locale-fr.html">locale-fr.html</a></li>
+      <li><a href="consent/locale-ru.html">locale-ru.html</a></li>
+      <li><a href="consent/locale-pt.html">locale-pt.html</a></li>
+      <li><a href="consent/locale-it.html">locale-it.html</a></li>
+      <li><a href="consent/locale-tr.html">locale-tr.html</a></li>
+      <li><a href="consent/locale-zh.html">locale-zh.html</a></li>
+      <li><a href="consent/locale-fa.html">locale-fa.html</a></li>
+      <li><a href="consent/locale-nl.html">locale-nl.html</a></li>
+      <li><a href="consent/locale-pl.html">locale-pl.html</a></li>
+      <li><a href="consent/locale-vi.html">locale-vi.html</a></li>
+      <li><a href="consent/locale-id.html">locale-id.html</a></li>
+      <li><a href="consent/locale-cs.html">locale-cs.html</a></li>
+      <li><a href="consent/locale-ko.html">locale-ko.html</a></li>
+      <li><a href="consent/locale-sv.html">locale-sv.html</a></li>
+      <li><a href="consent/locale-uk.html">locale-uk.html</a></li>
+      <li><a href="consent/locale-el.html">locale-el.html</a></li>
+      <li><a href="consent/locale-ar.html">locale-ar.html</a></li>
+      <li><a href="consent/locale-hu.html">locale-hu.html</a></li>
+      <li><a href="consent/locale-ro.html">locale-ro.html</a></li>
+      <li><a href="consent/locale-th.html">locale-th.html</a></li>
+      <li><a href="consent/locale-da.html">locale-da.html</a></li>
+      <li><a href="consent/locale-sk.html">locale-sk.html</a></li>
+      <li><a href="consent/locale-fi.html">locale-fi.html</a></li>
+      <li><a href="consent/locale-bg.html">locale-bg.html</a></li>
+      <li><a href="consent/locale-he.html">locale-he.html</a></li>
+      <li><a href="consent/locale-sr.html">locale-sr.html</a></li>
+      <li><a href="consent/locale-hr.html">locale-hr.html</a></li>
+      <li><a href="consent/locale-lt.html">locale-lt.html</a></li>
+      <li><a href="consent/locale-sl.html">locale-sl.html</a></li>
+      <li><a href="consent/locale-ca.html">locale-ca.html</a></li>
+      <li><a href="consent/locale-hi.html">locale-hi.html</a></li>
+      <li><a href="consent/locale-nb.html">locale-nb.html</a></li>
+      <li><a href="consent/locale-et.html">locale-et.html</a></li>
+      <li><a href="consent/locale-lv.html">locale-lv.html</a></li>
+      <li><a href="consent/locale-az.html">locale-az.html</a></li>
+      <li><a href="consent/locale-gl.html">locale-gl.html</a></li>
+      <li><a href="policy/locale-en-complete.html">locale-en-complete.html</a></li>
+      <li><a href="policy/locale-en-issue.html">locale-en-issue.html</a></li>
+      <li><a href="policy/locale-de-complete.html">locale-de-complete.html</a></li>
+      <li><a href="policy/locale-de-issue.html">locale-de-issue.html</a></li>
+      <li><a href="policy/locale-fr-complete.html">locale-fr-complete.html</a></li>
+      <li><a href="policy/locale-fr-issue.html">locale-fr-issue.html</a></li>
+      <li><a href="policy/locale-es-complete.html">locale-es-complete.html</a></li>
+      <li><a href="policy/locale-es-issue.html">locale-es-issue.html</a></li>
+      <li><a href="policy/locale-it-complete.html">locale-it-complete.html</a></li>
+      <li><a href="policy/locale-it-issue.html">locale-it-issue.html</a></li>
+      <li><a href="policy/locale-nl-complete.html">locale-nl-complete.html</a></li>
+      <li><a href="policy/locale-nl-issue.html">locale-nl-issue.html</a></li>
+      <li><a href="policy/locale-pl-complete.html">locale-pl-complete.html</a></li>
+      <li><a href="policy/locale-pl-issue.html">locale-pl-issue.html</a></li>
+      <li><a href="policy/locale-pt-complete.html">locale-pt-complete.html</a></li>
+      <li><a href="policy/locale-pt-issue.html">locale-pt-issue.html</a></li>
+      <li><a href="policy/locale-ru-complete.html">locale-ru-complete.html</a></li>
+      <li><a href="policy/locale-ru-issue.html">locale-ru-issue.html</a></li>
+      <li><a href="policy/locale-ja-complete.html">locale-ja-complete.html</a></li>
+      <li><a href="policy/locale-ja-issue.html">locale-ja-issue.html</a></li>
+      <li><a href="policy/locale-zh-complete.html">locale-zh-complete.html</a></li>
+      <li><a href="policy/locale-zh-issue.html">locale-zh-issue.html</a></li>
+      <li><a href="policy/locale-ar-complete.html">locale-ar-complete.html</a></li>
+      <li><a href="policy/locale-ar-issue.html">locale-ar-issue.html</a></li>
+      <li><a href="policy/locale-sv-complete.html">locale-sv-complete.html</a></li>
+      <li><a href="policy/locale-sv-issue.html">locale-sv-issue.html</a></li>
+      <li><a href="policy/locale-ro-complete.html">locale-ro-complete.html</a></li>
+      <li><a href="policy/locale-ro-issue.html">locale-ro-issue.html</a></li>
+      <li><a href="policy/locale-cs-complete.html">locale-cs-complete.html</a></li>
+      <li><a href="policy/locale-cs-issue.html">locale-cs-issue.html</a></li>
+      <li><a href="policy/locale-el-complete.html">locale-el-complete.html</a></li>
+      <li><a href="policy/locale-el-issue.html">locale-el-issue.html</a></li>
+      <li><a href="policy/locale-hu-complete.html">locale-hu-complete.html</a></li>
+      <li><a href="policy/locale-hu-issue.html">locale-hu-issue.html</a></li>
+      <li><a href="policy/locale-da-complete.html">locale-da-complete.html</a></li>
+      <li><a href="policy/locale-da-issue.html">locale-da-issue.html</a></li>
+      <li><a href="policy/locale-fi-complete.html">locale-fi-complete.html</a></li>
+      <li><a href="policy/locale-fi-issue.html">locale-fi-issue.html</a></li>
+      <li><a href="policy/locale-sk-complete.html">locale-sk-complete.html</a></li>
+      <li><a href="policy/locale-sk-issue.html">locale-sk-issue.html</a></li>
+      <li><a href="policy/locale-bg-complete.html">locale-bg-complete.html</a></li>
+      <li><a href="policy/locale-bg-issue.html">locale-bg-issue.html</a></li>
+      <li><a href="policy/locale-hr-complete.html">locale-hr-complete.html</a></li>
+      <li><a href="policy/locale-hr-issue.html">locale-hr-issue.html</a></li>
+      <li><a href="policy/locale-nb-complete.html">locale-nb-complete.html</a></li>
+      <li><a href="policy/locale-nb-issue.html">locale-nb-issue.html</a></li>
+      <li><a href="policy/locale-sl-complete.html">locale-sl-complete.html</a></li>
+      <li><a href="policy/locale-sl-issue.html">locale-sl-issue.html</a></li>
+      <li><a href="policy/locale-lt-complete.html">locale-lt-complete.html</a></li>
+      <li><a href="policy/locale-lt-issue.html">locale-lt-issue.html</a></li>
+      <li><a href="policy/locale-lv-complete.html">locale-lv-complete.html</a></li>
+      <li><a href="policy/locale-lv-issue.html">locale-lv-issue.html</a></li>
+      <li><a href="policy/locale-et-complete.html">locale-et-complete.html</a></li>
+      <li><a href="policy/locale-et-issue.html">locale-et-issue.html</a></li>
+      <li><a href="policy/locale-uk-complete.html">locale-uk-complete.html</a></li>
+      <li><a href="policy/locale-uk-issue.html">locale-uk-issue.html</a></li>
+      <li><a href="policy/locale-tr-complete.html">locale-tr-complete.html</a></li>
+      <li><a href="policy/locale-tr-issue.html">locale-tr-issue.html</a></li>
+      <li><a href="consent/edge/labels-en-accept-all.html">labels-en-accept-all.html</a></li>
+      <li><a href="consent/edge/labels-en-allow-continue-agree.html">labels-en-allow-continue-agree.html</a></li>
+      <li><a href="consent/edge/labels-ar-rtl-necessary-only.html">labels-ar-rtl-necessary-only.html</a></li>
+      <li><a href="consent/edge/labels-he-rtl-close.html">labels-he-rtl-close.html</a></li>
+      <li><a href="consent/edge/labels-fa-rtl-mixed.html">labels-fa-rtl-mixed.html</a></li>
+      <li><a href="consent/edge/nonlatin-cjk-thai-hindi-greek-cyrillic.html">nonlatin-cjk-thai-hindi-greek-cyrillic.html</a></li>
+      <li><a href="consent/edge/aria-only-and-custom-elements.html">aria-only-and-custom-elements.html</a></li>
+      <li><a href="consent/edge/nested-spans-composite-duplicate.html">nested-spans-composite-duplicate.html</a></li>
+      <li><a href="consent/edge/responsive-mobile.html">responsive-mobile.html</a></li>
+      <li><a href="consent/edge/responsive-tablet.html">responsive-tablet.html</a></li>
+      <li><a href="consent/edge/responsive-desktop.html">responsive-desktop.html</a></li>
+      <li><a href="consent/edge/viewport-below-fold-fixed-overflow.html">viewport-below-fold-fixed-overflow.html</a></li>
+      <li><a href="consent/edge/visibility-traps.html">visibility-traps.html</a></li>
+      <li><a href="consent/edge/language-mismatch.html">language-mismatch.html</a></li>
+      <li><a href="consent/edge/locale-fallback-regional-mixed.html">locale-fallback-regional-mixed.html</a></li>
+      <li><a href="consent/edge/delayed-route-modal-transition.html">delayed-route-modal-transition.html</a></li>
+      <li><a href="consent/edge/iframe-same-origin.html">iframe-same-origin.html</a></li>
+      <li><a href="consent/edge/iframe-cross-origin-nested-sandbox.html">iframe-cross-origin-nested-sandbox.html</a></li>
+      <li><a href="consent/edge/shadow-open-hydrated.html">shadow-open-hydrated.html</a></li>
+      <li><a href="consent/edge/shadow-closed-nested.html">shadow-closed-nested.html</a></li>
+      <li><a href="consent/edge/accessibility-disabled-focus-keyboard.html">accessibility-disabled-focus-keyboard.html</a></li>
+      <li><a href="policy/evidence/nav-only-topic-names.html">nav-only-topic-names.html</a></li>
+      <li><a href="policy/evidence/glossary-only-topics.html">glossary-only-topics.html</a></li>
+      <li><a href="policy/evidence/unrelated-vendor-policy.html">unrelated-vendor-policy.html</a></li>
+      <li><a href="policy/evidence/truncated-policy.html">truncated-policy.html</a></li>
+      <li><a href="policy/evidence/wrong-domain-policy.html">wrong-domain-policy.html</a></li>
+      <li><a href="policy/evidence/stale-policy.html">stale-policy.html</a></li>
+      <li><a href="policy/evidence/redirect-chain-policy.html">redirect-chain-policy.html</a></li>
+      <li><a href="policy/evidence/policy-runtime-mismatch-evidence.html">policy-runtime-mismatch-evidence.html</a></li>
+      <li><a href="runtime/fingerprinting/canvas.html">canvas.html</a></li>
+      <li><a href="runtime/fingerprinting/webgl.html">webgl.html</a></li>
+      <li><a href="runtime/fingerprinting/audio.html">audio.html</a></li>
+      <li><a href="runtime/fingerprinting/fonts.html">fonts.html</a></li>
+      <li><a href="runtime/fingerprinting/device-and-client-hints.html">device-and-client-hints.html</a></li>
+      <li><a href="runtime/fingerprinting/combined-positive.html">combined-positive.html</a></li>
+      <li><a href="sentinels/broad-baseline.html">broad-baseline.html</a></li>
+      <li><a href="sentinels/consent-stress.html">consent-stress.html</a></li>
+      <li><a href="sentinels/privacy-evidence.html">privacy-evidence.html</a></li>
+      <li><a href="sentinels/runtime-transport.html">runtime-transport.html</a></li>
+      <li><a href="sentinels/multilingual-rtl.html">multilingual-rtl.html</a></li>
+    </ul>
+    <nav aria-label="Additional test pages">
+      <h2>Additional test pages and embedded examples</h2>
+      <p><a href="/contact/">Contact ErgoVeritas</a></p>
+      <ul>
+        <li><a href="/.well-known/certscore-canary/policy/broad-baseline.html">broad-baseline.html (test page)</a></li>
+        <li><a href="/.well-known/certscore-embeds/card.html">card.html (embedded example)</a></li>
+        <li><a href="/.well-known/certscore-embeds/chart.html">chart.html (embedded example)</a></li>
+        <li><a href="/.well-known/certscore-embeds/notice.html">notice.html (embedded example)</a></li>
+        <li><a href="/sample_09_03_26_01.html">sample_09_03_26_01.html (test page)</a></li>
+        <li><a href="/test1.html">test1.html (test page)</a></li>
+        <li><a href="/test2.html">test2.html (test page)</a></li>
+        <li><a href="/test3.html">test3.html (test page)</a></li>
+        <li><a href="/test4.html">test4.html (test page)</a></li>
+        <li><a href="/testar1.html">testar1.html (test page)</a></li>
+        <li><a href="/testar2.html">testar2.html (test page)</a></li>
+      </ul>
+      <p><a href="/">Return to the ErgoVeritas homepage</a></p>
+    </nav>
+    <nav aria-label="Form inventory fixtures"><h2>Form collection examples</h2><ul><li><a href="/form-inventory-01/">Contact enquiry test form</a></li><li><a href="/form-inventory-02/">Newsletter signup test form</a></li><li><a href="/form-inventory-03/">Event registration test form</a></li><li><a href="/form-inventory-04/">Product feedback test form</a></li><li><a href="/form-inventory-05/">Site search test form</a></li></ul></nav>
+  </main>
+</body>
+</html>

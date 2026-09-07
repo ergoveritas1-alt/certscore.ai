@@ -1,3 +1,4 @@
+import { networkDestinationSchema, collectionSurfaceInventorySchema, collectionSurfaceSnapshotMetadataSchema, MAX_COLLECTION_SURFACE_FORMS } from "@certscore/contracts";
 import { z } from "zod";
 
 export const FULL_SITE_CONTRACT = "certscore.full-site-inventory.v1" as const;
@@ -138,6 +139,9 @@ export const crawlOccurrenceSchema = z
     firstSeenMs: z.number().finite().nonnegative().nullable(),
     evidenceRefs: z.array(text).max(20),
     graphNodeRefs: z.array(text).max(20).optional(),
+    networkDestinations: z.array(networkDestinationSchema).max(20).optional(),
+    networkDestinationMissingCount: z.number().int().nonnegative().optional(),
+    networkDestinationsTruncated: z.boolean().optional(),
     details: z.record(
       z.union([text, z.number().finite(), z.boolean(), z.null()]),
     ),
@@ -165,6 +169,11 @@ export const crawlObservationSchema = z
       sha256: z.string().regex(/^[a-f0-9]{64}$/),
       nodeCount: z.number().int().nonnegative().max(1000),
       edgeCount: z.number().int().nonnegative().max(2000),
+    }).strict().optional(),
+    collectionSurfaces: z.object({
+      inventory: collectionSurfaceInventorySchema,
+      sourceSizeBytes: z.number().int().positive().max(64 * 1024 * 1024).optional(),
+      snapshots: z.array(collectionSurfaceSnapshotMetadataSchema).max(MAX_COLLECTION_SURFACE_FORMS),
     }).strict().optional(),
     occurrences: z.array(crawlOccurrenceSchema).max(30000),
     links: z.array(text).max(5000),
@@ -252,6 +261,10 @@ export function aggregateFullSite(state: CrawlState, pages: CrawlPage[]) {
       occurrence: CrawlOccurrence;
       pageIds: string[];
       eventCount: number;
+      destinations: NonNullable<CrawlOccurrence["networkDestinations"]>;
+      destinationMissingCount: number;
+      destinationsTruncated: boolean;
+      destinationAssessedCount: number;
       partialPageIds: string[];
       homepage: "observed" | "not_observed" | "unknown";
       purposes: string[];
@@ -304,6 +317,7 @@ export function aggregateFullSite(state: CrawlState, pages: CrawlPage[]) {
           occurrence,
           pageIds: [],
           eventCount: 0,
+          destinations: [], destinationMissingCount: 0, destinationsTruncated: false, destinationAssessedCount: 0,
           partialPageIds: [],
           homepage: homeIds.has(key)
             ? "observed"
@@ -318,6 +332,11 @@ export function aggregateFullSite(state: CrawlState, pages: CrawlPage[]) {
         resources.set(key, row);
       }
       row.eventCount += occurrence.eventCount;
+      const merged = mergeCrawlDestinations(row.destinations, occurrence.networkDestinations ?? []);
+      row.destinations = merged.destinations;
+      row.destinationsTruncated ||= merged.truncated || Boolean(occurrence.networkDestinationsTruncated);
+      row.destinationMissingCount += occurrence.networkDestinationMissingCount ?? 0;
+      if (occurrence.networkDestinations !== undefined) row.destinationAssessedCount += occurrence.eventCount;
       if (!row.pageIds.includes(page.id)) row.pageIds.push(page.id);
       if (obs.status === "partial" && !row.partialPageIds.includes(page.id))
         row.partialPageIds.push(page.id);
@@ -395,7 +414,14 @@ export function compactCrawlObservation(
       row.confidence,
     ]);
     const existing = groups.get(key);
-    if (existing) { existing.eventCount += row.eventCount; existing.graphNodeRefs = [...new Set([...(existing.graphNodeRefs ?? []), ...(row.graphNodeRefs ?? [])])].slice(0, 20); }
+    if (existing) {
+      if (row.networkDestinations !== undefined) {
+        const merged = mergeCrawlDestinations(existing.networkDestinations ?? [], row.networkDestinations);
+        existing.networkDestinations = merged.destinations;
+        existing.networkDestinationsTruncated ||= merged.truncated || Boolean(row.networkDestinationsTruncated);
+        existing.networkDestinationMissingCount = (existing.networkDestinationMissingCount ?? 0) + (row.networkDestinationMissingCount ?? 0);
+      }
+      existing.eventCount += row.eventCount; existing.graphNodeRefs = [...new Set([...(existing.graphNodeRefs ?? []), ...(row.graphNodeRefs ?? [])])].slice(0, 20); }
     else
       groups.set(key, {
         ...row,
@@ -404,4 +430,11 @@ export function compactCrawlObservation(
       });
   }
   return { ...observation, links: [], occurrences: [...groups.values()] };
+}
+
+/** Bounded typed destination summaries; differing provenance is never silently overwritten. */
+export function mergeCrawlDestinations(...lists: NonNullable<CrawlOccurrence["networkDestinations"]>[]) {
+  const values = new Map<string, NonNullable<CrawlOccurrence["networkDestinations"]>[number]>();
+  for (const row of lists.flat()) values.set(JSON.stringify(row), row);
+  return { destinations: [...values.values()].slice(0, 20), truncated: values.size > 20 };
 }

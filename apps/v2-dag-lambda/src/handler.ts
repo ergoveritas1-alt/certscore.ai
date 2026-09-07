@@ -1,3 +1,4 @@
+import { createOpenAiScreenshotSafetyClassifier as createFormSnapshotSafetyClassifier } from "./screenshot-safety";
 import { FULL_SITE_PAGE_DISPATCH, dispatchFullSitePage } from "./full-site-page";
 import { InvokeCommand, LambdaClient, type InvokeCommandOutput } from "@aws-sdk/client-lambda";
 import { GetObjectCommand, PutObjectCommand, S3Client, type GetObjectCommandOutput, type PutObjectCommandOutput } from "@aws-sdk/client-s3";
@@ -1322,6 +1323,7 @@ async function runLocalV2DagLambdaScanBundle(
         evidenceLane,
         outDir: options.artifactRoot,
         onPreConsentScreenshotCaptured: options.screenshotSafetyReviewCoordinator.schedule,
+        formSnapshotReviewer: createFormSnapshotSafetyClassifier(),
         onPolicySurfaceComplete: options.onPolicySurfaceComplete,
         onPreConsentRuntimePreview: options.onRuntimePreviewComplete,
         policyOutputGraceMs: 1_000,
@@ -4191,6 +4193,7 @@ export function mergeLocalV2DagLambdaEvidenceLaneBundles(input: {
     scriptEvents: runtimeEvidence.scriptEvents,
     iframeEvents: runtimeEvidence.iframeEvents,
     collectionSurfaceInventory: runtimeEvidence.collectionSurfaceInventory,
+    collectionSurfaceSnapshots: runtimeEvidence.collectionSurfaceSnapshots,
     collectionSurfaceObservations: runtimeEvidence.collectionSurfaceObservations ?? [],
     consentUiObservations: consentProof.consentUiObservations,
     consentInteractionEvents: consentProof.consentInteractionEvents,

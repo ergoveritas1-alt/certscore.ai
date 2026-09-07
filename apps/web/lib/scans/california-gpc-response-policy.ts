@@ -5,7 +5,7 @@ export const CALIFORNIA_GPC_NO_SUPPRESSION_DEDUCTION_POINTS = 15 as const;
 export const CALIFORNIA_GPC_NO_SUPPRESSION_POLICY_KEY =
   "california.gpc_response.qualifying_activity_not_suppressed" as const;
 export const CANONICAL_OVERALL_SCORE_SOURCE = "canonical.multi_framework" as const;
-export const CANONICAL_OVERALL_SCORE_VERSION = "overall-posture.v2" as const;
+export const CANONICAL_OVERALL_SCORE_VERSION = "overall-posture.v3" as const;
 
 export type CaliforniaGpcResponsePolicyAssessment = {
   assessmentStatus: "checked" | "gap_observed" | "needs_evidence" | "not_applicable" | "review_signal";

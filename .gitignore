@@ -58,6 +58,12 @@ scripts/*-to-local.ts
 
 # Local scratch / tooling
 .codex/
+.codex-tmp/
 tmp/
 tools/generate-recovery-link.mts
 supabase/.temp
+
+# Licensed offline IP-location data (provisioned before image builds).
+config/iplocate/*.mmdb
+
+config/iplocate/*.installing

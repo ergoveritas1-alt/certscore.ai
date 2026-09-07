@@ -15,13 +15,19 @@ rm -rf "$deploy_dir" "$deps_dir" "$out_zip"
 
 cd "$repo_root"
 
+node scripts/verify-iplocate.mjs
+
 pnpm --filter @website-signal-risk-scanner/v2-dag-lambda clean
 pnpm --filter @website-signal-risk-scanner/v2-dag-lambda bundle
 pnpm --filter @website-signal-risk-scanner/v2-dag-lambda --prod deploy --legacy "$deps_dir"
 
 mkdir -p "${deploy_dir}/src"
+cp -R "${repo_root}/config/iplocate" "${deploy_dir}/iplocate"
 mkdir -p "${deploy_dir}/node_modules"
 mkdir -p "${deploy_dir}/node_modules/@napi-rs"
+for dependency in sharp @img detect-libc semver; do
+  cp -RL "${deps_dir}/node_modules/${dependency}" "${deploy_dir}/node_modules/${dependency}"
+done
 cp "${repo_root}/apps/v2-dag-lambda/dist-bundle/src/handler.js" "${deploy_dir}/src/handler.js"
 cp -R "${deps_dir}/node_modules/pdf-parse" "${deploy_dir}/node_modules/pdf-parse"
 cp -R "${deps_dir}/node_modules/pdfjs-dist" "${deploy_dir}/node_modules/pdfjs-dist"

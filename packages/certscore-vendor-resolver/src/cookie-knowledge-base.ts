@@ -1,3 +1,5 @@
+import { resolveCanonicalVendorHeadquarters } from "./vendor-headquarters";
+
 export type CanonicalCookieCategory =
   | "advertising"
   | "analytics"
@@ -32,6 +34,60 @@ type CookieKnowledgeRule = Omit<CanonicalCookieKnowledge, "name"> & {
 };
 
 const COOKIE_KNOWLEDGE_RULES: readonly CookieKnowledgeRule[] = [
+  // Frequency-reviewed September 7, 2026. Primary sources and deferred candidates:
+  // docs/operations/unknown-purpose-opportunity-assessment.md
+  // Google's published cookie table lists these exact legacy Analytics names.
+  {
+    pattern: /^__utm(?:a|b|c|t|z)$/,
+    category: "analytics",
+    dataTypes: ["analytics visitor identifier", "session and campaign measurement"],
+    description: "Legacy Google Analytics cookie used for visitor, session, campaign, or request-rate measurement.",
+    essentiality: "non_essential",
+    vendor: "Google Analytics",
+  },
+  {
+    pattern: /^FCCDCF$/,
+    category: "consent_management",
+    dataTypes: ["consent configuration"],
+    description: "Google Funding Choices cookie supporting consent-management functionality. Presence alone does not establish a visitor's consent decision.",
+    essentiality: "unknown",
+    vendor: "Google Funding Choices",
+  },
+  {
+    pattern: /^everest_(?:g|session)_v2$/,
+    contextHostPatterns: [/(?:^|\.)everesttech\.net$/i],
+    category: "advertising",
+    dataTypes: ["advertising visitor or session identifier"],
+    description: "Adobe Advertising cookie used to associate browser or session activity with advertising engagements.",
+    essentiality: "non_essential",
+    vendor: "Adobe Advertising",
+  },
+  {
+    pattern: /^_rdt_uuid$/,
+    contextHostPatterns: [/(?:^|\.)redditstatic\.com$/i, /(?:^|\.)reddit\.com$/i],
+    category: "advertising",
+    dataTypes: ["advertising pixel identifier", "conversion attribution"],
+    description: "Reddit Pixel first-party identifier used to associate conversion events with a browser. Requires direct Reddit domain or setter context.",
+    essentiality: "non_essential",
+    vendor: "Reddit Ads",
+  },
+  {
+    pattern: /^notice_behavior$/,
+    category: "consent_management",
+    dataTypes: ["regional consent-experience configuration"],
+    description: "TrustArc consent-manager cookie describing the regional consent experience. It is not proof of acceptance or refusal.",
+    essentiality: "unknown",
+    vendor: "TrustArc",
+  },
+  {
+    pattern: /^RT$/,
+    contextHostPatterns: [/(?:^|\.)go-mpulse\.net$/i],
+    category: "analytics",
+    dataTypes: ["performance session identifier", "page-load timing"],
+    description: "Akamai mPulse Boomerang cookie retaining client-side performance-session measurements. Requires direct mPulse domain or setter context.",
+    essentiality: "non_essential",
+    vendor: "Akamai mPulse",
+  },
   {
     pattern: /^sbjs_(?:migrations|current_add|first_add|current|first|udata|session)$/i,
     category: "analytics",
@@ -563,35 +619,29 @@ export type CanonicalVendorLegalContext = {
 
 const VERIFIED_AS_OF = "2026-07-23";
 
-const VENDOR_LEGAL_CONTEXT = new Map<string, CanonicalVendorLegalContext>([
+const VENDOR_LEGAL_CONTEXT = new Map<string, Omit<CanonicalVendorLegalContext, "headquartersCountry">>([
   ["Adobe Inc.", {
     controllingEntity: "Adobe Inc.",
-    headquartersCountry: "US",
     transferMechanism: { basis: "US-controlled vendor; mechanism requires current vendor/legal verification.", mechanism: "sccs_assumed_unverified", verifiedAsOf: VERIFIED_AS_OF },
   }],
   ["Google LLC", {
     controllingEntity: "Google LLC",
-    headquartersCountry: "US",
     transferMechanism: { basis: "US-controlled vendor; mechanism requires current vendor/legal verification.", mechanism: "sccs_assumed_unverified", verifiedAsOf: VERIFIED_AS_OF },
   }],
   ["LiveRamp Holdings, Inc.", {
     controllingEntity: "LiveRamp Holdings, Inc.",
-    headquartersCountry: "US",
     transferMechanism: { basis: "US-controlled vendor; mechanism requires current vendor/legal verification.", mechanism: "sccs_assumed_unverified", verifiedAsOf: VERIFIED_AS_OF },
   }],
   ["Taboola.com Ltd.", {
     controllingEntity: "Taboola.com Ltd.",
-    headquartersCountry: "US",
     transferMechanism: { basis: "US-controlled vendor; mechanism requires current vendor/legal verification.", mechanism: "sccs_assumed_unverified", verifiedAsOf: VERIFIED_AS_OF },
   }],
   ["Criteo SA", {
     controllingEntity: "Criteo SA",
-    headquartersCountry: "FR",
     transferMechanism: { basis: "Controlling entity is established in an EU member state; no cross-border transfer mechanism is inferred from headquarters alone.", mechanism: "unknown", verifiedAsOf: VERIFIED_AS_OF },
   }],
   ["OneTrust, LLC", {
     controllingEntity: "OneTrust, LLC",
-    headquartersCountry: "US",
     transferMechanism: { basis: "US-controlled vendor; mechanism requires current vendor/legal verification.", mechanism: "sccs_assumed_unverified", verifiedAsOf: VERIFIED_AS_OF },
   }],
 ]);
@@ -599,7 +649,18 @@ const VENDOR_LEGAL_CONTEXT = new Map<string, CanonicalVendorLegalContext>([
 export function resolveCanonicalVendorLegalContext(
   entity: string | null | undefined,
 ): CanonicalVendorLegalContext | null {
-  return entity ? VENDOR_LEGAL_CONTEXT.get(entity) ?? null : null;
+  const headquarters = resolveCanonicalVendorHeadquarters(entity);
+  if (!entity || headquarters?.status !== "verified" || !headquarters.headquartersCountry) return null;
+  const legacy = VENDOR_LEGAL_CONTEXT.get(entity);
+  return {
+    controllingEntity: entity,
+    headquartersCountry: headquarters.headquartersCountry,
+    transferMechanism: legacy?.transferMechanism ?? {
+      mechanism: "unknown",
+      basis: "Headquarters reference only; this vendor's transfer arrangements have not been assessed.",
+      verifiedAsOf: headquarters.checkedAt,
+    },
+  };
 }
 
 const ID_SYNC_HOST_PATTERNS = [

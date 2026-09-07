@@ -546,8 +546,8 @@ test("verified generic Reject click plus tracking produces one scored review wit
   assert.equal(result.postRejectRow.assessmentStatus, "review_signal");
   assert.match(JSON.stringify(result.postRejectRow), /Refusal registration remained unverified/);
   const score = deriveRegulatoryCoverageScore({ framework: "gdpr_eprivacy", rows: [result.postRejectRow] });
-  assert.equal(score.score, 88);
-  assert.equal(score.scoreVersion, "gdpr-eprivacy-posture.v13");
+  assert.equal(score.score, 85);
+  assert.equal(score.scoreVersion, "gdpr-eprivacy-posture.v14");
   const retained = result.postRejectRow.criticalEvidence?.retainedEvidence as Record<string, unknown>;
   assert.equal(retained.rejectInteractionConfirmed, false);
   assert.ok("rejectClickTrackingAssessment" in result.runtimeArtifacts);
@@ -561,10 +561,10 @@ test("verified generic Reject click plus tracking produces one scored review wit
 
   const existing = { assessmentStatus: "gap_observed", evidenceState: "observed", id: "transport_security_http_redirect",
     criticalEvidence: { retainedEvidence: { httpProbeOutcome: "plaintext_response_served", httpProbeStatus: 200 } }, status: "Gap observed" };
-  assert.equal(deriveRegulatoryCoverageScore({ framework: "gdpr_eprivacy", rows: [existing, result.postRejectRow] }).score, 86);
+  assert.equal(deriveRegulatoryCoverageScore({ framework: "gdpr_eprivacy", rows: [existing, result.postRejectRow] }).score, 83);
   const confirmed = { ...result.postRejectRow, assessmentStatus: "gap_observed", status: "Gap observed",
     criticalEvidence: { retainedEvidence: { rejectInteractionConfirmed: true, scoreEffect: "canonical_post_refusal_policy" } } };
-  assert.equal(deriveRegulatoryCoverageScore({ framework: "gdpr_eprivacy", rows: [confirmed, result.postRejectRow] }).score, 88);
+  assert.equal(deriveRegulatoryCoverageScore({ framework: "gdpr_eprivacy", rows: [confirmed, result.postRejectRow] }).score, 85);
   const contradiction = { ...confirmed, criticalEvidence: { retainedEvidence: {
     rejectInteractionConfirmed: true, refusalSignalContradictsAction: true,
   } } };

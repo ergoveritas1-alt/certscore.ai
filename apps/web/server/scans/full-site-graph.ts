@@ -3,7 +3,7 @@ import { loadFullSiteCrawl, loadFullSitePages, query, readFullSiteArtifact } fro
 import { crawlObservationSchema } from "@website-signal-risk-scanner/shared";
 import { projectCrawlRuntimeGraph } from "./runtime-evidence-graph-projection";
 
-export async function loadFullSiteGraph(scanId: string, pageId: string) {
+export async function loadFullSiteGraphContext(scanId: string, pageId: string) {
   if (!/^[a-f0-9-]{36}$/i.test(pageId)) return null;
   const crawl = await loadFullSiteCrawl(scanId);
   const [page] = await loadFullSitePages(scanId, pageId);
@@ -23,5 +23,9 @@ export async function loadFullSiteGraph(scanId: string, pageId: string) {
   const projection = projectCrawlRuntimeGraph({ graph: (evidence as { runtimeEvidenceGraph?: unknown })?.runtimeEvidenceGraph, pageId, attemptId: observation.attemptId, source });
   const graph = projection.graphs[0];
   if (!graph || graph.sourceHash !== observation.runtimeGraph.sha256 || graph.nodes.length !== observation.runtimeGraph.nodeCount || graph.edges.length !== observation.runtimeGraph.edgeCount) return null;
-  return projection;
+  return { projection, evidence };
+}
+
+export async function loadFullSiteGraph(scanId: string, pageId: string) {
+  return (await loadFullSiteGraphContext(scanId, pageId))?.projection ?? null;
 }

@@ -20,7 +20,9 @@ export {
   type TransferMechanism,
 } from "./cookie-knowledge-base";
 
-export const CANONICAL_VENDOR_RESOLVER_VERSION = "certscore-vendor-resolver-2026-09-05-attribution-v1";
+export { resolveCanonicalVendorHeadquarters, VENDOR_HEADQUARTERS_VERSION, VENDOR_HEADQUARTERS_REFERENCES, type VendorHeadquartersReference } from "./vendor-headquarters";
+
+export const CANONICAL_VENDOR_RESOLVER_VERSION = "certscore-vendor-resolver-2026-09-07-attribution-v2";
 
 export type VendorResolverEvidenceType =
   | "request"
@@ -2140,7 +2142,7 @@ const rules: VendorRule[] = [
   },
   {
     identity: {"entityId":"ent_eb11d9612170","vendorId":"ven_2b2ace8f0d60","serviceId":"svc_223d6f758020"},
-    entity: "jsDelivr",
+    entity: "Volentio JSD Limited",
     vendor: "jsDelivr",
     product: "jsDelivr CDN",
     purpose: "infrastructure",
@@ -2148,6 +2150,8 @@ const rules: VendorRule[] = [
     regulatoryRelevance: ["cdn", "third_party_runtime"],
     confidence: 0.92,
     hostPatterns: [/^cdn\.jsdelivr\.net$/i],
+    review: { reviewedAt: "2026-09-07", reviewer: "Codex source review", sourceUrls: ["https://www.jsdelivr.com/documents/data-processing-agreement.pdf"] },
+    // Correct the owner label while preserving the frozen service identity.
     basisLabel: "jsdelivr_cdn_host",
   },
   {
@@ -2176,7 +2180,7 @@ const rules: VendorRule[] = [
   },
   {
     identity: {"entityId":"ent_31c0793c7b6c","vendorId":"ven_30f8c31187a5","serviceId":"svc_30edf95d4d3c"},
-    entity: "npm, Inc.",
+    entity: "UNPKG (operator unverified)",
     vendor: "unpkg",
     product: "unpkg CDN",
     purpose: "infrastructure",
@@ -2184,6 +2188,8 @@ const rules: VendorRule[] = [
     regulatoryRelevance: ["cdn", "script_delivery", "third_party_runtime"],
     confidence: 0.9,
     hostPatterns: [/^unpkg\.com$/i],
+    review: { reviewedAt: "2026-09-07", reviewer: "Codex source review", sourceUrls: ["https://www.unpkg.com/"] },
+    // Correct the unsupported npm attribution; no corporate HQ is inferred.
     basisLabel: "unpkg_cdn_host",
   },
   {
@@ -5980,3 +5986,5 @@ function stableObservationId(
   }
   return `vendor_${hash.toString(16)}`;
 }
+
+export { resolveDocumentedServiceRegion, documentedServiceRegions, SERVICE_REGION_REFERENCES, SERVICE_REGION_REFERENCE_VERSION, type ServiceRegionReference } from "./service-regions";

@@ -67,7 +67,7 @@ reserves four seconds for bounded parallel artifact writes and its completion
 callback; a slow admission call can reduce the observation window. Deadline-limited
 observations remain partial or failed. `pageSeconds` records the 20-second maximum.
 The existing homepage Lambda keeps its 75-second timeout and observation protocol.
-No additional model calls, screenshots, consent actions, heavy-resource stubbing
+Except for the owner-approved low-resolution form snapshots and their image-safety reviews described below, no additional model calls, screenshots, consent actions, heavy-resource stubbing
 or provisioned capacity are introduced.
 
 ## Execution and safety
@@ -355,7 +355,159 @@ of three-page reports; local testing adds no cloud cost. Larger cohorts need
 cost reassessment. No additional scans or model calls are introduced.
 
 The owner selected one deduction per distinct site finding, with affected pages
-attached rather than repeated deductions. That cumulative scoring change is not
-yet implemented: additional-page inventories have no scored assessments. The
-current number is explicitly labeled Homepage score until canonical page
-assessment and site-level scoring are implemented.
+attached rather than repeated deductions. `full-site-distinct-findings.v2` now
+combines the persisted canonical homepage checklist with eligible additional-page
+storage, tracking, session replay, fingerprinting, sensitive-surface tracking and embed checklist rows. It verifies retained artifact hashes and
+page/configuration/attempt identity, validates typed runtime events, constructs
+normalized concerns, applies concern policy and projects the checklist before
+using the [canonical scoring policy](scoring-policy.md) identity deductions and family caps. Cookie identities and
+tracking vendors are deduplicated across pages. Unknown, malformed and incomplete
+additional-page evidence cannot create deductions. Consent controls, policy and action assessments remain homepage-scoped. Additional runtime categories reuse the homepage evidence adapters and require typed retained runtime evidence; missing or failed module evidence remains limited and neutral. The report explicitly states the assessed scope.
+
+The evidence-bound score and page provenance are saved in the crawl's policy JSON
+and reused by the report and full-site JSON/PDF downloads. No homepage score or
+homepage report projection is rewritten. Limited results use a bounded ten-minute
+process cache instead of persistent storage. Added artifact reads and one small
+result write are estimated below $1/month at 1,000 three-page reports; local
+testing has no paid-service usage. Reassess costs for larger cohorts. No extra
+scanner invocations or model calls are used.
+
+The summary also shows Non-essential and Review counts for cookies/storage and
+requests. Cookie/storage counts use distinct identities; request counts use
+retained event counts to match the request total. These inventory classifications
+are separate from the verified evidence required for score deductions.
+
+### Browser navigation and progress
+
+Full-site execution belongs to the background validation worker and persisted
+crawl/page jobs, not the results page. Leaving or closing the page cancels only
+its pending report reads. The worker continues within the existing crawl limits.
+On mount, tab focus, visibility restoration, or browser Back/Forward restoration,
+the workspace fetches current persisted progress with caching disabled. Its
+elapsed clock uses the original crawl start time and never restarts on return.
+This does not introduce scanner invocations or change polling frequency.
+
+
+### Collection surfaces and low-resolution form snapshots
+
+Owner approved form-snapshot capture/storage cost on September 6, 2026, then
+requested lower-resolution captures. Planning estimate: $20–$100 per million
+snapshots, assuming small JPEGs and 30-day retention; actual cost depends on
+volume, existing evidence retention, image size, and review/capture latency.
+Images share the existing evidence artifact and its retention policy; this
+change adds no browser invocation, consent/form action, retry, provisioned
+capacity, or scoring effect.
+
+`CollectionSurfaceInventory` is retained by the runtime-evidence lane and by
+each additional-page inventory worker. The existing main-document inventory
+limits remain 10 forms, 20 fields per form, 60 fields per page, and 250 inspected
+controls. Omitted candidates remain explicitly limited. Hidden controls,
+iframe contents, and controls revealed only by interaction are not covered.
+Snapshots cover native/ARIA form containers; unassociated controls have no
+verified form container and retain an unavailable image state.
+
+The full-site report shows **Collection surfaces (forms)** below Resource
+details: one row per retained form on each page, metadata, captured-page URL,
+expandable fields, and View form for verified retained images. Form, type, field
+count, method, destination, captured page, and snapshot status columns sort in
+both directions. Field counts sort numerically; expanded rows retain their
+identity when ordering changes. Duplicate forms
+on different pages remain separate. Missing legacy inventories are unknown,
+not zero-form observations. Failed/withheld/uncaptured images are unavailable;
+old reports are not rescanned or supplied synthetic screenshots.
+
+`certscore.collection-surface-snapshot.v1` binds each crop to its form reference,
+exact observed document URL, and inventory hash. Captured controls must retain
+their DOM position, element/input type, label, required state, and native/ARIA
+container relationship. Form values are masked. Crops are JPEG quality 45,
+resized without enlargement to at most 640 × 960, capped at 96 KB. Capture and
+parallel image-safety review share a 2.5-second optional budget inside the
+existing page deadline. Failures never erase field evidence or add findings.
+
+Approved image bytes are retained only in the verified evidence JSON; compact
+report rows retain metadata only. Publication validates inventory/source
+binding and image byte hashes. View form uses the existing authenticated,
+role-gated, rate-limited full-site API, validates the scan/page/attempt and
+retained artifact hash, and serves only the approved JPEG with private,
+no-store headers. The homepage uses its retained canonical bundle; additional
+pages use their exact successful attempt artifact. No public image URL is
+created. The Lambda/ZIP packaging includes sharp and its platform libraries.
+
+### Observed network destinations
+
+The data-transfer cell presents observed server countries and network operators;
+provider headquarters and transfer-mechanism registry context remain separate in
+the details. These are descriptive inventory facts, without score or finding effects.
+An address associated with a browser response may be a CDN edge or cached response
+metadata; it does not establish storage location or onward processing.
+
+New response capture binds the server address to the Playwright response/request
+object and retains request and redirect identity. It no longer pairs addresses by
+URL queues. Service-worker responses are explicitly neutral; graph evidence keeps
+its existing exact CDP cache/service-worker metadata. No additional network probe,
+model call, browser session, retry or observation window is introduced.
+
+Country and ASN lookup uses local MMDB readers, a bounded 2,048-entry cache and one
+shared in-flight lookup per IP. Country registration is not substituted for physical
+server location. Missing, stale, unmatched databases preserve the IP and explicit
+coverage states. Database build dates identify successful lookup provenance.
+Typed optional summaries survive crawl compaction and cross-page aggregation with
+20-destination limits and explicit truncation. Old evidence remains old: no country
+is synthesized, no historical source hashes are modified, and full coverage is not
+claimed for the older evidence-file fallback. Services use the same retained summaries
+as resources; there are no new per-service evidence-file reads.
+
+Provision IPLocate Country/ASN MMDB files with `scripts/install-iplocate.ts` (see
+`config/iplocate/README.md`). Free downloads require no per-IP fee or API call.
+The owner selected IPLocate with attribution on `/terms#third-party-data`, not
+repeated on reports. Data uses CC BY-SA 4.0; report fields are selected and
+reformatted, and the third-party license continues to govern these fields.
+Legacy MaxMind source identifiers remain readable without relabeling.
+
+Database files are ignored by Git and included in scanner image/ZIP builds when
+provisioned before building. Restart processes after an update. CI also needs
+files supplied before the image build; a source checkout alone has no databases.
+No scheduled download or production deployment is enabled by this change.
+There is no scan-time network lookup or database download. One local file load
+per new process is reused for all lookups; warm Lambda invocations reuse readers.
+The free GitHub mirror can lag the daily provider releases; stale files fail closed.
+
+Incremental compute estimate (not a measured latency result): 10–50 ms at about 3 GB
+is roughly $0.05–$0.25 per 100,000 enrichment executions. Full-site pages and enabled
+runtime lanes can each execute enrichment. Additional compact metadata is bounded;
+no extra S3 operations or retention period are introduced. Database image storage,
+updates and cold-start effects remain to be measured with the selected real data;
+no new recurring update service has been enabled.
+
+Local benchmark (September 7, 2026, Node 22; not a Lambda performance guarantee):
+the September 7 IPLocate Country and ASN files total 96,199,783 bytes (~92 MiB).
+Opening both took 24.8 ms and added 92.7 MiB RSS. Across 10,000 mixed IPv4/IPv6
+addresses, direct Country+ASN lookup pairs averaged 0.0028 ms, p95 0.0069 ms.
+This includes misses and measures the reader, not complete scan latency. Warm
+processes reuse readers; the separate IP result cache further avoids repeated work.
+No provisioned capacity, external per-IP API, or new recurring updater is enabled.
+
+Efficiency policy: keep one lazily opened reader pair per process, with 512 decoded
+records per reader and a 2,048-entry LRU of IP results (including misses). Concurrent
+requests share an in-flight lookup. Expiry is bounded by the precise database age
+limit and the next UTC day; database replacement still requires process restart.
+Public-IP CIDR constants are pre-parsed once. Late finalized response callbacks do
+not start enrichment. Non-network lanes/unused processes do not load the files.
+The database image layer precedes application code so unchanged database content
+can be reused across code releases. These optimizations add $0 recurring cost;
+no Lambda memory setting, provisioned concurrency, API, or service is added.
+
+A repeatable offline benchmark is available:
+`pnpm exec tsx --tsconfig tsconfig.base.json scripts/benchmark-iplocate.ts`.
+With the current files, first lookup including opening both files took 17.6 ms;
+10,000 unique synthetic IPv4/IPv6 IPs averaged 0.0052 ms through the full enricher,
+and warm repeated-IP calls averaged 0.0030 ms. These measurements include validation
+and wrapper overhead. A separate 20,000-IP comparison of decoder caches reduced
+retained heap growth from 2.75 MiB (10,000 entries per reader) to 0.50 MiB (512),
+with direct lookup means 0.0015 vs 0.0017 ms. Results vary by machine/cohort.
+
+Recommended release operations: fetch/validate a database pair outside scan time,
+reuse the same pair across regions, and include it in normal scanner releases.
+Review freshness weekly and release before the 30-day limit. Avoid downloading on
+each invocation, per-IP APIs, centralized cache services, or daily scanner rebuilds
+solely for geolocation updates. Automatic refresh/release is not enabled here.

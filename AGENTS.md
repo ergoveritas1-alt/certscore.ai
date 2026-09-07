@@ -451,6 +451,16 @@ WC01 does not own scanner runtime observation, crawler identity, or raw evidence
 
 Agents may inspect WS01 for scanner evidence contract, runtime signal, and retained evidence context. Only edit WS01 when the user request explicitly spans both repos or when a WC01 concern/policy change exposes a missing or incorrect upstream WS01 signal.
 
+### Canonical scoring policy
+
+`apps/web/lib/scans/scoring-policy.ts` is the source of truth for approved score
+rows, deductions, identity schedules, family caps, and single-page/full-site
+scope. `/scoring-review` renders that registry directly. Scoring consumers must
+import it rather than duplicate numbers or infer score effects in display code.
+Preserve canonical evidence eligibility, cross-page identity deduplication, the
+zero floor, and versioned historical results. See `docs/scoring-policy.md` for
+scope, provenance, and regression requirements.
+
 ### Canonical API read-rate policy
 
 `packages/shared/src/api-read-rate-policy.ts` `API_READ_RATE_POLICY` is the sole source of truth for completed-scan retrieval and status-polling windows, scope limits, and unit weights across the Pulse API, API v2, hosted MCP, and any future API or agent-facing read path. Import this policy; do not duplicate its numeric limits in route, SDK, MCP, worker, infrastructure, documentation, `.plist`, JSON, or environment-specific configuration. This file intentionally does not restate the current numbers.

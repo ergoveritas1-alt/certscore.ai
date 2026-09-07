@@ -27,7 +27,7 @@ test(
       );
       if (req.url === "/a")
         res.end(
-          `<main>Public inventory fixture A</main><button onclick="fetch('/clicked')">Accept all</button><a href="/privacy">Privacy policy</a><a href="/b">Contact</a><script src="/script.js"></script><iframe src="/frame"></iframe><img src="/image.png"><script>document.cookie='page_a=private-cookie;path=/';localStorage.setItem('page_a','private-value');fetch('/collect?token=private-query');fetch('/collect?token=private-query');</script>`,
+          `<main>Public inventory fixture A</main><form aria-label="Contact"><label>Email<input type="email" value="private-form-value"></label></form><button onclick="fetch('/clicked')">Accept all</button><a href="/privacy">Privacy policy</a><a href="/b">Contact</a><script src="/script.js"></script><iframe src="/frame"></iframe><img src="/image.png"><script>document.cookie='page_a=private-cookie;path=/';document.cookie='__utma=private-analytics;path=/';document.cookie='FCCDCF=private-consent;path=/';document.cookie='_rdt_uuid=private-unverified;path=/';document.cookie='_ga=private-existing;path=/';localStorage.setItem('page_a','private-value');fetch('/collect?token=private-query');fetch('/collect?token=private-query');</script>`,
         );
       else if (req.url === "/b")
         res.end(
@@ -54,6 +54,7 @@ test(
       const pageId = randomUUID(), attemptId = randomUUID();
       const a = await runInventoryOnly({
         runtimeGraph: { pageId, attemptId },
+        formSnapshotReviewer: async () => ({ safeForDisplay: true }),
         url: origin + "/a",
         hosts: ["127.0.0.1"],
         region: "eu-west-1",
@@ -101,6 +102,19 @@ test(
         status: "completed",
         limitations: [],
       });
+      // Fresh capture -> typed cookie event -> inventory projection: existing and
+      // newly reviewed knowledge reaches the report without a display fallback.
+      for (const [name, purpose] of [["_ga", "analytics"], ["__utma", "analytics"], ["FCCDCF", "consent_management"], ["_rdt_uuid", "unknown"], ["page_a", "unknown"]]) {
+        assert.equal(a.evidence.cookieEvents.find(event => event.cookieName === name && event.operation === "browser_snapshot")?.cookiePurpose, purpose, name);
+        assert.equal(projected.occurrences.find(row => row.kind === "cookie" && row.label === name)?.purpose, purpose, name);
+      }
+      assert.equal(a.evidence.cookieEvents.find(event => event.cookieName === "FCCDCF")?.cookieEssentiality, "unknown");
+      assert.ok(!JSON.stringify(projected).includes("private-analytics"));
+      assert.equal(projected.collectionSurfaces?.inventory.forms.length, 1);
+      assert.equal(projected.collectionSurfaces?.snapshots[0]?.status, "available");
+      assert.equal("data" in projected.collectionSurfaces!.snapshots[0]!, false);
+      assert.ok(!JSON.stringify(projected.collectionSurfaces).includes("private-form-value"));
+      assert.ok(a.evidence.collectionSurfaceSnapshots?.[0]?.data);
       const graph = a.evidence.runtimeEvidenceGraph;
       assert.ok(graph);
       assert.equal(graph.scanId, pageId);

@@ -82,14 +82,14 @@ export function FullSiteControls({
   }
   if (!policy) return availability === "denied" ? null : (
     <div className="px-3 py-2 text-sm text-slate-600" role="status">
-      <span className="font-semibold">Full site</span>
+      <span className="text-sm font-semibold text-slate-700">Full site</span>
       {availability === "loading" ? <span className="ml-2">Loading…</span> : <><span className="ml-2">Could not load.</span><button type="button" className="ml-2 text-sky-700 underline" onClick={() => setRetry(value => value + 1)}>Retry</button></>}
     </div>
   );
   return (
     <fieldset className="border-b border-slate-100 bg-white px-3 py-2 text-left text-slate-900">
       <label
-        className="flex cursor-pointer items-center justify-between gap-3 font-semibold"
+        className="flex cursor-pointer items-center justify-between gap-3 text-sm font-semibold text-slate-700"
         htmlFor={`${id}-enabled`}
       >
         Full site

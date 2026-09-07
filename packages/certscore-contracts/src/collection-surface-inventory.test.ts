@@ -126,3 +126,13 @@ test("CollectionSurfaceInventory v1 enforces form, per-form field, and total fie
   assert.ok(64 > MAX_COLLECTION_SURFACE_FIELDS);
   assert.equal(collectionSurfaceInventorySchema.safeParse(tooManyTotal).success, false);
 });
+
+
+test("form snapshot contracts reject unapproved bytes and oversized or incomplete captures", async () => {
+  const { collectionSurfaceSnapshotSchema } = await import("./index");
+  const base = { contractVersion: "certscore.collection-surface-snapshot.v1", formRef: "collection_form_0", pageUrl: "https://example.test/contact", capturedAt: "2026-09-07T00:00:00Z", sourceInventoryHash: "a".repeat(64), mimeType: "image/jpeg", valuesMasked: true };
+  assert.equal(collectionSurfaceSnapshotSchema.safeParse({ ...base, status: "unavailable" }).success, true);
+  assert.equal(collectionSurfaceSnapshotSchema.safeParse({ ...base, status: "withheld", data: "hidden-image" }).success, false);
+  assert.equal(collectionSurfaceSnapshotSchema.safeParse({ ...base, status: "available", data: "jpeg" }).success, false);
+  assert.equal(collectionSurfaceSnapshotSchema.safeParse({ ...base, status: "available", data: "jpeg", width: 641, height: 300, sha256: "b".repeat(64), sizeBytes: 4 }).success, false);
+});

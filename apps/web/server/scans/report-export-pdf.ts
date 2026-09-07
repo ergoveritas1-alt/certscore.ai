@@ -333,7 +333,8 @@ function reportLines(report: CanonicalReportExport, image: PdfImage | null): Pdf
     const f=report.fullSite, {state,counts,totals,timing}=f.summary;
     lines.splice(0,0,...[
       sectionHeading("Scan scope and resource inventory"),
-      ...wrappedLines(`${f.scope}. Additional pages: Not assessed for consent, CMP, policy, GDPR transparency or transport. ${f.scoreScope} remains unchanged.`),
+      ...wrappedLines(`${f.scope}. Additional pages: Not assessed for consent, CMP, policy, GDPR transparency or transport.`),
+      ...wrappedLines(`${f.scoreScope}: ${f.score?.value ?? "Unavailable"}/100. ${f.score?.scope ?? "Scored evidence unavailable."}`),
       ...wrappedLines(`${f.condition} ${f.countingScope}`),
       ...wrappedLines(`Max pages including homepage: ${state.requested.maxPages}; requested concurrency: ${state.requested.concurrency}; wait between starts: ${state.requested.waitSeconds}s; region: ${state.region}.`),
       ...wrappedLines(`Effective concurrency: ${state.effective.concurrency}; effective wait: ${state.effective.waitSeconds}s. Status: ${state.status}; stop reason: ${state.stopReason??"In progress"}.`),

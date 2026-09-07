@@ -1,3 +1,4 @@
+import { SCORE_FLOOR } from "../../lib/scans/scoring-policy";
 import type { GdprEprivacyCoverageChecklistItem } from "../../lib/scans/gdpr-eprivacy-coverage-checklist";
 import type { UnifiedFindingDisplayPacket } from "../../lib/scans/unified-findings";
 import {
@@ -34,5 +35,5 @@ export function deriveCanonicalOverallScoreForReport(input: {
     rows: input.checklistRows
   }).score;
   if (postureScore === null) return null;
-  return Math.max(0, postureScore - californiaGpcDeduction(input.unifiedFindings));
+  return Math.max(SCORE_FLOOR, postureScore - californiaGpcDeduction(input.unifiedFindings));
 }

@@ -1,3 +1,4 @@
+import { captureCollectionSurfaceSnapshots, type FormSnapshotReviewer } from "../collection-surface-snapshots";
 import { createGpcSignalCapture, installGpcNavigatorSignal } from "../gpc-signal-capture.js";
 import type { GpcSignalObservation } from "@certscore/contracts";
 import {
@@ -12,7 +13,6 @@ import {
   type DomSnapshotArtifact,
   type IframeEvent,
   type NetworkEvent,
-  type NetworkDestination,
   type NetworkResponseEvent,
   type RuntimeEvidenceEvent,
   type RuntimeEvidenceGraph,
@@ -70,7 +70,7 @@ import {
   getRegistrableDomainFromUrl,
 } from "../domain-utils.js";
 import { chromiumContextOptions, chromiumLaunchOptions } from "../playwright-runtime.js";
-import { enrichNetworkDestination } from "../network-destination.js";
+import { captureResponseDestination, enrichNetworkDestination } from "../network-destination.js";
 import { normalizePublicIpAddress } from "../public-ip-address.js";
 import { maybeFulfillHeavyResource } from "../resource-stubbing.js";
 import { installWebBotAuthRoute } from "../web-bot-auth-routing.js";
@@ -190,6 +190,7 @@ export interface PreConsentRuntimeScannerInput {
   captureScope?: "combined" | "consent_proof" | "runtime_evidence";
   executionProfile?: "inventory_only";
   onInventoryPage?: (page: Page) => Promise<void>;
+  formSnapshotReviewer?: FormSnapshotReviewer;
   navigationHosts?: string[];
   navigationAllowed?: (url: string) => boolean;
   runtimeGraph?: RuntimeGraphCaptureInput;
@@ -531,6 +532,7 @@ export interface PreConsentRuntimeScannerResult {
   scriptEvents: ScriptEvent[];
   iframeEvents: IframeEvent[];
   consentUiObservations: ConsentUiObservation[];
+  collectionSurfaceSnapshots?: import("@certscore/contracts").CollectionSurfaceSnapshot[];
   collectionSurfaceInventory?: CollectionSurfaceInventory;
   collectionSurfaceObservations: CollectionSurfaceObservation[];
   cmpRuntimeObservations: CmpRuntimeObservation[];
@@ -613,7 +615,6 @@ export async function preConsentRuntimeScanner(
   const pendingResponseCaptures = new Set<Promise<void>>();
   let responseCaptureFinalized = false;
   const cdpInitiatorsByUrl = new Map<string, string[][]>();
-  const cdpDestinationsByUrl = new Map<string, NetworkDestination[]>();
   const browserDocumentIdentityState: BrowserDocumentIdentityState = {};
   let networkMetadataSession: CDPSession | null = null;
   let visualCapture: VisualCaptureSummary = {
@@ -680,7 +681,6 @@ export async function preConsentRuntimeScanner(
   };
   page.on("crash", recordPageCrash);
   networkMetadataSession = await installCdpNetworkMetadataCapture(page, {
-    destinationsByUrl: cdpDestinationsByUrl,
     initiatorsByUrl: cdpInitiatorsByUrl,
     documentIdentityState: browserDocumentIdentityState,
   }).catch((error) => {
@@ -788,7 +788,6 @@ export async function preConsentRuntimeScanner(
     const responsibleScriptUrl = initiatorChain.find((value) =>
       classifyParty(value, topLevelForParty) === "third_party"
     );
-    const networkDestination = shiftQueuedValue(cdpDestinationsByUrl, requestUrl);
     const event: NetworkEvent = {
       eventId: nextId("net"),
       eventType: "network_request",
@@ -835,7 +834,6 @@ export async function preConsentRuntimeScanner(
       isSubFrame: !isMainFrame,
       isThirdParty: party === "third_party",
       idSyncEndpoint: isCanonicalIdSyncEndpoint(hostname),
-      networkDestination,
       parentRequestId: redirectedFromId,
       redirectChainRequestIds: redirectChainIds(request, requestIds),
       responsibleScriptUrl,
@@ -3720,6 +3718,9 @@ export async function preConsentRuntimeScanner(
       iframeEvents,
     });
     await emitPassiveRuntimeCheckpoint();
+    const collectionSurfaceSnapshots = input.formSnapshotReviewer && retainedCollectionSurfaceInventory
+      ? await captureCollectionSurfaceSnapshots(page, retainedCollectionSurfaceInventory, input.formSnapshotReviewer, input.signal)
+      : undefined;
     if (input.onInventoryPage) {
       // Optional crawl metadata must never downgrade or delay the canonical homepage assessment.
       let timer: ReturnType<typeof setTimeout> | undefined;
@@ -3731,6 +3732,7 @@ export async function preConsentRuntimeScanner(
       retainedRenderedPolicyLinkEvidence.length > 0;
     retainOwnedBrowserForPolicyRecovery = ownsBrowser && retainPolicyRecoverySession;
     return {
+      collectionSurfaceSnapshots,
       runtimeEvidenceGraph: finishGraph(),
       moduleRun: {
         moduleName: "preConsentRuntimeScanner",
@@ -3959,9 +3961,18 @@ export async function preConsentRuntimeScanner(
       .filter((metadata) => isValidSetCookieDomainForResponse(metadata.domain, hostname));
     const safeHeaders = safeResponseHeaders(headers);
     const sizesPromise = response.request().sizes().then(normalizeResponseSizes).catch(() => undefined);
-    const destinationPromise = enrichNetworkDestination(
-      requestEvent?.networkDestination ?? shiftQueuedValue(cdpDestinationsByUrl, responseUrl),
-    );
+    // Playwright binds serverAddr to this exact response/request, including redirects.
+    // Never correlate destinations by URL: concurrent requests can have the same URL.
+    const destinationPromise = captureResponseDestination(response).then(async result => {
+      if (responseCaptureFinalized) return undefined;
+      if (requestEvent) requestEvent.networkConnection = {
+        source: "response_request_binding", status: result.status,
+        requestId: requestEvent.requestId,
+        redirectedFromRequestId: request.redirectedFrom() ? requestIds.get(request.redirectedFrom()!) : undefined,
+        fromServiceWorker: result.fromServiceWorker,
+      };
+      return enrichNetworkDestination(result.destination);
+    });
     const sizes = graphCapture ? undefined : await sizesPromise;
     const timing = responseTiming(response);
     const networkDestination = graphCapture ? requestEvent?.networkDestination : await destinationPromise;
@@ -3995,6 +4006,7 @@ export async function preConsentRuntimeScanner(
       setCookieMetadata,
       cookieNamesSet: setCookieMetadata.map((metadata) => metadata.name),
       networkDestination,
+      networkConnection: requestEvent?.networkConnection,
       responseHeaders: safeHeaders,
       cacheHeaders: pickHeaders(headers, ["cache-control", "expires"]),
       locationRedirectHeader: headers.location,
@@ -4084,6 +4096,7 @@ export async function preConsentRuntimeScanner(
       if (responseCaptureFinalized) return;
       responseEvent.sizes = resolvedSizes;
       responseEvent.networkDestination = resolvedDestination;
+      responseEvent.networkConnection = requestEvent?.networkConnection;
       if (requestEvent && resolvedDestination) requestEvent.networkDestination = resolvedDestination;
     }
   }
@@ -10690,7 +10703,6 @@ async function readCookieWriteProbe(page: Page): Promise<RetainedCookieWriteProb
 async function installCdpNetworkMetadataCapture(
   page: Page,
   stores: {
-    destinationsByUrl: Map<string, NetworkDestination[]>;
     initiatorsByUrl: Map<string, string[][]>;
     documentIdentityState: BrowserDocumentIdentityState;
   },
@@ -10731,19 +10743,6 @@ async function installCdpNetworkMetadataCapture(
       ...flattenCdpInitiatorStack(params.initiator?.stack),
     ]).filter((value) => /^https?:\/\//i.test(value));
     if (chain.length > 0) pushQueuedValue(stores.initiatorsByUrl, url, chain);
-  });
-  session.on("Network.responseReceived", (raw: unknown) => {
-    const params = raw as {
-      response?: { remoteIPAddress?: string; url?: string };
-    };
-    const ip = normalizePublicIpAddress(params.response?.remoteIPAddress);
-    const url = params.response?.url;
-    if (!ip || !url) return;
-    pushQueuedValue(stores.destinationsByUrl, url, {
-      ip,
-      locationLabel: "server location (may be CDN edge)",
-      source: "cdp_remote_ip",
-    });
   });
   return session;
 }

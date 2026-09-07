@@ -981,7 +981,7 @@ test("canonical consent-control flow projects UniConsent accept/options evidence
   assert.equal(story.rejectRow.status, "Review signal");
   assert.equal(story.rejectRow.assessmentStatus, "review_signal");
   assert.equal(getEvidenceLabel(story.rejectRow), "Partial concern");
-  assert.equal(story.rejectScore.score, 90);
+  assert.equal(story.rejectScore.score, 88); // Approved v14 Reject-path deduction: 12.
   assert.match(story.rejectRow.limitation ?? "", /no same-layer reject/i);
 });
 
@@ -1198,7 +1198,7 @@ test("canonical pre-consent storage flow preserves classification and applies th
       expectedGapFinding: false,
       expectedMetric: null,
       expectedRowStatus: "Review signal",
-      expectedScore: 94
+      expectedScore: 92
     },
     {
       name: "confirmed non-essential write",
@@ -1221,7 +1221,7 @@ test("canonical pre-consent storage flow preserves classification and applies th
       expectedGapFinding: true,
       expectedMetric: 1,
       expectedRowStatus: "Gap observed",
-      expectedScore: 94
+      expectedScore: 92
     }
   ] as const;
 

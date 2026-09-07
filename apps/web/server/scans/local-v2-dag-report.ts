@@ -1744,7 +1744,22 @@ function getLocalV2DagAuxiliaryArtifact(
   return null;
 }
 
-async function readLocalV2DagPolicyTextArtifactFromS3(
+export async function readProjectedPolicyTextArtifact(pointer: LocalV2DagLambdaArtifactPointer, scanId: string) {
+  if (process.env.NODE_ENV !== "production" && pointer.uri.includes(`/local-parity/${scanId}/auxiliary/`) && /^[a-f0-9-]{36}$/i.test(scanId)) {
+    const fileName = path.basename(pointer.uri);
+    for (const root of v2PolicyTextArtifactRoots()) {
+      const candidate = resolvePolicyTextArtifactPath(path.join(root, scanId, fileName));
+      if (!candidate) continue;
+      if (!pointer.sha256 || !pointer.sizeBytes || pointer.sizeBytes > 1_000_000) throw new Error("Invalid retained policy text bounds.");
+      const body = verifyLocalV2DagLambdaArtifactBody({ body: await readFile(candidate), expectedSha256: pointer.sha256, expectedSizeBytes: pointer.sizeBytes });
+      if (body.includes(0)) throw new Error("Invalid retained policy text.");
+      return { text: body.toString("utf8").replace(/\s+/g, " ").trim(), sha256: pointer.sha256, sizeBytes: body.byteLength };
+    }
+  }
+  return readLocalV2DagPolicyTextArtifactFromS3(pointer);
+}
+
+export async function readLocalV2DagPolicyTextArtifactFromS3(
   pointer: LocalV2DagLambdaArtifactPointer,
 ): Promise<{ text: string; sha256: string; sizeBytes: number }> {
   if (pointer.sizeBytes === null || pointer.sizeBytes <= 0 || pointer.sizeBytes > 1_000_000 || !pointer.sha256) {
@@ -2020,7 +2035,7 @@ async function readLocalV2ConsentControlGeometryFromS3(
   }
 }
 
-function buildVendorResolverInputs(bundle: CanonicalEvidenceBundle): VendorResolverInput[] {
+function buildVendorResolverInputs(bundle: Partial<Pick<CanonicalEvidenceBundle, "networkEvents" | "scriptEvents" | "iframeEvents" | "cookieEvents">>): VendorResolverInput[] {
   return [
     ...(bundle.networkEvents ?? []).map((event) => ({
       consentStateAtTime: event.consentStateAtTime,
@@ -2133,7 +2148,7 @@ export function hasConcreteCanonicalVendorAnchor(vendor: NormalizedVendorObserva
     return nonLabelRuntimeBasis && (vendor.matchedEvidenceIds?.length ?? 0) > 0;
 }
 
-function buildVendorEvidence(bundle: CanonicalEvidenceBundle) {
+function buildVendorEvidence(bundle: Partial<Pick<CanonicalEvidenceBundle, "networkEvents" | "scriptEvents" | "iframeEvents" | "cookieEvents" | "normalizedVendorObservations" | "observedJourneys">>) {
   const retainedNormalizedVendors = (bundle.normalizedVendorObservations ?? [])
     .filter(hasConcreteCanonicalVendorAnchor);
   const vendors = [
@@ -2267,7 +2282,7 @@ function vendorRowsForAdvertisingInfrastructure(vendors: ReturnType<typeof build
   });
 }
 
-function sanitizeIframeEvents(bundle: CanonicalEvidenceBundle, rootDomain: string | null) {
+function sanitizeIframeEvents(bundle: Pick<CanonicalEvidenceBundle, "iframeEvents">, rootDomain: string | null) {
   return (bundle.iframeEvents ?? []).slice(0, 75).map((event) => {
     const frameUrl = firstString(event.frameUrl);
     const hostname = hostnameFromUrl(frameUrl);
@@ -2447,7 +2462,7 @@ export function summarizeEmbeddedContentEvidence(
   };
 }
 
-function browserApiAccessRows(bundle: CanonicalEvidenceBundle) {
+function browserApiAccessRows(bundle: Pick<CanonicalEvidenceBundle, "runtimeTimeline">) {
   return (bundle.runtimeTimeline ?? [])
     .filter((event) => event.eventType === "browser_api_access")
     .map((event) => {
@@ -2467,7 +2482,7 @@ function browserApiAccessRows(bundle: CanonicalEvidenceBundle) {
     });
 }
 
-function browserApiProbeInstalled(bundle: CanonicalEvidenceBundle) {
+function browserApiProbeInstalled(bundle: Pick<CanonicalEvidenceBundle, "modulesRun">) {
   return (bundle.modulesRun ?? []).some((moduleRun) =>
     (moduleRun.timingBreakdown ?? []).some((timing) =>
       timing.label === "browser api probe install"
@@ -2488,7 +2503,7 @@ function sanitizedRequestShape(value: string | null | undefined) {
   }
 }
 
-export function summarizeFingerprintingEvidence(bundle: CanonicalEvidenceBundle) {
+export function summarizeFingerprintingEvidence(bundle: Pick<CanonicalEvidenceBundle, "runtimeTimeline" | "modulesRun" | "networkEvents">) {
   const rows = browserApiAccessRows(bundle);
   const apiProbeRetained = browserApiProbeInstalled(bundle) || rows.length > 0;
   const fingerprintAttributeCategories = uniqueStrings(
@@ -2547,6 +2562,33 @@ export function summarizeFingerprintingEvidence(bundle: CanonicalEvidenceBundle)
     preConsentObserved: strongCorroboratorObserved && rows.some((row) => row.preConsent),
     promotionEligible: strongCorroboratorObserved,
     strongCorroboratorObserved
+  };
+}
+
+/** Reuse the homepage runtime evidence adapters for verified additional-page bundles. */
+export function summarizeFullSiteRuntimeEvidence(
+  bundle: Pick<CanonicalEvidenceBundle, "iframeEvents" | "networkEvents" | "runtimeTimeline" | "modulesRun" | "collectionSurfaceObservations">,
+  requestRows: Array<Record<string, unknown>>,
+  documentUrl: string,
+) {
+  const root = registrableDomain(hostnameFromUrl(documentUrl));
+  const frames = sanitizeIframeEvents(bundle, root).filter(event => event.preConsent);
+  const requests = bundle.networkEvents.filter(event => event.consentStateAtTime === "pre_consent" && (!event.scenario || event.scenario === "fresh_pre_consent"));
+  return {
+    embeddedContentSummary: summarizeEmbeddedContentEvidence(frames, requests),
+    fingerprintingEvidenceSummary: summarizeFingerprintingEvidence(bundle),
+    sessionReplayEvidenceSummary: summarizeSessionReplayEvidence(buildVendorEvidence({ networkEvents: requests }), requests, requestRows),
+    sensitiveThirdPartyTrackingCorrelation: deriveSensitiveThirdPartyTrackingCorrelation({
+      collectionSurfaceObservations: bundle.collectionSurfaceObservations,
+      requestPurposeRows: requestRows,
+      runtimeCoverageRetained: bundle.modulesRun.some(run => run.moduleName === "preConsentRuntimeScanner" && run.status === "completed"),
+    }),
+    iframeSummary: {
+      frameHostnames: uniqueStrings(frames.map(event => event.hostname)),
+      iframeEvents: frames,
+      preConsentIframeCount: frames.length,
+      thirdPartyPreConsentIframeCount: frames.filter(event => event.thirdParty).length,
+    },
   };
 }
 

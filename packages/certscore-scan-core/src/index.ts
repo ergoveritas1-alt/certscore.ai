@@ -1,3 +1,4 @@
+import type { FormSnapshotReviewer } from "./collection-surface-snapshots";
 import { inventoryConfiguration, inventoryHash } from "./full-site-inventory";
 import path from "node:path";
 import { closeSync, openSync, readSync, statSync } from "node:fs";
@@ -229,6 +230,7 @@ export interface RunScanInput {
    * but must not infer findings from screenshot pixels.
    */
   onPreConsentScreenshotCaptured?: (screenshot: ScreenshotArtifact) => void;
+  formSnapshotReviewer?: FormSnapshotReviewer;
   /** Local diagnostic override; production callers retain the 10s default. */
   lateConsentGateMs?: number;
   /** Diagnostic-only override that holds otherwise eligible partial consent packets through the 18s audit gate. */
@@ -552,6 +554,7 @@ export async function runScan(input: RunScanInput): Promise<CanonicalEvidenceBun
         screenshotMode: effectivePreConsentScreenshotMode,
         screenshotTimeoutMs: input.preConsentScreenshotTimeoutMs,
         onScreenshotCaptured: input.onPreConsentScreenshotCaptured,
+        formSnapshotReviewer: input.resourceInventoryCrawl && evidenceLane === "runtime_evidence" ? input.formSnapshotReviewer : undefined,
         onPassiveRuntimeCheckpoint: evidenceLane === "runtime_evidence"
           ? notifyPreConsentRuntimePreview
           : undefined,
@@ -666,6 +669,7 @@ export async function runScan(input: RunScanInput): Promise<CanonicalEvidenceBun
         screenshotMode: effectivePreConsentScreenshotMode,
         screenshotTimeoutMs: input.preConsentScreenshotTimeoutMs,
         onScreenshotCaptured: input.onPreConsentScreenshotCaptured,
+        formSnapshotReviewer: input.resourceInventoryCrawl && evidenceLane === "runtime_evidence" ? input.formSnapshotReviewer : undefined,
         consentGateAuditHoldout: input.consentGateAuditHoldout,
         waitMode: leanPreConsent ? "fast" : "full",
         retainRenderedPolicyRecoverySession: evidenceLane === "combined" && policySurfaceEnabled,
@@ -1340,6 +1344,7 @@ export async function runScan(input: RunScanInput): Promise<CanonicalEvidenceBun
       ...preConsentResult.consentUiObservations,
       ...(consentFlowResult?.consentUiObservations ?? []),
     ],
+    ...(preConsentResult.collectionSurfaceSnapshots ? { collectionSurfaceSnapshots: preConsentResult.collectionSurfaceSnapshots } : {}),
     ...(preConsentResult.collectionSurfaceInventory
       ? { collectionSurfaceInventory: preConsentResult.collectionSurfaceInventory }
       : {}),

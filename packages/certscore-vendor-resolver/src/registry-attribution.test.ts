@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { normalizedVendorObservationSchema, vendorRegistryIdentitySchema } from "@certscore/contracts";
 import baseline from "./registry-identity-baseline.json";
-import fixtures from "../../certscore-contracts/src/test-fixtures/vendor-registry-attribution-v1.json";
+import fixtures from "../../certscore-contracts/src/test-fixtures/vendor-registry-attribution-v2.json";
 import {
   getCanonicalVendorRegistryManifest, resolveCanonicalVendor, resolveVendorObservations,
   type VendorResolverInput,
@@ -80,4 +80,17 @@ test("request and iframe observations share service identity, not event identity
   const merged = resolveVendorObservations([{ type: "request", url, evidenceId: "request-one" }, { type: "iframe", url, evidenceId: "frame-two" }]);
   assert.deepEqual(merged[0]?.matchedEvidenceIds, ["request-one", "frame-two"]);
   assert.equal(merged[0]?.registryAttribution?.ruleIds.length, 1);
+});
+
+test("CDN owner corrections do not infer HQ or change endpoint classification", () => {
+  for (const [url, entity, serviceId] of [
+    ["https://cdn.jsdelivr.net/npm/example/index.js", "Volentio JSD Limited", "svc_223d6f758020"],
+    ["https://unpkg.com/example/index.js", "UNPKG (operator unverified)", "svc_30edf95d4d3c"],
+  ]) {
+    const observation = resolveCanonicalVendor({ type: "request", url }).observation!;
+    assert.equal(observation.entity, entity);
+    assert.equal(observation.purpose, "infrastructure");
+    assert.equal(observation.registryAttribution?.serviceId, serviceId);
+    assert.notEqual(observation.entity, "npm, Inc.");
+  }
 });

@@ -1,3 +1,4 @@
+import type { FormSnapshotReviewer } from "./collection-surface-snapshots";
 import { createHash } from "node:crypto";
 import { sanitizeRuntimeGraphUrl, type CanonicalEvidenceBundle, type RuntimeEvidenceGraph } from "@certscore/contracts";
 import {
@@ -57,7 +58,7 @@ type Evidence = Pick<
   | "scriptEvents"
   | "iframeEvents"
   | "domSnapshots"
-> & { runtimeEvidenceGraph?: RuntimeEvidenceGraph };
+> & { runtimeEvidenceGraph?: RuntimeEvidenceGraph; collectionSurfaceInventory?: CanonicalEvidenceBundle["collectionSurfaceInventory"]; collectionSurfaceSnapshots?: CanonicalEvidenceBundle["collectionSurfaceSnapshots"] };
 
 /** This projection describes observed resources. It never executes concern policy or assessment/scoring. */
 export function projectFullSiteInventory(input: {
@@ -183,6 +184,8 @@ export function projectFullSiteInventory(input: {
         graphNodeRefs: evidence.runtimeEvidenceGraph?.nodes.filter(node => node.kind === "request" && node.method === event.method && node.url === sanitizeRuntimeGraphUrl(event.requestUrl)).map(node => node.id).slice(0, 20),
         identity: inventoryHash([event.method, event.requestUrl]),
         kind: "request",
+        networkDestinations: event.networkDestination ? [event.networkDestination] : [],
+        networkDestinationMissingCount: event.networkDestination ? 0 : 1,
         label: crawlDisplayUrl(event.requestUrl),
         domain: event.requestHostname ?? null,
         resourceType: event.resourceType ?? "unknown",
@@ -351,6 +354,7 @@ export function projectFullSiteInventory(input: {
       ...(failureKind ? [failureKind] : []),
     ].slice(0, 50),
     sourceHash: input.sourceHash,
+    ...(!["blocked", "failed"].includes(status) && evidence.collectionSurfaceInventory ? { collectionSurfaces: { inventory: evidence.collectionSurfaceInventory, snapshots: (evidence.collectionSurfaceSnapshots ?? []).map(({ data: _data, ...metadata }) => metadata) } } : {}),
     occurrences: ["blocked", "failed"].includes(status)
       ? []
       : occurrences.slice(0, 30000),
@@ -375,6 +379,7 @@ export async function runInventoryOnly(input: {
   outDir: string;
   signal: AbortSignal;
   runtimeGraph?: { pageId: string; attemptId: string };
+  formSnapshotReviewer?: FormSnapshotReviewer;
 }) {
   if (publicNetworkGuardEnabled()) await assertPublicNetworkUrl(input.url);
   if (
@@ -399,6 +404,7 @@ export async function runInventoryOnly(input: {
       executionProfile: "inventory_only",
       captureScope: "runtime_evidence",
       screenshotMode: "never",
+      formSnapshotReviewer: input.formSnapshotReviewer,
       stubHeavyResources: false,
       globalPrivacyControlEnabled: false,
       waitMode: input.waitMode ?? "full",

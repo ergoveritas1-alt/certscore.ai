@@ -5,6 +5,7 @@ import { readFile } from "node:fs/promises";
 import { renderToStaticMarkup } from "react-dom/server";
 import { InventoryResourceProvider, InventoryResourceRow, ResourceDetails, matchInventoryResources } from "./inventory-resource-details";
 import { runtimeGraphUiFixture } from "./runtime-evidence-graph-ui-fixture";
+import { countInventoryResourceChildren } from "../../lib/scans/inventory-resource-relationships";
 import { InventoryNameDisclosure } from "./inventory-name-disclosure";
 
 test("missing graphs keep a discoverable relationship explanation instead of removing the icon", () => {
@@ -118,4 +119,20 @@ test("full-site relationship controls show verified positive child counts only",
   const render = (node: string) => renderToStaticMarkup(<InventoryResourceProvider projection={runtimeGraphUiFixture()}><table><tbody><InventoryResourceRow inspect positiveRelationshipsOnly identity={{ cookieRefs: [], nodeRefs: [node], requests: [] }} facts={{ name: node }}><tr><td>Inspect</td><td>Type</td><td>Vendor</td></tr></InventoryResourceRow></tbody></table></InventoryResourceProvider>);
   assert.match(render("request"), /Show 1 immediate link/);
   assert.doesNotMatch(render("missing"), /immediate link|Load retained relationship|Explain unavailable relationship/);
+});
+
+
+test("full-site counts are numeric before deferred graph details load", () => {
+  const html = renderToStaticMarkup(<InventoryResourceProvider source={{ href: "/api/scans/fixture/full-site?graphPage=page", scanId: "page", sha256: "a".repeat(64) }}><table><tbody><InventoryResourceRow inspect positiveRelationshipsOnly relationshipCount={2} identity={{ cookieRefs: [], nodeRefs: ["request"], requests: [] }} facts={{ name: "Deferred resource" }}><tr><td>Inspect</td><td>Type</td><td>Vendor</td></tr></InventoryResourceRow></tbody></table></InventoryResourceProvider>);
+  assert.match(html, /Show 2 immediate links/);
+  assert.doesNotMatch(html, /Load retained relationship links|<span>…/);
+});
+
+test("summary counts match distinct retained child targets, including shared children", () => {
+  const graph = runtimeGraphUiFixture().graphs[0]!;
+  const identity = { cookieRefs: [], nodeRefs: ["request"], requests: [] };
+  const edge = graph.edges.find(item => item.from === "request")!;
+  assert.equal(countInventoryResourceChildren(graph, identity), 1);
+  assert.equal(countInventoryResourceChildren({ ...graph, edges: [...graph.edges, { ...edge, id: "another-observation" }] }, identity), 1);
+  assert.equal(countInventoryResourceChildren(graph, { ...identity, nodeRefs: ["missing"] }), 0);
 });

@@ -373,8 +373,22 @@ export const networkDestinationSchema = z.object({
   city: z.string().max(120).optional(),
   asn: z.number().int().positive().optional(),
   provider: z.string().max(160).optional(),
-  source: z.enum(["cdp_remote_ip", "cdp_remote_ip_geolite2"]),
+  source: z.enum(["cdp_remote_ip", "cdp_remote_ip_geolite2", "response_server_addr", "response_server_addr_geolite2", "response_server_addr_iplocate", "cdp_remote_ip_iplocate"]),
+  enrichment: z.object({
+    country: z.enum(["resolved", "database_unavailable", "database_stale", "not_found"]),
+    network: z.enum(["resolved", "database_unavailable", "database_stale", "not_found"]),
+    countryDatabaseBuiltAt: z.string().datetime().optional(),
+    networkDatabaseBuiltAt: z.string().datetime().optional(),
+  }).optional(),
   locationLabel: z.literal("server location (may be CDN edge)"),
+});
+
+export const networkConnectionSchema = z.object({
+  source: z.literal("response_request_binding"),
+  status: z.enum(["server_observed", "ip_not_exposed", "service_worker", "unavailable"]),
+  requestId: z.string().max(200),
+  redirectedFromRequestId: z.string().max(200).optional(),
+  fromServiceWorker: z.boolean(),
 });
 
 export const setCookieMetadataSchema = z.object({
@@ -443,6 +457,7 @@ export const networkEventSchema = runtimeEvidenceEventSchema.extend({
   isThirdParty: z.boolean().optional(),
   idSyncEndpoint: z.boolean().optional(),
   networkDestination: networkDestinationSchema.optional(),
+  networkConnection: networkConnectionSchema.optional(),
   parentRequestId: z.string().optional(),
   redirectChainRequestIds: z.array(z.string()).default([]),
   responsibleScriptUrl: z.string().optional(),
@@ -480,6 +495,7 @@ export const networkResponseEventSchema = runtimeEvidenceEventSchema.extend({
   setCookieMetadata: z.array(setCookieMetadataSchema).default([]),
   cookieNamesSet: z.array(z.string()).default([]),
   networkDestination: networkDestinationSchema.optional(),
+  networkConnection: networkConnectionSchema.optional(),
   responseHeaders: safeResponseHeadersSchema.optional(),
   cacheHeaders: z.record(z.string()).default({}),
   locationRedirectHeader: z.string().optional(),
@@ -763,6 +779,7 @@ export const collectionSurfaceEvidenceRefSchema = z.object({
 
 export const collectionSurfaceFieldSchema = z.object({
   fieldRef: z.string().min(1).max(80),
+  controlIndex: z.number().int().nonnegative().max(249).optional(),
   elementType: z.enum(["input", "textarea", "select"]),
   inputType: z.string().min(1).max(40),
   semanticCategory: collectionSurfaceSemanticCategorySchema,
@@ -808,6 +825,30 @@ export const collectionSurfaceFormSchema = z.object({
     });
   }
 });
+
+// Pixels are presentation evidence only; unavailable/withheld images retain no bytes.
+const collectionSurfaceSnapshotObjectSchema = z.object({
+  contractVersion: z.literal("certscore.collection-surface-snapshot.v1"),
+  formRef: z.string().min(1).max(80),
+  pageUrl: z.string().min(1).max(500),
+  capturedAt: z.string().datetime(),
+  status: z.enum(["available", "unavailable", "withheld"]),
+  sourceInventoryHash: z.string().regex(/^[a-f0-9]{64}$/),
+  mimeType: z.literal("image/jpeg"),
+  width: z.number().int().positive().max(640).optional(),
+  height: z.number().int().positive().max(960).optional(),
+  sha256: z.string().regex(/^[a-f0-9]{64}$/).optional(),
+  sizeBytes: z.number().int().positive().max(96 * 1024).optional(),
+  data: z.string().max(128 * 1024).optional(),
+  valuesMasked: z.literal(true),
+}).strict();
+export const collectionSurfaceSnapshotMetadataSchema = collectionSurfaceSnapshotObjectSchema.omit({ data: true });
+export const collectionSurfaceSnapshotSchema = collectionSurfaceSnapshotObjectSchema.superRefine((snapshot, context) => {
+  if (snapshot.status === "available" ? (!snapshot.data || !snapshot.sha256 || !snapshot.sizeBytes || !snapshot.width || !snapshot.height) : snapshot.data !== undefined) {
+    context.addIssue({ code: z.ZodIssueCode.custom, message: "Snapshot bytes require complete, approved capture metadata" });
+  }
+});
+export type CollectionSurfaceSnapshot = z.infer<typeof collectionSurfaceSnapshotSchema>;
 
 export const collectionSurfaceInventoryCoverageSchema = z.object({
   status: z.enum(["complete", "limited", "failed"]),
@@ -3318,6 +3359,7 @@ const canonicalEvidenceBundleBaseSchema = z.object({
   consentUiObservations: z.array(consentUiObservationSchema),
   collectionSurfaceObservations: z.array(collectionSurfaceObservationSchema).default([]),
   collectionSurfaceInventory: collectionSurfaceInventorySchema.optional(),
+  collectionSurfaceSnapshots: z.array(collectionSurfaceSnapshotSchema).max(MAX_COLLECTION_SURFACE_FORMS).optional(),
   consentInteractionEvents: z.array(consentInteractionEventSchema).default([]),
   consentFlowObservations: z.array(consentFlowObservationSchema).default([]),
   consentActionCandidates: z.array(consentActionCandidateSchema).default([]),

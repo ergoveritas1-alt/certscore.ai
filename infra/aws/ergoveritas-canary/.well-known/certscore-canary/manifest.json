@@ -1,0 +1,3573 @@
+{
+  "contractVersion": "certscore.ergoveritas_owned_canary.2",
+  "owner": "ErgoVeritas",
+  "purpose": "CertScore owned live calibration",
+  "artifactOnly": true,
+  "consentInteractionAllowed": false,
+  "indexingAllowed": false,
+  "postRefusalInteraction": {
+    "consentInteractionAllowed": true,
+    "action": "reject_only",
+    "authorizationId": "ergoveritas_owned_post_refusal_canary.v1",
+    "authorizedHostname": "ergoveritas.com",
+    "authorizedPathPrefix": "/.well-known/certscore-canary/post-refusal/",
+    "maximumActionsPerBrowserContext": 1,
+    "deterministicResolverRequired": true,
+    "domGuessingAllowed": false
+  },
+  "extension": {
+    "addCase": "Add a unique page entry with lane, fixtureRole, and expected fields, then add one no-index HTML file at the declared URL.",
+    "consentExpectedFields": [
+      "accept",
+      "reject",
+      "options",
+      "geometry",
+      "renderMode"
+    ],
+    "policyExpectedFields": [
+      "topics",
+      "missing",
+      "coverage"
+    ],
+    "fixtureRoles": [
+      "control",
+      "positive",
+      "negative",
+      "false_positive",
+      "false_negative_guard"
+    ],
+    "policyTopicRule": "topics records attributable, relevant evidence; missing records intentionally absent topics; insufficient or unrelated-owner evidence must not be converted into target-policy absence."
+  },
+  "topicRegistry": [
+    "controller",
+    "purposes_legal_basis",
+    "retention",
+    "international_transfers",
+    "vendors_recipients",
+    "privacy_rights",
+    "cookies_storage",
+    "policy_runtime_comparison"
+  ],
+  "pages": [
+    {
+      "key": "index",
+      "url": "/.well-known/certscore-canary/index.html",
+      "lane": "transport",
+      "fixtureRole": "control"
+    },
+    {
+      "key": "post-refusal-honored",
+      "url": "/.well-known/certscore-canary/post-refusal/reject-honored.html",
+      "lane": "post_refusal",
+      "fixtureRole": "positive",
+      "cmpRecipe": "OneTrust",
+      "expectedRefusalRegistration": "confirmed",
+      "expectedPostRefusalActivity": false
+    },
+    {
+      "key": "post-refusal-ignored",
+      "url": "/.well-known/certscore-canary/post-refusal/reject-ignored.html",
+      "lane": "post_refusal",
+      "fixtureRole": "negative",
+      "cmpRecipe": "OneTrust",
+      "expectedRefusalRegistration": "confirmed",
+      "expectedPostRefusalActivity": true
+    },
+    {
+      "key": "consent-direct",
+      "url": "/.well-known/certscore-canary/consent/direct.html",
+      "lane": "consent_controls",
+      "accept": true,
+      "reject": true,
+      "options": true,
+      "geometry": "bottom-inline",
+      "renderMode": "direct",
+      "fixtureRole": "positive"
+    },
+    {
+      "key": "consent-missing-reject",
+      "url": "/.well-known/certscore-canary/consent/missing-reject.html",
+      "lane": "consent_controls",
+      "accept": true,
+      "reject": false,
+      "options": true,
+      "geometry": "bottom-inline",
+      "renderMode": "direct",
+      "fixtureRole": "positive"
+    },
+    {
+      "key": "consent-delayed",
+      "url": "/.well-known/certscore-canary/consent/delayed.html",
+      "lane": "consent_controls",
+      "accept": true,
+      "reject": true,
+      "options": true,
+      "geometry": "bottom-inline",
+      "renderMode": "delayed",
+      "fixtureRole": "positive"
+    },
+    {
+      "key": "consent-shadow-dom",
+      "url": "/.well-known/certscore-canary/consent/shadow-dom.html",
+      "lane": "consent_controls",
+      "accept": true,
+      "reject": true,
+      "options": true,
+      "geometry": "bottom-inline",
+      "renderMode": "shadow_dom",
+      "fixtureRole": "positive"
+    },
+    {
+      "key": "consent-stacked",
+      "url": "/.well-known/certscore-canary/consent/stacked.html",
+      "lane": "consent_controls",
+      "accept": true,
+      "reject": true,
+      "options": true,
+      "geometry": "bottom-stacked",
+      "renderMode": "direct",
+      "fixtureRole": "positive"
+    },
+    {
+      "key": "consent-centered-modal",
+      "url": "/.well-known/certscore-canary/consent/centered-modal.html",
+      "lane": "consent_controls",
+      "accept": true,
+      "reject": true,
+      "options": true,
+      "geometry": "centered-modal",
+      "renderMode": "direct",
+      "fixtureRole": "positive"
+    },
+    {
+      "key": "consent-split-actions",
+      "url": "/.well-known/certscore-canary/consent/split-actions.html",
+      "lane": "consent_controls",
+      "accept": true,
+      "reject": true,
+      "options": true,
+      "geometry": "split-actions",
+      "renderMode": "direct",
+      "fixtureRole": "positive"
+    },
+    {
+      "key": "consent-accept-only",
+      "url": "/.well-known/certscore-canary/consent/accept-only.html",
+      "lane": "consent_controls",
+      "accept": true,
+      "reject": false,
+      "options": false,
+      "geometry": "bottom-inline",
+      "renderMode": "direct",
+      "fixtureRole": "negative"
+    },
+    {
+      "key": "consent-reject-only",
+      "url": "/.well-known/certscore-canary/consent/reject-only.html",
+      "lane": "consent_controls",
+      "accept": false,
+      "reject": true,
+      "options": false,
+      "geometry": "bottom-inline",
+      "renderMode": "direct",
+      "fixtureRole": "negative"
+    },
+    {
+      "key": "consent-options-only",
+      "url": "/.well-known/certscore-canary/consent/options-only.html",
+      "lane": "consent_controls",
+      "accept": false,
+      "reject": false,
+      "options": true,
+      "geometry": "bottom-inline",
+      "renderMode": "direct",
+      "fixtureRole": "negative"
+    },
+    {
+      "key": "consent-hidden-reject-text",
+      "url": "/.well-known/certscore-canary/consent/hidden-reject-text.html",
+      "lane": "consent_controls",
+      "accept": true,
+      "reject": false,
+      "options": false,
+      "geometry": "bottom-inline",
+      "renderMode": "false_positive_text",
+      "fixtureRole": "false_positive"
+    },
+    {
+      "key": "consent-child-frame",
+      "url": "/.well-known/certscore-canary/consent/child-frame.html",
+      "lane": "consent_controls",
+      "accept": true,
+      "reject": true,
+      "options": true,
+      "geometry": "child-frame",
+      "renderMode": "iframe_srcdoc",
+      "fixtureRole": "positive"
+    },
+    {
+      "key": "consent-scroll-clipped",
+      "url": "/.well-known/certscore-canary/consent/scroll-clipped.html",
+      "lane": "consent_controls",
+      "accept": true,
+      "reject": true,
+      "options": true,
+      "geometry": "clipped_internal_scroll",
+      "renderMode": "direct",
+      "fixtureRole": "positive"
+    },
+    {
+      "key": "consent-partial-occlusion",
+      "url": "/.well-known/certscore-canary/consent/partial-occlusion.html",
+      "lane": "consent_controls",
+      "accept": true,
+      "reject": true,
+      "options": true,
+      "geometry": "partial-occlusion",
+      "renderMode": "direct",
+      "fixtureRole": "positive"
+    },
+    {
+      "key": "consent-disabled-state",
+      "url": "/.well-known/certscore-canary/consent/disabled-state.html",
+      "lane": "consent_controls",
+      "accept": true,
+      "reject": true,
+      "options": true,
+      "geometry": "disabled-enabled",
+      "renderMode": "direct",
+      "controlStates": {
+        "accept": "disabled",
+        "reject": "enabled",
+        "options": "enabled"
+      },
+      "fixtureRole": "positive"
+    },
+    {
+      "key": "consent-composite-container",
+      "url": "/.well-known/certscore-canary/consent/composite-container.html",
+      "lane": "consent_controls",
+      "accept": true,
+      "reject": true,
+      "options": true,
+      "geometry": "composite-container",
+      "renderMode": "direct",
+      "fixtureRole": "positive"
+    },
+    {
+      "key": "consent-multiple-surfaces",
+      "url": "/.well-known/certscore-canary/consent/multiple-surfaces.html",
+      "lane": "consent_controls",
+      "accept": true,
+      "reject": true,
+      "options": true,
+      "geometry": "multiple-surfaces",
+      "renderMode": "direct",
+      "fixtureRole": "positive"
+    },
+    {
+      "key": "consent-pay-or-consent",
+      "url": "/.well-known/certscore-canary/consent/pay-or-consent.html",
+      "lane": "consent_controls",
+      "accept": true,
+      "reject": false,
+      "options": true,
+      "geometry": "pay-or-consent",
+      "renderMode": "direct",
+      "fixtureRole": "semantic_guard"
+    },
+    {
+      "key": "consent-localized-french",
+      "url": "/.well-known/certscore-canary/consent/localized-french.html",
+      "lane": "consent_controls",
+      "accept": true,
+      "reject": true,
+      "options": true,
+      "geometry": "centered-modal",
+      "renderMode": "localized_fr",
+      "labels": {
+        "accept": "Accepter",
+        "reject": "Refuser",
+        "options": "Paramétrer"
+      },
+      "fixtureRole": "positive"
+    },
+    {
+      "key": "policy-landing",
+      "url": "/.well-known/certscore-canary/policy/index.html",
+      "lane": "gdpr_transparency",
+      "fixtureRole": "control"
+    },
+    {
+      "key": "policy-complete",
+      "url": "/.well-known/certscore-canary/policy/privacy.html",
+      "lane": "gdpr_transparency",
+      "topics": [
+        "controller",
+        "purposes_legal_basis",
+        "retention",
+        "international_transfers",
+        "vendors_recipients",
+        "privacy_rights",
+        "cookies_storage"
+      ],
+      "coverage": "complete",
+      "fixtureRole": "positive"
+    },
+    {
+      "key": "policy-missing-controller",
+      "url": "/.well-known/certscore-canary/policy/missing-controller.html",
+      "lane": "gdpr_transparency",
+      "topics": [
+        "purposes_legal_basis",
+        "retention",
+        "international_transfers",
+        "vendors_recipients",
+        "privacy_rights",
+        "cookies_storage"
+      ],
+      "missing": [
+        "controller"
+      ],
+      "coverage": "complete_except_declared_missing",
+      "fixtureRole": "negative"
+    },
+    {
+      "key": "policy-missing-purposes",
+      "url": "/.well-known/certscore-canary/policy/missing-purposes.html",
+      "lane": "gdpr_transparency",
+      "topics": [
+        "controller",
+        "retention",
+        "international_transfers",
+        "vendors_recipients",
+        "privacy_rights",
+        "cookies_storage"
+      ],
+      "missing": [
+        "purposes_legal_basis"
+      ],
+      "coverage": "complete_except_declared_missing",
+      "fixtureRole": "negative"
+    },
+    {
+      "key": "policy-missing-retention",
+      "url": "/.well-known/certscore-canary/policy/missing-retention.html",
+      "lane": "gdpr_transparency",
+      "topics": [
+        "controller",
+        "purposes_legal_basis",
+        "international_transfers",
+        "vendors_recipients",
+        "privacy_rights",
+        "cookies_storage"
+      ],
+      "missing": [
+        "retention"
+      ],
+      "coverage": "complete_except_declared_missing",
+      "fixtureRole": "negative"
+    },
+    {
+      "key": "policy-missing-transfers",
+      "url": "/.well-known/certscore-canary/policy/missing-transfers.html",
+      "lane": "gdpr_transparency",
+      "topics": [
+        "controller",
+        "purposes_legal_basis",
+        "retention",
+        "vendors_recipients",
+        "privacy_rights",
+        "cookies_storage"
+      ],
+      "missing": [
+        "international_transfers"
+      ],
+      "coverage": "complete_except_declared_missing",
+      "fixtureRole": "negative"
+    },
+    {
+      "key": "policy-missing-vendors",
+      "url": "/.well-known/certscore-canary/policy/missing-vendors.html",
+      "lane": "gdpr_transparency",
+      "topics": [
+        "controller",
+        "purposes_legal_basis",
+        "retention",
+        "international_transfers",
+        "privacy_rights",
+        "cookies_storage"
+      ],
+      "missing": [
+        "vendors_recipients"
+      ],
+      "coverage": "complete_except_declared_missing",
+      "fixtureRole": "negative"
+    },
+    {
+      "key": "policy-missing-rights",
+      "url": "/.well-known/certscore-canary/policy/missing-rights.html",
+      "lane": "gdpr_transparency",
+      "topics": [
+        "controller",
+        "purposes_legal_basis",
+        "retention",
+        "international_transfers",
+        "vendors_recipients",
+        "cookies_storage"
+      ],
+      "missing": [
+        "privacy_rights"
+      ],
+      "coverage": "complete_except_declared_missing",
+      "fixtureRole": "negative"
+    },
+    {
+      "key": "policy-missing-cookies",
+      "url": "/.well-known/certscore-canary/policy/missing-cookies.html",
+      "lane": "gdpr_transparency",
+      "topics": [
+        "controller",
+        "purposes_legal_basis",
+        "retention",
+        "international_transfers",
+        "vendors_recipients",
+        "privacy_rights"
+      ],
+      "missing": [
+        "cookies_storage"
+      ],
+      "coverage": "complete_except_declared_missing",
+      "fixtureRole": "negative"
+    },
+    {
+      "key": "policy-missing-combination",
+      "url": "/.well-known/certscore-canary/policy/missing-combination.html",
+      "lane": "gdpr_transparency",
+      "topics": [
+        "controller",
+        "purposes_legal_basis",
+        "retention",
+        "cookies_storage"
+      ],
+      "missing": [
+        "international_transfers",
+        "vendors_recipients",
+        "privacy_rights"
+      ],
+      "coverage": "complete_except_declared_missing",
+      "fixtureRole": "negative"
+    },
+    {
+      "key": "policy-keyword-decoy",
+      "url": "/.well-known/certscore-canary/policy/keyword-decoy.html",
+      "lane": "gdpr_transparency",
+      "topics": [],
+      "missing": [
+        "controller",
+        "purposes_legal_basis",
+        "retention",
+        "international_transfers",
+        "vendors_recipients",
+        "privacy_rights",
+        "cookies_storage"
+      ],
+      "coverage": "insufficient_retained_evidence",
+      "fixtureRole": "false_positive"
+    },
+    {
+      "key": "policy-unrelated-owner",
+      "url": "/.well-known/certscore-canary/policy/unrelated-owner.html",
+      "lane": "gdpr_transparency",
+      "topics": [],
+      "missing": [
+        "controller",
+        "purposes_legal_basis",
+        "retention",
+        "international_transfers",
+        "vendors_recipients",
+        "privacy_rights",
+        "cookies_storage"
+      ],
+      "coverage": "insufficient_retained_evidence",
+      "fixtureRole": "false_negative_guard"
+    },
+    {
+      "key": "runtime-first-party-storage",
+      "url": "/.well-known/certscore-canary/runtime/storage.html",
+      "lane": "runtime_evidence",
+      "fixtureRole": "control"
+    },
+    {
+      "key": "policy-runtime-mismatch",
+      "url": "/.well-known/certscore-canary/policy/runtime-mismatch.html",
+      "lane": "transport",
+      "fixtureRole": "control"
+    },
+    {
+      "key": "consent-locale-index",
+      "url": "/.well-known/certscore-canary/consent/locales.html",
+      "lane": "transport",
+      "fixtureRole": "control"
+    },
+    {
+      "key": "consent-locale-en",
+      "url": "/.well-known/certscore-canary/consent/locale-en.html",
+      "lane": "consent_controls",
+      "accept": true,
+      "reject": true,
+      "options": true,
+      "geometry": "bottom-inline",
+      "renderMode": "localized_en",
+      "locale": "en",
+      "labels": {
+        "accept": "accept all",
+        "reject": "reject all",
+        "options": "cookie settings"
+      },
+      "fixtureRole": "positive"
+    },
+    {
+      "key": "consent-locale-es",
+      "url": "/.well-known/certscore-canary/consent/locale-es.html",
+      "lane": "consent_controls",
+      "accept": true,
+      "reject": true,
+      "options": true,
+      "geometry": "bottom-inline",
+      "renderMode": "localized_es",
+      "locale": "es",
+      "labels": {
+        "accept": "aceptar todo",
+        "reject": "rechazar todo",
+        "options": "configuración de cookies"
+      },
+      "fixtureRole": "positive"
+    },
+    {
+      "key": "consent-locale-de",
+      "url": "/.well-known/certscore-canary/consent/locale-de.html",
+      "lane": "consent_controls",
+      "accept": true,
+      "reject": true,
+      "options": true,
+      "geometry": "bottom-inline",
+      "renderMode": "localized_de",
+      "locale": "de",
+      "labels": {
+        "accept": "alle akzeptieren",
+        "reject": "alle ablehnen",
+        "options": "cookie-einstellungen"
+      },
+      "fixtureRole": "positive"
+    },
+    {
+      "key": "consent-locale-ja",
+      "url": "/.well-known/certscore-canary/consent/locale-ja.html",
+      "lane": "consent_controls",
+      "accept": true,
+      "reject": true,
+      "options": true,
+      "geometry": "bottom-inline",
+      "renderMode": "localized_ja",
+      "locale": "ja",
+      "labels": {
+        "accept": "すべて同意する",
+        "reject": "すべて拒否する",
+        "options": "Cookie設定"
+      },
+      "fixtureRole": "positive"
+    },
+    {
+      "key": "consent-locale-fr",
+      "url": "/.well-known/certscore-canary/consent/locale-fr.html",
+      "lane": "consent_controls",
+      "accept": true,
+      "reject": true,
+      "options": true,
+      "geometry": "bottom-inline",
+      "renderMode": "localized_fr",
+      "locale": "fr",
+      "labels": {
+        "accept": "tout accepter",
+        "reject": "tout refuser",
+        "options": "paramètres des cookies"
+      },
+      "fixtureRole": "positive"
+    },
+    {
+      "key": "consent-locale-ru",
+      "url": "/.well-known/certscore-canary/consent/locale-ru.html",
+      "lane": "consent_controls",
+      "accept": true,
+      "reject": true,
+      "options": true,
+      "geometry": "bottom-inline",
+      "renderMode": "localized_ru",
+      "locale": "ru",
+      "labels": {
+        "accept": "принять все",
+        "reject": "отклонить все",
+        "options": "настройки файлов cookie"
+      },
+      "fixtureRole": "positive"
+    },
+    {
+      "key": "consent-locale-pt",
+      "url": "/.well-known/certscore-canary/consent/locale-pt.html",
+      "lane": "consent_controls",
+      "accept": true,
+      "reject": true,
+      "options": true,
+      "geometry": "bottom-inline",
+      "renderMode": "localized_pt",
+      "locale": "pt",
+      "labels": {
+        "accept": "aceitar todos",
+        "reject": "rejeitar todos",
+        "options": "definições de cookies"
+      },
+      "fixtureRole": "positive"
+    },
+    {
+      "key": "consent-locale-it",
+      "url": "/.well-known/certscore-canary/consent/locale-it.html",
+      "lane": "consent_controls",
+      "accept": true,
+      "reject": true,
+      "options": true,
+      "geometry": "bottom-inline",
+      "renderMode": "localized_it",
+      "locale": "it",
+      "labels": {
+        "accept": "accetta tutto",
+        "reject": "rifiuta tutto",
+        "options": "impostazioni cookie"
+      },
+      "fixtureRole": "positive"
+    },
+    {
+      "key": "consent-locale-tr",
+      "url": "/.well-known/certscore-canary/consent/locale-tr.html",
+      "lane": "consent_controls",
+      "accept": true,
+      "reject": true,
+      "options": true,
+      "geometry": "bottom-inline",
+      "renderMode": "localized_tr",
+      "locale": "tr",
+      "labels": {
+        "accept": "tümünü kabul et",
+        "reject": "tümünü reddet",
+        "options": "çerez ayarları"
+      },
+      "fixtureRole": "positive"
+    },
+    {
+      "key": "consent-locale-zh",
+      "url": "/.well-known/certscore-canary/consent/locale-zh.html",
+      "lane": "consent_controls",
+      "accept": true,
+      "reject": true,
+      "options": true,
+      "geometry": "bottom-inline",
+      "renderMode": "localized_zh",
+      "locale": "zh",
+      "labels": {
+        "accept": "全部接受",
+        "reject": "全部拒绝",
+        "options": "Cookie 设置"
+      },
+      "fixtureRole": "positive"
+    },
+    {
+      "key": "consent-locale-fa",
+      "url": "/.well-known/certscore-canary/consent/locale-fa.html",
+      "lane": "consent_controls",
+      "accept": true,
+      "reject": true,
+      "options": true,
+      "geometry": "bottom-inline",
+      "renderMode": "localized_fa",
+      "locale": "fa",
+      "labels": {
+        "accept": "پذیرش همه",
+        "reject": "رد همه",
+        "options": "تنظیمات کوکی"
+      },
+      "fixtureRole": "positive"
+    },
+    {
+      "key": "consent-locale-nl",
+      "url": "/.well-known/certscore-canary/consent/locale-nl.html",
+      "lane": "consent_controls",
+      "accept": true,
+      "reject": true,
+      "options": true,
+      "geometry": "bottom-inline",
+      "renderMode": "localized_nl",
+      "locale": "nl",
+      "labels": {
+        "accept": "alles accepteren",
+        "reject": "alles weigeren",
+        "options": "cookie-instellingen"
+      },
+      "fixtureRole": "positive"
+    },
+    {
+      "key": "consent-locale-pl",
+      "url": "/.well-known/certscore-canary/consent/locale-pl.html",
+      "lane": "consent_controls",
+      "accept": true,
+      "reject": true,
+      "options": true,
+      "geometry": "bottom-inline",
+      "renderMode": "localized_pl",
+      "locale": "pl",
+      "labels": {
+        "accept": "akceptuj wszystko",
+        "reject": "odrzuć wszystko",
+        "options": "ustawienia plików cookie"
+      },
+      "fixtureRole": "positive"
+    },
+    {
+      "key": "consent-locale-vi",
+      "url": "/.well-known/certscore-canary/consent/locale-vi.html",
+      "lane": "consent_controls",
+      "accept": true,
+      "reject": true,
+      "options": true,
+      "geometry": "bottom-inline",
+      "renderMode": "localized_vi",
+      "locale": "vi",
+      "labels": {
+        "accept": "chấp nhận tất cả",
+        "reject": "từ chối tất cả",
+        "options": "cài đặt cookie"
+      },
+      "fixtureRole": "positive"
+    },
+    {
+      "key": "consent-locale-id",
+      "url": "/.well-known/certscore-canary/consent/locale-id.html",
+      "lane": "consent_controls",
+      "accept": true,
+      "reject": true,
+      "options": true,
+      "geometry": "bottom-inline",
+      "renderMode": "localized_id",
+      "locale": "id",
+      "labels": {
+        "accept": "terima semua",
+        "reject": "tolak semua",
+        "options": "pengaturan cookie"
+      },
+      "fixtureRole": "positive"
+    },
+    {
+      "key": "consent-locale-cs",
+      "url": "/.well-known/certscore-canary/consent/locale-cs.html",
+      "lane": "consent_controls",
+      "accept": true,
+      "reject": true,
+      "options": true,
+      "geometry": "bottom-inline",
+      "renderMode": "localized_cs",
+      "locale": "cs",
+      "labels": {
+        "accept": "přijmout vše",
+        "reject": "odmítnout vše",
+        "options": "nastavení cookies"
+      },
+      "fixtureRole": "positive"
+    },
+    {
+      "key": "consent-locale-ko",
+      "url": "/.well-known/certscore-canary/consent/locale-ko.html",
+      "lane": "consent_controls",
+      "accept": true,
+      "reject": true,
+      "options": true,
+      "geometry": "bottom-inline",
+      "renderMode": "localized_ko",
+      "locale": "ko",
+      "labels": {
+        "accept": "모두 허용",
+        "reject": "모두 거부",
+        "options": "쿠키 설정"
+      },
+      "fixtureRole": "positive"
+    },
+    {
+      "key": "consent-locale-sv",
+      "url": "/.well-known/certscore-canary/consent/locale-sv.html",
+      "lane": "consent_controls",
+      "accept": true,
+      "reject": true,
+      "options": true,
+      "geometry": "bottom-inline",
+      "renderMode": "localized_sv",
+      "locale": "sv",
+      "labels": {
+        "accept": "acceptera alla",
+        "reject": "avvisa alla",
+        "options": "cookieinställningar"
+      },
+      "fixtureRole": "positive"
+    },
+    {
+      "key": "consent-locale-uk",
+      "url": "/.well-known/certscore-canary/consent/locale-uk.html",
+      "lane": "consent_controls",
+      "accept": true,
+      "reject": true,
+      "options": true,
+      "geometry": "bottom-inline",
+      "renderMode": "localized_uk",
+      "locale": "uk",
+      "labels": {
+        "accept": "прийняти всі",
+        "reject": "відхилити всі",
+        "options": "налаштування cookie"
+      },
+      "fixtureRole": "positive"
+    },
+    {
+      "key": "consent-locale-el",
+      "url": "/.well-known/certscore-canary/consent/locale-el.html",
+      "lane": "consent_controls",
+      "accept": true,
+      "reject": true,
+      "options": true,
+      "geometry": "bottom-inline",
+      "renderMode": "localized_el",
+      "locale": "el",
+      "labels": {
+        "accept": "αποδοχή όλων",
+        "reject": "απόρριψη όλων",
+        "options": "ρυθμίσεις cookies"
+      },
+      "fixtureRole": "positive"
+    },
+    {
+      "key": "consent-locale-ar",
+      "url": "/.well-known/certscore-canary/consent/locale-ar.html",
+      "lane": "consent_controls",
+      "accept": true,
+      "reject": true,
+      "options": true,
+      "geometry": "bottom-inline",
+      "renderMode": "localized_ar",
+      "locale": "ar",
+      "labels": {
+        "accept": "قبول الكل",
+        "reject": "رفض الكل",
+        "options": "إعدادات ملفات تعريف الارتباط"
+      },
+      "fixtureRole": "positive"
+    },
+    {
+      "key": "consent-locale-hu",
+      "url": "/.well-known/certscore-canary/consent/locale-hu.html",
+      "lane": "consent_controls",
+      "accept": true,
+      "reject": true,
+      "options": true,
+      "geometry": "bottom-inline",
+      "renderMode": "localized_hu",
+      "locale": "hu",
+      "labels": {
+        "accept": "összes elfogadása",
+        "reject": "összes elutasítása",
+        "options": "süti beállítások"
+      },
+      "fixtureRole": "positive"
+    },
+    {
+      "key": "consent-locale-ro",
+      "url": "/.well-known/certscore-canary/consent/locale-ro.html",
+      "lane": "consent_controls",
+      "accept": true,
+      "reject": true,
+      "options": true,
+      "geometry": "bottom-inline",
+      "renderMode": "localized_ro",
+      "locale": "ro",
+      "labels": {
+        "accept": "acceptă toate",
+        "reject": "respinge toate",
+        "options": "setări cookie"
+      },
+      "fixtureRole": "positive"
+    },
+    {
+      "key": "consent-locale-th",
+      "url": "/.well-known/certscore-canary/consent/locale-th.html",
+      "lane": "consent_controls",
+      "accept": true,
+      "reject": true,
+      "options": true,
+      "geometry": "bottom-inline",
+      "renderMode": "localized_th",
+      "locale": "th",
+      "labels": {
+        "accept": "ยอมรับทั้งหมด",
+        "reject": "ปฏิเสธทั้งหมด",
+        "options": "การตั้งค่าคุกกี้"
+      },
+      "fixtureRole": "positive"
+    },
+    {
+      "key": "consent-locale-da",
+      "url": "/.well-known/certscore-canary/consent/locale-da.html",
+      "lane": "consent_controls",
+      "accept": true,
+      "reject": true,
+      "options": true,
+      "geometry": "bottom-inline",
+      "renderMode": "localized_da",
+      "locale": "da",
+      "labels": {
+        "accept": "accepter alle",
+        "reject": "afvis alle",
+        "options": "cookieindstillinger"
+      },
+      "fixtureRole": "positive"
+    },
+    {
+      "key": "consent-locale-sk",
+      "url": "/.well-known/certscore-canary/consent/locale-sk.html",
+      "lane": "consent_controls",
+      "accept": true,
+      "reject": true,
+      "options": true,
+      "geometry": "bottom-inline",
+      "renderMode": "localized_sk",
+      "locale": "sk",
+      "labels": {
+        "accept": "prijať všetko",
+        "reject": "odmietnuť všetko",
+        "options": "nastavenia cookies"
+      },
+      "fixtureRole": "positive"
+    },
+    {
+      "key": "consent-locale-fi",
+      "url": "/.well-known/certscore-canary/consent/locale-fi.html",
+      "lane": "consent_controls",
+      "accept": true,
+      "reject": true,
+      "options": true,
+      "geometry": "bottom-inline",
+      "renderMode": "localized_fi",
+      "locale": "fi",
+      "labels": {
+        "accept": "hyväksy kaikki",
+        "reject": "hylkää kaikki",
+        "options": "evästeasetukset"
+      },
+      "fixtureRole": "positive"
+    },
+    {
+      "key": "consent-locale-bg",
+      "url": "/.well-known/certscore-canary/consent/locale-bg.html",
+      "lane": "consent_controls",
+      "accept": true,
+      "reject": true,
+      "options": true,
+      "geometry": "bottom-inline",
+      "renderMode": "localized_bg",
+      "locale": "bg",
+      "labels": {
+        "accept": "приемане на всички",
+        "reject": "отхвърляне на всички",
+        "options": "настройки за бисквитки"
+      },
+      "fixtureRole": "positive"
+    },
+    {
+      "key": "consent-locale-he",
+      "url": "/.well-known/certscore-canary/consent/locale-he.html",
+      "lane": "consent_controls",
+      "accept": true,
+      "reject": true,
+      "options": true,
+      "geometry": "bottom-inline",
+      "renderMode": "localized_he",
+      "locale": "he",
+      "labels": {
+        "accept": "אישור הכול",
+        "reject": "דחיית הכול",
+        "options": "הגדרות עוגיות"
+      },
+      "fixtureRole": "positive"
+    },
+    {
+      "key": "consent-locale-sr",
+      "url": "/.well-known/certscore-canary/consent/locale-sr.html",
+      "lane": "consent_controls",
+      "accept": true,
+      "reject": true,
+      "options": true,
+      "geometry": "bottom-inline",
+      "renderMode": "localized_sr",
+      "locale": "sr",
+      "labels": {
+        "accept": "prihvati sve",
+        "reject": "odbij sve",
+        "options": "podešavanja kolačića"
+      },
+      "fixtureRole": "positive"
+    },
+    {
+      "key": "consent-locale-hr",
+      "url": "/.well-known/certscore-canary/consent/locale-hr.html",
+      "lane": "consent_controls",
+      "accept": true,
+      "reject": true,
+      "options": true,
+      "geometry": "bottom-inline",
+      "renderMode": "localized_hr",
+      "locale": "hr",
+      "labels": {
+        "accept": "prihvati sve",
+        "reject": "odbij sve",
+        "options": "postavke kolačića"
+      },
+      "fixtureRole": "positive"
+    },
+    {
+      "key": "consent-locale-lt",
+      "url": "/.well-known/certscore-canary/consent/locale-lt.html",
+      "lane": "consent_controls",
+      "accept": true,
+      "reject": true,
+      "options": true,
+      "geometry": "bottom-inline",
+      "renderMode": "localized_lt",
+      "locale": "lt",
+      "labels": {
+        "accept": "priimti visus",
+        "reject": "atmesti visus",
+        "options": "slapukų nustatymai"
+      },
+      "fixtureRole": "positive"
+    },
+    {
+      "key": "consent-locale-sl",
+      "url": "/.well-known/certscore-canary/consent/locale-sl.html",
+      "lane": "consent_controls",
+      "accept": true,
+      "reject": true,
+      "options": true,
+      "geometry": "bottom-inline",
+      "renderMode": "localized_sl",
+      "locale": "sl",
+      "labels": {
+        "accept": "sprejmi vse",
+        "reject": "zavrni vse",
+        "options": "nastavitve piškotkov"
+      },
+      "fixtureRole": "positive"
+    },
+    {
+      "key": "consent-locale-ca",
+      "url": "/.well-known/certscore-canary/consent/locale-ca.html",
+      "lane": "consent_controls",
+      "accept": true,
+      "reject": true,
+      "options": true,
+      "geometry": "bottom-inline",
+      "renderMode": "localized_ca",
+      "locale": "ca",
+      "labels": {
+        "accept": "accepta-ho tot",
+        "reject": "rebutja-ho tot",
+        "options": "configuració de cookies"
+      },
+      "fixtureRole": "positive"
+    },
+    {
+      "key": "consent-locale-hi",
+      "url": "/.well-known/certscore-canary/consent/locale-hi.html",
+      "lane": "consent_controls",
+      "accept": true,
+      "reject": true,
+      "options": true,
+      "geometry": "bottom-inline",
+      "renderMode": "localized_hi",
+      "locale": "hi",
+      "labels": {
+        "accept": "सभी स्वीकार करें",
+        "reject": "सभी अस्वीकार करें",
+        "options": "कुकी सेटिंग्स"
+      },
+      "fixtureRole": "positive"
+    },
+    {
+      "key": "consent-locale-nb",
+      "url": "/.well-known/certscore-canary/consent/locale-nb.html",
+      "lane": "consent_controls",
+      "accept": true,
+      "reject": true,
+      "options": true,
+      "geometry": "bottom-inline",
+      "renderMode": "localized_nb",
+      "locale": "nb",
+      "labels": {
+        "accept": "godta alle",
+        "reject": "avvis alle",
+        "options": "innstillinger for informasjonskapsler"
+      },
+      "fixtureRole": "positive"
+    },
+    {
+      "key": "consent-locale-et",
+      "url": "/.well-known/certscore-canary/consent/locale-et.html",
+      "lane": "consent_controls",
+      "accept": true,
+      "reject": true,
+      "options": true,
+      "geometry": "bottom-inline",
+      "renderMode": "localized_et",
+      "locale": "et",
+      "labels": {
+        "accept": "nõustu kõigiga",
+        "reject": "keeldu kõigist",
+        "options": "küpsiste seaded"
+      },
+      "fixtureRole": "positive"
+    },
+    {
+      "key": "consent-locale-lv",
+      "url": "/.well-known/certscore-canary/consent/locale-lv.html",
+      "lane": "consent_controls",
+      "accept": true,
+      "reject": true,
+      "options": true,
+      "geometry": "bottom-inline",
+      "renderMode": "localized_lv",
+      "locale": "lv",
+      "labels": {
+        "accept": "pieņemt visus",
+        "reject": "noraidīt visus",
+        "options": "sīkdatņu iestatījumi"
+      },
+      "fixtureRole": "positive"
+    },
+    {
+      "key": "consent-locale-az",
+      "url": "/.well-known/certscore-canary/consent/locale-az.html",
+      "lane": "consent_controls",
+      "accept": true,
+      "reject": true,
+      "options": true,
+      "geometry": "bottom-inline",
+      "renderMode": "localized_az",
+      "locale": "az",
+      "labels": {
+        "accept": "hamısını qəbul et",
+        "reject": "hamısını rədd et",
+        "options": "kuki ayarları"
+      },
+      "fixtureRole": "positive"
+    },
+    {
+      "key": "consent-locale-gl",
+      "url": "/.well-known/certscore-canary/consent/locale-gl.html",
+      "lane": "consent_controls",
+      "accept": true,
+      "reject": true,
+      "options": true,
+      "geometry": "bottom-inline",
+      "renderMode": "localized_gl",
+      "locale": "gl",
+      "labels": {
+        "accept": "aceptar todo",
+        "reject": "rexeitar todo",
+        "options": "configuración de cookies"
+      },
+      "fixtureRole": "positive"
+    },
+    {
+      "key": "policy-locale-index",
+      "url": "/.well-known/certscore-canary/policy/locales.html",
+      "lane": "transport",
+      "fixtureRole": "control"
+    },
+    {
+      "key": "policy-locale-en-complete",
+      "url": "/.well-known/certscore-canary/policy/locale-en-complete.html",
+      "lane": "gdpr_transparency",
+      "topics": [
+        "controller",
+        "purposes_legal_basis",
+        "retention",
+        "international_transfers",
+        "vendors_recipients",
+        "privacy_rights",
+        "cookies_storage"
+      ],
+      "coverage": "complete",
+      "locale": "en",
+      "fixtureRole": "positive"
+    },
+    {
+      "key": "policy-locale-en-issue",
+      "url": "/.well-known/certscore-canary/policy/locale-en-issue.html",
+      "lane": "gdpr_transparency",
+      "topics": [
+        "controller",
+        "purposes_legal_basis",
+        "international_transfers",
+        "vendors_recipients",
+        "privacy_rights",
+        "cookies_storage"
+      ],
+      "missing": [
+        "retention"
+      ],
+      "coverage": "complete_except_declared_missing",
+      "locale": "en",
+      "fixtureRole": "negative"
+    },
+    {
+      "key": "policy-locale-de-complete",
+      "url": "/.well-known/certscore-canary/policy/locale-de-complete.html",
+      "lane": "gdpr_transparency",
+      "topics": [
+        "controller",
+        "purposes_legal_basis",
+        "retention",
+        "international_transfers",
+        "vendors_recipients",
+        "privacy_rights",
+        "cookies_storage"
+      ],
+      "coverage": "complete",
+      "locale": "de",
+      "fixtureRole": "positive"
+    },
+    {
+      "key": "policy-locale-de-issue",
+      "url": "/.well-known/certscore-canary/policy/locale-de-issue.html",
+      "lane": "gdpr_transparency",
+      "topics": [
+        "controller",
+        "purposes_legal_basis",
+        "international_transfers",
+        "vendors_recipients",
+        "privacy_rights",
+        "cookies_storage"
+      ],
+      "missing": [
+        "retention"
+      ],
+      "coverage": "complete_except_declared_missing",
+      "locale": "de",
+      "fixtureRole": "negative"
+    },
+    {
+      "key": "policy-locale-fr-complete",
+      "url": "/.well-known/certscore-canary/policy/locale-fr-complete.html",
+      "lane": "gdpr_transparency",
+      "topics": [
+        "controller",
+        "purposes_legal_basis",
+        "retention",
+        "international_transfers",
+        "vendors_recipients",
+        "privacy_rights",
+        "cookies_storage"
+      ],
+      "coverage": "complete",
+      "locale": "fr",
+      "fixtureRole": "positive"
+    },
+    {
+      "key": "policy-locale-fr-issue",
+      "url": "/.well-known/certscore-canary/policy/locale-fr-issue.html",
+      "lane": "gdpr_transparency",
+      "topics": [
+        "controller",
+        "purposes_legal_basis",
+        "international_transfers",
+        "vendors_recipients",
+        "privacy_rights",
+        "cookies_storage"
+      ],
+      "missing": [
+        "retention"
+      ],
+      "coverage": "complete_except_declared_missing",
+      "locale": "fr",
+      "fixtureRole": "negative"
+    },
+    {
+      "key": "policy-locale-es-complete",
+      "url": "/.well-known/certscore-canary/policy/locale-es-complete.html",
+      "lane": "gdpr_transparency",
+      "topics": [
+        "controller",
+        "purposes_legal_basis",
+        "retention",
+        "international_transfers",
+        "vendors_recipients",
+        "privacy_rights",
+        "cookies_storage"
+      ],
+      "coverage": "complete",
+      "locale": "es",
+      "fixtureRole": "positive"
+    },
+    {
+      "key": "policy-locale-es-issue",
+      "url": "/.well-known/certscore-canary/policy/locale-es-issue.html",
+      "lane": "gdpr_transparency",
+      "topics": [
+        "controller",
+        "purposes_legal_basis",
+        "international_transfers",
+        "vendors_recipients",
+        "privacy_rights",
+        "cookies_storage"
+      ],
+      "missing": [
+        "retention"
+      ],
+      "coverage": "complete_except_declared_missing",
+      "locale": "es",
+      "fixtureRole": "negative"
+    },
+    {
+      "key": "policy-locale-it-complete",
+      "url": "/.well-known/certscore-canary/policy/locale-it-complete.html",
+      "lane": "gdpr_transparency",
+      "topics": [
+        "controller",
+        "purposes_legal_basis",
+        "retention",
+        "international_transfers",
+        "vendors_recipients",
+        "privacy_rights",
+        "cookies_storage"
+      ],
+      "coverage": "complete",
+      "locale": "it",
+      "fixtureRole": "positive"
+    },
+    {
+      "key": "policy-locale-it-issue",
+      "url": "/.well-known/certscore-canary/policy/locale-it-issue.html",
+      "lane": "gdpr_transparency",
+      "topics": [
+        "controller",
+        "purposes_legal_basis",
+        "international_transfers",
+        "vendors_recipients",
+        "privacy_rights",
+        "cookies_storage"
+      ],
+      "missing": [
+        "retention"
+      ],
+      "coverage": "complete_except_declared_missing",
+      "locale": "it",
+      "fixtureRole": "negative"
+    },
+    {
+      "key": "policy-locale-nl-complete",
+      "url": "/.well-known/certscore-canary/policy/locale-nl-complete.html",
+      "lane": "gdpr_transparency",
+      "topics": [
+        "controller",
+        "purposes_legal_basis",
+        "retention",
+        "international_transfers",
+        "vendors_recipients",
+        "privacy_rights",
+        "cookies_storage"
+      ],
+      "coverage": "complete",
+      "locale": "nl",
+      "fixtureRole": "positive"
+    },
+    {
+      "key": "policy-locale-nl-issue",
+      "url": "/.well-known/certscore-canary/policy/locale-nl-issue.html",
+      "lane": "gdpr_transparency",
+      "topics": [
+        "controller",
+        "purposes_legal_basis",
+        "international_transfers",
+        "vendors_recipients",
+        "privacy_rights",
+        "cookies_storage"
+      ],
+      "missing": [
+        "retention"
+      ],
+      "coverage": "complete_except_declared_missing",
+      "locale": "nl",
+      "fixtureRole": "negative"
+    },
+    {
+      "key": "policy-locale-pl-complete",
+      "url": "/.well-known/certscore-canary/policy/locale-pl-complete.html",
+      "lane": "gdpr_transparency",
+      "topics": [
+        "controller",
+        "purposes_legal_basis",
+        "retention",
+        "international_transfers",
+        "vendors_recipients",
+        "privacy_rights",
+        "cookies_storage"
+      ],
+      "coverage": "complete",
+      "locale": "pl",
+      "fixtureRole": "positive"
+    },
+    {
+      "key": "policy-locale-pl-issue",
+      "url": "/.well-known/certscore-canary/policy/locale-pl-issue.html",
+      "lane": "gdpr_transparency",
+      "topics": [
+        "controller",
+        "purposes_legal_basis",
+        "international_transfers",
+        "vendors_recipients",
+        "privacy_rights",
+        "cookies_storage"
+      ],
+      "missing": [
+        "retention"
+      ],
+      "coverage": "complete_except_declared_missing",
+      "locale": "pl",
+      "fixtureRole": "negative"
+    },
+    {
+      "key": "policy-locale-pt-complete",
+      "url": "/.well-known/certscore-canary/policy/locale-pt-complete.html",
+      "lane": "gdpr_transparency",
+      "topics": [
+        "controller",
+        "purposes_legal_basis",
+        "retention",
+        "international_transfers",
+        "vendors_recipients",
+        "privacy_rights",
+        "cookies_storage"
+      ],
+      "coverage": "complete",
+      "locale": "pt",
+      "fixtureRole": "positive"
+    },
+    {
+      "key": "policy-locale-pt-issue",
+      "url": "/.well-known/certscore-canary/policy/locale-pt-issue.html",
+      "lane": "gdpr_transparency",
+      "topics": [
+        "controller",
+        "purposes_legal_basis",
+        "international_transfers",
+        "vendors_recipients",
+        "privacy_rights",
+        "cookies_storage"
+      ],
+      "missing": [
+        "retention"
+      ],
+      "coverage": "complete_except_declared_missing",
+      "locale": "pt",
+      "fixtureRole": "negative"
+    },
+    {
+      "key": "policy-locale-ru-complete",
+      "url": "/.well-known/certscore-canary/policy/locale-ru-complete.html",
+      "lane": "gdpr_transparency",
+      "topics": [
+        "controller",
+        "purposes_legal_basis",
+        "retention",
+        "international_transfers",
+        "vendors_recipients",
+        "privacy_rights",
+        "cookies_storage"
+      ],
+      "coverage": "complete",
+      "locale": "ru",
+      "fixtureRole": "positive"
+    },
+    {
+      "key": "policy-locale-ru-issue",
+      "url": "/.well-known/certscore-canary/policy/locale-ru-issue.html",
+      "lane": "gdpr_transparency",
+      "topics": [
+        "controller",
+        "purposes_legal_basis",
+        "international_transfers",
+        "vendors_recipients",
+        "privacy_rights",
+        "cookies_storage"
+      ],
+      "missing": [
+        "retention"
+      ],
+      "coverage": "complete_except_declared_missing",
+      "locale": "ru",
+      "fixtureRole": "negative"
+    },
+    {
+      "key": "policy-locale-ja-complete",
+      "url": "/.well-known/certscore-canary/policy/locale-ja-complete.html",
+      "lane": "gdpr_transparency",
+      "topics": [
+        "controller",
+        "purposes_legal_basis",
+        "retention",
+        "international_transfers",
+        "vendors_recipients",
+        "privacy_rights",
+        "cookies_storage"
+      ],
+      "coverage": "complete",
+      "locale": "ja",
+      "fixtureRole": "positive"
+    },
+    {
+      "key": "policy-locale-ja-issue",
+      "url": "/.well-known/certscore-canary/policy/locale-ja-issue.html",
+      "lane": "gdpr_transparency",
+      "topics": [
+        "controller",
+        "purposes_legal_basis",
+        "international_transfers",
+        "vendors_recipients",
+        "privacy_rights",
+        "cookies_storage"
+      ],
+      "missing": [
+        "retention"
+      ],
+      "coverage": "complete_except_declared_missing",
+      "locale": "ja",
+      "fixtureRole": "negative"
+    },
+    {
+      "key": "policy-locale-zh-complete",
+      "url": "/.well-known/certscore-canary/policy/locale-zh-complete.html",
+      "lane": "gdpr_transparency",
+      "topics": [
+        "controller",
+        "purposes_legal_basis",
+        "retention",
+        "international_transfers",
+        "vendors_recipients",
+        "privacy_rights",
+        "cookies_storage"
+      ],
+      "coverage": "complete",
+      "locale": "zh",
+      "fixtureRole": "positive"
+    },
+    {
+      "key": "policy-locale-zh-issue",
+      "url": "/.well-known/certscore-canary/policy/locale-zh-issue.html",
+      "lane": "gdpr_transparency",
+      "topics": [
+        "controller",
+        "purposes_legal_basis",
+        "international_transfers",
+        "vendors_recipients",
+        "privacy_rights",
+        "cookies_storage"
+      ],
+      "missing": [
+        "retention"
+      ],
+      "coverage": "complete_except_declared_missing",
+      "locale": "zh",
+      "fixtureRole": "negative"
+    },
+    {
+      "key": "policy-locale-ar-complete",
+      "url": "/.well-known/certscore-canary/policy/locale-ar-complete.html",
+      "lane": "gdpr_transparency",
+      "topics": [
+        "controller",
+        "purposes_legal_basis",
+        "retention",
+        "international_transfers",
+        "vendors_recipients",
+        "privacy_rights",
+        "cookies_storage"
+      ],
+      "coverage": "complete",
+      "locale": "ar",
+      "fixtureRole": "positive"
+    },
+    {
+      "key": "policy-locale-ar-issue",
+      "url": "/.well-known/certscore-canary/policy/locale-ar-issue.html",
+      "lane": "gdpr_transparency",
+      "topics": [
+        "controller",
+        "purposes_legal_basis",
+        "international_transfers",
+        "vendors_recipients",
+        "privacy_rights",
+        "cookies_storage"
+      ],
+      "missing": [
+        "retention"
+      ],
+      "coverage": "complete_except_declared_missing",
+      "locale": "ar",
+      "fixtureRole": "negative"
+    },
+    {
+      "key": "policy-locale-sv-complete",
+      "url": "/.well-known/certscore-canary/policy/locale-sv-complete.html",
+      "lane": "gdpr_transparency",
+      "topics": [
+        "controller",
+        "purposes_legal_basis",
+        "retention",
+        "international_transfers",
+        "vendors_recipients",
+        "privacy_rights",
+        "cookies_storage"
+      ],
+      "coverage": "complete",
+      "locale": "sv",
+      "fixtureRole": "positive"
+    },
+    {
+      "key": "policy-locale-sv-issue",
+      "url": "/.well-known/certscore-canary/policy/locale-sv-issue.html",
+      "lane": "gdpr_transparency",
+      "topics": [
+        "controller",
+        "purposes_legal_basis",
+        "international_transfers",
+        "vendors_recipients",
+        "privacy_rights",
+        "cookies_storage"
+      ],
+      "missing": [
+        "retention"
+      ],
+      "coverage": "complete_except_declared_missing",
+      "locale": "sv",
+      "fixtureRole": "negative"
+    },
+    {
+      "key": "policy-locale-ro-complete",
+      "url": "/.well-known/certscore-canary/policy/locale-ro-complete.html",
+      "lane": "gdpr_transparency",
+      "topics": [
+        "controller",
+        "purposes_legal_basis",
+        "retention",
+        "international_transfers",
+        "vendors_recipients",
+        "privacy_rights",
+        "cookies_storage"
+      ],
+      "coverage": "complete",
+      "locale": "ro",
+      "fixtureRole": "positive"
+    },
+    {
+      "key": "policy-locale-ro-issue",
+      "url": "/.well-known/certscore-canary/policy/locale-ro-issue.html",
+      "lane": "gdpr_transparency",
+      "topics": [
+        "controller",
+        "purposes_legal_basis",
+        "international_transfers",
+        "vendors_recipients",
+        "privacy_rights",
+        "cookies_storage"
+      ],
+      "missing": [
+        "retention"
+      ],
+      "coverage": "complete_except_declared_missing",
+      "locale": "ro",
+      "fixtureRole": "negative"
+    },
+    {
+      "key": "policy-locale-cs-complete",
+      "url": "/.well-known/certscore-canary/policy/locale-cs-complete.html",
+      "lane": "gdpr_transparency",
+      "topics": [
+        "controller",
+        "purposes_legal_basis",
+        "retention",
+        "international_transfers",
+        "vendors_recipients",
+        "privacy_rights",
+        "cookies_storage"
+      ],
+      "coverage": "complete",
+      "locale": "cs",
+      "fixtureRole": "positive"
+    },
+    {
+      "key": "policy-locale-cs-issue",
+      "url": "/.well-known/certscore-canary/policy/locale-cs-issue.html",
+      "lane": "gdpr_transparency",
+      "topics": [
+        "controller",
+        "purposes_legal_basis",
+        "international_transfers",
+        "vendors_recipients",
+        "privacy_rights",
+        "cookies_storage"
+      ],
+      "missing": [
+        "retention"
+      ],
+      "coverage": "complete_except_declared_missing",
+      "locale": "cs",
+      "fixtureRole": "negative"
+    },
+    {
+      "key": "policy-locale-el-complete",
+      "url": "/.well-known/certscore-canary/policy/locale-el-complete.html",
+      "lane": "gdpr_transparency",
+      "topics": [
+        "controller",
+        "purposes_legal_basis",
+        "retention",
+        "international_transfers",
+        "vendors_recipients",
+        "privacy_rights",
+        "cookies_storage"
+      ],
+      "coverage": "complete",
+      "locale": "el",
+      "fixtureRole": "positive"
+    },
+    {
+      "key": "policy-locale-el-issue",
+      "url": "/.well-known/certscore-canary/policy/locale-el-issue.html",
+      "lane": "gdpr_transparency",
+      "topics": [
+        "controller",
+        "purposes_legal_basis",
+        "international_transfers",
+        "vendors_recipients",
+        "privacy_rights",
+        "cookies_storage"
+      ],
+      "missing": [
+        "retention"
+      ],
+      "coverage": "complete_except_declared_missing",
+      "locale": "el",
+      "fixtureRole": "negative"
+    },
+    {
+      "key": "policy-locale-hu-complete",
+      "url": "/.well-known/certscore-canary/policy/locale-hu-complete.html",
+      "lane": "gdpr_transparency",
+      "topics": [
+        "controller",
+        "purposes_legal_basis",
+        "retention",
+        "international_transfers",
+        "vendors_recipients",
+        "privacy_rights",
+        "cookies_storage"
+      ],
+      "coverage": "complete",
+      "locale": "hu",
+      "fixtureRole": "positive"
+    },
+    {
+      "key": "policy-locale-hu-issue",
+      "url": "/.well-known/certscore-canary/policy/locale-hu-issue.html",
+      "lane": "gdpr_transparency",
+      "topics": [
+        "controller",
+        "purposes_legal_basis",
+        "international_transfers",
+        "vendors_recipients",
+        "privacy_rights",
+        "cookies_storage"
+      ],
+      "missing": [
+        "retention"
+      ],
+      "coverage": "complete_except_declared_missing",
+      "locale": "hu",
+      "fixtureRole": "negative"
+    },
+    {
+      "key": "policy-locale-da-complete",
+      "url": "/.well-known/certscore-canary/policy/locale-da-complete.html",
+      "lane": "gdpr_transparency",
+      "topics": [
+        "controller",
+        "purposes_legal_basis",
+        "retention",
+        "international_transfers",
+        "vendors_recipients",
+        "privacy_rights",
+        "cookies_storage"
+      ],
+      "coverage": "complete",
+      "locale": "da",
+      "fixtureRole": "positive"
+    },
+    {
+      "key": "policy-locale-da-issue",
+      "url": "/.well-known/certscore-canary/policy/locale-da-issue.html",
+      "lane": "gdpr_transparency",
+      "topics": [
+        "controller",
+        "purposes_legal_basis",
+        "international_transfers",
+        "vendors_recipients",
+        "privacy_rights",
+        "cookies_storage"
+      ],
+      "missing": [
+        "retention"
+      ],
+      "coverage": "complete_except_declared_missing",
+      "locale": "da",
+      "fixtureRole": "negative"
+    },
+    {
+      "key": "policy-locale-fi-complete",
+      "url": "/.well-known/certscore-canary/policy/locale-fi-complete.html",
+      "lane": "gdpr_transparency",
+      "topics": [
+        "controller",
+        "purposes_legal_basis",
+        "retention",
+        "international_transfers",
+        "vendors_recipients",
+        "privacy_rights",
+        "cookies_storage"
+      ],
+      "coverage": "complete",
+      "locale": "fi",
+      "fixtureRole": "positive"
+    },
+    {
+      "key": "policy-locale-fi-issue",
+      "url": "/.well-known/certscore-canary/policy/locale-fi-issue.html",
+      "lane": "gdpr_transparency",
+      "topics": [
+        "controller",
+        "purposes_legal_basis",
+        "international_transfers",
+        "vendors_recipients",
+        "privacy_rights",
+        "cookies_storage"
+      ],
+      "missing": [
+        "retention"
+      ],
+      "coverage": "complete_except_declared_missing",
+      "locale": "fi",
+      "fixtureRole": "negative"
+    },
+    {
+      "key": "policy-locale-sk-complete",
+      "url": "/.well-known/certscore-canary/policy/locale-sk-complete.html",
+      "lane": "gdpr_transparency",
+      "topics": [
+        "controller",
+        "purposes_legal_basis",
+        "retention",
+        "international_transfers",
+        "vendors_recipients",
+        "privacy_rights",
+        "cookies_storage"
+      ],
+      "coverage": "complete",
+      "locale": "sk",
+      "fixtureRole": "positive"
+    },
+    {
+      "key": "policy-locale-sk-issue",
+      "url": "/.well-known/certscore-canary/policy/locale-sk-issue.html",
+      "lane": "gdpr_transparency",
+      "topics": [
+        "controller",
+        "purposes_legal_basis",
+        "international_transfers",
+        "vendors_recipients",
+        "privacy_rights",
+        "cookies_storage"
+      ],
+      "missing": [
+        "retention"
+      ],
+      "coverage": "complete_except_declared_missing",
+      "locale": "sk",
+      "fixtureRole": "negative"
+    },
+    {
+      "key": "policy-locale-bg-complete",
+      "url": "/.well-known/certscore-canary/policy/locale-bg-complete.html",
+      "lane": "gdpr_transparency",
+      "topics": [
+        "controller",
+        "purposes_legal_basis",
+        "retention",
+        "international_transfers",
+        "vendors_recipients",
+        "privacy_rights",
+        "cookies_storage"
+      ],
+      "coverage": "complete",
+      "locale": "bg",
+      "fixtureRole": "positive"
+    },
+    {
+      "key": "policy-locale-bg-issue",
+      "url": "/.well-known/certscore-canary/policy/locale-bg-issue.html",
+      "lane": "gdpr_transparency",
+      "topics": [
+        "controller",
+        "purposes_legal_basis",
+        "international_transfers",
+        "vendors_recipients",
+        "privacy_rights",
+        "cookies_storage"
+      ],
+      "missing": [
+        "retention"
+      ],
+      "coverage": "complete_except_declared_missing",
+      "locale": "bg",
+      "fixtureRole": "negative"
+    },
+    {
+      "key": "policy-locale-hr-complete",
+      "url": "/.well-known/certscore-canary/policy/locale-hr-complete.html",
+      "lane": "gdpr_transparency",
+      "topics": [
+        "controller",
+        "purposes_legal_basis",
+        "retention",
+        "international_transfers",
+        "vendors_recipients",
+        "privacy_rights",
+        "cookies_storage"
+      ],
+      "coverage": "complete",
+      "locale": "hr",
+      "fixtureRole": "positive"
+    },
+    {
+      "key": "policy-locale-hr-issue",
+      "url": "/.well-known/certscore-canary/policy/locale-hr-issue.html",
+      "lane": "gdpr_transparency",
+      "topics": [
+        "controller",
+        "purposes_legal_basis",
+        "international_transfers",
+        "vendors_recipients",
+        "privacy_rights",
+        "cookies_storage"
+      ],
+      "missing": [
+        "retention"
+      ],
+      "coverage": "complete_except_declared_missing",
+      "locale": "hr",
+      "fixtureRole": "negative"
+    },
+    {
+      "key": "policy-locale-nb-complete",
+      "url": "/.well-known/certscore-canary/policy/locale-nb-complete.html",
+      "lane": "gdpr_transparency",
+      "topics": [
+        "controller",
+        "purposes_legal_basis",
+        "retention",
+        "international_transfers",
+        "vendors_recipients",
+        "privacy_rights",
+        "cookies_storage"
+      ],
+      "coverage": "complete",
+      "locale": "nb",
+      "fixtureRole": "positive"
+    },
+    {
+      "key": "policy-locale-nb-issue",
+      "url": "/.well-known/certscore-canary/policy/locale-nb-issue.html",
+      "lane": "gdpr_transparency",
+      "topics": [
+        "controller",
+        "purposes_legal_basis",
+        "international_transfers",
+        "vendors_recipients",
+        "privacy_rights",
+        "cookies_storage"
+      ],
+      "missing": [
+        "retention"
+      ],
+      "coverage": "complete_except_declared_missing",
+      "locale": "nb",
+      "fixtureRole": "negative"
+    },
+    {
+      "key": "policy-locale-sl-complete",
+      "url": "/.well-known/certscore-canary/policy/locale-sl-complete.html",
+      "lane": "gdpr_transparency",
+      "topics": [
+        "controller",
+        "purposes_legal_basis",
+        "retention",
+        "international_transfers",
+        "vendors_recipients",
+        "privacy_rights",
+        "cookies_storage"
+      ],
+      "coverage": "complete",
+      "locale": "sl",
+      "fixtureRole": "positive"
+    },
+    {
+      "key": "policy-locale-sl-issue",
+      "url": "/.well-known/certscore-canary/policy/locale-sl-issue.html",
+      "lane": "gdpr_transparency",
+      "topics": [
+        "controller",
+        "purposes_legal_basis",
+        "international_transfers",
+        "vendors_recipients",
+        "privacy_rights",
+        "cookies_storage"
+      ],
+      "missing": [
+        "retention"
+      ],
+      "coverage": "complete_except_declared_missing",
+      "locale": "sl",
+      "fixtureRole": "negative"
+    },
+    {
+      "key": "policy-locale-lt-complete",
+      "url": "/.well-known/certscore-canary/policy/locale-lt-complete.html",
+      "lane": "gdpr_transparency",
+      "topics": [
+        "controller",
+        "purposes_legal_basis",
+        "retention",
+        "international_transfers",
+        "vendors_recipients",
+        "privacy_rights",
+        "cookies_storage"
+      ],
+      "coverage": "complete",
+      "locale": "lt",
+      "fixtureRole": "positive"
+    },
+    {
+      "key": "policy-locale-lt-issue",
+      "url": "/.well-known/certscore-canary/policy/locale-lt-issue.html",
+      "lane": "gdpr_transparency",
+      "topics": [
+        "controller",
+        "purposes_legal_basis",
+        "international_transfers",
+        "vendors_recipients",
+        "privacy_rights",
+        "cookies_storage"
+      ],
+      "missing": [
+        "retention"
+      ],
+      "coverage": "complete_except_declared_missing",
+      "locale": "lt",
+      "fixtureRole": "negative"
+    },
+    {
+      "key": "policy-locale-lv-complete",
+      "url": "/.well-known/certscore-canary/policy/locale-lv-complete.html",
+      "lane": "gdpr_transparency",
+      "topics": [
+        "controller",
+        "purposes_legal_basis",
+        "retention",
+        "international_transfers",
+        "vendors_recipients",
+        "privacy_rights",
+        "cookies_storage"
+      ],
+      "coverage": "complete",
+      "locale": "lv",
+      "fixtureRole": "positive"
+    },
+    {
+      "key": "policy-locale-lv-issue",
+      "url": "/.well-known/certscore-canary/policy/locale-lv-issue.html",
+      "lane": "gdpr_transparency",
+      "topics": [
+        "controller",
+        "purposes_legal_basis",
+        "international_transfers",
+        "vendors_recipients",
+        "privacy_rights",
+        "cookies_storage"
+      ],
+      "missing": [
+        "retention"
+      ],
+      "coverage": "complete_except_declared_missing",
+      "locale": "lv",
+      "fixtureRole": "negative"
+    },
+    {
+      "key": "policy-locale-et-complete",
+      "url": "/.well-known/certscore-canary/policy/locale-et-complete.html",
+      "lane": "gdpr_transparency",
+      "topics": [
+        "controller",
+        "purposes_legal_basis",
+        "retention",
+        "international_transfers",
+        "vendors_recipients",
+        "privacy_rights",
+        "cookies_storage"
+      ],
+      "coverage": "complete",
+      "locale": "et",
+      "fixtureRole": "positive"
+    },
+    {
+      "key": "policy-locale-et-issue",
+      "url": "/.well-known/certscore-canary/policy/locale-et-issue.html",
+      "lane": "gdpr_transparency",
+      "topics": [
+        "controller",
+        "purposes_legal_basis",
+        "international_transfers",
+        "vendors_recipients",
+        "privacy_rights",
+        "cookies_storage"
+      ],
+      "missing": [
+        "retention"
+      ],
+      "coverage": "complete_except_declared_missing",
+      "locale": "et",
+      "fixtureRole": "negative"
+    },
+    {
+      "key": "policy-locale-uk-complete",
+      "url": "/.well-known/certscore-canary/policy/locale-uk-complete.html",
+      "lane": "gdpr_transparency",
+      "topics": [
+        "controller",
+        "purposes_legal_basis",
+        "retention",
+        "international_transfers",
+        "vendors_recipients",
+        "privacy_rights",
+        "cookies_storage"
+      ],
+      "coverage": "complete",
+      "locale": "uk",
+      "fixtureRole": "positive"
+    },
+    {
+      "key": "policy-locale-uk-issue",
+      "url": "/.well-known/certscore-canary/policy/locale-uk-issue.html",
+      "lane": "gdpr_transparency",
+      "topics": [
+        "controller",
+        "purposes_legal_basis",
+        "international_transfers",
+        "vendors_recipients",
+        "privacy_rights",
+        "cookies_storage"
+      ],
+      "missing": [
+        "retention"
+      ],
+      "coverage": "complete_except_declared_missing",
+      "locale": "uk",
+      "fixtureRole": "negative"
+    },
+    {
+      "key": "policy-locale-tr-complete",
+      "url": "/.well-known/certscore-canary/policy/locale-tr-complete.html",
+      "lane": "gdpr_transparency",
+      "topics": [
+        "controller",
+        "purposes_legal_basis",
+        "retention",
+        "international_transfers",
+        "vendors_recipients",
+        "privacy_rights",
+        "cookies_storage"
+      ],
+      "coverage": "complete",
+      "locale": "tr",
+      "fixtureRole": "positive"
+    },
+    {
+      "key": "policy-locale-tr-issue",
+      "url": "/.well-known/certscore-canary/policy/locale-tr-issue.html",
+      "lane": "gdpr_transparency",
+      "topics": [
+        "controller",
+        "purposes_legal_basis",
+        "international_transfers",
+        "vendors_recipients",
+        "privacy_rights",
+        "cookies_storage"
+      ],
+      "missing": [
+        "retention"
+      ],
+      "coverage": "complete_except_declared_missing",
+      "locale": "tr",
+      "fixtureRole": "negative"
+    },
+    {
+      "key": "labels-en-accept-all",
+      "url": "/.well-known/certscore-canary/consent/edge/labels-en-accept-all.html",
+      "lane": "consent_edge_cases",
+      "fixtureRole": "edge_case",
+      "locale": "en",
+      "semantic": "accept_all_variant",
+      "expectedARO": "A/R/O",
+      "geometry": "bottom-inline"
+    },
+    {
+      "key": "labels-en-allow-continue-agree",
+      "url": "/.well-known/certscore-canary/consent/edge/labels-en-allow-continue-agree.html",
+      "lane": "consent_edge_cases",
+      "fixtureRole": "edge_case",
+      "locale": "en",
+      "semantic": "allow_continue_agree",
+      "expectedARO": "A/R/O",
+      "geometry": "bottom-inline"
+    },
+    {
+      "key": "labels-ar-rtl-necessary-only",
+      "url": "/.well-known/certscore-canary/consent/edge/labels-ar-rtl-necessary-only.html",
+      "lane": "consent_edge_cases",
+      "fixtureRole": "edge_case",
+      "locale": "ar",
+      "semantic": "necessary_only",
+      "expectedARO": "A/R/O",
+      "geometry": "centered-modal",
+      "direction": "rtl"
+    },
+    {
+      "key": "labels-he-rtl-close",
+      "url": "/.well-known/certscore-canary/consent/edge/labels-he-rtl-close.html",
+      "lane": "consent_edge_cases",
+      "fixtureRole": "edge_case",
+      "locale": "he",
+      "semantic": "close_vs_reject",
+      "expectedARO": "A/?/A",
+      "geometry": "bottom-inline",
+      "direction": "rtl"
+    },
+    {
+      "key": "labels-fa-rtl-mixed",
+      "url": "/.well-known/certscore-canary/consent/edge/labels-fa-rtl-mixed.html",
+      "lane": "consent_edge_cases",
+      "fixtureRole": "edge_case",
+      "locale": "fa",
+      "semantic": "mixed_language",
+      "expectedARO": "A/R/O",
+      "geometry": "bottom-inline",
+      "direction": "rtl"
+    },
+    {
+      "key": "nonlatin-cjk-thai-hindi-greek-cyrillic",
+      "url": "/.well-known/certscore-canary/consent/edge/nonlatin-cjk-thai-hindi-greek-cyrillic.html",
+      "lane": "consent_edge_cases",
+      "fixtureRole": "edge_case",
+      "locale": "ja",
+      "semantic": "mixed_non_latin",
+      "expectedARO": "A/R/O",
+      "geometry": "bottom-inline"
+    },
+    {
+      "key": "aria-only-and-custom-elements",
+      "url": "/.well-known/certscore-canary/consent/edge/aria-only-and-custom-elements.html",
+      "lane": "consent_edge_cases",
+      "fixtureRole": "edge_case",
+      "locale": "en",
+      "semantic": "aria_custom_element",
+      "expectedARO": "A/R/O",
+      "geometry": "bottom-inline"
+    },
+    {
+      "key": "nested-spans-composite-duplicate",
+      "url": "/.well-known/certscore-canary/consent/edge/nested-spans-composite-duplicate.html",
+      "lane": "consent_edge_cases",
+      "fixtureRole": "edge_case",
+      "locale": "en",
+      "semantic": "nested_split_duplicate",
+      "expectedARO": "A/R/O",
+      "geometry": "bottom-inline",
+      "duplicateGuard": true
+    },
+    {
+      "key": "responsive-mobile",
+      "url": "/.well-known/certscore-canary/consent/edge/responsive-mobile.html",
+      "lane": "consent_edge_cases",
+      "fixtureRole": "edge_case",
+      "locale": "fr",
+      "semantic": "responsive",
+      "expectedARO": "A/R/O",
+      "geometry": "mobile-stacked",
+      "viewport": "mobile"
+    },
+    {
+      "key": "responsive-tablet",
+      "url": "/.well-known/certscore-canary/consent/edge/responsive-tablet.html",
+      "lane": "consent_edge_cases",
+      "fixtureRole": "edge_case",
+      "locale": "de",
+      "semantic": "responsive",
+      "expectedARO": "A/R/O",
+      "geometry": "tablet-split",
+      "viewport": "tablet"
+    },
+    {
+      "key": "responsive-desktop",
+      "url": "/.well-known/certscore-canary/consent/edge/responsive-desktop.html",
+      "lane": "consent_edge_cases",
+      "fixtureRole": "edge_case",
+      "locale": "es",
+      "semantic": "responsive",
+      "expectedARO": "A/R/O",
+      "geometry": "desktop-inline",
+      "viewport": "desktop"
+    },
+    {
+      "key": "viewport-below-fold-fixed-overflow",
+      "url": "/.well-known/certscore-canary/consent/edge/viewport-below-fold-fixed-overflow.html",
+      "lane": "consent_edge_cases",
+      "fixtureRole": "edge_case",
+      "locale": "en",
+      "semantic": "viewport_edges",
+      "expectedARO": "A/R/O",
+      "geometry": "below-fold-fixed-nested-scroll"
+    },
+    {
+      "key": "visibility-traps",
+      "url": "/.well-known/certscore-canary/consent/edge/visibility-traps.html",
+      "lane": "consent_edge_cases",
+      "fixtureRole": "edge_case",
+      "locale": "en",
+      "semantic": "visibility_traps",
+      "expectedARO": "A/?/O",
+      "geometry": "visibility"
+    },
+    {
+      "key": "language-mismatch",
+      "url": "/.well-known/certscore-canary/consent/edge/language-mismatch.html",
+      "lane": "consent_edge_cases",
+      "fixtureRole": "edge_case",
+      "locale": "en",
+      "semantic": "language_mismatch",
+      "expectedARO": "A/R/O",
+      "geometry": "bottom-inline",
+      "visibleLanguage": "fr"
+    },
+    {
+      "key": "locale-fallback-regional-mixed",
+      "url": "/.well-known/certscore-canary/consent/edge/locale-fallback-regional-mixed.html",
+      "lane": "consent_edge_cases",
+      "fixtureRole": "edge_case",
+      "locale": "fr-CA",
+      "semantic": "regional_fallback",
+      "expectedARO": "A/R/O",
+      "geometry": "bottom-inline"
+    },
+    {
+      "key": "delayed-route-modal-transition",
+      "url": "/.well-known/certscore-canary/consent/edge/delayed-route-modal-transition.html",
+      "lane": "consent_edge_cases",
+      "fixtureRole": "edge_case",
+      "locale": "en",
+      "semantic": "delayed_route_transition",
+      "expectedARO": "A/R/O",
+      "geometry": "modal-transition"
+    },
+    {
+      "key": "iframe-same-origin",
+      "url": "/.well-known/certscore-canary/consent/edge/iframe-same-origin.html",
+      "lane": "consent_edge_cases",
+      "fixtureRole": "edge_case",
+      "locale": "en",
+      "semantic": "iframe_same_origin",
+      "expectedARO": "A/R/O",
+      "geometry": "iframe"
+    },
+    {
+      "key": "iframe-cross-origin-nested-sandbox",
+      "url": "/.well-known/certscore-canary/consent/edge/iframe-cross-origin-nested-sandbox.html",
+      "lane": "consent_edge_cases",
+      "fixtureRole": "edge_case",
+      "locale": "en",
+      "semantic": "iframe_cross_origin_nested_sandbox",
+      "expectedARO": "unknown",
+      "geometry": "iframe"
+    },
+    {
+      "key": "shadow-open-hydrated",
+      "url": "/.well-known/certscore-canary/consent/edge/shadow-open-hydrated.html",
+      "lane": "consent_edge_cases",
+      "fixtureRole": "edge_case",
+      "locale": "en",
+      "semantic": "shadow_open_hydrated",
+      "expectedARO": "A/R/O",
+      "geometry": "shadow-dom"
+    },
+    {
+      "key": "shadow-closed-nested",
+      "url": "/.well-known/certscore-canary/consent/edge/shadow-closed-nested.html",
+      "lane": "consent_edge_cases",
+      "fixtureRole": "edge_case",
+      "locale": "en",
+      "semantic": "shadow_closed_nested",
+      "expectedARO": "A/unknown/unknown",
+      "geometry": "shadow-dom"
+    },
+    {
+      "key": "accessibility-disabled-focus-keyboard",
+      "url": "/.well-known/certscore-canary/consent/edge/accessibility-disabled-focus-keyboard.html",
+      "lane": "consent_edge_cases",
+      "fixtureRole": "edge_case",
+      "locale": "en",
+      "semantic": "accessibility_states",
+      "expectedARO": "?/R/O",
+      "geometry": "accessibility"
+    },
+    {
+      "key": "nav-only-topic-names",
+      "url": "/.well-known/certscore-canary/policy/evidence/nav-only-topic-names.html",
+      "lane": "gdpr_transparency",
+      "fixtureRole": "false_positive_guard",
+      "topics": [],
+      "evidenceQuality": "false_positive_guard"
+    },
+    {
+      "key": "glossary-only-topics",
+      "url": "/.well-known/certscore-canary/policy/evidence/glossary-only-topics.html",
+      "lane": "gdpr_transparency",
+      "fixtureRole": "false_positive_guard",
+      "topics": [],
+      "evidenceQuality": "false_positive_guard"
+    },
+    {
+      "key": "unrelated-vendor-policy",
+      "url": "/.well-known/certscore-canary/policy/evidence/unrelated-vendor-policy.html",
+      "lane": "gdpr_transparency",
+      "fixtureRole": "false_negative_guard",
+      "topics": [],
+      "evidenceQuality": "false_negative_guard"
+    },
+    {
+      "key": "truncated-policy",
+      "url": "/.well-known/certscore-canary/policy/evidence/truncated-policy.html",
+      "lane": "gdpr_transparency",
+      "fixtureRole": "insufficient_retained_evidence",
+      "topics": [
+        "controller"
+      ],
+      "evidenceQuality": "insufficient_retained_evidence"
+    },
+    {
+      "key": "wrong-domain-policy",
+      "url": "/.well-known/certscore-canary/policy/evidence/wrong-domain-policy.html",
+      "lane": "gdpr_transparency",
+      "fixtureRole": "wrong_domain",
+      "topics": [
+        "controller",
+        "purposes_legal_basis",
+        "retention",
+        "international_transfers",
+        "vendors_recipients",
+        "privacy_rights",
+        "cookies_storage"
+      ],
+      "evidenceQuality": "wrong_domain"
+    },
+    {
+      "key": "stale-policy",
+      "url": "/.well-known/certscore-canary/policy/evidence/stale-policy.html",
+      "lane": "gdpr_transparency",
+      "fixtureRole": "stale_policy",
+      "topics": [
+        "controller",
+        "purposes_legal_basis",
+        "retention",
+        "international_transfers",
+        "vendors_recipients",
+        "privacy_rights",
+        "cookies_storage"
+      ],
+      "evidenceQuality": "stale_policy"
+    },
+    {
+      "key": "redirect-chain-policy",
+      "url": "/.well-known/certscore-canary/policy/evidence/redirect-chain-policy.html",
+      "lane": "gdpr_transparency",
+      "fixtureRole": "redirect_chain",
+      "topics": [
+        "controller",
+        "purposes_legal_basis",
+        "retention",
+        "international_transfers",
+        "vendors_recipients",
+        "privacy_rights",
+        "cookies_storage"
+      ],
+      "evidenceQuality": "redirect_chain"
+    },
+    {
+      "key": "policy-runtime-mismatch-evidence",
+      "url": "/.well-known/certscore-canary/policy/evidence/policy-runtime-mismatch-evidence.html",
+      "lane": "gdpr_transparency",
+      "fixtureRole": "comparison_conflict",
+      "topics": [
+        "controller",
+        "purposes_legal_basis",
+        "retention",
+        "international_transfers",
+        "vendors_recipients",
+        "privacy_rights",
+        "cookies_storage",
+        "policy_runtime_comparison"
+      ],
+      "evidenceQuality": "comparison_conflict",
+      "coverage": "comparison_conflict"
+    },
+    {
+      "key": "fingerprinting-canvas",
+      "url": "/.well-known/certscore-canary/runtime/fingerprinting/canvas.html",
+      "lane": "runtime_fingerprinting",
+      "fixtureRole": "positive",
+      "fingerprinting": true,
+      "signal": "canvas",
+      "expected": "observed"
+    },
+    {
+      "key": "fingerprinting-webgl",
+      "url": "/.well-known/certscore-canary/runtime/fingerprinting/webgl.html",
+      "lane": "runtime_fingerprinting",
+      "fixtureRole": "positive",
+      "fingerprinting": true,
+      "signal": "webgl",
+      "expected": "observed"
+    },
+    {
+      "key": "fingerprinting-audio",
+      "url": "/.well-known/certscore-canary/runtime/fingerprinting/audio.html",
+      "lane": "runtime_fingerprinting",
+      "fixtureRole": "positive",
+      "fingerprinting": true,
+      "signal": "audio",
+      "expected": "observed"
+    },
+    {
+      "key": "fingerprinting-fonts",
+      "url": "/.well-known/certscore-canary/runtime/fingerprinting/fonts.html",
+      "lane": "runtime_fingerprinting",
+      "fixtureRole": "positive",
+      "fingerprinting": true,
+      "signal": "fonts",
+      "expected": "observed"
+    },
+    {
+      "key": "fingerprinting-device-and-client-hints",
+      "url": "/.well-known/certscore-canary/runtime/fingerprinting/device-and-client-hints.html",
+      "lane": "runtime_fingerprinting",
+      "fixtureRole": "positive",
+      "fingerprinting": true,
+      "signal": "device_signals",
+      "expected": "observed"
+    },
+    {
+      "key": "fingerprinting-combined-positive",
+      "url": "/.well-known/certscore-canary/runtime/fingerprinting/combined-positive.html",
+      "lane": "runtime_fingerprinting",
+      "fixtureRole": "positive",
+      "fingerprinting": true,
+      "signal": "combined",
+      "expected": "observed"
+    },
+    {
+      "key": "sentinel-broad-baseline",
+      "url": "/.well-known/certscore-canary/sentinels/broad-baseline.html",
+      "lane": "sentinel",
+      "fixtureRole": "four_hour_smoke",
+      "sentinel": true,
+      "locale": "en",
+      "role": "broad_baseline",
+      "expectedSignals": [
+        "pre_consent_storage",
+        "fingerprinting",
+        "policy_runtime_comparison",
+        "consent_controls"
+      ]
+    },
+    {
+      "key": "sentinel-consent-stress",
+      "url": "/.well-known/certscore-canary/sentinels/consent-stress.html",
+      "lane": "sentinel",
+      "fixtureRole": "four_hour_smoke",
+      "sentinel": true,
+      "locale": "en",
+      "role": "consent_stress",
+      "expectedSignals": [
+        "responsive_geometry",
+        "aria_controls",
+        "shadow_dom",
+        "split_labels"
+      ]
+    },
+    {
+      "key": "sentinel-privacy-evidence",
+      "url": "/.well-known/certscore-canary/sentinels/privacy-evidence.html",
+      "lane": "sentinel",
+      "fixtureRole": "four_hour_smoke",
+      "sentinel": true,
+      "locale": "en",
+      "role": "privacy_evidence",
+      "expectedSignals": [
+        "false_positive_decoy",
+        "truncated_policy",
+        "wrong_domain_supplement",
+        "missing_topics"
+      ]
+    },
+    {
+      "key": "sentinel-runtime-transport",
+      "url": "/.well-known/certscore-canary/sentinels/runtime-transport.html",
+      "lane": "sentinel",
+      "fixtureRole": "four_hour_smoke",
+      "sentinel": true,
+      "locale": "en",
+      "role": "runtime_transport",
+      "expectedSignals": [
+        "third_party_iframe",
+        "storage",
+        "canvas_fingerprinting"
+      ]
+    },
+    {
+      "key": "sentinel-multilingual-rtl",
+      "url": "/.well-known/certscore-canary/sentinels/multilingual-rtl.html",
+      "lane": "sentinel",
+      "fixtureRole": "four_hour_smoke",
+      "sentinel": true,
+      "locale": "ar",
+      "role": "multilingual_rtl",
+      "expectedSignals": [
+        "rtl_layout",
+        "mixed_scripts",
+        "necessary_only",
+        "localized_controls"
+      ]
+    }
+  ],
+  "consentLocaleCoverage": [
+    {
+      "locale": "en",
+      "url": "/.well-known/certscore-canary/consent/locale-en.html",
+      "accept": "accept all",
+      "reject": "reject all",
+      "options": "cookie settings"
+    },
+    {
+      "locale": "es",
+      "url": "/.well-known/certscore-canary/consent/locale-es.html",
+      "accept": "aceptar todo",
+      "reject": "rechazar todo",
+      "options": "configuración de cookies"
+    },
+    {
+      "locale": "de",
+      "url": "/.well-known/certscore-canary/consent/locale-de.html",
+      "accept": "alle akzeptieren",
+      "reject": "alle ablehnen",
+      "options": "cookie-einstellungen"
+    },
+    {
+      "locale": "ja",
+      "url": "/.well-known/certscore-canary/consent/locale-ja.html",
+      "accept": "すべて同意する",
+      "reject": "すべて拒否する",
+      "options": "Cookie設定"
+    },
+    {
+      "locale": "fr",
+      "url": "/.well-known/certscore-canary/consent/locale-fr.html",
+      "accept": "tout accepter",
+      "reject": "tout refuser",
+      "options": "paramètres des cookies"
+    },
+    {
+      "locale": "ru",
+      "url": "/.well-known/certscore-canary/consent/locale-ru.html",
+      "accept": "принять все",
+      "reject": "отклонить все",
+      "options": "настройки файлов cookie"
+    },
+    {
+      "locale": "pt",
+      "url": "/.well-known/certscore-canary/consent/locale-pt.html",
+      "accept": "aceitar todos",
+      "reject": "rejeitar todos",
+      "options": "definições de cookies"
+    },
+    {
+      "locale": "it",
+      "url": "/.well-known/certscore-canary/consent/locale-it.html",
+      "accept": "accetta tutto",
+      "reject": "rifiuta tutto",
+      "options": "impostazioni cookie"
+    },
+    {
+      "locale": "tr",
+      "url": "/.well-known/certscore-canary/consent/locale-tr.html",
+      "accept": "tümünü kabul et",
+      "reject": "tümünü reddet",
+      "options": "çerez ayarları"
+    },
+    {
+      "locale": "zh",
+      "url": "/.well-known/certscore-canary/consent/locale-zh.html",
+      "accept": "全部接受",
+      "reject": "全部拒绝",
+      "options": "Cookie 设置"
+    },
+    {
+      "locale": "fa",
+      "url": "/.well-known/certscore-canary/consent/locale-fa.html",
+      "accept": "پذیرش همه",
+      "reject": "رد همه",
+      "options": "تنظیمات کوکی"
+    },
+    {
+      "locale": "nl",
+      "url": "/.well-known/certscore-canary/consent/locale-nl.html",
+      "accept": "alles accepteren",
+      "reject": "alles weigeren",
+      "options": "cookie-instellingen"
+    },
+    {
+      "locale": "pl",
+      "url": "/.well-known/certscore-canary/consent/locale-pl.html",
+      "accept": "akceptuj wszystko",
+      "reject": "odrzuć wszystko",
+      "options": "ustawienia plików cookie"
+    },
+    {
+      "locale": "vi",
+      "url": "/.well-known/certscore-canary/consent/locale-vi.html",
+      "accept": "chấp nhận tất cả",
+      "reject": "từ chối tất cả",
+      "options": "cài đặt cookie"
+    },
+    {
+      "locale": "id",
+      "url": "/.well-known/certscore-canary/consent/locale-id.html",
+      "accept": "terima semua",
+      "reject": "tolak semua",
+      "options": "pengaturan cookie"
+    },
+    {
+      "locale": "cs",
+      "url": "/.well-known/certscore-canary/consent/locale-cs.html",
+      "accept": "přijmout vše",
+      "reject": "odmítnout vše",
+      "options": "nastavení cookies"
+    },
+    {
+      "locale": "ko",
+      "url": "/.well-known/certscore-canary/consent/locale-ko.html",
+      "accept": "모두 허용",
+      "reject": "모두 거부",
+      "options": "쿠키 설정"
+    },
+    {
+      "locale": "sv",
+      "url": "/.well-known/certscore-canary/consent/locale-sv.html",
+      "accept": "acceptera alla",
+      "reject": "avvisa alla",
+      "options": "cookieinställningar"
+    },
+    {
+      "locale": "uk",
+      "url": "/.well-known/certscore-canary/consent/locale-uk.html",
+      "accept": "прийняти всі",
+      "reject": "відхилити всі",
+      "options": "налаштування cookie"
+    },
+    {
+      "locale": "el",
+      "url": "/.well-known/certscore-canary/consent/locale-el.html",
+      "accept": "αποδοχή όλων",
+      "reject": "απόρριψη όλων",
+      "options": "ρυθμίσεις cookies"
+    },
+    {
+      "locale": "ar",
+      "url": "/.well-known/certscore-canary/consent/locale-ar.html",
+      "accept": "قبول الكل",
+      "reject": "رفض الكل",
+      "options": "إعدادات ملفات تعريف الارتباط"
+    },
+    {
+      "locale": "hu",
+      "url": "/.well-known/certscore-canary/consent/locale-hu.html",
+      "accept": "összes elfogadása",
+      "reject": "összes elutasítása",
+      "options": "süti beállítások"
+    },
+    {
+      "locale": "ro",
+      "url": "/.well-known/certscore-canary/consent/locale-ro.html",
+      "accept": "acceptă toate",
+      "reject": "respinge toate",
+      "options": "setări cookie"
+    },
+    {
+      "locale": "th",
+      "url": "/.well-known/certscore-canary/consent/locale-th.html",
+      "accept": "ยอมรับทั้งหมด",
+      "reject": "ปฏิเสธทั้งหมด",
+      "options": "การตั้งค่าคุกกี้"
+    },
+    {
+      "locale": "da",
+      "url": "/.well-known/certscore-canary/consent/locale-da.html",
+      "accept": "accepter alle",
+      "reject": "afvis alle",
+      "options": "cookieindstillinger"
+    },
+    {
+      "locale": "sk",
+      "url": "/.well-known/certscore-canary/consent/locale-sk.html",
+      "accept": "prijať všetko",
+      "reject": "odmietnuť všetko",
+      "options": "nastavenia cookies"
+    },
+    {
+      "locale": "fi",
+      "url": "/.well-known/certscore-canary/consent/locale-fi.html",
+      "accept": "hyväksy kaikki",
+      "reject": "hylkää kaikki",
+      "options": "evästeasetukset"
+    },
+    {
+      "locale": "bg",
+      "url": "/.well-known/certscore-canary/consent/locale-bg.html",
+      "accept": "приемане на всички",
+      "reject": "отхвърляне на всички",
+      "options": "настройки за бисквитки"
+    },
+    {
+      "locale": "he",
+      "url": "/.well-known/certscore-canary/consent/locale-he.html",
+      "accept": "אישור הכול",
+      "reject": "דחיית הכול",
+      "options": "הגדרות עוגיות"
+    },
+    {
+      "locale": "sr",
+      "url": "/.well-known/certscore-canary/consent/locale-sr.html",
+      "accept": "prihvati sve",
+      "reject": "odbij sve",
+      "options": "podešavanja kolačića"
+    },
+    {
+      "locale": "hr",
+      "url": "/.well-known/certscore-canary/consent/locale-hr.html",
+      "accept": "prihvati sve",
+      "reject": "odbij sve",
+      "options": "postavke kolačića"
+    },
+    {
+      "locale": "lt",
+      "url": "/.well-known/certscore-canary/consent/locale-lt.html",
+      "accept": "priimti visus",
+      "reject": "atmesti visus",
+      "options": "slapukų nustatymai"
+    },
+    {
+      "locale": "sl",
+      "url": "/.well-known/certscore-canary/consent/locale-sl.html",
+      "accept": "sprejmi vse",
+      "reject": "zavrni vse",
+      "options": "nastavitve piškotkov"
+    },
+    {
+      "locale": "ca",
+      "url": "/.well-known/certscore-canary/consent/locale-ca.html",
+      "accept": "accepta-ho tot",
+      "reject": "rebutja-ho tot",
+      "options": "configuració de cookies"
+    },
+    {
+      "locale": "hi",
+      "url": "/.well-known/certscore-canary/consent/locale-hi.html",
+      "accept": "सभी स्वीकार करें",
+      "reject": "सभी अस्वीकार करें",
+      "options": "कुकी सेटिंग्स"
+    },
+    {
+      "locale": "nb",
+      "url": "/.well-known/certscore-canary/consent/locale-nb.html",
+      "accept": "godta alle",
+      "reject": "avvis alle",
+      "options": "innstillinger for informasjonskapsler"
+    },
+    {
+      "locale": "et",
+      "url": "/.well-known/certscore-canary/consent/locale-et.html",
+      "accept": "nõustu kõigiga",
+      "reject": "keeldu kõigist",
+      "options": "küpsiste seaded"
+    },
+    {
+      "locale": "lv",
+      "url": "/.well-known/certscore-canary/consent/locale-lv.html",
+      "accept": "pieņemt visus",
+      "reject": "noraidīt visus",
+      "options": "sīkdatņu iestatījumi"
+    },
+    {
+      "locale": "az",
+      "url": "/.well-known/certscore-canary/consent/locale-az.html",
+      "accept": "hamısını qəbul et",
+      "reject": "hamısını rədd et",
+      "options": "kuki ayarları"
+    },
+    {
+      "locale": "gl",
+      "url": "/.well-known/certscore-canary/consent/locale-gl.html",
+      "accept": "aceptar todo",
+      "reject": "rexeitar todo",
+      "options": "configuración de cookies"
+    }
+  ],
+  "consentLocaleIndex": "/.well-known/certscore-canary/consent/locales.html",
+  "gdprLocaleCoverage": [
+    {
+      "locale": "en",
+      "completeUrl": "/.well-known/certscore-canary/policy/locale-en-complete.html",
+      "issueUrl": "/.well-known/certscore-canary/policy/locale-en-issue.html",
+      "issueType": "missing_retention"
+    },
+    {
+      "locale": "de",
+      "completeUrl": "/.well-known/certscore-canary/policy/locale-de-complete.html",
+      "issueUrl": "/.well-known/certscore-canary/policy/locale-de-issue.html",
+      "issueType": "missing_retention"
+    },
+    {
+      "locale": "fr",
+      "completeUrl": "/.well-known/certscore-canary/policy/locale-fr-complete.html",
+      "issueUrl": "/.well-known/certscore-canary/policy/locale-fr-issue.html",
+      "issueType": "missing_retention"
+    },
+    {
+      "locale": "es",
+      "completeUrl": "/.well-known/certscore-canary/policy/locale-es-complete.html",
+      "issueUrl": "/.well-known/certscore-canary/policy/locale-es-issue.html",
+      "issueType": "missing_retention"
+    },
+    {
+      "locale": "it",
+      "completeUrl": "/.well-known/certscore-canary/policy/locale-it-complete.html",
+      "issueUrl": "/.well-known/certscore-canary/policy/locale-it-issue.html",
+      "issueType": "missing_retention"
+    },
+    {
+      "locale": "nl",
+      "completeUrl": "/.well-known/certscore-canary/policy/locale-nl-complete.html",
+      "issueUrl": "/.well-known/certscore-canary/policy/locale-nl-issue.html",
+      "issueType": "missing_retention"
+    },
+    {
+      "locale": "pl",
+      "completeUrl": "/.well-known/certscore-canary/policy/locale-pl-complete.html",
+      "issueUrl": "/.well-known/certscore-canary/policy/locale-pl-issue.html",
+      "issueType": "missing_retention"
+    },
+    {
+      "locale": "pt",
+      "completeUrl": "/.well-known/certscore-canary/policy/locale-pt-complete.html",
+      "issueUrl": "/.well-known/certscore-canary/policy/locale-pt-issue.html",
+      "issueType": "missing_retention"
+    },
+    {
+      "locale": "ru",
+      "completeUrl": "/.well-known/certscore-canary/policy/locale-ru-complete.html",
+      "issueUrl": "/.well-known/certscore-canary/policy/locale-ru-issue.html",
+      "issueType": "missing_retention"
+    },
+    {
+      "locale": "ja",
+      "completeUrl": "/.well-known/certscore-canary/policy/locale-ja-complete.html",
+      "issueUrl": "/.well-known/certscore-canary/policy/locale-ja-issue.html",
+      "issueType": "missing_retention"
+    },
+    {
+      "locale": "zh",
+      "completeUrl": "/.well-known/certscore-canary/policy/locale-zh-complete.html",
+      "issueUrl": "/.well-known/certscore-canary/policy/locale-zh-issue.html",
+      "issueType": "missing_retention"
+    },
+    {
+      "locale": "ar",
+      "completeUrl": "/.well-known/certscore-canary/policy/locale-ar-complete.html",
+      "issueUrl": "/.well-known/certscore-canary/policy/locale-ar-issue.html",
+      "issueType": "missing_retention"
+    },
+    {
+      "locale": "sv",
+      "completeUrl": "/.well-known/certscore-canary/policy/locale-sv-complete.html",
+      "issueUrl": "/.well-known/certscore-canary/policy/locale-sv-issue.html",
+      "issueType": "missing_retention"
+    },
+    {
+      "locale": "ro",
+      "completeUrl": "/.well-known/certscore-canary/policy/locale-ro-complete.html",
+      "issueUrl": "/.well-known/certscore-canary/policy/locale-ro-issue.html",
+      "issueType": "missing_retention"
+    },
+    {
+      "locale": "cs",
+      "completeUrl": "/.well-known/certscore-canary/policy/locale-cs-complete.html",
+      "issueUrl": "/.well-known/certscore-canary/policy/locale-cs-issue.html",
+      "issueType": "missing_retention"
+    },
+    {
+      "locale": "el",
+      "completeUrl": "/.well-known/certscore-canary/policy/locale-el-complete.html",
+      "issueUrl": "/.well-known/certscore-canary/policy/locale-el-issue.html",
+      "issueType": "missing_retention"
+    },
+    {
+      "locale": "hu",
+      "completeUrl": "/.well-known/certscore-canary/policy/locale-hu-complete.html",
+      "issueUrl": "/.well-known/certscore-canary/policy/locale-hu-issue.html",
+      "issueType": "missing_retention"
+    },
+    {
+      "locale": "da",
+      "completeUrl": "/.well-known/certscore-canary/policy/locale-da-complete.html",
+      "issueUrl": "/.well-known/certscore-canary/policy/locale-da-issue.html",
+      "issueType": "missing_retention"
+    },
+    {
+      "locale": "fi",
+      "completeUrl": "/.well-known/certscore-canary/policy/locale-fi-complete.html",
+      "issueUrl": "/.well-known/certscore-canary/policy/locale-fi-issue.html",
+      "issueType": "missing_retention"
+    },
+    {
+      "locale": "sk",
+      "completeUrl": "/.well-known/certscore-canary/policy/locale-sk-complete.html",
+      "issueUrl": "/.well-known/certscore-canary/policy/locale-sk-issue.html",
+      "issueType": "missing_retention"
+    },
+    {
+      "locale": "bg",
+      "completeUrl": "/.well-known/certscore-canary/policy/locale-bg-complete.html",
+      "issueUrl": "/.well-known/certscore-canary/policy/locale-bg-issue.html",
+      "issueType": "missing_retention"
+    },
+    {
+      "locale": "hr",
+      "completeUrl": "/.well-known/certscore-canary/policy/locale-hr-complete.html",
+      "issueUrl": "/.well-known/certscore-canary/policy/locale-hr-issue.html",
+      "issueType": "missing_retention"
+    },
+    {
+      "locale": "nb",
+      "completeUrl": "/.well-known/certscore-canary/policy/locale-nb-complete.html",
+      "issueUrl": "/.well-known/certscore-canary/policy/locale-nb-issue.html",
+      "issueType": "missing_retention"
+    },
+    {
+      "locale": "sl",
+      "completeUrl": "/.well-known/certscore-canary/policy/locale-sl-complete.html",
+      "issueUrl": "/.well-known/certscore-canary/policy/locale-sl-issue.html",
+      "issueType": "missing_retention"
+    },
+    {
+      "locale": "lt",
+      "completeUrl": "/.well-known/certscore-canary/policy/locale-lt-complete.html",
+      "issueUrl": "/.well-known/certscore-canary/policy/locale-lt-issue.html",
+      "issueType": "missing_retention"
+    },
+    {
+      "locale": "lv",
+      "completeUrl": "/.well-known/certscore-canary/policy/locale-lv-complete.html",
+      "issueUrl": "/.well-known/certscore-canary/policy/locale-lv-issue.html",
+      "issueType": "missing_retention"
+    },
+    {
+      "locale": "et",
+      "completeUrl": "/.well-known/certscore-canary/policy/locale-et-complete.html",
+      "issueUrl": "/.well-known/certscore-canary/policy/locale-et-issue.html",
+      "issueType": "missing_retention"
+    },
+    {
+      "locale": "uk",
+      "completeUrl": "/.well-known/certscore-canary/policy/locale-uk-complete.html",
+      "issueUrl": "/.well-known/certscore-canary/policy/locale-uk-issue.html",
+      "issueType": "missing_retention"
+    },
+    {
+      "locale": "tr",
+      "completeUrl": "/.well-known/certscore-canary/policy/locale-tr-complete.html",
+      "issueUrl": "/.well-known/certscore-canary/policy/locale-tr-issue.html",
+      "issueType": "missing_retention"
+    }
+  ],
+  "gdprLocaleIndex": "/.well-known/certscore-canary/policy/locales.html",
+  "consentRegressionMatrix": [
+    {
+      "key": "labels-en-accept-all",
+      "locale": "en",
+      "semantic": "accept_all_variant",
+      "expectedARO": "A/R/O",
+      "geometry": "bottom-inline",
+      "viewport": "all",
+      "direction": "ltr",
+      "visibleLanguage": "en",
+      "duplicateGuard": false
+    },
+    {
+      "key": "labels-en-allow-continue-agree",
+      "locale": "en",
+      "semantic": "allow_continue_agree",
+      "expectedARO": "A/R/O",
+      "geometry": "bottom-inline",
+      "viewport": "all",
+      "direction": "ltr",
+      "visibleLanguage": "en",
+      "duplicateGuard": false
+    },
+    {
+      "key": "labels-ar-rtl-necessary-only",
+      "locale": "ar",
+      "semantic": "necessary_only",
+      "expectedARO": "A/R/O",
+      "geometry": "centered-modal",
+      "viewport": "all",
+      "direction": "rtl",
+      "visibleLanguage": "ar",
+      "duplicateGuard": false
+    },
+    {
+      "key": "labels-he-rtl-close",
+      "locale": "he",
+      "semantic": "close_vs_reject",
+      "expectedARO": "A/?/A",
+      "geometry": "bottom-inline",
+      "viewport": "all",
+      "direction": "rtl",
+      "visibleLanguage": "he",
+      "duplicateGuard": false
+    },
+    {
+      "key": "labels-fa-rtl-mixed",
+      "locale": "fa",
+      "semantic": "mixed_language",
+      "expectedARO": "A/R/O",
+      "geometry": "bottom-inline",
+      "viewport": "all",
+      "direction": "rtl",
+      "visibleLanguage": "fa",
+      "duplicateGuard": false
+    },
+    {
+      "key": "nonlatin-cjk-thai-hindi-greek-cyrillic",
+      "locale": "ja",
+      "semantic": "mixed_non_latin",
+      "expectedARO": "A/R/O",
+      "geometry": "bottom-inline",
+      "viewport": "all",
+      "direction": "ltr",
+      "visibleLanguage": "ja",
+      "duplicateGuard": false
+    },
+    {
+      "key": "aria-only-and-custom-elements",
+      "locale": "en",
+      "semantic": "aria_custom_element",
+      "expectedARO": "A/R/O",
+      "geometry": "bottom-inline",
+      "viewport": "all",
+      "direction": "ltr",
+      "visibleLanguage": "en",
+      "duplicateGuard": false
+    },
+    {
+      "key": "nested-spans-composite-duplicate",
+      "locale": "en",
+      "semantic": "nested_split_duplicate",
+      "expectedARO": "A/R/O",
+      "geometry": "bottom-inline",
+      "viewport": "all",
+      "direction": "ltr",
+      "visibleLanguage": "en",
+      "duplicateGuard": true
+    },
+    {
+      "key": "responsive-mobile",
+      "locale": "fr",
+      "semantic": "responsive",
+      "expectedARO": "A/R/O",
+      "geometry": "mobile-stacked",
+      "viewport": "mobile",
+      "direction": "ltr",
+      "visibleLanguage": "fr",
+      "duplicateGuard": false
+    },
+    {
+      "key": "responsive-tablet",
+      "locale": "de",
+      "semantic": "responsive",
+      "expectedARO": "A/R/O",
+      "geometry": "tablet-split",
+      "viewport": "tablet",
+      "direction": "ltr",
+      "visibleLanguage": "de",
+      "duplicateGuard": false
+    },
+    {
+      "key": "responsive-desktop",
+      "locale": "es",
+      "semantic": "responsive",
+      "expectedARO": "A/R/O",
+      "geometry": "desktop-inline",
+      "viewport": "desktop",
+      "direction": "ltr",
+      "visibleLanguage": "es",
+      "duplicateGuard": false
+    },
+    {
+      "key": "viewport-below-fold-fixed-overflow",
+      "locale": "en",
+      "semantic": "viewport_edges",
+      "expectedARO": "A/R/O",
+      "geometry": "below-fold-fixed-nested-scroll",
+      "viewport": "all",
+      "direction": "ltr",
+      "visibleLanguage": "en",
+      "duplicateGuard": false
+    },
+    {
+      "key": "visibility-traps",
+      "locale": "en",
+      "semantic": "visibility_traps",
+      "expectedARO": "A/?/O",
+      "geometry": "visibility",
+      "viewport": "all",
+      "direction": "ltr",
+      "visibleLanguage": "en",
+      "duplicateGuard": false
+    },
+    {
+      "key": "language-mismatch",
+      "locale": "en",
+      "semantic": "language_mismatch",
+      "expectedARO": "A/R/O",
+      "geometry": "bottom-inline",
+      "viewport": "all",
+      "direction": "ltr",
+      "visibleLanguage": "fr",
+      "duplicateGuard": false
+    },
+    {
+      "key": "locale-fallback-regional-mixed",
+      "locale": "fr-CA",
+      "semantic": "regional_fallback",
+      "expectedARO": "A/R/O",
+      "geometry": "bottom-inline",
+      "viewport": "all",
+      "direction": "ltr",
+      "visibleLanguage": "fr-CA",
+      "duplicateGuard": false
+    },
+    {
+      "key": "delayed-route-modal-transition",
+      "locale": "en",
+      "semantic": "delayed_route_transition",
+      "expectedARO": "A/R/O",
+      "geometry": "modal-transition",
+      "viewport": "all",
+      "direction": "ltr",
+      "visibleLanguage": "en",
+      "duplicateGuard": false
+    },
+    {
+      "key": "iframe-same-origin",
+      "locale": "en",
+      "semantic": "iframe_same_origin",
+      "expectedARO": "A/R/O",
+      "geometry": "iframe",
+      "viewport": "all",
+      "direction": "ltr",
+      "visibleLanguage": "en",
+      "duplicateGuard": false
+    },
+    {
+      "key": "iframe-cross-origin-nested-sandbox",
+      "locale": "en",
+      "semantic": "iframe_cross_origin_nested_sandbox",
+      "expectedARO": "unknown",
+      "geometry": "iframe",
+      "viewport": "all",
+      "direction": "ltr",
+      "visibleLanguage": "en",
+      "duplicateGuard": false
+    },
+    {
+      "key": "shadow-open-hydrated",
+      "locale": "en",
+      "semantic": "shadow_open_hydrated",
+      "expectedARO": "A/R/O",
+      "geometry": "shadow-dom",
+      "viewport": "all",
+      "direction": "ltr",
+      "visibleLanguage": "en",
+      "duplicateGuard": false
+    },
+    {
+      "key": "shadow-closed-nested",
+      "locale": "en",
+      "semantic": "shadow_closed_nested",
+      "expectedARO": "A/unknown/unknown",
+      "geometry": "shadow-dom",
+      "viewport": "all",
+      "direction": "ltr",
+      "visibleLanguage": "en",
+      "duplicateGuard": false
+    },
+    {
+      "key": "accessibility-disabled-focus-keyboard",
+      "locale": "en",
+      "semantic": "accessibility_states",
+      "expectedARO": "?/R/O",
+      "geometry": "accessibility",
+      "viewport": "all",
+      "direction": "ltr",
+      "visibleLanguage": "en",
+      "duplicateGuard": false
+    }
+  ],
+  "policyEvidenceQualityMatrix": [
+    {
+      "key": "nav-only-topic-names",
+      "fixtureRole": "false_positive_guard",
+      "evidenceQuality": "false_positive_guard",
+      "topics": []
+    },
+    {
+      "key": "glossary-only-topics",
+      "fixtureRole": "false_positive_guard",
+      "evidenceQuality": "false_positive_guard",
+      "topics": []
+    },
+    {
+      "key": "unrelated-vendor-policy",
+      "fixtureRole": "false_negative_guard",
+      "evidenceQuality": "false_negative_guard",
+      "topics": []
+    },
+    {
+      "key": "truncated-policy",
+      "fixtureRole": "insufficient_retained_evidence",
+      "evidenceQuality": "insufficient_retained_evidence",
+      "topics": [
+        "controller"
+      ]
+    },
+    {
+      "key": "wrong-domain-policy",
+      "fixtureRole": "wrong_domain",
+      "evidenceQuality": "wrong_domain",
+      "topics": [
+        "controller",
+        "purposes_legal_basis",
+        "retention",
+        "international_transfers",
+        "vendors_recipients",
+        "privacy_rights",
+        "cookies_storage"
+      ]
+    },
+    {
+      "key": "stale-policy",
+      "fixtureRole": "stale_policy",
+      "evidenceQuality": "stale_policy",
+      "topics": [
+        "controller",
+        "purposes_legal_basis",
+        "retention",
+        "international_transfers",
+        "vendors_recipients",
+        "privacy_rights",
+        "cookies_storage"
+      ]
+    },
+    {
+      "key": "redirect-chain-policy",
+      "fixtureRole": "redirect_chain",
+      "evidenceQuality": "redirect_chain",
+      "topics": [
+        "controller",
+        "purposes_legal_basis",
+        "retention",
+        "international_transfers",
+        "vendors_recipients",
+        "privacy_rights",
+        "cookies_storage"
+      ]
+    },
+    {
+      "key": "policy-runtime-mismatch-evidence",
+      "fixtureRole": "comparison_conflict",
+      "evidenceQuality": "comparison_conflict",
+      "topics": [
+        "controller",
+        "purposes_legal_basis",
+        "retention",
+        "international_transfers",
+        "vendors_recipients",
+        "privacy_rights",
+        "cookies_storage",
+        "policy_runtime_comparison"
+      ]
+    }
+  ],
+  "fingerprintingCoverage": [
+    {
+      "key": "fingerprinting-canvas",
+      "url": "/.well-known/certscore-canary/runtime/fingerprinting/canvas.html",
+      "signal": "canvas",
+      "expected": "observed"
+    },
+    {
+      "key": "fingerprinting-webgl",
+      "url": "/.well-known/certscore-canary/runtime/fingerprinting/webgl.html",
+      "signal": "webgl",
+      "expected": "observed"
+    },
+    {
+      "key": "fingerprinting-audio",
+      "url": "/.well-known/certscore-canary/runtime/fingerprinting/audio.html",
+      "signal": "audio",
+      "expected": "observed"
+    },
+    {
+      "key": "fingerprinting-fonts",
+      "url": "/.well-known/certscore-canary/runtime/fingerprinting/fonts.html",
+      "signal": "fonts",
+      "expected": "observed"
+    },
+    {
+      "key": "fingerprinting-device-and-client-hints",
+      "url": "/.well-known/certscore-canary/runtime/fingerprinting/device-and-client-hints.html",
+      "signal": "device_signals",
+      "expected": "observed"
+    },
+    {
+      "key": "fingerprinting-combined-positive",
+      "url": "/.well-known/certscore-canary/runtime/fingerprinting/combined-positive.html",
+      "signal": "combined",
+      "expected": "observed"
+    }
+  ],
+  "sentinelCorpus": {
+    "cadence": "PT1H",
+    "pages": [
+      {
+        "key": "sentinel-broad-baseline",
+        "url": "/.well-known/certscore-canary/sentinels/broad-baseline.html",
+        "role": "broad_baseline",
+        "expectedSignals": [
+          "pre_consent_storage",
+          "fingerprinting",
+          "policy_runtime_comparison",
+          "consent_controls"
+        ]
+      },
+      {
+        "key": "sentinel-consent-stress",
+        "url": "/.well-known/certscore-canary/sentinels/consent-stress.html",
+        "role": "consent_stress",
+        "expectedSignals": [
+          "responsive_geometry",
+          "aria_controls",
+          "shadow_dom",
+          "split_labels"
+        ]
+      },
+      {
+        "key": "sentinel-privacy-evidence",
+        "url": "/.well-known/certscore-canary/sentinels/privacy-evidence.html",
+        "role": "privacy_evidence",
+        "expectedSignals": [
+          "false_positive_decoy",
+          "truncated_policy",
+          "wrong_domain_supplement",
+          "missing_topics"
+        ]
+      },
+      {
+        "key": "sentinel-runtime-transport",
+        "url": "/.well-known/certscore-canary/sentinels/runtime-transport.html",
+        "role": "runtime_transport",
+        "expectedSignals": [
+          "third_party_iframe",
+          "storage",
+          "canvas_fingerprinting"
+        ]
+      },
+      {
+        "key": "sentinel-multilingual-rtl",
+        "url": "/.well-known/certscore-canary/sentinels/multilingual-rtl.html",
+        "role": "multilingual_rtl",
+        "expectedSignals": [
+          "rtl_layout",
+          "mixed_scripts",
+          "necessary_only",
+          "localized_controls"
+        ]
+      }
+    ],
+    "alertOn": [
+      "unreachable",
+      "required_signal_missing",
+      "unexpected_signal",
+      "evidence_incomplete",
+      "scan_duration_regression"
+    ],
+    "requireConsecutiveFailures": 2
+  }
+}

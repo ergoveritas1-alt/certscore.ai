@@ -264,3 +264,36 @@ test("canonical ID-sync and legal context registry does not infer data location 
   assert.equal(criteo?.headquartersCountry, "FR");
   assert.equal(criteo?.transferMechanism.mechanism, "unknown");
 });
+
+test("frequency-reviewed exact cookie families classify documented purpose without manufacturing consent", () => {
+  for (const name of ["__utma", "__utmb", "__utmc", "__utmt", "__utmz"]) {
+    assert.equal(resolveCanonicalCookieKnowledge(name).category, "analytics");
+  }
+  for (const name of ["FCCDCF", "notice_behavior"]) {
+    const knowledge = resolveCanonicalCookieKnowledge(name);
+    assert.equal(knowledge.category, "consent_management");
+    assert.equal(knowledge.essentiality, "unknown");
+  }
+  for (const name of ["__utm", "__utma_custom", "__utmx", "myFCCDCF", "NOTICE_BEHAVIOR", "PHPSESSID", "JSESSIONID", "country", "lang"]) {
+    assert.equal(resolveCanonicalCookieKnowledge(name).category, "unknown", name);
+  }
+});
+
+test("ambiguous recurring names need direct vendor context, never an ancestor or host suffix lookalike", () => {
+  for (const [name, host, category] of [
+    ["everest_g_v2", "cm.everesttech.net", "advertising"],
+    ["everest_session_v2", "everesttech.net", "advertising"],
+    ["_rdt_uuid", "www.redditstatic.com", "advertising"],
+    ["RT", "s.go-mpulse.net", "analytics"],
+  ]) {
+    assert.equal(resolveCanonicalCookieKnowledge(name).category, "unknown", name);
+    assert.equal(resolveCanonicalCookieKnowledge(name, { cookieDomain: host }).category, category);
+    assert.equal(resolveCanonicalCookieKnowledge(name, { cookieDomain: "site.example", setterScriptUrl: `https://${host}/script.js` }).category, category);
+    for (const context of [
+      { cookieDomain: "site.example" },
+      { cookieDomain: `${host}.example` },
+      { cookieDomain: `not${host.split(".").slice(-2).join(".")}` },
+      { cookieDomain: "site.example", initiatorChain: [`https://${host}/script.js`] },
+    ]) assert.equal(resolveCanonicalCookieKnowledge(name, context).category, "unknown", `${name} ${JSON.stringify(context)}`);
+  }
+});

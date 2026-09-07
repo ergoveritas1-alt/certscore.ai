@@ -1,4 +1,5 @@
 import React from "react";
+import { inventoryPurposeLabel, inventoryPurposeTitle } from "../../lib/scans/inventory-purpose-presentation";
 
 export function InventoryConfidenceDots({ confidence, description }: { confidence: string | number; description?: string }) {
   const normalized = typeof confidence === "number" ? (confidence >= 0.9 ? "high" : confidence >= 0.7 ? "medium" : "low") : confidence.toLowerCase();
@@ -24,13 +25,14 @@ function inventoryPurposeClasses(purpose: string) {
   return "bg-zinc-100 text-zinc-700";
 }
 
-export function InventoryPurposeChip({ purpose }: { purpose: string }) {
+export function InventoryPurposeChip({ purpose, relationships = [] }: { purpose: string; relationships?: readonly string[] }) {
+  const label = inventoryPurposeLabel(purpose, relationships).replaceAll("_", " ");
   return (
     <span
       className={`inline-flex h-6 max-w-full min-w-0 items-center rounded-md px-2 text-[0.67rem] font-semibold ${inventoryPurposeClasses(purpose)}`}
-      title={purpose}
+      title={inventoryPurposeTitle(label)}
     >
-      <span className="min-w-0 truncate whitespace-nowrap leading-4">{purpose}</span>
+      <span className="min-w-0 truncate whitespace-nowrap leading-4">{label}</span>
     </span>
   );
 }

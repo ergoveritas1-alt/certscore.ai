@@ -1,0 +1,165 @@
+"use client";
+
+import { ScanLiveValue } from "./scan-live-value";
+
+import { InspectButton } from "./inventory-resource-details";
+import { Fragment, useEffect, useId, useMemo, useRef, useState } from "react";
+import type { CollectionSurfaceAssessment } from "@certscore/contracts";
+
+type Form = CollectionSurfaceAssessment["forms"][number];
+export type CollectionSurfaceTableRow = {
+  id: string;
+  form: Form;
+  capturedAt: string;
+  snapshot: { status: "available"; url: string } | { status: "unavailable" | "withheld" | "pending" };
+};
+
+function pageHref(value: string) {
+  try {
+    const url = new URL(value);
+    return ["https:", "http:"].includes(url.protocol) ? url.href : undefined;
+  } catch { return undefined; }
+}
+const label = (value: string) => value.replaceAll("_", " ");
+
+export function fieldsInPageOrder(fields: Form["fields"]) {
+  // Older records without DOM positions retain their stored order.
+  return fields.every(field => field.controlIndex !== undefined)
+    ? [...fields].sort((a, b) => a.controlIndex! - b.controlIndex!)
+    : fields;
+}
+
+export type FormSortKey = "form" | "type" | "fields" | "method" | "destination" | "page" | "snapshot";
+const columns: Array<{ key: FormSortKey; label: string }> = [
+  { key: "form", label: "Form" }, { key: "type", label: "Type" }, { key: "fields", label: "Fields" },
+  { key: "method", label: "Method" }, { key: "destination", label: "Destination" },
+  { key: "page", label: "Captured on page" }, { key: "snapshot", label: "Snapshot" },
+];
+export function sortCollectionSurfaces(rows: CollectionSurfaceTableRow[], key: FormSortKey, direction: "asc" | "desc") {
+  const value = (row: CollectionSurfaceTableRow): string | number => {
+    switch (key) {
+      case "form": return row.form.title ?? label(row.form.surfaceType);
+      case "type": return row.form.surfaceType;
+      case "fields": return row.form.retainedFieldCount;
+      case "method": return row.form.method;
+      case "destination": return row.form.actionHostname ?? row.form.actionRelationship;
+      case "page": return row.form.pageUrl;
+      case "snapshot": return row.snapshot.status;
+    }
+  };
+  return [...rows].sort((a, b) => {
+    const left = value(a), right = value(b);
+    const order = typeof left === "number" && typeof right === "number" ? left - right : String(left).localeCompare(String(right), undefined, { numeric: true, sensitivity: "base" });
+    return (direction === "asc" ? order : -order) || a.id.localeCompare(b.id);
+  });
+}
+
+function FormSnapshotDialog({ title, url, onClose }: { title: string; url: string; onClose: () => void }) {
+  const dialog = useRef<HTMLDialogElement>(null);
+  const headingId = useId();
+  const trigger = useRef<HTMLElement | null>(null);
+  const [imageStatus, setImageStatus] = useState<"loading" | "loaded" | "failed">("loading");
+  useEffect(() => {
+    const element = dialog.current;
+    if (!trigger.current && document.activeElement instanceof HTMLElement) trigger.current = document.activeElement;
+    const previousOverflow = document.body.style.overflow;
+    element?.showModal();
+    document.body.style.overflow = "hidden";
+    return () => {
+      document.body.style.overflow = previousOverflow;
+      if (trigger.current?.isConnected) trigger.current.focus({ preventScroll: true });
+    };
+  }, []);
+  return <dialog ref={dialog} aria-labelledby={headingId} onClose={onClose}
+    onClick={event => { if (event.target === event.currentTarget) dialog.current?.close(); }}
+    className="m-auto max-h-[85vh] w-[calc(100%-2rem)] max-w-xl overflow-auto rounded-xl border border-slate-200 bg-white p-0 shadow-xl backdrop:bg-slate-950/50">
+    <div className="p-4">
+      <div className="mb-3 flex items-center justify-between gap-4">
+        <h3 id={headingId} className="min-w-0 text-base font-semibold">{title}</h3>
+        <button type="button" autoFocus onClick={() => dialog.current?.close()} aria-label="Close form snapshot"
+          className="shrink-0 rounded-lg border border-zinc-200 px-3 py-2 text-sm hover:bg-slate-50">Close</button>
+      </div>
+      {imageStatus === "loading" ? <p role="status" className="py-4 text-sm text-zinc-500">Loading snapshot…</p> : null}
+      {imageStatus === "failed" ? <p role="alert" className="py-4 text-sm text-zinc-600">This form snapshot could not be loaded. Close this popup and try again.</p> :
+        <img src={url} alt={`Captured form: ${title}`} onLoad={() => setImageStatus("loaded")} onError={() => setImageStatus("failed")}
+          className={`mx-auto max-h-[65vh] max-w-full object-contain ${imageStatus === "loading" ? "hidden" : "block"}`} />}
+    </div>
+  </dialog>;
+}
+
+export function CollectionSurfacesTable({ rows, loading = false, scanning = false, pagesWithoutInventory = 0, limitedPages = 0 }: {
+  rows: CollectionSurfaceTableRow[];
+  loading?: boolean;
+  scanning?: boolean;
+  pagesWithoutInventory?: number;
+  limitedPages?: number;
+}) {
+  const [expanded, setExpanded] = useState<Set<string>>(new Set());
+  const prefix = useId();
+  const [snapshot, setSnapshot] = useState<{ title: string; url: string } | null>(null);
+  const [sort, setSort] = useState<{ key: FormSortKey; direction: "asc" | "desc" }>({ key: "page", direction: "asc" });
+  const sortedRows = useMemo(() => sortCollectionSurfaces(rows, sort.key, sort.direction), [rows, sort]);
+  return (
+    <section aria-labelledby={`${prefix}-title`} className="min-w-0 border-b border-zinc-200 bg-white py-5">
+      <div className="mb-2 flex items-baseline justify-between gap-3">
+        <h2 id={`${prefix}-title`} className="text-xl font-semibold">Collection surfaces (forms)</h2>
+        <span className="text-xs text-zinc-500"><ScanLiveValue active={scanning && !loading} value={loading ? "Loading…" : `${rows.length} ${rows.length === 1 ? "form" : "forms"}`} /></span>
+      </div>
+      <p className="mb-4 text-xs text-zinc-600">Forms and fields observed on scanned pages. Expand a form to inspect its fields; submitted values are not included.</p>
+      {pagesWithoutInventory > 0 || limitedPages > 0 ? <p className="mb-3 rounded-lg bg-amber-50 p-3 text-xs text-amber-900">
+        {pagesWithoutInventory > 0 ? `${pagesWithoutInventory} page(s) have no retained form inventory. ` : ""}
+        {limitedPages > 0 ? `${limitedPages} page(s) have limited form coverage. ` : ""}Missing evidence does not establish that a page has no forms.
+      </p> : null}
+      {loading ? <p role="status" className="py-4 text-sm text-zinc-500">Loading form inventory…</p> : rows.length === 0 ?
+        <p className="py-4 text-sm text-zinc-500">{scanning ? "Form inventory will appear as pages finish scanning." : pagesWithoutInventory > 0 || limitedPages > 0 ? "No form rows are available in the retained evidence." : "No forms were observed on the inventoried pages."}</p> :
+        <div className="max-h-[560px] overflow-auto" tabIndex={0} aria-label="Scrollable collection surfaces">
+          <table className="w-full text-left text-xs">
+            <caption className="sr-only">One row per captured form, with expandable field details</caption>
+            <thead className="sticky top-0 z-10 bg-zinc-50 text-[10px] uppercase tracking-wider text-zinc-500">
+              <tr>{columns.map(column => column.key === "form" ? <th key={column.key} scope="col" className="w-10 border-b p-3"><span className="sr-only">View details</span></th> : <th key={column.key} scope="col" aria-sort={sort.key === column.key ? sort.direction === "asc" ? "ascending" : "descending" : "none"} className="whitespace-nowrap border-b p-3">
+                <button type="button" className="flex items-center gap-1 uppercase tracking-wider hover:text-sky-700" onClick={() => setSort(current => ({ key: column.key, direction: current.key === column.key && current.direction === "asc" ? "desc" : "asc" }))}>
+                  {column.label}<span aria-hidden="true">{sort.key === column.key ? sort.direction === "asc" ? "↑" : "↓" : "↕"}</span>
+                </button>
+              </th>)}</tr>
+            </thead>
+            <tbody>
+              {sortedRows.map((row) => {
+                const { form } = row;
+                const open = expanded.has(row.id);
+                const title = form.title ?? `${label(form.surfaceType)} ${Number(form.formRef.replace("collection_form_", "")) + 1}`;
+                const detailId = `${prefix}-fields-${row.id}`;
+                return <Fragment key={row.id}>
+                  <tr className="border-b border-zinc-100">
+                    <th scope="row" className="w-10 p-3 font-medium"><InspectButton open={open} controls={detailId} name={title} onClick={() => setExpanded(current => {
+                      const next = new Set(current); if (next.has(row.id)) next.delete(row.id); else next.add(row.id); return next;
+                    })} /></th>
+                    <td className="p-3 capitalize">{label(form.surfaceType)}</td>
+                    <td className="p-3 tabular-nums">{form.retainedFieldCount}{form.fieldsTruncated ? ` of ${form.candidateFieldCount}` : ""}</td>
+                    <td className="p-3 uppercase">{form.method}</td>
+                    <td className="p-3"><span className="block max-w-52 truncate" title={form.actionHostname}>{form.actionHostname ?? label(form.actionRelationship)}</span>{form.actionHostname ? <span className="block text-zinc-500">{label(form.actionRelationship)}</span> : null}</td>
+                    <td className="p-3"><a className="block max-w-64 truncate text-sky-800 hover:underline" href={pageHref(form.pageUrl)} title={form.pageUrl} target="_blank" rel="noopener noreferrer">{form.pageUrl}</a></td>
+                    <td className="whitespace-nowrap p-3">{row.snapshot.status === "available" && row.snapshot.url.startsWith("/api/scans/") ? <button type="button" onClick={() => { if (row.snapshot.status === "available") setSnapshot({ title, url: row.snapshot.url }); }} aria-label={`View form: ${title}`} className="inline-block rounded-lg border border-zinc-200 px-3 py-2 text-sky-800 hover:border-sky-500">View form</button> : <span className="text-zinc-500">{row.snapshot.status === "pending" ? "Snapshot pending" : row.snapshot.status === "withheld" ? "Snapshot withheld" : "Snapshot unavailable"}</span>}</td>
+                  </tr>
+                  <tr id={detailId} hidden={!open} className="border-b border-zinc-200 bg-slate-50/60"><td colSpan={7} className="p-4">
+                    <h3 className="mb-2 font-semibold">{title}</h3>
+                    <p className="mb-3 text-zinc-500">{label(form.structure)} · Captured {row.capturedAt}</p>
+                    {form.fields.length ? <table className="w-full text-left text-xs">
+                      <caption className="sr-only">Fields in {title}</caption>
+                      <thead><tr>{["Field", "Element", "Input type", "Category", "Required", "State", "Autocomplete"].map(h => <th key={h} scope="col" className="border-b border-slate-200 px-2 py-2 font-medium">{h}</th>)}</tr></thead>
+                      <tbody>{fieldsInPageOrder(form.fields).map(field => <tr key={field.fieldRef} className="border-b border-slate-100">
+                        <th scope="row" className="px-2 py-2 font-medium">{field.label ?? field.fieldRef}</th>
+                        <td className="px-2 py-2">{field.elementType}</td><td className="px-2 py-2">{field.inputType}</td><td className="px-2 py-2 capitalize">{label(field.semanticCategory)}</td>
+                        <td className="px-2 py-2">{field.required ? "Yes" : "No"}</td><td className="px-2 py-2">{[field.disabled ? "Disabled" : "", field.readOnly ? "Read only" : ""].filter(Boolean).join(", ") || "Enabled"}</td><td className="px-2 py-2">{field.autocompleteToken ?? "Not specified"}</td>
+                      </tr>)}</tbody>
+                    </table> : <p>No field details were retained.</p>}
+                    {form.fieldsTruncated ? <p className="mt-3 text-amber-800">{form.candidateFieldCount - form.retainedFieldCount} field(s) were omitted by the capture limit.</p> : null}
+                  </td></tr>
+                </Fragment>;
+              })}
+            </tbody>
+          </table>
+        </div>}
+      {snapshot ? <FormSnapshotDialog key={snapshot.url} {...snapshot} onClose={() => setSnapshot(null)} /> : null}
+    </section>
+  );
+}
