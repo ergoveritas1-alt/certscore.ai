@@ -39,7 +39,7 @@
     "@website-signal-risk-scanner/web-bot-auth": "workspace:*",
     "maxmind": "^5.0.6",
     "pdf-parse": "^2.4.5",
-    "playwright": "^1.51.1",
+    "playwright": "1.58.2",
     "sharp": "0.34.5",
     "tldts": "^7.4.2"
   },

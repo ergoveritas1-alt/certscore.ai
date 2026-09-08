@@ -59,6 +59,8 @@ RUN pnpm --filter @certscore/mcp-http build
 
 FROM builder AS prod-deps
 
+# MCP's production dependency subset does not include the browser patch.
+RUN node -e "const fs=require('fs');const p=require('./package.json');p.pnpm.allowNonAppliedPatches=true;fs.writeFileSync('package.json',JSON.stringify(p))"
 RUN rm -rf /app/deploy/mcp \
   && pnpm --filter @certscore/mcp-http deploy --prod --legacy /app/deploy/mcp
 

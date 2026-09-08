@@ -320,7 +320,7 @@ importers:
         specifier: ^2.4.5
         version: 2.4.5
       playwright:
-        specifier: ^1.51.1
+        specifier: 1.58.2
         version: 1.58.2
       sharp:
         specifier: 0.34.5

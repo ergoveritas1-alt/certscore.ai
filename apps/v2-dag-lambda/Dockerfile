@@ -37,6 +37,7 @@ COPY apps/v2-dag-lambda/runtime-bootstrap.mjs ./apps/v2-dag-lambda/runtime-boots
 RUN pnpm --filter @website-signal-risk-scanner/v2-dag-lambda bundle
 RUN --mount=type=cache,id=wc01-v2-dag-lambda-pnpm-store,target=/pnpm/store \
   pnpm --filter @website-signal-risk-scanner/v2-dag-lambda --prod deploy --legacy /lambda-deps
+RUN node -e "const fs=require('fs');const p='/lambda-deps/node_modules/playwright-core/';if(require(p+'package.json').version!=='1.58.2'||!fs.readFileSync(p+'lib/server/chromium/crNetworkManager.js','utf8').includes('certscoreConnectionId'))process.exit(1)"
 RUN mkdir -p /lambda/node_modules \
   && cp -RL /lambda-deps/node_modules/sharp /lambda/node_modules/sharp \
   && cp -RL /lambda-deps/node_modules/@img /lambda/node_modules/@img \
