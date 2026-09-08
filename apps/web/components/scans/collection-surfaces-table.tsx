@@ -4,7 +4,7 @@ import { ScanLiveValue } from "./scan-live-value";
 
 import { InspectButton } from "./inventory-resource-details";
 import { Fragment, useEffect, useId, useMemo, useRef, useState } from "react";
-import type { CollectionSurfaceAssessment } from "@certscore/contracts";
+import { FIELD_REVIEW_POLICY, legacyCollectionFieldCategory, type CollectionSurfaceAssessment } from "@certscore/contracts";
 
 type Form = CollectionSurfaceAssessment["forms"][number];
 export type CollectionSurfaceTableRow = {
@@ -29,9 +29,10 @@ export function fieldsInPageOrder(fields: Form["fields"]) {
     : fields;
 }
 
-export type FormSortKey = "form" | "type" | "fields" | "method" | "destination" | "page" | "snapshot";
+export type FormSortKey = "form" | "type" | "fields" | "controls" | "sensitivity" | "method" | "destination" | "page" | "snapshot";
 const columns: Array<{ key: FormSortKey; label: string }> = [
   { key: "form", label: "Form" }, { key: "type", label: "Type" }, { key: "fields", label: "Fields" },
+  { key: "controls", label: "Checkboxes / toggles" }, { key: "sensitivity", label: "Field review" },
   { key: "method", label: "Method" }, { key: "destination", label: "Destination" },
   { key: "page", label: "Captured on page" }, { key: "snapshot", label: "Snapshot" },
 ];
@@ -41,6 +42,8 @@ export function sortCollectionSurfaces(rows: CollectionSurfaceTableRow[], key: F
       case "form": return row.form.title ?? label(row.form.surfaceType);
       case "type": return row.form.surfaceType;
       case "fields": return row.form.retainedFieldCount;
+      case "controls": return row.form.fields.filter(f => ["checkbox", "switch"].includes(f.controlKind ?? f.inputType)).length;
+      case "sensitivity": return Math.max(0,...row.form.fields.map(f=>reviewRank(f)));
       case "method": return row.form.method;
       case "destination": return row.form.actionHostname ?? row.form.actionRelationship;
       case "page": return row.form.pageUrl;
@@ -52,6 +55,24 @@ export function sortCollectionSurfaces(rows: CollectionSurfaceTableRow[], key: F
     const order = typeof left === "number" && typeof right === "number" ? left - right : String(left).localeCompare(String(right), undefined, { numeric: true, sensitivity: "base" });
     return (direction === "asc" ? order : -order) || a.id.localeCompare(b.id);
   });
+}
+
+function controlsSummary(fields: Form["fields"]) {
+ const checkboxes=fields.filter(f=>(f.controlKind??f.inputType)==="checkbox").length;
+ const toggles=fields.filter(f=>f.controlKind==="switch").length;
+ return [checkboxes ? `${checkboxes} checkbox${checkboxes===1?"":"es"}` : "",toggles ? `${toggles} toggle${toggles===1?"":"s"}` : ""].filter(Boolean).join(" · ") || "—";
+}
+function reviewPolicy(field: Form["fields"][number]) { return FIELD_REVIEW_POLICY[field.review?.category ?? legacyCollectionFieldCategory(field.semanticCategory)]; }
+function reviewRank(field: Form["fields"][number]) { return ({ highest:4, high:3, personal:2, contextual:1, unknown:0 })[reviewPolicy(field).tier]; }
+function FieldReview({ field }: { field: Form["fields"][number] }) {
+ const policy=reviewPolicy(field),rank=reviewRank(field);
+ return <span title={`${policy.label}. Field review indicator; no score effect.`} className={`inline-flex items-center gap-1 ${rank>=3 ? "text-rose-700" : rank===2 ? "text-amber-700" : "text-slate-500"}`}>{rank>=2 ? <span role="img" aria-label="Field requires review">⚠</span> : null}{policy.label}</span>;
+}
+function ControlState({ field }: { field: Form["fields"][number] }) {
+ const kind=field.controlKind ?? field.inputType;
+ if(!["checkbox","switch","radio"].includes(kind))return null;
+ const state=field.checkedState===undefined?"Not captured":field.checkedState==="checked"?(kind==="switch"?"On":"Checked"):field.checkedState==="unchecked"?(kind==="switch"?"Off":"Unchecked"):field.checkedState==="mixed"?"Mixed":"Unknown";
+ return <span className="inline-flex items-center gap-1">{state}{field.review?.preselectedMarketing ? <span role="img" aria-label="Preselected marketing opt-in — review" title="Marketing control was selected at capture. Review the opt-in; this does not establish valid consent." className="text-amber-700">⚠</span> : null}</span>;
 }
 
 function FormSnapshotDialog({ title, url, onClose }: { title: string; url: string; onClose: () => void }) {
@@ -135,21 +156,23 @@ export function CollectionSurfacesTable({ rows, loading = false, scanning = fals
                     })} /></th>
                     <td className="p-3 capitalize">{label(form.surfaceType)}</td>
                     <td className="p-3 tabular-nums">{form.retainedFieldCount}{form.fieldsTruncated ? ` of ${form.candidateFieldCount}` : ""}</td>
+                    <td className="p-3">{controlsSummary(form.fields)}{form.fields.some(f=>f.review?.preselectedMarketing) ? <span role="img" aria-label="Preselected marketing opt-in — review" title="Expand to review preselected marketing controls" className="ml-1 text-amber-700">⚠</span> : null}{form.fieldsTruncated ? <span className="block text-zinc-500">Partial inventory</span> : null}</td>
+                    <td className="p-3">{form.fields.length ? <FieldReview field={[...form.fields].sort((a,b)=>reviewRank(b)-reviewRank(a))[0]!}/> : "—"}</td>
                     <td className="p-3 uppercase">{form.method}</td>
                     <td className="p-3"><span className="block max-w-52 truncate" title={form.actionHostname}>{form.actionHostname ?? label(form.actionRelationship)}</span>{form.actionHostname ? <span className="block text-zinc-500">{label(form.actionRelationship)}</span> : null}</td>
                     <td className="p-3"><a className="block max-w-64 truncate text-sky-800 hover:underline" href={pageHref(form.pageUrl)} title={form.pageUrl} target="_blank" rel="noopener noreferrer">{form.pageUrl}</a></td>
                     <td className="whitespace-nowrap p-3">{row.snapshot.status === "available" && row.snapshot.url.startsWith("/api/scans/") ? <button type="button" onClick={() => { if (row.snapshot.status === "available") setSnapshot({ title, url: row.snapshot.url }); }} aria-label={`View form: ${title}`} className="inline-block rounded-lg border border-zinc-200 px-3 py-2 text-sky-800 hover:border-sky-500">View form</button> : <span className="text-zinc-500">{row.snapshot.status === "pending" ? "Snapshot pending" : row.snapshot.status === "withheld" ? "Snapshot withheld" : "Snapshot unavailable"}</span>}</td>
                   </tr>
-                  <tr id={detailId} hidden={!open} className="border-b border-zinc-200 bg-slate-50/60"><td colSpan={7} className="p-4">
+                  <tr id={detailId} hidden={!open} className="border-b border-zinc-200 bg-slate-50/60"><td colSpan={columns.length} className="p-4">
                     <h3 className="mb-2 font-semibold">{title}</h3>
                     <p className="mb-3 text-zinc-500">{label(form.structure)} · Captured {row.capturedAt}</p>
                     {form.fields.length ? <table className="w-full text-left text-xs">
                       <caption className="sr-only">Fields in {title}</caption>
-                      <thead><tr>{["Field", "Element", "Input type", "Category", "Required", "State", "Autocomplete"].map(h => <th key={h} scope="col" className="border-b border-slate-200 px-2 py-2 font-medium">{h}</th>)}</tr></thead>
+                      <thead><tr>{["Field", "Element", "Input type", "Category", "Field review", "Required", "Selection", "State", "Autocomplete"].map(h => <th key={h} scope="col" className="border-b border-slate-200 px-2 py-2 font-medium">{h}</th>)}</tr></thead>
                       <tbody>{fieldsInPageOrder(form.fields).map(field => <tr key={field.fieldRef} className="border-b border-slate-100">
                         <th scope="row" className="px-2 py-2 font-medium">{field.label ?? field.fieldRef}</th>
-                        <td className="px-2 py-2">{field.elementType}</td><td className="px-2 py-2">{field.inputType}</td><td className="px-2 py-2 capitalize">{label(field.semanticCategory)}</td>
-                        <td className="px-2 py-2">{field.required ? "Yes" : "No"}</td><td className="px-2 py-2">{[field.disabled ? "Disabled" : "", field.readOnly ? "Read only" : ""].filter(Boolean).join(", ") || "Enabled"}</td><td className="px-2 py-2">{field.autocompleteToken ?? "Not specified"}</td>
+                        <td className="px-2 py-2">{field.elementType}</td><td className="px-2 py-2">{field.controlKind ?? field.inputType}</td><td className="px-2 py-2 capitalize">{label(field.semanticCategory)}</td>
+                        <td className="px-2 py-2"><FieldReview field={field}/></td><td className="px-2 py-2">{field.required ? "Yes" : "No"}</td><td className="px-2 py-2"><ControlState field={field}/></td><td className="px-2 py-2">{[field.disabled ? "Disabled" : "", field.readOnly ? "Read only" : ""].filter(Boolean).join(", ") || "Enabled"}</td><td className="px-2 py-2">{field.autocompleteToken ?? "Not specified"}</td>
                       </tr>)}</tbody>
                     </table> : <p>No field details were retained.</p>}
                     {form.fieldsTruncated ? <p className="mt-3 text-amber-800">{form.candidateFieldCount - form.retainedFieldCount} field(s) were omitted by the capture limit.</p> : null}

@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import React from "react";
+Object.assign(globalThis, { React });
 import { renderToStaticMarkup } from "react-dom/server";
 import { CollectionSurfacesTable, sortCollectionSurfaces, type FormSortKey, type CollectionSurfaceTableRow } from "./collection-surfaces-table";
 
@@ -55,4 +56,11 @@ test("loading inventory never announces zero forms", () => {
   const complete = renderToStaticMarkup(<CollectionSurfacesTable rows={[row]} scanning={false} />);
   assert.doesNotMatch(complete, /Updating as scan progresses|scan-hourglass-flip/);
   assert.match(complete, /1 form/);
+});
+
+test("retained toggle state and field warnings display without treating legacy missing state as off", () => {
+ const field={...row.form.fields[0]!,inputType:"checkbox",controlKind:"switch" as const,checkedState:"checked" as const,review:{version:"collection-field-review.v1" as const,category:"operational" as const,preselectedMarketing:true}};
+ const form={...row.form,fields:[field,{...field,fieldRef:"legacy",controlKind:"checkbox" as const,checkedState:undefined,review:undefined}]};
+ const html=renderToStaticMarkup(<CollectionSurfacesTable rows={[{...row,form}]}/>);
+ assert.match(html,/Checkboxes \/ toggles/);assert.match(html,/Preselected marketing opt-in/);assert.match(html,/>On</);assert.match(html,/Not captured/);
 });

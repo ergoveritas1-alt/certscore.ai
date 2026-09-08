@@ -27,5 +27,16 @@ export function describeSiteTechnology(observation?: SiteMetadata | null) {
     return { platform: "WordPress (declared)", version: versions.length === 1 ? versions[0]! : "Unknown" };
   }
   if (observation.wordpressAssetObserved) return { platform: "WordPress indicators observed", version: "Unknown" };
+  // Read explicit generator declarations only; asset versions can belong to plugins.
+  const cmsNames = ["Hugo", "Drupal", "Joomla", "Ghost", "Shopify", "Wix", "Squarespace", "Webflow", "TYPO3", "Magento", "PrestaShop", "HubSpot", "Contentful"];
+  const detected = cmsNames.flatMap(name => {
+    const declarations = observation.generators.filter(value => new RegExp(`^${name}(?:\\b|!)`, "i").test(value));
+    if (!declarations.length) return [];
+    const versions = declarations.map(value => new RegExp(`^${name}[!]?\\s+(?:v(?:ersion)?\\s*)?([0-9]+(?:\\.[0-9]+){1,3})(?=\\s|$|[,;])`, "i").exec(value)?.[1]);
+    const unique = [...new Set(versions.filter(Boolean))];
+    return [{ platform: `${name} (declared)`, version: unique.length === 1 && versions.every(Boolean) ? unique[0]! : "Unknown" }];
+  });
+  if (detected.length === 1) return detected[0]!;
+  if (detected.length > 1) return { platform: detected.map(item => item.platform).join(", "), version: "Unknown" };
   return { platform: observation.generators.join(", ") || "Not identified", version: "Unknown" };
 }

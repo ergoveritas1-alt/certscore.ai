@@ -1,3 +1,6 @@
+import { serviceEvidencePageIds } from "../../lib/scans/service-evidence-pages";
+import { serviceIntegrationGroup, groupedOrigin } from "../../lib/scans/service-integration-group";
+import { summarizeDiscoveredCoverage } from "../../lib/scans/full-site-coverage";
 import "server-only";
 import { inventoryPurposeGroups } from "../../lib/scans/inventory-purpose-presentation";
 import { identifyCrawlService, describeCrawlService } from "../../lib/scans/full-site-resource-context";
@@ -354,17 +357,21 @@ export async function loadFullSiteReport(
       });
     }),
   };
-  const serviceGroups = new Map<string, { key: string; name: string; context: ReturnType<typeof describeCrawlService>; pageIds: string[]; purposes: string[]; resources: Array<{key: string; name: string; kind: string; pageIds: string[]; occurrence: (typeof resources)[number]["occurrence"]; purposes: string[]; relationships: string[]; eventCount: number; inventoryEvidence: string}> }>();
+  const serviceGroups = new Map<string, { key: string; name: string; context: ReturnType<typeof describeCrawlService>; pageIds: string[]; purposes: string[]; resources: Array<{context: ReturnType<typeof describeCrawlService>; key: string; name: string; kind: string; pageIds: string[]; occurrence: (typeof resources)[number]["occurrence"]; purposes: string[]; relationships: string[]; eventCount: number; inventoryEvidence: string}> }>();
   for (const row of resources) {
-    const { key, context } = resourceContext(row);
-    const group = serviceGroups.get(key) ?? { key, name: context.identity?.product ?? "Unclassified resources", context, pageIds: [], purposes: [], resources: [] };
+    const { context } = resourceContext(row);
+    const { key, name } = serviceIntegrationGroup(context.identity);
+    const group = serviceGroups.get(key) ?? { key, name, context, pageIds: [], purposes: [], resources: [] };
     group.pageIds = [...new Set([...group.pageIds, ...row.pageIds])];
     group.purposes = [...new Set([...group.purposes, ...row.purposes])];
-    group.resources.push({ key: row.key, name: row.occurrence.label, kind: row.occurrence.kind, pageIds: row.pageIds, occurrence: row.occurrence, purposes: row.purposes, relationships: row.relationships, eventCount: row.eventCount, inventoryEvidence: inventoryClassification(row) });
+    group.resources.push({ context, key: row.key, name: row.occurrence.label, kind: row.occurrence.kind, pageIds: row.pageIds, occurrence: row.occurrence, purposes: row.purposes, relationships: row.relationships, eventCount: row.eventCount, inventoryEvidence: inventoryClassification(row) });
     serviceGroups.set(key, group);
   }
   const displayedResources = exportAllPages ? resources : resources.slice(offset, offset + limit);
-  const relationshipCounts = await loadFullSiteRelationshipCounts(scanId, pages, [...new Set([...displayedResources.map(row => row.pageIds[0]!), ...(detailId ? [detailId] : [])].filter(Boolean))], state.configurationHash);
+  const relationshipCounts = await loadFullSiteRelationshipCounts(scanId, pages, serviceEvidencePageIds({
+    localAudit: process.env.NODE_ENV !== "production" && Boolean((crawl.policy_json as {localExecution?: boolean}).localExecution),
+    pages, displayedPageIds: displayedResources.map(row => row.pageIds[0]!).filter(Boolean), detailId,
+  }), state.configurationHash);
   const resourcesByKey = new Map(resources.map(row => [row.key, row]));
   const destinationSummary = (row: (typeof resources)[number]) => ({
     destinations: row.destinationAssessedCount > 0 ? row.destinations : relationshipCounts.get(row.pageIds[0] ?? "")?.get(row.occurrence.id)?.destinations ?? [],
@@ -372,8 +379,32 @@ export async function loadFullSiteReport(
     destinationMissingCount: row.destinationMissingCount,
     destinationsTruncated: row.destinationsTruncated,
   });
+  const originsByService = new Map<string, Array<import("../../lib/scans/service-origins").ServiceOrigin & { pageId: string; resourceKey: string; occurrenceId: string; eventCount: number }>>();
+  for (const page of pages) {
+    const summaries = relationshipCounts.get(page.id);
+    if (!summaries) continue;
+    for (const occurrence of page.observation?.occurrences ?? []) {
+      const origins = summaries.get(occurrence.id)?.origins ?? [];
+      if (!origins.length) continue;
+      const identity = identifyCrawlService(occurrence);
+      if (!identity) continue;
+      const key = serviceIntegrationGroup(identity).key;
+      const existing = originsByService.get(key) ?? [];
+      for (const origin of origins) {
+        const grouped = groupedOrigin(origin);
+        if (grouped.key !== key) existing.push({ ...origin, ...grouped, pageId: page.id, occurrenceId: occurrence.id, eventCount: occurrence.eventCount, resourceKey: `${occurrence.kind}:${occurrence.identity}` });
+      }
+      originsByService.set(key, existing);
+    }
+  }
   return {
     services: [...serviceGroups.values()].map(service => ({ ...service,
+      context: { ...service.context, policy: {
+        ...service.context.policy,
+        status: service.resources.every(row => row.context.policy.status === "mentioned") ? "mentioned" as const : service.resources.every(row => row.context.policy.status === "not_found") ? "not_found" as const : "unknown" as const,
+        mentions: [...new Map(service.resources.flatMap(row => row.context.policy.mentions).map(mention => [JSON.stringify(mention), mention])).values()],
+      } },
+      origins: originsByService.get(service.key) ?? [],
       resources: service.resources.map(resource => {
         const aggregateRow = resourcesByKey.get(resource.key)!;
         return { ...resource, ...destinationSummary(aggregateRow) };
@@ -485,6 +516,7 @@ export async function loadFullSiteReport(
       destinations: relationshipCounts.get(detailId ?? "")?.get(evidence.rows[0].id)?.destinations ?? [] } : null,
     selectedResource:
       aggregate.resources.find((r) => r.key === resourceKey) ?? null,
+    coverage: summarizeDiscoveredCoverage(records.map(row => row.target_url), crawl.robots_json as RobotsPolicy | null),
     timing: {
       crawlStartedAt: crawl.crawl_started_at
         ? new Date(crawl.crawl_started_at).toISOString()

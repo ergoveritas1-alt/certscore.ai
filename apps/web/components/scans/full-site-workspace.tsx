@@ -1,4 +1,5 @@
 "use client";
+import { describeSiteTechnology, type SiteMetadataProjection } from "@certscore/contracts";
 import { SitePriorityReview } from "./site-priority-review";
 import type { ShadowFinding } from "./report-lab/shadow-report-data";
 import { FullSiteServices } from "./full-site-services-table";
@@ -93,6 +94,7 @@ export function FullSiteWorkspace({
   homepageGraph,
   homepageFindings = [],
   homepageUrl,
+  siteMetadata,
   initialStartedAt,
   identity,
   identityWithoutSharing,
@@ -104,13 +106,14 @@ export function FullSiteWorkspace({
   homepageGraph?: ApiRuntimeEvidenceGraphProjection;
   homepageFindings?: ShadowFinding[];
   homepageUrl?: string;
+  siteMetadata?: SiteMetadataProjection | null;
   initialStartedAt?: string;
   identity?: ReactNode;
   identityWithoutSharing?: ReactNode;
   scanNext?: ReactNode;
   children: ReactNode;
 }) {
-  const [inventoryView, setInventoryView] = useState<"resources" | "services">("resources");
+  const [inventoryView, setInventoryView] = useState<"resources" | "services">("services");
   const [collapseVersion, setCollapseVersion] = useState(0);
   const [tab, setTab] = useState<"resources" | "pages" | "homepage">(
     "resources",
@@ -283,6 +286,7 @@ export function FullSiteWorkspace({
       ...(data?.discovery.beyond ?? []),
       ...(data?.discovery.widespread ?? []),
     ].find((r) => r.key === resource);
+  const technology = describeSiteTechnology(siteMetadata?.observation);
   const timing = (
         <details className="text-xs text-zinc-600 sm:relative">
           <summary className="cursor-pointer font-medium">
@@ -293,50 +297,56 @@ export function FullSiteWorkspace({
                 : null,
             )}
           </summary>
-          <div className="absolute left-4 right-4 z-20 mt-2 sm:left-0 sm:right-auto sm:top-full sm:w-[min(36rem,70vw)] rounded-lg border border-zinc-200 bg-white p-4 shadow-lg">
-          <dl className="mt-2 grid gap-2 sm:grid-cols-3">
-            {[
-              ["Page limit", requested.maxPages],
-              ["Concurrency", state?.effective.concurrency ?? requested.concurrency],
-              ["Seconds between starts", state?.effective.waitSeconds ?? requested.waitSeconds],
-              ["Stopped because", state?.stopReason?.replaceAll("_", " ") ?? (running ? "In progress" : "Not stopped")],
-              ["Excluded links (not crawled)", counts?.excluded ?? 0],
-              ["Started", timestamp(state?.startedAt)],
-              ["Completed", timestamp(state?.completedAt)],
-              ["Homepage audit", duration(state?.homepageDurationMs)],
-              [
-                "Resource crawl",
-                duration(
-                  data?.timing.crawlStartedAt && timingEnd !== null
-                    ? Math.max(0, Math.floor((timingEnd - Date.parse(data.timing.crawlStartedAt)) / 1000) * 1000)
-                    : null,
-                ),
-              ],
-              [
-                `Median completed-page observation (${s?.timing.sampleCount ?? 0} samples)`,
-                duration(s?.timing.medianPageMs),
-              ],
-              [
-                "Slowest completed-page observation",
-                duration(s?.timing.slowestPageMs),
-              ],
-              [
-                "Measured peak page workers",
-                state?.peakWorkers ?? "Unavailable",
-              ],
-              ["Measured backoff duration", duration(state?.pauseMs)],
-            ].map(([label, value]) => (
-              <div key={label}>
-                <dt className="text-xs text-zinc-500">{label}</dt>
-                <dd>{value}</dd>
-              </div>
-            ))}
-          </dl>
-          <p className="mt-3 text-xs text-zinc-500">
-            Wait is a start interval. Page duration measures one observation;
-            total duration is wall-clock time. Overlapping durations are not
-            added. Load latency is not reported.
-          </p>
+          <div className="absolute left-4 right-4 z-20 mt-2 max-h-[70vh] overflow-y-auto rounded-lg border border-zinc-200 bg-white p-3 shadow-lg sm:left-0 sm:right-auto sm:top-full sm:w-[min(38rem,85vw)]">
+            <dl className="mb-3 grid gap-2 border-b border-zinc-200 pb-3 text-xs sm:grid-cols-2">
+              <div className="flex items-baseline justify-between gap-3"><dt className="text-zinc-500">CMS / generator</dt><dd className="text-right font-medium text-zinc-800">{technology.platform}</dd></div>
+              <div className="flex items-baseline justify-between gap-3"><dt className="text-zinc-500">Declared version</dt><dd className="text-right font-medium tabular-nums text-zinc-800">{technology.version === "Unknown" ? "Not available" : technology.version}</dd></div>
+            </dl>
+            <div className="grid gap-4 sm:grid-cols-2">
+              {[
+                { title: "Coverage", rows: [
+                  ["Pages discovered", data?.coverage?.discovered ?? "Loading…"],
+                  ["Robots-allowed", data?.coverage ? data.coverage.unknown === data.coverage.discovered && data.coverage.unknown > 0 ? "Not verified" : data.coverage.allowed : "Loading…"],
+                  ["Robots-blocked", data?.coverage ? data.coverage.unknown === data.coverage.discovered && data.coverage.unknown > 0 ? "Not verified" : data.coverage.blocked : "Loading…"],
+                  ...(data?.coverage?.unknown ? [["Robots not verified", data.coverage.unknown]] : []),
+                  ["Page limit", requested.maxPages],
+                  ["Excluded links", counts?.excluded ?? 0],
+                  ["Stop reason", state?.stopReason === "max_pages" ? "Page limit reached" : state?.stopReason?.replaceAll("_", " ") ?? (running ? "In progress" : "Not stopped")],
+                  ["Worker limit", state?.effective.concurrency ?? requested.concurrency],
+                  ["Peak workers", state?.peakWorkers ?? "Unavailable"],
+                  ["Start interval", `${state?.effective.waitSeconds ?? requested.waitSeconds}s`],
+                ] },
+                { title: "Timing", rows: [
+                  ["Homepage audit", duration(state?.homepageDurationMs)],
+                  ["Resource crawl", duration(data?.timing.crawlStartedAt && timingEnd !== null
+                    ? Math.max(0, Math.floor((timingEnd - Date.parse(data.timing.crawlStartedAt)) / 1000) * 1000) : null)],
+                  ["Median page", duration(s?.timing.medianPageMs)],
+                  ["Slowest page", duration(s?.timing.slowestPageMs)],
+                  ["Page samples", s?.timing.sampleCount ?? 0],
+                  ["Backoff", duration(state?.pauseMs)],
+                ] },
+              ].map(group => (
+                <div key={group.title}>
+                  <h3 className="mb-1 text-[10px] font-semibold uppercase tracking-wider text-zinc-500">{group.title}</h3>
+                  <dl className="divide-y divide-zinc-100">
+                    {group.rows.map(([label, value]) => (
+                      <div key={label} className="flex items-baseline justify-between gap-3 py-1.5 text-xs leading-4">
+                        <dt className="text-zinc-500">{label}</dt>
+                        <dd className="text-right font-medium tabular-nums text-zinc-800" title={value === "Unavailable" ? "Unavailable" : undefined}>{value === "Unavailable" ? "-" : value}</dd>
+                      </div>
+                    ))}
+                  </dl>
+                </div>
+              ))}
+            </div>
+            <dl className="mt-2 border-t border-zinc-200 pt-2 text-[11px] leading-4">
+              {[["Started", timestamp(state?.startedAt)], ["Completed", timestamp(state?.completedAt)]].map(([label, value]) => (
+                <div key={label} className="flex justify-between gap-3 py-0.5">
+                  <dt className="text-zinc-500">{label}</dt>
+                  <dd className="text-right tabular-nums text-zinc-600">{value}</dd>
+                </div>
+              ))}
+            </dl>
           </div>
         </details>
   );
@@ -410,26 +420,26 @@ export function FullSiteWorkspace({
           </p>
         ) : null}
       </header>
-      <section className="my-4 grid grid-cols-2 gap-3 md:grid-cols-5" aria-label="Scan summary">
-        <div className="flex min-w-0 flex-col rounded-xl bg-slate-950 p-4 text-white shadow-sm">
-          <span className="text-xs font-medium tracking-wide text-sky-200">Full site score</span>
-          <div className="my-2 flex items-baseline gap-1.5 tabular-nums">
-            <strong className="text-4xl font-semibold tracking-tight"><ScanLiveValue value={data?.score?.value} active={valuesUpdating} /></strong>
-            <span className="text-sm text-slate-400">/ 100</span>
+      <section className="my-3 grid grid-cols-2 gap-px overflow-hidden rounded-lg border border-zinc-200 bg-zinc-200 md:grid-cols-5" aria-label="Scan summary">
+        <div className="col-span-2 flex min-w-0 flex-col bg-slate-50 px-3 py-3 md:col-span-1">
+          <span className="text-xs font-medium text-slate-600">Full site score</span>
+          <div className="my-1 flex items-baseline gap-1.5 tabular-nums">
+            <strong className="text-2xl font-semibold tracking-tight text-slate-950"><ScanLiveValue value={data?.score?.value} active={valuesUpdating} /></strong>
+            <span className="text-xs text-slate-500">/ 100</span>
           </div>
-          <p className="mb-3 text-xs tabular-nums text-sky-200"><ScanLiveValue value={scannedPages === null ? "Loading page count…" : `${scannedPages} ${scannedPages === 1 ? "page" : "pages"} scanned`} active={valuesUpdating} /></p>
-          <div className="mt-auto border-t border-white/10 pt-2 text-xs leading-4 text-slate-300" title={data?.score?.scope}>
+          <p className="text-xs leading-4 tabular-nums text-slate-600"><ScanLiveValue value={scannedPages === null ? "Loading page count…" : `${scannedPages} ${scannedPages === 1 ? "page" : "pages"} scanned`} active={valuesUpdating} /></p>
+          <div className="mt-1 text-[11px] leading-4 text-slate-500" title={data?.score?.scope}>
             {data?.score ? data.score.limitedPages ? "Limited coverage" : "Site-wide assessment" : "Awaiting scored evidence"}
           </div>
         </div>
-        <div className="flex min-w-0 flex-col rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+        <div className="flex min-w-0 flex-col bg-white px-3 py-3">
           <span className="text-xs font-medium text-slate-500">Forms</span>
-          <strong className="my-2 block text-3xl font-semibold tracking-tight text-slate-950 tabular-nums">
+          <strong className="my-1 block text-2xl font-semibold tracking-tight text-slate-950 tabular-nums">
             <ScanLiveValue active={valuesUpdating} value={data?.collectionSurfaces && (data.collectionSurfaces.rows.length > 0 || (data.collectionSurfaces.pagesWithoutInventory === 0 && data.collectionSurfaces.limitedPages === 0))
               ? data.collectionSurfaces.rows.length
               : null} />
           </strong>
-          <div className="mt-auto border-t border-slate-100 pt-2 text-xs leading-4 tabular-nums text-slate-600">
+          <div className="text-xs leading-4 tabular-nums text-slate-600">
             {data?.collectionSurfaces ? <>
               <ScanLiveValue active={valuesUpdating} value={`${data.collectionSurfaces.rows.reduce((sum, row) => sum + row.form.retainedFieldCount, 0)} fields · ${data.collectionSurfaces.rows.filter(row => row.snapshot.status === "available").length} snapshots`} />
               {data.collectionSurfaces.pagesWithoutInventory > 0 || data.collectionSurfaces.limitedPages > 0
@@ -442,11 +452,11 @@ export function FullSiteWorkspace({
           { label: "Requests", value: s?.totals.requestEvents, group: "requests" },
           { label: "Embed instances", value: s?.totals.embedInstances, group: "embeds" },
         ].map(metric => (
-          <div key={metric.group} className="flex min-w-0 flex-col rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+          <div key={metric.group} className="flex min-w-0 flex-col bg-white px-3 py-3">
             <span className="text-xs font-medium text-slate-500">{metric.label}</span>
-            <strong className="my-2 block text-3xl font-semibold tracking-tight text-slate-950 tabular-nums"><ScanLiveValue value={metric.value} active={valuesUpdating} /></strong>
+            <strong className="my-1 block text-2xl font-semibold tracking-tight text-slate-950 tabular-nums"><ScanLiveValue value={metric.value} active={valuesUpdating} /></strong>
             {metric.group !== "embeds" ? (
-              <dl className="mt-auto space-y-1 border-t border-slate-100 pt-2 text-xs leading-4 tabular-nums">
+              <dl className="space-y-0.5 text-xs leading-4 tabular-nums">
                 <div className="flex items-center justify-between gap-2">
                   <dt className="flex items-center gap-1.5 text-slate-600"><span aria-hidden="true" className="h-1.5 w-1.5 shrink-0 rounded-full bg-rose-500" />Non-essential</dt>
                   <dd className="font-medium text-slate-900"><ScanLiveValue value={data?.priorityTotals?.[metric.group]?.nonEssential} active={valuesUpdating} /></dd>
@@ -457,7 +467,7 @@ export function FullSiteWorkspace({
                 </div>
               </dl>
             ) : (
-              <dl className="mt-auto space-y-1 border-t border-slate-100 pt-2 text-xs leading-4 text-slate-600 tabular-nums" aria-label="Embed categories">
+              <dl className="space-y-0.5 text-xs leading-4 text-slate-600 tabular-nums" aria-label="Embed categories">
                 {data?.charts.embeds.slice(0, 3).map(category => (
                   <div key={category.label} className="flex justify-between gap-2">
                     <dt className="capitalize">{category.label === "unknown" ? "Unclassified" : category.label.replaceAll("_", " ")}</dt>
@@ -503,9 +513,9 @@ export function FullSiteWorkspace({
           <section className="min-w-0 border-y border-zinc-200 bg-white py-4">
             <h2 className="mb-3 text-xl font-semibold">{tab === "pages" ? "Page observations and coverage" : "Resources and Services Details"}</h2>
             {activeFilters.length ? <button className="mb-2 text-xs text-sky-800 underline" onClick={() => { setFilters(initialFilters); setOffset(0); }}>Show all {units[filters.kind as keyof typeof units]?.toLowerCase()}</button> : null}
-              <div className="mb-3 flex gap-2" role="group" aria-label="Inventory view">{(["resources", "services"] as const).map(view => <button key={view} type="button" aria-pressed={inventoryView === view} className={`${button} capitalize ${inventoryView === view ? "!bg-slate-900 !text-white" : ""}`} onClick={() => setInventoryView(view)}>{view}</button>)}</div>
+              <div className="mb-3 flex gap-2" role="group" aria-label="Inventory view">{(["services", "resources"] as const).map(view => <button key={view} type="button" aria-pressed={inventoryView === view} className={`${button} capitalize ${inventoryView === view ? "!bg-slate-900 !text-white" : ""}`} onClick={() => setInventoryView(view)}>{view}</button>)}</div>
             <div className="my-3 flex flex-wrap items-center justify-between gap-3 text-xs text-slate-500">
-              <div className="flex flex-wrap items-baseline gap-x-2 gap-y-1"><span className="shrink-0"><ScanLiveValue key={inventoryView} active={valuesUpdating} value={data ? `${inventoryView === "services" ? data.services.length : data.resources.total} ${inventoryView}` : "Loading inventory…"} /></span><span className="text-slate-500">{inventoryView === "services" ? "· Grouped by service; expand to see member resources." : "· Distinct resources across scanned pages; expand to see parent/child links."}</span></div>
+              <div className="flex flex-wrap items-baseline gap-x-2 gap-y-1"><span className="shrink-0"><ScanLiveValue key={inventoryView} active={valuesUpdating} value={data ? `${inventoryView === "services" ? data.services.length : data.resources.total} ${inventoryView}` : "Loading inventory…"} /></span><span className="text-slate-500">{inventoryView === "services" ? "· Organized by root integration; expand for linked services and resources." : "· Distinct resources across scanned pages; expand to see parent/child links."}</span></div>
               <div className="flex flex-wrap items-center gap-3"><button type="button" onClick={() => setCollapseVersion(value => value + 1)} className="rounded-md px-2 py-1.5 text-sky-700 hover:bg-sky-50">Collapse all</button></div>
             </div>
             <div className="max-h-[488px] overflow-auto rounded-lg border border-zinc-200" tabIndex={0} aria-busy={isFetching} aria-label={tab === "pages" ? "Scrollable page observations" : `Scrollable ${inventoryView}`}

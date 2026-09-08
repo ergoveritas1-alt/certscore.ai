@@ -1,3 +1,5 @@
+import { FIELD_REVIEW_CATEGORIES } from "./collection-field-review";
+export * from "./collection-field-review";
 import { siteMetadataSchema } from "./site-metadata";
 export * from "./site-metadata";
 import { z } from "zod";
@@ -778,9 +780,12 @@ export const collectionSurfaceEvidenceRefSchema = z.object({
 }).strict();
 
 export const collectionSurfaceFieldSchema = z.object({
+  controlKind: z.enum(["checkbox", "switch", "radio"]).optional(),
+  checkedState: z.enum(["checked", "unchecked", "mixed", "unknown"]).optional(),
+  review: z.object({ version: z.literal("collection-field-review.v1"), category: z.enum(FIELD_REVIEW_CATEGORIES), preselectedMarketing: z.boolean() }).strict().optional(),
   fieldRef: z.string().min(1).max(80),
   controlIndex: z.number().int().nonnegative().max(249).optional(),
-  elementType: z.enum(["input", "textarea", "select"]),
+  elementType: z.enum(["input", "textarea", "select", "custom_control"]),
   inputType: z.string().min(1).max(40),
   semanticCategory: collectionSurfaceSemanticCategorySchema,
   label: z.string().min(1).max(120).optional(),
@@ -791,7 +796,11 @@ export const collectionSurfaceFieldSchema = z.object({
   evidenceRefs: z.array(collectionSurfaceEvidenceRefSchema).max(2).default([]),
   confidence: confidenceSchema,
   directVsInferred: directVsInferredSchema,
-}).strict();
+}).strict().superRefine((field, ctx) => {
+  if (field.review?.preselectedMarketing && (field.checkedState !== "checked" || !["checkbox", "switch"].includes(field.controlKind ?? ""))) {
+    ctx.addIssue({ code: z.ZodIssueCode.custom, message: "Preselected marketing review requires a retained selected checkbox or switch", path: ["review", "preselectedMarketing"] });
+  }
+});
 
 export const collectionSurfaceFormSchema = z.object({
   formRef: z.string().min(1).max(80),

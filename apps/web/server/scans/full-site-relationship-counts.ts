@@ -1,3 +1,4 @@
+import { buildServiceOriginLookup, type ServiceOrigin } from "../../lib/scans/service-origins";
 import "server-only";
 import type { CrawlPage } from "@website-signal-risk-scanner/shared";
 import { countInventoryResourceChildren, crawlOccurrenceGraphIdentity } from "../../lib/scans/inventory-resource-relationships";
@@ -6,11 +7,11 @@ import { z } from "zod";
 import { loadFullSiteGraphContext } from "./full-site-graph";
 
 // Only verified numeric summaries are cached, never full evidence bundles.
-const summaries = new Map<string, { expiresAt: number; result: Promise<Map<string, { count: number; destinations: Array<z.infer<typeof networkDestinationSchema>> }> | undefined> }>();
+const summaries = new Map<string, { expiresAt: number; result: Promise<Map<string, { count: number; origins: ServiceOrigin[]; destinations: Array<z.infer<typeof networkDestinationSchema>> }> | undefined> }>();
 async function pageCounts(scanId: string, page: CrawlPage, configurationHash: string) {
   const observation = page.observation;
   if (!observation?.runtimeGraph || observation.parentScanId !== scanId || observation.pageJobId !== page.id || observation.configurationHash !== configurationHash) return undefined;
-  const key = JSON.stringify([scanId, page.id, observation.attemptId, configurationHash, observation.sourceHash, observation.runtimeGraph.sha256]);
+  const key = JSON.stringify(["service-origins-site-v1", scanId, page.id, observation.attemptId, configurationHash, observation.sourceHash, observation.runtimeGraph.sha256]);
   const cached = summaries.get(key);
   if (cached && cached.expiresAt > Date.now()) return cached.result;
   const result = (async () => {
@@ -22,9 +23,10 @@ async function pageCounts(scanId: string, page: CrawlPage, configurationHash: st
       if (!graph || graph.sourceHash !== observation.runtimeGraph!.sha256) return undefined;
       const network = z.object({ networkEvents: z.array(z.object({ eventId: z.string(), networkDestination: networkDestinationSchema.optional() })).max(30000) }).safeParse(context?.evidence);
       const destinations = new Map(network.success ? network.data.networkEvents.map(event => [event.eventId, event.networkDestination]) : []);
+      const originsFor = buildServiceOriginLookup(graph, page.finalUrl ?? page.url);
       return new Map(observation.occurrences.map(occurrence => {
         const destination = destinations.get(occurrence.id);
-        return [occurrence.id, { count: countInventoryResourceChildren(graph, crawlOccurrenceGraphIdentity(occurrence)), destinations: destination ? [destination] : [] }];
+        return [occurrence.id, { origins: originsFor(occurrence), count: countInventoryResourceChildren(graph, crawlOccurrenceGraphIdentity(occurrence)), destinations: destination ? [destination] : [] }];
       }));
     } catch { return undefined; }
   })();
@@ -36,7 +38,7 @@ async function pageCounts(scanId: string, page: CrawlPage, configurationHash: st
 /** Bounded reads for the displayed rows; missing evidence stays unknown. */
 export async function loadFullSiteRelationshipCounts(scanId: string, pages: CrawlPage[], pageIds: string[], configurationHash: string) {
   const selected = pages.filter(page => pageIds.includes(page.id));
-  const counts = new Map<string, Map<string, { count: number; destinations: Array<z.infer<typeof networkDestinationSchema>> }>>();
+  const counts = new Map<string, Map<string, { count: number; origins: ServiceOrigin[]; destinations: Array<z.infer<typeof networkDestinationSchema>> }>>();
   let cursor = 0;
   await Promise.all(Array.from({ length: Math.min(3, selected.length) }, async () => {
     while (cursor < selected.length) {

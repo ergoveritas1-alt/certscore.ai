@@ -1,5 +1,6 @@
 import {
   COLLECTION_SURFACE_INVENTORY_VERSION,
+  classifyCollectionFieldReview,
   MAX_COLLECTION_SURFACE_FIELDS,
   MAX_COLLECTION_SURFACE_FIELDS_PER_FORM,
   MAX_COLLECTION_SURFACE_FORMS,
@@ -14,12 +15,14 @@ export const MAX_COLLECTION_SURFACE_INSPECTED_FORMS = 50;
 export const MAX_COLLECTION_SURFACE_INSPECTED_FIELDS = 250;
 
 export type CollectionSurfaceCaptureRow = {
+  controlKind?: "checkbox" | "switch" | "radio";
+  checkedState?: "checked" | "unchecked" | "mixed" | "unknown";
   groupKey: string;
   structure: "native_form" | "role_form" | "unassociated_controls";
   title?: string;
   method?: string;
   actionHostname?: string;
-  elementType: "input" | "textarea" | "select";
+  elementType: "input" | "textarea" | "select" | "custom_control";
   inputType: string;
   label?: string;
   autocompleteToken?: string;
@@ -53,7 +56,7 @@ function normalizedText(...values: Array<string | null | undefined>) {
 export function classifyCollectionSurfaceSemanticCategory(input: {
   autocompleteToken?: string;
   inputType: string;
-  elementType: "input" | "textarea" | "select";
+  elementType: "input" | "textarea" | "select" | "custom_control";
   label?: string;
 }): CollectionSurfaceSemanticCategory {
   const type = input.inputType.toLowerCase();
@@ -161,6 +164,8 @@ export function buildCollectionSurfaceInventory(
       elementType: row.elementType,
       inputType: row.inputType.slice(0, 40) || row.elementType,
       semanticCategory,
+      ...(row.controlKind ? { controlKind: row.controlKind, checkedState: row.checkedState ?? "unknown" } : {}),
+      review: classifyCollectionFieldReview({ ...row, semanticCategory, surfaceType }),
       ...(row.label ? { label: row.label.slice(0, 120) } : {}),
       ...(row.autocompleteToken ? { autocompleteToken: row.autocompleteToken.slice(0, 80) } : {}),
       required: row.required,

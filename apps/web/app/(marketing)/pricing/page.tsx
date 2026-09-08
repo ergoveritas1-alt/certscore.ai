@@ -200,7 +200,7 @@ export default function PricingPage() {
             <CardContent className="flex h-full flex-col justify-between gap-6 p-5">
               <div className="space-y-4">
                 <div className="space-y-1">
-                  <h2 className="text-2xl font-semibold tracking-tight text-slate-950">{customPlan.label}</h2>
+                  <h2 className="text-2xl font-semibold tracking-tight text-slate-950">Enterprise</h2>
                 </div>
                 <div className="space-y-3">
                   <p className="text-sm font-semibold text-slate-900">Need API access or higher-volume workflows?</p>

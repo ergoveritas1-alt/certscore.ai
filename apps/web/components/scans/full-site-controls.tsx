@@ -16,8 +16,10 @@ const fields = [
 ] as const;
 export function FullSiteControls({
   onChange,
+  active = false,
 }: {
   onChange?: (value: FullSiteFormValue) => void;
+  active?: boolean;
 }) {
   const id = useId();
   const [policy, setPolicy] = useState<FullSitePolicy | null>(null);
@@ -31,6 +33,8 @@ export function FullSiteControls({
   });
   const [errors, setErrors] = useState<Record<string, string>>({});
   useEffect(() => {
+    if (policy) return;
+    let disposed = false;
     const controller = new AbortController();
     setAvailability("loading");
     const timeout = setTimeout(() => controller.abort(), 10000);
@@ -40,6 +44,7 @@ export function FullSiteControls({
     })
       .then((r) => { if (!r.ok) throw new Error("Options unavailable"); return r.json(); })
       .then((data) => {
+        if (disposed) return;
         if (data?.allowed) {
           setPolicy(data.policy);
           setValues(
@@ -49,10 +54,10 @@ export function FullSiteControls({
           );
         } else { setAvailability("denied"); }
       })
-      .catch(() => setAvailability("error"))
+      .catch(() => { if (!disposed) setAvailability("error"); })
       .finally(() => clearTimeout(timeout));
-    return () => { clearTimeout(timeout); controller.abort(); };
-  }, [retry]);
+    return () => { disposed = true; clearTimeout(timeout); controller.abort(); };
+  }, [retry, active, policy]);
   function update(enabled: boolean, next = values) {
     setSelected(enabled);
     setValues(next);

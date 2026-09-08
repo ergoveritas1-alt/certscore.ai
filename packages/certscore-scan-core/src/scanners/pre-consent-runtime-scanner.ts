@@ -5060,7 +5060,7 @@ async function captureConsolidatedPageEvidenceSnapshot(page: Page): Promise<Cons
         if (key) sessionStorageEntries[key] = "[redacted]";
       }
     } catch {}
-    const allFieldCandidates = document.querySelectorAll("input, textarea, select");
+    const allFieldCandidates = document.querySelectorAll('input, textarea, select, [role="checkbox"], [role="switch"]');
     const inspectedFieldCandidates = Array.from(
       { length: Math.min(allFieldCandidates.length, maxFieldCandidates) },
       (_, index) => allFieldCandidates.item(index),
@@ -5127,7 +5127,7 @@ async function captureConsolidatedPageEvidenceSnapshot(page: Page): Promise<Cons
     };
     const rows = inspectedFieldCandidates.flatMap((element, domOrder) => {
       const type = (element.getAttribute("type") || element.tagName.toLowerCase()).toLowerCase();
-      if (["hidden", "submit", "button", "reset", "image"].includes(type) || !isVisible(element) || isCmpOwned(element)) {
+      if ((["hidden", "submit", "button", "reset", "image"].includes(type) && !["checkbox", "switch"].includes(element.getAttribute("role") ?? "")) || !isVisible(element) || isCmpOwned(element)) {
         return [];
       }
       const nativeForm = element.closest("form");
@@ -5141,18 +5141,23 @@ async function captureConsolidatedPageEvidenceSnapshot(page: Page): Promise<Cons
         } catch {}
       }
       const input = element as HTMLInputElement;
+      const role = element.getAttribute("role");
+      const controlKind = role === "switch" ? "switch" as const : type === "checkbox" || role === "checkbox" ? "checkbox" as const : type === "radio" ? "radio" as const : undefined;
+      const ariaChecked = element.getAttribute("aria-checked");
+      const checkedState = element instanceof HTMLInputElement && ["checkbox", "radio"].includes(type) ? input.indeterminate ? "mixed" as const : input.checked ? "checked" as const : "unchecked" as const : ariaChecked === "true" ? "checked" as const : ariaChecked === "false" ? "unchecked" as const : ariaChecked === "mixed" ? "mixed" as const : "unknown" as const;
       return [{
+        ...(controlKind ? { controlKind, checkedState } : {}),
         groupKey: groupRefFor(element),
         structure: nativeForm ? "native_form" as const : roleForm ? "role_form" as const : "unassociated_controls" as const,
         title: titleFor(group),
         method: nativeForm?.getAttribute("method") ?? undefined,
         actionHostname,
-        elementType: element.tagName.toLowerCase() as "input" | "textarea" | "select",
+        elementType: (["input", "textarea", "select"].includes(element.tagName.toLowerCase()) ? element.tagName.toLowerCase() : "custom_control") as "input" | "textarea" | "select" | "custom_control",
         inputType: type || element.tagName.toLowerCase(),
         label: labelFor(element),
         autocompleteToken: boundedText(element.getAttribute("autocomplete"), 80),
-        required: input.required === true,
-        disabled: input.disabled === true,
+        required: input.required === true || element.getAttribute("aria-required") === "true",
+        disabled: input.disabled === true || element.getAttribute("aria-disabled") === "true",
         readOnly: "readOnly" in input && input.readOnly === true,
         domOrder,
       }];

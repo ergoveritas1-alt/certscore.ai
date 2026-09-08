@@ -109,6 +109,7 @@ export function ScanFromSelect({
   const [uncontrolledFreshRescan, setUncontrolledFreshRescan] = useState(false);
   const buttonRef = useRef<HTMLButtonElement>(null);
   const menuRef = useRef<HTMLDivElement>(null);
+  const menuContentRef = useRef<HTMLDivElement>(null);
   const wrapperRef = useRef<HTMLDivElement>(null);
   const options = SCAN_FROM_OPTIONS.filter((option) => {
     if ((!includeLocalExtension || !allowRestrictedScanOptions) && option.value === "local_extension") {
@@ -170,7 +171,8 @@ export function ScanFromSelect({
       const width = variant === "icon" ? Math.min(320, viewportWidth - viewportPadding * 2) : Math.min(288, viewportWidth - viewportPadding * 2);
       const desiredLeft = variant === "icon" ? buttonRect.right - width + 96 : buttonRect.left;
       const left = Math.min(Math.max(viewportPadding, desiredLeft), Math.max(viewportPadding, viewportWidth - width - viewportPadding));
-      const measuredHeight = menuRef.current?.scrollHeight;
+      // Measure unclamped content so expanding controls can grow the menu.
+      const measuredHeight = menuContentRef.current ? menuContentRef.current.getBoundingClientRect().height + 12 : 0;
       const targetHeight = measuredHeight && measuredHeight > 0
         ? measuredHeight
         : includeFreshRescanOption
@@ -191,14 +193,17 @@ export function ScanFromSelect({
     }
 
     updateMenuPosition();
+    const contentObserver = new ResizeObserver(updateMenuPosition);
+    if (menuContentRef.current) contentObserver.observe(menuContentRef.current);
     window.addEventListener("resize", updateMenuPosition);
     window.addEventListener("scroll", updateMenuPosition, true);
 
     return () => {
+      contentObserver.disconnect();
       window.removeEventListener("resize", updateMenuPosition);
       window.removeEventListener("scroll", updateMenuPosition, true);
     };
-  }, [includeFreshRescanOption, includeScanFromOptions, isOpen, variant]);
+  }, [includeFreshRescanOption, includeScanFromOptions, isOpen, variant, Boolean(crawl)]);
 
   function selectScanFrom(nextValue: ScanFrom) {
     onChange?.(nextValue);
@@ -265,6 +270,7 @@ export function ScanFromSelect({
                 width: menuPosition?.width ?? (variant === "icon" ? 320 : 288)
               }}
             >
+              <div ref={menuContentRef}>
               {includeScanFromOptions ? (
                 <div className="pb-1">
                   <div className="px-3 pb-1.5 pt-1 text-[0.65rem] font-semibold uppercase tracking-[0.18em] text-slate-400">Scan from</div>
@@ -305,7 +311,7 @@ export function ScanFromSelect({
               {includeFreshRescanOption || showCrawl ? (
                 <div className={includeScanFromOptions ? "border-t border-slate-200/70 pt-1" : "pb-1"}>
                   <div className="px-3 pb-1.5 pt-1 text-[0.65rem] font-semibold uppercase tracking-[0.18em] text-slate-400">Options</div>
-                  {showCrawl ? <FullSiteControls onChange={next => { setCrawl(next); onFullSiteChange?.(next); }} /> : null}
+                  {showCrawl ? <FullSiteControls active={isOpen} onChange={next => { setCrawl(next); onFullSiteChange?.(next); }} /> : null}
                   {includeFreshRescanOption ? (
                     <label
                       className="flex w-full cursor-pointer items-center justify-between gap-4 px-3 py-2.5 text-left transition hover:bg-slate-50"
@@ -339,6 +345,7 @@ export function ScanFromSelect({
                   ) : null}
                 </div>
               ) : null}
+              </div>
             </div>,
             document.body
           )

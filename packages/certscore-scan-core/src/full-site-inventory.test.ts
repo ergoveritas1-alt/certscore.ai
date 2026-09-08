@@ -27,7 +27,7 @@ test(
       );
       if (req.url === "/a")
         res.end(
-          `<main>Public inventory fixture A</main><form aria-label="Contact"><label>Email<input type="email" value="private-form-value"></label></form><button onclick="fetch('/clicked')">Accept all</button><a href="/privacy">Privacy policy</a><a href="/b">Contact</a><script src="/script.js"></script><iframe src="/frame"></iframe><img src="/image.png"><script>document.cookie='page_a=private-cookie;path=/';document.cookie='__utma=private-analytics;path=/';document.cookie='FCCDCF=private-consent;path=/';document.cookie='_rdt_uuid=private-unverified;path=/';document.cookie='_ga=private-existing;path=/';localStorage.setItem('page_a','private-value');fetch('/collect?token=private-query');fetch('/collect?token=private-query');</script>`,
+          `<main>Public inventory fixture A</main><form aria-label="Contact"><label>Email<input type="email" value="private-form-value"></label><label><input type="checkbox" checked>Send me newsletters</label><button type="button" role="switch" aria-checked="false" aria-label="Marketing updates">Updates</button><label>Passport number<input></label></form><button onclick="fetch('/clicked')">Accept all</button><a href="/privacy">Privacy policy</a><a href="/b">Contact</a><script src="/script.js"></script><iframe src="/frame"></iframe><img src="/image.png"><script>document.cookie='page_a=private-cookie;path=/';document.cookie='__utma=private-analytics;path=/';document.cookie='FCCDCF=private-consent;path=/';document.cookie='_rdt_uuid=private-unverified;path=/';document.cookie='_ga=private-existing;path=/';localStorage.setItem('page_a','private-value');fetch('/collect?token=private-query');fetch('/collect?token=private-query');</script>`,
         );
       else if (req.url === "/b")
         res.end(
@@ -111,6 +111,11 @@ test(
       assert.equal(a.evidence.cookieEvents.find(event => event.cookieName === "FCCDCF")?.cookieEssentiality, "unknown");
       assert.ok(!JSON.stringify(projected).includes("private-analytics"));
       assert.equal(projected.collectionSurfaces?.inventory.forms.length, 1);
+      const fields = projected.collectionSurfaces!.inventory.forms[0]!.fields;
+      assert.equal(fields.find(f => f.controlKind === "checkbox")?.checkedState, "checked");
+      assert.equal(fields.find(f => f.controlKind === "checkbox")?.review?.preselectedMarketing, true);
+      assert.equal(fields.find(f => f.controlKind === "switch")?.checkedState, "unchecked");
+      assert.equal(fields.find(f => f.label === "Passport number")?.review?.category, "government_identifier");
       assert.equal(projected.collectionSurfaces?.snapshots[0]?.status, "available");
       assert.equal("data" in projected.collectionSurfaces!.snapshots[0]!, false);
       assert.ok(!JSON.stringify(projected.collectionSurfaces).includes("private-form-value"));
