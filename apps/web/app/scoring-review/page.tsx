@@ -1,5 +1,4 @@
 import { SCORE_BASE, SCORE_FLOOR, SCORING_RULES, SCORING_FAMILIES, SCORING_POLICY_VERSION, scoringRuleDescription } from "../../lib/scans/scoring-policy";
-import { notFound } from "next/navigation";
 
 export const metadata = {
   title: "Scoring policy review",
@@ -8,12 +7,11 @@ export const metadata = {
 export const dynamic = "force-dynamic";
 
 export default function ScoringReviewPage() {
-  if (process.env.NODE_ENV === "production") notFound();
   return (
     <main className="min-h-screen bg-slate-50 px-5 py-10 text-slate-900 sm:px-8">
       <div className="mx-auto max-w-6xl">
         <header className="mb-7">
-          <p className="mb-3 text-xs font-semibold uppercase tracking-widest text-sky-700">CertScore · Local policy review</p>
+          <p className="mb-3 text-xs font-semibold uppercase tracking-widest text-sky-700">CertScore · Scoring policy</p>
           <h1 className="text-3xl font-semibold tracking-tight">Canonical scoring policy</h1>
           <p className="mt-3 max-w-3xl text-sm leading-6 text-slate-600">This table is generated from the canonical scoring policy used by the scoring engine. Select any row or cell to propose a future change.</p>
           <div className="mt-5 rounded-xl bg-slate-950 px-5 py-4 text-sm text-white">
