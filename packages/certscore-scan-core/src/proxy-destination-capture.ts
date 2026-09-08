@@ -47,7 +47,7 @@ export async function createProxyDestinationCapture(launch:LaunchOptions) {
  try{directory=await mkdtemp(join(tmpdir(),'certscore-dest-'));}catch{return undefined;}
  const log=join(directory,'netlog.json');
  const sockets=new Set<Socket>();const attempts:Attempt[]=[];const bindings:Binding[]=[];
- let overflow=false,terminal=false;
+ let overflow=false,terminal=false,tracked=0;
  const bridge=createServer((q,s)=>{
   // Preserve ordinary HTTP proxy traffic; only CONNECT traffic has tunnel proof.
   const headers={...q.headers};
@@ -86,6 +86,7 @@ export async function createProxyDestinationCapture(launch:LaunchOptions) {
  return {
   launch:{...launch,proxy:{server:`http://127.0.0.1:${address.port}`,bypass:launch.proxy?.bypass},args:[...(launch.args??[]),`--log-net-log=${log}`,'--net-log-max-size-mb=16']} as LaunchOptions,
   track(requestId:string, connectionId:number|undefined, url:string){
+   tracked++;
    if(terminal||!Number.isSafeInteger(connectionId)||!connectionId||connectionId<1)return;
    if(bindings.length>=30000){overflow=true;return;}
    try{const u=new URL(url);if(u.protocol!=='https:')return;bindings.push({requestId,connectionId,authority:`${u.hostname}:${u.port||'443'}`});}catch{}
@@ -93,10 +94,14 @@ export async function createProxyDestinationCapture(launch:LaunchOptions) {
   /** Called once after normal browser close and before result publication, inside the owning deadline. */
   async resolve(deadline:number,parent?:AbortSignal):Promise<Map<string,NetworkDestination>>{
    terminal=true;const result=new Map<string,NetworkDestination>();
-   const remaining=deadline-Date.now();if(overflow||remaining<=0||parent?.aborted)return result;
+   const remaining=deadline-Date.now();
+   const diagnostic:Record<string,string|number|boolean>={event:'proxy_destination_finalized',tracked,bindings:bindings.length,attempts:attempts.length,remainingMs:remaining,overflow,resolved:0};
+   const report=()=>console.info(JSON.stringify(diagnostic));
+   if(overflow||remaining<=0||parent?.aborted){diagnostic.reason='budget_or_abort';report();return result;}
    const signal=parent?AbortSignal.any([parent,AbortSignal.timeout(Math.min(remaining,300))]):AbortSignal.timeout(Math.min(remaining,300));
    try{
     const [extracted,lines]=await Promise.all([extractNetlogSockets(log,{signal}),readRecords(endpoint,key,attempts.map(a=>a.id),signal)]);
+    diagnostic.netlogStatus=extracted.status;diagnostic.netlogReason=extracted.reason??'none';diagnostic.sockets=extracted.sockets.length;diagnostic.records=lines.length;
     if(extracted.status!=='extracted'||signal.aborted)return result;
     const byConnection=new Map<number,Attempt[]>();
     for(const socket of extracted.sockets)byConnection.set(socket.connectionId,attempts.filter(a=>a.clientPort===socket.clientPort&&a.bridgePort===socket.bridgePort));
@@ -110,8 +115,9 @@ export async function createProxyDestinationCapture(launch:LaunchOptions) {
      const destination=await enrichNetworkDestination({ip,source:'proxy_connect',locationLabel:'server location (may be CDN edge)',proxyConnection:{version:'chromium_connection.v1',connectionId:binding.connectionId,tunnelId:attempt.id,authority:attempt.authority,recordHash:createHash('sha256').update(line).digest('hex')}});
      if(destination)result.set(binding.requestId,destination);
     }
-    return signal.aborted?new Map():result;
-   }catch{return new Map();}
+    diagnostic.resolved=signal.aborted?0:result.size;return signal.aborted?new Map():result;
+   }catch(error){diagnostic.reason=signal.aborted?'aborted':error instanceof Error && /^proxy_records_[a-z]+$/.test(error.message)?error.message:'resolution_failed';return new Map();}
+   finally{report();}
   },
   async close(){terminal=true;for(const socket of sockets)socket.destroy();await new Promise<void>(r=>bridge.close(()=>r()));await rm(directory,{recursive:true,force:true});},
  };

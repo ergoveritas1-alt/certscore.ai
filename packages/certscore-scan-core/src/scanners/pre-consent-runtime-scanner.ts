@@ -639,6 +639,7 @@ export async function preConsentRuntimeScanner(
   const launchOptions = chromiumLaunchOptions({ headless: browserMode !== "headed" });
   const proxyDestinations = ownsBrowser && captureRuntimeEvidence && !input.retainRenderedPolicyRecoverySession
     ? await createProxyDestinationCapture(launchOptions) : undefined;
+  if (process.env.CERTSCORE_PROXY_DESTINATION_ENABLED === "1") console.info(JSON.stringify({event:"proxy_destination_setup",enabled:!!proxyDestinations,ownsBrowser,captureRuntimeEvidence,policyRecovery:!!input.retainRenderedPolicyRecoverySession,hasProxy:!!launchOptions.proxy}));
   const browser = input.browser ?? await recordTiming(timingBreakdown, "browser launch", `Playwright Chromium launch (${browserMode}).`, () =>
     chromium.launch(proxyDestinations?.launch ?? launchOptions)
   ).catch(async error => { await proxyDestinations?.close(); throw error; });
@@ -3758,6 +3759,7 @@ export async function preConsentRuntimeScanner(
         }
       }
     }
+    if (proxyDestinations && browser.isConnected()) console.info(JSON.stringify({event:"proxy_destination_skipped",reason:"browser_still_connected"}));
     return {
       collectionSurfaceSnapshots,
       runtimeEvidenceGraph: finalizedProxyGraph ?? finishGraph(),
