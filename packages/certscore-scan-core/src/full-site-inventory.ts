@@ -1,6 +1,6 @@
 import type { FormSnapshotReviewer } from "./collection-surface-snapshots";
 import { createHash } from "node:crypto";
-import { sanitizeRuntimeGraphUrl, type CanonicalEvidenceBundle, type RuntimeEvidenceGraph } from "@certscore/contracts";
+import { sanitizeRuntimeGraphUrl, type CanonicalEvidenceBundle, type RuntimeEvidenceGraph, type ScanModuleRun } from "@certscore/contracts";
 import {
   resolveCanonicalVendor,
   type VendorResolverInput,
@@ -58,7 +58,7 @@ type Evidence = Pick<
   | "scriptEvents"
   | "iframeEvents"
   | "domSnapshots"
-> & { runtimeEvidenceGraph?: RuntimeEvidenceGraph; collectionSurfaceInventory?: CanonicalEvidenceBundle["collectionSurfaceInventory"]; collectionSurfaceSnapshots?: CanonicalEvidenceBundle["collectionSurfaceSnapshots"] };
+> & { moduleRun?: ScanModuleRun; runtimeEvidenceGraph?: RuntimeEvidenceGraph; collectionSurfaceInventory?: CanonicalEvidenceBundle["collectionSurfaceInventory"]; collectionSurfaceSnapshots?: CanonicalEvidenceBundle["collectionSurfaceSnapshots"] };
 
 /** This projection describes observed resources. It never executes concern policy or assessment/scoring. */
 export function projectFullSiteInventory(input: {
@@ -112,9 +112,30 @@ export function projectFullSiteInventory(input: {
           : input.status === "failed"
             ? (input.failureKind ?? "collection_failure")
             : null;
+  // A server error is not proof that browser observation failed. Preserve positive
+  // inventory only after a completed capture of the same rendered HTML document.
+  // This is deliberately partial: no absence claims or full-site scoring eligibility.
+  // Authentication, throttling, challenge/error bodies and incomplete captures keep
+  // their ordinary failure outcome. No recovery visit or additional wait is added.
+  const retainedHttpError =
+    input.profile === "inventory_only" && input.status === "completed" &&
+    !input.failureKind && input.limitations.length === 0 && !noGo &&
+    httpStatus !== null && httpStatus >= 500 && httpStatus <= 599 &&
+    evidence.moduleRun?.status === "completed" && evidence.moduleRun.errors.length === 0 &&
+    input.finalUrl !== null && response?.responseUrl === input.finalUrl &&
+    /^(text\/html|application\/xhtml\+xml)(?:;|$)/i.test(response.contentType ?? "") &&
+    evidence.domSnapshots.some(snapshot =>
+      baseline(snapshot) && snapshot.url === input.finalUrl &&
+      Boolean(snapshot.documentIdentity?.token && snapshot.textExcerpt?.trim()) &&
+      snapshot.pagePhase === "network_idle" &&
+      snapshot.capturedAtMs >= response.timestampMs &&
+      snapshot.capturedAtMs <= Date.parse(input.completedAt) - Date.parse(input.startedAt),
+    );
   const status =
     failureKind === "rate_limit" || failureKind === "challenge"
       ? "blocked"
+      : retainedHttpError
+        ? "partial"
       : failureKind
         ? "failed"
         : input.status;
@@ -349,6 +370,7 @@ export function projectFullSiteInventory(input: {
     completedAt: input.completedAt,
     status: overflow && status === "completed" ? "partial" : status,
     limitations: [
+      ...(retainedHttpError ? ["http_error_rendered_inventory.v1"] : []),
       ...input.limitations,
       ...(overflow ? ["inventory_projection_limit"] : []),
       ...(failureKind ? [failureKind] : []),

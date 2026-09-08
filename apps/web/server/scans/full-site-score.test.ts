@@ -1,7 +1,7 @@
 import { buildSitePriorityReview } from "../../lib/scans/full-site-priority-review";
 import assert from "node:assert/strict";
 import test from "node:test";
-import { mergeSiteChecklistRows, projectFullSiteScoringEvidence } from "./full-site-score";
+import { isFullSiteScoringCaptureComplete, mergeSiteChecklistRows, projectFullSiteScoringEvidence } from "./full-site-score";
 import { deriveGdprEprivacyCoverageChecklist } from "../../lib/scans/gdpr-eprivacy-coverage-checklist";
 import { deriveCanonicalOverallScoreForReport } from "./canonical-overall-score";
 
@@ -15,6 +15,16 @@ function storage(names: string[]) {
   });
 }
 const score = (rows: ReturnType<typeof baseline>) => deriveCanonicalOverallScoreForReport({ checklistRows: rows, unifiedFindings: [] });
+
+test("partial HTTP error inventory is excluded before retained evidence enters scoring", () => {
+  const observation = { status: "completed" as const, httpStatus: 200, failureKind: null };
+  assert.equal(isFullSiteScoringCaptureComplete({ status: "completed", observation }), true);
+  assert.equal(isFullSiteScoringCaptureComplete({ status: "completed" }), false);
+  assert.equal(isFullSiteScoringCaptureComplete({ status: "partial", observation: { ...observation, status: "partial", httpStatus: 500, failureKind: "http_error" } }), false);
+  // Even inconsistent persisted status cannot turn an HTTP error into scoring evidence.
+  assert.equal(isFullSiteScoringCaptureComplete({ status: "completed", observation: { ...observation, httpStatus: 500 } }), false);
+  assert.equal(isFullSiteScoringCaptureComplete({ status: "completed", observation: { ...observation, failureKind: "collection_failure" } }), false);
+});
 
 test("typed retained cookie evidence passes through concern policy; other scenarios stay neutral", () => {
   const event = { eventId: "cookie-1", eventType: "cookie", timestampMs: 1000, sourceScanner: "preConsentRuntimeScanner", scenario: "fresh_pre_consent", consentStateAtTime: "pre_consent", pagePhase: "network_idle", confidence: 1, directVsInferred: "direct", operation: "set_cookie_header", cookieName: "_ga", cookieDomain: "example.test", cookiePath: "/", cookiePurpose: "analytics", cookieEssentiality: "non_essential" };

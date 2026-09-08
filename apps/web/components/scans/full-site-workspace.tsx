@@ -6,6 +6,8 @@ import { FullSiteServices } from "./full-site-services-table";
 import { ServiceResourceRows } from "./service-resource-rows";
 import { FullSiteResourceContext } from "./full-site-resource-context";
 import { CollectionSurfacesTable } from "./collection-surfaces-table";
+import { describeFullSitePageFailure } from "../../lib/scans/full-site-page-failure";
+import { fullSiteFinalizationDelayed } from "../../lib/scans/full-site-finalization";
 import { scanFailureExplanation } from "../../lib/scans/scan-failure-explanation";
 import { createContext, useContext, useEffect, useRef, useState, type ReactNode } from "react";
 import {
@@ -126,6 +128,10 @@ export function FullSiteWorkspace({
     [resource, setResource] = useState(""),
     [detailOffset, setDetailOffset] = useState(0);
   const [isFetching, setIsFetching] = useState(false);
+  const [stopping, setStopping] = useState(false);
+  const [stopError, setStopError] = useState<string | null>(null);
+  const [refreshVersion, setRefreshVersion] = useState(0);
+  const stopInFlight = useRef(false);
   const terminal = useRef(false);
   const detailRef = useRef<HTMLDivElement>(null);
   useEffect(() => {
@@ -215,7 +221,26 @@ export function FullSiteWorkspace({
       window.removeEventListener("pageshow", resume);
       if (timer) clearTimeout(timer);
     };
-  }, [scanId, filters, offset, detailPage, resource, detailOffset]);
+  }, [scanId, filters, offset, detailPage, resource, detailOffset, refreshVersion]);
+  async function stopCrawl() {
+    if (stopInFlight.current) return;
+    stopInFlight.current = true;
+    setStopping(true);
+    setStopError(null);
+    try {
+      const response = await fetch(`/api/scans/${scanId}/full-site/stop`, {
+        method: "POST", headers: { "x-certscore-full-site-action": "stop" }, signal: AbortSignal.timeout(15000),
+      });
+      if (!response.ok) throw new Error("Could not stop this crawl. Please try again.");
+      // Reload persisted state; do not convert locally cached evidence or counts.
+      setRefreshVersion(version => version + 1);
+    } catch (error) {
+      setStopError(error instanceof Error && error.name === "TimeoutError"
+        ? "Stop could not be confirmed. Refresh the report or try again."
+        : error instanceof Error ? error.message : "Could not stop this crawl. Please try again.");
+    }
+    finally { stopInFlight.current = false; setStopping(false); }
+  }
   function filter(patch: Partial<Filters>, reset = false) {
     setFilters((previous) => ({
       ...(reset ? initialFilters : previous),
@@ -268,6 +293,12 @@ export function FullSiteWorkspace({
   // Discovery can grow the denominator. Never imply completion while the crawl is active.
   const pageProgress = selectedPages > 0 ? Math.min(99, finishedPages / selectedPages * 100) : 0;
   const completed = state?.status === "completed" && !running;
+  const finalizing = valuesUpdating && Boolean(data?.finalizationStartedAt);
+  const finalizationDelayed = finalizing && fullSiteFinalizationDelayed(data?.finalizationStartedAt, now);
+  const stoppingWorkers = state?.status === "cancelled" && running;
+  const progressLabel = stoppingWorkers ? "Stopping" : finalizationDelayed ? "Finalization delayed" : finalizing ? "Finalizing results" : "In progress";
+  const failedPages = data?.pageChoices.filter(page => ["partial", "failed", "blocked"].includes(page.status)) ?? [];
+  const outcomeText = counts ? `${counts.completed} succeeded · ${counts.partial} partial · ${counts.blockedFailed} failed or blocked` : "";
   const timingEnd = state?.completedAt ? Date.parse(state.completedAt) : now;
   const shortPage = (url: string) => url.length > 30 ? `${url.slice(0, 29)}…` : url;
   const evidenceSymbol = (label: string) => ({ "Non-essential": "△", Essential: "◇", Review: "♢", Contextual: "ⓘ" }[label] ?? "ⓘ");
@@ -361,13 +392,33 @@ export function FullSiteWorkspace({
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div className="flex items-center gap-2">
             <h1 className="text-xl font-semibold tracking-tight">Site scan results</h1>
-            <span className="rounded-full bg-sky-50 px-2 py-0.5 text-xs font-medium text-sky-800">{!state ? "Loading report…" : running ? "In progress" : state?.status === "stopped" ? "Unsuccessful" : state?.status === "completed" && (counts?.blockedFailed || counts?.partial) ? "Completed with limitations" : state?.status === "completed" ? "Completed" : state?.status.replaceAll("_", " ") ?? "Loading"}</span>
+            <span className="rounded-full bg-sky-50 px-2 py-0.5 text-xs font-medium text-sky-800">{!state ? "Loading report…" : running ? progressLabel : state?.status === "cancelled" ? "Cancelled" : state?.status === "stopped" ? "Unsuccessful" : state?.status === "completed" && (counts?.blockedFailed || counts?.partial) ? "Completed with limitations" : state?.status === "completed" ? "Completed" : state?.status.replaceAll("_", " ") ?? "Loading"}</span>
           </div>
           <div className="flex w-full flex-wrap items-start justify-end gap-2 lg:w-auto lg:flex-1">
+            {valuesUpdating ? <button type="button" className={button} onClick={() => void stopCrawl()} disabled={stopping}
+              title="Stops additional page visits and keeps captured evidence. An initial page audit or active page visit may finish.">
+              {stopping ? "Stopping…" : "Stop site crawl"}
+            </button> : null}
             {completed ? scanNext : null}
 
           </div>
         </div>
+        {state?.status === "cancelled" ? <p role="status" className="mt-3 text-sm text-slate-600">
+          Site crawl cancelled. Captured evidence is preserved.{running ? " Active page visits are finishing; no additional visits will start." : ""}
+        </p> : null}
+        {state && counts && !running ? <p className="mt-2 text-xs text-slate-600">{outcomeText}</p> : null}
+        {failedPages.length ? <details className="mt-3 rounded-lg border border-amber-200 bg-amber-50/50 px-3 py-2 text-sm">
+          <summary className="cursor-pointer font-medium text-amber-950">{failedPages.length} pages with capture limitations — view reasons</summary>
+          <p className="mt-2 text-xs text-slate-600">These are page capture outcomes. A page can return an HTTP error even when some content renders.</p>
+          <ul className="mt-2 max-h-60 space-y-2 overflow-auto" aria-label="Page capture limitations">
+            {failedPages.slice(0, 50).map(page => <li key={page.id} className="flex flex-wrap justify-between gap-1 border-t border-amber-100 pt-2">
+              <span className="min-w-0 break-all text-xs text-slate-700">{page.url}</span>
+              <strong className="text-xs font-medium text-amber-950">{describeFullSitePageFailure(page)}</strong>
+            </li>)}
+          </ul>
+          {failedPages.length > 50 ? <p className="mt-2 text-xs text-slate-600">Showing the first 50 of {failedPages.length} affected pages.</p> : null}
+        </details> : null}
+        {stopError ? <p role="alert" className="mt-3 text-sm text-rose-700">{stopError}</p> : null}
         {state?.status === "stopped" ? <div role="status" className="mt-3 flex flex-wrap items-center justify-between gap-3 rounded-lg border border-amber-200/70 bg-amber-50/50 px-4 py-3">
           <div className="min-w-0 text-sm">
             <p className="font-semibold text-zinc-900">Full-site scan couldn’t finish</p>
@@ -400,18 +451,24 @@ export function FullSiteWorkspace({
                 <svg aria-hidden="true" viewBox="0 0 24 24" className="h-4 w-4 shrink-0 motion-safe:animate-[scan-hourglass-flip_3.2s_ease-in-out_infinite]" fill="none">
                   <path d="M5 3h14M5 21h14M7 3v4c0 2 3 4 5 5-2 1-5 3-5 5v4M17 3v4c0 2-3 4-5 5 2 1 5 3 5 5v4" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
                   <path d="M9 6h6v1l-3 3-3-3V6Zm3 8 3 3v2H9v-2l3-3Z" fill="currentColor" />
-                </svg> In progress
+                </svg> {progressLabel}
               </span>
               <span className="tabular-nums text-slate-600">{elapsedSeconds}s elapsed</span>
             </div>
-            <div role="progressbar" aria-label="Full site scan page progress" aria-valuemin={0} aria-valuemax={100} aria-valuenow={pageProgress} aria-valuetext={selectedPages ? `${finishedPages} of ${selectedPages} pages finished; discovery may add pages` : "Discovering pages"} className="h-2 overflow-hidden rounded-full bg-sky-100">
+            <div role="progressbar" aria-label="Full site scan page progress" aria-valuemin={0} aria-valuemax={100} aria-valuenow={pageProgress} aria-valuetext={selectedPages ? `${finishedPages} of ${selectedPages} pages processed; ${outcomeText}` : "Discovering pages"} className="h-2 overflow-hidden rounded-full bg-sky-100">
               <div className="h-full rounded-full bg-sky-600 transition-[width] duration-700 motion-reduce:transition-none" style={{ width: `${pageProgress}%` }} />
             </div>
             <div className="mt-2 flex flex-wrap justify-between gap-2 text-xs text-sky-900" aria-live="polite">
-              <span className="font-medium tabular-nums">{selectedPages ? `${finishedPages} / ${selectedPages} pages finished` : "Discovering pages"}</span>
+              <span className="font-medium tabular-nums">{selectedPages ? `${finishedPages} / ${selectedPages} pages processed` : "Discovering pages"}</span>
               <span>{counts?.active ?? 0} active · {queuedPages} queued · up to {requested.maxPages} pages</span>
             </div>
-            <p className="mt-1 text-xs text-slate-500">Results update as pages finish. Discovery may add more pages.</p>
+            <p className="mt-1 text-xs text-slate-600">{outcomeText}</p>
+            <p role={finalizationDelayed ? "status" : undefined} className="mt-1 text-xs text-slate-500">
+              {stoppingWorkers ? "Waiting for active page visits to finish within their existing time limits."
+                : finalizationDelayed ? "Page visits have finished, but finalization is taking longer than expected. You can stop this crawl and keep the captured evidence."
+                : finalizing ? "Page visits have finished. Finalizing the retained results."
+                : "Results update as pages finish. Discovery may add more pages."}
+            </p>
           </div>
         ) : null}
         {error ? (
@@ -429,7 +486,7 @@ export function FullSiteWorkspace({
           </div>
           <p className="text-xs leading-4 tabular-nums text-slate-600"><ScanLiveValue value={scannedPages === null ? "Loading page count…" : `${scannedPages} ${scannedPages === 1 ? "page" : "pages"} scanned`} active={valuesUpdating} /></p>
           <div className="mt-1 text-[11px] leading-4 text-slate-500" title={data?.score?.scope}>
-            {data?.score ? data.score.limitedPages ? "Limited coverage" : "Site-wide assessment" : "Awaiting scored evidence"}
+            {data?.score ? data.score.limitedPages ? "Limited coverage" : "Site-wide assessment" : valuesUpdating ? "Awaiting scored evidence" : "Full site score unavailable"}
           </div>
         </div>
         <div className="flex min-w-0 flex-col bg-white px-3 py-3">
@@ -572,7 +629,7 @@ export function FullSiteWorkspace({
                               {page.limitations.map(value => value.replaceAll("_", " ")).join(", ")}
                             </p>
                           </td>
-                          <td className="p-3">{page.status}</td>
+                          <td className="p-3">{page.status}{page.httpStatus !== null ? ` · HTTP ${page.httpStatus}` : ""}</td>
                           <td className="p-3">
                             {["completed", "partial"].includes(page.status)
                               ? `${page.services} / ${page.cookies}`

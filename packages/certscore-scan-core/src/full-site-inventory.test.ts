@@ -29,10 +29,13 @@ test(
         res.end(
           `<main>Public inventory fixture A</main><form aria-label="Contact"><label>Email<input type="email" value="private-form-value"></label><label><input type="checkbox" checked>Send me newsletters</label><button type="button" role="switch" aria-checked="false" aria-label="Marketing updates">Updates</button><label>Passport number<input></label></form><button onclick="fetch('/clicked')">Accept all</button><a href="/privacy">Privacy policy</a><a href="/b">Contact</a><script src="/script.js"></script><iframe src="/frame"></iframe><img src="/image.png"><script>document.cookie='page_a=private-cookie;path=/';document.cookie='__utma=private-analytics;path=/';document.cookie='FCCDCF=private-consent;path=/';document.cookie='_rdt_uuid=private-unverified;path=/';document.cookie='_ga=private-existing;path=/';localStorage.setItem('page_a','private-value');fetch('/collect?token=private-query');fetch('/collect?token=private-query');</script>`,
         );
-      else if (req.url === "/b")
+      else if (req.url === "/b") {
+        // Regression: a real HTTP 500 can still render the requested document.
+        res.statusCode = 500;
         res.end(
           `<main>Public inventory fixture B</main><script>fetch('/leak?cookie='+document.cookie+'&storage='+localStorage.getItem('page_a'));document.cookie='page_b=private-b;path=/';</script>`,
         );
+      }
       else if (req.url === "/frame")
         res.end(
           `<main>Embedded public content</main><script>sessionStorage.setItem('frame-key','private-frame');fetch('/frame-request')</script>`,
@@ -102,6 +105,45 @@ test(
         status: "completed",
         limitations: [],
       });
+      const errorInput = {
+        ...b, parentScanId: randomUUID(), pageJobId: randomUUID(), attemptId: randomUUID(),
+        configurationHash, requestedUrl: origin + "/b", profile: "inventory_only" as const,
+        sourceHash: inventoryHash(b.evidence), status: "completed" as const, limitations: [] as string[],
+      };
+      const partial = projectFullSiteInventory(errorInput);
+      assert.equal(partial.httpStatus, 500);
+      assert.equal(partial.failureKind, "http_error");
+      assert.equal(partial.status, "partial");
+      assert.ok(partial.limitations.includes("http_error_rendered_inventory.v1"));
+      assert.ok(partial.occurrences.some(row => row.kind === "cookie" && row.label === "page_b"));
+      assert.equal(partial.sourceHash, inventoryHash(b.evidence));
+      const mainIds = new Set(b.evidence.networkEvents.filter(e => e.isMainFrame && e.resourceType === "document").map(e => e.requestId));
+      for (const httpStatus of [401, 403, 404, 429]) {
+        const result = projectFullSiteInventory({ ...errorInput, evidence: { ...b.evidence,
+          networkResponseEvents: b.evidence.networkResponseEvents.map(e => mainIds.has(e.requestId!) ? { ...e, status: httpStatus } : e),
+        } });
+        assert.equal(result.status, httpStatus === 429 ? "blocked" : "failed");
+        assert.deepEqual(result.occurrences, []);
+      }
+      const unsafeCaptures = [
+        { ...errorInput, status: "partial" as const },
+        { ...errorInput, profile: "homepage_baseline" as const },
+        { ...errorInput, limitations: ["observation_deadline"] },
+        { ...errorInput, evidence: { ...b.evidence, moduleRun: { ...b.evidence.moduleRun, errors: ["capture failed"] } } },
+        { ...errorInput, evidence: { ...b.evidence, moduleRun: undefined } },
+        { ...errorInput, evidence: { ...b.evidence, domSnapshots: [] } },
+        { ...errorInput, evidence: { ...b.evidence, domSnapshots: b.evidence.domSnapshots.map(d => ({ ...d, url: origin + "/other" })) } },
+        { ...errorInput, evidence: { ...b.evidence, domSnapshots: b.evidence.domSnapshots.map(d => ({ ...d, documentIdentity: undefined })) } },
+        { ...errorInput, evidence: { ...b.evidence, domSnapshots: b.evidence.domSnapshots.map(d => ({ ...d, capturedAtMs: 0 })) } },
+        { ...errorInput, evidence: { ...b.evidence, domSnapshots: b.evidence.domSnapshots.map(d => ({ ...d, textExcerpt: "500 Internal Server Error" })) } },
+        { ...errorInput, evidence: { ...b.evidence, domSnapshots: b.evidence.domSnapshots.map(d => ({ ...d, textExcerpt: "" })) } },
+      ];
+      for (const candidate of unsafeCaptures) {
+        const result = projectFullSiteInventory(candidate);
+        assert.equal(result.status, "failed");
+        assert.deepEqual(result.occurrences, []);
+        assert.equal(result.collectionSurfaces, undefined);
+      }
       // Fresh capture -> typed cookie event -> inventory projection: existing and
       // newly reviewed knowledge reaches the report without a display fallback.
       for (const [name, purpose] of [["_ga", "analytics"], ["__utma", "analytics"], ["FCCDCF", "consent_management"], ["_rdt_uuid", "unknown"], ["page_a", "unknown"]]) {

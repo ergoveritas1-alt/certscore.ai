@@ -4,7 +4,7 @@ import { z } from "zod";
 import { cookieEventSchema, networkEventSchema, iframeEventSchema, runtimeEvidenceEventSchema, scanModuleRunSchema, collectionSurfaceObservationSchema } from "@certscore/contracts";
 import { resolveCanonicalVendor } from "@certscore/vendor-resolver";
 import { query, readFullSiteArtifact, type FullSiteCrawlRow } from "@website-signal-risk-scanner/db";
-import type { CrawlPage } from "@website-signal-risk-scanner/shared";
+import type { CrawlPage, CrawlObservation } from "@website-signal-risk-scanner/shared";
 import { buildNormalizedConcerns } from "../../lib/scans/normalized-concerns";
 import { buildUnifiedFindingDisplayPackets, type UnifiedFindingCandidate } from "../../lib/scans/unified-findings";
 import { isPromotionGradePreconsentRequestRow } from "../../lib/scans/preconsent-public-evidence";
@@ -94,6 +94,16 @@ export function mergeSiteChecklistRows(home: GdprEprivacyCoverageChecklistItem[]
   });
 }
 
+/** Inventory preserved from an error response must never enter concern/scoring projection. */
+export function isFullSiteScoringCaptureComplete(page: {
+  status: string;
+  observation?: Pick<CrawlObservation, "status" | "httpStatus" | "failureKind"> | null;
+}) {
+  const observation = page.observation;
+  return page.status === "completed" && observation?.status === "completed" &&
+    !observation.failureKind && (observation.httpStatus === null || observation.httpStatus < 400);
+}
+
 export async function loadFullSiteScore(crawl: FullSiteCrawlRow, pages: CrawlPage[]): Promise<FullSiteScore | null> {
   if (!crawl.completed_at || crawl.status !== "completed") return null;
   const { rows: [snapshot] } = await query<Record<string, unknown>>(
@@ -116,7 +126,7 @@ export async function loadFullSiteScore(crawl: FullSiteCrawlRow, pages: CrawlPag
     let scoredPages = 1, limitedPages = 0;
     for (const page of pages.filter(p => !["excluded", "cancelled"].includes(p.status) && p.observation?.executionProfile !== "homepage_baseline")) {
       const observation = page.observation;
-      if (!observation || page.status !== "completed" || observation.status !== "completed" || observation.parentScanId !== crawl.scan_id || observation.pageJobId !== page.id || observation.configurationHash !== crawl.configuration_hash || !observation.runtimeGraph) { limitedPages++; continue; }
+      if (!observation || !isFullSiteScoringCaptureComplete(page) || observation.parentScanId !== crawl.scan_id || observation.pageJobId !== page.id || observation.configurationHash !== crawl.configuration_hash || !observation.runtimeGraph) { limitedPages++; continue; }
       try {
         const { rows: [attempt] } = await query<{ artifact_json: { bucket: string; evidenceKey: string; sourceHash: string } }>("select artifact_json from full_site_attempts where id=$1 and page_id=$2 and status='completed'", [observation.attemptId, page.id]);
         const artifact = attempt?.artifact_json;
