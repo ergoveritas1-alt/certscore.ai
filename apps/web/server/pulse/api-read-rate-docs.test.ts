@@ -122,6 +122,7 @@ test("the compact public notice remains derived from the canonical policy", () =
 test("only approved pages render the full policy or compact notice", async () => {
   const approvedFullPolicyPages = [
     "apps/web/app/api-pulse/page.tsx",
+    "apps/web/app/app/admin/mcp/page.tsx",
     "apps/web/app/developers/mcp/page.tsx",
     "apps/web/app/developers/reference/page.tsx"
   ];
@@ -133,7 +134,7 @@ test("only approved pages render the full policy or compact notice", async () =>
   const noticeReferences: string[] = [];
   for (const path of await pageFiles("apps/web/app")) {
     const source = await readFile(path, "utf8");
-    if (/ApiReadRatePolicyDetails|API_READ_RATE_POLICY|apiReadRateWindow/.test(source)) fullPolicyReferences.push(path);
+    if (/ApiReadRatePolicyDetails|API_READ_RATE_POLICY|apiReadRateWindow|McpThrottleReminder/.test(source)) fullPolicyReferences.push(path);
     if (/ApiReadRatePolicyNotice/.test(source)) noticeReferences.push(path);
   }
   assert.deepEqual(fullPolicyReferences.sort(), approvedFullPolicyPages);

@@ -35,6 +35,74 @@ test("verified first-party policy evidence produces a partial outcome when homep
   assert.equal(assessment.lanes.cookiesTrackers, "not_testable");
 });
 
+test("ChatGPT main-document 401 stays no-go despite a designed sign-in screen and provider policy", async () => {
+  const directory = await mkdtemp(path.join(tmpdir(), "certscore-no-go-sign-in-"));
+  try {
+    // Retained text from production scan 2a986426-14cb-4925-b6d9-3aaad0e0fcfc.
+    const evidence = scanEvidence({
+      finalMainDocumentStatus: 401,
+      firstPartySuccesses: 5,
+      screenshots: [await retainedScreenshot(directory, { substantive: true })],
+      text: "You’re almost in\n\nThis site uses ChatGPT to securely sign you in\n\nContinue with ChatGPT\nYou can review OpenAI's Privacy Policy",
+    });
+    const noGo = buildScanNoGoAssessment(evidence);
+    assert.equal(noGo?.scanNoGoAssessment.decision, "no_go");
+    assert.equal(noGo?.primaryReasonCode, "authentication_required");
+
+    const providerPolicy = usablePolicySurface();
+    providerPolicy.url = "https://openai.com/en-GB/policies/privacy-policy/";
+    providerPolicy.normalizedUrl = providerPolicy.url;
+    providerPolicy.targetRelationship = "first_party_brand";
+    providerPolicy.ownershipConfidence = 0.78;
+    for (const assessment of [
+      noGo!.scanNoGoAssessment,
+      { ...noGo!.scanNoGoAssessment, reasonCodes: ["access_denied_or_forbidden_page"] },
+    ]) {
+      const lanes = buildScanEvidenceLaneAssessment({
+        normalizedUrl: "https://forenaxis-command.michaelmancini1968.chatgpt.site/",
+        policySurfaceObservations: [providerPolicy],
+        runtimeCoverage: unavailableRuntimeCoverage(),
+        scanNoGoAssessment: assessment,
+        transportSecurityObservationCount: 1,
+      });
+      assert.equal(lanes.outcome, "no_go");
+      assert.ok(lanes.limitationKeys.includes("authentication_required"));
+    }
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
+test("a public page with a sign-in link, a subresource 401, or a recovered document remains usable", () => {
+  const text = "Welcome to our public product homepage. Explore our services, read our public documentation, compare the available products, and learn about the team. Sign in to manage your account.";
+  const subresourceFailure = scanEvidence({ screenshots: [], text });
+  subresourceFailure.networkEvents.push({ requestId: "account-api", resourceType: "fetch", isMainFrame: true } as NetworkEvent);
+  subresourceFailure.networkResponseEvents.push({ requestId: "account-api", status: 401 } as NetworkResponseEvent);
+  for (const evidence of [
+    scanEvidence({ screenshots: [], text }),
+    subresourceFailure,
+    scanEvidence({ screenshots: [], text, priorMainDocumentStatus: 401, finalMainDocumentStatus: 200 }),
+  ]) {
+    assert.notEqual(buildScanNoGoAssessment(evidence)?.scanNoGoAssessment.decision, "no_go");
+  }
+});
+
+test("independently recovered target content preserves the existing partial-result path", () => {
+  const lanes = buildScanEvidenceLaneAssessment({
+    normalizedUrl: "https://example.test/",
+    policySurfaceObservations: [usablePolicySurface()],
+    runtimeCoverage: unavailableRuntimeCoverage(),
+    scanNoGoAssessment: {
+      ...terminalNoGoAssessment(),
+      decision: "continue_with_diagnostics",
+      reasonCodes: ["authentication_required"],
+      supportingSignals: { mainDocumentStatus: 401 },
+    },
+    transportSecurityObservationCount: 1,
+  });
+  assert.equal(lanes.outcome, "partial_with_diagnostics");
+});
+
 test("verified cross-site first-party brand policy keeps the policy lane usable", () => {
   const policy = usablePolicySurface();
   policy.url = "https://privacy.example-parent.test/policycenter/consumer/en-us/";

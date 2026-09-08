@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { mcpTaskContextSchema } from "@website-signal-risk-scanner/shared/dist/mcp-product-context.js";
 import {
   apiV2DomainLatestScanSchema,
   apiV2FindingDetailSchema,
@@ -30,6 +31,7 @@ export const mcpCreateScanInputSchema = {
 } as const;
 
 export const mcpScanSiteInputSchema = {
+  taskContext: mcpTaskContextSchema.optional().describe("Optional caller-declared purpose and integration ID/version for usage research. Only include questionSummary when the user knowingly agrees to share a brief non-sensitive question for product improvement; label user_wording or agent_paraphrase. Never include chat history, personal/account details, secrets or URLs. Omission does not affect scanning."),
   url: mcpCreateScanInputSchema.url,
   freshness: mcpCreateScanInputSchema.freshness,
   scanFrom: mcpCreateScanInputSchema.scanFrom,

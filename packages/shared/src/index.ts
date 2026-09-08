@@ -39,6 +39,7 @@ export * from "./load-test-control";
 export * from "./load-test-egress-budget";
 export * from "./load-test-quality-warnings";
 export * from "./mcp-telemetry";
+export * from "./mcp-product-context";
 export * from "./snapshots/project-snapshot-signals";
 export * from "./scoring/agency-mapping";
 export * from "./scoring/regulatory-risk";

@@ -244,6 +244,9 @@ importers:
 
   packages/certscore-api-contracts:
     dependencies:
+      '@website-signal-risk-scanner/shared':
+        specifier: workspace:*
+        version: link:../shared
       zod:
         specifier: ^3.25.76
         version: 3.25.76
@@ -269,6 +272,9 @@ importers:
       '@certscore/sdk':
         specifier: workspace:*
         version: link:../certscore-sdk
+      '@website-signal-risk-scanner/shared':
+        specifier: workspace:*
+        version: link:../shared
 
   packages/certscore-mcp-auth:
     dependencies:

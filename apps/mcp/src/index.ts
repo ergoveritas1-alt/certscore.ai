@@ -613,6 +613,12 @@ async function handleMcp(req: IncomingMessage, res: ServerResponse, anonymous: b
         }
       }, { ...corsHeaders(req), "Retry-After": String(decision.retryAfterSeconds) });
       session.telemetry?.observeTransportRateLimit({
+        rateLimit: {
+          kind: "mcp_read", scope: decision.scope, windowId: decision.windowId,
+          profile: readCall.profile, policyVersion: decision.policyVersion,
+          limit: decision.limitUnits, used: decision.usedUnits, requested: decision.requestedUnits,
+          windowSeconds: decision.windowSeconds, retryAfterSeconds: decision.retryAfterSeconds,
+        },
         body: parsedBody,
         durationMs: Date.now() - requestStartedAt,
         requesterIp: clientIp,

@@ -6,6 +6,7 @@ export const SCAN_NO_GO_REASON_CODES = [
   "site_not_ready",
   "captcha_or_challenge",
   "access_denied_or_forbidden_page",
+  "authentication_required",
   "rate_limited_429",
   "server_error_5xx",
   "configuration_error",
@@ -53,6 +54,22 @@ export type ScanNoGoReasonPresentation = {
 };
 
 export const SCAN_NO_GO_REASON_PRESENTATIONS: Record<ScanNoGoReasonCode, ScanNoGoReasonPresentation> = {
+  authentication_required: {
+    code: "authentication_required",
+    customerTitle: "Sign-in required",
+    explanation: "The requested page requires authentication. CertScore could not access the protected content as a public visitor.",
+    reportSummary: "The requested content could not be assessed, so no target score was generated.",
+    recommendedNextAction: "Use a publicly accessible URL, or make the requested page public and try again.",
+    pageState: "access_blocked",
+    retryLikelyToHelp: false,
+    limitationKind: "scanner_access_limitation",
+    snapshotStopReasonCode: "homepage_authentication_required",
+    snapshotStopReasonLabel: "Sign-in required",
+    snapshotStopReasonDetail: "Authentication prevented access to the requested content. No target score was generated.",
+    snapshotBlockPageClassification: "authentication_required",
+    snapshotHomepageFetchStatus: "blocked",
+    snapshotScanOutcome: "homepage_authentication_required",
+  },
   blank_or_unusable_page: {
     code: "blank_or_unusable_page",
     customerTitle: "The page appeared blank or unusable",

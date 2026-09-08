@@ -366,6 +366,7 @@ test("README documents current MCP tool surface and public docs", () => {
   assert.deepEqual(packageJson.files, ["dist", "README.md", "LICENSE", "server.json", "server-light.json"]);
   assert.equal(packageJson.dependencies?.["@certscore/api-contracts"], undefined);
   assert.equal(packageJson.dependencies?.["@certscore/sdk"], undefined);
+  assert.equal(packageJson.dependencies?.["@website-signal-risk-scanner/shared"], undefined);
   assert.equal(packageJson.devDependencies?.["@certscore/api-contracts"], "workspace:*");
   assert.equal(packageJson.devDependencies?.["@certscore/sdk"], "workspace:*");
 
@@ -727,7 +728,7 @@ test("certscore_scan_site returns a newly accepted scan immediately by default",
     await withMcpClient(async (client) => {
       const raw = await client.callTool({
           name: "certscore_scan_site",
-          arguments: { url: "https://example.com", freshness: "refresh", scanFrom: "eu_ie" }
+          arguments: { url: "https://example.com", freshness: "refresh", scanFrom: "eu_ie", taskContext: { purpose: "tracking_check", integrationId: "qc", integrationVersion: "1", skillVersion: "1" } }
         });
       const result = parseToolJson(raw);
       assert.equal(result.type, "certscore_scan_job");
@@ -742,6 +743,7 @@ test("certscore_scan_site returns a newly accepted scan immediately by default",
       assert.match(String(result.recommendedNextAction), /Do not poll in parallel or resubmit certscore_scan_site/);
       assert.match(mock.calls[0] ?? "", /\/api\/v2\/scans$/);
       assert.equal(mock.calls.length, 1);
+      assert.equal(JSON.parse(mock.requestBodies[0]!).taskContext, undefined);
     });
   } finally {
     mock.restore();

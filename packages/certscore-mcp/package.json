@@ -69,6 +69,7 @@
   },
   "devDependencies": {
     "@certscore/api-contracts": "workspace:*",
-    "@certscore/sdk": "workspace:*"
+    "@certscore/sdk": "workspace:*",
+    "@website-signal-risk-scanner/shared": "workspace:*"
   }
 }

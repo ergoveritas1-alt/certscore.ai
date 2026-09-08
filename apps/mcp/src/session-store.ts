@@ -2,6 +2,7 @@ import { createHash } from "node:crypto";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import type { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
 import type { HostedMcpObservationContext } from "./telemetry.js";
+import type { McpRequestDetails } from "@website-signal-risk-scanner/shared";
 
 export type McpHttpSession = {
   expiresAt: number;
@@ -13,6 +14,7 @@ export type McpHttpSession = {
     observationContext(): HostedMcpObservationContext;
     observeActivation(stage: "mcp_initialized" | "mcp_tools_listed" | "mcp_first_tool_invoked" | "mcp_scan_requested"): void;
     observeTransportRateLimit(input: {
+      rateLimit?: McpRequestDetails["rateLimit"];
       body: unknown;
       durationMs: number;
       requesterIp?: string | null;
