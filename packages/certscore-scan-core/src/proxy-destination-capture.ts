@@ -105,13 +105,14 @@ export async function createProxyDestinationCapture(launch:LaunchOptions) {
     if(extracted.status!=='extracted'||signal.aborted)return result;
     const byConnection=new Map<number,Attempt[]>();
     for(const socket of extracted.sockets)byConnection.set(socket.connectionId,attempts.filter(a=>a.clientPort===socket.clientPort&&a.bridgePort===socket.bridgePort));
+    const count=(name:string)=>{diagnostic[name]=Number(diagnostic[name]??0)+1;};
     for(const binding of bindings){
      if(signal.aborted)return new Map();
-     const candidates=byConnection.get(binding.connectionId);if(candidates?.length!==1)continue;
-     const attempt=candidates[0]!;if(!attempt.connected||attempt.authority!==binding.authority)continue;
-     const records=lines.filter(line=>line.split(/\s+/)[1]===attempt.id);if(records.length!==1)continue;
+     const candidates=byConnection.get(binding.connectionId);if(candidates?.length!==1){count('connectionMiss');continue;}
+     const attempt=candidates[0]!;if(!attempt.connected||attempt.authority!==binding.authority){count('authorityMiss');continue;}
+     const records=lines.filter(line=>line.split(/\s+/)[1]===attempt.id);if(records.length!==1){count('recordMiss');continue;}
      const line=records[0]!,fields=line.split(/\s+/),ip=normalizePublicIpAddress(fields[5]);
-     if(fields.length!==7||fields[2]!=='CONNECT'||fields[3]!==attempt.authority||fields[4]!=='200'||fields[6]!=='TCP_TUNNEL'||!ip)continue;
+     if(fields.length!==7||fields[2]!=='CONNECT'||fields[3]!==attempt.authority||fields[4]!=='200'||fields[6]!=='TCP_TUNNEL'||!ip){count('recordInvalid');if(!ip)count('ipInvalid');if(fields[6]!=='TCP_TUNNEL')count('tunnelInvalid');if(fields[4]!=='200')count('statusInvalid');continue;}
      const destination=await enrichNetworkDestination({ip,source:'proxy_connect',locationLabel:'server location (may be CDN edge)',proxyConnection:{version:'chromium_connection.v1',connectionId:binding.connectionId,tunnelId:attempt.id,authority:attempt.authority,recordHash:createHash('sha256').update(line).digest('hex')}});
      if(destination)result.set(binding.requestId,destination);
     }
