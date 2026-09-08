@@ -64,3 +64,34 @@ for bounded compute and small retained metadata, with existing proxy capacity an
 no paid per-IP calls. No additional instances, provisioned capacity or retention
 period are part of this change. Regional headroom must be checked before enablement;
 any capacity increase estimated at $1/month or more requires separate approval.
+
+
+## Production verification — September 8, 2026
+
+Scanner revision `f2fd532902347ccca2499287b54a663ab45ba21f` is deployed to the
+main and inventory Lambda functions in all three regions, with digest parity and
+health checks passing. Capture is enabled in all three regions. Web and validation
+consumers are deployed at `5db0c4dfb10e5925faa5c58e4ac1d32f77fb9931`.
+
+The first native canary exposed a cold-reader bug: opening MMDB files in the 300 ms
+finalization window discarded verified addresses. Moving initialization into
+browser work and preserving verified IP proof independently of optional enrichment
+fixed it. A regression test covers an enrichment reader that never settles.
+
+Native regional passive canaries retained `proxy_connect_iplocate` destinations:
+Frankfurt 17/18 requests, Dublin 17/18, California 21/21. Dublin's first tiny-profile
+invocation exhausted its 15-second browser-launch budget before any network
+capture; verification with the existing standard profile passed. No production
+timeout, capacity, or retry policy was increased.
+
+Fresh three-page production report:
+https://certscore.ai/app/scans/a3d54a1a-f24a-4d2f-88c9-50a842795142
+
+The report completed in 42 seconds. Microsoft Clarity's location detail retained
+3/3 request IPs (zero missing), with explicit proxy source and MMDB dates. Google
+Analytics and Tag Manager also showed destinations. Totals remained 20 requests,
+2 cookies/storage items, 1 embed, 2 forms/7 fields/2 snapshots, and score 58,
+matching the earlier canary. This is a bounded canary comparison, not a latency
+benchmark or a guarantee that every future response exposes a destination.
+Historical scans are not backfilled. Incremental estimate remains below
+$0.25/month at 1,000 scanned pages/month.
