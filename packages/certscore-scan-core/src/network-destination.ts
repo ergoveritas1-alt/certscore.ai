@@ -82,10 +82,15 @@ export function createDestinationEnricher(readers: Readers) {
 function databasePaths(name: string) {
   return ["/opt/iplocate", "/var/task/iplocate", resolve(process.cwd(), "config/iplocate"), resolve(process.cwd(), "../../config/iplocate")].map(directory => resolve(directory, name));
 }
-export const enrichNetworkDestination = createDestinationEnricher({
+const destinationReaders: Readers = {
   country: localReader<CountryResponse>(process.env.CERTSCORE_IPLOCATE_COUNTRY_DB_PATH ? [process.env.CERTSCORE_IPLOCATE_COUNTRY_DB_PATH] : databasePaths("ip-to-country.mmdb"), "ip-to-country"),
   network: localReader<AsnResponse>(process.env.CERTSCORE_IPLOCATE_ASN_DB_PATH ? [process.env.CERTSCORE_IPLOCATE_ASN_DB_PATH] : databasePaths("ip-to-asn.mmdb"), "ip-to-asn"),
-});
+};
+/** Open the existing local readers during capture, without a synthetic address or remote lookup. */
+export async function prepareDestinationEnrichment() {
+  await Promise.all([destinationReaders.country(), destinationReaders.network()]);
+}
+export const enrichNetworkDestination = createDestinationEnricher(destinationReaders);
 
 /** The browser response owns the address and redirect identity; URL queues are intentionally absent. */
 export async function captureResponseDestination(response: Pick<Response, "serverAddr" | "fromServiceWorker">) {

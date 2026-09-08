@@ -9,7 +9,7 @@ import type { LaunchOptions } from 'playwright';
 import type { NetworkDestination } from '@certscore/contracts';
 import { extractNetlogSockets } from './proxy-netlog-sockets.js';
 import { normalizePublicIpAddress } from './public-ip-address.js';
-import { enrichNetworkDestination } from './network-destination.js';
+import { enrichNetworkDestination, prepareDestinationEnrichment } from './network-destination.js';
 
 type Attempt = { id:string; authority:string; clientPort:number; bridgePort:number; connected:boolean };
 type Binding = { requestId:string; connectionId:number; authority:string };
@@ -45,6 +45,8 @@ export async function createProxyDestinationCapture(launch:LaunchOptions) {
  if(!['http:','https:'].includes(proxy.protocol)||!['http:','https:'].includes(endpoint.protocol)||endpoint.hostname!==proxy.hostname||endpoint.pathname!=='/records'||endpoint.username||endpoint.password||endpoint.search||endpoint.hash)return undefined;
  let directory:string;
  try{directory=await mkdtemp(join(tmpdir(),'certscore-dest-'));}catch{return undefined;}
+ // Overlap the same local database initialization with browser work, not finalization.
+ void prepareDestinationEnrichment().catch(()=>{});
  const log=join(directory,'netlog.json');
  const sockets=new Set<Socket>();const attempts:Attempt[]=[];const bindings:Binding[]=[];
  let overflow=false,terminal=false,tracked=0;
@@ -107,19 +109,34 @@ export async function createProxyDestinationCapture(launch:LaunchOptions) {
     for(const socket of extracted.sockets)byConnection.set(socket.connectionId,attempts.filter(a=>a.clientPort===socket.clientPort&&a.bridgePort===socket.bridgePort));
     const count=(name:string)=>{diagnostic[name]=Number(diagnostic[name]??0)+1;};
     for(const binding of bindings){
-     if(signal.aborted)return new Map();
+     if(signal.aborted)break;
      const candidates=byConnection.get(binding.connectionId);if(candidates?.length!==1){count('connectionMiss');continue;}
      const attempt=candidates[0]!;if(!attempt.connected||attempt.authority!==binding.authority){count('authorityMiss');continue;}
      const records=lines.filter(line=>line.split(/\s+/)[1]===attempt.id);if(records.length!==1){count('recordMiss');continue;}
      const line=records[0]!,fields=line.split(/\s+/),ip=normalizePublicIpAddress(fields[5]);
      if(fields.length!==7||fields[2]!=='CONNECT'||fields[3]!==attempt.authority||fields[4]!=='200'||fields[6]!=='TCP_TUNNEL'||!ip){count('recordInvalid');if(!ip)count('ipInvalid');if(fields[6]!=='TCP_TUNNEL')count('tunnelInvalid');if(fields[4]!=='200')count('statusInvalid');continue;}
-     const destination=await enrichNetworkDestination({ip,source:'proxy_connect',locationLabel:'server location (may be CDN edge)',proxyConnection:{version:'chromium_connection.v1',connectionId:binding.connectionId,tunnelId:attempt.id,authority:attempt.authority,recordHash:createHash('sha256').update(line).digest('hex')}});
-     if(destination)result.set(binding.requestId,destination);
+     const observed:NetworkDestination={ip,source:'proxy_connect',locationLabel:'server location (may be CDN edge)',proxyConnection:{version:'chromium_connection.v1',connectionId:binding.connectionId,tunnelId:attempt.id,authority:attempt.authority,recordHash:createHash('sha256').update(line).digest('hex')}};
+     // Country/operator enrichment must never erase a verified upstream address.
+     result.set(binding.requestId,observed);
+
     }
-    diagnostic.resolved=signal.aborted?0:result.size;return signal.aborted?new Map():result;
+    await Promise.all([...result].map(async ([requestId,observed])=>{
+     const enriched=await enrichBeforeDeadline(observed,signal);
+     if(enriched)result.set(requestId,enriched);
+    }));
+    diagnostic.resolved=result.size;return result;
    }catch(error){diagnostic.reason=signal.aborted?'aborted':error instanceof Error && /^proxy_records_[a-z]+$/.test(error.message)?error.message:'resolution_failed';return new Map();}
    finally{report();}
   },
   async close(){terminal=true;for(const socket of sockets)socket.destroy();await new Promise<void>(r=>bridge.close(()=>r()));await rm(directory,{recursive:true,force:true});},
  };
+}
+
+/** Optional enrichment shares the capture deadline; retained IP proof survives a slow local reader. */
+export async function enrichBeforeDeadline(destination:NetworkDestination, signal:AbortSignal, enrich=enrichNetworkDestination):Promise<NetworkDestination|undefined> {
+ if(signal.aborted)return destination;
+ let onAbort:()=>void=()=>{};
+ try{return await Promise.race([enrich(destination),new Promise<NetworkDestination>(resolve=>{onAbort=()=>resolve(destination);signal.addEventListener('abort',onAbort,{once:true});})]);}
+ catch{return destination;}
+ finally{signal.removeEventListener('abort',onAbort);}
 }

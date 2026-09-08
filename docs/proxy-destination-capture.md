@@ -21,7 +21,9 @@ NetLog stays local, is at most 16 MiB and is removed on cleanup. Only loopback
 socket tuples are extracted; raw NetLog is never published. There are at most 512
 tunnel records and 30,000 request bindings per capture. Collection runs once after
 normal browser close, before publication, within the owning deadline and a 300 ms
-cap. There is no retry or late report update. Externally owned browser sessions and
+cap. The existing local MMDB readers initialize during browser work. Verified IP
+proof survives unavailable or over-budget optional country/operator enrichment; a
+slow cold reader must not discard that proof. There is no retry or late report update. Externally owned browser sessions and
 sessions retained for policy recovery do not use this path.
 
 The proxy collector uses four workers, a bounded 16-request queue, 2-second socket
