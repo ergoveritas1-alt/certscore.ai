@@ -1,0 +1,39 @@
+diff --git a/lib/protocol/validator.js b/lib/protocol/validator.js
+index b36c9799d92a7717f2593412a4477b7db4d1b56d..19fffa20a04868fa7546a9d43a61affc486efc27 100644
+--- a/lib/protocol/validator.js
++++ b/lib/protocol/validator.js
+@@ -2394,6 +2394,7 @@ import_validatorPrimitives.scheme.RequestSizes = (0, import_validatorPrimitives.
+   responseHeadersSize: import_validatorPrimitives.tInt
+ });
+ import_validatorPrimitives.scheme.RemoteAddr = (0, import_validatorPrimitives.tObject)({
++  certscoreConnectionId: (0, import_validatorPrimitives.tOptional)(import_validatorPrimitives.tInt),
+   ipAddress: import_validatorPrimitives.tString,
+   port: import_validatorPrimitives.tInt
+ });
+diff --git a/lib/server/chromium/crNetworkManager.js b/lib/server/chromium/crNetworkManager.js
+index c1f2c4d4802f96f4422c2e37598b79406991a657..455558c78d9682cb2b2d7d91b22bfc42a1bad497 100644
+--- a/lib/server/chromium/crNetworkManager.js
++++ b/lib/server/chromium/crNetworkManager.js
+@@ -376,7 +376,8 @@ class CRNetworkManager {
+     if (responsePayload?.remoteIPAddress && typeof responsePayload?.remotePort === "number") {
+       response._serverAddrFinished({
+         ipAddress: responsePayload.remoteIPAddress,
+-        port: responsePayload.remotePort
++        port: responsePayload.remotePort,
++        certscoreConnectionId: !responsePayload.fromDiskCache && !responsePayload.fromPrefetchCache && !responsePayload.fromServiceWorker && !this._responseExtraInfoTracker.servedFromCache(request._requestId) && Number.isSafeInteger(responsePayload.connectionId) && responsePayload.connectionId > 0 ? responsePayload.connectionId : void 0
+       });
+     } else {
+       response._serverAddrFinished();
+diff --git a/types/types.d.ts b/types/types.d.ts
+index f6e6165885f0ae32b9d130797c77d5da04fba8cf..58d5433c58cb30a7e7d41def3c848797cf368737 100644
+--- a/types/types.d.ts
++++ b/types/types.d.ts
+@@ -20772,6 +20772,8 @@ export interface Response {
+    * Returns the IP address and port of the server.
+    */
+   serverAddr(): Promise<null|{
++    /** CertScore: exact Chromium response connection ID; absent for cached/worker responses. */
++    certscoreConnectionId?: number;
+     /**
+      * IPv4 or IPV6 address of the server.
+      */

@@ -100,3 +100,23 @@ test("bounded warm cache keeps frequently reused IPs while evicting older entrie
   assert.equal(calls.get(hot), 1);
   assert.equal(calls.get(first), 2);
 });
+
+test("proxy evidence requires exact provenance and enrichment preserves it", async () => {
+  const proxyConnection = { version: "chromium_connection.v1" as const, connectionId: 42, tunnelId: "c5a21136-cb84-4a1a-9cfe-22a7a71fe777", authority: "example.com:443", recordHash: "a".repeat(64) };
+  const proxy: NetworkDestination = { ...destination, source: "proxy_connect", proxyConnection };
+  assert.equal(networkDestinationSchema.safeParse({ ...proxy, proxyConnection: undefined }).success, false);
+  assert.equal(networkDestinationSchema.safeParse({ ...proxy, source: "response_server_addr" }).success, false);
+  const enrich = createDestinationEnricher({ now: () => now, country: async () => ({metadata, get: () => ({country_code: "DE"})}), network: async () => null });
+  await enrich(destination); // Cache from direct capture must not replace proxy provenance.
+  const result = await enrich(proxy);
+  assert.equal(result?.source, "proxy_connect_iplocate");
+  assert.deepEqual(result?.proxyConnection, proxyConnection);
+  assert.equal(networkDestinationSchema.safeParse(result).success, true);
+});
+
+test("private proxy address retains connection ID without inventing a destination", async () => {
+  const result = await captureResponseDestination({fromServiceWorker: () => false, serverAddr: async () => ({ipAddress: "127.0.0.1", port: 40000, certscoreConnectionId: 42})});
+  assert.equal(result.status, "ip_not_exposed");
+  assert.equal("connectionId" in result && result.connectionId, 42);
+  assert.equal(result.destination, undefined);
+});

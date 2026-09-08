@@ -10,6 +10,7 @@ ENV CI=1
 RUN corepack enable && corepack prepare pnpm@10.6.3 --activate
 
 COPY .npmrc package.json pnpm-lock.yaml pnpm-workspace.yaml tsconfig.base.json ./
+COPY patches ./patches
 COPY apps/v2-dag-lambda/package.json ./apps/v2-dag-lambda/package.json
 COPY packages/certscore-contracts/package.json ./packages/certscore-contracts/package.json
 COPY packages/certscore-mcp/package.json ./packages/certscore-mcp/package.json

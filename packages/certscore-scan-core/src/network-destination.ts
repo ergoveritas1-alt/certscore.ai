@@ -75,7 +75,7 @@ export function createDestinationEnricher(readers: Readers) {
     const enriched = await entry.pending;
     const resolved = enriched.countryCode || enriched.asn || enriched.provider;
     return { ...destination, ...enriched, ip,
-      source: resolved ? destination.source.startsWith("response_server_addr") ? "response_server_addr_iplocate" : "cdp_remote_ip_iplocate" : destination.source };
+      source: resolved ? destination.source.startsWith("proxy_connect") ? "proxy_connect_iplocate" : destination.source.startsWith("response_server_addr") ? "response_server_addr_iplocate" : "cdp_remote_ip_iplocate" : destination.source };
   };
 }
 
@@ -94,7 +94,7 @@ export async function captureResponseDestination(response: Pick<Response, "serve
   try {
     const address = await response.serverAddr();
     const ip = normalizePublicIpAddress(address?.ipAddress);
-    if (!ip) return { status: "ip_not_exposed" as const, fromServiceWorker };
+    if (!ip) return { status: "ip_not_exposed" as const, fromServiceWorker, connectionId: address?.certscoreConnectionId };
     const destination: NetworkDestination = { ip, source: "response_server_addr", locationLabel: "server location (may be CDN edge)" };
     return { status: "server_observed" as const, fromServiceWorker, destination };
   } catch { return { status: "unavailable" as const, fromServiceWorker }; }

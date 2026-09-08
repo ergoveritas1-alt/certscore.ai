@@ -1,3 +1,4 @@
+import { createProxyDestinationCapture } from "../proxy-destination-capture.js";
 import { captureCollectionSurfaceSnapshots, type FormSnapshotReviewer } from "../collection-surface-snapshots";
 import { createGpcSignalCapture, installGpcNavigatorSignal } from "../gpc-signal-capture.js";
 import type { GpcSignalObservation } from "@certscore/contracts";
@@ -635,9 +636,12 @@ export async function preConsentRuntimeScanner(
   const ownsBrowser = !input.browser;
   let retainOwnedBrowserForPolicyRecovery = false;
   lifecycleCheckpoint("browser_launch", "started");
+  const launchOptions = chromiumLaunchOptions({ headless: browserMode !== "headed" });
+  const proxyDestinations = ownsBrowser && captureRuntimeEvidence && !input.retainRenderedPolicyRecoverySession
+    ? await createProxyDestinationCapture(launchOptions) : undefined;
   const browser = input.browser ?? await recordTiming(timingBreakdown, "browser launch", `Playwright Chromium launch (${browserMode}).`, () =>
-    chromium.launch(chromiumLaunchOptions({ headless: browserMode !== "headed" }))
-  );
+    chromium.launch(proxyDestinations?.launch ?? launchOptions)
+  ).catch(async error => { await proxyDestinations?.close(); throw error; });
   lifecycleCheckpoint("browser_launch", "completed");
   lifecycleCheckpoint("browser_context", "started");
   const context = await recordTiming(timingBreakdown, "browser context", "New isolated browser context and page.", async () => {
@@ -647,6 +651,10 @@ export async function preConsentRuntimeScanner(
     );
     const newPage = await newContext.newPage();
     return { newContext, newPage };
+  }).catch(async error => {
+    if (ownsBrowser) await browser.close().catch(() => {});
+    await proxyDestinations?.close();
+    throw error;
   });
   lifecycleCheckpoint("browser_context", "completed");
   const page = context.newPage;
@@ -3731,9 +3739,28 @@ export async function preConsentRuntimeScanner(
     const retainPolicyRecoverySession = input.retainRenderedPolicyRecoverySession === true &&
       retainedRenderedPolicyLinkEvidence.length > 0;
     retainOwnedBrowserForPolicyRecovery = ownsBrowser && retainPolicyRecoverySession;
+    const finalizedProxyGraph = proxyDestinations ? finishGraph() : undefined;
+    if (proxyDestinations && !retainOwnedBrowserForPolicyRecovery) {
+      responseCaptureFinalized = true;
+      await boundedCleanup(browser.close(), Math.min(1000, remainingModuleBudgetMs()));
+      if (!browser.isConnected()) {
+        const destinations = await proxyDestinations.resolve(moduleDeadlineAtMs, input.signal);
+        for (const event of networkEvents) {
+          const destination = destinations.get(event.requestId ?? "");
+          if (destination && !event.networkDestination) {
+            event.networkDestination = destination;
+            if (event.networkConnection) event.networkConnection.status = "server_observed";
+          }
+        }
+        for (const event of networkResponseEvents) {
+          const destination = destinations.get(event.requestId ?? "");
+          if (destination && !event.networkDestination) event.networkDestination = destination;
+        }
+      }
+    }
     return {
       collectionSurfaceSnapshots,
-      runtimeEvidenceGraph: finishGraph(),
+      runtimeEvidenceGraph: finalizedProxyGraph ?? finishGraph(),
       moduleRun: {
         moduleName: "preConsentRuntimeScanner",
         status: runtimeErrors.length > 0 || screenshotErrors.length > 0 ? "partial" : "completed",
@@ -3916,6 +3943,7 @@ export async function preConsentRuntimeScanner(
     if (ownsBrowser && !retainOwnedBrowserForPolicyRecovery) {
       await boundedCleanup(browser.close(), 1_000);
     }
+    await proxyDestinations?.close();
   }
   })();
 
@@ -3965,6 +3993,7 @@ export async function preConsentRuntimeScanner(
     // Never correlate destinations by URL: concurrent requests can have the same URL.
     const destinationPromise = captureResponseDestination(response).then(async result => {
       if (responseCaptureFinalized) return undefined;
+      if (requestEvent && "connectionId" in result) proxyDestinations?.track(requestEvent.requestId, result.connectionId, responseUrl);
       if (requestEvent) requestEvent.networkConnection = {
         source: "response_request_binding", status: result.status,
         requestId: requestEvent.requestId,

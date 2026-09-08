@@ -375,7 +375,14 @@ export const networkDestinationSchema = z.object({
   city: z.string().max(120).optional(),
   asn: z.number().int().positive().optional(),
   provider: z.string().max(160).optional(),
-  source: z.enum(["cdp_remote_ip", "cdp_remote_ip_geolite2", "response_server_addr", "response_server_addr_geolite2", "response_server_addr_iplocate", "cdp_remote_ip_iplocate"]),
+  source: z.enum(["cdp_remote_ip", "cdp_remote_ip_geolite2", "response_server_addr", "response_server_addr_geolite2", "response_server_addr_iplocate", "cdp_remote_ip_iplocate", "proxy_connect", "proxy_connect_iplocate"]),
+  proxyConnection: z.object({
+    version: z.literal("chromium_connection.v1"),
+    connectionId: z.number().int().positive(),
+    tunnelId: z.string().uuid(),
+    authority: z.string().max(260),
+    recordHash: z.string().regex(/^[a-f0-9]{64}$/),
+  }).optional(),
   enrichment: z.object({
     country: z.enum(["resolved", "database_unavailable", "database_stale", "not_found"]),
     network: z.enum(["resolved", "database_unavailable", "database_stale", "not_found"]),
@@ -383,7 +390,7 @@ export const networkDestinationSchema = z.object({
     networkDatabaseBuiltAt: z.string().datetime().optional(),
   }).optional(),
   locationLabel: z.literal("server location (may be CDN edge)"),
-});
+}).refine(value => value.source.startsWith("proxy_connect") === Boolean(value.proxyConnection), { message: "Proxy destinations require exact connection provenance", path: ["proxyConnection"] });
 
 export const networkConnectionSchema = z.object({
   source: z.literal("response_request_binding"),
