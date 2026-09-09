@@ -1263,6 +1263,29 @@ test("successful bundle offers an optional attributed trial path without changin
   assert.match(text, /Light remains no-auth/);
 });
 
+test("successful bundle reserves the optional trial path when detailed findings fill TextContent", () => {
+  const text = scanBundleText({
+    status: "completed",
+    scanId: "scan_trial_cta_full",
+    domain: "example.test",
+    score: 41,
+    findings: Array.from({ length: 40 }, (_, index) => ({
+      id: `finding_${index}`,
+      title: `Finding ${index}`,
+      summary: "Detailed retained observation. ".repeat(80),
+      priority: "high",
+      confidence: "good",
+    })),
+    findingsMetadata: { total: 40, returned: 40 },
+    preConsentCookiesTrackers: { returned: 0, total: 8, truncated: true, rows: [] },
+  });
+
+  assert.ok(text.length <= 8_000);
+  assert.match(text, /7-day CertScore trial/);
+  assert.match(text, /OAuth-capable clients/);
+  assert.match(text, /Light remains no-auth/);
+});
+
 test("scan bundle surfaces canonical post-Accept findings and observation metadata", () => {
   const finding = publicFinding(
     "post_accept_consent_dependent_activity",

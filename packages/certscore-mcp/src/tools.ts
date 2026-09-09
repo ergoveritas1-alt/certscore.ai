@@ -1406,7 +1406,7 @@ export function scanBundleText(bundle: Record<string, any>) {
   const noGoText = canonicalNoGoText(bundle);
   if (noGoText) return noGoText;
   const score = typeof bundle.score === "number" ? `; CertScore score=${bundle.score}` : "";
-  const footer = [OBSERVATION_ONLY_DISCLAIMER, SCAN_BUNDLE_INTERPRETATION_STATEMENT];
+  const footer = [SUCCESSFUL_BUNDLE_TRIAL_CTA, OBSERVATION_ONLY_DISCLAIMER, SCAN_BUNDLE_INTERPRETATION_STATEMENT];
   const lines = [
     SCAN_BUNDLE_RESPONSE_CONTRACT,
     `CertScore scan bundle for ${bundle.domain ?? "unknown domain"}; status=${bundle.status ?? "unknown"}${score}; scanId=${bundle.scanId ?? "unknown"}.`,
@@ -1529,7 +1529,6 @@ export function scanBundleText(bundle: Record<string, any>) {
   } else {
     append("No row-level pre-consent inventory was available for this result; review coverage and limitations before interpreting absence.");
   }
-  append(SUCCESSFUL_BUNDLE_TRIAL_CTA);
   lines.push(...footer);
   return lines.join("\n");
 }
