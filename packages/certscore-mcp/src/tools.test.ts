@@ -1210,7 +1210,7 @@ test("terminal MCP status text surfaces GPC, Accept, and Reject lane results", (
 });
 
 test("terminal failed status keeps preliminary preview as diagnostic context without stale polling guidance", () => {
-  const text = scanStatusText({
+  const value = withMcpAgentGuidance({
     status: "failed",
     scanId: "scan_failed_preview",
     recommendedNextAction: "Retry certscore_scan_site with freshness=refresh after the recommended delay.",
@@ -1231,15 +1231,19 @@ test("terminal failed status keeps preliminary preview as diagnostic context wit
         vendorCount: 0,
         thirdPartyRequestCount: 0,
       },
-      observationOnlyDisclaimer: "Partial preview of passive runtime observations only.",
+      observationOnlyDisclaimer: "Partial preview only. Continue polling, then retrieve the canonical scan bundle.",
     },
   });
+  const text = scanStatusText(value);
 
   assert.match(text, /status=failed/);
   assert.match(text, /retained diagnostic context only/);
   assert.match(text, /do not continue polling/);
-  assert.match(text, /Next: Retry certscore_scan_site/);
+  assert.match(text, /Next: .*retry certscore_scan_site/i);
+  assert.match(text, /Full report: not available/);
   assert.doesNotMatch(text, /Continue sequential status polling|Wait for terminal scan status/);
+  assert.doesNotMatch(text, /Continue polling, then retrieve/);
+  assert.equal(value.preConsentPreview.observationOnlyDisclaimer, "Preliminary passive observations only; not findings, a score, or a final result.");
 });
 
 test("successful bundle offers an optional attributed trial path without changing Light authentication", () => {
