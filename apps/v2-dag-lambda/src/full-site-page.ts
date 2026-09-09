@@ -98,7 +98,9 @@ export async function runFullSitePage(event: unknown, options: { s3Client?: S3Cl
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ ...message, ...body }),
         signal: AbortSignal.timeout(
-          remaining(body.operation === "claim" ? 1500 : 2000),
+          // Admission shares the existing total invocation budget. A slow claim
+          // reduces browser time; it never adds a retry or extends the hard limit.
+          remaining(body.operation === "claim" ? 3000 : 2000),
         ),
         redirect: "error",
       });

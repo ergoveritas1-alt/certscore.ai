@@ -135,14 +135,14 @@ test("inventory hard timeout fits the lease without changing homepage runtime or
 });
 
 
-test("inventory admission uses the configured egress proxy and fails closed without browser work", async () => {
+test("inventory admission tolerates a two-second proxy handshake and fails closed without browser work or retry", async () => {
   const { createServer } = await import("node:http");
   const { once } = await import("node:events");
   const proxy = createServer();
   let target: string | undefined;
   proxy.on("connect", (request, socket) => {
     target = request.url;
-    socket.end("HTTP/1.1 503 Service Unavailable\r\nContent-Length: 0\r\n\r\n");
+    setTimeout(() => socket.end("HTTP/1.1 503 Service Unavailable\r\nContent-Length: 0\r\n\r\n"), 2000);
   });
   proxy.listen(0, "127.0.0.1");
   await once(proxy, "listening");
@@ -169,7 +169,7 @@ test("inventory admission uses the configured egress proxy and fails closed with
     assert.equal(diagnostic.event, "full_site_control_failed");
     assert.equal(diagnostic.page_id, message.pageId);
     assert.equal(diagnostic.operation, "claim");
-    assert.ok(diagnostic.elapsed_ms >= 0);
+    assert.ok(diagnostic.elapsed_ms >= 2000);
     assert.equal(diagnostic.error_name, "Error");
     assert.ok(!diagnostics[0]!.includes(message.token));
     assert.ok(!diagnostics[0]!.includes("example.com"));

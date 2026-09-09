@@ -594,3 +594,17 @@ error class. It excludes target URLs, tokens, error messages and response bodies
 This closes a diagnostic gap in the custom Lambda runtime, which posts uncaught
 errors to the invocation API without logging them. Estimated log storage/ingestion
 increase is below $0.01/month at the observed full-site crawl volume.
+
+Inventory admission allows up to three seconds for the authenticated control-plane
+claim, within the existing 24-second internal invocation budget and 25-second
+Lambda hard limit. Slow admission reduces the remaining browser allowance; it
+does not add a retry, invocation, or larger total deadline. A delayed-proxy
+regression covers a two-second handshake and verifies fail-closed behavior.
+The September 8 verification observed one unclaimed page alongside a 1.52-second
+worker exit, consistent with the former 1.5-second admission deadline; the old
+logs did not retain the exact network error. At the measured 30-day volume of
+69 scheduled pages across 12 crawls, additional compute and existing capture
+work enabled by this adjustment are conservatively estimated below $0.25/month,
+within the preapproved cost threshold. At 100,000 ten-page crawls/month and a
+10% admission-failure rate, additional browser compute could be $40–$50/month;
+that scale requires a fresh cost review.
