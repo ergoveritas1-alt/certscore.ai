@@ -540,7 +540,7 @@ test("Cursor and OpenAI plugin packages preserve independent release versions an
   const openAiSubmissionPacket = readFileSync(new URL("../../../docs/mcp-light-submission-packets.md", import.meta.url), "utf8");
 
   assert.equal(cursorPlugin.name, "certscore-website-privacy-preflight");
-  assert.equal(cursorPlugin.version, "1.0.3");
+  assert.equal(cursorPlugin.version, "1.0.4");
   assert.match(JSON.stringify(cursorPlugin), /GPC/i);
   assert.match(JSON.stringify(cursorPlugin), /Accept Path/i);
   assert.match(JSON.stringify(cursorPlugin), /Reject Path/i);
@@ -564,7 +564,7 @@ test("Cursor and OpenAI plugin packages preserve independent release versions an
   assert.deepEqual(cursorMarketplace.plugins?.map(({ name, source, version }) => ({ name, source, version })), [{
     name: "certscore-website-privacy-preflight",
     source: "integrations/cursor/certscore-website-privacy-preflight",
-    version: "1.0.3"
+    version: "1.0.4"
   }]);
 
   assert.equal(openAiPlugin.name, "certscore-website-privacy-preflight");
