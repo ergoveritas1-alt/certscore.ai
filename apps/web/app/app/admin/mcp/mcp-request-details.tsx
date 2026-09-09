@@ -34,7 +34,7 @@ export function McpRequestDetails({ event, traffic, period }: {
         <h3 className="font-semibold">Context from an earlier call</h3>
         <p className="mt-1 text-xs text-slate-500">Same caller, session, scan and entrypoint; this text was not supplied with the current call. {event.related_context.taskContext.questionSource === "user_wording" ? "Shared user wording" : "Agent paraphrase"}.</p>
         <p className="mt-2 whitespace-pre-wrap">{event.related_context.taskContext.questionSummary}</p>
-        <Link className="mt-2 block text-xs text-sky-700 underline" href={href(event.related_context.eventId)} prefetch={false}>Source request · {event.related_context.occurredAt}</Link>
+        <Link className="mt-2 block text-xs text-sky-700 underline" href={`/app/admin/mcp?${new URLSearchParams({ q: event.related_context.eventId, traffic, timeSpan: "all" })}`} prefetch={false}>Source request · {event.related_context.occurredAt}</Link>
       </section> : null}
       <section aria-label="What the caller sent">
         <h3 className="font-semibold text-slate-950">What the caller sent</h3>

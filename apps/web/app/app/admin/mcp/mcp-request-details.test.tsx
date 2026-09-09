@@ -68,5 +68,6 @@ test("caller input previews and omissions remain distinct from inherited and cur
   assert.match(html, /omitted by the sensitive-content filter/);
   assert.match(html, /this text was not supplied with the current call/);
   assert.match(html, /earlier-event/);
+  assert.match(html, /q=earlier-event&amp;traffic=external&amp;timeSpan=all/);
   assert.match(html, /Original shared question/);
 });
