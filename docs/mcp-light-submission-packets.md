@@ -118,7 +118,7 @@ After the external edit, verify the rendered name, endpoint, no-auth setting, th
 
 Submission artifact: `packages/certscore-mcp/server-light.json`.
 
-Publication target: version `0.2.20` is the prepared active release of `ai.certscore/mcp-light`; verify the registry record after publication.
+Registry status verified September 9, 2026: version `0.2.20` is active and latest for `ai.certscore/mcp-light`, and `packages/certscore-mcp/server-light.json` matches its published identity, description, endpoint, transport, repository, icons, and version. Version `0.2.19` is a historical record and is not latest.
 
 - Registry listing: https://registry.modelcontextprotocol.io/?q=ai.certscore%2Fmcp-light
 - Registry API lookup: https://registry.modelcontextprotocol.io/v0.1/servers?search=ai.certscore%2Fmcp-light
@@ -131,12 +131,12 @@ mcp-publisher validate packages/certscore-mcp/server-light.json
 
 Future release procedure:
 
-1. Update `packages/certscore-mcp/server-light.json` to the new released version and validate it.
+1. After the next hosted Light version is released, update only `packages/certscore-mcp/server-light.json` for the registry publication. Set its version to that released version and lead its description with: `No-auth Streamable HTTP website privacy scanner for pre-consent cookies, trackers, consent, policy, GDPR/ePrivacy, CCPA, and HTTPS/TLS.`
 2. Authenticate the existing `ai.certscore` namespace using an Official MCP Registry-supported method.
 3. Run the publisher against `packages/certscore-mcp/server-light.json`.
 4. Confirm that the new record is active and latest, resolves to the Light endpoint, and preserves the intended three-tool workflow.
 
-Do not publish `packages/certscore-mcp/server.json` as the Light listing.
+MCP Light is the recommended discovery entry. Do not publish `packages/certscore-mcp/server.json` as the Light listing, and do not deprecate the separate `ai.certscore/mcp` stdio/authenticated path.
 
 ## Cursor
 
@@ -221,11 +221,11 @@ pnpm --filter @certscore/mcp test
 
 Immediately before submission, also run the current OpenAI plugin-package and skill validators available in the submission environment and resolve every portal scan result. Select **Scan Tools** again after every production tool-schema or bundled-skill change so the reviewed snapshot matches the live endpoint.
 
-OpenAI review correction completed September 3, 2026: the existing `2.0.0` review was cancelled and resubmitted in place with an updated, passing skill scan plus corrected tool justifications, release notes, prompts, five positive review cases, and localized directory descriptions for the production GPC, Accept Path, and Reject Path behavior. The MCP origin remains `https://mcp.certscore.ai/mcp/light`. OpenAI approved version `2.0.0` on September 4, 2026; it is ready for the final portal **Publish** action, while version `1.0.0` remains **Published** until the approved replacement is published.
+OpenAI review correction completed September 3, 2026: the existing `2.0.0` review was cancelled and resubmitted in place with an updated, passing skill scan plus corrected tool justifications, release notes, prompts, five positive review cases, and localized directory descriptions for the production GPC, Accept Path, and Reject Path behavior. The MCP origin remains `https://mcp.certscore.ai/mcp/light`. OpenAI approved version `2.0.0` on September 4, 2026 and the product owner published it on September 9, 2026. Version `2.0.0` is now **Published**; version `1.0.0` remains **Approved** as the available rollback version and must not be published unless an intentional rollback is required.
 
 OpenAI acknowledged receipt by email on September 3, 2026 at 3:46 PM PT with submission reference `C-TBdiNT62SVe0` (`ChatGPT Plugin Submission Received`). Use this reference for any review follow-up.
 
-OpenAI acknowledged approval by email on September 4, 2026 at 6:02 PM PT under plugin ID `asdk_app_6a8359df23ac8191b557db3e6296b892` (`ChatGPT Plugin Submission Approved`). The approved version does not enter the universal plugin directory automatically; publish it from the plugin submission portal to replace the currently published version.
+OpenAI acknowledged approval by email on September 4, 2026 at 6:02 PM PT under plugin ID `asdk_app_6a8359df23ac8191b557db3e6296b892` (`ChatGPT Plugin Submission Approved`). Publication was verified in both the OpenAI portal and the public ChatGPT directory on September 9, 2026. The public listing is `https://chatgpt.com/plugins/plugin_asdk_app_6a8359df23ac8191b557db3e6296b892`; it displays version `2.0.0`, the **Website Privacy Preflight** skill, and the expected CertScore listing metadata.
 
 OpenAI listing fields:
 

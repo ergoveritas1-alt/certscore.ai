@@ -1,6 +1,6 @@
 # CertScore.ai MCP Light
 
-**No-auth website privacy scans for MCP clients.** Give an agent a public URL and retrieve evidence-backed observations about cookies and storage, trackers and vendors, consent controls, privacy-policy surfaces, and HTTPS/TLS signals.
+**Recommended discovery entry: no-auth Streamable HTTP website privacy scans for MCP clients.** Give an agent a public URL and retrieve evidence-backed observations about cookies and storage, trackers and vendors, consent controls, privacy-policy surfaces, and HTTPS/TLS signals.
 
 CertScore.ai MCP Light is live in the [GitHub MCP Registry](https://github.com/mcp/ai.certscore/mcp-light) as `ai.certscore/mcp-light`. It exposes exactly three tools and requires no signup, API key, bearer token, browser login, or OAuth.
 
