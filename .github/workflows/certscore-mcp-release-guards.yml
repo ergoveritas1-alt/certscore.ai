@@ -63,6 +63,7 @@ jobs:
 
       - name: Build MCP dependencies
         run: |
+          pnpm --filter @website-signal-risk-scanner/shared build
           pnpm --filter @certscore/api-contracts build
           pnpm --filter @certscore/sdk build
 
