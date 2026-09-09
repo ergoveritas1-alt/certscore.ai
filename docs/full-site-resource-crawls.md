@@ -578,3 +578,19 @@ comparison remains completed. No public rescans were required. At the observed
 discarded inventory adds about 1.2 MB before compression, estimated below
 $0.01/month for storage and response transfer. No new browser/model calls, retries,
 waits, capacity, or retention periods are introduced.
+
+The Lambda caller must pass a capture-failure hint only for an actual failed
+capture or retained navigation timeout. An unconditional `collection_failure`
+default vetoes the rendered-5xx eligibility gate even when browser capture
+completed. The Lambda boundary regression now runs an actual HTTP 500 Chromium
+capture through the caller's outcome derivation and inventory projection, and
+checks aborted, missing-document, failed, and timed-out alternatives. Retained
+incident packets are also replayed through that caller boundary with source hashes
+verified; helper-only replay is not sufficient release verification.
+
+Control-plane failures emit one bounded operational diagnostic with page/attempt
+IDs, claim/finish operation, elapsed time, received HTTP status when available, and
+error class. It excludes target URLs, tokens, error messages and response bodies.
+This closes a diagnostic gap in the custom Lambda runtime, which posts uncaught
+errors to the invocation API without logging them. Estimated log storage/ingestion
+increase is below $0.01/month at the observed full-site crawl volume.
