@@ -24,6 +24,8 @@ test("protocol observation captures validation errors, unknown tools and strippe
     assert.equal(JSON.stringify(observations).includes("secret-value"), false);
     assert.equal(observations[3]?.taskContext?.purpose, "vendor_review");
     assert.ok(observations[0]?.response?.bytes);
+    assert.equal(observations[3]?.callerInput?.questionStatus, "retained");
+    assert.equal(observations[2]?.callerInput?.fields.find(field => field.path === "arguments.hidden")?.disposition, "redacted");
   } finally { await client.close(); await server.close(); }
 });
 

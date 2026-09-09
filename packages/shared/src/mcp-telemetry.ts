@@ -1,3 +1,4 @@
+import { mcpCallerInputSchema } from "./mcp-caller-input";
 import { z } from "zod";
 import { mcpTaskContextSchema, sanitizeMcpTaskContext } from "./mcp-product-context";
 
@@ -117,6 +118,7 @@ const telemetryOption = z.string().regex(/^[a-zA-Z0-9_.:-]+$/).max(128);
 const telemetryCount = z.number().int().min(0).max(1_000_000);
 export const mcpRequestDetailsSchema = z.object({
   version: z.literal(1),
+  callerInput: mcpCallerInputSchema.optional(),
   captureBasis: z.enum(["protocol_request", "validated_arguments"]).optional(),
   taskContext: mcpTaskContextSchema.refine(value => JSON.stringify(value) === JSON.stringify(sanitizeMcpTaskContext(value)), "Question context must be sanitized before ingestion.").optional(),
   clientVersion: telemetryOption.optional(),
@@ -158,6 +160,24 @@ export const mcpRequestDetailsSchema = z.object({
   }).strict().nullable(),
 }).strict();
 export type McpRequestDetails = z.infer<typeof mcpRequestDetailsSchema>;
+
+// PostgreSQL enforces 4096 bytes on the entire jsonb value, including its spaces.
+// Pretty JSON is a conservative upper bound on that serialization's size.
+export function boundMcpRequestDetails(input: McpRequestDetails): McpRequestDetails {
+  const details: McpRequestDetails = { ...input, arguments: { ...input.arguments },
+    ...(input.callerInput ? { callerInput: { ...input.callerInput, fields: [...input.callerInput.fields], limits: [...input.callerInput.limits] } } : {}) };
+  const bytes = () => new TextEncoder().encode(JSON.stringify(details, null, 1)).length;
+  while (bytes() > 4096 && details.callerInput?.fields.length) {
+    details.callerInput.fields.pop();
+    if (!details.callerInput.limits.includes("byte_limit")) details.callerInput.limits.push("byte_limit");
+  }
+  // Retain context/reasons even if a legacy argument set consumes the envelope.
+  for (const key of Object.keys(details.arguments)) {
+    if (bytes() <= 4096) break;
+    delete (details.arguments as Record<string, unknown>)[key]; details.argumentsOmitted = true;
+  }
+  return details;
+}
 
 export const mcpTelemetryEventSchema = z.object({
   requestDetails: mcpRequestDetailsSchema.nullable().optional(),

@@ -4,6 +4,12 @@
 
 - Prepare Cursor integration `1.0.3` with the `CertScore.ai` MCP component name, jurisdiction-neutral GPC and evidence-qualified Accept and Reject Path discovery metadata, and three updated Cursor prompt deeplinks on the MCP Light landing page.
 
+## 0.2.20
+
+- Retain bounded, redacted caller argument and metadata previews with explicit omission reasons in hosted request diagnostics.
+- Preserve supplied task context on HTTP-rate-limited calls. Keep shared-question permission requirements, the existing 4 KB record limit, and 90-day retention.
+- Link admin requests to earlier retained question context only within the same caller, session, scan, provider and entrypoint, with source attribution.
+
 ## 0.2.19
 
 - Keep the required `scanFrom` field in the minimal byte-budget bundle so schema validation succeeds when large completed findings are compacted for MCP Light transports.

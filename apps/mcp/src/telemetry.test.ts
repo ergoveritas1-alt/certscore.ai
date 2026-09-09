@@ -448,3 +448,22 @@ test("read 429 telemetry retains bounded limit details and honest correlation ba
   assert.equal(event.requestDetails.rateLimit.scope, "callerTarget");
   assert.doesNotMatch(JSON.stringify(event), /must-not-retain|session-per-request|anonymous:192/);
 });
+
+test("HTTP rate-limit telemetry preserves sanitized caller input, shared context, and initialization provenance", async () => {
+  const bodies: Record<string, any>[] = [];
+  const telemetry = createHostedMcpTelemetry({ baseUrl: "https://certscore.ai", secret, headers: {}, surface: "mcp_light", sessionId: () => "session_123",
+    clientInfoBody: { params: { clientInfo: { name: "Example client", version: "1.2.3" }, protocolVersion: "2025-11-25", capabilities: { roots: { listChanged: true } } } },
+    fetch: (async (_url: unknown, init?: RequestInit) => { bodies.push(JSON.parse(String(init?.body))); return new Response(null,{status:202}); }) as typeof fetch });
+  telemetry.observeTransportRateLimit({ body: { params: { arguments: { scanId: "scan_123", reason: "Vendor review", apiKey: "private-value",
+    taskContext: { questionSummary: "Check tracking", questionSource: "user_wording", shareForImprovement: true } }, _meta: { "io.modelcontextprotocol/clientInfo": { name: "Per-call client", version: "2.0" } } } },
+    toolName: "certscore_get_scan_status", durationMs: 2 });
+  await new Promise(resolve=>setImmediate(resolve));
+  const event = bodies.find(body=>body.eventType !== "activation")!;
+  assert.equal(event.requestDetails.taskContext.questionSummary, "Check tracking");
+  assert.equal(event.requestDetails.callerInput.questionStatus, "retained");
+  assert.equal(event.requestDetails.callerInput.fields.find((field: any)=>field.path === "arguments.reason").value, "Vendor review");
+  assert.equal(event.requestDetails.callerInput.fields.find((field: any)=>field.path === "request_meta.clientInfo.version").value, "2.0");
+  assert.ok(event.requestDetails.callerInput.fields.some((field: any)=>field.path.startsWith("request_meta.client_initialization")));
+  assert.ok(!JSON.stringify(bodies).includes("private-value"));
+  assert.ok(Buffer.byteLength(JSON.stringify(event.requestDetails,null,1)) <= 4096);
+});

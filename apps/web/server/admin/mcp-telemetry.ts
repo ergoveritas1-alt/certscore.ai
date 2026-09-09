@@ -1,3 +1,4 @@
+import { mcpContextAnchors, mcpRelatedContextSql, parseMcpRelatedContext, type McpRelatedContext } from "../../lib/admin/mcp-related-context";
 import "server-only";
 import { mcpFunnelSql, MCP_FUNNEL_RESULT_TOOLS, MCP_FUNNEL_FOLLOW_UP_MINUTES, type McpFunnelData } from "../../lib/admin/mcp-funnel";
 import { SCAN_NO_GO_SNAPSHOT_OUTCOMES } from "@website-signal-risk-scanner/shared";
@@ -94,6 +95,7 @@ type HostnameRow = {
 
 export type AdminMcpTelemetryEvent = {
   caller_activity?: McpCallerActivity | null;
+  related_context?: McpRelatedContext | null;
   request_details?: unknown;
   access_posture_class: string | null;
   admin_summary_generated_at: string | null;
@@ -657,6 +659,7 @@ export async function listAdminMcpTelemetryEventsPage(
       or attribution_confidence ilike ${parameter}
       or coalesce(requested_resource, '') ilike ${parameter}
       or coalesce(requester_ip::text, '') ilike ${parameter}
+      or events.event_id::text ilike ${parameter}
       or error_code ilike ${parameter}
     )`);
   }
@@ -813,6 +816,13 @@ export async function listAdminMcpTelemetryEventsPage(
     ),
   ]);
 
+  const contextAnchors = mcpContextAnchors(eventResult.rows);
+  const relatedRows = contextAnchors.length ? await query<{
+    event_id: string; source_event_id: string; source_occurred_at: string; request_details: unknown;
+  }>(mcpRelatedContextSql(activityVisibilitySql, activityVisibilityValues.length + 1),
+    [...activityVisibilityValues, JSON.stringify(contextAnchors)], { readOnly: true }) : { rows: [] };
+  const relatedByEvent = new Map(relatedRows.rows.map(row => [row.event_id, parseMcpRelatedContext(row)]));
+
   const anchors = mcpCallerAnchors(eventResult.rows);
   const activityRows = anchors.length ? await query<{
     event_id: string; calls5m: number; calls10m: number; calls60m: number; quota_hits60m: number;
@@ -840,6 +850,7 @@ export async function listAdminMcpTelemetryEventsPage(
       return {
         ...event,
         caller_activity: activityByEvent.get(event.event_id) ?? null,
+        related_context: relatedByEvent.get(event.event_id) ?? null,
         evidence_matrix: evidenceUnavailable ? null : parseAdminEvidenceMatrix(rawEvidenceMatrix),
         score: evidenceUnavailable ? null : event.score,
         top_finding_count: evidenceUnavailable ? null : event.top_finding_count,

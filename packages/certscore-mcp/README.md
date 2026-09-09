@@ -10,7 +10,7 @@ CertScore.ai MCP Light is live in the [GitHub MCP Registry](https://github.com/m
 | Transport | Streamable HTTP |
 | Authentication | None |
 | Tools | `certscore_scan_site` → `certscore_get_scan_status` → `certscore_get_scan_bundle` |
-| Current hosted version | `0.2.19` |
+| Current hosted version | `0.2.20` |
 
 [Start with MCP Light](https://certscore.ai/mcp/light?utm_source=github&utm_medium=mcp_registry&utm_campaign=github_mcp_registry_launch) · [Install in Cursor](https://cursor.com/link/mcp/install?name=CertScore.ai&config=eyJ1cmwiOiJodHRwczovL21jcC5jZXJ0c2NvcmUuYWkvbWNwL2xpZ2h0In0%3D) · [Read the installation reference](../../docs/mcp-light-install.md)
 
@@ -413,3 +413,14 @@ This verifies the Homebrew-installed `certscore-mcp` command against live `https
 ## Runbook
 
 See `docs/certscore-mcp-homebrew-release.md` for Homebrew release steps and `docs/certscore-mcp-preview-runbook.md` for key issuance, smoke testing, deploy verification, and scan-to-report guardrails.
+
+
+### Hosted request diagnostics
+
+Hosted MCP retains bounded, redacted previews of explicitly submitted tool arguments and client metadata for operational diagnostics. The admin “What the caller sent” popup distinguishes current arguments, per-request metadata, and initialization metadata. It records reasons for sensitive-field, sensitive-content, depth, text, field-count, and byte-budget omissions. These caller-declared values are not verified claims or a copy of the surrounding conversation.
+
+The entire request-details record remains capped at 4 KB with the existing 90-day event retention. Previews contain at most 24 fields and 300 characters per string. Authentication headers, cookies, known credential fields, and chat-history/message collections are excluded; URL previews retain only the origin. Task-context question summaries retain their explicit sharing/source requirements and cannot be recovered through the generic preview path. The generic preview may show short text explicitly submitted in separate arguments such as `reason`, `notes`, or `prompt`; it does not fetch the user's chat.
+
+Question context from a prior request is shown separately, with a source link, only when the retained caller, session, scan, provider and entrypoint match and the source precedes the current call by at most 24 hours. Missing identities, filtered traffic and invalid context fail closed. No inherited context is written back to current events, and no scanning, findings or scoring behavior changes.
+
+Estimated additional cost at the September 2026 observed request volume: less than $0.10/month, using existing storage and record limits. No model calls, infrastructure capacity changes, or longer retention are introduced.

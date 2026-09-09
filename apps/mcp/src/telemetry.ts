@@ -7,6 +7,10 @@ import type { AnonymousRequesterNetwork } from "@website-signal-risk-scanner/sha
 import { CERTSCORE_MCP_VERSION } from "@certscore/mcp/version";
 
 const {
+  boundMcpRequestDetails,
+  captureMcpCallerInput,
+  mergeMcpCallerInputs,
+  sanitizeMcpTaskContext,
   MCP_CALLER_ATTRIBUTION_RULESET_VERSION,
   MCP_TELEMETRY_INTEGRATION,
   mcpActivationEventSchema,
@@ -217,6 +221,13 @@ export function createHostedMcpTelemetry(input: CreateHostedMcpTelemetryInput) {
   const fetchImpl = input.fetch ?? globalThis.fetch;
   const logger = input.logger ?? console;
   const client = classifyHostedMcpClient(input);
+  const initialization = input.clientInfoBody as { params?: { clientInfo?: unknown; capabilities?: unknown; protocolVersion?: unknown } } | undefined;
+  const initialInput = captureMcpCallerInput({}, { client_initialization: {
+    ...(initialization?.params?.clientInfo !== undefined ? { clientInfo: initialization.params.clientInfo } : {}),
+    ...(initialization?.params?.capabilities !== undefined ? { capabilities: initialization.params.capabilities } : {}),
+    ...(initialization?.params?.protocolVersion !== undefined ? { protocolVersion: initialization.params.protocolVersion } : {}),
+  } });
+  initialInput.fields = initialInput.fields.filter(field => field.path !== "arguments");
   const conversationId = firstHeader(input.headers, "openai-conversation-id");
   const ingestionUrl = new URL("/api/internal/mcp-telemetry", input.baseUrl);
   const sentActivationStages = new Set<McpActivationStage>();
@@ -322,8 +333,9 @@ export function createHostedMcpTelemetry(input: CreateHostedMcpTelemetryInput) {
     const sessionValue = conversationId ?? input.sessionId();
     const eventRequesterIp = requestContext?.requesterIp ?? input.requesterIp ?? null;
     const parsed = mcpTelemetryEventSchema.safeParse({
-      requestDetails: {
+      requestDetails: boundMcpRequestDetails({
         version: 1,
+        ...(observation.callerInput ? { callerInput: mergeMcpCallerInputs(observation.callerInput, initialInput) } : {}),
         captureBasis: observation.captureBasis ?? "validated_arguments",
         ...(observation.taskContext ? { taskContext: observation.taskContext } : {}),
         ...(observation.response ? { response: observation.response } : {}),
@@ -341,7 +353,7 @@ export function createHostedMcpTelemetry(input: CreateHostedMcpTelemetryInput) {
           : firstHeader(input.headers, "openai-ephemeral-user-id") ? "provider_ephemeral" : "requester_binding",
         sessionBasis: conversationId ? "provider_conversation" : input.sessionId() ? "mcp_session" : "unavailable",
         rateLimit: requestContext?.rateLimit ?? observation.rateLimit ?? null,
-      },
+      }),
       actorId: client.actorId,
       attributionConfidence: client.attributionConfidence,
       attributionRulesetVersion: client.attributionRulesetVersion,
@@ -419,6 +431,8 @@ export function createHostedMcpTelemetry(input: CreateHostedMcpTelemetryInput) {
       report({
         ...projected,
         captureBasis: "protocol_request",
+        callerInput: captureMcpCallerInput(args, (input.body as { params?: { _meta?: unknown } } | null)?.params?._meta),
+        ...(sanitizeMcpTaskContext(args.taskContext) ? { taskContext: sanitizeMcpTaskContext(args.taskContext)! } : {}),
         errorCode: "rate_limited",
         outcome: "rate_limited",
         quotaOutcome: "rate_limited",

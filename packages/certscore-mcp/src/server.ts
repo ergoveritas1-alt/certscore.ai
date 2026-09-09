@@ -1,3 +1,4 @@
+import { captureMcpCallerInput, type McpCallerInput } from "@website-signal-risk-scanner/shared/dist/mcp-caller-input.js";
 import { CertScoreClient } from "@certscore/sdk";
 import { certScoreMcpToolContracts, isCanonicalScanId } from "@certscore/api-contracts";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
@@ -57,6 +58,7 @@ type GetLatestDomainScanInput = { domain: string; scanFrom?: "eu_de" | "eu_ie" |
 type GetLatestDomainPreConsentCookiesTrackersInput = { domain: string; maxRows?: number; scanFrom?: "eu_de" | "eu_ie" | "california" };
 
 export type McpToolInvocationObservation = {
+  callerInput?: McpCallerInput;
   captureBasis?: "protocol_request";
   taskContext?: McpTaskContext;
   response?: { bytes: number; truncated: boolean | null; effectiveMaxBytes?: number };
@@ -434,6 +436,7 @@ export function createCertScoreMcpServer(options: CertScoreMcpOptions = {}) {
           observeToolInvocation(options.onToolInvocation, {
             ...observation,
             captureBasis: "protocol_request",
+            callerInput: captureMcpCallerInput(args, request.params._meta),
             ...(taskContext ? { taskContext } : {}),
             response: {
               bytes: Math.min(10_000_000, Buffer.byteLength(JSON.stringify(result ?? null))),
