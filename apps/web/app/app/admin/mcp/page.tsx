@@ -28,6 +28,7 @@ import {
   type AdminEvidenceResult,
   type AdminPolicyEvidenceDiagnostic,
 } from "../../../../lib/scans/admin-evidence-matrix";
+import { isScanNoGoSnapshotOutcome, resolveScanNoGoPresentation } from "@website-signal-risk-scanner/shared";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -210,7 +211,10 @@ const TRANSPARENCY_LABELS = { CC: "Controller/contact", LB: "Legal basis", DR: "
 const TRANSPORT_LABELS = { HD: "HTTPS delivery", HR: "HTTP redirect", MC: "Mixed content", TC: "TLS certificate", FT: "Form transport" };
 const RUNTIME_LABELS = { FP: "Device ID/fingerprinting", SR: "Session replay", IF: "Third-party iframe", SM: "Social media", "3P": "Embedded third-party services" };
 
-function accessLabel(event: Pick<AdminMcpTelemetryEvent, "access_posture_class" | "admin_summary_generated_at" | "blocked_flag" | "captcha_flag">) {
+function accessLabel(event: Pick<AdminMcpTelemetryEvent, "access_posture_class" | "admin_summary_generated_at" | "blocked_flag" | "captcha_flag" | "scan_outcome">) {
+  if (isScanNoGoSnapshotOutcome(event.scan_outcome)) {
+    return resolveScanNoGoPresentation(event.scan_outcome).customerTitle;
+  }
   if (event.captcha_flag) return "CAPTCHA";
   if (event.blocked_flag || event.access_posture_class === "early_loss") return "Blocked";
   if (event.access_posture_class === "robots_limited") return "Robots-limited";
