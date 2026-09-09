@@ -613,8 +613,12 @@ The subsequent ten-page production verification completed in 90 seconds with two
 completed and eight partial pages, no outstanding jobs, and verified retained
 source hashes. Its diagnostics also exposed two-second finish-acknowledgment
 timeouts after the server had correctly persisted the observations. The finish
-request now allows up to four seconds within the same total invocation deadline
-and requires an explicit `accepted: true` response. It adds no retry or duplicate
-publication. Tests cover a delayed successful acknowledgment, rejected acceptance,
-and a shorter remaining invocation deadline. The combined incremental cost remains
+request uses the remaining invocation budget, since it is the final operation,
+and requires an explicit `accepted: true` response. A separate four-second cap
+still caused two lost acknowledgments in the next production verification even
+though all results persisted; it was removed in favor of the existing absolute
+24-second internal deadline. It adds no retry or duplicate publication. Tests cover
+a five-second successful acknowledgment, rejected acceptance, and a shorter
+remaining invocation deadline. Successful finish acknowledgments also emit bounded
+page/attempt and elapsed-time diagnostics. The combined incremental cost remains
 below the current-volume $0.25/month estimate above.

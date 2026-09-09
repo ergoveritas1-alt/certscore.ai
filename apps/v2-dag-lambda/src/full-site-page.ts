@@ -69,7 +69,10 @@ export async function dispatchFullSitePage(event: unknown) {
 
 export async function requestFullSiteControl(controlUrl: URL, message: z.infer<typeof messageSchema>, body: Record<string, unknown>, invocationDeadline: number) {
   const controlStartedAt = Date.now();
-  const timeoutMs = Math.min(body.operation === "claim" ? 3000 : 4000, invocationDeadline - controlStartedAt);
+  const remainingMs = invocationDeadline - controlStartedAt;
+  // Finish is the last operation: use the remaining publication budget rather
+  // than imposing a second deadline before verified persistence can acknowledge.
+  const timeoutMs = body.operation === "claim" ? Math.min(3000, remainingMs) : remainingMs;
   if (timeoutMs <= 0) throw new Error("Inventory publication deadline reached.");
   let httpStatus: number | null = null;
   try {
@@ -89,6 +92,9 @@ export async function requestFullSiteControl(controlUrl: URL, message: z.infer<t
     const result = await response.json();
     if (body.operation === "finish" && result.accepted !== true)
       throw new Error("Full site result was not accepted.");
+    if (body.operation === "finish") console.info(JSON.stringify({ event: "full_site_control_completed",
+      page_id: message.pageId, attempt_id: message.attemptId, operation: "finish",
+      elapsed_ms: Date.now() - controlStartedAt, http_status: httpStatus }));
     return result;
   } catch (error) {
     // The custom Lambda runtime does not emit uncaught invocation errors.
