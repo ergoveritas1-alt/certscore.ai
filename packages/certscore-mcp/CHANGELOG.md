@@ -2,7 +2,14 @@
 
 ## Unreleased
 
-- Prepare Cursor integration `1.0.3` with the `CertScore.ai` MCP component name, jurisdiction-neutral GPC and evidence-qualified Accept and Reject Path discovery metadata, and three updated Cursor prompt deeplinks on the MCP Light landing page.
+- Prepare Cursor integration `1.0.4` with query-first cookie, tracker, consent, GDPR, CCPA, ePrivacy, privacy-risk, and website-scanner discovery metadata while preserving the `CertScore.ai` no-auth Light endpoint.
+
+## 0.2.20
+
+- Lead completed no-go responses with the canonical access blocker, “Not scored” disposition, retained evidence, next action, and retry guidance across scan, status, and bundle text surfaces, including tight response budgets.
+- Retain bounded, redacted caller argument and metadata previews with explicit omission reasons in hosted request diagnostics.
+- Preserve supplied task context on HTTP-rate-limited calls. Keep shared-question permission requirements, the existing 4 KB record limit, and 90-day retention.
+- Link admin requests to earlier retained question context only within the same caller, session, scan, provider and entrypoint, with source attribution.
 
 ## 0.2.19
 

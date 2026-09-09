@@ -11,9 +11,11 @@ Website Privacy Preflight connects Cursor to the existing no-auth CertScore.ai M
 
 ## Connection
 
-- Cursor plugin version: `1.0.3`
+[Install CertScore.ai MCP Light in Cursor](https://cursor.com/link/mcp/install?name=CertScore.ai&config=eyJ1cmwiOiJodHRwczovL21jcC5jZXJ0c2NvcmUuYWkvbWNwL2xpZ2h0In0%3D) — hosted Light URL, no API key required.
+
+- Cursor plugin version: `1.0.4`
 - Canonical MCP identity: `ai.certscore/mcp-light`
-- Hosted MCP version: `0.2.19`
+- Hosted MCP version: `0.2.20`
 - Endpoint: `https://mcp.certscore.ai/mcp/light`
 - Authentication: none
 - Tools: `certscore_scan_site`, `certscore_get_scan_status`, `certscore_get_scan_bundle`

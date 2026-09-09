@@ -43,6 +43,7 @@ import {
   type ShadowEvidenceRow,
   type ShadowEvidenceStatus,
   type ShadowReportData,
+  type TimelineReportData,
   type ShadowReportVariant
 } from "./shadow-report-data";
 
@@ -50,7 +51,7 @@ type ShadowScanReportProps = {
   allowRestrictedScanOptions?: boolean;
   defaultScanFrom?: ServerScanFrom;
   mode?: "authenticated" | "public";
-  report?: ShadowReportData;
+  report?: TimelineReportData;
   variant: ShadowReportVariant;
 };
 
@@ -140,7 +141,7 @@ function ReportIdentity({
   workspaceIdentity?: boolean;
   hideShare?: boolean;
   mode?: "authenticated" | "public";
-  report: ShadowReportData;
+  report: Pick<ShadowReportData, "scan" | "fullSite">;
 }) {
   if (report.fullSite && !workspaceIdentity) return null;
   const visualEvidence = report.scan.visualEvidenceHref ?? null;
@@ -206,7 +207,7 @@ function ReportIdentity({
   );
 }
 
-function ReportScanNext({ allowRestrictedScanOptions = false, defaultScanFrom, mode = "public", report }: { allowRestrictedScanOptions?: boolean; defaultScanFrom?: ServerScanFrom; mode?: "authenticated" | "public"; report: ShadowReportData }) {
+function ReportScanNext({ allowRestrictedScanOptions = false, defaultScanFrom, mode = "public", report }: { allowRestrictedScanOptions?: boolean; defaultScanFrom?: ServerScanFrom; mode?: "authenticated" | "public"; report: Pick<ShadowReportData, "scan" | "fullSite"> }) {
   return (
     <div className="shadow-scan-next w-full lg:max-w-[31rem] [&_.scan-report-button]:!rounded-md [&_.scan-report-button]:!border-zinc-300 [&_.scan-report-button]:!bg-white [&_.scan-report-button]:!text-zinc-700 [&_.scan-report-button]:!shadow-none [&_.ui-button]:!rounded-md [&_.ui-button]:!border-sky-700 [&_.ui-button]:!bg-none [&_.ui-button]:!bg-sky-600 [&_.ui-button]:!text-white [&_.ui-button]:!shadow-[0_4px_12px_rgba(2,132,199,0.22)] [&_.ui-button]:disabled:!border-sky-300 [&_.ui-button]:disabled:!bg-sky-100 [&_.ui-button]:disabled:!text-sky-700 [&_.ui-button]:disabled:!opacity-100 [&_input]:!h-10 [&_input]:!rounded-md [&_input]:!border [&_input]:!border-zinc-300 [&_input]:!bg-white [&_input]:!pl-3 [&_input]:!text-sm [&_input]:!shadow-none [&_input]:focus:!border-zinc-500 [&_input]:focus:!ring-1 [&_input]:focus:!ring-zinc-200">
       <DomainScanForm
@@ -1695,7 +1696,7 @@ function VariantBody({
   mode,
   report = SHADOW_REPORT,
   variant,
-}: ShadowScanReportProps) {
+}: Omit<ShadowScanReportProps, "report"> & { report?: ShadowReportData }) {
   if (variant === "triage") return <TriageVariant report={report} />;
   if (variant === "timeline") return (
     <TimelineVariant
@@ -1717,7 +1718,19 @@ export function ShadowScanReport({
   report = SHADOW_REPORT,
   variant,
 }: ShadowScanReportProps) {
-  const homepageContent = (
+  const homepageContent = report.resultDisposition === "no_go" ? (
+    <main className="mx-auto max-w-7xl space-y-8 px-5 py-10 lg:px-10">
+      <ReportIdentity enhancedActions allowRestrictedScanOptions={allowRestrictedScanOptions} defaultScanFrom={defaultScanFrom} mode={mode} report={report} />
+      <section aria-label="Scan access limitation" className="rounded-xl border border-amber-200 bg-amber-50 p-6">
+        <p className={reportEyebrow}>Scan not representative · Not scored</p>
+        <h2 className={`mt-3 ${reportSectionTitle}`}>{report.noGo.title}</h2>
+        <p className="mt-4 text-zinc-700">{report.noGo.explanation}</p>
+        <p className="mt-3 text-zinc-700">{report.noGo.summary}</p>
+        {report.noGo.evidenceExcerpt ? <blockquote className="mt-4 border-l-2 border-amber-400 pl-4 text-sm text-zinc-600">{report.noGo.evidenceExcerpt}</blockquote> : null}
+        <p className="mt-5 font-medium">{report.noGo.recommendedNextAction}</p>
+      </section>
+    </main>
+  ) : (
     <>
       <VariantBody
         allowRestrictedScanOptions={allowRestrictedScanOptions}
@@ -1730,7 +1743,7 @@ export function ShadowScanReport({
     </>
   );
 
-  const reportContent = report.fullSite ? <FullSiteWorkspace scanId={report.scan.id} requested={report.fullSite} homepageGraph={report.runtimeEvidenceGraph} homepageFindings={report.findings} homepageUrl={report.scan.url} siteMetadata={report.siteMetadata} identity={<ReportIdentity compact enhancedActions workspaceIdentity report={report} />} identityWithoutSharing={<ReportIdentity compact enhancedActions workspaceIdentity hideShare report={report} />} scanNext={<ReportScanNext allowRestrictedScanOptions={allowRestrictedScanOptions} defaultScanFrom={defaultScanFrom} mode={mode} report={report} />}>{homepageContent}</FullSiteWorkspace> : homepageContent;
+  const reportContent = report.resultDisposition !== "no_go" && report.fullSite ? <FullSiteWorkspace scanId={report.scan.id} requested={report.fullSite} homepageGraph={report.runtimeEvidenceGraph} homepageFindings={report.findings} homepageUrl={report.scan.url} siteMetadata={report.siteMetadata} identity={<ReportIdentity compact enhancedActions workspaceIdentity report={report} />} identityWithoutSharing={<ReportIdentity compact enhancedActions workspaceIdentity hideShare report={report} />} scanNext={<ReportScanNext allowRestrictedScanOptions={allowRestrictedScanOptions} defaultScanFrom={defaultScanFrom} mode={mode} report={report} />}>{homepageContent}</FullSiteWorkspace> : homepageContent;
 
   if (mode === "authenticated") {
     return (

@@ -1,7 +1,7 @@
 {
   "$schema": "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json",
   "name": "certscore-website-privacy-preflight",
-  "version": "1.0.3",
+  "version": "1.0.4",
   "description": "Free public-website privacy scanner for cookies, trackers, consent controls, jurisdiction-neutral GPC response comparisons, evidence-qualified Accept Path and Reject Path observations, policy and regulatory review signals, and HTTPS/TLS.",
   "author": {
     "name": "CertScore.ai, LLC",
@@ -11,5 +11,5 @@
   "homepage": "https://certscore.ai/mcp/light",
   "repository": "https://github.com/ergoveritas1-alt/certscore.ai",
   "license": "Apache-2.0",
-  "keywords": ["certscore", "mcp", "privacy", "privacy-scanner", "cookie-checker", "consent", "cmp", "gdpr", "eprivacy", "ccpa", "gpc", "global-privacy-control", "accept-path", "reject-path", "website-analysis", "preflight"]
+  "keywords": ["certscore", "mcp", "cookie", "GDPR", "tracker", "consent", "privacy", "CCPA", "ePrivacy", "website-scanner", "privacy-scanner", "cookie-checker", "cmp", "gpc", "global-privacy-control", "accept-path", "reject-path", "website-analysis", "preflight"]
 }

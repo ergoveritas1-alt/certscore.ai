@@ -1,4 +1,6 @@
+import { mcpCallerInputSchema } from "./mcp-caller-input";
 import { z } from "zod";
+import { mcpTaskContextSchema, sanitizeMcpTaskContext } from "./mcp-product-context";
 
 export const MCP_TELEMETRY_INTEGRATION = "certscore-mcp" as const;
 export const MCP_TELEMETRY_RETENTION_DAYS = 90;
@@ -112,7 +114,73 @@ export const mcpActivationEventSchema = z.object({
   { message: "Activation identity must match the hosted MCP surface.", path: ["authClass"] },
 );
 
+const telemetryOption = z.string().regex(/^[a-zA-Z0-9_.:-]+$/).max(128);
+const telemetryCount = z.number().int().min(0).max(1_000_000);
+export const mcpRequestDetailsSchema = z.object({
+  version: z.literal(1),
+  callerInput: mcpCallerInputSchema.optional(),
+  captureBasis: z.enum(["protocol_request", "validated_arguments"]).optional(),
+  taskContext: mcpTaskContextSchema.refine(value => JSON.stringify(value) === JSON.stringify(sanitizeMcpTaskContext(value)), "Question context must be sanitized before ingestion.").optional(),
+  clientVersion: telemetryOption.optional(),
+  serverVersion: telemetryOption.optional(),
+  toolSchemaVersion: telemetryOption.optional(),
+  response: z.object({
+    bytes: z.number().int().min(0).max(10_000_000),
+    truncated: z.boolean().nullable(),
+    effectiveMaxBytes: telemetryCount.optional(),
+  }).strict().optional(),
+  arguments: z.object({
+    url: z.string().url().max(512).refine((value) => {
+      try {
+        const url = new URL(value);
+        return ["http:", "https:"].includes(url.protocol) && value === url.origin;
+      } catch { return false; }
+    }).optional(),
+    domain: z.string().max(253).regex(/^[a-z0-9.-]+$/).optional(),
+    scanId: telemetryOption.optional(), jobId: telemetryOption.optional(), findingId: telemetryOption.optional(),
+    freshness: z.enum(["latest", "refresh"]).optional(),
+    scanFrom: z.enum(["eu_de", "eu_ie", "california"]).optional(),
+    detail: z.enum(["tiny", "quick", "standard", "full", "summary", "evidence", "findings"]).optional(),
+    format: z.enum(["json", "markdown"]).optional(),
+    waitForCompletion: z.boolean().optional(),
+    maxWaitSeconds: telemetryCount.optional(), maxBytes: telemetryCount.optional(),
+    maxFindings: telemetryCount.optional(), maxPreConsentRows: telemetryCount.optional(),
+    maxRows: telemetryCount.optional(), limit: telemetryCount.optional(), offset: telemetryCount.optional(),
+  }).strict(),
+  argumentsOmitted: z.boolean(),
+  actorBasis: z.enum(["authenticated", "provider_ephemeral", "requester_binding", "unavailable"]),
+  sessionBasis: z.enum(["provider_conversation", "mcp_session", "unavailable"]),
+  rateLimit: z.object({
+    kind: z.enum(["mcp_read", "scan_creation", "upstream"]),
+    scope: telemetryOption.optional(), windowId: telemetryOption.optional(),
+    profile: telemetryOption.optional(), policyVersion: telemetryOption.optional(),
+    limit: telemetryCount.optional(), used: telemetryCount.optional(),
+    requested: telemetryCount.optional(), windowSeconds: telemetryCount.optional(),
+    retryAfterSeconds: telemetryCount.optional(),
+  }).strict().nullable(),
+}).strict();
+export type McpRequestDetails = z.infer<typeof mcpRequestDetailsSchema>;
+
+// PostgreSQL enforces 4096 bytes on the entire jsonb value, including its spaces.
+// Pretty JSON is a conservative upper bound on that serialization's size.
+export function boundMcpRequestDetails(input: McpRequestDetails): McpRequestDetails {
+  const details: McpRequestDetails = { ...input, arguments: { ...input.arguments },
+    ...(input.callerInput ? { callerInput: { ...input.callerInput, fields: [...input.callerInput.fields], limits: [...input.callerInput.limits] } } : {}) };
+  const bytes = () => new TextEncoder().encode(JSON.stringify(details, null, 1)).length;
+  while (bytes() > 4096 && details.callerInput?.fields.length) {
+    details.callerInput.fields.pop();
+    if (!details.callerInput.limits.includes("byte_limit")) details.callerInput.limits.push("byte_limit");
+  }
+  // Retain context/reasons even if a legacy argument set consumes the envelope.
+  for (const key of Object.keys(details.arguments)) {
+    if (bytes() <= 4096) break;
+    delete (details.arguments as Record<string, unknown>)[key]; details.argumentsOmitted = true;
+  }
+  return details;
+}
+
 export const mcpTelemetryEventSchema = z.object({
+  requestDetails: mcpRequestDetailsSchema.nullable().optional(),
   actorId: z.string().regex(/^[a-f0-9]{24}$/).nullable(),
   authClass: z.enum(["anonymous", "authenticated"]),
   clientName: z.string().min(1).max(100).regex(/^[a-zA-Z0-9][a-zA-Z0-9 ._:/+@()-]*$/).nullable(),

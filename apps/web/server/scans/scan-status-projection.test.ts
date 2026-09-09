@@ -229,6 +229,20 @@ test("API v2 lightweight status projects retained no-go assessment without repor
   assert.equal(response.score, null);
 });
 
+test("authentication-required no-go returns sign-in guidance and withholds the target score", async () => {
+  const build = await getBuildLightweightApiV2ScanStatusInput();
+  const response = build(projection({
+    reportReady: false,
+    scanNoGoAssessment: { decision: "no_go", reasonCodes: ["authentication_required"] },
+    status: "completed",
+  }));
+  assert.equal(response.status, "completed_limited");
+  assert.equal(response.resultDisposition, "no_go");
+  assert.equal(response.noGo?.reasonCode, "authentication_required");
+  assert.equal(response.noGo?.title, "Sign-in required");
+  assert.equal(response.score, null);
+});
+
 test("API v2 lightweight status fails closed when persisted report projection failed", async () => {
   const build = await getBuildLightweightApiV2ScanStatusInput();
   const response = build(projection({

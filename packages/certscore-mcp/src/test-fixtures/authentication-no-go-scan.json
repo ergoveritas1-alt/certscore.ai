@@ -1,0 +1,226 @@
+{
+  "source": "Retained production MCP status response for the September 9, 2026 HTTP 401 scan; no new scan performed.",
+  "scan": {
+    "type": "certscore_scan",
+    "scanId": "0b9a3256-aa72-4378-acff-e205fd6cdc5e",
+    "domain": "forenaxis-command.michaelmancini1968.chatgpt.site",
+    "url": "https://forenaxis-command.michaelmancini1968.chatgpt.site/",
+    "scanFrom": "eu_de",
+    "status": "completed_limited",
+    "score": null,
+    "scoreStatus": "final",
+    "scoreVersion": "overall-posture.v3",
+    "scoreUpdatedAt": "2026-09-09T11:51:05.546Z",
+    "riskLevel": null,
+    "resultDisposition": "no_go",
+    "noGo": {
+      "reasonCode": "authentication_required",
+      "title": "Sign-in required",
+      "explanation": "The requested page requires authentication. CertScore could not access the protected content as a public visitor.",
+      "summary": "The requested content could not be assessed, so no target score was generated.",
+      "limitationKind": "scanner_access_limitation",
+      "recommendedNextAction": "Use a publicly accessible URL, or make the requested page public and try again.",
+      "retryLikelyToHelp": false,
+      "evidenceExcerpt": "The main document returned HTTP 401 and required authentication."
+    },
+    "coverage": {
+      "status": "scanner_access_limitation",
+      "summary": "The requested content could not be assessed, so no target score was generated.",
+      "limitations": [
+        "The requested page requires authentication. CertScore could not access the protected content as a public visitor."
+      ]
+    },
+    "gpcResponse": {
+      "contractVersion": "certscore.gpc-response-assessment.v2",
+      "status": "indeterminate",
+      "findingTitle": "GPC response",
+      "summary": "GPC delivery or comparison coverage could not be fully verified. Other verified scan evidence remains available; this GPC limitation is not a successful response or an observed gap.",
+      "scoreEffect": "none",
+      "legalInterpretation": "not_assessed",
+      "comparison": {
+        "comparable": false,
+        "protocol": "passive_baseline_with_sec_gpc",
+        "baselineArtifact": {
+          "lane": "runtime_evidence",
+          "sha256": "0e43880dde079f784004e407b3a9cb29df51d41ba0c771b6c8755dad6464d2ff",
+          "sizeBytes": 69075
+        },
+        "gpcArtifact": {
+          "lane": "gpc_observation",
+          "sha256": "dd61ab5dc642929f7f5e0f0de531fa951f0d0c87ece3316c185122cecde6be9a",
+          "sizeBytes": 69146
+        },
+        "enabledProof": {
+          "secGpcHeaderValue": "1",
+          "requestsWithSecGpc": 6,
+          "requestEventIds": [
+            "net_10",
+            "net_12",
+            "net_18",
+            "net_2",
+            "net_6",
+            "net_8"
+          ],
+          "navigatorGlobalPrivacyControl": true
+        },
+        "deltas": {
+          "cookies": {
+            "baselineCount": 2,
+            "gpcCount": 2,
+            "countDelta": 0,
+            "baselineOnly": [],
+            "gpcOnly": [],
+            "shared": [
+              "[\"__cf_bm\",\".chatgpt.site\",\"/\"]",
+              "[\"__cf_bm\",\"chatgpt.site\",\"/\"]"
+            ],
+            "baselineOnlyCount": 0,
+            "gpcOnlyCount": 0,
+            "sharedCount": 2,
+            "samplesTruncated": false
+          },
+          "trackers": {
+            "baselineCount": 0,
+            "gpcCount": 0,
+            "countDelta": 0,
+            "baselineOnly": [],
+            "gpcOnly": [],
+            "shared": [],
+            "baselineOnlyCount": 0,
+            "gpcOnlyCount": 0,
+            "sharedCount": 0,
+            "samplesTruncated": false
+          },
+          "advertisingOrMeasurementActivity": {
+            "baselineCount": 0,
+            "gpcCount": 0,
+            "countDelta": 0,
+            "baselineOnly": [],
+            "gpcOnly": [],
+            "shared": [],
+            "baselineOnlyCount": 0,
+            "gpcOnlyCount": 0,
+            "sharedCount": 0,
+            "samplesTruncated": false
+          },
+          "consentOrCmpBehavior": {
+            "baselineCount": 0,
+            "gpcCount": 0,
+            "countDelta": 0,
+            "baselineOnly": [],
+            "gpcOnly": [],
+            "shared": [],
+            "baselineOnlyCount": 0,
+            "gpcOnlyCount": 0,
+            "sharedCount": 0,
+            "samplesTruncated": false
+          },
+          "webStorage": {
+            "baselineCount": 0,
+            "gpcCount": 0,
+            "countDelta": 0,
+            "baselineOnly": [],
+            "gpcOnly": [],
+            "shared": [],
+            "baselineOnlyCount": 0,
+            "gpcOnlyCount": 0,
+            "sharedCount": 0,
+            "samplesTruncated": false
+          },
+          "advertisingOrMarketingActivity": {
+            "baselineCount": 0,
+            "gpcCount": 0,
+            "countDelta": 0,
+            "baselineOnly": [],
+            "gpcOnly": [],
+            "shared": [],
+            "baselineOnlyCount": 0,
+            "gpcOnlyCount": 0,
+            "sharedCount": 0,
+            "samplesTruncated": false
+          }
+        },
+        "delivery": {
+          "status": "verified"
+        },
+        "coverage": {
+          "status": "limited",
+          "comparedThroughMs": 2354
+        },
+        "responseBasis": "insufficient_evidence",
+        "limitationKeys": [
+          "baseline_not_representative",
+          "baseline_runtime_coverage_insufficient",
+          "gpc_not_representative",
+          "gpc_runtime_coverage_insufficient"
+        ]
+      },
+      "californiaPolicy": {
+        "applied": false,
+        "deductionPoints": 0
+      },
+      "evidenceUrl": "https://certscore.ai/api/v2/scans/0b9a3256-aa72-4378-acff-e205fd6cdc5e/findings/gpc_response"
+    },
+    "postAcceptObservation": {
+      "status": "aborted",
+      "acceptanceExercised": false,
+      "observationCount": 0,
+      "productionProjectable": false,
+      "evidenceDisposition": "indeterminate",
+      "indeterminateReason": "not_attempted",
+      "verdict": "no_confirmed_post_accept_verdict",
+      "interpretation": "Post-Accept evidence did not satisfy the production projection invariants, so no post-accept verdict was established.",
+      "observationStrategy": "not_applicable",
+      "termination": {
+        "kind": "unavailable",
+        "intentional": false,
+        "trigger": "unavailable"
+      },
+      "completedAt": "2026-09-09T11:51:01.452Z",
+      "coverageLimitations": [
+        "Post-Accept evidence did not satisfy the production projection invariants, so no post-accept verdict was established."
+      ],
+      "limitations": [
+        "Post-Accept evidence did not satisfy the production projection invariants, so no post-accept verdict was established."
+      ]
+    },
+    "postRefusalObservation": {
+      "status": "not_attempted",
+      "refusalExercised": false,
+      "observationCount": 0,
+      "productionProjectable": false,
+      "evidenceDisposition": "indeterminate",
+      "indeterminateReason": "not_attempted",
+      "verdict": "no_confirmed_post_refusal_verdict",
+      "interpretation": "No confirmed post-refusal verdict was established.",
+      "observationStrategy": "not_applicable",
+      "termination": {
+        "kind": "unavailable",
+        "intentional": false,
+        "trigger": "unavailable"
+      },
+      "completedAt": "2026-09-09T11:51:02.130Z",
+      "coverageLimitations": [
+        "interaction_authorization:scan_target_resolution:sharded_scan_resolved_exact_target.v2",
+        "redirect_target_resolved_exact:0",
+        "cmp_action_coverage:reject:no_cmp_evidence:25dc2def64ffdd00"
+      ],
+      "limitations": [
+        "interaction_authorization:scan_target_resolution:sharded_scan_resolved_exact_target.v2",
+        "redirect_target_resolved_exact:0",
+        "cmp_action_coverage:reject:no_cmp_evidence:25dc2def64ffdd00"
+      ]
+    },
+    "createdAt": "2026-09-09T11:50:39.585Z",
+    "startedAt": "2026-09-09T11:50:39.585Z",
+    "completedAt": "2026-09-09T11:51:05.546Z",
+    "scanTimeSeconds": 26,
+    "links": {
+      "self": "https://certscore.ai/api/v2/scans/0b9a3256-aa72-4378-acff-e205fd6cdc5e/status",
+      "findings": "https://certscore.ai/api/v2/scans/0b9a3256-aa72-4378-acff-e205fd6cdc5e/findings",
+      "pulse": "https://certscore.ai/api/v2/scans/0b9a3256-aa72-4378-acff-e205fd6cdc5e/pulse",
+      "report": "https://certscore.ai/scan/0b9a3256-aa72-4378-acff-e205fd6cdc5e",
+      "docs": "https://certscore.ai/api/v2/openapi.json"
+    }
+  }
+}

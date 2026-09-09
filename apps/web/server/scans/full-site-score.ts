@@ -1,10 +1,11 @@
+import { projectScanReportNoGo } from "../../lib/scans/scan-report-disposition";
 import "server-only";
 import { createHash } from "node:crypto";
 import { z } from "zod";
 import { cookieEventSchema, networkEventSchema, iframeEventSchema, runtimeEvidenceEventSchema, scanModuleRunSchema, collectionSurfaceObservationSchema } from "@certscore/contracts";
 import { resolveCanonicalVendor } from "@certscore/vendor-resolver";
 import { query, readFullSiteArtifact, type FullSiteCrawlRow } from "@website-signal-risk-scanner/db";
-import type { CrawlPage } from "@website-signal-risk-scanner/shared";
+import type { CrawlPage, CrawlObservation } from "@website-signal-risk-scanner/shared";
 import { buildNormalizedConcerns } from "../../lib/scans/normalized-concerns";
 import { buildUnifiedFindingDisplayPackets, type UnifiedFindingCandidate } from "../../lib/scans/unified-findings";
 import { isPromotionGradePreconsentRequestRow } from "../../lib/scans/preconsent-public-evidence";
@@ -94,13 +95,24 @@ export function mergeSiteChecklistRows(home: GdprEprivacyCoverageChecklistItem[]
   });
 }
 
+/** Inventory preserved from an error response must never enter concern/scoring projection. */
+export function isFullSiteScoringCaptureComplete(page: {
+  status: string;
+  observation?: Pick<CrawlObservation, "status" | "httpStatus" | "failureKind"> | null;
+}) {
+  const observation = page.observation;
+  return page.status === "completed" && observation?.status === "completed" &&
+    !observation.failureKind && (observation.httpStatus === null || observation.httpStatus < 400);
+}
+
 export async function loadFullSiteScore(crawl: FullSiteCrawlRow, pages: CrawlPage[]): Promise<FullSiteScore | null> {
   if (!crawl.completed_at || crawl.status !== "completed") return null;
   const { rows: [snapshot] } = await query<Record<string, unknown>>(
     "select report_projection_payload,report_projection_payload_sha256,report_projection_payload_size_bytes,report_projection_status,report_projection_version,report_projection_computed_at from scan_snapshots where scan_id=$1", [crawl.scan_id]);
   if (!snapshot) return null;
   const home = readPersistedScanReportProjection({ scan: { id: crawl.scan_id, status: "completed" } as ScanDetailResponse["scan"], snapshot });
-  const canonical = home && getPersistedCanonicalReportProjection(home);
+  if (!home || projectScanReportNoGo(home)) return null;
+  const canonical = getPersistedCanonicalReportProjection(home);
   if (!canonical) return null;
   const key = createHash("sha256").update(JSON.stringify([VERSION, PRIORITY_VERSION, GDPR_EPRIVACY_EVIDENCE_SCORE_VERSION, snapshot.report_projection_payload_sha256, crawl.configuration_hash, pages.map(p => [p.id, p.status, p.observation?.sourceHash])])).digest("hex");
   const saved = z.object({ fullSiteScore: z.object({sourceHash: z.string(), score: z.unknown()}) }).safeParse(crawl.policy_json);
@@ -116,7 +128,7 @@ export async function loadFullSiteScore(crawl: FullSiteCrawlRow, pages: CrawlPag
     let scoredPages = 1, limitedPages = 0;
     for (const page of pages.filter(p => !["excluded", "cancelled"].includes(p.status) && p.observation?.executionProfile !== "homepage_baseline")) {
       const observation = page.observation;
-      if (!observation || page.status !== "completed" || observation.status !== "completed" || observation.parentScanId !== crawl.scan_id || observation.pageJobId !== page.id || observation.configurationHash !== crawl.configuration_hash || !observation.runtimeGraph) { limitedPages++; continue; }
+      if (!observation || !isFullSiteScoringCaptureComplete(page) || observation.parentScanId !== crawl.scan_id || observation.pageJobId !== page.id || observation.configurationHash !== crawl.configuration_hash || !observation.runtimeGraph) { limitedPages++; continue; }
       try {
         const { rows: [attempt] } = await query<{ artifact_json: { bucket: string; evidenceKey: string; sourceHash: string } }>("select artifact_json from full_site_attempts where id=$1 and page_id=$2 and status='completed'", [observation.attemptId, page.id]);
         const artifact = attempt?.artifact_json;
@@ -139,7 +151,7 @@ export async function loadFullSiteScore(crawl: FullSiteCrawlRow, pages: CrawlPag
       ...(homePage ? [{ id: homePage.id, url: homePage.finalUrl ?? homePage.url, homepage: true, findingIds: [...homeFindingIds, ...executive.map(finding => finding.id)] }] : []),
       ...sources.map(source => { const page = pages.find(page => page.id === source.pageId)!; return { id: page.id, url: page.finalUrl ?? page.url, homepage: false, findingIds: source.findingIds }; }),
     ], executive);
-    const result = { version: VERSION, priorityReview, value: deriveCanonicalOverallScoreForReport({ checklistRows, unifiedFindings: canonical.globalUnifiedFindings }), scoredPages, limitedPages, sources, scope: "Homepage audit plus eligible retained storage, tracking, session replay, fingerprinting, sensitive-surface and embed evidence across scanned pages; duplicate identities count once. Additional-page consent, policy and action checks remain unassessed." };
+    const result = { version: VERSION, priorityReview, value: deriveCanonicalOverallScoreForReport({ scanRecord: home, checklistRows, unifiedFindings: canonical.globalUnifiedFindings }), scoredPages, limitedPages, sources, scope: "Homepage audit plus eligible retained storage, tracking, session replay, fingerprinting, sensitive-surface and embed evidence across scanned pages; duplicate identities count once. Additional-page consent, policy and action checks remain unassessed." };
     // Persist the versioned, evidence-bound result once; table filtering and downloads reuse it.
     if (!limitedPages) await query("update full_site_crawls set policy_json=jsonb_set(policy_json,'{fullSiteScore}',$2::jsonb) where scan_id=$1 and status='completed'", [crawl.scan_id, JSON.stringify({sourceHash: key, score: result})]);
     return result;

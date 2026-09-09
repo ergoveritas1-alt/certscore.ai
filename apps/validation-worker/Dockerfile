@@ -63,10 +63,10 @@ RUN rm -rf \
   ./packages/db/dist \
   ./packages/validation-shared/dist
 
-RUN pnpm --filter @certscore/api-contracts build
 RUN pnpm --filter @certscore/contracts build
 RUN pnpm --filter @certscore/vendor-resolver build
 RUN pnpm --filter @website-signal-risk-scanner/shared build
+RUN pnpm --filter @certscore/api-contracts build
 RUN pnpm --filter @website-signal-risk-scanner/web-bot-auth build
 RUN pnpm --filter @certscore/scan-core build
 RUN pnpm --filter @website-signal-risk-scanner/db build

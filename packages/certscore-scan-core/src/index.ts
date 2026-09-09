@@ -2572,7 +2572,8 @@ export function buildScanNoGoAssessment(input: {
   // settled page is corroborated. A screenshot is never sufficient by itself:
   // require a second independent representative-page channel.
   const representativeAccessBlockContradiction =
-    settledPageState?.reasonCode === "access_denied_or_forbidden_page" &&
+    (settledPageState?.reasonCode === "access_denied_or_forbidden_page" ||
+      settledPageState?.reasonCode === "authentication_required") &&
     visuallySubstantiveScreenshotObserved &&
     (
       (
@@ -2698,16 +2699,25 @@ export function buildScanEvidenceLaneAssessment(input: {
   transportSecurityObservationCount: number;
 }): ScanEvidenceLaneAssessment {
   const homepageNoGo = input.scanNoGoAssessment?.decision === "no_go";
+  // A policy reachable from a sign-in screen does not make the protected
+  // target assessable. Preserve that terminal result after all lanes finish.
+  // The status check also handles retained assessments with the older generic reason.
+  const authenticationNoGo = homepageNoGo && (
+    input.scanNoGoAssessment?.reasonCodes.includes("authentication_required") ||
+    input.scanNoGoAssessment?.supportingSignals.mainDocumentStatus === 401
+  );
   const usablePolicySurfaces = input.policySurfaceObservations.filter((observation) =>
     isIndependentlyUsablePolicySurface(observation, input.normalizedUrl)
   );
   const runtimeUsable = !homepageNoGo && input.runtimeCoverage.coverageStatus === "usable";
   const runtimeLimited = !homepageNoGo && input.runtimeCoverage.coverageStatus === "limited_partial";
-  const outcome: ScanEvidenceLaneAssessment["outcome"] = runtimeUsable || runtimeLimited
-    ? "usable"
-    : usablePolicySurfaces.length > 0
-      ? "partial_with_diagnostics"
-      : "no_go";
+  const outcome: ScanEvidenceLaneAssessment["outcome"] = authenticationNoGo
+    ? "no_go"
+    : runtimeUsable || runtimeLimited
+      ? "usable"
+      : usablePolicySurfaces.length > 0
+        ? "partial_with_diagnostics"
+        : "no_go";
   const runtimeLane = runtimeUsable ? "usable" as const : runtimeLimited ? "limited" as const : "unusable" as const;
   const policyLane = usablePolicySurfaces.length > 0
     ? "usable" as const
@@ -2732,6 +2742,7 @@ export function buildScanEvidenceLaneAssessment(input: {
       ...input.runtimeCoverage.limitationKeys,
       ...(input.consentLimitationKeys ?? []),
       homepageNoGo ? "homepage_runtime_no_go" : null,
+      authenticationNoGo ? "authentication_required" : null,
       outcome === "partial_with_diagnostics" ? "partial_policy_evidence_only" : null,
       policyLane !== "usable" ? "verified_policy_surface_unavailable" : null,
     ].filter((value): value is string => Boolean(value))).slice(0, 24),
@@ -2958,7 +2969,10 @@ function classifyMainDocumentStatus(status: number | null): ClassifiedNoGoPageSt
   if (status === 429) {
     return { confidence: 0.99, evidenceText: "The main document returned HTTP 429.", hardTerminal: true, reasonCode: "rate_limited_429", visualPageState: "access_blocked" };
   }
-  if ([401, 403, 407, 451].includes(status)) {
+  if (status === 401) {
+    return { confidence: 0.99, evidenceText: "The main document returned HTTP 401 and required authentication.", hardTerminal: true, reasonCode: "authentication_required", visualPageState: "access_blocked" };
+  }
+  if ([403, 407, 451].includes(status)) {
     return { confidence: 0.99, evidenceText: `The main document returned HTTP ${status}.`, hardTerminal: true, reasonCode: "access_denied_or_forbidden_page", visualPageState: "access_blocked" };
   }
   if ([500, 502, 503, 504].includes(status)) {

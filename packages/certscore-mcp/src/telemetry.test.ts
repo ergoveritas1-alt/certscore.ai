@@ -4,6 +4,31 @@ import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
 import { createCertScoreMcpServer, projectMcpToolInvocationObservation, type McpToolInvocationObservation } from "./server.js";
 
+test("protocol observation captures validation errors, unknown tools and stripped inputs exactly once", async () => {
+  const observations: McpToolInvocationObservation[] = [];
+  const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
+  const server = createCertScoreMcpServer({ toolProfile: "light", onToolInvocation: observation => { observations.push(observation); } });
+  const client = new Client({ name: "boundary-qc", version: "1" });
+  await Promise.all([server.connect(serverTransport), client.connect(clientTransport)]);
+  try {
+    for (const request of [
+      { name: "certscore_scan_site", arguments: {} },
+      { name: "qc_unknown_tool", arguments: {} },
+      { name: "certscore_get_scan_status", arguments: { scanId: "invalid", hidden: "secret-value" } },
+      { name: "certscore_scan_site", arguments: { taskContext: { purpose: "vendor_review", questionSummary: "Review vendor tracking", questionSource: "agent_paraphrase", shareForImprovement: true, integrationId: "qc", integrationVersion: "1" } } },
+    ]) assert.equal((await client.callTool(request)).isError, true);
+    assert.equal(observations.length, 4);
+    assert.deepEqual(observations.map(row => row.errorCode), ["invalid_arguments", "unknown_tool", "invalid_scan_id", "invalid_arguments"]);
+    assert.ok(observations.every(row => row.captureBasis === "protocol_request"));
+    assert.equal(observations[2]?.requestArguments?.omitted, true);
+    assert.equal(JSON.stringify(observations).includes("secret-value"), false);
+    assert.equal(observations[3]?.taskContext?.purpose, "vendor_review");
+    assert.ok(observations[0]?.response?.bytes);
+    assert.equal(observations[3]?.callerInput?.questionStatus, "retained");
+    assert.equal(observations[2]?.callerInput?.fields.find(field => field.path === "arguments.hidden")?.disposition, "redacted");
+  } finally { await client.close(); await server.close(); }
+});
+
 test("scan-site telemetry classifies new and reused scans without retaining a URL path", () => {
   const created = projectMcpToolInvocationObservation({
     args: { freshness: "refresh", scanFrom: "eu_de", url: "https://WWW.Example.com/private/path?token=secret" },
@@ -19,6 +44,7 @@ test("scan-site telemetry classifies new and reused scans without retaining a UR
   });
 
   assert.deepEqual(created, {
+    requestArguments: { values: { freshness: "refresh", scanFrom: "eu_de", url: "https://www.example.com" }, omitted: true },
     durationMs: 152,
     errorCode: null,
     freshness: "refresh",
@@ -38,6 +64,39 @@ test("scan-site telemetry classifies new and reused scans without retaining a UR
   assert.equal(reused.scanDecision, "reused");
   assert.equal(JSON.stringify(created).includes("private/path"), false);
   assert.equal(JSON.stringify(created).includes("secret"), false);
+});
+
+test("request details retain supplied options but omit secrets, free text, and invalid values", () => {
+  const event = projectMcpToolInvocationObservation({
+    toolName: "certscore_scan_site", durationMs: 1,
+    args: {
+      url: "https://user:password@example.com/private?token=secret#fragment",
+      freshness: "refresh", scanFrom: "eu_ie", waitForCompletion: false, maxWaitSeconds: 20,
+      detail: "full", format: "markdown", prompt: "private prompt", token: "private-token",
+      maxBytes: Infinity, offset: -1,
+    },
+    result: { structuredContent: { status: "queued" } },
+  });
+  assert.deepEqual(event.requestArguments, {
+    values: { url: "https://example.com", freshness: "refresh", scanFrom: "eu_ie", waitForCompletion: false, maxWaitSeconds: 20, detail: "full", format: "markdown" },
+    omitted: true,
+  });
+  assert.doesNotMatch(JSON.stringify(event), /password|private|secret|fragment|Infinity/);
+});
+
+test("creation limits keep their scope, usage and retry delay separate from target errors", () => {
+  const limited = projectMcpToolInvocationObservation({
+    toolName: "certscore_scan_site", args: { url: "https://example.com" }, durationMs: 1,
+    result: { isError: true, structuredContent: { error: { code: "rate_limited", retryAfterSeconds: 30,
+      creationRateLimit: { scope: "session", windowId: "concurrent", limit: 4, used: 4 } } } },
+  });
+  assert.deepEqual(limited.rateLimit, { kind: "scan_creation", scope: "session", windowId: "concurrent", retryAfterSeconds: 30, limit: 4, used: 4 });
+  const target = projectMcpToolInvocationObservation({
+    toolName: "certscore_get_scan_status", args: { scanId: "scan-1" }, durationMs: 1,
+    result: { isError: true, structuredContent: { error: { code: "rate_limited_429" } } },
+  });
+  assert.equal(target.quotaOutcome, "allowed");
+  assert.equal(target.rateLimit, undefined);
 });
 
 test("scan-site telemetry classifies the bounded CertScore canary path without retaining it", () => {

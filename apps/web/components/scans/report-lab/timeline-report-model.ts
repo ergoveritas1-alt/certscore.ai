@@ -1,3 +1,4 @@
+import { projectScanReportNoGo } from "../../../lib/scans/scan-report-disposition";
 import { siteMetadataProjectionSchema } from "@certscore/contracts";
 import { KNOWN_CMP_REGISTRY } from "@website-signal-risk-scanner/shared";
 import { acceptPathIncompleteReason } from "./accept-path-reason";
@@ -33,6 +34,7 @@ import type {
   ShadowEvidenceStatus,
   ShadowFinding,
   ShadowReportData,
+  TimelineReportData,
 } from "./shadow-report-data";
 import { buildExecutiveOverview } from "./executive-overview-copy";
 import { buildGpcResponseReportProjection } from "./gpc-report-projection";
@@ -616,7 +618,31 @@ function buildChoicePathComparison(
   return null;
 }
 
-export function buildTimelineReportModel(scanRecord: ScanDetailResponse): ShadowReportData {
+function buildReportIdentity(scanRecord: ScanDetailResponse): ShadowReportData["scan"] {
+  const visualEvidence = getVisualEvidenceArtifacts(scanRecord.runtimeArtifacts)
+    .find((artifact) => artifact.status === "available" && artifact.key);
+  return {
+    benchmark: scanRecord.domainBenchmark?.industry ?? "Comparable public websites",
+    createdAt: formatTimestamp(scanRecord.scan.createdAt),
+    duration: formatHeaderDuration(retainedScanDurationMs(scanRecord)),
+    host: scanRecord.scan.domainHostname ?? "Public website",
+    id: scanRecord.scan.id,
+    observedWindow: formatDuration(retainedScanDurationMs(scanRecord) ?? 0),
+    origin: scanRecord.scan.scanFromLabel,
+    originCode: scanRecord.scan.scanFromValue || scanRecord.scan.scanFromLabel,
+    reportUrl: `/scan/${encodeURIComponent(scanRecord.scan.id)}`,
+    url: reportUrl(scanRecord),
+    visualEvidenceHref: visualEvidence
+      ? `/api/scans/${encodeURIComponent(scanRecord.scan.id)}/visual-evidence/${encodeURIComponent(visualEvidence.id)}`
+      : null,
+  };
+}
+
+export function buildTimelineReportModel(scanRecord: ScanDetailResponse): TimelineReportData {
+  const noGo = projectScanReportNoGo(scanRecord);
+  if (noGo) {
+    return { ...noGo, scan: buildReportIdentity(scanRecord), score: { label: "Not scored" as const, value: null } };
+  }
   const canonical = getPersistedCanonicalReportProjection(scanRecord);
   if (!canonical) {
     throw new Error(`Canonical persisted report projection is unavailable for scan ${scanRecord.scan.id}`);
@@ -733,7 +759,7 @@ export function buildTimelineReportModel(scanRecord: ScanDetailResponse): Shadow
   // by this report. This keeps retained reports aligned when the versioned
   // reportable-row policy changes after their persisted presentation summary.
   const summaryCounts = summarizeEvidenceRows(evidenceRows);
-  const canonicalScore = deriveCanonicalOverallScoreForReport({
+  const canonicalScore = deriveCanonicalOverallScoreForReport({ scanRecord: scanRecord,
     checklistRows,
     unifiedFindings: canonical.ownerUnifiedFindings,
   });
@@ -774,8 +800,6 @@ export function buildTimelineReportModel(scanRecord: ScanDetailResponse): Shadow
     pageUrl: form.pageUrl,
     title: form.title ?? `${displayLabel(form.surfaceType)} ${index + 1}`,
   }));
-  const visualEvidence = getVisualEvidenceArtifacts(scanRecord.runtimeArtifacts)
-    .find((artifact) => artifact.status === "available" && artifact.key);
   const nonEssentialInventoryTallies = buildNonEssentialInventoryTallies(
     inventoryProjection.ungroupedRows,
   );
@@ -832,21 +856,7 @@ export function buildTimelineReportModel(scanRecord: ScanDetailResponse): Shadow
     preConsentRuntimeRows: evidenceRows.filter((row) => CHECKLIST_GROUPS.runtime.has(row.id)),
     rejectPath,
     relatedRows: [],
-    scan: {
-      benchmark: scanRecord.domainBenchmark?.industry ?? "Comparable public websites",
-      createdAt: formatTimestamp(scanRecord.scan.createdAt),
-      duration: formatHeaderDuration(retainedDurationMs),
-      host: scanRecord.scan.domainHostname ?? "Public website",
-      id: scanRecord.scan.id,
-      observedWindow: formatDuration(durationMs),
-      origin: scanRecord.scan.scanFromLabel,
-      originCode: scanRecord.scan.scanFromValue || scanRecord.scan.scanFromLabel,
-      reportUrl: `/scan/${encodeURIComponent(scanRecord.scan.id)}`,
-      url: reportUrl(scanRecord),
-      visualEvidenceHref: visualEvidence
-        ? `/api/scans/${encodeURIComponent(scanRecord.scan.id)}/visual-evidence/${encodeURIComponent(visualEvidence.id)}`
-        : null,
-    },
+    scan: buildReportIdentity(scanRecord),
     score: { label: scoreLabel(score), value: score },
     timeline,
     trackingExternalRows: evidenceRows.filter((row) => CHECKLIST_GROUPS.tracking.has(row.id)),

@@ -1,3 +1,4 @@
+import { fullSiteFinalizationStartedAt } from "../../lib/scans/full-site-finalization";
 import { serviceEvidencePageIds } from "../../lib/scans/service-evidence-pages";
 import { serviceIntegrationGroup, groupedOrigin } from "../../lib/scans/service-integration-group";
 import { summarizeDiscoveredCoverage } from "../../lib/scans/full-site-coverage";
@@ -183,6 +184,7 @@ export async function loadFullSiteReport(
     return {
       ...page,
       observation: undefined,
+      httpStatus: obs?.httpStatus ?? null,
       evidence: page.observation
         ? {
             attemptId: page.observation.attemptId,
@@ -398,6 +400,7 @@ export async function loadFullSiteReport(
     }
   }
   return {
+    finalizationStartedAt: fullSiteFinalizationStartedAt(crawl, records),
     services: [...serviceGroups.values()].map(service => ({ ...service,
       context: { ...service.context, policy: {
         ...service.context.policy,
@@ -437,7 +440,7 @@ export async function loadFullSiteReport(
     },
     pageChoices: pageRows
       .filter((p) => !["excluded", "cancelled"].includes(p.status))
-      .map((p) => { const observation = pages.find(page => page.id === p.id)?.observation; return { id: p.id, url: p.url, source: p.source, graphSource: observation?.runtimeGraph && observation.configurationHash === state.configurationHash ? { href: `/api/scans/${scanId}/full-site?graphPage=${p.id}`, scanId: p.id, sha256: observation.sourceHash } : undefined }; }),
+      .map((p) => { const observation = pages.find(page => page.id === p.id)?.observation; return { id: p.id, url: p.url, source: p.source, status: p.status, httpStatus: p.httpStatus, graphSource: observation?.runtimeGraph && observation.configurationHash === state.configurationHash ? { href: `/api/scans/${scanId}/full-site?graphPage=${p.id}`, scanId: p.id, sha256: observation.sourceHash } : undefined }; }),
     facets: {
       purposes: [
         ...new Set(

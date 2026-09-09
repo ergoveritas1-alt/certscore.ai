@@ -82,7 +82,7 @@ rmSync(releaseDir, { force: true, recursive: true });
 mkdirSync(join(releaseDir, "bin"), { recursive: true });
 mkdirSync(join(releaseDir, "libexec"), { recursive: true });
 
-runPnpm(["--filter", "@certscore/api-contracts", "build"]);
+runPnpm(["--filter", "@certscore/api-contracts...", "build"]);
 runPnpm(["--filter", "@certscore/sdk", "build"]);
 runPnpm(["--filter", "@certscore/mcp", "build"]);
 

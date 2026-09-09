@@ -1,4 +1,5 @@
 import { SCORE_FLOOR } from "../../lib/scans/scoring-policy";
+import { projectScanReportNoGo, type ScanReportAccessContext } from "../../lib/scans/scan-report-disposition";
 import type { GdprEprivacyCoverageChecklistItem } from "../../lib/scans/gdpr-eprivacy-coverage-checklist";
 import type { UnifiedFindingDisplayPacket } from "../../lib/scans/unified-findings";
 import {
@@ -27,9 +28,11 @@ function californiaGpcDeduction(unifiedFindings: UnifiedFindingDisplayPacket[]) 
 }
 
 export function deriveCanonicalOverallScoreForReport(input: {
+  scanRecord: ScanReportAccessContext;
   checklistRows: GdprEprivacyCoverageChecklistItem[];
   unifiedFindings: UnifiedFindingDisplayPacket[];
 }) {
+  if (projectScanReportNoGo(input.scanRecord)) return null;
   const postureScore = deriveRegulatoryCoverageScore({
     framework: "gdpr_eprivacy",
     rows: input.checklistRows

@@ -10,11 +10,11 @@ CertScore.ai MCP Light
 
 ## Short description
 
-Free website privacy scanner to detect pre-consent cookies and trackers, CMP and consent controls, privacy policy, GDPR/ePrivacy and CCPA, and HTTPS/TLS signals.
+Free no-auth website privacy scanner for pre-consent cookies, trackers, consent, policy, GDPR/ePrivacy, CCPA, HTTPS/TLS.
 
 ## Full description
 
-Free website privacy scanner and cookie checker for public websites. Detect pre-consent cookies and trackers, third-party tracking technologies, cookie banners, CMP and consent-management signals, privacy-policy and transparency findings, GDPR/ePrivacy and CCPA/CPRA review signals, and HTTPS/TLS transport observations.
+CertScore.ai MCP Light is a free, no-auth website privacy scanner and cookie checker for public websites. Connect through Streamable HTTP at `https://mcp.certscore.ai/mcp/light` with exactly three tools: `certscore_scan_site`, `certscore_get_scan_status`, and `certscore_get_scan_bundle`. Detect pre-consent cookies and trackers, third-party tracking technologies, cookie banners, CMP and consent-management signals, privacy-policy and transparency findings, GDPR/ePrivacy and CCPA/CPRA review signals, and HTTPS/TLS transport observations.
 
 Give CertScore.ai a public website to collect structured, evidence-backed privacy findings for launch review, vendor review, audit triage, or human compliance review. Results include a CertScore score and supporting evidence for human and agentic review; they are not legal advice, certification, or a compliance determination.
 
@@ -41,20 +41,40 @@ Privacy; Developer Tools; Website Analysis; Security; Compliance Review; Agent T
 ## Canonical technical fields
 
 - Registry name: `ai.certscore/mcp-light`
-- Version: `0.2.19`
+- Version: use the released Light version in `packages/certscore-mcp/server-light.json`
+- Name: CertScore.ai MCP Light
 - Transport: Streamable HTTP
+- URL: `https://mcp.certscore.ai/mcp/light`
 - Authentication: none
 - Tools: `certscore_scan_site`, `certscore_get_scan_status`, `certscore_get_scan_bundle`
+- Quota: 50 new scans/UTC day Light; reuse free
 - Manifest: `packages/certscore-mcp/server-light.json`
 
 The separate `ai.certscore/mcp` manifest and `https://mcp.certscore.ai/mcp` endpoint describe the full authenticated/local CertScore MCP. Do not substitute those values into a Light listing.
 
+## Default installation config
+
+```json
+{
+  "mcpServers": {
+    "certscore-light": {
+      "url": "https://mcp.certscore.ai/mcp/light"
+    }
+  }
+}
+```
+
+The Light installation requires no `command`, `args`, `env`, API key, or authorization headers. Do not advertise an 11-tool server or `CERTSCORE_API_KEY` as the default install.
+
+Optional authenticated upgrade: the stdio server uses `CERTSCORE_API_KEY` for authenticated CertScore access. It is separate from the free, no-auth MCP Light default.
+
 ## Submission notes
 
-- Official MCP Registry: version `0.2.19` is the prepared active release of `ai.certscore/mcp-light`; verify the published latest record at https://registry.modelcontextprotocol.io/?q=ai.certscore%2Fmcp-light and use `packages/certscore-mcp/server-light.json` for future releases after validation and existing namespace authentication.
+- mcp.so: use the paste-ready in-place edit packet in `docs/mcp-light-submission-packets.md#mcpso`. Lead with Light in the name, description, transport, authentication, tools, quota, and installation config; mention stdio only as the authenticated upgrade. This repository packet does not establish that the external listing has been updated.
+- Official MCP Registry: version `0.2.20` is the prepared active release of `ai.certscore/mcp-light`; verify the published latest record at https://registry.modelcontextprotocol.io/?q=ai.certscore%2Fmcp-light and use `packages/certscore-mcp/server-light.json` for future releases after validation and existing namespace authentication.
 - Claude Code: the validated plugin package is in `integrations/claude-code/certscore-mcp-light`, with the repository marketplace catalog at `.claude-plugin/marketplace.json`.
 - Anthropic directory: the existing `certscore-ai` listing is Published — Pending review. Reviewer instructions request an in-place replacement of the authenticated OAuth connection with the no-auth Light endpoint. Do not create a duplicate listing; endpoint and authentication changes remain reviewer-dependent.
-- Cursor: the marketplace-ready Agent Plugin package is in `integrations/cursor/certscore-website-privacy-preflight` at integration version `1.0.3`. Its MCP component is named `CertScore.ai`, its description includes jurisdiction-neutral GPC and evidence-qualified Accept and Reject Path boundaries, and the landing page provides three official Cursor prompt deeplinks.
+- Cursor: the marketplace-ready Agent Plugin package is in `integrations/cursor/certscore-website-privacy-preflight` at integration version `1.0.4`. Its discovery metadata covers cookie, tracker, consent, privacy, GDPR, CCPA, ePrivacy, and website-scanner queries; its MCP component remains the no-auth `CertScore.ai` Light endpoint.
 - OpenAI: the provider-neutral **With MCP** package is in `integrations/openai/certscore-website-privacy-preflight` at plugin version `2.0.0`; its production endpoint and bundled preview-aware skill must be scanned and submitted together through OpenAI's portal.
 - Cline: PR-ready catalog metadata is retained at `integrations/cline/certscore-mcp-light/entry.json`; submission is in review at https://github.com/cline/marketplace/pull/75.
 - Kilo: the PR-ready manifest is retained at `integrations/kilo-code/certscore-mcp-light/MCP.yaml`; submission is in review at https://github.com/Kilo-Org/kilo-marketplace/pull/250.

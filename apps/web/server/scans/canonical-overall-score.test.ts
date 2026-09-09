@@ -33,11 +33,11 @@ function gpcFinding(deductionPoints: number): UnifiedFindingDisplayPacket {
 }
 
 test("canonical overall score applies the qualified California GPC deduction exactly once", () => {
-  const baseline = deriveCanonicalOverallScoreForReport({
+  const baseline = deriveCanonicalOverallScoreForReport({ scanRecord: { runtimeArtifacts: null },
     checklistRows: checkedChecklist,
     unifiedFindings: [],
   });
-  const withGpcGap = deriveCanonicalOverallScoreForReport({
+  const withGpcGap = deriveCanonicalOverallScoreForReport({ scanRecord: { runtimeArtifacts: null },
     checklistRows: checkedChecklist,
     unifiedFindings: [gpcFinding(15), gpcFinding(15)],
   });
@@ -47,7 +47,7 @@ test("canonical overall score applies the qualified California GPC deduction exa
 });
 
 test("canonical overall score rejects malformed or differently valued GPC score effects", () => {
-  assert.equal(deriveCanonicalOverallScoreForReport({
+  assert.equal(deriveCanonicalOverallScoreForReport({ scanRecord: { runtimeArtifacts: null },
     checklistRows: checkedChecklist,
     unifiedFindings: [gpcFinding(5)],
   }), 100);

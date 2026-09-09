@@ -1,7 +1,9 @@
+import { captureMcpCallerInput, type McpCallerInput } from "@website-signal-risk-scanner/shared/dist/mcp-caller-input.js";
 import { CertScoreClient } from "@certscore/sdk";
 import { certScoreMcpToolContracts, isCanonicalScanId } from "@certscore/api-contracts";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
-import type { RequestInfo } from "@modelcontextprotocol/sdk/types.js";
+import { CallToolRequestSchema, type RequestInfo } from "@modelcontextprotocol/sdk/types.js";
+import { sanitizeMcpTaskContext, type McpTaskContext } from "@website-signal-risk-scanner/shared/dist/mcp-product-context.js";
 import { CERTSCORE_MCP_VERSION } from "./version.js";
 import { boundEvidencePacket, buildScanBundle, exportFindings, findingListText, limitPreConsentRows, markdownReportText, MAX_EVIDENCE_PACKET_CHARS, normalizeDetail, normalizeFormat, paginateFindingList, preConsentInventoryText, pulseReportText, scanBundleText, scanSiteText, scanStatusText, toInvalidArgumentsToolError, toInvalidScanIdToolError, toToolError, toToolResult, withMcpAgentGuidance, withMcpScanProvenanceGuidance } from "./tools.js";
 
@@ -56,6 +58,12 @@ type GetLatestDomainScanInput = { domain: string; scanFrom?: "eu_de" | "eu_ie" |
 type GetLatestDomainPreConsentCookiesTrackersInput = { domain: string; maxRows?: number; scanFrom?: "eu_de" | "eu_ie" | "california" };
 
 export type McpToolInvocationObservation = {
+  callerInput?: McpCallerInput;
+  captureBasis?: "protocol_request";
+  taskContext?: McpTaskContext;
+  response?: { bytes: number; truncated: boolean | null; effectiveMaxBytes?: number };
+  requestArguments?: { values: Record<string, string | number | boolean>; omitted: boolean };
+  rateLimit?: { kind: "scan_creation" | "upstream"; retryAfterSeconds?: number; scope?: string; windowId?: string; limit?: number; used?: number; windowSeconds?: number };
   durationMs: number;
   errorCode: string | null;
   freshness: "latest" | "refresh" | null;
@@ -236,6 +244,33 @@ function isCertScoreCanaryUrl(value: unknown) {
   }
 }
 
+/** Retain only bounded tool options; URL paths, queries and unknown/free-text inputs are omitted. */
+export function projectMcpTelemetryArguments(args: Record<string, unknown>) {
+  const values: Record<string, string | number | boolean> = {};
+  const options: Record<string, readonly string[]> = {
+    freshness: ["latest", "refresh"], scanFrom: ["eu_de", "eu_ie", "california"],
+    detail: ["tiny", "quick", "standard", "full", "summary", "evidence", "findings"], format: ["json", "markdown"],
+  };
+  for (const [key, allowed] of Object.entries(options)) {
+    if (typeof args[key] === "string" && allowed.includes(args[key] as string)) values[key] = args[key] as string;
+  }
+  for (const key of ["scanId", "jobId", "findingId"]) {
+    const token = boundedTelemetryToken(args[key], 128);
+    if (token) values[key] = token;
+  }
+  for (const key of ["maxWaitSeconds", "maxBytes", "maxFindings", "maxPreConsentRows", "maxRows", "limit", "offset"]) {
+    const value = args[key];
+    if (typeof value === "number" && Number.isInteger(value) && value >= 0 && value <= 1_000_000) values[key] = value;
+  }
+  if (typeof args.waitForCompletion === "boolean") values.waitForCompletion = args.waitForCompletion;
+  const url = telemetryUrl(args.url);
+  if (url) values.url = url;
+  const domain = telemetryHostname(args.domain);
+  if (domain && /^[a-z0-9.-]+$/.test(domain)) values.domain = domain;
+  const omitted = Object.keys(args).some((key) => !(key in values) || args[key] !== values[key]);
+  return { values, omitted };
+}
+
 export function projectMcpToolInvocationObservation(input: {
   args: unknown;
   durationMs: number;
@@ -275,6 +310,8 @@ export function projectMcpToolInvocationObservation(input: {
           : "unavailable";
 
   return {
+    requestArguments: projectMcpTelemetryArguments(args),
+    ...(rateLimited ? { rateLimit: projectMcpRateLimit(error ?? result) } : {}),
     durationMs: Math.max(0, Math.min(Math.round(input.durationMs), 3_600_000)),
     errorCode: rateLimited ? "rate_limited" : errorCode,
     freshness: args.freshness === "refresh" ? "refresh" : input.toolName === "certscore_scan_site" ? "latest" : null,
@@ -294,6 +331,21 @@ export function projectMcpToolInvocationObservation(input: {
     toolName: input.toolName,
     transportOutcome: isError ? "mcp_error" : "mcp_result",
   };
+}
+
+function projectMcpRateLimit(error: Record<string, unknown>): NonNullable<McpToolInvocationObservation["rateLimit"]> {
+  const creation = error.creationRateLimit && typeof error.creationRateLimit === "object" && !Array.isArray(error.creationRateLimit)
+    ? error.creationRateLimit as Record<string, unknown> : null;
+  const projected: NonNullable<McpToolInvocationObservation["rateLimit"]> = { kind: creation ? "scan_creation" : "upstream" };
+  for (const key of ["scope", "windowId"] as const) {
+    const value = boundedTelemetryToken(creation?.[key], 128);
+    if (value) projected[key] = value;
+  }
+  for (const key of ["retryAfterSeconds", "limit", "used", "windowSeconds"] as const) {
+    const value = key === "retryAfterSeconds" ? error[key] : creation?.[key];
+    if (typeof value === "number" && Number.isInteger(value) && value >= 0 && value <= 1_000_000) projected[key] = value;
+  }
+  return projected;
 }
 
 function observeToolInvocation(
@@ -354,42 +406,60 @@ export function createCertScoreMcpServer(options: CertScoreMcpOptions = {}) {
     "certscore_get_scan_status",
     "certscore_list_findings",
   ]);
-  const registerMcpTool = server.registerTool.bind(server) as any;
-  const registerTool = (name: CertScoreMcpToolName, contract: unknown, handler: unknown) => {
-    if (options.toolProfile === "light" && !lightTools.has(name)) {
-      return;
-    }
-    const typedHandler = handler as (input: unknown, extra: McpRequestExtra) => Promise<unknown>;
-    registerMcpTool(name, contract, async (input: unknown, extra: McpRequestExtra) => {
+  // Intercept SDK registration through its public API so lookup/validation errors
+  // and original arguments are observed once, before SDK normalization. Restore
+  // the registration method after constructing this server; no private handler map.
+  const registerRequest = server.server.setRequestHandler.bind(server.server);
+  server.server.setRequestHandler = ((schema: unknown, handler: any) => {
+    if (schema !== CallToolRequestSchema) return registerRequest(schema as any, handler);
+    return registerRequest(CallToolRequestSchema, async (request, extra) => {
       const startedAt = Date.now();
+      const name = request.params.name;
+      const args = request.params.arguments ?? {};
+      const known = certScoreMcpToolContracts.some(tool => tool.name === name)
+        && (options.toolProfile !== "light" || lightTools.has(name as CertScoreMcpToolName));
+      let result: any;
       try {
-        const scanId = input && typeof input === "object" && !Array.isArray(input)
-          ? (input as { scanId?: unknown }).scanId
-          : null;
-        const result = scanIdTools.has(name) && !isCanonicalScanId(scanId)
-          ? toInvalidScanIdToolError()
-          : await typedHandler(input, extra);
-        observeToolInvocation(options.onToolInvocation, projectMcpToolInvocationObservation({
-          args: input,
-          durationMs: Date.now() - startedAt,
-          result,
-          toolName: name,
-        }), { headers: extra.requestInfo?.headers ?? null });
+        result = await handler(request, extra);
         return result;
       } catch (error) {
-        observeToolInvocation(options.onToolInvocation, {
-          ...projectMcpToolInvocationObservation({
-            args: input,
-            durationMs: Date.now() - startedAt,
-            result: { isError: true, structuredContent: { error: { code: "handler_exception" } } },
-            toolName: name,
-          }),
-          errorCode: "handler_exception",
-          outcome: "error",
-          transportOutcome: "mcp_error",
-        }, { headers: extra.requestInfo?.headers ?? null });
+        result = { isError: true, structuredContent: { error: { code: "handler_exception" } } };
         throw error;
+      } finally {
+        try {
+          const observation = projectMcpToolInvocationObservation({ args, durationMs: Date.now() - startedAt, result, toolName: name });
+          if (!known) observation.errorCode = "unknown_tool";
+          else if (observation.outcome === "error" && !observation.errorCode) observation.errorCode = "protocol_error";
+          const payload = telemetryResultRecord(result);
+          const metadata = payload.mcpMetadata as Record<string, unknown> | undefined;
+          const taskContext = sanitizeMcpTaskContext(args.taskContext);
+          observeToolInvocation(options.onToolInvocation, {
+            ...observation,
+            captureBasis: "protocol_request",
+            callerInput: captureMcpCallerInput(args, request.params._meta),
+            ...(taskContext ? { taskContext } : {}),
+            response: {
+              bytes: Math.min(10_000_000, Buffer.byteLength(JSON.stringify(result ?? null))),
+              truncated: typeof metadata?.truncated === "boolean" ? metadata.truncated : null,
+              ...(typeof metadata?.effectiveMaxBytes === "number" ? { effectiveMaxBytes: metadata.effectiveMaxBytes } : {}),
+            },
+          }, { headers: extra.requestInfo?.headers ?? null });
+        } catch {
+          // Best-effort telemetry must never replace a tool response or its error.
+          console.error("[certscore-mcp] telemetry projection failed");
+        }
       }
+    });
+  }) as typeof server.server.setRequestHandler;
+  const registerMcpTool = server.registerTool.bind(server) as any;
+  const registerTool = (name: CertScoreMcpToolName, contract: unknown, handler: unknown) => {
+    if (options.toolProfile === "light" && !lightTools.has(name)) return;
+    const typedHandler = handler as (input: unknown, extra: McpRequestExtra) => Promise<unknown>;
+    registerMcpTool(name, contract, async (input: unknown, extra: McpRequestExtra) => {
+      const scanId = input && typeof input === "object" && !Array.isArray(input)
+        ? (input as { scanId?: unknown }).scanId : null;
+      return scanIdTools.has(name) && !isCanonicalScanId(scanId)
+        ? toInvalidScanIdToolError() : typedHandler(input, extra);
     });
   };
 
@@ -719,5 +789,6 @@ export function createCertScoreMcpServer(options: CertScoreMcpOptions = {}) {
     }
   );
 
+  server.server.setRequestHandler = registerRequest;
   return server;
 }

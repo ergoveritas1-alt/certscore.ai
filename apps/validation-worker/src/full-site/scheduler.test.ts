@@ -107,7 +107,7 @@ test(
             source: "fixture",
           })),
         );
-        return { id, userId };
+        return { id, userId, organizationId: org };
       }
       const unavailable = await parent("missing-queue.test", 3, 2, "eu-central-1");
       await stopCrawlsWithoutDispatchQueues({ "eu-west-1": "https://queue.example.test" });
@@ -343,6 +343,73 @@ test(
       assert.equal(await db.claimFullSitePage({ ...interruptedJob, region: interruptedJob.region }), null, "Cancellation blocks admission even before the sweep");
       await sweepFullSiteCrawls();
       assert.deepEqual(await db.reserveFullSiteDispatches(), []);
+
+      // Incident: 2 successful + 8 HTTP failures, all failures retained error-page links.
+      const incident = await parent("finalization-failed-links.test", 10);
+      const candidates = (await db.loadFullSitePages(incident.id)).filter(page => page.source !== "homepage");
+      for (const [index, page] of candidates.slice(0, 9).entries()) {
+        await db.query(`update full_site_pages set scheduled=true,status=$2,completed_at=now(),
+          observation_json=$3,limitation=$4 where id=$1`, [page.id, index ? "failed" : "completed",
+          { links: [`https://finalization-failed-links.test/${index ? "error-only" : "valid-child"}`] }, index ? "http_error" : null]);
+      }
+      await sweepFullSiteCrawls();
+      assert.equal((await db.loadFullSiteCrawl(incident.id))?.status, "completed");
+      assert.equal((await db.loadFullSiteCrawl(incident.id))?.stop_reason, "max_pages");
+      const incidentPages = await db.loadFullSitePages(incident.id);
+      assert.equal(incidentPages.filter(page => page.status === "failed").length, 8, "Failure evidence stays failed");
+      assert.ok(incidentPages.some(page => page.target_url.endsWith("/valid-child")), "Usable pending links are processed before finalization");
+      assert.ok(!incidentPages.some(page => page.target_url.endsWith("/error-only")), "Error page links never expand discovery");
+      assert.ok(!incidentPages.some(page => ["queued", "active", "dispatching"].includes(page.status)));
+      await sweepFullSiteCrawls();
+      assert.equal((await db.loadFullSiteCrawl(incident.id))?.status, "completed", "Finalization is idempotent");
+
+      const cancelledDiscovery = await parent("cancel-discovery.test");
+      let discoveryFetches = 0;
+      await discoverSitemaps((await db.loadFullSiteCrawl(cancelledDiscovery.id))!, async () => {
+        discoveryFetches++;
+        await db.cancelFullSiteCrawl({ scanId: cancelledDiscovery.id, userId: cancelledDiscovery.userId, organizationId: cancelledDiscovery.organizationId });
+        return { status: 200, text: "User-agent: *\nDisallow: /", retryAfter: null };
+      });
+      assert.equal(discoveryFetches, 1);
+      assert.equal((await db.loadFullSiteCrawl(cancelledDiscovery.id))?.status, "cancelled", "Late discovery must not overwrite cancellation");
+      assert.equal((await db.loadFullSiteCrawl(cancelledDiscovery.id))?.stop_reason, "user_cancelled");
+
+      const cancellation = await parent("cancel-inventory.test", 3);
+      const cancelInput = { scanId: cancellation.id, userId: cancellation.userId, organizationId: cancellation.organizationId };
+      assert.equal(await db.cancelFullSiteCrawl({ ...cancelInput, userId: randomUUID() }), null);
+      assert.equal(await db.cancelFullSiteCrawl({ ...cancelInput, organizationId: randomUUID() }), null);
+      await db.query(`update organization_members set role='user' where user_id=$1`, [cancellation.userId]);
+      assert.equal(await db.cancelFullSiteCrawl(cancelInput), null, "Revoked role cannot mutate the crawl");
+      await db.query(`update organization_members set role='advanced' where user_id=$1`, [cancellation.userId]);
+      const [activeJob] = await db.reserveFullSiteDispatches();
+      assert.ok(activeJob);
+      assert.ok(await db.claimFullSitePage({ ...activeJob, region: activeJob.region }));
+      await db.query(`update full_site_safety set last_dispatch_at=null,last_start_at=null where site_key='cancel-inventory.test'`);
+      const [unclaimedJob] = await db.reserveFullSiteDispatches();
+      assert.ok(unclaimedJob);
+      assert.deepEqual(await db.cancelFullSiteCrawl(cancelInput), { status: "cancelled" });
+      assert.deepEqual(await db.cancelFullSiteCrawl(cancelInput), { status: "cancelled" });
+      assert.equal(await db.claimFullSitePage({ ...unclaimedJob, region: unclaimedJob.region }), null, "Cancellation invalidates queued dispatch credentials");
+      assert.deepEqual(await db.reserveFullSiteDispatches(), [], "No further visits after cancellation");
+      assert.ok(await db.completeFullSitePage({ ...activeJob, status: "completed", observation: { links: [] }, compact: {},
+        finalUrl: "https://cancel-inventory.test/", failureKind: null, retryAfterSeconds: null, artifact: {} }), "An already-active worker may retain its result");
+      await sweepFullSiteCrawls();
+      assert.equal((await db.loadFullSiteCrawl(cancellation.id))?.status, "cancelled");
+      const cancelledPages = await db.loadFullSitePages(cancellation.id);
+      assert.equal(cancelledPages.filter(page => page.status === "completed").length, 2, "Homepage and active result survive");
+      assert.ok(cancelledPages.filter(page => page.status === "cancelled").length > 0);
+      assert.ok(!cancelledPages.some(page => ["active", "queued", "dispatching"].includes(page.status)));
+      await db.query(`delete from full_site_completion_emails where scan_id<>$1`, [cancellation.id]);
+      assert.equal(await db.reserveFullSiteCompletionEmail(), null, "Cancellation does not send a completion email");
+      assert.deepEqual(await db.cancelFullSiteCrawl({ scanId: incident.id, userId: incident.userId, organizationId: incident.organizationId }), { status: "completed" }, "A late Stop does not overwrite completion");
+      const waiting = await parent("cancel-waiting-homepage.test");
+      await db.query(`update scans set status='running' where id=$1`, [waiting.id]);
+      await db.query(`update full_site_crawls set status='waiting_homepage',discovery_complete=false where scan_id=$1`, [waiting.id]);
+      await db.query(`update full_site_pages set status='queued' where scan_id=$1 and source='homepage'`, [waiting.id]);
+      await db.cancelFullSiteCrawl({ scanId: waiting.id, userId: waiting.userId, organizationId: waiting.organizationId });
+      assert.equal((await db.queryOne<{status:string}>(`select status from scans where id=$1`, [waiting.id]))?.status, "running", "The independent initial audit is not cancelled");
+      assert.ok(!(await db.loadFullSitePages(waiting.id)).some(page => page.status === "queued"), "Cancelled waiting crawls leave no inventory work queued");
+
     } finally {
       await db.getWritePool().end();
       await db.getReadPool().end();

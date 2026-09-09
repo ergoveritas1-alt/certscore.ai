@@ -1,8 +1,9 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import { readFileSync } from "node:fs";
 import { CertScoreError, type PulseResult } from "@certscore/sdk";
 import { mcpScanBundleOutputSchema, mcpScanStatusOutputSchema, mcpPreConsentCookiesTrackersOutputSchema } from "@certscore/api-contracts";
-import { boundEvidencePacket, buildScanBundle, explainFinding, exportFindings, limitPreConsentRows, paginateFindingList, scanBundleText, scanSiteText, scanStatusText, toToolError, toToolResult, withMcpAgentGuidance, withMcpScanProvenanceGuidance } from "./tools.js";
+import { boundEvidencePacket, buildScanBundle, explainFinding, exportFindings, limitPreConsentRows, paginateFindingList, pulseReportText, scanBundleText, scanSiteText, scanStatusText, toToolError, toToolResult, withMcpAgentGuidance, withMcpScanProvenanceGuidance } from "./tools.js";
 
 const report = {
   type: "certscore_pulse",
@@ -1653,4 +1654,81 @@ test("boundEvidencePacket truncates oversized evidence packets with MCP metadata
   assert.equal(metadata.maxSerializedChars, 20_000);
   assert.equal(typeof metadata.originalSerializedChars, "number");
   assert.ok(JSON.stringify(result).length <= 20_000);
+});
+
+const retainedAuthenticationNoGo = JSON.parse(readFileSync(new URL("./test-fixtures/authentication-no-go-scan.json", import.meta.url), "utf8")).scan;
+
+test("retained 401 is explicit in every MCP text surface, including the default tool response", () => {
+  const value = withMcpAgentGuidance(structuredClone(retainedAuthenticationNoGo));
+  const texts = [scanStatusText(value), scanSiteText(value), scanBundleText(value), pulseReportText(value),
+    (toToolResult(value).content[0] as { text: string }).text];
+  for (const text of texts) {
+    assert.match(text, /^CertScore scan: Sign-in required/);
+    assert.match(text, /Not scored/);
+    assert.ok(text.includes(value.noGo.explanation));
+    assert.match(text, /HTTP 401/);
+    assert.ok(text.includes(`Next: ${value.noGo.recommendedNextAction}`));
+    assert.match(text, /Retry likely to help: no/);
+    assert.match(text, /not proof of compliance/);
+    assert.ok(text.length <= 8_000);
+    assert.doesNotMatch(text, /CertScore score=|Canonical findings complete|GPC response:/);
+  }
+});
+
+test("MCP text never promotes raw 401 hints or an inactive no-go object into a blocker", () => {
+  const value = { ...retainedAuthenticationNoGo, resultDisposition: null, status: "completed", score: 92, mainDocumentStatus: 401 };
+  for (const text of [scanStatusText(value), scanSiteText(value), scanBundleText(value), pulseReportText(value)]) {
+    assert.doesNotMatch(text, /CertScore scan: Sign-in required|Not scored/);
+  }
+});
+
+test("retained 401 no-go remedy and evidence survive all bundle tiers and supported tight budgets", () => {
+  for (const detail of ["summary", "findings", "evidence", "full"] as const) {
+    for (const maxBytes of [5_000, 8_000, 25_000]) {
+      const scan = structuredClone(retainedAuthenticationNoGo);
+      const bundle = buildScanBundle({ detail, maxBytes, responseCeilingBytes: 25_000, scan,
+        findings: { type: "certscore_finding_list", scanId: scan.scanId, findings: [] },
+        report: null, evidence: null, preConsentCookiesTrackers: null });
+      assert.equal(bundle.resultDisposition, "no_go");
+      assert.equal(bundle.score, null);
+      assert.equal(bundle.riskLevel, null);
+      assert.deepEqual(bundle.findings, []);
+      assert.deepEqual(bundle.noGo, scan.noGo);
+      assert.equal(bundle.recommendedNextAction, scan.noGo.recommendedNextAction);
+      assert.equal(bundle.error.recommendedNextAction, scan.noGo.recommendedNextAction);
+      assert.equal(bundle.error.retryable, false);
+      assert.ok(bundle.mcpMetadata.actualBytes <= maxBytes, `${detail}/${maxBytes}: ${bundle.mcpMetadata.actualBytes}`);
+      assert.equal(bundle.mcpMetadata.actualBytes, Buffer.byteLength(JSON.stringify(bundle)));
+      assert.deepEqual(mcpScanBundleOutputSchema.safeParse(bundle).error?.issues ?? [], [], `${detail}/${maxBytes}`);
+      const text = scanBundleText(bundle);
+      assert.match(text, /HTTP 401/);
+      assert.ok(text.includes(scan.noGo.recommendedNextAction));
+      assert.doesNotMatch(text, /Canonical findings complete|retry only for omitted envelope/);
+      for (const section of ["gpcResponse", "postAcceptObservation", "postRefusalObservation"]) {
+        if (bundle[section]) assert.deepEqual(bundle[section], scan[section]);
+        else assert.ok(bundle.mcpMetadata.omittedSections.includes(section));
+      }
+      if (maxBytes === 25_000) assert.equal(bundle.mcpMetadata.truncated, false);
+      else assert.equal(bundle.mcpMetadata.truncated, true);
+      assert.deepEqual(scan, retainedAuthenticationNoGo, "budgeting must not mutate retained input");
+    }
+  }
+});
+
+
+test("no-go text preserves reason-specific retry guidance rather than hardcoding authentication", () => {
+  const value = { ...retainedAuthenticationNoGo, noGo: {
+    ...retainedAuthenticationNoGo.noGo,
+    reasonCode: "maintenance_or_unavailable",
+    title: "Access temporarily restricted",
+    explanation: "The requested content was temporarily unavailable to the scanner.",
+    evidenceExcerpt: null,
+    retryLikelyToHelp: true,
+    recommendedNextAction: "Try again after the temporary restriction clears.",
+  } };
+  const text = scanStatusText(value);
+  assert.match(text, /Access temporarily restricted/);
+  assert.match(text, /Retry likely to help: yes/);
+  assert.ok(text.includes(value.noGo.recommendedNextAction));
+  assert.doesNotMatch(text, /HTTP 401|Sign-in required/);
 });

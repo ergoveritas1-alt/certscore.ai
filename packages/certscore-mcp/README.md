@@ -10,7 +10,7 @@ CertScore.ai MCP Light is live in the [GitHub MCP Registry](https://github.com/m
 | Transport | Streamable HTTP |
 | Authentication | None |
 | Tools | `certscore_scan_site` → `certscore_get_scan_status` → `certscore_get_scan_bundle` |
-| Current hosted version | `0.2.19` |
+| Current hosted version | `0.2.20` |
 
 [Start with MCP Light](https://certscore.ai/mcp/light?utm_source=github&utm_medium=mcp_registry&utm_campaign=github_mcp_registry_launch) · [Install in Cursor](https://cursor.com/link/mcp/install?name=CertScore.ai&config=eyJ1cmwiOiJodHRwczovL21jcC5jZXJ0c2NvcmUuYWkvbWNwL2xpZ2h0In0%3D) · [Read the installation reference](../../docs/mcp-light-install.md)
 
@@ -125,6 +125,8 @@ MCP tools backed by API v2 scan resources return scan timing when CertScore has 
 This applies to `certscore_scan_site` when it returns an API v2 scan resource or job, `certscore_get_scan`, and `certscore_get_scan_status` when called with a `scanId`. `scanTimeSeconds: null` means timing is unavailable or incomplete and should not be displayed as `0`.
 
 Completed Light results are canonical. `certscore_scan_site`, terminal `certscore_get_scan_status`, and `certscore_get_scan_bundle` return the same score, risk level, coverage, and timing fields. Scores include `scoreStatus`, `scoreVersion`, and `scoreUpdatedAt`; a scan remains `finalizing` until the persisted canonical report projection is ready, so a completed response always carries `scoreStatus: "final"`.
+
+No-go results lead with the retained access blocker, “Not scored,” evidence excerpt, next action, and retry guidance in MCP text. Structured responses retain `resultDisposition`, `noGo`, null score/risk, and empty findings. Tight bundle budgets preserve that blocker and remedy before optional lane diagnostics; omitted diagnostics are listed in `mcpMetadata.omittedSections`. A no-go `full` request does not fabricate a full report.
 
 The value is labeled `CertScore score`, never a compliance score. It covers observable public-web scan signals only. Clients must not infer technologies absent from the returned evidence, compare the value with a hypothetical compliant baseline, or infer legal compliance status.
 
@@ -413,3 +415,14 @@ This verifies the Homebrew-installed `certscore-mcp` command against live `https
 ## Runbook
 
 See `docs/certscore-mcp-homebrew-release.md` for Homebrew release steps and `docs/certscore-mcp-preview-runbook.md` for key issuance, smoke testing, deploy verification, and scan-to-report guardrails.
+
+
+### Hosted request diagnostics
+
+Hosted MCP retains bounded, redacted previews of explicitly submitted tool arguments and client metadata for operational diagnostics. The admin “What the caller sent” popup distinguishes current arguments, per-request metadata, and initialization metadata. It records reasons for sensitive-field, sensitive-content, depth, text, field-count, and byte-budget omissions. These caller-declared values are not verified claims or a copy of the surrounding conversation.
+
+The entire request-details record remains capped at 4 KB with the existing 90-day event retention. Previews contain at most 24 fields and 300 characters per string. Authentication headers, cookies, known credential fields, and chat-history/message collections are excluded; URL previews retain only the origin. Task-context question summaries retain their explicit sharing/source requirements and cannot be recovered through the generic preview path. The generic preview may show short text explicitly submitted in separate arguments such as `reason`, `notes`, or `prompt`; it does not fetch the user's chat.
+
+Question context from a prior request is shown separately, with a source link, only when the retained caller, session, scan, provider and entrypoint match and the source precedes the current call by at most 24 hours. Missing identities, filtered traffic and invalid context fail closed. No inherited context is written back to current events, and no scanning, findings or scoring behavior changes.
+
+Estimated additional cost at the September 2026 observed request volume: less than $0.10/month, using existing storage and record limits. No model calls, infrastructure capacity changes, or longer retention are introduced.

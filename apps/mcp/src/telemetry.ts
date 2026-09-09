@@ -1,11 +1,16 @@
 import { createHmac, randomUUID } from "node:crypto";
 import type { IncomingHttpHeaders } from "node:http";
 import shared from "@website-signal-risk-scanner/shared";
-import type { McpActivationStage, McpTelemetryEvent, McpTelemetrySurface } from "@website-signal-risk-scanner/shared";
+import type { McpActivationStage, McpRequestDetails, McpTelemetryEvent, McpTelemetrySurface } from "@website-signal-risk-scanner/shared";
 import { projectMcpToolInvocationObservation, type McpToolInvocationObservation } from "@certscore/mcp/server";
 import type { AnonymousRequesterNetwork } from "@website-signal-risk-scanner/shared";
+import { CERTSCORE_MCP_VERSION } from "@certscore/mcp/version";
 
 const {
+  boundMcpRequestDetails,
+  captureMcpCallerInput,
+  mergeMcpCallerInputs,
+  sanitizeMcpTaskContext,
   MCP_CALLER_ATTRIBUTION_RULESET_VERSION,
   MCP_TELEMETRY_INTEGRATION,
   mcpActivationEventSchema,
@@ -53,6 +58,7 @@ type CreateHostedMcpTelemetryInput = {
 };
 
 type ToolRequestContext = {
+  rateLimit?: McpRequestDetails["rateLimit"];
   requesterIp?: string | null;
   requesterNetwork?: AnonymousRequesterNetwork;
 };
@@ -215,6 +221,13 @@ export function createHostedMcpTelemetry(input: CreateHostedMcpTelemetryInput) {
   const fetchImpl = input.fetch ?? globalThis.fetch;
   const logger = input.logger ?? console;
   const client = classifyHostedMcpClient(input);
+  const initialization = input.clientInfoBody as { params?: { clientInfo?: unknown; capabilities?: unknown; protocolVersion?: unknown } } | undefined;
+  const initialInput = captureMcpCallerInput({}, { client_initialization: {
+    ...(initialization?.params?.clientInfo !== undefined ? { clientInfo: initialization.params.clientInfo } : {}),
+    ...(initialization?.params?.capabilities !== undefined ? { capabilities: initialization.params.capabilities } : {}),
+    ...(initialization?.params?.protocolVersion !== undefined ? { protocolVersion: initialization.params.protocolVersion } : {}),
+  } });
+  initialInput.fields = initialInput.fields.filter(field => field.path !== "arguments");
   const conversationId = firstHeader(input.headers, "openai-conversation-id");
   const ingestionUrl = new URL("/api/internal/mcp-telemetry", input.baseUrl);
   const sentActivationStages = new Set<McpActivationStage>();
@@ -320,6 +333,27 @@ export function createHostedMcpTelemetry(input: CreateHostedMcpTelemetryInput) {
     const sessionValue = conversationId ?? input.sessionId();
     const eventRequesterIp = requestContext?.requesterIp ?? input.requesterIp ?? null;
     const parsed = mcpTelemetryEventSchema.safeParse({
+      requestDetails: boundMcpRequestDetails({
+        version: 1,
+        ...(observation.callerInput ? { callerInput: mergeMcpCallerInputs(observation.callerInput, initialInput) } : {}),
+        captureBasis: observation.captureBasis ?? "validated_arguments",
+        ...(observation.taskContext ? { taskContext: observation.taskContext } : {}),
+        ...(observation.response ? { response: observation.response } : {}),
+        serverVersion: CERTSCORE_MCP_VERSION,
+        toolSchemaVersion: "2026-09-08.task-context.1",
+        ...(() => {
+          const body = input.clientInfoBody as { params?: { clientInfo?: { version?: unknown } } } | undefined;
+          const version = body?.params?.clientInfo?.version;
+          return typeof version === "string" && /^[a-zA-Z0-9_.:-]{1,128}$/.test(version) ? { clientVersion: version } : {};
+        })(),
+        arguments: observation.requestArguments?.values ?? {},
+        argumentsOmitted: observation.requestArguments?.omitted ?? true,
+        actorBasis: !client.actorId ? "unavailable"
+          : input.authenticatedActorId || input.authenticatedActorBinding ? "authenticated"
+          : firstHeader(input.headers, "openai-ephemeral-user-id") ? "provider_ephemeral" : "requester_binding",
+        sessionBasis: conversationId ? "provider_conversation" : input.sessionId() ? "mcp_session" : "unavailable",
+        rateLimit: requestContext?.rateLimit ?? observation.rateLimit ?? null,
+      }),
       actorId: client.actorId,
       attributionConfidence: client.attributionConfidence,
       attributionRulesetVersion: client.attributionRulesetVersion,
@@ -386,7 +420,7 @@ export function createHostedMcpTelemetry(input: CreateHostedMcpTelemetryInput) {
     observeToolInvocation(observation: McpToolInvocationObservation, requestContext?: ToolRequestContext) {
       report(observation, requestContext);
     },
-    observeTransportRateLimit(input: { body: unknown; durationMs: number; requesterIp?: string | null; requesterNetwork?: AnonymousRequesterNetwork; scanId?: string | null; toolName: string }) {
+    observeTransportRateLimit(input: { body: unknown; durationMs: number; requesterIp?: string | null; requesterNetwork?: AnonymousRequesterNetwork; scanId?: string | null; toolName: string; rateLimit?: McpRequestDetails["rateLimit"] }) {
       const args = parsedToolArguments(input.body);
       const projected = projectMcpToolInvocationObservation({
         args,
@@ -396,6 +430,9 @@ export function createHostedMcpTelemetry(input: CreateHostedMcpTelemetryInput) {
       });
       report({
         ...projected,
+        captureBasis: "protocol_request",
+        callerInput: captureMcpCallerInput(args, (input.body as { params?: { _meta?: unknown } } | null)?.params?._meta),
+        ...(sanitizeMcpTaskContext(args.taskContext) ? { taskContext: sanitizeMcpTaskContext(args.taskContext)! } : {}),
         errorCode: "rate_limited",
         outcome: "rate_limited",
         quotaOutcome: "rate_limited",
@@ -403,7 +440,7 @@ export function createHostedMcpTelemetry(input: CreateHostedMcpTelemetryInput) {
         scanId: typeof input.scanId === "string" && /^[a-zA-Z0-9_-]{1,128}$/.test(input.scanId) ? input.scanId : projected.scanId,
         scanStatus: "rate_limited",
         transportOutcome: "http_429",
-      }, { requesterIp: input.requesterIp, requesterNetwork: input.requesterNetwork });
+      }, { requesterIp: input.requesterIp, requesterNetwork: input.requesterNetwork, rateLimit: input.rateLimit });
     },
   };
 }

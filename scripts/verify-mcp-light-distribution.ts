@@ -4,14 +4,26 @@ import { join } from "node:path";
 
 const repoRoot = process.cwd();
 const EXPECTED = {
-  claudeVersion: "0.2.19",
-  cursorVersion: "1.0.3",
+  claudeVersion: "0.2.20",
+  cursorVersion: "1.0.4",
   endpoint: "https://mcp.certscore.ai/mcp/light",
   openAiVersion: "2.0.0",
   owner: "CertScore.ai, LLC",
   registryName: "ai.certscore/mcp-light",
-  serverVersion: "0.2.19",
+  serverVersion: "0.2.20",
 } as const;
+const CURSOR_DISCOVERY_KEYWORDS = [
+  "cookie",
+  "GDPR",
+  "tracker",
+  "consent",
+  "privacy",
+  "CCPA",
+  "ePrivacy",
+  "website-scanner",
+] as const;
+const CURSOR_SKILL_DESCRIPTION_PREFIX =
+  "Use this when the user asks to scan a website for cookies, trackers, consent, GDPR, CCPA, or privacy risk.";
 
 function read(path: string) {
   return readFileSync(join(repoRoot, path), "utf8");
@@ -33,6 +45,9 @@ const claudeCatalog = json(".claude-plugin/marketplace.json");
 const claudePlugin = json("integrations/claude-code/certscore-mcp-light/.claude-plugin/plugin.json");
 const cursorCatalog = json(".cursor-plugin/marketplace.json");
 const cursorPlugin = json("integrations/cursor/certscore-website-privacy-preflight/plugin.json");
+const cursorMcp = json("integrations/cursor/certscore-website-privacy-preflight/mcp.json");
+const cursorReadme = read("integrations/cursor/certscore-website-privacy-preflight/README.md");
+const cursorSkill = read("integrations/cursor/certscore-website-privacy-preflight/skills/website-privacy-preflight/SKILL.md");
 const openAiPlugin = json("integrations/openai/certscore-website-privacy-preflight/.codex-plugin/plugin.json");
 const clineEntry = json("integrations/cline/certscore-mcp-light/entry.json");
 const docs = [
@@ -56,6 +71,16 @@ assert.equal(cursorCatalog.plugins?.[0]?.author?.name, EXPECTED.owner);
 assert.equal(cursorCatalog.plugins?.[0]?.version, EXPECTED.cursorVersion);
 assert.equal(cursorPlugin.author?.name, EXPECTED.owner);
 assert.equal(cursorPlugin.version, EXPECTED.cursorVersion);
+assert.equal(cursorCatalog.plugins?.[0]?.category, "MCP");
+for (const keyword of CURSOR_DISCOVERY_KEYWORDS) {
+  assert.ok(cursorCatalog.plugins?.[0]?.keywords?.includes(keyword), `Cursor catalog omits discovery keyword ${keyword}.`);
+  assert.ok(cursorPlugin.keywords?.includes(keyword), `Cursor plugin omits discovery keyword ${keyword}.`);
+}
+assert.match(cursorSkill, new RegExp(`^description: ${CURSOR_SKILL_DESCRIPTION_PREFIX.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}`, "m"));
+assert.equal(cursorMcp.mcpServers?.["CertScore.ai"]?.url, EXPECTED.endpoint);
+assert.doesNotMatch(JSON.stringify(cursorMcp), /CERTSCORE_API_KEY/);
+assert.match(cursorReadme, /https:\/\/cursor\.com\/link\/mcp\/install\?/);
+assert.match(cursorReadme, /no API key required/i);
 assert.equal(openAiPlugin.author?.name, EXPECTED.owner);
 assert.equal(openAiPlugin.interface?.developerName, EXPECTED.owner);
 assert.equal(openAiPlugin.version, EXPECTED.openAiVersion);
@@ -82,7 +107,7 @@ assert.match(JSON.stringify(openAiPlugin), /Reject/i);
 assert.doesNotMatch(submissionPacket, /cannot accept consent/i);
 assert.match(read("integrations/kilo-code/certscore-mcp-light/MCP.yaml"), /^author: CertScore\.ai, LLC$/m);
 assert.match(read("apps/web/public/llms.txt"), /Official MCP Registry name: ai\.certscore\/mcp-light/);
-assert.match(read("apps/web/public/llms-full.txt"), /current hosted MCP version is `0\.2\.19`/);
+assert.match(read("apps/web/public/llms-full.txt"), /current hosted MCP version is `0\.2\.20`/);
 
 assert.deepEqual(pngDimensions("apps/web/public/certscore-mark-dark.png"), { width: 512, height: 512 });
 assert.deepEqual(pngDimensions("apps/web/public/certscore-mark-light.png"), { width: 512, height: 512 });

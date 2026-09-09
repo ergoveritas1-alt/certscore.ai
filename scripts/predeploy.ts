@@ -38,6 +38,12 @@ const RUNTIME_GRAPH_RELEASE_CHECK: Check = {
   ],
 };
 
+const SCAN_NO_GO_RELEASE_CHECK: Check = {
+  key: "scan-no-go-release",
+  label: "canonical no-go score, persistence and report regressions",
+  command: ["pnpm", "test:scan-no-go"],
+};
+
 const RUNTIME_GRAPH_CAPTURE_CHECK: Check = {
   key: "runtime-graph-capture",
   label: "runtime graph browser, correlation, retention and deadline regressions",
@@ -58,6 +64,7 @@ const REPRESENTATIVE_PROOF_CHECK: Check = {
 };
 
 const ROOT_FULL_CHECKS: Check[] = [
+  SCAN_NO_GO_RELEASE_CHECK,
   RUNTIME_GRAPH_RELEASE_CHECK,
   RUNTIME_GRAPH_CAPTURE_CHECK,
   REPRESENTATIVE_PROOF_CHECK,
@@ -142,6 +149,7 @@ const TARGETS: Target[] = [
       file.startsWith("packages/validation-shared/"),
     checks: [
       RUNTIME_GRAPH_RELEASE_CHECK,
+      SCAN_NO_GO_RELEASE_CHECK,
       {
         key: "web-typecheck",
         label: "public web typecheck",

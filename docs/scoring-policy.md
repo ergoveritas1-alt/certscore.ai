@@ -52,6 +52,32 @@ materializations use this policy. Full-site cache keys include the policy versio
 and source hashes, invalidating older calculated full-site scores. Deployment is
 separate from editing this policy.
 
+## Retained no-go report eligibility
+
+`apps/web/lib/scans/scan-report-disposition.ts` consumes the existing shared
+`projectExternalScanNoGo` projection. A retained typed `no_go` decision withholds
+the target score, including when an older snapshot contains a numeric score.
+Scoring callers must supply the scan's access context; neither an empty checklist
+nor successful sign-in-page resources can restore eligibility. The report model
+returns a separate no-go result, so public and authenticated reports show the
+canonical blocker and next action without a benchmark, executive assessment,
+substantive findings or regulatory checklist.
+
+Persistence writes a null score. Previously stored payloads are verified against
+their original size and hash before applying the same read-time eligibility;
+their retained evidence and stored assessment are not rewritten. A typed
+`continue_with_diagnostics` decision takes precedence over a lane-local visual
+NO_GO or stale snapshot, preserving independently recovered partial reports.
+HTTP hints, screenshots and absence of runtime activity do not create decisions
+in the reporting layer. Scoring numbers and policy versions are unchanged.
+
+`pnpm test:scan-no-go` covers scanner classification, canonical score eligibility,
+historical payload integrity, and public/authenticated rendering using retained
+assessment data from scan `0b9a3256-aa72-4378-acff-e205fd6cdc5e`. This gate runs in
+fast/full preflight, PR validation and the AWS web deployment workflow. No new
+scans, model calls, artifact reads, retries or infrastructure are introduced;
+expected incremental recurring cost is $0/month.
+
 ## Verification and cost
 
 Regression coverage lives in `scoring-policy.test.ts`,

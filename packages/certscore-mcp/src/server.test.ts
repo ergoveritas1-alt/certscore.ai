@@ -366,6 +366,7 @@ test("README documents current MCP tool surface and public docs", () => {
   assert.deepEqual(packageJson.files, ["dist", "README.md", "LICENSE", "server.json", "server-light.json"]);
   assert.equal(packageJson.dependencies?.["@certscore/api-contracts"], undefined);
   assert.equal(packageJson.dependencies?.["@certscore/sdk"], undefined);
+  assert.equal(packageJson.dependencies?.["@website-signal-risk-scanner/shared"], undefined);
   assert.equal(packageJson.devDependencies?.["@certscore/api-contracts"], "workspace:*");
   assert.equal(packageJson.devDependencies?.["@certscore/sdk"], "workspace:*");
 
@@ -432,7 +433,7 @@ test("Light registry metadata and distribution copy stay aligned", () => {
 
   for (const source of [submissions, packets]) {
     assert.match(source, /Official MCP Registry/);
-    assert.match(source, /version `0\.2\.19` is the prepared active release/i);
+    assert.match(source, /version `0\.2\.20` is the prepared active release/i);
     assert.match(source, /ai\.certscore\/mcp-light/i);
     assert.match(source, /https:\/\/registry\.modelcontextprotocol\.io\/\?q=ai\.certscore%2Fmcp-light/);
   }
@@ -539,7 +540,7 @@ test("Cursor and OpenAI plugin packages preserve independent release versions an
   const openAiSubmissionPacket = readFileSync(new URL("../../../docs/mcp-light-submission-packets.md", import.meta.url), "utf8");
 
   assert.equal(cursorPlugin.name, "certscore-website-privacy-preflight");
-  assert.equal(cursorPlugin.version, "1.0.3");
+  assert.equal(cursorPlugin.version, "1.0.4");
   assert.match(JSON.stringify(cursorPlugin), /GPC/i);
   assert.match(JSON.stringify(cursorPlugin), /Accept Path/i);
   assert.match(JSON.stringify(cursorPlugin), /Reject Path/i);
@@ -563,7 +564,7 @@ test("Cursor and OpenAI plugin packages preserve independent release versions an
   assert.deepEqual(cursorMarketplace.plugins?.map(({ name, source, version }) => ({ name, source, version })), [{
     name: "certscore-website-privacy-preflight",
     source: "integrations/cursor/certscore-website-privacy-preflight",
-    version: "1.0.3"
+    version: "1.0.4"
   }]);
 
   assert.equal(openAiPlugin.name, "certscore-website-privacy-preflight");
@@ -727,7 +728,7 @@ test("certscore_scan_site returns a newly accepted scan immediately by default",
     await withMcpClient(async (client) => {
       const raw = await client.callTool({
           name: "certscore_scan_site",
-          arguments: { url: "https://example.com", freshness: "refresh", scanFrom: "eu_ie" }
+          arguments: { url: "https://example.com", freshness: "refresh", scanFrom: "eu_ie", taskContext: { purpose: "tracking_check", integrationId: "qc", integrationVersion: "1", skillVersion: "1" } }
         });
       const result = parseToolJson(raw);
       assert.equal(result.type, "certscore_scan_job");
@@ -742,6 +743,7 @@ test("certscore_scan_site returns a newly accepted scan immediately by default",
       assert.match(String(result.recommendedNextAction), /Do not poll in parallel or resubmit certscore_scan_site/);
       assert.match(mock.calls[0] ?? "", /\/api\/v2\/scans$/);
       assert.equal(mock.calls.length, 1);
+      assert.equal(JSON.parse(mock.requestBodies[0]!).taskContext, undefined);
     });
   } finally {
     mock.restore();
@@ -855,7 +857,7 @@ test("MCP Light certscore_scan_site returns a verified preliminary preview withi
 
 test("MCP Light certscore_scan_site falls back to the unchanged scanId when the preview window expires", async () => {
   const scanId = "00000000-0000-4000-8000-000000000224";
-  const mock = installFetch([{
+  const queuedResponse = {
     status: 202,
     body: {
       type: "certscore_scan_job",
@@ -866,7 +868,8 @@ test("MCP Light certscore_scan_site falls back to the unchanged scanId when the 
       reused: false,
       freshnessDecision: "no_eligible_recent_scan_queued",
     },
-  }]);
+  };
+  const mock = installFetch([queuedResponse, queuedResponse]);
   try {
     await withMcpClient(async (client) => {
       const result = parseToolJson(await client.callTool({
@@ -878,7 +881,10 @@ test("MCP Light certscore_scan_site falls back to the unchanged scanId when the 
       assert.equal(result.status, "queued");
       assert.equal(result.preConsentPreview, undefined);
       assert.equal(result.recommendedNextTool, "certscore_get_scan_status");
-      assert.equal(mock.calls.length, 1);
+      assert.ok(mock.calls.length === 1 || mock.calls.length === 2);
+      if (mock.calls.length === 2) {
+        assert.equal(mock.requestHeaders[1]?.get("x-certscore-mcp-internal-operation"), "scan_site_wait");
+      }
     }, {
       initialPreConsentPreviewWaitMs: 20,
       toolProfile: "light",
@@ -1769,5 +1775,32 @@ test("certscore_get_scan returns an MCP error while a scan resource is not ready
     });
   } finally {
     mock.restore();
+  }
+});
+
+
+test("Light MCP returns retained authentication no-go text and typed remedies within tight bundle budgets", async () => {
+  const scan = JSON.parse(readFileSync(new URL("./test-fixtures/authentication-no-go-scan.json", import.meta.url), "utf8")).scan;
+  for (const maxBytes of [5_000, 8_000]) {
+    const mock = installFetch([{ status: 200, body: scan }]);
+    try {
+      await withMcpClient(async (client) => {
+        const result = await client.callTool({ name: "certscore_get_scan_bundle", arguments: { scanId: scan.scanId, detail: "full", maxBytes } });
+        const bundle = parseToolJson(result);
+        assertToolOutputSchema("certscore_get_scan_bundle", bundle);
+        assert.equal(bundle.score, null);
+        assert.equal(bundle.resultDisposition, "no_go");
+        assert.deepEqual(bundle.noGo, scan.noGo);
+        assert.equal(bundle.recommendedNextAction, scan.noGo.recommendedNextAction);
+        assert.ok(Buffer.byteLength(JSON.stringify(bundle)) <= maxBytes);
+        assert.equal(bundle.fullReport, undefined, "a no-go result has no full report to serialize");
+        const text = result.content?.find((item: any) => item.type === "text") as { text: string };
+        assert.match(text.text, /^CertScore scan: Sign-in required/);
+        assert.match(text.text, /HTTP 401/);
+        assert.ok(text.text.includes(scan.noGo.recommendedNextAction));
+        assert.doesNotMatch(text.text, /Canonical findings complete/);
+        assert.equal(mock.calls.length, 1, "no Pulse, inventory or evidence fetch for a no-go");
+      }, { toolProfile: "light" });
+    } finally { mock.restore(); }
   }
 });

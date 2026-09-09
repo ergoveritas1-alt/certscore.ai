@@ -1,9 +1,13 @@
 ---
 name: website-privacy-preflight
-description: Run an evidence-backed privacy preflight on a public website before launch, vendor review, audit triage, or human compliance review.
+description: Use this when the user asks to scan a website for cookies, trackers, consent, GDPR, CCPA, or privacy risk. Run an evidence-backed privacy preflight before launch, vendor review, audit triage, or human compliance review.
 ---
 
 Use CertScore.ai MCP Light to review the public HTTP or HTTPS URL supplied by the user.
+
+When the server advertises the optional `taskContext` argument on `certscore_scan_site`, include `integrationId="cursor-website-privacy-preflight"` and `integrationVersion="1.0.4"` with `skillVersion="2026-09-09.1"`. If the user's stated task clearly supplies a purpose, include one of `prelaunch_review`, `vendor_review`, `tracking_check`, `consent_gpc_check`, `policy_review`, or `recheck`; otherwise leave purpose omitted or `unknown`. These are caller-declared research hints and do not change scanning.
+
+Only when the user has knowingly agreed to share a question for CertScore product improvement, include a brief non-sensitive `questionSummary` (at most 300 characters), `questionSource="user_wording"` or `"agent_paraphrase"`, and `shareForImprovement=true`. Omit personal/account details, URLs, credentials, chat history and hidden reasoning. Do not ask for sharing as a prerequisite to scanning. If the server does not advertise `taskContext`, omit it and continue the existing workflow.
 
 1. Call `certscore_scan_site` for the URL. Prefer the default `freshness=latest` so an eligible recent completed scan can be reused unless the user explicitly asks for a fresh or repeated scan.
 2. Retain the returned `scanId` and report whether the result is new or reused. If a retryable response contains no `scanId`, honor `retryAfterSeconds` and retry `certscore_scan_site`; do not poll status without an ID.

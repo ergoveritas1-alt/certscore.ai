@@ -35,6 +35,7 @@
   },
   "license": "UNLICENSED",
   "dependencies": {
+    "@website-signal-risk-scanner/shared": "workspace:*",
     "zod": "^3.25.76"
   }
 }

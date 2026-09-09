@@ -176,6 +176,9 @@ jobs:
             scripts/assert-forward-web-deploy.test.ts \
             scripts/web-deployment-skew-protection.test.ts
 
+      - name: Test canonical scan no-go reports
+        run: pnpm test:scan-no-go
+
       - name: Typecheck web
         run: pnpm --filter @website-signal-risk-scanner/web typecheck
 

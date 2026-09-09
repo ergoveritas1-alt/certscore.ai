@@ -51,10 +51,8 @@ RUN rm -rf \
   ./packages/certscore-sdk/dist \
   ./packages/shared/dist
 
-RUN pnpm --filter @certscore/api-contracts build
-RUN pnpm --filter @certscore/sdk build
-RUN pnpm --filter @certscore/mcp-auth build
-RUN pnpm --filter @certscore/mcp build
+# build:deps compiles contracts and shared before API contracts, then the SDK,
+# auth and MCP packages. Keep the clean image build in that dependency order.
 RUN pnpm --filter @certscore/mcp-http build
 
 FROM builder AS prod-deps

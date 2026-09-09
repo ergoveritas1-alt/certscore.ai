@@ -12,7 +12,7 @@
       "name": "certscore-website-privacy-preflight",
       "source": "integrations/cursor/certscore-website-privacy-preflight",
       "description": "Free public-website privacy preflight for cookies, trackers, consent controls, jurisdiction-neutral GPC response comparisons, evidence-qualified Accept Path and Reject Path observations, policy review signals, and HTTPS/TLS through CertScore.ai MCP Light.",
-      "version": "1.0.3",
+      "version": "1.0.4",
       "author": {
         "name": "CertScore.ai, LLC",
         "email": "support@certscore.ai"
@@ -20,9 +20,9 @@
       "homepage": "https://certscore.ai/mcp/light",
       "repository": "https://github.com/ergoveritas1-alt/certscore.ai",
       "license": "Apache-2.0",
-      "keywords": ["mcp", "privacy", "privacy-scanner", "cookie-checker", "consent", "cmp", "gdpr", "eprivacy", "ccpa", "gpc", "global-privacy-control", "accept-path", "reject-path", "website-analysis", "preflight"],
+      "keywords": ["mcp", "cookie", "GDPR", "tracker", "consent", "privacy", "CCPA", "ePrivacy", "website-scanner", "privacy-scanner", "cookie-checker", "cmp", "gpc", "global-privacy-control", "accept-path", "reject-path", "website-analysis", "preflight"],
       "logo": "apps/web/public/images/mcp-directory/certscore-mcp-light-cline-400.png",
-      "category": "developer-tools",
+      "category": "MCP",
       "tags": ["mcp", "privacy", "cookie-checker", "consent", "gpc", "accept-path", "reject-path", "website-analysis", "preflight"]
     }
   ]

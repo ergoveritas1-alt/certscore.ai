@@ -26,7 +26,9 @@ export default async function ProductionCookieTablePreview({ searchParams }: { s
   } else if (real) {
     const record = await loadAnonymousPersistedScanReportProjection({ scanId: "cebfe71f-5644-4b11-ba97-67dbbf5d16c9" });
     if (!record) return <main className="p-8">The retained public report is not available through the verified report loader. <Link href="?example=demo">Open the labelled relationship demo</Link>.</main>;
-    report = buildTimelineReportModel(record);
+    const model = buildTimelineReportModel(record);
+    if (model.resultDisposition === "no_go") return <main className="p-8">{model.noGo.title} · Not scored</main>;
+    report = model;
   } else {
     const base = { ...SHADOW_REPORT.inventory[0]!, controllingEntity: "Not retained", transferMechanism: "Unknown", confidence: "Unknown", priority: "Review", category: "Review", serverLocation: "Not retained", requestNames: "Not retained", relationship: "Unknown", entityRelationship: "Unknown" };
     report = { ...SHADOW_REPORT, metrics: { ...SHADOW_REPORT.metrics, vendors: 3, domains: 2 }, runtimeEvidenceGraph: runtimeGraphUiFixture(), inventory: [

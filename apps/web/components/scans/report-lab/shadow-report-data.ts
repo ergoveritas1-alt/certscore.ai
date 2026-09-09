@@ -1,3 +1,4 @@
+import type { ExternalScanNoGoProjection } from "@website-signal-risk-scanner/shared";
 import type { GpcResponseAssessment } from "@certscore/contracts";
 import type { ExecutiveRejectPathProjection } from "../executive-summary-card";
 
@@ -132,6 +133,7 @@ export type GpcResponseReportProjection = {
 };
 
 export type ShadowReportData = {
+  resultDisposition?: never;
   siteMetadata?: import("@certscore/contracts").SiteMetadataProjection | null;
   fullSite?: import("@website-signal-risk-scanner/shared").CrawlOptions;
   runtimeEvidenceGraph?: import("@certscore/api-contracts").ApiRuntimeEvidenceGraphProjection;
@@ -238,6 +240,13 @@ export type ShadowReportData = {
     title: string;
   }>;
 };
+
+export type NoGoReportData = Pick<ShadowReportData, "scan" | "fullSite"> &
+  ExternalScanNoGoProjection & {
+    score: { label: "Not scored"; value: null };
+  };
+
+export type TimelineReportData = ShadowReportData | NoGoReportData;
 
 export const SHADOW_REPORT: ShadowReportData = {
   scan: {

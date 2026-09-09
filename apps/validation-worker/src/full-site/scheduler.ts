@@ -282,11 +282,12 @@ async function initializeHomepage(
         : ["homepage_baseline_coverage_limited"],
   });
   if (observation.collectionSurfaces) observation.collectionSurfaces.sourceSizeBytes = metadata.sizeBytes;
-  await withWriteTransaction(async (client) => {
-    await client.query(
-      `select scan_id from full_site_crawls where scan_id=$1 for update`,
+  const initialized = await withWriteTransaction(async (client) => {
+    const locked = await client.query(
+      `select scan_id from full_site_crawls where scan_id=$1 and status='waiting_homepage' for update`,
       [c.scan_id],
     );
+    if (!locked.rowCount) return false;
     await client.query(
       `update full_site_pages set status=$2,final_url=$3,observation_json=$4,compact_json=$5,completed_at=now(),attempt_count=1
       where id=$1 and observation_json is null`,
@@ -319,11 +320,13 @@ async function initializeHomepage(
         c.requested_json.maxPages === 1 ? "completed" : "running",
       ],
     );
+    return true;
   });
+  if (!initialized) return;
   if (c.requested_json.maxPages > 1) {
     if (["blocked", "failed"].includes(observation.status)) {
       await query(
-        `update full_site_crawls set status='stopped',stop_reason='homepage_unavailable',completed_at=now() where scan_id=$1`,
+        `update full_site_crawls set status='stopped',stop_reason='homepage_unavailable',completed_at=now() where scan_id=$1 and status='running'`,
         [c.scan_id],
       );
       return;
@@ -376,10 +379,11 @@ export async function discoverSitemaps(
   };
   if (robotPolicy.crawlDelaySeconds > 300)
     throw new Error("robots_delay_exceeds_crawl_budget");
-  await query(
-    `update full_site_crawls set robots_json=$2,effective_wait_seconds=greatest(effective_wait_seconds,$3) where scan_id=$1`,
+  const retainedRobots = await query(
+    `update full_site_crawls set robots_json=$2,effective_wait_seconds=greatest(effective_wait_seconds,$3) where scan_id=$1 and status='running'`,
     [c.scan_id, robotPolicy, robotPolicy.crawlDelaySeconds],
   );
+  if (!retainedRobots.rowCount) return;
   // Re-evaluate rendered links only after robots has been retained; no dispatch occurs before discovery_complete.
   const candidates = (
     await query<{ id: string; target_url: string }>(
@@ -395,7 +399,7 @@ export async function discoverSitemaps(
       );
   if (robotsDisallowAll(robotPolicy)) {
     await query(
-      `update full_site_crawls set status='stopped',stop_reason='robots_disallowed_all',discovery_complete=true,completed_at=now() where scan_id=$1`,
+      `update full_site_crawls set status='stopped',stop_reason='robots_disallowed_all',discovery_complete=true,completed_at=now() where scan_id=$1 and status='running'`,
       [c.scan_id],
     );
     return;
@@ -434,7 +438,7 @@ export async function discoverSitemaps(
     );
   }
   await query(
-    `update full_site_crawls set discovery_complete=true,stop_reason=case when $2 then coalesce(stop_reason,'sitemap_document_limit') else stop_reason end where scan_id=$1`,
+    `update full_site_crawls set discovery_complete=true,stop_reason=case when $2 then coalesce(stop_reason,'sitemap_document_limit') else stop_reason end where scan_id=$1 and status='running'`,
     [c.scan_id, queue.length > 0],
   );
 }
@@ -454,6 +458,10 @@ async function pauseDiscoveryRateLimit(
     [c.site_keys, seconds],
   );
 }
+// Only usable page observations can expand discovery. The completion barrier must
+// wait for exactly the same work; links on HTTP error pages are not candidates.
+const pendingDiscoveryLinksSql = `p.status in ('completed','partial') and p.source<>'homepage' and not p.links_processed and jsonb_array_length(coalesce(p.observation_json->'links','[]'::jsonb))>0`;
+
 export async function sweepFullSiteCrawls() {
   if (!fullSiteInternalEnabled()) return;
   await query(`update full_site_crawls c set status='stopped',stop_reason='wall_clock_limit',completed_at=now()
@@ -494,7 +502,7 @@ export async function sweepFullSiteCrawls() {
       await initializeHomepage(c);
     } catch {
       await query(
-        `update full_site_crawls set status='stopped',stop_reason='homepage_baseline_unverifiable',completed_at=now() where scan_id=$1`,
+        `update full_site_crawls set status='stopped',stop_reason='homepage_baseline_unverifiable',completed_at=now() where scan_id=$1 and status='waiting_homepage'`,
         [c.scan_id],
       );
     }
@@ -515,7 +523,7 @@ export async function sweepFullSiteCrawls() {
           ? error.message
           : "discovery_unavailable_or_blocked";
       await query(
-        `update full_site_crawls set status='stopped',stop_reason=$2,completed_at=now() where scan_id=$1`,
+        `update full_site_crawls set status='stopped',stop_reason=$2,completed_at=now() where scan_id=$1 and status='running'`,
         [c.scan_id, reason],
       );
     }
@@ -525,7 +533,7 @@ export async function sweepFullSiteCrawls() {
       scan_id: string;
       observation_json: { links: string[] };
     }>(`select p.id,p.scan_id,p.observation_json from full_site_pages p join full_site_crawls c on c.scan_id=p.scan_id
-    where c.status='running' and c.discovery_complete and p.status in ('completed','partial') and p.source<>'homepage' and not p.links_processed and jsonb_array_length(coalesce(p.observation_json->'links','[]'::jsonb))>0 limit 10`)
+    where c.status='running' and c.discovery_complete and ${pendingDiscoveryLinksSql} limit 10`)
   ).rows;
   for (const p of linkPages) {
     await addFullSiteCandidates(
@@ -545,7 +553,7 @@ export async function sweepFullSiteCrawls() {
     stop_reason=coalesce(c.stop_reason,case when exists(select 1 from full_site_pages p where p.scan_id=c.scan_id and p.status='queued') then 'max_pages' else 'all_discovered_eligible_targets_attempted' end)
     where c.status='running' and c.discovery_complete and not exists(select 1 from full_site_pages p where p.scan_id=c.scan_id and p.source<>'homepage' and (p.status in ('active','dispatching') or (p.status='queued' and p.scheduled)))
     and (not exists(select 1 from full_site_pages p where p.scan_id=c.scan_id and p.status='queued') or (select count(*) from full_site_pages p where p.scan_id=c.scan_id and p.scheduled)>=(c.requested_json->>'maxPages')::int)
-    and not exists(select 1 from full_site_pages p where p.scan_id=c.scan_id and p.source<>'homepage' and not p.links_processed and jsonb_array_length(coalesce(p.observation_json->'links','[]'::jsonb))>0)`);
+    and not exists(select 1 from full_site_pages p where p.scan_id=c.scan_id and ${pendingDiscoveryLinksSql})`);
   await query(
     `update full_site_pages p set status='cancelled',limitation='max_pages_unvisited' from full_site_crawls c where p.scan_id=c.scan_id and c.status='completed' and p.status='queued'`,
   );

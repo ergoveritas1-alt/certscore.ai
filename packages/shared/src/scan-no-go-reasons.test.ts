@@ -57,6 +57,18 @@ test("legacy reachability outcomes remain visible as no-go", () => {
   }
 });
 
+test("authentication no-go exposes sign-in guidance through the canonical public projection", () => {
+  const projection = projectExternalScanNoGo({
+    scan_no_go_assessment: { decision: "no_go", reasonCodes: ["authentication_required"] },
+  });
+  assert.equal(projection?.resultDisposition, "no_go");
+  assert.equal(projection?.noGo.reasonCode, "authentication_required");
+  assert.equal(projection?.noGo.title, "Sign-in required");
+  assert.equal(projection?.noGo.retryLikelyToHelp, false);
+  assert.match(projection?.noGo.summary ?? "", /no target score/);
+  assert.match(projection?.noGo.recommendedNextAction ?? "", /publicly accessible URL/);
+});
+
 test("projects a public-safe structured no-go result without diagnostic codes", () => {
   const projection = projectExternalScanNoGo({
     scan_no_go_assessment: { decision: "no_go", reasonCodes: ["site_not_ready", "scan_no_go_corroborated"] },

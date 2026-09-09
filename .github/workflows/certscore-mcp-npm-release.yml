@@ -73,7 +73,7 @@ jobs:
 
       - name: Build dependencies
         run: |
-          pnpm --filter @certscore/api-contracts build
+          pnpm --filter @certscore/api-contracts... build
           pnpm --filter @certscore/sdk build
 
       - run: pnpm --filter @certscore/mcp typecheck

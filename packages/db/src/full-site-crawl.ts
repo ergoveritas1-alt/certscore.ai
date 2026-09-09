@@ -61,6 +61,7 @@ export type FullSitePageRow = {
   token_hash: string | null;
   observation_json: unknown;
   compact_json: unknown;
+  completed_at: Date | null;
 };
 const hash = (value: string) =>
   createHash("sha256").update(value).digest("hex");
@@ -108,7 +109,7 @@ export async function loadFullSiteCrawl(scanId: string) {
 export async function loadFullSitePages(scanId: string, detailPageId?: string) {
   return (
     await query<FullSitePageRow>(
-      `select id,scan_id,target_url,final_url,source,discovery_count,discovery_sources,selection_reason,section,status,scheduled,limitation,attempt_count,attempt_id,
+      `select id,scan_id,target_url,final_url,source,discovery_count,discovery_sources,selection_reason,section,status,scheduled,limitation,attempt_count,attempt_id,completed_at,
     ${detailPageId ? "observation_json" : "null::jsonb as observation_json"},compact_json from full_site_pages where scan_id=$1 ${detailPageId ? "and id=$2" : ""} order by created_at,id`,
       detailPageId ? [scanId, detailPageId] : [scanId],
     )
@@ -536,5 +537,38 @@ export async function homepageMayStartAlongsideFullSite(hostname: string) {
       [keys],
     );
     return active.rowCount === 0;
+  });
+}
+
+/** Stop future inventory visits without deleting evidence or cancelling the initial audit. */
+export async function cancelFullSiteCrawl(input: {
+  scanId: string;
+  organizationId: string;
+  userId: string;
+}) {
+  if (!fullSiteInternalEnabled()) return null;
+  return withWriteTransaction(async (client) => {
+    const authorizedSql = `select c.* from full_site_crawls c
+      join scans s on s.id=c.scan_id
+      join organization_members m on m.organization_id=s.organization_id and m.user_id=c.authorized_user_id
+      where c.scan_id=$1 and s.organization_id=$2 and c.authorized_user_id=$3
+        and m.role in ('admin','advanced')`;
+    const params = [input.scanId, input.organizationId, input.userId];
+    const initial = (await client.query<FullSiteCrawlRow>(authorizedSql, params)).rows[0];
+    if (!initial) return null;
+    // Match dispatch/claim/callback lock order. Recheck authorization after waiting.
+    await lockFullSiteKeys(client, initial.site_keys);
+    const crawl = (await client.query<FullSiteCrawlRow>(
+      `${authorizedSql} for update of c for share of m`, params,
+    )).rows[0];
+    if (!crawl) return null;
+    if (!["waiting_homepage", "running"].includes(crawl.status)) return { status: crawl.status };
+    await client.query(`update full_site_crawls set status='cancelled',stop_reason='user_cancelled',completed_at=now()
+      where scan_id=$1`, [input.scanId]);
+    await client.query(`update full_site_pages set status='cancelled',limitation='user_cancelled',completed_at=now(),
+      token_hash=null,dispatch_lease_until=null where scan_id=$1 and status in ('queued','dispatching')`, [input.scanId]);
+    // Already-active bounded workers may return their evidence. No retries or new
+    // visits are permitted once the crawl is cancelled; their leases still expire.
+    return { status: "cancelled" };
   });
 }

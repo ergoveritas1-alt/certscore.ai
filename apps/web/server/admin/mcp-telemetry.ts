@@ -1,4 +1,10 @@
+import { mcpContextAnchors, mcpRelatedContextSql, parseMcpRelatedContext, type McpRelatedContext } from "../../lib/admin/mcp-related-context";
 import "server-only";
+import { mcpFunnelSql, MCP_FUNNEL_RESULT_TOOLS, MCP_FUNNEL_FOLLOW_UP_MINUTES, type McpFunnelData } from "../../lib/admin/mcp-funnel";
+import { SCAN_NO_GO_SNAPSHOT_OUTCOMES } from "@website-signal-risk-scanner/shared";
+import { mcpCallerAnchors, mcpCallerActivitySql, type McpCallerActivity } from "../../lib/admin/mcp-caller-activity";
+
+import { MCP_DISCOVERY_PERIODS, mcpDiscoverySql, type McpDiscoveryClient, type McpDiscoveryPeriod } from "../../lib/admin/mcp-discovery";
 
 import { unstable_cache } from "next/cache";
 import { query, queryOne } from "@website-signal-risk-scanner/db";
@@ -88,6 +94,9 @@ type HostnameRow = {
 };
 
 export type AdminMcpTelemetryEvent = {
+  caller_activity?: McpCallerActivity | null;
+  related_context?: McpRelatedContext | null;
+  request_details?: unknown;
   access_posture_class: string | null;
   admin_summary_generated_at: string | null;
   actor_id: string | null;
@@ -160,6 +169,7 @@ export function isAdminMcpEvidenceUnavailable(input: Pick<AdminMcpTelemetryEvent
 }
 
 export type AdminMcpTelemetryEventFilters = {
+  clientName?: string | null;
   confidence?: "verified" | "corroborated" | "declared" | "inferred" | "unknown" | null;
   excludeMacMiniScanBot?: boolean;
   includeCanary?: boolean;
@@ -169,7 +179,7 @@ export type AdminMcpTelemetryEventFilters = {
   product?: "chatgpt" | "codex" | "claude" | "claude_code" | "gemini_cli" | "grok" | "other" | "unknown" | null;
   source?: "openai" | "anthropic" | "google" | "xai" | "other" | "unknown" | null;
   surface?: McpTelemetrySurface | null;
-  timeSpan?: "all" | "4h" | "12h" | "24h" | "7d" | "30d";
+  timeSpan?: "all" | "4h" | "6h" | "12h" | "24h" | "7d" | "30d";
   toolName?: string | null;
 };
 
@@ -630,6 +640,8 @@ export async function listAdminMcpTelemetryEventsPage(
     const apiKeyNamesParameter = addValue(MAC_MINI_SCAN_BOT_API_KEY_NAMES);
     conditions.push(macMiniMcpTrafficFilter("events", "true", apiKeyNamesParameter).replace(/^and /, ""));
   }
+  const activityVisibilitySql = conditions.join(" and ");
+  const activityVisibilityValues = [...values];
 
   if (queryText) {
     const parameter = addValue(`%${queryText}%`);
@@ -647,9 +659,11 @@ export async function listAdminMcpTelemetryEventsPage(
       or attribution_confidence ilike ${parameter}
       or coalesce(requested_resource, '') ilike ${parameter}
       or coalesce(requester_ip::text, '') ilike ${parameter}
+      or events.event_id::text ilike ${parameter}
       or error_code ilike ${parameter}
     )`);
   }
+  if (filters.clientName) conditions.push(`client_name = ${addValue(filters.clientName.slice(0, 100))}`);
   if (filters.surface) conditions.push(`surface = ${addValue(filters.surface)}`);
   if (filters.source) conditions.push(`source = ${addValue(filters.source)}`);
   if (filters.product) conditions.push(`caller_product = ${addValue(filters.product)}`);
@@ -661,6 +675,7 @@ export async function listAdminMcpTelemetryEventsPage(
   const timeSpan = filters.timeSpan ?? "30d";
   const timeSpanSql = timeSpan === "all" ? null : {
     "4h": "occurred_at >= now() - interval '4 hours'",
+    "6h": "occurred_at >= now() - interval '6 hours'",
     "12h": "occurred_at >= now() - interval '12 hours'",
     "24h": "occurred_at >= now() - interval '24 hours'",
     "7d": "occurred_at >= now() - interval '7 days'",
@@ -684,7 +699,7 @@ export async function listAdminMcpTelemetryEventsPage(
               events.source_attribution, events.auth_class, events.client_family, events.client_name,
               events.caller_product, events.attribution_confidence, events.attribution_signals,
               events.attribution_ruleset_version, events.execution_channel, events.installation_origin,
-              events.tool_name, events.request_id,
+              events.tool_name, events.request_id, to_jsonb(events) -> 'request_details' as request_details,
               coalesce(events.target_hostname, canonical_domain.hostname) as target_hostname,
               case
                 when events.target_hostname is not null then 'request'
@@ -801,6 +816,22 @@ export async function listAdminMcpTelemetryEventsPage(
     ),
   ]);
 
+  const contextAnchors = mcpContextAnchors(eventResult.rows);
+  const relatedRows = contextAnchors.length ? await query<{
+    event_id: string; source_event_id: string; source_occurred_at: string; request_details: unknown;
+  }>(mcpRelatedContextSql(activityVisibilitySql, activityVisibilityValues.length + 1),
+    [...activityVisibilityValues, JSON.stringify(contextAnchors)], { readOnly: true }) : { rows: [] };
+  const relatedByEvent = new Map(relatedRows.rows.map(row => [row.event_id, parseMcpRelatedContext(row)]));
+
+  const anchors = mcpCallerAnchors(eventResult.rows);
+  const activityRows = anchors.length ? await query<{
+    event_id: string; calls5m: number; calls10m: number; calls60m: number; quota_hits60m: number;
+  }>(mcpCallerActivitySql(activityVisibilitySql, activityVisibilityValues.length + 1),
+    [...activityVisibilityValues, JSON.stringify(anchors)], { readOnly: true }) : { rows: [] };
+  const activityByEvent = new Map(activityRows.rows.map((row) => [row.event_id, {
+    calls5m: row.calls5m, calls10m: row.calls10m, calls60m: row.calls60m, quotaHits60m: row.quota_hits60m,
+  }]));
+
   return {
     items: eventResult.rows.map((row) => {
       const requesterIp = requesterIpAttributionFromRequest({
@@ -818,6 +849,8 @@ export async function listAdminMcpTelemetryEventsPage(
       const evidenceUnavailable = isAdminMcpEvidenceUnavailable(event);
       return {
         ...event,
+        caller_activity: activityByEvent.get(event.event_id) ?? null,
+        related_context: relatedByEvent.get(event.event_id) ?? null,
         evidence_matrix: evidenceUnavailable ? null : parseAdminEvidenceMatrix(rawEvidenceMatrix),
         score: evidenceUnavailable ? null : event.score,
         top_finding_count: evidenceUnavailable ? null : event.top_finding_count,
@@ -828,4 +861,98 @@ export async function listAdminMcpTelemetryEventsPage(
     }),
     totalCount: count(totalResult?.total_count ?? 0),
   };
+}
+
+async function loadAdminMcpDiscoveryUncached(
+  period: McpDiscoveryPeriod, search: string, surface: string | null, client: string | null,
+  source: string | null, limit: number, offset: number, includeInternalQa: boolean, excludeMacMini: boolean,
+) {
+  const invocationVisibility = [
+    `($13::boolean or ${internalQaMcpTrafficFilter("events", "$8", "$9", "$10").replace(/^and /, "")})`,
+    macMiniMcpTrafficFilter("events", "$12", "$11").replace(/^and /, ""),
+  ].join(" and ");
+  const result = await queryOne<{ total_count: number; items: McpDiscoveryClient[] }>(
+    mcpDiscoverySql({
+      invocationVisibility,
+      activationVisibility: "($13::boolean or lower(coalesce(activation.client_name, '')) <> all($10::text[]))",
+    }),
+    [MCP_DISCOVERY_PERIODS[period], search, surface, client, limit, offset, source,
+      INTERNAL_QA_EMAILS, INTERNAL_QA_REQUESTER_IPS, INTERNAL_QA_MCP_CLIENT_NAMES,
+      MAC_MINI_SCAN_BOT_API_KEY_NAMES, excludeMacMini, includeInternalQa],
+    { readOnly: true },
+  );
+  return result ?? { total_count: 0, items: [] };
+}
+
+const loadCachedAdminMcpDiscovery = unstable_cache(loadAdminMcpDiscoveryUncached, ["admin-mcp-discovery-v3"], { revalidate: 30 });
+
+export async function loadAdminMcpDiscovery(input: {
+  period: McpDiscoveryPeriod; search: string; surface: string | null; client: string | null; source: string | null;
+  limit: number; offset: number; includeInternalQa: boolean; excludeMacMini: boolean;
+}) {
+  await requirePlatformAdminContext();
+  return loadCachedAdminMcpDiscovery(
+    input.period in MCP_DISCOVERY_PERIODS ? input.period : "24h", input.search.slice(0, 100),
+    input.surface, input.client?.slice(0, 100) ?? null, input.source,
+    Math.max(1, Math.min(100, input.limit)), Math.max(0, Math.min(1_000_000, input.offset)),
+    input.includeInternalQa, input.excludeMacMini,
+  );
+}
+
+export async function loadAdminMcpWorkflowEvents(input: {
+  period: McpDiscoveryPeriod; client: string | null; surface: string | null; source: string | null;
+  includeInternalQa: boolean; excludeMacMini: boolean;
+}) {
+  await requirePlatformAdminContext();
+  const visibility = [
+    `($5::boolean or ${internalQaMcpTrafficFilter("events", "$6", "$7", "$8").replace(/^and /, "")})`,
+    macMiniMcpTrafficFilter("events", "$9", "$10").replace(/^and /, ""),
+  ].join(" and ");
+  const result = await query<import("../../lib/admin/mcp-workflows").McpWorkflowEvent & { total_events: string }>(`
+    with recent as materialized (
+      select events.*, count(*) over() as total_events
+      from public.mcp_tool_invocation_events events
+      where events.occurred_at >= now() - ($1::int * interval '1 hour') and events.occurred_at <= now()
+        and ($2::text is null or events.client_name = $2)
+        and ($3::text is null or events.surface = $3)
+        and ($4::text is null or events.source = $4)
+        and ${visibility}
+      order by events.occurred_at desc, events.event_id desc limit 5000
+    )
+    select recent.event_id, recent.occurred_at, recent.session_id, recent.scan_id,
+      recent.client_name, recent.source, recent.surface, recent.tool_name, recent.outcome,
+      recent.error_code, recent.quota_outcome, recent.duration_ms, recent.scan_decision,
+      recent.scan_status, recent.requested_resource, to_jsonb(recent)->'request_details' as request_details,
+      scan.status as canonical_status, snapshot.scan_outcome as canonical_outcome, recent.total_events
+    from recent
+    left join public.scans scan on scan.id = case when recent.scan_id ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$' then recent.scan_id::uuid else null end
+    left join public.scan_snapshots snapshot on snapshot.scan_id = scan.id
+    order by recent.occurred_at desc, recent.event_id desc`,
+    [MCP_DISCOVERY_PERIODS[input.period], input.client, input.surface, input.source, input.includeInternalQa,
+      INTERNAL_QA_EMAILS, INTERNAL_QA_REQUESTER_IPS, INTERNAL_QA_MCP_CLIENT_NAMES, input.excludeMacMini, MAC_MINI_SCAN_BOT_API_KEY_NAMES],
+    { readOnly: true });
+  return { events: result.rows, totalEvents: Number(result.rows[0]?.total_events ?? 0) };
+}
+
+
+async function loadMcpFunnelUncached(period: McpDiscoveryPeriod, client: string | null, surface: string | null,
+  source: string | null, includeInternalQa: boolean, excludeMacMini: boolean, followUpMinutes: number) {
+  const visibility = [
+    `($5::boolean or ${internalQaMcpTrafficFilter("events", "$6", "$7", "$8").replace(/^and /, "")})`,
+    macMiniMcpTrafficFilter("events", "$9", "$10").replace(/^and /, ""),
+  ].join(" and ");
+  const result = await queryOne<McpFunnelData>(mcpFunnelSql({ invocationVisibility: visibility,
+    activationVisibility: "($5::boolean or lower(coalesce(activation.client_name, '')) <> all($8::text[]))" }),
+    [MCP_DISCOVERY_PERIODS[period], client, surface, source, includeInternalQa,
+      INTERNAL_QA_EMAILS, INTERNAL_QA_REQUESTER_IPS, INTERNAL_QA_MCP_CLIENT_NAMES, excludeMacMini,
+      MAC_MINI_SCAN_BOT_API_KEY_NAMES, followUpMinutes, SCAN_NO_GO_SNAPSHOT_OUTCOMES, MCP_FUNNEL_RESULT_TOOLS], { readOnly: true });
+  if (!result) throw new Error("MCP funnel query returned no summary");
+  return result;
+}
+const loadCachedMcpFunnel = unstable_cache(loadMcpFunnelUncached, ["admin-mcp-session-funnel-v1"], { revalidate: 30 });
+export async function loadAdminMcpFunnel(input: { period: McpDiscoveryPeriod; client: string | null; surface: string | null;
+  source: string | null; includeInternalQa: boolean; excludeMacMini: boolean; followUpMinutes: number }) {
+  await requirePlatformAdminContext();
+  return loadCachedMcpFunnel(input.period in MCP_DISCOVERY_PERIODS ? input.period : "24h", input.client, input.surface, input.source,
+    input.includeInternalQa, input.excludeMacMini, (MCP_FUNNEL_FOLLOW_UP_MINUTES as readonly number[]).includes(input.followUpMinutes) ? input.followUpMinutes : 30);
 }

@@ -1,3 +1,4 @@
+import { resolveScanReportScore } from "../../lib/scans/scan-report-disposition";
 
 import { scanFailureExplanation } from "../../lib/scans/scan-failure-explanation";
 import type { ReactNode } from "react";
@@ -7922,13 +7923,13 @@ export async function SharedScanDetailView({
     scanRecord.snapshot,
     "critical_coverage_complete",
   );
-  const canonicalOverallScore = deriveCanonicalOverallScoreForReport({
+  const canonicalOverallScore = deriveCanonicalOverallScoreForReport({ scanRecord: scanRecord,
     checklistRows: gdprEprivacyCoverageChecklist,
     unifiedFindings: findingEvidenceDiagnostics
   });
   const persistedCanonicalOverallScore = getFiniteNumber(snapshot?.certscore_overall);
   const executiveDisplayedScore = browserCoverageSufficient && criticalCoverageComplete !== false
-    ? persistedCanonicalOverallScore ?? canonicalOverallScore
+    ? resolveScanReportScore(scanRecord, persistedCanonicalOverallScore ?? canonicalOverallScore)
     : null;
   const regulatoryGapTopFindings = buildChecklistConcernTopFindings(
     gdprEprivacyCoverageChecklist

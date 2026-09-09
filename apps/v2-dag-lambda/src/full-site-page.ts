@@ -19,6 +19,22 @@ import {
 } from "@website-signal-risk-scanner/shared";
 
 export const FULL_SITE_PAGE_DISPATCH = "certscore.full-site-page-dispatch.v1";
+
+/** Failure hints describe actual capture failures, never a successful visit's default. */
+export function fullSitePageCaptureOutcome(input: {
+  aborted: boolean;
+  finalUrl: string | null;
+  moduleRun: Awaited<ReturnType<typeof runInventoryOnly>>["evidence"]["moduleRun"];
+}) {
+  const status = !input.aborted && input.moduleRun.status === "completed" && input.finalUrl
+    ? "completed" as const
+    : input.moduleRun.status === "failed" ? "failed" as const : "partial" as const;
+  const failureKind = input.moduleRun.recoveryDiagnostics?.attempts?.some(attempt => attempt.outcome === "committed_timeout")
+    ? "navigation_timeout" as const
+    : status === "failed" ? "collection_failure" as const : undefined;
+  return { status, failureKind };
+}
+
 const messageSchema = z
   .object({
     contractVersion: z.literal(FULL_SITE_PAGE_DISPATCH),
@@ -51,6 +67,45 @@ export async function dispatchFullSitePage(event: unknown) {
   return { status: "dispatched" };
 }
 
+export async function requestFullSiteControl(controlUrl: URL, message: z.infer<typeof messageSchema>, body: Record<string, unknown>, invocationDeadline: number) {
+  const controlStartedAt = Date.now();
+  const remainingMs = invocationDeadline - controlStartedAt;
+  // Finish is the last operation: use the remaining publication budget rather
+  // than imposing a second deadline before verified persistence can acknowledge.
+  const timeoutMs = body.operation === "claim" ? Math.min(3000, remainingMs) : remainingMs;
+  if (timeoutMs <= 0) throw new Error("Inventory publication deadline reached.");
+  let httpStatus: number | null = null;
+  try {
+    const response = await proxyFetch(controlUrl, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ ...message, ...body }),
+      signal: AbortSignal.timeout(
+        // Both operations stay inside the existing total invocation budget.
+        timeoutMs,
+      ),
+      redirect: "error",
+    });
+    httpStatus = response.status;
+    if (!response.ok)
+      throw new Error(`Full site control plane returned ${response.status}`);
+    const result = await response.json();
+    if (body.operation === "finish" && result.accepted !== true)
+      throw new Error("Full site result was not accepted.");
+    if (body.operation === "finish") console.info(JSON.stringify({ event: "full_site_control_completed",
+      page_id: message.pageId, attempt_id: message.attemptId, operation: "finish",
+      elapsed_ms: Date.now() - controlStartedAt, http_status: httpStatus }));
+    return result;
+  } catch (error) {
+    // The custom Lambda runtime does not emit uncaught invocation errors.
+    // Retain bounded operational context without URLs, credentials or response bodies.
+    console.error(JSON.stringify({ event: "full_site_control_failed", page_id: message.pageId,
+      attempt_id: message.attemptId, operation: body.operation, elapsed_ms: Date.now() - controlStartedAt, http_status: httpStatus,
+      error_name: error instanceof Error ? error.name.slice(0, 80) : "UnknownError" }));
+    throw error;
+  }
+}
+
 export async function runFullSitePage(event: unknown, options: { s3Client?: S3Client; control?: (body: Record<string, unknown>) => Promise<any> } = {}) {
   if (process.env.CERTSCORE_FULL_SITE_INVENTORY_WORKER !== "1")
     throw new Error("Inventory requires its dedicated worker.");
@@ -74,18 +129,7 @@ export async function runFullSitePage(event: unknown, options: { s3Client?: S3Cl
   const controlUrl = new URL("/api/internal/full-site/page", origin);
   async function control(body: Record<string, unknown>) {
     if (options.control) return options.control(body);
-    const response = await proxyFetch(controlUrl, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ ...message, ...body }),
-      signal: AbortSignal.timeout(
-        remaining(body.operation === "claim" ? 1500 : 2000),
-      ),
-      redirect: "error",
-    });
-    if (!response.ok)
-      throw new Error(`Full site control plane returned ${response.status}`);
-    return response.json();
+    return requestFullSiteControl(controlUrl, message, body, invocationDeadline);
   }
   const admitted = await control({
     operation: "claim",
@@ -144,19 +188,7 @@ export async function runFullSitePage(event: unknown, options: { s3Client?: S3Cl
       requestedUrl: grant.url,
       profile: "inventory_only",
       sourceHash: inventoryHash(visit.evidence),
-      failureKind: visit.evidence.moduleRun.recoveryDiagnostics?.attempts?.some(
-        (attempt) => attempt.outcome === "committed_timeout",
-      )
-        ? "navigation_timeout"
-        : "collection_failure",
-      status:
-        !abort.signal.aborted &&
-        visit.evidence.moduleRun.status === "completed" &&
-        visit.finalUrl
-          ? "completed"
-          : visit.evidence.moduleRun.status === "failed"
-            ? "failed"
-            : "partial",
+      ...fullSitePageCaptureOutcome({ aborted: abort.signal.aborted, finalUrl: visit.finalUrl, moduleRun: visit.evidence.moduleRun }),
       limitations: [
         ...(abort.signal.aborted ? ["observation_deadline"] : []),
         ...visit.evidence.moduleRun.errors.map(
