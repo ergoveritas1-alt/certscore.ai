@@ -424,11 +424,23 @@ export function createCertScoreMcpServer(options: CertScoreMcpOptions = {}) {
       const startedAt = Date.now();
       const name = request.params.name;
       const args = request.params.arguments ?? {};
+      const taskContext = sanitizeMcpTaskContext(args.taskContext);
+      const forwardedRequest = name === "certscore_scan_site" && args.taskContext !== undefined && !taskContext
+        ? {
+            ...request,
+            params: {
+              ...request.params,
+              arguments: Object.fromEntries(
+                Object.entries(args).filter(([key]) => key !== "taskContext"),
+              ),
+            },
+          }
+        : request;
       const known = certScoreMcpToolContracts.some(tool => tool.name === name)
         && (options.toolProfile !== "light" || lightTools.has(name as CertScoreMcpToolName));
       let result: any;
       try {
-        result = await handler(request, extra);
+        result = await handler(forwardedRequest, extra);
         return result;
       } catch (error) {
         result = { isError: true, structuredContent: { error: { code: "handler_exception" } } };
@@ -440,7 +452,6 @@ export function createCertScoreMcpServer(options: CertScoreMcpOptions = {}) {
           else if (observation.outcome === "error" && !observation.errorCode) observation.errorCode = "protocol_error";
           const payload = telemetryResultRecord(result);
           const metadata = payload.mcpMetadata as Record<string, unknown> | undefined;
-          const taskContext = sanitizeMcpTaskContext(args.taskContext);
           observeToolInvocation(options.onToolInvocation, {
             ...observation,
             captureBasis: "protocol_request",

@@ -1,6 +1,9 @@
 // Only schema-owned path segments may enter diagnostics. Never log rejected
 // values, raw Zod messages (which can contain those values), or bundled stacks.
 const safeFields = new Set([
+  "modulesRun", "timingBreakdown", "consentUiObservations", "documentUrl",
+  "impliedConsentLanguageEvidence", "captureDiagnostics", "completedChannels",
+  "timedOutChannels", "failedChannels", "inventoryDiagnostics", "candidateLabels",
   "storage", "preAction", "postAction", "name", "storageType", "hostname",
   "identityBasis", "identityHash", "storageIdentityHash", "valueHash",
   "writesAfterAccept", "writesAfterRefusal", "itemsCreatedOrChangedAfterAccept",

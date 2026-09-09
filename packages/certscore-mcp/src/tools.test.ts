@@ -1209,6 +1209,56 @@ test("terminal MCP status text surfaces GPC, Accept, and Reject lane results", (
   assert.match(text, /Reject Path: Reject was confirmed/);
 });
 
+test("terminal failed status keeps preliminary preview as diagnostic context without stale polling guidance", () => {
+  const text = scanStatusText({
+    status: "failed",
+    scanId: "scan_failed_preview",
+    recommendedNextAction: "Retry certscore_scan_site with freshness=refresh after the recommended delay.",
+    preConsentPreview: {
+      generatedAt: "2026-09-08T16:11:19.488Z",
+      sourceLane: "runtime_evidence",
+      runtimeCoverage: { status: "limited_partial" },
+      cookies: [],
+      trackers: [],
+      operationalVendors: [],
+      summary: {
+        cookieCount: 0,
+        returnedCookieCount: 0,
+        trackingVendorCount: 0,
+        returnedTrackingVendorCount: 0,
+        operationalVendorCount: 0,
+        returnedOperationalVendorCount: 0,
+        vendorCount: 0,
+        thirdPartyRequestCount: 0,
+      },
+      observationOnlyDisclaimer: "Partial preview of passive runtime observations only.",
+    },
+  });
+
+  assert.match(text, /status=failed/);
+  assert.match(text, /retained diagnostic context only/);
+  assert.match(text, /do not continue polling/);
+  assert.match(text, /Next: Retry certscore_scan_site/);
+  assert.doesNotMatch(text, /Continue sequential status polling|Wait for terminal scan status/);
+});
+
+test("successful bundle offers an optional attributed trial path without changing Light authentication", () => {
+  const text = scanBundleText({
+    status: "completed",
+    scanId: "scan_trial_cta",
+    domain: "example.test",
+    score: 88,
+    findings: [],
+    findingsMetadata: { total: 0, returned: 0 },
+  });
+
+  assert.match(text, /Optional user follow-up/);
+  assert.match(text, /7-day CertScore trial/);
+  assert.match(text, /utm_source=mcp_light/);
+  assert.match(text, /https:\/\/mcp\.certscore\.ai\/mcp after account authorization/);
+  assert.match(text, /Light remains no-auth/);
+});
+
 test("scan bundle surfaces canonical post-Accept findings and observation metadata", () => {
   const finding = publicFinding(
     "post_accept_consent_dependent_activity",
@@ -1670,6 +1720,7 @@ test("retained 401 is explicit in every MCP text surface, including the default 
     assert.ok(text.includes(`Next: ${value.noGo.recommendedNextAction}`));
     assert.match(text, /Retry likely to help: no/);
     assert.match(text, /not proof of compliance/);
+    assert.doesNotMatch(text, /7-day CertScore trial|utm_source=mcp_light/);
     assert.ok(text.length <= 8_000);
     assert.doesNotMatch(text, /CertScore score=|Canonical findings complete|GPC response:/);
   }

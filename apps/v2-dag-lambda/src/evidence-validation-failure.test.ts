@@ -14,3 +14,12 @@ test("schema failure diagnostics retain bounded paths/codes but no values, messa
   assert.doesNotMatch(JSON.stringify(result), /secret|Error:|stack/);
   assert.equal(evidenceValidationFailure(new Error("ordinary failure")), undefined);
 });
+
+test("schema failure diagnostics identify canonical consent fields without retaining rejected content", () => {
+  const error = Object.assign(new Error("https://example.test/private-query"), { name: "ZodError", issues: [
+    { path: ["consentUiObservations", 0, "documentUrl"], code: "too_big", message: "private-query" },
+  ] });
+  const result = evidenceValidationFailure(error)!;
+  assert.equal(result.message, "Evidence validation failed: consentUiObservations.[0].documentUrl (too_big)");
+  assert.doesNotMatch(JSON.stringify(result), /private-query|example\.test/);
+});
