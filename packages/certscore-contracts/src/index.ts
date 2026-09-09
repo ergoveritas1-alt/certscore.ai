@@ -612,7 +612,10 @@ export const consentUiObservationSchema = z.object({
   // Main-frame document that produced this observation. New scanner output
   // should always retain it so ordinary redirects cannot detach typed
   // controls from the document on which they were actually observed.
-  documentUrl: z.string().max(500).optional(),
+  // Consent proof is bound to the committed browser document URL. Preserve
+  // ordinary long redirect URLs instead of failing the whole evidence lane.
+  // The 2,000-character cap matches other retained canonical URL surfaces.
+  documentUrl: z.string().max(2_000).optional(),
   documentIdentity: browserDocumentIdentitySchema.optional(),
   // Taken atomically with the DOM inventory, never inferred from a screenshot.
   // Loading documents cannot establish absence; visible positive evidence is

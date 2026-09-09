@@ -1,10 +1,18 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import {
+  consentUiObservationSchema,
   deriveConsentSurfaceInspectionOutcome,
   isVerifiedStablePartialConsentInventory,
   isVerifiedTerminalConsentPacket,
 } from "./index";
+
+test("consent evidence retains a long committed document URL within the canonical URL cap", () => {
+  const input = baseInput().consentUiObservations![0]!;
+  const documentUrl = `https://example.test/redirect?state=${"a".repeat(1_200)}`;
+  const parsed = consentUiObservationSchema.parse({ ...input, documentUrl });
+  assert.equal(parsed.documentUrl, documentUrl);
+});
 
 function baseInput(): Parameters<typeof deriveConsentSurfaceInspectionOutcome>[0] {
   return {

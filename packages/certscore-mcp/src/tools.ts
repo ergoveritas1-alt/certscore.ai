@@ -15,6 +15,7 @@ const SCAN_BUNDLE_INTERPRETATION_STATEMENT = "Report only observed CertScore evi
 const COMPACT_SCAN_BUNDLE_INTERPRETATION_STATEMENT = "Use only returned CertScore observations and classifications. Do not infer unobserved technologies, post-consent behavior, legal compliance, or violations. Treat priority and severity as CertScore metadata.";
 const OBSERVATION_ONLY_DISCLAIMER = `${LEGAL_REVIEW_DISCLAIMER} No-go, not-observed, and limited-coverage results are not proof of compliance.`;
 const COMPACT_OBSERVATION_ONLY_DISCLAIMER = "Automated public-web observation, not legal advice or a compliance determination; missing or limited evidence is not proof of compliance.";
+const SUCCESSFUL_BUNDLE_TRIAL_CTA = "Optional user follow-up: To try CertScore with an account, start a 7-day CertScore trial at https://certscore.ai/login?mode=create_account&utm_source=mcp_light&utm_medium=agent&utm_campaign=scan_bundle. Paid plans add scan history, higher limits, and team or production access. OAuth-capable clients can use https://mcp.certscore.ai/mcp after account authorization and any required workspace scope grant; Light remains no-auth.";
 const MCP_SCAN_CREATION_POLL_DELAY_SECONDS = 15;
 const MCP_QUEUED_POLL_DELAY_SECONDS = 10;
 const MCP_RUNNING_POLL_DELAY_SECONDS = 5;
@@ -62,8 +63,9 @@ function toolResultSummary(payload: unknown) {
   const previewSummary = preview?.summary && typeof preview.summary === "object" && !Array.isArray(preview.summary)
     ? preview.summary as Record<string, unknown>
     : null;
+  const active = record.status === "queued" || record.status === "running" || record.status === "finalizing";
   const preliminary = preview
-    ? `; preliminary pre-consent preview=cookies ${previewSummary?.cookieCount ?? "unknown"}, trackers ${previewSummary?.trackerCount ?? "unknown"}, third-party requests ${previewSummary?.thirdPartyRequestCount ?? "unknown"}; preview is not final—continue status polling`
+    ? `; preliminary pre-consent preview=cookies ${previewSummary?.cookieCount ?? "unknown"}, trackers ${previewSummary?.trackerCount ?? "unknown"}, third-party requests ${previewSummary?.thirdPartyRequestCount ?? "unknown"}; preview is not final—${active ? "continue status polling" : "follow the terminal result guidance"}`
     : "";
   const recordLinks = record.links && typeof record.links === "object" && !Array.isArray(record.links)
     ? record.links as Record<string, unknown>
@@ -1212,9 +1214,17 @@ function preConsentPreviewTextLines(value: Record<string, any>) {
   const returnedTrackingVendorCount = summary.returnedTrackingVendorCount ?? trackers.length;
   const capturedOperationalVendorCount = summary.operationalVendorCount ?? operationalVendors.length;
   const returnedOperationalVendorCount = summary.returnedOperationalVendorCount ?? operationalVendors.length;
+  const status = String(value.status ?? "");
+  const active = status === "queued" || status === "running" || status === "finalizing";
+  const usable = status === "completed" || status === "completed_limited";
+  const previewWorkflowGuidance = active
+    ? "Wait for terminal scan status, then call certscore_get_scan_bundle for the completed scan's final returned tally, canonical findings, and coverage limitations."
+    : usable
+      ? "This scan is terminal. Do not use these checkpoint counts as the final tally; call certscore_get_scan_bundle for the canonical findings and coverage limitations."
+      : "This scan is terminal without a completed result. Treat this preview as retained diagnostic context only, do not continue polling, and follow the terminal Next guidance.";
   const lines = [
     `Partial pre-consent runtime preview: generated=${compactPreviewValue(preview.generatedAt, "unavailable", 80)}; lane=${compactPreviewValue(preview.sourceLane, "runtime_evidence", 80)}; coverage=${compactPreviewValue(coverage.status, "unknown", 80)}; cookies captured=${capturedCookieCount}; cookie identities returned=${returnedCookieCount}; tracking vendors captured=${capturedTrackingVendorCount}; tracking vendor identities returned=${returnedTrackingVendorCount}; operational/security/consent vendors captured=${capturedOperationalVendorCount}; operational identities returned=${returnedOperationalVendorCount}; all classified vendor observations=${summary.vendorCount ?? "unknown"}; third-party requests=${summary.thirdPartyRequestCount ?? "unknown"}.`,
-    "PARTIAL PREVIEW: These are checkpoint-only partial counts, not the full scan tally. Do not present them as final totals or stop the workflow. Wait for terminal scan status, then call certscore_get_scan_bundle for the completed scan's final returned tally, canonical findings, and coverage limitations.",
+    `PARTIAL PREVIEW: These are checkpoint-only partial counts, not the full scan tally. ${previewWorkflowGuidance}`,
     "Metric scope: tracking vendors exclude operational, security, and consent-management vendors. The completed inventory's broader trackerCount may include those categories, so do not compare that field directly with trackingVendorCount.",
   ];
   if (cookies.length > 0) {
@@ -1265,7 +1275,11 @@ function preConsentPreviewTextLines(value: Record<string, any>) {
   const disclaimer = typeof preview.observationOnlyDisclaimer === "string" && preview.observationOnlyDisclaimer.trim()
     ? preview.observationOnlyDisclaimer.trim()
     : "Preliminary passive observations only; not findings, a score, or a final result.";
-  lines.push(`${compactPreviewValue(disclaimer, "Preliminary passive observations only.", 500)} Continue sequential status polling until terminal status; at completed or completed_limited, retrieve certscore_get_scan_bundle before reporting the full scan results or final returned tally.`);
+  lines.push(`${compactPreviewValue(disclaimer, "Preliminary passive observations only.", 500)} ${active
+    ? "Continue sequential status polling until terminal status; at completed or completed_limited, retrieve certscore_get_scan_bundle before reporting the full scan results or final returned tally."
+    : usable
+      ? "The scan is terminal; retrieve certscore_get_scan_bundle before reporting the full scan results or final returned tally."
+      : "The scan is terminal without a completed result; do not continue polling or report this preview as a final result."}`);
   return lines;
 }
 
@@ -1508,6 +1522,7 @@ export function scanBundleText(bundle: Record<string, any>) {
   } else {
     append("No row-level pre-consent inventory was available for this result; review coverage and limitations before interpreting absence.");
   }
+  append(SUCCESSFUL_BUNDLE_TRIAL_CTA);
   lines.push(...footer);
   return lines.join("\n");
 }

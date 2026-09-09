@@ -754,6 +754,41 @@ test("certscore_scan_site returns a newly accepted scan immediately by default",
   }
 });
 
+test("certscore_scan_site drops invalid optional task context instead of rejecting the scan", async () => {
+  const mock = installFetch([
+    {
+      status: 202,
+      body: {
+        type: "certscore_scan_job",
+        status: "queued",
+        jobId: "00000000-0000-4000-8000-000000000124",
+        scanId: "00000000-0000-4000-8000-000000000124",
+        executionMode: "new_scan",
+        reused: false,
+        freshnessDecision: "no_eligible_recent_scan_queued"
+      }
+    }
+  ]);
+  try {
+    await withMcpClient(async (client) => {
+      const raw = await client.callTool({
+        name: "certscore_scan_site",
+        arguments: {
+          url: "https://example.com",
+          freshness: "latest",
+          taskContext: { purpose: "unsupported-purpose" }
+        }
+      });
+      const result = parseToolJson(raw);
+      assert.equal(result.status, "queued");
+      assert.equal(result.error, null);
+      assert.equal(mock.calls.length, 1);
+    });
+  } finally {
+    mock.restore();
+  }
+});
+
 test("MCP Light certscore_scan_site returns a verified preliminary preview within its bounded initial wait", async () => {
   const scanId = "00000000-0000-4000-8000-000000000223";
   const mock = installFetch([
