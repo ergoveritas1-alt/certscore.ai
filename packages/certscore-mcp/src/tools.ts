@@ -15,6 +15,7 @@ const SCAN_BUNDLE_INTERPRETATION_STATEMENT = "Report only observed CertScore evi
 const COMPACT_SCAN_BUNDLE_INTERPRETATION_STATEMENT = "Use only returned CertScore observations and classifications. Do not infer unobserved technologies, post-consent behavior, legal compliance, or violations. Treat priority and severity as CertScore metadata.";
 const OBSERVATION_ONLY_DISCLAIMER = `${LEGAL_REVIEW_DISCLAIMER} No-go, not-observed, and limited-coverage results are not proof of compliance.`;
 const COMPACT_OBSERVATION_ONLY_DISCLAIMER = "Automated public-web observation, not legal advice or a compliance determination; missing or limited evidence is not proof of compliance.";
+const PREVIEW_OBSERVATION_ONLY_DISCLAIMER = "Preliminary passive observations only; not findings, a score, or a final result.";
 const SUCCESSFUL_BUNDLE_TRIAL_CTA = "Optional user follow-up: To try CertScore with an account, start a 7-day CertScore trial at https://certscore.ai/login?mode=create_account&utm_source=mcp_light&utm_medium=agent&utm_campaign=scan_bundle. Paid plans add scan history, higher limits, and team or production access. OAuth-capable clients can use https://mcp.certscore.ai/mcp after account authorization and any required workspace scope grant; Light remains no-auth.";
 const MCP_SCAN_CREATION_POLL_DELAY_SECONDS = 15;
 const MCP_QUEUED_POLL_DELAY_SECONDS = 10;
@@ -357,6 +358,12 @@ export function withMcpAgentGuidance<T extends Record<string, any>>(
     typeof value.preConsentPreview === "object" &&
     !Array.isArray(value.preConsentPreview),
   );
+  const preConsentPreview = hasPreConsentPreview
+    ? {
+        ...value.preConsentPreview,
+        observationOnlyDisclaimer: PREVIEW_OBSERVATION_ONLY_DISCLAIMER,
+      }
+    : value.preConsentPreview;
   const reportUrl = usable
     ? typeof value.reportUrl === "string" && value.reportUrl.trim()
       ? value.reportUrl.trim()
@@ -373,6 +380,7 @@ export function withMcpAgentGuidance<T extends Record<string, any>>(
   const activeNextAction = `${hasPreConsentPreview ? "The returned preConsentPreview is a partial preview of passive evidence. Its counts are checkpoint-only partial counts, not the full scan tally; do not present them as final totals or stop the workflow. " : ""}${activePollAction} Continue with certscore_get_scan_status using the unchanged scanId ${stableScanId ?? value.jobId}. Do not poll in parallel or resubmit certscore_scan_site while this scan is active. After completed or completed_limited, call certscore_get_scan_bundle for the completed scan's final returned tally, canonical findings, and limitations.`;
   return {
     ...value,
+    preConsentPreview,
     retryAfterSeconds,
     error,
     reportUrl,
@@ -1125,7 +1133,9 @@ function canonicalNoGoText(value: Record<string, any>) {
 export function scanStatusText(value: Record<string, any>) {
   const noGoText = canonicalNoGoText(value);
   if (noGoText) return noGoText;
-  const reportUrl = reportUrlFor(value);
+  const reportUrl = value.status === "completed" || value.status === "completed_limited"
+    ? reportUrlFor(value)
+    : null;
   const nextAction = typeof value.recommendedNextAction === "string" && value.recommendedNextAction.trim()
     ? value.recommendedNextAction.trim()
     : "Review the returned status and retained limitations.";
@@ -1272,10 +1282,7 @@ function preConsentPreviewTextLines(value: Record<string, any>) {
   ) {
     lines.push(`Preview identity lists are bounded: ${capturedCookieCount} cookies captured/${returnedCookieCount} identities returned; ${capturedTrackingVendorCount} tracking vendors captured/${returnedTrackingVendorCount} identities returned; ${capturedOperationalVendorCount} operational vendors captured/${returnedOperationalVendorCount} identities returned. Use captured counts for checkpoint coverage and returned arrays for names.`);
   }
-  const disclaimer = typeof preview.observationOnlyDisclaimer === "string" && preview.observationOnlyDisclaimer.trim()
-    ? preview.observationOnlyDisclaimer.trim()
-    : "Preliminary passive observations only; not findings, a score, or a final result.";
-  lines.push(`${compactPreviewValue(disclaimer, "Preliminary passive observations only.", 500)} ${active
+  lines.push(`${PREVIEW_OBSERVATION_ONLY_DISCLAIMER} ${active
     ? "Continue sequential status polling until terminal status; at completed or completed_limited, retrieve certscore_get_scan_bundle before reporting the full scan results or final returned tally."
     : usable
       ? "The scan is terminal; retrieve certscore_get_scan_bundle before reporting the full scan results or final returned tally."
