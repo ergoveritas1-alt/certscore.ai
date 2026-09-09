@@ -118,7 +118,7 @@ After the external edit, verify the rendered name, endpoint, no-auth setting, th
 
 Submission artifact: `packages/certscore-mcp/server-light.json`.
 
-Publication target: version `0.2.20` is the prepared active release of `ai.certscore/mcp-light`; verify the registry record after publication.
+Registry status verified September 9, 2026: version `0.2.20` is active and latest for `ai.certscore/mcp-light`, and `packages/certscore-mcp/server-light.json` matches its published identity, description, endpoint, transport, repository, icons, and version. Version `0.2.19` is a historical record and is not latest.
 
 - Registry listing: https://registry.modelcontextprotocol.io/?q=ai.certscore%2Fmcp-light
 - Registry API lookup: https://registry.modelcontextprotocol.io/v0.1/servers?search=ai.certscore%2Fmcp-light
@@ -131,12 +131,12 @@ mcp-publisher validate packages/certscore-mcp/server-light.json
 
 Future release procedure:
 
-1. Update `packages/certscore-mcp/server-light.json` to the new released version and validate it.
+1. After the next hosted Light version is released, update only `packages/certscore-mcp/server-light.json` for the registry publication. Set its version to that released version and lead its description with: `No-auth Streamable HTTP website privacy scanner for pre-consent cookies, trackers, consent, policy, GDPR/ePrivacy, CCPA, and HTTPS/TLS.`
 2. Authenticate the existing `ai.certscore` namespace using an Official MCP Registry-supported method.
 3. Run the publisher against `packages/certscore-mcp/server-light.json`.
 4. Confirm that the new record is active and latest, resolves to the Light endpoint, and preserves the intended three-tool workflow.
 
-Do not publish `packages/certscore-mcp/server.json` as the Light listing.
+MCP Light is the recommended discovery entry. Do not publish `packages/certscore-mcp/server.json` as the Light listing, and do not deprecate the separate `ai.certscore/mcp` stdio/authenticated path.
 
 ## Cursor
 
