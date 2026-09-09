@@ -857,7 +857,7 @@ test("MCP Light certscore_scan_site returns a verified preliminary preview withi
 
 test("MCP Light certscore_scan_site falls back to the unchanged scanId when the preview window expires", async () => {
   const scanId = "00000000-0000-4000-8000-000000000224";
-  const mock = installFetch([{
+  const queuedResponse = {
     status: 202,
     body: {
       type: "certscore_scan_job",
@@ -868,7 +868,8 @@ test("MCP Light certscore_scan_site falls back to the unchanged scanId when the 
       reused: false,
       freshnessDecision: "no_eligible_recent_scan_queued",
     },
-  }]);
+  };
+  const mock = installFetch([queuedResponse, queuedResponse]);
   try {
     await withMcpClient(async (client) => {
       const result = parseToolJson(await client.callTool({
@@ -880,7 +881,10 @@ test("MCP Light certscore_scan_site falls back to the unchanged scanId when the 
       assert.equal(result.status, "queued");
       assert.equal(result.preConsentPreview, undefined);
       assert.equal(result.recommendedNextTool, "certscore_get_scan_status");
-      assert.equal(mock.calls.length, 1);
+      assert.ok(mock.calls.length === 1 || mock.calls.length === 2);
+      if (mock.calls.length === 2) {
+        assert.equal(mock.requestHeaders[1]?.get("x-certscore-mcp-internal-operation"), "scan_site_wait");
+      }
     }, {
       initialPreConsentPreviewWaitMs: 20,
       toolProfile: "light",
