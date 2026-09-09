@@ -89,7 +89,7 @@ test("report detects an eliminated long initial hold and renders reusable markdo
     telemetryCorrelation: { clientIdentifier: "benchmark-case-1", sessionId: "session", timeWindowStart: "start", timeWindowEnd: "end" },
     error: null,
   } satisfies BenchmarkCaseResult;
-  const commonDescription = "runtime lane completes or reaches its six-second checkpoint; trackingVendorCount excludes infrastructure, security, and consent-management vendors; capped at approximately 9–11 seconds total; falls back to the stable scanId without a preview; retryAfterSeconds certscore_get_scan_status do not resubmit certscore_scan_site";
+  const scanDescription = "The response contains a stable scanId, lifecycle status, retry timing, and sometimes a bounded preliminary preConsentPreview; preliminary data contains no final findings or score.";
   const report = buildReport({
     runId: "run",
     endpoint: "https://mcp.certscore.ai/mcp/light",
@@ -117,9 +117,9 @@ test("report detects an eliminated long initial hold and renders reusable markdo
       },
     ],
     tools: [
-      { name: "certscore_scan_site", description: commonDescription },
-      { name: "certscore_get_scan_status", description: "never poll in parallel; never resubmit certscore_scan_site; at completed or completed_limited, call certscore_get_scan_bundle" },
-      { name: "certscore_get_scan_bundle", description: "Call after completed or completed_limited" },
+      { name: "certscore_scan_site", description: scanDescription },
+      { name: "certscore_get_scan_status", description: "Active responses include phase, heartbeat, estimated progress, retryAfterSeconds, and sometimes a bounded preview. Terminal responses include completion status and final metadata." },
+      { name: "certscore_get_scan_bundle", description: "Returns the completed or completed-limited CertScore evidence bundle." },
     ],
   });
   assert.equal(report.assessment.initialHoldEliminated, true);

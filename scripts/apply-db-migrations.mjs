@@ -10,6 +10,16 @@ const { Client } = pg;
 const MIGRATIONS_DIR = path.resolve(process.cwd(), "packages/db/migrations");
 const MIGRATIONS_TABLE = "schema_migrations";
 
+// 0196 was released with two comment-only variants before immutability was
+// restored. 0197 reapplies the canonical comment, so this exact earlier
+// checksum is safe to accept without rewriting an environment's ledger.
+const KNOWN_COMPATIBLE_APPLIED_CHECKSUMS = new Map([
+  [
+    "0196_mcp_request_details.sql",
+    new Set(["48a3fd1dc39431277f904ae046bac26810705c466f46b41ca9935408b0eccba6"])
+  ]
+]);
+
 function getRequiredEnv(name) {
   const value = process.env[name]?.trim();
   if (!value) {
@@ -141,6 +151,13 @@ async function main() {
 
       if (existingChecksum === checksum) {
         console.info(`SKIP ${migrationName}`);
+        continue;
+      }
+
+      if (existingChecksum && KNOWN_COMPATIBLE_APPLIED_CHECKSUMS.get(migrationName)?.has(existingChecksum)) {
+        console.info(
+          `SKIP ${migrationName} (compatible applied checksum ${existingChecksum}; canonical ${checksum})`
+        );
         continue;
       }
 

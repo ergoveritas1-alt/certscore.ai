@@ -312,15 +312,15 @@ function guidanceChecks(tools: Array<Record<string, any>>) {
   const bundle = text(byName.get("certscore_get_scan_bundle")?.description) ?? "";
   return {
     toolSet: ["certscore_scan_site", "certscore_get_scan_status", "certscore_get_scan_bundle"].every((name) => byName.has(name)),
-    scanReturnsBoundedPreview: /runtime lane completes or reaches its six-second checkpoint/i.test(scan) &&
-      /trackingVendorCount excludes infrastructure, security, and consent-management vendors/i.test(scan) &&
-      /capped at approximately 9–11 seconds total/i.test(scan) &&
-      /falls back to the stable scanId without a preview/i.test(scan),
-    scanDirectsStatus: /retryAfterSeconds/.test(scan) && /certscore_get_scan_status/.test(scan),
-    noResubmit: /do not resubmit certscore_scan_site/i.test(scan) && /never resubmit certscore_scan_site/i.test(status),
-    noParallelPolling: /never poll in parallel/i.test(status),
-    statusDirectsBundle: /completed or completed_limited, call certscore_get_scan_bundle/i.test(status),
-    bundleRequiresCompletion: /after completed or completed_limited/i.test(bundle),
+    scanReturnsBoundedPreview: /bounded preliminary preConsentPreview/i.test(scan) &&
+      /preliminary data contains no final findings or score/i.test(scan),
+    scanReturnsStableIdAndRetryTiming: /stable scanId/i.test(scan) &&
+      /lifecycle status/i.test(scan) &&
+      /retry timing/i.test(scan),
+    statusCoversActiveAndTerminal: /Active responses include phase/i.test(status) &&
+      /retryAfterSeconds/i.test(status) &&
+      /Terminal responses include completion status/i.test(status),
+    bundleRequiresCompletion: /completed or completed-limited CertScore evidence bundle/i.test(bundle),
   };
 }
 

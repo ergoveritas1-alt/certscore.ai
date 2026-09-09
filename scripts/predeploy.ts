@@ -164,7 +164,8 @@ const TARGETS: Target[] = [
           "apps/web/components/scans/scan-from-select.test.tsx",
           "apps/web/server/scans/recent-scan-reuse.test.ts",
           "apps/web/server/scans/restricted-scan-options.test.ts",
-          "scripts/assert-forward-web-deploy.test.ts"
+          "scripts/assert-forward-web-deploy.test.ts",
+          "scripts/web-deploy-migration-order.test.ts"
         ]
       },
       {
@@ -264,8 +265,14 @@ const TARGETS: Target[] = [
       file.startsWith("packages/db/") ||
       file === "scripts/apply-db-migrations.ts" ||
       file === "scripts/apply-db-migrations.mjs" ||
+      file === "scripts/web-deploy-migration-order.test.ts" ||
       file === ".github/workflows/prod-db-migrate.yml",
     checks: [
+      {
+        key: "db-migration-contracts",
+        label: "database migration compatibility and deploy ordering",
+        command: ["node", "--import", "tsx", "--test", "scripts/web-deploy-migration-order.test.ts"]
+      },
       {
         key: "db-typecheck",
         label: "database package typecheck",
