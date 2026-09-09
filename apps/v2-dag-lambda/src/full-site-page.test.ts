@@ -8,8 +8,53 @@ import {
   runFullSitePage,
   FULL_SITE_PAGE_DISPATCH,
   fullSitePageCaptureOutcome,
+  requestFullSiteControl,
 } from "./full-site-page";
 import { inventoryConfiguration, inventoryHash, projectFullSiteInventory, runInventoryOnly } from "@certscore/scan-core";
+
+test("finish waits for verified acceptance through the proxy without exceeding the invocation deadline", { timeout: 15000 }, async () => {
+  const { createServer } = await import("node:http");
+  let delay = 2500, accepted = true, requests = 0;
+  const server = createServer((request, response) => {
+    requests++;
+    request.resume();
+    setTimeout(() => {
+      response.writeHead(200, { "Content-Type": "application/json" });
+      response.end(JSON.stringify({ accepted }));
+    }, delay);
+  });
+  await new Promise<void>(resolve => server.listen(0, "127.0.0.1", resolve));
+  const address = server.address();
+  assert.ok(address && typeof address === "object");
+  const keys = ["CERTSCORE_V2_DAG_LAMBDA_PROXY_SERVER", "SCAN_PROXY_ENABLED", "CERTSCORE_PUBLIC_NETWORK_GUARD_FORCE"];
+  const previous = keys.map(key => process.env[key]);
+  const originalError = console.error;
+  const diagnostics: string[] = [];
+  try {
+    process.env.CERTSCORE_V2_DAG_LAMBDA_PROXY_SERVER = `http://127.0.0.1:${address.port}`;
+    process.env.SCAN_PROXY_ENABLED = "1";
+    process.env.CERTSCORE_PUBLIC_NETWORK_GUARD_FORCE = "true";
+    console.error = value => diagnostics.push(String(value));
+    const message = { contractVersion: FULL_SITE_PAGE_DISPATCH, pageId: randomUUID(), attemptId: randomUUID(), token: "a".repeat(64) };
+    const url = new URL("http://example.com/api/internal/full-site/page");
+    const startedAt = Date.now();
+    assert.deepEqual(await requestFullSiteControl(url, message, { operation: "finish" }, startedAt + 5000), { accepted: true });
+    assert.ok(Date.now() - startedAt >= 2500);
+    assert.equal(requests, 1, "No retry is added");
+    delay = 0; accepted = false;
+    await assert.rejects(requestFullSiteControl(url, message, { operation: "finish" }, Date.now() + 5000), /not accepted/);
+    delay = 2500; accepted = true;
+    await assert.rejects(requestFullSiteControl(url, message, { operation: "finish" }, Date.now() + 100), { name: "TimeoutError" });
+    assert.equal(requests, 3);
+    await assert.rejects(requestFullSiteControl(url, message, { operation: "finish" }, Date.now() - 1), /publication deadline/);
+    assert.equal(requests, 3, "An expired invocation makes no request");
+    assert.equal(diagnostics.length, 2);
+  } finally {
+    console.error = originalError;
+    keys.forEach((key, index) => { if (previous[index] === undefined) delete process.env[key]; else process.env[key] = previous[index]; });
+    await new Promise<void>(resolve => server.close(() => resolve()));
+  }
+});
 
 test("Lambda capture outcome preserves rendered HTTP 500 inventory and rejects incomplete captures", { timeout: 45000 }, async () => {
   const { createServer } = await import("node:http");

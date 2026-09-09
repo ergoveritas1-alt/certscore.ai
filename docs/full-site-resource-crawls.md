@@ -608,3 +608,13 @@ work enabled by this adjustment are conservatively estimated below $0.25/month,
 within the preapproved cost threshold. At 100,000 ten-page crawls/month and a
 10% admission-failure rate, additional browser compute could be $40–$50/month;
 that scale requires a fresh cost review.
+
+The subsequent ten-page production verification completed in 90 seconds with two
+completed and eight partial pages, no outstanding jobs, and verified retained
+source hashes. Its diagnostics also exposed two-second finish-acknowledgment
+timeouts after the server had correctly persisted the observations. The finish
+request now allows up to four seconds within the same total invocation deadline
+and requires an explicit `accepted: true` response. It adds no retry or duplicate
+publication. Tests cover a delayed successful acknowledgment, rejected acceptance,
+and a shorter remaining invocation deadline. The combined incremental cost remains
+below the current-volume $0.25/month estimate above.
