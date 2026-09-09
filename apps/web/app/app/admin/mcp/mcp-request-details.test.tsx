@@ -23,6 +23,8 @@ test("request details render recorded arguments, correlation links, and the enfo
   assert.match(html, /may represent shared IP/);
   assert.match(html, /timeSpan=6h/);
   assert.match(html, /original chat prompts are not received/);
+  assert.match(html, /<dialog/);
+  assert.doesNotMatch(html, /<details/);
 });
 
 test("older events do not invent submitted options or stable identities", () => {
@@ -31,4 +33,20 @@ test("older events do not invent submitted options or stable identities", () => 
   assert.match(html, /Correlation basis not recorded/);
   assert.match(html, /Limit details were not retained/);
   assert.doesNotMatch(html, /maxBytes/);
+  assert.match(html, /No prompt was provided/);
+  assert.match(html, /certscore_get_scan_bundle/);
+});
+
+test("shared question text is distinguished from an agent paraphrase and from a full chat transcript", () => {
+  for (const [questionSource, label] of [["user_wording", "Shared user wording"], ["agent_paraphrase", "Agent paraphrase"]] as const) {
+    const html = renderToStaticMarkup(<McpRequestDetails traffic="external" period="6h" event={{ ...event,
+      request_details: { version: 1, arguments: {}, argumentsOmitted: false, actorBasis: "requester_binding", sessionBasis: "mcp_session", rateLimit: null,
+        taskContext: { questionSummary: "Does the site track visitors before consent?", questionSource, shareForImprovement: true } },
+    }} />);
+    assert.match(html, /GPT prompt \/ shared question/);
+    assert.ok(html.includes(label));
+    assert.match(html, /Does the site track visitors before consent\?/);
+    assert.doesNotMatch(html, /No prompt was provided/);
+    assert.match(html, /up to 300 characters/);
+  }
 });
