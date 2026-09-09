@@ -1,0 +1,19 @@
+{
+  "runs": 12,
+  "evidenceIdentical": true,
+  "all242ResponsesBound": true,
+  "baseline": {
+    "captureMs": 174.76416649999996,
+    "wallMs": 442.8411255,
+    "cpuSeconds": 0.78,
+    "maxRssBytes": 122552320.0,
+    "parseMs": 0.00014599999997244595
+  },
+  "instrumented": {
+    "captureMs": 210.01750050000007,
+    "wallMs": 485.0419585,
+    "cpuSeconds": 1.03,
+    "maxRssBytes": 128851968.0,
+    "parseMs": 14.383291499999984
+  }
+}

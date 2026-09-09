@@ -1773,3 +1773,30 @@ test("certscore_get_scan returns an MCP error while a scan resource is not ready
     mock.restore();
   }
 });
+
+
+test("Light MCP returns retained authentication no-go text and typed remedies within tight bundle budgets", async () => {
+  const scan = JSON.parse(readFileSync(new URL("./test-fixtures/authentication-no-go-scan.json", import.meta.url), "utf8")).scan;
+  for (const maxBytes of [5_000, 8_000]) {
+    const mock = installFetch([{ status: 200, body: scan }]);
+    try {
+      await withMcpClient(async (client) => {
+        const result = await client.callTool({ name: "certscore_get_scan_bundle", arguments: { scanId: scan.scanId, detail: "full", maxBytes } });
+        const bundle = parseToolJson(result);
+        assertToolOutputSchema("certscore_get_scan_bundle", bundle);
+        assert.equal(bundle.score, null);
+        assert.equal(bundle.resultDisposition, "no_go");
+        assert.deepEqual(bundle.noGo, scan.noGo);
+        assert.equal(bundle.recommendedNextAction, scan.noGo.recommendedNextAction);
+        assert.ok(Buffer.byteLength(JSON.stringify(bundle)) <= maxBytes);
+        assert.equal(bundle.fullReport, undefined, "a no-go result has no full report to serialize");
+        const text = result.content?.find((item: any) => item.type === "text") as { text: string };
+        assert.match(text.text, /^CertScore scan: Sign-in required/);
+        assert.match(text.text, /HTTP 401/);
+        assert.ok(text.text.includes(scan.noGo.recommendedNextAction));
+        assert.doesNotMatch(text.text, /Canonical findings complete/);
+        assert.equal(mock.calls.length, 1, "no Pulse, inventory or evidence fetch for a no-go");
+      }, { toolProfile: "light" });
+    } finally { mock.restore(); }
+  }
+});

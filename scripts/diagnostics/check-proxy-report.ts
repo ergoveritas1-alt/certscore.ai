@@ -1,0 +1,2 @@
+import { loadFullSiteCrawl,loadFullSitePages } from '../../packages/db/src/index';
+async function main(){const id=process.argv[2]!;const c=await loadFullSiteCrawl(id);if(!(c?.policy_json as any)?.localExecution)throw Error('local only');const p=await loadFullSitePages(id);console.log(JSON.stringify(p.map(x=>({id:x.id,status:x.status,url:x.target_url,compact:x.compact_json})),null,2));process.exit(0)}main();

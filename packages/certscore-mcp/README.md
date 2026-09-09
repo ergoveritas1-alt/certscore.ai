@@ -126,6 +126,8 @@ This applies to `certscore_scan_site` when it returns an API v2 scan resource or
 
 Completed Light results are canonical. `certscore_scan_site`, terminal `certscore_get_scan_status`, and `certscore_get_scan_bundle` return the same score, risk level, coverage, and timing fields. Scores include `scoreStatus`, `scoreVersion`, and `scoreUpdatedAt`; a scan remains `finalizing` until the persisted canonical report projection is ready, so a completed response always carries `scoreStatus: "final"`.
 
+No-go results lead with the retained access blocker, “Not scored,” evidence excerpt, next action, and retry guidance in MCP text. Structured responses retain `resultDisposition`, `noGo`, null score/risk, and empty findings. Tight bundle budgets preserve that blocker and remedy before optional lane diagnostics; omitted diagnostics are listed in `mcpMetadata.omittedSections`. A no-go `full` request does not fabricate a full report.
+
 The value is labeled `CertScore score`, never a compliance score. It covers observable public-web scan signals only. Clients must not infer technologies absent from the returned evidence, compare the value with a hypothetical compliant baseline, or infer legal compliance status.
 
 Every `failed`, `expired`, or `rate_limited` status includes a bounded `error` object with `code`, `message`, `retryable`, `retryAfterSeconds`, and `recommendedNextAction`.

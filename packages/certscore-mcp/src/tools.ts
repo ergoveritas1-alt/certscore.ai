@@ -50,6 +50,8 @@ function toolResultSummary(payload: unknown) {
     return "CertScore tool call completed. Read structuredContent for the result.";
   }
   const record = payload as Record<string, unknown>;
+  const noGoText = canonicalNoGoText(record);
+  if (noGoText) return noGoText;
   const type = typeof record.type === "string" ? record.type : "result";
   const status = typeof record.status === "string" ? `; status=${record.status}` : "";
   const scanId = typeof record.scanId === "string" ? `; scanId=${record.scanId}` : "";
@@ -1093,7 +1095,34 @@ function canonicalScanProvenanceText(value: Record<string, any>) {
   return `Canonical scan provenance: scanId=${present(extractScanId(value))}; scanFrom/execution region=${present(value.scanFrom)}; completedAt=${present(value.completedAt)}; startedAt=${present(value.startedAt)}; createdAt=${present(value.createdAt)}; retrieval mode=${present(value.provenance?.retrievalMode)}; original creation decision=${present(value.provenance?.creationDecision)}; scan age seconds=${numeric(value.provenance?.scanAgeSeconds)}; compatibility provenance mode=${present(value.provenance?.mode)}.`;
 }
 
+/** Present only the API's retained disposition; never infer blockers from raw evidence. */
+function canonicalNoGo(value: Record<string, any>): Record<string, any> | null {
+  return value.resultDisposition === "no_go" && value.noGo && typeof value.noGo === "object" && !Array.isArray(value.noGo)
+    ? value.noGo
+    : null;
+}
+
+function canonicalNoGoText(value: Record<string, any>) {
+  const noGo = canonicalNoGo(value);
+  if (!noGo) return null;
+  return [
+    `CertScore scan: ${boundedText(noGo.title, 240) ?? "Scan access limitation"}; status=${value.status ?? "completed_limited"}; Not scored.`,
+    boundedText(noGo.explanation, 1_200),
+    boundedText(noGo.summary, 600),
+    noGo.evidenceExcerpt ? `Retained evidence: ${boundedText(noGo.evidenceExcerpt, 1_200)}` : null,
+    noGo.recommendedNextAction ? `Next: ${boundedText(noGo.recommendedNextAction, 1_000)}` : null,
+    typeof noGo.retryLikelyToHelp === "boolean" ? `Retry likely to help: ${noGo.retryLikelyToHelp ? "yes" : "no"}.` : null,
+    value.mcpMetadata?.truncated ? "Additional retained details were omitted to fit the response budget; see omission metadata and the report URL." : null,
+    canonicalScanProvenanceText(value),
+    `Full report: ${reportUrlFor(value) ?? "not available"}.`,
+    OBSERVATION_ONLY_DISCLAIMER,
+    SCAN_PROVENANCE_GROUNDING,
+  ].filter(Boolean).join("\n");
+}
+
 export function scanStatusText(value: Record<string, any>) {
+  const noGoText = canonicalNoGoText(value);
+  if (noGoText) return noGoText;
   const reportUrl = reportUrlFor(value);
   const nextAction = typeof value.recommendedNextAction === "string" && value.recommendedNextAction.trim()
     ? value.recommendedNextAction.trim()
@@ -1111,6 +1140,8 @@ export function scanStatusText(value: Record<string, any>) {
 }
 
 export function scanSiteText(value: Record<string, any>, leadingLines: string[] = []) {
+  const noGoText = canonicalNoGoText(value);
+  if (noGoText) return noGoText;
   const scanId = extractScanId(value) ?? "unknown";
   const active = value.status === "queued" || value.status === "running" || value.status === "finalizing";
   const nextAction = typeof value.recommendedNextAction === "string" && value.recommendedNextAction.trim()
@@ -1316,6 +1347,8 @@ export function preConsentInventoryText(value: Record<string, any>) {
 }
 
 export function pulseReportText(value: Record<string, any>, label = "CertScore report") {
+  const noGoText = canonicalNoGoText(value);
+  if (noGoText) return noGoText;
   const scanId = extractScanId(value) ?? "unknown";
   const domain = typeof value.domain === "string" ? value.domain : "unknown domain";
   const score = typeof value.summary?.score === "number"
@@ -1349,6 +1382,8 @@ export function markdownReportText(value: Record<string, any>) {
 }
 
 export function scanBundleText(bundle: Record<string, any>) {
+  const noGoText = canonicalNoGoText(bundle);
+  if (noGoText) return noGoText;
   const score = typeof bundle.score === "number" ? `; CertScore score=${bundle.score}` : "";
   const footer = [OBSERVATION_ONLY_DISCLAIMER, SCAN_BUNDLE_INTERPRETATION_STATEMENT];
   const lines = [
@@ -1651,7 +1686,7 @@ export function buildScanBundle(input: {
     ...(detail === "evidence" || detail === "full"
       ? { evidenceSummary: bundleEvidenceSummary(evidence, allFindings, links, detail === "full") }
       : {}),
-    ...(detail === "full" ? {
+    ...(detail === "full" && Object.keys(report).length > 0 ? {
       fullReport: compactEvidenceValue(deduplicatedReport.residual, {
         arrayItems: 50,
         depth: 8,
@@ -1724,15 +1759,27 @@ export function buildScanBundle(input: {
     bundle.mcpMetadata.nextRecommendedMaxBytes = completeBytes <= responseCeilingBytes
       ? Math.max(5_000, Math.ceil(completeBytes / 1_000) * 1_000)
       : null;
-    bundle.recommendedNextAction = canonicalFindingsComplete
+    bundle.recommendedNextAction = canonicalNoGo(bundle)?.recommendedNextAction ?? (canonicalFindingsComplete
       ? "Canonical findings complete; retry only for omitted envelope detail."
       : bundle.mcpMetadata.nextRecommendedMaxBytes
         ? `Retry with maxBytes=${bundle.mcpMetadata.nextRecommendedMaxBytes} to retrieve the complete requested tier, or open ${bundle.reportUrl ? "the report URL" : "an available content URL"}.`
-        : `The complete requested tier exceeds the MCP byte ceiling; open ${bundle.reportUrl ? "the report URL" : "an available content URL"}.`;
+        : `The complete requested tier exceeds the MCP byte ceiling; open ${bundle.reportUrl ? "the report URL" : "an available content URL"}.`);
     refresh();
   };
 
   captureFullPayloadBytes();
+  // Access disposition and its remedy outrank optional lane detail in a no-go envelope.
+  // Retained evidence remains available through the reported content URLs.
+  if (canonicalNoGo(bundle)) {
+    for (const section of ["gpcResponse", "postAcceptObservation", "postRefusalObservation"]) {
+      if (bundle.mcpMetadata.actualBytes <= maxBytes) break;
+      if (bundle[section]) {
+        markBudgetOmitted(section, "lane_detail_omitted_to_preserve_no_go");
+        delete bundle[section];
+        refresh();
+      }
+    }
+  }
   if (bundle.mcpMetadata.actualBytes > maxBytes && bundle.fullReport) {
     markBudgetOmitted("fullReport", "full_report_omitted_to_byte_limit");
     delete bundle.fullReport;

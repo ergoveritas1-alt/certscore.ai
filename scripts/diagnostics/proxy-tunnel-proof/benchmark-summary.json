@@ -1,0 +1,46 @@
+{
+  "small": {
+    "measuredRuns": 12,
+    "responsesPerRun": 26,
+    "identicalEvidence": true,
+    "allResponseSocketsBound": true,
+    "baseline": {
+      "captureMs": 59.39599999999996,
+      "wallMs": 316.663229,
+      "cpuSeconds": 0.52,
+      "maxRssBytes": 111886336.0,
+      "parseMs": 0.00016650000000595355
+    },
+    "instrumented": {
+      "captureMs": 73.27391700000001,
+      "wallMs": 311.68949999999995,
+      "cpuSeconds": 0.56,
+      "maxRssBytes": 116006912.0,
+      "parseMs": 2.607646000000017,
+      "netlogBytes": 807346.5,
+      "socketMetadataBytes": 1038.0
+    }
+  },
+  "large": {
+    "measuredRuns": 12,
+    "responsesPerRun": 242,
+    "identicalEvidence": true,
+    "allResponseSocketsBound": true,
+    "baseline": {
+      "captureMs": 177.07468749999998,
+      "wallMs": 458.0422085,
+      "cpuSeconds": 0.785,
+      "maxRssBytes": 122634240.0,
+      "parseMs": 0.00016699999991942605
+    },
+    "instrumented": {
+      "captureMs": 211.787542,
+      "wallMs": 536.431188,
+      "cpuSeconds": 1.025,
+      "maxRssBytes": 142204928.0,
+      "parseMs": 17.038187499999992,
+      "netlogBytes": 4804846.0,
+      "socketMetadataBytes": 1043.0
+    }
+  }
+}
