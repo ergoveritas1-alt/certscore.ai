@@ -1,4 +1,5 @@
 import { createHash } from "node:crypto";
+import { withScanReportDisposition } from "../../lib/scans/scan-report-disposition";
 import type { ScanDetailResponse } from "./get-scan-by-id";
 import type { PersistedCanonicalReportProjection } from "./persisted-canonical-report-projection";
 
@@ -171,6 +172,7 @@ export function buildPersistedScanReportProjection(
   scanRecord: ScanDetailResponse,
   options: { canonicalReportProjection?: PersistedCanonicalReportProjection } = {},
 ) {
+  scanRecord = withScanReportDisposition(scanRecord);
   const snapshot = isRecord(scanRecord.snapshot)
     ? stripReportProjectionFields(scanRecord.snapshot)
     : null;
@@ -241,5 +243,5 @@ export function readPersistedScanReportProjection(
   ) {
     return null;
   }
-  return payload as ScanDetailResponse;
+  return withScanReportDisposition(payload as ScanDetailResponse);
 }

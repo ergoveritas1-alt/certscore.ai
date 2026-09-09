@@ -19,7 +19,9 @@ export async function retainedPferdeklinikExample(): Promise<ShadowReportData> {
   const projection = apiRuntimeEvidenceGraphProjectionSchema.parse(JSON.parse(await readFile("/tmp/pferdeklinik-preview-graph-20260905.json", "utf8")));
   const expected = apiRuntimeEvidenceGraphProjectionSchema.parse(record.runtimeArtifacts?.runtimeEvidenceGraphProjection);
   if (projection.scanId !== scanId || projection.details || !projection.sourceBundle?.verified || projection.sourceBundle.sha256 !== expected?.sourceBundle?.sha256 || projection.sourceBundle.sizeBytes !== expected.sourceBundle.sizeBytes) throw new Error("Retained report/graph binding mismatch");
-  return buildTimelineReportModel({ ...record, runtimeArtifacts: { ...record.runtimeArtifacts, runtimeEvidenceGraphProjection: projection } });
+  const model = buildTimelineReportModel({ ...record, runtimeArtifacts: { ...record.runtimeArtifacts, runtimeEvidenceGraphProjection: projection } });
+  if (model.resultDisposition === "no_go") throw new Error("No-go report has no site inventory");
+  return model;
 }
 
 /** Read-only local replay. Never persist these presentation rows or modify canonical inventory. */

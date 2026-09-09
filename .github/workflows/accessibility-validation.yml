@@ -64,6 +64,9 @@ jobs:
       - name: Test validation cutover contract helpers
         run: pnpm exec tsx --test apps/web/scripts/check-validation-cutover-env.test.ts apps/web/server/validation/ops-host.test.ts apps/web/server/preview-scan/create-preview-scan.test.ts
 
+      - name: Test canonical scan no-go reports
+        run: pnpm test:scan-no-go
+
       - name: Validate main app split contract example
         run: |
           APP_FLAVOR=certscore \

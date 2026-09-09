@@ -1,4 +1,5 @@
 import "server-only";
+import { projectScanReportNoGo, resolveScanReportScore } from "../../lib/scans/scan-report-disposition";
 
 import { createHash } from "node:crypto";
 import { presentRuntimeGraphForRead } from "./runtime-evidence-graph-projection";
@@ -576,12 +577,13 @@ export async function loadScanReportProjectionRows(scanIds: string[]) {
   return new Map(result.rows.map((row) => [row.scan_id, row] as const));
 }
 
-async function deriveScanReportProjection(
+export async function deriveScanReportProjection(
   scanRecord: ScanDetailResponse,
   source: ScanReportProjectionSource = {}
 ) {
   const snapshot = record(scanRecord.snapshot);
   const sourceSnapshot = record(source.snapshot) ?? snapshot;
+  const noGo = projectScanReportNoGo(scanRecord);
   const assessment = canonicalConsentAssessment(scanRecord);
   const canonicalRuntimeArtifacts = assessment
     ? withPersistedFirstLayerConsentEvidence(
@@ -678,6 +680,7 @@ async function deriveScanReportProjection(
     "canonical_score",
     () => projectionScanRecord.scan.status === "completed"
       ? deriveCanonicalOverallScoreForReport({
+          scanRecord: projectionScanRecord,
           checklistRows: checklist,
           unifiedFindings: reportState.globalUnifiedFindings
         })
@@ -701,14 +704,14 @@ async function deriveScanReportProjection(
     })
   );
   const industry = stringValue(scanRecord.domainBenchmark?.industry) ?? stringValue(sourceSnapshot?.admin_industry_label) ?? stringValue(snapshot?.admin_industry_label);
-  const score = canonicalScore ?? numberValue(snapshot?.certscore_overall);
+  const score = resolveScanReportScore(projectionScanRecord, canonicalScore ?? numberValue(snapshot?.certscore_overall));
   const egressId = shouldUseLocalV2DagScanTool() ? null : stringValue(sourceSnapshot?.egress_id) ?? stringValue(snapshot?.egress_id);
   const egressProvider = shouldUseLocalV2DagScanTool() ? null : stringValue(sourceSnapshot?.egress_type) ?? stringValue(snapshot?.egress_type);
 
   const value: ProjectionValue = {
     score,
-    topFindingCount: visibleCanonicalHighPriorityFindings.length,
-    findingCount: reportState.globalUnifiedFindings.length || numberValue(snapshot?.report_finding_count),
+    topFindingCount: noGo ? 0 : visibleCanonicalHighPriorityFindings.length,
+    findingCount: noGo ? 0 : reportState.globalUnifiedFindings.length || numberValue(snapshot?.report_finding_count),
     cmpVendorName: stringValue(snapshot?.cmp_vendor_name),
     privacyPolicyPresent: booleanValue(sourceSnapshot?.privacy_policy_present) ?? booleanValue(snapshot?.privacy_policy_present),
     consentAcceptObserved: assessment
@@ -741,7 +744,7 @@ async function deriveScanReportProjection(
     durationMs: numberValue(scanRecord.scan.durationMs),
     scoreSource: canonicalScore === null ? (score === null ? null : "legacy.scan_snapshot") : CANONICAL_OVERALL_SCORE_SOURCE,
     scoreVersion: canonicalScore === null ? null : CANONICAL_OVERALL_SCORE_VERSION,
-    scoreScoredAt: scanRecord.scan.completedAt
+    scoreScoredAt: noGo ? null : scanRecord.scan.completedAt
   };
   if (!scanRecord.scan.completedAt) {
     throw new ScanReportProjectionNotReadyError(scanRecord.scan.id, "completion time is missing");
@@ -773,7 +776,7 @@ async function deriveScanReportProjection(
     evidenceIndex: indexedChecklistEvidence.evidenceIndex,
     globalUnifiedFindings: reportState.globalUnifiedFindings,
     legacyScoreAssessmentInput: buildLegacyGdprEprivacyVersionedAssessmentInput({
-      assessment: legacyScoreAssessment,
+      assessment: { ...legacyScoreAssessment, score: resolveScanReportScore(projectionScanRecord, legacyScoreAssessment.score) },
       checklistRows: checklist,
       scanId: scanRecord.scan.id,
       scoredAt: scanRecord.scan.completedAt,
@@ -784,7 +787,7 @@ async function deriveScanReportProjection(
     // V3 persists each display packet once. The accessor restores the
     // owner-specific ordering from ownerUnifiedFindingIds for existing callers.
     ownerUnifiedFindings: [],
-    topFindingIds: visibleCanonicalHighPriorityFindings.map((finding) => finding.id)
+    topFindingIds: noGo ? [] : visibleCanonicalHighPriorityFindings.map((finding) => finding.id)
   };
   if (!isGdprEprivacyChecklistPresentation(canonicalReportProjection.checklistPresentation)) {
     throw new ScanReportProjectionNotReadyError(

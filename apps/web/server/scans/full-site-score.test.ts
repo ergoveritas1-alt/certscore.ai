@@ -1,7 +1,10 @@
 import { buildSitePriorityReview } from "../../lib/scans/full-site-priority-review";
 import assert from "node:assert/strict";
 import test from "node:test";
-import { isFullSiteScoringCaptureComplete, mergeSiteChecklistRows, projectFullSiteScoringEvidence } from "./full-site-score";
+import { createRequire } from "node:module";
+const require = createRequire(import.meta.url);
+(require.cache as Record<string, unknown>)[require.resolve("server-only")] = { exports: {}, loaded: true };
+const { isFullSiteScoringCaptureComplete, mergeSiteChecklistRows, projectFullSiteScoringEvidence } = require("./full-site-score") as typeof import("./full-site-score");
 import { deriveGdprEprivacyCoverageChecklist } from "../../lib/scans/gdpr-eprivacy-coverage-checklist";
 import { deriveCanonicalOverallScoreForReport } from "./canonical-overall-score";
 
@@ -14,7 +17,7 @@ function storage(names: string[]) {
     } },
   });
 }
-const score = (rows: ReturnType<typeof baseline>) => deriveCanonicalOverallScoreForReport({ checklistRows: rows, unifiedFindings: [] });
+const score = (rows: ReturnType<typeof baseline>) => deriveCanonicalOverallScoreForReport({ scanRecord: { runtimeArtifacts: null }, checklistRows: rows, unifiedFindings: [] });
 
 test("partial HTTP error inventory is excluded before retained evidence enters scoring", () => {
   const observation = { status: "completed" as const, httpStatus: 200, failureKind: null };

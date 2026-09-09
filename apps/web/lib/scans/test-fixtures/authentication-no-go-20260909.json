@@ -1,0 +1,188 @@
+{
+  "sourceScanId": "0b9a3256-aa72-4378-acff-e205fd6cdc5e",
+  "sourceBundleSha256": "d3d64a8ad06f3113770ce28dd68c1af214329a676bf9ff79ed2f302c10cc7e1a",
+  "runtimeArtifacts": {
+    "scanNoGoAssessment": {
+      "status": "available",
+      "version": "scan-no-go-assessment-v1",
+      "decision": "no_go",
+      "scanNoGoConfidence": 0.99,
+      "visualScreenshotNoGoConfidence": 0.99,
+      "reasonCodes": [
+        "authentication_required",
+        "scan_no_go_corroborated"
+      ],
+      "corroboratorCodes": [
+        "terminal_page_text_or_status_observed",
+        "retained_visual_artifact_available"
+      ],
+      "contradictorCodes": [],
+      "supportingSignals": {
+        "challengeSignalsDetected": false,
+        "documentStatusBlocked": true,
+        "expectedOriginReached": false,
+        "mainDocumentStatus": 401,
+        "substantiveDomTextObserved": false,
+        "substantiveRetainedDomVolumeObserved": false,
+        "substantiveWordCount": 20,
+        "successfulFirstPartyResponses": 5,
+        "retainedVisualArtifactAvailable": true,
+        "securityChallengeRequestObserved": false,
+        "actionableConsentControlObserved": false,
+        "substantiveCapturedPageTextObserved": false,
+        "substantiveConsentSurfaceTextObserved": false,
+        "consentSurfaceWordCount": 0,
+        "visualHardNoGoPageState": true,
+        "visualNoGo": true,
+        "visualPageState": "access_blocked",
+        "successfulMainDocumentBeforeTerminal": false,
+        "successfulSettledMainDocument": false,
+        "accessBlockMarkerCount": 0,
+        "likelyIncidentalAccessBlockText": false,
+        "visuallySubstantiveScreenshotObserved": true,
+        "visuallyBlankScreenshotObserved": false,
+        "screenshotEncodedBytesPerPixel": 0.27304538799414346,
+        "screenshotHeight": 900,
+        "screenshotWidth": 1366
+      },
+      "evidenceRefs": [
+        "scan_runtime_artifacts.scan_no_go_assessment",
+        "scan_runtime_artifacts.visual_access_review",
+        "scan_runtime_artifacts.visual_evidence_artifacts"
+      ]
+    },
+    "visualAccessReview": {
+      "artifact_ref": "scan_core:screenshot_pre_consent",
+      "confidence": 0.99,
+      "go_no_go": "NO_GO",
+      "key_visual_evidence": [
+        "The main document returned HTTP 401 and required authentication."
+      ],
+      "page_state": "access_blocked",
+      "reason_code": "authentication_required",
+      "short_explanation": "Corroborated initial-load evidence showed a terminal no-go page instead of the normal public site: \"The main document returned HTTP 401 and required authentication.\"",
+      "status": "available",
+      "version": "visual-access-review-v1"
+    },
+    "scanEvidenceLaneAssessment": {
+      "status": "available",
+      "version": "scan-evidence-lane-assessment-v1",
+      "outcome": "no_go",
+      "lanes": {
+        "homepageRuntime": "unusable",
+        "consent": "limited",
+        "cookiesTrackers": "not_testable",
+        "policyGdpr": "limited",
+        "transport": "usable"
+      },
+      "usablePolicySurfaceUrls": [],
+      "limitationKeys": [
+        "authentication_required",
+        "scan_no_go_assessment",
+        "consent_control_inventory_incomplete",
+        "homepage_runtime_no_go",
+        "verified_policy_surface_unavailable"
+      ],
+      "evidenceRefs": [
+        "scan_runtime_artifacts.scan_no_go_assessment"
+      ]
+    },
+    "runtimeCoverage": {
+      "coverageStatus": "limited_none",
+      "limitationKeys": [
+        "authentication_required",
+        "scan_no_go_assessment"
+      ],
+      "fallbackModesUsed": [],
+      "observationCounts": {
+        "networkEvents": 6,
+        "thirdPartyRequests": 0,
+        "cookieEvents": 2,
+        "cookiesBeforeConsent": 1,
+        "normalizedVendors": 0,
+        "observedJourneys": 0
+      },
+      "silentEmpty": false,
+      "notes": [
+        "Initial-load evidence shows a terminal no-go page instead of the normal public site, so runtime evidence should be treated as not reportable."
+      ]
+    },
+    "scanLaneRuns": [
+      {
+        "laneId": "consent_proof",
+        "physicalInvocationId": "2926073a-88e6-4846-b360-e3d70b50207c",
+        "region": "eu-central-1",
+        "phaseName": "preConsentRuntimeScanner",
+        "startedAt": "2026-09-09T11:50:44.952Z",
+        "firstResponseAt": "2026-09-09T11:50:48.131Z",
+        "firstResponseOffsetMs": 3187,
+        "firstHttpStatus": 401,
+        "firstEffectiveUrl": "https://forenaxis-command.michaelmancini1968.chatgpt.site/",
+        "navigationCount": 1,
+        "navigationAttempts": [
+          {
+            "sequence": 1,
+            "mode": "initial_https_navigation",
+            "outcome": "http_error",
+            "httpStatus": 401,
+            "durationMs": 2142,
+            "effectiveUrl": "https://forenaxis-command.michaelmancini1968.chatgpt.site/"
+          }
+        ],
+        "challengeDetected": false,
+        "challengeType": null,
+        "executionOutcome": "success",
+        "accessOutcome": "access_denied",
+        "completedAt": "2026-09-09T11:50:56.682Z",
+        "durationMs": 11730
+      },
+      {
+        "laneId": "runtime_evidence",
+        "physicalInvocationId": "b4cdf56e-78a7-4aed-8227-70bf67ada2a8",
+        "region": "eu-central-1",
+        "phaseName": "preConsentRuntimeScanner",
+        "startedAt": "2026-09-09T11:50:45.049Z",
+        "firstResponseAt": "2026-09-09T11:50:48.199Z",
+        "firstResponseOffsetMs": 3158,
+        "firstHttpStatus": 401,
+        "firstEffectiveUrl": "https://forenaxis-command.michaelmancini1968.chatgpt.site/",
+        "navigationCount": 1,
+        "navigationAttempts": [
+          {
+            "sequence": 1,
+            "mode": "initial_https_navigation",
+            "outcome": "http_error",
+            "httpStatus": 401,
+            "durationMs": 1831,
+            "effectiveUrl": "https://forenaxis-command.michaelmancini1968.chatgpt.site/"
+          }
+        ],
+        "challengeDetected": false,
+        "challengeType": null,
+        "executionOutcome": "success",
+        "accessOutcome": "access_denied",
+        "completedAt": "2026-09-09T11:50:49.246Z",
+        "durationMs": 4197
+      },
+      {
+        "laneId": "policy_evidence",
+        "physicalInvocationId": "38a97494-b7b1-496b-900e-258421969996",
+        "region": "eu-central-1",
+        "phaseName": "policySurfaceScanner",
+        "startedAt": "2026-09-09T11:50:45.055Z",
+        "firstResponseAt": "2026-09-09T11:50:47.166Z",
+        "firstResponseOffsetMs": 2116,
+        "firstHttpStatus": 401,
+        "firstEffectiveUrl": "https://forenaxis-command.michaelmancini1968.chatgpt.site/",
+        "navigationCount": 1,
+        "navigationAttempts": [],
+        "challengeDetected": false,
+        "challengeType": null,
+        "executionOutcome": "success",
+        "accessOutcome": "access_denied",
+        "completedAt": "2026-09-09T11:51:04.196Z",
+        "durationMs": 19141
+      }
+    ]
+  }
+}

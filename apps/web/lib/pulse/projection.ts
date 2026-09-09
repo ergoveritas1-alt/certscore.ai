@@ -1,3 +1,4 @@
+import { projectScanReportNoGo, resolveScanReportScore } from "../scans/scan-report-disposition";
 import { projectExecutiveFindingsFromUnifiedPackets } from "../scans/executive-findings-projection";
 import { deriveCertScoreFindings } from "../scans/derive-findings";
 import { deriveGdprEprivacyCoverageChecklist } from "../scans/gdpr-eprivacy-coverage-checklist";
@@ -433,7 +434,7 @@ function buildPulseReportSurface(input: {
     rows: gdprEprivacyChecklist
   });
   const gdprEprivacyScore = gdprEprivacyScoreAssessment.score;
-  const canonicalScore = deriveCanonicalOverallScoreForReport({
+  const canonicalScore = deriveCanonicalOverallScoreForReport({ scanRecord: scanRecord,
     checklistRows: gdprEprivacyChecklist,
     unifiedFindings: unifiedFindingPackets
   });
@@ -441,7 +442,7 @@ function buildPulseReportSurface(input: {
     scanRecord.snapshot?.report_projection_status === "ready"
       ? finiteNumber(scanRecord.snapshot.certscore_overall)
       : null;
-  const score = boundedScore(persistedReportScore ?? canonicalScore);
+  const score = resolveScanReportScore(scanRecord, boundedScore(persistedReportScore ?? canonicalScore));
   const customerScoreAssessment = {
     coverageConfidence: gdprEprivacyScoreAssessment.coverageConfidence,
     coverageRatio: gdprEprivacyScoreAssessment.coverageRatio,
@@ -716,7 +717,7 @@ function deriveFreshness(completedAt: string | null, generated: string) {
 }
 
 function deriveCoverage(scanRecord: ScanDetailResponse) {
-  const noGoProjection = projectExternalScanNoGo(scanRecord.runtimeArtifacts);
+  const noGoProjection = projectScanReportNoGo(scanRecord);
   if (noGoProjection) {
     return {
       status: noGoProjection.noGo.limitationKind,
@@ -1899,7 +1900,7 @@ function buildEvidenceArtifact(input: {
   const coverageLimitedByNoGo = input.allFindings.some((finding) => finding.id === "scan_quality_visual_no_go");
   const findings = input.allFindings.map((finding) => toPulseFinding(finding, scanRecord.scan.id, {
     coverageLimitedByNoGo,
-    noGo: projectExternalScanNoGo(scanRecord.runtimeArtifacts)?.noGo,
+    noGo: projectScanReportNoGo(scanRecord)?.noGo,
     runtimeCookieRows: input.reportSurface.runtimeCookieRows,
     scannedPageUrl: scanRecord.accessPostureSummary?.finalEffectiveUrl ?? `https://${scanRecord.scan.domainHostname}/`
   }));

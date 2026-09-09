@@ -28,7 +28,7 @@ import type { PulseResponse } from "@certscore/api-contracts";
 import { deriveChoicePathEvidenceDisposition } from "@certscore/contracts";
 import type { ScanDetailResponse } from "../../server/scans/get-scan-by-id";
 import { getPersistedCanonicalReportProjection } from "../../server/scans/persisted-canonical-report-projection";
-import { projectExternalScanNoGo } from "@website-signal-risk-scanner/shared";
+import { projectScanReportNoGo } from "../scans/scan-report-disposition";
 import { derivePulseReportScore } from "../pulse/projection";
 import {
   buildRuntimeInventoryProjectionFromScan,
@@ -217,7 +217,7 @@ function normalizeScanStatus(value: string | null | undefined) {
 }
 
 export function apiV2CanonicalResultState(scanRecord: ScanDetailResponse): "finalizing" | "final" | "failed" {
-  if (projectExternalScanNoGo(scanRecord.runtimeArtifacts)) {
+  if (projectScanReportNoGo(scanRecord)) {
     return "final";
   }
   const scanStatus = normalizeScanStatus(scanRecord.scan.status);
@@ -886,7 +886,7 @@ export function deriveApiV2PostAcceptObservation(scanRecord: ScanDetailResponse)
 }
 
 function deriveCoverage(scanRecord: ScanDetailResponse) {
-  const noGoProjection = projectExternalScanNoGo(scanRecord.runtimeArtifacts);
+  const noGoProjection = projectScanReportNoGo(scanRecord);
   if (noGoProjection) {
     return {
       status: noGoProjection.noGo.limitationKind,
@@ -998,7 +998,7 @@ export function buildApiV2ScanResource(
   const domain = scan.domainHostname ?? "unknown";
   const score = derivePulseReportScore({ scanRecord });
   const scanTimeSeconds = scanTimeSecondsFromTimestamps(scan.startedAt, scan.completedAt);
-  const noGoProjection = projectExternalScanNoGo(scanRecord.runtimeArtifacts);
+  const noGoProjection = projectScanReportNoGo(scanRecord);
   const canonicalResultState = apiV2CanonicalResultState(scanRecord);
   const scoreStatus = canonicalResultState === "final" ? "final" : "provisional";
   const scoreVersion = stringOrNull(scanRecord.snapshot?.score_version) ?? CANONICAL_OVERALL_SCORE_VERSION;
@@ -1177,7 +1177,7 @@ export function buildApiV2ScanStatus(
   options: { canonicalScan?: ApiV2ScanResource; nowMs?: number } = {}
 ): ApiV2ScanJob {
   const scan = scanRecord.scan;
-  const noGoProjection = projectExternalScanNoGo(scanRecord.runtimeArtifacts);
+  const noGoProjection = projectScanReportNoGo(scanRecord);
   const normalizedScanStatus = normalizeScanStatus(scan.status);
   const canonicalResultState = apiV2CanonicalResultState(scanRecord);
   const status = noGoProjection && scan.status === "completed"
