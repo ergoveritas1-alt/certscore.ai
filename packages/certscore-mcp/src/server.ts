@@ -284,9 +284,17 @@ export function projectMcpToolInvocationObservation(input: {
   const error = result.error && typeof result.error === "object" && !Array.isArray(result.error)
     ? result.error as Record<string, unknown>
     : null;
-  const errorCode = boundedTelemetryToken(error?.code ?? (result as Record<string, unknown>).errorCode, 100);
+  const completedNoGo = result.status === "completed_limited"
+    && result.resultDisposition === "no_go";
+  // A completed no-go is a usable terminal scan result. Agent guidance embeds
+  // its reason-specific remedy in `error`, but the MCP tool call itself
+  // succeeded and must not be counted as a transport or invocation failure.
+  const errorCode = completedNoGo
+    ? null
+    : boundedTelemetryToken(error?.code ?? (result as Record<string, unknown>).errorCode, 100);
   const rateLimited = errorCode === "rate_limited" || result.status === "rate_limited";
-  const isError = Boolean((input.result as { isError?: unknown } | null)?.isError) || Boolean(error);
+  const isError = !completedNoGo
+    && (Boolean((input.result as { isError?: unknown } | null)?.isError) || Boolean(error));
   const outcome = rateLimited ? "rate_limited" : isError ? "error" : "success";
   const resultScanId = boundedTelemetryToken(result.scanId ?? result.scan_id ?? result.jobId, 128);
   const inputScanId = boundedTelemetryToken(args.scanId, 128);

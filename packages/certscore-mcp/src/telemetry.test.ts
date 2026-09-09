@@ -141,6 +141,37 @@ test("status and bundle telemetry retain only stable scan metadata", () => {
   }
 });
 
+test("completed no-go retrievals remain successful MCP results", () => {
+  for (const toolName of ["certscore_get_scan_status", "certscore_get_scan_bundle"]) {
+    const observation = projectMcpToolInvocationObservation({
+      args: { scanId: "scan_no_go" },
+      durationMs: 185,
+      result: {
+        structuredContent: {
+          error: {
+            code: "authentication_required",
+            message: "The requested page requires authentication.",
+            retryable: false,
+          },
+          noGo: {
+            reasonCode: "authentication_required",
+          },
+          resultDisposition: "no_go",
+          scanId: "scan_no_go",
+          status: "completed_limited",
+        },
+      },
+      toolName,
+    });
+
+    assert.equal(observation.outcome, "success");
+    assert.equal(observation.errorCode, null);
+    assert.equal(observation.transportOutcome, "mcp_result");
+    assert.equal(observation.scanStatus, "completed_limited");
+    assert.equal(observation.scanId, "scan_no_go");
+  }
+});
+
 test("full-profile domain tools contribute a normalized requested hostname", () => {
   for (const toolName of [
     "certscore_get_latest_domain_scan",
