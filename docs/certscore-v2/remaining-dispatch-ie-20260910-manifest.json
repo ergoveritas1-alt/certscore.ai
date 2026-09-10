@@ -1,0 +1,635 @@
+{
+  "eligibilityLedger": "docs/certscore-v2/remaining-dispatch-ie-20260910-ledger.json",
+  "publicContactPolicy": {
+    "minimumCooldownDays": 28
+  },
+  "targets": [
+    {
+      "url": "https://hs-sites.com/",
+      "role": "remaining_no_dispatch",
+      "lanes": [
+        "consent_controls",
+        "no_go_resilience"
+      ]
+    },
+    {
+      "url": "https://useinsider.com/",
+      "role": "remaining_no_dispatch",
+      "lanes": [
+        "consent_controls",
+        "no_go_resilience"
+      ]
+    },
+    {
+      "url": "https://sinsay.com/",
+      "role": "remaining_no_dispatch",
+      "lanes": [
+        "consent_controls",
+        "no_go_resilience"
+      ]
+    },
+    {
+      "url": "https://yumpu.com/",
+      "role": "remaining_no_dispatch",
+      "lanes": [
+        "consent_controls",
+        "no_go_resilience"
+      ]
+    },
+    {
+      "url": "https://emc.com/",
+      "role": "remaining_no_dispatch",
+      "lanes": [
+        "consent_controls",
+        "no_go_resilience"
+      ]
+    },
+    {
+      "url": "https://dedeman.ro/",
+      "role": "remaining_no_dispatch",
+      "lanes": [
+        "consent_controls",
+        "no_go_resilience"
+      ]
+    },
+    {
+      "url": "https://cookiedatabase.org/",
+      "role": "remaining_no_dispatch",
+      "lanes": [
+        "consent_controls",
+        "no_go_resilience"
+      ]
+    },
+    {
+      "url": "https://actify.nl/",
+      "role": "remaining_no_dispatch",
+      "lanes": [
+        "consent_controls",
+        "no_go_resilience"
+      ]
+    },
+    {
+      "url": "https://reviewbird.io/",
+      "role": "remaining_no_dispatch",
+      "lanes": [
+        "consent_controls",
+        "no_go_resilience"
+      ]
+    },
+    {
+      "url": "https://paypal.com/",
+      "role": "remaining_no_dispatch",
+      "lanes": [
+        "consent_controls",
+        "no_go_resilience"
+      ]
+    },
+    {
+      "url": "https://bbb.org/",
+      "role": "remaining_no_dispatch",
+      "lanes": [
+        "consent_controls",
+        "no_go_resilience"
+      ]
+    },
+    {
+      "url": "https://dnsmadeeasy.com/",
+      "role": "remaining_no_dispatch",
+      "lanes": [
+        "consent_controls",
+        "no_go_resilience"
+      ]
+    },
+    {
+      "url": "https://unrulymedia.com/",
+      "role": "remaining_no_dispatch",
+      "lanes": [
+        "consent_controls",
+        "no_go_resilience"
+      ]
+    },
+    {
+      "url": "https://eset.com/",
+      "role": "remaining_no_dispatch",
+      "lanes": [
+        "consent_controls",
+        "no_go_resilience"
+      ]
+    },
+    {
+      "url": "https://ya.ru/",
+      "role": "remaining_no_dispatch",
+      "lanes": [
+        "consent_controls",
+        "no_go_resilience"
+      ]
+    },
+    {
+      "url": "https://abo.stimme.de/",
+      "role": "remaining_no_dispatch",
+      "lanes": [
+        "consent_controls",
+        "no_go_resilience"
+      ]
+    },
+    {
+      "url": "https://wpastra.com/",
+      "role": "remaining_no_dispatch",
+      "lanes": [
+        "consent_controls",
+        "no_go_resilience"
+      ]
+    },
+    {
+      "url": "https://mercadolibre.com.mx/",
+      "role": "remaining_no_dispatch",
+      "lanes": [
+        "consent_controls",
+        "no_go_resilience"
+      ]
+    },
+    {
+      "url": "https://mercadolibre.com.ar/",
+      "role": "remaining_no_dispatch",
+      "lanes": [
+        "consent_controls",
+        "no_go_resilience"
+      ]
+    },
+    {
+      "url": "https://inmobi.com/",
+      "role": "remaining_no_dispatch",
+      "lanes": [
+        "consent_controls",
+        "no_go_resilience"
+      ]
+    },
+    {
+      "url": "https://vg.no/",
+      "role": "remaining_no_dispatch",
+      "lanes": [
+        "consent_controls",
+        "no_go_resilience"
+      ]
+    },
+    {
+      "url": "https://sophos.com/",
+      "role": "remaining_no_dispatch",
+      "lanes": [
+        "consent_controls",
+        "no_go_resilience"
+      ]
+    },
+    {
+      "url": "https://otomoto.pl/",
+      "role": "remaining_no_dispatch",
+      "lanes": [
+        "consent_controls",
+        "no_go_resilience"
+      ]
+    },
+    {
+      "url": "https://jw.org/",
+      "role": "remaining_no_dispatch",
+      "lanes": [
+        "consent_controls",
+        "no_go_resilience"
+      ]
+    },
+    {
+      "url": "https://www.gov.br/",
+      "role": "remaining_no_dispatch",
+      "lanes": [
+        "consent_controls",
+        "no_go_resilience"
+      ]
+    },
+    {
+      "url": "https://wpguardian.com/",
+      "role": "remaining_no_dispatch",
+      "lanes": [
+        "consent_controls",
+        "no_go_resilience"
+      ]
+    },
+    {
+      "url": "https://meteored.cl/",
+      "role": "remaining_no_dispatch",
+      "lanes": [
+        "consent_controls",
+        "no_go_resilience"
+      ]
+    },
+    {
+      "url": "https://mixpanel.com/",
+      "role": "remaining_no_dispatch",
+      "lanes": [
+        "consent_controls",
+        "no_go_resilience"
+      ]
+    },
+    {
+      "url": "https://hugedomains.com/",
+      "role": "remaining_no_dispatch",
+      "lanes": [
+        "consent_controls",
+        "no_go_resilience"
+      ]
+    },
+    {
+      "url": "https://wetteronline.de/",
+      "role": "remaining_no_dispatch",
+      "lanes": [
+        "consent_controls",
+        "no_go_resilience"
+      ]
+    },
+    {
+      "url": "https://bbc.co.uk/",
+      "role": "remaining_no_dispatch",
+      "lanes": [
+        "consent_controls",
+        "no_go_resilience"
+      ]
+    },
+    {
+      "url": "https://chaturbate.com/",
+      "role": "remaining_no_dispatch",
+      "lanes": [
+        "consent_controls",
+        "no_go_resilience"
+      ]
+    },
+    {
+      "url": "https://scribd.com/",
+      "role": "remaining_no_dispatch",
+      "lanes": [
+        "consent_controls",
+        "no_go_resilience"
+      ]
+    },
+    {
+      "url": "https://visma.com/",
+      "role": "remaining_no_dispatch",
+      "lanes": [
+        "consent_controls",
+        "no_go_resilience"
+      ]
+    },
+    {
+      "url": "https://t-online.de/",
+      "role": "remaining_no_dispatch",
+      "lanes": [
+        "consent_controls",
+        "no_go_resilience"
+      ]
+    },
+    {
+      "url": "https://one.one/",
+      "role": "remaining_no_dispatch",
+      "lanes": [
+        "consent_controls",
+        "no_go_resilience"
+      ]
+    },
+    {
+      "url": "https://inps.it/",
+      "role": "remaining_no_dispatch",
+      "lanes": [
+        "consent_controls",
+        "no_go_resilience"
+      ]
+    },
+    {
+      "url": "https://dw.com/",
+      "role": "remaining_no_dispatch",
+      "lanes": [
+        "consent_controls",
+        "no_go_resilience"
+      ]
+    },
+    {
+      "url": "https://launchdarkly.com/",
+      "role": "remaining_no_dispatch",
+      "lanes": [
+        "consent_controls",
+        "no_go_resilience"
+      ]
+    },
+    {
+      "url": "https://uol.com.br/",
+      "role": "remaining_no_dispatch",
+      "lanes": [
+        "consent_controls",
+        "no_go_resilience"
+      ]
+    },
+    {
+      "url": "https://liftoff.io/",
+      "role": "remaining_no_dispatch",
+      "lanes": [
+        "consent_controls",
+        "no_go_resilience"
+      ]
+    },
+    {
+      "url": "https://linode.com/",
+      "role": "remaining_no_dispatch",
+      "lanes": [
+        "consent_controls",
+        "no_go_resilience"
+      ]
+    },
+    {
+      "url": "https://skysports.com/",
+      "role": "remaining_no_dispatch",
+      "lanes": [
+        "consent_controls",
+        "no_go_resilience"
+      ]
+    },
+    {
+      "url": "https://finn.no/",
+      "role": "remaining_no_dispatch",
+      "lanes": [
+        "consent_controls",
+        "no_go_resilience"
+      ]
+    },
+    {
+      "url": "https://slack.com/",
+      "role": "remaining_no_dispatch",
+      "lanes": [
+        "consent_controls",
+        "no_go_resilience"
+      ]
+    },
+    {
+      "url": "https://meethue.com/",
+      "role": "remaining_no_dispatch",
+      "lanes": [
+        "consent_controls",
+        "no_go_resilience"
+      ]
+    },
+    {
+      "url": "https://therapservices.net/",
+      "role": "remaining_no_dispatch",
+      "lanes": [
+        "consent_controls",
+        "no_go_resilience"
+      ]
+    },
+    {
+      "url": "https://supercell.com/",
+      "role": "remaining_no_dispatch",
+      "lanes": [
+        "consent_controls",
+        "no_go_resilience"
+      ]
+    },
+    {
+      "url": "https://vice.com/",
+      "role": "remaining_no_dispatch",
+      "lanes": [
+        "consent_controls",
+        "no_go_resilience"
+      ]
+    },
+    {
+      "url": "https://olx.pl/",
+      "role": "remaining_no_dispatch",
+      "lanes": [
+        "consent_controls",
+        "no_go_resilience"
+      ]
+    },
+    {
+      "url": "https://achmea.nl/",
+      "role": "remaining_no_dispatch",
+      "lanes": [
+        "consent_controls",
+        "no_go_resilience"
+      ]
+    },
+    {
+      "url": "https://fifa.com/",
+      "role": "remaining_no_dispatch",
+      "lanes": [
+        "consent_controls",
+        "no_go_resilience"
+      ]
+    },
+    {
+      "url": "https://elconfidencial.com/",
+      "role": "remaining_no_dispatch",
+      "lanes": [
+        "consent_controls",
+        "no_go_resilience"
+      ]
+    },
+    {
+      "url": "https://ring.com/",
+      "role": "remaining_no_dispatch",
+      "lanes": [
+        "consent_controls",
+        "no_go_resilience"
+      ]
+    },
+    {
+      "url": "https://kv.no/",
+      "role": "remaining_no_dispatch",
+      "lanes": [
+        "consent_controls",
+        "no_go_resilience"
+      ]
+    },
+    {
+      "url": "https://veolia.com/",
+      "role": "remaining_no_dispatch",
+      "lanes": [
+        "consent_controls",
+        "no_go_resilience"
+      ]
+    },
+    {
+      "url": "https://pusher.com/",
+      "role": "remaining_no_dispatch",
+      "lanes": [
+        "consent_controls",
+        "no_go_resilience"
+      ]
+    },
+    {
+      "url": "https://uber.com/",
+      "role": "remaining_no_dispatch",
+      "lanes": [
+        "consent_controls",
+        "no_go_resilience"
+      ]
+    },
+    {
+      "url": "https://smadex.com/",
+      "role": "remaining_no_dispatch",
+      "lanes": [
+        "consent_controls",
+        "no_go_resilience"
+      ]
+    },
+    {
+      "url": "https://quickconnect.to/",
+      "role": "remaining_no_dispatch",
+      "lanes": [
+        "consent_controls",
+        "no_go_resilience"
+      ]
+    },
+    {
+      "url": "https://asus.com/",
+      "role": "remaining_no_dispatch",
+      "lanes": [
+        "consent_controls",
+        "no_go_resilience"
+      ]
+    },
+    {
+      "url": "https://pos.toasttab.com/",
+      "role": "remaining_no_dispatch",
+      "lanes": [
+        "consent_controls",
+        "no_go_resilience"
+      ]
+    },
+    {
+      "url": "https://lovesac.com/",
+      "role": "remaining_no_dispatch",
+      "lanes": [
+        "consent_controls",
+        "no_go_resilience"
+      ]
+    },
+    {
+      "url": "https://blackbaud.com/",
+      "role": "remaining_no_dispatch",
+      "lanes": [
+        "consent_controls",
+        "no_go_resilience"
+      ]
+    },
+    {
+      "url": "https://joinroot.com/",
+      "role": "remaining_no_dispatch",
+      "lanes": [
+        "consent_controls",
+        "no_go_resilience"
+      ]
+    },
+    {
+      "url": "https://soraa.com/",
+      "role": "remaining_no_dispatch",
+      "lanes": [
+        "consent_controls",
+        "no_go_resilience"
+      ]
+    },
+    {
+      "url": "https://stance.com/",
+      "role": "remaining_no_dispatch",
+      "lanes": [
+        "consent_controls",
+        "no_go_resilience"
+      ]
+    },
+    {
+      "url": "https://zeplin.io/",
+      "role": "remaining_no_dispatch",
+      "lanes": [
+        "consent_controls",
+        "no_go_resilience"
+      ]
+    },
+    {
+      "url": "https://us.oneill.com/",
+      "role": "remaining_no_dispatch",
+      "lanes": [
+        "consent_controls",
+        "no_go_resilience"
+      ]
+    },
+    {
+      "url": "https://www.cascadedesigns.com/",
+      "role": "remaining_no_dispatch",
+      "lanes": [
+        "consent_controls",
+        "no_go_resilience"
+      ]
+    },
+    {
+      "url": "https://www.acehardware.com/",
+      "role": "remaining_no_dispatch",
+      "lanes": [
+        "consent_controls",
+        "no_go_resilience"
+      ]
+    },
+    {
+      "url": "https://www.lagunatools.com/",
+      "role": "remaining_no_dispatch",
+      "lanes": [
+        "consent_controls",
+        "no_go_resilience"
+      ]
+    },
+    {
+      "url": "https://www.cakebread.com/",
+      "role": "remaining_no_dispatch",
+      "lanes": [
+        "consent_controls",
+        "no_go_resilience"
+      ]
+    },
+    {
+      "url": "https://www.teleflora.com/",
+      "role": "remaining_no_dispatch",
+      "lanes": [
+        "consent_controls",
+        "no_go_resilience"
+      ]
+    },
+    {
+      "url": "https://www.travismathew.com/",
+      "role": "remaining_no_dispatch",
+      "lanes": [
+        "consent_controls",
+        "no_go_resilience"
+      ]
+    },
+    {
+      "url": "https://www.irobot.com/",
+      "role": "remaining_no_dispatch",
+      "lanes": [
+        "consent_controls",
+        "no_go_resilience"
+      ]
+    },
+    {
+      "url": "https://adinaeden.com/",
+      "role": "remaining_no_dispatch",
+      "lanes": [
+        "consent_controls",
+        "no_go_resilience"
+      ]
+    }
+  ],
+  "purpose": "Remaining historical no-dispatch verification with current local code via Ireland; ErgoVeritas excluded; no deployment; previously recovered paths serve as regression controls",
+  "cooldownWaiver": {
+    "authorizedBy": "product_owner",
+    "source": "User explicitly waived cooldown for these local Ireland rescans",
+    "preserve": [
+      "blocked",
+      "do_not_calibrate",
+      "manual_contact_holds",
+      "unsafe_target"
+    ]
+  }
+}
