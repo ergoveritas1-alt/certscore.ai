@@ -1,0 +1,33 @@
+{
+  "eligibilityLedger": "docs/certscore-v2/calibration-runs/2026-09-10-onetrust-confirmation/ledger.json",
+  "publicContactPolicy": {
+    "minimumCooldownDays": 28
+  },
+  "targets": [
+    {
+      "url": "https://olx.pl/",
+      "role": "semantic_confirmation",
+      "lanes": [
+        "consent_controls",
+        "no_go_resilience"
+      ]
+    },
+    {
+      "url": "https://otomoto.pl/",
+      "role": "semantic_confirmation",
+      "lanes": [
+        "consent_controls",
+        "no_go_resilience"
+      ]
+    },
+    {
+      "url": "https://streamable.com/",
+      "role": "semantic_confirmation",
+      "lanes": [
+        "consent_controls",
+        "no_go_resilience"
+      ]
+    }
+  ],
+  "purpose": "Local Ireland-egress semantic confirmation diagnostics; ErgoVeritas excluded; no deployment. Four attempts: three completed scans and one local diagnostic preload failure, conservatively accounted as a contact."
+}
