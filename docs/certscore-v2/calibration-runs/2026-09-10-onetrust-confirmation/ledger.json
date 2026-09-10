@@ -2,8 +2,8 @@
   "entries": {
     "https://otomoto.pl/": {
       "consecutiveNoGoCount": 0,
-      "cooldownUntil": "2026-10-08T21:37:47.016Z",
-      "lastContactAt": "2026-09-10T21:37:47.016Z",
+      "cooldownUntil": "2026-10-08T21:58:18.313Z",
+      "lastContactAt": "2026-09-10T21:58:18.313Z",
       "lastContactSource": "calibration",
       "lastNoGoReasons": [],
       "lastOutcome": "completed",
@@ -12,8 +12,8 @@
     },
     "https://olx.pl/": {
       "consecutiveNoGoCount": 0,
-      "cooldownUntil": "2026-10-08T21:42:25.840Z",
-      "lastContactAt": "2026-09-10T21:42:25.840Z",
+      "cooldownUntil": "2026-10-08T21:57:59.602Z",
+      "lastContactAt": "2026-09-10T21:57:59.602Z",
       "lastContactSource": "calibration",
       "lastNoGoReasons": [],
       "lastOutcome": "completed",
@@ -22,8 +22,8 @@
     },
     "https://streamable.com/": {
       "consecutiveNoGoCount": 0,
-      "cooldownUntil": "2026-10-08T21:40:45.616Z",
-      "lastContactAt": "2026-09-10T21:40:45.616Z",
+      "cooldownUntil": "2026-10-08T21:56:59.012Z",
+      "lastContactAt": "2026-09-10T21:56:59.012Z",
       "lastContactSource": "calibration",
       "lastNoGoReasons": [],
       "lastOutcome": "completed",
@@ -32,5 +32,5 @@
     }
   },
   "ledgerVersion": "certscore.scan_quality_calibration_ledger.1",
-  "updatedAt": "2026-09-10T21:50:28.286Z"
+  "updatedAt": "2026-09-10T21:59:41.748Z"
 }

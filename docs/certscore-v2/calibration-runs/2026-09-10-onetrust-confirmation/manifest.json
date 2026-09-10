@@ -29,5 +29,5 @@
       ]
     }
   ],
-  "purpose": "Local Ireland-egress semantic confirmation diagnostics; ErgoVeritas excluded; no deployment. Four attempts: three completed scans and one local diagnostic preload failure, conservatively accounted as a contact."
+  "purpose": "Local Ireland-egress OneTrust/TCF semantic confirmation diagnostics; ErgoVeritas excluded; no deployment. Ten attempts: nine completed scans across three domains and one local diagnostic preload failure conservatively accounted as a contact. Not a population acceptance sample."
 }
