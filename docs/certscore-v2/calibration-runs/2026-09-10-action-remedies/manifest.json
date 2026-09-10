@@ -1,0 +1,109 @@
+{
+  "eligibilityLedger": "docs/certscore-v2/calibration-runs/2026-09-10-action-remedies/ledger.json",
+  "publicContactPolicy": {
+    "minimumCooldownDays": 28
+  },
+  "targets": [
+    {
+      "url": "https://pusher.com/",
+      "role": "container_binding",
+      "lanes": [
+        "consent_controls",
+        "no_go_resilience"
+      ]
+    },
+    {
+      "url": "https://mercadolibre.com.mx/",
+      "role": "container_binding",
+      "lanes": [
+        "consent_controls",
+        "no_go_resilience"
+      ]
+    },
+    {
+      "url": "https://reviewbird.io/",
+      "role": "localized_refusal",
+      "lanes": [
+        "consent_controls",
+        "no_go_resilience"
+      ]
+    },
+    {
+      "url": "https://www.gov.br/",
+      "role": "localized_refusal",
+      "lanes": [
+        "consent_controls",
+        "no_go_resilience"
+      ]
+    },
+    {
+      "url": "https://olx.pl/",
+      "role": "necessary_only",
+      "lanes": [
+        "consent_controls",
+        "no_go_resilience"
+      ]
+    },
+    {
+      "url": "https://otomoto.pl/",
+      "role": "worker_storage",
+      "lanes": [
+        "consent_controls",
+        "no_go_resilience"
+      ]
+    },
+    {
+      "url": "https://visma.com/",
+      "role": "actionability",
+      "lanes": [
+        "consent_controls",
+        "no_go_resilience"
+      ]
+    },
+    {
+      "url": "https://stance.com/",
+      "role": "accessibility",
+      "lanes": [
+        "consent_controls",
+        "no_go_resilience"
+      ]
+    },
+    {
+      "url": "https://www.irobot.com/",
+      "role": "accessibility",
+      "lanes": [
+        "consent_controls",
+        "no_go_resilience"
+      ]
+    },
+    {
+      "url": "https://checkpoint.com/",
+      "role": "known_success",
+      "lanes": [
+        "consent_controls",
+        "no_go_resilience"
+      ]
+    },
+    {
+      "url": "https://wpastra.com/",
+      "role": "genuine_ambiguity",
+      "lanes": [
+        "consent_controls",
+        "no_go_resilience"
+      ]
+    }
+  ],
+  "purpose": "Completed historical action-remedy diagnostic cohort; retained contact ledger, not the default release acceptance inventory",
+  "cooldownWaiver": {
+    "authorizedBy": "product_owner",
+    "source": "User instruction 2026-09-10: dont worry about cooldown period",
+    "scope": "this local Ireland-egress test only",
+    "preserve": [
+      "blocked",
+      "do_not_calibrate",
+      "manual_contact_holds",
+      "unsafe_target"
+    ],
+    "expiresAt": "2026-09-12T00:00:00Z"
+  }
+}

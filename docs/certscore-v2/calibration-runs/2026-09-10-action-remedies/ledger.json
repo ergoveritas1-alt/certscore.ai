@@ -1,0 +1,119 @@
+{
+  "entries": {
+    "https://pusher.com/": {
+      "consecutiveNoGoCount": 0,
+      "cooldownUntil": "2026-10-08T20:50:02.526Z",
+      "lastContactAt": "2026-09-10T20:50:02.526Z",
+      "lastContactSource": "calibration",
+      "lastNoGoReasons": [],
+      "lastOutcome": "completed",
+      "state": "cooldown",
+      "url": "https://pusher.com/"
+    },
+    "https://mercadolibre.com.mx/": {
+      "consecutiveNoGoCount": 0,
+      "cooldownUntil": "2026-10-08T20:52:48.048Z",
+      "lastContactAt": "2026-09-10T20:52:48.048Z",
+      "lastContactSource": "calibration",
+      "lastNoGoReasons": [],
+      "lastOutcome": "completed",
+      "state": "cooldown",
+      "url": "https://mercadolibre.com.mx/"
+    },
+    "https://reviewbird.io/": {
+      "consecutiveNoGoCount": 0,
+      "cooldownUntil": "2026-10-08T20:50:22.453Z",
+      "lastContactAt": "2026-09-10T20:50:22.453Z",
+      "lastContactSource": "calibration",
+      "lastNoGoReasons": [],
+      "lastOutcome": "completed",
+      "state": "cooldown",
+      "url": "https://reviewbird.io/"
+    },
+    "https://www.gov.br/": {
+      "consecutiveNoGoCount": 0,
+      "cooldownUntil": "2026-10-08T20:53:22.078Z",
+      "lastContactAt": "2026-09-10T20:53:22.078Z",
+      "lastContactSource": "calibration",
+      "lastNoGoReasons": [],
+      "lastOutcome": "completed",
+      "state": "cooldown",
+      "url": "https://www.gov.br/"
+    },
+    "https://olx.pl/": {
+      "consecutiveNoGoCount": 0,
+      "cooldownUntil": "2026-10-08T20:51:37.951Z",
+      "lastContactAt": "2026-09-10T20:51:37.951Z",
+      "lastContactSource": "calibration",
+      "lastNoGoReasons": [],
+      "lastOutcome": "completed",
+      "state": "cooldown",
+      "url": "https://olx.pl/"
+    },
+    "https://otomoto.pl/": {
+      "consecutiveNoGoCount": 0,
+      "cooldownUntil": "2026-10-08T21:00:58.083Z",
+      "lastContactAt": "2026-09-10T21:00:58.083Z",
+      "lastContactSource": "calibration",
+      "lastNoGoReasons": [],
+      "lastOutcome": "completed",
+      "state": "cooldown",
+      "url": "https://otomoto.pl/"
+    },
+    "https://visma.com/": {
+      "consecutiveNoGoCount": 0,
+      "cooldownUntil": "2026-10-08T20:52:27.717Z",
+      "lastContactAt": "2026-09-10T20:52:27.717Z",
+      "lastContactSource": "calibration",
+      "lastNoGoReasons": [],
+      "lastOutcome": "completed",
+      "state": "cooldown",
+      "url": "https://visma.com/"
+    },
+    "https://stance.com/": {
+      "consecutiveNoGoCount": 0,
+      "cooldownUntil": "2026-10-08T21:00:37.982Z",
+      "lastContactAt": "2026-09-10T21:00:37.982Z",
+      "lastContactSource": "calibration",
+      "lastNoGoReasons": [],
+      "lastOutcome": "completed",
+      "state": "cooldown",
+      "url": "https://stance.com/"
+    },
+    "https://www.irobot.com/": {
+      "consecutiveNoGoCount": 0,
+      "cooldownUntil": "2026-10-08T20:53:48.753Z",
+      "lastContactAt": "2026-09-10T20:53:48.753Z",
+      "lastContactSource": "calibration",
+      "lastNoGoReasons": [],
+      "lastOutcome": "completed",
+      "state": "cooldown",
+      "url": "https://www.irobot.com/"
+    },
+    "https://checkpoint.com/": {
+      "consecutiveNoGoCount": 1,
+      "cooldownUntil": "2026-10-08T20:48:56.625Z",
+      "lastContactAt": "2026-09-10T20:48:56.625Z",
+      "lastContactSource": "calibration",
+      "lastNoGoReasons": [
+        "captcha_or_challenge",
+        "scan_no_go_corroborated"
+      ],
+      "lastOutcome": "no_go",
+      "state": "blocked",
+      "url": "https://checkpoint.com/"
+    },
+    "https://wpastra.com/": {
+      "consecutiveNoGoCount": 0,
+      "cooldownUntil": "2026-10-08T20:50:44.536Z",
+      "lastContactAt": "2026-09-10T20:50:44.536Z",
+      "lastContactSource": "calibration",
+      "lastNoGoReasons": [],
+      "lastOutcome": "completed",
+      "state": "cooldown",
+      "url": "https://wpastra.com/"
+    }
+  },
+  "ledgerVersion": "certscore.scan_quality_calibration_ledger.1",
+  "updatedAt": "2026-09-10T21:02:48.325Z"
+}
