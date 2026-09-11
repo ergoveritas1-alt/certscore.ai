@@ -53,10 +53,10 @@ export function buildGpcOptOutPrototype(input: {
         candidate.documentStartedAtMs === proof.documentStartedAtMs && candidate.capturedAtMs >= document!.timestampMs &&
         candidate.capturedAtMs <= completedAtMs && candidate.navigatorGpc === true &&
         !candidate.limitationKeys.includes("document_changed_during_semantic_readback") &&
-        (!candidate.usca || candidate.stateSha256 === digest(JSON.stringify(candidate.usca)))) observation = candidate;
+        (!(candidate.usca ?? candidate.usnat) || candidate.stateSha256 === digest(JSON.stringify(candidate.usca ?? candidate.usnat)))) observation = candidate;
     } catch { /* A bad sidecar never invalidates independent retained request facts. */ }
   }
-  const state = observation?.gppStatus === "observed" ? observation.usca : null;
+  const state = observation?.gppStatus === "observed" ? (observation.usca ?? observation.usnat) : null;
   const axis = (notice: number | undefined, value: number | undefined) => notice === 1 && value === 1 ? "opted_out" as const :
     notice === 1 && value === 2 ? "not_opted_out" as const : "unknown" as const;
   const sale = axis(state?.saleNotice, state?.saleOptOut), sharing = axis(state?.sharingNotice, state?.sharingOptOut);

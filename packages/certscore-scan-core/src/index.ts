@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import type { FormSnapshotReviewer } from "./collection-surface-snapshots";
 import { inventoryConfiguration, inventoryHash } from "./full-site-inventory";
 import path from "node:path";
@@ -200,6 +201,8 @@ export {
 } from "./consent-geometry-visual-review.js";
 
 export interface RunScanInput {
+  /** In-process local calibration callback; never exposed by Lambda/public dispatch. */
+  onGpcObservationSession?: (packet: import("@certscore/contracts").GpcObservationSession) => void;
   /** Coordinator-owned identity shared by isolated evidence lanes. */
   scanId?: string;
   signal?: AbortSignal;
@@ -539,6 +542,7 @@ export async function runScan(input: RunScanInput): Promise<CanonicalEvidenceBun
             ? "runtime_evidence"
             : "combined",
         globalPrivacyControlEnabled: evidenceLane === "gpc_observation",
+        gpcOptOutPrototype: evidenceLane === "gpc_observation" && typeof input.onGpcObservationSession === "function" ? { scanId } : undefined,
         onInventoryPage: input.resourceInventoryCrawl && evidenceLane === "runtime_evidence" ? async page => {
           const configuration = inventoryConfiguration(input.region ?? "local", input.profile === "tiny" ? "tiny" : "standard", leanPreConsent ? "fast" : "full");
           resourceInventoryContext = { finalUrl: page.url(), configuration, configurationHash: inventoryHash(configuration),
@@ -654,6 +658,7 @@ export async function runScan(input: RunScanInput): Promise<CanonicalEvidenceBun
             ? "runtime_evidence"
             : "combined",
         globalPrivacyControlEnabled: evidenceLane === "gpc_observation",
+        gpcOptOutPrototype: evidenceLane === "gpc_observation" && typeof input.onGpcObservationSession === "function" ? { scanId } : undefined,
         onInventoryPage: input.resourceInventoryCrawl && evidenceLane === "runtime_evidence" ? async page => {
           const configuration = inventoryConfiguration(input.region ?? "local", input.profile === "tiny" ? "tiny" : "standard", leanPreConsent ? "fast" : "full");
           resourceInventoryContext = { finalUrl: page.url(), configuration, configurationHash: inventoryHash(configuration),
@@ -1335,6 +1340,13 @@ export async function runScan(input: RunScanInput): Promise<CanonicalEvidenceBun
     automatedAccessObservation: preConsentResult.automatedAccessObservation,
     siteResourceSizeSummary: summarizeSiteResourceSizes(networkResponseEvents),
     gpcSignalObservation: preConsentResult.gpcSignalObservation,
+    ...(preConsentResult.gpcObservationSession ? { gpcPrototypeSessionBinding: {
+      contractVersion: "certscore.gpc-prototype-session-binding.v1" as const,
+      captureId: preConsentResult.gpcObservationSession.captureId,
+      sessionSha256: createHash("sha256").update(JSON.stringify(preConsentResult.gpcObservationSession)).digest("hex"),
+      documentToken: preConsentResult.gpcObservationSession.mainDocument?.documentToken ?? null,
+      documentUrlSha256: preConsentResult.gpcObservationSession.mainDocument?.documentUrlSha256 ?? null,
+    } } : {}),
     cookieEvents,
     cookieSnapshots,
     storageSnapshots: preConsentResult.storageSnapshots,
@@ -1409,6 +1421,7 @@ export async function runScan(input: RunScanInput): Promise<CanonicalEvidenceBun
   await phaseRecorder.record("canonical_bundle_write", "started");
   await artifactWriter.writeJsonArtifact("CanonicalEvidenceBundle.json", bundle);
   await phaseRecorder.record("canonical_bundle_write", "completed");
+  if (preConsentResult.gpcObservationSession && typeof input.onGpcObservationSession === "function") input.onGpcObservationSession(preConsentResult.gpcObservationSession);
   if (runtimeEvidenceFinalizationAfterAbort) {
     await phaseRecorder.record("runtime_evidence_deadline_finalization", "completed", {
       coverageStatus: bundle.runtimeCoverage?.coverageStatus ?? "limited_none",

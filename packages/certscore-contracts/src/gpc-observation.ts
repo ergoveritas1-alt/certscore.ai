@@ -109,6 +109,7 @@ export const gpcSignalObservationSchema = z.object({
   documentUrlSha256: hashSchema,
   contextConfigSha256: hashSchema,
   prototypeCaptureBinding: gpcPrototypeCaptureBindingSchema.optional(),
+  prototypeSessionSha256: hashSchema.optional(),
   capturedAtMs: countSchema,
   documentStartedAtMs: countSchema,
   frameCount: countSchema,
@@ -212,7 +213,8 @@ export const gpcResponseAssessmentV2Schema = z.object({
 
 // Stored v1 evidence is preserved on read, never silently upgraded to v2 proof.
 export const gpcResponseAssessmentSchema = z.union([gpcResponseAssessmentV2Schema, legacyGpcResponseAssessmentSchema]);
-export type GpcSignalObservation = z.infer<typeof gpcSignalObservationSchema>;
+// Named interface keeps the large canonical bundle declaration bounded; runtime validation is unchanged.
+export interface GpcSignalObservation extends z.infer<typeof gpcSignalObservationSchema> {}
 export type GpcCompleteComparisonDelta = z.infer<typeof gpcCompleteComparisonDeltaSchema>;
 export type GpcResponseAssessmentV2 = z.infer<typeof gpcResponseAssessmentV2Schema>;
 export type GpcObservationDispatchConfig = z.infer<typeof gpcObservationDispatchConfigSchema>;

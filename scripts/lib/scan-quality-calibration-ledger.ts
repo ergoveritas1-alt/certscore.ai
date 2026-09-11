@@ -34,6 +34,7 @@ export type CalibrationSelection = {
   minimumCooldownDays: number;
   rotationKey: string;
   selected: CalibrationTarget[];
+  cooldownOverride?: { reason: string; appliedToUrls: string[] };
 };
 
 export type CentralCalibrationLedgerRecord = {
@@ -141,8 +142,14 @@ export function selectCalibrationTargets(input: {
   now: Date;
   rotationKey: string;
   targets: CalibrationTarget[];
+  cooldownOverrideReason?: string;
 }): CalibrationSelection {
+  const cooldownOverrideReason = input.cooldownOverrideReason?.trim();
+  if (input.cooldownOverrideReason !== undefined && !cooldownOverrideReason) {
+    throw new Error("Cooldown override requires a non-empty owner-authorization reason");
+  }
   const excluded: CalibrationSelection["excluded"] = [];
+  const overriddenCooldownUrls: string[] = [];
   const eligible = input.targets.filter((target) => {
     const entry = input.ledger.entries[target.url];
     if (!entry) return true;
@@ -151,12 +158,20 @@ export function selectCalibrationTargets(input: {
       return false;
     }
     if (entry.cooldownUntil && Date.parse(entry.cooldownUntil) > input.now.getTime()) {
+      if (cooldownOverrideReason) {
+        overriddenCooldownUrls.push(target.url);
+        return true;
+      }
       excluded.push({ reason: `cooldown_until:${entry.cooldownUntil}`, url: target.url });
       return false;
     }
     if (entry.lastContactAt) {
       const nextEligibleAt = Date.parse(entry.lastContactAt) + input.minimumCooldownDays * 86_400_000;
       if (nextEligibleAt > input.now.getTime()) {
+        if (cooldownOverrideReason) {
+          overriddenCooldownUrls.push(target.url);
+          return true;
+        }
         excluded.push({ reason: `cooldown_until:${new Date(nextEligibleAt).toISOString()}`, url: target.url });
         return false;
       }
@@ -197,6 +212,9 @@ export function selectCalibrationTargets(input: {
     minimumCooldownDays: input.minimumCooldownDays,
     rotationKey: input.rotationKey,
     selected,
+    ...(cooldownOverrideReason && overriddenCooldownUrls.length > 0
+      ? { cooldownOverride: { reason: cooldownOverrideReason, appliedToUrls: [...new Set(overriddenCooldownUrls)].sort() } }
+      : {}),
   };
 }
 

@@ -29,6 +29,7 @@ async function main() {
     now: new Date(args.now ?? Date.now()),
     rotationKey: args.rotationKey,
     targets: manifest.targets,
+    cooldownOverrideReason: args.cooldownOverrideReason,
   });
 
   await mkdir(path.dirname(path.resolve(root, args.outUrls)), { recursive: true });
@@ -50,6 +51,7 @@ function parseArgs(argv: string[]) {
     outSelection: "artifacts/v2-scan-quality-calibration/CalibrationTargetSelection.json",
     outUrls: "artifacts/v2-scan-quality-calibration/selected-targets.txt",
     rotationKey: new Date().toISOString().slice(0, 10),
+    cooldownOverrideReason: undefined as string | undefined,
   };
   for (let index = 0; index < argv.length; index += 1) {
     const arg = argv[index];
@@ -62,6 +64,7 @@ function parseArgs(argv: string[]) {
     else if (arg === "--out-selection") parsed.outSelection = value;
     else if (arg === "--out-urls") parsed.outUrls = value;
     else if (arg === "--rotation-key") parsed.rotationKey = value;
+    else if (arg === "--cooldown-override-reason") parsed.cooldownOverrideReason = value;
     else throw new Error(`Unknown argument: ${arg}`);
     index += 1;
   }

@@ -2,7 +2,7 @@ import { z } from "zod";
 import { gpcArtifactPointerSchema, gpcResponseAssessmentV2Schema, gpcPrototypeCaptureBindingSchema } from "./gpc-observation";
 
 export const GPC_OPT_OUT_PROTOTYPE_VERSION = "certscore.gpc-opt-out-assessment.prototype.v1" as const;
-export const GPC_OPT_OUT_ADAPTER_VERSION = "gpc_usca_and_live_status.v1" as const;
+export const GPC_OPT_OUT_ADAPTER_VERSION = "gpc_usca_usnat_and_live_status.v3" as const;
 // Exact current-visitor status messages only, in visible live-status elements
 // inside a registered CMP scope. Policy promises and receipt wording are excluded.
 export const GPC_STATUS_MESSAGES = [
@@ -22,23 +22,40 @@ export const gpcUscaStateSchema = z.object({
   sharingOptOut: z.union([z.literal(0), z.literal(1), z.literal(2)]),
   gpc: z.boolean().nullable(),
 }).strict();
+export const gpcUsNationalStateSchema = gpcUscaStateSchema.extend({
+  sectionId: z.literal(7), sectionVersion: z.union([z.literal(1), z.literal(2)]),
+}).strict();
 export const gpcOptOutObservationSchema = z.object({
   contractVersion: z.literal("certscore.gpc-opt-out-observation.prototype.v1"),
-  adapterVersion: z.literal(GPC_OPT_OUT_ADAPTER_VERSION),
+  adapterVersion: z.union([z.literal("gpc_usca_and_live_status.v1"), z.literal("gpc_usca_usnat_and_live_status.v2"), z.literal(GPC_OPT_OUT_ADAPTER_VERSION)]),
   scanId: z.string().min(1).max(160), documentUrlSha256: hash,
   captureBinding: gpcPrototypeCaptureBindingSchema.nullable(),
   documentStartedAtMs: time, capturedAtMs: time, navigatorGpc: z.boolean().nullable(),
   gppStatus: z.enum(["observed", "unavailable", "not_ready", "unsupported", "invalid"]),
-  usca: gpcUscaStateSchema.nullable(), stateSha256: hash.nullable(),
+  gppDiagnostics: z.object({ reason: z.string().min(1).max(80), callbackCount: time,
+    applicableSections: z.array(z.number().int()).max(4), sectionList: z.array(z.number().int()).max(33),
+  }).strict().optional(),
+  acknowledgmentCaptureComplete: z.boolean().optional(),
+  usca: gpcUscaStateSchema.nullable(), usnat: gpcUsNationalStateSchema.nullable().optional(), stateSha256: hash.nullable(),
+  stateTransitions: z.array(z.object({ observedAtMs: time,
+    status: z.enum(["observed", "unsupported", "invalid", "not_ready"]),
+    state: z.union([gpcUscaStateSchema, gpcUsNationalStateSchema]).nullable(), stateSha256: hash.nullable(),
+  }).strict()).max(16).optional(),
   acknowledgment: z.array(z.object({
     cmp: z.string().min(1).max(100), scopeSelector: z.string().min(1).max(200),
     message: z.enum(GPC_STATUS_MESSAGES), source: z.literal("visible_cmp_live_status"),
   }).strict()).max(8),
   limitationKeys: codes,
 }).strict().superRefine((p, ctx) => {
+  if (p.stateTransitions?.some((row, i, all) => row.observedAtMs > p.capturedAtMs ||
+    (i > 0 && row.observedAtMs < all[i - 1]!.observedAtMs) ||
+    (row.status === "observed" ? !row.state || !row.stateSha256 : row.state !== null || row.stateSha256 !== null))) {
+    ctx.addIssue({ code: z.ZodIssueCode.custom, message: "GPC transitions require consistent bounded state and monotonic timing." });
+  }
   if (p.capturedAtMs < p.documentStartedAtMs ||
-    (p.gppStatus === "observed") !== (p.usca !== null && p.stateSha256 !== null) ||
-    (p.gppStatus !== "observed" && (p.usca !== null || p.stateSha256 !== null))) {
+    (p.gppStatus === "observed") !== ((p.usca !== null || Boolean(p.usnat)) && p.stateSha256 !== null) ||
+    (p.usca !== null && Boolean(p.usnat)) ||
+    (p.gppStatus !== "observed" && (p.usca !== null || Boolean(p.usnat) || p.stateSha256 !== null))) {
     ctx.addIssue({ code: z.ZodIssueCode.custom, message: "GPC semantic observation must retain consistent state and timing." });
   }
 });
@@ -94,11 +111,12 @@ export const gpcOptOutPrototypeSchema = z.object({
   const expected = r.sale === "opted_out" && r.sharing === "opted_out" ? "opt_out_recorded" :
     r.sale === "not_opted_out" && r.sharing === "not_opted_out" ? "opt_out_not_recorded" :
     r.observation ? "mixed_or_incomplete" : "unknown";
-  const expectedSignal = r.observation?.usca?.gpc === true ? "received" : r.observation?.usca?.gpc === false ? "not_received" : "unknown";
+  const recordedState = r.observation?.usca ?? r.observation?.usnat;
+  const expectedSignal = recordedState?.gpc === true ? "received" : recordedState?.gpc === false ? "not_received" : "unknown";
   const axis = (notice?: number, value?: number) => notice === 1 && value === 1 ? "opted_out" : notice === 1 && value === 2 ? "not_opted_out" : "unknown";
   if (r.status !== expected || r.cmpGpcSignal !== expectedSignal || (r.observation && (!r.evidenceRefs.length || a.delivery.http.status !== "observed")) ||
-    r.sale !== axis(r.observation?.usca?.saleNotice, r.observation?.usca?.saleOptOut) ||
-    r.sharing !== axis(r.observation?.usca?.sharingNotice, r.observation?.usca?.sharingOptOut) ||
+    r.sale !== axis(recordedState?.saleNotice, recordedState?.saleOptOut) ||
+    r.sharing !== axis(recordedState?.sharingNotice, recordedState?.sharingOptOut) ||
     (a.delivery.fullContext.status === "observed" && (a.delivery.http.status !== "observed" || a.delivery.mainNavigator.status !== "observed")) ||
     (b.captureComplete && a.delivery.fullContext.status !== "observed") ||
     b.collectionRequestCount > b.requestCount || b.requests.length !== Math.min(100, b.requestCount) ||

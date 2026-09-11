@@ -1,9 +1,10 @@
-import { randomUUID } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import { createProxyDestinationCapture } from "../proxy-destination-capture.js";
 import { captureCollectionSurfaceSnapshots, type FormSnapshotReviewer } from "../collection-surface-snapshots";
 import { createGpcSignalCapture, installGpcNavigatorSignal } from "../gpc-signal-capture.js";
+import { startGpcObservationSession } from "../gpc-observation-session.js";
 import { captureGpcOptOutObservation } from "../gpc-opt-out-capture.js";
-import type { GpcOptOutObservation } from "@certscore/contracts";
+import type { GpcOptOutObservation, GpcObservationSession } from "@certscore/contracts";
 import type { GpcSignalObservation } from "@certscore/contracts";
 import {
   type ArtifactRef,
@@ -530,6 +531,7 @@ export function applyFinalDocumentPartyClassification(input: {
 export interface PreConsentRuntimeScannerResult {
   gpcSignalObservation?: GpcSignalObservation;
   gpcOptOutObservation?: GpcOptOutObservation;
+  gpcObservationSession?: GpcObservationSession;
   runtimeEvidenceGraph?: RuntimeEvidenceGraph;
   moduleRun: ScanModuleRun;
   runtimeTimeline: RuntimeEvidenceEvent[];
@@ -683,6 +685,10 @@ export async function preConsentRuntimeScanner(
   const prototypeBinding = input.gpcOptOutPrototype && captureRuntimeEvidence ? {
     captureId: randomUUID(), documentIdentity: () => currentBrowserDocumentIdentity(page),
   } : undefined;
+  const gpcObservationSession = prototypeBinding ? await startGpcObservationSession({
+    page, scanId: input.gpcOptOutPrototype!.scanId, captureId: prototypeBinding.captureId, scanStartedAtMs: input.scanStartedAtMs,
+  }).catch(() => undefined) : undefined;
+  let gpcMonitorResult: { callbacks: number; dropped: number; registered: boolean } | undefined;
   const gpcSignalCapture = captureRuntimeEvidence ? createGpcSignalCapture({
     context: browserContext, page, enabled: input.globalPrivacyControlEnabled === true,
     scanStartedAtMs: input.scanStartedAtMs, waitMode: input.waitMode, internalBudgetMs: input.internalBudgetMs,
@@ -880,6 +886,7 @@ export async function preConsentRuntimeScanner(
       requestPayloadSignals: payloadSignals,
     };
     networkEvents.push(event);
+    gpcObservationSession?.recordRequest(event, request);
     requestEvents.set(request, event);
     vendorResolverInputs.push({
       ...resolverInputForEvent(event),
@@ -966,6 +973,7 @@ export async function preConsentRuntimeScanner(
   let retainedStorageSnapshot: StorageSnapshot | undefined;
   let retainedGpcSignalObservation: GpcSignalObservation | undefined;
   let retainedGpcOptOutObservation: GpcOptOutObservation | undefined;
+  let retainedGpcObservationSession: GpcObservationSession | undefined;
   let retainedConsentUiObservation: ConsentUiObservation | undefined;
   let consentUiInspectionAttempted = false;
   let retainedCollectionSurfaceInventory: CollectionSurfaceInventory | undefined;
@@ -1960,7 +1968,7 @@ export async function preConsentRuntimeScanner(
       })()
       : Promise.resolve(undefined);
 
-    const [pageEvidence, initialConsentObservation, lateAccessibilityObservation, gpcSignalObservation, gpcOptOutObservation] = await recordTiming(
+    const [pageEvidence, initialConsentObservation, lateAccessibilityObservation, gpcSignalObservation] = await recordTiming(
       timingBreakdown,
       "page evidence capture",
       "Atomic read-only storage, scripts, iframes, browser API, collection surface, and DOM text snapshot after the first structured consent inventory is retained.",
@@ -1987,14 +1995,25 @@ export async function preConsentRuntimeScanner(
           "GPC signal readback", "Read actual main/frame values alongside the existing bounded page snapshot; no extra settling.",
           Math.min(2_500, Math.max(1, remainingModuleBudgetMs())), () => gpcSignalCapture.snapshot(), () => undefined)
           : Promise.resolve(undefined),
-        input.gpcOptOutPrototype && captureRuntimeEvidence ? recordBoundedTiming(timingBreakdown,
-          "GPC opt-out prototype", "Passive local-only semantic readback inside the existing page-capture budget.",
-          Math.min(2_500, Math.max(1, remainingModuleBudgetMs())),
-          () => captureGpcOptOutObservation(page, { scanId: input.gpcOptOutPrototype!.scanId, scanStartedAtMs: input.scanStartedAtMs, binding: prototypeBinding }),
-          () => undefined) : Promise.resolve(undefined)]),
+      ]),
     );
+    // Sample semantic state at the end of the existing page work. The listener
+    // remains active while parallel evidence/readback tasks finish; no second
+    // ping, additional settle window or increased deadline is introduced.
+    const gpcOptOutObservation = input.gpcOptOutPrototype && captureRuntimeEvidence ? await recordBoundedTiming(timingBreakdown,
+      "GPC opt-out prototype", "Passive local-only terminal semantic readback inside the existing page-capture budget.",
+      Math.min(2_500, Math.max(1, remainingModuleBudgetMs())),
+      () => captureGpcOptOutObservation(page, { scanId: input.gpcOptOutPrototype!.scanId, scanStartedAtMs: input.scanStartedAtMs, binding: prototypeBinding, monitorKey: gpcObservationSession?.monitorKey, onMonitorFinished: value => { gpcMonitorResult = value; } }),
+      () => undefined) : undefined;
     retainedGpcSignalObservation = gpcSignalObservation;
     retainedGpcOptOutObservation = gpcOptOutObservation;
+    if (gpcObservationSession) retainedGpcObservationSession = await recordBoundedTiming(timingBreakdown,
+      "GPC observation finalization", "Bind bounded local observation to the terminal CDP loader without a new settle window.",
+      Math.min(500, Math.max(1, remainingModuleBudgetMs())),
+      () => gpcObservationSession.finish(gpcOptOutObservation, gpcMonitorResult, input.signal?.aborted === true), () => undefined);
+    if (retainedGpcObservationSession && retainedGpcSignalObservation) {
+      retainedGpcSignalObservation.prototypeSessionSha256 = createHash("sha256").update(JSON.stringify(retainedGpcObservationSession)).digest("hex");
+    }
     const {
       apiAccesses,
       collectionSurfaceInventory,
@@ -3808,6 +3827,7 @@ export async function preConsentRuntimeScanner(
       gpcSignalObservation: retainedGpcSignalObservation,
       scriptEvents,
       ...(retainedGpcOptOutObservation ? { gpcOptOutObservation: retainedGpcOptOutObservation } : {}),
+      ...(retainedGpcObservationSession ? { gpcObservationSession: retainedGpcObservationSession } : {}),
       iframeEvents,
       consentUiObservations: captureConsentEvidence ? [consentObservation] : [],
       ...(collectionSurfaceInventory ? { collectionSurfaceInventory } : {}),
@@ -3956,6 +3976,7 @@ export async function preConsentRuntimeScanner(
     };
   } finally {
     finishGraph("runtime_capture_closed");
+    if (gpcObservationSession) await boundedCleanup(gpcObservationSession.close(), 250);
     if (passiveRuntimeCheckpointTimer) clearTimeout(passiveRuntimeCheckpointTimer);
     if (passiveRuntimeCheckpointPromise) await passiveRuntimeCheckpointPromise;
     input.signal?.removeEventListener("abort", abortRuntime);

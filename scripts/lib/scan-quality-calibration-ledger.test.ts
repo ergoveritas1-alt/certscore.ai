@@ -93,6 +93,31 @@ test("completed contact enters cooldown and becomes eligible after it expires", 
   );
 });
 
+test("owner-authorized cooldown override selects cooldown rows but never blocked or do-not-calibrate rows", () => {
+  const ledger = createEmptyCalibrationLedger();
+  ledger.entries = {
+    "https://cooldown.example": { url: "https://cooldown.example", state: "cooldown", consecutiveNoGoCount: 0, lastNoGoReasons: [], lastContactAt: "2026-09-10T00:00:00.000Z" },
+    "https://blocked.example": { url: "https://blocked.example", state: "blocked", consecutiveNoGoCount: 1, lastNoGoReasons: ["blocked"], lastContactAt: "2026-09-10T00:00:00.000Z" },
+    "https://hold.example": { url: "https://hold.example", state: "do_not_calibrate", consecutiveNoGoCount: 2, lastNoGoReasons: ["hold"], lastContactAt: "2026-09-10T00:00:00.000Z" },
+  };
+  const reason = "Product owner waived scan cooldown in this task; GPC local calibration authorized September 10, 2026";
+  const selection = selectCalibrationTargets({
+    ledger, limit: 1, minimumCooldownDays: 30, now: new Date("2026-09-11T00:00:00.000Z"), rotationKey: "test",
+    targets: ["https://cooldown.example", "https://blocked.example", "https://hold.example"].map(url => ({ url, role: url.slice(8, -8), lanes: [] })),
+    cooldownOverrideReason: reason,
+  });
+  assert.equal(selection.selected[0]?.url, "https://cooldown.example");
+  assert.deepEqual(selection.cooldownOverride, { reason, appliedToUrls: ["https://cooldown.example"] });
+  assert.deepEqual(selection.excluded.map(row => row.url).sort(), ["https://blocked.example", "https://hold.example"]);
+});
+
+test("cooldown override requires a non-empty reason and defaults remain unchanged", () => {
+  const ledger = createEmptyCalibrationLedger();
+  const target = { url: "https://cooldown.example", role: "standard", lanes: [] };
+  assert.throws(() => selectCalibrationTargets({ ledger: { ...ledger, entries: { [target.url]: { url: target.url, state: "cooldown", consecutiveNoGoCount: 0, lastNoGoReasons: [], lastContactAt: "2026-09-10T00:00:00.000Z" } } }, limit: 1, minimumCooldownDays: 30, now: new Date("2026-09-11T00:00:00.000Z"), rotationKey: "test", targets: [target], cooldownOverrideReason: "   " }), /non-empty/);
+  assert.throws(() => selectCalibrationTargets({ ledger: { ...ledger, entries: { [target.url]: { url: target.url, state: "cooldown", consecutiveNoGoCount: 0, lastNoGoReasons: [], lastContactAt: "2026-09-10T00:00:00.000Z" } } }, limit: 1, minimumCooldownDays: 30, now: new Date("2026-09-11T00:00:00.000Z"), rotationKey: "test", targets: [target] }), /Only 0 targets/);
+});
+
 test("no-go outcomes block once and retire after a reviewed second attempt", () => {
   const first = recordCalibrationOutcomes({
     ledger: createEmptyCalibrationLedger(),

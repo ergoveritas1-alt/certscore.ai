@@ -1,16 +1,20 @@
 import { createHash } from "node:crypto";
 import type { Page } from "playwright";
-import { GPC_OPT_OUT_ADAPTER_VERSION, GPC_STATUS_MESSAGES, gpcOptOutObservationSchema, gpcUscaStateSchema, type BrowserDocumentIdentity } from "@certscore/contracts";
+import { GPC_OPT_OUT_ADAPTER_VERSION, GPC_STATUS_MESSAGES, gpcOptOutObservationSchema, gpcUscaStateSchema, gpcUsNationalStateSchema, type BrowserDocumentIdentity } from "@certscore/contracts";
 import { KNOWN_CMP_REGISTRY } from "@website-signal-risk-scanner/shared";
+import { parseGpcGppPing } from "./gpc-gpp-parser.js";
 import { gpcDocumentHash } from "./gpc-signal-capture.js";
 
-/** Passive, one evaluation, no polling/listeners/clicks. Called only by the local prototype. */
+/** Passive terminal readback plus optional bounded listener history; local prototype only. */
 export async function captureGpcOptOutObservation(page: Page, input: {
   scanId: string; scanStartedAtMs: number;
+  monitorKey?: string;
+  onMonitorFinished?: (value: { callbacks: number; dropped: number; registered: boolean }) => void;
   binding?: { captureId: string; documentIdentity: () => BrowserDocumentIdentity | undefined };
 }) {
   const before = input.binding?.documentIdentity();
-  const sample = await page.evaluate(({ scopes, messages }) => {
+  const readback = ({ scopes, messages, monitorKey }: { scopes: Array<{ name: string; selectors: readonly string[] }>; messages: readonly string[]; monitorKey?: string }) => {
+    const monitor = monitorKey ? (window as unknown as Record<string, any>)[monitorKey]?.finish() : undefined;
     const startedUrl = location.href, timeOrigin = performance.timeOrigin;
     let ping: Record<string, unknown> | null = null;
     let callbackCount = 0, callbackSucceeded = false, accepting = true;
@@ -27,32 +31,23 @@ export async function captureGpcOptOutObservation(page: Page, input: {
     accepting = false;
     // GPP 1.1 generic commands must callback synchronously. Do not wait for a
     // queued/loading CMP or retain raw GPP strings / unrelated section data.
-    const p = ping as Record<string, unknown> | null;
-    let state: Record<string, unknown> | null = null;
-    let status = !present ? "unavailable" : "not_ready";
-    if (callbackCount === 1 && callbackSucceeded && p) {
-      if (p.gppVersion !== "1.1") status = "unsupported";
-      else if (p.cmpStatus === "loaded" && p.signalStatus === "ready") {
-        const sections = (p.parsedSections as Record<string, unknown> | undefined)?.usca;
-        if (!Array.isArray(p.applicableSections) || !p.applicableSections.includes(8) ||
-          !Array.isArray(p.sectionList) || !p.sectionList.includes(8)) status = "unsupported";
-        else if (new Set(p.applicableSections).size !== p.applicableSections.length ||
-          new Set(p.sectionList).size !== p.sectionList.length ||
-          !Array.isArray(sections) || sections.length < 1 || sections.length > 2) status = "invalid";
-        else {
-          const core = sections[0], gpc = sections[1];
-          if (!core || typeof core !== "object" ||
-            (gpc !== undefined && (!gpc || gpc.SubsectionType !== 1 || typeof gpc.Gpc !== "boolean"))) status = "invalid";
-          else {
-            status = "observed";
-            state = { apiVersion: "1.1", sectionId: 8, sectionVersion: core.Version,
-              cmpStatus: "loaded", signalStatus: "ready", saleNotice: core.SaleOptOutNotice,
-              sharingNotice: core.SharingOptOutNotice, saleOptOut: core.SaleOptOut,
-              sharingOptOut: core.SharingOptOut, gpc: gpc?.Gpc ?? null };
-          }
-        }
-      }
-    } else if (callbackCount > 1) status = "invalid";
+    // Retain only the four explicit state/notice fields and optional GPC bit.
+    // Raw GPP strings and unrelated sections never leave the page.
+    const p = ping as Record<string, any> | null;
+    const shortString = (v: unknown) => typeof v === "string" && v.length <= 32 ? v : null;
+    const number = (v: unknown) => typeof v === "number" && Number.isSafeInteger(v) ? v : null;
+    const safeSection = (c: any) => c && typeof c === "object" ? {
+      Version: number(c.Version), SaleOptOutNotice: number(c.SaleOptOutNotice), SharingOptOutNotice: number(c.SharingOptOutNotice),
+      SaleOptOut: number(c.SaleOptOut), SharingOptOut: number(c.SharingOptOut),
+      ...(c.SubsectionType !== undefined ? { SubsectionType: number(c.SubsectionType) } : {}),
+      ...(c.GpcSegmentType !== undefined ? { GpcSegmentType: number(c.GpcSegmentType) } : {}),
+      ...(c.Gpc !== undefined ? { Gpc: typeof c.Gpc === "boolean" ? c.Gpc : null } : {}),
+    } : null;
+    const safePing = p ? { gppVersion: shortString(p.gppVersion), cmpStatus: shortString(p.cmpStatus), signalStatus: shortString(p.signalStatus),
+      applicableSections: Array.isArray(p.applicableSections) ? p.applicableSections.slice(0, 4).map(number) : null,
+      sectionList: Array.isArray(p.sectionList) ? p.sectionList.slice(0, 33).map(number) : null,
+      parsedSections: Object.fromEntries(["usca", "usnat"].map(key => [key,
+        Array.isArray(p.parsedSections?.[key]) ? p.parsedSections[key].slice(0, 3).map(safeSection) : safeSection(p.parsedSections?.[key])])) } : null;
     const acknowledgment: Array<{ cmp: string; scopeSelector: string; message: string; source: "visible_cmp_live_status" }> = [];
     const seen = new Set<Element>();
     let truncated = false;
@@ -81,10 +76,19 @@ export async function captureGpcOptOutObservation(page: Page, input: {
     const preference = (navigator as Navigator & { globalPrivacyControl?: unknown }).globalPrivacyControl;
     return { startedUrl, finalUrl: location.href, timeOrigin, finalTimeOrigin: performance.timeOrigin,
       capturedAt: Date.now(), navigatorGpc: typeof preference === "boolean" ? preference : null,
-      state, status, acknowledgment, truncated };
-  }, { scopes: KNOWN_CMP_REGISTRY.map(cmp => ({ name: cmp.canonicalName, selectors: cmp.domSelectors ?? [] })), messages: GPC_STATUS_MESSAGES });
-  const parsed = gpcUscaStateSchema.safeParse(sample.state);
-  const usca = sample.status === "observed" && parsed.success ? parsed.data : null;
+      safePing, present, callbackCount, callbackSucceeded, acknowledgment, truncated,
+      monitor: monitor ? { callbacks: monitor.callbacks, dropped: monitor.dropped, registered: monitor.listenerRegistered } : null,
+      history: monitor?.history ?? [] };
+  };
+  const argumentsJson = JSON.stringify({ scopes: KNOWN_CMP_REGISTRY.map(cmp => ({ name: cmp.canonicalName, selectors: cmp.domSelectors ?? [] })), messages: GPC_STATUS_MESSAGES, monitorKey: input.monitorKey });
+  // Keep tsx name helpers lexical; never patch the website global to run a probe.
+  const sample = await page.evaluate<ReturnType<typeof readback>>(`(() => { const __name = (fn) => fn; return (${readback.toString()})(${argumentsJson}); })()`);
+  if (sample.monitor) input.onMonitorFinished?.(sample.monitor);
+  const decoded = !sample.present ? { status: "unavailable", state: null, reason: "api_unavailable" } :
+    sample.callbackCount > 1 ? { status: "invalid", state: null, reason: "duplicate_ping_callback" } :
+    sample.callbackCount !== 1 || !sample.callbackSucceeded ? { status: "not_ready", state: null, reason: "synchronous_ping_unavailable" } : parseGpcGppPing(sample.safePing);
+  const usca = decoded.state?.sectionId === 8 ? gpcUscaStateSchema.parse(decoded.state) : null;
+  const usnat = decoded.state?.sectionId === 7 ? gpcUsNationalStateSchema.parse(decoded.state) : null;
   const limitationKeys = [];
   const after = input.binding?.documentIdentity();
   const bindingStable = before?.token && before.token === after?.token;
@@ -98,8 +102,15 @@ export async function captureGpcOptOutObservation(page: Page, input: {
       documentIdentitySource: after!.source, documentToken: after!.token } : null,
     documentStartedAtMs: Math.max(0, Math.round(sample.timeOrigin - input.scanStartedAtMs)),
     capturedAtMs: Math.max(0, sample.capturedAt - input.scanStartedAtMs), navigatorGpc: sample.navigatorGpc,
-    gppStatus: sample.status === "observed" && !usca ? "invalid" : sample.status, usca,
-    stateSha256: usca ? createHash("sha256").update(JSON.stringify(usca)).digest("hex") : null,
+    gppStatus: decoded.status, usca, usnat,
+    gppDiagnostics: { reason: decoded.reason, callbackCount: sample.callbackCount,
+      applicableSections: (sample.safePing?.applicableSections ?? []).filter((x): x is number => typeof x === "number"),
+      sectionList: (sample.safePing?.sectionList ?? []).filter((x): x is number => typeof x === "number"),
+    },
+    acknowledgmentCaptureComplete: !sample.truncated,
+    stateSha256: (usca ?? usnat) ? createHash("sha256").update(JSON.stringify(usca ?? usnat)).digest("hex") : null,
+    stateTransitions: sample.history.map((row: any) => ({ observedAtMs: Math.max(0, row.at - input.scanStartedAtMs),
+      status: row.status, state: row.state, stateSha256: row.state ? createHash("sha256").update(JSON.stringify(row.state)).digest("hex") : null })),
     acknowledgment: sample.acknowledgment, limitationKeys,
   });
 }

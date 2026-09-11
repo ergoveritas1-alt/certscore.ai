@@ -1,0 +1,574 @@
+{
+  "auditedAt": "2026-09-11T04:52:55.362Z",
+  "batches": [
+    "heldout-02",
+    "heldout-03"
+  ],
+  "sources": [
+    {
+      "batch": "heldout-02",
+      "manifestSha256": "2d6ec8fc486d24d00e6bac8be3f4d4b97619f03a0ecd49a3b2a6c0d87d349379",
+      "resultsSha256": "31355daf59f4ae939962f78a419bdbc956d60bb8d585984f63d21c840273e5b5",
+      "rowsSha256": "926cb4c61376ea1317fd66267b1fa72d6c8731f4a11ba1a29d7915886711a5b3"
+    },
+    {
+      "batch": "heldout-03",
+      "manifestSha256": "348e6650752056cea13d91c9d6235f92c696caa4d76024272bf02403c6f35b2e",
+      "resultsSha256": "5b42c671a704ead948b75aeccb6dcee6842026d30ce8aa81cc7e7bb8be5ff261",
+      "rowsSha256": "dd8471b788053ac495c56fa0577fa24c333b4cd640c16bd4dea85ed4387be473"
+    }
+  ],
+  "implementationHashes": {
+    "scripts/run-gpc-observation-local.ts": "65c56fce93c05d14e66093cec66f9714d7efd0addee09e249a6a3c2ca4c17dc1",
+    "scripts/lib/gpc-observation-completion-gate.ts": "3964d63339ceb7c2b2f68c62bde653f55a08d243afe7ea504d40b36f46d9da9a",
+    "packages/certscore-scan-core/src/gpc-observation-completion.ts": "78d725e500e12446fe5e7744e505fd213b32985d054cb9c282257a50535b5854",
+    "packages/certscore-scan-core/src/gpc-observation-session.ts": "a8fb77ca85f31c8aed27f2d00fde1dc60589cb5d550ae89cca8cc878fb26ffc3",
+    "packages/certscore-scan-core/src/gpc-semantic-monitor.ts": "bc7c2a26ffdce42157cf20749d85c8b2d0a81398fe84ed5b0fd0f14170513389",
+    "packages/certscore-scan-core/src/gpc-gpp-parser.ts": "01fb5dd60ccb018ea725221f3db56fbf4b914530a79ee7472db0f8abb927cbd3",
+    "packages/certscore-scan-core/src/gpc-opt-out-capture.ts": "405ec3fe6a6defbb1b5bdec4ee6035179409e58bd20a30451cb81246fbf4dd1d",
+    "packages/certscore-scan-core/src/index.ts": "3d4857225138348fdd54bac685f496c55956bcad81095aae82ff32f010ecdaa0",
+    "packages/certscore-scan-core/src/scanners/pre-consent-runtime-scanner.ts": "58ed31f5b47f04e77172f0a2df0a7a17ff426b32bf24f5cf64e3014edbaa600c",
+    "packages/certscore-contracts/src/gpc-opt-out-prototype.ts": "9dc1b115cff438bdac2fd9270fc81d5a1d8609fcb80f23d75b336516a2249396",
+    "packages/certscore-contracts/src/gpc-observation-session.ts": "8c5e1a94e54656f477bb419b5174c8d8b35e0166bc82b1b1b546ad273dd334d2",
+    "packages/certscore-contracts/src/gpc-observation.ts": "b34d50d61b04779fa9f8e73e093d713ed030d7a4e4300e25fc19c84fd7301eb8",
+    "packages/certscore-contracts/src/index.ts": "1ceee50c084b1357e2aba644314eb9156627ceb3d09de9f8b4ab8572b8ff6628"
+  },
+  "gate": {
+    "diagnosticOnly": true,
+    "productionEligible": false,
+    "targetRate": 0.95,
+    "minimumRepresentativeRows": 100,
+    "confidenceLevel": 0.95,
+    "allSubmittedCount": 236,
+    "uniqueSubmittedCount": 236,
+    "duplicateScanIds": [],
+    "excludedNonRepresentativeCount": 37,
+    "excludedCanaryCount": 0,
+    "excludedUnverifiedCohortCount": 0,
+    "accessCounts": {
+      "representative": 197,
+      "nonRepresentative": 37,
+      "unknown": 2
+    },
+    "includedNonRepresentativeFailureCount": 0,
+    "representativeDenominator": 199,
+    "completedRepresentativeCount": 191,
+    "fullContextVerifiedCount": 103,
+    "fullContextRate": 0.5175879396984925,
+    "completionRate": 0.9597989949748744,
+    "confidenceInterval": {
+      "lower": 0.9226904289011894,
+      "upper": 0.9794913720706037
+    },
+    "pointEstimateAboveTarget": true,
+    "confidenceBoundAboveTarget": false,
+    "targetAchieved": false,
+    "allAttemptCompletedCount": 191,
+    "allAttemptCompletionRate": 0.809322033898305,
+    "failedRepresentativeRows": [
+      {
+        "scanId": "gpc-heldout2-20260911-47",
+        "reasons": [
+          "semantic_probe_not_ready",
+          "semantic_probe_not_ended"
+        ]
+      },
+      {
+        "scanId": "gpc-heldout3-20260911-10",
+        "reasons": [
+          "request_capture_not_ended"
+        ]
+      },
+      {
+        "scanId": "gpc-heldout3-20260911-18",
+        "reasons": [
+          "semantic_probe_not_ready",
+          "semantic_probe_not_ended"
+        ]
+      },
+      {
+        "scanId": "gpc-heldout3-20260911-19",
+        "reasons": [
+          "semantic_probe_incomplete",
+          "semantic_probe_not_ended"
+        ]
+      },
+      {
+        "scanId": "gpc-heldout3-20260911-43",
+        "reasons": [
+          "representative_access_not_verified",
+          "main_document_binding_unverified",
+          "http_delivery_not_retained",
+          "main_navigator_readback_not_retained",
+          "semantic_probe_incomplete",
+          "semantic_probe_not_started",
+          "semantic_probe_not_ended",
+          "request_capture_not_started",
+          "request_capture_not_ended",
+          "request_capture_drops_or_unknown",
+          "observed_facts_not_direct"
+        ]
+      },
+      {
+        "scanId": "gpc-heldout3-20260911-50",
+        "reasons": [
+          "request_capture_not_ended"
+        ]
+      },
+      {
+        "scanId": "gpc-heldout3-20260911-56",
+        "reasons": [
+          "request_capture_not_ended"
+        ]
+      },
+      {
+        "scanId": "gpc-heldout3-20260911-105",
+        "reasons": [
+          "representative_access_not_verified",
+          "main_document_binding_unverified",
+          "http_delivery_not_retained",
+          "main_navigator_readback_not_retained",
+          "semantic_probe_incomplete",
+          "semantic_probe_not_started",
+          "semantic_probe_not_ended",
+          "request_capture_not_started",
+          "request_capture_not_ended",
+          "request_capture_drops_or_unknown",
+          "observed_facts_not_direct"
+        ]
+      }
+    ],
+    "gateReasons": [
+      "lower_confidence_bound_not_above_target"
+    ],
+    "recommendation": "Do not treat this as a completion pass; increase the preregistered representative sample or fix the listed evidence gates before review."
+  },
+  "evidenceAudit": {
+    "verifiedPairs": 226,
+    "completedSessionsWithOriginalPointers": 219,
+    "missingOriginalPointers": [
+      {
+        "scanId": "gpc-heldout2-20260911-32",
+        "url": "https://sgvps.net/",
+        "access": "non_representative"
+      },
+      {
+        "scanId": "gpc-heldout2-20260911-59",
+        "url": "https://csccloud.in/",
+        "access": "non_representative"
+      },
+      {
+        "scanId": "gpc-heldout3-20260911-7",
+        "url": "https://bngf.ru/",
+        "access": "non_representative"
+      },
+      {
+        "scanId": "gpc-heldout3-20260911-37",
+        "url": "https://www.thehartford.com/",
+        "access": "non_representative"
+      },
+      {
+        "scanId": "gpc-heldout3-20260911-43",
+        "url": "https://swatch.com/",
+        "access": "unknown"
+      },
+      {
+        "scanId": "gpc-heldout3-20260911-87",
+        "url": "https://wbx2.com/",
+        "access": "non_representative"
+      },
+      {
+        "scanId": "gpc-heldout3-20260911-93",
+        "url": "https://csc.gov.in/",
+        "access": "non_representative"
+      },
+      {
+        "scanId": "gpc-heldout3-20260911-105",
+        "url": "https://askona.ru/",
+        "access": "unknown"
+      },
+      {
+        "scanId": "gpc-heldout3-20260911-110",
+        "url": "https://accuweather.com/",
+        "access": "non_representative"
+      },
+      {
+        "scanId": "gpc-heldout3-20260911-115",
+        "url": "https://sophos.com/",
+        "access": "non_representative"
+      }
+    ],
+    "sensitivityIncludingMissingPointerAccessAsFailures": {
+      "diagnosticOnly": true,
+      "productionEligible": false,
+      "targetRate": 0.95,
+      "minimumRepresentativeRows": 100,
+      "confidenceLevel": 0.95,
+      "allSubmittedCount": 236,
+      "uniqueSubmittedCount": 236,
+      "duplicateScanIds": [],
+      "excludedNonRepresentativeCount": 29,
+      "excludedCanaryCount": 0,
+      "excludedUnverifiedCohortCount": 0,
+      "accessCounts": {
+        "representative": 197,
+        "nonRepresentative": 37,
+        "unknown": 2
+      },
+      "includedNonRepresentativeFailureCount": 8,
+      "representativeDenominator": 207,
+      "completedRepresentativeCount": 191,
+      "fullContextVerifiedCount": 103,
+      "fullContextRate": 0.4975845410628019,
+      "completionRate": 0.9227053140096618,
+      "confidenceInterval": {
+        "lower": 0.8781416570431886,
+        "upper": 0.9518653245012505
+      },
+      "pointEstimateAboveTarget": false,
+      "confidenceBoundAboveTarget": false,
+      "targetAchieved": false,
+      "allAttemptCompletedCount": 191,
+      "allAttemptCompletionRate": 0.809322033898305,
+      "failedRepresentativeRows": [
+        {
+          "scanId": "gpc-heldout2-20260911-32",
+          "reasons": [
+            "representative_access_not_verified",
+            "retained_artifact_unverified",
+            "main_document_binding_unverified",
+            "http_delivery_not_retained",
+            "main_navigator_readback_not_retained",
+            "semantic_probe_incomplete",
+            "semantic_probe_not_started",
+            "semantic_probe_not_ended",
+            "request_capture_not_started",
+            "request_capture_not_ended",
+            "request_capture_drops_or_unknown",
+            "observed_facts_not_direct"
+          ]
+        },
+        {
+          "scanId": "gpc-heldout2-20260911-47",
+          "reasons": [
+            "semantic_probe_not_ready",
+            "semantic_probe_not_ended"
+          ]
+        },
+        {
+          "scanId": "gpc-heldout2-20260911-59",
+          "reasons": [
+            "representative_access_not_verified",
+            "retained_artifact_unverified",
+            "main_document_binding_unverified",
+            "http_delivery_not_retained",
+            "main_navigator_readback_not_retained",
+            "semantic_probe_incomplete",
+            "semantic_probe_not_started",
+            "semantic_probe_not_ended",
+            "request_capture_not_started",
+            "request_capture_not_ended",
+            "request_capture_drops_or_unknown",
+            "observed_facts_not_direct"
+          ]
+        },
+        {
+          "scanId": "gpc-heldout3-20260911-7",
+          "reasons": [
+            "representative_access_not_verified",
+            "retained_artifact_unverified",
+            "main_document_binding_unverified",
+            "http_delivery_not_retained",
+            "main_navigator_readback_not_retained",
+            "semantic_probe_incomplete",
+            "semantic_probe_not_started",
+            "semantic_probe_not_ended",
+            "request_capture_not_started",
+            "request_capture_not_ended",
+            "request_capture_drops_or_unknown",
+            "observed_facts_not_direct"
+          ]
+        },
+        {
+          "scanId": "gpc-heldout3-20260911-10",
+          "reasons": [
+            "request_capture_not_ended"
+          ]
+        },
+        {
+          "scanId": "gpc-heldout3-20260911-18",
+          "reasons": [
+            "semantic_probe_not_ready",
+            "semantic_probe_not_ended"
+          ]
+        },
+        {
+          "scanId": "gpc-heldout3-20260911-19",
+          "reasons": [
+            "semantic_probe_incomplete",
+            "semantic_probe_not_ended"
+          ]
+        },
+        {
+          "scanId": "gpc-heldout3-20260911-37",
+          "reasons": [
+            "representative_access_not_verified",
+            "retained_artifact_unverified",
+            "main_document_binding_unverified",
+            "http_delivery_not_retained",
+            "main_navigator_readback_not_retained",
+            "semantic_probe_incomplete",
+            "semantic_probe_not_started",
+            "semantic_probe_not_ended",
+            "request_capture_not_started",
+            "request_capture_not_ended",
+            "request_capture_drops_or_unknown",
+            "observed_facts_not_direct"
+          ]
+        },
+        {
+          "scanId": "gpc-heldout3-20260911-43",
+          "reasons": [
+            "representative_access_not_verified",
+            "retained_artifact_unverified",
+            "main_document_binding_unverified",
+            "http_delivery_not_retained",
+            "main_navigator_readback_not_retained",
+            "semantic_probe_incomplete",
+            "semantic_probe_not_started",
+            "semantic_probe_not_ended",
+            "request_capture_not_started",
+            "request_capture_not_ended",
+            "request_capture_drops_or_unknown",
+            "observed_facts_not_direct"
+          ]
+        },
+        {
+          "scanId": "gpc-heldout3-20260911-50",
+          "reasons": [
+            "request_capture_not_ended"
+          ]
+        },
+        {
+          "scanId": "gpc-heldout3-20260911-56",
+          "reasons": [
+            "request_capture_not_ended"
+          ]
+        },
+        {
+          "scanId": "gpc-heldout3-20260911-87",
+          "reasons": [
+            "representative_access_not_verified",
+            "retained_artifact_unverified",
+            "main_document_binding_unverified",
+            "http_delivery_not_retained",
+            "main_navigator_readback_not_retained",
+            "semantic_probe_incomplete",
+            "semantic_probe_not_started",
+            "semantic_probe_not_ended",
+            "request_capture_not_started",
+            "request_capture_not_ended",
+            "request_capture_drops_or_unknown",
+            "observed_facts_not_direct"
+          ]
+        },
+        {
+          "scanId": "gpc-heldout3-20260911-93",
+          "reasons": [
+            "representative_access_not_verified",
+            "retained_artifact_unverified",
+            "main_document_binding_unverified",
+            "http_delivery_not_retained",
+            "main_navigator_readback_not_retained",
+            "semantic_probe_incomplete",
+            "semantic_probe_not_started",
+            "semantic_probe_not_ended",
+            "request_capture_not_started",
+            "request_capture_not_ended",
+            "request_capture_drops_or_unknown",
+            "observed_facts_not_direct"
+          ]
+        },
+        {
+          "scanId": "gpc-heldout3-20260911-105",
+          "reasons": [
+            "representative_access_not_verified",
+            "retained_artifact_unverified",
+            "main_document_binding_unverified",
+            "http_delivery_not_retained",
+            "main_navigator_readback_not_retained",
+            "semantic_probe_incomplete",
+            "semantic_probe_not_started",
+            "semantic_probe_not_ended",
+            "request_capture_not_started",
+            "request_capture_not_ended",
+            "request_capture_drops_or_unknown",
+            "observed_facts_not_direct"
+          ]
+        },
+        {
+          "scanId": "gpc-heldout3-20260911-110",
+          "reasons": [
+            "representative_access_not_verified",
+            "retained_artifact_unverified",
+            "main_document_binding_unverified",
+            "http_delivery_not_retained",
+            "main_navigator_readback_not_retained",
+            "semantic_probe_incomplete",
+            "semantic_probe_not_started",
+            "semantic_probe_not_ended",
+            "request_capture_not_started",
+            "request_capture_not_ended",
+            "request_capture_drops_or_unknown",
+            "observed_facts_not_direct"
+          ]
+        },
+        {
+          "scanId": "gpc-heldout3-20260911-115",
+          "reasons": [
+            "representative_access_not_verified",
+            "retained_artifact_unverified",
+            "main_document_binding_unverified",
+            "http_delivery_not_retained",
+            "main_navigator_readback_not_retained",
+            "semantic_probe_incomplete",
+            "semantic_probe_not_started",
+            "semantic_probe_not_ended",
+            "request_capture_not_started",
+            "request_capture_not_ended",
+            "request_capture_drops_or_unknown",
+            "observed_facts_not_direct"
+          ]
+        }
+      ],
+      "gateReasons": [
+        "point_estimate_not_strictly_above_target",
+        "lower_confidence_bound_not_above_target"
+      ],
+      "recommendation": "Do not treat this as a completion pass; increase the preregistered representative sample or fix the listed evidence gates before review."
+    }
+  },
+  "representativeFacets": {
+    "semantic": {
+      "observed": 20,
+      "unavailable": 173,
+      "not_ready": 2,
+      "unsupported": 1,
+      "invalid": 1
+    },
+    "knownSaleSharingState": 18,
+    "acknowledgmentObserved": 0,
+    "acknowledgmentCaptureComplete": 184,
+    "requestHeaderSources": {
+      "request_snapshot": 28451,
+      "all_headers_readback": 5
+    },
+    "rowsUsingActualHeaderReadback": 0,
+    "completedRowsUsingIndependentBindingWithoutLegacySnapshot": 13
+  },
+  "sidecarBytes": {
+    "count": 226,
+    "total": 7154830,
+    "median": 24631,
+    "p95": 81408,
+    "max": 218282
+  },
+  "boundedWindowMs": {
+    "median": 4313,
+    "p95": 9042
+  },
+  "failures": [
+    {
+      "scanId": "gpc-heldout2-20260911-47",
+      "url": "https://www.xpel.com/",
+      "access": "representative",
+      "limitations": [
+        "semantic_probe_incomplete"
+      ],
+      "semantic": "not_ready"
+    },
+    {
+      "scanId": "gpc-heldout3-20260911-10",
+      "url": "https://360yield.com/",
+      "access": "representative",
+      "limitations": [
+        "bounded_request_capture_incomplete"
+      ],
+      "semantic": "unavailable"
+    },
+    {
+      "scanId": "gpc-heldout3-20260911-18",
+      "url": "https://imgsmail.ru/",
+      "access": "representative",
+      "limitations": [
+        "semantic_probe_incomplete"
+      ],
+      "semantic": "not_ready"
+    },
+    {
+      "scanId": "gpc-heldout3-20260911-19",
+      "url": "https://game8.co/",
+      "access": "representative",
+      "limitations": [
+        "semantic_probe_incomplete"
+      ],
+      "semantic": "invalid"
+    },
+    {
+      "scanId": "gpc-heldout3-20260911-43",
+      "url": "https://swatch.com/",
+      "access": "unknown",
+      "limitations": [
+        "source_unverified",
+        "document_or_semantic_binding_unverified",
+        "main_document_header_unverified",
+        "main_navigator_unverified",
+        "semantic_probe_incomplete",
+        "bounded_request_capture_incomplete"
+      ],
+      "semantic": "incomplete"
+    },
+    {
+      "scanId": "gpc-heldout3-20260911-50",
+      "url": "https://sberbank-tele.com/",
+      "access": "representative",
+      "limitations": [
+        "bounded_request_capture_incomplete"
+      ],
+      "semantic": "unavailable"
+    },
+    {
+      "scanId": "gpc-heldout3-20260911-56",
+      "url": "https://hugedomains.com/",
+      "access": "representative",
+      "limitations": [
+        "bounded_request_capture_incomplete"
+      ],
+      "semantic": "unavailable"
+    },
+    {
+      "scanId": "gpc-heldout3-20260911-105",
+      "url": "https://askona.ru/",
+      "access": "unknown",
+      "limitations": [
+        "source_unverified",
+        "document_or_semantic_binding_unverified",
+        "main_document_header_unverified",
+        "main_navigator_unverified",
+        "semantic_probe_incomplete",
+        "bounded_request_capture_incomplete"
+      ],
+      "semantic": "incomplete"
+    }
+  ],
+  "postCalibrationChange": {
+    "file": "scripts/run-gpc-observation-local.ts",
+    "sha256": "533ea6a38dcc8fb980894bdd5c98c8a3e85969afa0c02a16fa48e07bb2e4bcfa",
+    "description": "Save original canonical pointer for no-session outcomes; runtime and assessor unchanged; no historical repairs or new contacts."
+  },
+  "temporaryAccessCleanup": {
+    "tunnelClosed": true,
+    "temporarySecurityGroupRuleRemoved": true,
+    "verificationRecordedAt": "2026-09-11T04:54:32.962384+00:00"
+  }
+}

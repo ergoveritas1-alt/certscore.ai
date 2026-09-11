@@ -1,3 +1,4 @@
+import { gpcPrototypeSessionBindingSchema } from "./gpc-observation-session";
 import { FIELD_REVIEW_CATEGORIES } from "./collection-field-review";
 export * from "./collection-field-review";
 import { siteMetadataSchema } from "./site-metadata";
@@ -61,6 +62,7 @@ export * from "./post-accept-observation";
 export * from "./post-action-dispatch";
 export * from "./gpc-observation";
 export * from "./gpc-opt-out-prototype";
+export * from "./gpc-observation-session";
 
 const canonicalBundleGpcSignalObservationSchema: z.ZodType<import("./gpc-observation").GpcSignalObservation> = gpcSignalObservationSchema;
 const canonicalBundleGpcResponseAssessmentSchema: z.ZodType<GpcResponseAssessment> =
@@ -3379,6 +3381,7 @@ const canonicalEvidenceBundleBaseSchema = z.object({
   postRefusalLaneOutcome: postRefusalLaneOutcomeSchema.optional(),
   gpcResponseAssessment: canonicalBundleGpcResponseAssessmentSchema.optional(),
   gpcSignalObservation: canonicalBundleGpcSignalObservationSchema.optional(),
+  gpcPrototypeSessionBinding: gpcPrototypeSessionBindingSchema.optional(),
   runtimeTimeline: z.array(runtimeEvidenceEventSchema),
   networkEvents: z.array(networkEventSchema),
   networkResponseEvents: z.array(networkResponseEventSchema).default([]),

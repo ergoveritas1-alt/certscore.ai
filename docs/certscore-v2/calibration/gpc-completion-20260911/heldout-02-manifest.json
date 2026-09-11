@@ -1,0 +1,1764 @@
+{
+  "manifestVersion": "certscore.gpc_completion.heldout_calibration.1",
+  "internalOnly": true,
+  "artifactOnly": true,
+  "selectionStage": "candidate_preselection_pending_fresh_central_contact_export",
+  "purpose": "One-off second held-out GPC observation-completion calibration; no production integration and no replacement scans.",
+  "authorization": {
+    "userAuthorization": "Current user authorized pursuing >95% evidence-backed GPC observation completion on representative pages.",
+    "benchmarkApproval": "Luna benchmark approval for a second 120-domain held-out calibration cohort.",
+    "targetCount": 120,
+    "repetitionPolicy": "exactly once per target; no replacement",
+    "siteContact": "not performed by this artifact preparation"
+  },
+  "eligibilityLedger": "docs/certscore-v2/calibration/gpc-completion-20260911/heldout-02-ledger.json",
+  "publicContactPolicy": {
+    "minimumCooldownDays": 28,
+    "maximumConcurrentScansPerDomain": 1,
+    "automaticRetryAfterNoGo": false,
+    "crossRegionRetryAfterBlock": false,
+    "retireAfterRepeatedNoGo": true,
+    "eligibilityStates": [
+      "eligible",
+      "cooldown",
+      "blocked",
+      "do_not_calibrate"
+    ]
+  },
+  "sourceArtifacts": {
+    "cohort": "artifacts/gpc-prod-review-20260910/cohort.ndjson",
+    "effectiveLedger": "artifacts/gpc-completion-20260911/effective-ledger-02.json",
+    "existingRegistry": "docs/certscore-v2/scan-quality-calibration-manifest.json",
+    "firstHeldoutSelection": "artifacts/gpc-completion-20260911/heldout-prep/live-selection.json",
+    "hashes": {
+      "cohortNdjson": "85dc4f4b94c9f4b8b670455130aa0a6d32e1f4bcda244a425347859699cf3494",
+      "existingManifest": "378eed6bf313cd56ebeaa39634eeef5fa963af5c8da4af72ccf5bd6763f0953c",
+      "effectiveLedger02": "185da8383dd83460abedb6da22863b7c52fe44fc443259d4a677fac2c27929f1",
+      "firstSelection": "c09d619bd0a20e3a83e0b188fa3bf4a5540208e51c8b1469d19196d085aecc50",
+      "registrableDomainHelper": "f917cf4f9c3429b2f17e6ee3ef1e90910d71c2538a837faca329faa9db43e007",
+      "contactHoldRegistry": "43eccc94838fb6ae4fcf7c1f7f67eaebd9d2d6de4ecead0ae077f0650f857e27"
+    }
+  },
+  "sampling": {
+    "stratifyBy": "historicCmpPresence",
+    "strataTarget": {
+      "observed": 60,
+      "not_observed": 60,
+      "unknown": 0
+    },
+    "role": "unclassified",
+    "cmpInterpretation": "historicCmpPresence is a sampling stratum only and must not be used as evidence of present behavior or expected result"
+  },
+  "allStatistics": {
+    "excludeErgo": true,
+    "excludeCanaries": true,
+    "excludeContactHolds": true,
+    "excludeBlockedOrDoNotCalibrate": true,
+    "excludeFirstHeldoutCohort": true,
+    "excludeExistingRegistry": true,
+    "excludeDebugOrNonPublic": true,
+    "excludeDuplicateRegistrableDomains": true,
+    "excludeFailedOrIncomplete": false,
+    "excludeUnverifiedArtifacts": false,
+    "reportAllSubmittedSeparately": true,
+    "representativeDenominatorMustRemainPreRegistered": true,
+    "historicalCandidateEligibility": "Completed historical rows only; fresh failed/incomplete/unverified rows remain all-submitted and unknown-access denominators."
+  },
+  "centralContactPolicy": {
+    "requiredBeforeLiveSelection": true,
+    "failClosedWhenUnavailable": true,
+    "minimumCooldownDays": 28,
+    "noAutomaticRetryAfterNoGo": true
+  },
+  "requiredLanes": [
+    "consent_controls",
+    "gdpr_transparency",
+    "transport_evidence",
+    "third_party_attribution",
+    "no_go_resilience",
+    "language_inference"
+  ],
+  "targets": [
+    {
+      "url": "https://sondakika.com/",
+      "role": "unclassified",
+      "lanes": [
+        "consent_controls",
+        "gdpr_transparency",
+        "transport_evidence",
+        "third_party_attribution",
+        "no_go_resilience",
+        "language_inference"
+      ],
+      "historicCmpPresence": "observed",
+      "sourceScanId": "73ceb93c-43a0-4d96-a504-2a251a615937"
+    },
+    {
+      "url": "https://the-ozone-project.com/",
+      "role": "unclassified",
+      "lanes": [
+        "consent_controls",
+        "gdpr_transparency",
+        "transport_evidence",
+        "third_party_attribution",
+        "no_go_resilience",
+        "language_inference"
+      ],
+      "historicCmpPresence": "observed",
+      "sourceScanId": "c3369c17-c85d-4ec1-bfb0-5333f05ecae1"
+    },
+    {
+      "url": "https://mixpanel.com/",
+      "role": "unclassified",
+      "lanes": [
+        "consent_controls",
+        "gdpr_transparency",
+        "transport_evidence",
+        "third_party_attribution",
+        "no_go_resilience",
+        "language_inference"
+      ],
+      "historicCmpPresence": "observed",
+      "sourceScanId": "2c496b0a-bfd0-40c3-b208-294caef69ab1"
+    },
+    {
+      "url": "https://deccanherald.com/",
+      "role": "unclassified",
+      "lanes": [
+        "consent_controls",
+        "gdpr_transparency",
+        "transport_evidence",
+        "third_party_attribution",
+        "no_go_resilience",
+        "language_inference"
+      ],
+      "historicCmpPresence": "observed",
+      "sourceScanId": "b64f1a33-b345-41fa-83a9-4c7379d87097"
+    },
+    {
+      "url": "https://www.pferdeklinik-roentorf.de/",
+      "role": "unclassified",
+      "lanes": [
+        "consent_controls",
+        "gdpr_transparency",
+        "transport_evidence",
+        "third_party_attribution",
+        "no_go_resilience",
+        "language_inference"
+      ],
+      "historicCmpPresence": "observed",
+      "sourceScanId": "0fce2d3f-205a-483c-822a-20dbcef2c761"
+    },
+    {
+      "url": "https://mailchi.mp/",
+      "role": "unclassified",
+      "lanes": [
+        "consent_controls",
+        "gdpr_transparency",
+        "transport_evidence",
+        "third_party_attribution",
+        "no_go_resilience",
+        "language_inference"
+      ],
+      "historicCmpPresence": "observed",
+      "sourceScanId": "6c35b0be-296a-4e1c-84ed-5db9db0db290"
+    },
+    {
+      "url": "https://soraa.com/",
+      "role": "unclassified",
+      "lanes": [
+        "consent_controls",
+        "gdpr_transparency",
+        "transport_evidence",
+        "third_party_attribution",
+        "no_go_resilience",
+        "language_inference"
+      ],
+      "historicCmpPresence": "observed",
+      "sourceScanId": "d56343b9-575c-44db-a3dc-f90236157206"
+    },
+    {
+      "url": "https://trendmicro.com/",
+      "role": "unclassified",
+      "lanes": [
+        "consent_controls",
+        "gdpr_transparency",
+        "transport_evidence",
+        "third_party_attribution",
+        "no_go_resilience",
+        "language_inference"
+      ],
+      "historicCmpPresence": "observed",
+      "sourceScanId": "0e5a0924-037d-471e-b77d-9fa2e14d1e56"
+    },
+    {
+      "url": "https://tupi.fm/",
+      "role": "unclassified",
+      "lanes": [
+        "consent_controls",
+        "gdpr_transparency",
+        "transport_evidence",
+        "third_party_attribution",
+        "no_go_resilience",
+        "language_inference"
+      ],
+      "historicCmpPresence": "observed",
+      "sourceScanId": "eb500d3e-41b3-4424-9360-345090bb499f"
+    },
+    {
+      "url": "https://www.sealedair.com/",
+      "role": "unclassified",
+      "lanes": [
+        "consent_controls",
+        "gdpr_transparency",
+        "transport_evidence",
+        "third_party_attribution",
+        "no_go_resilience",
+        "language_inference"
+      ],
+      "historicCmpPresence": "observed",
+      "sourceScanId": "9f5cec00-59e3-4e8c-a92f-db623285fb8d"
+    },
+    {
+      "url": "https://sozcu.com.tr/",
+      "role": "unclassified",
+      "lanes": [
+        "consent_controls",
+        "gdpr_transparency",
+        "transport_evidence",
+        "third_party_attribution",
+        "no_go_resilience",
+        "language_inference"
+      ],
+      "historicCmpPresence": "observed",
+      "sourceScanId": "94c2c2e6-e303-4064-9c9d-1b61106f2d31"
+    },
+    {
+      "url": "https://flashscore.mobi/",
+      "role": "unclassified",
+      "lanes": [
+        "consent_controls",
+        "gdpr_transparency",
+        "transport_evidence",
+        "third_party_attribution",
+        "no_go_resilience",
+        "language_inference"
+      ],
+      "historicCmpPresence": "observed",
+      "sourceScanId": "75a6d12c-6194-4f3a-9bdd-7a3ee71172be"
+    },
+    {
+      "url": "https://webmd.com/",
+      "role": "unclassified",
+      "lanes": [
+        "consent_controls",
+        "gdpr_transparency",
+        "transport_evidence",
+        "third_party_attribution",
+        "no_go_resilience",
+        "language_inference"
+      ],
+      "historicCmpPresence": "observed",
+      "sourceScanId": "b91c73b4-b6a8-44f6-8ea5-772dad4dfa62"
+    },
+    {
+      "url": "https://vimeo.com/",
+      "role": "unclassified",
+      "lanes": [
+        "consent_controls",
+        "gdpr_transparency",
+        "transport_evidence",
+        "third_party_attribution",
+        "no_go_resilience",
+        "language_inference"
+      ],
+      "historicCmpPresence": "observed",
+      "sourceScanId": "37b63c8b-2039-48ad-8853-20029c90bfb1"
+    },
+    {
+      "url": "https://wordplays.com/",
+      "role": "unclassified",
+      "lanes": [
+        "consent_controls",
+        "gdpr_transparency",
+        "transport_evidence",
+        "third_party_attribution",
+        "no_go_resilience",
+        "language_inference"
+      ],
+      "historicCmpPresence": "observed",
+      "sourceScanId": "ea9b5ea2-d100-4920-9c48-610208cdf7d5"
+    },
+    {
+      "url": "https://mindvalley.com/",
+      "role": "unclassified",
+      "lanes": [
+        "consent_controls",
+        "gdpr_transparency",
+        "transport_evidence",
+        "third_party_attribution",
+        "no_go_resilience",
+        "language_inference"
+      ],
+      "historicCmpPresence": "observed",
+      "sourceScanId": "52e3da30-0bd3-4185-9f26-d99e9a1451da"
+    },
+    {
+      "url": "https://soax.com/",
+      "role": "unclassified",
+      "lanes": [
+        "consent_controls",
+        "gdpr_transparency",
+        "transport_evidence",
+        "third_party_attribution",
+        "no_go_resilience",
+        "language_inference"
+      ],
+      "historicCmpPresence": "observed",
+      "sourceScanId": "7c597db4-28f6-4033-9105-8ca6662a02ac"
+    },
+    {
+      "url": "https://qiita.com/",
+      "role": "unclassified",
+      "lanes": [
+        "consent_controls",
+        "gdpr_transparency",
+        "transport_evidence",
+        "third_party_attribution",
+        "no_go_resilience",
+        "language_inference"
+      ],
+      "historicCmpPresence": "observed",
+      "sourceScanId": "2c6b1089-97fd-460b-a490-9236a53e71b1"
+    },
+    {
+      "url": "https://matomo.org/",
+      "role": "unclassified",
+      "lanes": [
+        "consent_controls",
+        "gdpr_transparency",
+        "transport_evidence",
+        "third_party_attribution",
+        "no_go_resilience",
+        "language_inference"
+      ],
+      "historicCmpPresence": "observed",
+      "sourceScanId": "b1c684f5-637c-4a44-b3ac-0ea6fd7bedfc"
+    },
+    {
+      "url": "https://gaia.com/",
+      "role": "unclassified",
+      "lanes": [
+        "consent_controls",
+        "gdpr_transparency",
+        "transport_evidence",
+        "third_party_attribution",
+        "no_go_resilience",
+        "language_inference"
+      ],
+      "historicCmpPresence": "observed",
+      "sourceScanId": "4596fd0b-659d-459c-98da-25fad3dfe4a6"
+    },
+    {
+      "url": "https://supercell.com/",
+      "role": "unclassified",
+      "lanes": [
+        "consent_controls",
+        "gdpr_transparency",
+        "transport_evidence",
+        "third_party_attribution",
+        "no_go_resilience",
+        "language_inference"
+      ],
+      "historicCmpPresence": "observed",
+      "sourceScanId": "f9b181f7-85ae-4c20-a9c2-03f6cd04ddd0"
+    },
+    {
+      "url": "https://parallels.com/",
+      "role": "unclassified",
+      "lanes": [
+        "consent_controls",
+        "gdpr_transparency",
+        "transport_evidence",
+        "third_party_attribution",
+        "no_go_resilience",
+        "language_inference"
+      ],
+      "historicCmpPresence": "observed",
+      "sourceScanId": "27d4b910-c973-44b3-8f1e-05592a8bfb0e"
+    },
+    {
+      "url": "https://travelaudience.com/",
+      "role": "unclassified",
+      "lanes": [
+        "consent_controls",
+        "gdpr_transparency",
+        "transport_evidence",
+        "third_party_attribution",
+        "no_go_resilience",
+        "language_inference"
+      ],
+      "historicCmpPresence": "observed",
+      "sourceScanId": "66f03ccb-af3a-4dfc-a0c9-150135d5ffec"
+    },
+    {
+      "url": "https://zeplin.io/",
+      "role": "unclassified",
+      "lanes": [
+        "consent_controls",
+        "gdpr_transparency",
+        "transport_evidence",
+        "third_party_attribution",
+        "no_go_resilience",
+        "language_inference"
+      ],
+      "historicCmpPresence": "observed",
+      "sourceScanId": "5aa1a105-83dc-41cf-9003-5333bd01d708"
+    },
+    {
+      "url": "https://www.univarsolutions.com/",
+      "role": "unclassified",
+      "lanes": [
+        "consent_controls",
+        "gdpr_transparency",
+        "transport_evidence",
+        "third_party_attribution",
+        "no_go_resilience",
+        "language_inference"
+      ],
+      "historicCmpPresence": "observed",
+      "sourceScanId": "7a11b050-e943-4eab-a17e-d1cd44de1ca1"
+    },
+    {
+      "url": "https://haberler.com/",
+      "role": "unclassified",
+      "lanes": [
+        "consent_controls",
+        "gdpr_transparency",
+        "transport_evidence",
+        "third_party_attribution",
+        "no_go_resilience",
+        "language_inference"
+      ],
+      "historicCmpPresence": "observed",
+      "sourceScanId": "380a583a-fffe-4fe3-8025-17802fb16bd5"
+    },
+    {
+      "url": "https://playstation.com/",
+      "role": "unclassified",
+      "lanes": [
+        "consent_controls",
+        "gdpr_transparency",
+        "transport_evidence",
+        "third_party_attribution",
+        "no_go_resilience",
+        "language_inference"
+      ],
+      "historicCmpPresence": "observed",
+      "sourceScanId": "623fe2a0-5511-40d1-91f9-0ea74309beaf"
+    },
+    {
+      "url": "https://issuu.com/",
+      "role": "unclassified",
+      "lanes": [
+        "consent_controls",
+        "gdpr_transparency",
+        "transport_evidence",
+        "third_party_attribution",
+        "no_go_resilience",
+        "language_inference"
+      ],
+      "historicCmpPresence": "observed",
+      "sourceScanId": "2258e419-142b-45f2-940b-2dc7b6e06eba"
+    },
+    {
+      "url": "https://vmware.com/",
+      "role": "unclassified",
+      "lanes": [
+        "consent_controls",
+        "gdpr_transparency",
+        "transport_evidence",
+        "third_party_attribution",
+        "no_go_resilience",
+        "language_inference"
+      ],
+      "historicCmpPresence": "observed",
+      "sourceScanId": "57e0897d-a416-4a3e-9197-d7148be72385"
+    },
+    {
+      "url": "https://masrawy.com/",
+      "role": "unclassified",
+      "lanes": [
+        "consent_controls",
+        "gdpr_transparency",
+        "transport_evidence",
+        "third_party_attribution",
+        "no_go_resilience",
+        "language_inference"
+      ],
+      "historicCmpPresence": "observed",
+      "sourceScanId": "33af4702-7984-4863-868f-35842e2bb551"
+    },
+    {
+      "url": "https://siemens.com/",
+      "role": "unclassified",
+      "lanes": [
+        "consent_controls",
+        "gdpr_transparency",
+        "transport_evidence",
+        "third_party_attribution",
+        "no_go_resilience",
+        "language_inference"
+      ],
+      "historicCmpPresence": "observed",
+      "sourceScanId": "4e54ac9d-4e6c-471a-8a57-07575abe15e7"
+    },
+    {
+      "url": "https://netkeiba.com/",
+      "role": "unclassified",
+      "lanes": [
+        "consent_controls",
+        "gdpr_transparency",
+        "transport_evidence",
+        "third_party_attribution",
+        "no_go_resilience",
+        "language_inference"
+      ],
+      "historicCmpPresence": "observed",
+      "sourceScanId": "1ad2a99d-29d8-4bf6-81d4-7d380a608b85"
+    },
+    {
+      "url": "https://simple.life/",
+      "role": "unclassified",
+      "lanes": [
+        "consent_controls",
+        "gdpr_transparency",
+        "transport_evidence",
+        "third_party_attribution",
+        "no_go_resilience",
+        "language_inference"
+      ],
+      "historicCmpPresence": "observed",
+      "sourceScanId": "a9075c49-80f2-461c-a45e-a40dc3f34f1a"
+    },
+    {
+      "url": "https://branch.io/",
+      "role": "unclassified",
+      "lanes": [
+        "consent_controls",
+        "gdpr_transparency",
+        "transport_evidence",
+        "third_party_attribution",
+        "no_go_resilience",
+        "language_inference"
+      ],
+      "historicCmpPresence": "observed",
+      "sourceScanId": "cad506d7-7ee7-458e-b5f6-c06b3e31a48e"
+    },
+    {
+      "url": "https://battle.net/",
+      "role": "unclassified",
+      "lanes": [
+        "consent_controls",
+        "gdpr_transparency",
+        "transport_evidence",
+        "third_party_attribution",
+        "no_go_resilience",
+        "language_inference"
+      ],
+      "historicCmpPresence": "observed",
+      "sourceScanId": "5d0e6f91-9244-425e-ac20-9d55be2fff58"
+    },
+    {
+      "url": "https://visma.com/",
+      "role": "unclassified",
+      "lanes": [
+        "consent_controls",
+        "gdpr_transparency",
+        "transport_evidence",
+        "third_party_attribution",
+        "no_go_resilience",
+        "language_inference"
+      ],
+      "historicCmpPresence": "observed",
+      "sourceScanId": "48175e1c-3509-4d31-8425-660e938f409e"
+    },
+    {
+      "url": "https://sinsay.com/",
+      "role": "unclassified",
+      "lanes": [
+        "consent_controls",
+        "gdpr_transparency",
+        "transport_evidence",
+        "third_party_attribution",
+        "no_go_resilience",
+        "language_inference"
+      ],
+      "historicCmpPresence": "observed",
+      "sourceScanId": "772ce200-ff68-4f33-8bed-9420faa28d46"
+    },
+    {
+      "url": "https://wpguardian.com/",
+      "role": "unclassified",
+      "lanes": [
+        "consent_controls",
+        "gdpr_transparency",
+        "transport_evidence",
+        "third_party_attribution",
+        "no_go_resilience",
+        "language_inference"
+      ],
+      "historicCmpPresence": "observed",
+      "sourceScanId": "e7d03b58-8c5c-455a-9a3b-c978501b8ac1"
+    },
+    {
+      "url": "https://goal.com/",
+      "role": "unclassified",
+      "lanes": [
+        "consent_controls",
+        "gdpr_transparency",
+        "transport_evidence",
+        "third_party_attribution",
+        "no_go_resilience",
+        "language_inference"
+      ],
+      "historicCmpPresence": "observed",
+      "sourceScanId": "1db1d5b6-7d09-4178-9ee6-39c3f2e78c9c"
+    },
+    {
+      "url": "https://zeit.de/",
+      "role": "unclassified",
+      "lanes": [
+        "consent_controls",
+        "gdpr_transparency",
+        "transport_evidence",
+        "third_party_attribution",
+        "no_go_resilience",
+        "language_inference"
+      ],
+      "historicCmpPresence": "observed",
+      "sourceScanId": "160af54b-4bc6-42e6-a109-27d1d9b67698"
+    },
+    {
+      "url": "https://corsair.com/",
+      "role": "unclassified",
+      "lanes": [
+        "consent_controls",
+        "gdpr_transparency",
+        "transport_evidence",
+        "third_party_attribution",
+        "no_go_resilience",
+        "language_inference"
+      ],
+      "historicCmpPresence": "observed",
+      "sourceScanId": "f102bb63-87a1-4b99-9247-5ea6577fd5a5"
+    },
+    {
+      "url": "https://rubiconproject.com/",
+      "role": "unclassified",
+      "lanes": [
+        "consent_controls",
+        "gdpr_transparency",
+        "transport_evidence",
+        "third_party_attribution",
+        "no_go_resilience",
+        "language_inference"
+      ],
+      "historicCmpPresence": "observed",
+      "sourceScanId": "b76bf628-04da-43a2-af4d-c9d00b25d395"
+    },
+    {
+      "url": "https://lifehacker.com/",
+      "role": "unclassified",
+      "lanes": [
+        "consent_controls",
+        "gdpr_transparency",
+        "transport_evidence",
+        "third_party_attribution",
+        "no_go_resilience",
+        "language_inference"
+      ],
+      "historicCmpPresence": "observed",
+      "sourceScanId": "84f9e84f-e2a8-4312-96ea-46e7dd798147"
+    },
+    {
+      "url": "https://cricut.com/",
+      "role": "unclassified",
+      "lanes": [
+        "consent_controls",
+        "gdpr_transparency",
+        "transport_evidence",
+        "third_party_attribution",
+        "no_go_resilience",
+        "language_inference"
+      ],
+      "historicCmpPresence": "observed",
+      "sourceScanId": "443a25db-5ea4-46c8-8b06-16726358a341"
+    },
+    {
+      "url": "https://nymag.com/",
+      "role": "unclassified",
+      "lanes": [
+        "consent_controls",
+        "gdpr_transparency",
+        "transport_evidence",
+        "third_party_attribution",
+        "no_go_resilience",
+        "language_inference"
+      ],
+      "historicCmpPresence": "observed",
+      "sourceScanId": "5e0d5946-314a-4774-a950-729c326df809"
+    },
+    {
+      "url": "https://bentley.com/",
+      "role": "unclassified",
+      "lanes": [
+        "consent_controls",
+        "gdpr_transparency",
+        "transport_evidence",
+        "third_party_attribution",
+        "no_go_resilience",
+        "language_inference"
+      ],
+      "historicCmpPresence": "observed",
+      "sourceScanId": "5c709c4d-19d3-43cd-b9be-ef55d722793d"
+    },
+    {
+      "url": "https://mevblocker.io/",
+      "role": "unclassified",
+      "lanes": [
+        "consent_controls",
+        "gdpr_transparency",
+        "transport_evidence",
+        "third_party_attribution",
+        "no_go_resilience",
+        "language_inference"
+      ],
+      "historicCmpPresence": "observed",
+      "sourceScanId": "cc45dd4c-d184-4da7-96bf-2cdd64c5204b"
+    },
+    {
+      "url": "https://welcometogrowthcon.com/",
+      "role": "unclassified",
+      "lanes": [
+        "consent_controls",
+        "gdpr_transparency",
+        "transport_evidence",
+        "third_party_attribution",
+        "no_go_resilience",
+        "language_inference"
+      ],
+      "historicCmpPresence": "observed",
+      "sourceScanId": "c47247af-fba4-4555-8e5b-a869b79f3fbf"
+    },
+    {
+      "url": "https://www.teleflora.com/",
+      "role": "unclassified",
+      "lanes": [
+        "consent_controls",
+        "gdpr_transparency",
+        "transport_evidence",
+        "third_party_attribution",
+        "no_go_resilience",
+        "language_inference"
+      ],
+      "historicCmpPresence": "observed",
+      "sourceScanId": "ea3386a0-26b8-4947-a4ec-16ea41584f23"
+    },
+    {
+      "url": "https://statuspage.io/",
+      "role": "unclassified",
+      "lanes": [
+        "consent_controls",
+        "gdpr_transparency",
+        "transport_evidence",
+        "third_party_attribution",
+        "no_go_resilience",
+        "language_inference"
+      ],
+      "historicCmpPresence": "observed",
+      "sourceScanId": "c76340b6-db20-492a-b5ab-66166f2d2c61"
+    },
+    {
+      "url": "https://pluto.tv/",
+      "role": "unclassified",
+      "lanes": [
+        "consent_controls",
+        "gdpr_transparency",
+        "transport_evidence",
+        "third_party_attribution",
+        "no_go_resilience",
+        "language_inference"
+      ],
+      "historicCmpPresence": "observed",
+      "sourceScanId": "9f644e44-4604-4fdf-be9e-4a89f8759f1e"
+    },
+    {
+      "url": "https://cbsnews.com/",
+      "role": "unclassified",
+      "lanes": [
+        "consent_controls",
+        "gdpr_transparency",
+        "transport_evidence",
+        "third_party_attribution",
+        "no_go_resilience",
+        "language_inference"
+      ],
+      "historicCmpPresence": "observed",
+      "sourceScanId": "f761f210-bab8-4d1d-83d4-9676b02b0e59"
+    },
+    {
+      "url": "https://playtika.com/",
+      "role": "unclassified",
+      "lanes": [
+        "consent_controls",
+        "gdpr_transparency",
+        "transport_evidence",
+        "third_party_attribution",
+        "no_go_resilience",
+        "language_inference"
+      ],
+      "historicCmpPresence": "observed",
+      "sourceScanId": "a06ce1ae-a2dd-4e07-bd5c-e4ed5dc2b1fa"
+    },
+    {
+      "url": "https://www.roamans.com/",
+      "role": "unclassified",
+      "lanes": [
+        "consent_controls",
+        "gdpr_transparency",
+        "transport_evidence",
+        "third_party_attribution",
+        "no_go_resilience",
+        "language_inference"
+      ],
+      "historicCmpPresence": "observed",
+      "sourceScanId": "1147369c-edb9-4ee8-9455-a75c114f48f0"
+    },
+    {
+      "url": "https://www.cakebread.com/",
+      "role": "unclassified",
+      "lanes": [
+        "consent_controls",
+        "gdpr_transparency",
+        "transport_evidence",
+        "third_party_attribution",
+        "no_go_resilience",
+        "language_inference"
+      ],
+      "historicCmpPresence": "observed",
+      "sourceScanId": "7f479649-3158-4c44-a1f6-c053a1aac91b"
+    },
+    {
+      "url": "https://terra.com.br/",
+      "role": "unclassified",
+      "lanes": [
+        "consent_controls",
+        "gdpr_transparency",
+        "transport_evidence",
+        "third_party_attribution",
+        "no_go_resilience",
+        "language_inference"
+      ],
+      "historicCmpPresence": "observed",
+      "sourceScanId": "0faa645b-9bda-49de-aff0-3a9a8b61b649"
+    },
+    {
+      "url": "https://netflix.net/",
+      "role": "unclassified",
+      "lanes": [
+        "consent_controls",
+        "gdpr_transparency",
+        "transport_evidence",
+        "third_party_attribution",
+        "no_go_resilience",
+        "language_inference"
+      ],
+      "historicCmpPresence": "observed",
+      "sourceScanId": "5f1d33bf-a6e9-4384-80b1-04ed27500305"
+    },
+    {
+      "url": "https://dnsmadeeasy.com/",
+      "role": "unclassified",
+      "lanes": [
+        "consent_controls",
+        "gdpr_transparency",
+        "transport_evidence",
+        "third_party_attribution",
+        "no_go_resilience",
+        "language_inference"
+      ],
+      "historicCmpPresence": "observed",
+      "sourceScanId": "aec61b39-7834-4f2a-be65-abed5cf2655a"
+    },
+    {
+      "url": "https://cnet.com/",
+      "role": "unclassified",
+      "lanes": [
+        "consent_controls",
+        "gdpr_transparency",
+        "transport_evidence",
+        "third_party_attribution",
+        "no_go_resilience",
+        "language_inference"
+      ],
+      "historicCmpPresence": "observed",
+      "sourceScanId": "6f2d6f80-c03c-4b3b-a310-b9105ed32d93"
+    },
+    {
+      "url": "https://backblaze.com/",
+      "role": "unclassified",
+      "lanes": [
+        "consent_controls",
+        "gdpr_transparency",
+        "transport_evidence",
+        "third_party_attribution",
+        "no_go_resilience",
+        "language_inference"
+      ],
+      "historicCmpPresence": "observed",
+      "sourceScanId": "00a9f0ef-04e3-4499-9e5e-da382d27b49a"
+    },
+    {
+      "url": "https://javwow.com/",
+      "role": "unclassified",
+      "lanes": [
+        "consent_controls",
+        "gdpr_transparency",
+        "transport_evidence",
+        "third_party_attribution",
+        "no_go_resilience",
+        "language_inference"
+      ],
+      "historicCmpPresence": "not_observed",
+      "sourceScanId": "7c7240c6-708c-406a-b658-4e2c127f6bca"
+    },
+    {
+      "url": "https://sattamatkano1.me/",
+      "role": "unclassified",
+      "lanes": [
+        "consent_controls",
+        "gdpr_transparency",
+        "transport_evidence",
+        "third_party_attribution",
+        "no_go_resilience",
+        "language_inference"
+      ],
+      "historicCmpPresence": "not_observed",
+      "sourceScanId": "d2230077-6a8a-4412-ba34-95f13182bb55"
+    },
+    {
+      "url": "https://google-analytics.com/",
+      "role": "unclassified",
+      "lanes": [
+        "consent_controls",
+        "gdpr_transparency",
+        "transport_evidence",
+        "third_party_attribution",
+        "no_go_resilience",
+        "language_inference"
+      ],
+      "historicCmpPresence": "not_observed",
+      "sourceScanId": "49b5aace-d4dd-4cfb-a770-bca7987dd988"
+    },
+    {
+      "url": "https://www.xpel.com/",
+      "role": "unclassified",
+      "lanes": [
+        "consent_controls",
+        "gdpr_transparency",
+        "transport_evidence",
+        "third_party_attribution",
+        "no_go_resilience",
+        "language_inference"
+      ],
+      "historicCmpPresence": "not_observed",
+      "sourceScanId": "ee6c7c18-5a99-4bc2-b166-705b2d1ff24e"
+    },
+    {
+      "url": "https://cornell.edu/",
+      "role": "unclassified",
+      "lanes": [
+        "consent_controls",
+        "gdpr_transparency",
+        "transport_evidence",
+        "third_party_attribution",
+        "no_go_resilience",
+        "language_inference"
+      ],
+      "historicCmpPresence": "not_observed",
+      "sourceScanId": "6e5ae9ad-c406-4928-aed5-6957c49697b4"
+    },
+    {
+      "url": "https://anime-sama.to/",
+      "role": "unclassified",
+      "lanes": [
+        "consent_controls",
+        "gdpr_transparency",
+        "transport_evidence",
+        "third_party_attribution",
+        "no_go_resilience",
+        "language_inference"
+      ],
+      "historicCmpPresence": "not_observed",
+      "sourceScanId": "eff49229-ac60-4da8-be47-61794ceae0bd"
+    },
+    {
+      "url": "https://statsigapi.net/",
+      "role": "unclassified",
+      "lanes": [
+        "consent_controls",
+        "gdpr_transparency",
+        "transport_evidence",
+        "third_party_attribution",
+        "no_go_resilience",
+        "language_inference"
+      ],
+      "historicCmpPresence": "not_observed",
+      "sourceScanId": "a904ca6f-070e-4bb4-80ef-32557bbc7bb1"
+    },
+    {
+      "url": "https://amzn.to/",
+      "role": "unclassified",
+      "lanes": [
+        "consent_controls",
+        "gdpr_transparency",
+        "transport_evidence",
+        "third_party_attribution",
+        "no_go_resilience",
+        "language_inference"
+      ],
+      "historicCmpPresence": "not_observed",
+      "sourceScanId": "0bc46f35-fb25-4ee7-b17f-e48975b8fd8c"
+    },
+    {
+      "url": "https://goojara.to/",
+      "role": "unclassified",
+      "lanes": [
+        "consent_controls",
+        "gdpr_transparency",
+        "transport_evidence",
+        "third_party_attribution",
+        "no_go_resilience",
+        "language_inference"
+      ],
+      "historicCmpPresence": "not_observed",
+      "sourceScanId": "c54cf089-976c-4f3d-9629-ea91fc86f908"
+    },
+    {
+      "url": "https://csccloud.in/",
+      "role": "unclassified",
+      "lanes": [
+        "consent_controls",
+        "gdpr_transparency",
+        "transport_evidence",
+        "third_party_attribution",
+        "no_go_resilience",
+        "language_inference"
+      ],
+      "historicCmpPresence": "not_observed",
+      "sourceScanId": "2404aacc-9733-484e-92d4-a074d6b7bc6e"
+    },
+    {
+      "url": "https://ottadvisors.com/",
+      "role": "unclassified",
+      "lanes": [
+        "consent_controls",
+        "gdpr_transparency",
+        "transport_evidence",
+        "third_party_attribution",
+        "no_go_resilience",
+        "language_inference"
+      ],
+      "historicCmpPresence": "not_observed",
+      "sourceScanId": "86ba7539-50b8-456b-9f17-c5fdd5962fab"
+    },
+    {
+      "url": "https://arabx.cam/",
+      "role": "unclassified",
+      "lanes": [
+        "consent_controls",
+        "gdpr_transparency",
+        "transport_evidence",
+        "third_party_attribution",
+        "no_go_resilience",
+        "language_inference"
+      ],
+      "historicCmpPresence": "not_observed",
+      "sourceScanId": "86f22bc2-d023-4e42-bf82-ca926e956201"
+    },
+    {
+      "url": "https://2gis.com/",
+      "role": "unclassified",
+      "lanes": [
+        "consent_controls",
+        "gdpr_transparency",
+        "transport_evidence",
+        "third_party_attribution",
+        "no_go_resilience",
+        "language_inference"
+      ],
+      "historicCmpPresence": "not_observed",
+      "sourceScanId": "962ee867-7dc9-438a-8c32-c3bf269fd566"
+    },
+    {
+      "url": "https://jetbrains.com/",
+      "role": "unclassified",
+      "lanes": [
+        "consent_controls",
+        "gdpr_transparency",
+        "transport_evidence",
+        "third_party_attribution",
+        "no_go_resilience",
+        "language_inference"
+      ],
+      "historicCmpPresence": "not_observed",
+      "sourceScanId": "b521d5b3-8eac-4e15-868a-1598e73dd027"
+    },
+    {
+      "url": "https://canada.ca/",
+      "role": "unclassified",
+      "lanes": [
+        "consent_controls",
+        "gdpr_transparency",
+        "transport_evidence",
+        "third_party_attribution",
+        "no_go_resilience",
+        "language_inference"
+      ],
+      "historicCmpPresence": "not_observed",
+      "sourceScanId": "78ba881d-792a-41ab-8f6d-fcafc1e9a658"
+    },
+    {
+      "url": "https://kugou.com/",
+      "role": "unclassified",
+      "lanes": [
+        "consent_controls",
+        "gdpr_transparency",
+        "transport_evidence",
+        "third_party_attribution",
+        "no_go_resilience",
+        "language_inference"
+      ],
+      "historicCmpPresence": "not_observed",
+      "sourceScanId": "5e29992f-cda2-4ace-bad1-bb1f0e786c0e"
+    },
+    {
+      "url": "https://ltwebstatic.com/",
+      "role": "unclassified",
+      "lanes": [
+        "consent_controls",
+        "gdpr_transparency",
+        "transport_evidence",
+        "third_party_attribution",
+        "no_go_resilience",
+        "language_inference"
+      ],
+      "historicCmpPresence": "not_observed",
+      "sourceScanId": "43cff0be-de9b-4678-b7cc-3ffaaf7df754"
+    },
+    {
+      "url": "https://downloadwella.com/",
+      "role": "unclassified",
+      "lanes": [
+        "consent_controls",
+        "gdpr_transparency",
+        "transport_evidence",
+        "third_party_attribution",
+        "no_go_resilience",
+        "language_inference"
+      ],
+      "historicCmpPresence": "not_observed",
+      "sourceScanId": "f245fb13-076c-4f83-84ca-8069e3e6ee4f"
+    },
+    {
+      "url": "https://bpexch.live/",
+      "role": "unclassified",
+      "lanes": [
+        "consent_controls",
+        "gdpr_transparency",
+        "transport_evidence",
+        "third_party_attribution",
+        "no_go_resilience",
+        "language_inference"
+      ],
+      "historicCmpPresence": "not_observed",
+      "sourceScanId": "f6f8e326-5d2a-4cd3-ad07-c2a22a4198ea"
+    },
+    {
+      "url": "https://sreality.cz/",
+      "role": "unclassified",
+      "lanes": [
+        "consent_controls",
+        "gdpr_transparency",
+        "transport_evidence",
+        "third_party_attribution",
+        "no_go_resilience",
+        "language_inference"
+      ],
+      "historicCmpPresence": "not_observed",
+      "sourceScanId": "b6ed5d09-79e0-420e-97f4-d06a60af0661"
+    },
+    {
+      "url": "https://mangabuff.ru/",
+      "role": "unclassified",
+      "lanes": [
+        "consent_controls",
+        "gdpr_transparency",
+        "transport_evidence",
+        "third_party_attribution",
+        "no_go_resilience",
+        "language_inference"
+      ],
+      "historicCmpPresence": "not_observed",
+      "sourceScanId": "6ff384d2-4c2f-4eb8-bd9d-430e18a098cc"
+    },
+    {
+      "url": "https://arbada.com/",
+      "role": "unclassified",
+      "lanes": [
+        "consent_controls",
+        "gdpr_transparency",
+        "transport_evidence",
+        "third_party_attribution",
+        "no_go_resilience",
+        "language_inference"
+      ],
+      "historicCmpPresence": "not_observed",
+      "sourceScanId": "ab6c0016-0eb6-4796-befe-4e48ab200a53"
+    },
+    {
+      "url": "https://osym.gov.tr/",
+      "role": "unclassified",
+      "lanes": [
+        "consent_controls",
+        "gdpr_transparency",
+        "transport_evidence",
+        "third_party_attribution",
+        "no_go_resilience",
+        "language_inference"
+      ],
+      "historicCmpPresence": "not_observed",
+      "sourceScanId": "d8e6695f-b137-437e-a272-34108831bf44"
+    },
+    {
+      "url": "https://google.co.uk/",
+      "role": "unclassified",
+      "lanes": [
+        "consent_controls",
+        "gdpr_transparency",
+        "transport_evidence",
+        "third_party_attribution",
+        "no_go_resilience",
+        "language_inference"
+      ],
+      "historicCmpPresence": "not_observed",
+      "sourceScanId": "05a8566b-bace-4005-9ca6-f776c49ada4e"
+    },
+    {
+      "url": "https://pcmax.jp/",
+      "role": "unclassified",
+      "lanes": [
+        "consent_controls",
+        "gdpr_transparency",
+        "transport_evidence",
+        "third_party_attribution",
+        "no_go_resilience",
+        "language_inference"
+      ],
+      "historicCmpPresence": "not_observed",
+      "sourceScanId": "87213ba3-1eaf-4191-bd39-15a2602295bf"
+    },
+    {
+      "url": "https://ack.de/",
+      "role": "unclassified",
+      "lanes": [
+        "consent_controls",
+        "gdpr_transparency",
+        "transport_evidence",
+        "third_party_attribution",
+        "no_go_resilience",
+        "language_inference"
+      ],
+      "historicCmpPresence": "not_observed",
+      "sourceScanId": "c7b42ad5-e5e9-495c-88af-9c5a07121db0"
+    },
+    {
+      "url": "https://ucla.edu/",
+      "role": "unclassified",
+      "lanes": [
+        "consent_controls",
+        "gdpr_transparency",
+        "transport_evidence",
+        "third_party_attribution",
+        "no_go_resilience",
+        "language_inference"
+      ],
+      "historicCmpPresence": "not_observed",
+      "sourceScanId": "368af6ce-082f-4be4-849f-ab1fc00c935f"
+    },
+    {
+      "url": "https://sportschau.de/",
+      "role": "unclassified",
+      "lanes": [
+        "consent_controls",
+        "gdpr_transparency",
+        "transport_evidence",
+        "third_party_attribution",
+        "no_go_resilience",
+        "language_inference"
+      ],
+      "historicCmpPresence": "not_observed",
+      "sourceScanId": "22e22d7f-da23-4099-816b-a74d132e0965"
+    },
+    {
+      "url": "https://jquery.com/",
+      "role": "unclassified",
+      "lanes": [
+        "consent_controls",
+        "gdpr_transparency",
+        "transport_evidence",
+        "third_party_attribution",
+        "no_go_resilience",
+        "language_inference"
+      ],
+      "historicCmpPresence": "not_observed",
+      "sourceScanId": "f678df81-ca75-4a48-96ba-0950d19a0c18"
+    },
+    {
+      "url": "https://funpay.com/",
+      "role": "unclassified",
+      "lanes": [
+        "consent_controls",
+        "gdpr_transparency",
+        "transport_evidence",
+        "third_party_attribution",
+        "no_go_resilience",
+        "language_inference"
+      ],
+      "historicCmpPresence": "not_observed",
+      "sourceScanId": "7d723ad5-d043-4c58-ad85-3388ed351afb"
+    },
+    {
+      "url": "https://snaptik.app/",
+      "role": "unclassified",
+      "lanes": [
+        "consent_controls",
+        "gdpr_transparency",
+        "transport_evidence",
+        "third_party_attribution",
+        "no_go_resilience",
+        "language_inference"
+      ],
+      "historicCmpPresence": "not_observed",
+      "sourceScanId": "4d0755d4-ab08-4cfa-88f1-62a3f0399ea9"
+    },
+    {
+      "url": "https://dailymail.com/",
+      "role": "unclassified",
+      "lanes": [
+        "consent_controls",
+        "gdpr_transparency",
+        "transport_evidence",
+        "third_party_attribution",
+        "no_go_resilience",
+        "language_inference"
+      ],
+      "historicCmpPresence": "not_observed",
+      "sourceScanId": "ffb3607f-4d48-4e60-b66f-5022d88570a9"
+    },
+    {
+      "url": "https://www.acehardware.com/",
+      "role": "unclassified",
+      "lanes": [
+        "consent_controls",
+        "gdpr_transparency",
+        "transport_evidence",
+        "third_party_attribution",
+        "no_go_resilience",
+        "language_inference"
+      ],
+      "historicCmpPresence": "not_observed",
+      "sourceScanId": "705fc233-6b41-4b37-983a-a4a7c054675a"
+    },
+    {
+      "url": "https://publicnode.com/",
+      "role": "unclassified",
+      "lanes": [
+        "consent_controls",
+        "gdpr_transparency",
+        "transport_evidence",
+        "third_party_attribution",
+        "no_go_resilience",
+        "language_inference"
+      ],
+      "historicCmpPresence": "not_observed",
+      "sourceScanId": "2ac6f05b-7b27-4742-a220-d82e74550c59"
+    },
+    {
+      "url": "https://leroymerlin.es/",
+      "role": "unclassified",
+      "lanes": [
+        "consent_controls",
+        "gdpr_transparency",
+        "transport_evidence",
+        "third_party_attribution",
+        "no_go_resilience",
+        "language_inference"
+      ],
+      "historicCmpPresence": "not_observed",
+      "sourceScanId": "13de119d-166e-411a-ab25-65d51c5aa580"
+    },
+    {
+      "url": "https://ukdevilz.com/",
+      "role": "unclassified",
+      "lanes": [
+        "consent_controls",
+        "gdpr_transparency",
+        "transport_evidence",
+        "third_party_attribution",
+        "no_go_resilience",
+        "language_inference"
+      ],
+      "historicCmpPresence": "not_observed",
+      "sourceScanId": "746116ee-b497-48fb-9fbf-e0369dac5aef"
+    },
+    {
+      "url": "https://tobesure.com/",
+      "role": "unclassified",
+      "lanes": [
+        "consent_controls",
+        "gdpr_transparency",
+        "transport_evidence",
+        "third_party_attribution",
+        "no_go_resilience",
+        "language_inference"
+      ],
+      "historicCmpPresence": "not_observed",
+      "sourceScanId": "2e0ffc55-0b41-47e5-9938-a62e11cc5f66"
+    },
+    {
+      "url": "https://www.elotouch.com/",
+      "role": "unclassified",
+      "lanes": [
+        "consent_controls",
+        "gdpr_transparency",
+        "transport_evidence",
+        "third_party_attribution",
+        "no_go_resilience",
+        "language_inference"
+      ],
+      "historicCmpPresence": "not_observed",
+      "sourceScanId": "af775517-ef59-4900-9e63-b48c5b923d4d"
+    },
+    {
+      "url": "https://sgvps.net/",
+      "role": "unclassified",
+      "lanes": [
+        "consent_controls",
+        "gdpr_transparency",
+        "transport_evidence",
+        "third_party_attribution",
+        "no_go_resilience",
+        "language_inference"
+      ],
+      "historicCmpPresence": "not_observed",
+      "sourceScanId": "3c6584dc-dc87-4c55-a9fd-0b13dc6a8d74"
+    },
+    {
+      "url": "https://croxyproxy.com/",
+      "role": "unclassified",
+      "lanes": [
+        "consent_controls",
+        "gdpr_transparency",
+        "transport_evidence",
+        "third_party_attribution",
+        "no_go_resilience",
+        "language_inference"
+      ],
+      "historicCmpPresence": "not_observed",
+      "sourceScanId": "1dad1133-2d73-4fa0-82cd-dd338c920a7c"
+    },
+    {
+      "url": "https://checkpoint.com/",
+      "role": "unclassified",
+      "lanes": [
+        "consent_controls",
+        "gdpr_transparency",
+        "transport_evidence",
+        "third_party_attribution",
+        "no_go_resilience",
+        "language_inference"
+      ],
+      "historicCmpPresence": "not_observed",
+      "sourceScanId": "4c98b5b4-4418-4bb6-91cc-b723c5fe9a30"
+    },
+    {
+      "url": "https://pub.network/",
+      "role": "unclassified",
+      "lanes": [
+        "consent_controls",
+        "gdpr_transparency",
+        "transport_evidence",
+        "third_party_attribution",
+        "no_go_resilience",
+        "language_inference"
+      ],
+      "historicCmpPresence": "not_observed",
+      "sourceScanId": "779ae198-8620-41d3-ae61-e796261113d3"
+    },
+    {
+      "url": "https://kohls.com/",
+      "role": "unclassified",
+      "lanes": [
+        "consent_controls",
+        "gdpr_transparency",
+        "transport_evidence",
+        "third_party_attribution",
+        "no_go_resilience",
+        "language_inference"
+      ],
+      "historicCmpPresence": "not_observed",
+      "sourceScanId": "84873aca-fe8e-4429-8b05-e488d0a5a0ff"
+    },
+    {
+      "url": "https://latimes.com/",
+      "role": "unclassified",
+      "lanes": [
+        "consent_controls",
+        "gdpr_transparency",
+        "transport_evidence",
+        "third_party_attribution",
+        "no_go_resilience",
+        "language_inference"
+      ],
+      "historicCmpPresence": "not_observed",
+      "sourceScanId": "25a98c23-9974-467f-9f1e-d128f0b9285b"
+    },
+    {
+      "url": "https://va.gov/",
+      "role": "unclassified",
+      "lanes": [
+        "consent_controls",
+        "gdpr_transparency",
+        "transport_evidence",
+        "third_party_attribution",
+        "no_go_resilience",
+        "language_inference"
+      ],
+      "historicCmpPresence": "not_observed",
+      "sourceScanId": "4e322835-5638-4ae7-ab56-fb89261fc788"
+    },
+    {
+      "url": "https://btloader.com/",
+      "role": "unclassified",
+      "lanes": [
+        "consent_controls",
+        "gdpr_transparency",
+        "transport_evidence",
+        "third_party_attribution",
+        "no_go_resilience",
+        "language_inference"
+      ],
+      "historicCmpPresence": "not_observed",
+      "sourceScanId": "3f19a015-87ec-4e1f-bf6e-28ea4ef93253"
+    },
+    {
+      "url": "https://dmitriy-mevedev-tor.top/",
+      "role": "unclassified",
+      "lanes": [
+        "consent_controls",
+        "gdpr_transparency",
+        "transport_evidence",
+        "third_party_attribution",
+        "no_go_resilience",
+        "language_inference"
+      ],
+      "historicCmpPresence": "not_observed",
+      "sourceScanId": "390e7387-fe53-4180-b79f-dd6fa75382aa"
+    },
+    {
+      "url": "https://dzen.ru/",
+      "role": "unclassified",
+      "lanes": [
+        "consent_controls",
+        "gdpr_transparency",
+        "transport_evidence",
+        "third_party_attribution",
+        "no_go_resilience",
+        "language_inference"
+      ],
+      "historicCmpPresence": "not_observed",
+      "sourceScanId": "6cac1597-5c25-400f-844e-e609606f548e"
+    },
+    {
+      "url": "https://mozilla.com/",
+      "role": "unclassified",
+      "lanes": [
+        "consent_controls",
+        "gdpr_transparency",
+        "transport_evidence",
+        "third_party_attribution",
+        "no_go_resilience",
+        "language_inference"
+      ],
+      "historicCmpPresence": "not_observed",
+      "sourceScanId": "5c6dfc79-144c-4683-8fec-9fa00f011a0e"
+    },
+    {
+      "url": "https://glerum.nl/",
+      "role": "unclassified",
+      "lanes": [
+        "consent_controls",
+        "gdpr_transparency",
+        "transport_evidence",
+        "third_party_attribution",
+        "no_go_resilience",
+        "language_inference"
+      ],
+      "historicCmpPresence": "not_observed",
+      "sourceScanId": "02e9cd42-1c38-4fbc-baca-134feffd3f67"
+    },
+    {
+      "url": "https://linode.com/",
+      "role": "unclassified",
+      "lanes": [
+        "consent_controls",
+        "gdpr_transparency",
+        "transport_evidence",
+        "third_party_attribution",
+        "no_go_resilience",
+        "language_inference"
+      ],
+      "historicCmpPresence": "not_observed",
+      "sourceScanId": "ea881b61-7f89-4f3e-ab7a-55421a384439"
+    },
+    {
+      "url": "https://routedlogic.net/",
+      "role": "unclassified",
+      "lanes": [
+        "consent_controls",
+        "gdpr_transparency",
+        "transport_evidence",
+        "third_party_attribution",
+        "no_go_resilience",
+        "language_inference"
+      ],
+      "historicCmpPresence": "not_observed",
+      "sourceScanId": "aea7aec6-fe78-44b2-bad0-c7c358c28e33"
+    },
+    {
+      "url": "https://inmobi.com/",
+      "role": "unclassified",
+      "lanes": [
+        "consent_controls",
+        "gdpr_transparency",
+        "transport_evidence",
+        "third_party_attribution",
+        "no_go_resilience",
+        "language_inference"
+      ],
+      "historicCmpPresence": "not_observed",
+      "sourceScanId": "2929132b-d625-4cb9-aea2-5996a2aa26ab"
+    },
+    {
+      "url": "https://kwai.com/",
+      "role": "unclassified",
+      "lanes": [
+        "consent_controls",
+        "gdpr_transparency",
+        "transport_evidence",
+        "third_party_attribution",
+        "no_go_resilience",
+        "language_inference"
+      ],
+      "historicCmpPresence": "not_observed",
+      "sourceScanId": "81bb9cb9-3668-4b4d-8f0a-1503b29887bf"
+    },
+    {
+      "url": "https://mit.edu/",
+      "role": "unclassified",
+      "lanes": [
+        "consent_controls",
+        "gdpr_transparency",
+        "transport_evidence",
+        "third_party_attribution",
+        "no_go_resilience",
+        "language_inference"
+      ],
+      "historicCmpPresence": "not_observed",
+      "sourceScanId": "9fea1e31-46d3-4d73-bf6c-de5a38da7a7c"
+    },
+    {
+      "url": "https://www.gov.uk/",
+      "role": "unclassified",
+      "lanes": [
+        "consent_controls",
+        "gdpr_transparency",
+        "transport_evidence",
+        "third_party_attribution",
+        "no_go_resilience",
+        "language_inference"
+      ],
+      "historicCmpPresence": "not_observed",
+      "sourceScanId": "99202b43-1246-424a-a23d-fa6ac1559c44"
+    },
+    {
+      "url": "https://vdy.to/",
+      "role": "unclassified",
+      "lanes": [
+        "consent_controls",
+        "gdpr_transparency",
+        "transport_evidence",
+        "third_party_attribution",
+        "no_go_resilience",
+        "language_inference"
+      ],
+      "historicCmpPresence": "not_observed",
+      "sourceScanId": "297133e5-55a3-4e65-a1e5-f9732b39cac2"
+    },
+    {
+      "url": "https://yahoo.com/",
+      "role": "unclassified",
+      "lanes": [
+        "consent_controls",
+        "gdpr_transparency",
+        "transport_evidence",
+        "third_party_attribution",
+        "no_go_resilience",
+        "language_inference"
+      ],
+      "historicCmpPresence": "not_observed",
+      "sourceScanId": "1b7b5306-132c-41ae-b7fb-a423866daea5"
+    },
+    {
+      "url": "https://moneycontrol.com/",
+      "role": "unclassified",
+      "lanes": [
+        "consent_controls",
+        "gdpr_transparency",
+        "transport_evidence",
+        "third_party_attribution",
+        "no_go_resilience",
+        "language_inference"
+      ],
+      "historicCmpPresence": "not_observed",
+      "sourceScanId": "6c51579a-00c4-4e0c-929e-302379d9a7b2"
+    },
+    {
+      "url": "https://unrulymedia.com/",
+      "role": "unclassified",
+      "lanes": [
+        "consent_controls",
+        "gdpr_transparency",
+        "transport_evidence",
+        "third_party_attribution",
+        "no_go_resilience",
+        "language_inference"
+      ],
+      "historicCmpPresence": "not_observed",
+      "sourceScanId": "c499a766-ac7e-44d4-b7f6-1b8fd9aa82bc"
+    }
+  ],
+  "generatedAt": "2026-09-11T04:15:27.406757+00:00"
+}

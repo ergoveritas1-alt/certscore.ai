@@ -1,0 +1,1246 @@
+{
+  "entries": {
+    "https://sondakika.com/": {
+      "consecutiveNoGoCount": 0,
+      "cooldownUntil": "2026-10-09T04:31:27.525Z",
+      "lastContactAt": "2026-09-11T04:31:27.525Z",
+      "lastContactSource": "calibration",
+      "lastNoGoReasons": [],
+      "lastOutcome": "completed",
+      "state": "cooldown",
+      "url": "https://sondakika.com/"
+    },
+    "https://the-ozone-project.com/": {
+      "consecutiveNoGoCount": 0,
+      "cooldownUntil": "2026-10-09T04:34:31.523Z",
+      "lastContactAt": "2026-09-11T04:34:31.523Z",
+      "lastContactSource": "calibration",
+      "lastNoGoReasons": [],
+      "lastOutcome": "completed",
+      "state": "cooldown",
+      "url": "https://the-ozone-project.com/"
+    },
+    "https://mixpanel.com/": {
+      "consecutiveNoGoCount": 0,
+      "cooldownUntil": "2026-10-09T04:30:19.605Z",
+      "lastContactAt": "2026-09-11T04:30:19.605Z",
+      "lastContactSource": "calibration",
+      "lastNoGoReasons": [],
+      "lastOutcome": "completed",
+      "state": "cooldown",
+      "url": "https://mixpanel.com/"
+    },
+    "https://deccanherald.com/": {
+      "consecutiveNoGoCount": 0,
+      "cooldownUntil": "2026-10-09T04:33:21.630Z",
+      "lastContactAt": "2026-09-11T04:33:21.630Z",
+      "lastContactSource": "calibration",
+      "lastNoGoReasons": [],
+      "lastOutcome": "completed",
+      "state": "cooldown",
+      "url": "https://deccanherald.com/"
+    },
+    "https://www.pferdeklinik-roentorf.de/": {
+      "consecutiveNoGoCount": 0,
+      "cooldownUntil": "2026-10-09T04:35:21.715Z",
+      "lastContactAt": "2026-09-11T04:35:21.715Z",
+      "lastContactSource": "calibration",
+      "lastNoGoReasons": [],
+      "lastOutcome": "completed",
+      "state": "cooldown",
+      "url": "https://www.pferdeklinik-roentorf.de/"
+    },
+    "https://mailchi.mp/": {
+      "consecutiveNoGoCount": 0,
+      "cooldownUntil": "2026-10-09T04:35:05.629Z",
+      "lastContactAt": "2026-09-11T04:35:05.629Z",
+      "lastContactSource": "calibration",
+      "lastNoGoReasons": [],
+      "lastOutcome": "completed",
+      "state": "cooldown",
+      "url": "https://mailchi.mp/"
+    },
+    "https://soraa.com/": {
+      "consecutiveNoGoCount": 0,
+      "cooldownUntil": "2026-10-09T04:34:06.728Z",
+      "lastContactAt": "2026-09-11T04:34:06.728Z",
+      "lastContactSource": "calibration",
+      "lastNoGoReasons": [],
+      "lastOutcome": "completed",
+      "state": "cooldown",
+      "url": "https://soraa.com/"
+    },
+    "https://trendmicro.com/": {
+      "consecutiveNoGoCount": 0,
+      "cooldownUntil": "2026-10-09T04:34:17.607Z",
+      "lastContactAt": "2026-09-11T04:34:17.607Z",
+      "lastContactSource": "calibration",
+      "lastNoGoReasons": [],
+      "lastOutcome": "completed",
+      "state": "cooldown",
+      "url": "https://trendmicro.com/"
+    },
+    "https://tupi.fm/": {
+      "consecutiveNoGoCount": 0,
+      "cooldownUntil": "2026-10-09T04:33:42.502Z",
+      "lastContactAt": "2026-09-11T04:33:42.502Z",
+      "lastContactSource": "calibration",
+      "lastNoGoReasons": [],
+      "lastOutcome": "completed",
+      "state": "cooldown",
+      "url": "https://tupi.fm/"
+    },
+    "https://www.sealedair.com/": {
+      "consecutiveNoGoCount": 0,
+      "cooldownUntil": "2026-10-09T04:34:55.527Z",
+      "lastContactAt": "2026-09-11T04:34:55.527Z",
+      "lastContactSource": "calibration",
+      "lastNoGoReasons": [],
+      "lastOutcome": "completed",
+      "state": "cooldown",
+      "url": "https://www.sealedair.com/"
+    },
+    "https://sozcu.com.tr/": {
+      "consecutiveNoGoCount": 0,
+      "cooldownUntil": "2026-10-09T04:25:40.990Z",
+      "lastContactAt": "2026-09-11T04:25:40.990Z",
+      "lastContactSource": "calibration",
+      "lastNoGoReasons": [],
+      "lastOutcome": "completed",
+      "state": "cooldown",
+      "url": "https://sozcu.com.tr/"
+    },
+    "https://flashscore.mobi/": {
+      "consecutiveNoGoCount": 0,
+      "cooldownUntil": "2026-10-09T04:34:43.618Z",
+      "lastContactAt": "2026-09-11T04:34:43.618Z",
+      "lastContactSource": "calibration",
+      "lastNoGoReasons": [],
+      "lastOutcome": "completed",
+      "state": "cooldown",
+      "url": "https://flashscore.mobi/"
+    },
+    "https://webmd.com/": {
+      "consecutiveNoGoCount": 0,
+      "cooldownUntil": "2026-10-09T04:30:30.668Z",
+      "lastContactAt": "2026-09-11T04:30:30.668Z",
+      "lastContactSource": "calibration",
+      "lastNoGoReasons": [],
+      "lastOutcome": "completed",
+      "state": "cooldown",
+      "url": "https://webmd.com/"
+    },
+    "https://vimeo.com/": {
+      "consecutiveNoGoCount": 0,
+      "cooldownUntil": "2026-10-09T04:33:05.358Z",
+      "lastContactAt": "2026-09-11T04:33:05.358Z",
+      "lastContactSource": "calibration",
+      "lastNoGoReasons": [],
+      "lastOutcome": "completed",
+      "state": "cooldown",
+      "url": "https://vimeo.com/"
+    },
+    "https://wordplays.com/": {
+      "consecutiveNoGoCount": 1,
+      "cooldownUntil": "2026-10-09T04:30:00.396Z",
+      "lastContactAt": "2026-09-11T04:30:00.396Z",
+      "lastContactSource": "calibration",
+      "lastNoGoReasons": [
+        "canonical_no_go"
+      ],
+      "lastOutcome": "no_go",
+      "state": "blocked",
+      "url": "https://wordplays.com/"
+    },
+    "https://mindvalley.com/": {
+      "consecutiveNoGoCount": 0,
+      "cooldownUntil": "2026-10-09T04:32:36.453Z",
+      "lastContactAt": "2026-09-11T04:32:36.453Z",
+      "lastContactSource": "calibration",
+      "lastNoGoReasons": [],
+      "lastOutcome": "completed",
+      "state": "cooldown",
+      "url": "https://mindvalley.com/"
+    },
+    "https://soax.com/": {
+      "consecutiveNoGoCount": 0,
+      "cooldownUntil": "2026-10-09T04:34:25.322Z",
+      "lastContactAt": "2026-09-11T04:34:25.322Z",
+      "lastContactSource": "calibration",
+      "lastNoGoReasons": [],
+      "lastOutcome": "completed",
+      "state": "cooldown",
+      "url": "https://soax.com/"
+    },
+    "https://qiita.com/": {
+      "consecutiveNoGoCount": 0,
+      "cooldownUntil": "2026-10-09T04:33:38.360Z",
+      "lastContactAt": "2026-09-11T04:33:38.360Z",
+      "lastContactSource": "calibration",
+      "lastNoGoReasons": [],
+      "lastOutcome": "completed",
+      "state": "cooldown",
+      "url": "https://qiita.com/"
+    },
+    "https://matomo.org/": {
+      "consecutiveNoGoCount": 0,
+      "cooldownUntil": "2026-10-09T04:34:22.805Z",
+      "lastContactAt": "2026-09-11T04:34:22.805Z",
+      "lastContactSource": "calibration",
+      "lastNoGoReasons": [],
+      "lastOutcome": "completed",
+      "state": "cooldown",
+      "url": "https://matomo.org/"
+    },
+    "https://gaia.com/": {
+      "consecutiveNoGoCount": 0,
+      "cooldownUntil": "2026-10-09T04:25:54.287Z",
+      "lastContactAt": "2026-09-11T04:25:54.287Z",
+      "lastContactSource": "calibration",
+      "lastNoGoReasons": [],
+      "lastOutcome": "completed",
+      "state": "cooldown",
+      "url": "https://gaia.com/"
+    },
+    "https://supercell.com/": {
+      "consecutiveNoGoCount": 0,
+      "cooldownUntil": "2026-10-09T04:34:59.027Z",
+      "lastContactAt": "2026-09-11T04:34:59.027Z",
+      "lastContactSource": "calibration",
+      "lastNoGoReasons": [],
+      "lastOutcome": "completed",
+      "state": "cooldown",
+      "url": "https://supercell.com/"
+    },
+    "https://parallels.com/": {
+      "consecutiveNoGoCount": 0,
+      "cooldownUntil": "2026-10-09T04:27:06.696Z",
+      "lastContactAt": "2026-09-11T04:27:06.696Z",
+      "lastContactSource": "calibration",
+      "lastNoGoReasons": [],
+      "lastOutcome": "completed",
+      "state": "cooldown",
+      "url": "https://parallels.com/"
+    },
+    "https://travelaudience.com/": {
+      "consecutiveNoGoCount": 0,
+      "cooldownUntil": "2026-10-09T04:26:59.041Z",
+      "lastContactAt": "2026-09-11T04:26:59.041Z",
+      "lastContactSource": "calibration",
+      "lastNoGoReasons": [],
+      "lastOutcome": "completed",
+      "state": "cooldown",
+      "url": "https://travelaudience.com/"
+    },
+    "https://zeplin.io/": {
+      "consecutiveNoGoCount": 0,
+      "cooldownUntil": "2026-10-09T04:35:15.343Z",
+      "lastContactAt": "2026-09-11T04:35:15.343Z",
+      "lastContactSource": "calibration",
+      "lastNoGoReasons": [],
+      "lastOutcome": "completed",
+      "state": "cooldown",
+      "url": "https://zeplin.io/"
+    },
+    "https://www.univarsolutions.com/": {
+      "consecutiveNoGoCount": 0,
+      "cooldownUntil": "2026-10-09T04:32:03.551Z",
+      "lastContactAt": "2026-09-11T04:32:03.551Z",
+      "lastContactSource": "calibration",
+      "lastNoGoReasons": [],
+      "lastOutcome": "completed",
+      "state": "cooldown",
+      "url": "https://www.univarsolutions.com/"
+    },
+    "https://haberler.com/": {
+      "consecutiveNoGoCount": 0,
+      "cooldownUntil": "2026-10-09T04:26:40.906Z",
+      "lastContactAt": "2026-09-11T04:26:40.906Z",
+      "lastContactSource": "calibration",
+      "lastNoGoReasons": [],
+      "lastOutcome": "completed",
+      "state": "cooldown",
+      "url": "https://haberler.com/"
+    },
+    "https://playstation.com/": {
+      "consecutiveNoGoCount": 0,
+      "cooldownUntil": "2026-10-09T04:31:18.230Z",
+      "lastContactAt": "2026-09-11T04:31:18.230Z",
+      "lastContactSource": "calibration",
+      "lastNoGoReasons": [],
+      "lastOutcome": "completed",
+      "state": "cooldown",
+      "url": "https://playstation.com/"
+    },
+    "https://issuu.com/": {
+      "consecutiveNoGoCount": 0,
+      "cooldownUntil": "2026-10-09T04:33:08.608Z",
+      "lastContactAt": "2026-09-11T04:33:08.608Z",
+      "lastContactSource": "calibration",
+      "lastNoGoReasons": [],
+      "lastOutcome": "completed",
+      "state": "cooldown",
+      "url": "https://issuu.com/"
+    },
+    "https://vmware.com/": {
+      "consecutiveNoGoCount": 0,
+      "cooldownUntil": "2026-10-09T04:26:33.519Z",
+      "lastContactAt": "2026-09-11T04:26:33.519Z",
+      "lastContactSource": "calibration",
+      "lastNoGoReasons": [],
+      "lastOutcome": "completed",
+      "state": "cooldown",
+      "url": "https://vmware.com/"
+    },
+    "https://masrawy.com/": {
+      "consecutiveNoGoCount": 1,
+      "cooldownUntil": "2026-10-09T04:32:16.884Z",
+      "lastContactAt": "2026-09-11T04:32:16.884Z",
+      "lastContactSource": "calibration",
+      "lastNoGoReasons": [
+        "canonical_no_go"
+      ],
+      "lastOutcome": "no_go",
+      "state": "blocked",
+      "url": "https://masrawy.com/"
+    },
+    "https://siemens.com/": {
+      "consecutiveNoGoCount": 0,
+      "cooldownUntil": "2026-10-09T04:26:15.480Z",
+      "lastContactAt": "2026-09-11T04:26:15.480Z",
+      "lastContactSource": "calibration",
+      "lastNoGoReasons": [],
+      "lastOutcome": "completed",
+      "state": "cooldown",
+      "url": "https://siemens.com/"
+    },
+    "https://netkeiba.com/": {
+      "consecutiveNoGoCount": 0,
+      "cooldownUntil": "2026-10-09T04:32:23.595Z",
+      "lastContactAt": "2026-09-11T04:32:23.595Z",
+      "lastContactSource": "calibration",
+      "lastNoGoReasons": [],
+      "lastOutcome": "completed",
+      "state": "cooldown",
+      "url": "https://netkeiba.com/"
+    },
+    "https://simple.life/": {
+      "consecutiveNoGoCount": 0,
+      "cooldownUntil": "2026-10-09T04:26:03.470Z",
+      "lastContactAt": "2026-09-11T04:26:03.470Z",
+      "lastContactSource": "calibration",
+      "lastNoGoReasons": [],
+      "lastOutcome": "completed",
+      "state": "cooldown",
+      "url": "https://simple.life/"
+    },
+    "https://branch.io/": {
+      "consecutiveNoGoCount": 0,
+      "cooldownUntil": "2026-10-09T04:26:17.953Z",
+      "lastContactAt": "2026-09-11T04:26:17.953Z",
+      "lastContactSource": "calibration",
+      "lastNoGoReasons": [],
+      "lastOutcome": "completed",
+      "state": "cooldown",
+      "url": "https://branch.io/"
+    },
+    "https://battle.net/": {
+      "consecutiveNoGoCount": 0,
+      "cooldownUntil": "2026-10-09T04:32:47.101Z",
+      "lastContactAt": "2026-09-11T04:32:47.101Z",
+      "lastContactSource": "calibration",
+      "lastNoGoReasons": [],
+      "lastOutcome": "completed",
+      "state": "cooldown",
+      "url": "https://battle.net/"
+    },
+    "https://visma.com/": {
+      "consecutiveNoGoCount": 0,
+      "cooldownUntil": "2026-10-09T04:25:47.911Z",
+      "lastContactAt": "2026-09-11T04:25:47.911Z",
+      "lastContactSource": "calibration",
+      "lastNoGoReasons": [],
+      "lastOutcome": "completed",
+      "state": "cooldown",
+      "url": "https://visma.com/"
+    },
+    "https://sinsay.com/": {
+      "consecutiveNoGoCount": 0,
+      "cooldownUntil": "2026-10-09T04:32:49.520Z",
+      "lastContactAt": "2026-09-11T04:32:49.520Z",
+      "lastContactSource": "calibration",
+      "lastNoGoReasons": [],
+      "lastOutcome": "completed",
+      "state": "cooldown",
+      "url": "https://sinsay.com/"
+    },
+    "https://wpguardian.com/": {
+      "consecutiveNoGoCount": 0,
+      "cooldownUntil": "2026-10-09T04:25:50.772Z",
+      "lastContactAt": "2026-09-11T04:25:50.772Z",
+      "lastContactSource": "calibration",
+      "lastNoGoReasons": [],
+      "lastOutcome": "completed",
+      "state": "cooldown",
+      "url": "https://wpguardian.com/"
+    },
+    "https://goal.com/": {
+      "consecutiveNoGoCount": 0,
+      "cooldownUntil": "2026-10-09T04:29:31.355Z",
+      "lastContactAt": "2026-09-11T04:29:31.355Z",
+      "lastContactSource": "calibration",
+      "lastNoGoReasons": [],
+      "lastOutcome": "completed",
+      "state": "cooldown",
+      "url": "https://goal.com/"
+    },
+    "https://zeit.de/": {
+      "consecutiveNoGoCount": 0,
+      "cooldownUntil": "2026-10-09T04:34:36.896Z",
+      "lastContactAt": "2026-09-11T04:34:36.896Z",
+      "lastContactSource": "calibration",
+      "lastNoGoReasons": [],
+      "lastOutcome": "completed",
+      "state": "cooldown",
+      "url": "https://zeit.de/"
+    },
+    "https://corsair.com/": {
+      "consecutiveNoGoCount": 1,
+      "cooldownUntil": "2026-10-09T04:26:10.096Z",
+      "lastContactAt": "2026-09-11T04:26:10.096Z",
+      "lastContactSource": "calibration",
+      "lastNoGoReasons": [
+        "canonical_no_go"
+      ],
+      "lastOutcome": "no_go",
+      "state": "blocked",
+      "url": "https://corsair.com/"
+    },
+    "https://rubiconproject.com/": {
+      "consecutiveNoGoCount": 0,
+      "cooldownUntil": "2026-10-09T04:28:24.258Z",
+      "lastContactAt": "2026-09-11T04:28:24.258Z",
+      "lastContactSource": "calibration",
+      "lastNoGoReasons": [],
+      "lastOutcome": "completed",
+      "state": "cooldown",
+      "url": "https://rubiconproject.com/"
+    },
+    "https://lifehacker.com/": {
+      "consecutiveNoGoCount": 0,
+      "cooldownUntil": "2026-10-09T04:28:28.119Z",
+      "lastContactAt": "2026-09-11T04:28:28.119Z",
+      "lastContactSource": "calibration",
+      "lastNoGoReasons": [],
+      "lastOutcome": "completed",
+      "state": "cooldown",
+      "url": "https://lifehacker.com/"
+    },
+    "https://cricut.com/": {
+      "consecutiveNoGoCount": 0,
+      "cooldownUntil": "2026-10-09T04:32:30.343Z",
+      "lastContactAt": "2026-09-11T04:32:30.343Z",
+      "lastContactSource": "calibration",
+      "lastNoGoReasons": [],
+      "lastOutcome": "completed",
+      "state": "cooldown",
+      "url": "https://cricut.com/"
+    },
+    "https://nymag.com/": {
+      "consecutiveNoGoCount": 0,
+      "cooldownUntil": "2026-10-09T04:33:32.123Z",
+      "lastContactAt": "2026-09-11T04:33:32.123Z",
+      "lastContactSource": "calibration",
+      "lastNoGoReasons": [],
+      "lastOutcome": "completed",
+      "state": "cooldown",
+      "url": "https://nymag.com/"
+    },
+    "https://bentley.com/": {
+      "consecutiveNoGoCount": 0,
+      "cooldownUntil": "2026-10-09T04:32:08.191Z",
+      "lastContactAt": "2026-09-11T04:32:08.191Z",
+      "lastContactSource": "calibration",
+      "lastNoGoReasons": [],
+      "lastOutcome": "completed",
+      "state": "cooldown",
+      "url": "https://bentley.com/"
+    },
+    "https://mevblocker.io/": {
+      "consecutiveNoGoCount": 0,
+      "cooldownUntil": "2026-10-09T04:26:19.762Z",
+      "lastContactAt": "2026-09-11T04:26:19.762Z",
+      "lastContactSource": "calibration",
+      "lastNoGoReasons": [],
+      "lastOutcome": "completed",
+      "state": "cooldown",
+      "url": "https://mevblocker.io/"
+    },
+    "https://welcometogrowthcon.com/": {
+      "consecutiveNoGoCount": 0,
+      "cooldownUntil": "2026-10-09T04:27:32.238Z",
+      "lastContactAt": "2026-09-11T04:27:32.238Z",
+      "lastContactSource": "calibration",
+      "lastNoGoReasons": [],
+      "lastOutcome": "completed",
+      "state": "cooldown",
+      "url": "https://welcometogrowthcon.com/"
+    },
+    "https://www.teleflora.com/": {
+      "consecutiveNoGoCount": 0,
+      "cooldownUntil": "2026-10-09T04:33:26.192Z",
+      "lastContactAt": "2026-09-11T04:33:26.192Z",
+      "lastContactSource": "calibration",
+      "lastNoGoReasons": [],
+      "lastOutcome": "completed",
+      "state": "cooldown",
+      "url": "https://www.teleflora.com/"
+    },
+    "https://statuspage.io/": {
+      "consecutiveNoGoCount": 0,
+      "cooldownUntil": "2026-10-09T04:29:03.852Z",
+      "lastContactAt": "2026-09-11T04:29:03.852Z",
+      "lastContactSource": "calibration",
+      "lastNoGoReasons": [],
+      "lastOutcome": "completed",
+      "state": "cooldown",
+      "url": "https://statuspage.io/"
+    },
+    "https://pluto.tv/": {
+      "consecutiveNoGoCount": 0,
+      "cooldownUntil": "2026-10-09T04:30:13.384Z",
+      "lastContactAt": "2026-09-11T04:30:13.384Z",
+      "lastContactSource": "calibration",
+      "lastNoGoReasons": [],
+      "lastOutcome": "completed",
+      "state": "cooldown",
+      "url": "https://pluto.tv/"
+    },
+    "https://cbsnews.com/": {
+      "consecutiveNoGoCount": 0,
+      "cooldownUntil": "2026-10-09T04:29:17.700Z",
+      "lastContactAt": "2026-09-11T04:29:17.700Z",
+      "lastContactSource": "calibration",
+      "lastNoGoReasons": [],
+      "lastOutcome": "completed",
+      "state": "cooldown",
+      "url": "https://cbsnews.com/"
+    },
+    "https://playtika.com/": {
+      "consecutiveNoGoCount": 0,
+      "cooldownUntil": "2026-10-09T04:32:40.332Z",
+      "lastContactAt": "2026-09-11T04:32:40.332Z",
+      "lastContactSource": "calibration",
+      "lastNoGoReasons": [],
+      "lastOutcome": "completed",
+      "state": "cooldown",
+      "url": "https://playtika.com/"
+    },
+    "https://www.roamans.com/": {
+      "consecutiveNoGoCount": 0,
+      "cooldownUntil": "2026-10-09T04:31:50.745Z",
+      "lastContactAt": "2026-09-11T04:31:50.745Z",
+      "lastContactSource": "calibration",
+      "lastNoGoReasons": [],
+      "lastOutcome": "completed",
+      "state": "cooldown",
+      "url": "https://www.roamans.com/"
+    },
+    "https://www.cakebread.com/": {
+      "consecutiveNoGoCount": 0,
+      "cooldownUntil": "2026-10-09T04:34:53.192Z",
+      "lastContactAt": "2026-09-11T04:34:53.192Z",
+      "lastContactSource": "calibration",
+      "lastNoGoReasons": [],
+      "lastOutcome": "completed",
+      "state": "cooldown",
+      "url": "https://www.cakebread.com/"
+    },
+    "https://terra.com.br/": {
+      "consecutiveNoGoCount": 0,
+      "cooldownUntil": "2026-10-09T04:33:15.017Z",
+      "lastContactAt": "2026-09-11T04:33:15.017Z",
+      "lastContactSource": "calibration",
+      "lastNoGoReasons": [],
+      "lastOutcome": "completed",
+      "state": "cooldown",
+      "url": "https://terra.com.br/"
+    },
+    "https://netflix.net/": {
+      "consecutiveNoGoCount": 0,
+      "cooldownUntil": "2026-10-09T04:29:42.354Z",
+      "lastContactAt": "2026-09-11T04:29:42.354Z",
+      "lastContactSource": "calibration",
+      "lastNoGoReasons": [],
+      "lastOutcome": "completed",
+      "state": "cooldown",
+      "url": "https://netflix.net/"
+    },
+    "https://dnsmadeeasy.com/": {
+      "consecutiveNoGoCount": 0,
+      "cooldownUntil": "2026-10-09T04:32:59.349Z",
+      "lastContactAt": "2026-09-11T04:32:59.349Z",
+      "lastContactSource": "calibration",
+      "lastNoGoReasons": [],
+      "lastOutcome": "completed",
+      "state": "cooldown",
+      "url": "https://dnsmadeeasy.com/"
+    },
+    "https://cnet.com/": {
+      "consecutiveNoGoCount": 0,
+      "cooldownUntil": "2026-10-09T04:25:34.569Z",
+      "lastContactAt": "2026-09-11T04:25:34.569Z",
+      "lastContactSource": "calibration",
+      "lastNoGoReasons": [],
+      "lastOutcome": "completed",
+      "state": "cooldown",
+      "url": "https://cnet.com/"
+    },
+    "https://backblaze.com/": {
+      "consecutiveNoGoCount": 0,
+      "cooldownUntil": "2026-10-09T04:27:45.433Z",
+      "lastContactAt": "2026-09-11T04:27:45.433Z",
+      "lastContactSource": "calibration",
+      "lastNoGoReasons": [],
+      "lastOutcome": "completed",
+      "state": "cooldown",
+      "url": "https://backblaze.com/"
+    },
+    "https://javwow.com/": {
+      "consecutiveNoGoCount": 0,
+      "cooldownUntil": "2026-10-09T04:26:08.409Z",
+      "lastContactAt": "2026-09-11T04:26:08.409Z",
+      "lastContactSource": "calibration",
+      "lastNoGoReasons": [],
+      "lastOutcome": "completed",
+      "state": "cooldown",
+      "url": "https://javwow.com/"
+    },
+    "https://sattamatkano1.me/": {
+      "consecutiveNoGoCount": 0,
+      "cooldownUntil": "2026-10-09T04:29:21.918Z",
+      "lastContactAt": "2026-09-11T04:29:21.918Z",
+      "lastContactSource": "calibration",
+      "lastNoGoReasons": [],
+      "lastOutcome": "completed",
+      "state": "cooldown",
+      "url": "https://sattamatkano1.me/"
+    },
+    "https://google-analytics.com/": {
+      "consecutiveNoGoCount": 0,
+      "cooldownUntil": "2026-10-09T04:28:42.911Z",
+      "lastContactAt": "2026-09-11T04:28:42.911Z",
+      "lastContactSource": "calibration",
+      "lastNoGoReasons": [],
+      "lastOutcome": "completed",
+      "state": "cooldown",
+      "url": "https://google-analytics.com/"
+    },
+    "https://www.xpel.com/": {
+      "consecutiveNoGoCount": 0,
+      "cooldownUntil": "2026-10-09T04:29:24.430Z",
+      "lastContactAt": "2026-09-11T04:29:24.430Z",
+      "lastContactSource": "calibration",
+      "lastNoGoReasons": [],
+      "lastOutcome": "completed",
+      "state": "cooldown",
+      "url": "https://www.xpel.com/"
+    },
+    "https://cornell.edu/": {
+      "consecutiveNoGoCount": 0,
+      "cooldownUntil": "2026-10-09T04:32:56.238Z",
+      "lastContactAt": "2026-09-11T04:32:56.238Z",
+      "lastContactSource": "calibration",
+      "lastNoGoReasons": [],
+      "lastOutcome": "completed",
+      "state": "cooldown",
+      "url": "https://cornell.edu/"
+    },
+    "https://anime-sama.to/": {
+      "consecutiveNoGoCount": 0,
+      "cooldownUntil": "2026-10-09T04:34:28.913Z",
+      "lastContactAt": "2026-09-11T04:34:28.913Z",
+      "lastContactSource": "calibration",
+      "lastNoGoReasons": [],
+      "lastOutcome": "completed",
+      "state": "cooldown",
+      "url": "https://anime-sama.to/"
+    },
+    "https://statsigapi.net/": {
+      "consecutiveNoGoCount": 1,
+      "cooldownUntil": "2026-10-09T04:34:19.554Z",
+      "lastContactAt": "2026-09-11T04:34:19.554Z",
+      "lastContactSource": "calibration",
+      "lastNoGoReasons": [
+        "canonical_no_go"
+      ],
+      "lastOutcome": "no_go",
+      "state": "blocked",
+      "url": "https://statsigapi.net/"
+    },
+    "https://amzn.to/": {
+      "consecutiveNoGoCount": 0,
+      "cooldownUntil": "2026-10-09T04:26:24.992Z",
+      "lastContactAt": "2026-09-11T04:26:24.992Z",
+      "lastContactSource": "calibration",
+      "lastNoGoReasons": [],
+      "lastOutcome": "completed",
+      "state": "cooldown",
+      "url": "https://amzn.to/"
+    },
+    "https://goojara.to/": {
+      "consecutiveNoGoCount": 1,
+      "cooldownUntil": "2026-10-09T04:32:15.493Z",
+      "lastContactAt": "2026-09-11T04:32:15.493Z",
+      "lastContactSource": "calibration",
+      "lastNoGoReasons": [
+        "canonical_no_go"
+      ],
+      "lastOutcome": "no_go",
+      "state": "blocked",
+      "url": "https://goojara.to/"
+    },
+    "https://csccloud.in/": {
+      "consecutiveNoGoCount": 1,
+      "cooldownUntil": "2026-10-09T04:31:11.489Z",
+      "lastContactAt": "2026-09-11T04:31:11.489Z",
+      "lastContactSource": "calibration",
+      "lastNoGoReasons": [
+        "canonical_no_go"
+      ],
+      "lastOutcome": "no_go",
+      "state": "blocked",
+      "url": "https://csccloud.in/"
+    },
+    "https://ottadvisors.com/": {
+      "consecutiveNoGoCount": 0,
+      "cooldownUntil": "2026-10-09T04:29:20.788Z",
+      "lastContactAt": "2026-09-11T04:29:20.788Z",
+      "lastContactSource": "calibration",
+      "lastNoGoReasons": [],
+      "lastOutcome": "completed",
+      "state": "cooldown",
+      "url": "https://ottadvisors.com/"
+    },
+    "https://arabx.cam/": {
+      "consecutiveNoGoCount": 0,
+      "cooldownUntil": "2026-10-09T04:26:45.991Z",
+      "lastContactAt": "2026-09-11T04:26:45.991Z",
+      "lastContactSource": "calibration",
+      "lastNoGoReasons": [],
+      "lastOutcome": "completed",
+      "state": "cooldown",
+      "url": "https://arabx.cam/"
+    },
+    "https://2gis.com/": {
+      "consecutiveNoGoCount": 0,
+      "cooldownUntil": "2026-10-09T04:27:40.684Z",
+      "lastContactAt": "2026-09-11T04:27:40.684Z",
+      "lastContactSource": "calibration",
+      "lastNoGoReasons": [],
+      "lastOutcome": "completed",
+      "state": "cooldown",
+      "url": "https://2gis.com/"
+    },
+    "https://jetbrains.com/": {
+      "consecutiveNoGoCount": 0,
+      "cooldownUntil": "2026-10-09T04:29:11.958Z",
+      "lastContactAt": "2026-09-11T04:29:11.958Z",
+      "lastContactSource": "calibration",
+      "lastNoGoReasons": [],
+      "lastOutcome": "completed",
+      "state": "cooldown",
+      "url": "https://jetbrains.com/"
+    },
+    "https://canada.ca/": {
+      "consecutiveNoGoCount": 0,
+      "cooldownUntil": "2026-10-09T04:31:41.606Z",
+      "lastContactAt": "2026-09-11T04:31:41.606Z",
+      "lastContactSource": "calibration",
+      "lastNoGoReasons": [],
+      "lastOutcome": "completed",
+      "state": "cooldown",
+      "url": "https://canada.ca/"
+    },
+    "https://kugou.com/": {
+      "consecutiveNoGoCount": 0,
+      "cooldownUntil": "2026-10-09T04:33:49.826Z",
+      "lastContactAt": "2026-09-11T04:33:49.826Z",
+      "lastContactSource": "calibration",
+      "lastNoGoReasons": [],
+      "lastOutcome": "completed",
+      "state": "cooldown",
+      "url": "https://kugou.com/"
+    },
+    "https://ltwebstatic.com/": {
+      "consecutiveNoGoCount": 1,
+      "cooldownUntil": "2026-10-09T04:31:43.679Z",
+      "lastContactAt": "2026-09-11T04:31:43.679Z",
+      "lastContactSource": "calibration",
+      "lastNoGoReasons": [
+        "canonical_no_go"
+      ],
+      "lastOutcome": "no_go",
+      "state": "blocked",
+      "url": "https://ltwebstatic.com/"
+    },
+    "https://downloadwella.com/": {
+      "consecutiveNoGoCount": 0,
+      "cooldownUntil": "2026-10-09T04:27:02.184Z",
+      "lastContactAt": "2026-09-11T04:27:02.184Z",
+      "lastContactSource": "calibration",
+      "lastNoGoReasons": [],
+      "lastOutcome": "completed",
+      "state": "cooldown",
+      "url": "https://downloadwella.com/"
+    },
+    "https://bpexch.live/": {
+      "consecutiveNoGoCount": 0,
+      "cooldownUntil": "2026-10-09T04:26:31.262Z",
+      "lastContactAt": "2026-09-11T04:26:31.262Z",
+      "lastContactSource": "calibration",
+      "lastNoGoReasons": [],
+      "lastOutcome": "completed",
+      "state": "cooldown",
+      "url": "https://bpexch.live/"
+    },
+    "https://sreality.cz/": {
+      "consecutiveNoGoCount": 1,
+      "cooldownUntil": "2026-10-09T04:35:44.390Z",
+      "lastContactAt": "2026-09-11T04:35:44.390Z",
+      "lastContactSource": "calibration",
+      "lastNoGoReasons": [
+        "canonical_no_go"
+      ],
+      "lastOutcome": "no_go",
+      "state": "blocked",
+      "url": "https://sreality.cz/"
+    },
+    "https://mangabuff.ru/": {
+      "consecutiveNoGoCount": 1,
+      "cooldownUntil": "2026-10-08T19:29:06.91+00:00",
+      "lastContactAt": "2026-09-10T19:29:06.91+00:00",
+      "lastContactSource": "scan_quality_calibration",
+      "lastNoGoReasons": [
+        "access_denied_or_forbidden_page",
+        "scan_no_go_corroborated"
+      ],
+      "lastOutcome": "no_go",
+      "state": "blocked",
+      "url": "https://mangabuff.ru/"
+    },
+    "https://arbada.com/": {
+      "consecutiveNoGoCount": 0,
+      "cooldownUntil": "2026-10-09T04:29:47.294Z",
+      "lastContactAt": "2026-09-11T04:29:47.294Z",
+      "lastContactSource": "calibration",
+      "lastNoGoReasons": [],
+      "lastOutcome": "completed",
+      "state": "cooldown",
+      "url": "https://arbada.com/"
+    },
+    "https://osym.gov.tr/": {
+      "consecutiveNoGoCount": 0,
+      "cooldownUntil": "2026-10-09T04:29:00.181Z",
+      "lastContactAt": "2026-09-11T04:29:00.181Z",
+      "lastContactSource": "calibration",
+      "lastNoGoReasons": [],
+      "lastOutcome": "completed",
+      "state": "cooldown",
+      "url": "https://osym.gov.tr/"
+    },
+    "https://google.co.uk/": {
+      "consecutiveNoGoCount": 0,
+      "cooldownUntil": "2026-10-09T04:27:23.306Z",
+      "lastContactAt": "2026-09-11T04:27:23.306Z",
+      "lastContactSource": "calibration",
+      "lastNoGoReasons": [],
+      "lastOutcome": "completed",
+      "state": "cooldown",
+      "url": "https://google.co.uk/"
+    },
+    "https://pcmax.jp/": {
+      "consecutiveNoGoCount": 0,
+      "cooldownUntil": "2026-10-09T04:29:09.238Z",
+      "lastContactAt": "2026-09-11T04:29:09.238Z",
+      "lastContactSource": "calibration",
+      "lastNoGoReasons": [],
+      "lastOutcome": "completed",
+      "state": "cooldown",
+      "url": "https://pcmax.jp/"
+    },
+    "https://ack.de/": {
+      "consecutiveNoGoCount": 0,
+      "cooldownUntil": "2026-10-09T04:32:10.333Z",
+      "lastContactAt": "2026-09-11T04:32:10.333Z",
+      "lastContactSource": "calibration",
+      "lastNoGoReasons": [],
+      "lastOutcome": "completed",
+      "state": "cooldown",
+      "url": "https://ack.de/"
+    },
+    "https://ucla.edu/": {
+      "consecutiveNoGoCount": 0,
+      "cooldownUntil": "2026-10-09T04:26:48.981Z",
+      "lastContactAt": "2026-09-11T04:26:48.981Z",
+      "lastContactSource": "calibration",
+      "lastNoGoReasons": [],
+      "lastOutcome": "completed",
+      "state": "cooldown",
+      "url": "https://ucla.edu/"
+    },
+    "https://sportschau.de/": {
+      "consecutiveNoGoCount": 0,
+      "cooldownUntil": "2026-10-09T04:26:01.381Z",
+      "lastContactAt": "2026-09-11T04:26:01.381Z",
+      "lastContactSource": "calibration",
+      "lastNoGoReasons": [],
+      "lastOutcome": "completed",
+      "state": "cooldown",
+      "url": "https://sportschau.de/"
+    },
+    "https://jquery.com/": {
+      "consecutiveNoGoCount": 0,
+      "cooldownUntil": "2026-10-09T04:32:11.385Z",
+      "lastContactAt": "2026-09-11T04:32:11.385Z",
+      "lastContactSource": "calibration",
+      "lastNoGoReasons": [],
+      "lastOutcome": "completed",
+      "state": "cooldown",
+      "url": "https://jquery.com/"
+    },
+    "https://funpay.com/": {
+      "consecutiveNoGoCount": 0,
+      "cooldownUntil": "2026-10-09T04:25:44.203Z",
+      "lastContactAt": "2026-09-11T04:25:44.203Z",
+      "lastContactSource": "calibration",
+      "lastNoGoReasons": [],
+      "lastOutcome": "completed",
+      "state": "cooldown",
+      "url": "https://funpay.com/"
+    },
+    "https://snaptik.app/": {
+      "consecutiveNoGoCount": 0,
+      "cooldownUntil": "2026-10-09T04:35:26.490Z",
+      "lastContactAt": "2026-09-11T04:35:26.490Z",
+      "lastContactSource": "calibration",
+      "lastNoGoReasons": [],
+      "lastOutcome": "completed",
+      "state": "cooldown",
+      "url": "https://snaptik.app/"
+    },
+    "https://dailymail.com/": {
+      "consecutiveNoGoCount": 1,
+      "cooldownUntil": "2026-10-09T04:34:56.620Z",
+      "lastContactAt": "2026-09-11T04:34:56.620Z",
+      "lastContactSource": "calibration",
+      "lastNoGoReasons": [
+        "canonical_no_go"
+      ],
+      "lastOutcome": "no_go",
+      "state": "blocked",
+      "url": "https://dailymail.com/"
+    },
+    "https://www.acehardware.com/": {
+      "consecutiveNoGoCount": 0,
+      "cooldownUntil": "2026-10-09T04:34:11.052Z",
+      "lastContactAt": "2026-09-11T04:34:11.052Z",
+      "lastContactSource": "calibration",
+      "lastNoGoReasons": [],
+      "lastOutcome": "completed",
+      "state": "cooldown",
+      "url": "https://www.acehardware.com/"
+    },
+    "https://publicnode.com/": {
+      "consecutiveNoGoCount": 0,
+      "cooldownUntil": "2026-10-09T04:26:51.058Z",
+      "lastContactAt": "2026-09-11T04:26:51.058Z",
+      "lastContactSource": "calibration",
+      "lastNoGoReasons": [],
+      "lastOutcome": "completed",
+      "state": "cooldown",
+      "url": "https://publicnode.com/"
+    },
+    "https://leroymerlin.es/": {
+      "consecutiveNoGoCount": 1,
+      "cooldownUntil": "2026-10-09T04:30:23.872Z",
+      "lastContactAt": "2026-09-11T04:30:23.872Z",
+      "lastContactSource": "calibration",
+      "lastNoGoReasons": [
+        "canonical_no_go"
+      ],
+      "lastOutcome": "no_go",
+      "state": "blocked",
+      "url": "https://leroymerlin.es/"
+    },
+    "https://ukdevilz.com/": {
+      "consecutiveNoGoCount": 0,
+      "cooldownUntil": "2026-10-09T04:31:56.893Z",
+      "lastContactAt": "2026-09-11T04:31:56.893Z",
+      "lastContactSource": "calibration",
+      "lastNoGoReasons": [],
+      "lastOutcome": "completed",
+      "state": "cooldown",
+      "url": "https://ukdevilz.com/"
+    },
+    "https://tobesure.com/": {
+      "consecutiveNoGoCount": 0,
+      "cooldownUntil": "2026-10-09T04:33:58.655Z",
+      "lastContactAt": "2026-09-11T04:33:58.655Z",
+      "lastContactSource": "calibration",
+      "lastNoGoReasons": [],
+      "lastOutcome": "completed",
+      "state": "cooldown",
+      "url": "https://tobesure.com/"
+    },
+    "https://www.elotouch.com/": {
+      "consecutiveNoGoCount": 1,
+      "cooldownUntil": "2026-10-09T04:35:27.580Z",
+      "lastContactAt": "2026-09-11T04:35:27.580Z",
+      "lastContactSource": "calibration",
+      "lastNoGoReasons": [
+        "canonical_no_go"
+      ],
+      "lastOutcome": "no_go",
+      "state": "blocked",
+      "url": "https://www.elotouch.com/"
+    },
+    "https://sgvps.net/": {
+      "consecutiveNoGoCount": 1,
+      "cooldownUntil": "2026-10-09T04:28:20.517Z",
+      "lastContactAt": "2026-09-11T04:28:20.517Z",
+      "lastContactSource": "calibration",
+      "lastNoGoReasons": [
+        "canonical_no_go"
+      ],
+      "lastOutcome": "no_go",
+      "state": "blocked",
+      "url": "https://sgvps.net/"
+    },
+    "https://croxyproxy.com/": {
+      "consecutiveNoGoCount": 0,
+      "cooldownUntil": "2026-10-09T04:30:35.433Z",
+      "lastContactAt": "2026-09-11T04:30:35.433Z",
+      "lastContactSource": "calibration",
+      "lastNoGoReasons": [],
+      "lastOutcome": "completed",
+      "state": "cooldown",
+      "url": "https://croxyproxy.com/"
+    },
+    "https://checkpoint.com/": {
+      "consecutiveNoGoCount": 1,
+      "cooldownUntil": "2026-10-08T20:48:35.432+00:00",
+      "lastContactAt": "2026-09-10T20:48:35.432+00:00",
+      "lastContactSource": "scan_quality_calibration",
+      "lastNoGoReasons": [
+        "captcha_or_challenge",
+        "scan_no_go_corroborated"
+      ],
+      "lastOutcome": "no_go",
+      "state": "blocked",
+      "url": "https://checkpoint.com/"
+    },
+    "https://pub.network/": {
+      "consecutiveNoGoCount": 1,
+      "cooldownUntil": "2026-10-09T04:29:00.970Z",
+      "lastContactAt": "2026-09-11T04:29:00.970Z",
+      "lastContactSource": "calibration",
+      "lastNoGoReasons": [
+        "canonical_no_go"
+      ],
+      "lastOutcome": "no_go",
+      "state": "blocked",
+      "url": "https://pub.network/"
+    },
+    "https://kohls.com/": {
+      "consecutiveNoGoCount": 1,
+      "cooldownUntil": "2026-10-09T04:31:53.466Z",
+      "lastContactAt": "2026-09-11T04:31:53.466Z",
+      "lastContactSource": "calibration",
+      "lastNoGoReasons": [
+        "canonical_no_go"
+      ],
+      "lastOutcome": "no_go",
+      "state": "blocked",
+      "url": "https://kohls.com/"
+    },
+    "https://latimes.com/": {
+      "consecutiveNoGoCount": 0,
+      "cooldownUntil": "2026-10-09T04:35:30.428Z",
+      "lastContactAt": "2026-09-11T04:35:30.428Z",
+      "lastContactSource": "calibration",
+      "lastNoGoReasons": [],
+      "lastOutcome": "completed",
+      "state": "cooldown",
+      "url": "https://latimes.com/"
+    },
+    "https://va.gov/": {
+      "consecutiveNoGoCount": 0,
+      "cooldownUntil": "2026-10-09T04:26:27.683Z",
+      "lastContactAt": "2026-09-11T04:26:27.683Z",
+      "lastContactSource": "calibration",
+      "lastNoGoReasons": [],
+      "lastOutcome": "completed",
+      "state": "cooldown",
+      "url": "https://va.gov/"
+    },
+    "https://btloader.com/": {
+      "consecutiveNoGoCount": 1,
+      "cooldownUntil": "2026-10-09T04:31:52.736Z",
+      "lastContactAt": "2026-09-11T04:31:52.736Z",
+      "lastContactSource": "calibration",
+      "lastNoGoReasons": [
+        "canonical_no_go"
+      ],
+      "lastOutcome": "no_go",
+      "state": "blocked",
+      "url": "https://btloader.com/"
+    },
+    "https://dmitriy-mevedev-tor.top/": {
+      "consecutiveNoGoCount": 0,
+      "cooldownUntil": "2026-10-09T04:35:12.424Z",
+      "lastContactAt": "2026-09-11T04:35:12.424Z",
+      "lastContactSource": "calibration",
+      "lastNoGoReasons": [],
+      "lastOutcome": "completed",
+      "state": "cooldown",
+      "url": "https://dmitriy-mevedev-tor.top/"
+    },
+    "https://dzen.ru/": {
+      "consecutiveNoGoCount": 0,
+      "cooldownUntil": "2026-10-09T04:29:57.881Z",
+      "lastContactAt": "2026-09-11T04:29:57.881Z",
+      "lastContactSource": "calibration",
+      "lastNoGoReasons": [],
+      "lastOutcome": "completed",
+      "state": "cooldown",
+      "url": "https://dzen.ru/"
+    },
+    "https://mozilla.com/": {
+      "consecutiveNoGoCount": 0,
+      "cooldownUntil": "2026-10-09T04:31:20.338Z",
+      "lastContactAt": "2026-09-11T04:31:20.338Z",
+      "lastContactSource": "calibration",
+      "lastNoGoReasons": [],
+      "lastOutcome": "completed",
+      "state": "cooldown",
+      "url": "https://mozilla.com/"
+    },
+    "https://glerum.nl/": {
+      "consecutiveNoGoCount": 0,
+      "cooldownUntil": "2026-10-09T04:28:51.089Z",
+      "lastContactAt": "2026-09-11T04:28:51.089Z",
+      "lastContactSource": "calibration",
+      "lastNoGoReasons": [],
+      "lastOutcome": "completed",
+      "state": "cooldown",
+      "url": "https://glerum.nl/"
+    },
+    "https://linode.com/": {
+      "consecutiveNoGoCount": 0,
+      "cooldownUntil": "2026-10-09T04:28:40.151Z",
+      "lastContactAt": "2026-09-11T04:28:40.151Z",
+      "lastContactSource": "calibration",
+      "lastNoGoReasons": [],
+      "lastOutcome": "completed",
+      "state": "cooldown",
+      "url": "https://linode.com/"
+    },
+    "https://routedlogic.net/": {
+      "consecutiveNoGoCount": 0,
+      "cooldownUntil": "2026-10-09T04:27:25.438Z",
+      "lastContactAt": "2026-09-11T04:27:25.438Z",
+      "lastContactSource": "calibration",
+      "lastNoGoReasons": [],
+      "lastOutcome": "completed",
+      "state": "cooldown",
+      "url": "https://routedlogic.net/"
+    },
+    "https://inmobi.com/": {
+      "consecutiveNoGoCount": 0,
+      "cooldownUntil": "2026-10-09T04:29:37.544Z",
+      "lastContactAt": "2026-09-11T04:29:37.544Z",
+      "lastContactSource": "calibration",
+      "lastNoGoReasons": [],
+      "lastOutcome": "completed",
+      "state": "cooldown",
+      "url": "https://inmobi.com/"
+    },
+    "https://kwai.com/": {
+      "consecutiveNoGoCount": 0,
+      "cooldownUntil": "2026-10-09T04:34:50.415Z",
+      "lastContactAt": "2026-09-11T04:34:50.415Z",
+      "lastContactSource": "calibration",
+      "lastNoGoReasons": [],
+      "lastOutcome": "completed",
+      "state": "cooldown",
+      "url": "https://kwai.com/"
+    },
+    "https://mit.edu/": {
+      "consecutiveNoGoCount": 0,
+      "cooldownUntil": "2026-10-09T04:35:46.055Z",
+      "lastContactAt": "2026-09-11T04:35:46.055Z",
+      "lastContactSource": "calibration",
+      "lastNoGoReasons": [],
+      "lastOutcome": "completed",
+      "state": "cooldown",
+      "url": "https://mit.edu/"
+    },
+    "https://www.gov.uk/": {
+      "consecutiveNoGoCount": 0,
+      "cooldownUntil": "2026-10-09T04:28:21.421Z",
+      "lastContactAt": "2026-09-11T04:28:21.421Z",
+      "lastContactSource": "calibration",
+      "lastNoGoReasons": [],
+      "lastOutcome": "completed",
+      "state": "cooldown",
+      "url": "https://www.gov.uk/"
+    },
+    "https://vdy.to/": {
+      "consecutiveNoGoCount": 1,
+      "cooldownUntil": "2026-10-09T04:35:49.453Z",
+      "lastContactAt": "2026-09-11T04:35:49.453Z",
+      "lastContactSource": "calibration",
+      "lastNoGoReasons": [
+        "canonical_no_go"
+      ],
+      "lastOutcome": "no_go",
+      "state": "blocked",
+      "url": "https://vdy.to/"
+    },
+    "https://yahoo.com/": {
+      "consecutiveNoGoCount": 0,
+      "cooldownUntil": "2026-10-09T04:35:36.921Z",
+      "lastContactAt": "2026-09-11T04:35:36.921Z",
+      "lastContactSource": "calibration",
+      "lastNoGoReasons": [],
+      "lastOutcome": "completed",
+      "state": "cooldown",
+      "url": "https://yahoo.com/"
+    },
+    "https://moneycontrol.com/": {
+      "consecutiveNoGoCount": 1,
+      "cooldownUntil": "2026-10-09T04:25:45.193Z",
+      "lastContactAt": "2026-09-11T04:25:45.193Z",
+      "lastContactSource": "calibration",
+      "lastNoGoReasons": [
+        "canonical_no_go"
+      ],
+      "lastOutcome": "no_go",
+      "state": "blocked",
+      "url": "https://moneycontrol.com/"
+    },
+    "https://unrulymedia.com/": {
+      "consecutiveNoGoCount": 0,
+      "cooldownUntil": "2026-10-09T04:27:42.526Z",
+      "lastContactAt": "2026-09-11T04:27:42.526Z",
+      "lastContactSource": "calibration",
+      "lastNoGoReasons": [],
+      "lastOutcome": "completed",
+      "state": "cooldown",
+      "url": "https://unrulymedia.com/"
+    }
+  },
+  "ledgerVersion": "certscore.scan_quality_calibration_ledger.1",
+  "updatedAt": "2026-09-11T04:40:33.044Z"
+}

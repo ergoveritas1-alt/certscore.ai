@@ -1,5 +1,118 @@
 {
+  "entries": {
+    "https://capitalone.com": {
+      "consecutiveNoGoCount": 0,
+      "cooldownUntil": "2026-10-09T04:01:51.360Z",
+      "lastContactAt": "2026-09-11T04:01:51.360Z",
+      "lastContactSource": "calibration",
+      "lastNoGoReasons": [],
+      "lastOutcome": "completed",
+      "state": "cooldown",
+      "url": "https://capitalone.com"
+    },
+    "https://cloudflare.com": {
+      "consecutiveNoGoCount": 0,
+      "cooldownUntil": "2026-10-09T04:01:53.462Z",
+      "lastContactAt": "2026-09-11T04:01:53.462Z",
+      "lastContactSource": "calibration",
+      "lastNoGoReasons": [],
+      "lastOutcome": "completed",
+      "state": "cooldown",
+      "url": "https://cloudflare.com"
+    },
+    "https://spotify.com": {
+      "consecutiveNoGoCount": 0,
+      "cooldownUntil": "2026-10-09T04:01:58.113Z",
+      "lastContactAt": "2026-09-11T04:01:58.113Z",
+      "lastContactSource": "calibration",
+      "lastNoGoReasons": [],
+      "lastOutcome": "completed",
+      "state": "cooldown",
+      "url": "https://spotify.com"
+    },
+    "https://msnbc.com": {
+      "consecutiveNoGoCount": 0,
+      "cooldownUntil": "2026-10-09T04:02:04.207Z",
+      "lastContactAt": "2026-09-11T04:02:04.207Z",
+      "lastContactSource": "calibration",
+      "lastNoGoReasons": [],
+      "lastOutcome": "completed",
+      "state": "cooldown",
+      "url": "https://msnbc.com"
+    },
+    "https://fullstory.com": {
+      "consecutiveNoGoCount": 0,
+      "cooldownUntil": "2026-10-09T04:02:09.802Z",
+      "lastContactAt": "2026-09-11T04:02:09.802Z",
+      "lastContactSource": "calibration",
+      "lastNoGoReasons": [],
+      "lastOutcome": "completed",
+      "state": "cooldown",
+      "url": "https://fullstory.com"
+    },
+    "https://nih.gov": {
+      "consecutiveNoGoCount": 0,
+      "cooldownUntil": "2026-10-09T04:02:12.799Z",
+      "lastContactAt": "2026-09-11T04:02:12.799Z",
+      "lastContactSource": "calibration",
+      "lastNoGoReasons": [],
+      "lastOutcome": "completed",
+      "state": "cooldown",
+      "url": "https://nih.gov"
+    },
+    "https://linear.app": {
+      "consecutiveNoGoCount": 0,
+      "cooldownUntil": "2026-10-09T04:02:15.159Z",
+      "lastContactAt": "2026-09-11T04:02:15.159Z",
+      "lastContactSource": "calibration",
+      "lastNoGoReasons": [],
+      "lastOutcome": "completed",
+      "state": "cooldown",
+      "url": "https://linear.app"
+    },
+    "https://gatech.edu": {
+      "consecutiveNoGoCount": 0,
+      "cooldownUntil": "2026-10-09T04:02:21.442Z",
+      "lastContactAt": "2026-09-11T04:02:21.442Z",
+      "lastContactSource": "calibration",
+      "lastNoGoReasons": [],
+      "lastOutcome": "completed",
+      "state": "cooldown",
+      "url": "https://gatech.edu"
+    },
+    "https://bestbuy.com": {
+      "consecutiveNoGoCount": 0,
+      "cooldownUntil": "2026-10-09T04:02:48.211Z",
+      "lastContactAt": "2026-09-11T04:02:48.211Z",
+      "lastContactSource": "calibration",
+      "lastNoGoReasons": [],
+      "lastOutcome": "completed",
+      "state": "cooldown",
+      "url": "https://bestbuy.com"
+    },
+    "https://ftc.gov": {
+      "consecutiveNoGoCount": 1,
+      "cooldownUntil": "2026-10-09T03:57:13.880Z",
+      "lastContactAt": "2026-09-11T03:57:13.880Z",
+      "lastContactSource": "calibration",
+      "lastNoGoReasons": [
+        "canonical_no_go"
+      ],
+      "lastOutcome": "no_go",
+      "state": "blocked",
+      "url": "https://ftc.gov"
+    },
+    "https://consumerfinance.gov": {
+      "consecutiveNoGoCount": 0,
+      "cooldownUntil": "2026-10-09T04:02:51.340Z",
+      "lastContactAt": "2026-09-11T04:02:51.340Z",
+      "lastContactSource": "calibration",
+      "lastNoGoReasons": [],
+      "lastOutcome": "completed",
+      "state": "cooldown",
+      "url": "https://consumerfinance.gov"
+    }
+  },
   "ledgerVersion": "certscore.scan_quality_calibration_ledger.1",
-  "updatedAt": null,
-  "entries": {}
+  "updatedAt": "2026-09-11T04:03:56.340Z"
 }

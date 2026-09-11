@@ -266,6 +266,10 @@ test("dedicated passive browser condition sends Sec-GPC and exposes navigator.gl
     assert.ok(requests.every((event) => event.requestHeaders?.secGpc === "1"));
     assert.ok(requests.some((event) => event.path === "/navigator-gpc-true"));
     assert.equal(result.gpcSignalObservation?.frames[0]?.navigatorValue, true);
+    assert.ok(result.gpcObservationSession, "new capture retains its typed terminal session");
+    assert.equal(result.gpcObservationSession.terminal, "completed", JSON.stringify(result.gpcObservationSession.limitationKeys));
+    assert.equal(result.gpcObservationSession.mainDocument?.secGpc, "1");
+    assert.ok(result.gpcObservationSession.requests.length >= 2);
     assert.deepEqual(result.gpcOptOutObservation?.captureBinding, result.gpcSignalObservation?.prototypeCaptureBinding);
     assert.ok(result.gpcOptOutObservation?.captureBinding?.documentToken);
     assert.equal(result.gpcOptOutObservation?.usca?.saleOptOut, 1);
