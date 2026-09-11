@@ -433,11 +433,14 @@ test("read 429 telemetry retains bounded limit details and honest correlation ba
   });
   telemetry.observeTransportRateLimit({
     body: { params: { arguments: { scanId: "scan_123", detail: "full", maxBytes: 25000, secret: "must-not-retain" } } },
+    responseSummary: { version: 1, captureBasis: "response_generated", templateVersion: "2026-09-11.1", kind: "protocol_error", isError: true, errorCode: "rate_limited", mcpCode: -32029, message: "Read limit reached.", recommendedNextAction: "Wait before retrying.", textOmitted: false, summaryTruncated: false },
     durationMs: 2, toolName: "certscore_get_scan_bundle", scanId: "scan_123",
     rateLimit: { kind: "mcp_read", scope: "callerTarget", windowId: "burst", limit: 120, used: 120, requested: 4, windowSeconds: 600, retryAfterSeconds: 25 },
   });
   await new Promise((resolve) => setImmediate(resolve));
   const event = bodies.map(body => JSON.parse(body)).find(event => !event.eventType);
+  assert.equal(event.requestDetails.response.summary.message, "Read limit reached.");
+  assert.equal(event.requestDetails.response.bytes, null);
   assert.equal(event.transportOutcome, "http_429");
   assert.equal(event.quotaOutcome, "rate_limited");
   assert.deepEqual(event.requestDetails.arguments, { scanId: "scan_123", detail: "full", maxBytes: 25000 });

@@ -1,3 +1,4 @@
+import { captureMcpResponse, withResponseCapture } from "@certscore/mcp";
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
 import { createHmac, randomUUID } from "node:crypto";
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
@@ -613,6 +614,10 @@ async function handleMcp(req: IncomingMessage, res: ServerResponse, anonymous: b
         }
       }, { ...corsHeaders(req), "Retry-After": String(decision.retryAfterSeconds) });
       session.telemetry?.observeTransportRateLimit({
+        responseSummary: captureMcpResponse(undefined, withResponseCapture({
+          code: -32029, message: guidance.message,
+          data: { code: "rate_limited", retryable: true, retryAfterSeconds: decision.retryAfterSeconds },
+        }, { message: guidance.message, recommendedNextAction: guidance.recommendedNextAction })),
         rateLimit: {
           kind: "mcp_read", scope: decision.scope, windowId: decision.windowId,
           profile: readCall.profile, policyVersion: decision.policyVersion,

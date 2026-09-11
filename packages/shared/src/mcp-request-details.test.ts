@@ -22,3 +22,20 @@ test("correlation provenance and rate limits require the versioned bounded contr
   assert.equal(mcpRequestDetailsSchema.safeParse({ ...details, rateLimit: { kind: "mcp_read", retryAfterSeconds: -1 } }).success, false);
   assert.equal(mcpRequestDetailsSchema.safeParse({ ...details, rateLimit: { kind: "mcp_read", headers: { authorization: "secret" } } }).success, false);
 });
+
+test("response summaries fit the existing request-details envelope and reject raw bodies", async () => {
+  const { boundMcpRequestDetails } = await import("./mcp-telemetry");
+  const baseSummary = { version: 1 as const, captureBasis: "response_generated" as const, templateVersion: "2026-09-11.1" as const, kind: "tool_result" as const, isError: true, textOmitted: false, summaryTruncated: false, message: "m".repeat(400), recommendedNextAction: "a".repeat(800) };
+  const input = mcpRequestDetailsSchema.parse({ ...details, response: { bytes: null, truncated: null, summary: baseSummary } });
+  const { captureMcpCallerInput } = await import("./mcp-caller-input");
+  input.callerInput = captureMcpCallerInput(Object.fromEntries(Array.from({ length: 24 }, (_, i) => [`reason${i}`, "ordinary context ".repeat(17)])));
+  const originalFieldCount = input.callerInput.fields.length;
+  const bounded = boundMcpRequestDetails(input);
+  assert.equal(input.callerInput.fields.length, originalFieldCount);
+  assert.ok((bounded.callerInput?.fields.length ?? 0) < originalFieldCount);
+  assert.equal(bounded.response?.summary?.message, baseSummary.message);
+  assert.ok(Buffer.byteLength(JSON.stringify(bounded, null, 1)) <= 4096);
+  assert.equal(mcpRequestDetailsSchema.safeParse(bounded).success, true);
+  assert.equal(mcpRequestDetailsSchema.safeParse({ ...details, response: { bytes: null, truncated: null, summary: { ...baseSummary, body: "secret" } } }).success, false);
+  assert.equal(mcpRequestDetailsSchema.safeParse({ ...details, response: { bytes: 20, truncated: null, summary: { ...baseSummary, recommendedNextAction: "🙂".repeat(800) } } }).success, false);
+});

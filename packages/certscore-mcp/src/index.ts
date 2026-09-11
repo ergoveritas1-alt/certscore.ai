@@ -175,3 +175,5 @@ if (isMainModule()) {
     process.exitCode = 1;
   });
 }
+
+export { captureMcpResponse, withResponseCapture } from "./response-capture.js";

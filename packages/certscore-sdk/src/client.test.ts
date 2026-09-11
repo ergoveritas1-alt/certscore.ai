@@ -3,7 +3,7 @@ import { execFileSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 import test from "node:test";
 import { CertScoreClient } from "./client.js";
-import { CertScoreScanFailedError, CertScoreTimeoutError, InvalidUrlError, ThrottledError } from "./errors.js";
+import { getCertScoreErrorContext, CertScoreScanFailedError, CertScoreTimeoutError, InvalidUrlError, ThrottledError } from "./errors.js";
 import type { ScanNoGoReasonCode } from "./types.js";
 
 type MockResponse = {
@@ -747,4 +747,31 @@ test("scans.create uses the same API v2 submission path for every production reg
   } finally {
     mock.restore();
   }
+});
+
+test("failed HTTP reads retain bounded operation and request ID without endpoint paths", async () => {
+  for (const requestId of ["00000000-0000-4000-8000-000000000123", "secret-token"]) {
+    const mock = installFetch([{ status: 404, headers: { "x-request-id": requestId }, body: { error: { code: "not_found", message: "Not found" } } }]);
+    try {
+      await assert.rejects(new CertScoreClient().scans.get("private-scan-id"), (error: any) => {
+        assert.deepEqual(error.upstream, { operation: "scan_resource", httpStatus: 404, ...(requestId === "secret-token" ? {} : { requestId }) });
+        assert.doesNotMatch(JSON.stringify(error.upstream), /private-scan-id|secret-token|https/);
+        return true;
+      });
+    } finally { mock.restore(); }
+  }
+});
+
+
+test("transport failure retains operation without changing the thrown error", async () => {
+  const previous = globalThis.fetch;
+  const failure = new TypeError("Network failure with untrusted details");
+  globalThis.fetch = async () => { throw failure; };
+  try {
+    await assert.rejects(new CertScoreClient().scans.get("private-id"), error => {
+      assert.equal(error, failure);
+      assert.deepEqual(getCertScoreErrorContext(error), { operation: "scan_resource" });
+      return true;
+    });
+  } finally { globalThis.fetch = previous; }
 });

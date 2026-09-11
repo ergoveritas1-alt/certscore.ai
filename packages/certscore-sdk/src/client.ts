@@ -1,5 +1,5 @@
 import { createHmac } from "node:crypto";
-import { CertScoreApiError, InvalidUrlError, CertScoreScanFailedError, ThrottledError } from "./errors.js";
+import { recordCertScoreErrorContext, CertScoreError, CertScoreApiError, InvalidUrlError, CertScoreScanFailedError, ThrottledError } from "./errors.js";
 import { adaptivePollIntervalMs, parseRetryAfter, retryDelayMs, sleep, SUCCESS_STATUSES, throwForTerminalStatus, throwTimeout } from "./poll.js";
 import type {
   ApiV2RequestOptions,
@@ -585,14 +585,17 @@ export class CertScoreClient {
     return await this.throwForResponse(response);
   }
 
+  private responseContexts = new WeakMap<Response, NonNullable<CertScoreError["upstream"]>>();
+
   private async throwForResponse(response: Response): Promise<never> {
+    const upstream = this.responseContexts.get(response);
     const body = await this.safeBody(response);
     const code = bodyErrorCode(body);
     const message = bodyErrorMessage(body, `CertScore API request failed with HTTP ${response.status}.`);
     const retryAfterSeconds = parseRetryAfter(response.headers.get("Retry-After")) ?? bodyRetryAfter(body);
 
     if (response.status === 400 && code === "invalid_url") {
-      throw new InvalidUrlError(message, { status: response.status, code, responseBody: body });
+      throw Object.assign(new InvalidUrlError(message, { status: response.status, code, responseBody: body }), { upstream });
     }
     if (response.status === 429 || code === "pulse_throttled" || code === "rate_limited") {
       const errorRecord = body && typeof body === "object" && !Array.isArray(body) && "error" in body
@@ -603,9 +606,9 @@ export class CertScoreClient {
         && typeof (errorRecord as { creationRateLimit?: unknown }).creationRateLimit === "object"
         ? (errorRecord as { creationRateLimit: Record<string, unknown> }).creationRateLimit
         : undefined;
-      throw new ThrottledError(message, { status: response.status, code, retryAfterSeconds, creationRateLimit, responseBody: body });
+      throw Object.assign(new ThrottledError(message, { status: response.status, code, retryAfterSeconds, creationRateLimit, responseBody: body }), { upstream });
     }
-    throw new CertScoreApiError(message, { status: response.status, code, responseBody: body });
+    throw Object.assign(new CertScoreApiError(message, { status: response.status, code, responseBody: body }), { upstream });
   }
 
   private async safeBody(response: Response): Promise<unknown> {
@@ -617,6 +620,18 @@ export class CertScoreClient {
   }
 
   private async fetch(url: URL, options: RequestOptions = {}): Promise<Response> {
+    const path = url.pathname;
+    const operation: NonNullable<CertScoreError["upstream"]>["operation"] = options.method === "POST" ? "scan_create"
+      : /\/status$|\/pulse\/status\/[^/]+$/.test(path) ? "scan_status"
+      : path === "/api/v1/pulse" ? url.searchParams.get("detail") === "evidence" ? "evidence" : "report"
+      : /\/pulse$/.test(path) ? "report"
+      : /\/findings\/[^/]+$/.test(path) ? "finding"
+      : /\/findings$/.test(path) ? "findings"
+      : /\/report$/.test(path) ? "report"
+      : /\/evidence$/.test(path) ? "evidence"
+      : /pre-consent/.test(path) ? "pre_consent"
+      : /\/domains\//.test(path) ? "domain_latest"
+      : /\/scans\/[^/]+$/.test(path) ? "scan_resource" : "other";
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(new DOMException("CertScore request timed out.", "TimeoutError")), options.timeout ?? this.timeout);
     const abort = () => controller.abort(options.signal?.reason);
@@ -626,12 +641,20 @@ export class CertScoreClient {
       } else {
         options.signal?.addEventListener("abort", abort, { once: true });
       }
-      return await fetch(url, {
+      const response = await fetch(url, {
         body: options.body === undefined ? undefined : JSON.stringify(options.body),
         method: options.method ?? "GET",
         headers: this.headers(url, options.method ?? "GET", options.body !== undefined, options.internalMcpOperation),
         signal: controller.signal
       });
+      const requestId = response.headers.get("x-request-id");
+      this.responseContexts.set(response, { operation, httpStatus: response.status,
+        ...(requestId && /^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i.test(requestId) ? { requestId } : {}),
+      });
+      return response;
+    } catch (error) {
+      recordCertScoreErrorContext(error, { operation });
+      throw error;
     } finally {
       clearTimeout(timeout);
       options.signal?.removeEventListener("abort", abort);

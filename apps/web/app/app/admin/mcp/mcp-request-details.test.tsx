@@ -71,3 +71,15 @@ test("caller input previews and omissions remain distinct from inherited and cur
   assert.match(html, /q=earlier-event&amp;traffic=external&amp;timeSpan=all/);
   assert.match(html, /Original shared question/);
 });
+
+
+test("response capture displays generated semantics and omission markers", () => {
+  const html = renderToStaticMarkup(<McpRequestDetails traffic="external" period="24h" event={{ ...event,
+    request_details: { version: 1, arguments: {}, argumentsOmitted: false, actorBasis: "requester_binding", sessionBasis: "mcp_session", rateLimit: null,
+      response: { bytes: null, truncated: null, summary: { version: 1, captureBasis: "response_generated", templateVersion: "2026-09-11.1", kind: "protocol_error", isError: true, message: "Use the stable scan ID.", textOmitted: true, summaryTruncated: false } } },
+  }} />);
+  assert.match(html, /not confirmed client receipt/);
+  assert.match(html, /Use the stable scan ID/);
+  assert.match(html, /Some response text was omitted/);
+  assert.match(html, /size not recorded/);
+});

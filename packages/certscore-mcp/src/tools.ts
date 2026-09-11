@@ -1,5 +1,6 @@
+import { withResponseCapture, transferResponseCapture } from "./response-capture.js";
 import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
-import { CertScoreError, type FindingList, type JobStatus, type PreConsentCookiesTrackers, type PulseDetail, type PulseFormat, type PulseResult, type ScanResource, type TopFinding } from "@certscore/sdk";
+import { getCertScoreErrorContext, CertScoreError, type FindingList, type JobStatus, type PreConsentCookiesTrackers, type PulseDetail, type PulseFormat, type PulseResult, type ScanResource, type TopFinding } from "@certscore/sdk";
 
 const MAX_ERROR_RESPONSE_BODY_CHARS = 2_000;
 export const MAX_EVIDENCE_PACKET_CHARS = 250_000;
@@ -94,7 +95,7 @@ export function toToolResult(payload: unknown, text?: string): CallToolResult {
   const structuredContent = payload !== null && typeof payload === "object" && !Array.isArray(payload)
     ? payload as Record<string, unknown>
     : { value: payload };
-  return {
+  return transferResponseCapture(payload, {
     structuredContent,
     content: [
       {
@@ -102,7 +103,7 @@ export function toToolResult(payload: unknown, text?: string): CallToolResult {
         text: text ?? toolResultSummary(payload)
       }
     ]
-  };
+  });
 }
 
 export function toToolError(error: unknown, context: { scanCreation?: boolean } = {}): CallToolResult {
@@ -162,13 +163,13 @@ export function toToolError(error: unknown, context: { scanCreation?: boolean } 
     }
   };
 
-  return {
+  return withResponseCapture({
     content: [
       { type: "text", text: JSON.stringify(payload) },
       ...(targetRejected ? [{ type: "text" as const, text: `${message} ${recommendedNextAction}` }] : []),
     ],
     isError: true
-  };
+  }, { ...(targetRejected || typeof terminalError?.recommendedNextAction !== "string" ? { recommendedNextAction } : {}), ...(getCertScoreErrorContext(error) ? { upstream: getCertScoreErrorContext(error) } : {}) });
 }
 
 export function toInvalidArgumentsToolError(errorMessage: string, validation?: { tool: string; issues: { field: string; code: string; required?: boolean }[] }): CallToolResult {
@@ -211,11 +212,11 @@ export function toInvalidArgumentsToolError(errorMessage: string, validation?: {
         observationOnlyDisclaimer: OBSERVATION_ONLY_DISCLAIMER
       }
     : { error };
-  return {
+  return withResponseCapture({
     content: [{ type: "text", text: JSON.stringify(payload) }],
     ...(tool === "certscore_scan_site" ? { structuredContent: payload } : {}),
     isError: true
-  };
+  }, { message: error.message, recommendedNextAction: error.recommendedNextAction });
 }
 
 export function toInvalidScanIdToolError(): CallToolResult {
@@ -228,10 +229,10 @@ export function toInvalidScanIdToolError(): CallToolResult {
     recommendedNextAction: "Use the unchanged scanId returned by certscore_scan_site. Do not use placeholders, report URLs, domains, or job IDs.",
     mcpCode: -32602
   };
-  return {
+  return withResponseCapture({
     content: [{ type: "text", text: JSON.stringify({ error }) }],
     isError: true
-  };
+  }, { message: error.message, recommendedNextAction: error.recommendedNextAction });
 }
 
 function terminalErrorForResult(value: Record<string, any>): ActionableError | null {
@@ -395,7 +396,7 @@ export function withMcpAgentGuidance<T extends Record<string, any>>(
     : null;
   const activePollAction = `${retryAfterSeconds === null ? "Wait for the recommended delay" : `Wait at least ${retryAfterSeconds} seconds`}, then call certscore_get_scan_status once with scanId ${stableScanId ?? value.jobId}.`;
   const activeNextAction = `${hasPreConsentPreview ? "The returned preConsentPreview is a partial preview of passive evidence. Its counts are checkpoint-only partial counts, not the full scan tally; do not present them as final totals or stop the workflow. " : ""}${activePollAction} Continue with certscore_get_scan_status using the unchanged scanId ${stableScanId ?? value.jobId}. Do not poll in parallel or resubmit certscore_scan_site while this scan is active. After completed or completed_limited, call certscore_get_scan_bundle for the completed scan's final returned tally, canonical findings, and limitations.`;
-  return {
+  return withResponseCapture({
     ...value,
     preConsentPreview,
     retryAfterSeconds,
@@ -411,15 +412,15 @@ export function withMcpAgentGuidance<T extends Record<string, any>>(
         ? `Call certscore_get_scan_bundle with scanId ${stableScanId ?? value.jobId} for the completed scan's final returned tally, canonical findings, and limitations.`
         : "Review the result and retained limitations.")),
     observationOnlyDisclaimer: OBSERVATION_ONLY_DISCLAIMER
-  };
+  }, error && !value.error && !value.noGo ? { message: error.message, recommendedNextAction: error.recommendedNextAction } : {});
 }
 
 export function withMcpScanProvenanceGuidance(value: Record<string, any>, fallbackProvenanceMode: ScanProvenanceMode) {
   const guided = withMcpAgentGuidance(value, fallbackProvenanceMode, "scan_status");
-  return {
+  return transferResponseCapture(guided, {
     ...guided,
     interpretationGuidance: interpretationGuidance(`${INTERPRETATION_STATEMENT} ${SCAN_PROVENANCE_GROUNDING}`)
-  };
+  });
 }
 
 export function boundEvidencePacket<T>(payload: T, maxSerializedChars = MAX_EVIDENCE_PACKET_CHARS): T | Record<string, unknown> {

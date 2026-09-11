@@ -1,3 +1,4 @@
+import type { McpResponseSummary } from "@website-signal-risk-scanner/shared";
 import { createHmac, randomUUID } from "node:crypto";
 import type { IncomingHttpHeaders } from "node:http";
 import shared from "@website-signal-risk-scanner/shared";
@@ -340,6 +341,7 @@ export function createHostedMcpTelemetry(input: CreateHostedMcpTelemetryInput) {
         ...(observation.taskContext ? { taskContext: observation.taskContext } : {}),
         ...(observation.response ? { response: observation.response } : {}),
         serverVersion: CERTSCORE_MCP_VERSION,
+        ...(/^[a-f0-9]{40}$/.test(process.env.BUILD_GIT_SHA ?? "") ? { serverRevision: process.env.BUILD_GIT_SHA } : {}),
         toolSchemaVersion: "2026-09-08.task-context.1",
         ...(() => {
           const body = input.clientInfoBody as { params?: { clientInfo?: { version?: unknown } } } | undefined;
@@ -420,7 +422,7 @@ export function createHostedMcpTelemetry(input: CreateHostedMcpTelemetryInput) {
     observeToolInvocation(observation: McpToolInvocationObservation, requestContext?: ToolRequestContext) {
       report(observation, requestContext);
     },
-    observeTransportRateLimit(input: { body: unknown; durationMs: number; requesterIp?: string | null; requesterNetwork?: AnonymousRequesterNetwork; scanId?: string | null; toolName: string; rateLimit?: McpRequestDetails["rateLimit"] }) {
+    observeTransportRateLimit(input: { responseSummary?: McpResponseSummary; body: unknown; durationMs: number; requesterIp?: string | null; requesterNetwork?: AnonymousRequesterNetwork; scanId?: string | null; toolName: string; rateLimit?: McpRequestDetails["rateLimit"] }) {
       const args = parsedToolArguments(input.body);
       const projected = projectMcpToolInvocationObservation({
         args,
@@ -430,6 +432,7 @@ export function createHostedMcpTelemetry(input: CreateHostedMcpTelemetryInput) {
       });
       report({
         ...projected,
+        ...(input.responseSummary ? { response: { bytes: null, truncated: null, summary: input.responseSummary } } : {}),
         captureBasis: "protocol_request",
         callerInput: captureMcpCallerInput(args, (input.body as { params?: { _meta?: unknown } } | null)?.params?._meta),
         ...(sanitizeMcpTaskContext(args.taskContext) ? { taskContext: sanitizeMcpTaskContext(args.taskContext)! } : {}),

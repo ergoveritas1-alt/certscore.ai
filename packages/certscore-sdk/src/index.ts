@@ -1,6 +1,7 @@
 export { CertScoreClient } from "./client.js";
 export type { RuntimeEvidenceGraphProjection, RuntimeEvidenceGraph, RuntimeEvidenceGraphNode, RuntimeEvidenceGraphEdge } from "./runtime-evidence-graph.js";
 export {
+  getCertScoreErrorContext,
   CertScoreApiError,
   CertScoreError,
   CertScoreScanFailedError,

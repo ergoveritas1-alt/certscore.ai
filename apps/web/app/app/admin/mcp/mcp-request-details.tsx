@@ -59,7 +59,17 @@ export function McpRequestDetails({ event, traffic, period }: {
       </> : <p className="break-all text-slate-500">Detailed arguments were not recorded for this event. Retained {event.requested_resource_type ?? "resource"}: {event.requested_resource ?? "unavailable"}.</p>}
       {details?.taskContext ? <pre className="max-h-80 overflow-auto whitespace-pre-wrap break-all rounded-lg bg-slate-50 p-3 font-mono text-xs">{JSON.stringify({ callerDeclaredContext: details.taskContext }, null, 2)}</pre> : null}
       {details?.serverVersion ? <p>Server {details.serverVersion} · client version {details.clientVersion ?? "unknown"} · schema {details.toolSchemaVersion ?? "unknown"}</p> : null}
-      {details?.response ? <p>Response: {details.response.bytes} bytes · truncation {details.response.truncated === null ? "not recorded" : details.response.truncated ? "yes" : "no"}</p> : null}
+      {details?.response ? <p>Response: {details.response.bytes === null ? "size not recorded" : `${details.response.bytes} bytes`} · truncation {details.response.truncated === null ? "not recorded" : details.response.truncated ? "yes" : "no"}</p> : null}
+      <section aria-label="Generated response">
+        <h3 className="font-semibold">Generated response</h3>
+        <p className="text-xs text-slate-500">Bounded response summary; this records generation, not confirmed client receipt. Untrusted text and raw bodies are omitted.</p>
+        {details?.response?.summary ? <>
+          {details.response.summary.textOmitted ? <p className="text-amber-800">Some response text was omitted.</p> : null}
+          {details.response.summary.summaryTruncated ? <p className="text-amber-800">Summary shortened to fit retention limits.</p> : null}
+          <pre className="max-h-80 overflow-auto whitespace-pre-wrap break-all rounded-lg bg-slate-50 p-3 font-mono text-xs">{JSON.stringify(details.response.summary, null, 2)}</pre>
+        </> : <p>Response summary not recorded for this request.</p>}
+        {details?.serverRevision ? <p className="break-all text-xs">Server revision: {details.serverRevision}</p> : null}
+      </section>
       <p>Session: {event.session_id ? <Link className="break-all text-sky-700 underline" href={href(event.session_id)} prefetch={false}>{event.session_id}</Link> : "Not recorded"}{details ? ` (${details.sessionBasis.replaceAll("_", " ")})` : ""}</p>
       <p>{actorBasis}: {event.actor_id ? <Link className="break-all text-sky-700 underline" href={href(event.actor_id)} prefetch={false}>{event.actor_id}</Link> : "Not recorded"}</p>
       <p className="text-slate-500">Neither session nor requester counts establish unique agents or people.</p>

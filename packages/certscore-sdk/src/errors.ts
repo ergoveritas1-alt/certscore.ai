@@ -1,4 +1,5 @@
 export class CertScoreError extends Error {
+  upstream?: { operation: "scan_create" | "scan_status" | "scan_resource" | "findings" | "finding" | "report" | "evidence" | "pre_consent" | "domain_latest" | "other"; httpStatus?: number; requestId?: string };
   status?: number;
   code?: string;
   responseBody?: unknown;
@@ -79,3 +80,12 @@ export class CertScoreScanFailedError extends CertScoreError {
 }
 
 export { CertScoreScanFailedError as ScanFailedError };
+
+const transportErrorContexts = new WeakMap<object, NonNullable<CertScoreError["upstream"]>>();
+export function recordCertScoreErrorContext(error: unknown, context: NonNullable<CertScoreError["upstream"]>) {
+  if (error && typeof error === "object") transportErrorContexts.set(error, context);
+}
+export function getCertScoreErrorContext(error: unknown) {
+  return error instanceof CertScoreError && error.upstream ? error.upstream
+    : error && typeof error === "object" ? transportErrorContexts.get(error) : undefined;
+}

@@ -1,3 +1,5 @@
+import { captureMcpResponse, withResponseCapture } from "./response-capture.js";
+import type { McpResponseSummary } from "@website-signal-risk-scanner/shared";
 import { z } from "zod";
 import { captureMcpCallerInput, type McpCallerInput } from "@website-signal-risk-scanner/shared/dist/mcp-caller-input.js";
 import { CertScoreClient } from "@certscore/sdk";
@@ -62,7 +64,7 @@ export type McpToolInvocationObservation = {
   callerInput?: McpCallerInput;
   captureBasis?: "protocol_request";
   taskContext?: McpTaskContext;
-  response?: { bytes: number; truncated: boolean | null; effectiveMaxBytes?: number };
+  response?: { bytes: number | null; truncated: boolean | null; effectiveMaxBytes?: number; summary?: McpResponseSummary };
   requestArguments?: { values: Record<string, string | number | boolean>; omitted: boolean };
   rateLimit?: { kind: "scan_creation" | "upstream"; retryAfterSeconds?: number; scope?: string; windowId?: string; limit?: number; used?: number; windowSeconds?: number };
   durationMs: number;
@@ -441,14 +443,15 @@ export function createCertScoreMcpServer(options: CertScoreMcpOptions = {}) {
         : request;
       const known = registeredToolNames.has(name);
       let result: any;
+      let protocolFailure: unknown;
       try {
         if (!known) {
           result = { isError: true, structuredContent: { error: { code: "unknown_tool" } } };
           const availableTools = [...registeredToolNames];
           const recommendedNextAction = "Refresh the available tools using your MCP client's tool discovery (tools/list), then call a supported tool.";
-          throw new McpError(ErrorCode.InvalidParams,
+          throw withResponseCapture(new McpError(ErrorCode.InvalidParams,
             `This tool is unavailable on this endpoint. ${recommendedNextAction} Available tools: ${availableTools.join(", ")}.`,
-            { code: "unknown_tool", retryable: false, recommendedNextAction, availableTools });
+            { code: "unknown_tool", retryable: false, recommendedNextAction, availableTools }), { message: `This tool is unavailable on this endpoint. ${recommendedNextAction} Available tools: ${availableTools.join(", ")}.`, recommendedNextAction });
         }
         const contract = certScoreMcpToolContracts.find(candidate => candidate.name === name)!;
         const validation = z.object(contract.inputSchema).safeParse(forwardedRequest.params.arguments ?? {});
@@ -465,6 +468,7 @@ export function createCertScoreMcpServer(options: CertScoreMcpOptions = {}) {
             });
         return result;
       } catch (error) {
+        protocolFailure = error;
         result ??= { isError: true, structuredContent: { error: { code: "handler_exception" } } };
         throw error;
       } finally {
@@ -480,7 +484,8 @@ export function createCertScoreMcpServer(options: CertScoreMcpOptions = {}) {
             callerInput: captureMcpCallerInput(args, request.params._meta),
             ...(taskContext ? { taskContext } : {}),
             response: {
-              bytes: Math.min(10_000_000, Buffer.byteLength(JSON.stringify(result ?? null))),
+              summary: captureMcpResponse(result, protocolFailure),
+              bytes: protocolFailure ? null : Math.min(10_000_000, Buffer.byteLength(JSON.stringify(result ?? null))),
               truncated: typeof metadata?.truncated === "boolean" ? metadata.truncated : null,
               ...(typeof metadata?.effectiveMaxBytes === "number" ? { effectiveMaxBytes: metadata.effectiveMaxBytes } : {}),
             },

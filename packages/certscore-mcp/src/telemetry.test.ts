@@ -34,6 +34,11 @@ test("protocol observation captures validation errors, unknown tools and strippe
     assert.equal(JSON.stringify(observations).includes("secret-value"), false);
     assert.equal(observations[3]?.taskContext?.purpose, "vendor_review");
     assert.ok(observations[0]?.response?.bytes);
+    assert.equal(observations[0]?.response?.summary?.errorCode, "invalid_arguments");
+    assert.equal(observations[1]?.response?.summary?.kind, "protocol_error");
+    assert.equal(observations[1]?.response?.summary?.mcpCode, -32602);
+    assert.match(observations[1]?.response?.summary?.recommendedNextAction ?? "", /tool discovery/);
+    assert.equal(observations[1]?.response?.bytes, null);
     assert.equal(observations[3]?.callerInput?.questionStatus, "retained");
     assert.equal(observations[2]?.callerInput?.fields.find(field => field.path === "arguments.hidden")?.disposition, "redacted");
   } finally { await client.close(); await server.close(); }

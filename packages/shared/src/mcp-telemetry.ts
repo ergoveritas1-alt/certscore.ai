@@ -1,3 +1,4 @@
+import { mcpResponseSummarySchema } from "./mcp-response-summary";
 import { mcpCallerInputSchema } from "./mcp-caller-input";
 import { z } from "zod";
 import { mcpTaskContextSchema, sanitizeMcpTaskContext } from "./mcp-product-context";
@@ -123,11 +124,13 @@ export const mcpRequestDetailsSchema = z.object({
   taskContext: mcpTaskContextSchema.refine(value => JSON.stringify(value) === JSON.stringify(sanitizeMcpTaskContext(value)), "Question context must be sanitized before ingestion.").optional(),
   clientVersion: telemetryOption.optional(),
   serverVersion: telemetryOption.optional(),
+  serverRevision: z.string().regex(/^[a-f0-9]{40}$/).optional(),
   toolSchemaVersion: telemetryOption.optional(),
   response: z.object({
-    bytes: z.number().int().min(0).max(10_000_000),
+    bytes: z.number().int().min(0).max(10_000_000).nullable(),
     truncated: z.boolean().nullable(),
     effectiveMaxBytes: telemetryCount.optional(),
+    summary: mcpResponseSummarySchema.optional(),
   }).strict().optional(),
   arguments: z.object({
     url: z.string().url().max(512).refine((value) => {
@@ -165,6 +168,7 @@ export type McpRequestDetails = z.infer<typeof mcpRequestDetailsSchema>;
 // Pretty JSON is a conservative upper bound on that serialization's size.
 export function boundMcpRequestDetails(input: McpRequestDetails): McpRequestDetails {
   const details: McpRequestDetails = { ...input, arguments: { ...input.arguments },
+    ...(input.response ? { response: { ...input.response, ...(input.response.summary ? { summary: { ...input.response.summary } } : {}) } } : {}),
     ...(input.callerInput ? { callerInput: { ...input.callerInput, fields: [...input.callerInput.fields], limits: [...input.callerInput.limits] } } : {}) };
   const bytes = () => new TextEncoder().encode(JSON.stringify(details, null, 1)).length;
   while (bytes() > 4096 && details.callerInput?.fields.length) {
@@ -176,6 +180,13 @@ export function boundMcpRequestDetails(input: McpRequestDetails): McpRequestDeta
     if (bytes() <= 4096) break;
     delete (details.arguments as Record<string, unknown>)[key]; details.argumentsOmitted = true;
   }
+  for (const key of ["recommendedNextAction", "message", "issues"] as const) {
+    if (bytes() <= 4096 || !details.response?.summary) break;
+    delete details.response.summary[key];
+    details.response.summary.summaryTruncated = true;
+    details.response.summary.textOmitted = true;
+  }
+  if (bytes() > 4096 && details.response) delete details.response.summary;
   return details;
 }
 
