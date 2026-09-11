@@ -1,0 +1,36 @@
+{
+  "entries": {
+    "https://blick.ch/": {
+      "consecutiveNoGoCount": 0,
+      "cooldownUntil": "2026-10-09T19:00:46.820Z",
+      "lastContactAt": "2026-09-11T19:00:46.820Z",
+      "lastContactSource": "calibration",
+      "lastNoGoReasons": [],
+      "lastOutcome": "completed",
+      "state": "cooldown",
+      "url": "https://blick.ch/"
+    },
+    "https://mackolik.com/": {
+      "consecutiveNoGoCount": 0,
+      "cooldownUntil": "2026-10-09T19:02:34.370Z",
+      "lastContactAt": "2026-09-11T19:02:34.370Z",
+      "lastContactSource": "calibration",
+      "lastNoGoReasons": [],
+      "lastOutcome": "completed",
+      "state": "cooldown",
+      "url": "https://mackolik.com/"
+    },
+    "https://pestpac.com/": {
+      "consecutiveNoGoCount": 0,
+      "cooldownUntil": "2026-10-09T19:01:36.070Z",
+      "lastContactAt": "2026-09-11T19:01:36.070Z",
+      "lastContactSource": "calibration",
+      "lastNoGoReasons": [],
+      "lastOutcome": "completed",
+      "state": "cooldown",
+      "url": "https://pestpac.com/"
+    }
+  },
+  "ledgerVersion": "certscore.scan_quality_calibration_ledger.1",
+  "updatedAt": "2026-09-11T19:03:41.301Z"
+}

@@ -1,5 +1,7 @@
 # Ireland paired action validation — September 11, 2026
 
+**Later September 11 follow-up:** the bounded early-exit defect is fixed and fresh Ireland pairs passed all five targeted paths. See the [follow-up report](consent-action-followup-20260911.md) for the current release recommendation and limitations. The original pass below is preserved unchanged.
+
 The two final semantic gaps are fixed, but this diagnostic pass does not establish a net click-completion improvement. Keep deployment on hold pending the unresolved Mackolik and Blick losses.
 
 ## Design and evidence gates
