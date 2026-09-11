@@ -758,7 +758,7 @@ test("Developer API docs are discoverable by crawlers and agent manifests", asyn
   assert.equal(aiDiscovery.mcp.light.clineMarketplaceIconUrl, "https://certscore.ai/images/mcp-directory/certscore-mcp-light-cline-400.png");
   assert.match(aiDiscovery.mcp.light.shortDescription, /^Free website privacy scanner/);
   assert.match(aiDiscovery.mcp.light.longDescription, /Accept is a score-neutral comparison baseline/);
-  assert.match(aiDiscovery.mcp.light.longDescription, /confirmed refusal-state transition and qualifying retained evidence/);
+  assert.match(aiDiscovery.mcp.light.longDescription, /completed Reject click with independently verified tracking evidence/);
   assert.deepEqual(aiDiscovery.capabilities.choicePathResults, ["postAcceptObservation", "postRefusalObservation", "gpcResponse"]);
   assert.match(aiDiscovery.mcp.light.longDescription, /not legal advice, certification, or a compliance determination/);
   assert.deepEqual(aiDiscovery.mcp.light.tools, ["certscore_scan_site", "certscore_get_scan_status", "certscore_get_scan_bundle"]);
