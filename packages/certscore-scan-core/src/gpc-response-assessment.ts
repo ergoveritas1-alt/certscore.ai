@@ -43,7 +43,7 @@ function validReadback(proof: GpcSignalObservation | null, expected: boolean) {
     proof.frames.every((frame) => frame.navigatorValue === expected);
 }
 
-function retainedFinalDocumentRequest(bundle: CanonicalEvidenceBundle | undefined, proof: GpcSignalObservation | null) {
+export function retainedFinalDocumentRequest(bundle: CanonicalEvidenceBundle | undefined, proof: GpcSignalObservation | null) {
   if (!bundle || !proof) return undefined;
   const documents = bundle.networkEvents.filter((event) => event.isMainFrame === true && event.resourceType === "document" &&
     event.timestampMs >= proof.documentStartedAtMs);

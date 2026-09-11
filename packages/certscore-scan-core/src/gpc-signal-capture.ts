@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
 import type { BrowserContext, Page, Worker } from "playwright";
-import { gpcSignalObservationSchema, type GpcSignalObservation } from "@certscore/contracts";
+import { gpcSignalObservationSchema, type GpcSignalObservation, type BrowserDocumentIdentity } from "@certscore/contracts";
 import { chromiumContextOptions } from "./playwright-runtime.js";
 
 export function gpcDocumentHash(value: string): string {
@@ -22,6 +22,7 @@ export async function installGpcNavigatorSignal(context: BrowserContext, enabled
 export function createGpcSignalCapture(input: {
   context: BrowserContext; page: Page; enabled: boolean; scanStartedAtMs: number;
   waitMode?: string; internalBudgetMs: number;
+  prototypeBinding?: { captureId: string; documentIdentity: () => BrowserDocumentIdentity | undefined };
 }) {
   const workers = new Set<Worker>();
   input.page.on("worker", (worker) => workers.add(worker));
@@ -32,6 +33,7 @@ export function createGpcSignalCapture(input: {
 
   return {
     async snapshot(): Promise<GpcSignalObservation | undefined> {
+      const before = input.prototypeBinding?.documentIdentity();
       const frames = input.page.frames();
       const samples = await Promise.all(frames.slice(0, 32).map(async (frame) => {
         try {
@@ -58,9 +60,15 @@ export function createGpcSignalCapture(input: {
         !finalFrames.includes(frame) || (samples[index] && gpcDocumentHash(frame.url()) !== samples[index]!.documentUrlSha256))) {
         limitationKeys.push("frames_changed_during_readback");
       }
+      const after = input.prototypeBinding?.documentIdentity();
+      const bindingStable = before?.token && before.token === after?.token;
+      if (input.prototypeBinding && !bindingStable) limitationKeys.push("prototype_document_identity_unverified");
       return gpcSignalObservationSchema.parse({
         contractVersion: "certscore.gpc-signal-observation.v1", expectedEnabled: input.enabled,
         documentUrlSha256: main.documentUrlSha256, contextConfigSha256,
+        ...(input.prototypeBinding && bindingStable ? { prototypeCaptureBinding: {
+          captureId: input.prototypeBinding.captureId, documentIdentitySource: after!.source, documentToken: after!.token,
+        } } : {}),
         capturedAtMs: Math.max(0, Date.now() - input.scanStartedAtMs),
         documentStartedAtMs: Math.max(0, Math.round(main.timeOrigin - input.scanStartedAtMs)),
         frameCount: frames.length,

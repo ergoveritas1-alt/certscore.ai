@@ -96,11 +96,19 @@ const hashSchema = z.string().regex(/^[a-f0-9]{64}$/);
 const countSchema = z.number().int().nonnegative();
 
 /** Same-session readback, not a claim that configuring the browser succeeded. */
+// Emitted only by the internal opt-out prototype; legacy/production captures
+// do not acquire new proof merely by parsing this optional field.
+export const gpcPrototypeCaptureBindingSchema = z.object({
+  captureId: z.string().uuid(), documentIdentitySource: z.literal("cdp_loader_id"),
+  documentToken: z.string().min(1).max(160),
+}).strict();
+
 export const gpcSignalObservationSchema = z.object({
   contractVersion: z.literal("certscore.gpc-signal-observation.v1"),
   expectedEnabled: z.boolean(),
   documentUrlSha256: hashSchema,
   contextConfigSha256: hashSchema,
+  prototypeCaptureBinding: gpcPrototypeCaptureBindingSchema.optional(),
   capturedAtMs: countSchema,
   documentStartedAtMs: countSchema,
   frameCount: countSchema,

@@ -60,7 +60,9 @@ export * from "./post-refusal-observation";
 export * from "./post-accept-observation";
 export * from "./post-action-dispatch";
 export * from "./gpc-observation";
+export * from "./gpc-opt-out-prototype";
 
+const canonicalBundleGpcSignalObservationSchema: z.ZodType<import("./gpc-observation").GpcSignalObservation> = gpcSignalObservationSchema;
 const canonicalBundleGpcResponseAssessmentSchema: z.ZodType<GpcResponseAssessment> =
   gpcResponseAssessmentSchema;
 
@@ -3376,7 +3378,7 @@ const canonicalEvidenceBundleBaseSchema = z.object({
   postRefusalEvidence: canonicalPostRefusalPacketSchema.optional(),
   postRefusalLaneOutcome: postRefusalLaneOutcomeSchema.optional(),
   gpcResponseAssessment: canonicalBundleGpcResponseAssessmentSchema.optional(),
-  gpcSignalObservation: gpcSignalObservationSchema.optional(),
+  gpcSignalObservation: canonicalBundleGpcSignalObservationSchema.optional(),
   runtimeTimeline: z.array(runtimeEvidenceEventSchema),
   networkEvents: z.array(networkEventSchema),
   networkResponseEvents: z.array(networkResponseEventSchema).default([]),

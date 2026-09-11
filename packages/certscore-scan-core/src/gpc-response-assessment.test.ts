@@ -240,12 +240,17 @@ test("dedicated passive browser condition sends Sec-GPC and exposes navigator.gl
       artifactWriter: await createArtifactWriter(tempRoot),
       captureScope: "runtime_evidence",
       globalPrivacyControlEnabled: true,
+      gpcOptOutPrototype: { scanId: "gpc-runtime-prototype-fixture" },
       internalBudgetMs: 5_000,
       normalizedUrl: pageUrl,
       routeFulfillers: [{
         urlPattern: /^https:\/\/gpc-observation\.test\/$/,
         contentType: "text/html",
-        body: `<!doctype html><script>fetch('/navigator-gpc-' + String(navigator.globalPrivacyControl))</script>`,
+        body: `<!doctype html><script>
+          window.__gpp = (command, callback) => callback({ gppVersion: '1.1', cmpStatus: 'loaded', signalStatus: 'ready',
+            applicableSections: [8], sectionList: [8], parsedSections: { usca: [{ Version: 1,
+              SaleOptOutNotice: 1, SharingOptOutNotice: 1, SaleOptOut: 1, SharingOptOut: 1 }, { SubsectionType: 1, Gpc: true }] } }, true);
+          fetch('/navigator-gpc-' + String(navigator.globalPrivacyControl));</script>`,
       }, {
         urlPattern: /^https:\/\/gpc-observation\.test\/navigator-gpc-/,
         contentType: "text/plain",
@@ -261,6 +266,11 @@ test("dedicated passive browser condition sends Sec-GPC and exposes navigator.gl
     assert.ok(requests.every((event) => event.requestHeaders?.secGpc === "1"));
     assert.ok(requests.some((event) => event.path === "/navigator-gpc-true"));
     assert.equal(result.gpcSignalObservation?.frames[0]?.navigatorValue, true);
+    assert.deepEqual(result.gpcOptOutObservation?.captureBinding, result.gpcSignalObservation?.prototypeCaptureBinding);
+    assert.ok(result.gpcOptOutObservation?.captureBinding?.documentToken);
+    assert.equal(result.gpcOptOutObservation?.usca?.saleOptOut, 1);
+    assert.equal(result.gpcOptOutObservation?.usca?.sharingOptOut, 1);
+    assert.equal(result.gpcOptOutObservation?.documentUrlSha256, result.gpcSignalObservation?.documentUrlSha256);
     assert.equal(result.gpcSignalObservation?.documentUrlSha256, gpcDocumentHash(pageUrl));
     assert.equal(requests.some((event) => event.requestHeaders?.dnt !== undefined), false);
     assert.ok(result.transportSecurityObservations.length > 0);
@@ -357,4 +367,21 @@ test("250ms quiet gate restarts for late GPC-condition activity and retains the 
     await browser.close();
     await rm(tempRoot, { recursive: true, force: true });
   }
+});
+
+test("ordinary passive scanner has no prototype readback or sidecar", async () => {
+  const tempRoot = await mkdtemp(path.join(tmpdir(), "certscore-gpc-default-"));
+  try {
+    const result = await preConsentRuntimeScanner({
+      artifactWriter: await createArtifactWriter(tempRoot), captureScope: "runtime_evidence", globalPrivacyControlEnabled: true,
+      internalBudgetMs: 5000, normalizedUrl: "https://gpc-default.test/", url: "https://gpc-default.test/",
+      scanStartedAtMs: Date.now(), screenshotMode: "never", waitMode: "fast",
+      routeFulfillers: [{ urlPattern: /^https:\/\/gpc-default\.test\/.*$/, contentType: "text/html",
+        body: '<!doctype html><script>window.__gpp = () => { fetch("/unexpected-prototype-read"); throw Error("Unexpected prototype"); };</script><p>Default fixture</p>' }],
+    });
+    assert.equal(result.gpcOptOutObservation, undefined);
+    assert.equal(result.gpcSignalObservation?.prototypeCaptureBinding, undefined);
+    assert.equal(result.moduleRun.timingBreakdown?.some(t => t.label === "GPC opt-out prototype"), false);
+    assert.equal(result.networkEvents.some(e => e.path === "/unexpected-prototype-read"), false);
+  } finally { await rm(tempRoot, { recursive: true, force: true }); }
 });
