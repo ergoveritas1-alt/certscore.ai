@@ -365,8 +365,8 @@
     },
     "https://one.one/": {
       "consecutiveNoGoCount": 0,
-      "cooldownUntil": "2026-10-08T23:40:31.320Z",
-      "lastContactAt": "2026-09-10T23:40:31.320Z",
+      "cooldownUntil": "2026-10-09T01:25:15.659Z",
+      "lastContactAt": "2026-09-11T01:25:15.659+00:00",
       "lastContactSource": "calibration",
       "lastNoGoReasons": [],
       "lastOutcome": "completed",
@@ -395,8 +395,8 @@
     },
     "https://launchdarkly.com/": {
       "consecutiveNoGoCount": 0,
-      "cooldownUntil": "2026-10-08T23:36:41.391Z",
-      "lastContactAt": "2026-09-10T23:36:41.391Z",
+      "cooldownUntil": "2026-10-09T01:24:57.995Z",
+      "lastContactAt": "2026-09-11T01:24:57.995+00:00",
       "lastContactSource": "calibration",
       "lastNoGoReasons": [],
       "lastOutcome": "completed",
@@ -505,8 +505,8 @@
     },
     "https://olx.pl/": {
       "consecutiveNoGoCount": 0,
-      "cooldownUntil": "2026-10-08T23:40:02.791Z",
-      "lastContactAt": "2026-09-10T23:40:02.791Z",
+      "cooldownUntil": "2026-10-09T01:25:36.681Z",
+      "lastContactAt": "2026-09-11T01:25:36.681+00:00",
       "lastContactSource": "calibration",
       "lastNoGoReasons": [],
       "lastOutcome": "completed",
@@ -788,5 +788,5 @@
     }
   },
   "ledgerVersion": "certscore.scan_quality_calibration_ledger.1",
-  "updatedAt": "2026-09-10T23:55:34.324Z"
+  "updatedAt": "2026-09-11T01:27:20.777Z"
 }
