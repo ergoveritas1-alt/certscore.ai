@@ -1,0 +1,111 @@
+{
+  "entries": {
+    "https://blick.ch/": {
+      "consecutiveNoGoCount": 0,
+      "cooldownUntil": "2026-10-09T18:26:53.915Z",
+      "lastContactAt": "2026-09-11T18:26:53.915Z",
+      "lastContactSource": "calibration",
+      "lastNoGoReasons": [],
+      "lastOutcome": "completed",
+      "state": "cooldown",
+      "url": "https://blick.ch/"
+    },
+    "https://francetvinfo.fr/": {
+      "consecutiveNoGoCount": 0,
+      "cooldownUntil": "2026-10-09T18:21:49.008Z",
+      "lastContactAt": "2026-09-11T18:21:49.008Z",
+      "lastContactSource": "calibration",
+      "lastNoGoReasons": [],
+      "lastOutcome": "completed",
+      "state": "cooldown",
+      "url": "https://francetvinfo.fr/"
+    },
+    "https://freenet.de/": {
+      "consecutiveNoGoCount": 1,
+      "cooldownUntil": "2026-10-09T18:19:58.943Z",
+      "lastContactAt": "2026-09-11T18:19:58.943Z",
+      "lastContactSource": "calibration",
+      "lastNoGoReasons": [
+        "potential_security_challenge",
+        "scan_no_go_corroborated",
+        "consent_proof:bot_challenge:200",
+        "runtime_evidence:bot_challenge:302"
+      ],
+      "lastOutcome": "no_go",
+      "state": "blocked",
+      "url": "https://freenet.de/"
+    },
+    "https://fyber.com/": {
+      "consecutiveNoGoCount": 0,
+      "cooldownUntil": "2026-10-09T18:25:04.432Z",
+      "lastContactAt": "2026-09-11T18:25:04.432Z",
+      "lastContactSource": "calibration",
+      "lastNoGoReasons": [],
+      "lastOutcome": "completed",
+      "state": "cooldown",
+      "url": "https://fyber.com/"
+    },
+    "https://mailerlite.com/": {
+      "consecutiveNoGoCount": 0,
+      "cooldownUntil": "2026-10-09T18:26:00.160Z",
+      "lastContactAt": "2026-09-11T18:26:00.160Z",
+      "lastContactSource": "calibration",
+      "lastNoGoReasons": [],
+      "lastOutcome": "completed",
+      "state": "cooldown",
+      "url": "https://mailerlite.com/"
+    },
+    "https://tmdb.org/": {
+      "consecutiveNoGoCount": 0,
+      "cooldownUntil": "2026-10-09T18:24:23.776Z",
+      "lastContactAt": "2026-09-11T18:24:23.776Z",
+      "lastContactSource": "calibration",
+      "lastNoGoReasons": [],
+      "lastOutcome": "completed",
+      "state": "cooldown",
+      "url": "https://tmdb.org/"
+    },
+    "https://n8n.io/": {
+      "consecutiveNoGoCount": 0,
+      "cooldownUntil": "2026-10-09T18:20:53.871Z",
+      "lastContactAt": "2026-09-11T18:20:53.871Z",
+      "lastContactSource": "calibration",
+      "lastNoGoReasons": [],
+      "lastOutcome": "completed",
+      "state": "cooldown",
+      "url": "https://n8n.io/"
+    },
+    "https://mackolik.com/": {
+      "consecutiveNoGoCount": 0,
+      "cooldownUntil": "2026-10-09T18:19:22.758Z",
+      "lastContactAt": "2026-09-11T18:19:22.758Z",
+      "lastContactSource": "calibration",
+      "lastNoGoReasons": [],
+      "lastOutcome": "completed",
+      "state": "cooldown",
+      "url": "https://mackolik.com/"
+    },
+    "https://qobuz.com/": {
+      "consecutiveNoGoCount": 0,
+      "cooldownUntil": "2026-10-09T18:23:29.637Z",
+      "lastContactAt": "2026-09-11T18:23:29.637Z",
+      "lastContactSource": "calibration",
+      "lastNoGoReasons": [],
+      "lastOutcome": "completed",
+      "state": "cooldown",
+      "url": "https://qobuz.com/"
+    },
+    "https://pestpac.com/": {
+      "consecutiveNoGoCount": 0,
+      "cooldownUntil": "2026-10-09T18:22:45.509Z",
+      "lastContactAt": "2026-09-11T18:22:45.509Z",
+      "lastContactSource": "calibration",
+      "lastNoGoReasons": [],
+      "lastOutcome": "completed",
+      "state": "cooldown",
+      "url": "https://pestpac.com/"
+    }
+  },
+  "ledgerVersion": "certscore.scan_quality_calibration_ledger.1",
+  "updatedAt": "2026-09-11T18:27:40.318Z"
+}
