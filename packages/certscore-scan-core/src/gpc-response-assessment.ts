@@ -43,6 +43,20 @@ function validReadback(proof: GpcSignalObservation | null, expected: boolean) {
     proof.frames.every((frame) => frame.navigatorValue === expected);
 }
 
+function retainedFinalDocumentRequest(bundle: CanonicalEvidenceBundle | undefined, proof: GpcSignalObservation | null) {
+  if (!bundle || !proof) return undefined;
+  const documents = bundle.networkEvents.filter((event) => event.isMainFrame === true && event.resourceType === "document" &&
+    event.timestampMs >= proof.documentStartedAtMs);
+  const matching = documents.filter((event) => safeHash(event.requestUrl) === proof.documentUrlSha256);
+  // Bind the readback to this navigation, not a same-URL request from an older
+  // document. Redirect hops may precede it; later or ambiguous navigations must
+  // not borrow its proof. firstEffectiveUrl is first-response telemetry only.
+  const final = matching.length === 1 ? matching[0] : undefined;
+  if (!final || final.timestampMs > proof.capturedAtMs || documents.some((event) =>
+    event !== final && event.timestampMs >= final.timestampMs)) return undefined;
+  return final;
+}
+
 function comparableInventory(bundle: CanonicalEvidenceBundle | undefined, proof: GpcSignalObservation | null, throughMs: number | null) {
   const inWindow = (timestampMs: number) => proof !== null && throughMs !== null &&
     timestampMs >= proof.documentStartedAtMs && timestampMs <= proof.documentStartedAtMs + throughMs;
@@ -52,8 +66,19 @@ function comparableInventory(bundle: CanonicalEvidenceBundle | undefined, proof:
   const evidenceIds = new Set([...network, ...cookies, ...scripts].map((event) => event.eventId));
   const observedVendors = (bundle?.normalizedVendorObservations ?? []).filter((observation) =>
     observation.matchedEvidenceIds.some((id) => evidenceIds.has(id)));
-  const observedJourneys = (bundle?.observedJourneys ?? []).filter((journey) =>
-    inWindow(journey.firstObservedAtMs) && journey.eventRefs.some((ref) => evidenceIds.has(ref.eventId)));
+  const vendorsById = new Map(observedVendors.map((observation) => [observation.observationId, observation]));
+  const observedJourneys = (bundle?.observedJourneys ?? []).filter((journey) => {
+    const refs = new Set(journey.eventRefs.filter((ref) => evidenceIds.has(ref.eventId)).map((ref) => ref.eventId));
+    // An early tag-manager bootstrap does not establish a later advertising or
+    // analytics purpose. Require this journey's own purpose-bearing observation
+    // and an intersecting retained event inside the common window.
+    return journey.relatedVendorObservationIds.some((id) => {
+      const vendor = vendorsById.get(id);
+      return vendor && vendor.purpose === journey.purpose && vendor.vendor === journey.vendor &&
+        (!journey.product || journey.product === vendor.product) &&
+        vendor.matchedEvidenceIds.some((eventId) => refs.has(eventId));
+    });
+  });
   const classified = (purposes: Set<string>) => uniqueSorted([
     ...observedVendors.filter((v) => purposes.has(v.purpose)).map((v) => `${v.vendor}|${v.product ?? "unspecified"}|${v.purpose}`),
     ...observedJourneys.filter((j) => j.purpose && purposes.has(j.purpose))
@@ -93,15 +118,14 @@ export function buildGpcResponseAssessment(input: {
   const headerEvents = (input.gpc?.networkEvents ?? []).filter((event) => event.requestHeaders?.secGpc === "1");
   const headerEventIds = [...new Set(headerEvents.map((event) => event.eventId))].filter((id) => id.length > 0 && id.length <= 160).sort();
   if (headerEvents.some((event) => event.eventId.length === 0 || event.eventId.length > 160)) deliveryLimits.add("request_proof_identity_unverifiable");
-  const mainRequest = (bundle: CanonicalEvidenceBundle | undefined, proof: GpcSignalObservation | null) =>
-    bundle?.networkEvents.find((event) => event.isMainFrame === true && event.resourceType === "document" &&
-      proof && safeHash(event.requestUrl) === proof.documentUrlSha256);
+  const baselineDocument = retainedFinalDocumentRequest(input.baseline, baselineProof);
+  const gpcDocument = retainedFinalDocumentRequest(input.gpc, gpcProof);
   if (!validReadback(baselineProof, false)) deliveryLimits.add("baseline_signal_readback_unverified");
   if (!validReadback(gpcProof, true)) deliveryLimits.add("gpc_signal_readback_unverified");
-  if (!mainRequest(input.baseline, baselineProof) || input.baseline.networkEvents.some((event) => event.requestHeaders?.secGpc !== undefined)) {
+  if (!baselineDocument || input.baseline.networkEvents.some((event) => event.requestHeaders?.secGpc !== undefined)) {
     deliveryLimits.add("baseline_gpc_off_not_verified");
   }
-  if (mainRequest(input.gpc, gpcProof)?.requestHeaders?.secGpc !== "1") deliveryLimits.add("main_document_sec_gpc_not_retained");
+  if (gpcDocument?.requestHeaders?.secGpc !== "1") deliveryLimits.add("main_document_sec_gpc_not_retained");
   if (input.gpc?.networkEvents.some((event) => event.requestHeaders?.secGpc !== "1")) deliveryLimits.add("gpc_request_signal_incomplete");
   if (input.failureReason) coverageLimits.add(input.failureReason);
   if (!input.gpc || !input.gpcArtifact) coverageLimits.add("gpc_evidence_unavailable");
@@ -110,8 +134,7 @@ export function buildGpcResponseAssessment(input: {
   }
   if (!baselineProof || !gpcProof || baselineProof.contextConfigSha256 !== gpcProof.contextConfigSha256) coverageLimits.add("browser_protocol_mismatch");
   if (!baselineProof || !gpcProof || baselineProof.documentUrlSha256 !== gpcProof.documentUrlSha256 ||
-    safeHash(baselineLane?.firstEffectiveUrl ?? input.baseline.normalizedUrl) !== baselineProof.documentUrlSha256 ||
-    safeHash(gpcLane?.firstEffectiveUrl ?? input.gpc?.normalizedUrl) !== gpcProof.documentUrlSha256) {
+    !baselineDocument || !gpcDocument) {
     coverageLimits.add("baseline_gpc_document_mismatch");
   }
   for (const [label, bundle, lane] of [["baseline", input.baseline, baselineLane], ["gpc", input.gpc, gpcLane]] as const) {

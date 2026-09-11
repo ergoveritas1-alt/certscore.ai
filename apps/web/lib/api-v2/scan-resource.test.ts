@@ -24,6 +24,7 @@ import { gpcRuntimeFixture } from "../../../../packages/certscore-contracts/src/
 import servicePurposeFixtures from "../../../../packages/certscore-contracts/src/test-fixtures/vendor-service-purpose-v1.json";
 import { resolveCanonicalVendorLabel } from "@certscore/vendor-resolver";
 import { buildGpcResponseAssessment } from "../../../../packages/certscore-scan-core/src/gpc-response-assessment";
+import { gpcJourneyWindowFixture, redirectGpcFixture } from "../../../../packages/certscore-scan-core/src/test-fixtures/gpc-window.cases";
 import { buildNormalizedConcerns } from "../scans/normalized-concerns";
 import { buildUnifiedFindingDisplayPackets } from "../scans/unified-findings";
 import { buildGpcResponseReportProjection } from "../../components/scans/report-lab/gpc-report-projection";
@@ -332,14 +333,21 @@ test("API v2 resource and status surface the canonical GPC response without priv
   assert.deepEqual(status.gpcResponse, resource.gpcResponse);
 });
 
-for (const outcome of ["no_observable_response", "responsive", "indeterminate"] as const) {
-  test(`GPC v2 ${outcome} survives canonical concern/policy, persistence, report and API boundaries`, () => {
+for (const scenario of ["no_observable_response", "responsive", "indeterminate", "late_journey", "redirect", "stale_redirect"] as const) {
+  test(`GPC v2 ${scenario} survives canonical concern/policy, persistence, report and API boundaries`, () => {
+    const outcome = scenario === "stale_redirect" ? "indeterminate" :
+      scenario === "late_journey" || scenario === "redirect" ? "no_observable_response" : scenario;
     const vendors = Array.from({ length: 150 }, (_, i) => ({ name: `Ad ${i}` }));
-    const baseline = gpcRuntimeFixture({ enabled: false, vendors });
-    const gpc = gpcRuntimeFixture({ enabled: true, vendors: outcome === "responsive" ? [] : vendors });
+    const baseline = scenario === "late_journey" ? gpcJourneyWindowFixture(false, "advertising") : gpcRuntimeFixture({ enabled: false, vendors });
+    const gpc = scenario === "late_journey" ? gpcJourneyWindowFixture(true, "advertising") :
+      gpcRuntimeFixture({ enabled: true, vendors: outcome === "responsive" ? [] : vendors });
+    if (scenario === "redirect" || scenario === "stale_redirect") {
+      redirectGpcFixture(baseline); redirectGpcFixture(gpc);
+      if (scenario === "stale_redirect") gpc.networkEvents.push({ ...gpc.networkEvents[0]!, eventId: "later_navigation", timestampMs: 900 });
+    }
     const assessment = buildGpcResponseAssessment({ baseline,
       baselineArtifact: { sha256: "a".repeat(64), sizeBytes: 100, uri: "s3://private/baseline.json" },
-      ...(outcome === "indeterminate" ? { failureReason: "gpc_worker_failed" as const } : {
+      ...(scenario === "indeterminate" ? { failureReason: "gpc_worker_failed" as const } : {
         gpc, gpcArtifact: { sha256: "b".repeat(64), sizeBytes: 100, uri: "s3://private/gpc.json" },
       }),
     });
@@ -350,7 +358,7 @@ for (const outcome of ["no_observable_response", "responsive", "indeterminate"] 
     const finding = findings.find((row) => row.unifiedFindingId === "gpc_response");
     assert.ok(finding, "canonical flow must produce the typed GPC result");
     assert.equal(concerns.length, 1);
-    const expectedDeduction = outcome === "no_observable_response" ? 15 : 0;
+    const expectedDeduction = outcome === "no_observable_response" && scenario !== "late_journey" ? 15 : 0;
     const report = buildGpcResponseReportProjection(findings);
     assert.deepEqual(report?.assessment, assessment);
     assert.equal(report?.californiaDeductionPoints, expectedDeduction);
@@ -373,13 +381,17 @@ for (const outcome of ["no_observable_response", "responsive", "indeterminate"] 
     assert.equal(response.californiaPolicy.deductionPoints, expectedDeduction);
     assert.deepEqual(response, status.gpcResponse);
     assert.doesNotMatch(JSON.stringify(response), /s3:\/\/|documentUrlSha256|contextConfigSha256/);
-    if (outcome === "no_observable_response") {
+    if (outcome === "no_observable_response" && scenario !== "late_journey") {
       assert.equal(response.comparison.deltas.trackers.sharedCount, 150);
       assert.equal(response.comparison.deltas.trackers.shared.length, 100);
       assert.equal(apiV2GpcResponseSchema.safeParse({ ...response, comparison: { ...response.comparison,
         deltas: { ...response.comparison.deltas, trackers: { ...response.comparison.deltas.trackers, sharedCount: 99 } } } }).success, false);
     }
-    if (outcome === "indeterminate") {
+    if (scenario === "late_journey") {
+      assert.equal(response.comparison.deltas.trackers.baselineCount, 0);
+      assert.equal(response.comparison.deltas.trackers.gpcCount, 0);
+    }
+    if (scenario === "indeterminate") {
       assert.equal(response.comparison.gpcArtifact, null);
       assert.equal(response.comparison.enabledProof.navigatorGlobalPrivacyControl, null);
       assert.equal(response.comparison.delivery?.status, "unavailable");

@@ -11,6 +11,7 @@ import { buildGpcResponseAssessment, compareGpcSets } from "./gpc-response-asses
 import { gpcRuntimeFixture } from "../../certscore-contracts/src/test-fixtures/gpc-runtime.js";
 import { createGpcSignalCapture, gpcDocumentHash, installGpcNavigatorSignal } from "./gpc-signal-capture.js";
 import { preConsentRuntimeScanner } from "./scanners/pre-consent-runtime-scanner.js";
+import { gpcJourneyWindowFixture, redirectGpcFixture } from "./test-fixtures/gpc-window.cases.js";
 
 const sha = "a".repeat(64);
 
@@ -155,6 +156,81 @@ test("v2 worker failure retains a neutral assessment without invented GPC proof 
   assert.equal(result.comparison.delivery.status, "unavailable");
   assert.ok(result.comparison.limitationKeys.includes("gpc_worker_failed"));
 });
+
+for (const purpose of ["advertising", "analytics"] as const) {
+  test(`v2 does not backdate late ${purpose} through an early tag-manager journey`, () => {
+    const baseline = gpcJourneyWindowFixture(false, purpose);
+    baseline.gpcSignalObservation!.capturedAtMs = 2000;
+    const gpc = gpcJourneyWindowFixture(true, purpose);
+    const before = structuredClone([baseline, gpc]);
+    assert.ok(baseline.observedJourneys.some((j) => j.journeyType === "vendor" && j.purpose === purpose && j.firstObservedAtMs === 200));
+    const result = assess(baseline, gpc);
+    assert.equal(result.status, "no_observable_response");
+    assert.equal(result.comparison.deltas.trackers.baselineCount, 0);
+    assert.equal(result.comparison.deltas.trackers.gpcCount, 0);
+    assert.deepEqual([baseline, gpc], before, "raw evidence must remain intact");
+    assert.equal(assess(baseline, gpcRuntimeFixture({ enabled: true })).status, "no_observable_response",
+      "a late-only baseline purpose must not become apparent suppression");
+  });
+}
+
+test("v2 retains in-window purpose anchors even when a journey started before the current document", () => {
+  const baseline = gpcJourneyWindowFixture(false, "advertising", 500);
+  const gpc = gpcJourneyWindowFixture(true, "advertising", 500);
+  for (const bundle of [baseline, gpc]) {
+    bundle.gpcSignalObservation!.documentStartedAtMs = 300;
+    bundle.networkEvents[0]!.timestampMs = 300;
+    // A later endpoint cannot invalidate the qualifying one already retained.
+    bundle.networkEvents.push({ ...bundle.networkEvents[2]!, eventId: "late_endpoint", timestampMs: 2000 });
+  }
+  const delta = assess(baseline, gpc).comparison.deltas.trackers;
+  assert.deepEqual(delta.shared, ["Example Vendor|Collection|advertising", "Example Vendor|Example Vendor|advertising"]);
+});
+
+test("v2 journey purpose cannot borrow an unrelated product, observation, or event", () => {
+  for (const mutate of [
+    (j: CanonicalEvidenceBundle["observedJourneys"][number]) => { j.relatedVendorObservationIds = ["missing"]; },
+    (j: CanonicalEvidenceBundle["observedJourneys"][number]) => { j.product = "Unrelated Product"; },
+    (j: CanonicalEvidenceBundle["observedJourneys"][number]) => { j.eventRefs = j.eventRefs.filter((ref) => ref.eventId === "vendor_0"); },
+  ]) {
+    const baseline = gpcJourneyWindowFixture(false, "advertising", 500);
+    baseline.observedJourneys.forEach(mutate);
+    const result = assess(baseline, gpcRuntimeFixture({ enabled: true }));
+    assert.deepEqual(result.comparison.deltas.trackers.baselineOnly, ["Example Vendor|Collection|advertising"]);
+  }
+});
+
+test("v2 pairs verified final documents after redirects without treating the first response as final", () => {
+  const baseline = redirectGpcFixture(gpcRuntimeFixture({ enabled: false, vendors: [{ name: "Ads" }] }));
+  const gpc = redirectGpcFixture(gpcRuntimeFixture({ enabled: true, vendors: [{ name: "Ads" }] }));
+  const result = assess(baseline, gpc);
+  assert.equal(result.status, "no_observable_response");
+  assert.deepEqual(result.comparison.limitationKeys, []);
+  assert.equal(result.comparison.deltas.advertisingOrMarketingActivity.sharedCount, 1);
+});
+
+const invalidFinalDocuments: Array<[string, (b: CanonicalEvidenceBundle) => void]> = [
+  ["missing final request", (b) => { b.networkEvents.splice(1, 1); }],
+  ["final header missing", (b) => { b.networkEvents[1]!.requestHeaders = {}; }],
+  ["query identity mismatch", (b) => { b.networkEvents[1]!.requestUrl += "&other=1"; }],
+  ["old same-URL request", (b) => { b.gpcSignalObservation!.documentStartedAtMs = 101; }],
+  ["request after readback", (b) => { b.networkEvents[1]!.timestampMs = 1100; }],
+  ["duplicate same-URL navigation", (b) => { b.networkEvents.push({ ...b.networkEvents[1]!, eventId: "duplicate", timestampMs: 200 }); }],
+  ["later conflicting navigation", (b) => { b.networkEvents.push({ ...b.networkEvents[0]!, eventId: "later", timestampMs: 200 }); }],
+  ["navigation after readback", (b) => { b.networkEvents.push({ ...b.networkEvents[0]!, eventId: "later", timestampMs: 1100 }); }],
+  ["simultaneous conflicting navigation", (b) => { b.networkEvents[0]!.timestampMs = 100; }],
+  ["negative observation interval", (b) => { b.gpcSignalObservation!.documentStartedAtMs = 1001; }],
+];
+for (const [name, mutate] of invalidFinalDocuments) {
+  test(`v2 final document fails closed: ${name}`, () => {
+    const baseline = redirectGpcFixture(gpcRuntimeFixture({ enabled: false }));
+    const gpc = redirectGpcFixture(gpcRuntimeFixture({ enabled: true }));
+    mutate(gpc);
+    const result = assess(baseline, gpc);
+    assert.equal(result.status, "indeterminate");
+    assert.equal(result.comparison.comparable, false);
+  });
+}
 
 test("dedicated passive browser condition sends Sec-GPC and exposes navigator.globalPrivacyControl", async () => {
   const tempRoot = await mkdtemp(path.join(tmpdir(), "certscore-gpc-observation-"));

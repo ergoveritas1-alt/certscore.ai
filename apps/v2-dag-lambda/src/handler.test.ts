@@ -314,11 +314,16 @@ test("GPC invocation failure is terminal and neutral without losing the three ve
     workerLanes: ["runtime_evidence"], lambdaClient: { async send() { throw new Error("critical baseline unavailable"); } } }), /critical baseline/);
 });
 
-test("real passive workers retain one parent identity through upload, verification and GPC pairing", { timeout: 30_000 }, async () => {
+test("real redirected passive workers retain parent and final-document identity through upload, verification and GPC pairing", { timeout: 30_000 }, async () => {
   const previousBucket = process.env.CERTSCORE_V2_DAG_LAMBDA_ARTIFACT_BUCKET;
   process.env.CERTSCORE_V2_DAG_LAMBDA_ARTIFACT_BUCKET = "local-memory-only";
   const root = await mkdtemp(path.join(os.tmpdir(), "certscore-worker-identity-"));
-  const server = createHttpServer((_request, response) => {
+  const server = createHttpServer((request, response) => {
+    if (request.url === "/") {
+      response.writeHead(302, { Location: "/final?region=us" });
+      response.end();
+      return;
+    }
     response.setHeader("Content-Type", "text/html");
     response.end('<!doctype html><html><body><h1>Local public information fixture</h1><p>This substantive document is a deterministic browser fixture for independent baseline and privacy-signal captures, without outside requests or consent interactions.</p></body></html>');
   });
@@ -352,12 +357,16 @@ test("real passive workers retain one parent identity through upload, verificati
       assert.ok(verified, "real captured bundle must verify, not only a hand-written fixture");
       assert.equal(verified.scanId, payload.scanId);
       assert.equal(verified.scanLaneRuns[0]?.physicalInvocationId, `physical-${workerLane}`);
+      assert.equal(verified.scanLaneRuns[0]?.firstEffectiveUrl, targetUrl);
+      assert.ok(verified.networkEvents.some((event) => event.isMainFrame && event.resourceType === "document" &&
+        event.requestUrl === `${targetUrl}final?region=us`));
       bundles.push(verified);
       pointers.push({ uri: artifacts.artifactPointers.scanArtifactUri!, ...artifacts.artifactMetadata.scanArtifactUri! });
     }
     const assessment = buildGpcResponseAssessment({ baseline: bundles[0]!, gpc: bundles[1]!, baselineArtifact: pointers[0]!, gpcArtifact: pointers[1]! });
     assert.equal(assessment.comparison.delivery.status, "verified");
     assert.equal(assessment.comparison.limitationKeys.includes("paired_scan_context_mismatch"), false);
+    assert.equal(assessment.comparison.limitationKeys.includes("baseline_gpc_document_mismatch"), false);
     assert.equal(assessment.status, "no_observable_response");
   } finally {
     if (previousBucket === undefined) delete process.env.CERTSCORE_V2_DAG_LAMBDA_ARTIFACT_BUCKET;

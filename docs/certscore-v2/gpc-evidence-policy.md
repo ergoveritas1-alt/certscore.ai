@@ -110,3 +110,48 @@ Contracts/API builds and scan-core, Lambda, web, SDK and MCP typechecks passed;
 `git diff --check` was clean. One legacy Accept fixture assertion was corrected
 to require completed click/capture but unverified consent when its only witness
 was banner dismissal, consistent with the separately approved action policy.
+
+## September 10, 2026 comparison corrections
+
+The owner approved implementing the retained-cohort audit recommendations
+locally. Deployment remains a separate step. These correct v2's implementation
+of the existing evidence policy; they do not change its contract or scoring
+schedule. Existing stored assessments and scores are not recomputed on read.
+New scanner builds retain their normal build provenance and verified source
+artifact pointers. Diagnostic replay outputs are internal artifacts, never
+replacement historical evidence or production materializations.
+
+- Bind each readback to a retained main-document request at or after that
+  document's time origin and no later than the readback. Both final URL hashes
+  must match, including query identity. Permit earlier redirect hops, but fail
+  closed on missing, repeated same-URL, simultaneous conflicting, or later
+  main-document requests. Later navigation after readback also makes that
+  readback insufficient for the terminal document. `firstEffectiveUrl` remains
+  first-response telemetry; it is not final-document proof. Delivery, scan,
+  region, browser configuration, representative access, runtime coverage and
+  settle checks still apply.
+- Admit a journey's purpose only when its own referenced canonical vendor
+  observation has the same vendor, purpose and product (when specified), and
+  the two share a retained purpose-bearing event inside the matched window.
+  An early tag-manager bootstrap cannot backdate later advertising/analytics
+  activity. Use event timestamps from the raw retained inventory, not an
+  aggregate journey's first timestamp. Preserve full raw artifacts and existing
+  identity formatting; introduce no local vendor rules or inferred evidence.
+
+The cached 884-pair production replay (ErgoVeritas excluded) increased
+determinate comparisons from 58 to 116: 60 redirects recovered and two stale
+readbacks newly limited. LaunchDarkly's out-of-window advertising deduction is
+removed in replay; Mozilla's late analytics does not become a false responsive
+result. These are diagnostic results, not changes to stored production scans
+or a measured population false-positive/false-negative rate.
+
+No browser work, model calls, added retention, waits, retries, timeouts, lanes,
+or infrastructure are introduced. Expected incremental recurring cost is
+approximately $0/month at 100,000 scans; comparison-only local computation is
+not a live latency benchmark. The quiet gate is unchanged: 605 cohort scans
+have a settle limitation, and 203 have no other remaining blocker after these
+corrections. Existing artifacts retain timeout outcomes but not the exact
+in-flight count/quiet age at the gate. Request/response metadata cannot prove
+request completion, so these scans must not be promoted by assuming they
+settled during later capture. Any further settle optimization requires direct
+completion evidence within the existing budgets and focused calibration.
