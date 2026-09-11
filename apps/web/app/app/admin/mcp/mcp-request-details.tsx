@@ -5,7 +5,7 @@ import { mcpRequestDetailsSchema } from "@website-signal-risk-scanner/shared";
 import type { AdminMcpTelemetryEvent } from "../../../../server/admin/mcp-telemetry";
 
 export function McpRequestDetails({ event, traffic, period }: {
-  event: Pick<AdminMcpTelemetryEvent, "related_context" | "request_details" | "session_id" | "actor_id" | "tool_name" | "requested_resource" | "requested_resource_type" | "quota_outcome" | "transport_outcome">;
+  event: Pick<AdminMcpTelemetryEvent, "related_context" | "request_details" | "session_id" | "actor_id" | "tool_name" | "requested_resource" | "requested_resource_type" | "quota_outcome" | "transport_outcome"> & Partial<Pick<AdminMcpTelemetryEvent, "request_id" | "event_id">>;
   traffic: string; period: string;
 }) {
   const parsed = mcpRequestDetailsSchema.safeParse(event.request_details);
@@ -70,6 +70,8 @@ export function McpRequestDetails({ event, traffic, period }: {
         </> : <p>Response summary not recorded for this request.</p>}
         {details?.serverRevision ? <p className="break-all text-xs">Server revision: {details.serverRevision}</p> : null}
       </section>
+      {event.request_id ? <p className="break-all">Request correlation ID: {event.request_id}</p> : null}
+      {event.event_id ? <p className="break-all">Telemetry event ID: {event.event_id}</p> : null}
       <p>Session: {event.session_id ? <Link className="break-all text-sky-700 underline" href={href(event.session_id)} prefetch={false}>{event.session_id}</Link> : "Not recorded"}{details ? ` (${details.sessionBasis.replaceAll("_", " ")})` : ""}</p>
       <p>{actorBasis}: {event.actor_id ? <Link className="break-all text-sky-700 underline" href={href(event.actor_id)} prefetch={false}>{event.actor_id}</Link> : "Not recorded"}</p>
       <p className="text-slate-500">Neither session nor requester counts establish unique agents or people.</p>

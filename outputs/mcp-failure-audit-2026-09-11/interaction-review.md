@@ -1,0 +1,21 @@
+# MCP interaction review and telemetry coverage
+
+Adds capture-health and recovery/guidance sections to the existing Workflows view. Counts describe the retained calls matching the selected filters, within the existing 5,000-call bound; no complete-population denominator or user satisfaction is inferred.
+
+Capture health distinguishes valid request details, response summaries, session IDs present, repeated-session calls, timing capture, omitted/redacted input, and omitted/shortened response text. Missing or malformed capture remains missing. Earlier response byte metadata alone is not counted as a captured response summary.
+
+Interaction analysis uses adjacent calls within the configured follow-up window (ordered by captured request starts where available, otherwise logged completion times), grouped by session, client, provider and entrypoint. Same-scan matching is additionally required for recommended next-tool and polling-delay comparisons. Calls with missing sessions, equal completion times, different scan identities, or known overlap do not establish guidance following. Changed/repeated inputs require complete retained argument previews; redacted, omitted or missing values are not treated as matching. Success after an invalid request is a temporal observation, not proof of causation or completion of the user's task. Missing follow-up is not abandonment.
+
+Polling compares newly captured request-start and response-generation timestamps. Older completion/duration pairs do not substitute for unavailable timing. Overlap and boundaries within 250 ms remain uncertain; displayed timing is approximate server timing, not a calibrated client-receipt measurement.
+
+Workflow interaction outcome and activity stage now use retained state at the last call. Current canonical scan status/outcome is shown separately. Historical outcomes are not silently upgraded by later canonical state.
+
+Each tool invocation gets a server-generated request correlation UUID before handling. The request-start log, retained invocation event and delivery logs share that request ID. Delivery-start/accepted/failure logs also include the telemetry event ID, including across existing idempotent retries. Existing upstream request IDs remain available in the response summary. Admin request details and workflow timelines display the IDs. No raw JSON-RPC IDs, credentials, arguments or conversations are added to logs.
+
+The capture panel includes a CloudWatch Logs Insights reconciliation query for handler-started requests and their ingestion acceptance/failure logs. Requests without terminal logs remain unresolved (possibly in flight or missing logs). It excludes pre-handler access/quota blocks and initialization from that cohort. Acceptance percentages are deliberately not computed from successfully retained rows. The query is provided for manual execution; the page does not automatically query CloudWatch or claim live ingestion completeness. Syntax reference: https://docs.aws.amazon.com/AmazonCloudWatch/latest/logs/CWL_QuerySyntax-operations-functions.html and https://docs.aws.amazon.com/AmazonCloudWatch/latest/logs/CWL_QuerySyntax-Stats.html.
+
+Cost estimate disclosed before implementation: below $1/month at 100,000 requests. Additional bounded timing metadata and two small start log entries per handled request add tens of MB of monthly data; existing retention, telemetry retry limits, scan behavior, model usage and infrastructure remain unchanged. Manual CloudWatch queries use the existing service's query billing; no automatic query or metric stream is introduced.
+
+Validation: 15 focused interaction/workflow/request-details tests; 110 MCP tests; 35 hosted MCP tests; shared and MCP builds; hosted MCP and web typechecks; production web build. The final request-order concurrency refinement passed focused tests and web typecheck. Regression cases cover historical/current state separation, changed and repeated invalid inputs, missing/redacted capture, session/client/scan/time boundaries, overlapping calls, precise timing availability, stable request IDs and delivery-log IDs. Not deployed by this implementation.
+
+Rollout: deploy the web ingestion/schema reader before the hosted MCP emitter. The older strict request-details schema would reject newly emitted timing fields. This implementation does not deploy either target.

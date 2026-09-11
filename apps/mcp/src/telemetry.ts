@@ -244,8 +244,10 @@ export function createHostedMcpTelemetry(input: CreateHostedMcpTelemetryInput) {
     sourceAttribution: client.sourceAttribution,
   });
 
-  const deliver = (event: { eventId: string }, context: { stage?: string; toolName?: string }) => {
+  const deliver = (event: { eventId: string; requestId?: string }, context: { stage?: string; toolName?: string }) => {
     const deliveryStartedAt = Date.now();
+    const correlation = { eventId: event.eventId, requestId: event.requestId ?? null };
+    logger.log?.(JSON.stringify({ event: "mcp.telemetry_delivery_started", ...correlation, surface: input.surface }));
     const body = JSON.stringify(event);
     const timestamp = String(Math.floor(Date.now() / 1_000));
     const send = (attempt: number): Promise<number> => Promise.resolve().then(() => fetchImpl(ingestionUrl, {
@@ -271,6 +273,7 @@ export function createHostedMcpTelemetry(input: CreateHostedMcpTelemetryInput) {
         attempts,
         durationMs: Date.now() - deliveryStartedAt,
         event: "mcp.telemetry_delivery",
+        ...correlation,
         outcome: "accepted",
         stage: context.stage ?? null,
         surface: input.surface,
@@ -281,6 +284,7 @@ export function createHostedMcpTelemetry(input: CreateHostedMcpTelemetryInput) {
         attempts: TELEMETRY_DELIVERY_ATTEMPTS,
         durationMs: Date.now() - deliveryStartedAt,
         event: "mcp.telemetry_write_failed",
+        ...correlation,
         errorName: error instanceof Error ? error.name : "UnknownError",
         stage: context.stage ?? null,
         surface: input.surface,
@@ -339,6 +343,7 @@ export function createHostedMcpTelemetry(input: CreateHostedMcpTelemetryInput) {
         ...(observation.callerInput ? { callerInput: mergeMcpCallerInputs(observation.callerInput, initialInput) } : {}),
         captureBasis: observation.captureBasis ?? "validated_arguments",
         ...(observation.taskContext ? { taskContext: observation.taskContext } : {}),
+        ...(observation.timing ? { timing: observation.timing } : {}),
         ...(observation.response ? { response: observation.response } : {}),
         serverVersion: CERTSCORE_MCP_VERSION,
         ...(/^[a-f0-9]{40}$/.test(process.env.BUILD_GIT_SHA ?? "") ? { serverRevision: process.env.BUILD_GIT_SHA } : {}),
@@ -376,7 +381,7 @@ export function createHostedMcpTelemetry(input: CreateHostedMcpTelemetryInput) {
       occurredAt: new Date().toISOString(),
       outcome: observation.outcome,
       quotaOutcome: observation.quotaOutcome,
-      requestId: randomUUID(),
+      requestId: observation.requestId ?? randomUUID(),
       requestedResource: observation.requestedResource,
       requestedResourceType: observation.requestedResourceType,
       requesterIp: eventRequesterIp,
@@ -418,6 +423,9 @@ export function createHostedMcpTelemetry(input: CreateHostedMcpTelemetryInput) {
     observationContext,
     observeActivation(stage: McpActivationStage) {
       reportActivation(stage);
+    },
+    observeToolRequestStarted(request: { requestId: string; toolName: string; startedAt: string }) {
+      logger.log?.(JSON.stringify({ event: "mcp.request_started", requestId: request.requestId, toolName: sanitizedTransportToolName(request.toolName), startedAt: request.startedAt, surface: input.surface }));
     },
     observeToolInvocation(observation: McpToolInvocationObservation, requestContext?: ToolRequestContext) {
       report(observation, requestContext);

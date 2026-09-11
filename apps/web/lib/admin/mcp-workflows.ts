@@ -1,7 +1,7 @@
 import { mcpRequestDetailsSchema } from "@website-signal-risk-scanner/shared";
 
 export type McpWorkflowEvent = {
-  event_id: string; occurred_at: string; session_id: string | null; scan_id: string | null;
+  request_id?: string; event_id: string; occurred_at: string; session_id: string | null; scan_id: string | null;
   client_name: string | null; source: string; surface: string; tool_name: string;
   outcome: string; error_code: string | null; quota_outcome: string; duration_ms: number;
   scan_decision: string; scan_status: string | null; canonical_status: string | null;
@@ -33,10 +33,11 @@ export function buildMcpWorkflows(events: McpWorkflowEvent[]) {
     const bundleGapMs = scanRequest && bundle
       ? new Date(bundle.occurred_at).getTime() - new Date(scanRequest.occurred_at).getTime() : null;
     const errors = rows.filter(row => row.outcome !== "success");
-    const outcome = last.canonical_outcome ?? last.canonical_status ?? (last.scan_id ? last.scan_status : null);
-    const active = ["queued", "running", "finalizing"].includes(last.canonical_status ?? last.scan_status ?? "");
+    const outcome = last.scan_id ? details.at(-1)?.response?.summary?.status ?? last.scan_status : null;
+    const currentOutcome = last.canonical_outcome ?? last.canonical_status;
+    const active = ["queued", "running", "finalizing"].includes(outcome ?? "");
     return {
-      key, rows, details, first, last, scanRequest, bundle, outcome,
+      key, rows, details, first, last, scanRequest, bundle, outcome, currentOutcome,
       purposes: distinct(details.map(detail => detail?.taskContext?.purpose)),
       questions: distinct(details.map(detail => detail?.taskContext?.questionSummary ? `${detail.taskContext.questionSource === "user_wording" ? "User wording" : "Agent paraphrase"}: ${detail.taskContext.questionSummary}` : null)),
       integrations: distinct(details.map(detail => detail?.taskContext?.integrationId ? `${detail.taskContext.integrationId} @ ${detail.taskContext.integrationVersion ?? "version unknown"} · skill ${detail.taskContext.skillVersion ?? "unknown"}` : null)),

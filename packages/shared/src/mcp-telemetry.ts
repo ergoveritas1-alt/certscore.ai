@@ -123,6 +123,7 @@ export const mcpRequestDetailsSchema = z.object({
   captureBasis: z.enum(["protocol_request", "validated_arguments"]).optional(),
   taskContext: mcpTaskContextSchema.refine(value => JSON.stringify(value) === JSON.stringify(sanitizeMcpTaskContext(value)), "Question context must be sanitized before ingestion.").optional(),
   clientVersion: telemetryOption.optional(),
+  timing: z.object({ startedAt: z.string().datetime(), responseGeneratedAt: z.string().datetime() }).strict().optional(),
   serverVersion: telemetryOption.optional(),
   serverRevision: z.string().regex(/^[a-f0-9]{40}$/).optional(),
   toolSchemaVersion: telemetryOption.optional(),

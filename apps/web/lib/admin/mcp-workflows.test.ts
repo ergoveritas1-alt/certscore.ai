@@ -12,7 +12,8 @@ test("workflows relate observed intent, errors and bundle delivery without upgra
   ]);
   assert.equal(workflow?.stage, "Bundle retrieved");
   assert.deepEqual(workflow?.purposes, ["tracking_check"]);
-  assert.equal(workflow?.outcome, "completed_partial");
+  assert.equal(workflow?.outcome, "running");
+  assert.equal(workflow?.currentOutcome, "completed_partial");
   assert.equal(workflow?.firstBundleSeconds, 60);
   assert.equal(workflow?.quotaHits, 1);
   assert.equal(workflow?.truncatedResponses, 1);
@@ -22,7 +23,7 @@ test("shared scan IDs across sessions or clients are not merged; missing identit
   const groups = buildMcpWorkflows([base, { ...base, event_id: "b", session_id: "other" }, { ...base, event_id: "c", client_name: "other" }, { ...base, event_id: "d", session_id: null }, { ...base, event_id: "e", session_id: null }]);
   assert.equal(groups.length, 5);
   assert.ok(groups.every(group => !group.purposes.length && !group.integrations.length));
-  assert.ok(groups.every(group => group.stage === "Completed; no bundle observed"));
+  assert.ok(groups.every(group => group.stage === "Scan active"));
 });
 
 test("a rejected request without a scan retains friction without inventing a scan outcome", () => {

@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import { captureMcpResponse, withResponseCapture } from "./response-capture.js";
 import type { McpResponseSummary } from "@website-signal-risk-scanner/shared";
 import { z } from "zod";
@@ -22,6 +23,7 @@ export interface CertScoreMcpOptions {
   toolProfile?: "full" | "light";
   initialPreConsentPreviewWaitMs?: number;
   exampleDomainDemoUrl?: string | null;
+  onToolInvocationStarted?: (input: { requestId: string; toolName: string; startedAt: string }) => void | Promise<void>;
   onToolInvocation?: (
     observation: McpToolInvocationObservation,
     requestContext: McpToolInvocationRequestContext,
@@ -61,6 +63,8 @@ type GetLatestDomainScanInput = { domain: string; scanFrom?: "eu_de" | "eu_ie" |
 type GetLatestDomainPreConsentCookiesTrackersInput = { domain: string; maxRows?: number; scanFrom?: "eu_de" | "eu_ie" | "california" };
 
 export type McpToolInvocationObservation = {
+  requestId?: string;
+  timing?: { startedAt: string; responseGeneratedAt: string };
   callerInput?: McpCallerInput;
   captureBasis?: "protocol_request";
   taskContext?: McpTaskContext;
@@ -427,7 +431,12 @@ export function createCertScoreMcpServer(options: CertScoreMcpOptions = {}) {
     if (schema !== CallToolRequestSchema) return registerRequest(schema as any, handler);
     return registerRequest(CallToolRequestSchema, async (request, extra) => {
       const startedAt = Date.now();
+      const requestId = randomUUID();
       const name = request.params.name;
+      if (options.onToolInvocationStarted) {
+        void Promise.resolve().then(() => options.onToolInvocationStarted!({ requestId, toolName: name, startedAt: new Date(startedAt).toISOString() }))
+          .catch(() => console.error("[certscore-mcp] request-start observation failed"));
+      }
       const args = request.params.arguments ?? {};
       const taskContext = sanitizeMcpTaskContext(args.taskContext);
       const forwardedRequest = name === "certscore_scan_site" && args.taskContext !== undefined && !taskContext
@@ -480,6 +489,8 @@ export function createCertScoreMcpServer(options: CertScoreMcpOptions = {}) {
           const metadata = payload.mcpMetadata as Record<string, unknown> | undefined;
           observeToolInvocation(options.onToolInvocation, {
             ...observation,
+            requestId,
+            timing: { startedAt: new Date(startedAt).toISOString(), responseGeneratedAt: new Date().toISOString() },
             captureBasis: "protocol_request",
             callerInput: captureMcpCallerInput(args, request.params._meta),
             ...(taskContext ? { taskContext } : {}),

@@ -439,6 +439,7 @@ async function handleMcp(req: IncomingMessage, res: ServerResponse, anonymous: b
       exampleDomainDemoUrl: anonymous
         ? "https://ergoveritas.com/.well-known/certscore-canary/sentinels/broad-baseline.html"
         : null,
+      onToolInvocationStarted: request => telemetry.observeToolRequestStarted(request),
       onToolInvocation: (observation, context) => {
         const invocationSource = context.headers
           ? anonymousMcpRequesterFromHeaders(context.headers)

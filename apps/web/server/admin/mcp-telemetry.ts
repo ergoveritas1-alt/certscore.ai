@@ -969,7 +969,7 @@ export async function loadAdminMcpWorkflowEvents(input: {
         and ${visibility}
       order by events.occurred_at desc, events.event_id desc limit 5000
     )
-    select recent.event_id, recent.occurred_at, recent.session_id, recent.scan_id,
+    select recent.event_id, recent.request_id, recent.occurred_at, recent.session_id, recent.scan_id,
       recent.client_name, recent.source, recent.surface, recent.tool_name, recent.outcome,
       recent.error_code, recent.quota_outcome, recent.duration_ms, recent.scan_decision,
       recent.scan_status, recent.requested_resource, to_jsonb(recent)->'request_details' as request_details,

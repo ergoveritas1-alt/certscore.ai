@@ -107,11 +107,15 @@ test("lifecycle correlation exposes only bounded client metadata and records acc
   assert.equal(JSON.stringify(context).includes("private-conversation-value"), false);
   assert.equal(JSON.stringify(context).includes("private-session-value"), false);
 
-  telemetry.observeToolInvocation(observation());
+  telemetry.observeToolInvocation({ ...observation(), requestId: "00000000-0000-4000-8000-000000000123" });
   await new Promise((resolve) => setImmediate(resolve));
-  assert.equal(deliveries.length, 2);
-  assert.ok(deliveries.every((delivery) => /"event":"mcp\.telemetry_delivery"/.test(delivery)));
-  assert.ok(deliveries.every((delivery) => /"outcome":"accepted"/.test(delivery)));
+  assert.equal(deliveries.length, 4);
+  assert.equal(deliveries.filter(line => JSON.parse(line).requestId === "00000000-0000-4000-8000-000000000123").length, 2);
+  assert.ok(deliveries.some((delivery) => /"event":"mcp\.telemetry_delivery_started"/.test(delivery)));
+  const accepted = deliveries.filter(delivery => /"event":"mcp\.telemetry_delivery"/.test(delivery));
+  assert.ok(accepted.length > 0);
+  assert.ok(accepted.every((delivery) => /"outcome":"accepted"/.test(delivery)));
+  assert.ok(deliveries.every(delivery => typeof JSON.parse(delivery).eventId === "string"));
 });
 
 test("authenticated telemetry signs bounded MCP activation stages", async () => {

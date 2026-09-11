@@ -6,8 +6,9 @@ import { createCertScoreMcpServer, projectMcpToolInvocationObservation, type Mcp
 
 test("protocol observation captures validation errors, unknown tools and stripped inputs exactly once", async () => {
   const observations: McpToolInvocationObservation[] = [];
+  const started: string[] = [];
   const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
-  const server = createCertScoreMcpServer({ toolProfile: "light", onToolInvocation: observation => { observations.push(observation); } });
+  const server = createCertScoreMcpServer({ toolProfile: "light", onToolInvocationStarted: request => { started.push(request.requestId); }, onToolInvocation: observation => { observations.push(observation); } });
   const client = new Client({ name: "boundary-qc", version: "1" });
   await Promise.all([server.connect(serverTransport), client.connect(clientTransport)]);
   try {
@@ -26,6 +27,9 @@ test("protocol observation captures validation errors, unknown tools and strippe
       } else assert.equal((await client.callTool(request)).isError, true);
     }
     assert.equal(observations.length, 4);
+    assert.equal(new Set(observations.map(row => row.requestId)).size, 4);
+    assert.deepEqual(started, observations.map(row => row.requestId));
+    assert.ok(observations.every(row => row.timing && Date.parse(row.timing.startedAt) <= Date.parse(row.timing.responseGeneratedAt)));
     assert.equal(observations[2]?.scanId, null);
     assert.equal(observations[2]?.requestedResource, "invalid");
     assert.deepEqual(observations.map(row => row.errorCode), ["invalid_arguments", "unknown_tool", "invalid_scan_id", "invalid_arguments"]);
