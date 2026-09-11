@@ -3036,6 +3036,7 @@ export function textFallbackConsentControlAction(label: string, scenario?: Conse
   confidence: number;
 } | undefined {
   const classification = classifyConsentControlLabel({
+    usage: "action",
     label,
     hasConsentContext: true,
     hasPreferenceContext: true,
@@ -3414,6 +3415,7 @@ function classifyControlText(label: string, ariaLabel?: string, contextTextExcer
   metadata: ConsentControlLabelClassification;
 } {
   const metadata = classifyConsentControlLabel({
+    usage: "action",
     label,
     ariaLabel,
     contextText: contextTextExcerpt,
@@ -3432,6 +3434,7 @@ export function classifyPrivacyOptOutControl(label: string, ariaLabel?: string, 
   method: ConsentActionCandidate["detectionMethod"];
 } | undefined {
   const metadata = classifyConsentControlLabel({
+    usage: "action",
     label,
     ariaLabel,
     contextText: contextTextExcerpt,
@@ -3674,6 +3677,7 @@ export function oneTrustHiddenDiagnosticLabelAction(
   targetActionType: ConsentActionType,
 ): { actionType: Extract<ConsentActionType, "accept_all" | "reject_all" | "manage_preferences" | "save_preferences" | "do_not_sell_share">; confidence: number } | undefined {
   const classification = classifyConsentControlLabel({
+    usage: "action",
     label,
     hasConsentContext: true,
     hasPreferenceContext: true,

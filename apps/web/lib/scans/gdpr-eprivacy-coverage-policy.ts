@@ -6226,7 +6226,7 @@ function derivePostRejectOutcome(input: GdprEprivacyCoveragePolicyInput) {
     const first = Math.min(...clickAssessment.requests.map((row) => row.startedAtMs));
     const vendors = [...new Set(clickAssessment.requests.flatMap((row) => row.vendor ? [row.vendor] : []))];
     return makeOutcome("post_reject_tracking_reduction", "Review signal",
-      `${clickAssessment.eligibleRequestCount} classified tracking request(s) began after a verified Reject click${vendors.length ? ` (including ${vendors.join(", ")})` : ""}; first observed ${((first - clickAssessment.actionDispatchedAtMs) / 1000).toFixed(2)}s after the click. Refusal registration remained unverified. This observed behavior receives the post-Reject risk deduction without claiming a confirmed refusal or legal violation.`,
+      `${clickAssessment.eligibleRequestCount} tracking request(s) began after the Reject control was clicked${vendors.length ? ` (including ${vendors.join(", ")})` : ""}; first observed ${((first - clickAssessment.actionDispatchedAtMs) / 1000).toFixed(2)}s after the click. Review the recorded requests and how the Reject action controls this tracking activity.`,
       [`Evidence: post-refusal-packet:sha256:${clickAssessment.sourcePacketSha256}`],
       { retainedEvidence: {
         rejectClickTrackingAssessment: clickAssessment,

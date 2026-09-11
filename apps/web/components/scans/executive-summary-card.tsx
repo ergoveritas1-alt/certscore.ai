@@ -1,3 +1,4 @@
+import { afterClickCoverageLabel } from "./after-action-summary";
 import type { AgencyMapping, RegulatoryRiskAssessment } from "@website-signal-risk-scanner/shared";
 import { KNOWN_CMP_REGISTRY } from "../../../../packages/shared/src/known-cmps";
 import React from "react";
@@ -103,6 +104,8 @@ export type ExecutiveConsentControlProjection = {
 };
 
 export type ExecutiveRejectPathProjection = {
+  afterClickCoverage?: "complete" | "partial";
+  registrationConfirmed?: boolean;
   evidenceRows: Array<{
     detail: string | null;
     label: string;
@@ -2355,8 +2358,8 @@ export function CompactRejectPathCard(input: {
 }) {
   if (
     !input.projection
-    || input.projection.state === "incomplete"
-    || input.projection.observationWindowMs === null
+    || (input.projection.state === "incomplete" && !input.projection.afterClickCoverage)
+    || (input.projection.observationWindowMs === null && !input.projection.afterClickCoverage)
   ) {
     return null;
   }
@@ -2381,11 +2384,11 @@ export function CompactRejectPathCard(input: {
           After Reject
         </p>
         <span className={`rounded-full border px-2 py-0.5 text-[9px] font-semibold uppercase tracking-[0.12em] ${presentation.badgeTone}`}>
-          {presentation.badge}
+          {input.projection.state === "incomplete" ? afterClickCoverageLabel(input.projection.afterClickCoverage) : presentation.badge}
         </span>
       </div>
       <p className="mt-1 text-xs font-semibold leading-4 text-slate-950">{input.projection.label}</p>
-      {input.projection.note && input.projection.state !== "review_signal" ? (
+      {input.projection.note ? (
         <p className="mt-1 text-[11px] leading-4 text-slate-600">{input.projection.note}</p>
       ) : null}
       {context.length > 0 ? (

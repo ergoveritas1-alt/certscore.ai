@@ -1,4 +1,4 @@
-import { afterClickSummary } from "../after-action-summary";
+import { afterClickCoverage, afterClickSummary } from "../after-action-summary";
 
 export function acceptAfterClickSummary(projection: Record<string, unknown>): string {
   return afterClickSummary(projection, "accept");
@@ -15,11 +15,11 @@ export function acceptPathIncompleteReason(projection: Record<string, unknown>):
   if (resolver?.reason === "multiple_deterministic_accept_controls_found") {
     return "More than one possible Accept control was found. No click was attempted because the target was ambiguous.";
   }
-  if (diagnostics?.click?.outcome === "completed" || (projection.afterActionCapture as { activationStatus?: string } | undefined)?.activationStatus === "completed") {
-    return "The Accept control was clicked, but granted consent could not be verified." + acceptAfterClickSummary(projection);
+  if (diagnostics?.click?.outcome === "completed" || afterClickCoverage(projection, "accept")) {
+    return "The Accept control was clicked." + acceptAfterClickSummary(projection);
   }
   if (diagnostics?.click?.outcome === "failed_before_dispatch") return "The Accept control was found, but the click could not be dispatched.";
-  if (diagnostics?.click?.outcome === "failed_after_dispatch") return "An Accept click was dispatched, but its completion and granted consent could not be verified.";
+  if (diagnostics?.click?.outcome === "failed_after_dispatch") return "An Accept click was dispatched; click completion was not recorded.";
   if (projection.registrationStatus === "not_attempted") return "No Accept click was attempted. The retained result does not include the specific discovery reason.";
   if (projection.registrationStatus === "aborted") return "Accept testing stopped before a verified result was retained.";
   if (projection.registrationStatus === "unsupported") return "The observed consent control could not be exercised by the available action recipes.";

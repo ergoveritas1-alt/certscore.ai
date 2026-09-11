@@ -21,6 +21,7 @@ import {
   type ConsentActionAttempt,
   type ConsentFlowObservation,
   type ScreenshotArtifact,
+  postRefusalEvidencePacketSchema,
 } from "@certscore/contracts";
 import { buildPreConsentRuntimePreview, buildGpcResponseAssessment } from "@certscore/scan-core";
 import { parseLocalV2DagLambdaResultMessage } from "../../web/server/scans/local-v2-dag-lambda-dispatch";
@@ -77,6 +78,7 @@ import {
   runLocalV2DagLambdaPostRefusalArtifactChain,
   runLocalV2DagLambdaPostAcceptArtifactChain,
   runLocalV2DagLambdaArtifactChain,
+  runLocalV2DagLambdaShardedArtifactChain,
   sendLocalV2DagLambdaResultMessage,
   serializeCanonicalEvidenceBundle,
   unwrapLocalV2DagLambdaDispatchEvent,
@@ -1771,6 +1773,626 @@ function validPayload(overrides: Record<string, unknown> = {}) {
     ...overrides
   };
 }
+
+function coordinatorPostAcceptConfig(dispatchDelayMs: number) {
+  return {
+    enabled: true,
+    dispatchDelayMs,
+    observationWindowMs: 100,
+    confirmationTimeoutMs: 100,
+    actionSearchTimeoutMs: 100,
+    resolver: {
+      kind: "named_cmp" as const,
+      cmpCanonicalName: "Fixture CMP",
+      confirmation: {
+        kind: "local_storage_equals" as const,
+        key: "fixture-consent",
+        expectedValue: "granted",
+      },
+    },
+    interactionAuthorization: {
+      kind: "loopback" as const,
+      authorizationId: "loopback_local_lab",
+    },
+  };
+}
+
+function coordinatorPostRefusalConfig(dispatchDelayMs: number) {
+  return {
+    enabled: true,
+    dispatchDelayMs,
+    observationWindowMs: 100,
+    confirmationTimeoutMs: 100,
+    actionSearchTimeoutMs: 100,
+    resolver: {
+      kind: "named_cmp" as const,
+      cmpCanonicalName: "Fixture CMP",
+      confirmation: { kind: "tcf_purposes_denied" as const, purposeIds: [1] },
+    },
+    interactionAuthorization: {
+      kind: "loopback" as const,
+      authorizationId: "loopback_local_lab",
+    },
+  };
+}
+
+function coordinatorConsentBundle(
+  scanId: string,
+  options: {
+    inspectionCompleted: boolean;
+    acceptControlObserved?: boolean;
+    limited?: boolean;
+    rejectControlObserved?: boolean;
+  },
+) {
+  const acceptControlObserved = options.acceptControlObserved === true;
+  const rejectControlObserved = options.rejectControlObserved === true;
+  const actionableControlObserved = acceptControlObserved || rejectControlObserved;
+  return canonicalBundleFixture(scanId, {
+    consentSurfaceInspection: {
+      artifactVersion: "certscore.consent_surface_inspection.v1",
+      coverageStatus: options.limited ? "limited" : "complete",
+      outcome: options.limited
+        ? "indeterminate_limited_coverage"
+        : actionableControlObserved
+          ? "actionable_surface_observed"
+          : "no_surface_observed_complete_coverage",
+      inspectedAt: "2026-09-10T00:00:00.000Z",
+      inspectionCompleted: options.inspectionCompleted,
+      inspectedPreInteraction: true,
+      consentSurfaceObserved: actionableControlObserved,
+      actionableControlObserved,
+      observedAtMs: 100,
+      evidenceSources: ["control_inventory"],
+      limitationKeys: options.limited ? ["consent_session_access_limited"] : [],
+      sourceObservationIds: actionableControlObserved ? ["fixture-consent-ui"] : [],
+    },
+    consentUiObservations: actionableControlObserved ? [{
+      observationId: "fixture-consent-ui",
+      url: "https://example.com/",
+      observedAt: "2026-09-10T00:00:00.000Z",
+      observedAtMs: 100,
+      bannerDetected: true,
+      confidence: 0.99,
+      firstLayer: true,
+      likelyPresent: true,
+      basis: ["control_inventory"],
+      acceptControlObserved,
+      rejectControlObserved,
+      optionsControlObserved: false,
+      controls: [
+        ...(acceptControlObserved ? [{
+          controlId: "fixture-accept",
+          actionType: "accept_all" as const,
+          label: "Accept all",
+          visible: true,
+          classifierReasonCodes: [],
+        }] : []),
+        ...(rejectControlObserved ? [{
+          controlId: "fixture-reject",
+          actionType: "reject_all" as const,
+          label: "Reject all",
+          visible: true,
+          classifierReasonCodes: [],
+        }] : []),
+      ],
+      supportingArtifactIds: [],
+    }] : [],
+  });
+}
+
+function coordinatorPostAcceptPacket(scanId: string) {
+  return postAcceptEvidencePacketSchema.parse({
+    artifactVersion: "certscore.post_accept_evidence.v1",
+    artifactOnly: true,
+    productionProjectable: true,
+    scanId: `${scanId}:accept_observation`,
+    parentScanId: scanId,
+    targetUrl: "https://example.com/",
+    normalizedUrl: "https://example.com/",
+    observationBranch: "accept_only",
+    phase: "post_action",
+    consentAction: "accept",
+    startedAt: "2026-09-10T00:00:00.000Z",
+    completedAt: "2026-09-10T00:00:02.000Z",
+    resolver: {
+      found: true,
+      method: "cmp_registry_recipe",
+      confidence: 1,
+      recipeId: "canonical-cmp:fixture:accept:v1",
+      cmpId: "fixture",
+    },
+    actionControlProof: {
+      contractVersion: "certscore.consent_action_control_proof.v1",
+      action: "accept",
+      observedAtMs: 95,
+      accessibleLabel: "Accept all",
+      labelSource: "visible_text",
+      actionSemantics: "direct_label",
+      classifierIntent: "accept",
+      classifierConfidence: 1,
+      matchedLocale: "en",
+      matchStrength: "direct",
+      classifierReasonCodes: ["exact_accept_label"],
+      cmpId: "fixture",
+      recipeId: "canonical-cmp:fixture:accept:v1",
+      selectorHint: "#accept-all",
+      visible: true,
+      enabled: true,
+      uniquelyActionable: true,
+    },
+    acceptanceRegistration: {
+      status: "confirmed",
+      acceptanceExercised: true,
+      actionDispatchedAtMs: 100,
+      acceptanceRegisteredAtMs: 120,
+      witnesses: [{
+        witnessType: "cmp_storage_state",
+        observedAtMs: 120,
+        key: "fixture-consent",
+        expectedState: "granted",
+        observedStateHash: "a".repeat(64),
+        corroboratingOnly: false,
+      }],
+    },
+    observationWindowMs: 8_000,
+    timing: {
+      dispatchDelayMs: 0,
+      navigationMs: 40,
+      resolverMs: 10,
+      confirmationMs: 20,
+      observationMs: 100,
+      totalMs: 170,
+      readyAtMs: 170,
+    },
+    network: {
+      requests: [],
+      postAcceptNonEssentialRequests: [],
+      activeRequestIdsAtAcceptanceRegistration: [],
+    },
+    storage: {
+      preAction: [],
+      postAction: [],
+      writesAfterAccept: [],
+      itemsCreatedOrChangedAfterAccept: [],
+    },
+    observations: [],
+    cancellation: { requested: false, outcome: "not_requested" },
+    limitations: [],
+  });
+}
+
+function coordinatorPostRefusalPacket(scanId: string) {
+  return postRefusalEvidencePacketSchema.parse({
+    artifactVersion: "certscore.post_refusal_evidence.v1",
+    artifactOnly: true,
+    productionProjectable: true,
+    scanId: `${scanId}:reject_observation`,
+    parentScanId: scanId,
+    targetUrl: "https://example.com/",
+    normalizedUrl: "https://example.com/",
+    observationBranch: "reject_only",
+    phase: "post_action",
+    consentAction: "reject",
+    startedAt: "2026-09-10T00:00:00.000Z",
+    completedAt: "2026-09-10T00:00:02.000Z",
+    resolver: {
+      found: true,
+      method: "local_fixture_recipe",
+      confidence: 1,
+      recipeId: "fixture-direct-reject-v1",
+      cmpId: "fixture",
+    },
+    actionControlProof: {
+      contractVersion: "certscore.consent_action_control_proof.v1",
+      action: "reject",
+      observedAtMs: 95,
+      accessibleLabel: "Reject all",
+      labelSource: "visible_text",
+      actionSemantics: "direct_label",
+      classifierIntent: "reject",
+      classifierConfidence: 1,
+      matchedLocale: "en",
+      matchStrength: "direct",
+      classifierReasonCodes: ["exact_reject_label"],
+      cmpId: "fixture",
+      recipeId: "fixture-direct-reject-v1",
+      selectorHint: "#reject-all",
+      visible: true,
+      enabled: true,
+      uniquelyActionable: true,
+    },
+    refusalRegistration: {
+      status: "confirmed",
+      refusalExercised: true,
+      actionDispatchedAtMs: 100,
+      refusalRegisteredAtMs: 120,
+      witnesses: [{
+        witnessType: "cmp_storage_state",
+        observedAtMs: 120,
+        observedStateHash: "a".repeat(64),
+        corroboratingOnly: false,
+      }],
+    },
+    observationWindowMs: 8_000,
+    timing: {
+      dispatchDelayMs: 0,
+      navigationMs: 40,
+      resolverMs: 10,
+      confirmationMs: 20,
+      observationMs: 100,
+      totalMs: 170,
+      readyAtMs: 170,
+    },
+    network: {
+      requests: [],
+      postRefusalNonEssentialRequests: [],
+      activeRequestIdsAtRefusalRegistration: [],
+    },
+    storage: {
+      preActionCapturedAtMs: 95,
+      postActionCapturedAtMs: 125,
+      preAction: [],
+      postAction: [],
+      writesAfterRefusal: [],
+      nonEssentialItemsPersistingAfterRefusal: [],
+    },
+    observations: [],
+    cancellation: { requested: false, outcome: "not_requested" },
+    limitations: [],
+  });
+}
+
+async function runCoordinatorFixture(input: {
+  scanId: string;
+  consentBundle: CanonicalEvidenceBundle;
+  action: "none" | "hang" | "late" | "completed";
+  dispatchDelayMs: number;
+  actionLane?: "accept" | "reject";
+}) {
+  const artifactRoot = await mkdtemp(path.join(os.tmpdir(), "certscore-coordinator-cutoff-"));
+  const actionCalls: string[] = [];
+  const passiveBundles = new Map([
+    ["consent_proof", input.consentBundle],
+    ["runtime_evidence", canonicalBundleFixture(input.scanId, {
+      scanLaneRuns: [laneRunFixture("runtime_evidence", "fixture-runtime")],
+      runtimeCoverage: {
+        coverageStatus: "usable",
+        limitationKeys: [],
+        fallbackModesUsed: [],
+        notes: [],
+        observationCounts: {
+          networkEvents: 0,
+          thirdPartyRequests: 0,
+          cookieEvents: 0,
+          cookiesBeforeConsent: 0,
+          normalizedVendors: 0,
+          observedJourneys: 0,
+        },
+        silentEmpty: false,
+      },
+    })],
+    ["policy_evidence", canonicalBundleFixture(input.scanId, {
+      scanLaneRuns: [laneRunFixture("policy_evidence", "fixture-policy")],
+    })],
+  ] as const);
+  const pointers = new Map<string, { uri: string; body: Buffer; sha256: string; sizeBytes: number }>();
+  for (const [lane, bundle] of passiveBundles) {
+    const body = Buffer.from(JSON.stringify(bundle));
+    const key = `workers/${input.scanId}/${lane}/CanonicalEvidenceBundle.json`;
+    const uri = `s3://test-bucket/${key}`;
+    const metadata = { uri, body, sha256: createHash("sha256").update(body).digest("hex"), sizeBytes: body.byteLength };
+    pointers.set(uri, metadata);
+  }
+  const actionLane = input.actionLane ?? "accept";
+  const payload = parseLocalV2DagLambdaDispatchPayload(validPayload({
+    orchestrationMode: "sharded",
+    scanId: input.scanId,
+    callbackCorrelationId: input.scanId,
+    ...(actionLane === "accept"
+      ? { postAcceptObservation: coordinatorPostAcceptConfig(input.dispatchDelayMs) }
+      : { postRefusalObservation: coordinatorPostRefusalConfig(input.dispatchDelayMs) }),
+  }));
+  const packet = input.action === "completed"
+    ? actionLane === "accept"
+      ? coordinatorPostAcceptPacket(input.scanId)
+      : coordinatorPostRefusalPacket(input.scanId)
+    : undefined;
+  if (packet) {
+    const body = Buffer.from(JSON.stringify(packet));
+    const packetFile = actionLane === "accept" ? "PostAcceptEvidencePacket.json" : "PostRefusalEvidencePacket.json";
+    const uri = `s3://test-bucket/workers/${input.scanId}/${actionLane === "accept" ? "accept" : "reject"}_observation/${packetFile}`;
+    pointers.set(uri, { uri, body, sha256: createHash("sha256").update(body).digest("hex"), sizeBytes: body.byteLength });
+  }
+  const lambdaClient = {
+    async send(command: any, options?: { abortSignal?: AbortSignal }) {
+      const workerPayload = JSON.parse(Buffer.from(command.input.Payload ?? []).toString("utf8")) as Record<string, any>;
+      const lane = String(workerPayload.workerLane);
+      const actionWorkerLane = actionLane === "accept" ? "accept_observation" : "reject_observation";
+      if (lane === actionWorkerLane) {
+        actionCalls.push(lane);
+        if (input.action === "hang") {
+          return await new Promise<never>((_resolve, reject) => {
+            options?.abortSignal?.addEventListener("abort", () => reject(options.abortSignal?.reason ?? new Error("aborted")), { once: true });
+          });
+        }
+        if (input.action === "late") await new Promise((resolve) => setTimeout(resolve, 25));
+        if (input.action === "none") throw new Error("action should not have dispatched");
+        if (!packet) throw new Error("missing action packet fixture");
+        const uri = [...pointers.values()].find((candidate) => candidate.uri.includes(`${actionLane === "accept" ? "accept" : "reject"}_observation`))!;
+        const descriptor = actionLane === "accept"
+          ? {
+              artifactOnly: true,
+              contractVersion: "certscore.v2.lambda-post-accept-evidence-descriptor.v1",
+              generatedAt: packet.completedAt,
+              descriptorKind: "post_accept_evidence_descriptor",
+              packetMetadata: { sha256: uri.sha256, sizeBytes: uri.sizeBytes },
+              packetPointer: uri.uri,
+              parentDispatchSha256: postRefusalParentDispatchSha256(payload),
+              parentScanId: payload.scanId,
+              processor: LOCAL_V2_DAG_SCAN_PROCESSOR,
+              productionFindingIntegration: true,
+              acceptanceExercised: true,
+              observationCount: 0,
+              scanId: payload.scanId,
+              status: "confirmed_clean",
+              targetEnvironment: "local",
+            }
+          : {
+              artifactOnly: true,
+              contractVersion: "certscore.v2.lambda-post-refusal-evidence-descriptor.v1",
+              generatedAt: packet.completedAt,
+              descriptorKind: "post_refusal_evidence_descriptor",
+              packetMetadata: { sha256: uri.sha256, sizeBytes: uri.sizeBytes },
+              packetPointer: uri.uri,
+              parentDispatchSha256: postRefusalParentDispatchSha256(payload),
+              parentScanId: payload.scanId,
+              processor: LOCAL_V2_DAG_SCAN_PROCESSOR,
+              productionFindingIntegration: true,
+              refusalExercised: true,
+              observationCount: 0,
+              scanId: payload.scanId,
+              status: "confirmed_clean",
+              targetEnvironment: "local",
+            };
+        return {
+          StatusCode: 200,
+          Payload: Buffer.from(JSON.stringify({
+            artifactMetadata: actionLane === "accept"
+              ? { postAcceptPacketUri: { sha256: uri.sha256, sizeBytes: uri.sizeBytes } }
+              : { postRefusalPacketUri: { sha256: uri.sha256, sizeBytes: uri.sizeBytes } },
+            artifactPointers: actionLane === "accept"
+              ? { postAcceptPacketUri: uri.uri }
+              : { postRefusalPacketUri: uri.uri },
+            parentDispatchSha256: postRefusalParentDispatchSha256(payload),
+            ...(actionLane === "accept" ? { postAcceptEvidence: descriptor } : { postRefusalEvidence: descriptor }),
+            scanId: payload.scanId,
+            status: "completed",
+            workerLane: lane,
+          })),
+        };
+      }
+      const bundle = passiveBundles.get(lane as keyof typeof passiveBundles);
+      if (!bundle) throw new Error(`unexpected worker lane ${lane}`);
+      const uri = [...pointers.values()].find((candidate) => candidate.uri.includes(`/${lane}/`))!;
+      return {
+        StatusCode: 200,
+        Payload: Buffer.from(JSON.stringify({
+          artifactMetadata: { scanArtifactUri: { sha256: uri.sha256, sizeBytes: uri.sizeBytes } },
+          artifactPointers: { scanArtifactUri: uri.uri },
+          ...(lane === "consent_proof" ? { consentRejectAvailability: deriveConsentActionAvailability(bundle) } : {}),
+          completedAt: bundle.completedAt,
+          scanId: payload.scanId,
+          status: "completed",
+          workerLane: lane,
+        })),
+      };
+    },
+  };
+  const s3GetClient = {
+    async send(command: any) {
+      const key = String(command.input.Key ?? "");
+      const uri = `s3://${String(command.input.Bucket)}/${key}`;
+      const entry = pointers.get(uri);
+      if (!entry) throw new Error(`missing fixture object ${uri}`);
+      return { Body: entry.body };
+    },
+  };
+  const s3Client = { async send() { return {}; } };
+  try {
+    const result = await runLocalV2DagLambdaShardedArtifactChain(payload, {
+      artifactRoot,
+      lambdaClient,
+      s3Client,
+      s3GetClient,
+    });
+    const bundle = JSON.parse(await readFile(path.join(artifactRoot, "CanonicalEvidenceBundle.json"))) as Record<string, any>;
+    return { actionCalls, artifactRoot, bundle, result };
+  } catch (error) {
+    await rm(artifactRoot, { recursive: true, force: true });
+    throw error;
+  }
+}
+
+test("ARO coordinator: limited consent cancels an undispatched Accept before the passive barrier", async () => {
+  const priorFlag = process.env[POST_ACCEPT_WORKER_FEATURE_FLAG];
+  const priorBucket = process.env.CERTSCORE_V2_DAG_LAMBDA_ARTIFACT_BUCKET;
+  process.env[POST_ACCEPT_WORKER_FEATURE_FLAG] = "1";
+  process.env.CERTSCORE_V2_DAG_LAMBDA_ARTIFACT_BUCKET = "test-bucket";
+  try {
+    const outcome = await runCoordinatorFixture({
+      scanId: "aro-coordinator-limited-undispatched",
+      consentBundle: coordinatorConsentBundle("aro-coordinator-limited-undispatched", { inspectionCompleted: false, limited: true }),
+      action: "none",
+      dispatchDelayMs: 1_000,
+    });
+    assert.equal(outcome.actionCalls.length, 0);
+    assert.equal(outcome.bundle.postAcceptLaneOutcome?.status, "failed");
+    assert.equal(outcome.bundle.postAcceptLaneOutcome?.limitationCode, "accept_path_incomplete_at_passive_barrier");
+    assert.equal(outcome.result.laneTimingSummary.acceptLaneJoin, "failed");
+  } finally {
+    if (priorFlag === undefined) delete process.env[POST_ACCEPT_WORKER_FEATURE_FLAG]; else process.env[POST_ACCEPT_WORKER_FEATURE_FLAG] = priorFlag;
+    if (priorBucket === undefined) delete process.env.CERTSCORE_V2_DAG_LAMBDA_ARTIFACT_BUCKET; else process.env.CERTSCORE_V2_DAG_LAMBDA_ARTIFACT_BUCKET = priorBucket;
+  }
+});
+
+test("ARO coordinator: an invoked unfinished Accept is canceled at the passive barrier", async () => {
+  const priorFlag = process.env[POST_ACCEPT_WORKER_FEATURE_FLAG];
+  const priorBucket = process.env.CERTSCORE_V2_DAG_LAMBDA_ARTIFACT_BUCKET;
+  process.env[POST_ACCEPT_WORKER_FEATURE_FLAG] = "1";
+  process.env.CERTSCORE_V2_DAG_LAMBDA_ARTIFACT_BUCKET = "test-bucket";
+  try {
+    const outcome = await runCoordinatorFixture({
+      scanId: "aro-coordinator-invoked-incomplete",
+      consentBundle: coordinatorConsentBundle("aro-coordinator-invoked-incomplete", { inspectionCompleted: false, limited: true }),
+      action: "hang",
+      dispatchDelayMs: 0,
+    });
+    assert.equal(outcome.actionCalls.length, 1);
+    assert.equal(outcome.bundle.postAcceptLaneOutcome?.status, "failed");
+    assert.equal(outcome.bundle.postAcceptLaneOutcome?.limitationCode, "accept_path_incomplete_at_passive_barrier");
+    assert.equal(outcome.result.laneTimingSummary.acceptLaneJoin, "failed");
+  } finally {
+    if (priorFlag === undefined) delete process.env[POST_ACCEPT_WORKER_FEATURE_FLAG]; else process.env[POST_ACCEPT_WORKER_FEATURE_FLAG] = priorFlag;
+    if (priorBucket === undefined) delete process.env.CERTSCORE_V2_DAG_LAMBDA_ARTIFACT_BUCKET; else process.env.CERTSCORE_V2_DAG_LAMBDA_ARTIFACT_BUCKET = priorBucket;
+  }
+});
+
+test("ARO coordinator: a completed verified Accept remains joined through final publication", async () => {
+  const priorFlag = process.env[POST_ACCEPT_WORKER_FEATURE_FLAG];
+  const priorBucket = process.env.CERTSCORE_V2_DAG_LAMBDA_ARTIFACT_BUCKET;
+  process.env[POST_ACCEPT_WORKER_FEATURE_FLAG] = "1";
+  process.env.CERTSCORE_V2_DAG_LAMBDA_ARTIFACT_BUCKET = "test-bucket";
+  try {
+    const outcome = await runCoordinatorFixture({
+      scanId: "aro-coordinator-completed",
+      consentBundle: coordinatorConsentBundle("aro-coordinator-completed", { inspectionCompleted: true, acceptControlObserved: true }),
+      action: "completed",
+      dispatchDelayMs: 0,
+    });
+    assert.equal(outcome.actionCalls.length, 1);
+    assert.equal(outcome.bundle.postAcceptLaneOutcome?.status, "joined");
+    assert.equal(outcome.bundle.postAcceptEvidence?.acceptanceRegistration?.status, "confirmed");
+    assert.equal(outcome.result.artifactPointers.postAcceptPacketUri?.endsWith("PostAcceptEvidencePacket.json"), true);
+  } finally {
+    if (priorFlag === undefined) delete process.env[POST_ACCEPT_WORKER_FEATURE_FLAG]; else process.env[POST_ACCEPT_WORKER_FEATURE_FLAG] = priorFlag;
+    if (priorBucket === undefined) delete process.env.CERTSCORE_V2_DAG_LAMBDA_ARTIFACT_BUCKET; else process.env.CERTSCORE_V2_DAG_LAMBDA_ARTIFACT_BUCKET = priorBucket;
+  }
+});
+
+test("ARO coordinator: a late Accept completion after cancellation cannot republish evidence", async () => {
+  const priorFlag = process.env[POST_ACCEPT_WORKER_FEATURE_FLAG];
+  const priorBucket = process.env.CERTSCORE_V2_DAG_LAMBDA_ARTIFACT_BUCKET;
+  process.env[POST_ACCEPT_WORKER_FEATURE_FLAG] = "1";
+  process.env.CERTSCORE_V2_DAG_LAMBDA_ARTIFACT_BUCKET = "test-bucket";
+  try {
+    const outcome = await runCoordinatorFixture({
+      scanId: "aro-coordinator-late-completion",
+      consentBundle: coordinatorConsentBundle("aro-coordinator-late-completion", { inspectionCompleted: false, limited: true }),
+      action: "late",
+      dispatchDelayMs: 0,
+    });
+    assert.equal(outcome.actionCalls.length, 1);
+    assert.equal(outcome.bundle.postAcceptLaneOutcome?.status, "failed");
+    assert.equal(outcome.bundle.postAcceptEvidence, undefined);
+    assert.equal(outcome.result.artifactPointers.postAcceptPacketUri, undefined);
+  } finally {
+    if (priorFlag === undefined) delete process.env[POST_ACCEPT_WORKER_FEATURE_FLAG]; else process.env[POST_ACCEPT_WORKER_FEATURE_FLAG] = priorFlag;
+    if (priorBucket === undefined) delete process.env.CERTSCORE_V2_DAG_LAMBDA_ARTIFACT_BUCKET; else process.env.CERTSCORE_V2_DAG_LAMBDA_ARTIFACT_BUCKET = priorBucket;
+  }
+});
+
+test("ARO coordinator: limited consent cancels an undispatched Reject before the passive barrier", async () => {
+  const priorFlag = process.env[POST_REFUSAL_REJECT_WORKER_FEATURE_FLAG];
+  const priorBucket = process.env.CERTSCORE_V2_DAG_LAMBDA_ARTIFACT_BUCKET;
+  process.env[POST_REFUSAL_REJECT_WORKER_FEATURE_FLAG] = "1";
+  process.env.CERTSCORE_V2_DAG_LAMBDA_ARTIFACT_BUCKET = "test-bucket";
+  try {
+    const outcome = await runCoordinatorFixture({
+      scanId: "aro-coordinator-reject-limited-undispatched",
+      consentBundle: coordinatorConsentBundle("aro-coordinator-reject-limited-undispatched", { inspectionCompleted: false, limited: true }),
+      action: "none",
+      dispatchDelayMs: 1_000,
+      actionLane: "reject",
+    });
+    assert.equal(outcome.actionCalls.length, 0);
+    assert.equal(outcome.bundle.postRefusalLaneOutcome?.status, "failed");
+    assert.equal(outcome.bundle.postRefusalLaneOutcome?.limitationCode, "reject_path_incomplete_at_passive_barrier");
+    assert.equal(outcome.result.laneTimingSummary.rejectLaneJoin, "failed");
+  } finally {
+    if (priorFlag === undefined) delete process.env[POST_REFUSAL_REJECT_WORKER_FEATURE_FLAG]; else process.env[POST_REFUSAL_REJECT_WORKER_FEATURE_FLAG] = priorFlag;
+    if (priorBucket === undefined) delete process.env.CERTSCORE_V2_DAG_LAMBDA_ARTIFACT_BUCKET; else process.env.CERTSCORE_V2_DAG_LAMBDA_ARTIFACT_BUCKET = priorBucket;
+  }
+});
+
+test("ARO coordinator: an invoked unfinished Reject is canceled at the passive barrier", async () => {
+  const priorFlag = process.env[POST_REFUSAL_REJECT_WORKER_FEATURE_FLAG];
+  const priorBucket = process.env.CERTSCORE_V2_DAG_LAMBDA_ARTIFACT_BUCKET;
+  process.env[POST_REFUSAL_REJECT_WORKER_FEATURE_FLAG] = "1";
+  process.env.CERTSCORE_V2_DAG_LAMBDA_ARTIFACT_BUCKET = "test-bucket";
+  try {
+    const outcome = await runCoordinatorFixture({
+      scanId: "aro-coordinator-reject-invoked-incomplete",
+      consentBundle: coordinatorConsentBundle("aro-coordinator-reject-invoked-incomplete", { inspectionCompleted: false, limited: true }),
+      action: "hang",
+      dispatchDelayMs: 0,
+      actionLane: "reject",
+    });
+    assert.equal(outcome.actionCalls.length, 1);
+    assert.equal(outcome.bundle.postRefusalLaneOutcome?.status, "failed");
+    assert.equal(outcome.bundle.postRefusalLaneOutcome?.limitationCode, "reject_path_incomplete_at_passive_barrier");
+    assert.equal(outcome.result.laneTimingSummary.rejectLaneJoin, "failed");
+  } finally {
+    if (priorFlag === undefined) delete process.env[POST_REFUSAL_REJECT_WORKER_FEATURE_FLAG]; else process.env[POST_REFUSAL_REJECT_WORKER_FEATURE_FLAG] = priorFlag;
+    if (priorBucket === undefined) delete process.env.CERTSCORE_V2_DAG_LAMBDA_ARTIFACT_BUCKET; else process.env.CERTSCORE_V2_DAG_LAMBDA_ARTIFACT_BUCKET = priorBucket;
+  }
+});
+
+test("ARO coordinator: a completed verified Reject remains joined through final publication", async () => {
+  const priorFlag = process.env[POST_REFUSAL_REJECT_WORKER_FEATURE_FLAG];
+  const priorBucket = process.env.CERTSCORE_V2_DAG_LAMBDA_ARTIFACT_BUCKET;
+  process.env[POST_REFUSAL_REJECT_WORKER_FEATURE_FLAG] = "1";
+  process.env.CERTSCORE_V2_DAG_LAMBDA_ARTIFACT_BUCKET = "test-bucket";
+  try {
+    const outcome = await runCoordinatorFixture({
+      scanId: "aro-coordinator-reject-completed",
+      consentBundle: coordinatorConsentBundle("aro-coordinator-reject-completed", { inspectionCompleted: true, rejectControlObserved: true }),
+      action: "completed",
+      dispatchDelayMs: 0,
+      actionLane: "reject",
+    });
+    assert.equal(outcome.actionCalls.length, 1);
+    assert.equal(outcome.bundle.postRefusalLaneOutcome?.status, "joined");
+    assert.equal(outcome.bundle.postRefusalEvidence?.refusalRegistration?.status, "confirmed");
+    assert.equal(outcome.result.artifactPointers.postRefusalPacketUri?.endsWith("PostRefusalEvidencePacket.json"), true);
+  } finally {
+    if (priorFlag === undefined) delete process.env[POST_REFUSAL_REJECT_WORKER_FEATURE_FLAG]; else process.env[POST_REFUSAL_REJECT_WORKER_FEATURE_FLAG] = priorFlag;
+    if (priorBucket === undefined) delete process.env.CERTSCORE_V2_DAG_LAMBDA_ARTIFACT_BUCKET; else process.env.CERTSCORE_V2_DAG_LAMBDA_ARTIFACT_BUCKET = priorBucket;
+  }
+});
+
+test("ARO coordinator: a late Reject completion after cancellation cannot republish evidence", async () => {
+  const priorFlag = process.env[POST_REFUSAL_REJECT_WORKER_FEATURE_FLAG];
+  const priorBucket = process.env.CERTSCORE_V2_DAG_LAMBDA_ARTIFACT_BUCKET;
+  process.env[POST_REFUSAL_REJECT_WORKER_FEATURE_FLAG] = "1";
+  process.env.CERTSCORE_V2_DAG_LAMBDA_ARTIFACT_BUCKET = "test-bucket";
+  try {
+    const outcome = await runCoordinatorFixture({
+      scanId: "aro-coordinator-reject-late-completion",
+      consentBundle: coordinatorConsentBundle("aro-coordinator-reject-late-completion", { inspectionCompleted: false, limited: true }),
+      action: "late",
+      dispatchDelayMs: 0,
+      actionLane: "reject",
+    });
+    assert.equal(outcome.actionCalls.length, 1);
+    assert.equal(outcome.bundle.postRefusalLaneOutcome?.status, "failed");
+    assert.equal(outcome.bundle.postRefusalEvidence, undefined);
+    assert.equal(outcome.result.artifactPointers.postRefusalPacketUri, undefined);
+  } finally {
+    if (priorFlag === undefined) delete process.env[POST_REFUSAL_REJECT_WORKER_FEATURE_FLAG]; else process.env[POST_REFUSAL_REJECT_WORKER_FEATURE_FLAG] = priorFlag;
+    if (priorBucket === undefined) delete process.env.CERTSCORE_V2_DAG_LAMBDA_ARTIFACT_BUCKET; else process.env.CERTSCORE_V2_DAG_LAMBDA_ARTIFACT_BUCKET = priorBucket;
+  }
+});
 
 test("regional FIFO SQS dispatch envelopes contain exactly one typed payload", () => {
   const event = {

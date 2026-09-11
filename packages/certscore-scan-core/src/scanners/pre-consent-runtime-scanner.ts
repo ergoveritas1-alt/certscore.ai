@@ -26,6 +26,9 @@ import {
   type ConsentUiObservation,
   type VisualCaptureSummary,
   classifyConsentControlLabel,
+  classifyConsentControlLinkDestination,
+  hasUnresolvedConsentDecision,
+  UNRESOLVED_CONSENT_DECISION,
   classifyTransportHttpProbeOutcome,
   CONSENT_PREFERENCE_CATEGORY_REGISTRY,
   classifyConsentSurfaceText,
@@ -6486,7 +6489,8 @@ export async function detectConsentUi(
     };
     const isFirstLayerPosition = (element) => {
       const rect = element.getBoundingClientRect();
-      return rect.top <= window.innerHeight + 200 && rect.bottom >= -200;
+      return rect.width > 0 && rect.height > 0 && rect.top < window.innerHeight &&
+          rect.bottom > 0 && rect.left < window.innerWidth && rect.right > 0;
     };
     const hasConsentContext = (element) => {
       let current = element;
@@ -6624,6 +6628,7 @@ async function readDirectCmpSemanticConsentUiObservation(
   type DirectCmpSemanticInventory = {
     controls: Array<{
       label: string;
+      linkHref?: string;
       contextText: string;
       cmpScoped: boolean;
       role?: string;
@@ -6678,7 +6683,8 @@ async function readDirectCmpSemanticConsentUiObservation(
       const style = window.getComputedStyle(element);
       if (
         rect.width <= 0 || rect.height <= 0 ||
-        rect.top > window.innerHeight + 200 || rect.bottom < -200 ||
+        rect.top >= window.innerHeight || rect.bottom <= 0 ||
+        rect.left >= window.innerWidth || rect.right <= 0 ||
         style.visibility === "hidden" || style.display === "none" ||
         element.getAttribute("aria-hidden") === "true" ||
         Number.parseFloat(style.opacity || "1") <= 0.05
@@ -6691,15 +6697,23 @@ async function readDirectCmpSemanticConsentUiObservation(
       const id = element.getAttribute("id");
       const dataTestId = element.getAttribute("data-testid");
       const cmpContainer = closestCmpContainer(element);
-      const localContext = normalize(
-        cmpContainer?.innerText ??
-        element.closest<HTMLElement>("[role='dialog'],dialog,[aria-modal='true']")?.innerText ??
-        element.parentElement?.innerText ??
-        "",
-      ).slice(0, 2_000);
+      const contextContainer = cmpContainer ??
+        element.closest<HTMLElement>("[role='dialog'],dialog,[aria-modal='true']") ?? element.parentElement;
+      const contextParts: string[] = [];
+      if (contextContainer && contextContainer !== document.body && contextContainer !== document.documentElement &&
+        !contextContainer.closest("footer,header,nav,aside,[role='navigation'],[role='contentinfo']")) {
+        const walker = document.createTreeWalker(contextContainer, NodeFilter.SHOW_TEXT);
+        for (let inspected = 0, node = walker.nextNode(); node && inspected < 160; inspected += 1, node = walker.nextNode()) {
+          if (!element.contains(node) && !node.parentElement?.closest("button, [role='button'], a, input[type='button'], input[type='submit']")) {
+            contextParts.push(node.textContent || "");
+          }
+        }
+      }
+      const localContext = normalize(contextParts.join(" ")).slice(0, 2_000);
       controls.push({
         label,
         contextText: localContext,
+        linkHref: element.tagName.toLowerCase() === "a" ? element.getAttribute("href") ?? "" : undefined,
         cmpScoped: Boolean(cmpContainer),
         role: element.getAttribute("role") || undefined,
         selectorHint: id
@@ -6718,13 +6732,16 @@ async function readDirectCmpSemanticConsentUiObservation(
     canonicalConsentInventoryLabels: CANONICAL_CONSENT_INVENTORY_LABELS,
   }).catch((): DirectCmpSemanticInventory => ({ controls: [] }));
 
-  const controls = snapshot.controls.flatMap((control) => {
+  let navigationLimited = false;
+  const controls = snapshot.controls.map(control => normalizeConsentControlLink(control, page.url())).flatMap((control) => {
     if (hasMultipleCanonicalConsentIntents(control.label)) return [];
     const classification = classifyConsentControlLabel({
       label: control.label,
+      linkDestination: control.linkDestination,
       contextText: control.contextText,
       hasConsentContext: control.cmpScoped,
     });
+    navigationLimited ||= classification.reasonCodes.includes("unverified_preferences_navigation");
     const actionType = consentUiControlActionTypeFromClassification(classification);
     if (!actionType || (actionType === "other" && !isPaidDeclineClassification(classification))) return [];
     // A directly observed CMP script does not make every generic page
@@ -6739,6 +6756,7 @@ async function readDirectCmpSemanticConsentUiObservation(
       matchedTerm: classification.matchedTerm,
       matchedLocale: classification.matchedLocale,
       matchStrength: classification.matchStrength,
+      classifierRegistryVersion: classification.registryVersion,
       classifierReasonCodes: classification.reasonCodes,
       classifierVariant: classification.variant,
     }];
@@ -6749,7 +6767,7 @@ async function readDirectCmpSemanticConsentUiObservation(
     documentIdentity: currentBrowserDocumentIdentity(page),
     text: snapshot.controls.map((control) => `${control.contextText} ${control.label}`).join(" ").slice(0, 12_000),
     controls,
-    fallbackBasis: controls.length > 0 ? ["inventory:direct_cmp_semantic_controls"] : [],
+    fallbackBasis: [...(controls.length > 0 ? ["inventory:direct_cmp_semantic_controls"] : []), ...(navigationLimited ? [UNRESOLVED_CONSENT_DECISION] : [])],
     inventoryDiagnostics: {
       candidateContainerCount: controls.length > 0 ? 1 : 0,
       candidateControlCount: snapshot.controls.length,
@@ -6835,6 +6853,7 @@ async function readRapidFirstLayerConsentUiObservationUnbounded(
     controls: Array<{
       cmpScoped: boolean;
       label: string;
+      linkHref?: string;
       role?: string;
       selectorHint: string;
       tagName: string;
@@ -6889,7 +6908,8 @@ async function readRapidFirstLayerConsentUiObservationUnbounded(
         style.pointerEvents !== "none" &&
         Boolean(centerHit && (centerHit === element || element.contains(centerHit)));
       return rect.width > 0 && rect.height > 0 &&
-        rect.top <= window.innerHeight + 200 && rect.bottom >= -200 &&
+        rect.top < window.innerHeight && rect.bottom > 0 &&
+        rect.left < window.innerWidth && rect.right > 0 &&
         style.visibility !== "hidden" && style.display !== "none" &&
         style.pointerEvents !== "none" &&
         element.getAttribute("aria-hidden") !== "true" &&
@@ -6897,9 +6917,12 @@ async function readRapidFirstLayerConsentUiObservationUnbounded(
         (!centerHit || centerHit === element || element.contains(centerHit));
     };
     const consentContextFor = (element) => {
-      let current = element;
-      for (let depth = 0; current && depth < 24; depth += 1) {
-        if (current !== document.body && current !== document.documentElement) {
+      let current = element.parentElement;
+      for (let depth = 0; current && depth < 8; depth += 1) {
+        if (current === document.body || current === document.documentElement ||
+          /^(?:nav|footer|header|aside)$/i.test(current.tagName) ||
+          /^(?:navigation|contentinfo|menu|menubar)$/i.test(current.getAttribute("role") || "")) return "";
+        {
           const attrs = normalize([
             current.getAttribute("id"),
             current.getAttribute("class"),
@@ -6907,13 +6930,21 @@ async function readRapidFirstLayerConsentUiObservationUnbounded(
             current.getAttribute("aria-label"),
             current.getAttribute("data-testid"),
           ].filter(Boolean).join(" "));
-          const text = normalize(current.textContent).slice(0, 8_000);
-          const normalizedContext = (attrs + " " + text).toLowerCase();
+          const contextParts = [];
+          const walker = current.ownerDocument.createTreeWalker(current, NodeFilter.SHOW_TEXT);
+          for (let inspected = 0, node = walker.nextNode(); node && inspected < 160; inspected += 1, node = walker.nextNode()) {
+            if (!element.contains(node) && !node.parentElement?.closest("button, [role='button'], a, input[type='button'], input[type='submit']")) {
+              contextParts.push(node.textContent || "");
+            }
+          }
+          const text = normalize(contextParts.join(" ")).slice(0, 4_000);
+          const normalizedContext = text.toLowerCase();
           if (
             contextPattern.test(normalizedContext) ||
-            contextHints.some((hint) => normalizedContext.includes(hint))
+            contextHints.some((hint) => normalizedContext.includes(hint)) ||
+            combinedCmpContainers.some((container) => container === current && container.contains(element))
           ) {
-            return text;
+            return normalize(current.textContent).slice(0, 4_000);
           }
         }
         current = current.parentElement;
@@ -7030,6 +7061,7 @@ async function readRapidFirstLayerConsentUiObservationUnbounded(
       }
       controls.push({
         cmpScoped: scopedSeen.has(element) || sameSurfaceCanonicalControlCount >= 2,
+        linkHref: element.tagName.toLowerCase() === "a" ? element.getAttribute("href") ?? "" : undefined,
         label,
         role: element.getAttribute("role") || undefined,
         selectorHint: selectorHintFor(element),
@@ -7141,10 +7173,11 @@ async function readRapidFirstLayerConsentUiObservationUnbounded(
     canonicalOptionalPreferenceLabels: CANONICAL_OPTIONAL_PREFERENCE_CATEGORY_LABELS,
   });
 
-  const classifiedControls = snapshot.controls.map((control) => ({
+  const classifiedControls = snapshot.controls.map(control => normalizeConsentControlLink(control, page.url())).map((control) => ({
     control,
     classification: classifyConsentControlLabel({
       label: control.label,
+      linkDestination: control.linkDestination,
       contextText: snapshot.contextText,
       hasConsentContext: true,
     }),
@@ -7175,6 +7208,7 @@ async function readRapidFirstLayerConsentUiObservationUnbounded(
       matchedTerm: classification.matchedTerm,
       matchedLocale: classification.matchedLocale,
       matchStrength: classification.matchStrength,
+      classifierRegistryVersion: classification.registryVersion,
       classifierReasonCodes: classification.reasonCodes,
       classifierVariant: classification.variant,
     }];
@@ -7194,7 +7228,7 @@ async function readRapidFirstLayerConsentUiObservationUnbounded(
       precheckedOptionalPurposeCount: snapshot.precheckedOptionalPurposeCount,
       precheckedOptionalPurposeLabels: snapshot.precheckedOptionalPurposeLabels,
     },
-    fallbackBasis: controls.length > 0 ? ["inventory:rapid_first_layer_controls"] : [],
+    fallbackBasis: [...(controls.length > 0 ? ["inventory:rapid_first_layer_controls"] : []), ...(classifiedControls.some(({ classification }) => classification.reasonCodes.includes("unverified_preferences_navigation")) ? [UNRESOLVED_CONSENT_DECISION] : [])],
     inventoryDiagnostics: {
       candidateContainerCount: snapshot.contextText ? 1 : 0,
       candidateControlCount: snapshot.controls.length,
@@ -7215,9 +7249,9 @@ async function readRapidFirstLayerConsentUiObservationUnbounded(
   const mainFrameObservation: ConsentUiObservation = {
     ...observation,
     documentReadyState: snapshot.documentReadyState,
-    inventoryOutcome: controls.length > 0 ? "complete_with_controls"
+    inventoryOutcome: observation.basis.includes(UNRESOLVED_CONSENT_DECISION) ? "partial" : controls.length > 0 ? "complete_with_controls"
       : snapshot.documentReadyState === "loading" ? "partial" : "complete_empty",
-    captureStatus: controls.length === 0 && snapshot.documentReadyState === "loading"
+    captureStatus: observation.basis.includes(UNRESOLVED_CONSENT_DECISION) || controls.length === 0 && snapshot.documentReadyState === "loading"
       ? "incomplete" : observation.captureStatus,
     captureDiagnostics: {
       completedChannels: ["dom_inventory"],
@@ -7235,13 +7269,16 @@ async function readRapidFirstLayerConsentUiObservationUnbounded(
   // classify only their visible DOM controls through the canonical registry.
   const frameInventory = await readRapidChildFrameConsentInventory(page);
   const frameContextText = frameInventory.textExcerpts.join(" ").slice(0, 12_000);
-  const frameControls = frameInventory.controls.flatMap((control) => {
+  let frameNavigationLimited = false;
+  const frameControls = frameInventory.controls.map(control => normalizeConsentControlLink(control, control.frameUrl ?? page.url())).flatMap((control) => {
     if (hasMultipleCanonicalConsentIntents(control.label)) return [];
     const classification = classifyConsentControlLabel({
       label: control.label,
+      linkDestination: control.linkDestination,
       contextText: frameContextText,
       hasConsentContext: true,
     });
+    frameNavigationLimited ||= classification.reasonCodes.includes("unverified_preferences_navigation");
     const actionType = consentUiControlActionTypeFromClassification(classification);
     if (!actionType || (actionType === "other" && !isPaidDeclineClassification(classification))) return [];
     return [{
@@ -7250,6 +7287,7 @@ async function readRapidFirstLayerConsentUiObservationUnbounded(
       matchedTerm: classification.matchedTerm,
       matchedLocale: classification.matchedLocale,
       matchStrength: classification.matchStrength,
+      classifierRegistryVersion: classification.registryVersion,
       classifierReasonCodes: classification.reasonCodes,
       classifierVariant: classification.variant,
     }];
@@ -7260,9 +7298,7 @@ async function readRapidFirstLayerConsentUiObservationUnbounded(
     documentIdentity: currentBrowserDocumentIdentity(page),
     text: frameContextText,
     controls: frameControls,
-    fallbackBasis: frameControls.length > 0
-      ? ["inventory:same_origin_frame_controls", "inventory:rapid_child_frame_controls"]
-      : [],
+    fallbackBasis: [...(frameControls.length > 0 ? ["inventory:same_origin_frame_controls", "inventory:rapid_child_frame_controls"] : []), ...(frameNavigationLimited ? [UNRESOLVED_CONSENT_DECISION] : [])],
     inventoryDiagnostics: {
       candidateContainerCount: frameControls.length > 0 ? 1 : 0,
       candidateControlCount: frameInventory.controls.length,
@@ -7475,11 +7511,12 @@ async function readConsentUiObservation(
   const defaultToggleEvidence = await readConsentDefaultToggleEvidence(page);
   const frameInaccessibleCount = inventory.frameInaccessibleCount + frameInventory.frameInaccessibleCount;
   const probeDiagnostics = inventory.diagnostics;
-  const classifiedControls = combinedControls.map((control) => {
+  const classifiedControls = combinedControls.map(control => normalizeConsentControlLink(control, control.frameUrl ?? page.url())).map((control) => {
     const classification = classifyConsentControlLabel({
       label: control.label,
-      contextText: combinedText,
-      hasConsentContext: true,
+      linkDestination: control.linkDestination,
+      contextText: control.nearbyConsentText,
+      hasConsentContext: control.consentContextEvidence === "local_surface",
     });
     const actionType = consentUiControlActionTypeFromClassification(classification);
     return {
@@ -7490,6 +7527,7 @@ async function readConsentUiObservation(
       matchedTerm: classification.matchedTerm,
       matchedLocale: classification.matchedLocale,
       matchStrength: classification.matchStrength,
+      classifierRegistryVersion: classification.registryVersion,
       classifierReasonCodes: classification.reasonCodes,
       classifierVariant: classification.variant,
     };
@@ -7666,6 +7704,7 @@ async function readConsentUiObservation(
     controls: enrichedControls,
     defaultToggleEvidence,
     fallbackBasis: [
+      ...(classifiedControls.some(control => control.classifierReasonCodes.includes("unverified_preferences_navigation")) ? [UNRESOLVED_CONSENT_DECISION] : []),
       ...(retainedInventorySources.has("full_document_cmp") ? ["inventory:full_document_cmp_controls"] : []),
       ...(retainedInventorySources.has("full_document_consent_surface") ? ["inventory:full_document_consent_surface_controls"] : []),
       ...(retainedInventorySources.has("same_origin_frame") ? ["inventory:same_origin_frame_controls"] : []),
@@ -7686,7 +7725,7 @@ async function readConsentUiObservation(
     ...observation,
     documentReadyState: inventory.documentReadyState,
     inventoryOutcome:
-      frameInaccessibleCount > 0
+      observation.basis.includes(UNRESOLVED_CONSENT_DECISION) ? "partial" : frameInaccessibleCount > 0
         ? "frame_inaccessible"
         : enrichedControls.length > 0
           ? "complete_with_controls"
@@ -7696,7 +7735,7 @@ async function readConsentUiObservation(
               ? "timed_out"
               : "partial",
     captureStatus:
-      enrichedControls.length > 0
+      observation.basis.includes(UNRESOLVED_CONSENT_DECISION) ? "incomplete" : enrichedControls.length > 0
         ? "observed"
         : domInventoryCompleted || accessibilityInventory.captureStatus === "completed"
           ? observation.captureStatus
@@ -7714,7 +7753,13 @@ async function readConsentUiObservation(
   };
 }
 
+function normalizeConsentControlLink<T extends { linkHref?: string; linkDestination?: ConsentUiObservation["controls"][number]["linkDestination"] }>(control: T, documentUrl: string) {
+  const { linkHref, ...retained } = control;
+  return { ...retained, ...(linkHref !== undefined ? { linkDestination: classifyConsentControlLinkDestination(linkHref, documentUrl) } : {}) };
+}
+
 type ConsentUiInventoryControl = ConsentUiObservation["controls"][number] & {
+  linkHref?: string;
   frameUrl?: string;
   inventorySource?: "first_layer" | "full_document_cmp" | "full_document_consent_surface" | "same_origin_frame" | "accessibility_tree";
   inventoryContainerKey?: string;
@@ -7853,7 +7898,8 @@ const CONSENT_DEFAULT_TOGGLE_PROBE_SCRIPT = String.raw`(() => {
   const isFirstLayerPosition = (element) => {
     if (!element) return false;
     const rect = element.getBoundingClientRect();
-    return rect.top <= window.innerHeight + 200 && rect.bottom >= -200;
+    return rect.width > 0 && rect.height > 0 && rect.top < window.innerHeight &&
+          rect.bottom > 0 && rect.left < window.innerWidth && rect.right > 0;
   };
   const isWithinVisibleScrollableConsentSurface = (element) => {
     let current = element?.parentElement ?? null;
@@ -8164,38 +8210,46 @@ function boundedFrameInventoryRead(frame: Frame): Promise<{
         return (
           rect.width > 0 &&
           rect.height > 0 &&
+          rect.top < window.innerHeight && rect.bottom > 0 &&
+          rect.left < window.innerWidth && rect.right > 0 &&
           style.visibility !== "hidden" &&
           style.display !== "none" &&
           element.getAttribute("aria-hidden") !== "true" &&
           Number.parseFloat(style.opacity || "1") > 0.05
         );
       };
-      const hasConsentContext = (element: Element) => {
-        let current: Element | null = element;
+      const localConsentContext = (element: Element) => {
+        let current: Element | null = element.parentElement;
         for (let depth = 0; current && depth < 6; depth += 1) {
-          if (current === document.body || current === document.documentElement) {
-            current = current.parentElement;
-            continue;
+          if (current === document.body || current === document.documentElement ||
+            /^(?:nav|footer|header|aside)$/i.test(current.tagName) ||
+            /^(?:navigation|contentinfo|menu|menubar)$/i.test(current.getAttribute("role") || "")) return "";
+          const contextParts: string[] = [];
+          const walker = current.ownerDocument.createTreeWalker(current, NodeFilter.SHOW_TEXT);
+          for (let inspected = 0, node = walker.nextNode(); node && inspected < 160; inspected += 1, node = walker.nextNode()) {
+            if (!element.contains(node) && !node.parentElement?.closest(controlSelector)) {
+              contextParts.push(node.textContent || "");
+            }
           }
-          const contextText = (current.textContent || "").replace(/\s+/g, " ").trim();
+          const contextText = contextParts.join(" ").replace(/\s+/g, " ").trim();
           const contextAttrs = [
             current.getAttribute("aria-label"),
             current.getAttribute("role"),
             current.getAttribute("id"),
             current.getAttribute("class"),
           ].filter(Boolean).join(" ");
-          if (consentContextPattern.test(`${contextText} ${contextAttrs}`)) {
-            return true;
+          if (contextText.length <= 4_000 && consentContextPattern.test(contextText)) {
+            return `${current.textContent || ""} ${contextAttrs}`.replace(/\s+/g, " ").trim().slice(0, 500);
           }
           current = current.parentElement;
         }
-        return false;
+        return "";
       };
       const controls = Array.from(document.querySelectorAll(controlSelector))
         .slice(0, 80)
         .flatMap((element) => {
           const label = labelFor(element).slice(0, 120);
-          if (!label || label.length > 120 || !isVisible(element) || !hasConsentContext(element)) {
+          if (!label || label.length > 120 || !isVisible(element) || !localConsentContext(element)) {
             return [];
           }
           return [{
@@ -8204,7 +8258,10 @@ function boundedFrameInventoryRead(frame: Frame): Promise<{
             role: element.getAttribute("role") || undefined,
             selectorHint: selectorHintFor(element),
             tagName: element.tagName.toLowerCase(),
+            linkHref: element.tagName.toLowerCase() === "a" ? element.getAttribute("href") ?? "" : undefined,
             visible: true,
+            consentContextEvidence: "local_surface" as const,
+            nearbyConsentText: localConsentContext(element),
             frameUrl: window.location.href,
             inventoryContainerKey: `same_origin_frame:${window.location.href}`,
             inventoryRootSource: "document" as const,
@@ -8232,7 +8289,9 @@ type AccessibilityNodeValue = {
 };
 
 export type ConsentAccessibilityTreeNode = {
+  visibilityEvidence?: "box_model_verified" | "unverified";
   backendDOMNodeId?: number;
+  properties?: Array<{ name: string; value?: AccessibilityNodeValue }>;
   childIds?: string[];
   ignored?: boolean;
   name?: AccessibilityNodeValue;
@@ -8270,7 +8329,7 @@ async function readAccessibilityConsentInventory(page: Page, timeoutMs = 6_000):
         page.viewportSize(),
       );
       return {
-        ...consentControlsFromAccessibilityTree(firstLayerNodes),
+        ...consentControlsFromAccessibilityTree(firstLayerNodes, page.url()),
         captureStatus: "completed" as const,
       };
     })(),
@@ -8304,12 +8363,12 @@ async function readAccessibilityConsentInventory(page: Page, timeoutMs = 6_000):
   }
 }
 
-async function filterAccessibilityTreeToFirstLayer(
+export async function filterAccessibilityTreeToFirstLayer(
   client: CDPSession,
   nodes: ConsentAccessibilityTreeNode[],
   viewport: { width: number; height: number } | null,
 ): Promise<ConsentAccessibilityTreeNode[]> {
-  if (!viewport) return nodes;
+  if (!viewport) return nodes.map((node) => ({ ...node, visibilityEvidence: "unverified" }));
   const canonicalLabels = CANONICAL_CONSENT_INVENTORY_LABELS.map((label) => label.toLowerCase());
   const candidates = nodes.filter((node) => {
     if (!node.backendDOMNodeId || node.ignored === true) return false;
@@ -8320,7 +8379,7 @@ async function filterAccessibilityTreeToFirstLayer(
       (canonicalLabel) => label === canonicalLabel || (canonicalLabel.length >= 6 && label.includes(canonicalLabel)),
     );
   }).slice(0, 40);
-  if (candidates.length === 0) return nodes;
+  if (candidates.length === 0) return nodes.map((node) => ({ ...node, visibilityEvidence: "unverified" }));
   const firstLayerByNodeId = new Map(await Promise.all(candidates.map(async (node) => {
     const box = await client.send("DOM.getBoxModel", {
       backendNodeId: node.backendDOMNodeId,
@@ -8328,17 +8387,22 @@ async function filterAccessibilityTreeToFirstLayer(
     const quad = box?.model?.border ?? [];
     const xs = quad.filter((_, index) => index % 2 === 0);
     const ys = quad.filter((_, index) => index % 2 === 1);
-    const hasBox = xs.length >= 4 && ys.length >= 4;
+    const hasBox = xs.length >= 4 && ys.length >= 4 && quad.every(Number.isFinite);
+    if (!hasBox) return [node.nodeId, undefined] as const;
     const inFirstLayer = hasBox &&
+      Math.max(...xs) > Math.min(...xs) &&
+      Math.max(...ys) > Math.min(...ys) &&
       Math.max(...xs) > 0 &&
       Math.min(...xs) < viewport.width &&
-      Math.max(...ys) >= -200 &&
-      Math.min(...ys) <= viewport.height + 200;
+      Math.max(...ys) > 0 &&
+      Math.min(...ys) < viewport.height;
     return [node.nodeId, inFirstLayer] as const;
   })));
-  return nodes.map((node) => firstLayerByNodeId.get(node.nodeId) === false
-    ? { ...node, ignored: true }
-    : node);
+  return nodes.map((node) => ({
+    ...node,
+    visibilityEvidence: firstLayerByNodeId.get(node.nodeId) === true ? "box_model_verified" : "unverified",
+    ...(firstLayerByNodeId.get(node.nodeId) === false ? { ignored: true } : {}),
+  }));
 }
 
 function consentUiObservationFromAccessibilityInventory(
@@ -8351,8 +8415,9 @@ function consentUiObservationFromAccessibilityInventory(
   const classifiedControls = inventory.controls.flatMap((control) => {
     const classification = classifyConsentControlLabel({
       label: control.label,
-      contextText,
-      hasConsentContext: true,
+      linkDestination: control.linkDestination,
+      contextText: control.nearbyConsentText,
+      hasConsentContext: control.consentContextEvidence === "local_surface",
     });
     const actionType = consentUiControlActionTypeFromClassification(classification);
     if (!actionType || (actionType === "other" && !isPaidDeclineClassification(classification))) return [];
@@ -8369,6 +8434,7 @@ function consentUiObservationFromAccessibilityInventory(
       matchedTerm: classification.matchedTerm,
       matchedLocale: classification.matchedLocale,
       matchStrength: classification.matchStrength,
+      classifierRegistryVersion: classification.registryVersion,
       classifierReasonCodes: classification.reasonCodes,
       classifierVariant: classification.variant,
       _matchStrength: classification.matchStrength,
@@ -8396,6 +8462,7 @@ function consentUiObservationFromAccessibilityInventory(
     text: contextText,
     controls,
     fallbackBasis: [
+      ...(inventory.controls.some(control => control.visible && control.classifierReasonCodes?.includes("unverified_preferences_navigation")) ? [UNRESOLVED_CONSENT_DECISION] : []),
       ...(controls.length > 0 ? ["inventory:accessibility_tree"] : []),
       ...(inventory.captureStatus === "timed_out" ? ["inventory:accessibility_tree_timed_out"] : []),
       ...(inventory.captureStatus === "failed" ? ["inventory:accessibility_tree_failed"] : []),
@@ -8422,8 +8489,9 @@ function consentUiObservationFromAccessibilityInventory(
   });
   return {
     ...observation,
+    inventoryOutcome: observation.basis.includes(UNRESOLVED_CONSENT_DECISION) ? "partial" : observation.inventoryOutcome,
     captureStatus:
-      inventory.captureStatus === "completed"
+      observation.basis.includes(UNRESOLVED_CONSENT_DECISION) ? "incomplete" : inventory.captureStatus === "completed"
         ? observation.captureStatus
         : controls.length > 0
           ? "observed"
@@ -8438,6 +8506,7 @@ function consentUiObservationFromAccessibilityInventory(
 
 export function consentControlsFromAccessibilityTree(
   nodes: ConsentAccessibilityTreeNode[],
+  documentUrl?: string,
 ): {
   controls: ConsentUiInventoryControl[];
   hasPotentialToggle: boolean;
@@ -8487,12 +8556,16 @@ export function consentControlsFromAccessibilityTree(
     if (!AX_CONSENT_CONTEXT_PATTERN.test(contextText)) {
       continue;
     }
+    const href = node.properties?.find(property => property.name === "url")?.value?.value;
+    const linkDestination = role === "link"
+      ? classifyConsentControlLinkDestination(typeof href === "string" ? href : undefined, documentUrl) : undefined;
     const classification = classifyConsentControlLabel({
       label,
+      linkDestination,
       contextText,
       hasConsentContext: true,
     });
-    if (classification.intent === "unknown") {
+    if (classification.intent === "unknown" && !classification.reasonCodes.includes("unverified_preferences_navigation")) {
       continue;
     }
     const containerIntents = accessibilitySubtreeConsentIntents(container, nodesById);
@@ -8513,11 +8586,16 @@ export function consentControlsFromAccessibilityTree(
     }
     controls.push({
       actionType: "other",
+      linkDestination,
+      classifierReasonCodes: classification.reasonCodes,
       label,
       role,
       selectorHint: `ax:${node.nodeId}`,
       tagName: "ax-node",
-      visible: true,
+      visible: node.visibilityEvidence === "box_model_verified",
+      visibilityEvidence: node.visibilityEvidence ?? "unverified",
+      consentContextEvidence: "local_surface",
+      nearbyConsentText: contextText.slice(0, 500),
       inventoryContainerKey: `accessibility_tree:${container.nodeId}`,
       inventoryRootSource: "document",
       inventorySource: "accessibility_tree",
@@ -8548,6 +8626,7 @@ function nearestAccessibilityConsentContainer(
     const role = axStringValue(current.role);
     const name = axStringValue(current.name);
     const subtreeText = collectAccessibilitySubtreeText(current, nodesById, 60);
+    if (/^(?:RootWebArea|WebArea|navigation|contentinfo|menubar|menu)$/i.test(role)) return null;
     const isLikelyConsentContainer = (
       AX_CONSENT_CONTAINER_ROLE_PATTERN.test(role) ||
       AX_CONSENT_CONTEXT_PATTERN.test(`${name} ${role}`)
@@ -8810,7 +8889,8 @@ const CONSENT_INVENTORY_PROBE_SCRIPT = String.raw`(() => {
       };
       const isFirstLayerPosition = (element) => {
         const rect = element.getBoundingClientRect();
-        return rect.top <= window.innerHeight + 200 && rect.bottom >= -200;
+        return rect.width > 0 && rect.height > 0 && rect.top < window.innerHeight &&
+          rect.bottom > 0 && rect.left < window.innerWidth && rect.right > 0;
       };
       const containerKindFor = (element) => {
         if (isFirstLayerPosition(element)) {
@@ -8903,14 +8983,20 @@ const CONSENT_INVENTORY_PROBE_SCRIPT = String.raw`(() => {
         }
         return { key: "ineligible", source: "ineligible" };
       };
-      const hasConsentContext = (element) => {
-        let current = element;
+      const localConsentContext = (element) => {
+        let current = parentFor(element);
         for (let depth = 0; current && depth < 8; depth += 1) {
-          if (current === document.body || current === document.documentElement) {
-            current = parentFor(current);
-            continue;
+          if (current === document.body || current === document.documentElement ||
+            /^(?:nav|footer|header|aside)$/i.test(current.tagName) ||
+            /^(?:navigation|contentinfo|menu|menubar)$/i.test(current.getAttribute("role") || "")) return "";
+          const contextParts = [];
+          const walker = current.ownerDocument.createTreeWalker(current, NodeFilter.SHOW_TEXT);
+          for (let inspected = 0, node = walker.nextNode(); node && inspected < 160; inspected += 1, node = walker.nextNode()) {
+            if (!element.contains(node) && !node.parentElement?.closest(controlSelector)) {
+              contextParts.push(node.textContent || "");
+            }
           }
-          const contextText = (current.textContent || "").replace(/\s+/g, " ").trim();
+          const contextText = contextParts.join(" ").replace(/\s+/g, " ").trim();
           const contextAttrs = [
             current.getAttribute("aria-label"),
             current.getAttribute("role"),
@@ -8918,15 +9004,16 @@ const CONSENT_INVENTORY_PROBE_SCRIPT = String.raw`(() => {
             current.getAttribute("class"),
           ].filter(Boolean).join(" ");
           if (
-            consentContextPattern.test(contextText + " " + contextAttrs) ||
-            hasCanonicalContextHint(contextText + " " + contextAttrs)
+            contextText.length <= 4_000 && (consentContextPattern.test(contextText) ||
+            hasCanonicalContextHint(contextText))
           ) {
-            return true;
+            return ((current.textContent || "") + " " + contextAttrs).replace(/\s+/g, " ").trim().slice(0, 500);
           }
           current = parentFor(current);
         }
-        return false;
+        return "";
       };
+      const hasConsentContext = (element) => Boolean(localConsentContext(element));
       const isPotentialCustomControl = (element) => {
         const role = (element.getAttribute("role") || "").toLowerCase();
         const tabIndex = element.getAttribute("tabindex");
@@ -9024,7 +9111,7 @@ const CONSENT_INVENTORY_PROBE_SCRIPT = String.raw`(() => {
           }
           const label = labelFor(element);
           if (!label || label.length > 140 || !hasConsentContext(element)) {
-            rememberCandidate(element, label, "no_consent_context");
+            rememberCandidate(element, label, element.closest?.("footer,header,nav,aside,[role='navigation'],[role='contentinfo']") ? "footer_nav_page_chrome" : "no_consent_context");
             return false;
           }
           return !Array.from(element.children).slice(0, 20).some((child) => {
@@ -9056,7 +9143,7 @@ const CONSENT_INVENTORY_PROBE_SCRIPT = String.raw`(() => {
         }
         const label = labelFor(element).slice(0, 120);
         if (!label || label.length > 120 || !hasConsentContext(element)) {
-          rememberCandidate(element, label, "no_consent_context");
+          rememberCandidate(element, label, element.closest?.("footer,header,nav,aside,[role='navigation'],[role='contentinfo']") ? "footer_nav_page_chrome" : "no_consent_context");
           return [];
         }
         const container = containerKindFor(element);
@@ -9079,7 +9166,10 @@ const CONSENT_INVENTORY_PROBE_SCRIPT = String.raw`(() => {
           role: element.getAttribute("role") || undefined,
           selectorHint: selectorHintFor(element),
           tagName: element.tagName.toLowerCase(),
+          linkHref: element.tagName.toLowerCase() === "a" ? element.getAttribute("href") ?? "" : undefined,
           visible: true,
+          consentContextEvidence: "local_surface",
+          nearbyConsentText: localConsentContext(element),
           frameUrl: sameOriginFrameControl ? element.ownerDocument.location?.href : undefined,
           inventoryContainerKey: sameOriginFrameControl ? "same_origin_frame:" + (element.ownerDocument.location?.href || "about:blank") : container.key,
           inventoryRootSource: rootSourceFor(element),
@@ -9182,11 +9272,11 @@ function buildConsentUiObservationFromEvidence(input: {
 }): ConsentUiObservation {
   const { controls, defaultToggleEvidence, documentIdentity, documentUrl, fallbackBasis = [], inventoryDiagnostics, scanStartedAtMs, text } = input;
   const canonicalSurfaceText = classifyConsentSurfaceText({ text });
-  const visibleChoiceLabels = controls.map((control) => control.label);
-  const acceptControlObserved = controls.some((control) => control.actionType === "accept_all");
-  const rejectControlObserved = controls.some((control) => control.actionType === "reject_all");
+  const visibleChoiceLabels = controls.filter((control) => control.visible !== false).map((control) => control.label);
+  const acceptControlObserved = controls.some((control) => control.visible !== false && control.actionType === "accept_all");
+  const rejectControlObserved = controls.some((control) => control.visible !== false && control.actionType === "reject_all");
   const managePreferencesControlObserved = controls.some((control) =>
-    control.actionType === "manage_preferences" || control.actionType === "save_preferences"
+    control.visible !== false && (control.actionType === "manage_preferences" || control.actionType === "save_preferences")
   );
   const controlBasis = controls.map((control) => `control:${control.actionType}:${control.label}`);
   const surfaceTextBasis = canonicalSurfaceText.matches.map((match) =>
@@ -9373,10 +9463,10 @@ function hasActionableConsentChoiceControl(observation: ConsentUiObservation): b
 }
 
 function hasSufficientFirstLayerConsentControls(observation: ConsentUiObservation): boolean {
-  const hasAccept = observation.controls.some((control) => control.actionType === "accept_all");
-  const hasReject = observation.controls.some((control) => control.actionType === "reject_all");
+  const hasAccept = observation.controls.some((control) => control.visible !== false && control.actionType === "accept_all");
+  const hasReject = observation.controls.some((control) => control.visible !== false && control.actionType === "reject_all");
   const hasManage = observation.controls.some((control) =>
-    control.actionType === "manage_preferences" || control.actionType === "save_preferences"
+    control.visible !== false && (control.actionType === "manage_preferences" || control.actionType === "save_preferences")
   );
   return hasReject && (hasAccept || hasManage);
 }
@@ -9588,7 +9678,7 @@ export function mergeConsentUiObservations(
       failedChannels: activeFailedChannels,
     },
     acceptControlObserved: current.acceptControlObserved || candidate.acceptControlObserved ||
-      controls.some((control) => control.actionType === "accept_all"),
+      controls.some((control) => control.visible !== false && control.actionType === "accept_all"),
     basis: unique([
       ...current.basis,
       ...candidate.basis,
@@ -9631,7 +9721,7 @@ export function mergeConsentUiObservations(
       ...(candidate.precheckedOptionalPurposeLabels ?? []),
     ]).slice(0, 10),
     rejectControlObserved: current.rejectControlObserved || candidate.rejectControlObserved ||
-      controls.some((control) => control.actionType === "reject_all"),
+      controls.some((control) => control.visible !== false && control.actionType === "reject_all"),
     visibleChoiceLabels,
   };
 }
@@ -12203,8 +12293,8 @@ export function reconcileConsentUiObservationWithCompletedGeometry(input: {
     ]);
     return annotateConsentUiObservation({
       ...input.current,
-      acceptControlObserved: controls.some((control) => control.actionType === "accept_all"),
-      rejectControlObserved: controls.some((control) => control.actionType === "reject_all"),
+      acceptControlObserved: controls.some((control) => control.visible !== false && control.actionType === "accept_all"),
+      rejectControlObserved: controls.some((control) => control.visible !== false && control.actionType === "reject_all"),
       managePreferencesControlObserved: controls.some((control) => control.actionType === "manage_preferences"),
       captureStatus: "incomplete",
       inventoryOutcome: "partial",
@@ -12284,8 +12374,8 @@ export function reconcileConsentUiObservationWithCompletedGeometry(input: {
     const controls = reconciled.controls;
     return annotateConsentUiObservation({
       ...reconciled,
-      acceptControlObserved: controls.some((control) => control.actionType === "accept_all"),
-      rejectControlObserved: controls.some((control) => control.actionType === "reject_all"),
+      acceptControlObserved: controls.some((control) => control.visible !== false && control.actionType === "accept_all"),
+      rejectControlObserved: controls.some((control) => control.visible !== false && control.actionType === "reject_all"),
       managePreferencesControlObserved: controls.some((control) => control.actionType === "manage_preferences"),
       captureStatus: "incomplete",
       inventoryOutcome: "partial",
@@ -12339,8 +12429,9 @@ export function reconcileConsentUiObservationWithCompletedGeometry(input: {
     ...(input.current.captureDiagnostics?.completedChannels ?? []),
     "geometry",
   ]) as NonNullable<ConsentUiObservation["captureDiagnostics"]>["completedChannels"];
+  const unresolvedDecision = hasUnresolvedConsentDecision(input.geometry);
   const completedSettledEmptyInventory =
-    input.current.documentReadyState !== "loading" &&
+    !unresolvedDecision && input.current.documentReadyState !== "loading" &&
     input.current.controls.length === 0 &&
     input.current.inventoryOutcome === "complete_empty" &&
     (input.current.captureDiagnostics?.completedChannels ?? []).some((channel) =>
@@ -12368,8 +12459,9 @@ export function reconcileConsentUiObservationWithCompletedGeometry(input: {
       likelyPresent: completedSettledEmptyInventory
         ? false
         : input.current.likelyPresent,
+      basis: unique([...input.current.basis, ...(unresolvedDecision ? [UNRESOLVED_CONSENT_DECISION] : [])]),
       inventoryOutcome:
-        input.current.inventoryOutcome === "frame_inaccessible"
+        unresolvedDecision ? "partial" : input.current.inventoryOutcome === "frame_inaccessible"
           ? "frame_inaccessible"
           : input.current.controls.length > 0
             ? "complete_with_controls"
@@ -12495,6 +12587,8 @@ export function consentUiObservationFromConfirmedGeometryControls(input: {
       }
       return [{
         actionType,
+        classifierRegistryVersion: candidate.classifierRegistryVersion,
+        linkDestination: candidate.linkDestination,
         classifierReasonCodes: candidate.classifierReasonCodes,
         label: candidate.label.slice(0, 120),
         matchStrength: candidate.matchStrength as ConsentUiObservation["controls"][number]["matchStrength"],
@@ -12525,7 +12619,8 @@ export function consentUiObservationFromConfirmedGeometryControls(input: {
       ...controls.map((control) => control.label),
     ].filter(Boolean).join(" ").slice(0, 12_000),
   });
-  observation.inventoryOutcome = "complete_with_controls";
+  observation.inventoryOutcome = hasUnresolvedConsentDecision(input.geometry) ? "partial" : "complete_with_controls";
+  if (hasUnresolvedConsentDecision(input.geometry)) observation.basis.push(UNRESOLVED_CONSENT_DECISION);
   observation.captureDiagnostics = {
     completedChannels: ["geometry"],
     timedOutChannels: [],

@@ -1,5 +1,6 @@
 import { classifyConsentControlLabel } from "@certscore/contracts";
 import type { Frame, Locator, Page } from "playwright";
+import { consentScopePermitsInteraction } from "./cmp-action-target.js";
 
 export type CmpAccessibleActionResolution = {
   kind: "scoped_accessible_control" | "closed_shadow_accessible_control";
@@ -16,6 +17,7 @@ type ClosedShadowTarget = {
 
 function eligibleIntent(label: string, intent: "accept" | "reject") {
   const classification = classifyConsentControlLabel({
+    usage: "action",
     label,
     hasConsentContext: true,
   });
@@ -44,20 +46,24 @@ export async function resolveScopedAccessibleControl(
   const containers = scope.locator(resolution.scopeSelector);
   if (await containers.count().catch(() => 0) !== 1) return undefined;
   const container = containers.first();
-  if (!await container.isVisible().catch(() => false)) return undefined;
+  if (!await consentScopePermitsInteraction(container)) return undefined;
   const controls = container.getByRole("button");
   const matches: Locator[] = [];
-  const count = Math.min(await controls.count().catch(() => 0), 24);
+  const rawCount = await controls.count().catch(() => 0);
+  if (rawCount > 24) return undefined;
+  const count = rawCount;
   for (let index = 0; index < count; index += 1) {
     const control = controls.nth(index);
-    const [visible, enabled, labels] = await Promise.all([
+    const [visible, enabled, scopePermitsInteraction, labels] = await Promise.all([
       control.isVisible().catch(() => false),
       control.isEnabled().catch(() => false),
+      consentScopePermitsInteraction(control),
       accessibleLabels(control),
     ]);
     if (
       visible &&
       enabled &&
+      scopePermitsInteraction &&
       labels.some((label) => eligibleIntent(label, resolution.intent))
     ) matches.push(control);
   }

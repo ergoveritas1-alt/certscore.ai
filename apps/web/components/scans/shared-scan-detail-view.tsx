@@ -2,7 +2,7 @@ import { resolveScanReportScore } from "../../lib/scans/scan-report-disposition"
 
 import { scanFailureExplanation } from "../../lib/scans/scan-failure-explanation";
 import type { ReactNode } from "react";
-import { afterClickSummary } from "./after-action-summary";
+import { afterClickCoverage, afterClickSummary } from "./after-action-summary";
 import { InventoryResourceProvider, InventoryResourceRow, InventoryResourceMobile } from "./inventory-resource-details";
 import Link from "next/link";
 import {
@@ -1440,7 +1440,9 @@ export function buildExecutiveRejectPathProjection(
   const contradictionObserved = retained.refusalSignalContradictsAction === true;
   const observationWindowMs = getOptionalFiniteNumber(retained, "observationWindowMs");
   const resolverMethod = getOptionalString(retained, "resolverMethod");
-  const afterClickNote = afterClickSummary(retained, "reject", retained.rejectInteractionConfirmed === true);
+  const captureCoverage = afterClickCoverage(retained, "reject");
+  const registrationConfirmed = retained.rejectInteractionConfirmed === true;
+  const afterClickNote = afterClickSummary(retained, "reject");
   const customerFacingNote = omitScoreMechanicsFromCustomerCopy(item.note) + afterClickNote;
   const timelineEvents = activityRows
     .map(formatRejectTimelineEvent)
@@ -1457,6 +1459,8 @@ export function buildExecutiveRejectPathProjection(
       ].slice(0, 3),
       label: contradictionObserved ? "Consent signal contradicted Reject" : "Activity observed after Reject",
       note: customerFacingNote,
+      afterClickCoverage: captureCoverage,
+      registrationConfirmed,
       observationWindowMs,
       resolverMethod,
       scoreEffect: "deduction",
@@ -1470,6 +1474,8 @@ export function buildExecutiveRejectPathProjection(
       evidenceRows: persistenceRows.map(formatRejectPersistenceEvidence).slice(0, 3),
       label: item.label,
       note: customerFacingNote,
+      afterClickCoverage: captureCoverage,
+      registrationConfirmed,
       observationWindowMs,
       resolverMethod,
       scoreEffect: "none",
@@ -1483,6 +1489,8 @@ export function buildExecutiveRejectPathProjection(
       evidenceRows: [],
       label: "No post-Reject issue observed",
       note: "A confirmed Reject and bounded observation window were retained. No qualifying post-Reject issue was observed in that window." + afterClickNote,
+      afterClickCoverage: captureCoverage,
+      registrationConfirmed,
       observationWindowMs,
       resolverMethod,
       scoreEffect: "none",
@@ -1493,10 +1501,12 @@ export function buildExecutiveRejectPathProjection(
 
   return {
     evidenceRows: [],
-    label: "Reject path limited",
+    label: captureCoverage ? "After-Reject observation recorded" : "Reject path limited",
     note: afterClickNote
-      ? "The Reject control was clicked, but refusal could not be verified." + afterClickNote
+      ? "The Reject control was clicked." + afterClickNote
       : customerFacingNote,
+    afterClickCoverage: captureCoverage,
+    registrationConfirmed,
     observationWindowMs,
     resolverMethod,
     scoreEffect: "none",

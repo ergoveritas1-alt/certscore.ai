@@ -13,6 +13,9 @@ import {
   article13DisclosureRejectReason as sharedArticle13DisclosureRejectReason,
   assessArticle13PolicyTextQuality,
   classifyConsentControlLabel,
+  consentSessionAccessLimited,
+  hasUnresolvedConsentDecision,
+  UNRESOLVED_CONSENT_DECISION,
   classifyTransportHttpProbeOutcome,
   COLLECTION_SURFACE_ASSESSMENT_VERSION,
   collectionSurfaceAssessmentSchema,
@@ -4687,6 +4690,19 @@ export function reconcileConsentSurfaceInspectionWithGeometry(
   geometryEvidence: Record<string, unknown> | null | undefined,
   inspection: ReturnType<typeof deriveConsentSurfaceInspectionOutcome>
 ) {
+  if (hasUnresolvedConsentDecision(geometryEvidence) || consentSessionAccessLimited(bundle, geometryEvidence)) {
+    return {
+      ...inspection,
+      outcome: "indeterminate_limited_coverage" as const,
+      coverageStatus: "limited" as const,
+      inspectionCompleted: false,
+      limitationKeys: uniqueStrings([
+        ...inspection.limitationKeys,
+        ...(hasUnresolvedConsentDecision(geometryEvidence) ? [UNRESOLVED_CONSENT_DECISION] : []),
+        ...(consentSessionAccessLimited(bundle, geometryEvidence) ? ["consent_session_access_limited"] : []),
+      ]),
+    };
+  }
   // The canonical bundle may already contain a completed, geometry-backed
   // consent observation. A missing optional auxiliary mirror must not erase
   // that retained structured evidence.
@@ -6438,7 +6454,7 @@ export function buildGpcResponseRuntimeProjection(
 // fully derived report detail, so retaining an older entry can cause a
 // projection repair to persist stale evidence even after the projector is
 // deployed.
-const LOCAL_V2_DAG_REPORT_MATERIALIZATION_CACHE_VERSION = "local-v2-report-materialization-v16";
+const LOCAL_V2_DAG_REPORT_MATERIALIZATION_CACHE_VERSION = "local-v2-report-materialization-v17";
 const LOCAL_V2_DAG_REPORT_MATERIALIZATION_CACHE_TTL_MS = 60 * 60 * 1_000;
 const LOCAL_V2_DAG_REPORT_MATERIALIZATION_CACHE_MAX_ENTRIES = 6;
 const localV2DagReportMaterializationCache = new BoundedPromiseCache<string, ScanDetailResponse>({

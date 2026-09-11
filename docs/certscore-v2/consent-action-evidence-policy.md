@@ -288,3 +288,216 @@ surfacing/taxonomy tests, 486 broader checklist/concern-policy/unified-finding t
 loopback browser tests passed (866 distinct tests). Contracts, scan-core, Lambda
 and web type checks plus diff whitespace checks passed. This is deterministic
 regression verification, not a measured production CMP success rate.
+
+### September 10, 2026 bounded resolver reliability corrections
+
+The owner approved implementation and an allowance of up to $5/month in
+incremental compute/metadata at 100,000 scans/month, with deployment deferred.
+This is a planning allowance, not a measured bill increase. Successful actions
+may use more of the existing after-action windows; faster resolution may instead
+reduce billed duration. No browser invocation, model call, observation-window
+extension, or action-tail extension is added.
+
+Action resolvers collapse recipe aliases only after live browser node equality
+and identical confirmation/scope contracts are verified. Distinct buttons,
+conflicting recipes, inaccessible nodes and ambiguous frame identities remain
+unresolved. Closed-shadow host equality does not establish action-node equality.
+Geometry retains exact structural container selectors when label-unique hints
+would identify multiple containers; action resolution intersects the control and
+container scopes. Static headings and tabs do not compete as action controls.
+Explicitly labelled semantic consent regions retain their local consent context.
+
+Existing geometry CMP observations prioritize registered recipe searches without
+excluding other recipes based on a stale cookie or fingerprint. Accept retains
+bounded resolver snapshots, including accessibility actionability and deadline
+limitations. Reject searches exact child-frame scopes, preserves incomplete-sweep
+ambiguity, and leaves time for its existing control-stability check inside the
+original search deadline.
+
+A late `resolved_control_no_longer_actionable` proof failure can trigger one
+pre-dispatch re-resolution using only the time remaining from the original
+resolver start. Recovery rebuilds control proof and semantic baselines; Reject
+refreshes its storage baseline and necessary-only precondition. Exhausted budgets,
+label conflicts, redirects, aborts, and uncertain or completed clicks do not
+receive a new attempt. Malformed storage entries are omitted with explicit
+coverage limitations; valid empty keys, names and values remain exact.
+
+The canonical label registry now recognizes context-bound German `Nur notwendige`,
+Portuguese `Rejeitar cookies`, and Polish `Akceptuj niezbędne` as refusal choices.
+The latter is necessary-only, not Accept. These changes do not confirm consent
+registration, lower generic action thresholds, or change scoring. `Akkoord` was
+already recognized; a cross-session mismatch is not grounds for inventing a new
+synonym. Accessibility-only and label-source cases remain live-calibration targets
+through the existing registered action mechanisms.
+
+### Boxless consent scopes and Polish necessary-only controls
+
+A unique consent wrapper or open-shadow host may have no layout box while its
+first-layer controls remain visible and actionable. The shared scope check tests
+connectedness and hidden/inert/ARIA-hidden/visibility suppression through composed
+ancestors; it does not require the wrapper itself to be a pointer target. Both
+canonical discovery paths retain the individual control's visibility, label,
+uniqueness and viewport hit proof. Final control proof independently checks those
+ancestors from the actual control, including descendants inside the retained scope.
+This does not make banner disappearance or a successful click semantic consent.
+The guard rejects fully transparent ancestors; the existing geometry inventory
+continues to apply its stricter near-transparency threshold to candidates.
+
+Polish `Zezwól tylko na niezbędne` is a canonical context-bound necessary-only
+Reject label. `Zezwól na wszystkie` remains Accept. These changes add no invocation,
+retry, capture window, tail wait, model call or evidence-retention increase.
+Existing overflow and deadline outcomes remain explicit coverage limitations.
+
+### Semantic baseline and bounded post-click retention
+
+Generic Accept and Reject confirmation preserve the existing visible-surface
+check and may also bind a boxless scope to the already-resolved action control.
+The fallback requires a unique available scope and control, and verifies exact
+composed ancestry through open-shadow hosts. It does not select a new control,
+permit another click, or use banner disappearance to establish a decision.
+Fresh value-bound semantic proof and exact-target authorization remain required.
+Opposite, mixed, opaque, and missing decisions remain unconfirmed.
+
+`CONSENT_ACTION_POST_CLICK_REQUEST_LIMIT` in the shared action-evidence contract
+sets the post-click network bound to 192. Both observers and the typed packet,
+after-action reference/ancestry, and persisted report-projection schemas consume
+that bound. Pre-click retention remains 96. The final request inventory grows
+beyond 96 only when more than 96 post-click requests were directly observed;
+additional capacity does not retain extra pre-click traffic. Every retained
+post-click request keeps its ordinary classification and provenance. Reject
+ancestry remains complete for all after-click references. Storage bounds and
+bounded display samples are unchanged.
+
+Overflow beyond 192 remains explicitly incomplete and non-projectable under the
+existing completeness gates. No capture window, confirmation deadline, action
+tail, invocation, retry, or model call is added. Historical packets are not
+rewritten or upgraded; missing historical requests cannot be reconstructed from
+the drop counter. Contract readers must support the expanded bound before or
+together with scanner writers in any separately authorized deployment.
+
+The engineering estimate is less than $1/month incremental compute/metadata at
+100,000 scans/month with 30-day retention, within the owner's existing $5/month
+approval. The calibration basis is 269 dropped requests over 712 terminal scans
+and roughly 302 bytes per retained request row before replicated metadata. This
+is a workload-based planning estimate, not a billing or production-latency result.
+
+### Modern TCF callbacks and configuration-bound OneTrust decisions
+
+The shared action TCF reader subscribes once per live API/document through
+`addEventListener`, invalidates failed updates, and ignores callbacks from a
+replaced API. The existing bounded `getTCData` compatibility read remains for
+older CMPs. Neither operation changes consent. Confirmation still requires a
+fresh fingerprint and post-action `useractioncomplete`; cached pre-action state
+and UI changes alone do not confirm registration.
+
+`iab_tcf_sparse_purposes.v1` decodes the IAB API's documented `false | undefined`
+no-consent encoding only from a loaded, successful GDPR-applicable TCData
+response with supported TCF policy version 4 or 5, bounded CMP identifiers,
+its own required protocol fields, a present valid purpose map, and a bounded
+v2 TC string. All 24 normalized purpose flags must agree with the encoded
+purpose bits. Missing envelopes, malformed maps, unsupported versions, invalid
+or truncated purpose-bearing cores, and conflicting values remain unknown.
+The outer TCData may be a vendor SDK class instance; validation uses its own
+protocol fields, rather than its constructor name. This is protocol decoding,
+not a conversion of missing generic category evidence to refusal. The existing
+v2 purpose-bit decoder is not a validator for every variable vendor segment.
+
+The typed decision proof retains the API source, sparse-encoding policy,
+TCF policy version, CMP identifiers, explicit purpose IDs, exact state hash,
+and timestamp provenance. These fields travel through the verified retained
+packet and canonical persisted action projection. Historical packets remain
+readable without these optional fields and are not upgraded on read.
+
+`onetrust_cookie_groups.v1` binds cookie interpretation to the same session's
+read-only `OneTrust.GetDomainData().Groups`, exact cookie identity, changed value
+hash, and unchanged configuration hash. Baseline, returned cookie, and configured
+group identities must match completely. Only groups explicitly configured
+`always active` are excluded from the optional-purpose decision. Unknown IDs,
+ambiguous cookies, malformed configuration, missing groups, configuration drift,
+and all-essential inventories do not confirm a decision. A missing domain-data
+API preserves legacy registry decoding; a present but unverifiable API must not
+fall back to guessed group semantics. Opposite/mixed decisions remain neutral.
+
+No invocation, retry, confirmation timeout, observation window, tail cap, or
+model call is added. Read-only browser API checks add small local work within
+existing deadlines. Bounded provenance metadata is estimated below $1/month
+at 100,000 scans/month with 30-day retention, within the existing owner-approved
+$5/month allowance. Support these optional proof fields in contract readers
+before or together with scanner writers in a separately authorized deployment.
+
+Primary protocol references:
+- [IAB CMP API v2](https://github.com/InteractiveAdvertisingBureau/GDPR-Transparency-and-Consent-Framework/blob/master/TCFv2/IAB%20Tech%20Lab%20-%20CMP%20API%20v2.md)
+- [OneTrust JavaScript API](https://developer.onetrust.com/onetrust/docs/javascript-api)
+
+### Customer presentation of action outcomes
+
+Lead Accept/Reject results with the directly observed behavior. For the existing
+eligible Reject-click tracking finding, use “Tracking observed after Reject” and
+explain the recorded requests, services and timing. Consent-state confirmation
+belongs in supporting details; it must not qualify the finding title or suggest
+that valid observed requests are speculative. A review classification must not
+be relabeled as confirmed refusal.
+
+Completed interactions with schema-valid persisted after-action capture remain
+visible as “Observation recorded” or “Partial observation,” even when the
+canonical decision state remains incomplete. These labels describe capture,
+not consent registration or finding eligibility. Preserve the canonical state,
+score and retained provenance. Never infer tracking from an all-purpose request
+count, a completed observation from a click alone, or a successful refusal from
+an unknown decision. Keep early-stop and dropped-request limitations explicit.
+Missing/uncertain/malformed capture must not create an observation badge.
+
+Executive and detailed results consume the same persisted projection/checklist
+facts. Do not infer a confirmed decision from a review/issue display state.
+Historical assessments and persisted finding text are not rewritten on read.
+This presentation change adds no scanner work, paid calls or recurring cost.
+
+### Bounded first-layer context and accessible scope binding
+
+Geometry retains an exact, unique container for a canonical control when its
+consent context comes from bounded independent readable prose, including in a
+child frame with generic CSS names. The prose and control must belong to that
+same live document and scope. A label alone, page chrome, a main/article body,
+script/style/template content, or hidden/inert/aria-hidden prose must not supply
+this context. Readability follows composed ancestors, including open-shadow
+hosts, and is cached within each bounded geometry capture. This repairs retained
+scope provenance; it does not introduce a site-specific recipe or promote an
+unclassified control.
+
+Accessible action resolution permits a boxless scope only when both the exact
+scope and candidate control permit interaction. Existing unique-label, enabled,
+hit-target, exact-target authorization, one-action and semantic-decision guards
+remain authoritative. More than the bounded 24 accessible controls fails closed;
+never truncate a larger set and infer uniqueness from the remaining subset.
+
+No invocation, retry, model call, observation window or tail cap is added.
+Bounded geometry work/metadata is estimated below $1/month at 100,000 scans and
+30-day retention, within the approved allowance; successful dispatch may use
+more of the already-approved action-capture budget. Targeted Ireland replays
+measure recoveries and retained evidence, not production precision/recall or a
+production latency percentile. Keep access holds and all non-cooldown eligibility
+rules in force even when the owner waives calibration cooldowns.
+
+
+### Consistent multilingual action-control proof
+
+The final action proof uses the same canonical `multilingual_v1` label profile as
+structured control discovery. Classify the preferred retained accessible label,
+and independently check other label sources for conflicting intents using that
+same profile. A native button's submission `value` is not an accessible label;
+only native input button/submit/reset controls use their rendered value as a label.
+Do not concatenate opaque submission payloads into visible or ARIA labels.
+
+Apply these rules both to the selected control and to the final uniqueness check.
+Keep the 0.8 direct-label threshold, exact-target authorization, one-action guard,
+container interaction checks and separate semantic registration requirements.
+Unknown preferred labels, mixed label intents, generic “OK”, privacy opt-out
+controls, hidden/inert scopes and distinct matching controls remain fail-closed.
+Retained diagnostics distinguish `resolved_control_scope_not_interactive` from
+`resolved_control_no_longer_actionable`; both retain the existing bounded stale
+control recovery eligibility. Neither outcome creates a finding.
+
+This adds no browser reads, waits, lanes or model calls. The broader in-memory
+label checks are estimated below $1/month at 100,000 scans, within the prior
+owner-approved allowance. Additional successful action capture uses the previously
+approved existing observation windows.

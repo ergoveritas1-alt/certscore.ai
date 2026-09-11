@@ -900,3 +900,16 @@ async function closeServer(server: Server): Promise<void> {
     });
   });
 }
+
+
+test("unresolved visible consent decisions survive final geometry reconciliation without invented absence", () => {
+  const geometry = oxfamStyleGeometry();
+  geometry.candidates[0] = { ...geometry.candidates[0]!, label: "Unresolved choice", tagName: "button", decisionStatus: "ambiguous", consentContextConfirmed: true, classifierReasonCodes: ["no_term_match"] };
+  const result = reconcileConsentUiObservationWithCompletedGeometry({
+    current: { ...rapidOxfamStyleObservation, controls: [], acceptControlObserved: false, rejectControlObserved: false, managePreferencesControlObserved: false, inventoryOutcome: "complete_empty", documentReadyState: "complete" },
+    geometry, geometryAccessLoaded: true, pageUrl: geometry.pageUrl, scanStartedAtMs: Date.now() - 10_000,
+  });
+  assert.equal(result.inventoryOutcome, "partial");
+  assert.ok(result.basis.includes("unresolved_visible_consent_decision"));
+  assert.equal(result.controls.length, 0);
+});

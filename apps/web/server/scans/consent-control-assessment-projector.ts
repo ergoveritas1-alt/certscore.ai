@@ -1,5 +1,9 @@
 import {
   deriveConsentControlAssessment,
+  consentSessionAccessLimited,
+  hasUnresolvedConsentDecision,
+  UNRESOLVED_CONSENT_DECISION,
+  CONSENT_CONTROL_CAPTURE_POLICY_VERSION,
   hasUnresolvedAdaptivePartialConsentInventory,
   isVerifiedTerminalConsentPacket,
   type CanonicalEvidenceBundle,
@@ -161,6 +165,7 @@ function geometryInput(
           matchedTerm: typeof row.matchedTerm === "string" ? row.matchedTerm : null,
           locale: typeof row.matchedLocale === "string" ? row.matchedLocale as ConsentControlAssessmentCandidate["locale"] : null,
           matchStrength: typeof row.matchStrength === "string" ? row.matchStrength as ConsentControlAssessmentCandidate["matchStrength"] : null,
+          classifierRegistryVersion: typeof row.classifierRegistryVersion === "string" ? row.classifierRegistryVersion : undefined,
           classifierReasonCodes,
           layer: row.layer === "first_layer"
             ? "first_layer"
@@ -213,6 +218,25 @@ function geometryInput(
   };
 }
 
+/** The verified consent lane owns its document, independently of runtime redirects.
+ * URL equality alone cannot override the global document: require the retained
+ * lane outcome and matching observation, DOM and geometry loader tokens. */
+function verifiedConsentLaneDocument(bundle: CanonicalEvidenceBundle, rawGeometry: Record<string, unknown> | null | undefined): string | null {
+  const lane = bundle.scanLaneRuns?.find((run) => run.laneId === "consent_proof");
+  const lanes = bundle.scanEvidenceLaneAssessment ?? bundle.scan_evidence_lane_assessment;
+  if (lane?.executionOutcome !== "success" || lanes?.lanes.consent !== "usable") return null;
+  const geometryUrl = normalizedDocumentId(typeof rawGeometry?.pageUrl === "string" ? rawGeometry.pageUrl : null);
+  const geometryToken = retainedDocumentToken(rawGeometry?.documentIdentity);
+  if (!geometryUrl || !geometryToken || !["https:", "http:"].includes(new URL(geometryUrl).protocol)) return null;
+  const observation = [...(bundle.consentUiObservations ?? [])].sort((a, b) => b.observedAtMs - a.observedAtMs)[0];
+  if (!observation || normalizedDocumentId(observation.documentUrl) !== geometryUrl ||
+    retainedDocumentToken(observation.documentIdentity) !== geometryToken ||
+    !["observed", "no_evidence"].includes(observation.captureStatus ?? "")) return null;
+  return (bundle.domSnapshots ?? []).some((snapshot) => snapshot.consentStateAtTime === "pre_consent" &&
+    normalizedDocumentId(snapshot.url) === geometryUrl && retainedDocumentToken(snapshot.documentIdentity) === geometryToken)
+    ? geometryUrl : null;
+}
+
 export function deriveMaterializedConsentControlAssessment(input: {
   bundle: CanonicalEvidenceBundle;
   consentControlGeometryEvidence?: Record<string, unknown> | null;
@@ -223,8 +247,16 @@ export function deriveMaterializedConsentControlAssessment(input: {
   requestedUrl?: string | null;
   scanId?: string | null;
 }): ConsentControlAssessment {
+  const consentLaneDocument = verifiedConsentLaneDocument(input.bundle, input.consentControlGeometryEvidence);
+  const consentNoGo = input.noGo && !consentLaneDocument;
+  const accessLimited = consentSessionAccessLimited(input.bundle, input.consentControlGeometryEvidence);
+  const unresolvedDecision = hasUnresolvedConsentDecision(input.consentControlGeometryEvidence);
+  const unverifiedAccessibility = [...(input.bundle.consentUiObservations ?? [])].sort((a, b) => b.observedAtMs - a.observedAtMs).slice(0, 1).some((observation) => (observation.controls ?? []).some((control) =>
+    (control.tagName === "ax-node" || control.selectorHint?.startsWith("ax:")) &&
+    (control.visibilityEvidence !== "box_model_verified" || control.consentContextEvidence !== "local_surface")
+  ));
   const canonicalDocumentId = normalizedDocumentId(
-    input.finalUrl ??
+    consentLaneDocument ?? input.finalUrl ??
     input.bundle.domSnapshots.at(-1)?.url ??
     input.bundle.normalizedUrl ??
     input.bundle.url,
@@ -431,6 +463,8 @@ export function deriveMaterializedConsentControlAssessment(input: {
       ],
       evidenceRefs: (observation.evidenceRefs ?? []).map((reference) => reference.refId),
       controls: (observation.controls ?? []).flatMap((control) => {
+        if ((control.tagName === "ax-node" || control.selectorHint?.startsWith("ax:")) &&
+          (control.visibilityEvidence !== "box_model_verified" || control.consentContextEvidence !== "local_surface")) return [];
         const evidenceId = control.artifactRef ?? `${observation.observationId}:${control.label}`;
         const layer = control.presentationType === "persistent_link" || control.placementType === "persistent_surface"
           ? "deeper_layer" as const
@@ -446,6 +480,7 @@ export function deriveMaterializedConsentControlAssessment(input: {
           locale: control.matchedLocale,
           matchedTerm: control.matchedTerm,
           matchStrength: control.matchStrength,
+          classifierRegistryVersion: control.classifierRegistryVersion,
           classifierReasonCodes: control.classifierReasonCodes,
           presentationType: control.presentationType,
           placementType: control.placementType,
@@ -511,7 +546,15 @@ export function deriveMaterializedConsentControlAssessment(input: {
     canonicalDocumentId && typedFirstLayerProjectedObservation?.documentId === canonicalDocumentId
       ? observations.filter((observation) => observation.documentId === canonicalDocumentId)
       : observations;
-  const inspection = input.consentSurfaceInspection ?? input.bundle.consentSurfaceInspection ?? null;
+  const retainedInspection = input.bundle.consentSurfaceInspection;
+  // Geometry may resolve missing auxiliary evidence, but cannot erase access,
+  // partial inventory or document limitations retained by the consent lane.
+  const blockingRetainedInspection = retainedInspection?.coverageStatus !== "complete" &&
+    retainedInspection?.limitationKeys?.some((key) => ![
+      "cmp_runtime_without_actionable_surface", "consent_surface_inspection_settled_inventory_missing",
+    ].includes(key));
+  const inspection = blockingRetainedInspection ? retainedInspection : input.consentSurfaceInspection ?? retainedInspection ?? null;
+  const semanticCoverageLimited = unresolvedDecision || unverifiedAccessibility || accessLimited;
   const inspectionChannels = inspection?.evidenceChannels ?? [];
   const completedChannels: ConsentControlAssessmentChannel[] = unique([
     ...assessmentObservations.flatMap((observation) => observation.completedChannels ?? []),
@@ -581,7 +624,7 @@ export function deriveMaterializedConsentControlAssessment(input: {
     .sort((left, right) => right.observedAtMs - left.observedAtMs)[0];
   const loadingEmptyInventory = latestInventory?.documentReadyState === "loading" &&
     latestInventory.controls.length === 0;
-  const coordinatorInspectionComplete = !loadingEmptyInventory && (!inspection || (
+  const coordinatorInspectionComplete = !semanticCoverageLimited && !loadingEmptyInventory && (!inspection || (
     inspection.inspectionCompleted === true &&
     inspection.coverageStatus === "complete"
   ));
@@ -614,7 +657,8 @@ export function deriveMaterializedConsentControlAssessment(input: {
     : REQUIRED_CHANNELS;
   const requiredChannels = baseRequiredChannels;
   const coverageComplete =
-    !input.noGo &&
+    !semanticCoverageLimited &&
+    !consentNoGo &&
     !loadingEmptyInventory &&
     !unresolvedAdaptivePartialInventory &&
     documentIdentityStatus === "matched" &&
@@ -628,6 +672,7 @@ export function deriveMaterializedConsentControlAssessment(input: {
       )
     );
   const verifiedInspectionComplete =
+    !semanticCoverageLimited &&
     !loadingEmptyInventory &&
     !unresolvedAdaptivePartialInventory &&
     inspection?.inspectionCompleted === true &&
@@ -656,7 +701,7 @@ export function deriveMaterializedConsentControlAssessment(input: {
       requestedUrl,
       finalUrl: canonicalDocumentId,
       scanStatus: "completed",
-      noGo: input.noGo,
+      noGo: consentNoGo,
       noGoReasonCodes: input.noGoReasonCodes,
     },
     document: {
@@ -675,14 +720,18 @@ export function deriveMaterializedConsentControlAssessment(input: {
       evidenceRefs: [],
     },
     coverage: {
-      status: input.noGo ? "none" : coverageComplete ? "complete" : "limited",
+      status: consentNoGo ? "none" : coverageComplete ? "complete" : "limited",
       requiredChannels,
       completedChannels,
       incompleteChannels,
       reasonCodes: unique([
         ...(inspection?.limitationKeys ?? []),
+        CONSENT_CONTROL_CAPTURE_POLICY_VERSION,
+        ...(unresolvedDecision ? [UNRESOLVED_CONSENT_DECISION] : []),
+        ...(unverifiedAccessibility ? ["accessibility_control_proof_unverified"] : []),
+        ...(accessLimited ? ["consent_session_access_limited"] : []),
         ...(loadingEmptyInventory ? ["consent_surface_inspection_document_still_loading"] : []),
-        ...(!coverageComplete && !input.noGo ? ["canonical_consent_coverage_incomplete"] : []),
+        ...(!coverageComplete && !consentNoGo ? ["canonical_consent_coverage_incomplete"] : []),
       ]),
     },
     source: {

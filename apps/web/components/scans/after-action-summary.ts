@@ -1,7 +1,13 @@
 import { afterActionCaptureSchema } from "@certscore/contracts";
 
 /** Display already-retained after-click facts without treating them as granted consent. */
-export function afterClickSummary(projection: Record<string, unknown>, action: "accept" | "reject", registrationVerified = false): string {
+export function afterClickCoverage(projection: Record<string, unknown>, action: "accept" | "reject"): "complete" | "partial" | undefined {
+  const parsed = afterActionCaptureSchema.safeParse(projection.afterActionCapture);
+  if (!parsed.success || parsed.data.action !== action || parsed.data.activationStatus !== "completed") return undefined;
+  return parsed.data.stopReason === "window_elapsed" && parsed.data.requestsDropped === 0 ? "complete" : "partial";
+}
+
+export function afterClickSummary(projection: Record<string, unknown>, action: "accept" | "reject"): string {
   const parsed = afterActionCaptureSchema.safeParse(projection.afterActionCapture);
   if (!parsed.success || parsed.data.action !== action || parsed.data.activationStatus !== "completed") return "";
   const capture = parsed.data;
@@ -13,7 +19,10 @@ export function afterClickSummary(projection: Record<string, unknown>, action: "
     (capture.storageSnapshotRetained ? " A post-click storage snapshot was retained." : " No post-click storage snapshot was retained.") +
     (capture.stopReason !== "window_elapsed" ? " Capture stopped early; coverage is partial." : "") +
     (capture.requestsDropped > 0 ? ` ${capture.requestsDropped} requests were dropped; retained counts are partial.` : "") +
-    (registrationVerified
-      ? " Request totals include all retained after-click requests, not only non-essential activity."
-      : ` These are after-click observations, not proof of ${action === "accept" ? "granted consent" : "verified refusal"}.`);
+    " Request totals include all retained after-click requests; tracking classifications are shown in the findings.";
+}
+
+/** Presentation of persisted observations, independent of decision eligibility. */
+export function afterClickCoverageLabel(coverage: "complete" | "partial" | undefined): string {
+  return coverage === "complete" ? "Observation recorded" : coverage === "partial" ? "Partial observation" : "Limited";
 }

@@ -102,6 +102,8 @@ export type ShadowEvidenceRow = {
 };
 
 export type ExecutiveAcceptPathProjection = {
+  afterClickCoverage?: "complete" | "partial";
+  registrationConfirmed?: boolean;
   evidenceRows: Array<{
     detail: string | null;
     label: string;

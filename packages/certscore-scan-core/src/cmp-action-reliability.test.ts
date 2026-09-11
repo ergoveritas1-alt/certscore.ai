@@ -97,7 +97,7 @@ const QUALIFIED_CMPS: QualifiedCmp[] = [
 
 const REPEAT_COUNT = 3;
 
-test("newly qualified CMP actions confirm exactly once across repeated fresh browser sessions", async () => {
+test("qualified CMP actions dispatch once and opaque receipts never prove registration", async () => {
   const acceptRecipes = buildCanonicalPostAcceptActionRecipes();
   const rejectRecipes = buildCanonicalPostRefusalActionRecipes();
 
@@ -122,7 +122,7 @@ test("newly qualified CMP actions confirm exactly once across repeated fresh bro
           });
           assert.equal(
             packet.acceptanceRegistration.status,
-            "confirmed",
+            cmp.apiProvider ? "confirmed" : "unconfirmed",
             `${cmp.canonicalName} Accept attempt ${attempt}: ${packet.acceptanceRegistration.reason ?? "no reason"}`,
           );
           assert.equal(packet.resolver.cmpId, cmp.canonicalName);
@@ -144,7 +144,7 @@ test("newly qualified CMP actions confirm exactly once across repeated fresh bro
           });
           assert.equal(
             packet.refusalRegistration.status,
-            "confirmed",
+            cmp.apiProvider ? "confirmed" : "unconfirmed",
             `${cmp.canonicalName} Reject attempt ${attempt}: ${packet.refusalRegistration.reason ?? "no reason"}`,
           );
           assert.equal(packet.resolver.cmpId, cmp.canonicalName);
@@ -249,6 +249,7 @@ async function withCmpFixture(
           for (const key of Object.keys(transcendState)) if (key !== "Essential") transcendState[key] = action === "accept";
           transcendTimestamp = new Date(Date.now() + 1000).toISOString();
         } else {
+// Intentionally opaque: dispatch is observable, but this is not semantic consent proof.
           document.cookie = cookieName + "=" + action + "-confirmed; Path=/; SameSite=Lax";
         }
         fetch("/action?action=" + action, { method: "POST" });

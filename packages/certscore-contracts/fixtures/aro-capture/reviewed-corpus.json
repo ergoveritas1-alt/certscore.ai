@@ -1,0 +1,178 @@
+{
+  "corpusVersion": "aro-capture-replay.v1",
+  "attribution": "model_assisted",
+  "excludedDomains": ["ergoveritas.com"],
+  "sourceCohortRecords": 662,
+  "cases": [
+    {
+      "scanId": "fixture-toast-reject-non-necessary",
+      "domain": "pos.toasttab.com",
+      "sourceWindow": "oldest",
+      "attribution": "model_assisted",
+      "storedAssessment": {"artifactVersion":"2.1","assessmentStatus":"complete","controls":{"accept":{"state":"observed"},"reject":{"state":"not_observed"},"options":{"state":"observed"}}},
+      "assessmentInput": {
+        "scan":{"scanId":"fixture-toast-reject-non-necessary","requestedUrl":"https://pos.toasttab.com/","finalUrl":"https://pos.toasttab.com/","scanStatus":"completed","noGo":false},
+        "document":{"canonicalDocumentId":"https://pos.toasttab.com/","observedDocumentIds":["https://pos.toasttab.com/"],"identityStatus":"matched"},
+        "observations":[{"observationId":"consent-ui","observedAtMs":1000,"likelyPresent":true,"layerInspected":"first_layer","documentId":"https://pos.toasttab.com/","captureStatus":"observed","inventoryOutcome":"complete_with_controls","controls":[{"evidenceId":"accept","intent":"accept","label":"Accept All Cookies","layer":"first_layer","visible":true,"actionable":true},{"evidenceId":"reject","intent":"reject","label":"Reject Non-Necessary Cookies","layer":"first_layer","visible":true,"actionable":true},{"evidenceId":"options","intent":"options","label":"Manage Settings","layer":"first_layer","visible":true,"actionable":true}]}],
+        "geometry":{"artifactVersion":"consent_control_geometry.v1","assessmentStatus":"complete","documentId":"https://pos.toasttab.com/","observedAtMs":1000,"candidates":[{"evidenceId":"accept-g","intent":"accept","label":"Accept All Cookies","layer":"first_layer","visible":true,"actionable":true},{"evidenceId":"reject-g","intent":"reject","label":"Reject Non-Necessary Cookies","layer":"first_layer","visible":true,"actionable":true},{"evidenceId":"options-g","intent":"options","label":"Manage Settings","layer":"first_layer","visible":true,"actionable":true}]},
+        "surface":{"status":"observed_actionable","firstObservedAtMs":1000,"lastObservedAtMs":1000},
+        "coverage":{"status":"complete","requiredChannels":["dom_inventory","geometry"],"completedChannels":["dom_inventory","geometry"],"incompleteChannels":[]},
+        "visualEvidence":{"status":"available","artifactRefs":["synthetic:toast"],"reasonCodes":[]},
+        "source":{"bundleVersion":"fixture.bundle.v1","geometryVersion":"consent_control_geometry.v1","computedAt":"2026-09-10T00:00:00.000Z"}
+      }
+    },
+    {
+      "scanId": "fixture-zeplin-allow",
+      "domain": "zeplin.io",
+      "sourceWindow": "oldest",
+      "attribution": "model_assisted",
+      "storedAssessment": {"artifactVersion":"2.1","assessmentStatus":"complete","controls":{"accept":{"state":"not_observed"},"reject":{"state":"observed"},"options":{"state":"observed"}}},
+      "assessmentInput": {
+        "scan":{"scanId":"fixture-zeplin-allow","requestedUrl":"https://zeplin.io/","finalUrl":"https://zeplin.io/","scanStatus":"completed","noGo":false},
+        "document":{"canonicalDocumentId":"https://zeplin.io/","observedDocumentIds":["https://zeplin.io/"],"identityStatus":"matched"},
+        "observations":[{"observationId":"consent-ui","observedAtMs":1000,"likelyPresent":true,"layerInspected":"first_layer","documentId":"https://zeplin.io/","captureStatus":"observed","inventoryOutcome":"complete_with_controls","controls":[{"evidenceId":"allow","intent":"accept","label":"Allow","layer":"first_layer","visible":true,"actionable":true},{"evidenceId":"reject","intent":"reject","label":"No, thanks","layer":"first_layer","visible":true,"actionable":true},{"evidenceId":"options","intent":"options","label":"preferences","layer":"first_layer","visible":true,"actionable":true}]}],
+        "geometry":{"artifactVersion":"consent_control_geometry.v1","assessmentStatus":"complete","documentId":"https://zeplin.io/","observedAtMs":1000,"candidates":[{"evidenceId":"allow-g","intent":"accept","label":"Allow","layer":"first_layer","visible":true,"actionable":true},{"evidenceId":"reject-g","intent":"reject","label":"No, thanks","layer":"first_layer","visible":true,"actionable":true},{"evidenceId":"options-g","intent":"options","label":"preferences","layer":"first_layer","visible":true,"actionable":true}]},
+        "surface":{"status":"observed_actionable","firstObservedAtMs":1000,"lastObservedAtMs":1000},
+        "coverage":{"status":"complete","requiredChannels":["dom_inventory","geometry"],"completedChannels":["dom_inventory","geometry"],"incompleteChannels":[]},
+        "visualEvidence":{"status":"available","artifactRefs":["synthetic:zeplin"],"reasonCodes":[]},
+        "source":{"bundleVersion":"fixture.bundle.v1","geometryVersion":"consent_control_geometry.v1","computedAt":"2026-09-10T00:00:00.000Z"}
+      }
+    },
+    {
+      "scanId": "fixture-gov-accept-additional",
+      "domain": "www.gov.uk",
+      "sourceWindow": "previous",
+      "attribution": "model_assisted",
+      "storedAssessment": {"artifactVersion":"2.1","assessmentStatus":"complete","controls":{"accept":{"state":"not_observed"},"reject":{"state":"observed"},"options":{"state":"not_observed"}}},
+      "assessmentInput": {
+        "scan":{"scanId":"fixture-gov-accept-additional","requestedUrl":"https://www.gov.uk/","finalUrl":"https://www.gov.uk/","scanStatus":"completed","noGo":false},
+        "document":{"canonicalDocumentId":"https://www.gov.uk/","observedDocumentIds":["https://www.gov.uk/"],"identityStatus":"matched"},
+        "observations":[{"observationId":"consent-ui","observedAtMs":1000,"likelyPresent":true,"layerInspected":"first_layer","documentId":"https://www.gov.uk/","captureStatus":"observed","inventoryOutcome":"complete_with_controls","controls":[{"evidenceId":"accept","intent":"accept","label":"Accept additional cookies","layer":"first_layer","visible":true,"actionable":true},{"evidenceId":"reject","intent":"reject","label":"Reject additional cookies","layer":"first_layer","visible":true,"actionable":true}]}],
+        "geometry":{"artifactVersion":"consent_control_geometry.v1","assessmentStatus":"complete","documentId":"https://www.gov.uk/","observedAtMs":1000,"candidates":[{"evidenceId":"accept-g","intent":"accept","label":"Accept additional cookies","layer":"first_layer","visible":true,"actionable":true},{"evidenceId":"reject-g","intent":"reject","label":"Reject additional cookies","layer":"first_layer","visible":true,"actionable":true}]},
+        "surface":{"status":"observed_actionable","firstObservedAtMs":1000,"lastObservedAtMs":1000},
+        "coverage":{"status":"complete","requiredChannels":["dom_inventory","geometry"],"completedChannels":["dom_inventory","geometry"],"incompleteChannels":[]},
+        "visualEvidence":{"status":"available","artifactRefs":["synthetic:gov"],"reasonCodes":[]},
+        "source":{"bundleVersion":"fixture.bundle.v1","geometryVersion":"consent_control_geometry.v1","computedAt":"2026-09-10T00:00:00.000Z"}
+      }
+    },
+    {
+      "scanId": "fixture-cookiebot-details",
+      "domain": "lathampool.com",
+      "sourceWindow": "oldest",
+      "attribution": "model_assisted",
+      "storedAssessment": {"artifactVersion":"2.1","assessmentStatus":"complete","controls":{"accept":{"state":"observed"},"reject":{"state":"observed"},"options":{"state":"not_observed"}}},
+      "assessmentInput": {
+        "scan":{"scanId":"fixture-cookiebot-details","requestedUrl":"https://lathampool.com/","finalUrl":"https://lathampool.com/","scanStatus":"completed","noGo":false},
+        "document":{"canonicalDocumentId":"https://lathampool.com/","observedDocumentIds":["https://lathampool.com/"],"identityStatus":"matched"},
+        "observations":[{"observationId":"consent-ui","observedAtMs":1000,"likelyPresent":true,"layerInspected":"first_layer","documentId":"https://lathampool.com/","captureStatus":"observed","inventoryOutcome":"complete_with_controls","controls":[{"evidenceId":"accept","intent":"accept","label":"Allow all","layer":"first_layer","visible":true,"actionable":true},{"evidenceId":"reject","intent":"reject","label":"Deny","layer":"first_layer","visible":true,"actionable":true},{"evidenceId":"options","intent":"options","label":"Show details","layer":"first_layer","visible":true,"actionable":true}]}],
+        "geometry":{"artifactVersion":"consent_control_geometry.v1","assessmentStatus":"complete","documentId":"https://lathampool.com/","observedAtMs":1000,"candidates":[{"evidenceId":"accept-g","intent":"accept","label":"Allow all","layer":"first_layer","visible":true,"actionable":true},{"evidenceId":"reject-g","intent":"reject","label":"Deny","layer":"first_layer","visible":true,"actionable":true},{"evidenceId":"options-g","intent":"options","label":"Show details","layer":"first_layer","visible":true,"actionable":true}]},
+        "surface":{"status":"observed_actionable","firstObservedAtMs":1000,"lastObservedAtMs":1000},
+        "coverage":{"status":"complete","requiredChannels":["dom_inventory","geometry"],"completedChannels":["dom_inventory","geometry"],"incompleteChannels":[]},
+        "visualEvidence":{"status":"withheld","artifactRefs":[],"reasonCodes":["fixture_visual_withheld"]},
+        "source":{"bundleVersion":"fixture.bundle.v1","geometryVersion":"consent_control_geometry.v1","computedAt":"2026-09-10T00:00:00.000Z"}
+      }
+    },
+    {
+      "scanId": "fixture-footer-negative",
+      "domain": "example.org",
+      "sourceWindow": "fixture",
+      "attribution": "model_assisted",
+      "storedAssessment": {"artifactVersion":"2.1","assessmentStatus":"complete","controls":{"accept":{"state":"not_observed"},"reject":{"state":"not_observed"},"options":{"state":"not_observed"}}},
+      "assessmentInput": {
+        "scan":{"scanId":"fixture-footer-negative","requestedUrl":"https://example.org/","finalUrl":"https://example.org/","scanStatus":"completed","noGo":false},
+        "document":{"canonicalDocumentId":"https://example.org/","observedDocumentIds":["https://example.org/"],"identityStatus":"matched"},
+        "observations":[{"observationId":"empty","observedAtMs":1000,"likelyPresent":false,"layerInspected":"first_layer","documentId":"https://example.org/","captureStatus":"no_evidence","inventoryOutcome":"complete_empty","controls":[]}],
+        "geometry":{"artifactVersion":"consent_control_geometry.v1","assessmentStatus":"complete","documentId":"https://example.org/","observedAtMs":1000,"candidates":[]},
+        "surface":{"status":"not_observed","evidenceRefs":[]},
+        "coverage":{"status":"complete","requiredChannels":["dom_inventory","geometry"],"completedChannels":["dom_inventory","geometry"],"incompleteChannels":[]},
+        "visualEvidence":{"status":"withheld","artifactRefs":[],"reasonCodes":["fixture_visual_withheld"]},
+        "source":{"bundleVersion":"fixture.bundle.v1","geometryVersion":"consent_control_geometry.v1","computedAt":"2026-09-10T00:00:00.000Z"}
+      }
+    },
+    {
+      "scanId": "fixture-limited-unknown",
+      "domain": "unknown.example",
+      "sourceWindow": "fixture",
+      "attribution": "model_assisted",
+      "storedAssessment": {"artifactVersion":"2.1","assessmentStatus":"limited","controls":{"accept":{"state":"unknown"},"reject":{"state":"unknown"},"options":{"state":"unknown"}}},
+      "assessmentInput": {
+        "scan":{"scanId":"fixture-limited-unknown","requestedUrl":"https://unknown.example/","finalUrl":"https://unknown.example/","scanStatus":"completed","noGo":true},
+        "document":{"canonicalDocumentId":"https://unknown.example/","observedDocumentIds":[],"identityStatus":"unknown"},
+        "observations":[{"observationId":"no-go","observedAtMs":1000,"likelyPresent":false,"layerInspected":"first_layer","documentId":"https://unknown.example/","captureStatus":"no_evidence","inventoryOutcome":"no_go","controls":[]}],
+        "geometry":null,
+        "surface":{"status":"unknown","evidenceRefs":[]},
+        "coverage":{"status":"none","requiredChannels":["dom_inventory","geometry"],"completedChannels":[],"incompleteChannels":["dom_inventory","geometry"]},
+        "visualEvidence":{"status":"unavailable","artifactRefs":[],"reasonCodes":["fixture_no_go"]},
+        "source":{"bundleVersion":"fixture.bundle.v1","geometryVersion":"consent_control_geometry.v1","computedAt":"2026-09-10T00:00:00.000Z"}
+      }
+    },
+    {
+      "scanId": "fixture-geometry-conflict",
+      "domain": "conflict.example",
+      "sourceWindow": "fixture",
+      "attribution": "model_assisted",
+      "storedAssessment": {"artifactVersion":"2.1","assessmentStatus":"complete","controls":{"accept":{"state":"not_observed"},"reject":{"state":"not_observed"},"options":{"state":"observed"}}},
+      "assessmentInput": {
+        "scan":{"scanId":"fixture-geometry-conflict","requestedUrl":"https://conflict.example/","finalUrl":"https://conflict.example/","scanStatus":"completed","noGo":false},
+        "document":{"canonicalDocumentId":"https://conflict.example/","observedDocumentIds":["https://conflict.example/"],"identityStatus":"matched"},
+        "observations":[{"observationId":"bundle","observedAtMs":1000,"likelyPresent":true,"layerInspected":"first_layer","documentId":"https://conflict.example/","captureStatus":"observed","inventoryOutcome":"complete_with_controls","controls":[{"evidenceId":"ax-options","intent":"options","label":"Privacy Center","layer":"first_layer","visible":true,"actionable":true}]}],
+        "geometry":{"artifactVersion":"consent_control_geometry.v1","assessmentStatus":"complete","documentId":"https://conflict.example/","observedAtMs":1000,"candidates":[]},
+        "surface":{"status":"observed_actionable","firstObservedAtMs":1000,"lastObservedAtMs":1000},
+        "coverage":{"status":"complete","requiredChannels":["dom_inventory","geometry"],"completedChannels":["dom_inventory","geometry"],"incompleteChannels":[]},
+        "visualEvidence":{"status":"withheld","artifactRefs":[],"reasonCodes":["fixture_visual_withheld"]},
+        "source":{"bundleVersion":"fixture.bundle.v1","geometryVersion":"consent_control_geometry.v1","computedAt":"2026-09-10T00:00:00.000Z"}
+      }
+    },
+    {
+      "scanId": "fixture-structured-withheld",
+      "domain": "withheld.example",
+      "sourceWindow": "fixture",
+      "attribution": "model_assisted",
+      "storedAssessment": {"artifactVersion":"2.1","assessmentStatus":"complete","controls":{"accept":{"state":"observed"},"reject":{"state":"observed"},"options":{"state":"observed"}}},
+      "assessmentInput": {
+        "scan":{"scanId":"fixture-structured-withheld","requestedUrl":"https://withheld.example/","finalUrl":"https://withheld.example/","scanStatus":"completed","noGo":false},
+        "document":{"canonicalDocumentId":"https://withheld.example/","observedDocumentIds":["https://withheld.example/"],"identityStatus":"matched"},
+        "observations":[{"observationId":"typed-controls","observedAtMs":1000,"likelyPresent":true,"layerInspected":"first_layer","documentId":"https://withheld.example/","captureStatus":"observed","inventoryOutcome":"complete_with_controls","controls":[{"evidenceId":"accept","intent":"accept","label":"Accept","layer":"first_layer","visible":true,"actionable":true},{"evidenceId":"reject","intent":"reject","label":"Reject","layer":"first_layer","visible":true,"actionable":true},{"evidenceId":"options","intent":"options","label":"Options","layer":"first_layer","visible":true,"actionable":true}]}],
+        "geometry":{"artifactVersion":"consent_control_geometry.v1","assessmentStatus":"complete","documentId":"https://withheld.example/","observedAtMs":1000,"candidates":[{"evidenceId":"accept-g","intent":"accept","label":"Accept","layer":"first_layer","visible":true,"actionable":true},{"evidenceId":"reject-g","intent":"reject","label":"Reject","layer":"first_layer","visible":true,"actionable":true},{"evidenceId":"options-g","intent":"options","label":"Options","layer":"first_layer","visible":true,"actionable":true}]},
+        "surface":{"status":"observed_actionable","firstObservedAtMs":1000,"lastObservedAtMs":1000},
+        "coverage":{"status":"complete","requiredChannels":["dom_inventory","geometry"],"completedChannels":["dom_inventory","geometry"],"incompleteChannels":[]},
+        "visualEvidence":{"status":"withheld","artifactRefs":[],"reasonCodes":["owner_review_withheld"]},
+        "source":{"bundleVersion":"fixture.bundle.v1","geometryVersion":"consent_control_geometry.v1","computedAt":"2026-09-10T00:00:00.000Z"}
+      }
+    },
+    {
+      "scanId": "fixture-persistent-footer-negative",
+      "domain": "footer.example",
+      "sourceWindow": "fixture",
+      "attribution": "model_assisted",
+      "storedAssessment": {"artifactVersion":"2.1","assessmentStatus":"complete","controls":{"accept":{"state":"not_observed"},"reject":{"state":"not_observed"},"options":{"state":"not_observed"}}},
+      "assessmentInput": {
+        "scan":{"scanId":"fixture-persistent-footer-negative","requestedUrl":"https://footer.example/","finalUrl":"https://footer.example/","scanStatus":"completed","noGo":false},
+        "document":{"canonicalDocumentId":"https://footer.example/","observedDocumentIds":["https://footer.example/"],"identityStatus":"matched"},
+        "observations":[{"observationId":"empty","observedAtMs":1000,"likelyPresent":false,"layerInspected":"first_layer","documentId":"https://footer.example/","captureStatus":"no_evidence","inventoryOutcome":"complete_empty","controls":[]}],
+        "geometry":{"artifactVersion":"consent_control_geometry.v1","assessmentStatus":"complete","documentId":"https://footer.example/","observedAtMs":1000,"candidates":[{"evidenceId":"footer-link","intent":"other","actionType":"other","label":"Privacy Center","layer":"first_layer","visible":true,"actionable":true,"presentationType":"persistent_link","placementType":"persistent_surface"}]},
+        "surface":{"status":"not_observed","evidenceRefs":[]},
+        "coverage":{"status":"complete","requiredChannels":["dom_inventory","geometry"],"completedChannels":["dom_inventory","geometry"],"incompleteChannels":[]},
+        "visualEvidence":{"status":"withheld","artifactRefs":[],"reasonCodes":["footer_only"]},
+        "source":{"bundleVersion":"fixture.bundle.v1","geometryVersion":"consent_control_geometry.v1","computedAt":"2026-09-10T00:00:00.000Z"}
+      }
+    },
+    {
+      "scanId": "fixture-nogo-document-mismatch",
+      "domain": "mismatch.example",
+      "sourceWindow": "fixture",
+      "attribution": "model_assisted",
+      "storedAssessment": {"artifactVersion":"2.1","assessmentStatus":"limited","controls":{"accept":{"state":"unknown"},"reject":{"state":"unknown"},"options":{"state":"unknown"}}},
+      "assessmentInput": {
+        "scan":{"scanId":"fixture-nogo-document-mismatch","requestedUrl":"https://mismatch.example/","finalUrl":"https://mismatch.example/","scanStatus":"completed","noGo":true},
+        "document":{"canonicalDocumentId":"https://mismatch.example/","observedDocumentIds":["https://mismatch.example/"],"identityStatus":"matched"},
+        "observations":[{"observationId":"no-go","observedAtMs":1000,"likelyPresent":false,"layerInspected":"first_layer","documentId":"https://mismatch.example/","captureStatus":"no_evidence","inventoryOutcome":"no_go","controls":[]}],
+        "geometry":{"artifactVersion":"consent_control_geometry.v1","assessmentStatus":"document_mismatch","documentId":"https://other.example/","observedAtMs":1000,"candidates":[{"evidenceId":"foreign-accept","intent":"accept","label":"Accept","layer":"first_layer","visible":true,"actionable":true}]},
+        "surface":{"status":"unknown","evidenceRefs":[]},
+        "coverage":{"status":"limited","requiredChannels":["dom_inventory","geometry"],"completedChannels":["geometry"],"incompleteChannels":["dom_inventory"]},
+        "visualEvidence":{"status":"unavailable","artifactRefs":[],"reasonCodes":["no_go_document_mismatch"]},
+        "source":{"bundleVersion":"fixture.bundle.v1","geometryVersion":"consent_control_geometry.v1","computedAt":"2026-09-10T00:00:00.000Z"}
+      }
+    }
+  ]
+}

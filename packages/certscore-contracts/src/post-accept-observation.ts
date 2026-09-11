@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { validateActionStorageName, validateLegacyActionStorageNames } from "./action-storage-name";
 import { afterActionCaptureSchema, validateAfterActionCapture, validateAfterActionProjection } from "./after-action-capture";
-import { actionCaptureCoverageSchema, consentDecisionEvidenceSchema, hasSemanticConsentWitness } from "./consent-action-evidence-policy";
+import { CONSENT_ACTION_POST_CLICK_REQUEST_LIMIT, actionCaptureCoverageSchema, consentDecisionEvidenceSchema, hasSemanticConsentWitness } from "./consent-action-evidence-policy";
 import { runtimeEvidenceGraphSchema, runtimeGraphVerificationDiagnosticSchema, withRuntimeGraphCompatibility, type RuntimeEvidenceGraph } from "./runtime-evidence-graph";
 const packetRuntimeGraphSchema: z.ZodType<RuntimeEvidenceGraph> = runtimeEvidenceGraphSchema;
 import {
@@ -181,7 +181,7 @@ const postAcceptEvidencePacketBaseSchema = z.object({
     readyAtMs: z.number().int().nonnegative(),
   }),
   network: z.object({
-    requests: z.array(postAcceptNetworkRequestSchema).max(96),
+    requests: z.array(postAcceptNetworkRequestSchema).max(CONSENT_ACTION_POST_CLICK_REQUEST_LIMIT),
     postAcceptNonEssentialRequests: z.array(postAcceptNetworkRequestSchema).max(24),
     activeRequestIdsAtAcceptanceRegistration: z.array(z.string().max(120)).max(48),
   }),
@@ -474,7 +474,7 @@ export const postAcceptReportProjectionSchema = z.object({
   resolverDurationMs: z.number().int().nonnegative().optional(),
   interactionDiagnostics: postRefusalInteractionDiagnosticsSchema.optional(),
   afterActionCapture: afterActionCaptureSchema.optional(),
-  afterActionRequests: z.array(postRefusalNetworkRequestSchema.omit({ inFlightAtRefusalRegistration: true, msOffsetFromRefusal: true })).max(96).optional(),
+  afterActionRequests: z.array(postRefusalNetworkRequestSchema.omit({ inFlightAtRefusalRegistration: true, msOffsetFromRefusal: true })).max(CONSENT_ACTION_POST_CLICK_REQUEST_LIMIT).optional(),
   afterActionStorage: z.array(postRefusalStorageItemSchema).max(96).optional(),
   decisionEvidence: consentDecisionEvidenceSchema.optional(),
   captureCoverage: actionCaptureCoverageSchema.optional(),

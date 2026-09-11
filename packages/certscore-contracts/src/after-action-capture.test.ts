@@ -32,3 +32,13 @@ test("legacy capture remains readable without manufacturing ancestry", () => {
   const parsed = afterActionCaptureSchema.parse({ ...capture, policyVersion: "bounded_after_action_capture.v1", requestAncestry: undefined });
   assert.equal(parsed.requestAncestry, undefined);
 });
+
+test("expanded capture stays bounded and requires ancestry for every retained request", () => {
+  const requestIds = Array.from({ length: 192 }, (_, index) => `r${index}`);
+  const requestAncestry = requestIds.map((requestId) => ({ requestId, rootStartedAtMs: 501 }));
+  const expanded = { ...capture, requestIds, requestAncestry };
+  assert.equal(afterActionCaptureSchema.safeParse(expanded).success, true);
+  assert.equal(afterActionCaptureSchema.safeParse({ ...expanded, requestAncestry: requestAncestry.slice(0, 96) }).success, false);
+  assert.equal(afterActionCaptureSchema.safeParse({ ...expanded, requestIds: [...requestIds, "extra"],
+    requestAncestry: [...requestAncestry, { requestId: "extra", rootStartedAtMs: 501 }] }).success, false);
+});

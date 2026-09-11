@@ -1,6 +1,9 @@
 import type { Page } from "playwright";
 import {
   classifyConsentControlLabel,
+  classifyConsentControlLinkDestination,
+  hasUnresolvedConsentDecision,
+  UNRESOLVED_CONSENT_DECISION,
   consentControlTerms,
   isProductionCreditworthySupplementalConsentControlClassification,
   isSupportedPrivacyEvidenceLocale,
@@ -13,6 +16,7 @@ import {
 } from "@certscore/contracts";
 import {
   KNOWN_CMP_REGISTRY,
+  knownCmpObservationRecipe,
   detectKnownCmps,
   type KnownCmpDetection,
   type KnownCmpSignal,
@@ -139,9 +143,11 @@ export interface ConsentControlCandidateEvidence {
   matchedTerm?: string;
   matchedLocale?: string;
   matchStrength?: string;
+  classifierRegistryVersion?: string;
   classifierReasonCodes: string[];
   classifierConfidence: number;
   consentContextConfirmed?: boolean;
+  linkDestination?: "same_document" | "other_document" | "unverified";
   diagnosticClassifications?: ConsentControlDiagnosticClassification[];
   effectiveVisibility?: "direct" | "visible_via_actionable_proxy";
   actionableControlCandidateId?: string;
@@ -157,6 +163,7 @@ export interface ConsentControlDiagnosticClassification {
   matchedTerm?: string;
   matchedLocale?: string;
   matchStrength?: string;
+  classifierRegistryVersion?: string;
   classifierReasonCodes: string[];
   classifierConfidence: number;
   classifierVariant?: string;
@@ -222,6 +229,7 @@ interface RawGeometryCandidate {
   frameUrl: string;
   localeHint?: string;
   label: string;
+  linkHref?: string;
   tagName: string;
   role?: string;
   ariaLabel?: string;
@@ -377,6 +385,9 @@ export async function captureConsentControlGeometry(
   reconcileConfirmedConsentModalClusters(candidates, containers);
   classifyConsentControlPlacements(candidates, containers);
   const summary = summarizeConsentControlGeometry(candidates, cmp);
+  if (hasUnresolvedConsentDecision({ candidates })) {
+    summary.limitations = [UNRESOLVED_CONSENT_DECISION, ...summary.limitations].slice(0, 12);
+  }
   const mainFrameUnavailable = !mainFrameCapture ||
     mainFrameCapture.pageUrl === "about:blank" ||
     mainFrameCapture.viewport.width <= 0 ||
@@ -823,9 +834,11 @@ function buildCandidateEvidence(
     matchedTerm: classification.matchedTerm,
     matchedLocale: classification.matchedLocale,
     matchStrength: classification.matchStrength,
+    classifierRegistryVersion: classification.registryVersion,
     classifierReasonCodes: classification.reasonCodes,
     classifierConfidence: classification.confidence,
     consentContextConfirmed: CONSENT_CONTEXT_PATTERN.test(candidate.contextText),
+    linkDestination: candidate.linkHref !== undefined ? classifyConsentControlLinkDestination(candidate.linkHref, candidate.frameUrl) : undefined,
     diagnosticClassifications,
     effectiveVisibility: decisionStatus === "confirmed_visible" ? "direct" : undefined,
     decisionStatus,
@@ -852,6 +865,8 @@ function presentationTypeForCandidate(
 
 function classifyCandidate(candidate: RawGeometryCandidate): ConsentControlLabelClassification {
   const input = {
+    observationRecipe: knownCmpObservationRecipe(candidate.selectorHint, candidate.containerSelectorHint),
+    linkDestination: candidate.linkHref !== undefined ? classifyConsentControlLinkDestination(candidate.linkHref, candidate.frameUrl) : undefined,
     label: candidate.label,
     ariaLabel: candidate.ariaLabel,
     title: candidate.title,
@@ -968,11 +983,13 @@ function diagnosticClassificationsForCandidate(candidate: RawGeometryCandidate):
     (candidate.layer === "preference_center" || MULTILINGUAL_PREFERENCE_CONTEXT_PATTERN.test(candidate.contextText));
   const classifierContextText = hasConsentContext || hasPreferenceContext ? candidate.contextText : "";
   const classification = classifyConsentControlLabel({
+    observationRecipe: knownCmpObservationRecipe(candidate.selectorHint, candidate.containerSelectorHint),
     label: candidate.label,
     ariaLabel: candidate.ariaLabel,
     title: candidate.title,
     value: candidate.value,
     contextText: classifierContextText,
+    linkDestination: candidate.linkHref !== undefined ? classifyConsentControlLinkDestination(candidate.linkHref, candidate.frameUrl) : undefined,
     classifierProfile: "multilingual_v1",
     hasConsentContext,
     hasPreferenceContext,
@@ -991,6 +1008,7 @@ function diagnosticClassificationsForCandidate(candidate: RawGeometryCandidate):
     matchedTerm: classification.matchedTerm,
     matchedLocale: classification.matchedLocale,
     matchStrength: classification.matchStrength,
+    classifierRegistryVersion: classification.registryVersion,
     classifierReasonCodes: classification.reasonCodes,
     classifierConfidence: classification.confidence,
     classifierVariant: classification.variant,
@@ -1199,6 +1217,8 @@ function collectConsentGeometryInPage(input: {
   const maxText = 1_200;
   const maxHtml = 2_000;
   const deepRootCache = new WeakMap<ParentNode, ParentNode[]>();
+  const textContextRootCache = new WeakMap<Element, Element | null>();
+  const contextVisibilityCache = new WeakMap<Element, boolean>();
   const viewport = {
     width: window.innerWidth,
     height: window.innerHeight,
@@ -1246,11 +1266,14 @@ function collectConsentGeometryInPage(input: {
     "input[type='radio']",
   ].join(",");
 
-  const containers = deepQuerySelectorAll(containerSelector)
+  const namedConsentRegions = deepQuerySelectorAll("section[aria-label], [role='region'][aria-label], [role='group'][aria-label]")
+    .filter(element => consentPattern.test(element.getAttribute("aria-label") || ""));
+  const containers = [...new Set([...deepQuerySelectorAll(containerSelector), ...namedConsentRegions])]
     .filter((element) => {
       const tagName = element.tagName.toLowerCase();
       const role = (element.getAttribute("role") || "").toLowerCase();
       return (
+        !isPageChromeContext(element) &&
         tagName !== "html" &&
         tagName !== "body" &&
         tagName !== "head" &&
@@ -1271,12 +1294,20 @@ function collectConsentGeometryInPage(input: {
       element.getAttribute("id") || "",
       element.getAttribute("class") || "",
     ].join(" "))))
-    .map((element) => {
+    .map(containerFor)
+    .filter((item, index, list) =>
+      item.evidence.boundingBox.width > 0 ||
+      item.evidence.boundingBox.height > 0 ||
+      index < Math.min(4, list.length)
+    )
+    .slice(0, input.containerLimit);
+
+  function containerFor(element: Element) {
       const box = rectFor(element);
       return {
         element,
         evidence: {
-          selectorHint: selectorHintFor(element),
+          selectorHint: selectorHintFor(element, true),
           role: attr(element, "role"),
           ariaLabel: attr(element, "aria-label"),
           id: attr(element, "id"),
@@ -1288,17 +1319,7 @@ function collectConsentGeometryInPage(input: {
           intersectsViewport: intersects(box, viewportRect()),
         } satisfies RawGeometryContainer,
       };
-    })
-    .filter((item, index, list) =>
-      item.evidence.boundingBox.width > 0 ||
-      item.evidence.boundingBox.height > 0 ||
-      index < Math.min(4, list.length)
-    )
-    .slice(0, input.containerLimit);
-
-  const containerControls = containers.flatMap((container) =>
-    deepQuerySelectorAll(controlSelector, container.element).slice(0, 80)
-  );
+  }
   const documentControls = deepQuerySelectorAll(controlSelector)
     .filter((element) => {
       const label = labelFor(element);
@@ -1312,6 +1333,23 @@ function collectConsentGeometryInPage(input: {
       return controlLabelPattern.test(attrs) || consentPattern.test(attrs);
     })
     .slice(0, 800);
+  // Retain the same bounded, independent consent prose used by classification
+  // when a banner has no consent-specific id/class. A label alone cannot create
+  // a scope. Never substitute the document, page chrome, or an article/main.
+  // Action consumers still require exact live scope/control identity, a unique
+  // canonical action, viewport hit testing and the existing authorization proof.
+  for (const element of documentControls) {
+    if (containers.length >= input.containerLimit) break;
+    if (!isSemanticallyInteractive(element) || !controlLabelPattern.test(labelFor(element)) ||
+      nearestContainerIndex(element, containers) !== undefined) continue;
+    const root = nearestTextContextRoot(element, consentPattern, labelFor(element));
+    if (root && selectorUniquelyTargetsElement(selectorHintFor(root, true), root)) {
+      containers.push(containerFor(root));
+    }
+  }
+  const containerControls = containers.flatMap((container) =>
+    deepQuerySelectorAll(controlSelector, container.element).slice(0, 80)
+  );
   const seenControlElements = new Set<Element>();
   const controlElements = [...containerControls, ...documentControls].filter((element) => {
     if (seenControlElements.has(element)) {
@@ -1392,9 +1430,8 @@ function collectConsentGeometryInPage(input: {
     const contextRoot = typeof containerIndex === "number" ? containerItems[containerIndex]?.element : nearestContextRoot(element, contextPattern);
     const consentfulContextRoot = nearestTextContextRoot(element, contextPattern, label);
     const contextText = compactText(
-      (consentfulContextRoot ? deepText(consentfulContextRoot) : "") ||
-      (contextRoot ? deepText(contextRoot) : "") ||
-      (element.parentElement ? deepText(element.parentElement) : ""),
+      consentfulContextRoot ? independentContextText(consentfulContextRoot, element)
+        : typeof containerIndex === "number" ? readableContextText(containerItems[containerIndex]!.element) : "",
     );
     const attrs = compactText([
       label,
@@ -1448,6 +1485,7 @@ function collectConsentGeometryInPage(input: {
         : undefined,
       occlusion: occlusionFor(element, box),
       contextText: contextText.slice(0, 1_000),
+      linkHref: element.tagName.toLowerCase() === "a" ? element.getAttribute("href") ?? "" : undefined,
     };
   }
 
@@ -1492,13 +1530,19 @@ function collectConsentGeometryInPage(input: {
     ).some((descendant) => descendant !== element && isSemanticallyInteractive(descendant));
   }
 
+  function isPageChromeContext(element: Element): boolean {
+    return element === document.body || element === document.documentElement ||
+      /^(?:nav|header|footer|aside)$/i.test(element.tagName) ||
+      /^(?:navigation|contentinfo|menu|menubar)$/i.test(element.getAttribute("role") || "");
+  }
+
   function nearestContextRoot(element: Element, pattern: RegExp): Element | undefined {
     let current: Element | null = element;
     for (let depth = 0; current && depth < 8; depth += 1) {
-      if (current === document.body || current === document.documentElement) {
+      if (isPageChromeContext(current)) {
         return undefined;
       }
-      if (pattern.test(compactText([
+      if (deepText(current).length <= 4_000 && pattern.test(compactText([
         deepText(current),
         current.getAttribute("id") || "",
         current.getAttribute("class") || "",
@@ -1511,14 +1555,60 @@ function collectConsentGeometryInPage(input: {
     return undefined;
   }
 
-  function nearestTextContextRoot(element: Element, pattern: RegExp, label: string): Element | undefined {
+  function independentContextText(root: Element, control: Element): string {
+    return readableContextText(root, control);
+  }
+
+  function readableContextText(root: Element, control?: Element): string {
+    const parts: string[] = [];
+    let count = 0;
+    for (const textRoot of deepRootsFor(root)) {
+      const walker = root.ownerDocument.createTreeWalker(textRoot, NodeFilter.SHOW_TEXT);
+      for (let node = walker.nextNode(); node && count < 160; count += 1, node = walker.nextNode()) {
+        const parent = node.parentElement;
+        if (parent && contextTextIsReadable(parent) &&
+          (!control || (!composedContains(control, parent) &&
+            !parent.closest("a,button,input,[role='button'],[role='link']")))) {
+          parts.push(node.textContent || "");
+        }
+      }
+      if (count >= 160) break;
+    }
+    return compactText(parts.join(" "));
+  }
+
+  function contextTextIsReadable(element: Element): boolean {
+    const visited: Element[] = [];
     let current: Element | null = element;
+    let readable = false;
+    for (let depth = 0; current && depth < 64; depth += 1) {
+      const cached = contextVisibilityCache.get(current);
+      if (cached !== undefined) { readable = cached; break; }
+      visited.push(current);
+      const style = getComputedStyle(current);
+      if (current.matches("script,style,noscript,template,[hidden],[inert],[aria-hidden='true' i]") ||
+        style.display === "none" || style.visibility === "hidden" || style.visibility === "collapse" ||
+        Number.parseFloat(style.opacity || "1") <= 0.05) break;
+      current = parentElementOrHost(current);
+      if (!current) readable = true;
+    }
+    for (const node of visited) contextVisibilityCache.set(node, readable);
+    return readable;
+  }
+
+  function nearestTextContextRoot(element: Element, pattern: RegExp, label: string): Element | undefined {
+    const cached = textContextRootCache.get(element);
+    if (cached !== undefined) return cached ?? undefined;
+    textContextRootCache.set(element, null);
+    let current: Element | null = parentElementOrHost(element);
     for (let depth = 0; current && depth < 8; depth += 1) {
-      if (current === document.body || current === document.documentElement) {
+      if (isPageChromeContext(current)) {
         return undefined;
       }
-      const text = deepText(current);
-      if (text.length > Math.max(label.length + 24, 48) && pattern.test(text)) {
+      if (/^(?:main|article)$/i.test(current.tagName) || current.getAttribute("role") === "main") return undefined;
+      const text = independentContextText(current, element);
+      if (text.length <= 4_000 && text.length > Math.max(label.length + 24, 48) && pattern.test(text)) {
+        textContextRootCache.set(element, current);
         return current;
       }
       current = parentElementOrHost(current);
@@ -1650,7 +1740,7 @@ function collectConsentGeometryInPage(input: {
     return /^[A-Za-z][A-Za-z0-9]*(?:[._:-][A-Za-z0-9_-]+)+$/.test(value) && !/\s/.test(value);
   }
 
-  function selectorHintFor(element: Element): string {
+  function selectorHintFor(element: Element, requireUnique = false): string {
     const id = element.getAttribute("id");
     const testId = element.getAttribute("data-testid");
     const aria = element.getAttribute("aria-label");
@@ -1713,7 +1803,7 @@ function collectConsentGeometryInPage(input: {
         const candidate = `${ancestorSelector} ${descendantSelector}`;
         if (
           selectorUniquelyTargetsElement(candidate, element) ||
-          selectorUniquelyTargetsElementByLabel(candidate, element)
+          (!requireUnique && selectorUniquelyTargetsElementByLabel(candidate, element))
         ) return candidate;
       }
     }
@@ -1723,6 +1813,25 @@ function collectConsentGeometryInPage(input: {
         .map((item) => `.${cssEscape(item)}`)
         .join("")}`;
       if (selectorUniquelyTargetsElement(candidate, element)) return candidate;
+    }
+
+    if (requireUnique) {
+      // Capture a bounded structural identity in this document. Label-unique
+      // selectors cannot bind a container because multiple nested divs can
+      // carry identical consent text. Validate every path against the live node.
+      let current: Element | null = element;
+      let path = "";
+      for (let depth = 0; current && depth < 12; depth += 1) {
+        const tag = current.tagName.toLowerCase();
+        const siblings = current.parentElement
+          ? Array.from(current.parentElement.children).filter((node) => node.tagName === current!.tagName)
+          : [];
+        const segment = `${tag}:nth-of-type(${Math.max(1, siblings.indexOf(current) + 1)})`;
+        path = path ? `${segment} > ${path}` : segment;
+        if (path.length > 512) break;
+        if (selectorUniquelyTargetsElement(path, element)) return path;
+        current = current.parentElement;
+      }
     }
 
     // A non-unique hint remains useful for retained diagnostics. Consumers

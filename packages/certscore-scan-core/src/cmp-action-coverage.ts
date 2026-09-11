@@ -164,7 +164,7 @@ export async function diagnoseCmpActionCoverage(input: {
     urls,
   });
   const intents = boundedSorted(probe.controlLabels.map((label) =>
-    classifyConsentControlLabel(label).intent
+    classifyConsentControlLabel({ ...label, usage: "action" }).intent
   ).filter((intent) => intent !== "unknown"));
   const detectedCmpNames = boundedSorted(detections.map((detection) => detection.canonicalName), 8);
   const fingerprintSha256 = fingerprint({

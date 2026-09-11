@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { CONSENT_ACTION_POST_CLICK_REQUEST_LIMIT } from "./consent-action-evidence-policy";
 
 /** Factual capture after a control action; never a claim of registered consent. */
 export const afterActionCaptureSchema = z.object({
@@ -20,12 +21,12 @@ export const afterActionCaptureSchema = z.object({
     nonEssential: z.boolean(),
     vendor: z.string().max(160).optional(),
   }).strict()).max(48),
-  requestIds: z.array(z.string().min(1).max(120)).max(96),
+  requestIds: z.array(z.string().min(1).max(120)).max(CONSENT_ACTION_POST_CLICK_REQUEST_LIMIT),
   // Earliest start in each redirect chain, including ancestors outside retention.
   requestAncestry: z.array(z.object({
     requestId: z.string().min(1).max(120),
     rootStartedAtMs: z.number().int().nonnegative(),
-  }).strict()).max(96).optional(),
+  }).strict()).max(CONSENT_ACTION_POST_CLICK_REQUEST_LIMIT).optional(),
 }).strict().superRefine((capture, context) => {
   if (capture.policyVersion === "bounded_after_action_capture.v2" && (
     !capture.requestAncestry || capture.requestAncestry.length !== capture.requestIds.length ||

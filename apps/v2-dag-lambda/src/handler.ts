@@ -12,6 +12,7 @@ import path from "node:path";
 import { mkdir, readdir, readFile, writeFile } from "node:fs/promises";
 import { connect as tlsConnect, type TLSSocket } from "node:tls";
 import { chromium } from "playwright";
+import { consentActionPassiveBarrierLimits } from "./consent-action-tail-policy.js";
 import { actionLanePassiveAbsenceDisposition } from "./action-lane-passive-absence.js";
 import { evidenceValidationFailure } from "./evidence-validation-failure.js";
 import {
@@ -474,6 +475,8 @@ type LocalV2DagLambdaShardResult = {
   postRefusalEvidence?: PostRefusalLambdaEvidenceDescriptor;
   postAcceptEvidence?: PostAcceptLambdaEvidenceDescriptor;
   consentRejectAvailability?: {
+    acceptPassiveBarrierOnly?: boolean;
+    rejectPassiveBarrierOnly?: boolean;
     acceptControlObserved: boolean;
     inventoryComplete: boolean;
     necessaryOnlyRejectEquivalentObserved: boolean;
@@ -2369,6 +2372,7 @@ export async function runLocalV2DagLambdaShardedArtifactChain(
   ];
   const postRefusalState: {
     passiveAbsence: boolean;
+    passiveCoverageLimited?: boolean;
     cancelledNoReject: boolean;
     dispatchStartedAtMs?: number;
     error?: string;
@@ -2382,7 +2386,7 @@ export async function runLocalV2DagLambdaShardedArtifactChain(
   const postRefusalAbortController = new AbortController();
   postRefusalAbortController.signal.addEventListener("abort", () => {
     postRefusalState.error = postRefusalState.cancelledNoReject
-      ? postRefusalState.dispatchStartedAtMs === undefined ? "reject_control_not_observed" : "reject_path_incomplete_at_passive_barrier"
+      ? postRefusalState.dispatchStartedAtMs === undefined && !postRefusalState.passiveCoverageLimited ? "reject_control_not_observed" : "reject_path_incomplete_at_passive_barrier"
       : "reject_path_exceeded_post_primary_join_budget";
     postRefusalState.outcomeObservedAtMs = Date.now();
     postRefusalState.settled = true;
@@ -2432,6 +2436,7 @@ export async function runLocalV2DagLambdaShardedArtifactChain(
   }
   const postAcceptState: {
     passiveAbsence: boolean;
+    passiveCoverageLimited?: boolean;
     cancelledNoAccept: boolean;
     dispatchStartedAtMs?: number;
     error?: string;
@@ -2445,7 +2450,7 @@ export async function runLocalV2DagLambdaShardedArtifactChain(
   const postAcceptAbortController = new AbortController();
   postAcceptAbortController.signal.addEventListener("abort", () => {
     postAcceptState.error = postAcceptState.cancelledNoAccept
-      ? postAcceptState.dispatchStartedAtMs === undefined ? "accept_control_not_observed" : "accept_path_incomplete_at_passive_barrier"
+      ? postAcceptState.dispatchStartedAtMs === undefined && !postAcceptState.passiveCoverageLimited ? "accept_control_not_observed" : "accept_path_incomplete_at_passive_barrier"
       : "accept_path_exceeded_post_primary_join_budget";
     postAcceptState.outcomeObservedAtMs = Date.now();
     postAcceptState.settled = true;
@@ -2496,6 +2501,20 @@ export async function runLocalV2DagLambdaShardedArtifactChain(
           result.workerLane !== "consent_proof" ||
           !result.consentRejectAvailability
         ) return;
+        // Passive uncertainty is a coverage limitation, never proof of absence.
+        // Preserve the old work ceiling while retaining already-returned action evidence.
+        for (const [state, controller, limited, action] of [
+          [postRefusalState, postRefusalAbortController, result.consentRejectAvailability.rejectPassiveBarrierOnly, "reject"],
+          [postAcceptState, postAcceptAbortController, result.consentRejectAvailability.acceptPassiveBarrierOnly, "accept"],
+        ] as const) {
+          if (!limited || !state.started || state.settled) continue;
+          state.passiveCoverageLimited = true;
+          if (actionLanePassiveAbsenceDisposition({ ...state, passiveBarrierReached: false }) === "cancel_not_dispatched") {
+            if (action === "reject") postRefusalState.cancelledNoReject = true;
+            else postAcceptState.cancelledNoAccept = true;
+            controller.abort(new Error(`${action}_path_incomplete_at_passive_barrier`));
+          }
+        }
         if (postRefusalState.started && !postRefusalState.cancelledNoReject && !postRefusalState.timedOut) {
           const returnedRejectStatus = postRefusalState.result?.postRefusalEvidence?.status;
           const rejectActionMayHaveDispatched = returnedRejectStatus !== undefined &&
@@ -2558,11 +2577,11 @@ export async function runLocalV2DagLambdaShardedArtifactChain(
   // Cost-neutral reconciliation: preserve action results already returned by
   // the passive barrier, but add no tail wait solely to resolve passive absence.
   // An unfinished independent session is limited, not evidence of no control.
-  if (postRefusalState.passiveAbsence && actionLanePassiveAbsenceDisposition({ ...postRefusalState, passiveBarrierReached: true }) === "cancel_incomplete") {
+  if ((postRefusalState.passiveAbsence || postRefusalState.passiveCoverageLimited) && actionLanePassiveAbsenceDisposition({ ...postRefusalState, passiveBarrierReached: true }) === "cancel_incomplete") {
     postRefusalState.cancelledNoReject = true;
     postRefusalAbortController.abort(new Error("reject_path_incomplete_at_passive_barrier"));
   }
-  if (postAcceptState.passiveAbsence && actionLanePassiveAbsenceDisposition({ ...postAcceptState, passiveBarrierReached: true }) === "cancel_incomplete") {
+  if ((postAcceptState.passiveAbsence || postAcceptState.passiveCoverageLimited) && actionLanePassiveAbsenceDisposition({ ...postAcceptState, passiveBarrierReached: true }) === "cancel_incomplete") {
     postAcceptState.cancelledNoAccept = true;
     postAcceptAbortController.abort(new Error("accept_path_incomplete_at_passive_barrier"));
   }
@@ -2760,7 +2779,7 @@ export async function runLocalV2DagLambdaShardedArtifactChain(
   let postRefusalJoin: "disabled" | "joined" | "failed" | "not_applicable" | "timed_out" =
     postRefusalState.started ? "failed" : "disabled";
   if (postRefusalState.cancelledNoReject) {
-    postRefusalJoin = postRefusalState.dispatchStartedAtMs === undefined ? "not_applicable" : "failed";
+    postRefusalJoin = postRefusalState.dispatchStartedAtMs === undefined && !postRefusalState.passiveCoverageLimited ? "not_applicable" : "failed";
   } else if (postRefusalState.timedOut) {
     postRefusalJoin = "timed_out";
   } else if (joinedPostRefusalPacket) {
@@ -2791,7 +2810,7 @@ export async function runLocalV2DagLambdaShardedArtifactChain(
   let postAcceptJoin: "disabled" | "joined" | "failed" | "not_applicable" | "timed_out" =
     postAcceptState.started ? "failed" : "disabled";
   if (postAcceptState.cancelledNoAccept) {
-    postAcceptJoin = postAcceptState.dispatchStartedAtMs === undefined ? "not_applicable" : "failed";
+    postAcceptJoin = postAcceptState.dispatchStartedAtMs === undefined && !postAcceptState.passiveCoverageLimited ? "not_applicable" : "failed";
   } else if (postAcceptState.timedOut) {
     postAcceptJoin = "timed_out";
   } else if (joinedPostAcceptPacket) {
@@ -3464,6 +3483,8 @@ function parseLocalV2DagLambdaShardResult(
     typeof consentRejectAvailabilityRecord.rejectControlObserved === "boolean"
       ? {
           acceptControlObserved: consentRejectAvailabilityRecord.acceptControlObserved === true,
+          ...(consentRejectAvailabilityRecord.acceptPassiveBarrierOnly === true ? { acceptPassiveBarrierOnly: true } : {}),
+          ...(consentRejectAvailabilityRecord.rejectPassiveBarrierOnly === true ? { rejectPassiveBarrierOnly: true } : {}),
           inventoryComplete: consentRejectAvailabilityRecord.inventoryComplete,
           necessaryOnlyRejectEquivalentObserved:
             consentRejectAvailabilityRecord.necessaryOnlyRejectEquivalentObserved === true,
@@ -3792,6 +3813,7 @@ export function deriveConsentRejectAvailability(bundle: CanonicalEvidenceBundle)
 export function deriveConsentActionAvailability(bundle: CanonicalEvidenceBundle) {
   return {
     ...deriveConsentRejectAvailability(bundle),
+    ...consentActionPassiveBarrierLimits(bundle),
     acceptControlObserved: bundle.consentUiObservations.some((observation) =>
       observation.acceptControlObserved ||
       observation.controls.some((control) => control.actionType === "accept_all")

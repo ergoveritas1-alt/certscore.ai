@@ -1,3 +1,4 @@
+import { afterClickCoverage } from "../after-action-summary";
 import { projectScanReportNoGo } from "../../../lib/scans/scan-report-disposition";
 import { siteMetadataProjectionSchema } from "@certscore/contracts";
 import { KNOWN_CMP_REGISTRY } from "@website-signal-risk-scanner/shared";
@@ -536,6 +537,7 @@ function buildAcceptPathProjection(
     };
   }
 
+  const captureCoverage = afterClickCoverage(projection, "accept");
   const registrationConfirmed = projection.registrationStatus === "confirmed" &&
     projection.acceptanceExercised === true &&
     projection.productionProjectable === true;
@@ -568,7 +570,7 @@ function buildAcceptPathProjection(
       ? "Consent-dependent activity observed"
       : state === "no_activity_observed"
         ? "No qualifying post-Accept activity observed"
-        : "Accept path limited";
+        : captureCoverage ? "After-Accept observation recorded" : "Accept path limited";
   const note = state === "review_signal"
     ? "The visitor clicked Accept, but the consent record saved afterward still said analytics and advertising were not allowed. The saved record should match the visitor’s choice."
     : state === "activity_observed"
@@ -584,6 +586,8 @@ function buildAcceptPathProjection(
     }).slice(0, 3),
     label,
     note,
+    afterClickCoverage: captureCoverage,
+    registrationConfirmed,
     observationWindowMs: recordNumber(projection, ["observationWindowMs"]),
     resolverMethod: recordString(projection, ["resolverMethod"]),
     scoreEffect: "none",

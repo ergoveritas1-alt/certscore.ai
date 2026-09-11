@@ -1,3 +1,4 @@
+import { REJECT_CLICK_TRACKING_COPY } from "./consent-action-copy";
 import { assessRejectClickTracking, readRejectClickTrackingAssessment, REJECT_CLICK_TRACKING_SIGNAL } from "./reject-click-tracking-policy";
 import {
   classifyGdprTransparencyTopics,
@@ -3958,10 +3959,10 @@ function buildRejectClickTrackingConcerns(
   const urls = assessment.requests.map((row) => row.url);
   return [buildConcernFromSharedInput({
     categoryId: "enforcement_outcomes_after_user_choice",
-    description: "Classified tracking requests began after a verified Reject click. Refusal registration remained unverified; this is a scored review signal, not proof of a registered refusal or a legal violation.",
+    description: REJECT_CLICK_TRACKING_COPY.description,
     domainContext,
     evidence: urls,
-    observedValue: `${assessment.eligibleRequestCount} tracking request(s) after Reject click; decision unverified`,
+    observedValue: `${assessment.eligibleRequestCount} tracking request(s) observed after Reject`,
     originKey: REJECT_CLICK_TRACKING_SIGNAL,
     originType: "runtime_artifact",
     rawEvidence: {
@@ -3972,10 +3973,10 @@ function buildRejectClickTrackingConcerns(
     },
     severity: "medium",
     signalKey: REJECT_CLICK_TRACKING_SIGNAL,
-    signalLabel: "Tracking after Reject click; decision unverified",
+    signalLabel: REJECT_CLICK_TRACKING_COPY.label,
     signalSource: "runtime_artifact_signal",
     sourceType: "signal",
-    title: "Tracking after Reject click; decision unverified",
+    title: REJECT_CLICK_TRACKING_COPY.label,
   })];
 }
 

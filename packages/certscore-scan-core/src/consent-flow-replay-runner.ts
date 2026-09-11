@@ -1004,6 +1004,7 @@ function extractControlTexts(frame: ReplayFrameSnapshot): Array<{ label: string;
 
 function classifyControlLabel(label: string, reason: string): { action: ReplayActionCandidateType; confidence: number; reason: string } | undefined {
   const classification = classifyConsentControlLabel({
+    usage: "action",
     label,
     hasConsentContext: true,
     hasPreferenceContext: true,

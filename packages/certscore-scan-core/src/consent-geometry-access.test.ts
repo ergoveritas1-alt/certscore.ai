@@ -209,3 +209,16 @@ test("missingRequiredProxyDiagnostic records egress no-go without a browser run"
   assert.equal(diagnostic.status, "access_no_go");
   assert.ok(diagnostic.reasonCodes.includes("required_proxy_missing"));
 });
+
+
+test("browser error documents cannot inherit an earlier HTTP 200 success", () => {
+  const diagnostic = classifyConsentGeometryAccess({ pageUrl: "chrome-error://chromewebdata/", httpStatus: 200, bodyText: "This site cannot be reached" });
+  assert.equal(diagnostic.status, "navigation_error");
+  assert.ok(diagnostic.reasonCodes.includes("browser_error_document"));
+});
+
+test("nonstandard HTTP error statuses cannot establish loaded consent coverage", () => {
+  const diagnostic = classifyConsentGeometryAccess({ httpStatus: 498, bodyText: "Checking your browser" });
+  assert.notEqual(diagnostic.status, "loaded");
+  assert.ok(diagnostic.reasonCodes.includes("http_status_498"));
+});

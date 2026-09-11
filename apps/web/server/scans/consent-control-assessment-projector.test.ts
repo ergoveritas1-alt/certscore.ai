@@ -1429,3 +1429,115 @@ test("redirected-document evidence cannot be attributed to a different final doc
   assert.equal(assessment.controls.accept.state, "unknown");
   assert.equal(assessment.surface.status, "unknown");
 });
+
+for (const control of [
+  { label: "Decide later", tagName: "button", classifierReasonCodes: [] },
+  { label: "Learn more", tagName: "a", classifierReasonCodes: ["ambiguous_information_control"] },
+]) test(`an unclassified ${control.tagName} beside verified Options cannot establish Accept/Reject absence`, () => {
+  const g = geometry([{
+    candidateId: "unresolved", actionType: "other", ...control,
+    layer: "first_layer", consentContextConfirmed: true, enabled: true,
+    intersectsViewport: true, boundingBox: { width: 120, height: 40 }, decisionStatus: "ambiguous",
+  }], { firstLayerAccept: false, firstLayerReject: false, firstLayerOptions: true });
+  const result = deriveMaterializedConsentControlAssessment({
+    bundle: bundle([{ actionType: "manage_preferences", label: "Cookie Settings", visible: true, layer: "first_layer" }]),
+    consentControlGeometryEvidence: g, consentSurfaceInspection: completeInspection("actionable_surface_observed", true), noGo: false,
+  });
+  assert.equal(result.controls.options.state, "observed");
+  assert.equal(result.controls.accept.state, "unknown");
+  assert.equal(result.controls.reject.state, "unknown");
+  assert.equal(result.assessmentStatus, "limited");
+  assert.ok(result.coverage.reasonCodes.includes("unresolved_visible_consent_decision"));
+});
+
+test("unverified AX positives stay limited while independently verified DOM controls survive", () => {
+  const result = deriveMaterializedConsentControlAssessment({
+    bundle: bundle([
+      { actionType: "accept_all", label: "Accept cookies", visible: true, layer: "first_layer" },
+      { actionType: "manage_preferences", label: "Privacy Center", visible: true, tagName: "ax-node", selectorHint: "ax:7", layer: "first_layer" },
+    ]),
+    consentSurfaceInspection: completeInspection("actionable_surface_observed", true), noGo: false,
+  });
+  assert.equal(result.controls.accept.state, "observed");
+  assert.equal(result.controls.options.state, "unknown");
+  assert.ok(result.coverage.reasonCodes.includes("accessibility_control_proof_unverified"));
+});
+
+test("a challenged consent session remains limited when runtime coverage continues", () => {
+  const b = bundle([], { likelyPresent: false, captureStatus: "no_evidence" });
+  b.consentUiObservations[0]!.inventoryOutcome = "complete_empty";
+  const g = { ...geometry([], { firstLayerAccept: false, firstLayerReject: false, firstLayerOptions: false }), access: { status: "loaded", httpStatus: 498 } };
+  const result = deriveMaterializedConsentControlAssessment({ bundle: b, consentControlGeometryEvidence: g,
+    consentSurfaceInspection: completeInspection("no_surface_observed_complete_coverage", false), noGo: false });
+  assert.equal(result.assessmentStatus, "limited");
+  assert.equal(result.controls.accept.state, "unknown");
+  assert.ok(result.coverage.reasonCodes.includes("consent_session_access_limited"));
+});
+
+function independentConsentLaneFixture() {
+  const b = bundle([{ actionType: "accept_all", label: "Accept all cookies", visible: true, layer: "first_layer" }]);
+  const identity = { source: "cdp_loader_id" as const, token: "consent-document-token" };
+  b.consentUiObservations[0]!.documentUrl = "https://oxfam.org/en";
+  b.consentUiObservations[0]!.documentIdentity = identity;
+  b.domSnapshots[0]!.documentIdentity = identity;
+  b.scanLaneRuns = [{ laneId: "consent_proof", executionOutcome: "success" }] as CanonicalEvidenceBundle["scanLaneRuns"];
+  b.scanEvidenceLaneAssessment = { lanes: { consent: "usable" } } as CanonicalEvidenceBundle["scanEvidenceLaneAssessment"];
+  return { b, g: { ...geometry([], { firstLayerAccept: true, firstLayerReject: false, firstLayerOptions: false }), documentIdentity: identity } };
+}
+
+test("three retained document bindings preserve consent evidence despite another lane's blocked final URL", () => {
+  const { b, g } = independentConsentLaneFixture();
+  const result = deriveMaterializedConsentControlAssessment({ bundle: b, consentControlGeometryEvidence: g,
+    consentSurfaceInspection: completeInspection("actionable_surface_observed", true), noGo: true,
+    finalUrl: "https://oxfam.org/blocked" });
+  assert.equal(result.controls.accept.state, "observed");
+  assert.equal(result.document.canonicalDocumentId, "https://oxfam.org/en");
+  assert.equal(result.scan.noGo, false);
+});
+
+test("missing or mismatched consent binding cannot override a blocked document", () => {
+  for (const missing of ["geometry", "observation", "snapshot", "lane"] as const) {
+    const { b, g } = independentConsentLaneFixture();
+    if (missing === "geometry") g.documentIdentity = { source: "cdp_loader_id", token: "other" };
+    if (missing === "observation") delete b.consentUiObservations[0]!.documentIdentity;
+    if (missing === "snapshot") delete b.domSnapshots[0]!.documentIdentity;
+    if (missing === "lane") b.scanLaneRuns = [];
+    const result = deriveMaterializedConsentControlAssessment({ bundle: b, consentControlGeometryEvidence: g,
+      consentSurfaceInspection: completeInspection("actionable_surface_observed", true), noGo: true,
+      finalUrl: "https://oxfam.org/blocked" });
+    assert.equal(result.controls.accept.state, "unknown", missing);
+    assert.equal(result.scan.noGo, true, missing);
+  }
+});
+
+test("new materialization preserves legacy classifier provenance rather than inventing a registry version", () => {
+  const result = deriveMaterializedConsentControlAssessment({ bundle: bundle([{ actionType: "accept_all", label: "Accept", visible: true }]), noGo: false });
+  assert.equal(result.provenance.projectorVersion, "2.1.1");
+  assert.equal(result.evidence[0]?.classifier?.registryVersion, "consent-control-label-registry");
+});
+
+
+test("a browser error document never establishes a complete no-control inventory", () => {
+  const { b, g } = independentConsentLaneFixture();
+  const url = "chrome-error://chromewebdata/";
+  b.consentUiObservations[0] = { ...b.consentUiObservations[0]!, documentUrl: url, controls: [], captureStatus: "no_evidence", likelyPresent: false, inventoryOutcome: "complete_empty" };
+  b.domSnapshots[0]!.url = url;
+  const result = deriveMaterializedConsentControlAssessment({ bundle: b, consentControlGeometryEvidence: { ...g, pageUrl: url, access: { status: "loaded", httpStatus: 200 } },
+    consentSurfaceInspection: completeInspection("no_surface_observed_complete_coverage", false), finalUrl: "https://oxfam.org/en", noGo: false });
+  assert.equal(result.assessmentStatus, "limited");
+  for (const control of Object.values(result.controls)) assert.equal(control.state, "unknown");
+  assert.ok(result.coverage.reasonCodes.includes("consent_session_access_limited"));
+});
+
+
+test("AX navigation uncertainty survives materialization without suppressing independent positive controls", () => {
+  const source = bundle([{ actionType: "accept_all", label: "Accept all", visible: true, layer: "first_layer" }]);
+  source.consentUiObservations[0]!.basis = [...(source.consentUiObservations[0]!.basis ?? []), "unresolved_visible_consent_decision"];
+  source.consentUiObservations[0]!.inventoryOutcome = "partial";
+  source.consentUiObservations[0]!.captureStatus = "incomplete";
+  const assessment = deriveMaterializedConsentControlAssessment({ bundle: source, consentControlGeometryEvidence: null,
+    consentSurfaceInspection: completeInspection("actionable_surface_observed", true), noGo: false });
+  assert.equal(assessment.controls.accept.state, "observed");
+  assert.equal(assessment.controls.options.state, "unknown");
+  assert.equal(assessment.assessmentStatus, "limited");
+});

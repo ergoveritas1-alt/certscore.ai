@@ -108,7 +108,7 @@ test("executive overview describes Reject outcomes without disclosing scoring tr
     },
   });
 
-  assert.match(reviewCopy, /retained storage persistence remains a review signal/i);
+  assert.match(reviewCopy, /Reject path retained evidence requiring review/i);
   assert.match(incompleteCopy, /Reject-path testing did not complete/i);
   assert.doesNotMatch(`${reviewCopy} ${incompleteCopy}`, /score-neutral|affect(?:s|ed)? (?:the )?score|score effect|deduct|partial credit/i);
 });
@@ -151,7 +151,19 @@ test("executive overview explains the deferred post-choice check without implyin
   });
 
   assertBounded(copy);
-  assert.match(copy, /post-choice tracking was not tested/i);
-  assert.match(copy, /remains unassessed/i);
+  assert.match(copy, /post-choice tracking assessment has limited evidence/i);
+  assert.match(copy, /see the Reject-path result/i);
   assert.doesNotMatch(copy, /verify that row manually/i);
+});
+
+
+test("observed after-click facts are not described as an unperformed Reject test", () => {
+  const copy = buildExecutiveOverview({
+    ...baseInput,
+    findings: [{ title: "After-Reject observations", summary: "Two requests were recorded after Reject." }],
+    limitedItems: ["Post-choice tracking reduction"],
+    rejectPath: { state: "incomplete", observationWindowMs: 3000, afterClickCoverage: "complete", note: "Two requests were recorded after Reject." },
+  });
+  assert.match(copy, /Two requests were recorded after Reject/);
+  assert.doesNotMatch(copy, /testing did not complete|tracking was not tested/);
 });

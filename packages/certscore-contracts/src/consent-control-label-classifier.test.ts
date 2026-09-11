@@ -583,6 +583,24 @@ test("classifies Portuguese Preferências only with retained consent context", (
   );
 });
 
+test("classifies explicit Portuguese refusal wording only in retained consent context", () => {
+  const withoutContext = classifyConsentControlLabel({
+    label: "Rejeitar cookies",
+    localeHints: ["pt"],
+  });
+  assert.equal(withoutContext.intent, "unknown");
+
+  const withContext = classifyConsentControlLabel({
+    label: "Rejeitar cookies",
+    contextText: "Usamos cookies para melhorar a experiência. Escolha suas preferências.",
+    localeHints: ["pt"],
+  });
+  assert.equal(withContext.intent, "reject");
+  assert.equal(withContext.matchStrength, "direct");
+  assert.equal(withContext.matchedTerm, "rejeitar cookies");
+  assert.equal(withContext.contextSatisfied, true);
+});
+
 test("classifies observed Danish and Lithuanian consent labels", () => {
   const danishAccept = classifyConsentControlLabel({
     label: "Acceptér alle",
@@ -812,6 +830,26 @@ test("classifies Dutch and Polish necessary-only labels in both profiles", () =>
   }
 });
 
+test("keeps Polish Akceptuj niezbędne on the necessary-only refusal path", () => {
+  const withoutContext = classifyConsentControlLabel({
+    label: "Akceptuj niezbędne",
+    localeHints: ["pl"],
+  });
+  assert.equal(withoutContext.intent, "reject");
+  assert.equal(withoutContext.variant, "necessary_only");
+
+  const withContext = classifyConsentControlLabel({
+    label: "Akceptuj niezbędne",
+    contextText: "Używamy plików cookie. Wybierz ustawienia prywatności.",
+    localeHints: ["pl"],
+  });
+  assert.equal(withContext.intent, "reject");
+  assert.equal(withContext.semanticRole, "necessary_only");
+  assert.equal(withContext.variant, "necessary_only");
+  assert.equal(withContext.matchedTerm, "akceptuj niezbędne");
+  assert.notEqual(withContext.intent, "accept");
+});
+
 test("classifies decline non-essential cookies as reject", () => {
   const classification = classifyConsentControlLabel({ label: "Decline Non-Essential Cookies" });
   assert.equal(classification.intent, "reject");
@@ -1015,8 +1053,8 @@ test("keeps generic contextual phrases bounded to complete control labels", () =
     label: "Learn more",
     contextText: "We use cookies. Choose your privacy preferences.",
   });
-  assert.equal(boundedControl.intent, "options");
-  assert.equal(boundedControl.matchStrength, "contextual");
+  assert.equal(boundedControl.intent, "unknown");
+  assert.ok(boundedControl.reasonCodes.includes("ambiguous_information_control"));
 });
 
 test("page prose cannot establish a consent surface from generic contextual phrases", () => {
@@ -1072,6 +1110,8 @@ test("schemas accept bounded classifier metadata", () => {
 test("recognizes restored German, French, Italian, and Polish consent labels", () => {
   const german = classifyConsentControlLabel({ label: "Nur notwendige", contextText: "Wir verwenden Cookies" });
   assert.equal(german.intent, "reject");
+  assert.equal(german.matchStrength, "equivalent");
+  assert.equal(german.confidence, 0.9);
   assert.equal(classifyConsentControlLabel({ label: "Non merci", contextText: "Nous utilisons des cookies" }).intent, "reject");
   assert.equal(classifyConsentControlLabel({ label: "Solo cookie tecnici" }).intent, "reject");
   const polish = classifyConsentControlLabel({ label: "Dostosuj zgody", classifierProfile: "multilingual_v1" });

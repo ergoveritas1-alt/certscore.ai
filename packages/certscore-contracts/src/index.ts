@@ -3,6 +3,7 @@ export * from "./collection-field-review";
 import { siteMetadataSchema } from "./site-metadata";
 export * from "./site-metadata";
 import { z } from "zod";
+import { consentControlLinkDestinationSchema } from "./consent-control-link";
 import { vendorServicePurposeSchema } from "./vendor-service-purpose";
 import { vendorRegistryAttributionSchema } from "./vendor-registry-attribution";
 export * from "./vendor-registry-attribution";
@@ -34,6 +35,9 @@ import {
   type GpcResponseAssessment,
 } from "./gpc-observation";
 export * from "./consent-control-label-classifier";
+export * from "./consent-control-link";
+export * from "./consent-control-evidence-policy";
+import { UNRESOLVED_CONSENT_DECISION } from "./consent-control-evidence-policy";
 export * from "./consent-action-control-proof";
 export * from "./choice-path-evidence-disposition";
 export * from "./consent-preference-category-classifier";
@@ -699,12 +703,16 @@ export const consentUiObservationSchema = z.object({
     semanticRole: consentControlSemanticRoleSchema.optional(),
     confidence: confidenceSchema.optional(),
     nearbyConsentText: z.string().max(500).optional(),
+    visibilityEvidence: z.enum(["box_model_verified", "unverified"]).optional(),
+    consentContextEvidence: z.enum(["local_surface", "unverified"]).optional(),
     artifactRef: z.string().max(240).optional(),
     matchedTerm: z.string().max(120).optional(),
     matchedLocale: consentControlLocaleSchema.optional(),
     matchStrength: consentControlMatchStrengthSchema.optional(),
+    classifierRegistryVersion: z.string().max(80).optional(),
     classifierReasonCodes: consentControlClassifierReasonCodesSchema,
     classifierVariant: z.string().max(80).optional(),
+    linkDestination: consentControlLinkDestinationSchema.optional(),
   })).default([]),
   impliedConsentLanguageObserved: z.boolean().default(false).optional(),
   impliedConsentLanguageEvidence: z.array(z.object({
@@ -3175,6 +3183,10 @@ export function deriveConsentSurfaceInspectionOutcome(input: {
     (input.screenshots ?? []).some((artifact) => artifact.consentStateAtTime === "pre_consent") ||
     (input.domSnapshots ?? []).some((artifact) => artifact.consentStateAtTime === "pre_consent");
   const inspectionLimitationKeys = [
+    ...(latestObservation?.basis?.includes(UNRESOLVED_CONSENT_DECISION) ? [UNRESOLVED_CONSENT_DECISION] : []),
+    ...(latestObservation?.controls?.some((control) => control.tagName === "ax-node" &&
+      (control.visibilityEvidence !== "box_model_verified" || control.consentContextEvidence !== "local_surface"))
+      ? ["accessibility_control_proof_unverified"] : []),
     ...materialLimitationKeys,
     !consentSurfaceObserved && latestObservation?.documentReadyState === "loading"
       ? "consent_surface_inspection_document_still_loading"

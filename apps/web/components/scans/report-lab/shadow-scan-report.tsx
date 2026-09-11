@@ -1,3 +1,4 @@
+import { afterClickCoverageLabel } from "../after-action-summary";
 import { DisclosureChevron, StatusBadge, JsonEvidence, EvidenceTools, FindingRow } from "../report-finding-row";
 import { describeSiteTechnology } from "@certscore/contracts";
 import { FullSiteWorkspace, FullSiteTiming, FullSiteRegion } from "../full-site-workspace";
@@ -682,7 +683,7 @@ function CompactAcceptPathCard({ projection }: { projection: NonNullable<ShadowR
             cardTone: "border-zinc-200 bg-gradient-to-b from-white to-zinc-50/90",
           }
         : {
-            badge: "Limited",
+            badge: afterClickCoverageLabel(projection.afterClickCoverage),
             badgeTone: "border-zinc-300 bg-zinc-100 text-zinc-700",
             cardTone: "border-zinc-200 bg-gradient-to-b from-white to-zinc-50/90",
           };
@@ -733,14 +734,14 @@ function ChoicePathCard({ path, report }: { path: "accept" | "reject"; report: S
         ? "Review signal"
         : projection.state === "no_activity_observed"
           ? "No activity observed"
-          : "Limited"
+          : afterClickCoverageLabel(projection.afterClickCoverage)
     : projection.state === "issue_observed"
       ? "Issue observed"
       : projection.state === "review_signal"
         ? "Review signal"
         : projection.state === "no_issue_observed"
           ? "No issue observed"
-          : "Limited";
+          : afterClickCoverageLabel(projection.afterClickCoverage);
   const toneClasses = projection.state === "issue_observed"
     ? "border-rose-300 bg-rose-50 text-rose-800"
     : projection.state === "review_signal"
@@ -783,10 +784,12 @@ function ChoicePathCard({ path, report }: { path: "accept" | "reject"; report: S
         <h4 className="text-sm font-semibold leading-5 text-zinc-950">{projection.label}</h4>
         <p className="text-xs leading-5 text-zinc-600">{projection.note}</p>
         <div className="mt-3 flex flex-wrap gap-1.5 text-[0.68rem] text-zinc-600">
-          <span className="rounded-md bg-zinc-100 px-2 py-1">{projection.state === "incomplete" ? "Not confirmed" : `${isAccept ? "Accept" : "Reject"} confirmed`}</span>
           {projection.observationWindowMs !== null ? <span className="rounded-md bg-zinc-100 px-2 py-1">{formatChoicePathOffset(projection.observationWindowMs)} window</span> : null}
           {events.length > 0 ? <span className="rounded-md bg-zinc-100 px-2 py-1">{events.length} retained event{events.length === 1 ? "" : "s"}</span> : null}
         </div>
+        {projection.registrationConfirmed !== undefined ? (
+          <p className="mt-2 text-[0.68rem] text-zinc-500">Consent-state confirmation: {projection.registrationConfirmed ? "recorded" : "not recorded"}.</p>
+        ) : null}
         {evidence.length > 0 ? (
           <div className="mt-3 border-t border-zinc-200 pt-2">
             <p className="text-xs font-semibold text-sky-700">Retained evidence</p>
@@ -805,11 +808,11 @@ function ChoicePathCard({ path, report }: { path: "accept" | "reject"; report: S
   );
 }
 
-function ChoicePathResults({ report }: { report: ShadowReportData }) {
-  const acceptSucceeded = Boolean(report.acceptPath && report.acceptPath.state !== "incomplete");
-  const rejectSucceeded = Boolean(report.rejectPath && report.rejectPath.state !== "incomplete");
+export function ChoicePathResults({ report }: { report: ShadowReportData }) {
+  const acceptSucceeded = Boolean(report.acceptPath && (report.acceptPath.state !== "incomplete" || report.acceptPath.afterClickCoverage));
+  const rejectSucceeded = Boolean(report.rejectPath && (report.rejectPath.state !== "incomplete" || report.rejectPath.afterClickCoverage));
   if (!acceptSucceeded && !rejectSucceeded) return null;
-  const comparison = acceptSucceeded && rejectSucceeded ? report.choicePathComparison : null;
+  const comparison = acceptSucceeded && rejectSucceeded && report.acceptPath?.state !== "incomplete" && report.rejectPath?.state !== "incomplete" ? report.choicePathComparison : null;
   const comparisonClasses = comparison?.state === "indistinguishable"
     ? "border-amber-300 bg-amber-50 text-amber-900"
     : "border-sky-300 bg-sky-50 text-sky-800";

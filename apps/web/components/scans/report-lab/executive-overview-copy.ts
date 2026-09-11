@@ -3,6 +3,7 @@ export const EXECUTIVE_OVERVIEW_MAX_LENGTH = 430;
 
 type ExecutiveOverviewInput = {
   acceptPath?: {
+    afterClickCoverage?: "complete" | "partial";
     note?: string | null;
     observationWindowMs: number | null;
     state: "activity_observed" | "review_signal" | "no_activity_observed" | "incomplete";
@@ -20,6 +21,7 @@ type ExecutiveOverviewInput = {
   limitedItems: string[];
   positiveCount: number;
   rejectPath?: {
+    afterClickCoverage?: "complete" | "partial";
     note?: string | null;
     observationWindowMs: number | null;
     state: "issue_observed" | "review_signal" | "no_issue_observed" | "incomplete";
@@ -76,7 +78,9 @@ export function buildExecutiveOverview(input: ExecutiveOverviewInput) {
       : input.acceptPath?.state === "no_activity_observed"
         ? "The confirmed Accept path retained no qualifying post-Accept activity in its bounded window."
         : input.acceptPath?.state === "incomplete"
-          ? input.acceptPath.note?.trim()
+          ? input.acceptPath.afterClickCoverage
+            ? input.acceptPath.note?.trim() || "The Accept control was clicked and subsequent observations were recorded."
+            : input.acceptPath.note?.trim()
             ? `Accept-path testing was limited. ${input.acceptPath.note.trim()}`
             : "Accept-path testing was limited."
           : null;
@@ -88,18 +92,22 @@ export function buildExecutiveOverview(input: ExecutiveOverviewInput) {
   const rejectOutcome = input.rejectPath?.state === "issue_observed"
     ? `The confirmed Reject path did not stop qualifying non-essential activity during the retained ${rejectWindow} post-Reject window.`
     : input.rejectPath?.state === "review_signal"
-      ? "The Reject test completed, but retained storage persistence remains a review signal rather than proof of active post-Refusal use."
+      ? input.rejectPath.note?.trim() || "The Reject path retained evidence requiring review."
       : input.rejectPath?.state === "no_issue_observed"
         ? `The confirmed Reject path completed without a qualifying issue in the retained ${rejectWindow} post-Reject window.`
         : input.rejectPath?.state === "incomplete"
-          ? rejectIncompleteReason
+          ? input.rejectPath.afterClickCoverage
+            ? rejectIncompleteReason || "The Reject control was clicked and subsequent observations were recorded."
+            : rejectIncompleteReason
             ? `Reject-path testing did not complete. ${rejectIncompleteReason}`
             : "Reject-path testing did not complete."
           : null;
   const limitation = (() => {
     if (input.limitedCount === 0) return "No checklist items were technically limited in this retained scan.";
     if (input.limitedCount === 1 && limitedItems[0] === "Post-choice tracking reduction") {
-      return "Post-choice tracking was not tested and remains unassessed without a confirmed refusal state.";
+      return input.rejectPath?.afterClickCoverage
+        ? "The after-click observations remain available; consent-state confirmation is recorded separately."
+        : "Post-choice tracking assessment has limited evidence; see the Reject-path result.";
     }
     if (input.limitedCount === 1 && limitedItems[0]) {
       return `Limited evidence remains for ${limitedItems[0]}; verify that row manually.`;

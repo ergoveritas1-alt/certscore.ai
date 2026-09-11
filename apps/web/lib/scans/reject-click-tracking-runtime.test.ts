@@ -8,10 +8,13 @@ import { buildPostRefusalRuntimeProjection } from "./post-refusal-runtime-projec
 import { buildNormalizedConcerns } from "./normalized-concerns";
 import { deriveGdprEprivacyCoveragePolicyOutcomes } from "./gdpr-eprivacy-coverage-policy";
 import { deriveGdprEprivacyCoverageChecklist } from "./gdpr-eprivacy-coverage-checklist";
+import { SCORE_BASE, SCORING_RULES } from "./scoring-policy";
 import { deriveRegulatoryCoverageScore } from "./regulatory-coverage-score";
+import { assessRejectClickTracking } from "./reject-click-tracking-policy";
 
-for (const direct of [false, true]) {
-  test(`loopback Reject: ${direct ? "new tracking scores" : "pre-click redirect alone stays neutral"} without decision registration`, async () => {
+for (const directCount of [0, 1, 160, 210]) {
+  const shouldScore = directCount > 0 && directCount < 192;
+  test(`loopback Reject: ${directCount} direct requests with pre-click ancestry and unverified registration`, async () => {
     let pendingRedirect: ServerResponse | undefined;
     const server = createServer((request, response) => {
       if (request.url === "/redirect-source") { pendingRedirect = response; return; }
@@ -28,7 +31,7 @@ for (const direct of [false, true]) {
         document.getElementById('reject').onclick=()=>{
           document.getElementById('consent-banner').hidden=true;
           fetch('/clicked');
-          ${direct ? "fetch('https://www.google-analytics.com/g/collect?tid=G-DIRECT').catch(()=>{});" : ""}
+          for (let index = 0; index < ${directCount}; index++) fetch('https://www.google-analytics.com/g/collect?tid=G-DIRECT&i='+index).catch(()=>{});
         };
       </script>`);
     });
@@ -51,7 +54,7 @@ for (const direct of [false, true]) {
         url, scanId: "local-reject-click-policy", browser, productionProjectable: true,
         interactionAuthorization: { kind: "loopback", authorizationId: "loopback_local_lab" },
         allowCanonicalRejectDiscovery: true, actionSearchTimeoutMs: 1500,
-        confirmationTimeoutMs: 75, observationWindowMs: 400,
+        confirmationTimeoutMs: 75, observationWindowMs: directCount > 1 ? 1000 : 400,
         recipe: { artifactVersion: "certscore.post_refusal_action_recipe.v1", recipeId: "loopback-generic-reject",
           resolverMethod: "local_fixture_recipe", controlSelector: "#absent", bannerSelector: "#consent-banner",
           confirmation: { kind: "local_storage_equals", key: "consent", expectedValue: "denied" } },
@@ -60,20 +63,28 @@ for (const direct of [false, true]) {
       assert.equal(packet.interactionDiagnostics?.click.outcome, "completed");
       assert.equal(packet.afterActionCapture?.policyVersion, "bounded_after_action_capture.v2");
       const analytics = packet.network.requests.filter((row) => row.purpose === "analytics");
-      assert.equal(analytics.length, direct ? 2 : 1);
+      if (directCount < 192) assert.equal(analytics.length, directCount + 1);
+      else assert.ok(packet.captureCoverage!.requestsDroppedAfterAction > 0);
       const capture = packet.afterActionCapture!;
       const ancestry = analytics.map((row) => capture.requestAncestry!.find((entry) => entry.requestId === row.requestId)!);
-      assert.equal(ancestry.filter((row) => row.rootStartedAtMs <= capture.actionDispatchedAtMs).length, 1);
-      const runtimeArtifacts = buildPostRefusalRuntimeProjection(projectPostRefusalEvidenceForReport({ packet, packetSha256: "b".repeat(64) }));
+      assert.ok(ancestry.every(Boolean));
+      // An overflowing burst may omit the redirect row; the entire capture
+      // must stay score-neutral regardless of which requests reached the cap.
+      if (directCount < 192) assert.equal(ancestry.filter((row) => row.rootStartedAtMs <= capture.actionDispatchedAtMs).length, 1);
+      const projection = projectPostRefusalEvidenceForReport({ packet, packetSha256: "b".repeat(64) });
+      const assessment = assessRejectClickTracking(projection);
+      assert.equal(assessment?.eligibleRequestCount ?? 0, shouldScore ? directCount : 0);
+      assert.ok((assessment?.requests.length ?? 0) <= 8);
+      const runtimeArtifacts = buildPostRefusalRuntimeProjection(projection);
       const normalizedConcerns = buildNormalizedConcerns({ runtimeArtifacts, reviewFindingCandidates: [], validationFindings: [] });
       const coverageOutcomes = deriveGdprEprivacyCoveragePolicyOutcomes({ runtimeArtifacts, normalizedConcerns,
         coverageLimited: false, scanCompleted: true, snapshot: {} });
       const rows = deriveGdprEprivacyCoverageChecklist({ coverageOutcomes, coverageLimited: false,
         scanCompleted: true, projectedFindings: [], unifiedFindings: [] }).filter((row) => row.id === "post_reject_tracking_reduction");
-      assert.equal(normalizedConcerns.length, direct ? 1 : 0, JSON.stringify({ proof: packet.actionControlProof,
+      assert.equal(normalizedConcerns.length, shouldScore ? 1 : 0, JSON.stringify({ proof: packet.actionControlProof,
         capture, analytics, decision: packet.decisionEvidence, status: packet.refusalRegistration.status, limitations: packet.limitations }));
       const checked = { id: "privacy_notice_availability", assessmentStatus: "checked", status: "Observed", evidenceState: "observed" };
-      assert.equal(deriveRegulatoryCoverageScore({ framework: "gdpr_eprivacy", rows: [checked, ...rows] }).score, direct ? 88 : 100);
+      assert.equal(deriveRegulatoryCoverageScore({ framework: "gdpr_eprivacy", rows: [checked, ...rows] }).score, shouldScore ? SCORE_BASE - SCORING_RULES.find(rule => rule.id === "post_reject_tracking_reduction")!.points : SCORE_BASE);
     } finally {
       pendingRedirect?.end();
       await browser.close();

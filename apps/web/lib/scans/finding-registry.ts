@@ -1,3 +1,4 @@
+import { REJECT_CLICK_TRACKING_COPY } from "./consent-action-copy";
 export type CertScoreFindingSection =
   | "Privacy & Tracking"
   | "Consent Experience"
@@ -329,10 +330,10 @@ export const CERT_SCORE_FINDING_REGISTRY: Record<string, CertScoreFindingDefinit
   },
   post_reject_click_tracking: {
     id: "post_reject_click_tracking",
-    label: "Tracking after Reject click; decision unverified",
+    label: REJECT_CLICK_TRACKING_COPY.label,
     section: "Consent Experience",
     defaultSurfacePriority: 80,
-    whyItMatters: "Classified tracking began after a verified Reject click, but refusal registration remained unverified. This is a scored review signal, not a confirmed refusal failure or legal conclusion.",
+    whyItMatters: REJECT_CLICK_TRACKING_COPY.whyItMatters,
     remediation: "Verify the recorded decision and suppress the retained tracking requests after Reject."
   },
   post_accept_consent_dependent_activity: {

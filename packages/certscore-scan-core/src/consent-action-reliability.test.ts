@@ -305,11 +305,36 @@ test("Accept pre-action floods cannot displace post-action requests", async () =
   });
 });
 
-test("A post-action capture overflow is retained as limited coverage", async () => {
-  await fixture("accept", { decision: true, after: "for(let i=0;i<110;i++)fetch('/post-noise?i='+i);" }, async (url) => {
-    const packet = await observe("accept", url);
-    assert.equal(packet.productionProjectable, false);
-    assert.ok(packet.captureCoverage!.requestsDroppedAfterAction > 0);
-    assert.ok(packet.limitations.includes("post_action_network_capture_truncated"));
+for (const action of ["accept", "reject"] as const) {
+  test(`${action}: a bounded post-click burst retains every request through projection without confirming consent`, async () => {
+    await fixture(action, { flood: 110, after: "for(let i=0;i<160;i++)fetch('/post-noise?i='+i);" }, async (url) => {
+      const packet = await observe(action, url, { observationWindowMs: 1000 });
+      assert.equal(packet.captureCoverage!.requestsDroppedAfterAction, 0);
+      assert.ok(packet.captureCoverage!.requestsDroppedBeforeAction > 0);
+      assert.equal(packet.network.requests.filter((row) => row.sanitizedUrl.includes('/post-noise')).length, 160);
+      assert.equal(packet.afterActionCapture?.requestIds.length, 161);
+      assert.equal(packet.afterActionCapture?.requestedWindowMs, 1000);
+      assert.equal(packet.afterActionCapture?.stopReason, "window_elapsed");
+      assert.equal(packet.decisionEvidence?.decision, "unknown");
+      const projection = "acceptanceRegistration" in packet
+        ? projectPostAcceptEvidenceForReport({ packet: postAcceptEvidencePacketSchema.parse(packet) })
+        : projectPostRefusalEvidenceForReport({ packet: postRefusalEvidencePacketSchema.parse(packet) });
+      assert.deepEqual(projection.afterActionCapture, packet.afterActionCapture);
+      assert.deepEqual(projection.afterActionRequests?.map((row) => row.requestId), packet.afterActionCapture?.requestIds);
+      if (action === "reject") {
+        assert.equal(packet.afterActionCapture?.requestAncestry?.length, 161);
+      }
+    });
   });
-});
+
+  test(`${action}: post-action overflow beyond the new bound stays explicitly incomplete`, async () => {
+    await fixture(action, { after: "for(let i=0;i<210;i++)fetch('/post-noise?i='+i);" }, async (url) => {
+      const packet = await observe(action, url, { observationWindowMs: 1000 });
+      assert.equal(packet.productionProjectable, false);
+      assert.equal(packet.network.requests.length, 192);
+      assert.ok(packet.captureCoverage!.requestsDroppedAfterAction > 0);
+      assert.ok(packet.limitations.includes("post_action_network_capture_truncated"));
+      assert.equal(packet.afterActionCapture?.requestsDropped, packet.captureCoverage!.requestsDroppedAfterAction);
+    });
+  });
+}

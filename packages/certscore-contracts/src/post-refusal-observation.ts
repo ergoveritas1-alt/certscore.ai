@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { actionStorageNameSchema, validateActionStorageName, validateLegacyActionStorageNames } from "./action-storage-name";
 import { afterActionCaptureSchema, validateAfterActionCapture, validateAfterActionProjection } from "./after-action-capture";
-import { actionCaptureCoverageSchema, consentDecisionEvidenceSchema, hasSemanticConsentWitness } from "./consent-action-evidence-policy";
+import { CONSENT_ACTION_POST_CLICK_REQUEST_LIMIT, actionCaptureCoverageSchema, consentDecisionEvidenceSchema, hasSemanticConsentWitness } from "./consent-action-evidence-policy";
 import { runtimeEvidenceGraphSchema, runtimeGraphVerificationDiagnosticSchema, withRuntimeGraphCompatibility, type RuntimeEvidenceGraph } from "./runtime-evidence-graph";
 const packetRuntimeGraphSchema: z.ZodType<RuntimeEvidenceGraph> = runtimeEvidenceGraphSchema;
 import { consentActionControlProofSchema } from "./consent-action-control-proof";
@@ -460,7 +460,7 @@ const postRefusalEvidencePacketBaseSchema = z.object({
     readyAtMs: z.number().int().nonnegative(),
   }),
   network: z.object({
-    requests: z.array(postRefusalNetworkRequestSchema).max(96),
+    requests: z.array(postRefusalNetworkRequestSchema).max(CONSENT_ACTION_POST_CLICK_REQUEST_LIMIT),
     postRefusalNonEssentialRequests: z.array(postRefusalNetworkRequestSchema).max(24),
     activeRequestIdsAtRefusalRegistration: z.array(z.string().max(120)).max(48),
   }),
@@ -1103,7 +1103,7 @@ const postRefusalReportPersistedStorageRowSchema = z.object({
 
 export const postRefusalReportProjectionSchema = z.object({
   afterActionCapture: afterActionCaptureSchema.optional(),
-  afterActionRequests: z.array(postRefusalNetworkRequestSchema.omit({ inFlightAtRefusalRegistration: true, msOffsetFromRefusal: true })).max(96).optional(),
+  afterActionRequests: z.array(postRefusalNetworkRequestSchema.omit({ inFlightAtRefusalRegistration: true, msOffsetFromRefusal: true })).max(CONSENT_ACTION_POST_CLICK_REQUEST_LIMIT).optional(),
   afterActionStorage: z.array(postRefusalStorageItemSchema).max(96).optional(),
   decisionEvidence: consentDecisionEvidenceSchema.optional(),
   captureCoverage: actionCaptureCoverageSchema.optional(),

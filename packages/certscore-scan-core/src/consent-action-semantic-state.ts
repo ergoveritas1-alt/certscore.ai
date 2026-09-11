@@ -1,7 +1,8 @@
-import { decodeCanonicalConsentDecision, type ConsentStateDecision } from "@certscore/contracts";
+import { decodeCanonicalConsentDecision, type ConsentStateDecision, type OneTrustGroupEvidence } from "@certscore/contracts";
 import { createHash } from "node:crypto";
 import type { BrowserContext, Frame, Page } from "playwright";
 import { matchesCanonicalCmpCookieName } from "./cmp-cookie-name.js";
+import { verifyOneTrustCookieDecision, type OneTrustBaseline } from "./onetrust-consent-state.js";
 
 export type ActionStateWrite = {
   storageType: "cookie" | "local_storage" | "session_storage";
@@ -13,6 +14,7 @@ export type ActionStateWrite = {
 };
 
 export type SemanticState = {
+  oneTrustGroupEvidence?: OneTrustGroupEvidence;
   stateHash: string;
   key: string;
   observedAtEpochMs?: number;
@@ -43,6 +45,7 @@ export async function verifiedCookieDecision(input: {
   scope: Page | Frame;
   cookieName: string;
   actionAt: number;
+  oneTrustBaseline?: OneTrustBaseline;
 }): Promise<SemanticState | undefined> {
   const writes = await readActionStateWrites(input.scope);
   const cookies = (await input.context.cookies(input.scope.url())).filter((cookie) =>
@@ -50,6 +53,11 @@ export async function verifiedCookieDecision(input: {
   // Multiple paths/domains/partitions with the same logical cookie are ambiguous.
   if (cookies.length !== 1) return undefined;
   const cookie = cookies[0]!;
+  if (input.cookieName === "OptanonConsent" && input.oneTrustBaseline) {
+    const state = await verifyOneTrustCookieDecision(input.context, input.scope, input.oneTrustBaseline);
+    if (!state || state.stateHash !== sha256(cookie.value)) return undefined;
+    return { ...state, observedAtEpochMs: matchingStateWriteTime(writes, cookie.name, cookie.value, input.actionAt, "cookie") };
+  }
   const decision = decodeCanonicalConsentDecision(cookie.name, cookie.value, true);
   if (decision === "unknown") return undefined;
   return {

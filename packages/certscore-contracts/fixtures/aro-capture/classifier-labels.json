@@ -1,0 +1,71 @@
+{
+  "corpusVersion": "aro-capture-classifier.v1",
+  "attribution": "model_assisted",
+  "purpose": "Synthetic upstream inventory regression candidates. These labels are retained for fresh classifier tests; replay must not reclassify raw labels in stored WC01 assessments.",
+  "cases": [
+    {
+      "caseId": "reject-non-necessary-cookies",
+      "label": "Reject Non-Necessary Cookies",
+      "hasConsentContext": true,
+      "pairedNavigation": false,
+      "reviewIntent": "reject",
+      "reviewStatus": "suspected_missed_label"
+    },
+    {
+      "caseId": "reject-unnecessary-cookies-uppercase",
+      "label": "REJECT UNNECESSARY COOKIES",
+      "hasConsentContext": true,
+      "pairedNavigation": false,
+      "reviewIntent": "reject",
+      "reviewStatus": "suspected_missed_label"
+    },
+    {
+      "caseId": "allow",
+      "label": "Allow",
+      "hasConsentContext": true,
+      "pairedNavigation": false,
+      "reviewIntent": "accept",
+      "reviewStatus": "suspected_missed_label"
+    },
+    {
+      "caseId": "agree-to-all",
+      "label": "Agree to all",
+      "hasConsentContext": true,
+      "pairedNavigation": false,
+      "reviewIntent": "accept",
+      "reviewStatus": "suspected_missed_label"
+    },
+    {
+      "caseId": "accept-additional-cookies",
+      "label": "Accept additional cookies",
+      "hasConsentContext": true,
+      "pairedNavigation": false,
+      "reviewIntent": "accept",
+      "reviewStatus": "suspected_missed_label"
+    },
+    {
+      "caseId": "show-details",
+      "label": "Show details",
+      "hasConsentContext": true,
+      "pairedNavigation": false,
+      "reviewIntent": "options",
+      "reviewStatus": "suspected_missed_label"
+    },
+    {
+      "caseId": "ai-settings-navigation-negative",
+      "label": "AI Settings",
+      "hasConsentContext": true,
+      "pairedNavigation": true,
+      "reviewIntent": "unknown",
+      "reviewStatus": "paired_negative"
+    },
+    {
+      "caseId": "privacy-center-navigation-negative",
+      "label": "Privacy Center",
+      "hasConsentContext": false,
+      "pairedNavigation": true,
+      "reviewIntent": "unknown",
+      "reviewStatus": "paired_negative"
+    }
+  ]
+}

@@ -9,6 +9,7 @@ import { getKnownCmpDefinitionByName } from "@website-signal-risk-scanner/shared
 import { createHash } from "node:crypto";
 import { inspectLocatorActionability, locatorActionabilitySupportsVerifiedDispatch } from "./cmp-control-actionability.js";
 import type { Locator, Page } from "playwright";
+import { consentScopePermitsInteraction } from "./cmp-action-target.js";
 import {
   readClosedShadowAccessibleControlLabel,
   type CmpAccessibleActionResolution,
@@ -51,9 +52,13 @@ export async function buildConsentActionControlProof(input: {
   if (input.authorizedTargetSha256 && sha256(normalizedTarget(input.page.url())) !== input.authorizedTargetSha256) {
     return { status: "label_unverifiable", reason: "redirect_target_not_authorized" };
   }
-  if (input.expectedAccessibleControl?.kind !== "closed_shadow_accessible_control" &&
-    !locatorActionabilitySupportsVerifiedDispatch(await inspectLocatorActionability(input.control))) {
-    return { status: "label_unverifiable", reason: "resolved_control_no_longer_actionable" };
+  if (input.expectedAccessibleControl?.kind !== "closed_shadow_accessible_control") {
+    if (!await consentScopePermitsInteraction(input.control)) {
+      return { status: "label_unverifiable", reason: "resolved_control_scope_not_interactive" };
+    }
+    if (!locatorActionabilitySupportsVerifiedDispatch(await inspectLocatorActionability(input.control))) {
+      return { status: "label_unverifiable", reason: "resolved_control_no_longer_actionable" };
+    }
   }
   const fields = input.expectedAccessibleControl?.kind === "closed_shadow_accessible_control"
     ? {
@@ -72,10 +77,10 @@ export async function buildConsentActionControlProof(input: {
   const contextualLabelVerified = contextualApproval &&
     isRegisteredContextualAcceptLabel(preferredLabel(bounded)?.value ?? "", contextualApproval.expectedNormalizedLabel);
   const classification = classifyConsentControlLabel({
-    label: bounded.visibleText,
-    ariaLabel: bounded.ariaLabel,
-    title: bounded.title,
-    value: bounded.value,
+    // Discovery and every proof check must use the same canonical locale set.
+    // In particular, do not lose Dutch intent or miss a cross-language conflict.
+    usage: "action", classifierProfile: "multilingual_v1",
+    label: preferredLabel(bounded)?.value,
     hasConsentContext: true,
   });
   const conflictingIntent = sourceIntentConflict(bounded);
@@ -152,7 +157,8 @@ export async function buildConsentActionControlProof(input: {
       }).map((element) => ({ ariaLabel: element.getAttribute("aria-label") ?? undefined,
         visibleText: (element as HTMLElement).innerText || element.textContent || undefined,
         title: element.getAttribute("title") ?? undefined,
-        value: "value" in element ? String((element as HTMLInputElement).value) : undefined }));
+        value: element instanceof HTMLInputElement && ["button", "submit", "reset"].includes(element.type)
+          ? element.value : undefined }));
     }).catch(() => null);
     const matching = liveLabels?.filter((fields) => {
       const labels = boundFields(fields);
@@ -161,8 +167,8 @@ export async function buildConsentActionControlProof(input: {
         normalizeConsentControlText(label) === normalizeConsentControlText(input.canonicalNecessaryOnly?.expectedNormalizedLabel));
       if (contextualLabelVerified) return isRegisteredContextualAcceptLabel(
         preferredLabel(labels)?.value ?? "", contextualApproval!.expectedNormalizedLabel);
-      const classified = classifyConsentControlLabel({ label: labels.visibleText, ariaLabel: labels.ariaLabel,
-        title: labels.title, value: labels.value, hasConsentContext: true });
+      const classified = classifyConsentControlLabel({ usage: "action", classifierProfile: "multilingual_v1",
+        label: preferredLabel(labels)?.value, hasConsentContext: true });
       return classified.intent === input.action && classified.confidence >= 0.8;
     });
     if (matching?.length !== 1) return { status: "label_unverifiable", reason: "resolved_control_no_longer_unique" };
@@ -242,11 +248,13 @@ async function verifyContextualApprovalScope(control: Locator, bannerSelector: s
 async function readControlLabelFields(control: Locator): Promise<ControlLabelFields> {
   return control.evaluate((element) => {
     const html = element as HTMLElement;
-    const inputElement = element as HTMLInputElement;
     return {
       ariaLabel: element.getAttribute("aria-label") ?? undefined,
       title: element.getAttribute("title") ?? undefined,
-      value: "value" in inputElement ? String(inputElement.value ?? "") : undefined,
+      // A button's value is a submission payload, not its accessible label.
+      // Only these input types render their value as the control label.
+      value: element instanceof HTMLInputElement && ["button", "submit", "reset"].includes(element.type)
+        ? element.value : undefined,
       visibleText: html.innerText || element.textContent || undefined,
     };
   }).catch(() => ({}));
@@ -276,7 +284,7 @@ function sourceIntentConflict(fields: ControlLabelFields) {
   const intents = new Set(
     [fields.ariaLabel, fields.visibleText, fields.value, fields.title]
       .filter((value): value is string => Boolean(value))
-      .map((label) => classifyConsentControlLabel({ label, hasConsentContext: true }).intent)
+      .map((label) => classifyConsentControlLabel({ usage: "action", classifierProfile: "multilingual_v1", label, hasConsentContext: true }).intent)
       .filter((intent) => intent !== "unknown"),
   );
   return intents.size > 1 ? [...intents].sort().join("_") : undefined;

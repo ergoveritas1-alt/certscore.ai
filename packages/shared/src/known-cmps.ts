@@ -59,6 +59,9 @@ export type KnownCmpActionCapability = {
 };
 
 export type KnownCmpDefinition = {
+  /** Passive control recognition only; never an action/dispatch recipe. */
+  observationControlRecipes?: Array<{ recipeId: string; controlSelector: string; containerSelectors: string[] }>;
+
   /** Reviewed contextual approval labels may activate only this exact named
    * first-layer scope. This is control proof, never semantic consent proof. */
   acceptContextualApproval?: {
@@ -409,6 +412,11 @@ export const KNOWN_CMP_REGISTRY: KnownCmpDefinition[] = [
       "#CybotCookiebotDialogBodyButtonAccept",
     ],
     canonicalName: "Cookiebot",
+    observationControlRecipes: [{
+      recipeId: "Cookiebot.options.v1",
+      controlSelector: "#CybotCookiebotDialogBodyEdgeMoreDetailsLink",
+      containerSelectors: ["#CybotCookiebotDialog", "#CybotCookiebotDialogTabContent", "#CybotCookiebotDialogBody"],
+    }],
     cookieNames: ["CookieConsent", "CookieConsentBulkTicket"],
     domains: ["cookiebot.com", "consent.cookiebot.com", "cookiebot.eu", "consent.cookiebot.eu", "consentcdn.cookiebot.eu"],
     domSelectors: ["#CybotCookiebotDialog", "#CookiebotWidget"],
@@ -1247,4 +1255,14 @@ export function isKnownCmpCookieName(value: string | null | undefined) {
 
 export function isKnownCmpVendorLabel(value: string | null | undefined) {
   return Boolean(value && detectKnownCmps({ labels: [value] }).length > 0);
+}
+
+/** Exact retained selector binding, not a guessed label or site-specific fallback. */
+export function knownCmpObservationRecipe(controlSelector: string, containerSelector: string | undefined): string | undefined {
+  if (!containerSelector) return undefined;
+  for (const cmp of KNOWN_CMP_REGISTRY) {
+    const recipe = cmp.observationControlRecipes?.find((entry) => entry.controlSelector === controlSelector && entry.containerSelectors.includes(containerSelector));
+    if (recipe) return recipe.recipeId;
+  }
+  return undefined;
 }

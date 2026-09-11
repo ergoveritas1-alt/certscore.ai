@@ -1608,7 +1608,7 @@ test("pre-consent runtime scanner inventories compact German accept and reject c
   }
 });
 
-test("pre-consent runtime scanner inventories compact privacy settings and accept controls after supplemental full-page evidence", async () => {
+test("pre-consent runtime scanner excludes off-viewport page-body privacy settings from first-layer evidence", async () => {
   const server = await startStaticFixtureServer();
   const tempRoot = await mkdtemp(path.join(tmpdir(), "certscore-v2-preconsent-compact-privacy-settings-"));
   try {
@@ -1621,11 +1621,41 @@ test("pre-consent runtime scanner inventories compact privacy settings and accep
     );
     const observation = result.consentUiObservations[0];
 
+    // A full-page image does not turn below-fold page-body buttons into visible
+    // first-layer controls. Structured visibility remains authoritative.
+    assert.equal(result.screenshots.some((screenshot) => screenshot.captureMethod === "primary_full_page"), true);
+    assert.equal(observation?.acceptControlObserved, false);
+    assert.equal(observation?.rejectControlObserved, false);
+    assert.equal(observation?.managePreferencesControlObserved, false);
+    assert.deepEqual(observation?.visibleChoiceLabels, []);
+    assert.equal(observation?.basis.includes("geometry:no_visible_consent_surface"), true);
+  } finally {
+    await server.close();
+    await rm(tempRoot, { recursive: true, force: true });
+  }
+});
+
+test("pre-consent runtime scanner inventories compact privacy settings and accept controls in the visible first-layer", async (t) => {
+  const server = await startStaticFixtureServer();
+  const tempRoot = await mkdtemp(path.join(tmpdir(), "certscore-v2-preconsent-visible-privacy-settings-"));
+  const browser = await chromium.launch({ headless: true });
+  const newContext = browser.newContext.bind(browser);
+  t.mock.method(browser, "newContext", async (options: Parameters<typeof browser.newContext>[0]) =>
+    newContext({ ...options, viewport: { width: 1440, height: 1800 } }),
+  );
+  try {
+    const result = await scanFixturePage(
+      server.urlFor("consent-compact-privacy-settings-controls"),
+      path.join(tempRoot, "consent-compact-privacy-settings-controls"),
+      "fast", "always", "viewport_first", undefined, undefined, false, browser,
+    );
+    const observation = result.consentUiObservations[0];
     assert.equal(observation?.acceptControlObserved, true);
     assert.equal(observation?.rejectControlObserved, false);
     assert.equal(observation?.managePreferencesControlObserved, true);
-    assert.deepEqual(observation?.visibleChoiceLabels, ["Settings", "Accept"]);
+    assert.deepEqual([...observation.visibleChoiceLabels].sort(), ["Accept", "Settings"]);
   } finally {
+    await browser.close();
     await server.close();
     await rm(tempRoot, { recursive: true, force: true });
   }

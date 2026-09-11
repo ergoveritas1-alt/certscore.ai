@@ -489,7 +489,7 @@ test("deterministic resolution waits for a transient duplicate Reject control to
       },
     });
 
-    assert.equal(packet.resolver.found, true);
+    assert.equal(packet.resolver.found, true, JSON.stringify({resolver: packet.resolver, diagnostics: packet.interactionDiagnostics, timing: packet.timing, limitations: packet.limitations}));
     assert.equal(packet.refusalRegistration.status, "confirmed");
     assert.equal(packet.interactionDiagnostics.click.outcome, "completed");
   });

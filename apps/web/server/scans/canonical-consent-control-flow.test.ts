@@ -33,6 +33,7 @@ type FixtureControl = {
 };
 
 type ConsentFlowFixture = {
+  unresolvedDecision?: boolean;
   screenshotWithheld?: boolean;
   complete?: boolean;
   defaultToggleStatesObserved?: boolean;
@@ -118,7 +119,7 @@ function geometryEvidence(input: ConsentFlowFixture) {
           enabled: true,
           decisionStatus: "footer_or_policy_link"
         }]
-      : [],
+      : input.unresolvedDecision ? [{ actionType: "other", label: "Undecided action", decisionStatus: "ambiguous", tagName: "button", layer: "first_layer", consentContextConfirmed: true, enabled: true, intersectsViewport: true, boundingBox: { width: 100, height: 30 } }] : [],
     ...(complete
       ? {
           summary: {
@@ -1301,4 +1302,19 @@ test("all customer and administrative surfaces consume persisted canonical proje
     supplementalSignalsProjection,
     /snapshot\.cookie_banner_present\s*===\s*(?:true|false)/
   );
+});
+
+
+test("unresolved decisions remain unknown through persistence, normalized concerns, policy, checklist and score", () => {
+  const result = projectConsentStory({ unresolvedDecision: true, firstLayerControls: [
+    { actionType: "accept_all", label: "Accept all" },
+  ] });
+  assert.equal(result.assessment.controls.accept.state, "observed");
+  assert.equal(result.assessment.controls.reject.state, "unknown");
+  assert.equal(result.assessment.controls.options.state, "unknown");
+  assert.notEqual(result.row.assessmentStatus, "gap_observed");
+  assert.notEqual(result.rejectRow.assessmentStatus, "gap_observed");
+  assert.equal(result.gapFindingObserved, false);
+  assert.equal(result.score.score, null);
+  assert.equal(result.rejectScore.score, null);
 });

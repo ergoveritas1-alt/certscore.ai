@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { consentActionControlProofSchema, postRefusalReportProjectionSchema } from "@certscore/contracts";
+import { CONSENT_ACTION_POST_CLICK_REQUEST_LIMIT, consentActionControlProofSchema, postRefusalReportProjectionSchema } from "@certscore/contracts";
 
 export const REJECT_CLICK_TRACKING_POLICY = "reject_click_tracking.v1" as const;
 export const REJECT_CLICK_TRACKING_FINDING = "post_reject_click_tracking" as const;
@@ -28,7 +28,7 @@ export const rejectClickTrackingAssessmentSchema = z.object({
   actionDispatchedAtMs: z.number().int().nonnegative(),
   captureEndedAtMs: z.number().int().nonnegative(),
   requestedWindowMs: z.number().int().min(1).max(30_000),
-  eligibleRequestCount: z.number().int().min(1).max(96),
+  eligibleRequestCount: z.number().int().min(1).max(CONSENT_ACTION_POST_CLICK_REQUEST_LIMIT),
   // Bounded assessment references; all request evidence stays in the source projection.
   requests: z.array(trackingRequestSchema).min(1).max(8),
 }).strict().superRefine((assessment, context) => {

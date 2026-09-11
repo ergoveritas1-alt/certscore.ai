@@ -1,4 +1,6 @@
 import { z } from "zod";
+import { CONSENT_CONTROL_LABEL_REGISTRY_VERSION } from "./consent-control-label-classifier";
+import { CONSENT_CONTROL_CAPTURE_POLICY_VERSION } from "./consent-control-evidence-policy";
 import type {
   ConsentControlIntent,
   ConsentControlMatchStrength,
@@ -181,6 +183,7 @@ export type ConsentControlAssessmentCandidate = {
   locale?: ConsentControlLocale | null;
   matchedTerm?: string | null;
   matchStrength?: ConsentControlMatchStrength | null;
+  classifierRegistryVersion?: string;
   classifierReasonCodes?: string[];
   layer?: "first_layer" | "deeper_layer" | "unknown";
   visible?: boolean | null;
@@ -248,7 +251,7 @@ export type ConsentControlAssessmentInput = {
   };
 };
 
-const PROJECTOR_VERSION = "2.1.0";
+const PROJECTOR_VERSION = "2.1.1";
 const DEFAULT_REQUIRED_CHANNELS: ConsentControlAssessmentChannel[] = ["dom_inventory", "geometry"];
 
 function unique<T>(values: T[]) {
@@ -351,7 +354,7 @@ function eligibleCandidate(candidate: ConsentControlAssessmentCandidate, fallbac
     channels: unique(candidate.channels ?? (source === "geometry" ? ["geometry"] : ["dom_inventory"])),
     artifactRefs: bounded(candidate.artifactRefs ?? []),
     classifier: {
-      registryVersion: "consent-control-label-registry",
+      registryVersion: candidate.classifierRegistryVersion ?? "consent-control-label-registry",
       matchedTerm: candidate.matchedTerm ?? null,
       matchStrength: candidate.matchStrength ?? null,
       reasonCodes: bounded(candidate.classifierReasonCodes, 16),
@@ -619,6 +622,8 @@ export function deriveConsentControlAssessment(input: ConsentControlAssessmentIn
   const firstObservedAtMs = observations.find((observation) => observation.likelyPresent)?.observedAtMs ?? null;
   const lastObservedAtMs = observations.at(-1)?.observedAtMs ?? input.geometry?.observedAtMs ?? null;
   const sourceInput = {
+    capturePolicyVersion: CONSENT_CONTROL_CAPTURE_POLICY_VERSION,
+    registryVersion: CONSENT_CONTROL_LABEL_REGISTRY_VERSION,
     evidencePolicy: CONSENT_CONTROL_EVIDENCE_POLICY,
     visualEvidence: input.visualEvidence ?? null,
     scan: input.scan,

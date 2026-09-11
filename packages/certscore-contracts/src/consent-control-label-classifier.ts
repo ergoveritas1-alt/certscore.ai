@@ -3,6 +3,9 @@ import {
   SUPPORTED_PRIVACY_EVIDENCE_LOCALES,
   type SupportedPrivacyEvidenceLocale,
 } from "./supported-languages";
+import type { ConsentControlLinkDestination } from "./consent-control-link";
+
+export const CONSENT_CONTROL_LABEL_REGISTRY_VERSION = "consent-control-label-registry.v2";
 
 export type ConsentControlIntent =
   | "accept"
@@ -38,6 +41,8 @@ export type ConsentControlTerm = {
   intent: Exclude<ConsentControlIntent, "unknown">;
   strength: ConsentControlMatchStrength;
   variant?: string;
+  observationOnly?: boolean;
+  requiredObservationRecipe?: string;
   requiresConsentContext?: boolean;
   requiresPreferenceContext?: boolean;
   requiresContinueConsentContext?: boolean;
@@ -51,11 +56,16 @@ export type ConsentControlLabelClassifierInput = {
   contextText?: string | null;
   localeHints?: ConsentControlLocale[];
   classifierProfile?: ConsentControlClassifierProfile;
+  usage?: "observation" | "action";
+  observationRecipe?: string;
   hasConsentContext?: boolean;
   hasPreferenceContext?: boolean;
+  /** Destination proof for link controls; omitted preserves legacy behavior. */
+  linkDestination?: ConsentControlLinkDestination;
 };
 
 export type ConsentControlLabelClassification = {
+  registryVersion?: string;
   intent: ConsentControlIntent;
   semanticRole: ConsentControlSemanticRole;
   confidence: number;
@@ -65,6 +75,7 @@ export type ConsentControlLabelClassification = {
   variant?: string;
   reasonCodes: string[];
   contextSatisfied: boolean;
+  linkDestination?: ConsentControlLinkDestination;
 };
 
 export type ConsentSurfaceTextMatch = {
@@ -116,7 +127,14 @@ const nl = (terms: TermInput[]) => terms.map((term): ConsentControlTerm => ({ lo
 const pl = (terms: TermInput[]) => terms.map((term): ConsentControlTerm => ({ locale: "pl", ...term }));
 
 export const CONSENT_CONTROL_PHRASE_REGISTRY: ConsentControlTerm[] = [
+  { locale: "ru", phrase: "настроить", intent: "options", strength: "contextual", requiresConsentContext: true, observationOnly: true },
+  { locale: "pt", phrase: "aceitar cookies", intent: "accept", strength: "direct", requiresConsentContext: true, observationOnly: true },
+  { locale: "pt", phrase: "rejeitar cookies", intent: "reject", strength: "direct", requiresConsentContext: true },
+  { locale: "pt", phrase: "gerenciar cookies", intent: "options", strength: "direct", requiresConsentContext: true, observationOnly: true },
   ...en([
+    { phrase: "show details", intent: "options", strength: "direct", requiresConsentContext: true, observationOnly: true, requiredObservationRecipe: "Cookiebot.options.v1" },
+    ...["accept additional cookies", "agree to all", "allow"].map((phrase): TermInput => ({ phrase, intent: "accept", strength: "direct", requiresConsentContext: true, observationOnly: true })),
+    ...["reject non-necessary cookies", "reject unnecessary cookies"].map((phrase): TermInput => ({ phrase, intent: "reject", strength: "direct", requiresConsentContext: true, observationOnly: true })),
     ...direct("accept", "accept"),
     ...direct("accept", "accept all"),
     ...direct("accept", "allow all"),
@@ -277,6 +295,7 @@ export const CONSENT_CONTROL_PHRASE_REGISTRY: ConsentControlTerm[] = [
     contextual("options", "set up the collection", { requiresConsentContext: true }),
     ...direct("options", "cookie settings"),
     ...direct("options", "privacy settings"),
+    { phrase: "individual preferences", intent: "options", strength: "contextual", requiresConsentContext: true, observationOnly: true },
     contextual("options", "preferences", { requiresConsentContext: true }),
     contextual("options", "parameters", { requiresConsentContext: true }),
     contextual("options", "personalise", { requiresConsentContext: true }),
@@ -378,7 +397,7 @@ export const CONSENT_CONTROL_PHRASE_REGISTRY: ConsentControlTerm[] = [
     equivalent("reject", "nur erforderliche cookies", "necessary_only"),
     equivalent("reject", "nur essenzielle cookies", "necessary_only"),
     equivalent("reject", "nur essentielle cookies", "necessary_only"),
-    contextual("reject", "nur notwendige", { requiresConsentContext: true, variant: "necessary_only" }),
+    { phrase: "nur notwendige", intent: "reject", strength: "equivalent", requiresConsentContext: true, variant: "necessary_only" },
     contextual("reject", "nur erforderliche", { requiresConsentContext: true, variant: "necessary_only" }),
     contextual("reject", "nur essenzielle", { requiresConsentContext: true, variant: "necessary_only" }),
     contextual("reject", "nur essentielle", { requiresConsentContext: true, variant: "necessary_only" }),
@@ -768,6 +787,7 @@ export const CONSENT_CONTROL_PHRASE_REGISTRY: ConsentControlTerm[] = [
     ...direct("accept", "zezwól na wybrane"),
     equivalent("accept", "zaakceptuj funkcjonalne pliki cookie", "category_functional"),
     equivalent("accept", "zaakceptuj reklamowe pliki cookie", "category_advertising"),
+    { phrase: "akceptuj niezbędne", intent: "reject", strength: "equivalent", variant: "necessary_only" },
     contextual("accept", "przejdź do serwisu", { requiresConsentContext: true }),
     weak("accept", "ok", { requiresConsentContext: true }),
 
@@ -784,6 +804,7 @@ export const CONSENT_CONTROL_PHRASE_REGISTRY: ConsentControlTerm[] = [
     equivalent("reject", "tylko niezbędne pliki cookie", "necessary_only"),
     equivalent("reject", "tylko wymagane pliki cookie", "necessary_only"),
     equivalent("reject", "tylko konieczne pliki cookie", "necessary_only"),
+    equivalent("reject", "zezwól tylko na niezbędne", "necessary_only"),
     equivalent("reject", "używaj tylko niezbędnych plików cookie", "necessary_only"),
     ...direct("reject", "odrzuć opcjonalne pliki cookie"),
     ...direct("reject", "wyłącz wszystkie"),
@@ -899,6 +920,10 @@ const CONTEXTUAL_EXACT_LABEL_ONLY_PHRASES = new Set([
   "learn more",
   "manage",
   "object",
+  "settings",
+  "privacy settings",
+  "privacy center",
+  "preferences",
 ]);
 
 export function classifyConsentSurfaceText(input: {
@@ -975,7 +1000,15 @@ export function classifyConsentSurfaceText(input: {
   };
 }
 
-export function classifyConsentControlLabel(
+export function classifyConsentControlLabel(input: ConsentControlLabelClassifierInput): ConsentControlLabelClassification {
+  return {
+    ...classifyConsentControlLabelInternal(input),
+    registryVersion: CONSENT_CONTROL_LABEL_REGISTRY_VERSION,
+    ...(input.linkDestination !== undefined ? { linkDestination: input.linkDestination } : {}),
+  };
+}
+
+function classifyConsentControlLabelInternal(
   input: ConsentControlLabelClassifierInput,
 ): ConsentControlLabelClassification {
   const labelText = [
@@ -1016,7 +1049,7 @@ export function classifyConsentControlLabel(
   if (NON_ACTIONABLE_REFERENCE_PATTERN.test(normalizedLabel)) {
     return unknown(["non_actionable_reference_label"]);
   }
-  if (/^(?:close|dismiss|×|x)$/i.test(normalizedLabel)) {
+  if (/^(?:close|close modal|dismiss|×|x)$/i.test(normalizedLabel)) {
     return {
       intent: "unknown",
       semanticRole: "dismiss",
@@ -1026,6 +1059,11 @@ export function classifyConsentControlLabel(
       reasonCodes: ["matched_dismiss", "match_strength_direct"],
       contextSatisfied: hasConsentContext,
     };
+  }
+  // Informational wording is not proof of a preference mechanism, even inside a CMP.
+  // Keep the candidate available for bounded geometry/coverage review.
+  if (normalizedLabel === "learn more") {
+    return unknown(["ambiguous_information_control"]);
   }
   if (isUtiqScopedRejectLabel(normalizedLabel)) {
     return {
@@ -1052,6 +1090,8 @@ export function classifyConsentControlLabel(
   const localeHints = new Set(input.localeHints ?? []);
   const terms = CONSENT_CONTROL_PHRASE_REGISTRY.filter((term) =>
     activeLocales.has(term.locale) &&
+    !(input.usage === "action" && term.observationOnly === true) &&
+    (!term.requiredObservationRecipe || term.requiredObservationRecipe === input.observationRecipe) &&
     (localeHints.size === 0 || localeHints.has(term.locale))
   );
   const match = terms
@@ -1068,6 +1108,13 @@ export function classifyConsentControlLabel(
   }
 
   const contextSatisfied = contextRequirementSatisfied(match.term, hasConsentContext, hasPreferenceContext, hasContinueConsentContext);
+  if (
+    match.term.intent === "options" &&
+    input.linkDestination !== undefined &&
+    input.linkDestination !== "same_document"
+  ) {
+    return unknown(["unverified_preferences_navigation"]);
+  }
   const confidence = confidenceFor(match.term, contextSatisfied);
   return {
     intent: match.term.intent,
@@ -1080,6 +1127,7 @@ export function classifyConsentControlLabel(
     reasonCodes: uniqueStrings([
       ...reasonCodes,
       `matched_${match.term.intent}`,
+      ...(match.term.observationOnly ? ["observation_only_label"] : []),
       `match_strength_${match.term.strength}`,
       match.term.variant ? `variant_${match.term.variant}` : null,
       match.term.requiresConsentContext ? "requires_consent_context" : null,
@@ -1209,7 +1257,7 @@ function termScore(
     return 0;
   }
   const exact = normalizedLabel === phrase;
-  if (!exact && CONTEXTUAL_EXACT_LABEL_ONLY_PHRASES.has(phrase)) {
+  if (!exact && (term.observationOnly === true || CONTEXTUAL_EXACT_LABEL_ONLY_PHRASES.has(phrase))) {
     return 0;
   }
   const phraseMatch = !exact && phrase.length >= 8 && paddedIncludes(normalizedLabel, phrase);

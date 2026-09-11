@@ -24,6 +24,7 @@ export interface ConsentGeometryEgressDiagnostic {
 }
 
 export interface ConsentGeometryPageAccessInput {
+  pageUrl?: string;
   errorMessage?: string;
   httpStatus?: number;
   title?: string;
@@ -67,11 +68,14 @@ export function classifyConsentGeometryAccess(input: ConsentGeometryPageAccessIn
     input.errorMessage ?? "",
   ].join(" "));
   const reasonCodes: string[] = [];
+  if (input.pageUrl?.startsWith("chrome-error:") || input.pageUrl?.startsWith("about:neterror")) {
+    reasonCodes.push("browser_error_document");
+  }
   if (typeof input.httpStatus === "number" && (
     HTTP_ACCESS_NO_GO_STATUSES.has(input.httpStatus) ||
     HTTP_TIMEOUT_STATUSES.has(input.httpStatus) ||
     HTTP_RATE_LIMIT_OR_SECURITY_STATUSES.has(input.httpStatus) ||
-    input.httpStatus >= 500
+    input.httpStatus >= 400
   )) {
     reasonCodes.push(`http_status_${input.httpStatus}`);
   }
@@ -144,6 +148,7 @@ export async function collectConsentGeometryPageAccess(
     ].join(" ").slice(0, 6_000),
   };
   return classifyConsentGeometryAccess({
+    pageUrl: page.url?.(),
     httpStatus,
     title: text.title,
     bodyText: text.bodyText,
@@ -220,6 +225,7 @@ function classifyAccessStatus(input: {
   text: string;
 }): ConsentGeometryAccessStatus {
   const errorText = compactText(input.errorMessage ?? "");
+  if (input.reasonCodes.includes("browser_error_document")) return "navigation_error";
   // A rendered HTTP-200 page can finish with a bounded evidence-module error.
   // That is a coverage limitation, not proof that the origin was inaccessible.
   // Runtime coverage retains the limitation separately.

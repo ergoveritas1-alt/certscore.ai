@@ -1,3 +1,4 @@
+import { REJECT_CLICK_TRACKING_COPY } from "./consent-action-copy";
 import {
   type MergedSignalRecord,
   getReportUnifiedFinding,
@@ -5752,7 +5753,7 @@ const UNIFIED_FINDING_PRESENTATION_COPY_OVERRIDES: Record<
   },
   post_reject_click_tracking: {
     suggestedFix: "Verify that the Reject control records the visitor's choice and suppresses the retained tracking requests. Re-test both the saved decision and subsequent activity.",
-    whyThisMatters: "Tracking began after a verified Reject click, but refusal registration could not be verified. This is a scored review signal about the observed behavior, not proof that a registered refusal was ignored or a legal violation occurred."
+    whyThisMatters: REJECT_CLICK_TRACKING_COPY.whyItMatters
   },
   post_refusal_non_essential_activity: {
     suggestedFix: "Update the reject path so confirmed refusal suppresses non-essential network requests and storage writes, then re-test the same post-refusal window.",

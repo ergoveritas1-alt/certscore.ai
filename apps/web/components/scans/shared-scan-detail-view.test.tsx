@@ -123,10 +123,12 @@ test("limited Reject explains completed click and retained capture without claim
     },
   } });
   const result = buildExecutiveRejectPathProjection(item)!;
-  assert.equal(result.label, "Reject path limited");
-  assert.match(result.note!, /Reject control was clicked, but refusal could not be verified/);
+  assert.equal(result.label, "After-Reject observation recorded");
+  assert.match(result.note!, /^The Reject control was clicked\./);
   assert.match(result.note!, /During 3s.*2 requests.*1 main-document storage write.*consent_choice/);
-  assert.match(result.note!, /not proof of verified refusal/);
+  assert.doesNotMatch(result.note!, /could not be verified|not proof/);
+  assert.equal(result.afterClickCoverage, "complete");
+  assert.equal(result.registrationConfirmed, false);
   assert.equal(result.state, "incomplete");
   assert.equal(result.scoreEffect, "none");
   assert.deepEqual(result.evidenceRows, []);
@@ -151,6 +153,8 @@ test("executive Reject projection formats only the canonical checklist outcome",
   }));
 
   assert.deepEqual(projected, {
+    afterClickCoverage: undefined,
+    registrationConfirmed: false,
     evidenceRows: [{ detail: "request · analytics.example.test · 120ms after Reject", label: "Example Analytics" }],
     label: "Activity observed after Reject",
     note: "Canonical Reject-path explanation.",
