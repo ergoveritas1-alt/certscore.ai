@@ -20,7 +20,7 @@ test("protocol observation captures validation errors, unknown tools and strippe
       if (request.name === "qc_unknown_tool") {
         await assert.rejects(client.callTool(request), (error: any) => {
           assert.equal(error.code, -32602);
-          assert.match(error.message, /Call tools\/list/);
+          assert.match(error.message, /MCP client's tool discovery \(tools\/list\)/);
           return true;
         });
       } else assert.equal((await client.callTool(request)).isError, true);
@@ -302,13 +302,18 @@ test("unknown and unavailable tools return discovery guidance without breaking t
     const client = new Client({ name: "discovery-recovery-test", version: "1" });
     await Promise.all([server.connect(serverTransport), client.connect(clientTransport)]);
     try {
+      const availableNames = (await client.listTools()).tools.map(tool => tool.name);
       const names = toolProfile === "light" ? ["__probe__", "certscore_get_report"] : ["__probe__"];
       for (const name of names) {
         await assert.rejects(client.callTool({ name, arguments: { scanId: "test" } }), (error: any) => {
           assert.equal(error.code, -32602);
           assert.equal(error.data.code, "unknown_tool");
           assert.equal(error.data.retryable, false);
-          assert.match(error.message, /Call tools\/list/);
+          assert.deepEqual([...error.data.availableTools].sort(), [...availableNames].sort());
+          assert.match(error.data.recommendedNextAction, /then call a supported tool/);
+          for (const availableName of availableNames) assert.ok(error.message.includes(availableName));
+          if (toolProfile === "light") assert.ok(!error.message.includes("certscore_get_report"));
+          assert.match(error.message, /MCP client's tool discovery \(tools\/list\)/);
           return true;
         });
       }

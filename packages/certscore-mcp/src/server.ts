@@ -403,6 +403,7 @@ export function createCertScoreMcpServer(options: CertScoreMcpOptions = {}) {
   (server as any).createToolError = (message: string) => message.includes("Input validation error:")
     ? toInvalidArgumentsToolError(message)
     : sdkCreateToolError(message);
+  const registeredToolNames = new Set<string>();
   const lightTools = new Set<CertScoreMcpToolName>(["certscore_scan_site", "certscore_get_scan_status", "certscore_get_scan_bundle"]);
   const scanIdTools = new Set<CertScoreMcpToolName>([
     "certscore_explain_finding",
@@ -437,15 +438,16 @@ export function createCertScoreMcpServer(options: CertScoreMcpOptions = {}) {
             },
           }
         : request;
-      const known = certScoreMcpToolContracts.some(tool => tool.name === name)
-        && (options.toolProfile !== "light" || lightTools.has(name as CertScoreMcpToolName));
+      const known = registeredToolNames.has(name);
       let result: any;
       try {
         if (!known) {
           result = { isError: true, structuredContent: { error: { code: "unknown_tool" } } };
+          const availableTools = [...registeredToolNames];
+          const recommendedNextAction = "Refresh the available tools using your MCP client's tool discovery (tools/list), then call a supported tool.";
           throw new McpError(ErrorCode.InvalidParams,
-            "This tool is unavailable on this endpoint. Call tools/list to discover supported tools.",
-            { code: "unknown_tool", retryable: false, recommendedNextAction: "Call tools/list to discover supported tools." });
+            `This tool is unavailable on this endpoint. ${recommendedNextAction} Available tools: ${availableTools.join(", ")}.`,
+            { code: "unknown_tool", retryable: false, recommendedNextAction, availableTools });
         }
         result = await handler(forwardedRequest, extra);
         return result;
@@ -487,6 +489,7 @@ export function createCertScoreMcpServer(options: CertScoreMcpOptions = {}) {
       return scanIdTools.has(name) && !isCanonicalScanId(scanId)
         ? toInvalidScanIdToolError() : typedHandler(input, extra);
     });
+    registeredToolNames.add(name);
   };
 
   registerTool(
