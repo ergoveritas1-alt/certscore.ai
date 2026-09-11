@@ -105,7 +105,7 @@ export function toToolResult(payload: unknown, text?: string): CallToolResult {
   };
 }
 
-export function toToolError(error: unknown): CallToolResult {
+export function toToolError(error: unknown, context: { scanCreation?: boolean } = {}): CallToolResult {
   const responseRecord = error instanceof CertScoreError && error.responseBody && typeof error.responseBody === "object" && !Array.isArray(error.responseBody)
     ? error.responseBody as Record<string, unknown>
     : null;
@@ -125,11 +125,17 @@ export function toToolError(error: unknown): CallToolResult {
         : null;
   const code = error instanceof CertScoreError ? error.code : "internal_error";
   const reasonCode = terminalError?.reasonCode === "non_public_target" ? "non_public_target" : null;
-  const message = error instanceof Error ? error.message : "Unknown CertScore MCP error.";
+  const targetRejected = context.scanCreation === true && code === "invalid_url" && status === 400;
+  const originalMessage = error instanceof Error ? error.message : "Unknown CertScore MCP error.";
+  const message = targetRejected ? `Scan target rejected. No scan was started. ${originalMessage}` : originalMessage;
   const creationRateLimit = terminalError?.creationRateLimit && typeof terminalError.creationRateLimit === "object" && !Array.isArray(terminalError.creationRateLimit)
     ? terminalError.creationRateLimit
     : null;
-  const recommendedNextAction = typeof terminalError?.recommendedNextAction === "string"
+  const recommendedNextAction = targetRejected
+    ? reasonCode === "non_public_target"
+      ? "Ask for a publicly reachable HTTP or HTTPS website, then call certscore_scan_site with that URL. Do not retry this private or ineligible target or try to bypass the public-target checks."
+      : 'Check the spelling and DNS of the intended hostname, then call certscore_scan_site with the actual public website URL, for example {"url":"https://example.com"}. A bare domain is accepted, but example.com and www.example.com are different hostnames; use www only if it is the intended site. Do not repeat the same invalid request. If the correct URL is unclear, ask the user.'
+    : typeof terminalError?.recommendedNextAction === "string"
     ? terminalError.recommendedNextAction
     : creationRateLimit
       ? `No scan was created. Wait ${retryAfterSeconds ?? 30} seconds, then retry the same request. If the limit continues after that delay, contact support@certscore.ai.`
@@ -141,9 +147,10 @@ export function toToolError(error: unknown): CallToolResult {
       code,
       reasonCode,
       message,
-      retryable,
-      retryAfterSeconds,
+      retryable: targetRejected ? false : retryable,
+      retryAfterSeconds: targetRejected ? null : retryAfterSeconds,
       recommendedNextAction,
+      ...(targetRejected ? { field: "url", scanStarted: false, inputCorrectionRequired: true } : {}),
       ...(creationRateLimit
         ? { creationRateLimit }
         : {}),
@@ -156,7 +163,10 @@ export function toToolError(error: unknown): CallToolResult {
   };
 
   return {
-    content: [{ type: "text", text: JSON.stringify(payload) }],
+    content: [
+      { type: "text", text: JSON.stringify(payload) },
+      ...(targetRejected ? [{ type: "text" as const, text: `${message} ${recommendedNextAction}` }] : []),
+    ],
     isError: true
   };
 }

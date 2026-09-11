@@ -1810,3 +1810,39 @@ test("no-go text preserves reason-specific retry guidance rather than hardcoding
   assert.ok(text.includes(value.noGo.recommendedNextAction));
   assert.doesNotMatch(text, /HTTP 401|Sign-in required/);
 });
+
+test("scan-target rejection gives readable correction guidance while preserving the API reason", () => {
+  for (const message of ["Enter a valid public URL or domain.", "We could not find DNS records for that domain. Check the spelling and try again."]) {
+    const result = toToolError(new CertScoreError(message, { code: "invalid_url", status: 400 }), { scanCreation: true });
+    const payload = JSON.parse(result.content[0]?.type === "text" ? result.content[0].text : "{}");
+    assert.equal(payload.error.code, "invalid_url");
+    assert.equal(payload.error.field, "url");
+    assert.equal(payload.error.scanStarted, false);
+    assert.equal(payload.error.retryable, false);
+    assert.ok(payload.error.message.includes(message));
+    assert.match(payload.error.recommendedNextAction, /Do not repeat the same invalid request/);
+    assert.match(payload.error.recommendedNextAction, /bare domain is accepted/);
+    assert.match(payload.error.recommendedNextAction, /www only if it is the intended site/);
+    assert.match(result.content[1]?.type === "text" ? result.content[1].text : "", /Scan target rejected\. No scan was started/);
+  }
+});
+
+test("target guidance keeps private targets denied and leaves read errors and transient failures unchanged", () => {
+  const denied = toToolError(new CertScoreError("This target is not eligible for public website scanning.", {
+    code: "invalid_url", status: 400, responseBody: { error: { reasonCode: "non_public_target" } },
+  }), { scanCreation: true });
+  const error = JSON.parse(denied.content[0]?.type === "text" ? denied.content[0].text : "{}").error;
+  assert.equal(error.reasonCode, "non_public_target");
+  assert.match(error.recommendedNextAction, /Do not retry this private or ineligible target/);
+  assert.doesNotMatch(error.recommendedNextAction, /www/);
+  for (const [failure, context] of [
+    [new CertScoreError("Invalid scan ID.", { code: "invalid_url", status: 400 }), {}],
+    [new CertScoreError("DNS verification unavailable", { code: "internal_error", status: 503 }), { scanCreation: true }],
+  ] as const) {
+    const result = toToolError(failure, context);
+    const payload = JSON.parse(result.content[0]?.type === "text" ? result.content[0].text : "{}");
+    assert.equal(payload.error.scanStarted, undefined);
+    assert.equal(payload.error.message, failure.message);
+    assert.equal(payload.error.retryable, failure.status === 503);
+  }
+});

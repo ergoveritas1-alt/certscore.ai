@@ -4,6 +4,7 @@ import { mcpRequestValidationLabel, MCP_INVALID_REQUEST_SQL, MCP_EXECUTION_ERROR
 
 test("historical validation failures are distinct from scan and execution failures", () => {
   for (const [error_code, label] of [
+    ["invalid_url", "Invalid target URL"],
     ["invalid_scan_id", "Invalid scan ID"],
     ["invalid_arguments", "Invalid arguments"],
     ["unknown_tool", "Unknown tool"],

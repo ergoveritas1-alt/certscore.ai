@@ -1783,6 +1783,13 @@ test("tool errors are returned as machine-readable JSON without invalid success-
       const result = parseToolJson(raw);
       const error = result.error as Record<string, unknown>;
       assert.equal(error.name, "InvalidUrlError");
+      assert.equal(error.field, "url");
+      assert.equal(error.scanStarted, false);
+      assert.equal(error.inputCorrectionRequired, true);
+      assert.match(String(error.message), /No scan was started/);
+      assert.match(String(error.recommendedNextAction), /bare domain is accepted/);
+      assert.match(String(error.recommendedNextAction), /www only if it is the intended site/);
+      assert.equal(raw.content.length, 2);
       assert.equal(error.code, "invalid_url");
       assert.equal(error.retryable, false);
       assert.equal(error.retryAfterSeconds, null);

@@ -1,5 +1,6 @@
 /** Request validation is separate from execution failure, including historical events. */
 const requestErrorLabels: Record<string, string> = {
+  invalid_url: "Invalid target URL",
   invalid_scan_id: "Invalid scan ID",
   invalid_arguments: "Invalid arguments",
   unknown_tool: "Unknown tool",

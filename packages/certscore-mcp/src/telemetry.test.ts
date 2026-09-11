@@ -325,3 +325,37 @@ test("unknown and unavailable tools return discovery guidance without breaking t
     } finally { await client.close(); await server.close(); }
   }
 });
+
+test("a rejected bare-domain scan preserves the reason, guides correction, and creates no scan link or retry", async () => {
+  const previousFetch = globalThis.fetch;
+  let calls = 0;
+  globalThis.fetch = (async () => {
+    calls += 1;
+    return new Response(JSON.stringify({ type: "certscore_pulse_error", error: {
+      code: "invalid_url", message: "We could not find DNS records for that domain. Check the spelling and try again.",
+    } }), { status: 400, headers: { "Content-Type": "application/json" } });
+  }) as typeof fetch;
+  const observations: McpToolInvocationObservation[] = [];
+  const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
+  const server = createCertScoreMcpServer({ toolProfile: "light", onToolInvocation: observation => { observations.push(observation); } });
+  const client = new Client({ name: "target-rejection-test", version: "1" });
+  try {
+    await Promise.all([server.connect(serverTransport), client.connect(clientTransport)]);
+    const result = await client.callTool({ name: "certscore_scan_site", arguments: { url: "aaronbux.com" } });
+    assert.equal(result.isError, true);
+    const text = JSON.stringify(result.content);
+    assert.match(text, /No scan was started/);
+    assert.match(text, /could not find DNS records/);
+    assert.match(text, /bare domain is accepted/);
+    assert.match(text, /Do not repeat the same invalid request/);
+    assert.equal(calls, 1);
+    assert.equal(observations.length, 1);
+    assert.equal(observations[0]?.errorCode, "invalid_url");
+    assert.equal(observations[0]?.outcome, "error");
+    assert.equal(observations[0]?.scanId, null);
+    assert.equal(observations[0]?.requestedResource, "https://aaronbux.com");
+  } finally {
+    globalThis.fetch = previousFetch;
+    await client.close(); await server.close();
+  }
+});

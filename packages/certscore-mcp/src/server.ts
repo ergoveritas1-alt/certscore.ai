@@ -333,7 +333,7 @@ export function projectMcpToolInvocationObservation(input: {
       : result.scanFrom === "eu_de" || result.scanFrom === "eu_ie" || result.scanFrom === "california"
         ? result.scanFrom
         : null,
-    scanId: outcome === "error" && ["invalid_scan_id", "invalid_arguments", "unknown_tool"].includes(errorCode ?? "")
+    scanId: outcome === "error" && ["invalid_scan_id", "invalid_arguments", "invalid_url", "unknown_tool"].includes(errorCode ?? "")
       ? null : resultScanId ?? inputScanId,
     scanStatus: boundedTelemetryToken(result.status, 64),
     targetHostname,
@@ -501,11 +501,13 @@ export function createCertScoreMcpServer(options: CertScoreMcpOptions = {}) {
       const client = clientForRequest(extra);
       const demoSubstitution = exampleDomainDemoSubstitution(input.url, options.exampleDomainDemoUrl);
       const effectiveUrl = demoSubstitution?.effectiveUrl ?? input.url;
+      let creationCompleted = false;
       try {
         const created = await client.scans.create(effectiveUrl, {
           freshness: input.freshness ?? "latest",
           scanFrom: input.scanFrom
         });
+        creationCompleted = true;
         console.log(JSON.stringify({
           event: "mcp.certscore_scan_site.creation_completed",
           durationMs: Date.now() - creationStartedAtMs,
@@ -586,7 +588,7 @@ export function createCertScoreMcpServer(options: CertScoreMcpOptions = {}) {
           durationMs: Date.now() - creationStartedAtMs,
           errorName: error instanceof Error ? error.name : "UnknownError",
         }));
-        return toToolError(error);
+        return toToolError(error, { scanCreation: !creationCompleted });
       }
     }
   );
