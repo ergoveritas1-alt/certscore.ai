@@ -34,8 +34,10 @@ test("database counts all tools/outcomes in exact windows, with provider, entryp
     insert into mcp_tool_invocation_events(occurred_at) values
       ('2026-09-08T12:00:00Z'), ('2026-09-08T11:55:00Z'), ('2026-09-08T11:54:59.999Z'),
       ('2026-09-08T11:50:00Z'), ('2026-09-08T11:49:59.999Z'), ('2026-09-08T11:00:00Z'),
-      ('2026-09-08T10:59:59.999Z'), ('2026-09-08T12:00:00.001Z');
+      ('2026-09-08T10:59:59.999Z'), ('2026-09-08T12:00:00.001Z'),
+      ('2026-09-07T12:00:00Z'), ('2026-09-07T11:59:59.999Z');
     insert into mcp_tool_invocation_events(occurred_at, tool_name, outcome, quota_outcome, transport_outcome) values
+      ('2026-09-08T10:30:00Z','certscore_scan_site','rate_limited','rate_limited','http_429'),
       ('2026-09-08T11:59:00Z','certscore_scan_site','error','allowed','mcp_error'),
       ('2026-09-08T11:59:00Z','certscore_get_scan_bundle','rate_limited','rate_limited','http_429');
     insert into mcp_tool_invocation_events(occurred_at, surface, source, actor_id, session_id, is_canary) values
@@ -48,8 +50,9 @@ test("database counts all tools/outcomes in exact windows, with provider, entryp
       [includeCanary, JSON.stringify(anchors)],
     );
     const result = await run(mcpCallerAnchors([event]));
-    assert.deepEqual(result.rows, [{ event_id: "anchor", calls5m: 4, calls10m: 6, calls60m: 8, quota_hits60m: 1 }]);
+    assert.deepEqual(result.rows, [{ event_id: "anchor", calls5m: 4, calls10m: 6, calls60m: 8, calls24h: 11, quota_hits60m: 1 }]);
     assert.equal((await run(mcpCallerAnchors([event]), true)).rows[0].calls60m, 9);
+    assert.equal((await run(mcpCallerAnchors([event]), true)).rows[0].calls24h, 12);
     assert.deepEqual((await run(mcpCallerAnchors([{ ...event, actor_id: null }]))).rows, result.rows);
     assert.equal((await run(mcpCallerAnchors([{ ...event, event_id: "older", occurred_at: "2026-09-08T11:00:00Z" }]))).rows[0].calls5m, 2);
   } finally {

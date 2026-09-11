@@ -842,11 +842,11 @@ export async function listAdminMcpTelemetryEventsPage(
 
   const anchors = mcpCallerAnchors(eventResult.rows);
   const activityRows = anchors.length ? await query<{
-    event_id: string; calls5m: number; calls10m: number; calls60m: number; quota_hits60m: number;
+    event_id: string; calls5m: number; calls10m: number; calls60m: number; calls24h: number; quota_hits60m: number;
   }>(mcpCallerActivitySql(activityVisibilitySql, activityVisibilityValues.length + 1),
     [...activityVisibilityValues, JSON.stringify(anchors)], { readOnly: true }) : { rows: [] };
   const activityByEvent = new Map(activityRows.rows.map((row) => [row.event_id, {
-    calls5m: row.calls5m, calls10m: row.calls10m, calls60m: row.calls60m, quotaHits60m: row.quota_hits60m,
+    calls5m: row.calls5m, calls10m: row.calls10m, calls60m: row.calls60m, calls24h: row.calls24h, quotaHits60m: row.quota_hits60m,
   }]));
 
   return {

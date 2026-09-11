@@ -1,7 +1,7 @@
 import { mcpRequestDetailsSchema } from "@website-signal-risk-scanner/shared";
 
 export type McpCallerIdentity = { kind: "actor" | "session"; id: string; label: string };
-export type McpCallerActivity = { calls5m: number; calls10m: number; calls60m: number; quotaHits60m: number };
+export type McpCallerActivity = { calls5m: number; calls10m: number; calls60m: number; calls24h: number; quotaHits60m: number };
 export type McpCallerEvent = {
   actor_id: string | null; session_id: string | null; request_details?: unknown;
 };
@@ -31,7 +31,7 @@ export function mcpCallerAnchors(events: (McpCallerEvent & { event_id: string; o
 
 // Only repository-owned visibility predicates and a parameter position enter this builder.
 // Other page filters must not narrow the caller's counts. Existing timestamp indexes
-// bound each lookup to the hour preceding the displayed event, including that event.
+// bound each lookup to the 24 hours preceding the displayed event, including that event.
 export function mcpCallerActivitySql(visibilitySql: string, anchorsParameter: number) {
   return `with anchors as (
     select * from jsonb_to_recordset($${anchorsParameter}::jsonb) as anchor(
@@ -42,10 +42,12 @@ export function mcpCallerActivitySql(visibilitySql: string, anchorsParameter: nu
   cross join lateral (
     select count(*) filter (where events.occurred_at >= anchor.occurred_at - interval '5 minutes')::int as calls5m,
            count(*) filter (where events.occurred_at >= anchor.occurred_at - interval '10 minutes')::int as calls10m,
-           count(*)::int as calls60m,
-           count(*) filter (where events.quota_outcome = 'rate_limited' or events.transport_outcome = 'http_429')::int as quota_hits60m
+           count(*) filter (where events.occurred_at >= anchor.occurred_at - interval '60 minutes')::int as calls60m,
+           count(*)::int as calls24h,
+           count(*) filter (where events.occurred_at >= anchor.occurred_at - interval '60 minutes'
+             and (events.quota_outcome = 'rate_limited' or events.transport_outcome = 'http_429'))::int as quota_hits60m
       from public.mcp_tool_invocation_events events
-     where events.occurred_at >= anchor.occurred_at - interval '60 minutes'
+     where events.occurred_at >= anchor.occurred_at - interval '24 hours'
        and events.occurred_at <= anchor.occurred_at
        and events.surface = anchor.surface and events.source = anchor.source
        and ((anchor.kind = 'actor' and events.actor_id = anchor.caller_id)
