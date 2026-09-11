@@ -209,7 +209,7 @@ export function toInvalidScanIdToolError(): CallToolResult {
   const error: ActionableError = {
     code: "invalid_scan_id",
     field: "scanId",
-    message: "The scanId must be the canonical UUID returned by certscore_scan_site.",
+    message: "Invalid scanId. Use the unchanged UUID returned by certscore_scan_site. This request did not start a scan.",
     retryable: false,
     retryAfterSeconds: null,
     recommendedNextAction: "Use the unchanged scanId returned by certscore_scan_site. Do not use placeholders, report URLs, domains, or job IDs.",

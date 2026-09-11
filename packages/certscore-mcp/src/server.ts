@@ -2,7 +2,7 @@ import { captureMcpCallerInput, type McpCallerInput } from "@website-signal-risk
 import { CertScoreClient } from "@certscore/sdk";
 import { certScoreMcpToolContracts, isCanonicalScanId } from "@certscore/api-contracts";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
-import { CallToolRequestSchema, type RequestInfo } from "@modelcontextprotocol/sdk/types.js";
+import { CallToolRequestSchema, ErrorCode, McpError, type RequestInfo } from "@modelcontextprotocol/sdk/types.js";
 import { sanitizeMcpTaskContext, type McpTaskContext } from "@website-signal-risk-scanner/shared/dist/mcp-product-context.js";
 import { CERTSCORE_MCP_VERSION } from "./version.js";
 import { boundEvidencePacket, buildScanBundle, exportFindings, findingListText, limitPreConsentRows, markdownReportText, MAX_EVIDENCE_PACKET_CHARS, normalizeDetail, normalizeFormat, paginateFindingList, preConsentInventoryText, pulseReportText, scanBundleText, scanSiteText, scanStatusText, toInvalidArgumentsToolError, toInvalidScanIdToolError, toToolError, toToolResult, withMcpAgentGuidance, withMcpScanProvenanceGuidance } from "./tools.js";
@@ -333,7 +333,8 @@ export function projectMcpToolInvocationObservation(input: {
       : result.scanFrom === "eu_de" || result.scanFrom === "eu_ie" || result.scanFrom === "california"
         ? result.scanFrom
         : null,
-    scanId: resultScanId ?? inputScanId,
+    scanId: outcome === "error" && ["invalid_scan_id", "invalid_arguments", "unknown_tool"].includes(errorCode ?? "")
+      ? null : resultScanId ?? inputScanId,
     scanStatus: boundedTelemetryToken(result.status, 64),
     targetHostname,
     toolName: input.toolName,
@@ -440,10 +441,16 @@ export function createCertScoreMcpServer(options: CertScoreMcpOptions = {}) {
         && (options.toolProfile !== "light" || lightTools.has(name as CertScoreMcpToolName));
       let result: any;
       try {
+        if (!known) {
+          result = { isError: true, structuredContent: { error: { code: "unknown_tool" } } };
+          throw new McpError(ErrorCode.InvalidParams,
+            "This tool is unavailable on this endpoint. Call tools/list to discover supported tools.",
+            { code: "unknown_tool", retryable: false, recommendedNextAction: "Call tools/list to discover supported tools." });
+        }
         result = await handler(forwardedRequest, extra);
         return result;
       } catch (error) {
-        result = { isError: true, structuredContent: { error: { code: "handler_exception" } } };
+        result ??= { isError: true, structuredContent: { error: { code: "handler_exception" } } };
         throw error;
       } finally {
         try {

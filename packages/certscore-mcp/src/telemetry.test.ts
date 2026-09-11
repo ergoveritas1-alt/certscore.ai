@@ -16,8 +16,18 @@ test("protocol observation captures validation errors, unknown tools and strippe
       { name: "qc_unknown_tool", arguments: {} },
       { name: "certscore_get_scan_status", arguments: { scanId: "invalid", hidden: "secret-value" } },
       { name: "certscore_scan_site", arguments: { taskContext: { purpose: "vendor_review", questionSummary: "Review vendor tracking", questionSource: "agent_paraphrase", shareForImprovement: true, integrationId: "qc", integrationVersion: "1" } } },
-    ]) assert.equal((await client.callTool(request)).isError, true);
+    ]) {
+      if (request.name === "qc_unknown_tool") {
+        await assert.rejects(client.callTool(request), (error: any) => {
+          assert.equal(error.code, -32602);
+          assert.match(error.message, /Call tools\/list/);
+          return true;
+        });
+      } else assert.equal((await client.callTool(request)).isError, true);
+    }
     assert.equal(observations.length, 4);
+    assert.equal(observations[2]?.scanId, null);
+    assert.equal(observations[2]?.requestedResource, "invalid");
     assert.deepEqual(observations.map(row => row.errorCode), ["invalid_arguments", "unknown_tool", "invalid_scan_id", "invalid_arguments"]);
     assert.ok(observations.every(row => row.captureBasis === "protocol_request"));
     assert.equal(observations[2]?.requestArguments?.omitted, true);
@@ -269,6 +279,7 @@ test("malformed scan IDs fail before origin work and still emit bounded telemetr
     });
     assert.equal(result.isError, true);
     assert.match(JSON.stringify(result.content), /invalid_scan_id/);
+    assert.match(JSON.stringify(result.content), /This request did not start a scan/);
     await new Promise((resolve) => setImmediate(resolve));
     assert.equal(fetchCalls, 0);
     assert.equal(observations.length, 1);
@@ -279,5 +290,33 @@ test("malformed scan IDs fail before origin work and still emit bounded telemetr
     globalThis.fetch = previousFetch;
     await client.close();
     await server.close();
+  }
+});
+
+
+test("unknown and unavailable tools return discovery guidance without breaking the MCP session", async () => {
+  for (const toolProfile of ["light", "full"] as const) {
+    const observations: McpToolInvocationObservation[] = [];
+    const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
+    const server = createCertScoreMcpServer({ toolProfile, onToolInvocation: observation => { observations.push(observation); } });
+    const client = new Client({ name: "discovery-recovery-test", version: "1" });
+    await Promise.all([server.connect(serverTransport), client.connect(clientTransport)]);
+    try {
+      const names = toolProfile === "light" ? ["__probe__", "certscore_get_report"] : ["__probe__"];
+      for (const name of names) {
+        await assert.rejects(client.callTool({ name, arguments: { scanId: "test" } }), (error: any) => {
+          assert.equal(error.code, -32602);
+          assert.equal(error.data.code, "unknown_tool");
+          assert.equal(error.data.retryable, false);
+          assert.match(error.message, /Call tools\/list/);
+          return true;
+        });
+      }
+      const listed = await client.listTools();
+      assert.ok(listed.tools.some(tool => tool.name === "certscore_scan_site"));
+      assert.equal(listed.tools.some(tool => tool.name === "certscore_get_report"), toolProfile === "full");
+      assert.equal(observations.length, names.length);
+      assert.ok(observations.every(row => row.outcome === "error" && row.errorCode === "unknown_tool" && row.scanId === null));
+    } finally { await client.close(); await server.close(); }
   }
 });
