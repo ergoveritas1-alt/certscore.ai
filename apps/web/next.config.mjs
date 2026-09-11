@@ -10,6 +10,11 @@ const nextConfig = {
   devIndicators: false,
   output: "standalone",
   outputFileTracingRoot: path.join(__dirname, "../.."),
+  // Scan/calibration output is runtime data, not a server dependency. Mirror
+  // Docker's existing exclusions so local standalone builds cannot copy it.
+  outputFileTracingExcludes: {
+    "*": ["../../artifacts/**/*", "../../tmp/**/*", "./artifacts/**/*", "./tmp/**/*"]
+  },
   poweredByHeader: false,
   async headers() {
     return [
