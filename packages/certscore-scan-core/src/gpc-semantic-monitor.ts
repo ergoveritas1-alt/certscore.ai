@@ -9,7 +9,7 @@ export async function installGpcSemanticMonitor(context: BrowserContext, key: st
     let closed = false, attempts = 0, listenerId: number | null = null, api: any;
     let callbacks = 0, dropped = 0, checks = 0;
     const startedAt = Date.now();
-    const history: Array<{ at: number; status: string; state: unknown }> = [];
+    const history: Array<{ at: number; status: string; state: unknown; diagnosticCodes?: string[] }> = [];
     let observer: MutationObserver | undefined;
     const onEvent = (event: any, success: boolean) => {
       if (closed) return;
@@ -19,7 +19,8 @@ export async function installGpcSemanticMonitor(context: BrowserContext, key: st
       if (!["listenerRegistered", "signalStatus", "sectionChange", "cmpStatus"].includes(event.eventName)) return;
       const value = parse(event.pingData);
       const previous = history.at(-1);
-      if (previous && previous.status === value.status && JSON.stringify(previous.state) === JSON.stringify(value.state)) return;
+      if (previous && previous.status === value.status && JSON.stringify(previous.state) === JSON.stringify(value.state) &&
+        JSON.stringify(previous.diagnosticCodes) === JSON.stringify(value.diagnosticCodes)) return;
       if (history.length >= 16) { dropped++; history.shift(); }
       history.push({ at: Date.now(), ...value });
     };

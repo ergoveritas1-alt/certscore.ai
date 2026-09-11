@@ -1,0 +1,266 @@
+{
+  "manifestVersion": "certscore.gpc_completion.diagnostic_calibration.1",
+  "ledgerVersion": "certscore.scan_quality_calibration_ledger.1",
+  "internalOnly": true,
+  "artifactOnly": true,
+  "generatedAt": "2026-09-11T05:12:49.422546Z",
+  "selectionStage": "diagnostics_pending_review",
+  "purpose": "Six-target bounded GPC capture/parser diagnostic review; no general reliability estimate and no public contact until review and fixes are frozen.",
+  "authorization": {
+    "userAuthorization": "Current user authorized bounded GPP diagnostics and a later fresh California acceptance cohort.",
+    "benchmarkApproval": "Diagnostics are prerequisite to any fixed 260-target follow-up contact.",
+    "siteContact": "not performed"
+  },
+  "eligibilityLedger": "artifacts/gpc-completion-followup-20260911/diagnostic-prep/manual-filtered-ledger.json",
+  "publicContactPolicy": {
+    "minimumCooldownDays": 28,
+    "maximumConcurrentScansPerDomain": 1,
+    "automaticRetryAfterNoGo": false,
+    "crossRegionRetryAfterBlock": false,
+    "retireAfterRepeatedNoGo": true,
+    "eligibilityStates": [
+      "eligible",
+      "cooldown",
+      "blocked",
+      "do_not_calibrate"
+    ]
+  },
+  "diagnosticPolicy": {
+    "exactlyOnce": true,
+    "noReplacement": true,
+    "centralContactExportRequired": true,
+    "hardHoldsCannotBeOverridden": true,
+    "noContactUntilReviewAndFixesFrozen": true,
+    "resultsNotForReliabilityEstimate": true
+  },
+  "sourceArtifacts": {
+    "cohort": "artifacts/gpc-prod-review-20260910/cohort.ndjson",
+    "heldout03Results": "artifacts/gpc-completion-20260911/heldout-03/Results.json",
+    "heldout03Manifest": "artifacts/gpc-completion-20260911/heldout-03/Manifest.json",
+    "priorManualLedgers": "merged into diagnostic-prep/manual-filtered-ledger.json",
+    "hashes": {
+      "cohortNdjson": "85dc4f4b94c9f4b8b670455130aa0a6d32e1f4bcda244a425347859699cf3494",
+      "existingManifest": "378eed6bf313cd56ebeaa39634eeef5fa963af5c8da4af72ccf5bd6763f0953c",
+      "effectiveLedger02": "185da8383dd83460abedb6da22863b7c52fe44fc443259d4a677fac2c27929f1",
+      "firstSelection": "c09d619bd0a20e3a83e0b188fa3bf4a5540208e51c8b1469d19196d085aecc50",
+      "secondSelection": "6df6e4fcefca5106965a7f78496fac34a952ae0308bdc17b2827a7e8b5c24d24",
+      "thirdSelection": "fd4dc60c89caf9ed3d809ce708d8708211cedbda39651bff7a2332bf4ac1e659",
+      "registrableDomainHelper": "f917cf4f9c3429b2f17e6ee3ef1e90910d71c2538a837faca329faa9db43e007",
+      "contactHoldRegistry": "43eccc94838fb6ae4fcf7c1f7f67eaebd9d2d6de4ecead0ae077f0650f857e27",
+      "heldout03Results": "5b42c671a704ead948b75aeccb6dcee6842026d30ce8aa81cc7e7bb8be5ff261",
+      "heldout03Manifest": "348e6650752056cea13d91c9d6235f92c696caa4d76024272bf02403c6f35b2e"
+    }
+  },
+  "targets": [
+    {
+      "url": "https://www.xpel.com/",
+      "role": "unclassified",
+      "lanes": [
+        "consent_controls",
+        "gdpr_transparency",
+        "transport_evidence",
+        "third_party_attribution",
+        "no_go_resilience",
+        "language_inference"
+      ],
+      "previousEvidence": {
+        "priorScanId": null,
+        "priorStatus": "not_in_heldout03",
+        "representativeAccess": "unknown",
+        "limitations": [
+          "historical_diagnostic_target_requires_fresh_review"
+        ],
+        "assessmentEvidenceRefs": 0
+      },
+      "freshestLedgerStatus": {
+        "freshestTimestamp": "2026-09-11T04:29:24.430Z",
+        "sourceLedger": "artifacts/gpc-completion-20260911/heldout-prep-02/ledger.candidate.json",
+        "entry": {
+          "consecutiveNoGoCount": 0,
+          "cooldownUntil": "2026-10-09T04:29:24.430Z",
+          "lastContactAt": "2026-09-11T04:29:24.430Z",
+          "lastContactSource": "calibration",
+          "lastNoGoReasons": [],
+          "lastOutcome": "completed",
+          "state": "cooldown",
+          "url": "https://www.xpel.com/"
+        }
+      }
+    },
+    {
+      "url": "https://360yield.com/",
+      "role": "unclassified",
+      "lanes": [
+        "consent_controls",
+        "gdpr_transparency",
+        "transport_evidence",
+        "third_party_attribution",
+        "no_go_resilience",
+        "language_inference"
+      ],
+      "previousEvidence": {
+        "priorScanId": "gpc-heldout3-20260911-10",
+        "priorStatus": "completed",
+        "representativeAccess": "representative",
+        "limitations": [
+          "bounded_request_capture_incomplete"
+        ],
+        "assessmentEvidenceRefs": 2
+      },
+      "freshestLedgerStatus": {
+        "freshestTimestamp": "2026-09-11T04:41:13.902Z",
+        "sourceLedger": "artifacts/gpc-completion-20260911/heldout-prep-03/ledger.candidate.json",
+        "entry": {
+          "consecutiveNoGoCount": 0,
+          "cooldownUntil": "2026-10-09T04:41:13.902Z",
+          "lastContactAt": "2026-09-11T04:41:13.902Z",
+          "lastContactSource": "calibration",
+          "lastNoGoReasons": [],
+          "lastOutcome": "completed",
+          "state": "cooldown",
+          "url": "https://360yield.com/"
+        }
+      }
+    },
+    {
+      "url": "https://imgsmail.ru/",
+      "role": "unclassified",
+      "lanes": [
+        "consent_controls",
+        "gdpr_transparency",
+        "transport_evidence",
+        "third_party_attribution",
+        "no_go_resilience",
+        "language_inference"
+      ],
+      "previousEvidence": {
+        "priorScanId": "gpc-heldout3-20260911-18",
+        "priorStatus": "completed",
+        "representativeAccess": "representative",
+        "limitations": [
+          "semantic_probe_incomplete"
+        ],
+        "assessmentEvidenceRefs": 2
+      },
+      "freshestLedgerStatus": {
+        "freshestTimestamp": "2026-09-11T04:41:59.268Z",
+        "sourceLedger": "artifacts/gpc-completion-20260911/heldout-prep-03/ledger.candidate.json",
+        "entry": {
+          "consecutiveNoGoCount": 0,
+          "cooldownUntil": "2026-10-09T04:41:59.268Z",
+          "lastContactAt": "2026-09-11T04:41:59.268Z",
+          "lastContactSource": "calibration",
+          "lastNoGoReasons": [],
+          "lastOutcome": "completed",
+          "state": "cooldown",
+          "url": "https://imgsmail.ru/"
+        }
+      }
+    },
+    {
+      "url": "https://game8.co/",
+      "role": "unclassified",
+      "lanes": [
+        "consent_controls",
+        "gdpr_transparency",
+        "transport_evidence",
+        "third_party_attribution",
+        "no_go_resilience",
+        "language_inference"
+      ],
+      "previousEvidence": {
+        "priorScanId": "gpc-heldout3-20260911-19",
+        "priorStatus": "completed",
+        "representativeAccess": "representative",
+        "limitations": [
+          "semantic_probe_incomplete"
+        ],
+        "assessmentEvidenceRefs": 2
+      },
+      "freshestLedgerStatus": {
+        "freshestTimestamp": "2026-09-11T04:42:05.261Z",
+        "sourceLedger": "artifacts/gpc-completion-20260911/heldout-prep-03/ledger.candidate.json",
+        "entry": {
+          "consecutiveNoGoCount": 0,
+          "cooldownUntil": "2026-10-09T04:42:05.261Z",
+          "lastContactAt": "2026-09-11T04:42:05.261Z",
+          "lastContactSource": "calibration",
+          "lastNoGoReasons": [],
+          "lastOutcome": "completed",
+          "state": "cooldown",
+          "url": "https://game8.co/"
+        }
+      }
+    },
+    {
+      "url": "https://sberbank-tele.com/",
+      "role": "unclassified",
+      "lanes": [
+        "consent_controls",
+        "gdpr_transparency",
+        "transport_evidence",
+        "third_party_attribution",
+        "no_go_resilience",
+        "language_inference"
+      ],
+      "previousEvidence": {
+        "priorScanId": "gpc-heldout3-20260911-50",
+        "priorStatus": "completed",
+        "representativeAccess": "representative",
+        "limitations": [
+          "bounded_request_capture_incomplete"
+        ],
+        "assessmentEvidenceRefs": 2
+      },
+      "freshestLedgerStatus": {
+        "freshestTimestamp": "2026-09-11T04:45:09.879Z",
+        "sourceLedger": "artifacts/gpc-completion-20260911/heldout-prep-03/ledger.candidate.json",
+        "entry": {
+          "consecutiveNoGoCount": 0,
+          "cooldownUntil": "2026-10-09T04:45:09.879Z",
+          "lastContactAt": "2026-09-11T04:45:09.879Z",
+          "lastContactSource": "calibration",
+          "lastNoGoReasons": [],
+          "lastOutcome": "completed",
+          "state": "cooldown",
+          "url": "https://sberbank-tele.com/"
+        }
+      }
+    },
+    {
+      "url": "https://hugedomains.com/",
+      "role": "unclassified",
+      "lanes": [
+        "consent_controls",
+        "gdpr_transparency",
+        "transport_evidence",
+        "third_party_attribution",
+        "no_go_resilience",
+        "language_inference"
+      ],
+      "previousEvidence": {
+        "priorScanId": "gpc-heldout3-20260911-56",
+        "priorStatus": "completed",
+        "representativeAccess": "representative",
+        "limitations": [
+          "bounded_request_capture_incomplete"
+        ],
+        "assessmentEvidenceRefs": 2
+      },
+      "freshestLedgerStatus": {
+        "freshestTimestamp": "2026-09-11T04:45:40.596Z",
+        "sourceLedger": "artifacts/gpc-completion-20260911/heldout-prep-03/ledger.candidate.json",
+        "entry": {
+          "consecutiveNoGoCount": 0,
+          "cooldownUntil": "2026-10-09T04:45:40.596Z",
+          "lastContactAt": "2026-09-11T04:45:40.596Z",
+          "lastContactSource": "calibration",
+          "lastNoGoReasons": [],
+          "lastOutcome": "completed",
+          "state": "cooldown",
+          "url": "https://hugedomains.com/"
+        }
+      }
+    }
+  ]
+}

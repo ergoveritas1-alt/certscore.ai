@@ -54,11 +54,23 @@ test("request header readback recovers Sec-GPC from the same Chromium request", 
     assert.equal(fixture.receivedSecGpc, "1");
     assert.ok(navigationRequest);
     session.recordRequest({ eventId: "fixture-navigation", timestampMs: Date.now() - started, requestUrl: fixture.url, requestHeaders: {} }, navigationRequest);
+    // Simulate the observed API omission while the independent fixture server
+    // confirms that Chromium sent GPC. Diagnostics must reveal the discrepancy,
+    // without substituting a correlated header into authoritative capture.
+    const original = navigationRequest;
+    session.recordRequest({ eventId: "fixture-omitted-readback", timestampMs: Date.now() - started, requestUrl: fixture.url, requestHeaders: {} }, {
+      allHeaders: async () => ({}), timing: () => original.timing(), method: () => original.method(),
+      resourceType: () => original.resourceType(), serviceWorker: () => original.serviceWorker(),
+      failure: () => original.failure(), frame: () => original.frame(),
+    });
     const packet = await finishFixture(page, session, "header-recovery", captureId, started);
     const row = packet.requests.find((request) => request.eventId === "fixture-navigation");
     assert.equal(row?.secGpc, "1");
     assert.equal(row?.headerSource, "all_headers_readback");
     assert.equal(packet.limitationKeys.includes("request_header_readback_incomplete"), false);
+    const diagnostic = packet.requestDiagnostics?.missingHeaders.find(d => d.eventId === "fixture-omitted-readback");
+    assert.equal(diagnostic?.cdp?.extraInfoHeader, "1", JSON.stringify(diagnostic));
+    assert.equal(packet.requests.find(r => r.eventId === "fixture-omitted-readback")?.secGpc, null);
     await context.close();
   } finally { await closeServer(fixture.server); await browser.close(); }
 });

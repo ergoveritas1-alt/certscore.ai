@@ -2,13 +2,23 @@ import { z } from "zod";
 import { gpcArtifactPointerSchema, gpcResponseAssessmentV2Schema, gpcPrototypeCaptureBindingSchema } from "./gpc-observation";
 
 export const GPC_OPT_OUT_PROTOTYPE_VERSION = "certscore.gpc-opt-out-assessment.prototype.v1" as const;
-export const GPC_OPT_OUT_ADAPTER_VERSION = "gpc_usca_usnat_and_live_status.v3" as const;
+export const GPC_OPT_OUT_ADAPTER_VERSION = "gpc_usca_usnat_and_live_status.v4" as const;
 // Exact current-visitor status messages only, in visible live-status elements
 // inside a registered CMP scope. Policy promises and receipt wording are excluded.
 export const GPC_STATUS_MESSAGES = [
   "Opt-Out Request Honored",
   "Your Global Privacy Control signal is honored.",
   "Your opt-out preference signal has been honored.",
+] as const;
+export const GPC_DIAGNOSTIC_CODES = [
+  "ping_not_object", "gpp_version_unsupported", "cmp_status_not_loaded", "signal_status_not_ready",
+  "duplicate_ping_callback", "synchronous_ping_unavailable", "api_unavailable",
+  "applicable_sections_not_array", "section_list_not_array", "section_inventory_too_large",
+  "duplicate_applicable_section", "duplicate_section_list_id", "no_supported_applicable_section",
+  "ambiguous_applicable_sections", "applicable_section_missing_from_list", "parsed_section_missing",
+  "subsection_shape_invalid", "section_version_invalid", "sale_notice_invalid", "sharing_notice_invalid",
+  "sale_opt_out_invalid", "sharing_opt_out_invalid", "gpc_subsection_type_invalid", "gpc_subsection_type_missing", "gpc_subsection_type_conflict", "gpc_value_invalid",
+  "flat_usca_section", "flat_usnat_section",
 ] as const;
 const hash = z.string().regex(/^[a-f0-9]{64}$/);
 const time = z.number().int().nonnegative();
@@ -27,19 +37,21 @@ export const gpcUsNationalStateSchema = gpcUscaStateSchema.extend({
 }).strict();
 export const gpcOptOutObservationSchema = z.object({
   contractVersion: z.literal("certscore.gpc-opt-out-observation.prototype.v1"),
-  adapterVersion: z.union([z.literal("gpc_usca_and_live_status.v1"), z.literal("gpc_usca_usnat_and_live_status.v2"), z.literal(GPC_OPT_OUT_ADAPTER_VERSION)]),
+  adapterVersion: z.union([z.literal("gpc_usca_and_live_status.v1"), z.literal("gpc_usca_usnat_and_live_status.v2"), z.literal("gpc_usca_usnat_and_live_status.v3"), z.literal(GPC_OPT_OUT_ADAPTER_VERSION)]),
   scanId: z.string().min(1).max(160), documentUrlSha256: hash,
   captureBinding: gpcPrototypeCaptureBindingSchema.nullable(),
   documentStartedAtMs: time, capturedAtMs: time, navigatorGpc: z.boolean().nullable(),
   gppStatus: z.enum(["observed", "unavailable", "not_ready", "unsupported", "invalid"]),
   gppDiagnostics: z.object({ reason: z.string().min(1).max(80), callbackCount: time,
     applicableSections: z.array(z.number().int()).max(4), sectionList: z.array(z.number().int()).max(33),
+    diagnosticCodes: z.array(z.enum(GPC_DIAGNOSTIC_CODES)).max(8).optional(),
   }).strict().optional(),
   acknowledgmentCaptureComplete: z.boolean().optional(),
   usca: gpcUscaStateSchema.nullable(), usnat: gpcUsNationalStateSchema.nullable().optional(), stateSha256: hash.nullable(),
   stateTransitions: z.array(z.object({ observedAtMs: time,
     status: z.enum(["observed", "unsupported", "invalid", "not_ready"]),
     state: z.union([gpcUscaStateSchema, gpcUsNationalStateSchema]).nullable(), stateSha256: hash.nullable(),
+    diagnosticCodes: z.array(z.enum(GPC_DIAGNOSTIC_CODES)).max(8).optional(),
   }).strict()).max(16).optional(),
   acknowledgment: z.array(z.object({
     cmp: z.string().min(1).max(100), scopeSelector: z.string().min(1).max(200),

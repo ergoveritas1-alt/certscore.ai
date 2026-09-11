@@ -8,7 +8,7 @@ import { captureGpcOptOutObservation } from "./gpc-opt-out-capture.js";
 test("fresh Chromium GPP readback keeps ready, stale, partial and unsupported states separate", async t => {
   const browser = await chromium.launch(chromiumLaunchOptions({ headless: true }));
   try {
-    const cases = ["ready", "not_ready", "wrong_section", "wrong_version", "bad_core", "duplicate_callback", "async_callback", "unavailable", "false_success", "gpc_echo_only", "duplicate_section", "missing_section", "conflicting_sections", "wrong_core_version"] as const;
+    const cases = ["ready", "canonical_array", "not_ready", "wrong_section", "wrong_version", "bad_core", "duplicate_callback", "async_callback", "unavailable", "false_success", "gpc_echo_only", "duplicate_section", "missing_section", "conflicting_sections", "wrong_core_version"] as const;
     for (const scenario of cases) await t.test(scenario, async () => {
       const context = await browser.newContext(); await installGpcNavigatorSignal(context, true);
       await context.route("**/*", route => route.fulfill({ contentType: "text/html", body: "<!doctype html><p>Public fixture</p>" }));
@@ -24,7 +24,7 @@ test("fresh Chromium GPP readback keeps ready, stale, partial and unsupported st
             applicableSections: scenario === "wrong_section" ? [7] : [8], gppString: "PRIVATE_GPP_MUST_NOT_BE_RETAINED",
             parsedSections: { usca: scenario === "gpc_echo_only" ? [{ SubsectionType: 1, Gpc: true }] :
               [{ Version: scenario === "wrong_core_version" ? 2 : 1, SaleOptOutNotice: 1, SharingOptOutNotice: 1,
-                SaleOptOut: scenario === "bad_core" ? "1" : 1, SharingOptOut: 1 }, { SubsectionType: 1, Gpc: true }] } };
+                SaleOptOut: scenario === "bad_core" ? "1" : 1, SharingOptOut: 1 }, { [scenario === "canonical_array" ? "GpcSegmentType" : "SubsectionType"]: 1, Gpc: true }] } };
           if (scenario === "conflicting_sections") value.parsedSections.usca.push({ Version: 1, SaleOptOutNotice: 1, SharingOptOutNotice: 1, SaleOptOut: 2, SharingOptOut: 2 });
           if (scenario === "async_callback") { setTimeout(() => callback(value, true), 10); return; }
           callback(value, scenario !== "false_success");
@@ -32,9 +32,13 @@ test("fresh Chromium GPP readback keeps ready, stale, partial and unsupported st
         };
       }, scenario);
       const result = await captureGpcOptOutObservation(page, { scanId: "fresh-fixture", scanStartedAtMs: started });
-      assert.equal(result.gppStatus === "observed", scenario === "ready");
+      assert.equal(result.gppStatus === "observed", scenario === "ready" || scenario === "canonical_array");
       assert.equal(result.navigatorGpc, true);
       assert.ok(result.capturedAtMs >= result.documentStartedAtMs);
+      if (scenario === "not_ready") assert.deepEqual(result.gppDiagnostics?.diagnosticCodes, ["signal_status_not_ready"]);
+      if (scenario === "wrong_version") assert.deepEqual(result.gppDiagnostics?.diagnosticCodes, ["gpp_version_unsupported"]);
+      if (scenario === "unavailable") assert.deepEqual(result.gppDiagnostics?.diagnosticCodes, ["api_unavailable"]);
+      assert.ok((result.gppDiagnostics?.diagnosticCodes ?? []).every(code => /^[a-z0-9_]+$/.test(code)));
       assert.doesNotMatch(JSON.stringify(result), /PRIVATE_GPP|gppString/);
       assert.deepEqual(result.acknowledgment, []);
       await context.close();

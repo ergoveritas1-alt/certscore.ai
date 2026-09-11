@@ -1,0 +1,2801 @@
+{
+  "manifestVersion": "certscore.gpc_completion.acceptance_pool.1",
+  "ledgerVersion": "certscore.scan_quality_calibration_ledger.1",
+  "internalOnly": true,
+  "artifactOnly": true,
+  "generatedAt": "2026-09-11T05:26:27.112Z",
+  "selectionStage": "frozen_before_any_acceptance_contact",
+  "purpose": "Full 837-candidate artifact-only input for one fixed 260-target fresh GPC observation-completion acceptance cohort. Canonical central export and selector choose the final targets after current eligibility is evaluated; no public contacts occurred here.",
+  "authorization": {
+    "userAuthorization": "Current user authorized pursuing >95% evidence-backed main-document GPC observation completion.",
+    "benchmarkApproval": "Luna benchmark approval for a compositionally representative fixed follow-up; six diagnostics must be reviewed and fixes frozen before public contact.",
+    "finalTargetCount": 260,
+    "plannedHistoricCmpAllocation": {
+      "observed": 57,
+      "not_observed": 203,
+      "unknown": 0
+    },
+    "selectionRule": "Canonical selector applies fresh central eligibility to this frozen pool, then selects at most the preregistered historic CMP allocation without inspecting GPC outcomes or replacing failed targets.",
+    "siteContact": "not performed"
+  },
+  "eligibilityLedger": "artifacts/gpc-completion-followup-20260911/acceptance-prep/central-verified-ledger.json",
+  "publicContactPolicy": {
+    "minimumCooldownDays": 28,
+    "maximumConcurrentScansPerDomain": 1,
+    "automaticRetryAfterNoGo": false,
+    "crossRegionRetryAfterBlock": false,
+    "retireAfterRepeatedNoGo": true,
+    "eligibilityStates": [
+      "eligible",
+      "cooldown",
+      "blocked",
+      "do_not_calibrate"
+    ]
+  },
+  "sourceArtifacts": {
+    "paths": {
+      "cohort": "artifacts/gpc-prod-review-20260910/cohort.ndjson",
+      "candidateInventory": "artifacts/gpc-completion-followup-20260911/heldout-prep/candidate-inventory.json",
+      "existingRegistry": "docs/certscore-v2/scan-quality-calibration-manifest.json",
+      "effectiveLedger": "artifacts/gpc-completion-20260911/effective-ledger-02.json",
+      "diagnosticManifest": "artifacts/gpc-completion-followup-20260911/diagnostic-prep/diagnostic-manifest.json",
+      "registrableDomainHelper": "packages/certscore-scan-core/src/domain-utils.ts",
+      "contactHoldRegistry": "packages/certscore-scan-core/src/public-test-contact-holds.ts",
+      "allLedgerFiles": [
+        "/Users/benmasek/WC01/artifacts/abort-flow-live-local-20260908/contact-ledger-after.json",
+        "/Users/benmasek/WC01/artifacts/abort-flow-live-local-20260908/contact-ledger-before.json",
+        "/Users/benmasek/WC01/artifacts/action-path-review-20260910/focused-dispatch/effective-ledger.json",
+        "/Users/benmasek/WC01/artifacts/action-path-review-20260910/focused-dispatch/ledger-candidate.json",
+        "/Users/benmasek/WC01/artifacts/action-path-review-20260910/focused-dispatch/scope-review/waived-ledger.json",
+        "/Users/benmasek/WC01/artifacts/action-path-review-20260910/focused-dispatch/verified/effective-ledger.json",
+        "/Users/benmasek/WC01/artifacts/action-path-review-20260910/focused-dispatch/verified/waived-ledger.json",
+        "/Users/benmasek/WC01/artifacts/action-path-review-20260910/focused-dispatch/waived-ledger.json",
+        "/Users/benmasek/WC01/artifacts/action-path-review-20260910/implementation/cooldown-waived-local-ledger.json",
+        "/Users/benmasek/WC01/artifacts/action-path-review-20260910/implementation/effective-ledger.json",
+        "/Users/benmasek/WC01/artifacts/action-path-review-20260910/implementation/live/effective-ledger.json",
+        "/Users/benmasek/WC01/artifacts/action-path-review-20260910/implementation/live/followup/effective-ledger.json",
+        "/Users/benmasek/WC01/artifacts/action-path-review-20260910/implementation/live/followup/ledger-candidate.json",
+        "/Users/benmasek/WC01/artifacts/action-path-review-20260910/implementation/live/followup/waived-ledger.json",
+        "/Users/benmasek/WC01/artifacts/action-path-review-20260910/implementation/live/ledger-candidate.json",
+        "/Users/benmasek/WC01/artifacts/action-path-review-20260910/implementation/live/waived-ledger.json",
+        "/Users/benmasek/WC01/artifacts/action-path-review-20260910/onetrust-followup/effective-ledger.json",
+        "/Users/benmasek/WC01/artifacts/action-path-review-20260910/onetrust-followup/ledger-candidate.json",
+        "/Users/benmasek/WC01/artifacts/action-path-review-20260910/onetrust-followup/verified/effective-ledger.json",
+        "/Users/benmasek/WC01/artifacts/action-path-review-20260910/onetrust-followup/verified/ledger-candidate.json",
+        "/Users/benmasek/WC01/artifacts/action-path-review-20260910/onetrust-followup/verified/waived-ledger.json",
+        "/Users/benmasek/WC01/artifacts/action-path-review-20260910/onetrust-followup/waived-ledger.json",
+        "/Users/benmasek/WC01/artifacts/action-path-review-20260910/production-six-paths/central-ledger.json",
+        "/Users/benmasek/WC01/artifacts/action-path-review-20260910/production-six-paths/ledger-candidate.json",
+        "/Users/benmasek/WC01/artifacts/action-path-review-20260910/production-six-paths/manual-ledger.json",
+        "/Users/benmasek/WC01/artifacts/action-path-review-20260910/production-six-paths/selection-ledger.json",
+        "/Users/benmasek/WC01/artifacts/action-path-review-20260910/remaining-dispatch/binding-pass/effective-ledger.json",
+        "/Users/benmasek/WC01/artifacts/action-path-review-20260910/remaining-dispatch/binding-pass/waived-ledger.json",
+        "/Users/benmasek/WC01/artifacts/action-path-review-20260910/remaining-dispatch/effective-ledger.json",
+        "/Users/benmasek/WC01/artifacts/action-path-review-20260910/remaining-dispatch/final-selection/effective-ledger.json",
+        "/Users/benmasek/WC01/artifacts/action-path-review-20260910/remaining-dispatch/verified/effective-ledger.json",
+        "/Users/benmasek/WC01/artifacts/action-path-review-20260910/remaining-dispatch/verified/waived-ledger.json",
+        "/Users/benmasek/WC01/artifacts/action-path-review-20260910/remaining-dispatch/waived-ledger.json",
+        "/Users/benmasek/WC01/artifacts/aro-prod-review-20260910/local-validation/central-ledger.json",
+        "/Users/benmasek/WC01/artifacts/aro-prod-review-20260910/local-validation/cooldown-waived-ledger.json",
+        "/Users/benmasek/WC01/artifacts/aro-prod-review-20260910/local-validation/final-ledger-candidate.json",
+        "/Users/benmasek/WC01/artifacts/aro-prod-review-20260910/local-validation/ledger-candidate.json",
+        "/Users/benmasek/WC01/artifacts/aro-prod-review-20260910/local-validation/manual-ledger.json",
+        "/Users/benmasek/WC01/artifacts/aro-prod-review-20260910/narrow-review/central-ledger.json",
+        "/Users/benmasek/WC01/artifacts/aro-prod-review-20260910/narrow-review/final-ledger-candidate.json",
+        "/Users/benmasek/WC01/artifacts/aro-prod-review-20260910/narrow-review/focused/ledger.json",
+        "/Users/benmasek/WC01/artifacts/aro-prod-review-20260910/narrow-review/manual-ledger.json",
+        "/Users/benmasek/WC01/artifacts/aro-prod-review-20260910/narrow-review/waived-ledger.json",
+        "/Users/benmasek/WC01/artifacts/gdpr-transparency-verification-20260821/effective-eligibility-ledger.json",
+        "/Users/benmasek/WC01/artifacts/gpc-completion-20260911/effective-ledger-02.json",
+        "/Users/benmasek/WC01/artifacts/gpc-completion-20260911/effective-ledger.json",
+        "/Users/benmasek/WC01/artifacts/gpc-completion-20260911/heldout-prep-02/central-verified-ledger.json",
+        "/Users/benmasek/WC01/artifacts/gpc-completion-20260911/heldout-prep-02/effective-ledger.json",
+        "/Users/benmasek/WC01/artifacts/gpc-completion-20260911/heldout-prep-02/ledger.candidate.json",
+        "/Users/benmasek/WC01/artifacts/gpc-completion-20260911/heldout-prep-02/manual-filtered-ledger.json",
+        "/Users/benmasek/WC01/artifacts/gpc-completion-20260911/heldout-prep-03/central-verified-ledger.json",
+        "/Users/benmasek/WC01/artifacts/gpc-completion-20260911/heldout-prep-03/ledger.candidate.json",
+        "/Users/benmasek/WC01/artifacts/gpc-completion-20260911/heldout-prep-03/manual-filtered-ledger.json",
+        "/Users/benmasek/WC01/artifacts/gpc-completion-20260911/heldout-prep/effective-ledger.json",
+        "/Users/benmasek/WC01/artifacts/gpc-completion-20260911/heldout-prep/ledger.candidate.json",
+        "/Users/benmasek/WC01/artifacts/gpc-completion-20260911/heldout-prep/manual-filtered-ledger.json",
+        "/Users/benmasek/WC01/artifacts/gpc-completion-20260911/ledger.candidate-02.json",
+        "/Users/benmasek/WC01/artifacts/gpc-completion-20260911/ledger.candidate.json",
+        "/Users/benmasek/WC01/artifacts/gpc-completion-followup-20260911/diagnostic-prep/central-verified-ledger.json",
+        "/Users/benmasek/WC01/artifacts/gpc-completion-followup-20260911/diagnostic-prep/ledger.candidate.json",
+        "/Users/benmasek/WC01/artifacts/gpc-completion-followup-20260911/diagnostic-prep/manual-filtered-ledger.json",
+        "/Users/benmasek/WC01/artifacts/gpc-completion-followup-20260911/heldout-prep/central-verified-ledger.json",
+        "/Users/benmasek/WC01/artifacts/gpc-completion-followup-20260911/heldout-prep/manual-filtered-ledger.json",
+        "/Users/benmasek/WC01/artifacts/gpc-completion-followup-20260911/heldout-prep/rejected-depleted-pool/manual-filtered-ledger.json",
+        "/Users/benmasek/WC01/artifacts/gpc-completion-followup-20260911/verification-prep/central-verified-ledger.json",
+        "/Users/benmasek/WC01/artifacts/gpc-completion-followup-20260911/verification-prep/manual-ledger.json",
+        "/Users/benmasek/WC01/artifacts/local-pferdeklinik-no-added-latency-20260906/effective-eligibility-ledger.json",
+        "/Users/benmasek/WC01/artifacts/local-pferdeklinik-no-added-latency-20260906/ledger.candidate.json",
+        "/Users/benmasek/WC01/artifacts/local-pferdeklinik-verification-20260906/effective-eligibility-ledger.json",
+        "/Users/benmasek/WC01/artifacts/local-pferdeklinik-verification-20260906/ledger.candidate.json",
+        "/Users/benmasek/WC01/artifacts/mcp-light-gpt-benchmark/prod-30-2026-08-29/effective-eligibility-ledger.json",
+        "/Users/benmasek/WC01/artifacts/mcp-qc-20260908/ledger-check.json",
+        "/Users/benmasek/WC01/artifacts/mcp-workflow-qc-20260908/local-ledger.json",
+        "/Users/benmasek/WC01/artifacts/policy-capture-diagnosis-baseline-834-20260813/effective-eligibility-ledger.json",
+        "/Users/benmasek/WC01/artifacts/policy-capture-diagnosis-baseline-834-20260813/policy-miss-live-exception-ledger.candidate.json",
+        "/Users/benmasek/WC01/artifacts/policy-capture-diagnosis-baseline-834-20260813/policy-miss-live-exception-ledger.initial.json",
+        "/Users/benmasek/WC01/artifacts/post-refusal-public/scan-quality-calibration-ledger.candidate.json",
+        "/Users/benmasek/WC01/artifacts/postdeploy-calibration-d4986ded/effective-eligibility-ledger.json",
+        "/Users/benmasek/WC01/artifacts/prod-reject-audit-20260831/effective-eligibility-ledger-20260831.json",
+        "/Users/benmasek/WC01/artifacts/prod-reject-audit-20260831/effective-eligibility-ledger-after-owner-override-20260831.json",
+        "/Users/benmasek/WC01/artifacts/prod-reject-audit-20260831/effective-eligibility-ledger-owner-override-20260831.json",
+        "/Users/benmasek/WC01/artifacts/prod-reject-audit-20260831/netent-resolver-telemetry-effective-ledger.json",
+        "/Users/benmasek/WC01/artifacts/scan-quality-calibration/2026-08-30-reject-path-100/effective-eligibility-ledger.json",
+        "/Users/benmasek/WC01/artifacts/scan-quality-calibration/2026-08-30-reject-path-60/effective-eligibility-ledger.json",
+        "/Users/benmasek/WC01/artifacts/scan-quality-calibration/2026-08-30-reject-path-v2/effective-eligibility-ledger.json",
+        "/Users/benmasek/WC01/artifacts/v2-no-go-diagnostic-retest-20260719/effective-eligibility-ledger.json",
+        "/Users/benmasek/WC01/artifacts/v2-no-go-diagnostic-retest-20260719/older-than-30d-effective-ledger.json",
+        "/Users/benmasek/WC01/artifacts/v2-no-go-diagnostic-retest-20260719/older-than-30d-ledger.json",
+        "/Users/benmasek/WC01/artifacts/v2-no-go-diagnostic-retest-20260719/post-run-effective-ledger.json",
+        "/Users/benmasek/WC01/artifacts/v2-no-go-diagnostic-retest-20260719/scan-quality-calibration-ledger.candidate.json",
+        "/Users/benmasek/WC01/artifacts/v2-no-go-diagnostic-retest-20260719/tier-a-effective-ledger.json",
+        "/Users/benmasek/WC01/artifacts/v2-no-go-diagnostic-retest-20260719/tier-a-ledger.candidate.json",
+        "/Users/benmasek/WC01/artifacts/v2-no-go-diagnostic-retest-20260719/tier-a-ledger.json",
+        "/Users/benmasek/WC01/artifacts/v2-no-go-diagnostic-retest-20260719/tier-a-post-run-effective-ledger.json",
+        "/Users/benmasek/WC01/artifacts/v2-scan-quality-calibration/adaptive-consent-20260818/effective-eligibility-ledger.json",
+        "/Users/benmasek/WC01/artifacts/v2-scan-quality-calibration/adaptive-consent-20260818/scan-quality-calibration-ledger.candidate.json",
+        "/Users/benmasek/WC01/artifacts/v2-scan-quality-calibration/adaptive-consent-2s-20260818/effective-eligibility-ledger.json",
+        "/Users/benmasek/WC01/artifacts/v2-scan-quality-calibration/adaptive-consent-2s-20260818/scan-quality-calibration-ledger.candidate.audit.json",
+        "/Users/benmasek/WC01/artifacts/v2-scan-quality-calibration/adaptive-consent-2s-20260818/scan-quality-calibration-ledger.candidate.json",
+        "/Users/benmasek/WC01/artifacts/v2-scan-quality-calibration/adaptive-consent-hard-20260818/effective-eligibility-ledger-postrun.json",
+        "/Users/benmasek/WC01/artifacts/v2-scan-quality-calibration/adaptive-consent-hard-20260818/effective-eligibility-ledger.json",
+        "/Users/benmasek/WC01/artifacts/v2-scan-quality-calibration/adaptive-consent-hard-20260818/scan-quality-calibration-ledger.candidate.json",
+        "/Users/benmasek/WC01/artifacts/v2-scan-quality-calibration/cmp-action-qualification-effective-ledger.json",
+        "/Users/benmasek/WC01/artifacts/v2-scan-quality-calibration/cmp-candidate-empty-ledger.json",
+        "/Users/benmasek/WC01/artifacts/v2-scan-quality-calibration/cmp-consentmanager-bosch-country-effective-ledger.json",
+        "/Users/benmasek/WC01/artifacts/v2-scan-quality-calibration/cmp-consentmanager-effective-ledger.json",
+        "/Users/benmasek/WC01/artifacts/v2-scan-quality-calibration/cmp-consentmanager-fallback-effective-ledger.json",
+        "/Users/benmasek/WC01/artifacts/v2-scan-quality-calibration/cmp-consentmanager-followup-effective-ledger.json",
+        "/Users/benmasek/WC01/artifacts/v2-scan-quality-calibration/cmp-consentmanager-live-control-primary-ledger.candidate.json",
+        "/Users/benmasek/WC01/artifacts/v2-scan-quality-calibration/cmp-qualification-effective-ledger.json",
+        "/Users/benmasek/WC01/artifacts/v2-scan-quality-calibration/consent-retention-06d7e04f-20260718/effective-eligibility-ledger.json",
+        "/Users/benmasek/WC01/artifacts/v2-scan-quality-calibration/effective-eligibility-ledger-2026-08-23.json",
+        "/Users/benmasek/WC01/artifacts/v2-scan-quality-calibration/effective-eligibility-ledger-20260723-rerun.json",
+        "/Users/benmasek/WC01/artifacts/v2-scan-quality-calibration/effective-eligibility-ledger-20260723.json",
+        "/Users/benmasek/WC01/artifacts/v2-scan-quality-calibration/effective-eligibility-ledger-20260730-consent-retry.json",
+        "/Users/benmasek/WC01/artifacts/v2-scan-quality-calibration/effective-eligibility-ledger-20260730-consent.json",
+        "/Users/benmasek/WC01/artifacts/v2-scan-quality-calibration/effective-eligibility-ledger-20260822-policy-rescan.json",
+        "/Users/benmasek/WC01/artifacts/v2-scan-quality-calibration/effective-eligibility-ledger-current.json",
+        "/Users/benmasek/WC01/artifacts/v2-scan-quality-calibration/effective-eligibility-ledger-resume.json",
+        "/Users/benmasek/WC01/artifacts/v2-scan-quality-calibration/effective-eligibility-ledger.json",
+        "/Users/benmasek/WC01/artifacts/v2-scan-quality-calibration/gdpr-recovery-a945db40/effective-eligibility-ledger.json",
+        "/Users/benmasek/WC01/artifacts/v2-scan-quality-calibration/local-consent-bundle-20260805/effective-eligibility-ledger.json",
+        "/Users/benmasek/WC01/artifacts/v2-scan-quality-calibration/mcp-partial-preview-10/effective-eligibility-ledger.json",
+        "/Users/benmasek/WC01/artifacts/v2-scan-quality-calibration/multilingual-20260824-effective-ledger.json",
+        "/Users/benmasek/WC01/artifacts/v2-scan-quality-calibration/multilingual-policy-20260824/calibration-ledger.initial.json",
+        "/Users/benmasek/WC01/artifacts/v2-scan-quality-calibration/multilingual-policy-20260824/scan-quality-calibration-ledger.candidate.json",
+        "/Users/benmasek/WC01/artifacts/v2-scan-quality-calibration/policy-evidence-20260731-effective-ledger.json",
+        "/Users/benmasek/WC01/artifacts/v2-scan-quality-calibration/postdeploy-41889143/effective-eligibility-ledger.json",
+        "/Users/benmasek/WC01/artifacts/v2-scan-quality-calibration/postdeploy-bfcc090d/scan-quality-calibration-ledger.candidate.json",
+        "/Users/benmasek/WC01/artifacts/v2-scan-quality-calibration/scoring-20260722/effective-eligibility-ledger.json",
+        "/Users/benmasek/WC01/artifacts/v2-scan-quality-calibration/web-bot-auth-bf4ee376/effective-eligibility-ledger.post-run.json",
+        "/Users/benmasek/WC01/artifacts/v2-scan-quality-calibration/web-bot-auth-bf4ee376/scan-quality-calibration-ledger.candidate.json",
+        "/Users/benmasek/WC01/docs/certscore-v2/calibration-runs/2026-09-10-action-remedies/ledger.json",
+        "/Users/benmasek/WC01/docs/certscore-v2/calibration-runs/2026-09-10-onetrust-confirmation/ledger.json",
+        "/Users/benmasek/WC01/docs/certscore-v2/calibration/gpc-completion-20260911/heldout-01-ledger.json",
+        "/Users/benmasek/WC01/docs/certscore-v2/calibration/gpc-completion-20260911/heldout-02-ledger.json",
+        "/Users/benmasek/WC01/docs/certscore-v2/calibration/gpc-completion-20260911/heldout-03-ledger.json",
+        "/Users/benmasek/WC01/docs/certscore-v2/focused-dispatch-ie-20260910-ledger.json",
+        "/Users/benmasek/WC01/docs/certscore-v2/remaining-dispatch-ie-20260910-ledger.json",
+        "/Users/benmasek/WC01/docs/certscore-v2/scan-quality-calibration-ledger.json"
+      ]
+    },
+    "hashes": {
+      "artifacts/gpc-prod-review-20260910/cohort.ndjson": "85dc4f4b94c9f4b8b670455130aa0a6d32e1f4bcda244a425347859699cf3494",
+      "artifacts/gpc-completion-followup-20260911/heldout-prep/candidate-inventory.json": "6ccae5a1d69ebdec1b312a06b8c10fdbc972709f26aa4dda55b3fc54af20c924",
+      "docs/certscore-v2/scan-quality-calibration-manifest.json": "378eed6bf313cd56ebeaa39634eeef5fa963af5c8da4af72ccf5bd6763f0953c",
+      "artifacts/gpc-completion-20260911/effective-ledger-02.json": "185da8383dd83460abedb6da22863b7c52fe44fc443259d4a677fac2c27929f1",
+      "packages/certscore-scan-core/src/domain-utils.ts": "f917cf4f9c3429b2f17e6ee3ef1e90910d71c2538a837faca329faa9db43e007",
+      "packages/certscore-scan-core/src/public-test-contact-holds.ts": "43eccc94838fb6ae4fcf7c1f7f67eaebd9d2d6de4ecead0ae077f0650f857e27",
+      "artifacts/gpc-completion-followup-20260911/diagnostic-prep/diagnostic-manifest.json": "70d3acf7e5873595b8711f6c89e681ec471832d9531db4d1beb2b89ded496034"
+    }
+  },
+  "pool": {
+    "candidateCount": 837,
+    "strata": {
+      "observed": 183,
+      "not_observed": 654,
+      "unknown": 0
+    },
+    "selectionTarget": 260,
+    "plannedAllocation": {
+      "observed": 57,
+      "not_observed": 203,
+      "unknown": 0
+    },
+    "sourceObservedShare": 0.218638,
+    "overlapWithPriorDomainsAllowed": true,
+    "priorGpcOutcomesUsedForSelection": false,
+    "rolePolicy": "all roles remain unclassified"
+  },
+  "allStatistics": {
+    "candidatePoolFrozen": true,
+    "centralEligibilityRecomputedBeforeSelection": true,
+    "excludeFailedOrIncomplete": false,
+    "excludeUnverifiedArtifacts": false,
+    "reportAllSubmittedSeparately": true,
+    "noOutcomeBasedReplacement": true,
+    "noGlobalOrCmpSpecificReliabilityClaim": true,
+    "defaultRegistryUrlsAreSourceExclusions": true
+  },
+  "targets": [
+    {
+      "url": "https://ya.ru/",
+      "registrableDomain": "ya.ru",
+      "role": "unclassified",
+      "historicCmpPresence": "not_observed",
+      "sourceScanId": "e8a38ea9-d1de-4a44-8ffb-3b9c77898b05",
+      "sourceCompletedAt": "2026-09-09T10:21:56.485+00:00",
+      "sourcePeriod": 1
+    },
+    {
+      "url": "https://digitallocker.gov.in/",
+      "registrableDomain": "digitallocker.gov.in",
+      "role": "unclassified",
+      "historicCmpPresence": "not_observed",
+      "sourceScanId": "7bbdbfc2-f9d5-4f66-a523-c941110e2db2",
+      "sourceCompletedAt": "2026-09-08T20:17:25.182+00:00",
+      "sourcePeriod": 2
+    },
+    {
+      "url": "https://zignature.com/",
+      "registrableDomain": "zignature.com",
+      "role": "unclassified",
+      "historicCmpPresence": "not_observed",
+      "sourceScanId": "332a96b5-fecb-4eee-9afc-82d0dc8a5f45",
+      "sourceCompletedAt": "2026-09-08T16:29:44.358+00:00",
+      "sourcePeriod": 2
+    },
+    {
+      "url": "https://yelp.com/",
+      "registrableDomain": "yelp.com",
+      "role": "unclassified",
+      "historicCmpPresence": "not_observed",
+      "sourceScanId": "6a587ba3-cd62-4e3f-a16e-f2f4987d9699",
+      "sourceCompletedAt": "2026-09-08T16:32:51.974+00:00",
+      "sourcePeriod": 2
+    },
+    {
+      "url": "https://tiktokio.com/",
+      "registrableDomain": "tiktokio.com",
+      "role": "unclassified",
+      "historicCmpPresence": "not_observed",
+      "sourceScanId": "48982cd1-401c-44c9-b6dc-36239465120c",
+      "sourceCompletedAt": "2026-09-09T00:08:34.175+00:00",
+      "sourcePeriod": 2
+    },
+    {
+      "url": "https://nirvam.it/",
+      "registrableDomain": "nirvam.it",
+      "role": "unclassified",
+      "historicCmpPresence": "not_observed",
+      "sourceScanId": "fe093dd1-a3e1-4d1a-8169-01663c0c0126",
+      "sourceCompletedAt": "2026-09-08T23:47:24.659+00:00",
+      "sourcePeriod": 2
+    },
+    {
+      "url": "https://cloudinary.com/",
+      "registrableDomain": "cloudinary.com",
+      "role": "unclassified",
+      "historicCmpPresence": "not_observed",
+      "sourceScanId": "94e3dacd-08d6-4ed8-bd43-88a3b3af8fa1",
+      "sourceCompletedAt": "2026-09-09T04:28:29.824+00:00",
+      "sourcePeriod": 1
+    },
+    {
+      "url": "https://wordpress.org/",
+      "registrableDomain": "wordpress.org",
+      "role": "unclassified",
+      "historicCmpPresence": "not_observed",
+      "sourceScanId": "61d08d46-1e3e-4c98-b3f9-b563e591bb43",
+      "sourceCompletedAt": "2026-09-09T01:20:22.753+00:00",
+      "sourcePeriod": 2
+    },
+    {
+      "url": "https://kleinanzeigen.de/",
+      "registrableDomain": "kleinanzeigen.de",
+      "role": "unclassified",
+      "historicCmpPresence": "not_observed",
+      "sourceScanId": "a5e43af6-ec15-4072-aa67-89e37cdff234",
+      "sourceCompletedAt": "2026-09-09T00:10:43.956+00:00",
+      "sourcePeriod": 2
+    },
+    {
+      "url": "https://delish.com/",
+      "registrableDomain": "delish.com",
+      "role": "unclassified",
+      "historicCmpPresence": "observed",
+      "sourceScanId": "a01f8876-b79c-4bfa-9182-484d5ebe248e",
+      "sourceCompletedAt": "2026-09-10T23:58:44.525+00:00",
+      "sourcePeriod": 0
+    },
+    {
+      "url": "https://wpguardian.com/",
+      "registrableDomain": "wpguardian.com",
+      "role": "unclassified",
+      "historicCmpPresence": "observed",
+      "sourceScanId": "e7d03b58-8c5c-455a-9a3b-c978501b8ac1",
+      "sourceCompletedAt": "2026-09-09T08:27:09.594+00:00",
+      "sourcePeriod": 1
+    },
+    {
+      "url": "https://jstor.org/",
+      "registrableDomain": "jstor.org",
+      "role": "unclassified",
+      "historicCmpPresence": "observed",
+      "sourceScanId": "8007307f-6410-4f80-9015-57b98a0f8281",
+      "sourceCompletedAt": "2026-09-09T05:15:08.377+00:00",
+      "sourcePeriod": 1
+    },
+    {
+      "url": "https://robinhood.com/",
+      "role": "unclassified",
+      "lanes": [
+        "consent_controls",
+        "gdpr_transparency",
+        "transport_evidence",
+        "third_party_attribution",
+        "no_go_resilience",
+        "language_inference"
+      ],
+      "historicCmpPresence": "observed",
+      "sourceScanId": "eff0c2f2-af2b-4e22-bd86-bfc2fbf60d6f",
+      "registrableDomain": "robinhood.com"
+    },
+    {
+      "url": "https://sciencedirect.com/",
+      "registrableDomain": "sciencedirect.com",
+      "role": "unclassified",
+      "historicCmpPresence": "not_observed",
+      "sourceScanId": "8a924128-2467-4f47-9fdc-06e6378c6d66",
+      "sourceCompletedAt": "2026-09-09T00:25:44.053+00:00",
+      "sourcePeriod": 2
+    },
+    {
+      "url": "https://sinsay.com/",
+      "registrableDomain": "sinsay.com",
+      "role": "unclassified",
+      "historicCmpPresence": "observed",
+      "sourceScanId": "772ce200-ff68-4f33-8bed-9420faa28d46",
+      "sourceCompletedAt": "2026-09-10T18:53:47.501+00:00",
+      "sourcePeriod": 0
+    },
+    {
+      "url": "https://inps.it/",
+      "role": "unclassified",
+      "lanes": [
+        "consent_controls",
+        "gdpr_transparency",
+        "transport_evidence",
+        "third_party_attribution",
+        "no_go_resilience",
+        "language_inference"
+      ],
+      "historicCmpPresence": "not_observed",
+      "sourceScanId": "a6bed3b5-5afd-4b04-a66e-628ca4ac14c4",
+      "registrableDomain": "inps.it"
+    },
+    {
+      "url": "https://qq.com/",
+      "registrableDomain": "qq.com",
+      "role": "unclassified",
+      "historicCmpPresence": "not_observed",
+      "sourceScanId": "975eebf8-56b9-45a4-a83e-43cd1c4cefa4",
+      "sourceCompletedAt": "2026-09-09T05:06:53.95+00:00",
+      "sourcePeriod": 1
+    },
+    {
+      "url": "https://klikbca.com/",
+      "registrableDomain": "klikbca.com",
+      "role": "unclassified",
+      "historicCmpPresence": "not_observed",
+      "sourceScanId": "d7e74eed-106c-4f00-98cd-dd01fd59eb3a",
+      "sourceCompletedAt": "2026-09-09T07:16:42.878+00:00",
+      "sourcePeriod": 1
+    },
+    {
+      "url": "https://psu.edu/",
+      "registrableDomain": "psu.edu",
+      "role": "unclassified",
+      "historicCmpPresence": "not_observed",
+      "sourceScanId": "979284df-a9e0-4ade-96bb-014642cbab72",
+      "sourceCompletedAt": "2026-09-09T03:29:10.201+00:00",
+      "sourcePeriod": 1
+    },
+    {
+      "url": "https://ottadvisors.com/",
+      "registrableDomain": "ottadvisors.com",
+      "role": "unclassified",
+      "historicCmpPresence": "not_observed",
+      "sourceScanId": "86ba7539-50b8-456b-9f17-c5fdd5962fab",
+      "sourceCompletedAt": "2026-09-10T20:33:24.69+00:00",
+      "sourcePeriod": 0
+    },
+    {
+      "url": "https://orekou.net/",
+      "registrableDomain": "orekou.net",
+      "role": "unclassified",
+      "historicCmpPresence": "not_observed",
+      "sourceScanId": "d05d0df7-b390-449c-a0d6-7bd56d14fc11",
+      "sourceCompletedAt": "2026-09-10T23:04:39.394+00:00",
+      "sourcePeriod": 0
+    },
+    {
+      "url": "https://apnews.com/",
+      "role": "unclassified",
+      "lanes": [
+        "consent_controls",
+        "gdpr_transparency",
+        "transport_evidence",
+        "third_party_attribution",
+        "no_go_resilience",
+        "language_inference"
+      ],
+      "historicCmpPresence": "not_observed",
+      "sourceScanId": "e9e9216b-abe6-4ec4-b1a6-4fdd332e8799",
+      "registrableDomain": "apnews.com"
+    },
+    {
+      "url": "https://kooora.com/",
+      "role": "unclassified",
+      "lanes": [
+        "consent_controls",
+        "gdpr_transparency",
+        "transport_evidence",
+        "third_party_attribution",
+        "no_go_resilience",
+        "language_inference"
+      ],
+      "historicCmpPresence": "observed",
+      "sourceScanId": "a570698e-9c19-4da5-8099-f2935ff0f610",
+      "registrableDomain": "kooora.com"
+    },
+    {
+      "url": "https://nymag.com/",
+      "registrableDomain": "nymag.com",
+      "role": "unclassified",
+      "historicCmpPresence": "observed",
+      "sourceScanId": "5e0d5946-314a-4774-a950-729c326df809",
+      "sourceCompletedAt": "2026-09-10T18:32:59.742+00:00",
+      "sourcePeriod": 0
+    },
+    {
+      "url": "https://time.com/",
+      "registrableDomain": "time.com",
+      "role": "unclassified",
+      "historicCmpPresence": "observed",
+      "sourceScanId": "99694ffc-9eec-4dd4-a6a5-481e2aae18fa",
+      "sourceCompletedAt": "2026-09-09T00:23:36.756+00:00",
+      "sourcePeriod": 2
+    },
+    {
+      "url": "https://ulisboa.pt/",
+      "registrableDomain": "ulisboa.pt",
+      "role": "unclassified",
+      "historicCmpPresence": "observed",
+      "sourceScanId": "73aa6971-22f8-43d0-91ed-94928a77554f",
+      "sourceCompletedAt": "2026-09-10T20:14:09.81+00:00",
+      "sourcePeriod": 0
+    },
+    {
+      "url": "https://tradingview.com/",
+      "registrableDomain": "tradingview.com",
+      "role": "unclassified",
+      "historicCmpPresence": "not_observed",
+      "sourceScanId": "7b5700e0-0a3d-464e-9ccb-22d634b888c1",
+      "sourceCompletedAt": "2026-09-09T02:29:05.716+00:00",
+      "sourcePeriod": 1
+    },
+    {
+      "url": "https://serpro.gov.br/",
+      "registrableDomain": "serpro.gov.br",
+      "role": "unclassified",
+      "historicCmpPresence": "not_observed",
+      "sourceScanId": "47a4a0c5-2ff7-4699-baf4-5b9da2ff5a6e",
+      "sourceCompletedAt": "2026-09-10T20:11:53.167+00:00",
+      "sourcePeriod": 0
+    },
+    {
+      "url": "https://ncsu.edu/",
+      "registrableDomain": "ncsu.edu",
+      "role": "unclassified",
+      "historicCmpPresence": "not_observed",
+      "sourceScanId": "9dc0f6b0-3e98-48e4-8b89-540973401d34",
+      "sourceCompletedAt": "2026-09-10T21:17:59.969+00:00",
+      "sourcePeriod": 0
+    },
+    {
+      "url": "https://allaboutcookies.org/",
+      "registrableDomain": "allaboutcookies.org",
+      "role": "unclassified",
+      "historicCmpPresence": "not_observed",
+      "sourceScanId": "86531281-6e46-4044-98ae-20958d7d1c91",
+      "sourceCompletedAt": "2026-09-08T20:37:44.045+00:00",
+      "sourcePeriod": 2
+    },
+    {
+      "url": "https://servicewebly.com/",
+      "registrableDomain": "servicewebly.com",
+      "role": "unclassified",
+      "historicCmpPresence": "not_observed",
+      "sourceScanId": "43e45cdc-805b-4168-ac38-59ef1d5bedc5",
+      "sourceCompletedAt": "2026-09-10T22:41:22.339+00:00",
+      "sourcePeriod": 0
+    },
+    {
+      "url": "https://ilfattoquotidiano.it/",
+      "registrableDomain": "ilfattoquotidiano.it",
+      "role": "unclassified",
+      "historicCmpPresence": "not_observed",
+      "sourceScanId": "962c66a1-d561-4b34-b639-0944041447d6",
+      "sourceCompletedAt": "2026-09-08T21:45:20.023+00:00",
+      "sourcePeriod": 2
+    },
+    {
+      "url": "https://hath.network/",
+      "registrableDomain": "hath.network",
+      "role": "unclassified",
+      "historicCmpPresence": "not_observed",
+      "sourceScanId": "cbb9b086-76bf-4667-b881-b1dde699c0da",
+      "sourceCompletedAt": "2026-09-10T21:34:45.652+00:00",
+      "sourcePeriod": 0
+    },
+    {
+      "url": "https://arca.live/",
+      "registrableDomain": "arca.live",
+      "role": "unclassified",
+      "historicCmpPresence": "not_observed",
+      "sourceScanId": "eda705ab-2126-419a-8d76-565deb6a566c",
+      "sourceCompletedAt": "2026-09-08T22:45:25.907+00:00",
+      "sourcePeriod": 2
+    },
+    {
+      "url": "https://www.gov.br/",
+      "registrableDomain": "www.gov.br",
+      "role": "unclassified",
+      "historicCmpPresence": "not_observed",
+      "sourceScanId": "9296f067-3595-4c1f-a9be-bbe66ed95001",
+      "sourceCompletedAt": "2026-09-09T08:29:16.931+00:00",
+      "sourcePeriod": 1
+    },
+    {
+      "url": "https://amzn.to/",
+      "registrableDomain": "amzn.to",
+      "role": "unclassified",
+      "historicCmpPresence": "not_observed",
+      "sourceScanId": "0bc46f35-fb25-4ee7-b17f-e48975b8fd8c",
+      "sourceCompletedAt": "2026-09-09T02:18:11.88+00:00",
+      "sourcePeriod": 1
+    },
+    {
+      "url": "https://dnsmadeeasy.com/",
+      "registrableDomain": "dnsmadeeasy.com",
+      "role": "unclassified",
+      "historicCmpPresence": "observed",
+      "sourceScanId": "aec61b39-7834-4f2a-be65-abed5cf2655a",
+      "sourceCompletedAt": "2026-09-09T11:26:04.446+00:00",
+      "sourcePeriod": 1
+    },
+    {
+      "url": "https://turf-fr.com/",
+      "registrableDomain": "turf-fr.com",
+      "role": "unclassified",
+      "historicCmpPresence": "not_observed",
+      "sourceScanId": "939fc989-f01f-43fd-9399-4d5807066a98",
+      "sourceCompletedAt": "2026-09-10T19:43:18.604+00:00",
+      "sourcePeriod": 0
+    },
+    {
+      "url": "https://newtoki1.org/",
+      "registrableDomain": "newtoki1.org",
+      "role": "unclassified",
+      "historicCmpPresence": "not_observed",
+      "sourceScanId": "f40dcf23-5198-4dd0-836f-0701dd59d0c3",
+      "sourceCompletedAt": "2026-09-08T19:52:15.641+00:00",
+      "sourcePeriod": 2
+    },
+    {
+      "url": "https://samsungknox.com/",
+      "registrableDomain": "samsungknox.com",
+      "role": "unclassified",
+      "historicCmpPresence": "not_observed",
+      "sourceScanId": "ec564c1e-2e0f-446b-940f-d88e77057980",
+      "sourceCompletedAt": "2026-09-08T18:59:31.082+00:00",
+      "sourcePeriod": 2
+    },
+    {
+      "url": "https://iso.org/",
+      "registrableDomain": "iso.org",
+      "role": "unclassified",
+      "historicCmpPresence": "not_observed",
+      "sourceScanId": "b3505432-f52e-41b4-8cf7-4e163a740b9f",
+      "sourceCompletedAt": "2026-09-08T19:37:53.422+00:00",
+      "sourcePeriod": 2
+    },
+    {
+      "url": "https://missav.ws/",
+      "registrableDomain": "missav.ws",
+      "role": "unclassified",
+      "historicCmpPresence": "not_observed",
+      "sourceScanId": "e17810c8-ef1d-4987-b397-7bc5ae7bd1b1",
+      "sourceCompletedAt": "2026-09-08T20:58:24.915+00:00",
+      "sourcePeriod": 2
+    },
+    {
+      "url": "https://capgemini.com/",
+      "role": "unclassified",
+      "lanes": [
+        "consent_controls",
+        "gdpr_transparency",
+        "transport_evidence",
+        "third_party_attribution",
+        "no_go_resilience",
+        "language_inference"
+      ],
+      "historicCmpPresence": "observed",
+      "sourceScanId": "e07a34c6-36ff-40a9-b989-d0ff22c65ceb",
+      "registrableDomain": "capgemini.com"
+    },
+    {
+      "url": "https://gamepass.com/",
+      "registrableDomain": "gamepass.com",
+      "role": "unclassified",
+      "historicCmpPresence": "not_observed",
+      "sourceScanId": "db73a900-ea96-467a-9daf-110ace4bb64f",
+      "sourceCompletedAt": "2026-09-08T20:45:49.369+00:00",
+      "sourcePeriod": 2
+    },
+    {
+      "url": "https://routedlogic.net/",
+      "registrableDomain": "routedlogic.net",
+      "role": "unclassified",
+      "historicCmpPresence": "not_observed",
+      "sourceScanId": "aea7aec6-fe78-44b2-bad0-c7c358c28e33",
+      "sourceCompletedAt": "2026-09-11T00:02:33.286+00:00",
+      "sourcePeriod": 0
+    },
+    {
+      "url": "https://sift.com/",
+      "registrableDomain": "sift.com",
+      "role": "unclassified",
+      "historicCmpPresence": "observed",
+      "sourceScanId": "0b065151-e95d-447d-8fcb-80af43d1f389",
+      "sourceCompletedAt": "2026-09-11T00:42:24.797+00:00",
+      "sourcePeriod": 0
+    },
+    {
+      "url": "https://hp.com/",
+      "registrableDomain": "hp.com",
+      "role": "unclassified",
+      "historicCmpPresence": "not_observed",
+      "sourceScanId": "1685bfd4-48ac-42f2-9573-29e38bc47813",
+      "sourceCompletedAt": "2026-09-08T20:43:35.214+00:00",
+      "sourcePeriod": 2
+    },
+    {
+      "url": "https://xorgasmo.com/",
+      "registrableDomain": "xorgasmo.com",
+      "role": "unclassified",
+      "historicCmpPresence": "not_observed",
+      "sourceScanId": "5d44c79d-569a-4ef2-bf35-ccbca68cc19b",
+      "sourceCompletedAt": "2026-09-09T08:50:39.258+00:00",
+      "sourcePeriod": 1
+    },
+    {
+      "url": "https://emojidb.org/",
+      "registrableDomain": "emojidb.org",
+      "role": "unclassified",
+      "historicCmpPresence": "not_observed",
+      "sourceScanId": "c9693065-ce09-4f35-b77d-f5fbeeed6c9a",
+      "sourceCompletedAt": "2026-09-11T00:52:49.66+00:00",
+      "sourcePeriod": 0
+    },
+    {
+      "url": "https://soraa.com/",
+      "registrableDomain": "soraa.com",
+      "role": "unclassified",
+      "historicCmpPresence": "observed",
+      "sourceScanId": "d56343b9-575c-44db-a3dc-f90236157206",
+      "sourceCompletedAt": "2026-09-08T16:30:33.481+00:00",
+      "sourcePeriod": 2
+    },
+    {
+      "url": "https://google.co.uk/",
+      "registrableDomain": "google.co.uk",
+      "role": "unclassified",
+      "historicCmpPresence": "not_observed",
+      "sourceScanId": "05a8566b-bace-4005-9ca6-f776c49ada4e",
+      "sourceCompletedAt": "2026-09-09T00:12:52.055+00:00",
+      "sourcePeriod": 2
+    },
+    {
+      "url": "https://typeform.com/",
+      "role": "unclassified",
+      "lanes": [
+        "consent_controls",
+        "gdpr_transparency",
+        "transport_evidence",
+        "third_party_attribution",
+        "no_go_resilience",
+        "language_inference"
+      ],
+      "historicCmpPresence": "observed",
+      "sourceScanId": "fab6d34e-b4eb-4a78-9cc9-69434b34efcf",
+      "registrableDomain": "typeform.com"
+    },
+    {
+      "url": "https://max.ru/",
+      "registrableDomain": "max.ru",
+      "role": "unclassified",
+      "historicCmpPresence": "not_observed",
+      "sourceScanId": "9ee79e4a-5d01-4e08-9439-420aba32755f",
+      "sourceCompletedAt": "2026-09-08T22:14:43.44+00:00",
+      "sourcePeriod": 2
+    },
+    {
+      "url": "https://fanpage.it/",
+      "registrableDomain": "fanpage.it",
+      "role": "unclassified",
+      "historicCmpPresence": "not_observed",
+      "sourceScanId": "dc83c320-5bf5-47e3-8c8d-d1e87e2aaa8a",
+      "sourceCompletedAt": "2026-09-10T18:39:14.692+00:00",
+      "sourcePeriod": 0
+    },
+    {
+      "url": "https://grandviewresearch.com/",
+      "registrableDomain": "grandviewresearch.com",
+      "role": "unclassified",
+      "historicCmpPresence": "not_observed",
+      "sourceScanId": "af2741b9-244e-40bc-bc5d-0bf08a027041",
+      "sourceCompletedAt": "2026-09-10T19:22:17.725+00:00",
+      "sourcePeriod": 0
+    },
+    {
+      "url": "https://olx.pl/",
+      "role": "unclassified",
+      "lanes": [
+        "consent_controls",
+        "gdpr_transparency",
+        "transport_evidence",
+        "third_party_attribution",
+        "no_go_resilience",
+        "language_inference"
+      ],
+      "historicCmpPresence": "observed",
+      "sourceScanId": "74e49069-7a58-4ab4-9d89-f37b83b71087",
+      "registrableDomain": "olx.pl"
+    },
+    {
+      "url": "https://hs-sites.com/",
+      "registrableDomain": "hs-sites.com",
+      "role": "unclassified",
+      "historicCmpPresence": "not_observed",
+      "sourceScanId": "3f933b42-8ea1-4495-a7ca-074177760c45",
+      "sourceCompletedAt": "2026-09-10T19:34:52.856+00:00",
+      "sourcePeriod": 0
+    },
+    {
+      "url": "https://dol.gov/",
+      "registrableDomain": "dol.gov",
+      "role": "unclassified",
+      "historicCmpPresence": "not_observed",
+      "sourceScanId": "6b4fa4f2-100e-4a1b-8d9d-66af55ec1e63",
+      "sourceCompletedAt": "2026-09-11T01:24:35.959+00:00",
+      "sourcePeriod": 0
+    },
+    {
+      "url": "https://mixpanel.com/",
+      "registrableDomain": "mixpanel.com",
+      "role": "unclassified",
+      "historicCmpPresence": "observed",
+      "sourceScanId": "2c496b0a-bfd0-40c3-b208-294caef69ab1",
+      "sourceCompletedAt": "2026-09-09T07:41:12.277+00:00",
+      "sourcePeriod": 1
+    },
+    {
+      "url": "https://rbc.ru/",
+      "registrableDomain": "rbc.ru",
+      "role": "unclassified",
+      "historicCmpPresence": "not_observed",
+      "sourceScanId": "ffdc3dfc-040d-471a-85ae-bb26cdf4ee06",
+      "sourceCompletedAt": "2026-09-09T01:16:19.676+00:00",
+      "sourcePeriod": 2
+    },
+    {
+      "url": "https://stern.de/",
+      "registrableDomain": "stern.de",
+      "role": "unclassified",
+      "historicCmpPresence": "not_observed",
+      "sourceScanId": "f3518afe-026a-4eaf-becf-8fc1a6d1635d",
+      "sourceCompletedAt": "2026-09-10T23:00:42.867+00:00",
+      "sourcePeriod": 0
+    },
+    {
+      "url": "https://beehiiv.com/",
+      "role": "unclassified",
+      "lanes": [
+        "consent_controls",
+        "gdpr_transparency",
+        "transport_evidence",
+        "third_party_attribution",
+        "no_go_resilience",
+        "language_inference"
+      ],
+      "historicCmpPresence": "observed",
+      "sourceScanId": "ba9148f9-7afc-44c3-a5ad-08bcefc5f4b8",
+      "registrableDomain": "beehiiv.com"
+    },
+    {
+      "url": "https://reddit.com/",
+      "registrableDomain": "reddit.com",
+      "role": "unclassified",
+      "historicCmpPresence": "not_observed",
+      "sourceScanId": "e816475d-e205-4664-a681-c8ca7696f6e4",
+      "sourceCompletedAt": "2026-09-09T04:35:10.385+00:00",
+      "sourcePeriod": 1
+    },
+    {
+      "url": "https://divar.ir/",
+      "registrableDomain": "divar.ir",
+      "role": "unclassified",
+      "historicCmpPresence": "not_observed",
+      "sourceScanId": "5c43ce22-72a1-4a34-b7e5-ddd032cdc642",
+      "sourceCompletedAt": "2026-09-08T19:05:55.1+00:00",
+      "sourcePeriod": 2
+    },
+    {
+      "url": "https://vice.com/",
+      "registrableDomain": "vice.com",
+      "role": "unclassified",
+      "historicCmpPresence": "not_observed",
+      "sourceScanId": "ab0aca23-fb3d-4ddb-8b87-68f1bea9198e",
+      "sourceCompletedAt": "2026-09-08T23:51:29.586+00:00",
+      "sourcePeriod": 2
+    },
+    {
+      "url": "https://sweb.ru/",
+      "registrableDomain": "sweb.ru",
+      "role": "unclassified",
+      "historicCmpPresence": "not_observed",
+      "sourceScanId": "198a0b9f-74c8-4c66-8f1b-ab1523d73712",
+      "sourceCompletedAt": "2026-09-09T04:30:42.997+00:00",
+      "sourcePeriod": 1
+    },
+    {
+      "url": "https://aajtak.in/",
+      "registrableDomain": "aajtak.in",
+      "role": "unclassified",
+      "historicCmpPresence": "not_observed",
+      "sourceScanId": "7a53b805-222b-44da-83cf-cb6d67e431b5",
+      "sourceCompletedAt": "2026-09-09T01:24:29.729+00:00",
+      "sourcePeriod": 2
+    },
+    {
+      "url": "https://360totalsecurity.com/",
+      "registrableDomain": "360totalsecurity.com",
+      "role": "unclassified",
+      "historicCmpPresence": "not_observed",
+      "sourceScanId": "ed1a0784-4254-46a6-abde-f243ceb4a5b0",
+      "sourceCompletedAt": "2026-09-10T22:34:55.937+00:00",
+      "sourcePeriod": 0
+    },
+    {
+      "url": "https://mileroticos.com/",
+      "registrableDomain": "mileroticos.com",
+      "role": "unclassified",
+      "historicCmpPresence": "not_observed",
+      "sourceScanId": "de6f9836-eacc-4adb-8371-6b5e0b117abd",
+      "sourceCompletedAt": "2026-09-08T19:43:57.761+00:00",
+      "sourcePeriod": 2
+    },
+    {
+      "url": "https://qiita.com/",
+      "registrableDomain": "qiita.com",
+      "role": "unclassified",
+      "historicCmpPresence": "observed",
+      "sourceScanId": "2c6b1089-97fd-460b-a490-9236a53e71b1",
+      "sourceCompletedAt": "2026-09-10T23:15:12.82+00:00",
+      "sourcePeriod": 0
+    },
+    {
+      "url": "https://mcafee.com/",
+      "registrableDomain": "mcafee.com",
+      "role": "unclassified",
+      "historicCmpPresence": "not_observed",
+      "sourceScanId": "dbb2ba72-13c7-407c-a551-2f85e41257d8",
+      "sourceCompletedAt": "2026-09-08T20:50:02.058+00:00",
+      "sourcePeriod": 2
+    },
+    {
+      "url": "https://infobae.com/",
+      "registrableDomain": "infobae.com",
+      "role": "unclassified",
+      "historicCmpPresence": "not_observed",
+      "sourceScanId": "01e94a91-a84f-4ec7-8ca9-cf97eef0723c",
+      "sourceCompletedAt": "2026-09-08T18:28:35.041+00:00",
+      "sourcePeriod": 2
+    },
+    {
+      "url": "https://nya2.com/",
+      "registrableDomain": "nya2.com",
+      "role": "unclassified",
+      "historicCmpPresence": "not_observed",
+      "sourceScanId": "782a83b4-701f-44e9-bbc3-2190201ca4f7",
+      "sourceCompletedAt": "2026-09-09T03:57:40.659+00:00",
+      "sourcePeriod": 1
+    },
+    {
+      "url": "https://www.m-files.com/",
+      "role": "unclassified",
+      "lanes": [
+        "consent_controls",
+        "gdpr_transparency",
+        "transport_evidence",
+        "third_party_attribution",
+        "no_go_resilience",
+        "language_inference"
+      ],
+      "historicCmpPresence": "observed",
+      "sourceScanId": "ccbb1c3b-df2d-4aed-ac8b-5ae8e234a051",
+      "registrableDomain": "m-files.com"
+    },
+    {
+      "url": "https://adroll.com/",
+      "role": "unclassified",
+      "lanes": [
+        "consent_controls",
+        "gdpr_transparency",
+        "transport_evidence",
+        "third_party_attribution",
+        "no_go_resilience",
+        "language_inference"
+      ],
+      "historicCmpPresence": "observed",
+      "sourceScanId": "ea41322d-7395-43f4-b183-7070bef52ce8",
+      "registrableDomain": "adroll.com"
+    },
+    {
+      "url": "https://blackbaud.com/",
+      "registrableDomain": "blackbaud.com",
+      "role": "unclassified",
+      "historicCmpPresence": "not_observed",
+      "sourceScanId": "9501faee-fe90-427e-838b-6b0bf48e6cbb",
+      "sourceCompletedAt": "2026-09-08T16:32:01.955+00:00",
+      "sourcePeriod": 2
+    },
+    {
+      "url": "https://astorchocolate.com/",
+      "registrableDomain": "astorchocolate.com",
+      "role": "unclassified",
+      "historicCmpPresence": "not_observed",
+      "sourceScanId": "ef79c973-3ea9-475a-bd7e-7a88352c5cf3",
+      "sourceCompletedAt": "2026-09-08T15:51:59.916+00:00",
+      "sourcePeriod": 2
+    },
+    {
+      "url": "https://tp-link.com/",
+      "registrableDomain": "tp-link.com",
+      "role": "unclassified",
+      "historicCmpPresence": "not_observed",
+      "sourceScanId": "700b712f-26f3-4f8b-a578-f4e60c7a2fdc",
+      "sourceCompletedAt": "2026-09-08T18:23:20.837+00:00",
+      "sourcePeriod": 2
+    },
+    {
+      "url": "https://eeroup.com/",
+      "registrableDomain": "eeroup.com",
+      "role": "unclassified",
+      "historicCmpPresence": "not_observed",
+      "sourceScanId": "ed432211-2e13-4c7c-beef-e219445f8e94",
+      "sourceCompletedAt": "2026-09-09T10:20:03.152+00:00",
+      "sourcePeriod": 1
+    },
+    {
+      "url": "https://imo.im/",
+      "registrableDomain": "imo.im",
+      "role": "unclassified",
+      "historicCmpPresence": "not_observed",
+      "sourceScanId": "6471d842-553b-4c47-9d1c-1b1f1fd56997",
+      "sourceCompletedAt": "2026-09-10T19:18:22.773+00:00",
+      "sourcePeriod": 0
+    },
+    {
+      "url": "https://the-ozone-project.com/",
+      "registrableDomain": "the-ozone-project.com",
+      "role": "unclassified",
+      "historicCmpPresence": "observed",
+      "sourceScanId": "c3369c17-c85d-4ec1-bfb0-5333f05ecae1",
+      "sourceCompletedAt": "2026-09-10T22:02:38.159+00:00",
+      "sourcePeriod": 0
+    },
+    {
+      "url": "https://economist.com/",
+      "registrableDomain": "economist.com",
+      "role": "unclassified",
+      "historicCmpPresence": "not_observed",
+      "sourceScanId": "99e304d6-0039-4d63-b96a-5443f024d2ce",
+      "sourceCompletedAt": "2026-09-09T11:36:11.461+00:00",
+      "sourcePeriod": 1
+    },
+    {
+      "url": "https://pubmatic.com/",
+      "registrableDomain": "pubmatic.com",
+      "role": "unclassified",
+      "historicCmpPresence": "not_observed",
+      "sourceScanId": "73c20bd6-31e8-4b4a-82ae-616cb8a0f28b",
+      "sourceCompletedAt": "2026-09-09T11:15:52.818+00:00",
+      "sourcePeriod": 1
+    },
+    {
+      "url": "https://wi.gov/",
+      "registrableDomain": "wi.gov",
+      "role": "unclassified",
+      "historicCmpPresence": "not_observed",
+      "sourceScanId": "c9431e0e-a22c-4271-a949-731655642f09",
+      "sourceCompletedAt": "2026-09-10T23:49:28.828+00:00",
+      "sourcePeriod": 0
+    },
+    {
+      "url": "https://ipinfo.io/",
+      "registrableDomain": "ipinfo.io",
+      "role": "unclassified",
+      "historicCmpPresence": "not_observed",
+      "sourceScanId": "7d305c20-bdb7-4282-8e50-53729e0fb1b1",
+      "sourceCompletedAt": "2026-09-09T09:28:03.709+00:00",
+      "sourcePeriod": 1
+    },
+    {
+      "url": "https://threads.net/",
+      "registrableDomain": "threads.net",
+      "role": "unclassified",
+      "historicCmpPresence": "not_observed",
+      "sourceScanId": "fcc027a0-17fa-440e-9384-be9376423f2f",
+      "sourceCompletedAt": "2026-09-09T04:40:52.958+00:00",
+      "sourcePeriod": 1
+    },
+    {
+      "url": "https://thomsonreuters.com/",
+      "role": "unclassified",
+      "lanes": [
+        "consent_controls",
+        "gdpr_transparency",
+        "transport_evidence",
+        "third_party_attribution",
+        "no_go_resilience",
+        "language_inference"
+      ],
+      "historicCmpPresence": "observed",
+      "sourceScanId": "9bd4dd98-c913-498a-b8d7-e2938456e2a0",
+      "registrableDomain": "thomsonreuters.com"
+    },
+    {
+      "url": "https://visma.com/",
+      "registrableDomain": "visma.com",
+      "role": "unclassified",
+      "historicCmpPresence": "observed",
+      "sourceScanId": "48175e1c-3509-4d31-8425-660e938f409e",
+      "sourceCompletedAt": "2026-09-09T05:51:30.461+00:00",
+      "sourcePeriod": 1
+    },
+    {
+      "url": "https://admissions.nic.in/",
+      "registrableDomain": "admissions.nic.in",
+      "role": "unclassified",
+      "historicCmpPresence": "not_observed",
+      "sourceScanId": "78d433aa-8a81-419c-9dfb-8a138431b880",
+      "sourceCompletedAt": "2026-09-09T08:33:28.78+00:00",
+      "sourcePeriod": 1
+    },
+    {
+      "url": "https://bcv.org.ve/",
+      "registrableDomain": "bcv.org.ve",
+      "role": "unclassified",
+      "historicCmpPresence": "not_observed",
+      "sourceScanId": "0f4d8147-b062-42c2-8c5b-27a449442a88",
+      "sourceCompletedAt": "2026-09-10T19:16:28.934+00:00",
+      "sourcePeriod": 0
+    },
+    {
+      "url": "https://cornell.edu/",
+      "registrableDomain": "cornell.edu",
+      "role": "unclassified",
+      "historicCmpPresence": "not_observed",
+      "sourceScanId": "6e5ae9ad-c406-4928-aed5-6957c49697b4",
+      "sourceCompletedAt": "2026-09-09T09:35:48.579+00:00",
+      "sourcePeriod": 1
+    },
+    {
+      "url": "https://dribbble.com/",
+      "registrableDomain": "dribbble.com",
+      "role": "unclassified",
+      "historicCmpPresence": "observed",
+      "sourceScanId": "304f64ed-be8f-4b0a-865a-829b9b9144e3",
+      "sourceCompletedAt": "2026-09-09T06:09:47.471+00:00",
+      "sourcePeriod": 1
+    },
+    {
+      "url": "https://spacedaily.com/",
+      "registrableDomain": "spacedaily.com",
+      "role": "unclassified",
+      "historicCmpPresence": "not_observed",
+      "sourceScanId": "be391f0e-6c13-41be-8793-04dc2410ac7a",
+      "sourceCompletedAt": "2026-09-10T22:32:46.685+00:00",
+      "sourcePeriod": 0
+    },
+    {
+      "url": "https://adnxs.com/",
+      "registrableDomain": "adnxs.com",
+      "role": "unclassified",
+      "historicCmpPresence": "not_observed",
+      "sourceScanId": "057b9b3a-9e5a-4706-b153-84a1efda5a2d",
+      "sourceCompletedAt": "2026-09-09T07:03:05.877+00:00",
+      "sourcePeriod": 1
+    },
+    {
+      "url": "https://xham.live/",
+      "registrableDomain": "xham.live",
+      "role": "unclassified",
+      "historicCmpPresence": "not_observed",
+      "sourceScanId": "4a0544d1-4a4b-4987-a9c7-eca59026d3c6",
+      "sourceCompletedAt": "2026-09-09T08:39:56.931+00:00",
+      "sourcePeriod": 1
+    },
+    {
+      "url": "https://ucla.edu/",
+      "registrableDomain": "ucla.edu",
+      "role": "unclassified",
+      "historicCmpPresence": "not_observed",
+      "sourceScanId": "368af6ce-082f-4be4-849f-ab1fc00c935f",
+      "sourceCompletedAt": "2026-09-09T08:25:10.256+00:00",
+      "sourcePeriod": 1
+    },
+    {
+      "url": "https://yourmysticgirl.be/",
+      "registrableDomain": "yourmysticgirl.be",
+      "role": "unclassified",
+      "historicCmpPresence": "not_observed",
+      "sourceScanId": "6082d30a-5797-43cb-bdb0-c573c716a77e",
+      "sourceCompletedAt": "2026-09-08T23:08:45.604+00:00",
+      "sourcePeriod": 2
+    },
+    {
+      "url": "https://euronews.com/",
+      "registrableDomain": "euronews.com",
+      "role": "unclassified",
+      "historicCmpPresence": "not_observed",
+      "sourceScanId": "47ff08cc-7734-46a5-ad83-34514619facc",
+      "sourceCompletedAt": "2026-09-10T22:30:42.96+00:00",
+      "sourcePeriod": 0
+    },
+    {
+      "url": "https://flipkart.com/",
+      "registrableDomain": "flipkart.com",
+      "role": "unclassified",
+      "historicCmpPresence": "not_observed",
+      "sourceScanId": "17adecb7-a926-4191-9fe6-22d36eda32a3",
+      "sourceCompletedAt": "2026-09-08T21:51:33.488+00:00",
+      "sourcePeriod": 2
+    },
+    {
+      "url": "https://stridehealth.com/",
+      "role": "unclassified",
+      "lanes": [
+        "consent_controls",
+        "gdpr_transparency",
+        "transport_evidence",
+        "third_party_attribution",
+        "no_go_resilience",
+        "language_inference"
+      ],
+      "historicCmpPresence": "observed",
+      "sourceScanId": "2c75cebb-016e-4f3b-b912-e066be97809c",
+      "registrableDomain": "stridehealth.com"
+    },
+    {
+      "url": "https://alidns.com/",
+      "registrableDomain": "alidns.com",
+      "role": "unclassified",
+      "historicCmpPresence": "not_observed",
+      "sourceScanId": "c3cac7f0-5409-4ff8-bdc3-fcc29f5c82ea",
+      "sourceCompletedAt": "2026-09-08T23:53:33.682+00:00",
+      "sourcePeriod": 2
+    },
+    {
+      "url": "https://vg.no/",
+      "registrableDomain": "vg.no",
+      "role": "unclassified",
+      "historicCmpPresence": "observed",
+      "sourceScanId": "1f595405-72bd-43e4-9d1c-dbbac06e62c9",
+      "sourceCompletedAt": "2026-09-09T09:33:55.529+00:00",
+      "sourcePeriod": 1
+    },
+    {
+      "url": "https://jecontacte.com/",
+      "role": "unclassified",
+      "lanes": [
+        "consent_controls",
+        "gdpr_transparency",
+        "transport_evidence",
+        "third_party_attribution",
+        "no_go_resilience",
+        "language_inference"
+      ],
+      "historicCmpPresence": "observed",
+      "sourceScanId": "e01b0736-1d89-48e8-8db7-521e2dd5dd9c",
+      "registrableDomain": "jecontacte.com"
+    },
+    {
+      "url": "https://adjust.com/",
+      "registrableDomain": "adjust.com",
+      "role": "unclassified",
+      "historicCmpPresence": "not_observed",
+      "sourceScanId": "7c98ae5c-e3c6-4da9-9d0a-8f9919e4facb",
+      "sourceCompletedAt": "2026-09-08T19:42:03.971+00:00",
+      "sourcePeriod": 2
+    },
+    {
+      "url": "https://castbox.fm/",
+      "registrableDomain": "castbox.fm",
+      "role": "unclassified",
+      "historicCmpPresence": "not_observed",
+      "sourceScanId": "c0a492d8-fece-4dab-a931-de2257bac25c",
+      "sourceCompletedAt": "2026-09-10T22:25:59.003+00:00",
+      "sourcePeriod": 0
+    },
+    {
+      "url": "https://wp.com/",
+      "registrableDomain": "wp.com",
+      "role": "unclassified",
+      "historicCmpPresence": "not_observed",
+      "sourceScanId": "e55608b8-f294-47f9-af13-d1daec6b9a60",
+      "sourceCompletedAt": "2026-09-09T12:44:39.994+00:00",
+      "sourcePeriod": 1
+    },
+    {
+      "url": "https://www.kendrascott.com/",
+      "role": "unclassified",
+      "lanes": [
+        "consent_controls",
+        "gdpr_transparency",
+        "transport_evidence",
+        "third_party_attribution",
+        "no_go_resilience",
+        "language_inference"
+      ],
+      "historicCmpPresence": "not_observed",
+      "sourceScanId": "c349819b-3236-49f4-ac7c-fee9ab57c6db",
+      "registrableDomain": "kendrascott.com"
+    },
+    {
+      "url": "https://dropmms.com/",
+      "registrableDomain": "dropmms.com",
+      "role": "unclassified",
+      "historicCmpPresence": "not_observed",
+      "sourceScanId": "73a0f7d9-1c8b-490b-9b92-6e0718831d07",
+      "sourceCompletedAt": "2026-09-11T00:02:56.927+00:00",
+      "sourcePeriod": 0
+    },
+    {
+      "url": "https://paypal.com/",
+      "registrableDomain": "paypal.com",
+      "role": "unclassified",
+      "historicCmpPresence": "not_observed",
+      "sourceScanId": "4778b49f-5fe2-4f99-a615-68a54ddf5c67",
+      "sourceCompletedAt": "2026-09-09T12:10:18.203+00:00",
+      "sourcePeriod": 1
+    },
+    {
+      "url": "https://18comic.vip/",
+      "registrableDomain": "18comic.vip",
+      "role": "unclassified",
+      "historicCmpPresence": "not_observed",
+      "sourceScanId": "ddb4ecfc-882b-4d6f-9619-9bd09d1d7b18",
+      "sourceCompletedAt": "2026-09-09T03:53:58.571+00:00",
+      "sourcePeriod": 1
+    },
+    {
+      "url": "https://nrk.no/",
+      "registrableDomain": "nrk.no",
+      "role": "unclassified",
+      "historicCmpPresence": "not_observed",
+      "sourceScanId": "767c0e44-5071-4629-8d74-04e5fd6ee350",
+      "sourceCompletedAt": "2026-09-08T20:31:52.106+00:00",
+      "sourcePeriod": 2
+    },
+    {
+      "url": "https://google.az/",
+      "registrableDomain": "google.az",
+      "role": "unclassified",
+      "historicCmpPresence": "not_observed",
+      "sourceScanId": "938ebd05-147d-4b12-a0e2-6957bd8244a7",
+      "sourceCompletedAt": "2026-09-10T22:50:14.2+00:00",
+      "sourcePeriod": 0
+    },
+    {
+      "url": "https://ring.com/",
+      "registrableDomain": "ring.com",
+      "role": "unclassified",
+      "historicCmpPresence": "not_observed",
+      "sourceScanId": "6ae5a76c-f69f-4c7b-be75-14653185421b",
+      "sourceCompletedAt": "2026-09-08T21:43:12.557+00:00",
+      "sourcePeriod": 2
+    },
+    {
+      "url": "https://playtika.com/",
+      "registrableDomain": "playtika.com",
+      "role": "unclassified",
+      "historicCmpPresence": "observed",
+      "sourceScanId": "a06ce1ae-a2dd-4e07-bd5c-e4ed5dc2b1fa",
+      "sourceCompletedAt": "2026-09-10T22:15:16.747+00:00",
+      "sourcePeriod": 0
+    },
+    {
+      "url": "https://xhspot.com/",
+      "role": "unclassified",
+      "lanes": [
+        "consent_controls",
+        "gdpr_transparency",
+        "transport_evidence",
+        "third_party_attribution",
+        "no_go_resilience",
+        "language_inference"
+      ],
+      "historicCmpPresence": "not_observed",
+      "sourceScanId": "871dae7d-648c-4afe-8c04-b812b2098bba",
+      "registrableDomain": "xhspot.com"
+    },
+    {
+      "url": "https://sgnic.sg/",
+      "registrableDomain": "sgnic.sg",
+      "role": "unclassified",
+      "historicCmpPresence": "not_observed",
+      "sourceScanId": "b1a6f9e1-7047-4aeb-9f9f-f371f5ad4b37",
+      "sourceCompletedAt": "2026-09-10T22:00:31.823+00:00",
+      "sourcePeriod": 0
+    },
+    {
+      "url": "https://huntington.com/",
+      "registrableDomain": "huntington.com",
+      "role": "unclassified",
+      "historicCmpPresence": "not_observed",
+      "sourceScanId": "490f2a8c-f5ed-446f-ac3f-40d2aa9eb593",
+      "sourceCompletedAt": "2026-09-10T20:49:47.358+00:00",
+      "sourcePeriod": 0
+    },
+    {
+      "url": "https://www.mybobs.com/",
+      "role": "unclassified",
+      "lanes": [
+        "consent_controls",
+        "gdpr_transparency",
+        "transport_evidence",
+        "third_party_attribution",
+        "no_go_resilience",
+        "language_inference"
+      ],
+      "historicCmpPresence": "observed",
+      "sourceScanId": "99323a9a-c848-469b-8fcd-4d706b01ad4d",
+      "registrableDomain": "mybobs.com"
+    },
+    {
+      "url": "https://ojogodobicho.com/",
+      "registrableDomain": "ojogodobicho.com",
+      "role": "unclassified",
+      "historicCmpPresence": "not_observed",
+      "sourceScanId": "da6f60fa-a9d0-4173-a973-73458aee76e7",
+      "sourceCompletedAt": "2026-09-09T06:46:39.031+00:00",
+      "sourcePeriod": 1
+    },
+    {
+      "url": "https://realgoodfoods.com/",
+      "registrableDomain": "realgoodfoods.com",
+      "role": "unclassified",
+      "historicCmpPresence": "not_observed",
+      "sourceScanId": "18c049b8-17a5-4d07-b2d4-3887072e16f5",
+      "sourceCompletedAt": "2026-09-08T16:33:17.329+00:00",
+      "sourcePeriod": 2
+    },
+    {
+      "url": "https://www.vivatv.com.tw/",
+      "registrableDomain": "vivatv.com.tw",
+      "role": "unclassified",
+      "historicCmpPresence": "not_observed",
+      "sourceScanId": "c4313cda-eef2-4a6b-a7ec-f20b033c9c99",
+      "sourceCompletedAt": "2026-09-09T16:37:14.438+00:00",
+      "sourcePeriod": 1
+    },
+    {
+      "url": "https://vmware.com/",
+      "registrableDomain": "vmware.com",
+      "role": "unclassified",
+      "historicCmpPresence": "observed",
+      "sourceScanId": "57e0897d-a416-4a3e-9197-d7148be72385",
+      "sourceCompletedAt": "2026-09-09T09:16:54.078+00:00",
+      "sourcePeriod": 1
+    },
+    {
+      "url": "https://att.net/",
+      "registrableDomain": "att.net",
+      "role": "unclassified",
+      "historicCmpPresence": "not_observed",
+      "sourceScanId": "fa5b8192-ac19-42da-b0ee-ddf92e87a47a",
+      "sourceCompletedAt": "2026-09-09T12:22:44.758+00:00",
+      "sourcePeriod": 1
+    },
+    {
+      "url": "https://xnxx.com/",
+      "registrableDomain": "xnxx.com",
+      "role": "unclassified",
+      "historicCmpPresence": "not_observed",
+      "sourceScanId": "b34d7c04-74ec-4b6a-bc88-dcc8d809544d",
+      "sourceCompletedAt": "2026-09-08T18:38:50.574+00:00",
+      "sourcePeriod": 2
+    },
+    {
+      "url": "https://conreri.de/",
+      "registrableDomain": "conreri.de",
+      "role": "unclassified",
+      "historicCmpPresence": "not_observed",
+      "sourceScanId": "3af9c681-0e29-40ef-ba8e-6542fcb7069b",
+      "sourceCompletedAt": "2026-09-09T12:35:04.373+00:00",
+      "sourcePeriod": 1
+    },
+    {
+      "url": "https://bikewale.com/",
+      "registrableDomain": "bikewale.com",
+      "role": "unclassified",
+      "historicCmpPresence": "not_observed",
+      "sourceScanId": "472c487f-65d2-4efe-b9e6-c841db3f06c0",
+      "sourceCompletedAt": "2026-09-08T21:16:15.938+00:00",
+      "sourcePeriod": 2
+    },
+    {
+      "url": "https://filmyfly.faith/",
+      "role": "unclassified",
+      "lanes": [
+        "consent_controls",
+        "gdpr_transparency",
+        "transport_evidence",
+        "third_party_attribution",
+        "no_go_resilience",
+        "language_inference"
+      ],
+      "historicCmpPresence": "not_observed",
+      "sourceScanId": "f2f55bf3-6b90-4940-a4fd-089b75ae3449",
+      "registrableDomain": "filmyfly.faith"
+    },
+    {
+      "url": "https://example.com/",
+      "registrableDomain": "example.com",
+      "role": "unclassified",
+      "historicCmpPresence": "not_observed",
+      "sourceScanId": "842c14a1-e9c4-44dd-91c8-983163250e2c",
+      "sourceCompletedAt": "2026-09-09T11:21:50.617+00:00",
+      "sourcePeriod": 1
+    },
+    {
+      "url": "https://www.diesellaptops.com/",
+      "registrableDomain": "diesellaptops.com",
+      "role": "unclassified",
+      "historicCmpPresence": "not_observed",
+      "sourceScanId": "5ec7d625-877d-4698-85d6-607b3c02e1e2",
+      "sourceCompletedAt": "2026-09-08T16:16:09.413+00:00",
+      "sourcePeriod": 2
+    },
+    {
+      "url": "https://nexusmods.com/",
+      "registrableDomain": "nexusmods.com",
+      "role": "unclassified",
+      "historicCmpPresence": "not_observed",
+      "sourceScanId": "570de3bd-abaf-4c9d-8858-951a41fbbc98",
+      "sourceCompletedAt": "2026-09-09T00:59:56.68+00:00",
+      "sourcePeriod": 2
+    },
+    {
+      "url": "https://bentley.com/",
+      "registrableDomain": "bentley.com",
+      "role": "unclassified",
+      "historicCmpPresence": "observed",
+      "sourceScanId": "5c709c4d-19d3-43cd-b9be-ef55d722793d",
+      "sourceCompletedAt": "2026-09-11T01:28:44.815+00:00",
+      "sourcePeriod": 0
+    },
+    {
+      "url": "https://blogspot.co.uk/",
+      "registrableDomain": "blogspot.co.uk",
+      "role": "unclassified",
+      "historicCmpPresence": "not_observed",
+      "sourceScanId": "21310419-1ad9-4aac-be27-9667ac37f970",
+      "sourceCompletedAt": "2026-09-10T23:35:36.808+00:00",
+      "sourcePeriod": 0
+    },
+    {
+      "url": "https://www.lagunatools.com/",
+      "registrableDomain": "lagunatools.com",
+      "role": "unclassified",
+      "historicCmpPresence": "not_observed",
+      "sourceScanId": "2a258a6f-a8cc-4b26-b3d3-87978bc48803",
+      "sourceCompletedAt": "2026-09-08T16:13:52.656+00:00",
+      "sourcePeriod": 2
+    },
+    {
+      "url": "https://foreca.fi/",
+      "registrableDomain": "foreca.fi",
+      "role": "unclassified",
+      "historicCmpPresence": "not_observed",
+      "sourceScanId": "788fb099-9b94-4235-b74e-13208c48d4f6",
+      "sourceCompletedAt": "2026-09-09T08:06:41.194+00:00",
+      "sourcePeriod": 1
+    },
+    {
+      "url": "https://blackhub.team/",
+      "registrableDomain": "blackhub.team",
+      "role": "unclassified",
+      "historicCmpPresence": "not_observed",
+      "sourceScanId": "82b1d1cf-a983-499f-901c-db8ce9cd8f21",
+      "sourceCompletedAt": "2026-09-09T10:12:16.975+00:00",
+      "sourcePeriod": 1
+    },
+    {
+      "url": "https://npmjs.com/",
+      "role": "unclassified",
+      "lanes": [
+        "consent_controls",
+        "gdpr_transparency",
+        "transport_evidence",
+        "third_party_attribution",
+        "no_go_resilience",
+        "language_inference"
+      ],
+      "historicCmpPresence": "not_observed",
+      "sourceScanId": "71e5996e-3e11-4053-9242-10ae87f453eb",
+      "registrableDomain": "npmjs.com"
+    },
+    {
+      "url": "https://cnbc.com/",
+      "role": "unclassified",
+      "lanes": [
+        "consent_controls",
+        "gdpr_transparency",
+        "transport_evidence",
+        "third_party_attribution",
+        "no_go_resilience",
+        "language_inference"
+      ],
+      "historicCmpPresence": "observed",
+      "sourceScanId": "6a46a87f-1328-486d-849b-cb4237875ece",
+      "registrableDomain": "cnbc.com"
+    },
+    {
+      "url": "https://id5-sync.com/",
+      "registrableDomain": "id5-sync.com",
+      "role": "unclassified",
+      "historicCmpPresence": "not_observed",
+      "sourceScanId": "f35325ef-5277-456d-94ab-04912f599a83",
+      "sourceCompletedAt": "2026-09-09T04:11:59.066+00:00",
+      "sourcePeriod": 1
+    },
+    {
+      "url": "https://xnhau.you/",
+      "registrableDomain": "xnhau.you",
+      "role": "unclassified",
+      "historicCmpPresence": "not_observed",
+      "sourceScanId": "70c7e39f-3cec-482d-a9f0-62564154ab52",
+      "sourceCompletedAt": "2026-09-08T19:48:01.372+00:00",
+      "sourcePeriod": 2
+    },
+    {
+      "url": "https://3lift.com/",
+      "registrableDomain": "3lift.com",
+      "role": "unclassified",
+      "historicCmpPresence": "observed",
+      "sourceScanId": "2ab4f4f8-d291-475a-b3a3-5c4cce7c7912",
+      "sourceCompletedAt": "2026-09-09T01:05:36.658+00:00",
+      "sourcePeriod": 2
+    },
+    {
+      "url": "https://tnaflix.com/",
+      "registrableDomain": "tnaflix.com",
+      "role": "unclassified",
+      "historicCmpPresence": "not_observed",
+      "sourceScanId": "85a05f84-e4de-4e8b-a8d6-b441c9f1bbac",
+      "sourceCompletedAt": "2026-09-09T07:56:19.414+00:00",
+      "sourcePeriod": 1
+    },
+    {
+      "url": "https://rutube.ru/",
+      "registrableDomain": "rutube.ru",
+      "role": "unclassified",
+      "historicCmpPresence": "not_observed",
+      "sourceScanId": "d53f99bc-3b8a-4a7b-86c2-b860fd38a780",
+      "sourceCompletedAt": "2026-09-09T06:25:06.252+00:00",
+      "sourcePeriod": 1
+    },
+    {
+      "url": "https://mdpi.com/",
+      "registrableDomain": "mdpi.com",
+      "role": "unclassified",
+      "historicCmpPresence": "not_observed",
+      "sourceScanId": "ccf9392c-286d-4bf9-8631-159577f62747",
+      "sourceCompletedAt": "2026-09-08T20:47:56.667+00:00",
+      "sourcePeriod": 2
+    },
+    {
+      "url": "https://lencr.org/",
+      "registrableDomain": "lencr.org",
+      "role": "unclassified",
+      "historicCmpPresence": "not_observed",
+      "sourceScanId": "d7c71dcb-cfa3-49f0-ac55-3512627a6ed3",
+      "sourceCompletedAt": "2026-09-09T04:36:58.431+00:00",
+      "sourcePeriod": 1
+    },
+    {
+      "url": "https://so-net.ne.jp/",
+      "registrableDomain": "so-net.ne.jp",
+      "role": "unclassified",
+      "historicCmpPresence": "not_observed",
+      "sourceScanId": "3553207d-d0cd-4585-833e-a519ba717be4",
+      "sourceCompletedAt": "2026-09-10T18:19:48.504+00:00",
+      "sourcePeriod": 0
+    },
+    {
+      "url": "https://jquery.com/",
+      "registrableDomain": "jquery.com",
+      "role": "unclassified",
+      "historicCmpPresence": "not_observed",
+      "sourceScanId": "f678df81-ca75-4a48-96ba-0950d19a0c18",
+      "sourceCompletedAt": "2026-09-08T23:34:49.232+00:00",
+      "sourcePeriod": 2
+    },
+    {
+      "url": "https://epam.com/",
+      "registrableDomain": "epam.com",
+      "role": "unclassified",
+      "historicCmpPresence": "not_observed",
+      "sourceScanId": "dec6b9ad-3c21-48c1-977f-02ff27c77cbc",
+      "sourceCompletedAt": "2026-09-09T02:34:51.744+00:00",
+      "sourcePeriod": 1
+    },
+    {
+      "url": "https://ca.gov/",
+      "role": "unclassified",
+      "lanes": [
+        "consent_controls",
+        "gdpr_transparency",
+        "transport_evidence",
+        "third_party_attribution",
+        "no_go_resilience",
+        "language_inference"
+      ],
+      "historicCmpPresence": "not_observed",
+      "sourceScanId": "59bec940-228c-473d-be99-065419862a26",
+      "registrableDomain": "ca.gov"
+    },
+    {
+      "url": "https://bergdorfgoodman.com/",
+      "registrableDomain": "bergdorfgoodman.com",
+      "role": "unclassified",
+      "historicCmpPresence": "not_observed",
+      "sourceScanId": "fa41be6c-7e41-45e0-8e91-c40a1ee3c974",
+      "sourceCompletedAt": "2026-09-08T16:34:36.302+00:00",
+      "sourcePeriod": 2
+    },
+    {
+      "url": "https://gtm-a2b2.com/",
+      "registrableDomain": "gtm-a2b2.com",
+      "role": "unclassified",
+      "historicCmpPresence": "not_observed",
+      "sourceScanId": "1c9de89c-1beb-48c1-b0f6-3151c1d1de34",
+      "sourceCompletedAt": "2026-09-09T08:02:33.878+00:00",
+      "sourcePeriod": 1
+    },
+    {
+      "url": "https://alibaba.com/",
+      "registrableDomain": "alibaba.com",
+      "role": "unclassified",
+      "historicCmpPresence": "not_observed",
+      "sourceScanId": "c1e9078a-e55f-4024-9b41-69f990d07723",
+      "sourceCompletedAt": "2026-09-09T01:11:59.091+00:00",
+      "sourcePeriod": 2
+    },
+    {
+      "url": "https://govinfo.gov/",
+      "registrableDomain": "govinfo.gov",
+      "role": "unclassified",
+      "historicCmpPresence": "not_observed",
+      "sourceScanId": "6b5820af-a09c-468f-b3dc-5b3b0c99c7fa",
+      "sourceCompletedAt": "2026-09-10T22:54:21.916+00:00",
+      "sourcePeriod": 0
+    },
+    {
+      "url": "https://lg.com/",
+      "registrableDomain": "lg.com",
+      "role": "unclassified",
+      "historicCmpPresence": "not_observed",
+      "sourceScanId": "2094cdb0-8508-42e1-a610-25d3be2a579b",
+      "sourceCompletedAt": "2026-09-08T18:47:34.37+00:00",
+      "sourcePeriod": 2
+    },
+    {
+      "url": "https://cnet.com/",
+      "registrableDomain": "cnet.com",
+      "role": "unclassified",
+      "historicCmpPresence": "observed",
+      "sourceScanId": "6f2d6f80-c03c-4b3b-a310-b9105ed32d93",
+      "sourceCompletedAt": "2026-09-09T11:38:16.406+00:00",
+      "sourcePeriod": 1
+    },
+    {
+      "url": "https://ailawandorder.com/",
+      "registrableDomain": "ailawandorder.com",
+      "role": "unclassified",
+      "historicCmpPresence": "not_observed",
+      "sourceScanId": "399ddf30-08ab-436e-9529-5b405ee7a5a5",
+      "sourceCompletedAt": "2026-09-08T20:08:50.951+00:00",
+      "sourcePeriod": 2
+    },
+    {
+      "url": "https://indexww.com/",
+      "registrableDomain": "indexww.com",
+      "role": "unclassified",
+      "historicCmpPresence": "not_observed",
+      "sourceScanId": "b8514507-6921-4dc2-b965-79a4e18820c3",
+      "sourceCompletedAt": "2026-09-08T23:15:03.781+00:00",
+      "sourcePeriod": 2
+    },
+    {
+      "url": "https://dns.google/",
+      "registrableDomain": "dns.google",
+      "role": "unclassified",
+      "historicCmpPresence": "not_observed",
+      "sourceScanId": "851bc973-c7ca-428a-8074-5560f5e7e24c",
+      "sourceCompletedAt": "2026-09-09T09:18:48.203+00:00",
+      "sourcePeriod": 1
+    },
+    {
+      "url": "https://bpexch.live/",
+      "registrableDomain": "bpexch.live",
+      "role": "unclassified",
+      "historicCmpPresence": "not_observed",
+      "sourceScanId": "f6f8e326-5d2a-4cd3-ad07-c2a22a4198ea",
+      "sourceCompletedAt": "2026-09-08T18:55:43.529+00:00",
+      "sourcePeriod": 2
+    },
+    {
+      "url": "https://ok.xxx/",
+      "registrableDomain": "ok.xxx",
+      "role": "unclassified",
+      "historicCmpPresence": "not_observed",
+      "sourceScanId": "1fa457d4-c48c-4836-b06f-592f96a42252",
+      "sourceCompletedAt": "2026-09-10T20:57:28.822+00:00",
+      "sourcePeriod": 0
+    },
+    {
+      "url": "https://moloco.com/",
+      "role": "unclassified",
+      "lanes": [
+        "consent_controls",
+        "gdpr_transparency",
+        "transport_evidence",
+        "third_party_attribution",
+        "no_go_resilience",
+        "language_inference"
+      ],
+      "historicCmpPresence": "observed",
+      "sourceScanId": "97286837-4535-4cf7-bddf-0dbb10824948",
+      "registrableDomain": "moloco.com"
+    },
+    {
+      "url": "https://xhamster1.desi/",
+      "role": "unclassified",
+      "lanes": [
+        "consent_controls",
+        "gdpr_transparency",
+        "transport_evidence",
+        "third_party_attribution",
+        "no_go_resilience",
+        "language_inference"
+      ],
+      "historicCmpPresence": "not_observed",
+      "sourceScanId": "050b9e65-18de-4b18-ba24-c21a1eb1488b",
+      "registrableDomain": "xhamster1.desi"
+    },
+    {
+      "url": "https://kingoftime.jp/",
+      "role": "unclassified",
+      "lanes": [
+        "consent_controls",
+        "gdpr_transparency",
+        "transport_evidence",
+        "third_party_attribution",
+        "no_go_resilience",
+        "language_inference"
+      ],
+      "historicCmpPresence": "not_observed",
+      "sourceScanId": "8de91fa4-8b45-4456-a772-37f106674d50",
+      "registrableDomain": "kingoftime.jp"
+    },
+    {
+      "url": "https://www.sealedair.com/",
+      "registrableDomain": "sealedair.com",
+      "role": "unclassified",
+      "historicCmpPresence": "observed",
+      "sourceScanId": "9f5cec00-59e3-4e8c-a92f-db623285fb8d",
+      "sourceCompletedAt": "2026-09-08T16:09:07.136+00:00",
+      "sourcePeriod": 2
+    },
+    {
+      "url": "https://creator-spring.com/",
+      "registrableDomain": "creator-spring.com",
+      "role": "unclassified",
+      "historicCmpPresence": "not_observed",
+      "sourceScanId": "1b7e8933-f820-4144-9388-96edbe98f647",
+      "sourceCompletedAt": "2026-09-08T16:34:03.116+00:00",
+      "sourcePeriod": 2
+    },
+    {
+      "url": "https://linkedin.com/",
+      "registrableDomain": "linkedin.com",
+      "role": "unclassified",
+      "historicCmpPresence": "not_observed",
+      "sourceScanId": "d9910157-f408-43f6-b90b-d051568bab7f",
+      "sourceCompletedAt": "2026-09-08T19:45:58.129+00:00",
+      "sourcePeriod": 2
+    },
+    {
+      "url": "https://addtoany.com/",
+      "registrableDomain": "addtoany.com",
+      "role": "unclassified",
+      "historicCmpPresence": "not_observed",
+      "sourceScanId": "e2399f23-661b-4a5b-8bd7-156a7b48ec1d",
+      "sourceCompletedAt": "2026-09-09T00:41:30.54+00:00",
+      "sourcePeriod": 2
+    },
+    {
+      "url": "https://mailchi.mp/",
+      "registrableDomain": "mailchi.mp",
+      "role": "unclassified",
+      "historicCmpPresence": "observed",
+      "sourceScanId": "6c35b0be-296a-4e1c-84ed-5db9db0db290",
+      "sourceCompletedAt": "2026-09-08T22:26:53.496+00:00",
+      "sourcePeriod": 2
+    },
+    {
+      "url": "https://administracionelectronica.gob.es/",
+      "registrableDomain": "administracionelectronica.gob.es",
+      "role": "unclassified",
+      "historicCmpPresence": "not_observed",
+      "sourceScanId": "41f941bc-b701-4b5e-b152-4922b33eba3b",
+      "sourceCompletedAt": "2026-09-08T23:30:35.006+00:00",
+      "sourcePeriod": 2
+    },
+    {
+      "url": "https://torn.com/",
+      "registrableDomain": "torn.com",
+      "role": "unclassified",
+      "historicCmpPresence": "not_observed",
+      "sourceScanId": "7ecea05f-80c0-4e47-909f-22f3f828e631",
+      "sourceCompletedAt": "2026-09-10T20:31:34.042+00:00",
+      "sourcePeriod": 0
+    },
+    {
+      "url": "https://pcmax.jp/",
+      "registrableDomain": "pcmax.jp",
+      "role": "unclassified",
+      "historicCmpPresence": "not_observed",
+      "sourceScanId": "87213ba3-1eaf-4191-bd39-15a2602295bf",
+      "sourceCompletedAt": "2026-09-11T00:38:15.724+00:00",
+      "sourcePeriod": 0
+    },
+    {
+      "url": "https://elwatannews.com/",
+      "registrableDomain": "elwatannews.com",
+      "role": "unclassified",
+      "historicCmpPresence": "observed",
+      "sourceScanId": "c355e4d5-60a9-4585-a96a-57439e665b25",
+      "sourceCompletedAt": "2026-09-10T19:39:01.442+00:00",
+      "sourcePeriod": 0
+    },
+    {
+      "url": "https://xxxvideosind.com/",
+      "registrableDomain": "xxxvideosind.com",
+      "role": "unclassified",
+      "historicCmpPresence": "not_observed",
+      "sourceScanId": "d0d8196d-178c-4b33-86ac-9f4b66c46d2a",
+      "sourceCompletedAt": "2026-09-08T23:26:31.905+00:00",
+      "sourcePeriod": 2
+    },
+    {
+      "url": "https://wired.com/",
+      "role": "unclassified",
+      "lanes": [
+        "consent_controls",
+        "gdpr_transparency",
+        "transport_evidence",
+        "third_party_attribution",
+        "no_go_resilience",
+        "language_inference"
+      ],
+      "historicCmpPresence": "observed",
+      "sourceScanId": "c421f262-a89b-4fcd-a716-9c4aa0cbdf68",
+      "registrableDomain": "wired.com"
+    },
+    {
+      "url": "https://yr.no/",
+      "registrableDomain": "yr.no",
+      "role": "unclassified",
+      "historicCmpPresence": "not_observed",
+      "sourceScanId": "dceeab64-f12a-4156-886f-c7c7782e981b",
+      "sourceCompletedAt": "2026-09-08T19:54:10.45+00:00",
+      "sourcePeriod": 2
+    },
+    {
+      "url": "https://joinroot.com/",
+      "role": "unclassified",
+      "lanes": [
+        "consent_controls",
+        "gdpr_transparency",
+        "transport_evidence",
+        "third_party_attribution",
+        "no_go_resilience",
+        "language_inference"
+      ],
+      "historicCmpPresence": "observed",
+      "sourceScanId": "813272c1-f9f0-4c17-a673-28c00a81c4eb",
+      "registrableDomain": "joinroot.com"
+    },
+    {
+      "url": "https://wikihow.com/",
+      "registrableDomain": "wikihow.com",
+      "role": "unclassified",
+      "historicCmpPresence": "not_observed",
+      "sourceScanId": "fe3f8971-a263-43dc-974a-a0ff9beff13d",
+      "sourceCompletedAt": "2026-09-09T09:14:46.704+00:00",
+      "sourcePeriod": 1
+    },
+    {
+      "url": "https://justdial.com/",
+      "registrableDomain": "justdial.com",
+      "role": "unclassified",
+      "historicCmpPresence": "not_observed",
+      "sourceScanId": "a3c5a881-29f2-4479-aff1-ca9fcb990992",
+      "sourceCompletedAt": "2026-09-08T20:02:14.18+00:00",
+      "sourcePeriod": 2
+    },
+    {
+      "url": "https://staples.com/",
+      "registrableDomain": "staples.com",
+      "role": "unclassified",
+      "historicCmpPresence": "not_observed",
+      "sourceScanId": "33f697f4-6f27-4b1c-816b-baa84dc4a733",
+      "sourceCompletedAt": "2026-09-11T01:31:08.322+00:00",
+      "sourcePeriod": 0
+    },
+    {
+      "url": "https://thscore99.com/",
+      "registrableDomain": "thscore99.com",
+      "role": "unclassified",
+      "historicCmpPresence": "not_observed",
+      "sourceScanId": "792763fe-05dd-4f72-8f11-0853e4f2b08d",
+      "sourceCompletedAt": "2026-09-09T11:50:02.752+00:00",
+      "sourcePeriod": 1
+    },
+    {
+      "url": "https://ubnt.com/",
+      "registrableDomain": "ubnt.com",
+      "role": "unclassified",
+      "historicCmpPresence": "observed",
+      "sourceScanId": "71af04ba-3e4b-43e9-a661-96f741664e8c",
+      "sourceCompletedAt": "2026-09-09T01:09:56.831+00:00",
+      "sourcePeriod": 2
+    },
+    {
+      "url": "https://bugsnag.com/",
+      "registrableDomain": "bugsnag.com",
+      "role": "unclassified",
+      "historicCmpPresence": "not_observed",
+      "sourceScanId": "0cca67ee-c1c4-45ca-bcb5-ea7a4b9bc53c",
+      "sourceCompletedAt": "2026-09-08T23:43:20.969+00:00",
+      "sourcePeriod": 2
+    },
+    {
+      "url": "https://lithiachevroletredding.com/",
+      "registrableDomain": "lithiachevroletredding.com",
+      "role": "unclassified",
+      "historicCmpPresence": "not_observed",
+      "sourceScanId": "56ec79f9-4cc3-4e97-bf54-1e6ca4053fdb",
+      "sourceCompletedAt": "2026-09-08T16:28:57.538+00:00",
+      "sourcePeriod": 2
+    },
+    {
+      "url": "https://mts.ru/",
+      "registrableDomain": "mts.ru",
+      "role": "unclassified",
+      "historicCmpPresence": "not_observed",
+      "sourceScanId": "3f9b6262-3b63-482e-b64e-73469351ecb2",
+      "sourceCompletedAt": "2026-09-09T09:32:01.704+00:00",
+      "sourcePeriod": 1
+    },
+    {
+      "url": "https://emc.com/",
+      "registrableDomain": "emc.com",
+      "role": "unclassified",
+      "historicCmpPresence": "observed",
+      "sourceScanId": "337c05df-7bef-450b-879b-e5c9ef444d51",
+      "sourceCompletedAt": "2026-09-10T18:09:33.207+00:00",
+      "sourcePeriod": 0
+    },
+    {
+      "url": "https://adobe.net/",
+      "registrableDomain": "adobe.net",
+      "role": "unclassified",
+      "historicCmpPresence": "not_observed",
+      "sourceScanId": "033b4dae-3ea7-4cd4-8d4b-e1b1a7a90244",
+      "sourceCompletedAt": "2026-09-09T08:12:36.168+00:00",
+      "sourcePeriod": 1
+    },
+    {
+      "url": "https://drmgms.com/",
+      "registrableDomain": "drmgms.com",
+      "role": "unclassified",
+      "historicCmpPresence": "not_observed",
+      "sourceScanId": "94c52835-4a55-4e31-989d-db819ac2d44e",
+      "sourceCompletedAt": "2026-09-10T23:37:35.886+00:00",
+      "sourcePeriod": 0
+    },
+    {
+      "url": "https://www.teleflora.com/",
+      "registrableDomain": "teleflora.com",
+      "role": "unclassified",
+      "historicCmpPresence": "observed",
+      "sourceScanId": "ea3386a0-26b8-4947-a4ec-16ea41584f23",
+      "sourceCompletedAt": "2026-09-08T16:11:39.778+00:00",
+      "sourcePeriod": 2
+    },
+    {
+      "url": "https://uq.edu.au/",
+      "registrableDomain": "uq.edu.au",
+      "role": "unclassified",
+      "historicCmpPresence": "not_observed",
+      "sourceScanId": "d3cf05c3-def3-4981-8aa1-480f17489712",
+      "sourceCompletedAt": "2026-09-10T18:49:28.567+00:00",
+      "sourcePeriod": 0
+    },
+    {
+      "url": "https://autoplius.lt/",
+      "registrableDomain": "autoplius.lt",
+      "role": "unclassified",
+      "historicCmpPresence": "not_observed",
+      "sourceScanId": "cd2d97bf-c521-4f7f-a1ef-f6ff171f9296",
+      "sourceCompletedAt": "2026-09-09T05:49:26.557+00:00",
+      "sourcePeriod": 1
+    },
+    {
+      "url": "https://trustpilot.com/",
+      "registrableDomain": "trustpilot.com",
+      "role": "unclassified",
+      "historicCmpPresence": "observed",
+      "sourceScanId": "81dea7d9-3386-420a-8178-94aef5c82275",
+      "sourceCompletedAt": "2026-09-08T22:31:29.561+00:00",
+      "sourcePeriod": 2
+    },
+    {
+      "url": "https://wetransfer.com/",
+      "registrableDomain": "wetransfer.com",
+      "role": "unclassified",
+      "historicCmpPresence": "not_observed",
+      "sourceScanId": "21508a5f-1f84-41f9-8ae0-21b493d79e30",
+      "sourceCompletedAt": "2026-09-10T19:47:28.93+00:00",
+      "sourcePeriod": 0
+    },
+    {
+      "url": "https://360.cn/",
+      "registrableDomain": "360.cn",
+      "role": "unclassified",
+      "historicCmpPresence": "not_observed",
+      "sourceScanId": "cc6978fc-ca94-484e-93fa-89fe3b21bf67",
+      "sourceCompletedAt": "2026-09-09T09:20:39.002+00:00",
+      "sourcePeriod": 1
+    },
+    {
+      "url": "https://www.fiberondecking.com/",
+      "role": "unclassified",
+      "lanes": [
+        "consent_controls",
+        "gdpr_transparency",
+        "transport_evidence",
+        "third_party_attribution",
+        "no_go_resilience",
+        "language_inference"
+      ],
+      "historicCmpPresence": "observed",
+      "sourceScanId": "71bdfa2c-5439-4a52-830e-9d82dad6e119",
+      "registrableDomain": "fiberondecking.com"
+    },
+    {
+      "url": "https://iherb.com/",
+      "registrableDomain": "iherb.com",
+      "role": "unclassified",
+      "historicCmpPresence": "not_observed",
+      "sourceScanId": "5f074399-c3a9-466e-a5fd-1e008accfce6",
+      "sourceCompletedAt": "2026-09-11T00:28:01.837+00:00",
+      "sourcePeriod": 0
+    },
+    {
+      "url": "https://adsafeprotected.com/",
+      "registrableDomain": "adsafeprotected.com",
+      "role": "unclassified",
+      "historicCmpPresence": "not_observed",
+      "sourceScanId": "fea0ff43-4dde-42cf-9491-d527f320148a",
+      "sourceCompletedAt": "2026-09-08T22:53:15.441+00:00",
+      "sourcePeriod": 2
+    },
+    {
+      "url": "https://cspserver.net/",
+      "registrableDomain": "cspserver.net",
+      "role": "unclassified",
+      "historicCmpPresence": "not_observed",
+      "sourceScanId": "7bb3b4d6-11e3-4545-a063-6d12ca19bb64",
+      "sourceCompletedAt": "2026-09-09T03:05:40.517+00:00",
+      "sourcePeriod": 1
+    },
+    {
+      "url": "https://javwow.com/",
+      "registrableDomain": "javwow.com",
+      "role": "unclassified",
+      "historicCmpPresence": "not_observed",
+      "sourceScanId": "7c7240c6-708c-406a-b658-4e2c127f6bca",
+      "sourceCompletedAt": "2026-09-08T21:40:57.862+00:00",
+      "sourcePeriod": 2
+    },
+    {
+      "url": "https://calculator.net/",
+      "registrableDomain": "calculator.net",
+      "role": "unclassified",
+      "historicCmpPresence": "not_observed",
+      "sourceScanId": "bbf6b735-8c11-4346-a98f-4e816c1b7891",
+      "sourceCompletedAt": "2026-09-09T12:40:48.721+00:00",
+      "sourcePeriod": 1
+    },
+    {
+      "url": "https://britannica.com/",
+      "registrableDomain": "britannica.com",
+      "role": "unclassified",
+      "historicCmpPresence": "observed",
+      "sourceScanId": "37c98a3d-1b90-4874-af29-1a1cdf81f7b1",
+      "sourceCompletedAt": "2026-09-09T00:51:42.346+00:00",
+      "sourcePeriod": 2
+    },
+    {
+      "url": "https://doubleverify.com/",
+      "registrableDomain": "doubleverify.com",
+      "role": "unclassified",
+      "historicCmpPresence": "observed",
+      "sourceScanId": "20f2c2cd-bfd3-493a-920b-08300019f736",
+      "sourceCompletedAt": "2026-09-09T02:47:23.686+00:00",
+      "sourcePeriod": 1
+    },
+    {
+      "url": "https://girlschannel.net/",
+      "registrableDomain": "girlschannel.net",
+      "role": "unclassified",
+      "historicCmpPresence": "not_observed",
+      "sourceScanId": "b8df5a89-d61f-47af-934c-3af356b49e3b",
+      "sourceCompletedAt": "2026-09-08T18:51:45.943+00:00",
+      "sourcePeriod": 2
+    },
+    {
+      "url": "https://siteground.biz/",
+      "registrableDomain": "siteground.biz",
+      "role": "unclassified",
+      "historicCmpPresence": "not_observed",
+      "sourceScanId": "ef024998-dccc-4156-948a-7559b5d2b982",
+      "sourceCompletedAt": "2026-09-11T01:12:38.411+00:00",
+      "sourcePeriod": 0
+    },
+    {
+      "url": "https://google.fm/",
+      "registrableDomain": "google.fm",
+      "role": "unclassified",
+      "historicCmpPresence": "not_observed",
+      "sourceScanId": "fb33a50a-8353-47cd-ac07-33bfd794a002",
+      "sourceCompletedAt": "2026-09-10T23:21:21.552+00:00",
+      "sourcePeriod": 0
+    },
+    {
+      "url": "https://discordapp.com/",
+      "registrableDomain": "discordapp.com",
+      "role": "unclassified",
+      "historicCmpPresence": "not_observed",
+      "sourceScanId": "21da8539-90a3-4d2f-af79-77ce1970bf4e",
+      "sourceCompletedAt": "2026-09-09T06:33:04.531+00:00",
+      "sourcePeriod": 1
+    },
+    {
+      "url": "https://deezer.com/",
+      "registrableDomain": "deezer.com",
+      "role": "unclassified",
+      "historicCmpPresence": "not_observed",
+      "sourceScanId": "89e91b82-27ae-4491-971b-b51871f2e6d8",
+      "sourceCompletedAt": "2026-09-09T11:44:09.554+00:00",
+      "sourcePeriod": 1
+    },
+    {
+      "url": "https://upwork.com/",
+      "registrableDomain": "upwork.com",
+      "role": "unclassified",
+      "historicCmpPresence": "not_observed",
+      "sourceScanId": "fa591287-7eda-4152-a767-a9092271a1f6",
+      "sourceCompletedAt": "2026-09-10T21:26:24.217+00:00",
+      "sourcePeriod": 0
+    },
+    {
+      "url": "https://twitch.tv/",
+      "registrableDomain": "twitch.tv",
+      "role": "unclassified",
+      "historicCmpPresence": "not_observed",
+      "sourceScanId": "dcb1bee1-53b6-4e97-8a85-38e0ae692aec",
+      "sourceCompletedAt": "2026-09-09T11:19:55.978+00:00",
+      "sourcePeriod": 1
+    },
+    {
+      "url": "https://lifehacker.com/",
+      "registrableDomain": "lifehacker.com",
+      "role": "unclassified",
+      "historicCmpPresence": "observed",
+      "sourceScanId": "84f9e84f-e2a8-4312-96ea-46e7dd798147",
+      "sourceCompletedAt": "2026-09-10T22:46:01.69+00:00",
+      "sourcePeriod": 0
+    },
+    {
+      "url": "https://anthropic.com/",
+      "registrableDomain": "anthropic.com",
+      "role": "unclassified",
+      "historicCmpPresence": "not_observed",
+      "sourceScanId": "bebb8490-b8c6-43e6-bc3b-e14207e61b4b",
+      "sourceCompletedAt": "2026-09-09T01:48:46.346+00:00",
+      "sourcePeriod": 1
+    },
+    {
+      "url": "https://clashofclans.com/",
+      "role": "unclassified",
+      "lanes": [
+        "consent_controls",
+        "gdpr_transparency",
+        "transport_evidence",
+        "third_party_attribution",
+        "no_go_resilience",
+        "language_inference"
+      ],
+      "historicCmpPresence": "observed",
+      "sourceScanId": "42cffb38-6778-42fa-b719-4ea4849c973a",
+      "registrableDomain": "clashofclans.com"
+    },
+    {
+      "url": "https://meethue.com/",
+      "role": "unclassified",
+      "lanes": [
+        "consent_controls",
+        "gdpr_transparency",
+        "transport_evidence",
+        "third_party_attribution",
+        "no_go_resilience",
+        "language_inference"
+      ],
+      "historicCmpPresence": "not_observed",
+      "sourceScanId": "da23863c-afae-4903-ab15-548f64455727",
+      "registrableDomain": "meethue.com"
+    },
+    {
+      "url": "https://www.fino.lk/",
+      "registrableDomain": "fino.lk",
+      "role": "unclassified",
+      "historicCmpPresence": "not_observed",
+      "sourceScanId": "0077ab74-e2e0-4455-a437-ce71eea1e176",
+      "sourceCompletedAt": "2026-09-09T05:11:22.46+00:00",
+      "sourcePeriod": 1
+    },
+    {
+      "url": "https://amazon.com.au/",
+      "role": "unclassified",
+      "lanes": [
+        "consent_controls",
+        "gdpr_transparency",
+        "transport_evidence",
+        "third_party_attribution",
+        "no_go_resilience",
+        "language_inference"
+      ],
+      "historicCmpPresence": "not_observed",
+      "sourceScanId": "61001735-c397-47bc-ab72-114fc3a53d43",
+      "registrableDomain": "amazon.com.au"
+    },
+    {
+      "url": "https://property24.com/",
+      "registrableDomain": "property24.com",
+      "role": "unclassified",
+      "historicCmpPresence": "not_observed",
+      "sourceScanId": "e7b0bc7e-c98c-4a6b-9e00-56b89279d902",
+      "sourceCompletedAt": "2026-09-09T02:13:37.291+00:00",
+      "sourcePeriod": 1
+    },
+    {
+      "url": "https://jd.com/",
+      "registrableDomain": "jd.com",
+      "role": "unclassified",
+      "historicCmpPresence": "not_observed",
+      "sourceScanId": "391bbbe5-adc9-4fcb-bf90-808b5e4ba430",
+      "sourceCompletedAt": "2026-09-08T21:49:30.611+00:00",
+      "sourcePeriod": 2
+    },
+    {
+      "url": "https://mux.com/",
+      "registrableDomain": "mux.com",
+      "role": "unclassified",
+      "historicCmpPresence": "not_observed",
+      "sourceScanId": "a5239cf9-1da7-40f9-be0b-3d23b33d8994",
+      "sourceCompletedAt": "2026-09-10T20:23:03.719+00:00",
+      "sourcePeriod": 0
+    },
+    {
+      "url": "https://tandfonline.com/",
+      "registrableDomain": "tandfonline.com",
+      "role": "unclassified",
+      "historicCmpPresence": "not_observed",
+      "sourceScanId": "8a69d51c-0bdf-40d1-893a-cece93a9f99b",
+      "sourceCompletedAt": "2026-09-09T11:46:08.852+00:00",
+      "sourcePeriod": 1
+    },
+    {
+      "url": "https://px-cloud.net/",
+      "registrableDomain": "px-cloud.net",
+      "role": "unclassified",
+      "historicCmpPresence": "not_observed",
+      "sourceScanId": "695c7972-cccf-4cc8-80fc-271dded5dc9b",
+      "sourceCompletedAt": "2026-09-09T06:35:02.931+00:00",
+      "sourcePeriod": 1
+    },
+    {
+      "url": "https://elconfidencial.com/",
+      "registrableDomain": "elconfidencial.com",
+      "role": "unclassified",
+      "historicCmpPresence": "not_observed",
+      "sourceScanId": "ae58576c-e053-48fb-a89c-c5a248621865",
+      "sourceCompletedAt": "2026-09-08T22:18:46.944+00:00",
+      "sourcePeriod": 2
+    },
+    {
+      "url": "https://mechacomic.jp/",
+      "registrableDomain": "mechacomic.jp",
+      "role": "unclassified",
+      "historicCmpPresence": "not_observed",
+      "sourceScanId": "06101aa5-9a25-42e5-9751-2fabc991cb81",
+      "sourceCompletedAt": "2026-09-08T22:02:16.374+00:00",
+      "sourcePeriod": 2
+    },
+    {
+      "url": "https://one.one/",
+      "registrableDomain": "one.one",
+      "role": "unclassified",
+      "historicCmpPresence": "observed",
+      "sourceScanId": "9e396f2c-be56-4ce1-a967-cae9dd21ae95",
+      "sourceCompletedAt": "2026-09-11T01:25:15.659+00:00",
+      "sourcePeriod": 0
+    },
+    {
+      "url": "https://xhwide.com/",
+      "registrableDomain": "xhwide.com",
+      "role": "unclassified",
+      "historicCmpPresence": "not_observed",
+      "sourceScanId": "0ccd5176-c0fc-40ae-a604-0d1e961f03f3",
+      "sourceCompletedAt": "2026-09-08T19:29:40.456+00:00",
+      "sourcePeriod": 2
+    },
+    {
+      "url": "https://alfasense.com/",
+      "registrableDomain": "alfasense.com",
+      "role": "unclassified",
+      "historicCmpPresence": "not_observed",
+      "sourceScanId": "39434343-5c5e-4372-8744-84b324200355",
+      "sourceCompletedAt": "2026-09-10T18:35:01.691+00:00",
+      "sourcePeriod": 0
+    },
+    {
+      "url": "https://wallbox.com/",
+      "registrableDomain": "wallbox.com",
+      "role": "unclassified",
+      "historicCmpPresence": "not_observed",
+      "sourceScanId": "a4c91490-7ff3-49b3-82a8-9a2fb39472ba",
+      "sourceCompletedAt": "2026-09-08T16:12:32.448+00:00",
+      "sourcePeriod": 2
+    },
+    {
+      "url": "https://chess.com/",
+      "role": "unclassified",
+      "lanes": [
+        "consent_controls",
+        "gdpr_transparency",
+        "transport_evidence",
+        "third_party_attribution",
+        "no_go_resilience",
+        "language_inference"
+      ],
+      "historicCmpPresence": "observed",
+      "sourceScanId": "1594735d-e5fb-43f7-a7b2-2373b62ad604",
+      "registrableDomain": "chess.com"
+    },
+    {
+      "url": "https://www.travismathew.com/",
+      "registrableDomain": "travismathew.com",
+      "role": "unclassified",
+      "historicCmpPresence": "not_observed",
+      "sourceScanId": "19d853ef-ac95-4a71-8782-0324a4fa3aca",
+      "sourceCompletedAt": "2026-09-08T16:10:46.221+00:00",
+      "sourcePeriod": 2
+    },
+    {
+      "url": "https://asurascans.com/",
+      "registrableDomain": "asurascans.com",
+      "role": "unclassified",
+      "historicCmpPresence": "not_observed",
+      "sourceScanId": "9f281d5f-59e4-4510-b983-4d74c37508ba",
+      "sourceCompletedAt": "2026-09-09T00:43:21.824+00:00",
+      "sourcePeriod": 2
+    },
+    {
+      "url": "https://freesexkahani.com/",
+      "role": "unclassified",
+      "lanes": [
+        "consent_controls",
+        "gdpr_transparency",
+        "transport_evidence",
+        "third_party_attribution",
+        "no_go_resilience",
+        "language_inference"
+      ],
+      "historicCmpPresence": "not_observed",
+      "sourceScanId": "3a0bf961-ac04-4ea0-8e9f-2d38b005ab49",
+      "registrableDomain": "freesexkahani.com"
+    },
+    {
+      "url": "https://deepl.com/",
+      "registrableDomain": "deepl.com",
+      "role": "unclassified",
+      "historicCmpPresence": "not_observed",
+      "sourceScanId": "1cba36bb-b579-4784-b8c1-114e61a420db",
+      "sourceCompletedAt": "2026-09-09T05:11:13.701+00:00",
+      "sourcePeriod": 1
+    },
+    {
+      "url": "https://sexnyk.com/",
+      "registrableDomain": "sexnyk.com",
+      "role": "unclassified",
+      "historicCmpPresence": "not_observed",
+      "sourceScanId": "8803d1a0-770a-4ebb-8805-265498c5993c",
+      "sourceCompletedAt": "2026-09-09T04:01:49.312+00:00",
+      "sourcePeriod": 1
+    },
+    {
+      "url": "https://gsmarena.com/",
+      "role": "unclassified",
+      "lanes": [
+        "consent_controls",
+        "gdpr_transparency",
+        "transport_evidence",
+        "third_party_attribution",
+        "no_go_resilience",
+        "language_inference"
+      ],
+      "historicCmpPresence": "observed",
+      "sourceScanId": "62230852-642e-448f-8482-e208e7dc4724",
+      "registrableDomain": "gsmarena.com"
+    },
+    {
+      "url": "https://tripadvisor.co.uk/",
+      "registrableDomain": "tripadvisor.co.uk",
+      "role": "unclassified",
+      "historicCmpPresence": "not_observed",
+      "sourceScanId": "0d347b52-dbab-4479-b826-f6c0646fb4b4",
+      "sourceCompletedAt": "2026-09-10T20:59:33.59+00:00",
+      "sourcePeriod": 0
+    },
+    {
+      "url": "https://www.iana.org/",
+      "registrableDomain": "iana.org",
+      "role": "unclassified",
+      "historicCmpPresence": "not_observed",
+      "sourceScanId": "fcfcda27-8a1c-4bb0-943f-9d730df02476",
+      "sourceCompletedAt": "2026-09-08T19:50:47.791+00:00",
+      "sourcePeriod": 2
+    },
+    {
+      "url": "https://tbank.ru/",
+      "registrableDomain": "tbank.ru",
+      "role": "unclassified",
+      "historicCmpPresence": "not_observed",
+      "sourceScanId": "d85f43b3-66dd-4494-939a-d3e7c5d66c67",
+      "sourceCompletedAt": "2026-09-09T11:57:51.093+00:00",
+      "sourcePeriod": 1
+    },
+    {
+      "url": "https://ack.de/",
+      "registrableDomain": "ack.de",
+      "role": "unclassified",
+      "historicCmpPresence": "not_observed",
+      "sourceScanId": "c7b42ad5-e5e9-495c-88af-9c5a07121db0",
+      "sourceCompletedAt": "2026-09-09T00:35:35.48+00:00",
+      "sourcePeriod": 2
+    },
+    {
+      "url": "https://www.virtualpro.com/",
+      "registrableDomain": "virtualpro.com",
+      "role": "unclassified",
+      "historicCmpPresence": "observed",
+      "sourceScanId": "ecc54119-fb5a-4de9-b704-750ff271593b",
+      "sourceCompletedAt": "2026-09-08T16:15:59.787+00:00",
+      "sourcePeriod": 2
+    },
+    {
+      "url": "https://google.com.sa/",
+      "role": "unclassified",
+      "lanes": [
+        "consent_controls",
+        "gdpr_transparency",
+        "transport_evidence",
+        "third_party_attribution",
+        "no_go_resilience",
+        "language_inference"
+      ],
+      "historicCmpPresence": "not_observed",
+      "sourceScanId": "df7e554e-8766-4636-bba1-e1da55ce9b08",
+      "registrableDomain": "google.com.sa"
+    },
+    {
+      "url": "https://hamshahrionline.ir/",
+      "role": "unclassified",
+      "lanes": [
+        "consent_controls",
+        "gdpr_transparency",
+        "transport_evidence",
+        "third_party_attribution",
+        "no_go_resilience",
+        "language_inference"
+      ],
+      "historicCmpPresence": "not_observed",
+      "sourceScanId": "a6608e64-223c-42f0-811b-62479e97a4fb",
+      "registrableDomain": "hamshahrionline.ir"
+    },
+    {
+      "url": "https://realtor.com/",
+      "registrableDomain": "realtor.com",
+      "role": "unclassified",
+      "historicCmpPresence": "not_observed",
+      "sourceScanId": "9874cd0e-8f24-4c41-8eea-af5a04469646",
+      "sourceCompletedAt": "2026-09-10T21:32:49.078+00:00",
+      "sourcePeriod": 0
+    },
+    {
+      "url": "https://bundestag.de/",
+      "registrableDomain": "bundestag.de",
+      "role": "unclassified",
+      "historicCmpPresence": "not_observed",
+      "sourceScanId": "68a436bc-d6bf-43f2-b632-70d081e4c718",
+      "sourceCompletedAt": "2026-09-10T22:24:01.613+00:00",
+      "sourcePeriod": 0
+    },
+    {
+      "url": "https://xvideos.tube/",
+      "registrableDomain": "xvideos.tube",
+      "role": "unclassified",
+      "historicCmpPresence": "not_observed",
+      "sourceScanId": "05b9e22f-14fd-4705-8898-872deeb789e5",
+      "sourceCompletedAt": "2026-09-11T00:04:57.767+00:00",
+      "sourcePeriod": 0
+    },
+    {
+      "url": "https://outlook.com/",
+      "registrableDomain": "outlook.com",
+      "role": "unclassified",
+      "historicCmpPresence": "not_observed",
+      "sourceScanId": "7ee89ec4-2fb6-4a57-8448-e929cdc59d1a",
+      "sourceCompletedAt": "2026-09-09T08:10:34.712+00:00",
+      "sourcePeriod": 1
+    },
+    {
+      "url": "https://uni-tuebingen.de/",
+      "registrableDomain": "uni-tuebingen.de",
+      "role": "unclassified",
+      "historicCmpPresence": "not_observed",
+      "sourceScanId": "ee1eb493-346e-4481-bc6e-9bde694267b6",
+      "sourceCompletedAt": "2026-09-11T01:20:35.946+00:00",
+      "sourcePeriod": 0
+    },
+    {
+      "url": "https://amplitude.com/",
+      "registrableDomain": "amplitude.com",
+      "role": "unclassified",
+      "historicCmpPresence": "not_observed",
+      "sourceScanId": "9c0f1253-86a9-4e3d-a023-e6c223cf1533",
+      "sourceCompletedAt": "2026-09-09T12:48:42.249+00:00",
+      "sourcePeriod": 1
+    },
+    {
+      "url": "https://rfc-editor.org/",
+      "role": "unclassified",
+      "lanes": [
+        "consent_controls",
+        "gdpr_transparency",
+        "transport_evidence",
+        "third_party_attribution",
+        "no_go_resilience",
+        "language_inference"
+      ],
+      "historicCmpPresence": "not_observed",
+      "sourceScanId": "5aed7f21-27cf-419d-b485-3e9d3de126f1",
+      "registrableDomain": "rfc-editor.org"
+    },
+    {
+      "url": "https://issuu.com/",
+      "registrableDomain": "issuu.com",
+      "role": "unclassified",
+      "historicCmpPresence": "observed",
+      "sourceScanId": "2258e419-142b-45f2-940b-2dc7b6e06eba",
+      "sourceCompletedAt": "2026-09-09T02:57:31.606+00:00",
+      "sourcePeriod": 1
+    },
+    {
+      "url": "https://snapchat.com/",
+      "registrableDomain": "snapchat.com",
+      "role": "unclassified",
+      "historicCmpPresence": "not_observed",
+      "sourceScanId": "f487465d-12dd-4440-9d0a-b156caddb2f5",
+      "sourceCompletedAt": "2026-09-08T18:43:13.625+00:00",
+      "sourcePeriod": 2
+    },
+    {
+      "url": "https://kakao.com/",
+      "registrableDomain": "kakao.com",
+      "role": "unclassified",
+      "historicCmpPresence": "not_observed",
+      "sourceScanId": "0de060e8-9e37-40e5-ae74-ce6c0defa03c",
+      "sourceCompletedAt": "2026-09-09T05:30:54.769+00:00",
+      "sourcePeriod": 1
+    },
+    {
+      "url": "https://icloud-content.com/",
+      "registrableDomain": "icloud-content.com",
+      "role": "unclassified",
+      "historicCmpPresence": "not_observed",
+      "sourceScanId": "909ef588-fdee-47ee-b975-971f4fcfb20d",
+      "sourceCompletedAt": "2026-09-08T20:52:02.576+00:00",
+      "sourcePeriod": 2
+    },
+    {
+      "url": "https://zhihu.com/",
+      "registrableDomain": "zhihu.com",
+      "role": "unclassified",
+      "historicCmpPresence": "not_observed",
+      "sourceScanId": "e941fcfa-9b5d-4635-a777-76f1cdc31a2d",
+      "sourceCompletedAt": "2026-09-08T20:33:49.274+00:00",
+      "sourcePeriod": 2
+    },
+    {
+      "url": "https://novinky.cz/",
+      "registrableDomain": "novinky.cz",
+      "role": "unclassified",
+      "historicCmpPresence": "not_observed",
+      "sourceScanId": "753501c2-bb1f-40ba-b1b5-cb4971588f60",
+      "sourceCompletedAt": "2026-09-09T01:50:50.629+00:00",
+      "sourcePeriod": 1
+    },
+    {
+      "url": "https://nginx.org/",
+      "registrableDomain": "nginx.org",
+      "role": "unclassified",
+      "historicCmpPresence": "not_observed",
+      "sourceScanId": "624d1210-5e84-4bb0-9eb6-67796d467230",
+      "sourceCompletedAt": "2026-09-08T20:39:31.317+00:00",
+      "sourcePeriod": 2
+    },
+    {
+      "url": "https://www.onestopplus.com/",
+      "role": "unclassified",
+      "lanes": [
+        "consent_controls",
+        "gdpr_transparency",
+        "transport_evidence",
+        "third_party_attribution",
+        "no_go_resilience",
+        "language_inference"
+      ],
+      "historicCmpPresence": "observed",
+      "sourceScanId": "0727eda8-7d71-454b-b504-a58a6f52101f",
+      "registrableDomain": "onestopplus.com"
+    },
+    {
+      "url": "https://abebooks.com/",
+      "registrableDomain": "abebooks.com",
+      "role": "unclassified",
+      "historicCmpPresence": "not_observed",
+      "sourceScanId": "4a54fcb9-25d3-47b8-a911-06e09da9e15e",
+      "sourceCompletedAt": "2026-09-10T19:26:15.249+00:00",
+      "sourcePeriod": 0
+    },
+    {
+      "url": "https://compass.com/",
+      "registrableDomain": "compass.com",
+      "role": "unclassified",
+      "historicCmpPresence": "not_observed",
+      "sourceScanId": "3a2d6bee-9b95-488f-b7d8-535564ac8f7d",
+      "sourceCompletedAt": "2026-09-10T23:31:31.214+00:00",
+      "sourcePeriod": 0
+    },
+    {
+      "url": "https://xiaomi.com/",
+      "registrableDomain": "xiaomi.com",
+      "role": "unclassified",
+      "historicCmpPresence": "not_observed",
+      "sourceScanId": "af5e5a93-a34d-460f-a48e-7bf04efb12e3",
+      "sourceCompletedAt": "2026-09-09T09:10:41.993+00:00",
+      "sourcePeriod": 1
+    },
+    {
+      "url": "https://featureassets.org/",
+      "registrableDomain": "featureassets.org",
+      "role": "unclassified",
+      "historicCmpPresence": "not_observed",
+      "sourceScanId": "9a73cc9b-9ebe-4d8d-9415-1acc828ca8a8",
+      "sourceCompletedAt": "2026-09-09T07:08:57.53+00:00",
+      "sourcePeriod": 1
+    },
+    {
+      "url": "https://altibox.no/",
+      "role": "unclassified",
+      "lanes": [
+        "consent_controls",
+        "gdpr_transparency",
+        "transport_evidence",
+        "third_party_attribution",
+        "no_go_resilience",
+        "language_inference"
+      ],
+      "historicCmpPresence": "observed",
+      "sourceScanId": "9af2049f-0c41-4434-9a53-89db4da080fc",
+      "registrableDomain": "altibox.no"
+    },
+    {
+      "url": "https://trendmicro.com/",
+      "registrableDomain": "trendmicro.com",
+      "role": "unclassified",
+      "historicCmpPresence": "observed",
+      "sourceScanId": "0e5a0924-037d-471e-b77d-9fa2e14d1e56",
+      "sourceCompletedAt": "2026-09-09T06:22:50.602+00:00",
+      "sourcePeriod": 1
+    },
+    {
+      "url": "https://mmechocaptiveportal.com/",
+      "registrableDomain": "mmechocaptiveportal.com",
+      "role": "unclassified",
+      "historicCmpPresence": "not_observed",
+      "sourceScanId": "170d01c4-cf84-40d3-b314-3b70d15f9699",
+      "sourceCompletedAt": "2026-09-08T18:36:58.171+00:00",
+      "sourcePeriod": 2
+    }
+  ],
+  "acceptanceGate": {
+    "targetRate": 0.95,
+    "minimumRepresentativeRows": 200,
+    "confidenceLevel": 0.95,
+    "requireWilsonLowerBoundAboveTarget": true,
+    "allSubmittedCount": 260,
+    "historicalCmpObserved": 57,
+    "historicalCmpNotObserved": 203,
+    "noRetries": true,
+    "noOutcomeReplacements": true,
+    "knownDiagnosticCasesReportedSeparately": true
+  }
+}

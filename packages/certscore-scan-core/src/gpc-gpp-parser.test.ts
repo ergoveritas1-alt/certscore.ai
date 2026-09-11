@@ -43,3 +43,60 @@ test("documented flat California section uses its own version and explicit shari
   p.parsedSections.usca.Version = 2;
   assert.equal(parseGpcGppPing(p).status, "invalid");
 });
+
+test("array GPP sections accept canonical GpcSegmentType and reject conflicting or missing type fields", () => {
+  const canonical: any = ping(8);
+  canonical.parsedSections.usca[1] = { GpcSegmentType: 1, Gpc: true };
+  assert.equal(parseGpcGppPing(canonical).status, "observed");
+
+  const conflicting: any = ping(8);
+  conflicting.parsedSections.usca[1] = { GpcSegmentType: 1, SubsectionType: 2, Gpc: true };
+  assert.deepEqual(parseGpcGppPing(conflicting).diagnosticCodes, ["gpc_subsection_type_conflict"]);
+
+  const missing: any = ping(8);
+  missing.parsedSections.usca[1] = { Gpc: true };
+  assert.deepEqual(parseGpcGppPing(missing).diagnosticCodes, ["gpc_subsection_type_missing"]);
+
+  const disallowed: any = ping(8);
+  disallowed.parsedSections.usca[1] = { GpcSegmentType: 2, Gpc: true };
+  assert.deepEqual(parseGpcGppPing(disallowed).diagnosticCodes, ["gpc_subsection_type_invalid"]);
+
+  const nonBoolean: any = ping(8);
+  nonBoolean.parsedSections.usca[1] = { GpcSegmentType: 1, Gpc: 1 };
+  assert.deepEqual(parseGpcGppPing(nonBoolean).diagnosticCodes, ["gpc_value_invalid"]);
+});
+
+test("diagnostics expose only bounded field codes for readiness and malformed sections", () => {
+  const notReady: any = ping(7);
+  notReady.cmpStatus = "loading";
+  notReady.signalStatus = "not ready";
+  const readiness = parseGpcGppPing(notReady);
+  assert.equal(readiness.status, "not_ready");
+  assert.deepEqual(readiness.diagnosticCodes, ["cmp_status_not_loaded", "signal_status_not_ready"]);
+
+  const malformed: any = ping(8);
+  delete malformed.parsedSections.usca[0].SharingOptOutNotice;
+  malformed.parsedSections.usca[0].SaleOptOut = "opaque-private-value";
+  const fields = parseGpcGppPing(malformed);
+  assert.equal(fields.status, "invalid");
+  assert.deepEqual(fields.diagnosticCodes, ["sharing_notice_invalid", "sale_opt_out_invalid"]);
+  assert.doesNotMatch(JSON.stringify(fields), /opaque-private-value|gppString|cookie/i);
+
+  const flat: any = ping(8);
+  flat.parsedSections.usca = { ...flat.parsedSections.usca[0], Gpc: false, GpcSegmentType: 1 };
+  assert.deepEqual(parseGpcGppPing(flat).diagnosticCodes, ["flat_usca_section"]);
+});
+
+test("oversized section inventories fail before duplicate-set iteration", () => {
+  const oversized: any = ping(7);
+  const hostile = new Proxy(new Array(33).fill(7), {
+    get(target, property, receiver) {
+      if (property === Symbol.iterator) throw new Error("must not iterate oversized inventory");
+      return Reflect.get(target, property, receiver);
+    },
+  });
+  oversized.sectionList = hostile;
+  const result = parseGpcGppPing(oversized);
+  assert.equal(result.status, "invalid");
+  assert.deepEqual(result.diagnosticCodes, ["section_inventory_too_large"]);
+});

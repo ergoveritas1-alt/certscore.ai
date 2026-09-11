@@ -1,0 +1,66 @@
+{
+  "entries": {
+    "https://www.xpel.com/": {
+      "consecutiveNoGoCount": 0,
+      "cooldownUntil": "2026-10-09T05:15:58.020Z",
+      "lastContactAt": "2026-09-11T05:15:58.020Z",
+      "lastContactSource": "calibration",
+      "lastNoGoReasons": [],
+      "lastOutcome": "completed",
+      "state": "cooldown",
+      "url": "https://www.xpel.com/"
+    },
+    "https://360yield.com/": {
+      "consecutiveNoGoCount": 0,
+      "cooldownUntil": "2026-10-09T05:22:44.230Z",
+      "lastContactAt": "2026-09-11T05:22:44.230Z",
+      "lastContactSource": "calibration",
+      "lastNoGoReasons": [],
+      "lastOutcome": "completed",
+      "state": "cooldown",
+      "url": "https://360yield.com/"
+    },
+    "https://imgsmail.ru/": {
+      "consecutiveNoGoCount": 0,
+      "cooldownUntil": "2026-10-09T05:16:09.558Z",
+      "lastContactAt": "2026-09-11T05:16:09.558Z",
+      "lastContactSource": "calibration",
+      "lastNoGoReasons": [],
+      "lastOutcome": "completed",
+      "state": "cooldown",
+      "url": "https://imgsmail.ru/"
+    },
+    "https://game8.co/": {
+      "consecutiveNoGoCount": 0,
+      "cooldownUntil": "2026-10-09T05:22:50.448Z",
+      "lastContactAt": "2026-09-11T05:22:50.448Z",
+      "lastContactSource": "calibration",
+      "lastNoGoReasons": [],
+      "lastOutcome": "completed",
+      "state": "cooldown",
+      "url": "https://game8.co/"
+    },
+    "https://sberbank-tele.com/": {
+      "consecutiveNoGoCount": 0,
+      "cooldownUntil": "2026-10-09T05:23:07.062Z",
+      "lastContactAt": "2026-09-11T05:23:07.062Z",
+      "lastContactSource": "calibration",
+      "lastNoGoReasons": [],
+      "lastOutcome": "completed",
+      "state": "cooldown",
+      "url": "https://sberbank-tele.com/"
+    },
+    "https://hugedomains.com/": {
+      "consecutiveNoGoCount": 0,
+      "cooldownUntil": "2026-10-09T05:22:53.300Z",
+      "lastContactAt": "2026-09-11T05:22:53.300Z",
+      "lastContactSource": "calibration",
+      "lastNoGoReasons": [],
+      "lastOutcome": "completed",
+      "state": "cooldown",
+      "url": "https://hugedomains.com/"
+    }
+  },
+  "ledgerVersion": "certscore.scan_quality_calibration_ledger.1",
+  "updatedAt": "2026-09-11T05:28:24.439Z"
+}

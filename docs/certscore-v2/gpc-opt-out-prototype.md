@@ -79,6 +79,20 @@ wait is added, no configured value is substituted, and late completion cannot ch
 a finalized packet. Actual absence or zero is preserved. Every request counted for
 the declared GPC window must still have retained `Sec-GPC: 1` proof.
 
+The optional `certscore.gpc-request-diagnostics.v1` packet records bounded CDP
+request outcomes, fixed failure/blocked-reason codes and missing-header correlation
+metadata. It retains only hashed URLs and the Sec-GPC value, never full headers or
+raw error strings. Unique URL/method/timing correlation is diagnostic-only; candidates
+without timing remain explicitly unbound. Redirect chains and ambiguous extra-info
+cannot supply a header for another request. These diagnostics never populate missing
+request or main-document delivery evidence and never change completion or scoring.
+Raw event, request-handle and output caps have explicit overflow counters.
+
+The local runner validates the actual canonical file and writes its original
+checksum pointer before handling an optional session, including blocked/no-session
+outcomes. Exclusive creation prevents replacing that original pointer during replay.
+This does not backfill older records whose capture-time pointer is unavailable.
+
 The session remains a sidecar, not a CanonicalEvidenceBundle field. Its small optional
 canonical checksum/binding does not alter production v1/v2 conclusions or make a
 prototype assessment projectable. Historical packets are not backfilled. Existing
@@ -145,7 +159,10 @@ labels are not independent human ground truth or a measured error rate.
 ## Completion and release gates
 
 Adapter v3 adds the documented flat California shape and independently anchored
-main-document session. Earlier v1/v2 adapter observations retain their versions.
+main-document session. Adapter v4 also accepts the canonical subsection-array
+`GpcSegmentType: 1` form while retaining legacy `SubsectionType: 1` support. When
+both markers appear they must agree; missing/invalid markers and non-boolean GPC
+values remain invalid. Earlier v1/v2/v3 observations retain their versions.
 
 The owner target is **strictly greater than 95%** completion of
 `main_document_and_retained_http_requests` observation on representative pages.
@@ -169,8 +186,10 @@ visible in any later product proposal.
 representative-page rates. Only independently evidenced non-representative pages
 leave the latter denominator; unknown access and unverified artifacts stay as
 failures. Duplicate scan identities fail the gate. Require at least 100 representative
-observations and a 95% Wilson lower confidence bound strictly above 95%. A small
-perfect sample does not pass. Freeze a held-out cohort before evaluation and report
+observations and a 95% Wilson lower confidence bound strictly above 95%. The
+September 11 follow-up preregisters a stricter minimum of 200 representative
+observations. A small perfect sample does not pass. Freeze a held-out cohort before
+evaluation and report
 cohort composition; this is not an internet-wide reliability estimate.
 
 The prototype always remains internal-only and score-neutral. Before production:
@@ -195,7 +214,9 @@ owner approval. No deployment is part of this work.
 
 ## Verification record
 
-See the dated local calibration report for exact source hashes, outcomes, limitations,
+See the [follow-up calibration report](calibration/gpc-completion-followup-20260911/README.md)
+and the [earlier report](calibration/gpc-completion-20260911/README.md) for exact
+source hashes, outcomes, limitations,
 artifact sizes and checks. Earlier historical replay remains unchanged and cannot
 supply the new completion proof. A held-out statistical pass is required before
 claiming the >95% target achieved.

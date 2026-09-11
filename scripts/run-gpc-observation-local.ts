@@ -4,12 +4,23 @@ import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { chromiumProxyOptions } from "../packages/certscore-scan-core/src/playwright-runtime";
 import { runScan } from "../packages/certscore-scan-core/src/index";
-import { retainedGpcObservationSessionSchema, type GpcObservationSession } from "@certscore/contracts";
+import { canonicalEvidenceBundleSchema, retainedGpcObservationSessionSchema, type GpcObservationSession } from "@certscore/contracts";
 import { assessGpcObservationCompletion } from "../packages/certscore-scan-core/src/gpc-observation-completion";
 import { evaluateGpcObservationCompletionGate, type GpcObservationCompletionRow } from "./lib/gpc-observation-completion-gate";
 import { publicTestContactHoldForUrl } from "../packages/certscore-scan-core/src/public-test-contact-holds";
 const digest = (bytes: Uint8Array) => createHash("sha256").update(bytes).digest("hex");
 export function localGpcSource(bytes: Uint8Array, uri: string) { return { bytes, pointer: { uri, sha256: digest(bytes), sizeBytes: bytes.length } }; }
+
+/** Retain access evidence before optional session handling, including no-go and
+ * unknown outcomes. Validate actual disk bytes rather than an in-memory result. */
+export async function retainLocalGpcCanonicalSource(outDir: string, scanId: string) {
+  const bytes = await readFile(path.join(outDir, "CanonicalEvidenceBundle.json"));
+  const bundle = canonicalEvidenceBundleSchema.parse(JSON.parse(bytes.toString()));
+  if (bundle.scanId !== scanId) throw Error("Canonical artifact scan identity mismatch");
+  const source = localGpcSource(bytes, path.join(outDir, "CanonicalEvidenceBundle.json"));
+  await writeFile(path.join(outDir, "CanonicalEvidenceBundle.pointer.json"), JSON.stringify(source.pointer, null, 2), { flag: "wx" });
+  return { bundle, source };
+}
 
 /** Local artifact-only runner. Selection and verified egress are mandatory for
  * public targets; no retry or target replacement after seeing an outcome. */
@@ -30,6 +41,7 @@ export async function runLocalGpcCalibration(input: {
   const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
   const implementationFiles = ["scripts/run-gpc-observation-local.ts", "scripts/lib/gpc-observation-completion-gate.ts",
     "packages/certscore-scan-core/src/gpc-observation-completion.ts", "packages/certscore-scan-core/src/gpc-observation-session.ts",
+    "packages/certscore-scan-core/src/gpc-request-diagnostics.ts",
     "packages/certscore-scan-core/src/gpc-semantic-monitor.ts", "packages/certscore-scan-core/src/gpc-gpp-parser.ts",
     "packages/certscore-scan-core/src/gpc-opt-out-capture.ts", "packages/certscore-scan-core/src/index.ts",
     "packages/certscore-scan-core/src/scanners/pre-consent-runtime-scanner.ts", "packages/certscore-contracts/src/gpc-opt-out-prototype.ts",
@@ -50,15 +62,11 @@ export async function runLocalGpcCalibration(input: {
     let canonicalVerified = false;
     let status = "failed", error: string | undefined;
     try {
-      const bundle = await runScan({ scanId, url: url.href, profile: "standard", region: "us-west-1", outDir,
+      await runScan({ scanId, url: url.href, profile: "standard", region: "us-west-1", outDir,
         evidenceLane: "gpc_observation", preConsentScreenshotMode: "never",
         onGpcObservationSession: packet => { session = packet; } });
-      const bytes = await readFile(path.join(outDir, "CanonicalEvidenceBundle.json"));
-      const source = localGpcSource(bytes, path.join(outDir, "CanonicalEvidenceBundle.json"));
-      canonicalVerified = bundle.scanId === scanId;
-      // Preserve original access evidence even when no GPC session is returned.
-      // A later audit must never manufacture the original checksum for a no-go.
-      await writeFile(path.join(outDir, "CanonicalEvidenceBundle.pointer.json"), JSON.stringify(source.pointer, null, 2));
+      const { bundle, source } = await retainLocalGpcCanonicalSource(outDir, scanId);
+      canonicalVerified = true;
       if (session) {
         const envelope = retainedGpcObservationSessionSchema.parse({ contractVersion: "certscore.retained-gpc-observation-session.v1", gpcArtifactSha256: source.pointer.sha256, session });
         const sidecarBytes = Buffer.from(JSON.stringify(envelope, null, 2) + "\n");

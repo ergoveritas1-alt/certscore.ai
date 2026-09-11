@@ -84,9 +84,9 @@ export async function captureGpcOptOutObservation(page: Page, input: {
   // Keep tsx name helpers lexical; never patch the website global to run a probe.
   const sample = await page.evaluate<ReturnType<typeof readback>>(`(() => { const __name = (fn) => fn; return (${readback.toString()})(${argumentsJson}); })()`);
   if (sample.monitor) input.onMonitorFinished?.(sample.monitor);
-  const decoded = !sample.present ? { status: "unavailable", state: null, reason: "api_unavailable" } :
-    sample.callbackCount > 1 ? { status: "invalid", state: null, reason: "duplicate_ping_callback" } :
-    sample.callbackCount !== 1 || !sample.callbackSucceeded ? { status: "not_ready", state: null, reason: "synchronous_ping_unavailable" } : parseGpcGppPing(sample.safePing);
+  const decoded = !sample.present ? { status: "unavailable", state: null, reason: "api_unavailable", diagnosticCodes: ["api_unavailable"] as string[] } :
+    sample.callbackCount > 1 ? { status: "invalid", state: null, reason: "duplicate_ping_callback", diagnosticCodes: ["duplicate_ping_callback"] as string[] } :
+    sample.callbackCount !== 1 || !sample.callbackSucceeded ? { status: "not_ready", state: null, reason: "synchronous_ping_unavailable", diagnosticCodes: ["cmp_status_not_loaded"] as string[] } : parseGpcGppPing(sample.safePing);
   const usca = decoded.state?.sectionId === 8 ? gpcUscaStateSchema.parse(decoded.state) : null;
   const usnat = decoded.state?.sectionId === 7 ? gpcUsNationalStateSchema.parse(decoded.state) : null;
   const limitationKeys = [];
@@ -106,11 +106,13 @@ export async function captureGpcOptOutObservation(page: Page, input: {
     gppDiagnostics: { reason: decoded.reason, callbackCount: sample.callbackCount,
       applicableSections: (sample.safePing?.applicableSections ?? []).filter((x): x is number => typeof x === "number"),
       sectionList: (sample.safePing?.sectionList ?? []).filter((x): x is number => typeof x === "number"),
+      diagnosticCodes: decoded.diagnosticCodes,
     },
     acknowledgmentCaptureComplete: !sample.truncated,
     stateSha256: (usca ?? usnat) ? createHash("sha256").update(JSON.stringify(usca ?? usnat)).digest("hex") : null,
     stateTransitions: sample.history.map((row: any) => ({ observedAtMs: Math.max(0, row.at - input.scanStartedAtMs),
-      status: row.status, state: row.state, stateSha256: row.state ? createHash("sha256").update(JSON.stringify(row.state)).digest("hex") : null })),
+      status: row.status, state: row.state, stateSha256: row.state ? createHash("sha256").update(JSON.stringify(row.state)).digest("hex") : null,
+      diagnosticCodes: row.diagnosticCodes })),
     acknowledgment: sample.acknowledgment, limitationKeys,
   });
 }

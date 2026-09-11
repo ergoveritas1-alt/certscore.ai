@@ -2,6 +2,7 @@ import type { Page, CDPSession, Request } from "playwright";
 import { gpcObservationSessionSchema, type GpcOptOutObservation, type GpcObservationSession, type NetworkEvent } from "@certscore/contracts";
 import { gpcDocumentHash } from "./gpc-signal-capture.js";
 import { installGpcSemanticMonitor } from "./gpc-semantic-monitor.js";
+import { createGpcRequestDiagnostics } from "./gpc-request-diagnostics.js";
 
 /** Local opt-in. CDP binds actual navigation delivery to browser loader identity,
  * independently of wall-clock alignment between Node and performance.timeOrigin. */
@@ -15,6 +16,7 @@ export async function startGpcObservationSession(input: { page: Page; scanId: st
   await Promise.all([cdp.send("Network.enable"), cdp.send("Page.enable")]);
   const tree = await cdp.send("Page.getFrameTree");
   const mainFrameId = tree.frameTree.frame.id;
+  const requestDiagnostics = createGpcRequestDiagnostics(cdp, mainFrameId);
   const documents: Array<{ loader: string; frame: string; requestId: string; requestAtMs: number; urlHash: string; secGpc: string | null }> = [];
   let committed: { loader: string; urlHash: string; at: number } | null = null;
   let documentDrops = 0, stopped = false, requestsObserved = 0, requestsDropped = 0;
@@ -41,13 +43,19 @@ export async function startGpcObservationSession(input: { page: Page; scanId: st
   cdp.on("Page.navigatedWithinDocument", onWithinDocument);
   return {
     monitorKey,
-    recordRequest(event: Pick<NetworkEvent, "eventId" | "timestampMs" | "requestUrl" | "requestHeaders">, request?: Pick<Request, "allHeaders">) {
+    recordRequest(event: Pick<NetworkEvent, "eventId" | "timestampMs" | "requestUrl" | "requestHeaders">,
+      request?: Pick<Request, "allHeaders"> & Partial<Pick<Request, "timing" | "method" | "resourceType" | "serviceWorker" | "failure" | "frame">>) {
       if (stopped) return;
       requestsObserved++;
       if (requests.length >= 5000 || event.eventId.length > 160) { requestsDropped++; return; }
       const row: GpcObservationSession["requests"][number] = { eventId: event.eventId, timestampMs: event.timestampMs,
         urlSha256: gpcDocumentHash(event.requestUrl), secGpc: event.requestHeaders?.secGpc ?? null, headerSource: "request_snapshot" };
       requests.push(row);
+      if (request && [request.timing, request.method, request.resourceType, request.serviceWorker, request.failure].every(fn => typeof fn === "function")) {
+        let isMainFrame: boolean | null = null;
+        try { if (request.frame) isMainFrame = request.frame() === page.mainFrame(); } catch { /* Worker-owned requests have no frame. */ }
+        requestDiagnostics.track(event.eventId, request as Request, isMainFrame);
+      }
       // Playwright's synchronous snapshot can omit security headers. Read only
       // missing values from the same request, overlapping the existing window.
       // Finalization never waits for these promises or borrows configured values.
@@ -87,10 +95,11 @@ export async function startGpcObservationSession(input: { page: Page; scanId: st
           requestId: delivered.requestId, requestAtMs: delivered.requestAtMs, secGpc: delivered.secGpc, committedAtMs: commit.at,
         },
         semanticObservation: semanticObservation ?? null, requests, requestsObserved, requestsDropped,
-        listener: listener ?? { callbacks: 0, dropped: 0, registered: false }, limitationKeys: limitations,
+        listener: listener ?? { callbacks: 0, dropped: 0, registered: false },
+        requestDiagnostics: requestDiagnostics.finish(requests), limitationKeys: limitations,
       });
       return packet;
     },
-    async close() { stopped = true; await cdp.detach().catch(() => {}); },
+    async close() { stopped = true; requestDiagnostics.close(); await cdp.detach().catch(() => {}); },
   };
 }
