@@ -1,0 +1,120 @@
+{
+  "eligibilityLedger": "docs/certscore-v2/focused-dispatch-ie-20260910-ledger.json",
+  "publicContactPolicy": {
+    "minimumCooldownDays": 28
+  },
+  "targets": [
+    {
+      "url": "https://achmea.nl/",
+      "role": "focused_dispatch_diagnostic",
+      "lanes": [
+        "consent_controls",
+        "no_go_resilience"
+      ]
+    },
+    {
+      "url": "https://actify.nl/",
+      "role": "focused_dispatch_diagnostic",
+      "lanes": [
+        "consent_controls",
+        "no_go_resilience"
+      ]
+    },
+    {
+      "url": "https://adinaeden.com/",
+      "role": "focused_dispatch_diagnostic",
+      "lanes": [
+        "consent_controls",
+        "no_go_resilience"
+      ]
+    },
+    {
+      "url": "https://hs-sites.com/",
+      "role": "focused_dispatch_diagnostic",
+      "lanes": [
+        "consent_controls",
+        "no_go_resilience"
+      ]
+    },
+    {
+      "url": "https://linode.com/",
+      "role": "focused_dispatch_diagnostic",
+      "lanes": [
+        "consent_controls",
+        "no_go_resilience"
+      ]
+    },
+    {
+      "url": "https://lovesac.com/",
+      "role": "focused_dispatch_diagnostic",
+      "lanes": [
+        "consent_controls",
+        "no_go_resilience"
+      ]
+    },
+    {
+      "url": "https://reviewbird.io/",
+      "role": "focused_dispatch_diagnostic",
+      "lanes": [
+        "consent_controls",
+        "no_go_resilience"
+      ]
+    },
+    {
+      "url": "https://skysports.com/",
+      "role": "focused_dispatch_diagnostic",
+      "lanes": [
+        "consent_controls",
+        "no_go_resilience"
+      ]
+    },
+    {
+      "url": "https://slack.com/",
+      "role": "focused_dispatch_diagnostic",
+      "lanes": [
+        "consent_controls",
+        "no_go_resilience"
+      ]
+    },
+    {
+      "url": "https://soraa.com/",
+      "role": "focused_dispatch_diagnostic",
+      "lanes": [
+        "consent_controls",
+        "no_go_resilience"
+      ]
+    },
+    {
+      "url": "https://unrulymedia.com/",
+      "role": "focused_dispatch_diagnostic",
+      "lanes": [
+        "consent_controls",
+        "no_go_resilience"
+      ]
+    },
+    {
+      "url": "https://useinsider.com/",
+      "role": "focused_dispatch_diagnostic",
+      "lanes": [
+        "consent_controls",
+        "no_go_resilience"
+      ]
+    },
+    {
+      "url": "https://www.cascadedesigns.com/",
+      "role": "focused_dispatch_diagnostic",
+      "lanes": [
+        "consent_controls",
+        "no_go_resilience"
+      ]
+    },
+    {
+      "url": "https://yumpu.com/",
+      "role": "focused_dispatch_diagnostic",
+      "lanes": [
+        "consent_controls",
+        "no_go_resilience"
+      ]
+    }
+  ]
+}
