@@ -1,3 +1,4 @@
+import { MCP_RESPONSE_CATEGORIES, MCP_AGENT_NEXT_STEPS, MCP_FAILURE_SOURCES, MCP_RESPONSE_CAPTURE_OPTIONS } from "../../../../lib/admin/mcp-response-review";
 import { mcpRequestValidationLabel, mcpScanLimitationLabel } from "../../../../lib/admin/mcp-request-outcome";
 import { MCP_FUNNEL_FOLLOW_UP_MINUTES } from "../../../../lib/admin/mcp-funnel";
 import Link from "next/link";
@@ -60,6 +61,10 @@ type AdminMcpPageProps = {
     excludeMacMiniScanBot?: string;
     includeCanary?: string;
     outcome?: string;
+    responseCategory?: string;
+    agentNextStep?: string;
+    failureSource?: string;
+    responseCapture?: string;
     page?: string;
     perPage?: string;
     product?: string;
@@ -286,6 +291,11 @@ export default async function AdminMcpTelemetryPage({ searchParams }: AdminMcpPa
     }));
     return <McpDiscoveryView data={data} period={period} search={activeQuery} client={activeClient} surface={activeSurface} source={activeSource} traffic={trafficScope} page={page} pageSize={pageSize} />;
   }
+  const activeResponseCategory = normalizeOption(resolved.responseCategory, Object.keys(MCP_RESPONSE_CATEGORIES) as (keyof typeof MCP_RESPONSE_CATEGORIES)[]);
+  const activeAgentNextStep = normalizeOption(resolved.agentNextStep, Object.keys(MCP_AGENT_NEXT_STEPS) as (keyof typeof MCP_AGENT_NEXT_STEPS)[]);
+  const activeFailureSource = normalizeOption(resolved.failureSource, Object.keys(MCP_FAILURE_SOURCES) as (keyof typeof MCP_FAILURE_SOURCES)[]);
+  const activeResponseCapture = normalizeOption(resolved.responseCapture, Object.keys(MCP_RESPONSE_CAPTURE_OPTIONS) as (keyof typeof MCP_RESPONSE_CAPTURE_OPTIONS)[]);
+  const responseFilters = { responseCategory: activeResponseCategory, agentNextStep: activeAgentNextStep, failureSource: activeFailureSource, responseCapture: activeResponseCapture };
   const activeOutcome = normalizeOption(resolved.outcome, outcomes);
   const activeDecision = normalizeOption(resolved.decision, scanDecisions);
   const activeTimeSpan = normalizeOption(resolved.timeSpan, timeSpans) ?? "30d";
@@ -293,7 +303,7 @@ export default async function AdminMcpTelemetryPage({ searchParams }: AdminMcpPa
   const activeToolPeriod = normalizeOption(resolved.toolPeriod, snapshotPeriods) ?? "24h";
   const activeSourcePeriod = normalizeOption(resolved.sourcePeriod, snapshotPeriods) ?? "24h";
   const activeTool = resolved.tool?.trim().slice(0, 100) ?? "";
-  const hasFilters = Boolean(activeClient || activeQuery || activeSurface || activeSource || activeProduct || activeConfidence || activeOutcome || activeDecision || activeTool || activeTimeSpan !== "30d");
+  const hasFilters = Boolean(activeResponseCategory || activeAgentNextStep || activeFailureSource || activeResponseCapture || activeClient || activeQuery || activeSurface || activeSource || activeProduct || activeConfidence || activeOutcome || activeDecision || activeTool || activeTimeSpan !== "30d");
   const [dashboard, eventPage] = await Promise.all([
     withServerTiming("app.admin.mcp_telemetry", () => loadAdminMcpTelemetryDashboard(
       activeSnapshotPeriod as AdminMcpSnapshotPeriod,
@@ -306,6 +316,7 @@ export default async function AdminMcpTelemetryPage({ searchParams }: AdminMcpPa
       clientName: activeClient,
       confidence: activeConfidence,
       outcome: activeOutcome,
+      ...responseFilters,
       product: activeProduct,
       query: activeQuery || null,
       scanDecision: activeDecision,
@@ -403,20 +414,26 @@ export default async function AdminMcpTelemetryPage({ searchParams }: AdminMcpPa
             <select aria-label="Filter MCP requests by attribution confidence" className="h-10 w-[9.5rem] shrink-0 rounded-lg border border-slate-300 bg-white px-2 text-xs" defaultValue={activeConfidence ?? ""} name="confidence"><option value="">Any confidence</option>{confidenceLevels.map((confidence) => <option key={confidence} value={confidence}>{formatLabel(confidence)}</option>)}</select>
             <select aria-label="Filter MCP requests by tool" className="h-10 w-[13rem] shrink-0 rounded-lg border border-slate-300 bg-white px-2 text-xs" defaultValue={activeTool} name="tool"><option value="">Any tool</option>{toolOptions.map((tool) => <option key={tool} value={tool}>{tool}</option>)}</select>
             <select aria-label="Filter MCP requests by outcome" className="h-10 w-[8.5rem] shrink-0 rounded-lg border border-slate-300 bg-white px-2 text-xs" defaultValue={activeOutcome ?? ""} name="outcome"><option value="">Any outcome</option>{outcomes.map((outcome) => <option key={outcome} value={outcome}>{formatLabel(outcome)}</option>)}</select>
+            {[
+              { name: "responseCategory", label: "Response category", value: activeResponseCategory, options: MCP_RESPONSE_CATEGORIES },
+              { name: "agentNextStep", label: "Agent next step", value: activeAgentNextStep, options: MCP_AGENT_NEXT_STEPS },
+              { name: "failureSource", label: "Failure source", value: activeFailureSource, options: MCP_FAILURE_SOURCES },
+              { name: "responseCapture", label: "Response capture", value: activeResponseCapture, options: MCP_RESPONSE_CAPTURE_OPTIONS },
+            ].map(filter => <select key={filter.name} name={filter.name} aria-label={`Filter MCP requests by ${filter.label.toLowerCase()}`} className="h-10 w-[10rem] shrink-0 rounded-lg border border-slate-300 bg-white px-2 text-xs" defaultValue={filter.value ?? ""}><option value="">Any {filter.label.toLowerCase()}</option>{Object.entries(filter.options).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select>)}
             <select aria-label="Filter MCP requests by scan decision" className="h-10 w-[9rem] shrink-0 rounded-lg border border-slate-300 bg-white px-2 text-xs" defaultValue={activeDecision ?? ""} name="decision"><option value="">Any decision</option>{scanDecisions.map((decision) => <option key={decision} value={decision}>{formatLabel(decision)}</option>)}</select>
             <select aria-label="Filter MCP requests by time span" className="h-10 w-[8.5rem] shrink-0 rounded-lg border border-slate-300 bg-white px-2 text-xs" defaultValue={activeTimeSpan} name="timeSpan">{timeSpans.map((timeSpan) => <option key={timeSpan} value={timeSpan}>{timeSpan === "all" ? "All retained" : timeSpan === "4h" ? "Past 4 hours" : timeSpan === "6h" ? "Past 6 hours" : timeSpan === "12h" ? "Past 12 hours" : timeSpan === "24h" ? "Past 24 hours" : timeSpan === "7d" ? "Past 7 days" : "Past 30 days"}</option>)}</select>
           </AdminScansFilterForm>
 
           {activeClient ? <p className="text-sm text-sky-800">Exact client: {activeClient}. <Link className="underline" href={mcpClientHref("discovery", { clientName: activeClient, surface: activeSurface, source: activeSource, traffic: trafficScope, period: activeTimeSpan })} prefetch={false}>View discovery</Link></p> : null}
 
-          <p className="text-xs text-slate-500">Caller IDs are correlation hints, not verified unique agents. Counts cover the preceding 5/10/60 minutes and 24 hours as of each request, including that call, across all tools and outcomes in the selected traffic scope. Open Request details for tool arguments and any explicitly shared question. Original chat conversations are not received.</p>
+          <p className="text-xs text-slate-500">Caller IDs are correlation hints, not verified unique agents. Counts cover the preceding 5/10/60 minutes and 24 hours as of each request, including that call, across all tools and outcomes in the selected traffic scope. Open Request details for tool arguments and any explicitly shared question. Original chat conversations are not received. Response columns summarize captured guidance from that request, not confirmed client receipt. Missing capture is shown as Not recorded; full safe text remains in Request details.</p>
 
-          <PaginationControls basePath="/app/admin/mcp" itemLabel="MCP requests" page={page} pageCount={pageCount} pageSize={pageSize} searchParams={{ client: activeClient, q: activeQuery, surface: activeSurface, source: activeSource, product: activeProduct, confidence: activeConfidence, tool: activeTool, outcome: activeOutcome, decision: activeDecision, timeSpan: activeTimeSpan, snapshot: activeSnapshotPeriod, toolPeriod: activeToolPeriod, sourcePeriod: activeSourcePeriod, traffic: trafficScope }} showPageJump totalCount={eventPage.totalCount} visibleCount={eventPage.items.length} />
+          <PaginationControls basePath="/app/admin/mcp" itemLabel="MCP requests" page={page} pageCount={pageCount} pageSize={pageSize} searchParams={{ ...responseFilters, client: activeClient, q: activeQuery, surface: activeSurface, source: activeSource, product: activeProduct, confidence: activeConfidence, tool: activeTool, outcome: activeOutcome, decision: activeDecision, timeSpan: activeTimeSpan, snapshot: activeSnapshotPeriod, toolPeriod: activeToolPeriod, sourcePeriod: activeSourcePeriod, traffic: trafficScope }} showPageJump totalCount={eventPage.totalCount} visibleCount={eventPage.items.length} />
 
           <div className="w-full max-w-full overflow-x-auto overscroll-x-contain rounded-xl border border-slate-200">
-            <table className="table-fixed text-left text-xs" style={{ width: "3830px", minWidth: "3830px" }}>
+            <table className="table-fixed text-left text-xs" style={{ width: "4450px", minWidth: "4450px" }}>
               <colgroup>
-                <col style={{ width: "140px" }} /><col style={{ width: "155px" }} /><col style={{ width: "180px" }} /><col style={{ width: "300px" }} />
+                <col style={{ width: "140px" }} /><col style={{ width: "140px" }} /><col style={{ width: "145px" }} /><col style={{ width: "150px" }} /><col style={{ width: "185px" }} /><col style={{ width: "155px" }} /><col style={{ width: "180px" }} /><col style={{ width: "300px" }} />
                 <col style={{ width: "150px" }} /><col style={{ width: "105px" }} /><col style={{ width: "230px" }} />
                 <col style={{ width: "70px" }} /><col style={{ width: "65px" }} /><col style={{ width: "55px" }} />
                 <col style={{ width: "170px" }} /><col style={{ width: "80px" }} /><col style={{ width: "115px" }} />
@@ -428,7 +445,7 @@ export default async function AdminMcpTelemetryPage({ searchParams }: AdminMcpPa
               </colgroup>
               <thead className="sticky top-0 z-20 bg-slate-50 text-[10px] uppercase tracking-[0.08em] text-slate-500">
                 <tr>{[
-                  { label: "Status", className: "sticky left-0 z-30 bg-slate-50" }, { label: "Entrypoint" }, { label: "Client / channel" }, { label: "Caller activity" },
+                  { label: "Status", className: "sticky left-0 z-30 bg-slate-50" }, { label: "Response" }, { label: "Agent next step" }, { label: "Retry" }, { label: "Failure source" }, { label: "Entrypoint" }, { label: "Client / channel" }, { label: "Caller activity" },
                   { label: "Requester / caller IP" }, { label: "Requested" }, { label: "Page" }, { label: "Tranco" }, { label: "Score" }, { label: "Top" },
                   { label: "Privacy / CMP" }, { label: "A/R/O" }, { label: "Access" }, { label: "Transparency" }, { label: "Transport" }, { label: "Runtime" },
                   { label: "Time" }, { label: "Caller attribution" }, { label: "Outcome" }, { label: "From" }, { label: "Freshness" }, { label: "Language" }, { label: "Industry" },
@@ -452,6 +469,10 @@ export default async function AdminMcpTelemetryPage({ searchParams }: AdminMcpPa
                   return (
                     <tr className="group h-[52px] leading-4 hover:bg-slate-50/70" key={event.event_id}>
                       <td className="sticky left-0 z-10 bg-white px-2.5 py-1.5 group-hover:bg-slate-50"><span className={`inline-flex max-w-full items-center gap-1.5 overflow-hidden whitespace-nowrap font-semibold ${outcome.text}`}><span aria-hidden="true" className={`inline-block h-2.5 w-2.5 shrink-0 rounded-full ${outcome.dot}`} />{outcome.label}</span>{event.error_code ? <p className="mt-0.5 truncate text-[10px] text-slate-500" title={event.error_code}>{validationLabel ?? limitationLabel ?? event.error_code}</p> : null}</td>
+                      <td className="px-2.5 py-1.5">{MCP_RESPONSE_CATEGORIES[event.response_category ?? "not_recorded"]}</td>
+                      <td className="px-2.5 py-1.5">{MCP_AGENT_NEXT_STEPS[event.agent_next_step ?? "not_recorded"]}</td>
+                      <td className="px-2.5 py-1.5">{event.response_retry ?? "Not recorded"}</td>
+                      <td className="px-2.5 py-1.5">{MCP_FAILURE_SOURCES[event.failure_source ?? "not_recorded"]}</td>
                       <td className="px-2.5 py-1.5"><span className={`inline-flex max-w-full truncate whitespace-nowrap rounded-full px-1.5 py-0.5 text-[10px] font-semibold ring-1 ${surfaceClass(event.surface)}`}>{surfaceLabels[event.surface]}</span><p className="mt-1 text-[10px] text-slate-500">{event.auth_class}</p></td>
                       <td className="px-2.5 py-1.5"><p className="truncate font-semibold text-slate-700" title={clientDetail(event)}>{event.client_name ? <Link className="hover:underline" href={mcpClientHref("discovery", { clientName: event.client_name, surface: event.surface, source: event.source, traffic: trafficScope, period: activeTimeSpan })} prefetch={false}>{clientDetail(event)}</Link> : clientDetail(event)}</p><McpCallerActivity event={event} traffic={trafficScope} period={activeTimeSpan}><p><strong>Client:</strong> {clientDetail(event)}</p><p><strong>Channel:</strong> {formatLabel(event.execution_channel)} · {formatLabel(event.client_family)}</p></McpCallerActivity></td>
                       <td className="px-2.5 py-1.5 text-[11px]"><McpCallerActivityCounts counts={event.caller_activity} /></td>
@@ -482,7 +503,7 @@ export default async function AdminMcpTelemetryPage({ searchParams }: AdminMcpPa
                     </tr>
                   );
                 })}
-                {eventPage.items.length === 0 ? <tr><td className="px-4 py-10 text-center text-sm text-slate-500" colSpan={28}>No MCP requests match these filters.</td></tr> : null}
+                {eventPage.items.length === 0 ? <tr><td className="px-4 py-10 text-center text-sm text-slate-500" colSpan={32}>No MCP requests match these filters.</td></tr> : null}
               </tbody>
             </table>
           </div>
@@ -495,7 +516,7 @@ export default async function AdminMcpTelemetryPage({ searchParams }: AdminMcpPa
               <div className="flex flex-wrap items-center justify-between gap-2">
                 <div><CardTitle>Tool distribution and latency</CardTitle><p className="mt-0.5 text-xs text-slate-500">{dashboard.toolAnalytics.label} · p50 / p95{activeToolPeriod === "1y" ? ` · limited to ${dashboard.retention.days}d retained data` : ""}</p></div>
                 <form action="/app/admin/mcp" className="flex items-center gap-2" method="get">
-                  {activeQuery ? <input name="q" type="hidden" value={activeQuery} /> : null}{activeSurface ? <input name="surface" type="hidden" value={activeSurface} /> : null}{activeSource ? <input name="source" type="hidden" value={activeSource} /> : null}{activeProduct ? <input name="product" type="hidden" value={activeProduct} /> : null}{activeConfidence ? <input name="confidence" type="hidden" value={activeConfidence} /> : null}{activeTool ? <input name="tool" type="hidden" value={activeTool} /> : null}{activeOutcome ? <input name="outcome" type="hidden" value={activeOutcome} /> : null}{activeDecision ? <input name="decision" type="hidden" value={activeDecision} /> : null}
+                  {Object.entries(responseFilters).map(([name, value]) => value ? <input key={name} name={name} type="hidden" value={value} /> : null)}{activeQuery ? <input name="q" type="hidden" value={activeQuery} /> : null}{activeSurface ? <input name="surface" type="hidden" value={activeSurface} /> : null}{activeSource ? <input name="source" type="hidden" value={activeSource} /> : null}{activeProduct ? <input name="product" type="hidden" value={activeProduct} /> : null}{activeConfidence ? <input name="confidence" type="hidden" value={activeConfidence} /> : null}{activeTool ? <input name="tool" type="hidden" value={activeTool} /> : null}{activeOutcome ? <input name="outcome" type="hidden" value={activeOutcome} /> : null}{activeDecision ? <input name="decision" type="hidden" value={activeDecision} /> : null}
                   <input name="timeSpan" type="hidden" value={activeTimeSpan} /><input name="snapshot" type="hidden" value={activeSnapshotPeriod} /><input name="sourcePeriod" type="hidden" value={activeSourcePeriod} />
                   <input name="traffic" type="hidden" value={trafficScope} />
                   <label className="sr-only" htmlFor="mcp-tool-period">Tool analytics period</label>
@@ -540,7 +561,7 @@ export default async function AdminMcpTelemetryPage({ searchParams }: AdminMcpPa
               <div className="flex flex-wrap items-center justify-between gap-2">
                 <div><CardTitle>Source and access signals</CardTitle><p className="mt-0.5 text-xs text-slate-500">{dashboard.sourceAnalytics.label}{activeSourcePeriod === "1y" ? ` · limited to ${dashboard.retention.days}d retained data` : ""}</p></div>
                 <form action="/app/admin/mcp" className="flex items-center gap-2" method="get">
-                  {activeQuery ? <input name="q" type="hidden" value={activeQuery} /> : null}{activeSurface ? <input name="surface" type="hidden" value={activeSurface} /> : null}{activeSource ? <input name="source" type="hidden" value={activeSource} /> : null}{activeProduct ? <input name="product" type="hidden" value={activeProduct} /> : null}{activeConfidence ? <input name="confidence" type="hidden" value={activeConfidence} /> : null}{activeTool ? <input name="tool" type="hidden" value={activeTool} /> : null}{activeOutcome ? <input name="outcome" type="hidden" value={activeOutcome} /> : null}{activeDecision ? <input name="decision" type="hidden" value={activeDecision} /> : null}
+                  {Object.entries(responseFilters).map(([name, value]) => value ? <input key={name} name={name} type="hidden" value={value} /> : null)}{activeQuery ? <input name="q" type="hidden" value={activeQuery} /> : null}{activeSurface ? <input name="surface" type="hidden" value={activeSurface} /> : null}{activeSource ? <input name="source" type="hidden" value={activeSource} /> : null}{activeProduct ? <input name="product" type="hidden" value={activeProduct} /> : null}{activeConfidence ? <input name="confidence" type="hidden" value={activeConfidence} /> : null}{activeTool ? <input name="tool" type="hidden" value={activeTool} /> : null}{activeOutcome ? <input name="outcome" type="hidden" value={activeOutcome} /> : null}{activeDecision ? <input name="decision" type="hidden" value={activeDecision} /> : null}
                   <input name="timeSpan" type="hidden" value={activeTimeSpan} /><input name="snapshot" type="hidden" value={activeSnapshotPeriod} /><input name="toolPeriod" type="hidden" value={activeToolPeriod} />
                   <input name="traffic" type="hidden" value={trafficScope} />
                   <label className="sr-only" htmlFor="mcp-source-period">Source analytics period</label>

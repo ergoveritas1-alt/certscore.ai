@@ -1,3 +1,4 @@
+import { MCP_RESPONSE_CATEGORY_SQL, MCP_AGENT_NEXT_STEP_SQL, MCP_RETRY_SQL, MCP_FAILURE_SOURCE_SQL, MCP_RESPONSE_CAPTURED_SQL, MCP_RESPONSE_CATEGORIES, MCP_AGENT_NEXT_STEPS, MCP_FAILURE_SOURCES, type McpResponseCategory, type McpAgentNextStep, type McpFailureSource } from "../../lib/admin/mcp-response-review";
 import { MCP_INVALID_REQUEST_SQL, MCP_EXECUTION_ERROR_SQL, MCP_SCAN_LIMITED_SQL } from "../../lib/admin/mcp-request-outcome";
 import { mcpContextAnchors, mcpRelatedContextSql, parseMcpRelatedContext, type McpRelatedContext } from "../../lib/admin/mcp-related-context";
 import "server-only";
@@ -105,6 +106,10 @@ type HostnameRow = {
 };
 
 export type AdminMcpTelemetryEvent = {
+  response_category?: McpResponseCategory;
+  agent_next_step?: McpAgentNextStep;
+  response_retry?: string;
+  failure_source?: McpFailureSource;
   caller_activity?: McpCallerActivity | null;
   related_context?: McpRelatedContext | null;
   request_details?: unknown;
@@ -180,6 +185,10 @@ export function isAdminMcpEvidenceUnavailable(input: Pick<AdminMcpTelemetryEvent
 }
 
 export type AdminMcpTelemetryEventFilters = {
+  responseCategory?: McpResponseCategory | null;
+  agentNextStep?: McpAgentNextStep | null;
+  failureSource?: McpFailureSource | null;
+  responseCapture?: "recorded" | "missing" | null;
   clientName?: string | null;
   confidence?: "verified" | "corroborated" | "declared" | "inferred" | "unknown" | null;
   excludeMacMiniScanBot?: boolean;
@@ -698,6 +707,11 @@ export async function listAdminMcpTelemetryEventsPage(
   if (filters.product) conditions.push(`caller_product = ${addValue(filters.product)}`);
   if (filters.confidence) conditions.push(`attribution_confidence = ${addValue(filters.confidence)}`);
   if (filters.toolName) conditions.push(`tool_name = ${addValue(filters.toolName.slice(0, 100))}`);
+  if (filters.responseCategory && Object.hasOwn(MCP_RESPONSE_CATEGORIES, filters.responseCategory)) conditions.push(`${MCP_RESPONSE_CATEGORY_SQL} = ${addValue(filters.responseCategory)}`);
+  if (filters.agentNextStep && Object.hasOwn(MCP_AGENT_NEXT_STEPS, filters.agentNextStep)) conditions.push(`${MCP_AGENT_NEXT_STEP_SQL} = ${addValue(filters.agentNextStep)}`);
+  if (filters.failureSource && Object.hasOwn(MCP_FAILURE_SOURCES, filters.failureSource)) conditions.push(`${MCP_FAILURE_SOURCE_SQL} = ${addValue(filters.failureSource)}`);
+  if (filters.responseCapture === "recorded") conditions.push(MCP_RESPONSE_CAPTURED_SQL);
+  if (filters.responseCapture === "missing") conditions.push(`not (${MCP_RESPONSE_CAPTURED_SQL})`);
   if (filters.outcome === "invalid_request") conditions.push(MCP_INVALID_REQUEST_SQL);
   else if (filters.outcome === "scan_limited") conditions.push(MCP_SCAN_LIMITED_SQL);
   else if (filters.outcome === "error") conditions.push(MCP_EXECUTION_ERROR_SQL);
@@ -727,7 +741,11 @@ export async function listAdminMcpTelemetryEventsPage(
       { readOnly: true },
     ),
     query<AdminMcpTelemetryEventRow>(
-      `select events.event_id, events.occurred_at, events.surface, events.source,
+      `select ${MCP_RESPONSE_CATEGORY_SQL} as response_category,
+              ${MCP_AGENT_NEXT_STEP_SQL} as agent_next_step,
+              ${MCP_RETRY_SQL} as response_retry,
+              ${MCP_FAILURE_SOURCE_SQL} as failure_source,
+              events.event_id, events.occurred_at, events.surface, events.source,
               events.source_attribution, events.auth_class, events.client_family, events.client_name,
               events.caller_product, events.attribution_confidence, events.attribution_signals,
               events.attribution_ruleset_version, events.execution_channel, events.installation_origin,

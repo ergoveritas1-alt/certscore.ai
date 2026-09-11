@@ -159,3 +159,17 @@ test("MCP invocation persistence retains bounded request attribution for failed 
   assert.match(requestContextMigration, /set requested_resource_type = 'scan_id',[\s\S]*requested_resource = scan_id/);
   assert.doesNotMatch(persistence, /request_body|raw_header|authorization|prompt/i);
 });
+
+
+test("response review columns and filters retain pagination and form state", () => {
+  for (const label of ["Response", "Agent next step", "Retry", "Failure source"]) assert.ok(page.includes(`label: "${label}"`));
+  for (const name of ["responseCategory", "agentNextStep", "failureSource", "responseCapture"]) {
+    assert.ok(page.includes(`name: "${name}"`));
+    assert.ok(repository.includes(`filters.${name}`));
+  }
+  assert.match(page, /searchParams=\{\{ \.\.\.responseFilters/);
+  assert.match(page, /Object.entries\(responseFilters\)/);
+  assert.match(page, /colSpan=\{32\}/);
+  assert.match(page, /Missing capture is shown as Not recorded/);
+  assert.match(repository, /MCP_RESPONSE_CATEGORY_SQL\} as response_category/);
+});
