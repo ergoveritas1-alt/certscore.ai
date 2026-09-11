@@ -1667,3 +1667,18 @@ test("private full-site resource keeps homepage score without exposing inventory
  assert.equal("fullSite" in resource,false);
  assert.equal("fullSite" in baseline,false);
 });
+
+
+test("known incomplete scans retain their status and same-ID polling guidance", () => {
+  for (const scanStatus of ["queued", "running", "failed", "expired"] as const) {
+    const record = fixture();
+    record.scan.status = scanStatus;
+    const status = buildApiV2ScanStatus(record);
+    assert.equal(status.status, scanStatus === "expired" ? "failed" : scanStatus);
+    assert.equal(status.scanId, record.scan.id);
+    if (scanStatus === "queued" || scanStatus === "running") {
+      assert.match(status.recommendedNextAction ?? "", /certscore_get_scan_status/);
+      assert.ok((status.retryAfterSeconds ?? 0) > 0);
+    }
+  }
+});

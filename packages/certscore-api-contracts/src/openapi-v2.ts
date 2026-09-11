@@ -1089,7 +1089,7 @@ export function buildCertScoreApiV2OpenApiDocument() {
               required: ["code", "message", "retryable", "retryAfterSeconds", "recommendedNextAction"],
               properties: {
                 code: { type: "string" },
-                reasonCode: { type: ["string", "null"], enum: ["non_public_target", null] },
+                reasonCode: { type: ["string", "null"], enum: ["non_public_target", "domain_not_found", "dns_unavailable", null] },
                 message: { type: "string" },
                 retryable: { type: "boolean" },
                 retryAfterSeconds: { type: ["integer", "null"] },

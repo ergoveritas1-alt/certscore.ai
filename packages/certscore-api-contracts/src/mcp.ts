@@ -240,6 +240,11 @@ export const mcpActionableErrorSchema = z.object({
   recommendedNextAction: z.string(),
   field: z.string().optional(),
   mcpCode: z.number().int().optional(),
+  issues: z.array(z.object({
+    field: z.string().max(80),
+    code: z.string().max(80),
+    required: z.boolean().optional(),
+  }).strict()).max(8).optional(),
   name: z.string().optional(),
   status: z.number().int().optional(),
   responseBody: z.unknown().optional()

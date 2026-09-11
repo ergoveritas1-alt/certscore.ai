@@ -33,7 +33,7 @@ export type PulseCreationRateLimit = {
 
 export function buildPulseError(input: {
   code: string;
-  reasonCode?: "non_public_target" | null;
+  reasonCode?: "non_public_target" | "domain_not_found" | "dns_unavailable" | null;
   creationRateLimit?: PulseCreationRateLimit;
   message: string;
   rateLimit?: PulseRateLimit;

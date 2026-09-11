@@ -745,7 +745,7 @@ async function handlePulseGET(request: Request, options: PulseRouteOptions = {})
       return pulseJson(
         buildPulseError({
           code: dnsStatus.retryable ? "internal_error" : "invalid_url",
-          reasonCode: dnsStatus.reasonCode === "non_public_target" ? "non_public_target" : null,
+          reasonCode: dnsStatus.reasonCode,
           message: dnsStatus.reason,
           retryAfterSeconds: dnsStatus.retryable ? 60 : null,
           url: rawUrl,

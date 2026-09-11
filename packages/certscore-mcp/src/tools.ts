@@ -124,7 +124,7 @@ export function toToolError(error: unknown, context: { scanCreation?: boolean } 
         ? 30
         : null;
   const code = error instanceof CertScoreError ? error.code : "internal_error";
-  const reasonCode = terminalError?.reasonCode === "non_public_target" ? "non_public_target" : null;
+  const reasonCode = typeof terminalError?.reasonCode === "string" && ["non_public_target", "domain_not_found", "dns_unavailable"].includes(terminalError.reasonCode) ? terminalError.reasonCode : null;
   const targetRejected = context.scanCreation === true && code === "invalid_url" && status === 400;
   const originalMessage = error instanceof Error ? error.message : "Unknown CertScore MCP error.";
   const message = targetRejected ? `Scan target rejected. No scan was started. ${originalMessage}` : originalMessage;
@@ -171,12 +171,14 @@ export function toToolError(error: unknown, context: { scanCreation?: boolean } 
   };
 }
 
-export function toInvalidArgumentsToolError(errorMessage: string): CallToolResult {
-  const tool = errorMessage.match(/tool ([a-z_]+)/i)?.[1] ?? null;
-  const field = errorMessage.match(/\bat ([a-zA-Z0-9_.-]+)/)?.[1]
+export function toInvalidArgumentsToolError(errorMessage: string, validation?: { tool: string; issues: { field: string; code: string; required?: boolean }[] }): CallToolResult {
+  const tool = validation?.tool ?? errorMessage.match(/tool ([a-z_]+)/i)?.[1] ?? null;
+  const field = validation?.issues[0]?.field ?? errorMessage.match(/\bat ([a-zA-Z0-9_.-]+)/)?.[1]
     ?? (errorMessage.includes("url") ? "url" : errorMessage.includes("scanId") ? "scanId" : null);
-  const missing = /required|expected string, received undefined/i.test(errorMessage);
-  const message = field
+  const missing = validation?.issues[0]?.required === true || /required|expected string, received undefined/i.test(errorMessage);
+  const message = validation && validation.issues.length > 1
+    ? `Invalid arguments in fields: ${validation.issues.map(issue => issue.field).join(", ")}.`
+    : field
     ? missing
       ? `The ${field} field is required.`
       : `The ${field} field is invalid.`
@@ -185,7 +187,7 @@ export function toInvalidArgumentsToolError(errorMessage: string): CallToolResul
     ? "Provide a public URL or domain."
     : field === "scanId"
       ? "Provide the stable scanId returned by certscore_scan_site."
-      : "Correct the named fields using the tool input schema, then retry.";
+      : "Correct the named fields using the tool input schema. Omit optional parameters to use defaults; do not send null. Refresh tool discovery (tools/list) for the accepted types, values and limits, then retry.";
   const error: ActionableError = {
     code: "invalid_arguments",
     message,
@@ -193,7 +195,8 @@ export function toInvalidArgumentsToolError(errorMessage: string): CallToolResul
     retryable: false,
     retryAfterSeconds: null,
     recommendedNextAction,
-    mcpCode: -32602
+    mcpCode: -32602,
+    ...(validation ? { issues: validation.issues } : {})
   };
   const payload = tool === "certscore_scan_site"
     ? {
@@ -232,6 +235,9 @@ export function toInvalidScanIdToolError(): CallToolResult {
 }
 
 function terminalErrorForResult(value: Record<string, any>): ActionableError | null {
+  const terminalGuidance = value.status === "failed" || value.status === "expired"
+    ? ` This scan is terminal; polling the same scanId will not resume it. A freshness=refresh request starts a new scan and uses scan quota. Stop if the failure repeats.${typeof value.scanId === "string" && /^[a-f0-9-]{36}$/i.test(value.scanId) ? ` Support reference: ${value.scanId}.` : ""}`
+    : "";
   const existing = value.error && typeof value.error === "object" && !Array.isArray(value.error)
     ? value.error as Record<string, unknown>
     : null;
@@ -242,11 +248,11 @@ function terminalErrorForResult(value: Record<string, any>): ActionableError | n
       message: typeof existing.message === "string" ? existing.message : "The scan did not produce a canonical result.",
       retryable,
       retryAfterSeconds: typeof existing.retryAfterSeconds === "number" ? existing.retryAfterSeconds : retryable ? 30 : null,
-      recommendedNextAction: typeof existing.recommendedNextAction === "string"
+      recommendedNextAction: (typeof existing.recommendedNextAction === "string"
         ? existing.recommendedNextAction
         : retryable
           ? "Wait for the recommended delay, then retry certscore_scan_site with freshness=refresh."
-          : "Stop and review the scan limitations before deciding whether to change the URL."
+          : "Stop and review the scan limitations before deciding whether to change the URL.") + (typeof existing.recommendedNextAction === "string" && existing.recommendedNextAction.endsWith(terminalGuidance) ? "" : terminalGuidance)
     };
   }
   if (value.status === "completed_limited" && value.noGo) {
@@ -284,7 +290,8 @@ function terminalErrorForResult(value: Record<string, any>): ActionableError | n
       recommendedNextAction: "Wait for the recommended delay, then retry the same certscore_scan_site request."
     }
   };
-  return fallback[String(value.status)] ?? null;
+  const error = fallback[String(value.status)];
+  return error ? { ...error, recommendedNextAction: error.recommendedNextAction + terminalGuidance } : null;
 }
 
 function scanProvenance(value: Record<string, any>, fallbackMode: ScanProvenanceMode): {

@@ -1061,6 +1061,7 @@ test("certscore_get_scan_status requires the stable scanId", async () => {
     const payload = parseToolJson(missing);
     assert.deepEqual(payload.error, {
       code: "invalid_arguments",
+      issues: [{ field: "scanId", code: "invalid_type", required: true }],
       message: "The scanId field is required.",
       field: "scanId",
       retryable: false,
@@ -1081,6 +1082,7 @@ test("certscore_scan_site returns typed validation details when url is missing",
     assert.equal(payload.status, "invalid_arguments");
     assert.deepEqual(payload.error, {
       code: "invalid_arguments",
+      issues: [{ field: "url", code: "invalid_type", required: true }],
       message: "The url field is required.",
       field: "url",
       retryable: false,
@@ -1849,4 +1851,21 @@ test("Light MCP returns retained authentication no-go text and typed remedies wi
       }, { toolProfile: "light" });
     } finally { mock.restore(); }
   }
+});
+
+
+test("optional null arguments identify every rejected field without calling the origin", async () => {
+  const mock = installFetch([]);
+  try {
+    await withMcpClient(async client => {
+      const result = await client.callTool({ name: "certscore_get_scan_bundle", arguments: {
+        scanId: "00000000-0000-4000-8000-000000000123", detail: null, maxBytes: null, maxFindings: null, maxPreConsentRows: null,
+      } });
+      assert.equal(result.isError, true);
+      const error = parseToolJson(result).error as Record<string, any>;
+      assert.deepEqual(error.issues.map((issue: any) => issue.field).sort(), ["detail", "maxBytes", "maxFindings", "maxPreConsentRows"].sort());
+      assert.match(error.recommendedNextAction, /Omit optional parameters.*do not send null/);
+      assert.equal(mock.calls.length, 0);
+    });
+  } finally { mock.restore(); }
 });

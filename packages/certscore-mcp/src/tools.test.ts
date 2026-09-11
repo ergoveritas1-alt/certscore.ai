@@ -1846,3 +1846,23 @@ test("target guidance keeps private targets denied and leaves read errors and tr
     assert.equal(payload.error.retryable, failure.status === 503);
   }
 });
+
+
+test("DNS reason codes survive MCP errors and terminal guidance identifies new-scan quota", () => {
+  for (const reasonCode of ["domain_not_found", "dns_unavailable", "non_public_target"]) {
+    const transient = reasonCode === "dns_unavailable";
+    const result = toToolError(new CertScoreError("DNS validation failed", {
+      code: transient ? "internal_error" : "invalid_url", status: transient ? 500 : 400,
+      responseBody: { error: { reasonCode, retryAfterSeconds: transient ? 60 : null } },
+    }), { scanCreation: true });
+    const payload = JSON.parse((result.content[0] as { text: string }).text);
+    assert.equal(payload.error.reasonCode, reasonCode);
+    assert.equal(payload.error.retryable, transient);
+  }
+  for (const error of [undefined, { code: "scanner_runtime_failure", message: "Scan failed", retryable: false, recommendedNextAction: "Contact support." }]) {
+    const result = withMcpAgentGuidance({ type: "certscore_scan_job", status: "failed", scanId: "00000000-0000-4000-8000-000000000123", error });
+    assert.match(result.error!.recommendedNextAction, /polling the same scanId will not resume/);
+    assert.match(result.error!.recommendedNextAction, /uses scan quota/);
+    assert.match(result.error!.recommendedNextAction, /Support reference: 00000000/);
+  }
+});

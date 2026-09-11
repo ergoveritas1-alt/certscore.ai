@@ -1,3 +1,4 @@
+import { z } from "zod";
 import { captureMcpCallerInput, type McpCallerInput } from "@website-signal-risk-scanner/shared/dist/mcp-caller-input.js";
 import { CertScoreClient } from "@certscore/sdk";
 import { certScoreMcpToolContracts, isCanonicalScanId } from "@certscore/api-contracts";
@@ -449,7 +450,19 @@ export function createCertScoreMcpServer(options: CertScoreMcpOptions = {}) {
             `This tool is unavailable on this endpoint. ${recommendedNextAction} Available tools: ${availableTools.join(", ")}.`,
             { code: "unknown_tool", retryable: false, recommendedNextAction, availableTools });
         }
-        result = await handler(forwardedRequest, extra);
+        const contract = certScoreMcpToolContracts.find(candidate => candidate.name === name)!;
+        const validation = z.object(contract.inputSchema).safeParse(forwardedRequest.params.arguments ?? {});
+        result = validation.success
+          ? await handler(forwardedRequest, extra)
+          : toInvalidArgumentsToolError(`Input validation error: tool ${name}`, {
+              tool: name,
+              issues: validation.error.issues.map(issue => ({
+                // Only schema-owned top-level names; never echo values or dynamic keys.
+                field: typeof issue.path[0] === "string" && Object.hasOwn(contract.inputSchema, issue.path[0]) ? issue.path[0] : "arguments",
+                code: issue.code,
+                ...(issue.code === "invalid_type" && issue.received === "undefined" ? { required: true } : {}),
+              })).filter((issue, index, issues) => issues.findIndex(other => other.field === issue.field) === index).slice(0, 8),
+            });
         return result;
       } catch (error) {
         result ??= { isError: true, structuredContent: { error: { code: "handler_exception" } } };

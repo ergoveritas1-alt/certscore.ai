@@ -5,12 +5,12 @@ import { loadAnonymousPersistedScanReportProjection } from "./scan-report-projec
 export type PublicScanRecord = NonNullable<Awaited<ReturnType<typeof getAnonymousScanByIdForReadOnlyProjection>>>;
 
 export async function getPublicScanRecord(scanId: string, options: { logPrefix?: string } = {}) {
-  const persistedReportProjection = await loadAnonymousPersistedScanReportProjection({ scanId }).catch(() => null);
+  const persistedReportProjection = await loadAnonymousPersistedScanReportProjection({ scanId });
   if (persistedReportProjection) {
     return persistedReportProjection;
   }
 
-  const scanRecord = await getAnonymousScanByIdForReadOnlyProjection(scanId).catch(() => null);
+  const scanRecord = await getAnonymousScanByIdForReadOnlyProjection(scanId);
   if (!scanRecord || scanRecord.scan.status !== "completed") {
     return scanRecord;
   }

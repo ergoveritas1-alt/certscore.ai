@@ -34,7 +34,7 @@ export async function GET(request: Request, context: RouteContext) {
 
   try {
     const scanRecord = await getPublicScanRecord(scanId, { logPrefix: "[api-v2-scan]" });
-    if (!scanRecord || scanRecord.scan.status !== "completed") {
+    if (!scanRecord) {
       return apiV2JsonResponse({
         body: buildApiV2Error({ code: "not_found", message: "Scan not found or not eligible for public API v2." }),
         requestId: id,
@@ -45,7 +45,7 @@ export async function GET(request: Request, context: RouteContext) {
     const canonicalScan = buildApiV2ScanResource(scanRecord);
     const canonicalStatus = buildApiV2ScanStatus(scanRecord, { canonicalScan });
     if (canonicalStatus.status !== "completed" && canonicalStatus.status !== "completed_limited") {
-      const failed = canonicalStatus.status === "failed";
+      const failed = canonicalStatus.status === "failed" || canonicalStatus.status === "expired";
       const retryAfterSeconds = canonicalStatus.retryAfterSeconds ?? canonicalStatus.error?.retryAfterSeconds ?? (failed ? null : 2);
       return apiV2JsonResponse({
         body: buildApiV2Error({

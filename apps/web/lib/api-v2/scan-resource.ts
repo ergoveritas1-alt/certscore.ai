@@ -124,7 +124,7 @@ type PulseStatusLike = {
 type PulseErrorLike = {
   error?: {
     code?: string;
-    reasonCode?: "non_public_target" | null;
+    reasonCode?: "non_public_target" | "domain_not_found" | "dns_unavailable" | null;
     message?: string;
     retryAfterSeconds?: number | null;
     creationRateLimit?: {
@@ -1459,7 +1459,7 @@ export function buildApiV2DomainLatestScan(input: {
 export function buildApiV2Error(input: {
   code: "invalid_request" | "invalid_url" | "not_found" | "rate_limited" | "unauthorized" | "forbidden" | "scan_unavailable" | "internal_error";
   message: string;
-  reasonCode?: "non_public_target" | null;
+  reasonCode?: "non_public_target" | "domain_not_found" | "dns_unavailable" | null;
   retryable?: boolean;
   retryAfterSeconds?: number | null;
   recommendedNextAction?: string;

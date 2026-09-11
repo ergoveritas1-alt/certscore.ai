@@ -173,7 +173,7 @@ export const apiV2ErrorSchema = z
     error: z
       .object({
         code: z.enum(["invalid_request", "invalid_url", "not_found", "rate_limited", "unauthorized", "forbidden", "scan_unavailable", "internal_error"]),
-        reasonCode: z.enum(["non_public_target"]).nullable().optional(),
+        reasonCode: z.enum(["non_public_target", "domain_not_found", "dns_unavailable"]).nullable().optional(),
         message: z.string(),
         retryable: z.boolean(),
         retryAfterSeconds: z.number().int().nullable(),

@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { mcpRequestValidationLabel, MCP_INVALID_REQUEST_SQL, MCP_EXECUTION_ERROR_SQL } from "./mcp-request-outcome";
+import { mcpScanLimitationLabel, MCP_SCAN_LIMITED_SQL, mcpRequestValidationLabel, MCP_INVALID_REQUEST_SQL, MCP_EXECUTION_ERROR_SQL } from "./mcp-request-outcome";
 
 test("historical validation failures are distinct from scan and execution failures", () => {
   for (const [error_code, label] of [
@@ -18,4 +18,16 @@ test("historical validation failures are distinct from scan and execution failur
     assert.equal(mcpRequestValidationLabel({ outcome: "error", error_code }), null);
   }
   assert.ok(MCP_EXECUTION_ERROR_SQL.includes(`not ${MCP_INVALID_REQUEST_SQL}`));
+});
+
+
+test("limited classification requires retained limited status and a canonical reason", () => {
+  assert.equal(mcpScanLimitationLabel({ outcome: "error", error_code: "authentication_required", scan_status: "completed_limited" }), "Sign-in required");
+  for (const scan_status of [null, "failed", "completed", "queued"]) {
+    assert.equal(mcpScanLimitationLabel({ outcome: "error", error_code: "authentication_required", scan_status }), null);
+  }
+  assert.equal(mcpScanLimitationLabel({ outcome: "error", error_code: "handler_exception", scan_status: "completed_limited" }), null);
+  assert.equal(mcpScanLimitationLabel({ outcome: "success", error_code: null, scan_status: "completed_limited" }), "Completed with limited coverage");
+  assert.ok(MCP_SCAN_LIMITED_SQL.includes("coalesce(events.scan_status, '')"));
+  assert.ok(MCP_EXECUTION_ERROR_SQL.includes(`not ${MCP_SCAN_LIMITED_SQL}`));
 });

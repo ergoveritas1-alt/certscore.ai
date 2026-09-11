@@ -1,4 +1,4 @@
-import { MCP_INVALID_REQUEST_SQL, MCP_EXECUTION_ERROR_SQL } from "../../lib/admin/mcp-request-outcome";
+import { MCP_INVALID_REQUEST_SQL, MCP_EXECUTION_ERROR_SQL, MCP_SCAN_LIMITED_SQL } from "../../lib/admin/mcp-request-outcome";
 import { mcpContextAnchors, mcpRelatedContextSql, parseMcpRelatedContext, type McpRelatedContext } from "../../lib/admin/mcp-related-context";
 import "server-only";
 import { mcpFunnelSql, MCP_FUNNEL_RESULT_TOOLS, MCP_FUNNEL_FOLLOW_UP_MINUTES, type McpFunnelData } from "../../lib/admin/mcp-funnel";
@@ -30,6 +30,7 @@ type CountValue = number | string | null;
 type SummaryRow = {
   actor_count: CountValue;
   bundle_count: CountValue;
+  scan_limited_count: CountValue;
   invalid_request_count: CountValue;
   error_count: CountValue;
   invocation_count: CountValue;
@@ -46,6 +47,7 @@ type SummaryRow = {
 };
 
 type ComparisonRow = {
+  scan_limited_count: CountValue;
   invalid_request_count: CountValue;
   error_count: CountValue;
   invocation_count: CountValue;
@@ -54,6 +56,7 @@ type ComparisonRow = {
 
 type TrendRow = {
   bucket_label: string;
+  scan_limited: CountValue;
   invalid_requests: CountValue;
   errors: CountValue;
   invocations: CountValue;
@@ -64,6 +67,7 @@ export type AdminMcpSnapshotPeriod = AdminOperationalSnapshotPeriod;
 
 type ToolRow = {
   calls: CountValue;
+  scan_limited: CountValue;
   invalid_requests: CountValue;
   errors: CountValue;
   p50_duration_ms: CountValue;
@@ -75,6 +79,7 @@ type ToolRow = {
 type SurfaceRow = {
   actors: CountValue;
   calls: CountValue;
+  scan_limited: CountValue;
   invalid_requests: CountValue;
   errors: CountValue;
   sessions: CountValue;
@@ -179,7 +184,7 @@ export type AdminMcpTelemetryEventFilters = {
   confidence?: "verified" | "corroborated" | "declared" | "inferred" | "unknown" | null;
   excludeMacMiniScanBot?: boolean;
   includeCanary?: boolean;
-  outcome?: "success" | "error" | "invalid_request" | "rate_limited" | null;
+  outcome?: "success" | "error" | "invalid_request" | "scan_limited" | "rate_limited" | null;
   query?: string | null;
   scanDecision?: "reused" | "new" | "unavailable" | "not_applicable" | null;
   product?: "chatgpt" | "codex" | "claude" | "claude_code" | "gemini_cli" | "grok" | "other" | "unknown" | null;
@@ -313,6 +318,7 @@ async function loadAdminMcpTelemetryDashboardUncached(
               count(*) filter (where tool_name = 'certscore_get_scan_status') as status_count,
               count(*) filter (where tool_name = 'certscore_get_scan_bundle') as bundle_count,
               count(*) filter (where outcome = 'success') as success_count,
+              count(*) filter (where ${MCP_SCAN_LIMITED_SQL}) as scan_limited_count,
               count(*) filter (where ${MCP_INVALID_REQUEST_SQL}) as invalid_request_count,
               count(*) filter (where ${MCP_EXECUTION_ERROR_SQL}) as error_count,
               count(*) filter (where outcome = 'rate_limited') as quota_limited_count,
@@ -339,6 +345,7 @@ async function loadAdminMcpTelemetryDashboardUncached(
        )
        select to_char(buckets.bucket at time zone 'America/Los_Angeles', '${snapshotConfig.bucketLabel}') as bucket_label,
               count(events.event_id) as invocations,
+              count(events.event_id) filter (where ${MCP_SCAN_LIMITED_SQL}) as scan_limited,
               count(events.event_id) filter (where ${MCP_INVALID_REQUEST_SQL}) as invalid_requests,
               count(events.event_id) filter (where ${MCP_EXECUTION_ERROR_SQL}) as errors,
               count(events.event_id) filter (where events.outcome = 'rate_limited') as quota_limited
@@ -357,6 +364,7 @@ async function loadAdminMcpTelemetryDashboardUncached(
       `select surface,
               tool_name,
               count(*) as calls,
+              count(*) filter (where ${MCP_SCAN_LIMITED_SQL}) as scan_limited,
               count(*) filter (where ${MCP_INVALID_REQUEST_SQL}) as invalid_requests,
               count(*) filter (where ${MCP_EXECUTION_ERROR_SQL}) as errors,
               percentile_cont(0.5) within group (order by duration_ms) as p50_duration_ms,
@@ -375,6 +383,7 @@ async function loadAdminMcpTelemetryDashboardUncached(
     query<SurfaceRow>(
       `select surface,
               count(*) as calls,
+              count(*) filter (where ${MCP_SCAN_LIMITED_SQL}) as scan_limited,
               count(*) filter (where ${MCP_INVALID_REQUEST_SQL}) as invalid_requests,
               count(*) filter (where ${MCP_EXECUTION_ERROR_SQL}) as errors,
               count(distinct session_id) filter (where session_id is not null) as sessions,
@@ -435,6 +444,7 @@ async function loadAdminMcpTelemetryDashboardUncached(
     ),
     queryOne<ComparisonRow>(
       `select count(*) as invocation_count,
+              count(*) filter (where ${MCP_SCAN_LIMITED_SQL}) as scan_limited_count,
               count(*) filter (where ${MCP_INVALID_REQUEST_SQL}) as invalid_request_count,
               count(*) filter (where ${MCP_EXECUTION_ERROR_SQL}) as error_count,
               percentile_cont(0.95) within group (order by duration_ms) as p95_duration_ms
@@ -499,7 +509,7 @@ async function loadAdminMcpTelemetryDashboardUncached(
   ]);
 
   const summary = summaryResult ?? {
-    actor_count: 0, bundle_count: 0, invalid_request_count: 0, error_count: 0, invocation_count: 0,
+    actor_count: 0, bundle_count: 0, scan_limited_count: 0, invalid_request_count: 0, error_count: 0, invocation_count: 0,
     newest_event_at: null,
     new_scan_count: 0, p50_duration_ms: null, p95_duration_ms: null,
     quota_limited_count: 0, reused_scan_count: 0, scan_count: 0,
@@ -508,6 +518,7 @@ async function loadAdminMcpTelemetryDashboardUncached(
   const metrics = {
     actors: count(summary.actor_count),
     bundles: count(summary.bundle_count),
+    scanLimited: count(summary.scan_limited_count),
     invalidRequests: count(summary.invalid_request_count),
     errors: count(summary.error_count),
     invocations: count(summary.invocation_count),
@@ -553,6 +564,7 @@ async function loadAdminMcpTelemetryDashboardUncached(
       period: toolPeriod,
     },
     trend: trendResult.rows.map((row) => ({
+      scanLimited: count(row.scan_limited),
       invalidRequests: count(row.invalid_requests),
       errors: count(row.errors),
       invocations: count(row.invocations),
@@ -591,6 +603,7 @@ async function loadAdminMcpTelemetryDashboardUncached(
     surfaces: surfaceResult.rows.map((row) => ({
       actors: count(row.actors),
       calls: count(row.calls),
+      scanLimited: count(row.scan_limited),
       invalidRequests: count(row.invalid_requests),
       errors: count(row.errors),
       sessions: count(row.sessions),
@@ -598,6 +611,7 @@ async function loadAdminMcpTelemetryDashboardUncached(
     })),
     tools: toolResult.rows.map((row) => ({
       calls: count(row.calls),
+      scanLimited: count(row.scan_limited),
       invalidRequests: count(row.invalid_requests),
       errors: count(row.errors),
       p50DurationMs: nullableNumber(row.p50_duration_ms),
@@ -685,6 +699,7 @@ export async function listAdminMcpTelemetryEventsPage(
   if (filters.confidence) conditions.push(`attribution_confidence = ${addValue(filters.confidence)}`);
   if (filters.toolName) conditions.push(`tool_name = ${addValue(filters.toolName.slice(0, 100))}`);
   if (filters.outcome === "invalid_request") conditions.push(MCP_INVALID_REQUEST_SQL);
+  else if (filters.outcome === "scan_limited") conditions.push(MCP_SCAN_LIMITED_SQL);
   else if (filters.outcome === "error") conditions.push(MCP_EXECUTION_ERROR_SQL);
   else if (filters.outcome) conditions.push(`outcome = ${addValue(filters.outcome)}`);
   if (filters.scanDecision) conditions.push(`scan_decision = ${addValue(filters.scanDecision)}`);

@@ -281,7 +281,7 @@ export function buildPulseChatGptOpenApiDocument() {
               additionalProperties: true,
               properties: {
                 code: { type: "string", enum: ["invalid_url", "not_found", "pulse_throttled", "rate_limited", "internal_error", "scan_unavailable"] },
-                reasonCode: { type: "string", enum: ["non_public_target"], nullable: true },
+                reasonCode: { type: "string", enum: ["non_public_target", "domain_not_found", "dns_unavailable"], nullable: true },
                 message: { type: "string" },
                 retryAfterSeconds: { type: "integer", nullable: true },
                 recommendedNextAction: { type: "string", nullable: true },

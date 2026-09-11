@@ -276,7 +276,7 @@ export const pulseErrorSchema = z
     error: z
       .object({
         code: pulseErrorCodeSchema,
-        reasonCode: z.enum(["non_public_target"]).nullable().optional(),
+        reasonCode: z.enum(["non_public_target", "domain_not_found", "dns_unavailable"]).nullable().optional(),
         message: z.string(),
         retryAfterSeconds: z.number().int().nullable().optional(),
         recommendedNextAction: z.string().nullable().optional(),
