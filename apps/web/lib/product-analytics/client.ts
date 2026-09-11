@@ -66,8 +66,9 @@ export function trackProductEvent(input: Omit<ProductAnalyticsPayload, "actorId"
   if (!privacyBounded) setSafeStorage(window.sessionStorage, ENTRY_ROUTE_KEY, entryRoute);
   const payload: ProductAnalyticsPayload = {
     ...input,
+    eventId: crypto.randomUUID(),
     route: actualRoute,
-    scanId: privacyBounded ? undefined : extractScanIdFromPath(actualRoute),
+    scanId: !privacyBounded || actualRoute === "/app" || actualRoute.startsWith("/app/") ? extractScanIdFromPath(actualRoute) : undefined,
     entryRoute,
     language: navigator.language,
     viewportBand: viewportBand(),

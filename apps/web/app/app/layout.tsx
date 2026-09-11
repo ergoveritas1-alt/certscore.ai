@@ -4,7 +4,7 @@ import type { ReactNode } from "react";
 import { AppShell } from "../../components/dashboard/app-shell";
 import { getDashboardContext } from "../../server/auth";
 import { getPlatformAdminFlag } from "../../server/admin/platform-admin";
-import { normalizeAnalyticsRoute } from "../../lib/product-analytics/contract";
+import { extractScanIdFromPath, normalizeAnalyticsRoute } from "../../lib/product-analytics/contract";
 import { persistProductAnalyticsEvent } from "../../server/product-analytics/repository";
 
 export const dynamic = "force-dynamic";
@@ -31,7 +31,8 @@ export default async function AppLayout({ children }: AppLayoutProps) {
       try {
         await persistProductAnalyticsEvent({
           ...operationalEvent,
-          route: normalizeAnalyticsRoute(route)
+          route: normalizeAnalyticsRoute(route),
+          scanId: extractScanIdFromPath(route)
         }, {
           browserFamily: "server",
           consentState: "operational",

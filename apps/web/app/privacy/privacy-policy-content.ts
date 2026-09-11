@@ -24,7 +24,7 @@ export const CERTSCORE_PRIVACY_POLICY_SECTIONS = [
   {
     title: "3. Usage And Operational Data",
     body: [
-      "We may collect technical information needed to operate the service, such as authentication events, usage logs, scan status events, browser metadata, and product interaction data."
+      "We may collect technical information needed to operate the service, such as authentication events, usage logs, scan status events, browser metadata, and product interaction data. Authenticated application activity, including page and report views, scan actions, clicks, and form outcomes, is recorded with your account and relevant scan identifiers for operations, support, reliability, and security independently of optional analytics consent. These activity records are restricted to authorized administrators and retained for up to 90 days, subject to routine deletion processing. We do not include form contents, passwords, or report contents in these activity records."
     ]
   },
   {

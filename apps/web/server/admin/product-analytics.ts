@@ -506,7 +506,7 @@ export async function listProductAnalyticsEventsPage(
   if (queryText) {
     values.push(`%${queryText}%`);
     const parameter = `$${values.length}`;
-    clauses.push(`(events.event_route ilike ${parameter} or events.normalized_route ilike ${parameter} or events.feature ilike ${parameter} or events.event_name ilike ${parameter} or events.source ilike ${parameter} or events.session_id::text ilike ${parameter} or events.actor_id::text ilike ${parameter} or events.origin_ip ilike ${parameter} or events.origin_ip_hash ilike ${parameter} or events.freshness ilike ${parameter} or events.request_region ilike ${parameter} or users.email ilike ${parameter} or coalesce(events.target_hostname, domains.hostname) ilike ${parameter})`);
+    clauses.push(`(events.event_route ilike ${parameter} or events.normalized_route ilike ${parameter} or events.feature ilike ${parameter} or events.event_name ilike ${parameter} or events.source ilike ${parameter} or events.session_id::text ilike ${parameter} or events.actor_id::text ilike ${parameter} or events.scan_id::text ilike ${parameter} or events.origin_ip ilike ${parameter} or events.origin_ip_hash ilike ${parameter} or events.freshness ilike ${parameter} or events.request_region ilike ${parameter} or users.email ilike ${parameter} or coalesce(events.target_hostname, domains.hostname) ilike ${parameter})`);
   }
   const where = clauses.join(" and ");
   const cte = unifiedEventsCte();

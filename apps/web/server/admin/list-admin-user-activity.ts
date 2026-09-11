@@ -26,6 +26,8 @@ export type AdminUserActivity = {
   };
   scanStatusCounts: Array<{ count: number; status: string }>;
   apiRoutes: Array<{ channels: string[]; count: number; lastRequestedAt: string | null; route: AdminApiRoute }>;
+  events: AdminUserEvent[];
+  eventCount: number;
   scans: Array<{
     association: "claimed" | "submitted";
     completedAt: string | null;
@@ -36,6 +38,19 @@ export type AdminUserActivity = {
     scanType: string;
     status: string;
   }>;
+};
+
+export type AdminUserEvent = {
+  event_id: string;
+  occurred_at: string;
+  event_name: string;
+  normalized_route: string;
+  feature: string;
+  outcome: string;
+  scan_id: string | null;
+  hostname: string | null;
+  element_id: string | null;
+  browser_family: string;
 };
 
 type AdminUserActivityUserRow = {
@@ -82,7 +97,7 @@ type AdminUserActivityApiRouteRow = {
   last_requested_at: string | null;
 };
 
-export async function loadAdminUserActivity(userId: string, limit = 10, offset = 0): Promise<AdminUserActivity | null> {
+export async function loadAdminUserActivity(userId: string, limit = 10, offset = 0, eventLimit = 20, eventOffset = 0): Promise<AdminUserActivity | null> {
   await requirePlatformAdminContext();
 
   const normalizedUserId = userId.trim();
@@ -94,7 +109,7 @@ export async function loadAdminUserActivity(userId: string, limit = 10, offset =
   const normalizedLimit = Math.min(Math.max(limit, 1), 100);
   const normalizedOffset = Math.max(offset, 0);
 
-  const [user, metrics, scans, statusCounts, requestMetrics, apiRoutes] = await Promise.all([
+  const [user, metrics, scans, statusCounts, requestMetrics, apiRoutes, events, eventCount] = await Promise.all([
     queryOne<AdminUserActivityUserRow>(
       `with selected_membership as (
          select organization_id
@@ -184,7 +199,24 @@ export async function loadAdminUserActivity(userId: string, limit = 10, offset =
         order by count(*) desc, api_route asc`,
       [normalizedUserId],
       { readOnly: true }
-    ).then((result) => result.rows)
+    ).then((result) => result.rows),
+    query<AdminUserEvent>(
+      `select e.event_id, e.occurred_at, e.event_name, e.normalized_route,
+              e.feature, e.outcome, e.scan_id, e.element_id, e.browser_family, d.hostname
+         from product_analytics_events e
+         left join scans s on s.id = e.scan_id
+         left join domains d on d.id = s.domain_id
+        where e.user_id = $1 and e.occurred_at >= now() - interval '90 days'
+        order by e.occurred_at desc, e.event_id desc
+        limit $2 offset $3`,
+      [normalizedUserId, Math.min(Math.max(eventLimit, 1), 100), Math.max(eventOffset, 0)],
+      { readOnly: true }
+    ).then((result) => result.rows),
+    queryOne<{ count: number }>(
+      `select count(*)::int as count from product_analytics_events
+        where user_id = $1 and occurred_at >= now() - interval '90 days'`,
+      [normalizedUserId], { readOnly: true }
+    )
   ]);
 
   if (!user) {
@@ -192,6 +224,8 @@ export async function loadAdminUserActivity(userId: string, limit = 10, offset =
   }
 
   return {
+    events,
+    eventCount: Number(eventCount?.count ?? 0),
     user: {
       createdAt: user.created_at,
       email: user.email,

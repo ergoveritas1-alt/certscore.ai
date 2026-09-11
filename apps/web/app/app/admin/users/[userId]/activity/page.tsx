@@ -7,7 +7,7 @@ import { loadAdminUserActivity } from "../../../../../../server/admin/list-admin
 
 type AdminUserActivityPageProps = {
   params: Promise<{ userId: string }>;
-  searchParams?: Promise<{ page?: string; perPage?: string }>;
+  searchParams?: Promise<{ page?: string; perPage?: string; eventPage?: string; eventPerPage?: string }>;
 };
 
 function formatStatus(status: string) {
@@ -21,9 +21,11 @@ function formatChannels(channels: string[]) {
 export default async function AdminUserActivityPage({ params, searchParams }: AdminUserActivityPageProps) {
   const { userId } = await params;
   const resolvedSearchParams = searchParams ? await searchParams : {};
+  const eventPage = normalizePage(resolvedSearchParams.eventPage);
+  const eventPageSize = normalizePageSize(resolvedSearchParams.eventPerPage, 20);
   const pageSize = normalizePageSize(resolvedSearchParams.perPage);
   const requestedPage = normalizePage(resolvedSearchParams.page);
-  const requestedActivity = await loadAdminUserActivity(userId, pageSize, (requestedPage - 1) * pageSize);
+  const requestedActivity = await loadAdminUserActivity(userId, pageSize, (requestedPage - 1) * pageSize, eventPageSize, (eventPage - 1) * eventPageSize);
 
   if (!requestedActivity) {
     notFound();
@@ -33,7 +35,7 @@ export default async function AdminUserActivityPage({ params, searchParams }: Ad
   const page = Math.min(requestedPage, pageCount);
   const activity = page === requestedPage
     ? requestedActivity
-    : await loadAdminUserActivity(userId, pageSize, (page - 1) * pageSize);
+    : await loadAdminUserActivity(userId, pageSize, (page - 1) * pageSize, eventPageSize, (eventPage - 1) * eventPageSize);
 
   if (!activity) {
     notFound();
@@ -95,10 +97,37 @@ export default async function AdminUserActivityPage({ params, searchParams }: Ad
       </Card>
 
       <Card className="border-slate-200 bg-white">
+        <CardHeader><CardTitle>Logged-in activity</CardTitle></CardHeader>
+        <CardContent className="space-y-3">
+          <p className="text-sm text-slate-600">Recorded activity from the last 90 days. Browser events report interactions; server events record requests. Older anonymous events cannot be attributed retroactively.</p>
+          <PaginationControls basePath={`/app/admin/users/${userId}/activity`} itemLabel="events"
+            page={eventPage} pageCount={Math.max(1, Math.ceil(activity.eventCount / eventPageSize))}
+            pageSize={eventPageSize} pageParamName="eventPage" perPageParamName="eventPerPage"
+            searchParams={{ page: String(page), perPage: String(pageSize) }}
+            totalCount={activity.eventCount} visibleCount={activity.events.length} />
+          <div className="overflow-x-auto">
+            <table className="min-w-full text-left text-sm">
+              <thead><tr><th className="p-2">Time</th><th className="p-2">Action</th><th className="p-2">Page / control</th><th className="p-2">Scan</th><th className="p-2">Outcome</th><th className="p-2">Source</th></tr></thead>
+              <tbody>{activity.events.map((event) => <tr className="border-t border-slate-100" key={event.event_id}>
+                <td className="whitespace-nowrap p-2">{formatAdminDateTime(event.occurred_at)}</td>
+                <td className="p-2">{formatStatus(event.event_name)}</td>
+                <td className="p-2"><code>{event.normalized_route}</code><p className="text-xs text-slate-500">{event.element_id ?? event.feature}</p></td>
+                <td className="p-2">{event.scan_id ? <Link className="text-sky-700" href={`/app/scans/${event.scan_id}`}>{event.hostname ?? "Scan"}<span className="block font-mono text-xs">{event.scan_id}</span></Link> : "—"}</td>
+                <td className="p-2">{formatStatus(event.outcome)}</td>
+                <td className="p-2">{event.browser_family === "server" ? "Server" : "Browser"}</td>
+              </tr>)}</tbody>
+            </table>
+            {!activity.events.length && <p className="py-3 text-sm text-slate-600">No attributed events in this period.</p>}
+          </div>
+        </CardContent>
+      </Card>
+
+      <Card className="border-slate-200 bg-white">
         <CardHeader><CardTitle>Scan activity</CardTitle></CardHeader>
         <CardContent>
           <PaginationControls
             basePath={`/app/admin/users/${userId}/activity`}
+            searchParams={{ eventPage: String(eventPage), eventPerPage: String(eventPageSize) }}
             itemLabel="scan activity items"
             page={page}
             pageCount={pageCount}

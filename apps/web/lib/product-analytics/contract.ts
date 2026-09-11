@@ -29,6 +29,7 @@ export type ProductAnalyticsCategory = "navigation" | "interaction" | "form" | "
 export type ProductAnalyticsOutcome = "observed" | "started" | "submitted" | "success" | "failure" | "opted_in" | "opted_out";
 
 export type ProductAnalyticsPayload = {
+  eventId?: string;
   actorId?: string;
   campaignMedium?: string;
   campaignName?: string;
@@ -84,7 +85,7 @@ export function analyticsRouteIdentifier(prefix: string, value: string, maxLengt
 }
 
 export function extractScanIdFromPath(value: string) {
-  const match = value.match(/\/scans\/([0-9a-f-]{36})(?:[/?#]|$)/i);
+  const match = value.match(/\/(?:scans|scanso)\/([0-9a-f-]{36})(?:[/?#]|$)/i);
   const candidate = match?.[1];
   return candidate && UUID_PATTERN.test(candidate) ? candidate : undefined;
 }
@@ -116,6 +117,7 @@ export function parseProductAnalyticsPayload(value: unknown): ProductAnalyticsPa
   const uuid = (candidate: unknown) => typeof candidate === "string" && UUID_PATTERN.test(candidate) ? candidate : undefined;
   const boundedNumber = (candidate: unknown, max: number) => typeof candidate === "number" && Number.isFinite(candidate) && candidate >= 0 && candidate <= max ? candidate : undefined;
   return {
+    eventId: uuid(input.eventId),
     eventName: input.eventName as ProductAnalyticsEventName,
     category: input.category as ProductAnalyticsCategory,
     outcome: input.outcome as ProductAnalyticsOutcome,

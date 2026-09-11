@@ -1,3 +1,4 @@
+import { resolveActivityAttribution } from "../../lib/product-analytics/operational-activity";
 import { NextResponse } from "next/server";
 import { isPlatformAdminEmail } from "../admin/platform-admin";
 import { getBetterAuthSessionUser } from "../better-auth/session";
@@ -25,13 +26,16 @@ function referringDomain(request: Request) {
 }
 
 export async function handleOperationalEventPost(request: Request) {
+  if (request.headers.get("sec-fetch-site") === "cross-site") {
+    return NextResponse.json({ error: "cross_origin_event" }, { status: 403 });
+  }
   const contentLength = Number(request.headers.get("content-length") ?? 0);
   if (contentLength > 8_192) return NextResponse.json({ error: "payload_too_large" }, { status: 413 });
 
   const payload = parseProductAnalyticsPayload(await request.json().catch(() => null));
   if (!payload) return NextResponse.json({ error: "invalid_event" }, { status: 400 });
 
-  const consentState = payload.eventName === "analytics_opted_out" || request.headers.get("x-certscore-analytics-consent") === "denied"
+  const optionalConsentState = payload.eventName === "analytics_opted_out" || request.headers.get("x-certscore-analytics-consent") === "denied"
     ? "opted_out" as const
     : request.headers.get("x-certscore-analytics-consent") === "granted"
       ? "granted" as const
@@ -42,17 +46,20 @@ export async function handleOperationalEventPost(request: Request) {
   const countryCode = countryHeader && /^[A-Z]{2}$/.test(countryHeader) ? countryHeader : null;
 
   try {
-    const user = consentState === "opted_out" ? null : await getBetterAuthSessionUser();
+    // Actor identity comes only from the authenticated server session.
+    const user = await getBetterAuthSessionUser();
+    const attribution = resolveActivityAttribution(payload, user?.id ?? null, optionalConsentState);
+    const { operational, consentState } = attribution;
     const organizationId = user ? await findOrganizationIdForUser(user.id).catch(() => null) : null;
-    await persistProductAnalyticsEvent(payload, {
+    await persistProductAnalyticsEvent(attribution.payload, {
       ...technical,
       consentState,
       countryCode,
       isStaff: isPlatformAdminEmail(user?.email),
       organizationId,
-      referringDomain: referringDomain(request),
-      userId: user?.id ?? null
-    });
+      referringDomain: operational ? null : referringDomain(request),
+      userId: attribution.userId
+    }, payload.eventId);
     return new NextResponse(null, { status: 201 });
   } catch (error) {
     console.error(JSON.stringify({ event: "product_analytics.write_failed", errorClass: error instanceof Error ? error.name : "UnknownError" }));
