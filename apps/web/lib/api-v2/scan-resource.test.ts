@@ -626,7 +626,7 @@ test("API v2 fails closed when a joined Accept observation window was truncated"
   ));
 });
 
-test("API v2 and status expose a six-second Reject Path timeout as a neutral limitation", () => {
+test("API v2 and status expose a bounded Reject Path timeout as a neutral limitation", () => {
   const retained = {
     ...fixture(),
     runtimeArtifacts: {
@@ -650,7 +650,7 @@ test("API v2 and status expose a six-second Reject Path timeout as a neutral lim
     evidenceDisposition: "indeterminate",
     indeterminateReason: "reject_path_timeout",
     verdict: "no_confirmed_post_refusal_verdict",
-    interpretation: "Reject Path did not complete within the six-second post-primary allowance, so no post-refusal verdict was established.",
+    interpretation: "Reject Path did not complete within the configured action-lane allowance, so no post-refusal verdict was established.",
     observationStrategy: "not_applicable",
     termination: {
       kind: "unavailable",
@@ -658,12 +658,12 @@ test("API v2 and status expose a six-second Reject Path timeout as a neutral lim
       trigger: "reject_path_timeout",
     },
     completedAt: "2026-08-26T12:00:16.000Z",
-    coverageLimitations: ["Reject Path did not complete within the six-second post-primary allowance, so no post-refusal verdict was established."],
-    limitations: ["Reject Path did not complete within the six-second post-primary allowance, so no post-refusal verdict was established."],
+    coverageLimitations: ["Reject Path did not complete within the configured action-lane allowance, so no post-refusal verdict was established."],
+    limitations: ["Reject Path did not complete within the configured action-lane allowance, so no post-refusal verdict was established."],
   });
   assert.deepEqual(status.postRefusalObservation, resource.postRefusalObservation);
   assert.ok(resource.coverage?.limitations?.includes(
-    "Reject Path did not complete within the six-second post-primary allowance.",
+    "Reject Path did not complete within the configured action-lane allowance.",
   ));
 });
 

@@ -202,8 +202,8 @@ test("Light tool descriptions are factual, bounded, and free of model-behavior i
   assert.match(status.description, /retryAfterSeconds/);
   assert.match(status.description, /Preliminary observations are distinct from completed findings/i);
   assert.match(bundle.description, /Returns the completed or completed-limited CertScore evidence bundle/i);
-  assert.match(bundle.description, /Accept and Reject Path content is present only for confirmed, evidence-qualified post-action observations/i);
-  assert.match(bundle.description, /unsupported or inconclusive outcomes remain neutral coverage limitations/i);
+  assert.match(bundle.description, /Accept and Reject results distinguish registered decisions from retained after-click facts/i);
+  assert.match(bundle.description, /absent or failed capture remains explicitly limited/i);
   for (const concept of [
     /pre-consent storage/,
     /trackers/,

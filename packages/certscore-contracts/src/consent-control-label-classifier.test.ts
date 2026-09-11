@@ -795,9 +795,8 @@ test("classifies observed French reject-all cookie labels", () => {
   const compositeSubscriptionChoice = classifyConsentControlLabel({
     label: "Accepter les cookies ou Refuser et s'abonner",
   });
-  assert.equal(compositeSubscriptionChoice.intent, "reject");
-  assert.equal(compositeSubscriptionChoice.variant, "reject_with_subscription");
-  assert.equal(compositeSubscriptionChoice.matchedTerm, "refuser et s'abonner");
+  assert.equal(compositeSubscriptionChoice.intent, "unknown");
+  assert.ok(compositeSubscriptionChoice.reasonCodes.includes("conflicting_consent_decisions"));
 });
 
 test("classifies necessary-only labels as reject-equivalent", () => {
@@ -929,16 +928,15 @@ test("keeps the audited vocabulary represented across every supported locale", (
   }
 });
 
-test("classifies short non-essential reject labels in concatenated banner text", () => {
+test("classifies standalone non-essential refusal but withholds conflicting concatenated labels", () => {
   const standalone = classifyConsentControlLabel({ label: "Reject Non-Essential" });
   assert.equal(standalone.intent, "reject");
   assert.equal(standalone.matchedTerm, "reject non-essential");
   assert.equal(standalone.matchStrength, "direct");
 
   const concatenated = classifyConsentControlLabel({ label: "Save Accept All Reject Non-Essential" });
-  assert.equal(concatenated.intent, "reject");
-  assert.equal(concatenated.matchedTerm, "reject non-essential");
-  assert.equal(concatenated.matchStrength, "direct");
+  assert.equal(concatenated.intent, "unknown");
+  assert.ok(concatenated.reasonCodes.includes("conflicting_consent_decisions"));
 });
 
 test("classifies category-scoped analytics controls without broadening plain category labels", () => {

@@ -1413,7 +1413,7 @@ test("capture policy recognizes reviewed observation labels in a local consent s
   ] as const) {
     const artifact = await captureFixture(`<section id="cookie-banner" role="dialog" aria-label="Cookie consent" style="position:fixed;bottom:0;padding:20px;background:white"><p>We use optional cookies for analytics. Choose your cookie preferences.</p><button>${label}</button></section>`);
     assert.equal(artifact.summary[field], true, label);
-    assert.equal(findCandidate(artifact, label)?.classifierRegistryVersion, "consent-control-label-registry.v2");
+    assert.equal(findCandidate(artifact, label)?.classifierRegistryVersion, "consent-control-label-registry.v3");
   }
 });
 

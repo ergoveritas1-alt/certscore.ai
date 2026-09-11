@@ -60,7 +60,7 @@ import {
   type CmpAccessibleActionResolution,
 } from "./cmp-accessible-action.js";
 import { readCmpApiConsentSnapshot } from "./cmp-api-consent-state.js";
-import { assertConsentActionDispatchAllowed, buildConsentActionControlProof } from "./cmp-action-control-proof.js";
+import { assertConsentActionDispatchAllowed, buildConsentActionControlProof, consentActionLabelNeedsRediscovery } from "./cmp-action-control-proof.js";
 import { matchingStateWriteTime, readActionStateWrites, verifiedCanonicalStateWrite, verifiedCookieDecision, type SemanticState } from "./consent-action-semantic-state.js";
 import { matchesCanonicalCmpCookieName } from "./cmp-cookie-name.js";
 import {
@@ -1150,6 +1150,7 @@ export async function runPostRefusalObserver(
       }
     }
     let proofResolution = await buildConsentActionControlProof({
+      onLabelInspection: recordResolverSnapshot,
       signal: input.signal,
       action: "reject",
       ...(authorizedExactTargetUrl
@@ -1179,7 +1180,8 @@ export async function runPostRefusalObserver(
     if (
       proofResolution.status !== "verified" &&
       (proofResolution.reason === "resolved_control_no_longer_actionable" ||
-        proofResolution.reason === "resolved_control_scope_not_interactive") &&
+        proofResolution.reason === "resolved_control_scope_not_interactive" ||
+        (input.allowCanonicalRejectDiscovery && consentActionLabelNeedsRediscovery(proofResolution))) &&
       !cancellation()
     ) {
       try {
@@ -1194,18 +1196,29 @@ export async function runPostRefusalObserver(
         if (remainingRecoveryBudgetMs() === 0) {
           throw new Error("late_control_recovery_search_budget_exhausted");
         }
-        let lateResolution = await waitForDeterministicRecipe(
-          page,
-          [selectedRecipe],
-          Math.min(250, remainingRecoveryBudgetMs()),
-          input.signal,
-        );
+        // An unverified named label must not repeatedly select the same control.
+        // Spend only the remaining original budget on canonical live discovery.
+        let lateResolution: DeterministicRecipeResolution = consentActionLabelNeedsRediscovery(proofResolution)
+          ? { status: "not_found" }
+          : await waitForDeterministicRecipe(
+            page,
+            [selectedRecipe],
+            Math.min(250, remainingRecoveryBudgetMs()),
+            input.signal,
+            recordResolverSnapshot,
+            actionDiscovery,
+          );
         if (lateResolution.status === "not_found" && input.allowCanonicalRejectDiscovery && remainingRecoveryBudgetMs() >= 250) {
           lateResolution = await waitForCanonicalRejectControlRecipe(
             page,
             remainingRecoveryBudgetMs(),
             input.signal,
             [selectedRecipe],
+            recordResolverSnapshot,
+            actionDiscovery,
+            selectedRecipe,
+            undefined,
+            resolverStartedAtMs + actionSearchTimeoutMs,
           );
         }
         if (lateResolution.status === "found") {
@@ -1241,6 +1254,7 @@ export async function runPostRefusalObserver(
             control,
           );
           proofResolution = await buildConsentActionControlProof({
+            onLabelInspection: recordResolverSnapshot,
             signal: input.signal,
             action: "reject",
             ...(authorizedExactTargetUrl
@@ -2194,28 +2208,7 @@ type DeterministicRecipeResolution =
       diagnosticGeometry?: ConsentControlGeometryArtifact;
     };
 
-type ResolverDiagnosticSnapshot = {
-  source: "named_recipe" | "canonical_geometry";
-  state:
-    | "document_loading"
-    | "scope_ambiguous"
-    | "selector_absent"
-    | "precondition_unsatisfied"
-    | "control_hidden"
-    | "control_disabled"
-    | "label_mismatch"
-    | "single_actionable"
-    | "multiple_actionable"
-    | "geometry_unavailable"
-    | "canonical_reject_absent";
-  selectorMatchCount: number;
-  visibleCount: number;
-  enabledCount: number;
-  labelMatchCount: number;
-  actionableCount: number;
-  cmpIds: string[];
-  controlLabels: string[];
-};
+type ResolverDiagnosticSnapshot = Omit<NonNullable<PostRefusalInteractionDiagnostics["resolver"]>["snapshots"][number], "attempt" | "elapsedMs">;
 
 type ResolverDiagnosticReporter = (snapshot: ResolverDiagnosticSnapshot) => void;
 
@@ -2699,7 +2692,7 @@ async function waitForDeterministicOrCanonicalRecipe(
     if (canonicalBudgetMs <= 0) break;
     const canonicalResolution = await waitForCanonicalRejectControlRecipe(
       page, canonicalBudgetMs, signal, boundedRecipes, reportDiagnostic, discovery,
-      runtimeRecipes.length === 1 ? runtimeRecipes[0] : undefined, rememberCmp,
+      runtimeRecipes.length === 1 ? runtimeRecipes[0] : undefined, rememberCmp, deadlineAtMs,
     );
     firstPass = false;
     diagnosticGeometry = canonicalResolution.diagnosticGeometry ?? diagnosticGeometry;
@@ -2728,6 +2721,7 @@ async function waitForCanonicalRejectControlRecipe(
   discovery?: ConsentActionDiscovery,
   runtimeBoundRecipe?: PostRefusalActionRecipe,
   onCmpDetected?: (name: string) => void,
+  outerDeadlineAtMs?: number,
 ): Promise<DeterministicRecipeResolution> {
   const deadlineAtMs = Date.now() + timeoutMs;
   let diagnosticGeometry: ConsentControlGeometryArtifact | undefined;
@@ -2771,14 +2765,14 @@ async function waitForCanonicalRejectControlRecipe(
     const candidates = containerBoundCandidates.length > 0
       ? containerBoundCandidates
       : retainedCandidates;
-    reportDiagnostic?.({
+    const snapshot: ResolverDiagnosticSnapshot = {
       source: "canonical_geometry",
       state: !geometry
         ? "geometry_unavailable"
         : candidates.length > 1
           ? "multiple_actionable"
           : candidates.length === 1
-            ? "single_actionable"
+            ? "candidate_detected"
             : "canonical_reject_absent",
       selectorMatchCount: Math.min(geometry?.candidates.length ?? 0, 64),
       visibleCount: Math.min(geometry?.candidates.filter((candidate) =>
@@ -2789,7 +2783,9 @@ async function waitForCanonicalRejectControlRecipe(
       actionableCount: Math.min(candidates.length, 64),
       cmpIds: geometry?.cmp.name ? [geometry.cmp.name] : [],
       controlLabels: [...new Set(candidates.map((candidate) => candidate.normalizedLabel))].slice(0, 4),
-    });
+    };
+    reportDiagnostic?.(snapshot);
+    const bindingState = (state: typeof snapshot.state) => reportDiagnostic?.({ ...snapshot, state, actionableCount: 0 });
     if (candidates.length > 1) {
       sawAmbiguousCanonicalControl = true;
       if (Date.now() >= deadlineAtMs) break;
@@ -2805,6 +2801,7 @@ async function waitForCanonicalRejectControlRecipe(
         : undefined;
       const scopeResolution = exactSelectorScope(page, controlFrameUrl);
       if (scopeResolution.status === "ambiguous") {
+        bindingState("scope_ambiguous");
         sawAmbiguousCanonicalControl = true;
         if (Date.now() >= deadlineAtMs) break;
         const waitMs = Math.min(150, Math.max(0, deadlineAtMs - Date.now()));
@@ -2812,7 +2809,7 @@ async function waitForCanonicalRejectControlRecipe(
         else await waitForDelay(Math.min(50, waitMs), signal).catch(() => undefined);
         continue;
       }
-      if (scopeResolution.status === "not_found") continue;
+      if (scopeResolution.status === "not_found") { bindingState("frame_not_found"); continue; }
       const containerSelector = candidate.containerSelectorHint;
       const containers = containerSelector
         ? scopeResolution.scope.locator(containerSelector)
@@ -2820,7 +2817,7 @@ async function waitForCanonicalRejectControlRecipe(
       const containerCount = containers
         ? await containers.count().catch(() => 0)
         : 0;
-      if (containerCount === 1 && !await consentScopePermitsInteraction(containers!.first())) continue;
+      if (containerCount === 1 && !await consentScopePermitsInteraction(containers!.first())) { bindingState("scope_not_interactive"); continue; }
       const scopedControlSelector = containerSelector && containerCount === 1
         ? candidate.selectorHint === containerSelector ||
           candidate.selectorHint.startsWith(`${containerSelector} `)
@@ -2829,21 +2826,26 @@ async function waitForCanonicalRejectControlRecipe(
         : candidate.selectorHint;
       const controls = scopeResolution.scope.locator(scopedControlSelector);
       const controlCount = await controls.count().catch(() => 0);
-      if (controlCount > 8) return {
+      if (controlCount > 8) { bindingState("multiple_actionable"); return {
         status: "ambiguous",
         ...(diagnosticGeometry ? { diagnosticGeometry } : {}),
-      };
+      }; }
       const actionableControls: Locator[] = [];
+      let failedStage: typeof snapshot.state = "selector_absent";
+      const stages: Array<typeof snapshot.state> = ["selector_absent", "control_hidden", "control_disabled", "label_mismatch", "control_not_hit_target"];
+      const failed = (stage: typeof snapshot.state) => {
+        if (stages.indexOf(stage) > stages.indexOf(failedStage)) failedStage = stage;
+      };
       for (let index = 0; index < controlCount; index += 1) {
         const control = controls.nth(index);
-        if (
-          await control.isVisible().catch(() => false) &&
-          await control.isEnabled().catch(() => false) &&
-          (await normalizedLocatorLabels(control)).includes(candidate.normalizedLabel) &&
-          await locatorHasViewportHitTarget(control)
-        ) actionableControls.push(control);
+        if (!await control.isVisible().catch(() => false)) { failed("control_hidden"); continue; }
+        if (!await control.isEnabled().catch(() => false)) { failed("control_disabled"); continue; }
+        if (!(await normalizedLocatorLabels(control)).includes(candidate.normalizedLabel)) { failed("label_mismatch"); continue; }
+        if (!await locatorHasViewportHitTarget(control)) { failed("control_not_hit_target"); continue; }
+        actionableControls.push(control);
       }
       if (actionableControls.length > 1) {
+        bindingState("multiple_actionable");
         sawAmbiguousCanonicalControl = true;
         if (Date.now() >= deadlineAtMs) break;
         const waitMs = Math.min(150, Math.max(0, deadlineAtMs - Date.now()));
@@ -2851,7 +2853,7 @@ async function waitForCanonicalRejectControlRecipe(
         else await waitForDelay(Math.min(50, waitMs), signal).catch(() => undefined);
         continue;
       }
-      if (actionableControls.length !== 1) continue;
+      if (actionableControls.length !== 1) { bindingState(failedStage); continue; }
       let visibleContainerCount = 0;
       for (let index = 0; index < Math.min(containerCount, 8); index += 1) {
         if (await containers!.nth(index).isVisible().catch(() => false)) visibleContainerCount += 1;
@@ -2908,8 +2910,10 @@ async function waitForCanonicalRejectControlRecipe(
             ...(bannerFrameUrl ? { bannerFrameUrl } : {}),
           },
       };
-      const confirmationSearchMs = Math.min(250, Math.max(0, deadlineAtMs - Date.now()));
-      if (confirmationSearchMs <= 0) break;
+      // Geometry can consume the inner discovery slice. Reuse remaining outer
+      // search time for the complete uniqueness sweep, without extending it.
+      const confirmationSearchMs = Math.min(750, Math.max(0, (outerDeadlineAtMs ?? deadlineAtMs) - Date.now()));
+      if (confirmationSearchMs <= 0) { bindingState("binding_budget_exhausted"); break; }
       const resolved = await waitForDeterministicRecipe(
         page,
         [recipe],
@@ -2918,6 +2922,10 @@ async function waitForCanonicalRejectControlRecipe(
         reportDiagnostic,
         discovery,
       );
+      if (resolved.status === "found" && Date.now() >= (outerDeadlineAtMs ?? deadlineAtMs)) {
+        bindingState("binding_budget_exhausted");
+        break;
+      }
       if (resolved.status === "ambiguous") {
         sawAmbiguousCanonicalControl = true;
       } else if (resolved.status !== "not_found") return {

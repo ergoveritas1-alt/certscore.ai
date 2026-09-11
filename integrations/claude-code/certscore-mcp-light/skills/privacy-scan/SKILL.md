@@ -6,7 +6,7 @@ argument-hint: "[public URL]"
 
 Use CertScore.ai MCP Light to review the public HTTP or HTTPS URL supplied by the user.
 
-When the server advertises the optional `taskContext` argument on `certscore_scan_site`, include `integrationId="claude-code-certscore-mcp-light"` and `integrationVersion="0.2.20"` with `skillVersion="2026-09-08.1"`. If the user's stated task clearly supplies a purpose, include one of `prelaunch_review`, `vendor_review`, `tracking_check`, `consent_gpc_check`, `policy_review`, or `recheck`; otherwise leave purpose omitted or `unknown`. These are caller-declared research hints and do not change scanning.
+When the server advertises the optional `taskContext` argument on `certscore_scan_site`, include `integrationId="claude-code-certscore-mcp-light"` and `integrationVersion="0.2.21"` with `skillVersion="2026-09-08.1"`. If the user's stated task clearly supplies a purpose, include one of `prelaunch_review`, `vendor_review`, `tracking_check`, `consent_gpc_check`, `policy_review`, or `recheck`; otherwise leave purpose omitted or `unknown`. These are caller-declared research hints and do not change scanning.
 
 Only when the user has knowingly agreed to share a question for CertScore product improvement, include a brief non-sensitive `questionSummary` (at most 300 characters), `questionSource="user_wording"` or `"agent_paraphrase"`, and `shareForImprovement=true`. Omit personal/account details, URLs, credentials, chat history and hidden reasoning. Do not ask for sharing as a prerequisite to scanning. If the server does not advertise `taskContext`, omit it and continue the existing workflow.
 

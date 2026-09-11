@@ -1,9 +1,11 @@
 import {
   CONSENT_ACTION_CONTROL_PROOF_VERSION,
   classifyConsentControlLabel,
+  hasConsentControlSemanticVeto,
   isRegisteredContextualAcceptLabel,
   normalizeConsentControlText,
   type ConsentActionControlProof,
+  type PostRefusalInteractionDiagnostics,
 } from "@certscore/contracts";
 import { getKnownCmpDefinitionByName } from "@website-signal-risk-scanner/shared";
 import { createHash } from "node:crypto";
@@ -26,6 +28,15 @@ export type ConsentActionControlProofResolution =
   | { status: "verified"; proof: ConsentActionControlProof }
   | { status: "label_mismatch" | "label_unverifiable"; reason: string };
 
+/** Unreadable/weak labels may be rediscovered inside the original search budget.
+ * Opposite decisions, semantic conflicts and transactional controls never qualify. */
+export function consentActionLabelNeedsRediscovery(resolution: ConsentActionControlProofResolution): boolean {
+  return resolution.status === "label_unverifiable" && (
+    resolution.reason === "resolved_control_label_not_classified" ||
+    resolution.reason === "resolved_control_label_below_confidence_threshold"
+  );
+}
+
 /** Synchronous last-mile check, including after geometry/CDP awaits. */
 export function assertConsentActionDispatchAllowed(page: Page, signal?: AbortSignal, authorizedTargetSha256?: string) {
   if (signal?.aborted) throw new Error("abort_requested_before_action");
@@ -36,6 +47,7 @@ export function assertConsentActionDispatchAllowed(page: Page, signal?: AbortSig
 
 export async function buildConsentActionControlProof(input: {
   signal?: AbortSignal;
+  onLabelInspection?: (snapshot: Omit<NonNullable<PostRefusalInteractionDiagnostics["resolver"]>["snapshots"][number], "attempt" | "elapsedMs">) => void;
   action: "accept" | "reject";
   authorizedTargetSha256?: string;
   canonicalNecessaryOnly?: { expectedNormalizedLabel: string };
@@ -69,6 +81,20 @@ export async function buildConsentActionControlProof(input: {
       }
     : await readControlLabelFields(input.control);
   const bounded = boundFields(fields);
+  // Retain the exact bounded label sources read for proof, without another DOM
+  // round trip. This is a candidate read, never dispatch or registration proof.
+  const labelEntries = ([['aria_label', bounded.ariaLabel], ['visible_text', bounded.visibleText],
+    ['value', bounded.value], ['title', bounded.title]] as const).filter((entry) => Boolean(entry[1]));
+  input.onLabelInspection?.({
+    source: "control_proof", state: "candidate_detected",
+    selectorMatchCount: 1, visibleCount: 1, enabledCount: 1,
+    labelMatchCount: 0, actionableCount: 0,
+    cmpIds: input.cmpId ? [input.cmpId.slice(0, 120)] : [],
+    controlLabels: labelEntries.map((entry) => entry[1]!.slice(0, 120)),
+    binding: { selectorSha256: sha256(input.selectorHint),
+      frameIdentitySha256: sha256(input.controlFrameUrl ?? input.page.url()),
+      labelSources: labelEntries.map((entry) => entry[0]) },
+  });
   const definition = input.action === "accept" ? getKnownCmpDefinitionByName(input.cmpId) : undefined;
   const contextualApproval = definition?.acceptContextualApproval &&
     input.recipeId === `canonical-cmp:${definition.canonicalName}:accept:${definition.recipeVersion ?? "v1"}` &&
@@ -281,12 +307,12 @@ function preferredLabel(fields: ControlLabelFields): {
 }
 
 function sourceIntentConflict(fields: ControlLabelFields) {
-  const intents = new Set(
-    [fields.ariaLabel, fields.visibleText, fields.value, fields.title]
-      .filter((value): value is string => Boolean(value))
-      .map((label) => classifyConsentControlLabel({ usage: "action", classifierProfile: "multilingual_v1", label, hasConsentContext: true }).intent)
-      .filter((intent) => intent !== "unknown"),
-  );
+  const classifications = [fields.ariaLabel, fields.visibleText, fields.value, fields.title]
+    .filter((value): value is string => Boolean(value))
+    .map((label) => classifyConsentControlLabel({ usage: "action", classifierProfile: "multilingual_v1", label, hasConsentContext: true }));
+  if (classifications.some(hasConsentControlSemanticVeto)) return "semantic_veto";
+  const intents = new Set(classifications.map((classification) => classification.intent)
+    .filter((intent) => intent !== "unknown"));
   return intents.size > 1 ? [...intents].sort().join("_") : undefined;
 }
 

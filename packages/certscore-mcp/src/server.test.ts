@@ -285,7 +285,7 @@ test("CertScore Light exposes only the focused no-account workflow", async () =>
     assert.ok(bundleTool?.outputSchema?.required?.includes("scanFrom"));
     assert.match(bundleTool?.description ?? "", /Returns the completed or completed-limited CertScore evidence bundle/);
     assert.match(bundleTool?.description ?? "", /persisted execution provenance/);
-    assert.match(bundleTool?.description ?? "", /Accept and Reject Path content is present only for confirmed, evidence-qualified post-action observations/i);
+    assert.match(bundleTool?.description ?? "", /Accept and Reject results distinguish registered decisions from retained after-click facts/i);
     assert.match(bundleTool?.description ?? "", /not legal advice, certification, or a compliance determination/i);
     for (const tool of [scanSiteTool, statusTool, bundleTool]) {
       assert.doesNotMatch(tool?.description ?? "", /\b(?:never|must|should|do not|call|wait|continue polling|stop polling)\b/i);
@@ -433,7 +433,7 @@ test("Light registry metadata and distribution copy stay aligned", () => {
 
   for (const source of [submissions, packets]) {
     assert.match(source, /Official MCP Registry/);
-    assert.match(source, /version `0\.2\.20` is (?:the )?active (?:and )?latest/i);
+    assert.match(source, /version `0\.2\.21` is (?:the )?active (?:and )?latest/i);
     assert.match(source, /Version `0\.2\.19` (?:remains historical|is a historical record)/i);
     assert.match(source, /No-auth Streamable HTTP website privacy scanner/);
     assert.match(source, /recommended discovery entry/i);

@@ -4,6 +4,12 @@
 
 - Prepare Cursor integration `1.0.4` with query-first cookie, tracker, consent, GDPR, CCPA, ePrivacy, privacy-risk, and website-scanner discovery metadata while preserving the `CertScore.ai` no-auth Light endpoint.
 
+## 0.2.21
+
+- Publish the GPC v3 observation presentation and interpretation guidance for local MCP clients.
+- Preserve bounded after-click summaries from canonical API results, independently of consent registration.
+- Keep backend findings and scoring authoritative; do not infer consent success from capture completion.
+
 ## 0.2.20
 
 - Lead completed no-go responses with the canonical access blocker, “Not scored” disposition, retained evidence, next action, and retry guidance across scan, status, and bundle text surfaces, including tight response budgets.

@@ -101,24 +101,25 @@ if (latest.scan) {
           <CodeBlock>{`const scan = await certscore.scans.wait(created);
 
 const reject = scan.postRefusalObservation;
-const accept = scan.postAcceptObservation; // score-neutral baseline
-const CONFIRMED = ["confirmed_observation", "confirmed_clean"];
+const accept = scan.postAcceptObservation;
 
-if (!reject || !CONFIRMED.includes(reject.status)) {
-  // Limited coverage: the question was not answered. This is not a pass.
-  review.unknown(reject?.coverageLimitations ?? ["not_available"]);
-} else {
-  // verdict is the only field carrying an outcome
-  review.fromVerdict(reject.verdict, reject.interpretation);
+for (const path of [accept, reject]) {
+  if (!path) continue;
+  console.log(path.interpretation);
+  // After-click facts remain useful even when registration is unconfirmed.
+  if (path.afterAction) console.log(path.afterAction);
+  // Use canonical findings for risk/scoring; request counts are not tracker counts.
 }
 
-if (accept && CONFIRMED.includes(accept.status)) {
-  review.baseline(accept.interpretation); // never a negative finding
-}
-
-if (scan.gpcResponse) {
-  review.gpcComparison(scan.gpcResponse); // scoreEffect: none
-}`}</CodeBlock>
+const gpc = scan.gpcResponse;
+console.log({
+  observation: gpc?.observation?.status ?? "not_available_in_this_record",
+  pairedResponse: gpc?.status,
+  recordedState: gpc?.observation?.registration,
+  requests: gpc?.observation?.requests,
+});
+// Complete observation does not mean GPC was honored.
+// Historical records may omit observation and afterAction entirely.`}</CodeBlock>
         </Section>
 
         <Section eyebrow="SDK" title="Read the pre-consent cookie and tracker table">

@@ -54,7 +54,7 @@ import {
   type CmpAccessibleActionResolution,
 } from "./cmp-accessible-action.js";
 import { readCmpApiConsentSnapshot } from "./cmp-api-consent-state.js";
-import { assertConsentActionDispatchAllowed, buildConsentActionControlProof } from "./cmp-action-control-proof.js";
+import { assertConsentActionDispatchAllowed, buildConsentActionControlProof, consentActionLabelNeedsRediscovery } from "./cmp-action-control-proof.js";
 import { matchingStateWriteTime, readActionStateWrites, verifiedCanonicalStateWrite, verifiedCookieDecision, type SemanticState } from "./consent-action-semantic-state.js";
 import {
   captureConsentControlGeometry,
@@ -818,6 +818,7 @@ export async function runPostAcceptObserver(
       control,
     );
     let proofResolution = await buildConsentActionControlProof({
+      onLabelInspection: recordResolverSnapshot,
       signal: effectiveSignal,
       action: "accept",
       ...(authorizedExactTargetUrl
@@ -839,7 +840,8 @@ export async function runPostAcceptObserver(
     if (
       proofResolution.status !== "verified" &&
       (proofResolution.reason === "resolved_control_no_longer_actionable" ||
-        proofResolution.reason === "resolved_control_scope_not_interactive") &&
+        proofResolution.reason === "resolved_control_scope_not_interactive" ||
+        (input.allowCanonicalAcceptDiscovery && consentActionLabelNeedsRediscovery(proofResolution))) &&
       !cancellation()
     ) {
       try {
@@ -854,19 +856,29 @@ export async function runPostAcceptObserver(
         if (remainingRecoveryBudgetMs() === 0) {
           throw new Error("late_control_recovery_search_budget_exhausted");
         }
-        let lateResolution = await waitForDeterministicRecipe(
-          page,
-          [selectedRecipe],
-          Math.min(250, remainingRecoveryBudgetMs()),
-          effectiveSignal,
-          actionDiscovery,
-        );
+        // An unverified named label must not repeatedly select the same control.
+        // Spend only the remaining original budget on canonical live discovery.
+        let lateResolution: AcceptRecipeResolution = consentActionLabelNeedsRediscovery(proofResolution)
+          ? { status: "not_found" }
+          : await waitForDeterministicRecipe(
+            page,
+            [selectedRecipe],
+            Math.min(250, remainingRecoveryBudgetMs()),
+            effectiveSignal,
+            actionDiscovery,
+            recordResolverSnapshot,
+          );
         if (lateResolution.status === "not_found" && input.allowCanonicalAcceptDiscovery && remainingRecoveryBudgetMs() >= 250) {
           lateResolution = await waitForCanonicalAcceptControlRecipe(
             page,
             remainingRecoveryBudgetMs(),
             effectiveSignal,
             [selectedRecipe],
+            actionDiscovery,
+            selectedRecipe,
+            undefined,
+            recordResolverSnapshot,
+            resolverStartedAtMs + actionSearchTimeoutMs,
           );
         }
         if (lateResolution.status === "found") {
@@ -883,6 +895,7 @@ export async function runPostAcceptObserver(
             control,
           );
           proofResolution = await buildConsentActionControlProof({
+            onLabelInspection: recordResolverSnapshot,
             signal: effectiveSignal,
             action: "accept",
             ...(authorizedExactTargetUrl
@@ -1362,6 +1375,7 @@ async function waitForDeterministicOrCanonicalAcceptRecipe(
         activeRuntimeRecipes.length === 1 ? activeRuntimeRecipes[0] : undefined,
         rememberCmp,
         reportDiagnostic,
+        deadlineAtMs,
       );
       if (
         canonicalResolution.status === "found" ||
@@ -1389,6 +1403,7 @@ async function waitForDeterministicOrCanonicalAcceptRecipe(
         undefined,
         rememberCmp,
         reportDiagnostic,
+        deadlineAtMs,
       );
       if (
         initialCanonicalResolution.status === "found" ||
@@ -1435,8 +1450,9 @@ async function waitForDeterministicOrCanonicalAcceptRecipe(
       boundedRecipes,
       discovery,
       activeRuntimeRecipes.length === 1 ? activeRuntimeRecipes[0] : undefined,
-        rememberCmp,
-        reportDiagnostic,
+      rememberCmp,
+      reportDiagnostic,
+      deadlineAtMs,
     );
     if (canonicalResolution.status === "found" || canonicalResolution.status === "aborted") {
       return canonicalResolution;
@@ -1457,6 +1473,7 @@ async function waitForCanonicalAcceptControlRecipe(
   runtimeBoundRecipe?: PostAcceptActionRecipe,
   onCmpDetected?: (name: string) => void,
   reportDiagnostic?: ResolverReporter,
+  outerDeadlineAtMs?: number,
 ): Promise<AcceptRecipeResolution> {
   const deadlineAtMs = Date.now() + timeoutMs;
   let sawAmbiguousCanonicalControl = false;
@@ -1487,16 +1504,18 @@ async function waitForCanonicalAcceptControlRecipe(
         Boolean(candidate.containerSelectorHint)
       ) ?? [],
     );
-    reportDiagnostic?.({ source: "canonical_geometry",
+    const snapshot: ResolverSnapshot = { source: "canonical_geometry",
       state: !geometry ? "geometry_unavailable" : candidates.length > 1 ? "multiple_actionable"
-        : candidates.length === 1 ? "single_actionable" : "selector_absent",
+        : candidates.length === 1 ? "candidate_detected" : "selector_absent",
       selectorMatchCount: Math.min(64, geometry?.candidates.length ?? 0),
       visibleCount: Math.min(64, geometry?.candidates.filter(c => c.decisionStatus === "confirmed_visible").length ?? 0),
       enabledCount: Math.min(64, geometry?.candidates.filter(c => c.enabled).length ?? 0),
       labelMatchCount: Math.min(64, candidates.length), actionableCount: Math.min(64, candidates.length),
       cmpIds: geometry?.cmp.name ? [geometry.cmp.name] : [],
       controlLabels: [...new Set(candidates.map(c => c.normalizedLabel))].slice(0, 4),
-    });
+    };
+    reportDiagnostic?.(snapshot);
+    const bindingState = (state: typeof snapshot.state) => reportDiagnostic?.({ ...snapshot, state, actionableCount: 0 });
     if (candidates.length > 1) {
       sawAmbiguousCanonicalControl = true;
       if (Date.now() >= deadlineAtMs) break;
@@ -1512,39 +1531,46 @@ async function waitForCanonicalAcceptControlRecipe(
         : undefined;
       const scope = exactAcceptSelectorScope(page, controlFrameUrl);
       if (scope.status === "ambiguous") {
+        bindingState("scope_ambiguous");
         sawAmbiguousCanonicalControl = true;
         continue;
       }
-      if (scope.status !== "found") continue;
+      if (scope.status !== "found") { bindingState("frame_not_found"); continue; }
       const containerSelector = candidate.containerSelectorHint!;
       const containers = scope.scope.locator(containerSelector);
       if (await containers.count().catch(() => 0) !== 1) {
+        bindingState("scope_ambiguous");
         sawAmbiguousCanonicalControl = true;
         continue;
       }
-      if (!await consentScopePermitsInteraction(containers.first())) continue;
+      if (!await consentScopePermitsInteraction(containers.first())) { bindingState("scope_not_interactive"); continue; }
       const controlSelector = candidate.selectorHint === containerSelector ||
           candidate.selectorHint.startsWith(`${containerSelector} `)
         ? candidate.selectorHint
         : `:is(${candidate.selectorHint}):is(${containerSelector}, ${containerSelector} *)`;
       const controls = scope.scope.locator(controlSelector);
       const controlCount = Math.min(await controls.count().catch(() => 0), 9);
-      if (controlCount > 8) return { status: "ambiguous" };
+      if (controlCount > 8) { bindingState("multiple_actionable"); return { status: "ambiguous" }; }
       const actionableControls: Locator[] = [];
+      let failedStage: typeof snapshot.state = "selector_absent";
+      const stages: Array<typeof snapshot.state> = ["selector_absent", "control_hidden", "control_disabled", "label_mismatch", "control_not_hit_target"];
+      const failed = (stage: typeof snapshot.state) => {
+        if (stages.indexOf(stage) > stages.indexOf(failedStage)) failedStage = stage;
+      };
       for (let index = 0; index < controlCount; index += 1) {
         const control = controls.nth(index);
-        if (
-          await control.isVisible().catch(() => false) &&
-          await control.isEnabled().catch(() => false) &&
-          (await normalizedAcceptLocatorLabels(control)).includes(candidate.normalizedLabel) &&
-          await locatorHasViewportHitTarget(control)
-        ) actionableControls.push(control);
+        if (!await control.isVisible().catch(() => false)) { failed("control_hidden"); continue; }
+        if (!await control.isEnabled().catch(() => false)) { failed("control_disabled"); continue; }
+        if (!(await normalizedAcceptLocatorLabels(control)).includes(candidate.normalizedLabel)) { failed("label_mismatch"); continue; }
+        if (!await locatorHasViewportHitTarget(control)) { failed("control_not_hit_target"); continue; }
+        actionableControls.push(control);
       }
       if (actionableControls.length > 1) {
+        bindingState("multiple_actionable");
         sawAmbiguousCanonicalControl = true;
         continue;
       }
-      if (actionableControls.length !== 1) continue;
+      if (actionableControls.length !== 1) { bindingState(failedStage); continue; }
       const recipe: PostAcceptActionRecipe = {
         artifactVersion: "certscore.post_accept_action_recipe.v1",
         recipeId: `canonical-control:accept:v1:${hashValue([
@@ -1574,14 +1600,23 @@ async function waitForCanonicalAcceptControlRecipe(
           ...(controlFrameUrl ? { bannerFrameUrl: controlFrameUrl } : {}),
         },
       };
+      // Finish the full frame/selector uniqueness sweep using remaining outer
+      // search time. The former 100 ms slice could repeatedly discard a valid
+      // candidate. No overall deadline or observation window is extended.
+      const confirmationSearchMs = Math.min(750, Math.max(0, (outerDeadlineAtMs ?? deadlineAtMs) - Date.now()));
+      if (confirmationSearchMs <= 0) { bindingState("binding_budget_exhausted"); break; }
       const resolved = await waitForDeterministicRecipe(
         page,
         [recipe],
-        100,
+        confirmationSearchMs,
         signal,
         discovery,
         reportDiagnostic,
       );
+      if (resolved.status === "found" && Date.now() >= (outerDeadlineAtMs ?? deadlineAtMs)) {
+        bindingState("binding_budget_exhausted");
+        break;
+      }
       if (resolved.status === "ambiguous") sawAmbiguousCanonicalControl = true;
       else if (resolved.status !== "not_found") return resolved;
     }

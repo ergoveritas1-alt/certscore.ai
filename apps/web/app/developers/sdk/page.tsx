@@ -26,7 +26,7 @@ export default function DeveloperSdkPage() {
             <a className="font-semibold text-sky-700 hover:text-sky-900" href="https://www.npmjs.com/package/@certscore/sdk">
               @certscore/sdk
             </a>
-            . Use version <code className="rounded bg-slate-100 px-1.5 py-0.5 text-xs text-slate-800">{PUBLIC_CERTSCORE_SDK_VERSION}</code> or newer for typed GPC, Accept Path, and Reject Path results on Pulse and API v2 scan resources, plus API v2 scan creation in EU-Germany, EU-Ireland, and California. Source and examples live in{" "}
+            . Use version <code className="rounded bg-slate-100 px-1.5 py-0.5 text-xs text-slate-800">{PUBLIC_CERTSCORE_SDK_VERSION}</code> or newer for typed GPC v3 bounded observations and Accept/Reject after-click summaries on Pulse and API v2 scan resources, plus API v2 scan creation in EU-Germany, EU-Ireland, and California. Source and examples live in{" "}
             <a className="font-semibold text-sky-700 hover:text-sky-900" href="https://github.com/ergoveritas1-alt/certscore.ai/tree/main/packages/certscore-sdk">
               packages/certscore-sdk
             </a>
@@ -71,7 +71,10 @@ const completed = await certscore.scans.wait(created);
 const scanId = completed.scanId;
 
 console.log(
-  completed.gpcResponse?.status,
+  completed.gpcResponse?.observation?.status, // bounded capture
+  completed.gpcResponse?.status, // paired response
+  completed.postAcceptObservation?.afterAction,
+  completed.postRefusalObservation?.afterAction,
   completed.postAcceptObservation?.verdict,
   completed.postRefusalObservation?.verdict
 );

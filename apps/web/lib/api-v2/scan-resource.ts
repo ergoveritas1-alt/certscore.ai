@@ -1,3 +1,4 @@
+import { deriveAfterActionSummary, afterActionInterpretation } from "./after-action-summary";
 import {
   CANONICAL_SCAN_ID_PATTERN,
   apiV2DomainLatestScanSchema,
@@ -556,6 +557,7 @@ export function deriveApiV2PostRefusalObservation(scanRecord: ScanDetailResponse
     runtimeArtifacts?.post_refusal_evidence_projection ??
     metadata?.postRefusalReportProjection,
   );
+  const afterAction = deriveAfterActionSummary(projection, "reject");
   const status = stringOrNull(projection?.status);
   if (!status || !supportedStatuses.has(status)) {
     const coverage = plainRecord(
@@ -565,7 +567,7 @@ export function deriveApiV2PostRefusalObservation(scanRecord: ScanDetailResponse
     const limitationCode = stringOrNull(coverage?.limitationCode);
     if (coverage?.status !== "limited" || !limitationCode) return null;
     const interpretation = limitationCode === "reject_path_timeout"
-      ? "Reject Path did not complete within the six-second post-primary allowance, so no post-refusal verdict was established."
+      ? "Reject Path did not complete within the configured action-lane allowance, so no post-refusal verdict was established."
       : "Reject Path worker failed before verified evidence could be joined, so no post-refusal verdict was established.";
     const coverageLimitations = [interpretation];
     return {
@@ -648,7 +650,7 @@ export function deriveApiV2PostRefusalObservation(scanRecord: ScanDetailResponse
               : "Reject was confirmed. No eligible non-essential activity was observed during the completed bounded window."
     : confirmed && status === "confirmed_clean"
       ? "Reject was confirmed. No eligible non-essential activity was observed during the completed bounded window."
-      : "No confirmed post-refusal verdict was established.";
+      : afterActionInterpretation(afterAction) ?? "No confirmed post-refusal verdict was established.";
   const evidenceDisposition = deriveChoicePathEvidenceDisposition({
     status: status as
       | "confirmed_observation"
@@ -670,6 +672,7 @@ export function deriveApiV2PostRefusalObservation(scanRecord: ScanDetailResponse
       | "not_attempted"
       | "unsupported"
       | "aborted",
+    ...(afterAction ? { afterAction } : {}),
     refusalExercised: projection?.refusalExercised === true,
     observationCount: confirmed ? Math.max(0, finiteInt(projection?.observationCount) ?? 0) : 0,
     productionProjectable: confirmed,
@@ -728,6 +731,7 @@ export function deriveApiV2PostAcceptObservation(scanRecord: ScanDetailResponse)
     runtimeArtifacts?.postAcceptObservationCoverage ??
     runtimeArtifacts?.post_accept_observation_coverage,
   );
+  const afterAction = deriveAfterActionSummary(projection, "accept");
   const status = stringOrNull(projection?.status);
   const limitationCode = stringOrNull(coverage?.limitationCode);
   const projectionIndeterminateReason = stringOrNull(projection?.indeterminateReason);
@@ -756,16 +760,22 @@ export function deriveApiV2PostAcceptObservation(scanRecord: ScanDetailResponse)
           : indeterminateReason === "accept_path_worker_failed"
             ? "worker_failed" as const
             : "unavailable" as const;
-    const coverageLimitations = [interpretation];
+    const coverageLimitations = afterAction && status === "unconfirmed"
+      ? [...new Set([
+          "Consent registration remains unconfirmed.",
+          ...(Array.isArray(projection?.limitations) ? projection.limitations.filter((item): item is string => typeof item === "string") : []),
+        ])].slice(0, 24)
+      : [interpretation];
     return {
-      status: indeterminateReason === "accept_control_not_observed" ? "not_attempted" as const : "aborted" as const,
+      status: afterAction && status === "unconfirmed" ? "unconfirmed" as const : indeterminateReason === "accept_control_not_observed" ? "not_attempted" as const : "aborted" as const,
+      ...(afterAction ? { afterAction } : {}),
       acceptanceExercised: false,
       observationCount: 0,
       productionProjectable: false,
       evidenceDisposition: "indeterminate" as const,
       indeterminateReason,
       verdict: "no_confirmed_post_accept_verdict" as const,
-      interpretation,
+      interpretation: afterActionInterpretation(afterAction) ?? interpretation,
       observationStrategy: "not_applicable" as const,
       termination: {
         kind: "unavailable" as const,
@@ -845,6 +855,7 @@ export function deriveApiV2PostAcceptObservation(scanRecord: ScanDetailResponse)
       | "not_attempted"
       | "unsupported"
       | "aborted",
+    ...(afterAction ? { afterAction } : {}),
     acceptanceExercised: projection?.acceptanceExercised === true,
     observationCount: confirmed ? Math.max(0, finiteInt(projection?.observationCount) ?? 0) : 0,
     productionProjectable: confirmed,
@@ -903,7 +914,7 @@ function deriveCoverage(scanRecord: ScanDetailResponse) {
   const postRefusalLimitationCode = stringOrNull(postRefusalCoverage?.limitationCode);
   const postRefusalLimitation = postRefusalCoverage?.status === "limited"
     ? postRefusalLimitationCode === "reject_path_timeout"
-      ? "Reject Path did not complete within the six-second post-primary allowance."
+      ? "Reject Path did not complete within the configured action-lane allowance."
       : "Reject Path worker failed before verified evidence could be joined."
     : null;
   const postAcceptCoverage = plainRecord(

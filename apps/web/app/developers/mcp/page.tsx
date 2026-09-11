@@ -179,10 +179,10 @@ Tools: certscore_scan_site, certscore_get_scan_status, certscore_get_scan_bundle
             ))}
           </div>
           <p className="max-w-3xl text-sm leading-7 text-slate-600">
-            Reject Path observations are reported only when the scan has eligible, confirmed post-refusal evidence. Unsupported, unavailable, or limited Reject Path coverage remains explicit and score-neutral.
+            Reject results distinguish confirmed post-refusal evidence from retained after-click observations. Unsupported or unavailable capture remains explicitly limited. Any finding or scoring effect comes from canonical evidence policy.
           </p>
           <p className="max-w-3xl text-sm leading-7 text-slate-600">
-            Scan bundles may include three typed results: <code>postAcceptObservation</code> is a score-neutral comparison baseline, <code>postRefusalObservation</code> is the only one that can support a choice-path finding, and <code>gpcResponse</code> is a jurisdiction-neutral comparison with <code>scoreEffect: none</code>. GPC v3 also includes <code>gpcResponse.observation</code>: bounded capture, current CMP-recorded sale/sharing state, and direct request findings. Its completion is independent of the paired comparison and does not mean GPC was honored. A terminal scan status describes lifecycle only.
+            Scan bundles may include three typed results: <code>postAcceptObservation</code> is a score-neutral comparison baseline, <code>postRefusalObservation</code> is the only one that can support a choice-path finding, and <code>gpcResponse</code> is a jurisdiction-neutral comparison with <code>scoreEffect: none</code>. GPC v3 also includes <code>gpcResponse.observation</code>: bounded capture, current CMP-recorded sale/sharing state, and direct request findings. Its completion is independent of the paired comparison and does not mean GPC was honored. Accept/Reject <code>afterAction</code> summaries retain observed click and capture facts even when registration is unconfirmed. Request counts do not classify every request as tracking. A terminal scan status describes lifecycle only.
           </p>
         </Section>
 

@@ -4,13 +4,13 @@ import { join } from "node:path";
 
 const repoRoot = process.cwd();
 const EXPECTED = {
-  claudeVersion: "0.2.20",
+  claudeVersion: "0.2.21",
   cursorVersion: "1.0.4",
   endpoint: "https://mcp.certscore.ai/mcp/light",
   openAiVersion: "2.0.0",
   owner: "CertScore.ai, LLC",
   registryName: "ai.certscore/mcp-light",
-  serverVersion: "0.2.20",
+  serverVersion: "0.2.21",
 } as const;
 const CURSOR_DISCOVERY_KEYWORDS = [
   "cookie",
@@ -107,7 +107,7 @@ assert.match(JSON.stringify(openAiPlugin), /Reject/i);
 assert.doesNotMatch(submissionPacket, /cannot accept consent/i);
 assert.match(read("integrations/kilo-code/certscore-mcp-light/MCP.yaml"), /^author: CertScore\.ai, LLC$/m);
 assert.match(read("apps/web/public/llms.txt"), /Official MCP Registry name: ai\.certscore\/mcp-light/);
-assert.match(read("apps/web/public/llms-full.txt"), /current hosted MCP version is `0\.2\.20`/);
+assert.match(read("apps/web/public/llms-full.txt"), /current hosted MCP version is `0\.2\.21`/);
 
 assert.deepEqual(pngDimensions("apps/web/public/certscore-mark-dark.png"), { width: 512, height: 512 });
 assert.deepEqual(pngDimensions("apps/web/public/certscore-mark-light.png"), { width: 512, height: 512 });

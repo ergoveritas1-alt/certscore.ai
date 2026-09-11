@@ -1,5 +1,11 @@
 # @certscore/sdk
 
+## 0.2.11
+
+- Add typed GPC v3 bounded observations, separately from the paired response status.
+- Expose evidence-bound after-click summaries for Accept and Reject without upgrading consent registration or scoring.
+- Clarify complete observations, limited capture and historical records in integration examples.
+
 ## 0.2.10
 
 - Surface GPC, post-Accept, and post-Refusal observation results on Pulse responses returned by the default `scan()` and `getScan()` SDK methods, in addition to API v2 scan and scan-job resources.

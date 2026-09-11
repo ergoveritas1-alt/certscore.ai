@@ -512,9 +512,13 @@ test("resolver timeline captures a delayed identical-class A/R/O set without loo
     assert.equal(packet.interactionDiagnostics.click.outcome, "completed");
     assert.deepEqual(
       packet.interactionDiagnostics.resolver?.snapshots.map((snapshot) => snapshot.state),
-      ["selector_absent", "single_actionable"],
+      ["selector_absent", "single_actionable", "candidate_detected"],
     );
-    const terminal = packet.interactionDiagnostics.resolver?.snapshots.at(-1);
+    const terminal = packet.interactionDiagnostics.resolver?.snapshots.findLast((snapshot) => snapshot.source === "named_recipe");
+    const proofRead = packet.interactionDiagnostics.resolver?.snapshots.at(-1);
+    assert.equal(proofRead?.source, "control_proof");
+    assert.equal(proofRead?.actionableCount, 0, "a label read does not claim a verified action");
+    assert.equal(proofRead?.binding?.selectorSha256, createHash("sha256").update(".ju button").digest("hex"));
     assert.equal(terminal?.selectorMatchCount, 3);
     assert.equal(terminal?.visibleCount, 3);
     assert.equal(terminal?.enabledCount, 3);

@@ -121,7 +121,19 @@ export interface ScanCreationMetadata {
   recommendedNextTool?: "certscore_get_scan_status" | "certscore_get_scan_bundle";
 }
 
+export interface AfterActionSummary {
+  policyVersion: "bounded_after_action_capture.v1" | "bounded_after_action_capture.v2";
+  action: "accept" | "reject";
+  activationStatus: "completed" | "uncertain";
+  stopReason: "window_elapsed" | "aborted" | "target_changed" | "click_uncertain";
+  requestsDropped: number;
+  requestCount: number;
+  storageWriteCount: number;
+  storageSnapshotRetained: boolean;
+}
+
 export interface PostRefusalObservation {
+  afterAction?: AfterActionSummary;
   status:
     | "confirmed_observation"
     | "confirmed_clean"
@@ -160,6 +172,7 @@ export interface PostRefusalObservation {
 }
 
 export interface PostAcceptObservation {
+  afterAction?: AfterActionSummary;
   status:
     | "confirmed_observation"
     | "confirmed_clean"

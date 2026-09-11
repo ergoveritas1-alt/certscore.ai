@@ -43,7 +43,7 @@ Use these canonical discovery resources:
 
 These resources are intended for OpenAI/ChatGPT, Anthropic/Claude, Perplexity, Google/Gemini, Microsoft Copilot/Bing, DeepSeek, Kimi, Qwen, Grok/xAI, Mistral, Meta, and future agents. They are vendor-neutral and should not be treated as limited to one AI platform.
 
-The canonical MCP Light registry identity is `ai.certscore/mcp-light`, the current hosted MCP version is `0.2.20`, and the publisher and legal owner is CertScore.ai, LLC.
+The canonical MCP Light registry identity is `ai.certscore/mcp-light`, the current hosted MCP version is `0.2.21`, and the publisher and legal owner is CertScore.ai, LLC.
 
 ## Agent quick path
 
@@ -234,13 +234,13 @@ Agents and SDKs should honor `Retry-After` on pending or throttled responses. Th
 
 ## TypeScript SDK
 
-Status: published. Install `@certscore/sdk@0.2.10` or newer for typed GPC, Accept Path, and Reject Path results on Pulse and API v2 scan resources, plus API v2 scan creation in EU-Germany, EU-Ireland, and California.
+Status: published. Install `@certscore/sdk@0.2.11` or newer for typed GPC, Accept Path, and Reject Path results on Pulse and API v2 scan resources, plus API v2 scan creation in EU-Germany, EU-Ireland, and California.
 
 Choice-path interpretation:
 
 - Read `status` before `verdict` for `postAcceptObservation` and `postRefusalObservation`; a non-confirmed status is limited coverage, not a clean result.
 - `postAcceptObservation` is a score-neutral comparison baseline.
-- `postRefusalObservation` can support a finding only after a confirmed refusal-state transition and retained qualifying activity after confirmation.
+- `postRefusalObservation` separates registered-refusal verdicts from `afterAction` facts. Canonical findings may also include independently verified Reject-click tracking under its separate policy; do not infer scoring from request counts.
 - The public methodology is https://certscore.ai/guides/consent-enforcement-testing and an authentic owned-sample report is https://certscore.ai/scan/f4362840-376e-4d8c-897a-34a220136ad4.
 
 Docs:
@@ -437,3 +437,5 @@ These phrases describe the public integration surface:
 Primary docs: https://certscore.ai/developers
 
 Feedback: support@certscore.ai
+
+GPC v3: read gpcResponse.observation.status for bounded capture and gpcResponse.status for paired response. Complete capture does not mean GPC was honored. SDK 0.2.11 types these separately. Optional postAcceptObservation.afterAction and postRefusalObservation.afterAction retain after-click facts independently of registration; counts do not establish tracking or a score deduction. Historical records may omit these fields.

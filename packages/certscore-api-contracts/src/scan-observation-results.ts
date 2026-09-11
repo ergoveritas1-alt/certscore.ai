@@ -1,7 +1,19 @@
 import { gpcBoundedObservationSchema } from "./gpc-bounded-observation.js";
 import { z } from "zod";
 
+export const apiV2AfterActionSummarySchema = z.object({
+  policyVersion: z.enum(["bounded_after_action_capture.v1", "bounded_after_action_capture.v2"]),
+  action: z.enum(["accept", "reject"]),
+  activationStatus: z.enum(["completed", "uncertain"]),
+  stopReason: z.enum(["window_elapsed", "aborted", "target_changed", "click_uncertain"]),
+  requestsDropped: z.number().int().nonnegative(),
+  requestCount: z.number().int().nonnegative(),
+  storageWriteCount: z.number().int().nonnegative(),
+  storageSnapshotRetained: z.boolean(),
+}).strict();
+
 export const apiV2PostRefusalObservationSchema = z.object({
+  afterAction: apiV2AfterActionSummarySchema.optional(),
   status: z.enum(["confirmed_observation", "confirmed_clean", "unconfirmed", "not_attempted", "unsupported", "aborted"]),
   refusalExercised: z.boolean(),
   observationCount: z.number().int().min(0),
@@ -36,6 +48,7 @@ export const apiV2PostRefusalObservationSchema = z.object({
 }).strict();
 
 export const apiV2PostAcceptObservationSchema = z.object({
+  afterAction: apiV2AfterActionSummarySchema.optional(),
   status: z.enum(["confirmed_observation", "confirmed_clean", "unconfirmed", "not_attempted", "unsupported", "aborted"]),
   acceptanceExercised: z.boolean(),
   observationCount: z.number().int().min(0),

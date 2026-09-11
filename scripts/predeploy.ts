@@ -30,6 +30,8 @@ const RUNTIME_GRAPH_RELEASE_CHECK: Check = {
     "apps/web/server/scans/runtime-evidence-graph-read.test.ts",
     "apps/web/server/scans/runtime-evidence-graph-storage.test.ts",
     "apps/web/lib/api-v2/scan-resource.test.ts",
+    "apps/web/lib/api-v2/after-action-summary.test.ts",
+    "apps/web/lib/public-integration-versions.test.ts",
     "apps/web/server/pulse/retrieval-quota.test.ts",
     "scripts/runtime-graph-rollout.test.ts",
     "scripts/lib/scanner-image-provenance.test.ts",
@@ -75,7 +77,20 @@ const GPC_OBSERVATION_RELEASE_CHECK: Check = {
     "packages/certscore-mcp/src/tools.test.ts"],
 };
 
+const CONSENT_ACTION_SEMANTICS_CHECK: Check = {
+  key: "consent-action-semantics",
+  label: "multilingual consent classification and bounded Accept/Reject dispatch",
+  command: ["pnpm", "exec", "tsx", "--tsconfig", "tsconfig.base.json", "--test", "--test-concurrency=2",
+    "packages/certscore-contracts/src/consent-control-semantics.test.ts",
+    "packages/certscore-scan-core/src/cmp-action-semantic-proof.test.ts",
+    "packages/certscore-scan-core/src/consent-action-binding.test.ts",
+    "packages/certscore-scan-core/src/consent-action-late-label.test.ts",
+    "packages/certscore-scan-core/src/post-accept-observer.test.ts",
+    "packages/certscore-scan-core/src/post-refusal-observer.test.ts"],
+};
+
 const ROOT_FULL_CHECKS: Check[] = [
+  CONSENT_ACTION_SEMANTICS_CHECK,
   GPC_OBSERVATION_RELEASE_CHECK,
   SCAN_NO_GO_RELEASE_CHECK,
   RUNTIME_GRAPH_RELEASE_CHECK,
@@ -139,6 +154,13 @@ const ROOT_FULL_CHECKS: Check[] = [
 ];
 
 const TARGETS: Target[] = [
+  {
+    key: "consent-action-semantics",
+    label: "consent action semantics and dispatch",
+    matches: file => file.startsWith("packages/certscore-contracts/src/") ||
+      /^packages\/certscore-scan-core\/src\/(?:post-accept-|post-refusal-|cmp-action-|consent-)/.test(file),
+    checks: [CONSENT_ACTION_SEMANTICS_CHECK],
+  },
   {
     key: "gpc-observation", label: "GPC bounded observation",
     matches: file => file.includes("/gpc-") || file === "scripts/run-gpc-observation-local.ts" || file === "scripts/sync-gpc-observation-contract.ts" || file === "apps/v2-dag-lambda/src/handler.ts" || file === "packages/certscore-scan-core/src/index.ts",

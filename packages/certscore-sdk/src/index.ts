@@ -12,6 +12,7 @@ export {
   ThrottledError
 } from "./errors.js";
 export type {
+  AfterActionSummary,
   AgentInterpretation,
   ApiV2RequestOptions,
   Capabilities,
@@ -69,3 +70,5 @@ export type {
   TopFinding,
   TransportSecurityProjection
 } from "./types.js";
+
+export type { GpcBoundedObservation } from "./gpc-bounded-observation.js";

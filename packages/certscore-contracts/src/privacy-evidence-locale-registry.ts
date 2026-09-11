@@ -19,6 +19,11 @@ export type PrivacyEvidenceLocaleRegistryEntry = {
     options: readonly string[];
     necessaryOnly: readonly string[];
   };
+  consentLabelGuards?: {
+    negationTokens: readonly string[];
+    categoryPhrases?: readonly string[];
+    informationalPrefixes: readonly string[];
+  };
   contextualConsentControls?: {
     accept?: readonly string[];
     reject?: readonly string[];
@@ -46,7 +51,7 @@ const BASE_PRIVACY_EVIDENCE_LOCALE_REGISTRY: readonly PrivacyEvidenceLocaleRegis
     combinedPrivacyCookieLabels: ["privacy & cookie policy", "privacy and cookie policy", "website and cookies"],
     cookieSettingsLabels: ["cookie settings", "cookie preferences"], termsLabels: ["terms of service", "terms and conditions"], termsPathSlugs: ["terms", "terms-of-service"],
     contextHints: ["privacy", "personal data", "cookies", "consent"], tldHints: [],
-    consentControls: { accept: ["accept all", "allow all"], reject: ["reject all", "decline all", "deny non-essential", "deny non-essential cookies"], options: ["cookie settings", "manage preferences", "allow selection"], necessaryOnly: ["necessary only", "required only", "essential only", "only necessary", "only essential", "essential cookies only", "necessary cookies only"] },
+    consentControls: { accept: ["accept all", "allow all"], reject: ["i do not accept cookies", "do not accept cookies", "reject all", "reject all non-required", "decline all", "deny non-essential", "deny non-essential cookies"], options: ["cookie settings", "manage preferences", "allow selection"], necessaryOnly: ["accept only necessary cookies", "accept only essential cookies", "accept only required cookies", "necessary only", "required only", "essential only", "only necessary", "only essential", "essential cookies only", "necessary cookies only"] },
   }),
   locale("es", {
     privacyPolicyLabels: ["política de privacidad", "aviso de privacidad", "protección de datos"], privacyPolicyPathSlugs: ["politica-de-privacidad", "privacidad", "proteccion-de-datos"],
@@ -58,7 +63,7 @@ const BASE_PRIVACY_EVIDENCE_LOCALE_REGISTRY: readonly PrivacyEvidenceLocaleRegis
     privacyPolicyLabels: ["datenschutzerklärung", "datenschutzinformation", "datenschutz"], privacyPolicyPathSlugs: ["datenschutz", "datenschutzerklaerung"], cookiePolicyLabels: ["cookie-richtlinie", "cookie-hinweis"], cookiePolicyPathSlugs: ["cookie-richtlinie"],
     policyIndexLabels: ["rechtliches"],
     cookieSettingsLabels: ["cookie-einstellungen", "datenschutzeinstellungen"], termsLabels: ["nutzungsbedingungen", "allgemeine geschäftsbedingungen"], termsPathSlugs: ["nutzungsbedingungen", "agb"], contextHints: ["datenschutz", "personenbezogene daten", "cookies", "einwilligung"], tldHints: [".de", ".at"],
-    consentControls: { accept: ["alle akzeptieren", "alles akzeptieren", "alle auswählen"], reject: ["alle ablehnen", "alles ablehnen"], options: ["cookie-einstellungen", "einstellungen verwalten", "einwilligungs-einstellungen"], necessaryOnly: ["nur notwendige cookies", "nur erforderliche cookies"] },
+    consentControls: { accept: ["alle akzeptieren", "alles akzeptieren", "alle auswählen"], reject: ["alle ablehnen", "alles ablehnen"], options: ["cookie-einstellungen", "einstellungen verwalten", "einwilligungs-einstellungen"], necessaryOnly: ["nur notwendige cookies", "nur erforderliche cookies", "nur notwendige funktionscookies akzeptieren"] },
   }),
   locale("ja", {
     privacyPolicyLabels: ["プライバシーポリシー", "個人情報保護方針"], privacyPolicyPathSlugs: ["privacy-policy", "kojin-joho"], cookiePolicyLabels: ["クッキーポリシー"], cookiePolicyPathSlugs: ["cookie-policy", "ja/cookies"], cookieSettingsLabels: ["Cookie設定"],
@@ -263,9 +268,55 @@ const COMBINED_PRIVACY_COOKIE_LABELS_BY_LOCALE = {
   gl: ["política de privacidade e cookies"],
 } as const satisfies Record<SupportedPrivacyEvidenceLocale, readonly string[]>;
 
+// Conservative semantic guards: these markers can withhold action credit,
+// never create refusal or consent. Exact refusal phrases remain separately typed.
+const CONSENT_LABEL_GUARDS_BY_LOCALE = {
+  en: { categoryPhrases: ["non-essential cookies", "non essential cookies", "non-necessary cookies", "non necessary cookies", "non-required cookies", "non required cookies"], negationTokens: ["not", "don't", "never"], informationalPrefixes: ["what happens", "why", "how to", "learn about"] },
+  es: { negationTokens: ["no", "nunca"], informationalPrefixes: ["qué pasa", "que pasa", "por qué", "cómo"] },
+  de: { categoryPhrases: ["nicht notwendigen cookies", "nicht notwendige cookies", "nicht erforderlichen cookies", "nicht erforderliche cookies", "nicht essentiellen cookies", "nicht essenziellen cookies"], negationTokens: ["nicht", "kein", "keine", "keinen"], informationalPrefixes: ["was passiert", "warum", "wie kann"] },
+  ja: { negationTokens: ["しない", "しません", "拒否"], informationalPrefixes: ["どうなる", "なぜ"] },
+  fr: { categoryPhrases: ["cookies non essentiels", "cookies non nécessaires", "cookies non necessaires"], negationTokens: ["ne", "n'", "pas", "jamais"], informationalPrefixes: ["que se passe", "pourquoi", "comment"] },
+  ru: { negationTokens: ["не", "нет"], informationalPrefixes: ["что произойдет", "что будет", "почему", "как"] },
+  pt: { negationTokens: ["não", "nao", "nunca"], informationalPrefixes: ["o que acontece", "por que", "como"] },
+  it: { negationTokens: ["non", "mai"], informationalPrefixes: ["cosa succede", "perché", "come"] },
+  tr: { negationTokens: ["değil", "hayır", "etme", "etmiyorum"], informationalPrefixes: ["ne olur", "neden", "nasıl"] },
+  zh: { negationTokens: ["不", "不要", "拒绝"], informationalPrefixes: ["会发生什么", "为什么", "如何"] },
+  fa: { negationTokens: ["نه", "نکنید"], informationalPrefixes: ["چه اتفاقی", "چرا", "چگونه"] },
+  nl: { negationTokens: ["niet", "geen"], informationalPrefixes: ["wat gebeurt", "waarom", "hoe"] },
+  pl: { negationTokens: ["nie", "nigdy"], informationalPrefixes: ["co się stanie", "dlaczego", "jak"] },
+  vi: { negationTokens: ["không"], informationalPrefixes: ["điều gì xảy ra", "tại sao", "làm thế nào"] },
+  id: { negationTokens: ["tidak", "jangan"], informationalPrefixes: ["apa yang terjadi", "mengapa", "bagaimana"] },
+  cs: { negationTokens: ["ne", "nikdy"], informationalPrefixes: ["co se stane", "proč", "jak"] },
+  ko: { negationTokens: ["않음", "않습니다", "거부"], informationalPrefixes: ["어떻게", "왜"] },
+  sv: { negationTokens: ["inte", "aldrig"], informationalPrefixes: ["vad händer", "varför", "hur"] },
+  uk: { negationTokens: ["не", "ні"], informationalPrefixes: ["що станеться", "чому", "як"] },
+  el: { negationTokens: ["δεν", "μην"], informationalPrefixes: ["τι συμβαίνει", "γιατί", "πώς"] },
+  ar: { negationTokens: ["لا", "ليس"], informationalPrefixes: ["ماذا يحدث", "لماذا", "كيف"] },
+  hu: { negationTokens: ["nem", "ne"], informationalPrefixes: ["mi történik", "miért", "hogyan"] },
+  ro: { negationTokens: ["nu", "niciodată"], informationalPrefixes: ["ce se întâmplă", "de ce", "cum"] },
+  th: { negationTokens: ["ไม่"], informationalPrefixes: ["จะเกิดอะไร", "ทำไม", "อย่างไร"] },
+  da: { negationTokens: ["ikke", "aldrig"], informationalPrefixes: ["hvad sker", "hvorfor", "hvordan"] },
+  sk: { negationTokens: ["nie", "nikdy"], informationalPrefixes: ["čo sa stane", "prečo", "ako"] },
+  fi: { negationTokens: ["ei", "älä"], informationalPrefixes: ["mitä tapahtuu", "miksi", "miten"] },
+  bg: { negationTokens: ["не", "никога"], informationalPrefixes: ["какво се случва", "защо", "как"] },
+  he: { negationTokens: ["לא"], informationalPrefixes: ["מה קורה", "למה", "איך"] },
+  sr: { negationTokens: ["ne", "не"], informationalPrefixes: ["šta se dešava", "шта се дешава", "zašto", "зашто"] },
+  hr: { negationTokens: ["ne", "nikad"], informationalPrefixes: ["što se događa", "zašto", "kako"] },
+  lt: { negationTokens: ["ne", "niekada"], informationalPrefixes: ["kas nutiks", "kodėl", "kaip"] },
+  sl: { negationTokens: ["ne", "nikoli"], informationalPrefixes: ["kaj se zgodi", "zakaj", "kako"] },
+  ca: { negationTokens: ["no", "mai"], informationalPrefixes: ["què passa", "per què", "com"] },
+  hi: { negationTokens: ["नहीं", "मत"], informationalPrefixes: ["क्या होता", "क्यों", "कैसे"] },
+  nb: { negationTokens: ["ikke", "aldri"], informationalPrefixes: ["hva skjer", "hvorfor", "hvordan"] },
+  et: { negationTokens: ["ei", "ära"], informationalPrefixes: ["mis juhtub", "miks", "kuidas"] },
+  lv: { negationTokens: ["ne", "nekad"], informationalPrefixes: ["kas notiek", "kāpēc", "kā"] },
+  az: { negationTokens: ["deyil", "etmə"], informationalPrefixes: ["nə baş verir", "niyə", "necə"] },
+  gl: { negationTokens: ["non", "nunca"], informationalPrefixes: ["que pasa", "por que", "como"] },
+} satisfies Record<SupportedPrivacyEvidenceLocale, NonNullable<PrivacyEvidenceLocaleRegistryEntry["consentLabelGuards"]>>;
+
 export const PRIVACY_EVIDENCE_LOCALE_REGISTRY: readonly PrivacyEvidenceLocaleRegistryEntry[] =
   BASE_PRIVACY_EVIDENCE_LOCALE_REGISTRY.map((entry) => ({
     ...entry,
+    consentLabelGuards: CONSENT_LABEL_GUARDS_BY_LOCALE[entry.locale],
     combinedPrivacyCookieLabels: [...new Set([
       ...(entry.combinedPrivacyCookieLabels ?? []),
       ...COMBINED_PRIVACY_COOKIE_LABELS_BY_LOCALE[entry.locale],

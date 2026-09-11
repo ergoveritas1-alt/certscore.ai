@@ -1102,6 +1102,10 @@ test("scan bundle makes intentional post-refusal evidence termination explicit",
       status: "completed",
       score: 42,
       postRefusalObservation: {
+        afterAction: {
+          policyVersion: "bounded_after_action_capture.v2", action: "reject", activationStatus: "completed",
+          stopReason: "window_elapsed", requestsDropped: 0, requestCount: 3, storageWriteCount: 1, storageSnapshotRetained: true,
+        },
         status: "confirmed_observation",
         refusalExercised: true,
         observationCount: 2,
@@ -1124,6 +1128,7 @@ test("scan bundle makes intentional post-refusal evidence termination explicit",
   } as any);
 
   const text = scanBundleText(bundle);
+  assert.equal(bundle.postRefusalObservation?.afterAction?.requestCount, 3);
   assert.match(text, /Reject Path: Reject was confirmed, and eligible non-essential storage activity was observed afterward\./);
   assert.match(text, /observation then stopped intentionally because qualifying evidence had been captured/i);
   assert.match(text, /Reject Path coverage limitation: The remainder of the persistence window was not measured\./);
@@ -1893,5 +1898,31 @@ test("GPC v3 MCP text preserves completed bounded findings alongside an indeterm
   assert.match(text, /status=indeterminate/);
   assert.equal(bundle.gpcResponse.observation.registration.sale, "unknown");
   assert.match(bundle.interpretationGuidance.statement, /completion does not mean GPC was honored/);
+  assert.doesNotThrow(() => mcpScanBundleOutputSchema.parse(bundle));
+});
+
+test("completed bundle preserves unconfirmed after-click facts without a registered verdict", () => {
+  const observation = {
+    status: "unconfirmed", refusalExercised: false, observationCount: 0,
+    productionProjectable: false, evidenceDisposition: "indeterminate", indeterminateReason: "registration_unconfirmed",
+    verdict: "no_confirmed_post_refusal_verdict",
+    interpretation: "Reject was clicked. 4 requests were retained afterward. Consent registration is reported separately.",
+    observationStrategy: "not_applicable", termination: { kind: "unavailable", intentional: false, trigger: "unavailable" },
+    completedAt: "2026-09-11T12:00:00.000Z", coverageLimitations: [], limitations: [],
+    afterAction: {
+      policyVersion: "bounded_after_action_capture.v2", action: "reject", activationStatus: "completed",
+      stopReason: "window_elapsed", requestsDropped: 0, requestCount: 4, storageWriteCount: 0, storageSnapshotRetained: true,
+    },
+  };
+  const bundle = buildScanBundle({
+    detail: "summary", findings: { type: "certscore_finding_list", scanId: "scan_after_click", findings: [] },
+    preConsentCookiesTrackers: null, report,
+    scan: { type: "certscore_scan", scanId: "scan_after_click", domain: "example.com", status: "completed", score: 72,
+      postRefusalObservation: observation },
+  } as any);
+  assert.deepEqual(bundle.postRefusalObservation?.afterAction, observation.afterAction);
+  assert.equal(bundle.postRefusalObservation?.productionProjectable, false);
+  assert.equal(bundle.postRefusalObservation?.verdict, "no_confirmed_post_refusal_verdict");
+  assert.match(scanBundleText(bundle), /Reject was clicked\. 4 requests were retained afterward/);
   assert.doesNotThrow(() => mcpScanBundleOutputSchema.parse(bundle));
 });

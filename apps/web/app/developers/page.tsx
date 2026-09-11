@@ -43,7 +43,7 @@ export default function DevelopersPage() {
 
         <Section eyebrow="Typed scan results" title="Choice paths in every integration">
           <p className="max-w-3xl text-sm leading-7 text-slate-600">
-            Eligible completed scans can include <code>postAcceptObservation</code>, <code>postRefusalObservation</code>, and <code>gpcResponse</code>. Accept is a score-neutral comparison baseline; Reject can support a finding only after confirmation and qualifying retained activity. For GPC v3, <code>gpcResponse.observation</code> reports bounded capture, CMP-recorded sale/sharing state, and observed requests independently of the paired <code>gpcResponse.status</code>. Completed observation does not mean GPC was honored. <Link className="font-semibold text-sky-700 hover:text-sky-900" href="/developers/reference#choice-path-results">Read the field semantics.</Link>
+            Eligible completed scans can include <code>postAcceptObservation</code>, <code>postRefusalObservation</code>, and <code>gpcResponse</code>. Accept is a score-neutral comparison baseline; Reject findings follow canonical evidence policy, including separately verified Reject-click tracking. Read optional <code>afterAction</code> facts independently of registration. For GPC v3, <code>gpcResponse.observation</code> reports bounded capture, CMP-recorded sale/sharing state, and observed requests independently of the paired <code>gpcResponse.status</code>. Completed observation does not mean GPC was honored. <Link className="font-semibold text-sky-700 hover:text-sky-900" href="/developers/reference#choice-path-results">Read the field semantics.</Link>
           </p>
         </Section>
 

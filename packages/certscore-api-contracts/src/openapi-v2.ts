@@ -2,6 +2,22 @@ import { gpcBoundedObservationOpenApi } from "./gpc-bounded-observation-openapi.
 import { apiV2Disclaimer, CERTSCORE_API_V2_SCHEMA_VERSION } from "./api-v2.js";
 import { runtimeEvidenceGraphOpenApiSchemas } from "./runtime-evidence-graph-openapi.js";
 
+const afterActionSummaryOpenApi = {
+  type: "object", additionalProperties: false,
+  description: "Retained after-click facts, independently of consent registration. Request counts do not classify all traffic as tracking. No new finding or score effect is inferred.",
+  required: ["policyVersion", "action", "activationStatus", "stopReason", "requestsDropped", "requestCount", "storageWriteCount", "storageSnapshotRetained"],
+  properties: {
+    policyVersion: { type: "string", enum: ["bounded_after_action_capture.v1", "bounded_after_action_capture.v2"] },
+    action: { type: "string", enum: ["accept", "reject"] },
+    activationStatus: { type: "string", enum: ["completed", "uncertain"] },
+    stopReason: { type: "string", enum: ["window_elapsed", "aborted", "target_changed", "click_uncertain"] },
+    requestsDropped: { type: "integer", minimum: 0 },
+    requestCount: { type: "integer", minimum: 0 },
+    storageWriteCount: { type: "integer", minimum: 0 },
+    storageSnapshotRetained: { type: "boolean" },
+  },
+} as const;
+
 const diagnosticHeaders = {
   "x-certscore-api-version": { schema: { type: "string", const: "v2" }, description: "CertScore API version marker." },
   "x-certscore-request-id": { schema: { type: "string" }, description: "Request identifier for support and diagnostics." }
@@ -758,6 +774,7 @@ export function buildCertScoreApiV2OpenApiDocument() {
             "limitations"
           ],
           properties: {
+            afterAction: afterActionSummaryOpenApi,
             status: { type: "string", description: "confirmed_observation and confirmed_clean are results. Every other value is limited coverage and must not be interpreted as a pass.", enum: ["confirmed_observation", "confirmed_clean", "unconfirmed", "not_attempted", "unsupported", "aborted"] },
             refusalExercised: { type: "boolean" },
             observationCount: { type: "integer", minimum: 0 },
@@ -766,7 +783,7 @@ export function buildCertScoreApiV2OpenApiDocument() {
             indeterminateReason: { type: ["string", "null"], maxLength: 160 },
             verdict: {
               type: "string",
-              description: "The only field carrying an outcome. Do not derive a verdict by counting evidence rows.",
+              description: "The registered-decision verdict; afterAction separately carries retained after-click facts. Do not derive a verdict by counting evidence rows.",
               enum: [
                 "eligible_nonessential_activity_observed_after_confirmed_refusal",
                 "retained_consent_signal_contradiction_observed_after_confirmed_refusal",
@@ -811,6 +828,7 @@ export function buildCertScoreApiV2OpenApiDocument() {
             "limitations"
           ],
           properties: {
+            afterAction: afterActionSummaryOpenApi,
             status: { type: "string", description: "confirmed_observation and confirmed_clean are results. Every other value is limited coverage and must not be interpreted as a pass.", enum: ["confirmed_observation", "confirmed_clean", "unconfirmed", "not_attempted", "unsupported", "aborted"] },
             acceptanceExercised: { type: "boolean" },
             observationCount: { type: "integer", minimum: 0 },
@@ -819,7 +837,7 @@ export function buildCertScoreApiV2OpenApiDocument() {
             indeterminateReason: { type: ["string", "null"], maxLength: 160 },
             verdict: {
               type: "string",
-              description: "The only field carrying an outcome. Post-acceptance activity is a score-neutral comparison baseline, not a negative finding.",
+              description: "The registered-decision verdict; afterAction separately carries retained after-click facts. Post-acceptance activity is a score-neutral comparison baseline, not a negative finding.",
               enum: [
                 "eligible_nonessential_activity_observed_after_confirmed_acceptance",
                 "retained_consent_signal_contradiction_observed_after_confirmed_acceptance",

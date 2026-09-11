@@ -269,7 +269,7 @@ export const postRefusalInteractionDiagnosticsSchema = z.object({
     snapshots: z.array(z.object({
       attempt: z.number().int().positive().max(10_000),
       elapsedMs: z.number().int().nonnegative().max(30_000),
-      source: z.enum(["named_recipe", "canonical_geometry"]),
+      source: z.enum(["named_recipe", "canonical_geometry", "control_proof"]),
       state: z.enum([
         "document_loading",
         "scope_ambiguous",
@@ -278,6 +278,11 @@ export const postRefusalInteractionDiagnosticsSchema = z.object({
         "control_hidden",
         "control_disabled",
         "label_mismatch",
+        "candidate_detected",
+        "frame_not_found",
+        "scope_not_interactive",
+        "control_not_hit_target",
+        "binding_budget_exhausted",
         "single_actionable",
         "multiple_actionable",
         "geometry_unavailable",
@@ -290,6 +295,11 @@ export const postRefusalInteractionDiagnosticsSchema = z.object({
       actionableCount: z.number().int().nonnegative().max(64),
       cmpIds: z.array(z.string().min(1).max(120)).max(8).default([]),
       controlLabels: z.array(z.string().min(1).max(120)).max(4).default([]),
+      binding: z.object({
+        selectorSha256: z.string().regex(/^[a-f0-9]{64}$/),
+        frameIdentitySha256: z.string().regex(/^[a-f0-9]{64}$/),
+        labelSources: z.array(z.enum(["aria_label", "visible_text", "value", "title"])).max(4),
+      }).optional(),
     })).max(12),
     truncated: z.boolean(),
   }).optional(),
